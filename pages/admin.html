@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="supported-color-schemes" content="light dark" />
+    <title>Parascene - Admin</title>
+    <link rel="stylesheet" href="/global.css" />
+    <link rel="stylesheet" href="/admin.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Parascene</h1>
+      <p>System Internals</p>
+    </header>
+
+    <main>
+      <section>
+        <h3>Session</h3>
+        <form action="/logout" method="post">
+          <button type="submit">Logout</button>
+        </form>
+      </section>
+
+      <section>
+        <h2>admin.html</h2>
+        <ul>
+          <li>moderation</li>
+          <li>provider registry</li>
+          <li>policy knobs</li>
+        </ul>
+      </section>
+      <section>
+        <h3>Users</h3>
+        <table id="users-table" border="1" cellpadding="6">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Email</th>
+              <th>Role</th>
+              <th>Created</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td colspan="4">Loading...</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+
+    <script src="/admin.js" defer></script>
+  </body>
+</html>

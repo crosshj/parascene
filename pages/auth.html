@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="supported-color-schemes" content="light dark" />
+    <title>Parascene - Auth / Entry</title>
+    <link rel="stylesheet" href="/global.css" />
+    <link rel="stylesheet" href="/auth.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Parascene</h1>
+    </header>
+
+    <main>
+      <section id="auth-fail">
+        <h3>Login failed</h3>
+        <p>Please check your email and password, then try again.</p>
+      </section>
+
+      <section id="signup">
+        <h3>Signup</h3>
+        <form action="/signup" method="post" autocomplete="on">
+          <label>
+            Email
+            <input
+              type="email"
+              name="username"
+              autocomplete="username"
+              inputmode="email"
+              required
+            />
+          </label>
+          <label>
+            Password
+            <input
+              type="password"
+              name="password"
+              autocomplete="new-password"
+              required
+            />
+          </label>
+          <button type="submit">Create account</button>
+        </form>
+        <br />
+        <p>Already have an account? <a href="#login">Click here to log in.</a></p>
+      </section>
+
+      <section id="login">
+        <h3>Login</h3>
+        <form action="/login" method="post" autocomplete="on">
+          <label>
+            Email
+            <input
+              type="email"
+              name="username"
+              autocomplete="username"
+              inputmode="email"
+              required
+            />
+          </label>
+          <label>
+            Password
+            <input
+              type="password"
+              name="password"
+              autocomplete="current-password"
+              required
+            />
+          </label>
+          <button type="submit">Login</button>
+        </form>
+        <br />
+        <p>New here? <a href="#signup">Click here to sign up.</a></p>
+      </section>
+
+    </main>
+
+    <script src="/auth.js" defer></script>
+  </body>
+</html>

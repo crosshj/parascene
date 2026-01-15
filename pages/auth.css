@@ -1,0 +1,25 @@
+/* Page-specific styles for auth.html */
+
+section[id] {
+  display: none;
+}
+
+section[id="auth-fail"]:target {
+  display: block;
+}
+
+section[id="login"] {
+  display: block;
+}
+
+section[id="login"]:target {
+  display: block;
+}
+
+section[id="signup"]:target {
+  display: block;
+}
+
+section[id="signup"]:target ~ section[id="login"] {
+  display: none;
+}
