@@ -187,6 +187,7 @@ function initSchema(db) {
 
 function openDb() {
   if (process.env.VERCEL) {
+    console.log("Using mock database for Vercel deployment.");
     return openMockDb();
   }
 

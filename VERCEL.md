@@ -1,4 +1,4 @@
-# Vercel Deployment Checklist (Terse)
+# Vercel Deployment Checklist
 
 ## 1) Replace local SQLite
 - Vercel functions do not persist local files between invocations.
