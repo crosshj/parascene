@@ -66,6 +66,110 @@ const SEED_PROVIDERS = [
   }
 ];
 
+const SEED_PROVIDER_STATUS = [
+  {
+    provider_name: "Aurora Streaming",
+    status: "operational",
+    region: "NA",
+    uptime_pct: 99.98,
+    capacity_pct: 72
+  },
+  {
+    provider_name: "Nimbus Render",
+    status: "degraded",
+    region: "EU",
+    uptime_pct: 98.62,
+    capacity_pct: 91
+  },
+  {
+    provider_name: "Echo Cloud",
+    status: "maintenance",
+    region: "APAC",
+    uptime_pct: 97.45,
+    capacity_pct: 44
+  }
+];
+
+const SEED_PROVIDER_METRICS = [
+  {
+    name: "Jobs processed",
+    value: "12,480",
+    unit: "jobs",
+    change: "+4.2%",
+    period: "Last 7 days",
+    description: "Completed renders across all regions."
+  },
+  {
+    name: "Average queue time",
+    value: "3.6",
+    unit: "min",
+    change: "-12%",
+    period: "Last 24 hours",
+    description: "Median time from submission to start."
+  },
+  {
+    name: "GPU utilization",
+    value: "78",
+    unit: "%",
+    change: "+5%",
+    period: "Last 7 days",
+    description: "Weighted average utilization across clusters."
+  },
+  {
+    name: "Failed runs",
+    value: "14",
+    unit: "runs",
+    change: "-3",
+    period: "Last 7 days",
+    description: "Automated retry failures requiring review."
+  }
+];
+
+const SEED_PROVIDER_GRANTS = [
+  {
+    name: "Sustainability Compute Fund",
+    sponsor: "OpenRender Alliance",
+    amount: "$48,000",
+    status: "active",
+    next_report: "2026-02-15"
+  },
+  {
+    name: "Realtime Collaboration Pilot",
+    sponsor: "Visor Labs",
+    amount: "$22,500",
+    status: "pending renewal",
+    next_report: "2026-01-28"
+  },
+  {
+    name: "Creator Accelerator Credits",
+    sponsor: "Parascene Labs",
+    amount: "$15,000",
+    status: "active",
+    next_report: "2026-03-10"
+  }
+];
+
+const SEED_PROVIDER_TEMPLATES = [
+  {
+    name: "Realtime Preview Pipeline",
+    category: "Streaming",
+    version: "v2.4",
+    deployments: 18
+  },
+  {
+    name: "Distributed Cache Mesh",
+    category: "Infrastructure",
+    version: "v1.9",
+    deployments: 9
+  },
+  {
+    name: "Latency Guardrails",
+    category: "Monitoring",
+    version: "v3.1",
+    deployments: 27
+  }
+];
+
 const SEED_POLICIES = [
   {
     key: "content.flag.threshold",
@@ -384,6 +488,82 @@ if (providerCount === 0) {
       provider.status,
       provider.region,
       provider.contact_email
+    );
+  }
+}
+
+const providerStatusCount = db
+  .prepare("SELECT COUNT(*) AS count FROM provider_statuses")
+  .get().count;
+if (providerStatusCount === 0) {
+  for (const status of SEED_PROVIDER_STATUS) {
+    db.prepare(
+      `INSERT INTO provider_statuses
+       (provider_name, status, region, uptime_pct, capacity_pct)
+       VALUES (?, ?, ?, ?, ?)`
+    ).run(
+      status.provider_name,
+      status.status,
+      status.region,
+      status.uptime_pct,
+      status.capacity_pct
+    );
+  }
+}
+
+const providerMetricsCount = db
+  .prepare("SELECT COUNT(*) AS count FROM provider_metrics")
+  .get().count;
+if (providerMetricsCount === 0) {
+  for (const metric of SEED_PROVIDER_METRICS) {
+    db.prepare(
+      `INSERT INTO provider_metrics
+       (name, value, unit, change, period, description)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(
+      metric.name,
+      metric.value,
+      metric.unit,
+      metric.change,
+      metric.period,
+      metric.description
+    );
+  }
+}
+
+const providerGrantsCount = db
+  .prepare("SELECT COUNT(*) AS count FROM provider_grants")
+  .get().count;
+if (providerGrantsCount === 0) {
+  for (const grant of SEED_PROVIDER_GRANTS) {
+    db.prepare(
+      `INSERT INTO provider_grants
+       (name, sponsor, amount, status, next_report)
+       VALUES (?, ?, ?, ?, ?)`
+    ).run(
+      grant.name,
+      grant.sponsor,
+      grant.amount,
+      grant.status,
+      grant.next_report
+    );
+  }
+}
+
+const providerTemplatesCount = db
+  .prepare("SELECT COUNT(*) AS count FROM provider_templates")
+  .get().count;
+if (providerTemplatesCount === 0) {
+  for (const template of SEED_PROVIDER_TEMPLATES) {
+    db.prepare(
+      `INSERT INTO provider_templates
+       (name, category, version, deployments)
+       VALUES (?, ?, ?, ?)`
+    ).run(
+      template.name,
+      template.category,
+      template.version,
+      template.deployments
     );
   }
 }

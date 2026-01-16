@@ -49,6 +49,54 @@ function initSchema(db) {
   `);
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS provider_statuses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      provider_name TEXT NOT NULL,
+      status TEXT NOT NULL,
+      region TEXT NOT NULL,
+      uptime_pct REAL NOT NULL,
+      capacity_pct REAL NOT NULL,
+      last_check_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS provider_metrics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      value TEXT NOT NULL,
+      unit TEXT,
+      change TEXT,
+      period TEXT,
+      description TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS provider_grants (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      sponsor TEXT NOT NULL,
+      amount TEXT NOT NULL,
+      status TEXT NOT NULL,
+      next_report TEXT,
+      awarded_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS provider_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL,
+      version TEXT NOT NULL,
+      deployments INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  db.exec(`
     CREATE TABLE IF NOT EXISTS policy_knobs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       key TEXT NOT NULL,
@@ -162,6 +210,26 @@ function openDb() {
     selectProviders: db.prepare(
       `SELECT id, name, status, region, contact_email, created_at
        FROM provider_registry
+       ORDER BY name ASC`
+    ),
+    selectProviderStatuses: db.prepare(
+      `SELECT id, provider_name, status, region, uptime_pct, capacity_pct, last_check_at
+       FROM provider_statuses
+       ORDER BY provider_name ASC`
+    ),
+    selectProviderMetrics: db.prepare(
+      `SELECT id, name, value, unit, change, period, description, updated_at
+       FROM provider_metrics
+       ORDER BY id ASC`
+    ),
+    selectProviderGrants: db.prepare(
+      `SELECT id, name, sponsor, amount, status, next_report, awarded_at
+       FROM provider_grants
+       ORDER BY awarded_at DESC`
+    ),
+    selectProviderTemplates: db.prepare(
+      `SELECT id, name, category, version, deployments, updated_at
+       FROM provider_templates
        ORDER BY name ASC`
     ),
     selectPolicies: db.prepare(

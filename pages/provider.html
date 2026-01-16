@@ -25,26 +25,11 @@
     <app-notifications></app-notifications>
 
     <main>
-      <section class="section-wip">
-        <div data-route-content="status">
-          <h3>Status</h3>
-          <p>You will see the status of the provider here.</p>
-        </div>
-        
-        <div data-route-content="metrics">
-          <h3>Metrics</h3>
-          <p>You will see the metrics of the provider here.</p>
-        </div>
-        
-        <div data-route-content="grants">
-          <h3>Grants</h3>
-          <p>You will see the grants of the provider here.</p>
-        </div>
-        
-        <div data-route-content="templates-hosted">
-          <h3>Templates</h3>
-          <p>You will see the templates hosted by the provider here.</p>
-        </div>
+      <section>
+        <app-route-provider-status data-route-content="status"></app-route-provider-status>
+        <app-route-provider-metrics data-route-content="metrics"></app-route-provider-metrics>
+        <app-route-provider-grants data-route-content="grants"></app-route-provider-grants>
+        <app-route-provider-templates data-route-content="templates-hosted"></app-route-provider-templates>
       </section>
     </main>
 
