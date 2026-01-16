@@ -332,6 +332,7 @@ class AppHeader extends HTMLElement {
           transition: background-color 0.2s, border-color 0.2s;
           cursor: pointer;
           font: inherit;
+          align-self: center;
         }
         header .action-item:hover {
           background: var(--surface-strong);
@@ -345,6 +346,10 @@ class AppHeader extends HTMLElement {
           width: 16px;
           height: 16px;
           flex-shrink: 0;
+          display: block;
+        }
+        header .header-actions > * {
+          align-self: center;
         }
         header .notifications-menu {
           position: absolute;
