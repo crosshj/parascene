@@ -240,6 +240,7 @@ const templates = [
   }
 ];
 
+const generated_images = [];
 
 export function openDb() {
   let nextUserId = users.length + 1;
@@ -340,6 +341,58 @@ export function openDb() {
     },
     selectTemplates: {
       all: async () => [...templates]
+    },
+    insertGeneratedImage: {
+      run: async (userId, filename, filePath, width, height, color, status = 'generating') => {
+        const image = {
+          id: generated_images.length > 0 
+            ? Math.max(...generated_images.map(i => i.id || 0)) + 1
+            : 1,
+          user_id: userId,
+          filename,
+          file_path: filePath,
+          width,
+          height,
+          color,
+          status,
+          created_at: new Date().toISOString()
+        };
+        generated_images.push(image);
+        return {
+          insertId: image.id,
+          lastInsertRowid: image.id,
+          changes: 1
+        };
+      }
+    },
+    updateGeneratedImageStatus: {
+      run: async (id, userId, status, color = null) => {
+        const image = generated_images.find(
+          (img) => img.id === Number(id) && img.user_id === Number(userId)
+        );
+        if (!image) {
+          return { changes: 0 };
+        }
+        image.status = status;
+        if (color) {
+          image.color = color;
+        }
+        return { changes: 1 };
+      }
+    },
+    selectGeneratedImagesForUser: {
+      all: async (userId) => {
+        return generated_images.filter(
+          (img) => img.user_id === Number(userId)
+        );
+      }
+    },
+    selectGeneratedImageById: {
+      get: async (id, userId) => {
+        return generated_images.find(
+          (img) => img.id === Number(id) && img.user_id === Number(userId)
+        );
+      }
     }
   };
 
@@ -398,6 +451,9 @@ export function openDb() {
       case "templates":
         targetArray = templates;
         break;
+      case "generated_images":
+        targetArray = generated_images;
+        break;
       default:
         console.warn(`Unknown table: ${tableName}`);
         return;
@@ -444,6 +500,7 @@ export function openDb() {
     posts.length = 0;
     servers.length = 0;
     templates.length = 0;
+    generated_images.length = 0;
     // Reset ID counters
     nextUserId = 1;
     nextNotificationId = 1;

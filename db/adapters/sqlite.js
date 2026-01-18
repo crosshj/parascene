@@ -175,6 +175,30 @@ function initSchema(db) {
     );
   `);
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS generated_images (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      filename TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      width INTEGER NOT NULL,
+      height INTEGER NOT NULL,
+      color TEXT,
+      status TEXT NOT NULL DEFAULT 'generating',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+  `);
+
+  // Add status column to existing tables if it doesn't exist
+  try {
+    db.exec("ALTER TABLE generated_images ADD COLUMN status TEXT NOT NULL DEFAULT 'completed';");
+    // Update existing rows without status to 'completed'
+    db.exec("UPDATE generated_images SET status = 'completed' WHERE status IS NULL;");
+  } catch {
+    // Column already exists.
+  }
+
   try {
     db.exec(
       "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'consumer';"
@@ -382,6 +406,62 @@ export function openDb() {
            ORDER BY name ASC`
         );
         return Promise.resolve(stmt.all());
+      }
+    },
+    insertGeneratedImage: {
+      run: async (userId, filename, filePath, width, height, color, status = 'generating') => {
+        const stmt = db.prepare(
+          `INSERT INTO generated_images (user_id, filename, file_path, width, height, color, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
+        );
+        const result = stmt.run(userId, filename, filePath, width, height, color, status);
+        return Promise.resolve({
+          insertId: result.lastInsertRowid,
+          lastInsertRowid: result.lastInsertRowid,
+          changes: result.changes
+        });
+      }
+    },
+    updateGeneratedImageStatus: {
+      run: async (id, userId, status, color = null) => {
+        if (color) {
+          const stmt = db.prepare(
+            `UPDATE generated_images
+             SET status = ?, color = ?
+             WHERE id = ? AND user_id = ?`
+          );
+          const result = stmt.run(status, color, id, userId);
+          return Promise.resolve({ changes: result.changes });
+        } else {
+          const stmt = db.prepare(
+            `UPDATE generated_images
+             SET status = ?
+             WHERE id = ? AND user_id = ?`
+          );
+          const result = stmt.run(status, id, userId);
+          return Promise.resolve({ changes: result.changes });
+        }
+      }
+    },
+    selectGeneratedImagesForUser: {
+      all: async (userId) => {
+        const stmt = db.prepare(
+          `SELECT id, filename, file_path, width, height, color, status, created_at
+           FROM generated_images
+           WHERE user_id = ?
+           ORDER BY created_at DESC`
+        );
+        return Promise.resolve(stmt.all(userId));
+      }
+    },
+    selectGeneratedImageById: {
+      get: async (id, userId) => {
+        const stmt = db.prepare(
+          `SELECT id, filename, file_path, width, height, color, status, created_at
+           FROM generated_images
+           WHERE id = ? AND user_id = ?`
+        );
+        return Promise.resolve(stmt.get(id, userId));
       }
     }
   };
