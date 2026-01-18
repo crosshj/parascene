@@ -191,7 +191,13 @@ class AppRouteCreations extends HTMLElement {
             this.startPolling();
           }
         } else {
-          // Show completed image
+          // Show completed image - make it clickable
+          card.style.cursor = 'pointer';
+          card.addEventListener('click', () => {
+            // Navigate to server route for creation detail
+            window.location.href = `/creations/${item.id}`;
+          });
+          
           card.innerHTML = `
             <div 
               class="route-media"

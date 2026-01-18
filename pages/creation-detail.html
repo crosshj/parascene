@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="supported-color-schemes" content="light dark" />
+    <title>Creation - parascene</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/global.css" />
+    <link rel="stylesheet" href="/creator.css" />
+    <script type="module" src="/global.js"></script>
+  </head>
+  <body class="creation-detail-page">
+    <app-header show-notifications show-profile show-create default-route="feed">
+      <a data-route="feed">Feed</a>
+      <a data-route="creations">Creations</a>
+      <a data-route="servers">Servers</a>
+      <a data-route="templates" data-role-only="creator">Templates</a>
+    </app-header>
+    <script>
+      // Filter routes based on user role BEFORE header component parses them
+      (function() {
+        const userRole = window.__USER_ROLE__;
+        if (!userRole) return;
+        
+        function filterRoutes() {
+          const header = document.querySelector('app-header');
+          if (!header) {
+            // If header not ready yet, try again
+            requestAnimationFrame(filterRoutes);
+            return;
+          }
+          
+          // Remove routes that don't match the user's role
+          Array.from(header.children).forEach(child => {
+            if (child.hasAttribute('data-role-only')) {
+              const requiredRole = child.getAttribute('data-role-only');
+              if (userRole !== requiredRole) {
+                child.remove();
+              }
+            }
+          });
+        }
+        
+        // Start filtering as soon as possible
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', filterRoutes);
+        } else {
+          filterRoutes();
+        }
+      })();
+    </script>
+    <app-profile></app-profile>
+    <app-notifications></app-notifications>
+
+    <main>
+      <div class="creation-detail-route">
+        <div class="creation-detail-hero">
+          <div class="creation-detail-background" data-background></div>
+          <div class="creation-detail-image-wrapper">
+            <img class="creation-detail-image" data-image alt="Creation" />
+          </div>
+        </div>
+        <div class="creation-detail-footer">
+          <div class="creation-detail-actions">
+            <button class="creation-detail-action-btn">→ Expand</button>
+            <button class="creation-detail-action-btn">⚙️ Adjust & Crop</button>
+            <button class="creation-detail-action-btn">⋮ More</button>
+          </div>
+          <div class="creation-detail-info" data-detail-content>
+            <div class="route-empty">Loading...</div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      // Set up URL change detection BEFORE header component loads
+      // This ensures we capture navigation events
+      
+      // Get creation ID from URL
+      function getCreationId() {
+        const pathname = window.location.pathname;
+        const match = pathname.match(/^\/creations\/(\d+)$/);
+        return match ? parseInt(match[1], 10) : null;
+      }
+      
+      // Store original history methods before anything else modifies them
+      const originalPushState = history.pushState.bind(history);
+      const originalReplaceState = history.replaceState.bind(history);
+
+      function getTimeAgo(date) {
+        const now = new Date();
+        const diffMs = now - date;
+        const diffSecs = Math.floor(diffMs / 1000);
+        const diffMins = Math.floor(diffSecs / 60);
+        const diffHours = Math.floor(diffMins / 60);
+        const diffDays = Math.floor(diffHours / 24);
+        const diffMonths = Math.floor(diffDays / 30);
+        const diffYears = Math.floor(diffDays / 365);
+
+        if (diffYears > 0) return `${diffYears} year${diffYears > 1 ? 's' : ''} ago`;
+        if (diffMonths > 0) return `${diffMonths} month${diffMonths > 1 ? 's' : ''} ago`;
+        if (diffDays > 0) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+        if (diffHours > 0) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+        if (diffMins > 0) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+        return 'just now';
+      }
+
+      async function loadCreation() {
+        const detailContent = document.querySelector('[data-detail-content]');
+        const imageEl = document.querySelector('[data-image]');
+        const backgroundEl = document.querySelector('[data-background]');
+        
+        if (!detailContent || !imageEl || !backgroundEl) return;
+
+        const creationId = getCreationId();
+        if (!creationId) {
+          detailContent.innerHTML = `
+            <div class="route-empty">
+              <div class="route-empty-title">Invalid creation ID</div>
+            </div>
+          `;
+          return;
+        }
+
+        detailContent.innerHTML = '<div class="route-empty">Loading...</div>';
+
+        try {
+          const response = await fetch(`/api/create/images/${creationId}`);
+          if (!response.ok) {
+            if (response.status === 404) {
+              detailContent.innerHTML = `
+                <div class="route-empty">
+                  <div class="route-empty-title">Creation not found</div>
+                  <div class="route-empty-message">The creation you're looking for doesn't exist or you don't have access to it.</div>
+                </div>
+              `;
+              return;
+            }
+            throw new Error('Failed to load creation');
+          }
+
+          const creation = await response.json();
+          
+          // Set image and blurred background
+          imageEl.src = creation.url;
+          imageEl.style.display = 'block';
+          backgroundEl.style.backgroundImage = `url('${creation.url}')`;
+          
+          // Format date
+          const date = new Date(creation.created_at);
+          const timeAgo = getTimeAgo(date);
+          
+          // Generate title from filename or use default
+          const title = creation.filename 
+            ? creation.filename.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ')
+            : 'Creation';
+          
+          detailContent.innerHTML = `
+            <div class="creation-detail-author">
+              <span class="creation-detail-author-icon">S</span>
+              <span class="creation-detail-author-name">User</span>
+              <span class="creation-detail-author-handle">@user</span>
+              <span class="creation-detail-date">${timeAgo}</span>
+            </div>
+            <div class="creation-detail-title">${title}</div>
+            <div class="creation-detail-meta">
+              <span>Created ${timeAgo}</span>
+              <span>•</span>
+              <span>0 comments</span>
+              <span>•</span>
+              <span>0 likes</span>
+            </div>
+          `;
+        } catch (error) {
+          console.error("Error loading creation detail:", error);
+          detailContent.innerHTML = `
+            <div class="route-empty">
+              <div class="route-empty-title">Unable to load creation</div>
+              <div class="route-empty-message">An error occurred while loading the creation.</div>
+            </div>
+          `;
+        }
+      }
+
+      let currentCreationId = null;
+
+      function checkAndLoadCreation() {
+        const creationId = getCreationId();
+        console.log('checkAndLoadCreation called, creationId:', creationId, 'currentCreationId:', currentCreationId);
+        // Only reload if the creation ID has changed
+        if (creationId && creationId !== currentCreationId) {
+          console.log('Creation ID changed, loading new creation');
+          currentCreationId = creationId;
+          loadCreation();
+          // Reset scroll to top
+          window.scrollTo(0, 0);
+        } else if (!creationId && currentCreationId !== null) {
+          // If we're no longer on a creation detail page, reset
+          console.log('No longer on creation detail page');
+          currentCreationId = null;
+        }
+      }
+
+      // Load creation when page loads
+      document.addEventListener('DOMContentLoaded', () => {
+        checkAndLoadCreation();
+      });
+
+      // Listen for URL changes (browser back/forward navigation)
+      // Use capture phase to ensure we get the event before header handles it
+      window.addEventListener('popstate', (e) => {
+        console.log('popstate event fired', window.location.pathname);
+        // Check if we're still on a creation detail page
+        const creationId = getCreationId();
+        if (creationId) {
+          checkAndLoadCreation();
+        }
+      }, true);
+
+      // Override pushState and replaceState to detect programmatic navigation
+      history.pushState = function(...args) {
+        console.log('pushState called', args);
+        originalPushState(...args);
+        // Check if URL changed to a different creation
+        setTimeout(() => {
+          const creationId = getCreationId();
+          console.log('After pushState, creationId:', creationId);
+          if (creationId) {
+            checkAndLoadCreation();
+          }
+        }, 0);
+      };
+
+      history.replaceState = function(...args) {
+        console.log('replaceState called', args);
+        originalReplaceState(...args);
+        setTimeout(() => {
+          const creationId = getCreationId();
+          console.log('After replaceState, creationId:', creationId);
+          if (creationId) {
+            checkAndLoadCreation();
+          }
+        }, 0);
+      };
+
+      // Listen for the route-change event from the header component
+      document.addEventListener('route-change', (e) => {
+        console.log('route-change event fired', e.detail?.route);
+        const route = e.detail?.route;
+        if (route && route.startsWith('creations/')) {
+          checkAndLoadCreation();
+        }
+      });
+
+      // Also monitor pathname changes directly as a fallback
+      let lastPathname = window.location.pathname;
+      const pathnameCheck = setInterval(() => {
+        const currentPathname = window.location.pathname;
+        if (currentPathname !== lastPathname) {
+          lastPathname = currentPathname;
+          const creationId = getCreationId();
+          if (creationId) {
+            checkAndLoadCreation();
+          } else {
+            // If we're no longer on a creation detail page, clear interval
+            clearInterval(pathnameCheck);
+          }
+        }
+      }, 100);
+    </script>
+  </body>
+</html>

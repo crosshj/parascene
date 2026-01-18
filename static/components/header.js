@@ -89,7 +89,15 @@ class AppHeader extends HTMLElement {
         e.preventDefault();
         const route = link.getAttribute('data-route');
         if (route) {
-          // Use History API with pathname-based routing
+          // Check if we're on a server-sent page (like creation detail)
+          // If so, use full page navigation for ANY route change
+          const isServerSentPage = /^\/creations\/\d+$/.test(window.location.pathname);
+          if (isServerSentPage) {
+            // Use full page navigation for server-sent pages
+            window.location.href = `/${route}`;
+            return;
+          }
+          // Use History API with pathname-based routing for client-side pages
           window.history.pushState({ route }, '', `/${route}`);
           this.handleRouteChange();
         }
@@ -232,6 +240,13 @@ class AppHeader extends HTMLElement {
   }
 
   handleRouteChange() {
+    // If we're on a server-sent page (like creation detail), don't handle route changes
+    // Any navigation should result in a full page load
+    const isServerSentPage = /^\/creations\/\d+$/.test(window.location.pathname);
+    if (isServerSentPage) {
+      return;
+    }
+    
     // Get route from pathname (e.g., /feed -> feed, / -> defaultRoute)
     const pathname = window.location.pathname;
     let currentRoute = pathname === '/' || pathname === '' ? this.defaultRoute : pathname.slice(1);
@@ -309,6 +324,15 @@ class AppHeader extends HTMLElement {
         const route = link.getAttribute('data-route');
         this.closeMobileMenu();
         if (route) {
+          // Check if we're on a server-sent page (like creation detail)
+          // If so, use full page navigation for ANY route change
+          const isServerSentPage = /^\/creations\/\d+$/.test(window.location.pathname);
+          if (isServerSentPage) {
+            // Use full page navigation for server-sent pages
+            window.location.href = `/${route}`;
+            return;
+          }
+          // Use History API with pathname-based routing for client-side pages
           window.history.pushState({ route }, '', `/${route}`);
           this.handleRouteChange();
         }
@@ -323,6 +347,12 @@ class AppHeader extends HTMLElement {
         e.stopPropagation();
         if (mobileCreateButton.disabled) return;
         this.closeMobileMenu();
+        // Check if we're on a server-sent page (like creation detail)
+        const isServerSentPage = /^\/creations\/\d+$/.test(window.location.pathname);
+        if (isServerSentPage) {
+          window.location.href = '/create';
+          return;
+        }
         window.history.pushState({ route: 'create' }, '', '/create');
         this.handleRouteChange();
       });
@@ -336,6 +366,12 @@ class AppHeader extends HTMLElement {
         e.stopPropagation();
         // Don't navigate if already on create route
         if (createButton.disabled) return;
+        // Check if we're on a server-sent page (like creation detail)
+        const isServerSentPage = /^\/creations\/\d+$/.test(window.location.pathname);
+        if (isServerSentPage) {
+          window.location.href = '/create';
+          return;
+        }
         // Navigate to create route
         window.history.pushState({ route: 'create' }, '', '/create');
         this.handleRouteChange();
