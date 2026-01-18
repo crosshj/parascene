@@ -15,10 +15,10 @@
     <script type="module" src="/global.js"></script>
   </head>
   <body>
-    <app-header show-notifications show-profile show-generate default-route="feed">
+    <app-header show-notifications show-profile show-create default-route="feed">
       <a data-route="feed">Feed</a>
       <a data-route="explore">Explore</a>
-      <a data-route="posts">Creations</a>
+      <a data-route="creations">Creations</a>
       <a data-route="servers">Servers</a>
     </app-header>
 
@@ -29,9 +29,9 @@
       <section>
         <app-route-feed data-route-content="feed"></app-route-feed>
         <app-route-explore data-route-content="explore"></app-route-explore>
-        <app-route-posts data-route-content="posts"></app-route-posts>
+        <app-route-creations data-route-content="creations"></app-route-creations>
         <app-route-servers data-route-content="servers"></app-route-servers>
-        <app-route-generate data-route-content="generate"></app-route-generate>
+        <app-route-create data-route-content="create"></app-route-create>
       </section>
     </main>
 

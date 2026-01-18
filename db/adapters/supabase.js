@@ -115,7 +115,7 @@ export function openDb() {
         throw new Error("Not implemented");
       }
     },
-    selectPostsForUser: {
+    selectCreationsForUser: {
       all: async (userId) => {
         // TODO: Implement Supabase query
         throw new Error("Not implemented");

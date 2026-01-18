@@ -1,34 +1,34 @@
-class AppRoutePosts extends HTMLElement {
+class AppRouteCreations extends HTMLElement {
   connectedCallback() {
     this.innerHTML = `
       <style>
-        .posts-route .route-header {
+        .creations-route .route-header {
           margin-bottom: 12px;
         }
-        .posts-route .route-header p {
+        .creations-route .route-header p {
           color: var(--text-muted);
         }
-        .posts-route .route-cards {
+        .creations-route .route-cards {
           display: grid;
           grid-template-columns: repeat(5, minmax(0, 1fr));
           gap: 6px;
         }
         @media (max-width: 1024px) {
-          .posts-route .route-cards {
+          .creations-route .route-cards {
             grid-template-columns: repeat(4, minmax(0, 1fr));
           }
         }
         @media (max-width: 860px) {
-          .posts-route .route-cards {
+          .creations-route .route-cards {
             grid-template-columns: repeat(3, minmax(0, 1fr));
           }
         }
         @media (max-width: 600px) {
-          .posts-route .route-cards {
+          .creations-route .route-cards {
             grid-template-columns: repeat(2, minmax(0, 1fr));
           }
         }
-        .posts-route .route-card {
+        .creations-route .route-card {
           background: transparent;
           border: none;
           border-radius: 0;
@@ -36,10 +36,12 @@ class AppRoutePosts extends HTMLElement {
           position: relative;
           overflow: hidden;
           aspect-ratio: 1 / 1;
+          width: 100%;
+          height: 100%;
           display: flex;
           align-items: stretch;
         }
-        .posts-route .route-media {
+        .creations-route .route-media {
           position: absolute;
           inset: 0;
           border-radius: 6px;
@@ -47,40 +49,34 @@ class AppRoutePosts extends HTMLElement {
           background-position: center;
           border: none;
         }
-        .posts-route .route-media.loading {
-          background: var(--surface-muted);
+        .creations-route .route-media.loading {
+          background: linear-gradient(90deg, var(--surface-muted), var(--surface-strong), var(--surface-muted));
+          background-size: 200% 100%;
+          animation: loading 4s linear infinite;
           display: flex;
           align-items: center;
           justify-content: center;
-          position: relative;
-        }
-        .posts-route .route-media.loading::before {
-          content: '';
           position: absolute;
-          top: 0;
-          left: -100%;
+          inset: 0;
           width: 100%;
           height: 100%;
-          background: linear-gradient(
-            90deg,
-            transparent,
-            rgba(255, 255, 255, 0.2),
-            transparent
-          );
-          animation: shimmer 2s infinite;
         }
-        @keyframes shimmer {
-          0% { left: -100%; }
-          100% { left: 100%; }
+        @keyframes loading {
+          0% {
+            background-position: 200% 0;
+          }
+          100% {
+            background-position: -200% 0;
+          }
         }
-        .posts-route .route-media.loading::after {
-          content: 'Generating...';
+        .creations-route .route-media.loading::after {
+          content: 'Creating...';
           position: relative;
           z-index: 1;
           color: var(--text-muted);
           font-size: 0.9rem;
         }
-        .posts-route .route-details {
+        .creations-route .route-details {
           position: absolute;
           left: 0;
           right: 0;
@@ -93,20 +89,20 @@ class AppRoutePosts extends HTMLElement {
           color: var(--text);
         }
         @media (prefers-color-scheme: light) {
-          .posts-route .route-details {
+          .creations-route .route-details {
             background: rgba(255, 255, 255, 0.9);
             color: var(--text);
           }
         }
-        .posts-route .route-details-content {
+        .creations-route .route-details-content {
           padding: 12px;
         }
-        .posts-route .route-card:hover .route-details,
-        .posts-route .route-card:focus-within .route-details {
+        .creations-route .route-card:hover .route-details,
+        .creations-route .route-card:focus-within .route-details {
           opacity: 1;
           transform: translateY(0);
         }
-        .posts-route .route-title {
+        .creations-route .route-title {
           font-weight: 600;
           display: -webkit-box;
           -webkit-box-orient: vertical;
@@ -121,14 +117,14 @@ class AppRoutePosts extends HTMLElement {
           overflow-wrap: anywhere;
           word-break: break-word;
         }
-        .posts-route .route-meta {
+        .creations-route .route-meta {
           font-size: 0.85rem;
           color: var(--text-muted);
         }
-        .posts-route .route-meta-spacer {
+        .creations-route .route-meta-spacer {
           height: 6px;
         }
-        .posts-route .route-summary {
+        .creations-route .route-summary {
           display: -webkit-box;
           -webkit-box-orient: vertical;
           -webkit-line-clamp: 2;
@@ -146,46 +142,80 @@ class AppRoutePosts extends HTMLElement {
           margin-top: 0;
         }
         @media (prefers-color-scheme: light) {
-          .posts-route .route-summary {
+          .creations-route .route-summary {
             color: rgba(15, 23, 42, 0.65);
           }
         }
-        .posts-route .route-tags {
+        .creations-route .route-tags {
           font-size: 0.8rem;
           color: var(--text-muted);
         }
-        .posts-route .route-empty {
+        .creations-route .route-empty {
           grid-column: 1 / -1;
+          text-align: center;
+          padding: 48px 24px;
           color: var(--text-muted);
         }
+        .creations-route .route-empty-title {
+          font-size: 1.25rem;
+          font-weight: 600;
+          color: var(--text);
+          margin-bottom: 8px;
+        }
+        .creations-route .route-empty-message {
+          font-size: 0.95rem;
+          color: var(--text-muted);
+          margin-bottom: 24px;
+          line-height: 1.5;
+        }
+        .creations-route .route-empty-button {
+          display: inline-block;
+          padding: 10px 24px;
+          background: var(--accent);
+          color: var(--accent-text);
+          border: none;
+          border-radius: 6px;
+          font-size: 0.95rem;
+          font-weight: 500;
+          cursor: pointer;
+          text-decoration: none;
+          transition: background 0.2s ease, transform 0.1s ease;
+        }
+        .creations-route .route-empty-button:hover {
+          background: var(--focus);
+          transform: translateY(-1px);
+        }
+        .creations-route .route-empty-button:active {
+          transform: translateY(0);
+        }
       </style>
-      <div class="posts-route">
+      <div class="creations-route">
         <div class="route-header">
           <h3>Creations</h3>
           <p>Your generated creations. Share them when you're ready.</p>
         </div>
-        <div class="route-cards" data-posts-container>
+        <div class="route-cards" data-creations-container>
           <div class="route-empty">Loading...</div>
         </div>
       </div>
     `;
     this.pollInterval = null;
     this.setupRouteListener();
-    // Load posts after a brief delay to ensure DOM is ready
+    // Load creations after a brief delay to ensure DOM is ready
     // This also ensures we reload if navigating from another page
     setTimeout(() => {
-      this.loadPosts();
+      this.loadCreations();
       this.startPolling();
     }, 50);
   }
 
   setupRouteListener() {
-    // Listen for route change events to reload when posts route becomes active
+    // Listen for route change events to reload when creations route becomes active
     this.routeChangeHandler = (e) => {
       const route = e.detail?.route;
-      if (route === 'posts') {
-        // Reload posts immediately when navigating to posts page
-        this.loadPosts();
+      if (route === 'creations') {
+        // Reload creations immediately when navigating to creations page
+        this.loadCreations();
         // Restart polling in case it was stopped
         if (!this.pollInterval) {
           this.startPolling();
@@ -199,8 +229,8 @@ class AppRoutePosts extends HTMLElement {
     this.intersectionObserver = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
         if (entry.isIntersecting && entry.target === this) {
-          // Element is visible, reload posts
-          this.loadPosts();
+          // Element is visible, reload creations
+          this.loadCreations();
           if (!this.pollInterval) {
             this.startPolling();
           }
@@ -224,7 +254,7 @@ class AppRoutePosts extends HTMLElement {
   }
 
   startPolling() {
-    // Poll every 2 seconds for images that are still generating
+    // Poll every 2 seconds for creations that are still being created
     this.pollInterval = setInterval(() => {
       this.checkForUpdates();
     }, 2000);
@@ -238,87 +268,108 @@ class AppRoutePosts extends HTMLElement {
   }
 
   async checkForUpdates() {
-    const container = this.querySelector("[data-posts-container]");
+    const container = this.querySelector("[data-creations-container]");
     if (!container) return;
 
-    // Check if there are any loading images
-    const loadingImages = container.querySelectorAll('.route-media[data-image-id][data-status="generating"]');
-    if (loadingImages.length === 0) {
-      // No loading images, stop polling
+    // Check if there are any loading creations
+    const loadingCreations = container.querySelectorAll('.route-media[data-image-id][data-status="creating"]');
+    if (loadingCreations.length === 0) {
+      // No loading creations, stop polling
       this.stopPolling();
       return;
     }
 
-    // Fetch updated images
-    try {
-      const response = await fetch("/api/generate/images");
-      if (!response.ok) return;
-      
-      const data = await response.json();
-      const images = Array.isArray(data.images) ? data.images : [];
-      
-      // Update any images that have completed
-      let hasUpdates = false;
-      loadingImages.forEach(loadingElement => {
-        const imageId = loadingElement.getAttribute('data-image-id');
-        const updatedImage = images.find(img => img.id.toString() === imageId);
+      // Fetch updated creations
+      try {
+        const response = await fetch("/api/create/images");
+        if (!response.ok) return;
         
-        if (updatedImage && updatedImage.status === 'completed') {
-          hasUpdates = true;
+        const data = await response.json();
+        const creations = Array.isArray(data.images) ? data.images : [];
+        
+        // Update any creations that have completed
+        let hasUpdates = false;
+        loadingCreations.forEach(loadingElement => {
+          const creationId = loadingElement.getAttribute('data-image-id');
+          const updatedCreation = creations.find(c => c.id.toString() === creationId);
+          
+          if (updatedCreation && updatedCreation.status === 'completed') {
+            hasUpdates = true;
+          }
+        });
+        
+        if (hasUpdates) {
+          // Reload the entire list to get the updated creations
+          this.loadCreations();
         }
-      });
-      
-      if (hasUpdates) {
-        // Reload the entire list to get the updated images
-        this.loadPosts();
-      }
     } catch (error) {
       console.error("Error checking for updates:", error);
     }
   }
 
-  async loadPosts() {
-    const container = this.querySelector("[data-posts-container]");
+  async loadCreations() {
+    const container = this.querySelector("[data-creations-container]");
     if (!container) return;
 
     try {
-      // Fetch generated images only
-      const imagesResponse = await fetch("/api/generate/images").catch(() => ({ ok: false }));
+      // Fetch created creations only
+      const creationsResponse = await fetch("/api/create/images").catch(() => ({ ok: false }));
       
-      const images = imagesResponse.ok
-        ? (await imagesResponse.json()).images || []
+      const creations = creationsResponse.ok
+        ? (await creationsResponse.json()).images || []
         : [];
 
       container.innerHTML = "";
       
-      if (images.length === 0) {
-        container.innerHTML = `<div class="route-empty">No creations yet.</div>`;
+      if (creations.length === 0) {
+        container.innerHTML = `
+          <div class="route-empty">
+            <div class="route-empty-title">No creations yet</div>
+            <div class="route-empty-message">Start creating to see your work here.</div>
+            <a href="/create" class="route-empty-button" data-route="create">Get Started</a>
+          </div>
+        `;
+        
+        // Add click handler for the button to use client-side routing
+        const button = container.querySelector('.route-empty-button');
+        if (button) {
+          button.addEventListener('click', (e) => {
+            e.preventDefault();
+            const header = document.querySelector('app-header');
+            if (header && typeof header.handleRouteChange === 'function') {
+              window.history.pushState({ route: 'create' }, '', '/create');
+              header.handleRouteChange();
+            } else {
+              window.location.hash = 'create';
+            }
+          });
+        }
         return;
       }
 
-      // Sort images by created_at (newest first)
-      const sortedImages = images.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      // Sort creations by created_at (newest first)
+      const sortedCreations = creations.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-      for (const item of sortedImages) {
+      for (const item of sortedCreations) {
         const card = document.createElement("div");
         card.className = "route-card";
         
-        // Generated image
-        const isGenerating = item.status === 'generating' || item.status === 'pending';
+        // Created creation
+        const isCreating = item.status === 'creating' || item.status === 'pending';
         
-        if (isGenerating) {
+        if (isCreating) {
           // Show loading state
           card.innerHTML = `
             <div 
               class="route-media loading"
               data-image-id="${item.id}"
-              data-status="generating"
+              data-status="creating"
               aria-hidden="true"
             ></div>
             <div class="route-details">
               <div class="route-details-content">
-                <div class="route-title">Generating Image</div>
-                <div class="route-summary">Creating your image...</div>
+                <div class="route-title">Creating...</div>
+                <div class="route-summary">Your creation is being processed...</div>
                 <div class="route-meta">${item.created_at}</div>
               </div>
             </div>
@@ -339,7 +390,7 @@ class AppRoutePosts extends HTMLElement {
             ></div>
             <div class="route-details">
               <div class="route-details-content">
-                <div class="route-title">Generated Image</div>
+                <div class="route-title">Creation</div>
                 <div class="route-summary">${item.width} × ${item.height}px</div>
                 <div class="route-meta">${item.created_at}</div>
                 <div class="route-meta route-meta-spacer"></div>
@@ -358,4 +409,4 @@ class AppRoutePosts extends HTMLElement {
   }
 }
 
-customElements.define("app-route-posts", AppRoutePosts);
+customElements.define("app-route-creations", AppRouteCreations);

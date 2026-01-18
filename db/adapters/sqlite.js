@@ -142,7 +142,7 @@ function initSchema(db) {
   `);
 
   db.exec(`
-    CREATE TABLE IF NOT EXISTS posts (
+    CREATE TABLE IF NOT EXISTS creations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
       title TEXT NOT NULL,
@@ -176,7 +176,7 @@ function initSchema(db) {
   `);
 
   db.exec(`
-    CREATE TABLE IF NOT EXISTS generated_images (
+    CREATE TABLE IF NOT EXISTS created_images (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
       filename TEXT NOT NULL,
@@ -184,7 +184,7 @@ function initSchema(db) {
       width INTEGER NOT NULL,
       height INTEGER NOT NULL,
       color TEXT,
-      status TEXT NOT NULL DEFAULT 'generating',
+      status TEXT NOT NULL DEFAULT 'creating',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id)
     );
@@ -192,9 +192,9 @@ function initSchema(db) {
 
   // Add status column to existing tables if it doesn't exist
   try {
-    db.exec("ALTER TABLE generated_images ADD COLUMN status TEXT NOT NULL DEFAULT 'completed';");
+    db.exec("ALTER TABLE created_images ADD COLUMN status TEXT NOT NULL DEFAULT 'completed';");
     // Update existing rows without status to 'completed'
-    db.exec("UPDATE generated_images SET status = 'completed' WHERE status IS NULL;");
+    db.exec("UPDATE created_images SET status = 'completed' WHERE status IS NULL;");
   } catch {
     // Column already exists.
   }
@@ -377,11 +377,11 @@ export function openDb() {
         return Promise.resolve(stmt.all());
       }
     },
-    selectPostsForUser: {
+    selectCreationsForUser: {
       all: async (userId) => {
         const stmt = db.prepare(
           `SELECT id, title, body, status, created_at
-           FROM posts
+           FROM creations
            WHERE user_id = ?
            ORDER BY created_at DESC`
         );
@@ -408,10 +408,10 @@ export function openDb() {
         return Promise.resolve(stmt.all());
       }
     },
-    insertGeneratedImage: {
-      run: async (userId, filename, filePath, width, height, color, status = 'generating') => {
+    insertCreatedImage: {
+      run: async (userId, filename, filePath, width, height, color, status = 'creating') => {
         const stmt = db.prepare(
-          `INSERT INTO generated_images (user_id, filename, file_path, width, height, color, status)
+          `INSERT INTO created_images (user_id, filename, file_path, width, height, color, status)
            VALUES (?, ?, ?, ?, ?, ?, ?)`
         );
         const result = stmt.run(userId, filename, filePath, width, height, color, status);
@@ -422,11 +422,11 @@ export function openDb() {
         });
       }
     },
-    updateGeneratedImageStatus: {
+    updateCreatedImageStatus: {
       run: async (id, userId, status, color = null) => {
         if (color) {
           const stmt = db.prepare(
-            `UPDATE generated_images
+            `UPDATE created_images
              SET status = ?, color = ?
              WHERE id = ? AND user_id = ?`
           );
@@ -434,7 +434,7 @@ export function openDb() {
           return Promise.resolve({ changes: result.changes });
         } else {
           const stmt = db.prepare(
-            `UPDATE generated_images
+            `UPDATE created_images
              SET status = ?
              WHERE id = ? AND user_id = ?`
           );
@@ -443,22 +443,22 @@ export function openDb() {
         }
       }
     },
-    selectGeneratedImagesForUser: {
+    selectCreatedImagesForUser: {
       all: async (userId) => {
         const stmt = db.prepare(
           `SELECT id, filename, file_path, width, height, color, status, created_at
-           FROM generated_images
+           FROM created_images
            WHERE user_id = ?
            ORDER BY created_at DESC`
         );
         return Promise.resolve(stmt.all(userId));
       }
     },
-    selectGeneratedImageById: {
+    selectCreatedImageById: {
       get: async (id, userId) => {
         const stmt = db.prepare(
           `SELECT id, filename, file_path, width, height, color, status, created_at
-           FROM generated_images
+           FROM created_images
            WHERE id = ? AND user_id = ?`
         );
         return Promise.resolve(stmt.get(id, userId));

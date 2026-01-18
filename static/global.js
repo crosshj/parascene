@@ -6,8 +6,8 @@ import './components/nav-bar.js';
 import './components/pages/feed.js';
 import './components/pages/explore.js';
 import './components/pages/servers.js';
-import './components/pages/posts.js';
-import './components/pages/generate.js';
+import './components/pages/creations.js';
+import './components/pages/create.js';
 import './components/pages/templates.js';
 import './components/pages/provider-status.js';
 import './components/pages/provider-metrics.js';
@@ -30,9 +30,9 @@ async function initPage() {
     'app-notifications',
     'app-route-feed',
     'app-route-explore',
+    'app-route-creations',
     'app-route-servers',
-    'app-route-posts',
-    'app-route-generate',
+    'app-route-create',
     'app-route-templates',
     'app-route-provider-status',
     'app-route-provider-metrics',

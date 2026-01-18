@@ -28,7 +28,7 @@ const seedData = {
 
   moderation_queue: [
     {
-      content_type: "post",
+      content_type: "creation",
       content_id: "post_1042",
       status: "pending",
       reason: "Possible spam links"
@@ -250,9 +250,9 @@ const seedData = {
     {
       audience: "role",
       role: "creator",
-      title: "Post flagged",
-      message: "One of your posts was flagged for review.",
-      link: "/posts"
+      title: "Creation flagged",
+      message: "One of your creations was flagged for review.",
+      link: "/creations"
     },
     {
       audience: "role",
@@ -396,7 +396,7 @@ const seedData = {
     }
   ],
 
-  posts: [
+  creations: [
     {
       email: "creator@example.com",
       title: "Foggy bridge pass",
@@ -569,30 +569,30 @@ const { queries, seed } = openDb();
       checkExists: async () => await queries.selectExploreItems.all()
     });
 
-    // Seed posts (with user_id lookups)
-    const creatorUser = await queries.selectUserByEmail.get("creator@example.com");
-    const consumerUser = await queries.selectUserByEmail.get("consumer@example.com");
+    // Seed creations (with user_id lookups) - DISABLED: creations table not seeded
+    // const creatorUser = await queries.selectUserByEmail.get("creator@example.com");
+    // const consumerUser = await queries.selectUserByEmail.get("consumer@example.com");
 
-    const postsToSeed = seedData.posts
-      .map((post) => {
-        const userId =
-          post.email === "creator@example.com"
-            ? creatorUser?.id
-            : consumerUser?.id;
-        if (!userId) return null;
+    // const creationsToSeed = seedData.creations
+    //   .map((creation) => {
+    //     const userId =
+    //       creation.email === "creator@example.com"
+    //         ? creatorUser?.id
+    //         : consumerUser?.id;
+    //     if (!userId) return null;
 
-        return {
-          user_id: userId,
-          title: post.title,
-          body: post.body,
-          status: post.status
-        };
-      })
-      .filter(Boolean);
+    //     return {
+    //       user_id: userId,
+    //       title: creation.title,
+    //       body: creation.body,
+    //       status: creation.status
+    //     };
+    //   })
+    //   .filter(Boolean);
 
-    await seed("posts", postsToSeed, {
-      skipIfExists: true
-    });
+    // await seed("creations", creationsToSeed, {
+    //   skipIfExists: true
+    // });
 
     // Seed servers
     await seed("servers", seedData.servers, {

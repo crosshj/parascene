@@ -36,7 +36,7 @@ const users = [
 const moderation_queue = [
   {
     id: 1,
-    content_type: "post",
+    content_type: "creation",
     content_id: "post_1042",
     status: "pending",
     reason: "Possible spam links",
@@ -207,7 +207,7 @@ const explore_items = [
   }
 ];
 
-const posts = [
+const creations = [
   {
     id: 1,
     user_id: 1,
@@ -240,7 +240,7 @@ const templates = [
   }
 ];
 
-const generated_images = [];
+const created_images = [];
 
 export function openDb() {
   let nextUserId = users.length + 1;
@@ -333,8 +333,8 @@ export function openDb() {
     selectExploreItems: {
       all: async () => [...explore_items]
     },
-    selectPostsForUser: {
-      all: async (userId) => posts.filter((post) => post.user_id === Number(userId))
+    selectCreationsForUser: {
+      all: async (userId) => creations.filter((creation) => creation.user_id === Number(userId))
     },
     selectServers: {
       all: async () => [...servers]
@@ -342,11 +342,11 @@ export function openDb() {
     selectTemplates: {
       all: async () => [...templates]
     },
-    insertGeneratedImage: {
-      run: async (userId, filename, filePath, width, height, color, status = 'generating') => {
+    insertCreatedImage: {
+      run: async (userId, filename, filePath, width, height, color, status = 'creating') => {
         const image = {
-          id: generated_images.length > 0 
-            ? Math.max(...generated_images.map(i => i.id || 0)) + 1
+          id: created_images.length > 0 
+            ? Math.max(...created_images.map(i => i.id || 0)) + 1
             : 1,
           user_id: userId,
           filename,
@@ -357,7 +357,7 @@ export function openDb() {
           status,
           created_at: new Date().toISOString()
         };
-        generated_images.push(image);
+        created_images.push(image);
         return {
           insertId: image.id,
           lastInsertRowid: image.id,
@@ -365,9 +365,9 @@ export function openDb() {
         };
       }
     },
-    updateGeneratedImageStatus: {
+    updateCreatedImageStatus: {
       run: async (id, userId, status, color = null) => {
-        const image = generated_images.find(
+        const image = created_images.find(
           (img) => img.id === Number(id) && img.user_id === Number(userId)
         );
         if (!image) {
@@ -380,16 +380,16 @@ export function openDb() {
         return { changes: 1 };
       }
     },
-    selectGeneratedImagesForUser: {
+    selectCreatedImagesForUser: {
       all: async (userId) => {
-        return generated_images.filter(
+        return created_images.filter(
           (img) => img.user_id === Number(userId)
         );
       }
     },
-    selectGeneratedImageById: {
+    selectCreatedImageById: {
       get: async (id, userId) => {
-        return generated_images.find(
+        return created_images.find(
           (img) => img.id === Number(id) && img.user_id === Number(userId)
         );
       }
@@ -442,8 +442,8 @@ export function openDb() {
       case "explore_items":
         targetArray = explore_items;
         break;
-      case "posts":
-        targetArray = posts;
+      case "creations":
+        targetArray = creations;
         break;
       case "servers":
         targetArray = servers;
@@ -451,8 +451,8 @@ export function openDb() {
       case "templates":
         targetArray = templates;
         break;
-      case "generated_images":
-        targetArray = generated_images;
+      case "created_images":
+        targetArray = created_images;
         break;
       default:
         console.warn(`Unknown table: ${tableName}`);
@@ -497,10 +497,10 @@ export function openDb() {
     notifications.length = 0;
     feed_items.length = 0;
     explore_items.length = 0;
-    posts.length = 0;
+    creations.length = 0;
     servers.length = 0;
     templates.length = 0;
-    generated_images.length = 0;
+    created_images.length = 0;
     // Reset ID counters
     nextUserId = 1;
     nextNotificationId = 1;

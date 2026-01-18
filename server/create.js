@@ -6,14 +6,14 @@ import { generateRandomColorImage } from "./utils/imageGenerator.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export default function createGenerateRoutes({ queries }) {
+export default function createCreateRoutes({ queries }) {
   const router = express.Router();
 
   // Ensure images directory exists
-  const imagesDir = path.join(__dirname, "..", "db", "data", "images", "generated");
+  const imagesDir = path.join(__dirname, "..", "db", "data", "images", "created");
   
-  // Serve generated images statically
-  router.use("/images/generated", express.static(imagesDir));
+  // Serve created images statically
+  router.use("/images/created", express.static(imagesDir));
 
   async function requireUser(req, res) {
     if (!req.auth?.userId) {
@@ -30,81 +30,82 @@ export default function createGenerateRoutes({ queries }) {
     return user;
   }
 
-  // POST /api/generate - Generate a new image
-  router.post("/api/generate", async (req, res) => {
+  // POST /api/create - Create a new image
+  router.post("/api/create", async (req, res) => {
     const user = await requireUser(req, res);
     if (!user) return;
 
     try {
-      // Generate unique filename
+      // Create unique filename
       const timestamp = Date.now();
       const random = Math.random().toString(36).substring(2, 9);
       const filename = `${user.id}_${timestamp}_${random}.png`;
       const filePath = path.join(imagesDir, filename);
 
-      // Create placeholder entry in database with "generating" status
-      const result = await queries.insertGeneratedImage.run(
+      // Create placeholder entry in database with "creating" status
+      const result = await queries.insertCreatedImage.run(
         user.id,
         filename,
         filePath,
         1024, // width
         1024, // height
-        null, // color - will be set after generation
-        'generating' // status
+        null, // color - will be set after creation
+        'creating' // status
       );
 
-      // Return immediately with generating status
+      // Return immediately with creating status
       res.json({
         id: result.insertId,
         filename,
-        url: `/images/generated/${filename}`,
+        url: `/images/created/${filename}`,
         color: null,
         width: 1024,
         height: 1024,
-        status: 'generating',
+        status: 'creating',
         created_at: new Date().toISOString()
       });
 
-      // Generate the image asynchronously with delay
+      // Create the image asynchronously with delay
       (async () => {
         try {
           // Add delay (3-5 seconds)
           const delay = 3000 + Math.random() * 2000; // 3-5 seconds
+          // const delay = 100000;
           await new Promise(resolve => setTimeout(resolve, delay));
 
-          // Generate the image
+          // Create the image
           const { color, width, height } = await generateRandomColorImage(filePath);
 
           // Update database with completed status and color
-          await queries.updateGeneratedImageStatus.run(result.insertId, user.id, 'completed', color);
+          await queries.updateCreatedImageStatus.run(result.insertId, user.id, 'completed', color);
           
           // Note: We could also update the color in the database, but for now status is enough
           // The color will be fetched when the image is loaded
         } catch (error) {
-          console.error("Error generating image in background:", error);
+          console.error("Error creating image in background:", error);
           // Update status to failed
-          await queries.updateGeneratedImageStatus.run(result.insertId, user.id, 'failed');
+          await queries.updateCreatedImageStatus.run(result.insertId, user.id, 'failed');
         }
       })();
     } catch (error) {
-      console.error("Error initiating image generation:", error);
-      return res.status(500).json({ error: "Failed to initiate image generation" });
+      console.error("Error initiating image creation:", error);
+      return res.status(500).json({ error: "Failed to initiate image creation" });
     }
   });
 
-  // GET /api/generate/images - List all images for user
-  router.get("/api/generate/images", async (req, res) => {
+  // GET /api/create/images - List all images for user
+  router.get("/api/create/images", async (req, res) => {
     const user = await requireUser(req, res);
     if (!user) return;
 
     try {
-      const images = await queries.selectGeneratedImagesForUser.all(user.id);
+      const images = await queries.selectCreatedImagesForUser.all(user.id);
       
       // Transform to include URLs
       const imagesWithUrls = images.map((img) => ({
         id: img.id,
         filename: img.filename,
-        url: `/images/generated/${img.filename}`,
+        url: `/images/created/${img.filename}`,
         width: img.width,
         height: img.height,
         color: img.color,
@@ -119,13 +120,13 @@ export default function createGenerateRoutes({ queries }) {
     }
   });
 
-  // GET /api/generate/images/:id - Get specific image metadata
-  router.get("/api/generate/images/:id", async (req, res) => {
+  // GET /api/create/images/:id - Get specific image metadata
+  router.get("/api/create/images/:id", async (req, res) => {
     const user = await requireUser(req, res);
     if (!user) return;
 
     try {
-      const image = await queries.selectGeneratedImageById.get(
+      const image = await queries.selectCreatedImageById.get(
         req.params.id,
         user.id
       );
@@ -137,7 +138,7 @@ export default function createGenerateRoutes({ queries }) {
       return res.json({
         id: image.id,
         filename: image.filename,
-        url: `/images/generated/${image.filename}`,
+        url: `/images/created/${image.filename}`,
         width: image.width,
         height: image.height,
         color: image.color,

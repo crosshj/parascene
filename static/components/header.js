@@ -13,7 +13,7 @@ class AppHeader extends HTMLElement {
   }
 
   static get observedAttributes() {
-    return ['show-notifications', 'show-profile', 'show-generate', 'default-route'];
+    return ['show-notifications', 'show-profile', 'show-create', 'default-route'];
   }
 
   connectedCallback() {
@@ -97,28 +97,28 @@ class AppHeader extends HTMLElement {
     });
   }
 
-  updateGenerateButtonState() {
-    const generateButtons = this.querySelectorAll('.generate-button');
-    if (generateButtons.length === 0) return;
+  updateCreateButtonState() {
+    const createButtons = this.querySelectorAll('.create-button');
+    if (createButtons.length === 0) return;
     
     const pathname = window.location.pathname;
     const currentRoute = pathname === '/' || pathname === '' ? this.defaultRoute : pathname.slice(1);
-    const isGenerateRoute = currentRoute === 'generate';
+    const isCreateRoute = currentRoute === 'create';
     
-    generateButtons.forEach(generateButton => {
-      generateButton.disabled = isGenerateRoute;
-      if (isGenerateRoute) {
-        generateButton.style.background = 'var(--surface-strong)';
-        generateButton.style.color = 'var(--text)';
-        generateButton.style.borderColor = 'var(--border)';
-        generateButton.style.cursor = 'not-allowed';
-        generateButton.style.fontWeight = '700';
+    createButtons.forEach(createButton => {
+      createButton.disabled = isCreateRoute;
+      if (isCreateRoute) {
+        createButton.style.background = 'var(--surface-strong)';
+        createButton.style.color = 'var(--text)';
+        createButton.style.borderColor = 'var(--border)';
+        createButton.style.cursor = 'not-allowed';
+        createButton.style.fontWeight = '700';
       } else {
-        generateButton.style.background = 'var(--accent)';
-        generateButton.style.color = 'var(--accent-text)';
-        generateButton.style.borderColor = 'var(--accent)';
-        generateButton.style.cursor = 'pointer';
-        generateButton.style.fontWeight = '500';
+        createButton.style.background = 'var(--accent)';
+        createButton.style.color = 'var(--accent-text)';
+        createButton.style.borderColor = 'var(--accent)';
+        createButton.style.cursor = 'pointer';
+        createButton.style.fontWeight = '500';
       }
     });
   }
@@ -263,8 +263,8 @@ class AppHeader extends HTMLElement {
       link.classList.toggle('active', isActive);
     });
     
-    // Update Generate button state
-    this.updateGenerateButtonState();
+    // Update Create button state
+    this.updateCreateButtonState();
     
     // Show/hide route content sections
     const contentSections = document.querySelectorAll('[data-route-content]');
@@ -331,28 +331,28 @@ class AppHeader extends HTMLElement {
     });
 
     // Handle mobile menu action clicks
-    const mobileGenerateButton = this.querySelector('.mobile-menu .generate-button');
-    if (mobileGenerateButton) {
-      mobileGenerateButton.addEventListener('click', (e) => {
+    const mobileCreateButton = this.querySelector('.mobile-menu .create-button');
+    if (mobileCreateButton) {
+      mobileCreateButton.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (mobileGenerateButton.disabled) return;
+        if (mobileCreateButton.disabled) return;
         this.closeMobileMenu();
-        window.history.pushState({ route: 'generate' }, '', '/generate');
+        window.history.pushState({ route: 'create' }, '', '/create');
         this.handleRouteChange();
       });
     }
 
 
-    const generateButton = this.querySelector('.generate-button');
-    if (generateButton) {
-      generateButton.addEventListener('click', (e) => {
+    const createButton = this.querySelector('.create-button');
+    if (createButton) {
+      createButton.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        // Don't navigate if already on generate route
-        if (generateButton.disabled) return;
-        // Navigate to generate route
-        window.history.pushState({ route: 'generate' }, '', '/generate');
+        // Don't navigate if already on create route
+        if (createButton.disabled) return;
+        // Navigate to create route
+        window.history.pushState({ route: 'create' }, '', '/create');
         this.handleRouteChange();
       });
     }
@@ -446,7 +446,7 @@ class AppHeader extends HTMLElement {
   render() {
     const showNotifications = this.hasAttribute('show-notifications');
     const showProfile = this.hasAttribute('show-profile');
-    const showGenerate = this.hasAttribute('show-generate');
+    const showCreate = this.hasAttribute('show-create');
 
     this.innerHTML = `
       <style>
@@ -770,7 +770,7 @@ class AppHeader extends HTMLElement {
           gap: 2px;
           margin-top: 20px;
         }
-        .mobile-menu-actions .generate-button {
+        .mobile-menu-actions .create-button {
           width: 100%;
           padding: 12px 16px;
           border-radius: 8px;
@@ -853,7 +853,7 @@ class AppHeader extends HTMLElement {
             display: flex;
             gap: 4px;
           }
-          header .header-actions .generate-button {
+          header .header-actions .create-button {
             display: none;
           }
           header .header-content {
@@ -905,9 +905,9 @@ class AppHeader extends HTMLElement {
             }).join('')}
           </nav>
           <div class="header-actions">
-            ${showGenerate ? `
-              <button class="action-item generate-button" style="background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 500;">
-                Generate
+            ${showCreate ? `
+              <button class="action-item create-button" style="background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 500;">
+                Create
               </button>
             ` : ''}
             ${showNotifications ? `
@@ -963,9 +963,9 @@ class AppHeader extends HTMLElement {
             }).join('')}
           </nav>
           <div class="mobile-menu-actions">
-            ${showGenerate ? `
-              <button class="action-item generate-button" style="background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 500;">
-                Generate
+            ${showCreate ? `
+              <button class="action-item create-button" style="background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 500;">
+                Create
               </button>
             ` : ''}
           </div>
