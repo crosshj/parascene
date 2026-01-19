@@ -1,6 +1,5 @@
 {
   "version": 2,
   "builds": [{ "src": "server/index.js", "use": "@vercel/node" }],
-  "routes": [{ "src": "/(.*)", "dest": "server/index.js" }],
-  "installCommand": "npm ci --production --omit=dev"
+  "routes": [{ "src": "/(.*)", "dest": "server/index.js" }]
 }
