@@ -4,6 +4,7 @@
 
 ```sh
 npm install
+npm i -g better-sqlite3
 npm run dev
 ```
 
