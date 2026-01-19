@@ -1,4 +1,3 @@
-import Database from "better-sqlite3";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -8,6 +7,15 @@ const __dirname = path.dirname(__filename);
 
 const dataDir = path.join(__dirname, "..", "data");
 const dbPath = path.join(dataDir, "app.db");
+
+// Dynamically import better-sqlite3 only when needed (not in production/Vercel)
+let Database;
+async function loadDatabase() {
+  if (!Database) {
+    Database = (await import("better-sqlite3")).default;
+  }
+  return Database;
+}
 
 function ensureDataDir() {
   if (!fs.existsSync(dataDir)) {
@@ -240,9 +248,10 @@ function initSchema(db) {
   }
 }
 
-export function openDb() {
+export async function openDb() {
+  const DbClass = await loadDatabase();
   ensureDataDir();
-  const db = new Database(dbPath);
+  const db = new DbClass(dbPath);
   initSchema(db);
 
   const queries = {

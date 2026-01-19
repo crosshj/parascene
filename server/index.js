@@ -23,7 +23,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const pagesDir = path.join(__dirname, "..", "pages");
 const staticDir = path.join(__dirname, "..", "static");
-const { queries } = openDb();
+
+// Initialize database asynchronously using top-level await
+const { queries } = await openDb();
 
 app.use(express.static(staticDir));
 // Serve CSS/JS from pagesDir, but NEVER serve HTML files - they go through routes

@@ -34,7 +34,7 @@ try {
   console.log("Images cleared.");
 
   // Use adapter's reset method if available
-  const { reset } = openDb();
+  const { reset } = await openDb();
   if (reset) {
     await reset();
   }

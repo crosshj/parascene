@@ -461,7 +461,7 @@ const seedData = {
 };
 
 // Seed execution
-const { queries, seed } = openDb();
+const { queries, seed } = await openDb();
 
 (async () => {
   try {

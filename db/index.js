@@ -1,8 +1,7 @@
-import { openDb as openSqliteDb } from "./adapters/sqlite.js";
 import { openDb as openMockDb } from "./adapters/mock.js";
 import { openDb as openSupabaseDb } from "./adapters/supabase.js";
 
-function openDb() {
+async function openDb() {
   // Determine which adapter to use based on environment
   if (process.env.VERCEL) {
     console.log("Using mock database for Vercel deployment.");
@@ -23,6 +22,8 @@ function openDb() {
     case "sqlite":
     default:
       console.log("Using SQLite adapter.");
+      // Dynamically import SQLite adapter only when needed (not in production/Vercel)
+      const { openDb: openSqliteDb } = await import("./adapters/sqlite.js");
       return openSqliteDb();
   }
 }
