@@ -1,7 +1,14 @@
 import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { clearAuthCookie, getJwtSecret, setAuthCookie } from "./auth.js";
+import {
+  COOKIE_NAME,
+  ONE_WEEK_MS,
+  clearAuthCookie,
+  getJwtSecret,
+  hashToken,
+  setAuthCookie
+} from "./auth.js";
 
 export default function createProfileRoutes({ queries }) {
   const router = express.Router();
@@ -25,12 +32,13 @@ export default function createProfileRoutes({ queries }) {
     const info = await queries.insertUser.run(email, passwordHash, "consumer");
     // Support both insertId (standardized) and lastInsertRowid (legacy SQLite)
     const userId = info.insertId || info.lastInsertRowid;
-    const token = jwt.sign(
-      { userId },
-      getJwtSecret(),
-      { expiresIn: "7d" }
-    );
+    const token = jwt.sign({ userId }, getJwtSecret(), { expiresIn: "7d" });
     setAuthCookie(res, token);
+    if (queries.insertSession) {
+      const tokenHash = hashToken(token);
+      const expiresAt = new Date(Date.now() + ONE_WEEK_MS).toISOString();
+      await queries.insertSession.run(userId, tokenHash, expiresAt);
+    }
 
     return res.redirect("/");
   });
@@ -54,10 +62,25 @@ export default function createProfileRoutes({ queries }) {
       expiresIn: "7d"
     });
     setAuthCookie(res, token);
+    if (queries.insertSession) {
+      const tokenHash = hashToken(token);
+      const expiresAt = new Date(Date.now() + ONE_WEEK_MS).toISOString();
+      await queries.insertSession.run(user.id, tokenHash, expiresAt);
+    }
     return res.redirect("/");
   });
 
-  router.post("/logout", (req, res) => {
+  router.post("/logout", async (req, res) => {
+    if (queries.deleteSessionByTokenHash) {
+      const token = req.cookies?.[COOKIE_NAME];
+      if (token) {
+        const tokenHash = hashToken(token);
+        await queries.deleteSessionByTokenHash.run(
+          tokenHash,
+          req.auth?.userId
+        );
+      }
+    }
     clearAuthCookie(res);
     res.redirect("/");
   });

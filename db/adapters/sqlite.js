@@ -35,6 +35,17 @@ function initSchema(db) {
   `);
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      token_hash TEXT UNIQUE NOT NULL,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+  `);
+
+  db.exec(`
     CREATE TABLE IF NOT EXISTS moderation_queue (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       content_type TEXT NOT NULL,
@@ -271,6 +282,16 @@ export async function openDb() {
         return Promise.resolve(stmt.get(id));
       }
     },
+    selectSessionByTokenHash: {
+      get: async (tokenHash, userId) => {
+        const stmt = db.prepare(
+          `SELECT id, user_id, token_hash, expires_at
+           FROM sessions
+           WHERE token_hash = ? AND user_id = ?`
+        );
+        return Promise.resolve(stmt.get(tokenHash, userId));
+      }
+    },
     insertUser: {
       run: async (email, password_hash, role) => {
         const stmt = db.prepare(
@@ -283,6 +304,56 @@ export async function openDb() {
           lastInsertRowid: result.lastInsertRowid,
           changes: result.changes
         });
+      }
+    },
+    insertSession: {
+      run: async (userId, tokenHash, expiresAt) => {
+        const stmt = db.prepare(
+          `INSERT INTO sessions (user_id, token_hash, expires_at)
+           VALUES (?, ?, ?)`
+        );
+        const result = stmt.run(userId, tokenHash, expiresAt);
+        return Promise.resolve({
+          insertId: result.lastInsertRowid,
+          lastInsertRowid: result.lastInsertRowid,
+          changes: result.changes
+        });
+      }
+    },
+    refreshSessionExpiry: {
+      run: async (id, expiresAt) => {
+        const stmt = db.prepare(
+          `UPDATE sessions
+           SET expires_at = ?
+           WHERE id = ?`
+        );
+        const result = stmt.run(expiresAt, id);
+        return Promise.resolve({ changes: result.changes });
+      }
+    },
+    deleteSessionByTokenHash: {
+      run: async (tokenHash, userId) => {
+        if (userId) {
+          const stmt = db.prepare(
+            `DELETE FROM sessions
+             WHERE token_hash = ? AND user_id = ?`
+          );
+          const result = stmt.run(tokenHash, userId);
+          return Promise.resolve({ changes: result.changes });
+        }
+        const stmt = db.prepare("DELETE FROM sessions WHERE token_hash = ?");
+        const result = stmt.run(tokenHash);
+        return Promise.resolve({ changes: result.changes });
+      }
+    },
+    deleteExpiredSessions: {
+      run: async (nowIso) => {
+        const stmt = db.prepare(
+          `DELETE FROM sessions
+           WHERE expires_at <= ?`
+        );
+        const result = stmt.run(nowIso);
+        return Promise.resolve({ changes: result.changes });
       }
     },
     selectUsers: {

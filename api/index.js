@@ -14,7 +14,12 @@ import createProviderRoutes from "../api_routes/provider.js";
 import createServersRoutes from "../api_routes/servers.js";
 import createTemplatesRoutes from "../api_routes/templates.js";
 import createUserRoutes from "../api_routes/user.js";
-import { authMiddleware, clearAuthCookie } from "../api_routes/auth.js";
+import {
+  authMiddleware,
+  clearAuthCookie,
+  probabilisticSessionCleanup,
+  sessionMiddleware
+} from "../api_routes/auth.js";
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -45,6 +50,8 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(authMiddleware());
+app.use(sessionMiddleware(queries));
+app.use(probabilisticSessionCleanup(queries));
 app.use(createUserRoutes({ queries }));
 
 app.use(createAdminRoutes({ queries }));

@@ -241,6 +241,7 @@ const templates = [
 ];
 
 const created_images = [];
+const sessions = [];
 
 export function openDb() {
   let nextUserId = users.length + 1;
@@ -258,6 +259,14 @@ export function openDb() {
         return safeUser;
       }
     },
+    selectSessionByTokenHash: {
+      get: async (tokenHash, userId) =>
+        sessions.find(
+          (session) =>
+            session.token_hash === tokenHash &&
+            session.user_id === Number(userId)
+        )
+    },
     insertUser: {
       run: async (email, password_hash, role) => {
         const user = {
@@ -270,6 +279,70 @@ export function openDb() {
         users.push(user);
         // Standardize return value: use insertId (also support lastInsertRowid for backward compat)
         return { insertId: user.id, lastInsertRowid: user.id, changes: 1 };
+      }
+    },
+    insertSession: {
+      run: async (userId, tokenHash, expiresAt) => {
+        const session = {
+          id: sessions.length > 0
+            ? Math.max(...sessions.map((s) => s.id || 0)) + 1
+            : 1,
+          user_id: Number(userId),
+          token_hash: tokenHash,
+          expires_at: expiresAt,
+          created_at: new Date().toISOString()
+        };
+        sessions.push(session);
+        return { insertId: session.id, lastInsertRowid: session.id, changes: 1 };
+      }
+    },
+    refreshSessionExpiry: {
+      run: async (id, expiresAt) => {
+        const session = sessions.find((entry) => entry.id === Number(id));
+        if (!session) {
+          return { changes: 0 };
+        }
+        session.expires_at = expiresAt;
+        return { changes: 1 };
+      }
+    },
+    deleteSessionByTokenHash: {
+      run: async (tokenHash, userId) => {
+        const beforeCount = sessions.length;
+        if (userId) {
+          for (let i = sessions.length - 1; i >= 0; i -= 1) {
+            if (
+              sessions[i].token_hash === tokenHash &&
+              sessions[i].user_id === Number(userId)
+            ) {
+              sessions.splice(i, 1);
+            }
+          }
+        } else {
+          for (let i = sessions.length - 1; i >= 0; i -= 1) {
+            if (sessions[i].token_hash === tokenHash) {
+              sessions.splice(i, 1);
+            }
+          }
+        }
+        return { changes: beforeCount - sessions.length };
+      }
+    },
+    deleteExpiredSessions: {
+      run: async (nowIso) => {
+        const beforeCount = sessions.length;
+        const nowMs = Date.parse(nowIso);
+        for (let i = sessions.length - 1; i >= 0; i -= 1) {
+          const expiresAtMs = Date.parse(sessions[i].expires_at);
+          if (
+            Number.isFinite(nowMs) &&
+            Number.isFinite(expiresAtMs) &&
+            expiresAtMs <= nowMs
+          ) {
+            sessions.splice(i, 1);
+          }
+        }
+        return { changes: beforeCount - sessions.length };
       }
     },
     selectUsers: {
@@ -501,6 +574,7 @@ export function openDb() {
     servers.length = 0;
     templates.length = 0;
     created_images.length = 0;
+    sessions.length = 0;
     // Reset ID counters
     nextUserId = 1;
     nextNotificationId = 1;
