@@ -3,6 +3,31 @@ import crypto from "crypto";
 
 const COOKIE_NAME = "ps_session";
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const SESSION_REFRESH_WINDOW_MS = 2 * 24 * 60 * 60 * 1000;
+const SESSION_REFRESH_SKIP_PREFIXES = [
+  "/static",
+  "/favicon",
+  "/robots.txt",
+  "/api/images/created/"
+];
+const SESSION_REFRESH_SKIP_EXTENSIONS = new Set([
+  ".css",
+  ".js",
+  ".mjs",
+  ".json",
+  ".map",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".webp",
+  ".svg",
+  ".ico",
+  ".woff",
+  ".woff2",
+  ".ttf",
+  ".otf"
+]);
 
 function getJwtSecret() {
   return process.env.SESSION_SECRET || "dev-secret-change-me";
@@ -20,6 +45,26 @@ function authMiddleware() {
 
 function hashToken(token) {
   return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+function shouldSkipSessionRefresh(req) {
+  if (!req?.path) {
+    return false;
+  }
+
+  if (SESSION_REFRESH_SKIP_PREFIXES.some((prefix) => req.path.startsWith(prefix))) {
+    return true;
+  }
+
+  const lastDot = req.path.lastIndexOf(".");
+  if (lastDot > -1) {
+    const ext = req.path.slice(lastDot).toLowerCase();
+    if (SESSION_REFRESH_SKIP_EXTENSIONS.has(ext)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function sessionMiddleware(queries = {}) {
@@ -100,10 +145,21 @@ function sessionMiddleware(queries = {}) {
         return next();
       }
 
-      // Session is valid - refresh it and continue
+      if (shouldSkipSessionRefresh(req)) {
+        return next();
+      }
+
+      const refreshThreshold = now + SESSION_REFRESH_WINDOW_MS;
+      if (expiresAtMs > refreshThreshold) {
+        return next();
+      }
+
+      // Session is valid but near expiry - refresh it and continue
       const refreshedAt = new Date(now + ONE_WEEK_MS).toISOString();
-      console.log(`[SessionMiddleware] Refreshing session ${session.id} expiry to ${refreshedAt}`);
-      
+      console.log(
+        `[SessionMiddleware] Refreshing session ${session.id} expiry to ${refreshedAt}`
+      );
+
       try {
         await queries.refreshSessionExpiry.run(session.id, refreshedAt);
         setAuthCookie(res, token, req);
