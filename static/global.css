@@ -1948,6 +1948,7 @@ body.creation-detail-page main > section:first-of-type {
   color: var(--text);
   line-height: 1.5;
   margin-top: 8px;
+  white-space: pre;
 }
 
 .creation-detail-meta {

@@ -1,19 +1,56 @@
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
-import { generateRandomColorImage } from "./utils/imageGenerator.js";
+import { generateRandomColorImageToBuffer } from "./utils/imageGenerator.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export default function createCreateRoutes({ queries }) {
+export default function createCreateRoutes({ queries, storage }) {
   const router = express.Router();
 
-  // Ensure images directory exists
+  // Serve created images statically (for filesystem-based adapters)
+  // This will be used as fallback for filesystem adapters
   const imagesDir = path.join(__dirname, "..", "db", "data", "images", "created");
-  
-  // Serve created images statically
   router.use("/images/created", express.static(imagesDir));
+  
+  // GET /api/images/created/:filename - Serve image through backend
+  // This route handles images from Supabase Storage and provides authorization
+  router.get("/api/images/created/:filename", async (req, res) => {
+    const filename = req.params.filename;
+    
+    try {
+      // Find the image in the database by filename
+      const image = await queries.selectCreatedImageByFilename?.get(filename);
+      
+      if (!image) {
+        return res.status(404).json({ error: "Image not found" });
+      }
+      
+      // Check access: user owns the image OR image is published
+      const userId = req.auth?.userId;
+      const isOwner = userId && image.user_id === userId;
+      const isPublished = image.published === 1 || image.published === true;
+      
+      if (!isOwner && !isPublished) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      // Fetch image buffer from storage
+      const imageBuffer = await storage.getImageBuffer(filename);
+      
+      // Set appropriate content type
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+      res.send(imageBuffer);
+    } catch (error) {
+      console.error("Error serving image:", error);
+      if (error.message && error.message.includes("not found")) {
+        return res.status(404).json({ error: "Image not found" });
+      }
+      return res.status(500).json({ error: "Failed to serve image" });
+    }
+  });
 
   async function requireUser(req, res) {
     if (!req.auth?.userId) {
@@ -40,53 +77,35 @@ export default function createCreateRoutes({ queries }) {
       const timestamp = Date.now();
       const random = Math.random().toString(36).substring(2, 9);
       const filename = `${user.id}_${timestamp}_${random}.png`;
-      const filePath = path.join(imagesDir, filename);
 
-      // Create placeholder entry in database with "creating" status
+      // Generate image to buffer first
+      const { buffer, color, width, height } = await generateRandomColorImageToBuffer();
+
+      // Upload image using storage adapter
+      const imageUrl = await storage.uploadImage(buffer, filename);
+
+      // Create entry in database with completed status
       const result = await queries.insertCreatedImage.run(
         user.id,
         filename,
-        filePath,
+        imageUrl, // Store URL instead of file path
         1024, // width
         1024, // height
-        null, // color - will be set after creation
-        'creating' // status
+        color,
+        'completed' // status
       );
 
-      // Return immediately with creating status
+      // Return with completed status
       res.json({
         id: result.insertId,
         filename,
-        url: `/images/created/${filename}`,
-        color: null,
-        width: 1024,
-        height: 1024,
-        status: 'creating',
+        url: imageUrl,
+        color,
+        width,
+        height,
+        status: 'completed',
         created_at: new Date().toISOString()
       });
-
-      // Create the image asynchronously with delay
-      (async () => {
-        try {
-          // Add delay (3-5 seconds)
-          const delay = 3000 + Math.random() * 2000; // 3-5 seconds
-          // const delay = 100000;
-          await new Promise(resolve => setTimeout(resolve, delay));
-
-          // Create the image
-          const { color, width, height } = await generateRandomColorImage(filePath);
-
-          // Update database with completed status and color
-          await queries.updateCreatedImageStatus.run(result.insertId, user.id, 'completed', color);
-          
-          // Note: We could also update the color in the database, but for now status is enough
-          // The color will be fetched when the image is loaded
-        } catch (error) {
-          console.error("Error creating image in background:", error);
-          // Update status to failed
-          await queries.updateCreatedImageStatus.run(result.insertId, user.id, 'failed');
-        }
-      })();
     } catch (error) {
       console.error("Error initiating image creation:", error);
       return res.status(500).json({ error: "Failed to initiate image creation" });
@@ -101,11 +120,11 @@ export default function createCreateRoutes({ queries }) {
     try {
       const images = await queries.selectCreatedImagesForUser.all(user.id);
       
-      // Transform to include URLs
+      // Transform to include URLs (use file_path from DB which now contains the URL)
       const imagesWithUrls = images.map((img) => ({
         id: img.id,
         filename: img.filename,
-        url: `/images/created/${img.filename}`,
+        url: img.file_path || storage.getImageUrl(img.filename), // Use stored URL or generate one
         width: img.width,
         height: img.height,
         color: img.color,
@@ -155,7 +174,7 @@ export default function createCreateRoutes({ queries }) {
       return res.json({
         id: image.id,
         filename: image.filename,
-        url: `/images/created/${image.filename}`,
+        url: image.file_path || storage.getImageUrl(image.filename), // Use stored URL or generate one
         width: image.width,
         height: image.height,
         color: image.color,
@@ -238,7 +257,7 @@ export default function createCreateRoutes({ queries }) {
       return res.json({
         id: updatedImage.id,
         filename: updatedImage.filename,
-        url: `/images/created/${updatedImage.filename}`,
+        url: updatedImage.file_path || storage.getImageUrl(updatedImage.filename), // Use stored URL or generate one
         width: updatedImage.width,
         height: updatedImage.height,
         color: updatedImage.color,

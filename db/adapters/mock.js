@@ -1,3 +1,10 @@
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const users = [];
 const moderation_queue = [];
 const provider_registry = [];
@@ -15,6 +22,15 @@ const templates = [];
 
 const created_images = [];
 const sessions = [];
+
+const dataDir = path.join(__dirname, "..", "data");
+const imagesDir = path.join(dataDir, "images", "created");
+
+function ensureImagesDir() {
+  if (!fs.existsSync(imagesDir)) {
+    fs.mkdirSync(imagesDir, { recursive: true });
+  }
+}
 
 const TABLE_TIMESTAMP_FIELDS = {
   users: ["created_at"],
@@ -257,6 +273,13 @@ export function openDb() {
           (img) => img.id === Number(id) && img.user_id === Number(userId)
         );
       }
+    },
+    selectCreatedImageByFilename: {
+      get: async (filename) => {
+        return created_images.find(
+          (img) => img.filename === filename
+        );
+      }
     }
   };
 
@@ -387,5 +410,47 @@ export function openDb() {
     nextNotificationId = 1;
   }
 
-  return { db, queries, seed, reset };
+  // Storage interface for images (using filesystem like SQLite)
+  const storage = {
+    uploadImage: async (buffer, filename) => {
+      ensureImagesDir();
+      const filePath = path.join(imagesDir, filename);
+      fs.writeFileSync(filePath, buffer);
+      return `/images/created/${filename}`;
+    },
+    
+    getImageUrl: (filename) => {
+      return `/images/created/${filename}`;
+    },
+    
+    getImageBuffer: async (filename) => {
+      const filePath = path.join(imagesDir, filename);
+      if (!fs.existsSync(filePath)) {
+        throw new Error(`Image not found: ${filename}`);
+      }
+      return fs.readFileSync(filePath);
+    },
+    
+    deleteImage: async (filename) => {
+      const filePath = path.join(imagesDir, filename);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    },
+    
+    clearAll: async () => {
+      if (fs.existsSync(imagesDir)) {
+        const files = fs.readdirSync(imagesDir);
+        for (const file of files) {
+          const filePath = path.join(imagesDir, file);
+          const stat = fs.statSync(filePath);
+          if (stat.isFile()) {
+            fs.unlinkSync(filePath);
+          }
+        }
+      }
+    }
+  };
+
+  return { db, queries, seed, reset, storage };
 }

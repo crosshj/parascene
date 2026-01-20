@@ -21,6 +21,21 @@ import {
   sessionMiddleware
 } from "../api_routes/auth.js";
 
+// Handle unhandled promise rejections
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled Promise Rejection:", reason);
+  if (reason instanceof Error) {
+    console.error("Error stack:", reason.stack);
+  }
+  // Don't exit in production, but log the error
+  if (process.env.NODE_ENV === "production") {
+    console.error("Continuing in production mode...");
+  } else {
+    console.error("Exiting due to unhandled rejection in development");
+    process.exit(1);
+  }
+});
+
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -30,7 +45,20 @@ const pagesDir = path.join(__dirname, "..", "pages");
 const staticDir = path.join(__dirname, "..", "static");
 
 // Initialize database asynchronously using top-level await
-const { queries } = await openDb();
+let queries, storage;
+try {
+  const dbResult = await openDb();
+  queries = dbResult.queries;
+  storage = dbResult.storage;
+} catch (error) {
+  console.error("Failed to initialize database:", error);
+  console.error("Error details:", error.message);
+  if (error.message?.includes("Missing required env var")) {
+    console.error("\nPlease ensure all required environment variables are set.");
+    console.error("For Supabase: SUPABASE_URL and SUPABASE_ANON_KEY are required.");
+  }
+  process.exit(1);
+}
 
 app.use(express.static(staticDir));
 // Serve CSS/JS from pagesDir, but NEVER serve HTML files - they go through routes
@@ -57,7 +85,7 @@ app.use(createUserRoutes({ queries }));
 app.use(createAdminRoutes({ queries }));
 app.use(createFeedRoutes({ queries }));
 app.use(createExploreRoutes({ queries }));
-app.use(createCreateRoutes({ queries }));
+app.use(createCreateRoutes({ queries, storage }));
 app.use(createCreationsRoutes({ queries }));
 app.use(createProviderRoutes({ queries }));
 app.use(createServersRoutes({ queries }));

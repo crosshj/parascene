@@ -243,8 +243,8 @@ export async function openDb() {
       all: async () => {
         const stmt = db.prepare(
           `SELECT fi.id, fi.title, fi.summary, fi.author, fi.tags, fi.created_at, 
-                  fi.created_image_id, ci.filename, ci.user_id,
-                  CASE WHEN ci.filename IS NOT NULL THEN '/images/created/' || ci.filename ELSE NULL END as url
+                  fi.created_image_id, ci.filename, ci.file_path, ci.user_id,
+                  COALESCE(ci.file_path, CASE WHEN ci.filename IS NOT NULL THEN '/api/images/created/' || ci.filename ELSE NULL END) as url
            FROM feed_items fi
            LEFT JOIN created_images ci ON fi.created_image_id = ci.id
            ORDER BY fi.created_at DESC`
@@ -362,6 +362,17 @@ export async function openDb() {
         return Promise.resolve(stmt.get(id));
       }
     },
+    selectCreatedImageByFilename: {
+      get: async (filename) => {
+        const stmt = db.prepare(
+          `SELECT id, filename, file_path, width, height, color, status, created_at,
+                  published, published_at, title, description, user_id
+           FROM created_images
+           WHERE filename = ?`
+        );
+        return Promise.resolve(stmt.get(filename));
+      }
+    },
     publishCreatedImage: {
       run: async (id, userId, title, description) => {
         const stmt = db.prepare(
@@ -437,5 +448,55 @@ export async function openDb() {
     }
   }
 
-  return { db, queries, seed, reset };
+  // Storage interface for images
+  const imagesDir = path.join(dataDir, "images", "created");
+  
+  function ensureImagesDir() {
+    if (!fs.existsSync(imagesDir)) {
+      fs.mkdirSync(imagesDir, { recursive: true });
+    }
+  }
+
+  const storage = {
+    uploadImage: async (buffer, filename) => {
+      ensureImagesDir();
+      const filePath = path.join(imagesDir, filename);
+      fs.writeFileSync(filePath, buffer);
+      return `/images/created/${filename}`;
+    },
+    
+    getImageUrl: (filename) => {
+      return `/images/created/${filename}`;
+    },
+    
+    getImageBuffer: async (filename) => {
+      const filePath = path.join(imagesDir, filename);
+      if (!fs.existsSync(filePath)) {
+        throw new Error(`Image not found: ${filename}`);
+      }
+      return fs.readFileSync(filePath);
+    },
+    
+    deleteImage: async (filename) => {
+      const filePath = path.join(imagesDir, filename);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    },
+    
+    clearAll: async () => {
+      if (fs.existsSync(imagesDir)) {
+        const files = fs.readdirSync(imagesDir);
+        for (const file of files) {
+          const filePath = path.join(imagesDir, file);
+          const stat = fs.statSync(filePath);
+          if (stat.isFile()) {
+            fs.unlinkSync(filePath);
+          }
+        }
+      }
+    }
+  };
+
+  return { db, queries, seed, reset, storage };
 }

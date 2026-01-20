@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { openDb } from "./index.js";
 import { seedDatabase } from "./seed.js";
 import fs from "fs";
@@ -24,23 +25,37 @@ function clearImagesDirectory(dirPath) {
 }
 
 try {
-  // Clear images from data folder
-  const imagesDir = path.join(__dirname, "data", "images");
-  const createdDir = path.join(imagesDir, "created");
-  const generatedDir = path.join(imagesDir, "generated");
+  // Ensure we're using Supabase adapter
+  process.env.DB_ADAPTER = process.env.DB_ADAPTER || 'supabase';
   
-  console.log("Clearing images from data folder...");
-  clearImagesDirectory(createdDir);
-  clearImagesDirectory(generatedDir);
-  console.log("Images cleared.");
+  // Get database instance with storage
+  const dbInstance = await openDb();
+  const { reset, storage } = dbInstance;
 
-  // Use adapter's reset method if available
-  const { reset } = await openDb();
-  if (reset) {
-    await reset();
+  // Clear images using storage adapter
+  if (storage && storage.clearAll) {
+    console.log("Clearing images using storage adapter...");
+    await storage.clearAll();
+    console.log("Images cleared.");
+  } else {
+    // Fallback to manual clearing for filesystem-based adapters
+    const imagesDir = path.join(__dirname, "data", "images");
+    const createdDir = path.join(imagesDir, "created");
+    const generatedDir = path.join(imagesDir, "generated");
+    
+    console.log("Clearing images from data folder...");
+    clearImagesDirectory(createdDir);
+    clearImagesDirectory(generatedDir);
+    console.log("Images cleared.");
   }
 
-  const dbInstance = await openDb({ quiet: true });
+  // Use adapter's reset method if available
+  if (reset) {
+    console.log("Resetting database tables...");
+    await reset();
+    console.log("Database tables cleared.");
+  }
+
   await seedDatabase(dbInstance);
   console.log("Database reset complete.");
 } catch (error) {

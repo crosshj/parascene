@@ -34,6 +34,14 @@ export function openDb() {
   const supabaseUrl = requireEnv("SUPABASE_URL");
   const supabaseKey = requireEnv("SUPABASE_ANON_KEY");
   const supabase = createClient(supabaseUrl, supabaseKey);
+  
+  // Use service role key for storage operations and backend operations (bypasses RLS)
+  // This is needed for admin operations and operations that need to access all columns
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const serviceClient = serviceRoleKey 
+    ? createClient(supabaseUrl, serviceRoleKey)
+    : supabase;
+  const storageClient = serviceClient;
 
   const queries = {
     selectUserByEmail: {
@@ -216,7 +224,8 @@ export function openDb() {
     },
     selectNotificationsForUser: {
       all: async (userId, role) => {
-        let query = supabase
+        // Use service client to bypass RLS for backend operations
+        let query = serviceClient
           .from(prefixedTable("notifications"))
           .select("id, title, message, link, created_at, acknowledged_at")
           .order("created_at", { ascending: false });
@@ -229,13 +238,23 @@ export function openDb() {
           return [];
         }
         const { data, error } = await filteredQuery;
-        if (error) throw error;
+        if (error) {
+          if (error.code === '42703' && error.message?.includes('user_id')) {
+            throw new Error(
+              `Database schema error: The ${prefixedTable("notifications")} table is missing the 'user_id' column. ` +
+              `Please apply the schema from db/schemas/supabase_01.sql to your Supabase database. ` +
+              `Original error: ${error.message}`
+            );
+          }
+          throw error;
+        }
         return data ?? [];
       }
     },
     selectUnreadNotificationCount: {
       get: async (userId, role) => {
-        let query = supabase
+        // Use service client to bypass RLS for backend operations
+        let query = serviceClient
           .from(prefixedTable("notifications"))
           .select("*", { count: "exact", head: true })
           .is("acknowledged_at", null);
@@ -248,28 +267,65 @@ export function openDb() {
           return { count: 0 };
         }
         const { count, error } = await filteredQuery;
-        if (error) throw error;
+        if (error) {
+          if (error.code === '42703' && error.message?.includes('user_id')) {
+            throw new Error(
+              `Database schema error: The ${prefixedTable("notifications")} table is missing the 'user_id' column. ` +
+              `Please apply the schema from db/schemas/supabase_01.sql to your Supabase database. ` +
+              `Original error: ${error.message}`
+            );
+          }
+          throw error;
+        }
         return { count: count ?? 0 };
       }
     },
     acknowledgeNotificationById: {
       run: async (id, userId, role) => {
-        let query = supabase
-          .from(prefixedTable("notifications"))
-          .update({ acknowledged_at: new Date().toISOString() })
-          .eq("id", id)
-          .is("acknowledged_at", null);
-        const { query: filteredQuery, hasFilter } = applyUserOrRoleFilter(
-          query,
-          userId,
-          role
-        );
-        if (!hasFilter) {
+        const hasUserId = userId !== null && userId !== undefined;
+        const hasRole = role !== null && role !== undefined;
+        
+        if (!hasUserId && !hasRole) {
           return { changes: 0 };
         }
-        const { data, error } = await filteredQuery.select("id");
-        if (error) throw error;
-        return { changes: data?.length ?? 0 };
+        
+        // PostgREST doesn't support .or() in UPDATE queries the same way as SELECT
+        // Try each condition separately - return on first match
+        // Must create a fresh query for each attempt (can't reuse query builders)
+        
+        // Try with user_id first if provided
+        if (hasUserId) {
+          const { data, error } = await serviceClient
+            .from(prefixedTable("notifications"))
+            .update({ acknowledged_at: new Date().toISOString() })
+            .eq("id", id)
+            .is("acknowledged_at", null)
+            .eq("user_id", userId)
+            .select("id");
+          
+          if (error) throw error;
+          if (data && data.length > 0) {
+            return { changes: data.length };
+          }
+        }
+        
+        // If user_id didn't match, try with role
+        if (hasRole) {
+          const { data, error } = await serviceClient
+            .from(prefixedTable("notifications"))
+            .update({ acknowledged_at: new Date().toISOString() })
+            .eq("id", id)
+            .is("acknowledged_at", null)
+            .eq("role", role)
+            .select("id");
+          
+          if (error) throw error;
+          if (data && data.length > 0) {
+            return { changes: data.length };
+          }
+        }
+        
+        return { changes: 0 };
       }
     },
     selectFeedItems: {
@@ -277,19 +333,21 @@ export function openDb() {
         const { data, error } = await supabase
           .from(prefixedTable("feed_items"))
           .select(
-            "id, title, summary, author, tags, created_at, created_image_id, prsn_created_images(filename, user_id)"
+            "id, title, summary, author, tags, created_at, created_image_id, prsn_created_images(filename, file_path, user_id)"
           )
           .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map((item) => {
           const { prsn_created_images, ...rest } = item;
           const filename = prsn_created_images?.filename ?? null;
+          const file_path = prsn_created_images?.file_path ?? null;
           const user_id = prsn_created_images?.user_id ?? null;
           return {
             ...rest,
             filename,
             user_id,
-            url: filename ? `/images/created/${filename}` : null
+            // Use file_path (which contains the URL) or fall back to constructing from filename
+            url: file_path || (filename ? `/api/images/created/${filename}` : null)
           };
         });
       }
@@ -414,6 +472,19 @@ export function openDb() {
         return data ?? undefined;
       }
     },
+    selectCreatedImageByFilename: {
+      get: async (filename) => {
+        const { data, error } = await supabase
+          .from(prefixedTable("created_images"))
+          .select(
+            "id, filename, file_path, width, height, color, status, created_at, published, published_at, title, description, user_id"
+          )
+          .eq("filename", filename)
+          .maybeSingle();
+        if (error) throw error;
+        return data ?? undefined;
+      }
+    },
     publishCreatedImage: {
       run: async (id, userId, title, description) => {
         const { data, error } = await supabase
@@ -501,10 +572,101 @@ export function openDb() {
     ].map((table) => prefixedTable(table));
 
     for (const table of tables) {
-      const { error } = await supabase.from(table).delete().neq("id", 0);
-      if (error) throw error;
+      // Delete all rows - using a condition that should match all rows
+      const { error } = await supabase.from(table).delete().gte("id", 0);
+      if (error) {
+        // If delete fails, try alternative approach
+        const { error: error2 } = await supabase.from(table).delete().neq("id", -1);
+        if (error2) throw error2;
+      }
     }
   }
 
-  return { db, queries, seed, reset };
+  // Storage interface for images using Supabase Storage
+  // Images are stored in a private bucket and served through the backend
+  const STORAGE_BUCKET = "prsn_created-images";
+  
+  const storage = {
+    uploadImage: async (buffer, filename) => {
+      // Use storage client (service role if available) for uploads to private bucket
+      const { data, error } = await storageClient.storage
+        .from(STORAGE_BUCKET)
+        .upload(filename, buffer, {
+          contentType: "image/png",
+          upsert: true
+        });
+      
+      if (error) {
+        throw new Error(`Failed to upload image to Supabase Storage: ${error.message}`);
+      }
+      
+      // Return backend route URL instead of public Supabase URL
+      // Images will be served through /api/images/created/:filename
+      return `/api/images/created/${filename}`;
+    },
+    
+    getImageUrl: (filename) => {
+      // Return backend route URL - images are served through the backend
+      return `/api/images/created/${filename}`;
+    },
+    
+    getImageBuffer: async (filename) => {
+      // Fetch image from Supabase Storage and return as buffer
+      // Uses storage client (service role if available) to access private bucket
+      const { data, error } = await storageClient.storage
+        .from(STORAGE_BUCKET)
+        .download(filename);
+      
+      if (error) {
+        throw new Error(`Failed to fetch image from Supabase Storage: ${error.message}`);
+      }
+      
+      // Convert blob to buffer
+      const arrayBuffer = await data.arrayBuffer();
+      return Buffer.from(arrayBuffer);
+    },
+    
+    deleteImage: async (filename) => {
+      // Use storage client (service role if available) for deletes
+      const { error } = await storageClient.storage
+        .from(STORAGE_BUCKET)
+        .remove([filename]);
+      
+      if (error) {
+        // Don't throw if file doesn't exist
+        if (error.message && !error.message.includes("not found")) {
+          throw new Error(`Failed to delete image from Supabase Storage: ${error.message}`);
+        }
+      }
+    },
+    
+    clearAll: async () => {
+      // Use storage client (service role if available) for admin operations
+      // List all files in the bucket
+      const { data: files, error: listError } = await storageClient.storage
+        .from(STORAGE_BUCKET)
+        .list();
+      
+      if (listError) {
+        // If bucket doesn't exist, that's okay - nothing to clear
+        if (listError.message && listError.message.includes("not found")) {
+          return;
+        }
+        throw new Error(`Failed to list images in Supabase Storage: ${listError.message}`);
+      }
+      
+      if (files && files.length > 0) {
+        const fileNames = files.map(file => file.name);
+        const { error: deleteError } = await storageClient.storage
+          .from(STORAGE_BUCKET)
+          .remove(fileNames);
+        
+        if (deleteError) {
+          throw new Error(`Failed to clear images from Supabase Storage: ${deleteError.message}`);
+        }
+      }
+    }
+  };
+
+  return { db, queries, seed, reset, storage };
 }

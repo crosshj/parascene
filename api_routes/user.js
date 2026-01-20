@@ -103,60 +103,75 @@ export default function createProfileRoutes({ queries }) {
   });
 
   router.get("/api/notifications", async (req, res) => {
-    if (!req.auth?.userId) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
+    try {
+      if (!req.auth?.userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
 
-    const user = await queries.selectUserById.get(req.auth.userId);
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
+      const user = await queries.selectUserById.get(req.auth.userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
 
-    const notifications = await queries.selectNotificationsForUser.all(
-      user.id,
-      user.role
-    );
-    return res.json({ notifications });
+      const notifications = await queries.selectNotificationsForUser.all(
+        user.id,
+        user.role
+      );
+      return res.json({ notifications });
+    } catch (error) {
+      console.error("Error loading notifications:", error);
+      return res.status(500).json({ error: "Internal server error" });
+    }
   });
 
   router.get("/api/notifications/unread-count", async (req, res) => {
-    if (!req.auth?.userId) {
+    try {
+      if (!req.auth?.userId) {
+        return res.json({ count: 0 });
+      }
+
+      const user = await queries.selectUserById.get(req.auth.userId);
+      if (!user) {
+        return res.json({ count: 0 });
+      }
+
+      const result = await queries.selectUnreadNotificationCount.get(
+        user.id,
+        user.role
+      );
+      return res.json({ count: result?.count ?? 0 });
+    } catch (error) {
+      console.error("Error loading unread notification count:", error);
       return res.json({ count: 0 });
     }
-
-    const user = await queries.selectUserById.get(req.auth.userId);
-    if (!user) {
-      return res.json({ count: 0 });
-    }
-
-    const result = await queries.selectUnreadNotificationCount.get(
-      user.id,
-      user.role
-    );
-    return res.json({ count: result?.count ?? 0 });
   });
 
   router.post("/api/notifications/acknowledge", async (req, res) => {
-    if (!req.auth?.userId) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
+    try {
+      if (!req.auth?.userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
 
-    const user = await queries.selectUserById.get(req.auth.userId);
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
+      const user = await queries.selectUserById.get(req.auth.userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
 
-    const id = Number(req.body?.id);
-    if (!id) {
-      return res.status(400).json({ error: "Notification id required" });
-    }
+      const id = Number(req.body?.id);
+      if (!id) {
+        return res.status(400).json({ error: "Notification id required" });
+      }
 
-    const result = await queries.acknowledgeNotificationById.run(
-      id,
-      user.id,
-      user.role
-    );
-    return res.json({ ok: true, updated: result.changes });
+      const result = await queries.acknowledgeNotificationById.run(
+        id,
+        user.id,
+        user.role
+      );
+      return res.json({ ok: true, updated: result.changes });
+    } catch (error) {
+      console.error("Error acknowledging notification:", error);
+      return res.status(500).json({ error: "Internal server error" });
+    }
   });
 
   return router;

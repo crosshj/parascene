@@ -1,9 +1,11 @@
-import { describe, it, expect, beforeAll } from '@jest/globals';
+import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { createClient } from '@supabase/supabase-js';
+import { openDb } from '../db/index.js';
 
 // Load environment variables
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 // All tables that should exist according to the schema
 const expectedTables = [
@@ -87,6 +89,107 @@ describe('Database Integration Tests', () => {
 
         expect(error).toBeNull();
       }
+    });
+  });
+
+  describe('Notification Acknowledgment', () => {
+    let supabaseServiceClient;
+    let dbQueries;
+    let testUserId;
+    let testNotificationIds = [];
+
+    beforeAll(async () => {
+      if (!serviceRoleKey) {
+        throw new Error('SUPABASE_SERVICE_ROLE_KEY is required for notification tests');
+      }
+      supabaseServiceClient = createClient(supabaseUrl, serviceRoleKey);
+
+      // Initialize db abstraction with Supabase adapter
+      process.env.DB_ADAPTER = 'supabase';
+      const db = await openDb({ quiet: true });
+      dbQueries = db.queries;
+
+      // Create a test user
+      const testEmail = `test-${Date.now()}@example.com`;
+      const { data: userData, error: userError } = await supabaseServiceClient
+        .from('prsn_users')
+        .insert({
+          email: testEmail,
+          password_hash: 'test_hash',
+          role: 'consumer'
+        })
+        .select('id')
+        .single();
+
+      if (userError) {
+        throw new Error(`Failed to create test user: ${userError.message}`);
+      }
+      testUserId = userData.id;
+    });
+
+    afterAll(async () => {
+      // Clean up all test notifications
+      if (testNotificationIds.length > 0) {
+        try {
+          await supabaseServiceClient
+            .from('prsn_notifications')
+            .delete()
+            .in('id', testNotificationIds);
+        } catch (error) {
+          console.error('Error cleaning up notifications:', error);
+        }
+      }
+      // Clean up test user
+      if (testUserId) {
+        try {
+          await supabaseServiceClient
+            .from('prsn_users')
+            .delete()
+            .eq('id', testUserId);
+        } catch (error) {
+          console.error('Error cleaning up test user:', error);
+        }
+      }
+    });
+
+    it('should create and acknowledge a notification', async () => {
+      // Create notification directly via Supabase
+      const { data: notificationData, error: createError } = await supabaseServiceClient
+        .from('prsn_notifications')
+        .insert({
+          user_id: testUserId,
+          role: 'consumer',
+          title: 'Test Notification',
+          message: 'This is a test',
+          acknowledged_at: null
+        })
+        .select('id, user_id, role, acknowledged_at')
+        .single();
+
+      expect(createError).toBeNull();
+      expect(notificationData).toBeTruthy();
+      expect(notificationData.acknowledged_at).toBeNull();
+      
+      const notificationId = notificationData.id;
+      testNotificationIds.push(notificationId);
+
+      // Acknowledge using the db abstraction
+      const result = await dbQueries.acknowledgeNotificationById.run(
+        notificationId,
+        testUserId,
+        'consumer'
+      );
+
+      expect(result.changes).toBeGreaterThan(0);
+
+      // Verify it was acknowledged
+      const { data: updatedNotification } = await supabaseServiceClient
+        .from('prsn_notifications')
+        .select('acknowledged_at')
+        .eq('id', notificationId)
+        .single();
+
+      expect(updatedNotification.acknowledged_at).not.toBeNull();
     });
   });
 });

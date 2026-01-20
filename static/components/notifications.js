@@ -27,6 +27,12 @@ class AppNotifications extends HTMLElement {
     document.addEventListener('keydown', this.handleEscape);
     document.addEventListener('open-notifications', this.handleOpenEvent);
     document.addEventListener('close-notifications', this.handleCloseEvent);
+    document.addEventListener('notifications-acknowledged', () => {
+      // Reload notifications when one is acknowledged
+      if (this.isOpen()) {
+        this.loadNotifications();
+      }
+    });
 
     const overlays = this.shadowRoot.querySelectorAll(
       '.notifications-overlay, .notification-detail-overlay'
@@ -151,6 +157,14 @@ class AppNotifications extends HTMLElement {
       }
       const data = await response.json();
       if (data.updated) {
+        // Update local notification state
+        const notification = this.notifications.find(n => n.id === id);
+        if (notification) {
+          notification.acknowledged_at = new Date().toISOString();
+        }
+        // Reload notifications to get fresh data from server
+        await this.loadNotifications();
+        // Dispatch event for other components (like header count)
         document.dispatchEvent(new CustomEvent('notifications-acknowledged'));
       }
     } catch (error) {
