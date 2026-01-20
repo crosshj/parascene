@@ -586,8 +586,9 @@ export function openDb() {
 
   // Storage interface for images using Supabase Storage
   // Images are stored in a private bucket and served through the backend
-  const STORAGE_BUCKET = "prsn_created-images";
-  const STORAGE_THUMBNAIL_BUCKET = "prsn_created_images_thumbnails";
+  const STORAGE_BUCKET = process.env.SUPABASE_IMAGE_BUCKET || "prsn_created-images";
+  const STORAGE_THUMBNAIL_BUCKET =
+    process.env.SUPABASE_THUMBNAIL_BUCKET || "prsn_created-images-thumbnails";
   
   function getThumbnailFilename(filename) {
     const ext = path.extname(filename);
@@ -637,7 +638,7 @@ export function openDb() {
     getImageBuffer: async (filename, options = {}) => {
       const isThumbnail = options?.variant === "thumbnail";
       const bucket = isThumbnail ? STORAGE_THUMBNAIL_BUCKET : STORAGE_BUCKET;
-      const requestedFilename = isThumbnail ? getThumbnailFilename(filename) : filename;
+      const requestedFilename = filename;
       // Fetch image from Supabase Storage and return as buffer
       // Uses storage client (service role if available) to access private bucket
       const { data, error } = await storageClient.storage
@@ -645,7 +646,22 @@ export function openDb() {
         .download(requestedFilename);
       
       if (error) {
-        throw new Error(`Failed to fetch image from Supabase Storage: ${error.message}`);
+        console.error("Supabase image fetch failed, serving fallback image.", {
+          bucket,
+          filename,
+          variant: options?.variant ?? null,
+          error: error?.message ?? error
+        });
+        return sharp({
+          create: {
+            width: 250,
+            height: 250,
+            channels: 3,
+            background: "#b0b0b0"
+          }
+        })
+          .png()
+          .toBuffer();
       }
       
       // Convert blob to buffer

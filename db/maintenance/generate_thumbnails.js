@@ -1,6 +1,5 @@
 import "dotenv/config";
 import { createClient } from "@supabase/supabase-js";
-import path from "path";
 import sharp from "sharp";
 
 function requireEnv(name) {
@@ -9,12 +8,6 @@ function requireEnv(name) {
     throw new Error(`Missing required env var ${name}`);
   }
   return value;
-}
-
-function getThumbnailFilename(filename) {
-  const ext = path.extname(filename);
-  const base = path.basename(filename, ext);
-  return `${base}_th${ext || ""}`;
 }
 
 async function listAllFiles(storage, bucket, prefix = "") {
@@ -74,30 +67,33 @@ async function main() {
     );
   }
 
+  console.log(`Clearing thumbnail bucket ${thumbnailBucket}...`);
+  const existingThumbnails = await listAllFiles(storage, thumbnailBucket, prefix);
+  if (existingThumbnails.length > 0) {
+    const chunkSize = 1000;
+    for (let i = 0; i < existingThumbnails.length; i += chunkSize) {
+      const chunk = existingThumbnails.slice(i, i + chunkSize);
+      const { error: removeError } = await storage
+        .from(thumbnailBucket)
+        .remove(chunk);
+      if (removeError) {
+        throw new Error(
+          `Failed to clear thumbnails: ${removeError.message}`
+        );
+      }
+    }
+  }
+  console.log(`Cleared ${existingThumbnails.length} thumbnails.`);
+
   console.log(`Listing source images from ${storageBucket}...`);
   const sourceFiles = await listAllFiles(storage, storageBucket, prefix);
   console.log(`Found ${sourceFiles.length} images.`);
 
-  console.log(`Listing existing thumbnails from ${thumbnailBucket}...`);
-  const thumbnailFiles = await listAllFiles(storage, thumbnailBucket, prefix);
-  const thumbnailSet = new Set(thumbnailFiles);
-  console.log(`Found ${thumbnailFiles.length} thumbnails.`);
-
   let processed = 0;
   let created = 0;
-  let skipped = 0;
 
   for (const filename of sourceFiles) {
     processed += 1;
-    const thumbnailFilename = getThumbnailFilename(filename);
-
-    if (thumbnailSet.has(thumbnailFilename)) {
-      skipped += 1;
-      if (processed % 50 === 0) {
-        console.log(`Processed ${processed}/${sourceFiles.length}...`);
-      }
-      continue;
-    }
 
     const { data, error } = await storage.from(storageBucket).download(filename);
     if (error) {
@@ -115,7 +111,7 @@ async function main() {
 
     const { error: uploadError } = await storage
       .from(thumbnailBucket)
-      .upload(thumbnailFilename, thumbnailBuffer, {
+      .upload(filename, thumbnailBuffer, {
         contentType: "image/png",
         upsert: true
       });
@@ -133,7 +129,7 @@ async function main() {
   }
 
   console.log(
-    `Done. processed=${processed} created=${created} skipped=${skipped}`
+    `Done. processed=${processed} created=${created}`
   );
 }
 
