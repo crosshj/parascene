@@ -1,6 +1,8 @@
+const html = String.raw;
+
 class AppRouteProviderStatus extends HTMLElement {
   connectedCallback() {
-    this.innerHTML = `
+    this.innerHTML = html`
       <style>
         .status-pill {
           display: inline-flex;
@@ -47,14 +49,14 @@ class AppRouteProviderStatus extends HTMLElement {
 
       container.innerHTML = "";
       if (statuses.length === 0) {
-        container.innerHTML = `<div class="route-empty">No provider status updates.</div>`;
+        container.innerHTML = html`<div class="route-empty">No provider status updates.</div>`;
         return;
       }
 
       for (const status of statuses) {
         const card = document.createElement("div");
         card.className = "route-card";
-        card.innerHTML = `
+        card.innerHTML = html`
           <div class="route-title">${status.provider_name}</div>
           <div class="route-meta">
             <span class="status-pill">${status.status}</span>
@@ -75,7 +77,7 @@ class AppRouteProviderStatus extends HTMLElement {
         container.appendChild(card);
       }
     } catch (error) {
-      container.innerHTML = `<div class="route-empty">Unable to load status.</div>`;
+      container.innerHTML = html`<div class="route-empty">Unable to load status.</div>`;
     }
   }
 }

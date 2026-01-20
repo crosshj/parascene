@@ -1,6 +1,8 @@
+const html = String.raw;
+
 class AppRouteProviderMetrics extends HTMLElement {
   connectedCallback() {
-    this.innerHTML = `
+    this.innerHTML = html`
       <style>
         .metric-card {
           display: grid;
@@ -43,7 +45,7 @@ class AppRouteProviderMetrics extends HTMLElement {
 
       container.innerHTML = "";
       if (metrics.length === 0) {
-        container.innerHTML = `<div class="route-empty">No metrics available.</div>`;
+        container.innerHTML = html`<div class="route-empty">No metrics available.</div>`;
         return;
       }
 
@@ -51,7 +53,7 @@ class AppRouteProviderMetrics extends HTMLElement {
         const card = document.createElement("div");
         card.className = "card route-card metric-card";
         const unit = metric.unit ? ` ${metric.unit}` : "";
-        card.innerHTML = `
+        card.innerHTML = html`
           <div class="metric-title">${metric.name}</div>
           <div class="metric-value">${metric.value}${unit}</div>
           <div class="metric-meta">${metric.change || ""}</div>
@@ -61,7 +63,7 @@ class AppRouteProviderMetrics extends HTMLElement {
         container.appendChild(card);
       }
     } catch (error) {
-      container.innerHTML = `<div class="route-empty">Unable to load metrics.</div>`;
+      container.innerHTML = html`<div class="route-empty">Unable to load metrics.</div>`;
     }
   }
 }

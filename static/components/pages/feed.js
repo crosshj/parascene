@@ -1,6 +1,8 @@
+const html = String.raw;
+
 class AppRouteFeed extends HTMLElement {
   connectedCallback() {
-    this.innerHTML = `
+    this.innerHTML = html`
       <style>
         .feed-route .route-media:not(.route-media-has-image) {
           background:
@@ -59,7 +61,7 @@ class AppRouteFeed extends HTMLElement {
 
       container.innerHTML = "";
       if (items.length === 0) {
-        container.innerHTML = `
+        container.innerHTML = html`
           <div class="route-empty route-empty-image-grid feed-empty-state">
             <div class="feed-empty-icon">
               <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -89,7 +91,7 @@ class AppRouteFeed extends HTMLElement {
         
         // Check if current user owns this item
         const isOwned = currentUserId && item.user_id && currentUserId === item.user_id;
-        const ownedBadge = isOwned ? `
+        const ownedBadge = isOwned ? html`
           <div class="creation-published-badge" title="Your creation">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
@@ -104,7 +106,7 @@ class AppRouteFeed extends HTMLElement {
           ? `style="background-image: url('${item.thumbnail_url || item.image_url}'); background-size: cover; background-position: center;"`
           : '';
         
-        card.innerHTML = `
+        card.innerHTML = html`
           <div class="route-media ${mediaClass}" ${mediaStyle} aria-hidden="true"></div>
           ${ownedBadge}
           <div class="route-details">
@@ -121,7 +123,7 @@ class AppRouteFeed extends HTMLElement {
         container.appendChild(card);
       }
     } catch (error) {
-      container.innerHTML = `<div class="route-empty route-empty-image-grid">Unable to load feed.</div>`;
+      container.innerHTML = html`<div class="route-empty route-empty-image-grid">Unable to load feed.</div>`;
     }
   }
 }

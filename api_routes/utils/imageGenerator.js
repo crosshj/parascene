@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const html = String.raw;
 
 /**
  * Generates a random hex color
@@ -57,7 +58,7 @@ export async function generateRandomColorImage(outputPath) {
   // Create SVG with 4-corner gradient using a simple bilinear approach
   // Top row blends top-left to top-right, bottom row blends bottom-left to bottom-right
   // Then blend vertically
-  const svgBackground = `
+  const svgBackground = html`
 <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="topGrad" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -77,7 +78,7 @@ export async function generateRandomColorImage(outputPath) {
 `;
 
   // Create circle SVG
-  const circleSvg = `
+  const circleSvg = html`
 <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
   <circle cx="${circleCenterX}" cy="${circleCenterY}" r="${circleRadius}" fill="${circleColor}" />
 </svg>
@@ -146,7 +147,7 @@ export async function generateRandomColorImageToBuffer() {
   // Create SVG with 4-corner gradient using a simple bilinear approach
   // Top row blends top-left to top-right, bottom row blends bottom-left to bottom-right
   // Then blend vertically
-  const svgBackground = `
+  const svgBackground = html`
 <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="topGrad" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -166,7 +167,7 @@ export async function generateRandomColorImageToBuffer() {
 `;
 
   // Create circle SVG
-  const circleSvg = `
+  const circleSvg = html`
 <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
   <circle cx="${circleCenterX}" cy="${circleCenterY}" r="${circleRadius}" fill="${circleColor}" />
 </svg>

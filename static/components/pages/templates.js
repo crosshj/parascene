@@ -1,6 +1,8 @@
+const html = String.raw;
+
 class AppRouteTemplates extends HTMLElement {
   connectedCallback() {
-    this.innerHTML = `
+    this.innerHTML = html`
       <div class="route-header">
         <h3>Templates</h3>
         <p>Templates ready to bootstrap new workspaces.</p>
@@ -26,14 +28,14 @@ class AppRouteTemplates extends HTMLElement {
 
       container.innerHTML = "";
       if (templates.length === 0) {
-        container.innerHTML = `<div class="route-empty">No templates yet.</div>`;
+        container.innerHTML = html`<div class="route-empty">No templates yet.</div>`;
         return;
       }
 
       for (const template of templates) {
         const card = document.createElement("div");
         card.className = "route-card";
-        card.innerHTML = `
+        card.innerHTML = html`
           <div class="route-title">${template.name}</div>
           <div>${template.description}</div>
           <div class="route-meta">${template.category}</div>
@@ -41,7 +43,7 @@ class AppRouteTemplates extends HTMLElement {
         container.appendChild(card);
       }
     } catch (error) {
-      container.innerHTML = `<div class="route-empty">Unable to load templates.</div>`;
+      container.innerHTML = html`<div class="route-empty">Unable to load templates.</div>`;
     }
   }
 }

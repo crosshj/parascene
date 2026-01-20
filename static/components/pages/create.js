@@ -1,6 +1,8 @@
+const html = String.raw;
+
 class AppRouteCreate extends HTMLElement {
   connectedCallback() {
-    this.innerHTML = `
+    this.innerHTML = html`
       <style>
         .create-route .create-controls {
           display: flex;

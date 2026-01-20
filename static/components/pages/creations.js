@@ -1,6 +1,8 @@
+const html = String.raw;
+
 class AppRouteCreations extends HTMLElement {
   connectedCallback() {
-    this.innerHTML = `
+    this.innerHTML = html`
       <div class="creations-route">
         <div class="route-header">
           <h3>Creations</h3>
@@ -170,7 +172,7 @@ class AppRouteCreations extends HTMLElement {
       const combinedCreations = [...pendingCreations, ...creations];
       
       if (combinedCreations.length === 0) {
-        container.innerHTML = `
+        container.innerHTML = html`
           <div class="route-empty route-empty-image-grid">
             <div class="route-empty-title">No creations yet</div>
             <div class="route-empty-message">Start creating to see your work here.</div>
@@ -207,7 +209,7 @@ class AppRouteCreations extends HTMLElement {
         
         if (isCreating) {
           // Show loading state
-          card.innerHTML = `
+          card.innerHTML = html`
             <div 
               class="route-media loading"
               data-image-id="${item.id}"
@@ -242,7 +244,7 @@ class AppRouteCreations extends HTMLElement {
             const publishedDate = new Date(item.published_at);
             const publishedTimeAgo = this.getTimeAgo(publishedDate);
             
-            publishedBadge = `
+            publishedBadge = html`
               <div class="creation-published-badge" title="Published">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <circle cx="12" cy="12" r="10"></circle>
@@ -252,10 +254,10 @@ class AppRouteCreations extends HTMLElement {
               </div>
             `;
             
-            publishedInfo = `<div class="route-meta">Published ${publishedTimeAgo}</div>`;
+            publishedInfo = html`<div class="route-meta">Published ${publishedTimeAgo}</div>`;
           }
           
-          card.innerHTML = `
+          card.innerHTML = html`
             <div 
               class="route-media"
               style="background-image: url('${item.thumbnail_url || item.url}')"
@@ -281,7 +283,9 @@ class AppRouteCreations extends HTMLElement {
       }
     } catch (error) {
       console.error("Error loading creations:", error);
-      container.innerHTML = `<div class="route-empty route-empty-image-grid">Unable to load creations.</div>`;
+      container.innerHTML = html`
+        <div class="route-empty route-empty-image-grid">Unable to load creations.</div>
+      `;
     }
   }
 }

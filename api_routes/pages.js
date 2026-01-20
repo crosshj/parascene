@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import { clearAuthCookie, COOKIE_NAME } from "./auth.js";
+const html = String.raw;
 
 function getPageForUser(user) {
   const roleToPage = {
@@ -78,14 +79,14 @@ export default function createPageRoutes({ queries, pagesDir }) {
       // Read the HTML file and inject user role
       const fs = await import('fs/promises');
       const htmlPath = path.join(pagesDir, "creation-detail.html");
-      let html = await fs.readFile(htmlPath, 'utf-8');
+      let pageHtml = await fs.readFile(htmlPath, 'utf-8');
       
       // Inject user role as a script variable before the closing head tag
-      const roleScript = `<script>window.__USER_ROLE__ = ${JSON.stringify(user.role)};</script>`;
-      html = html.replace('</head>', `${roleScript}</head>`);
+      const roleScript = html`<script>window.__USER_ROLE__ = ${JSON.stringify(user.role)};</script>`;
+      pageHtml = pageHtml.replace('</head>', `${roleScript}</head>`);
       
       res.setHeader('Content-Type', 'text/html');
-      return res.send(html);
+      return res.send(pageHtml);
     } catch (error) {
       console.error("Error loading creation detail:", error);
       return res.status(500).send("Internal server error");

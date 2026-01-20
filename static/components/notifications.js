@@ -1,3 +1,5 @@
+const html = String.raw;
+
 class AppNotifications extends HTMLElement {
   constructor() {
     super();
@@ -120,7 +122,7 @@ class AppNotifications extends HTMLElement {
     const content = this.viewMode === 'detail' ? detailContent : listContent;
     if (!content) return;
 
-    content.innerHTML = '<p>Loading...</p>';
+    content.innerHTML = html`<p>Loading...</p>`;
 
     try {
       const response = await fetch('/api/notifications', {
@@ -142,7 +144,7 @@ class AppNotifications extends HTMLElement {
     } catch (error) {
       console.error('Error loading notifications:', error);
       if (content) {
-        content.innerHTML = '<p style="color: var(--text-muted);">Failed to load notifications.</p>';
+        content.innerHTML = html`<p style="color: var(--text-muted);">Failed to load notifications.</p>`;
       }
     }
   }
@@ -196,7 +198,7 @@ class AppNotifications extends HTMLElement {
     if (!content) return;
 
     if (!this.notifications.length) {
-      content.innerHTML = '<p style="color: var(--text-muted);">No notifications.</p>';
+      content.innerHTML = html`<p style="color: var(--text-muted);">No notifications.</p>`;
       return;
     }
 
@@ -206,7 +208,7 @@ class AppNotifications extends HTMLElement {
       return div.innerHTML;
     };
 
-    content.innerHTML = this.notifications.map((notification) => `
+    content.innerHTML = this.notifications.map((notification) => html`
       <button class="notification-list-item ${notification.acknowledged_at ? 'is-read' : 'is-unread'}" data-id="${notification.id}">
         <div class="notification-list-title">${escapeHtml(notification.title || 'Notification')}</div>
         <div class="notification-list-message">${escapeHtml(notification.message || '')}</div>
@@ -229,7 +231,7 @@ class AppNotifications extends HTMLElement {
     if (!content) return;
 
     if (!this.notifications.length) {
-      content.innerHTML = '<p style="color: var(--text-muted);">No notifications.</p>';
+      content.innerHTML = html`<p style="color: var(--text-muted);">No notifications.</p>`;
       return;
     }
 
@@ -246,14 +248,14 @@ class AppNotifications extends HTMLElement {
       notification.acknowledged_at = new Date().toISOString();
     }
 
-    content.innerHTML = `
+    content.innerHTML = html`
       <div class="notification-detail">
         <div class="notification-detail-header">
           <div class="notification-title">${escapeHtml(notification.title || 'Notification')}</div>
         </div>
         <div class="notification-message">${escapeHtml(notification.message || '')}</div>
         <div class="notification-time">${escapeHtml(notification.created_at || '')}</div>
-        ${notification.link ? `
+        ${notification.link ? html`
           <a class="notification-link" href="${escapeHtml(notification.link)}">Open related page</a>
         ` : ''}
         <button class="notification-view-all">View all notifications</button>
@@ -270,7 +272,7 @@ class AppNotifications extends HTMLElement {
   }
 
   render() {
-    this.shadowRoot.innerHTML = `
+    this.shadowRoot.innerHTML = html`
       <style>
         :host {
           display: block;

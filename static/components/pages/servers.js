@@ -1,6 +1,8 @@
+const html = String.raw;
+
 class AppRouteServers extends HTMLElement {
   connectedCallback() {
-    this.innerHTML = `
+    this.innerHTML = html`
       <div class="route-header">
         <h3>Servers</h3>
         <p>You will find a list of servers here that you can join as well as those you have already joined.</p>
@@ -26,14 +28,14 @@ class AppRouteServers extends HTMLElement {
 
       container.innerHTML = "";
       if (servers.length === 0) {
-        container.innerHTML = `<div class="route-empty">No servers available.</div>`;
+        container.innerHTML = html`<div class="route-empty">No servers available.</div>`;
         return;
       }
 
       for (const server of servers) {
         const card = document.createElement("div");
         card.className = "route-card";
-        card.innerHTML = `
+        card.innerHTML = html`
           <div class="route-title">${server.name}</div>
           <div>${server.description}</div>
           <div class="route-meta">${server.region} • ${server.status}</div>
@@ -42,7 +44,7 @@ class AppRouteServers extends HTMLElement {
         container.appendChild(card);
       }
     } catch (error) {
-      container.innerHTML = `<div class="route-empty">Unable to load servers.</div>`;
+      container.innerHTML = html`<div class="route-empty">Unable to load servers.</div>`;
     }
   }
 }

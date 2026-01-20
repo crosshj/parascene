@@ -1,3 +1,5 @@
+const html = String.raw;
+
 class AppNavBar extends HTMLElement {
   constructor() {
     super();
@@ -39,7 +41,7 @@ class AppNavBar extends HTMLElement {
       const navItems = this.routes.map(route => {
         const routeId = route.id || route.toLowerCase().replace(/\s+/g, '-');
         const routeLabel = route.label || route;
-        return `<a href="#${routeId}" class="nav-link" data-route="${routeId}">${routeLabel}</a>`;
+        return html`<a href="#${routeId}" class="nav-link" data-route="${routeId}">${routeLabel}</a>`;
       }).join('');
       headerNav.innerHTML = navItems;
       this.style.display = 'none';
@@ -126,10 +128,10 @@ class AppNavBar extends HTMLElement {
     const navItems = this.routes.map(route => {
       const routeId = route.id || route.toLowerCase().replace(/\s+/g, '-');
       const routeLabel = route.label || route;
-      return `<li><a href="#${routeId}" class="nav-link" data-route="${routeId}">${routeLabel}</a></li>`;
+      return html`<li><a href="#${routeId}" class="nav-link" data-route="${routeId}">${routeLabel}</a></li>`;
     }).join('');
 
-    this.innerHTML = `
+    this.innerHTML = html`
       <nav class="nav-bar">
         <ul>
           ${navItems}

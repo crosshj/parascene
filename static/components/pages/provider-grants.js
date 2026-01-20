@@ -1,6 +1,8 @@
+const html = String.raw;
+
 class AppRouteProviderGrants extends HTMLElement {
   connectedCallback() {
-    this.innerHTML = `
+    this.innerHTML = html`
       <style>
         .grant-status {
           text-transform: capitalize;
@@ -31,14 +33,14 @@ class AppRouteProviderGrants extends HTMLElement {
 
       container.innerHTML = "";
       if (grants.length === 0) {
-        container.innerHTML = `<div class="route-empty">No grants tracked.</div>`;
+        container.innerHTML = html`<div class="route-empty">No grants tracked.</div>`;
         return;
       }
 
       for (const grant of grants) {
         const card = document.createElement("div");
         card.className = "route-card";
-        card.innerHTML = `
+        card.innerHTML = html`
           <div class="route-title">${grant.name}</div>
           <div>${grant.sponsor}</div>
           <div class="route-meta">Amount • ${grant.amount}</div>
@@ -48,7 +50,7 @@ class AppRouteProviderGrants extends HTMLElement {
         container.appendChild(card);
       }
     } catch (error) {
-      container.innerHTML = `<div class="route-empty">Unable to load grants.</div>`;
+      container.innerHTML = html`<div class="route-empty">Unable to load grants.</div>`;
     }
   }
 }

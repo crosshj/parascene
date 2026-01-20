@@ -1,3 +1,5 @@
+const html = String.raw;
+
 class AppHeader extends HTMLElement {
   constructor() {
     super();
@@ -186,7 +188,7 @@ class AppHeader extends HTMLElement {
     const preview = this.querySelector('.notifications-preview');
     if (!preview) return;
 
-    preview.innerHTML = `
+    preview.innerHTML = html`
       <div class="notifications-menu-item notifications-loading">
         Loading notifications...
       </div>
@@ -197,7 +199,7 @@ class AppHeader extends HTMLElement {
         credentials: 'include'
       });
       if (response.status === 401) {
-        preview.innerHTML = `
+        preview.innerHTML = html`
           <div class="notifications-menu-item notifications-loading">
             Sign in to view notifications.
           </div>
@@ -214,7 +216,7 @@ class AppHeader extends HTMLElement {
 
       preview.innerHTML = '';
       if (notifications.length === 0) {
-        preview.innerHTML = `
+        preview.innerHTML = html`
           <div class="notifications-menu-item notifications-loading">
             No notifications yet.
           </div>
@@ -257,7 +259,7 @@ class AppHeader extends HTMLElement {
         preview.appendChild(item);
       }
     } catch {
-      preview.innerHTML = `
+      preview.innerHTML = html`
         <div class="notifications-menu-item notifications-loading">
           Failed to load notifications.
         </div>
@@ -500,7 +502,7 @@ class AppHeader extends HTMLElement {
     const showCreate = this.hasAttribute('show-create');
     const hasAuthLinks = (this.authLinks || []).length > 0;
 
-    this.innerHTML = `
+    this.innerHTML = html`
       <header>
         <div class="header-content">
           <button class="hamburger-button" aria-label="Toggle menu">
@@ -522,19 +524,19 @@ class AppHeader extends HTMLElement {
               const routeId = route.id;
               const routeLabel = route.label;
               // Generate clean URL path (e.g., /feed, /explore)
-              return `<a href="/${routeId}" class="nav-link" data-route="${routeId}">${routeLabel}</a>`;
+              return html`<a href="/${routeId}" class="nav-link" data-route="${routeId}">${routeLabel}</a>`;
             }).join('')}
           </nav>
           <div class="header-actions">
             ${hasAuthLinks ? (this.authLinks || []).map(authLink => 
-              `<a href="${authLink.href}" class="header-auth-link ${authLink.isPrimary ? 'btn-primary' : ''}">${authLink.text}</a>`
+              html`<a href="${authLink.href}" class="header-auth-link ${authLink.isPrimary ? 'btn-primary' : ''}">${authLink.text}</a>`
             ).join('') : ''}
-            ${showCreate ? `
+            ${showCreate ? html`
               <button class="action-item create-button btn-primary">
                 Create
               </button>
             ` : ''}
-            ${showNotifications ? `
+            ${showNotifications ? html`
               <div class="notifications-wrapper">
                 <button class="action-item notifications-button" aria-label="Open notifications">
                   <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -551,7 +553,7 @@ class AppHeader extends HTMLElement {
                 </div>
               </div>
             ` : ''}
-            ${showProfile ? `
+            ${showProfile ? html`
               <button class="action-item profile-button" aria-label="Open profile">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
@@ -586,14 +588,14 @@ class AppHeader extends HTMLElement {
             ${(this.routes || []).map(route => {
               const routeId = route.id;
               const routeLabel = route.label;
-              return `<a href="/${routeId}" class="nav-link" data-route="${routeId}">${routeLabel}</a>`;
+              return html`<a href="/${routeId}" class="nav-link" data-route="${routeId}">${routeLabel}</a>`;
             }).join('')}
           </nav>
           <div class="mobile-menu-actions">
             ${hasAuthLinks ? (this.authLinks || []).map(authLink => 
-              `<a href="${authLink.href}" class="header-auth-link ${authLink.isPrimary ? 'btn-primary' : ''}" style="display: block; width: 100%; text-align: center; margin-bottom: 8px;">${authLink.text}</a>`
+              html`<a href="${authLink.href}" class="header-auth-link ${authLink.isPrimary ? 'btn-primary' : ''}" style="display: block; width: 100%; text-align: center; margin-bottom: 8px;">${authLink.text}</a>`
             ).join('') : ''}
-            ${showCreate ? `
+            ${showCreate ? html`
               <button class="action-item create-button btn-primary">
                 Create
               </button>

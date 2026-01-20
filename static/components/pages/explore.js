@@ -1,6 +1,8 @@
+const html = String.raw;
+
 class AppRouteExplore extends HTMLElement {
   connectedCallback() {
-    this.innerHTML = `
+    this.innerHTML = html`
       <div class="route-header">
         <h3>Explore</h3>
         <p>You will find a list of creations here based on factors that are outside you current configuration.</p>
@@ -26,14 +28,14 @@ class AppRouteExplore extends HTMLElement {
 
       container.innerHTML = "";
       if (items.length === 0) {
-        container.innerHTML = `<div class="route-empty">No explore items yet.</div>`;
+        container.innerHTML = html`<div class="route-empty">No explore items yet.</div>`;
         return;
       }
 
       for (const item of items) {
         const card = document.createElement("div");
         card.className = "route-card";
-        card.innerHTML = `
+        card.innerHTML = html`
           <div class="route-title">${item.title}</div>
           <div>${item.summary}</div>
           <div class="route-meta">${item.category} • ${item.created_at}</div>
@@ -41,7 +43,7 @@ class AppRouteExplore extends HTMLElement {
         container.appendChild(card);
       }
     } catch (error) {
-      container.innerHTML = `<div class="route-empty">Unable to load explore.</div>`;
+      container.innerHTML = html`<div class="route-empty">Unable to load explore.</div>`;
     }
   }
 }

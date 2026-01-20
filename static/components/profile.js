@@ -1,3 +1,5 @@
+const html = String.raw;
+
 class AppProfile extends HTMLElement {
   constructor() {
     super();
@@ -85,7 +87,7 @@ class AppProfile extends HTMLElement {
     const content = this.shadowRoot.querySelector('.profile-content');
     if (!content) return;
 
-    content.innerHTML = '<p>Loading...</p>';
+    content.innerHTML = html`<p>Loading...</p>`;
 
     try {
       const response = await fetch('/api/profile', {
@@ -93,7 +95,7 @@ class AppProfile extends HTMLElement {
       });
       if (!response.ok) {
         if (response.status === 401) {
-          content.innerHTML = '<p style="color: var(--text-muted);">Please log in to view your profile.</p>';
+          content.innerHTML = html`<p style="color: var(--text-muted);">Please log in to view your profile.</p>`;
           return;
         }
         throw new Error('Failed to load profile');
@@ -103,7 +105,7 @@ class AppProfile extends HTMLElement {
       this.displayProfile(user);
     } catch (error) {
       console.error('Error loading profile:', error);
-      content.innerHTML = '<p style="color: var(--text-muted);">Failed to load profile information.</p>';
+      content.innerHTML = html`<p style="color: var(--text-muted);">Failed to load profile information.</p>`;
     }
   }
 
@@ -133,7 +135,7 @@ class AppProfile extends HTMLElement {
       return div.innerHTML;
     };
 
-    content.innerHTML = `
+    content.innerHTML = html`
       <div class="field">
         <label>Email</label>
         <div class="value">${escapeHtml(user.email)}</div>
@@ -150,7 +152,7 @@ class AppProfile extends HTMLElement {
   }
 
   render() {
-    this.shadowRoot.innerHTML = `
+    this.shadowRoot.innerHTML = html`
       <style>
         :host {
           display: block;
