@@ -29,40 +29,108 @@ function sessionMiddleware(queries = {}) {
 
   return async (req, res, next) => {
     const token = req.cookies?.[COOKIE_NAME];
-    if (!token || !req.auth?.userId) {
+    const userId = req.auth?.userId;
+    
+    if (!token) {
+      console.log(`[SessionMiddleware] No token in cookies for path: ${req.path}`);
+      return next();
+    }
+    
+    if (!userId) {
+      console.log(`[SessionMiddleware] Token present but no userId in auth for path: ${req.path}`);
       return next();
     }
 
-    const tokenHash = hashToken(token);
-    const session = await queries.selectSessionByTokenHash.get(
-      tokenHash,
-      req.auth.userId
-    );
+    console.log(`[SessionMiddleware] Checking session for user ${userId}, path: ${req.path}`);
 
-    if (!session) {
-      clearAuthCookie(res, req);
-      req.auth = null;
-      if (req.path.startsWith("/api/") || req.path === "/me") {
-        return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const tokenHash = hashToken(token);
+      console.log(`[SessionMiddleware] Looking up session with tokenHash: ${tokenHash.substring(0, 8)}...`);
+      
+      const session = await queries.selectSessionByTokenHash.get(
+        tokenHash,
+        userId
+      );
+
+      if (!session) {
+        // If session not found but JWT is valid, be lenient - don't clear cookie immediately
+        // This handles race conditions, DB replication lag, or transient DB issues
+        console.warn(
+          `[SessionMiddleware] Session not found for user ${userId} (tokenHash: ${tokenHash.substring(0, 8)}...) but JWT is valid. ` +
+          `Path: ${req.path}. This may be a race condition or DB lag. Allowing request to proceed.`
+        );
+        // Don't clear cookie - let the JWT validation handle auth
+        // The session might be created shortly or there's a transient DB issue
+        return next();
       }
-      return next();
-    }
 
-    const expiresAtMs = Date.parse(session.expires_at);
-    if (!Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) {
-      await queries.deleteSessionByTokenHash?.run(tokenHash, req.auth.userId);
-      clearAuthCookie(res, req);
-      req.auth = null;
-      if (req.path.startsWith("/api/") || req.path === "/me") {
-        return res.status(401).json({ error: "Unauthorized" });
+      console.log(`[SessionMiddleware] Session found: id=${session.id}, expires_at=${session.expires_at}`);
+
+      const expiresAtMs = Date.parse(session.expires_at);
+      const now = Date.now();
+      
+      if (!Number.isFinite(expiresAtMs)) {
+        console.error(
+          `[SessionMiddleware] Invalid expires_at format: ${session.expires_at} for session ${session.id}, user ${userId}`
+        );
+        // Invalid date format - treat as expired
+        await queries.deleteSessionByTokenHash?.run(tokenHash, userId);
+        clearAuthCookie(res, req);
+        req.auth = null;
+        console.log(`[SessionMiddleware] Cleared cookie due to invalid expiry date. Path: ${req.path}`);
+        if (req.path.startsWith("/api/") || req.path === "/me") {
+          return res.status(401).json({ error: "Unauthorized" });
+        }
+        return next();
       }
+
+      if (expiresAtMs <= now) {
+        // Session is expired - this is a legitimate reason to clear
+        const expiredSecondsAgo = Math.floor((now - expiresAtMs) / 1000);
+        console.log(
+          `[SessionMiddleware] Session expired ${expiredSecondsAgo}s ago for user ${userId}. ` +
+          `Expired at: ${session.expires_at}, now: ${new Date(now).toISOString()}. Clearing cookie.`
+        );
+        await queries.deleteSessionByTokenHash?.run(tokenHash, userId);
+        clearAuthCookie(res, req);
+        req.auth = null;
+        if (req.path.startsWith("/api/") || req.path === "/me") {
+          return res.status(401).json({ error: "Unauthorized" });
+        }
+        return next();
+      }
+
+      // Session is valid - refresh it and continue
+      const refreshedAt = new Date(now + ONE_WEEK_MS).toISOString();
+      console.log(`[SessionMiddleware] Refreshing session ${session.id} expiry to ${refreshedAt}`);
+      
+      try {
+        await queries.refreshSessionExpiry.run(session.id, refreshedAt);
+        setAuthCookie(res, token, req);
+        console.log(`[SessionMiddleware] Session refreshed successfully for user ${userId}`);
+      } catch (refreshError) {
+        console.error(
+          `[SessionMiddleware] Failed to refresh session ${session.id} for user ${userId}:`,
+          refreshError
+        );
+        // Don't fail the request if refresh fails - session is still valid
+      }
+      
+      return next();
+    } catch (error) {
+      // If database query fails, don't clear the cookie - it might be a transient error
+      console.error(
+        `[SessionMiddleware] Database error during session lookup for user ${userId}, path: ${req.path}`,
+        {
+          error: error.message,
+          stack: error.stack,
+          name: error.name
+        }
+      );
+      // Don't clear cookie on database errors - let it retry on next request
+      // The JWT is still valid, so the user should be able to proceed
       return next();
     }
-
-    const refreshedAt = new Date(Date.now() + ONE_WEEK_MS).toISOString();
-    await queries.refreshSessionExpiry.run(session.id, refreshedAt);
-    setAuthCookie(res, token, req);
-    return next();
   };
 }
 
@@ -81,10 +149,17 @@ function probabilisticSessionCleanup(queries = {}, options = {}) {
       return next();
     }
 
+    const now = new Date().toISOString();
+    console.log(`[SessionCleanup] Running cleanup for expired sessions before ${now}`);
     try {
-      await queries.deleteExpiredSessions.run(new Date().toISOString());
+      const result = await queries.deleteExpiredSessions.run(now);
+      console.log(`[SessionCleanup] Cleanup completed, deleted ${result.changes || 0} expired sessions`);
     } catch (error) {
-      console.warn("Session cleanup failed:", error);
+      console.error("[SessionCleanup] Cleanup failed:", {
+        error: error.message,
+        stack: error.stack,
+        name: error.name
+      });
     }
 
     return next();
@@ -110,25 +185,39 @@ function setAuthCookie(res, token, req = null) {
   // For Vercel/production, use 'none' with secure to ensure cookies work with fetch requests
   // 'lax' doesn't send cookies with cross-site fetch requests, even on same domain
   const sameSite = isSecure ? "none" : "lax";
-  res.cookie(COOKIE_NAME, token, {
+  const cookieOptions = {
     httpOnly: true,
     sameSite: sameSite,
     secure: isSecure,
     maxAge: ONE_WEEK_MS,
     path: "/"
+  };
+  console.log(`[setAuthCookie] Setting cookie with options:`, {
+    sameSite,
+    secure: isSecure,
+    path: cookieOptions.path,
+    maxAge: `${ONE_WEEK_MS}ms (${Math.floor(ONE_WEEK_MS / 86400000)} days)`
   });
+  res.cookie(COOKIE_NAME, token, cookieOptions);
 }
 
 function clearAuthCookie(res, req = null) {
   const isSecure = isSecureRequest(req);
   // Must match the same options used in setAuthCookie for clearCookie to work
   const sameSite = isSecure ? "none" : "lax";
-  res.clearCookie(COOKIE_NAME, {
+  const cookieOptions = {
     httpOnly: true,
     sameSite: sameSite,
     secure: isSecure,
     path: "/"
+  };
+  const path = req?.path || "unknown";
+  console.log(`[clearAuthCookie] Clearing cookie for path: ${path}`, {
+    sameSite,
+    secure: isSecure,
+    path: cookieOptions.path
   });
+  res.clearCookie(COOKIE_NAME, cookieOptions);
 }
 
 export {

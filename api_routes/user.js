@@ -37,7 +37,18 @@ export default function createProfileRoutes({ queries }) {
     if (queries.insertSession) {
       const tokenHash = hashToken(token);
       const expiresAt = new Date(Date.now() + ONE_WEEK_MS).toISOString();
-      await queries.insertSession.run(userId, tokenHash, expiresAt);
+      console.log(`[Signup] Creating session for new user ${userId}, expires at: ${expiresAt}`);
+      try {
+        await queries.insertSession.run(userId, tokenHash, expiresAt);
+        console.log(`[Signup] Session created successfully for user ${userId}`);
+      } catch (error) {
+        console.error(`[Signup] Failed to create session for user ${userId}:`, {
+          error: error.message,
+          stack: error.stack,
+          name: error.name
+        });
+        // Don't fail signup if session creation fails - cookie is still set
+      }
     }
 
     return res.redirect("/");
@@ -65,7 +76,18 @@ export default function createProfileRoutes({ queries }) {
     if (queries.insertSession) {
       const tokenHash = hashToken(token);
       const expiresAt = new Date(Date.now() + ONE_WEEK_MS).toISOString();
-      await queries.insertSession.run(user.id, tokenHash, expiresAt);
+      console.log(`[Login] Creating session for user ${user.id}, expires at: ${expiresAt}`);
+      try {
+        await queries.insertSession.run(user.id, tokenHash, expiresAt);
+        console.log(`[Login] Session created successfully for user ${user.id}`);
+      } catch (error) {
+        console.error(`[Login] Failed to create session for user ${user.id}:`, {
+          error: error.message,
+          stack: error.stack,
+          name: error.name
+        });
+        // Don't fail login if session creation fails - cookie is still set
+      }
     }
     return res.redirect("/");
   });

@@ -1,6 +1,6 @@
 import express from "express";
 import path from "path";
-import { clearAuthCookie } from "./auth.js";
+import { clearAuthCookie, COOKIE_NAME } from "./auth.js";
 
 function getPageForUser(user) {
   const roleToPage = {
@@ -27,7 +27,10 @@ export default function createPageRoutes({ queries, pagesDir }) {
     // Logged in → get role and serve role page
     const user = await queries.selectUserById.get(userId);
     if (!user) {
-      clearAuthCookie(res, req);
+      // Only clear cookie if it was actually sent
+      if (req.cookies?.[COOKIE_NAME]) {
+        clearAuthCookie(res, req);
+      }
       return res.sendFile(path.join(pagesDir, "index.html"));
     }
 
@@ -45,7 +48,10 @@ export default function createPageRoutes({ queries, pagesDir }) {
 
     const user = await queries.selectUserById.get(userId);
     if (!user) {
-      clearAuthCookie(res, req);
+      // Only clear cookie if it was actually sent
+      if (req.cookies?.[COOKIE_NAME]) {
+        clearAuthCookie(res, req);
+      }
       return res.sendFile(path.join(pagesDir, "auth.html"));
     }
 
@@ -111,7 +117,10 @@ export default function createPageRoutes({ queries, pagesDir }) {
     // If logged in → get user and their role
     const user = await queries.selectUserById.get(userId);
     if (!user) {
-      clearAuthCookie(res, req);
+      // Only clear cookie if it was actually sent
+      if (req.cookies?.[COOKIE_NAME]) {
+        clearAuthCookie(res, req);
+      }
       return res.sendFile(path.join(pagesDir, "auth.html"));
     }
 
