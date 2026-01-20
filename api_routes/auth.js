@@ -107,20 +107,27 @@ function isSecureRequest(req) {
 
 function setAuthCookie(res, token, req = null) {
   const isSecure = isSecureRequest(req);
+  // For Vercel/production, use 'none' with secure to ensure cookies work with fetch requests
+  // 'lax' doesn't send cookies with cross-site fetch requests, even on same domain
+  const sameSite = isSecure ? "none" : "lax";
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
-    sameSite: "lax",
+    sameSite: sameSite,
     secure: isSecure,
-    maxAge: ONE_WEEK_MS
+    maxAge: ONE_WEEK_MS,
+    path: "/"
   });
 }
 
 function clearAuthCookie(res, req = null) {
   const isSecure = isSecureRequest(req);
+  // Must match the same options used in setAuthCookie for clearCookie to work
+  const sameSite = isSecure ? "none" : "lax";
   res.clearCookie(COOKIE_NAME, {
     httpOnly: true,
-    sameSite: "lax",
-    secure: isSecure
+    sameSite: sameSite,
+    secure: isSecure,
+    path: "/"
   });
 }
 
