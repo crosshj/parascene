@@ -101,7 +101,7 @@ class AppRouteFeed extends HTMLElement {
         // Add class to indicate if there's an image (to override gradient)
         const mediaClass = item.image_url ? 'route-media-has-image' : '';
         const mediaStyle = item.image_url 
-          ? `style="background-image: url('${item.image_url}'); background-size: cover; background-position: center;"`
+          ? `style="background-image: url('${item.thumbnail_url || item.image_url}'); background-size: cover; background-position: center;"`
           : '';
         
         card.innerHTML = `

@@ -2,13 +2,13 @@ import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import { generateRandomColorImageToBuffer } from "./utils/imageGenerator.js";
+import { getThumbnailUrl } from "./utils/url.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export default function createCreateRoutes({ queries, storage }) {
   const router = express.Router();
-
   // Serve created images statically (for filesystem-based adapters)
   // This will be used as fallback for filesystem adapters
   const imagesDir = path.join(__dirname, "..", "db", "data", "images", "created");
@@ -42,7 +42,7 @@ export default function createCreateRoutes({ queries, storage }) {
       
       // Set appropriate content type
       res.setHeader('Content-Type', 'image/png');
-      res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+      res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
       res.send(imageBuffer);
     } catch (error) {
       console.error("Error serving image:", error);
@@ -122,10 +122,13 @@ export default function createCreateRoutes({ queries, storage }) {
       const images = await queries.selectCreatedImagesForUser.all(user.id);
       
       // Transform to include URLs (use file_path from DB which now contains the URL)
-      const imagesWithUrls = images.map((img) => ({
+      const imagesWithUrls = images.map((img) => {
+        const url = img.file_path || storage.getImageUrl(img.filename);
+        return {
         id: img.id,
         filename: img.filename,
-        url: img.file_path || storage.getImageUrl(img.filename), // Use stored URL or generate one
+        url,
+        thumbnail_url: getThumbnailUrl(url),
         width: img.width,
         height: img.height,
         color: img.color,
@@ -135,7 +138,8 @@ export default function createCreateRoutes({ queries, storage }) {
         published_at: img.published_at || null,
         title: img.title || null,
         description: img.description || null
-      }));
+        };
+      });
 
       return res.json({ images: imagesWithUrls });
     } catch (error) {

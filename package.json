@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "watch": "NODE_ENV=dev PORT=2367 node --watch api/index.js",
+    "watch": "NODE_ENV=dev PORT=2367 nodemon api/index.js",
     "reset": "node db/reset.js",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest"
   },
@@ -21,6 +21,7 @@
   "devDependencies": {
     "@jest/globals": "^30.2.0",
     "better-sqlite3": "^9.6.0",
-    "jest": "^30.2.0"
+    "jest": "^30.2.0",
+    "nodemon": "^3.1.11"
   }
 }

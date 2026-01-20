@@ -244,7 +244,7 @@ class AppRouteCreations extends HTMLElement {
           card.innerHTML = `
             <div 
               class="route-media"
-              style="background-image: url('${item.url}')"
+              style="background-image: url('${item.thumbnail_url || item.url}')"
               aria-hidden="true"
               data-image-id="${item.id}"
               data-status="completed"
