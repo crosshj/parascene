@@ -240,16 +240,17 @@ export async function openDb() {
       }
     },
     selectFeedItems: {
-      all: async () => {
+      all: async (excludeUserId) => {
         const stmt = db.prepare(
           `SELECT fi.id, fi.title, fi.summary, fi.author, fi.tags, fi.created_at, 
                   fi.created_image_id, ci.filename, ci.file_path, ci.user_id,
                   COALESCE(ci.file_path, CASE WHEN ci.filename IS NOT NULL THEN '/api/images/created/' || ci.filename ELSE NULL END) as url
            FROM feed_items fi
            LEFT JOIN created_images ci ON fi.created_image_id = ci.id
+           WHERE ? IS NULL OR ci.user_id IS NULL OR ci.user_id != ?
            ORDER BY fi.created_at DESC`
         );
-        return Promise.resolve(stmt.all());
+        return Promise.resolve(stmt.all(excludeUserId ?? null, excludeUserId ?? null));
       }
     },
     selectExploreItems: {

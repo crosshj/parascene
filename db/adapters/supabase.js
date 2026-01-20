@@ -331,7 +331,7 @@ export function openDb() {
       }
     },
     selectFeedItems: {
-      all: async () => {
+      all: async (excludeUserId) => {
         const { data, error } = await supabase
           .from(prefixedTable("feed_items"))
           .select(
@@ -339,7 +339,7 @@ export function openDb() {
           )
           .order("created_at", { ascending: false });
         if (error) throw error;
-        return (data ?? []).map((item) => {
+        const items = (data ?? []).map((item) => {
           const { prsn_created_images, ...rest } = item;
           const filename = prsn_created_images?.filename ?? null;
           const file_path = prsn_created_images?.file_path ?? null;
@@ -352,6 +352,10 @@ export function openDb() {
             url: file_path || (filename ? `/api/images/created/${filename}` : null)
           };
         });
+        if (!excludeUserId) {
+          return items;
+        }
+        return items.filter((item) => item.user_id !== excludeUserId);
       }
     },
     selectExploreItems: {

@@ -14,7 +14,7 @@ export default function createFeedRoutes({ queries }) {
       return res.status(404).json({ error: "User not found" });
     }
 
-    const items = await queries.selectFeedItems.all();
+    const items = await queries.selectFeedItems.all(user.id);
     
     // Transform items to include image_url when created_image_id exists
     const itemsWithImages = items.map((item) => {

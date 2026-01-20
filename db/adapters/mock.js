@@ -219,7 +219,8 @@ export function openDb() {
       }
     },
     selectFeedItems: {
-      all: async () => [...feed_items]
+      all: async (excludeUserId) =>
+        feed_items.filter((item) => item.user_id !== Number(excludeUserId))
     },
     selectExploreItems: {
       all: async () => [...explore_items]
