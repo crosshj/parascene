@@ -91,5 +91,17 @@
     "dependsOn": [
       "Credits++"
     ]
+  },
+  {
+    "name": "Creation comments",
+    "description": "add comments on creations with storage and UI support",
+    "cost": 34,
+    "impact": 83
+  },
+  {
+    "name": "Creation likes",
+    "description": "add likes on creations with storage and UI support",
+    "cost": 21,
+    "impact": 72
   }
 ]
