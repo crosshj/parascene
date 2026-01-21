@@ -7,6 +7,9 @@ class AppProfile extends HTMLElement {
     super();
     this.attachShadow({ mode: 'open' });
     this._isOpen = false;
+    this.profileLoading = false;
+    this.profileLoadedAt = 0;
+    this.profileData = null;
     this.handleEscape = this.handleEscape.bind(this);
     this.handleOpenEvent = this.handleOpenEvent.bind(this);
     this.handleCloseEvent = this.handleCloseEvent.bind(this);
@@ -15,6 +18,7 @@ class AppProfile extends HTMLElement {
   connectedCallback() {
     this.render();
     this.setupEventListeners();
+    this.prefetchProfile();
   }
 
   disconnectedCallback() {
@@ -70,7 +74,7 @@ class AppProfile extends HTMLElement {
     const overlay = this.shadowRoot.querySelector('.profile-overlay');
     if (overlay) {
       overlay.classList.add('open');
-      this.loadProfile();
+      this.loadProfile({ silent: true });
     }
     // Dispatch event to close notifications if open
     document.dispatchEvent(new CustomEvent('close-notifications'));
@@ -85,34 +89,55 @@ class AppProfile extends HTMLElement {
     }
   }
 
-  async loadProfile() {
+  async loadProfile({ silent = true, force = false } = {}) {
     const content = this.shadowRoot.querySelector('.profile-content');
     if (!content) return;
 
-    content.innerHTML = html`<p>Loading...</p>`;
+    if (this.profileLoading) return;
+    const now = Date.now();
+    if (!force && now - this.profileLoadedAt < 30000) return;
 
     try {
+      this.profileLoading = true;
       const response = await fetch('/api/profile', {
         credentials: 'include'
       });
       if (!response.ok) {
         if (response.status === 401) {
-          content.innerHTML = html`<p style="color: var(--text-muted);">Please log in to view your profile.</p>`;
+          if (!this.profileData) {
+            content.innerHTML = html`<p style="color: var(--text-muted);">Please log in to view your profile.</p>`;
+          }
           return;
         }
         throw new Error('Failed to load profile');
       }
 
       const user = await response.json();
-      this.displayProfile(user);
+      const nextKey = user
+        ? `${user.email || ''}|${user.role || ''}|${user.created_at || ''}`
+        : '';
+      const currentKey = this.profileData
+        ? `${this.profileData.email || ''}|${this.profileData.role || ''}|${this.profileData.created_at || ''}`
+        : '';
+
+      if (nextKey !== currentKey) {
+        this.profileData = user;
+        this.displayProfile(user);
+      }
+      this.profileLoadedAt = Date.now();
     } catch (error) {
       console.error('Error loading profile:', error);
-      content.innerHTML = html`<p style="color: var(--text-muted);">Failed to load profile information.</p>`;
+      if (!silent && !this.profileData) {
+        content.innerHTML = html`<p style="color: var(--text-muted);">Failed to load profile information.</p>`;
+      }
+    } finally {
+      this.profileLoading = false;
     }
   }
 
   displayProfile(user) {
     const content = this.shadowRoot.querySelector('.profile-content');
+    if (!content) return;
 
     const roleLabels = {
       consumer: 'Consumer',
@@ -268,9 +293,7 @@ class AppProfile extends HTMLElement {
             </button>
           </div>
           <div class="profile-body">
-            <div class="profile-content">
-              <p>Loading...</p>
-            </div>
+            <div class="profile-content"></div>
           </div>
           <div class="profile-actions">
             <form action="/logout" method="post">
@@ -280,6 +303,15 @@ class AppProfile extends HTMLElement {
         </div>
       </div>
     `;
+  }
+
+  prefetchProfile() {
+    const schedule = window.requestIdleCallback
+      ? window.requestIdleCallback.bind(window)
+      : (cb) => setTimeout(cb, 200);
+    schedule(() => {
+      this.loadProfile({ silent: true, force: true });
+    });
   }
 }
 
