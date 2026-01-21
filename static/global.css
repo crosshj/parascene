@@ -5,7 +5,7 @@
   --surface-strong: #f0f2f7;
   --surface-muted: #f8f9fc;
   --text: #0f172a;
-  --text-muted: #4b5563;
+  --text-muted: #525a6b;
   /* Used as a subtle backdrop while images are still loading */
   --image-placeholder: rgba(15, 23, 42, 0.06);
   /* Used for "image unavailable" fallbacks */
@@ -48,7 +48,7 @@
     --surface-strong: #25203a;
     --surface-muted: #120f1d;
     --text: #ede9fe;
-    --text-muted: #a78bfa;
+    --text-muted: #b3b7c3;
     /* Used as a subtle backdrop while images are still loading */
     --image-placeholder: rgba(237, 233, 254, 0.08);
     --border: #3d3552;
@@ -67,6 +67,7 @@
 @supports (background-color: color-mix(in srgb, white 10%, transparent)) {
   :root {
     --image-placeholder: color-mix(in srgb, var(--text) 10%, transparent);
+    --text-muted: color-mix(in srgb, var(--text) 62%, transparent);
   }
 }
 
@@ -503,6 +504,62 @@ input {
   border: 1px solid var(--border);
   background: var(--input-bg);
   color: inherit;
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 8px;
+  padding: 0;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px;
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  box-shadow: var(--shadow);
+}
+
+input[type="range"]::-moz-range-track {
+  height: 8px;
+  background: var(--surface-strong);
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  box-shadow: var(--shadow);
+}
+
+input[type="range"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus);
+}
+
+input[type="range"]:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 input:-webkit-autofill,

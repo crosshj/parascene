@@ -14,6 +14,7 @@ import createProviderRoutes from "../api_routes/provider.js";
 import createServersRoutes from "../api_routes/servers.js";
 import createTemplatesRoutes from "../api_routes/templates.js";
 import createUserRoutes from "../api_routes/user.js";
+import createTodoRoutes from "../api_routes/todo.js";
 import {
   authMiddleware,
   clearAuthCookie,
@@ -111,6 +112,7 @@ app.use(createProviderRoutes({ queries }));
 app.use(createServersRoutes({ queries }));
 app.use(createTemplatesRoutes({ queries }));
 app.use(createPageRoutes({ queries, pagesDir }));
+app.use(createTodoRoutes());
 
 app.use((err, req, res, next) => {
   if (err?.name !== "UnauthorizedError") {

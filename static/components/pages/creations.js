@@ -35,15 +35,17 @@ class AppRouteCreations extends HTMLElement {
       </div>
     `;
     this.pollInterval = null;
+    this.hasLoadedOnce = false;
+    this.isLoading = false;
     this.setupRouteListener();
     this.pendingUpdateHandler = () => {
-      this.loadCreations();
+      this.loadCreations({ force: true });
     };
     document.addEventListener('creations-pending-updated', this.pendingUpdateHandler);
     // Load creations after a brief delay to ensure DOM is ready
     // This also ensures we reload if navigating from another page
     setTimeout(() => {
-      this.loadCreations();
+      this.loadCreations({ force: true });
       this.startPolling();
     }, 50);
   }
@@ -53,8 +55,8 @@ class AppRouteCreations extends HTMLElement {
     this.routeChangeHandler = (e) => {
       const route = e.detail?.route;
       if (route === 'creations') {
-        // Reload creations immediately when navigating to creations page
-        this.loadCreations();
+        // Only refresh if stale or needed to avoid flicker
+        this.refreshOnActivate();
         // Restart polling in case it was stopped
         if (!this.pollInterval) {
           this.startPolling();
@@ -68,8 +70,8 @@ class AppRouteCreations extends HTMLElement {
     this.intersectionObserver = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
         if (entry.isIntersecting && entry.target === this) {
-          // Element is visible, reload creations
-          this.loadCreations();
+          // Element is visible, refresh if needed
+          this.refreshOnActivate();
           if (!this.pollInterval) {
             this.startPolling();
           }
@@ -156,11 +158,23 @@ class AppRouteCreations extends HTMLElement {
     }
   }
 
-  async loadCreations() {
+  refreshOnActivate() {
+    const hasPending = this.getPendingCreations().length > 0;
+    const hasLoading = this.querySelectorAll('.route-media[data-image-id][data-status="creating"]').length > 0;
+
+    if (!this.hasLoadedOnce || hasPending || hasLoading) {
+      this.loadCreations({ force: true });
+    }
+  }
+
+  async loadCreations({ force = false } = {}) {
     const container = this.querySelector("[data-creations-container]");
     if (!container) return;
+    if (this.isLoading) return;
+    if (!force && this.hasLoadedOnce) return;
 
     try {
+      this.isLoading = true;
       // Fetch created creations only
       const creationsResponse = await fetch("/api/create/images", {
         credentials: 'include'
@@ -197,6 +211,7 @@ class AppRouteCreations extends HTMLElement {
             }
           });
         }
+        this.hasLoadedOnce = true;
         return;
       }
 
@@ -287,11 +302,14 @@ class AppRouteCreations extends HTMLElement {
         
         container.appendChild(card);
       }
+      this.hasLoadedOnce = true;
     } catch (error) {
       console.error("Error loading creations:", error);
       container.innerHTML = html`
         <div class="route-empty route-empty-image-grid">Unable to load creations.</div>
       `;
+    } finally {
+      this.isLoading = false;
     }
   }
 }

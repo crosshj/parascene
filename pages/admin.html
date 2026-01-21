@@ -20,6 +20,7 @@
       <a data-route="moderation">Moderation</a>
       <a data-route="providers">Providers</a>
       <a data-route="policies">Policies</a>
+      <a data-route="todo">Todo</a>
     </app-header>
     <app-profile></app-profile>
     <app-credits></app-credits>
@@ -53,7 +54,63 @@
           <div class="users-loading">Loading...</div>
         </div>
       </section>
+
+      <section data-route-content="todo">
+        <h3>Todo</h3>
+        <div id="todo-alert" class="admin-alert" hidden>
+          Writes are disabled on Vercel. Add or edit items locally.
+        </div>
+        <div class="todo-layout">
+          <div id="todo-list" class="todo-list">
+            <div class="todo-loading">Loading...</div>
+          </div>
+        </div>
+      </section>
     </main>
+
+    <div id="todo-modal" class="publish-modal-overlay" data-todo-modal role="dialog" aria-modal="true" aria-labelledby="todo-modal-title">
+      <div class="publish-modal">
+        <header class="publish-modal-header todo-modal-header">
+          <button type="button" class="publish-modal-close" data-todo-close aria-label="Close">✕</button>
+        </header>
+        <div class="publish-modal-body">
+          <form id="todo-modal-form" class="todo-modal-form">
+          <input type="hidden" name="mode" value="add" />
+          <input type="hidden" name="originalName" value="" />
+          <label>
+            Name
+            <input type="text" name="name" required />
+          </label>
+          <label>
+            Description
+            <textarea name="description" rows="3" required></textarea>
+          </label>
+          <label class="todo-slider">
+            Cost
+            <input type="range" name="time" min="1" max="100" required />
+            <div class="todo-slider-meta">
+              <span>Low</span>
+              <span class="todo-slider-value" data-slider-value="time">50</span>
+              <span>High</span>
+            </div>
+          </label>
+          <label class="todo-slider">
+            Impact
+            <input type="range" name="impact" min="1" max="100" required />
+            <div class="todo-slider-meta">
+              <span>Low</span>
+              <span class="todo-slider-value" data-slider-value="impact">50</span>
+              <span>High</span>
+            </div>
+          </label>
+          <div class="todo-modal-actions">
+            <button type="button" class="todo-modal-delete" data-todo-delete>Delete</button>
+            <button type="submit" class="todo-modal-submit btn-primary">Save</button>
+          </div>
+          </form>
+        </div>
+      </div>
+    </div>
 
     <script src="/admin.js" defer></script>
   </body>
