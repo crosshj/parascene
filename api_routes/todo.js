@@ -11,6 +11,11 @@ function computePriority(time, impact) {
   return Math.round((impact * (100 - time)) / 100);
 }
 
+function computeProbability(time) {
+  if (!Number.isFinite(time)) return 0;
+  return Math.max(0, Math.min(100, Math.round(100 - time)));
+}
+
 function normalizeDependencies(dependsOn) {
   if (!Array.isArray(dependsOn)) return [];
   return dependsOn
@@ -27,13 +32,17 @@ function normalizeTodoItem(item) {
   const priority = Number.isFinite(cost) && Number.isFinite(impact)
     ? computePriority(cost, impact)
     : 0;
+  const probability = Number.isFinite(cost)
+    ? computeProbability(cost)
+    : 0;
   return {
     name,
     description,
     cost,
     impact,
     dependsOn,
-    priority
+    priority,
+    probability
   };
 }
 
@@ -72,14 +81,23 @@ async function readTodoItems() {
 }
 
 async function writeTodoItems(items) {
-  const normalized = items.map((item) => ({
-    name: String(item?.name || "").trim(),
-    description: String(item?.description || "").trim(),
-    cost: Number(item?.cost ?? item?.time),
-    impact: Number(item?.impact),
-    dependsOn: normalizeDependencies(item?.dependsOn)
+  const normalized = items.map((item, index) => ({
+    ...normalizeTodoItem(item),
+    order: index
   }));
-  await fs.writeFile(TODO_PATH, JSON.stringify(normalized, null, 2), "utf8");
+  applyDependencyPriority(normalized);
+  normalized.sort((a, b) => {
+    if (b.priority !== a.priority) return b.priority - a.priority;
+    return a.order - b.order;
+  });
+  const serialized = normalized.map(({ name, description, cost, impact, dependsOn }) => ({
+    name,
+    description,
+    cost,
+    impact,
+    dependsOn
+  }));
+  await fs.writeFile(TODO_PATH, JSON.stringify(serialized, null, 2), "utf8");
 }
 
 export default function createTodoRoutes() {
@@ -94,7 +112,8 @@ export default function createTodoRoutes() {
           description: item.description,
           time: item.cost,
           impact: item.impact,
-          priority: item.priority
+          priority: item.priority,
+          probability: item.probability
         })),
         writable: !process.env.VERCEL,
         formula: "round(Impact * (100 - Cost) / 100), deps bumped +1"
@@ -128,12 +147,14 @@ export default function createTodoRoutes() {
     try {
       const items = await readTodoItems();
       const priorityValue = computePriority(timeValue, impactValue);
+      const probabilityValue = computeProbability(timeValue);
       items.push({
         name: normalizedName,
         description: normalizedDescription,
         cost: timeValue,
         impact: impactValue,
-        priority: priorityValue
+        priority: priorityValue,
+        probability: probabilityValue
       });
       await writeTodoItems(items);
       res.json({
@@ -143,7 +164,8 @@ export default function createTodoRoutes() {
           description: normalizedDescription,
           time: timeValue,
           impact: impactValue,
-          priority: priorityValue
+          priority: priorityValue,
+          probability: probabilityValue
         }
       });
     } catch (error) {
@@ -179,6 +201,7 @@ export default function createTodoRoutes() {
     try {
       const items = await readTodoItems();
       const priorityValue = computePriority(timeValue, impactValue);
+      const probabilityValue = computeProbability(timeValue);
       const updatedItems = items.map((item) => {
         if (item.name !== normalizedOriginal) return item;
         return {
@@ -186,7 +209,8 @@ export default function createTodoRoutes() {
           description: normalizedDescription,
           cost: timeValue,
           impact: impactValue,
-          priority: priorityValue
+          priority: priorityValue,
+          probability: probabilityValue
         };
       });
       await writeTodoItems(updatedItems);
@@ -197,7 +221,8 @@ export default function createTodoRoutes() {
           description: normalizedDescription,
           time: timeValue,
           impact: impactValue,
-          priority: priorityValue
+          priority: priorityValue,
+          probability: probabilityValue
         }
       });
     } catch (error) {
