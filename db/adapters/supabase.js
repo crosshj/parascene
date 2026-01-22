@@ -48,7 +48,8 @@ export function openDb() {
   const queries = {
     selectUserByEmail: {
       get: async (email) => {
-        const { data, error } = await supabase
+        // Use serviceClient to bypass RLS for authentication
+        const { data, error } = await serviceClient
           .from(prefixedTable("users"))
           .select("id, email, password_hash, role")
           .eq("email", email)
@@ -59,7 +60,8 @@ export function openDb() {
     },
     selectUserById: {
       get: async (id) => {
-        const { data, error } = await supabase
+        // Use serviceClient to bypass RLS for authentication
+        const { data, error } = await serviceClient
           .from(prefixedTable("users"))
           .select("id, email, role, created_at")
           .eq("id", id)
@@ -70,7 +72,8 @@ export function openDb() {
     },
     selectSessionByTokenHash: {
       get: async (tokenHash, userId) => {
-        const { data, error } = await supabase
+        // Use serviceClient to bypass RLS for authentication
+        const { data, error } = await serviceClient
           .from(prefixedTable("sessions"))
           .select("id, user_id, token_hash, expires_at")
           .eq("token_hash", tokenHash)
@@ -82,7 +85,8 @@ export function openDb() {
     },
     insertUser: {
       run: async (email, password_hash, role) => {
-        const { data, error } = await supabase
+        // Use serviceClient to bypass RLS for authentication
+        const { data, error } = await serviceClient
           .from(prefixedTable("users"))
           .insert({ email, password_hash, role })
           .select("id")
@@ -97,7 +101,8 @@ export function openDb() {
     },
     insertSession: {
       run: async (userId, tokenHash, expiresAt) => {
-        const { data, error } = await supabase
+        // Use serviceClient to bypass RLS for authentication
+        const { data, error } = await serviceClient
           .from(prefixedTable("sessions"))
           .insert({ user_id: userId, token_hash: tokenHash, expires_at: expiresAt })
           .select("id")
@@ -112,7 +117,8 @@ export function openDb() {
     },
     refreshSessionExpiry: {
       run: async (id, expiresAt) => {
-        const { data, error } = await supabase
+        // Use serviceClient to bypass RLS for authentication
+        const { data, error } = await serviceClient
           .from(prefixedTable("sessions"))
           .update({ expires_at: expiresAt })
           .eq("id", id)
@@ -123,7 +129,8 @@ export function openDb() {
     },
     deleteSessionByTokenHash: {
       run: async (tokenHash, userId) => {
-        let query = supabase.from(prefixedTable("sessions")).delete();
+        // Use serviceClient to bypass RLS for authentication
+        let query = serviceClient.from(prefixedTable("sessions")).delete();
         query = query.eq("token_hash", tokenHash);
         if (userId) {
           query = query.eq("user_id", userId);
@@ -135,7 +142,8 @@ export function openDb() {
     },
     deleteExpiredSessions: {
       run: async (nowIso) => {
-        const { data, error } = await supabase
+        // Use serviceClient to bypass RLS for authentication
+        const { data, error } = await serviceClient
           .from(prefixedTable("sessions"))
           .delete()
           .lte("expires_at", nowIso)
@@ -146,7 +154,8 @@ export function openDb() {
     },
     selectUsers: {
       all: async () => {
-        const { data, error } = await supabase
+        // Use serviceClient to bypass RLS for admin operations
+        const { data, error } = await serviceClient
           .from(prefixedTable("users"))
           .select("id, email, role, created_at")
           .order("id", { ascending: true });
@@ -156,7 +165,8 @@ export function openDb() {
     },
     selectModerationQueue: {
       all: async () => {
-        const { data, error } = await supabase
+        // Use serviceClient to bypass RLS for backend operations
+        const { data, error } = await serviceClient
           .from(prefixedTable("moderation_queue"))
           .select("id, content_type, content_id, status, reason, created_at")
           .order("created_at", { ascending: false });
@@ -166,7 +176,8 @@ export function openDb() {
     },
     selectProviders: {
       all: async () => {
-        const { data, error } = await supabase
+        // Use serviceClient to bypass RLS for backend operations
+        const { data, error } = await serviceClient
           .from(prefixedTable("provider_registry"))
           .select("id, name, status, region, contact_email, created_at")
           .order("name", { ascending: true });
@@ -176,7 +187,8 @@ export function openDb() {
     },
     selectProviderStatuses: {
       all: async () => {
-        const { data, error } = await supabase
+        // Use serviceClient to bypass RLS for backend operations
+        const { data, error } = await serviceClient
           .from(prefixedTable("provider_statuses"))
           .select("id, provider_name, status, region, uptime_pct, capacity_pct, last_check_at")
           .order("provider_name", { ascending: true });
@@ -186,7 +198,8 @@ export function openDb() {
     },
     selectProviderMetrics: {
       all: async () => {
-        const { data, error } = await supabase
+        // Use serviceClient to bypass RLS for backend operations
+        const { data, error } = await serviceClient
           .from(prefixedTable("provider_metrics"))
           .select("id, name, value, unit, change, period, description, updated_at")
           .order("id", { ascending: true });
@@ -196,7 +209,8 @@ export function openDb() {
     },
     selectProviderGrants: {
       all: async () => {
-        const { data, error } = await supabase
+        // Use serviceClient to bypass RLS for backend operations
+        const { data, error } = await serviceClient
           .from(prefixedTable("provider_grants"))
           .select("id, name, sponsor, amount, status, next_report, awarded_at")
           .order("awarded_at", { ascending: false });
@@ -206,7 +220,8 @@ export function openDb() {
     },
     selectProviderTemplates: {
       all: async () => {
-        const { data, error } = await supabase
+        // Use serviceClient to bypass RLS for backend operations
+        const { data, error } = await serviceClient
           .from(prefixedTable("provider_templates"))
           .select("id, name, category, version, deployments, updated_at")
           .order("name", { ascending: true });
@@ -216,7 +231,8 @@ export function openDb() {
     },
     selectPolicies: {
       all: async () => {
-        const { data, error } = await supabase
+        // Use serviceClient to bypass RLS for backend operations
+        const { data, error } = await serviceClient
           .from(prefixedTable("policy_knobs"))
           .select("id, key, value, description, updated_at")
           .order("key", { ascending: true });
@@ -332,7 +348,8 @@ export function openDb() {
     },
     selectFeedItems: {
       all: async (excludeUserId) => {
-        const { data, error } = await supabase
+        // Use serviceClient to bypass RLS for backend operations
+        const { data, error } = await serviceClient
           .from(prefixedTable("feed_items"))
           .select(
             "id, title, summary, author, tags, created_at, created_image_id, prsn_created_images(filename, file_path, user_id)"
@@ -360,7 +377,8 @@ export function openDb() {
     },
     selectExploreItems: {
       all: async () => {
-        const { data, error } = await supabase
+        // Use serviceClient to bypass RLS for backend operations
+        const { data, error } = await serviceClient
           .from(prefixedTable("explore_items"))
           .select("id, title, summary, category, created_at")
           .order("created_at", { ascending: false });
@@ -370,7 +388,8 @@ export function openDb() {
     },
     selectCreationsForUser: {
       all: async (userId) => {
-        const { data, error } = await supabase
+        // Use serviceClient to bypass RLS for backend operations
+        const { data, error } = await serviceClient
           .from(prefixedTable("creations"))
           .select("id, title, body, status, created_at")
           .eq("user_id", userId)
@@ -381,7 +400,8 @@ export function openDb() {
     },
     selectServers: {
       all: async () => {
-        const { data, error } = await supabase
+        // Use serviceClient to bypass RLS for backend operations
+        const { data, error } = await serviceClient
           .from(prefixedTable("servers"))
           .select("id, name, region, status, members_count, description, created_at")
           .order("name", { ascending: true });
@@ -391,7 +411,8 @@ export function openDb() {
     },
     selectTemplates: {
       all: async () => {
-        const { data, error } = await supabase
+        // Use serviceClient to bypass RLS for backend operations
+        const { data, error } = await serviceClient
           .from(prefixedTable("templates"))
           .select("id, name, category, description, created_at")
           .order("name", { ascending: true });
@@ -401,7 +422,8 @@ export function openDb() {
     },
     insertCreatedImage: {
       run: async (userId, filename, filePath, width, height, color, status = "creating") => {
-        const { data, error } = await supabase
+        // Use serviceClient to bypass RLS for backend operations
+        const { data, error } = await serviceClient
           .from(prefixedTable("created_images"))
           .insert({
             user_id: userId,
@@ -424,11 +446,12 @@ export function openDb() {
     },
     updateCreatedImageStatus: {
       run: async (id, userId, status, color = null) => {
+        // Use serviceClient to bypass RLS for backend operations
         const updateFields = { status };
         if (color) {
           updateFields.color = color;
         }
-        const { data, error } = await supabase
+        const { data, error } = await serviceClient
           .from(prefixedTable("created_images"))
           .update(updateFields)
           .eq("id", id)
@@ -440,7 +463,8 @@ export function openDb() {
     },
     selectCreatedImagesForUser: {
       all: async (userId) => {
-        const { data, error } = await supabase
+        // Use serviceClient to bypass RLS for backend operations
+        const { data, error } = await serviceClient
           .from(prefixedTable("created_images"))
           .select(
             "id, filename, file_path, width, height, color, status, created_at, published, published_at, title, description"
@@ -453,7 +477,8 @@ export function openDb() {
     },
     selectCreatedImageById: {
       get: async (id, userId) => {
-        const { data, error } = await supabase
+        // Use serviceClient to bypass RLS for backend operations
+        const { data, error } = await serviceClient
           .from(prefixedTable("created_images"))
           .select(
             "id, filename, file_path, width, height, color, status, created_at, published, published_at, title, description, user_id"
@@ -467,7 +492,8 @@ export function openDb() {
     },
     selectCreatedImageByIdAnyUser: {
       get: async (id) => {
-        const { data, error } = await supabase
+        // Use serviceClient to bypass RLS for backend operations
+        const { data, error } = await serviceClient
           .from(prefixedTable("created_images"))
           .select(
             "id, filename, file_path, width, height, color, status, created_at, published, published_at, title, description, user_id"
@@ -480,7 +506,8 @@ export function openDb() {
     },
     selectCreatedImageByFilename: {
       get: async (filename) => {
-        const { data, error } = await supabase
+        // Use serviceClient to bypass RLS for backend operations
+        const { data, error } = await serviceClient
           .from(prefixedTable("created_images"))
           .select(
             "id, filename, file_path, width, height, color, status, created_at, published, published_at, title, description, user_id"
@@ -493,7 +520,8 @@ export function openDb() {
     },
     publishCreatedImage: {
       run: async (id, userId, title, description) => {
-        const { data, error } = await supabase
+        // Use serviceClient to bypass RLS for backend operations
+        const { data, error } = await serviceClient
           .from(prefixedTable("created_images"))
           .update({
             published: true,
@@ -510,7 +538,8 @@ export function openDb() {
     },
     insertFeedItem: {
       run: async (title, summary, author, tags, createdImageId) => {
-        const { data, error } = await supabase
+        // Use serviceClient to bypass RLS for backend operations
+        const { data, error } = await serviceClient
           .from(prefixedTable("feed_items"))
           .insert({
             title,
@@ -525,6 +554,138 @@ export function openDb() {
         return {
           insertId: data.id,
           lastInsertRowid: data.id,
+          changes: 1
+        };
+      }
+    },
+    selectUserCredits: {
+      get: async (userId) => {
+        // Use serviceClient to bypass RLS for backend operations
+        const { data, error } = await serviceClient
+          .from(prefixedTable("user_credits"))
+          .select("id, user_id, balance, last_daily_claim_at, created_at, updated_at")
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (error) throw error;
+        return data ?? undefined;
+      }
+    },
+    insertUserCredits: {
+      run: async (userId, balance, lastDailyClaimAt) => {
+        // Use serviceClient to bypass RLS for backend operations
+        const { data, error } = await serviceClient
+          .from(prefixedTable("user_credits"))
+          .insert({
+            user_id: userId,
+            balance,
+            last_daily_claim_at: lastDailyClaimAt || null
+          })
+          .select("id")
+          .single();
+        if (error) throw error;
+        return {
+          insertId: data.id,
+          lastInsertRowid: data.id,
+          changes: 1
+        };
+      }
+    },
+    updateUserCreditsBalance: {
+      run: async (userId, amount) => {
+        // Use serviceClient to bypass RLS for backend operations
+        // First get current balance
+        const { data: current, error: selectError } = await serviceClient
+          .from(prefixedTable("user_credits"))
+          .select("balance")
+          .eq("user_id", userId)
+          .single();
+        
+        if (selectError && selectError.code !== 'PGRST116') throw selectError;
+        
+        const newBalance = (current?.balance ?? 0) + amount;
+        
+        const { data, error } = await serviceClient
+          .from(prefixedTable("user_credits"))
+          .update({
+            balance: newBalance,
+            updated_at: new Date().toISOString()
+          })
+          .eq("user_id", userId)
+          .select("id");
+        
+        if (error) throw error;
+        return { changes: data?.length ?? 0 };
+      }
+    },
+    claimDailyCredits: {
+      run: async (userId, amount = 10) => {
+        // Use serviceClient to bypass RLS for backend operations
+        // Get current credits record
+        const { data: credits, error: selectError } = await serviceClient
+          .from(prefixedTable("user_credits"))
+          .select("id, balance, last_daily_claim_at")
+          .eq("user_id", userId)
+          .maybeSingle();
+        
+        if (selectError) throw selectError;
+        
+        if (!credits) {
+          // No credits record exists, create one with the daily amount
+          const { data: newCredits, error: insertError } = await serviceClient
+            .from(prefixedTable("user_credits"))
+            .insert({
+              user_id: userId,
+              balance: amount,
+              last_daily_claim_at: new Date().toISOString()
+            })
+            .select("balance")
+            .single();
+          
+          if (insertError) throw insertError;
+          return {
+            success: true,
+            balance: newCredits.balance,
+            changes: 1
+          };
+        }
+        
+        // Check if already claimed today (UTC)
+        const now = new Date();
+        const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+        
+        if (credits.last_daily_claim_at) {
+          const lastClaimDate = new Date(credits.last_daily_claim_at);
+          const lastClaimUTC = new Date(Date.UTC(lastClaimDate.getUTCFullYear(), lastClaimDate.getUTCMonth(), lastClaimDate.getUTCDate()));
+          
+          if (lastClaimUTC.getTime() >= todayUTC.getTime()) {
+            // Already claimed today
+            return {
+              success: false,
+              balance: credits.balance,
+              changes: 0,
+              message: 'Daily credits already claimed today'
+            };
+          }
+        }
+        
+        // Update balance and last claim date
+        const newBalance = credits.balance + amount;
+        const { data: updated, error: updateError } = await serviceClient
+          .from(prefixedTable("user_credits"))
+          .update({
+            balance: newBalance,
+            last_daily_claim_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq("user_id", userId)
+          .select("balance")
+          .single();
+        
+        if (updateError) throw updateError;
+        
+        return {
+          success: true,
+          balance: updated.balance,
           changes: 1
         };
       }
@@ -544,7 +705,8 @@ export function openDb() {
         const existing = await checkExists();
         if (existing && existing.length > 0) return;
       } else {
-        const { count, error } = await supabase
+        // Use serviceClient to bypass RLS for backend operations
+        const { count, error } = await serviceClient
           .from(table)
           .select("id", { count: "exact", head: true });
         if (error) throw error;
@@ -553,7 +715,8 @@ export function openDb() {
     }
 
     const transformedItems = transform ? items.map(transform) : items;
-    const { error } = await supabase.from(table).insert(transformedItems);
+    // Use serviceClient to bypass RLS for backend operations
+    const { error } = await serviceClient.from(table).insert(transformedItems);
     if (error) throw error;
   }
 
@@ -578,11 +741,12 @@ export function openDb() {
     ].map((table) => prefixedTable(table));
 
     for (const table of tables) {
+      // Use serviceClient to bypass RLS for backend operations
       // Delete all rows - using a condition that should match all rows
-      const { error } = await supabase.from(table).delete().gte("id", 0);
+      const { error } = await serviceClient.from(table).delete().gte("id", 0);
       if (error) {
         // If delete fails, try alternative approach
-        const { error: error2 } = await supabase.from(table).delete().neq("id", -1);
+        const { error: error2 } = await serviceClient.from(table).delete().neq("id", -1);
         if (error2) throw error2;
       }
     }

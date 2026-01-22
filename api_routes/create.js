@@ -73,7 +73,32 @@ export default function createCreateRoutes({ queries, storage }) {
     const user = await requireUser(req, res);
     if (!user) return;
 
+    // Credit cost for creating an image (hardcoded until server/template system is ready)
+    const CREATION_CREDIT_COST = 0.5;
+
     try {
+      // Check user's credit balance
+      let credits = await queries.selectUserCredits.get(user.id);
+      
+      // Initialize credits if record doesn't exist
+      if (!credits) {
+        await queries.insertUserCredits.run(user.id, 100, null);
+        credits = await queries.selectUserCredits.get(user.id);
+      }
+
+      // Check if user has sufficient credits
+      if (!credits || credits.balance < CREATION_CREDIT_COST) {
+        return res.status(402).json({ 
+          error: "Insufficient credits", 
+          message: `Creation requires ${CREATION_CREDIT_COST} credits. You have ${credits?.balance ?? 0} credits.`,
+          required: CREATION_CREDIT_COST,
+          current: credits?.balance ?? 0
+        });
+      }
+
+      // Deduct credits before creating the image
+      await queries.updateUserCreditsBalance.run(user.id, -CREATION_CREDIT_COST);
+
       // Create unique filename
       const timestamp = Date.now();
       const random = Math.random().toString(36).substring(2, 9);
@@ -96,6 +121,9 @@ export default function createCreateRoutes({ queries, storage }) {
         'completed' // status
       );
 
+      // Get updated credit balance
+      const updatedCredits = await queries.selectUserCredits.get(user.id);
+
       // Return with completed status
       res.json({
         id: result.insertId,
@@ -105,7 +133,8 @@ export default function createCreateRoutes({ queries, storage }) {
         width,
         height,
         status: 'completed',
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        credits_remaining: updatedCredits?.balance ?? 0
       });
     } catch (error) {
       console.error("Error initiating image creation:", error);

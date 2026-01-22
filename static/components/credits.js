@@ -109,48 +109,72 @@ class AppCredits extends HTMLElement {
   }
 
   async refreshCredits() {
-    const storedCredits = this.readStoredCredits();
-    if (storedCredits !== null) {
-      this.creditsCount = storedCredits;
-      this.updateCreditsUI();
-      this.updateClaimUI();
-      return;
-    }
-
     try {
-      const response = await fetch('/api/profile', { credentials: 'include' });
+      const response = await fetch('/api/credits', { credentials: 'include' });
       if (!response.ok) {
         this.creditsCount = 0;
         this.updateCreditsUI();
         this.updateClaimUI();
         return;
       }
-      const user = await response.json();
-      this.creditsCount = this.normalizeCredits(user?.credits);
+      const data = await response.json();
+      this.creditsCount = this.normalizeCredits(data?.balance ?? 0);
+      this.lastClaimDate = data?.lastClaimDate || null;
+      // Cache in localStorage for offline/performance (optional)
       this.writeStoredCredits(this.creditsCount);
       this.updateCreditsUI();
       this.updateClaimUI();
     } catch {
-      this.creditsCount = 0;
-      this.updateCreditsUI();
-      this.updateClaimUI();
+      // Fallback to cached value if available
+      const storedCredits = this.readStoredCredits();
+      if (storedCredits !== null) {
+        this.creditsCount = storedCredits;
+        this.updateCreditsUI();
+        this.updateClaimUI();
+      } else {
+        this.creditsCount = 0;
+        this.updateCreditsUI();
+        this.updateClaimUI();
+      }
     }
   }
 
-  handleClaimCredits() {
+  async handleClaimCredits() {
     if (this.isClaimedToday()) return;
-    const updated = this.normalizeCredits(this.creditsCount + 10);
-    this.creditsCount = updated;
-    this.writeStoredCredits(updated);
-    this.writeStoredClaimDate(this.getTodayKey());
-    this.updateCreditsUI();
-    this.updateClaimUI();
-    document.dispatchEvent(new CustomEvent('credits-updated', {
-      detail: { count: updated }
-    }));
-    document.dispatchEvent(new CustomEvent('credits-claim-status', {
-      detail: { canClaim: false }
-    }));
+    
+    try {
+      const response = await fetch('/api/credits/claim', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Failed to claim credits:', error);
+        return;
+      }
+      
+      const data = await response.json();
+      if (data.success) {
+        this.creditsCount = this.normalizeCredits(data.balance);
+        this.writeStoredCredits(this.creditsCount);
+        // Refresh to get updated lastClaimDate
+        await this.refreshCredits();
+        this.updateCreditsUI();
+        this.updateClaimUI();
+        document.dispatchEvent(new CustomEvent('credits-updated', {
+          detail: { count: this.creditsCount }
+        }));
+        document.dispatchEvent(new CustomEvent('credits-claim-status', {
+          detail: { canClaim: false }
+        }));
+      }
+    } catch (error) {
+      console.error('Error claiming credits:', error);
+    }
   }
 
   updateCreditsUI() {
@@ -176,9 +200,12 @@ class AppCredits extends HTMLElement {
   }
 
   isClaimedToday() {
-    const lastClaim = this.readStoredClaimDate();
-    if (!lastClaim) return false;
-    return lastClaim === this.getTodayKey();
+    if (!this.lastClaimDate) return false;
+    const now = new Date();
+    const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const lastClaimDate = new Date(this.lastClaimDate);
+    const lastClaimUTC = new Date(Date.UTC(lastClaimDate.getUTCFullYear(), lastClaimDate.getUTCMonth(), lastClaimDate.getUTCDate()));
+    return lastClaimUTC.getTime() >= todayUTC.getTime();
   }
 
   getTodayKey() {
@@ -193,7 +220,14 @@ class AppCredits extends HTMLElement {
 
   formatCredits(value) {
     const count = this.normalizeCredits(value);
-    return count.toFixed(1);
+    // If there's a non-zero decimal remainder, show as "X+" (rounded down)
+    // Otherwise show the whole number without decimal
+    const wholePart = Math.floor(count);
+    const decimalPart = count - wholePart;
+    if (decimalPart > 0) {
+      return `${wholePart}+`;
+    }
+    return String(wholePart);
   }
 
   readStoredCredits() {

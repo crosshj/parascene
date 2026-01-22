@@ -6,8 +6,9 @@ class AppRouteCreate extends HTMLElement {
       <style>
         .create-route .create-controls {
           display: flex;
-          gap: 12px;
-          align-items: center;
+          flex-direction: column;
+          gap: 8px;
+          align-items: flex-start;
           margin-bottom: 24px;
         }
         .create-route .create-button {
@@ -32,6 +33,11 @@ class AppRouteCreate extends HTMLElement {
           opacity: 0.6;
           cursor: not-allowed;
         }
+        .create-route .create-cost {
+          font-size: 0.875rem;
+          color: var(--text-muted);
+          margin: 0;
+        }
       </style>
       <div class="create-route">
         <div class="route-header">
@@ -42,6 +48,7 @@ class AppRouteCreate extends HTMLElement {
           <button class="create-button" data-create-button>
             Create
           </button>
+          <p class="create-cost">Costs 0.5 credits</p>
         </div>
       </div>
     `;

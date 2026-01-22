@@ -398,6 +398,111 @@ export async function openDb() {
           changes: result.changes
         });
       }
+    },
+    selectUserCredits: {
+      get: async (userId) => {
+        const stmt = db.prepare(
+          `SELECT id, user_id, balance, last_daily_claim_at, created_at, updated_at
+           FROM user_credits
+           WHERE user_id = ?`
+        );
+        return Promise.resolve(stmt.get(userId));
+      }
+    },
+    insertUserCredits: {
+      run: async (userId, balance, lastDailyClaimAt) => {
+        const stmt = db.prepare(
+          `INSERT INTO user_credits (user_id, balance, last_daily_claim_at)
+           VALUES (?, ?, ?)`
+        );
+        const result = stmt.run(userId, balance, lastDailyClaimAt || null);
+        return Promise.resolve({
+          insertId: result.lastInsertRowid,
+          lastInsertRowid: result.lastInsertRowid,
+          changes: result.changes
+        });
+      }
+    },
+    updateUserCreditsBalance: {
+      run: async (userId, amount) => {
+        const stmt = db.prepare(
+          `UPDATE user_credits
+           SET balance = balance + ?, updated_at = datetime('now')
+           WHERE user_id = ?`
+        );
+        const result = stmt.run(amount, userId);
+        return Promise.resolve({ changes: result.changes });
+      }
+    },
+    claimDailyCredits: {
+      run: async (userId, amount = 10) => {
+        // Check if user can claim (last claim was not today in UTC)
+        const checkStmt = db.prepare(
+          `SELECT id, balance, last_daily_claim_at
+           FROM user_credits
+           WHERE user_id = ?`
+        );
+        const credits = checkStmt.get(userId);
+        
+        if (!credits) {
+          // No credits record exists, create one with the daily amount
+          const nowUTC = new Date().toISOString();
+          const insertStmt = db.prepare(
+            `INSERT INTO user_credits (user_id, balance, last_daily_claim_at, updated_at)
+             VALUES (?, ?, ?, ?)`
+          );
+          insertStmt.run(userId, amount, nowUTC, nowUTC);
+          return Promise.resolve({ 
+            success: true, 
+            balance: amount,
+            changes: 1
+          });
+        }
+        
+        // Check if already claimed today (UTC)
+        const now = new Date();
+        const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+        const todayUTCStr = todayUTC.toISOString().slice(0, 10);
+        
+        if (credits.last_daily_claim_at) {
+          const lastClaimDate = new Date(credits.last_daily_claim_at);
+          const lastClaimUTC = new Date(Date.UTC(lastClaimDate.getUTCFullYear(), lastClaimDate.getUTCMonth(), lastClaimDate.getUTCDate()));
+          const lastClaimUTCStr = lastClaimUTC.toISOString().slice(0, 10);
+          
+          if (lastClaimUTCStr >= todayUTCStr) {
+            // Already claimed today
+            return Promise.resolve({ 
+              success: false, 
+              balance: credits.balance,
+              changes: 0,
+              message: 'Daily credits already claimed today'
+            });
+          }
+        }
+        
+        // Update balance and last claim date (using UTC)
+        const nowUTC = new Date().toISOString();
+        const updateStmt = db.prepare(
+          `UPDATE user_credits
+           SET balance = balance + ?, 
+               last_daily_claim_at = ?,
+               updated_at = ?
+           WHERE user_id = ?`
+        );
+        const result = updateStmt.run(amount, nowUTC, nowUTC, userId);
+        
+        // Get new balance
+        const newBalanceStmt = db.prepare(
+          `SELECT balance FROM user_credits WHERE user_id = ?`
+        );
+        const newCredits = newBalanceStmt.get(userId);
+        
+        return Promise.resolve({ 
+          success: true, 
+          balance: newCredits.balance,
+          changes: result.changes
+        });
+      }
     }
   };
 

@@ -235,7 +235,13 @@ class AppHeader extends HTMLElement {
     this.creditsCount = count;
     const creditsCount = this.querySelector('.credits-count');
     if (creditsCount) {
-      creditsCount.textContent = String(count);
+      // Format credits: if there's a non-zero decimal remainder, show as "X+" (rounded down)
+      // Otherwise show the whole number without decimal
+      const normalized = this.parseCreditsCount(count);
+      const wholePart = Math.floor(normalized);
+      const decimalPart = normalized - wholePart;
+      const formatted = decimalPart > 0 ? `${wholePart}+` : String(wholePart);
+      creditsCount.textContent = formatted;
     }
   }
 

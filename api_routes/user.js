@@ -32,6 +32,19 @@ export default function createProfileRoutes({ queries }) {
     const info = await queries.insertUser.run(email, passwordHash, "consumer");
     // Support both insertId (standardized) and lastInsertRowid (legacy SQLite)
     const userId = info.insertId || info.lastInsertRowid;
+    
+    // Initialize credits for new user with 100 starting credits
+    try {
+      await queries.insertUserCredits.run(userId, 100, null);
+    } catch (error) {
+      console.error(`[Signup] Failed to initialize credits for user ${userId}:`, {
+        error: error.message,
+        stack: error.stack,
+        name: error.name
+      });
+      // Don't fail signup if credits initialization fails
+    }
+    
     const token = jwt.sign({ userId }, getJwtSecret(), { expiresIn: "7d" });
     setAuthCookie(res, token, req);
     if (queries.insertSession) {
@@ -121,7 +134,20 @@ export default function createProfileRoutes({ queries }) {
       return res.status(404).json({ error: "User not found" });
     }
 
-    return res.json(user);
+    // Get credits balance
+    let credits = await queries.selectUserCredits.get(req.auth.userId);
+    // If no credits record exists, initialize with 100 for existing users
+    if (!credits) {
+      try {
+        await queries.insertUserCredits.run(req.auth.userId, 100, null);
+        credits = { balance: 100 };
+      } catch (error) {
+        console.error(`[Profile] Failed to initialize credits for user ${req.auth.userId}:`, error);
+        credits = { balance: 0 };
+      }
+    }
+
+    return res.json({ ...user, credits: credits.balance });
   });
 
   router.get("/api/notifications", async (req, res) => {
@@ -192,6 +218,78 @@ export default function createProfileRoutes({ queries }) {
       return res.json({ ok: true, updated: result.changes });
     } catch (error) {
       console.error("Error acknowledging notification:", error);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  router.get("/api/credits", async (req, res) => {
+    try {
+      if (!req.auth?.userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const credits = await queries.selectUserCredits.get(req.auth.userId);
+      
+      // If no credits record exists, initialize with 100
+      if (!credits) {
+        try {
+          await queries.insertUserCredits.run(req.auth.userId, 100, null);
+          const newCredits = await queries.selectUserCredits.get(req.auth.userId);
+          return res.json({
+            balance: newCredits.balance,
+            canClaim: true,
+            lastClaimDate: null
+          });
+        } catch (error) {
+          console.error("Error initializing credits:", error);
+          return res.status(500).json({ error: "Internal server error" });
+        }
+      }
+
+      // Check if can claim (last claim was not today in UTC)
+      const canClaim = (() => {
+        if (!credits.last_daily_claim_at) return true;
+        const now = new Date();
+        const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+        const lastClaimDate = new Date(credits.last_daily_claim_at);
+        const lastClaimUTC = new Date(Date.UTC(lastClaimDate.getUTCFullYear(), lastClaimDate.getUTCMonth(), lastClaimDate.getUTCDate()));
+        return lastClaimUTC.getTime() < todayUTC.getTime();
+      })();
+
+      return res.json({
+        balance: credits.balance,
+        canClaim,
+        lastClaimDate: credits.last_daily_claim_at
+      });
+    } catch (error) {
+      console.error("Error loading credits:", error);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  router.post("/api/credits/claim", async (req, res) => {
+    try {
+      if (!req.auth?.userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const result = await queries.claimDailyCredits.run(req.auth.userId, 10);
+      
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          balance: result.balance,
+          message: result.message || "Daily credits already claimed today"
+        });
+      }
+
+      return res.json({
+        success: true,
+        balance: result.balance,
+        message: "Daily credits claimed successfully"
+      });
+    } catch (error) {
+      console.error("Error claiming daily credits:", error);
       return res.status(500).json({ error: "Internal server error" });
     }
   });
