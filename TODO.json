@@ -1,90 +1,81 @@
 [
   {
-    "name": "Invite flow + token redemption",
-    "description": "invite-first onboarding with email or share token redemption and invite context",
-    "cost": 27,
-    "impact": 88,
+    "name": "Mobile bottom nav",
+    "description": "Users get lost on mobile without clear actions visible at all times.  Add this and use instead of hamburger.",
+    "cost": 25,
+    "impact": 78,
+    "dependsOn": []
+  },
+  {
+    "name": "Invites & redemption",
+    "description": "Optional invite onboarding via email or shareable token, with stored invite context.",
+    "cost": 30,
+    "impact": 25,
+    "dependsOn": []
+  },
+  {
+    "name": "Default provider AI methods",
+    "description": "Add stronger AI generation methods to the default provider server.",
+    "cost": 50,
+    "impact": 100,
+    "dependsOn": []
+  },
+  {
+    "name": "Invite credits",
+    "description": "Grant starter credits on invite acceptance; record inviter and source.",
+    "cost": 15,
+    "impact": 40,
     "dependsOn": [
-      "Email Functionality"
+      "Invites & redemption"
     ]
   },
   {
-    "name": "Shareable artifact pages",
-    "description": "public creation page for sharing artifacts without pushing signup links",
-    "cost": 24,
-    "impact": 82,
+    "name": "Likes",
+    "description": "Persist likes on creations and surface them in the UI.",
+    "cost": 20,
+    "impact": 70,
     "dependsOn": []
   },
   {
-    "name": "Hospitality credits on invite",
-    "description": "grant small starter credits when an invite is accepted; record inviter and source",
-    "cost": 19,
-    "impact": 72,
-    "dependsOn": [
-      "Invite flow + token redemption"
-    ]
-  },
-  {
-    "name": "Creation likes",
-    "description": "add likes on creations with storage and UI support",
-    "cost": 21,
-    "impact": 72,
+    "name": "Comments",
+    "description": "Persist comments on creations with UI support.",
+    "cost": 50,
+    "impact": 85,
     "dependsOn": []
   },
   {
-    "name": "Templates",
-    "description": "how does this even work?",
-    "cost": 31,
-    "impact": 81,
+    "name": "Provider boosts",
+    "description": "Server-scoped boosts increase provider credit yield with caps, no discovery lift.",
+    "cost": 35,
+    "impact": 45,
     "dependsOn": []
   },
   {
-    "name": "Creation comments",
-    "description": "add comments on creations with storage and UI support",
-    "cost": 34,
-    "impact": 83,
-    "dependsOn": []
-  },
-  {
-    "name": "Boosts v0",
-    "description": "server-scoped boosts that increase provider credit yield with caps, no visibility benefits",
-    "cost": 29,
-    "impact": 74,
-    "dependsOn": []
-  },
-  {
-    "name": "Provider credit pools",
-    "description": "basic pool ledger and UI for giveaways, events, and competitions",
-    "cost": 34,
-    "impact": 79,
-    "dependsOn": []
-  },
-  {
-    "name": "Provider-served read path",
-    "description": "lightweight mechanism for providers to serve public read data to reduce system costs",
-    "cost": 37,
-    "impact": 77,
-    "dependsOn": []
-  },
-  {
-    "name": "Role change",
-    "description": "how does user change from one role to another + should roles be relaxed?",
-    "cost": 51,
-    "impact": 76,
+    "name": "Credit pools",
+    "description": "Ledger and UI for provider pools used in giveaways and events.",
+    "cost": 45,
+    "impact": 55,
     "dependsOn": []
   },
   {
     "name": "Notifications",
-    "description": "how do notifications work - how can we get some real notifications hooked up in this system?",
-    "cost": 31,
-    "impact": 46,
+    "description": "Define notification types and wire them to real delivery.",
+    "cost": 60,
+    "impact": 70,
     "dependsOn": []
   },
   {
-    "name": "Mobile bottom nav",
-    "description": "bottom bar for mobile versus slideout menu using hamburger button",
-    "cost": 51,
-    "impact": 16,
+    "name": "Role Progression",
+    "description": "Define role transition rules and whether roles can be relaxed.",
+    "cost": 55,
+    "impact": 50,
+    "dependsOn": []
+  },
+  {
+    "name": "Templates",
+    "description": "Define template model, storage, and UI flow for reusable prompts.",
+    "cost": 35,
+    "impact": 30,
     "dependsOn": []
   }
 ]

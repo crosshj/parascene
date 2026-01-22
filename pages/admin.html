@@ -62,9 +62,6 @@
 
       <section data-route-content="todo">
         <h3>Todo</h3>
-        <div id="todo-alert" class="admin-alert" hidden>
-          Writes are disabled on Vercel. Add or edit items locally.
-        </div>
         <div class="todo-layout">
           <div id="todo-list" class="todo-list">
             <div class="todo-loading">Loading...</div>
@@ -113,6 +110,33 @@
             <button type="submit" class="todo-modal-submit btn-primary">Save</button>
           </div>
           </form>
+        </div>
+      </div>
+    </div>
+
+    <div id="todo-readonly-modal" class="publish-modal-overlay" data-todo-readonly role="dialog" aria-modal="true" aria-labelledby="todo-readonly-title">
+      <div class="publish-modal todo-readonly-modal">
+        <header class="publish-modal-header todo-modal-header">
+          <button type="button" class="publish-modal-close" data-todo-readonly-close aria-label="Close">✕</button>
+        </header>
+        <div class="publish-modal-body todo-readonly-body">
+          <div class="todo-readonly-title" id="todo-readonly-title"></div>
+          <div class="todo-readonly-description" data-todo-readonly-description></div>
+          <div class="todo-readonly-dials">
+            <div class="todo-readonly-dial">
+              <div class="todo-card-dial" data-todo-readonly-dial="time"></div>
+              <div class="todo-readonly-dial-label">Cost</div>
+            </div>
+            <div class="todo-readonly-dial">
+              <div class="todo-card-dial" data-todo-readonly-dial="impact"></div>
+              <div class="todo-readonly-dial-label">Impact</div>
+            </div>
+          </div>
+          <div class="todo-readonly-actions">
+            <button type="button" class="todo-readonly-dismiss btn-primary" data-todo-readonly-close>
+              Dismiss
+            </button>
+          </div>
         </div>
       </div>
     </div>

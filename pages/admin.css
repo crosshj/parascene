@@ -218,6 +218,65 @@
   justify-content: flex-end;
 }
 
+.todo-readonly-modal {
+  max-width: 520px;
+}
+
+.todo-readonly-body {
+  display: grid;
+  gap: 16px;
+}
+
+.todo-readonly-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.todo-readonly-description {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  padding: 0;
+}
+
+.todo-readonly-dials {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 16px;
+  align-items: center;
+}
+
+.todo-readonly-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.todo-readonly-dismiss {
+  min-width: 140px;
+}
+
+.todo-readonly-dial {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 0;
+}
+
+.todo-readonly-dial .todo-card-dial {
+  width: 64px;
+  height: 64px;
+  font-size: 1.1rem;
+}
+
+.todo-readonly-dial-label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .todo-modal-form label {
   display: grid;
   gap: 6px;
