@@ -425,12 +425,23 @@ export async function openDb() {
     },
     updateUserCreditsBalance: {
       run: async (userId, amount) => {
+        // First get current balance to prevent negative credits
+        const selectStmt = db.prepare(
+          `SELECT balance FROM user_credits WHERE user_id = ?`
+        );
+        const current = selectStmt.get(userId);
+        const currentBalance = current?.balance ?? 0;
+        const newBalance = currentBalance + amount;
+        
+        // Prevent negative credits - ensure balance never goes below 0
+        const finalBalance = Math.max(0, newBalance);
+        
         const stmt = db.prepare(
           `UPDATE user_credits
-           SET balance = balance + ?, updated_at = datetime('now')
+           SET balance = ?, updated_at = datetime('now')
            WHERE user_id = ?`
         );
-        const result = stmt.run(amount, userId);
+        const result = stmt.run(finalBalance, userId);
         return Promise.resolve({ changes: result.changes });
       }
     },

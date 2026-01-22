@@ -1,11 +1,5 @@
 [
   {
-    "name": "Credits++",
-    "description": "connect credits system through to DB including mechanism for daily credits tracking",
-    "cost": 19,
-    "impact": 91
-  },
-  {
     "name": "Provider server",
     "description": "write an example server, connect that with system",
     "cost": 21,
@@ -82,15 +76,6 @@
     "description": "lightweight mechanism for providers to serve public read data to reduce system costs",
     "cost": 37,
     "impact": 77
-  },
-  {
-    "name": "Credits-based API rate limiting",
-    "description": "rate-limit API calls using credits to enforce scarcity and prevent abuse",
-    "cost": 23,
-    "impact": 78,
-    "dependsOn": [
-      "Credits++"
-    ]
   },
   {
     "name": "Creation comments",

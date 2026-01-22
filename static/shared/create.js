@@ -43,9 +43,28 @@ function setupCreateHandler() {
       .then(async (response) => {
         if (!response.ok) {
           const error = await response.json();
+          // Handle insufficient credits error specifically
+          if (response.status === 402) {
+            // Refresh credits to get updated balance
+            document.dispatchEvent(new CustomEvent('credits-updated', {
+              detail: { count: error.current ?? 0 }
+            }));
+            // Trigger credits refresh in create component
+            const createRoute = document.querySelector('app-route-create');
+            if (createRoute && typeof createRoute.loadCredits === 'function') {
+              createRoute.loadCredits();
+            }
+            throw new Error(error.message || "Insufficient credits");
+          }
           throw new Error(error.error || "Failed to create image");
         }
-        await response.json();
+        const data = await response.json();
+        // Update credits if returned in response
+        if (typeof data.credits_remaining === 'number') {
+          document.dispatchEvent(new CustomEvent('credits-updated', {
+            detail: { count: data.credits_remaining }
+          }));
+        }
         return null;
       })
       .then(() => {
@@ -60,6 +79,11 @@ function setupCreateHandler() {
         sessionStorage.setItem(pendingKey, JSON.stringify(next));
         document.dispatchEvent(new CustomEvent("creations-pending-updated"));
         console.error("Error creating image:", error);
+        // Refresh credits display in case of error
+        const createRoute = document.querySelector('app-route-create');
+        if (createRoute && typeof createRoute.loadCredits === 'function') {
+          createRoute.loadCredits();
+        }
       })
       .finally(() => {
         button.disabled = false;

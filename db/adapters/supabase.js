@@ -604,10 +604,13 @@ export function openDb() {
         
         const newBalance = (current?.balance ?? 0) + amount;
         
+        // Prevent negative credits - ensure balance never goes below 0
+        const finalBalance = Math.max(0, newBalance);
+        
         const { data, error } = await serviceClient
           .from(prefixedTable("user_credits"))
           .update({
-            balance: newBalance,
+            balance: finalBalance,
             updated_at: new Date().toISOString()
           })
           .eq("user_id", userId)
