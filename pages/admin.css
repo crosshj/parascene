@@ -45,6 +45,11 @@
   text-transform: capitalize;
 }
 
+.user-credits {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
 .user-id {
   font-size: 0.875rem;
   color: var(--text-muted);

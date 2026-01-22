@@ -1,7 +1,6 @@
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
-import { generateRandomColorImageToBuffer } from "./utils/imageGenerator.js";
 import { getThumbnailUrl } from "./utils/url.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -73,10 +72,44 @@ export default function createCreateRoutes({ queries, storage }) {
     const user = await requireUser(req, res);
     if (!user) return;
 
-    // Credit cost for creating an image (hardcoded until server/template system is ready)
-    const CREATION_CREDIT_COST = 0.5;
+    const { server_id, method, args } = req.body;
+
+    // Validate required fields
+    if (!server_id || !method) {
+      return res.status(400).json({ 
+        error: "Missing required fields", 
+        message: "server_id and method are required" 
+      });
+    }
 
     try {
+      // Fetch server
+      const server = await queries.selectServerById.get(server_id);
+      if (!server) {
+        return res.status(404).json({ error: "Server not found" });
+      }
+
+      if (server.status !== 'active') {
+        return res.status(400).json({ error: "Server is not active" });
+      }
+
+      // Parse server_config and validate method
+      if (!server.server_config || !server.server_config.methods) {
+        return res.status(400).json({ error: "Server configuration is invalid" });
+      }
+
+      const methodConfig = server.server_config.methods[method];
+      if (!methodConfig) {
+        return res.status(400).json({ 
+          error: "Method not available", 
+          message: `Method "${method}" is not available on this server`,
+          available_methods: Object.keys(server.server_config.methods)
+        });
+      }
+
+      // Get credit cost from method config
+      const CREATION_CREDIT_COST = methodConfig.credits ?? 0.5;
+
       // Check user's credit balance
       let credits = await queries.selectUserCredits.get(user.id);
       
@@ -99,27 +132,91 @@ export default function createCreateRoutes({ queries, storage }) {
       // Deduct credits before creating the image
       await queries.updateUserCreditsBalance.run(user.id, -CREATION_CREDIT_COST);
 
+      // Call provider server
+      let imageBuffer;
+      let color = null;
+      let width = 1024;
+      let height = 1024;
+
+      try {
+        const providerResponse = await fetch(server.server_url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'image/png'
+          },
+          body: JSON.stringify({
+            method: method,
+            args: args || {}
+          }),
+          signal: AbortSignal.timeout(30000) // 30 second timeout
+        });
+
+        if (!providerResponse.ok) {
+          // Refund credits on provider error
+          await queries.updateUserCreditsBalance.run(user.id, CREATION_CREDIT_COST);
+          return res.status(502).json({ 
+            error: "Provider server error", 
+            message: `Provider server returned error: ${providerResponse.status} ${providerResponse.statusText}`
+          });
+        }
+
+        // Get image buffer from response
+        imageBuffer = Buffer.from(await providerResponse.arrayBuffer());
+        
+        // Try to get metadata from headers if available
+        const headerColor = providerResponse.headers.get('X-Image-Color');
+        const headerWidth = providerResponse.headers.get('X-Image-Width');
+        const headerHeight = providerResponse.headers.get('X-Image-Height');
+        
+        if (headerColor) color = headerColor;
+        if (headerWidth) width = parseInt(headerWidth, 10);
+        if (headerHeight) height = parseInt(headerHeight, 10);
+      } catch (fetchError) {
+        // Refund credits on fetch error
+        await queries.updateUserCreditsBalance.run(user.id, CREATION_CREDIT_COST);
+        
+        if (fetchError.name === 'AbortError') {
+          return res.status(504).json({ 
+            error: "Provider server timeout", 
+            message: "Provider server did not respond within 30 seconds"
+          });
+        }
+        return res.status(502).json({ 
+          error: "Failed to connect to provider server", 
+          message: fetchError.message
+        });
+      }
+
       // Create unique filename
       const timestamp = Date.now();
       const random = Math.random().toString(36).substring(2, 9);
       const filename = `${user.id}_${timestamp}_${random}.png`;
 
-      // Generate image to buffer first
-      const { buffer, color, width, height } = await generateRandomColorImageToBuffer();
-
       // Upload image using storage adapter
-      const imageUrl = await storage.uploadImage(buffer, filename);
+      const imageUrl = await storage.uploadImage(imageBuffer, filename);
 
       // Create entry in database with completed status
       const result = await queries.insertCreatedImage.run(
         user.id,
         filename,
-        imageUrl, // Store URL instead of file path
-        1024, // width
-        1024, // height
+        imageUrl,
+        width,
+        height,
         color,
-        'completed' // status
+        'completed'
       );
+
+      // Credit server owner (30% of what user was charged)
+      const ownerCredits = CREATION_CREDIT_COST * 0.3;
+      if (server.user_id && ownerCredits > 0) {
+        // Initialize owner credits if needed
+        let ownerCreditsRecord = await queries.selectUserCredits.get(server.user_id);
+        if (!ownerCreditsRecord) {
+          await queries.insertUserCredits.run(server.user_id, 0, null);
+        }
+        await queries.updateUserCreditsBalance.run(server.user_id, ownerCredits);
+      }
 
       // Get updated credit balance
       const updatedCredits = await queries.selectUserCredits.get(user.id);
@@ -138,7 +235,7 @@ export default function createCreateRoutes({ queries, storage }) {
       });
     } catch (error) {
       console.error("Error initiating image creation:", error);
-      return res.status(500).json({ error: "Failed to initiate image creation" });
+      return res.status(500).json({ error: "Failed to initiate image creation", message: error.message });
     }
   });
 
@@ -305,6 +402,52 @@ export default function createCreateRoutes({ queries, storage }) {
     } catch (error) {
       console.error("Error publishing image:", error);
       return res.status(500).json({ error: "Failed to publish image" });
+    }
+  });
+
+  // DELETE /api/create/images/:id - Delete a creation
+  router.delete("/api/create/images/:id", async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+
+    try {
+      // Get the image to verify ownership
+      const image = await queries.selectCreatedImageById.get(
+        req.params.id,
+        user.id
+      );
+
+      if (!image) {
+        return res.status(404).json({ error: "Image not found" });
+      }
+
+      // Check if image is published - cannot delete published images
+      if (image.published === 1 || image.published === true) {
+        return res.status(400).json({ error: "Cannot delete published images" });
+      }
+
+      // Delete the image file from storage
+      try {
+        await storage.deleteImage(image.filename);
+      } catch (storageError) {
+        // Log but don't fail if file doesn't exist
+        console.warn(`Warning: Could not delete image file ${image.filename}:`, storageError.message);
+      }
+
+      // Delete the database record
+      const deleteResult = await queries.deleteCreatedImageById.run(
+        req.params.id,
+        user.id
+      );
+
+      if (deleteResult.changes === 0) {
+        return res.status(500).json({ error: "Failed to delete image" });
+      }
+
+      return res.json({ success: true, message: "Image deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting image:", error);
+      return res.status(500).json({ error: "Failed to delete image" });
     }
   });
 

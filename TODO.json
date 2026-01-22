@@ -1,11 +1,5 @@
 [
   {
-    "name": "Provider server",
-    "description": "write an example server, connect that with system",
-    "cost": 21,
-    "impact": 86
-  },
-  {
     "name": "Templates",
     "description": "how does this even work?",
     "cost": 31,

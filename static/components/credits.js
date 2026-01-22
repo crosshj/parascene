@@ -220,12 +220,13 @@ class AppCredits extends HTMLElement {
 
   formatCredits(value) {
     const count = this.normalizeCredits(value);
-    // If there's a non-zero decimal remainder, show as "X+" (rounded down)
-    // Otherwise show the whole number without decimal
+    // Show the actual decimal value (e.g., "101.5" instead of "101+")
+    // If it's a whole number, show without decimal places
     const wholePart = Math.floor(count);
     const decimalPart = count - wholePart;
     if (decimalPart > 0) {
-      return `${wholePart}+`;
+      // Show one decimal place
+      return count.toFixed(1);
     }
     return String(wholePart);
   }

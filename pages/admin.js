@@ -53,11 +53,18 @@ async function loadUsers() {
       role.className = "user-role";
       role.textContent = user.role;
 
+      const credits = document.createElement("span");
+      credits.className = "user-credits";
+      const creditsValue = typeof user.credits === 'number' ? user.credits : 0;
+      credits.textContent = `${creditsValue.toFixed(1)} credits`;
+
       const created = document.createElement("div");
       created.className = "user-created";
       created.textContent = user.created_at;
 
       details.appendChild(role);
+      details.appendChild(document.createTextNode(" • "));
+      details.appendChild(credits);
 
       card.appendChild(email);
       card.appendChild(details);
@@ -124,13 +131,91 @@ async function loadModeration() {
   }
 }
 
+function renderProviderCapabilities(container, capabilities) {
+  const methodsContainer = document.createElement("div");
+  methodsContainer.className = "provider-capabilities";
+  methodsContainer.style.marginTop = "1rem";
+  methodsContainer.style.padding = "1rem";
+  methodsContainer.style.background = "var(--surface-strong, #f5f5f5)";
+  methodsContainer.style.borderRadius = "8px";
+
+  const methodsTitle = document.createElement("h4");
+  methodsTitle.textContent = "Available Generation Methods";
+  methodsTitle.style.marginTop = "0";
+  methodsTitle.style.marginBottom = "1rem";
+  methodsContainer.appendChild(methodsTitle);
+
+  const methods = capabilities.methods || {};
+  const methodKeys = Object.keys(methods);
+
+  if (methodKeys.length === 0) {
+    const noMethods = document.createElement("div");
+    noMethods.textContent = "No generation methods available.";
+    noMethods.style.color = "var(--text-muted, #666)";
+    methodsContainer.appendChild(noMethods);
+  } else {
+    methodKeys.forEach(methodKey => {
+      const method = methods[methodKey];
+      const methodCard = document.createElement("div");
+      methodCard.style.marginBottom = "1rem";
+      methodCard.style.padding = "0.75rem";
+      methodCard.style.background = "var(--surface, #fff)";
+      methodCard.style.borderRadius = "4px";
+      methodCard.style.border = "1px solid var(--border, #ddd)";
+
+      const methodName = document.createElement("div");
+      methodName.style.fontWeight = "600";
+      methodName.style.marginBottom = "0.25rem";
+      methodName.textContent = method.name || methodKey;
+      methodCard.appendChild(methodName);
+
+      const methodDesc = document.createElement("div");
+      methodDesc.style.fontSize = "0.875rem";
+      methodDesc.style.color = "var(--text-muted, #666)";
+      methodDesc.style.marginBottom = "0.5rem";
+      methodDesc.textContent = method.description || "No description";
+      methodCard.appendChild(methodDesc);
+
+      const fields = method.fields || {};
+      const fieldKeys = Object.keys(fields);
+      if (fieldKeys.length > 0) {
+        const fieldsTitle = document.createElement("div");
+        fieldsTitle.style.fontSize = "0.75rem";
+        fieldsTitle.style.fontWeight = "600";
+        fieldsTitle.style.marginTop = "0.5rem";
+        fieldsTitle.style.marginBottom = "0.25rem";
+        fieldsTitle.textContent = "Fields:";
+        methodCard.appendChild(fieldsTitle);
+
+        fieldKeys.forEach(fieldKey => {
+          const field = fields[fieldKey];
+          const fieldItem = document.createElement("div");
+          fieldItem.style.fontSize = "0.75rem";
+          fieldItem.style.marginLeft = "0.5rem";
+          fieldItem.style.marginBottom = "0.25rem";
+          
+          const requiredBadge = field.required ? " (required)" : " (optional)";
+          fieldItem.textContent = `${field.label || fieldKey} (${field.type || 'text'})${requiredBadge}`;
+          methodCard.appendChild(fieldItem);
+        });
+      }
+
+      methodsContainer.appendChild(methodCard);
+    });
+  }
+
+  container.appendChild(methodsContainer);
+}
+
 async function loadProviders() {
   const container = document.querySelector("#providers-container");
   if (!container) return;
   if (adminDataLoaded.providers) return;
 
   try {
-    const response = await fetch("/admin/providers");
+    const response = await fetch("/admin/providers", {
+      credentials: 'include'
+    });
     if (!response.ok) throw new Error("Failed to load providers.");
     const data = await response.json();
 
@@ -146,15 +231,22 @@ async function loadProviders() {
 
       const name = document.createElement("div");
       name.className = "admin-title";
-      name.textContent = provider.name;
+      name.textContent = provider.name || "Unnamed Server";
 
       const meta = document.createElement("div");
       meta.className = "admin-meta";
-      meta.textContent = `${provider.status} • ${provider.region}`;
+      meta.textContent = `${provider.status}`;
+      if (provider.owner_email) {
+        meta.textContent += ` • ${provider.owner_email}`;
+      }
 
-      const contact = document.createElement("div");
-      contact.className = "admin-detail";
-      contact.textContent = provider.contact_email;
+      if (provider.server_url) {
+        const serverUrl = document.createElement("div");
+        serverUrl.className = "admin-detail";
+        serverUrl.style.fontSize = "0.875rem";
+        serverUrl.textContent = provider.server_url;
+        card.appendChild(serverUrl);
+      }
 
       const created = document.createElement("div");
       created.className = "admin-timestamp";
@@ -162,7 +254,6 @@ async function loadProviders() {
 
       card.appendChild(name);
       card.appendChild(meta);
-      card.appendChild(contact);
       card.appendChild(created);
 
       container.appendChild(card);

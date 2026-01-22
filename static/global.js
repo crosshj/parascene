@@ -14,6 +14,7 @@ import './components/pages/provider-status.js';
 import './components/pages/provider-metrics.js';
 import './components/pages/provider-grants.js';
 import './components/pages/provider-templates.js';
+import './components/pages/provider-servers.js';
 
 // Wait for DOM and custom elements to be ready before showing content
 async function initPage() {
@@ -39,7 +40,8 @@ async function initPage() {
     'app-route-provider-status',
     'app-route-provider-metrics',
     'app-route-provider-grants',
-    'app-route-provider-templates'
+    'app-route-provider-templates',
+    'app-route-provider-servers'
   ];
   await Promise.all(
     customElementTags.map(tag => customElements.whenDefined(tag))

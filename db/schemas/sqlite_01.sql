@@ -26,52 +26,17 @@ CREATE TABLE IF NOT EXISTS moderation_queue (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS provider_registry (
+CREATE TABLE IF NOT EXISTS servers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
   name TEXT NOT NULL,
+  server_url TEXT NOT NULL,
   status TEXT NOT NULL,
-  region TEXT NOT NULL,
-  contact_email TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS provider_statuses (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  provider_name TEXT NOT NULL,
-  status TEXT NOT NULL,
-  region TEXT NOT NULL,
-  uptime_pct REAL NOT NULL,
-  capacity_pct REAL NOT NULL,
-  last_check_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS provider_metrics (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  value TEXT NOT NULL,
-  unit TEXT,
-  change TEXT,
-  period TEXT,
+  status_date TEXT,
   description TEXT,
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS provider_grants (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  sponsor TEXT NOT NULL,
-  amount TEXT NOT NULL,
-  status TEXT NOT NULL,
-  next_report TEXT,
-  awarded_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS provider_templates (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  category TEXT NOT NULL,
-  version TEXT NOT NULL,
-  deployments INTEGER NOT NULL DEFAULT 0,
+  members_count INTEGER NOT NULL DEFAULT 0,
+  server_config TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -123,15 +88,6 @@ CREATE TABLE IF NOT EXISTS creations (
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
-CREATE TABLE IF NOT EXISTS servers (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  region TEXT NOT NULL,
-  status TEXT NOT NULL,
-  members_count INTEGER NOT NULL DEFAULT 0,
-  description TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
 
 CREATE TABLE IF NOT EXISTS templates (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

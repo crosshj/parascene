@@ -5,7 +5,19 @@ export default function createAdminRoutes({ queries }) {
 
   router.get("/admin/users", async (req, res) => {
     const users = await queries.selectUsers.all();
-    res.json({ users });
+    
+    // Fetch credits for each user
+    const usersWithCredits = await Promise.all(
+      users.map(async (user) => {
+        const credits = await queries.selectUserCredits.get(user.id);
+        return {
+          ...user,
+          credits: credits?.balance ?? 0
+        };
+      })
+    );
+    
+    res.json({ users: usersWithCredits });
   });
 
   router.get("/admin/moderation", async (req, res) => {

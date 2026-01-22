@@ -178,55 +178,50 @@ export function openDb() {
       all: async () => {
         // Use serviceClient to bypass RLS for backend operations
         const { data, error } = await serviceClient
-          .from(prefixedTable("provider_registry"))
-          .select("id, name, status, region, contact_email, created_at")
+          .from(prefixedTable("servers"))
+          .select(`
+            id,
+            user_id,
+            name,
+            status,
+            server_url,
+            status_date,
+            description,
+            members_count,
+            server_config,
+            created_at,
+            updated_at,
+            prsn_users(email)
+          `)
           .order("name", { ascending: true });
         if (error) throw error;
-        return data ?? [];
+        // Transform the data to flatten the user email
+        return (data ?? []).map(provider => {
+          const { prsn_users, ...rest } = provider;
+          return {
+            ...rest,
+            owner_email: prsn_users?.email || null
+          };
+        });
       }
     },
-    selectProviderStatuses: {
-      all: async () => {
-        // Use serviceClient to bypass RLS for backend operations
+    insertProvider: {
+      run: async (userId, name, status, serverUrl) => {
         const { data, error } = await serviceClient
-          .from(prefixedTable("provider_statuses"))
-          .select("id, provider_name, status, region, uptime_pct, capacity_pct, last_check_at")
-          .order("provider_name", { ascending: true });
+          .from(prefixedTable("servers"))
+          .insert({
+            user_id: userId,
+            name,
+            status,
+            server_url: serverUrl
+          })
+          .select("id")
+          .single();
         if (error) throw error;
-        return data ?? [];
-      }
-    },
-    selectProviderMetrics: {
-      all: async () => {
-        // Use serviceClient to bypass RLS for backend operations
-        const { data, error } = await serviceClient
-          .from(prefixedTable("provider_metrics"))
-          .select("id, name, value, unit, change, period, description, updated_at")
-          .order("id", { ascending: true });
-        if (error) throw error;
-        return data ?? [];
-      }
-    },
-    selectProviderGrants: {
-      all: async () => {
-        // Use serviceClient to bypass RLS for backend operations
-        const { data, error } = await serviceClient
-          .from(prefixedTable("provider_grants"))
-          .select("id, name, sponsor, amount, status, next_report, awarded_at")
-          .order("awarded_at", { ascending: false });
-        if (error) throw error;
-        return data ?? [];
-      }
-    },
-    selectProviderTemplates: {
-      all: async () => {
-        // Use serviceClient to bypass RLS for backend operations
-        const { data, error } = await serviceClient
-          .from(prefixedTable("provider_templates"))
-          .select("id, name, category, version, deployments, updated_at")
-          .order("name", { ascending: true });
-        if (error) throw error;
-        return data ?? [];
+        return { 
+          insertId: data.id,
+          changes: 1 
+        };
       }
     },
     selectPolicies: {
@@ -403,10 +398,62 @@ export function openDb() {
         // Use serviceClient to bypass RLS for backend operations
         const { data, error } = await serviceClient
           .from(prefixedTable("servers"))
-          .select("id, name, region, status, members_count, description, created_at")
+          .select(`
+            id,
+            name,
+            status,
+            members_count,
+            description,
+            created_at,
+            server_url,
+            status_date,
+            server_config,
+            prsn_users(email)
+          `)
           .order("name", { ascending: true });
         if (error) throw error;
-        return data ?? [];
+        // Transform the data to flatten the user email
+        return (data ?? []).map(server => {
+          const { prsn_users, ...rest } = server;
+          return {
+            ...rest,
+            owner_email: prsn_users?.email || null
+          };
+        });
+      }
+    },
+    selectServerById: {
+      get: async (serverId) => {
+        // Use serviceClient to bypass RLS for backend operations
+        const { data, error } = await serviceClient
+          .from(prefixedTable("servers"))
+          .select(`
+            id,
+            user_id,
+            name,
+            status,
+            members_count,
+            description,
+            created_at,
+            server_url,
+            status_date,
+            server_config,
+            prsn_users(email)
+          `)
+          .eq("id", serverId)
+          .single();
+        if (error) {
+          if (error.code === 'PGRST116') return null; // Not found
+          throw error;
+        }
+        if (!data) return null;
+        
+        // Transform the data to flatten the user email
+        const { prsn_users, ...rest } = data;
+        return {
+          ...rest,
+          owner_email: prsn_users?.email || null
+        };
       }
     },
     selectTemplates: {
@@ -529,6 +576,19 @@ export function openDb() {
             title,
             description
           })
+          .eq("id", id)
+          .eq("user_id", userId)
+          .select("id");
+        if (error) throw error;
+        return { changes: data?.length ?? 0 };
+      }
+    },
+    deleteCreatedImageById: {
+      run: async (id, userId) => {
+        // Use serviceClient to bypass RLS for backend operations
+        const { data, error } = await serviceClient
+          .from(prefixedTable("created_images"))
+          .delete()
           .eq("id", id)
           .eq("user_id", userId)
           .select("id");

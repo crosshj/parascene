@@ -147,51 +147,54 @@ export async function openDb() {
     selectProviders: {
       all: async () => {
         const stmt = db.prepare(
-          `SELECT id, name, status, region, contact_email, created_at
-           FROM provider_registry
-           ORDER BY name ASC`
+          `SELECT 
+            ps.id, 
+            ps.user_id, 
+            ps.name, 
+            ps.status, 
+            ps.server_url,
+            ps.status_date,
+            ps.description,
+            ps.members_count,
+            ps.server_config,
+            ps.created_at,
+            ps.updated_at,
+            u.email as owner_email
+           FROM servers ps
+           LEFT JOIN users u ON ps.user_id = u.id
+           ORDER BY ps.name ASC`
         );
-        return Promise.resolve(stmt.all());
+        const results = stmt.all();
+        // Parse JSON for server_config in SQLite
+        return results.map(row => {
+          let serverConfig = null;
+          if (row.server_config) {
+            try {
+              serverConfig = JSON.parse(row.server_config);
+            } catch (e) {
+              console.warn(`Failed to parse server_config for server ${row.id}:`, e);
+              serverConfig = null;
+            }
+          }
+          return {
+            ...row,
+            server_config: serverConfig
+          };
+        });
       }
     },
-    selectProviderStatuses: {
-      all: async () => {
+    insertProvider: {
+      run: async (userId, name, status, serverUrl, serverConfig = null) => {
         const stmt = db.prepare(
-          `SELECT id, provider_name, status, region, uptime_pct, capacity_pct, last_check_at
-           FROM provider_statuses
-           ORDER BY provider_name ASC`
+          `INSERT INTO servers (user_id, name, status, server_url, server_config)
+           VALUES (?, ?, ?, ?, ?)`
         );
-        return Promise.resolve(stmt.all());
-      }
-    },
-    selectProviderMetrics: {
-      all: async () => {
-        const stmt = db.prepare(
-          `SELECT id, name, value, unit, change, period, description, updated_at
-           FROM provider_metrics
-           ORDER BY id ASC`
-        );
-        return Promise.resolve(stmt.all());
-      }
-    },
-    selectProviderGrants: {
-      all: async () => {
-        const stmt = db.prepare(
-          `SELECT id, name, sponsor, amount, status, next_report, awarded_at
-           FROM provider_grants
-           ORDER BY awarded_at DESC`
-        );
-        return Promise.resolve(stmt.all());
-      }
-    },
-    selectProviderTemplates: {
-      all: async () => {
-        const stmt = db.prepare(
-          `SELECT id, name, category, version, deployments, updated_at
-           FROM provider_templates
-           ORDER BY name ASC`
-        );
-        return Promise.resolve(stmt.all());
+        const configJson = serverConfig ? JSON.stringify(serverConfig) : null;
+        const result = stmt.run(userId, name, status, serverUrl, configJson);
+        return Promise.resolve({ 
+          insertId: result.lastInsertRowid,
+          changes: result.changes 
+        });
       }
     },
     selectPolicies: {
@@ -277,11 +280,76 @@ export async function openDb() {
     selectServers: {
       all: async () => {
         const stmt = db.prepare(
-          `SELECT id, name, region, status, members_count, description, created_at
-           FROM servers
-           ORDER BY name ASC`
+          `SELECT 
+            ps.id, 
+            ps.name, 
+            ps.status, 
+            ps.members_count, 
+            ps.description, 
+            ps.created_at,
+            ps.server_url,
+            ps.status_date,
+            ps.server_config,
+            u.email as owner_email
+           FROM servers ps
+           LEFT JOIN users u ON ps.user_id = u.id
+           ORDER BY ps.name ASC`
         );
-        return Promise.resolve(stmt.all());
+        const results = stmt.all();
+        // Parse JSON for server_config in SQLite
+        return results.map(row => {
+          let serverConfig = null;
+          if (row.server_config) {
+            try {
+              serverConfig = JSON.parse(row.server_config);
+            } catch (e) {
+              console.warn(`Failed to parse server_config for server ${row.id}:`, e);
+              serverConfig = null;
+            }
+          }
+          return {
+            ...row,
+            server_config: serverConfig
+          };
+        });
+      }
+    },
+    selectServerById: {
+      get: async (serverId) => {
+        const stmt = db.prepare(
+          `SELECT 
+            ps.id, 
+            ps.user_id,
+            ps.name, 
+            ps.status, 
+            ps.members_count, 
+            ps.description, 
+            ps.created_at,
+            ps.server_url,
+            ps.status_date,
+            ps.server_config,
+            u.email as owner_email
+           FROM servers ps
+           LEFT JOIN users u ON ps.user_id = u.id
+           WHERE ps.id = ?`
+        );
+        const row = stmt.get(serverId);
+        if (!row) return null;
+        
+        // Parse JSON for server_config in SQLite
+        let serverConfig = null;
+        if (row.server_config) {
+          try {
+            serverConfig = JSON.parse(row.server_config);
+          } catch (e) {
+            console.warn(`Failed to parse server_config for server ${row.id}:`, e);
+            serverConfig = null;
+          }
+        }
+        return {
+          ...row,
+          server_config: serverConfig
+        };
       }
     },
     selectTemplates: {
@@ -382,6 +450,16 @@ export async function openDb() {
            WHERE id = ? AND user_id = ?`
         );
         const result = stmt.run(title, description, id, userId);
+        return Promise.resolve({ changes: result.changes });
+      }
+    },
+    deleteCreatedImageById: {
+      run: async (id, userId) => {
+        const stmt = db.prepare(
+          `DELETE FROM created_images
+           WHERE id = ? AND user_id = ?`
+        );
+        const result = stmt.run(id, userId);
         return Promise.resolve({ changes: result.changes });
       }
     },

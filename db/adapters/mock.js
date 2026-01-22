@@ -7,17 +7,12 @@ const __dirname = path.dirname(__filename);
 
 const users = [];
 const moderation_queue = [];
-const provider_registry = [];
-const provider_statuses = [];
-const provider_metrics = [];
-const provider_grants = [];
-const provider_templates = [];
+const servers = [];
 const policy_knobs = [];
 const notifications = [];
 const feed_items = [];
 const explore_items = [];
 const creations = [];
-const servers = [];
 const templates = [];
 
 const created_images = [];
@@ -46,17 +41,12 @@ function ensureImagesDir() {
 const TABLE_TIMESTAMP_FIELDS = {
   users: ["created_at"],
   moderation_queue: ["created_at"],
-  provider_registry: ["created_at"],
-  provider_statuses: ["last_check_at"],
-  provider_metrics: ["updated_at"],
-  provider_grants: ["awarded_at"],
-  provider_templates: ["updated_at"],
+  servers: ["created_at", "updated_at", "status_date"],
   policy_knobs: ["updated_at"],
   notifications: ["created_at"],
   feed_items: ["created_at"],
   explore_items: ["created_at"],
   creations: ["created_at"],
-  servers: ["created_at"],
   templates: ["created_at"],
   created_images: ["created_at"]
 };
@@ -171,19 +161,39 @@ export function openDb() {
       all: async () => [...moderation_queue]
     },
     selectProviders: {
-      all: async () => [...provider_registry]
+      all: async () => {
+        // Join with users to get owner email
+        return servers.map(provider => {
+          const user = users.find(u => u.id === provider.user_id);
+          return {
+            ...provider,
+            owner_email: user?.email || null
+          };
+        });
+      }
     },
-    selectProviderStatuses: {
-      all: async () => [...provider_statuses]
-    },
-    selectProviderMetrics: {
-      all: async () => [...provider_metrics]
-    },
-    selectProviderGrants: {
-      all: async () => [...provider_grants]
-    },
-    selectProviderTemplates: {
-      all: async () => [...provider_templates]
+    insertProvider: {
+      run: async (userId, name, status, serverUrl, serverConfig = null) => {
+        const id = servers.length + 1;
+        const now = new Date().toISOString();
+        servers.push({
+          id,
+          user_id: userId,
+          name,
+          status,
+          server_url: serverUrl,
+          status_date: null,
+          description: null,
+          members_count: 0,
+          server_config: serverConfig,
+          created_at: now,
+          updated_at: now
+        });
+        return Promise.resolve({ 
+          insertId: id,
+          changes: 1 
+        });
+      }
     },
     selectPolicies: {
       all: async () => [...policy_knobs]
@@ -229,7 +239,27 @@ export function openDb() {
       all: async (userId) => creations.filter((creation) => creation.user_id === Number(userId))
     },
     selectServers: {
-      all: async () => [...servers]
+      all: async () => {
+        // Join with users to get owner email
+        return servers.map(server => {
+          const user = users.find(u => u.id === server.user_id);
+          return {
+            ...server,
+            owner_email: user?.email || null
+          };
+        });
+      }
+    },
+    selectServerById: {
+      get: async (serverId) => {
+        const server = servers.find(s => s.id === Number(serverId));
+        if (!server) return null;
+        const user = users.find(u => u.id === server.user_id);
+        return {
+          ...server,
+          owner_email: user?.email || null
+        };
+      }
     },
     selectTemplates: {
       all: async () => [...templates]
@@ -292,6 +322,33 @@ export function openDb() {
           (img) => img.filename === filename
         );
       }
+    },
+    publishCreatedImage: {
+      run: async (id, userId, title, description) => {
+        const image = created_images.find(
+          (img) => img.id === Number(id) && img.user_id === Number(userId)
+        );
+        if (!image) {
+          return { changes: 0 };
+        }
+        image.published = true;
+        image.published_at = new Date().toISOString();
+        image.title = title;
+        image.description = description;
+        return { changes: 1 };
+      }
+    },
+    deleteCreatedImageById: {
+      run: async (id, userId) => {
+        const index = created_images.findIndex(
+          (img) => img.id === Number(id) && img.user_id === Number(userId)
+        );
+        if (index === -1) {
+          return { changes: 0 };
+        }
+        created_images.splice(index, 1);
+        return { changes: 1 };
+      }
     }
   };
 
@@ -314,20 +371,8 @@ export function openDb() {
       case "moderation_queue":
         targetArray = moderation_queue;
         break;
-      case "provider_registry":
-        targetArray = provider_registry;
-        break;
-      case "provider_statuses":
-        targetArray = provider_statuses;
-        break;
-      case "provider_metrics":
-        targetArray = provider_metrics;
-        break;
-      case "provider_grants":
-        targetArray = provider_grants;
-        break;
-      case "provider_templates":
-        targetArray = provider_templates;
+      case "servers":
+        targetArray = servers;
         break;
       case "policy_knobs":
         targetArray = policy_knobs;
@@ -343,9 +388,6 @@ export function openDb() {
         break;
       case "creations":
         targetArray = creations;
-        break;
-      case "servers":
-        targetArray = servers;
         break;
       case "templates":
         targetArray = templates;
@@ -413,7 +455,6 @@ export function openDb() {
     feed_items.length = 0;
     explore_items.length = 0;
     creations.length = 0;
-    servers.length = 0;
     templates.length = 0;
     created_images.length = 0;
     sessions.length = 0;

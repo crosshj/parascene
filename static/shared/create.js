@@ -2,9 +2,16 @@ function setupCreateHandler() {
   const createRoute = document.querySelector('app-route-create');
   if (!createRoute) return;
 
-  createRoute.onCreate = async ({ button }) => {
+  createRoute.onCreate = async ({ button, server_id, method, args }) => {
     if (!button) return;
     button.disabled = true;
+
+    // Validate required data
+    if (!server_id || !method) {
+      console.error('Missing required data: server_id and method are required');
+      button.disabled = false;
+      return;
+    }
 
     const pendingId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const pendingItem = {
@@ -38,7 +45,12 @@ function setupCreateHandler() {
       headers: {
         "Content-Type": "application/json"
       },
-      credentials: "include"
+      credentials: "include",
+      body: JSON.stringify({
+        server_id,
+        method,
+        args: args || {}
+      })
     })
       .then(async (response) => {
         if (!response.ok) {

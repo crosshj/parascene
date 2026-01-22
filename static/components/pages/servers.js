@@ -50,8 +50,8 @@ class AppRouteServers extends HTMLElement {
         card.className = "route-card";
         card.innerHTML = html`
           <div class="route-title">${server.name}</div>
-          <div>${server.description}</div>
-          <div class="route-meta">${server.region} • ${server.status}</div>
+          <div>${server.description || ''}</div>
+          <div class="route-meta">${server.status}</div>
           <div class="route-meta">${server.members_count} members</div>
         `;
         container.appendChild(card);
