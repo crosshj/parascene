@@ -14,10 +14,17 @@
     "dependsOn": []
   },
   {
+    "name": "Creation Failure",
+    "description": "sometimes a creation fails or results in a stuck image loading forever - this looks bad",
+    "cost": 40,
+    "impact": 45,
+    "dependsOn": []
+  },
+  {
     "name": "Notifications",
     "description": "Define notification types and wire them to real delivery.",
-    "cost": 100,
-    "impact": 75,
+    "cost": 59,
+    "impact": 56,
     "dependsOn": []
   },
   {
@@ -35,6 +42,13 @@
     "dependsOn": []
   },
   {
+    "name": "Provider boosts",
+    "description": "Server-scoped boosts increase provider credit yield with caps, no discovery lift.",
+    "cost": 45,
+    "impact": 33,
+    "dependsOn": []
+  },
+  {
     "name": "Invite credits",
     "description": "Grant starter credits on invite acceptance; record inviter and source.",
     "cost": 1,
@@ -42,13 +56,6 @@
     "dependsOn": [
       "Invites & redemption"
     ]
-  },
-  {
-    "name": "Provider boosts",
-    "description": "Server-scoped boosts increase provider credit yield with caps, no discovery lift.",
-    "cost": 45,
-    "impact": 33,
-    "dependsOn": []
   },
   {
     "name": "Role Progression",
