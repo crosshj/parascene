@@ -6,12 +6,14 @@ class AppHeader extends HTMLElement {
   constructor() {
     super();
     this.notificationsMenuOpen = false;
+    this.mobileMenuOpen = false;
     this.notificationsCount = 0;
     this.creditsCount = 0;
     this.previewNotifications = [];
     this.previewLoadedAt = 0;
     this.previewLoading = false;
     this.handleDocumentClick = this.handleDocumentClick.bind(this);
+    this.handleKeydown = this.handleKeydown.bind(this);
     this.handleRouteChange = this.handleRouteChange.bind(this);
     this.handleNotificationsUpdated = this.handleNotificationsUpdated.bind(this);
     this.handleCreditsUpdated = this.handleCreditsUpdated.bind(this);
@@ -23,7 +25,7 @@ class AppHeader extends HTMLElement {
   }
 
   static get observedAttributes() {
-    return ['show-notifications', 'show-profile', 'show-create', 'default-route', 'credits-count'];
+    return ['show-notifications', 'show-profile', 'show-create', 'show-mobile-menu', 'default-route', 'credits-count'];
   }
 
   connectedCallback() {
@@ -37,6 +39,7 @@ class AppHeader extends HTMLElement {
     this.setupEventListeners();
     this.setupNavListeners();
     document.addEventListener('click', this.handleDocumentClick);
+    document.addEventListener('keydown', this.handleKeydown);
     window.addEventListener('popstate', this.handleRouteChange);
     document.addEventListener('notifications-acknowledged', this.handleNotificationsUpdated);
     document.addEventListener('credits-updated', this.handleCreditsUpdated);
@@ -51,6 +54,7 @@ class AppHeader extends HTMLElement {
 
   disconnectedCallback() {
     document.removeEventListener('click', this.handleDocumentClick);
+    document.removeEventListener('keydown', this.handleKeydown);
     window.removeEventListener('popstate', this.handleRouteChange);
     document.removeEventListener('notifications-acknowledged', this.handleNotificationsUpdated);
     document.removeEventListener('credits-updated', this.handleCreditsUpdated);
@@ -129,27 +133,34 @@ class AppHeader extends HTMLElement {
 
 
   setupNavListeners() {
-    const navLinks = this.querySelectorAll('.header-nav .nav-link');
+    const navLinks = this.querySelectorAll('.header-nav .nav-link, .mobile-menu .nav-link');
     navLinks.forEach(link => {
       link.addEventListener('click', (e) => {
         e.preventDefault();
         const route = link.getAttribute('data-route');
         if (route) {
-          // Check if we're on a server-sent page (like creation detail)
-          // If so, use full page navigation for ANY route change
-          const isServerSentPage = /^\/creations\/\d+$/.test(window.location.pathname) ||
-            window.location.pathname.startsWith('/help/');
-          if (isServerSentPage) {
-            // Use full page navigation for server-sent pages
-            window.location.href = `/${route}`;
-            return;
+          this.navigateToRoute(route);
+          if (link.closest('.mobile-menu')) {
+            this.closeMobileMenu();
           }
-          // Use History API with pathname-based routing for client-side pages
-          window.history.pushState({ route }, '', `/${route}`);
-          this.handleRouteChange();
         }
       });
     });
+  }
+
+  navigateToRoute(route) {
+    // Check if we're on a server-sent page (like creation detail)
+    // If so, use full page navigation for ANY route change
+    const isServerSentPage = /^\/creations\/\d+$/.test(window.location.pathname) ||
+      window.location.pathname.startsWith('/help/');
+    if (isServerSentPage) {
+      // Use full page navigation for server-sent pages
+      window.location.href = `/${route}`;
+      return;
+    }
+    // Use History API with pathname-based routing for client-side pages
+    window.history.pushState({ route }, '', `/${route}`);
+    this.handleRouteChange();
   }
 
   updateCreateButtonState() {
@@ -419,6 +430,8 @@ class AppHeader extends HTMLElement {
       return;
     }
     
+    this.closeMobileMenu();
+
     // Get route from pathname (e.g., /feed -> feed, / -> defaultRoute)
     const pathname = window.location.pathname;
     let currentRoute = pathname === '/' || pathname === '' ? this.defaultRoute : pathname.slice(1);
@@ -462,6 +475,20 @@ class AppHeader extends HTMLElement {
     if (this.notificationsMenuOpen) {
       this.closeNotificationsMenu();
     }
+    if (this.mobileMenuOpen) {
+      const menu = this.querySelector('.mobile-menu');
+      const toggle = this.querySelector('[data-mobile-menu-toggle]');
+      const clickedInside = menu?.contains(e.target) || toggle?.contains(e.target);
+      if (!clickedInside) {
+        this.closeMobileMenu();
+      }
+    }
+  }
+
+  handleKeydown(e) {
+    if (e.key === 'Escape' && this.mobileMenuOpen) {
+      this.closeMobileMenu();
+    }
   }
 
   resetSectionScroll() {
@@ -474,47 +501,43 @@ class AppHeader extends HTMLElement {
   }
 
   setupEventListeners() {
-    const createButton = this.querySelector('.create-button');
-    if (createButton) {
+    const createButtons = this.querySelectorAll('.create-button');
+    createButtons.forEach(createButton => {
       createButton.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
         // Don't navigate if already on create route
         if (createButton.disabled) return;
-        // Check if we're on a server-sent page (like creation detail)
-        const isServerSentPage = /^\/creations\/\d+$/.test(window.location.pathname);
-        if (isServerSentPage) {
-          window.location.href = '/create';
-          return;
+        this.navigateToRoute('create');
+        if (createButton.closest('.mobile-menu')) {
+          this.closeMobileMenu();
         }
-        // Navigate to create route
-        window.history.pushState({ route: 'create' }, '', '/create');
-        this.handleRouteChange();
       });
-    }
-    const profileButton = this.querySelector('.profile-button');
-    if (profileButton) {
+    });
+
+    const profileButtons = this.querySelectorAll('.profile-button');
+    profileButtons.forEach(profileButton => {
       profileButton.addEventListener('click', (e) => {
         e.stopPropagation();
         document.dispatchEvent(new CustomEvent('open-profile'));
       });
-    }
+    });
 
-    const notificationsButton = this.querySelector('.notifications-button');
-    if (notificationsButton) {
+    const notificationsButtons = this.querySelectorAll('.notifications-button');
+    notificationsButtons.forEach(notificationsButton => {
       notificationsButton.addEventListener('click', (e) => {
         e.stopPropagation();
         this.toggleNotificationsMenu();
       });
-    }
+    });
 
-    const creditsButton = this.querySelector('.credits-button');
-    if (creditsButton) {
+    const creditsButtons = this.querySelectorAll('.credits-button');
+    creditsButtons.forEach(creditsButton => {
       creditsButton.addEventListener('click', (e) => {
         e.stopPropagation();
         document.dispatchEvent(new CustomEvent('open-credits'));
       });
-    }
+    });
 
     const notificationsMenu = this.querySelector('.notifications-menu');
     if (notificationsMenu) {
@@ -529,6 +552,82 @@ class AppHeader extends HTMLElement {
           e.stopPropagation();
         }
       });
+    }
+
+    this.setupMobileMenuListeners();
+  }
+
+  setupMobileMenuListeners() {
+    const toggleButton = this.querySelector('[data-mobile-menu-toggle]');
+    if (toggleButton) {
+      toggleButton.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.toggleMobileMenu();
+      });
+    }
+
+    const closeButtons = this.querySelectorAll('[data-mobile-menu-close]');
+    closeButtons.forEach(button => {
+      button.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.closeMobileMenu();
+      });
+    });
+
+    const backdrop = this.querySelector('[data-mobile-menu-backdrop]');
+    if (backdrop) {
+      backdrop.addEventListener('click', () => {
+        this.closeMobileMenu();
+      });
+    }
+
+    const actionButtons = this.querySelectorAll('[data-mobile-menu-action]');
+    actionButtons.forEach(button => {
+      button.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const action = button.getAttribute('data-mobile-menu-action');
+        this.closeMobileMenu();
+        if (action === 'notifications') {
+          document.dispatchEvent(new CustomEvent('open-notifications'));
+        } else if (action === 'credits') {
+          document.dispatchEvent(new CustomEvent('open-credits'));
+        } else if (action === 'profile') {
+          document.dispatchEvent(new CustomEvent('open-profile'));
+        } else if (action === 'create') {
+          this.navigateToRoute('create');
+        }
+      });
+    });
+  }
+
+  toggleMobileMenu() {
+    this.mobileMenuOpen = !this.mobileMenuOpen;
+    this.syncMobileMenuUI();
+  }
+
+  closeMobileMenu() {
+    if (!this.mobileMenuOpen) return;
+    this.mobileMenuOpen = false;
+    this.syncMobileMenuUI();
+  }
+
+  syncMobileMenuUI() {
+    const menu = this.querySelector('.mobile-menu');
+    const backdrop = this.querySelector('.mobile-menu-backdrop');
+    const toggle = this.querySelector('[data-mobile-menu-toggle]');
+    if (menu) {
+      menu.classList.toggle('open', this.mobileMenuOpen);
+      menu.setAttribute('aria-hidden', this.mobileMenuOpen ? 'false' : 'true');
+    }
+    if (backdrop) {
+      backdrop.classList.toggle('open', this.mobileMenuOpen);
+    }
+    if (toggle) {
+      toggle.classList.toggle('active', this.mobileMenuOpen);
+      toggle.setAttribute('aria-expanded', this.mobileMenuOpen ? 'true' : 'false');
     }
   }
 
@@ -556,12 +655,27 @@ class AppHeader extends HTMLElement {
     const showNotifications = this.hasAttribute('show-notifications');
     const showProfile = this.hasAttribute('show-profile');
     const showCreate = this.hasAttribute('show-create');
+    const showMobileMenu = this.hasAttribute('show-mobile-menu');
     const showCredits = this.hasAttribute('show-profile');
     const hasAuthLinks = (this.authLinks || []).length > 0;
+    const hasMobileActions = showCreate || showNotifications || showCredits || showProfile;
 
     this.innerHTML = html`
       <header>
         <div class="header-content">
+          ${showMobileMenu ? html`
+            <button
+              class="hamburger-button ${this.mobileMenuOpen ? 'active' : ''}"
+              data-mobile-menu-toggle
+              aria-label="Open menu"
+              aria-controls="mobile-menu"
+              aria-expanded="${this.mobileMenuOpen ? 'true' : 'false'}"
+            >
+              <span></span>
+              <span></span>
+              <span></span>
+            </button>
+          ` : ''}
           <div class="header-logo">
             <a href="/" style="text-decoration: none; display: block;">
               <svg class="logo" width="200" height="40" viewBox="0 0 200 40">
@@ -625,6 +739,61 @@ class AppHeader extends HTMLElement {
           </div>
         </div>
       </header>
+      ${showMobileMenu ? html`
+        <div class="mobile-menu-backdrop ${this.mobileMenuOpen ? 'open' : ''}" data-mobile-menu-backdrop></div>
+        <aside id="mobile-menu" class="mobile-menu ${this.mobileMenuOpen ? 'open' : ''}" aria-hidden="${this.mobileMenuOpen ? 'false' : 'true'}">
+          <div class="mobile-menu-header">
+            <div class="header-logo">
+              <a href="/" style="text-decoration: none; display: block;">
+                <svg class="logo" width="200" height="40" viewBox="0 0 200 40">
+                  <text x="2" y="27" class="logo-text">
+                    <tspan opacity="1">par</tspan><tspan opacity="0.7">asc</tspan><tspan opacity="1">ene</tspan>
+                  </text>
+                </svg>
+              </a>
+            </div>
+            <button class="mobile-menu-close" data-mobile-menu-close aria-label="Close menu">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+          <div class="mobile-menu-content">
+            <nav class="mobile-menu-nav">
+              ${(this.routes || []).map(route => {
+                const routeId = route.id;
+                const routeLabel = route.label;
+                return html`<a href="/${routeId}" class="nav-link" data-route="${routeId}">${routeLabel}</a>`;
+              }).join('')}
+            </nav>
+            ${hasMobileActions ? html`
+              <div class="mobile-menu-actions">
+                ${showCreate ? html`
+                  <button class="create-button btn-primary">
+                    Create
+                  </button>
+                ` : ''}
+                ${showNotifications ? html`
+                  <button class="action-item" data-mobile-menu-action="notifications">
+                    Notifications
+                  </button>
+                ` : ''}
+                ${showCredits ? html`
+                  <button class="action-item" data-mobile-menu-action="credits">
+                    Credits
+                  </button>
+                ` : ''}
+                ${showProfile ? html`
+                  <button class="action-item" data-mobile-menu-action="profile">
+                    Profile
+                  </button>
+                ` : ''}
+              </div>
+            ` : ''}
+          </div>
+        </aside>
+      ` : ''}
     `;
   }
 }
