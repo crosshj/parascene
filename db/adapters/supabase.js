@@ -456,6 +456,22 @@ export function openDb() {
         };
       }
     },
+    updateServerConfig: {
+      run: async (serverId, serverConfig) => {
+        const { data, error } = await serviceClient
+          .from(prefixedTable("servers"))
+          .update({
+            server_config: serverConfig,
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", serverId)
+          .select();
+        if (error) throw error;
+        return { 
+          changes: data?.length || 0 
+        };
+      }
+    },
     selectTemplates: {
       all: async () => {
         // Use serviceClient to bypass RLS for backend operations

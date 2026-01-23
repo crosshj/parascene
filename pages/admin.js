@@ -254,6 +254,8 @@ async function loadProviders() {
 		for (const provider of data.providers) {
 			const card = document.createElement("div");
 			card.className = "card admin-card";
+			card.style.cursor = "pointer";
+			card.dataset.serverId = provider.id;
 
 			const name = document.createElement("div");
 			name.className = "admin-title";
@@ -281,6 +283,10 @@ async function loadProviders() {
 			card.appendChild(name);
 			card.appendChild(meta);
 			card.appendChild(created);
+
+			card.addEventListener("click", () => {
+				openServerModal(provider.id);
+			});
 
 			container.appendChild(card);
 		}
@@ -739,5 +745,183 @@ if (todoModalForm) {
 	});
 	todoModalForm.addEventListener("change", () => {
 		updateTodoSaveState();
+	});
+}
+
+// Server Modal Functions
+const serverModal = document.querySelector("#server-modal");
+const serverModalContent = document.querySelector("#server-modal-content");
+const serverModalTitle = document.querySelector("#server-modal-title");
+
+function openServerModal(serverId) {
+	if (!serverModal || !serverModalContent) return;
+	serverModal.classList.add("open");
+	loadServerDetails(serverId);
+}
+
+function closeServerModal() {
+	if (!serverModal) return;
+	serverModal.classList.remove("open");
+}
+
+async function loadServerDetails(serverId) {
+	if (!serverModalContent) return;
+	serverModalContent.innerHTML = '<div class="server-loading">Loading...</div>';
+
+	try {
+		const response = await fetch(`/admin/servers/${serverId}`, {
+			credentials: 'include'
+		});
+		if (!response.ok) throw new Error("Failed to load server details.");
+		const data = await response.json();
+		const server = data.server;
+
+		if (serverModalTitle) {
+			serverModalTitle.textContent = server.name || "Server Details";
+		}
+
+		renderServerDetails(server);
+	} catch (err) {
+		serverModalContent.innerHTML = `<div class="admin-error">Error loading server details: ${err.message}</div>`;
+	}
+}
+
+function renderServerDetails(server) {
+	if (!serverModalContent) return;
+
+	const html = `
+		<div class="server-details">
+			<div class="server-detail-row">
+				<strong>Status:</strong> <span>${server.status || '—'}</span>
+			</div>
+			<div class="server-detail-row">
+				<strong>Server URL:</strong> <span>${server.server_url || '—'}</span>
+			</div>
+			${server.owner_email ? `<div class="server-detail-row"><strong>Owner:</strong> <span>${server.owner_email}</span></div>` : ''}
+			${server.description ? `<div class="server-detail-row"><strong>Description:</strong> <span>${server.description}</span></div>` : ''}
+			<div class="server-detail-row">
+				<strong>Members:</strong> <span>${server.members_count || 0}</span>
+			</div>
+			<div class="server-detail-row">
+				<strong>Created:</strong> <span>${server.created_at || '—'}</span>
+			</div>
+			${server.updated_at ? `<div class="server-detail-row"><strong>Last Updated:</strong> <span>${server.updated_at}</span></div>` : ''}
+		</div>
+		<div id="server-capabilities-container" class="server-capabilities-container"></div>
+		<div class="server-modal-actions">
+			<button type="button" id="server-test-btn" class="btn-secondary">Test Server</button>
+			<button type="button" id="server-refresh-btn" class="btn-primary">Refresh Methods</button>
+		</div>
+	`;
+
+	serverModalContent.innerHTML = html;
+
+	// Render existing capabilities if available
+	if (server.server_config) {
+		renderServerCapabilities(server.server_config);
+	}
+
+	// Setup button handlers
+	const testBtn = document.querySelector("#server-test-btn");
+	const refreshBtn = document.querySelector("#server-refresh-btn");
+
+	if (testBtn) {
+		testBtn.addEventListener("click", () => testServer(server.id));
+	}
+	if (refreshBtn) {
+		refreshBtn.addEventListener("click", () => refreshServerMethods(server.id));
+	}
+}
+
+function renderServerCapabilities(capabilities) {
+	const container = document.querySelector("#server-capabilities-container");
+	if (!container) return;
+
+	if (!capabilities || !capabilities.methods) {
+		container.innerHTML = '<div class="server-capabilities-empty">No capabilities data available.</div>';
+		return;
+	}
+
+	renderProviderCapabilities(container, capabilities);
+}
+
+async function testServer(serverId) {
+	const testBtn = document.querySelector("#server-test-btn");
+	const capabilitiesContainer = document.querySelector("#server-capabilities-container");
+	
+	if (!testBtn || !capabilitiesContainer) return;
+
+	const originalText = testBtn.textContent;
+	testBtn.disabled = true;
+	testBtn.textContent = "Testing...";
+	capabilitiesContainer.innerHTML = '<div class="server-loading">Testing server...</div>';
+
+	try {
+		const response = await fetch(`/admin/servers/${serverId}/test`, {
+			method: 'POST',
+			credentials: 'include'
+		});
+
+		const data = await response.json();
+
+		if (!response.ok) {
+			capabilitiesContainer.innerHTML = `<div class="admin-error">Error: ${data.error || 'Failed to test server'}</div>`;
+		} else {
+			capabilitiesContainer.innerHTML = '<div class="server-success">✓ Server is accessible and responding</div>';
+			renderProviderCapabilities(capabilitiesContainer, data.capabilities);
+		}
+	} catch (err) {
+		capabilitiesContainer.innerHTML = `<div class="admin-error">Error: ${err.message || 'Failed to test server'}</div>`;
+	} finally {
+		testBtn.disabled = false;
+		testBtn.textContent = originalText;
+	}
+}
+
+async function refreshServerMethods(serverId) {
+	const refreshBtn = document.querySelector("#server-refresh-btn");
+	const capabilitiesContainer = document.querySelector("#server-capabilities-container");
+	
+	if (!refreshBtn || !capabilitiesContainer) return;
+
+	const originalText = refreshBtn.textContent;
+	refreshBtn.disabled = true;
+	refreshBtn.textContent = "Refreshing...";
+	capabilitiesContainer.innerHTML = '<div class="server-loading">Refreshing server methods...</div>';
+
+	try {
+		const response = await fetch(`/admin/servers/${serverId}/refresh`, {
+			method: 'POST',
+			credentials: 'include'
+		});
+
+		const data = await response.json();
+
+		if (!response.ok) {
+			capabilitiesContainer.innerHTML = `<div class="admin-error">Error: ${data.error || 'Failed to refresh server methods'}</div>`;
+		} else {
+			capabilitiesContainer.innerHTML = '<div class="server-success">✓ Server methods refreshed successfully</div>';
+			renderProviderCapabilities(capabilitiesContainer, data.capabilities);
+			// Reload server details to show updated timestamp
+			loadServerDetails(serverId);
+		}
+	} catch (err) {
+		capabilitiesContainer.innerHTML = `<div class="admin-error">Error: ${err.message || 'Failed to refresh server methods'}</div>`;
+	} finally {
+		refreshBtn.disabled = false;
+		refreshBtn.textContent = originalText;
+	}
+}
+
+if (serverModal) {
+	serverModal.addEventListener("click", (event) => {
+		if (event.target?.dataset?.serverClose !== undefined || event.target === serverModal) {
+			closeServerModal();
+		}
+	});
+	document.addEventListener("keydown", (event) => {
+		if (event.key === "Escape" && serverModal.classList.contains("open")) {
+			closeServerModal();
+		}
 	});
 }

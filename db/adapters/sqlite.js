@@ -352,6 +352,20 @@ export async function openDb() {
         };
       }
     },
+    updateServerConfig: {
+      run: async (serverId, serverConfig) => {
+        const stmt = db.prepare(
+          `UPDATE servers 
+           SET server_config = ?, updated_at = datetime('now')
+           WHERE id = ?`
+        );
+        const configJson = serverConfig ? JSON.stringify(serverConfig) : null;
+        const result = stmt.run(configJson, serverId);
+        return Promise.resolve({ 
+          changes: result.changes 
+        });
+      }
+    },
     selectTemplates: {
       all: async () => {
         const stmt = db.prepare(

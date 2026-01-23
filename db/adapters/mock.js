@@ -261,6 +261,17 @@ export function openDb() {
         };
       }
     },
+    updateServerConfig: {
+      run: async (serverId, serverConfig) => {
+        const server = servers.find(s => s.id === Number(serverId));
+        if (server) {
+          server.server_config = serverConfig;
+          server.updated_at = new Date().toISOString();
+          return { changes: 1 };
+        }
+        return { changes: 0 };
+      }
+    },
     selectTemplates: {
       all: async () => [...templates]
     },

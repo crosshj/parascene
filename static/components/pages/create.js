@@ -284,7 +284,10 @@ class AppRouteCreate extends HTMLElement {
     if (methodKeys.length > 0) {
       const firstMethodKey = methodKeys[0];
       methodSelect.value = firstMethodKey;
-      this.handleMethodChange(firstMethodKey);
+      // Use microtask to ensure DOM is ready and method selection happens after render
+      Promise.resolve().then(() => {
+        this.handleMethodChange(firstMethodKey);
+      });
     } else {
       methodSelect.value = '';
     }
