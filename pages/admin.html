@@ -82,6 +82,7 @@
     <div id="todo-modal" class="publish-modal-overlay" data-todo-modal role="dialog" aria-modal="true" aria-labelledby="todo-modal-title">
       <div class="publish-modal">
         <header class="publish-modal-header todo-modal-header">
+          <h3 id="todo-modal-title" class="todo-modal-title">Todo Item</h3>
           <button type="button" class="publish-modal-close" data-todo-close aria-label="Close">✕</button>
         </header>
         <div class="publish-modal-body">
@@ -126,6 +127,7 @@
     <div id="todo-readonly-modal" class="publish-modal-overlay" data-todo-readonly role="dialog" aria-modal="true" aria-labelledby="todo-readonly-title">
       <div class="publish-modal todo-readonly-modal">
         <header class="publish-modal-header todo-modal-header">
+          <h3 class="todo-modal-title">Todo Item</h3>
           <button type="button" class="publish-modal-close" data-todo-readonly-close aria-label="Close">✕</button>
         </header>
         <div class="publish-modal-body todo-readonly-body">
@@ -160,6 +162,10 @@
           <div id="server-modal-content" class="server-modal-content">
             <div class="server-loading">Loading...</div>
           </div>
+        </div>
+        <div id="server-modal-actions" class="server-modal-actions">
+          <button type="button" id="server-test-btn" class="btn-secondary">Test Server</button>
+          <button type="button" id="server-refresh-btn" class="btn-primary">Refresh Methods</button>
         </div>
       </div>
     </div>

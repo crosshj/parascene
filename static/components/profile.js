@@ -34,6 +34,7 @@ class AppProfile extends HTMLElement {
 
     const overlay = this.shadowRoot.querySelector('.profile-overlay');
     const closeButton = this.shadowRoot.querySelector('.profile-close');
+    const logoutForm = this.shadowRoot.querySelector('form[action="/logout"]');
 
     if (overlay) {
       overlay.addEventListener('click', (e) => {
@@ -46,6 +47,13 @@ class AppProfile extends HTMLElement {
     if (closeButton) {
       closeButton.addEventListener('click', () => {
         this.close();
+      });
+    }
+
+    if (logoutForm) {
+      logoutForm.addEventListener('submit', (e) => {
+        // Clear localStorage before submitting logout
+        this.clearCreditsStorage();
       });
     }
   }
@@ -78,6 +86,7 @@ class AppProfile extends HTMLElement {
     }
     // Dispatch event to close notifications if open
     document.dispatchEvent(new CustomEvent('close-notifications'));
+    document.dispatchEvent(new CustomEvent('modal-opened'));
   }
 
   close() {
@@ -87,6 +96,7 @@ class AppProfile extends HTMLElement {
     if (overlay) {
       overlay.classList.remove('open');
     }
+    document.dispatchEvent(new CustomEvent('modal-closed'));
   }
 
   async loadProfile({ silent = true, force = false } = {}) {
@@ -228,7 +238,7 @@ class AppProfile extends HTMLElement {
           display: flex;
           align-items: center;
           justify-content: center;
-          border-radius: 4px;
+          border-radius: 6px;
           transition: background-color 0.2s;
         }
         .profile-close:hover {
@@ -312,6 +322,16 @@ class AppProfile extends HTMLElement {
     schedule(() => {
       this.loadProfile({ silent: true, force: true });
     });
+  }
+
+  clearCreditsStorage() {
+    try {
+      window.localStorage?.removeItem('credits-balance');
+      window.localStorage?.removeItem('credits-user-email');
+      window.localStorage?.removeItem('credits-last-claim');
+    } catch {
+      // ignore storage errors
+    }
   }
 }
 

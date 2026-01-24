@@ -184,9 +184,9 @@ function renderProviderCapabilities(container, capabilities) {
 			const method = methods[methodKey];
 			const methodCard = document.createElement("div");
 			methodCard.style.marginBottom = "1rem";
-			methodCard.style.padding = "0.75rem";
+			methodCard.style.padding = "12px 14px";
 			methodCard.style.background = "var(--surface, #fff)";
-			methodCard.style.borderRadius = "4px";
+			methodCard.style.borderRadius = "8px";
 			methodCard.style.border = "1px solid var(--border, #ddd)";
 
 			const methodName = document.createElement("div");
@@ -217,7 +217,7 @@ function renderProviderCapabilities(container, capabilities) {
 					const field = fields[fieldKey];
 					const fieldItem = document.createElement("div");
 					fieldItem.style.fontSize = "0.75rem";
-					fieldItem.style.marginLeft = "0.5rem";
+					fieldItem.style.marginLeft = "0.75rem";
 					fieldItem.style.marginBottom = "0.25rem";
 
 					const requiredBadge = field.required ? " (required)" : " (optional)";
@@ -510,7 +510,9 @@ function openTodoModal({ mode, item }) {
 	todoModal.classList.add("open");
 	const submit = todoModal.querySelector(".todo-modal-submit");
 	const deleteButton = todoModal.querySelector(".todo-modal-delete");
+	const title = todoModal.querySelector("#todo-modal-title");
 	if (submit) submit.textContent = mode === "edit" ? "Save changes" : "Add item";
+	if (title) title.textContent = mode === "edit" ? "Edit Todo Item" : "Add Todo Item";
 	if (deleteButton) {
 		deleteButton.hidden = mode !== "edit";
 	}
@@ -752,9 +754,11 @@ if (todoModalForm) {
 const serverModal = document.querySelector("#server-modal");
 const serverModalContent = document.querySelector("#server-modal-content");
 const serverModalTitle = document.querySelector("#server-modal-title");
+let currentServerId = null;
 
 function openServerModal(serverId) {
 	if (!serverModal || !serverModalContent) return;
+	currentServerId = serverId;
 	serverModal.classList.add("open");
 	loadServerDetails(serverId);
 }
@@ -808,10 +812,6 @@ function renderServerDetails(server) {
 			${server.updated_at ? `<div class="server-detail-row"><strong>Last Updated:</strong> <span>${server.updated_at}</span></div>` : ''}
 		</div>
 		<div id="server-capabilities-container" class="server-capabilities-container"></div>
-		<div class="server-modal-actions">
-			<button type="button" id="server-test-btn" class="btn-secondary">Test Server</button>
-			<button type="button" id="server-refresh-btn" class="btn-primary">Refresh Methods</button>
-		</div>
 	`;
 
 	serverModalContent.innerHTML = html;
@@ -821,15 +821,23 @@ function renderServerDetails(server) {
 		renderServerCapabilities(server.server_config);
 	}
 
-	// Setup button handlers
+	// Setup button handlers - remove old listeners and add new ones
 	const testBtn = document.querySelector("#server-test-btn");
 	const refreshBtn = document.querySelector("#server-refresh-btn");
 
 	if (testBtn) {
-		testBtn.addEventListener("click", () => testServer(server.id));
+		const newTestBtn = testBtn.cloneNode(true);
+		testBtn.replaceWith(newTestBtn);
+		newTestBtn.addEventListener("click", () => {
+			if (currentServerId) testServer(currentServerId);
+		});
 	}
 	if (refreshBtn) {
-		refreshBtn.addEventListener("click", () => refreshServerMethods(server.id));
+		const newRefreshBtn = refreshBtn.cloneNode(true);
+		refreshBtn.replaceWith(newRefreshBtn);
+		newRefreshBtn.addEventListener("click", () => {
+			if (currentServerId) refreshServerMethods(currentServerId);
+		});
 	}
 }
 

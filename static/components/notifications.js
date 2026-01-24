@@ -115,6 +115,7 @@ class AppNotifications extends HTMLElement {
     if (overlay) {
       overlay.classList.add('open');
     }
+    document.dispatchEvent(new CustomEvent('modal-opened'));
   }
 
   close() {
@@ -124,6 +125,7 @@ class AppNotifications extends HTMLElement {
       '.notifications-overlay, .notification-detail-overlay'
     );
     overlays.forEach((overlay) => overlay.classList.remove('open'));
+    document.dispatchEvent(new CustomEvent('modal-closed'));
   }
 
   async loadNotifications({ silent = false, force = false } = {}) {
@@ -367,7 +369,7 @@ class AppNotifications extends HTMLElement {
           display: flex;
           align-items: center;
           justify-content: center;
-          border-radius: 4px;
+          border-radius: 6px;
           transition: background-color 0.2s;
         }
         .notifications-close:hover {

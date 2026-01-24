@@ -247,8 +247,11 @@
   gap: 12px;
 }
 
-.todo-modal-header {
-  justify-content: flex-end;
+.todo-modal-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
 }
 
 .todo-readonly-modal {
@@ -393,6 +396,10 @@
 .server-modal-body {
   display: grid;
   gap: 20px;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
 }
 
 .server-modal-content {
@@ -459,12 +466,25 @@
   display: flex;
   gap: 12px;
   justify-content: flex-end;
-  padding-top: 12px;
+  padding: 18px 20px;
   border-top: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
-.server-modal-actions button {
-  min-width: 140px;
+.server-modal-actions .btn-secondary,
+.server-modal-actions .btn-primary {
+  /* Standardize both buttons to use the same base button styling */
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: inherit;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: auto;
+  min-height: auto;
+  height: auto;
+  line-height: 1.5;
 }
 
 .admin-error {

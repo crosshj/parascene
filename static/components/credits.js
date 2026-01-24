@@ -96,6 +96,7 @@ class AppCredits extends HTMLElement {
 			overlay.classList.add('open');
 		}
 		document.dispatchEvent(new CustomEvent('close-notifications'));
+		document.dispatchEvent(new CustomEvent('modal-opened'));
 		this.refreshCredits();
 	}
 
@@ -106,12 +107,48 @@ class AppCredits extends HTMLElement {
 		if (overlay) {
 			overlay.classList.remove('open');
 		}
+		document.dispatchEvent(new CustomEvent('modal-closed'));
 	}
 
 	async refreshCredits() {
 		try {
+			// First, get current user to check if user changed
+			let currentUserEmail = null;
+			try {
+				const profileResponse = await fetch('/api/profile', { credentials: 'include' });
+				if (profileResponse.ok) {
+					const profile = await profileResponse.json();
+					currentUserEmail = profile?.email || null;
+				}
+			} catch {
+				// Ignore profile fetch errors
+			}
+
+			// If no signed-in user, clear cache
+			if (!currentUserEmail) {
+				this.clearStoredCredits();
+				this.clearStoredUserEmail();
+				this.creditsCount = 0;
+				this.updateCreditsUI();
+				this.updateClaimUI();
+				return;
+			}
+
+			// Check if user changed - if so, clear cache
+			const cachedUserEmail = this.readStoredUserEmail();
+			if (cachedUserEmail && currentUserEmail !== cachedUserEmail) {
+				// User changed - clear cache
+				this.clearStoredCredits();
+				this.clearStoredUserEmail();
+			}
+
 			const response = await fetch('/api/credits', { credentials: 'include' });
 			if (!response.ok) {
+				// If unauthorized or any error, clear cache
+				if (response.status === 401 || !currentUserEmail) {
+					this.clearStoredCredits();
+					this.clearStoredUserEmail();
+				}
 				this.creditsCount = 0;
 				this.updateCreditsUI();
 				this.updateClaimUI();
@@ -120,22 +157,55 @@ class AppCredits extends HTMLElement {
 			const data = await response.json();
 			this.creditsCount = this.normalizeCredits(data?.balance ?? 0);
 			this.lastClaimDate = data?.lastClaimDate || null;
-			// Cache in localStorage for offline/performance (optional)
-			this.writeStoredCredits(this.creditsCount);
+			// Cache in localStorage with user email
+			if (currentUserEmail) {
+				this.writeStoredCredits(this.creditsCount);
+				this.writeStoredUserEmail(currentUserEmail);
+			}
 			this.updateCreditsUI();
 			this.updateClaimUI();
 		} catch {
-			// Fallback to cached value if available
-			const storedCredits = this.readStoredCredits();
-			if (storedCredits !== null) {
-				this.creditsCount = storedCredits;
-				this.updateCreditsUI();
-				this.updateClaimUI();
-			} else {
+			// Fallback to cached value only if user matches
+			const cachedUserEmail = this.readStoredUserEmail();
+			let currentUserEmail = null;
+			try {
+				const profileResponse = await fetch('/api/profile', { credentials: 'include' });
+				if (profileResponse.ok) {
+					const profile = await profileResponse.json();
+					currentUserEmail = profile?.email || null;
+				}
+			} catch {
+				// Ignore profile fetch errors
+			}
+
+			// If no signed-in user, clear cache
+			if (!currentUserEmail) {
+				this.clearStoredCredits();
+				this.clearStoredUserEmail();
 				this.creditsCount = 0;
 				this.updateCreditsUI();
 				this.updateClaimUI();
+				return;
 			}
+
+			// Only use cached value if user matches
+			if (cachedUserEmail && currentUserEmail === cachedUserEmail) {
+				const storedCredits = this.readStoredCredits();
+				if (storedCredits !== null) {
+					this.creditsCount = storedCredits;
+					this.updateCreditsUI();
+					this.updateClaimUI();
+					return;
+				}
+			} else {
+				// User changed or no cache - clear it
+				this.clearStoredCredits();
+				this.clearStoredUserEmail();
+			}
+
+			this.creditsCount = 0;
+			this.updateCreditsUI();
+			this.updateClaimUI();
 		}
 	}
 
@@ -265,6 +335,38 @@ class AppCredits extends HTMLElement {
 		}
 	}
 
+	readStoredUserEmail() {
+		try {
+			return window.localStorage?.getItem('credits-user-email');
+		} catch {
+			return null;
+		}
+	}
+
+	writeStoredUserEmail(email) {
+		try {
+			window.localStorage?.setItem('credits-user-email', email);
+		} catch {
+			// ignore storage errors
+		}
+	}
+
+	clearStoredCredits() {
+		try {
+			window.localStorage?.removeItem('credits-balance');
+		} catch {
+			// ignore storage errors
+		}
+	}
+
+	clearStoredUserEmail() {
+		try {
+			window.localStorage?.removeItem('credits-user-email');
+		} catch {
+			// ignore storage errors
+		}
+	}
+
 	render() {
 		this.shadowRoot.innerHTML = html`
       <style>
@@ -325,7 +427,7 @@ class AppCredits extends HTMLElement {
           display: flex;
           align-items: center;
           justify-content: center;
-          border-radius: 4px;
+          border-radius: 6px;
           transition: background-color 0.2s;
         }
         .credits-close:hover {

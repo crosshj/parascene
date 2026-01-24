@@ -221,22 +221,75 @@ class AppHeader extends HTMLElement {
       return;
     }
 
-    const storedCount = this.readStoredCreditsCount();
-    if (storedCount !== null) {
-      this.updateCreditsUI(storedCount);
-      return;
-    }
-
     try {
       const response = await fetch('/api/profile', { credentials: 'include' });
       if (!response.ok) {
+        // If unauthorized or any error, clear cache
+        if (response.status === 401) {
+          this.clearStoredCredits();
+          this.clearStoredUserEmail();
+        }
         this.updateCreditsUI(0);
         return;
       }
       const user = await response.json();
+      const currentUserEmail = user?.email || null;
+      
+      // If no signed-in user, clear cache
+      if (!currentUserEmail) {
+        this.clearStoredCredits();
+        this.clearStoredUserEmail();
+        this.updateCreditsUI(0);
+        return;
+      }
+      
+      // Check if user changed - if so, clear cache
+      const cachedUserEmail = this.readStoredUserEmail();
+      if (cachedUserEmail && currentUserEmail !== cachedUserEmail) {
+        // User changed - clear cache
+        this.clearStoredCredits();
+        this.clearStoredUserEmail();
+      }
+
       const count = this.parseCreditsCount(user?.credits);
       this.updateCreditsUI(count);
+      
+      // Store user email for future checks
+      this.writeStoredUserEmail(currentUserEmail);
     } catch {
+      // Only use cached value if user matches
+      const cachedUserEmail = this.readStoredUserEmail();
+      let currentUserEmail = null;
+      try {
+        const profileResponse = await fetch('/api/profile', { credentials: 'include' });
+        if (profileResponse.ok) {
+          const profile = await profileResponse.json();
+          currentUserEmail = profile?.email || null;
+        }
+      } catch {
+        // Ignore profile fetch errors
+      }
+
+      // If no signed-in user, clear cache
+      if (!currentUserEmail) {
+        this.clearStoredCredits();
+        this.clearStoredUserEmail();
+        this.updateCreditsUI(0);
+        return;
+      }
+
+      if (cachedUserEmail && currentUserEmail === cachedUserEmail) {
+        const storedCount = this.readStoredCreditsCount();
+        if (storedCount !== null) {
+          this.updateCreditsUI(storedCount);
+          return;
+        }
+      } else {
+        // User changed or no cache - clear it
+        this.clearStoredCredits();
+        this.clearStoredUserEmail();
+      }
+
       this.updateCreditsUI(0);
     }
   }
@@ -297,6 +350,38 @@ class AppHeader extends HTMLElement {
       return parsed;
     } catch {
       return null;
+    }
+  }
+
+  readStoredUserEmail() {
+    try {
+      return window.localStorage?.getItem('credits-user-email');
+    } catch {
+      return null;
+    }
+  }
+
+  writeStoredUserEmail(email) {
+    try {
+      window.localStorage?.setItem('credits-user-email', email);
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  clearStoredCredits() {
+    try {
+      window.localStorage?.removeItem('credits-balance');
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  clearStoredUserEmail() {
+    try {
+      window.localStorage?.removeItem('credits-user-email');
+    } catch {
+      // ignore storage errors
     }
   }
 

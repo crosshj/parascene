@@ -74,3 +74,26 @@ function registerServiceWorker() {
 }
 
 registerServiceWorker();
+
+// Prevent body scrolling when shadow DOM modals are open
+// Regular DOM modals are handled by CSS :has() selector
+// Shadow DOM modals dispatch events to toggle body class
+let shadowModalCount = 0;
+
+function updateBodyClass() {
+	if (shadowModalCount > 0) {
+		document.body.classList.add('modal-open');
+	} else {
+		document.body.classList.remove('modal-open');
+	}
+}
+
+document.addEventListener('modal-opened', () => {
+	shadowModalCount++;
+	updateBodyClass();
+});
+
+document.addEventListener('modal-closed', () => {
+	shadowModalCount = Math.max(0, shadowModalCount - 1);
+	updateBodyClass();
+});

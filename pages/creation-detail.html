@@ -380,7 +380,7 @@
         const modal = document.querySelector('[data-publish-modal]');
         if (modal) {
           modal.classList.add('open');
-          document.body.style.overflow = 'hidden';
+          // Body scroll prevention is handled globally in global.js
           // Hide any existing alert
           hidePublishAlert();
           // Focus on title input
@@ -395,7 +395,7 @@
         const modal = document.querySelector('[data-publish-modal]');
         if (modal) {
           modal.classList.remove('open');
-          document.body.style.overflow = '';
+          // Body scroll restoration is handled globally in global.js
           // Clear form
           const titleInput = document.getElementById('publish-title');
           const descriptionTextarea = document.getElementById('publish-description');
