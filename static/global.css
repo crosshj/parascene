@@ -1518,6 +1518,10 @@ header .hamburger-button.active span:nth-child(3) {
 	gap: 12px;
 }
 
+app-route-feed {
+	margin-top: -16px;
+}
+
 .feed-route .route-cards.feed-cards {
 	display: flex;
 	flex-direction: column;
@@ -2496,6 +2500,9 @@ body.creation-detail-page main>section:first-of-type {
 .creation-detail-info {
 	max-width: 800px;
 	margin: 0 auto;
+	overflow-wrap: break-word;
+	word-wrap: break-word;
+	word-break: break-word;
 }
 
 .creation-detail-author {
@@ -2559,7 +2566,10 @@ body.creation-detail-page main>section:first-of-type {
 	color: var(--text);
 	line-height: 1.5;
 	margin-top: 8px;
-	white-space: pre;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+	word-wrap: break-word;
+	word-break: break-word;
 }
 
 .creation-detail-meta {
