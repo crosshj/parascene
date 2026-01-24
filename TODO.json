@@ -1,58 +1,30 @@
 [
   {
-    "name": "Likes",
-    "description": "Persist likes on creations and surface them in the UI.",
-    "cost": 12,
-    "impact": 75,
-    "dependsOn": []
-  },
-  {
-    "name": "Creation Failure",
-    "description": "sometimes a creation fails or results in a stuck image loading forever - this looks bad",
-    "cost": 40,
-    "impact": 52,
-    "dependsOn": []
-  },
-  {
     "name": "Comments",
     "description": "Persist comments on creations with UI support.",
-    "cost": 78,
+    "cost": 50,
     "impact": 100,
     "dependsOn": []
   },
   {
     "name": "Follows",
     "description": "Add the ability to follow another user, adjust \"Explore\" and \"Feed\" to reflect this.  Provide ability to see follows and remove. Show following on user profile",
-    "cost": 78,
+    "cost": 50,
     "impact": 97,
     "dependsOn": []
   },
   {
     "name": "Notifications",
     "description": "Define notification types and wire them to real delivery.",
-    "cost": 59,
-    "impact": 56,
-    "dependsOn": []
-  },
-  {
-    "name": "Credit pools",
-    "description": "Ledger and UI for provider pools used in giveaways and events.",
-    "cost": 67,
-    "impact": 50,
+    "cost": 50,
+    "impact": 81,
     "dependsOn": []
   },
   {
     "name": "Invites & redemption",
     "description": "Optional invite onboarding via email or shareable token, with stored invite context.",
-    "cost": 34,
+    "cost": 38,
     "impact": 1,
-    "dependsOn": []
-  },
-  {
-    "name": "Provider boosts",
-    "description": "Server-scoped boosts increase provider credit yield with caps, no discovery lift.",
-    "cost": 45,
-    "impact": 33,
     "dependsOn": []
   },
   {
@@ -65,17 +37,38 @@
     ]
   },
   {
-    "name": "Role Progression",
-    "description": "Define role transition rules and whether roles can be relaxed.",
-    "cost": 89,
-    "impact": 42,
+    "name": "Provider boosts",
+    "description": "Server-scoped boosts increase provider credit yield with caps, no discovery lift.",
+    "cost": 51,
+    "impact": 33,
+    "dependsOn": []
+  },
+  {
+    "name": "BUG: Creation Failure",
+    "description": "sometimes a creation fails or results in a stuck image loading forever - this looks bad",
+    "cost": 70,
+    "impact": 45,
+    "dependsOn": []
+  },
+  {
+    "name": "Credit pools",
+    "description": "Ledger and UI for provider pools used in giveaways and events.",
+    "cost": 75,
+    "impact": 50,
     "dependsOn": []
   },
   {
     "name": "Templates",
     "description": "Define template model, storage, and UI flow for reusable prompts.",
-    "cost": 45,
+    "cost": 51,
     "impact": 8,
+    "dependsOn": []
+  },
+  {
+    "name": "Role Progression",
+    "description": "Define role transition rules and whether roles can be relaxed.",
+    "cost": 100,
+    "impact": 42,
     "dependsOn": []
   }
 ]

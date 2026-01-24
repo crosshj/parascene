@@ -1,5 +1,7 @@
 # TODO
 
+here are notes about how to handle TODO.json
+
 ## Cost
 
 `cost` reflects expected effort and complexity to deliver the item. Higher cost means more engineering time, more moving parts, or greater risk of hidden work.
