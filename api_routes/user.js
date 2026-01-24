@@ -13,6 +13,19 @@ import {
 export default function createProfileRoutes({ queries }) {
 	const router = express.Router();
 
+	function getTipperDisplayName(user) {
+		const name =
+			typeof user?.name === "string"
+				? user.name.trim()
+				: typeof user?.display_name === "string"
+					? user.display_name.trim()
+					: "";
+		if (name) return name;
+		const email = String(user?.email || "").trim();
+		const localPart = email.includes("@") ? email.split("@")[0] : email;
+		return `@${localPart || "user"}`;
+	}
+
 	router.post("/signup", async (req, res) => {
 		const email = String(req.body.username || req.body.email || "")
 			.trim()
@@ -290,6 +303,98 @@ export default function createProfileRoutes({ queries }) {
 			});
 		} catch (error) {
 			console.error("Error claiming daily credits:", error);
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	router.post("/api/credits/tip", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+
+			if (!queries.transferCredits?.run) {
+				return res.status(500).json({ error: "Credits transfer not available" });
+			}
+
+			const fromUserId = Number(req.auth.userId);
+			const toUserId = Number(req.body?.toUserId);
+			const rawAmount = Number(req.body?.amount);
+			const amount = Math.round(rawAmount * 10) / 10;
+
+			if (!Number.isFinite(toUserId) || toUserId <= 0) {
+				return res.status(400).json({ error: "Invalid recipient user id" });
+			}
+			if (!Number.isFinite(amount) || amount <= 0) {
+				return res.status(400).json({ error: "Invalid amount" });
+			}
+			if (toUserId === fromUserId) {
+				return res.status(400).json({ error: "Cannot tip yourself" });
+			}
+
+			const sender = await queries.selectUserById.get(fromUserId);
+			if (!sender) {
+				return res.status(404).json({ error: "User not found" });
+			}
+
+			const recipient = await queries.selectUserById.get(toUserId);
+			if (!recipient) {
+				return res.status(404).json({ error: "Recipient not found" });
+			}
+
+			let transferResult;
+			try {
+				transferResult = await queries.transferCredits.run(fromUserId, toUserId, amount);
+			} catch (error) {
+				const message = String(error?.message || "");
+				const code = error?.code || "";
+				const isInsufficient =
+					code === "INSUFFICIENT_CREDITS" ||
+					message.toLowerCase().includes("insufficient");
+				if (isInsufficient) {
+					return res.status(400).json({ error: "Insufficient credits" });
+				}
+				const isSelfTip = message.toLowerCase().includes("tip yourself");
+				if (isSelfTip) {
+					return res.status(400).json({ error: "Cannot tip yourself" });
+				}
+				console.error("Error transferring credits:", error);
+				return res.status(500).json({ error: "Internal server error" });
+			}
+
+			// Best-effort notification (no link, no new tables)
+			try {
+				if (queries.insertNotification?.run) {
+					const tipperName = getTipperDisplayName(sender);
+					const title = "You received a tip";
+					const message = `${tipperName} tipped you ${amount.toFixed(1)} credits.`;
+					await queries.insertNotification.run(toUserId, null, title, message, null);
+				}
+			} catch (error) {
+				console.error("Failed to insert tip notification:", error);
+				// do not fail the transfer
+			}
+
+			const fromBalance =
+				transferResult && typeof transferResult.fromBalance === "number"
+					? transferResult.fromBalance
+					: transferResult && typeof transferResult.from_balance === "number"
+						? transferResult.from_balance
+						: null;
+			const toBalance =
+				transferResult && typeof transferResult.toBalance === "number"
+					? transferResult.toBalance
+					: transferResult && typeof transferResult.to_balance === "number"
+						? transferResult.to_balance
+						: null;
+
+			return res.json({
+				success: true,
+				fromBalance,
+				toBalance
+			});
+		} catch (error) {
+			console.error("Error tipping credits:", error);
 			return res.status(500).json({ error: "Internal server error" });
 		}
 	});

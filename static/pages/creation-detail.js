@@ -76,7 +76,24 @@ async function loadCreation() {
 		}
 
 		const creation = await response.json();
-		const likeCount = getCreationLikeCount({ ...creation, created_image_id: creationId });
+
+		// Load like metadata from backend (no localStorage fallback).
+		let likeMeta = { like_count: 0, viewer_liked: false };
+		try {
+			const likeRes = await fetch(`/api/created-images/${creationId}/like`, { credentials: 'include' });
+			if (likeRes.ok) {
+				const meta = await likeRes.json();
+				likeMeta = {
+					like_count: Number(meta?.like_count ?? 0),
+					viewer_liked: Boolean(meta?.viewer_liked)
+				};
+			}
+		} catch {
+			// ignore like meta load failures
+		}
+
+		const creationWithLikes = { ...creation, ...likeMeta, created_image_id: creationId };
+		const likeCount = getCreationLikeCount(creationWithLikes);
 
 		// Set image and blurred background
 		imageWrapper?.classList.remove('image-error');
@@ -208,7 +225,7 @@ async function loadCreation() {
 
 		const likeButton = detailContent.querySelector('button[data-like-button]');
 		if (likeButton) {
-			initLikeButton(likeButton, { ...creation, created_image_id: creationId });
+			initLikeButton(likeButton, creationWithLikes);
 		}
 
 		enableLikeButtons(detailContent);
@@ -484,7 +501,7 @@ window.addEventListener('popstate', (e) => {
 }, true);
 
 // Override pushState and replaceState to detect programmatic navigation
-history.pushState = function(...args) {
+history.pushState = function (...args) {
 	console.log('pushState called', args);
 	originalPushState(...args);
 	// Check if URL changed to a different creation
@@ -497,7 +514,7 @@ history.pushState = function(...args) {
 	}, 0);
 };
 
-history.replaceState = function(...args) {
+history.replaceState = function (...args) {
 	console.log('replaceState called', args);
 	originalReplaceState(...args);
 	setTimeout(() => {

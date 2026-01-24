@@ -1,12 +1,5 @@
 [
   {
-    "name": "Credit Transfer",
-    "description": "Allows one user to give another user credits.",
-    "cost": 9,
-    "impact": 80,
-    "dependsOn": []
-  },
-  {
     "name": "Comments",
     "description": "Persist comments on creations with UI support.",
     "cost": 50,
@@ -15,16 +8,9 @@
   },
   {
     "name": "Follows",
-    "description": "Add the ability to follow another user, adjust \"Explore\" and \"Feed\" to reflect this.  Provide ability to see follows and remove. Show following on user profile",
+    "description": "Ability to follow user, adjust \"Explore\" and \"Feed\".  Ability to list/CRUD follows.",
     "cost": 50,
     "impact": 97,
-    "dependsOn": []
-  },
-  {
-    "name": "Notifications",
-    "description": "Define notification types and wire them to real delivery.",
-    "cost": 50,
-    "impact": 81,
     "dependsOn": []
   },
   {

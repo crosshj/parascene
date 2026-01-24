@@ -341,6 +341,29 @@ export function openDb() {
         return { changes: 0 };
       }
     },
+    insertNotification: {
+      run: async (userId, role, title, message, link) => {
+        // Use serviceClient to bypass RLS for backend operations
+        const { data, error } = await serviceClient
+          .from(prefixedTable("notifications"))
+          .insert({
+            user_id: userId ?? null,
+            role: role ?? null,
+            title,
+            message,
+            link: link ?? null,
+            acknowledged_at: null
+          })
+          .select("id")
+          .single();
+        if (error) throw error;
+        return {
+          insertId: data.id,
+          lastInsertRowid: data.id,
+          changes: 1
+        };
+      }
+    },
     selectFeedItems: {
       all: async (excludeUserId) => {
         // Use serviceClient to bypass RLS for backend operations
@@ -864,6 +887,19 @@ export function openDb() {
           balance: updated.balance,
           changes: 1
         };
+      }
+    },
+    transferCredits: {
+      run: async (fromUserId, toUserId, amount) => {
+        const { data, error } = await serviceClient.rpc("prsn_transfer_credits", {
+          from_user_id: fromUserId,
+          to_user_id: toUserId,
+          amount
+        });
+        if (error) throw error;
+        // RPC returns a single-row table; PostgREST exposes it as an array
+        const row = Array.isArray(data) ? data[0] : data;
+        return row || null;
       }
     }
   };

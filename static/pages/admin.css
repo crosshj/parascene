@@ -26,6 +26,69 @@
   /* Extends .card from global.css */
 }
 
+.user-card {
+	cursor: pointer;
+}
+
+.user-card:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
+
+.user-modal-body {
+	display: grid;
+	gap: 16px;
+}
+
+.user-tip-label {
+	display: grid;
+	gap: 10px;
+}
+
+.user-tip-row {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+}
+
+.user-tip-row input {
+	flex: 1;
+	min-width: 0;
+}
+
+.user-tip-button {
+	position: relative;
+	min-width: 92px;
+}
+
+.user-tip-spinner {
+	display: none;
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 16px;
+	height: 16px;
+	transform: translate(-50%, -50%);
+	border-radius: 50%;
+	border: 2px solid currentColor;
+	border-top-color: transparent;
+	animation: user-tip-spin 0.8s linear infinite;
+}
+
+.user-tip-button.is-loading .user-tip-button-label {
+	opacity: 0;
+}
+
+.user-tip-button.is-loading .user-tip-spinner {
+	display: block;
+}
+
+@keyframes user-tip-spin {
+	to {
+		transform: translate(-50%, -50%) rotate(360deg);
+	}
+}
+
 .user-email {
   font-size: 1rem;
   font-weight: 600;
@@ -193,11 +256,15 @@
 .todo-card-text {
   display: grid;
   gap: 6px;
+  min-width: 0;
 }
 
 .todo-card-description {
   color: var(--text-muted);
   font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .todo-card-dial {
@@ -245,6 +312,100 @@
 .todo-modal-form {
   display: grid;
   gap: 12px;
+}
+
+/* Keep todo modal actions visible while body scrolls */
+#todo-modal .publish-modal-body {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.todo-modal-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+
+.todo-depends {
+  display: grid;
+  gap: 8px;
+}
+
+.todo-depends-label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.todo-depends-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.todo-depends-list:empty {
+  display: none;
+}
+
+.todo-depends-select {
+  flex: 1;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.todo-depends-add {
+  flex-shrink: 0;
+}
+
+.todo-depends-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.todo-depends-pill {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.todo-depends-remove {
+  appearance: none;
+  border: 0;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  font-weight: 700;
+  cursor: pointer;
+  width: 26px;
+  height: 26px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  padding: 0;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.todo-depends-remove:hover {
+  color: var(--text);
+}
+
+.todo-depends-remove:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .todo-modal-title {
@@ -504,7 +665,7 @@
     grid-template-columns: 1fr;
   }
   .todo-card-description {
-    display: none;
+    font-size: 0.85rem;
   }
   .server-detail-row {
     grid-template-columns: 1fr;

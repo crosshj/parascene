@@ -9,6 +9,7 @@ class AppCredits extends HTMLElement {
 		this._isOpen = false;
 		this.creditsCount = 0;
 		this.lastClaimDate = null;
+		this.canClaim = null; // null = unknown until /api/credits responds
 		this.handleEscape = this.handleEscape.bind(this);
 		this.handleOpenEvent = this.handleOpenEvent.bind(this);
 		this.handleCloseEvent = this.handleCloseEvent.bind(this);
@@ -145,12 +146,20 @@ class AppCredits extends HTMLElement {
 					this.clearStoredUserEmail();
 				}
 				this.creditsCount = 0;
+				this.canClaim = null;
 				this.updateCreditsUI();
 				this.updateClaimUI();
 				return;
 			}
 			this.creditsCount = this.normalizeCredits(credits.data?.balance ?? 0);
 			this.lastClaimDate = credits.data?.lastClaimDate || null;
+			this.canClaim = typeof credits.data?.canClaim === 'boolean'
+				? credits.data.canClaim
+				: null;
+			// Keep a simple YYYY-MM-DD marker for header claim attention.
+			if (this.lastClaimDate) {
+				this.writeStoredClaimDate(String(this.lastClaimDate).slice(0, 10));
+			}
 			// Cache in localStorage with user email
 			if (currentUserEmail) {
 				this.writeStoredCredits(this.creditsCount);
@@ -171,6 +180,7 @@ class AppCredits extends HTMLElement {
 			this.clearStoredCredits();
 			this.clearStoredUserEmail();
 			this.creditsCount = 0;
+			this.canClaim = null;
 			this.updateCreditsUI();
 			this.updateClaimUI();
 		}
@@ -198,6 +208,9 @@ class AppCredits extends HTMLElement {
 			if (data.success) {
 				this.creditsCount = this.normalizeCredits(data.balance);
 				this.writeStoredCredits(this.creditsCount);
+				// Immediately mark as claimed today so header/UI updates even if refresh fails.
+				this.lastClaimDate = new Date().toISOString();
+				this.writeStoredClaimDate(this.getTodayKey());
 				// Refresh to get updated lastClaimDate
 				await this.refreshCredits();
 				this.updateCreditsUI();
@@ -224,16 +237,22 @@ class AppCredits extends HTMLElement {
 	updateClaimUI() {
 		const claimButton = this.shadowRoot.querySelector('.credits-claim-button');
 		const claimNote = this.shadowRoot.querySelector('.credits-claim-note');
-		const claimed = this.isClaimedToday();
+		const canClaim = this.canClaim;
+		const claimed = canClaim === null ? this.isClaimedToday() : !canClaim;
 		if (claimButton) {
-			claimButton.disabled = claimed;
+			claimButton.disabled = canClaim === null ? claimed : !canClaim;
 		}
 		if (claimNote) {
-			claimNote.textContent = claimed ? 'Come back tomorrow for more credits.' : '';
+			// Reserve space to prevent layout jump; toggle visibility instead of content.
+			claimNote.textContent = 'Come back tomorrow for more credits.';
+			claimNote.style.visibility = canClaim === false ? 'visible' : 'hidden';
 		}
-		document.dispatchEvent(new CustomEvent('credits-claim-status', {
-			detail: { canClaim: !claimed }
-		}));
+		// Only broadcast claim status when it is confirmed by /api/credits.
+		if (typeof canClaim === 'boolean') {
+			document.dispatchEvent(new CustomEvent('credits-claim-status', {
+				detail: { canClaim }
+			}));
+		}
 	}
 
 	isClaimedToday() {

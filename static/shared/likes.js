@@ -1,5 +1,3 @@
-const STORAGE_KEY = 'parascene.likes.v1';
-
 function getCreationLikeId(creation) {
 	if (!creation) return null;
 
@@ -11,34 +9,6 @@ function getCreationLikeId(creation) {
 
 	if (id === null || id === undefined) return null;
 	return String(id);
-}
-
-function readLikedIdSet() {
-	try {
-		const raw = localStorage.getItem(STORAGE_KEY);
-		if (!raw) return new Set();
-
-		const parsed = JSON.parse(raw);
-		if (Array.isArray(parsed)) {
-			return new Set(parsed.map(String));
-		}
-
-		if (parsed && typeof parsed === 'object' && Array.isArray(parsed.ids)) {
-			return new Set(parsed.ids.map(String));
-		}
-	} catch {
-		// ignore malformed local storage
-	}
-
-	return new Set();
-}
-
-function writeLikedIdSet(set) {
-	try {
-		localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(set)));
-	} catch {
-		// ignore quota / disabled storage errors
-	}
 }
 
 function toSafeInt(value, fallback = 0) {
@@ -83,41 +53,19 @@ export function isCreationLiked(creation) {
 		return creation.viewer_liked;
 	}
 
-	const id = getCreationLikeId(creation);
-	if (!id) return false;
-
-	return readLikedIdSet().has(id);
+	return false;
 }
 
 export function setCreationLiked(creation, liked) {
-	const id = getCreationLikeId(creation);
-	if (!id) return false;
-
-	const set = readLikedIdSet();
-	if (liked) {
-		set.add(id);
-	} else {
-		set.delete(id);
-	}
-
-	writeLikedIdSet(set);
-	return set.has(id);
+	if (!creation) return false;
+	creation.viewer_liked = Boolean(liked);
+	return creation.viewer_liked;
 }
 
 export function toggleCreationLiked(creation) {
-	const id = getCreationLikeId(creation);
-	if (!id) return false;
-
-	const set = readLikedIdSet();
-	const next = !set.has(id);
-
-	if (next) {
-		set.add(id);
-	} else {
-		set.delete(id);
-	}
-
-	writeLikedIdSet(set);
+	if (!creation) return false;
+	const next = !Boolean(creation.viewer_liked);
+	creation.viewer_liked = next;
 	return next;
 }
 
@@ -175,12 +123,7 @@ export function initLikeButton(buttonEl, creation) {
 	if (id) buttonEl.dataset.likeId = id;
 	buttonEl.dataset.likeButton = 'true';
 	buttonEl.dataset.likeBaseCount = String(getCreationBaseLikeCount(creation));
-
-	// If API provides viewer_liked, sync our local cache to it.
 	const liked = isCreationLiked(creation);
-	if (creation && typeof creation.viewer_liked === 'boolean') {
-		setCreationLiked({ created_image_id: id }, creation.viewer_liked);
-	}
 	applyLikeButtonState(buttonEl, liked, false);
 	setDisplayedLikeCount(buttonEl, creation, liked);
 	return liked;
@@ -212,15 +155,8 @@ export function enableLikeButtons(root = document) {
 		e.preventDefault();
 		e.stopPropagation();
 
-		const set = readLikedIdSet();
-		const prev = set.has(id);
+		const prev = button.getAttribute('aria-pressed') === 'true';
 		const next = !prev;
-		if (next) {
-			set.add(id);
-		} else {
-			set.delete(id);
-		}
-		writeLikedIdSet(set);
 
 		// Always recompute from base + local liked state (don’t trust rendered text).
 		setDisplayedLikeCount(button, baseCreation, next);
@@ -228,7 +164,9 @@ export function enableLikeButtons(root = document) {
 
 		const imageId = Number.parseInt(id, 10);
 		if (!Number.isFinite(imageId) || imageId <= 0) {
-			// Not a created-image id; keep local-only behavior for now.
+			// Not a created-image id; no backend support.
+			setDisplayedLikeCount(button, baseCreation, prev);
+			applyLikeButtonState(button, prev, false);
 			return;
 		}
 
@@ -257,13 +195,11 @@ export function enableLikeButtons(root = document) {
 				const newBase = Math.max(0, likeCount - (viewerLiked ? 1 : 0));
 
 				button.dataset.likeBaseCount = String(newBase);
-				setCreationLiked({ created_image_id: id }, viewerLiked);
 				setDisplayedLikeCount(button, { like_count: newBase }, viewerLiked);
 				applyLikeButtonState(button, viewerLiked, false);
 			})
 			.catch(() => {
 				// Revert optimistic state on failure.
-				setCreationLiked({ created_image_id: id }, prev);
 				setDisplayedLikeCount(button, baseCreation, prev);
 				applyLikeButtonState(button, prev, false);
 			})

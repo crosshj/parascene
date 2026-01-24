@@ -20,7 +20,7 @@
     <script type="module" src="/global.js"></script>
   </head>
   <body>
-    <app-header show-notifications hide-notifications show-profile hide-credits show-mobile-menu default-route="todo">
+    <app-header show-notifications hide-notifications show-profile show-mobile-menu default-route="todo">
       <a data-route="todo">Todo</a>
       <a data-route="users">Users</a>
       <a data-route="providers">Servers</a>
@@ -66,9 +66,11 @@
       <section data-route-content="todo">
         <div class="todo-header">
           <h3>Todo</h3>
-          <div class="todo-mode-toggle" data-todo-mode-toggle role="group" aria-label="Priority formula">
-            <button type="button" class="todo-mode-button" data-todo-mode="pre" aria-pressed="true">Gated</button>
-            <button type="button" class="todo-mode-button" data-todo-mode="post" aria-pressed="false">Ratio</button>
+          <div class="todo-mode-toggle" data-todo-mode-toggle role="group" aria-label="Priority mode">
+            <button type="button" class="todo-mode-button" data-todo-mode="gated" aria-pressed="true">Gated</button>
+            <button type="button" class="todo-mode-button" data-todo-mode="ratio" aria-pressed="false">Ratio</button>
+            <button type="button" class="todo-mode-button" data-todo-mode="impact" aria-pressed="false">Impact</button>
+            <button type="button" class="todo-mode-button" data-todo-mode="cost" aria-pressed="false">Cost</button>
           </div>
         </div>
         <div class="todo-layout">
@@ -97,6 +99,15 @@
             Description
             <textarea name="description" rows="3" required></textarea>
           </label>
+          <input type="hidden" name="dependsOn" value="[]" />
+          <div class="todo-depends" data-todo-depends>
+            <div class="todo-depends-label">Depends on</div>
+            <div class="todo-depends-list" data-todo-depends-list></div>
+            <div class="todo-depends-controls">
+              <select class="todo-depends-select" data-todo-depends-select aria-label="Add dependency"></select>
+              <button type="button" class="btn-secondary todo-depends-add" data-todo-depends-add>Add</button>
+            </div>
+          </div>
           <label class="todo-slider">
             Cost
             <input type="range" name="time" min="1" max="100" required />
@@ -166,6 +177,33 @@
         <div id="server-modal-actions" class="server-modal-actions">
           <button type="button" id="server-test-btn" class="btn-secondary">Test Server</button>
           <button type="button" id="server-refresh-btn" class="btn-primary">Refresh Methods</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="user-modal" class="publish-modal-overlay" data-user-modal role="dialog" aria-modal="true" aria-labelledby="user-modal-title">
+      <div class="publish-modal user-modal">
+        <header class="publish-modal-header">
+          <h3 id="user-modal-title" class="user-modal-title">User</h3>
+          <button type="button" class="publish-modal-close" data-user-close aria-label="Close">✕</button>
+        </header>
+        <div class="publish-modal-body user-modal-body">
+          <div class="user-modal-details" data-user-modal-details></div>
+
+          <form id="user-tip-form" class="user-tip-form">
+            <input type="hidden" name="toUserId" value="" />
+            <label class="user-tip-label">
+              Tip credits
+              <div class="user-tip-row">
+                <input type="number" name="amount" min="0.1" step="0.1" inputmode="decimal" required />
+                <button type="submit" class="btn-primary user-tip-button">
+                  <span class="user-tip-button-label">Tip</span>
+                  <span class="user-tip-spinner" aria-hidden="true"></span>
+                </button>
+              </div>
+            </label>
+            <div class="alert error user-tip-error" data-user-tip-error hidden></div>
+          </form>
         </div>
       </div>
     </div>

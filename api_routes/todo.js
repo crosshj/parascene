@@ -68,6 +68,24 @@ function computePriorityRatio(time, impact) {
 	}
 }
 
+function computePriorityImpact(time, impact) {
+	if (!Number.isFinite(impact)) return 1;
+	return clamp(Math.round(impact), 1, 100);
+
+	function clamp(n, lo, hi) {
+		return Math.max(lo, Math.min(hi, n));
+	}
+}
+
+function computePriorityCost(time, impact) {
+	if (!Number.isFinite(time)) return 1;
+	return clamp(Math.round(time), 1, 100);
+
+	function clamp(n, lo, hi) {
+		return Math.max(lo, Math.min(hi, n));
+	}
+}
+
 function computeProbability(time) {
 	if (!Number.isFinite(time)) return 0;
 	return Math.max(0, Math.min(100, Math.round(100 - time)));
@@ -75,9 +93,16 @@ function computeProbability(time) {
 
 function normalizeDependencies(dependsOn) {
 	if (!Array.isArray(dependsOn)) return [];
-	return dependsOn
-		.map((dep) => String(dep || "").trim())
-		.filter((dep) => dep.length > 0);
+	const seen = new Set();
+	const normalized = [];
+	for (const raw of dependsOn) {
+		const dep = String(raw || "").trim();
+		if (!dep) continue;
+		if (seen.has(dep)) continue;
+		seen.add(dep);
+		normalized.push(dep);
+	}
+	return normalized;
 }
 
 function normalizeTodoItem(item, computeFn = computePriority) {
@@ -85,7 +110,7 @@ function normalizeTodoItem(item, computeFn = computePriority) {
 	const description = String(item?.description || "").trim();
 	const cost = Number(item?.cost ?? item?.time);
 	const impact = Number(item?.impact);
-	const dependsOn = normalizeDependencies(item?.dependsOn);
+	const dependsOn = normalizeDependencies(item?.dependsOn).filter((dep) => dep !== name);
 	const priority = Number.isFinite(cost) && Number.isFinite(impact)
 		? computeFn(cost, impact)
 		: 0;
@@ -128,8 +153,54 @@ function applyDependencyPriority(items) {
 	}
 }
 
+function buildDependencyMap(items) {
+	const map = new Map();
+	for (const item of items || []) {
+		const name = String(item?.name || "").trim();
+		if (!name) continue;
+		const deps = normalizeDependencies(item?.dependsOn);
+		map.set(name, deps);
+	}
+	return map;
+}
+
+function canReach(from, target, map, visited = new Set()) {
+	if (!from || !target) return false;
+	if (from === target) return true;
+	if (visited.has(from)) return false;
+	visited.add(from);
+	const deps = map.get(from) || [];
+	for (const dep of deps) {
+		if (canReach(dep, target, map, visited)) return true;
+	}
+	return false;
+}
+
+function wouldCreateCycle({ items, itemName, dependsOn }) {
+	const name = String(itemName || "").trim();
+	if (!name) return false;
+	const deps = normalizeDependencies(dependsOn).filter((dep) => dep !== name);
+	if (!deps.length) return false;
+	const map = buildDependencyMap(items);
+	// treat the edited item's deps as the new truth
+	map.set(name, deps);
+	return deps.some((dep) => canReach(dep, name, map));
+}
+
 async function readTodoItems({ mode } = {}) {
-	const computeFn = mode === "post" ? computePriorityRatio : computePriority;
+	const normalizedMode =
+		mode === "post" ? "ratio"
+		: mode === "pre" ? "gated"
+		: mode;
+
+	const computeFn =
+		normalizedMode === "ratio"
+			? computePriorityRatio
+			: normalizedMode === "impact"
+				? computePriorityImpact
+				: normalizedMode === "cost"
+					? computePriorityCost
+					: computePriority;
 	const raw = await fs.readFile(TODO_PATH, "utf8");
 	const parsed = JSON.parse(raw);
 	if (!Array.isArray(parsed)) return [];
@@ -163,21 +234,35 @@ export default function createTodoRoutes() {
 
 	router.get("/api/todo", async (req, res) => {
 		try {
-			const mode = req.query?.mode === "post" ? "post" : "pre";
+			const rawMode = String(req.query?.mode || "");
+			const mode =
+				rawMode === "post" ? "ratio"
+				: rawMode === "pre" ? "gated"
+				: rawMode === "ratio" || rawMode === "impact" || rawMode === "cost"
+					? rawMode
+					: "gated";
+
 			const items = await readTodoItems({ mode });
+			const formula = mode === "ratio"
+				? "round(Impact / (1 + (Cost/100)^2)), deps bumped +1"
+				: mode === "impact"
+					? "round(Impact), deps bumped +1"
+					: mode === "cost"
+						? "round(Cost), deps bumped +1"
+						: "round(Impact * (1 - (Cost/100)^2)), deps bumped +1";
+
 			res.json({
 				items: items.map((item) => ({
 					name: item.name,
 					description: item.description,
 					time: item.cost,
 					impact: item.impact,
+					dependsOn: item.dependsOn,
 					priority: item.priority,
 					probability: item.probability
 				})),
 				writable: !process.env.VERCEL,
-				formula: mode === "post"
-					? "round(Impact / (1 + (Cost/100)^2)), deps bumped +1"
-					: "round(Impact * (1 - (Cost/100)^2)), deps bumped +1"
+				formula
 			});
 		} catch (error) {
 			res.status(500).json({ error: "Failed to read TODO.json." });
@@ -209,11 +294,16 @@ export default function createTodoRoutes() {
 			const items = await readTodoItems();
 			const priorityValue = computePriority(timeValue, impactValue);
 			const probabilityValue = computeProbability(timeValue);
+			const dependsOnValue = normalizeDependencies(req.body?.dependsOn).filter((dep) => dep !== normalizedName);
+			if (wouldCreateCycle({ items, itemName: normalizedName, dependsOn: dependsOnValue })) {
+				return res.status(400).json({ error: "Invalid dependency: would create a circular dependency." });
+			}
 			items.push({
 				name: normalizedName,
 				description: normalizedDescription,
 				cost: timeValue,
 				impact: impactValue,
+				dependsOn: dependsOnValue,
 				priority: priorityValue,
 				probability: probabilityValue
 			});
@@ -225,6 +315,7 @@ export default function createTodoRoutes() {
 					description: normalizedDescription,
 					time: timeValue,
 					impact: impactValue,
+					dependsOn: dependsOnValue,
 					priority: priorityValue,
 					probability: probabilityValue
 				}
@@ -263,17 +354,34 @@ export default function createTodoRoutes() {
 			const items = await readTodoItems();
 			const priorityValue = computePriority(timeValue, impactValue);
 			const probabilityValue = computeProbability(timeValue);
+			const dependsOnValue = normalizeDependencies(req.body?.dependsOn).filter((dep) => dep !== normalizedName);
 			const updatedItems = items.map((item) => {
-				if (item.name !== normalizedOriginal) return item;
+				// keep dependencies consistent if we rename an item
+				const nextDepends = normalizedOriginal !== normalizedName && Array.isArray(item.dependsOn)
+					? item.dependsOn.map((dep) => dep === normalizedOriginal ? normalizedName : dep)
+					: item.dependsOn;
+
+				if (item.name !== normalizedOriginal) {
+					return {
+						...item,
+						dependsOn: normalizeDependencies(nextDepends).filter((dep) => dep !== item.name)
+					};
+				}
+
 				return {
 					name: normalizedName,
 					description: normalizedDescription,
 					cost: timeValue,
 					impact: impactValue,
+					dependsOn: dependsOnValue,
 					priority: priorityValue,
 					probability: probabilityValue
 				};
 			});
+
+			if (wouldCreateCycle({ items: updatedItems, itemName: normalizedName, dependsOn: dependsOnValue })) {
+				return res.status(400).json({ error: "Invalid dependency: would create a circular dependency." });
+			}
 			await writeTodoItems(updatedItems);
 			res.json({
 				ok: true,
@@ -282,6 +390,7 @@ export default function createTodoRoutes() {
 					description: normalizedDescription,
 					time: timeValue,
 					impact: impactValue,
+					dependsOn: dependsOnValue,
 					priority: priorityValue,
 					probability: probabilityValue
 				}

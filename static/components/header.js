@@ -4,731 +4,736 @@ import { fetchJsonWithStatusDeduped } from '../shared/api.js';
 const html = String.raw;
 
 class AppHeader extends HTMLElement {
-  constructor() {
-    super();
-    this.notificationsMenuOpen = false;
-    this.mobileMenuOpen = false;
-    this.notificationsCount = 0;
-    this.creditsCount = 0;
-    this.previewNotifications = [];
-    this.previewLoadedAt = 0;
-    this.previewLoading = false;
-    this.handleDocumentClick = this.handleDocumentClick.bind(this);
-    this.handleKeydown = this.handleKeydown.bind(this);
-    this.handleRouteChange = this.handleRouteChange.bind(this);
-    this.handleNotificationsUpdated = this.handleNotificationsUpdated.bind(this);
-    this.handleCreditsUpdated = this.handleCreditsUpdated.bind(this);
-    this.handleCreditsClaimStatus = this.handleCreditsClaimStatus.bind(this);
-    this.routes = [];
-    this.authLinks = [];
-    this.defaultRoute = null;
-    this.hasParsedRoutes = false;
-  }
+	constructor() {
+		super();
+		this.notificationsMenuOpen = false;
+		this.mobileMenuOpen = false;
+		this.notificationsCount = 0;
+		this.creditsCount = 0;
+		this.previewNotifications = [];
+		this.previewLoadedAt = 0;
+		this.previewLoading = false;
+		this.handleDocumentClick = this.handleDocumentClick.bind(this);
+		this.handleKeydown = this.handleKeydown.bind(this);
+		this.handleRouteChange = this.handleRouteChange.bind(this);
+		this.handleNotificationsUpdated = this.handleNotificationsUpdated.bind(this);
+		this.handleCreditsUpdated = this.handleCreditsUpdated.bind(this);
+		this.handleCreditsClaimStatus = this.handleCreditsClaimStatus.bind(this);
+		this.canClaimCredits = null; // null = unknown (no callout)
+		this.routes = [];
+		this.authLinks = [];
+		this.defaultRoute = null;
+		this.hasParsedRoutes = false;
+	}
 
-  static get observedAttributes() {
-    return ['show-notifications', 'hide-notifications', 'show-profile', 'show-create', 'show-mobile-menu', 'hide-credits', 'default-route', 'credits-count'];
-  }
+	static get observedAttributes() {
+		return ['show-notifications', 'hide-notifications', 'show-profile', 'show-create', 'show-mobile-menu', 'hide-credits', 'default-route', 'credits-count'];
+	}
 
-  connectedCallback() {
-    // Parse routes if not already parsed (attributeChangedCallback might have run first)
-    if (!this.hasParsedRoutes) {
-      this.parseRoutesFromChildren();
-    }
-    
-    // Now render (which will replace innerHTML and children)
-    this.render();
-    this.setupEventListeners();
-    this.setupNavListeners();
-    document.addEventListener('click', this.handleDocumentClick);
-    document.addEventListener('keydown', this.handleKeydown);
-    window.addEventListener('popstate', this.handleRouteChange);
-    document.addEventListener('notifications-acknowledged', this.handleNotificationsUpdated);
-    document.addEventListener('credits-updated', this.handleCreditsUpdated);
-    document.addEventListener('credits-claim-status', this.handleCreditsClaimStatus);
-    this.loadNotificationCount();
-    this.loadCreditsCount();
-    this.updateCreditsAttention();
-    this.prefetchNotificationPreview();
-    // Establish current route immediately so route components can react on mount.
-    this.handleRouteChange();
-  }
+	connectedCallback() {
+		// Parse routes if not already parsed (attributeChangedCallback might have run first)
+		if (!this.hasParsedRoutes) {
+			this.parseRoutesFromChildren();
+		}
 
-  disconnectedCallback() {
-    document.removeEventListener('click', this.handleDocumentClick);
-    document.removeEventListener('keydown', this.handleKeydown);
-    window.removeEventListener('popstate', this.handleRouteChange);
-    document.removeEventListener('notifications-acknowledged', this.handleNotificationsUpdated);
-    document.removeEventListener('credits-updated', this.handleCreditsUpdated);
-    document.removeEventListener('credits-claim-status', this.handleCreditsClaimStatus);
-  }
+		// Now render (which will replace innerHTML and children)
+		this.render();
+		this.setupEventListeners();
+		this.setupNavListeners();
+		document.addEventListener('click', this.handleDocumentClick);
+		document.addEventListener('keydown', this.handleKeydown);
+		window.addEventListener('popstate', this.handleRouteChange);
+		document.addEventListener('notifications-acknowledged', this.handleNotificationsUpdated);
+		document.addEventListener('credits-updated', this.handleCreditsUpdated);
+		document.addEventListener('credits-claim-status', this.handleCreditsClaimStatus);
+		this.loadNotificationCount();
+		this.loadCreditsCount();
+		// Don't show credits callout until claim status is known from API.
+		this.updateCreditsAttention(null);
+		this.prefetchNotificationPreview();
+		// Establish current route immediately so route components can react on mount.
+		this.handleRouteChange();
+	}
 
-  attributeChangedCallback(name, oldValue, newValue) {
-    // Parse routes BEFORE rendering if not already parsed
-    if (!this.hasParsedRoutes) {
-      this.parseRoutesFromChildren();
-    }
-    
-    if (name === 'default-route' && oldValue !== newValue) {
-      this.defaultRoute = newValue;
-      if (this.hasParsedRoutes) {
-        this.handleRouteChange();
-      }
-    } else if (name === 'credits-count' && oldValue !== newValue) {
-      this.creditsCount = this.parseCreditsCount(newValue);
-      this.updateCreditsUI(this.creditsCount);
-    } else {
-      // Re-render to update UI
-      this.render();
-      this.setupEventListeners();
-      this.setupNavListeners();
-      this.loadNotificationCount();
-      this.loadCreditsCount();
-    }
-  }
-  
-  parseRoutesFromChildren() {
-    // Parse routes from direct children - must be called BEFORE render()
-    const children = Array.from(this.children);
-    const userRole = window.__USER_ROLE__;
-    const shouldIncludeRoute = (child) => {
-      if (!child.hasAttribute('data-role-only')) {
-        return true;
-      }
-      if (!userRole) {
-        return false;
-      }
-      return child.getAttribute('data-role-only') === userRole;
-    };
-    
-    const routeLinks = children.filter(child => 
-      child.tagName === 'A' && child.hasAttribute('data-route') && shouldIncludeRoute(child)
-    );
-    
-    this.routes = routeLinks.map(link => ({
-      id: link.getAttribute('data-route'),
-      label: link.textContent.trim()
-    }));
-    
-    if (!Array.isArray(this.routes)) {
-      this.routes = [];
-    }
-    
-    // Parse auth links (links with class header-auth-link)
-    const authLinks = children.filter(child => 
-      child.tagName === 'A' && child.classList.contains('header-auth-link')
-    );
-    
-    this.authLinks = authLinks.map(link => ({
-      href: link.getAttribute('href') || '#',
-      text: link.textContent.trim(),
-      isPrimary: link.classList.contains('btn-primary')
-    }));
-    
-    if (!Array.isArray(this.authLinks)) {
-      this.authLinks = [];
-    }
-    
-    this.defaultRoute = this.getAttribute('default-route') || this.routes[0]?.id;
-    this.hasParsedRoutes = true;
-  }
+	disconnectedCallback() {
+		document.removeEventListener('click', this.handleDocumentClick);
+		document.removeEventListener('keydown', this.handleKeydown);
+		window.removeEventListener('popstate', this.handleRouteChange);
+		document.removeEventListener('notifications-acknowledged', this.handleNotificationsUpdated);
+		document.removeEventListener('credits-updated', this.handleCreditsUpdated);
+		document.removeEventListener('credits-claim-status', this.handleCreditsClaimStatus);
+	}
+
+	attributeChangedCallback(name, oldValue, newValue) {
+		// Parse routes BEFORE rendering if not already parsed
+		if (!this.hasParsedRoutes) {
+			this.parseRoutesFromChildren();
+		}
+
+		if (name === 'default-route' && oldValue !== newValue) {
+			this.defaultRoute = newValue;
+			if (this.hasParsedRoutes) {
+				this.handleRouteChange();
+			}
+		} else if (name === 'credits-count' && oldValue !== newValue) {
+			this.creditsCount = this.parseCreditsCount(newValue);
+			this.updateCreditsUI(this.creditsCount);
+		} else {
+			// Re-render to update UI
+			this.render();
+			this.setupEventListeners();
+			this.setupNavListeners();
+			this.loadNotificationCount();
+			this.loadCreditsCount();
+		}
+	}
+
+	parseRoutesFromChildren() {
+		// Parse routes from direct children - must be called BEFORE render()
+		const children = Array.from(this.children);
+		const userRole = window.__USER_ROLE__;
+		const shouldIncludeRoute = (child) => {
+			if (!child.hasAttribute('data-role-only')) {
+				return true;
+			}
+			if (!userRole) {
+				return false;
+			}
+			return child.getAttribute('data-role-only') === userRole;
+		};
+
+		const routeLinks = children.filter(child =>
+			child.tagName === 'A' && child.hasAttribute('data-route') && shouldIncludeRoute(child)
+		);
+
+		this.routes = routeLinks.map(link => ({
+			id: link.getAttribute('data-route'),
+			label: link.textContent.trim()
+		}));
+
+		if (!Array.isArray(this.routes)) {
+			this.routes = [];
+		}
+
+		// Parse auth links (links with class header-auth-link)
+		const authLinks = children.filter(child =>
+			child.tagName === 'A' && child.classList.contains('header-auth-link')
+		);
+
+		this.authLinks = authLinks.map(link => ({
+			href: link.getAttribute('href') || '#',
+			text: link.textContent.trim(),
+			isPrimary: link.classList.contains('btn-primary')
+		}));
+
+		if (!Array.isArray(this.authLinks)) {
+			this.authLinks = [];
+		}
+
+		this.defaultRoute = this.getAttribute('default-route') || this.routes[0]?.id;
+		this.hasParsedRoutes = true;
+	}
 
 
-  setupNavListeners() {
-    const navLinks = this.querySelectorAll('.header-nav .nav-link, .mobile-menu .nav-link');
-    navLinks.forEach(link => {
-      link.addEventListener('click', (e) => {
-        e.preventDefault();
-        const route = link.getAttribute('data-route');
-        if (route) {
-          this.navigateToRoute(route);
-          if (link.closest('.mobile-menu')) {
-            this.closeMobileMenu();
-          }
-        }
-      });
-    });
-  }
+	setupNavListeners() {
+		const navLinks = this.querySelectorAll('.header-nav .nav-link, .mobile-menu .nav-link');
+		navLinks.forEach(link => {
+			link.addEventListener('click', (e) => {
+				e.preventDefault();
+				const route = link.getAttribute('data-route');
+				if (route) {
+					this.navigateToRoute(route);
+					if (link.closest('.mobile-menu')) {
+						this.closeMobileMenu();
+					}
+				}
+			});
+		});
+	}
 
-  navigateToRoute(route) {
-    // Check if we're on a server-sent page (like creation detail)
-    // If so, use full page navigation for ANY route change
-    const isServerSentPage = /^\/creations\/\d+$/.test(window.location.pathname) ||
-      window.location.pathname.startsWith('/help/');
-    if (isServerSentPage) {
-      // Use full page navigation for server-sent pages
-      window.location.href = `/${route}`;
-      return;
-    }
-    // Use History API with pathname-based routing for client-side pages
-    window.history.pushState({ route }, '', `/${route}`);
-    this.handleRouteChange();
-  }
+	navigateToRoute(route) {
+		// Check if we're on a server-sent page (like creation detail)
+		// If so, use full page navigation for ANY route change
+		const isServerSentPage = /^\/creations\/\d+$/.test(window.location.pathname) ||
+			window.location.pathname.startsWith('/help/');
+		if (isServerSentPage) {
+			// Use full page navigation for server-sent pages
+			window.location.href = `/${route}`;
+			return;
+		}
+		// Use History API with pathname-based routing for client-side pages
+		window.history.pushState({ route }, '', `/${route}`);
+		this.handleRouteChange();
+	}
 
-  updateCreateButtonState() {
-    const createButtons = this.querySelectorAll('.create-button');
-    if (createButtons.length === 0) return;
-    
-    const pathname = window.location.pathname;
-    const currentRoute = pathname === '/' || pathname === '' ? this.defaultRoute : pathname.slice(1);
-    const isCreateRoute = currentRoute === 'create';
-    
-    createButtons.forEach(createButton => {
-      createButton.disabled = isCreateRoute;
-    });
-  }
+	updateCreateButtonState() {
+		const createButtons = this.querySelectorAll('.create-button');
+		if (createButtons.length === 0) return;
 
-  async loadNotificationCount() {
-    if (!this.hasAttribute('show-notifications')) return;
+		const pathname = window.location.pathname;
+		const currentRoute = pathname === '/' || pathname === '' ? this.defaultRoute : pathname.slice(1);
+		const isCreateRoute = currentRoute === 'create';
 
-    try {
-      const result = await fetchJsonWithStatusDeduped('/api/notifications/unread-count', {
-        credentials: 'include'
-      }, { windowMs: 2000 });
-      if (!result.ok) throw new Error('Failed to load notifications count');
-      const count = Number(result.data?.count || 0);
-      this.updateNotificationsUI(count);
-    } catch {
-      this.updateNotificationsUI(0);
-    }
-  }
+		createButtons.forEach(createButton => {
+			createButton.disabled = isCreateRoute;
+		});
+	}
 
-  updateNotificationsUI(count) {
-    this.notificationsCount = count;
-    const badge = this.querySelector('.notifications-badge');
-    if (badge) {
-      if (count > 0) {
-        badge.textContent = count > 99 ? '99+' : String(count);
-      } else {
-        badge.textContent = '';
-      }
-    }
+	async loadNotificationCount() {
+		if (!this.hasAttribute('show-notifications')) return;
 
-    const status = this.querySelector('.notifications-status');
-    if (status) {
-      status.textContent =
-        count > 0
-          ? `${count} new notification${count === 1 ? '' : 's'}`
-          : 'No new notifications';
-    }
-  }
+		try {
+			const result = await fetchJsonWithStatusDeduped('/api/notifications/unread-count', {
+				credentials: 'include'
+			}, { windowMs: 2000 });
+			if (!result.ok) throw new Error('Failed to load notifications count');
+			const count = Number(result.data?.count || 0);
+			this.updateNotificationsUI(count);
+		} catch {
+			this.updateNotificationsUI(0);
+		}
+	}
 
-  async loadCreditsCount() {
-    if (!this.hasAttribute('show-profile')) return;
+	updateNotificationsUI(count) {
+		this.notificationsCount = count;
+		const badge = this.querySelector('.notifications-badge');
+		if (badge) {
+			if (count > 0) {
+				badge.textContent = count > 99 ? '99+' : String(count);
+			} else {
+				badge.textContent = '';
+			}
+		}
 
-    if (this.hasAttribute('credits-count')) {
-      const count = this.parseCreditsCount(this.getAttribute('credits-count'));
-      this.updateCreditsUI(count);
-      return;
-    }
+		const status = this.querySelector('.notifications-status');
+		if (status) {
+			status.textContent =
+				count > 0
+					? `${count} new notification${count === 1 ? '' : 's'}`
+					: 'No new notifications';
+		}
+	}
 
-    try {
-      const profile = await fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 2000 });
-      if (!profile.ok) {
-        if (profile.status === 401) {
-          this.clearStoredCredits();
-          this.clearStoredUserEmail();
-        }
-        this.updateCreditsUI(0);
-        return;
-      }
-      const user = profile.data;
-      const currentUserEmail = user?.email || null;
-      
-      // If no signed-in user, clear cache
-      if (!currentUserEmail) {
-        this.clearStoredCredits();
-        this.clearStoredUserEmail();
-        this.updateCreditsUI(0);
-        return;
-      }
-      
-      // Check if user changed - if so, clear cache
-      const cachedUserEmail = this.readStoredUserEmail();
-      if (cachedUserEmail && currentUserEmail !== cachedUserEmail) {
-        // User changed - clear cache
-        this.clearStoredCredits();
-        this.clearStoredUserEmail();
-      }
+	async loadCreditsCount() {
+		if (!this.hasAttribute('show-profile')) return;
 
-      const count = this.parseCreditsCount(user?.credits);
-      this.updateCreditsUI(count);
-      
-      // Store user email for future checks
-      this.writeStoredUserEmail(currentUserEmail);
-    } catch {
-      // Network/unknown error fallback: show cached value (if any).
-      const storedCount = this.readStoredCreditsCount();
-      if (storedCount !== null && this.readStoredUserEmail()) {
-        this.updateCreditsUI(storedCount);
-        return;
-      }
-      this.updateCreditsUI(0);
-    }
-  }
+		if (this.hasAttribute('credits-count')) {
+			const count = this.parseCreditsCount(this.getAttribute('credits-count'));
+			this.updateCreditsUI(count);
+			return;
+		}
 
-  updateCreditsUI(count) {
-    this.creditsCount = count;
-    const creditsCount = this.querySelector('.credits-count');
-    if (creditsCount) {
-      // Format credits: if there's a non-zero decimal remainder, show as "X+" (rounded down)
-      // Otherwise show the whole number without decimal
-      const normalized = this.parseCreditsCount(count);
-      const wholePart = Math.floor(normalized);
-      const decimalPart = normalized - wholePart;
-      const formatted = decimalPart > 0 ? `${wholePart}+` : String(wholePart);
-      creditsCount.textContent = formatted;
-    }
-  }
+		try {
+			const profile = await fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 2000 });
+			if (!profile.ok) {
+				if (profile.status === 401) {
+					this.clearStoredCredits();
+					this.clearStoredUserEmail();
+				}
+				this.updateCreditsUI(0);
+				return;
+			}
+			const user = profile.data;
+			const currentUserEmail = user?.email || null;
 
-  parseCreditsCount(value) {
-    const count = Number(value);
-    if (!Number.isFinite(count)) return 0;
-    return Math.max(0, Math.round(count * 10) / 10);
-  }
+			// If no signed-in user, clear cache
+			if (!currentUserEmail) {
+				this.clearStoredCredits();
+				this.clearStoredUserEmail();
+				this.updateCreditsUI(0);
+				return;
+			}
 
-  handleCreditsUpdated(event) {
-    const count = this.parseCreditsCount(event?.detail?.count);
-    this.updateCreditsUI(count);
-  }
+			// Check if user changed - if so, clear cache
+			const cachedUserEmail = this.readStoredUserEmail();
+			if (cachedUserEmail && currentUserEmail !== cachedUserEmail) {
+				// User changed - clear cache
+				this.clearStoredCredits();
+				this.clearStoredUserEmail();
+			}
 
-  handleCreditsClaimStatus(event) {
-    const canClaim = Boolean(event?.detail?.canClaim);
-    this.updateCreditsAttention(canClaim);
-  }
+			const count = this.parseCreditsCount(user?.credits);
+			this.updateCreditsUI(count);
 
-  updateCreditsAttention(forceCanClaim) {
-    const creditsButton = this.querySelector('.credits-button');
-    if (!creditsButton) return;
-    const canClaim = typeof forceCanClaim === 'boolean' ? forceCanClaim : this.getCreditsClaimStatus();
-    creditsButton.classList.toggle('attention', canClaim);
-  }
+			// Store user email for future checks
+			this.writeStoredUserEmail(currentUserEmail);
+		} catch {
+			// Network/unknown error fallback: show cached value (if any).
+			const storedCount = this.readStoredCreditsCount();
+			if (storedCount !== null && this.readStoredUserEmail()) {
+				this.updateCreditsUI(storedCount);
+				return;
+			}
+			this.updateCreditsUI(0);
+		}
+	}
 
-  getCreditsClaimStatus() {
-    try {
-      const lastClaim = window.localStorage?.getItem('credits-last-claim');
-      if (!lastClaim) return true;
-      const today = new Date().toISOString().slice(0, 10);
-      return lastClaim !== today;
-    } catch {
-      return false;
-    }
-  }
+	updateCreditsUI(count) {
+		this.creditsCount = count;
+		const creditsCount = this.querySelector('.credits-count');
+		if (creditsCount) {
+			// Format credits: if there's a non-zero decimal remainder, show as "X+" (rounded down)
+			// Otherwise show the whole number without decimal
+			const normalized = this.parseCreditsCount(count);
+			const wholePart = Math.floor(normalized);
+			const decimalPart = normalized - wholePart;
+			const formatted = decimalPart > 0 ? `${wholePart}+` : String(wholePart);
+			creditsCount.textContent = formatted;
+		}
+	}
 
-  readStoredCreditsCount() {
-    try {
-      const stored = window.localStorage?.getItem('credits-balance');
-      if (stored == null) return null;
-      const parsed = this.parseCreditsCount(stored);
-      return parsed;
-    } catch {
-      return null;
-    }
-  }
+	parseCreditsCount(value) {
+		const count = Number(value);
+		if (!Number.isFinite(count)) return 0;
+		return Math.max(0, Math.round(count * 10) / 10);
+	}
 
-  readStoredUserEmail() {
-    try {
-      return window.localStorage?.getItem('credits-user-email');
-    } catch {
-      return null;
-    }
-  }
+	handleCreditsUpdated(event) {
+		const count = this.parseCreditsCount(event?.detail?.count);
+		this.updateCreditsUI(count);
+	}
 
-  writeStoredUserEmail(email) {
-    try {
-      window.localStorage?.setItem('credits-user-email', email);
-    } catch {
-      // ignore storage errors
-    }
-  }
+	handleCreditsClaimStatus(event) {
+		const value = event?.detail?.canClaim;
+		const canClaim = typeof value === 'boolean' ? value : null;
+		this.canClaimCredits = canClaim;
+		this.updateCreditsAttention(canClaim);
+	}
 
-  clearStoredCredits() {
-    try {
-      window.localStorage?.removeItem('credits-balance');
-    } catch {
-      // ignore storage errors
-    }
-  }
+	updateCreditsAttention(forceCanClaim) {
+		const creditsButton = this.querySelector('.credits-button');
+		if (!creditsButton) return;
+		const canClaim = typeof forceCanClaim === 'boolean'
+			? forceCanClaim
+			: null;
+		// Only show callout if status is known and canClaim is true.
+		creditsButton.classList.toggle('attention', canClaim === true);
+	}
 
-  clearStoredUserEmail() {
-    try {
-      window.localStorage?.removeItem('credits-user-email');
-    } catch {
-      // ignore storage errors
-    }
-  }
+	readStoredCreditsCount() {
+		try {
+			const stored = window.localStorage?.getItem('credits-balance');
+			if (stored == null) return null;
+			const parsed = this.parseCreditsCount(stored);
+			return parsed;
+		} catch {
+			return null;
+		}
+	}
 
-  async loadNotificationPreview({ silent = true, force = false } = {}) {
-    if (!this.hasAttribute('show-notifications')) return;
+	readStoredUserEmail() {
+		try {
+			return window.localStorage?.getItem('credits-user-email');
+		} catch {
+			return null;
+		}
+	}
 
-    const preview = this.querySelector('.notifications-preview');
-    if (!preview) return;
+	writeStoredUserEmail(email) {
+		try {
+			window.localStorage?.setItem('credits-user-email', email);
+		} catch {
+			// ignore storage errors
+		}
+	}
 
-    if (this.previewLoading) return;
-    const now = Date.now();
-    if (!force && now - this.previewLoadedAt < 30000) return;
+	clearStoredCredits() {
+		try {
+			window.localStorage?.removeItem('credits-balance');
+		} catch {
+			// ignore storage errors
+		}
+	}
 
-    try {
-      this.previewLoading = true;
-      const result = await fetchJsonWithStatusDeduped('/api/notifications', {
-        credentials: 'include'
-      }, { windowMs: 2000 });
-      if (result.status === 401) {
-        if (!this.previewNotifications.length) {
-          preview.innerHTML = html`
+	clearStoredUserEmail() {
+		try {
+			window.localStorage?.removeItem('credits-user-email');
+		} catch {
+			// ignore storage errors
+		}
+	}
+
+	async loadNotificationPreview({ silent = true, force = false } = {}) {
+		if (!this.hasAttribute('show-notifications')) return;
+
+		const preview = this.querySelector('.notifications-preview');
+		if (!preview) return;
+
+		if (this.previewLoading) return;
+		const now = Date.now();
+		if (!force && now - this.previewLoadedAt < 30000) return;
+
+		try {
+			this.previewLoading = true;
+			const result = await fetchJsonWithStatusDeduped('/api/notifications', {
+				credentials: 'include'
+			}, { windowMs: 2000 });
+			if (result.status === 401) {
+				if (!this.previewNotifications.length) {
+					preview.innerHTML = html`
             <div class="notifications-menu-item notifications-loading">
               Sign in to view notifications.
             </div>
           `;
-        }
-        return;
-      }
-      if (!result.ok) {
-        throw new Error('Failed to load notifications');
-      }
-      const notifications = Array.isArray(result.data?.notifications)
-        ? result.data.notifications.slice(0, 5)
-        : [];
+				}
+				return;
+			}
+			if (!result.ok) {
+				throw new Error('Failed to load notifications');
+			}
+			const notifications = Array.isArray(result.data?.notifications)
+				? result.data.notifications.slice(0, 5)
+				: [];
 
-      const nextKey = notifications
-        .map((notification) => `${notification.id}:${notification.acknowledged_at || ''}`)
-        .join('|');
-      const currentKey = this.previewNotifications
-        .map((notification) => `${notification.id}:${notification.acknowledged_at || ''}`)
-        .join('|');
+			const nextKey = notifications
+				.map((notification) => `${notification.id}:${notification.acknowledged_at || ''}`)
+				.join('|');
+			const currentKey = this.previewNotifications
+				.map((notification) => `${notification.id}:${notification.acknowledged_at || ''}`)
+				.join('|');
 
-      if (nextKey === currentKey) {
-        this.previewLoadedAt = Date.now();
-        return;
-      }
+			if (nextKey === currentKey) {
+				this.previewLoadedAt = Date.now();
+				return;
+			}
 
-      this.previewNotifications = notifications;
-      this.previewLoadedAt = Date.now();
+			this.previewNotifications = notifications;
+			this.previewLoadedAt = Date.now();
 
-      if (notifications.length === 0) {
-        preview.innerHTML = html`
+			if (notifications.length === 0) {
+				preview.innerHTML = html`
           <div class="notifications-menu-item notifications-loading">
             No notifications yet.
           </div>
         `;
-        return;
-      }
+				return;
+			}
 
-      const fragment = document.createDocumentFragment();
-      for (const notification of notifications) {
-        const item = document.createElement('div');
-        item.className = 'notification-preview-item';
-        if (notification.acknowledged_at) {
-          item.classList.add('is-read');
-        } else {
-          item.classList.add('is-new');
-        }
-        item.setAttribute('role', 'button');
-        item.setAttribute('tabindex', '0');
-        item.addEventListener('click', () => {
-          document.dispatchEvent(new CustomEvent('open-notifications', {
-            detail: { notificationId: notification.id }
-          }));
-          this.closeNotificationsMenu();
-        });
+			const fragment = document.createDocumentFragment();
+			for (const notification of notifications) {
+				const item = document.createElement('div');
+				item.className = 'notification-preview-item';
+				if (notification.acknowledged_at) {
+					item.classList.add('is-read');
+				} else {
+					item.classList.add('is-new');
+				}
+				item.setAttribute('role', 'button');
+				item.setAttribute('tabindex', '0');
+				item.addEventListener('click', () => {
+					document.dispatchEvent(new CustomEvent('open-notifications', {
+						detail: { notificationId: notification.id }
+					}));
+					this.closeNotificationsMenu();
+				});
 
-        const title = document.createElement('div');
-        title.className = 'notification-preview-title';
-        title.textContent = notification.title || 'Notification';
+				const title = document.createElement('div');
+				title.className = 'notification-preview-title';
+				title.textContent = notification.title || 'Notification';
 
-        const message = document.createElement('div');
-        message.className = 'notification-preview-message';
-        message.textContent = notification.message || '';
+				const message = document.createElement('div');
+				message.className = 'notification-preview-message';
+				message.textContent = notification.message || '';
 
-        const time = document.createElement('div');
-        time.className = 'notification-preview-time';
-        time.textContent = formatRelativeTime(notification.created_at) || '';
-        time.title = formatDateTime(notification.created_at) || '';
+				const time = document.createElement('div');
+				time.className = 'notification-preview-time';
+				time.textContent = formatRelativeTime(notification.created_at) || '';
+				time.title = formatDateTime(notification.created_at) || '';
 
-        item.appendChild(title);
-        item.appendChild(message);
-        item.appendChild(time);
-        fragment.appendChild(item);
-      }
-      preview.innerHTML = '';
-      preview.appendChild(fragment);
-    } catch {
-      if (!silent && !this.previewNotifications.length) {
-        preview.innerHTML = html`
+				item.appendChild(title);
+				item.appendChild(message);
+				item.appendChild(time);
+				fragment.appendChild(item);
+			}
+			preview.innerHTML = '';
+			preview.appendChild(fragment);
+		} catch {
+			if (!silent && !this.previewNotifications.length) {
+				preview.innerHTML = html`
           <div class="notifications-menu-item notifications-loading">
             Failed to load notifications.
           </div>
         `;
-      }
-    } finally {
-      this.previewLoading = false;
-    }
-  }
+			}
+		} finally {
+			this.previewLoading = false;
+		}
+	}
 
-  prefetchNotificationPreview() {
-    const schedule = window.requestIdleCallback
-      ? window.requestIdleCallback.bind(window)
-      : (cb) => setTimeout(cb, 250);
-    schedule(() => {
-      this.loadNotificationPreview({ silent: true, force: true });
-    });
-  }
+	prefetchNotificationPreview() {
+		const schedule = window.requestIdleCallback
+			? window.requestIdleCallback.bind(window)
+			: (cb) => setTimeout(cb, 250);
+		schedule(() => {
+			this.loadNotificationPreview({ silent: true, force: true });
+		});
+	}
 
-  handleNotificationsUpdated() {
-    this.loadNotificationCount();
-  }
+	handleNotificationsUpdated() {
+		this.loadNotificationCount();
+		this.loadNotificationPreview({ silent: true, force: true });
+	}
 
-  handleRouteChange() {
-    // If we're on a server-sent page (like creation detail), don't handle route changes
-    // Any navigation should result in a full page load
-    const isServerSentPage = /^\/creations\/\d+$/.test(window.location.pathname) ||
-      window.location.pathname.startsWith('/help/');
-    if (isServerSentPage) {
-      return;
-    }
-    
-    this.closeMobileMenu();
+	handleRouteChange() {
+		// If we're on a server-sent page (like creation detail), don't handle route changes
+		// Any navigation should result in a full page load
+		const isServerSentPage = /^\/creations\/\d+$/.test(window.location.pathname) ||
+			window.location.pathname.startsWith('/help/');
+		if (isServerSentPage) {
+			return;
+		}
 
-    // Get route from pathname (e.g., /feed -> feed, / -> defaultRoute)
-    const pathname = window.location.pathname;
-    let currentRoute = pathname === '/' || pathname === '' ? this.defaultRoute : pathname.slice(1);
-    if (pathname.startsWith('/servers/')) {
-      currentRoute = 'servers';
-    }
+		this.closeMobileMenu();
 
-    // Make current route discoverable to other components immediately on mount.
-    try {
-      window.__CURRENT_ROUTE__ = currentRoute;
-    } catch {
-      // ignore
-    }
-    try {
-      document.documentElement.dataset.route = currentRoute;
-    } catch {
-      // ignore
-    }
-    
-    // If at root and we have a default route, update URL to reflect it
-    if ((pathname === '/' || pathname === '') && this.defaultRoute && currentRoute) {
-      window.history.replaceState({ route: currentRoute }, '', `/${currentRoute}`);
-    }
-    
-    // Update active nav link (both desktop and mobile)
-    const navLinks = this.querySelectorAll('.header-nav .nav-link, .mobile-menu .nav-link');
-    navLinks.forEach(link => {
-      const isActive = link.getAttribute('data-route') === currentRoute;
-      link.classList.toggle('active', isActive);
-    });
-    
-    // Update Create button state
-    this.updateCreateButtonState();
-    
-    // Show/hide route content sections
-    const contentSections = document.querySelectorAll('[data-route-content]');
-    contentSections.forEach(section => {
-      const isActive = section.getAttribute('data-route-content') === currentRoute;
-      section.classList.toggle('active', isActive);
-      section.style.display = isActive ? 'block' : 'none';
-    });
+		// Get route from pathname (e.g., /feed -> feed, / -> defaultRoute)
+		const pathname = window.location.pathname;
+		let currentRoute = pathname === '/' || pathname === '' ? this.defaultRoute : pathname.slice(1);
+		if (pathname.startsWith('/servers/')) {
+			currentRoute = 'servers';
+		}
 
-    this.resetSectionScroll();
-    
-    // Dispatch custom event for route change
-    this.dispatchEvent(new CustomEvent('route-change', {
-      detail: { route: currentRoute },
-      bubbles: true
-    }));
-  }
+		// Make current route discoverable to other components immediately on mount.
+		try {
+			window.__CURRENT_ROUTE__ = currentRoute;
+		} catch {
+			// ignore
+		}
+		try {
+			document.documentElement.dataset.route = currentRoute;
+		} catch {
+			// ignore
+		}
 
-  handleDocumentClick(e) {
-    if (this.notificationsMenuOpen) {
-      this.closeNotificationsMenu();
-    }
-    if (this.mobileMenuOpen) {
-      const menu = this.querySelector('.mobile-menu');
-      const toggle = this.querySelector('[data-mobile-menu-toggle]');
-      const clickedInside = menu?.contains(e.target) || toggle?.contains(e.target);
-      if (!clickedInside) {
-        this.closeMobileMenu();
-      }
-    }
-  }
+		// If at root and we have a default route, update URL to reflect it
+		if ((pathname === '/' || pathname === '') && this.defaultRoute && currentRoute) {
+			window.history.replaceState({ route: currentRoute }, '', `/${currentRoute}`);
+		}
 
-  handleKeydown(e) {
-    if (e.key === 'Escape' && this.mobileMenuOpen) {
-      this.closeMobileMenu();
-    }
-  }
+		// Update active nav link (both desktop and mobile)
+		const navLinks = this.querySelectorAll('.header-nav .nav-link, .mobile-menu .nav-link');
+		navLinks.forEach(link => {
+			const isActive = link.getAttribute('data-route') === currentRoute;
+			link.classList.toggle('active', isActive);
+		});
 
-  resetSectionScroll() {
-    const scroller = document.scrollingElement || document.documentElement;
-    if (!scroller) return;
-    scroller.scrollTop = 0;
-    if (typeof window.scrollTo === 'function') {
-      window.scrollTo(0, 0);
-    }
-  }
+		// Update Create button state
+		this.updateCreateButtonState();
 
-  setupEventListeners() {
-    const createButtons = this.querySelectorAll('.create-button');
-    createButtons.forEach(createButton => {
-      createButton.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        // Don't navigate if already on create route
-        if (createButton.disabled) return;
-        this.navigateToRoute('create');
-        if (createButton.closest('.mobile-menu')) {
-          this.closeMobileMenu();
-        }
-      });
-    });
+		// Show/hide route content sections
+		const contentSections = document.querySelectorAll('[data-route-content]');
+		contentSections.forEach(section => {
+			const isActive = section.getAttribute('data-route-content') === currentRoute;
+			section.classList.toggle('active', isActive);
+			section.style.display = isActive ? 'block' : 'none';
+		});
 
-    const profileButtons = this.querySelectorAll('.profile-button');
-    profileButtons.forEach(profileButton => {
-      profileButton.addEventListener('click', (e) => {
-        e.stopPropagation();
-        document.dispatchEvent(new CustomEvent('open-profile'));
-      });
-    });
+		this.resetSectionScroll();
 
-    const notificationsButtons = this.querySelectorAll('.notifications-button');
-    notificationsButtons.forEach(notificationsButton => {
-      notificationsButton.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.toggleNotificationsMenu();
-      });
-    });
+		// Dispatch custom event for route change
+		this.dispatchEvent(new CustomEvent('route-change', {
+			detail: { route: currentRoute },
+			bubbles: true
+		}));
+	}
 
-    const creditsButtons = this.querySelectorAll('.credits-button');
-    creditsButtons.forEach(creditsButton => {
-      creditsButton.addEventListener('click', (e) => {
-        e.stopPropagation();
-        document.dispatchEvent(new CustomEvent('open-credits'));
-      });
-    });
+	handleDocumentClick(e) {
+		if (this.notificationsMenuOpen) {
+			this.closeNotificationsMenu();
+		}
+		if (this.mobileMenuOpen) {
+			const menu = this.querySelector('.mobile-menu');
+			const toggle = this.querySelector('[data-mobile-menu-toggle]');
+			const clickedInside = menu?.contains(e.target) || toggle?.contains(e.target);
+			if (!clickedInside) {
+				this.closeMobileMenu();
+			}
+		}
+	}
 
-    const notificationsMenu = this.querySelector('.notifications-menu');
-    if (notificationsMenu) {
-      notificationsMenu.addEventListener('click', (e) => {
-        const link = e.target.closest('a[data-action="notifications"]');
-        if (link) {
-          e.preventDefault();
-          e.stopPropagation();
-          this.closeNotificationsMenu();
-          document.dispatchEvent(new CustomEvent('open-notifications'));
-        } else {
-          e.stopPropagation();
-        }
-      });
-    }
+	handleKeydown(e) {
+		if (e.key === 'Escape' && this.mobileMenuOpen) {
+			this.closeMobileMenu();
+		}
+	}
 
-    this.setupMobileMenuListeners();
-  }
+	resetSectionScroll() {
+		const scroller = document.scrollingElement || document.documentElement;
+		if (!scroller) return;
+		scroller.scrollTop = 0;
+		if (typeof window.scrollTo === 'function') {
+			window.scrollTo(0, 0);
+		}
+	}
 
-  setupMobileMenuListeners() {
-    const toggleButton = this.querySelector('[data-mobile-menu-toggle]');
-    if (toggleButton) {
-      toggleButton.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        this.toggleMobileMenu();
-      });
-    }
+	setupEventListeners() {
+		const createButtons = this.querySelectorAll('.create-button');
+		createButtons.forEach(createButton => {
+			createButton.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				// Don't navigate if already on create route
+				if (createButton.disabled) return;
+				this.navigateToRoute('create');
+				if (createButton.closest('.mobile-menu')) {
+					this.closeMobileMenu();
+				}
+			});
+		});
 
-    const closeButtons = this.querySelectorAll('[data-mobile-menu-close]');
-    closeButtons.forEach(button => {
-      button.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        this.closeMobileMenu();
-      });
-    });
+		const profileButtons = this.querySelectorAll('.profile-button');
+		profileButtons.forEach(profileButton => {
+			profileButton.addEventListener('click', (e) => {
+				e.stopPropagation();
+				document.dispatchEvent(new CustomEvent('open-profile'));
+			});
+		});
 
-    const backdrop = this.querySelector('[data-mobile-menu-backdrop]');
-    if (backdrop) {
-      backdrop.addEventListener('click', () => {
-        this.closeMobileMenu();
-      });
-    }
+		const notificationsButtons = this.querySelectorAll('.notifications-button');
+		notificationsButtons.forEach(notificationsButton => {
+			notificationsButton.addEventListener('click', (e) => {
+				e.stopPropagation();
+				this.toggleNotificationsMenu();
+			});
+		});
 
-    const actionButtons = this.querySelectorAll('[data-mobile-menu-action]');
-    actionButtons.forEach(button => {
-      button.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const action = button.getAttribute('data-mobile-menu-action');
-        this.closeMobileMenu();
-        if (action === 'notifications') {
-          document.dispatchEvent(new CustomEvent('open-notifications'));
-        } else if (action === 'credits') {
-          document.dispatchEvent(new CustomEvent('open-credits'));
-        } else if (action === 'profile') {
-          document.dispatchEvent(new CustomEvent('open-profile'));
-        } else if (action === 'create') {
-          this.navigateToRoute('create');
-        }
-      });
-    });
-  }
+		const creditsButtons = this.querySelectorAll('.credits-button');
+		creditsButtons.forEach(creditsButton => {
+			creditsButton.addEventListener('click', (e) => {
+				e.stopPropagation();
+				document.dispatchEvent(new CustomEvent('open-credits'));
+			});
+		});
 
-  toggleMobileMenu() {
-    this.mobileMenuOpen = !this.mobileMenuOpen;
-    this.syncMobileMenuUI();
-  }
+		const notificationsMenu = this.querySelector('.notifications-menu');
+		if (notificationsMenu) {
+			notificationsMenu.addEventListener('click', (e) => {
+				const link = e.target.closest('a[data-action="notifications"]');
+				if (link) {
+					e.preventDefault();
+					e.stopPropagation();
+					this.closeNotificationsMenu();
+					document.dispatchEvent(new CustomEvent('open-notifications'));
+				} else {
+					e.stopPropagation();
+				}
+			});
+		}
 
-  closeMobileMenu() {
-    if (!this.mobileMenuOpen) return;
-    this.mobileMenuOpen = false;
-    this.syncMobileMenuUI();
-  }
+		this.setupMobileMenuListeners();
+	}
 
-  syncMobileMenuUI() {
-    const menu = this.querySelector('.mobile-menu');
-    const backdrop = this.querySelector('.mobile-menu-backdrop');
-    const toggle = this.querySelector('[data-mobile-menu-toggle]');
-    if (menu) {
-      menu.classList.toggle('open', this.mobileMenuOpen);
-      menu.setAttribute('aria-hidden', this.mobileMenuOpen ? 'false' : 'true');
-    }
-    if (backdrop) {
-      backdrop.classList.toggle('open', this.mobileMenuOpen);
-    }
-    if (toggle) {
-      toggle.classList.toggle('active', this.mobileMenuOpen);
-      toggle.setAttribute('aria-expanded', this.mobileMenuOpen ? 'true' : 'false');
-    }
-  }
+	setupMobileMenuListeners() {
+		const toggleButton = this.querySelector('[data-mobile-menu-toggle]');
+		if (toggleButton) {
+			toggleButton.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				this.toggleMobileMenu();
+			});
+		}
 
-  toggleNotificationsMenu() {
-    this.notificationsMenuOpen = !this.notificationsMenuOpen;
-    const menu = this.querySelector('.notifications-menu');
-    if (menu) {
-      menu.classList.toggle('open', this.notificationsMenuOpen);
-      if (this.notificationsMenuOpen) {
-        this.loadNotificationPreview({ silent: true });
-      }
-    }
-  }
+		const closeButtons = this.querySelectorAll('[data-mobile-menu-close]');
+		closeButtons.forEach(button => {
+			button.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				this.closeMobileMenu();
+			});
+		});
 
-  closeNotificationsMenu() {
-    this.notificationsMenuOpen = false;
-    const menu = this.querySelector('.notifications-menu');
-    if (menu) {
-      menu.classList.remove('open');
-    }
-  }
+		const backdrop = this.querySelector('[data-mobile-menu-backdrop]');
+		if (backdrop) {
+			backdrop.addEventListener('click', () => {
+				this.closeMobileMenu();
+			});
+		}
+
+		const actionButtons = this.querySelectorAll('[data-mobile-menu-action]');
+		actionButtons.forEach(button => {
+			button.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				const action = button.getAttribute('data-mobile-menu-action');
+				this.closeMobileMenu();
+				if (action === 'notifications') {
+					document.dispatchEvent(new CustomEvent('open-notifications'));
+				} else if (action === 'credits') {
+					document.dispatchEvent(new CustomEvent('open-credits'));
+				} else if (action === 'profile') {
+					document.dispatchEvent(new CustomEvent('open-profile'));
+				} else if (action === 'create') {
+					this.navigateToRoute('create');
+				}
+			});
+		});
+	}
+
+	toggleMobileMenu() {
+		this.mobileMenuOpen = !this.mobileMenuOpen;
+		this.syncMobileMenuUI();
+	}
+
+	closeMobileMenu() {
+		if (!this.mobileMenuOpen) return;
+		this.mobileMenuOpen = false;
+		this.syncMobileMenuUI();
+	}
+
+	syncMobileMenuUI() {
+		const menu = this.querySelector('.mobile-menu');
+		const backdrop = this.querySelector('.mobile-menu-backdrop');
+		const toggle = this.querySelector('[data-mobile-menu-toggle]');
+		if (menu) {
+			menu.classList.toggle('open', this.mobileMenuOpen);
+			menu.setAttribute('aria-hidden', this.mobileMenuOpen ? 'false' : 'true');
+		}
+		if (backdrop) {
+			backdrop.classList.toggle('open', this.mobileMenuOpen);
+		}
+		if (toggle) {
+			toggle.classList.toggle('active', this.mobileMenuOpen);
+			toggle.setAttribute('aria-expanded', this.mobileMenuOpen ? 'true' : 'false');
+		}
+	}
+
+	toggleNotificationsMenu() {
+		const wasOpen = this.notificationsMenuOpen;
+		this.notificationsMenuOpen = !this.notificationsMenuOpen;
+		const menu = this.querySelector('.notifications-menu');
+		if (menu) {
+			menu.classList.toggle('open', this.notificationsMenuOpen);
+			if (this.notificationsMenuOpen) {
+				this.loadNotificationPreview({ silent: true });
+			}
+		}
+		if (!wasOpen && this.notificationsMenuOpen) {
+			document.dispatchEvent(new CustomEvent('modal-opened'));
+		} else if (wasOpen && !this.notificationsMenuOpen) {
+			document.dispatchEvent(new CustomEvent('modal-closed'));
+		}
+	}
+
+	closeNotificationsMenu() {
+		if (!this.notificationsMenuOpen) return;
+		this.notificationsMenuOpen = false;
+		const menu = this.querySelector('.notifications-menu');
+		if (menu) {
+			menu.classList.remove('open');
+		}
+		document.dispatchEvent(new CustomEvent('modal-closed'));
+	}
 
 
-  render() {
-    const showNotifications = this.hasAttribute('show-notifications') && !this.hasAttribute('hide-notifications');
-    const showProfile = this.hasAttribute('show-profile');
-    const showCreate = this.hasAttribute('show-create');
-    const showMobileMenu = this.hasAttribute('show-mobile-menu');
-    const showCredits = this.hasAttribute('show-profile') && !this.hasAttribute('hide-credits');
-    const hasAuthLinks = (this.authLinks || []).length > 0;
-    const hasMobileActions = showCreate || showNotifications || showCredits || showProfile;
+	render() {
+		const showNotifications = this.hasAttribute('show-notifications') && !this.hasAttribute('hide-notifications');
+		const showProfile = this.hasAttribute('show-profile');
+		const showCreate = this.hasAttribute('show-create');
+		const showMobileMenu = this.hasAttribute('show-mobile-menu');
+		const showCredits = this.hasAttribute('show-profile') && !this.hasAttribute('hide-credits');
+		const hasAuthLinks = (this.authLinks || []).length > 0;
+		const hasMobileActions = showCreate || showNotifications || showCredits || showProfile;
 
-    this.innerHTML = html`
+		this.innerHTML = html`
       <header>
         <div class="header-content">
           ${showMobileMenu ? html`
@@ -755,21 +760,21 @@ class AppHeader extends HTMLElement {
           </div>
           <nav class="header-nav">
             ${(this.routes || []).map(route => {
-              const routeId = route.id;
-              const routeLabel = route.label;
-              // Generate clean URL path (e.g., /feed, /explore)
-              return html`<a href="/${routeId}" class="nav-link" data-route="${routeId}">${routeLabel}</a>`;
-            }).join('')}
+			const routeId = route.id;
+			const routeLabel = route.label;
+			// Generate clean URL path (e.g., /feed, /explore)
+			return html`<a href="/${routeId}" class="nav-link" data-route="${routeId}">${routeLabel}</a>`;
+		}).join('')}
           </nav>
-          <div class="header-actions">
-            ${hasAuthLinks ? (this.authLinks || []).map(authLink => 
-              html`<a href="${authLink.href}" class="header-auth-link ${authLink.isPrimary ? 'btn-primary' : ''}">${authLink.text}</a>`
-            ).join('') : ''}
-            ${showCreate ? html`
+			${showCreate ? html`
               <button class="action-item create-button btn-primary">
                 Create
               </button>
             ` : ''}
+          <div class="header-actions">
+            ${hasAuthLinks ? (this.authLinks || []).map(authLink =>
+			html`<a href="${authLink.href}" class="header-auth-link ${authLink.isPrimary ? 'btn-primary' : ''}">${authLink.text}</a>`
+		).join('') : ''}
             ${showNotifications ? html`
               <div class="notifications-wrapper">
                 <button class="action-item notifications-button" aria-label="Open notifications">
@@ -784,7 +789,6 @@ class AppHeader extends HTMLElement {
                   <div class="notifications-menu-divider"></div>
                   <a href="#" data-action="notifications" class="notifications-menu-item">View All</a>
                 </div>
-                </div>
               </div>
             ` : ''}
             ${showCredits ? html`
@@ -794,6 +798,7 @@ class AppHeader extends HTMLElement {
                   <text x="12" y="12" text-anchor="middle" dominant-baseline="middle" font-size="10" fill="currentColor" stroke="none">P</text>
                 </svg>
                 <span class="credits-count">${this.creditsCount}</span>
+                <span class="credits-badge" aria-hidden="true"></span>
               </button>
             ` : ''}
             ${showProfile ? html`
@@ -830,10 +835,10 @@ class AppHeader extends HTMLElement {
           <div class="mobile-menu-content">
             <nav class="mobile-menu-nav">
               ${(this.routes || []).map(route => {
-                const routeId = route.id;
-                const routeLabel = route.label;
-                return html`<a href="/${routeId}" class="nav-link" data-route="${routeId}">${routeLabel}</a>`;
-              }).join('')}
+			const routeId = route.id;
+			const routeLabel = route.label;
+			return html`<a href="/${routeId}" class="nav-link" data-route="${routeId}">${routeLabel}</a>`;
+		}).join('')}
             </nav>
             ${hasMobileActions ? html`
               <div class="mobile-menu-actions">
@@ -863,7 +868,7 @@ class AppHeader extends HTMLElement {
         </aside>
       ` : ''}
     `;
-  }
+	}
 }
 
 customElements.define('app-header', AppHeader);

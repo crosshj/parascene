@@ -17,6 +17,7 @@ const templates = [];
 
 const created_images = [];
 const sessions = [];
+const user_credits = [];
 
 // On Vercel, use /tmp directory which is writable
 // Otherwise use the local data directory
@@ -54,6 +55,7 @@ const TABLE_TIMESTAMP_FIELDS = {
 export function openDb() {
   let nextUserId = users.length + 1;
   let nextNotificationId = notifications.length + 1;
+  let nextUserCreditsId = user_credits.length + 1;
 
   const queries = {
     selectUserByEmail: {
@@ -228,6 +230,22 @@ export function openDb() {
         return { changes: 1 };
       }
     },
+    insertNotification: {
+      run: async (userId, role, title, message, link) => {
+        const notification = {
+          id: nextNotificationId++,
+          user_id: userId ?? null,
+          role: role ?? null,
+          title,
+          message,
+          link: link ?? null,
+          created_at: new Date().toISOString(),
+          acknowledged_at: null
+        };
+        notifications.push(notification);
+        return { insertId: notification.id, lastInsertRowid: notification.id, changes: 1 };
+      }
+    },
     selectFeedItems: {
       all: async (excludeUserId) =>
         feed_items.filter((item) => item.user_id !== Number(excludeUserId))
@@ -359,6 +377,136 @@ export function openDb() {
         }
         created_images.splice(index, 1);
         return { changes: 1 };
+      }
+    },
+    selectUserCredits: {
+      get: async (userId) =>
+        user_credits.find((row) => row.user_id === Number(userId))
+    },
+    insertUserCredits: {
+      run: async (userId, balance, lastDailyClaimAt) => {
+        const existing = user_credits.find((row) => row.user_id === Number(userId));
+        if (existing) {
+          const error = new Error("Credits already exist for user");
+          error.code = "CREDITS_ALREADY_EXIST";
+          throw error;
+        }
+        const now = new Date().toISOString();
+        const row = {
+          id: nextUserCreditsId++,
+          user_id: Number(userId),
+          balance: Number(balance) || 0,
+          last_daily_claim_at: lastDailyClaimAt || null,
+          created_at: now,
+          updated_at: now
+        };
+        user_credits.push(row);
+        return { insertId: row.id, lastInsertRowid: row.id, changes: 1 };
+      }
+    },
+    updateUserCreditsBalance: {
+      run: async (userId, amount) => {
+        const id = Number(userId);
+        const delta = Number(amount) || 0;
+        let row = user_credits.find((entry) => entry.user_id === id);
+        const now = new Date().toISOString();
+        if (!row) {
+          row = {
+            id: nextUserCreditsId++,
+            user_id: id,
+            balance: 0,
+            last_daily_claim_at: null,
+            created_at: now,
+            updated_at: now
+          };
+          user_credits.push(row);
+        }
+        const next = Math.max(0, Number(row.balance || 0) + delta);
+        row.balance = next;
+        row.updated_at = now;
+        return { changes: 1 };
+      }
+    },
+    claimDailyCredits: {
+      run: async (userId, amount = 10) => {
+        const id = Number(userId);
+        const delta = Number(amount) || 0;
+        const now = new Date();
+        const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+        const todayUTCStr = todayUTC.toISOString().slice(0, 10);
+        let row = user_credits.find((entry) => entry.user_id === id);
+        const nowIso = new Date().toISOString();
+        if (!row) {
+          row = {
+            id: nextUserCreditsId++,
+            user_id: id,
+            balance: delta,
+            last_daily_claim_at: nowIso,
+            created_at: nowIso,
+            updated_at: nowIso
+          };
+          user_credits.push(row);
+          return { success: true, balance: row.balance, changes: 1 };
+        }
+        if (row.last_daily_claim_at) {
+          const lastClaimDate = new Date(row.last_daily_claim_at);
+          const lastClaimUTC = new Date(Date.UTC(lastClaimDate.getUTCFullYear(), lastClaimDate.getUTCMonth(), lastClaimDate.getUTCDate()));
+          const lastClaimUTCStr = lastClaimUTC.toISOString().slice(0, 10);
+          if (lastClaimUTCStr >= todayUTCStr) {
+            return { success: false, balance: row.balance, changes: 0, message: "Daily credits already claimed today" };
+          }
+        }
+        row.balance = Number(row.balance || 0) + delta;
+        row.last_daily_claim_at = nowIso;
+        row.updated_at = nowIso;
+        return { success: true, balance: row.balance, changes: 1 };
+      }
+    },
+    transferCredits: {
+      run: async (fromUserId, toUserId, amount) => {
+        const fromId = Number(fromUserId);
+        const toId = Number(toUserId);
+        const delta = Number(amount);
+        if (!Number.isFinite(delta) || delta <= 0) {
+          const error = new Error("Invalid amount");
+          error.code = "INVALID_AMOUNT";
+          throw error;
+        }
+        const nowIso = new Date().toISOString();
+        let fromRow = user_credits.find((entry) => entry.user_id === fromId);
+        if (!fromRow) {
+          fromRow = {
+            id: nextUserCreditsId++,
+            user_id: fromId,
+            balance: 0,
+            last_daily_claim_at: null,
+            created_at: nowIso,
+            updated_at: nowIso
+          };
+          user_credits.push(fromRow);
+        }
+        let toRow = user_credits.find((entry) => entry.user_id === toId);
+        if (!toRow) {
+          toRow = {
+            id: nextUserCreditsId++,
+            user_id: toId,
+            balance: 0,
+            last_daily_claim_at: null,
+            created_at: nowIso,
+            updated_at: nowIso
+          };
+          user_credits.push(toRow);
+        }
+        if (Number(fromRow.balance || 0) < delta) {
+          const error = new Error("Insufficient credits");
+          error.code = "INSUFFICIENT_CREDITS";
+          throw error;
+        }
+        fromRow.balance = Number(fromRow.balance || 0) - delta;
+        fromRow.updated_at = nowIso;
+        toRow.balance = Number(toRow.balance || 0) + delta;
+        toRow.updated_at = nowIso;
+        return { fromBalance: fromRow.balance, toBalance: toRow.balance };
       }
     }
   };

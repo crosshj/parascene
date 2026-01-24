@@ -306,7 +306,7 @@ header .header-nav a.active {
 header .header-actions {
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: 2px;
 	flex-wrap: wrap;
 	position: relative;
 	flex-shrink: 0;
@@ -726,7 +726,8 @@ header .action-item {
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
-	padding: 6px 10px;
+	height: 36px;
+	padding: 0 12px;
 	border-radius: 6px;
 	text-decoration: none;
 	color: var(--text);
@@ -737,6 +738,20 @@ header .action-item {
 	cursor: pointer;
 	font: inherit;
 	align-self: center;
+	line-height: 1;
+}
+
+/* Square icon buttons for even spacing */
+header .action-item.notifications-button,
+header .action-item.profile-button {
+	width: 36px;
+	padding: 0;
+	justify-content: center;
+}
+
+/* Credits button includes a label/count, so keep it wider but same height */
+header .action-item.credits-button {
+	padding: 0 10px;
 }
 
 header .action-item:hover:not(.btn-primary) {
@@ -761,9 +776,28 @@ header .credits-button .icon {
 	height: 20px;
 }
 
-header .credits-button.attention {
-	border-color: var(--accent);
-	background: var(--surface-strong);
+header .credits-button {
+	position: relative;
+}
+
+header .credits-badge {
+	position: absolute;
+	top: -2px;
+	right: -2px;
+	min-width: 16px;
+	height: 16px;
+	width: 16px;
+	border-radius: 999px;
+	background: var(--accent);
+	border: 2px solid var(--surface);
+	box-sizing: border-box;
+	display: none;
+	align-items: center;
+	justify-content: center;
+}
+
+header .credits-button.attention .credits-badge {
+	display: inline-flex;
 }
 
 
@@ -781,6 +815,8 @@ header .create-button.btn-primary {
 
 /* Notifications button and badge */
 header .notifications-wrapper {
+	display: inline-flex;
+	align-items: center;
 	position: relative;
 }
 
@@ -1215,6 +1251,11 @@ header .hamburger-button.active span:nth-child(3) {
 	}
 
 	header .header-actions .create-button {
+		display: none;
+	}
+
+	/* If Create is rendered outside header-actions, still hide it on mobile */
+	header .header-content .create-button {
 		display: none;
 	}
 

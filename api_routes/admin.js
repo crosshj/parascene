@@ -24,6 +24,9 @@ export default function createAdminRoutes({ queries }) {
   }
 
   router.get("/admin/users", async (req, res) => {
+    const user = await requireAdmin(req, res);
+    if (!user) return;
+
     const users = await queries.selectUsers.all();
     
     // Fetch credits for each user

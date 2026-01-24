@@ -1,6 +1,6 @@
 # TODO
 
-here are notes about how to handle TODO.json
+here are notes about how to handle TODO.json, you will edit TODO.json when user mentions there are TODO changes.  You will not change this markdown file when the previously mentioned file changes.  You do not need to track items that are done.
 
 ## Cost
 

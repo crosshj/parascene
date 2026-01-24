@@ -35,6 +35,56 @@ export async function openDb() {
   const db = new DbClass(dbPath);
   initSchema(db);
 
+  const transferCreditsTxn = db.transaction((fromUserId, toUserId, amount) => {
+    const ensureCreditsRowStmt = db.prepare(
+      `INSERT OR IGNORE INTO user_credits (user_id, balance, last_daily_claim_at)
+       VALUES (?, 0, NULL)`
+    );
+    const selectBalanceStmt = db.prepare(
+      `SELECT balance FROM user_credits WHERE user_id = ?`
+    );
+    const debitStmt = db.prepare(
+      `UPDATE user_credits
+       SET balance = balance - ?, updated_at = datetime('now')
+       WHERE user_id = ?`
+    );
+    const creditStmt = db.prepare(
+      `UPDATE user_credits
+       SET balance = balance + ?, updated_at = datetime('now')
+       WHERE user_id = ?`
+    );
+
+    ensureCreditsRowStmt.run(fromUserId);
+    ensureCreditsRowStmt.run(toUserId);
+
+    const fromRow = selectBalanceStmt.get(fromUserId);
+    const toRow = selectBalanceStmt.get(toUserId);
+    const fromBalance = Number(fromRow?.balance ?? 0);
+    const toBalance = Number(toRow?.balance ?? 0);
+
+    if (!Number.isFinite(fromBalance) || !Number.isFinite(toBalance)) {
+      const err = new Error("Invalid credits balance");
+      err.code = "INVALID_BALANCE";
+      throw err;
+    }
+
+    if (fromBalance < amount) {
+      const err = new Error("Insufficient credits");
+      err.code = "INSUFFICIENT_CREDITS";
+      throw err;
+    }
+
+    debitStmt.run(amount, fromUserId);
+    creditStmt.run(amount, toUserId);
+
+    const nextFrom = selectBalanceStmt.get(fromUserId);
+    const nextTo = selectBalanceStmt.get(toUserId);
+    return {
+      fromBalance: Number(nextFrom?.balance ?? 0),
+      toBalance: Number(nextTo?.balance ?? 0)
+    };
+  });
+
   const queries = {
     selectUserByEmail: {
       get: async (email) => {
@@ -240,6 +290,26 @@ export async function openDb() {
         );
         const result = stmt.run(id, userId, role);
         return Promise.resolve({ changes: result.changes });
+      }
+    },
+    insertNotification: {
+      run: async (userId, role, title, message, link) => {
+        const stmt = db.prepare(
+          `INSERT INTO notifications (user_id, role, title, message, link)
+           VALUES (?, ?, ?, ?, ?)`
+        );
+        const result = stmt.run(
+          userId ?? null,
+          role ?? null,
+          title,
+          message,
+          link ?? null
+        );
+        return Promise.resolve({
+          insertId: result.lastInsertRowid,
+          lastInsertRowid: result.lastInsertRowid,
+          changes: result.changes
+        });
       }
     },
     selectFeedItems: {
@@ -657,6 +727,12 @@ export async function openDb() {
           balance: newCredits.balance,
           changes: result.changes
         });
+      }
+    },
+    transferCredits: {
+      run: async (fromUserId, toUserId, amount) => {
+        const result = transferCreditsTxn(Number(fromUserId), Number(toUserId), Number(amount));
+        return Promise.resolve(result);
       }
     }
   };

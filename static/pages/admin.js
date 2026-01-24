@@ -6,7 +6,50 @@ const adminDataLoaded = {
 	todo: false
 };
 let todoWritable = true;
-let todoPriorityMode = "pre";
+let todoPriorityMode = "gated";
+let todoItemsCache = [];
+let todoModalDependsOn = [];
+
+function normalizeTodoMode(mode) {
+	if (mode === "post") return "ratio";
+	if (mode === "pre") return "gated";
+	if (mode === "ratio" || mode === "impact" || mode === "cost") return mode;
+	return "gated";
+}
+
+function buildTodoDependencyMap(items) {
+	const map = new Map();
+	for (const item of items || []) {
+		const name = String(item?.name || "").trim();
+		if (!name) continue;
+		const dependsOn = Array.isArray(item?.dependsOn) ? item.dependsOn : [];
+		map.set(name, dependsOn.map((dep) => String(dep || "").trim()).filter(Boolean));
+	}
+	return map;
+}
+
+function canReachDependency(from, target, map, visited = new Set()) {
+	if (!from || !target) return false;
+	if (from === target) return true;
+	if (visited.has(from)) return false;
+	visited.add(from);
+	const deps = map.get(from) || [];
+	for (const dep of deps) {
+		if (canReachDependency(dep, target, map, visited)) return true;
+	}
+	return false;
+}
+
+function isAllowedDependency({ itemName, dependencyName }) {
+	const name = String(itemName || "").trim();
+	const dep = String(dependencyName || "").trim();
+	if (!dep) return false;
+	if (!name) return true; // can't validate cycles until we know the item name
+	if (dep === name) return false;
+	const map = buildTodoDependencyMap(todoItemsCache);
+	// disallow if the candidate already depends (directly/transitively) on this item
+	return !canReachDependency(dep, name, map);
+}
 
 function getDialColor(value) {
 	const clamped = Math.max(0, Math.min(100, Number(value) || 0));
@@ -46,10 +89,211 @@ function renderError(container, message) {
 	container.appendChild(error);
 }
 
-async function loadUsers() {
+const userModal = document.querySelector("#user-modal");
+const userModalTitle = document.querySelector("#user-modal-title");
+const userModalDetails = document.querySelector("[data-user-modal-details]");
+const userTipForm = document.querySelector("#user-tip-form");
+const userTipError = document.querySelector("[data-user-tip-error]");
+let currentUser = null;
+let currentViewerUserId = null;
+
+function escapeHtml(text) {
+	const div = document.createElement("div");
+	div.textContent = text;
+	return div.innerHTML;
+}
+
+async function loadCurrentViewerUser() {
+	try {
+		const response = await fetch("/api/profile", { credentials: "include" });
+		if (!response.ok) return;
+		const data = await response.json();
+		currentViewerUserId = Number(data?.id) || null;
+	} catch {
+		// ignore
+	}
+}
+
+loadCurrentViewerUser();
+
+function renderUserDetails(user) {
+	if (!userModalDetails) return;
+	const creditsValue = typeof user?.credits === "number" ? user.credits : 0;
+	userModalDetails.innerHTML = `
+		<div class="field">
+			<label>User ID</label>
+			<div class="value">${escapeHtml(String(user?.id ?? ""))}</div>
+		</div>
+		<div class="field">
+			<label>Email</label>
+			<div class="value">${escapeHtml(String(user?.email ?? ""))}</div>
+		</div>
+		<div class="field">
+			<label>Role</label>
+			<div class="value">${escapeHtml(String(user?.role ?? ""))}</div>
+		</div>
+		<div class="field">
+			<label>Credits</label>
+			<div class="value" data-user-modal-credits>${escapeHtml(creditsValue.toFixed(1))}</div>
+		</div>
+	`;
+}
+
+function closeUserModal() {
+	if (!userModal) return;
+	userModal.classList.remove("open");
+	currentUser = null;
+	if (userTipError) {
+		userTipError.hidden = true;
+		userTipError.textContent = "";
+	}
+}
+
+function openUserModal(user) {
+	if (!userModal) return;
+	currentUser = user;
+	if (userModalTitle) {
+		userModalTitle.textContent = user?.email || "User";
+	}
+	renderUserDetails(user);
+	if (userTipForm) {
+		userTipForm.reset();
+		userTipForm.elements.toUserId.value = String(user?.id ?? "");
+	}
+	if (userTipError) {
+		userTipError.hidden = true;
+		userTipError.textContent = "";
+	}
+	userModal.classList.add("open");
+}
+
+if (userModal) {
+	userModal.addEventListener("click", (event) => {
+		if (event.target?.dataset?.userClose !== undefined || event.target === userModal) {
+			closeUserModal();
+		}
+	});
+	document.addEventListener("keydown", (event) => {
+		if (event.key === "Escape" && userModal.classList.contains("open")) {
+			closeUserModal();
+		}
+	});
+}
+
+if (userTipForm) {
+	userTipForm.addEventListener("submit", async (event) => {
+		event.preventDefault();
+		if (!currentUser) return;
+
+		const submitButton = userTipForm.querySelector('button[type="submit"]');
+		const amountInput = userTipForm.elements.amount;
+		const fixedWidth = submitButton ? submitButton.getBoundingClientRect().width : null;
+		if (submitButton) {
+			submitButton.disabled = true;
+			if (fixedWidth) submitButton.style.width = `${fixedWidth}px`;
+			submitButton.classList.add("is-loading");
+		}
+		if (amountInput) {
+			amountInput.disabled = true;
+		}
+		if (userTipError) {
+			userTipError.hidden = true;
+			userTipError.textContent = "";
+		}
+
+		const toUserId = Number(userTipForm.elements.toUserId.value);
+		const amount = Number(userTipForm.elements.amount.value);
+
+		try {
+			const response = await fetch("/api/credits/tip", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				credentials: "include",
+				body: JSON.stringify({ toUserId, amount })
+			});
+			const data = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				const message = data?.error || "Failed to tip credits.";
+				if (userTipError) {
+					userTipError.hidden = false;
+					userTipError.textContent = message;
+				} else {
+					alert(message);
+				}
+				return;
+			}
+
+			// Update credits everywhere without closing modal.
+			const nextToBalance = typeof data?.toBalance === "number" ? data.toBalance : null;
+			const nextFromBalance = typeof data?.fromBalance === "number" ? data.fromBalance : null;
+
+			// Update modal credits for recipient
+			if (nextToBalance !== null) {
+				currentUser.credits = nextToBalance;
+				const creditsEl = document.querySelector("[data-user-modal-credits]");
+				if (creditsEl) {
+					creditsEl.textContent = nextToBalance.toFixed(1);
+				}
+			}
+
+			// Update list card for recipient
+			const recipientCard = document.querySelector(`.user-card[data-user-id="${toUserId}"]`);
+			if (recipientCard && nextToBalance !== null) {
+				const creditsSpan = recipientCard.querySelector(".user-credits");
+				if (creditsSpan) {
+					creditsSpan.textContent = `${nextToBalance.toFixed(1)} credits`;
+				}
+			}
+
+			// Update list card + header credits for sender
+			if (nextFromBalance !== null) {
+				document.dispatchEvent(new CustomEvent("credits-updated", {
+					detail: { count: nextFromBalance }
+				}));
+				try {
+					window.localStorage?.setItem("credits-balance", String(nextFromBalance));
+				} catch {
+					// ignore
+				}
+				if (currentViewerUserId) {
+					const senderCard = document.querySelector(`.user-card[data-user-id="${currentViewerUserId}"]`);
+					if (senderCard) {
+						const creditsSpan = senderCard.querySelector(".user-credits");
+						if (creditsSpan) {
+							creditsSpan.textContent = `${nextFromBalance.toFixed(1)} credits`;
+						}
+					}
+				}
+			}
+
+			// Reset amount field, keep modal open
+			userTipForm.reset();
+			userTipForm.elements.toUserId.value = String(toUserId);
+		} catch (error) {
+			const message = error?.message || "Failed to tip credits.";
+			if (userTipError) {
+				userTipError.hidden = false;
+				userTipError.textContent = message;
+			} else {
+				alert(message);
+			}
+		} finally {
+			if (submitButton) {
+				submitButton.disabled = false;
+				submitButton.classList.remove("is-loading");
+				submitButton.style.width = "";
+			}
+			if (amountInput) {
+				amountInput.disabled = false;
+			}
+		}
+	});
+}
+
+async function loadUsers({ force = false } = {}) {
 	const container = document.querySelector("#users-container");
 	if (!container) return;
-	if (adminDataLoaded.users) return;
+	if (adminDataLoaded.users && !force) return;
 
 	try {
 		const response = await fetch("/admin/users", {
@@ -67,6 +311,17 @@ async function loadUsers() {
 		for (const user of data.users) {
 			const card = document.createElement("div");
 			card.className = "card user-card";
+			card.dataset.userId = String(user.id);
+			card.tabIndex = 0;
+			card.setAttribute("role", "button");
+			card.setAttribute("aria-label", `Open user ${user.email || ""}`);
+			card.addEventListener("click", () => openUserModal(user));
+			card.addEventListener("keydown", (event) => {
+				if (event.key === "Enter" || event.key === " ") {
+					event.preventDefault();
+					openUserModal(user);
+				}
+			});
 
 			const email = document.createElement("div");
 			email.className = "user-email";
@@ -74,6 +329,10 @@ async function loadUsers() {
 
 			const details = document.createElement("div");
 			details.className = "user-details";
+
+			const userId = document.createElement("span");
+			userId.className = "user-id";
+			userId.textContent = `#${user.id}`;
 
 			const role = document.createElement("span");
 			role.className = "user-role";
@@ -88,6 +347,8 @@ async function loadUsers() {
 			created.className = "user-created";
 			created.textContent = user.created_at;
 
+			details.appendChild(userId);
+			details.appendChild(document.createTextNode(" • "));
 			details.appendChild(role);
 			details.appendChild(document.createTextNode(" • "));
 			details.appendChild(credits);
@@ -370,6 +631,7 @@ function renderTodoRows(container, items, writable) {
 		row.dataset.itemDescription = item.description || "";
 		row.dataset.itemTime = item.time;
 		row.dataset.itemImpact = item.impact;
+		row.dataset.itemDependsOn = JSON.stringify(Array.isArray(item.dependsOn) ? item.dependsOn : []);
 
 		const card = document.createElement("div");
 		card.className = "todo-card-inner";
@@ -425,7 +687,7 @@ async function loadTodo({ force = false, mode } = {}) {
 	if (adminDataLoaded.todo && !force) return;
 
 	try {
-		const priorityMode = mode ? (mode === "post" ? "post" : "pre") : todoPriorityMode;
+		const priorityMode = normalizeTodoMode(mode ?? todoPriorityMode);
 		const query = new URLSearchParams({ mode: priorityMode });
 		const response = await fetch(`/api/todo?${query.toString()}`, {
 			credentials: "include"
@@ -434,7 +696,8 @@ async function loadTodo({ force = false, mode } = {}) {
 		const data = await response.json();
 		const writable = data.writable !== false;
 		todoWritable = writable;
-		renderTodoRows(body, Array.isArray(data.items) ? data.items : [], writable);
+		todoItemsCache = Array.isArray(data.items) ? data.items : [];
+		renderTodoRows(body, todoItemsCache, writable);
 
 		if (alert) {
 			alert.hidden = writable;
@@ -504,6 +767,105 @@ const todoReadonlyTitle = document.querySelector("#todo-readonly-title");
 const todoReadonlyDescription = document.querySelector("[data-todo-readonly-description]");
 const todoReadonlyTimeDial = document.querySelector('[data-todo-readonly-dial="time"]');
 const todoReadonlyImpactDial = document.querySelector('[data-todo-readonly-dial="impact"]');
+const todoDependsRoot = document.querySelector("[data-todo-depends]");
+const todoDependsSelect = document.querySelector("[data-todo-depends-select]");
+const todoDependsAdd = document.querySelector("[data-todo-depends-add]");
+const todoDependsList = document.querySelector("[data-todo-depends-list]");
+
+function buildTodoDependencyOptions({ excludeName } = {}) {
+	if (!todoDependsSelect) return;
+	const exclude = String(excludeName || "").trim();
+	const currentName = exclude;
+	const names = todoItemsCache
+		.map((item) => String(item?.name || "").trim())
+		.filter((name) => {
+			if (!name || name === exclude) return false;
+			if (todoModalDependsOn.includes(name)) return false;
+			return isAllowedDependency({ itemName: currentName, dependencyName: name });
+		});
+	names.sort((a, b) => a.localeCompare(b));
+
+	todoDependsSelect.innerHTML = "";
+	const placeholder = document.createElement("option");
+	placeholder.value = "";
+	placeholder.textContent = names.length ? "Select an item…" : "No other items";
+	placeholder.disabled = true;
+	placeholder.selected = true;
+	todoDependsSelect.appendChild(placeholder);
+
+	for (const name of names) {
+		const option = document.createElement("option");
+		option.value = name;
+		option.textContent = name;
+		todoDependsSelect.appendChild(option);
+	}
+	todoDependsSelect.disabled = names.length === 0;
+}
+
+function renderTodoDependsOn() {
+	if (!todoDependsList) return;
+	todoDependsList.innerHTML = "";
+
+	for (const dep of todoModalDependsOn) {
+		const pill = document.createElement("div");
+		pill.className = "todo-depends-pill";
+		pill.appendChild(document.createTextNode(dep));
+
+		const remove = document.createElement("button");
+		remove.type = "button";
+		remove.className = "todo-depends-remove";
+		remove.dataset.todoDependsRemove = dep;
+		remove.setAttribute("aria-label", `Remove dependency ${dep}`);
+		remove.textContent = "×";
+		pill.appendChild(remove);
+
+		todoDependsList.appendChild(pill);
+	}
+
+	if (todoModalForm?.elements?.dependsOn) {
+		todoModalForm.elements.dependsOn.value = JSON.stringify(todoModalDependsOn);
+	}
+}
+
+function setTodoDependsOn(next) {
+	const seen = new Set();
+	const cleaned = (Array.isArray(next) ? next : [])
+		.map((d) => String(d || "").trim())
+		.filter((d) => d.length > 0 && !seen.has(d) && (seen.add(d), true));
+
+	const currentName = String(todoModalForm?.elements?.name?.value || "").trim();
+	todoModalDependsOn = cleaned.filter((d) => {
+		if (d === currentName) return false;
+		return isAllowedDependency({ itemName: currentName, dependencyName: d });
+	});
+	renderTodoDependsOn();
+	buildTodoDependencyOptions({ excludeName: currentName });
+}
+
+if (todoDependsAdd) {
+	todoDependsAdd.addEventListener("click", () => {
+		if (!todoDependsSelect || !todoModalForm) return;
+		const selected = String(todoDependsSelect.value || "").trim();
+		if (!selected) return;
+		const currentName = String(todoModalForm.elements.name.value || "").trim();
+		if (selected === currentName) return;
+		if (!isAllowedDependency({ itemName: currentName, dependencyName: selected })) return;
+		if (todoModalDependsOn.includes(selected)) return;
+		setTodoDependsOn([...todoModalDependsOn, selected]);
+		updateTodoSaveState();
+	});
+}
+
+if (todoDependsList) {
+	todoDependsList.addEventListener("click", (event) => {
+		const target = event.target;
+		if (!(target instanceof HTMLElement)) return;
+		const dep = target.dataset.todoDependsRemove;
+		if (!dep) return;
+		setTodoDependsOn(todoModalDependsOn.filter((d) => d !== dep));
+		updateTodoSaveState();
+	});
+}
 
 function openTodoModal({ mode, item }) {
 	if (!todoModal || !todoModalForm) return;
@@ -524,11 +886,13 @@ function openTodoModal({ mode, item }) {
 	todoModalForm.elements.description.value = item?.description || "";
 	todoModalForm.elements.time.value = item?.time || 50;
 	todoModalForm.elements.impact.value = item?.impact || 50;
+	setTodoDependsOn(Array.isArray(item?.dependsOn) ? item.dependsOn : []);
 	todoModalForm.dataset.initial = JSON.stringify({
 		name: todoModalForm.elements.name.value,
 		description: todoModalForm.elements.description.value,
 		time: String(todoModalForm.elements.time.value),
-		impact: String(todoModalForm.elements.impact.value)
+		impact: String(todoModalForm.elements.impact.value),
+		dependsOn: todoModalForm.elements.dependsOn?.value || "[]"
 	});
 	updateTodoSaveState();
 	updateTodoSliderValues();
@@ -609,7 +973,8 @@ if (todoList) {
 					name: card.dataset.itemName,
 					description: card.dataset.itemDescription,
 					time: card.dataset.itemTime,
-					impact: card.dataset.itemImpact
+					impact: card.dataset.itemImpact,
+					dependsOn: JSON.parse(card.dataset.itemDependsOn || "[]")
 				}
 			});
 		}
@@ -622,7 +987,7 @@ const todoModeButtons = todoModeToggle
 	: [];
 
 function setTodoPriorityMode(mode) {
-	todoPriorityMode = mode === "post" ? "post" : "pre";
+	todoPriorityMode = normalizeTodoMode(mode);
 	todoModeButtons.forEach((button) => {
 		const isActive = button.dataset.todoMode === todoPriorityMode;
 		button.classList.toggle("is-active", isActive);
@@ -634,8 +999,8 @@ if (todoModeButtons.length) {
 	setTodoPriorityMode(todoPriorityMode);
 	todoModeButtons.forEach((button) => {
 		button.addEventListener("click", () => {
-			const nextMode = button.dataset.todoMode;
-			if (!nextMode || nextMode === todoPriorityMode) return;
+			const nextMode = normalizeTodoMode(button.dataset.todoMode);
+			if (nextMode === todoPriorityMode) return;
 			setTodoPriorityMode(nextMode);
 			adminDataLoaded.todo = false;
 			loadTodo({ force: true, mode: todoPriorityMode });
@@ -653,7 +1018,8 @@ if (todoModalForm) {
 			name: todoModalForm.elements.name.value,
 			description: todoModalForm.elements.description.value,
 			time: Number(todoModalForm.elements.time.value),
-			impact: Number(todoModalForm.elements.impact.value)
+			impact: Number(todoModalForm.elements.impact.value),
+			dependsOn: todoModalDependsOn
 		};
 		const mode = todoModalForm.elements.mode.value;
 		if (mode === "edit") {
@@ -673,7 +1039,7 @@ if (todoModalForm) {
 			}
 			closeTodoModal();
 			adminDataLoaded.todo = false;
-			loadTodo({ force: true });
+			loadTodo({ force: true, mode: todoPriorityMode });
 		} catch (err) {
 			alert(err.message || "Failed to save todo item.");
 		}
@@ -701,7 +1067,7 @@ if (todoDeleteButton) {
 			}
 			closeTodoModal();
 			adminDataLoaded.todo = false;
-			loadTodo({ force: true });
+			loadTodo({ force: true, mode: todoPriorityMode });
 		} catch (err) {
 			alert(err.message || "Failed to delete todo item.");
 		}
@@ -727,13 +1093,15 @@ function updateTodoSaveState() {
 		name: todoModalForm.elements.name.value,
 		description: todoModalForm.elements.description.value,
 		time: String(todoModalForm.elements.time.value),
-		impact: String(todoModalForm.elements.impact.value)
+		impact: String(todoModalForm.elements.impact.value),
+		dependsOn: todoModalForm.elements.dependsOn?.value || "[]"
 	};
 	const hasChanges = !initial
 		|| initial.name !== current.name
 		|| initial.description !== current.description
 		|| initial.time !== current.time
-		|| initial.impact !== current.impact;
+		|| initial.impact !== current.impact
+		|| initial.dependsOn !== current.dependsOn;
 	submit.disabled = !hasChanges;
 }
 
@@ -742,6 +1110,9 @@ if (todoModalForm) {
 		const target = event.target;
 		if (target instanceof HTMLInputElement && (target.name === "time" || target.name === "impact")) {
 			updateTodoSliderValues();
+		}
+		if (target instanceof HTMLInputElement && target.name === "name") {
+			setTodoDependsOn(todoModalDependsOn);
 		}
 		updateTodoSaveState();
 	});
