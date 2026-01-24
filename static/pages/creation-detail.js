@@ -16,13 +16,34 @@ function getCreationId() {
 const originalPushState = history.pushState.bind(history);
 const originalReplaceState = history.replaceState.bind(history);
 
+function setActionsLoadingState() {
+	const actionsEl = document.querySelector('.creation-detail-actions');
+	if (!actionsEl) return;
+	actionsEl.classList.remove('is-ready');
+	actionsEl.style.display = '';
+	// Also enforce hidden state in case inline styles exist.
+	actionsEl.style.opacity = '0';
+	actionsEl.style.visibility = 'hidden';
+	actionsEl.style.pointerEvents = 'none';
+}
+
 async function loadCreation() {
 	const detailContent = document.querySelector('[data-detail-content]');
 	const imageEl = document.querySelector('[data-image]');
 	const backgroundEl = document.querySelector('[data-background]');
 	const imageWrapper = imageEl?.closest?.('.creation-detail-image-wrapper');
+	const actionsEl = document.querySelector('.creation-detail-actions');
 
 	if (!detailContent || !imageEl || !backgroundEl) return;
+
+	// Hide actions until the page has loaded and ownership is resolved (prevents flash).
+	if (actionsEl) {
+		actionsEl.classList.remove('is-ready');
+		actionsEl.style.display = '';
+		actionsEl.style.opacity = '0';
+		actionsEl.style.visibility = 'hidden';
+		actionsEl.style.pointerEvents = 'none';
+	}
 
 	// Attach image load/error handlers once, so broken-image icons never show
 	if (!imageEl.dataset.fallbackAttached) {
@@ -53,6 +74,7 @@ async function loadCreation() {
 				<div class="route-empty-title">Invalid creation ID</div>
 			</div>
 		`;
+		if (actionsEl) actionsEl.style.display = 'none';
 		return;
 	}
 
@@ -70,6 +92,7 @@ async function loadCreation() {
 						<div class="route-empty-message">The creation you're looking for doesn't exist or you don't have access to it.</div>
 					</div>
 				`;
+				if (actionsEl) actionsEl.style.display = 'none';
 				return;
 			}
 			throw new Error('Failed to load creation');
@@ -177,6 +200,13 @@ async function loadCreation() {
 			}
 		}
 
+		// If no actions are visible, hide the whole actions row to avoid empty spacing.
+		if (actionsEl) {
+			const actionButtons = Array.from(actionsEl.querySelectorAll('button'));
+			const anyVisible = actionButtons.some(btn => btn.style.display !== 'none');
+			actionsEl.style.display = anyVisible ? '' : 'none';
+		}
+
 		// Build published info if published
 		let publishedInfo = '';
 		if (isPublished && creation.published_at) {
@@ -229,6 +259,15 @@ async function loadCreation() {
 		}
 
 		enableLikeButtons(detailContent);
+
+		// Now that the creation detail view is fully resolved, show actions.
+		if (actionsEl && actionsEl.style.display !== 'none') {
+			// Clear inline hidden styles (set in HTML / loading state) so CSS can reveal.
+			actionsEl.style.opacity = '';
+			actionsEl.style.visibility = '';
+			actionsEl.style.pointerEvents = '';
+			actionsEl.classList.add('is-ready');
+		}
 	} catch (error) {
 		console.error("Error loading creation detail:", error);
 		detailContent.innerHTML = `
@@ -237,6 +276,7 @@ async function loadCreation() {
 				<div class="route-empty-message">An error occurred while loading the creation.</div>
 			</div>
 		`;
+		if (actionsEl) actionsEl.style.display = 'none';
 	}
 }
 
@@ -247,6 +287,7 @@ function checkAndLoadCreation() {
 	console.log('checkAndLoadCreation called, creationId:', creationId, 'currentCreationId:', currentCreationId);
 	// Only reload if the creation ID has changed
 	if (creationId && creationId !== currentCreationId) {
+		setActionsLoadingState();
 		console.log('Creation ID changed, loading new creation');
 		currentCreationId = creationId;
 		loadCreation();
@@ -531,6 +572,7 @@ document.addEventListener('route-change', (e) => {
 	console.log('route-change event fired', e.detail?.route);
 	const route = e.detail?.route;
 	if (route && route.startsWith('creations/')) {
+		setActionsLoadingState();
 		checkAndLoadCreation();
 	}
 });

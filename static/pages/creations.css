@@ -140,6 +140,16 @@ body.creation-detail-page main>section:first-of-type {
 	gap: 12px;
 	margin-bottom: 24px;
 	flex-wrap: wrap;
+	opacity: 0;
+	visibility: hidden;
+	pointer-events: none;
+	transition: opacity 0.15s ease;
+}
+
+.creation-detail-actions.is-ready {
+	opacity: 1;
+	visibility: visible;
+	pointer-events: auto;
 }
 
 .creation-detail-action-btn {

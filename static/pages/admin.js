@@ -463,6 +463,17 @@ function renderProviderCapabilities(container, capabilities) {
 			methodDesc.textContent = method.description || "No description";
 			methodCard.appendChild(methodDesc);
 
+			const configuredCredits = Number(method?.credits);
+			const isDefaultCredits = Number.isNaN(configuredCredits);
+			const creditsCost = isDefaultCredits ? 0.5 : configuredCredits;
+
+			const methodCost = document.createElement("div");
+			methodCost.style.fontSize = "0.875rem";
+			methodCost.style.color = "var(--text-muted, #666)";
+			methodCost.style.marginBottom = "0.5rem";
+			methodCost.textContent = `Cost: ${creditsCost.toFixed(1)} credits${isDefaultCredits ? " (default)" : ""}`;
+			methodCard.appendChild(methodCost);
+
 			const fields = method.fields || {};
 			const fieldKeys = Object.keys(fields);
 			if (fieldKeys.length > 0) {
