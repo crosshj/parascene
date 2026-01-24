@@ -1,3 +1,5 @@
+import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
+
 const html = String.raw;
 
 class AppRouteProviderMetrics extends HTMLElement {
@@ -25,7 +27,7 @@ class AppRouteProviderMetrics extends HTMLElement {
         <p>Operational performance highlights from the last reporting windows.</p>
       </div>
       <div class="grid-auto-fit-sm" data-provider-metrics-container>
-        <div class="route-empty">Loading...</div>
+        <div class="route-empty route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
       </div>
     `;
     this.loadMetrics();
@@ -36,12 +38,11 @@ class AppRouteProviderMetrics extends HTMLElement {
     if (!container) return;
 
     try {
-      const response = await fetch("/api/provider/metrics", {
+      const result = await fetchJsonWithStatusDeduped("/api/provider/metrics", {
         credentials: 'include'
-      });
-      if (!response.ok) throw new Error("Failed to load provider metrics.");
-      const data = await response.json();
-      const metrics = Array.isArray(data.metrics) ? data.metrics : [];
+      }, { windowMs: 2000 });
+      if (!result.ok) throw new Error("Failed to load provider metrics.");
+      const metrics = Array.isArray(result.data?.metrics) ? result.data.metrics : [];
 
       container.innerHTML = "";
       if (metrics.length === 0) {

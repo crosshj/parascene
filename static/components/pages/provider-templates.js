@@ -1,4 +1,5 @@
 import { formatDateTime, formatRelativeTime } from '../../shared/datetime.js';
+import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 
 const html = String.raw;
 
@@ -10,7 +11,7 @@ class AppRouteProviderTemplates extends HTMLElement {
         <p>Hosted templates currently available for provider deployments.</p>
       </div>
       <div class="route-cards grid-auto-fit" data-provider-templates-container>
-        <div class="route-empty">Loading...</div>
+        <div class="route-empty route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
       </div>
     `;
     this.loadTemplates();
@@ -21,12 +22,11 @@ class AppRouteProviderTemplates extends HTMLElement {
     if (!container) return;
 
     try {
-      const response = await fetch("/api/provider/templates-hosted", {
+      const result = await fetchJsonWithStatusDeduped("/api/provider/templates-hosted", {
         credentials: 'include'
-      });
-      if (!response.ok) throw new Error("Failed to load provider templates.");
-      const data = await response.json();
-      const templates = Array.isArray(data.templates) ? data.templates : [];
+      }, { windowMs: 2000 });
+      if (!result.ok) throw new Error("Failed to load provider templates.");
+      const templates = Array.isArray(result.data?.templates) ? result.data.templates : [];
 
       container.innerHTML = "";
       if (templates.length === 0) {

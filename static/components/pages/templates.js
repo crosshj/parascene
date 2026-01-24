@@ -1,3 +1,5 @@
+import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
+
 const html = String.raw;
 
 class AppRouteTemplates extends HTMLElement {
@@ -8,7 +10,7 @@ class AppRouteTemplates extends HTMLElement {
         <p>Templates ready to bootstrap new workspaces.</p>
       </div>
       <div class="route-cards cards-grid-auto" data-templates-container>
-        <div class="route-empty">Loading...</div>
+        <div class="route-empty route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
       </div>
     `;
     this.loadTemplates();
@@ -19,12 +21,11 @@ class AppRouteTemplates extends HTMLElement {
     if (!container) return;
 
     try {
-      const response = await fetch("/api/templates", {
+      const result = await fetchJsonWithStatusDeduped("/api/templates", {
         credentials: 'include'
-      });
-      if (!response.ok) throw new Error("Failed to load templates.");
-      const data = await response.json();
-      const templates = Array.isArray(data.templates) ? data.templates : [];
+      }, { windowMs: 2000 });
+      if (!result.ok) throw new Error("Failed to load templates.");
+      const templates = Array.isArray(result.data?.templates) ? result.data.templates : [];
 
       container.innerHTML = "";
       if (templates.length === 0) {

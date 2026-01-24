@@ -1,4 +1,5 @@
 import { formatDate } from '../shared/datetime.js';
+import { fetchJsonWithStatusDeduped } from '../shared/api.js';
 
 const html = String.raw;
 
@@ -109,11 +110,11 @@ class AppProfile extends HTMLElement {
 
     try {
       this.profileLoading = true;
-      const response = await fetch('/api/profile', {
+      const result = await fetchJsonWithStatusDeduped('/api/profile', {
         credentials: 'include'
-      });
-      if (!response.ok) {
-        if (response.status === 401) {
+      }, { windowMs: 2000 });
+      if (!result.ok) {
+        if (result.status === 401) {
           if (!this.profileData) {
             content.innerHTML = html`<p style="color: var(--text-muted);">Please log in to view your profile.</p>`;
           }
@@ -122,7 +123,7 @@ class AppProfile extends HTMLElement {
         throw new Error('Failed to load profile');
       }
 
-      const user = await response.json();
+      const user = result.data;
       const nextKey = user
         ? `${user.email || ''}|${user.role || ''}|${user.created_at || ''}`
         : '';

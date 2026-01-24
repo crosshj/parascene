@@ -1,3 +1,5 @@
+import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
+
 const html = String.raw;
 
 class AppRouteServers extends HTMLElement {
@@ -8,7 +10,7 @@ class AppRouteServers extends HTMLElement {
         <p>You will find a list of servers here that you can join as well as those you have already joined.</p>
       </div>
       <div class="route-cards grid-auto-fit" data-servers-container>
-        <div class="route-empty">Loading...</div>
+        <div class="route-empty route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
       </div>
      <!-- 
 	  <div class="route-header route-section" id="servers-help">
@@ -34,12 +36,11 @@ class AppRouteServers extends HTMLElement {
 		if (!container) return;
 
 		try {
-			const response = await fetch("/api/servers", {
+			const result = await fetchJsonWithStatusDeduped("/api/servers", {
 				credentials: 'include'
-			});
-			if (!response.ok) throw new Error("Failed to load servers.");
-			const data = await response.json();
-			const servers = Array.isArray(data.servers) ? data.servers : [];
+			}, { windowMs: 2000 });
+			if (!result.ok) throw new Error("Failed to load servers.");
+			const servers = Array.isArray(result.data?.servers) ? result.data.servers : [];
 
 			container.innerHTML = "";
 			if (servers.length === 0) {

@@ -1,3 +1,5 @@
+import { fetchJsonWithStatusDeduped } from '../shared/api.js';
+
 const html = String.raw;
 
 class AppCredits extends HTMLElement {
@@ -112,17 +114,10 @@ class AppCredits extends HTMLElement {
 
 	async refreshCredits() {
 		try {
-			// First, get current user to check if user changed
-			let currentUserEmail = null;
-			try {
-				const profileResponse = await fetch('/api/profile', { credentials: 'include' });
-				if (profileResponse.ok) {
-					const profile = await profileResponse.json();
-					currentUserEmail = profile?.email || null;
-				}
-			} catch {
-				// Ignore profile fetch errors
-			}
+			// First, get current user to check if user changed (deduped).
+			const profileResult = await fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 2000 })
+				.catch(() => ({ ok: false, status: 0, data: null }));
+			const currentUserEmail = profileResult.ok ? (profileResult.data?.email || null) : null;
 
 			// If no signed-in user, clear cache
 			if (!currentUserEmail) {
@@ -142,10 +137,10 @@ class AppCredits extends HTMLElement {
 				this.clearStoredUserEmail();
 			}
 
-			const response = await fetch('/api/credits', { credentials: 'include' });
-			if (!response.ok) {
+			const credits = await fetchJsonWithStatusDeduped('/api/credits', { credentials: 'include' }, { windowMs: 2000 });
+			if (!credits.ok) {
 				// If unauthorized or any error, clear cache
-				if (response.status === 401 || !currentUserEmail) {
+				if (credits.status === 401 || !currentUserEmail) {
 					this.clearStoredCredits();
 					this.clearStoredUserEmail();
 				}
@@ -154,9 +149,8 @@ class AppCredits extends HTMLElement {
 				this.updateClaimUI();
 				return;
 			}
-			const data = await response.json();
-			this.creditsCount = this.normalizeCredits(data?.balance ?? 0);
-			this.lastClaimDate = data?.lastClaimDate || null;
+			this.creditsCount = this.normalizeCredits(credits.data?.balance ?? 0);
+			this.lastClaimDate = credits.data?.lastClaimDate || null;
 			// Cache in localStorage with user email
 			if (currentUserEmail) {
 				this.writeStoredCredits(this.creditsCount);
@@ -165,44 +159,17 @@ class AppCredits extends HTMLElement {
 			this.updateCreditsUI();
 			this.updateClaimUI();
 		} catch {
-			// Fallback to cached value only if user matches
-			const cachedUserEmail = this.readStoredUserEmail();
-			let currentUserEmail = null;
-			try {
-				const profileResponse = await fetch('/api/profile', { credentials: 'include' });
-				if (profileResponse.ok) {
-					const profile = await profileResponse.json();
-					currentUserEmail = profile?.email || null;
-				}
-			} catch {
-				// Ignore profile fetch errors
-			}
-
-			// If no signed-in user, clear cache
-			if (!currentUserEmail) {
-				this.clearStoredCredits();
-				this.clearStoredUserEmail();
-				this.creditsCount = 0;
+			// Fallback to cached value (best-effort).
+			const storedCredits = this.readStoredCredits();
+			if (storedCredits !== null && this.readStoredUserEmail()) {
+				this.creditsCount = storedCredits;
 				this.updateCreditsUI();
 				this.updateClaimUI();
 				return;
 			}
 
-			// Only use cached value if user matches
-			if (cachedUserEmail && currentUserEmail === cachedUserEmail) {
-				const storedCredits = this.readStoredCredits();
-				if (storedCredits !== null) {
-					this.creditsCount = storedCredits;
-					this.updateCreditsUI();
-					this.updateClaimUI();
-					return;
-				}
-			} else {
-				// User changed or no cache - clear it
-				this.clearStoredCredits();
-				this.clearStoredUserEmail();
-			}
-
+			this.clearStoredCredits();
+			this.clearStoredUserEmail();
 			this.creditsCount = 0;
 			this.updateCreditsUI();
 			this.updateClaimUI();

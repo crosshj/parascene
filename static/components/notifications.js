@@ -1,4 +1,5 @@
 import { formatDateTime, formatRelativeTime } from '../shared/datetime.js';
+import { fetchJsonWithStatusDeduped } from '../shared/api.js';
 
 const html = String.raw;
 
@@ -146,15 +147,14 @@ class AppNotifications extends HTMLElement {
 
     this._isLoading = true;
     try {
-      const response = await fetch('/api/notifications', {
+      const result = await fetchJsonWithStatusDeduped('/api/notifications', {
         credentials: 'include'
-      });
-      if (!response.ok) {
+      }, { windowMs: 2000 });
+      if (!result.ok) {
         throw new Error('Failed to load notifications');
       }
-      const data = await response.json();
-      this.notifications = Array.isArray(data.notifications)
-        ? data.notifications
+      this.notifications = Array.isArray(result.data?.notifications)
+        ? result.data.notifications
         : [];
       this._lastLoadedAt = Date.now();
       this.selectActiveNotification();

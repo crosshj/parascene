@@ -1,5 +1,6 @@
 import { formatDateTime, formatRelativeTime } from '/shared/datetime.js';
 import { enableLikeButtons, getCreationLikeCount, initLikeButton } from '/shared/likes.js';
+import { fetchJsonWithStatusDeduped } from '/shared/api.js';
 
 // Set up URL change detection BEFORE header component loads
 // This ensures we capture navigation events
@@ -99,13 +100,12 @@ async function loadCreation() {
 		// Check if current user owns this creation
 		let currentUserId = null;
 		try {
-			const profileResponse = await fetch('/api/profile');
-			if (profileResponse.ok) {
-				const profile = await profileResponse.json();
-				currentUserId = profile.id;
+			const profile = await fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 2000 });
+			if (profile.ok) {
+				currentUserId = profile.data?.id ?? null;
 			}
-		} catch (error) {
-			console.error('Error fetching user profile:', error);
+		} catch {
+			// ignore
 		}
 
 		const isOwner = currentUserId && creation.user_id && currentUserId === creation.user_id;

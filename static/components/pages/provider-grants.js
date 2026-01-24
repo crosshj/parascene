@@ -1,3 +1,5 @@
+import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
+
 const html = String.raw;
 
 class AppRouteProviderGrants extends HTMLElement {
@@ -13,7 +15,7 @@ class AppRouteProviderGrants extends HTMLElement {
         <p>Active funding programs and reporting milestones.</p>
       </div>
       <div class="route-cards grid-auto-fit" data-provider-grants-container>
-        <div class="route-empty">Loading...</div>
+        <div class="route-empty route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
       </div>
     `;
     this.loadGrants();
@@ -24,12 +26,11 @@ class AppRouteProviderGrants extends HTMLElement {
     if (!container) return;
 
     try {
-      const response = await fetch("/api/provider/grants", {
+      const result = await fetchJsonWithStatusDeduped("/api/provider/grants", {
         credentials: 'include'
-      });
-      if (!response.ok) throw new Error("Failed to load provider grants.");
-      const data = await response.json();
-      const grants = Array.isArray(data.grants) ? data.grants : [];
+      }, { windowMs: 2000 });
+      if (!result.ok) throw new Error("Failed to load provider grants.");
+      const grants = Array.isArray(result.data?.grants) ? result.data.grants : [];
 
       container.innerHTML = "";
       if (grants.length === 0) {

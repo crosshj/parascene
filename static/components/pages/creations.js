@@ -1,4 +1,5 @@
 import { formatDateTime, formatRelativeTime } from '../../shared/datetime.js';
+import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 
 const html = String.raw;
 
@@ -8,17 +9,21 @@ function setRouteMediaBackgroundImage(mediaEl, url) {
   mediaEl.classList.remove('route-media-error');
   mediaEl.style.backgroundImage = '';
 
-  const probe = new Image();
-  probe.decoding = 'async';
-  probe.onload = () => {
-    mediaEl.classList.remove('route-media-error');
-    mediaEl.style.backgroundImage = `url("${String(url).replace(/"/g, '\\"')}")`;
-  };
-  probe.onerror = () => {
-    mediaEl.classList.add('route-media-error');
-    mediaEl.style.backgroundImage = '';
-  };
-  probe.src = url;
+  return new Promise((resolve) => {
+    const probe = new Image();
+    probe.decoding = 'async';
+    probe.onload = () => {
+      mediaEl.classList.remove('route-media-error');
+      mediaEl.style.backgroundImage = `url("${String(url).replace(/"/g, '\\"')}")`;
+      resolve(true);
+    };
+    probe.onerror = () => {
+      mediaEl.classList.add('route-media-error');
+      mediaEl.style.backgroundImage = '';
+      resolve(false);
+    };
+    probe.src = url;
+  });
 }
 
 class AppRouteCreations extends HTMLElement {
@@ -30,7 +35,7 @@ class AppRouteCreations extends HTMLElement {
           <p>Your generated creations. Share them when you're ready.</p>
         </div>
         <div class="route-cards route-cards-image-grid" data-creations-container>
-          <div class="route-empty route-empty-image-grid">Loading...</div>
+          <div class="route-empty route-empty-image-grid route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
         </div>
       </div>
     `;
@@ -42,6 +47,7 @@ class AppRouteCreations extends HTMLElement {
       this.loadCreations({ force: true });
     };
     document.addEventListener('creations-pending-updated', this.pendingUpdateHandler);
+    this.setupImageLazyLoading();
     // Load creations after a brief delay to ensure DOM is ready
     // This also ensures we reload if navigating from another page
     setTimeout(() => {
@@ -84,6 +90,61 @@ class AppRouteCreations extends HTMLElement {
     this.intersectionObserver.observe(this);
   }
 
+  setupImageLazyLoading() {
+    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    const prefersSaveData = Boolean(connection && connection.saveData);
+    const isVerySlowConnection = Boolean(connection && typeof connection.effectiveType === 'string' && connection.effectiveType.includes('2g'));
+
+    this.eagerImageCount = prefersSaveData || isVerySlowConnection ? 2 : 6;
+    this.maxConcurrentImageLoads = prefersSaveData || isVerySlowConnection ? 2 : 4;
+    this.imageRootMargin = prefersSaveData || isVerySlowConnection ? '200px 0px' : '600px 0px';
+
+    this.imageLoadQueue = [];
+    this.imageLoadsInFlight = 0;
+
+    if (this.imageObserver) this.imageObserver.disconnect();
+    this.imageObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+
+        const el = entry.target;
+        if (!el || el.dataset.bgQueued === '1') return;
+
+        const url = el.dataset.bgUrl;
+        if (!url) {
+          this.imageObserver.unobserve(el);
+          return;
+        }
+
+        el.dataset.bgQueued = '1';
+        this.imageObserver.unobserve(el);
+        this.imageLoadQueue.push({ el, url });
+        this.drainImageLoadQueue();
+      });
+    }, {
+      root: null,
+      rootMargin: this.imageRootMargin,
+      threshold: 0.01,
+    });
+  }
+
+  drainImageLoadQueue() {
+    if (!Array.isArray(this.imageLoadQueue)) return;
+    if (typeof this.maxConcurrentImageLoads !== 'number' || this.maxConcurrentImageLoads <= 0) return;
+
+    while (this.imageLoadsInFlight < this.maxConcurrentImageLoads && this.imageLoadQueue.length > 0) {
+      const next = this.imageLoadQueue.shift();
+      if (!next || !next.el || !next.url) continue;
+
+      this.imageLoadsInFlight += 1;
+      Promise.resolve(setRouteMediaBackgroundImage(next.el, next.url))
+        .finally(() => {
+          this.imageLoadsInFlight -= 1;
+          this.drainImageLoadQueue();
+        });
+    }
+  }
+
   disconnectedCallback() {
     this.stopPolling();
     if (this.routeChangeHandler) {
@@ -95,6 +156,12 @@ class AppRouteCreations extends HTMLElement {
     if (this.intersectionObserver) {
       this.intersectionObserver.disconnect();
     }
+    if (this.imageObserver) {
+      this.imageObserver.disconnect();
+      this.imageObserver = null;
+    }
+    this.imageLoadQueue = [];
+    this.imageLoadsInFlight = 0;
   }
 
   getPendingCreations() {
@@ -130,13 +197,12 @@ class AppRouteCreations extends HTMLElement {
 
       // Fetch updated creations
       try {
-        const response = await fetch("/api/create/images", {
+        const result = await fetchJsonWithStatusDeduped("/api/create/images", {
           credentials: 'include'
-        });
-        if (!response.ok) return;
-        
-        const data = await response.json();
-        const creations = Array.isArray(data.images) ? data.images : [];
+        }, { windowMs: 300 });
+        if (!result.ok) return;
+
+        const creations = Array.isArray(result.data?.images) ? result.data.images : [];
         
         // Update any creations that have completed
         let hasUpdates = false;
@@ -176,15 +242,21 @@ class AppRouteCreations extends HTMLElement {
     try {
       this.isLoading = true;
       // Fetch created creations only
-      const creationsResponse = await fetch("/api/create/images", {
+      const creationsResult = await fetchJsonWithStatusDeduped("/api/create/images", {
         credentials: 'include'
-      }).catch(() => ({ ok: false }));
-      
-      const creations = creationsResponse.ok
-        ? (await creationsResponse.json()).images || []
+      }, { windowMs: 500 }).catch(() => ({ ok: false, status: 0, data: null }));
+
+      const creations = creationsResult.ok
+        ? (Array.isArray(creationsResult.data?.images) ? creationsResult.data.images : [])
         : [];
 
       container.innerHTML = "";
+      // New content means new media elements; clear previous observers/queue.
+      if (this.imageObserver) this.imageObserver.disconnect();
+      this.imageLoadQueue = [];
+      this.imageLoadsInFlight = 0;
+      this.setupImageLazyLoading();
+
       const pendingCreations = this.getPendingCreations();
       const combinedCreations = [...pendingCreations, ...creations];
       
@@ -218,7 +290,7 @@ class AppRouteCreations extends HTMLElement {
       // Sort creations by created_at (newest first)
       const sortedCreations = combinedCreations.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-      for (const item of sortedCreations) {
+      sortedCreations.forEach((item, index) => {
         const card = document.createElement("div");
         card.className = "route-card route-card-image";
         
@@ -298,11 +370,17 @@ class AppRouteCreations extends HTMLElement {
 
           const mediaEl = card.querySelector('.route-media');
           const url = item.thumbnail_url || item.url;
-          setRouteMediaBackgroundImage(mediaEl, url);
+          if (index < this.eagerImageCount) {
+            setRouteMediaBackgroundImage(mediaEl, url);
+          } else if (this.imageObserver && mediaEl) {
+            mediaEl.dataset.bgUrl = url;
+            mediaEl.dataset.bgQueued = '0';
+            this.imageObserver.observe(mediaEl);
+          }
         }
         
         container.appendChild(card);
-      }
+      });
       this.hasLoadedOnce = true;
     } catch (error) {
       console.error("Error loading creations:", error);

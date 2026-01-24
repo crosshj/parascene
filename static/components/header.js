@@ -1,4 +1,5 @@
 import { formatDateTime, formatRelativeTime } from '../shared/datetime.js';
+import { fetchJsonWithStatusDeduped } from '../shared/api.js';
 
 const html = String.raw;
 
@@ -180,12 +181,11 @@ class AppHeader extends HTMLElement {
     if (!this.hasAttribute('show-notifications')) return;
 
     try {
-      const response = await fetch('/api/notifications/unread-count', {
+      const result = await fetchJsonWithStatusDeduped('/api/notifications/unread-count', {
         credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to load notifications count');
-      const data = await response.json();
-      const count = Number(data.count || 0);
+      }, { windowMs: 2000 });
+      if (!result.ok) throw new Error('Failed to load notifications count');
+      const count = Number(result.data?.count || 0);
       this.updateNotificationsUI(count);
     } catch {
       this.updateNotificationsUI(0);
@@ -222,17 +222,16 @@ class AppHeader extends HTMLElement {
     }
 
     try {
-      const response = await fetch('/api/profile', { credentials: 'include' });
-      if (!response.ok) {
-        // If unauthorized or any error, clear cache
-        if (response.status === 401) {
+      const profile = await fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 2000 });
+      if (!profile.ok) {
+        if (profile.status === 401) {
           this.clearStoredCredits();
           this.clearStoredUserEmail();
         }
         this.updateCreditsUI(0);
         return;
       }
-      const user = await response.json();
+      const user = profile.data;
       const currentUserEmail = user?.email || null;
       
       // If no signed-in user, clear cache
@@ -257,39 +256,12 @@ class AppHeader extends HTMLElement {
       // Store user email for future checks
       this.writeStoredUserEmail(currentUserEmail);
     } catch {
-      // Only use cached value if user matches
-      const cachedUserEmail = this.readStoredUserEmail();
-      let currentUserEmail = null;
-      try {
-        const profileResponse = await fetch('/api/profile', { credentials: 'include' });
-        if (profileResponse.ok) {
-          const profile = await profileResponse.json();
-          currentUserEmail = profile?.email || null;
-        }
-      } catch {
-        // Ignore profile fetch errors
-      }
-
-      // If no signed-in user, clear cache
-      if (!currentUserEmail) {
-        this.clearStoredCredits();
-        this.clearStoredUserEmail();
-        this.updateCreditsUI(0);
+      // Network/unknown error fallback: show cached value (if any).
+      const storedCount = this.readStoredCreditsCount();
+      if (storedCount !== null && this.readStoredUserEmail()) {
+        this.updateCreditsUI(storedCount);
         return;
       }
-
-      if (cachedUserEmail && currentUserEmail === cachedUserEmail) {
-        const storedCount = this.readStoredCreditsCount();
-        if (storedCount !== null) {
-          this.updateCreditsUI(storedCount);
-          return;
-        }
-      } else {
-        // User changed or no cache - clear it
-        this.clearStoredCredits();
-        this.clearStoredUserEmail();
-      }
-
       this.updateCreditsUI(0);
     }
   }
@@ -397,10 +369,10 @@ class AppHeader extends HTMLElement {
 
     try {
       this.previewLoading = true;
-      const response = await fetch('/api/notifications', {
+      const result = await fetchJsonWithStatusDeduped('/api/notifications', {
         credentials: 'include'
-      });
-      if (response.status === 401) {
+      }, { windowMs: 2000 });
+      if (result.status === 401) {
         if (!this.previewNotifications.length) {
           preview.innerHTML = html`
             <div class="notifications-menu-item notifications-loading">
@@ -410,12 +382,11 @@ class AppHeader extends HTMLElement {
         }
         return;
       }
-      if (!response.ok) {
+      if (!result.ok) {
         throw new Error('Failed to load notifications');
       }
-      const data = await response.json();
-      const notifications = Array.isArray(data.notifications)
-        ? data.notifications.slice(0, 5)
+      const notifications = Array.isArray(result.data?.notifications)
+        ? result.data.notifications.slice(0, 5)
         : [];
 
       const nextKey = notifications

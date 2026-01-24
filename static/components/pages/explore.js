@@ -1,4 +1,5 @@
 import { formatDateTime, formatRelativeTime } from '../../shared/datetime.js';
+import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 
 const html = String.raw;
 
@@ -10,19 +11,23 @@ function setRouteMediaBackgroundImage(mediaEl, url) {
   mediaEl.classList.remove('route-media-error');
   mediaEl.style.backgroundImage = '';
 
-  const probe = new Image();
-  probe.decoding = 'async';
-  probe.onload = () => {
-    mediaEl.classList.remove('route-media-error');
-    mediaEl.classList.add('route-media-has-image');
-    mediaEl.style.backgroundImage = `url("${String(url).replace(/"/g, '\\"')}")`;
-  };
-  probe.onerror = () => {
-    mediaEl.classList.remove('route-media-has-image');
-    mediaEl.classList.add('route-media-error');
-    mediaEl.style.backgroundImage = '';
-  };
-  probe.src = url;
+  return new Promise((resolve) => {
+    const probe = new Image();
+    probe.decoding = 'async';
+    probe.onload = () => {
+      mediaEl.classList.remove('route-media-error');
+      mediaEl.classList.add('route-media-has-image');
+      mediaEl.style.backgroundImage = `url("${String(url).replace(/"/g, '\\"')}")`;
+      resolve(true);
+    };
+    probe.onerror = () => {
+      mediaEl.classList.remove('route-media-has-image');
+      mediaEl.classList.add('route-media-error');
+      mediaEl.style.backgroundImage = '';
+      resolve(false);
+    };
+    probe.src = url;
+  });
 }
 
 class AppRouteExplore extends HTMLElement {
@@ -51,11 +56,77 @@ class AppRouteExplore extends HTMLElement {
         <p>Discover creations from the broader community, including people you are not friends with yet.</p>
         </div>
         <div class="route-cards route-cards-image-grid" data-explore-container>
-        <div class="route-empty route-empty-image-grid">Loading...</div>
+        <div class="route-empty route-empty-image-grid route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
         </div>
       </div>
     `;
+    this.setupImageLazyLoading();
     this.loadExplore();
+  }
+
+  setupImageLazyLoading() {
+    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    const prefersSaveData = Boolean(connection && connection.saveData);
+    const isVerySlowConnection = Boolean(connection && typeof connection.effectiveType === 'string' && connection.effectiveType.includes('2g'));
+
+    this.eagerImageCount = prefersSaveData || isVerySlowConnection ? 2 : 6;
+    this.maxConcurrentImageLoads = prefersSaveData || isVerySlowConnection ? 2 : 4;
+    this.imageRootMargin = prefersSaveData || isVerySlowConnection ? '200px 0px' : '600px 0px';
+
+    this.imageLoadQueue = [];
+    this.imageLoadsInFlight = 0;
+
+    // (Re)create observer
+    if (this.imageObserver) this.imageObserver.disconnect();
+    this.imageObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+
+        const el = entry.target;
+        if (!el || el.dataset.bgQueued === '1') return;
+
+        const url = el.dataset.bgUrl;
+        if (!url) {
+          this.imageObserver.unobserve(el);
+          return;
+        }
+
+        el.dataset.bgQueued = '1';
+        this.imageObserver.unobserve(el);
+        this.imageLoadQueue.push({ el, url });
+        this.drainImageLoadQueue();
+      });
+    }, {
+      root: null,
+      rootMargin: this.imageRootMargin,
+      threshold: 0.01,
+    });
+  }
+
+  drainImageLoadQueue() {
+    if (!Array.isArray(this.imageLoadQueue)) return;
+    if (typeof this.maxConcurrentImageLoads !== 'number' || this.maxConcurrentImageLoads <= 0) return;
+
+    while (this.imageLoadsInFlight < this.maxConcurrentImageLoads && this.imageLoadQueue.length > 0) {
+      const next = this.imageLoadQueue.shift();
+      if (!next || !next.el || !next.url) continue;
+
+      this.imageLoadsInFlight += 1;
+      Promise.resolve(setRouteMediaBackgroundImage(next.el, next.url))
+        .finally(() => {
+          this.imageLoadsInFlight -= 1;
+          this.drainImageLoadQueue();
+        });
+    }
+  }
+
+  disconnectedCallback() {
+    if (this.imageObserver) {
+      this.imageObserver.disconnect();
+      this.imageObserver = null;
+    }
+    this.imageLoadQueue = [];
+    this.imageLoadsInFlight = 0;
   }
 
   async loadExplore() {
@@ -65,26 +136,25 @@ class AppRouteExplore extends HTMLElement {
     try {
       // Get current user ID
       let currentUserId = null;
-      try {
-        const profileResponse = await fetch('/api/profile', {
-          credentials: 'include'
-        });
-        if (profileResponse.ok) {
-          const profile = await profileResponse.json();
-          currentUserId = profile.id;
-        }
-      } catch (error) {
-        console.error('Error fetching user profile:', error);
+      const profile = await fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 2000 })
+        .catch(() => ({ ok: false, status: 0, data: null }));
+      if (profile.ok) {
+        currentUserId = profile.data?.id ?? null;
       }
 
-      const response = await fetch("/api/feed", {
+      const feed = await fetchJsonWithStatusDeduped("/api/feed", {
         credentials: 'include'
-      });
-      if (!response.ok) throw new Error("Failed to load explore.");
-      const data = await response.json();
-      const items = Array.isArray(data.items) ? data.items : [];
+      }, { windowMs: 2000 });
+      if (!feed.ok) throw new Error("Failed to load explore.");
+      const items = Array.isArray(feed.data?.items) ? feed.data.items : [];
 
       container.innerHTML = "";
+      // New content means new media elements; clear previous observers/queue.
+      if (this.imageObserver) this.imageObserver.disconnect();
+      this.imageLoadQueue = [];
+      this.imageLoadsInFlight = 0;
+      this.setupImageLazyLoading();
+
       if (items.length === 0) {
         container.innerHTML = html`
           <div class="route-empty route-empty-image-grid feed-empty-state">
@@ -102,7 +172,7 @@ class AppRouteExplore extends HTMLElement {
         return;
       }
 
-      for (const item of items) {
+      items.forEach((item, index) => {
         const card = document.createElement("div");
         card.className = "route-card route-card-image";
         
@@ -147,10 +217,16 @@ class AppRouteExplore extends HTMLElement {
         if (item.image_url) {
           const mediaEl = card.querySelector('.route-media');
           const url = item.thumbnail_url || item.image_url;
-          setRouteMediaBackgroundImage(mediaEl, url);
+          if (index < this.eagerImageCount) {
+            setRouteMediaBackgroundImage(mediaEl, url);
+          } else if (this.imageObserver && mediaEl) {
+            mediaEl.dataset.bgUrl = url;
+            mediaEl.dataset.bgQueued = '0';
+            this.imageObserver.observe(mediaEl);
+          }
         }
         container.appendChild(card);
-      }
+      });
     } catch (error) {
       container.innerHTML = html`<div class="route-empty route-empty-image-grid">Unable to load explore.</div>`;
     }

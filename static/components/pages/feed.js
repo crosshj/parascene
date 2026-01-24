@@ -1,5 +1,6 @@
 import { formatDateTime, formatRelativeTime } from '../../shared/datetime.js';
 import { enableLikeButtons, initLikeButton } from '../../shared/likes.js';
+import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 
 const html = String.raw;
 
@@ -83,7 +84,7 @@ class AppRouteFeed extends HTMLElement {
         </div>
 		-->
         <div class="route-cards feed-cards" data-feed-container>
-        <div class="route-empty route-empty-image-grid">Loading...</div>
+        <div class="route-empty route-empty-image-grid route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
         </div>
       </div>
     `;
@@ -273,24 +274,17 @@ class AppRouteFeed extends HTMLElement {
 		try {
 			// Get current user ID
 			let currentUserId = null;
-			try {
-				const profileResponse = await fetch('/api/profile', {
-					credentials: 'include'
-				});
-				if (profileResponse.ok) {
-					const profile = await profileResponse.json();
-					currentUserId = profile.id;
-				}
-			} catch (error) {
-				console.error('Error fetching user profile:', error);
+			const profile = await fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 2000 })
+				.catch(() => ({ ok: false, status: 0, data: null }));
+			if (profile.ok) {
+				currentUserId = profile.data?.id ?? null;
 			}
 
-			const response = await fetch("/api/feed", {
+			const feed = await fetchJsonWithStatusDeduped("/api/feed", {
 				credentials: 'include'
-			});
-			if (!response.ok) throw new Error("Failed to load feed.");
-			const data = await response.json();
-			const items = Array.isArray(data.items) ? data.items : [];
+			}, { windowMs: 2000 });
+			if (!feed.ok) throw new Error("Failed to load feed.");
+			const items = Array.isArray(feed.data?.items) ? feed.data.items : [];
 
 			container.innerHTML = "";
 			if (items.length === 0) {

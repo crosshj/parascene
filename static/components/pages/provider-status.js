@@ -1,3 +1,5 @@
+import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
+
 const html = String.raw;
 
 class AppRouteProviderStatus extends HTMLElement {
@@ -29,7 +31,7 @@ class AppRouteProviderStatus extends HTMLElement {
         <p>Live provider health checks and regional capacity snapshots.</p>
       </div>
       <div class="route-cards grid-auto-fit" data-provider-status-container>
-        <div class="route-empty">Loading...</div>
+        <div class="route-empty route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
       </div>
     `;
     this.loadStatuses();
@@ -40,12 +42,11 @@ class AppRouteProviderStatus extends HTMLElement {
     if (!container) return;
 
     try {
-      const response = await fetch("/api/provider/status", {
+      const result = await fetchJsonWithStatusDeduped("/api/provider/status", {
         credentials: 'include'
-      });
-      if (!response.ok) throw new Error("Failed to load provider status.");
-      const data = await response.json();
-      const statuses = Array.isArray(data.statuses) ? data.statuses : [];
+      }, { windowMs: 2000 });
+      if (!result.ok) throw new Error("Failed to load provider status.");
+      const statuses = Array.isArray(result.data?.statuses) ? result.data.statuses : [];
 
       container.innerHTML = "";
       if (statuses.length === 0) {

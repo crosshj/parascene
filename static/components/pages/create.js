@@ -1,3 +1,5 @@
+import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
+
 const html = String.raw;
 
 class AppRouteCreate extends HTMLElement {
@@ -161,10 +163,9 @@ class AppRouteCreate extends HTMLElement {
 
 	async loadServers() {
 		try {
-			const response = await fetch('/api/servers', { credentials: 'include' });
-			if (response.ok) {
-				const data = await response.json();
-				this.servers = Array.isArray(data.servers) ? data.servers : [];
+			const result = await fetchJsonWithStatusDeduped('/api/servers', { credentials: 'include' }, { windowMs: 2000 });
+			if (result.ok) {
+				this.servers = Array.isArray(result.data?.servers) ? result.data.servers : [];
 				// Parse server_config if it's a string
 				this.servers = this.servers.map(server => {
 					if (server.server_config && typeof server.server_config === 'string') {
@@ -440,10 +441,9 @@ class AppRouteCreate extends HTMLElement {
 
 	async loadCredits() {
 		try {
-			const response = await fetch('/api/credits', { credentials: 'include' });
-			if (response.ok) {
-				const data = await response.json();
-				this.creditsCount = this.normalizeCredits(data?.balance ?? 0);
+			const result = await fetchJsonWithStatusDeduped('/api/credits', { credentials: 'include' }, { windowMs: 2000 });
+			if (result.ok) {
+				this.creditsCount = this.normalizeCredits(result.data?.balance ?? 0);
 				this.updateButtonState();
 			} else {
 				this.creditsCount = 0;
