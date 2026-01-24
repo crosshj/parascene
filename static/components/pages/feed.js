@@ -24,6 +24,40 @@ const avatarColors = [
 	'#0ea5e9', // Sky
 ];
 
+function scheduleImageWork(start) {
+	if (typeof start !== 'function') return Promise.resolve();
+	if (document.visibilityState === 'visible') {
+		start();
+		return Promise.resolve();
+	}
+
+	return new Promise((resolve) => {
+		let idleHandle = null;
+		let timeoutHandle = null;
+
+		function onVisibilityChange() {
+			if (document.visibilityState === 'visible') runNow();
+		}
+
+		function runNow() {
+			if (idleHandle !== null && typeof cancelIdleCallback === 'function') cancelIdleCallback(idleHandle);
+			if (timeoutHandle !== null) clearTimeout(timeoutHandle);
+			document.removeEventListener('visibilitychange', onVisibilityChange);
+			start();
+			resolve();
+		}
+
+		document.addEventListener('visibilitychange', onVisibilityChange);
+
+		// Still preload in background, but at low priority (idle time).
+		if (typeof requestIdleCallback === 'function') {
+			idleHandle = requestIdleCallback(() => runNow(), { timeout: 2000 });
+		} else {
+			timeoutHandle = setTimeout(() => runNow(), 500);
+		}
+	});
+}
+
 function getAvatarColor(character) {
 	if (!character) return avatarColors[0];
 
@@ -36,24 +70,32 @@ function getAvatarColor(character) {
 function setRouteMediaBackgroundImage(mediaEl, url) {
 	if (!mediaEl || !url) return;
 
-	// Start in "no-image" state so placeholders show until load completes
+	// Always preload, but let visible work take priority.
+	// If hidden, start the request during idle time and use low fetch priority.
 	mediaEl.classList.remove('route-media-has-image');
 	mediaEl.classList.remove('route-media-error');
 	mediaEl.style.backgroundImage = '';
 
-	const probe = new Image();
-	probe.decoding = 'async';
-	probe.onload = () => {
-		mediaEl.classList.remove('route-media-error');
-		mediaEl.classList.add('route-media-has-image');
-		mediaEl.style.backgroundImage = `url("${String(url).replace(/"/g, '\\"')}")`;
+	const startProbe = () => {
+		const probe = new Image();
+		probe.decoding = 'async';
+		if ('fetchPriority' in probe) {
+			probe.fetchPriority = document.visibilityState === 'visible' ? 'auto' : 'low';
+		}
+		probe.onload = () => {
+			mediaEl.classList.remove('route-media-error');
+			mediaEl.classList.add('route-media-has-image');
+			mediaEl.style.backgroundImage = `url("${String(url).replace(/"/g, '\\"')}")`;
+		};
+		probe.onerror = () => {
+			mediaEl.classList.remove('route-media-has-image');
+			mediaEl.classList.add('route-media-error');
+			mediaEl.style.backgroundImage = '';
+		};
+		probe.src = url;
 	};
-	probe.onerror = () => {
-		mediaEl.classList.remove('route-media-has-image');
-		mediaEl.classList.add('route-media-error');
-		mediaEl.style.backgroundImage = '';
-	};
-	probe.src = url;
+
+	void scheduleImageWork(startProbe);
 }
 
 class AppRouteFeed extends HTMLElement {
@@ -144,14 +186,14 @@ class AppRouteFeed extends HTMLElement {
 		if (start >= end) return;
 
 		for (let i = start; i < end; i += 1) {
-			const card = this.buildFeedCard(this.feedItems[i]);
+			const card = this.buildFeedCard(this.feedItems[i], i);
 			container.appendChild(card);
 		}
 
 		this.feedIndex = end;
 	}
 
-	buildFeedCard(item) {
+	buildFeedCard(item, itemIndex) {
 		const card = document.createElement("div");
 		card.className = "feed-card";
 
@@ -215,6 +257,13 @@ class AppRouteFeed extends HTMLElement {
 		const imageContainer = card.querySelector('.feed-card-image');
 
 		if (imageEl && item.image_url) {
+			const isHighPriority = typeof itemIndex === 'number' && itemIndex >= 0 && itemIndex < 2;
+			// Ensure the first couple of above-the-fold images win the network race.
+			imageEl.loading = isHighPriority ? 'eager' : 'lazy';
+			if ('fetchPriority' in imageEl) {
+				imageEl.fetchPriority = isHighPriority ? 'high' : 'auto';
+			}
+
 			// Add loading class initially
 			imageContainer.classList.add('loading');
 

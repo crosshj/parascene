@@ -3,34 +3,87 @@ import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 
 const html = String.raw;
 
-function setRouteMediaBackgroundImage(mediaEl, url) {
+function scheduleImageWork(start, { immediate = true, wakeOnVisible = true } = {}) {
+  if (typeof start !== 'function') return Promise.resolve();
+
+  const isVisible = document.visibilityState === 'visible';
+  if (immediate && isVisible) {
+    start();
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    let idleHandle = null;
+    let timeoutHandle = null;
+
+    function onVisibilityChange() {
+      if (document.visibilityState === 'visible') runNow();
+    }
+
+    function runNow() {
+      if (idleHandle !== null && typeof cancelIdleCallback === 'function') cancelIdleCallback(idleHandle);
+      if (timeoutHandle !== null) clearTimeout(timeoutHandle);
+      if (wakeOnVisible) document.removeEventListener('visibilitychange', onVisibilityChange);
+      start();
+      resolve();
+    };
+
+    if (wakeOnVisible) {
+      document.addEventListener('visibilitychange', onVisibilityChange);
+    }
+
+    // Low priority: wait for idle time (and/or small delay).
+    if (typeof requestIdleCallback === 'function') {
+      idleHandle = requestIdleCallback(() => runNow(), { timeout: 2000 });
+    } else {
+      timeoutHandle = setTimeout(() => runNow(), 500);
+    }
+  });
+}
+
+function setRouteMediaBackgroundImage(mediaEl, url, { lowPriority = false } = {}) {
   if (!mediaEl || !url) return;
 
-  // Start in "no-image" state so placeholders show until load completes
+  // Always preload, but let the active/visible route win.
   mediaEl.classList.remove('route-media-has-image');
   mediaEl.classList.remove('route-media-error');
   mediaEl.style.backgroundImage = '';
 
   return new Promise((resolve) => {
-    const probe = new Image();
-    probe.decoding = 'async';
-    probe.onload = () => {
-      mediaEl.classList.remove('route-media-error');
-      mediaEl.classList.add('route-media-has-image');
-      mediaEl.style.backgroundImage = `url("${String(url).replace(/"/g, '\\"')}")`;
-      resolve(true);
+    const startProbe = () => {
+      const probe = new Image();
+      probe.decoding = 'async';
+      if ('fetchPriority' in probe) {
+        probe.fetchPriority = lowPriority ? 'low' : (document.visibilityState === 'visible' ? 'auto' : 'low');
+      }
+      probe.onload = () => {
+        mediaEl.classList.remove('route-media-error');
+        mediaEl.classList.add('route-media-has-image');
+        mediaEl.style.backgroundImage = `url("${String(url).replace(/"/g, '\\"')}")`;
+        resolve(true);
+      };
+      probe.onerror = () => {
+        mediaEl.classList.remove('route-media-has-image');
+        mediaEl.classList.add('route-media-error');
+        mediaEl.style.backgroundImage = '';
+        resolve(false);
+      };
+      probe.src = url;
     };
-    probe.onerror = () => {
-      mediaEl.classList.remove('route-media-has-image');
-      mediaEl.classList.add('route-media-error');
-      mediaEl.style.backgroundImage = '';
-      resolve(false);
-    };
-    probe.src = url;
+
+    void scheduleImageWork(startProbe, { immediate: !lowPriority, wakeOnVisible: !lowPriority });
   });
 }
 
 class AppRouteExplore extends HTMLElement {
+  isRouteActive() {
+    try {
+      return window.__CURRENT_ROUTE__ === 'explore' || this.isActiveRoute === true;
+    } catch {
+      return this.isActiveRoute === true;
+    }
+  }
+
   connectedCallback() {
     this.innerHTML = html`
       <style>
@@ -61,7 +114,106 @@ class AppRouteExplore extends HTMLElement {
       </div>
     `;
     this.setupImageLazyLoading();
-    this.loadExplore();
+    this.hasLoadedOnce = false;
+    this.isLoading = false;
+    // Use null so the initial setActiveRoute() always runs once
+    // (so inactive routes can schedule deferred background preloads).
+    this.isActiveRoute = null;
+    this.loadedAt = 0;
+    this.deferredPreloadTimer = null;
+    this.deferredPreloadIdle = null;
+
+    this.setActiveRoute = (shouldBeActive) => {
+      const next = Boolean(shouldBeActive);
+      if (next === this.isActiveRoute) return;
+      this.isActiveRoute = next;
+
+      if (this.isActiveRoute) {
+        this.cancelDeferredPreload();
+        this.refreshOnActivate();
+      } else {
+        // Stop scheduling more image work while inactive.
+        if (this.imageObserver) this.imageObserver.disconnect();
+        this.imageLoadQueue = [];
+        this.imageLoadsInFlight = 0;
+
+        // Defer preload work so the current route gets priority.
+        this.scheduleDeferredPreload();
+      }
+    };
+
+    this.refreshOnActivate = () => {
+      // If we already have cards, don't blow them away; just resume lazy loading.
+      if (this.hasLoadedOnce) {
+        const now = Date.now();
+        const isStale = !this.loadedAt || (now - this.loadedAt) > 60000;
+        if (isStale) {
+          this.loadExplore({ background: false, force: true });
+          return;
+        }
+        this.resumeImageLazyLoading();
+        return;
+      }
+
+      this.loadExplore({ background: false, force: true });
+    };
+
+    this.resumeImageLazyLoading = () => {
+      // Recreate observer and re-observe any tiles that still need images.
+      this.setupImageLazyLoading();
+      const pendingTiles = this.querySelectorAll('.route-media[data-bg-url]');
+      pendingTiles.forEach((mediaEl) => {
+        if (!mediaEl) return;
+        if (mediaEl.classList.contains('route-media-has-image')) return;
+        if (mediaEl.classList.contains('route-media-error')) return;
+        if (!mediaEl.dataset.bgUrl) return;
+        mediaEl.dataset.bgQueued = '0';
+        if (this.imageObserver) this.imageObserver.observe(mediaEl);
+      });
+      this.drainImageLoadQueue();
+    };
+
+    this.scheduleDeferredPreload = () => {
+      if (this.hasLoadedOnce) return;
+      if (this.deferredPreloadTimer || this.deferredPreloadIdle) return;
+      this.deferredPreloadTimer = setTimeout(() => {
+        this.deferredPreloadTimer = null;
+        const run = () => {
+          this.deferredPreloadIdle = null;
+          if (this.isActiveRoute || this.hasLoadedOnce) return;
+          this.loadExplore({ background: true, force: true });
+        };
+        if (typeof requestIdleCallback === 'function') {
+          this.deferredPreloadIdle = requestIdleCallback(run, { timeout: 2000 });
+        } else {
+          run();
+        }
+      }, 2500);
+    };
+
+    this.cancelDeferredPreload = () => {
+      if (this.deferredPreloadTimer) {
+        clearTimeout(this.deferredPreloadTimer);
+        this.deferredPreloadTimer = null;
+      }
+      if (this.deferredPreloadIdle && typeof cancelIdleCallback === 'function') {
+        cancelIdleCallback(this.deferredPreloadIdle);
+        this.deferredPreloadIdle = null;
+      }
+    };
+
+    this.routeChangeHandler = (e) => {
+      const route = e?.detail?.route;
+      if (typeof route !== 'string') return;
+      this.setActiveRoute(route === 'explore');
+    };
+    document.addEventListener('route-change', this.routeChangeHandler);
+
+    // Mount-time awareness of current route.
+    const initialRoute = window.__CURRENT_ROUTE__ || null;
+    const pathname = window.location.pathname || '';
+    const inferred = initialRoute || (pathname.startsWith('/explore') ? 'explore' : null);
+    this.setActiveRoute(inferred === 'explore');
   }
 
   setupImageLazyLoading() {
@@ -112,7 +264,7 @@ class AppRouteExplore extends HTMLElement {
       if (!next || !next.el || !next.url) continue;
 
       this.imageLoadsInFlight += 1;
-      Promise.resolve(setRouteMediaBackgroundImage(next.el, next.url))
+      Promise.resolve(setRouteMediaBackgroundImage(next.el, next.url, { lowPriority: !this.isActiveRoute }))
         .finally(() => {
           this.imageLoadsInFlight -= 1;
           this.drainImageLoadQueue();
@@ -121,6 +273,12 @@ class AppRouteExplore extends HTMLElement {
   }
 
   disconnectedCallback() {
+    if (this.routeChangeHandler) {
+      document.removeEventListener('route-change', this.routeChangeHandler);
+    }
+    if (typeof this.cancelDeferredPreload === 'function') {
+      this.cancelDeferredPreload();
+    }
     if (this.imageObserver) {
       this.imageObserver.disconnect();
       this.imageObserver = null;
@@ -129,11 +287,20 @@ class AppRouteExplore extends HTMLElement {
     this.imageLoadsInFlight = 0;
   }
 
-  async loadExplore() {
+  async loadExplore({ background = false, force = false } = {}) {
+    if (this.isLoading) return;
+    if (!background && !this.isRouteActive()) return;
+    if (!force && this.hasLoadedOnce) {
+      // If already loaded and not forcing, just resume lazy loading.
+      this.resumeImageLazyLoading();
+      return;
+    }
+
     const container = this.querySelector("[data-explore-container]");
     if (!container) return;
 
     try {
+      this.isLoading = true;
       // Get current user ID
       let currentUserId = null;
       const profile = await fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 2000 })
@@ -217,18 +384,25 @@ class AppRouteExplore extends HTMLElement {
         if (item.image_url) {
           const mediaEl = card.querySelector('.route-media');
           const url = item.thumbnail_url || item.image_url;
-          if (index < this.eagerImageCount) {
-            setRouteMediaBackgroundImage(mediaEl, url);
-          } else if (this.imageObserver && mediaEl) {
+          // Always store url for resume-on-activate behavior.
+          if (mediaEl) {
             mediaEl.dataset.bgUrl = url;
             mediaEl.dataset.bgQueued = '0';
+          }
+          if (index < this.eagerImageCount) {
+            setRouteMediaBackgroundImage(mediaEl, url, { lowPriority: !this.isActiveRoute });
+          } else if (this.imageObserver && mediaEl) {
             this.imageObserver.observe(mediaEl);
           }
         }
         container.appendChild(card);
       });
+      this.hasLoadedOnce = true;
+      this.loadedAt = Date.now();
     } catch (error) {
       container.innerHTML = html`<div class="route-empty route-empty-image-grid">Unable to load explore.</div>`;
+    } finally {
+      this.isLoading = false;
     }
   }
 }

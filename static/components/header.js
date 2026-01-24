@@ -49,8 +49,8 @@ class AppHeader extends HTMLElement {
     this.loadCreditsCount();
     this.updateCreditsAttention();
     this.prefetchNotificationPreview();
-    // Small delay to ensure DOM is ready for route change handler
-    setTimeout(() => this.handleRouteChange(), 0);
+    // Establish current route immediately so route components can react on mount.
+    this.handleRouteChange();
   }
 
   disconnectedCallback() {
@@ -493,6 +493,18 @@ class AppHeader extends HTMLElement {
     let currentRoute = pathname === '/' || pathname === '' ? this.defaultRoute : pathname.slice(1);
     if (pathname.startsWith('/servers/')) {
       currentRoute = 'servers';
+    }
+
+    // Make current route discoverable to other components immediately on mount.
+    try {
+      window.__CURRENT_ROUTE__ = currentRoute;
+    } catch {
+      // ignore
+    }
+    try {
+      document.documentElement.dataset.route = currentRoute;
+    } catch {
+      // ignore
     }
     
     // If at root and we have a default route, update URL to reflect it
