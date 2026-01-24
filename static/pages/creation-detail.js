@@ -78,7 +78,7 @@ async function loadCreation() {
 		return;
 	}
 
-	detailContent.innerHTML = '<div class="route-empty">Loading...</div>';
+	detailContent.innerHTML = '<div class="route-empty route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>';
 
 	try {
 		const response = await fetch(`/api/create/images/${creationId}`, {

@@ -1152,7 +1152,7 @@ function closeServerModal() {
 
 async function loadServerDetails(serverId) {
 	if (!serverModalContent) return;
-	serverModalContent.innerHTML = '<div class="server-loading">Loading...</div>';
+	serverModalContent.innerHTML = '<div class="route-empty route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>';
 
 	try {
 		const response = await fetch(`/admin/servers/${serverId}`, {
