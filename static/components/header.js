@@ -3,6 +3,8 @@ import { fetchJsonWithStatusDeduped } from '../shared/api.js';
 
 const html = String.raw;
 
+const AVATAR_URL_STORAGE_KEY = 'profile-avatar-url';
+
 class AppHeader extends HTMLElement {
 	constructor() {
 		super();
@@ -10,6 +12,8 @@ class AppHeader extends HTMLElement {
 		this.mobileMenuOpen = false;
 		this.notificationsCount = 0;
 		this.creditsCount = 0;
+		this.avatarUrl = null;
+		this.avatarLoading = false;
 		this.previewNotifications = [];
 		this.previewLoadedAt = 0;
 		this.previewLoading = false;
@@ -31,6 +35,12 @@ class AppHeader extends HTMLElement {
 	}
 
 	connectedCallback() {
+		// Establish avatar loading state before first render to avoid icon flicker.
+		if (this.hasAttribute('show-profile')) {
+			this.avatarUrl = this.readStoredAvatarUrl();
+			this.avatarLoading = !this.avatarUrl;
+		}
+
 		// Parse routes if not already parsed (attributeChangedCallback might have run first)
 		if (!this.hasParsedRoutes) {
 			this.parseRoutesFromChildren();
@@ -85,6 +95,59 @@ class AppHeader extends HTMLElement {
 			this.setupNavListeners();
 			this.loadNotificationCount();
 			this.loadCreditsCount();
+		}
+	}
+
+	readStoredAvatarUrl() {
+		try {
+			const stored = window.localStorage?.getItem(AVATAR_URL_STORAGE_KEY);
+			const value = typeof stored === 'string' ? stored.trim() : '';
+			return value || null;
+		} catch {
+			return null;
+		}
+	}
+
+	writeStoredAvatarUrl(url) {
+		const value = typeof url === 'string' ? url.trim() : '';
+		if (!value) return;
+		try {
+			window.localStorage?.setItem(AVATAR_URL_STORAGE_KEY, value);
+		} catch {
+			// ignore storage errors
+		}
+	}
+
+	clearStoredAvatarUrl() {
+		try {
+			window.localStorage?.removeItem(AVATAR_URL_STORAGE_KEY);
+		} catch {
+			// ignore storage errors
+		}
+	}
+
+	updateProfileAvatarUI({ loading, avatarUrl } = {}) {
+		if (typeof loading === 'boolean') {
+			this.avatarLoading = loading;
+		}
+		const nextAvatar = typeof avatarUrl === 'string' ? avatarUrl.trim() : '';
+		if (avatarUrl !== undefined) {
+			this.avatarUrl = nextAvatar || null;
+		}
+
+		const button = this.querySelector('.profile-button');
+		if (!button) return;
+
+		button.classList.toggle('has-avatar', Boolean(this.avatarUrl));
+		button.classList.toggle('is-avatar-loading', Boolean(this.avatarLoading) && !this.avatarUrl);
+
+		const img = button.querySelector('img.profile-avatar');
+		if (img) {
+			if (this.avatarUrl) {
+				img.src = this.avatarUrl;
+			} else {
+				img.removeAttribute('src');
+			}
 		}
 	}
 
@@ -219,10 +282,13 @@ class AppHeader extends HTMLElement {
 	async loadCreditsCount() {
 		if (!this.hasAttribute('show-profile')) return;
 
+		// While we determine avatar state, hide the profile icon (unless we already have a cached avatar).
+		this.updateProfileAvatarUI({ loading: !this.avatarUrl });
+
 		if (this.hasAttribute('credits-count')) {
 			const count = this.parseCreditsCount(this.getAttribute('credits-count'));
 			this.updateCreditsUI(count);
-			return;
+			// Continue to fetch profile for avatar + cache consistency.
 		}
 
 		try {
@@ -231,17 +297,23 @@ class AppHeader extends HTMLElement {
 				if (profile.status === 401) {
 					this.clearStoredCredits();
 					this.clearStoredUserEmail();
+					this.clearStoredAvatarUrl();
 				}
+				const fallbackAvatarUrl = this.avatarUrl || this.readStoredAvatarUrl();
+				this.updateProfileAvatarUI({ loading: false, avatarUrl: fallbackAvatarUrl || null });
 				this.updateCreditsUI(0);
 				return;
 			}
 			const user = profile.data;
 			const currentUserEmail = user?.email || null;
+			const nextAvatarUrl = typeof user?.profile?.avatar_url === 'string' ? user.profile.avatar_url.trim() : '';
 
 			// If no signed-in user, clear cache
 			if (!currentUserEmail) {
 				this.clearStoredCredits();
 				this.clearStoredUserEmail();
+				this.clearStoredAvatarUrl();
+				this.updateProfileAvatarUI({ loading: false, avatarUrl: null });
 				this.updateCreditsUI(0);
 				return;
 			}
@@ -252,10 +324,20 @@ class AppHeader extends HTMLElement {
 				// User changed - clear cache
 				this.clearStoredCredits();
 				this.clearStoredUserEmail();
+				this.clearStoredAvatarUrl();
 			}
 
 			const count = this.parseCreditsCount(user?.credits);
 			this.updateCreditsUI(count);
+
+			// Avatar cache + UI
+			if (nextAvatarUrl) {
+				this.writeStoredAvatarUrl(nextAvatarUrl);
+				this.updateProfileAvatarUI({ loading: false, avatarUrl: nextAvatarUrl });
+			} else {
+				this.clearStoredAvatarUrl();
+				this.updateProfileAvatarUI({ loading: false, avatarUrl: null });
+			}
 
 			// Store user email for future checks
 			this.writeStoredUserEmail(currentUserEmail);
@@ -264,8 +346,16 @@ class AppHeader extends HTMLElement {
 			const storedCount = this.readStoredCreditsCount();
 			if (storedCount !== null && this.readStoredUserEmail()) {
 				this.updateCreditsUI(storedCount);
+				// If we have a cached avatar, show it; otherwise stop loading and show icon.
+				const storedAvatarUrl = this.readStoredAvatarUrl();
+				if (storedAvatarUrl) {
+					this.updateProfileAvatarUI({ loading: false, avatarUrl: storedAvatarUrl });
+				} else {
+					this.updateProfileAvatarUI({ loading: false, avatarUrl: null });
+				}
 				return;
 			}
+			this.updateProfileAvatarUI({ loading: false, avatarUrl: null });
 			this.updateCreditsUI(0);
 		}
 	}
@@ -590,6 +680,15 @@ class AppHeader extends HTMLElement {
 				e.stopPropagation();
 				document.dispatchEvent(new CustomEvent('open-profile'));
 			});
+
+			// Fallback to icon if avatar image fails to load.
+			const avatarImg = profileButton.querySelector('img.profile-avatar');
+			if (avatarImg) {
+				avatarImg.addEventListener('error', () => {
+					this.clearStoredAvatarUrl();
+					this.updateProfileAvatarUI({ loading: false, avatarUrl: null });
+				});
+			}
 		});
 
 		const notificationsButtons = this.querySelectorAll('.notifications-button');
@@ -806,7 +905,8 @@ class AppHeader extends HTMLElement {
               </button>
             ` : ''}
             ${showProfile ? html`
-              <button class="action-item profile-button" aria-label="Open profile">
+              <button class="action-item profile-button ${this.avatarUrl ? 'has-avatar' : ''} ${this.avatarLoading && !this.avatarUrl ? 'is-avatar-loading' : ''}" aria-label="Open profile">
+				<img class="profile-avatar" ${this.avatarUrl ? `src="${this.avatarUrl}"` : ''} alt="" aria-hidden="true" />
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                   <circle cx="12" cy="7" r="4"></circle>

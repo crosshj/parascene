@@ -758,6 +758,27 @@ header .action-item.profile-button {
 	justify-content: center;
 }
 
+header .action-item.profile-button.is-avatar-loading {
+	visibility: hidden;
+	pointer-events: none;
+}
+
+header .profile-button .profile-avatar {
+	width: 26px;
+	height: 26px;
+	border-radius: 50%;
+	object-fit: cover;
+	display: none;
+}
+
+header .profile-button.has-avatar .profile-avatar {
+	display: block;
+}
+
+header .profile-button.has-avatar .icon {
+	display: none;
+}
+
 /* Credits button includes a label/count, so keep it wider but same height */
 header .action-item.credits-button {
 	padding: 0 10px;

@@ -361,6 +361,7 @@ class AppProfile extends HTMLElement {
       window.localStorage?.removeItem('credits-balance');
       window.localStorage?.removeItem('credits-user-email');
       window.localStorage?.removeItem('credits-last-claim');
+      window.localStorage?.removeItem('profile-avatar-url');
     } catch {
       // ignore storage errors
     }
