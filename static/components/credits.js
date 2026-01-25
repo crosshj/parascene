@@ -7,6 +7,7 @@ class AppCredits extends HTMLElement {
 		super();
 		this.attachShadow({ mode: 'open' });
 		this._isOpen = false;
+		this._claimInFlight = false;
 		this.creditsCount = 0;
 		this.lastClaimDate = null;
 		this.canClaim = null; // null = unknown until /api/credits responds
@@ -113,7 +114,7 @@ class AppCredits extends HTMLElement {
 		document.dispatchEvent(new CustomEvent('modal-closed'));
 	}
 
-	async refreshCredits() {
+	async refreshCredits({ force = false } = {}) {
 		try {
 			// First, get current user to check if user changed (deduped).
 			const profileResult = await fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 2000 })
@@ -138,7 +139,14 @@ class AppCredits extends HTMLElement {
 				this.clearStoredUserEmail();
 			}
 
-			const credits = await fetchJsonWithStatusDeduped('/api/credits', { credentials: 'include' }, { windowMs: 2000 });
+			// Note: fetchJsonWithStatusDeduped caches GET results for a short window.
+			// After mutating credits (claim), force a cache-busted read to avoid stale UI.
+			const creditsUrl = force ? `/api/credits?bust=${Date.now()}` : '/api/credits';
+			const credits = await fetchJsonWithStatusDeduped(
+				creditsUrl,
+				{ credentials: 'include' },
+				{ windowMs: force ? 0 : 2000 }
+			);
 			if (!credits.ok) {
 				// If unauthorized or any error, clear cache
 				if (credits.status === 401 || !currentUserEmail) {
@@ -187,8 +195,12 @@ class AppCredits extends HTMLElement {
 	}
 
 	async handleClaimCredits() {
+		if (this._claimInFlight) return;
+		if (this.canClaim === false) return;
 		if (this.isClaimedToday()) return;
 
+		this._claimInFlight = true;
+		this.updateClaimUI();
 		try {
 			const response = await fetch('/api/credits/claim', {
 				method: 'POST',
@@ -211,8 +223,9 @@ class AppCredits extends HTMLElement {
 				// Immediately mark as claimed today so header/UI updates even if refresh fails.
 				this.lastClaimDate = new Date().toISOString();
 				this.writeStoredClaimDate(this.getTodayKey());
-				// Refresh to get updated lastClaimDate
-				await this.refreshCredits();
+				this.canClaim = false;
+				// Refresh (forced) to get updated lastClaimDate/balance from server.
+				await this.refreshCredits({ force: true });
 				this.updateCreditsUI();
 				this.updateClaimUI();
 				document.dispatchEvent(new CustomEvent('credits-updated', {
@@ -224,6 +237,9 @@ class AppCredits extends HTMLElement {
 			}
 		} catch (error) {
 			console.error('Error claiming credits:', error);
+		} finally {
+			this._claimInFlight = false;
+			this.updateClaimUI();
 		}
 	}
 
@@ -240,7 +256,9 @@ class AppCredits extends HTMLElement {
 		const canClaim = this.canClaim;
 		const claimed = canClaim === null ? this.isClaimedToday() : !canClaim;
 		if (claimButton) {
-			claimButton.disabled = canClaim === null ? claimed : !canClaim;
+			claimButton.disabled = this._claimInFlight || (canClaim === null ? claimed : !canClaim);
+			claimButton.textContent = this._claimInFlight ? 'Claiming…' : 'Claim 10 credits';
+			claimButton.setAttribute('aria-busy', this._claimInFlight ? 'true' : 'false');
 		}
 		if (claimNote) {
 			// Reserve space to prevent layout jump; toggle visibility instead of content.
