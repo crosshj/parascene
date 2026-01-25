@@ -1,4 +1,5 @@
 import express from "express";
+import { sendTemplatedEmail } from "../email/index.js";
 
 async function requireUser(req, res, queries) {
 	if (!req.auth?.userId) {
@@ -52,6 +53,34 @@ function normalizeOffset(raw) {
 	return Math.max(0, n);
 }
 
+function getBaseAppUrl() {
+	// Prefer explicit env configuration, fall back to production URL.
+	const raw =
+		process.env.APP_URL ||
+		process.env.PUBLIC_APP_URL ||
+		process.env.BASE_APP_URL ||
+		(process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") ||
+		"https://parascene.crosshj.com";
+
+	try {
+		// Ensure a scheme exists so URL parsing behaves.
+		const normalized = String(raw || "").trim();
+		if (!normalized) return "https://parascene.crosshj.com";
+		if (normalized.startsWith("http://") || normalized.startsWith("https://")) return normalized;
+		return `https://${normalized}`;
+	} catch {
+		return "https://parascene.crosshj.com";
+	}
+}
+
+function getUserDisplayName(user) {
+	const name = typeof user?.name === "string" ? user.name.trim() : "";
+	if (name) return name;
+	const email = String(user?.email || "").trim();
+	const localPart = email.includes("@") ? email.split("@")[0] : email;
+	return localPart || "Someone";
+}
+
 export default function createCommentsRoutes({ queries }) {
 	const router = express.Router();
 
@@ -90,6 +119,7 @@ export default function createCommentsRoutes({ queries }) {
 	});
 
 	router.post("/api/created-images/:id/comments", async (req, res) => {
+
 		const user = await requireUser(req, res, queries);
 		if (!user) return;
 
@@ -113,6 +143,95 @@ export default function createCommentsRoutes({ queries }) {
 		}
 
 		const comment = await queries.insertCreatedImageComment?.run(user.id, imageId, text);
+
+		console.log(`[Comments] POST /api/created-images/${req.params.id}/comments`);
+
+		// Best-effort email notification to the creation owner.
+		// Do not block comment creation if email fails.
+		try {
+			const ownerUserId = Number(image?.user_id);
+			if (!Number.isFinite(ownerUserId) || ownerUserId <= 0) {
+				// If this happens, the created_images row is missing/invalid.
+				console.warn("[Comments] Skipping comment email: invalid owner user_id on image", {
+					imageId,
+					ownerUserId: image?.user_id ?? null
+				});
+			} else if (ownerUserId === Number(user.id)) {
+				// We don't email you about your own comments.
+				console.log("[Comments] Skipping comment email: self-comment", { imageId, ownerUserId });
+			} else {
+				const owner = await queries.selectUserById?.get(ownerUserId);
+				if (!owner) {
+					// Owner record missing (data integrity issue).
+					console.warn("[Comments] Skipping comment email: owner user not found", { imageId, ownerUserId });
+				} else {
+					const ownerEmail = String(owner?.email || "").trim();
+					if (!ownerEmail) {
+						// No email on file → cannot deliver.
+						console.warn("[Comments] Skipping comment email: owner has no email address", {
+							imageId,
+							ownerUserId
+						});
+					} else {
+						const ownerEmailLower = ownerEmail.toLowerCase();
+						const shouldSuppress = ownerEmailLower.includes("example.com");
+						if (shouldSuppress) {
+							// Explicit exception requested: suppress emails for example.com users.
+							console.log("[Comments] Skipping comment email: suppressed domain match (example.com)", {
+								imageId,
+								ownerUserId,
+								ownerEmailDomain: ownerEmailLower.split("@")[1] || null
+							});
+						} else if (!process.env.RESEND_API_KEY || !process.env.RESEND_SYSTEM_EMAIL) {
+							// Most common local/dev issue: missing env vars.
+							console.warn("[Comments] Skipping comment email: Resend env missing", {
+								imageId,
+								ownerUserId,
+								hasResendApiKey: Boolean(process.env.RESEND_API_KEY),
+								hasResendSystemEmail: Boolean(process.env.RESEND_SYSTEM_EMAIL)
+							});
+						} else {
+							const baseUrl = getBaseAppUrl();
+							const creationPath = `/creations/${encodeURIComponent(String(imageId))}`;
+							const creationUrl = new URL(creationPath, baseUrl).toString();
+							const commenterName = getUserDisplayName(user);
+							const recipientName = getUserDisplayName(owner);
+							const creationTitle = typeof image?.title === "string" ? image.title.trim() : "";
+
+							console.log("[Comments] Sending comment notification email", {
+								// ownerEmail,
+								recipientName,
+								commenterName,
+								commentText: text,
+								creationTitle,
+							});
+							await sendTemplatedEmail({
+								to: ownerEmail,
+								template: "commentReceived",
+								data: {
+									recipientName,
+									commenterName,
+									commentText: text,
+									creationTitle,
+									creationUrl
+								}
+							});
+						}
+					}
+				}
+			}
+		} catch (error) {
+			// This catch exists so comment posting still succeeds even if email fails.
+			// Common causes:
+			// - Missing/invalid Resend env (RESEND_API_KEY / RESEND_SYSTEM_EMAIL)
+			// - Resend API error / rate limit
+			// - Invalid recipient address
+			console.warn("[Comments] Failed to send comment notification email:", {
+				imageId,
+				commenterUserId: user?.id ?? null,
+				error: error?.message || String(error)
+			});
+		}
 
 		let commentCount = null;
 		try {

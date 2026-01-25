@@ -136,7 +136,22 @@ app.use((err, req, res, next) => {
 		return res.status(401).json({ error: "Unauthorized" });
 	}
 
-	return res.sendFile(path.join(pagesDir, "auth.html"));
+	// Preserve the user's original destination so login can return them there.
+	// Avoid redirect loops when the user is already on the auth page.
+	if (req.path === "/auth.html") {
+		return res.sendFile(path.join(pagesDir, "auth.html"));
+	}
+	try {
+		const rawReturnUrl = typeof req.originalUrl === "string" ? req.originalUrl : "/";
+		const returnUrl =
+			rawReturnUrl.startsWith("/") && !rawReturnUrl.startsWith("//") && !rawReturnUrl.includes("://")
+				? rawReturnUrl
+				: "/";
+		const qs = new URLSearchParams({ returnUrl });
+		return res.redirect(`/auth.html?${qs.toString()}`);
+	} catch {
+		return res.sendFile(path.join(pagesDir, "auth.html"));
+	}
 });
 
 if (process.env.NODE_ENV !== "production") {

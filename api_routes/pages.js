@@ -16,10 +16,26 @@ function getPageForUser(user) {
 export default function createPageRoutes({ queries, pagesDir }) {
   const router = express.Router();
 
+  function normalizeReturnUrl(raw) {
+    const value = typeof raw === "string" ? raw.trim() : "";
+    if (!value) return "/";
+    if (!value.startsWith("/")) return "/";
+    if (value.startsWith("//")) return "/";
+    if (value.includes("://")) return "/";
+    if (value.length > 2048) return "/";
+    return value;
+  }
+
+  function redirectToAuth(req, res) {
+    const returnUrl = normalizeReturnUrl(req?.originalUrl || req?.path || "/");
+    const qs = new URLSearchParams({ returnUrl });
+    return res.redirect(`/auth.html?${qs.toString()}`);
+  }
+
   async function requireLoggedInUser(req, res) {
     const userId = req.auth?.userId;
     if (!userId) {
-      res.sendFile(path.join(pagesDir, "auth.html"));
+      redirectToAuth(req, res);
       return null;
     }
 
@@ -29,7 +45,7 @@ export default function createPageRoutes({ queries, pagesDir }) {
       if (req.cookies?.[COOKIE_NAME]) {
         clearAuthCookie(res, req);
       }
-      res.sendFile(path.join(pagesDir, "auth.html"));
+      redirectToAuth(req, res);
       return null;
     }
 
@@ -160,6 +176,10 @@ export default function createPageRoutes({ queries, pagesDir }) {
     }
   });
 
+  // Auth page (supports returnUrl query param).
+  router.get("/auth.html", (req, res) => {
+    return res.sendFile(path.join(pagesDir, "auth.html"));
+  });
 
   // Catch-all route for sub-routes - serve the same page for all routes
   // This allows clean URLs like /feed, /explore, etc. while serving the same HTML
@@ -182,7 +202,11 @@ export default function createPageRoutes({ queries, pagesDir }) {
     
     // If NOT logged in → require authentication
     if (!userId) {
-      return res.sendFile(path.join(pagesDir, "auth.html"));
+      // Avoid redirect loops if user is already on the auth page.
+      if (req.path === "/auth.html") {
+        return res.sendFile(path.join(pagesDir, "auth.html"));
+      }
+      return redirectToAuth(req, res);
     }
 
     // If logged in → get user and their role
@@ -192,7 +216,7 @@ export default function createPageRoutes({ queries, pagesDir }) {
       if (req.cookies?.[COOKIE_NAME]) {
         clearAuthCookie(res, req);
       }
-      return res.sendFile(path.join(pagesDir, "auth.html"));
+      return redirectToAuth(req, res);
     }
 
     // User is logged in and has a role → serve their role-based page

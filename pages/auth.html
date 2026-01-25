@@ -38,6 +38,7 @@
 		<section id="signup">
 			<h3>Signup</h3>
 			<form action="/signup" method="post" autocomplete="on">
+				<input type="hidden" name="returnUrl" value="/" data-return-url />
 				<label>
 					Email
 					<input type="email" name="username" autocomplete="username" inputmode="email" required />
@@ -59,6 +60,7 @@
 				<p>Please check your email and password, then try again.</p>
 			</div>
 			<form action="/login" method="post" autocomplete="on">
+				<input type="hidden" name="returnUrl" value="/" data-return-url />
 				<label>
 					Email
 					<input type="email" name="username" autocomplete="username" inputmode="email" required />
@@ -74,6 +76,31 @@
 		</section>
 
 	</main>
+
+	<script>
+		(function () {
+			try {
+				var params = new URLSearchParams(window.location.search || '');
+				var returnUrl = params.get('returnUrl');
+				if (!returnUrl) return;
+
+				// Basic client-side hardening; server still validates.
+				if (typeof returnUrl !== 'string') return;
+				returnUrl = returnUrl.trim();
+				if (!returnUrl.startsWith('/') || returnUrl.startsWith('//') || returnUrl.indexOf('://') !== -1) {
+					return;
+				}
+				if (returnUrl.length > 2048) return;
+
+				var inputs = document.querySelectorAll('input[data-return-url][name="returnUrl"]');
+				inputs.forEach(function (el) {
+					el.value = returnUrl;
+				});
+			} catch (e) {
+				// ignore
+			}
+		})();
+	</script>
 
 </body>
 

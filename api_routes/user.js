@@ -30,6 +30,23 @@ export default function createProfileRoutes({ queries }) {
 		return `@${localPart || "user"}`;
 	}
 
+	function sanitizeReturnUrl(raw) {
+		const value = typeof raw === "string" ? raw.trim() : "";
+		if (!value) return "/";
+		if (!value.startsWith("/")) return "/";
+		if (value.startsWith("//")) return "/";
+		if (value.includes("://")) return "/";
+		if (value.includes("\n") || value.includes("\r")) return "/";
+		if (value.length > 2048) return "/";
+		return value;
+	}
+
+	function getReturnUrl(req) {
+		const bodyValue = req?.body?.returnUrl;
+		const queryValue = req?.query?.returnUrl;
+		return sanitizeReturnUrl(typeof bodyValue === "string" ? bodyValue : (typeof queryValue === "string" ? queryValue : ""));
+	}
+
 	function safeJsonParse(value, fallback) {
 		if (value == null) return fallback;
 		if (typeof value === "object") return value;
@@ -175,6 +192,7 @@ export default function createProfileRoutes({ queries }) {
 			.trim()
 			.toLowerCase();
 		const password = String(req.body.password || "");
+		const returnUrl = getReturnUrl(req);
 
 		if (!email || !password) {
 			return res.status(400).send("Email and password are required.");
@@ -221,7 +239,7 @@ export default function createProfileRoutes({ queries }) {
 			}
 		}
 
-		return res.redirect("/");
+		return res.redirect(returnUrl || "/");
 	});
 
 	router.post("/login", async (req, res) => {
@@ -229,6 +247,7 @@ export default function createProfileRoutes({ queries }) {
 			.trim()
 			.toLowerCase();
 		const password = String(req.body.password || "");
+		const returnUrl = getReturnUrl(req);
 
 		if (!email || !password) {
 			return res.status(400).send("Email and password are required.");
@@ -236,7 +255,13 @@ export default function createProfileRoutes({ queries }) {
 
 		const user = await queries.selectUserByEmail.get(email);
 		if (!user || !bcrypt.compareSync(password, user.password_hash)) {
-			return res.redirect("/auth.html#fail");
+			const qs = new URLSearchParams();
+			if (returnUrl && returnUrl !== "/") {
+				qs.set("returnUrl", returnUrl);
+			}
+			const queryString = qs.toString();
+			const url = queryString ? `/auth.html?${queryString}#fail` : "/auth.html#fail";
+			return res.redirect(url);
 		}
 
 		const token = jwt.sign({ userId: user.id }, getJwtSecret(), {
@@ -259,7 +284,7 @@ export default function createProfileRoutes({ queries }) {
 				// Don't fail login if session creation fails - cookie is still set
 			}
 		}
-		return res.redirect("/");
+		return res.redirect(returnUrl || "/");
 	});
 
 	router.post("/logout", async (req, res) => {

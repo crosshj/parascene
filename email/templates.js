@@ -109,6 +109,63 @@ export function renderHelloFromParascene({ recipientName = "there" } = {}) {
 	return { subject, html: emailHtml, text };
 }
 
+function truncateMiddle(value, max = 240) {
+	const s = String(value ?? "");
+	if (s.length <= max) return s;
+	const keepStart = Math.max(0, Math.floor(max * 0.7));
+	const keepEnd = Math.max(0, max - keepStart - 1);
+	return `${s.slice(0, keepStart)}…${s.slice(s.length - keepEnd)}`;
+}
+
+export function renderCommentReceived({
+	recipientName = "there",
+	commenterName = "Someone",
+	commentText = "",
+	creationTitle = "",
+	creationUrl = DEFAULT_APP_URL
+} = {}) {
+	const safeRecipient = escapeHtml(recipientName);
+	const safeCommenter = escapeHtml(commenterName);
+	const safeTitle = escapeHtml(creationTitle || "your creation");
+	const safeComment = escapeHtml(truncateMiddle(commentText, 600));
+
+	const subject = `New comment on ${creationTitle ? creationTitle : "your creation"}`;
+	const preheader = `${commenterName || "Someone"} left a comment on ${creationTitle ? creationTitle : "your creation"}.`;
+
+	const bodyHtml = html`
+    <p style="margin:0 0 12px;">Hi ${safeRecipient},</p>
+    <p style="margin:0 0 12px;">
+      <strong>${safeCommenter}</strong> commented on <strong>${safeTitle}</strong>.
+    </p>
+    <div style="margin:16px 0 0; padding:14px 16px; border:1px solid #e2e8f0; border-radius:12px; background:#f8fafc;">
+      <div style="color:#475569; font-size:13px; margin:0 0 6px;">Comment</div>
+      <div style="white-space:pre-wrap; color:#0f172a; font-size:15px; line-height:1.6;">${safeComment}</div>
+    </div>
+  `;
+
+	const emailHtml = baseEmailLayout({
+		preheader,
+		title: "You got a comment",
+		bodyHtml,
+		ctaText: "View the creation",
+		ctaUrl: creationUrl || DEFAULT_APP_URL,
+		footerText: "You’re receiving this email because someone commented on your creation."
+	});
+
+	const text = [
+		`Hi ${recipientName},`,
+		"",
+		`${commenterName} commented on ${creationTitle || "your creation"}:`,
+		"",
+		truncateMiddle(commentText, 1200),
+		"",
+		`View the creation: ${creationUrl || DEFAULT_APP_URL}`
+	].join("\n");
+
+	return { subject, html: emailHtml, text };
+}
+
 export const templates = {
-	helloFromParascene: renderHelloFromParascene
+	helloFromParascene: renderHelloFromParascene,
+	commentReceived: renderCommentReceived
 };
