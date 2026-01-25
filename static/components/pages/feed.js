@@ -220,7 +220,7 @@ class AppRouteFeed extends HTMLElement {
           </svg>
           <span class="feed-card-action-count" data-like-count>${item.like_count ?? 0}</span>
         </button>
-        <button class="feed-card-action" type="button" aria-label="Comment">
+        <button class="feed-card-action" type="button" aria-label="Comment" data-comment-button>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15a4 4 0 0 1-4 4H8l-5 5V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
           </svg>
@@ -239,6 +239,15 @@ class AppRouteFeed extends HTMLElement {
 		const likeButton = card.querySelector('button[data-like-button]');
 		if (likeButton) {
 			initLikeButton(likeButton, item);
+		}
+
+		const commentButton = card.querySelector('button[data-comment-button]');
+		if (commentButton && item.created_image_id) {
+			commentButton.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				window.location.href = `/creations/${item.created_image_id}#comments`;
+			});
 		}
 
 		const imageEl = card.querySelector('.feed-card-img');

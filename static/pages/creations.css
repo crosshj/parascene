@@ -131,7 +131,7 @@ body.creation-detail-page main>section:first-of-type {
 	background: var(--surface-strong);
 	padding: 24px;
 	border-top: 1px solid var(--border);
-	padding-bottom: 96px;
+	padding-bottom: 360px;
 }
 
 .creation-detail-actions {
@@ -471,6 +471,7 @@ body.creation-detail-page main>section:first-of-type {
 
 	.creation-detail-footer {
 		padding: 16px 8px;
+		padding-bottom: 360px;
 	}
 
 	.creation-detail-title {

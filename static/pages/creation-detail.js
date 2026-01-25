@@ -2,6 +2,7 @@ import { formatDateTime, formatRelativeTime } from '/shared/datetime.js';
 import { enableLikeButtons, getCreationLikeCount, initLikeButton } from '/shared/likes.js';
 import { fetchJsonWithStatusDeduped } from '/shared/api.js';
 import { getAvatarColor } from '/shared/avatar.js';
+import { fetchCreatedImageComments, postCreatedImageComment } from '/shared/comments.js';
 
 // Set up URL change detection BEFORE header component loads
 // This ensures we capture navigation events
@@ -140,10 +141,14 @@ async function loadCreation() {
 
 		// Check if current user owns this creation
 		let currentUserId = null;
+		let currentUser = null;
+		let currentUserProfile = null;
 		try {
 			const profile = await fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 2000 });
 			if (profile.ok) {
-				currentUserId = profile.data?.id ?? null;
+				currentUser = profile.data ?? null;
+				currentUserProfile = currentUser?.profile ?? null;
+				currentUserId = currentUser?.id ?? null;
 			}
 		} catch {
 			// ignore
@@ -238,6 +243,16 @@ async function loadCreation() {
 		const creatorColor = getAvatarColor(creatorUserName || creatorEmailPrefix || String(creatorId || '') || creatorName);
 		const creatorProfileHref = Number.isFinite(creatorId) && creatorId > 0 ? `/user/${creatorId}` : null;
 
+		const viewerUserName = typeof currentUserProfile?.user_name === 'string' ? currentUserProfile.user_name.trim() : '';
+		const viewerDisplayName = typeof currentUserProfile?.display_name === 'string' ? currentUserProfile.display_name.trim() : '';
+		const viewerEmailPrefix = currentUser?.email
+			? String(currentUser.email).split('@')[0]
+			: 'You';
+		const viewerName = viewerDisplayName || viewerUserName || viewerEmailPrefix || 'You';
+		const viewerInitial = viewerName.charAt(0).toUpperCase();
+		const viewerAvatarUrl = typeof currentUserProfile?.avatar_url === 'string' ? currentUserProfile.avatar_url.trim() : '';
+		const viewerColor = getAvatarColor(viewerUserName || viewerEmailPrefix || String(currentUserId || '') || viewerName);
+
 		detailContent.innerHTML = `
 			<div class="creation-detail-author">
 				${creatorProfileHref ? `
@@ -258,7 +273,9 @@ async function loadCreation() {
 			<div class="creation-detail-meta">
 				<span title="${createdAtTitle}">Created ${timeAgo}</span>
 				<span>•</span>
-				<span>0 comments</span>
+				<a class="creation-detail-comments-link" href="#comments" data-comments-link>
+					<span data-comment-count>0</span> comments
+				</a>
 				<span>•</span>
 				<button class="feed-card-action" type="button" aria-label="Like" data-like-button>
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
@@ -266,6 +283,44 @@ async function loadCreation() {
 					</svg>
 					<span class="feed-card-action-count" data-like-count>${likeCount}</span>
 				</button>
+			</div>
+
+
+
+			<div class="comment-input" data-comment-input>
+				<div class="comment-avatar" style="background: ${viewerColor};">
+					${viewerAvatarUrl ? `<img class="comment-avatar-img" src="${viewerAvatarUrl}" alt="">` : viewerInitial}
+				</div>
+				<div class="comment-input-body">
+					<textarea class="comment-textarea" rows="1" placeholder="What do you like about this creation?" data-comment-textarea></textarea>
+					<div class="comment-submit-row" data-comment-submit-row style="display: none;">
+						<button class="btn-primary comment-submit-btn" type="button" data-comment-submit>Post</button>
+					</div>
+				</div>
+			</div>
+
+			<div class="comments-toolbar">
+				<div class="comments-sort">
+					<!--
+					<svg class="comments-sort-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<path d="M11 5h10"></path>
+						<path d="M11 9h7"></path>
+						<path d="M11 13h4"></path>
+						<path d="M3 7l3-3 3 3"></path>
+						<path d="M6 4v16"></path>
+					</svg>
+					-->
+					<label class="comments-sort-label" for="comments-sort">Sort:</label>
+
+					<select class="comments-sort-select" id="comments-sort" data-comments-sort>
+						<option value="desc">Most recent</option>
+						<option value="asc">Oldest</option>
+					</select>
+				</div>
+			</div>
+			<div id="comments" data-comments-anchor></div>
+			<div class="comment-list" data-comment-list>
+				<div class="route-empty route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
 			</div>
 		`;
 
@@ -275,6 +330,193 @@ async function loadCreation() {
 		}
 
 		enableLikeButtons(detailContent);
+
+		function escapeHtml(value) {
+			return String(value ?? '')
+				.replace(/&/g, '&amp;')
+				.replace(/</g, '&lt;')
+				.replace(/>/g, '&gt;')
+				.replace(/"/g, '&quot;')
+				.replace(/'/g, '&#39;');
+		}
+
+		function scrollToComments() {
+			const el = detailContent.querySelector('#comments');
+			if (!el) return;
+			el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+		}
+
+		let commentsDidInitialHashScroll = false;
+		const commentsState = {
+			order: 'desc',
+			comments: [],
+			commentCount: 0
+		};
+
+		const commentCountEl = detailContent.querySelector('[data-comment-count]');
+		const commentListEl = detailContent.querySelector('[data-comment-list]');
+		const commentsSortEl = detailContent.querySelector('[data-comments-sort]');
+		const commentsToolbarEl = detailContent.querySelector('.comments-toolbar');
+		const commentTextarea = detailContent.querySelector('[data-comment-textarea]');
+		const commentSubmitRow = detailContent.querySelector('[data-comment-submit-row]');
+		const commentSubmitBtn = detailContent.querySelector('[data-comment-submit]');
+
+		function setCommentCount(nextCount) {
+			const n = Number(nextCount ?? 0);
+			commentsState.commentCount = Number.isFinite(n) ? Math.max(0, n) : 0;
+			if (commentCountEl) commentCountEl.textContent = String(commentsState.commentCount);
+		}
+
+		function renderComments() {
+			if (!commentListEl) return;
+
+			const list = Array.isArray(commentsState.comments) ? commentsState.comments : [];
+			if (list.length === 0) {
+				if (commentsToolbarEl instanceof HTMLElement) {
+					commentsToolbarEl.style.display = 'none';
+				}
+				commentListEl.innerHTML = `
+					<div class="route-empty comments-empty">
+						<div class="route-empty-title">No comments yet</div>
+						<div class="route-empty-message">Be the first to say something.</div>
+					</div>
+				`;
+				return;
+			}
+
+			if (commentsToolbarEl instanceof HTMLElement) {
+				commentsToolbarEl.style.display = '';
+			}
+			commentListEl.innerHTML = list.map((c) => {
+				const userName = typeof c?.user_name === 'string' ? c.user_name.trim() : '';
+				const displayName = typeof c?.display_name === 'string' ? c.display_name.trim() : '';
+				const fallbackName = userName ? userName : 'User';
+				const name = displayName || fallbackName;
+				const handle = userName ? `@${userName}` : '';
+				const avatarUrl = typeof c?.avatar_url === 'string' ? c.avatar_url.trim() : '';
+				const seed = userName || String(c?.user_id ?? '') || name;
+				const color = getAvatarColor(seed);
+				const initial = name.charAt(0).toUpperCase() || '?';
+				const date = c?.created_at ? new Date(c.created_at) : null;
+				const timeAgo = date ? (formatRelativeTime(date) || '') : '';
+				const timeTitle = date ? formatDateTime(date) : '';
+				const safeText = escapeHtml(c?.text ?? '');
+
+				return `
+					<div class="comment-item">
+						<div class="comment-avatar" style="background: ${color};">
+							${avatarUrl ? `<img class="comment-avatar-img" src="${avatarUrl}" alt="">` : initial}
+						</div>
+						<div class="comment-body">
+							<div class="comment-top">
+								<div class="comment-top-left">
+									<span class="comment-author-name">${escapeHtml(name)}</span>
+									${handle ? `<span class="comment-author-handle">${escapeHtml(handle)}</span>` : ''}
+								</div>
+							</div>
+							<div class="comment-text">${safeText}</div>
+							${timeAgo ? `<div class="comment-time-row"><span class="comment-time" title="${escapeHtml(timeTitle)}">${escapeHtml(timeAgo)}</span></div>` : ''}
+						</div>
+					</div>
+				`;
+			}).join('');
+		}
+
+		async function loadComments({ scrollIfHash = false } = {}) {
+			if (!commentListEl) return;
+			commentListEl.innerHTML = '<div class="route-empty route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>';
+			if (commentsToolbarEl instanceof HTMLElement) commentsToolbarEl.style.display = 'none';
+
+			const res = await fetchCreatedImageComments(creationId, { order: commentsState.order, limit: 50, offset: 0 })
+				.catch(() => ({ ok: false, status: 0, data: null }));
+
+			if (!res.ok) {
+				if (commentsToolbarEl instanceof HTMLElement) commentsToolbarEl.style.display = 'none';
+				commentListEl.innerHTML = `
+					<div class="route-empty comments-empty">
+						<div class="route-empty-title">Unable to load comments</div>
+					</div>
+				`;
+				return;
+			}
+
+			const comments = Array.isArray(res.data?.comments) ? res.data.comments : [];
+			const commentCount = Number(res.data?.comment_count ?? comments.length);
+			commentsState.comments = comments;
+			setCommentCount(commentCount);
+			renderComments();
+
+			if (scrollIfHash && window.location.hash === '#comments' && !commentsDidInitialHashScroll) {
+				commentsDidInitialHashScroll = true;
+				scrollToComments();
+			}
+		}
+
+		if (commentsSortEl instanceof HTMLSelectElement) {
+			commentsSortEl.value = commentsState.order;
+			commentsSortEl.addEventListener('change', () => {
+				commentsState.order = commentsSortEl.value === 'desc' ? 'desc' : 'asc';
+				void loadComments({ scrollIfHash: false });
+			});
+		}
+
+		function setSubmitVisibility() {
+			if (!(commentTextarea instanceof HTMLTextAreaElement)) return;
+			if (!(commentSubmitRow instanceof HTMLElement)) return;
+			const hasText = commentTextarea.value.trim().length > 0;
+			commentSubmitRow.style.display = hasText ? '' : 'none';
+		}
+
+		function autoGrowTextarea() {
+			if (!(commentTextarea instanceof HTMLTextAreaElement)) return;
+			commentTextarea.style.height = 'auto';
+			commentTextarea.style.height = `${commentTextarea.scrollHeight}px`;
+		}
+
+		if (commentTextarea instanceof HTMLTextAreaElement) {
+			commentTextarea.addEventListener('input', () => {
+				autoGrowTextarea();
+				setSubmitVisibility();
+			});
+		}
+
+		if (commentSubmitBtn instanceof HTMLButtonElement && commentTextarea instanceof HTMLTextAreaElement) {
+			commentSubmitBtn.addEventListener('click', async () => {
+				const text = commentTextarea.value.trim();
+				if (!text) return;
+				commentSubmitBtn.disabled = true;
+				try {
+					const res = await postCreatedImageComment(creationId, text)
+						.catch(() => ({ ok: false, status: 0, data: null }));
+					if (!res.ok) {
+						const message = typeof res.data?.error === 'string' ? res.data.error : 'Failed to post comment';
+						throw new Error(message);
+					}
+
+					commentTextarea.value = '';
+					autoGrowTextarea();
+					setSubmitVisibility();
+
+					// Reload list to ensure correct ordering + count.
+					await loadComments({ scrollIfHash: false });
+				} catch (err) {
+					alert(err?.message || 'Failed to post comment');
+				} finally {
+					commentSubmitBtn.disabled = false;
+				}
+			});
+		}
+
+		window.addEventListener('hashchange', () => {
+			if (window.location.hash === '#comments') {
+				scrollToComments();
+			}
+		});
+
+		// Initial load + deep-link scroll support.
+		autoGrowTextarea();
+		setSubmitVisibility();
+		void loadComments({ scrollIfHash: true });
 
 		// Now that the creation detail view is fully resolved, show actions.
 		if (actionsEl && actionsEl.style.display !== 'none') {

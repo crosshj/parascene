@@ -156,3 +156,20 @@ CREATE INDEX IF NOT EXISTS idx_likes_created_image_created_image_id
 
 CREATE INDEX IF NOT EXISTS idx_likes_created_image_user_id
   ON likes_created_image(user_id);
+
+CREATE TABLE IF NOT EXISTS comments_created_image (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  created_image_id INTEGER NOT NULL,
+  text TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (created_image_id) REFERENCES created_images(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_comments_created_image_created_image_id_created_at
+  ON comments_created_image(created_image_id, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_comments_created_image_user_id
+  ON comments_created_image(user_id);

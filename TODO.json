@@ -1,37 +1,30 @@
 [
   {
-    "name": "Comments",
-    "description": "Persist comments on creations with UI support.",
-    "cost": 50,
-    "impact": 100,
-    "dependsOn": []
-  },
-  {
     "name": "Follows",
     "description": "Ability to follow user, adjust \"Explore\" and \"Feed\".  Ability to list/CRUD follows.",
     "cost": 50,
-    "impact": 97,
+    "impact": 100,
     "dependsOn": []
   },
   {
     "name": "Invite credits",
     "description": "Grant starter credits on invite acceptance; record inviter and source.",
     "cost": 1,
-    "impact": 25,
+    "impact": 26,
     "dependsOn": []
   },
   {
     "name": "Provider boosts",
     "description": "Server-scoped boosts increase provider credit yield with caps, no discovery lift.",
     "cost": 51,
-    "impact": 33,
+    "impact": 34,
     "dependsOn": []
   },
   {
     "name": "BUG: Creation Failure",
     "description": "sometimes a creation fails or results in a stuck image loading forever - this looks bad",
     "cost": 70,
-    "impact": 45,
+    "impact": 46,
     "dependsOn": []
   },
   {
@@ -68,7 +61,7 @@
     "name": "Role Progression",
     "description": "Define role transition rules and whether roles can be relaxed.",
     "cost": 100,
-    "impact": 42,
+    "impact": 43,
     "dependsOn": []
   }
 ]
