@@ -342,11 +342,23 @@ class AppRouteExplore extends HTMLElement {
       items.forEach((item, index) => {
         const card = document.createElement("div");
         card.className = "route-card route-card-image";
+        const authorUserId = item.user_id != null ? Number(item.user_id) : null;
+        const profileHref = Number.isFinite(authorUserId) && authorUserId > 0 ? `/user/${authorUserId}` : null;
+        const authorUserName = typeof item.author_user_name === "string" ? item.author_user_name.trim() : "";
+        const authorDisplayName = typeof item.author_display_name === "string" ? item.author_display_name.trim() : "";
+        const emailPrefix = typeof item.author === "string" && item.author.includes("@")
+          ? item.author.split("@")[0]
+          : "";
+        const authorLabel = authorDisplayName || authorUserName || emailPrefix || item.author || "User";
+        const handleText = authorUserName || emailPrefix || "";
+        const handle = handleText ? `@${handleText}` : "";
         
         // If item has an image, make it clickable and use the image
         if (item.image_url && item.created_image_id) {
           card.style.cursor = 'pointer';
-          card.addEventListener('click', () => {
+          card.addEventListener('click', (e) => {
+            const profileLink = e.target?.closest?.('[data-profile-link]');
+            if (profileLink) return;
             window.location.href = `/creations/${item.created_image_id}`;
           });
         }
@@ -373,7 +385,9 @@ class AppRouteExplore extends HTMLElement {
               <div class="route-title">${item.title}</div>
               <div class="route-summary">${item.summary}</div>
               <div class="route-meta" title="${formatDateTime(item.created_at)}">${formatRelativeTime(item.created_at)}</div>
-              <div class="route-meta">By ${item.author}</div>
+              <div class="route-meta">
+                By ${profileHref ? html`<a class="user-link" href="${profileHref}" data-profile-link>${authorLabel}</a>` : authorLabel}${handle ? html` <span>(${handle})</span>` : ''}
+              </div>
               <div class="route-meta route-meta-spacer"></div>
               <div class="route-tags">${item.tags || ""}</div>
             </div>

@@ -119,6 +119,7 @@ loadCurrentViewerUser();
 function renderUserDetails(user) {
 	if (!userModalDetails) return;
 	const creditsValue = typeof user?.credits === "number" ? user.credits : 0;
+	const profileHref = user?.id ? `/user/${user.id}` : null;
 	userModalDetails.innerHTML = `
 		<div class="field">
 			<label>User ID</label>
@@ -136,6 +137,12 @@ function renderUserDetails(user) {
 			<label>Credits</label>
 			<div class="value" data-user-modal-credits>${escapeHtml(creditsValue.toFixed(1))}</div>
 		</div>
+		${profileHref ? `
+			<div class="field">
+				<label>Profile</label>
+				<div class="value"><a class="user-link" href="${escapeHtml(profileHref)}">View profile</a></div>
+			</div>
+		` : ""}
 	`;
 }
 

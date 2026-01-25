@@ -1,28 +1,9 @@
 import { formatDateTime, formatRelativeTime } from '../../shared/datetime.js';
 import { enableLikeButtons, initLikeButton } from '../../shared/likes.js';
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
+import { getAvatarColor } from '../../shared/avatar.js';
 
 const html = String.raw;
-
-// Color palette for avatar backgrounds - distinct, vibrant colors
-const avatarColors = [
-	'#7c3aed', // Purple
-	'#05c76f', // Green
-	'#3b82f6', // Blue
-	'#f59e0b', // Amber
-	'#ef4444', // Red
-	'#ec4899', // Pink
-	'#14b8a6', // Teal
-	'#8b5cf6', // Violet
-	'#f97316', // Orange
-	'#06b6d4', // Cyan
-	'#84cc16', // Lime
-	'#a855f7', // Purple variant
-	'#10b981', // Emerald
-	'#6366f1', // Indigo
-	'#f43f5e', // Rose
-	'#0ea5e9', // Sky
-];
 
 function scheduleImageWork(start) {
 	if (typeof start !== 'function') return Promise.resolve();
@@ -56,15 +37,6 @@ function scheduleImageWork(start) {
 			timeoutHandle = setTimeout(() => runNow(), 500);
 		}
 	});
-}
-
-function getAvatarColor(character) {
-	if (!character) return avatarColors[0];
-
-	// Get character code and map to color palette
-	const charCode = character.toUpperCase().charCodeAt(0);
-	const index = charCode % avatarColors.length;
-	return avatarColors[index];
 }
 
 function setRouteMediaBackgroundImage(mediaEl, url) {
@@ -198,30 +170,46 @@ class AppRouteFeed extends HTMLElement {
 		card.className = "feed-card";
 
 		const author = item.author || "Anonymous";
+		const authorUserName = typeof item.author_user_name === "string" ? item.author_user_name.trim() : "";
+		const authorDisplayName = typeof item.author_display_name === "string" ? item.author_display_name.trim() : "";
 		const emailPrefix = typeof item.author === "string" && item.author.includes("@")
 			? item.author.split("@")[0]
 			: author;
-		const handle = emailPrefix
+		const handle = (authorUserName || emailPrefix || author)
 			.toLowerCase()
-			.replace(/[^a-z0-9]/g, '')
-			.slice(0, 24) || "creator";
-		const avatarInitial = author.trim().charAt(0).toUpperCase() || "?";
-		const avatarColor = getAvatarColor(avatarInitial);
+			.slice(0, 48) || "user";
+		const displayName = authorDisplayName || authorUserName || emailPrefix || author;
+		const avatarUrl = typeof item.author_avatar_url === "string" ? item.author_avatar_url.trim() : "";
+		const avatarInitial = displayName.trim().charAt(0).toUpperCase() || "?";
+		const colorSeed = authorUserName || emailPrefix || String(authorUserId || '') || displayName;
+		const avatarColor = getAvatarColor(colorSeed);
 		const relativeTime = formatRelativeTime(item.created_at) || "recently";
 		const title = item.title || "";
 		const likeCount = item.like_count ?? 0;
 		const likesText = likeCount === 1 ? "like" : "likes";
+		const authorUserId = item.user_id != null ? Number(item.user_id) : null;
+		const profileHref = Number.isFinite(authorUserId) && authorUserId > 0 ? `/user/${authorUserId}` : null;
 
 		card.innerHTML = html`
       <div class="feed-card-image">
         <img class="feed-card-img" alt="${item.title || 'Feed image'}" loading="lazy" decoding="async">
       </div>
       <div class="feed-card-footer-grid">
-        <div class="feed-card-avatar" style="background: ${avatarColor};" aria-hidden="true">${avatarInitial}</div>
+        ${profileHref ? html`
+          <a class="user-link user-avatar-link" href="${profileHref}" data-profile-link aria-label="View ${author} profile">
+            <div class="feed-card-avatar" style="background: ${avatarColor};" aria-hidden="true">
+              ${avatarUrl ? html`<img class="feed-card-avatar-img" src="${avatarUrl}" alt="">` : avatarInitial}
+            </div>
+          </a>
+        ` : html`
+          <div class="feed-card-avatar" style="background: ${avatarColor};" aria-hidden="true">
+            ${avatarUrl ? html`<img class="feed-card-avatar-img" src="${avatarUrl}" alt="">` : avatarInitial}
+          </div>
+        `}
         <div class="feed-card-content">
           <div class="feed-card-title">${title}</div>
           <div class="feed-card-metadata" title="${formatDateTime(item.created_at)}">
-            @${handle} • ${relativeTime}
+            ${displayName} • ${profileHref ? html`<a class="user-link" href="${profileHref}" data-profile-link>@${handle}</a>` : html`@${handle}`} • ${relativeTime}
           </div>
         </div>
       </div>
@@ -295,6 +283,10 @@ class AppRouteFeed extends HTMLElement {
 
 			// Add click handler to the card
 			card.addEventListener('click', (e) => {
+				// Allow profile links to navigate without triggering card click
+				const profileLink = e.target?.closest?.('[data-profile-link]');
+				if (profileLink) return;
+
 				// Don't navigate if clicking on actions row or its children
 				const actionsRow = card.querySelector('.feed-card-actions');
 				if (actionsRow && actionsRow.contains(e.target)) {

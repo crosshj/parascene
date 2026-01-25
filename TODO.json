@@ -7,20 +7,11 @@
     "dependsOn": []
   },
   {
-    "name": "User Profile Page",
-    "description": "Current and other user view of a user.  Enables image upload and user name customization.",
-    "cost": 50,
-    "impact": 70,
-    "dependsOn": []
-  },
-  {
     "name": "Follows",
     "description": "Ability to follow user, adjust \"Explore\" and \"Feed\".  Ability to list/CRUD follows.",
     "cost": 50,
     "impact": 97,
-    "dependsOn": [
-      "User Profile Page"
-    ]
+    "dependsOn": []
   },
   {
     "name": "Invite credits",

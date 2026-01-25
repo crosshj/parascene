@@ -6,6 +6,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const users = [];
+const user_profiles = [];
 const moderation_queue = [];
 const servers = [];
 const policy_knobs = [];
@@ -25,6 +26,7 @@ const dataDir = process.env.VERCEL
   ? "/tmp/parascene-data"
   : path.join(__dirname, "..", "data");
 const imagesDir = path.join(dataDir, "images", "created");
+const genericImagesDir = path.join(dataDir, "images", "generic");
 
 function ensureImagesDir() {
   try {
@@ -39,8 +41,19 @@ function ensureImagesDir() {
   }
 }
 
+function ensureGenericImagesDir() {
+  try {
+    if (!fs.existsSync(genericImagesDir)) {
+      fs.mkdirSync(genericImagesDir, { recursive: true });
+    }
+  } catch (error) {
+    console.warn(`Warning: Could not create generic images directory: ${error.message}`);
+  }
+}
+
 const TABLE_TIMESTAMP_FIELDS = {
   users: ["created_at"],
+  user_profiles: ["created_at", "updated_at"],
   moderation_queue: ["created_at"],
   servers: ["created_at", "updated_at", "status_date"],
   policy_knobs: ["updated_at"],
@@ -67,6 +80,40 @@ export function openDb() {
         if (!user) return undefined;
         const { password_hash, ...safeUser } = user;
         return safeUser;
+      }
+    },
+    selectUserProfileByUserId: {
+      get: async (userId) =>
+        user_profiles.find((row) => row.user_id === Number(userId))
+    },
+    selectUserProfileByUsername: {
+      get: async (userName) =>
+        user_profiles.find((row) => row.user_name === String(userName))
+    },
+    upsertUserProfile: {
+      run: async (userId, profile) => {
+        const id = Number(userId);
+        const now = new Date().toISOString();
+        const existing = user_profiles.find((row) => row.user_id === id);
+        const next = {
+          user_id: id,
+          user_name: profile?.user_name ?? null,
+          display_name: profile?.display_name ?? null,
+          about: profile?.about ?? null,
+          socials: profile?.socials ?? null,
+          avatar_url: profile?.avatar_url ?? null,
+          cover_image_url: profile?.cover_image_url ?? null,
+          badges: profile?.badges ?? null,
+          meta: profile?.meta ?? null,
+          created_at: existing?.created_at ?? now,
+          updated_at: now
+        };
+        if (existing) {
+          Object.assign(existing, next);
+        } else {
+          user_profiles.push(next);
+        }
+        return { changes: 1 };
       }
     },
     selectSessionByTokenHash: {
@@ -247,8 +294,18 @@ export function openDb() {
       }
     },
     selectFeedItems: {
-      all: async (excludeUserId) =>
-        feed_items.filter((item) => item.user_id !== Number(excludeUserId))
+      all: async (excludeUserId) => {
+        const filtered = feed_items.filter((item) => item.user_id !== Number(excludeUserId));
+        return filtered.map((item) => {
+          const profile = user_profiles.find((p) => p.user_id === Number(item.user_id));
+          return {
+            ...item,
+            author_user_name: profile?.user_name ?? null,
+            author_display_name: profile?.display_name ?? null,
+            author_avatar_url: profile?.avatar_url ?? null
+          };
+        });
+      }
     },
     selectExploreItems: {
       all: async () => [...explore_items]
@@ -337,6 +394,27 @@ export function openDb() {
           (img) => img.user_id === Number(userId)
         );
       }
+    },
+    selectPublishedCreatedImagesForUser: {
+      all: async (userId) =>
+        created_images.filter(
+          (img) => img.user_id === Number(userId) && (img.published === true || img.published === 1)
+        )
+    },
+    selectAllCreatedImageCountForUser: {
+      get: async (userId) => ({
+        count: created_images.filter((img) => img.user_id === Number(userId)).length
+      })
+    },
+    selectPublishedCreatedImageCountForUser: {
+      get: async (userId) => ({
+        count: created_images.filter(
+          (img) => img.user_id === Number(userId) && (img.published === true || img.published === 1)
+        ).length
+      })
+    },
+    selectLikesReceivedForUserPublished: {
+      get: async () => ({ count: 0 })
     },
     selectCreatedImageById: {
       get: async (id, userId) => {
@@ -527,6 +605,9 @@ export function openDb() {
       case "users":
         targetArray = users;
         break;
+      case "user_profiles":
+        targetArray = user_profiles;
+        break;
       case "moderation_queue":
         targetArray = moderation_queue;
         break;
@@ -603,6 +684,7 @@ export function openDb() {
   async function reset() {
     // Clear all in-memory data arrays
     users.length = 0;
+    user_profiles.length = 0;
     moderation_queue.length = 0;
     provider_registry.length = 0;
     provider_statuses.length = 0;
@@ -657,6 +739,51 @@ export function openDb() {
         // If file doesn't exist (e.g., on Vercel where files can't be written),
         // throw a clear error
         throw new Error(`Image file not available: ${filename}. This may occur on serverless platforms. Consider using Supabase adapter.`);
+      }
+    },
+
+    getGenericImageBuffer: async (key) => {
+      try {
+        ensureGenericImagesDir();
+        const safeKey = String(key || "");
+        const filePath = path.join(genericImagesDir, safeKey.replace(/^\/+/, ""));
+        if (!fs.existsSync(filePath)) {
+          throw new Error(`Image not found: ${safeKey}`);
+        }
+        return fs.readFileSync(filePath);
+      } catch (error) {
+        throw new Error(`Image not found: ${String(key || "")}`);
+      }
+    },
+
+    uploadGenericImage: async (buffer, key) => {
+      try {
+        ensureGenericImagesDir();
+        const safeKey = String(key || "").replace(/^\/+/, "");
+        const filePath = path.join(genericImagesDir, safeKey);
+        const dir = path.dirname(filePath);
+        try {
+          fs.mkdirSync(dir, { recursive: true });
+        } catch {
+          // ignore
+        }
+        fs.writeFileSync(filePath, buffer);
+        return safeKey;
+      } catch (error) {
+        throw new Error("Failed to upload image");
+      }
+    },
+
+    deleteGenericImage: async (key) => {
+      try {
+        ensureGenericImagesDir();
+        const safeKey = String(key || "").replace(/^\/+/, "");
+        const filePath = path.join(genericImagesDir, safeKey);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch {
+        // ignore
       }
     },
     

@@ -435,6 +435,15 @@ input {
 	color: inherit;
 }
 
+textarea {
+	padding: 10px 12px;
+	border-radius: 10px;
+	border: 1px solid var(--border);
+	background: var(--input-bg);
+	color: inherit;
+	resize: vertical;
+}
+
 input[type="range"] {
 	-webkit-appearance: none;
 	appearance: none;
@@ -1550,6 +1559,33 @@ app-route-feed {
 	flex-shrink: 0;
 }
 
+.feed-card-avatar-img {
+	width: 100%;
+	height: 100%;
+	display: block;
+	border-radius: 50%;
+	object-fit: cover;
+}
+
+.user-link {
+	color: inherit;
+	text-decoration: none;
+}
+
+.user-link:hover {
+	text-decoration: underline;
+}
+
+.user-link:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+	border-radius: 6px;
+}
+
+.user-avatar-link:hover {
+	text-decoration: none;
+}
+
 .feed-card-footer-grid {
 	display: grid;
 	grid-template-columns: auto 1fr;
@@ -2419,7 +2455,6 @@ body.modal-open {
 	height: 90vh;
 	max-height: 90vh;
 }
-
 
 /* ============================================
    Creation Detail Page Styles

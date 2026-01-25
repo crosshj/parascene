@@ -1,6 +1,9 @@
 import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import Busboy from "busboy";
+import path from "path";
+import sharp from "sharp";
 import {
 	COOKIE_NAME,
 	ONE_WEEK_MS,
@@ -9,6 +12,7 @@ import {
 	hashToken,
 	setAuthCookie
 } from "./auth.js";
+import { getThumbnailUrl } from "./utils/url.js";
 
 export default function createProfileRoutes({ queries }) {
 	const router = express.Router();
@@ -24,6 +28,146 @@ export default function createProfileRoutes({ queries }) {
 		const email = String(user?.email || "").trim();
 		const localPart = email.includes("@") ? email.split("@")[0] : email;
 		return `@${localPart || "user"}`;
+	}
+
+	function safeJsonParse(value, fallback) {
+		if (value == null) return fallback;
+		if (typeof value === "object") return value;
+		if (typeof value !== "string") return fallback;
+		const trimmed = value.trim();
+		if (!trimmed) return fallback;
+		try {
+			return JSON.parse(trimmed);
+		} catch {
+			return fallback;
+		}
+	}
+
+	function normalizeUsername(input) {
+		const raw = typeof input === "string" ? input.trim() : "";
+		if (!raw) return null;
+		const normalized = raw.toLowerCase();
+		// Simple, stable public handle rules (expand later if needed)
+		if (!/^[a-z0-9][a-z0-9_]{2,23}$/.test(normalized)) return null;
+		return normalized;
+	}
+
+	function normalizeProfileRow(row) {
+		if (!row) {
+			return {
+				user_name: null,
+				display_name: null,
+				about: null,
+				socials: {},
+				avatar_url: null,
+				cover_image_url: null,
+				badges: [],
+				meta: {},
+				created_at: null,
+				updated_at: null
+			};
+		}
+		return {
+			user_name: row.user_name ?? null,
+			display_name: row.display_name ?? null,
+			about: row.about ?? null,
+			socials: safeJsonParse(row.socials, {}),
+			avatar_url: row.avatar_url ?? null,
+			cover_image_url: row.cover_image_url ?? null,
+			badges: safeJsonParse(row.badges, []),
+			meta: safeJsonParse(row.meta, {}),
+			created_at: row.created_at ?? null,
+			updated_at: row.updated_at ?? null
+		};
+	}
+
+	function extractGenericKey(url) {
+		const raw = typeof url === "string" ? url.trim() : "";
+		if (!raw) return null;
+		if (!raw.startsWith("/api/images/generic/")) return null;
+		const tail = raw.slice("/api/images/generic/".length);
+		if (!tail) return null;
+		// Decode each path segment to rebuild the storage key safely.
+		const segments = tail.split("/").filter(Boolean).map((seg) => {
+			try {
+				return decodeURIComponent(seg);
+			} catch {
+				return seg;
+			}
+		});
+		return segments.join("/");
+	}
+
+	function buildGenericUrl(key) {
+		const segments = String(key || "")
+			.split("/")
+			.filter(Boolean)
+			.map((seg) => encodeURIComponent(seg));
+		return `/api/images/generic/${segments.join("/")}`;
+	}
+
+	function parseJsonField(raw, fallback, errorMessage) {
+		if (raw == null || raw === "") return fallback;
+		if (typeof raw === "object") return raw;
+		if (typeof raw !== "string") return fallback;
+		try {
+			return JSON.parse(raw);
+		} catch {
+			const err = new Error(errorMessage || "Invalid JSON");
+			err.code = "INVALID_JSON";
+			throw err;
+		}
+	}
+
+	function parseMultipart(req, { maxFileBytes = 12 * 1024 * 1024 } = {}) {
+		return new Promise((resolve, reject) => {
+			const busboy = Busboy({
+				headers: req.headers,
+				limits: {
+					fileSize: maxFileBytes,
+					files: 2,
+					fields: 50
+				}
+			});
+
+			const fields = {};
+			const files = {};
+
+			busboy.on("field", (name, value) => {
+				fields[name] = value;
+			});
+
+			busboy.on("file", (name, file, info) => {
+				const { filename, mimeType } = info || {};
+				const chunks = [];
+				let total = 0;
+
+				file.on("data", (data) => {
+					total += data.length;
+					chunks.push(data);
+				});
+
+				file.on("limit", () => {
+					const err = new Error("File too large");
+					err.code = "FILE_TOO_LARGE";
+					reject(err);
+				});
+
+				file.on("end", () => {
+					if (total === 0) return;
+					files[name] = {
+						filename: filename || "",
+						mimeType: mimeType || "application/octet-stream",
+						buffer: Buffer.concat(chunks)
+					};
+				});
+			});
+
+			busboy.on("error", (error) => reject(error));
+			busboy.on("finish", () => resolve({ fields, files }));
+
+			req.pipe(busboy);
+		});
 	}
 
 	router.post("/signup", async (req, res) => {
@@ -147,6 +291,9 @@ export default function createProfileRoutes({ queries }) {
 			return res.status(404).json({ error: "User not found" });
 		}
 
+		const profileRow = await queries.selectUserProfileByUserId?.get(req.auth.userId);
+		const profile = normalizeProfileRow(profileRow);
+
 		// Get credits balance
 		let credits = await queries.selectUserCredits.get(req.auth.userId);
 		// If no credits record exists, initialize with 100 for existing users
@@ -160,7 +307,330 @@ export default function createProfileRoutes({ queries }) {
 			}
 		}
 
-		return res.json({ ...user, credits: credits.balance });
+		return res.json({ ...user, credits: credits.balance, profile });
+	});
+
+	// Update current user's profile (user_profiles table)
+	router.put("/api/profile", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+
+			const user = await queries.selectUserById.get(req.auth.userId);
+			if (!user) {
+				return res.status(404).json({ error: "User not found" });
+			}
+
+			const rawUserName = req.body?.user_name ?? req.body?.username;
+			const userName = normalizeUsername(rawUserName);
+			if (typeof rawUserName === "string" && !userName) {
+				return res.status(400).json({
+					error: "Invalid username",
+					message: "Username must be 3-24 chars, lowercase letters/numbers/underscore, starting with a letter/number."
+				});
+			}
+
+			// Enforce uniqueness if username provided
+			if (userName && queries.selectUserProfileByUsername?.get) {
+				const existing = await queries.selectUserProfileByUsername.get(userName);
+				if (existing && Number(existing.user_id) !== Number(req.auth.userId)) {
+					return res.status(409).json({ error: "Username already taken" });
+				}
+			}
+
+			const payload = {
+				user_name: userName,
+				display_name: typeof req.body?.display_name === "string" ? req.body.display_name.trim() : null,
+				about: typeof req.body?.about === "string" ? req.body.about.trim() : null,
+				socials: typeof req.body?.socials === "object" && req.body.socials ? req.body.socials : {},
+				avatar_url: typeof req.body?.avatar_url === "string" ? req.body.avatar_url.trim() : null,
+				cover_image_url: typeof req.body?.cover_image_url === "string" ? req.body.cover_image_url.trim() : null,
+				badges: Array.isArray(req.body?.badges) ? req.body.badges : [],
+				meta: typeof req.body?.meta === "object" && req.body.meta ? req.body.meta : {}
+			};
+
+			if (!queries.upsertUserProfile?.run) {
+				return res.status(500).json({ error: "Profile storage not available" });
+			}
+
+			await queries.upsertUserProfile.run(req.auth.userId, payload);
+			const updatedRow = await queries.selectUserProfileByUserId?.get(req.auth.userId);
+			const profile = normalizeProfileRow(updatedRow);
+			return res.json({ ok: true, profile });
+		} catch (error) {
+			console.error("Error updating profile:", error);
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	// Update current user's profile via multipart form (server uploads images and deletes previous)
+	router.post("/api/profile", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+
+			const user = await queries.selectUserById.get(req.auth.userId);
+			if (!user) {
+				return res.status(404).json({ error: "User not found" });
+			}
+
+			if (!queries.upsertUserProfile?.run) {
+				return res.status(500).json({ error: "Profile storage not available" });
+			}
+
+			const { fields, files } = await parseMultipart(req);
+
+			const rawUserName = fields?.user_name ?? fields?.username;
+			const userName = normalizeUsername(rawUserName);
+			if (typeof rawUserName === "string" && rawUserName.trim() && !userName) {
+				return res.status(400).json({
+					error: "Invalid username",
+					message: "Username must be 3-24 chars, lowercase letters/numbers/underscore, starting with a letter/number."
+				});
+			}
+
+			if (userName && queries.selectUserProfileByUsername?.get) {
+				const existing = await queries.selectUserProfileByUsername.get(userName);
+				if (existing && Number(existing.user_id) !== Number(req.auth.userId)) {
+					return res.status(409).json({ error: "Username already taken" });
+				}
+			}
+
+			const existingRow = await queries.selectUserProfileByUserId?.get(req.auth.userId);
+			const existingProfile = normalizeProfileRow(existingRow);
+
+			const avatarRemove = Boolean(fields?.avatar_remove);
+			const coverRemove = Boolean(fields?.cover_remove);
+			const avatarFile = files?.avatar_file || null;
+			const coverFile = files?.cover_file || null;
+
+			const oldAvatarUrl = existingProfile.avatar_url || null;
+			const oldCoverUrl = existingProfile.cover_image_url || null;
+			const oldAvatarKey = extractGenericKey(oldAvatarUrl);
+			const oldCoverKey = extractGenericKey(oldCoverUrl);
+
+			const nextSocials = {
+				...(typeof existingProfile.socials === "object" && existingProfile.socials ? existingProfile.socials : {})
+			};
+			if (typeof fields?.social_website === "string") {
+				const website = fields.social_website.trim();
+				if (website) nextSocials.website = website;
+				else delete nextSocials.website;
+			}
+
+			const badges = parseJsonField(fields?.badges, existingProfile.badges || [], "Badges must be valid JSON.");
+			if (!Array.isArray(badges)) {
+				return res.status(400).json({ error: "Badges must be a JSON array" });
+			}
+			const meta = parseJsonField(fields?.meta, existingProfile.meta || {}, "Meta must be valid JSON.");
+			if (meta == null || typeof meta !== "object" || Array.isArray(meta)) {
+				return res.status(400).json({ error: "Meta must be a JSON object" });
+			}
+
+			let avatar_url = avatarRemove ? null : (oldAvatarUrl || null);
+			let cover_image_url = coverRemove ? null : (oldCoverUrl || null);
+
+			const now = Date.now();
+			const rand = Math.random().toString(36).slice(2, 9);
+
+			const pendingDeletes = [];
+
+			const storage = req.app?.locals?.storage;
+			if (!storage?.uploadGenericImage) {
+				return res.status(500).json({ error: "Generic images storage not available" });
+			}
+
+			if (!avatarRemove && avatarFile?.buffer?.length) {
+				let resized;
+				try {
+					resized = await sharp(avatarFile.buffer)
+						.rotate()
+						.resize(128, 128, { fit: "cover" })
+						.png()
+						.toBuffer();
+				} catch {
+					return res.status(400).json({ error: "Invalid avatar image" });
+				}
+				const key = `profile/${req.auth.userId}/avatar_${now}_${rand}.png`;
+				const stored = await storage.uploadGenericImage(resized, key, {
+					contentType: "image/png"
+				});
+				avatar_url = buildGenericUrl(stored);
+				if (oldAvatarKey && storage.deleteGenericImage) pendingDeletes.push(oldAvatarKey);
+			} else if (avatarRemove && oldAvatarKey && storage.deleteGenericImage) {
+				pendingDeletes.push(oldAvatarKey);
+			}
+
+			if (!coverRemove && coverFile?.buffer?.length) {
+				const ext = path.extname(coverFile.filename) || ".png";
+				const key = `profile/${req.auth.userId}/cover_${now}_${rand}${ext}`;
+				const stored = await storage.uploadGenericImage(coverFile.buffer, key, {
+					contentType: coverFile.mimeType
+				});
+				cover_image_url = buildGenericUrl(stored);
+				if (oldCoverKey && storage.deleteGenericImage) pendingDeletes.push(oldCoverKey);
+			} else if (coverRemove && oldCoverKey && storage.deleteGenericImage) {
+				pendingDeletes.push(oldCoverKey);
+			}
+
+			const payload = {
+				user_name: userName || existingProfile.user_name || null,
+				display_name: typeof fields?.display_name === "string" ? fields.display_name.trim() : existingProfile.display_name || null,
+				about: typeof fields?.about === "string" ? fields.about.trim() : existingProfile.about || null,
+				socials: nextSocials,
+				avatar_url,
+				cover_image_url,
+				badges,
+				meta
+			};
+
+			await queries.upsertUserProfile.run(req.auth.userId, payload);
+			const updatedRow = await queries.selectUserProfileByUserId?.get(req.auth.userId);
+			const profile = normalizeProfileRow(updatedRow);
+
+			// Best-effort delete old images after profile update.
+			if (storage.deleteGenericImage && pendingDeletes.length > 0) {
+				for (const key of pendingDeletes) {
+					try {
+						await storage.deleteGenericImage(key);
+					} catch (error) {
+						console.warn("Failed to delete previous profile image:", error?.message || error);
+					}
+				}
+			}
+
+			return res.json({ ok: true, profile });
+		} catch (error) {
+			if (error?.code === "FILE_TOO_LARGE") {
+				return res.status(413).json({ error: "Image too large" });
+			}
+			if (error?.code === "INVALID_JSON") {
+				return res.status(400).json({ error: error.message || "Invalid JSON" });
+			}
+			console.error("Error updating profile (multipart):", error);
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	// Public-ish profile summary (auth required for now)
+	router.get("/api/users/:id/profile", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+
+			const viewer = await queries.selectUserById.get(req.auth.userId);
+			if (!viewer) {
+				return res.status(404).json({ error: "User not found" });
+			}
+
+			const targetUserId = Number.parseInt(req.params.id, 10);
+			if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+				return res.status(400).json({ error: "Invalid user id" });
+			}
+
+			const target = await queries.selectUserById.get(targetUserId);
+			if (!target) {
+				return res.status(404).json({ error: "User not found" });
+			}
+
+			const emailPrefix = (() => {
+				const email = String(target?.email || "").trim();
+				if (!email) return null;
+				const local = email.includes("@") ? email.split("@")[0] : email;
+				const trimmed = local.trim();
+				return trimmed || null;
+			})();
+
+			const isSelf = Number(targetUserId) === Number(req.auth.userId);
+			const profileRow = await queries.selectUserProfileByUserId?.get(targetUserId);
+			const profile = normalizeProfileRow(profileRow);
+
+			const allCountRow = await queries.selectAllCreatedImageCountForUser?.get(targetUserId);
+			const publishedCountRow = await queries.selectPublishedCreatedImageCountForUser?.get(targetUserId);
+			const likesCountRow = await queries.selectLikesReceivedForUserPublished?.get(targetUserId);
+
+			const stats = {
+				creations_total: Number(allCountRow?.count ?? 0),
+				creations_published: Number(publishedCountRow?.count ?? 0),
+				likes_received: Number(likesCountRow?.count ?? 0),
+				member_since: target.created_at ?? null
+			};
+
+			const publicUser = isSelf
+				? { id: target.id, email: target.email, role: target.role, created_at: target.created_at }
+				: { id: target.id, role: target.role, created_at: target.created_at, email_prefix: emailPrefix };
+
+			return res.json({ user: publicUser, profile, stats, is_self: isSelf });
+		} catch (error) {
+			console.error("Error loading user profile summary:", error);
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	// Created images for a user (published-only unless viewer is owner and include=all)
+	router.get("/api/users/:id/created-images", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+
+			const viewer = await queries.selectUserById.get(req.auth.userId);
+			if (!viewer) {
+				return res.status(404).json({ error: "User not found" });
+			}
+
+			const targetUserId = Number.parseInt(req.params.id, 10);
+			if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+				return res.status(400).json({ error: "Invalid user id" });
+			}
+
+			const target = await queries.selectUserById.get(targetUserId);
+			if (!target) {
+				return res.status(404).json({ error: "User not found" });
+			}
+
+			const isSelf = Number(targetUserId) === Number(req.auth.userId);
+			const include = String(req.query?.include || "").toLowerCase();
+			const wantAll = include === "all";
+
+			let images = [];
+			if (isSelf && wantAll && queries.selectCreatedImagesForUser?.all) {
+				images = await queries.selectCreatedImagesForUser.all(targetUserId);
+			} else if (queries.selectPublishedCreatedImagesForUser?.all) {
+				images = await queries.selectPublishedCreatedImagesForUser.all(targetUserId);
+			} else if (queries.selectCreatedImagesForUser?.all) {
+				// Fallback: filter in memory
+				const all = await queries.selectCreatedImagesForUser.all(targetUserId);
+				images = Array.isArray(all) ? all.filter((img) => img?.published === 1 || img?.published === true) : [];
+			}
+
+			const mapped = (Array.isArray(images) ? images : []).map((img) => {
+				const url = img.file_path || (img.filename ? `/api/images/created/${img.filename}` : null);
+				return {
+					id: img.id,
+					filename: img.filename,
+					url,
+					thumbnail_url: getThumbnailUrl(url),
+					width: img.width,
+					height: img.height,
+					color: img.color,
+					status: img.status || "completed",
+					created_at: img.created_at,
+					published: img.published === 1 || img.published === true,
+					published_at: img.published_at || null,
+					title: img.title || null,
+					description: img.description || null
+				};
+			});
+
+			return res.json({ images: mapped, is_self: isSelf, scope: isSelf && wantAll ? "all" : "published" });
+		} catch (error) {
+			console.error("Error loading user created images:", error);
+			return res.status(500).json({ error: "Internal server error" });
+		}
 	});
 
 	router.get("/api/notifications", async (req, res) => {

@@ -155,7 +155,9 @@ class AppHeader extends HTMLElement {
 		// Check if we're on a server-sent page (like creation detail)
 		// If so, use full page navigation for ANY route change
 		const isServerSentPage = /^\/creations\/\d+$/.test(window.location.pathname) ||
-			window.location.pathname.startsWith('/help/');
+			window.location.pathname.startsWith('/help/') ||
+			window.location.pathname === '/user' ||
+			/^\/user\/\d+$/.test(window.location.pathname);
 		if (isServerSentPage) {
 			// Use full page navigation for server-sent pages
 			window.location.href = `/${route}`;
@@ -478,7 +480,9 @@ class AppHeader extends HTMLElement {
 		// If we're on a server-sent page (like creation detail), don't handle route changes
 		// Any navigation should result in a full page load
 		const isServerSentPage = /^\/creations\/\d+$/.test(window.location.pathname) ||
-			window.location.pathname.startsWith('/help/');
+			window.location.pathname.startsWith('/help/') ||
+			window.location.pathname === '/user' ||
+			/^\/user\/\d+$/.test(window.location.pathname);
 		if (isServerSentPage) {
 			return;
 		}

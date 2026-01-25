@@ -301,6 +301,9 @@ export default function createCreateRoutes({ queries, storage }) {
       if (image.user_id) {
         creator = await queries.selectUserById.get(image.user_id);
       }
+      const creatorProfile = image.user_id
+        ? await queries.selectUserProfileByUserId.get(image.user_id).catch(() => null)
+        : null;
 
       const likeCountRow = await queries.selectCreatedImageLikeCount?.get(image.id);
       const likeCount = Number(likeCountRow?.like_count ?? 0);
@@ -326,7 +329,10 @@ export default function createCreateRoutes({ queries, storage }) {
         creator: creator ? {
           id: creator.id,
           email: creator.email,
-          role: creator.role
+          role: creator.role,
+          user_name: creatorProfile?.user_name ?? null,
+          display_name: creatorProfile?.display_name ?? null,
+          avatar_url: creatorProfile?.avatar_url ?? null
         } : null
       });
     } catch (error) {

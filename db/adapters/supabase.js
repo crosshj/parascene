@@ -70,6 +70,50 @@ export function openDb() {
         return data ?? undefined;
       }
     },
+    selectUserProfileByUserId: {
+      get: async (userId) => {
+        const { data, error } = await serviceClient
+          .from(prefixedTable("user_profiles"))
+          .select("user_id, user_name, display_name, about, socials, avatar_url, cover_image_url, badges, meta, created_at, updated_at")
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (error) throw error;
+        return data ?? undefined;
+      }
+    },
+    selectUserProfileByUsername: {
+      get: async (userName) => {
+        const { data, error } = await serviceClient
+          .from(prefixedTable("user_profiles"))
+          .select("user_id, user_name")
+          .eq("user_name", userName)
+          .maybeSingle();
+        if (error) throw error;
+        return data ?? undefined;
+      }
+    },
+    upsertUserProfile: {
+      run: async (userId, profile) => {
+        const payload = {
+          user_id: userId,
+          user_name: profile?.user_name ?? null,
+          display_name: profile?.display_name ?? null,
+          about: profile?.about ?? null,
+          socials: profile?.socials ?? null,
+          avatar_url: profile?.avatar_url ?? null,
+          cover_image_url: profile?.cover_image_url ?? null,
+          badges: profile?.badges ?? null,
+          meta: profile?.meta ?? null,
+          updated_at: new Date().toISOString()
+        };
+        const { data, error } = await serviceClient
+          .from(prefixedTable("user_profiles"))
+          .upsert(payload, { onConflict: "user_id" })
+          .select("user_id");
+        if (error) throw error;
+        return { changes: data?.length ?? 0 };
+      }
+    },
     selectSessionByTokenHash: {
       get: async (tokenHash, userId) => {
         // Use serviceClient to bypass RLS for authentication
@@ -427,16 +471,43 @@ export function openDb() {
           likedIdSet = new Set((likedRows ?? []).map((row) => String(row.created_image_id)));
         }
 
+        // Attach profile fields (display_name, user_name, avatar_url) for authors
+        const authorIds = Array.from(new Set(
+          filtered
+            .map((item) => item.user_id)
+            .filter((id) => id !== null && id !== undefined)
+            .map((id) => Number(id))
+            .filter((id) => Number.isFinite(id) && id > 0)
+        ));
+
+        let profileByUserId = new Map();
+        if (authorIds.length > 0) {
+          const { data: profileRows, error: profileError } = await serviceClient
+            .from(prefixedTable("user_profiles"))
+            .select("user_id, user_name, display_name, avatar_url")
+            .in("user_id", authorIds);
+          if (profileError) throw profileError;
+          profileByUserId = new Map(
+            (profileRows ?? []).map((row) => [String(row.user_id), row])
+          );
+        }
+
         return filtered.map((item) => {
           const key = item.created_image_id === null || item.created_image_id === undefined
             ? null
             : String(item.created_image_id);
           const likeCount = key ? (countById.get(key) ?? 0) : 0;
           const viewerLiked = key && likedIdSet ? likedIdSet.has(key) : false;
+          const profile = item.user_id !== null && item.user_id !== undefined
+            ? profileByUserId.get(String(item.user_id)) ?? null
+            : null;
           return {
             ...item,
             like_count: likeCount,
-            viewer_liked: viewerLiked
+            viewer_liked: viewerLiked,
+            author_user_name: profile?.user_name ?? null,
+            author_display_name: profile?.display_name ?? null,
+            author_avatar_url: profile?.avatar_url ?? null
           };
         });
       }
@@ -607,6 +678,61 @@ export function openDb() {
           .order("created_at", { ascending: false });
         if (error) throw error;
         return data ?? [];
+      }
+    },
+    selectPublishedCreatedImagesForUser: {
+      all: async (userId) => {
+        const { data, error } = await serviceClient
+          .from(prefixedTable("created_images"))
+          .select(
+            "id, filename, file_path, width, height, color, status, created_at, published, published_at, title, description"
+          )
+          .eq("user_id", userId)
+          .eq("published", true)
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        return data ?? [];
+      }
+    },
+    selectAllCreatedImageCountForUser: {
+      get: async (userId) => {
+        const { count, error } = await serviceClient
+          .from(prefixedTable("created_images"))
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId);
+        if (error) throw error;
+        return { count: count ?? 0 };
+      }
+    },
+    selectPublishedCreatedImageCountForUser: {
+      get: async (userId) => {
+        const { count, error } = await serviceClient
+          .from(prefixedTable("created_images"))
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId)
+          .eq("published", true);
+        if (error) throw error;
+        return { count: count ?? 0 };
+      }
+    },
+    selectLikesReceivedForUserPublished: {
+      get: async (userId) => {
+        // First fetch published image ids for this user
+        const { data: images, error: imagesError } = await serviceClient
+          .from(prefixedTable("created_images"))
+          .select("id")
+          .eq("user_id", userId)
+          .eq("published", true);
+        if (imagesError) throw imagesError;
+        const ids = (images ?? []).map((row) => row.id).filter((id) => id != null);
+        if (ids.length === 0) return { count: 0 };
+
+        const { count, error } = await serviceClient
+          .from(prefixedTable("likes_created_image"))
+          .select("id", { count: "exact", head: true })
+          .in("created_image_id", ids);
+        if (error) throw error;
+        return { count: count ?? 0 };
       }
     },
     selectCreatedImageById: {
@@ -936,6 +1062,7 @@ export function openDb() {
     const tables = [
       "feed_items",
       "created_images",
+      "user_profiles",
       "sessions",
       "notifications",
       "creations",
@@ -966,9 +1093,9 @@ export function openDb() {
 
   // Storage interface for images using Supabase Storage
   // Images are stored in a private bucket and served through the backend
-  const STORAGE_BUCKET = process.env.SUPABASE_IMAGE_BUCKET || "prsn_created-images";
-  const STORAGE_THUMBNAIL_BUCKET =
-    process.env.SUPABASE_THUMBNAIL_BUCKET || "prsn_created-images-thumbnails";
+  const STORAGE_BUCKET = "prsn_created-images";
+  const STORAGE_THUMBNAIL_BUCKET = "prsn_created-images-thumbnails";
+  const GENERIC_BUCKET = "prsn_generic-images";
   
   function getThumbnailFilename(filename) {
     const ext = path.extname(filename);
@@ -1045,6 +1172,47 @@ export function openDb() {
       // Convert blob to buffer
       const arrayBuffer = await data.arrayBuffer();
       return Buffer.from(arrayBuffer);
+    },
+
+    getGenericImageBuffer: async (key) => {
+      const objectKey = String(key || "");
+      if (!objectKey) {
+        throw new Error("Image not found");
+      }
+      const { data, error } = await storageClient.storage
+        .from(GENERIC_BUCKET)
+        .download(objectKey);
+      if (error) {
+        throw new Error(`Image not found: ${objectKey}`);
+      }
+      const arrayBuffer = await data.arrayBuffer();
+      return Buffer.from(arrayBuffer);
+    },
+
+    uploadGenericImage: async (buffer, key, options = {}) => {
+      const objectKey = String(key || "");
+      if (!objectKey) {
+        throw new Error("Invalid key");
+      }
+      const contentType = String(options?.contentType || "application/octet-stream");
+      const { error } = await storageClient.storage
+        .from(GENERIC_BUCKET)
+        .upload(objectKey, buffer, { contentType, upsert: true });
+      if (error) {
+        throw new Error(`Failed to upload generic image: ${error.message}`);
+      }
+      return objectKey;
+    },
+
+    deleteGenericImage: async (key) => {
+      const objectKey = String(key || "");
+      if (!objectKey) return;
+      const { error } = await storageClient.storage
+        .from(GENERIC_BUCKET)
+        .remove([objectKey]);
+      if (error && error.message && !error.message.toLowerCase().includes("not found")) {
+        throw new Error(`Failed to delete generic image: ${error.message}`);
+      }
     },
     
     deleteImage: async (filename) => {

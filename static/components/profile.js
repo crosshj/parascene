@@ -35,6 +35,7 @@ class AppProfile extends HTMLElement {
 
     const overlay = this.shadowRoot.querySelector('.profile-overlay');
     const closeButton = this.shadowRoot.querySelector('.profile-close');
+    const fullProfileLink = this.shadowRoot.querySelector('[data-full-profile-link]');
     const logoutForm = this.shadowRoot.querySelector('form[action="/logout"]');
 
     if (overlay) {
@@ -48,6 +49,14 @@ class AppProfile extends HTMLElement {
     if (closeButton) {
       closeButton.addEventListener('click', () => {
         this.close();
+      });
+    }
+
+    if (fullProfileLink) {
+      fullProfileLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.close();
+        window.location.href = '/user';
       });
     }
 
@@ -256,17 +265,38 @@ class AppProfile extends HTMLElement {
           display: flex;
           justify-content: flex-end;
           padding: 0 20px 20px;
+          gap: 10px;
+          flex-wrap: wrap;
         }
-        .logout-button {
-          padding: 8px 14px;
+        .profile-actions form {
+          margin: 0;
+        }
+        .profile-action-button {
+          height: 40px;
+          padding: 0 14px;
           border-radius: 10px;
           border: 1px solid var(--border);
-          background: var(--surface-strong);
+          background: transparent;
           color: var(--text);
           cursor: pointer;
           font-weight: 600;
+          text-decoration: none;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          box-sizing: border-box;
+          line-height: 1;
+          -webkit-appearance: none;
+          appearance: none;
         }
-        .logout-button:hover {
+        .profile-action-button:hover {
+          border-color: var(--accent);
+          background: var(--surface-strong);
+        }
+        .profile-action-button.is-logout {
+          background: var(--surface-strong);
+        }
+        .profile-action-button.is-logout:hover {
           border-color: var(--accent);
           background: var(--surface);
         }
@@ -307,8 +337,9 @@ class AppProfile extends HTMLElement {
             <div class="profile-content"></div>
           </div>
           <div class="profile-actions">
+            <a class="profile-action-button" href="/user" data-full-profile-link>View Full Profile</a>
             <form action="/logout" method="post">
-              <button type="submit" class="logout-button">Logout</button>
+              <button type="submit" class="profile-action-button is-logout">Logout</button>
             </form>
           </div>
         </div>

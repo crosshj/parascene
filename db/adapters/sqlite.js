@@ -102,6 +102,90 @@ export async function openDb() {
         return Promise.resolve(stmt.get(id));
       }
     },
+    selectUserProfileByUserId: {
+      get: async (userId) => {
+        const stmt = db.prepare(
+          `SELECT user_id, user_name, display_name, about, socials, avatar_url, cover_image_url, badges, meta, created_at, updated_at
+           FROM user_profiles
+           WHERE user_id = ?`
+        );
+        return Promise.resolve(stmt.get(userId));
+      }
+    },
+    selectUserProfileByUsername: {
+      get: async (username) => {
+        const stmt = db.prepare(
+          `SELECT user_id, user_name
+           FROM user_profiles
+           WHERE user_name = ?`
+        );
+        return Promise.resolve(stmt.get(username));
+      }
+    },
+    upsertUserProfile: {
+      run: async (userId, profile) => {
+        const toJsonText = (value) => {
+          if (value == null) return null;
+          if (typeof value === "string") return value;
+          try {
+            return JSON.stringify(value);
+          } catch {
+            return null;
+          }
+        };
+
+        const stmt = db.prepare(
+          `INSERT INTO user_profiles (
+            user_id,
+            user_name,
+            display_name,
+            about,
+            socials,
+            avatar_url,
+            cover_image_url,
+            badges,
+            meta,
+            created_at,
+            updated_at
+          ) VALUES (
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            datetime('now'),
+            datetime('now')
+          )
+          ON CONFLICT(user_id) DO UPDATE SET
+            user_name = excluded.user_name,
+            display_name = excluded.display_name,
+            about = excluded.about,
+            socials = excluded.socials,
+            avatar_url = excluded.avatar_url,
+            cover_image_url = excluded.cover_image_url,
+            badges = excluded.badges,
+            meta = excluded.meta,
+            updated_at = datetime('now')`
+        );
+
+        const result = stmt.run(
+          userId,
+          profile?.user_name ?? null,
+          profile?.display_name ?? null,
+          profile?.about ?? null,
+          toJsonText(profile?.socials),
+          profile?.avatar_url ?? null,
+          profile?.cover_image_url ?? null,
+          toJsonText(profile?.badges),
+          toJsonText(profile?.meta)
+        );
+        return Promise.resolve({ changes: result.changes });
+      }
+    },
     selectSessionByTokenHash: {
       get: async (tokenHash, userId) => {
         const stmt = db.prepare(
@@ -318,11 +402,15 @@ export async function openDb() {
         const stmt = db.prepare(
           `SELECT fi.id, fi.title, fi.summary, fi.author, fi.tags, fi.created_at, 
                   fi.created_image_id, ci.filename, ci.file_path, ci.user_id,
+                  up.user_name AS author_user_name,
+                  up.display_name AS author_display_name,
+                  up.avatar_url AS author_avatar_url,
                   COALESCE(ci.file_path, CASE WHEN ci.filename IS NOT NULL THEN '/api/images/created/' || ci.filename ELSE NULL END) as url,
                   COALESCE(lc.like_count, 0) AS like_count,
                   CASE WHEN ? IS NOT NULL AND vl.user_id IS NOT NULL THEN 1 ELSE 0 END AS viewer_liked
            FROM feed_items fi
            LEFT JOIN created_images ci ON fi.created_image_id = ci.id
+           LEFT JOIN user_profiles up ON up.user_id = ci.user_id
            LEFT JOIN (
              SELECT created_image_id, COUNT(*) AS like_count
              FROM likes_created_image
@@ -502,6 +590,49 @@ export async function openDb() {
            ORDER BY created_at DESC`
         );
         return Promise.resolve(stmt.all(userId));
+      }
+    },
+    selectPublishedCreatedImagesForUser: {
+      all: async (userId) => {
+        const stmt = db.prepare(
+          `SELECT id, filename, file_path, width, height, color, status, created_at, 
+                  published, published_at, title, description
+           FROM created_images
+           WHERE user_id = ? AND published = 1
+           ORDER BY created_at DESC`
+        );
+        return Promise.resolve(stmt.all(userId));
+      }
+    },
+    selectAllCreatedImageCountForUser: {
+      get: async (userId) => {
+        const stmt = db.prepare(
+          `SELECT COUNT(*) AS count
+           FROM created_images
+           WHERE user_id = ?`
+        );
+        return Promise.resolve(stmt.get(userId));
+      }
+    },
+    selectPublishedCreatedImageCountForUser: {
+      get: async (userId) => {
+        const stmt = db.prepare(
+          `SELECT COUNT(*) AS count
+           FROM created_images
+           WHERE user_id = ? AND published = 1`
+        );
+        return Promise.resolve(stmt.get(userId));
+      }
+    },
+    selectLikesReceivedForUserPublished: {
+      get: async (userId) => {
+        const stmt = db.prepare(
+          `SELECT COUNT(*) AS count
+           FROM likes_created_image l
+           INNER JOIN created_images ci ON ci.id = l.created_image_id
+           WHERE ci.user_id = ? AND ci.published = 1`
+        );
+        return Promise.resolve(stmt.get(userId));
       }
     },
     selectCreatedImageById: {
@@ -787,11 +918,30 @@ export async function openDb() {
 
   // Storage interface for images
   const imagesDir = path.join(dataDir, "images", "created");
+  const genericImagesDir = path.join(dataDir, "images", "generic");
   
   function ensureImagesDir() {
     if (!fs.existsSync(imagesDir)) {
       fs.mkdirSync(imagesDir, { recursive: true });
     }
+  }
+
+  function ensureGenericImagesDir() {
+    if (!fs.existsSync(genericImagesDir)) {
+      fs.mkdirSync(genericImagesDir, { recursive: true });
+    }
+  }
+
+  function safeJoin(baseDir, key) {
+    const raw = String(key || "");
+    const normalized = raw.replace(/\\/g, "/");
+    const stripped = normalized.replace(/^\/+/, "");
+    const resolved = path.resolve(baseDir, stripped);
+    const baseResolved = path.resolve(baseDir);
+    if (!resolved.startsWith(baseResolved + path.sep) && resolved !== baseResolved) {
+      throw new Error("Invalid key");
+    }
+    return { resolved, stripped };
   }
 
   const storage = {
@@ -812,6 +962,37 @@ export async function openDb() {
         throw new Error(`Image not found: ${filename}`);
       }
       return fs.readFileSync(filePath);
+    },
+
+    getGenericImageBuffer: async (key) => {
+      ensureGenericImagesDir();
+      const safeKey = String(key || "");
+      const { resolved: filePath } = safeJoin(genericImagesDir, safeKey);
+      if (!fs.existsSync(filePath)) {
+        throw new Error(`Image not found: ${safeKey}`);
+      }
+      return fs.readFileSync(filePath);
+    },
+
+    uploadGenericImage: async (buffer, key) => {
+      ensureGenericImagesDir();
+      const safeKey = String(key || "");
+      const { resolved: filePath, stripped } = safeJoin(genericImagesDir, safeKey);
+      const dir = path.dirname(filePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(filePath, buffer);
+      return stripped;
+    },
+
+    deleteGenericImage: async (key) => {
+      ensureGenericImagesDir();
+      const safeKey = String(key || "");
+      const { resolved: filePath } = safeJoin(genericImagesDir, safeKey);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
     },
     
     deleteImage: async (filename) => {

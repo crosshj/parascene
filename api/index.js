@@ -9,6 +9,7 @@ import createExploreRoutes from "../api_routes/explore.js";
 import createFeedRoutes from "../api_routes/feed.js";
 import createCreateRoutes from "../api_routes/create.js";
 import createCreationsRoutes from "../api_routes/creations.js";
+import createImagesRoutes from "../api_routes/images.js";
 import createPageRoutes from "../api_routes/pages.js";
 import createProviderRoutes from "../api_routes/provider.js";
 import createServersRoutes from "../api_routes/servers.js";
@@ -75,6 +76,9 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 
+// Make storage accessible to routes that need it.
+app.locals.storage = storage;
+
 // Add request logging middleware for debugging
 app.use((req, res, next) => {
   console.log(`[Request] ${req.method} ${req.path}`, {
@@ -95,6 +99,7 @@ app.use(createAdminRoutes({ queries }));
 app.use(createFeedRoutes({ queries }));
 app.use(createExploreRoutes({ queries }));
 app.use(createCreateRoutes({ queries, storage }));
+app.use(createImagesRoutes({ storage }));
 app.use(createCreationsRoutes({ queries }));
 app.use(createLikesRoutes({ queries }));
 app.use(createProviderRoutes({ queries }));

@@ -1,6 +1,7 @@
 import { formatDateTime, formatRelativeTime } from '/shared/datetime.js';
 import { enableLikeButtons, getCreationLikeCount, initLikeButton } from '/shared/likes.js';
 import { fetchJsonWithStatusDeduped } from '/shared/api.js';
+import { getAvatarColor } from '/shared/avatar.js';
 
 // Set up URL change detection BEFORE header component loads
 // This ensures we capture navigation events
@@ -222,19 +223,34 @@ async function loadCreation() {
 		}
 
 		// Get creator information
-		const creatorName = creation.creator?.email
+		const creatorUserName = typeof creation?.creator?.user_name === 'string' ? creation.creator.user_name.trim() : '';
+		const creatorDisplayName = typeof creation?.creator?.display_name === 'string' ? creation.creator.display_name.trim() : '';
+		const creatorEmailPrefix = creation.creator?.email
 			? creation.creator.email.split('@')[0]
 			: 'User';
-		const creatorHandle = creation.creator?.email
-			? `@${creation.creator.email.split('@')[0]}`
-			: '@user';
+		const creatorName = creatorDisplayName || creatorUserName || creatorEmailPrefix || 'User';
+		const creatorHandle = creatorUserName
+			? `@${creatorUserName}`
+			: (creation.creator?.email ? `@${creatorEmailPrefix}` : '@user');
 		const creatorInitial = creatorName.charAt(0).toUpperCase();
+		const creatorAvatarUrl = typeof creation?.creator?.avatar_url === 'string' ? creation.creator.avatar_url.trim() : '';
+		const creatorId = Number(creation?.creator?.id ?? creation?.user_id ?? 0);
+		const creatorColor = getAvatarColor(creatorUserName || creatorEmailPrefix || String(creatorId || '') || creatorName);
+		const creatorProfileHref = Number.isFinite(creatorId) && creatorId > 0 ? `/user/${creatorId}` : null;
 
 		detailContent.innerHTML = `
 			<div class="creation-detail-author">
-				<span class="creation-detail-author-icon">${creatorInitial}</span>
-				<span class="creation-detail-author-name">${creatorName}</span>
-				<span class="creation-detail-author-handle">${creatorHandle}</span>
+				${creatorProfileHref ? `
+					<a class="user-link creation-detail-author-link" href="${creatorProfileHref}">
+						<span class="creation-detail-author-icon" style="background: ${creatorColor};">${creatorAvatarUrl ? `<img class="creation-detail-author-avatar" src="${creatorAvatarUrl}" alt="">` : creatorInitial}</span>
+						<span class="creation-detail-author-name">${creatorName}</span>
+						<span class="creation-detail-author-handle">${creatorHandle}</span>
+					</a>
+				` : `
+					<span class="creation-detail-author-icon" style="background: ${creatorColor};">${creatorAvatarUrl ? `<img class="creation-detail-author-avatar" src="${creatorAvatarUrl}" alt="">` : creatorInitial}</span>
+					<span class="creation-detail-author-name">${creatorName}</span>
+					<span class="creation-detail-author-handle">${creatorHandle}</span>
+				`}
 				<span class="creation-detail-date" title="${createdAtTitle}">${timeAgo}</span>
 			</div>
 			<div class="creation-detail-title">${displayTitle}</div>
