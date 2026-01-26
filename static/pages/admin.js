@@ -1,3 +1,6 @@
+import { getAvatarColor } from "../shared/avatar.js";
+import { formatRelativeTime } from "../shared/datetime.js";
+
 const adminDataLoaded = {
 	users: false,
 	moderation: false,
@@ -80,6 +83,49 @@ function renderEmpty(container, message) {
 	empty.className = "admin-empty";
 	empty.textContent = message;
 	container.appendChild(empty);
+}
+
+function getUserDisplayName(user) {
+	const displayName = String(user?.display_name || "").trim();
+	if (displayName) return displayName;
+	const userName = String(user?.user_name || "").trim();
+	if (userName) return userName;
+	const email = String(user?.email || "").trim();
+	if (email) return email.split("@")[0] || email;
+	if (user?.id) return `User ${user.id}`;
+	return "User";
+}
+
+function getUserInitial(displayName) {
+	const initial = String(displayName || "").trim().charAt(0).toUpperCase();
+	return initial || "?";
+}
+
+function createUserAvatar(user) {
+	const avatar = document.createElement("div");
+	avatar.className = "user-avatar";
+	const displayName = getUserDisplayName(user);
+	const avatarUrl = typeof user?.avatar_url === "string" ? user.avatar_url.trim() : "";
+
+	if (avatarUrl) {
+		const img = document.createElement("img");
+		img.src = avatarUrl;
+		img.alt = displayName ? `Avatar for ${displayName}` : "User avatar";
+		img.loading = "lazy";
+		img.decoding = "async";
+		avatar.appendChild(img);
+	} else {
+		const fallback = document.createElement("div");
+		fallback.className = "user-avatar-fallback";
+		fallback.textContent = getUserInitial(displayName);
+		fallback.style.background = getAvatarColor(
+			user?.user_name || user?.email || user?.id
+		);
+		fallback.setAttribute("aria-hidden", "true");
+		avatar.appendChild(fallback);
+	}
+
+	return { avatar, displayName };
 }
 
 function renderError(container, message) {
@@ -321,7 +367,8 @@ async function loadUsers({ force = false } = {}) {
 			card.dataset.userId = String(user.id);
 			card.tabIndex = 0;
 			card.setAttribute("role", "button");
-			card.setAttribute("aria-label", `Open user ${user.email || ""}`);
+			const { avatar, displayName } = createUserAvatar(user);
+			card.setAttribute("aria-label", `Open user ${displayName}`);
 			card.addEventListener("click", () => openUserModal(user));
 			card.addEventListener("keydown", (event) => {
 				if (event.key === "Enter" || event.key === " ") {
@@ -330,12 +377,29 @@ async function loadUsers({ force = false } = {}) {
 				}
 			});
 
-			const email = document.createElement("div");
-			email.className = "user-email";
-			email.textContent = user.email;
+			const header = document.createElement("div");
+			header.className = "user-card-header";
+
+			const info = document.createElement("div");
+			info.className = "user-card-info";
+
+			const title = document.createElement("div");
+			title.className = "user-title";
+
+			const name = document.createElement("div");
+			name.className = "user-name";
+			name.textContent = displayName;
+			title.appendChild(name);
+
+			if (user.email && user.email !== displayName) {
+				const email = document.createElement("div");
+				email.className = "user-email";
+				email.textContent = user.email;
+				title.appendChild(email);
+			}
 
 			const details = document.createElement("div");
-			details.className = "user-details";
+			details.className = "user-meta";
 
 			const userId = document.createElement("span");
 			userId.className = "user-id";
@@ -350,18 +414,23 @@ async function loadUsers({ force = false } = {}) {
 			const creditsValue = typeof user.credits === 'number' ? user.credits : 0;
 			credits.textContent = `${creditsValue.toFixed(1)} credits`;
 
-			const created = document.createElement("div");
-			created.className = "user-created";
-			created.textContent = user.created_at;
-
 			details.appendChild(userId);
-			details.appendChild(document.createTextNode(" • "));
 			details.appendChild(role);
-			details.appendChild(document.createTextNode(" • "));
 			details.appendChild(credits);
 
-			card.appendChild(email);
-			card.appendChild(details);
+			info.appendChild(title);
+			info.appendChild(details);
+			header.appendChild(avatar);
+			header.appendChild(info);
+
+			const createdLabel = formatRelativeTime(user.created_at, { style: "long" });
+			const created = document.createElement("div");
+			created.className = "user-created";
+			created.textContent = createdLabel
+				? `Joined ${createdLabel}`
+				: (user.created_at || "—");
+
+			card.appendChild(header);
 			card.appendChild(created);
 
 			container.appendChild(card);
@@ -1182,6 +1251,10 @@ async function loadServerDetails(serverId) {
 function renderServerDetails(server) {
 	if (!serverModalContent) return;
 
+	const resolvedAuthToken = typeof server?.auth_token === "string" && server.auth_token.trim()
+		? server.auth_token.trim()
+		: "";
+
 	const html = `
 		<div class="server-details">
 			<div class="server-detail-row">
@@ -1190,6 +1263,14 @@ function renderServerDetails(server) {
 			<div class="server-detail-row">
 				<strong>Server URL:</strong> <span>${server.server_url || '—'}</span>
 			</div>
+			<div class="server-detail-row">
+				<strong>Auth token:</strong>
+				<div class="server-auth-controls">
+					<input class="server-auth-input" type="text" value="${escapeHtml(resolvedAuthToken)}" data-server-auth-input />
+					<button type="button" class="btn-secondary server-auth-save" data-server-auth-save>Save token</button>
+				</div>
+			</div>
+			<div class="server-auth-status" data-server-auth-status hidden></div>
 			${server.owner_email ? `<div class="server-detail-row"><strong>Owner:</strong> <span>${server.owner_email}</span></div>` : ''}
 			${server.description ? `<div class="server-detail-row"><strong>Description:</strong> <span>${server.description}</span></div>` : ''}
 			<div class="server-detail-row">
@@ -1226,6 +1307,54 @@ function renderServerDetails(server) {
 		refreshBtn.replaceWith(newRefreshBtn);
 		newRefreshBtn.addEventListener("click", () => {
 			if (currentServerId) refreshServerMethods(currentServerId);
+		});
+	}
+
+	const authInput = document.querySelector("[data-server-auth-input]");
+	const authSaveButton = document.querySelector("[data-server-auth-save]");
+	const authStatus = document.querySelector("[data-server-auth-status]");
+
+	const setAuthStatus = (message, isError = false) => {
+		if (!authStatus) return;
+		authStatus.textContent = message;
+		authStatus.hidden = !message;
+		authStatus.classList.toggle("is-error", Boolean(isError));
+	};
+
+	if (authSaveButton) {
+		const newAuthSaveButton = authSaveButton.cloneNode(true);
+		authSaveButton.replaceWith(newAuthSaveButton);
+		newAuthSaveButton.addEventListener("click", async () => {
+			if (!currentServerId) return;
+			const nextToken = authInput ? authInput.value : "";
+			const originalText = newAuthSaveButton.textContent;
+			newAuthSaveButton.disabled = true;
+			newAuthSaveButton.textContent = "Saving...";
+			setAuthStatus("", false);
+
+			try {
+				const response = await fetch(`/admin/servers/${currentServerId}`, {
+					method: "PUT",
+					headers: { "Content-Type": "application/json" },
+					credentials: "include",
+					body: JSON.stringify({ auth_token: nextToken })
+				});
+				const data = await response.json().catch(() => ({}));
+				if (!response.ok) {
+					setAuthStatus(data.error || "Failed to update auth token.", true);
+					return;
+				}
+
+				if (authInput && data?.server?.auth_token !== undefined) {
+					authInput.value = typeof data.server.auth_token === "string" ? data.server.auth_token : "";
+				}
+				setAuthStatus("Auth token updated.", false);
+			} catch (error) {
+				setAuthStatus(error?.message || "Failed to update auth token.", true);
+			} finally {
+				newAuthSaveButton.disabled = false;
+				newAuthSaveButton.textContent = originalText;
+			}
 		});
 	}
 }

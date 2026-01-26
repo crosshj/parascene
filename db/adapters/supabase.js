@@ -322,10 +322,31 @@ export function openDb() {
 				// Use serviceClient to bypass RLS for admin operations
 				const { data, error } = await serviceClient
 					.from(prefixedTable("users"))
-					.select("id, email, role, created_at")
+					.select(`
+            id,
+            email,
+            role,
+            created_at,
+            ${prefixedTable("user_profiles")} (
+              user_name,
+              display_name,
+              avatar_url
+            )
+          `)
 					.order("id", { ascending: true });
 				if (error) throw error;
-				return data ?? [];
+				return (data ?? []).map((row) => {
+					const profile = row?.[prefixedTable("user_profiles")] || null;
+					return {
+						id: row.id,
+						email: row.email,
+						role: row.role,
+						created_at: row.created_at,
+						user_name: profile?.user_name ?? null,
+						display_name: profile?.display_name ?? null,
+						avatar_url: profile?.avatar_url ?? null
+					};
+				});
 			}
 		},
 		selectModerationQueue: {
@@ -350,6 +371,7 @@ export function openDb() {
             name,
             status,
             server_url,
+            auth_token,
             status_date,
             description,
             members_count,
@@ -371,14 +393,19 @@ export function openDb() {
 			}
 		},
 		insertProvider: {
-			run: async (userId, name, status, serverUrl) => {
+			run: async (userId, name, status, serverUrl, serverConfig = null, authToken = null) => {
+				const resolvedAuthToken = typeof authToken === "string" && authToken.trim()
+					? authToken.trim()
+					: null;
 				const { data, error } = await serviceClient
 					.from(prefixedTable("servers"))
 					.insert({
 						user_id: userId,
 						name,
 						status,
-						server_url: serverUrl
+						server_url: serverUrl,
+						server_config: serverConfig,
+						auth_token: resolvedAuthToken
 					})
 					.select("id")
 					.single();
@@ -823,6 +850,7 @@ export function openDb() {
             description,
             created_at,
             server_url,
+            auth_token,
             status_date,
             server_config,
             prsn_users(email)
@@ -853,6 +881,7 @@ export function openDb() {
             description,
             created_at,
             server_url,
+            auth_token,
             status_date,
             server_config,
             prsn_users(email)
@@ -879,6 +908,30 @@ export function openDb() {
 					.from(prefixedTable("servers"))
 					.update({
 						server_config: serverConfig,
+						updated_at: new Date().toISOString()
+					})
+					.eq("id", serverId)
+					.select();
+				if (error) throw error;
+				return {
+					changes: data?.length || 0
+				};
+			}
+		},
+		updateServer: {
+			run: async (serverId, server) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("servers"))
+					.update({
+						user_id: server?.user_id ?? null,
+						name: server?.name ?? null,
+						status: server?.status ?? null,
+						server_url: server?.server_url ?? null,
+						auth_token: server?.auth_token ?? null,
+						status_date: server?.status_date ?? null,
+						description: server?.description ?? null,
+						members_count: server?.members_count ?? 0,
+						server_config: server?.server_config ?? null,
 						updated_at: new Date().toISOString()
 					})
 					.eq("id", serverId)

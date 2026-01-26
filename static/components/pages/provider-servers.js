@@ -1,90 +1,90 @@
 const html = String.raw;
 
 function renderProviderCapabilities(container, capabilities) {
-  const methodsContainer = document.createElement("div");
-  methodsContainer.className = "provider-capabilities";
+	const methodsContainer = document.createElement("div");
+	methodsContainer.className = "provider-capabilities";
 
-  const methodsTitle = document.createElement("h4");
-  methodsTitle.textContent = "Available Generation Methods";
-  methodsContainer.appendChild(methodsTitle);
+	const methodsTitle = document.createElement("h4");
+	methodsTitle.textContent = "Available Generation Methods";
+	methodsContainer.appendChild(methodsTitle);
 
-  const methods = capabilities.methods || {};
-  const methodKeys = Object.keys(methods);
+	const methods = capabilities.methods || {};
+	const methodKeys = Object.keys(methods);
 
-  if (methodKeys.length === 0) {
-    const noMethods = document.createElement("div");
-    noMethods.style.padding = "1rem";
-    noMethods.style.textAlign = "center";
-    noMethods.style.color = "var(--text-muted)";
-    noMethods.textContent = "No generation methods available.";
-    methodsContainer.appendChild(noMethods);
-  } else {
-    methodKeys.forEach(methodKey => {
-      const method = methods[methodKey];
-      const methodCard = document.createElement("div");
-      methodCard.className = "method-card";
+	if (methodKeys.length === 0) {
+		const noMethods = document.createElement("div");
+		noMethods.style.padding = "1rem";
+		noMethods.style.textAlign = "center";
+		noMethods.style.color = "var(--text-muted)";
+		noMethods.textContent = "No generation methods available.";
+		methodsContainer.appendChild(noMethods);
+	} else {
+		methodKeys.forEach(methodKey => {
+			const method = methods[methodKey];
+			const methodCard = document.createElement("div");
+			methodCard.className = "method-card";
 
-      const methodName = document.createElement("div");
-      methodName.className = "method-name";
-      methodName.textContent = method.name || methodKey;
-      methodCard.appendChild(methodName);
+			const methodName = document.createElement("div");
+			methodName.className = "method-name";
+			methodName.textContent = method.name || methodKey;
+			methodCard.appendChild(methodName);
 
-      const methodDesc = document.createElement("div");
-      methodDesc.className = "method-desc";
-      methodDesc.textContent = method.description || "No description";
-      methodCard.appendChild(methodDesc);
+			const methodDesc = document.createElement("div");
+			methodDesc.className = "method-desc";
+			methodDesc.textContent = method.description || "No description";
+			methodCard.appendChild(methodDesc);
 
-      const fields = method.fields || {};
-      const fieldKeys = Object.keys(fields);
-      if (fieldKeys.length > 0) {
-        const fieldsSection = document.createElement("div");
-        fieldsSection.className = "fields-section";
+			const fields = method.fields || {};
+			const fieldKeys = Object.keys(fields);
+			if (fieldKeys.length > 0) {
+				const fieldsSection = document.createElement("div");
+				fieldsSection.className = "fields-section";
 
-        const fieldsTitle = document.createElement("div");
-        fieldsTitle.className = "fields-title";
-        fieldsTitle.textContent = "Fields";
-        fieldsSection.appendChild(fieldsTitle);
+				const fieldsTitle = document.createElement("div");
+				fieldsTitle.className = "fields-title";
+				fieldsTitle.textContent = "Fields";
+				fieldsSection.appendChild(fieldsTitle);
 
-        const fieldList = document.createElement("div");
-        fieldList.className = "field-list";
+				const fieldList = document.createElement("div");
+				fieldList.className = "field-list";
 
-        fieldKeys.forEach(fieldKey => {
-          const field = fields[fieldKey];
-          const fieldItem = document.createElement("div");
-          fieldItem.className = "field-item";
+				fieldKeys.forEach(fieldKey => {
+					const field = fields[fieldKey];
+					const fieldItem = document.createElement("div");
+					fieldItem.className = "field-item";
 
-          const fieldLabel = document.createElement("span");
-          fieldLabel.className = "field-label";
-          fieldLabel.textContent = field.label || fieldKey;
-          fieldItem.appendChild(fieldLabel);
+					const fieldLabel = document.createElement("span");
+					fieldLabel.className = "field-label";
+					fieldLabel.textContent = field.label || fieldKey;
+					fieldItem.appendChild(fieldLabel);
 
-          const fieldType = document.createElement("span");
-          fieldType.className = "field-type";
-          fieldType.textContent = field.type || 'text';
-          fieldItem.appendChild(fieldType);
+					const fieldType = document.createElement("span");
+					fieldType.className = "field-type";
+					fieldType.textContent = field.type || 'text';
+					fieldItem.appendChild(fieldType);
 
-          const fieldBadge = document.createElement("span");
-          fieldBadge.className = `field-badge ${field.required ? 'required' : 'optional'}`;
-          fieldBadge.textContent = field.required ? 'Required' : 'Optional';
-          fieldItem.appendChild(fieldBadge);
+					const fieldBadge = document.createElement("span");
+					fieldBadge.className = `field-badge ${field.required ? 'required' : 'optional'}`;
+					fieldBadge.textContent = field.required ? 'Required' : 'Optional';
+					fieldItem.appendChild(fieldBadge);
 
-          fieldList.appendChild(fieldItem);
-        });
+					fieldList.appendChild(fieldItem);
+				});
 
-        fieldsSection.appendChild(fieldList);
-        methodCard.appendChild(fieldsSection);
-      }
+				fieldsSection.appendChild(fieldList);
+				methodCard.appendChild(fieldsSection);
+			}
 
-      methodsContainer.appendChild(methodCard);
-    });
-  }
+			methodsContainer.appendChild(methodCard);
+		});
+	}
 
-  container.appendChild(methodsContainer);
+	container.appendChild(methodsContainer);
 }
 
 class AppRouteProviderServers extends HTMLElement {
-  connectedCallback() {
-    this.innerHTML = html`
+	connectedCallback() {
+		this.innerHTML = html`
       <style>
         .provider-register-form {
           display: flex;
@@ -294,6 +294,7 @@ class AppRouteProviderServers extends HTMLElement {
         <form id="provider-register-form" class="provider-register-form">
           <input type="text" name="name" placeholder="Server Name" required />
           <input type="url" name="server_url" placeholder="Server URL (e.g., https://your-server.vercel.app/api)" required />
+          <input type="text" name="auth_token" placeholder="Auth token (optional)" />
           <div class="provider-register-buttons">
             <button type="button" id="test-server-btn">Test Server</button>
             <button type="submit" id="register-btn">Register</button>
@@ -303,114 +304,117 @@ class AppRouteProviderServers extends HTMLElement {
       <div id="test-results-container"></div>
     `;
 
-    const form = this.querySelector("#provider-register-form");
-    const testButton = this.querySelector("#test-server-btn");
-    const registerButton = this.querySelector("#register-btn");
-    const urlInput = form.querySelector('input[name="server_url"]');
+		const form = this.querySelector("#provider-register-form");
+		const testButton = this.querySelector("#test-server-btn");
+		const registerButton = this.querySelector("#register-btn");
+		const urlInput = form.querySelector('input[name="server_url"]');
+		const authInput = form.querySelector('input[name="auth_token"]');
 
-    testButton.addEventListener("click", async () => {
-      const serverUrl = urlInput.value.trim();
-      if (!serverUrl) {
-        alert("Please enter a server URL");
-        return;
-      }
+		testButton.addEventListener("click", async () => {
+			const serverUrl = urlInput.value.trim();
+			const authToken = authInput ? authInput.value : "";
+			if (!serverUrl) {
+				alert("Please enter a server URL");
+				return;
+			}
 
-      testButton.disabled = true;
-      testButton.textContent = "Testing...";
+			testButton.disabled = true;
+			testButton.textContent = "Testing...";
 
-      // Clear any existing test results
-      const resultsContainer = this.querySelector("#test-results-container");
-      if (resultsContainer) {
-        resultsContainer.innerHTML = "";
-      }
+			// Clear any existing test results
+			const resultsContainer = this.querySelector("#test-results-container");
+			if (resultsContainer) {
+				resultsContainer.innerHTML = "";
+			}
 
-      try {
-        const testResponse = await fetch("/api/provider/test", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ server_url: serverUrl }),
-          credentials: "include"
-        });
+			try {
+				const testResponse = await fetch("/api/provider/test", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ server_url: serverUrl, auth_token: authToken }),
+					credentials: "include"
+				});
 
-        const testData = await testResponse.json();
+				const testData = await testResponse.json();
 
-        const resultsContainer = this.querySelector("#test-results-container");
-        if (!resultsContainer) return;
+				const resultsContainer = this.querySelector("#test-results-container");
+				if (!resultsContainer) return;
 
-        if (!testResponse.ok) {
-          const resultsDiv = document.createElement("div");
-          resultsDiv.className = "provider-test-results error";
-          const errorMsg = document.createElement("div");
-          errorMsg.className = "error-message";
-          errorMsg.textContent = `✗ ${testData.error || "Failed to test server"}`;
-          resultsDiv.appendChild(errorMsg);
-          resultsContainer.appendChild(resultsDiv);
-        } else {
-          const successIndicator = document.createElement("div");
-          successIndicator.className = "provider-test-results success-indicator";
-          successIndicator.innerHTML = `<span class="check-icon">✓</span> <span>Server is accessible and responding</span>`;
-          resultsContainer.appendChild(successIndicator);
+				if (!testResponse.ok) {
+					const resultsDiv = document.createElement("div");
+					resultsDiv.className = "provider-test-results error";
+					const errorMsg = document.createElement("div");
+					errorMsg.className = "error-message";
+					errorMsg.textContent = `✗ ${testData.error || "Failed to test server"}`;
+					resultsDiv.appendChild(errorMsg);
+					resultsContainer.appendChild(resultsDiv);
+				} else {
+					const successIndicator = document.createElement("div");
+					successIndicator.className = "provider-test-results success-indicator";
+					successIndicator.innerHTML = `<span class="check-icon">✓</span> <span>Server is accessible and responding</span>`;
+					resultsContainer.appendChild(successIndicator);
 
-          if (testData.capabilities) {
-            renderProviderCapabilities(resultsContainer, testData.capabilities);
-          }
-        }
-      } catch (err) {
-        const resultsContainer = this.querySelector("#test-results-container");
-        if (resultsContainer) {
-          const resultsDiv = document.createElement("div");
-          resultsDiv.className = "provider-test-results error";
-          const errorMsg = document.createElement("div");
-          errorMsg.className = "error-message";
-          errorMsg.textContent = `✗ ${err.message || "Failed to test server"}`;
-          resultsDiv.appendChild(errorMsg);
-          resultsContainer.appendChild(resultsDiv);
-        }
-      } finally {
-        testButton.disabled = false;
-        testButton.textContent = "Test Server";
-      }
-    });
+					if (testData.capabilities) {
+						renderProviderCapabilities(resultsContainer, testData.capabilities);
+					}
+				}
+			} catch (err) {
+				const resultsContainer = this.querySelector("#test-results-container");
+				if (resultsContainer) {
+					const resultsDiv = document.createElement("div");
+					resultsDiv.className = "provider-test-results error";
+					const errorMsg = document.createElement("div");
+					errorMsg.className = "error-message";
+					errorMsg.textContent = `✗ ${err.message || "Failed to test server"}`;
+					resultsDiv.appendChild(errorMsg);
+					resultsContainer.appendChild(resultsDiv);
+				}
+			} finally {
+				testButton.disabled = false;
+				testButton.textContent = "Test Server";
+			}
+		});
 
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const formData = new FormData(form);
-      const payload = {
-        name: formData.get("name"),
-        server_url: formData.get("server_url")
-      };
+		form.addEventListener("submit", async (e) => {
+			e.preventDefault();
+			const formData = new FormData(form);
+			const payload = {
+				name: formData.get("name"),
+				server_url: formData.get("server_url"),
+				auth_token: formData.get("auth_token")
+			};
 
-      registerButton.disabled = true;
-      registerButton.textContent = "Registering...";
+			registerButton.disabled = true;
+			registerButton.textContent = "Registering...";
 
-      try {
-        const registerResponse = await fetch("/api/provider/register", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-          credentials: "include"
-        });
+			try {
+				const registerResponse = await fetch("/api/provider/register", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify(payload),
+					credentials: "include"
+				});
 
-        const registerData = await registerResponse.json();
+				const registerData = await registerResponse.json();
 
-        if (!registerResponse.ok) {
-          alert(registerData.error || "Failed to register provider");
-        } else {
-          form.reset();
-          const resultsContainer = this.querySelector("#test-results-container");
-          if (resultsContainer) {
-            resultsContainer.innerHTML = "";
-          }
-          alert("Provider registered successfully!");
-        }
-      } catch (err) {
-        alert(err.message || "Failed to register provider");
-      } finally {
-        registerButton.disabled = false;
-        registerButton.textContent = "Register";
-      }
-    });
-  }
+				if (!registerResponse.ok) {
+					alert(registerData.error || "Failed to register provider");
+				} else {
+					form.reset();
+					const resultsContainer = this.querySelector("#test-results-container");
+					if (resultsContainer) {
+						resultsContainer.innerHTML = "";
+					}
+					alert("Provider registered successfully!");
+				}
+			} catch (err) {
+				alert(err.message || "Failed to register provider");
+			} finally {
+				registerButton.disabled = false;
+				registerButton.textContent = "Register";
+			}
+		});
+	}
 }
 
 customElements.define("app-route-provider-servers", AppRouteProviderServers);

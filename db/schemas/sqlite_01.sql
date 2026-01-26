@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS servers (
   user_id INTEGER NOT NULL REFERENCES users(id),
   name TEXT NOT NULL,
   server_url TEXT NOT NULL,
+  auth_token TEXT,
   status TEXT NOT NULL,
   status_date TEXT,
   description TEXT,

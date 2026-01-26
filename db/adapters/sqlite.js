@@ -29,11 +29,24 @@ function initSchema(db) {
 	db.exec(schemaSql);
 }
 
+function ensureServersAuthTokenColumn(db) {
+	try {
+		const columns = db.prepare("PRAGMA table_info(servers)").all();
+		const hasAuthToken = columns.some((column) => column.name === "auth_token");
+		if (!hasAuthToken) {
+			db.exec("ALTER TABLE servers ADD COLUMN auth_token TEXT");
+		}
+	} catch (error) {
+		console.warn("Failed to ensure auth_token column on servers:", error);
+	}
+}
+
 export async function openDb() {
 	const DbClass = await loadDatabase();
 	ensureDataDir();
 	const db = new DbClass(dbPath);
 	initSchema(db);
+	ensureServersAuthTokenColumn(db);
 
 	const transferCreditsTxn = db.transaction((fromUserId, toUserId, amount) => {
 		const ensureCreditsRowStmt = db.prepare(
@@ -328,7 +341,16 @@ export async function openDb() {
 		selectUsers: {
 			all: async () => {
 				const stmt = db.prepare(
-					"SELECT id, email, role, created_at FROM users ORDER BY id ASC"
+					`SELECT u.id,
+            u.email,
+            u.role,
+            u.created_at,
+            up.user_name,
+            up.display_name,
+            up.avatar_url
+           FROM users u
+           LEFT JOIN user_profiles up ON up.user_id = u.id
+           ORDER BY u.id ASC`
 				);
 				return Promise.resolve(stmt.all());
 			}
@@ -352,6 +374,7 @@ export async function openDb() {
             ps.name, 
             ps.status, 
             ps.server_url,
+            ps.auth_token,
             ps.status_date,
             ps.description,
             ps.members_count,
@@ -383,13 +406,16 @@ export async function openDb() {
 			}
 		},
 		insertProvider: {
-			run: async (userId, name, status, serverUrl, serverConfig = null) => {
+			run: async (userId, name, status, serverUrl, serverConfig = null, authToken = null) => {
 				const stmt = db.prepare(
-					`INSERT INTO servers (user_id, name, status, server_url, server_config)
-           VALUES (?, ?, ?, ?, ?)`
+					`INSERT INTO servers (user_id, name, status, server_url, server_config, auth_token)
+           VALUES (?, ?, ?, ?, ?, ?)`
 				);
+				const resolvedAuthToken = typeof authToken === "string" && authToken.trim()
+					? authToken.trim()
+					: null;
 				const configJson = serverConfig ? JSON.stringify(serverConfig) : null;
-				const result = stmt.run(userId, name, status, serverUrl, configJson);
+				const result = stmt.run(userId, name, status, serverUrl, configJson, resolvedAuthToken);
 				return Promise.resolve({
 					insertId: result.lastInsertRowid,
 					changes: result.changes
@@ -575,6 +601,7 @@ export async function openDb() {
             ps.description, 
             ps.created_at,
             ps.server_url,
+            ps.auth_token,
             ps.status_date,
             ps.server_config,
             u.email as owner_email
@@ -613,6 +640,7 @@ export async function openDb() {
             ps.description, 
             ps.created_at,
             ps.server_url,
+            ps.auth_token,
             ps.status_date,
             ps.server_config,
             u.email as owner_email
@@ -648,6 +676,40 @@ export async function openDb() {
 				);
 				const configJson = serverConfig ? JSON.stringify(serverConfig) : null;
 				const result = stmt.run(configJson, serverId);
+				return Promise.resolve({
+					changes: result.changes
+				});
+			}
+		},
+		updateServer: {
+			run: async (serverId, server) => {
+				const stmt = db.prepare(
+					`UPDATE servers
+           SET user_id = ?,
+               name = ?,
+               status = ?,
+               server_url = ?,
+               auth_token = ?,
+               status_date = ?,
+               description = ?,
+               members_count = ?,
+               server_config = ?,
+               updated_at = datetime('now')
+           WHERE id = ?`
+				);
+				const configJson = server?.server_config ? JSON.stringify(server.server_config) : null;
+				const result = stmt.run(
+					server?.user_id ?? null,
+					server?.name ?? null,
+					server?.status ?? null,
+					server?.server_url ?? null,
+					server?.auth_token ?? null,
+					server?.status_date ?? null,
+					server?.description ?? null,
+					server?.members_count ?? 0,
+					configJson,
+					serverId
+				);
 				return Promise.resolve({
 					changes: result.changes
 				});

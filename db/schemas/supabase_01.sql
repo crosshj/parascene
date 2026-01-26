@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS prsn_servers (
   user_id bigint NOT NULL REFERENCES prsn_users(id),
   name text NOT NULL,
   server_url text NOT NULL,
+  auth_token text,
   status text NOT NULL,
   status_date timestamptz,
   description text,
