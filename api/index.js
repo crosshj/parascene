@@ -26,6 +26,7 @@ import {
 	probabilisticSessionCleanup,
 	sessionMiddleware
 } from "../api_routes/auth.js";
+import { injectCommonHead } from "../api_routes/utils/head.js";
 
 // Handle unhandled promise rejections
 process.on("unhandledRejection", (reason, promise) => {
@@ -112,7 +113,7 @@ app.use(createTemplatesRoutes({ queries }));
 app.use(createPageRoutes({ queries, pagesDir }));
 app.use(createTodoRoutes());
 
-app.use((err, req, res, next) => {
+app.use(async (err, req, res, next) => {
 	if (err?.name !== "UnauthorizedError") {
 		return next(err);
 	}
@@ -139,7 +140,11 @@ app.use((err, req, res, next) => {
 	// Preserve the user's original destination so login can return them there.
 	// Avoid redirect loops when the user is already on the auth page.
 	if (req.path === "/auth.html") {
-		return res.sendFile(path.join(pagesDir, "auth.html"));
+		const fs = await import("fs/promises");
+		let htmlContent = await fs.readFile(path.join(pagesDir, "auth.html"), "utf-8");
+		htmlContent = injectCommonHead(htmlContent);
+		res.setHeader("Content-Type", "text/html");
+		return res.send(htmlContent);
 	}
 	try {
 		const rawReturnUrl = typeof req.originalUrl === "string" ? req.originalUrl : "/";
@@ -150,7 +155,11 @@ app.use((err, req, res, next) => {
 		const qs = new URLSearchParams({ returnUrl });
 		return res.redirect(`/auth.html?${qs.toString()}`);
 	} catch {
-		return res.sendFile(path.join(pagesDir, "auth.html"));
+		const fs = await import("fs/promises");
+		let htmlContent = await fs.readFile(path.join(pagesDir, "auth.html"), "utf-8");
+		htmlContent = injectCommonHead(htmlContent);
+		res.setHeader("Content-Type", "text/html");
+		return res.send(htmlContent);
 	}
 });
 

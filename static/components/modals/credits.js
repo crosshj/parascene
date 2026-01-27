@@ -1,11 +1,11 @@
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
+import { formatRelativeTime } from '../../shared/datetime.js';
 
 const html = String.raw;
 
 class AppModalCredits extends HTMLElement {
 	constructor() {
 		super();
-		this.attachShadow({ mode: 'open' });
 		this._isOpen = false;
 		this._claimInFlight = false;
 		this.creditsCount = 0;
@@ -34,10 +34,10 @@ class AppModalCredits extends HTMLElement {
 		document.addEventListener('open-credits', this.handleOpenEvent);
 		document.addEventListener('close-credits', this.handleCloseEvent);
 
-		const overlay = this.shadowRoot.querySelector('.credits-overlay');
-		const closeButton = this.shadowRoot.querySelector('.credits-close');
-		const claimButton = this.shadowRoot.querySelector('.credits-claim-button');
-		const linkButtons = this.shadowRoot.querySelectorAll('.credits-link-button');
+		const overlay = this.querySelector('.credits-overlay');
+		const closeButton = this.querySelector('.credits-close');
+		const claimButton = this.querySelector('.credits-claim-button');
+		const linkButtons = this.querySelectorAll('.btn-secondary');
 
 		if (overlay) {
 			overlay.addEventListener('click', (e) => {
@@ -95,7 +95,7 @@ class AppModalCredits extends HTMLElement {
 	open() {
 		if (this._isOpen) return;
 		this._isOpen = true;
-		const overlay = this.shadowRoot.querySelector('.credits-overlay');
+		const overlay = this.querySelector('.credits-overlay');
 		if (overlay) {
 			overlay.classList.add('open');
 		}
@@ -107,7 +107,7 @@ class AppModalCredits extends HTMLElement {
 	close() {
 		if (!this._isOpen) return;
 		this._isOpen = false;
-		const overlay = this.shadowRoot.querySelector('.credits-overlay');
+		const overlay = this.querySelector('.credits-overlay');
 		if (overlay) {
 			overlay.classList.remove('open');
 		}
@@ -244,15 +244,24 @@ class AppModalCredits extends HTMLElement {
 	}
 
 	updateCreditsUI() {
-		const balanceValue = this.shadowRoot.querySelector('.credits-balance-value');
+		const balanceValue = this.querySelector('.credits-balance-value');
 		if (balanceValue) {
 			balanceValue.textContent = this.formatCredits(this.creditsCount);
 		}
 	}
 
+	getNextAvailableTime() {
+		// Daily credits reset at midnight UTC
+		const now = new Date();
+		const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+		const tomorrowUTC = new Date(todayUTC);
+		tomorrowUTC.setUTCDate(tomorrowUTC.getUTCDate() + 1);
+		return tomorrowUTC;
+	}
+
 	updateClaimUI() {
-		const claimButton = this.shadowRoot.querySelector('.credits-claim-button');
-		const claimNote = this.shadowRoot.querySelector('.credits-claim-note');
+		const claimButton = this.querySelector('.credits-claim-button');
+		const claimNote = this.querySelector('.credits-claim-note');
 		const canClaim = this.canClaim;
 		const claimed = canClaim === null ? this.isClaimedToday() : !canClaim;
 		if (claimButton) {
@@ -261,8 +270,18 @@ class AppModalCredits extends HTMLElement {
 			claimButton.setAttribute('aria-busy', this._claimInFlight ? 'true' : 'false');
 		}
 		if (claimNote) {
-			// Reserve space to prevent layout jump; toggle visibility instead of content.
-			claimNote.textContent = 'Come back tomorrow for more credits.';
+			// Calculate when next daily credits will be available (midnight UTC)
+			const nextAvailable = this.getNextAvailableTime();
+			const now = new Date();
+			const hoursUntilAvailable = (nextAvailable.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+			// If more than 12 hours away, show simple "tomorrow" message
+			if (hoursUntilAvailable > 12) {
+				claimNote.textContent = 'Check back tomorrow for more credits.';
+			} else {
+				const relativeTime = formatRelativeTime(nextAvailable, { style: 'long' });
+				claimNote.textContent = `Daily credits available ${relativeTime}.`;
+			}
 			claimNote.style.visibility = canClaim === false ? 'visible' : 'hidden';
 		}
 		// Only broadcast claim status when it is confirmed by /api/credits.
@@ -372,9 +391,9 @@ class AppModalCredits extends HTMLElement {
 	}
 
 	render() {
-		this.shadowRoot.innerHTML = html`
+		this.innerHTML = html`
       <style>
-        :host {
+        app-modal-credits {
           display: block;
         }
         .credits-overlay {
@@ -443,22 +462,13 @@ class AppModalCredits extends HTMLElement {
         }
         .credits-body {
           padding: 20px;
-          color: var(--text);
         }
         .credits-balance {
-          padding: 12px 14px;
-          border-radius: 12px;
-          border: 1px solid var(--border);
-          background: var(--surface-strong);
-          font-weight: 600;
           margin-bottom: 18px;
-        }
-        .credits-balance-value {
-          font-weight: 700;
         }
         .credits-body p {
           margin: 0 0 12px;
-          color: var(--text);
+          color: var(--text-muted);
         }
         .credits-section {
           margin-top: 3em;
@@ -470,54 +480,26 @@ class AppModalCredits extends HTMLElement {
         .credits-list {
           margin: 0;
           padding-left: 18px;
-          color: var(--text);
         }
         .credits-list li {
           margin: 6px 0;
         }
         .credits-action-row {
           display: flex;
-          flex-direction: column;
-          gap: 8px;
-          margin-top: 10px;
-        }
-        .credits-action-button {
-          padding: 8px 14px;
-          border-radius: 10px;
-          border: 1px solid var(--border);
-          background: var(--accent);
-          color: var(--accent-text);
-          cursor: pointer;
-          font-weight: 600;
-          width: fit-content;
-        }
-        .credits-action-button:disabled {
-          background: var(--surface-strong);
-          color: var(--text-muted);
-          cursor: not-allowed;
-          border-color: var(--border);
-        }
-        .credits-link-button {
-          display: inline-flex;
+          flex-direction: row;
           align-items: center;
-          padding: 8px 14px;
+          gap: 12px;
+          margin-top: 10px;
+          flex-wrap: wrap;
+        }
+        /* Modal-specific: ensure button maintains min-width when disabled */
+        app-modal-credits .btn-primary {
+          min-width: 140px;
+        }
+        /* Ensure btn-secondary matches button height in this modal */
+        app-modal-credits .btn-secondary {
+          padding: 10px 16px;
           border-radius: 10px;
-          border: 1px solid var(--border);
-          background: var(--surface-strong);
-          color: var(--text);
-          text-decoration: none;
-          font-weight: 600;
-          width: fit-content;
-        }
-        .credits-link-button .icon {
-          width: 16px;
-          height: 16px;
-          margin-right: 8px;
-          flex-shrink: 0;
-        }
-        .credits-link-button:hover {
-          border-color: var(--accent);
-          background: var(--surface);
         }
         .credits-claim-note {
           color: var(--text-muted);
@@ -545,14 +527,17 @@ class AppModalCredits extends HTMLElement {
           </div>
           <div class="credits-body">
             <div class="credits-balance">
-              Available credits: <span class="credits-balance-value">0.0</span>
+              <span>You have</span>
+			  <strong class="credits-balance-value">0.0</strong>
+			  <strong>credits</strong>
+			  <span>available. Explore the options below to earn more.</span>
             </div>
 
             <div class="credits-section">
               <h3>Claim daily free credits</h3>
               <p>Claim 10 credits once per day.</p>
               <div class="credits-action-row">
-                <button class="credits-action-button credits-claim-button" type="button">Claim 10 credits</button>
+                <button class="btn-primary credits-claim-button" type="button">Claim 10 credits</button>
                 <span class="credits-claim-note">Come back tomorrow for more credits.</span>
               </div>
             </div>
@@ -560,7 +545,7 @@ class AppModalCredits extends HTMLElement {
             <div class="credits-section">
               <h3>Boost a server or participate in competitions</h3>
               <p>Boosting and competitions are the fastest ways to earn more credits.</p>
-              <a class="credits-link-button" href="/servers">
+              <a class="btn-secondary" href="/servers">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"></path>
                 </svg>
@@ -571,7 +556,7 @@ class AppModalCredits extends HTMLElement {
             <div class="credits-section">
               <h3>Run a server</h3>
               <p>Run a server and earn credits for supporting the community.</p>
-              <a class="credits-link-button" href="/servers#help">
+              <a class="btn-secondary" href="/servers#help">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <circle cx="12" cy="12" r="9"></circle>
                   <path d="M12 16h.01"></path>

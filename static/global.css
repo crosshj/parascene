@@ -1,5 +1,6 @@
 :root {
 	color-scheme: light dark;
+	--font-family: "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 	--bg: #f6f7fb;
 	--surface: #ffffff;
 	--surface-strong: #f0f2f7;
@@ -84,7 +85,8 @@ html {
 body {
 	margin: 0;
 	min-height: 100vh;
-	font-family: "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	font-family: var(--font-family);
+	font-weight: 400;
 	line-height: 1.5;
 	background: var(--bg);
 	color: var(--text);
@@ -334,7 +336,7 @@ header .logo {
 }
 
 header .logo-text {
-	font-family: "Montserrat", "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	font-family: var(--font-family);
 	font-size: 24px;
 	font-weight: 700;
 	font-style: italic;
@@ -383,6 +385,10 @@ h3 {
 
 p {
 	margin: 0;
+}
+
+strong {
+	font-weight: 700;
 }
 
 ul {
@@ -612,7 +618,7 @@ input:-webkit-autofill:active {
 	-webkit-text-fill-color: var(--text) !important;
 	-webkit-box-shadow: 0 0 0px 1000px var(--input-bg) inset !important;
 	box-shadow: 0 0 0px 1000px var(--input-bg) inset !important;
-	font-family: "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+	font-family: var(--font-family) !important;
 	font-size: 1rem !important;
 	line-height: 1.5 !important;
 	transition: background-color 5000s ease-in-out 0s;
@@ -1216,7 +1222,7 @@ header .hamburger-button.active span:nth-child(3) {
 }
 
 .mobile-menu-header .logo-text {
-	font-family: "Montserrat", "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	font-family: var(--font-family);
 	font-size: 24px;
 	font-weight: 700;
 	font-style: italic;

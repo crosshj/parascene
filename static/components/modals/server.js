@@ -640,7 +640,7 @@ class AppModalServer extends HTMLElement {
 		const body = this.shadowRoot.querySelector('[data-modal-body]');
 		const actions = this.shadowRoot.querySelector('[data-modal-actions]');
 
-		if (title) title.textContent = `Edit Server: ${this.serverData.name}`;
+		if (title) title.textContent = this.serverData.name;
 		if (body) {
 			const resolvedAuthToken = typeof this.serverData?.auth_token === "string" && this.serverData.auth_token.trim()
 				? this.serverData.auth_token.trim()

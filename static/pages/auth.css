@@ -25,7 +25,7 @@ body {
 }
 
 .auth-logo .logo-text {
-	font-family: "Montserrat", "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	font-family: var(--font-family);
 	font-size: 36px;
 	font-weight: 700;
 	font-style: italic;

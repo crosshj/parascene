@@ -864,7 +864,7 @@ class AppNavigation extends HTMLElement {
           ` : ''}
           <div class="header-logo">
             <a href="/" style="text-decoration: none; display: block;">
-              <svg class="logo" width="200" height="40" viewBox="0 0 200 40">
+              <svg class="logo" width="200" height="40" viewBox="0 0 185 40">
                 <text x="2" y="27" class="logo-text">
                   <tspan opacity="1">par</tspan><tspan opacity="0.7">asc</tspan><tspan opacity="1">ene</tspan>
                 </text>
@@ -932,7 +932,7 @@ class AppNavigation extends HTMLElement {
           <div class="mobile-menu-header">
             <div class="header-logo">
               <a href="/" style="text-decoration: none; display: block;">
-                <svg class="logo" width="200" height="40" viewBox="0 0 200 40">
+                <svg class="logo" width="200" height="40" viewBox="0 0 185 40">
                   <text x="2" y="27" class="logo-text">
                     <tspan opacity="1">par</tspan><tspan opacity="0.7">asc</tspan><tspan opacity="1">ene</tspan>
                   </text>
