@@ -209,7 +209,9 @@ class AppRouteFeed extends HTMLElement {
         <div class="feed-card-content">
           <div class="feed-card-title">${title}</div>
           <div class="feed-card-metadata" title="${formatDateTime(item.created_at)}">
-            ${displayName} • ${profileHref ? html`<a class="user-link" href="${profileHref}" data-profile-link>@${handle}</a>` : html`@${handle}`} • ${relativeTime}
+            ${profileHref
+		? html`<a class="user-link" href="${profileHref}" data-profile-link>${displayName} @${handle}</a>`
+		: html`${displayName} @${handle}`} • ${relativeTime}
           </div>
         </div>
       </div>

@@ -201,19 +201,13 @@
 	font-size: 1rem;
 	font-weight: 600;
 	color: var(--text);
+	line-height: 1.4;
 }
 
 .admin-meta {
-	font-size: 0.875rem;
-	color: var(--text);
-	font-weight: 600;
-}
-
-.admin-timestamp {
-	font-size: 0.8rem;
+	font-size: 0.85rem;
 	color: var(--text-muted);
-	padding-top: 8px;
-	border-top: 1px solid var(--border);
+	margin-top: 4px;
 }
 
 .admin-alert {

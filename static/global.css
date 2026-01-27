@@ -2702,6 +2702,12 @@ body.modal-open {
 	color: var(--text-muted);
 }
 
+.server-card {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
 .server-card-actions {
 	display: flex;
 	gap: 0.5rem;
@@ -2747,6 +2753,58 @@ body.modal-open {
 /* Shared admin detail text (always muted) */
 .admin-detail {
 	font-size: 0.875rem;
+	color: var(--text-muted);
+	margin-top: 4px;
+}
+
+/* Server owner display */
+.server-owner {
+	margin-top: 8px;
+	margin-bottom: 2px;
+}
+
+.server-owner-link {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	text-decoration: none;
+	color: inherit;
+}
+
+.server-owner-avatar {
+	width: 32px;
+	height: 32px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 0.75rem;
+	color: #ffffff;
+	font-weight: 600;
+	flex-shrink: 0;
+}
+
+.server-owner-avatar-img {
+	width: 100%;
+	height: 100%;
+	border-radius: 50%;
+	object-fit: cover;
+	display: block;
+}
+
+.server-owner-text {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 0.875rem;
+}
+
+.server-owner-name {
+	color: var(--text);
+	font-weight: 500;
+}
+
+.server-owner-handle {
 	color: var(--text-muted);
 }
 

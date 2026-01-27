@@ -23,7 +23,9 @@ export default function createServersRoutes({ queries }) {
 	async function addPermissionFlags(servers, userId, isAdmin = false) {
 		return Promise.all(servers.map(async (server) => {
 			const isSpecial = server.id === 1;
-			const isOwner = server.user_id === userId || isAdmin;
+			// "Owner" means the user who originally created the server.
+			// Admins can still manage all servers, but are not treated as owners.
+			const isOwner = server.user_id === userId;
 			let isMember = await queries.checkServerMembership.get(server.id, userId);
 			if (isSpecial) {
 				// All authenticated users are treated as members of the special server.
@@ -45,6 +47,27 @@ export default function createServersRoutes({ queries }) {
 				// Any authenticated user can conceptually join/leave; frontend / special rules decide controls.
 				can_join_leave: !isSpecial
 			};
+
+			// Include owner information for display
+			if (server.user_id) {
+				const ownerUser = await queries.selectUserById.get(server.user_id);
+				const ownerProfile = ownerUser ? await queries.selectUserProfileByUserId?.get(server.user_id) : null;
+				
+				if (ownerUser) {
+					const emailPrefix = ownerUser.email ? ownerUser.email.split('@')[0] : null;
+					const displayName = ownerProfile?.display_name?.trim() || ownerProfile?.user_name?.trim() || emailPrefix || `User ${ownerUser.id}`;
+					const userName = ownerProfile?.user_name?.trim() || emailPrefix || null;
+					const avatarUrl = ownerProfile?.avatar_url?.trim() || null;
+					
+					result.owner = {
+						id: ownerUser.id,
+						display_name: displayName,
+						user_name: userName,
+						avatar_url: avatarUrl,
+						email_prefix: emailPrefix
+					};
+				}
+			}
 
 			// Only include sensitive fields if user can manage
 			if (canManage) {
@@ -95,14 +118,15 @@ export default function createServersRoutes({ queries }) {
 			return res.status(404).json({ error: "Server not found" });
 		}
 
-		const isAdmin = user.role === 'admin';
 		const isSpecial = server.id === 1;
-		const isOwner = server.user_id === user.id || isAdmin;
+		// "Owner" means the user who originally created the server.
+		// Admins can still manage all servers, but are not treated as owners.
+		const isOwner = server.user_id === user.id;
 		let isMember = await queries.checkServerMembership.get(serverId, user.id);
 		if (isSpecial) {
 			isMember = true;
 		}
-		const canManage = isOwner || isAdmin;
+		const canManage = isOwner || user.role === 'admin';
 
 		const result = {
 			id: server.id,
@@ -117,6 +141,27 @@ export default function createServersRoutes({ queries }) {
 			can_manage: canManage,
 			can_join_leave: !isSpecial
 		};
+
+		// Include owner information for display
+		if (server.user_id) {
+			const ownerUser = await queries.selectUserById.get(server.user_id);
+			const ownerProfile = ownerUser ? await queries.selectUserProfileByUserId?.get(server.user_id) : null;
+			
+			if (ownerUser) {
+				const emailPrefix = ownerUser.email ? ownerUser.email.split('@')[0] : null;
+				const displayName = ownerProfile?.display_name?.trim() || ownerProfile?.user_name?.trim() || emailPrefix || `User ${ownerUser.id}`;
+				const userName = ownerProfile?.user_name?.trim() || emailPrefix || null;
+				const avatarUrl = ownerProfile?.avatar_url?.trim() || null;
+				
+				result.owner = {
+					id: ownerUser.id,
+					display_name: displayName,
+					user_name: userName,
+					avatar_url: avatarUrl,
+					email_prefix: emailPrefix
+				};
+			}
+		}
 
 		// Only include sensitive fields if user can manage
 		if (canManage) {

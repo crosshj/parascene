@@ -1,5 +1,6 @@
 import { formatRelativeTime } from '../../shared/datetime.js';
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
+import { getAvatarColor } from '../../shared/avatar.js';
 
 const html = String.raw;
 
@@ -76,20 +77,8 @@ class AppRouteServers extends HTMLElement {
 			name.className = 'admin-title';
 			name.innerHTML = `${server.name || 'Unnamed Server'} ${badges.join('')}`;
 
-			const meta = document.createElement('div');
-			meta.className = 'admin-meta';
-			meta.textContent = `${server.status || 'unknown'}`;
-			// Special server (id = 1) should not display member counts.
-			if (typeof server.members_count === 'number' && server.id !== 1) {
-				meta.textContent += ` • ${server.members_count} member${server.members_count !== 1 ? 's' : ''}`;
-			}
-
 			const hasDescription = typeof server.description === 'string' && server.description.trim().length > 0;
 			const descriptionText = hasDescription ? server.description.trim() : '';
-
-			const created = document.createElement('div');
-			created.className = 'admin-timestamp';
-			created.textContent = server.created_at ? formatRelativeTime(server.created_at, { style: 'long' }) : '—';
 
 			card.appendChild(name);
 
@@ -100,8 +89,59 @@ class AppRouteServers extends HTMLElement {
 				card.appendChild(desc);
 			}
 
+			// Add owner information if available.
+			// Intentionally non-clickable so it doesn't interfere with card click to open the modal.
+			if (server.owner && server.id !== 1) {
+				const owner = server.owner;
+				const ownerDisplayName = owner.display_name || `User ${owner.id}`;
+				const ownerUserName = owner.user_name || owner.email_prefix || null;
+				const ownerAvatarUrl = owner.avatar_url || null;
+				const ownerInitial = ownerDisplayName.trim().charAt(0).toUpperCase() || '?';
+				const ownerColor = getAvatarColor(owner.user_name || owner.email_prefix || String(owner.id || ''));
+
+				const ownerInfo = document.createElement('div');
+				ownerInfo.className = 'server-owner';
+
+				const ownerRow = document.createElement('div');
+				ownerRow.className = 'server-owner-link';
+
+				const avatar = document.createElement('div');
+				avatar.className = 'server-owner-avatar';
+				avatar.style.background = ownerColor;
+				if (ownerAvatarUrl) {
+					const img = document.createElement('img');
+					img.src = ownerAvatarUrl;
+					img.className = 'server-owner-avatar-img';
+					img.alt = '';
+					avatar.appendChild(img);
+				} else {
+					avatar.textContent = ownerInitial;
+				}
+
+				const ownerText = document.createElement('span');
+				ownerText.className = 'server-owner-text';
+				ownerText.innerHTML = html`
+					<span class="server-owner-name">${ownerDisplayName}</span>
+					${ownerUserName ? html`<span class="server-owner-handle">@${ownerUserName}</span>` : ''}
+				`;
+
+				ownerRow.appendChild(avatar);
+				ownerRow.appendChild(ownerText);
+				ownerInfo.appendChild(ownerRow);
+				card.appendChild(ownerInfo);
+			}
+
+			// Status and timestamp on one line
+			const meta = document.createElement('div');
+			meta.className = 'admin-meta';
+			const statusText = server.status || 'unknown';
+			const memberText = (typeof server.members_count === 'number' && server.id !== 1)
+				? ` • ${server.members_count} member${server.members_count !== 1 ? 's' : ''}`
+				: '';
+			const timeText = server.created_at ? formatRelativeTime(server.created_at, { style: 'long' }) : '—';
+			meta.textContent = `${statusText}${memberText} • ${timeText}`;
+
 			card.appendChild(meta);
-			card.appendChild(created);
 
 			// Click card to view details
 			card.addEventListener('click', () => {
