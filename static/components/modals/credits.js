@@ -571,7 +571,7 @@ class AppModalCredits extends HTMLElement {
             <div class="credits-section">
               <h3>Run a server</h3>
               <p>Run a server and earn credits for supporting the community.</p>
-              <a class="credits-link-button" href="/servers/help">
+              <a class="credits-link-button" href="/servers#help">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <circle cx="12" cy="12" r="9"></circle>
                   <path d="M12 16h.01"></path>

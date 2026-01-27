@@ -1525,6 +1525,12 @@ header .hamburger-button.active span:nth-child(3) {
 	margin: 0;
 }
 
+@media (max-width: 768px) {
+	.route-header p {
+		font-size: 0.9rem;
+	}
+}
+
 .route-header button {
 	align-self: flex-start;
 }

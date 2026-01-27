@@ -154,19 +154,8 @@ class AppNavigation extends HTMLElement {
 	parseRoutesFromChildren() {
 		// Parse routes from direct children - must be called BEFORE render()
 		const children = Array.from(this.children);
-		const userRole = window.__USER_ROLE__;
-		const shouldIncludeRoute = (child) => {
-			if (!child.hasAttribute('data-role-only')) {
-				return true;
-			}
-			if (!userRole) {
-				return false;
-			}
-			return child.getAttribute('data-role-only') === userRole;
-		};
-
 		const routeLinks = children.filter(child =>
-			child.tagName === 'A' && child.hasAttribute('data-route') && shouldIncludeRoute(child)
+			child.tagName === 'A' && child.hasAttribute('data-route')
 		);
 
 		this.routes = routeLinks.map(link => ({
@@ -806,6 +795,27 @@ class AppNavigation extends HTMLElement {
 		if (menu) {
 			menu.classList.toggle('open', this.notificationsMenuOpen);
 			if (this.notificationsMenuOpen) {
+				// If there are no notifications, show a friendly empty state
+				const hasNotifications = (this.notificationsCount || 0) > 0;
+				const preview = menu.querySelector('.notifications-preview');
+				const divider = menu.querySelector('.notifications-menu-divider');
+				const viewAllLink = menu.querySelector('a[data-action="notifications"]');
+
+				if (!hasNotifications) {
+					if (preview && !preview.innerHTML.trim()) {
+						preview.innerHTML = html`
+              <div class="notifications-menu-item notifications-loading">
+                You're all caught up. New notifications will appear here.
+              </div>
+            `;
+					}
+					if (divider) divider.style.display = 'none';
+					if (viewAllLink) viewAllLink.style.display = 'none';
+				} else {
+					if (divider) divider.style.display = '';
+					if (viewAllLink) viewAllLink.style.display = '';
+				}
+
 				this.loadNotificationPreview({ silent: true });
 			}
 		}

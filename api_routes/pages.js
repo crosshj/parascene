@@ -23,6 +23,8 @@ export default function createPageRoutes({ queries, pagesDir }) {
     if (value.startsWith("//")) return "/";
     if (value.includes("://")) return "/";
     if (value.length > 2048) return "/";
+    // Never return to auth pages after login
+    if (value === "/auth" || value === "/auth.html") return "/";
     return value;
   }
 
@@ -123,9 +125,6 @@ export default function createPageRoutes({ queries, pagesDir }) {
         includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
       );
 
-      const roleScript = html`<script>window.__USER_ROLE__ = ${JSON.stringify(user.role)};</script>`;
-      pageHtml = pageHtml.replace("</head>", `${roleScript}</head>`);
-
       res.setHeader("Content-Type", "text/html");
       return res.send(pageHtml);
     } catch (error) {
@@ -159,14 +158,33 @@ export default function createPageRoutes({ queries, pagesDir }) {
         }
       }
 
-      // Read the HTML file and inject user role
+      // Read the HTML file and inject the correct role-based header and mobile nav
       const fs = await import('fs/promises');
+      const rolePageName = getPageForUser(user);
+      const rolePagePath = path.join(pagesDir, rolePageName);
       const htmlPath = path.join(pagesDir, "creation-detail.html");
       let pageHtml = await fs.readFile(htmlPath, 'utf-8');
-      
-      // Inject user role as a script variable before the closing head tag
-      const roleScript = html`<script>window.__USER_ROLE__ = ${JSON.stringify(user.role)};</script>`;
-      pageHtml = pageHtml.replace('</head>', `${roleScript}</head>`);
+
+      let headerHtml = "";
+      let includeMobileBottomNav = false;
+      try {
+        const roleHtml = await fs.readFile(rolePagePath, "utf-8");
+        const headerMatch = roleHtml.match(/<app-navigation[\s\S]*?<\/app-navigation>/i);
+        if (headerMatch) {
+          headerHtml = headerMatch[0];
+        }
+        includeMobileBottomNav = /<app-navigation-mobile\b/i.test(roleHtml);
+      } catch (error) {
+        console.warn("Failed to extract role header for creation detail page:", error?.message || error);
+      }
+
+      if (headerHtml) {
+        pageHtml = pageHtml.replace("<!--APP_HEADER-->", headerHtml);
+      }
+      pageHtml = pageHtml.replace(
+        "<!--APP_MOBILE_BOTTOM_NAV-->",
+        includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
+      );
       
       res.setHeader('Content-Type', 'text/html');
       return res.send(pageHtml);
@@ -202,8 +220,8 @@ export default function createPageRoutes({ queries, pagesDir }) {
     
     // If NOT logged in → require authentication
     if (!userId) {
-      // Avoid redirect loops if user is already on the auth page.
-      if (req.path === "/auth.html") {
+      // If user requests /auth or /auth.html directly, serve auth page without redirect
+      if (req.path === "/auth" || req.path === "/auth.html") {
         return res.sendFile(path.join(pagesDir, "auth.html"));
       }
       return redirectToAuth(req, res);

@@ -24,18 +24,13 @@
 </head>
 
 <body class="creation-detail-page">
-	<app-navigation show-notifications show-profile show-create default-route="feed">
-		<a data-route="feed">Feed</a>
-		<a data-route="explore">Explore</a>
-		<a data-route="creations">Creations</a>
-		<a data-route="servers">Servers</a>
-		<a data-route="templates" data-role-only="creator">Templates</a>
-	</app-navigation>
+	<!--APP_HEADER-->
 
 	<app-modal-profile></app-modal-profile>
 	<app-modal-credits></app-modal-credits>
 	<app-modal-notifications></app-modal-notifications>
-	<app-navigation-mobile></app-navigation-mobile>
+
+	<!--APP_MOBILE_BOTTOM_NAV-->
 
 	<!-- Publish Modal -->
 	<div class="publish-modal-overlay" data-publish-modal>

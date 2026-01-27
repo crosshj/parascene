@@ -254,6 +254,12 @@ class AppModalServer extends HTMLElement {
 					overflow: hidden;
 				}
 
+				@media (min-width: 1024px) {
+					.server-modal {
+						max-width: 800px;
+					}
+				}
+
 				.server-modal-overlay.open .server-modal {
 					transform: scale(1);
 				}
@@ -654,11 +660,7 @@ class AppModalServer extends HTMLElement {
 					</label>
 					<label>
 						Auth Token
-						<div class="server-auth-controls">
-							<input type="text" name="auth_token" value="${this.escapeHtml(resolvedAuthToken)}" />
-							<button type="button" class="btn-secondary" data-save-token-btn>Save token</button>
-						</div>
-						<div class="server-auth-status" data-auth-status hidden></div>
+						<input type="text" name="auth_token" value="${this.escapeHtml(resolvedAuthToken)}" />
 					</label>
 					<label>
 						Status
@@ -695,14 +697,6 @@ class AppModalServer extends HTMLElement {
 				}
 			}
 
-			// Setup auth token save
-			const saveTokenBtn = body.querySelector('[data-save-token-btn]');
-			const authInput = body.querySelector('input[name="auth_token"]');
-			const authStatus = body.querySelector('[data-auth-status]');
-
-			if (saveTokenBtn && authInput) {
-				saveTokenBtn.addEventListener('click', () => this.handleSaveAuthToken(authInput, authStatus));
-			}
 		}
 
 		if (actions) {
@@ -945,7 +939,8 @@ class AppModalServer extends HTMLElement {
 			name: formData.get('name'),
 			server_url: formData.get('server_url'),
 			status: formData.get('status'),
-			description: formData.get('description') || null
+			description: formData.get('description') || null,
+			auth_token: formData.get('auth_token') || null
 		};
 
 		const saveBtn = this.shadowRoot.querySelector('[data-save-btn]');

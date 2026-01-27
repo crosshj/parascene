@@ -60,11 +60,16 @@ class AppRouteServers extends HTMLElement {
 			card.style.cursor = 'pointer';
 
 			const badges = [];
-			if (server.is_owner) {
-				badges.push('<span class="server-badge server-badge-owner">Owned</span>');
-			}
-			if (server.is_member && !server.is_owner) {
-				badges.push('<span class="server-badge server-badge-member">Joined</span>');
+			// Special "home" server (id = 1) has a dedicated Home tag.
+			if (server.id === 1) {
+				badges.push('<span class="server-badge server-badge-member">Home</span>');
+			} else {
+				if (server.is_owner) {
+					badges.push('<span class="server-badge server-badge-owner">Owned</span>');
+				}
+				if (server.is_member && !server.is_owner) {
+					badges.push('<span class="server-badge server-badge-member">Joined</span>');
+				}
 			}
 
 			const name = document.createElement('div');
@@ -86,28 +91,6 @@ class AppRouteServers extends HTMLElement {
 			created.className = 'admin-timestamp';
 			created.textContent = server.created_at ? formatRelativeTime(server.created_at, { style: 'long' }) : '—';
 
-			// Action buttons
-			const actions = document.createElement('div');
-			actions.className = 'server-card-actions';
-			actions.style.display = 'flex';
-			actions.style.gap = '0.5rem';
-			actions.style.marginTop = '0.75rem';
-
-			// Join/Leave should only be available from the modal, not on cards.
-			if (server.can_manage) {
-				const manageBtn = document.createElement('button');
-				manageBtn.className = 'btn-primary';
-				manageBtn.textContent = 'Manage';
-				manageBtn.addEventListener('click', (e) => {
-					e.stopPropagation();
-					const modal = document.querySelector('app-modal-server');
-					if (modal) {
-						modal.open({ mode: 'edit', serverId: server.id });
-					}
-				});
-				actions.appendChild(manageBtn);
-			}
-
 			card.appendChild(name);
 
 			if (hasDescription) {
@@ -118,9 +101,6 @@ class AppRouteServers extends HTMLElement {
 			}
 
 			card.appendChild(meta);
-			if (actions.children.length > 0) {
-				card.appendChild(actions);
-			}
 			card.appendChild(created);
 
 			// Click card to view details
