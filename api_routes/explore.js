@@ -4,23 +4,9 @@ import { getThumbnailUrl } from "./utils/url.js";
 export default function createExploreRoutes({ queries }) {
   const router = express.Router();
 
-  router.get("/api/explore", async (req, res) => {
-    if (!req.auth?.userId) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-
-    const user = await queries.selectUserById.get(req.auth?.userId);
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    const items = await queries.selectExploreItems.all();
-    return res.json({ items });
-  });
-
-  // Explore feed: show all published creations (newest first).
+  // Explore: show all published creations (newest first).
   // Excludes items from users that the current user follows.
-  router.get("/api/explore/feed", async (req, res) => {
+  router.get("/api/explore", async (req, res) => {
     if (!req.auth?.userId) {
       return res.status(401).json({ error: "Unauthorized" });
     }
