@@ -1,5 +1,33 @@
 [
   {
+    "name": "Edit / un-publish creations",
+    "description": "Allow owners to edit a creation's title/description after publishing, and optionally un-publish.",
+    "cost": 32,
+    "impact": 90,
+    "dependsOn": []
+  },
+  {
+    "name": "Re-generate",
+    "description": "Regenerate from stored generation info.",
+    "cost": 49,
+    "impact": 100,
+    "dependsOn": []
+  },
+  {
+    "name": "BUG: Creation Failure",
+    "description": "sometimes a creation fails or results in a stuck image loading forever - this looks bad",
+    "cost": 63,
+    "impact": 100,
+    "dependsOn": []
+  },
+  {
+    "name": "Admin User CRUD",
+    "description": "ability for admin to modify users",
+    "cost": 36,
+    "impact": 67,
+    "dependsOn": []
+  },
+  {
     "name": "Invite credits",
     "description": "Grant starter credits on invite acceptance; record inviter and source.",
     "cost": 1,
@@ -9,52 +37,17 @@
   {
     "name": "Provider boosts",
     "description": "Server-scoped boosts increase provider credit yield with caps, no discovery lift.",
-    "cost": 51,
-    "impact": 74,
-    "dependsOn": []
-  },
-  {
-    "name": "BUG: Creation Failure",
-    "description": "sometimes a creation fails or results in a stuck image loading forever - this looks bad",
-    "cost": 70,
-    "impact": 100,
-    "dependsOn": []
-  },
-  {
-    "name": "Templates",
-    "description": "Define template model, storage, and UI flow for reusable prompts.",
-    "cost": 51,
-    "impact": 16,
-    "dependsOn": []
-  },
-  {
-    "name": "Edit / un-publish creations",
-    "description": "Allow owners to edit a creation's title/description after publishing, and optionally un-publish.",
-    "cost": 15,
-    "impact": 10,
-    "dependsOn": []
-  },
-  {
-    "name": "Re-generate",
-    "description": "Regenerate from stored generation info.",
-    "cost": 80,
-    "impact": 10,
+    "cost": 64,
+    "impact": 63,
     "dependsOn": []
   },
   {
     "name": "Invites & redemption",
     "description": "Optional invite onboarding via email or shareable token, with stored invite context.",
-    "cost": 38,
+    "cost": 47,
     "impact": 1,
     "dependsOn": [
       "Invite credits"
     ]
-  },
-  {
-    "name": "Role Progression",
-    "description": "Define role transition rules and whether roles can be relaxed.",
-    "cost": 100,
-    "impact": 93,
-    "dependsOn": []
   }
 ]

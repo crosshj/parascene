@@ -27,42 +27,19 @@
 	<app-navigation show-notifications show-profile show-mobile-menu default-route="todo">
 		<a data-route="todo">Todo</a>
 		<a data-route="users">Users</a>
-		<a data-route="providers">Servers</a>
-		<!-- <a data-route="moderation">Moderation</a> -->
-		<!-- <a data-route="policies">Policies</a> -->
+		<a data-route="servers">Servers</a>
 	</app-navigation>
 
 	<app-modal-profile></app-modal-profile>
 	<app-modal-credits></app-modal-credits>
 	<app-modal-notifications></app-modal-notifications>
+	<app-modal-server></app-modal-server>
 
 	<main>
-		<!--
-      <section data-route-content="moderation">
-        <h3>Moderation</h3>
-        <div id="moderation-container" class="admin-cards">
-          <div class="admin-loading">Loading...</div>
-        </div>
-      </section>
-      -->
-
-		<section data-route-content="providers">
-			<h3>Servers</h3>
-			<div id="providers-container" class="admin-cards">
-				<div class="route-empty route-loading">
-					<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
-				</div>
-			</div>
+		<section data-route-content="servers">
+			<app-route-servers></app-route-servers>
 		</section>
 
-		<!--
-      <section data-route-content="policies">
-        <h3>Policies</h3>
-        <div id="policies-container" class="admin-cards">
-          <div class="admin-loading">Loading...</div>
-        </div>
-      </section>
-      -->
 		<section data-route-content="users">
 			<h3>Users</h3>
 			<div id="users-container" class="users-cards">
@@ -178,27 +155,6 @@
 						Dismiss
 					</button>
 				</div>
-			</div>
-		</div>
-	</div>
-
-	<div id="server-modal" class="publish-modal-overlay" data-server-modal role="dialog" aria-modal="true"
-		aria-labelledby="server-modal-title">
-		<div class="publish-modal server-modal">
-			<header class="publish-modal-header">
-				<h3 id="server-modal-title" class="server-modal-title">Server Details</h3>
-				<button type="button" class="publish-modal-close" data-server-close aria-label="Close">✕</button>
-			</header>
-			<div class="publish-modal-body server-modal-body">
-				<div id="server-modal-content" class="server-modal-content">
-					<div class="route-empty route-loading">
-						<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
-					</div>
-				</div>
-			</div>
-			<div id="server-modal-actions" class="server-modal-actions">
-				<button type="button" id="server-test-btn" class="btn-secondary">Test Server</button>
-				<button type="button" id="server-refresh-btn" class="btn-primary">Refresh Methods</button>
 			</div>
 		</div>
 	</div>

@@ -1,3 +1,4 @@
+import { formatRelativeTime } from '../../shared/datetime.js';
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 
 const html = String.raw;
@@ -5,74 +6,209 @@ const html = String.raw;
 class AppRouteServers extends HTMLElement {
 	connectedCallback() {
 		this.innerHTML = html`
-      <div class="route-header">
-        <h3>Servers</h3>
-        <p>You will find a list of servers here that you can join as well as those you have already joined.</p>
+      <div class="servers-route">
+        <div class="route-header">
+          <h3>Servers</h3>
+          <p>Browse and manage image generation servers.</p>
+        </div>
+        <div class="route-cards admin-cards" data-servers-container>
+          <div class="route-empty route-loading">
+            <div class="route-loading-spinner" aria-label="Loading" role="status"></div>
+          </div>
+        </div>
       </div>
-      <div class="route-cards grid-auto-fit" data-servers-container>
-        <div class="route-empty route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
-      </div>
-     <!-- 
-	  <div class="route-header route-section" id="servers-help">
-        <h3>How to run a server</h3>
-        <p>Running a server earns credits and helps the community scale.</p>
-      </div>
-      <div class="route-card">
-        <ol>
-          <li>Create your server profile and choose a region.</li>
-          <li>Configure capacity, uptime targets, and moderation settings.</li>
-          <li>Connect your infrastructure and verify health checks.</li>
-          <li>Publish the server so creators can discover and boost it.</li>
-        </ol>
-      </div>
-      -->
     `;
-		this.maybeScrollToHelp();
+
 		this.loadServers();
 	}
 
-	async loadServers() {
-		const container = this.querySelector("[data-servers-container]");
+	// Listen for server updates from modal
+	setupEventListeners() {
+		document.addEventListener('server-updated', () => {
+			this.loadServers({ force: true });
+		});
+	}
+
+	async loadServers({ force = false } = {}) {
+		const container = this.querySelector('[data-servers-container]');
 		if (!container) return;
 
 		try {
-			const result = await fetchJsonWithStatusDeduped("/api/servers", {
-				credentials: 'include'
-			}, { windowMs: 2000 });
-			if (!result.ok) throw new Error("Failed to load servers.");
+			const result = await fetchJsonWithStatusDeduped('/api/servers', { credentials: 'include' }, { windowMs: 2000 });
+			if (!result.ok) {
+				throw new Error('Failed to load servers');
+			}
+
 			const servers = Array.isArray(result.data?.servers) ? result.data.servers : [];
-
-			container.innerHTML = "";
-			if (servers.length === 0) {
-				container.innerHTML = html`<div class="route-empty">No servers available.</div>`;
-				return;
-			}
-
-			for (const server of servers) {
-				const card = document.createElement("div");
-				card.className = "route-card";
-				card.innerHTML = html`
-          <div class="route-title">${server.name}</div>
-          <div>${server.description || ''}</div>
-          <div class="route-meta">${server.status}</div>
-          <div class="route-meta">${server.members_count} members</div>
-        `;
-				container.appendChild(card);
-			}
+			this.renderServers(servers, container);
 		} catch (error) {
-			container.innerHTML = html`<div class="route-empty">Unable to load servers.</div>`;
+			console.error('Error loading servers:', error);
+			container.innerHTML = '<div class="route-empty">Error loading servers.</div>';
 		}
 	}
 
-	maybeScrollToHelp() {
-		if (!window.location.pathname.startsWith('/servers/help')) {
+	renderServers(servers, container) {
+		container.innerHTML = '';
+
+		// Rely on server-side (ID ascending) ordering so client matches API.
+		const sortedServers = [...servers];
+
+		sortedServers.forEach(server => {
+			const card = document.createElement('div');
+			card.className = 'card admin-card server-card';
+			card.dataset.serverId = server.id;
+			card.style.cursor = 'pointer';
+
+			const badges = [];
+			if (server.is_owner) {
+				badges.push('<span class="server-badge server-badge-owner">Owned</span>');
+			}
+			if (server.is_member && !server.is_owner) {
+				badges.push('<span class="server-badge server-badge-member">Joined</span>');
+			}
+
+			const name = document.createElement('div');
+			name.className = 'admin-title';
+			name.innerHTML = `${server.name || 'Unnamed Server'} ${badges.join('')}`;
+
+			const meta = document.createElement('div');
+			meta.className = 'admin-meta';
+			meta.textContent = `${server.status || 'unknown'}`;
+			// Special server (id = 1) should not display member counts.
+			if (typeof server.members_count === 'number' && server.id !== 1) {
+				meta.textContent += ` • ${server.members_count} member${server.members_count !== 1 ? 's' : ''}`;
+			}
+
+			const hasDescription = typeof server.description === 'string' && server.description.trim().length > 0;
+			const descriptionText = hasDescription ? server.description.trim() : '';
+
+			const created = document.createElement('div');
+			created.className = 'admin-timestamp';
+			created.textContent = server.created_at ? formatRelativeTime(server.created_at, { style: 'long' }) : '—';
+
+			// Action buttons
+			const actions = document.createElement('div');
+			actions.className = 'server-card-actions';
+			actions.style.display = 'flex';
+			actions.style.gap = '0.5rem';
+			actions.style.marginTop = '0.75rem';
+
+			// Join/Leave should only be available from the modal, not on cards.
+			if (server.can_manage) {
+				const manageBtn = document.createElement('button');
+				manageBtn.className = 'btn-primary';
+				manageBtn.textContent = 'Manage';
+				manageBtn.addEventListener('click', (e) => {
+					e.stopPropagation();
+					const modal = document.querySelector('app-modal-server');
+					if (modal) {
+						modal.open({ mode: 'edit', serverId: server.id });
+					}
+				});
+				actions.appendChild(manageBtn);
+			}
+
+			card.appendChild(name);
+
+			if (hasDescription) {
+				const desc = document.createElement('div');
+				desc.className = 'admin-detail';
+				desc.textContent = descriptionText;
+				card.appendChild(desc);
+			}
+
+			card.appendChild(meta);
+			if (actions.children.length > 0) {
+				card.appendChild(actions);
+			}
+			card.appendChild(created);
+
+			// Click card to view details
+			card.addEventListener('click', () => {
+				const modal = document.querySelector('app-modal-server');
+				if (modal) {
+					modal.open({
+						mode: server.can_manage ? 'edit' : 'view',
+						serverId: server.id
+					});
+				}
+			});
+
+			container.appendChild(card);
+		});
+
+		// Ghost card for adding a custom server (always last).
+		const ghostCard = document.createElement('button');
+		ghostCard.type = 'button';
+		ghostCard.className = 'card server-card server-card-ghost';
+		ghostCard.setAttribute('aria-label', 'Add custom server');
+
+		const ghostTitle = document.createElement('div');
+		ghostTitle.className = 'server-card-ghost-title';
+		ghostTitle.textContent = 'Add custom server';
+
+		const ghostSubtitle = document.createElement('div');
+		ghostSubtitle.className = 'server-card-ghost-subtitle';
+		ghostSubtitle.textContent = 'Register your own image generation server.';
+
+		ghostCard.appendChild(ghostTitle);
+		ghostCard.appendChild(ghostSubtitle);
+
+		ghostCard.addEventListener('click', () => {
+			const modal = document.querySelector('app-modal-server');
+			if (modal) {
+				modal.open({ mode: 'add' });
+			}
+		});
+
+		container.appendChild(ghostCard);
+	}
+
+	async handleJoin(serverId) {
+		try {
+			const response = await fetch(`/api/servers/${serverId}/join`, {
+				method: 'POST',
+				credentials: 'include'
+			});
+
+			const data = await response.json();
+			if (!response.ok) {
+				alert(data.error || 'Failed to join server');
+				return;
+			}
+
+			// Reload servers
+			await this.loadServers({ force: true });
+		} catch (error) {
+			console.error('Error joining server:', error);
+			alert('Failed to join server');
+		}
+	}
+
+	async handleLeave(serverId) {
+		if (!confirm('Are you sure you want to leave this server?')) {
 			return;
 		}
-		const helpSection = this.querySelector('#servers-help');
-		if (helpSection) {
-			helpSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+		try {
+			const response = await fetch(`/api/servers/${serverId}/leave`, {
+				method: 'POST',
+				credentials: 'include'
+			});
+
+			const data = await response.json();
+			if (!response.ok) {
+				alert(data.error || 'Failed to leave server');
+				return;
+			}
+
+			// Reload servers
+			await this.loadServers({ force: true });
+		} catch (error) {
+			console.error('Error leaving server:', error);
+			alert('Failed to leave server');
 		}
 	}
 }
 
-customElements.define("app-route-servers", AppRouteServers);
+customElements.define('app-route-servers', AppRouteServers);

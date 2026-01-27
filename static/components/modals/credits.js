@@ -1,4 +1,4 @@
-import { fetchJsonWithStatusDeduped } from '../shared/api.js';
+import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 
 const html = String.raw;
 

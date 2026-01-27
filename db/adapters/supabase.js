@@ -378,7 +378,7 @@ export function openDb() {
             server_config,
             created_at,
             updated_at,
-            prsn_users(email)
+            prsn_users!prsn_servers_user_id_fkey(email)
           `)
 					.order("name", { ascending: true });
 				if (error) throw error;
@@ -865,6 +865,7 @@ export function openDb() {
 					.from(prefixedTable("servers"))
 					.select(`
             id,
+            user_id,
             name,
             status,
             members_count,
@@ -874,7 +875,7 @@ export function openDb() {
             auth_token,
             status_date,
             server_config,
-            prsn_users(email)
+            prsn_users!prsn_servers_user_id_fkey(email)
           `)
 					.order("name", { ascending: true });
 				if (error) throw error;
@@ -905,7 +906,7 @@ export function openDb() {
             auth_token,
             status_date,
             server_config,
-            prsn_users(email)
+            prsn_users!prsn_servers_user_id_fkey(email)
           `)
 					.eq("id", serverId)
 					.single();
@@ -960,6 +961,111 @@ export function openDb() {
 				if (error) throw error;
 				return {
 					changes: data?.length || 0
+				};
+			}
+		},
+		checkServerMembership: {
+			get: async (serverId, userId) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("server_members"))
+					.select("server_id, user_id")
+					.eq("server_id", serverId)
+					.eq("user_id", userId)
+					.maybeSingle();
+				if (error) throw error;
+				return data !== null;
+			}
+		},
+		addServerMember: {
+			run: async (serverId, userId) => {
+				// Check if already a member
+				const { data: existing } = await serviceClient
+					.from(prefixedTable("server_members"))
+					.select("server_id, user_id")
+					.eq("server_id", serverId)
+					.eq("user_id", userId)
+					.maybeSingle();
+
+				if (existing) {
+					return { changes: 0 };
+				}
+
+				// Insert membership
+				const { error: insertError } = await serviceClient
+					.from(prefixedTable("server_members"))
+					.insert({ server_id: serverId, user_id: userId })
+					.select();
+
+				if (insertError) {
+					// If already exists (race condition), ignore
+					if (insertError.code === '23505') { // Unique violation
+						return { changes: 0 };
+					}
+					throw insertError;
+				}
+
+				// Update members_count manually
+				const { data: serverData } = await serviceClient
+					.from(prefixedTable("servers"))
+					.select("members_count")
+					.eq("id", serverId)
+					.single();
+
+				await serviceClient
+					.from(prefixedTable("servers"))
+					.update({ members_count: (serverData?.members_count || 0) + 1 })
+					.eq("id", serverId);
+
+				return { changes: 1 };
+			}
+		},
+		removeServerMember: {
+			run: async (serverId, userId) => {
+				const { error } = await serviceClient
+					.from(prefixedTable("server_members"))
+					.delete()
+					.eq("server_id", serverId)
+					.eq("user_id", userId);
+
+				if (error) throw error;
+
+				// Update members_count
+				const { data: serverData } = await serviceClient
+					.from(prefixedTable("servers"))
+					.select("members_count")
+					.eq("id", serverId)
+					.single();
+
+				await serviceClient
+					.from(prefixedTable("servers"))
+					.update({ members_count: Math.max(0, (serverData?.members_count || 0) - 1) })
+					.eq("id", serverId);
+
+				return { changes: 1 };
+			}
+		},
+		insertServer: {
+			run: async (userId, name, status, serverUrl, serverConfig = null, authToken = null, description = null) => {
+				const resolvedAuthToken = typeof authToken === "string" && authToken.trim()
+					? authToken.trim()
+					: null;
+				const { data, error } = await serviceClient
+					.from(prefixedTable("servers"))
+					.insert({
+						user_id: userId,
+						name,
+						status,
+						server_url: serverUrl,
+						server_config: serverConfig,
+						auth_token: resolvedAuthToken,
+						description
+					})
+					.select("id")
+					.single();
+				if (error) throw error;
+				return {
+					insertId: data.id,
+					changes: 1
 				};
 			}
 		},

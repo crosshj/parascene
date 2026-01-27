@@ -1,178 +1,178 @@
-import { formatDate } from '../shared/datetime.js';
-import { fetchJsonWithStatusDeduped } from '../shared/api.js';
+import { formatDate } from '../../shared/datetime.js';
+import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 
 const html = String.raw;
 
 class AppModalProfile extends HTMLElement {
-  constructor() {
-    super();
-    this.attachShadow({ mode: 'open' });
-    this._isOpen = false;
-    this.profileLoading = false;
-    this.profileLoadedAt = 0;
-    this.profileData = null;
-    this.handleEscape = this.handleEscape.bind(this);
-    this.handleOpenEvent = this.handleOpenEvent.bind(this);
-    this.handleCloseEvent = this.handleCloseEvent.bind(this);
-  }
+	constructor() {
+		super();
+		this.attachShadow({ mode: 'open' });
+		this._isOpen = false;
+		this.profileLoading = false;
+		this.profileLoadedAt = 0;
+		this.profileData = null;
+		this.handleEscape = this.handleEscape.bind(this);
+		this.handleOpenEvent = this.handleOpenEvent.bind(this);
+		this.handleCloseEvent = this.handleCloseEvent.bind(this);
+	}
 
-  connectedCallback() {
-    this.render();
-    this.setupEventListeners();
-    this.prefetchProfile();
-  }
+	connectedCallback() {
+		this.render();
+		this.setupEventListeners();
+		this.prefetchProfile();
+	}
 
-  disconnectedCallback() {
-    document.removeEventListener('keydown', this.handleEscape);
-    document.removeEventListener('open-profile', this.handleOpenEvent);
-    document.removeEventListener('close-profile', this.handleCloseEvent);
-  }
+	disconnectedCallback() {
+		document.removeEventListener('keydown', this.handleEscape);
+		document.removeEventListener('open-profile', this.handleOpenEvent);
+		document.removeEventListener('close-profile', this.handleCloseEvent);
+	}
 
-  setupEventListeners() {
-    document.addEventListener('keydown', this.handleEscape);
-    document.addEventListener('open-profile', this.handleOpenEvent);
-    document.addEventListener('close-profile', this.handleCloseEvent);
+	setupEventListeners() {
+		document.addEventListener('keydown', this.handleEscape);
+		document.addEventListener('open-profile', this.handleOpenEvent);
+		document.addEventListener('close-profile', this.handleCloseEvent);
 
-    const overlay = this.shadowRoot.querySelector('.profile-overlay');
-    const closeButton = this.shadowRoot.querySelector('.profile-close');
-    const fullProfileLink = this.shadowRoot.querySelector('[data-full-profile-link]');
-    const logoutForm = this.shadowRoot.querySelector('form[action="/logout"]');
+		const overlay = this.shadowRoot.querySelector('.profile-overlay');
+		const closeButton = this.shadowRoot.querySelector('.profile-close');
+		const fullProfileLink = this.shadowRoot.querySelector('[data-full-profile-link]');
+		const logoutForm = this.shadowRoot.querySelector('form[action="/logout"]');
 
-    if (overlay) {
-      overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) {
-          this.close();
-        }
-      });
-    }
+		if (overlay) {
+			overlay.addEventListener('click', (e) => {
+				if (e.target === overlay) {
+					this.close();
+				}
+			});
+		}
 
-    if (closeButton) {
-      closeButton.addEventListener('click', () => {
-        this.close();
-      });
-    }
+		if (closeButton) {
+			closeButton.addEventListener('click', () => {
+				this.close();
+			});
+		}
 
-    if (fullProfileLink) {
-      fullProfileLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        this.close();
-        window.location.href = '/user';
-      });
-    }
+		if (fullProfileLink) {
+			fullProfileLink.addEventListener('click', (e) => {
+				e.preventDefault();
+				this.close();
+				window.location.href = '/user';
+			});
+		}
 
-    if (logoutForm) {
-      logoutForm.addEventListener('submit', (e) => {
-        // Clear localStorage before submitting logout
-        this.clearCreditsStorage();
-      });
-    }
-  }
+		if (logoutForm) {
+			logoutForm.addEventListener('submit', (e) => {
+				// Clear localStorage before submitting logout
+				this.clearCreditsStorage();
+			});
+		}
+	}
 
-  handleOpenEvent() {
-    this.open();
-  }
+	handleOpenEvent() {
+		this.open();
+	}
 
-  handleCloseEvent() {
-    this.close();
-  }
+	handleCloseEvent() {
+		this.close();
+	}
 
-  handleEscape(e) {
-    if (e.key === 'Escape' && this.isOpen()) {
-      this.close();
-    }
-  }
+	handleEscape(e) {
+		if (e.key === 'Escape' && this.isOpen()) {
+			this.close();
+		}
+	}
 
-  isOpen() {
-    return this._isOpen;
-  }
+	isOpen() {
+		return this._isOpen;
+	}
 
-  open() {
-    if (this._isOpen) return;
-    this._isOpen = true;
-    const overlay = this.shadowRoot.querySelector('.profile-overlay');
-    if (overlay) {
-      overlay.classList.add('open');
-      this.loadProfile({ silent: true });
-    }
-    // Dispatch event to close notifications if open
-    document.dispatchEvent(new CustomEvent('close-notifications'));
-    document.dispatchEvent(new CustomEvent('modal-opened'));
-  }
+	open() {
+		if (this._isOpen) return;
+		this._isOpen = true;
+		const overlay = this.shadowRoot.querySelector('.profile-overlay');
+		if (overlay) {
+			overlay.classList.add('open');
+			this.loadProfile({ silent: true });
+		}
+		// Dispatch event to close notifications if open
+		document.dispatchEvent(new CustomEvent('close-notifications'));
+		document.dispatchEvent(new CustomEvent('modal-opened'));
+	}
 
-  close() {
-    if (!this._isOpen) return;
-    this._isOpen = false;
-    const overlay = this.shadowRoot.querySelector('.profile-overlay');
-    if (overlay) {
-      overlay.classList.remove('open');
-    }
-    document.dispatchEvent(new CustomEvent('modal-closed'));
-  }
+	close() {
+		if (!this._isOpen) return;
+		this._isOpen = false;
+		const overlay = this.shadowRoot.querySelector('.profile-overlay');
+		if (overlay) {
+			overlay.classList.remove('open');
+		}
+		document.dispatchEvent(new CustomEvent('modal-closed'));
+	}
 
-  async loadProfile({ silent = true, force = false } = {}) {
-    const content = this.shadowRoot.querySelector('.profile-content');
-    if (!content) return;
+	async loadProfile({ silent = true, force = false } = {}) {
+		const content = this.shadowRoot.querySelector('.profile-content');
+		if (!content) return;
 
-    if (this.profileLoading) return;
-    const now = Date.now();
-    if (!force && now - this.profileLoadedAt < 30000) return;
+		if (this.profileLoading) return;
+		const now = Date.now();
+		if (!force && now - this.profileLoadedAt < 30000) return;
 
-    try {
-      this.profileLoading = true;
-      const result = await fetchJsonWithStatusDeduped('/api/profile', {
-        credentials: 'include'
-      }, { windowMs: 2000 });
-      if (!result.ok) {
-        if (result.status === 401) {
-          if (!this.profileData) {
-            content.innerHTML = html`<p style="color: var(--text-muted);">Please log in to view your profile.</p>`;
-          }
-          return;
-        }
-        throw new Error('Failed to load profile');
-      }
+		try {
+			this.profileLoading = true;
+			const result = await fetchJsonWithStatusDeduped('/api/profile', {
+				credentials: 'include'
+			}, { windowMs: 2000 });
+			if (!result.ok) {
+				if (result.status === 401) {
+					if (!this.profileData) {
+						content.innerHTML = html`<p style="color: var(--text-muted);">Please log in to view your profile.</p>`;
+					}
+					return;
+				}
+				throw new Error('Failed to load profile');
+			}
 
-      const user = result.data;
-      const nextKey = user
-        ? `${user.email || ''}|${user.role || ''}|${user.created_at || ''}`
-        : '';
-      const currentKey = this.profileData
-        ? `${this.profileData.email || ''}|${this.profileData.role || ''}|${this.profileData.created_at || ''}`
-        : '';
+			const user = result.data;
+			const nextKey = user
+				? `${user.email || ''}|${user.role || ''}|${user.created_at || ''}`
+				: '';
+			const currentKey = this.profileData
+				? `${this.profileData.email || ''}|${this.profileData.role || ''}|${this.profileData.created_at || ''}`
+				: '';
 
-      if (nextKey !== currentKey) {
-        this.profileData = user;
-        this.displayProfile(user);
-      }
-      this.profileLoadedAt = Date.now();
-    } catch (error) {
-      console.error('Error loading profile:', error);
-      if (!silent && !this.profileData) {
-        content.innerHTML = html`<p style="color: var(--text-muted);">Failed to load profile information.</p>`;
-      }
-    } finally {
-      this.profileLoading = false;
-    }
-  }
+			if (nextKey !== currentKey) {
+				this.profileData = user;
+				this.displayProfile(user);
+			}
+			this.profileLoadedAt = Date.now();
+		} catch (error) {
+			console.error('Error loading profile:', error);
+			if (!silent && !this.profileData) {
+				content.innerHTML = html`<p style="color: var(--text-muted);">Failed to load profile information.</p>`;
+			}
+		} finally {
+			this.profileLoading = false;
+		}
+	}
 
-  displayProfile(user) {
-    const content = this.shadowRoot.querySelector('.profile-content');
-    if (!content) return;
+	displayProfile(user) {
+		const content = this.shadowRoot.querySelector('.profile-content');
+		if (!content) return;
 
-    const roleLabels = {
-      consumer: 'Consumer',
-      creator: 'Creator',
-      provider: 'Provider',
-      admin: 'Administrator'
-    };
+		const roleLabels = {
+			consumer: 'Consumer',
+			creator: 'Creator',
+			provider: 'Provider',
+			admin: 'Administrator'
+		};
 
-    const escapeHtml = (text) => {
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
-    };
+		const escapeHtml = (text) => {
+			const div = document.createElement('div');
+			div.textContent = text;
+			return div.innerHTML;
+		};
 
-    content.innerHTML = html`
+		content.innerHTML = html`
       <div class="field">
         <label>Email</label>
         <div class="value">${escapeHtml(user.email)}</div>
@@ -186,10 +186,10 @@ class AppModalProfile extends HTMLElement {
         <div class="value">${formatDate(user.created_at) || 'N/A'}</div>
       </div>
     `;
-  }
+	}
 
-  render() {
-    this.shadowRoot.innerHTML = html`
+	render() {
+		this.shadowRoot.innerHTML = html`
       <style>
         :host {
           display: block;
@@ -345,27 +345,27 @@ class AppModalProfile extends HTMLElement {
         </div>
       </div>
     `;
-  }
+	}
 
-  prefetchProfile() {
-    const schedule = window.requestIdleCallback
-      ? window.requestIdleCallback.bind(window)
-      : (cb) => setTimeout(cb, 200);
-    schedule(() => {
-      this.loadProfile({ silent: true, force: true });
-    });
-  }
+	prefetchProfile() {
+		const schedule = window.requestIdleCallback
+			? window.requestIdleCallback.bind(window)
+			: (cb) => setTimeout(cb, 200);
+		schedule(() => {
+			this.loadProfile({ silent: true, force: true });
+		});
+	}
 
-  clearCreditsStorage() {
-    try {
-      window.localStorage?.removeItem('credits-balance');
-      window.localStorage?.removeItem('credits-user-email');
-      window.localStorage?.removeItem('credits-last-claim');
-      window.localStorage?.removeItem('profile-avatar-url');
-    } catch {
-      // ignore storage errors
-    }
-  }
+	clearCreditsStorage() {
+		try {
+			window.localStorage?.removeItem('credits-balance');
+			window.localStorage?.removeItem('credits-user-email');
+			window.localStorage?.removeItem('credits-last-claim');
+			window.localStorage?.removeItem('profile-avatar-url');
+		} catch {
+			// ignore storage errors
+		}
+	}
 }
 
 customElements.define('app-modal-profile', AppModalProfile);

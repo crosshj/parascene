@@ -166,6 +166,11 @@ class AppRouteCreate extends HTMLElement {
 			const result = await fetchJsonWithStatusDeduped('/api/servers', { credentials: 'include' }, { windowMs: 2000 });
 			if (result.ok) {
 				this.servers = Array.isArray(result.data?.servers) ? result.data.servers : [];
+				// Show servers where user is owner or member.
+				// Additionally, the special server with id = 1 should always appear.
+				this.servers = this.servers.filter(server =>
+					server.id === 1 || server.is_owner === true || server.is_member === true
+				);
 				// Parse server_config if it's a string
 				this.servers = this.servers.map(server => {
 					if (server.server_config && typeof server.server_config === 'string') {

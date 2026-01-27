@@ -5,12 +5,12 @@ const html = String.raw;
 
 function getPageForUser(user) {
   const roleToPage = {
-    consumer: "consumer.html",
-    creator: "creator.html",
-    provider: "provider.html",
-    admin: "admin.html"
+    consumer: "app.html",
+    creator: "app.html",
+    provider: "app.html",
+    admin: "app-admin.html"
   };
-  return roleToPage[user.role] || "consumer.html";
+  return roleToPage[user.role] || "app.html";
 }
 
 export default function createPageRoutes({ queries, pagesDir }) {

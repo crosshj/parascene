@@ -75,6 +75,13 @@ CREATE TABLE IF NOT EXISTS servers (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS server_members (
+  server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (server_id, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS policy_knobs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   key TEXT NOT NULL,

@@ -72,6 +72,22 @@ CREATE TABLE IF NOT EXISTS prsn_servers (
 ALTER TABLE prsn_servers ENABLE ROW LEVEL SECURITY;
 COMMENT ON TABLE prsn_servers IS 'Parascene: consolidated provider servers table combining registry, status, and community server information. RLS enabled without policies - only service role can access. All access controlled via API layer.';
 
+-- Server members
+CREATE TABLE IF NOT EXISTS prsn_server_members (
+  server_id bigint NOT NULL REFERENCES prsn_servers(id) ON DELETE CASCADE,
+  user_id  bigint NOT NULL REFERENCES prsn_users(id)    ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (server_id, user_id)
+);
+
+ALTER TABLE prsn_server_members ENABLE ROW LEVEL SECURITY;
+
+COMMENT ON TABLE prsn_server_members IS
+  'Parascene: membership relationships between users and servers. RLS enabled without policies - only service role can access. All access controlled via API layer.';
+
+CREATE INDEX IF NOT EXISTS idx_prsn_server_members_user_id
+  ON prsn_server_members(user_id);
+
 
 -- Policy knobs
 CREATE TABLE IF NOT EXISTS prsn_policy_knobs (

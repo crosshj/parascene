@@ -1,240 +1,240 @@
-import { formatDateTime, formatRelativeTime } from '../shared/datetime.js';
-import { fetchJsonWithStatusDeduped } from '../shared/api.js';
+import { formatDateTime, formatRelativeTime } from '../../shared/datetime.js';
+import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 
 const html = String.raw;
 
 class AppModalNotifications extends HTMLElement {
-  constructor() {
-    super();
-    this.attachShadow({ mode: 'open' });
-    this._isOpen = false;
-    this._isLoading = false;
-    this._lastLoadedAt = 0;
-    this.notifications = [];
-    this.activeIndex = 0;
-    this.pendingNotificationId = null;
-    this.viewMode = 'list';
-    this.handleEscape = this.handleEscape.bind(this);
-    this.handleOpenEvent = this.handleOpenEvent.bind(this);
-    this.handleCloseEvent = this.handleCloseEvent.bind(this);
-  }
+	constructor() {
+		super();
+		this.attachShadow({ mode: 'open' });
+		this._isOpen = false;
+		this._isLoading = false;
+		this._lastLoadedAt = 0;
+		this.notifications = [];
+		this.activeIndex = 0;
+		this.pendingNotificationId = null;
+		this.viewMode = 'list';
+		this.handleEscape = this.handleEscape.bind(this);
+		this.handleOpenEvent = this.handleOpenEvent.bind(this);
+		this.handleCloseEvent = this.handleCloseEvent.bind(this);
+	}
 
-  connectedCallback() {
-    this.render();
-    this.setupEventListeners();
-    this.prefetchNotifications();
-  }
+	connectedCallback() {
+		this.render();
+		this.setupEventListeners();
+		this.prefetchNotifications();
+	}
 
-  disconnectedCallback() {
-    document.removeEventListener('keydown', this.handleEscape);
-    document.removeEventListener('open-notifications', this.handleOpenEvent);
-    document.removeEventListener('close-notifications', this.handleCloseEvent);
-  }
+	disconnectedCallback() {
+		document.removeEventListener('keydown', this.handleEscape);
+		document.removeEventListener('open-notifications', this.handleOpenEvent);
+		document.removeEventListener('close-notifications', this.handleCloseEvent);
+	}
 
-  setupEventListeners() {
-    document.addEventListener('keydown', this.handleEscape);
-    document.addEventListener('open-notifications', this.handleOpenEvent);
-    document.addEventListener('close-notifications', this.handleCloseEvent);
-    document.addEventListener('notifications-acknowledged', () => {
-      // Reload notifications when one is acknowledged
-      this.loadNotifications({ silent: true, force: true });
-    });
+	setupEventListeners() {
+		document.addEventListener('keydown', this.handleEscape);
+		document.addEventListener('open-notifications', this.handleOpenEvent);
+		document.addEventListener('close-notifications', this.handleCloseEvent);
+		document.addEventListener('notifications-acknowledged', () => {
+			// Reload notifications when one is acknowledged
+			this.loadNotifications({ silent: true, force: true });
+		});
 
-    const overlays = this.shadowRoot.querySelectorAll(
-      '.notifications-overlay, .notification-detail-overlay'
-    );
-    const closeButtons = this.shadowRoot.querySelectorAll('.notifications-close');
+		const overlays = this.shadowRoot.querySelectorAll(
+			'.notifications-overlay, .notification-detail-overlay'
+		);
+		const closeButtons = this.shadowRoot.querySelectorAll('.notifications-close');
 
-    overlays.forEach((overlay) => {
-      overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) {
-          this.close();
-        }
-      });
-    });
+		overlays.forEach((overlay) => {
+			overlay.addEventListener('click', (e) => {
+				if (e.target === overlay) {
+					this.close();
+				}
+			});
+		});
 
-    closeButtons.forEach((button) => {
-      button.addEventListener('click', () => {
-        this.close();
-      });
-    });
-  }
+		closeButtons.forEach((button) => {
+			button.addEventListener('click', () => {
+				this.close();
+			});
+		});
+	}
 
-  handleOpenEvent(event) {
-    const notificationId = event?.detail?.notificationId ?? null;
-    if (notificationId) {
-      this.openDetail(notificationId);
-    } else {
-      this.openList();
-    }
-  }
+	handleOpenEvent(event) {
+		const notificationId = event?.detail?.notificationId ?? null;
+		if (notificationId) {
+			this.openDetail(notificationId);
+		} else {
+			this.openList();
+		}
+	}
 
-  handleCloseEvent() {
-    this.close();
-  }
+	handleCloseEvent() {
+		this.close();
+	}
 
-  handleEscape(e) {
-    if (e.key === 'Escape' && this.isOpen()) {
-      this.close();
-    }
-  }
+	handleEscape(e) {
+		if (e.key === 'Escape' && this.isOpen()) {
+			this.close();
+		}
+	}
 
-  isOpen() {
-    return this._isOpen;
-  }
+	isOpen() {
+		return this._isOpen;
+	}
 
-  openList() {
-    this.viewMode = 'list';
-    this.pendingNotificationId = null;
-    this.openModal('.notifications-overlay');
-    if (this.notifications.length) {
-      this.renderNotificationList();
-    }
-    this.loadNotifications({ silent: true });
-    document.dispatchEvent(new CustomEvent('close-profile'));
-  }
+	openList() {
+		this.viewMode = 'list';
+		this.pendingNotificationId = null;
+		this.openModal('.notifications-overlay');
+		if (this.notifications.length) {
+			this.renderNotificationList();
+		}
+		this.loadNotifications({ silent: true });
+		document.dispatchEvent(new CustomEvent('close-profile'));
+	}
 
-  openDetail(notificationId) {
-    this.viewMode = 'detail';
-    this.pendingNotificationId = notificationId;
-    this.openModal('.notification-detail-overlay');
-    if (this.notifications.length) {
-      this.selectActiveNotification();
-      this.renderNotificationDetail();
-    }
-    this.loadNotifications({ silent: true });
-    document.dispatchEvent(new CustomEvent('close-profile'));
-  }
+	openDetail(notificationId) {
+		this.viewMode = 'detail';
+		this.pendingNotificationId = notificationId;
+		this.openModal('.notification-detail-overlay');
+		if (this.notifications.length) {
+			this.selectActiveNotification();
+			this.renderNotificationDetail();
+		}
+		this.loadNotifications({ silent: true });
+		document.dispatchEvent(new CustomEvent('close-profile'));
+	}
 
-  openModal(selector) {
-    const overlays = this.shadowRoot.querySelectorAll(
-      '.notifications-overlay, .notification-detail-overlay'
-    );
-    overlays.forEach((overlay) => overlay.classList.remove('open'));
-    this._isOpen = true;
-    const overlay = this.shadowRoot.querySelector(selector);
-    if (overlay) {
-      overlay.classList.add('open');
-    }
-    document.dispatchEvent(new CustomEvent('modal-opened'));
-  }
+	openModal(selector) {
+		const overlays = this.shadowRoot.querySelectorAll(
+			'.notifications-overlay, .notification-detail-overlay'
+		);
+		overlays.forEach((overlay) => overlay.classList.remove('open'));
+		this._isOpen = true;
+		const overlay = this.shadowRoot.querySelector(selector);
+		if (overlay) {
+			overlay.classList.add('open');
+		}
+		document.dispatchEvent(new CustomEvent('modal-opened'));
+	}
 
-  close() {
-    if (!this._isOpen) return;
-    this._isOpen = false;
-    const overlays = this.shadowRoot.querySelectorAll(
-      '.notifications-overlay, .notification-detail-overlay'
-    );
-    overlays.forEach((overlay) => overlay.classList.remove('open'));
-    document.dispatchEvent(new CustomEvent('modal-closed'));
-  }
+	close() {
+		if (!this._isOpen) return;
+		this._isOpen = false;
+		const overlays = this.shadowRoot.querySelectorAll(
+			'.notifications-overlay, .notification-detail-overlay'
+		);
+		overlays.forEach((overlay) => overlay.classList.remove('open'));
+		document.dispatchEvent(new CustomEvent('modal-closed'));
+	}
 
-  async loadNotifications({ silent = false, force = false } = {}) {
-    if (this._isLoading) return;
-    const now = Date.now();
-    if (!force && now - this._lastLoadedAt < 30000) {
-      return;
-    }
+	async loadNotifications({ silent = false, force = false } = {}) {
+		if (this._isLoading) return;
+		const now = Date.now();
+		if (!force && now - this._lastLoadedAt < 30000) {
+			return;
+		}
 
-    const listContent = this.shadowRoot.querySelector('.notifications-content');
-    const detailContent = this.shadowRoot.querySelector('.notification-detail-content');
-    const content = this.viewMode === 'detail' ? detailContent : listContent;
-    if (!content) return;
+		const listContent = this.shadowRoot.querySelector('.notifications-content');
+		const detailContent = this.shadowRoot.querySelector('.notification-detail-content');
+		const content = this.viewMode === 'detail' ? detailContent : listContent;
+		if (!content) return;
 
-    if (!silent && !this.notifications.length) {
-      content.innerHTML = html`<p>Loading...</p>`;
-    }
+		if (!silent && !this.notifications.length) {
+			content.innerHTML = html`<p>Loading...</p>`;
+		}
 
-    this._isLoading = true;
-    try {
-      const result = await fetchJsonWithStatusDeduped('/api/notifications', {
-        credentials: 'include'
-      }, { windowMs: 2000 });
-      if (!result.ok) {
-        throw new Error('Failed to load notifications');
-      }
-      this.notifications = Array.isArray(result.data?.notifications)
-        ? result.data.notifications
-        : [];
-      this._lastLoadedAt = Date.now();
-      this.selectActiveNotification();
-      this.renderNotificationList();
-      this.renderNotificationDetail({
-        acknowledge: this.isOpen() && this.viewMode === 'detail'
-      });
-    } catch (error) {
-      console.error('Error loading notifications:', error);
-      if (content) {
-        content.innerHTML = html`<p style="color: var(--text-muted);">Failed to load notifications.</p>`;
-      }
-    } finally {
-      this._isLoading = false;
-    }
-  }
+		this._isLoading = true;
+		try {
+			const result = await fetchJsonWithStatusDeduped('/api/notifications', {
+				credentials: 'include'
+			}, { windowMs: 2000 });
+			if (!result.ok) {
+				throw new Error('Failed to load notifications');
+			}
+			this.notifications = Array.isArray(result.data?.notifications)
+				? result.data.notifications
+				: [];
+			this._lastLoadedAt = Date.now();
+			this.selectActiveNotification();
+			this.renderNotificationList();
+			this.renderNotificationDetail({
+				acknowledge: this.isOpen() && this.viewMode === 'detail'
+			});
+		} catch (error) {
+			console.error('Error loading notifications:', error);
+			if (content) {
+				content.innerHTML = html`<p style="color: var(--text-muted);">Failed to load notifications.</p>`;
+			}
+		} finally {
+			this._isLoading = false;
+		}
+	}
 
-  async acknowledgeNotification(id) {
-    try {
-      const response = await fetch('/api/notifications/acknowledge', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ id: String(id) }),
-        credentials: 'include'
-      });
-      if (!response.ok) {
-        throw new Error('Failed to acknowledge notification');
-      }
-      const data = await response.json();
-      if (data.updated) {
-        // Update local notification state
-        const notification = this.notifications.find(n => n.id === id);
-        if (notification) {
-          notification.acknowledged_at = new Date().toISOString();
-        }
-        // Reload notifications to get fresh data from server
-        await this.loadNotifications({ silent: true, force: true });
-        // Dispatch event for other components (like header count)
-        document.dispatchEvent(new CustomEvent('notifications-acknowledged'));
-      }
-    } catch (error) {
-      console.error('Error acknowledging notification:', error);
-    }
-  }
+	async acknowledgeNotification(id) {
+		try {
+			const response = await fetch('/api/notifications/acknowledge', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+				body: new URLSearchParams({ id: String(id) }),
+				credentials: 'include'
+			});
+			if (!response.ok) {
+				throw new Error('Failed to acknowledge notification');
+			}
+			const data = await response.json();
+			if (data.updated) {
+				// Update local notification state
+				const notification = this.notifications.find(n => n.id === id);
+				if (notification) {
+					notification.acknowledged_at = new Date().toISOString();
+				}
+				// Reload notifications to get fresh data from server
+				await this.loadNotifications({ silent: true, force: true });
+				// Dispatch event for other components (like header count)
+				document.dispatchEvent(new CustomEvent('notifications-acknowledged'));
+			}
+		} catch (error) {
+			console.error('Error acknowledging notification:', error);
+		}
+	}
 
-  selectActiveNotification() {
-    if (!this.notifications.length) {
-      this.activeIndex = 0;
-      return;
-    }
+	selectActiveNotification() {
+		if (!this.notifications.length) {
+			this.activeIndex = 0;
+			return;
+		}
 
-    if (this.pendingNotificationId) {
-      const index = this.notifications.findIndex(
-        (notification) => notification.id === this.pendingNotificationId
-      );
-      this.activeIndex = index >= 0 ? index : 0;
-    } else if (this.activeIndex >= this.notifications.length) {
-      this.activeIndex = 0;
-    }
-  }
+		if (this.pendingNotificationId) {
+			const index = this.notifications.findIndex(
+				(notification) => notification.id === this.pendingNotificationId
+			);
+			this.activeIndex = index >= 0 ? index : 0;
+		} else if (this.activeIndex >= this.notifications.length) {
+			this.activeIndex = 0;
+		}
+	}
 
-  renderNotificationList() {
-    const content = this.shadowRoot.querySelector('.notifications-content');
-    if (!content) return;
+	renderNotificationList() {
+		const content = this.shadowRoot.querySelector('.notifications-content');
+		if (!content) return;
 
-    if (!this.notifications.length) {
-      content.innerHTML = html`<p style="color: var(--text-muted);">No notifications.</p>`;
-      return;
-    }
+		if (!this.notifications.length) {
+			content.innerHTML = html`<p style="color: var(--text-muted);">No notifications.</p>`;
+			return;
+		}
 
-    const escapeHtml = (text) => {
-      const div = document.createElement('div');
-      div.textContent = text ?? '';
-      return div.innerHTML;
-    };
+		const escapeHtml = (text) => {
+			const div = document.createElement('div');
+			div.textContent = text ?? '';
+			return div.innerHTML;
+		};
 
-    content.innerHTML = this.notifications.map((notification) => {
-      const time = formatRelativeTime(notification.created_at);
-      const timeTitle = formatDateTime(notification.created_at);
-      return html`
+		content.innerHTML = this.notifications.map((notification) => {
+			const time = formatRelativeTime(notification.created_at);
+			const timeTitle = formatDateTime(notification.created_at);
+			return html`
       <button class="notification-list-item ${notification.acknowledged_at ? 'is-read' : 'is-unread'}" data-id="${notification.id}">
         <div class="notification-list-title">${escapeHtml(notification.title || 'Notification')}</div>
         <div class="notification-list-message">${escapeHtml(notification.message || '')}</div>
@@ -242,42 +242,42 @@ class AppModalNotifications extends HTMLElement {
       </button>
     `}).join('');
 
-    content.querySelectorAll('.notification-list-item').forEach((item) => {
-      item.addEventListener('click', () => {
-        const id = Number(item.getAttribute('data-id'));
-        if (id) {
-          this.openDetail(id);
-        }
-      });
-    });
-  }
+		content.querySelectorAll('.notification-list-item').forEach((item) => {
+			item.addEventListener('click', () => {
+				const id = Number(item.getAttribute('data-id'));
+				if (id) {
+					this.openDetail(id);
+				}
+			});
+		});
+	}
 
-  renderNotificationDetail({ acknowledge = true } = {}) {
-    const content = this.shadowRoot.querySelector('.notification-detail-content');
-    if (!content) return;
+	renderNotificationDetail({ acknowledge = true } = {}) {
+		const content = this.shadowRoot.querySelector('.notification-detail-content');
+		if (!content) return;
 
-    if (!this.notifications.length) {
-      content.innerHTML = html`<p style="color: var(--text-muted);">No notifications.</p>`;
-      return;
-    }
+		if (!this.notifications.length) {
+			content.innerHTML = html`<p style="color: var(--text-muted);">No notifications.</p>`;
+			return;
+		}
 
-    const escapeHtml = (text) => {
-      const div = document.createElement('div');
-      div.textContent = text ?? '';
-      return div.innerHTML;
-    };
+		const escapeHtml = (text) => {
+			const div = document.createElement('div');
+			div.textContent = text ?? '';
+			return div.innerHTML;
+		};
 
-    const notification = this.notifications[this.activeIndex];
+		const notification = this.notifications[this.activeIndex];
 
-    if (acknowledge && !notification.acknowledged_at) {
-      this.acknowledgeNotification(notification.id);
-      notification.acknowledged_at = new Date().toISOString();
-    }
+		if (acknowledge && !notification.acknowledged_at) {
+			this.acknowledgeNotification(notification.id);
+			notification.acknowledged_at = new Date().toISOString();
+		}
 
-    const time = formatRelativeTime(notification.created_at);
-    const timeTitle = formatDateTime(notification.created_at);
+		const time = formatRelativeTime(notification.created_at);
+		const timeTitle = formatDateTime(notification.created_at);
 
-    content.innerHTML = html`
+		content.innerHTML = html`
       <div class="notification-detail">
         <div class="notification-detail-header">
           <div class="notification-title">${escapeHtml(notification.title || 'Notification')}</div>
@@ -291,17 +291,17 @@ class AppModalNotifications extends HTMLElement {
       </div>
     `;
 
-    const viewAllButton = this.shadowRoot.querySelector('.notification-view-all');
-    if (viewAllButton) {
-      viewAllButton.addEventListener('click', () => {
-        this.close();
-        this.openList();
-      });
-    }
-  }
+		const viewAllButton = this.shadowRoot.querySelector('.notification-view-all');
+		if (viewAllButton) {
+			viewAllButton.addEventListener('click', () => {
+				this.close();
+				this.openList();
+			});
+		}
+	}
 
-  render() {
-    this.shadowRoot.innerHTML = html`
+	render() {
+		this.shadowRoot.innerHTML = html`
       <style>
         :host {
           display: block;
@@ -526,16 +526,16 @@ class AppModalNotifications extends HTMLElement {
         </div>
       </div>
     `;
-  }
+	}
 
-  prefetchNotifications() {
-    const schedule = window.requestIdleCallback
-      ? window.requestIdleCallback.bind(window)
-      : (cb) => setTimeout(cb, 250);
-    schedule(() => {
-      this.loadNotifications({ silent: true, force: true });
-    });
-  }
+	prefetchNotifications() {
+		const schedule = window.requestIdleCallback
+			? window.requestIdleCallback.bind(window)
+			: (cb) => setTimeout(cb, 250);
+		schedule(() => {
+			this.loadNotifications({ silent: true, force: true });
+		});
+	}
 }
 
 customElements.define('app-modal-notifications', AppModalNotifications);

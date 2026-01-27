@@ -722,6 +722,76 @@ export async function openDb() {
 				});
 			}
 		},
+		checkServerMembership: {
+			get: async (serverId, userId) => {
+				const stmt = db.prepare(
+					`SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ?`
+				);
+				const result = stmt.get(serverId, userId);
+				return result !== undefined;
+			}
+		},
+		addServerMember: {
+			run: async (serverId, userId) => {
+				const stmt = db.prepare(
+					`INSERT OR IGNORE INTO server_members (server_id, user_id) VALUES (?, ?)`
+				);
+				const result = stmt.run(serverId, userId);
+				if (result.changes > 0) {
+					// Update members_count
+					const updateStmt = db.prepare(
+						`UPDATE servers SET members_count = members_count + 1 WHERE id = ?`
+					);
+					updateStmt.run(serverId);
+				}
+				return Promise.resolve({
+					changes: result.changes
+				});
+			}
+		},
+		removeServerMember: {
+			run: async (serverId, userId) => {
+				const stmt = db.prepare(
+					`DELETE FROM server_members WHERE server_id = ? AND user_id = ?`
+				);
+				const result = stmt.run(serverId, userId);
+				if (result.changes > 0) {
+					// Update members_count
+					const updateStmt = db.prepare(
+						`UPDATE servers SET members_count = MAX(0, members_count - 1) WHERE id = ?`
+					);
+					updateStmt.run(serverId);
+				}
+				return Promise.resolve({
+					changes: result.changes
+				});
+			}
+		},
+		insertServer: {
+			run: async (userId, name, status, serverUrl, serverConfig = null, authToken = null, description = null) => {
+				const resolvedAuthToken = typeof authToken === "string" && authToken.trim()
+					? authToken.trim()
+					: null;
+				const stmt = db.prepare(
+					`INSERT INTO servers (user_id, name, status, server_url, auth_token, description, server_config)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
+				);
+				const configJson = serverConfig ? JSON.stringify(serverConfig) : null;
+				const result = stmt.run(
+					userId,
+					name,
+					status,
+					serverUrl,
+					resolvedAuthToken,
+					description,
+					configJson
+				);
+				return Promise.resolve({
+					insertId: result.lastInsertRowid,
+					changes: result.changes
+				});
+			}
+		},
 		selectTemplates: {
 			all: async () => {
 				const stmt = db.prepare(

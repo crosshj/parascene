@@ -1,5 +1,5 @@
-import { formatDateTime, formatRelativeTime } from '../shared/datetime.js';
-import { fetchJsonWithStatusDeduped } from '../shared/api.js';
+import { formatDateTime, formatRelativeTime } from '../../shared/datetime.js';
+import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 
 const html = String.raw;
 

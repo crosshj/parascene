@@ -9,6 +9,7 @@ const users = [];
 const user_profiles = [];
 const moderation_queue = [];
 const servers = [];
+const server_members = [];
 const policy_knobs = [];
 const notifications = [];
 const feed_items = [];
@@ -500,6 +501,90 @@ export function openDb() {
 				server.server_config = nextServer?.server_config ?? server.server_config ?? null;
 				server.updated_at = new Date().toISOString();
 				return { changes: 1 };
+			}
+		},
+		checkServerMembership: {
+			get: async (serverId, userId) => {
+				return server_members.some(
+					m => m.server_id === Number(serverId) && m.user_id === Number(userId)
+				);
+			}
+		},
+		addServerMember: {
+			run: async (serverId, userId) => {
+				const serverIdNum = Number(serverId);
+				const userIdNum = Number(userId);
+				
+				// Check if already a member
+				if (server_members.some(m => m.server_id === serverIdNum && m.user_id === userIdNum)) {
+					return { changes: 0 };
+				}
+				
+				server_members.push({
+					server_id: serverIdNum,
+					user_id: userIdNum,
+					created_at: new Date().toISOString()
+				});
+				
+				// Update members_count
+				const server = servers.find(s => s.id === serverIdNum);
+				if (server) {
+					server.members_count = (server.members_count || 0) + 1;
+				}
+				
+				return { changes: 1 };
+			}
+		},
+		removeServerMember: {
+			run: async (serverId, userId) => {
+				const serverIdNum = Number(serverId);
+				const userIdNum = Number(userId);
+				const index = server_members.findIndex(
+					m => m.server_id === serverIdNum && m.user_id === userIdNum
+				);
+				
+				if (index === -1) {
+					return { changes: 0 };
+				}
+				
+				server_members.splice(index, 1);
+				
+				// Update members_count
+				const server = servers.find(s => s.id === serverIdNum);
+				if (server) {
+					server.members_count = Math.max(0, (server.members_count || 0) - 1);
+				}
+				
+				return { changes: 1 };
+			}
+		},
+		insertServer: {
+			run: async (userId, name, status, serverUrl, serverConfig = null, authToken = null, description = null) => {
+				const id = servers.length > 0
+					? Math.max(...servers.map(s => s.id || 0)) + 1
+					: 1;
+				const now = new Date().toISOString();
+				const resolvedAuthToken = typeof authToken === "string" && authToken.trim()
+					? authToken.trim()
+					: null;
+				servers.push({
+					id,
+					user_id: userId,
+					name,
+					status,
+					server_url: serverUrl,
+					auth_token: resolvedAuthToken,
+					status_date: null,
+					description: description || null,
+					members_count: 0,
+					server_config: serverConfig,
+					created_at: now,
+					updated_at: now
+				});
+				return Promise.resolve({
+					insertId: id,
+					changes: 1
+				});
 			}
 		},
 		selectTemplates: {

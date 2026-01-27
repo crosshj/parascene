@@ -4,17 +4,13 @@ import './components/navigation/mobile.js';
 import './components/modals/profile.js';
 import './components/modals/credits.js';
 import './components/modals/notifications.js';
+import './components/modals/server.js';
 import './components/routes/feed.js';
 import './components/routes/explore.js';
 import './components/routes/servers.js';
 import './components/routes/creations.js';
 import './components/routes/create.js';
 import './components/routes/templates.js';
-import './components/routes/provider-status.js';
-import './components/routes/provider-metrics.js';
-import './components/routes/provider-grants.js';
-import './components/routes/provider-templates.js';
-import './components/routes/provider-servers.js';
 
 // Wait for DOM and custom elements to be ready before showing content
 async function initPage() {
@@ -32,17 +28,14 @@ async function initPage() {
     'app-modal-profile',
     'app-modal-credits',
     'app-modal-notifications',
+    'app-modal-server',
     'app-route-feed',
     'app-route-explore',
     'app-route-creations',
     'app-route-servers',
     'app-route-create',
     'app-route-templates',
-    'app-route-provider-status',
-    'app-route-provider-metrics',
-    'app-route-provider-grants',
-    'app-route-provider-templates',
-    'app-route-provider-servers'
+    'app-route-servers'
   ];
   await Promise.all(
     customElementTags.map(tag => customElements.whenDefined(tag))
