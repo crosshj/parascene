@@ -3,6 +3,7 @@ import { enableLikeButtons, getCreationLikeCount, initLikeButton } from '/shared
 import { fetchJsonWithStatusDeduped } from '/shared/api.js';
 import { getAvatarColor } from '/shared/avatar.js';
 import { fetchCreatedImageComments, postCreatedImageComment } from '/shared/comments.js';
+import '../components/modals/publish.js';
 
 // Set up URL change detection BEFORE header component loads
 // This ensures we capture navigation events
@@ -132,11 +133,10 @@ async function loadCreation() {
 		const date = new Date(creation.created_at);
 		const createdAtTitle = formatDateTime(date);
 
-		// Generate title from published title, filename, or use default
+		// Generate title from published title or use default
 		const isPublished = creation.published === true || creation.published === 1;
-		const displayTitle = creation.title || (creation.filename
-			? creation.filename.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ')
-			: 'Creation');
+		const displayTitle = creation.title || 'Untitled';
+		const isUntitled = !creation.title;
 
 		// Check if current user owns this creation
 		let currentUserId = null;
@@ -154,6 +154,8 @@ async function loadCreation() {
 		}
 
 		const isOwner = currentUserId && creation.user_id && currentUserId === creation.user_id;
+		const isAdmin = currentUser?.role === 'admin';
+		const canEdit = isOwner || isAdmin;
 
 		function escapeHtml(value) {
 			return String(value ?? '')
@@ -164,16 +166,16 @@ async function loadCreation() {
 				.replace(/'/g, '&#39;');
 		}
 
-		// Update publish button - hide if not owner, disable if already published
+		// Update publish button - hide if not owner/admin or if already published (we have unpublish button for that)
 		const publishBtn = document.querySelector('[data-publish-btn]');
 		if (publishBtn) {
-			if (!isOwner) {
-				// Hide publish button if user doesn't own the creation
+			if (!canEdit || isPublished) {
+				// Hide publish button if user doesn't own/admin or if already published
 				publishBtn.style.display = 'none';
 			} else {
 				// Button is active (enabled) when not already published
 				publishBtn.style.display = '';
-				publishBtn.disabled = isPublished;
+				publishBtn.disabled = false;
 
 				// Create SVG icon
 				const svgIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -197,15 +199,37 @@ async function loadCreation() {
 				// Update button content
 				publishBtn.innerHTML = '';
 				publishBtn.appendChild(svgIcon);
-				publishBtn.appendChild(document.createTextNode(isPublished ? ' Published' : ' Publish'));
+				publishBtn.appendChild(document.createTextNode(' Publish'));
 			}
 		}
 
-		// Update delete button - hide if not owner, disable if published
+		// Update edit button - show for published creations if owner/admin
+		const editBtn = document.querySelector('[data-edit-btn]');
+		if (editBtn) {
+			if (!canEdit || !isPublished) {
+				editBtn.style.display = 'none';
+			} else {
+				editBtn.style.display = '';
+				editBtn.disabled = false;
+			}
+		}
+
+		// Update unpublish button - show for published creations if owner/admin
+		const unpublishBtn = document.querySelector('[data-unpublish-btn]');
+		if (unpublishBtn) {
+			if (!canEdit || !isPublished) {
+				unpublishBtn.style.display = 'none';
+			} else {
+				unpublishBtn.style.display = '';
+				unpublishBtn.disabled = false;
+			}
+		}
+
+		// Update delete button - hide if not owner/admin, disable if published
 		const deleteBtn = document.querySelector('[data-delete-btn]');
 		if (deleteBtn) {
-			if (!isOwner) {
-				// Hide delete button if user doesn't own the creation
+			if (!canEdit) {
+				// Hide delete button if user doesn't own the creation and isn't admin
 				deleteBtn.style.display = 'none';
 			} else {
 				// Button is disabled if already published
@@ -225,7 +249,6 @@ async function loadCreation() {
 		// - Show "Published {time ago}" directly under the user identification line.
 		// - Keep description as its own block further down.
 		let publishedLabel = '';
-		let publishedDescription = '';
 		if (isPublished) {
 			const publishedDateRaw = creation.published_at || creation.created_at || null;
 			const publishedDate = publishedDateRaw ? new Date(publishedDateRaw) : null;
@@ -238,15 +261,17 @@ async function loadCreation() {
 					Published${publishedTimeAgo ? ` ${publishedTimeAgo}` : ''}
 				</div>
 			`;
+		}
 
-			const descriptionText = typeof creation.description === 'string' ? creation.description.trim() : '';
-			if (descriptionText) {
-				publishedDescription = `
-					<div class="creation-detail-published">
-						<div class="creation-detail-description">${escapeHtml(descriptionText)}</div>
-					</div>
-				`;
-			}
+		// Show description whenever it exists, regardless of publication status
+		let descriptionHtml = '';
+		const descriptionText = typeof creation.description === 'string' ? creation.description.trim() : '';
+		if (descriptionText) {
+			descriptionHtml = `
+				<div class="creation-detail-published">
+					<div class="creation-detail-description">${escapeHtml(descriptionText)}</div>
+				</div>
+			`;
 		}
 
 		// Get creator information
@@ -308,8 +333,8 @@ async function loadCreation() {
 
 				${publishedLabel}
 			</div>
-			<div class="creation-detail-title">${displayTitle}</div>
-			${publishedDescription}
+			<div class="creation-detail-title${isUntitled ? ' creation-detail-title-untitled' : ''}">${escapeHtml(displayTitle)}</div>
+			${descriptionHtml}
 			<div class="creation-detail-meta">
 				<a class="feed-card-action creation-detail-comments-link" href="#comments" data-comments-link aria-label="Comments">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -605,61 +630,6 @@ function checkAndLoadCreation() {
 	}
 }
 
-// Publish modal functionality
-function openPublishModal() {
-	const modal = document.querySelector('[data-publish-modal]');
-	if (modal) {
-		modal.classList.add('open');
-		// Body scroll prevention is handled globally in global.js
-		// Hide any existing alert
-		hidePublishAlert();
-		// Focus on title input
-		const titleInput = document.getElementById('publish-title');
-		if (titleInput) {
-			setTimeout(() => titleInput.focus(), 100);
-		}
-	}
-}
-
-function closePublishModal() {
-	const modal = document.querySelector('[data-publish-modal]');
-	if (modal) {
-		modal.classList.remove('open');
-		// Body scroll restoration is handled globally in global.js
-		// Clear form
-		const titleInput = document.getElementById('publish-title');
-		const descriptionTextarea = document.getElementById('publish-description');
-		if (titleInput) titleInput.value = '';
-		if (descriptionTextarea) descriptionTextarea.value = '';
-		// Hide alert
-		hidePublishAlert();
-	}
-}
-
-function showPublishAlert(message, isError = true) {
-	const alert = document.querySelector('[data-publish-alert]');
-	const alertMessage = document.querySelector('[data-publish-alert-message]');
-	if (alert && alertMessage) {
-		alertMessage.textContent = message;
-		alert.className = `publish-alert ${isError ? 'publish-alert-error' : 'publish-alert-success'}`;
-		alert.style.display = 'flex';
-	}
-}
-
-function hidePublishAlert() {
-	const alert = document.querySelector('[data-publish-alert]');
-	if (alert) {
-		alert.style.display = 'none';
-	}
-}
-
-// Close alert button handler
-document.addEventListener('click', (e) => {
-	if (e.target.closest('[data-publish-alert-close]')) {
-		hidePublishAlert();
-	}
-});
-
 // Set up modal event listeners
 document.addEventListener('DOMContentLoaded', () => {
 	checkAndLoadCreation();
@@ -670,48 +640,10 @@ document.addEventListener('click', (e) => {
 	const publishBtn = e.target.closest('[data-publish-btn]');
 	if (publishBtn && !publishBtn.disabled) {
 		e.preventDefault();
-		openPublishModal();
-	}
-});
-
-// Close modal handlers - set up after DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-	const modal = document.querySelector('[data-publish-modal]');
-	if (modal) {
-		// Close on overlay click (but not when clicking inside the modal)
-		modal.addEventListener('click', (e) => {
-			if (e.target === modal) {
-				closePublishModal();
-			}
-		});
-
-		// Close on X button or cancel link
-		const closeButtons = document.querySelectorAll('[data-publish-modal-close]');
-		closeButtons.forEach(btn => {
-			btn.addEventListener('click', (e) => {
-				e.preventDefault();
-				closePublishModal();
-			});
-		});
-	}
-});
-
-// Close on Escape key
-document.addEventListener('keydown', (e) => {
-	const modal = document.querySelector('[data-publish-modal]');
-	if (e.key === 'Escape' && modal && modal.classList.contains('open')) {
-		const loading = document.querySelector('[data-publish-loading]');
-		if (!loading || !loading.classList.contains('active')) {
-			closePublishModal();
-		}
-	}
-});
-
-// Publish submission handler
-document.addEventListener('click', (e) => {
-	if (e.target.closest('[data-publish-submit]')) {
-		e.preventDefault();
-		handlePublish();
+		const creationId = getCreationId();
+		document.dispatchEvent(new CustomEvent('open-publish-modal', {
+			detail: { creationId }
+		}));
 	}
 });
 
@@ -724,76 +656,27 @@ document.addEventListener('click', (e) => {
 	}
 });
 
-async function handlePublish() {
-	const creationId = getCreationId();
-	if (!creationId) {
-		showPublishAlert('Invalid creation ID');
-		return;
+// Edit button handler
+document.addEventListener('click', (e) => {
+	const editBtn = e.target.closest('[data-edit-btn]');
+	if (editBtn && !editBtn.disabled) {
+		e.preventDefault();
+		const creationId = getCreationId();
+		document.dispatchEvent(new CustomEvent('open-edit-modal', {
+			detail: { creationId }
+		}));
 	}
+});
 
-	const titleInput = document.getElementById('publish-title');
-	const descriptionTextarea = document.getElementById('publish-description');
-	const loadingOverlay = document.querySelector('[data-publish-loading]');
-	const modal = document.querySelector('[data-publish-modal]');
-	const submitBtn = document.querySelector('[data-publish-submit]');
-	const cancelLink = document.querySelector('.publish-cancel-link');
-
-	if (!titleInput || !loadingOverlay || !modal) return;
-
-	const title = titleInput.value.trim();
-	const description = descriptionTextarea ? descriptionTextarea.value.trim() : '';
-
-	if (!title) {
-		showPublishAlert('Title is required');
-		titleInput.focus();
-		return;
+// Un-publish button handler
+document.addEventListener('click', (e) => {
+	const unpublishBtn = e.target.closest('[data-unpublish-btn]');
+	if (unpublishBtn && !unpublishBtn.disabled) {
+		e.preventDefault();
+		handleUnpublish();
 	}
+});
 
-	// Hide any existing alert
-	hidePublishAlert();
-
-	// Show loading state
-	loadingOverlay.classList.add('active');
-	titleInput.disabled = true;
-	if (descriptionTextarea) descriptionTextarea.disabled = true;
-	if (submitBtn) submitBtn.disabled = true;
-	if (cancelLink) {
-		cancelLink.style.pointerEvents = 'none';
-		cancelLink.style.opacity = '0.5';
-	}
-
-	try {
-		const response = await fetch(`/api/create/images/${creationId}/publish`, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json'
-			},
-			body: JSON.stringify({ title, description }),
-			credentials: 'include'
-		});
-
-		if (!response.ok) {
-			const error = await response.json();
-			throw new Error(error.error || 'Failed to publish creation');
-		}
-
-		// Success - navigate to creation detail page
-		window.location.href = `/creations/${creationId}`;
-	} catch (error) {
-		console.error('Error publishing creation:', error);
-		showPublishAlert(error.message || 'Failed to publish creation. Please try again.');
-
-		// Hide loading state
-		loadingOverlay.classList.remove('active');
-		titleInput.disabled = false;
-		if (descriptionTextarea) descriptionTextarea.disabled = false;
-		if (submitBtn) submitBtn.disabled = false;
-		if (cancelLink) {
-			cancelLink.style.pointerEvents = '';
-			cancelLink.style.opacity = '';
-		}
-	}
-}
 
 async function handleDelete() {
 	const creationId = getCreationId();
@@ -831,6 +714,47 @@ async function handleDelete() {
 
 		if (deleteBtn) {
 			deleteBtn.disabled = false;
+		}
+	}
+}
+
+
+async function handleUnpublish() {
+	const creationId = getCreationId();
+	if (!creationId) {
+		alert('Invalid creation ID');
+		return;
+	}
+
+	// Confirm unpublishing
+	if (!confirm('Are you sure you want to un-publish this creation? It will be removed from the feed and no longer visible to other users. You will also lose all likes and comments.')) {
+		return;
+	}
+
+	const unpublishBtn = document.querySelector('[data-unpublish-btn]');
+	if (unpublishBtn) {
+		unpublishBtn.disabled = true;
+	}
+
+	try {
+		const response = await fetch(`/api/create/images/${creationId}/unpublish`, {
+			method: 'POST',
+			credentials: 'include'
+		});
+
+		if (!response.ok) {
+			const error = await response.json();
+			throw new Error(error.error || 'Failed to unpublish creation');
+		}
+
+		// Success - reload the page to show updated state
+		window.location.reload();
+	} catch (error) {
+		console.error('Error unpublishing creation:', error);
+		alert(error.message || 'Failed to unpublish creation. Please try again.');
+
+		if (unpublishBtn) {
+			unpublishBtn.disabled = false;
 		}
 	}
 }

@@ -197,8 +197,8 @@ class AppRouteServers extends HTMLElement {
 				return;
 			}
 
-			// Reload servers
-			await this.loadServers({ force: true });
+			// Refresh the page to show updated state
+			window.location.reload();
 		} catch (error) {
 			console.error('Error joining server:', error);
 			alert('Failed to join server');
@@ -222,8 +222,8 @@ class AppRouteServers extends HTMLElement {
 				return;
 			}
 
-			// Reload servers
-			await this.loadServers({ force: true });
+			// Refresh the page to show updated state
+			window.location.reload();
 		} catch (error) {
 			console.error('Error leaving server:', error);
 			alert('Failed to leave server');

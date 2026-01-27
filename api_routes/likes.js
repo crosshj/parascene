@@ -19,17 +19,21 @@ function isPublishedImage(image) {
   return image?.published === true || image?.published === 1;
 }
 
-async function requireCreatedImageAccess({ queries, imageId, userId }) {
+async function requireCreatedImageAccess({ queries, imageId, userId, userRole }) {
   // Owner access
   const owned = await queries.selectCreatedImageById?.get(imageId, userId);
   if (owned) {
     return owned;
   }
 
-  // Published access
+  // Published access or admin access
   const anyImage = await queries.selectCreatedImageByIdAnyUser?.get(imageId);
-  if (anyImage && isPublishedImage(anyImage)) {
-    return anyImage;
+  if (anyImage) {
+    const isPublished = isPublishedImage(anyImage);
+    const isAdmin = userRole === 'admin';
+    if (isPublished || isAdmin) {
+      return anyImage;
+    }
   }
 
   return null;
@@ -59,7 +63,7 @@ export default function createLikesRoutes({ queries }) {
       return res.status(400).json({ error: "Invalid image id" });
     }
 
-    const image = await requireCreatedImageAccess({ queries, imageId, userId: user.id });
+    const image = await requireCreatedImageAccess({ queries, imageId, userId: user.id, userRole: user.role });
     if (!image) {
       return res.status(404).json({ error: "Image not found" });
     }
@@ -77,7 +81,7 @@ export default function createLikesRoutes({ queries }) {
       return res.status(400).json({ error: "Invalid image id" });
     }
 
-    const image = await requireCreatedImageAccess({ queries, imageId, userId: user.id });
+    const image = await requireCreatedImageAccess({ queries, imageId, userId: user.id, userRole: user.role });
     if (!image) {
       return res.status(404).json({ error: "Image not found" });
     }
@@ -96,7 +100,7 @@ export default function createLikesRoutes({ queries }) {
       return res.status(400).json({ error: "Invalid image id" });
     }
 
-    const image = await requireCreatedImageAccess({ queries, imageId, userId: user.id });
+    const image = await requireCreatedImageAccess({ queries, imageId, userId: user.id, userRole: user.role });
     if (!image) {
       return res.status(404).json({ error: "Image not found" });
     }

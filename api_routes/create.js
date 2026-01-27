@@ -28,12 +28,23 @@ export default function createCreateRoutes({ queries, storage }) {
 				return res.status(404).json({ error: "Image not found" });
 			}
 
-			// Check access: user owns the image OR image is published
+			// Check access: user owns the image OR image is published OR user is admin
 			const userId = req.auth?.userId;
 			const isOwner = userId && image.user_id === userId;
 			const isPublished = image.published === 1 || image.published === true;
+			
+			// Get user to check admin role
+			let isAdmin = false;
+			if (userId && !isOwner && !isPublished) {
+				try {
+					const user = await queries.selectUserById.get(userId);
+					isAdmin = user?.role === 'admin';
+				} catch {
+					// ignore errors checking user
+				}
+			}
 
-			if (!isOwner && !isPublished) {
+			if (!isOwner && !isPublished && !isAdmin) {
 				return res.status(403).json({ error: "Access denied" });
 			}
 
@@ -287,11 +298,17 @@ export default function createCreateRoutes({ queries, storage }) {
 				user.id
 			);
 
-			// If not found as owner, check if it exists and is published
+			// If not found as owner, check if it exists and is either published or user is admin
 			if (!image) {
 				const anyImage = await queries.selectCreatedImageByIdAnyUser.get(req.params.id);
-				if (anyImage && (anyImage.published === 1 || anyImage.published === true)) {
-					image = anyImage;
+				if (anyImage) {
+					const isPublished = anyImage.published === 1 || anyImage.published === true;
+					const isAdmin = user.role === 'admin';
+					if (isPublished || isAdmin) {
+						image = anyImage;
+					} else {
+						return res.status(404).json({ error: "Image not found" });
+					}
 				} else {
 					return res.status(404).json({ error: "Image not found" });
 				}
@@ -312,18 +329,9 @@ export default function createCreateRoutes({ queries, storage }) {
 			const viewerLiked = Boolean(viewerLikedRow?.viewer_liked);
 
 			const isPublished = image.published === 1 || image.published === true;
-			let description = typeof image.description === "string" ? image.description.trim() : "";
-			if (!description && isPublished && queries.selectFeedItemByCreatedImageId?.get) {
-				try {
-					const feedItem = await queries.selectFeedItemByCreatedImageId.get(image.id);
-					const summary = typeof feedItem?.summary === "string" ? feedItem.summary.trim() : "";
-					if (summary) {
-						description = summary;
-					}
-				} catch {
-					// ignore fallback failures
-				}
-			}
+			// Always read description from created_image, not from feed_item
+			// (feed_item may be deleted when un-publishing)
+			const description = typeof image.description === "string" ? image.description.trim() : "";
 
 			return res.json({
 				id: image.id,
@@ -430,6 +438,181 @@ export default function createCreateRoutes({ queries, storage }) {
 		} catch (error) {
 			console.error("Error publishing image:", error);
 			return res.status(500).json({ error: "Failed to publish image" });
+		}
+	});
+
+	// PUT /api/create/images/:id - Update a creation's title/description
+	router.put("/api/create/images/:id", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		try {
+			const { title, description } = req.body;
+
+			if (!title || title.trim() === '') {
+				return res.status(400).json({ error: "Title is required" });
+			}
+
+			// Get the image to verify ownership or admin status
+			const image = await queries.selectCreatedImageById.get(
+				req.params.id,
+				user.id
+			);
+
+			// If not found as owner, check if it exists and user is admin
+			let anyImage = null;
+			if (!image) {
+				anyImage = await queries.selectCreatedImageByIdAnyUser?.get(req.params.id);
+				if (!anyImage) {
+					return res.status(404).json({ error: "Image not found" });
+				}
+				// Only admins can edit images they don't own
+				if (user.role !== 'admin') {
+					return res.status(403).json({ error: "Forbidden: You can only edit your own creations" });
+				}
+			}
+
+			const targetImage = image || anyImage;
+			const isPublished = targetImage.published === 1 || targetImage.published === true;
+
+			if (!isPublished) {
+				return res.status(400).json({ error: "Can only edit published creations" });
+			}
+
+			const isAdmin = user.role === 'admin';
+			const isOwner = image && image.user_id === user.id;
+
+			// Update the image
+			const updateResult = await queries.updateCreatedImage.run(
+				req.params.id,
+				user.id,
+				title.trim(),
+				description ? description.trim() : null,
+				isAdmin
+			);
+
+			if (updateResult.changes === 0) {
+				return res.status(500).json({ error: "Failed to update image" });
+			}
+
+			// Update the associated feed item if it exists
+			const feedItem = await queries.selectFeedItemByCreatedImageId?.get(parseInt(req.params.id));
+			if (feedItem) {
+				await queries.updateFeedItem?.run(
+					parseInt(req.params.id),
+					title.trim(),
+					description ? description.trim() : ''
+				);
+			}
+
+			// Get updated image
+			const updatedImage = isOwner
+				? await queries.selectCreatedImageById.get(req.params.id, user.id)
+				: await queries.selectCreatedImageByIdAnyUser?.get(req.params.id);
+
+			return res.json({
+				id: updatedImage.id,
+				filename: updatedImage.filename,
+				url: updatedImage.file_path || storage.getImageUrl(updatedImage.filename),
+				width: updatedImage.width,
+				height: updatedImage.height,
+				color: updatedImage.color,
+				status: updatedImage.status || 'completed',
+				created_at: updatedImage.created_at,
+				published: updatedImage.published === 1 || updatedImage.published === true,
+				published_at: updatedImage.published_at,
+				title: updatedImage.title,
+				description: updatedImage.description
+			});
+		} catch (error) {
+			console.error("Error updating image:", error);
+			return res.status(500).json({ error: "Failed to update image" });
+		}
+	});
+
+	// POST /api/create/images/:id/unpublish - Un-publish a creation
+	router.post("/api/create/images/:id/unpublish", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		try {
+			// Get the image to verify ownership or admin status
+			const image = await queries.selectCreatedImageById.get(
+				req.params.id,
+				user.id
+			);
+
+			// If not found as owner, check if it exists and user is admin
+			let anyImage = null;
+			if (!image) {
+				anyImage = await queries.selectCreatedImageByIdAnyUser?.get(req.params.id);
+				if (!anyImage) {
+					return res.status(404).json({ error: "Image not found" });
+				}
+				// Only admins can unpublish images they don't own
+				if (user.role !== 'admin') {
+					return res.status(403).json({ error: "Forbidden: You can only unpublish your own creations" });
+				}
+			}
+
+			const targetImage = image || anyImage;
+			const isPublished = targetImage.published === 1 || targetImage.published === true;
+
+			if (!isPublished) {
+				return res.status(400).json({ error: "Image is not published" });
+			}
+
+			const isAdmin = user.role === 'admin';
+			const isOwner = image && image.user_id === user.id;
+
+			// Un-publish the image
+			const unpublishResult = await queries.unpublishCreatedImage.run(
+				req.params.id,
+				user.id,
+				isAdmin
+			);
+
+			if (unpublishResult.changes === 0) {
+				return res.status(500).json({ error: "Failed to unpublish image" });
+			}
+
+			// Delete the associated feed item if it exists
+			if (queries.deleteFeedItemByCreatedImageId) {
+				await queries.deleteFeedItemByCreatedImageId.run(parseInt(req.params.id));
+			}
+
+			// Delete all likes for this created image
+			if (queries.deleteAllLikesForCreatedImage) {
+				await queries.deleteAllLikesForCreatedImage.run(parseInt(req.params.id));
+			}
+
+			// Delete all comments for this created image
+			if (queries.deleteAllCommentsForCreatedImage) {
+				await queries.deleteAllCommentsForCreatedImage.run(parseInt(req.params.id));
+			}
+
+			// Get updated image
+			const updatedImage = isOwner
+				? await queries.selectCreatedImageById.get(req.params.id, user.id)
+				: await queries.selectCreatedImageByIdAnyUser?.get(req.params.id);
+
+			return res.json({
+				id: updatedImage.id,
+				filename: updatedImage.filename,
+				url: updatedImage.file_path || storage.getImageUrl(updatedImage.filename),
+				width: updatedImage.width,
+				height: updatedImage.height,
+				color: updatedImage.color,
+				status: updatedImage.status || 'completed',
+				created_at: updatedImage.created_at,
+				published: false,
+				published_at: null,
+				title: updatedImage.title,
+				description: updatedImage.description
+			});
+		} catch (error) {
+			console.error("Error unpublishing image:", error);
+			return res.status(500).json({ error: "Failed to unpublish image" });
 		}
 	});
 

@@ -1068,6 +1068,87 @@ export async function openDb() {
 				return Promise.resolve(stmt.get(createdImageId));
 			}
 		},
+		updateCreatedImage: {
+			run: async (id, userId, title, description, isAdmin = false) => {
+				// Admin can update any image, owner can only update their own
+				const stmt = isAdmin
+					? db.prepare(
+						`UPDATE created_images
+             SET title = ?, description = ?
+             WHERE id = ?`
+					)
+					: db.prepare(
+						`UPDATE created_images
+             SET title = ?, description = ?
+             WHERE id = ? AND user_id = ?`
+					);
+				const result = isAdmin
+					? stmt.run(title, description, id)
+					: stmt.run(title, description, id, userId);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		unpublishCreatedImage: {
+			run: async (id, userId, isAdmin = false) => {
+				// Admin can unpublish any image, owner can only unpublish their own
+				const stmt = isAdmin
+					? db.prepare(
+						`UPDATE created_images
+             SET published = 0, published_at = NULL
+             WHERE id = ?`
+					)
+					: db.prepare(
+						`UPDATE created_images
+             SET published = 0, published_at = NULL
+             WHERE id = ? AND user_id = ?`
+					);
+				const result = isAdmin
+					? stmt.run(id)
+					: stmt.run(id, userId);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		updateFeedItem: {
+			run: async (createdImageId, title, summary) => {
+				const stmt = db.prepare(
+					`UPDATE feed_items
+           SET title = ?, summary = ?
+           WHERE created_image_id = ?`
+				);
+				const result = stmt.run(title, summary, createdImageId);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		deleteFeedItemByCreatedImageId: {
+			run: async (createdImageId) => {
+				const stmt = db.prepare(
+					`DELETE FROM feed_items
+           WHERE created_image_id = ?`
+				);
+				const result = stmt.run(createdImageId);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		deleteAllLikesForCreatedImage: {
+			run: async (createdImageId) => {
+				const stmt = db.prepare(
+					`DELETE FROM likes_created_image
+           WHERE created_image_id = ?`
+				);
+				const result = stmt.run(createdImageId);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		deleteAllCommentsForCreatedImage: {
+			run: async (createdImageId) => {
+				const stmt = db.prepare(
+					`DELETE FROM comments_created_image
+           WHERE created_image_id = ?`
+				);
+				const result = stmt.run(createdImageId);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
 		selectUserCredits: {
 			get: async (userId) => {
 				const stmt = db.prepare(

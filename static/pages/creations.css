@@ -446,6 +446,11 @@ body.creation-detail-page main>section:first-of-type {
 	line-height: 1.3;
 }
 
+.creation-detail-title-untitled {
+	color: var(--text-muted);
+	font-style: italic;
+}
+
 .creation-detail-published {
 	margin-bottom: 16px;
 	padding-bottom: 16px;

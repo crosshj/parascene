@@ -502,7 +502,7 @@ class AppRouteCreations extends HTMLElement {
             ${publishedBadge}
             <div class="route-details">
               <div class="route-details-content">
-                <div class="route-title">${item.title || 'Creation'}</div>
+                <div class="route-title">${item.title || 'Untitled'}</div>
                 <div class="route-summary">${item.width} × ${item.height}px</div>
                 ${publishedInfo}
                 <div class="route-meta" title="${formatDateTime(item.created_at)}">Created ${formatRelativeTime(item.created_at)}</div>

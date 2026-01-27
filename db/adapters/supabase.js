@@ -1445,6 +1445,99 @@ export function openDb() {
 				return data ?? undefined;
 			}
 		},
+		updateCreatedImage: {
+			run: async (id, userId, title, description, isAdmin = false) => {
+				// Use serviceClient to bypass RLS for backend operations
+				// Admin can update any image, owner can only update their own
+				const query = serviceClient
+					.from(prefixedTable("created_images"))
+					.update({
+						title,
+						description
+					})
+					.eq("id", id);
+				
+				if (!isAdmin) {
+					query.eq("user_id", userId);
+				}
+				
+				const { data, error } = await query.select("id");
+				if (error) throw error;
+				return { changes: data?.length ?? 0 };
+			}
+		},
+		unpublishCreatedImage: {
+			run: async (id, userId, isAdmin = false) => {
+				// Use serviceClient to bypass RLS for backend operations
+				// Admin can unpublish any image, owner can only unpublish their own
+				const query = serviceClient
+					.from(prefixedTable("created_images"))
+					.update({
+						published: false,
+						published_at: null
+					})
+					.eq("id", id);
+				
+				if (!isAdmin) {
+					query.eq("user_id", userId);
+				}
+				
+				const { data, error } = await query.select("id");
+				if (error) throw error;
+				return { changes: data?.length ?? 0 };
+			}
+		},
+		updateFeedItem: {
+			run: async (createdImageId, title, summary) => {
+				// Use serviceClient to bypass RLS for backend operations
+				const { data, error } = await serviceClient
+					.from(prefixedTable("feed_items"))
+					.update({
+						title,
+						summary
+					})
+					.eq("created_image_id", createdImageId)
+					.select("id");
+				if (error) throw error;
+				return { changes: data?.length ?? 0 };
+			}
+		},
+		deleteFeedItemByCreatedImageId: {
+			run: async (createdImageId) => {
+				// Use serviceClient to bypass RLS for backend operations
+				const { data, error } = await serviceClient
+					.from(prefixedTable("feed_items"))
+					.delete()
+					.eq("created_image_id", createdImageId)
+					.select("id");
+				if (error) throw error;
+				return { changes: data?.length ?? 0 };
+			}
+		},
+		deleteAllLikesForCreatedImage: {
+			run: async (createdImageId) => {
+				// Use serviceClient to bypass RLS for backend operations
+				const { data, error } = await serviceClient
+					.from(prefixedTable("likes_created_image"))
+					.delete()
+					.eq("created_image_id", createdImageId)
+					.select("id");
+				if (error) throw error;
+				return { changes: data?.length ?? 0 };
+			}
+		},
+		deleteAllCommentsForCreatedImage: {
+			run: async (createdImageId) => {
+				// Use serviceClient to bypass RLS for backend operations
+				const { data, error } = await serviceClient
+					.from(prefixedTable("comments_created_image"))
+					.delete()
+					.eq("created_image_id", createdImageId)
+					.select("id");
+				if (error) throw error;
+				return { changes: data?.length ?? 0 };
+			}
+		},
 		selectUserCredits: {
 			get: async (userId) => {
 				// Use serviceClient to bypass RLS for backend operations

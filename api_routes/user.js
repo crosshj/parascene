@@ -631,11 +631,12 @@ export default function createProfileRoutes({ queries }) {
 			}
 
 			const isSelf = Number(targetUserId) === Number(req.auth.userId);
+			const isAdmin = viewer?.role === 'admin';
 			const include = String(req.query?.include || "").toLowerCase();
 			const wantAll = include === "all";
 
 			let images = [];
-			if (isSelf && wantAll && queries.selectCreatedImagesForUser?.all) {
+			if ((isSelf || isAdmin) && wantAll && queries.selectCreatedImagesForUser?.all) {
 				images = await queries.selectCreatedImagesForUser.all(targetUserId);
 			} else if (queries.selectPublishedCreatedImagesForUser?.all) {
 				images = await queries.selectPublishedCreatedImagesForUser.all(targetUserId);

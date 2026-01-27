@@ -1097,6 +1097,7 @@ class AppModalServer extends HTMLElement {
 
 			this.close();
 			document.dispatchEvent(new CustomEvent('server-updated'));
+			window.location.reload();
 		} catch (error) {
 			alert(error.message || 'Failed to join server');
 		}
@@ -1123,6 +1124,7 @@ class AppModalServer extends HTMLElement {
 
 			this.close();
 			document.dispatchEvent(new CustomEvent('server-updated'));
+			window.location.reload();
 		} catch (error) {
 			alert(error.message || 'Failed to leave server');
 		}

@@ -21,6 +21,8 @@ const user_follows = [];
 const created_images = [];
 const sessions = [];
 const user_credits = [];
+const likes_created_image = [];
+const comments_created_image = [];
 
 // On Vercel, use /tmp directory which is writable
 // Otherwise use the local data directory
@@ -663,6 +665,13 @@ export function openDb() {
 				);
 			}
 		},
+		selectCreatedImageByIdAnyUser: {
+			get: async (id) => {
+				return created_images.find(
+					(img) => img.id === Number(id)
+				);
+			}
+		},
 		selectCreatedImageByFilename: {
 			get: async (filename) => {
 				return created_images.find(
@@ -695,6 +704,102 @@ export function openDb() {
 				}
 				created_images.splice(index, 1);
 				return { changes: 1 };
+			}
+		},
+		updateCreatedImage: {
+			run: async (id, userId, title, description, isAdmin = false) => {
+				const image = created_images.find(
+					(img) => img.id === Number(id) && (isAdmin || img.user_id === Number(userId))
+				);
+				if (!image) {
+					return { changes: 0 };
+				}
+				image.title = title;
+				image.description = description;
+				return { changes: 1 };
+			}
+		},
+		unpublishCreatedImage: {
+			run: async (id, userId, isAdmin = false) => {
+				const image = created_images.find(
+					(img) => img.id === Number(id) && (isAdmin || img.user_id === Number(userId))
+				);
+				if (!image) {
+					return { changes: 0 };
+				}
+				image.published = false;
+				image.published_at = null;
+				return { changes: 1 };
+			}
+		},
+		insertFeedItem: {
+			run: async (title, summary, author, tags, createdImageId) => {
+				const id = feed_items.length > 0
+					? Math.max(...feed_items.map(item => item.id || 0)) + 1
+					: 1;
+				const now = new Date().toISOString();
+				const item = {
+					id,
+					title,
+					summary,
+					author,
+					tags: tags || null,
+					created_at: now,
+					created_image_id: createdImageId || null
+				};
+				feed_items.push(item);
+				return {
+					insertId: id,
+					lastInsertRowid: id,
+					changes: 1
+				};
+			}
+		},
+		selectFeedItemByCreatedImageId: {
+			get: async (createdImageId) => {
+				return feed_items
+					.filter(item => item.created_image_id === Number(createdImageId))
+					.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))[0];
+			}
+		},
+		updateFeedItem: {
+			run: async (createdImageId, title, summary) => {
+				const items = feed_items.filter(item => item.created_image_id === Number(createdImageId));
+				if (items.length === 0) {
+					return { changes: 0 };
+				}
+				items.forEach(item => {
+					item.title = title;
+					item.summary = summary;
+				});
+				return { changes: items.length };
+			}
+		},
+		deleteFeedItemByCreatedImageId: {
+			run: async (createdImageId) => {
+				const initialLength = feed_items.length;
+				const filtered = feed_items.filter(item => item.created_image_id !== Number(createdImageId));
+				feed_items.length = 0;
+				feed_items.push(...filtered);
+				return { changes: initialLength - feed_items.length };
+			}
+		},
+		deleteAllLikesForCreatedImage: {
+			run: async (createdImageId) => {
+				const initialLength = likes_created_image.length;
+				const filtered = likes_created_image.filter(like => like.created_image_id !== Number(createdImageId));
+				likes_created_image.length = 0;
+				likes_created_image.push(...filtered);
+				return { changes: initialLength - likes_created_image.length };
+			}
+		},
+		deleteAllCommentsForCreatedImage: {
+			run: async (createdImageId) => {
+				const initialLength = comments_created_image.length;
+				const filtered = comments_created_image.filter(comment => comment.created_image_id !== Number(createdImageId));
+				comments_created_image.length = 0;
+				comments_created_image.push(...filtered);
+				return { changes: initialLength - comments_created_image.length };
 			}
 		},
 		selectUserCredits: {

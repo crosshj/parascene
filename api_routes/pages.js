@@ -162,11 +162,17 @@ export default function createPageRoutes({ queries, pagesDir }) {
 			// First try to get as owner
 			let image = await queries.selectCreatedImageById.get(creationId, user.id);
 
-			// If not found as owner, check if it exists and is published
+			// If not found as owner, check if it exists and is either published or user is admin
 			if (!image) {
 				const anyImage = await queries.selectCreatedImageByIdAnyUser.get(creationId);
-				if (anyImage && (anyImage.published === 1 || anyImage.published === true)) {
-					image = anyImage;
+				if (anyImage) {
+					const isPublished = anyImage.published === 1 || anyImage.published === true;
+					const isAdmin = user.role === 'admin';
+					if (isPublished || isAdmin) {
+						image = anyImage;
+					} else {
+						return res.status(404).send("Creation not found");
+					}
 				} else {
 					return res.status(404).send("Creation not found");
 				}
