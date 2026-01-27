@@ -418,7 +418,7 @@ class AppRouteCreations extends HTMLElement {
         if (button) {
           button.addEventListener('click', (e) => {
             e.preventDefault();
-            const header = document.querySelector('app-header');
+            const header = document.querySelector('app-navigation');
             if (header && typeof header.handleRouteChange === 'function') {
               window.history.pushState({ route: 'create' }, '', '/create');
               header.handleRouteChange();

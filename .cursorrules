@@ -70,7 +70,7 @@ When in doubt, use: `6px` for buttons/inputs, `10px` for cards, `14px` for modal
 ### global.css
 Use for styles that are:
 - **Shared across multiple pages** (header, footer, navigation, modals, buttons, forms)
-- **Web component styles** (app-header, app-profile, app-credits, app-notifications, app-mobile-bottom-nav, etc.)
+- **Web component styles** (app-navigation, app-navigation-mobile, app-modal-profile, app-modal-credits, app-modal-notifications, etc.)
 - **Global layout and typography** (body, html, base element styles)
 - **CSS custom properties** (CSS variables in :root)
 - **Reusable utility classes** (route-empty, btn-primary, etc.)
@@ -79,7 +79,7 @@ Use for styles that are:
 Examples:
 - `.header`, `.mobile-bottom-nav` - used across pages
 - `.feed-card`, `.route-empty` - reusable patterns
-- `app-header`, `app-profile`, `app-credits` - web component styles
+- `app-navigation`, `app-navigation-mobile`, `app-modal-profile`, `app-modal-credits`, `app-modal-notifications` - web component styles
 
 ### Page-specific CSS (e.g., index.css, creator.css, consumer.css)
 Use for styles that are:
@@ -96,9 +96,9 @@ Examples:
 
 ### Web Component CSS
 - **All web component styles go in global.css**, not in separate files
-- Components are JavaScript classes (e.g., `AppHeader`, `AppProfile`) and their styles are defined in global.css using their tag names (e.g., `app-header`, `app-profile`)
-- Use the component's tag name as the selector (e.g., `app-header`, `app-route-feed`)
-- **Exception: Shadow DOM components** - Components using shadow DOM (e.g., `app-credits`, `app-profile`, `app-notifications`) may have inline styles in their JS files due to style isolation, but should follow the same standardized patterns (modal structure, border-radius values, spacing) as defined in global.css
+- Components are JavaScript classes (e.g., `AppNavigation`, `AppModalProfile`) and their styles are defined in global.css using their tag names (e.g., `app-navigation`, `app-modal-profile`)
+- Use the component's tag name as the selector (e.g., `app-navigation`, `app-route-feed`)
+- **Exception: Shadow DOM components** - Components using shadow DOM (e.g., `app-modal-credits`, `app-modal-profile`, `app-modal-notifications`) may have inline styles in their JS files due to style isolation, but should follow the same standardized patterns (modal structure, border-radius values, spacing) as defined in global.css
 
 ### Decision Guidelines
 1. **If it's used in 2+ pages** → global.css

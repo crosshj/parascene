@@ -592,7 +592,7 @@ class AppRouteCreate extends HTMLElement {
 		}
 
 		// Navigate to Creations page immediately (optimistic UI)
-		const header = document.querySelector('app-header');
+		const header = document.querySelector('app-navigation');
 		if (header && typeof header.handleRouteChange === 'function') {
 			window.history.pushState({ route: 'creations' }, '', '/creations');
 			header.handleRouteChange();

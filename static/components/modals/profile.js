@@ -3,7 +3,7 @@ import { fetchJsonWithStatusDeduped } from '../shared/api.js';
 
 const html = String.raw;
 
-class AppProfile extends HTMLElement {
+class AppModalProfile extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
@@ -368,4 +368,4 @@ class AppProfile extends HTMLElement {
   }
 }
 
-customElements.define('app-profile', AppProfile);
+customElements.define('app-modal-profile', AppModalProfile);

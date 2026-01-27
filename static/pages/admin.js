@@ -834,7 +834,7 @@ function handleAdminRouteChange(route) {
 	}
 }
 
-const adminHeader = document.querySelector("app-header");
+const adminHeader = document.querySelector("app-navigation");
 if (adminHeader) {
 	adminHeader.addEventListener("route-change", (event) => {
 		handleAdminRouteChange(event.detail?.route);

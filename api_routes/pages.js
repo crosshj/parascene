@@ -106,11 +106,11 @@ export default function createPageRoutes({ queries, pagesDir }) {
       let includeMobileBottomNav = false;
       try {
         const roleHtml = await fs.readFile(rolePagePath, "utf-8");
-        const headerMatch = roleHtml.match(/<app-header[\s\S]*?<\/app-header>/i);
+        const headerMatch = roleHtml.match(/<app-navigation[\s\S]*?<\/app-navigation>/i);
         if (headerMatch) {
           headerHtml = headerMatch[0];
         }
-        includeMobileBottomNav = /<app-mobile-bottom-nav\b/i.test(roleHtml);
+        includeMobileBottomNav = /<app-navigation-mobile\b/i.test(roleHtml);
       } catch (error) {
         console.warn("Failed to extract role header for profile page:", error?.message || error);
       }
@@ -120,7 +120,7 @@ export default function createPageRoutes({ queries, pagesDir }) {
       }
       pageHtml = pageHtml.replace(
         "<!--APP_MOBILE_BOTTOM_NAV-->",
-        includeMobileBottomNav ? "<app-mobile-bottom-nav></app-mobile-bottom-nav>" : ""
+        includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
       );
 
       const roleScript = html`<script>window.__USER_ROLE__ = ${JSON.stringify(user.role)};</script>`;

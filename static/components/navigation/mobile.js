@@ -1,6 +1,6 @@
 const html = String.raw;
 
-class AppMobileBottomNav extends HTMLElement {
+class AppNavigationMobile extends HTMLElement {
 	constructor() {
 		super();
 		this.handleNavClick = this.handleNavClick.bind(this);
@@ -45,7 +45,7 @@ class AppMobileBottomNav extends HTMLElement {
 		}
 
 		window.history.pushState({ route }, '', `/${route}`);
-		const header = document.querySelector('app-header');
+		const header = document.querySelector('app-navigation');
 		if (header && typeof header.handleRouteChange === 'function') {
 			header.handleRouteChange();
 		} else {
@@ -77,7 +77,7 @@ class AppMobileBottomNav extends HTMLElement {
 		const navButtons = this.querySelectorAll('.mobile-bottom-nav-item[data-route]');
 		if (navButtons.length === 0) return;
 		const pathname = window.location.pathname;
-		const header = document.querySelector('app-header');
+		const header = document.querySelector('app-navigation');
 		const defaultRoute = header?.getAttribute('default-route') || 'feed';
 		let currentRoute = pathname === '/' || pathname === '' ? defaultRoute : pathname.slice(1);
 		if (pathname.startsWith('/creations/')) {
@@ -147,4 +147,4 @@ class AppMobileBottomNav extends HTMLElement {
 	}
 }
 
-customElements.define('app-mobile-bottom-nav', AppMobileBottomNav);
+customElements.define('app-navigation-mobile', AppNavigationMobile);

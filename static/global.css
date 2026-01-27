@@ -235,7 +235,7 @@ header .header-content {
 	min-height: 56px;
 }
 
-app-header {
+app-navigation {
 	display: block;
 	position: sticky;
 	top: 0;
@@ -247,7 +247,7 @@ app-header {
 		-webkit-tap-highlight-color: transparent;
 	}
 
-	app-header {
+	app-navigation {
 		position: sticky;
 		top: 0;
 		z-index: 1000;

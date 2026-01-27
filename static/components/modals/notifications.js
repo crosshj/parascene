@@ -3,7 +3,7 @@ import { fetchJsonWithStatusDeduped } from '../shared/api.js';
 
 const html = String.raw;
 
-class AppNotifications extends HTMLElement {
+class AppModalNotifications extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
@@ -538,4 +538,4 @@ class AppNotifications extends HTMLElement {
   }
 }
 
-customElements.define('app-notifications', AppNotifications);
+customElements.define('app-modal-notifications', AppModalNotifications);

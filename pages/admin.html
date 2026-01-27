@@ -24,16 +24,17 @@
 </head>
 
 <body>
-	<app-header show-notifications show-profile show-mobile-menu default-route="todo">
+	<app-navigation show-notifications show-profile show-mobile-menu default-route="todo">
 		<a data-route="todo">Todo</a>
 		<a data-route="users">Users</a>
 		<a data-route="providers">Servers</a>
 		<!-- <a data-route="moderation">Moderation</a> -->
 		<!-- <a data-route="policies">Policies</a> -->
-	</app-header>
-	<app-profile></app-profile>
-	<app-credits></app-credits>
-	<app-notifications></app-notifications>
+	</app-navigation>
+
+	<app-modal-profile></app-modal-profile>
+	<app-modal-credits></app-modal-credits>
+	<app-modal-notifications></app-modal-notifications>
 
 	<main>
 		<!--

@@ -2,7 +2,7 @@ import { fetchJsonWithStatusDeduped } from '../shared/api.js';
 
 const html = String.raw;
 
-class AppCredits extends HTMLElement {
+class AppModalCredits extends HTMLElement {
 	constructor() {
 		super();
 		this.attachShadow({ mode: 'open' });
@@ -587,4 +587,4 @@ class AppCredits extends HTMLElement {
 	}
 }
 
-customElements.define('app-credits', AppCredits);
+customElements.define('app-modal-credits', AppModalCredits);

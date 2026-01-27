@@ -5,7 +5,7 @@ const html = String.raw;
 
 const AVATAR_URL_STORAGE_KEY = 'profile-avatar-url';
 
-class AppHeader extends HTMLElement {
+class AppNavigation extends HTMLElement {
 	constructor() {
 		super();
 		this.notificationsMenuOpen = false;
@@ -975,4 +975,4 @@ class AppHeader extends HTMLElement {
 	}
 }
 
-customElements.define('app-header', AppHeader);
+customElements.define('app-navigation', AppNavigation);

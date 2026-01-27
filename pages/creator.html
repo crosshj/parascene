@@ -24,18 +24,18 @@
 </head>
 
 <body>
-	<app-header show-notifications show-profile show-create default-route="feed">
+	<app-navigation show-notifications show-profile show-create default-route="feed">
 		<a data-route="feed">Feed</a>
 		<a data-route="explore">Explore</a>
 		<a data-route="creations">Creations</a>
 		<a data-route="templates">Templates</a>
 		<a data-route="servers">Servers</a>
-	</app-header>
+	</app-navigation>
 
-	<app-profile></app-profile>
-	<app-credits></app-credits>
-	<app-notifications></app-notifications>
-	<app-mobile-bottom-nav></app-mobile-bottom-nav>
+	<app-modal-profile></app-modal-profile>
+	<app-modal-credits></app-modal-credits>
+	<app-modal-notifications></app-modal-notifications>
+	<app-navigation-mobile></app-navigation-mobile>
 
 	<main>
 		<section>

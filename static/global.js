@@ -1,21 +1,20 @@
 // Global components that all pages will use
-import './components/header.js';
-import './components/mobile-bottom-nav.js';
-import './components/profile.js';
-import './components/credits.js';
-import './components/notifications.js';
-import './components/nav-bar.js';
-import './components/pages/feed.js';
-import './components/pages/explore.js';
-import './components/pages/servers.js';
-import './components/pages/creations.js';
-import './components/pages/create.js';
-import './components/pages/templates.js';
-import './components/pages/provider-status.js';
-import './components/pages/provider-metrics.js';
-import './components/pages/provider-grants.js';
-import './components/pages/provider-templates.js';
-import './components/pages/provider-servers.js';
+import './components/navigation/index.js';
+import './components/navigation/mobile.js';
+import './components/modals/profile.js';
+import './components/modals/credits.js';
+import './components/modals/notifications.js';
+import './components/routes/feed.js';
+import './components/routes/explore.js';
+import './components/routes/servers.js';
+import './components/routes/creations.js';
+import './components/routes/create.js';
+import './components/routes/templates.js';
+import './components/routes/provider-status.js';
+import './components/routes/provider-metrics.js';
+import './components/routes/provider-grants.js';
+import './components/routes/provider-templates.js';
+import './components/routes/provider-servers.js';
 
 // Wait for DOM and custom elements to be ready before showing content
 async function initPage() {
@@ -28,10 +27,11 @@ async function initPage() {
 
   // Wait for all custom elements to be defined
   const customElementTags = [
-    'app-header',
-    'app-profile',
-    'app-credits',
-    'app-notifications',
+    'app-navigation',
+    'app-navigation-mobile',
+    'app-modal-profile',
+    'app-modal-credits',
+    'app-modal-notifications',
     'app-route-feed',
     'app-route-explore',
     'app-route-creations',

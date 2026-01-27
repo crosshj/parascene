@@ -24,16 +24,17 @@
 </head>
 
 <body>
-	<app-header show-notifications show-profile show-mobile-menu default-route="status">
+	<app-navigation show-notifications show-profile show-mobile-menu default-route="status">
 		<a data-route="status">Status</a>
 		<a data-route="metrics">Metrics</a>
 		<a data-route="grants">Grants</a>
 		<a data-route="templates-hosted">Templates</a>
 		<a data-route="servers">Servers</a>
-	</app-header>
-	<app-profile></app-profile>
-	<app-credits></app-credits>
-	<app-notifications></app-notifications>
+	</app-navigation>
+
+	<app-modal-profile></app-modal-profile>
+	<app-modal-credits></app-modal-credits>
+	<app-modal-notifications></app-modal-notifications>
 
 	<main>
 		<section>
