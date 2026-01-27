@@ -1,117 +1,136 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="light dark" />
-    <meta name="supported-color-schemes" content="light dark" />
-    <title>Creation - parascene</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#242131" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="Parascene" />
-    <link rel="apple-touch-icon" href="/icons/icon-180.png" />
-    <link rel="stylesheet" href="/global.css" />
-    <link rel="stylesheet" href="/pages/creations.css" />
-    <script type="module" src="/global.js"></script>
-  </head>
-  <body class="creation-detail-page">
-    <app-header show-notifications show-profile show-create default-route="feed">
-      <a data-route="feed">Feed</a>
-      <a data-route="explore">Explore</a>
-      <a data-route="creations">Creations</a>
-      <a data-route="servers">Servers</a>
-      <a data-route="templates" data-role-only="creator">Templates</a>
-    </app-header>
-    <app-profile></app-profile>
-    <app-credits></app-credits>
-    <app-notifications></app-notifications>
-    <app-mobile-bottom-nav></app-mobile-bottom-nav>
 
-    <!-- Publish Modal -->
-    <div class="publish-modal-overlay" data-publish-modal>
-      <div class="publish-modal">
-        <div class="publish-modal-loading" data-publish-loading>
-          <div class="publish-spinner"></div>
-        </div>
-        <div class="publish-modal-header">
-          <h2>Publish Creation</h2>
-          <button class="publish-modal-close" aria-label="Close" data-publish-modal-close>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
-        </div>
-        <div class="publish-modal-body">
-          <div class="publish-alert" data-publish-alert style="display: none;">
-            <span class="publish-alert-message" data-publish-alert-message></span>
-            <button class="publish-alert-close" data-publish-alert-close aria-label="Close alert">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
-          </div>
-          <div class="publish-field">
-            <label for="publish-title">Title</label>
-            <input type="text" id="publish-title" name="title" placeholder="Enter a title for your creation" />
-          </div>
-          <div class="publish-field">
-            <label for="publish-description">Description</label>
-            <textarea id="publish-description" name="description" rows="4" placeholder="Describe your creation..."></textarea>
-          </div>
-        </div>
-        <div class="publish-modal-footer">
-          <a href="#" class="publish-cancel-link" data-publish-modal-close>Cancel</a>
-          <button class="btn-primary publish-submit-btn" data-publish-submit>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 6px; vertical-align: middle;">
-              <path d="M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-            </svg>
-            Publish
-          </button>
-        </div>
-      </div>
-    </div>
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<meta name="color-scheme" content="light dark" />
+	<meta name="supported-color-schemes" content="light dark" />
+	<title>Creation - parascene</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link
+		href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap"
+		rel="stylesheet">
+	<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+	<link rel="manifest" href="/manifest.webmanifest" />
+	<meta name="theme-color" content="#242131" />
+	<meta name="apple-mobile-web-app-capable" content="yes" />
+	<meta name="apple-mobile-web-app-title" content="Parascene" />
+	<link rel="apple-touch-icon" href="/icons/icon-180.png" />
+	<link rel="stylesheet" href="/global.css" />
+	<link rel="stylesheet" href="/pages/creations.css" />
+	<script type="module" src="/global.js"></script>
+</head>
 
-    <main>
-      <div class="creation-detail-route">
-        <div class="creation-detail-hero">
-          <div class="creation-detail-background" data-background></div>
-          <div class="creation-detail-image-wrapper image-loading">
-            <img class="creation-detail-image" data-image alt="Creation" />
-          </div>
-        </div>
-        <div class="creation-detail-footer">
-          <div class="creation-detail-actions" style="opacity: 0; visibility: hidden; pointer-events: none;">
-            <button class="creation-detail-action-btn btn-primary" data-publish-btn disabled>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 6px; vertical-align: middle;">
-                <path d="M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-              </svg>
-              Publish
-            </button>
-            <button class="creation-detail-action-btn" data-delete-btn disabled>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 6px; vertical-align: middle;">
-                <path d="M2 4H14M12.5 4V13.5C12.5 14.3284 11.8284 15 11 15H5C4.17157 15 3.5 14.3284 3.5 13.5V4M5.5 4V2.5C5.5 1.67157 6.17157 1 7 1H9C9.82843 1 10.5 1.67157 10.5 2.5V4M6.5 7.5V11.5M9.5 7.5V11.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              Delete
-            </button>
-            <!--
+<body class="creation-detail-page">
+	<app-header show-notifications show-profile show-create default-route="feed">
+		<a data-route="feed">Feed</a>
+		<a data-route="explore">Explore</a>
+		<a data-route="creations">Creations</a>
+		<a data-route="servers">Servers</a>
+		<a data-route="templates" data-role-only="creator">Templates</a>
+	</app-header>
+
+	<app-profile></app-profile>
+	<app-credits></app-credits>
+	<app-notifications></app-notifications>
+	<app-mobile-bottom-nav></app-mobile-bottom-nav>
+
+	<!-- Publish Modal -->
+	<div class="publish-modal-overlay" data-publish-modal>
+		<div class="publish-modal">
+			<div class="publish-modal-loading" data-publish-loading>
+				<div class="publish-spinner"></div>
+			</div>
+			<div class="publish-modal-header">
+				<h2>Publish Creation</h2>
+				<button class="publish-modal-close" aria-label="Close" data-publish-modal-close>
+					<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+						stroke-linecap="round" stroke-linejoin="round">
+						<line x1="18" y1="6" x2="6" y2="18"></line>
+						<line x1="6" y1="6" x2="18" y2="18"></line>
+					</svg>
+				</button>
+			</div>
+			<div class="publish-modal-body">
+				<div class="publish-alert" data-publish-alert style="display: none;">
+					<span class="publish-alert-message" data-publish-alert-message></span>
+					<button class="publish-alert-close" data-publish-alert-close aria-label="Close alert">
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+							stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<line x1="18" y1="6" x2="6" y2="18"></line>
+							<line x1="6" y1="6" x2="18" y2="18"></line>
+						</svg>
+					</button>
+				</div>
+				<div class="publish-field">
+					<label for="publish-title">Title</label>
+					<input type="text" id="publish-title" name="title" placeholder="Enter a title for your creation" />
+				</div>
+				<div class="publish-field">
+					<label for="publish-description">Description</label>
+					<textarea id="publish-description" name="description" rows="4"
+						placeholder="Describe your creation..."></textarea>
+				</div>
+			</div>
+			<div class="publish-modal-footer">
+				<a href="#" class="publish-cancel-link" data-publish-modal-close>Cancel</a>
+				<button class="btn-primary publish-submit-btn" data-publish-submit>
+					<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"
+						style="margin-right: 6px; vertical-align: middle;">
+						<path d="M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z" stroke="currentColor" stroke-width="1.5"
+							stroke-linecap="round" stroke-linejoin="round" fill="none" />
+					</svg>
+					Publish
+				</button>
+			</div>
+		</div>
+	</div>
+
+	<main>
+		<div class="creation-detail-route">
+			<div class="creation-detail-hero">
+				<div class="creation-detail-background" data-background></div>
+				<div class="creation-detail-image-wrapper image-loading">
+					<img class="creation-detail-image" data-image alt="Creation" />
+				</div>
+			</div>
+			<div class="creation-detail-footer">
+				<div class="creation-detail-actions" style="opacity: 0; visibility: hidden; pointer-events: none;">
+					<button class="creation-detail-action-btn btn-primary" data-publish-btn disabled>
+						<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"
+							style="margin-right: 6px; vertical-align: middle;">
+							<path d="M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z" stroke="currentColor" stroke-width="1.5"
+								stroke-linecap="round" stroke-linejoin="round" fill="none" />
+						</svg>
+						Publish
+					</button>
+					<button class="creation-detail-action-btn" data-delete-btn disabled>
+						<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"
+							style="margin-right: 6px; vertical-align: middle;">
+							<path
+								d="M2 4H14M12.5 4V13.5C12.5 14.3284 11.8284 15 11 15H5C4.17157 15 3.5 14.3284 3.5 13.5V4M5.5 4V2.5C5.5 1.67157 6.17157 1 7 1H9C9.82843 1 10.5 1.67157 10.5 2.5V4M6.5 7.5V11.5M9.5 7.5V11.5"
+								stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+								stroke-linejoin="round" />
+						</svg>
+						Delete
+					</button>
+					<!--
             <button class="creation-detail-action-btn">⚙️ Adjust & Crop</button>
             <button class="creation-detail-action-btn">⋮ More</button>
             -->
-          </div>
-          <div class="creation-detail-info" data-detail-content>
-            <div class="route-empty route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
-          </div>
-        </div>
-      </div>
-    </main>
+				</div>
+				<div class="creation-detail-info" data-detail-content>
+					<div class="route-empty route-loading">
+						<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</main>
 
-    <script type="module" src="/pages/creation-detail.js"></script>
-  </body>
+	<script type="module" src="/pages/creation-detail.js"></script>
+</body>
+
 </html>
