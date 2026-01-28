@@ -187,7 +187,7 @@ class AppModalUser extends HTMLElement {
 				document.dispatchEvent(new CustomEvent('credits-updated', { detail: { count: nextFromBalance } }));
 				try {
 					window.localStorage?.setItem('credits-balance', String(nextFromBalance));
-				} catch {}
+				} catch { }
 				if (this._viewerUserId) {
 					const senderCard = document.querySelector(`.user-card[data-user-id="${this._viewerUserId}"]`);
 					if (senderCard) {

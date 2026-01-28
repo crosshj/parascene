@@ -18,60 +18,60 @@ import './components/routes/todo.js';
 
 // Wait for DOM and custom elements to be ready before showing content
 async function initPage() {
-  // Wait for DOM to be ready
-  if (document.readyState === 'loading') {
-    await new Promise(resolve => {
-      document.addEventListener('DOMContentLoaded', resolve);
-    });
-  }
+	// Wait for DOM to be ready
+	if (document.readyState === 'loading') {
+		await new Promise(resolve => {
+			document.addEventListener('DOMContentLoaded', resolve);
+		});
+	}
 
-  // Wait for all custom elements to be defined
-  const customElementTags = [
-    'app-navigation',
-    'app-navigation-mobile',
-    'app-modal-profile',
-    'app-modal-credits',
-    'app-modal-notifications',
-    'app-modal-server',
-    'app-modal-user',
-    'app-modal-todo',
-    'app-route-feed',
-    'app-route-explore',
-    'app-route-creations',
-    'app-route-servers',
-    'app-route-create',
-    'app-route-templates',
-    'app-route-users',
-    'app-route-todo',
-    'app-route-servers'
-  ];
-  await Promise.all(
-    customElementTags.map(tag => customElements.whenDefined(tag))
-  );
+	// Wait for all custom elements to be defined
+	const customElementTags = [
+		'app-navigation',
+		'app-navigation-mobile',
+		'app-modal-profile',
+		'app-modal-credits',
+		'app-modal-notifications',
+		'app-modal-server',
+		'app-modal-user',
+		'app-modal-todo',
+		'app-route-feed',
+		'app-route-explore',
+		'app-route-creations',
+		'app-route-servers',
+		'app-route-create',
+		'app-route-templates',
+		'app-route-users',
+		'app-route-todo',
+		'app-route-servers'
+	];
+	await Promise.all(
+		customElementTags.map(tag => customElements.whenDefined(tag))
+	);
 
-  // Small delay to ensure components are fully initialized and rendered
-  await new Promise(resolve => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(resolve);
-    });
-  });
+	// Small delay to ensure components are fully initialized and rendered
+	await new Promise(resolve => {
+		requestAnimationFrame(() => {
+			requestAnimationFrame(resolve);
+		});
+	});
 
-  // Show the page
-  document.body.classList.add('loaded');
+	// Show the page
+	document.body.classList.add('loaded');
 }
 
 initPage();
 
 function registerServiceWorker() {
-  if (!("serviceWorker" in navigator)) {
-    return;
-  }
+	if (!("serviceWorker" in navigator)) {
+		return;
+	}
 
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").catch(error => {
-      console.warn("Service worker registration failed:", error);
-    });
-  });
+	window.addEventListener("load", () => {
+		navigator.serviceWorker.register("/sw.js").catch(error => {
+			console.warn("Service worker registration failed:", error);
+		});
+	});
 }
 
 registerServiceWorker();
