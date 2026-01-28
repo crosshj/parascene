@@ -2,6 +2,12 @@ import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 
 const html = String.raw;
 
+function generateCreationToken() {
+	const ts = Date.now().toString(36);
+	const rand = Math.random().toString(36).slice(2, 10);
+	return `crt_${ts}_${rand}`;
+}
+
 class AppRouteCreate extends HTMLElement {
 	constructor() {
 		super();
@@ -578,12 +584,15 @@ class AppRouteCreate extends HTMLElement {
 
 		button.disabled = true;
 
+		const creationToken = generateCreationToken();
+
 		// Create pending creation item
 		const pendingId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 		const pendingItem = {
 			id: pendingId,
-			status: "creating",
-			created_at: new Date().toISOString()
+			status: "pending",
+			created_at: new Date().toISOString(),
+			creation_token: creationToken
 		};
 		const pendingKey = "pendingCreations";
 		const pendingList = JSON.parse(sessionStorage.getItem(pendingKey) || "[]");
@@ -616,7 +625,8 @@ class AppRouteCreate extends HTMLElement {
 			body: JSON.stringify({
 				server_id: this.selectedServer.id,
 				method: methodKey,
-				args: collectedArgs || {}
+				args: collectedArgs || {},
+				creation_token: creationToken
 			})
 		})
 			.then(async (response) => {

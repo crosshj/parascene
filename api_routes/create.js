@@ -2,7 +2,8 @@ import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import { getThumbnailUrl } from "./utils/url.js";
-import { buildProviderHeaders } from "./utils/providerAuth.js";
+import { runCreationJob, PROVIDER_TIMEOUT_MS } from "./utils/creationJob.js";
+import { scheduleCreationJob } from "./utils/scheduleCreationJob.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -79,18 +80,40 @@ export default function createCreateRoutes({ queries, storage }) {
 		return user;
 	}
 
+	function parseMeta(raw) {
+		if (raw == null) return null;
+		if (typeof raw === "object") return raw;
+		if (typeof raw !== "string") return null;
+		try {
+			return JSON.parse(raw);
+		} catch {
+			return null;
+		}
+	}
+
+	function nowIso() {
+		return new Date().toISOString();
+	}
+
 	// POST /api/create - Create a new image
 	router.post("/api/create", async (req, res) => {
 		const user = await requireUser(req, res);
 		if (!user) return;
 
-		const { server_id, method, args } = req.body;
+		const { server_id, method, args, creation_token } = req.body;
 
 		// Validate required fields
 		if (!server_id || !method) {
 			return res.status(400).json({
 				error: "Missing required fields",
 				message: "server_id and method are required"
+			});
+		}
+
+		if (typeof creation_token !== "string" || creation_token.trim().length < 10) {
+			return res.status(400).json({
+				error: "Missing required fields",
+				message: "creation_token is required"
 			});
 		}
 
@@ -144,110 +167,83 @@ export default function createCreateRoutes({ queries, storage }) {
 			// Deduct credits before creating the image
 			await queries.updateUserCreditsBalance.run(user.id, -CREATION_CREDIT_COST);
 
-			// Call provider server
-			let imageBuffer;
-			let color = null;
-			let width = 1024;
-			let height = 1024;
+			const started_at = nowIso();
+			const timeout_at = new Date(Date.now() + PROVIDER_TIMEOUT_MS + 2000).toISOString();
 
-			try {
-				const providerResponse = await fetch(server.server_url, {
-					method: 'POST',
-					headers: buildProviderHeaders({
-						'Content-Type': 'application/json',
-						'Accept': 'image/png'
-					}, server.auth_token),
-					body: JSON.stringify({
-						method: method,
-						args: args || {}
-					}),
-					signal: AbortSignal.timeout(30000) // 30 second timeout
-				});
+			// Insert a durable row BEFORE provider call.
+			const placeholderFilename = `creating_${user.id}_${Date.now()}.png`;
+			const meta = {
+				creation_token: creation_token.trim(),
+				server_id: Number(server_id),
+				server_name: typeof server.name === "string" ? server.name : null,
+				server_url: server.server_url,
+				method,
+				method_name: typeof methodConfig.name === "string" && methodConfig.name.trim()
+					? methodConfig.name.trim()
+					: null,
+				args: args || {},
+				started_at,
+				timeout_at,
+				credit_cost: CREATION_CREDIT_COST,
+			};
 
-				if (!providerResponse.ok) {
-					// Refund credits on provider error
-					await queries.updateUserCreditsBalance.run(user.id, CREATION_CREDIT_COST);
-					return res.status(502).json({
-						error: "Provider server error",
-						message: `Provider server returned error: ${providerResponse.status} ${providerResponse.statusText}`
-					});
-				}
-
-				// Get image buffer from response
-				imageBuffer = Buffer.from(await providerResponse.arrayBuffer());
-
-				// Try to get metadata from headers if available
-				const headerColor = providerResponse.headers.get('X-Image-Color');
-				const headerWidth = providerResponse.headers.get('X-Image-Width');
-				const headerHeight = providerResponse.headers.get('X-Image-Height');
-
-				if (headerColor) color = headerColor;
-				if (headerWidth) width = parseInt(headerWidth, 10);
-				if (headerHeight) height = parseInt(headerHeight, 10);
-			} catch (fetchError) {
-				// Refund credits on fetch error
-				await queries.updateUserCreditsBalance.run(user.id, CREATION_CREDIT_COST);
-
-				if (fetchError.name === 'AbortError') {
-					return res.status(504).json({
-						error: "Provider server timeout",
-						message: "Provider server did not respond within 30 seconds"
-					});
-				}
-				return res.status(502).json({
-					error: "Failed to connect to provider server",
-					message: fetchError.message
-				});
-			}
-
-			// Create unique filename
-			const timestamp = Date.now();
-			const random = Math.random().toString(36).substring(2, 9);
-			const filename = `${user.id}_${timestamp}_${random}.png`;
-
-			// Upload image using storage adapter
-			const imageUrl = await storage.uploadImage(imageBuffer, filename);
-
-			// Create entry in database with completed status
 			const result = await queries.insertCreatedImage.run(
 				user.id,
-				filename,
-				imageUrl,
-				width,
-				height,
-				color,
-				'completed'
+				placeholderFilename,
+				"", // file_path placeholder (schema requires non-null)
+				1024,
+				1024,
+				null,
+				"creating",
+				meta
 			);
 
-			// Credit server owner (30% of what user was charged)
-			const ownerCredits = CREATION_CREDIT_COST * 0.3;
-			if (server.user_id && ownerCredits > 0) {
-				// Initialize owner credits if needed
-				let ownerCreditsRecord = await queries.selectUserCredits.get(server.user_id);
-				if (!ownerCreditsRecord) {
-					await queries.insertUserCredits.run(server.user_id, 0, null);
-				}
-				await queries.updateUserCreditsBalance.run(server.user_id, ownerCredits);
-			}
+			const createdImageId = result.insertId;
 
-			// Get updated credit balance
+			await scheduleCreationJob({
+				payload: {
+					created_image_id: createdImageId,
+					user_id: user.id,
+					server_id: Number(server_id),
+					method,
+					args: args || {},
+					credit_cost: CREATION_CREDIT_COST,
+				},
+				runCreationJob: ({ payload }) => runCreationJob({ queries, storage, payload }),
+			});
+
 			const updatedCredits = await queries.selectUserCredits.get(user.id);
 
-			// Return with completed status
-			res.json({
-				id: result.insertId,
-				filename,
-				url: imageUrl,
-				color,
-				width,
-				height,
-				status: 'completed',
-				created_at: new Date().toISOString(),
+			return res.json({
+				id: createdImageId,
+				status: "creating",
+				created_at: started_at,
+				meta,
 				credits_remaining: updatedCredits?.balance ?? 0
 			});
 		} catch (error) {
 			console.error("Error initiating image creation:", error);
 			return res.status(500).json({ error: "Failed to initiate image creation", message: error.message });
+		}
+	});
+
+	// POST /api/create/worker - Worker callback (QStash or internal)
+	router.post("/api/create/worker", async (req, res) => {
+		try {
+			// If QStash is configured, require an explicit worker secret to avoid exposing this endpoint.
+			if (process.env.UPSTASH_QSTASH_TOKEN) {
+				const requiredSecret = process.env.CREATE_WORKER_SECRET;
+				const provided = req.get("x-worker-secret");
+				if (!requiredSecret || provided !== requiredSecret) {
+					return res.status(401).json({ error: "Unauthorized" });
+				}
+			}
+
+			await runCreationJob({ queries, storage, payload: req.body });
+			return res.json({ ok: true });
+		} catch (error) {
+			console.error("Error running create worker:", error);
+			return res.status(500).json({ ok: false, error: "Worker failed" });
 		}
 	});
 
@@ -261,21 +257,24 @@ export default function createCreateRoutes({ queries, storage }) {
 
 			// Transform to include URLs (use file_path from DB which now contains the URL)
 			const imagesWithUrls = images.map((img) => {
-				const url = img.file_path || storage.getImageUrl(img.filename);
+				const status = img.status || 'completed';
+				const url = status === "completed" ? (img.file_path || storage.getImageUrl(img.filename)) : null;
+				const meta = parseMeta(img.meta);
 				return {
 					id: img.id,
 					filename: img.filename,
 					url,
-					thumbnail_url: getThumbnailUrl(url),
+					thumbnail_url: url ? getThumbnailUrl(url) : null,
 					width: img.width,
 					height: img.height,
 					color: img.color,
-					status: img.status || 'completed', // Default to completed for backward compatibility
+					status, // Default to completed for backward compatibility
 					created_at: img.created_at,
 					published: img.published === 1 || img.published === true,
 					published_at: img.published_at || null,
 					title: img.title || null,
-					description: img.description || null
+					description: img.description || null,
+					meta
 				};
 			});
 
@@ -332,15 +331,21 @@ export default function createCreateRoutes({ queries, storage }) {
 			// Always read description from created_image, not from feed_item
 			// (feed_item may be deleted when un-publishing)
 			const description = typeof image.description === "string" ? image.description.trim() : "";
+			const meta = parseMeta(image.meta);
+
+			const status = image.status || 'completed';
+			const url = status === "completed"
+				? (image.file_path || storage.getImageUrl(image.filename))
+				: null;
 
 			return res.json({
 				id: image.id,
 				filename: image.filename,
-				url: image.file_path || storage.getImageUrl(image.filename), // Use stored URL or generate one
+				url, // Use stored URL or generate one
 				width: image.width,
 				height: image.height,
 				color: image.color,
-				status: image.status || 'completed',
+				status,
 				created_at: image.created_at,
 				published: isPublished,
 				published_at: image.published_at || null,
@@ -349,6 +354,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				like_count: likeCount,
 				viewer_liked: viewerLiked,
 				user_id: image.user_id,
+				meta,
 				creator: creator ? {
 					id: creator.id,
 					email: creator.email,
@@ -361,6 +367,55 @@ export default function createCreateRoutes({ queries, storage }) {
 		} catch (error) {
 			console.error("Error fetching image:", error);
 			return res.status(500).json({ error: "Failed to fetch image" });
+		}
+	});
+
+	// POST /api/create/images/:id/retry - "Retry" means: mark stale creating as failed (no provider retry)
+	router.post("/api/create/images/:id/retry", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		try {
+			const image = await queries.selectCreatedImageById.get(req.params.id, user.id);
+			if (!image) {
+				return res.status(404).json({ error: "Image not found" });
+			}
+
+			const meta = parseMeta(image.meta) || {};
+			const status = image.status || "completed";
+			const timeoutAt = meta?.timeout_at ? new Date(meta.timeout_at).getTime() : NaN;
+			const isPastTimeout = Number.isFinite(timeoutAt) && Date.now() > timeoutAt;
+
+			if (status === "completed") {
+				return res.status(400).json({ error: "Cannot retry a completed image" });
+			}
+
+			if (status === "creating" && !isPastTimeout) {
+				return res.status(400).json({ error: "Creation is still in progress" });
+			}
+
+			const nextMeta = {
+				...meta,
+				failed_at: nowIso(),
+				error_code: meta?.error_code || (status === "creating" ? "timeout" : "provider_error"),
+				error: meta?.error || (status === "creating" ? "Timed out" : "Failed"),
+			};
+
+			await queries.updateCreatedImageJobFailed.run(Number(req.params.id), user.id, { meta: nextMeta });
+
+			// If it was stuck creating and credits were never refunded, refund once.
+			const creditCost = Number(nextMeta?.credit_cost ?? 0);
+			if (status === "creating" && creditCost > 0 && nextMeta.credits_refunded !== true) {
+				await queries.updateUserCreditsBalance.run(user.id, creditCost);
+				await queries.updateCreatedImageJobFailed.run(Number(req.params.id), user.id, {
+					meta: { ...nextMeta, credits_refunded: true }
+				});
+			}
+
+			return res.json({ ok: true });
+		} catch (error) {
+			console.error("Error retrying image:", error);
+			return res.status(500).json({ error: "Failed to retry image" });
 		}
 	});
 
@@ -637,9 +692,22 @@ export default function createCreateRoutes({ queries, storage }) {
 				return res.status(400).json({ error: "Cannot delete published images" });
 			}
 
+			// Allow delete for failed, or creating past timeout, or unpublished completed.
+			const meta = parseMeta(image.meta);
+			const status = image.status || "completed";
+			if (status === "creating") {
+				const timeoutAt = meta?.timeout_at ? new Date(meta.timeout_at).getTime() : NaN;
+				if (!Number.isFinite(timeoutAt) || Date.now() <= timeoutAt) {
+					return res.status(400).json({ error: "Cannot delete an in-progress creation" });
+				}
+			}
+
 			// Delete the image file from storage
 			try {
-				await storage.deleteImage(image.filename);
+				// Only delete underlying file if we actually have one.
+				if (image.filename && image.file_path) {
+					await storage.deleteImage(image.filename);
+				}
 			} catch (storageError) {
 				// Log but don't fail if file doesn't exist
 				console.warn(`Warning: Could not delete image file ${image.filename}:`, storageError.message);

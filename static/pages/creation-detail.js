@@ -4,6 +4,7 @@ import { fetchJsonWithStatusDeduped } from '/shared/api.js';
 import { getAvatarColor } from '/shared/avatar.js';
 import { fetchCreatedImageComments, postCreatedImageComment } from '/shared/comments.js';
 import '../components/modals/publish.js';
+import '../components/modals/creation-details.js';
 
 // Set up URL change detection BEFORE header component loads
 // This ensures we capture navigation events
@@ -103,6 +104,12 @@ async function loadCreation() {
 
 		const creation = await response.json();
 
+		const status = creation.status || 'completed';
+		const meta = creation.meta || null;
+		const timeoutAt = meta && typeof meta.timeout_at === 'string' ? new Date(meta.timeout_at).getTime() : NaN;
+		const isTimedOut = status === 'creating' && Number.isFinite(timeoutAt) && Date.now() > timeoutAt;
+		const isFailed = status === 'failed' || isTimedOut;
+
 		// Load like metadata from backend (no localStorage fallback).
 		let likeMeta = { like_count: 0, viewer_liked: false };
 		try {
@@ -119,15 +126,28 @@ async function loadCreation() {
 		}
 
 		const creationWithLikes = { ...creation, ...likeMeta, created_image_id: creationId };
+		lastCreationMeta = creation;
 		const likeCount = getCreationLikeCount(creationWithLikes);
 
-		// Set image and blurred background
+		// Set image and blurred background depending on status
 		imageWrapper?.classList.remove('image-error');
-		imageWrapper?.classList.add('image-loading');
+		imageWrapper?.classList.remove('image-loading');
 		backgroundEl.style.backgroundImage = '';
 		imageEl.style.visibility = 'hidden';
-		imageEl.dataset.currentUrl = creation.url;
-		imageEl.src = creation.url;
+		imageEl.dataset.currentUrl = '';
+		imageEl.src = '';
+
+		if (status === 'completed' && creation.url) {
+			imageWrapper?.classList.add('image-loading');
+			imageEl.dataset.currentUrl = creation.url;
+			imageEl.src = creation.url;
+		} else if (status === 'creating' && !isTimedOut) {
+			// Still creating: show loading placeholder
+			imageWrapper?.classList.add('image-loading');
+		} else if (isFailed) {
+			// Failed or timed out: show error placeholder
+			imageWrapper?.classList.add('image-error');
+		}
 
 		// Format date (tooltip only; no visible "time ago" on this page)
 		const date = new Date(creation.created_at);
@@ -166,11 +186,12 @@ async function loadCreation() {
 				.replace(/'/g, '&#39;');
 		}
 
-		// Update publish button - hide if not owner/admin or if already published (we have unpublish button for that)
+		// Update publish button - hide if not owner/admin, already published, or creation not successfully completed
 		const publishBtn = document.querySelector('[data-publish-btn]');
 		if (publishBtn) {
-			if (!canEdit || isPublished) {
-				// Hide publish button if user doesn't own/admin or if already published
+			if (!canEdit || isPublished || status !== 'completed' || isFailed) {
+				// Hide publish button if user doesn't own/admin, if already published,
+				// or if the creation is not a successfully completed image (creating/failed/etc.)
 				publishBtn.style.display = 'none';
 			} else {
 				// Button is active (enabled) when not already published
@@ -203,10 +224,10 @@ async function loadCreation() {
 			}
 		}
 
-		// Update edit button - show for published creations if owner/admin
+		// Update edit button - show for published creations if owner/admin and not failed
 		const editBtn = document.querySelector('[data-edit-btn]');
 		if (editBtn) {
-			if (!canEdit || !isPublished) {
+			if (!canEdit || !isPublished || isFailed) {
 				editBtn.style.display = 'none';
 			} else {
 				editBtn.style.display = '';
@@ -214,10 +235,10 @@ async function loadCreation() {
 			}
 		}
 
-		// Update unpublish button - show for published creations if owner/admin
+		// Update unpublish button - show for published creations if owner/admin and not failed
 		const unpublishBtn = document.querySelector('[data-unpublish-btn]');
 		if (unpublishBtn) {
-			if (!canEdit || !isPublished) {
+			if (!canEdit || !isPublished || isFailed) {
 				unpublishBtn.style.display = 'none';
 			} else {
 				unpublishBtn.style.display = '';
@@ -225,16 +246,28 @@ async function loadCreation() {
 			}
 		}
 
-		// Update delete button - hide if not owner/admin, disable if published
+		// Update delete / retry buttons
 		const deleteBtn = document.querySelector('[data-delete-btn]');
+		const retryBtn = document.querySelector('[data-retry-btn]');
+
 		if (deleteBtn) {
 			if (!canEdit) {
 				// Hide delete button if user doesn't own the creation and isn't admin
 				deleteBtn.style.display = 'none';
 			} else {
-				// Button is disabled if already published
 				deleteBtn.style.display = '';
-				deleteBtn.disabled = isPublished;
+				// Allow delete for failed or creating+timed-out or unpublished completed; disable otherwise.
+				const deletable = !isPublished && (status === 'failed' || (status === 'creating' && isTimedOut) || status === 'completed');
+				deleteBtn.disabled = !deletable;
+			}
+		}
+
+		if (retryBtn) {
+			if (!canEdit || !isFailed) {
+				retryBtn.style.display = 'none';
+			} else {
+				retryBtn.style.display = '';
+				retryBtn.disabled = false;
 			}
 		}
 
@@ -336,6 +369,18 @@ async function loadCreation() {
 			<div class="creation-detail-title${isUntitled ? ' creation-detail-title-untitled' : ''}">${escapeHtml(displayTitle)}</div>
 			${descriptionHtml}
 			<div class="creation-detail-meta">
+				${meta && (meta.server_id !== undefined || meta.method || meta.args) ? `
+				<button class="feed-card-action" type="button" data-creation-details-link>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<circle cx="12" cy="12" r="10"></circle>
+						<path d="M12 8v8"></path>
+						<path d="M12 6h.01"></path>
+					</svg>
+					<span>Details</span>
+				</button>
+				${isPublished && !isFailed ? '<span>•</span>' : ''}
+				` : ``}
+				${isPublished && !isFailed ? `
 				<a class="feed-card-action creation-detail-comments-link" href="#comments" data-comments-link aria-label="Comments">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 						<path d="M21 15a4 4 0 0 1-4 4H8l-5 5V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
@@ -349,10 +394,10 @@ async function loadCreation() {
 					</svg>
 					<span class="feed-card-action-count" data-like-count>${likeCount}</span>
 				</button>
+				` : ''}
 			</div>
 
-
-
+			${isPublished && !isFailed ? `
 			<div class="comment-input" data-comment-input>
 				<div class="comment-avatar" style="background: ${viewerColor};">
 					${viewerAvatarUrl ? `<img class="comment-avatar-img" src="${viewerAvatarUrl}" alt="">` : viewerInitial}
@@ -367,15 +412,6 @@ async function loadCreation() {
 
 			<div class="comments-toolbar">
 				<div class="comments-sort">
-					<!--
-					<svg class="comments-sort-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-						<path d="M11 5h10"></path>
-						<path d="M11 9h7"></path>
-						<path d="M11 13h4"></path>
-						<path d="M3 7l3-3 3 3"></path>
-						<path d="M6 4v16"></path>
-					</svg>
-					-->
 					<label class="comments-sort-label" for="comments-sort">Sort:</label>
 
 					<select class="comments-sort-select" id="comments-sort" data-comments-sort>
@@ -388,11 +424,24 @@ async function loadCreation() {
 			<div class="comment-list" data-comment-list>
 				<div class="route-empty route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
 			</div>
+			` : ''}
 		`;
 
 		const likeButton = detailContent.querySelector('button[data-like-button]');
 		if (likeButton) {
 			initLikeButton(likeButton, creationWithLikes);
+		}
+
+		const detailsBtn = detailContent.querySelector('[data-creation-details-link]');
+		if (detailsBtn && meta && (meta.server_id !== undefined || meta.method || meta.args)) {
+			detailsBtn.addEventListener('click', () => {
+				document.dispatchEvent(new CustomEvent('open-creation-details-modal', {
+					detail: {
+						creationId,
+						meta
+					}
+				}));
+			});
 		}
 
 		enableLikeButtons(detailContent);
@@ -611,6 +660,7 @@ async function loadCreation() {
 }
 
 let currentCreationId = null;
+let lastCreationMeta = null;
 
 function checkAndLoadCreation() {
 	const creationId = getCreationId();
@@ -677,6 +727,15 @@ document.addEventListener('click', (e) => {
 	}
 });
 
+// Retry button handler
+document.addEventListener('click', (e) => {
+	const retryBtn = e.target.closest('[data-retry-btn]');
+	if (retryBtn && !retryBtn.disabled) {
+		e.preventDefault();
+		handleRetry();
+	}
+});
+
 
 async function handleDelete() {
 	const creationId = getCreationId();
@@ -716,6 +775,129 @@ async function handleDelete() {
 			deleteBtn.disabled = false;
 		}
 	}
+}
+
+async function handleRetry() {
+	const creationId = getCreationId();
+	if (!creationId) {
+		alert('Invalid creation ID');
+		return;
+	}
+
+	const meta = lastCreationMeta && lastCreationMeta.meta ? lastCreationMeta.meta : null;
+	const serverId = meta && meta.server_id;
+	const method = meta && meta.method;
+	const args = (meta && meta.args) ? meta.args : {};
+
+	if (!serverId || !method) {
+		alert('Cannot retry this creation because server or method information is missing.');
+		return;
+	}
+
+	const retryBtn = document.querySelector('[data-retry-btn]');
+	if (retryBtn) {
+		retryBtn.disabled = true;
+	}
+
+	const creationToken = `crt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
+	const pendingKey = "pendingCreations";
+	const pendingId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+	const pendingItem = {
+		id: pendingId,
+		status: "pending",
+		created_at: new Date().toISOString(),
+		creation_token: creationToken
+	};
+
+	const pendingList = JSON.parse(sessionStorage.getItem(pendingKey) || "[]");
+	pendingList.unshift(pendingItem);
+	sessionStorage.setItem(pendingKey, JSON.stringify(pendingList));
+
+	// Hide the failed creation we are retrying from the creations list view (session-only).
+	try {
+		const hiddenKey = 'hiddenFailedCreations';
+		const rawHidden = sessionStorage.getItem(hiddenKey);
+		const hiddenList = rawHidden ? JSON.parse(rawHidden) : [];
+		const nextHidden = Array.isArray(hiddenList) ? hiddenList.slice() : [];
+		const idValue = Number.isFinite(creationId) ? creationId : Number(creationId);
+		const idString = String(idValue);
+		if (!nextHidden.some((id) => String(id) === idString)) {
+			nextHidden.push(idValue);
+		}
+		sessionStorage.setItem(hiddenKey, JSON.stringify(nextHidden));
+	} catch {
+		// Non-fatal: if sessionStorage fails, user will just see both tiles.
+	}
+
+	document.dispatchEvent(new CustomEvent("creations-pending-updated"));
+	const creationsRoute = document.querySelector("app-route-creations");
+	if (creationsRoute && typeof creationsRoute.loadCreations === "function") {
+		await creationsRoute.loadCreations({ force: true, background: false });
+	}
+
+	// Navigate back to creations list view
+	const header = document.querySelector('app-navigation');
+	if (header && typeof header.navigateToRoute === 'function') {
+		header.navigateToRoute('creations');
+	} else {
+		window.location.href = '/creations';
+	}
+
+	// Kick off new create job with same server/method/args but fresh creation_token
+	fetch("/api/create", {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json"
+		},
+		credentials: "include",
+		body: JSON.stringify({
+			server_id: serverId,
+			method,
+			args: args || {},
+			creation_token: creationToken
+		})
+	})
+		.then(async (response) => {
+			if (!response.ok) {
+				const error = await response.json();
+				if (response.status === 402) {
+					// Refresh credits to get updated balance
+					document.dispatchEvent(new CustomEvent('credits-updated', {
+						detail: { count: error.current ?? 0 }
+					}));
+					alert(error.message || "Insufficient credits");
+					throw new Error(error.message || "Insufficient credits");
+				}
+				throw new Error(error.error || "Failed to retry creation");
+			}
+			const data = await response.json();
+			if (typeof data.credits_remaining === 'number') {
+				document.dispatchEvent(new CustomEvent('credits-updated', {
+					detail: { count: data.credits_remaining }
+				}));
+			}
+			return null;
+		})
+		.then(() => {
+			const current = JSON.parse(sessionStorage.getItem(pendingKey) || "[]");
+			const next = current.filter(item => item.id !== pendingId);
+			sessionStorage.setItem(pendingKey, JSON.stringify(next));
+			document.dispatchEvent(new CustomEvent("creations-pending-updated"));
+		})
+		.catch((error) => {
+			const current = JSON.parse(sessionStorage.getItem(pendingKey) || "[]");
+			const next = current.filter(item => item.id !== pendingId);
+			sessionStorage.setItem(pendingKey, JSON.stringify(next));
+			document.dispatchEvent(new CustomEvent("creations-pending-updated"));
+			console.error('Error retrying creation:', error);
+			alert(error.message || 'Failed to retry creation. Please try again.');
+		})
+		.finally(() => {
+			const btn = document.querySelector('[data-retry-btn]');
+			if (btn) {
+				btn.disabled = false;
+			}
+		});
 }
 
 

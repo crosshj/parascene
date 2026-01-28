@@ -13,6 +13,7 @@
 	<app-modal-credits></app-modal-credits>
 	<app-modal-notifications></app-modal-notifications>
 	<app-modal-publish></app-modal-publish>
+	<app-modal-creation-details></app-modal-creation-details>
 
 	<!--APP_MOBILE_BOTTOM_NAV-->
 
@@ -37,8 +38,8 @@
 					<button class="creation-detail-action-btn" data-edit-btn disabled style="display: none;">
 						<svg width="16" height="16" viewBox="0 0 16 16" fill="none"
 							style="margin-right: 6px; vertical-align: middle;">
-							<path d="M11.5 2.5L13.5 4.5L5.5 12.5H3.5V10.5L11.5 2.5Z" stroke="currentColor" stroke-width="1.5"
-								stroke-linecap="round" stroke-linejoin="round" fill="none" />
+							<path d="M11.5 2.5L13.5 4.5L5.5 12.5H3.5V10.5L11.5 2.5Z" stroke="currentColor"
+								stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none" />
 						</svg>
 						Edit
 					</button>
@@ -49,6 +50,16 @@
 								stroke-linecap="round" stroke-linejoin="round" fill="none" />
 						</svg>
 						Un-publish
+					</button>
+					<button class="creation-detail-action-btn" data-retry-btn style="display: none;">
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+							style="margin-right: 6px; vertical-align: middle;">
+							<path d="M3 12a9 9 0 1 0 3-6.708" stroke="currentColor" stroke-width="1.5"
+								stroke-linecap="round" stroke-linejoin="round" />
+							<polyline points="3 4 3 10 9 10" stroke="currentColor" stroke-width="1.5"
+								stroke-linecap="round" stroke-linejoin="round" />
+						</svg>
+						Retry
 					</button>
 					<button class="creation-detail-action-btn" data-delete-btn disabled>
 						<svg width="16" height="16" viewBox="0 0 16 16" fill="none"

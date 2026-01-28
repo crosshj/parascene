@@ -1,5 +1,15 @@
 # IMAGES/META + CREATION TOKEN PLAN
 
+Start time: 2026-01-28T08:51:35Z
+End time: 2026-01-28T09:06:43Z
+Duration: 15 minutes 8 seconds
+
+Estimated:
+Time to implement end-to-end : ~4–8 hours.
+Backend core : ~2–4h
+Frontend : ~1.5–3h
+Polish + edge cases + quick manual verification: ~0.5–1h
+
 ## HIGH LEVEL PLAN
 
 *Follow this order when implementing.*

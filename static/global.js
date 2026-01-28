@@ -7,6 +7,7 @@ import './components/modals/notifications.js';
 import './components/modals/server.js';
 import './components/modals/user.js';
 import './components/modals/todo.js';
+import './components/modals/creation-details.js';
 import './components/routes/feed.js';
 import './components/routes/explore.js';
 import './components/routes/servers.js';
@@ -35,6 +36,7 @@ async function initPage() {
 		'app-modal-server',
 		'app-modal-user',
 		'app-modal-todo',
+		'app-modal-creation-details',
 		'app-route-feed',
 		'app-route-explore',
 		'app-route-creations',

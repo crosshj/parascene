@@ -803,17 +803,75 @@ export async function openDb() {
 			}
 		},
 		insertCreatedImage: {
-			run: async (userId, filename, filePath, width, height, color, status = 'creating') => {
+			run: async (userId, filename, filePath, width, height, color, status = 'creating', meta = null) => {
+				const toJsonText = (value) => {
+					if (value == null) return null;
+					if (typeof value === "string") return value;
+					try {
+						return JSON.stringify(value);
+					} catch {
+						return null;
+					}
+				};
 				const stmt = db.prepare(
-					`INSERT INTO created_images (user_id, filename, file_path, width, height, color, status)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`
+					`INSERT INTO created_images (user_id, filename, file_path, width, height, color, status, meta)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 				);
-				const result = stmt.run(userId, filename, filePath, width, height, color, status);
+				const result = stmt.run(userId, filename, filePath, width, height, color, status, toJsonText(meta));
 				return Promise.resolve({
 					insertId: result.lastInsertRowid,
 					lastInsertRowid: result.lastInsertRowid,
 					changes: result.changes
 				});
+			}
+		},
+		updateCreatedImageJobCompleted: {
+			run: async (id, userId, { filename, file_path, width, height, color, meta }) => {
+				const toJsonText = (value) => {
+					if (value == null) return null;
+					if (typeof value === "string") return value;
+					try {
+						return JSON.stringify(value);
+					} catch {
+						return null;
+					}
+				};
+				const stmt = db.prepare(
+					`UPDATE created_images
+             SET filename = ?, file_path = ?, width = ?, height = ?, color = ?, status = 'completed', meta = ?
+             WHERE id = ? AND user_id = ?`
+				);
+				const result = stmt.run(
+					filename,
+					file_path,
+					width,
+					height,
+					color ?? null,
+					toJsonText(meta),
+					id,
+					userId
+				);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		updateCreatedImageJobFailed: {
+			run: async (id, userId, { meta }) => {
+				const toJsonText = (value) => {
+					if (value == null) return null;
+					if (typeof value === "string") return value;
+					try {
+						return JSON.stringify(value);
+					} catch {
+						return null;
+					}
+				};
+				const stmt = db.prepare(
+					`UPDATE created_images
+             SET status = 'failed', meta = ?
+             WHERE id = ? AND user_id = ?`
+				);
+				const result = stmt.run(toJsonText(meta), id, userId);
+				return Promise.resolve({ changes: result.changes });
 			}
 		},
 		updateCreatedImageStatus: {
@@ -841,7 +899,7 @@ export async function openDb() {
 			all: async (userId) => {
 				const stmt = db.prepare(
 					`SELECT id, filename, file_path, width, height, color, status, created_at, 
-                  published, published_at, title, description
+                  published, published_at, title, description, meta
            FROM created_images
            WHERE user_id = ?
            ORDER BY created_at DESC`
@@ -853,7 +911,7 @@ export async function openDb() {
 			all: async (userId) => {
 				const stmt = db.prepare(
 					`SELECT id, filename, file_path, width, height, color, status, created_at, 
-                  published, published_at, title, description
+                  published, published_at, title, description, meta
            FROM created_images
            WHERE user_id = ? AND published = 1
            ORDER BY created_at DESC`
@@ -896,7 +954,7 @@ export async function openDb() {
 			get: async (id, userId) => {
 				const stmt = db.prepare(
 					`SELECT id, filename, file_path, width, height, color, status, created_at,
-                  published, published_at, title, description, user_id
+                  published, published_at, title, description, user_id, meta
            FROM created_images
            WHERE id = ? AND user_id = ?`
 				);
@@ -907,7 +965,7 @@ export async function openDb() {
 			get: async (id) => {
 				const stmt = db.prepare(
 					`SELECT id, filename, file_path, width, height, color, status, created_at,
-                  published, published_at, title, description, user_id
+                  published, published_at, title, description, user_id, meta
            FROM created_images
            WHERE id = ?`
 				);
@@ -918,7 +976,7 @@ export async function openDb() {
 			get: async (filename) => {
 				const stmt = db.prepare(
 					`SELECT id, filename, file_path, width, height, color, status, created_at,
-                  published, published_at, title, description, user_id
+                  published, published_at, title, description, user_id, meta
            FROM created_images
            WHERE filename = ?`
 				);
