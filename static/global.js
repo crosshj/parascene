@@ -5,12 +5,16 @@ import './components/modals/profile.js';
 import './components/modals/credits.js';
 import './components/modals/notifications.js';
 import './components/modals/server.js';
+import './components/modals/user.js';
+import './components/modals/todo.js';
 import './components/routes/feed.js';
 import './components/routes/explore.js';
 import './components/routes/servers.js';
 import './components/routes/creations.js';
 import './components/routes/create.js';
 import './components/routes/templates.js';
+import './components/routes/users.js';
+import './components/routes/todo.js';
 
 // Wait for DOM and custom elements to be ready before showing content
 async function initPage() {
@@ -29,12 +33,16 @@ async function initPage() {
     'app-modal-credits',
     'app-modal-notifications',
     'app-modal-server',
+    'app-modal-user',
+    'app-modal-todo',
     'app-route-feed',
     'app-route-explore',
     'app-route-creations',
     'app-route-servers',
     'app-route-create',
     'app-route-templates',
+    'app-route-users',
+    'app-route-todo',
     'app-route-servers'
   ];
   await Promise.all(

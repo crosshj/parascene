@@ -17,160 +17,16 @@
 	<app-modal-credits></app-modal-credits>
 	<app-modal-notifications></app-modal-notifications>
 	<app-modal-server></app-modal-server>
+	<app-modal-user></app-modal-user>
+	<app-modal-todo></app-modal-todo>
 
 	<main>
-		<section data-route-content="servers">
-			<app-route-servers></app-route-servers>
-		</section>
-
-		<section data-route-content="users">
-			<h3>Users</h3>
-			<div id="users-container" class="users-cards">
-				<div class="route-empty route-loading">
-					<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
-				</div>
-			</div>
-		</section>
-
-		<section data-route-content="todo">
-			<div class="todo-header">
-				<h3>Todo</h3>
-				<div class="todo-mode-toggle" data-todo-mode-toggle role="group" aria-label="Priority mode">
-					<button type="button" class="todo-mode-button" data-todo-mode="gated"
-						aria-pressed="true">Gated</button>
-					<button type="button" class="todo-mode-button" data-todo-mode="ratio"
-						aria-pressed="false">Ratio</button>
-					<button type="button" class="todo-mode-button" data-todo-mode="impact"
-						aria-pressed="false">Impact</button>
-					<button type="button" class="todo-mode-button" data-todo-mode="cost"
-						aria-pressed="false">Cost</button>
-				</div>
-			</div>
-			<div class="todo-layout">
-				<div id="todo-list" class="todo-list">
-					<div class="route-empty route-loading">
-						<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
-					</div>
-				</div>
-			</div>
+		<section>
+			<app-route-todo data-route-content="todo"></app-route-todo>
+			<app-route-users data-route-content="users"></app-route-users>
+			<app-route-servers data-route-content="servers"></app-route-servers>
 		</section>
 	</main>
-
-	<div id="todo-modal" class="publish-modal-overlay" data-todo-modal role="dialog" aria-modal="true"
-		aria-labelledby="todo-modal-title">
-		<div class="publish-modal">
-			<header class="publish-modal-header todo-modal-header">
-				<h3 id="todo-modal-title" class="todo-modal-title">Todo Item</h3>
-				<button type="button" class="publish-modal-close" data-todo-close aria-label="Close">✕</button>
-			</header>
-			<div class="publish-modal-body">
-				<form id="todo-modal-form" class="todo-modal-form">
-					<input type="hidden" name="mode" value="add" />
-					<input type="hidden" name="originalName" value="" />
-					<label>
-						Name
-						<input type="text" name="name" required />
-					</label>
-					<label>
-						Description
-						<textarea name="description" rows="3" required></textarea>
-					</label>
-					<input type="hidden" name="dependsOn" value="[]" />
-					<div class="todo-depends" data-todo-depends>
-						<div class="todo-depends-label">Depends on</div>
-						<div class="todo-depends-list" data-todo-depends-list></div>
-						<div class="todo-depends-controls">
-							<select class="todo-depends-select" data-todo-depends-select
-								aria-label="Add dependency"></select>
-							<button type="button" class="btn-secondary todo-depends-add"
-								data-todo-depends-add>Add</button>
-						</div>
-					</div>
-					<label class="todo-slider">
-						Cost
-						<input type="range" name="time" min="1" max="100" required />
-						<div class="todo-slider-meta">
-							<span>Low</span>
-							<span class="todo-slider-value" data-slider-value="time">50</span>
-							<span>High</span>
-						</div>
-					</label>
-					<label class="todo-slider">
-						Impact
-						<input type="range" name="impact" min="1" max="100" required />
-						<div class="todo-slider-meta">
-							<span>Low</span>
-							<span class="todo-slider-value" data-slider-value="impact">50</span>
-							<span>High</span>
-						</div>
-					</label>
-					<div class="todo-modal-actions">
-						<button type="button" class="todo-modal-delete" data-todo-delete>Delete</button>
-						<button type="submit" class="todo-modal-submit btn-primary">Save</button>
-					</div>
-				</form>
-			</div>
-		</div>
-	</div>
-
-	<div id="todo-readonly-modal" class="publish-modal-overlay" data-todo-readonly role="dialog" aria-modal="true"
-		aria-labelledby="todo-readonly-title">
-		<div class="publish-modal todo-readonly-modal">
-			<header class="publish-modal-header todo-modal-header">
-				<h3 class="todo-modal-title">Todo Item</h3>
-				<button type="button" class="publish-modal-close" data-todo-readonly-close aria-label="Close">✕</button>
-			</header>
-			<div class="publish-modal-body todo-readonly-body">
-				<div class="todo-readonly-title" id="todo-readonly-title"></div>
-				<div class="todo-readonly-description" data-todo-readonly-description></div>
-				<div class="todo-readonly-dials">
-					<div class="todo-readonly-dial">
-						<div class="todo-card-dial" data-todo-readonly-dial="time"></div>
-						<div class="todo-readonly-dial-label">Cost</div>
-					</div>
-					<div class="todo-readonly-dial">
-						<div class="todo-card-dial" data-todo-readonly-dial="impact"></div>
-						<div class="todo-readonly-dial-label">Impact</div>
-					</div>
-				</div>
-				<div class="todo-readonly-actions">
-					<button type="button" class="todo-readonly-dismiss btn-primary" data-todo-readonly-close>
-						Dismiss
-					</button>
-				</div>
-			</div>
-		</div>
-	</div>
-
-	<div id="user-modal" class="publish-modal-overlay" data-user-modal role="dialog" aria-modal="true"
-		aria-labelledby="user-modal-title">
-		<div class="publish-modal user-modal">
-			<header class="publish-modal-header">
-				<h3 id="user-modal-title" class="user-modal-title">User</h3>
-				<button type="button" class="publish-modal-close" data-user-close aria-label="Close">✕</button>
-			</header>
-			<div class="publish-modal-body user-modal-body">
-				<div class="user-modal-details" data-user-modal-details></div>
-
-				<form id="user-tip-form" class="user-tip-form">
-					<input type="hidden" name="toUserId" value="" />
-					<label class="user-tip-label">
-						Tip credits
-						<div class="user-tip-row">
-							<input type="number" name="amount" min="0.1" step="0.1" inputmode="decimal" required />
-							<button type="submit" class="btn-primary user-tip-button">
-								<span class="user-tip-button-label">Tip</span>
-								<span class="user-tip-spinner" aria-hidden="true"></span>
-							</button>
-						</div>
-					</label>
-					<div class="alert error user-tip-error" data-user-tip-error hidden></div>
-				</form>
-			</div>
-		</div>
-	</div>
-
-	<script type="module" src="/pages/admin.js"></script>
 </body>
 
 </html>

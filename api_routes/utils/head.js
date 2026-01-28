@@ -8,6 +8,7 @@ function getCommonHead() {
 		<meta name="supported-color-schemes" content="light dark" />
 		<meta name="description" content="parascene is a community that uses AI, ML, and algorithms to support creation. Join us for creativity, entertainment, and involvement." />
 		<meta name="theme-color" content="#242131" />
+		<meta name="mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-title" content="Parascene" />
 

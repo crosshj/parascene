@@ -368,7 +368,7 @@
 }
 
 /* Keep todo modal actions visible while body scrolls */
-#todo-modal .publish-modal-body {
+app-modal-todo .publish-modal-body {
 	overflow-y: auto;
 	min-height: 0;
 }
