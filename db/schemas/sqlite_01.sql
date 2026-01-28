@@ -153,6 +153,7 @@ CREATE TABLE IF NOT EXISTS created_images (
   published_at TEXT,
   title TEXT,
   description TEXT,
+  meta TEXT,
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
