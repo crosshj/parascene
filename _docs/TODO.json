@@ -1,16 +1,74 @@
 [
   {
-    "name": "Evole | Re-generate",
+    "name": "Evolve | Re-generate",
     "description": "use a creation as a stepping stone for another creation",
     "cost": 40,
     "impact": 82,
-    "dependsOn": []
+    "dependsOn": [
+      "Servers: creation inputs"
+    ]
   },
   {
     "name": "Admin User CRUD",
     "description": "ability for admin to modify users",
     "cost": 61,
     "impact": 83,
+    "dependsOn": []
+  },
+  {
+    "name": "Mobile copy creation URL",
+    "description": "Add a copy/share affordance on mobile so users can copy a creation's canonical URL for pasting into creation descriptions or comments.",
+    "cost": 12,
+    "impact": 55,
+    "dependsOn": []
+  },
+  {
+    "name": "Comment reply notifications",
+    "description": "Notify users when someone replies to their comment (even on someone else's creation) via in-app notifications, so they can return to the thread.",
+    "cost": 48,
+    "impact": 90,
+    "dependsOn": []
+  },
+  {
+    "name": "Community page: comment activity",
+    "description": "Evolve the Servers page into a Community page with tabs for Servers and Comments; Comments highlights recent site-wide activity and links to creations with the latest discussion.",
+    "cost": 58,
+    "impact": 68,
+    "dependsOn": []
+  },
+  {
+    "name": "Feature requests",
+    "description": "Let users submit feature requests via a lightweight form, store them for review, and acknowledge submission (basic feedback loop).",
+    "cost": 22,
+    "impact": 60,
+    "dependsOn": []
+  },
+  {
+    "name": "External image sharing",
+    "description": "Allow sharing a created image with someone who is not a user, likely via a secure share link/token flow similar to invites (view-only by default, with clear revocation/expiration behavior).",
+    "cost": 52,
+    "impact": 72,
+    "dependsOn": []
+  },
+  {
+    "name": "Onboarding: choose username",
+    "description": "During signup, require the user to pick a unique username before they can proceed into the app; validate availability, reserve it, and improve the first-run experience.",
+    "cost": 28,
+    "impact": 85,
+    "dependsOn": []
+  },
+  {
+    "name": "YouTube link transforms",
+    "description": "Detect YouTube links across the site (descriptions/comments) and transform them consistently (preview/embed) similar to how creation links are transformed today.",
+    "cost": 33,
+    "impact": 48,
+    "dependsOn": []
+  },
+  {
+    "name": "Servers: creation inputs",
+    "description": "Allow provider servers to accept existing creations (e.g., images) as inputs to jobs to enable editing workflows, evolution/regeneration, and other creation-to-creation operations.",
+    "cost": 88,
+    "impact": 100,
     "dependsOn": []
   },
   {
