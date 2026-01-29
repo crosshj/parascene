@@ -86,17 +86,17 @@ try {
 }
 
 // CRITICAL: Log EVERY request at the absolute top to see if Vercel is invoking the function
-app.use((req, res, next) => {
-	console.log("[Vercel] Function invoked", {
-		method: req.method,
-		path: req.path,
-		originalUrl: req.originalUrl,
-		url: req.url,
-		timestamp: new Date().toISOString(),
-		userAgent: req.get("user-agent"),
-	});
-	next();
-});
+// app.use((req, res, next) => {
+// 	console.log("[Vercel] Function invoked", {
+// 		method: req.method,
+// 		path: req.path,
+// 		originalUrl: req.originalUrl,
+// 		url: req.url,
+// 		timestamp: new Date().toISOString(),
+// 		userAgent: req.get("user-agent"),
+// 	});
+// 	next();
+// });
 
 app.use(express.static(staticDir));
 app.use(express.json());
@@ -189,7 +189,7 @@ app.use(async (err, req, res, next) => {
 
 if (process.env.NODE_ENV !== "production") {
 	app.listen(port, () => {
-		// console.log(`Parascene dev server running on http://localhost:${port}`);
+		console.log(`Parascene dev server running on http://localhost:${port}`);
 	});
 }
 

@@ -3,6 +3,7 @@ import { enableLikeButtons, getCreationLikeCount, initLikeButton } from '/shared
 import { fetchJsonWithStatusDeduped } from '/shared/api.js';
 import { getAvatarColor } from '/shared/avatar.js';
 import { fetchCreatedImageComments, postCreatedImageComment } from '/shared/comments.js';
+import { textWithCreationLinks } from '/shared/urls.js';
 import '../components/modals/publish.js';
 import '../components/modals/creation-details.js';
 
@@ -302,7 +303,7 @@ async function loadCreation() {
 		if (descriptionText) {
 			descriptionHtml = `
 				<div class="creation-detail-published">
-					<div class="creation-detail-description">${escapeHtml(descriptionText)}</div>
+					<div class="creation-detail-description">${textWithCreationLinks(descriptionText)}</div>
 				</div>
 			`;
 		}
@@ -508,7 +509,7 @@ async function loadCreation() {
 				const date = c?.created_at ? new Date(c.created_at) : null;
 				const timeAgo = date ? (formatRelativeTime(date) || '') : '';
 				const timeTitle = date ? formatDateTime(date) : '';
-				const safeText = escapeHtml(c?.text ?? '');
+				const safeText = textWithCreationLinks(c?.text ?? '');
 
 				return `
 					<div class="comment-item">

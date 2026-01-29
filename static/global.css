@@ -1739,6 +1739,14 @@ app-route-feed {
 	border-radius: 6px;
 }
 
+.creation-link {
+	color: var(--accent);
+}
+
+.creation-link:hover {
+	color: var(--accent);
+}
+
 .user-avatar-link:hover {
 	text-decoration: none;
 }
