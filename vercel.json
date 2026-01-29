@@ -2,17 +2,21 @@
   "version": 2,
   "rewrites": [
     {
-      "source": "/api/worker/create(?:/.*)?",
+      "source": "/api/worker/create",
       "destination": "/api/worker/create.js"
     },
     {
-      "source": "/api/(.*)",
-      "destination": "/api/index"
+      "source": "/api/worker/create/:path*",
+      "destination": "/api/worker/create.js"
     },
+    {
+      "source": "/api/:path*",
+      "destination": "/api/index"
+    }
   ],
   "headers": [
     {
-      "source": "/api/worker/create",
+      "source": "/api/worker/create/:path*",
       "headers": [
         {
           "key": "Cache-Control",
