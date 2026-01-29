@@ -13,6 +13,8 @@ export async function scheduleCreationJob({ payload, runCreationJob, log = conso
 		const callbackUrl = new URL("/api/create/worker", getBaseAppUrl()).toString();
 		const publishUrl = `https://qstash.upstash.io/v2/publish/${encodeURIComponent(callbackUrl)}`;
 
+		console.log(`scheduleCreationJob: ${publishUrl}`);
+
 		const res = await fetch(publishUrl, {
 			method: "POST",
 			headers: {
