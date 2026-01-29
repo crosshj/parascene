@@ -2,7 +2,7 @@
 
 Start time: 2026-01-28T08:51:35Z
 End time: 2026-01-28T09:06:43Z
-Duration: 15 minutes 8 seconds
+Duration: 15 minutes 8 seconds (initial) + 3-4 hours refinment
 
 Estimated:
 Time to implement end-to-end : ~4–8 hours.
