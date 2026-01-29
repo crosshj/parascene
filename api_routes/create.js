@@ -191,13 +191,21 @@ export default function createCreateRoutes({ queries, storage }) {
 					return res.status(404).json({ error: "Image not found" });
 				}
 				const status = image.status || "completed";
-				if (status !== "failed") {
+				if (status === "completed") {
 					return res.status(400).json({
 						error: "Cannot retry",
-						message: status === "creating"
-							? "Creation is still in progress"
-							: "Only failed creations can be retried"
+						message: "Only failed or timed-out creations can be retried"
 					});
+				}
+				if (status === "creating") {
+					const existingMeta = parseMeta(image.meta) || {};
+					const timeoutAt = existingMeta.timeout_at ? new Date(existingMeta.timeout_at).getTime() : NaN;
+					if (!Number.isFinite(timeoutAt) || Date.now() <= timeoutAt) {
+						return res.status(400).json({
+							error: "Cannot retry",
+							message: "Creation is still in progress"
+						});
+					}
 				}
 				const existingMeta = parseMeta(image.meta) || {};
 				// Refund previous attempt if it was never refunded (so we don't double-charge)
