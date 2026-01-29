@@ -32,7 +32,7 @@ export async function scheduleCreationJob({ payload, runCreationJob, log = conso
 		throw error;
 	}
 	if (isVercel && hasNonEmpty(qstashToken)) {
-		const callbackUrl = new URL("/api/worker/create", getBaseAppUrl()).toString();
+		const callbackUrl = new URL("/api/worker/create/", getBaseAppUrl()).toString();
 		const qstashBaseUrl = process.env.UPSTASH_QSTASH_URL;
 		const publishUrl = `${qstashBaseUrl}/v2/publish/${callbackUrl}`;
 
