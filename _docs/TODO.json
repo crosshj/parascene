@@ -1,43 +1,36 @@
 [
   {
-    "name": "Re-generate",
-    "description": "Regenerate from stored generation info.",
-    "cost": 56,
-    "impact": 100,
+    "name": "Evole | Re-generate",
+    "description": "use a creation as a stepping stone for another creation",
+    "cost": 40,
+    "impact": 82,
     "dependsOn": []
   },
   {
     "name": "Admin User CRUD",
     "description": "ability for admin to modify users",
-    "cost": 56,
+    "cost": 61,
     "impact": 83,
-    "dependsOn": []
-  },
-  {
-    "name": "BUG: Creation Failure",
-    "description": "sometimes a creation fails or results in a stuck image loading forever - this looks bad",
-    "cost": 69,
-    "impact": 100,
     "dependsOn": []
   },
   {
     "name": "Invite credits",
     "description": "Grant starter credits on invite acceptance; record inviter and source.",
-    "cost": 30,
+    "cost": 1,
     "impact": 40,
     "dependsOn": []
   },
   {
     "name": "Provider boosts",
     "description": "Server-scoped boosts increase provider credit yield with caps, no discovery lift.",
-    "cost": 70,
+    "cost": 93,
     "impact": 38,
     "dependsOn": []
   },
   {
     "name": "Invites & redemption",
     "description": "Optional invite onboarding via email or shareable token, with stored invite context.",
-    "cost": 73,
+    "cost": 100,
     "impact": 1,
     "dependsOn": [
       "Invite credits"
