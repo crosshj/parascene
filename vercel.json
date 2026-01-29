@@ -2,13 +2,13 @@
   "version": 2,
   "rewrites": [
     {
-      "source": "/api/worker/create",
-      "destination": "/api/worker/create"
+      "source": "/api/worker/create(?:/.*)?",
+      "destination": "/api/worker/create.js"
     },
     {
-      "source": "/(.*)",
+      "source": "/api/(.*)",
       "destination": "/api/index"
-    }
+    },
   ],
   "headers": [
     {
