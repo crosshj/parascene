@@ -23,6 +23,20 @@
     "dependsOn": []
   },
   {
+    "name": "Share includes prompt",
+    "description": "When a creation is generated from a prompt, include that prompt in the shared description/caption so recipients have useful context when the image is shared externally.",
+    "cost": 14,
+    "impact": 42,
+    "dependsOn": []
+  },
+  {
+    "name": "Create: auto-expand prompt",
+    "description": "Make the prompt input on the Create page auto-expand its rows as the user types (similar to the comment composer) to improve writing/editing long prompts.",
+    "cost": 9,
+    "impact": 36,
+    "dependsOn": []
+  },
+  {
     "name": "Comment reply notifications",
     "description": "Notify users when someone replies to their comment (even on someone else's creation) via in-app notifications, so they can return to the thread.",
     "cost": 48,
