@@ -19,6 +19,7 @@ import createCommentsRoutes from "../api_routes/comments.js";
 import createUserRoutes from "../api_routes/user.js";
 import createFollowsRoutes from "../api_routes/follows.js";
 import createTodoRoutes from "../api_routes/todo.js";
+import createYoutubeRoutes from "../api_routes/youtube.js";
 import {
 	authMiddleware,
 	clearAuthCookie,
@@ -138,6 +139,7 @@ app.use(createServersRoutes({ queries }));
 app.use(createTemplatesRoutes({ queries }));
 app.use(createPageRoutes({ queries, pagesDir }));
 app.use(createTodoRoutes());
+app.use(createYoutubeRoutes());
 
 app.use(async (err, req, res, next) => {
 	if (err?.name !== "UnauthorizedError") {

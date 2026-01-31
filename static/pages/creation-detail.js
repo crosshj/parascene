@@ -3,11 +3,36 @@ import { enableLikeButtons, getCreationLikeCount, initLikeButton } from '/shared
 import { fetchJsonWithStatusDeduped } from '/shared/api.js';
 import { getAvatarColor } from '/shared/avatar.js';
 import { fetchCreatedImageComments, postCreatedImageComment } from '/shared/comments.js';
-import { textWithCreationLinks } from '/shared/urls.js';
+import { hydrateYoutubeLinkTitles, textWithCreationLinks } from '/shared/urls.js';
 import '../components/modals/publish.js';
 import '../components/modals/creation-details.js';
 
 const html = String.raw;
+
+async function copyTextToClipboard(text) {
+	try {
+		if (navigator.clipboard?.writeText) {
+			await navigator.clipboard.writeText(text);
+			return true;
+		}
+	} catch {
+		// ignore
+	}
+	try {
+		const ta = document.createElement('textarea');
+		ta.value = text;
+		ta.style.position = 'fixed';
+		ta.style.left = '-9999px';
+		document.body.appendChild(ta);
+		ta.focus();
+		ta.select();
+		const ok = document.execCommand('copy');
+		document.body.removeChild(ta);
+		return ok;
+	} catch {
+		return false;
+	}
+}
 
 // Set up URL change detection BEFORE header component loads
 // This ensures we capture navigation events
@@ -361,6 +386,18 @@ async function loadCreation() {
 			<span class="creation-detail-author-handle">${creatorHandle}</span>
 		`;
 
+		const hasDetails = !!(meta && (meta.server_id !== undefined || meta.method || meta.args));
+		const hasEngagementActions = !!(isPublished && !isFailed);
+		const copyLinkButtonHtml = `
+			<button class="feed-card-action" type="button" data-copy-link-button aria-label="Copy link">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+					<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+				</svg>
+				<span data-copy-link-label>Copy link</span>
+			</button>
+		`;
+
 		detailContent.innerHTML = html`
 			<div class="creation-detail-author">
 				${creatorProfileHref ? html`
@@ -386,32 +423,36 @@ async function loadCreation() {
 			<div class="creation-detail-title${isUntitled ? ' creation-detail-title-untitled' : ''}">${escapeHtml(displayTitle)}</div>
 			${descriptionHtml}
 			<div class="creation-detail-meta">
-				${meta && (meta.server_id !== undefined || meta.method || meta.args) ? `
-				<button class="feed-card-action" type="button" data-creation-details-link>
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-						<circle cx="12" cy="12" r="10"></circle>
-						<path d="M12 8v8"></path>
-						<path d="M12 6h.01"></path>
-					</svg>
-					<span>Details</span>
-				</button>
-				${isPublished && !isFailed ? '<span>•</span>' : ''}
-				` : ``}
-				${isPublished && !isFailed ? `
-				<a class="feed-card-action creation-detail-comments-link" href="#comments" data-comments-link aria-label="Comments">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-						<path d="M21 15a4 4 0 0 1-4 4H8l-5 5V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
-					</svg>
-					<span class="feed-card-action-count" data-comment-count>0</span>
-				</a>
-				<span>•</span>
-				<button class="feed-card-action" type="button" aria-label="Like" data-like-button>
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-						<path d="M20.8 4.6a5 5 0 0 0-7.1 0L12 6.3l-1.7-1.7a5 5 0 1 0-7.1 7.1l1.7 1.7L12 21l7.1-7.6 1.7-1.7a5 5 0 0 0 0-7.1z"></path>
-					</svg>
-					<span class="feed-card-action-count" data-like-count>${likeCount}</span>
-				</button>
-				` : ''}
+				<div class="creation-detail-meta-left">
+					${hasDetails ? `
+					<button class="feed-card-action" type="button" data-creation-details-link>
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<circle cx="12" cy="12" r="10"></circle>
+							<path d="M12 8v8"></path>
+							<path d="M12 6h.01"></path>
+						</svg>
+						<span>Details</span>
+					</button>
+					` : ``}
+					${copyLinkButtonHtml}
+				</div>
+				<div class="creation-detail-meta-spacer" aria-hidden="true"></div>
+				<div class="creation-detail-meta-right">
+					${hasEngagementActions ? `
+					<a class="feed-card-action creation-detail-comments-link" href="#comments" data-comments-link aria-label="Comments">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<path d="M21 15a4 4 0 0 1-4 4H8l-5 5V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
+						</svg>
+						<span class="feed-card-action-count" data-comment-count>0</span>
+					</a>
+					<button class="feed-card-action" type="button" aria-label="Like" data-like-button>
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M20.8 4.6a5 5 0 0 0-7.1 0L12 6.3l-1.7-1.7a5 5 0 1 0-7.1 7.1l1.7 1.7L12 21l7.1-7.6 1.7-1.7a5 5 0 0 0 0-7.1z"></path>
+						</svg>
+						<span class="feed-card-action-count" data-like-count>${likeCount}</span>
+					</button>
+					` : ``}
+				</div>
 			</div>
 
 			${isPublished && !isFailed ? `
@@ -432,8 +473,8 @@ async function loadCreation() {
 					<label class="comments-sort-label" for="comments-sort">Sort:</label>
 
 					<select class="comments-sort-select" id="comments-sort" data-comments-sort>
-						<option value="desc">Most recent</option>
 						<option value="asc">Oldest</option>
+						<option value="desc">Most recent</option>
 					</select>
 				</div>
 			</div>
@@ -444,9 +485,35 @@ async function loadCreation() {
 			` : ''}
 		`;
 
+		// After rendering description (and initial scaffold), hydrate any YouTube link labels.
+		hydrateYoutubeLinkTitles(detailContent);
+
 		const likeButton = detailContent.querySelector('button[data-like-button]');
 		if (likeButton) {
 			initLikeButton(likeButton, creationWithLikes);
+		}
+
+		const copyLinkBtn = detailContent.querySelector('button[data-copy-link-button]');
+		const copyLinkLabel = detailContent.querySelector('[data-copy-link-label]');
+		if (copyLinkBtn instanceof HTMLButtonElement) {
+			copyLinkBtn.addEventListener('click', async () => {
+				const canonical = new URL(`/creations/${creationId}`, window.location.origin).toString();
+				const ok = await copyTextToClipboard(canonical);
+				if (!copyLinkLabel) return;
+
+				if (ok) {
+					copyLinkLabel.textContent = 'Copied';
+				} else {
+					copyLinkLabel.textContent = 'Copy failed';
+				}
+
+				window.setTimeout(() => {
+					// Only reset if the element still exists
+					if (copyLinkLabel && copyLinkLabel.isConnected) {
+						copyLinkLabel.textContent = 'Copy link';
+					}
+				}, 1500);
+			});
 		}
 
 		const detailsBtn = detailContent.querySelector('[data-creation-details-link]');
@@ -471,7 +538,7 @@ async function loadCreation() {
 
 		let commentsDidInitialHashScroll = false;
 		const commentsState = {
-			order: 'desc',
+			order: 'asc',
 			comments: [],
 			commentCount: 0
 		};
@@ -558,6 +625,9 @@ async function loadCreation() {
 					</div>
 				`;
 			}).join('');
+
+			// Comments were re-rendered; hydrate any YouTube link labels within them.
+			hydrateYoutubeLinkTitles(commentListEl);
 		}
 
 		async function loadComments({ scrollIfHash = false } = {}) {

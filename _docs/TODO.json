@@ -2,77 +2,56 @@
   {
     "name": "Admin User CRUD",
     "description": "ability for admin to modify users",
-    "cost": 66,
+    "cost": 63,
     "impact": 23,
-    "dependsOn": []
-  },
-  {
-    "name": "Mobile copy creation URL",
-    "description": "Add a copy/share affordance on mobile so users can copy a creation's canonical URL for pasting into creation descriptions or comments.",
-    "cost": 3,
-    "impact": 47,
-    "dependsOn": []
-  },
-  {
-    "name": "Create: auto-expand prompt",
-    "description": "Make the prompt input on the Create page auto-expand its rows as the user types (similar to the comment composer) to improve writing/editing long prompts.",
-    "cost": 1,
-    "impact": 8,
     "dependsOn": []
   },
   {
     "name": "Comment reply notifications",
     "description": "Notify users when someone replies to their comment (even on someone else's creation) via in-app notifications, so they can return to the thread.",
-    "cost": 68,
+    "cost": 65,
     "impact": 100,
     "dependsOn": []
   },
   {
     "name": "Community page: comment activity",
     "description": "Evolve the Servers page into a Community page with tabs for Servers and Comments; Comments highlights recent site-wide activity and links to creations with the latest discussion.",
-    "cost": 62,
+    "cost": 58,
     "impact": 78,
     "dependsOn": []
   },
   {
     "name": "Feature requests",
     "description": "Let users submit feature requests via a lightweight form, store them for review, and acknowledge submission (basic feedback loop).",
-    "cost": 18,
+    "cost": 10,
     "impact": 16,
     "dependsOn": []
   },
   {
     "name": "External image sharing",
     "description": "Allow sharing a created image with someone who is not a user, likely via a secure share link/token flow similar to invites (view-only by default, with clear revocation/expiration behavior).",
-    "cost": 85,
+    "cost": 84,
     "impact": 82,
     "dependsOn": []
   },
   {
     "name": "Onboarding: choose username",
     "description": "During signup, require the user to pick a unique username before they can proceed into the app; validate availability, reserve it, and improve the first-run experience.",
-    "cost": 40,
+    "cost": 34,
     "impact": 68,
-    "dependsOn": []
-  },
-  {
-    "name": "YouTube link transforms",
-    "description": "Detect YouTube links across the site (descriptions/comments) and transform them consistently (preview/embed) similar to how creation links are transformed today.",
-    "cost": 30,
-    "impact": 35,
     "dependsOn": []
   },
   {
     "name": "Invite credits",
     "description": "Grant starter credits on invite acceptance; record inviter and source.",
-    "cost": 10,
+    "cost": 1,
     "impact": 50,
     "dependsOn": []
   },
   {
     "name": "Provider boosts",
     "description": "Server-scoped boosts increase provider credit yield with caps, no discovery lift.",
-    "cost": 77,
+    "cost": 75,
     "impact": 1,
     "dependsOn": []
   },
