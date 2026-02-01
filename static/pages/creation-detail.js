@@ -36,6 +36,52 @@ async function copyTextToClipboard(text) {
 	}
 }
 
+function setupCollapsibleDescription(rootEl) {
+	const root = rootEl instanceof Element ? rootEl : document;
+	const wrap = root.querySelector('[data-description-wrap]');
+	const descriptionEl = root.querySelector('[data-description]');
+	const toggleBtn = root.querySelector('[data-description-toggle]');
+
+	if (!(wrap instanceof HTMLElement)) return;
+	if (!(descriptionEl instanceof HTMLElement)) return;
+	if (!(toggleBtn instanceof HTMLButtonElement)) return;
+
+	const maxLines = 10;
+	const computed = window.getComputedStyle(descriptionEl);
+	const lineHeightRaw = Number.parseFloat(computed.lineHeight || '');
+	const fontSizeRaw = Number.parseFloat(computed.fontSize || '');
+	const lineHeight = Number.isFinite(lineHeightRaw) ? lineHeightRaw : (Number.isFinite(fontSizeRaw) ? fontSizeRaw * 1.5 : 24);
+	const maxHeight = Math.round(lineHeight * maxLines);
+
+	// If description is short, keep it plain (no button).
+	// Use scrollHeight (full content) vs our 10-line cutoff.
+	wrap.style.setProperty('--ps-desc-max-height', `${maxHeight}px`);
+
+	// Default state: collapsed, but only keep it if it actually overflows.
+	wrap.classList.add('is-collapsed');
+
+	if (!descriptionEl.id) {
+		descriptionEl.id = 'creation-detail-description';
+	}
+	toggleBtn.setAttribute('aria-controls', descriptionEl.id);
+	toggleBtn.setAttribute('aria-expanded', 'false');
+	toggleBtn.textContent = 'View Full';
+
+	const overflows = descriptionEl.scrollHeight > (maxHeight + 1);
+	if (!overflows) {
+		wrap.classList.remove('is-collapsed');
+		toggleBtn.hidden = true;
+		return;
+	}
+
+	toggleBtn.hidden = false;
+	toggleBtn.addEventListener('click', () => {
+		const isCollapsed = wrap.classList.toggle('is-collapsed');
+		toggleBtn.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+		toggleBtn.textContent = isCollapsed ? 'View Full' : 'Collapse';
+	});
+}
+
 // Set up URL change detection BEFORE header component loads
 // This ensures we capture navigation events
 
@@ -463,7 +509,14 @@ async function loadCreation() {
 		if (descriptionText || historyStripHtml) {
 			descriptionHtml = html`
 				<div class="creation-detail-published${historyStripHtml ? ' has-history' : ''}">
-					${descriptionText ? html`<div class="creation-detail-description">${textWithCreationLinks(descriptionText)}</div>` : ''}
+					${descriptionText ? html`
+						<div class="creation-detail-description-wrap" data-description-wrap>
+							<div class="creation-detail-description" data-description>${textWithCreationLinks(descriptionText)}</div>
+							<div class="creation-detail-description-toggle-row">
+								<button type="button" class="btn-secondary creation-detail-description-toggle" data-description-toggle hidden>Show full description</button>
+							</div>
+						</div>
+					` : ''}
 					${historyStripHtml}
 				</div>
 			`;
@@ -626,6 +679,7 @@ async function loadCreation() {
 
 		// After rendering description (and initial scaffold), hydrate any YouTube link labels.
 		hydrateYoutubeLinkTitles(detailContent);
+		setupCollapsibleDescription(detailContent);
 
 		// Hydrate history thumbnails (best-effort).
 		if (historyIds.length > 0) {
