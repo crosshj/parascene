@@ -2,7 +2,7 @@ import { formatRelativeTime } from '../../shared/datetime.js';
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 import { getAvatarColor } from '../../shared/avatar.js';
 import { fetchLatestComments } from '../../shared/comments.js';
-import { textWithCreationLinks, hydrateYoutubeLinkTitles } from '../../shared/urls.js';
+import { textWithCreationLinks, hydrateYoutubeLinkTitles, hydrateXLinkTitles } from '../../shared/urls.js';
 import { attachAutoGrowTextarea } from '../../shared/autogrow.js';
 
 const html = String.raw;
@@ -246,6 +246,7 @@ class AppRouteServers extends HTMLElement {
 
 		// Comments were rendered; hydrate any YouTube link labels within them.
 		hydrateYoutubeLinkTitles(container);
+		hydrateXLinkTitles(container);
 	}
 
 	// Listen for server updates from modal

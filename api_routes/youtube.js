@@ -40,6 +40,21 @@ function normalizeUrl(raw) {
 	return value;
 }
 
+function extractYoutubeCreator({ authorUrl, authorName }) {
+	let handle = "";
+	try {
+		const parsed = new URL(String(authorUrl || ""));
+		const path = String(parsed.pathname || "");
+		const m = path.match(/^\/@([A-Za-z0-9._-]{2,})/);
+		if (m) handle = `@${m[1]}`;
+	} catch {
+		// ignore
+	}
+
+	const name = typeof authorName === "string" ? authorName.trim() : "";
+	return handle || name || "";
+}
+
 export default function createYoutubeRoutes() {
 	const router = express.Router();
 
@@ -83,7 +98,12 @@ export default function createYoutubeRoutes() {
 				return res.status(502).json({ error: "No title returned" });
 			}
 
-			return res.json({ title });
+			const creator = extractYoutubeCreator({
+				authorUrl: data?.author_url,
+				authorName: data?.author_name
+			});
+
+			return res.json({ title, creator });
 		} catch (error) {
 			return res.status(502).json({ error: "YouTube oEmbed fetch failed" });
 		}

@@ -3,7 +3,7 @@ import { enableLikeButtons, getCreationLikeCount, initLikeButton } from '/shared
 import { fetchJsonWithStatusDeduped } from '/shared/api.js';
 import { getAvatarColor } from '/shared/avatar.js';
 import { fetchCreatedImageComments, postCreatedImageComment } from '/shared/comments.js';
-import { hydrateYoutubeLinkTitles, textWithCreationLinks } from '/shared/urls.js';
+import { hydrateYoutubeLinkTitles, hydrateXLinkTitles, textWithCreationLinks } from '/shared/urls.js';
 import { attachAutoGrowTextarea } from '/shared/autogrow.js';
 import '../components/modals/publish.js';
 import '../components/modals/creation-details.js';
@@ -679,6 +679,7 @@ async function loadCreation() {
 
 		// After rendering description (and initial scaffold), hydrate any YouTube link labels.
 		hydrateYoutubeLinkTitles(detailContent);
+		hydrateXLinkTitles(detailContent);
 		setupCollapsibleDescription(detailContent);
 
 		// Hydrate history thumbnails (best-effort).
@@ -926,6 +927,7 @@ async function loadCreation() {
 
 			// Comments were re-rendered; hydrate any YouTube link labels within them.
 			hydrateYoutubeLinkTitles(commentListEl);
+			hydrateXLinkTitles(commentListEl);
 		}
 
 		async function loadComments({ scrollIfHash = false } = {}) {
