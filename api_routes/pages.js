@@ -45,9 +45,26 @@ export default function createPageRoutes({ queries, pagesDir }) {
 	router.get("/s/:version/:token/:bust?", async (req, res) => {
 		const version = String(req.params.version || "");
 		const token = String(req.params.token || "");
+		const bust = String(req.params.bust || "").trim();
 
 		const base = getBaseAppUrl();
 		const requestUrl = new URL(String(req.originalUrl || req.path || "/"), base).toString();
+
+		function clampText(value, { maxChars = 200 } = {}) {
+			const v = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+			if (!v) return "";
+			if (v.length <= maxChars) return v;
+			return `${v.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
+		}
+
+		function ensureMinText(value, { minChars = 0, suffix = "" } = {}) {
+			const v = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+			if (!v) return suffix ? suffix.trim() : "";
+			if (v.length >= minChars) return v;
+			if (!suffix) return v;
+			const joiner = /[.!?]$/.test(v) ? " " : " — ";
+			return `${v}${joiner}${suffix}`.trim();
+		}
 
 		function sendPrettyFallback({ title = "Parascene", message = "This share link is invalid or no longer available." } = {}) {
 			let html = `
@@ -216,18 +233,32 @@ export default function createPageRoutes({ queries, pagesDir }) {
 				// ignore
 			}
 
-			const imageUrl = `${base}/api/share/${encodeURIComponent(version)}/${encodeURIComponent(token)}/image`;
+			const imageUrlBase = `${base}/api/share/${encodeURIComponent(version)}/${encodeURIComponent(token)}/image`;
+			const imageUrl = `${imageUrlBase}?variant=wide&v=${encodeURIComponent(bust || token)}`;
+			const secureImageUrl = imageUrl.startsWith("http://") ? `https://${imageUrl.slice("http://".length)}` : imageUrl;
 
 			const titleRaw = typeof image.title === "string" ? image.title.trim() : "";
 			const hasTitle = Boolean(titleRaw);
 			const metaTitleRaw = hasTitle ? titleRaw : `Creation #${image.id}`;
 			const imageAlt = hasTitle ? titleRaw : "Parascene creation";
-			const title = `Parascene — ${metaTitleRaw}`;
-			const description = `A creation shared by ${sharerHandle || sharerName} on Parascene. Create your own for free.`;
+			const title = clampText(
+				ensureMinText(`Parascene — ${metaTitleRaw}`, {
+					minChars: 30,
+					suffix: "make something beautiful"
+				}),
+				{ maxChars: 70 }
+			);
+			const description = clampText(
+				ensureMinText(`A creation shared by ${sharerHandle || sharerName} on Parascene.`, {
+					minChars: 110,
+					suffix: "Explore the image, then create your own for free in minutes."
+				}),
+				{ maxChars: 200 }
+			);
 
-			const width = Number(image.width ?? 0);
-			const height = Number(image.height ?? 0);
-			const hasDims = Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0;
+			const width = 1200;
+			const height = 675;
+			const hasDims = true;
 
 			const heroSharer = sharerHandle || sharerName;
 			const heroCreator = creatorHandle || creatorName;
@@ -252,6 +283,8 @@ export default function createPageRoutes({ queries, pagesDir }) {
 	<meta property="og:description" content="${escapeHtml(description)}" />
 	<meta property="og:url" content="${escapeHtml(requestUrl)}" />
 	<meta property="og:image" content="${escapeHtml(imageUrl)}" />
+	<meta property="og:image:secure_url" content="${escapeHtml(secureImageUrl)}" />
+	<meta property="og:image:type" content="image/png" />
 	${hasDims ? `<meta property="og:image:width" content="${width}" />` : ""}
 	${hasDims ? `<meta property="og:image:height" content="${height}" />` : ""}
 	<meta property="og:image:alt" content="${escapeHtml(imageAlt)}" />
