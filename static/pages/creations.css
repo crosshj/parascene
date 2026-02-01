@@ -457,6 +457,10 @@ body.creation-detail-page main>section:first-of-type {
 	border-bottom: 1px solid var(--border);
 }
 
+.creation-detail-published.has-history {
+	padding-bottom: 18px;
+}
+
 .creation-detail-published-label {
 	font-size: 0.9rem;
 	color: var(--text-muted);
@@ -472,6 +476,100 @@ body.creation-detail-page main>section:first-of-type {
 	overflow-wrap: break-word;
 	word-wrap: break-word;
 	word-break: break-word;
+}
+
+.creation-detail-history {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 0;
+	margin-bottom: 0;
+	overflow-x: auto;
+	padding: 6px 0;
+}
+
+.creation-detail-history-wrap {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	margin-top: 14px;
+}
+
+.creation-detail-history-label {
+	font-size: 0.75rem;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text-muted);
+}
+
+.creation-detail-history-thumb-link {
+	width: 128px;
+	height: 128px;
+	border-radius: 0;
+	overflow: hidden;
+	border: 1px solid var(--border);
+	background: var(--surface-muted);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 auto;
+	text-decoration: none;
+	position: relative;
+}
+
+.creation-detail-history-thumb-link:hover {
+	border-color: var(--accent);
+}
+
+.creation-detail-history-thumb-link:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
+
+.creation-detail-history-thumb {
+	width: 100%;
+	height: 100%;
+	display: block;
+	object-fit: cover;
+	border-radius: 0;
+}
+
+.creation-detail-history-fallback {
+	font-size: 0.9rem;
+	font-weight: 700;
+	color: color-mix(in srgb, var(--text) 55%, transparent);
+}
+
+.creation-detail-history-current {
+	width: 128px;
+	height: 128px;
+	border-radius: 0;
+	overflow: hidden;
+	border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+	background: transparent;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 auto;
+	color: var(--text-muted);
+	pointer-events: none;
+}
+
+.creation-detail-history-current-text {
+	font-size: 0.8rem;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	opacity: 0.75;
+}
+
+.creation-detail-history-arrow {
+	color: var(--text-muted);
+	font-size: 1.15rem;
+	line-height: 1;
+	opacity: 0.9;
+	flex: 0 0 auto;
 }
 
 .creation-detail-meta {

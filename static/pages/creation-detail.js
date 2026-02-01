@@ -214,6 +214,18 @@ async function loadCreation() {
 				.replace(/'/g, '&#39;');
 		}
 
+		async function fetchCreationThumbUrl(id) {
+			try {
+				const res = await fetch(`/api/create/images/${id}`, { credentials: 'include' });
+				if (!res.ok) return null;
+				const c = await res.json().catch(() => null);
+				const thumb = c?.thumbnail_url || c?.url || null;
+				return (typeof thumb === 'string' && thumb.trim()) ? thumb.trim() : null;
+			} catch {
+				return null;
+			}
+		}
+
 		// Update publish button - hide if not owner/admin, already published, or creation not successfully completed
 		const publishBtn = document.querySelector('[data-publish-btn]');
 		if (publishBtn) {
@@ -339,15 +351,69 @@ async function loadCreation() {
 		}
 
 		// Show description whenever it exists, regardless of publication status
-		let descriptionHtml = '';
-		const descriptionText = typeof creation.description === 'string' ? creation.description.trim() : '';
-		if (descriptionText) {
-			descriptionHtml = html`
-				<div class="creation-detail-published">
-					<div class="creation-detail-description">${textWithCreationLinks(descriptionText)}</div>
+		// History thumbnails (mutations lineage)
+		const historyRaw = meta?.history;
+		const historyIds = Array.isArray(historyRaw)
+			? historyRaw.map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0)
+			: [];
+
+		const historyChainIds = [];
+		const seenHistoryIds = new Set();
+		for (const id of historyIds) {
+			if (seenHistoryIds.has(id)) continue;
+			seenHistoryIds.add(id);
+			historyChainIds.push(id);
+		}
+		if (!seenHistoryIds.has(creationId)) {
+			historyChainIds.push(creationId);
+		}
+
+		const currentIndicatorHtml = `
+			<span class="creation-detail-history-current" aria-label="Current creation">
+				<span class="creation-detail-history-current-text">current</span>
+			</span>
+		`;
+
+		let historyStripHtml = '';
+		if (historyIds.length > 0 && historyChainIds.length >= 2) {
+			const nonCurrentIds = historyChainIds.filter((id) => id !== creationId);
+			const parts = nonCurrentIds.map((id) => `
+				<a
+					class="creation-detail-history-thumb-link"
+					href="/creations/${id}"
+					aria-label="${escapeHtml(`Go to creation #${id}`)}"
+					data-history-id="${id}"
+				>
+					<span class="creation-detail-history-fallback" data-history-fallback>#${id}</span>
+					<img class="creation-detail-history-thumb" data-history-img alt="" loading="lazy" style="display: none;" />
+				</a>
+				<span class="creation-detail-history-arrow" aria-hidden="true">→</span>
+			`).join('');
+
+			historyStripHtml = html`
+				<div class="creation-detail-history-wrap">
+					<div class="creation-detail-history-label">LINEAGE</div>
+					<div class="creation-detail-history" data-creation-history>
+						${parts}${currentIndicatorHtml}
+					</div>
 				</div>
 			`;
 		}
+
+		// Show description block if we have either description or history.
+		let descriptionHtml = '';
+		const descriptionText = typeof creation.description === 'string' ? creation.description.trim() : '';
+		if (descriptionText || historyStripHtml) {
+			descriptionHtml = html`
+				<div class="creation-detail-published${historyStripHtml ? ' has-history' : ''}">
+					${descriptionText ? html`<div class="creation-detail-description">${textWithCreationLinks(descriptionText)}</div>` : ''}
+					${historyStripHtml}
+				</div>
+			`;
+		}
+
+		// (Keep `historyStripHtml` empty now; it lives inside `descriptionHtml` above the border line.)
+		historyStripHtml = '';
 
 		// Get creator information
 		const creatorUserName = typeof creation?.creator?.user_name === 'string' ? creation.creator.user_name.trim() : '';
@@ -503,6 +569,42 @@ async function loadCreation() {
 
 		// After rendering description (and initial scaffold), hydrate any YouTube link labels.
 		hydrateYoutubeLinkTitles(detailContent);
+
+		// Hydrate history thumbnails (best-effort).
+		if (historyIds.length > 0) {
+			const historyRoot = detailContent.querySelector('[data-creation-history]');
+			if (historyRoot) {
+				const thumbMap = new Map();
+
+				const idsToFetch = historyChainIds.filter((id) => id !== creationId);
+				const results = await Promise.allSettled(idsToFetch.map((id) => fetchCreationThumbUrl(id)));
+				for (let i = 0; i < idsToFetch.length; i++) {
+					const id = idsToFetch[i];
+					const r = results[i];
+					const url = r.status === 'fulfilled' ? r.value : null;
+					if (url) thumbMap.set(id, url);
+				}
+
+				const links = Array.from(historyRoot.querySelectorAll('a[data-history-id]'));
+				for (const a of links) {
+					if (!(a instanceof HTMLAnchorElement)) continue;
+					const id = Number(a.dataset.historyId);
+					if (!Number.isFinite(id) || id <= 0) continue;
+					const url = thumbMap.get(id) || null;
+					if (!url) continue;
+
+					const img = a.querySelector('img[data-history-img]');
+					const fallback = a.querySelector('[data-history-fallback]');
+					if (img instanceof HTMLImageElement) {
+						img.src = url;
+						img.style.display = '';
+					}
+					if (fallback instanceof HTMLElement) {
+						fallback.style.display = 'none';
+					}
+				}
+			}
+		}
 
 		const likeButton = detailContent.querySelector('button[data-like-button]');
 		if (likeButton) {
