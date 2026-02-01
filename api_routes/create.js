@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
+import sharp from "sharp";
 import { getThumbnailUrl } from "./utils/url.js";
 import { getBaseAppUrl } from "./utils/url.js";
 import { runCreationJob, PROVIDER_TIMEOUT_MS } from "./utils/creationJob.js";
@@ -10,6 +11,27 @@ import { ACTIVE_SHARE_VERSION, mintShareToken, verifyShareToken } from "./utils/
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+function isPng(buffer) {
+	return (
+		buffer &&
+		Buffer.isBuffer(buffer) &&
+		buffer.length >= 8 &&
+		buffer[0] === 0x89 &&
+		buffer[1] === 0x50 &&
+		buffer[2] === 0x4e &&
+		buffer[3] === 0x47 &&
+		buffer[4] === 0x0d &&
+		buffer[5] === 0x0a &&
+		buffer[6] === 0x1a &&
+		buffer[7] === 0x0a
+	);
+}
+
+async function ensurePngBuffer(buffer) {
+	if (isPng(buffer)) return buffer;
+	return await sharp(buffer, { failOn: "none" }).png().toBuffer();
+}
 
 export default function createCreateRoutes({ queries, storage }) {
 	const router = express.Router();
@@ -54,11 +76,12 @@ export default function createCreateRoutes({ queries, storage }) {
 
 			// Fetch image buffer from storage
 			const imageBuffer = await storage.getImageBuffer(filename, { variant });
+			const png = await ensurePngBuffer(imageBuffer);
 
 			// Set appropriate content type
 			res.setHeader('Content-Type', 'image/png');
 			res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
-			res.send(imageBuffer);
+			res.send(png);
 		} catch (error) {
 			// console.error("Error serving image:", error);
 			if (error.message && error.message.includes("not found")) {

@@ -1,4 +1,5 @@
 import { buildProviderHeaders } from "./providerAuth.js";
+import sharp from "sharp";
 
 const PROVIDER_TIMEOUT_MS = 50_000;
 const DEFAULT_WIDTH = 1024;
@@ -47,6 +48,34 @@ function safeErrorMessage(err) {
 		return JSON.stringify(err);
 	} catch {
 		return "Error";
+	}
+}
+
+function isPng(buffer) {
+	return (
+		buffer &&
+		Buffer.isBuffer(buffer) &&
+		buffer.length >= 8 &&
+		buffer[0] === 0x89 &&
+		buffer[1] === 0x50 &&
+		buffer[2] === 0x4e &&
+		buffer[3] === 0x47 &&
+		buffer[4] === 0x0d &&
+		buffer[5] === 0x0a &&
+		buffer[6] === 0x1a &&
+		buffer[7] === 0x0a
+	);
+}
+
+async function ensurePngBuffer(buffer) {
+	if (isPng(buffer)) return buffer;
+	try {
+		return await sharp(buffer, { failOn: "none" }).png().toBuffer();
+	} catch (err) {
+		const msg = safeErrorMessage(err);
+		const e = new Error(`Failed to convert image to PNG: ${msg}`);
+		e.code = "IMAGE_ENCODE_FAILED";
+		throw e;
 	}
 }
 
@@ -204,7 +233,13 @@ export async function runCreationJob({ queries, storage, payload }) {
 			throw err;
 		}
 
-		imageBuffer = Buffer.from(await providerResponse.arrayBuffer());
+		const providerContentType = String(providerResponse.headers.get("content-type") || "").toLowerCase();
+		if (providerContentType && !providerContentType.includes("image/png")) {
+			logCreationWarn("Provider returned non-PNG; converting to PNG", { providerContentType });
+		}
+
+		const rawBuffer = Buffer.from(await providerResponse.arrayBuffer());
+		imageBuffer = await ensurePngBuffer(rawBuffer);
 
 		const headerColor = providerResponse.headers.get("X-Image-Color");
 		const headerWidth = providerResponse.headers.get("X-Image-Width");
