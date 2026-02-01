@@ -1,5 +1,6 @@
 import { submitCreationWithPending } from '/shared/createSubmit.js';
 import { fetchJsonWithStatusDeduped } from '/shared/api.js';
+import { attachAutoGrowTextarea } from '/shared/autogrow.js';
 
 const html = String.raw;
 
@@ -457,14 +458,7 @@ async function loadEditPage() {
 
 		// Auto-grow prompt like comments, min 3 rows.
 		if (promptEl instanceof HTMLTextAreaElement) {
-			promptEl.style.height = 'auto';
-			const baseHeight = promptEl.scrollHeight;
-			const autoGrow = () => {
-				promptEl.style.height = 'auto';
-				promptEl.style.height = `${Math.max(baseHeight, promptEl.scrollHeight)}px`;
-			};
-			autoGrow();
-			promptEl.addEventListener('input', autoGrow);
+			attachAutoGrowTextarea(promptEl);
 		}
 
 		// Load credits (match create)

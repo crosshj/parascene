@@ -1,6 +1,7 @@
 // Global components that all pages will use
 import './components/navigation/index.js';
 import './components/navigation/mobile.js';
+import './components/elements/tabs.js';
 import './components/modals/profile.js';
 import './components/modals/credits.js';
 import './components/modals/notifications.js';
@@ -16,6 +17,7 @@ import './components/routes/create.js';
 import './components/routes/templates.js';
 import './components/routes/users.js';
 import './components/routes/todo.js';
+import { refreshAutoGrowTextareas } from './shared/autogrow.js';
 
 // Wait for DOM and custom elements to be ready before showing content
 async function initPage() {
@@ -30,6 +32,7 @@ async function initPage() {
 	const customElementTags = [
 		'app-navigation',
 		'app-navigation-mobile',
+		'app-tabs',
 		'app-modal-profile',
 		'app-modal-credits',
 		'app-modal-notifications',
@@ -60,9 +63,45 @@ async function initPage() {
 
 	// Show the page
 	document.body.classList.add('loaded');
+
+	// Auto-grow textareas (run after components + layout settle)
+	try {
+		refreshAutoGrowTextareas(document);
+	} catch {
+		// ignore
+	}
+	try {
+		const fonts = document.fonts;
+		if (fonts?.ready && typeof fonts.ready.then === 'function') {
+			fonts.ready.then(() => refreshAutoGrowTextareas(document)).catch(() => {});
+		}
+	} catch {
+		// ignore
+	}
 }
 
 initPage();
+
+// Keep autogrow heights correct when UI changes visibility/layout.
+document.addEventListener('tab-change', () => {
+	try { refreshAutoGrowTextareas(document); } catch { /* ignore */ }
+});
+document.addEventListener('route-change', () => {
+	try { refreshAutoGrowTextareas(document); } catch { /* ignore */ }
+});
+window.addEventListener('resize', () => {
+	try { refreshAutoGrowTextareas(document); } catch { /* ignore */ }
+});
+window.addEventListener('orientationchange', () => {
+	try { refreshAutoGrowTextareas(document); } catch { /* ignore */ }
+});
+
+document.addEventListener('modal-opened', () => {
+	setTimeout(() => {
+		try { refreshAutoGrowTextareas(document); } catch { /* ignore */ }
+	}, 0);
+});
+
 
 function registerServiceWorker() {
 	if (!("serviceWorker" in navigator)) {

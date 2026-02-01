@@ -20,6 +20,7 @@ import createUserRoutes from "../api_routes/user.js";
 import createFollowsRoutes from "../api_routes/follows.js";
 import createTodoRoutes from "../api_routes/todo.js";
 import createYoutubeRoutes from "../api_routes/youtube.js";
+import createFeatureRequestRoutes from "../api_routes/feature_requests.js";
 import { computeWelcome } from "../api_routes/utils/welcome.js";
 import {
 	authMiddleware,
@@ -181,6 +182,7 @@ app.use(createTemplatesRoutes({ queries }));
 app.use(createPageRoutes({ queries, pagesDir }));
 app.use(createTodoRoutes());
 app.use(createYoutubeRoutes());
+app.use(createFeatureRequestRoutes({ queries }));
 
 app.use(async (err, req, res, next) => {
 	if (err?.name !== "UnauthorizedError") {

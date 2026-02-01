@@ -4,6 +4,7 @@ import { fetchJsonWithStatusDeduped } from '/shared/api.js';
 import { getAvatarColor } from '/shared/avatar.js';
 import { fetchCreatedImageComments, postCreatedImageComment } from '/shared/comments.js';
 import { hydrateYoutubeLinkTitles, textWithCreationLinks } from '/shared/urls.js';
+import { attachAutoGrowTextarea } from '/shared/autogrow.js';
 import '../components/modals/publish.js';
 import '../components/modals/creation-details.js';
 
@@ -854,16 +855,13 @@ async function loadCreation() {
 			const hasText = commentTextarea.value.trim().length > 0;
 			commentSubmitRow.style.display = hasText ? '' : 'none';
 		}
-
-		function autoGrowTextarea() {
-			if (!(commentTextarea instanceof HTMLTextAreaElement)) return;
-			commentTextarea.style.height = 'auto';
-			commentTextarea.style.height = `${commentTextarea.scrollHeight}px`;
-		}
+		const refreshCommentTextarea = commentTextarea instanceof HTMLTextAreaElement
+			? attachAutoGrowTextarea(commentTextarea)
+			: () => {};
 
 		if (commentTextarea instanceof HTMLTextAreaElement) {
 			commentTextarea.addEventListener('input', () => {
-				autoGrowTextarea();
+				refreshCommentTextarea();
 				setSubmitVisibility();
 			});
 		}
@@ -882,7 +880,7 @@ async function loadCreation() {
 					}
 
 					commentTextarea.value = '';
-					autoGrowTextarea();
+					refreshCommentTextarea();
 					setSubmitVisibility();
 
 					// Reload list to ensure correct ordering + count.
@@ -902,7 +900,7 @@ async function loadCreation() {
 		});
 
 		// Initial load + deep-link scroll support.
-		autoGrowTextarea();
+		refreshCommentTextarea();
 		setSubmitVisibility();
 		void loadComments({ scrollIfHash: true });
 

@@ -1,5 +1,6 @@
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 import { submitCreationWithPending } from '../../shared/createSubmit.js';
+import { attachAutoGrowTextarea } from '../../shared/autogrow.js';
 
 const html = String.raw;
 
@@ -419,8 +420,6 @@ class AppRouteCreate extends HTMLElement {
 					input.className = 'form-input';
 					input.placeholder = field.label || fieldKey;
 					input.rows = typeof field.rows === 'number' && field.rows > 0 ? field.rows : 3;
-					input.style.resize = 'none';
-					input.style.overflowY = 'hidden';
 					if (field.required) {
 						input.required = true;
 					}
@@ -428,23 +427,12 @@ class AppRouteCreate extends HTMLElement {
 					// Initialize field value
 					this.fieldValues[fieldKey] = '';
 
-					// Auto-grow like mutate/comments, with a minimum height.
-					let baseHeight = 0;
-					const autoGrow = () => {
-						if (!(input instanceof HTMLTextAreaElement)) return;
-						input.style.height = 'auto';
-						if (!baseHeight) baseHeight = input.scrollHeight;
-						input.style.height = `${Math.max(baseHeight, input.scrollHeight)}px`;
-					};
+					attachAutoGrowTextarea(input);
 
 					input.addEventListener('input', (e) => {
 						this.fieldValues[fieldKey] = e.target.value;
-						autoGrow();
 						this.updateButtonState();
 					});
-
-					// After insertion, compute correct base height.
-					requestAnimationFrame(() => autoGrow());
 				} else {
 					input = document.createElement('input');
 					input.type = field.type || 'text';

@@ -3,6 +3,7 @@ import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 import { getAvatarColor } from '../../shared/avatar.js';
 import { fetchLatestComments } from '../../shared/comments.js';
 import { textWithCreationLinks, hydrateYoutubeLinkTitles } from '../../shared/urls.js';
+import { attachAutoGrowTextarea } from '../../shared/autogrow.js';
 
 const html = String.raw;
 
@@ -21,30 +22,50 @@ class AppRouteServers extends HTMLElement {
       <div class="servers-route">
         <div class="route-header">
           <h3>Connect</h3>
-          <p>See the latest comments across the site and manage image generation servers.</p>
+          <p>See what’s happening across parascene, manage your image generation servers, and send feature requests directly to the team.</p>
         </div>
-		<div class="route-header">
-			<h4>Latest Comments</h4>
-		</div>
-		<div class="comment-list" data-comments-container>
-			<div class="route-empty route-loading">
-				<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
-			</div>
-		</div>
+		<app-tabs>
+			<tab data-id="latest-comments" label="Comments" default>
+				<div class="comment-list" data-comments-container>
+					<div class="route-empty route-loading">
+						<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
+					</div>
+				</div>
+			</tab>
 
-		<div class="route-header">
-			<h4>Servers</h4>
-		</div>
-		<div class="route-cards admin-cards" data-servers-container>
-			<div class="route-empty route-loading">
-				<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
-			</div>
-		</div>
+			<tab data-id="servers" label="Servers">
+				<div class="route-cards admin-cards" data-servers-container>
+					<div class="route-empty route-loading">
+						<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
+					</div>
+				</div>
+			</tab>
+
+			<tab data-id="feature-requests" label="Feature Requests">
+				<div class="route-header">
+					<p>Tell us what you want to see next. We read every submission.</p>
+				</div>
+				<div class="alert" data-feature-request-status hidden></div>
+				<form data-feature-request-form>
+					<textarea
+						name="message"
+						rows="10"
+						maxlength="5000"
+						placeholder="What should we build? What problem does it solve?"
+						aria-label="Feature request details"
+						data-feature-request-message
+						required
+					></textarea>
+					<button type="submit" class="btn-primary btn-inline" data-feature-request-submit>Send</button>
+				</form>
+			</tab>
+		</app-tabs>
       </div>
     `;
 
 		this.loadLatestComments();
 		this.loadServers();
+		this.setupFeatureRequestForm();
 	}
 
 	async loadLatestComments() {
@@ -231,6 +252,120 @@ class AppRouteServers extends HTMLElement {
 	setupEventListeners() {
 		document.addEventListener('server-updated', () => {
 			this.loadServers({ force: true });
+		});
+	}
+
+	setupFeatureRequestForm() {
+		const form = this.querySelector('[data-feature-request-form]');
+		if (!(form instanceof HTMLFormElement)) return;
+
+		const status = this.querySelector('[data-feature-request-status]');
+		const submit = this.querySelector('[data-feature-request-submit]');
+		const messageEl = this.querySelector('[data-feature-request-message]');
+		const refreshMessage = messageEl instanceof HTMLTextAreaElement
+			? attachAutoGrowTextarea(messageEl)
+			: () => {};
+
+		let statusTimer = null;
+
+		const setStatus = ({ type, text } = {}) => {
+			if (!(status instanceof HTMLElement)) return;
+			if (statusTimer) {
+				clearTimeout(statusTimer);
+				statusTimer = null;
+			}
+			status.hidden = !text;
+			status.classList.toggle('error', type === 'error');
+			if (!text) {
+				status.textContent = '';
+				return;
+			}
+
+			// Render a dismissible alert.
+			status.innerHTML = `
+				<span>${escapeHtml(text)}</span>
+				<button type="button" class="alert-close" data-alert-close aria-label="Dismiss">✕</button>
+			`;
+
+			const close = status.querySelector('[data-alert-close]');
+			if (close instanceof HTMLButtonElement) {
+				close.addEventListener('click', () => {
+					setStatus({ type: 'info', text: '' });
+				});
+			}
+
+			// Auto-dismiss non-error notices.
+			if (type !== 'error') {
+				statusTimer = setTimeout(() => {
+					setStatus({ type: 'info', text: '' });
+				}, 4000);
+			}
+		};
+
+		form.addEventListener('submit', async (e) => {
+			e.preventDefault();
+			setStatus({ type: 'info', text: '' });
+
+			const message = String(form.elements.message.value || '').trim();
+			const context = {
+				route: (document.documentElement?.dataset?.route || window.__CURRENT_ROUTE__ || '').toString(),
+				referrer: (document.referrer || '').toString(),
+				timezone: (() => {
+					try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; }
+				})(),
+				locale: (navigator.language || '').toString(),
+				platform: (navigator.platform || '').toString(),
+				colorScheme: (() => {
+					try { return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; } catch { return ''; }
+				})(),
+				reducedMotion: (() => {
+					try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'reduce' : 'no-preference'; } catch { return ''; }
+				})(),
+				network: (() => {
+					const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+					const effectiveType = conn?.effectiveType ? String(conn.effectiveType) : '';
+					const saveData = typeof conn?.saveData === 'boolean' ? (conn.saveData ? 'save-data' : '') : '';
+					return [effectiveType, saveData].filter(Boolean).join(' ');
+				})(),
+				viewportWidth: window.innerWidth || 0,
+				viewportHeight: window.innerHeight || 0,
+				screenWidth: window.screen?.width || 0,
+				screenHeight: window.screen?.height || 0,
+				devicePixelRatio: window.devicePixelRatio || 1
+			};
+
+			if (!message) {
+				setStatus({ type: 'error', text: 'Please share your idea.' });
+				return;
+			}
+
+			if (submit instanceof HTMLButtonElement) {
+				submit.disabled = true;
+				submit.textContent = 'Sending…';
+			}
+
+			try {
+				const response = await fetch('/api/feature-requests', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					credentials: 'include',
+					body: JSON.stringify({ message, context })
+				});
+				const data = await response.json().catch(() => ({}));
+				if (!response.ok) {
+					throw new Error(data.error || 'Failed to send feature request.');
+				}
+				form.reset();
+				refreshMessage();
+				setStatus({ type: 'info', text: 'Sent. Thanks — we’ll review it soon.' });
+			} catch (err) {
+				setStatus({ type: 'error', text: err?.message || 'Failed to send feature request.' });
+			} finally {
+				if (submit instanceof HTMLButtonElement) {
+					submit.disabled = false;
+					submit.textContent = 'Send';
+				}
+			}
 		});
 	}
 

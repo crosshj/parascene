@@ -411,10 +411,38 @@ form {
 	border: 1px solid var(--border);
 	background: var(--surface-strong);
 	color: var(--text);
+	margin-bottom: 12px;
+	position: relative;
+	padding-right: 44px;
 }
 
 .alert p {
 	margin: 0;
+}
+
+.alert-close {
+	position: absolute;
+	top: 8px;
+	right: 8px;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	border-radius: 6px;
+	border: 1px solid transparent;
+	background: transparent;
+	color: inherit;
+	cursor: pointer;
+	display: grid;
+	place-items: center;
+}
+
+.alert-close:hover {
+	background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.alert-close:focus-visible {
+	outline: none;
+	box-shadow: 0 0 0 2px var(--focus);
 }
 
 .alert.error {
@@ -643,6 +671,12 @@ button:active {
 	transform: translateY(1px);
 }
 
+/* Keep buttons from stretching in grid layouts */
+.btn-inline {
+	justify-self: start;
+	width: auto;
+}
+
 /* Primary button style */
 .btn-primary,
 button.btn-primary,
@@ -835,6 +869,95 @@ app-nav-bar {
 
 [data-route-content].active {
 	display: block;
+}
+
+/* ============================================
+   Tabs (app-tabs)
+   ============================================ */
+
+app-tabs {
+	display: block;
+}
+
+app-tabs > tab {
+	display: block;
+}
+
+app-tabs > tab[hidden] {
+	display: none;
+}
+
+app-tabs .app-tabs {
+	display: flex;
+	align-items: center;
+	gap: 28px;
+	padding: 0;
+	border-bottom: 1px solid var(--border);
+	background: transparent;
+	box-shadow: none;
+	overflow-x: auto;
+	overflow-y: hidden;
+	-webkit-overflow-scrolling: touch;
+	scrollbar-width: none;
+	overscroll-behavior-x: contain;
+}
+
+app-tabs .app-tabs::-webkit-scrollbar {
+	width: 0;
+	height: 0;
+}
+
+app-tabs .app-tabs-button {
+	appearance: none;
+	border: none;
+	background: transparent;
+	color: var(--text-muted);
+	font: inherit;
+	font-size: 0.75rem;
+	font-weight: 700;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	padding: 14px 0 12px;
+	cursor: pointer;
+	white-space: nowrap;
+	position: relative;
+}
+
+app-tabs .app-tabs-button:hover {
+	color: var(--text);
+}
+
+app-tabs .app-tabs-button.is-active {
+	color: color-mix(in srgb, var(--text) 20%, var(--accent));
+}
+
+app-tabs .app-tabs-button::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: -1px;
+	height: 2px;
+	background: transparent;
+	border-radius: 999px;
+}
+
+app-tabs .app-tabs-button.is-active::after {
+	background: color-mix(in srgb, var(--text) 20%, var(--accent));
+}
+
+app-tabs .app-tabs-button:focus-visible {
+	outline: none;
+	box-shadow: none;
+	border-radius: 0;
+}
+
+app-tabs .app-tabs-button:focus-visible::after {
+	background: var(--accent);
+}
+
+app-tabs .app-tabs-panel {
+	margin-top: 24px;
 }
 
 /* ============================================

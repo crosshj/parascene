@@ -44,11 +44,11 @@ function renderImpersonationBar({ originalRecipient, reason } = {}) {
 // ctaText: Text for the call-to-action button (e.g., "Visit Us", "View the creation")
 // ctaUrl: Full URL for the CTA link (e.g., "https://parascene.crosshj.com" or "https://parascene.crosshj.com/creations/123")
 //         Defaults to base URL (homepage) if not provided
-function baseEmailLayout({ preheader, title, bodyHtml, ctaText, ctaUrl = getBaseAppUrl(), footerText, topNotice }) {
+function baseEmailLayout({ preheader, title, bodyHtml, ctaText, ctaUrl = getBaseAppUrl(), footerText, topNotice, suppressCta = false }) {
 	const safePreheader = escapeHtml(preheader || "");
 	const safeTitle = escapeHtml(title || "");
 	const safeFooter = escapeHtml(footerText || `© ${new Date().getFullYear()} ${BRAND_NAME}. All rights reserved.`);
-	const ctaBlock = ctaText
+	const ctaBlock = (!suppressCta && ctaText)
 		? html`
       <div style="margin:28px 0 12px; text-align:center;">
         <a href="${ctaUrl}"
@@ -229,7 +229,165 @@ export function renderCommentReceived({
 	return { subject, html: emailHtml, text };
 }
 
+export function renderFeatureRequest({
+	requesterName = "Someone",
+	requesterEmail = "",
+	requesterUserId = null,
+	requesterUserName = "",
+	requesterDisplayName = "",
+	requesterRole = "",
+	requesterCreatedAt = null,
+	message = "",
+	userAgent = "",
+	acceptLanguage = "",
+	referer = "",
+	forwardedFor = "",
+	ip = "",
+	ips = [],
+	context = null,
+	submittedAt = null
+} = {}) {
+	const safeRequesterName = escapeHtml(requesterName || "Someone");
+	const safeRequesterEmail = escapeHtml(requesterEmail || "unknown");
+	const safeUserId = escapeHtml(
+		Number.isFinite(Number(requesterUserId)) ? Number(requesterUserId) : "unknown"
+	);
+	const safeUserName = escapeHtml(requesterUserName || "");
+	const safeDisplayName = escapeHtml(requesterDisplayName || "");
+	const safeRole = escapeHtml(requesterRole || "");
+	const safeUserCreatedAt = escapeHtml(requesterCreatedAt || "");
+	const safeMessage = escapeHtml(truncateMiddle(message, 4000));
+	const safeUserAgent = escapeHtml(truncateMiddle(userAgent, 280));
+	const safeAcceptLanguage = escapeHtml(truncateMiddle(acceptLanguage, 280));
+	const safeReferer = escapeHtml(truncateMiddle(referer, 800));
+	const safeForwardedFor = escapeHtml(truncateMiddle(forwardedFor, 500));
+	const safeIp = escapeHtml(ip || "");
+	const safeIps = escapeHtml(Array.isArray(ips) ? ips.filter(Boolean).join(", ") : "");
+	const ctx = context && typeof context === "object" ? context : null;
+	const safeCtxRoute = escapeHtml(String(ctx?.route || ""));
+	const safeCtxTimezone = escapeHtml(String(ctx?.timezone || ""));
+	const safeCtxLocale = escapeHtml(String(ctx?.locale || ""));
+	const safeCtxPlatform = escapeHtml(String(ctx?.platform || ""));
+	const safeCtxColorScheme = escapeHtml(String(ctx?.colorScheme || ""));
+	const safeCtxReducedMotion = escapeHtml(String(ctx?.reducedMotion || ""));
+	const safeCtxNetwork = escapeHtml(String(ctx?.network || ""));
+	const safeCtxViewport = escapeHtml(
+		(ctx?.viewportWidth && ctx?.viewportHeight) ? `${ctx.viewportWidth}×${ctx.viewportHeight}` : ""
+	);
+	const safeCtxScreen = escapeHtml(
+		(ctx?.screenWidth && ctx?.screenHeight) ? `${ctx.screenWidth}×${ctx.screenHeight}` : ""
+	);
+	const safeCtxDpr = escapeHtml(Number.isFinite(Number(ctx?.devicePixelRatio)) ? String(ctx.devicePixelRatio) : "");
+	const timestamp = submittedAt ? new Date(submittedAt) : new Date();
+	const safeWhen = escapeHtml(timestamp.toISOString());
+
+	const summary = String(message || "")
+		.split("\n")
+		.map((line) => line.trim())
+		.find(Boolean) || "New request";
+	const subject = `Feature request: ${truncateMiddle(summary, 80)}`;
+	const preheader = `${requesterName || "Someone"} submitted a feature request.`;
+
+	const bodyHtml = html`
+		<div style="margin:0 0 14px;">
+			<div style="color:#475569; font-size:13px; margin:0 0 6px;">From</div>
+			<div style="font-size:15px; line-height:1.6;">
+				<strong>${safeRequesterName}</strong> (${safeRequesterEmail})<br />
+				<span style="color:#64748b;">User ID:</span> ${safeUserId}<br />
+				${(safeUserName || safeDisplayName) ? html`
+					<span style="color:#64748b;">Profile:</span>
+					${safeDisplayName ? html`<span>${safeDisplayName}</span>` : ""}
+					${safeUserName ? html`${safeDisplayName ? html`&nbsp;·&nbsp;` : ""}<span>@${safeUserName}</span>` : ""}
+					<br />
+				` : ""}
+				${safeRole ? html`<span style="color:#64748b;">Role:</span> ${safeRole}<br />` : ""}
+				${safeUserCreatedAt ? html`<span style="color:#64748b;">User created:</span> ${safeUserCreatedAt}<br />` : ""}
+				<span style="color:#64748b;">Submitted:</span> ${safeWhen}
+			</div>
+		</div>
+
+		<div style="margin:12px 0 0; padding:14px 16px; border:1px solid #e2e8f0; border-radius:12px; background:#ffffff;">
+			<div style="color:#475569; font-size:13px; margin:0 0 6px;">Details</div>
+			<div style="white-space:pre-wrap; color:#0f172a; font-size:15px; line-height:1.7;">${safeMessage}</div>
+		</div>
+
+		${(safeCtxRoute || safeReferer || safeIp || safeForwardedFor || safeAcceptLanguage || safeCtxTimezone || safeCtxLocale || safeCtxPlatform || safeCtxViewport || safeCtxScreen || safeCtxDpr || safeCtxColorScheme || safeCtxReducedMotion || safeCtxNetwork) ? html`
+			<div style="margin:12px 0 0; padding:14px 16px; border:1px solid #e2e8f0; border-radius:12px; background:#ffffff;">
+				<div style="color:#475569; font-size:13px; margin:0 0 10px;">Context</div>
+				<div style="color:#0f172a; font-size:13px; line-height:1.7;">
+					${safeCtxRoute ? html`<div><span style="color:#64748b;">Route:</span> ${safeCtxRoute}</div>` : ""}
+					${safeReferer ? html`<div><span style="color:#64748b;">Referrer:</span> ${safeReferer}</div>` : ""}
+					${safeIp ? html`<div><span style="color:#64748b;">IP:</span> ${safeIp}</div>` : ""}
+					${safeIps ? html`<div><span style="color:#64748b;">IPs:</span> ${safeIps}</div>` : ""}
+					${safeForwardedFor ? html`<div><span style="color:#64748b;">X-Forwarded-For:</span> ${safeForwardedFor}</div>` : ""}
+					${safeAcceptLanguage ? html`<div><span style="color:#64748b;">Accept-Language:</span> ${safeAcceptLanguage}</div>` : ""}
+					${safeCtxTimezone ? html`<div><span style="color:#64748b;">Timezone:</span> ${safeCtxTimezone}</div>` : ""}
+					${safeCtxLocale ? html`<div><span style="color:#64748b;">Locale:</span> ${safeCtxLocale}</div>` : ""}
+					${safeCtxPlatform ? html`<div><span style="color:#64748b;">Platform:</span> ${safeCtxPlatform}</div>` : ""}
+					${safeCtxViewport ? html`<div><span style="color:#64748b;">Viewport:</span> ${safeCtxViewport}</div>` : ""}
+					${safeCtxScreen ? html`<div><span style="color:#64748b;">Screen:</span> ${safeCtxScreen}</div>` : ""}
+					${safeCtxDpr ? html`<div><span style="color:#64748b;">DPR:</span> ${safeCtxDpr}</div>` : ""}
+					${safeCtxColorScheme ? html`<div><span style="color:#64748b;">Color scheme:</span> ${safeCtxColorScheme}</div>` : ""}
+					${safeCtxReducedMotion ? html`<div><span style="color:#64748b;">Reduced motion:</span> ${safeCtxReducedMotion}</div>` : ""}
+					${safeCtxNetwork ? html`<div><span style="color:#64748b;">Network:</span> ${safeCtxNetwork}</div>` : ""}
+				</div>
+			</div>
+		` : ""}
+
+		${userAgent ? html`
+			<div style="margin:12px 0 0; padding:14px 16px; border:1px solid #e2e8f0; border-radius:12px; background:#ffffff;">
+				<div style="color:#475569; font-size:13px; margin:0 0 6px;">User agent</div>
+				<div style="color:#0f172a; font-size:13px; line-height:1.6; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;">
+					${safeUserAgent}
+				</div>
+			</div>
+		` : ""}
+	`;
+
+	const emailHtml = baseEmailLayout({
+		preheader,
+		title: "New feature request",
+		bodyHtml,
+		suppressCta: true,
+		footerText: "You’re receiving this email because you’re the parascene admin."
+	});
+
+	const text = [
+		"New feature request",
+		"",
+		`From: ${requesterName || "Someone"} (${requesterEmail || "unknown"})`,
+		`User ID: ${Number.isFinite(Number(requesterUserId)) ? Number(requesterUserId) : "unknown"}`,
+		(requesterDisplayName || requesterUserName) ? `Profile: ${requesterDisplayName || ""}${(requesterDisplayName && requesterUserName) ? " · " : ""}${requesterUserName ? `@${requesterUserName}` : ""}` : "",
+		requesterRole ? `Role: ${requesterRole}` : "",
+		requesterCreatedAt ? `User created: ${requesterCreatedAt}` : "",
+		`Submitted: ${timestamp.toISOString()}`,
+		"",
+		"Details:",
+		String(message || "").trim(),
+		"",
+		(ctx?.route ? `Route: ${ctx.route}` : ""),
+		referer ? `Referrer: ${referer}` : "",
+		ip ? `IP: ${ip}` : "",
+		(Array.isArray(ips) && ips.length) ? `IPs: ${ips.join(", ")}` : "",
+		forwardedFor ? `X-Forwarded-For: ${forwardedFor}` : "",
+		acceptLanguage ? `Accept-Language: ${acceptLanguage}` : "",
+		(ctx?.timezone ? `Timezone: ${ctx.timezone}` : ""),
+		(ctx?.locale ? `Locale: ${ctx.locale}` : ""),
+		(ctx?.platform ? `Platform: ${ctx.platform}` : ""),
+		(ctx?.viewportWidth && ctx?.viewportHeight) ? `Viewport: ${ctx.viewportWidth}x${ctx.viewportHeight}` : "",
+		(ctx?.screenWidth && ctx?.screenHeight) ? `Screen: ${ctx.screenWidth}x${ctx.screenHeight}` : "",
+		Number.isFinite(Number(ctx?.devicePixelRatio)) ? `DPR: ${ctx.devicePixelRatio}` : "",
+		(ctx?.colorScheme ? `Color scheme: ${ctx.colorScheme}` : ""),
+		(ctx?.reducedMotion ? `Reduced motion: ${ctx.reducedMotion}` : ""),
+		(ctx?.network ? `Network: ${ctx.network}` : ""),
+		userAgent ? `User agent: ${userAgent}` : ""
+	].filter(Boolean).join("\n");
+
+	return { subject, html: emailHtml, text };
+}
+
 export const templates = {
 	helloFromParascene: renderHelloFromParascene,
-	commentReceived: renderCommentReceived
+	commentReceived: renderCommentReceived,
+	featureRequest: renderFeatureRequest
 };
