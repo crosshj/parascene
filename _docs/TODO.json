@@ -35,6 +35,13 @@
     "dependsOn": []
   },
   {
+    "name": "Join from Share pays out",
+    "description": "The original creator gets some credits.\nThe sharer gets credits.\nWhat to do about mutated creations?",
+    "cost": 50,
+    "impact": 50,
+    "dependsOn": []
+  },
+  {
     "name": "Server boosts",
     "description": "Server-scoped boosts increase owner's credit yield with caps, no discovery lift.",
     "cost": 75,
