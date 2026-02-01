@@ -123,6 +123,48 @@ function extractXStatusInfo(url) {
 	return null;
 }
 
+function extractXHashtagInfo(url) {
+	let parsed;
+	try {
+		parsed = new URL(String(url || ''));
+	} catch {
+		return null;
+	}
+
+	const host = parsed.hostname.toLowerCase();
+	const pathname = parsed.pathname || '';
+
+	const isXHost =
+		host === 'x.com' ||
+		host === 'www.x.com' ||
+		host === 'twitter.com' ||
+		host === 'www.twitter.com' ||
+		host === 'mobile.twitter.com' ||
+		host === 'm.twitter.com';
+
+	if (!isXHost) return null;
+
+	// x.com/hashtag/{tag}
+	// twitter.com/hashtag/{tag}
+	const m = pathname.match(/^\/hashtag\/([^/?#]+)/i);
+	if (!m) return null;
+
+	let tag = '';
+	try {
+		tag = decodeURIComponent(m[1] || '');
+	} catch {
+		tag = String(m[1] || '');
+	}
+	tag = tag.trim();
+	if (!tag) return null;
+
+	// Only allow the characters we want to display; keep it conservative.
+	// (We still link to the original URL, but we don't want to render weird label text.)
+	if (!/^[A-Za-z0-9_]{1,80}$/.test(tag)) return null;
+
+	return { tag };
+}
+
 /**
  * Matches full URLs that point to a creation page (e.g. https://parascene.crosshj.com/creations/219).
  * Captures the creation ID for the replacement path.
@@ -188,6 +230,16 @@ export function textWithCreationLinks(text) {
 			const user = typeof x.user === 'string' ? x.user.trim() : '';
 			const label = user ? `@${user}` : x.statusId;
 			out += `<a href="${safeUrl}" class="user-link creation-link" target="_blank" rel="noopener noreferrer" data-x-url="${safeUrl}" data-x-status-id="${statusId}" data-x-user="${escapeHtml(user)}">x-twitter ${escapeHtml(label)}</a>`;
+			out += escapeHtml(trailing);
+			lastIndex = start + rawUrl.length;
+			continue;
+		}
+
+		const xHashtag = extractXHashtagInfo(url);
+		if (xHashtag?.tag) {
+			const safeUrl = escapeHtml(url);
+			const tag = escapeHtml(xHashtag.tag);
+			out += `<a href="${safeUrl}" class="user-link creation-link" target="_blank" rel="noopener noreferrer">x-twitter #${tag}</a>`;
 			out += escapeHtml(trailing);
 			lastIndex = start + rawUrl.length;
 			continue;
