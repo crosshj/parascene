@@ -152,6 +152,36 @@ export default function createCommentsRoutes({ queries }) {
 
 		// console.log(`[Comments] POST /api/created-images/${req.params.id}/comments`);
 
+		// Best-effort in-app notifications for prior commenters on this creation.
+		// Do not block comment creation if notification insert fails.
+		try {
+			if (queries.insertNotification?.run && queries.selectCreatedImageCommenterUserIdsDistinct?.all) {
+				const rawIds = await queries.selectCreatedImageCommenterUserIdsDistinct.all(imageId);
+				const commenterId = Number(user.id);
+				const recipientIds = Array.from(new Set(
+					(rawIds ?? [])
+						.map((id) => Number(id))
+						.filter((id) => Number.isFinite(id) && id > 0 && id !== commenterId)
+				));
+
+				if (recipientIds.length > 0) {
+					const commenterName = getUserDisplayName(user);
+					const creationTitle = typeof image?.title === "string" ? image.title.trim() : "";
+					const title = "New comment";
+					const link = `/creations/${encodeURIComponent(String(imageId))}`;
+					const message = creationTitle
+						? `${commenterName} commented on “${creationTitle}”.`
+						: `${commenterName} commented on a creation you commented on.`;
+
+					for (const toUserId of recipientIds) {
+						await queries.insertNotification.run(toUserId, null, title, message, link);
+					}
+				}
+			}
+		} catch (error) {
+			// This catch exists so comment posting still succeeds even if notifications fail.
+		}
+
 		// Best-effort email notification to the creation owner.
 		// Do not block comment creation if email fails.
 		try {

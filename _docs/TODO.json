@@ -3,28 +3,21 @@
     "name": "Admin User CRUD",
     "description": "ability for admin to modify users",
     "cost": 63,
-    "impact": 23,
-    "dependsOn": []
-  },
-  {
-    "name": "Comment reply notifications",
-    "description": "Notify users when someone replies to their comment (even on someone else's creation) via in-app notifications, so they can return to the thread.",
-    "cost": 65,
-    "impact": 100,
+    "impact": 28,
     "dependsOn": []
   },
   {
     "name": "External image sharing",
     "description": "Allow sharing a created image with someone who is not a user, likely via a secure share link/token flow similar to invites (view-only by default, with clear revocation/expiration behavior).",
     "cost": 84,
-    "impact": 82,
+    "impact": 100,
     "dependsOn": []
   },
   {
     "name": "Invite credits",
     "description": "Grant starter credits on invite acceptance; record inviter and source.",
     "cost": 1,
-    "impact": 50,
+    "impact": 61,
     "dependsOn": []
   },
   {
@@ -38,7 +31,7 @@
     "name": "Invites & redemption",
     "description": "Optional invite welcome flow via email or shareable token, with stored invite context.",
     "cost": 100,
-    "impact": 65,
+    "impact": 79,
     "dependsOn": [
       "Invite credits"
     ]

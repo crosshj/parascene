@@ -1069,6 +1069,21 @@ export async function openDb() {
 				});
 			}
 		},
+		selectCreatedImageCommenterUserIdsDistinct: {
+			all: async (createdImageId) => {
+				const stmt = db.prepare(
+					`SELECT DISTINCT user_id
+           FROM comments_created_image
+           WHERE created_image_id = ?`
+				);
+				const rows = stmt.all(createdImageId) ?? [];
+				return Promise.resolve(
+					rows
+						.map((row) => Number(row?.user_id))
+						.filter((id) => Number.isFinite(id) && id > 0)
+				);
+			}
+		},
 		selectCreatedImageComments: {
 			all: async (createdImageId, options = {}) => {
 				const order = String(options?.order || "asc").toLowerCase() === "desc" ? "DESC" : "ASC";

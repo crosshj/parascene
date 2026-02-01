@@ -1367,6 +1367,22 @@ export function openDb() {
 				};
 			}
 		},
+		selectCreatedImageCommenterUserIdsDistinct: {
+			all: async (createdImageId) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("comments_created_image"))
+					.select("user_id")
+					.eq("created_image_id", createdImageId);
+				if (error) throw error;
+				return Array.from(new Set(
+					(data ?? [])
+						.map((row) => row?.user_id)
+						.filter((id) => id !== null && id !== undefined)
+						.map((id) => Number(id))
+						.filter((id) => Number.isFinite(id) && id > 0)
+				));
+			}
+		},
 		selectCreatedImageComments: {
 			all: async (createdImageId, options = {}) => {
 				const order = String(options?.order || "asc").toLowerCase() === "desc" ? "desc" : "asc";
