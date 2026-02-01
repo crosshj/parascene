@@ -243,27 +243,50 @@ class AppRouteFeed extends HTMLElement {
         </div>
       </div>
       <div class="feed-card-actions">
-        <button class="feed-card-action" type="button" aria-label="Like" data-like-button>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M20.8 4.6a5 5 0 0 0-7.1 0L12 6.3l-1.7-1.7a5 5 0 1 0-7.1 7.1l1.7 1.7L12 21l7.1-7.6 1.7-1.7a5 5 0 0 0 0-7.1z"></path>
-          </svg>
-          <span class="feed-card-action-count" data-like-count>${item.like_count ?? 0}</span>
-        </button>
-        <button class="feed-card-action" type="button" aria-label="Comment" data-comment-button>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15a4 4 0 0 1-4 4H8l-5 5V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
-          </svg>
-          <span class="feed-card-action-count">${item.comment_count ?? 0}</span>
-        </button>
-        <button class="feed-card-action feed-card-action-more" type="button" aria-label="More" data-more-button data-item-id="${item.created_image_id || item.id}">
-          <svg viewBox="0 0 24 24" fill="currentColor">
-            <circle cx="12" cy="5" r="1.6"></circle>
-            <circle cx="12" cy="12" r="1.6"></circle>
-            <circle cx="12" cy="19" r="1.6"></circle>
-          </svg>
-        </button>
-        <div class="feed-card-menu" data-feed-menu style="display: none;">
-          <button class="feed-card-menu-item" type="button" data-hide-item>Hide from my feed</button>
+        <div class="feed-card-actions-left">
+          ${item.created_image_id ? html`
+            <button class="feed-card-action" type="button" data-details-button aria-label="Details">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M12 8v8"></path>
+                <path d="M12 6h.01"></path>
+              </svg>
+              <span>Details</span>
+            </button>
+          ` : ``}
+          ${profileHref ? html`
+            <button class="feed-card-action" type="button" data-creator-button aria-label="Creator">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+              <span>Creator</span>
+            </button>
+          ` : ``}
+        </div>
+        <div class="feed-card-actions-right">
+          <button class="feed-card-action" type="button" aria-label="Comment" data-comment-button>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a4 4 0 0 1-4 4H8l-5 5V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
+            </svg>
+            <span class="feed-card-action-count">${item.comment_count ?? 0}</span>
+          </button>
+          <button class="feed-card-action" type="button" aria-label="Like" data-like-button>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20.8 4.6a5 5 0 0 0-7.1 0L12 6.3l-1.7-1.7a5 5 0 1 0-7.1 7.1l1.7 1.7L12 21l7.1-7.6 1.7-1.7a5 5 0 0 0 0-7.1z"></path>
+            </svg>
+            <span class="feed-card-action-count" data-like-count>${item.like_count ?? 0}</span>
+          </button>
+          <button class="feed-card-action feed-card-action-more" type="button" aria-label="More" data-more-button data-item-id="${item.created_image_id || item.id}">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <circle cx="12" cy="5" r="1.6"></circle>
+              <circle cx="12" cy="12" r="1.6"></circle>
+              <circle cx="12" cy="19" r="1.6"></circle>
+            </svg>
+          </button>
+          <div class="feed-card-menu" data-feed-menu style="display: none;">
+            <button class="feed-card-menu-item" type="button" data-hide-item>Hide from my feed</button>
+          </div>
         </div>
       </div>
     `;
@@ -279,6 +302,24 @@ class AppRouteFeed extends HTMLElement {
 				e.preventDefault();
 				e.stopPropagation();
 				window.location.href = `/creations/${item.created_image_id}#comments`;
+			});
+		}
+
+		const detailsButton = card.querySelector('button[data-details-button]');
+		if (detailsButton && item.created_image_id) {
+			detailsButton.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				window.location.href = `/creations/${item.created_image_id}`;
+			});
+		}
+
+		const creatorButton = card.querySelector('button[data-creator-button]');
+		if (creatorButton && profileHref) {
+			creatorButton.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				window.location.href = profileHref;
 			});
 		}
 

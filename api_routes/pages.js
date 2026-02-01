@@ -54,6 +54,21 @@ export default function createPageRoutes({ queries, pagesDir }) {
 		return user;
 	}
 
+	// Welcome (server-sent, minimal chrome)
+	router.get("/welcome", async (req, res) => {
+		const user = await requireLoggedInUser(req, res);
+		if (!user) return;
+		try {
+			const fs = await import("fs/promises");
+			let htmlContent = await fs.readFile(path.join(pagesDir, "welcome.html"), "utf-8");
+			htmlContent = injectCommonHead(htmlContent);
+			res.setHeader("Content-Type", "text/html");
+			return res.send(htmlContent);
+		} catch (error) {
+			return res.status(500).send("Internal server error");
+		}
+	});
+
 	// Handle root and index.html - same logic
 	router.get(["/", "/index.html"], async (req, res) => {
 		const userId = req.auth?.userId;
@@ -353,6 +368,7 @@ export default function createPageRoutes({ queries, pagesDir }) {
 		if (req.path.startsWith("/api/") ||
 			req.path.startsWith("/admin/users") ||
 			req.path.startsWith("/creations/") ||
+			req.path === "/welcome" ||
 			req.path === "/user" ||
 			req.path.startsWith("/user/") ||
 			req.path === "/me" ||

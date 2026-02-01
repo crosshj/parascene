@@ -431,7 +431,7 @@ async function loadCreation() {
 							<path d="M12 8v8"></path>
 							<path d="M12 6h.01"></path>
 						</svg>
-						<span>Details</span>
+						<span>More Info</span>
 					</button>
 					` : ``}
 					${copyLinkButtonHtml}
@@ -452,6 +452,22 @@ async function loadCreation() {
 						<span class="feed-card-action-count" data-like-count>${likeCount}</span>
 					</button>
 					` : ``}
+					${'' /*
+					Creation detail kebab menu (disabled for now)
+					<div class="creation-detail-more">
+						<button class="feed-card-action feed-card-action-more" type="button" aria-label="More" data-creation-more-button>
+							<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+								<circle cx="12" cy="5" r="1.6"></circle>
+								<circle cx="12" cy="12" r="1.6"></circle>
+								<circle cx="12" cy="19" r="1.6"></circle>
+							</svg>
+						</button>
+						<div class="feed-card-menu" data-creation-menu style="display: none;">
+							${hasDetails ? `<button class="feed-card-menu-item" type="button" data-creation-menu-info>More Info</button>` : ``}
+							<button class="feed-card-menu-item" type="button" data-creation-menu-copy>Copy link</button>
+						</div>
+					</div>
+					*/ }
 				</div>
 			</div>
 
@@ -527,6 +543,68 @@ async function loadCreation() {
 				}));
 			});
 		}
+
+		/*
+		Creation detail kebab menu handlers (disabled for now)
+		const moreBtn = detailContent.querySelector('[data-creation-more-button]');
+		const menu = detailContent.querySelector('[data-creation-menu]');
+		const menuInfoBtn = detailContent.querySelector('[data-creation-menu-info]');
+		const copyLinkMenuBtn = detailContent.querySelector('[data-creation-menu-copy]');
+		const moreWrap = detailContent.querySelector('.creation-detail-more');
+
+		if (moreBtn instanceof HTMLButtonElement && menu instanceof HTMLElement && moreWrap instanceof HTMLElement) {
+			const closeMenu = (e) => {
+				if (!menu.contains(e.target) && !moreBtn.contains(e.target)) {
+					menu.style.display = 'none';
+					document.removeEventListener('click', closeMenu);
+				}
+			};
+
+			moreBtn.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+
+				const isVisible = menu.style.display !== 'none';
+				menu.style.display = isVisible ? 'none' : 'block';
+
+				if (!isVisible) {
+					const buttonRect = moreBtn.getBoundingClientRect();
+					const wrapRect = moreWrap.getBoundingClientRect();
+					menu.style.position = 'absolute';
+					menu.style.right = `${wrapRect.right - buttonRect.right}px`;
+					menu.style.bottom = `${wrapRect.bottom - buttonRect.top + 4}px`;
+					menu.style.zIndex = '1000';
+
+					setTimeout(() => {
+						document.addEventListener('click', closeMenu);
+					}, 0);
+				} else {
+					document.removeEventListener('click', closeMenu);
+				}
+			});
+
+			if (menuInfoBtn instanceof HTMLButtonElement && detailsBtn) {
+				menuInfoBtn.addEventListener('click', (e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					menu.style.display = 'none';
+					document.removeEventListener('click', closeMenu);
+					detailsBtn.click();
+				});
+			}
+
+			if (copyLinkMenuBtn instanceof HTMLButtonElement) {
+				copyLinkMenuBtn.addEventListener('click', async (e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					menu.style.display = 'none';
+					document.removeEventListener('click', closeMenu);
+					const canonical = new URL(`/creations/${creationId}`, window.location.origin).toString();
+					await copyTextToClipboard(canonical);
+				});
+			}
+		}
+		*/
 
 		enableLikeButtons(detailContent);
 

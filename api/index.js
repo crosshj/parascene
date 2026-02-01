@@ -20,6 +20,7 @@ import createUserRoutes from "../api_routes/user.js";
 import createFollowsRoutes from "../api_routes/follows.js";
 import createTodoRoutes from "../api_routes/todo.js";
 import createYoutubeRoutes from "../api_routes/youtube.js";
+import { computeWelcome } from "../api_routes/utils/welcome.js";
 import {
 	authMiddleware,
 	clearAuthCookie,
@@ -123,6 +124,46 @@ app.use((req, res, next) => {
 app.use(authMiddleware());
 app.use(sessionMiddleware(queries));
 app.use(probabilisticSessionCleanup(queries));
+
+// Welcome gate: block most authenticated actions until user is welcomed.
+app.use(async (req, res, next) => {
+	const userId = req.auth?.userId;
+	if (!userId) {
+		return next();
+	}
+
+	try {
+		const method = String(req.method || "GET").toUpperCase();
+		const pathName = String(req.path || "");
+
+		const allow =
+			(pathName === "/welcome" && method === "GET") ||
+			(pathName === "/api/profile" && (method === "GET" || method === "PUT" || method === "POST")) ||
+			(pathName === "/api/username-suggest" && method === "GET") ||
+			(pathName === "/logout" && method === "POST") ||
+			(pathName === "/auth.html" && method === "GET") ||
+			(pathName === "/me" && method === "GET");
+		if (allow) {
+			return next();
+		}
+
+		const profileRow = await queries.selectUserProfileByUserId?.get(userId);
+		const welcome = computeWelcome({ profileRow });
+		if (!welcome.required) {
+			return next();
+		}
+
+		if (pathName.startsWith("/api/")) {
+			return res.status(409).json({ error: "WELCOME_REQUIRED", welcome });
+		}
+
+		return res.redirect("/welcome");
+	} catch {
+		// Fail-open on unexpected errors to avoid hard-locking the app.
+		return next();
+	}
+});
+
 app.use(createUserRoutes({ queries }));
 app.use(createFollowsRoutes({ queries }));
 

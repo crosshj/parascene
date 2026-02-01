@@ -25,7 +25,7 @@ class AppModalCreationDetails extends HTMLElement {
 			<div class="modal-overlay" data-overlay>
 				<div class="modal modal-medium">
 					<div class="modal-header">
-						<h3>Creation details</h3>
+						<h3>More Info</h3>
 						<button class="modal-close" type="button" aria-label="Close">
 							<svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
 								stroke-linecap="round" stroke-linejoin="round">

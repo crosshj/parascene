@@ -4,6 +4,56 @@ import { buildProviderHeaders, resolveProviderAuthToken } from "./utils/provider
 export default function createAdminRoutes({ queries }) {
 	const router = express.Router();
 
+	function safeJsonParse(value, fallback) {
+		if (value == null) return fallback;
+		if (typeof value === "object") return value;
+		if (typeof value !== "string") return fallback;
+		const trimmed = value.trim();
+		if (!trimmed) return fallback;
+		try {
+			return JSON.parse(trimmed);
+		} catch {
+			return fallback;
+		}
+	}
+
+	function normalizeProfileRow(row) {
+		if (!row) {
+			return {
+				user_name: null,
+				display_name: null,
+				about: null,
+				socials: {},
+				avatar_url: null,
+				cover_image_url: null,
+				badges: [],
+				meta: {},
+				created_at: null,
+				updated_at: null
+			};
+		}
+		return {
+			user_name: row.user_name ?? null,
+			display_name: row.display_name ?? null,
+			about: row.about ?? null,
+			socials: safeJsonParse(row.socials, {}),
+			avatar_url: row.avatar_url ?? null,
+			cover_image_url: row.cover_image_url ?? null,
+			badges: safeJsonParse(row.badges, []),
+			meta: safeJsonParse(row.meta, {}),
+			created_at: row.created_at ?? null,
+			updated_at: row.updated_at ?? null
+		};
+	}
+
+	function normalizeUsername(input) {
+		const raw = typeof input === "string" ? input.trim() : "";
+		if (!raw) return null;
+		const normalized = raw.toLowerCase();
+		if (!/^[a-z0-9][a-z0-9_]{2,23}$/.test(normalized)) return null;
+		return normalized;
+	}
+
 	async function requireAdmin(req, res) {
 		if (!req.auth?.userId) {
 			res.status(401).json({ error: "Unauthorized" });
@@ -42,6 +92,67 @@ export default function createAdminRoutes({ queries }) {
 		);
 
 		res.json({ users: usersWithCredits });
+	});
+
+	// Admin-only: override a user's username (write-once for normal users).
+	router.put("/admin/users/:id/username", async (req, res) => {
+		const admin = await requireAdmin(req, res);
+		if (!admin) return;
+
+		const targetUserId = Number.parseInt(String(req.params?.id || ""), 10);
+		if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+			return res.status(400).json({ error: "Invalid user id" });
+		}
+
+		const target = await queries.selectUserById.get(targetUserId);
+		if (!target) {
+			return res.status(404).json({ error: "User not found" });
+		}
+
+		const rawUserName = req.body?.user_name ?? req.body?.username;
+		const userName = normalizeUsername(rawUserName);
+		if (!userName) {
+			return res.status(400).json({
+				error: "Invalid username",
+				message: "Username must be 3-24 chars, lowercase letters/numbers/underscore, starting with a letter/number."
+			});
+		}
+
+		// Uniqueness check
+		if (queries.selectUserProfileByUsername?.get) {
+			const existing = await queries.selectUserProfileByUsername.get(userName);
+			if (existing && Number(existing.user_id) !== Number(targetUserId)) {
+				return res.status(409).json({ error: "Username already taken" });
+			}
+		}
+
+		if (!queries.upsertUserProfile?.run) {
+			return res.status(500).json({ error: "Profile storage not available" });
+		}
+
+		// Preserve existing profile fields; only update username.
+		const existingRow = await queries.selectUserProfileByUserId?.get(targetUserId);
+		const existingProfile = normalizeProfileRow(existingRow);
+
+		const nextMeta = {
+			...(typeof existingProfile.meta === "object" && existingProfile.meta ? existingProfile.meta : {})
+		};
+
+		const payload = {
+			user_name: userName,
+			display_name: existingProfile.display_name ?? null,
+			about: existingProfile.about ?? null,
+			socials: typeof existingProfile.socials === "object" && existingProfile.socials ? existingProfile.socials : {},
+			avatar_url: existingProfile.avatar_url ?? null,
+			cover_image_url: existingProfile.cover_image_url ?? null,
+			badges: Array.isArray(existingProfile.badges) ? existingProfile.badges : [],
+			meta: nextMeta
+		};
+
+		await queries.upsertUserProfile.run(targetUserId, payload);
+
+		const updated = await queries.selectUserProfileByUserId?.get(targetUserId);
+		return res.json({ ok: true, profile: normalizeProfileRow(updated) });
 	});
 
 	router.get("/admin/moderation", async (req, res) => {

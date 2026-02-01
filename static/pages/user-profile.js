@@ -109,6 +109,8 @@ function renderProfilePage(container, { user, profile, stats, isSelf, viewerFoll
 	const website = normalizeWebsite(profile?.socials?.website);
 	const avatarUrl = typeof profile?.avatar_url === 'string' ? profile.avatar_url.trim() : '';
 	const coverUrl = typeof profile?.cover_image_url === 'string' ? profile.cover_image_url.trim() : '';
+	const userNameValue = profile?.user_name && String(profile.user_name).trim() ? String(profile.user_name).trim() : '';
+	const userNameLocked = Boolean(userNameValue);
 
 	const avatarInitial = displayName.trim().charAt(0).toUpperCase() || '?';
 	const avatarColor = getAvatarColor(profile?.user_name || user?.email_prefix || user?.email || String(user?.id || ''));
@@ -209,8 +211,12 @@ function renderProfilePage(container, { user, profile, stats, isSelf, viewerFoll
 						<div class="user-profile-form-section">
 						<div class="field">
 							<label>Username</label>
-							<input name="user_name" placeholder="e.g. oceanman" value="${escapeHtml(profile?.user_name || '')}">
-							<div class="user-profile-help">3–24 characters. Lowercase letters, numbers, and underscores only.</div>
+							<input name="user_name" placeholder="e.g. oceanman" value="${escapeHtml(userNameValue)}" ${userNameLocked ? 'disabled' : ''}>
+							<div class="user-profile-help">
+								${userNameLocked
+			? 'Username is permanent and cannot be changed.'
+			: '3–24 characters. Lowercase letters, numbers, and underscores only. This cannot be changed later.'}
+							</div>
 						</div>
 						<div class="field">
 							<label>Display name</label>

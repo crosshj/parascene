@@ -1876,8 +1876,21 @@ app-route-feed {
 .feed-card-actions {
 	display: flex;
 	align-items: center;
-	gap: 16px;
+	justify-content: space-between;
+	gap: 12px;
 	padding: 0 4px 0 12px;
+}
+
+.feed-card-actions-left,
+.feed-card-actions-right {
+	display: inline-flex;
+	align-items: center;
+	gap: 14px;
+}
+
+.feed-card-actions-right {
+	margin-left: auto;
+	gap: 16px;
 }
 
 .feed-card-action {
@@ -1931,9 +1944,8 @@ app-route-feed {
 }
 
 .feed-card-action-more {
-	margin-left: auto;
 	padding: 8px;
-	margin: -8px -8px -8px auto;
+	margin: -8px -8px -8px 0;
 }
 
 .feed-card {
@@ -1979,6 +1991,12 @@ app-route-feed {
 	display: inline-flex;
 	align-items: center;
 	gap: 12px;
+}
+
+.creation-detail-more {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
 }
 
 .creation-detail-meta-spacer {

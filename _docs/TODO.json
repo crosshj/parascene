@@ -35,13 +35,6 @@
     "dependsOn": []
   },
   {
-    "name": "Onboarding: choose username",
-    "description": "During signup, require the user to pick a unique username before they can proceed into the app; validate availability, reserve it, and improve the first-run experience.",
-    "cost": 34,
-    "impact": 68,
-    "dependsOn": []
-  },
-  {
     "name": "Invite credits",
     "description": "Grant starter credits on invite acceptance; record inviter and source.",
     "cost": 1,
@@ -57,7 +50,7 @@
   },
   {
     "name": "Invites & redemption",
-    "description": "Optional invite onboarding via email or shareable token, with stored invite context.",
+    "description": "Optional invite welcome flow via email or shareable token, with stored invite context.",
     "cost": 100,
     "impact": 65,
     "dependsOn": [
