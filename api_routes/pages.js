@@ -41,6 +41,16 @@ export default function createPageRoutes({ queries, pagesDir }) {
 			.replace(/'/g, "&#39;");
 	}
 
+	function replaceTemplateTokens(template, tokens) {
+		let out = String(template ?? "");
+		const map = tokens && typeof tokens === "object" ? tokens : {};
+		for (const [key, value] of Object.entries(map)) {
+			const token = `{{${key}}}`;
+			out = out.split(token).join(String(value ?? ""));
+		}
+		return out;
+	}
+
 	// External share page (unauthed, unfurl-first)
 	router.get("/s/:version/:token/:bust?", async (req, res) => {
 		const version = String(req.params.version || "");
@@ -73,8 +83,6 @@ export default function createPageRoutes({ queries, pagesDir }) {
 <head>
 	<title>${escapeHtml(title)}</title>
 	<link rel="stylesheet" href="/pages/share.css" />
-
-	<meta name="robots" content="noindex,nofollow" />
 	<meta name="description" content="${escapeHtml(message)}" />
 
 	<meta property="og:type" content="website" />
@@ -115,7 +123,6 @@ export default function createPageRoutes({ queries, pagesDir }) {
 			html = injectCommonHead(html);
 			res.setHeader("Content-Type", "text/html");
 			res.setHeader("Cache-Control", "no-store");
-			res.setHeader("X-Robots-Tag", "noindex, nofollow");
 			return res.status(200).send(html);
 		}
 
@@ -267,116 +274,61 @@ export default function createPageRoutes({ queries, pagesDir }) {
 			const sharerAvatarFallback = escapeHtml((sharerName || "S").trim().charAt(0).toUpperCase());
 			const creatorAvatarFallback = escapeHtml((creatorName || "C").trim().charAt(0).toUpperCase());
 
-			let html = `
-<!doctype html>
-<html lang="en">
-<head>
-	<title>${escapeHtml(title)}</title>
-	<link rel="stylesheet" href="/pages/share.css" />
+			const sharerAvatarHtml = sharerAvatarUrl
+				? `<img class="share-avatar-img" src="${escapeHtml(sharerAvatarUrl)}" alt="" />`
+				: `<span class="share-avatar-fallback" aria-hidden="true">${sharerAvatarFallback}</span>`;
 
-	<meta name="robots" content="noindex,nofollow" />
-	<meta name="description" content="${escapeHtml(description)}" />
+			const creatorAvatarHtml = creatorAvatarUrl
+				? `<img class="share-avatar-img" src="${escapeHtml(creatorAvatarUrl)}" alt="" />`
+				: `<span class="share-avatar-fallback" aria-hidden="true">${creatorAvatarFallback}</span>`;
 
-	<meta property="og:type" content="website" />
-	<meta property="og:site_name" content="Parascene" />
-	<meta property="og:title" content="${escapeHtml(title)}" />
-	<meta property="og:description" content="${escapeHtml(description)}" />
-	<meta property="og:url" content="${escapeHtml(requestUrl)}" />
-	<meta property="og:image" content="${escapeHtml(imageUrl)}" />
-	<meta property="og:image:secure_url" content="${escapeHtml(secureImageUrl)}" />
-	<meta property="og:image:type" content="image/png" />
-	${hasDims ? `<meta property="og:image:width" content="${width}" />` : ""}
-	${hasDims ? `<meta property="og:image:height" content="${height}" />` : ""}
-	<meta property="og:image:alt" content="${escapeHtml(imageAlt)}" />
+			const overlayTitleHtml = hasTitle ? `<h1 class="share-overlay-title">${escapeHtml(titleRaw)}</h1>` : ``;
 
-	<meta name="twitter:card" content="summary_large_image" />
-	<meta name="twitter:title" content="${escapeHtml(title)}" />
-	<meta name="twitter:description" content="${escapeHtml(description)}" />
-	<meta name="twitter:image" content="${escapeHtml(imageUrl)}" />
-	<meta name="twitter:image:alt" content="${escapeHtml(imageAlt)}" />
-</head>
-<body class="share-page">
-	<main class="share-main">
-		${authLogo}
-		<section class="share-hero">
-			<div class="share-hero-media">
-				<img class="share-image" src="/api/share/${encodeURIComponent(version)}/${encodeURIComponent(token)}/image" alt="${escapeHtml(imageAlt)}" />
-				<div class="share-overlay" aria-label="Image details">
-					${hasTitle ? `<h1 class="share-overlay-title">${escapeHtml(titleRaw)}</h1>` : ``}
-
-					<div class="share-overlay-rows">
+			const creatorBlockHtml = showCreator ? `
 						<div class="share-person">
 							<div class="share-avatar">
-								${sharerAvatarUrl
-					? `<img class="share-avatar-img" src="${escapeHtml(sharerAvatarUrl)}" alt="" />`
-					: `<span class="share-avatar-fallback" aria-hidden="true">${sharerAvatarFallback}</span>`
-				}
-							</div>
-							<div class="share-person-text">
-								<div class="share-person-label">Shared by</div>
-								<div class="share-person-name">${escapeHtml(heroSharer)}</div>
-							</div>
-						</div>
-
-						${showCreator ? `
-						<div class="share-person">
-							<div class="share-avatar">
-								${creatorAvatarUrl
-						? `<img class="share-avatar-img" src="${escapeHtml(creatorAvatarUrl)}" alt="" />`
-						: `<span class="share-avatar-fallback" aria-hidden="true">${creatorAvatarFallback}</span>`
-					}
+								${creatorAvatarHtml}
 							</div>
 							<div class="share-person-text">
 								<div class="share-person-label">Created by</div>
 								<div class="share-person-name">${escapeHtml(heroCreator)}</div>
 							</div>
 						</div>
-						` : ``}
-					</div>
-				</div>
-			</div>
+			`.trim() : ``;
 
-			<div class="share-hero-copy">
-				<p class="share-value">
-					Make beautiful images in minutes — start from a prompt, explore variations, and refine until it feels right.
-					Save your favorites, share the best ones, and come back anytime to build on what you made.
-					<span class="share-value-strong">Ready to make yours?</span>
-				</p>
+			const ogDimsMeta = hasDims
+				? `\t<meta property="og:image:width" content="${width}" />\n\t<meta property="og:image:height" content="${height}" />`
+				: "";
 
-				<div class="share-cta-row">
-					<a class="btn-primary btn-large" href="/auth#signup">Create your own</a>
-				</div>
-				<p class="share-alt">Already have an account? <a href="/auth?returnUrl=${encodeURIComponent(req.originalUrl || req.path || "/")}#login">Sign in</a></p>
-			</div>
-		</section>
-	</main>
+			const fs = await import("fs/promises");
+			const templatePath = path.join(pagesDir, "share.html");
+			const template = await fs.readFile(templatePath, "utf-8");
 
-	<script>
-		(function () {
-			try {
-				var ref = {
-					referrer_user_id: ${Number(verified.sharedByUserId) || 0},
-					image_id: ${Number(image.id) || 0},
-					created_by_user_id: ${Number(image.user_id) || 0},
-					source: "share",
-					ts: Date.now()
-				};
-				if (ref.referrer_user_id > 0) {
-					sessionStorage.setItem("ps_referral", JSON.stringify(ref));
-				}
-			} catch (e) {
-				// ignore
-			}
-		})();
-	</script>
-</body>
-</html>
-`.trim();
+			const shareImageSrc = `/api/share/${encodeURIComponent(version)}/${encodeURIComponent(token)}/image`;
+			const signInUrl = `/auth?returnUrl=${encodeURIComponent(req.originalUrl || req.path || "/")}#login`;
+
+			let html = replaceTemplateTokens(template, {
+				PAGE_TITLE: escapeHtml(title),
+				PAGE_DESCRIPTION: escapeHtml(description),
+				REQUEST_URL: escapeHtml(requestUrl),
+				OG_IMAGE_URL: escapeHtml(imageUrl),
+				OG_IMAGE_SECURE_URL: escapeHtml(secureImageUrl),
+				OG_IMAGE_DIMS_META: ogDimsMeta,
+				IMAGE_ALT: escapeHtml(imageAlt),
+				SHARE_IMAGE_SRC: escapeHtml(shareImageSrc),
+				OVERLAY_TITLE_HTML: overlayTitleHtml,
+				SHARER_AVATAR_HTML: sharerAvatarHtml,
+				SHARER_NAME: escapeHtml(heroSharer),
+				CREATOR_BLOCK_HTML: creatorBlockHtml,
+				SIGNIN_URL: escapeHtml(signInUrl),
+				REFERRER_USER_ID: String(Number(verified.sharedByUserId) || 0),
+				IMAGE_ID: String(Number(image.id) || 0),
+				CREATED_BY_USER_ID: String(Number(image.user_id) || 0)
+			});
 
 			html = injectCommonHead(html);
 			res.setHeader("Content-Type", "text/html");
 			res.setHeader("Cache-Control", "no-store");
-			res.setHeader("X-Robots-Tag", "noindex, nofollow");
 			return res.send(html);
 		} catch {
 			return res.status(500).send("Internal server error");
