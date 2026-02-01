@@ -3,42 +3,35 @@
     "name": "Invite credits",
     "description": "Grant starter credits on invite acceptance; record inviter and source.",
     "cost": 1,
-    "impact": 61,
+    "impact": 69,
     "dependsOn": []
   },
   {
     "name": "Credit Purchase",
     "description": "users can buy credits using real money",
     "cost": 74,
-    "impact": 88,
+    "impact": 100,
     "dependsOn": []
   },
   {
     "name": "Creation Detail Related Images",
     "description": "images that are similar or related after fold",
     "cost": 50,
-    "impact": 50,
+    "impact": 57,
     "dependsOn": []
   },
   {
     "name": "Static Help Pages",
     "description": "well-formatted explainers for site features, unprotected route",
     "cost": 50,
-    "impact": 50,
+    "impact": 57,
     "dependsOn": []
   },
   {
     "name": "Engagement Emails",
     "description": "system fires emails to encourage users to engage, eg. user signed up but hasn't created anything, bundle notifications and send daily reminder where non-zero list",
     "cost": 50,
-    "impact": 50,
-    "dependsOn": []
-  },
-  {
-    "name": "External image sharing",
-    "description": "Allow sharing a created image with someone who is not a user, likely via a secure share link/token flow similar to invites (view-only by default, with clear revocation/expiration behavior).",
-    "cost": 84,
-    "impact": 100,
+    "impact": 57,
     "dependsOn": []
   },
   {
@@ -52,7 +45,7 @@
     "name": "Invites & redemption",
     "description": "Optional invite welcome flow via email or shareable token, with stored invite context.",
     "cost": 100,
-    "impact": 79,
+    "impact": 90,
     "dependsOn": [
       "Invite credits"
     ]
