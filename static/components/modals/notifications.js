@@ -284,14 +284,16 @@ class AppModalNotifications extends HTMLElement {
         </div>
         <div class="notification-message">${escapeHtml(notification.message || '')}</div>
         <div class="notification-time" title="${escapeHtml(timeTitle)}">${escapeHtml(time)}</div>
-        ${notification.link ? html`
-          <a class="notification-link" href="${escapeHtml(notification.link)}">Open related page</a>
-        ` : ''}
-        <button class="notification-view-all">View all notifications</button>
+        <div class="notification-actions">
+          <button class="notification-action" type="button">View all notifications</button>
+          ${notification.link ? html`
+            <a class="notification-action is-primary" href="${escapeHtml(notification.link)}">Open related page</a>
+          ` : ''}
+        </div>
       </div>
     `;
 
-		const viewAllButton = this.shadowRoot.querySelector('.notification-view-all');
+		const viewAllButton = this.shadowRoot.querySelector('.notification-actions .notification-action:not(.is-primary)');
 		if (viewAllButton) {
 			viewAllButton.addEventListener('click', () => {
 				this.close();
@@ -334,12 +336,14 @@ class AppModalNotifications extends HTMLElement {
           border-radius: 14px;
           box-shadow: var(--shadow);
           width: 520px;
-          height: 360px;
           max-width: 92vw;
           max-height: 90vh;
           overflow: hidden;
           transform: scale(0.95);
           transition: transform 0.2s;
+        }
+        .notification-detail-modal {
+          height: auto;
         }
         .notifications-modal {
           width: 760px;
@@ -390,30 +394,30 @@ class AppModalNotifications extends HTMLElement {
         }
         .notification-detail-body {
           padding: 20px;
-          padding-bottom: 36px;
-          height: calc(100% - 64px);
           overflow-y: auto;
         }
         .notification-title {
           font-weight: 600;
-          font-size: 0.95rem;
+          font-size: 1.15rem;
           color: var(--text);
-          margin-bottom: 4px;
+          line-height: 1.25;
+          margin-bottom: 0;
         }
         .notification-message {
-          font-size: 0.9rem;
+          font-size: 1rem;
           color: var(--text-muted);
-          margin-bottom: 8px;
+          line-height: 1.6;
+          margin-bottom: 0;
           overflow-wrap: anywhere;
           word-break: break-word;
         }
         .notification-time {
-          font-size: 0.85rem;
+          font-size: 0.9rem;
           color: var(--text-muted);
         }
         .notification-detail {
           display: grid;
-          gap: 8px;
+          gap: 10px;
         }
         .notification-detail-header {
           display: flex;
@@ -471,26 +475,59 @@ class AppModalNotifications extends HTMLElement {
           font-size: 0.85rem;
           color: var(--text-muted);
         }
-        .notification-link {
-          font-size: 0.85rem;
-          color: var(--accent);
-          text-decoration: none;
+        .notification-actions {
+          display: flex;
+          align-items: center;
+          justify-content: flex-start;
+          gap: 10px;
+          flex-wrap: wrap;
+          margin-top: 6px;
         }
-        .notification-link:hover {
-          text-decoration: underline;
-        }
-        .notification-view-all {
-          padding: 10px 12px;
-          border-radius: 8px;
+        .notification-action {
+          height: 40px;
+          padding: 0 14px;
+          border-radius: 10px;
           border: 1px solid var(--border);
-          background: var(--surface-strong);
+          background: transparent;
           color: var(--text);
           cursor: pointer;
+          font-weight: 600;
           font: inherit;
-          width: fit-content;
+          text-decoration: none;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          box-sizing: border-box;
+          line-height: 1;
+          -webkit-appearance: none;
+          appearance: none;
         }
-        .notification-view-all:hover {
-          background: var(--surface);
+        .notification-action:hover {
+          border-color: var(--accent);
+          background: var(--surface-strong);
+        }
+        .notification-action.is-primary {
+          margin-left: auto;
+          background: var(--accent);
+          border-color: var(--accent);
+          color: var(--accent-text);
+        }
+        .notification-action.is-primary:hover {
+          background: color-mix(in srgb, var(--accent) 90%, black);
+          border-color: color-mix(in srgb, var(--accent) 90%, black);
+        }
+
+        @media (max-width: 520px) {
+          .notification-actions {
+            flex-direction: column;
+            align-items: stretch;
+          }
+          .notification-action {
+            width: 100%;
+          }
+          .notification-action.is-primary {
+            margin-left: 0;
+          }
         }
       </style>
       <div class="notifications-overlay">

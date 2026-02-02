@@ -3,48 +3,62 @@
     "name": "Invite credits",
     "description": "Grant starter credits on invite acceptance; record inviter and source.",
     "cost": 1,
-    "impact": 69,
+    "impact": 67,
     "dependsOn": []
   },
   {
     "name": "Credit Purchase",
     "description": "users can buy credits using real money",
-    "cost": 74,
+    "cost": 77,
     "impact": 100,
     "dependsOn": []
   },
   {
     "name": "Creation Detail Related Images",
     "description": "images that are similar or related after fold",
-    "cost": 50,
-    "impact": 57,
+    "cost": 47,
+    "impact": 54,
     "dependsOn": []
   },
   {
     "name": "Static Help Pages",
     "description": "well-formatted explainers for site features, unprotected route",
-    "cost": 50,
-    "impact": 57,
+    "cost": 16,
+    "impact": 27,
     "dependsOn": []
   },
   {
     "name": "Engagement Emails",
     "description": "system fires emails to encourage users to engage, eg. user signed up but hasn't created anything, bundle notifications and send daily reminder where non-zero list",
-    "cost": 50,
-    "impact": 57,
+    "cost": 62,
+    "impact": 74,
     "dependsOn": []
   },
   {
     "name": "Join from Share pays out",
     "description": "The original creator gets some credits.\nThe sharer gets credits.\nWhat to do about mutated creations?",
-    "cost": 50,
-    "impact": 50,
+    "cost": 70,
+    "impact": 80,
+    "dependsOn": []
+  },
+  {
+    "name": "Share: include image when possible",
+    "description": "For share flows that support it, include the creation image (OG/Twitter card image previews for link shares; Web Share API with image file on supported devices).",
+    "cost": 58,
+    "impact": 83,
+    "dependsOn": []
+  },
+  {
+    "name": "Anti-slam Emails",
+    "description": "we don't want to send an email every time a comment comes through",
+    "cost": 24,
+    "impact": 47,
     "dependsOn": []
   },
   {
     "name": "Server boosts",
     "description": "Server-scoped boosts increase owner's credit yield with caps, no discovery lift.",
-    "cost": 75,
+    "cost": 54,
     "impact": 1,
     "dependsOn": []
   },
@@ -52,7 +66,7 @@
     "name": "Invites & redemption",
     "description": "Optional invite welcome flow via email or shareable token, with stored invite context.",
     "cost": 100,
-    "impact": 90,
+    "impact": 87,
     "dependsOn": [
       "Invite credits"
     ]
