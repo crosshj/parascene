@@ -46,40 +46,60 @@ function setupCollapsibleDescription(rootEl) {
 	if (!(descriptionEl instanceof HTMLElement)) return;
 	if (!(toggleBtn instanceof HTMLButtonElement)) return;
 
-	const maxLines = 10;
-	const computed = window.getComputedStyle(descriptionEl);
-	const lineHeightRaw = Number.parseFloat(computed.lineHeight || '');
-	const fontSizeRaw = Number.parseFloat(computed.fontSize || '');
-	const lineHeight = Number.isFinite(lineHeightRaw) ? lineHeightRaw : (Number.isFinite(fontSizeRaw) ? fontSizeRaw * 1.5 : 24);
-	const maxHeight = Math.round(lineHeight * maxLines);
-
-	// If description is short, keep it plain (no button).
-	// Use scrollHeight (full content) vs our 10-line cutoff.
-	wrap.style.setProperty('--ps-desc-max-height', `${maxHeight}px`);
-
-	// Default state: collapsed, but only keep it if it actually overflows.
-	wrap.classList.add('is-collapsed');
+	if (!wrap.dataset.psDescInit) {
+		// Default state: collapsed, but only keep it if it actually overflows.
+		wrap.classList.add('is-collapsed');
+		wrap.dataset.psDescInit = '1';
+	}
 
 	if (!descriptionEl.id) {
 		descriptionEl.id = 'creation-detail-description';
 	}
 	toggleBtn.setAttribute('aria-controls', descriptionEl.id);
-	toggleBtn.setAttribute('aria-expanded', 'false');
-	toggleBtn.textContent = 'View Full';
+	function update() {
+		// Measure overflow using the collapsed max-height enforced by CSS.
+		// This avoids fragile computed line-height math across browsers.
+		const wasCollapsed = wrap.classList.contains('is-collapsed');
+		wrap.classList.add('is-measuring');
+		wrap.classList.add('is-collapsed');
+		const delta = descriptionEl.scrollHeight - descriptionEl.clientHeight;
+		wrap.classList.remove('is-measuring');
+		// Tolerate small sub-pixel rounding differences that can vary by browser/font.
+		const overflows = delta > 4;
+		if (!overflows) {
+			wrap.classList.remove('is-collapsed');
+			toggleBtn.hidden = true;
+			return;
+		}
 
-	const overflows = descriptionEl.scrollHeight > (maxHeight + 1);
-	if (!overflows) {
-		wrap.classList.remove('is-collapsed');
-		toggleBtn.hidden = true;
-		return;
-	}
-
-	toggleBtn.hidden = false;
-	toggleBtn.addEventListener('click', () => {
-		const isCollapsed = wrap.classList.toggle('is-collapsed');
+		toggleBtn.hidden = false;
+		// Restore expanded state if user already expanded it.
+		if (!wasCollapsed) wrap.classList.remove('is-collapsed');
+		const isCollapsed = wrap.classList.contains('is-collapsed');
 		toggleBtn.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
 		toggleBtn.textContent = isCollapsed ? 'View Full' : 'Collapse';
-	});
+	}
+
+	update();
+
+	// Run again once layout has fully settled (fonts/styles can affect measurements).
+	requestAnimationFrame(() => requestAnimationFrame(update));
+
+	// Keep accurate on responsive layout changes and async link title hydration.
+	if (typeof window.ResizeObserver === 'function') {
+		const ro = new ResizeObserver(() => update());
+		ro.observe(descriptionEl);
+	}
+	window.addEventListener('resize', update, { passive: true });
+
+	if (!toggleBtn.dataset.psDescToggleBound) {
+		toggleBtn.dataset.psDescToggleBound = '1';
+		toggleBtn.addEventListener('click', () => {
+			const isCollapsed = wrap.classList.toggle('is-collapsed');
+			toggleBtn.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+			toggleBtn.textContent = isCollapsed ? 'View Full' : 'Collapse';
+		});
+	}
 }
 
 // Set up URL change detection BEFORE header component loads
@@ -513,7 +533,7 @@ async function loadCreation() {
 						<div class="creation-detail-description-wrap" data-description-wrap>
 							<div class="creation-detail-description" data-description>${textWithCreationLinks(descriptionText)}</div>
 							<div class="creation-detail-description-toggle-row">
-								<button type="button" class="btn-secondary creation-detail-description-toggle" data-description-toggle hidden>Show full description</button>
+								<button type="button" class="btn-secondary creation-detail-description-toggle" data-description-toggle hidden>View Full</button>
 							</div>
 						</div>
 					` : ''}

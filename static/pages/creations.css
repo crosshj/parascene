@@ -480,6 +480,7 @@ body.creation-detail-page main>section:first-of-type {
 
 .creation-detail-description-wrap {
 	margin-top: 8px;
+	--ps-desc-max-height: calc(10 * 1.5em);
 }
 
 .creation-detail-description-wrap.is-collapsed .creation-detail-description {
@@ -500,6 +501,10 @@ body.creation-detail-page main>section:first-of-type {
 	background: linear-gradient(180deg,
 			transparent,
 			color-mix(in srgb, var(--surface-strong) 92%, transparent));
+}
+
+.creation-detail-description-wrap.is-measuring.is-collapsed .creation-detail-description::after {
+	content: none;
 }
 
 .creation-detail-description-toggle-row {
