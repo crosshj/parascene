@@ -635,11 +635,13 @@ class AppRouteCreate extends HTMLElement {
 
 		button.disabled = true;
 
+		// Standalone create page (/create) needs full navigation to /creations; SPA only works when create is in-app.
+		const isStandaloneCreatePage = window.location.pathname === '/create';
 		submitCreationWithPending({
 			serverId: this.selectedServer.id,
 			methodKey,
 			args: collectedArgs || {},
-			navigate: 'spa',
+			navigate: isStandaloneCreatePage ? 'full' : 'spa',
 			onInsufficientCredits: async () => {
 				await this.loadCredits();
 			},
