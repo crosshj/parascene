@@ -479,24 +479,10 @@ class AppRouteCreations extends HTMLElement {
           <div class="route-empty route-empty-image-grid">
             <div class="route-empty-title">No creations yet</div>
             <div class="route-empty-message">Start creating to see your work here.</div>
-            <a href="/create" class="route-empty-button" data-route="create">Get Started</a>
+            <a href="/create" class="route-empty-button">Get Started</a>
           </div>
         `;
 
-				// Add click handler for the button to use client-side routing
-				const button = container.querySelector('.route-empty-button');
-				if (button) {
-					button.addEventListener('click', (e) => {
-						e.preventDefault();
-						const header = document.querySelector('app-navigation');
-						if (header && typeof header.handleRouteChange === 'function') {
-							window.history.pushState({ route: 'create' }, '', '/create');
-							header.handleRouteChange();
-						} else {
-							window.location.hash = 'create';
-						}
-					});
-				}
 				this.hasLoadedOnce = true;
 				return;
 			}

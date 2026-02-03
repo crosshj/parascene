@@ -35,6 +35,16 @@ class AppNavigationMobile extends HTMLElement {
 		const route = button?.getAttribute('data-route');
 		if (!route) return;
 
+		// Create is a standalone page; full navigation to/from it
+		if (route === 'create') {
+			window.location.href = '/create';
+			return;
+		}
+		if (window.location.pathname === '/create') {
+			window.location.href = `/${route}`;
+			return;
+		}
+
 		const isServerSentPage = /^\/creations\/\d+(\/(edit|mutat|mutate))?$/.test(window.location.pathname) ||
 			window.location.pathname.startsWith('/s/') ||
 			window.location.pathname.startsWith('/help/') ||
@@ -90,12 +100,14 @@ class AppNavigationMobile extends HTMLElement {
 		if (pathname === '/user' || /^\/user\/\d+$/.test(pathname)) {
 			currentRoute = null;
 		}
+		// Create is a standalone page at /create
+		const isCreatePage = pathname === '/create';
 		navButtons.forEach(button => {
 			const route = button.getAttribute('data-route');
 			const isActive = Boolean(currentRoute) && route === currentRoute;
 			button.classList.toggle('is-active', isActive);
 			if (button.classList.contains('create-button')) {
-				button.disabled = false;
+				button.disabled = isCreatePage;
 			}
 		});
 	}

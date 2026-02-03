@@ -724,12 +724,19 @@ header .create-button.btn-primary:active:not(:disabled) {
 .btn-primary:disabled,
 button.btn-primary:disabled,
 header .action-item.btn-primary:disabled,
-header .create-button.btn-primary:disabled {
+header .create-button.btn-primary:disabled,
+header .create-button.btn-primary.is-active {
 	background: var(--surface-strong);
 	color: var(--text);
 	border-color: var(--border);
 	cursor: not-allowed;
 	opacity: 0.6;
+}
+
+header .create-button.btn-primary.is-active:hover,
+header .create-button.btn-primary.is-active:active {
+	background: var(--surface-strong);
+	transform: none;
 }
 
 /* Secondary button style */
@@ -1263,6 +1270,21 @@ header .notification-preview-item+.notification-preview-item {
 
 header .notification-preview-item.is-read {
 	opacity: 0.65;
+}
+
+@media (max-width: 768px) {
+	header .notifications-menu {
+		position: fixed;
+		top: 52px;
+		right: auto;
+		left: 50%;
+		transform: translateX(-50%) translateY(-8px);
+		width: min(280px, calc(100vw - 24px));
+	}
+
+	header .notifications-menu.open {
+		transform: translateX(-50%) translateY(0);
+	}
 }
 
 header .notification-preview-item.is-new .notification-preview-title {

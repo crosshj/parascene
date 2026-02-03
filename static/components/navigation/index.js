@@ -204,9 +204,10 @@ class AppNavigation extends HTMLElement {
 	}
 
 	navigateToRoute(route) {
-		// Check if we're on a server-sent page (like creation detail)
+		// Check if we're on a server-sent or standalone page (create, creation detail, etc.)
 		// If so, use full page navigation for ANY route change
-		const isServerSentPage = /^\/creations\/\d+(\/(edit|mutat|mutate))?$/.test(window.location.pathname) ||
+		const isServerSentPage = window.location.pathname === '/create' ||
+			/^\/creations\/\d+(\/(edit|mutat|mutate))?$/.test(window.location.pathname) ||
 			window.location.pathname.startsWith('/s/') ||
 			window.location.pathname.startsWith('/help/') ||
 			window.location.pathname === '/user' ||
@@ -227,10 +228,11 @@ class AppNavigation extends HTMLElement {
 
 		const pathname = window.location.pathname;
 		const currentRoute = pathname === '/' || pathname === '' ? this.defaultRoute : pathname.slice(1);
-		const isCreateRoute = currentRoute === 'create';
+		const isCreateRoute = currentRoute === 'create' || pathname === '/create';
 
 		createButtons.forEach(createButton => {
 			createButton.disabled = isCreateRoute;
+			createButton.classList.toggle('is-active', isCreateRoute);
 		});
 	}
 
@@ -654,10 +656,16 @@ class AppNavigation extends HTMLElement {
 		const createButtons = this.querySelectorAll('.create-button');
 		createButtons.forEach(createButton => {
 			createButton.addEventListener('click', (e) => {
+				// Don't navigate if already on create page
+				if (createButton.disabled) {
+					e.preventDefault();
+					e.stopPropagation();
+					return;
+				}
+				// Allow default navigation for link to /create (standalone create page)
+				if (createButton.getAttribute?.('href') === '/create') return;
 				e.preventDefault();
 				e.stopPropagation();
-				// Don't navigate if already on create route
-				if (createButton.disabled) return;
 				this.navigateToRoute('create');
 				if (createButton.closest('.mobile-menu')) {
 					this.closeMobileMenu();
@@ -756,7 +764,7 @@ class AppNavigation extends HTMLElement {
 				} else if (action === 'profile') {
 					document.dispatchEvent(new CustomEvent('open-profile'));
 				} else if (action === 'create') {
-					this.navigateToRoute('create');
+					window.location.href = '/create';
 				}
 			});
 		});
@@ -892,9 +900,9 @@ class AppNavigation extends HTMLElement {
 		}).join('')}
           </nav>
 			${showCreate ? html`
-              <button class="action-item create-button btn-primary">
+              <a href="/create" class="action-item create-button btn-primary">
                 Create
-              </button>
+              </a>
             ` : ''}
           <div class="header-actions">
             ${hasAuthLinks ? (this.authLinks || []).map(authLink =>
@@ -978,9 +986,9 @@ class AppNavigation extends HTMLElement {
             ${hasMobileActions ? html`
               <div class="mobile-menu-actions">
                 ${showCreate ? html`
-                  <button class="create-button btn-primary">
+                  <a href="/create" class="create-button btn-primary">
                     Create
-                  </button>
+                  </a>
                 ` : ''}
                 ${showNotifications ? html`
                   <button class="action-item" data-mobile-menu-action="notifications">
