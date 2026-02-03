@@ -125,31 +125,46 @@ class AppRouteCreate extends HTMLElement {
       <div class="create-route">
         <div class="route-header">
           <h3>Create</h3>
-          <p>Select a server and generation method to create a new image.</p>
         </div>
-        <form class="create-form" data-create-form>
-          <div class="form-group">
-            <label class="form-label" for="server-select">Server</label>
-            <select class="form-select" id="server-select" data-server-select required>
-              <option value="">Select a server...</option>
-            </select>
-          </div>
-          <div class="form-group" data-method-group style="display: none;">
-            <label class="form-label" for="method-select">Generation Method</label>
-            <select class="form-select" id="method-select" data-method-select required>
-              <option value="">Select a method...</option>
-            </select>
-          </div>
-          <div class="form-group" data-fields-group style="display: none;">
-            <div data-fields-container></div>
-          </div>
-        </form>
-        <div class="create-controls">
-          <button class="create-button" data-create-button disabled>
-            Create
-          </button>
-          <p class="create-cost" data-create-cost>Select a server and method to see cost</p>
-        </div>
+        <app-tabs>
+          <tab data-id="basic" label="Basic" default>
+            <div class="route-header">
+              <p>Select a server and generation method to create a new image.</p>
+            </div>
+            <form class="create-form" data-create-form>
+              <div class="form-group">
+                <label class="form-label" for="server-select">Server</label>
+                <select class="form-select" id="server-select" data-server-select required>
+                  <option value="">Select a server...</option>
+                </select>
+              </div>
+              <div class="form-group" data-method-group style="display: none;">
+                <label class="form-label" for="method-select">Generation Method</label>
+                <select class="form-select" id="method-select" data-method-select required>
+                  <option value="">Select a method...</option>
+                </select>
+              </div>
+              <div class="form-group" data-fields-group style="display: none;">
+                <div data-fields-container></div>
+              </div>
+            </form>
+            <div class="create-controls">
+              <button class="create-button" data-create-button disabled>
+                Create
+              </button>
+              <p class="create-cost" data-create-cost>Select a server and method to see cost</p>
+            </div>
+          </tab>
+          <tab data-id="advanced" label="Advanced">
+            <div class="route-empty create-route-coming-soon">
+              <p class="route-empty-message">
+				Coming soon...
+				Here you will be able to build, save, and share workflows.
+				Workflows enable you to connect server methods together and source information from parascene api.
+			  </p>
+            </div>
+          </tab>
+        </app-tabs>
       </div>
     `;
 		this.setupEventListeners();
