@@ -45,6 +45,13 @@
 	margin-bottom: 6px;
 }
 
+.user-name-row {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+}
+
 .user-name {
 	font-size: 1rem;
 	font-weight: 600;

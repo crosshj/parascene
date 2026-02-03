@@ -842,6 +842,36 @@ input:focus-visible {
 	margin-top: 10px;
 }
 
+.user-suspend-zone {
+	margin-top: 16px;
+	padding-top: 16px;
+	border-top: 1px solid var(--border);
+}
+
+.user-suspend-title {
+	font-weight: 700;
+	margin-bottom: 8px;
+}
+
+.user-suspend-label {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	margin-right: 10px;
+}
+
+.user-suspend-save {
+	margin-top: 8px;
+}
+
+.user-suspend-save.is-loading {
+	opacity: 0.8;
+}
+
+.user-suspend-error {
+	margin-top: 10px;
+}
+
 table {
 	width: 100%;
 	border-collapse: collapse;
@@ -3549,6 +3579,11 @@ body.modal-open {
 }
 
 .server-badge-member {
+	background: var(--surface-strong);
+	color: var(--text-muted);
+}
+
+.server-badge-suspended {
 	background: var(--surface-strong);
 	color: var(--text-muted);
 }

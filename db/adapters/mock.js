@@ -77,14 +77,20 @@ export function openDb() {
 
 	const queries = {
 		selectUserByEmail: {
-			get: async (email) => users.find((user) => user.email === email)
+			get: async (email) => {
+				const user = users.find((u) => u.email === email);
+				if (!user) return undefined;
+				const meta = user.meta != null && typeof user.meta === "object" ? user.meta : {};
+				return { ...user, meta, suspended: meta.suspended === true };
+			}
 		},
 		selectUserById: {
 			get: async (id) => {
 				const user = users.find((entry) => entry.id === Number(id));
 				if (!user) return undefined;
 				const { password_hash, ...safeUser } = user;
-				return safeUser;
+				const meta = safeUser.meta != null && typeof safeUser.meta === "object" ? safeUser.meta : {};
+				return { ...safeUser, meta, suspended: meta.suspended === true };
 			}
 		},
 		selectUserProfileByUserId: {
@@ -137,7 +143,8 @@ export function openDb() {
 					password_hash,
 					role,
 					created_at: new Date().toISOString(),
-					last_active_at: null
+					last_active_at: null,
+					meta: {}
 				};
 				users.push(user);
 				// Standardize return value: use insertId (also support lastInsertRowid for backward compat)
@@ -214,14 +221,26 @@ export function openDb() {
 					const profile = user_profiles.find(
 						(row) => row.user_id === Number(safeUser.id)
 					);
+					const meta = safeUser.meta != null && typeof safeUser.meta === "object" ? safeUser.meta : {};
 					return {
 						...safeUser,
 						last_active_at: safeUser.last_active_at ?? null,
+						meta,
+						suspended: meta.suspended === true,
 						user_name: profile?.user_name ?? null,
 						display_name: profile?.display_name ?? null,
 						avatar_url: profile?.avatar_url ?? null
 					};
 				})
+		},
+		updateUserSuspended: {
+			run: async (userId, suspended) => {
+				const user = users.find((u) => Number(u.id) === Number(userId));
+				if (!user) return { changes: 0 };
+				user.meta = user.meta != null && typeof user.meta === "object" ? { ...user.meta } : {};
+				user.meta.suspended = Boolean(suspended);
+				return { changes: 1 };
+			}
 		},
 		updateUserLastActive: {
 			run: async (userId) => {

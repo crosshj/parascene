@@ -44,11 +44,13 @@ section[id] {
 	display: none;
 }
 
-#fail {
+#fail,
+#suspended {
 	display: none;
 }
 
-#fail:target {
+#fail:target,
+#suspended:target {
 	display: block;
 }
 

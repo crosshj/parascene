@@ -51,11 +51,13 @@ export function openDb() {
 				// Use serviceClient to bypass RLS for authentication
 				const { data, error } = await serviceClient
 					.from(prefixedTable("users"))
-					.select("id, email, password_hash, role")
+					.select("id, email, password_hash, role, meta")
 					.eq("email", email)
 					.maybeSingle();
 				if (error) throw error;
-				return data ?? undefined;
+				if (!data) return undefined;
+				const meta = typeof data.meta === "object" && data.meta !== null ? data.meta : {};
+				return { ...data, meta, suspended: meta.suspended === true };
 			}
 		},
 		selectUserById: {
@@ -63,11 +65,13 @@ export function openDb() {
 				// Use serviceClient to bypass RLS for authentication
 				const { data, error } = await serviceClient
 					.from(prefixedTable("users"))
-					.select("id, email, role, created_at")
+					.select("id, email, role, created_at, meta")
 					.eq("id", id)
 					.maybeSingle();
 				if (error) throw error;
-				return data ?? undefined;
+				if (!data) return undefined;
+				const meta = typeof data.meta === "object" && data.meta !== null ? data.meta : {};
+				return { ...data, meta, suspended: meta.suspended === true };
 			}
 		},
 		selectUserProfileByUserId: {
@@ -328,6 +332,7 @@ export function openDb() {
             role,
             created_at,
             last_active_at,
+            meta,
             ${prefixedTable("user_profiles")} (
               user_name,
               display_name,
@@ -338,17 +343,39 @@ export function openDb() {
 				if (error) throw error;
 				return (data ?? []).map((row) => {
 					const profile = row?.[prefixedTable("user_profiles")] || null;
+					const meta = typeof row.meta === "object" && row.meta !== null ? row.meta : {};
 					return {
 						id: row.id,
 						email: row.email,
 						role: row.role,
 						created_at: row.created_at,
 						last_active_at: row.last_active_at ?? null,
+						meta,
+						suspended: meta.suspended === true,
 						user_name: profile?.user_name ?? null,
 						display_name: profile?.display_name ?? null,
 						avatar_url: profile?.avatar_url ?? null
 					};
 				});
+			}
+		},
+		updateUserSuspended: {
+			run: async (userId, suspended) => {
+				const { data: current, error: selectError } = await serviceClient
+					.from(prefixedTable("users"))
+					.select("meta")
+					.eq("id", userId)
+					.maybeSingle();
+				if (selectError) throw selectError;
+				const existing = current?.meta ?? null;
+				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
+				meta.suspended = Boolean(suspended);
+				const { error } = await serviceClient
+					.from(prefixedTable("users"))
+					.update({ meta })
+					.eq("id", userId);
+				if (error) throw error;
+				return { changes: 1 };
 			}
 		},
 		updateUserLastActive: {

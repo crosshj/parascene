@@ -57,6 +57,29 @@ function ensureUsersLastActiveAtColumn(db) {
 	}
 }
 
+function ensureUsersMetaColumn(db) {
+	try {
+		const columns = db.prepare("PRAGMA table_info(users)").all();
+		const hasMeta = columns.some((column) => column.name === "meta");
+		if (!hasMeta) {
+			db.exec("ALTER TABLE users ADD COLUMN meta TEXT");
+		}
+	} catch (error) {
+		// console.warn("Failed to ensure meta column on users:", error);
+	}
+}
+
+function parseUserMeta(value) {
+	if (value == null) return {};
+	if (typeof value === "object") return value;
+	if (typeof value !== "string" || !value.trim()) return {};
+	try {
+		return JSON.parse(value);
+	} catch {
+		return {};
+	}
+}
+
 export async function openDb() {
 	const DbClass = await loadDatabase();
 	ensureDataDir();
@@ -64,6 +87,7 @@ export async function openDb() {
 	initSchema(db);
 	ensureServersAuthTokenColumn(db);
 	ensureUsersLastActiveAtColumn(db);
+	ensureUsersMetaColumn(db);
 
 	const transferCreditsTxn = db.transaction((fromUserId, toUserId, amount) => {
 		const ensureCreditsRowStmt = db.prepare(
@@ -182,17 +206,23 @@ export async function openDb() {
 		selectUserByEmail: {
 			get: async (email) => {
 				const stmt = db.prepare(
-					"SELECT id, email, password_hash, role FROM users WHERE email = ?"
+					"SELECT id, email, password_hash, role, meta FROM users WHERE email = ?"
 				);
-				return Promise.resolve(stmt.get(email));
+				const row = stmt.get(email);
+				if (!row) return undefined;
+				const meta = parseUserMeta(row.meta);
+				return { ...row, meta, suspended: meta.suspended === true };
 			}
 		},
 		selectUserById: {
 			get: async (id) => {
 				const stmt = db.prepare(
-					"SELECT id, email, role, created_at FROM users WHERE id = ?"
+					"SELECT id, email, role, created_at, meta FROM users WHERE id = ?"
 				);
-				return Promise.resolve(stmt.get(id));
+				const row = stmt.get(id);
+				if (!row) return undefined;
+				const meta = parseUserMeta(row.meta);
+				return { ...row, meta, suspended: meta.suspended === true };
 			}
 		},
 		selectUserProfileByUserId: {
@@ -426,6 +456,7 @@ export async function openDb() {
             u.role,
             u.created_at,
             u.last_active_at,
+            u.meta,
             up.user_name,
             up.display_name,
             up.avatar_url
@@ -433,7 +464,26 @@ export async function openDb() {
            LEFT JOIN user_profiles up ON up.user_id = u.id
            ORDER BY u.id ASC`
 				);
-				return Promise.resolve(stmt.all());
+				const rows = stmt.all();
+				return rows.map((row) => {
+					const meta = parseUserMeta(row.meta);
+					return {
+						...row,
+						meta,
+						suspended: meta.suspended === true
+					};
+				});
+			}
+		},
+		updateUserSuspended: {
+			run: async (userId, suspended) => {
+				const stmt = db.prepare("SELECT meta FROM users WHERE id = ?");
+				const row = stmt.get(userId);
+				const existing = parseUserMeta(row?.meta);
+				const meta = { ...existing, suspended: Boolean(suspended) };
+				const updateStmt = db.prepare("UPDATE users SET meta = ? WHERE id = ?");
+				const result = updateStmt.run(JSON.stringify(meta), userId);
+				return Promise.resolve({ changes: result.changes });
 			}
 		},
 		updateUserLastActive: {

@@ -306,6 +306,16 @@ export default function createProfileRoutes({ queries }) {
 			return res.redirect(url);
 		}
 
+		if (user.suspended) {
+			const qs = new URLSearchParams();
+			if (returnUrl && returnUrl !== "/") {
+				qs.set("returnUrl", returnUrl);
+			}
+			const queryString = qs.toString();
+			const url = queryString ? `/auth.html?${queryString}#suspended` : "/auth.html#suspended";
+			return res.redirect(url);
+		}
+
 		const token = jwt.sign({ userId: user.id }, getJwtSecret(), {
 			expiresIn: "7d"
 		});

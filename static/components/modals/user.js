@@ -26,12 +26,17 @@ class AppModalUser extends HTMLElement {
 		this._dangerZone = this.querySelector('[data-user-danger-zone]');
 		this._deleteButton = this.querySelector('[data-user-delete-button]');
 		this._deleteError = this.querySelector('[data-user-delete-error]');
+		this._suspendZone = this.querySelector('[data-user-suspend-zone]');
+		this._suspendCheckbox = this.querySelector('[data-user-suspend-checkbox]');
+		this._suspendSaveButton = this.querySelector('[data-user-suspend-save]');
+		this._suspendError = this.querySelector('[data-user-suspend-error]');
 		this._overlay?.addEventListener('click', (e) => {
 			if (e.target?.dataset?.userClose !== undefined || e.target === this._overlay) this.close();
 		});
 		document.addEventListener('keydown', this._boundEscape);
 		this._form?.addEventListener('submit', (e) => this.handleSubmit(e));
 		this._deleteButton?.addEventListener('click', () => this.handleDeleteUser());
+		this._suspendSaveButton?.addEventListener('click', () => this.handleSaveSuspend());
 		this.loadViewerUser();
 	}
 
@@ -75,6 +80,17 @@ class AppModalUser extends HTMLElement {
 							</label>
 							<div class="alert error user-tip-error" data-user-tip-error hidden></div>
 						</form>
+						<div class="user-suspend-zone" data-user-suspend-zone hidden>
+							<div class="user-suspend-title">Suspend</div>
+							<label class="user-suspend-label">
+								<input type="checkbox" data-user-suspend-checkbox />
+								<span>Suspended</span>
+							</label>
+							<button type="button" class="btn-primary user-suspend-save" data-user-suspend-save>
+								Save
+							</button>
+							<div class="alert error user-suspend-error" data-user-suspend-error hidden></div>
+						</div>
 						<div class="user-danger-zone" data-user-danger-zone hidden>
 							<div class="user-danger-title">Danger zone</div>
 							<div class="user-danger-help">
@@ -117,6 +133,23 @@ class AppModalUser extends HTMLElement {
 		if (this._dangerZone) {
 			this._dangerZone.hidden = !canDelete;
 		}
+
+		const canSuspend =
+			this._viewerRole === 'admin' &&
+			Number.isFinite(Number(user?.id)) &&
+			Number(user?.id) > 0 &&
+			(this._viewerUserId == null || Number(user?.id) !== Number(this._viewerUserId));
+		if (this._suspendZone) {
+			this._suspendZone.hidden = !canSuspend;
+		}
+		if (this._suspendCheckbox) {
+			this._suspendCheckbox.checked = Boolean(user?.suspended);
+		}
+		if (this._suspendError) {
+			this._suspendError.hidden = true;
+			this._suspendError.textContent = '';
+		}
+
 		this._overlay?.classList.add('open');
 	}
 
@@ -313,6 +346,65 @@ class AppModalUser extends HTMLElement {
 			if (this._deleteError) {
 				this._deleteError.hidden = false;
 				this._deleteError.textContent = message;
+			} else {
+				alert(message);
+			}
+		} finally {
+			if (btn) {
+				btn.disabled = false;
+				btn.classList.remove('is-loading');
+			}
+		}
+	}
+
+	async handleSaveSuspend() {
+		const userId = Number(this._currentUser?.id);
+		if (!Number.isFinite(userId) || userId <= 0) return;
+		if (this._viewerRole !== 'admin') return;
+		if (this._viewerUserId && Number(this._viewerUserId) === userId) return;
+
+		const suspended = Boolean(this._suspendCheckbox?.checked);
+		if (this._suspendError) {
+			this._suspendError.hidden = true;
+			this._suspendError.textContent = '';
+		}
+
+		const btn = this._suspendSaveButton;
+		if (btn) {
+			btn.disabled = true;
+			btn.classList.add('is-loading');
+		}
+
+		try {
+			const res = await fetch(`/admin/users/${userId}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify({ suspended })
+			});
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				const message = data?.error || data?.message || 'Failed to update suspend state.';
+				if (this._suspendError) {
+					this._suspendError.hidden = false;
+					this._suspendError.textContent = message;
+				} else {
+					alert(message);
+				}
+				return;
+			}
+			this._currentUser.suspended = suspended;
+			if (data?.user) {
+				this._currentUser.credits = data.user.credits;
+				const creditsEl = this.querySelector('[data-user-modal-credits]');
+				if (creditsEl) creditsEl.textContent = Number(data.user.credits).toFixed(1);
+			}
+			document.dispatchEvent(new CustomEvent('user-updated', { detail: { userId } }));
+		} catch (err) {
+			const message = err?.message || 'Failed to update suspend state.';
+			if (this._suspendError) {
+				this._suspendError.hidden = false;
+				this._suspendError.textContent = message;
 			} else {
 				alert(message);
 			}

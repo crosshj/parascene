@@ -6,7 +6,8 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'consumer',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  last_active_at TEXT
+  last_active_at TEXT,
+  meta TEXT
 );
 
 CREATE TABLE IF NOT EXISTS user_profiles (

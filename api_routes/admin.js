@@ -95,23 +95,84 @@ export default function createAdminRoutes({ queries, storage }) {
 	}
 
 	router.get("/admin/users", async (req, res) => {
-		const user = await requireAdmin(req, res);
-		if (!user) return;
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
 
 		const users = await queries.selectUsers.all();
 
 		// Fetch credits for each user
 		const usersWithCredits = await Promise.all(
-			users.map(async (user) => {
-				const credits = await queries.selectUserCredits.get(user.id);
+			users.map(async (u) => {
+				const credits = await queries.selectUserCredits.get(u.id);
 				return {
-					...user,
+					...u,
 					credits: credits?.balance ?? 0
 				};
 			})
 		);
 
-		res.json({ users: usersWithCredits });
+		// Active: role === 'consumer' && !suspended, sorted by last_active_at desc (nulls last)
+		const activeUsers = usersWithCredits
+			.filter((u) => u.role === "consumer" && !u.suspended)
+			.sort((a, b) => {
+				const aAt = a.last_active_at ? new Date(a.last_active_at).getTime() : 0;
+				const bAt = b.last_active_at ? new Date(b.last_active_at).getTime() : 0;
+				return bAt - aAt;
+			});
+
+		// Other: role !== 'consumer' OR suspended (order undefined)
+		const otherUsers = usersWithCredits.filter(
+			(u) => u.role !== "consumer" || u.suspended
+		);
+
+		res.json({ activeUsers, otherUsers });
+	});
+
+	// Admin-only: update user suspend state (merge into users.meta.suspended).
+	router.put("/admin/users/:id", async (req, res) => {
+		const admin = await requireAdmin(req, res);
+		if (!admin) return;
+
+		const targetUserId = Number.parseInt(String(req.params?.id || ""), 10);
+		if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+			return res.status(400).json({ error: "Invalid user id" });
+		}
+
+		if (Number(targetUserId) === Number(admin.id)) {
+			return res.status(400).json({ error: "Refusing to suspend current admin user" });
+		}
+
+		const target = await queries.selectUserById.get(targetUserId);
+		if (!target) {
+			return res.status(404).json({ error: "User not found" });
+		}
+
+		const suspended = req.body?.suspended;
+		if (typeof suspended !== "boolean") {
+			return res.status(400).json({ error: "suspended must be a boolean" });
+		}
+
+		if (!queries.updateUserSuspended?.run) {
+			return res.status(500).json({ error: "User suspend update not available" });
+		}
+
+		await queries.updateUserSuspended.run(targetUserId, suspended);
+		const updated = await queries.selectUserById.get(targetUserId);
+		let creditsBalance = 0;
+		try {
+			const creditsRow = await queries.selectUserCredits.get(targetUserId);
+			creditsBalance = creditsRow?.balance ?? 0;
+		} catch {
+			// ignore
+		}
+		res.json({
+			ok: true,
+			user: {
+				...updated,
+				suspended,
+				credits: creditsBalance
+			}
+		});
 	});
 
 	// Admin-only: delete a user and clean up related content (likes, comments, images, etc).
