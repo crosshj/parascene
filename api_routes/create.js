@@ -121,8 +121,11 @@ export default function createCreateRoutes({ queries, storage }) {
 		return new Date().toISOString();
 	}
 
+	// Provider must fetch image URLs; it cannot access localhost. Always use production base.
+	const PROVIDER_BASE_URL = "https://parascene.crosshj.com";
+
 	function toParasceneImageUrl(raw) {
-		const base = "https://parascene.crosshj.com";
+		const base = PROVIDER_BASE_URL;
 		if (typeof raw !== "string") return null;
 		const value = raw.trim();
 		if (!value) return null;
@@ -257,6 +260,24 @@ export default function createCreateRoutes({ queries, storage }) {
 					if (normalized) {
 						safeArgs.image_url = normalized;
 						meta.args.image_url = normalized;
+					}
+				}
+
+				// Unpublished sources: provider cannot use /api/images/created/:filename (403).
+				// Use share URL so provider can fetch without auth.
+				const sourcePublished = source.published === 1 || source.published === true;
+				if (!sourcePublished && source.status === "completed" && source.filename) {
+					try {
+						const token = mintShareToken({
+							version: ACTIVE_SHARE_VERSION,
+							imageId: source.id,
+							sharedByUserId: user.id
+						});
+						const shareUrl = `${PROVIDER_BASE_URL}/api/share/${encodeURIComponent(ACTIVE_SHARE_VERSION)}/${encodeURIComponent(token)}/image`;
+						safeArgs.image_url = shareUrl;
+						meta.args.image_url = shareUrl;
+					} catch {
+						// If mint fails, keep existing image_url; provider may 403 for unpublished
 					}
 				}
 			}
@@ -763,12 +784,6 @@ export default function createCreateRoutes({ queries, storage }) {
 			}
 
 			const targetImage = image || anyImage;
-			const isPublished = targetImage.published === 1 || targetImage.published === true;
-
-			if (!isPublished) {
-				return res.status(400).json({ error: "Can only edit published creations" });
-			}
-
 			const isAdmin = user.role === 'admin';
 			const isOwner = image && image.user_id === user.id;
 

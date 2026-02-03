@@ -375,10 +375,10 @@ async function loadCreation() {
 			}
 		}
 
-		// Update edit button - show for published creations if owner/admin and not failed
+		// Update edit button - show for completed creations if owner/admin and not failed (published or not)
 		const editBtn = document.querySelector('[data-edit-btn]');
 		if (editBtn) {
-			if (!canEdit || !isPublished || isFailed) {
+			if (!canEdit || status !== 'completed' || isFailed) {
 				editBtn.style.display = 'none';
 			} else {
 				editBtn.style.display = '';
@@ -397,12 +397,10 @@ async function loadCreation() {
 			}
 		}
 
-		// Update mutate button - show for completed images with a URL
+		// Update mutate button - show for completed images with a URL (published or unpublished; backend uses share URL for unpublished)
 		const mutateBtn = document.querySelector('[data-mutate-btn]');
 		if (mutateBtn) {
-			// Only allow mutate when the source image is publicly readable by provider servers.
-			// Unpublished images require auth and will 403 for providers fetching by URL.
-			const canMutate = isPublished && status === 'completed' && !isFailed && Boolean(creation.url);
+			const canMutate = canEdit && status === 'completed' && !isFailed && Boolean(creation.url);
 			if (!canMutate) {
 				mutateBtn.style.display = 'none';
 			} else {
