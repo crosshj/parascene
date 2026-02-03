@@ -136,7 +136,8 @@ export function openDb() {
 					email,
 					password_hash,
 					role,
-					created_at: new Date().toISOString()
+					created_at: new Date().toISOString(),
+					last_active_at: null
 				};
 				users.push(user);
 				// Standardize return value: use insertId (also support lastInsertRowid for backward compat)
@@ -215,11 +216,24 @@ export function openDb() {
 					);
 					return {
 						...safeUser,
+						last_active_at: safeUser.last_active_at ?? null,
 						user_name: profile?.user_name ?? null,
 						display_name: profile?.display_name ?? null,
 						avatar_url: profile?.avatar_url ?? null
 					};
 				})
+		},
+		updateUserLastActive: {
+			run: async (userId) => {
+				const user = users.find((u) => Number(u.id) === Number(userId));
+				if (!user) return { changes: 0 };
+				const now = new Date();
+				const fifteenMinAgo = new Date(now.getTime() - 15 * 60 * 1000);
+				const last = user.last_active_at ? new Date(user.last_active_at) : null;
+				if (last !== null && last > fifteenMinAgo) return { changes: 0 };
+				user.last_active_at = now.toISOString();
+				return { changes: 1 };
+			}
 		},
 		selectModerationQueue: {
 			all: async () => [...moderation_queue]

@@ -429,8 +429,18 @@ async function loadUsers({ force = false } = {}) {
 				? `Joined ${createdLabel}`
 				: (user.created_at || "—");
 
+			const lastActiveLabel = user.last_active_at
+				? formatRelativeTime(user.last_active_at, { style: "long" })
+				: null;
+			const lastActive = document.createElement("div");
+			lastActive.className = "user-last-active";
+			lastActive.textContent = lastActiveLabel
+				? `Last active ${lastActiveLabel}`
+				: "Last active —";
+
 			card.appendChild(header);
 			card.appendChild(created);
+			card.appendChild(lastActive);
 
 			container.appendChild(card);
 		}

@@ -45,12 +45,25 @@ function ensureServersAuthTokenColumn(db) {
 	}
 }
 
+function ensureUsersLastActiveAtColumn(db) {
+	try {
+		const columns = db.prepare("PRAGMA table_info(users)").all();
+		const hasLastActiveAt = columns.some((column) => column.name === "last_active_at");
+		if (!hasLastActiveAt) {
+			db.exec("ALTER TABLE users ADD COLUMN last_active_at TEXT");
+		}
+	} catch (error) {
+		// console.warn("Failed to ensure last_active_at column on users:", error);
+	}
+}
+
 export async function openDb() {
 	const DbClass = await loadDatabase();
 	ensureDataDir();
 	const db = new DbClass(dbPath);
 	initSchema(db);
 	ensureServersAuthTokenColumn(db);
+	ensureUsersLastActiveAtColumn(db);
 
 	const transferCreditsTxn = db.transaction((fromUserId, toUserId, amount) => {
 		const ensureCreditsRowStmt = db.prepare(
@@ -412,6 +425,7 @@ export async function openDb() {
             u.email,
             u.role,
             u.created_at,
+            u.last_active_at,
             up.user_name,
             up.display_name,
             up.avatar_url
@@ -420,6 +434,16 @@ export async function openDb() {
            ORDER BY u.id ASC`
 				);
 				return Promise.resolve(stmt.all());
+			}
+		},
+		updateUserLastActive: {
+			run: async (userId) => {
+				const stmt = db.prepare(
+					`UPDATE users SET last_active_at = datetime('now')
+					 WHERE id = ? AND (last_active_at IS NULL OR last_active_at < datetime('now', '-15 minutes'))`
+				);
+				const result = stmt.run(userId);
+				return Promise.resolve({ changes: result.changes });
 			}
 		},
 		selectModerationQueue: {

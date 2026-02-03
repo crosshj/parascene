@@ -14,6 +14,13 @@
     "dependsOn": []
   },
   {
+    "name": "[Provider] Pixel art dims → Flux",
+    "description": "NES 8-bit - 160×160, SNES 16-bit - 256×256, AI Legacy - 512×512, AI Classic - 768×768, AI Latest - 1024×1024",
+    "cost": 42,
+    "impact": 94,
+    "dependsOn": []
+  },
+  {
     "name": "Invite credits",
     "description": "Grant starter credits on invite acceptance; record inviter and source.",
     "cost": 1,
@@ -53,6 +60,13 @@
     "description": "well-formatted explainers for site features, unprotected route",
     "cost": 16,
     "impact": 27,
+    "dependsOn": []
+  },
+  {
+    "name": "Advanced create - node workflow",
+    "description": "Assemble nodes into a workflow (and save), then run. Node-based workflow builder for creation with persistence and execution.",
+    "cost": 92,
+    "impact": 88,
     "dependsOn": []
   },
   {

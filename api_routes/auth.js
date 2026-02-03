@@ -167,6 +167,13 @@ function sessionMiddleware(queries = {}) {
 				return next();
 			}
 
+			// Throttled update of last_active_at (at most once per 15 min per user)
+			try {
+				await queries.updateUserLastActive?.run?.(userId);
+			} catch {
+				// Non-fatal; do not block the request
+			}
+
 			if (shouldSkipSessionRefresh(req)) {
 				return next();
 			}

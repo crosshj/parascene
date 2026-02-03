@@ -6,7 +6,8 @@ CREATE TABLE IF NOT EXISTS prsn_users (
   email text UNIQUE NOT NULL,
   password_hash text NOT NULL,
   role text NOT NULL DEFAULT 'consumer',
-  created_at timestamptz NOT NULL DEFAULT now()
+  created_at timestamptz NOT NULL DEFAULT now(),
+  last_active_at timestamptz
 );
 ALTER TABLE prsn_users ENABLE ROW LEVEL SECURITY;
 COMMENT ON TABLE prsn_users IS 'Parascene: user accounts with authentication credentials and roles. RLS enabled without policies - only service role can access. All access controlled via API layer.';

@@ -327,6 +327,7 @@ export function openDb() {
             email,
             role,
             created_at,
+            last_active_at,
             ${prefixedTable("user_profiles")} (
               user_name,
               display_name,
@@ -342,11 +343,23 @@ export function openDb() {
 						email: row.email,
 						role: row.role,
 						created_at: row.created_at,
+						last_active_at: row.last_active_at ?? null,
 						user_name: profile?.user_name ?? null,
 						display_name: profile?.display_name ?? null,
 						avatar_url: profile?.avatar_url ?? null
 					};
 				});
+			}
+		},
+		updateUserLastActive: {
+			run: async (userId) => {
+				const { error } = await serviceClient
+					.from(prefixedTable("users"))
+					.update({ last_active_at: new Date().toISOString() })
+					.eq("id", userId)
+					.or("last_active_at.is.null,last_active_at.lt." + new Date(Date.now() - 15 * 60 * 1000).toISOString());
+				if (error) throw error;
+				return { changes: 1 };
 			}
 		},
 		selectModerationQueue: {
