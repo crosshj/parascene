@@ -25,6 +25,11 @@ class AppRouteCreate extends HTMLElement {
           gap: 1.25rem;
           margin-bottom: 1.5rem;
         }
+        .create-route [data-fields-container] {
+          display: flex;
+          flex-direction: column;
+          gap: 1.25rem;
+        }
         .create-route .form-group {
           display: flex;
           flex-direction: column;
@@ -51,6 +56,17 @@ class AppRouteCreate extends HTMLElement {
           font-family: inherit;
           transition: border-color 0.2s ease, box-shadow 0.2s ease;
         }
+        .create-route .form-select {
+          appearance: none;
+          -webkit-appearance: none;
+          -moz-appearance: none;
+          padding-right: 2.25rem;
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a0a0a0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+          background-repeat: no-repeat;
+          background-position: right 0.75rem center;
+          background-size: 1rem;
+          cursor: pointer;
+        }
         .create-route .form-input:focus-visible,
         .create-route .form-select:focus-visible {
           outline: none;
@@ -63,6 +79,67 @@ class AppRouteCreate extends HTMLElement {
         .create-route .form-input[type="color"] {
           height: 48px;
           cursor: pointer;
+        }
+        .create-route .form-group-checkbox {
+          flex-direction: row;
+          align-items: center;
+          gap: 0.75rem;
+        }
+        .create-route .form-group-checkbox .form-label {
+          margin-bottom: 0;
+        }
+        .create-route .form-switch-input {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          padding: 0;
+          margin: -1px;
+          overflow: hidden;
+          clip: rect(0, 0, 0, 0);
+          white-space: nowrap;
+          border: 0;
+        }
+        .create-route .form-switch {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+          flex-shrink: 0;
+          cursor: pointer;
+        }
+        .create-route .form-switch:focus-visible {
+          outline: 2px solid var(--accent-switch);
+          outline-offset: 2px;
+          border-radius: 999px;
+        }
+        .create-route .form-switch-track {
+          display: flex;
+          align-items: center;
+          width: 2.75rem;
+          height: 1.5rem;
+          padding: 2px;
+          border-radius: 999px;
+          background: var(--switch-track-off);
+          transition: background 0.2s ease, box-shadow 0.2s ease;
+        }
+        .create-route .form-switch-input:focus-visible ~ .form-switch-track,
+        .create-route .form-switch:focus-visible .form-switch-track {
+          box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-switch) 40%, transparent);
+        }
+        .create-route .form-switch-thumb {
+          width: 1.25rem;
+          height: 1.25rem;
+          border-radius: 50%;
+          background: var(--switch-thumb-off);
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+          transition: transform 0.2s ease;
+          transform: translateX(0);
+        }
+        .create-route .form-switch-input:checked ~ .form-switch-track {
+          background: color-mix(in srgb, var(--accent-switch) 40%, var(--switch-track-off));
+        }
+        .create-route .form-switch-input:checked ~ .form-switch-track .form-switch-thumb {
+          background: var(--accent-switch);
+          transform: translateX(1.25rem);
         }
         .create-route .create-controls {
           display: flex;
@@ -92,6 +169,16 @@ class AppRouteCreate extends HTMLElement {
         .create-route .create-button:disabled {
           opacity: 0.6;
           cursor: not-allowed;
+        }
+        .create-route .create-button-spinner {
+          display: inline-block;
+          width: 20px;
+          height: 20px;
+          border: 2px solid color-mix(in srgb, var(--accent-text) 40%, transparent);
+          border-top-color: var(--accent-text);
+          border-radius: 50%;
+          animation: spin 0.8s linear infinite;
+          vertical-align: middle;
         }
         .create-route .create-cost {
           font-size: 0.875rem;
@@ -163,7 +250,16 @@ class AppRouteCreate extends HTMLElement {
 	setupEventListeners() {
 		const createButton = this.querySelector("[data-create-button]");
 		if (createButton) {
-			createButton.addEventListener("click", () => this.handleCreate());
+			createButton.addEventListener("click", () => {
+				// Apply loading state immediately, before any other code runs
+				const btn = this.querySelector("[data-create-button]");
+				if (!btn) return;
+				btn.style.minWidth = `${btn.offsetWidth}px`;
+				btn.disabled = true;
+				btn.innerHTML = '<span class="create-button-spinner" aria-hidden="true"></span>';
+				void btn.offsetHeight; // force reflow so the loading state is committed
+				this.handleCreate(btn);
+			});
 		}
 
 		const serverSelect = this.querySelector("[data-server-select]");
@@ -500,12 +596,19 @@ class AppRouteCreate extends HTMLElement {
 		}
 	}
 
-	async handleCreate() {
-		const button = this.querySelector("[data-create-button]");
-
+	handleCreate(button) {
 		if (!button) return;
+		// Yield so the loading state can paint before we run validation/submit/navigation
+		requestAnimationFrame(() => {
+			requestAnimationFrame(() => {
+				this.handleCreateAfterSpinner(button);
+			});
+		});
+	}
 
+	handleCreateAfterSpinner(button) {
 		if (!this.selectedServer || !this.selectedMethod) {
+			this.resetCreateButton(button);
 			return;
 		}
 
@@ -514,6 +617,7 @@ class AppRouteCreate extends HTMLElement {
 		const methodKey = Object.keys(methods).find(key => methods[key] === this.selectedMethod);
 
 		if (!methodKey) {
+			this.resetCreateButton(button);
 			return;
 		}
 
@@ -521,22 +625,28 @@ class AppRouteCreate extends HTMLElement {
 		const fields = this.selectedMethod.fields || {};
 		const collectedArgs = {};
 		Object.keys(fields).forEach(fieldKey => {
-			const input = this.querySelector(`#field-${fieldKey}`);
+			let input = this.querySelector(`#field-${fieldKey}`);
+			const field = fields[fieldKey];
+			if (input?.classList?.contains('form-switch')) {
+				input = input.querySelector('.form-switch-input');
+			}
 			if (input) {
-				collectedArgs[fieldKey] = input.value || this.fieldValues[fieldKey] || '';
+				if (field?.type === 'boolean' || input.type === 'checkbox') {
+					collectedArgs[fieldKey] = input.checked;
+				} else {
+					collectedArgs[fieldKey] = input.value || this.fieldValues[fieldKey] || '';
+				}
 			} else {
 				// Fallback to stored value
-				collectedArgs[fieldKey] = this.fieldValues[fieldKey] || '';
+				collectedArgs[fieldKey] = this.fieldValues[fieldKey] ?? (field?.type === 'boolean' ? false : '');
 			}
 		});
 
 		// Validate required data
 		if (!this.selectedServer.id || !methodKey) {
-			// console.error('Missing required data: server_id and method are required');
+			this.resetCreateButton(button);
 			return;
 		}
-
-		button.disabled = true;
 
 		// Standalone create page (/create) needs full navigation to /creations; SPA only works when create is in-app.
 		const isStandaloneCreatePage = window.location.pathname === '/create';
@@ -546,17 +656,21 @@ class AppRouteCreate extends HTMLElement {
 			args: collectedArgs || {},
 			navigate: isStandaloneCreatePage ? 'full' : 'spa',
 			onInsufficientCredits: async () => {
+				this.resetCreateButton(button);
 				await this.loadCredits();
 			},
 			onError: async () => {
+				this.resetCreateButton(button);
 				await this.loadCredits();
 			}
 		});
+	}
 
-		// In most cases we navigate away immediately; still re-enable just in case.
-		setTimeout(() => {
-			button.disabled = false;
-		}, 0);
+	resetCreateButton(button) {
+		if (!button) return;
+		button.disabled = false;
+		button.style.minWidth = '';
+		button.textContent = 'Create';
 	}
 
 	saveSelections() {
@@ -633,18 +747,21 @@ class AppRouteCreate extends HTMLElement {
 
 	restoreFieldValues(savedFieldValues) {
 		Object.keys(savedFieldValues).forEach(fieldKey => {
-			const input = this.querySelector(`#field-${fieldKey}`);
-			if (input) {
+			let el = this.querySelector(`#field-${fieldKey}`);
+			if (el?.classList?.contains('form-switch')) {
+				el = el.querySelector('.form-switch-input');
+			}
+			if (el) {
 				const savedValue = savedFieldValues[fieldKey];
 				if (savedValue !== undefined && savedValue !== null && savedValue !== '') {
-					if (input.type === 'checkbox') {
-						input.checked = savedValue === true || savedValue === 'true';
+					if (el.type === 'checkbox') {
+						el.checked = savedValue === true || savedValue === 'true';
 					} else {
-						input.value = savedValue;
+						el.value = savedValue;
 					}
 					// Trigger change event to update fieldValues and button state
-					input.dispatchEvent(new Event('input', { bubbles: true }));
-					input.dispatchEvent(new Event('change', { bubbles: true }));
+					el.dispatchEvent(new Event('input', { bubbles: true }));
+					el.dispatchEvent(new Event('change', { bubbles: true }));
 				}
 			}
 		});

@@ -14,6 +14,9 @@
 	--border: #e2e8f0;
 	--accent: #7c3aed;
 	--accent-text: #ffffff;
+	--accent-switch: var(--accent);
+	--switch-track-off: var(--border);
+	--switch-thumb-off: var(--surface-strong);
 	--focus: #6d28d9;
 	--shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
 	--input-bg: #ffffff;
@@ -64,6 +67,9 @@
 		/* --accent: #7c3aed; */
 		--accent: #05c76f;
 		--accent-text: #0f0d1a;
+		--accent-switch: var(--focus);
+		--switch-track-off: #4d4560;
+		--switch-thumb-off: #6b6377;
 		--focus: #8b5cf6;
 		--shadow: 0 16px 32px rgba(91, 33, 182, 0.2);
 		--input-bg: #0f0d1a;

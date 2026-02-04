@@ -141,22 +141,85 @@ function createSelectField(fieldKey, field, context) {
 	return select;
 }
 
+function createBooleanField(fieldKey, field, context) {
+	const { fieldIdPrefix, onValueChange } = context;
+	const input = document.createElement('input');
+	input.type = 'checkbox';
+	input.name = fieldKey;
+	input.className = 'form-switch-input';
+	input.setAttribute('aria-hidden', 'true');
+	input.setAttribute('tabindex', '-1');
+	if (field.required) input.required = true;
+
+	const defaultValue = field.default === true || field.default === 'true';
+	input.checked = defaultValue;
+
+	const wrapper = document.createElement('div');
+	wrapper.id = `${fieldIdPrefix}${fieldKey}`;
+	wrapper.className = 'form-switch';
+	wrapper.setAttribute('role', 'switch');
+	wrapper.setAttribute('aria-checked', String(input.checked));
+	wrapper.setAttribute('tabindex', '0');
+	wrapper.setAttribute('aria-label', field.label || fieldKey);
+
+	const track = document.createElement('span');
+	track.className = 'form-switch-track';
+	const thumb = document.createElement('span');
+	thumb.className = 'form-switch-thumb';
+	track.appendChild(thumb);
+	wrapper.appendChild(input);
+	wrapper.appendChild(track);
+
+	const notify = (value) => onValueChange(fieldKey, value);
+	notify(input.checked);
+
+	const updateAria = () => wrapper.setAttribute('aria-checked', String(input.checked));
+
+	const handleChange = () => {
+		updateAria();
+		notify(input.checked);
+	};
+
+	input.addEventListener('change', handleChange);
+
+	wrapper.addEventListener('click', (e) => {
+		if (e.target === input) return;
+		e.preventDefault();
+		input.checked = !input.checked;
+		updateAria();
+		notify(input.checked);
+	});
+
+	wrapper.addEventListener('keydown', (e) => {
+		if (e.key === ' ' || e.key === 'Enter') {
+			e.preventDefault();
+			input.checked = !input.checked;
+			updateAria();
+			notify(input.checked);
+		}
+	});
+
+	return wrapper;
+}
+
 // --- Handler resolution ---
 
 const FIELD_HANDLERS = {
 	color: createColorField,
 	textarea: createTextareaField,
 	text: createTextField,
-	select: createSelectField
+	select: createSelectField,
+	boolean: createBooleanField
 };
 
 /**
- * Returns the handler key for a given field (e.g. 'color', 'textarea', 'text', 'select').
+ * Returns the handler key for a given field (e.g. 'color', 'textarea', 'text', 'select', 'boolean').
  * Used to look up the handler in FIELD_HANDLERS.
  */
 export function getFieldType(fieldKey, field) {
 	if (field?.type === 'color') return 'color';
 	if (field?.type === 'select') return 'select';
+	if (field?.type === 'boolean') return 'boolean';
 	if (isMultilineField(fieldKey, field)) return 'textarea';
 	return 'text';
 }
@@ -188,7 +251,7 @@ const DEFAULTS = {
 
 /**
  * Render form fields from a provider method's fields config into a container.
- * Each field type is handled by a dedicated handler (color, textarea, text, select).
+ * Each field type is handled by a dedicated handler (color, textarea, text, select, boolean).
  *
  * @param {HTMLElement} container - Element to append form-group divs into (e.g. data-fields-container)
  * @param {object} fields - Method fields config, e.g. method.fields from server_config
@@ -212,7 +275,8 @@ export function renderFields(container, fields, options = {}) {
 	fieldKeys.forEach((fieldKey) => {
 		const field = fields[fieldKey];
 		const fieldGroup = document.createElement('div');
-		fieldGroup.className = 'form-group';
+		const type = getFieldType(fieldKey, field);
+		fieldGroup.className = type === 'boolean' ? 'form-group form-group-checkbox' : 'form-group';
 
 		const label = createLabel(fieldKey, field, {
 			labelClassName: opts.labelClassName,
