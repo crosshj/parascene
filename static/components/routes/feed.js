@@ -224,12 +224,12 @@ class AppRouteFeed extends HTMLElement {
       <div class="feed-card-footer-grid">
         ${profileHref ? html`
           <a class="user-link user-avatar-link" href="${profileHref}" data-profile-link aria-label="View ${author} profile">
-            <div class="feed-card-avatar" style="background: ${avatarColor};" aria-hidden="true">
+            <div class="feed-card-avatar" style="--feed-card-avatar-bg: ${avatarColor};" aria-hidden="true">
               ${avatarUrl ? html`<img class="feed-card-avatar-img" src="${avatarUrl}" alt="">` : avatarInitial}
             </div>
           </a>
         ` : html`
-          <div class="feed-card-avatar" style="background: ${avatarColor};" aria-hidden="true">
+          <div class="feed-card-avatar" style="--feed-card-avatar-bg: ${avatarColor};" aria-hidden="true">
             ${avatarUrl ? html`<img class="feed-card-avatar-img" src="${avatarUrl}" alt="">` : avatarInitial}
           </div>
         `}

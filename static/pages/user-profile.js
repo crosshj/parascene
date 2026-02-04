@@ -127,7 +127,7 @@ function renderProfilePage(container, { user, profile, stats, isSelf, viewerFoll
 					${avatarUrl ? html`
 						<img class="user-profile-avatar-img" src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(displayName)}">
 					` : html`
-						<div class="user-profile-avatar-fallback" style="background: ${avatarColor};" aria-hidden="true">${escapeHtml(avatarInitial)}</div>
+						<div class="user-profile-avatar-fallback" style="--user-profile-avatar-bg: ${avatarColor};" aria-hidden="true">${escapeHtml(avatarInitial)}</div>
 					`}
 				</div>
 

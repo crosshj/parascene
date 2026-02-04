@@ -1960,6 +1960,7 @@ app-route-feed {
 	width: 36px;
 	height: 36px;
 	border-radius: 50%;
+	background: var(--feed-card-avatar-bg, #6b7280);
 	color: #ffffff;
 	display: flex;
 	align-items: center;
