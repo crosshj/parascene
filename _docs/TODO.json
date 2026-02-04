@@ -14,13 +14,6 @@
     "dependsOn": []
   },
   {
-    "name": "[Provider] Pixel art dims → Flux",
-    "description": "NES 8-bit - 160×160, SNES 16-bit - 256×256, AI Legacy - 512×512, AI Classic - 768×768, AI Latest - 1024×1024",
-    "cost": 42,
-    "impact": 94,
-    "dependsOn": []
-  },
-  {
     "name": "Invite credits",
     "description": "Grant starter credits on invite acceptance; record inviter and source.",
     "cost": 1,

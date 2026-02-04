@@ -13,6 +13,7 @@ class AppRouteCreate extends HTMLElement {
 		this.fieldValues = {};
 		this.servers = [];
 		this.handleCreditsUpdated = this.handleCreditsUpdated.bind(this);
+		this.storageKey = 'create-page-selections';
 	}
 
 	connectedCallback() {
@@ -202,8 +203,9 @@ class AppRouteCreate extends HTMLElement {
 				});
 				this.renderServerOptions();
 
-				// Auto-select first server if available
-				if (this.servers.length > 0) {
+				// Try to restore selections, otherwise auto-select first server
+				const restored = this.restoreSelections();
+				if (!restored && this.servers.length > 0) {
 					const firstServer = this.servers[0];
 					const serverSelect = this.querySelector("[data-server-select]");
 					if (serverSelect) {
@@ -243,6 +245,7 @@ class AppRouteCreate extends HTMLElement {
 			this.hideMethodGroup();
 			this.hideFieldsGroup();
 			this.updateButtonState();
+			this.saveSelections();
 			return;
 		}
 
@@ -255,9 +258,10 @@ class AppRouteCreate extends HTMLElement {
 		this.renderMethodOptions();
 		this.hideFieldsGroup();
 		this.updateButtonState();
+		this.saveSelections();
 	}
 
-	renderMethodOptions() {
+	renderMethodOptions(skipAutoSelect = false) {
 		const methodGroup = this.querySelector("[data-method-group]");
 		const methodSelect = this.querySelector("[data-method-select]");
 		if (!methodGroup || !methodSelect) return;
@@ -303,15 +307,15 @@ class AppRouteCreate extends HTMLElement {
 
 		methodGroup.style.display = 'flex';
 
-		// Auto-select first method if available
-		if (methodKeys.length > 0) {
+		// Auto-select first method if available (unless skipping auto-select)
+		if (!skipAutoSelect && methodKeys.length > 0) {
 			const firstMethodKey = methodKeys[0];
 			methodSelect.value = firstMethodKey;
 			// Use microtask to ensure DOM is ready and method selection happens after render
 			Promise.resolve().then(() => {
 				this.handleMethodChange(firstMethodKey);
 			});
-		} else {
+		} else if (methodKeys.length === 0) {
 			methodSelect.value = '';
 		}
 	}
@@ -322,6 +326,7 @@ class AppRouteCreate extends HTMLElement {
 			this.fieldValues = {};
 			this.hideFieldsGroup();
 			this.updateButtonState();
+			this.saveSelections();
 			return;
 		}
 
@@ -349,6 +354,7 @@ class AppRouteCreate extends HTMLElement {
 		this.fieldValues = {};
 		this.renderFields();
 		this.updateButtonState();
+		this.saveSelections();
 	}
 
 	renderFields() {
@@ -371,6 +377,7 @@ class AppRouteCreate extends HTMLElement {
 			onFieldChange: (fieldKey, value) => {
 				this.fieldValues[fieldKey] = value;
 				this.updateButtonState();
+				this.saveSelections();
 			}
 		});
 		fieldsGroup.style.display = 'flex';
@@ -550,6 +557,97 @@ class AppRouteCreate extends HTMLElement {
 		setTimeout(() => {
 			button.disabled = false;
 		}, 0);
+	}
+
+	saveSelections() {
+		try {
+			const selections = {
+				serverId: this.selectedServer?.id || null,
+				methodKey: this.getMethodKey() || null,
+				fieldValues: { ...this.fieldValues }
+			};
+			sessionStorage.setItem(this.storageKey, JSON.stringify(selections));
+		} catch (e) {
+			// Ignore storage errors
+		}
+	}
+
+	getMethodKey() {
+		if (!this.selectedServer || !this.selectedMethod) return null;
+		const methods = this.selectedServer.server_config?.methods || {};
+		return Object.keys(methods).find(key => methods[key] === this.selectedMethod) || null;
+	}
+
+	restoreSelections() {
+		// Only restore if servers are loaded
+		if (!this.servers || this.servers.length === 0) return false;
+
+		try {
+			const stored = sessionStorage.getItem(this.storageKey);
+			if (!stored) return false;
+
+			const selections = JSON.parse(stored);
+			if (!selections || !selections.serverId) return false;
+
+			// Restore server selection
+			const server = this.servers.find(s => s.id === Number(selections.serverId));
+			if (!server) return false;
+
+			const serverSelect = this.querySelector("[data-server-select]");
+			if (!serverSelect) return false;
+
+			serverSelect.value = server.id;
+			this.selectedServer = server;
+			this.renderMethodOptions(true); // Skip auto-select when restoring
+
+			// Restore method selection after methods are rendered
+			if (selections.methodKey) {
+				// Use microtask to ensure DOM is ready
+				Promise.resolve().then(() => {
+					const methodSelect = this.querySelector("[data-method-select]");
+					if (methodSelect) {
+						const methodExists = Array.from(methodSelect.options).some(
+							opt => opt.value === selections.methodKey
+						);
+						if (methodExists) {
+							methodSelect.value = selections.methodKey;
+							this.handleMethodChange(selections.methodKey);
+
+							// Restore field values after fields are rendered
+							if (selections.fieldValues && Object.keys(selections.fieldValues).length > 0) {
+								Promise.resolve().then(() => {
+									this.restoreFieldValues(selections.fieldValues);
+								});
+							}
+						}
+					}
+				});
+			}
+
+			return true;
+		} catch (e) {
+			// Ignore storage errors
+			return false;
+		}
+	}
+
+	restoreFieldValues(savedFieldValues) {
+		Object.keys(savedFieldValues).forEach(fieldKey => {
+			const input = this.querySelector(`#field-${fieldKey}`);
+			if (input) {
+				const savedValue = savedFieldValues[fieldKey];
+				if (savedValue !== undefined && savedValue !== null && savedValue !== '') {
+					if (input.type === 'checkbox') {
+						input.checked = savedValue === true || savedValue === 'true';
+					} else {
+						input.value = savedValue;
+					}
+					// Trigger change event to update fieldValues and button state
+					input.dispatchEvent(new Event('input', { bubbles: true }));
+					input.dispatchEvent(new Event('change', { bubbles: true }));
+				}
+			}
+		});
 	}
 }
 
