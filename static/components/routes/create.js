@@ -1,6 +1,6 @@
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 import { submitCreationWithPending } from '../../shared/createSubmit.js';
-import { attachAutoGrowTextarea } from '../../shared/autogrow.js';
+import { renderFields } from '../../shared/providerFormFields.js';
 
 const html = String.raw;
 
@@ -13,23 +13,6 @@ class AppRouteCreate extends HTMLElement {
 		this.fieldValues = {};
 		this.servers = [];
 		this.handleCreditsUpdated = this.handleCreditsUpdated.bind(this);
-	}
-
-	isPromptLikeField(fieldKey, field) {
-		const key = String(fieldKey || '');
-		const label = String(field?.label || '');
-		return /prompt/i.test(key) || /prompt/i.test(label);
-	}
-
-	isMultilineField(fieldKey, field) {
-		const type = typeof field?.type === 'string' ? field.type.toLowerCase() : '';
-		if (type === 'textarea' || type === 'multiline') return true;
-		if (field?.multiline === true) return true;
-		// Back-compat: many server configs encode prompt as a text input.
-		if (type === '' || type === 'text' || type === 'string') {
-			return this.isPromptLikeField(fieldKey, field);
-		}
-		return false;
 	}
 
 	connectedCallback() {
@@ -378,105 +361,18 @@ class AppRouteCreate extends HTMLElement {
 			return;
 		}
 
-		fieldsContainer.innerHTML = '';
 		const fields = this.selectedMethod.fields;
-
 		if (Object.keys(fields).length === 0) {
 			fieldsGroup.style.display = 'none';
 			return;
 		}
 
-		Object.keys(fields).forEach(fieldKey => {
-			const field = fields[fieldKey];
-			const fieldGroup = document.createElement('div');
-			fieldGroup.className = 'form-group';
-
-			const label = document.createElement('label');
-			label.className = 'form-label';
-			label.htmlFor = `field-${fieldKey}`;
-			// Append text and asterisk inline
-			label.appendChild(document.createTextNode(field.label || fieldKey));
-			if (field.required) {
-				const required = document.createElement('span');
-				required.className = 'field-required';
-				required.textContent = ' *';
-				label.appendChild(required);
+		renderFields(fieldsContainer, fields, {
+			onFieldChange: (fieldKey, value) => {
+				this.fieldValues[fieldKey] = value;
+				this.updateButtonState();
 			}
-
-			let input;
-			if (field.type === 'color') {
-				input = document.createElement('input');
-				input.type = 'color';
-				input.id = `field-${fieldKey}`;
-				input.name = fieldKey;
-				input.className = 'form-input';
-				// Set default color if not provided
-				input.value = '#000000';
-				if (field.required) {
-					input.required = true;
-				}
-				// Initialize field value with default
-				this.fieldValues[fieldKey] = input.value;
-				input.addEventListener('change', (e) => {
-					this.fieldValues[fieldKey] = e.target.value;
-					this.updateButtonState();
-				});
-				// Also listen to input event for color pickers
-				input.addEventListener('input', (e) => {
-					this.fieldValues[fieldKey] = e.target.value;
-					this.updateButtonState();
-				});
-			} else {
-				const isMultiline = this.isMultilineField(fieldKey, field);
-				if (isMultiline) {
-					input = document.createElement('textarea');
-					input.id = `field-${fieldKey}`;
-					input.name = fieldKey;
-					input.className = 'form-input';
-					input.placeholder = field.label || fieldKey;
-					input.rows = typeof field.rows === 'number' && field.rows > 0 ? field.rows : 3;
-					if (field.required) {
-						input.required = true;
-					}
-
-					// Initialize field value
-					this.fieldValues[fieldKey] = '';
-
-					attachAutoGrowTextarea(input);
-
-					input.addEventListener('input', (e) => {
-						this.fieldValues[fieldKey] = e.target.value;
-						this.updateButtonState();
-					});
-				} else {
-					input = document.createElement('input');
-					input.type = field.type || 'text';
-					input.id = `field-${fieldKey}`;
-					input.name = fieldKey;
-					input.className = 'form-input';
-					input.placeholder = field.label || fieldKey;
-					if (field.required) {
-						input.required = true;
-					}
-					// Initialize field value
-					this.fieldValues[fieldKey] = '';
-					input.addEventListener('input', (e) => {
-						this.fieldValues[fieldKey] = e.target.value;
-						this.updateButtonState();
-					});
-					// Also listen to change event for text inputs
-					input.addEventListener('change', (e) => {
-						this.fieldValues[fieldKey] = e.target.value;
-						this.updateButtonState();
-					});
-				}
-			}
-
-			fieldGroup.appendChild(label);
-			fieldGroup.appendChild(input);
-			fieldsContainer.appendChild(fieldGroup);
 		});
-
 		fieldsGroup.style.display = 'flex';
 	}
 
