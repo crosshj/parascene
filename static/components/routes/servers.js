@@ -2,7 +2,7 @@ import { formatRelativeTime } from '../../shared/datetime.js';
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 import { getAvatarColor } from '../../shared/avatar.js';
 import { fetchLatestComments } from '../../shared/comments.js';
-import { textWithCreationLinks, hydrateYoutubeLinkTitles, hydrateXLinkTitles } from '../../shared/urls.js';
+import { processUserText, hydrateUserTextLinks } from '../../shared/urls.js';
 import { attachAutoGrowTextarea } from '../../shared/autogrow.js';
 
 const html = String.raw;
@@ -215,7 +215,7 @@ class AppRouteServers extends HTMLElement {
 				`;
 
 			const timeAgo = comment?.created_at ? (formatRelativeTime(comment.created_at) || '') : '';
-			const safeText = textWithCreationLinks(comment?.text ?? '');
+			const safeText = processUserText(comment?.text ?? '');
 
 			const commentText = document.createElement('div');
 			commentText.className = 'comment-text';
@@ -244,9 +244,8 @@ class AppRouteServers extends HTMLElement {
 			container.appendChild(row);
 		});
 
-		// Comments were rendered; hydrate any YouTube link labels within them.
-		hydrateYoutubeLinkTitles(container);
-		hydrateXLinkTitles(container);
+		// Comments were rendered; hydrate any special link labels within them.
+		hydrateUserTextLinks(container);
 	}
 
 	// Listen for server updates from modal

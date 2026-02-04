@@ -184,6 +184,8 @@ const CREATION_URL_RE = /https?:\/\/[^\s"'<>]+\/creations\/(\d+)\/?/g;
  * - Initial label is `x-twitter @{user}` (or `x-twitter {statusId}` when username not present)
  * - Call `hydrateXLinkTitles(rootEl)` to asynchronously replace the link text with `x-twitter @handle - {excerpt...}` when available
  *
+ * Any other http(s) URL is turned into a clickable link with the URL as the link text.
+ *
  * Use when rendering user content such as image descriptions or comments.
  *
  * @param {string} text - Raw user text (may contain URLs and special characters)
@@ -245,8 +247,10 @@ export function textWithCreationLinks(text) {
 			continue;
 		}
 
-		// Not a recognized URL type: keep as plain text (do not linkify).
-		out += escapeHtml(rawUrl);
+		// Generic http(s) URL: turn into a clickable link (same styling as other user links).
+		const safeUrl = escapeHtml(url);
+		out += `<a href="${safeUrl}" class="user-link creation-link" target="_blank" rel="noopener noreferrer">${safeUrl}</a>`;
+		out += escapeHtml(trailing);
 		lastIndex = start + rawUrl.length;
 	}
 
@@ -450,4 +454,44 @@ export function hydrateXLinkTitles(rootEl) {
 			a.dataset.xTitleHydrated = 'true';
 		});
 	}
+}
+
+/**
+ * Generic string processor for user-generated content.
+ * Processes text to convert URLs into links and hydrates special link types (YouTube, X).
+ *
+ * This is the main function to use when rendering user content anywhere in the app.
+ * It handles:
+ * - Creation URLs → relative links (/creations/123)
+ * - YouTube URLs → links with titles (hydrated asynchronously)
+ * - X/Twitter URLs → links with titles (hydrated asynchronously)
+ * - Generic http(s) URLs → clickable links
+ *
+ * Usage:
+ * ```js
+ * // When rendering HTML:
+ * element.innerHTML = processUserText(userContent);
+ * hydrateUserTextLinks(element); // Call after inserting into DOM
+ *
+ * // Or in template strings:
+ * html`<div>${processUserText(userContent)}</div>`
+ * // Then call hydrateUserTextLinks(container) after rendering
+ * ```
+ *
+ * @param {string} text - Raw user text (may contain URLs and special characters)
+ * @returns {string} - HTML-safe string with all URLs converted to links
+ */
+export function processUserText(text) {
+	return textWithCreationLinks(text);
+}
+
+/**
+ * Hydrates all special link types (YouTube, X) within a container element.
+ * Call this after inserting processed user text into the DOM.
+ *
+ * @param {Element|Document} rootEl - Container element or document to search within
+ */
+export function hydrateUserTextLinks(rootEl) {
+	hydrateYoutubeLinkTitles(rootEl);
+	hydrateXLinkTitles(rootEl);
 }

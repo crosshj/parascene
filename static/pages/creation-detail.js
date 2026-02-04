@@ -3,7 +3,7 @@ import { enableLikeButtons, getCreationLikeCount, initLikeButton } from '/shared
 import { fetchJsonWithStatusDeduped } from '/shared/api.js';
 import { getAvatarColor } from '/shared/avatar.js';
 import { fetchCreatedImageComments, postCreatedImageComment } from '/shared/comments.js';
-import { hydrateYoutubeLinkTitles, hydrateXLinkTitles, textWithCreationLinks } from '/shared/urls.js';
+import { processUserText, hydrateUserTextLinks } from '/shared/urls.js';
 import { attachAutoGrowTextarea } from '/shared/autogrow.js';
 import '../components/modals/publish.js';
 import '../components/modals/creation-details.js';
@@ -529,7 +529,7 @@ async function loadCreation() {
 				<div class="creation-detail-published${historyStripHtml ? ' has-history' : ''}">
 					${descriptionText ? html`
 						<div class="creation-detail-description-wrap" data-description-wrap>
-							<div class="creation-detail-description" data-description>${textWithCreationLinks(descriptionText)}</div>
+							<div class="creation-detail-description" data-description>${processUserText(descriptionText)}</div>
 							<div class="creation-detail-description-toggle-row">
 								<button type="button" class="btn-secondary creation-detail-description-toggle" data-description-toggle hidden>View Full</button>
 							</div>
@@ -695,9 +695,8 @@ async function loadCreation() {
 			` : ''}
 		`;
 
-		// After rendering description (and initial scaffold), hydrate any YouTube link labels.
-		hydrateYoutubeLinkTitles(detailContent);
-		hydrateXLinkTitles(detailContent);
+		// After rendering description (and initial scaffold), hydrate any special link labels.
+		hydrateUserTextLinks(detailContent);
 		setupCollapsibleDescription(detailContent);
 
 		// Hydrate history thumbnails (best-effort).
@@ -909,7 +908,7 @@ async function loadCreation() {
 				const date = c?.created_at ? new Date(c.created_at) : null;
 				const timeAgo = date ? (formatRelativeTime(date) || '') : '';
 				const timeTitle = date ? formatDateTime(date) : '';
-				const safeText = textWithCreationLinks(c?.text ?? '');
+				const safeText = processUserText(c?.text ?? '');
 
 				return `
 					<div class="comment-item">
@@ -943,9 +942,8 @@ async function loadCreation() {
 				`;
 			}).join('');
 
-			// Comments were re-rendered; hydrate any YouTube link labels within them.
-			hydrateYoutubeLinkTitles(commentListEl);
-			hydrateXLinkTitles(commentListEl);
+			// Comments were re-rendered; hydrate any special link labels within them.
+			hydrateUserTextLinks(commentListEl);
 		}
 
 		async function loadComments({ scrollIfHash = false } = {}) {

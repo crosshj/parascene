@@ -1,6 +1,7 @@
 import { formatDate, formatDateTime, formatRelativeTime } from '../shared/datetime.js';
 import { fetchJsonWithStatusDeduped } from '../shared/api.js';
 import { getAvatarColor } from '../shared/avatar.js';
+import { processUserText, hydrateUserTextLinks } from '../shared/urls.js';
 
 const html = String.raw;
 
@@ -168,7 +169,7 @@ function renderProfilePage(container, { user, profile, stats, isSelf, viewerFoll
 							${about ? html`
 								<div class="user-profile-meta-row">
 									<span class="user-profile-meta-label">About</span>
-									<span class="user-profile-meta-text">${escapeHtml(about)}</span>
+									<span class="user-profile-meta-text">${processUserText(about)}</span>
 								</div>
 							` : ''}
 							${website ? html`
@@ -474,6 +475,9 @@ async function init() {
 	profile.meta = safeJsonParse(profile.meta, {});
 
 	renderProfilePage(container, { user, profile, stats, isSelf, viewerFollows, isAdmin });
+
+	// Hydrate any links in user-generated content (e.g., About field)
+	hydrateUserTextLinks(container);
 
 	const grid = container.querySelector('[data-profile-grid]');
 	const tabButtons = Array.from(container.querySelectorAll('.user-profile-tab'));
