@@ -397,10 +397,10 @@ async function loadCreation() {
 			}
 		}
 
-		// Update mutate button - show for completed images with a URL (published or unpublished; backend uses share URL for unpublished)
+		// Update mutate button - show for completed images with a URL (owner or any viewer; mutate creates a new creation from this one)
 		const mutateBtn = document.querySelector('[data-mutate-btn]');
 		if (mutateBtn) {
-			const canMutate = canEdit && status === 'completed' && !isFailed && Boolean(creation.url);
+			const canMutate = status === 'completed' && !isFailed && Boolean(creation.url);
 			if (!canMutate) {
 				mutateBtn.style.display = 'none';
 			} else {
