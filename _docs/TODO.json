@@ -84,5 +84,12 @@
     "dependsOn": [
       "Invite credits"
     ]
+  },
+  {
+    "name": "User tips",
+    "description": "users can tip each other",
+    "cost": 55,
+    "impact": 75,
+    "dependsOn": []
   }
 ]
