@@ -469,10 +469,9 @@ class AppModalShare extends HTMLElement {
 	async handleX(buttonEl) {
 		await this.runCtaAction(buttonEl, async () => {
 			const url = await this.ensureShareUrl();
-			const text = "Check this out on Parascene";
 			const hashtags = "parascene";
 			openShareUrl(
-				`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}&hashtags=${encodeURIComponent(hashtags)}`
+				`https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&hashtags=${encodeURIComponent(hashtags)}`
 			);
 		}, { resetMs: 900 });
 	}
