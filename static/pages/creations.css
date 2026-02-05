@@ -262,6 +262,12 @@ body.creation-detail-page main>section:first-of-type {
 	font-size: 0.9rem;
 }
 
+.publish-field .field-required {
+	display: inline;
+	margin-left: 2px;
+	color: var(--error, #e74c3c);
+}
+
 .publish-field input,
 .publish-field textarea {
 	width: 100%;
@@ -478,8 +484,31 @@ body.creation-detail-page main>section:first-of-type {
 	word-break: break-word;
 }
 
-.creation-detail-description-wrap {
+.creation-detail-description-meta-label {
+	color: var(--text-muted);
+	font-weight: 500;
+}
+
+.creation-detail-description-meta-value {
+	color: var(--text);
+}
+
+.creation-detail-prompt-label {
+	font-size: 0.75rem;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text-muted);
+	margin-bottom: 4px;
+}
+
+.creation-detail-description-meta-line {
 	margin-top: 8px;
+	font-size: 0.95rem;
+}
+
+.creation-detail-description-wrap {
+	margin-top: 4px;
 	--ps-desc-max-height: calc(10 * 1.5em);
 }
 

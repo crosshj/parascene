@@ -58,8 +58,8 @@ class AppModalPublish extends HTMLElement {
 							</button>
 						</div>
 						<div class="publish-field">
-							<label for="publish-title">Title</label>
-							<input type="text" id="publish-title" name="title" placeholder="Enter a title for your creation" />
+							<label for="publish-title">Title <span class="field-required" aria-hidden="true">*</span></label>
+							<input type="text" id="publish-title" name="title" placeholder="Enter a title for your creation" required />
 						</div>
 						<div class="publish-field">
 							<label for="publish-description">Description</label>
@@ -69,7 +69,7 @@ class AppModalPublish extends HTMLElement {
 					</div>
 					<div class="publish-modal-footer">
 						<a href="#" class="publish-cancel-link">Cancel</a>
-						<button class="btn-primary publish-submit-btn" data-publish-submit>
+						<button class="btn-primary publish-submit-btn" data-publish-submit disabled>
 							<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"
 								style="margin-right: 6px; vertical-align: middle;">
 								<path d="M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z" stroke="currentColor" stroke-width="1.5"
@@ -129,6 +129,17 @@ class AppModalPublish extends HTMLElement {
 				this.hideAlert();
 			});
 		}
+
+		// Set up title input listener to enable/disable submit button
+		const titleInput = this.querySelector('#publish-title');
+		if (titleInput && submitBtn) {
+			const updateSubmitButton = () => {
+				const hasTitle = titleInput.value.trim().length > 0;
+				submitBtn.disabled = !hasTitle;
+			};
+			titleInput.addEventListener('input', updateSubmitButton);
+			titleInput.addEventListener('change', updateSubmitButton);
+		}
 	}
 
 	handleEscape(e) {
@@ -155,28 +166,17 @@ class AppModalPublish extends HTMLElement {
 		return this._isOpen;
 	}
 
-	getPromptFromMeta(meta) {
-		if (!meta || typeof meta !== 'object') return '';
-
-		if (typeof meta.prompt === 'string' && meta.prompt.trim()) {
-			return meta.prompt.trim();
-		}
-
-		const args = meta.args;
-		if (args && typeof args === 'object' && !Array.isArray(args)) {
-			if (typeof args.prompt === 'string' && args.prompt.trim()) {
-				return args.prompt.trim();
-			}
-		}
-
-		return '';
-	}
-
 	async openPublish(creationId) {
 		this._mode = 'publish';
 		this._creationId = creationId;
 		this.updateModalContent();
 		this.open();
+
+		// Disable submit button initially (will be enabled when title has text)
+		const submitBtn = this.querySelector('[data-publish-submit]');
+		if (submitBtn) {
+			submitBtn.disabled = true;
+		}
 
 		if (!creationId) {
 			this.showAlert('Invalid creation ID', true);
@@ -208,8 +208,14 @@ class AppModalPublish extends HTMLElement {
 
 			if (descriptionTextarea && !descriptionTextarea.value.trim()) {
 				const savedDescription = typeof creation.description === 'string' ? creation.description.trim() : '';
-				const prompt = this.getPromptFromMeta(creation.meta);
-				descriptionTextarea.value = savedDescription || prompt || '';
+				descriptionTextarea.value = savedDescription || '';
+			}
+
+			// Update submit button state based on title
+			const submitBtn = this.querySelector('[data-publish-submit]');
+			if (submitBtn) {
+				const hasTitle = titleInput && titleInput.value.trim().length > 0;
+				submitBtn.disabled = !hasTitle;
 			}
 
 			// Focus title input
@@ -225,6 +231,12 @@ class AppModalPublish extends HTMLElement {
 	async openEdit(creationId) {
 		this._mode = 'edit';
 		this._creationId = creationId;
+
+		// Disable submit button initially (will be enabled when title has text)
+		const submitBtn = this.querySelector('[data-publish-submit]');
+		if (submitBtn) {
+			submitBtn.disabled = true;
+		}
 
 		if (!creationId) {
 			this.showAlert('Invalid creation ID', true);
@@ -247,6 +259,13 @@ class AppModalPublish extends HTMLElement {
 
 			if (titleInput) titleInput.value = creation.title || '';
 			if (descriptionTextarea) descriptionTextarea.value = creation.description || '';
+
+			// Update submit button state based on title
+			const submitBtn = this.querySelector('[data-publish-submit]');
+			if (submitBtn) {
+				const hasTitle = titleInput && titleInput.value.trim().length > 0;
+				submitBtn.disabled = !hasTitle;
+			}
 
 			this.updateModalContent();
 			this.open();
@@ -305,8 +324,10 @@ class AppModalPublish extends HTMLElement {
 		// Clear form
 		const titleInput = this.querySelector('#publish-title');
 		const descriptionTextarea = this.querySelector('#publish-description');
+		const submitBtn = this.querySelector('[data-publish-submit]');
 		if (titleInput) titleInput.value = '';
 		if (descriptionTextarea) descriptionTextarea.value = '';
+		if (submitBtn) submitBtn.disabled = true;
 		this.hideAlert();
 	}
 

@@ -5,6 +5,7 @@ import { getAvatarColor } from '/shared/avatar.js';
 import { fetchCreatedImageComments, postCreatedImageComment } from '/shared/comments.js';
 import { processUserText, hydrateUserTextLinks } from '/shared/urls.js';
 import { attachAutoGrowTextarea } from '/shared/autogrow.js';
+import { textsSameWithinTolerance } from '/shared/textCompare.js';
 import '../components/modals/publish.js';
 import '../components/modals/creation-details.js';
 import '../components/modals/share.js';
@@ -34,6 +35,34 @@ async function copyTextToClipboard(text) {
 	} catch {
 		return false;
 	}
+}
+
+function formatDuration(meta) {
+	if (!meta) return '';
+	const durationMs =
+		typeof meta.duration_ms === 'number' && Number.isFinite(meta.duration_ms)
+			? meta.duration_ms
+			: null;
+	let ms = durationMs;
+	if (ms == null) {
+		const started = meta.started_at ? Date.parse(meta.started_at) : NaN;
+		const endedRaw = meta.completed_at || meta.failed_at || null;
+		const ended = endedRaw ? Date.parse(endedRaw) : NaN;
+		if (Number.isFinite(started) && Number.isFinite(ended) && ended >= started) {
+			ms = ended - started;
+		}
+	}
+	if (!Number.isFinite(ms) || ms <= 0) return '';
+	const seconds = ms / 1000;
+	if (seconds < 60) return `${seconds.toFixed(1)}s`;
+	const minutes = Math.floor(seconds / 60);
+	const rem = Math.round(seconds % 60);
+	if (minutes >= 60) {
+		const hours = Math.floor(minutes / 60);
+		const remMin = minutes % 60;
+		return `${hours}h ${remMin}m`;
+	}
+	return rem > 0 ? `${minutes}m ${rem}s` : `${minutes}m`;
 }
 
 function setupCollapsibleDescription(rootEl) {
@@ -521,23 +550,103 @@ async function loadCreation() {
 			`;
 		}
 
-		// Show description block if we have either description or history.
+		// Meta-derived values for description section (Server, Method, Duration, Prompt)
+		const args = meta?.args ?? null;
+		const isPlainObject = args && typeof args === 'object' && !Array.isArray(args);
+		const argKeys = isPlainObject ? Object.keys(args) : [];
+		const isPromptOnly = isPlainObject && argKeys.length === 1 && Object.prototype.hasOwnProperty.call(args, 'prompt');
+		// Extract prompt text if it exists (whether prompt-only or part of larger args)
+		const promptText = isPlainObject && Object.prototype.hasOwnProperty.call(args, 'prompt') && typeof args.prompt === 'string' ? args.prompt.trim() : '';
+		const serverName = typeof meta?.server_name === 'string' && meta.server_name.trim()
+			? meta.server_name.trim()
+			: (meta?.server_id != null ? String(meta.server_id) : '');
+		const methodName = typeof meta?.method_name === 'string' && meta.method_name.trim()
+			? meta.method_name.trim()
+			: (typeof meta?.method === 'string' ? meta.method : '');
+		const durationStr = formatDuration(meta || {});
+
+		// Show description block if we have user description, history, prompt, or meta (server/method/duration).
 		let descriptionHtml = '';
 		const descriptionText = typeof creation.description === 'string' ? creation.description.trim() : '';
-		if (descriptionText || historyStripHtml) {
+		const hasDescription = descriptionText.length > 0;
+		const hasPrompt = promptText.length > 0;
+		const hasMetaInDescription = !!(serverName || methodName || durationStr);
+		const showDescriptionBlock = descriptionText || promptText || historyStripHtml || hasMetaInDescription;
+
+		if (showDescriptionBlock) {
+			const descriptionParts = [];
+			const sameAsPrompt = hasDescription && hasPrompt && textsSameWithinTolerance(descriptionText, promptText);
+
+			if (hasDescription && !sameAsPrompt) {
+				// Show description first (only when it differs from prompt)
+				descriptionParts.push(processUserText(descriptionText));
+			}
+
+			if (hasPrompt) {
+				// Show prompt section: when same as description, only show this; when different, show after description
+				if (hasDescription && !sameAsPrompt) {
+					descriptionParts.push('<br><br>');
+				}
+				descriptionParts.push(html`<div class="creation-detail-prompt-label">Prompt</div>`);
+				descriptionParts.push(escapeHtml(promptText));
+			}
+			
+			const descriptionInnerHtml = descriptionParts.length ? descriptionParts.join('') : '';
+
+			// Build Server/Method/Duration line (outside collapsible)
+			let metaLineHtml = '';
+			if (serverName || methodName || durationStr) {
+				const metaItems = [];
+				if (serverName) metaItems.push(html`<span class="creation-detail-description-meta-label">Server</span> <span class="creation-detail-description-meta-value">${escapeHtml(serverName)}</span>`);
+				if (methodName) metaItems.push(html`<span class="creation-detail-description-meta-label">Method</span> <span class="creation-detail-description-meta-value">${escapeHtml(methodName)}</span>`);
+				if (durationStr) metaItems.push(html`<span class="creation-detail-description-meta-label">Duration</span> <span class="creation-detail-description-meta-value">${escapeHtml(durationStr)}</span>`);
+				metaLineHtml = html`<div class="creation-detail-description-meta-line">${metaItems.join(' • ')}</div>`;
+			}
+
 			descriptionHtml = html`
 				<div class="creation-detail-published${historyStripHtml ? ' has-history' : ''}">
-					${descriptionText ? html`
+					${descriptionInnerHtml ? html`
 						<div class="creation-detail-description-wrap" data-description-wrap>
-							<div class="creation-detail-description" data-description>${processUserText(descriptionText)}</div>
+							<div class="creation-detail-description" data-description>${descriptionInnerHtml}</div>
 							<div class="creation-detail-description-toggle-row">
 								<button type="button" class="btn-secondary creation-detail-description-toggle" data-description-toggle hidden>View Full</button>
 							</div>
 						</div>
 					` : ''}
 					${historyStripHtml}
+					${metaLineHtml}
 				</div>
 			`;
+		}
+
+		// More Info button: show when modal would have content after filtering (raw args or provider error).
+		const providerError = meta?.provider_error ?? null;
+		let hasDetailsModalContent = false;
+		
+		// Check if args would have content after filtering
+		if (args && !isPromptOnly && isPlainObject) {
+			// Simulate the filtering logic from the modal
+			const hasHistory = historyIds.length > 0;
+			const promptTextInArgs = Object.prototype.hasOwnProperty.call(args, 'prompt') && typeof args.prompt === 'string' ? args.prompt.trim() : '';
+			const hasPromptInArgs = promptTextInArgs.length > 0;
+			// Hide prompt if it's shown in description section (matches description, no description, or differs from description)
+			const shouldHidePrompt = hasPromptInArgs;
+			
+			const filteredArgs = { ...args };
+			if (hasHistory && Object.prototype.hasOwnProperty.call(filteredArgs, 'image_url')) {
+				delete filteredArgs.image_url;
+			}
+			if (shouldHidePrompt && Object.prototype.hasOwnProperty.call(filteredArgs, 'prompt')) {
+				delete filteredArgs.prompt;
+			}
+			
+			// Check if there are any keys left after filtering
+			hasDetailsModalContent = Object.keys(filteredArgs).length > 0;
+		}
+		
+		// Also show if there's a provider error
+		if (!hasDetailsModalContent && providerError && typeof providerError === 'object') {
+			hasDetailsModalContent = true;
 		}
 
 		// (Keep `historyStripHtml` empty now; it lives inside `descriptionHtml` above the border line.)
@@ -580,7 +689,6 @@ async function loadCreation() {
 			<span class="creation-detail-author-handle">${creatorHandle}</span>
 		`;
 
-		const hasDetails = !!(meta && (meta.server_id !== undefined || meta.method || meta.args));
 		const hasEngagementActions = !!(isPublished && !isFailed);
 		const copyLinkButtonHtml = `
 			<button class="feed-card-action" type="button" data-copy-link-button aria-label="Copy link">
@@ -618,7 +726,7 @@ async function loadCreation() {
 			${descriptionHtml}
 			<div class="creation-detail-meta">
 				<div class="creation-detail-meta-left">
-					${hasDetails ? `
+					${hasDetailsModalContent ? `
 					<button class="feed-card-action" type="button" data-creation-details-link>
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 							<circle cx="12" cy="12" r="10"></circle>
@@ -769,12 +877,13 @@ async function loadCreation() {
 		}
 
 		const detailsBtn = detailContent.querySelector('[data-creation-details-link]');
-		if (detailsBtn && meta && (meta.server_id !== undefined || meta.method || meta.args)) {
+		if (detailsBtn && meta && hasDetailsModalContent) {
 			detailsBtn.addEventListener('click', () => {
 				document.dispatchEvent(new CustomEvent('open-creation-details-modal', {
 					detail: {
 						creationId,
-						meta
+						meta,
+						description: descriptionText
 					}
 				}));
 			});

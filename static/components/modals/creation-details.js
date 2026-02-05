@@ -6,6 +6,7 @@ class AppModalCreationDetails extends HTMLElement {
 		this._isOpen = false;
 		this._meta = null;
 		this._creationId = null;
+		this._description = '';
 		this.handleEscape = this.handleEscape.bind(this);
 		this.handleOpen = this.handleOpen.bind(this);
 	}
@@ -35,29 +36,9 @@ class AppModalCreationDetails extends HTMLElement {
 						</button>
 					</div>
 					<div class="modal-body">
-						<div class="field">
-							<div class="label">Server</div>
-							<div class="value" data-server></div>
-						</div>
-						<div class="field">
-							<div class="label">Method</div>
-							<div class="value" data-method></div>
-						</div>
-						<div class="field">
-							<div class="label">Duration</div>
-							<div class="value" data-duration></div>
-						</div>
-						<div class="field" data-prompt-field style="display: none;">
-							<div class="label">Prompt</div>
-							<div class="value" data-prompt></div>
-						</div>
 						<div class="field" data-args-field>
 							<div class="label">Arguments</div>
 							<pre class="creation-details-args" data-args></pre>
-						</div>
-						<div class="field" data-history-field style="display: none;">
-							<div class="label">History</div>
-							<div class="value" data-history></div>
 						</div>
 						<div class="field" data-provider-error-field style="display: none;">
 							<div class="label">Provider error</div>
@@ -71,20 +52,6 @@ class AppModalCreationDetails extends HTMLElement {
 			</div>
 		`;
 
-		// Styles for history links (shared with modal styling)
-		const style = document.createElement('style');
-		style.textContent = `
-			.creation-details-history-link {
-				color: var(--accent);
-				text-decoration: none;
-				font-weight: 600;
-			}
-
-			.creation-details-history-link:hover {
-				text-decoration: underline;
-			}
-		`;
-		this.appendChild(style);
 	}
 
 	setupEventListeners() {
@@ -122,130 +89,60 @@ class AppModalCreationDetails extends HTMLElement {
 		const detail = event.detail || {};
 		this._meta = detail.meta || null;
 		this._creationId = detail.creationId || null;
+		this._description = detail.description || '';
 		this.updateContent();
 		this.open();
 	}
 
-	formatDuration(meta) {
-		if (!meta) return "Unknown";
-		const durationMs =
-			typeof meta.duration_ms === "number" && Number.isFinite(meta.duration_ms)
-				? meta.duration_ms
-				: null;
-
-		let ms = durationMs;
-		if (ms == null) {
-			const started = meta.started_at ? Date.parse(meta.started_at) : NaN;
-			const endedRaw = meta.completed_at || meta.failed_at || null;
-			const ended = endedRaw ? Date.parse(endedRaw) : NaN;
-			if (Number.isFinite(started) && Number.isFinite(ended) && ended >= started) {
-				ms = ended - started;
-			}
-		}
-
-		if (!Number.isFinite(ms) || ms <= 0) return "Unknown";
-
-		const seconds = ms / 1000;
-		if (seconds < 60) {
-			return `${seconds.toFixed(1)}s`;
-		}
-		const minutes = Math.floor(seconds / 60);
-		const rem = Math.round(seconds % 60);
-		if (minutes >= 60) {
-			const hours = Math.floor(minutes / 60);
-			const remMin = minutes % 60;
-			return `${hours}h ${remMin}m`;
-		}
-		return rem > 0 ? `${minutes}m ${rem}s` : `${minutes}m`;
-	}
-
 	updateContent() {
 		const meta = this._meta || {};
-		const serverEl = this.querySelector("[data-server]");
-		const methodEl = this.querySelector("[data-method]");
-		const durationEl = this.querySelector("[data-duration]");
 		const argsEl = this.querySelector("[data-args]");
-		const promptField = this.querySelector("[data-prompt-field]");
-		const promptEl = this.querySelector("[data-prompt]");
 		const argsField = this.querySelector("[data-args-field]");
-		const historyField = this.querySelector("[data-history-field]");
-		const historyEl = this.querySelector("[data-history]");
 		const providerErrorField = this.querySelector("[data-provider-error-field]");
 		const providerErrorEl = this.querySelector("[data-provider-error]");
-
-		const serverId = meta.server_id != null ? String(meta.server_id) : "Unknown";
-		const serverUrl = typeof meta.server_url === "string" ? meta.server_url : "";
-		const serverName = typeof meta.server_name === "string" && meta.server_name.trim()
-			? meta.server_name.trim()
-			: null;
-		const method = typeof meta.method === "string" ? meta.method : "Unknown";
-		const methodName = typeof meta.method_name === "string" && meta.method_name.trim()
-			? meta.method_name.trim()
-			: null;
-
-		if (serverEl) {
-			if (serverName) {
-				serverEl.textContent = serverName;
-			} else if (serverUrl) {
-				serverEl.textContent = `${serverId} — ${serverUrl}`;
-			} else {
-				serverEl.textContent = serverId;
-			}
-		}
-
-		if (methodEl) {
-			methodEl.textContent = methodName || method;
-		}
-
-		if (durationEl) {
-			durationEl.textContent = this.formatDuration(meta);
-		}
 
 		const args = meta.args ?? null;
 		const isPlainObject = args && typeof args === "object" && !Array.isArray(args);
 		const argKeys = isPlainObject ? Object.keys(args) : [];
 		const isPromptOnly = isPlainObject && argKeys.length === 1 && Object.prototype.hasOwnProperty.call(args, "prompt");
 
+		// Check if there's history/lineage
+		const historyRaw = meta.history;
+		const hasHistory = Array.isArray(historyRaw) && historyRaw.length > 0;
+
+		// Check if prompt matches description or would be shown in description
+		const description = typeof this._description === 'string' ? this._description.trim() : '';
+		const promptText = isPlainObject && Object.prototype.hasOwnProperty.call(args, "prompt") && typeof args.prompt === 'string' ? args.prompt.trim() : '';
+		const hasPrompt = promptText.length > 0;
+		// Hide prompt if: it's prompt-only, OR prompt exists (always shown in description section)
+		const shouldHidePrompt = isPromptOnly || hasPrompt;
+
 		if (isPromptOnly) {
-			if (promptField && promptEl) {
-				promptField.style.display = "";
-				promptEl.textContent = String(args.prompt ?? "");
-			}
 			if (argsField) {
 				argsField.style.display = "none";
 			}
 		} else {
-			if (promptField) {
-				promptField.style.display = "none";
-			}
 			if (argsField) {
 				argsField.style.display = "";
 			}
 			if (argsEl) {
 				try {
-					const pretty = JSON.stringify(args ?? {}, null, 2);
+					// Filter out image_url if there's history, and prompt if it matches description or would be shown in description
+					let argsToDisplay = args;
+					if (isPlainObject) {
+						argsToDisplay = { ...args };
+						if (hasHistory && Object.prototype.hasOwnProperty.call(argsToDisplay, "image_url")) {
+							delete argsToDisplay.image_url;
+						}
+						if (shouldHidePrompt && Object.prototype.hasOwnProperty.call(argsToDisplay, "prompt")) {
+							delete argsToDisplay.prompt;
+						}
+					}
+					const pretty = JSON.stringify(argsToDisplay ?? {}, null, 2);
 					argsEl.textContent = pretty;
 				} catch {
 					argsEl.textContent = String(args ?? "");
 				}
-			}
-		}
-
-		// History (mutations lineage)
-		const historyRaw = meta.history;
-		const historyIds = Array.isArray(historyRaw)
-			? historyRaw.map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0)
-			: [];
-		if (historyField instanceof HTMLElement && historyEl) {
-			if (historyIds.length === 0) {
-				historyField.style.display = "none";
-				historyEl.textContent = "";
-			} else {
-				historyField.style.display = "";
-				// Render as links to creation pages (most recent last)
-				historyEl.innerHTML = historyIds
-					.map((id) => `<a class="creation-details-history-link" href="/creations/${id}">#${id}</a>`)
-					.join(" → ");
 			}
 		}
 
