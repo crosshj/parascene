@@ -1,6 +1,7 @@
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 import { submitCreationWithPending } from '../../shared/createSubmit.js';
 import { renderFields } from '../../shared/providerFormFields.js';
+import { attachAutoGrowTextarea } from '../../shared/autogrow.js';
 
 const html = String.raw;
 
@@ -56,6 +57,12 @@ class AppRouteCreate extends HTMLElement {
           font-size: 0.95rem;
           font-family: inherit;
           transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        .create-route .form-input[type="textarea"],
+        .create-route textarea.form-input {
+          resize: none;
+          overflow: hidden;
+          min-height: auto;
         }
         .create-route .form-select {
           appearance: none;
@@ -358,6 +365,10 @@ class AppRouteCreate extends HTMLElement {
                   <option value="">Select a server...</option>
                 </select>
               </div>
+              <div class="form-group">
+                <label class="form-label" for="advanced-prompt">Prompt</label>
+                <textarea class="form-input" id="advanced-prompt" data-advanced-prompt rows="3" placeholder="Enter a prompt..."></textarea>
+              </div>
               <div class="form-group create-route-advanced-data">
                 <label class="form-label">Data Builder</label>
                 <ul class="create-route-advanced-list" data-advanced-list role="list">
@@ -420,6 +431,11 @@ class AppRouteCreate extends HTMLElement {
 		this.setupEventListeners();
 		this.loadServers();
 		this.loadCredits();
+		// Attach autogrow to prompt textarea
+		const promptTextarea = this.querySelector('[data-advanced-prompt]');
+		if (promptTextarea) {
+			attachAutoGrowTextarea(promptTextarea);
+		}
 	}
 
 	disconnectedCallback() {
@@ -479,6 +495,12 @@ class AppRouteCreate extends HTMLElement {
 				this.saveAdvancedOptions();
 			});
 		});
+		// Advanced tab: prompt field
+		const promptInput = this.querySelector("[data-advanced-prompt]");
+		if (promptInput) {
+			promptInput.addEventListener("input", () => this.saveAdvancedOptions());
+			promptInput.addEventListener("change", () => this.saveAdvancedOptions());
+		}
 		this.restoreAdvancedOptions();
 
 		// Restore and persist active tab (Basic / Advanced) in sessionStorage
@@ -616,6 +638,10 @@ class AppRouteCreate extends HTMLElement {
 				const key = btn.getAttribute("data-advanced-option");
 				if (key) options[key] = btn.getAttribute("aria-checked") === "true";
 			});
+			const promptInput = this.querySelector("[data-advanced-prompt]");
+			if (promptInput) {
+				options.prompt = promptInput.value;
+			}
 			const stored = sessionStorage.getItem(this.storageKey);
 			const selections = stored ? JSON.parse(stored) : {};
 			selections.advancedOptions = options;
@@ -632,10 +658,19 @@ class AppRouteCreate extends HTMLElement {
 			const selections = JSON.parse(stored);
 			const options = selections?.advancedOptions;
 			if (!options || typeof options !== "object") return;
+			// Restore data builder options
 			this.querySelectorAll("[data-advanced-option]").forEach((btn) => {
 				const key = btn.getAttribute("data-advanced-option");
 				if (key && options[key] === true) btn.setAttribute("aria-checked", "true");
 			});
+			// Restore prompt value
+			const promptInput = this.querySelector("[data-advanced-prompt]");
+			if (promptInput && typeof options.prompt === "string") {
+				promptInput.value = options.prompt;
+				// Trigger autogrow resize
+				const refresh = attachAutoGrowTextarea(promptInput);
+				if (refresh) refresh();
+			}
 			this.updateAdvancedCreateButton();
 		} catch (e) {
 			// Ignore storage errors
@@ -651,6 +686,12 @@ class AppRouteCreate extends HTMLElement {
 		if (!Number.isFinite(serverId) || serverId <= 0) return;
 
 		const args = {};
+		// Collect prompt value
+		const promptInput = this.querySelector("[data-advanced-prompt]");
+		if (promptInput && promptInput.value.trim()) {
+			args.prompt = promptInput.value.trim();
+		}
+		// Collect data builder options
 		this.querySelectorAll("[data-advanced-option]").forEach((btn) => {
 			const key = btn.getAttribute("data-advanced-option");
 			if (key) args[key] = btn.getAttribute("aria-checked") === "true";
