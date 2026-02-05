@@ -69,6 +69,18 @@ function ensureUsersMetaColumn(db) {
 	}
 }
 
+function ensureCreatedImagesMetaColumn(db) {
+	try {
+		const columns = db.prepare("PRAGMA table_info(created_images)").all();
+		const hasMeta = columns.some((column) => column.name === "meta");
+		if (!hasMeta) {
+			db.exec("ALTER TABLE created_images ADD COLUMN meta TEXT");
+		}
+	} catch (error) {
+		// console.warn("Failed to ensure meta column on created_images:", error);
+	}
+}
+
 function parseUserMeta(value) {
 	if (value == null) return {};
 	if (typeof value === "object") return value;
@@ -88,6 +100,7 @@ export async function openDb() {
 	ensureServersAuthTokenColumn(db);
 	ensureUsersLastActiveAtColumn(db);
 	ensureUsersMetaColumn(db);
+	ensureCreatedImagesMetaColumn(db);
 
 	const transferCreditsTxn = db.transaction((fromUserId, toUserId, amount) => {
 		const ensureCreditsRowStmt = db.prepare(
@@ -671,6 +684,127 @@ export async function openDb() {
            ORDER BY fi.created_at DESC`
 				);
 				return Promise.resolve(stmt.all(id, id, id, id));
+			}
+		},
+		selectAllCreatedImageIdAndMeta: {
+			all: async () => {
+				const stmt = db.prepare(`SELECT id, meta FROM created_images`);
+				return stmt.all();
+			}
+		},
+		selectFeedItemsByCreationIds: {
+			all: async (ids) => {
+				const safeIds = Array.isArray(ids)
+					? ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
+					: [];
+				if (safeIds.length === 0) return [];
+				const placeholders = safeIds.map(() => "?").join(",");
+				const stmt = db.prepare(
+					`SELECT ci.id, ci.title, ci.summary, ci.created_at, ci.user_id,
+						COALESCE(lc.like_count, 0) AS like_count,
+						COALESCE(cc.comment_count, 0) AS comment_count,
+						up.user_name AS author_user_name,
+						up.display_name AS author_display_name
+					FROM created_images ci
+					LEFT JOIN (
+						SELECT created_image_id, COUNT(*) AS like_count
+						FROM likes_created_image
+						GROUP BY created_image_id
+					) lc ON lc.created_image_id = ci.id
+					LEFT JOIN (
+						SELECT created_image_id, COUNT(*) AS comment_count
+						FROM comments_created_image
+						GROUP BY created_image_id
+					) cc ON cc.created_image_id = ci.id
+					LEFT JOIN user_profiles up ON up.user_id = ci.user_id
+					WHERE ci.id IN (${placeholders})`
+				);
+				const rows = stmt.all(...safeIds);
+				const orderById = new Map(safeIds.map((id, i) => [id, i]));
+				const sorted = (rows ?? []).slice().sort((a, b) => (orderById.get(Number(a.id)) ?? 999) - (orderById.get(Number(b.id)) ?? 999));
+				return sorted.map((row) => ({
+					id: row.id,
+					created_image_id: row.id,
+					title: row.title ?? "",
+					summary: row.summary ?? "",
+					created_at: row.created_at,
+					user_id: row.user_id,
+					like_count: Number(row.like_count ?? 0),
+					comment_count: Number(row.comment_count ?? 0),
+					author_display_name: row.author_display_name ?? null,
+					author_user_name: row.author_user_name ?? null
+				}));
+			}
+		},
+		selectMostMutatedFeedItems: {
+			all: async (viewerId, limit) => {
+				const limitNum = Number.isFinite(Number(limit)) ? Math.max(0, Math.min(Number(limit), 200)) : 25;
+				const rows = db.prepare("SELECT id, meta FROM created_images").all();
+				const countById = new Map();
+				function toHistoryArray(meta) {
+					const h = meta?.history;
+					if (Array.isArray(h)) return h;
+					if (typeof h === "string") {
+						try { const a = JSON.parse(h); return Array.isArray(a) ? a : []; } catch { return []; }
+					}
+					return [];
+				}
+				for (const row of rows ?? []) {
+					let meta = null;
+					try {
+						meta = typeof row.meta === "string" ? JSON.parse(row.meta) : row.meta;
+					} catch (_) {}
+					if (!meta || typeof meta !== "object") continue;
+					const history = toHistoryArray(meta);
+					for (const v of history) {
+						const id = v != null ? Number(v) : NaN;
+						if (!Number.isFinite(id) || id <= 0) continue;
+						countById.set(id, (countById.get(id) ?? 0) + 1);
+					}
+					const mid = meta.mutate_of_id != null ? Number(meta.mutate_of_id) : NaN;
+					if (Number.isFinite(mid) && mid > 0) countById.set(mid, (countById.get(mid) ?? 0) + 1);
+				}
+				const topIds = [...countById.entries()]
+					.sort((a, b) => (b[1] - a[1]) || (a[0] - b[0]))
+					.slice(0, limitNum)
+					.map(([id]) => id);
+				if (topIds.length === 0) return [];
+				const placeholders = topIds.map(() => "?").join(",");
+				const detailStmt = db.prepare(
+					`SELECT ci.id, ci.title, ci.summary, ci.created_at, ci.user_id,
+						COALESCE(lc.like_count, 0) AS like_count,
+						COALESCE(cc.comment_count, 0) AS comment_count,
+						up.user_name AS author_user_name,
+						up.display_name AS author_display_name
+					FROM created_images ci
+					LEFT JOIN (
+						SELECT created_image_id, COUNT(*) AS like_count
+						FROM likes_created_image
+						GROUP BY created_image_id
+					) lc ON lc.created_image_id = ci.id
+					LEFT JOIN (
+						SELECT created_image_id, COUNT(*) AS comment_count
+						FROM comments_created_image
+						GROUP BY created_image_id
+					) cc ON cc.created_image_id = ci.id
+					LEFT JOIN user_profiles up ON up.user_id = ci.user_id
+					WHERE ci.id IN (${placeholders})`
+				);
+				const detailRows = detailStmt.all(...topIds);
+				const orderById = new Map(topIds.map((id, i) => [id, i]));
+				const sorted = (detailRows ?? []).slice().sort((a, b) => (orderById.get(Number(a.id)) ?? 999) - (orderById.get(Number(b.id)) ?? 999));
+				return sorted.map((row) => ({
+					id: row.id,
+					created_image_id: row.id,
+					title: row.title ?? "",
+					summary: row.summary ?? "",
+					created_at: row.created_at,
+					user_id: row.user_id,
+					like_count: Number(row.like_count ?? 0),
+					comment_count: Number(row.comment_count ?? 0),
+					author_display_name: row.author_display_name ?? null,
+					author_user_name: row.author_user_name ?? null
+				}));
 			}
 		},
 		selectFeedItems: {

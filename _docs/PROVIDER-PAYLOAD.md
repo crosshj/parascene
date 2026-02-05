@@ -95,10 +95,12 @@ Every item in `args.items` is an object. Each has a **`type`** and **`source`** 
 - **`image_url`** – Share URL your server can use to fetch the image (GET, no auth). Use this if you need the actual pixels. Optional; can be `null` if not available.
 - **`created_at`** – ISO 8601 timestamp string (e.g. `"2025-02-04T12:00:00.000Z"`).
 - **`description`** – User-written description of the **creation** (the image). Only present when the creator set one.
-- **`creation_meta`** – Object describing **how that creation was made** (inputs and server/method). Only present when we have that data. Shape:
+- **`creation_meta`** – Object describing **how that creation was made** (inputs, server/method, lineage). Only present when we have that data. Shape:
   - `args` (object) – Inputs used to generate the image (e.g. `{ "prompt": "..." }`).
   - `method_name` (string) – Human-readable method name.
   - `server_name` (string) – Name of the server that produced the image.
+  - `history` (array of numbers) – Lineage: creation IDs from root → … → parent (ordered chain).
+  - `mutate_of_id` (number) – Direct parent creation ID when this creation was made from another (mutate flow).
 
 ---
 
@@ -118,7 +120,7 @@ Latest comments across the platform, each tied to a creation.
 | `image_id`     | number \| null | Creation (image) ID |
 | `image_title`  | string \| null | Title of that creation |
 | `description`  | string \| null | *(optional)* Creation description |
-| `creation_meta`| object \| null | *(optional)* `{ args?, method_name?, server_name? }` for that creation |
+| `creation_meta`| object \| null | *(optional)* `{ args?, method_name?, server_name?, history?, mutate_of_id? }` for that creation |
 
 ---
 
@@ -144,14 +146,14 @@ Feed items for “newest” creations (one per creation in the explore feed).
 
 ---
 
-### Type: `image` (source: `top_likes` or `bottom_likes`)
+### Type: `image` (source: `top_likes`, `bottom_likes`, or `most_mutated`)
 
-Creations sorted by like count (most or least). Here `id` is the creation (image) ID.
+Creations sorted by like count (most or least) or by how often they appear in mutation lineages (meta.history). Here `id` is the creation (image) ID.
 
 | Field          | Type   | Description |
 |----------------|--------|-------------|
 | `type`         | string | `"image"` |
-| `source`       | string | `"top_likes"` or `"bottom_likes"` |
+| `source`       | string | `"top_likes"`, `"bottom_likes"`, or `"most_mutated"` |
 | `id`           | number | Creation (image) ID |
 | `title`       | string | Creation title |
 | `summary`      | string | Creation summary |
@@ -234,6 +236,22 @@ Creations sorted by like count (most or least). Here `id` is the creation (image
 
 ---
 
+## Closing the blind spot
+
+Server-to-server traffic is invisible compared to browser DevTools. Parascene reduces that gap in these ways:
+
+1. **This doc** – Single source of truth for the payload shape so provider authors don’t have to guess or sniff traffic.
+
+2. **Preview payload in the UI** – In the Create → Advanced tab, **Preview payload** builds the same request the backend would send (using your current Data Builder options and prompt) and shows it in a modal. No provider is called; you see the exact JSON and can copy it. Use this to confirm what your server will receive or to share a sample with your team.
+
+3. **Optional request logging** – In development, you can enable logging of outgoing provider requests (e.g. via an env flag) so backend logs show the body (with tokens redacted). Helps when debugging live.
+
+4. **Link from app to doc** – Server settings or the Advanced tab can link to this doc (e.g. “What do we send to the server?”) so provider authors know where to look.
+
+5. **Contract tests** – Tests that build the same payload as the app and assert shape (or snapshot) keep the implementation in sync with this reference.
+
+---
+
 ## Summary
 
 | Topic | Detail |
@@ -242,9 +260,9 @@ Creations sorted by like count (most or least). Here `id` is the creation (image
 | **advanced_query** | `args`: `items` (array, max 100), optional `prompt`. Respond with JSON: `supported`, `cost`. |
 | **advanced_generate** | Same `args` as query. Respond with **image/png** body. |
 | **Item count** | Capped at **100** items total, split across the selected Data Builder options. |
-| **Item types** | `comment` (recent_comments), `post` (recent_posts), `image` (top_likes / bottom_likes). |
+| **Item types** | `comment` (recent_comments), `post` (recent_posts), `image` (top_likes / bottom_likes / most_mutated). |
 | **Extra args** | Any non–Data-Builder key (e.g. `prompt`) is passed through in `args` as-is. |
-| **Creation context** | Each item may include `description` and `creation_meta` (args, method_name, server_name) for the creation it refers to. |
+| **Creation context** | Each item may include `description` and `creation_meta` (args, method_name, server_name, history, mutate_of_id) for the creation it refers to. |
 | **Image access** | Use `image_url` (share URL) to GET the image when you need it; no auth required. |
 
 Implementing against this shape ensures your provider stays in sync with what Parascene sends, even though the calls are server-to-server and not visible in the browser.

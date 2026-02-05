@@ -283,6 +283,30 @@ class AppRouteCreate extends HTMLElement {
           align-items: flex-start;
           margin-top: 0.25rem;
         }
+        .create-route .create-route-advanced-preview-hint {
+          margin: 0.5rem 0 0 0;
+          font-size: 0.85rem;
+          color: var(--text-muted);
+          text-align: right;
+        }
+        .create-route .create-route-advanced-preview-link {
+          background: none;
+          border: none;
+          padding: 0;
+          font-size: inherit;
+          color: var(--text-muted);
+          text-decoration: underline;
+          cursor: pointer;
+          font-family: inherit;
+        }
+        .create-route .create-route-advanced-preview-link:hover {
+          color: var(--text);
+        }
+        .create-route .create-route-advanced-preview-link:focus-visible {
+          outline: 2px solid var(--accent);
+          outline-offset: 2px;
+          border-radius: 2px;
+        }
         /* Advanced confirm dialog (cost + Create) */
         .create-route-advanced-confirm {
           position: fixed;
@@ -299,6 +323,11 @@ class AppRouteCreate extends HTMLElement {
         .create-route-advanced-confirm.open {
           visibility: visible;
           opacity: 1;
+        }
+        .create-route-advanced-confirm[data-advanced-preview-dialog] {
+          padding: 0.25rem;
+          align-items: stretch;
+          justify-content: stretch;
         }
         .create-route-advanced-confirm-overlay {
           position: absolute;
@@ -322,6 +351,46 @@ class AppRouteCreate extends HTMLElement {
           display: flex;
           gap: 0.75rem;
           flex-wrap: wrap;
+        }
+        .create-route-advanced-preview-panel {
+          width: 100%;
+          height: 100%;
+          max-width: none;
+          padding: 0.5rem;
+          display: flex;
+          flex-direction: column;
+        }
+        .create-route-advanced-preview-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 0.5rem;
+          margin-bottom: 0.25rem;
+          flex-shrink: 0;
+        }
+        .create-route-advanced-preview-actions {
+          justify-content: flex-end;
+        }
+        .create-route-advanced-preview-title {
+          font-size: 0.95rem;
+          font-weight: 600;
+          color: var(--text);
+          margin: 0;
+        }
+        .create-route-advanced-preview-json {
+          flex: 1;
+          min-height: 0;
+          overflow: auto;
+          margin: 0 0 0.5rem 0;
+          padding: 0.25rem 0.5rem;
+          border-radius: 6px;
+          background: var(--surface-strong);
+          border: 1px solid var(--border);
+          font-size: 0.8rem;
+          line-height: 1.4;
+          color: var(--text);
+          white-space: pre-wrap;
+          word-break: break-word;
         }
       </style>
       <div class="create-route">
@@ -404,7 +473,18 @@ class AppRouteCreate extends HTMLElement {
                     Creations with the fewest likes on the platform.
                   </div>
                 </li>
+                <li class="create-route-advanced-item">
+                  <button type="button" class="create-route-advanced-switch" role="switch" aria-checked="false" data-advanced-option="most_mutated" aria-label="Include most mutated">
+                  </button>
+                  <div class="create-route-advanced-item-desc">
+                    <strong>Most mutated</strong>
+                    Creations that appear the most in mutation lineages (history).
+                  </div>
+                </li>
               </ul>
+              <p class="create-route-advanced-preview-hint">
+                <button type="button" class="create-route-advanced-preview-link" data-advanced-preview-payload>See what we send to the server</button>
+              </p>
               </div>
               <div class="create-route-advanced-actions">
                 <button type="button" class="create-button" data-advanced-create-button disabled>
@@ -426,6 +506,25 @@ class AppRouteCreate extends HTMLElement {
             </div>
           </div>
         </div>
+        <div class="create-route-advanced-confirm" data-advanced-preview-dialog hidden>
+          <div class="create-route-advanced-confirm-overlay" data-advanced-preview-overlay></div>
+          <div class="create-route-advanced-confirm-panel create-route-advanced-preview-panel">
+            <div class="create-route-advanced-preview-header">
+              <p class="create-route-advanced-preview-title">Payload sent to provider</p>
+              <button type="button" class="modal-close" data-advanced-preview-close-x aria-label="Close">
+                <svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+            <pre class="create-route-advanced-preview-json" data-advanced-preview-json></pre>
+            <div class="create-route-advanced-confirm-actions create-route-advanced-preview-actions">
+              <button type="button" class="btn-secondary" data-advanced-preview-close>Close</button>
+              <button type="button" class="create-button" data-advanced-preview-copy>Copy</button>
+            </div>
+          </div>
+        </div>
       </div>
     `;
 		this.setupEventListeners();
@@ -440,6 +539,9 @@ class AppRouteCreate extends HTMLElement {
 
 	disconnectedCallback() {
 		document.removeEventListener('credits-updated', this.handleCreditsUpdated);
+		if (this._boundPreviewEscape) {
+			document.removeEventListener('keydown', this._boundPreviewEscape);
+		}
 	}
 
 	setupEventListeners() {
@@ -476,6 +578,26 @@ class AppRouteCreate extends HTMLElement {
 		if (advancedCreateButton) {
 			advancedCreateButton.addEventListener("click", () => this.handleAdvancedCreate());
 		}
+		const previewPayloadBtn = this.querySelector("[data-advanced-preview-payload]");
+		if (previewPayloadBtn) {
+			previewPayloadBtn.addEventListener("click", () => this.handlePreviewPayload());
+		}
+		const previewDialog = this.querySelector("[data-advanced-preview-dialog]");
+		const previewOverlay = this.querySelector("[data-advanced-preview-overlay]");
+		const previewCloseBtn = this.querySelector("[data-advanced-preview-close]");
+		const previewCloseX = this.querySelector("[data-advanced-preview-close-x]");
+		const previewCopyBtn = this.querySelector("[data-advanced-preview-copy]");
+		if (previewOverlay) previewOverlay.addEventListener("click", () => this.closePreviewPayload());
+		if (previewCloseBtn) previewCloseBtn.addEventListener("click", () => this.closePreviewPayload());
+		if (previewCloseX) previewCloseX.addEventListener("click", () => this.closePreviewPayload());
+		if (previewCopyBtn) previewCopyBtn.addEventListener("click", () => this.copyPreviewPayload());
+		this._boundPreviewEscape = (e) => {
+			if (e.key === "Escape") {
+				const d = this.querySelector("[data-advanced-preview-dialog]");
+				if (d && !d.hidden && d.classList.contains("open")) this.closePreviewPayload();
+			}
+		};
+		document.addEventListener("keydown", this._boundPreviewEscape);
 		// Advanced confirm dialog
 		const confirmDialog = this.querySelector("[data-advanced-confirm-dialog]");
 		const confirmOverlay = this.querySelector("[data-advanced-confirm-overlay]");
@@ -759,6 +881,84 @@ class AppRouteCreate extends HTMLElement {
 			dialog.classList.remove('open');
 		}
 		this._advancedConfirm = null;
+	}
+
+	async handlePreviewPayload() {
+		const args = {};
+		const promptInput = this.querySelector("[data-advanced-prompt]");
+		if (promptInput && promptInput.value.trim()) {
+			args.prompt = promptInput.value.trim();
+		}
+		this.querySelectorAll("[data-advanced-option]").forEach((btn) => {
+			const key = btn.getAttribute("data-advanced-option");
+			if (key) args[key] = btn.getAttribute("aria-checked") === "true";
+		});
+		const hasAtLeastOne = Object.keys(args).some((k) => k === 'prompt' || args[k] === true);
+		if (!hasAtLeastOne) {
+			const pre = this.querySelector("[data-advanced-preview-json]");
+			if (pre) pre.textContent = 'Turn on at least one Data Builder option or enter a prompt to preview the payload.';
+			this.openPreviewPayload();
+			return;
+		}
+		try {
+			const res = await fetch('/api/create/preview', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify({ args })
+			});
+			const data = await res.json().catch(() => ({}));
+			const pre = this.querySelector("[data-advanced-preview-json]");
+			if (pre) {
+				if (!res.ok) {
+					pre.textContent = data?.message || data?.error || 'Failed to load preview.';
+				} else {
+					const payload = data?.payload;
+					pre.textContent = payload != null
+						? JSON.stringify(payload, null, 2)
+						: 'No payload returned.';
+				}
+			}
+			this._previewPayloadRaw = data?.payload != null ? JSON.stringify(data.payload) : null;
+			this.openPreviewPayload();
+		} catch (e) {
+			const pre = this.querySelector("[data-advanced-preview-json]");
+			if (pre) pre.textContent = 'Failed to load preview.';
+			this._previewPayloadRaw = null;
+			this.openPreviewPayload();
+		}
+	}
+
+	openPreviewPayload() {
+		const dialog = this.querySelector("[data-advanced-preview-dialog]");
+		if (dialog) {
+			dialog.hidden = false;
+			dialog.classList.add('open');
+		}
+	}
+
+	closePreviewPayload() {
+		const dialog = this.querySelector("[data-advanced-preview-dialog]");
+		if (dialog) {
+			dialog.hidden = true;
+			dialog.classList.remove('open');
+		}
+		this._previewPayloadRaw = null;
+	}
+
+	copyPreviewPayload() {
+		const raw = this._previewPayloadRaw;
+		if (!raw) return;
+		try {
+			navigator.clipboard.writeText(raw).then(() => {
+				const btn = this.querySelector("[data-advanced-preview-copy]");
+				if (btn) {
+					const prev = btn.textContent;
+					btn.textContent = 'Copied';
+					setTimeout(() => { btn.textContent = prev; }, 1500);
+				}
+			}).catch(() => {});
+		} catch (e) {}
 	}
 
 	submitAdvancedCreate() {

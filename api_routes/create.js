@@ -157,7 +157,7 @@ export default function createCreateRoutes({ queries, storage }) {
 	}
 
 	// Data Builder option keys (boolean flags). Other keys (e.g. prompt) are passed through to the provider.
-	const ADVANCED_DATA_BUILDER_KEYS = ["recent_comments", "recent_posts", "top_likes", "bottom_likes"];
+	const ADVANCED_DATA_BUILDER_KEYS = ["recent_comments", "recent_posts", "top_likes", "bottom_likes", "most_mutated"];
 
 	function getAdvancedExtraArgs(args) {
 		if (!args || typeof args !== "object") return {};
@@ -169,7 +169,7 @@ export default function createCreateRoutes({ queries, storage }) {
 		return extra;
 	}
 
-	/** Build creation_meta subset for provider: inputs and how the image was created (args, method_name, server_name). */
+	/** Build creation_meta subset for provider: inputs, how the image was created, and lineage (args, method_name, server_name, history, mutate_of_id). */
 	function buildCreationMetaSubset(meta) {
 		const m = parseMeta(meta);
 		if (!m || typeof m !== "object") return null;
@@ -183,6 +183,12 @@ export default function createCreateRoutes({ queries, storage }) {
 		if (typeof m.server_name === "string" && m.server_name.trim()) {
 			out.server_name = m.server_name.trim();
 		}
+		if (Array.isArray(m.history) && m.history.length > 0) {
+			out.history = m.history.map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0);
+		}
+		if (m.mutate_of_id != null && Number.isFinite(Number(m.mutate_of_id)) && Number(m.mutate_of_id) > 0) {
+			out.mutate_of_id = Number(m.mutate_of_id);
+		}
 		return Object.keys(out).length === 0 ? null : out;
 	}
 
@@ -192,7 +198,8 @@ export default function createCreateRoutes({ queries, storage }) {
 		const recent_posts = options?.recent_posts === true;
 		const top_likes = options?.top_likes === true;
 		const bottom_likes = options?.bottom_likes === true;
-		const selectedOptions = [recent_comments && 'recent_comments', recent_posts && 'recent_posts', top_likes && 'top_likes', bottom_likes && 'bottom_likes'].filter(Boolean);
+		const most_mutated = options?.most_mutated === true;
+		const selectedOptions = [recent_comments && 'recent_comments', recent_posts && 'recent_posts', top_likes && 'top_likes', bottom_likes && 'bottom_likes', most_mutated && 'most_mutated'].filter(Boolean);
 		if (selectedOptions.length === 0) return [];
 		const MAX_ITEMS = 100;
 		const perOptionLimit = Math.floor(MAX_ITEMS / selectedOptions.length);
@@ -276,6 +283,53 @@ export default function createCreateRoutes({ queries, storage }) {
 				});
 			}
 		}
+		if (most_mutated && queries.selectAllCreatedImageIdAndMeta?.all && queries.selectFeedItemsByCreationIds?.all) {
+			const idMetaRows = await queries.selectAllCreatedImageIdAndMeta.all().catch(() => []) ?? [];
+			const countById = new Map();
+			function toHistoryArray(raw) {
+				const h = raw?.history;
+				if (Array.isArray(h)) return h;
+				if (typeof h === "string") {
+					try { const a = JSON.parse(h); return Array.isArray(a) ? a : []; } catch { return []; }
+				}
+				return [];
+			}
+			for (const row of idMetaRows) {
+				const meta = parseMeta(row?.meta);
+				if (!meta || typeof meta !== "object") continue;
+				const history = toHistoryArray(meta);
+				for (const v of history) {
+					const id = v != null ? Number(v) : NaN;
+					if (!Number.isFinite(id) || id <= 0) continue;
+					countById.set(id, (countById.get(id) ?? 0) + 1);
+				}
+				const mid = meta.mutate_of_id != null ? Number(meta.mutate_of_id) : NaN;
+				if (Number.isFinite(mid) && mid > 0) countById.set(mid, (countById.get(mid) ?? 0) + 1);
+			}
+			const topIds = [...countById.entries()]
+				.sort((a, b) => (b[1] - a[1]) || (a[0] - b[0]))
+				.slice(0, perOptionLimit)
+				.map(([id]) => id);
+			const feedItems = topIds.length > 0
+				? (await queries.selectFeedItemsByCreationIds.all(topIds).catch(() => []) ?? [])
+				: [];
+			for (const item of feedItems.slice(0, perOptionLimit)) {
+				const imageId = item?.created_image_id ?? item?.id ?? null;
+				const imageUrl = shareUrlForImage(imageId, userId) ?? null;
+				items.push({
+					type: 'image',
+					source: 'most_mutated',
+					id: imageId,
+					title: item?.title || '',
+					summary: item?.summary || '',
+					created_at: item?.created_at,
+					author: item?.author_display_name || item?.author_user_name || item?.author || null,
+					image_url: imageUrl,
+					like_count: Number(item?.like_count || 0),
+					comment_count: Number(item?.comment_count || 0)
+				});
+			}
+		}
 
 		const trimmed = items.slice(0, MAX_ITEMS);
 		const imageIds = [...new Set(
@@ -309,6 +363,36 @@ export default function createCreateRoutes({ queries, storage }) {
 		return trimmed;
 	}
 
+	// POST /api/create/preview - Return the exact payload that would be sent to the provider (no provider call, no charge)
+	router.post("/api/create/preview", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		// Accept args from req.body.args or, if missing, from req.body (so clients can send { most_mutated: true } or { args: { most_mutated: true } })
+		const raw = (req.body && typeof req.body === "object" && req.body.args != null && typeof req.body.args === "object")
+			? req.body.args
+			: (req.body && typeof req.body === "object" ? req.body : {});
+		const safeArgs = { ...raw };
+		// Normalize Data Builder booleans so string "true" is treated as true
+		for (const k of ADVANCED_DATA_BUILDER_KEYS) {
+			if (safeArgs[k] === "true" || safeArgs[k] === true) safeArgs[k] = true;
+			else if (safeArgs[k] === "false" || safeArgs[k] === false) safeArgs[k] = false;
+		}
+
+		try {
+			const items = await buildAdvancedItems(user.id, safeArgs);
+			const extraArgs = getAdvancedExtraArgs(safeArgs);
+			const providerArgs = { items, ...extraArgs };
+			const payload = { method: "advanced_query", args: providerArgs };
+			return res.json({ payload });
+		} catch (err) {
+			return res.status(500).json({
+				error: "Preview failed",
+				message: err?.message || "Failed to build payload"
+			});
+		}
+	});
+
 	// POST /api/create/query - Query server for advanced create support and cost (no charge, no DB write)
 	router.post("/api/create/query", async (req, res) => {
 		const user = await requireUser(req, res);
@@ -329,7 +413,7 @@ export default function createCreateRoutes({ queries, storage }) {
 			// Backend builds items from boolean args and sends that to the provider; include extra args (e.g. prompt)
 			const items = await buildAdvancedItems(user.id, safeArgs);
 			const extraArgs = getAdvancedExtraArgs(safeArgs);
-			const providerArgs = items.length > 0 ? { items, ...extraArgs } : { ...safeArgs };
+			const providerArgs = { items, ...extraArgs };
 
 			const providerResponse = await fetch(server.server_url, {
 				method: "POST",

@@ -410,6 +410,96 @@ export function openDb() {
 						author_display_name: profile?.display_name ?? null,
 						author_avatar_url: profile?.avatar_url ?? null
 					};
+			});
+		}
+		},
+		selectAllCreatedImageIdAndMeta: {
+			all: async () => {
+				return created_images.map((img) => ({ id: img.id, meta: img.meta }));
+			}
+		},
+		selectFeedItemsByCreationIds: {
+			all: async (ids) => {
+				const safeIds = Array.isArray(ids)
+					? ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
+					: [];
+				if (safeIds.length === 0) return [];
+				const idSet = new Set(safeIds);
+				const sorted = created_images
+					.filter((img) => img.id != null && idSet.has(Number(img.id)))
+					.slice()
+					.sort((a, b) => safeIds.indexOf(Number(a.id)) - safeIds.indexOf(Number(b.id)));
+				return sorted.map((row) => {
+					const id = Number(row.id);
+					const likeCount = likes_created_image.filter((l) => Number(l.created_image_id) === id).length;
+					const commentCount = comments_created_image.filter((c) => Number(c.created_image_id) === id).length;
+					const profile = user_profiles.find((p) => Number(p.user_id) === Number(row.user_id));
+					return {
+						id: row.id,
+						created_image_id: row.id,
+						title: row.title ?? "",
+						summary: row.summary ?? "",
+						created_at: row.created_at,
+						user_id: row.user_id,
+						like_count: likeCount,
+						comment_count: commentCount,
+						author_display_name: profile?.display_name ?? null,
+						author_user_name: profile?.user_name ?? null
+					};
+				});
+			}
+		},
+		selectMostMutatedFeedItems: {
+			all: async (viewerId, limit) => {
+				const limitNum = Number.isFinite(Number(limit)) ? Math.max(0, Math.min(Number(limit), 200)) : 25;
+				function toHistoryArray(meta) {
+					const h = meta?.history;
+					if (Array.isArray(h)) return h;
+					if (typeof h === "string") {
+						try { const a = JSON.parse(h); return Array.isArray(a) ? a : []; } catch { return []; }
+					}
+					return [];
+				}
+				const countById = new Map();
+				for (const img of created_images) {
+					const meta = img.meta != null && typeof img.meta === "object" ? img.meta : (typeof img.meta === "string" ? (() => { try { return JSON.parse(img.meta); } catch { return null; } })() : null);
+					if (!meta || typeof meta !== "object") continue;
+					const history = toHistoryArray(meta);
+					for (const v of history) {
+						const id = v != null ? Number(v) : NaN;
+						if (!Number.isFinite(id) || id <= 0) continue;
+						countById.set(id, (countById.get(id) ?? 0) + 1);
+					}
+					const mid = meta.mutate_of_id != null ? Number(meta.mutate_of_id) : NaN;
+					if (Number.isFinite(mid) && mid > 0) countById.set(mid, (countById.get(mid) ?? 0) + 1);
+				}
+				const topIds = [...countById.entries()]
+					.sort((a, b) => (b[1] - a[1]) || (a[0] - b[0]))
+					.slice(0, limitNum)
+					.map(([id]) => id);
+				if (topIds.length === 0) return [];
+				const idSet = new Set(topIds);
+				const sorted = created_images
+					.filter((img) => img.id != null && idSet.has(Number(img.id)))
+					.slice()
+					.sort((a, b) => topIds.indexOf(Number(a.id)) - topIds.indexOf(Number(b.id)));
+				return sorted.map((row) => {
+					const id = Number(row.id);
+					const likeCount = likes_created_image.filter((l) => Number(l.created_image_id) === id).length;
+					const commentCount = comments_created_image.filter((c) => Number(c.created_image_id) === id).length;
+					const profile = user_profiles.find((p) => Number(p.user_id) === Number(row.user_id));
+					return {
+						id: row.id,
+						created_image_id: row.id,
+						title: row.title ?? "",
+						summary: row.summary ?? "",
+						created_at: row.created_at,
+						user_id: row.user_id,
+						like_count: likeCount,
+						comment_count: commentCount,
+						author_display_name: profile?.display_name ?? null,
+						author_user_name: profile?.user_name ?? null
+					};
 				});
 			}
 		},

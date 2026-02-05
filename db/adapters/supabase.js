@@ -875,6 +875,91 @@ export function openDb() {
 				});
 			}
 		},
+		selectMostMutatedFeedItems: {
+			all: async (viewerId, limit) => {
+				const limitNum = Number.isFinite(Number(limit)) ? Math.max(0, Math.min(Number(limit), 200)) : 25;
+				const { data: metaRows, error: metaError } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.select("meta");
+				if (metaError) throw metaError;
+				const countById = new Map();
+				function toHistoryArray(raw) {
+					const h = raw?.history;
+					if (Array.isArray(h)) return h;
+					if (typeof h === "string") {
+						try { const a = JSON.parse(h); return Array.isArray(a) ? a : []; } catch { return []; }
+					}
+					return [];
+				}
+				for (const row of metaRows ?? []) {
+					const meta = row?.meta;
+					const raw = meta != null && typeof meta === "object" ? meta : (typeof meta === "string" ? (() => { try { return JSON.parse(meta); } catch { return null; } })() : null);
+					if (!raw || typeof raw !== "object") continue;
+					const history = toHistoryArray(raw);
+					for (const v of history) {
+						const id = v != null ? Number(v) : NaN;
+						if (!Number.isFinite(id) || id <= 0) continue;
+						countById.set(id, (countById.get(id) ?? 0) + 1);
+					}
+					// Fallback: count mutate_of_id so older records without history still show up
+					const mid = raw.mutate_of_id != null ? Number(raw.mutate_of_id) : NaN;
+					if (Number.isFinite(mid) && mid > 0) countById.set(mid, (countById.get(mid) ?? 0) + 1);
+				}
+				const topIds = [...countById.entries()]
+					.sort((a, b) => (b[1] - a[1]) || (a[0] - b[0]))
+					.slice(0, limitNum)
+					.map(([id]) => id);
+				if (topIds.length === 0) return [];
+				const { data: images, error: imgError } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.select("id, title, description, created_at, user_id")
+					.in("id", topIds);
+				if (imgError) throw imgError;
+				const orderById = new Map(topIds.map((id, i) => [Number(id), i]));
+				const sorted = (images ?? []).slice().sort((a, b) => (orderById.get(Number(a.id)) ?? 999) - (orderById.get(Number(b.id)) ?? 999));
+				const createdImageIds = sorted.map((r) => r.id).filter((id) => id != null);
+				if (createdImageIds.length === 0) return [];
+				const { data: countRows, error: countError } = await serviceClient
+					.from(prefixedTable("created_image_like_counts"))
+					.select("created_image_id, like_count")
+					.in("created_image_id", createdImageIds);
+				if (countError) throw countError;
+				const likeById = new Map((countRows ?? []).map((r) => [String(r.created_image_id), Number(r.like_count ?? 0)]));
+				const { data: commentRows, error: commentError } = await serviceClient
+					.from(prefixedTable("created_image_comment_counts"))
+					.select("created_image_id, comment_count")
+					.in("created_image_id", createdImageIds);
+				if (commentError) throw commentError;
+				const commentById = new Map((commentRows ?? []).map((r) => [String(r.created_image_id), Number(r.comment_count ?? 0)]));
+				const authorIds = [...new Set(sorted.map((r) => r.user_id).filter(Boolean))];
+				let profileByUserId = new Map();
+				if (authorIds.length > 0) {
+					const { data: profileRows, error: profileError } = await serviceClient
+						.from(prefixedTable("user_profiles"))
+						.select("user_id, user_name, display_name")
+						.in("user_id", authorIds);
+					if (!profileError && profileRows) {
+						profileByUserId = new Map(profileRows.map((r) => [String(r.user_id), r]));
+					}
+				}
+				return sorted.map((row) => {
+					const key = String(row.id);
+					const profile = row.user_id != null ? profileByUserId.get(String(row.user_id)) : null;
+					return {
+						id: row.id,
+						created_image_id: row.id,
+						title: row.title ?? "",
+						summary: row.description ?? "",
+						created_at: row.created_at,
+						user_id: row.user_id,
+						like_count: likeById.get(key) ?? 0,
+						comment_count: commentById.get(key) ?? 0,
+						author_display_name: profile?.display_name ?? null,
+						author_user_name: profile?.user_name ?? null
+					};
+				});
+			}
+		},
 		selectExploreItems: {
 			all: async () => {
 				// Use serviceClient to bypass RLS for backend operations
@@ -1338,6 +1423,72 @@ export function openDb() {
 					.in("id", safeIds);
 				if (error) throw error;
 				return data ?? [];
+			}
+		},
+		selectAllCreatedImageIdAndMeta: {
+			all: async () => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.select("id, meta");
+				if (error) throw error;
+				return data ?? [];
+			}
+		},
+		selectFeedItemsByCreationIds: {
+			all: async (ids) => {
+				const safeIds = Array.isArray(ids)
+					? ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
+					: [];
+				if (safeIds.length === 0) return [];
+				// prsn_created_images has title, description (no summary column); use description for summary
+				const { data: images, error: imgError } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.select("id, title, description, created_at, user_id")
+					.in("id", safeIds);
+				if (imgError) throw imgError;
+				const orderById = new Map(safeIds.map((id, i) => [Number(id), i]));
+				const sorted = (images ?? []).slice().sort((a, b) => (orderById.get(Number(a.id)) ?? 999) - (orderById.get(Number(b.id)) ?? 999));
+				const createdImageIds = sorted.map((r) => r.id).filter((id) => id != null);
+				if (createdImageIds.length === 0) return [];
+				const { data: countRows, error: countError } = await serviceClient
+					.from(prefixedTable("created_image_like_counts"))
+					.select("created_image_id, like_count")
+					.in("created_image_id", createdImageIds);
+				if (countError) throw countError;
+				const likeById = new Map((countRows ?? []).map((r) => [String(r.created_image_id), Number(r.like_count ?? 0)]));
+				const { data: commentRows, error: commentError } = await serviceClient
+					.from(prefixedTable("created_image_comment_counts"))
+					.select("created_image_id, comment_count")
+					.in("created_image_id", createdImageIds);
+				if (commentError) throw commentError;
+				const commentById = new Map((commentRows ?? []).map((r) => [String(r.created_image_id), Number(r.comment_count ?? 0)]));
+				const authorIds = [...new Set(sorted.map((r) => r.user_id).filter(Boolean))];
+				let profileByUserId = new Map();
+				if (authorIds.length > 0) {
+					const { data: profileRows, error: profileError } = await serviceClient
+						.from(prefixedTable("user_profiles"))
+						.select("user_id, user_name, display_name")
+						.in("user_id", authorIds);
+					if (!profileError && profileRows) {
+						profileByUserId = new Map(profileRows.map((r) => [String(r.user_id), r]));
+					}
+				}
+				return sorted.map((row) => {
+					const key = String(row.id);
+					const profile = row.user_id != null ? profileByUserId.get(String(row.user_id)) : null;
+					return {
+						id: row.id,
+						created_image_id: row.id,
+						title: row.title ?? "",
+						summary: row.description ?? "",
+						created_at: row.created_at,
+						user_id: row.user_id,
+						like_count: likeById.get(key) ?? 0,
+						comment_count: commentById.get(key) ?? 0,
+						author_display_name: profile?.display_name ?? null,
+						author_user_name: profile?.user_name ?? null
+					};
+				});
 			}
 		},
 		insertCreatedImageLike: {
