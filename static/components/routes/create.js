@@ -14,6 +14,7 @@ class AppRouteCreate extends HTMLElement {
 		this.servers = [];
 		this.handleCreditsUpdated = this.handleCreditsUpdated.bind(this);
 		this.storageKey = 'create-page-selections';
+		this._advancedConfirm = null; // { serverId, args, cost } when cost dialog is open
 	}
 
 	connectedCallback() {
@@ -167,7 +168,8 @@ class AppRouteCreate extends HTMLElement {
           transform: translateY(0);
         }
         .create-route .create-button:disabled {
-          opacity: 0.6;
+          background: var(--surface-strong);
+          color: var(--text-muted);
           cursor: not-allowed;
         }
         .create-route .create-button-spinner {
@@ -191,6 +193,128 @@ class AppRouteCreate extends HTMLElement {
         }
         .create-route .field-required {
           color: var(--error, #e74c3c);
+        }
+        /* Advanced tab: context options list + switch */
+        .create-route .create-route-advanced {
+          display: flex;
+          flex-direction: column;
+          gap: 1.5rem;
+        }
+        .create-route .create-route-advanced-server {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+        .create-route .create-route-advanced-list {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0;
+          border-radius: 10px;
+          border: 1px solid var(--border);
+          overflow: hidden;
+          background: var(--surface);
+        }
+        .create-route .create-route-advanced-item {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          padding: 1rem 1.25rem;
+          border-bottom: 1px solid var(--border);
+          background: var(--surface);
+        }
+        .create-route .create-route-advanced-item:last-child {
+          border-bottom: none;
+        }
+        .create-route .create-route-advanced-item-desc {
+          flex: 1;
+          font-size: 0.95rem;
+          color: var(--text);
+          line-height: 1.4;
+        }
+        .create-route .create-route-advanced-item-desc strong {
+          display: block;
+          font-weight: 600;
+          margin-bottom: 0.15rem;
+        }
+        .create-route .create-route-advanced-switch {
+          position: relative;
+          width: 44px;
+          height: 24px;
+          flex-shrink: 0;
+          border-radius: 999px;
+          background: var(--border);
+          cursor: pointer;
+          transition: background 0.2s ease;
+          border: none;
+          padding: 0;
+        }
+        .create-route .create-route-advanced-switch[aria-checked="true"] {
+          background: var(--accent);
+        }
+        .create-route .create-route-advanced-switch::after {
+          content: '';
+          position: absolute;
+          top: 2px;
+          left: 2px;
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: var(--surface);
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+          transition: transform 0.2s ease;
+        }
+        .create-route .create-route-advanced-switch[aria-checked="true"]::after {
+          transform: translateX(20px);
+        }
+        .create-route .create-route-advanced-actions {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          align-items: flex-start;
+          margin-top: 0.25rem;
+        }
+        /* Advanced confirm dialog (cost + Create) */
+        .create-route-advanced-confirm {
+          position: fixed;
+          inset: 0;
+          z-index: 1000;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 1rem;
+          visibility: hidden;
+          opacity: 0;
+          transition: visibility 0.2s ease, opacity 0.2s ease;
+        }
+        .create-route-advanced-confirm.open {
+          visibility: visible;
+          opacity: 1;
+        }
+        .create-route-advanced-confirm-overlay {
+          position: absolute;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.5);
+        }
+        .create-route-advanced-confirm-panel {
+          position: relative;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 14px;
+          padding: 1.5rem;
+          max-width: 360px;
+          width: 100%;
+          box-shadow: var(--shadow);
+        }
+        .create-route-advanced-confirm-panel .create-cost {
+          margin: 0 0 1rem 0;
+        }
+        .create-route-advanced-confirm-actions {
+          display: flex;
+          gap: 0.75rem;
+          flex-wrap: wrap;
         }
       </style>
       <div class="create-route">
@@ -227,15 +351,70 @@ class AppRouteCreate extends HTMLElement {
             </div>
           </tab>
           <tab data-id="advanced" label="Advanced">
-            <div class="route-empty create-route-coming-soon">
-              <p class="route-empty-message">
-				Coming soon...
-				Here you will be able to build, save, and share workflows.
-				Workflows enable you to connect server methods together and source information from parascene api.
-			  </p>
+            <div class="create-route-advanced">
+              <div class="create-route-advanced-server form-group">
+                <label class="form-label" for="advanced-server-select">Server</label>
+                <select class="form-select" id="advanced-server-select" data-advanced-server-select>
+                  <option value="">Select a server...</option>
+                </select>
+              </div>
+              <div class="form-group create-route-advanced-data">
+                <label class="form-label">Data Builder</label>
+                <ul class="create-route-advanced-list" data-advanced-list role="list">
+                <li class="create-route-advanced-item">
+                  <button type="button" class="create-route-advanced-switch" role="switch" aria-checked="false" data-advanced-option="recent_comments" aria-label="Include recent comments">
+                  </button>
+                  <div class="create-route-advanced-item-desc">
+                    <strong>Recent comments</strong>
+                    Latest comments across the platform.
+                  </div>
+                </li>
+                <li class="create-route-advanced-item">
+                  <button type="button" class="create-route-advanced-switch" role="switch" aria-checked="false" data-advanced-option="recent_posts" aria-label="Include recent posts">
+                  </button>
+                  <div class="create-route-advanced-item-desc">
+                    <strong>Newest</strong>
+                    Latest published creations on the platform.
+                  </div>
+                </li>
+                <li class="create-route-advanced-item">
+                  <button type="button" class="create-route-advanced-switch" role="switch" aria-checked="false" data-advanced-option="top_likes" aria-label="Include top likes">
+                  </button>
+                  <div class="create-route-advanced-item-desc">
+                    <strong>Most likes</strong>
+                    Creations with the most likes on the platform.
+                  </div>
+                </li>
+                <li class="create-route-advanced-item">
+                  <button type="button" class="create-route-advanced-switch" role="switch" aria-checked="false" data-advanced-option="bottom_likes" aria-label="Include bottom likes">
+                  </button>
+                  <div class="create-route-advanced-item-desc">
+                    <strong>Least likes</strong>
+                    Creations with the fewest likes on the platform.
+                  </div>
+                </li>
+              </ul>
+              </div>
+              <div class="create-route-advanced-actions">
+                <button type="button" class="create-button" data-advanced-create-button disabled>
+                  Query
+                </button>
+                <p class="create-cost" data-advanced-create-cost>Turn on at least one Data Builder option to create.</p>
+                <p class="create-cost" data-advanced-create-cost-query hidden>Query the server to check support and cost.</p>
+              </div>
             </div>
           </tab>
         </app-tabs>
+        <div class="create-route-advanced-confirm" data-advanced-confirm-dialog hidden>
+          <div class="create-route-advanced-confirm-overlay" data-advanced-confirm-overlay></div>
+          <div class="create-route-advanced-confirm-panel">
+            <p class="create-cost" data-advanced-confirm-message></p>
+            <div class="create-route-advanced-confirm-actions">
+              <button type="button" class="create-button" data-advanced-confirm-create>Create</button>
+              <button type="button" class="btn-secondary" data-advanced-confirm-cancel>Cancel</button>
+            </div>
+          </div>
+        </div>
       </div>
     `;
 		this.setupEventListeners();
@@ -272,6 +451,65 @@ class AppRouteCreate extends HTMLElement {
 			methodSelect.addEventListener("change", (e) => this.handleMethodChange(e.target.value));
 		}
 
+		// Advanced tab: server select and Create button
+		const advancedServerSelect = this.querySelector("[data-advanced-server-select]");
+		if (advancedServerSelect) {
+			advancedServerSelect.addEventListener("change", () => this.updateAdvancedCreateButton());
+		}
+		const advancedCreateButton = this.querySelector("[data-advanced-create-button]");
+		if (advancedCreateButton) {
+			advancedCreateButton.addEventListener("click", () => this.handleAdvancedCreate());
+		}
+		// Advanced confirm dialog
+		const confirmDialog = this.querySelector("[data-advanced-confirm-dialog]");
+		const confirmOverlay = this.querySelector("[data-advanced-confirm-overlay]");
+		const confirmCreateBtn = this.querySelector("[data-advanced-confirm-create]");
+		const confirmCancelBtn = this.querySelector("[data-advanced-confirm-cancel]");
+		if (confirmOverlay) confirmOverlay.addEventListener("click", () => this.closeAdvancedConfirm());
+		if (confirmCancelBtn) confirmCancelBtn.addEventListener("click", () => this.closeAdvancedConfirm());
+		if (confirmCreateBtn) confirmCreateBtn.addEventListener("click", () => this.submitAdvancedCreate());
+		// Advanced tab: switch toggles
+		this.querySelectorAll("[data-advanced-option]").forEach((btn) => {
+			btn.addEventListener("click", (e) => {
+				const el = e.currentTarget;
+				if (el.getAttribute("role") !== "switch") return;
+				const checked = el.getAttribute("aria-checked") === "true";
+				el.setAttribute("aria-checked", (!checked).toString());
+				this.updateAdvancedCreateButton();
+				this.saveAdvancedOptions();
+			});
+		});
+		this.restoreAdvancedOptions();
+
+		// Restore and persist active tab (Basic / Advanced) in sessionStorage
+		const tabsEl = this.querySelector('app-tabs');
+		if (tabsEl) {
+			try {
+				const stored = sessionStorage.getItem(this.storageKey);
+				if (stored) {
+					const selections = JSON.parse(stored);
+					const tab = selections?.tab;
+					if (tab === 'basic' || tab === 'advanced') {
+						tabsEl.setActiveTab(tab);
+					}
+				}
+			} catch (e) {
+				// Ignore storage errors
+			}
+			tabsEl.addEventListener('tab-change', (e) => {
+				const id = e.detail?.id;
+				if (id !== 'basic' && id !== 'advanced') return;
+				try {
+					const stored = sessionStorage.getItem(this.storageKey);
+					const selections = stored ? JSON.parse(stored) : {};
+					selections.tab = id;
+					sessionStorage.setItem(this.storageKey, JSON.stringify(selections));
+				} catch (e) {
+					// Ignore storage errors
+				}
+			});
+		}
+
 		document.addEventListener('credits-updated', this.handleCreditsUpdated);
 	}
 
@@ -298,8 +536,9 @@ class AppRouteCreate extends HTMLElement {
 					return server;
 				});
 				this.renderServerOptions();
+				this.renderAdvancedServerOptions();
 
-				// Try to restore selections, otherwise auto-select first server
+				// Try to restore selections, otherwise auto-select first server (Basic and Advanced)
 				const restored = this.restoreSelections();
 				if (!restored && this.servers.length > 0) {
 					const firstServer = this.servers[0];
@@ -307,6 +546,11 @@ class AppRouteCreate extends HTMLElement {
 					if (serverSelect) {
 						serverSelect.value = firstServer.id;
 						this.handleServerChange(firstServer.id);
+					}
+					const advancedSelect = this.querySelector("[data-advanced-server-select]");
+					if (advancedSelect) {
+						advancedSelect.value = firstServer.id;
+						this.updateAdvancedCreateButton();
 					}
 				}
 			}
@@ -330,6 +574,168 @@ class AppRouteCreate extends HTMLElement {
 			option.value = server.id;
 			option.textContent = server.name;
 			serverSelect.appendChild(option);
+		});
+	}
+
+	renderAdvancedServerOptions() {
+		const advancedSelect = this.querySelector("[data-advanced-server-select]");
+		if (!advancedSelect) return;
+
+		while (advancedSelect.children.length > 1) {
+			advancedSelect.removeChild(advancedSelect.lastChild);
+		}
+		this.servers.forEach(server => {
+			const option = document.createElement('option');
+			option.value = server.id;
+			option.textContent = server.name;
+			advancedSelect.appendChild(option);
+		});
+		this.updateAdvancedCreateButton();
+	}
+
+	updateAdvancedCreateButton() {
+		const advancedSelect = this.querySelector("[data-advanced-server-select]");
+		const advancedCreateButton = this.querySelector("[data-advanced-create-button]");
+		const costEl = this.querySelector("[data-advanced-create-cost]");
+		const costQueryEl = this.querySelector("[data-advanced-create-cost-query]");
+		if (!advancedSelect || !advancedCreateButton) return;
+		const hasServer = advancedSelect.value !== '' && Number(advancedSelect.value) > 0;
+		const hasAtLeastOneSwitch = Array.from(this.querySelectorAll("[data-advanced-option]")).some(
+			(btn) => btn.getAttribute("aria-checked") === "true"
+		);
+		advancedCreateButton.disabled = !hasServer || !hasAtLeastOneSwitch;
+		advancedCreateButton.textContent = 'Query';
+		if (costEl) costEl.hidden = hasAtLeastOneSwitch;
+		if (costQueryEl) costQueryEl.hidden = !hasAtLeastOneSwitch;
+	}
+
+	saveAdvancedOptions() {
+		try {
+			const options = {};
+			this.querySelectorAll("[data-advanced-option]").forEach((btn) => {
+				const key = btn.getAttribute("data-advanced-option");
+				if (key) options[key] = btn.getAttribute("aria-checked") === "true";
+			});
+			const stored = sessionStorage.getItem(this.storageKey);
+			const selections = stored ? JSON.parse(stored) : {};
+			selections.advancedOptions = options;
+			sessionStorage.setItem(this.storageKey, JSON.stringify(selections));
+		} catch (e) {
+			// Ignore storage errors
+		}
+	}
+
+	restoreAdvancedOptions() {
+		try {
+			const stored = sessionStorage.getItem(this.storageKey);
+			if (!stored) return;
+			const selections = JSON.parse(stored);
+			const options = selections?.advancedOptions;
+			if (!options || typeof options !== "object") return;
+			this.querySelectorAll("[data-advanced-option]").forEach((btn) => {
+				const key = btn.getAttribute("data-advanced-option");
+				if (key && options[key] === true) btn.setAttribute("aria-checked", "true");
+			});
+			this.updateAdvancedCreateButton();
+		} catch (e) {
+			// Ignore storage errors
+		}
+	}
+
+	async handleAdvancedCreate() {
+		const advancedSelect = this.querySelector("[data-advanced-server-select]");
+		const queryBtn = this.querySelector("[data-advanced-create-button]");
+		if (!advancedSelect?.value) return;
+
+		const serverId = Number(advancedSelect.value);
+		if (!Number.isFinite(serverId) || serverId <= 0) return;
+
+		const args = {};
+		this.querySelectorAll("[data-advanced-option]").forEach((btn) => {
+			const key = btn.getAttribute("data-advanced-option");
+			if (key) args[key] = btn.getAttribute("aria-checked") === "true";
+		});
+
+		if (queryBtn) {
+			queryBtn.disabled = true;
+			queryBtn.textContent = 'Querying…';
+		}
+		try {
+			const res = await fetch('/api/create/query', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify({ server_id: serverId, args })
+			});
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				this.showAdvancedConfirm(
+					data?.message || data?.error || 'Failed to query server',
+					null
+				);
+				return;
+			}
+			const supported = data?.supported === true || data?.supported === 'true';
+			const cost = typeof data?.cost === 'number' ? data.cost : Number(data?.cost);
+			if (supported && Number.isFinite(cost) && cost > 0) {
+				this._advancedConfirm = { serverId, args, cost };
+				this.showAdvancedConfirm(
+					`This will cost ${cost} credit${cost === 1 ? '' : 's'}.`,
+					true
+				);
+			} else {
+				this._advancedConfirm = null;
+				this.showAdvancedConfirm(
+					'This server does not support this request.',
+					false
+				);
+			}
+		} finally {
+			if (queryBtn) {
+				queryBtn.disabled = false;
+				queryBtn.textContent = 'Query';
+				this.updateAdvancedCreateButton();
+			}
+		}
+	}
+
+	showAdvancedConfirm(message, showCreateButton) {
+		const dialog = this.querySelector("[data-advanced-confirm-dialog]");
+		const msgEl = this.querySelector("[data-advanced-confirm-message]");
+		const createBtn = this.querySelector("[data-advanced-confirm-create]");
+		if (msgEl) msgEl.textContent = message;
+		if (createBtn) createBtn.hidden = !showCreateButton;
+		if (dialog) {
+			dialog.hidden = false;
+			dialog.classList.add('open');
+		}
+	}
+
+	closeAdvancedConfirm() {
+		const dialog = this.querySelector("[data-advanced-confirm-dialog]");
+		if (dialog) {
+			dialog.hidden = true;
+			dialog.classList.remove('open');
+		}
+		this._advancedConfirm = null;
+	}
+
+	submitAdvancedCreate() {
+		const pending = this._advancedConfirm;
+		if (!pending) {
+			this.closeAdvancedConfirm();
+			return;
+		}
+		this.closeAdvancedConfirm();
+		const isStandaloneCreatePage = window.location.pathname === '/create';
+		submitCreationWithPending({
+			serverId: pending.serverId,
+			methodKey: 'advanced_generate',
+			args: pending.args,
+			creditCost: pending.cost,
+			navigate: isStandaloneCreatePage ? 'full' : 'spa',
+			onInsufficientCredits: async () => { await this.loadCredits(); },
+			onError: async () => { await this.loadCredits(); }
 		});
 	}
 
@@ -390,9 +796,13 @@ class AppRouteCreate extends HTMLElement {
 			return;
 		}
 
-		// Add method options
+		// Add method options, sorted by display name
 		const methods = serverConfig.methods;
-		const methodKeys = Object.keys(methods);
+		const methodKeys = Object.keys(methods).sort((a, b) => {
+			const nameA = (methods[a]?.name || a).toString().toLowerCase();
+			const nameB = (methods[b]?.name || b).toString().toLowerCase();
+			return nameA.localeCompare(nameB);
+		});
 		methodKeys.forEach(methodKey => {
 			const method = methods[methodKey];
 			const option = document.createElement('option');
@@ -680,6 +1090,17 @@ class AppRouteCreate extends HTMLElement {
 				methodKey: this.getMethodKey() || null,
 				fieldValues: { ...this.fieldValues }
 			};
+			const tabsEl = this.querySelector('app-tabs');
+			const activeTab = tabsEl?.getAttribute?.('active');
+			if (activeTab === 'basic' || activeTab === 'advanced') {
+				selections.tab = activeTab;
+			}
+			const options = {};
+			this.querySelectorAll("[data-advanced-option]").forEach((btn) => {
+				const key = btn.getAttribute("data-advanced-option");
+				if (key) options[key] = btn.getAttribute("aria-checked") === "true";
+			});
+			selections.advancedOptions = options;
 			sessionStorage.setItem(this.storageKey, JSON.stringify(selections));
 		} catch (e) {
 			// Ignore storage errors
@@ -713,6 +1134,16 @@ class AppRouteCreate extends HTMLElement {
 			serverSelect.value = server.id;
 			this.selectedServer = server;
 			this.renderMethodOptions(true); // Skip auto-select when restoring
+
+			// Restore same server on Advanced tab
+			const advancedSelect = this.querySelector("[data-advanced-server-select]");
+			if (advancedSelect) {
+				const optionExists = Array.from(advancedSelect.options).some(opt => opt.value === String(server.id));
+				if (optionExists) {
+					advancedSelect.value = server.id;
+					this.updateAdvancedCreateButton();
+				}
+			}
 
 			// Restore method selection after methods are rendered
 			if (selections.methodKey) {

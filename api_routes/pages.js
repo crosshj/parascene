@@ -18,6 +18,18 @@ function getPageForUser(user) {
 export default function createPageRoutes({ queries, pagesDir }) {
 	const router = express.Router();
 
+	let cachedShareTemplate = null;
+	async function getShareTemplate() {
+		if (cachedShareTemplate === null) {
+			const fs = await import("fs/promises");
+			cachedShareTemplate = await fs.readFile(path.join(pagesDir, "share.html"), "utf-8");
+		}
+		return cachedShareTemplate;
+	}
+
+	const shareHtmlCache = new Map();
+	const SHARE_CACHE_TTL_MS = 60_000;
+
 	const authLogo = `
 		<div class="auth-logo share-auth-logo">
 			<a href="/" class="auth-logo-link" aria-label="Parascene home">
@@ -81,7 +93,14 @@ export default function createPageRoutes({ queries, pagesDir }) {
 <!doctype html>
 <html lang="en">
 <head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<meta name="theme-color" content="#242131" />
 	<title>${escapeHtml(title)}</title>
+	<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 	<link rel="stylesheet" href="/pages/share.css" />
 	<meta name="description" content="${escapeHtml(message)}" />
 
@@ -120,7 +139,6 @@ export default function createPageRoutes({ queries, pagesDir }) {
 </html>
 `.trim();
 
-			html = injectCommonHead(html);
 			res.setHeader("Content-Type", "text/html");
 			res.setHeader("Cache-Control", "no-store");
 			return res.status(200).send(html);
@@ -200,14 +218,32 @@ export default function createPageRoutes({ queries, pagesDir }) {
 				}
 			}
 
+			const cacheKey = `${version}:${token}`;
+			const cached = shareHtmlCache.get(cacheKey);
+			if (cached && Date.now() - cached.ts < SHARE_CACHE_TTL_MS) {
+				res.setHeader("Content-Type", "text/html");
+				res.setHeader("Cache-Control", "public, max-age=60");
+				return res.send(cached.html);
+			}
+
+			const sharerId = Number(verified.sharedByUserId);
+			const creatorId = Number(image.user_id ?? 0);
+			const hasCreator = Number.isFinite(creatorId) && creatorId > 0;
+
+			const [template, sharerProfile, sharerUser, creatorProfile, creatorUser] = await Promise.all([
+				getShareTemplate(),
+				queries.selectUserProfileByUserId?.get(sharerId).catch(() => null),
+				queries.selectUserById?.get(sharerId).catch(() => null),
+				hasCreator ? queries.selectUserProfileByUserId?.get(creatorId).catch(() => null) : Promise.resolve(null),
+				hasCreator ? queries.selectUserById?.get(creatorId).catch(() => null) : Promise.resolve(null)
+			]);
+
 			let sharerName = "your friend";
 			let sharerHandle = "";
 			let sharerAvatarUrl = "";
 			try {
-				const sharerId = Number(verified.sharedByUserId);
-				const profile = await queries.selectUserProfileByUserId?.get(sharerId).catch(() => null);
-				const user = await queries.selectUserById?.get(sharerId).catch(() => null);
-
+				const profile = sharerProfile;
+				const user = sharerUser;
 				const userName = typeof profile?.user_name === "string" ? profile.user_name.trim() : "";
 				const displayName = typeof profile?.display_name === "string" ? profile.display_name.trim() : "";
 				sharerAvatarUrl = typeof profile?.avatar_url === "string" ? profile.avatar_url.trim() : "";
@@ -223,11 +259,9 @@ export default function createPageRoutes({ queries, pagesDir }) {
 			let creatorHandle = "";
 			let creatorAvatarUrl = "";
 			try {
-				const creatorId = Number(image.user_id ?? 0);
-				if (Number.isFinite(creatorId) && creatorId > 0) {
-					const profile = await queries.selectUserProfileByUserId?.get(creatorId).catch(() => null);
-					const user = await queries.selectUserById?.get(creatorId).catch(() => null);
-
+				if (hasCreator && creatorProfile != null && creatorUser != null) {
+					const profile = creatorProfile;
+					const user = creatorUser;
 					const userName = typeof profile?.user_name === "string" ? profile.user_name.trim() : "";
 					const displayName = typeof profile?.display_name === "string" ? profile.display_name.trim() : "";
 					creatorAvatarUrl = typeof profile?.avatar_url === "string" ? profile.avatar_url.trim() : "";
@@ -300,10 +334,6 @@ export default function createPageRoutes({ queries, pagesDir }) {
 				? `\t<meta property="og:image:width" content="${width}" />\n\t<meta property="og:image:height" content="${height}" />`
 				: "";
 
-			const fs = await import("fs/promises");
-			const templatePath = path.join(pagesDir, "share.html");
-			const template = await fs.readFile(templatePath, "utf-8");
-
 			const shareImageSrc = `/api/share/${encodeURIComponent(version)}/${encodeURIComponent(token)}/image`;
 			const signInUrl = `/auth?returnUrl=${encodeURIComponent(req.originalUrl || req.path || "/")}#login`;
 
@@ -326,9 +356,9 @@ export default function createPageRoutes({ queries, pagesDir }) {
 				CREATED_BY_USER_ID: String(Number(image.user_id) || 0)
 			});
 
-			html = injectCommonHead(html);
+			shareHtmlCache.set(cacheKey, { html, ts: Date.now() });
 			res.setHeader("Content-Type", "text/html");
-			res.setHeader("Cache-Control", "no-store");
+			res.setHeader("Cache-Control", "public, max-age=60");
 			return res.send(html);
 		} catch {
 			return res.status(500).send("Internal server error");

@@ -56,13 +56,6 @@
     "dependsOn": []
   },
   {
-    "name": "Advanced create - node workflow",
-    "description": "Assemble nodes into a workflow (and save), then run. Node-based workflow builder for creation with persistence and execution.",
-    "cost": 92,
-    "impact": 88,
-    "dependsOn": []
-  },
-  {
     "name": "Server boosts",
     "description": "Server-scoped boosts increase owner's credit yield with caps, no discovery lift.",
     "cost": 54,

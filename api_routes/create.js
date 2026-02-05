@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import sharp from "sharp";
 import { getThumbnailUrl } from "./utils/url.js";
 import { getBaseAppUrl } from "./utils/url.js";
+import { buildProviderHeaders } from "./utils/providerAuth.js";
 import { runCreationJob, PROVIDER_TIMEOUT_MS } from "./utils/creationJob.js";
 import { scheduleCreationJob } from "./utils/scheduleCreationJob.js";
 import { verifyQStashRequest } from "./utils/qstashVerification.js";
@@ -138,12 +139,185 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	}
 
+	/** Build share-page image URL (no auth) for provider. Returns null if mint fails. */
+	function shareUrlForImage(imageId, sharedByUserId) {
+		const id = Number(imageId);
+		const uid = Number(sharedByUserId);
+		if (!Number.isFinite(id) || id <= 0 || !Number.isFinite(uid) || uid <= 0) return null;
+		try {
+			const token = mintShareToken({
+				version: ACTIVE_SHARE_VERSION,
+				imageId: id,
+				sharedByUserId: uid
+			});
+			return `${PROVIDER_BASE_URL}/api/share/${encodeURIComponent(ACTIVE_SHARE_VERSION)}/${encodeURIComponent(token)}/image`;
+		} catch {
+			return null;
+		}
+	}
+
+	// Build balanced items array (up to 200) from boolean Data Builder options. Used by query and create.
+	async function buildAdvancedItems(userId, options) {
+		const recent_comments = options?.recent_comments === true;
+		const recent_posts = options?.recent_posts === true;
+		const top_likes = options?.top_likes === true;
+		const bottom_likes = options?.bottom_likes === true;
+		const selectedOptions = [recent_comments && 'recent_comments', recent_posts && 'recent_posts', top_likes && 'top_likes', bottom_likes && 'bottom_likes'].filter(Boolean);
+		if (selectedOptions.length === 0) return [];
+		const MAX_ITEMS = 200;
+		const perOptionLimit = Math.floor(MAX_ITEMS / selectedOptions.length);
+		const items = [];
+
+		if (recent_comments && queries.selectLatestCreatedImageComments?.all) {
+			const comments = await queries.selectLatestCreatedImageComments.all({ limit: perOptionLimit });
+			for (const comment of (comments || []).slice(0, perOptionLimit)) {
+				const imageId = comment?.created_image_id || null;
+				const imageUrl = shareUrlForImage(imageId, userId) ?? null;
+				items.push({
+					type: 'comment',
+					source: 'recent_comments',
+					id: comment?.id,
+					text: comment?.text || '',
+					created_at: comment?.created_at,
+					author: comment?.user_name || comment?.display_name || null,
+					image_url: imageUrl,
+					image_id: imageId,
+					image_title: comment?.created_image_title || null
+				});
+			}
+		}
+		if (recent_posts && queries.selectExploreFeedItems?.all) {
+			const feedItems = await queries.selectExploreFeedItems.all(userId);
+			for (const item of (feedItems || []).slice(0, perOptionLimit)) {
+				const imageId = item?.created_image_id || null;
+				const imageUrl = shareUrlForImage(imageId, userId) ?? null;
+				items.push({
+					type: 'post',
+					source: 'recent_posts',
+					id: item?.id,
+					title: item?.title || '',
+					summary: item?.summary || '',
+					created_at: item?.created_at,
+					author: item?.author_display_name || item?.author_user_name || item?.author || null,
+					image_url: imageUrl,
+					image_id: imageId,
+					like_count: Number(item?.like_count || 0),
+					comment_count: Number(item?.comment_count || 0)
+				});
+			}
+		}
+		if (top_likes && queries.selectExploreFeedItems?.all) {
+			const feedItems = await queries.selectExploreFeedItems.all(userId) || [];
+			const sorted = [...feedItems].filter(i => i?.like_count !== undefined).sort((a, b) => Number(b?.like_count || 0) - Number(a?.like_count || 0)).slice(0, perOptionLimit);
+			for (const item of sorted) {
+				const imageId = item?.created_image_id || item?.id || null;
+				const imageUrl = shareUrlForImage(imageId, userId) ?? null;
+				items.push({
+					type: 'image',
+					source: 'top_likes',
+					id: imageId,
+					title: item?.title || '',
+					summary: item?.summary || '',
+					created_at: item?.created_at,
+					author: item?.author_display_name || item?.author_user_name || item?.author || null,
+					image_url: imageUrl,
+					like_count: Number(item?.like_count || 0),
+					comment_count: Number(item?.comment_count || 0)
+				});
+			}
+		}
+		if (bottom_likes && queries.selectExploreFeedItems?.all) {
+			const feedItems = await queries.selectExploreFeedItems.all(userId) || [];
+			const sorted = [...feedItems].filter(i => i?.like_count !== undefined).sort((a, b) => Number(a?.like_count || 0) - Number(b?.like_count || 0)).slice(0, perOptionLimit);
+			for (const item of sorted) {
+				const imageId = item?.created_image_id || item?.id || null;
+				const imageUrl = shareUrlForImage(imageId, userId) ?? null;
+				items.push({
+					type: 'image',
+					source: 'bottom_likes',
+					id: imageId,
+					title: item?.title || '',
+					summary: item?.summary || '',
+					created_at: item?.created_at,
+					author: item?.author_display_name || item?.author_user_name || item?.author || null,
+					image_url: imageUrl,
+					like_count: Number(item?.like_count || 0),
+					comment_count: Number(item?.comment_count || 0)
+				});
+			}
+		}
+		return items.slice(0, MAX_ITEMS);
+	}
+
+	// POST /api/create/query - Query server for advanced create support and cost (no charge, no DB write)
+	router.post("/api/create/query", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		const { server_id, args } = req.body;
+		const safeArgs = args && typeof args === "object" ? { ...args } : {};
+
+		if (!server_id) {
+			return res.status(400).json({ error: "Missing required fields", message: "server_id is required" });
+		}
+
+		try {
+			const server = await queries.selectServerById.get(server_id);
+			if (!server) return res.status(404).json({ error: "Server not found" });
+			if (server.status !== "active") return res.status(400).json({ error: "Server is not active" });
+
+			// Backend builds items from boolean args and sends that to the provider
+			const items = await buildAdvancedItems(user.id, safeArgs);
+			const providerArgs = items.length > 0 ? { items } : safeArgs;
+
+			const providerResponse = await fetch(server.server_url, {
+				method: "POST",
+				headers: buildProviderHeaders(
+					{ "Content-Type": "application/json", Accept: "application/json" },
+					server.auth_token
+				),
+				body: JSON.stringify({ method: "advanced_query", args: providerArgs }),
+				signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS)
+			});
+
+			const contentType = String(providerResponse.headers.get("content-type") || "").toLowerCase();
+			let body = null;
+			if (contentType.includes("application/json")) {
+				body = await providerResponse.json().catch(() => null);
+			} else {
+				const text = await providerResponse.text().catch(() => "");
+				return res.status(502).json({
+					error: "Invalid provider response",
+					message: "Server did not return JSON"
+				});
+			}
+
+			if (!providerResponse.ok) {
+				return res.status(502).json({
+					error: "Provider error",
+					message: body?.error || body?.message || providerResponse.statusText,
+					provider: body
+				});
+			}
+
+			return res.json(body);
+		} catch (err) {
+			if (err?.name === "AbortError") {
+				return res.status(504).json({ error: "Timeout", message: "Server did not respond in time" });
+			}
+			return res.status(500).json({
+				error: "Query failed",
+				message: err?.message || "Failed to query server"
+			});
+		}
+	});
+
 	// POST /api/create - Create a new image
 	router.post("/api/create", async (req, res) => {
 		const user = await requireUser(req, res);
 		if (!user) return;
 
-		const { server_id, method, args, creation_token, retry_of_id, mutate_of_id } = req.body;
+		const { server_id, method, args, creation_token, retry_of_id, mutate_of_id, credit_cost: bodyCreditCost } = req.body;
 		const safeArgs = args && typeof args === "object" ? { ...args } : {};
 
 		// Validate required fields
@@ -172,22 +346,38 @@ export default function createCreateRoutes({ queries, storage }) {
 				return res.status(400).json({ error: "Server is not active" });
 			}
 
-			// Parse server_config and validate method
-			if (!server.server_config || !server.server_config.methods) {
-				return res.status(400).json({ error: "Server configuration is invalid" });
+			const isAdvancedGenerate = method === "advanced_generate";
+			let methodConfig = null;
+			let CREATION_CREDIT_COST = 0.5;
+			let argsForProvider = safeArgs;
+			// For advanced_generate, backend builds items from boolean args; we store/send { items } to provider
+			if (isAdvancedGenerate) {
+				const cost = Number(bodyCreditCost);
+				if (!Number.isFinite(cost) || cost <= 0) {
+					return res.status(400).json({
+						error: "Missing required fields",
+						message: "credit_cost is required for advanced_generate and must be a positive number"
+					});
+				}
+				CREATION_CREDIT_COST = cost;
+				methodConfig = { name: "Advanced generate", credits: cost };
+				const items = await buildAdvancedItems(user.id, safeArgs);
+				argsForProvider = { items };
+			} else {
+				// Parse server_config and validate method
+				if (!server.server_config || !server.server_config.methods) {
+					return res.status(400).json({ error: "Server configuration is invalid" });
+				}
+				methodConfig = server.server_config.methods[method];
+				if (!methodConfig) {
+					return res.status(400).json({
+						error: "Method not available",
+						message: `Method "${method}" is not available on this server`,
+						available_methods: Object.keys(server.server_config.methods)
+					});
+				}
+				CREATION_CREDIT_COST = methodConfig.credits ?? 0.5;
 			}
-
-			const methodConfig = server.server_config.methods[method];
-			if (!methodConfig) {
-				return res.status(400).json({
-					error: "Method not available",
-					message: `Method "${method}" is not available on this server`,
-					available_methods: Object.keys(server.server_config.methods)
-				});
-			}
-
-			// Get credit cost from method config
-			const CREATION_CREDIT_COST = methodConfig.credits ?? 0.5;
 
 			// Check user's credit balance
 			let credits = await queries.selectUserCredits.get(user.id);
@@ -220,7 +410,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				method_name: typeof methodConfig.name === "string" && methodConfig.name.trim()
 					? methodConfig.name.trim()
 					: null,
-				args: safeArgs,
+				args: argsForProvider,
 				started_at,
 				timeout_at,
 				credit_cost: CREATION_CREDIT_COST,
@@ -326,7 +516,7 @@ export default function createCreateRoutes({ queries, storage }) {
 						user_id: user.id,
 						server_id: Number(server_id),
 						method,
-						args: safeArgs,
+						args: argsForProvider,
 						credit_cost: CREATION_CREDIT_COST,
 					},
 					runCreationJob: ({ payload }) => runCreationJob({ queries, storage, payload }),
@@ -363,7 +553,7 @@ export default function createCreateRoutes({ queries, storage }) {
 					user_id: user.id,
 					server_id: Number(server_id),
 					method,
-					args: safeArgs,
+					args: argsForProvider,
 					credit_cost: CREATION_CREDIT_COST,
 				},
 				runCreationJob: ({ payload }) => runCreationJob({ queries, storage, payload }),

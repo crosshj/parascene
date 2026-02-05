@@ -62,6 +62,7 @@ export function submitCreationWithPending({
 	methodKey,
 	args,
 	mutateOfId,
+	creditCost,
 	navigate = 'spa', // 'spa' | 'full'
 	onInsufficientCredits,
 	onError
@@ -86,7 +87,8 @@ export function submitCreationWithPending({
 		method: methodKey,
 		args: args || {},
 		creation_token: creationToken,
-		...(Number.isFinite(Number(mutateOfId)) && Number(mutateOfId) > 0 ? { mutate_of_id: Number(mutateOfId) } : {})
+		...(Number.isFinite(Number(mutateOfId)) && Number(mutateOfId) > 0 ? { mutate_of_id: Number(mutateOfId) } : {}),
+		...(Number.isFinite(Number(creditCost)) && Number(creditCost) > 0 ? { credit_cost: Number(creditCost) } : {})
 	});
 
 	// Full navigation unloads the page; use a background-safe request so the backend

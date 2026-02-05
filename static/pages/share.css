@@ -1,4 +1,37 @@
+/* Share page is self-contained: no global.css, so define vars here */
+:root {
+	color-scheme: light dark;
+	--font-family: "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	--bg: #f6f7fb;
+	--text: #0f172a;
+	--text-muted: #525a6b;
+	--image-placeholder: rgba(15, 23, 42, 0.06);
+	--accent: #7c3aed;
+	--accent-text: #ffffff;
+	--focus: #6d28d9;
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--bg: #0f0d1a;
+		--text: #ede9fe;
+		--text-muted: #b3b7c3;
+		--image-placeholder: rgba(237, 233, 254, 0.08);
+		--accent: #05c76f;
+		--accent-text: #0f0d1a;
+		--focus: #8b5cf6;
+	}
+}
+@supports (background-color: color-mix(in srgb, white 10%, transparent)) {
+	:root {
+		--image-placeholder: color-mix(in srgb, var(--text) 10%, transparent);
+		--text-muted: color-mix(in srgb, var(--text) 62%, transparent);
+	}
+}
+
 body.share-page {
+	margin: 0;
+	font-family: var(--font-family);
+	background: var(--bg);
 	min-height: 100vh;
 }
 
@@ -201,8 +234,39 @@ body.share-page {
 	justify-content: center;
 }
 
-.share-cta-row a.btn-primary {
+/* CTA button (share page has no global.css so we define here) */
+.share-page .btn-primary {
+	display: inline-block;
+	padding: 10px 16px;
+	border: 1px solid var(--accent);
+	border-radius: 6px;
+	background: var(--accent);
+	color: var(--accent-text);
+	font-family: var(--font-family);
+	font-weight: 500;
 	text-decoration: none;
+	cursor: pointer;
+	transition: background 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
+}
+
+.share-page .btn-primary:hover {
+	background: var(--focus);
+	border-color: var(--focus);
+	transform: translateY(-1px);
+}
+
+.share-page .btn-primary:active {
+	transform: translateY(0);
+}
+
+.share-page .btn-large {
+	padding-top: clamp(14px, 2.5vw, 18px);
+	padding-right: clamp(20px, 5vw, 28px);
+	padding-bottom: clamp(14px, 2.5vw, 18px);
+	padding-left: clamp(20px, 5vw, 28px);
+	font-size: clamp(1rem, 2.4vw, 1.15rem);
+	font-weight: 700;
+	border-radius: 12px;
 }
 
 .share-alt {
@@ -221,16 +285,6 @@ body.share-page {
 
 .share-alt a:hover {
 	text-decoration: underline;
-}
-
-.btn-large {
-	padding-top: clamp(14px, 2.5vw, 18px);
-	padding-right: clamp(20px, 5vw, 28px);
-	padding-bottom: clamp(14px, 2.5vw, 18px);
-	padding-left: clamp(20px, 5vw, 28px);
-	font-size: clamp(1rem, 2.4vw, 1.15rem);
-	font-weight: 700;
-	border-radius: 12px;
 }
 
 @media (max-width: 900px) {
