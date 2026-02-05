@@ -156,6 +156,19 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	}
 
+	// Data Builder option keys (boolean flags). Other keys (e.g. prompt) are passed through to the provider.
+	const ADVANCED_DATA_BUILDER_KEYS = ["recent_comments", "recent_posts", "top_likes", "bottom_likes"];
+
+	function getAdvancedExtraArgs(args) {
+		if (!args || typeof args !== "object") return {};
+		const extra = {};
+		for (const [k, v] of Object.entries(args)) {
+			if (ADVANCED_DATA_BUILDER_KEYS.includes(k)) continue;
+			extra[k] = v;
+		}
+		return extra;
+	}
+
 	// Build balanced items array (up to 200) from boolean Data Builder options. Used by query and create.
 	async function buildAdvancedItems(userId, options) {
 		const recent_comments = options?.recent_comments === true;
@@ -266,9 +279,10 @@ export default function createCreateRoutes({ queries, storage }) {
 			if (!server) return res.status(404).json({ error: "Server not found" });
 			if (server.status !== "active") return res.status(400).json({ error: "Server is not active" });
 
-			// Backend builds items from boolean args and sends that to the provider
+			// Backend builds items from boolean args and sends that to the provider; include extra args (e.g. prompt)
 			const items = await buildAdvancedItems(user.id, safeArgs);
-			const providerArgs = items.length > 0 ? { items } : safeArgs;
+			const extraArgs = getAdvancedExtraArgs(safeArgs);
+			const providerArgs = items.length > 0 ? { items, ...extraArgs } : { ...safeArgs };
 
 			const providerResponse = await fetch(server.server_url, {
 				method: "POST",
@@ -350,7 +364,7 @@ export default function createCreateRoutes({ queries, storage }) {
 			let methodConfig = null;
 			let CREATION_CREDIT_COST = 0.5;
 			let argsForProvider = safeArgs;
-			// For advanced_generate, backend builds items from boolean args; we store/send { items } to provider
+			// For advanced_generate, backend builds items from boolean args; we store/send { items, ...extra } to provider
 			if (isAdvancedGenerate) {
 				const cost = Number(bodyCreditCost);
 				if (!Number.isFinite(cost) || cost <= 0) {
@@ -362,7 +376,8 @@ export default function createCreateRoutes({ queries, storage }) {
 				CREATION_CREDIT_COST = cost;
 				methodConfig = { name: "Advanced generate", credits: cost };
 				const items = await buildAdvancedItems(user.id, safeArgs);
-				argsForProvider = { items };
+				const extraArgs = getAdvancedExtraArgs(safeArgs);
+				argsForProvider = { items, ...extraArgs };
 			} else {
 				// Parse server_config and validate method
 				if (!server.server_config || !server.server_config.methods) {
