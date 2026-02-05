@@ -1326,6 +1326,20 @@ export function openDb() {
 				return data ?? undefined;
 			}
 		},
+		selectCreatedImageDescriptionAndMetaByIds: {
+			all: async (ids) => {
+				const safeIds = Array.isArray(ids)
+					? ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
+					: [];
+				if (safeIds.length === 0) return [];
+				const { data, error } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.select("id, description, meta")
+					.in("id", safeIds);
+				if (error) throw error;
+				return data ?? [];
+			}
+		},
 		insertCreatedImageLike: {
 			run: async (userId, createdImageId) => {
 				// Use serviceClient to bypass RLS for backend operations

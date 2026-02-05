@@ -169,7 +169,24 @@ export default function createCreateRoutes({ queries, storage }) {
 		return extra;
 	}
 
-	// Build balanced items array (up to 200) from boolean Data Builder options. Used by query and create.
+	/** Build creation_meta subset for provider: inputs and how the image was created (args, method_name, server_name). */
+	function buildCreationMetaSubset(meta) {
+		const m = parseMeta(meta);
+		if (!m || typeof m !== "object") return null;
+		const out = {};
+		if (m.args != null && typeof m.args === "object" && !Array.isArray(m.args)) {
+			out.args = m.args;
+		}
+		if (typeof m.method_name === "string" && m.method_name.trim()) {
+			out.method_name = m.method_name.trim();
+		}
+		if (typeof m.server_name === "string" && m.server_name.trim()) {
+			out.server_name = m.server_name.trim();
+		}
+		return Object.keys(out).length === 0 ? null : out;
+	}
+
+	// Build balanced items array (up to 100) from boolean Data Builder options. Used by query and create.
 	async function buildAdvancedItems(userId, options) {
 		const recent_comments = options?.recent_comments === true;
 		const recent_posts = options?.recent_posts === true;
@@ -177,7 +194,7 @@ export default function createCreateRoutes({ queries, storage }) {
 		const bottom_likes = options?.bottom_likes === true;
 		const selectedOptions = [recent_comments && 'recent_comments', recent_posts && 'recent_posts', top_likes && 'top_likes', bottom_likes && 'bottom_likes'].filter(Boolean);
 		if (selectedOptions.length === 0) return [];
-		const MAX_ITEMS = 200;
+		const MAX_ITEMS = 100;
 		const perOptionLimit = Math.floor(MAX_ITEMS / selectedOptions.length);
 		const items = [];
 
@@ -259,7 +276,37 @@ export default function createCreateRoutes({ queries, storage }) {
 				});
 			}
 		}
-		return items.slice(0, MAX_ITEMS);
+
+		const trimmed = items.slice(0, MAX_ITEMS);
+		const imageIds = [...new Set(
+			trimmed
+				.map((it) => it.image_id != null ? it.image_id : it.id)
+				.filter((id) => id != null && Number.isFinite(Number(id)) && Number(id) > 0)
+		)];
+		if (imageIds.length === 0) return trimmed;
+
+		const descriptionAndMetaRows = await queries.selectCreatedImageDescriptionAndMetaByIds?.all(imageIds).catch(() => []) ?? [];
+		const byId = new Map();
+		for (const row of descriptionAndMetaRows) {
+			const id = row?.id != null ? Number(row.id) : null;
+			if (id == null || !Number.isFinite(id)) continue;
+			const description = typeof row.description === "string" ? row.description.trim() || null : null;
+			const creation_meta = buildCreationMetaSubset(row.meta);
+			byId.set(id, { description, creation_meta });
+		}
+
+		for (const it of trimmed) {
+			const imageId = it.image_id != null ? it.image_id : it.id;
+			const id = imageId != null ? Number(imageId) : null;
+			if (id == null) continue;
+			const info = byId.get(id);
+			if (info) {
+				if (info.description != null) it.description = info.description;
+				if (info.creation_meta != null) it.creation_meta = info.creation_meta;
+			}
+		}
+
+		return trimmed;
 	}
 
 	// POST /api/create/query - Query server for advanced create support and cost (no charge, no DB write)

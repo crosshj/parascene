@@ -727,6 +727,18 @@ export function openDb() {
 				);
 			}
 		},
+		selectCreatedImageDescriptionAndMetaByIds: {
+			all: async (ids) => {
+				const safeIds = Array.isArray(ids)
+					? ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
+					: [];
+				if (safeIds.length === 0) return [];
+				const idSet = new Set(safeIds);
+				return created_images
+					.filter((img) => img.id != null && idSet.has(Number(img.id)))
+					.map((img) => ({ id: img.id, description: img.description ?? null, meta: img.meta ?? null }));
+			}
+		},
 		publishCreatedImage: {
 			run: async (id, userId, title, description) => {
 				const image = created_images.find(

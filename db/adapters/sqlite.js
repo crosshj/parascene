@@ -1144,6 +1144,20 @@ export async function openDb() {
 				return Promise.resolve(stmt.get(filename));
 			}
 		},
+		selectCreatedImageDescriptionAndMetaByIds: {
+			all: async (ids) => {
+				const safeIds = Array.isArray(ids)
+					? ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
+					: [];
+				if (safeIds.length === 0) return [];
+				const placeholders = safeIds.map(() => "?").join(",");
+				const stmt = db.prepare(
+					`SELECT id, description, meta FROM created_images WHERE id IN (${placeholders})`
+				);
+				const rows = stmt.all(...safeIds);
+				return rows ?? [];
+			}
+		},
 		insertCreatedImageLike: {
 			run: async (userId, createdImageId) => {
 				const stmt = db.prepare(
