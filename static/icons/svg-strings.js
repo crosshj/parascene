@@ -6,8 +6,8 @@ const html = String.raw;
 /** Returns (className?) => string that injects class into the <svg> tag when provided. */
 function withAttributes(svgString) {
 	return (className = '') => {
-		if (!className) return svgString;
-		return svgString.replace('<svg', `<svg class="${className}" `);
+		if (!className) return svgString.replace('<svg', `<svg data-from="svg-strings"`);
+		return svgString.replace('<svg', `<svg class="${className}" data-from="svg-strings"`);
 	}
 }
 
@@ -28,6 +28,13 @@ export const helpIcon = withAttributes(html`
 	</svg>
 `);
 
+export const closeIcon = withAttributes(html`
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+		<line x1="18" y1="6" x2="6" y2="18"></line>
+		<line x1="6" y1="6" x2="18" y2="18"></line>
+	</svg>
+`);
+
 export const xIcon = withAttributes(html`
 	<svg viewBox="0 0 24 24" aria-hidden="true">
 		<path d="M21.742 21.75l-7.563-11.179 7.056-8.321h-2.456l-5.691 6.714-4.54-6.714H2.359l7.29 10.776L2.25 21.75h2.456l6.035-7.118 4.818 7.118h6.191-.008zM7.739 3.818L18.81 20.182h-2.447L5.29 3.818h2.447z"></path>
@@ -42,12 +49,11 @@ export const facebookIcon = withAttributes(html`
 
 export const redditIcon = withAttributes(html`
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-		<circle cx="12" cy="13" r="5"></circle>
-		<circle cx="10.2" cy="13" r="0.8" fill="currentColor" stroke="none"></circle>
-		<circle cx="13.8" cy="13" r="0.8" fill="currentColor" stroke="none"></circle>
-		<path d="M10.3 15.2c.7.7 1.5 1.1 1.7 1.1s1-.4 1.7-1.1"></path>
-		<path d="M13.9 8.6l2.2-1.1"></path>
-		<circle cx="18.1" cy="7.2" r="1.2"></circle>
+		<path d="M 19.43 13.883 C 19.43 17.399 14.992 20.874 11.032 20.874 C 7.072 20.874 2.616 17.399 2.616 13.883 C 2.616 10.367 7.174 6.765 11.134 6.765 C 15.094 6.765 19.43 10.367 19.43 13.883 Z M 8.48 12.726 C 7.836 12.726 7.314 13.248 7.314 13.892 C 7.314 14.536 7.836 15.058 8.48 15.058 C 9.124 15.058 9.646 14.536 9.646 13.892 C 9.646 13.248 9.124 12.726 8.48 12.726 Z M 13.726 12.726 C 13.082 12.726 12.56 13.248 12.56 13.892 C 12.56 14.536 13.082 15.058 13.726 15.058 C 14.37 15.058 14.892 14.536 14.892 13.892 C 14.892 13.248 14.37 12.726 13.726 12.726 Z" fill="currentColor" stroke-width="0"></path>
+		<path d="M 13.22 7.066 L 15.303 3.674 L 17.994 4.685" style=""></path>
+		<circle cx="19.981" cy="5.426" r="3" fill="currentColor" stroke="none" style="" transform="matrix(0.74681, 0, 0, 0.744378, 4.472072, 1.201748)"></circle>
+		<path d="M 20.222 14.267 C 20.222 15.664 18.473 16.016 18.473 16.016 L 18.473 12.518 C 18.473 12.518 20.222 12.46 20.222 14.267 Z"></path>
+		<path d="M 1.827 14.31 C 1.827 15.707 3.576 16.059 3.576 16.059 L 3.576 12.561 C 3.576 12.561 1.827 12.503 1.827 14.31 Z"></path>
 	</svg>
 `);
 

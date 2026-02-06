@@ -1,5 +1,17 @@
 const html = String.raw;
 
+import {
+	closeIcon,
+	xIcon,
+	facebookIcon,
+	redditIcon,
+	linkedinIcon,
+	smsIcon,
+	emailIcon,
+	shareIcon,
+	linkIcon
+} from '../../icons/svg-strings.js';
+
 async function copyTextToClipboard(text) {
 	try {
 		if (navigator.clipboard?.writeText) {
@@ -77,11 +89,7 @@ class AppModalShare extends HTMLElement {
 					<div class="modal-header">
 						<h3>Share</h3>
 						<button class="modal-close" type="button" aria-label="Close">
-							<svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-								stroke-linecap="round" stroke-linejoin="round">
-								<line x1="18" y1="6" x2="6" y2="18"></line>
-								<line x1="6" y1="6" x2="18" y2="18"></line>
-							</svg>
+							${closeIcon('modal-close-icon')}
 						</button>
 					</div>
 
@@ -95,15 +103,7 @@ class AppModalShare extends HTMLElement {
 						<div class="share-action-list" role="list">
 							<button type="button" class="share-action-row" data-share-x>
 								<span class="share-action-left">
-									<span class="share-option-icon share-option-icon-x is-brand">
-										<svg viewBox="0 0 24 24" aria-hidden="true">
-											<g>
-												<path
-													d="M21.742 21.75l-7.563-11.179 7.056-8.321h-2.456l-5.691 6.714-4.54-6.714H2.359l7.29 10.776L2.25 21.75h2.456l6.035-7.118 4.818 7.118h6.191-.008zM7.739 3.818L18.81 20.182h-2.447L5.29 3.818h2.447z">
-												</path>
-											</g>
-										</svg>
-									</span>
+									<span class="share-option-icon share-option-icon-x is-brand">${xIcon('share-option-icon share-option-icon-x is-brand')}</span>
 									<span class="share-action-text">
 										<span class="share-action-title">Share on X</span>
 										<span class="share-action-subtitle">Formerly known as Twitter</span>
@@ -114,13 +114,7 @@ class AppModalShare extends HTMLElement {
 
 							<button type="button" class="share-action-row" data-share-facebook>
 								<span class="share-action-left">
-									<span class="share-option-icon share-option-icon-facebook is-brand">
-										<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-											<path
-												d="M14 9h3V6h-3c-2.2 0-4 1.8-4 4v2H7v3h3v7h3v-7h3l1-3h-4v-2c0-.6.4-1 1-1z">
-											</path>
-										</svg>
-									</span>
+									<span class="share-option-icon share-option-icon-facebook is-brand">${facebookIcon('share-option-icon share-option-icon-facebook is-brand')}</span>
 									<span class="share-action-text">
 										<span class="share-action-title">Share on Facebook</span>
 										<span class="share-action-subtitle">Show your friends</span>
@@ -131,17 +125,7 @@ class AppModalShare extends HTMLElement {
 
 							<button type="button" class="share-action-row" data-share-reddit>
 								<span class="share-action-left">
-									<span class="share-option-icon share-option-icon-reddit is-brand">
-										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-											stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-											<circle cx="12" cy="13" r="5"></circle>
-											<circle cx="10.2" cy="13" r="0.8" fill="currentColor" stroke="none"></circle>
-											<circle cx="13.8" cy="13" r="0.8" fill="currentColor" stroke="none"></circle>
-											<path d="M10.3 15.2c.7.7 1.5 1.1 1.7 1.1s1-.4 1.7-1.1"></path>
-											<path d="M13.9 8.6l2.2-1.1"></path>
-											<circle cx="18.1" cy="7.2" r="1.2"></circle>
-										</svg>
-									</span>
+									<span class="share-option-icon share-option-icon-reddit is-brand">${redditIcon('share-option-icon share-option-icon-reddit is-brand')}</span>
 									<span class="share-action-text">
 										<span class="share-action-title">Post to Reddit</span>
 										<span class="share-action-subtitle">Share to a subreddit</span>
@@ -152,13 +136,7 @@ class AppModalShare extends HTMLElement {
 
 							<button type="button" class="share-action-row" data-share-linkedin>
 								<span class="share-action-left">
-									<span class="share-option-icon share-option-icon-linkedin is-brand">
-										<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-											<path
-												d="M6.5 9.5H3.8V21h2.7V9.5zM5.2 3C4.2 3 3.4 3.8 3.4 4.8s.8 1.8 1.8 1.8S7 5.8 7 4.8 6.2 3 5.2 3zM20.6 21h-2.7v-5.9c0-1.4 0-3.2-2-3.2s-2.3 1.5-2.3 3.1V21H10.9V9.5h2.6v1.6h.04c.36-.7 1.24-1.5 2.56-1.5 2.74 0 3.25 1.8 3.25 4.2V21z">
-											</path>
-										</svg>
-									</span>
+									<span class="share-option-icon share-option-icon-linkedin is-brand">${linkedinIcon('share-option-icon share-option-icon-linkedin is-brand')}</span>
 									<span class="share-action-text">
 										<span class="share-action-title">Share on LinkedIn</span>
 										<span class="share-action-subtitle">Share with your network</span>
@@ -169,12 +147,7 @@ class AppModalShare extends HTMLElement {
 
 							<button type="button" class="share-action-row" data-share-sms>
 								<span class="share-action-left">
-									<span class="share-option-icon">
-										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-											stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-											<path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
-										</svg>
-									</span>
+									<span class="share-option-icon">${smsIcon()}</span>
 									<span class="share-action-text">
 										<span class="share-action-title">Text message</span>
 										<span class="share-action-subtitle">Send via Messages</span>
@@ -185,13 +158,7 @@ class AppModalShare extends HTMLElement {
 
 							<button type="button" class="share-action-row" data-share-email>
 								<span class="share-action-left">
-									<span class="share-option-icon">
-										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-											stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-											<path d="M4 6h16v12H4z"></path>
-											<path d="M4 7l8 6 8-6"></path>
-										</svg>
-									</span>
+									<span class="share-option-icon">${emailIcon()}</span>
 									<span class="share-action-text">
 										<span class="share-action-title">Email</span>
 										<span class="share-action-subtitle">Send a message with the link</span>
@@ -200,43 +167,26 @@ class AppModalShare extends HTMLElement {
 								<span class="share-action-cta" data-cta><span class="share-action-cta-label">Send</span></span>
 							</button>
 
+							<button type="button" class="share-action-row" data-native-share style="display: none;">
+								<span class="share-action-left">
+									<span class="share-option-icon">${shareIcon()}</span>
+									<span class="share-action-text">
+										<span class="share-action-title">Device share</span>
+										<span class="share-action-subtitle">Use your device's share menu</span>
+									</span>
+								</span>
+								<span class="share-action-cta" data-cta><span class="share-action-cta-label">Open</span></span>
+							</button>
+
 							<button type="button" class="share-action-row" data-copy-link>
 								<span class="share-action-left">
-									<span class="share-option-icon">
-										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-											stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-											<path
-												d="M10 13a5 5 0 0 1 0-7l1-1a5 5 0 0 1 7 7l-1 1"></path>
-											<path
-												d="M14 11a5 5 0 0 1 0 7l-1 1a5 5 0 0 1-7-7l1-1"></path>
-										</svg>
-									</span>
+									<span class="share-option-icon">${linkIcon()}</span>
 									<span class="share-action-text">
 										<span class="share-action-title">Copy link</span>
 										<span class="share-action-subtitle">Share it anywhere</span>
 									</span>
 								</span>
 								<span class="share-action-cta" data-cta><span class="share-action-cta-label">Copy</span></span>
-							</button>
-
-							<button type="button" class="share-action-row" data-native-share style="display: none;">
-								<span class="share-action-left">
-									<span class="share-option-icon">
-										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-											stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-											<circle cx="18" cy="5" r="2"></circle>
-											<circle cx="6" cy="12" r="2"></circle>
-											<circle cx="18" cy="19" r="2"></circle>
-											<path d="M8 12l8-6"></path>
-											<path d="M8 12l8 6"></path>
-										</svg>
-									</span>
-									<span class="share-action-text">
-										<span class="share-action-title">More options</span>
-										<span class="share-action-subtitle">Open your device share menu</span>
-									</span>
-								</span>
-								<span class="share-action-cta" data-cta><span class="share-action-cta-label">Open</span></span>
 							</button>
 						</div>
 
