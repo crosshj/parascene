@@ -17,9 +17,11 @@ class AppModalNotifications extends HTMLElement {
 		this.handleEscape = this.handleEscape.bind(this);
 		this.handleOpenEvent = this.handleOpenEvent.bind(this);
 		this.handleCloseEvent = this.handleCloseEvent.bind(this);
+		this.handleCloseAllModals = this.handleCloseAllModals.bind(this);
 	}
 
 	connectedCallback() {
+		this.setAttribute('data-modal', '');
 		this.render();
 		this.setupEventListeners();
 		this.prefetchNotifications();
@@ -29,6 +31,7 @@ class AppModalNotifications extends HTMLElement {
 		document.removeEventListener('keydown', this.handleEscape);
 		document.removeEventListener('open-notifications', this.handleOpenEvent);
 		document.removeEventListener('close-notifications', this.handleCloseEvent);
+		document.removeEventListener('close-all-modals', this.handleCloseAllModals);
 	}
 
 	setupEventListeners() {
@@ -70,6 +73,10 @@ class AppModalNotifications extends HTMLElement {
 	}
 
 	handleCloseEvent() {
+		this.close();
+	}
+
+	handleCloseAllModals() {
 		this.close();
 	}
 

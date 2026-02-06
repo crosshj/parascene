@@ -14,10 +14,12 @@ class AppModalPublish extends HTMLElement {
 		this.handleOpenPublish = this.handleOpenPublish.bind(this);
 		this.handleOpenEdit = this.handleOpenEdit.bind(this);
 		this.handleClose = this.handleClose.bind(this);
+		this.handleCloseAllModals = this.handleCloseAllModals.bind(this);
 		this.handleSubmit = this.handleSubmit.bind(this);
 	}
 
 	connectedCallback() {
+		this.setAttribute('data-modal', '');
 		this.render();
 		this.setupEventListeners();
 	}
@@ -27,6 +29,7 @@ class AppModalPublish extends HTMLElement {
 		document.removeEventListener('open-publish-modal', this.handleOpenPublish);
 		document.removeEventListener('open-edit-modal', this.handleOpenEdit);
 		document.removeEventListener('close-publish-modal', this.handleClose);
+		document.removeEventListener('close-all-modals', this.handleCloseAllModals);
 	}
 
 	render() {
@@ -88,6 +91,7 @@ class AppModalPublish extends HTMLElement {
 		document.addEventListener('open-publish-modal', this.handleOpenPublish);
 		document.addEventListener('open-edit-modal', this.handleOpenEdit);
 		document.addEventListener('close-publish-modal', this.handleClose);
+		document.addEventListener('close-all-modals', this.handleCloseAllModals);
 
 		const overlay = this.querySelector('.publish-modal-overlay');
 		const closeButton = this.querySelector('.publish-modal-close');
@@ -159,6 +163,10 @@ class AppModalPublish extends HTMLElement {
 	}
 
 	handleClose() {
+		this.close();
+	}
+
+	handleCloseAllModals() {
 		this.close();
 	}
 

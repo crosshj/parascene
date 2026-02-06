@@ -18,6 +18,7 @@ import './components/routes/templates.js';
 import './components/routes/users.js';
 import './components/routes/todo.js';
 import { refreshAutoGrowTextareas } from './shared/autogrow.js';
+import { closeModalsAndNavigate } from './shared/navigation.js';
 
 // Wait for DOM and custom elements to be ready before showing content
 async function initPage() {
@@ -139,3 +140,37 @@ document.addEventListener('modal-closed', () => {
 	shadowModalCount = Math.max(0, shadowModalCount - 1);
 	updateBodyClass();
 });
+
+// Standard modal navigation: intercept links inside modals and use closeModalsAndNavigate
+// Use composedPath() so we find the real link when the click is inside shadow DOM (event is retargeted to host)
+document.addEventListener('click', (e) => {
+	const path = e.composedPath?.() || (e.target ? [e.target, ...ancestors(e.target)] : []);
+	let link = null;
+	for (const el of path) {
+		if (el?.nodeType === 1 && el.tagName === 'A' && el.hasAttribute('href')) {
+			link = el;
+			break;
+		}
+	}
+	if (!link) return;
+	const href = link.getAttribute('href');
+	if (!href || href.startsWith('#') || link.target === '_blank' || link.hasAttribute('download')) return;
+	const root = link.getRootNode();
+	const inModal = root instanceof ShadowRoot
+		? root.host.hasAttribute?.('data-modal')
+		: link.closest?.('[data-modal]');
+	if (!inModal) return;
+	e.preventDefault();
+	e.stopPropagation();
+	closeModalsAndNavigate(href);
+}, true);
+
+function ancestors(node) {
+	const list = [];
+	let n = node?.parentNode;
+	while (n) {
+		list.push(n);
+		n = n.parentNode;
+	}
+	return list;
+}

@@ -28,6 +28,13 @@
     "dependsOn": []
   },
   {
+    "name": "User tips",
+    "description": "users can tip each other",
+    "cost": 55,
+    "impact": 75,
+    "dependsOn": []
+  },
+  {
     "name": "Creation Detail Related Images",
     "description": "images that are similar or related after fold",
     "cost": 47,
@@ -49,13 +56,6 @@
     "dependsOn": []
   },
   {
-    "name": "Static Help Pages",
-    "description": "well-formatted explainers for site features, unprotected route",
-    "cost": 16,
-    "impact": 27,
-    "dependsOn": []
-  },
-  {
     "name": "Server boosts",
     "description": "Server-scoped boosts increase owner's credit yield with caps, no discovery lift.",
     "cost": 54,
@@ -70,12 +70,5 @@
     "dependsOn": [
       "Invite credits"
     ]
-  },
-  {
-    "name": "User tips",
-    "description": "users can tip each other",
-    "cost": 55,
-    "impact": 75,
-    "dependsOn": []
   }
 ]

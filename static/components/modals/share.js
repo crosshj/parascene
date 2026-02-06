@@ -51,9 +51,11 @@ class AppModalShare extends HTMLElement {
 
 		this.handleEscape = this.handleEscape.bind(this);
 		this.handleOpen = this.handleOpen.bind(this);
+		this.handleCloseAllModals = this.handleCloseAllModals.bind(this);
 	}
 
 	connectedCallback() {
+		this.setAttribute('data-modal', '');
 		this.render();
 		this.setupEventListeners();
 		this.updateButtons();
@@ -62,6 +64,7 @@ class AppModalShare extends HTMLElement {
 	disconnectedCallback() {
 		document.removeEventListener("keydown", this.handleEscape);
 		document.removeEventListener("open-share-modal", this.handleOpen);
+		document.removeEventListener("close-all-modals", this.handleCloseAllModals);
 
 		for (const t of this._ctaTimers) clearTimeout(t);
 		this._ctaTimers.clear();
@@ -247,6 +250,7 @@ class AppModalShare extends HTMLElement {
 	setupEventListeners() {
 		document.addEventListener("keydown", this.handleEscape);
 		document.addEventListener("open-share-modal", this.handleOpen);
+		document.addEventListener("close-all-modals", this.handleCloseAllModals);
 
 		const overlay = this.querySelector("[data-overlay]");
 		const closeBtn = this.querySelector(".modal-close");
@@ -290,6 +294,10 @@ class AppModalShare extends HTMLElement {
 	handleOpen(e) {
 		const id = e.detail?.creationId ?? null;
 		this.open(id);
+	}
+
+	handleCloseAllModals() {
+		this.close();
 	}
 
 	resetAllCtas() {

@@ -542,6 +542,9 @@ class AppRouteCreate extends HTMLElement {
 		if (this._boundPreviewEscape) {
 			document.removeEventListener('keydown', this._boundPreviewEscape);
 		}
+		if (typeof this._createTabHashCleanup === 'function') {
+			this._createTabHashCleanup();
+		}
 	}
 
 	setupEventListeners() {
@@ -625,21 +628,56 @@ class AppRouteCreate extends HTMLElement {
 		}
 		this.restoreAdvancedOptions();
 
-		// Restore and persist active tab (Basic / Advanced) in sessionStorage
+		// Restore and persist active tab (Basic / Advanced); sync with URL hash (#basic, #advanced)
 		const tabsEl = this.querySelector('app-tabs');
 		if (tabsEl) {
-			try {
-				const stored = sessionStorage.getItem(this.storageKey);
-				if (stored) {
-					const selections = JSON.parse(stored);
-					const tab = selections?.tab;
-					if (tab === 'basic' || tab === 'advanced') {
-						tabsEl.setActiveTab(tab);
+			const CREATE_TAB_IDS = ['basic', 'advanced'];
+			const syncTabFromHash = () => {
+				if (window.location.pathname !== '/create') return;
+				const hash = (window.location.hash || '').replace(/^#/, '').toLowerCase();
+				if (hash !== 'basic' && hash !== 'advanced') return;
+				tabsEl.setActiveTab(hash, { focus: false });
+				try {
+					const stored = sessionStorage.getItem(this.storageKey);
+					const selections = stored ? JSON.parse(stored) : {};
+					selections.tab = hash;
+					sessionStorage.setItem(this.storageKey, JSON.stringify(selections));
+				} catch (e) {
+					// Ignore storage errors
+				}
+			};
+
+			// Prefer URL hash over sessionStorage when present
+			if (window.location.pathname === '/create') {
+				const hash = (window.location.hash || '').replace(/^#/, '').toLowerCase();
+				if (hash === 'basic' || hash === 'advanced') {
+					tabsEl.setActiveTab(hash);
+					try {
+						const stored = sessionStorage.getItem(this.storageKey);
+						const selections = stored ? JSON.parse(stored) : {};
+						selections.tab = hash;
+						sessionStorage.setItem(this.storageKey, JSON.stringify(selections));
+					} catch (e) {
+						// Ignore storage errors
+					}
+				} else {
+					try {
+						const stored = sessionStorage.getItem(this.storageKey);
+						if (stored) {
+							const selections = JSON.parse(stored);
+							const tab = selections?.tab;
+							if (tab === 'basic' || tab === 'advanced') {
+								tabsEl.setActiveTab(tab);
+							}
+						}
+					} catch (e) {
+						// Ignore storage errors
 					}
 				}
-			} catch (e) {
-				// Ignore storage errors
 			}
+
+			window.addEventListener('hashchange', syncTabFromHash);
+
 			tabsEl.addEventListener('tab-change', (e) => {
 				const id = e.detail?.id;
 				if (id !== 'basic' && id !== 'advanced') return;
@@ -651,7 +689,11 @@ class AppRouteCreate extends HTMLElement {
 				} catch (e) {
 					// Ignore storage errors
 				}
+				if (window.location.pathname === '/create' && window.location.hash !== `#${id}`) {
+					window.history.replaceState(null, '', `/create#${id}`);
+				}
 			});
+			this._createTabHashCleanup = () => window.removeEventListener('hashchange', syncTabFromHash);
 		}
 
 		document.addEventListener('credits-updated', this.handleCreditsUpdated);

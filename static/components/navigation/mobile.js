@@ -1,3 +1,5 @@
+import { homeIcon } from '../../icons/svg-strings.js';
+
 const html = String.raw;
 
 class AppNavigationMobile extends HTMLElement {
@@ -47,7 +49,7 @@ class AppNavigationMobile extends HTMLElement {
 
 		const isServerSentPage = /^\/creations\/\d+(\/(edit|mutat|mutate))?$/.test(window.location.pathname) ||
 			window.location.pathname.startsWith('/s/') ||
-			window.location.pathname.startsWith('/help/') ||
+			(window.location.pathname === '/help' || window.location.pathname.startsWith('/help/')) ||
 			window.location.pathname === '/user' ||
 			/^\/user\/\d+$/.test(window.location.pathname);
 		if (isServerSentPage) {
@@ -118,9 +120,7 @@ class AppNavigationMobile extends HTMLElement {
         <div class="mobile-bottom-nav-bar" aria-hidden="true"></div>
         <div class="mobile-bottom-nav-buttons" role="navigation" aria-label="Mobile actions">
           <button class="mobile-bottom-nav-item" data-route="feed" aria-label="Home">
-			<svg class="mobile-bottom-nav-icon mobile-bottom-nav-icon-home" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-				<path class="home-house" d="M 3 9 L 12 2 L 21 9 L 21 20 C 21 21.105 20.105 22 19 22 L 15 22 L 15 12 L 9 12 L 9 22 L 5 22 C 3.895 22 3 21.105 3 20 Z"></path>
-			</svg>
+			${homeIcon('mobile-bottom-nav-icon mobile-bottom-nav-icon-home')}
             <span class="mobile-bottom-nav-text" aria-hidden="true">Home</span>
           </button>
           <button class="mobile-bottom-nav-item" data-route="creations" aria-label="Creations">
@@ -148,7 +148,7 @@ class AppNavigationMobile extends HTMLElement {
             </svg>
             <span class="mobile-bottom-nav-text" aria-hidden="true">Explore</span>
           </button>
-          <button class="mobile-bottom-nav-item" data-route="servers" aria-label="Connect">
+          <button class="mobile-bottom-nav-item" data-route="connect" aria-label="Connect">
             <svg class="mobile-bottom-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <circle cx="18" cy="5" r="3"></circle>
               <circle cx="6" cy="12" r="3"></circle>

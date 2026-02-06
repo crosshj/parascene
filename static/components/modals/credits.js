@@ -14,10 +14,12 @@ class AppModalCredits extends HTMLElement {
 		this.handleEscape = this.handleEscape.bind(this);
 		this.handleOpenEvent = this.handleOpenEvent.bind(this);
 		this.handleCloseEvent = this.handleCloseEvent.bind(this);
+		this.handleCloseAllModals = this.handleCloseAllModals.bind(this);
 		this.handleClaimCredits = this.handleClaimCredits.bind(this);
 	}
 
 	connectedCallback() {
+		this.setAttribute('data-modal', '');
 		this.render();
 		this.setupEventListeners();
 		this.refreshCredits();
@@ -27,17 +29,18 @@ class AppModalCredits extends HTMLElement {
 		document.removeEventListener('keydown', this.handleEscape);
 		document.removeEventListener('open-credits', this.handleOpenEvent);
 		document.removeEventListener('close-credits', this.handleCloseEvent);
+		document.removeEventListener('close-all-modals', this.handleCloseAllModals);
 	}
 
 	setupEventListeners() {
 		document.addEventListener('keydown', this.handleEscape);
 		document.addEventListener('open-credits', this.handleOpenEvent);
 		document.addEventListener('close-credits', this.handleCloseEvent);
+		document.addEventListener('close-all-modals', this.handleCloseAllModals);
 
 		const overlay = this.querySelector('.credits-overlay');
 		const closeButton = this.querySelector('.credits-close');
 		const claimButton = this.querySelector('.credits-claim-button');
-		const linkButtons = this.querySelectorAll('.btn-secondary');
 
 		if (overlay) {
 			overlay.addEventListener('click', (e) => {
@@ -56,22 +59,6 @@ class AppModalCredits extends HTMLElement {
 		if (claimButton) {
 			claimButton.addEventListener('click', this.handleClaimCredits);
 		}
-
-		if (linkButtons.length > 0) {
-			linkButtons.forEach((link) => {
-				link.addEventListener('click', (e) => {
-					e.preventDefault();
-					const href = link.getAttribute('href');
-					if (!href) return;
-					this.close();
-					if (href.startsWith('/servers')) {
-						window.location.assign(href);
-						return;
-					}
-					window.location.assign(href);
-				});
-			});
-		}
 	}
 
 	handleOpenEvent() {
@@ -79,6 +66,10 @@ class AppModalCredits extends HTMLElement {
 	}
 
 	handleCloseEvent() {
+		this.close();
+	}
+
+	handleCloseAllModals() {
 		this.close();
 	}
 
@@ -545,18 +536,20 @@ class AppModalCredits extends HTMLElement {
             <div class="credits-section">
               <h3>Boost a server or participate in competitions</h3>
               <p>Boosting and competitions are the fastest ways to earn more credits.</p>
-              <a class="btn-secondary" href="/servers">
+              <a class="btn-secondary" href="/help/credits/boost-and-compete">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"></path>
+                  <circle cx="12" cy="12" r="9"></circle>
+                  <path d="M12 16h.01"></path>
+                  <path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4"></path>
                 </svg>
-                Boost and Compete
+                Learn More
               </a>
             </div>
 
             <div class="credits-section">
               <h3>Run a server</h3>
               <p>Run a server and earn credits for supporting the community.</p>
-              <a class="btn-secondary" href="/servers#help">
+              <a class="btn-secondary" href="/help/credits/run-a-server">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <circle cx="12" cy="12" r="9"></circle>
                   <path d="M12 16h.01"></path>

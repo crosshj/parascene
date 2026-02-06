@@ -15,9 +15,11 @@ class AppModalUser extends HTMLElement {
 		this._boundEscape = (e) => {
 			if (e.key === 'Escape' && this._overlay?.classList.contains('open')) this.close();
 		};
+		this._boundCloseAllModals = () => this.close();
 	}
 
 	connectedCallback() {
+		this.setAttribute('data-modal', '');
 		this.render();
 		this._overlay = this.querySelector('[data-user-modal-overlay]');
 		this._details = this.querySelector('[data-user-modal-details]');
@@ -34,6 +36,7 @@ class AppModalUser extends HTMLElement {
 			if (e.target?.dataset?.userClose !== undefined || e.target === this._overlay) this.close();
 		});
 		document.addEventListener('keydown', this._boundEscape);
+		document.addEventListener('close-all-modals', this._boundCloseAllModals);
 		this._form?.addEventListener('submit', (e) => this.handleSubmit(e));
 		this._deleteButton?.addEventListener('click', () => this.handleDeleteUser());
 		this._suspendSaveButton?.addEventListener('click', () => this.handleSaveSuspend());
@@ -42,6 +45,7 @@ class AppModalUser extends HTMLElement {
 
 	disconnectedCallback() {
 		document.removeEventListener('keydown', this._boundEscape);
+		document.removeEventListener('close-all-modals', this._boundCloseAllModals);
 	}
 
 	async loadViewerUser() {

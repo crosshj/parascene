@@ -9,9 +9,11 @@ class AppModalCreationDetails extends HTMLElement {
 		this._description = '';
 		this.handleEscape = this.handleEscape.bind(this);
 		this.handleOpen = this.handleOpen.bind(this);
+		this.handleCloseAllModals = this.handleCloseAllModals.bind(this);
 	}
 
 	connectedCallback() {
+		this.setAttribute('data-modal', '');
 		this.render();
 		this.setupEventListeners();
 	}
@@ -19,6 +21,7 @@ class AppModalCreationDetails extends HTMLElement {
 	disconnectedCallback() {
 		document.removeEventListener("keydown", this.handleEscape);
 		document.removeEventListener("open-creation-details-modal", this.handleOpen);
+		document.removeEventListener("close-all-modals", this.handleCloseAllModals);
 	}
 
 	render() {
@@ -57,6 +60,7 @@ class AppModalCreationDetails extends HTMLElement {
 	setupEventListeners() {
 		document.addEventListener("keydown", this.handleEscape);
 		document.addEventListener("open-creation-details-modal", this.handleOpen);
+		document.addEventListener("close-all-modals", this.handleCloseAllModals);
 
 		const overlay = this.querySelector("[data-overlay]");
 		const closeBtn = this.querySelector(".modal-close");
@@ -83,6 +87,10 @@ class AppModalCreationDetails extends HTMLElement {
 		if (event.key === "Escape" && this._isOpen) {
 			this.close();
 		}
+	}
+
+	handleCloseAllModals() {
+		this.close();
 	}
 
 	handleOpen(event) {

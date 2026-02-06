@@ -113,19 +113,23 @@ class AppModalServer extends HTMLElement {
 		this.serverId = null;
 		this.serverData = null;
 		this.handleEscape = this.handleEscape.bind(this);
+		this.handleCloseAllModals = this.handleCloseAllModals.bind(this);
 	}
 
 	connectedCallback() {
+		this.setAttribute('data-modal', '');
 		this.render();
 		this.setupEventListeners();
 	}
 
 	disconnectedCallback() {
 		document.removeEventListener('keydown', this.handleEscape);
+		document.removeEventListener('close-all-modals', this.handleCloseAllModals);
 	}
 
 	setupEventListeners() {
 		document.addEventListener('keydown', this.handleEscape);
+		document.addEventListener('close-all-modals', this.handleCloseAllModals);
 
 		const overlay = this.shadowRoot.querySelector('.server-modal-overlay');
 		const closeButton = this.shadowRoot.querySelector('.server-modal-close');
@@ -153,6 +157,10 @@ class AppModalServer extends HTMLElement {
 
 	isOpen() {
 		return this._isOpen;
+	}
+
+	handleCloseAllModals() {
+		this.close();
 	}
 
 	async open({ mode, serverId = null } = {}) {

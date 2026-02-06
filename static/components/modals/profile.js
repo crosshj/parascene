@@ -1,5 +1,6 @@
 import { formatDate } from '../../shared/datetime.js';
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
+import { helpIcon } from '../../icons/svg-strings.js';
 
 const html = String.raw;
 
@@ -14,9 +15,11 @@ class AppModalProfile extends HTMLElement {
 		this.handleEscape = this.handleEscape.bind(this);
 		this.handleOpenEvent = this.handleOpenEvent.bind(this);
 		this.handleCloseEvent = this.handleCloseEvent.bind(this);
+		this.handleCloseAllModals = this.handleCloseAllModals.bind(this);
 	}
 
 	connectedCallback() {
+		this.setAttribute('data-modal', '');
 		this.render();
 		this.setupEventListeners();
 		this.prefetchProfile();
@@ -26,16 +29,17 @@ class AppModalProfile extends HTMLElement {
 		document.removeEventListener('keydown', this.handleEscape);
 		document.removeEventListener('open-profile', this.handleOpenEvent);
 		document.removeEventListener('close-profile', this.handleCloseEvent);
+		document.removeEventListener('close-all-modals', this.handleCloseAllModals);
 	}
 
 	setupEventListeners() {
 		document.addEventListener('keydown', this.handleEscape);
 		document.addEventListener('open-profile', this.handleOpenEvent);
 		document.addEventListener('close-profile', this.handleCloseEvent);
+		document.addEventListener('close-all-modals', this.handleCloseAllModals);
 
 		const overlay = this.shadowRoot.querySelector('.profile-overlay');
 		const closeButton = this.shadowRoot.querySelector('.profile-close');
-		const fullProfileLink = this.shadowRoot.querySelector('[data-full-profile-link]');
 		const logoutForm = this.shadowRoot.querySelector('form[action="/logout"]');
 
 		if (overlay) {
@@ -52,14 +56,6 @@ class AppModalProfile extends HTMLElement {
 			});
 		}
 
-		if (fullProfileLink) {
-			fullProfileLink.addEventListener('click', (e) => {
-				e.preventDefault();
-				this.close();
-				window.location.href = '/user';
-			});
-		}
-
 		if (logoutForm) {
 			logoutForm.addEventListener('submit', (e) => {
 				// Clear localStorage before submitting logout
@@ -73,6 +69,10 @@ class AppModalProfile extends HTMLElement {
 	}
 
 	handleCloseEvent() {
+		this.close();
+	}
+
+	handleCloseAllModals() {
 		this.close();
 	}
 
@@ -300,6 +300,12 @@ class AppModalProfile extends HTMLElement {
           border-color: var(--accent);
           background: var(--surface);
         }
+        .profile-action-button .profile-action-icon {
+          width: 18px;
+          height: 18px;
+          margin-right: 8px;
+          flex-shrink: 0;
+        }
         .field {
           margin: 12px 0;
         }
@@ -337,6 +343,7 @@ class AppModalProfile extends HTMLElement {
             <div class="profile-content"></div>
           </div>
           <div class="profile-actions">
+            <a class="profile-action-button" href="/help">${helpIcon('profile-action-icon')} Help</a>
             <a class="profile-action-button" href="/user" data-full-profile-link>View Full Profile</a>
             <form action="/logout" method="post">
               <button type="submit" class="profile-action-button is-logout">Logout</button>

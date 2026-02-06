@@ -66,6 +66,61 @@ class AppRouteServers extends HTMLElement {
 		this.loadLatestComments();
 		this.loadServers();
 		this.setupFeatureRequestForm();
+		this.setupConnectTabHash();
+	}
+
+	/** Sync Connect tab from URL hash (#servers, #latest-comments, #feature-requests) and update hash when tab changes. */
+	setupConnectTabHash() {
+		const CONNECT_TAB_IDS = ['latest-comments', 'servers', 'feature-requests'];
+
+		const syncTabFromHash = () => {
+			const path = window.location.pathname || '';
+			if (path !== '/connect' && !path.startsWith('/connect/')) return;
+			const hash = (window.location.hash || '').replace(/^#/, '').toLowerCase();
+			if (!hash || !CONNECT_TAB_IDS.includes(hash)) return;
+			const tabs = this.querySelector('app-tabs');
+			if (tabs && typeof tabs.setActiveTab === 'function') {
+				tabs.setActiveTab(hash, { focus: false });
+			}
+		};
+
+		const onRouteChange = (e) => {
+			if (e.detail?.route === 'connect') syncTabFromHash();
+		};
+
+		const onHashChange = () => syncTabFromHash();
+
+		setTimeout(() => {
+			if (document.documentElement?.dataset?.route === 'connect') syncTabFromHash();
+		}, 0);
+
+		document.addEventListener('route-change', onRouteChange);
+		window.addEventListener('hashchange', onHashChange);
+
+		const tabs = this.querySelector('app-tabs');
+		if (tabs) {
+			tabs.addEventListener('tab-change', (e) => {
+				const id = e.detail?.id;
+				if (!id) return;
+				const path = window.location.pathname || '';
+				if (path !== '/connect' && !path.startsWith('/connect/')) return;
+				const newHash = `#${id}`;
+				if (window.location.hash !== newHash) {
+					window.history.replaceState(null, '', `/connect${newHash}`);
+				}
+			});
+		}
+
+		this._connectTabHashCleanup = () => {
+			document.removeEventListener('route-change', onRouteChange);
+			window.removeEventListener('hashchange', onHashChange);
+		};
+	}
+
+	disconnectedCallback() {
+		if (typeof this._connectTabHashCleanup === 'function') {
+			this._connectTabHashCleanup();
+		}
 	}
 
 	async loadLatestComments() {

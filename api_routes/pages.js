@@ -759,6 +759,7 @@ export default function createPageRoutes({ queries, pagesDir }) {
 		if (req.path.startsWith("/api/") ||
 			req.path.startsWith("/admin/users") ||
 			req.path.startsWith("/creations/") ||
+			req.path.startsWith("/help") ||
 			req.path === "/welcome" ||
 			req.path === "/user" ||
 			req.path.startsWith("/user/") ||

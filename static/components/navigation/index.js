@@ -209,7 +209,7 @@ class AppNavigation extends HTMLElement {
 		const isServerSentPage = window.location.pathname === '/create' ||
 			/^\/creations\/\d+(\/(edit|mutat|mutate))?$/.test(window.location.pathname) ||
 			window.location.pathname.startsWith('/s/') ||
-			window.location.pathname.startsWith('/help/') ||
+			(window.location.pathname === '/help' || window.location.pathname.startsWith('/help/')) ||
 			window.location.pathname === '/user' ||
 			/^\/user\/\d+$/.test(window.location.pathname);
 		if (isServerSentPage) {
@@ -460,6 +460,7 @@ class AppNavigation extends HTMLElement {
             </div>
           `;
 				}
+				this.updateNotificationsMenuViewAllVisibility();
 				return;
 			}
 			if (!result.ok) {
@@ -490,6 +491,7 @@ class AppNavigation extends HTMLElement {
             No notifications yet.
           </div>
         `;
+				this.updateNotificationsMenuViewAllVisibility();
 				return;
 			}
 
@@ -531,6 +533,7 @@ class AppNavigation extends HTMLElement {
 			}
 			preview.innerHTML = '';
 			preview.appendChild(fragment);
+			this.updateNotificationsMenuViewAllVisibility();
 		} catch {
 			if (!silent && !this.previewNotifications.length) {
 				preview.innerHTML = html`
@@ -539,6 +542,7 @@ class AppNavigation extends HTMLElement {
           </div>
         `;
 			}
+			this.updateNotificationsMenuViewAllVisibility();
 		} finally {
 			this.previewLoading = false;
 		}
@@ -563,7 +567,7 @@ class AppNavigation extends HTMLElement {
 		// Any navigation should result in a full page load
 		const isServerSentPage = /^\/creations\/\d+(\/(edit|mutat|mutate))?$/.test(window.location.pathname) ||
 			window.location.pathname.startsWith('/s/') ||
-			window.location.pathname.startsWith('/help/') ||
+			(window.location.pathname === '/help' || window.location.pathname.startsWith('/help/')) ||
 			window.location.pathname === '/user' ||
 			/^\/user\/\d+$/.test(window.location.pathname);
 		if (isServerSentPage) {
@@ -575,8 +579,8 @@ class AppNavigation extends HTMLElement {
 		// Get route from pathname (e.g., /feed -> feed, / -> defaultRoute)
 		const pathname = window.location.pathname;
 		let currentRoute = pathname === '/' || pathname === '' ? this.defaultRoute : pathname.slice(1);
-		if (pathname.startsWith('/servers/')) {
-			currentRoute = 'servers';
+		if (pathname.startsWith('/connect')) {
+			currentRoute = 'connect';
 		}
 
 		// Make current route discoverable to other components immediately on mount.
@@ -798,6 +802,16 @@ class AppNavigation extends HTMLElement {
 		}
 	}
 
+	updateNotificationsMenuViewAllVisibility() {
+		const hasNotifications = (this.notificationsCount || 0) > 0 || (this.previewNotifications || []).length > 0;
+		const menu = this.querySelector('.notifications-menu');
+		if (!menu) return;
+		const divider = menu.querySelector('.notifications-menu-divider');
+		const viewAllLink = menu.querySelector('a[data-action="notifications"]');
+		if (divider) divider.style.display = hasNotifications ? '' : 'none';
+		if (viewAllLink) viewAllLink.style.display = hasNotifications ? '' : 'none';
+	}
+
 	toggleNotificationsMenu() {
 		const wasOpen = this.notificationsMenuOpen;
 		this.notificationsMenuOpen = !this.notificationsMenuOpen;
@@ -805,27 +819,15 @@ class AppNavigation extends HTMLElement {
 		if (menu) {
 			menu.classList.toggle('open', this.notificationsMenuOpen);
 			if (this.notificationsMenuOpen) {
-				// If there are no notifications, show a friendly empty state
-				const hasNotifications = (this.notificationsCount || 0) > 0;
 				const preview = menu.querySelector('.notifications-preview');
-				const divider = menu.querySelector('.notifications-menu-divider');
-				const viewAllLink = menu.querySelector('a[data-action="notifications"]');
-
-				if (!hasNotifications) {
-					if (preview && !preview.innerHTML.trim()) {
-						preview.innerHTML = html`
+				if (preview && !preview.innerHTML.trim()) {
+					preview.innerHTML = html`
               <div class="notifications-menu-item notifications-loading">
                 You're all caught up. New notifications will appear here.
               </div>
             `;
-					}
-					if (divider) divider.style.display = 'none';
-					if (viewAllLink) viewAllLink.style.display = 'none';
-				} else {
-					if (divider) divider.style.display = '';
-					if (viewAllLink) viewAllLink.style.display = '';
 				}
-
+				this.updateNotificationsMenuViewAllVisibility();
 				this.loadNotificationPreview({ silent: true });
 			}
 		}
@@ -982,6 +984,7 @@ class AppNavigation extends HTMLElement {
 			const routeLabel = route.label;
 			return html`<a href="/${routeId}" class="nav-link" data-route="${routeId}">${routeLabel}</a>`;
 		}).join('')}
+              <a href="/help" class="mobile-menu-help">Help</a>
             </nav>
             ${hasMobileActions ? html`
               <div class="mobile-menu-actions">

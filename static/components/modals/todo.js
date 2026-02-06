@@ -67,9 +67,11 @@ class AppModalTodo extends HTMLElement {
 		this._boundEscape = (e) => {
 			if (e.key === 'Escape' && this._isOpen) this.close();
 		};
+		this._boundCloseAllModals = () => this.close();
 	}
 
 	connectedCallback() {
+		this.setAttribute('data-modal', '');
 		this.render();
 
 		this._overlay = this.querySelector('[data-todo-modal]');
@@ -82,10 +84,12 @@ class AppModalTodo extends HTMLElement {
 			}
 		});
 		document.addEventListener('keydown', this._boundEscape);
+		document.addEventListener('close-all-modals', this._boundCloseAllModals);
 	}
 
 	disconnectedCallback() {
 		document.removeEventListener('keydown', this._boundEscape);
+		document.removeEventListener('close-all-modals', this._boundCloseAllModals);
 	}
 
 	render() {

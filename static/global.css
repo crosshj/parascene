@@ -327,6 +327,48 @@ header .header-nav a.active {
 	font-weight: 700;
 }
 
+/* Header auth links (Login / Sign up) – shared when not logged in (e.g. help, landing) */
+.header-auth-link {
+	display: inline-flex;
+	align-items: center;
+	padding: 8px 16px;
+	text-decoration: none;
+	color: var(--text);
+	font-size: 0.95rem;
+	font-weight: 500;
+	border-radius: 8px;
+	transition: background-color 0.2s, color 0.2s, border-color 0.2s, transform 0.1s;
+	border: 1px solid transparent;
+}
+
+.header-auth-link:not(.btn-primary) {
+	color: var(--text-muted);
+}
+
+.header-auth-link:not(.btn-primary):hover {
+	color: var(--text);
+	background: var(--surface-strong);
+}
+
+.header-auth-link.btn-primary {
+	background: var(--accent);
+	color: var(--accent-text);
+	border-color: var(--accent);
+}
+
+.header-auth-link.btn-primary:hover {
+	background: var(--focus);
+	border-color: var(--focus);
+	transform: translateY(-1px);
+}
+
+@media (max-width: 768px) {
+	.header-auth-link {
+		padding: 6px 12px;
+		font-size: 0.875rem;
+	}
+}
+
 header .header-actions {
 	display: flex;
 	align-items: center;
@@ -1539,6 +1581,20 @@ header .hamburger-button.active span:nth-child(3) {
 	color: var(--text);
 	font-weight: 600;
 	background: var(--surface-strong);
+}
+
+.mobile-menu-nav .mobile-menu-help {
+	display: block;
+	padding: 14px 16px;
+	text-decoration: none;
+	color: var(--text-muted);
+	font-size: 0.95rem;
+	border-radius: 6px;
+}
+
+.mobile-menu-nav .mobile-menu-help:hover {
+	background: var(--surface-strong);
+	color: var(--text);
 }
 
 .mobile-menu-actions {
