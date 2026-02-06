@@ -21,13 +21,6 @@
     "dependsOn": []
   },
   {
-    "name": "Share: include image when possible",
-    "description": "For share flows that support it, include the creation image (OG/Twitter card image previews for link shares; Web Share API with image file on supported devices).",
-    "cost": 58,
-    "impact": 83,
-    "dependsOn": []
-  },
-  {
     "name": "User tips",
     "description": "users can tip each other",
     "cost": 55,
