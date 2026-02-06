@@ -48,6 +48,37 @@ function extractCreationId(url) {
 	return Number.isFinite(id) && id > 0 ? String(id) : null;
 }
 
+/** Hostnames that are considered the parascene app (transform full URLs to relative paths). */
+const PARASCENE_HOSTS = ['parascene.crosshj.com'];
+
+/**
+ * If the URL points to parascene (same-origin or known parascene host), returns the relative
+ * path (pathname + search + hash). Otherwise returns null.
+ */
+function getParasceneRelativePath(url) {
+	try {
+		const parsed = new URL(
+			String(url || ''),
+			typeof window !== 'undefined' && window.location
+				? window.location.origin
+				: 'https://parascene.crosshj.com'
+		);
+		const host = parsed.hostname.toLowerCase();
+		const isSameOrigin =
+			typeof window !== 'undefined' &&
+			window.location &&
+			parsed.origin === window.location.origin;
+		const isParasceneHost = PARASCENE_HOSTS.includes(host);
+		if (!isSameOrigin && !isParasceneHost) return null;
+		const path = parsed.pathname || '/';
+		const search = parsed.search || '';
+		const hash = parsed.hash || '';
+		return path + search + hash;
+	} catch {
+		return null;
+	}
+}
+
 function extractYoutubeVideoId(url) {
 	let parsed;
 	try {
@@ -60,7 +91,11 @@ function extractYoutubeVideoId(url) {
 	const pathname = parsed.pathname || '';
 
 	// youtube.com/watch?v=VIDEO_ID
-	if (host === 'www.youtube.com' || host === 'youtube.com' || host === 'm.youtube.com') {
+	if (
+		host === 'www.youtube.com' ||
+		host === 'youtube.com' ||
+		host === 'm.youtube.com'
+	) {
 		if (pathname === '/watch') {
 			const v = parsed.searchParams.get('v');
 			return v && /^[a-zA-Z0-9_-]{6,}$/.test(v) ? v : null;
@@ -172,9 +207,9 @@ function extractXHashtagInfo(url) {
 const CREATION_URL_RE = /https?:\/\/[^\s"'<>]+\/creations\/(\d+)\/?/g;
 
 /**
- * Turns plain text into HTML that is safe to insert and converts full creation URLs
- * (e.g. https://parascene.crosshj.com/creations/219) into relative links that display
- * as /creations/219 and navigate to that creation page.
+ * Turns plain text into HTML that is safe to insert and converts full parascene URLs
+ * (same-origin, e.g. https://parascene.crosshj.com/creations/219 or /feed) into relative
+ * links that display as the path and navigate in-app.
  *
  * Also detects YouTube URLs and converts them into links with a consistent label:
  * - Initial label is `youtube {videoId}`
@@ -189,7 +224,7 @@ const CREATION_URL_RE = /https?:\/\/[^\s"'<>]+\/creations\/(\d+)\/?/g;
  * Use when rendering user content such as image descriptions or comments.
  *
  * @param {string} text - Raw user text (may contain URLs and special characters)
- * @returns {string} - HTML-safe string with creation URLs as <a href="/creations/123">/creations/123</a>
+ * @returns {string} - HTML-safe string with parascene URLs as relative <a href="..."> links
  */
 export function textWithCreationLinks(text) {
 	const raw = String(text ?? '');
@@ -207,10 +242,9 @@ export function textWithCreationLinks(text) {
 		out += escapeHtml(raw.slice(lastIndex, start));
 
 		const { url, trailing } = splitUrlTrailingPunctuation(rawUrl);
-		const creationId = extractCreationId(url);
-		if (creationId) {
-			const path = `/creations/${creationId}`;
-			out += `<a href="${path}" class="user-link creation-link">${path}</a>`;
+		const relativePath = getParasceneRelativePath(url);
+		if (relativePath) {
+			out += `<a href="${escapeHtml(relativePath)}" class="user-link creation-link">${escapeHtml(relativePath)}</a>`;
 			out += escapeHtml(trailing);
 			lastIndex = start + rawUrl.length;
 			continue;
@@ -268,11 +302,17 @@ function getCachedYoutubeTitle(videoId) {
 		const raw = localStorage.getItem(key);
 		if (!raw) return null;
 		const parsed = JSON.parse(raw);
-		if (!parsed || typeof parsed.title !== 'string' || typeof parsed.savedAt !== 'number') return null;
+		if (
+			!parsed ||
+			typeof parsed.title !== 'string' ||
+			typeof parsed.savedAt !== 'number'
+		)
+			return null;
 		if (Date.now() - parsed.savedAt > YT_TITLE_TTL_MS) return null;
 		const title = parsed.title.trim();
 		if (!title) return null;
-		const creator = typeof parsed.creator === 'string' ? parsed.creator.trim() : '';
+		const creator =
+			typeof parsed.creator === 'string' ? parsed.creator.trim() : '';
 		return { title, creator };
 	} catch {
 		return null;
@@ -282,7 +322,10 @@ function getCachedYoutubeTitle(videoId) {
 function setCachedYoutubeTitle(videoId, { title, creator } = {}) {
 	try {
 		const key = `${YT_TITLE_CACHE_PREFIX}${videoId}`;
-		localStorage.setItem(key, JSON.stringify({ title, creator, savedAt: Date.now() }));
+		localStorage.setItem(
+			key,
+			JSON.stringify({ title, creator, savedAt: Date.now() })
+		);
 	} catch {
 		// Ignore storage errors (quota, privacy mode, etc.)
 	}
@@ -305,10 +348,13 @@ function formatYoutubeLabel({ title, creator } = {}) {
 }
 
 export function hydrateYoutubeLinkTitles(rootEl) {
-	const root = rootEl instanceof Element || rootEl instanceof Document ? rootEl : document;
+	const root =
+		rootEl instanceof Element || rootEl instanceof Document ? rootEl : document;
 	if (!root || typeof root.querySelectorAll !== 'function') return;
 
-	const links = Array.from(root.querySelectorAll('a[data-youtube-video-id][data-youtube-url]'));
+	const links = Array.from(
+		root.querySelectorAll('a[data-youtube-video-id][data-youtube-url]')
+	);
 	for (const a of links) {
 		if (!(a instanceof HTMLAnchorElement)) continue;
 		if (a.dataset.youtubeTitleHydrated === 'true') continue;
@@ -330,14 +376,16 @@ export function hydrateYoutubeLinkTitles(rootEl) {
 			p = fetch(`/api/youtube/oembed?url=${encodeURIComponent(url)}`, {
 				method: 'GET',
 				headers: {
-					'Accept': 'application/json'
-				}
+					Accept: 'application/json',
+				},
 			})
 				.then(async (res) => {
 					if (!res.ok) return null;
 					const data = await res.json().catch(() => null);
-					const title = typeof data?.title === 'string' ? data.title.trim() : '';
-					const creator = typeof data?.creator === 'string' ? data.creator.trim() : '';
+					const title =
+						typeof data?.title === 'string' ? data.title.trim() : '';
+					const creator =
+						typeof data?.creator === 'string' ? data.creator.trim() : '';
 					if (!title) return null;
 					return { title, creator };
 				})
@@ -370,11 +418,17 @@ function getCachedXTitle(statusId) {
 		const raw = localStorage.getItem(key);
 		if (!raw) return null;
 		const parsed = JSON.parse(raw);
-		if (!parsed || typeof parsed.title !== 'string' || typeof parsed.savedAt !== 'number') return null;
+		if (
+			!parsed ||
+			typeof parsed.title !== 'string' ||
+			typeof parsed.savedAt !== 'number'
+		)
+			return null;
 		if (Date.now() - parsed.savedAt > X_TITLE_TTL_MS) return null;
 		const title = parsed.title.trim();
 		if (!title) return null;
-		const tweetText = typeof parsed.tweetText === 'string' ? parsed.tweetText.trim() : '';
+		const tweetText =
+			typeof parsed.tweetText === 'string' ? parsed.tweetText.trim() : '';
 		return { title, tweetText };
 	} catch {
 		return null;
@@ -384,7 +438,10 @@ function getCachedXTitle(statusId) {
 function setCachedXTitle(statusId, { title, tweetText } = {}) {
 	try {
 		const key = `${X_TITLE_CACHE_PREFIX}${statusId}`;
-		localStorage.setItem(key, JSON.stringify({ title, tweetText, savedAt: Date.now() }));
+		localStorage.setItem(
+			key,
+			JSON.stringify({ title, tweetText, savedAt: Date.now() })
+		);
 	} catch {
 		// ignore
 	}
@@ -402,10 +459,13 @@ function formatXLabel({ title, tweetText } = {}) {
 }
 
 export function hydrateXLinkTitles(rootEl) {
-	const root = rootEl instanceof Element || rootEl instanceof Document ? rootEl : document;
+	const root =
+		rootEl instanceof Element || rootEl instanceof Document ? rootEl : document;
 	if (!root || typeof root.querySelectorAll !== 'function') return;
 
-	const links = Array.from(root.querySelectorAll('a[data-x-status-id][data-x-url]'));
+	const links = Array.from(
+		root.querySelectorAll('a[data-x-status-id][data-x-url]')
+	);
 	for (const a of links) {
 		if (!(a instanceof HTMLAnchorElement)) continue;
 		if (a.dataset.xTitleHydrated === 'true') continue;
@@ -427,14 +487,16 @@ export function hydrateXLinkTitles(rootEl) {
 			p = fetch(`/api/x/oembed?url=${encodeURIComponent(url)}`, {
 				method: 'GET',
 				headers: {
-					'Accept': 'application/json'
-				}
+					Accept: 'application/json',
+				},
 			})
 				.then(async (res) => {
 					if (!res.ok) return null;
 					const data = await res.json().catch(() => null);
-					const title = typeof data?.title === 'string' ? data.title.trim() : '';
-					const tweetText = typeof data?.tweetText === 'string' ? data.tweetText.trim() : '';
+					const title =
+						typeof data?.title === 'string' ? data.title.trim() : '';
+					const tweetText =
+						typeof data?.tweetText === 'string' ? data.tweetText.trim() : '';
 					if (!title) return null;
 					return { title, tweetText };
 				})
@@ -462,7 +524,7 @@ export function hydrateXLinkTitles(rootEl) {
  *
  * This is the main function to use when rendering user content anywhere in the app.
  * It handles:
- * - Creation URLs → relative links (/creations/123)
+ * - Parascene (same-origin) URLs → relative links (/creations/123, /feed, etc.)
  * - YouTube URLs → links with titles (hydrated asynchronously)
  * - X/Twitter URLs → links with titles (hydrated asynchronously)
  * - Generic http(s) URLs → clickable links
