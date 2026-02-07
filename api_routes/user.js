@@ -357,7 +357,8 @@ export default function createProfileRoutes({ queries }) {
 			}
 		}
 		clearAuthCookie(res, req);
-		res.redirect("/auth");
+		// res.redirect("/auth");
+		res.redirect("/");
 	});
 
 	router.get("/me", (req, res) => {

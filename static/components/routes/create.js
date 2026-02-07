@@ -1,6 +1,6 @@
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 import { submitCreationWithPending } from '../../shared/createSubmit.js';
-import { renderFields } from '../../shared/providerFormFields.js';
+import { renderFields, isPromptLikeField } from '../../shared/providerFormFields.js';
 import { attachAutoGrowTextarea } from '../../shared/autogrow.js';
 
 const html = String.raw;
@@ -16,6 +16,7 @@ class AppRouteCreate extends HTMLElement {
 		this.handleCreditsUpdated = this.handleCreditsUpdated.bind(this);
 		this.storageKey = 'create-page-selections';
 		this._advancedConfirm = null; // { serverId, args, cost } when cost dialog is open
+		this._promptFromUrl = null; // prompt from ?prompt= (landing page); applied when Basic tab has a prompt field
 	}
 
 	connectedCallback() {
@@ -626,6 +627,7 @@ class AppRouteCreate extends HTMLElement {
 			promptInput.addEventListener("input", () => this.saveAdvancedOptions());
 			promptInput.addEventListener("change", () => this.saveAdvancedOptions());
 		}
+		this.applyPromptFromUrl(); // run first so URL prompt can supersede saved state
 		this.restoreAdvancedOptions();
 
 		// Restore and persist active tab (Basic / Advanced); sync with URL hash (#basic, #advanced)
@@ -827,18 +829,46 @@ class AppRouteCreate extends HTMLElement {
 				const key = btn.getAttribute("data-advanced-option");
 				if (key && options[key] === true) btn.setAttribute("aria-checked", "true");
 			});
-			// Restore prompt value
+			// Restore prompt value; query-param prompt supersedes saved
 			const promptInput = this.querySelector("[data-advanced-prompt]");
-			if (promptInput && typeof options.prompt === "string") {
-				promptInput.value = options.prompt;
-				// Trigger autogrow resize
-				const refresh = attachAutoGrowTextarea(promptInput);
-				if (refresh) refresh();
+			if (promptInput) {
+				const value = this._promptFromUrl ?? (typeof options.prompt === "string" ? options.prompt : "");
+				if (value) {
+					promptInput.value = value;
+					const refresh = attachAutoGrowTextarea(promptInput);
+					if (refresh) refresh();
+				}
 			}
 			this.updateAdvancedCreateButton();
 		} catch (e) {
 			// Ignore storage errors
 		}
+	}
+
+	/** Store prompt from ?prompt= (e.g. from landing page). Applied to Basic tab when server+method has a prompt field. */
+	applyPromptFromUrl() {
+		if (window.location.pathname !== "/create") return;
+		const params = new URLSearchParams(window.location.search);
+		const prompt = params.get("prompt");
+		this._promptFromUrl = typeof prompt === "string" && prompt.trim() ? prompt.trim() : null;
+	}
+
+	/** If we have a URL prompt and the current method has a prompt field, fill it. Call after renderFields(). */
+	applyUrlPromptToBasicFields() {
+		if (!this._promptFromUrl || !this.selectedMethod?.fields) return;
+		const fields = this.selectedMethod.fields;
+		const promptKey = Object.keys(fields).find((k) => isPromptLikeField(k, fields[k]));
+		if (!promptKey) return;
+		this.fieldValues[promptKey] = this._promptFromUrl;
+		const input = this.querySelector(`#field-${promptKey}`);
+		if (!input) return;
+		input.value = this._promptFromUrl;
+		if (input.tagName === "TEXTAREA") {
+			const refresh = attachAutoGrowTextarea(input);
+			if (refresh) refresh();
+		}
+		this.updateButtonState();
+		this.saveSelections();
 	}
 
 	async handleAdvancedCreate() {
@@ -999,8 +1029,8 @@ class AppRouteCreate extends HTMLElement {
 					btn.textContent = 'Copied';
 					setTimeout(() => { btn.textContent = prev; }, 1500);
 				}
-			}).catch(() => {});
-		} catch (e) {}
+			}).catch(() => { });
+		} catch (e) { }
 	}
 
 	submitAdvancedCreate() {
@@ -1170,6 +1200,7 @@ class AppRouteCreate extends HTMLElement {
 			}
 		});
 		fieldsGroup.style.display = 'flex';
+		this.applyUrlPromptToBasicFields();
 	}
 
 	hideMethodGroup() {
@@ -1460,7 +1491,10 @@ class AppRouteCreate extends HTMLElement {
 	}
 
 	restoreFieldValues(savedFieldValues) {
+		const fields = this.selectedMethod?.fields || {};
 		Object.keys(savedFieldValues).forEach(fieldKey => {
+			// Query-param prompt supersedes saved prompt on Basic tab
+			if (this._promptFromUrl && isPromptLikeField(fieldKey, fields[fieldKey])) return;
 			let el = this.querySelector(`#field-${fieldKey}`);
 			if (el?.classList?.contains('form-switch')) {
 				el = el.querySelector('.form-switch-input');
@@ -1479,6 +1513,8 @@ class AppRouteCreate extends HTMLElement {
 				}
 			}
 		});
+		// Re-apply URL prompt so it wins over any saved prompt we skipped
+		this.applyUrlPromptToBasicFields();
 	}
 }
 
