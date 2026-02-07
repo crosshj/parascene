@@ -1,5 +1,37 @@
 // Landing page behavior for index.html
 
+const LANDING_PROMPTS = [
+	"Serene mountain at golden sunset",
+	"Fluid abstract color waves",
+	"Cozy rain-soaked café",
+	"Luminous underwater coral reef",
+	"Retro-futurist city skyline",
+	"Whimsical forest creatures",
+	"Minimal geometric composition",
+	"Dreamlike cloudscape",
+	"Neon street at midnight",
+	"Stylized voxel game world",
+	"Epic fantasy landscape",
+	"Cyberpunk megacity",
+	"Realistic human portrait",
+	"Modern abstract digital art",
+	"Surreal sci-fi environment",
+	"Ultra-realistic natural landscape",
+
+	// Feminine / human (implied, not explicit)
+	"Natural beauty, intimate portrait",
+	"Fantasy heroine with flowing hair",
+	"Ethereal figure in moonlight",
+	"Editorial-style fashion portrait",
+
+	// Feminine / creature / mythic
+	"Elven heroine in an enchanted forest",
+	"Celestial goddess-like figure",
+	"Bioluminescent alien being",
+	"Mermaid emerging from the sea",
+	"Fae princess with glowing eyes",
+];
+
 function setCtaNoteText(text) {
 	const el = document.querySelector(".cta-note");
 	if (el) el.textContent = text;
@@ -46,6 +78,13 @@ function updatePolicyCta() {
 // Smooth scroll + fade-in animations
 document.addEventListener('DOMContentLoaded', () => {
 	updatePolicyCta();
+
+	// Fill hero prompt input with a random example on load
+	const promptInput = document.querySelector(".landing-generate-form input[name=\"prompt\"]");
+	if (promptInput && LANDING_PROMPTS.length > 0) {
+		promptInput.value = LANDING_PROMPTS[Math.floor(Math.random() * LANDING_PROMPTS.length)];
+	}
+
 	// Handle smooth scrolling for anchor links
 	document.querySelectorAll('a[href^="#"]').forEach((anchor) => {
 		anchor.addEventListener('click', function (e) {
