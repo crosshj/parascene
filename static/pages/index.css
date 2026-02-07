@@ -179,12 +179,20 @@ body.landing-page header.scrolled::before {
 .hero-title::after {
   content: '';
   position: absolute;
-  left: 0;
-  right: 0;
+  left: 50%;
   bottom: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, var(--accent), transparent);
-  opacity: 0.5;
+  width: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, rgba(0, 200, 140, 0.9), transparent);
+  border-radius: 999px;
+  animation: hero-title-accent 1.2s ease-out 0.4s forwards;
+}
+
+@keyframes hero-title-accent {
+  to {
+    left: 15%;
+    width: 70%;
+  }
 }
 
 .hero-subtitle {
@@ -208,25 +216,27 @@ body.landing-page header.scrolled::before {
 }
 
 .hero-pill {
-  display: inline-block;
-  padding: 10px 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 18px;
   font-size: 0.9rem;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.95);
-  background: rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.9);
   text-decoration: none;
-  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
 }
 
 .hero-pill:hover {
-  border-color: rgba(255, 255, 255, 0.35);
-  background: rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
 }
 
 @media (prefers-color-scheme: light) {
@@ -265,7 +275,7 @@ body.landing-page header.scrolled::before {
   
   .hero-pill {
     font-size: 0.85rem;
-    padding: 8px 16px;
+    padding: 12px 16px;
   }
 }
 
@@ -281,85 +291,152 @@ body.landing-page header.scrolled::before {
   font-size: 0.95rem;
 }
 
+/* Subtle glow pulse to draw attention on load and every 20s (stops when form is focused). */
+@keyframes landing-form-glow-pulse {
+  0%,
+  4%,
+  100% {
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15), 0 0 24px rgba(139, 92, 246, 0.35), 0 0 48px rgba(139, 92, 246, 0.15);
+  }
+  2% {
+    box-shadow: 0 2px 14px rgba(0, 0, 0, 0.18), 0 0 32px rgba(139, 92, 246, 0.5), 0 0 56px rgba(139, 92, 246, 0.22);
+  }
+}
+
+@keyframes landing-form-glow-pulse-light {
+  0%,
+  4%,
+  100% {
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06), 0 0 20px rgba(124, 58, 237, 0.25), 0 0 40px rgba(124, 58, 237, 0.1);
+  }
+  2% {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08), 0 0 28px rgba(124, 58, 237, 0.4), 0 0 52px rgba(124, 58, 237, 0.18);
+  }
+}
+
+/* Connected input + button: form is the single box; children are absolutely positioned.
+   Focus ring lives on the form via :focus-within, so it always surrounds the whole bar. */
 .landing-generate-form {
-  display: flex;
-  gap: 6px;
-  max-width: 640px;
+  --landing-btn-width: 120px;
+  --landing-input-padding-x: 20px;
+  position: relative;
+  display: block;
+  height: 58px;
+  max-width: 560px;
   width: 100%;
   margin: 0 auto 20px;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.landing-generate-input {
-  flex: 1;
-  min-width: 220px;
-  padding: 16px 20px;
-  font-size: 1rem;
-  font-family: inherit;
-  color: var(--text);
-  background: rgba(20, 20, 28, 0.55);
-  border: 1px solid rgba(189, 192, 206, 0.35);
-  border-radius: 10px;
-  outline: none;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 0;
+  overflow: hidden;
+  transition: box-shadow 0.2s ease;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15), 0 0 24px rgba(139, 92, 246, 0.35), 0 0 48px rgba(139, 92, 246, 0.15);
+  box-sizing: border-box;
 }
 
-.landing-generate-input::placeholder {
-  color: rgba(189, 175, 239, 0.65);
+.landing-generate-form:not(:focus-within) {
+  animation: landing-form-glow-pulse 20s ease-in-out 1.2s infinite;
 }
 
-.landing-generate-input:focus-visible {
-  border-color: rgba(167, 139, 250, 0.6);
+.landing-generate-form:focus-within {
   box-shadow: 0 2px 16px rgba(0, 0, 0, 0.2), 0 0 0 2px rgba(139, 92, 246, 0.35), 0 0 32px rgba(139, 92, 246, 0.5), 0 0 64px rgba(139, 92, 246, 0.25);
 }
 
-.landing-generate-btn {
+.landing-generate-input {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  height: 58px;
+  padding: 0 var(--landing-input-padding-x);
+  padding-right: calc(var(--landing-btn-width) + var(--landing-input-padding-x));
+  font-size: 17px;
+  font-family: inherit;
+  color: rgba(255, 255, 255, 0.95);
+  background: transparent;
+  border: none;
+  outline: none;
+  box-sizing: border-box;
+  z-index: 1;
+}
+
+.landing-generate-input::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* Override global button border: match border to button background so no visible stroke.
+   !important ensures we win over global.css button { border: 1px solid var(--accent) }. */
+button.landing-generate-btn,
+.landing-generate-form .landing-generate-btn {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: var(--landing-btn-width);
+  height: 58px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  flex-shrink: 0;
-  min-width: 132px;
-  padding: 16px 16px;
+  padding: 0 20px;
   font-size: 1rem;
   font-weight: 600;
-  color: #fff;
-  background: linear-gradient(180deg, rgb(52, 199, 140) 0%, rgb(38, 174, 118) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 10px;
+  color: var(--accent-text);
+  background: var(--accent);
+  border: 1px solid var(--accent) !important;
+  border-radius: 0;
   cursor: pointer;
-  transition: filter 0.2s ease, box-shadow 0.2s ease;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.12) inset, 0 4px 16px rgba(38, 174, 118, 0.3);
+  box-sizing: border-box;
+  transition: transform 0.2s ease, filter 0.2s ease;
+  box-shadow: 2px 0 12px color-mix(in srgb, var(--accent) 35%, transparent);
+  z-index: 2;
+  appearance: none;
+  -webkit-appearance: none;
+  outline: none;
+}
+
+button.landing-generate-btn::-moz-focus-inner,
+.landing-generate-form .landing-generate-btn::-moz-focus-inner {
+  border: 0;
+  padding: 0;
 }
 
 .landing-generate-btn-icon {
   flex-shrink: 0;
 }
 
-.landing-generate-btn:hover {
+button.landing-generate-btn:hover,
+.landing-generate-form .landing-generate-btn:hover {
+  transform: translateY(-1px);
   filter: brightness(1.06);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.2) inset, 0 4px 20px rgba(38, 174, 118, 0.4);
+  border-color: var(--accent) !important;
+  box-shadow: 2px 0 16px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
-.landing-generate-btn:focus-visible {
+button.landing-generate-btn:focus-visible,
+.landing-generate-form .landing-generate-btn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(38, 174, 118, 0.6);
+  border-color: var(--accent) !important;
+  box-shadow: 2px 0 12px color-mix(in srgb, var(--accent) 35%, transparent), 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent);
 }
 
 @media (prefers-color-scheme: light) {
-  .landing-generate-input {
-    background: rgba(255, 255, 255, 0.9);
-    border-color: rgba(124, 58, 237, 0.35);
+  .landing-generate-form {
+    background: rgba(255, 255, 255, 0.6);
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06), 0 0 20px rgba(124, 58, 237, 0.25), 0 0 40px rgba(124, 58, 237, 0.1);
+  }
+  .landing-generate-form:not(:focus-within) {
+    animation: landing-form-glow-pulse-light 20s ease-in-out 1.2s infinite;
+  }
+  .landing-generate-form:focus-within {
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08), 0 0 0 2px rgba(124, 58, 237, 0.25), 0 0 28px rgba(124, 58, 237, 0.4), 0 0 56px rgba(124, 58, 237, 0.15);
+  }
+  .landing-generate-input {
+    color: rgba(0, 0, 0, 0.9);
   }
   .landing-generate-input::placeholder {
     color: rgba(0, 0, 0, 0.45);
-  }
-  .landing-generate-input:focus-visible {
-    border-color: var(--accent);
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08), 0 0 0 2px rgba(124, 58, 237, 0.25), 0 0 28px rgba(124, 58, 237, 0.4), 0 0 56px rgba(124, 58, 237, 0.15);
   }
 }
 
@@ -371,12 +448,17 @@ body.landing-page header.scrolled::before {
 
 @media (max-width: 768px) {
   .landing-generate-form {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 6px;
+    --landing-btn-width: 100px;
+    --landing-input-padding-x: 16px;
+    max-width: 100%;
   }
   .landing-generate-input {
-    min-width: 0;
+    font-size: 16px;
+  }
+  .landing-generate-btn {
+    width: var(--landing-btn-width);
+    padding: 0 16px;
+    box-sizing: border-box;
   }
 }
 
