@@ -7,8 +7,9 @@
 }
 
 .try-main {
-	padding: 0;
-	padding-bottom: 10em;
+	padding: 14px 18px 10em;
+	margin: 0 auto;
+	max-width: 1240px;
 }
 
 /* Same body look as share page so main content matches */
