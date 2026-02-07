@@ -1,7 +1,51 @@
 // Landing page behavior for index.html
 
+function setCtaNoteText(text) {
+	const el = document.querySelector(".cta-note");
+	if (el) el.textContent = text;
+}
+
+function getPolicyHints() {
+	const tz = typeof Intl !== "undefined" && Intl.DateTimeFormat?.().resolvedOptions?.().timeZone ? Intl.DateTimeFormat().resolvedOptions().timeZone : "";
+	const screenHint = typeof window.screen !== "undefined" ? window.screen.width + "x" + window.screen.height : "";
+	return { tz, screen: screenHint };
+}
+
+/** Call once on first meaningful action (e.g. first Create click) to initialize anon identity. */
+function markPolicySeen() {
+	const { tz, screen } = getPolicyHints();
+	fetch("/api/policy/seen", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		credentials: "include",
+		body: JSON.stringify({ tz, screen })
+	}).catch(() => { });
+}
+
+function updatePolicyCta() {
+	const { tz, screen } = getPolicyHints();
+	const params = new URLSearchParams();
+	if (tz) params.set("tz", tz);
+	if (screen) params.set("screen", screen);
+	const qs = params.toString();
+	fetch("/api/policy" + (qs ? "?" + qs : ""), {
+		method: "GET",
+		credentials: "include"
+	})
+		.then((res) => (res.ok ? res.json() : Promise.reject(new Error("policy error"))))
+		.then((data) => {
+			if (data && typeof data.seen === "boolean") {
+				setCtaNoteText(data.seen ? "No credit card required — start creating now." : "No payment required — start creating now.");
+			} else {
+				setCtaNoteText("No credit card needed — start creating now.");
+			}
+		})
+		.catch(() => setCtaNoteText("No payment needed — start creating now."));
+}
+
 // Smooth scroll + fade-in animations
 document.addEventListener('DOMContentLoaded', () => {
+	updatePolicyCta();
 	// Handle smooth scrolling for anchor links
 	document.querySelectorAll('a[href^="#"]').forEach((anchor) => {
 		anchor.addEventListener('click', function (e) {

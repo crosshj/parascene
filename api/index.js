@@ -24,6 +24,7 @@ import createYoutubeRoutes from "../api_routes/youtube.js";
 import createXRoutes from "../api_routes/x.js";
 import createFeatureRequestRoutes from "../api_routes/feature_requests.js";
 import createShareRoutes from "../api_routes/share.js";
+import createPolicyRoutes from "../api_routes/policy.js";
 import { computeWelcome } from "../api_routes/utils/welcome.js";
 import {
 	authMiddleware,
@@ -186,6 +187,7 @@ app.use(createTemplatesRoutes({ queries }));
 app.use(createHelpRoutes({ pagesDir, queries }));
 app.use(createPageRoutes({ queries, pagesDir }));
 app.use(createTodoRoutes());
+app.use(createPolicyRoutes());
 app.use(createYoutubeRoutes());
 app.use(createXRoutes());
 app.use(createFeatureRequestRoutes({ queries }));
