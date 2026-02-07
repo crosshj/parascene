@@ -1411,6 +1411,151 @@ export function openDb() {
 				return data ?? undefined;
 			}
 		},
+		// Anonymous (try) creations (no anon_cid or color; try_requests links requesters to images)
+		insertCreatedImageAnon: {
+			run: async (prompt, filename, filePath, width, height, status, meta) => {
+				const metaVal = typeof meta === "object" && meta !== null ? meta : meta == null ? null : meta;
+				const { data, error } = await serviceClient
+					.from(prefixedTable("created_images_anon"))
+					.insert({
+						prompt: prompt ?? null,
+						filename,
+						file_path: filePath,
+						width,
+						height,
+						status,
+						meta: metaVal
+					})
+					.select("id")
+					.single();
+				if (error) throw error;
+				return Promise.resolve({ insertId: data?.id, changes: data ? 1 : 0 });
+			}
+		},
+		selectCreatedImageAnonById: {
+			get: async (id) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("created_images_anon"))
+					.select("id, prompt, filename, file_path, width, height, status, created_at, meta")
+					.eq("id", id)
+					.maybeSingle();
+				if (error) throw error;
+				return data ?? undefined;
+			}
+		},
+		selectCreatedImagesAnonByIds: {
+			all: async (ids) => {
+				const safeIds = Array.isArray(ids)
+					? ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
+					: [];
+				if (safeIds.length === 0) return [];
+				const { data, error } = await serviceClient
+					.from(prefixedTable("created_images_anon"))
+					.select("id, prompt, filename, file_path, width, height, status, created_at, meta")
+					.in("id", safeIds);
+				if (error) throw error;
+				return Array.isArray(data) ? data : [];
+			}
+		},
+		/** Up to limit recent completed rows for this prompt, for cache reuse. sinceIso = created_at >= this (e.g. 24h ago). */
+		selectRecentCompletedCreatedImageAnonByPrompt: {
+			all: async (prompt, sinceIso, limit = 5) => {
+				if (prompt == null || String(prompt).trim() === "") return [];
+				const safeLimit = Math.min(Math.max(Number(limit) || 5, 1), 20);
+				const { data, error } = await serviceClient
+					.from(prefixedTable("created_images_anon"))
+					.select("id, prompt, filename, file_path, width, height, status, created_at, meta")
+					.eq("prompt", String(prompt).trim())
+					.eq("status", "completed")
+					.gte("created_at", sinceIso)
+					.order("created_at", { ascending: false })
+					.limit(safeLimit);
+				if (error) throw error;
+				return Array.isArray(data) ? data : [];
+			}
+		},
+		selectTryRequestByCidAndPrompt: {
+			get: async (anonCid, prompt) => {
+				if (prompt == null || String(prompt).trim() === "") return undefined;
+				const { data, error } = await serviceClient
+					.from(prefixedTable("try_requests"))
+					.select("id, anon_cid, prompt, created_at, fulfilled_at, created_image_anon_id")
+					.eq("anon_cid", anonCid)
+					.eq("prompt", String(prompt).trim())
+					.order("created_at", { ascending: false })
+					.limit(1);
+				if (error) throw error;
+				const row = Array.isArray(data) && data.length > 0 ? data[0] : null;
+				return row ?? undefined;
+			}
+		},
+		selectTryRequestsByCid: {
+			all: async (anonCid) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("try_requests"))
+					.select("id, anon_cid, prompt, created_at, fulfilled_at, created_image_anon_id")
+					.eq("anon_cid", anonCid)
+					.order("created_at", { ascending: false });
+				if (error) throw error;
+				return data ?? [];
+			}
+		},
+		updateCreatedImageAnonJobCompleted: {
+			run: async (id, { filename, file_path, width, height, meta }) => {
+				const metaVal = typeof meta === "object" && meta !== null ? meta : meta == null ? null : meta;
+				const { error } = await serviceClient
+					.from(prefixedTable("created_images_anon"))
+					.update({
+						filename,
+						file_path: file_path,
+						width,
+						height,
+						status: "completed",
+						meta: metaVal
+					})
+					.eq("id", id);
+				if (error) throw error;
+				return Promise.resolve({ changes: 1 });
+			}
+		},
+		updateCreatedImageAnonJobFailed: {
+			run: async (id, { meta }) => {
+				const metaVal = typeof meta === "object" && meta !== null ? meta : meta == null ? null : meta;
+				const { error } = await serviceClient
+					.from(prefixedTable("created_images_anon"))
+					.update({ status: "failed", meta: metaVal })
+					.eq("id", id);
+				if (error) throw error;
+				return Promise.resolve({ changes: 1 });
+			}
+		},
+		insertTryRequest: {
+			run: async (anonCid, prompt, created_image_anon_id, fulfilled_at = null, meta = null) => {
+				const metaVal = typeof meta === "object" && meta !== null ? meta : meta == null ? null : meta;
+				const { error } = await serviceClient
+					.from(prefixedTable("try_requests"))
+					.insert({
+						anon_cid: anonCid,
+						prompt: prompt ?? null,
+						created_image_anon_id,
+						fulfilled_at: fulfilled_at ?? null,
+						meta: metaVal,
+					});
+				if (error) throw error;
+				return Promise.resolve({ changes: 1 });
+			}
+		},
+		updateTryRequestFulfilledByCreatedImageAnonId: {
+			run: async (created_image_anon_id, fulfilled_at_iso) => {
+				const { error } = await serviceClient
+					.from(prefixedTable("try_requests"))
+					.update({ fulfilled_at: fulfilled_at_iso })
+					.eq("created_image_anon_id", created_image_anon_id)
+					.is("fulfilled_at", null);
+				if (error) throw error;
+				return Promise.resolve({ changes: 1 });
+			}
+		},
 		selectCreatedImageDescriptionAndMetaByIds: {
 			all: async (ids) => {
 				const safeIds = Array.isArray(ids)
@@ -2301,6 +2446,7 @@ export function openDb() {
 	// Storage interface for images using Supabase Storage
 	// Images are stored in a private bucket and served through the backend
 	const STORAGE_BUCKET = "prsn_created-images";
+	const STORAGE_BUCKET_ANON = "prsn_created-images-anon";
 	const STORAGE_THUMBNAIL_BUCKET = "prsn_created-images-thumbnails";
 	const GENERIC_BUCKET = "prsn_generic-images";
 
@@ -2346,6 +2492,29 @@ export function openDb() {
 		getImageUrl: (filename) => {
 			// Return backend route URL - images are served through the backend
 			return `/api/images/created/${filename}`;
+		},
+
+		uploadImageAnon: async (buffer, filename) => {
+			const { error } = await storageClient.storage
+				.from(STORAGE_BUCKET_ANON)
+				.upload(filename, buffer, { contentType: "image/png", upsert: true });
+			if (error) {
+				throw new Error(`Failed to upload anon image to Supabase Storage: ${error.message}`);
+			}
+			return `/api/try/images/${filename}`;
+		},
+
+		getImageUrlAnon: (filename) => `/api/try/images/${filename}`,
+
+		getImageBufferAnon: async (filename) => {
+			const { data, error } = await storageClient.storage
+				.from(STORAGE_BUCKET_ANON)
+				.download(filename);
+			if (error) {
+				throw new Error(`Anon image not found: ${filename}`);
+			}
+			const arrayBuffer = await data.arrayBuffer();
+			return Buffer.from(arrayBuffer);
 		},
 
 		getImageBuffer: async (filename, options = {}) => {

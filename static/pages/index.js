@@ -75,9 +75,50 @@ function updatePolicyCta() {
 		.catch(() => setCtaNoteText("No payment needed — start creating now."));
 }
 
+/** On Create click: if policy says never seen, go to /try; else proceed to form action. */
+function handleCreateSubmit(e) {
+	const form = e.target.closest("form.landing-generate-form");
+	if (!form) return;
+	e.preventDefault();
+	const { tz, screen } = getPolicyHints();
+	const params = new URLSearchParams();
+	if (tz) params.set("tz", tz);
+	if (screen) params.set("screen", screen);
+	const formData = new FormData(form);
+	for (const [k, v] of formData.entries()) {
+		if (v != null && String(v).trim() !== "") params.set(k, v);
+	}
+	const qs = params.toString();
+	fetch("/api/policy" + (qs ? "?" + qs : ""), { method: "GET", credentials: "include" })
+		.then((res) => (res.ok ? res.json() : Promise.reject(new Error("policy error"))))
+		.then((data) => {
+			if (data && data.seen === false) {
+				const prompt = formData.get("prompt");
+				const promptStr = prompt != null ? String(prompt).trim() : "";
+				const tryUrl = promptStr ? "/try?prompt=" + encodeURIComponent(promptStr) : "/try";
+				window.location.replace(tryUrl);
+				return;
+			}
+			const action = (form.getAttribute("action") || "/create").trim();
+			const query = new URLSearchParams(formData).toString();
+			window.location.href = query ? `${action}?${query}` : action;
+		})
+		.catch(() => {
+			const action = (form.getAttribute("action") || "/create").trim();
+			const query = new URLSearchParams(new FormData(form)).toString();
+			window.location.href = query ? `${action}?${query}` : action;
+		});
+}
+
 // Smooth scroll + fade-in animations
 document.addEventListener('DOMContentLoaded', () => {
 	updatePolicyCta();
+
+	// Create button: redirect to /try if never seen, else go to /create
+	const createForm = document.querySelector(".landing-generate-form");
+	if (createForm) {
+		createForm.addEventListener("submit", handleCreateSubmit);
+	}
 
 	// Fill hero prompt input with a random example on load
 	const promptInput = document.querySelector(".landing-generate-form input[name=\"prompt\"]");

@@ -752,6 +752,14 @@ export default function createPageRoutes({ queries, pagesDir }) {
 		return res.send(htmlContent);
 	});
 
+	// Try page (unauthenticated). try.html includes global.css and global.js itself; do not inject common head to avoid loading them twice.
+	router.get("/try", async (req, res) => {
+		const fs = await import("fs/promises");
+		const htmlContent = await fs.readFile(path.join(pagesDir, "try.html"), "utf-8");
+		res.setHeader("Content-Type", "text/html");
+		return res.send(htmlContent);
+	});
+
 	// Catch-all route for sub-routes - serve the same page for all routes
 	// This allows clean URLs like /feed, /explore, etc. while serving the same HTML
 	router.get("/*", async (req, res, next) => {

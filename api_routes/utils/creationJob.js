@@ -367,5 +367,148 @@ export async function runCreationJob({ queries, storage, payload }) {
 	return { ok: true, id: imageId, filename, url: imageUrl, width, height, color };
 }
 
+/** Anonymous (try) creation job: same provider flow, anon table + anon storage, no credits. */
+export async function runAnonCreationJob({ queries, storage, payload }) {
+	const { created_image_anon_id, server_id, method, args } = payload || {};
+
+	logCreation("runAnonCreationJob started", {
+		created_image_anon_id,
+		server_id,
+		method,
+		args_keys: args ? Object.keys(args) : []
+	});
+
+	if (!created_image_anon_id || !server_id || !method) {
+		const error = new Error("runAnonCreationJob: missing required payload fields");
+		logCreationError("Missing required fields", {
+			created_image_anon_id,
+			server_id,
+			method
+		});
+		throw error;
+	}
+
+	const imageId = Number(created_image_anon_id);
+
+	const image = await queries.selectCreatedImageAnonById.get(imageId);
+	if (!image) {
+		logCreationWarn(`Anon image ${imageId} not found`);
+		return { ok: false, reason: "not_found" };
+	}
+	if (image.status && image.status !== "creating") {
+		logCreation(`Skipping anon job - image ${imageId} already ${image.status}`);
+		return { ok: true, skipped: true, status: image.status };
+	}
+
+	const existingMeta = parseMeta(image.meta);
+
+	const server = await queries.selectServerById.get(server_id);
+	if (!server || server.status !== "active") {
+		const errorMsg = !server ? "Server not found" : "Server is not active";
+		logCreationError(`Anon server validation failed: ${errorMsg}`, { server_id });
+		const nextMeta = mergeMeta(existingMeta, {
+			failed_at: new Date().toISOString(),
+			error_code: "provider_error",
+			error: errorMsg
+		});
+		await queries.updateCreatedImageAnonJobFailed.run(imageId, { meta: nextMeta });
+		return { ok: false, reason: "invalid_server" };
+	}
+
+	let imageBuffer;
+	let width = DEFAULT_WIDTH;
+	let height = DEFAULT_HEIGHT;
+
+	try {
+		const providerResponse = await fetch(server.server_url, {
+			method: "POST",
+			headers: buildProviderHeaders(
+				{ "Content-Type": "application/json", Accept: "image/png" },
+				server.auth_token
+			),
+			body: JSON.stringify({ method, args: args || {} }),
+			signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+		});
+
+		if (!providerResponse.ok) {
+			const payloadErr = await readProviderErrorPayload(providerResponse);
+			const providerMessage = providerBodyToMessage(payloadErr.body);
+			const err = new Error(providerMessage || `Provider error: ${providerResponse.status} ${providerResponse.statusText}`);
+			err.code = "PROVIDER_NON_2XX";
+			err.provider = {
+				status: providerResponse.status,
+				statusText: providerResponse.statusText,
+				contentType: payloadErr.contentType,
+				body: payloadErr.body
+			};
+			throw err;
+		}
+
+		const providerContentType = String(providerResponse.headers.get("content-type") || "").toLowerCase();
+		if (providerContentType && !providerContentType.includes("image/png")) {
+			logCreationWarn("Provider returned non-PNG; converting to PNG", { providerContentType });
+		}
+		const rawBuffer = Buffer.from(await providerResponse.arrayBuffer());
+		imageBuffer = await ensurePngBuffer(rawBuffer);
+
+		const headerWidth = providerResponse.headers.get("X-Image-Width");
+		const headerHeight = providerResponse.headers.get("X-Image-Height");
+		if (headerWidth) width = Number.parseInt(headerWidth, 10) || width;
+		if (headerHeight) height = Number.parseInt(headerHeight, 10) || height;
+	} catch (err) {
+		const startedAtMs = existingMeta?.started_at ? Date.parse(existingMeta.started_at) : NaN;
+		const failedAtIso = new Date().toISOString();
+		const failedAtMs = Date.parse(failedAtIso);
+		const durationMs =
+			Number.isFinite(startedAtMs) && Number.isFinite(failedAtMs) && failedAtMs >= startedAtMs
+				? failedAtMs - startedAtMs
+				: null;
+		const errorCode = inferErrorCode(err);
+		const providerDetails =
+			err && typeof err === "object" && err.provider && typeof err.provider === "object" ? err.provider : null;
+		const errorMsg = safeErrorMessage(err);
+		const providerMsg = providerDetails ? providerBodyToMessage(providerDetails.body) : "";
+		const nextMeta = mergeMeta(existingMeta, {
+			failed_at: failedAtIso,
+			error_code: errorCode,
+			error: providerMsg || errorMsg,
+			...(providerDetails ? { provider_error: providerDetails } : {}),
+			...(Number.isFinite(durationMs) && durationMs >= 0 ? { duration_ms: durationMs } : {}),
+		});
+		await queries.updateCreatedImageAnonJobFailed.run(imageId, { meta: nextMeta });
+		return { ok: false, reason: "provider_failed" };
+	}
+
+	const timestamp = Date.now();
+	const random = Math.random().toString(36).substring(2, 9);
+	const filename = `anon_${imageId}_${timestamp}_${random}.png`;
+
+	const imageUrl = await storage.uploadImageAnon(imageBuffer, filename);
+	const completedAtIso = new Date().toISOString();
+	const startedAtMs = existingMeta?.started_at ? Date.parse(existingMeta.started_at) : NaN;
+	const completedAtMs = Date.parse(completedAtIso);
+	const durationMs =
+		Number.isFinite(startedAtMs) && Number.isFinite(completedAtMs) && completedAtMs >= startedAtMs
+			? completedAtMs - startedAtMs
+			: null;
+	const completedMeta = mergeMeta(existingMeta, {
+		completed_at: completedAtIso,
+		...(Number.isFinite(durationMs) && durationMs >= 0 ? { duration_ms: durationMs } : {}),
+	});
+
+	await queries.updateCreatedImageAnonJobCompleted.run(imageId, {
+		filename,
+		file_path: imageUrl,
+		width,
+		height,
+		meta: completedMeta,
+	});
+
+	await queries.updateTryRequestFulfilledByCreatedImageAnonId?.run?.(imageId, completedAtIso);
+
+	logCreation("Anon job completed", { imageId, filename, width, height });
+	return { ok: true, id: imageId, filename, url: imageUrl, width, height };
+}
+
 export { PROVIDER_TIMEOUT_MS };
 

@@ -81,6 +81,44 @@ function ensureCreatedImagesMetaColumn(db) {
 	}
 }
 
+function ensureCreatedImagesAnonPromptColumn(db) {
+	try {
+		const columns = db.prepare("PRAGMA table_info(created_images_anon)").all();
+		const hasPrompt = columns.some((column) => column.name === "prompt");
+		if (!hasPrompt) {
+			db.exec("ALTER TABLE created_images_anon ADD COLUMN prompt TEXT");
+		}
+	} catch (error) {
+		// ignore
+	}
+}
+
+function ensureCreatedImagesAnonDroppedAnonCidAndColor(db) {
+	try {
+		let columns = db.prepare("PRAGMA table_info(created_images_anon)").all();
+		if (columns.some((c) => c.name === "anon_cid")) {
+			db.exec("ALTER TABLE created_images_anon DROP COLUMN anon_cid");
+			columns = db.prepare("PRAGMA table_info(created_images_anon)").all();
+		}
+		if (columns.some((c) => c.name === "color")) {
+			db.exec("ALTER TABLE created_images_anon DROP COLUMN color");
+		}
+	} catch (error) {
+		// ignore (e.g. SQLite < 3.35 without DROP COLUMN)
+	}
+}
+
+function ensureTryRequestsMetaColumn(db) {
+	try {
+		const columns = db.prepare("PRAGMA table_info(try_requests)").all();
+		if (!columns.some((c) => c.name === "meta")) {
+			db.exec("ALTER TABLE try_requests ADD COLUMN meta TEXT");
+		}
+	} catch (error) {
+		// ignore
+	}
+}
+
 function parseUserMeta(value) {
 	if (value == null) return {};
 	if (typeof value === "object") return value;
@@ -101,6 +139,9 @@ export async function openDb() {
 	ensureUsersLastActiveAtColumn(db);
 	ensureUsersMetaColumn(db);
 	ensureCreatedImagesMetaColumn(db);
+	ensureCreatedImagesAnonPromptColumn(db);
+	ensureCreatedImagesAnonDroppedAnonCidAndColor(db);
+	ensureTryRequestsMetaColumn(db);
 
 	const transferCreditsTxn = db.transaction((fromUserId, toUserId, amount) => {
 		const ensureCreditsRowStmt = db.prepare(
@@ -1278,6 +1319,115 @@ export async function openDb() {
 				return Promise.resolve(stmt.get(filename));
 			}
 		},
+		// Anonymous (try) creations (no anon_cid or color; try_requests links requesters to images)
+		insertCreatedImageAnon: {
+			run: async (prompt, filename, filePath, width, height, status, meta) => {
+				const toJsonText = (v) => (v == null ? null : typeof v === "string" ? v : JSON.stringify(v));
+				const stmt = db.prepare(
+					`INSERT INTO created_images_anon (prompt, filename, file_path, width, height, status, meta)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
+				);
+				const result = stmt.run(prompt ?? null, filename, filePath, width, height, status, toJsonText(meta));
+				return Promise.resolve({ insertId: result.lastInsertRowid, changes: result.changes });
+			}
+		},
+		selectCreatedImageAnonById: {
+			get: async (id) => {
+				const stmt = db.prepare(
+					`SELECT id, prompt, filename, file_path, width, height, status, created_at, meta
+           FROM created_images_anon WHERE id = ?`
+				);
+				return Promise.resolve(stmt.get(id));
+			}
+		},
+		selectCreatedImagesAnonByIds: {
+			all: async (ids) => {
+				const safeIds = Array.isArray(ids)
+					? ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
+					: [];
+				if (safeIds.length === 0) return [];
+				const placeholders = safeIds.map(() => "?").join(",");
+				const stmt = db.prepare(
+					`SELECT id, prompt, filename, file_path, width, height, status, created_at, meta
+           FROM created_images_anon WHERE id IN (${placeholders})`
+				);
+				return Promise.resolve(stmt.all(...safeIds));
+			}
+		},
+		/** Up to limit recent completed rows for this prompt, for cache reuse. sinceIso = created_at >= this (e.g. 24h ago). */
+		selectRecentCompletedCreatedImageAnonByPrompt: {
+			all: async (prompt, sinceIso, limit = 5) => {
+				if (prompt == null || String(prompt).trim() === "") return [];
+				const safeLimit = Math.min(Math.max(Number(limit) || 5, 1), 20);
+				const stmt = db.prepare(
+					`SELECT id, prompt, filename, file_path, width, height, status, created_at, meta
+           FROM created_images_anon WHERE prompt = ? AND status = 'completed' AND created_at >= ?
+           ORDER BY created_at DESC LIMIT ?`
+				);
+				return Promise.resolve(stmt.all(String(prompt).trim(), sinceIso, safeLimit));
+			}
+		},
+		selectTryRequestByCidAndPrompt: {
+			get: async (anonCid, prompt) => {
+				if (prompt == null || String(prompt).trim() === "") return undefined;
+				const stmt = db.prepare(
+					`SELECT id, anon_cid, prompt, created_at, fulfilled_at, created_image_anon_id
+           FROM try_requests WHERE anon_cid = ? AND prompt = ? ORDER BY created_at DESC LIMIT 1`
+				);
+				return Promise.resolve(stmt.get(anonCid, String(prompt).trim()));
+			}
+		},
+		selectTryRequestsByCid: {
+			all: async (anonCid) => {
+				const stmt = db.prepare(
+					`SELECT id, anon_cid, prompt, created_at, fulfilled_at, created_image_anon_id
+           FROM try_requests WHERE anon_cid = ? ORDER BY created_at DESC`
+				);
+				return Promise.resolve(stmt.all(anonCid));
+			}
+		},
+		updateCreatedImageAnonJobCompleted: {
+			run: async (id, { filename, file_path, width, height, meta }) => {
+				const toJsonText = (v) => (v == null ? null : typeof v === "string" ? v : JSON.stringify(v));
+				const stmt = db.prepare(
+					`UPDATE created_images_anon
+             SET filename = ?, file_path = ?, width = ?, height = ?, status = 'completed', meta = ?
+             WHERE id = ?`
+				);
+				const result = stmt.run(filename, file_path, width, height, toJsonText(meta), id);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		updateCreatedImageAnonJobFailed: {
+			run: async (id, { meta }) => {
+				const toJsonText = (v) => (v == null ? null : typeof v === "string" ? v : JSON.stringify(v));
+				const stmt = db.prepare(
+					`UPDATE created_images_anon SET status = 'failed', meta = ? WHERE id = ?`
+				);
+				const result = stmt.run(toJsonText(meta), id);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		insertTryRequest: {
+			run: async (anonCid, prompt, created_image_anon_id, fulfilled_at = null, meta = null) => {
+				const toJsonText = (v) => (v == null ? null : typeof v === "string" ? v : JSON.stringify(v));
+				const stmt = db.prepare(
+					`INSERT INTO try_requests (anon_cid, prompt, created_image_anon_id, fulfilled_at, meta)
+           VALUES (?, ?, ?, ?, ?)`
+				);
+				const result = stmt.run(anonCid, prompt ?? null, created_image_anon_id, fulfilled_at, toJsonText(meta));
+				return Promise.resolve({ insertId: result.lastInsertRowid, changes: result.changes });
+			}
+		},
+		updateTryRequestFulfilledByCreatedImageAnonId: {
+			run: async (created_image_anon_id, fulfilled_at_iso) => {
+				const stmt = db.prepare(
+					`UPDATE try_requests SET fulfilled_at = ? WHERE created_image_anon_id = ? AND fulfilled_at IS NULL`
+				);
+				const result = stmt.run(fulfilled_at_iso, created_image_anon_id);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
 		selectCreatedImageDescriptionAndMetaByIds: {
 			all: async (ids) => {
 				const safeIds = Array.isArray(ids)
@@ -1737,11 +1887,18 @@ export async function openDb() {
 
 	// Storage interface for images
 	const imagesDir = path.join(dataDir, "images", "created");
+	const imagesDirAnon = path.join(dataDir, "images", "created_anon");
 	const genericImagesDir = path.join(dataDir, "images", "generic");
 
 	function ensureImagesDir() {
 		if (!fs.existsSync(imagesDir)) {
 			fs.mkdirSync(imagesDir, { recursive: true });
+		}
+	}
+
+	function ensureImagesDirAnon() {
+		if (!fs.existsSync(imagesDirAnon)) {
+			fs.mkdirSync(imagesDirAnon, { recursive: true });
 		}
 	}
 
@@ -1777,6 +1934,23 @@ export async function openDb() {
 
 		getImageBuffer: async (filename) => {
 			const filePath = path.join(imagesDir, filename);
+			if (!fs.existsSync(filePath)) {
+				throw new Error(`Image not found: ${filename}`);
+			}
+			return fs.readFileSync(filePath);
+		},
+
+		uploadImageAnon: async (buffer, filename) => {
+			ensureImagesDirAnon();
+			const filePath = path.join(imagesDirAnon, filename);
+			fs.writeFileSync(filePath, buffer);
+			return `/api/try/images/${filename}`;
+		},
+
+		getImageUrlAnon: (filename) => `/api/try/images/${filename}`,
+
+		getImageBufferAnon: async (filename) => {
+			const filePath = path.join(imagesDirAnon, filename);
 			if (!fs.existsSync(filePath)) {
 				throw new Error(`Image not found: ${filename}`);
 			}

@@ -200,3 +200,31 @@ CREATE INDEX IF NOT EXISTS idx_comments_created_image_created_image_id_created_a
 
 CREATE INDEX IF NOT EXISTS idx_comments_created_image_user_id
   ON comments_created_image(user_id);
+
+-- Anonymous (try) creations: prompt-pool and per-request images. try_requests links anon_cid to created_image_anon_id.
+CREATE TABLE IF NOT EXISTS created_images_anon (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  prompt TEXT,
+  filename TEXT NOT NULL,
+  file_path TEXT NOT NULL,
+  width INTEGER NOT NULL,
+  height INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'creating',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  meta TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_created_images_anon_prompt ON created_images_anon(prompt);
+
+-- Try requests: one row per try create call, keyed by anon_cid. Maps request to how it was served.
+CREATE TABLE IF NOT EXISTS try_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  anon_cid TEXT NOT NULL,
+  prompt TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  fulfilled_at TEXT,
+  created_image_anon_id INTEGER NOT NULL,
+  meta TEXT,
+  FOREIGN KEY (created_image_anon_id) REFERENCES created_images_anon(id)
+);
+CREATE INDEX IF NOT EXISTS idx_try_requests_anon_cid ON try_requests(anon_cid);
+CREATE INDEX IF NOT EXISTS idx_try_requests_created_image_anon_id ON try_requests(created_image_anon_id);

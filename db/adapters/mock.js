@@ -19,6 +19,8 @@ const templates = [];
 const user_follows = [];
 
 const created_images = [];
+const created_images_anon = [];
+const try_requests = [];
 const sessions = [];
 const user_credits = [];
 const likes_created_image = [];
@@ -30,6 +32,7 @@ const dataDir = process.env.VERCEL
 	? "/tmp/parascene-data"
 	: path.join(__dirname, "..", "data");
 const imagesDir = path.join(dataDir, "images", "created");
+const imagesDirAnon = path.join(dataDir, "images", "created_anon");
 const genericImagesDir = path.join(dataDir, "images", "generic");
 
 function ensureImagesDir() {
@@ -43,6 +46,14 @@ function ensureImagesDir() {
 		// console.warn(`Warning: Could not create images directory: ${error.message}`);
 		// console.warn("Images will not be persisted to disk. Consider using Supabase adapter on Vercel.");
 	}
+}
+
+function ensureImagesDirAnon() {
+	try {
+		if (!fs.existsSync(imagesDirAnon)) {
+			fs.mkdirSync(imagesDirAnon, { recursive: true });
+		}
+	} catch (_) {}
 }
 
 function ensureGenericImagesDir() {
@@ -817,6 +828,119 @@ export function openDb() {
 				);
 			}
 		},
+		insertCreatedImageAnon: {
+			run: async (prompt, filename, filePath, width, height, status, meta) => {
+				const id = created_images_anon.length > 0
+					? Math.max(...created_images_anon.map((i) => i.id || 0)) + 1
+					: 1;
+				created_images_anon.push({
+					id,
+					prompt: prompt ?? null,
+					filename,
+					file_path: filePath,
+					width,
+					height,
+					status,
+					created_at: new Date().toISOString(),
+					meta: meta ?? null
+				});
+				return Promise.resolve({ insertId: id, changes: 1 });
+			}
+		},
+		selectCreatedImageAnonById: {
+			get: async (id) => created_images_anon.find((r) => r.id === Number(id))
+		},
+		selectCreatedImagesAnonByIds: {
+			all: async (ids) => {
+				const safeIds = (Array.isArray(ids) ? ids : []).map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0);
+				const idSet = new Set(safeIds);
+				return created_images_anon.filter((r) => r.id != null && idSet.has(Number(r.id)));
+			}
+		},
+		selectRecentCompletedCreatedImageAnonByPrompt: {
+			all: async (prompt, sinceIso, limit = 5) => {
+				if (prompt == null || String(prompt).trim() === "") return [];
+				const key = String(prompt).trim();
+				const since = new Date(sinceIso).getTime();
+				const safeLimit = Math.min(Math.max(Number(limit) || 5, 1), 20);
+				return created_images_anon
+					.filter(
+						(r) =>
+							r.prompt === key &&
+							r.status === "completed" &&
+							new Date(r.created_at).getTime() >= since
+					)
+					.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+					.slice(0, safeLimit);
+			}
+		},
+		selectTryRequestByCidAndPrompt: {
+			get: async (anonCid, prompt) => {
+				if (prompt == null || String(prompt).trim() === "") return undefined;
+				const key = String(prompt).trim();
+				const matches = try_requests
+					.filter((r) => r.anon_cid === anonCid && r.prompt === key)
+					.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+				return matches[0] ?? undefined;
+			}
+		},
+		selectTryRequestsByCid: {
+			all: async (anonCid) =>
+				try_requests
+					.filter((r) => r.anon_cid === anonCid)
+					.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+		},
+		updateCreatedImageAnonJobCompleted: {
+			run: async (id, { filename, file_path, width, height, meta }) => {
+				const row = created_images_anon.find((r) => r.id === Number(id));
+				if (!row) return Promise.resolve({ changes: 0 });
+				row.filename = filename;
+				row.file_path = file_path;
+				row.width = width;
+				row.height = height;
+				row.status = "completed";
+				row.meta = meta ?? row.meta;
+				return Promise.resolve({ changes: 1 });
+			}
+		},
+		updateCreatedImageAnonJobFailed: {
+			run: async (id, { meta }) => {
+				const row = created_images_anon.find((r) => r.id === Number(id));
+				if (!row) return Promise.resolve({ changes: 0 });
+				row.status = "failed";
+				row.meta = meta ?? row.meta;
+				return Promise.resolve({ changes: 1 });
+			}
+		},
+		insertTryRequest: {
+			run: async (anonCid, prompt, created_image_anon_id, fulfilled_at = null, meta = null) => {
+				const id =
+					try_requests.length > 0
+						? Math.max(...try_requests.map((r) => r.id || 0)) + 1
+						: 1;
+				try_requests.push({
+					id,
+					anon_cid: anonCid,
+					prompt: prompt ?? null,
+					created_at: new Date().toISOString(),
+					fulfilled_at: fulfilled_at ?? null,
+					created_image_anon_id: Number(created_image_anon_id),
+					meta: meta ?? null,
+				});
+				return Promise.resolve({ insertId: id, changes: 1 });
+			}
+		},
+		updateTryRequestFulfilledByCreatedImageAnonId: {
+			run: async (created_image_anon_id, fulfilled_at_iso) => {
+				const rows = try_requests.filter(
+					(r) => r.created_image_anon_id === Number(created_image_anon_id) && r.fulfilled_at == null
+				);
+				rows.forEach((r) => {
+					r.fulfilled_at = fulfilled_at_iso;
+				});
+				return Promise.resolve({ changes: rows.length });
+			}
+		},
 		selectCreatedImageDescriptionAndMetaByIds: {
 			all: async (ids) => {
 				const safeIds = Array.isArray(ids)
@@ -1427,6 +1551,27 @@ export function openDb() {
 				// throw a clear error
 				throw new Error(`Image file not available: ${filename}. This may occur on serverless platforms. Consider using Supabase adapter.`);
 			}
+		},
+
+		uploadImageAnon: async (buffer, filename) => {
+			try {
+				ensureImagesDirAnon();
+				const filePath = path.join(imagesDirAnon, filename);
+				fs.writeFileSync(filePath, buffer);
+				return `/api/try/images/${filename}`;
+			} catch (_) {
+				return `/api/try/images/${filename}`;
+			}
+		},
+
+		getImageUrlAnon: (filename) => `/api/try/images/${filename}`,
+
+		getImageBufferAnon: async (filename) => {
+			const filePath = path.join(imagesDirAnon, filename);
+			if (!fs.existsSync(filePath)) {
+				throw new Error(`Image not found: ${filename}`);
+			}
+			return fs.readFileSync(filePath);
 		},
 
 		getGenericImageBuffer: async (key) => {
