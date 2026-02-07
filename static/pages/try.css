@@ -191,3 +191,29 @@ body.try-page header.scrolled::before {
 .try-prompt:empty {
 	display: none;
 }
+
+/* Result image (replaces generating state) */
+.try-result-image {
+	display: block;
+	width: 100%;
+	height: auto;
+	aspect-ratio: 1;
+	object-fit: cover;
+	border-radius: 10px;
+	background: color-mix(in srgb, var(--text) 6%, var(--bg));
+}
+
+/* Error state when generation fails or times out */
+.try-error {
+	margin: 0;
+	padding: 1.5rem;
+	text-align: center;
+	font-weight: 600;
+	color: var(--text);
+	background: color-mix(in srgb, var(--text) 8%, var(--bg));
+	border-radius: 10px;
+	min-height: 200px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}

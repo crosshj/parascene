@@ -37,18 +37,14 @@ async function ensurePngBuffer(buffer) {
 	return await sharp(buffer, { failOn: "none" }).png().toBuffer();
 }
 
-/** Pick first active server and a default method with args { prompt }. Returns { server_id, method, args } or null. */
-async function getDefaultServerAndArgs(queries, prompt) {
-	const servers = await queries.selectServers?.all?.();
-	if (!Array.isArray(servers)) return null;
-	const active = servers.find((s) => s.status === "active");
-	if (!active) return null;
-	const methods = active.server_config?.methods;
-	const methodNames = methods && typeof methods === "object" ? Object.keys(methods) : [];
-	const method = methodNames[0] || "advanced_query";
+/** Hardcoded server/method for try/create (matches create page: server 1, fluxImage). */
+const TRY_DEFAULT_SERVER_ID = 1;
+const TRY_DEFAULT_METHOD = "fluxImage";
+
+function getTryServerAndArgs(prompt) {
 	return {
-		server_id: active.id,
-		method,
+		server_id: TRY_DEFAULT_SERVER_ID,
+		method: TRY_DEFAULT_METHOD,
 		args: typeof prompt === "string" && prompt.trim() ? { prompt: prompt.trim() } : {},
 	};
 }
@@ -117,13 +113,7 @@ export default function createTryRoutes({ queries, storage }) {
 
 		if (server_id == null || !method) {
 			const prompt = body.prompt;
-			const defaults = await getDefaultServerAndArgs(queries, prompt);
-			if (!defaults) {
-				return res.status(503).json({
-					error: "No server",
-					message: "No active server available for try. Provide server_id and method.",
-				});
-			}
+			const defaults = getTryServerAndArgs(prompt);
 			server_id = server_id ?? defaults.server_id;
 			method = method ?? defaults.method;
 			if (Object.keys(args).length === 0 && defaults.args && Object.keys(defaults.args).length > 0) {

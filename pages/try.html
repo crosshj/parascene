@@ -61,15 +61,88 @@
 				var prompt = params.get('prompt');
 				p.textContent = prompt != null ? prompt : '';
 			}
-			// Cookie the user so we can identify them (policy "seen" = set ps_cid + fingerprint).
-			var tz = typeof Intl !== "undefined" && Intl.DateTimeFormat && Intl.DateTimeFormat().resolvedOptions && Intl.DateTimeFormat().resolvedOptions().timeZone ? Intl.DateTimeFormat().resolvedOptions().timeZone : "";
-			var screenHint = typeof window.screen !== "undefined" ? window.screen.width + "x" + window.screen.height : "";
-			fetch("/api/policy/seen", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				credentials: "include",
-				body: JSON.stringify({ tz: tz, screen: screenHint })
-			}).catch(function () {});
+		})();
+	</script>
+	<script type="module">
+		(function () {
+			var params = new URLSearchParams(window.location.search);
+			var prompt = params.get('prompt');
+			if (prompt == null || String(prompt).trim() === '') return;
+
+			var media = document.querySelector('.try-main .share-hero-media');
+			if (!media) return;
+
+			function setGenerating() {
+				media.innerHTML = '<div class="try-generating share-image" aria-live="polite" aria-busy="true">' +
+					'<div class="try-generating-blob try-generating-blob-1" aria-hidden="true"></div>' +
+					'<div class="try-generating-blob try-generating-blob-2" aria-hidden="true"></div>' +
+					'<div class="try-generating-blob try-generating-blob-3" aria-hidden="true"></div>' +
+					'<div class="try-generating-blob try-generating-blob-4" aria-hidden="true"></div>' +
+					'<span class="try-generating-text">Generating your image…</span></div>';
+			}
+
+			function showImage(url) {
+				media.innerHTML = '<img src="' + url.replace(/"/g, '&quot;') + '" alt="Generated image" class="try-result-image" />';
+			}
+
+			function showError(msg) {
+				media.innerHTML = '<p class="try-error">' + (msg || 'Something went wrong.') + '</p>';
+			}
+
+			async function run() {
+				var tz = typeof Intl !== 'undefined' && Intl.DateTimeFormat && Intl.DateTimeFormat().resolvedOptions && Intl.DateTimeFormat().resolvedOptions().timeZone ? Intl.DateTimeFormat().resolvedOptions().timeZone : '';
+				var screenHint = typeof window.screen !== 'undefined' ? window.screen.width + 'x' + window.screen.height : '';
+				await fetch('/api/policy/seen', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					credentials: 'include',
+					body: JSON.stringify({ tz: tz, screen: screenHint })
+				}).catch(function () {});
+
+				var createRes = await fetch('/api/try/create', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					credentials: 'include',
+					body: JSON.stringify({ prompt: prompt.trim() })
+				});
+				if (!createRes.ok) {
+					showError(createRes.status === 400 ? 'Please enable cookies and refresh.' : 'Could not start generation.');
+					return;
+				}
+				var data = await createRes.json();
+				if (data.status === 'completed' && data.url) {
+					showImage(data.url);
+					return;
+				}
+				var id = data.id;
+				if (!id) {
+					setGenerating();
+					return;
+				}
+
+				var pollMs = 2000;
+				var maxPolls = 120;
+				var pollCount = 0;
+				while (pollCount < maxPolls) {
+					await new Promise(function (r) { setTimeout(r, pollMs); });
+					pollCount++;
+					var listRes = await fetch('/api/try/list', { credentials: 'include' });
+					if (!listRes.ok) break;
+					var list = await listRes.json();
+					var item = Array.isArray(list) ? list.find(function (i) { return i.id === id; }) : null;
+					if (!item) continue;
+					if (item.status === 'completed' && item.url) {
+						showImage(item.url);
+						return;
+					}
+					if (item.status === 'failed') {
+						showError((item.meta && item.meta.error) || 'Generation failed.');
+						return;
+					}
+				}
+				showError('This is taking longer than usual. Refresh to check again.');
+			}
+			run();
 		})();
 	</script>
 	<script type="module">
