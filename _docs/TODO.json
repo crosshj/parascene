@@ -70,13 +70,6 @@
     "dependsOn": []
   },
   {
-    "name": "Generate from uploaded image",
-    "description": "Main create flow: user uploads an image and generates from it (img2img); wire upload to provider payload and create UI.",
-    "cost": 65,
-    "impact": 90,
-    "dependsOn": []
-  },
-  {
     "name": "Search comments/descriptions/prompts",
     "description": "Full-text search over creation metadata: comments, descriptions, prompts.",
     "cost": 68,
