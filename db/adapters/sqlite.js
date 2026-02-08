@@ -550,6 +550,48 @@ export async function openDb() {
 				return Promise.resolve({ changes: result.changes });
 			}
 		},
+		setPasswordResetToken: {
+			run: async (userId, tokenHash, expiresAt) => {
+				const stmt = db.prepare("SELECT meta FROM users WHERE id = ?");
+				const row = stmt.get(userId);
+				const existing = parseUserMeta(row?.meta);
+				const meta = { ...existing, reset_token_hash: tokenHash, reset_token_expires_at: expiresAt };
+				const updateStmt = db.prepare("UPDATE users SET meta = ? WHERE id = ?");
+				const result = updateStmt.run(JSON.stringify(meta), userId);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		selectUserByResetTokenHash: {
+			get: async (tokenHash) => {
+				const stmt = db.prepare(
+					"SELECT id, email, password_hash, role, meta FROM users WHERE json_extract(meta, '$.reset_token_hash') = ?"
+				);
+				const row = stmt.get(tokenHash);
+				if (!row) return undefined;
+				const meta = parseUserMeta(row.meta);
+				return { ...row, meta, suspended: meta.suspended === true };
+			}
+		},
+		clearPasswordResetToken: {
+			run: async (userId) => {
+				const stmt = db.prepare("SELECT meta FROM users WHERE id = ?");
+				const row = stmt.get(userId);
+				const existing = parseUserMeta(row?.meta);
+				const meta = { ...existing };
+				delete meta.reset_token_hash;
+				delete meta.reset_token_expires_at;
+				const updateStmt = db.prepare("UPDATE users SET meta = ? WHERE id = ?");
+				const result = updateStmt.run(JSON.stringify(meta), userId);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		updateUserPassword: {
+			run: async (userId, passwordHash) => {
+				const stmt = db.prepare("UPDATE users SET password_hash = ? WHERE id = ?");
+				const result = stmt.run(passwordHash, userId);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
 		selectModerationQueue: {
 			all: async () => {
 				const stmt = db.prepare(

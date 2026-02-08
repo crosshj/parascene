@@ -50,6 +50,48 @@
 			<p>Already have an account? <a href="#login">Login</a></p>
 		</section>
 
+		<section id="forgot">
+			<form action="/forgot-password" method="post" autocomplete="on">
+				<input type="hidden" name="returnUrl" value="/" data-return-url />
+				<label>
+					Email
+					<input type="email" name="username" autocomplete="username" inputmode="email" required />
+				</label>
+				<button type="submit">Send reset link</button>
+			</form>
+			<br />
+			<p><a href="#login">Back to login</a></p>
+		</section>
+
+		<section id="reset">
+			<div id="reset-error" class="alert error margin-bottom-1" style="display:none;">
+				<strong>Invalid or expired link</strong>
+				<p>This link is invalid or has expired. <a href="#forgot">Request a new reset link</a>.</p>
+			</div>
+			<form action="/reset-password" method="post" autocomplete="on">
+				<input type="hidden" name="rt" value="" data-reset-token />
+				<label>
+					New password
+					<input type="password" name="password" autocomplete="new-password" required minlength="8" />
+				</label>
+				<label>
+					Confirm password
+					<input type="password" name="passwordConfirm" autocomplete="new-password" required minlength="8" />
+				</label>
+				<button type="submit">Reset password</button>
+			</form>
+			<br />
+			<p><a href="#login">Back to login</a></p>
+		</section>
+
+		<section id="sent">
+			<div class="alert margin-bottom-1">
+				<strong>Check your email</strong>
+				<p>If an account exists for that address, we sent a link to reset your password.</p>
+			</div>
+			<p><a href="#login">Back to login</a></p>
+		</section>
+
 		<section id="login">
 			<div id="fail" class="alert error margin-bottom-1">
 				<strong>Login failed</strong>
@@ -73,33 +115,53 @@
 			</form>
 			<br />
 			<p>Don't have an account? <a href="#signup">Signup</a></p>
+			<p class="auth-forgot-wrap"><a href="#forgot" class="auth-forgot-link">Forgot password?</a></p>
 		</section>
 
 	</main>
 
 	<script>
 		(function () {
-			try {
-				var params = new URLSearchParams(window.location.search || '');
-				var returnUrl = params.get('returnUrl');
-				if (returnUrl) {
-					// Basic client-side hardening; server still validates.
-					if (typeof returnUrl === 'string') {
-						returnUrl = returnUrl.trim();
-						if (returnUrl.startsWith('/') && !returnUrl.startsWith('//') && returnUrl.indexOf('://') === -1 && returnUrl.length <= 2048) {
-							var inputs = document.querySelectorAll('input[data-return-url][name="returnUrl"]');
-							inputs.forEach(function (el) {
-								el.value = returnUrl;
-							});
+			function initAuthPage() {
+				try {
+					var params = new URLSearchParams(window.location.search || '');
+					var returnUrl = params.get('returnUrl');
+					if (returnUrl) {
+						// Basic client-side hardening; server still validates.
+						if (typeof returnUrl === 'string') {
+							returnUrl = returnUrl.trim();
+							if (returnUrl.startsWith('/') && !returnUrl.startsWith('//') && returnUrl.indexOf('://') === -1 && returnUrl.length <= 2048) {
+								var inputs = document.querySelectorAll('input[data-return-url][name="returnUrl"]');
+								inputs.forEach(function (el) {
+									el.value = returnUrl;
+								});
+							}
 						}
 					}
-				}
-			} catch (e) {
-				// ignore
-			}
 
-			// Referral capture from share pages (session-scoped)
-			try {
+					// Reset token from email link: ?rt=TOKEN -> show #reset and fill hidden input (must run after DOM ready)
+					var rt = params.get('rt');
+					if (rt && typeof rt === 'string' && rt.length > 0) {
+						var elRt = document.querySelector('input[data-reset-token][name="rt"]');
+						if (elRt) {
+							elRt.value = rt;
+							elRt.setAttribute('value', rt);
+						}
+						window.location.hash = 'reset';
+					}
+
+					// Show messages based on query and hash
+					var hash = (window.location.hash || '').replace(/^#/, '');
+					if (params.get('error') === 'invalid' && hash === 'reset') {
+						var resetError = document.getElementById('reset-error');
+						if (resetError) resetError.style.display = 'block';
+					}
+				} catch (e) {
+					// ignore
+				}
+
+				// Referral capture from share pages (session-scoped)
+				try {
 				var raw = null;
 				try { raw = sessionStorage.getItem('ps_referral'); } catch (e) { raw = null; }
 				if (!raw) return;
@@ -123,8 +185,14 @@
 				var createdBy = Number(ref.created_by_user_id || 0);
 				var elCreatedBy = document.querySelector('input[data-referral-created-by-user-id][name="referral_created_by_user_id"]');
 				if (elCreatedBy && Number.isFinite(createdBy) && createdBy > 0) elCreatedBy.value = String(createdBy);
-			} catch (e) {
-				// ignore
+				} catch (e) {
+					// ignore
+				}
+			}
+			if (document.readyState === 'loading') {
+				document.addEventListener('DOMContentLoaded', initAuthPage);
+			} else {
+				initAuthPage();
 			}
 		})();
 	</script>

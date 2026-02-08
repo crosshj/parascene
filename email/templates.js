@@ -146,6 +146,40 @@ export function renderHelloFromParascene({ recipientName = "there" } = {}) {
 	return { subject, html: emailHtml, text };
 }
 
+export function renderPasswordReset({ recipientName = "there", resetUrl = "" } = {}) {
+	const safeName = escapeHtml(recipientName);
+	const subject = "Reset your parascene password";
+	const preheader = "Use the link below to set a new password for your parascene account.";
+	const bodyHtml = html`
+    <p style="margin:0 0 12px;">Hi ${safeName},</p>
+    <p style="margin:0 0 12px;">
+      We received a request to reset your password. Click the button below to choose a new password.
+    </p>
+    <p style="margin:0 0 12px;">
+      If you didn't request this, you can safely ignore this email. The link will expire in 1 hour.
+    </p>
+  `;
+	const emailHtml = baseEmailLayout({
+		preheader,
+		title: subject,
+		bodyHtml,
+		ctaText: "Reset password",
+		ctaUrl: resetUrl,
+		footerText: "You're receiving this email because a password reset was requested for your parascene account."
+	});
+	const text = [
+		`Hi ${recipientName},`,
+		"",
+		"We received a request to reset your password. Use the link below to choose a new password:",
+		"",
+		resetUrl,
+		"",
+		"If you didn't request this, you can safely ignore this email. The link will expire in 1 hour."
+	].join("\n");
+
+	return { subject, html: emailHtml, text };
+}
+
 function truncateMiddle(value, max = 240) {
 	const s = String(value ?? "");
 	if (s.length <= max) return s;
@@ -389,5 +423,6 @@ export function renderFeatureRequest({
 export const templates = {
 	helloFromParascene: renderHelloFromParascene,
 	commentReceived: renderCommentReceived,
-	featureRequest: renderFeatureRequest
+	featureRequest: renderFeatureRequest,
+	passwordReset: renderPasswordReset
 };

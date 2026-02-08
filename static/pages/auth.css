@@ -66,8 +66,48 @@ section[id="signup"]:target {
 	display: block;
 }
 
-section[id="signup"]:target~section[id="login"] {
+section[id="signup"]:target ~ section {
 	display: none;
+}
+
+section[id="forgot"]:target {
+	display: block;
+}
+
+section[id="forgot"]:target ~ section {
+	display: none;
+}
+
+section[id="reset"]:target {
+	display: block;
+}
+
+section[id="reset"]:target ~ section {
+	display: none;
+}
+
+section[id="sent"]:target {
+	display: block;
+}
+
+section[id="sent"]:target ~ section {
+	display: none;
+}
+
+/* Forgot password link: login only, below signup line, centered and muted */
+.auth-forgot-wrap {
+	margin-top: 8px;
+	margin-bottom: 0;
+}
+
+section[id="login"] .auth-forgot-link {
+	color: var(--text-muted);
+	font-weight: 500;
+	font-size: 0.875rem;
+}
+
+section[id="login"] .auth-forgot-link:hover {
+	color: var(--text);
 }
 
 /* Auth Page Typography Hierarchy */

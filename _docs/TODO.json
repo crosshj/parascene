@@ -65,13 +65,6 @@
 		]
 	},
 	{
-		"name": "Forgot password",
-		"description": "Password reset flow: request reset (email/token), reset form, secure token handling.",
-		"cost": 35,
-		"impact": 85,
-		"dependsOn": []
-	},
-	{
 		"name": "Generate from uploaded image",
 		"description": "Main create flow: user uploads an image and generates from it (img2img); wire upload to provider payload and create UI.",
 		"cost": 65,

@@ -265,6 +265,42 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		setPasswordResetToken: {
+			run: async (userId, tokenHash, expiresAt) => {
+				const user = users.find((u) => Number(u.id) === Number(userId));
+				if (!user) return { changes: 0 };
+				user.meta = user.meta != null && typeof user.meta === "object" ? { ...user.meta } : {};
+				user.meta.reset_token_hash = tokenHash;
+				user.meta.reset_token_expires_at = expiresAt;
+				return { changes: 1 };
+			}
+		},
+		selectUserByResetTokenHash: {
+			get: async (tokenHash) => {
+				const user = users.find((u) => u.meta?.reset_token_hash === tokenHash);
+				if (!user) return undefined;
+				const meta = user.meta != null && typeof user.meta === "object" ? user.meta : {};
+				return { ...user, meta, suspended: meta.suspended === true };
+			}
+		},
+		clearPasswordResetToken: {
+			run: async (userId) => {
+				const user = users.find((u) => Number(u.id) === Number(userId));
+				if (!user) return { changes: 0 };
+				user.meta = user.meta != null && typeof user.meta === "object" ? { ...user.meta } : {};
+				delete user.meta.reset_token_hash;
+				delete user.meta.reset_token_expires_at;
+				return { changes: 1 };
+			}
+		},
+		updateUserPassword: {
+			run: async (userId, passwordHash) => {
+				const user = users.find((u) => Number(u.id) === Number(userId));
+				if (!user) return { changes: 0 };
+				user.password_hash = passwordHash;
+				return { changes: 1 };
+			}
+		},
 		selectModerationQueue: {
 			all: async () => [...moderation_queue]
 		},

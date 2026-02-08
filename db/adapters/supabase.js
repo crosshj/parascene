@@ -389,6 +389,71 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		setPasswordResetToken: {
+			run: async (userId, tokenHash, expiresAt) => {
+				const { data: current, error: selectError } = await serviceClient
+					.from(prefixedTable("users"))
+					.select("meta")
+					.eq("id", userId)
+					.maybeSingle();
+				if (selectError) throw selectError;
+				const existing = current?.meta ?? null;
+				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
+				meta.reset_token_hash = tokenHash;
+				meta.reset_token_expires_at = expiresAt;
+				const { error } = await serviceClient
+					.from(prefixedTable("users"))
+					.update({ meta })
+					.eq("id", userId);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
+		selectUserByResetTokenHash: {
+			get: async (tokenHash) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("users"))
+					.select("id, email, password_hash, role, meta")
+					.contains("meta", { reset_token_hash: tokenHash })
+					.maybeSingle();
+				if (error) throw error;
+				if (!data) return undefined;
+				const meta = typeof data.meta === "object" && data.meta !== null ? data.meta : {};
+				return { ...data, meta, suspended: meta.suspended === true };
+			}
+		},
+		clearPasswordResetToken: {
+			run: async (userId) => {
+				const { data: current, error: selectError } = await serviceClient
+					.from(prefixedTable("users"))
+					.select("meta")
+					.eq("id", userId)
+					.maybeSingle();
+				if (selectError) throw selectError;
+				const existing = current?.meta ?? null;
+				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
+				delete meta.reset_token_hash;
+				delete meta.reset_token_expires_at;
+				const { error } = await serviceClient
+					.from(prefixedTable("users"))
+					.update({ meta })
+					.eq("id", userId);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
+		updateUserPassword: {
+			run: async (userId, passwordHash) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("users"))
+					.update({ password_hash: passwordHash })
+					.eq("id", userId)
+					.select("id");
+				if (error) throw error;
+				const changes = Array.isArray(data) && data.length > 0 ? data.length : 0;
+				return { changes };
+			}
+		},
 		selectModerationQueue: {
 			all: async () => {
 				// Use serviceClient to bypass RLS for backend operations

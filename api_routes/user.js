@@ -1,9 +1,11 @@
+import crypto from "crypto";
 import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import Busboy from "busboy";
 import path from "path";
 import sharp from "sharp";
+import { sendTemplatedEmail } from "../email/index.js";
 import {
 	COOKIE_NAME,
 	ONE_WEEK_MS,
@@ -359,6 +361,77 @@ export default function createProfileRoutes({ queries }) {
 		clearAuthCookie(res, req);
 		// res.redirect("/auth");
 		res.redirect("/");
+	});
+
+	router.post("/forgot-password", async (req, res) => {
+		const email = String(req.body.username || req.body.email || "")
+			.trim()
+			.toLowerCase();
+		if (!email) {
+			return res.redirect("/auth#sent");
+		}
+		const user = await queries.selectUserByEmail.get(email);
+		if (user && queries.setPasswordResetToken) {
+			const rawToken = crypto.randomBytes(32).toString("hex");
+			const tokenHash = hashToken(rawToken);
+			const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+			try {
+				await queries.setPasswordResetToken.run(user.id, tokenHash, expiresAt);
+				const resetUrl =
+					"https://parascene.crosshj.com/auth?rt=" +
+					encodeURIComponent(rawToken) +
+					"#reset";
+				const recipientName =
+					typeof user.email === "string" && user.email.includes("@")
+						? user.email.split("@")[0]
+						: "there";
+				if (process.env.RESEND_API_KEY && process.env.RESEND_SYSTEM_EMAIL) {
+					await sendTemplatedEmail({
+						to: user.email,
+						template: "passwordReset",
+						data: { recipientName, resetUrl }
+					});
+				}
+			} catch (err) {
+				// Log but do not reveal failure; same response as success
+			}
+		}
+		return res.redirect("/auth#sent");
+	});
+
+	router.post("/reset-password", async (req, res) => {
+		const token = String(req.body.rt ?? "").trim();
+		const password = String(req.body.password ?? "");
+		if (!token || !password) {
+			return res.redirect("/auth?error=invalid#reset");
+		}
+		if (!queries.selectUserByResetTokenHash || !queries.updateUserPassword || !queries.clearPasswordResetToken) {
+			return res.redirect("/auth?error=invalid#reset");
+		}
+		const tokenHash = hashToken(token);
+		const user = await queries.selectUserByResetTokenHash.get(tokenHash);
+		if (!user || !user.meta) {
+			return res.redirect("/auth?error=invalid#reset");
+		}
+		const expiresAt = user.meta.reset_token_expires_at;
+		if (!expiresAt || new Date(expiresAt) < new Date()) {
+			return res.redirect("/auth?error=invalid#reset");
+		}
+		const userId = Number(user.id);
+		if (!Number.isFinite(userId) || userId < 1) {
+			return res.redirect("/auth?error=invalid#reset");
+		}
+		try {
+			const passwordHash = bcrypt.hashSync(password, 12);
+			const updateResult = await queries.updateUserPassword.run(userId, passwordHash);
+			if (updateResult?.changes !== undefined && updateResult.changes === 0) {
+				throw new Error("Password update affected no rows");
+			}
+			await queries.clearPasswordResetToken.run(userId);
+		} catch (err) {
+			return res.redirect("/auth?error=invalid#reset");
+		}
+		return res.redirect("/auth#login");
 	});
 
 	router.get("/me", (req, res) => {
