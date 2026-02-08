@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import sharp from "sharp";
 
 function guessContentType(key) {
 	const ext = path.extname(String(key || "")).toLowerCase();
@@ -12,7 +13,7 @@ function guessContentType(key) {
 
 function normalizeUploadKind(value) {
 	const v = String(value || "").toLowerCase().trim();
-	if (v === "avatar" || v === "cover") return v;
+	if (v === "avatar" || v === "cover" || v === "edited") return v;
 	return "generic";
 }
 
@@ -59,11 +60,12 @@ export default function createImagesRoutes({ storage }) {
 			return res.status(400).json({ error: "Invalid key" });
 		}
 
-		// Public-read subset: profile images (avatars/covers) must be viewable on share pages.
-		// Keep the rest of the generic bucket auth-gated to avoid accidentally exposing private uploads.
+		// Public-read subset: profile images (avatars/covers) and edited images (provider fetch) are viewable without auth.
 		const isPublicProfileKey =
 			key.startsWith("profile/") && !key.includes("..") && !key.startsWith("profile//");
-		if (!isPublicProfileKey && !req.auth?.userId) {
+		const isPublicEditedKey =
+			key.startsWith("edited/") && !key.includes("..") && !key.startsWith("edited//");
+		if (!isPublicProfileKey && !isPublicEditedKey && !req.auth?.userId) {
 			return res.status(401).json({ error: "Unauthorized" });
 		}
 
@@ -101,14 +103,18 @@ export default function createImagesRoutes({ storage }) {
 			if (namespace !== "generic") return next();
 
 			if (!req.auth?.userId) {
-				return res.status(401).json({ error: "Unauthorized" });
+				return res.status(401).json({
+					error: "Unauthorized",
+					code: "LOGIN_REQUIRED",
+					message: "You must be logged in to upload images."
+				});
 			}
 
 			if (!storage?.uploadGenericImage) {
 				return res.status(500).json({ error: "Generic images storage not available" });
 			}
 
-			const buffer = req.body;
+			let buffer = req.body;
 			if (!buffer || !Buffer.isBuffer(buffer) || buffer.length === 0) {
 				return res.status(400).json({ error: "Empty upload" });
 			}
@@ -121,11 +127,38 @@ export default function createImagesRoutes({ storage }) {
 			const now = Date.now();
 			const rand = Math.random().toString(36).slice(2, 9);
 			const userPart = safeKeySegment(String(req.auth.userId));
-			const key = `profile/${userPart}/${kind}_${now}_${rand}${ext}`;
+
+			if (kind === "edited") {
+				try {
+					const meta = await sharp(buffer).metadata();
+					if (
+						typeof meta.width === "number" &&
+						typeof meta.height === "number" &&
+						(meta.width !== 1024 || meta.height !== 1024)
+					) {
+						buffer = await sharp(buffer)
+							.resize(1024, 1024, {
+								fit: "cover",
+								position: "entropy"
+							})
+							.png()
+							.toBuffer();
+					} else {
+						buffer = await sharp(buffer).png().toBuffer();
+					}
+				} catch (err) {
+					return res.status(400).json({ error: "Invalid image" });
+				}
+			}
+
+			const key =
+				kind === "edited"
+					? `edited/${userPart}/${now}_${rand}.png`
+					: `profile/${userPart}/${kind}_${now}_${rand}${ext}`;
 
 			try {
 				const storedKey = await storage.uploadGenericImage(buffer, key, {
-					contentType
+					contentType: kind === "edited" ? "image/png" : contentType
 				});
 				return res.json({
 					ok: true,

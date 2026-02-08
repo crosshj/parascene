@@ -1,5 +1,5 @@
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
-import { submitCreationWithPending } from '../../shared/createSubmit.js';
+import { submitCreationWithPending, uploadImageFile } from '../../shared/createSubmit.js';
 import { renderFields, isPromptLikeField } from '../../shared/providerFormFields.js';
 import { attachAutoGrowTextarea } from '../../shared/autogrow.js';
 
@@ -392,6 +392,113 @@ class AppRouteCreate extends HTMLElement {
           color: var(--text);
           white-space: pre-wrap;
           word-break: break-word;
+        }
+        /* Image field (image_url): radios + one source block + thumbnail when set */
+        .create-route .image-field-multi {
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+        .create-route .image-source-radios {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 1rem 1.5rem;
+          align-items: center;
+        }
+        .create-route .image-source-radio-label {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.35rem;
+          cursor: pointer;
+          font-size: 0.95rem;
+          color: var(--text);
+        }
+        .create-route .image-source-radio-label input {
+          margin: 0;
+        }
+        .create-route .image-source-block {
+          min-height: 0;
+        }
+        .create-route .image-source-block .form-input,
+        .create-route .image-source-block .image-url-input {
+          width: 100%;
+        }
+        .create-route .image-source-block[data-image-block="paste_image"] {
+          padding: 1rem;
+          border-radius: 8px;
+          border: 1px dashed var(--border);
+          background: var(--surface-muted);
+          color: var(--text-muted);
+          font-size: 0.9rem;
+          outline: none;
+          transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        .create-route .image-source-block[data-image-block="paste_image"]:focus {
+          border-color: var(--accent);
+          box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+        }
+        .create-route .image-source-block[data-image-block="paste_image"]:focus-visible {
+          border-color: var(--accent);
+          box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+        }
+        .create-route .image-thumb-container {
+          display: flex;
+          align-items: flex-start;
+          gap: 0.75rem;
+        }
+        .create-route .image-thumb-container .image-thumb-wrap {
+          width: 120px;
+          height: 120px;
+          border-radius: 8px;
+          overflow: hidden;
+          border: 1px solid var(--border);
+          background: color-mix(in srgb, var(--text) 6%, transparent);
+          flex: 0 0 auto;
+          position: relative;
+        }
+        .create-route .image-thumb-container .image-thumb-wrap.loading {
+          background: linear-gradient(90deg, var(--surface-muted), var(--surface-strong), var(--surface-muted));
+          background-size: 200% 100%;
+          animation: loading 4s linear infinite;
+        }
+        .create-route .image-thumb-container .image-thumb-wrap.error {
+          background: var(--image-placeholder, #333);
+        }
+        .create-route .image-thumb-container .image-thumb {
+          width: 100%;
+          height: 100%;
+          display: block;
+          object-fit: cover;
+          opacity: 0;
+          transition: opacity 0.3s ease;
+        }
+        .create-route .image-thumb-container .image-thumb-wrap.loaded .image-thumb {
+          opacity: 1;
+        }
+        .create-route .image-choose-btn {
+          padding: 0.5rem 0.75rem;
+          font-size: 0.875rem;
+          border-radius: 6px;
+          border: 1px solid var(--border);
+          background: var(--input-bg);
+          color: var(--text);
+          cursor: pointer;
+          font-family: inherit;
+          transition: border-color 0.2s ease, background 0.2s ease;
+          display: inline-block;
+        }
+        .create-route .image-choose-btn:hover {
+          background: var(--surface-muted);
+          border-color: var(--text-muted);
+        }
+        .create-route .image-choose-label {
+          margin: 0;
+          cursor: pointer;
+        }
+        .create-route .image-field-error {
+          font-size: 0.875rem;
+          color: var(--error, #e74c3c);
+          margin: 0;
         }
       </style>
       <div class="create-route">
@@ -1267,7 +1374,9 @@ class AppRouteCreate extends HTMLElement {
 		const requiredFields = Object.keys(fields).filter(key => fields[key].required);
 		const allRequiredFilled = requiredFields.every(key => {
 			const value = this.fieldValues[key];
-			return value !== undefined && value !== null && value !== '';
+			if (value === undefined || value === null) return false;
+			if (value instanceof File) return true;
+			return value !== '';
 		});
 
 		if (!allRequiredFilled) {
@@ -1330,7 +1439,7 @@ class AppRouteCreate extends HTMLElement {
 		});
 	}
 
-	handleCreateAfterSpinner(button) {
+	async handleCreateAfterSpinner(button) {
 		if (!this.selectedServer || !this.selectedMethod) {
 			this.resetCreateButton(button);
 			return;
@@ -1361,7 +1470,7 @@ class AppRouteCreate extends HTMLElement {
 					collectedArgs[fieldKey] = input.value || this.fieldValues[fieldKey] || '';
 				}
 			} else {
-				// Fallback to stored value
+				// Fallback to stored value (e.g. image_url can be string URL or File; upload happens on Create)
 				collectedArgs[fieldKey] = this.fieldValues[fieldKey] ?? (field?.type === 'boolean' ? false : '');
 			}
 		});
@@ -1370,6 +1479,21 @@ class AppRouteCreate extends HTMLElement {
 		if (!this.selectedServer.id || !methodKey) {
 			this.resetCreateButton(button);
 			return;
+		}
+
+		// If image_url is a File (paste or upload), upload it first while spinner is showing; then submit with the URL.
+		if (collectedArgs.image_url instanceof File) {
+			try {
+				collectedArgs.image_url = await uploadImageFile(collectedArgs.image_url);
+			} catch (err) {
+				this.resetCreateButton(button);
+				if (typeof this.showCreateError === 'function') {
+					this.showCreateError(err?.message || 'Image upload failed');
+				} else {
+					alert(err?.message || 'Image upload failed');
+				}
+				return;
+			}
 		}
 
 		// Standalone create page (/create) needs full navigation to /creations; SPA only works when create is in-app.

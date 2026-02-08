@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
+import Busboy from "busboy";
 import sharp from "sharp";
 import { getThumbnailUrl } from "./utils/url.js";
 import { getBaseAppUrl } from "./utils/url.js";
@@ -32,6 +33,42 @@ function isPng(buffer) {
 async function ensurePngBuffer(buffer) {
 	if (isPng(buffer)) return buffer;
 	return await sharp(buffer, { failOn: "none" }).png().toBuffer();
+}
+
+function buildGenericUrl(key) {
+	const segments = String(key || "")
+		.split("/")
+		.filter(Boolean)
+		.map((seg) => encodeURIComponent(seg));
+	return `/api/images/generic/${segments.join("/")}`;
+}
+
+function parseMultipartCreate(req, { maxFileBytes = 12 * 1024 * 1024 } = {}) {
+	return new Promise((resolve, reject) => {
+		const busboy = Busboy({ headers: req.headers, limits: { fileSize: maxFileBytes, files: 1, fields: 20 } });
+		const fields = {};
+		const files = {};
+		busboy.on("field", (name, value) => {
+			fields[name] = value;
+		});
+		busboy.on("file", (name, file, info) => {
+			const chunks = [];
+			let total = 0;
+			file.on("data", (data) => {
+				total += data.length;
+				chunks.push(data);
+			});
+			file.on("limit", () => reject(new Error("File too large")));
+			file.on("end", () => {
+				if (total > 0) {
+					files[name] = { buffer: Buffer.concat(chunks), mimeType: info?.mimeType || "application/octet-stream" };
+				}
+			});
+		});
+		busboy.on("error", reject);
+		busboy.on("finish", () => resolve({ fields, files }));
+		req.pipe(busboy);
+	});
 }
 
 export default function createCreateRoutes({ queries, storage }) {
@@ -457,10 +494,61 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	});
 
-	// POST /api/create - Create a new image
+	// POST /api/create - Create a new image (accepts JSON or multipart with optional image_file)
 	router.post("/api/create", async (req, res) => {
 		const user = await requireUser(req, res);
 		if (!user) return;
+
+		if (req.is("multipart/form-data")) {
+			try {
+				const { fields, files } = await parseMultipartCreate(req);
+				const args = typeof fields.args === "string" ? (() => {
+					try {
+						return JSON.parse(fields.args);
+					} catch {
+						return {};
+					}
+				})() : (fields.args && typeof fields.args === "object" ? fields.args : {});
+				if (files.image_file?.buffer) {
+					let imgBuf = files.image_file.buffer;
+					const meta = await sharp(imgBuf).metadata();
+					if (
+						typeof meta.width === "number" &&
+						typeof meta.height === "number" &&
+						(meta.width !== 1024 || meta.height !== 1024)
+					) {
+						imgBuf = await sharp(imgBuf)
+							.resize(1024, 1024, { fit: "cover", position: "entropy" })
+							.png()
+							.toBuffer();
+					} else {
+						imgBuf = await sharp(imgBuf).png().toBuffer();
+					}
+					const now = Date.now();
+					const rand = Math.random().toString(36).slice(2, 9);
+					const userPart = String(user.id).replace(/[^a-z0-9._-]/gi, "_").slice(0, 80);
+					const key = `edited/${userPart}/${now}_${rand}.png`;
+					if (storage?.uploadGenericImage) {
+						await storage.uploadGenericImage(imgBuf, key, { contentType: "image/png" });
+						args.image_url = buildGenericUrl(key);
+					}
+				}
+				req.body = {
+					server_id: fields.server_id,
+					method: fields.method,
+					args,
+					creation_token: fields.creation_token,
+					retry_of_id: fields.retry_of_id,
+					mutate_of_id: fields.mutate_of_id,
+					credit_cost: fields.credit_cost
+				};
+			} catch (err) {
+				if (err?.code === "FILE_TOO_LARGE" || err?.message === "File too large") {
+					return res.status(413).json({ error: "Image too large" });
+				}
+				return res.status(400).json({ error: "Invalid multipart body", message: err?.message || "Bad request" });
+			}
+		}
 
 		const { server_id, method, args, creation_token, retry_of_id, mutate_of_id, credit_cost: bodyCreditCost } = req.body;
 		const safeArgs = args && typeof args === "object" ? { ...args } : {};
@@ -523,6 +611,12 @@ export default function createCreateRoutes({ queries, storage }) {
 					});
 				}
 				CREATION_CREDIT_COST = methodConfig.credits ?? 0.5;
+			}
+
+			// Provider must fetch image_url; relative paths fail. Normalize to absolute URL.
+			if (typeof argsForProvider.image_url === "string") {
+				const absolute = toParasceneImageUrl(argsForProvider.image_url);
+				if (absolute) argsForProvider.image_url = absolute;
 			}
 
 			// Check user's credit balance

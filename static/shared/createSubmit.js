@@ -52,10 +52,36 @@ function navigateToCreations({ mode }) {
 }
 
 /**
+ * Upload a file to the generic image endpoint; returns the image URL on success.
+ * Used when Create is clicked and args contain a File (paste/upload) so we upload first, then submit with the URL.
+ */
+export async function uploadImageFile(file) {
+	if (!file || !(file instanceof File)) throw new Error('Invalid file');
+	const res = await fetch('/api/images/generic', {
+		method: 'POST',
+		headers: {
+			'Content-Type': file.type || 'image/png',
+			'X-upload-kind': 'edited',
+			'X-upload-name': file.name || 'image.png'
+		},
+		body: file,
+		credentials: 'include'
+	});
+	if (!res.ok) {
+		const err = await res.json().catch(() => ({}));
+		throw new Error(err.message || err.error || `Upload failed (${res.status})`);
+	}
+	const data = await res.json();
+	if (!data?.url) throw new Error('No URL in response');
+	return data.url;
+}
+
+/**
  * Shared submit helper for /create and /creations/:id/mutate.
  * - Adds a pending creation entry (sessionStorage)
  * - Navigates to creations immediately (optimistic)
- * - POSTs /api/create with { server_id, method, args, creation_token }
+ * - POSTs /api/create with { server_id, method, args, creation_token } (JSON).
+ *   image_url in args must be a string URL (client uploads the image before submit via /api/images/generic).
  */
 export function submitCreationWithPending({
 	serverId,
@@ -82,28 +108,35 @@ export function submitCreationWithPending({
 		// ignore
 	}
 
-	const body = JSON.stringify({
+	const payload = {
 		server_id: serverId,
 		method: methodKey,
 		args: args || {},
 		creation_token: creationToken,
 		...(Number.isFinite(Number(mutateOfId)) && Number(mutateOfId) > 0 ? { mutate_of_id: Number(mutateOfId) } : {}),
 		...(Number.isFinite(Number(creditCost)) && Number(creditCost) > 0 ? { credit_cost: Number(creditCost) } : {})
-	});
+	};
 
-	// Full navigation unloads the page; use a background-safe request so the backend
-	// still receives the create request and returns a DB row that polling can observe.
+	const doFetch = () =>
+		fetch('/api/create', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			credentials: 'include',
+			body: JSON.stringify(payload)
+		});
+
+	// Full navigate: use sendBeacon so request survives page unload.
 	if (navigate === 'full') {
 		try {
 			if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
-				const blob = new Blob([body], { type: 'application/json' });
+				const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
 				navigator.sendBeacon('/api/create', blob);
 			} else {
 				fetch('/api/create', {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					credentials: 'include',
-					body,
+					body: JSON.stringify(payload),
 					keepalive: true
 				}).catch(() => null);
 			}
@@ -112,19 +145,12 @@ export function submitCreationWithPending({
 		}
 
 		navigateToCreations({ mode: navigate });
-		// NOTE: we cannot reliably remove pending here (page unload). Creations route
-		// will reconcile by creation_token + TTL.
 		return;
 	}
 
 	navigateToCreations({ mode: navigate });
 
-	fetch('/api/create', {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		credentials: 'include',
-		body
-	})
+	doFetch()
 		.then(async (response) => {
 			if (!response.ok) {
 				let error = null;

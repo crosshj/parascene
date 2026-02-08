@@ -111,6 +111,21 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 
+// CORS: allow credentials so cookies are sent when frontend is on a different origin (e.g. dev port).
+app.use((req, res, next) => {
+	const origin = req.get("origin");
+	if (origin) {
+		res.setHeader("Access-Control-Allow-Origin", origin);
+		res.setHeader("Access-Control-Allow-Credentials", "true");
+		res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+		res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-upload-kind, X-upload-name");
+	}
+	if (req.method === "OPTIONS") {
+		return res.sendStatus(204);
+	}
+	next();
+});
+
 // Make storage accessible to routes that need it.
 app.locals.storage = storage;
 

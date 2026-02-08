@@ -205,6 +205,10 @@ export async function runCreationJob({ queries, storage, payload }) {
 	let height = DEFAULT_HEIGHT;
 	let providerError = null;
 
+	const argsForProvider = args || {};
+	const providerPayload = { method, args: argsForProvider };
+	console.log("[Creation] Sending to provider:", JSON.stringify(providerPayload, null, 2));
+
 	try {
 		const providerResponse = await fetch(server.server_url, {
 			method: "POST",
@@ -215,7 +219,7 @@ export async function runCreationJob({ queries, storage, payload }) {
 				},
 				server.auth_token
 			),
-			body: JSON.stringify({ method, args: args || {} }),
+			body: JSON.stringify(providerPayload),
 			signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
 		});
 

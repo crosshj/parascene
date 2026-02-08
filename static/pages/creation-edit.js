@@ -225,7 +225,8 @@ async function loadEditPage() {
 			editContent.innerHTML = html`
 				<div class="route-empty">
 					<div class="route-empty-title">No mutate methods available</div>
-					<div class="route-empty-message">No servers currently expose a method with intent <strong>image_mutate</strong>.</div>
+					<div class="route-empty-message">No servers currently expose a method with intent <strong>image_mutate</strong>.
+					</div>
 				</div>
 			`;
 			return;
@@ -295,14 +296,14 @@ async function loadEditPage() {
 						</div>
 					</div>
 				</div>
-
+			
 				<div class="form-group" data-server-group style="display: none;">
 					<label class="form-label" for="mutate-server">Server</label>
 					<select class="form-select" id="mutate-server" data-server-select>
 						<option value="">Select a server...</option>
 					</select>
 				</div>
-
+			
 				<div class="form-group" data-method-group style="display: none;">
 					<div class="method-context" data-method-context style="display: none;">
 						Server: <span data-method-server-name></span>
@@ -312,13 +313,15 @@ async function loadEditPage() {
 						<option value="">Select a method...</option>
 					</select>
 				</div>
-
+			
 				<div class="form-group">
-					<label class="form-label" for="edit-prompt">Prompt <span class="field-required" aria-hidden="true">*</span></label>
-					<textarea class="form-input form-textarea" id="edit-prompt" data-edit-prompt rows="3" placeholder="Describe what you want to change..."></textarea>
+					<label class="form-label" for="edit-prompt">Prompt <span class="field-required"
+							aria-hidden="true">*</span></label>
+					<textarea class="form-input form-textarea" id="edit-prompt" data-edit-prompt rows="3"
+						placeholder="Describe what you want to change..."></textarea>
 				</div>
 			</form>
-
+			
 			<div class="create-controls">
 				<button class="create-button" data-generate-btn disabled>
 					Mutate

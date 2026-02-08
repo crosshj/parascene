@@ -133,20 +133,96 @@
 	min-height: 170px;
 }
 
+.creation-edit-route .image-field-multi {
+	padding: 0;
+	gap: 0;
+	min-height: 120px;
+}
+
+.creation-edit-route .image-field-inputs {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	flex: 1;
+	min-width: 0;
+	padding: 10px 12px;
+}
+
+.creation-edit-route .image-field-inputs .form-input {
+	width: 100%;
+}
+
+.creation-edit-route .image-field-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	align-items: center;
+}
+
+.creation-edit-route .image-paste-btn,
+.creation-edit-route .image-choose-btn {
+	padding: 0.5rem 0.75rem;
+	font-size: 0.875rem;
+	border-radius: 6px;
+	border: 1px solid var(--border);
+	background: var(--input-bg);
+	color: var(--text);
+	cursor: pointer;
+	font-family: inherit;
+	transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.creation-edit-route .image-paste-btn:hover,
+.creation-edit-route .image-choose-btn:hover {
+	background: var(--surface-muted);
+	border-color: var(--text-muted);
+}
+
+.creation-edit-route .image-choose-label {
+	margin: 0;
+	cursor: pointer;
+}
+
+.creation-edit-route .image-field-error {
+	font-size: 0.875rem;
+	color: var(--error, #e74c3c);
+	margin: 0;
+}
+
 .creation-edit-route .form-static.image-field {
 	padding: 0;
 }
 
 .creation-edit-route .image-thumb-wrap {
-	width: 170px;
-	height: 170px;
+	width: 120px;
+	height: 120px;
 	border-radius: 8px 0 0 8px;
 	overflow: hidden;
 	border-right: 1px solid var(--border);
 	background: color-mix(in srgb, var(--text) 6%, transparent);
 	flex: 0 0 auto;
 	position: relative;
-	cursor: pointer;
+}
+
+.creation-edit-route .image-field-multi .image-thumb-wrap {
+	cursor: default;
+}
+
+@media (max-width: 768px) {
+	.creation-edit-route .image-field-multi {
+		flex-direction: column;
+		align-items: stretch;
+	}
+	.creation-edit-route .image-field-multi .image-thumb-wrap {
+		width: 100%;
+		height: 120px;
+		border-radius: 8px 8px 0 0;
+		border-right: none;
+		border-bottom: 1px solid var(--border);
+	}
+	.creation-edit-route .image-field-multi .image-field-inputs {
+		padding: 10px 12px;
+	}
 }
 
 .creation-edit-route .image-thumb-wrap.loading {
