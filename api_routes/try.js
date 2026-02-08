@@ -127,28 +127,7 @@ export default function createTryRoutes({ queries, storage }) {
 			rawPrompt != null && typeof rawPrompt === "string" && rawPrompt.trim() ? rawPrompt.trim() : null;
 
 		if (canonicalPrompt) {
-			const existingReq = await queries.selectTryRequestByCidAndPrompt?.get?.(anonCid, canonicalPrompt);
-			if (existingReq) {
-				const existing = await queries.selectCreatedImageAnonById?.get?.(existingReq.created_image_anon_id);
-				if (existing) {
-					const meta = parseMeta(existing.meta);
-					const url =
-						existing.status === "completed" && existing.filename
-							? (storage.getImageUrlAnon ? storage.getImageUrlAnon(existing.filename) : `/api/try/images/${existing.filename}`)
-							: null;
-					return res.status(200).json({
-						id: existing.id,
-						status: existing.status,
-						created_at: existing.created_at,
-						meta,
-						prompt: existing.prompt,
-						url: url ?? undefined,
-						existing: true,
-					});
-				}
-			}
-
-			// Pool: up to TRY_PROMPT_POOL_MAX completed images per prompt; pick random one to serve; refill in background if < 5.
+			// Pool first: if we have 1+ completed images for this prompt, always serve a random one (so refresh gives variety).
 			const sinceIso = new Date(Date.now() - TRY_PROMPT_CACHE_TTL_MS).toISOString();
 			const cachedList = await queries.selectRecentCompletedCreatedImageAnonByPrompt?.all?.(
 				canonicalPrompt,
@@ -201,6 +180,28 @@ export default function createTryRoutes({ queries, storage }) {
 							from_cache: true,
 						});
 					}
+				}
+			}
+
+			// Idempotency when pool is empty: same cid + prompt returns existing row (in-progress or previous result).
+			const existingReq = await queries.selectTryRequestByCidAndPrompt?.get?.(anonCid, canonicalPrompt);
+			if (existingReq) {
+				const existing = await queries.selectCreatedImageAnonById?.get?.(existingReq.created_image_anon_id);
+				if (existing) {
+					const meta = parseMeta(existing.meta);
+					const url =
+						existing.status === "completed" && existing.filename
+							? (storage.getImageUrlAnon ? storage.getImageUrlAnon(existing.filename) : `/api/try/images/${existing.filename}`)
+							: null;
+					return res.status(200).json({
+						id: existing.id,
+						status: existing.status,
+						created_at: existing.created_at,
+						meta,
+						prompt: existing.prompt,
+						url: url ?? undefined,
+						existing: true,
+					});
 				}
 			}
 		}
