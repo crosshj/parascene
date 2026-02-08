@@ -1565,6 +1565,34 @@ export function openDb() {
 				return data ?? [];
 			}
 		},
+		/** Unique anon_cids from try_requests with request count; excludes __pool__. Order by last_request_at desc. */
+		selectTryRequestAnonCidsWithCount: {
+			all: async () => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("try_requests"))
+					.select("anon_cid, created_at")
+					.neq("anon_cid", "__pool__");
+				if (error) throw error;
+				const rows = data ?? [];
+				const byCid = new Map();
+				for (const r of rows) {
+					const cid = r.anon_cid;
+					const at = r.created_at;
+					if (!byCid.has(cid)) {
+						byCid.set(cid, { anon_cid: cid, request_count: 0, first_request_at: at, last_request_at: at });
+					}
+					const agg = byCid.get(cid);
+					agg.request_count += 1;
+					if (at && (!agg.first_request_at || at < agg.first_request_at)) agg.first_request_at = at;
+					if (at && (!agg.last_request_at || at > agg.last_request_at)) agg.last_request_at = at;
+				}
+				return Array.from(byCid.values()).sort((a, b) => {
+					const aAt = a.last_request_at || "";
+					const bAt = b.last_request_at || "";
+					return bAt.localeCompare(aAt);
+				});
+			}
+		},
 		updateCreatedImageAnonJobCompleted: {
 			run: async (id, { filename, file_path, width, height, meta }) => {
 				const metaVal = typeof meta === "object" && meta !== null ? meta : meta == null ? null : meta;

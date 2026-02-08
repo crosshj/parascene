@@ -102,6 +102,170 @@
 	font-size: 1rem;
 }
 
+/* Anonymous users tab */
+.anon-tab-content {
+	margin-top: 0;
+}
+
+.anon-table-container {
+	overflow-x: auto;
+	margin-top: 0;
+}
+
+.anon-table-wrapper {
+	overflow-x: auto;
+}
+
+.anon-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.9rem;
+}
+
+.anon-table th,
+.anon-table td {
+	padding: 10px 12px;
+	text-align: left;
+	border-bottom: 1px solid var(--border);
+}
+
+.anon-table th {
+	font-weight: 600;
+	color: var(--text-muted);
+	white-space: nowrap;
+}
+
+.anon-table tbody tr {
+	cursor: pointer;
+}
+
+.anon-table tbody tr:hover {
+	background: var(--surface-hover);
+}
+
+.anon-table-row:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: -2px;
+}
+
+.anon-table-col-cid {
+	font-family: ui-monospace, monospace;
+	word-break: break-all;
+	max-width: 200px;
+}
+
+.anon-table-col-dates {
+	color: var(--text-muted);
+}
+
+.anon-table-dates-cell {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.anon-table-date-line {
+	font-size: 0.85rem;
+	white-space: nowrap;
+}
+
+.anon-table-date-label {
+	font-weight: 500;
+	margin-right: 0.25em;
+}
+
+@media (max-width: 768px) {
+	.anon-table-dates-cell {
+		gap: 4px;
+	}
+
+	.anon-table-date-line {
+		display: block;
+	}
+}
+
+.anon-table-col-count {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
+.anon-detail-modal-body {
+	max-height: 85vh;
+	overflow-y: auto;
+}
+
+.anon-detail-modal .publish-modal {
+	max-height: 90vh;
+}
+
+.anon-detail-requests {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+}
+
+.anon-request-row {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	grid-template-rows: auto auto auto;
+	gap: 8px 16px;
+	align-items: start;
+	padding: 12px 0;
+	border-bottom: 1px solid var(--border);
+}
+
+.anon-request-row:last-child {
+	border-bottom: none;
+	padding-bottom: 0;
+}
+
+.anon-request-meta {
+	grid-column: 1;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	font-size: 0.8rem;
+	color: var(--text-muted);
+}
+
+.anon-request-datetime {
+	font-weight: 500;
+}
+
+.anon-request-prompt {
+	grid-column: 1;
+	font-size: 0.9rem;
+	color: var(--text);
+	word-break: break-word;
+}
+
+.anon-request-image {
+	grid-column: 2;
+	grid-row: 1 / -1;
+	align-self: start;
+}
+
+.anon-request-image-link {
+	display: block;
+	border-radius: 8px;
+	overflow: hidden;
+	background: var(--surface);
+	border: 1px solid var(--border);
+}
+
+.anon-request-thumb {
+	display: block;
+	width: 80px;
+	height: 80px;
+	object-fit: cover;
+	vertical-align: middle;
+}
+
+.anon-request-no-image {
+	font-size: 0.8rem;
+	color: var(--text-muted);
+}
+
 .user-modal-body {
 	display: grid;
 	gap: 16px;

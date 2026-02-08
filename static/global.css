@@ -3144,6 +3144,7 @@ body:has([data-publish-modal].open),
 body:has([data-todo-modal].open),
 body:has([data-todo-readonly].open),
 body:has([data-server-modal].open),
+body:has([data-anon-detail-modal].open),
 body.modal-open {
 	overflow: hidden;
 }
@@ -3155,6 +3156,7 @@ body.modal-open {
 [data-todo-modal],
 [data-todo-readonly],
 [data-server-modal],
+[data-anon-detail-modal],
 #todo-modal,
 #todo-readonly-modal,
 #server-modal {
@@ -3179,6 +3181,7 @@ body.modal-open {
 [data-todo-modal].open,
 [data-todo-readonly].open,
 [data-server-modal].open,
+[data-anon-detail-modal].open,
 #todo-modal.open,
 #todo-readonly-modal.open,
 #server-modal.open {
@@ -3212,6 +3215,7 @@ body.modal-open {
 [data-todo-modal].open .publish-modal,
 [data-todo-readonly].open .publish-modal,
 [data-server-modal].open .publish-modal,
+[data-anon-detail-modal].open .publish-modal,
 #todo-modal.open .publish-modal,
 #todo-readonly-modal.open .publish-modal,
 #server-modal.open .publish-modal {

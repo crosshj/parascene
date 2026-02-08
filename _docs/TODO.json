@@ -1,137 +1,130 @@
 [
-	{
-		"name": "Engagement Emails",
-		"description": "system fires emails to encourage users to engage, eg. user signed up but hasn't created anything, bundle notifications and send daily reminder where non-zero list",
-		"cost": 40,
-		"impact": 100,
-		"dependsOn": []
-	},
-	{
-		"name": "Anti-slam Emails",
-		"description": "we don't want to send an email every time a comment comes through",
-		"cost": 45,
-		"impact": 100,
-		"dependsOn": []
-	},
-	{
-		"name": "Invite credits",
-		"description": "Grant starter credits on invite acceptance; record inviter and source.",
-		"cost": 1,
-		"impact": 67,
-		"dependsOn": []
-	},
-	{
-		"name": "User tips",
-		"description": "users can tip each other",
-		"cost": 55,
-		"impact": 75,
-		"dependsOn": []
-	},
-	{
-		"name": "Creation Detail Related Images",
-		"description": "images that are similar or related after fold",
-		"cost": 47,
-		"impact": 54,
-		"dependsOn": []
-	},
-	{
-		"name": "Credit Purchase",
-		"description": "users can buy credits using real money",
-		"cost": 77,
-		"impact": 100,
-		"dependsOn": []
-	},
-	{
-		"name": "Join from Share pays out",
-		"description": "The original creator gets some credits.\nThe sharer gets credits.\nWhat to do about mutated creations?",
-		"cost": 70,
-		"impact": 80,
-		"dependsOn": []
-	},
-	{
-		"name": "Server boosts",
-		"description": "Server-scoped boosts increase owner's credit yield with caps, no discovery lift.",
-		"cost": 54,
-		"impact": 1,
-		"dependsOn": []
-	},
-	{
-		"name": "Invites & redemption",
-		"description": "Optional invite welcome flow via email or shareable token, with stored invite context.",
-		"cost": 100,
-		"impact": 87,
-		"dependsOn": [
-			"Invite credits"
-		]
-	},
-	{
-		"name": "Generate from uploaded image",
-		"description": "Main create flow: user uploads an image and generates from it (img2img); wire upload to provider payload and create UI.",
-		"cost": 65,
-		"impact": 90,
-		"dependsOn": []
-	},
-	{
-		"name": "Abuse protection (anon generate)",
-		"description": "Rate limiting and abuse controls for anonymous/try generation only (e.g. by IP/cookie, caps).",
-		"cost": 15,
-		"impact": 72,
-		"dependsOn": []
-	},
-	{
-		"name": "Admin: anon monitor",
-		"description": "Admin tooling to monitor anonymous usage (e.g. try flow volume, abuse signals).",
-		"cost": 20,
-		"impact": 45,
-		"dependsOn": []
-	},
-	{
-		"name": "BUG: scroll resetting (some browsers)",
-		"description": "Fix scroll position reset on some browsers (e.g. feed/detail/nav).",
-		"cost": 5,
-		"impact": 78,
-		"dependsOn": []
-	},
-	{
-		"name": "Anonymous example community creations",
-		"description": "Show example or featured community creations to anonymous visitors (no login).",
-		"cost": 25,
-		"impact": 68,
-		"dependsOn": []
-	},
-	{
-		"name": "Feed for people that haven't followed",
-		"description": "When user has no follows, show a useful feed (e.g. explore-style or curated) instead of empty.",
-		"cost": 30,
-		"impact": 88,
-		"dependsOn": []
-	},
-	{
-		"name": "Make follow easier",
-		"description": "General UX pass to make following creators easier (visibility, one-click where appropriate).",
-		"cost": 10,
-		"impact": 72,
-		"dependsOn": []
-	},
-	{
-		"name": "Lineage shows children (graph view)",
-		"description": "Lineage view shows children (derivatives/remixes) and a graph visualization.",
-		"cost": 60,
-		"impact": 55,
-		"dependsOn": []
-	},
-	{
-		"name": "Search comments/descriptions/prompts",
-		"description": "Full-text search over creation metadata: comments, descriptions, prompts.",
-		"cost": 68,
-		"impact": 85,
-		"dependsOn": []
-	},
-	{
-		"name": "Share method QR Code",
-		"description": "Add QR code as a share option so users can share a link via scannable QR (e.g. in share modal).",
-		"cost": 25,
-		"impact": 70,
-		"dependsOn": []
-	}
+  {
+    "name": "Engagement Emails",
+    "description": "system fires emails to encourage users to engage, eg. user signed up but hasn't created anything, bundle notifications and send daily reminder where non-zero list",
+    "cost": 40,
+    "impact": 100,
+    "dependsOn": []
+  },
+  {
+    "name": "Anti-slam Emails",
+    "description": "we don't want to send an email every time a comment comes through",
+    "cost": 45,
+    "impact": 100,
+    "dependsOn": []
+  },
+  {
+    "name": "Feed for people that haven't followed",
+    "description": "When user has no follows, show a useful feed (e.g. explore-style or curated) instead of empty.",
+    "cost": 30,
+    "impact": 88,
+    "dependsOn": []
+  },
+  {
+    "name": "BUG: scroll resetting (some browsers)",
+    "description": "Fix scroll position reset on some browsers (e.g. feed/detail/nav).",
+    "cost": 5,
+    "impact": 78,
+    "dependsOn": []
+  },
+  {
+    "name": "Make follow easier",
+    "description": "General UX pass to make following creators easier (visibility, one-click where appropriate).",
+    "cost": 10,
+    "impact": 72,
+    "dependsOn": []
+  },
+  {
+    "name": "Abuse protection (anon generate)",
+    "description": "Rate limiting and abuse controls for anonymous/try generation only (e.g. by IP/cookie, caps).",
+    "cost": 15,
+    "impact": 72,
+    "dependsOn": []
+  },
+  {
+    "name": "Invite credits",
+    "description": "Grant starter credits on invite acceptance; record inviter and source.",
+    "cost": 1,
+    "impact": 67,
+    "dependsOn": []
+  },
+  {
+    "name": "Share method QR Code",
+    "description": "Add QR code as a share option so users can share a link via scannable QR (e.g. in share modal).",
+    "cost": 25,
+    "impact": 70,
+    "dependsOn": []
+  },
+  {
+    "name": "Landing: community creations iamges",
+    "description": "Show example or featured community creations to anonymous visitors (no login).",
+    "cost": 25,
+    "impact": 68,
+    "dependsOn": []
+  },
+  {
+    "name": "User tips",
+    "description": "users can tip each other",
+    "cost": 55,
+    "impact": 75,
+    "dependsOn": []
+  },
+  {
+    "name": "Generate from uploaded image",
+    "description": "Main create flow: user uploads an image and generates from it (img2img); wire upload to provider payload and create UI.",
+    "cost": 65,
+    "impact": 90,
+    "dependsOn": []
+  },
+  {
+    "name": "Search comments/descriptions/prompts",
+    "description": "Full-text search over creation metadata: comments, descriptions, prompts.",
+    "cost": 68,
+    "impact": 85,
+    "dependsOn": []
+  },
+  {
+    "name": "Creation Detail Related Images",
+    "description": "images that are similar or related after fold",
+    "cost": 47,
+    "impact": 54,
+    "dependsOn": []
+  },
+  {
+    "name": "Credit Purchase",
+    "description": "users can buy credits using real money",
+    "cost": 77,
+    "impact": 100,
+    "dependsOn": []
+  },
+  {
+    "name": "Join from Share pays out",
+    "description": "The original creator gets some credits.\nThe sharer gets credits.\nWhat to do about mutated creations?",
+    "cost": 70,
+    "impact": 80,
+    "dependsOn": []
+  },
+  {
+    "name": "Lineage shows children (graph view)",
+    "description": "Lineage view shows children (derivatives/remixes) and a graph visualization.",
+    "cost": 60,
+    "impact": 55,
+    "dependsOn": []
+  },
+  {
+    "name": "Server boosts",
+    "description": "Server-scoped boosts increase owner's credit yield with caps, no discovery lift.",
+    "cost": 54,
+    "impact": 1,
+    "dependsOn": []
+  },
+  {
+    "name": "Invites & redemption",
+    "description": "Optional invite welcome flow via email or shareable token, with stored invite context.",
+    "cost": 100,
+    "impact": 87,
+    "dependsOn": [
+      "Invite credits"
+    ]
+  }
 ]

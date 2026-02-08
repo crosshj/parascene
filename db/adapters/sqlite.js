@@ -1428,6 +1428,16 @@ export async function openDb() {
 				return Promise.resolve(stmt.all(anonCid));
 			}
 		},
+		/** Unique anon_cids from try_requests with request count; excludes __pool__. Order by last_request_at desc. */
+		selectTryRequestAnonCidsWithCount: {
+			all: async () => {
+				const stmt = db.prepare(
+					`SELECT anon_cid, COUNT(*) AS request_count, MIN(created_at) AS first_request_at, MAX(created_at) AS last_request_at
+           FROM try_requests WHERE anon_cid != '__pool__' GROUP BY anon_cid ORDER BY last_request_at DESC`
+				);
+				return Promise.resolve(stmt.all());
+			}
+		},
 		updateCreatedImageAnonJobCompleted: {
 			run: async (id, { filename, file_path, width, height, meta }) => {
 				const toJsonText = (v) => (v == null ? null : typeof v === "string" ? v : JSON.stringify(v));

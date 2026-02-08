@@ -316,6 +316,61 @@ export default function createAdminRoutes({ queries, storage }) {
 		return res.json({ ok: true, profile: normalizeProfileRow(updated) });
 	});
 
+	/** GET /admin/anonymous-users — list unique anon_cids from try_requests with request count (excludes __pool__). */
+	router.get("/admin/anonymous-users", async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+
+		if (!queries.selectTryRequestAnonCidsWithCount?.all) {
+			return res.json({ anonCids: [] });
+		}
+		const rows = await queries.selectTryRequestAnonCidsWithCount.all();
+		res.json({ anonCids: rows });
+	});
+
+	/** GET /admin/anonymous-users/:cid — requests for this anon_cid (datetime desc) with image details and view URL. */
+	router.get("/admin/anonymous-users/:cid", async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+
+		const cid = typeof req.params?.cid === "string" ? req.params.cid.trim() : "";
+		if (!cid) {
+			return res.status(400).json({ error: "Invalid anon_cid" });
+		}
+
+		const requests = await queries.selectTryRequestsByCid?.all?.(cid) ?? [];
+		const imageIds = [...new Set(requests.map((r) => r.created_image_anon_id).filter(Boolean))];
+		const images = (await queries.selectCreatedImagesAnonByIds?.all?.(imageIds)) ?? [];
+		const imageById = new Map(images.map((img) => [Number(img.id), img]));
+
+		const requestsWithImage = requests.map((r) => {
+			const img = imageById.get(Number(r.created_image_anon_id));
+			const imagePath = img?.filename ? `/api/try/images/${encodeURIComponent(img.filename)}` : null;
+			return {
+				id: r.id,
+				anon_cid: r.anon_cid,
+				prompt: r.prompt,
+				created_at: r.created_at,
+				fulfilled_at: r.fulfilled_at,
+				created_image_anon_id: r.created_image_anon_id,
+				image: img
+					? {
+							id: img.id,
+							filename: img.filename,
+							file_path: img.file_path,
+							width: img.width,
+							height: img.height,
+							status: img.status,
+							created_at: img.created_at,
+							image_url: imagePath
+						}
+					: null
+			};
+		});
+
+		res.json({ anon_cid: cid, requests: requestsWithImage });
+	});
+
 	router.get("/admin/moderation", async (req, res) => {
 		const items = await queries.selectModerationQueue.all();
 		res.json({ items });
