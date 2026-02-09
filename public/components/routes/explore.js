@@ -111,6 +111,7 @@ class AppRouteExplore extends HTMLElement {
         <div class="route-cards route-cards-image-grid" data-explore-container>
           <div class="route-empty route-empty-image-grid route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
         </div>
+        <div class="explore-load-more-sentinel" data-explore-sentinel aria-hidden="true"></div>
         <div class="explore-load-more-fallback" data-explore-load-more-fallback>
           <button type="button" class="btn-secondary explore-load-more-btn" data-explore-load-more-btn>Load more</button>
         </div>
@@ -125,7 +126,7 @@ class AppRouteExplore extends HTMLElement {
 		this.setupRouteListener();
 		this.setupLoadMoreFallback();
 		this.setupImageLazyLoading();
-		// this.updateLoadMoreFallback();
+		this.updateLoadMoreFallback();
 
 		const initialRoute = window.__CURRENT_ROUTE__ || null;
 		const pathname = window.location.pathname || '';
@@ -146,29 +147,49 @@ class AppRouteExplore extends HTMLElement {
 				if (this.hasLoadedOnce) {
 					this.resumeImageLazyLoading();
 				}
+				this.observeLoadMoreSentinel();
 			} else {
 				this.isActiveRoute = false;
 				if (this.imageObserver) this.imageObserver.disconnect();
 				this.imageLoadQueue = [];
 				this.imageLoadsInFlight = 0;
+				this.sentinelObserver?.disconnect();
+				this.sentinelObserver = null;
 			}
 		};
 		document.addEventListener('route-change', this.routeChangeHandler);
+	}
+
+	/** Single observer: when sentinel is visible, call loadMore() (same as the button). Re-attach after each load. */
+	observeLoadMoreSentinel() {
+		this.sentinelObserver?.disconnect();
+		this.sentinelObserver = null;
+		if (!this.hasMore) return;
+		const sentinel = this.querySelector('[data-explore-sentinel]');
+		if (!sentinel) return;
+		this.sentinelObserver = new IntersectionObserver(
+			(entries) => {
+				const entry = entries[0];
+				if (!entry?.isIntersecting) return;
+				if (!this.hasMore || this.isLoadingMore || this.isLoading || !this.isRouteActive()) return;
+				this.loadMore();
+			},
+			{ root: null, rootMargin: '800px 0px', threshold: 0 }
+		);
+		this.sentinelObserver.observe(sentinel);
 	}
 
 	updateLoadMoreFallback() {
 		const wrap = this.querySelector('[data-explore-load-more-fallback]');
 		const btn = this.querySelector('[data-explore-load-more-btn]');
 		if (!wrap || !btn) return;
-		// Hide the button when hasMore is false (API said no more pages or returned < full page)
 		if (!this.hasMore) {
-			debugger;
-			wrap.hidden = true;
 			wrap.setAttribute('hidden', '');
+			wrap.style.display = 'none';
 			return;
 		}
-		debugger
-		wrap.hidden = wrap.hidden || false;
+		wrap.removeAttribute('hidden');
+		wrap.style.display = '';
 		btn.disabled = false;
 		btn.textContent = 'Load more';
 	}
@@ -241,6 +262,8 @@ class AppRouteExplore extends HTMLElement {
 		if (this.routeChangeHandler) {
 			document.removeEventListener('route-change', this.routeChangeHandler);
 		}
+		this.sentinelObserver?.disconnect();
+		this.sentinelObserver = null;
 		if (this.imageObserver) {
 			this.imageObserver.disconnect();
 			this.imageObserver = null;
@@ -292,7 +315,7 @@ class AppRouteExplore extends HTMLElement {
 			const items = Array.isArray(res.data?.items) ? res.data.items : [];
 			const apiHasMore = res.data && res.data.hasMore === true;
 			this.hasMore = apiHasMore && items.length >= EXPLORE_PAGE_SIZE;
-			// this.updateLoadMoreFallback();
+			this.updateLoadMoreFallback();
 
 			if (reset && items.length === 0) {
 				cont.innerHTML = html`
@@ -316,12 +339,13 @@ class AppRouteExplore extends HTMLElement {
 			this.appendExploreCards(cont, items);
 			this.exploreOffset = offset + items.length;
 			this.hasLoadedOnce = true;
+			if (this.hasMore) this.observeLoadMoreSentinel();
 		} catch (err) {
 			const errCont = this.querySelector("[data-explore-container]");
 			if (errCont) errCont.innerHTML = html`<div class="route-empty route-empty-image-grid">Unable to load explore.</div>`;
 		} finally {
 			this.isLoading = false;
-			// this.updateLoadMoreFallback();
+			this.updateLoadMoreFallback();
 		}
 	}
 
@@ -329,7 +353,7 @@ class AppRouteExplore extends HTMLElement {
 		if (!this.hasMore || this.isLoadingMore || this.isLoading || !this.isRouteActive()) return;
 
 		this.isLoadingMore = true;
-		// this.updateLoadMoreFallback();
+		this.updateLoadMoreFallback();
 		try {
 			const res = await fetchJsonWithStatusDeduped(
 				`/api/explore?limit=${EXPLORE_PAGE_SIZE}&offset=${this.exploreOffset}`,
@@ -351,9 +375,10 @@ class AppRouteExplore extends HTMLElement {
 
 			this.appendExploreCards(container, items);
 			this.exploreOffset += items.length;
+			if (this.hasMore) this.observeLoadMoreSentinel();
 		} finally {
 			this.isLoadingMore = false;
-			// this.updateLoadMoreFallback();
+			this.updateLoadMoreFallback();
 		}
 	}
 

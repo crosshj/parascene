@@ -2828,6 +2828,13 @@ app-route-feed {
 	gap: 6px;
 }
 
+.explore-load-more-sentinel {
+	height: 1px;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+}
+
 .explore-load-more-fallback {
 	padding: 24px 0 32px;
 	text-align: center;
