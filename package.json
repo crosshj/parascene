@@ -7,7 +7,8 @@
     "watch": "NODE_ENV=dev PORT=2367 nodemon api/index.js",
     "reset": "node db/reset.js",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
-    "test:integration": "RUN_INTEGRATION_TESTS=true NODE_OPTIONS=--experimental-vm-modules jest --config jest.config.js --testPathIgnorePatterns '' --testMatch '**/test/**/*.integration.test.js'"
+    "test:integration": "RUN_INTEGRATION_TESTS=true NODE_OPTIONS=--experimental-vm-modules jest --config jest.config.js --testPathIgnorePatterns '' --testMatch '**/test/**/*.integration.test.js'",
+    "vercel": "vercel"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
@@ -28,6 +29,7 @@
     "@jest/globals": "^30.2.0",
     "better-sqlite3": "^9.6.0",
     "jest": "^30.2.0",
-    "nodemon": "^3.1.11"
+    "nodemon": "^3.1.11",
+    "vercel": "^50.13.2"
   }
 }

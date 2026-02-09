@@ -89,7 +89,17 @@ function baseEmailLayout({ preheader, title, bodyHtml, ctaText, ctaUrl = getBase
 	<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#f5f7fb; padding:24px 0;">
 		<tr>
 			<td align="center">
-				<table role="presentation" cellpadding="0" cellspacing="0" width="600"
+				<table role="presentation" cellpadding="0" cellspacing="0" width="600" style="margin:0 auto; font-family:Arial, Helvetica, sans-serif;">
+					<tr>
+						<td style="padding:0 0 16px 0; padding-left:24px; text-align:left; font-size:0;">
+							<span style="color:#2b303a; font-style:italic; font-weight:700; font-size:30px; letter-spacing:-0.02em; font-family:Arial, Helvetica, sans-serif;">par</span>
+							<span style="color:#6b7484; font-style:italic; font-weight:700; font-size:30px; letter-spacing:-0.02em; font-family:Arial, Helvetica, sans-serif;">asc</span>
+							<span style="color:#2b303a; font-style:italic; font-weight:700; font-size:30px; letter-spacing:-0.02em; font-family:Arial, Helvetica, sans-serif;">ene</span>
+						</td>
+					</tr>
+					<tr>
+						<td>
+				<table role="presentation" cellpadding="0" cellspacing="0" width="100%"
 					style="background:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 10px 30px rgba(15, 23, 42, 0.08); font-family:Arial, Helvetica, sans-serif;">
 					<tr>
 						<td style="padding:32px; font-family:Arial, Helvetica, sans-serif;">
@@ -106,6 +116,9 @@ function baseEmailLayout({ preheader, title, bodyHtml, ctaText, ctaUrl = getBase
 						<td
 							style="padding:20px 32px; background:#f8fafc; color:#64748b; font-size:12px; line-height:1.6; text-align:center; font-family:Arial, Helvetica, sans-serif;">
 							${safeFooter}
+						</td>
+					</tr>
+				</table>
 						</td>
 					</tr>
 				</table>
@@ -333,7 +346,12 @@ export function renderFeatureRequest({
 	const preheader = `${requesterName || "Someone"} submitted a feature request.`;
 
 	const bodyHtml = html`
-		<div style="margin:0 0 14px; font-family:Arial, Helvetica, sans-serif;">
+		<div style="margin:0 0 14px; padding:14px 16px; border:1px solid #e2e8f0; border-radius:12px; background:#ffffff; font-family:Arial, Helvetica, sans-serif;">
+			<div style="color:#475569; font-size:13px; margin:0 0 6px; font-family:Arial, Helvetica, sans-serif;">Details</div>
+			<div style="white-space:pre-wrap; color:#0f172a; font-size:15px; line-height:1.7; font-family:Arial, Helvetica, sans-serif;">${safeMessage}</div>
+		</div>
+
+		<div style="margin:14px 0 0; font-family:Arial, Helvetica, sans-serif;">
 			<div style="color:#475569; font-size:13px; margin:0 0 6px; font-family:Arial, Helvetica, sans-serif;">From</div>
 			<div style="font-size:15px; line-height:1.6; font-family:Arial, Helvetica, sans-serif;">
 				<strong>${safeRequesterName}</strong> (${safeRequesterEmail})<br />
@@ -349,47 +367,29 @@ export function renderFeatureRequest({
 				<span style="color:#64748b;">Submitted:</span> ${safeWhen}
 			</div>
 		</div>
-		
-		<div style="margin:12px 0 0; padding:14px 16px; border:1px solid #e2e8f0; border-radius:12px; background:#ffffff; font-family:Arial, Helvetica, sans-serif;">
-			<div style="color:#475569; font-size:13px; margin:0 0 6px; font-family:Arial, Helvetica, sans-serif;">Details</div>
-			<div style="white-space:pre-wrap; color:#0f172a; font-size:15px; line-height:1.7; font-family:Arial, Helvetica, sans-serif;">${safeMessage}</div>
-		</div>
-		
+
 		${(safeCtxRoute || safeReferer || safeIp || safeForwardedFor || safeAcceptLanguage || safeCtxTimezone || safeCtxLocale
-		|| safeCtxPlatform || safeCtxViewport || safeCtxScreen || safeCtxDpr || safeCtxColorScheme || safeCtxReducedMotion ||
-		safeCtxNetwork) ? html`
-		<div style="margin:12px 0 0; padding:14px 16px; border:1px solid #e2e8f0; border-radius:12px; background:#ffffff; font-family:Arial, Helvetica, sans-serif;">
-			<div style="color:#475569; font-size:13px; margin:0 0 10px; font-family:Arial, Helvetica, sans-serif;">Context</div>
-			<div style="color:#0f172a; font-size:13px; line-height:1.7; font-family:Arial, Helvetica, sans-serif;">
-				${safeCtxRoute ? html`<div><span style="color:#64748b;">Route:</span> ${safeCtxRoute}</div>` : ""}
-				${safeReferer ? html`<div><span style="color:#64748b;">Referrer:</span> ${safeReferer}</div>` : ""}
-				${safeIp ? html`<div><span style="color:#64748b;">IP:</span> ${safeIp}</div>` : ""}
-				${safeIps ? html`<div><span style="color:#64748b;">IPs:</span> ${safeIps}</div>` : ""}
-				${safeForwardedFor ? html`<div><span style="color:#64748b;">X-Forwarded-For:</span> ${safeForwardedFor}</div>` :
-				""}
-				${safeAcceptLanguage ? html`<div><span style="color:#64748b;">Accept-Language:</span> ${safeAcceptLanguage}
-				</div>` : ""}
-				${safeCtxTimezone ? html`<div><span style="color:#64748b;">Timezone:</span> ${safeCtxTimezone}</div>` : ""}
-				${safeCtxLocale ? html`<div><span style="color:#64748b;">Locale:</span> ${safeCtxLocale}</div>` : ""}
-				${safeCtxPlatform ? html`<div><span style="color:#64748b;">Platform:</span> ${safeCtxPlatform}</div>` : ""}
-				${safeCtxViewport ? html`<div><span style="color:#64748b;">Viewport:</span> ${safeCtxViewport}</div>` : ""}
-				${safeCtxScreen ? html`<div><span style="color:#64748b;">Screen:</span> ${safeCtxScreen}</div>` : ""}
-				${safeCtxDpr ? html`<div><span style="color:#64748b;">DPR:</span> ${safeCtxDpr}</div>` : ""}
-				${safeCtxColorScheme ? html`<div><span style="color:#64748b;">Color scheme:</span> ${safeCtxColorScheme}</div>`
-				: ""}
-				${safeCtxReducedMotion ? html`<div><span style="color:#64748b;">Reduced motion:</span> ${safeCtxReducedMotion}
-				</div>` : ""}
-				${safeCtxNetwork ? html`<div><span style="color:#64748b;">Network:</span> ${safeCtxNetwork}</div>` : ""}
-			</div>
-		</div>
-		` : ""}
-		
-		${userAgent ? html`
-		<div style="margin:12px 0 0; padding:14px 16px; border:1px solid #e2e8f0; border-radius:12px; background:#ffffff; font-family:Arial, Helvetica, sans-serif;">
-			<div style="color:#475569; font-size:13px; margin:0 0 6px; font-family:Arial, Helvetica, sans-serif;">User agent</div>
-			<div
-				style="color:#0f172a; font-size:13px; line-height:1.6; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;">
-				${safeUserAgent}
+			|| safeCtxPlatform || safeCtxViewport || safeCtxScreen || safeCtxDpr || safeCtxColorScheme || safeCtxReducedMotion ||
+			safeCtxNetwork || safeUserAgent) ? html`
+		<div style="margin:14px 0 0; font-family:Arial, Helvetica, sans-serif;">
+			<div style="color:#475569; font-size:13px; margin:0 0 6px; font-family:Arial, Helvetica, sans-serif;">Context</div>
+			<div style="font-size:15px; line-height:1.6; font-family:Arial, Helvetica, sans-serif;">
+				${safeCtxRoute ? html`<span style="color:#64748b;">Route:</span> ${safeCtxRoute}<br />` : ""}
+				${safeReferer ? html`<span style="color:#64748b;">Referrer:</span> ${safeReferer}<br />` : ""}
+				${safeIp ? html`<span style="color:#64748b;">IP:</span> ${safeIp}<br />` : ""}
+				${safeIps ? html`<span style="color:#64748b;">IPs:</span> ${safeIps}<br />` : ""}
+				${safeForwardedFor ? html`<span style="color:#64748b;">X-Forwarded-For:</span> ${safeForwardedFor}<br />` : ""}
+				${safeAcceptLanguage ? html`<span style="color:#64748b;">Accept-Language:</span> ${safeAcceptLanguage}<br />` : ""}
+				${safeCtxTimezone ? html`<span style="color:#64748b;">Timezone:</span> ${safeCtxTimezone}<br />` : ""}
+				${safeCtxLocale ? html`<span style="color:#64748b;">Locale:</span> ${safeCtxLocale}<br />` : ""}
+				${safeCtxPlatform ? html`<span style="color:#64748b;">Platform:</span> ${safeCtxPlatform}<br />` : ""}
+				${safeCtxViewport ? html`<span style="color:#64748b;">Viewport:</span> ${safeCtxViewport}<br />` : ""}
+				${safeCtxScreen ? html`<span style="color:#64748b;">Screen:</span> ${safeCtxScreen}<br />` : ""}
+				${safeCtxDpr ? html`<span style="color:#64748b;">DPR:</span> ${safeCtxDpr}<br />` : ""}
+				${safeCtxColorScheme ? html`<span style="color:#64748b;">Color scheme:</span> ${safeCtxColorScheme}<br />` : ""}
+				${safeCtxReducedMotion ? html`<span style="color:#64748b;">Reduced motion:</span> ${safeCtxReducedMotion}<br />` : ""}
+				${safeCtxNetwork ? html`<span style="color:#64748b;">Network:</span> ${safeCtxNetwork}<br />` : ""}
+				${safeUserAgent ? html`<span style="color:#64748b;">User agent:</span> ${safeUserAgent}<br />` : ""}
 			</div>
 		</div>
 		` : ""}
@@ -445,11 +445,11 @@ function renderActivityList(items, sectionTitle) {
 		<div style="color:#475569; font-size:13px; margin:0 0 10px; font-weight:600; font-family:Arial, Helvetica, sans-serif;">${escapeHtml(sectionTitle)}</div>
 		<ul style="margin:0; padding-left:20px; color:#0f172a; font-size:15px; line-height:1.8; font-family:Arial, Helvetica, sans-serif;">
 			${list.map((item) => {
-			const title = item?.title && String(item.title).trim() ? escapeHtml(String(item.title).trim()) : "Untitled";
-			const count = Number(item?.comment_count ?? 0);
-			const commentLabel = count === 1 ? "1 new comment" : `${count} new comments`;
-			return `<li><strong>${title}</strong> — ${escapeHtml(commentLabel)}</li>`;
-			}).join("")}
+		const title = item?.title && String(item.title).trim() ? escapeHtml(String(item.title).trim()) : "Untitled";
+		const count = Number(item?.comment_count ?? 0);
+		const commentLabel = count === 1 ? "1 new comment" : `${count} new comments`;
+		return `<li><strong>${title}</strong> — ${escapeHtml(commentLabel)}</li>`;
+	}).join("")}
 		</ul>
 	</div>
   `;

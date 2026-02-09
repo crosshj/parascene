@@ -144,11 +144,7 @@ function renderError(container, message) {
 	container.appendChild(error);
 }
 
-const userModal = document.querySelector("#user-modal");
-const userModalTitle = document.querySelector("#user-modal-title");
-const userModalDetails = document.querySelector("[data-user-modal-details]");
-const userTipForm = document.querySelector("#user-tip-form");
-const userTipError = document.querySelector("[data-user-tip-error]");
+const userModalComponent = document.querySelector("app-modal-user");
 let currentUser = null;
 let currentViewerUserId = null;
 
@@ -171,186 +167,13 @@ async function loadCurrentViewerUser() {
 
 loadCurrentViewerUser();
 
-function renderUserDetails(user) {
-	if (!userModalDetails) return;
-	const creditsValue = typeof user?.credits === "number" ? user.credits : 0;
-	const profileHref = user?.id ? `/user/${user.id}` : null;
-	userModalDetails.innerHTML = `
-		<div class="field">
-			<label>User ID</label>
-			<div class="value">${escapeHtml(String(user?.id ?? ""))}</div>
-		</div>
-		<div class="field">
-			<label>Email</label>
-			<div class="value">${escapeHtml(String(user?.email ?? ""))}</div>
-		</div>
-		<div class="field">
-			<label>Role</label>
-			<div class="value">${escapeHtml(String(user?.role ?? ""))}</div>
-		</div>
-		<div class="field">
-			<label>Credits</label>
-			<div class="value" data-user-modal-credits>${escapeHtml(creditsValue.toFixed(1))}</div>
-		</div>
-		${profileHref ? `
-			<div class="field">
-				<label>Profile</label>
-				<div class="value"><a class="user-link" href="${escapeHtml(profileHref)}">View profile</a></div>
-			</div>
-		` : ""}
-	`;
-}
-
-function closeUserModal() {
-	if (!userModal) return;
-	userModal.classList.remove("open");
-	currentUser = null;
-	if (userTipError) {
-		userTipError.hidden = true;
-		userTipError.textContent = "";
-	}
-}
-
 function openUserModal(user) {
-	if (!userModal) return;
+	if (!userModalComponent) return;
 	currentUser = user;
-	if (userModalTitle) {
-		userModalTitle.textContent = user?.email || "User";
-	}
-	renderUserDetails(user);
-	if (userTipForm) {
-		userTipForm.reset();
-		userTipForm.elements.toUserId.value = String(user?.id ?? "");
-	}
-	if (userTipError) {
-		userTipError.hidden = true;
-		userTipError.textContent = "";
-	}
-	userModal.classList.add("open");
+	userModalComponent.open(user);
 }
 
-if (userModal) {
-	userModal.addEventListener("click", (event) => {
-		if (event.target?.dataset?.userClose !== undefined || event.target === userModal) {
-			closeUserModal();
-		}
-	});
-	document.addEventListener("keydown", (event) => {
-		if (event.key === "Escape" && userModal.classList.contains("open")) {
-			closeUserModal();
-		}
-	});
-}
-
-if (userTipForm) {
-	userTipForm.addEventListener("submit", async (event) => {
-		event.preventDefault();
-		if (!currentUser) return;
-
-		const submitButton = userTipForm.querySelector('button[type="submit"]');
-		const amountInput = userTipForm.elements.amount;
-		const fixedWidth = submitButton ? submitButton.getBoundingClientRect().width : null;
-		if (submitButton) {
-			submitButton.disabled = true;
-			if (fixedWidth) submitButton.style.width = `${fixedWidth}px`;
-			submitButton.classList.add("is-loading");
-		}
-		if (amountInput) {
-			amountInput.disabled = true;
-		}
-		if (userTipError) {
-			userTipError.hidden = true;
-			userTipError.textContent = "";
-		}
-
-		const toUserId = Number(userTipForm.elements.toUserId.value);
-		const amount = Number(userTipForm.elements.amount.value);
-
-		try {
-			const response = await fetch("/api/credits/tip", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				credentials: "include",
-				body: JSON.stringify({ toUserId, amount })
-			});
-			const data = await response.json().catch(() => ({}));
-			if (!response.ok) {
-				const message = data?.error || "Failed to tip credits.";
-				if (userTipError) {
-					userTipError.hidden = false;
-					userTipError.textContent = message;
-				} else {
-					alert(message);
-				}
-				return;
-			}
-
-			// Update credits everywhere without closing modal.
-			const nextToBalance = typeof data?.toBalance === "number" ? data.toBalance : null;
-			const nextFromBalance = typeof data?.fromBalance === "number" ? data.fromBalance : null;
-
-			// Update modal credits for recipient
-			if (nextToBalance !== null) {
-				currentUser.credits = nextToBalance;
-				const creditsEl = document.querySelector("[data-user-modal-credits]");
-				if (creditsEl) {
-					creditsEl.textContent = nextToBalance.toFixed(1);
-				}
-			}
-
-			// Update list card for recipient
-			const recipientCard = document.querySelector(`.user-card[data-user-id="${toUserId}"]`);
-			if (recipientCard && nextToBalance !== null) {
-				const creditsSpan = recipientCard.querySelector(".user-credits");
-				if (creditsSpan) {
-					creditsSpan.textContent = `${nextToBalance.toFixed(1)} credits`;
-				}
-			}
-
-			// Update list card + header credits for sender
-			if (nextFromBalance !== null) {
-				document.dispatchEvent(new CustomEvent("credits-updated", {
-					detail: { count: nextFromBalance }
-				}));
-				try {
-					window.localStorage?.setItem("credits-balance", String(nextFromBalance));
-				} catch {
-					// ignore
-				}
-				if (currentViewerUserId) {
-					const senderCard = document.querySelector(`.user-card[data-user-id="${currentViewerUserId}"]`);
-					if (senderCard) {
-						const creditsSpan = senderCard.querySelector(".user-credits");
-						if (creditsSpan) {
-							creditsSpan.textContent = `${nextFromBalance.toFixed(1)} credits`;
-						}
-					}
-				}
-			}
-
-			// Reset amount field, keep modal open
-			userTipForm.reset();
-			userTipForm.elements.toUserId.value = String(toUserId);
-		} catch (error) {
-			const message = error?.message || "Failed to tip credits.";
-			if (userTipError) {
-				userTipError.hidden = false;
-				userTipError.textContent = message;
-			} else {
-				alert(message);
-			}
-		} finally {
-			if (submitButton) {
-				submitButton.disabled = false;
-				submitButton.classList.remove("is-loading");
-				submitButton.style.width = "";
-			}
-			if (amountInput) {
-				amountInput.disabled = false;
-			}
-		}
-	});
-}
+// Tip form handling is now in the app-modal-user component
 
 async function loadUsers({ force = false } = {}) {
 	const container = document.querySelector("#users-container");
@@ -649,6 +472,47 @@ async function loadEmailSends() {
 	}
 }
 
+function setupEmailsTabPersistence() {
+	const emailsPage = document.querySelector("#emails-page");
+	if (!emailsPage) return;
+
+	const tabsEl = emailsPage.querySelector("app-tabs");
+	if (!tabsEl) return;
+
+	const storageKey = "admin-emails-tab";
+	const validTabIds = ["sends", "templates", "settings"];
+
+	// Restore saved tab on load
+	const savedTab = (() => {
+		try {
+			const saved = sessionStorage.getItem(storageKey);
+			return saved && validTabIds.includes(saved) ? saved : null;
+		} catch {
+			return null;
+		}
+	})();
+
+	if (savedTab) {
+		// Wait for tabs to be hydrated before setting active tab
+		setTimeout(() => {
+			if (typeof tabsEl.setActiveTab === "function") {
+				tabsEl.setActiveTab(savedTab, { focus: false });
+			}
+		}, 0);
+	}
+
+	// Save tab on change
+	tabsEl.addEventListener("tab-change", (e) => {
+		const id = e.detail?.id;
+		if (!id || !validTabIds.includes(id)) return;
+		try {
+			sessionStorage.setItem(storageKey, id);
+		} catch {
+			// Ignore storage errors
+		}
+	});
+}
+
 async function loadEmailTemplates() {
 	const container = document.querySelector("#email-templates-container");
 	if (!container) return;
@@ -661,6 +525,7 @@ async function loadEmailTemplates() {
 		const templates = [
 			{ name: "helloFromParascene", label: "Hello from parascene" },
 			{ name: "commentReceived", label: "Comment received" },
+			{ name: "commentReceivedDelegated", label: "Comment received (delegated)" },
 			{ name: "featureRequest", label: "Feature request" },
 			{ name: "passwordReset", label: "Password reset" },
 			{ name: "digestActivity", label: "Digest activity" },
@@ -1065,6 +930,7 @@ function handleAdminRouteChange(route) {
 			loadPolicies();
 			break;
 		case "emails":
+			setupEmailsTabPersistence();
 			loadEmailSends();
 			loadEmailTemplates();
 			loadSettings();

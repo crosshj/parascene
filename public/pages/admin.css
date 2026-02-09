@@ -440,14 +440,186 @@
 	color: var(--text-muted);
 }
 
+.publish-modal.user-modal {
+	max-width: 700px;
+}
+
 .user-modal-body {
+	display: flex;
+	flex-direction: column;
+	gap: 24px;
+	overflow-y: auto;
+	min-height: 0;
+	-webkit-overflow-scrolling: touch;
+}
+
+.publish-modal.user-modal .publish-modal-footer {
+	flex-direction: column;
+	align-items: stretch;
+}
+
+.user-delete-error {
+	margin-top: 12px;
+}
+
+.user-modal-section {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 16px 0;
+	border-bottom: 1px solid var(--border);
+}
+
+.user-modal-section:last-child {
+	border-bottom: none;
+}
+
+.user-modal-section-danger {
+	border-top: 2px solid var(--danger, #dc2626);
+	padding-top: 20px;
+	margin-top: 8px;
+}
+
+.user-modal-section-title {
+	font-size: 0.75rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--text-muted);
+	margin-bottom: 12px;
+	border-bottom: 1px solid var(--border);
+	padding-bottom: 8px;
+}
+
+.user-modal-section-title-no-border {
+	border-bottom: none !important;
+	padding-bottom: 0 !important;
+	margin-bottom: 8px !important;
+}
+
+.user-modal-details {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.user-modal-field {
 	display: grid;
+	grid-template-columns: 140px 1fr;
+	gap: 12px;
+	align-items: start;
+}
+
+.user-modal-field-label {
+	font-weight: 600;
+	font-size: 0.9rem;
+	color: var(--text);
+}
+
+.user-modal-field-value {
+	font-size: 0.9rem;
+	color: var(--text);
+	word-break: break-word;
+}
+
+.user-modal-role {
+	text-transform: capitalize;
+}
+
+.user-modal-link {
+	color: var(--accent, #7c3aed);
+	text-decoration: none;
+	font-weight: 500;
+}
+
+.user-modal-link:hover {
+	text-decoration: underline;
+}
+
+.user-suspend-zone {
+	display: flex;
+	flex-direction: column;
 	gap: 16px;
 }
 
+.user-suspend-zone .user-modal-field {
+	margin-bottom: 0;
+}
+
+.user-status-actions {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	margin-top: 8px;
+}
+
+.user-status-actions .btn-secondary {
+	justify-content: center;
+	text-align: center;
+}
+
+.user-suspend-label {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 0.9rem;
+	color: var(--text);
+	cursor: pointer;
+}
+
+.user-suspend-label input[type="checkbox"] {
+	width: 18px;
+	height: 18px;
+	cursor: pointer;
+}
+
+.user-suspend-save {
+	min-width: 120px;
+}
+
+.user-danger-zone {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.user-danger-help {
+	font-size: 0.875rem;
+	color: var(--text-muted);
+	line-height: 1.5;
+}
+
+.user-delete-button {
+	min-width: 120px;
+}
+
+@media (max-width: 768px) {
+	.user-modal-field {
+		grid-template-columns: 1fr;
+		gap: 6px;
+	}
+
+	.publish-modal-footer {
+		flex-direction: column;
+		align-items: stretch;
+	}
+
+	.publish-modal-footer .btn-secondary,
+	.user-delete-button {
+		width: 100%;
+	}
+}
+
 .user-tip-label {
-	display: grid;
-	gap: 10px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.user-tip-label label {
+	font-weight: 600;
+	font-size: 0.9rem;
+	color: var(--text);
 }
 
 .user-tip-row {
@@ -456,9 +628,174 @@
 	align-items: center;
 }
 
+.user-tip-label {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.user-tip-label label {
+	font-size: 0.9rem;
+	font-weight: 500;
+	color: var(--text);
+}
+
+.user-tip-label input {
+	width: 100%;
+	padding: 10px 12px;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: var(--input-bg);
+	color: var(--text);
+	font-size: 0.95rem;
+}
+
+.user-delete-confirm-overlay {
+	z-index: 100000;
+}
+
+.user-delete-confirm-modal {
+	max-width: 480px;
+}
+
+.user-delete-confirm-input {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin-top: 16px;
+}
+
+.user-delete-confirm-input label {
+	font-size: 0.9rem;
+	font-weight: 500;
+	color: var(--text);
+}
+
+.user-delete-confirm-input input {
+	width: 100%;
+	padding: 10px 12px;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: var(--input-bg);
+	color: var(--text);
+	font-size: 0.95rem;
+}
+
+.user-delete-confirm-input input:focus {
+	outline: none;
+	border-color: var(--accent);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.user-delete-danger-alert {
+	padding: 16px;
+	border-radius: 10px;
+	border: 2px solid var(--danger, #dc2626);
+	background: color-mix(in srgb, var(--danger, #dc2626) 10%, transparent);
+	margin-bottom: 20px;
+}
+
+.user-delete-danger-alert strong {
+	display: block;
+	color: var(--danger, #dc2626);
+	font-size: 1rem;
+	font-weight: 600;
+	margin-bottom: 8px;
+}
+
+.user-delete-danger-alert p {
+	margin: 0;
+	color: var(--text);
+	line-height: 1.6;
+}
+
+.user-tip-modal-overlay {
+	z-index: 100001;
+}
+
+.user-tip-modal {
+	max-width: 400px;
+}
+
+.user-tip-label {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.user-tip-label label {
+	font-size: 0.9rem;
+	font-weight: 500;
+	color: var(--text);
+}
+
+.user-tip-label input {
+	width: 100%;
+	padding: 10px 12px;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: var(--input-bg);
+	color: var(--text);
+	font-size: 0.95rem;
+}
+
+.user-tip-label input:focus {
+	outline: none;
+	border-color: var(--accent);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.user-suspend-confirm-overlay {
+	z-index: 100001;
+}
+
+.user-suspend-confirm-modal {
+	max-width: 480px;
+}
+
+.user-suspend-confirm-input {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin-top: 16px;
+}
+
+.user-suspend-confirm-input label {
+	font-size: 0.9rem;
+	font-weight: 500;
+	color: var(--text);
+}
+
+.user-suspend-confirm-input input {
+	width: 100%;
+	padding: 10px 12px;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: var(--input-bg);
+	color: var(--text);
+	font-size: 0.95rem;
+}
+
+.user-suspend-confirm-input input:focus {
+	outline: none;
+	border-color: var(--accent);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
 .user-tip-row input {
 	flex: 1;
 	min-width: 0;
+	padding: 8px 12px;
+	border-radius: 6px;
+	border: 1px solid var(--border);
+	background: var(--surface);
+	color: var(--text);
+	font-size: 0.9rem;
+}
+
+.user-tip-row input:focus {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
 }
 
 .user-tip-button {

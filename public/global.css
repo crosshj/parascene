@@ -862,6 +862,52 @@ a.btn-secondary .icon {
 	flex-shrink: 0;
 }
 
+/* Outlined button style */
+.btn-outlined,
+button.btn-outlined {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	padding: 8px 12px;
+	border-radius: 8px;
+	background: transparent;
+	border: 1px solid var(--accent);
+	color: var(--accent);
+	text-decoration: none;
+	font-size: 0.95rem;
+	font-weight: 500;
+	transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+	cursor: pointer;
+	font: inherit;
+}
+
+.btn-outlined:hover:not(:disabled),
+button.btn-outlined:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--accent) 10%, transparent);
+	border-color: var(--accent);
+	color: var(--accent);
+}
+
+.btn-outlined:active:not(:disabled),
+button.btn-outlined:active:not(:disabled) {
+	background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.btn-outlined:disabled,
+button.btn-outlined:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+	color: var(--text-muted);
+	border-color: var(--border);
+}
+
+.btn-outlined:focus-visible,
+button.btn-outlined:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
+
 input:focus-visible,
 button:focus-visible {
 	outline: none;
@@ -895,12 +941,6 @@ input:focus-visible {
 
 .user-delete-error {
 	margin-top: 10px;
-}
-
-.user-suspend-zone {
-	margin-top: 16px;
-	padding-top: 16px;
-	border-top: 1px solid var(--border);
 }
 
 .user-suspend-title {

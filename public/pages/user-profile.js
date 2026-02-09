@@ -185,12 +185,12 @@ function renderProfilePage(container, { user, profile, stats, isSelf, viewerFoll
 		</div>
 
 		<div class="user-profile-content">
-			${(isSelf || isAdmin) ? html`
-				<div class="user-profile-tabs">
-					<button type="button" class="user-profile-tab is-active" data-tab="published">Published</button>
-					<button type="button" class="user-profile-tab" data-tab="all">All</button>
-				</div>
-			` : ''}
+		${isSelf ? html`
+			<div class="user-profile-tabs">
+				<button type="button" class="user-profile-tab" data-tab="all">All</button>
+				<button type="button" class="user-profile-tab is-active" data-tab="published">Published</button>
+			</div>
+		` : ''}
 			<div class="route-cards route-cards-image-grid" data-profile-grid>
 				<div class="route-empty route-empty-image-grid route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
 			</div>
@@ -484,9 +484,22 @@ async function init() {
 	const overlay = container.querySelector('[data-profile-edit-overlay]');
 
 	const publishedImages = await loadUserImages(targetUserId, { includeAll: false }).catch(() => []);
-	renderImageGrid(grid, publishedImages, false);
-
 	let allImagesCache = null;
+
+	// If admin viewing another user's profile, default to "All" tab
+	const defaultTab = (isAdmin && !isSelf) ? 'all' : 'published';
+	const defaultTabButton = tabButtons.find(btn => btn.getAttribute('data-tab') === defaultTab);
+	if (defaultTabButton) {
+		defaultTabButton.classList.add('is-active');
+	}
+
+	// Load initial content based on default tab
+	if (defaultTab === 'all' && (isSelf || isAdmin)) {
+		allImagesCache = await loadUserImages(targetUserId, { includeAll: true }).catch(() => []);
+		renderImageGrid(grid, allImagesCache, true);
+	} else {
+		renderImageGrid(grid, publishedImages, false);
+	}
 
 	tabButtons.forEach((btn) => {
 		btn.addEventListener('click', async () => {

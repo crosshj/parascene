@@ -101,13 +101,41 @@ async function runNotificationsCron({ queries }) {
 			const to = getEffectiveRecipient(settings, email);
 			const recipientName = user?.display_name || user?.user_name || email.split("@")[0] || "there";
 			const feedUrl = getBaseAppUrl();
+			
+			// Get unread notifications to filter digest to only show creations with unread notifications
+			const unreadNotifications = await (queries.selectNotificationsForUser?.all(userId, user?.role) ?? []);
+			const unreadCreationIds = new Set();
+			for (const notif of unreadNotifications) {
+				if (!notif.acknowledged_at && notif.link) {
+					// Extract creation ID from link like "/creations/123"
+					const match = String(notif.link).match(/\/creations\/(\d+)/);
+					if (match && match[1]) {
+						const creationId = Number(match[1]);
+						if (Number.isFinite(creationId) && creationId > 0) {
+							unreadCreationIds.add(creationId);
+						}
+					}
+				}
+			}
+			
 			const ownerRows = await (queries.selectDigestActivityByOwnerSince?.all(userId, sinceIso) ?? []);
 			const commenterRows = await (queries.selectDigestActivityByCommenterSince?.all(userId, sinceIso) ?? []);
-			const activityItems = ownerRows.map((r) => ({
+			
+			// Filter to only include creations with unread notifications
+			const filteredOwnerRows = ownerRows.filter((r) => {
+				const creationId = Number(r?.created_image_id);
+				return Number.isFinite(creationId) && unreadCreationIds.has(creationId);
+			});
+			const filteredCommenterRows = commenterRows.filter((r) => {
+				const creationId = Number(r?.created_image_id);
+				return Number.isFinite(creationId) && unreadCreationIds.has(creationId);
+			});
+			
+			const activityItems = filteredOwnerRows.map((r) => ({
 				title: r?.title && String(r.title).trim() ? String(r.title).trim() : "Untitled",
 				comment_count: Number(r?.comment_count ?? 0)
 			}));
-			const otherCreationsActivityItems = commenterRows.map((r) => ({
+			const otherCreationsActivityItems = filteredCommenterRows.map((r) => ({
 				title: r?.title && String(r.title).trim() ? String(r.title).trim() : "Untitled",
 				comment_count: Number(r?.comment_count ?? 0)
 			}));

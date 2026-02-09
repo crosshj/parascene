@@ -420,6 +420,31 @@ export default function createAdminRoutes({ queries, storage }) {
 		res.json({ sends: sendsWithEmail, total });
 	});
 
+	router.get("/admin/users/:id/unread-notifications", async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+
+		const targetUserId = Number.parseInt(String(req.params?.id || ""), 10);
+		if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+			return res.status(400).json({ error: "Invalid user id" });
+		}
+
+		const targetUser = await queries.selectUserById.get(targetUserId);
+		if (!targetUser) {
+			return res.status(404).json({ error: "User not found" });
+		}
+
+		try {
+			const result = await queries.selectUnreadNotificationCount.get(
+				targetUserId,
+				targetUser?.role || null
+			);
+			res.json({ count: result?.count ?? 0 });
+		} catch (error) {
+			res.status(500).json({ error: error?.message || "Failed to get notification count" });
+		}
+	});
+
 	router.get("/admin/email-templates/:templateName", async (req, res) => {
 		const adminUser = await requireAdmin(req, res);
 		if (!adminUser) return;
@@ -438,6 +463,21 @@ export default function createAdminRoutes({ queries, storage }) {
 				commentText: "This is a sample comment to show how the email template looks with real content. It demonstrates the formatting and layout.",
 				creationTitle: "Sunset Over Mountains",
 				creationUrl: `${getBaseAppUrl()}/creations/123`
+			},
+			commentReceivedDelegated: {
+				recipientName: "Alex",
+				commenterName: "Jordan",
+				commentText: "This is a sample comment to show how the email template looks with real content. It demonstrates the formatting and layout.",
+				creationTitle: "Sunset Over Mountains",
+				creationUrl: `${getBaseAppUrl()}/creations/123`,
+				impersonation: {
+					originalRecipient: {
+						name: "Taylor",
+						email: "taylor@example.com",
+						userId: 123
+					},
+					reason: "Suppressed recipient"
+				}
 			},
 			featureRequest: {
 				requesterName: "Sam",
@@ -504,12 +544,18 @@ export default function createAdminRoutes({ queries, storage }) {
 		};
 
 		try {
+			// Handle delegated template variants
+			let actualTemplateName = templateName;
+			if (templateName === "commentReceivedDelegated") {
+				actualTemplateName = "commentReceived";
+			}
+
 			const data = sampleData[templateName];
 			if (!data) {
 				return res.status(404).json({ error: `Template "${templateName}" not found` });
 			}
 
-			const { html } = renderEmailTemplate(templateName, data);
+			const { html } = renderEmailTemplate(actualTemplateName, data);
 			res.setHeader("Content-Type", "text/html; charset=utf-8");
 			res.send(html);
 		} catch (error) {

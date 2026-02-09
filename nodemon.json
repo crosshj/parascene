@@ -2,7 +2,9 @@
   "watch": [
     "api",
     "api_routes",
-    "db"
+    "db",
+    "pages",
+    "email"
   ],
   "ext": "js,json"
 }
