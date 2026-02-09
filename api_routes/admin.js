@@ -1,6 +1,7 @@
 import express from "express";
 import { buildProviderHeaders, resolveProviderAuthToken } from "./utils/providerAuth.js";
 import { getEmailSettings } from "./utils/emailSettings.js";
+import { getBaseAppUrl } from "./utils/url.js";
 
 export default function createAdminRoutes({ queries, storage }) {
 	const router = express.Router();
@@ -417,6 +418,103 @@ export default function createAdminRoutes({ queries, storage }) {
 			user_email: emailByUserId[s.user_id] ?? null
 		}));
 		res.json({ sends: sendsWithEmail, total });
+	});
+
+	router.get("/admin/email-templates/:templateName", async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+
+		const { templateName } = req.params;
+		const { renderEmailTemplate } = await import("../email/index.js");
+
+		// Generate sample data for each template
+		const sampleData = {
+			helloFromParascene: {
+				recipientName: "Alex"
+			},
+			commentReceived: {
+				recipientName: "Alex",
+				commenterName: "Jordan",
+				commentText: "This is a sample comment to show how the email template looks with real content. It demonstrates the formatting and layout.",
+				creationTitle: "Sunset Over Mountains",
+				creationUrl: `${getBaseAppUrl()}/creations/123`
+			},
+			featureRequest: {
+				requesterName: "Sam",
+				requesterEmail: "sam@example.com",
+				requesterUserId: 42,
+				requesterUserName: "sam",
+				requesterDisplayName: "Sam",
+				requesterRole: "consumer",
+				requesterCreatedAt: "2024-01-15T10:30:00Z",
+				message: "It would be great to have dark mode support. The current light theme is nice, but a dark option would be perfect for late-night browsing.",
+				userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+				acceptLanguage: "en-US,en;q=0.9",
+				referer: `${getBaseAppUrl()}/feed`,
+				forwardedFor: "192.168.1.1",
+				ip: "192.168.1.1",
+				ips: ["192.168.1.1"],
+				context: {
+					route: "/feed",
+					timezone: "America/New_York",
+					locale: "en-US",
+					platform: "MacIntel",
+					colorScheme: "light",
+					reducedMotion: "no-preference",
+					network: "4g",
+					viewportWidth: 1920,
+					viewportHeight: 1080,
+					screenWidth: 1920,
+					screenHeight: 1080,
+					devicePixelRatio: 2
+				},
+				submittedAt: new Date().toISOString()
+			},
+			passwordReset: {
+				recipientName: "Alex",
+				resetUrl: `${getBaseAppUrl()}/reset-password?rt=sample-token-123`
+			},
+			digestActivity: {
+				recipientName: "Alex",
+				activitySummary: "You have 3 creations with new comments.",
+				feedUrl: `${getBaseAppUrl()}/feed`,
+				activityItems: [
+					{ title: "Sunset Over Mountains", comment_count: 5 },
+					{ title: "City Lights at Night", comment_count: 2 }
+				],
+				otherCreationsActivityItems: [
+					{ title: "Ocean Waves", comment_count: 3 }
+				]
+			},
+			welcome: {
+				recipientName: "Alex"
+			},
+			firstCreationNudge: {
+				recipientName: "Alex"
+			},
+			reengagement: {
+				recipientName: "Alex"
+			},
+			creationHighlight: {
+				recipientName: "Alex",
+				creationTitle: "Sunset Over Mountains",
+				creationUrl: `${getBaseAppUrl()}/creations/123`,
+				commentCount: 8
+			}
+		};
+
+		try {
+			const data = sampleData[templateName];
+			if (!data) {
+				return res.status(404).json({ error: `Template "${templateName}" not found` });
+			}
+
+			const { html } = renderEmailTemplate(templateName, data);
+			res.setHeader("Content-Type", "text/html; charset=utf-8");
+			res.send(html);
+		} catch (error) {
+			res.status(500).json({ error: error?.message || "Failed to render template" });
+		}
 	});
 
 	router.get("/admin/settings", async (req, res) => {

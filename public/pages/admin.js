@@ -649,6 +649,59 @@ async function loadEmailSends() {
 	}
 }
 
+async function loadEmailTemplates() {
+	const container = document.querySelector("#email-templates-container");
+	if (!container) return;
+
+	container.innerHTML = "";
+	renderLoading(container, "Loading templates…");
+
+	try {
+		// Get list of available templates from the templates export
+		const templates = [
+			{ name: "helloFromParascene", label: "Hello from parascene" },
+			{ name: "commentReceived", label: "Comment received" },
+			{ name: "featureRequest", label: "Feature request" },
+			{ name: "passwordReset", label: "Password reset" },
+			{ name: "digestActivity", label: "Digest activity" },
+			{ name: "welcome", label: "Welcome" },
+			{ name: "firstCreationNudge", label: "First creation nudge" },
+			{ name: "reengagement", label: "Re-engagement" },
+			{ name: "creationHighlight", label: "Creation highlight" }
+		];
+
+		container.innerHTML = "";
+
+		for (const template of templates) {
+			const card = document.createElement("div");
+			card.className = "admin-email-template-card";
+
+			const header = document.createElement("div");
+			header.className = "admin-email-template-header";
+			const title = document.createElement("h4");
+			title.className = "admin-email-template-title";
+			title.textContent = template.label;
+			header.appendChild(title);
+
+			const iframeWrapper = document.createElement("div");
+			iframeWrapper.className = "admin-email-template-iframe-wrapper";
+			const iframe = document.createElement("iframe");
+			iframe.className = "admin-email-template-iframe";
+			iframe.src = `/admin/email-templates/${template.name}`;
+			iframe.setAttribute("loading", "lazy");
+			iframe.setAttribute("title", `Preview of ${template.label} email template`);
+			iframeWrapper.appendChild(iframe);
+
+			card.appendChild(header);
+			card.appendChild(iframeWrapper);
+			container.appendChild(card);
+		}
+	} catch (err) {
+		container.innerHTML = "";
+		renderError(container, "Error loading email templates.");
+	}
+}
+
 async function loadPolicies() {
 	const container = document.querySelector("#policies-container");
 	if (!container) return;
@@ -1013,6 +1066,7 @@ function handleAdminRouteChange(route) {
 			break;
 		case "emails":
 			loadEmailSends();
+			loadEmailTemplates();
 			loadSettings();
 			break;
 		case "todo":

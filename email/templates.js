@@ -26,12 +26,12 @@ function renderImpersonationBar({ originalRecipient, reason } = {}) {
 
 	return html`
 	<tr>
-		<td style="background:#fff7ed; border-bottom:1px solid #ea580c; padding:12px 24px; text-align:left;">
+		<td style="background:#fff7ed; border-bottom:1px solid #ea580c; padding:12px 24px; text-align:left; font-family:Arial, Helvetica, sans-serif;">
 			<div
-				style="color:#9a3412; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; margin:0 0 6px;">
+				style="color:#9a3412; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; margin:0 0 6px; font-family:Arial, Helvetica, sans-serif;">
 				Delegated delivery
 			</div>
-			<div style="color:#7c2d12; font-size:13px; line-height:1.6;">
+			<div style="color:#7c2d12; font-size:13px; line-height:1.6; font-family:Arial, Helvetica, sans-serif;">
 				<div><strong>Original recipient</strong>: ${safeName} (${safeEmail})</div>
 				<div><strong>User ID</strong>: ${safeUserId}</div>
 				<div><strong>Reason</strong>: ${safeReason}</div>
@@ -53,9 +53,9 @@ function baseEmailLayout({ preheader, title, bodyHtml, ctaText, ctaUrl = getBase
 		? html`
 	<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:28px auto 12px;">
 		<tr>
-			<td style="background-color:#7c3aed; border-radius:18px; text-align:center;">
+			<td style="background-color:#7c3aed; border-radius:18px; text-align:center; font-family:Arial, Helvetica, sans-serif;">
 				<a href="${ctaUrl}"
-					style="display:inline-block; background-color:#7c3aed; color:#ffffff; text-decoration:none; padding:14px 28px; font-weight:600; font-size:16px; letter-spacing:0.2px; min-width:240px;">
+					style="display:inline-block; background-color:#7c3aed; color:#ffffff; text-decoration:none; padding:14px 28px; font-weight:600; font-size:16px; letter-spacing:0.2px; min-width:240px; border-radius:18px; font-family:Arial, Helvetica, sans-serif;">
 					${escapeHtml(ctaText)}
 				</a>
 			</td>
@@ -81,7 +81,7 @@ function baseEmailLayout({ preheader, title, bodyHtml, ctaText, ctaUrl = getBase
 	<title>${safeTitle}</title>
 </head>
 
-<body style="margin:0; padding:0; background:#f5f7fb;">
+<body style="margin:0; padding:0; background:#f5f7fb; font-family:Arial, Helvetica, sans-serif;">
 	<div style="display:none; max-height:0; overflow:hidden; opacity:0; color:transparent;">
 		${safePreheader}
 	</div>
@@ -90,13 +90,13 @@ function baseEmailLayout({ preheader, title, bodyHtml, ctaText, ctaUrl = getBase
 		<tr>
 			<td align="center">
 				<table role="presentation" cellpadding="0" cellspacing="0" width="600"
-					style="background:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 10px 30px rgba(15, 23, 42, 0.08);">
+					style="background:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 10px 30px rgba(15, 23, 42, 0.08); font-family:Arial, Helvetica, sans-serif;">
 					<tr>
-						<td style="padding:32px;">
-							<h1 style="margin:0 0 16px; color:${BRAND_COLOR}; font-size:24px; line-height:1.3;">
+						<td style="padding:32px; font-family:Arial, Helvetica, sans-serif;">
+							<h1 style="margin:0 0 16px; color:${BRAND_COLOR}; font-size:24px; line-height:1.3; font-family:Arial, Helvetica, sans-serif;">
 								${safeTitle}
 							</h1>
-							<div style="color:#334155; font-size:15px; line-height:1.7;">
+							<div style="color:#334155; font-size:15px; line-height:1.7; font-family:Arial, Helvetica, sans-serif;">
 								${bodyHtml}
 							</div>
 							${ctaBlock}
@@ -104,7 +104,7 @@ function baseEmailLayout({ preheader, title, bodyHtml, ctaText, ctaUrl = getBase
 					</tr>
 					<tr>
 						<td
-							style="padding:20px 32px; background:#f8fafc; color:#64748b; font-size:12px; line-height:1.6; text-align:center;">
+							style="padding:20px 32px; background:#f8fafc; color:#64748b; font-size:12px; line-height:1.6; text-align:center; font-family:Arial, Helvetica, sans-serif;">
 							${safeFooter}
 						</td>
 					</tr>
@@ -161,11 +161,11 @@ export function renderPasswordReset({ recipientName = "there", resetUrl = "" } =
 	const subject = "Reset your parascene password";
 	const preheader = "Use the link below to set a new password for your parascene account.";
 	const bodyHtml = html`
-	<p style="margin:0 0 12px;">Hi ${safeName},</p>
-	<p style="margin:0 0 12px;">
+	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">Hi ${safeName},</p>
+	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">
 		We received a request to reset your password. Click the button below to choose a new password.
 	</p>
-	<p style="margin:0 0 12px;">
+	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">
 		If you didn't request this, you can safely ignore this email. The link will expire in 1 hour.
 	</p>
   `;
@@ -218,13 +218,13 @@ export function renderCommentReceived({
 	const preheader = `${commenterName || "Someone"} left a comment on ${creationTitle ? creationTitle : "your creation"}.`;
 
 	const bodyHtml = html`
-	<p style="margin:0 0 12px;">Hi ${safeRecipient},</p>
-	<p style="margin:0 0 12px;">
+	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">Hi ${safeRecipient},</p>
+	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">
 		<strong>${safeCommenter}</strong> commented on <strong>${safeTitle}</strong>.
 	</p>
-	<div style="margin:16px 0 0; padding:14px 16px; border:1px solid #e2e8f0; border-radius:12px; background:#f8fafc;">
-		<div style="color:#475569; font-size:13px; margin:0 0 6px;">Comment</div>
-		<div style="white-space:pre-wrap; color:#0f172a; font-size:15px; line-height:1.6;">${safeComment}</div>
+	<div style="margin:16px 0 0; padding:14px 16px; border:1px solid #e2e8f0; border-radius:12px; background:#f8fafc; font-family:Arial, Helvetica, sans-serif;">
+		<div style="color:#475569; font-size:13px; margin:0 0 6px; font-family:Arial, Helvetica, sans-serif;">Comment</div>
+		<div style="white-space:pre-wrap; color:#0f172a; font-size:15px; line-height:1.6; font-family:Arial, Helvetica, sans-serif;">${safeComment}</div>
 	</div>
   `;
 
@@ -333,9 +333,9 @@ export function renderFeatureRequest({
 	const preheader = `${requesterName || "Someone"} submitted a feature request.`;
 
 	const bodyHtml = html`
-		<div style="margin:0 0 14px;">
-			<div style="color:#475569; font-size:13px; margin:0 0 6px;">From</div>
-			<div style="font-size:15px; line-height:1.6;">
+		<div style="margin:0 0 14px; font-family:Arial, Helvetica, sans-serif;">
+			<div style="color:#475569; font-size:13px; margin:0 0 6px; font-family:Arial, Helvetica, sans-serif;">From</div>
+			<div style="font-size:15px; line-height:1.6; font-family:Arial, Helvetica, sans-serif;">
 				<strong>${safeRequesterName}</strong> (${safeRequesterEmail})<br />
 				<span style="color:#64748b;">User ID:</span> ${safeUserId}<br />
 				${(safeUserName || safeDisplayName) ? html`
@@ -350,17 +350,17 @@ export function renderFeatureRequest({
 			</div>
 		</div>
 		
-		<div style="margin:12px 0 0; padding:14px 16px; border:1px solid #e2e8f0; border-radius:12px; background:#ffffff;">
-			<div style="color:#475569; font-size:13px; margin:0 0 6px;">Details</div>
-			<div style="white-space:pre-wrap; color:#0f172a; font-size:15px; line-height:1.7;">${safeMessage}</div>
+		<div style="margin:12px 0 0; padding:14px 16px; border:1px solid #e2e8f0; border-radius:12px; background:#ffffff; font-family:Arial, Helvetica, sans-serif;">
+			<div style="color:#475569; font-size:13px; margin:0 0 6px; font-family:Arial, Helvetica, sans-serif;">Details</div>
+			<div style="white-space:pre-wrap; color:#0f172a; font-size:15px; line-height:1.7; font-family:Arial, Helvetica, sans-serif;">${safeMessage}</div>
 		</div>
 		
 		${(safeCtxRoute || safeReferer || safeIp || safeForwardedFor || safeAcceptLanguage || safeCtxTimezone || safeCtxLocale
 		|| safeCtxPlatform || safeCtxViewport || safeCtxScreen || safeCtxDpr || safeCtxColorScheme || safeCtxReducedMotion ||
 		safeCtxNetwork) ? html`
-		<div style="margin:12px 0 0; padding:14px 16px; border:1px solid #e2e8f0; border-radius:12px; background:#ffffff;">
-			<div style="color:#475569; font-size:13px; margin:0 0 10px;">Context</div>
-			<div style="color:#0f172a; font-size:13px; line-height:1.7;">
+		<div style="margin:12px 0 0; padding:14px 16px; border:1px solid #e2e8f0; border-radius:12px; background:#ffffff; font-family:Arial, Helvetica, sans-serif;">
+			<div style="color:#475569; font-size:13px; margin:0 0 10px; font-family:Arial, Helvetica, sans-serif;">Context</div>
+			<div style="color:#0f172a; font-size:13px; line-height:1.7; font-family:Arial, Helvetica, sans-serif;">
 				${safeCtxRoute ? html`<div><span style="color:#64748b;">Route:</span> ${safeCtxRoute}</div>` : ""}
 				${safeReferer ? html`<div><span style="color:#64748b;">Referrer:</span> ${safeReferer}</div>` : ""}
 				${safeIp ? html`<div><span style="color:#64748b;">IP:</span> ${safeIp}</div>` : ""}
@@ -385,8 +385,8 @@ export function renderFeatureRequest({
 		` : ""}
 		
 		${userAgent ? html`
-		<div style="margin:12px 0 0; padding:14px 16px; border:1px solid #e2e8f0; border-radius:12px; background:#ffffff;">
-			<div style="color:#475569; font-size:13px; margin:0 0 6px;">User agent</div>
+		<div style="margin:12px 0 0; padding:14px 16px; border:1px solid #e2e8f0; border-radius:12px; background:#ffffff; font-family:Arial, Helvetica, sans-serif;">
+			<div style="color:#475569; font-size:13px; margin:0 0 6px; font-family:Arial, Helvetica, sans-serif;">User agent</div>
 			<div
 				style="color:#0f172a; font-size:13px; line-height:1.6; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;">
 				${safeUserAgent}
@@ -441,9 +441,9 @@ function renderActivityList(items, sectionTitle) {
 	const list = Array.isArray(items) ? items : [];
 	if (list.length === 0) return "";
 	return html`
-	<div style="margin:16px 0 0; padding:14px 16px; border:1px solid #e2e8f0; border-radius:12px; background:#f8fafc;">
-		<div style="color:#475569; font-size:13px; margin:0 0 10px; font-weight:600;">${escapeHtml(sectionTitle)}</div>
-		<ul style="margin:0; padding-left:20px; color:#0f172a; font-size:15px; line-height:1.8;">
+	<div style="margin:16px 0 0; padding:14px 16px; border:1px solid #e2e8f0; border-radius:12px; background:#f8fafc; font-family:Arial, Helvetica, sans-serif;">
+		<div style="color:#475569; font-size:13px; margin:0 0 10px; font-weight:600; font-family:Arial, Helvetica, sans-serif;">${escapeHtml(sectionTitle)}</div>
+		<ul style="margin:0; padding-left:20px; color:#0f172a; font-size:15px; line-height:1.8; font-family:Arial, Helvetica, sans-serif;">
 			${list.map((item) => {
 			const title = item?.title && String(item.title).trim() ? escapeHtml(String(item.title).trim()) : "Untitled";
 			const count = Number(item?.comment_count ?? 0);
@@ -480,8 +480,8 @@ export function renderDigestActivity({
   ` : "";
 
 	const bodyHtml = html`
-	<p style="margin:0 0 12px;">Hi ${safeName},</p>
-	<p style="margin:0 0 12px;">${safeSummary}</p>
+	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">Hi ${safeName},</p>
+	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">${safeSummary}</p>
 	${activityListHtml}
   `;
 	const emailHtml = baseEmailLayout({
@@ -525,14 +525,14 @@ export function renderWelcome({ recipientName = "there" } = {}) {
 	const subject = "Welcome to parascene";
 	const preheader = "You're in. Start creating.";
 	const bodyHtml = html`
-	<p style="margin:0 0 12px;">Hi ${safeName},</p>
-	<p style="margin:0 0 12px;">
+	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">Hi ${safeName},</p>
+	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">
 		Thanks for joining parascene. We're here to help you turn prompts into scenes that feel cinematic and personal.
 	</p>
-	<p style="margin:0 0 12px;">
+	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">
 		Create your first scene, explore what others have made, or just say hello in the community.
 	</p>
-	<p style="margin:0;">— The parascene team</p>
+	<p style="margin:0; font-family:Arial, Helvetica, sans-serif;">— The parascene team</p>
   `;
 	const emailHtml = baseEmailLayout({
 		preheader,
@@ -561,14 +561,14 @@ export function renderFirstCreationNudge({ recipientName = "there" } = {}) {
 	const subject = "Your first creation is waiting";
 	const preheader = "You haven't created anything yet — here's how to start.";
 	const bodyHtml = html`
-	<p style="margin:0 0 12px;">Hi ${safeName},</p>
-	<p style="margin:0 0 12px;">
+	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">Hi ${safeName},</p>
+	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">
 		You've had an account for a bit but haven't made a creation yet. No pressure — but when you're ready, it only takes a prompt to get started.
 	</p>
-	<p style="margin:0 0 12px;">
+	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">
 		Pick a template or describe a scene in your own words. We'll turn it into something you can share.
 	</p>
-	<p style="margin:0;">— The parascene team</p>
+	<p style="margin:0; font-family:Arial, Helvetica, sans-serif;">— The parascene team</p>
   `;
 	const emailHtml = baseEmailLayout({
 		preheader,
@@ -597,14 +597,14 @@ export function renderReengagement({ recipientName = "there" } = {}) {
 	const subject = "We miss you on parascene";
 	const preheader = "Your creations are waiting — come back and see what's new.";
 	const bodyHtml = html`
-	<p style="margin:0 0 12px;">Hi ${safeName},</p>
-	<p style="margin:0 0 12px;">
+	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">Hi ${safeName},</p>
+	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">
 		It's been a while since we've seen you. Your scenes and the community are still here whenever you're ready to drop back in.
 	</p>
-	<p style="margin:0 0 12px;">
+	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">
 		Create something new, see what others have been making, or just say hello.
 	</p>
-	<p style="margin:0;">— The parascene team</p>
+	<p style="margin:0; font-family:Arial, Helvetica, sans-serif;">— The parascene team</p>
   `;
 	const emailHtml = baseEmailLayout({
 		preheader,
@@ -641,14 +641,14 @@ export function renderCreationHighlight({
 	const subject = `"${creationTitle || "Your creation"}" is getting attention`;
 	const preheader = `${commentLabel} on ${creationTitle || "your creation"}.`;
 	const bodyHtml = html`
-	<p style="margin:0 0 12px;">Hi ${safeName},</p>
-	<p style="margin:0 0 12px;">
+	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">Hi ${safeName},</p>
+	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">
 		Your creation <strong>${safeTitle}</strong> has ${commentLabel.toLowerCase()}. People are engaging with what you made.
 	</p>
-	<p style="margin:0 0 12px;">
+	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">
 		Head over to see the conversation and join in.
 	</p>
-	<p style="margin:0;">— The parascene team</p>
+	<p style="margin:0; font-family:Arial, Helvetica, sans-serif;">— The parascene team</p>
   `;
 	const emailHtml = baseEmailLayout({
 		preheader,

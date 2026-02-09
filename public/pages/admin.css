@@ -562,6 +562,54 @@
 	min-height: 120px;
 }
 
+.admin-emails-templates-panel {
+	display: flex;
+	flex-direction: column;
+	gap: 24px;
+	min-height: 120px;
+}
+
+.admin-email-template-card {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	overflow: hidden;
+}
+
+.admin-email-template-header {
+	padding: 16px 20px;
+	border-bottom: 1px solid var(--border);
+	background: var(--surface-subtle);
+}
+
+.admin-email-template-title {
+	margin: 0;
+	font-size: 1rem;
+	font-weight: 600;
+	color: var(--text);
+}
+
+.admin-email-template-iframe-wrapper {
+	position: relative;
+	width: 100%;
+	height: 600px;
+	overflow: auto;
+	background: #f5f7fb;
+}
+
+.admin-email-template-iframe {
+	width: 100%;
+	height: 100%;
+	border: none;
+	display: block;
+}
+
+@media (max-width: 768px) {
+	.admin-email-template-iframe-wrapper {
+		height: 500px;
+	}
+}
+
 .admin-loading {
 	color: var(--text-muted);
 	font-size: 0.95rem;
