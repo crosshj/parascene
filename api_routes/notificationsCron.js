@@ -70,8 +70,13 @@ export default function createNotificationsCronRoutes({ queries }) {
 				const to = await getEffectiveEmailRecipient(queries, email);
 				const recipientName = user?.display_name || user?.user_name || email.split("@")[0] || "there";
 				const feedUrl = getBaseAppUrl();
-				const activityRows = await (queries.selectDigestActivityByOwnerSince?.all(userId, sinceIso) ?? []);
-				const activityItems = activityRows.map((r) => ({
+				const ownerRows = await (queries.selectDigestActivityByOwnerSince?.all(userId, sinceIso) ?? []);
+				const commenterRows = await (queries.selectDigestActivityByCommenterSince?.all(userId, sinceIso) ?? []);
+				const activityItems = ownerRows.map((r) => ({
+					title: r?.title && String(r.title).trim() ? String(r.title).trim() : "Untitled",
+					comment_count: Number(r?.comment_count ?? 0)
+				}));
+				const otherCreationsActivityItems = commenterRows.map((r) => ({
 					title: r?.title && String(r.title).trim() ? String(r.title).trim() : "Untitled",
 					comment_count: Number(r?.comment_count ?? 0)
 				}));
@@ -81,9 +86,10 @@ export default function createNotificationsCronRoutes({ queries }) {
 						template: "digestActivity",
 						data: {
 							recipientName,
-							activitySummary: "You have new activity on your creations.",
+							activitySummary: "You have new activity.",
 							feedUrl,
-							activityItems
+							activityItems,
+							otherCreationsActivityItems
 						}
 					});
 					if (queries.upsertUserEmailCampaignStateLastDigest?.run) {

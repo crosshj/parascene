@@ -799,6 +799,48 @@ export function openDb() {
 					.sort((a, b) => b.comment_count - a.comment_count || a.created_image_id - b.created_image_id);
 			}
 		},
+		selectDigestActivityByCommenterSince: {
+			all: async (commenterUserId, sinceIso) => {
+				const { data: myComments, error: myError } = await serviceClient
+					.from(prefixedTable("comments_created_image"))
+					.select("created_image_id")
+					.eq("user_id", commenterUserId);
+				if (myError) throw myError;
+				const creationIds = [...new Set((myComments ?? []).map((r) => r?.created_image_id).filter((id) => id != null))];
+				if (creationIds.length === 0) return [];
+
+				const { data: creations, error: creationsError } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.select("id, title")
+					.in("id", creationIds)
+					.neq("user_id", commenterUserId);
+				if (creationsError) throw creationsError;
+				const notOwnedIds = (creations ?? []).map((r) => r.id).filter((id) => id != null);
+				if (notOwnedIds.length === 0) return [];
+
+				const { data: comments, error: commentsError } = await serviceClient
+					.from(prefixedTable("comments_created_image"))
+					.select("created_image_id")
+					.in("created_image_id", notOwnedIds)
+					.gte("created_at", sinceIso)
+					.neq("user_id", commenterUserId);
+				if (commentsError) throw commentsError;
+
+				const countByImage = {};
+				for (const row of comments ?? []) {
+					const id = row?.created_image_id;
+					if (id != null) countByImage[id] = (countByImage[id] || 0) + 1;
+				}
+				const byId = Object.fromEntries((creations ?? []).map((c) => [c.id, c]));
+				return Object.entries(countByImage)
+					.map(([created_image_id, comment_count]) => ({
+						created_image_id: Number(created_image_id),
+						title: (byId[Number(created_image_id)]?.title && String(byId[Number(created_image_id)].title).trim()) || "Untitled",
+						comment_count: Number(comment_count)
+					}))
+					.sort((a, b) => b.comment_count - a.comment_count || a.created_image_id - b.created_image_id);
+			}
+		},
 		insertEmailLinkClick: {
 			run: async (emailSendId, userId, path) => {
 				const { error } = await serviceClient

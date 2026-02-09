@@ -508,6 +508,36 @@ export function openDb() {
 				return out;
 			}
 		},
+		selectDigestActivityByCommenterSince: {
+			all: async (commenterUserId, sinceIso) => {
+				const myCommentCreationIds = [...new Set(
+					(comments_created_image ?? [])
+						.filter((c) => Number(c?.user_id) === Number(commenterUserId))
+						.map((c) => Number(c?.created_image_id))
+						.filter((id) => Number.isFinite(id))
+				)];
+				const notOwned = (created_images ?? []).filter(
+					(ci) => myCommentCreationIds.includes(Number(ci?.id)) && Number(ci?.user_id) !== Number(commenterUserId)
+				);
+				const out = [];
+				for (const ci of notOwned) {
+					const count = (comments_created_image ?? []).filter(
+						(c) => Number(c?.created_image_id) === Number(ci.id)
+							&& (c?.created_at ?? "") >= sinceIso
+							&& Number(c?.user_id) !== Number(commenterUserId)
+					).length;
+					if (count > 0) {
+						out.push({
+							created_image_id: Number(ci.id),
+							title: (ci?.title && String(ci.title).trim()) || "Untitled",
+							comment_count: count
+						});
+					}
+				}
+				out.sort((a, b) => b.comment_count - a.comment_count || a.created_image_id - b.created_image_id);
+				return out;
+			}
+		},
 		insertEmailLinkClick: {
 			run: async (emailSendId, userId, path) => {
 				email_link_clicks.push({

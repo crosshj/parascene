@@ -51,12 +51,16 @@ function baseEmailLayout({ preheader, title, bodyHtml, ctaText, ctaUrl = getBase
 	const safeFooter = escapeHtml(footerText || `© ${new Date().getFullYear()} ${BRAND_NAME}. All rights reserved.`);
 	const ctaBlock = (!suppressCta && ctaText)
 		? html`
-	<div style="margin:28px 0 12px; text-align:center;">
-		<a href="${ctaUrl}"
-			style="background:xxxxxxxxxxxxxxx; color:#ffffff; text-decoration:none; padding:14px 28px; border-radius:18px; font-weight:600; font-size:16px; letter-spacing:0.2px; display:inline-block; min-width:240px; text-align:center;">
-			${escapeHtml(ctaText)}
-		</a>
-	</div>
+	<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:28px auto 12px;">
+		<tr>
+			<td style="background-color:#7c3aed; border-radius:18px; text-align:center;">
+				<a href="${ctaUrl}"
+					style="display:inline-block; background-color:#7c3aed; color:#ffffff; text-decoration:none; padding:14px 28px; font-weight:600; font-size:16px; letter-spacing:0.2px; min-width:240px;">
+					${escapeHtml(ctaText)}
+				</a>
+			</td>
+		</tr>
+	</table>
     `
 		: "";
 
@@ -89,7 +93,7 @@ function baseEmailLayout({ preheader, title, bodyHtml, ctaText, ctaUrl = getBase
 					style="background:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 10px 30px rgba(15, 23, 42, 0.08);">
 					<tr>
 						<td style="padding:32px;">
-							<h1 style="margin:0 0 16px; color:xxxxxxxxxxxxxx; font-size:24px; line-height:1.3;">
+							<h1 style="margin:0 0 16px; color:${BRAND_COLOR}; font-size:24px; line-height:1.3;">
 								${safeTitle}
 							</h1>
 							<div style="color:#334155; font-size:15px; line-height:1.7;">
@@ -433,26 +437,14 @@ export function renderFeatureRequest({
 	return { subject, html: emailHtml, text };
 }
 
-export function renderDigestActivity({
-	recipientName = "there",
-	activitySummary = "You have new activity on your creations.",
-	feedUrl = getBaseAppUrl(),
-	activityItems = []
-} = {}) {
-	const safeName = escapeHtml(recipientName);
-	const safeSummary = escapeHtml(activitySummary);
-	const items = Array.isArray(activityItems) ? activityItems : [];
-	const subject = "You have new activity on parascene!";
-	const preheader = items.length > 0
-		? `${items.length} creation${items.length === 1 ? "" : "s"} with new comments`
-		: (activitySummary || "You have new activity on parascene.");
-
-	const activityListHtml = items.length > 0
-		? html`
+function renderActivityList(items, sectionTitle) {
+	const list = Array.isArray(items) ? items : [];
+	if (list.length === 0) return "";
+	return html`
 	<div style="margin:16px 0 0; padding:14px 16px; border:1px solid #e2e8f0; border-radius:12px; background:#f8fafc;">
-		<div style="color:#475569; font-size:13px; margin:0 0 10px; font-weight:600;">Activity summary</div>
+		<div style="color:#475569; font-size:13px; margin:0 0 10px; font-weight:600;">${escapeHtml(sectionTitle)}</div>
 		<ul style="margin:0; padding-left:20px; color:#0f172a; font-size:15px; line-height:1.8;">
-			${items.map((item) => {
+			${list.map((item) => {
 			const title = item?.title && String(item.title).trim() ? escapeHtml(String(item.title).trim()) : "Untitled";
 			const count = Number(item?.comment_count ?? 0);
 			const commentLabel = count === 1 ? "1 new comment" : `${count} new comments`;
@@ -460,8 +452,32 @@ export function renderDigestActivity({
 			}).join("")}
 		</ul>
 	</div>
-  `
-		: "";
+  `;
+}
+
+export function renderDigestActivity({
+	recipientName = "there",
+	activitySummary = "You have new activity.",
+	feedUrl = getBaseAppUrl(),
+	activityItems = [],
+	otherCreationsActivityItems = []
+} = {}) {
+	const safeName = escapeHtml(recipientName);
+	const safeSummary = escapeHtml(activitySummary);
+	const items = Array.isArray(activityItems) ? activityItems : [];
+	const otherItems = Array.isArray(otherCreationsActivityItems) ? otherCreationsActivityItems : [];
+	const totalCount = items.length + otherItems.length;
+	const subject = "You have new activity on parascene!";
+	const preheader = totalCount > 0
+		? `${totalCount} creation${totalCount === 1 ? "" : "s"} with new comments`
+		: (activitySummary || "You have new activity on parascene.");
+
+	const yourCreationsHtml = renderActivityList(items, "Your creations");
+	const otherCreationsHtml = renderActivityList(otherItems, "Creations you've commented on");
+	const activityListHtml = yourCreationsHtml || otherCreationsHtml ? html`
+	${yourCreationsHtml}
+	${otherCreationsHtml}
+  ` : "";
 
 	const bodyHtml = html`
 	<p style="margin:0 0 12px;">Hi ${safeName},</p>
@@ -477,17 +493,26 @@ export function renderDigestActivity({
 		footerText: "You're receiving this because you have notifications on parascene."
 	});
 
+	const textSections = [];
+	if (items.length > 0) {
+		textSections.push("Your creations:", ...items.map((item) => {
+			const title = (item?.title && String(item.title).trim()) || "Untitled";
+			const count = Number(item?.comment_count ?? 0);
+			return `  • ${title} — ${count} new comment${count === 1 ? "" : "s"}`;
+		}));
+	}
+	if (otherItems.length > 0) {
+		textSections.push("Creations you've commented on:", ...otherItems.map((item) => {
+			const title = (item?.title && String(item.title).trim()) || "Untitled";
+			const count = Number(item?.comment_count ?? 0);
+			return `  • ${title} — ${count} new comment${count === 1 ? "" : "s"}`;
+		}));
+	}
 	const textLines = [
 		`Hi ${recipientName},`,
 		"",
 		activitySummary,
-		...(items.length > 0
-			? ["", "Activity summary:", ...items.map((item) => {
-				const title = (item?.title && String(item.title).trim()) || "Untitled";
-				const count = Number(item?.comment_count ?? 0);
-				return `  • ${title} — ${count} new comment${count === 1 ? "" : "s"}`;
-			})]
-			: []),
+		...(textSections.length > 0 ? ["", ...textSections] : []),
 		"",
 		`View activity: ${feedUrl}`
 	];

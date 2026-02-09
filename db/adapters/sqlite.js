@@ -825,6 +825,21 @@ export async function openDb() {
 				return Promise.resolve(rows);
 			}
 		},
+		selectDigestActivityByCommenterSince: {
+			all: async (commenterUserId, sinceIso) => {
+				const stmt = db.prepare(
+					`SELECT ci.id AS created_image_id, COALESCE(NULLIF(TRIM(ci.title), ''), 'Untitled') AS title, COUNT(c.id) AS comment_count
+           FROM created_images ci
+           INNER JOIN comments_created_image c ON c.created_image_id = ci.id AND c.created_at >= datetime(?) AND c.user_id != ?
+           WHERE ci.id IN (SELECT DISTINCT created_image_id FROM comments_created_image WHERE user_id = ?)
+           AND ci.user_id != ?
+           GROUP BY ci.id, ci.title
+           ORDER BY comment_count DESC, ci.id`
+				);
+				const rows = stmt.all(sinceIso, commenterUserId, commenterUserId, commenterUserId) ?? [];
+				return Promise.resolve(rows);
+			}
+		},
 		insertEmailLinkClick: {
 			run: async (emailSendId, userId, path) => {
 				const stmt = db.prepare(
