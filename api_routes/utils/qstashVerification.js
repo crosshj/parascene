@@ -61,15 +61,19 @@ export async function verifyQStashRequest(req) {
 		return false;
 	}
 
-	// Use raw body when set (e.g. cron route mounted with express.raw()); otherwise Upstash verification fails for empty body (signed as "" but we'd pass "{}").
+	// Use raw body when set (e.g. cron route mounted with express.raw()). Otherwise: QStash signs the raw body;
+	// for empty POST (e.g. cron) that is "". Vercel/serverless often parses empty body as {} so we must use ""
+	// for verification when body is missing or empty object, else we'd pass "{}" and body hash would not match.
 	const body =
 		req.rawBodyForVerify !== undefined
 			? req.rawBodyForVerify
 			: typeof req.body === "string"
 				? req.body
-				: req.body != null
-					? JSON.stringify(req.body)
-					: "";
+				: req.body != null && typeof req.body === "object" && Object.keys(req.body).length === 0
+					? ""
+					: req.body != null
+						? JSON.stringify(req.body)
+						: "";
 	const path = req.originalUrl || req.url || "/api/worker/create";
 
 	logCreation("Verifying QStash signature", {
