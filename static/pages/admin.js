@@ -833,6 +833,56 @@ function bindSwitch(checkbox, onSave) {
 	});
 }
 
+/** Convert UTC time string (HH:MM or HH) to local time string (HH:MM). */
+function utcToLocalTime(utcTimeStr) {
+	const trimmed = String(utcTimeStr ?? "").trim();
+	if (!trimmed) return "";
+	const parts = trimmed.split(":");
+	const hour = parseInt(parts[0], 10);
+	if (!Number.isFinite(hour) || hour < 0 || hour > 23) return trimmed;
+	const today = new Date();
+	const utcDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), hour, parseInt(parts[1] || "0", 10) || 0));
+	const localHour = utcDate.getHours();
+	const localMin = utcDate.getMinutes();
+	return `${String(localHour).padStart(2, "0")}:${String(localMin).padStart(2, "0")}`;
+}
+
+/** Convert comma-separated UTC times to comma-separated local times. */
+function utcWindowsToLocal(utcWindowsStr) {
+	if (!utcWindowsStr) return "";
+	return utcWindowsStr
+		.split(",")
+		.map((s) => s.trim())
+		.filter(Boolean)
+		.map(utcToLocalTime)
+		.join(", ");
+}
+
+/** Convert local time string (HH:MM or HH) to UTC time string (HH:MM). */
+function localToUtcTime(localTimeStr) {
+	const trimmed = String(localTimeStr ?? "").trim();
+	if (!trimmed) return "";
+	const parts = trimmed.split(":");
+	const hour = parseInt(parts[0], 10);
+	if (!Number.isFinite(hour) || hour < 0 || hour > 23) return trimmed;
+	const today = new Date();
+	const localDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hour, parseInt(parts[1] || "0", 10) || 0);
+	const utcHour = localDate.getUTCHours();
+	const utcMin = localDate.getUTCMinutes();
+	return `${String(utcHour).padStart(2, "0")}:${String(utcMin).padStart(2, "0")}`;
+}
+
+/** Convert comma-separated local times to comma-separated UTC times. */
+function localWindowsToUtc(localWindowsStr) {
+	if (!localWindowsStr) return "";
+	return localWindowsStr
+		.split(",")
+		.map((s) => s.trim())
+		.filter(Boolean)
+		.map(localToUtcTime)
+		.join(",");
+}
+
 async function loadSettings() {
 	if (adminDataLoaded.settings) return;
 
@@ -840,6 +890,7 @@ async function loadSettings() {
 	const dryRunCheckbox = document.getElementById("email-dry-run");
 	const digestWindowsInput = document.getElementById("digest-utc-windows");
 	const maxDigestsInput = document.getElementById("max-digests-per-user-per-day");
+	const digestActivityLookbackInput = document.getElementById("digest-activity-hours-lookback");
 	const welcomeDelayInput = document.getElementById("welcome-email-delay-hours");
 	const reengagementInactiveInput = document.getElementById("reengagement-inactive-days");
 	const reengagementCooldownInput = document.getElementById("reengagement-cooldown-days");
@@ -856,8 +907,12 @@ async function loadSettings() {
 		if (dryRunCheckbox) dryRunCheckbox.checked = !!data.email_dry_run;
 		syncSwitchAria(emailTestCheckbox);
 		syncSwitchAria(dryRunCheckbox);
-		if (digestWindowsInput) digestWindowsInput.value = data.digest_utc_windows ?? "";
+		if (digestWindowsInput) {
+			const utcWindows = data.digest_utc_windows ?? "";
+			digestWindowsInput.value = utcWindows ? utcWindowsToLocal(utcWindows) : "";
+		}
 		if (maxDigestsInput) maxDigestsInput.value = String(data.max_digests_per_user_per_day ?? "2");
+		if (digestActivityLookbackInput) digestActivityLookbackInput.value = String(data.digest_activity_hours_lookback ?? "24");
 		if (welcomeDelayInput) welcomeDelayInput.value = String(data.welcome_email_delay_hours ?? "1");
 		if (reengagementInactiveInput) reengagementInactiveInput.value = String(data.reengagement_inactive_days ?? "14");
 		if (reengagementCooldownInput) reengagementCooldownInput.value = String(data.reengagement_cooldown_days ?? "30");
@@ -891,25 +946,44 @@ async function loadSettings() {
 		});
 
 		if (settingsSaveBtn) {
+			const saveLabel = settingsSaveBtn.querySelector(".admin-settings-save-label");
 			settingsSaveBtn.addEventListener("click", async () => {
-				const payload = {
-					digest_utc_windows: (digestWindowsInput?.value ?? "").trim() || "09:00,18:00",
-					max_digests_per_user_per_day: Math.max(0, parseInt(maxDigestsInput?.value, 10) || 0),
-					welcome_email_delay_hours: Math.max(0, parseInt(welcomeDelayInput?.value, 10) || 0),
-					reengagement_inactive_days: Math.max(1, parseInt(reengagementInactiveInput?.value, 10) || 14),
-					reengagement_cooldown_days: Math.max(1, parseInt(reengagementCooldownInput?.value, 10) || 30),
-					creation_highlight_lookback_hours: Math.max(1, parseInt(highlightLookbackInput?.value, 10) || 48),
-					creation_highlight_cooldown_days: Math.max(1, parseInt(highlightCooldownInput?.value, 10) || 7)
-				};
-				const res = await fetch("/admin/settings", {
-					method: "PATCH",
-					credentials: "include",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify(payload)
-				});
-				if (res.ok) {
-					settingsSaveBtn.textContent = "Saved";
-					setTimeout(() => { settingsSaveBtn.textContent = "Save settings"; }, 2000);
+				settingsSaveBtn.disabled = true;
+				settingsSaveBtn.classList.add("is-loading");
+				try {
+					const localWindows = (digestWindowsInput?.value ?? "").trim();
+					const utcWindows = localWindows ? localWindowsToUtc(localWindows) : "09:00,18:00";
+					const payload = {
+						digest_utc_windows: utcWindows,
+						max_digests_per_user_per_day: Math.max(0, parseInt(maxDigestsInput?.value, 10) || 0),
+						digest_activity_hours_lookback: Math.max(1, parseInt(digestActivityLookbackInput?.value, 10) || 24),
+						welcome_email_delay_hours: Math.max(0, parseInt(welcomeDelayInput?.value, 10) || 0),
+						reengagement_inactive_days: Math.max(1, parseInt(reengagementInactiveInput?.value, 10) || 14),
+						reengagement_cooldown_days: Math.max(1, parseInt(reengagementCooldownInput?.value, 10) || 30),
+						creation_highlight_lookback_hours: Math.max(1, parseInt(highlightLookbackInput?.value, 10) || 48),
+						creation_highlight_cooldown_days: Math.max(1, parseInt(highlightCooldownInput?.value, 10) || 7)
+					};
+					const res = await fetch("/admin/settings", {
+						method: "PATCH",
+						credentials: "include",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify(payload)
+					});
+					if (res.ok) {
+						settingsSaveBtn.classList.remove("is-loading");
+						if (saveLabel) saveLabel.textContent = "Saved";
+						setTimeout(() => {
+							settingsSaveBtn.disabled = false;
+							if (saveLabel) saveLabel.textContent = "Save settings";
+						}, 2000);
+						return;
+					}
+				} finally {
+					if (settingsSaveBtn.disabled && settingsSaveBtn.classList.contains("is-loading")) {
+						settingsSaveBtn.classList.remove("is-loading");
+						settingsSaveBtn.disabled = false;
+						if (saveLabel) saveLabel.textContent = "Save settings";
+					}
 				}
 			});
 		}

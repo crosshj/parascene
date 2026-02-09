@@ -61,14 +61,19 @@
 									</div>
 								</div>
 								<div class="admin-settings-field">
-									<label class="admin-settings-label" for="digest-utc-windows">Digest UTC windows</label>
+									<label class="admin-settings-label" for="digest-utc-windows">Digest windows</label>
 									<input type="text" id="digest-utc-windows" class="admin-settings-input" placeholder="09:00,18:00" />
-									<p class="admin-detail">Comma-separated HH:MM (UTC). Cron only runs digest in these hours.</p>
+									<p class="admin-detail">Comma-separated times in your local timezone (HH:MM or HH). Minutes are optional; only hours are used. Converted to UTC when saved.</p>
 								</div>
 								<div class="admin-settings-field">
 									<label class="admin-settings-label" for="max-digests-per-user-per-day">Max digests per user per day</label>
 									<input type="number" id="max-digests-per-user-per-day" class="admin-settings-input" min="0" step="1" />
 									<p class="admin-detail">Cap per user per UTC day.</p>
+								</div>
+								<div class="admin-settings-field">
+									<label class="admin-settings-label" for="digest-activity-hours-lookback">Activity lookback (hours)</label>
+									<input type="number" id="digest-activity-hours-lookback" class="admin-settings-input" min="1" step="1" />
+									<p class="admin-detail">Hours to look back for unread activity when building digest candidates.</p>
 								</div>
 							</section>
 							<section class="admin-settings-section">
@@ -106,7 +111,10 @@
 								</div>
 							</section>
 							<div class="admin-settings-actions">
-								<button type="button" id="settings-save" class="btn-primary">Save settings</button>
+								<button type="button" id="settings-save" class="btn-primary admin-settings-save">
+									<span class="admin-settings-save-label">Save settings</span>
+									<span class="admin-settings-save-spinner" aria-hidden="true"></span>
+								</button>
 							</div>
 						</div>
 					</tab>

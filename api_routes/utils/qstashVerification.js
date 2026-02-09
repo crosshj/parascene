@@ -61,7 +61,15 @@ export async function verifyQStashRequest(req) {
 		return false;
 	}
 
-	const body = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
+	// Use raw body when set (e.g. cron route mounted with express.raw()); otherwise Upstash verification fails for empty body (signed as "" but we'd pass "{}").
+	const body =
+		req.rawBodyForVerify !== undefined
+			? req.rawBodyForVerify
+			: typeof req.body === "string"
+				? req.body
+				: req.body != null
+					? JSON.stringify(req.body)
+					: "";
 	const path = req.originalUrl || req.url || "/api/worker/create";
 
 	logCreation("Verifying QStash signature", {

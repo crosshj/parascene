@@ -1,13 +1,6 @@
 import express from "express";
 import { buildProviderHeaders, resolveProviderAuthToken } from "./utils/providerAuth.js";
-import {
-		getEmailUseTestRecipient,
-		getPolicyValue,
-		getReengagementInactiveDays,
-		getReengagementCooldownDays,
-		getCreationHighlightLookbackHours,
-		getCreationHighlightCooldownDays
-	} from "./utils/emailSettings.js";
+import { getEmailSettings } from "./utils/emailSettings.js";
 
 export default function createAdminRoutes({ queries, storage }) {
 	const router = express.Router();
@@ -429,26 +422,18 @@ export default function createAdminRoutes({ queries, storage }) {
 	router.get("/admin/settings", async (req, res) => {
 		const user = await requireAdmin(req, res);
 		if (!user) return;
-		const email_use_test_recipient = await getEmailUseTestRecipient(queries);
-		const email_dry_run_val = await getPolicyValue(queries, "email_dry_run", "true");
-		const email_dry_run = email_dry_run_val.toLowerCase() === "true" || email_dry_run_val === "1";
-		const digest_utc_windows = await getPolicyValue(queries, "digest_utc_windows", "09:00,18:00");
-		const max_digests_per_user_per_day = await getPolicyValue(queries, "max_digests_per_user_per_day", "2");
-		const welcome_email_delay_hours = await getPolicyValue(queries, "welcome_email_delay_hours", "1");
-		const reengagement_inactive_days = await getReengagementInactiveDays(queries);
-		const reengagement_cooldown_days = await getReengagementCooldownDays(queries);
-		const creation_highlight_lookback_hours = await getCreationHighlightLookbackHours(queries);
-		const creation_highlight_cooldown_days = await getCreationHighlightCooldownDays(queries);
+		const s = await getEmailSettings(queries);
 		res.json({
-			email_use_test_recipient,
-			email_dry_run,
-			digest_utc_windows,
-			max_digests_per_user_per_day,
-			welcome_email_delay_hours,
-			reengagement_inactive_days,
-			reengagement_cooldown_days,
-			creation_highlight_lookback_hours,
-			creation_highlight_cooldown_days
+			email_use_test_recipient: s.emailUseTestRecipient,
+			email_dry_run: s.dryRun,
+			digest_utc_windows: s.digestUtcWindowsRaw,
+			max_digests_per_user_per_day: String(s.maxDigestsPerUserPerDay),
+			digest_activity_hours_lookback: String(s.activityHoursLookback),
+			welcome_email_delay_hours: String(s.welcomeEmailDelayHours),
+			reengagement_inactive_days: s.reengagementInactiveDays,
+			reengagement_cooldown_days: s.reengagementCooldownDays,
+			creation_highlight_lookback_hours: s.creationHighlightLookbackHours,
+			creation_highlight_cooldown_days: s.creationHighlightCooldownDays
 		});
 	});
 
@@ -484,6 +469,12 @@ export default function createAdminRoutes({ queries, storage }) {
 				await queries.upsertPolicyKey.run("max_digests_per_user_per_day", value, "Max digest emails per user per UTC day.");
 			}
 		}
+		if (typeof body.digest_activity_hours_lookback !== "undefined") {
+			const value = String(Math.max(1, parseInt(body.digest_activity_hours_lookback, 10) || 24));
+			if (queries.upsertPolicyKey?.run) {
+				await queries.upsertPolicyKey.run("digest_activity_hours_lookback", value, "Hours to look back for unread activity when building digest candidates.");
+			}
+		}
 		if (typeof body.welcome_email_delay_hours !== "undefined") {
 			const value = String(Math.max(0, parseInt(body.welcome_email_delay_hours, 10) || 0));
 			if (queries.upsertPolicyKey?.run) {
@@ -514,26 +505,18 @@ export default function createAdminRoutes({ queries, storage }) {
 				await queries.upsertPolicyKey.run("creation_highlight_cooldown_days", value, "Minimum days between creation highlight emails per user.");
 			}
 		}
-		const email_use_test_recipient = await getEmailUseTestRecipient(queries);
-		const email_dry_run_val = await getPolicyValue(queries, "email_dry_run", "true");
-		const email_dry_run = email_dry_run_val.toLowerCase() === "true" || email_dry_run_val === "1";
-		const digest_utc_windows = await getPolicyValue(queries, "digest_utc_windows", "09:00,18:00");
-		const max_digests_per_user_per_day = await getPolicyValue(queries, "max_digests_per_user_per_day", "2");
-		const welcome_email_delay_hours = await getPolicyValue(queries, "welcome_email_delay_hours", "1");
-		const reengagement_inactive_days = await getReengagementInactiveDays(queries);
-		const reengagement_cooldown_days = await getReengagementCooldownDays(queries);
-		const creation_highlight_lookback_hours = await getCreationHighlightLookbackHours(queries);
-		const creation_highlight_cooldown_days = await getCreationHighlightCooldownDays(queries);
+		const s = await getEmailSettings(queries);
 		res.json({
-			email_use_test_recipient,
-			email_dry_run,
-			digest_utc_windows,
-			max_digests_per_user_per_day,
-			welcome_email_delay_hours,
-			reengagement_inactive_days,
-			reengagement_cooldown_days,
-			creation_highlight_lookback_hours,
-			creation_highlight_cooldown_days
+			email_use_test_recipient: s.emailUseTestRecipient,
+			email_dry_run: s.dryRun,
+			digest_utc_windows: s.digestUtcWindowsRaw,
+			max_digests_per_user_per_day: String(s.maxDigestsPerUserPerDay),
+			digest_activity_hours_lookback: String(s.activityHoursLookback),
+			welcome_email_delay_hours: String(s.welcomeEmailDelayHours),
+			reengagement_inactive_days: s.reengagementInactiveDays,
+			reengagement_cooldown_days: s.reengagementCooldownDays,
+			creation_highlight_lookback_hours: s.creationHighlightLookbackHours,
+			creation_highlight_cooldown_days: s.creationHighlightCooldownDays
 		});
 	});
 

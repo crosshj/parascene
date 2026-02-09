@@ -79,6 +79,39 @@
 	border-top: 1px solid var(--border);
 }
 
+.admin-settings-save {
+	position: relative;
+	min-width: 120px;
+}
+
+.admin-settings-save-spinner {
+	display: none;
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 18px;
+	height: 18px;
+	margin: -9px 0 0 -9px;
+	border-radius: 50%;
+	border: 2px solid currentColor;
+	border-top-color: transparent;
+	animation: admin-settings-spin 0.8s linear infinite;
+}
+
+.admin-settings-save.is-loading .admin-settings-save-label {
+	opacity: 0;
+}
+
+.admin-settings-save.is-loading .admin-settings-save-spinner {
+	display: block;
+}
+
+@keyframes admin-settings-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
 /* Switch (admin settings) – matches global form-switch pattern */
 .admin-emails-settings-panel .form-switch-input {
 	position: absolute;
