@@ -488,6 +488,26 @@ export function openDb() {
 				return { count };
 			}
 		},
+		selectDigestActivityByOwnerSince: {
+			all: async (ownerUserId, sinceIso) => {
+				const owned = (created_images ?? []).filter((ci) => Number(ci?.user_id) === Number(ownerUserId));
+				const out = [];
+				for (const ci of owned) {
+					const count = (comments_created_image ?? []).filter(
+						(c) => Number(c?.created_image_id) === Number(ci.id) && (c?.created_at ?? "") >= sinceIso
+					).length;
+					if (count > 0) {
+						out.push({
+							created_image_id: Number(ci.id),
+							title: (ci?.title && String(ci.title).trim()) || "Untitled",
+							comment_count: count
+						});
+					}
+				}
+				out.sort((a, b) => b.comment_count - a.comment_count || a.created_image_id - b.created_image_id);
+				return out;
+			}
+		},
 		insertEmailLinkClick: {
 			run: async (emailSendId, userId, path) => {
 				email_link_clicks.push({

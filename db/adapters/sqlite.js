@@ -810,6 +810,21 @@ export async function openDb() {
 				return Promise.resolve(stmt.get(userId, campaign, sinceIso));
 			}
 		},
+		selectDigestActivityByOwnerSince: {
+			all: async (ownerUserId, sinceIso) => {
+				// Use datetime(?) so ISO 'YYYY-MM-DDTHH:MM:SS.sssZ' compares correctly with SQLite's 'YYYY-MM-DD HH:MM:SS'
+				const stmt = db.prepare(
+					`SELECT ci.id AS created_image_id, COALESCE(NULLIF(TRIM(ci.title), ''), 'Untitled') AS title, COUNT(c.id) AS comment_count
+           FROM created_images ci
+           INNER JOIN comments_created_image c ON c.created_image_id = ci.id AND c.created_at >= datetime(?)
+           WHERE ci.user_id = ?
+           GROUP BY ci.id, ci.title
+           ORDER BY comment_count DESC, ci.id`
+				);
+				const rows = stmt.all(sinceIso, ownerUserId) ?? [];
+				return Promise.resolve(rows);
+			}
+		},
 		insertEmailLinkClick: {
 			run: async (emailSendId, userId, path) => {
 				const stmt = db.prepare(

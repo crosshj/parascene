@@ -767,6 +767,38 @@ export function openDb() {
 				return { count: (data ?? []).length };
 			}
 		},
+		selectDigestActivityByOwnerSince: {
+			all: async (ownerUserId, sinceIso) => {
+				const { data: creations, error: creationsError } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.select("id, title")
+					.eq("user_id", ownerUserId);
+				if (creationsError) throw creationsError;
+				const creationIds = (creations ?? []).map((r) => r.id).filter((id) => id != null);
+				if (creationIds.length === 0) return [];
+
+				const { data: comments, error: commentsError } = await serviceClient
+					.from(prefixedTable("comments_created_image"))
+					.select("created_image_id")
+					.in("created_image_id", creationIds)
+					.gte("created_at", sinceIso);
+				if (commentsError) throw commentsError;
+
+				const countByImage = {};
+				for (const row of comments ?? []) {
+					const id = row?.created_image_id;
+					if (id != null) countByImage[id] = (countByImage[id] || 0) + 1;
+				}
+				const byId = Object.fromEntries((creations ?? []).map((c) => [c.id, c]));
+				return Object.entries(countByImage)
+					.map(([created_image_id, comment_count]) => ({
+						created_image_id: Number(created_image_id),
+						title: (byId[Number(created_image_id)]?.title && String(byId[Number(created_image_id)].title).trim()) || "Untitled",
+						comment_count: Number(comment_count)
+					}))
+					.sort((a, b) => b.comment_count - a.comment_count || a.created_image_id - b.created_image_id);
+			}
+		},
 		insertEmailLinkClick: {
 			run: async (emailSendId, userId, path) => {
 				const { error } = await serviceClient

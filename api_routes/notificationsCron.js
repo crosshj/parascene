@@ -65,14 +65,16 @@ export default function createNotificationsCronRoutes({ queries }) {
 			const result = await queries.insertEmailSend?.run(userId, "digest", null);
 			const sendId = result?.insertId ?? result?.lastInsertRowid;
 			const sentAt = new Date().toISOString();
-			if (queries.upsertUserEmailCampaignStateLastDigest?.run) {
-				await queries.upsertUserEmailCampaignStateLastDigest.run(userId, sentAt);
-			}
 
 			if (!dryRun && process.env.RESEND_API_KEY && process.env.RESEND_SYSTEM_EMAIL) {
 				const to = await getEffectiveEmailRecipient(queries, email);
 				const recipientName = user?.display_name || user?.user_name || email.split("@")[0] || "there";
 				const feedUrl = getBaseAppUrl();
+				const activityRows = await (queries.selectDigestActivityByOwnerSince?.all(userId, sinceIso) ?? []);
+				const activityItems = activityRows.map((r) => ({
+					title: r?.title && String(r.title).trim() ? String(r.title).trim() : "Untitled",
+					comment_count: Number(r?.comment_count ?? 0)
+				}));
 				try {
 					await sendTemplatedEmail({
 						to,
@@ -80,9 +82,13 @@ export default function createNotificationsCronRoutes({ queries }) {
 						data: {
 							recipientName,
 							activitySummary: "You have new activity on your creations.",
-							feedUrl
+							feedUrl,
+							activityItems
 						}
 					});
+					if (queries.upsertUserEmailCampaignStateLastDigest?.run) {
+						await queries.upsertUserEmailCampaignStateLastDigest.run(userId, sentAt);
+					}
 					sent++;
 				} catch (err) {
 					// Log but don't fail the cron

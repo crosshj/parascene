@@ -1,7 +1,5 @@
 import express from "express";
-import { sendDelegatedEmail, sendTemplatedEmail } from "../email/index.js";
-import { getEffectiveEmailRecipient } from "./utils/emailSettings.js";
-import { getBaseAppUrl, getThumbnailUrl } from "./utils/url.js";
+import { getThumbnailUrl } from "./utils/url.js";
 
 async function requireUser(req, res, queries) {
 	if (!req.auth?.userId) {
@@ -153,127 +151,47 @@ export default function createCommentsRoutes({ queries }) {
 
 		// console.log(`[Comments] POST /api/created-images/${req.params.id}/comments`);
 
-		// Best-effort in-app notifications for prior commenters on this creation.
+		// Best-effort in-app notifications: creation owner + prior commenters (for digest / in-app).
 		// Do not block comment creation if notification insert fails.
 		try {
-			if (queries.insertNotification?.run && queries.selectCreatedImageCommenterUserIdsDistinct?.all) {
-				const rawIds = await queries.selectCreatedImageCommenterUserIdsDistinct.all(imageId);
+			if (queries.insertNotification?.run) {
 				const commenterId = Number(user.id);
-				const recipientIds = Array.from(new Set(
-					(rawIds ?? [])
-						.map((id) => Number(id))
-						.filter((id) => Number.isFinite(id) && id > 0 && id !== commenterId)
-				));
+				const commenterName = getUserDisplayName(user);
+				const creationTitle = typeof image?.title === "string" ? image.title.trim() : "";
+				const title = "New comment";
+				const link = `/creations/${encodeURIComponent(String(imageId))}`;
 
-				if (recipientIds.length > 0) {
-					const commenterName = getUserDisplayName(user);
-					const creationTitle = typeof image?.title === "string" ? image.title.trim() : "";
-					const title = "New comment";
-					const link = `/creations/${encodeURIComponent(String(imageId))}`;
+				// Notify creation owner when someone else comments (so they get digest / in-app).
+				const ownerUserId = Number(image?.user_id);
+				if (Number.isFinite(ownerUserId) && ownerUserId > 0 && ownerUserId !== commenterId) {
 					const message = creationTitle
 						? `${commenterName} commented on “${creationTitle}”.`
-						: `${commenterName} commented on a creation you commented on.`;
-
-					for (const toUserId of recipientIds) {
-						await queries.insertNotification.run(toUserId, null, title, message, link);
-					}
+						: `${commenterName} commented on your creation.`;
+					await queries.insertNotification.run(ownerUserId, null, title, message, link);
 				}
-			}
-		} catch (error) {
-			// This catch exists so comment posting still succeeds even if notifications fail.
-		}
 
-		// Best-effort email notification to the creation owner.
-		// Do not block comment creation if email fails.
-		try {
-			const ownerUserId = Number(image?.user_id);
-			if (!Number.isFinite(ownerUserId) || ownerUserId <= 0) {
-				// If this happens, the created_images row is missing/invalid.
-				// console.warn("[Comments] Skipping comment email: invalid owner user_id on image", {
-				// 	imageId,
-				// 		ownerUserId: image?.user_id ?? null
-				// });
-			} else if (ownerUserId === Number(user.id)) {
-				// We don't email you about your own comments.
-				// console.log("[Comments] Skipping comment email: self-comment", { imageId, ownerUserId });
-			} else {
-				const owner = await queries.selectUserById?.get(ownerUserId);
-				if (!owner) {
-					// Owner record missing (data integrity issue).
-					// console.warn("[Comments] Skipping comment email: owner user not found", { imageId, ownerUserId });
-				} else {
-					const ownerEmail = String(owner?.email || "").trim();
-					if (!ownerEmail) {
-						// No email on file → cannot deliver.
-						// console.warn("[Comments] Skipping comment email: owner has no email address", {
-						// 	imageId,
-						// 	ownerUserId
-						// });
-					} else {
-						const ownerEmailLower = ownerEmail.toLowerCase();
-						const shouldSuppress = ownerEmailLower.includes("example.com");
-						if (!process.env.RESEND_API_KEY || !process.env.RESEND_SYSTEM_EMAIL) {
-							// Most common local/dev issue: missing env vars.
-							// console.warn("[Comments] Skipping comment email: Resend env missing", {
-							// 	imageId,
-							// 	ownerUserId,
-							// 	hasResendApiKey: Boolean(process.env.RESEND_API_KEY),
-							// 	hasResendSystemEmail: Boolean(process.env.RESEND_SYSTEM_EMAIL)
-							// });
-						} else {
-							const baseUrl = getBaseAppUrl();
-							const creationPath = `/creations/${encodeURIComponent(String(imageId))}`;
-							const creationUrl = new URL(creationPath, baseUrl).toString();
-							const commenterName = getUserDisplayName(user);
-							const recipientName = getUserDisplayName(owner);
-							const creationTitle = typeof image?.title === "string" ? image.title.trim() : "";
+				// Notify prior commenters (excluding current commenter and owner, to avoid duplicate).
+				if (queries.selectCreatedImageCommenterUserIdsDistinct?.all) {
+					const rawIds = await queries.selectCreatedImageCommenterUserIdsDistinct.all(imageId);
+					const recipientIds = Array.from(new Set(
+						(rawIds ?? [])
+							.map((r) => Number(r?.user_id ?? r))
+							.filter((id) => Number.isFinite(id) && id > 0 && id !== commenterId && id !== ownerUserId)
+					));
 
-							const to = await getEffectiveEmailRecipient(queries, ownerEmail);
-							if (shouldSuppress && to === ownerEmail) {
-								await sendDelegatedEmail({
-									template: "commentReceived",
-									reason: "Suppressed domain match (example.com)",
-									originalRecipient: {
-										name: recipientName,
-										email: ownerEmail,
-										userId: ownerUserId
-									},
-									data: {
-										recipientName,
-										commenterName,
-										commentText: text,
-										creationTitle,
-										creationUrl
-									}
-								});
-							} else {
-								await sendTemplatedEmail({
-									to,
-									template: "commentReceived",
-									data: {
-										recipientName,
-										commenterName,
-										commentText: text,
-										creationTitle,
-										creationUrl
-									}
-								});
-							}
+					if (recipientIds.length > 0) {
+						const message = creationTitle
+							? `${commenterName} commented on “${creationTitle}”.`
+							: `${commenterName} commented on a creation you commented on.`;
+
+						for (const toUserId of recipientIds) {
+							await queries.insertNotification.run(toUserId, null, title, message, link);
 						}
 					}
 				}
 			}
 		} catch (error) {
-			// This catch exists so comment posting still succeeds even if email fails.
-			// Common causes:
-			// - Missing/invalid Resend env (RESEND_API_KEY / RESEND_SYSTEM_EMAIL)
-			// - Resend API error / rate limit
-			// - Invalid recipient address
-			// console.warn("[Comments] Failed to send comment notification email:", {
-			// 	imageId,
-			// 	commenterUserId: user?.id ?? null,
-			// 	error: error?.message || String(error)
-			// });
+			// This catch exists so comment posting still succeeds even if notifications fail.
 		}
 
 		let commentCount = null;
