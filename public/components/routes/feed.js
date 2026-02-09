@@ -132,12 +132,26 @@ class AppRouteFeed extends HTMLElement {
 		this.feedItems = [];
 		this.feedIndex = 0;
 		this.feedBatchSize = 6;
+		this.sentinelWasIntersecting = false;
+		this.isLoading = false;
 		enableLikeButtons(this);
 		this.setupInfiniteScroll();
-		this.loadFeed();
+		this.routeChangeHandler = (e) => {
+			const route = e?.detail?.route;
+			if (route === 'feed') this.loadFeed();
+		};
+		document.addEventListener('route-change', this.routeChangeHandler);
+		// Only load feed when feed is the active route (avoids loading on explore/creations and reduces API storm)
+		const initialRoute = window.__CURRENT_ROUTE__ || (window.location.pathname === '/' || window.location.pathname === '' ? 'feed' : window.location.pathname.slice(1).split('/')[0]);
+		if (initialRoute === 'feed') {
+			this.loadFeed();
+		}
 	}
 
 	disconnectedCallback() {
+		if (this.routeChangeHandler) {
+			document.removeEventListener('route-change', this.routeChangeHandler);
+		}
 		if (this.feedObserver) {
 			this.feedObserver.disconnect();
 			this.feedObserver = null;
@@ -160,9 +174,11 @@ class AppRouteFeed extends HTMLElement {
 
 		this.feedObserver = new IntersectionObserver((entries) => {
 			entries.forEach((entry) => {
-				if (entry.isIntersecting) {
+				const nowIntersecting = entry.isIntersecting;
+				if (nowIntersecting && !this.sentinelWasIntersecting) {
 					this.renderNextBatch();
 				}
+				this.sentinelWasIntersecting = nowIntersecting;
 			});
 		}, {
 			root: null,
@@ -193,6 +209,10 @@ class AppRouteFeed extends HTMLElement {
 	}
 
 	buildFeedCard(item, itemIndex) {
+		if (item.type === "tip") {
+			return this.buildTipCard(item);
+		}
+
 		const card = document.createElement("div");
 		card.className = "feed-card";
 
@@ -389,35 +409,41 @@ class AppRouteFeed extends HTMLElement {
 		const imageContainer = card.querySelector('.feed-card-image');
 
 		if (imageEl && item.image_url) {
-			const isHighPriority = typeof itemIndex === 'number' && itemIndex >= 0 && itemIndex < 2;
-			// Ensure the first couple of above-the-fold images win the network race.
-			imageEl.loading = isHighPriority ? 'eager' : 'lazy';
-			if ('fetchPriority' in imageEl) {
-				imageEl.fetchPriority = isHighPriority ? 'high' : 'auto';
-			}
+			// Skip loading if this element already has this URL (avoids duplicate requests)
+			const alreadyLoaded = imageEl.dataset.feedImageUrl === item.image_url ||
+				(imageEl.src && imageEl.src === item.image_url) ||
+				(imageEl.currentSrc && imageEl.currentSrc === item.image_url);
+			if (alreadyLoaded) {
+				if (imageEl.complete && imageEl.naturalHeight !== 0) {
+					imageContainer.classList.remove('loading');
+					imageContainer.classList.add('loaded');
+				}
+			} else {
+				imageEl.dataset.feedImageUrl = item.image_url;
+				const isHighPriority = typeof itemIndex === 'number' && itemIndex >= 0 && itemIndex < 2;
+				imageEl.loading = isHighPriority ? 'eager' : 'lazy';
+				if ('fetchPriority' in imageEl) {
+					imageEl.fetchPriority = isHighPriority ? 'high' : 'auto';
+				}
 
-			// Add loading class initially
-			imageContainer.classList.add('loading');
+				imageContainer.classList.add('loading');
 
-			// Handle image load
-			imageEl.onload = () => {
-				imageContainer.classList.remove('loading');
-				imageContainer.classList.add('loaded');
-			};
+				imageEl.onload = () => {
+					imageContainer.classList.remove('loading');
+					imageContainer.classList.add('loaded');
+				};
 
-			// Handle image error
-			imageEl.onerror = () => {
-				imageContainer.classList.remove('loading');
-				imageContainer.classList.add('error');
-			};
+				imageEl.onerror = () => {
+					imageContainer.classList.remove('loading');
+					imageContainer.classList.add('error');
+				};
 
-			// Set src - if cached, onload will fire immediately
-			imageEl.src = item.image_url;
+				imageEl.src = item.image_url;
 
-			// Check if image was already cached and loaded
-			if (imageEl.complete && imageEl.naturalHeight !== 0) {
-				imageContainer.classList.remove('loading');
-				imageContainer.classList.add('loaded');
+				if (imageEl.complete && imageEl.naturalHeight !== 0) {
+					imageContainer.classList.remove('loading');
+					imageContainer.classList.add('loaded');
+				}
 			}
 		}
 
@@ -452,14 +478,68 @@ class AppRouteFeed extends HTMLElement {
 		return card;
 	}
 
+	buildTipCard(item) {
+		const card = document.createElement("div");
+		card.className = "feed-card feed-card-tip";
+		const title = item.title || "Tip";
+		const message = item.message || "";
+		const cta = item.cta || "Explore";
+		const ctaRoute = (item.ctaRoute || "/explore").trim();
+		const isExternal = ctaRoute.startsWith("http://") || ctaRoute.startsWith("https://");
+		const openInNewTab = isExternal && (item.ctaTarget === "_blank" || item.ctaRoute?.startsWith("http"));
+		const targetAttr = openInNewTab ? ' target="_blank" rel="noopener noreferrer"' : "";
+		card.innerHTML = html`
+			<div class="feed-card-tip-inner">
+				<div class="feed-card-tip-title">${title}</div>
+				<div class="feed-card-tip-message">${message}</div>
+				<a class="route-empty-button feed-card-tip-cta" href="${ctaRoute}"${targetAttr} data-tip-cta>${cta}</a>
+			</div>
+		`;
+		const ctaEl = card.querySelector("[data-tip-cta]");
+		if (ctaEl) {
+			ctaEl.addEventListener("click", (e) => {
+				e.preventDefault();
+				if (isExternal && ctaEl.getAttribute("target") === "_blank") {
+					window.open(ctaRoute, "_blank", "noopener,noreferrer");
+				} else {
+					window.location.href = ctaRoute;
+				}
+			});
+		}
+
+		const tipInner = card.querySelector(".feed-card-tip-inner");
+		if (tipInner && typeof IntersectionObserver !== "undefined") {
+			const observer = new IntersectionObserver(
+				(entries) => {
+					const entry = entries[0];
+					if (entry?.isIntersecting) {
+						card.classList.add("feed-card-tip-in-view");
+						observer.disconnect();
+					}
+				},
+				{ threshold: 0.25, rootMargin: "0px 0px -40px 0px" }
+			);
+			observer.observe(tipInner);
+		}
+
+		return card;
+	}
+
 	async loadFeed() {
 		const container = this.querySelector("[data-feed-container]");
 		if (!container) return;
 
+		if (this.isLoading) return;
+		// Skip refetch if we already have feed data (avoids loop from repeated loadFeed calls)
+		if (Array.isArray(this.feedItems) && this.feedItems.length > 0) {
+			return;
+		}
+
+		this.isLoading = true;
 		try {
 			// Get current user ID
 			let currentUserId = null;
-			const profile = await fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 2000 })
+			const profile = await fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 30000 })
 				.catch(() => ({ ok: false, status: 0, data: null }));
 			if (profile.ok) {
 				currentUserId = profile.data?.id ?? null;
@@ -467,13 +547,14 @@ class AppRouteFeed extends HTMLElement {
 
 			const feed = await fetchJsonWithStatusDeduped("/api/feed", {
 				credentials: 'include'
-			}, { windowMs: 2000 });
+			}, { windowMs: 30000 });
 			if (!feed.ok) throw new Error("Failed to load feed.");
 			let items = Array.isArray(feed.data?.items) ? feed.data.items : [];
 
-			// Filter out hidden items
+			// Filter out hidden items (only creation items; tips are not hideable)
 			const hiddenIds = getHiddenFeedItems();
 			items = items.filter(item => {
+				if (item.type === "tip") return true;
 				const itemId = String(item.created_image_id || item.id);
 				return !hiddenIds.includes(itemId);
 			});
@@ -514,9 +595,12 @@ class AppRouteFeed extends HTMLElement {
 
 			this.feedItems = items;
 			this.feedIndex = 0;
+			this.sentinelWasIntersecting = false;
 			this.renderNextBatch();
 		} catch (error) {
 			container.innerHTML = html`<div class="route-empty route-empty-image-grid">Unable to load feed.</div>`;
+		} finally {
+			this.isLoading = false;
 		}
 	}
 }

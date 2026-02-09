@@ -62,7 +62,11 @@ function scheduleImageWork(start, { immediate = true, wakeOnVisible = true } = {
 function setRouteMediaBackgroundImage(mediaEl, url, { lowPriority = false } = {}) {
 	if (!mediaEl || !url) return;
 
-	// Always preload, but let the active/visible route win.
+	// Skip if we already have this URL loaded (avoids duplicate requests)
+	if (mediaEl.dataset.bgLoadedUrl === url) {
+		return Promise.resolve(true);
+	}
+
 	mediaEl.classList.remove('route-media-error');
 	mediaEl.style.backgroundImage = '';
 
@@ -74,6 +78,7 @@ function setRouteMediaBackgroundImage(mediaEl, url, { lowPriority = false } = {}
 				probe.fetchPriority = lowPriority ? 'low' : (document.visibilityState === 'visible' ? 'auto' : 'low');
 			}
 			probe.onload = () => {
+				mediaEl.dataset.bgLoadedUrl = url;
 				mediaEl.classList.remove('route-media-error');
 				mediaEl.style.backgroundImage = `url("${String(url).replace(/"/g, '\\"')}")`;
 				resolve(true);
@@ -131,60 +136,24 @@ class AppRouteCreations extends HTMLElement {
 		this.hasLoadedOnce = false;
 		this.isLoading = false;
 		this.isActiveRoute = false;
-		this.deferredPreloadTimer = null;
-		this.deferredPreloadIdle = null;
+		this.creationsWasVisible = false;
+		this.lastLoadFromCheckAt = 0;
 		this.setupRouteListener();
 		this.pendingUpdateHandler = () => {
 			if (this.isActiveRoute) {
-				this.loadCreations({ force: true, background: false });
-			} else {
-				// Defer background refresh so the current route keeps priority.
-				this.scheduleDeferredPreload();
+				this.loadCreations({ force: true });
 			}
 		};
 		document.addEventListener('creations-pending-updated', this.pendingUpdateHandler);
 		this.setupImageLazyLoading();
 
-		this.scheduleDeferredPreload = () => {
-			if (this.hasLoadedOnce) return;
-			if (this.deferredPreloadTimer || this.deferredPreloadIdle) return;
-			this.deferredPreloadTimer = setTimeout(() => {
-				this.deferredPreloadTimer = null;
-				const run = () => {
-					this.deferredPreloadIdle = null;
-					if (this.isActiveRoute || this.hasLoadedOnce) return;
-					this.loadCreations({ force: true, background: true });
-				};
-				if (typeof requestIdleCallback === 'function') {
-					this.deferredPreloadIdle = requestIdleCallback(run, { timeout: 2000 });
-				} else {
-					run();
-				}
-			}, 3000);
-		};
-
-		this.cancelDeferredPreload = () => {
-			if (this.deferredPreloadTimer) {
-				clearTimeout(this.deferredPreloadTimer);
-				this.deferredPreloadTimer = null;
-			}
-			if (this.deferredPreloadIdle && typeof cancelIdleCallback === 'function') {
-				cancelIdleCallback(this.deferredPreloadIdle);
-				this.deferredPreloadIdle = null;
-			}
-		};
-
-		// Mount-time awareness of current route.
 		const initialRoute = window.__CURRENT_ROUTE__ || null;
 		const pathname = window.location.pathname || '';
 		const inferred = initialRoute || (pathname.startsWith('/creations') ? 'creations' : null);
 		this.isActiveRoute = inferred === 'creations';
 		if (this.isRouteActive()) {
-			this.cancelDeferredPreload();
 			this.refreshOnActivate();
 			this.startPolling();
-		} else {
-			this.scheduleDeferredPreload();
 		}
 	}
 
@@ -198,8 +167,6 @@ class AppRouteCreations extends HTMLElement {
 			}
 			if (route === 'creations') {
 				this.isActiveRoute = true;
-				this.cancelDeferredPreload();
-				// Only refresh if stale or needed to avoid flicker
 				this.refreshOnActivate();
 				// If we didn't rebuild, make sure lazy loading resumes.
 				if (this.hasLoadedOnce) {
@@ -211,7 +178,6 @@ class AppRouteCreations extends HTMLElement {
 				}
 			} else {
 				this.isActiveRoute = false;
-				// If the route is not active, stop background polling and image work.
 				this.stopPolling();
 				if (this.imageObserver) this.imageObserver.disconnect();
 				this.imageLoadQueue = [];
@@ -220,14 +186,13 @@ class AppRouteCreations extends HTMLElement {
 		};
 		document.addEventListener('route-change', this.routeChangeHandler);
 
-		// Also use IntersectionObserver to detect when element becomes visible
-		// This catches cases where the route change event might not fire
+		// Only react when we transition to visible (avoids repeated refreshOnActivate / load loops)
 		this.intersectionObserver = new IntersectionObserver((entries) => {
 			entries.forEach(entry => {
-				if (entry.isIntersecting && entry.target === this) {
-					// If the element is actually visible, treat it as active to avoid stalls.
+				const nowVisible = entry.isIntersecting && entry.target === this;
+				if (nowVisible && !this.creationsWasVisible) {
+					this.creationsWasVisible = true;
 					this.isActiveRoute = true;
-					// Element is visible, refresh if needed
 					this.refreshOnActivate();
 					if (this.hasLoadedOnce) {
 						this.resumeImageLazyLoading();
@@ -235,10 +200,12 @@ class AppRouteCreations extends HTMLElement {
 					if (!this.pollInterval) {
 						this.startPolling();
 					}
+				} else if (!nowVisible) {
+					this.creationsWasVisible = false;
 				}
 			});
 		}, {
-			threshold: 0.1 // Trigger when at least 10% visible
+			threshold: 0.1
 		});
 
 		this.intersectionObserver.observe(this);
@@ -266,6 +233,10 @@ class AppRouteCreations extends HTMLElement {
 
 				const url = el.dataset.bgUrl;
 				if (!url) {
+					this.imageObserver.unobserve(el);
+					return;
+				}
+				if (el.dataset.bgLoadedUrl === url) {
 					this.imageObserver.unobserve(el);
 					return;
 				}
@@ -301,9 +272,6 @@ class AppRouteCreations extends HTMLElement {
 
 	disconnectedCallback() {
 		this.stopPolling();
-		if (typeof this.cancelDeferredPreload === 'function') {
-			this.cancelDeferredPreload();
-		}
 		if (this.routeChangeHandler) {
 			document.removeEventListener('route-change', this.routeChangeHandler);
 		}
@@ -375,9 +343,14 @@ class AppRouteCreations extends HTMLElement {
 
 			// If we have pending placeholders, keep refreshing so they can reconcile into DB rows
 			// (or expire via TTL) even before we have a visible "creating" row.
-			if (hasUpdates || hasPending) {
-				// Reload the entire list to get the updated creations (including failed/timed-out)
-				this.loadCreations({ force: true, background: !this.isRouteActive() });
+			// Throttle: when only hasPending (no hasUpdates), don't reload more than once per 5s to avoid storms.
+			const now = Date.now();
+			const throttleMs = 5000;
+			const wouldReload = hasUpdates || hasPending;
+			const throttleOk = hasUpdates || (now - this.lastLoadFromCheckAt >= throttleMs);
+			if (wouldReload && throttleOk) {
+				this.lastLoadFromCheckAt = now;
+				this.loadCreations({ force: true });
 			}
 		} catch (error) {
 			// console.error("Error checking for updates:", error);
@@ -389,7 +362,7 @@ class AppRouteCreations extends HTMLElement {
 		const hasLoading = this.querySelectorAll('.route-media[data-image-id][data-status="creating"]').length > 0;
 
 		if (!this.hasLoadedOnce || hasPending || hasLoading) {
-			this.loadCreations({ force: true, background: !this.isRouteActive() });
+			this.loadCreations({ force: true });
 			return;
 		}
 
@@ -397,19 +370,22 @@ class AppRouteCreations extends HTMLElement {
 		this.resumeImageLazyLoading();
 	}
 
-	async loadCreations({ force = false, background = false } = {}) {
+	async loadCreations({ force = false } = {}) {
 		const container = this.querySelector("[data-creations-container]");
 		if (!container) return;
 		if (this.isLoading) return;
-		if (!background && !this.isRouteActive()) return;
+		if (!this.isRouteActive()) return;
 		if (!force && this.hasLoadedOnce) return;
 
+		this.isLoading = true;
 		try {
-			this.isLoading = true;
 			// Fetch created creations only
 			const creationsResult = await fetchJsonWithStatusDeduped("/api/create/images", {
 				credentials: 'include'
 			}, { windowMs: 500 }).catch(() => ({ ok: false, status: 0, data: null }));
+
+			let cont = this.querySelector("[data-creations-container]");
+			if (!cont) return;
 
 			const creationsRaw = creationsResult.ok
 				? (Array.isArray(creationsResult.data?.images) ? creationsResult.data.images : [])
@@ -417,7 +393,7 @@ class AppRouteCreations extends HTMLElement {
 
 			const creations = creationsRaw;
 
-			container.innerHTML = "";
+			cont.innerHTML = "";
 			// New content means new media elements; clear previous observers/queue.
 			if (this.imageObserver) this.imageObserver.disconnect();
 			this.imageLoadQueue = [];
@@ -464,18 +440,23 @@ class AppRouteCreations extends HTMLElement {
 			});
 			const ttlPurged = filteredPending.length !== pendingCreations.length;
 			if (shouldPurge || ttlPurged) {
+				const newPendingStr = JSON.stringify(filteredPending);
+				const oldPendingStr = sessionStorage.getItem("pendingCreations") || "[]";
 				try {
-					sessionStorage.setItem("pendingCreations", JSON.stringify(filteredPending));
+					sessionStorage.setItem("pendingCreations", newPendingStr);
 				} catch {
 					// ignore storage write errors
 				}
-				document.dispatchEvent(new CustomEvent("creations-pending-updated"));
+				// Only dispatch when the stored value actually changed to avoid reload loops
+				if (newPendingStr !== oldPendingStr) {
+					document.dispatchEvent(new CustomEvent("creations-pending-updated"));
+				}
 			}
 
 			const combinedCreations = [...filteredPending, ...creations];
 
 			if (combinedCreations.length === 0) {
-				container.innerHTML = html`
+				cont.innerHTML = html`
           <div class="route-empty route-empty-image-grid">
             <div class="route-empty-title">No creations yet</div>
             <div class="route-empty-message">Start creating to see your work here.</div>
@@ -636,12 +617,13 @@ class AppRouteCreations extends HTMLElement {
 					}
 				}
 
-				container.appendChild(card);
+				cont.appendChild(card);
 			});
 			this.hasLoadedOnce = true;
 		} catch (error) {
 			// console.error("Error loading creations:", error);
-			container.innerHTML = html`
+			const errCont = this.querySelector("[data-creations-container]");
+			if (errCont) errCont.innerHTML = html`
         <div class="route-empty route-empty-image-grid">Unable to load creations.</div>
       `;
 		} finally {
@@ -695,7 +677,7 @@ class AppRouteCreations extends HTMLElement {
 			}
 
 			// Reload list to pick up new creating row + updated credits.
-			await this.loadCreations({ force: true, background: false });
+			await this.loadCreations({ force: true });
 		} catch (error) {
 			// console.error('Error retrying creation:', error);
 			alert('Failed to retry creation. Please try again.');
@@ -732,7 +714,7 @@ class AppRouteCreations extends HTMLElement {
 				return;
 			}
 
-			await this.loadCreations({ force: true, background: false });
+			await this.loadCreations({ force: true });
 		} catch (error) {
 			// console.error('Error deleting creation from list view:', error);
 			alert('Failed to delete creation. Please try again.');

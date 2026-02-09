@@ -1040,6 +1040,93 @@ export async function openDb() {
            ORDER BY fi.created_at DESC`
 				);
 				return Promise.resolve(stmt.all(id, id, id, id));
+			},
+			paginated: async (viewerId, { limit = 24, offset = 0 } = {}) => {
+				const id = viewerId ?? null;
+				if (id === null || id === undefined) {
+					return Promise.resolve([]);
+				}
+				// Allow limit+1 (e.g. 101) so API can detect hasMore; cap at 500 for safety
+				const lim = Math.min(Math.max(0, Number(limit) || 24), 500);
+				const off = Math.max(0, Number(offset) || 0);
+				const stmt = db.prepare(
+					`SELECT fi.id, fi.title, fi.summary, fi.author, fi.tags, fi.created_at, 
+                  fi.created_image_id, ci.filename, ci.file_path, ci.user_id,
+                  up.user_name AS author_user_name,
+                  up.display_name AS author_display_name,
+                  up.avatar_url AS author_avatar_url,
+                  COALESCE(ci.file_path, CASE WHEN ci.filename IS NOT NULL THEN '/api/images/created/' || ci.filename ELSE NULL END) as url,
+                  COALESCE(lc.like_count, 0) AS like_count,
+                  COALESCE(cc.comment_count, 0) AS comment_count,
+                  CASE WHEN ? IS NOT NULL AND vl.user_id IS NOT NULL THEN 1 ELSE 0 END AS viewer_liked
+           FROM feed_items fi
+           LEFT JOIN created_images ci ON fi.created_image_id = ci.id
+           LEFT JOIN user_profiles up ON up.user_id = ci.user_id
+           LEFT JOIN (
+             SELECT created_image_id, COUNT(*) AS like_count
+             FROM likes_created_image
+             GROUP BY created_image_id
+           ) lc ON lc.created_image_id = fi.created_image_id
+           LEFT JOIN (
+             SELECT created_image_id, COUNT(*) AS comment_count
+             FROM comments_created_image
+             GROUP BY created_image_id
+           ) cc ON cc.created_image_id = fi.created_image_id
+           LEFT JOIN likes_created_image vl
+             ON vl.created_image_id = fi.created_image_id
+            AND vl.user_id = ?
+           WHERE ci.user_id IS NOT NULL
+             AND ci.user_id != ?
+             AND NOT EXISTS (
+               SELECT 1
+               FROM user_follows uf
+               WHERE uf.follower_id = ?
+                 AND uf.following_id = ci.user_id
+             )
+           ORDER BY fi.created_at DESC
+           LIMIT ? OFFSET ?`
+				);
+				return Promise.resolve(stmt.all(id, id, id, id, lim, off));
+			}
+		},
+		selectNewbieFeedItems: {
+			all: async (viewerId) => {
+				const id = viewerId ?? null;
+				if (id === null || id === undefined) {
+					return Promise.resolve([]);
+				}
+				const stmt = db.prepare(
+					`SELECT fi.id, fi.title, fi.summary, fi.author, fi.tags, fi.created_at,
+                  fi.created_image_id, ci.filename, ci.file_path, ci.user_id,
+                  up.user_name AS author_user_name,
+                  up.display_name AS author_display_name,
+                  up.avatar_url AS author_avatar_url,
+                  COALESCE(ci.file_path, CASE WHEN ci.filename IS NOT NULL THEN '/api/images/created/' || ci.filename ELSE NULL END) as url,
+                  COALESCE(lc.like_count, 0) AS like_count,
+                  COALESCE(cc.comment_count, 0) AS comment_count,
+                  CASE WHEN ? IS NOT NULL AND vl.user_id IS NOT NULL THEN 1 ELSE 0 END AS viewer_liked
+           FROM feed_items fi
+           LEFT JOIN created_images ci ON fi.created_image_id = ci.id
+           LEFT JOIN user_profiles up ON up.user_id = ci.user_id
+           LEFT JOIN (
+             SELECT created_image_id, COUNT(*) AS like_count
+             FROM likes_created_image
+             GROUP BY created_image_id
+           ) lc ON lc.created_image_id = fi.created_image_id
+           LEFT JOIN (
+             SELECT created_image_id, COUNT(*) AS comment_count
+             FROM comments_created_image
+             GROUP BY created_image_id
+           ) cc ON cc.created_image_id = fi.created_image_id
+           LEFT JOIN likes_created_image vl
+             ON vl.created_image_id = fi.created_image_id
+            AND vl.user_id = ?
+           WHERE ci.user_id IS NOT NULL
+             AND ci.user_id != ?
+             AND (COALESCE(lc.like_count, 0) > 0 OR COALESCE(cc.comment_count, 0) > 0)
+           ORDER BY fi.created_at DESC`
+				);
+				return Promise.resolve(stmt.all(id, id, id));
 			}
 		},
 		selectAllCreatedImageIdAndMeta: {

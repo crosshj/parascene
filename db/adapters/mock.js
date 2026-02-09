@@ -774,14 +774,11 @@ export function openDb() {
 				});
 			}
 		},
-		selectExploreFeedItems: {
-			all: async (viewerId) => {
+		selectExploreFeedItems: (() => {
+			const exploreAll = async (viewerId) => {
 				const id = viewerId ?? null;
-				if (id === null || id === undefined) {
-					return [];
-				}
+				if (id === null || id === undefined) return [];
 
-				// Get list of users the viewer follows to exclude them from explore
 				const viewerIdNum = Number(id);
 				const followingIds = new Set(
 					user_follows
@@ -793,9 +790,7 @@ export function openDb() {
 					.filter((item) => {
 						if (item.user_id === null || item.user_id === undefined) return false;
 						const itemUserId = Number(item.user_id);
-						// Exclude items from the viewer themselves
 						if (itemUserId === viewerIdNum) return false;
-						// Exclude items from users the viewer follows
 						return !followingIds.has(itemUserId);
 					})
 					.slice()
@@ -809,8 +804,94 @@ export function openDb() {
 						author_display_name: profile?.display_name ?? null,
 						author_avatar_url: profile?.avatar_url ?? null
 					};
-			});
-		}
+				});
+			};
+
+			// Paginated: filter then slice then map — only build the requested page (no "all" then slice).
+			const explorePaginated = async (viewerId, { limit = 24, offset = 0 } = {}) => {
+				const id = viewerId ?? null;
+				if (id === null || id === undefined) return [];
+
+				const viewerIdNum = Number(id);
+				const followingIds = new Set(
+					user_follows
+						.filter((row) => row.follower_id === viewerIdNum)
+						.map((row) => Number(row.following_id))
+				);
+
+				const filtered = feed_items
+					.filter((item) => {
+						if (item.user_id === null || item.user_id === undefined) return false;
+						const itemUserId = Number(item.user_id);
+						if (itemUserId === viewerIdNum) return false;
+						return !followingIds.has(itemUserId);
+					})
+					.slice()
+					.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+
+				// Allow limit+1 (e.g. 101) so API can detect hasMore; cap at 500 for safety
+				const lim = Math.min(Math.max(0, Number(limit) || 24), 500);
+				const off = Math.max(0, Number(offset) || 0);
+				const page = filtered.slice(off, off + lim);
+
+				return page.map((item) => {
+					const profile = user_profiles.find((p) => p.user_id === Number(item.user_id));
+					return {
+						...item,
+						author_user_name: profile?.user_name ?? null,
+						author_display_name: profile?.display_name ?? null,
+						author_avatar_url: profile?.avatar_url ?? null
+					};
+				});
+			};
+
+			return {
+				all: exploreAll,
+				paginated: explorePaginated
+			};
+		})(),
+		selectNewbieFeedItems: {
+			all: async (viewerId) => {
+				const id = viewerId ?? null;
+				if (id === null || id === undefined) {
+					return [];
+				}
+				const viewerIdNum = Number(id);
+				const itemsWithUser = feed_items.map((item) => {
+					const user_id = item.user_id != null ? Number(item.user_id) : (() => {
+						const ci = created_images.find((c) => Number(c.id) === Number(item.created_image_id));
+						return ci?.user_id != null ? Number(ci.user_id) : null;
+					})();
+					return { ...item, user_id };
+				});
+				const filtered = itemsWithUser
+					.filter((item) => {
+						if (item.user_id === null || item.user_id === undefined) return false;
+						if (Number(item.user_id) === viewerIdNum) return false;
+						const cid = Number(item.created_image_id);
+						const likeCount = likes_created_image.filter((l) => Number(l.created_image_id) === cid).length;
+						const commentCount = comments_created_image.filter((c) => Number(c.created_image_id) === cid).length;
+						return likeCount > 0 || commentCount > 0;
+					})
+					.slice()
+					.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+
+				return filtered.map((item) => {
+					const cid = Number(item.created_image_id);
+					const likeCount = likes_created_image.filter((l) => Number(l.created_image_id) === cid).length;
+					const commentCount = comments_created_image.filter((c) => Number(c.created_image_id) === cid).length;
+					const profile = user_profiles.find((p) => p.user_id === Number(item.user_id));
+					return {
+						...item,
+						like_count: likeCount,
+						comment_count: commentCount,
+						viewer_liked: Boolean(likes_created_image.some((l) => Number(l.created_image_id) === cid && Number(l.user_id) === viewerIdNum)),
+						author_user_name: profile?.user_name ?? null,
+						author_display_name: profile?.display_name ?? null,
+						author_avatar_url: profile?.avatar_url ?? null
+					};
+				});
+			}
 		},
 		selectAllCreatedImageIdAndMeta: {
 			all: async () => {

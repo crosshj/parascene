@@ -96,6 +96,8 @@ class AppNavigation extends HTMLElement {
 			this.setupNavListeners();
 			this.loadNotificationCount();
 			this.loadCreditsCount();
+			// Re-apply active route highlight (render replaced DOM, so links lost .active)
+			this.handleRouteChange();
 		}
 	}
 
@@ -627,10 +629,13 @@ class AppNavigation extends HTMLElement {
 		this.closeMobileMenu();
 
 		// Get route from pathname (e.g., /feed -> feed, / -> defaultRoute)
-		let currentRoute = pathname === '/' || pathname === '' ? this.defaultRoute : pathname.slice(1);
+		let currentRoute = pathname === '/' || pathname === '' ? this.defaultRoute : pathname.slice(1).split('/')[0];
 		if (pathname.startsWith('/connect')) {
 			currentRoute = 'connect';
 		}
+
+		const previousRoute = this.currentRoute;
+		const routeChanged = previousRoute !== currentRoute;
 
 		// Make current route discoverable to other components immediately on mount.
 		try {
@@ -649,7 +654,7 @@ class AppNavigation extends HTMLElement {
 			window.history.replaceState({ route: currentRoute }, '', `/${currentRoute}`);
 		}
 
-		// Update active nav link (both desktop and mobile)
+		// Always update active nav link (both desktop and mobile) so highlight is correct after re-renders
 		const navLinks = this.querySelectorAll('.header-nav .nav-link, .mobile-menu .nav-link');
 		navLinks.forEach(link => {
 			const isActive = link.getAttribute('data-route') === currentRoute;
@@ -667,23 +672,41 @@ class AppNavigation extends HTMLElement {
 			section.style.display = isActive ? 'block' : 'none';
 		});
 
-		// Only reset scroll when the route actually changes.
-		// This avoids unexpected jumps when handleRouteChange is invoked
-		// repeatedly for the same route (e.g., redundant history events).
-		const previousRoute = this.currentRoute;
 		this.currentRoute = currentRoute;
-		if (previousRoute && previousRoute !== currentRoute) {
+
+		// Only reset scroll and dispatch when the route actually changed (stops duplicate loads and handler storms)
+		if (routeChanged && previousRoute != null) {
 			this.resetSectionScroll();
 		}
-
-		// Dispatch custom event for route change
-		this.dispatchEvent(new CustomEvent('route-change', {
-			detail: { route: currentRoute },
-			bubbles: true
-		}));
+		if (routeChanged) {
+			this.dispatchEvent(new CustomEvent('route-change', {
+				detail: { route: currentRoute },
+				bubbles: true
+			}));
+		}
 	}
 
 	handleDocumentClick(e) {
+		// Ensure nav link clicks always use client-side routing (no full page load = no manifest reload).
+		// Delegation so we never miss a link even if DOM was re-rendered before listeners reattached.
+		if (e.button === 0 && this.contains(e.target)) {
+			const link = e.target?.closest?.('a.nav-link[data-route]');
+			if (link) {
+				// Only handle if no other listener did (avoids double navigate when link listener already ran)
+				if (!e.defaultPrevented) {
+					e.preventDefault();
+					e.stopPropagation();
+					const route = link.getAttribute('data-route');
+					if (route) {
+						this.navigateToRoute(route);
+						if (link.closest('.mobile-menu')) {
+							this.closeMobileMenu();
+						}
+					}
+				}
+				return;
+			}
+		}
 		if (this.notificationsMenuOpen) {
 			this.closeNotificationsMenu();
 		}

@@ -8,6 +8,7 @@ class AppModalCredits extends HTMLElement {
 		super();
 		this._isOpen = false;
 		this._claimInFlight = false;
+		this._creditsRefreshLastCall = 0;
 		this.creditsCount = 0;
 		this.lastClaimDate = null;
 		this.canClaim = null; // null = unknown until /api/credits responds
@@ -106,6 +107,11 @@ class AppModalCredits extends HTMLElement {
 	}
 
 	async refreshCredits({ force = false } = {}) {
+		// Throttle: avoid repeated fetches when connectedCallback or open() fires many times (e.g. reconnection loop).
+		const now = Date.now();
+		if (!force && now - this._creditsRefreshLastCall < 2500) return;
+		this._creditsRefreshLastCall = now;
+
 		try {
 			// First, get current user to check if user changed (deduped).
 			const profileResult = await fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 2000 })
