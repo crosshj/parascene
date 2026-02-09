@@ -5,6 +5,18 @@
 	background: var(--bg);
 }
 
+/* On help pages, remove extra bottom padding from main
+   (including mobile bottom-nav padding) while keeping top/side padding. */
+.help-page main {
+	padding-bottom: 0;
+}
+
+@media (max-width: 768px) {
+	body.help-page main {
+		padding-bottom: 0;
+	}
+}
+
 /* Use global main for max-width and padding; container is just the help grid */
 .help-container {
 	display: grid;
@@ -27,6 +39,7 @@
 	max-height: calc(100vh - 88px);
 	overflow-y: auto;
 	padding-top: 8px;
+	padding-bottom: 72px;
 }
 
 @media (max-width: 768px) {
@@ -169,6 +182,10 @@
 }
 
 /* Article Content */
+.help-article-wrapper {
+	padding-bottom: 72px;
+}
+
 .help-article {
 	background: var(--surface);
 	border: 1px solid var(--border);
