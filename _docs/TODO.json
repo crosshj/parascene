@@ -1,30 +1,9 @@
 [
   {
-    "name": "Engagement Emails",
-    "description": "system fires emails to encourage users to engage, eg. user signed up but hasn't created anything, bundle notifications and send daily reminder where non-zero list",
-    "cost": 40,
-    "impact": 100,
-    "dependsOn": []
-  },
-  {
-    "name": "Anti-slam Emails",
-    "description": "we don't want to send an email every time a comment comes through",
-    "cost": 45,
-    "impact": 100,
-    "dependsOn": []
-  },
-  {
     "name": "Feed for people that haven't followed",
     "description": "When user has no follows, show a useful feed (e.g. explore-style or curated) instead of empty.",
     "cost": 30,
     "impact": 88,
-    "dependsOn": []
-  },
-  {
-    "name": "BUG: scroll resetting (some browsers)",
-    "description": "Fix scroll position reset on some browsers (e.g. feed/detail/nav).",
-    "cost": 5,
-    "impact": 78,
     "dependsOn": []
   },
   {

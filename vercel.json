@@ -10,7 +10,7 @@
       "destination": "/api/worker/notifications.js"
     },
     {
-      "source": "/((?!icons/).*)",
+      "source": "/(.*)",
       "destination": "/api/index"
     }
   ],
