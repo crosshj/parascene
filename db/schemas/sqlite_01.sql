@@ -113,12 +113,15 @@ CREATE TABLE IF NOT EXISTS email_sends (
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
+-- For existing SQLite DBs created before last_creation_highlight_sent_at was added, run:
+-- ALTER TABLE email_user_campaign_state ADD COLUMN last_creation_highlight_sent_at TEXT;
 CREATE TABLE IF NOT EXISTS email_user_campaign_state (
   user_id INTEGER PRIMARY KEY,
   last_digest_sent_at TEXT,
   welcome_email_sent_at TEXT,
   first_creation_nudge_sent_at TEXT,
   last_reengagement_sent_at TEXT,
+  last_creation_highlight_sent_at TEXT,
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   meta TEXT,
   FOREIGN KEY (user_id) REFERENCES users(id)

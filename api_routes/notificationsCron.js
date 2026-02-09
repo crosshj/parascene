@@ -1,7 +1,16 @@
 import express from "express";
 import { sendTemplatedEmail } from "../email/index.js";
 import { getBaseAppUrl } from "./utils/url.js";
-import { getCronDigestSettings, getEffectiveEmailRecipient, getWelcomeEmailDelayHours } from "./utils/emailSettings.js";
+import {
+	getCronDigestSettings,
+	getEffectiveEmailRecipient,
+	getWelcomeEmailDelayHours,
+	getReengagementInactiveDays,
+	getReengagementCooldownDays,
+	getCreationHighlightLookbackHours,
+	getCreationHighlightCooldownDays
+} from "./utils/emailSettings.js";
+import { markPreviousStepsCompleted } from "./utils/emailCampaignState.js";
 
 const CRON_SECRET_ENV = "CRON_SECRET";
 const DIGEST_ACTIVITY_HOURS_LOOKBACK = 24;
@@ -45,9 +54,37 @@ export default function createNotificationsCronRoutes({ queries }) {
 		let skipped = 0;
 		let welcomeSent = 0;
 		let firstCreationNudgeSent = 0;
+		let reengagementSent = 0;
+		let creationHighlightSent = 0;
 
 		const candidateRows = await (queries.selectDistinctUserIdsWithUnreadNotificationsSince?.all(sinceIso) ?? []);
 		const userIds = candidateRows.map((r) => r?.user_id).filter((id) => id != null && Number.isFinite(Number(id)));
+
+		// Users who will receive a "later" campaign this run: we mark previous steps done and do NOT send welcome/first-nudge to them this run
+		const reengagementInactiveDays = await getReengagementInactiveDays(queries);
+		const reengagementCooldownDays = await getReengagementCooldownDays(queries);
+		const inactiveCutoff = new Date();
+		inactiveCutoff.setUTCDate(inactiveCutoff.getUTCDate() - reengagementInactiveDays);
+		const reengagementCooldownCutoff = new Date();
+		reengagementCooldownCutoff.setUTCDate(reengagementCooldownCutoff.getUTCDate() - reengagementCooldownDays);
+		const reengagementEligibleRows = await (queries.selectUsersEligibleForReengagement?.all(
+			inactiveCutoff.toISOString(),
+			reengagementCooldownCutoff.toISOString()
+		) ?? []);
+		const highlightLookbackHours = await getCreationHighlightLookbackHours(queries);
+		const highlightCooldownDays = await getCreationHighlightCooldownDays(queries);
+		const highlightSince = new Date();
+		highlightSince.setUTCHours(highlightSince.getUTCHours() - highlightLookbackHours, highlightSince.getUTCMinutes(), highlightSince.getUTCSeconds(), 0);
+		const highlightCooldownCutoff = new Date();
+		highlightCooldownCutoff.setUTCDate(highlightCooldownCutoff.getUTCDate() - highlightCooldownDays);
+		const highlightEligibleRows = await (queries.selectCreationsEligibleForHighlight?.all(
+			highlightSince.toISOString(),
+			highlightCooldownCutoff.toISOString()
+		) ?? []);
+		const userIdsReceivingLaterCampaignThisRun = new Set([
+			...reengagementEligibleRows.map((r) => r?.user_id).filter((id) => id != null),
+			...highlightEligibleRows.map((r) => r?.user_id).filter((id) => id != null)
+		]);
 
 		for (const userId of userIds) {
 			const user = await queries.selectUserById?.get(userId);
@@ -97,14 +134,8 @@ export default function createNotificationsCronRoutes({ queries }) {
 					if (queries.upsertUserEmailCampaignStateLastDigest?.run) {
 						await queries.upsertUserEmailCampaignStateLastDigest.run(userId, sentAt);
 					}
-					// Treat digest as having "welcomed" them so we never send a separate welcome email
-					if (queries.upsertUserEmailCampaignStateWelcome?.run) {
-						await queries.upsertUserEmailCampaignStateWelcome.run(userId, sentAt);
-					}
-					// Treat digest as "no need for first-creation nudge" (they're already engaged)
-					if (queries.upsertUserEmailCampaignStateFirstCreationNudge?.run) {
-						await queries.upsertUserEmailCampaignStateFirstCreationNudge.run(userId, sentAt);
-					}
+					await markPreviousStepsCompleted(queries, userId, sentAt, "digest");
+					userIdsReceivingLaterCampaignThisRun.add(userId);
 					sent++;
 				} catch (err) {
 					// Log but don't fail the cron
@@ -122,6 +153,7 @@ export default function createNotificationsCronRoutes({ queries }) {
 		for (const row of welcomeEligibleRows) {
 			const userId = row?.user_id;
 			if (userId == null || !Number.isFinite(Number(userId))) continue;
+			if (userIdsReceivingLaterCampaignThisRun.has(userId)) continue;
 			const user = await queries.selectUserById?.get(userId);
 			const email = user?.email ? String(user.email).trim() : "";
 			if (!email || !email.includes("@")) continue;
@@ -154,6 +186,7 @@ export default function createNotificationsCronRoutes({ queries }) {
 		for (const row of nudgeEligibleRows) {
 			const userId = row?.user_id;
 			if (userId == null || !Number.isFinite(Number(userId))) continue;
+			if (userIdsReceivingLaterCampaignThisRun.has(userId)) continue;
 			const user = await queries.selectUserById?.get(userId);
 			const email = user?.email ? String(user.email).trim() : "";
 			if (!email || !email.includes("@")) continue;
@@ -178,6 +211,72 @@ export default function createNotificationsCronRoutes({ queries }) {
 			}
 		}
 
+		// Re-engagement: inactive users with at least one creation; cooldown between sends
+		for (const row of reengagementEligibleRows) {
+			const userId = row?.user_id;
+			if (userId == null || !Number.isFinite(Number(userId))) continue;
+			const user = await queries.selectUserById?.get(userId);
+			const email = user?.email ? String(user.email).trim() : "";
+			if (!email || !email.includes("@")) continue;
+			if (!dryRun && process.env.RESEND_API_KEY && process.env.RESEND_SYSTEM_EMAIL) {
+				try {
+					const to = await getEffectiveEmailRecipient(queries, email);
+					const recipientName = user?.display_name || user?.user_name || email.split("@")[0] || "there";
+					await sendTemplatedEmail({
+						to,
+						template: "reengagement",
+						data: { recipientName }
+					});
+					await queries.insertEmailSend?.run(userId, "reengagement", null);
+					const sentAt = new Date().toISOString();
+					if (queries.upsertUserEmailCampaignStateReengagement?.run) {
+						await queries.upsertUserEmailCampaignStateReengagement.run(userId, sentAt);
+					}
+					await markPreviousStepsCompleted(queries, userId, sentAt, "reengagement");
+					reengagementSent++;
+				} catch (err) {
+					// skip on failure
+				}
+			}
+		}
+
+		// Creation highlight: creators whose creation got recent comments; one per owner per cooldown
+		for (const row of highlightEligibleRows) {
+			const userId = row?.user_id;
+			if (userId == null || !Number.isFinite(Number(userId))) continue;
+			const user = await queries.selectUserById?.get(userId);
+			const email = user?.email ? String(user.email).trim() : "";
+			if (!email || !email.includes("@")) continue;
+			if (!dryRun && process.env.RESEND_API_KEY && process.env.RESEND_SYSTEM_EMAIL) {
+				try {
+					const to = await getEffectiveEmailRecipient(queries, email);
+					const recipientName = user?.display_name || user?.user_name || email.split("@")[0] || "there";
+					const creationTitle = row?.title && String(row.title).trim() ? String(row.title).trim() : "Untitled";
+					const creationId = row?.creation_id;
+					const creationUrl = creationId != null ? `${getBaseAppUrl()}/creations/${creationId}` : getBaseAppUrl();
+					await sendTemplatedEmail({
+						to,
+						template: "creationHighlight",
+						data: {
+							recipientName,
+							creationTitle,
+							creationUrl,
+							commentCount: Number(row?.comment_count ?? 0) || 1
+						}
+					});
+					await queries.insertEmailSend?.run(userId, "creation_highlight", null);
+					const sentAt = new Date().toISOString();
+					if (queries.upsertUserEmailCampaignStateCreationHighlight?.run) {
+						await queries.upsertUserEmailCampaignStateCreationHighlight.run(userId, sentAt);
+					}
+					await markPreviousStepsCompleted(queries, userId, sentAt, "creation_highlight");
+					creationHighlightSent++;
+				} catch (err) {
+					// skip on failure
+				}
+			}
+		}
+
 		res.json({
 			ok: true,
 			dryRun,
@@ -186,7 +285,9 @@ export default function createNotificationsCronRoutes({ queries }) {
 			sent,
 			skipped,
 			welcomeSent,
-			firstCreationNudgeSent
+			firstCreationNudgeSent,
+			reengagementSent,
+			creationHighlightSent
 		});
 	});
 

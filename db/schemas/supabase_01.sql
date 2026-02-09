@@ -135,6 +135,7 @@ CREATE TABLE IF NOT EXISTS prsn_email_user_campaign_state (
   welcome_email_sent_at timestamptz,
   first_creation_nudge_sent_at timestamptz,
   last_reengagement_sent_at timestamptz,
+  last_creation_highlight_sent_at timestamptz,
   updated_at timestamptz NOT NULL DEFAULT now(),
   meta jsonb
 );

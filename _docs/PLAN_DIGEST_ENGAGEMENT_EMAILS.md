@@ -6,17 +6,17 @@
 
 ## Phases (validation chunks)
 
-### Phase 1: Settings and test recipient
+### Phase 1: Settings and test recipient ✅ Done
 - **Goal:** Admin-editable setting controls whether emails go to real users or `delivered@resend.dev`.
 - **Deliverables:** Use `policy_knobs` for `email_use_test_recipient`; adapter methods to get/upsert by key; GET/PATCH `/admin/settings`; all existing email send paths (password reset, comment notification) respect the setting; admin UI toggle.
 - **Validate:** Toggle on → trigger an email (e.g. password reset) → message goes to `delivered@resend.dev`. Toggle off → next email goes to real address.
 
-### Phase 2: Cron endpoint and dry run (no real digest send yet)
+### Phase 2: Cron endpoint and dry run (no real digest send yet) ✅ Done
 - **Goal:** Cron endpoint exists, secured; decides who would get a digest and records to DB; does not send when dry run.
 - **Deliverables:** Tables `email_link_clicks`, `email_sends`, `email_user_campaign_state`; adapter methods; `POST /api/notifications/cron` (or `/api/email/digest-run`) with secret auth; digest-only logic (users with recent activity, window + cap); insert `email_sends`, optional `email_dry_run` setting; no Resend call when dry run.
 - **Validate:** Set digest window to “now”, dry run on; trigger cron; DB has `email_sends` rows; no emails sent. Turn dry run off, keep test recipient on → run again → emails to `delivered@resend.dev`.
 
-### Phase 3: Digest email and remove direct comment email
+### Phase 3: Digest email and remove direct comment email ✅ Done
 - **Goal:** Digest is sent (to test address when setting on); direct per-comment email removed.
 - **Deliverables:** Digest template; cron sends digest via Resend and updates `last_digest_sent_at`; remove immediate comment email in `comments.js`.
 - **Validate:** Comments create activity; cron sends one digest to test address; no per-comment email.
@@ -27,7 +27,7 @@
 - **Validate:** New user gets welcome; user with no creations gets nudge; second run does not resend.
 - **How to validate (Phase 4):** See [Phase 4 validation](#phase-4-validation) below.
 
-### Phase 5: Re-engagement and highlight
+### Phase 5: Re-engagement and highlight ✅ Done
 - **Goal:** “We miss you” and “creation getting attention” emails with cooldowns.
 - **Deliverables:** State for re-engagement and highlight; cron logic + templates.
 - **Validate:** Inactive user and “hot” creation get one email each; cooldowns prevent repeat.

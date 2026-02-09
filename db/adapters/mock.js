@@ -474,6 +474,7 @@ export function openDb() {
 					welcome_email_sent_at: null,
 					first_creation_nudge_sent_at: null,
 					last_reengagement_sent_at: null,
+					last_creation_highlight_sent_at: null,
 					updated_at: now,
 					meta: null
 				});
@@ -495,6 +496,7 @@ export function openDb() {
 					welcome_email_sent_at: sentAtIso,
 					first_creation_nudge_sent_at: null,
 					last_reengagement_sent_at: null,
+					last_creation_highlight_sent_at: null,
 					updated_at: now,
 					meta: null
 				});
@@ -516,10 +518,111 @@ export function openDb() {
 					welcome_email_sent_at: null,
 					first_creation_nudge_sent_at: sentAtIso,
 					last_reengagement_sent_at: null,
+					last_creation_highlight_sent_at: null,
 					updated_at: now,
 					meta: null
 				});
 				return { changes: 1 };
+			}
+		},
+		upsertUserEmailCampaignStateReengagement: {
+			run: async (userId, sentAtIso) => {
+				const now = new Date().toISOString();
+				const existing = email_user_campaign_state.find((s) => s.user_id === userId);
+				if (existing) {
+					existing.last_reengagement_sent_at = sentAtIso;
+					existing.updated_at = now;
+					return { changes: 1 };
+				}
+				email_user_campaign_state.push({
+					user_id: userId,
+					last_digest_sent_at: null,
+					welcome_email_sent_at: null,
+					first_creation_nudge_sent_at: null,
+					last_reengagement_sent_at: sentAtIso,
+					last_creation_highlight_sent_at: null,
+					updated_at: now,
+					meta: null
+				});
+				return { changes: 1 };
+			}
+		},
+		upsertUserEmailCampaignStateCreationHighlight: {
+			run: async (userId, sentAtIso) => {
+				const now = new Date().toISOString();
+				const existing = email_user_campaign_state.find((s) => s.user_id === userId);
+				if (existing) {
+					existing.last_creation_highlight_sent_at = sentAtIso;
+					existing.updated_at = now;
+					return { changes: 1 };
+				}
+				email_user_campaign_state.push({
+					user_id: userId,
+					last_digest_sent_at: null,
+					welcome_email_sent_at: null,
+					first_creation_nudge_sent_at: null,
+					last_reengagement_sent_at: null,
+					last_creation_highlight_sent_at: sentAtIso,
+					updated_at: now,
+					meta: null
+				});
+				return { changes: 1 };
+			}
+		},
+		selectUsersEligibleForReengagement: {
+			// Only users who have already received welcome (so we never send "we miss you" before "welcome")
+			all: async (inactiveBeforeIso, lastReengagementBeforeIso) => {
+				const userList = (typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.users) ?? users;
+				const creationList = (typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.created_images) ?? created_images ?? [];
+				const stateList = (typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.email_user_campaign_state) ?? email_user_campaign_state;
+				const hasCreation = new Set(creationList.map((c) => c?.user_id).filter((id) => id != null));
+				const inactiveCutoff = inactiveBeforeIso ?? "1970-01-01T00:00:00.000Z";
+				const reengagementCutoff = lastReengagementBeforeIso ?? "9999-12-31T23:59:59.999Z";
+				const lastActivity = (u) => u?.last_active_at ?? u?.created_at ?? "";
+				return userList
+					.filter((u) => u?.email && String(u.email).trim() && String(u.email).includes("@"))
+					.filter((u) => hasCreation.has(u.id))
+					.filter((u) => lastActivity(u) <= inactiveCutoff)
+					.filter((u) => {
+						const s = stateList.find((x) => x.user_id === u.id);
+						if (!s || s.welcome_email_sent_at == null) return false;
+						return s.last_reengagement_sent_at == null || (s.last_reengagement_sent_at ?? "") <= reengagementCutoff;
+					})
+					.map((u) => ({ user_id: u.id }));
+			}
+		},
+		selectCreationsEligibleForHighlight: {
+			all: async (sinceIso, highlightSentBeforeIso) => {
+				const creationList = (typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.created_images) ?? created_images ?? [];
+				const commentList = (typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.comments_created_image) ?? comments_created_image ?? [];
+				const stateList = (typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.email_user_campaign_state) ?? email_user_campaign_state;
+				const since = sinceIso ?? "1970-01-01T00:00:00.000Z";
+				const highlightCutoff = highlightSentBeforeIso ?? "9999-12-31T23:59:59.999Z";
+				const countByCreation = {};
+				for (const c of commentList) {
+					if ((c?.created_at ?? "") >= since) {
+						const id = c?.created_image_id;
+						if (id != null) countByCreation[id] = (countByCreation[id] || 0) + 1;
+					}
+				}
+				const byOwner = {};
+				for (const ci of creationList) {
+					const count = countByCreation[ci?.id] || 0;
+					if (count === 0) continue;
+					const uid = ci?.user_id;
+					if (uid == null) continue;
+					const s = stateList.find((x) => x.user_id === uid);
+					if (s && s.last_creation_highlight_sent_at != null && (s.last_creation_highlight_sent_at ?? "") > highlightCutoff) continue;
+					if (!byOwner[uid] || count > (byOwner[uid].comment_count || 0)) {
+						byOwner[uid] = {
+							user_id: uid,
+							creation_id: ci?.id,
+							title: (ci?.title && String(ci.title).trim()) || "Untitled",
+							comment_count: count
+						};
+					}
+				}
+				return Object.values(byOwner);
 			}
 		},
 		selectUsersEligibleForWelcomeEmail: {

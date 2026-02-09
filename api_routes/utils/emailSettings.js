@@ -81,3 +81,52 @@ export async function getWelcomeEmailDelayHours(queries) {
 	const n = parseInt(val, 10);
 	return Number.isFinite(n) && n >= 0 ? n : 1;
 }
+
+const REENGAGEMENT_INACTIVE_DAYS_KEY = "reengagement_inactive_days";
+const REENGAGEMENT_COOLDOWN_DAYS_KEY = "reengagement_cooldown_days";
+const CREATION_HIGHLIGHT_LOOKBACK_HOURS_KEY = "creation_highlight_lookback_hours";
+const CREATION_HIGHLIGHT_COOLDOWN_DAYS_KEY = "creation_highlight_cooldown_days";
+
+/**
+ * Days of inactivity (no last_active_at or last activity) before a user is eligible for re-engagement email. Default 14.
+ * @param {{ selectPolicyByKey?: { get: (key: string) => Promise<{ value?: string } | null> } }} queries
+ * @returns {Promise<number>}
+ */
+export async function getReengagementInactiveDays(queries) {
+	const val = await getPolicyValue(queries, REENGAGEMENT_INACTIVE_DAYS_KEY, "14");
+	const n = parseInt(val, 10);
+	return Number.isFinite(n) && n >= 1 ? n : 14;
+}
+
+/**
+ * Minimum days between re-engagement emails per user. Default 30.
+ * @param {{ selectPolicyByKey?: { get: (key: string) => Promise<{ value?: string } | null> } }} queries
+ * @returns {Promise<number>}
+ */
+export async function getReengagementCooldownDays(queries) {
+	const val = await getPolicyValue(queries, REENGAGEMENT_COOLDOWN_DAYS_KEY, "30");
+	const n = parseInt(val, 10);
+	return Number.isFinite(n) && n >= 1 ? n : 30;
+}
+
+/**
+ * Hours to look back for comments on a creation to consider it "hot" for highlight email. Default 48.
+ * @param {{ selectPolicyByKey?: { get: (key: string) => Promise<{ value?: string } | null> } }} queries
+ * @returns {Promise<number>}
+ */
+export async function getCreationHighlightLookbackHours(queries) {
+	const val = await getPolicyValue(queries, CREATION_HIGHLIGHT_LOOKBACK_HOURS_KEY, "48");
+	const n = parseInt(val, 10);
+	return Number.isFinite(n) && n >= 1 ? n : 48;
+}
+
+/**
+ * Minimum days between creation highlight emails per user. Default 7.
+ * @param {{ selectPolicyByKey?: { get: (key: string) => Promise<{ value?: string } | null> } }} queries
+ * @returns {Promise<number>}
+ */
+export async function getCreationHighlightCooldownDays(queries) {
+	const val = await getPolicyValue(queries, CREATION_HIGHLIGHT_COOLDOWN_DAYS_KEY, "7");
+	const n = parseInt(val, 10);
+	return Number.isFinite(n) && n >= 1 ? n : 7;
+}

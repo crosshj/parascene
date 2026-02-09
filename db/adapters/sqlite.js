@@ -781,7 +781,7 @@ export async function openDb() {
 			get: async (userId) => {
 				const stmt = db.prepare(
 					`SELECT user_id, last_digest_sent_at, welcome_email_sent_at,
-            first_creation_nudge_sent_at, last_reengagement_sent_at, updated_at, meta
+            first_creation_nudge_sent_at, last_reengagement_sent_at, last_creation_highlight_sent_at, updated_at, meta
            FROM email_user_campaign_state WHERE user_id = ?`
 				);
 				return Promise.resolve(stmt.get(userId));
@@ -824,6 +824,79 @@ export async function openDb() {
 				);
 				const result = stmt.run(userId, sentAtIso);
 				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		upsertUserEmailCampaignStateReengagement: {
+			run: async (userId, sentAtIso) => {
+				const stmt = db.prepare(
+					`INSERT INTO email_user_campaign_state (user_id, last_reengagement_sent_at, updated_at)
+           VALUES (?, ?, datetime('now'))
+           ON CONFLICT (user_id) DO UPDATE SET
+             last_reengagement_sent_at = excluded.last_reengagement_sent_at,
+             updated_at = datetime('now')`
+				);
+				const result = stmt.run(userId, sentAtIso);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		upsertUserEmailCampaignStateCreationHighlight: {
+			run: async (userId, sentAtIso) => {
+				const stmt = db.prepare(
+					`INSERT INTO email_user_campaign_state (user_id, last_creation_highlight_sent_at, updated_at)
+           VALUES (?, ?, datetime('now'))
+           ON CONFLICT (user_id) DO UPDATE SET
+             last_creation_highlight_sent_at = excluded.last_creation_highlight_sent_at,
+             updated_at = datetime('now')`
+				);
+				const result = stmt.run(userId, sentAtIso);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		selectUsersEligibleForReengagement: {
+			// Only users who have already received welcome (so we never send "we miss you" before "welcome")
+			all: async (inactiveBeforeIso, lastReengagementBeforeIso) => {
+				const stmt = db.prepare(
+					`SELECT DISTINCT ci.user_id AS user_id
+           FROM created_images ci
+           INNER JOIN users u ON u.id = ci.user_id AND TRIM(u.email) != '' AND u.email LIKE '%@%'
+           AND (COALESCE(u.last_active_at, u.created_at) <= datetime(?))
+           INNER JOIN email_user_campaign_state s ON s.user_id = ci.user_id
+           AND s.welcome_email_sent_at IS NOT NULL
+           WHERE (s.last_reengagement_sent_at IS NULL OR datetime(s.last_reengagement_sent_at) <= datetime(?))`
+				);
+				const rows = stmt.all(inactiveBeforeIso ?? "1970-01-01T00:00:00.000Z", lastReengagementBeforeIso ?? "9999-12-31T23:59:59.999Z") ?? [];
+				return Promise.resolve(rows);
+			}
+		},
+		selectCreationsEligibleForHighlight: {
+			all: async (sinceIso, highlightSentBeforeIso) => {
+				const stmt = db.prepare(
+					`SELECT ci.user_id AS user_id, ci.id AS creation_id,
+            COALESCE(NULLIF(TRIM(ci.title), ''), 'Untitled') AS title,
+            COUNT(c.id) AS comment_count
+           FROM comments_created_image c
+           INNER JOIN created_images ci ON ci.id = c.created_image_id AND c.created_at >= datetime(?)
+           LEFT JOIN email_user_campaign_state s ON s.user_id = ci.user_id
+           WHERE (s.last_creation_highlight_sent_at IS NULL OR datetime(s.last_creation_highlight_sent_at) <= datetime(?))
+           GROUP BY ci.user_id, ci.id, ci.title
+           ORDER BY ci.user_id, comment_count DESC`
+				);
+				const rows = stmt.all(sinceIso ?? "1970-01-01T00:00:00.000Z", highlightSentBeforeIso ?? "9999-12-31T23:59:59.999Z") ?? [];
+				// One row per owner (hottest creation)
+				const byOwner = {};
+				for (const r of rows) {
+					const uid = r?.user_id;
+					if (uid == null) continue;
+					if (!byOwner[uid] || (r?.comment_count ?? 0) > (byOwner[uid].comment_count ?? 0)) {
+						byOwner[uid] = {
+							user_id: uid,
+							creation_id: r?.creation_id,
+							title: r?.title ?? "Untitled",
+							comment_count: r?.comment_count ?? 0
+						};
+					}
+				}
+				return Promise.resolve(Object.values(byOwner));
 			}
 		},
 		selectUsersEligibleForWelcomeEmail: {

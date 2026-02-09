@@ -592,6 +592,86 @@ export function renderFirstCreationNudge({ recipientName = "there" } = {}) {
 	return { subject, html: emailHtml, text };
 }
 
+export function renderReengagement({ recipientName = "there" } = {}) {
+	const safeName = escapeHtml(recipientName);
+	const subject = "We miss you on parascene";
+	const preheader = "Your creations are waiting — come back and see what's new.";
+	const bodyHtml = html`
+	<p style="margin:0 0 12px;">Hi ${safeName},</p>
+	<p style="margin:0 0 12px;">
+		It's been a while since we've seen you. Your scenes and the community are still here whenever you're ready to drop back in.
+	</p>
+	<p style="margin:0 0 12px;">
+		Create something new, see what others have been making, or just say hello.
+	</p>
+	<p style="margin:0;">— The parascene team</p>
+  `;
+	const emailHtml = baseEmailLayout({
+		preheader,
+		title: subject,
+		bodyHtml,
+		ctaText: "Visit parascene",
+		ctaUrl: getBaseAppUrl(),
+		footerText: "You're receiving this because you have a parascene account."
+	});
+	const text = [
+		`Hi ${recipientName},`,
+		"",
+		"It's been a while since we've seen you. Your scenes and the community are still here whenever you're ready to drop back in.",
+		"",
+		"Create something new, see what others have been making, or just say hello.",
+		"",
+		"— The parascene team",
+		"",
+		`Visit parascene: ${getBaseAppUrl()}`
+	].join("\n");
+	return { subject, html: emailHtml, text };
+}
+
+export function renderCreationHighlight({
+	recipientName = "there",
+	creationTitle = "your creation",
+	creationUrl = getBaseAppUrl(),
+	commentCount = 1
+} = {}) {
+	const safeName = escapeHtml(recipientName);
+	const safeTitle = escapeHtml(creationTitle || "your creation");
+	const count = Number(commentCount) || 1;
+	const commentLabel = count === 1 ? "1 new comment" : `${count} new comments`;
+	const subject = `"${creationTitle || "Your creation"}" is getting attention`;
+	const preheader = `${commentLabel} on ${creationTitle || "your creation"}.`;
+	const bodyHtml = html`
+	<p style="margin:0 0 12px;">Hi ${safeName},</p>
+	<p style="margin:0 0 12px;">
+		Your creation <strong>${safeTitle}</strong> has ${commentLabel.toLowerCase()}. People are engaging with what you made.
+	</p>
+	<p style="margin:0 0 12px;">
+		Head over to see the conversation and join in.
+	</p>
+	<p style="margin:0;">— The parascene team</p>
+  `;
+	const emailHtml = baseEmailLayout({
+		preheader,
+		title: "Your creation is getting attention",
+		bodyHtml,
+		ctaText: "View creation",
+		ctaUrl: creationUrl,
+		footerText: "You're receiving this because someone commented on your creation on parascene."
+	});
+	const text = [
+		`Hi ${recipientName},`,
+		"",
+		`Your creation "${creationTitle || "your creation"}" has ${commentLabel.toLowerCase()}. People are engaging with what you made.`,
+		"",
+		"Head over to see the conversation and join in.",
+		"",
+		"— The parascene team",
+		"",
+		`View creation: ${creationUrl}`
+	].join("\n");
+	return { subject, html: emailHtml, text };
+}
+
 export const templates = {
 	helloFromParascene: renderHelloFromParascene,
 	commentReceived: renderCommentReceived,
@@ -599,5 +679,7 @@ export const templates = {
 	passwordReset: renderPasswordReset,
 	digestActivity: renderDigestActivity,
 	welcome: renderWelcome,
-	firstCreationNudge: renderFirstCreationNudge
+	firstCreationNudge: renderFirstCreationNudge,
+	reengagement: renderReengagement,
+	creationHighlight: renderCreationHighlight
 };

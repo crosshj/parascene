@@ -732,7 +732,7 @@ export function openDb() {
 			get: async (userId) => {
 				const { data, error } = await serviceClient
 					.from(prefixedTable("email_user_campaign_state"))
-					.select("user_id, last_digest_sent_at, welcome_email_sent_at, first_creation_nudge_sent_at, last_reengagement_sent_at, updated_at, meta")
+					.select("user_id, last_digest_sent_at, welcome_email_sent_at, first_creation_nudge_sent_at, last_reengagement_sent_at, last_creation_highlight_sent_at, updated_at, meta")
 					.eq("user_id", userId)
 					.maybeSingle();
 				if (error) throw error;
@@ -785,6 +785,141 @@ export function openDb() {
 					);
 				if (error) throw error;
 				return { changes: 1 };
+			}
+		},
+		upsertUserEmailCampaignStateReengagement: {
+			run: async (userId, sentAtIso) => {
+				const { error } = await serviceClient
+					.from(prefixedTable("email_user_campaign_state"))
+					.upsert(
+						{
+							user_id: userId,
+							last_reengagement_sent_at: sentAtIso,
+							updated_at: new Date().toISOString()
+						},
+						{ onConflict: "user_id" }
+					);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
+		upsertUserEmailCampaignStateCreationHighlight: {
+			run: async (userId, sentAtIso) => {
+				const { error } = await serviceClient
+					.from(prefixedTable("email_user_campaign_state"))
+					.upsert(
+						{
+							user_id: userId,
+							last_creation_highlight_sent_at: sentAtIso,
+							updated_at: new Date().toISOString()
+						},
+						{ onConflict: "user_id" }
+					);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
+		selectUsersEligibleForReengagement: {
+			// inactiveBeforeIso: treat user as inactive if COALESCE(last_active_at, created_at) <= this
+			// lastReengagementBeforeIso: only include users with last_reengagement_sent_at null or <= this (cooldown)
+			all: async (inactiveBeforeIso, lastReengagementBeforeIso) => {
+				const { data: creators, error: cErr } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.select("user_id");
+				if (cErr) throw cErr;
+				const creatorIds = [...new Set((creators ?? []).map((r) => r?.user_id).filter((id) => id != null))];
+				if (creatorIds.length === 0) return [];
+				const { data: users, error: uErr } = await serviceClient
+					.from(prefixedTable("users"))
+					.select("id, email, last_active_at, created_at")
+					.in("id", creatorIds)
+					.not("email", "is", null);
+				if (uErr) throw uErr;
+				const inactiveCutoff = inactiveBeforeIso ?? "1970-01-01T00:00:00.000Z";
+				const lastActivity = (u) => u?.last_active_at ?? u?.created_at ?? "";
+				const inactiveUserIds = (users ?? [])
+					.filter((u) => u?.email && String(u.email).trim().includes("@"))
+					.filter((u) => lastActivity(u) <= inactiveCutoff)
+					.map((u) => u?.id)
+					.filter((id) => id != null);
+				if (inactiveUserIds.length === 0) return [];
+				const { data: stateRows, error: sErr } = await serviceClient
+					.from(prefixedTable("email_user_campaign_state"))
+					.select("user_id, welcome_email_sent_at, last_reengagement_sent_at")
+					.in("user_id", inactiveUserIds);
+				if (sErr) throw sErr;
+				// Only re-engage users who have already received welcome (so we never send "we miss you" before "welcome")
+				const stateByUser = Object.fromEntries((stateRows ?? []).map((s) => [String(s?.user_id), s]));
+				const reengagementBlocked = new Set(
+					(stateRows ?? [])
+						.filter((s) => {
+							const sent = s?.last_reengagement_sent_at;
+							if (sent == null) return false;
+							return lastReengagementBeforeIso != null && sent > lastReengagementBeforeIso;
+						})
+						.map((s) => String(s?.user_id))
+				);
+				return inactiveUserIds
+					.filter((id) => {
+						const state = stateByUser[String(id)];
+						if (!state || state.welcome_email_sent_at == null) return false;
+						return !reengagementBlocked.has(String(id));
+					})
+					.map((user_id) => ({ user_id }));
+			}
+		},
+		selectCreationsEligibleForHighlight: {
+			// sinceIso: comments on creations after this time make a creation "hot"
+			// highlightSentBeforeIso: only include owners with last_creation_highlight_sent_at null or <= this
+			all: async (sinceIso, highlightSentBeforeIso) => {
+				const { data: comments, error: cErr } = await serviceClient
+					.from(prefixedTable("comments_created_image"))
+					.select("created_image_id")
+					.gte("created_at", sinceIso ?? "1970-01-01T00:00:00.000Z");
+				if (cErr) throw cErr;
+				const countByCreation = {};
+				for (const row of comments ?? []) {
+					const id = row?.created_image_id;
+					if (id != null) countByCreation[id] = (countByCreation[id] || 0) + 1;
+				}
+				const creationIds = Object.keys(countByCreation).map(Number).filter((id) => id > 0);
+				if (creationIds.length === 0) return [];
+				const { data: creations, error: imgErr } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.select("id, user_id, title")
+					.in("id", creationIds);
+				if (imgErr) throw imgErr;
+				const ownerIds = [...new Set((creations ?? []).map((r) => r?.user_id).filter((id) => id != null))];
+				if (ownerIds.length === 0) return [];
+				const { data: stateRows, error: sErr } = await serviceClient
+					.from(prefixedTable("email_user_campaign_state"))
+					.select("user_id, last_creation_highlight_sent_at")
+					.in("user_id", ownerIds);
+				if (sErr) throw sErr;
+				const highlightBlocked = new Set(
+					(stateRows ?? [])
+						.filter((s) => {
+							const sent = s?.last_creation_highlight_sent_at;
+							if (sent == null) return false;
+							return highlightSentBeforeIso != null && sent > highlightSentBeforeIso;
+						})
+						.map((s) => String(s?.user_id))
+				);
+				const byOwner = {};
+				for (const c of creations ?? []) {
+					const uid = c?.user_id;
+					if (uid == null || highlightBlocked.has(String(uid))) continue;
+					const count = countByCreation[c?.id] || 0;
+					if (!byOwner[uid] || count > (byOwner[uid].comment_count || 0)) {
+						byOwner[uid] = {
+							user_id: uid,
+							creation_id: c?.id,
+							title: (c?.title && String(c.title).trim()) || "Untitled",
+							comment_count: count
+						};
+					}
+				}
+				return Object.values(byOwner);
 			}
 		},
 		selectUsersEligibleForWelcomeEmail: {
