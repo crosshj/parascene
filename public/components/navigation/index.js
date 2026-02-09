@@ -24,6 +24,7 @@ class AppNavigation extends HTMLElement {
 		this.handleCreditsUpdated = this.handleCreditsUpdated.bind(this);
 		this.handleCreditsClaimStatus = this.handleCreditsClaimStatus.bind(this);
 		this.canClaimCredits = null; // null = unknown (no callout)
+		this.currentRoute = null;
 		this.routes = [];
 		this.authLinks = [];
 		this.defaultRoute = null;
@@ -666,7 +667,14 @@ class AppNavigation extends HTMLElement {
 			section.style.display = isActive ? 'block' : 'none';
 		});
 
-		this.resetSectionScroll();
+		// Only reset scroll when the route actually changes.
+		// This avoids unexpected jumps when handleRouteChange is invoked
+		// repeatedly for the same route (e.g., redundant history events).
+		const previousRoute = this.currentRoute;
+		this.currentRoute = currentRoute;
+		if (previousRoute && previousRoute !== currentRoute) {
+			this.resetSectionScroll();
+		}
 
 		// Dispatch custom event for route change
 		this.dispatchEvent(new CustomEvent('route-change', {

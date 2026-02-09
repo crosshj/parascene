@@ -65,7 +65,6 @@ class AppNavigationMobile extends HTMLElement {
 			this.updateContentForRoute(route);
 		}
 		this.handleRouteChange();
-		this.resetSectionScroll();
 	}
 
 	updateContentForRoute(route) {
