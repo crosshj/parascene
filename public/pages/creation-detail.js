@@ -167,48 +167,6 @@ function getPrimaryLinkUrl(creationId) {
 	return new URL(`/creations/${creationId}`, window.location.origin).toString();
 }
 
-async function acknowledgeNotificationsForCurrentCreation(creationId) {
-	if (!creationId) return;
-	const path = `/creations/${creationId}`;
-
-	try {
-		const result = await fetchJsonWithStatusDeduped(
-			'/api/notifications',
-			{ credentials: 'include' },
-			{ windowMs: 2000 }
-		);
-		if (!result.ok || !Array.isArray(result.data?.notifications)) {
-			return;
-		}
-
-		const toAcknowledge = result.data.notifications.filter((notification) => {
-			if (!notification || notification.acknowledged_at) return false;
-			const link = typeof notification.link === 'string' ? notification.link : '';
-			// Match exact creation detail path; ignore any query/hash on either side.
-			const linkPath = link.split('#')[0].split('?')[0];
-			return linkPath === path;
-		});
-
-		if (!toAcknowledge.length) return;
-
-		await Promise.all(
-			toAcknowledge.map((notification) =>
-				fetch('/api/notifications/acknowledge', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-					body: new URLSearchParams({ id: String(notification.id) }),
-					credentials: 'include'
-				}).catch(() => null)
-			)
-		);
-
-		// Let header + notification components refresh counts/previews.
-		document.dispatchEvent(new CustomEvent('notifications-acknowledged'));
-	} catch {
-		// Best-effort only; failures shouldn't break the page.
-	}
-}
-
 // Store original history methods before anything else modifies them
 const originalPushState = history.pushState.bind(history);
 const originalReplaceState = history.replaceState.bind(history);
@@ -337,10 +295,6 @@ async function loadCreation() {
 		const creationWithLikes = { ...creation, ...likeMeta, created_image_id: creationId };
 		lastCreationMeta = creation;
 		const likeCount = getCreationLikeCount(creationWithLikes);
-
-		// Best-effort: when viewing a creation, automatically acknowledge any
-		// unread notifications that point to this creation detail page.
-		void acknowledgeNotificationsForCurrentCreation(creationId);
 
 		// Set image and blurred background depending on status
 		imageWrapper?.classList.remove('image-error');

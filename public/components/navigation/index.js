@@ -236,13 +236,13 @@ class AppNavigation extends HTMLElement {
 		});
 	}
 
-	async loadNotificationCount() {
+	async loadNotificationCount({ force = false } = {}) {
 		if (!this.hasAttribute('show-notifications')) return;
 
 		try {
 			const result = await fetchJsonWithStatusDeduped('/api/notifications/unread-count', {
 				credentials: 'include'
-			}, { windowMs: 2000 });
+			}, { windowMs: force ? 0 : 2000 });
 			if (!result.ok) throw new Error('Failed to load notifications count');
 			const count = Number(result.data?.count || 0);
 			this.updateNotificationsUI(count);
@@ -557,19 +557,68 @@ class AppNavigation extends HTMLElement {
 		});
 	}
 
+	async autoAcknowledgeNotificationsForPath(pathname) {
+		if (!this.hasAttribute('show-notifications')) return;
+		const path = typeof pathname === 'string' && pathname ? pathname.split('#')[0].split('?')[0] : '';
+		if (!path) return;
+
+		try {
+			const result = await fetchJsonWithStatusDeduped(
+				'/api/notifications',
+				{ credentials: 'include' },
+				{ windowMs: 0 }
+			);
+			if (!result.ok || !Array.isArray(result.data?.notifications)) {
+				return;
+			}
+
+			const toAcknowledge = result.data.notifications.filter((notification) => {
+				if (!notification || notification.acknowledged_at) return false;
+				const link = typeof notification.link === 'string' ? notification.link : '';
+				const linkPath = link.split('#')[0].split('?')[0];
+				return linkPath === path;
+			});
+
+			if (!toAcknowledge.length) return;
+
+			await Promise.all(
+				toAcknowledge.map((notification) =>
+					fetch('/api/notifications/acknowledge', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+						body: new URLSearchParams({ id: String(notification.id) }),
+						credentials: 'include'
+					}).catch(() => null)
+				)
+			);
+
+			// Immediately refresh bell badge and preview menu.
+			this.loadNotificationCount({ force: true });
+			this.loadNotificationPreview({ silent: true, force: true });
+			document.dispatchEvent(new CustomEvent('notifications-acknowledged'));
+		} catch {
+			// Best-effort only; ignore failures.
+		}
+	}
+
 	handleNotificationsUpdated() {
-		this.loadNotificationCount();
+		this.loadNotificationCount({ force: true });
 		this.loadNotificationPreview({ silent: true, force: true });
 	}
 
 	handleRouteChange() {
+		const pathname = window.location.pathname;
+
+		// First: auto-ack any notifications that point at this URL.
+		void this.autoAcknowledgeNotificationsForPath(pathname);
+
 		// If we're on a server-sent page (like creation detail), don't handle route changes
 		// Any navigation should result in a full page load
-		const isServerSentPage = /^\/creations\/\d+(\/(edit|mutat|mutate))?$/.test(window.location.pathname) ||
-			window.location.pathname.startsWith('/s/') ||
-			(window.location.pathname === '/help' || window.location.pathname.startsWith('/help/')) ||
-			window.location.pathname === '/user' ||
-			/^\/user\/\d+$/.test(window.location.pathname);
+		const isServerSentPage = /^\/creations\/\d+(\/(edit|mutat|mutate))?$/.test(pathname) ||
+			pathname.startsWith('/s/') ||
+			(pathname === '/help' || pathname.startsWith('/help/')) ||
+			pathname === '/user' ||
+			/^\/user\/\d+$/.test(pathname);
 		if (isServerSentPage) {
 			return;
 		}
@@ -577,7 +626,6 @@ class AppNavigation extends HTMLElement {
 		this.closeMobileMenu();
 
 		// Get route from pathname (e.g., /feed -> feed, / -> defaultRoute)
-		const pathname = window.location.pathname;
 		let currentRoute = pathname === '/' || pathname === '' ? this.defaultRoute : pathname.slice(1);
 		if (pathname.startsWith('/connect')) {
 			currentRoute = 'connect';
