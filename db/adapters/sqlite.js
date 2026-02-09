@@ -669,6 +669,34 @@ export async function openDb() {
 				return Promise.resolve(stmt.all());
 			}
 		},
+		selectPolicyByKey: {
+			get: async (key) => {
+				const stmt = db.prepare(
+					`SELECT id, key, value, description, updated_at
+           FROM policy_knobs
+           WHERE key = ?
+           LIMIT 1`
+				);
+				return Promise.resolve(stmt.get(key));
+			}
+		},
+		upsertPolicyKey: {
+			run: async (key, value, description) => {
+				const updateStmt = db.prepare(
+					`UPDATE policy_knobs
+           SET value = ?, description = ?, updated_at = datetime('now')
+           WHERE key = ?`
+				);
+				const result = updateStmt.run(value, description ?? null, key);
+				if (result.changes > 0) return { changes: result.changes };
+				const insertStmt = db.prepare(
+					`INSERT INTO policy_knobs (key, value, description, updated_at)
+           VALUES (?, ?, ?, datetime('now'))`
+				);
+				insertStmt.run(key, value, description ?? null);
+				return { changes: 1 };
+			}
+		},
 		selectNotificationsForUser: {
 			all: async (userId, role) => {
 				const stmt = db.prepare(

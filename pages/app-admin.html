@@ -4,6 +4,7 @@
 <head>
 	<title>parascene - admin</title>
 	<link rel="stylesheet" href="/pages/admin.css" />
+	<script type="module" src="/pages/admin.js"></script>
 </head>
 
 <body>
@@ -11,6 +12,7 @@
 		<a data-route="todo">Todo</a>
 		<a data-route="users">Users</a>
 		<a data-route="connect">Connect</a>
+		<a data-route="settings">Settings</a>
 	</app-navigation>
 
 	<app-modal-profile></app-modal-profile>
@@ -25,6 +27,18 @@
 			<app-route-todo data-route-content="todo"></app-route-todo>
 			<app-route-users data-route-content="users"></app-route-users>
 			<app-route-servers data-route-content="connect"></app-route-servers>
+			<div id="settings-container" data-route-content="settings" class="route-content">
+				<div class="admin-card">
+					<h2 class="admin-title">Email</h2>
+					<div class="admin-settings-email">
+						<label class="admin-settings-toggle">
+							<input type="checkbox" id="email-use-test-recipient" />
+							<span>Send to test address (delivered@resend.dev)</span>
+						</label>
+						<p class="admin-detail">When on, all lifecycle and transactional emails go to Resend’s test address instead of real users.</p>
+					</div>
+				</div>
+			</div>
 		</section>
 	</main>
 </body>

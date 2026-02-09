@@ -1,5 +1,6 @@
 import express from "express";
 import { sendDelegatedEmail, sendTemplatedEmail } from "../email/index.js";
+import { getEffectiveEmailRecipient } from "./utils/emailSettings.js";
 import { getBaseAppUrl, getThumbnailUrl } from "./utils/url.js";
 
 async function requireUser(req, res, queries) {
@@ -219,36 +220,6 @@ export default function createCommentsRoutes({ queries }) {
 							// 	hasResendApiKey: Boolean(process.env.RESEND_API_KEY),
 							// 	hasResendSystemEmail: Boolean(process.env.RESEND_SYSTEM_EMAIL)
 							// });
-						} else if (shouldSuppress) {
-							// console.log("[Comments] Sending delegated comment email: suppressed domain match (example.com)", {
-							// 	imageId,
-							// 	ownerUserId,
-							// 	ownerEmailDomain: ownerEmailLower.split("@")[1] || null
-							// });
-
-							const baseUrl = getBaseAppUrl();
-							const creationPath = `/creations/${encodeURIComponent(String(imageId))}`;
-							const creationUrl = new URL(creationPath, baseUrl).toString();
-							const commenterName = getUserDisplayName(user);
-							const recipientName = getUserDisplayName(owner);
-							const creationTitle = typeof image?.title === "string" ? image.title.trim() : "";
-
-							await sendDelegatedEmail({
-								template: "commentReceived",
-								reason: "Suppressed domain match (example.com)",
-								originalRecipient: {
-									name: recipientName,
-									email: ownerEmail,
-									userId: ownerUserId
-								},
-								data: {
-									recipientName,
-									commenterName,
-									commentText: text,
-									creationTitle,
-									creationUrl
-								}
-							});
 						} else {
 							const baseUrl = getBaseAppUrl();
 							const creationPath = `/creations/${encodeURIComponent(String(imageId))}`;
@@ -257,24 +228,37 @@ export default function createCommentsRoutes({ queries }) {
 							const recipientName = getUserDisplayName(owner);
 							const creationTitle = typeof image?.title === "string" ? image.title.trim() : "";
 
-							// console.log("[Comments] Sending comment notification email", {
-							// 	// ownerEmail,
-							// 	recipientName,
-							// 	commenterName,
-							// 	commentText: text,
-							// 	creationTitle,
-							// });
-							await sendTemplatedEmail({
-								to: ownerEmail,
-								template: "commentReceived",
-								data: {
-									recipientName,
-									commenterName,
-									commentText: text,
-									creationTitle,
-									creationUrl
-								}
-							});
+							const to = await getEffectiveEmailRecipient(queries, ownerEmail);
+							if (shouldSuppress && to === ownerEmail) {
+								await sendDelegatedEmail({
+									template: "commentReceived",
+									reason: "Suppressed domain match (example.com)",
+									originalRecipient: {
+										name: recipientName,
+										email: ownerEmail,
+										userId: ownerUserId
+									},
+									data: {
+										recipientName,
+										commenterName,
+										commentText: text,
+										creationTitle,
+										creationUrl
+									}
+								});
+							} else {
+								await sendTemplatedEmail({
+									to,
+									template: "commentReceived",
+									data: {
+										recipientName,
+										commenterName,
+										commentText: text,
+										creationTitle,
+										creationUrl
+									}
+								});
+							}
 						}
 					}
 				}

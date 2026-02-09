@@ -346,6 +346,29 @@ export function openDb() {
 		selectPolicies: {
 			all: async () => [...policy_knobs]
 		},
+		selectPolicyByKey: {
+			get: async (key) => policy_knobs.find((p) => p.key === key) ?? null
+		},
+		upsertPolicyKey: {
+			run: async (key, value, description) => {
+				const existing = policy_knobs.find((p) => p.key === key);
+				const now = new Date().toISOString();
+				if (existing) {
+					existing.value = value;
+					existing.description = description ?? existing.description;
+					existing.updated_at = now;
+					return { changes: 1 };
+				}
+				policy_knobs.push({
+					id: policy_knobs.length + 1,
+					key,
+					value,
+					description: description ?? null,
+					updated_at: now
+				});
+				return { changes: 1 };
+			}
+		},
 		selectNotificationsForUser: {
 			all: async (userId, role) =>
 				notifications.filter(

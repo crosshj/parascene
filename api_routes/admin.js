@@ -1,5 +1,6 @@
 import express from "express";
 import { buildProviderHeaders, resolveProviderAuthToken } from "./utils/providerAuth.js";
+import { getEmailUseTestRecipient } from "./utils/emailSettings.js";
 
 export default function createAdminRoutes({ queries, storage }) {
 	const router = express.Router();
@@ -384,6 +385,31 @@ export default function createAdminRoutes({ queries, storage }) {
 	router.get("/admin/policies", async (req, res) => {
 		const policies = await queries.selectPolicies.all();
 		res.json({ policies });
+	});
+
+	router.get("/admin/settings", async (req, res) => {
+		const user = await requireAdmin(req, res);
+		if (!user) return;
+		const email_use_test_recipient = await getEmailUseTestRecipient(queries);
+		res.json({ email_use_test_recipient });
+	});
+
+	router.patch("/admin/settings", async (req, res) => {
+		const user = await requireAdmin(req, res);
+		if (!user) return;
+		const body = req.body || {};
+		if (typeof body.email_use_test_recipient === "boolean") {
+			const value = body.email_use_test_recipient ? "true" : "false";
+			if (queries.upsertPolicyKey?.run) {
+				await queries.upsertPolicyKey.run(
+					"email_use_test_recipient",
+					value,
+					"When true, all lifecycle/transactional emails go to delivered@resend.dev"
+				);
+			}
+		}
+		const email_use_test_recipient = await getEmailUseTestRecipient(queries);
+		res.json({ email_use_test_recipient });
 	});
 
 	router.get("/admin/servers/:id", async (req, res) => {

@@ -6,6 +6,7 @@ import Busboy from "busboy";
 import path from "path";
 import sharp from "sharp";
 import { sendTemplatedEmail } from "../email/index.js";
+import { getEffectiveEmailRecipient } from "./utils/emailSettings.js";
 import {
 	COOKIE_NAME,
 	ONE_WEEK_MS,
@@ -386,8 +387,9 @@ export default function createProfileRoutes({ queries }) {
 						? user.email.split("@")[0]
 						: "there";
 				if (process.env.RESEND_API_KEY && process.env.RESEND_SYSTEM_EMAIL) {
+					const to = await getEffectiveEmailRecipient(queries, user.email);
 					await sendTemplatedEmail({
-						to: user.email,
+						to,
 						template: "passwordReset",
 						data: { recipientName, resetUrl }
 					});

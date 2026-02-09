@@ -5,7 +5,8 @@ const adminDataLoaded = {
 	users: false,
 	moderation: false,
 	policies: false,
-	todo: false
+	todo: false,
+	settings: false
 };
 let todoWritable = true;
 let todoPriorityMode = "gated";
@@ -665,6 +666,38 @@ async function loadTodo({ force = false, mode } = {}) {
 	}
 }
 
+async function loadSettings() {
+	const container = document.querySelector("#settings-container");
+	if (!container) return;
+	if (adminDataLoaded.settings) return;
+
+	const checkbox = document.getElementById("email-use-test-recipient");
+	if (!checkbox) return;
+
+	try {
+		const response = await fetch("/admin/settings", { credentials: "include" });
+		if (!response.ok) throw new Error("Failed to load settings.");
+		const data = await response.json();
+		checkbox.checked = !!data.email_use_test_recipient;
+		checkbox.addEventListener("change", async () => {
+			const next = checkbox.checked;
+			const res = await fetch("/admin/settings", {
+				method: "PATCH",
+				credentials: "include",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ email_use_test_recipient: next })
+			});
+			if (!res.ok) {
+				checkbox.checked = !next;
+				return;
+			}
+		});
+		adminDataLoaded.settings = true;
+	} catch (err) {
+		// Optionally show error in container
+	}
+}
+
 function handleAdminRouteChange(route) {
 	const normalizedRoute = route === "policies"
 		? "policy-knobs"
@@ -679,6 +712,9 @@ function handleAdminRouteChange(route) {
 			break;
 		case "policy-knobs":
 			loadPolicies();
+			break;
+		case "settings":
+			loadSettings();
 			break;
 		case "todo":
 			loadTodo();

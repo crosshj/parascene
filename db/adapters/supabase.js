@@ -532,6 +532,42 @@ export function openDb() {
 				return data ?? [];
 			}
 		},
+		selectPolicyByKey: {
+			get: async (key) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("policy_knobs"))
+					.select("id, key, value, description, updated_at")
+					.eq("key", key)
+					.limit(1)
+					.maybeSingle();
+				if (error) throw error;
+				return data;
+			}
+		},
+		upsertPolicyKey: {
+			run: async (key, value, description) => {
+				const { data: existing } = await serviceClient
+					.from(prefixedTable("policy_knobs"))
+					.select("id")
+					.eq("key", key)
+					.limit(1)
+					.maybeSingle();
+				const now = new Date().toISOString();
+				if (existing) {
+					const { error } = await serviceClient
+						.from(prefixedTable("policy_knobs"))
+						.update({ value, description: description ?? null, updated_at: now })
+						.eq("key", key);
+					if (error) throw error;
+					return { changes: 1 };
+				}
+				const { error } = await serviceClient
+					.from(prefixedTable("policy_knobs"))
+					.insert({ key, value, description: description ?? null, updated_at: now });
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
 		selectNotificationsForUser: {
 			all: async (userId, role) => {
 				// Use service client to bypass RLS for backend operations

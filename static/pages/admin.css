@@ -1,5 +1,22 @@
 /* Page-specific styles for admin.html */
 
+.admin-settings-email {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.admin-settings-toggle {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	cursor: pointer;
+}
+
+.admin-settings-toggle input {
+	margin: 0;
+}
+
 [data-route-content="users"] {
 	background: transparent;
 	border: none;
