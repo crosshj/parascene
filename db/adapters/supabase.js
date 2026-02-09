@@ -697,6 +697,89 @@ export function openDb() {
 				};
 			}
 		},
+		selectDistinctUserIdsWithUnreadNotificationsSince: {
+			all: async (sinceIso) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("notifications"))
+					.select("user_id")
+					.not("user_id", "is", null)
+					.is("acknowledged_at", null)
+					.gte("created_at", sinceIso);
+				if (error) throw error;
+				const seen = new Set();
+				const userIds = (data ?? [])
+					.map((r) => r?.user_id)
+					.filter((id) => id != null && !seen.has(String(id)) && (seen.add(String(id)), true));
+				return userIds.map((id) => ({ user_id: id }));
+			}
+		},
+		insertEmailSend: {
+			run: async (userId, campaign, meta) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("email_sends"))
+					.insert({
+						user_id: userId,
+						campaign,
+						meta: meta ?? null
+					})
+					.select("id")
+					.single();
+				if (error) throw error;
+				return { insertId: data.id, lastInsertRowid: data.id, changes: 1 };
+			}
+		},
+		selectUserEmailCampaignState: {
+			get: async (userId) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("email_user_campaign_state"))
+					.select("user_id, last_digest_sent_at, welcome_email_sent_at, first_creation_nudge_sent_at, last_reengagement_sent_at, updated_at, meta")
+					.eq("user_id", userId)
+					.maybeSingle();
+				if (error) throw error;
+				return data;
+			}
+		},
+		upsertUserEmailCampaignStateLastDigest: {
+			run: async (userId, sentAtIso) => {
+				const { error } = await serviceClient
+					.from(prefixedTable("email_user_campaign_state"))
+					.upsert(
+						{
+							user_id: userId,
+							last_digest_sent_at: sentAtIso,
+							updated_at: new Date().toISOString()
+						},
+						{ onConflict: "user_id" }
+					);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
+		selectEmailSendsCountForUserSince: {
+			get: async (userId, campaign, sinceIso) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("email_sends"))
+					.select("id")
+					.eq("user_id", userId)
+					.eq("campaign", campaign)
+					.gte("created_at", sinceIso);
+				if (error) throw error;
+				return { count: (data ?? []).length };
+			}
+		},
+		insertEmailLinkClick: {
+			run: async (emailSendId, userId, path) => {
+				const { error } = await serviceClient
+					.from(prefixedTable("email_link_clicks"))
+					.insert({
+						email_send_id: emailSendId,
+						user_id: userId ?? null,
+						path: path ?? null
+					});
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
 		selectFeedItems: {
 			all: async (excludeUserId) => {
 				const viewerId = excludeUserId ?? null;

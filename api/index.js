@@ -26,6 +26,7 @@ import createFeatureRequestRoutes from "../api_routes/feature_requests.js";
 import createShareRoutes from "../api_routes/share.js";
 import createPolicyRoutes from "../api_routes/policy.js";
 import createTryRoutes from "../api_routes/try.js";
+import createNotificationsCronRoutes from "../api_routes/notificationsCron.js";
 import { computeWelcome } from "../api_routes/utils/welcome.js";
 import {
 	authMiddleware,
@@ -196,6 +197,7 @@ app.use(createImagesRoutes({ storage }));
 app.use(createCreationsRoutes({ queries }));
 app.use(createLikesRoutes({ queries }));
 app.use(createCommentsRoutes({ queries }));
+app.use(createNotificationsCronRoutes({ queries }));
 app.use(createShareRoutes({ queries, storage }));
 app.use(createProviderRoutes({ queries }));
 app.use(createServersRoutes({ queries }));

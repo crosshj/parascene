@@ -25,6 +25,9 @@ const sessions = [];
 const user_credits = [];
 const likes_created_image = [];
 const comments_created_image = [];
+const email_sends = [];
+const email_user_campaign_state = [];
+const email_link_clicks = [];
 
 // On Vercel, use /tmp directory which is writable
 // Otherwise use the local data directory
@@ -73,6 +76,9 @@ const TABLE_TIMESTAMP_FIELDS = {
 	servers: ["created_at", "updated_at", "status_date"],
 	policy_knobs: ["updated_at"],
 	notifications: ["created_at"],
+	email_sends: ["created_at"],
+	email_user_campaign_state: ["updated_at"],
+	email_link_clicks: ["clicked_at"],
 	feed_items: ["created_at"],
 	explore_items: ["created_at"],
 	creations: ["created_at"],
@@ -413,6 +419,85 @@ export function openDb() {
 				};
 				notifications.push(notification);
 				return { insertId: notification.id, lastInsertRowid: notification.id, changes: 1 };
+			}
+		},
+		selectDistinctUserIdsWithUnreadNotificationsSince: {
+			all: async (sinceIso) => {
+				const seen = new Set();
+				return notifications
+					.filter(
+						(n) =>
+							n.user_id != null &&
+							!n.acknowledged_at &&
+							n.created_at >= sinceIso
+					)
+					.map((n) => n.user_id)
+					.filter((id) => {
+						const k = String(id);
+						if (seen.has(k)) return false;
+						seen.add(k);
+						return true;
+					})
+					.map((user_id) => ({ user_id }));
+			}
+		},
+		insertEmailSend: {
+			run: async (userId, campaign, meta) => {
+				const id = email_sends.length + 1;
+				email_sends.push({
+					id,
+					user_id: userId,
+					campaign,
+					created_at: new Date().toISOString(),
+					meta: meta ?? null
+				});
+				return { insertId: id, lastInsertRowid: id, changes: 1 };
+			}
+		},
+		selectUserEmailCampaignState: {
+			get: async (userId) => {
+				return email_user_campaign_state.find((s) => s.user_id === userId) ?? null;
+			}
+		},
+		upsertUserEmailCampaignStateLastDigest: {
+			run: async (userId, sentAtIso) => {
+				const now = new Date().toISOString();
+				const existing = email_user_campaign_state.find((s) => s.user_id === userId);
+				if (existing) {
+					existing.last_digest_sent_at = sentAtIso;
+					existing.updated_at = now;
+					return { changes: 1 };
+				}
+				email_user_campaign_state.push({
+					user_id: userId,
+					last_digest_sent_at: sentAtIso,
+					welcome_email_sent_at: null,
+					first_creation_nudge_sent_at: null,
+					last_reengagement_sent_at: null,
+					updated_at: now,
+					meta: null
+				});
+				return { changes: 1 };
+			}
+		},
+		selectEmailSendsCountForUserSince: {
+			get: async (userId, campaign, sinceIso) => {
+				const count = email_sends.filter(
+					(s) => s.user_id === userId && s.campaign === campaign && s.created_at >= sinceIso
+				).length;
+				return { count };
+			}
+		},
+		insertEmailLinkClick: {
+			run: async (emailSendId, userId, path) => {
+				email_link_clicks.push({
+					id: email_link_clicks.length + 1,
+					email_send_id: emailSendId,
+					user_id: userId ?? null,
+					clicked_at: new Date().toISOString(),
+					path: path ?? null
+				});
+				return { changes: 1 };
 			}
 		},
 		selectFeedItems: {
@@ -1510,6 +1595,15 @@ export function openDb() {
 			case "notifications":
 				targetArray = notifications;
 				break;
+			case "email_sends":
+				targetArray = email_sends;
+				break;
+			case "email_user_campaign_state":
+				targetArray = email_user_campaign_state;
+				break;
+			case "email_link_clicks":
+				targetArray = email_link_clicks;
+				break;
 			case "feed_items":
 				targetArray = feed_items;
 				break;
@@ -1586,6 +1680,9 @@ export function openDb() {
 		provider_templates.length = 0;
 		policy_knobs.length = 0;
 		notifications.length = 0;
+		email_sends.length = 0;
+		email_user_campaign_state.length = 0;
+		email_link_clicks.length = 0;
 		feed_items.length = 0;
 		explore_items.length = 0;
 		creations.length = 0;

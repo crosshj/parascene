@@ -752,6 +752,74 @@ export async function openDb() {
 				});
 			}
 		},
+		selectDistinctUserIdsWithUnreadNotificationsSince: {
+			all: async (sinceIso) => {
+				const stmt = db.prepare(
+					`SELECT DISTINCT user_id AS user_id
+           FROM notifications
+           WHERE user_id IS NOT NULL AND acknowledged_at IS NULL AND created_at >= ?`
+				);
+				const rows = stmt.all(sinceIso);
+				return Promise.resolve(rows ?? []);
+			}
+		},
+		insertEmailSend: {
+			run: async (userId, campaign, meta) => {
+				const stmt = db.prepare(
+					`INSERT INTO email_sends (user_id, campaign, created_at, meta)
+           VALUES (?, ?, datetime('now'), ?)`
+				);
+				const result = stmt.run(userId, campaign, meta ?? null);
+				return Promise.resolve({
+					insertId: result.lastInsertRowid,
+					lastInsertRowid: result.lastInsertRowid,
+					changes: result.changes
+				});
+			}
+		},
+		selectUserEmailCampaignState: {
+			get: async (userId) => {
+				const stmt = db.prepare(
+					`SELECT user_id, last_digest_sent_at, welcome_email_sent_at,
+            first_creation_nudge_sent_at, last_reengagement_sent_at, updated_at, meta
+           FROM email_user_campaign_state WHERE user_id = ?`
+				);
+				return Promise.resolve(stmt.get(userId));
+			}
+		},
+		upsertUserEmailCampaignStateLastDigest: {
+			run: async (userId, sentAtIso) => {
+				const stmt = db.prepare(
+					`INSERT INTO email_user_campaign_state (user_id, last_digest_sent_at, updated_at)
+           VALUES (?, ?, datetime('now'))
+           ON CONFLICT (user_id) DO UPDATE SET
+             last_digest_sent_at = excluded.last_digest_sent_at,
+             updated_at = datetime('now')`
+				);
+				const result = stmt.run(userId, sentAtIso);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		selectEmailSendsCountForUserSince: {
+			get: async (userId, campaign, sinceIso) => {
+				const stmt = db.prepare(
+					`SELECT COUNT(*) AS count
+           FROM email_sends
+           WHERE user_id = ? AND campaign = ? AND created_at >= ?`
+				);
+				return Promise.resolve(stmt.get(userId, campaign, sinceIso));
+			}
+		},
+		insertEmailLinkClick: {
+			run: async (emailSendId, userId, path) => {
+				const stmt = db.prepare(
+					`INSERT INTO email_link_clicks (email_send_id, user_id, clicked_at, path)
+           VALUES (?, ?, datetime('now'), ?)`
+				);
+				const result = stmt.run(emailSendId, userId ?? null, path ?? null);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
 		selectExploreFeedItems: {
 			all: async (viewerId) => {
 				const id = viewerId ?? null;

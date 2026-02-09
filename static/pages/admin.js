@@ -671,27 +671,63 @@ async function loadSettings() {
 	if (!container) return;
 	if (adminDataLoaded.settings) return;
 
-	const checkbox = document.getElementById("email-use-test-recipient");
-	if (!checkbox) return;
+	const emailTestCheckbox = document.getElementById("email-use-test-recipient");
+	const dryRunCheckbox = document.getElementById("email-dry-run");
+	const digestWindowsInput = document.getElementById("digest-utc-windows");
+	const maxDigestsInput = document.getElementById("max-digests-per-user-per-day");
+	const digestSaveBtn = document.getElementById("settings-digest-save");
+	if (!emailTestCheckbox) return;
 
 	try {
 		const response = await fetch("/admin/settings", { credentials: "include" });
 		if (!response.ok) throw new Error("Failed to load settings.");
 		const data = await response.json();
-		checkbox.checked = !!data.email_use_test_recipient;
-		checkbox.addEventListener("change", async () => {
-			const next = checkbox.checked;
+		emailTestCheckbox.checked = !!data.email_use_test_recipient;
+		if (dryRunCheckbox) dryRunCheckbox.checked = !!data.email_dry_run;
+		if (digestWindowsInput) digestWindowsInput.value = data.digest_utc_windows ?? "";
+		if (maxDigestsInput) maxDigestsInput.value = data.max_digests_per_user_per_day ?? "2";
+
+		emailTestCheckbox.addEventListener("change", async () => {
+			const next = emailTestCheckbox.checked;
 			const res = await fetch("/admin/settings", {
 				method: "PATCH",
 				credentials: "include",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ email_use_test_recipient: next })
 			});
-			if (!res.ok) {
-				checkbox.checked = !next;
-				return;
-			}
+			if (!res.ok) emailTestCheckbox.checked = !next;
 		});
+
+		if (dryRunCheckbox) {
+			dryRunCheckbox.addEventListener("change", async () => {
+				const next = dryRunCheckbox.checked;
+				const res = await fetch("/admin/settings", {
+					method: "PATCH",
+					credentials: "include",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ email_dry_run: next })
+				});
+				if (!res.ok) dryRunCheckbox.checked = !next;
+			});
+		}
+
+		if (digestSaveBtn && digestWindowsInput && maxDigestsInput) {
+			digestSaveBtn.addEventListener("click", async () => {
+				const res = await fetch("/admin/settings", {
+					method: "PATCH",
+					credentials: "include",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						digest_utc_windows: digestWindowsInput.value.trim() || "09:00,18:00",
+						max_digests_per_user_per_day: parseInt(maxDigestsInput.value, 10) || 0
+					})
+				});
+				if (res.ok) {
+					digestSaveBtn.textContent = "Saved";
+					setTimeout(() => { digestSaveBtn.textContent = "Save digest settings"; }, 2000);
+				}
+			});
+		}
 		adminDataLoaded.settings = true;
 	} catch (err) {
 		// Optionally show error in container

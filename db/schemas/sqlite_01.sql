@@ -104,6 +104,37 @@ CREATE TABLE IF NOT EXISTS notifications (
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
+CREATE TABLE IF NOT EXISTS email_sends (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  campaign TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  meta TEXT,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS email_user_campaign_state (
+  user_id INTEGER PRIMARY KEY,
+  last_digest_sent_at TEXT,
+  welcome_email_sent_at TEXT,
+  first_creation_nudge_sent_at TEXT,
+  last_reengagement_sent_at TEXT,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  meta TEXT,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS email_link_clicks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email_send_id INTEGER NOT NULL,
+  user_id INTEGER,
+  clicked_at TEXT NOT NULL DEFAULT (datetime('now')),
+  path TEXT,
+  meta TEXT,
+  FOREIGN KEY (email_send_id) REFERENCES email_sends(id),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
 CREATE TABLE IF NOT EXISTS feed_items (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   title TEXT NOT NULL,

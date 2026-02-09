@@ -1,6 +1,6 @@
 import express from "express";
 import { buildProviderHeaders, resolveProviderAuthToken } from "./utils/providerAuth.js";
-import { getEmailUseTestRecipient } from "./utils/emailSettings.js";
+import { getEmailUseTestRecipient, getPolicyValue } from "./utils/emailSettings.js";
 
 export default function createAdminRoutes({ queries, storage }) {
 	const router = express.Router();
@@ -391,7 +391,16 @@ export default function createAdminRoutes({ queries, storage }) {
 		const user = await requireAdmin(req, res);
 		if (!user) return;
 		const email_use_test_recipient = await getEmailUseTestRecipient(queries);
-		res.json({ email_use_test_recipient });
+		const email_dry_run_val = await getPolicyValue(queries, "email_dry_run", "true");
+		const email_dry_run = email_dry_run_val.toLowerCase() === "true" || email_dry_run_val === "1";
+		const digest_utc_windows = await getPolicyValue(queries, "digest_utc_windows", "09:00,18:00");
+		const max_digests_per_user_per_day = await getPolicyValue(queries, "max_digests_per_user_per_day", "2");
+		res.json({
+			email_use_test_recipient,
+			email_dry_run,
+			digest_utc_windows,
+			max_digests_per_user_per_day
+		});
 	});
 
 	router.patch("/admin/settings", async (req, res) => {
@@ -408,8 +417,35 @@ export default function createAdminRoutes({ queries, storage }) {
 				);
 			}
 		}
+		if (typeof body.email_dry_run === "boolean") {
+			const value = body.email_dry_run ? "true" : "false";
+			if (queries.upsertPolicyKey?.run) {
+				await queries.upsertPolicyKey.run("email_dry_run", value, "When true, cron records digest sends but does not send email.");
+			}
+		}
+		if (typeof body.digest_utc_windows === "string") {
+			const value = body.digest_utc_windows.trim();
+			if (queries.upsertPolicyKey?.run) {
+				await queries.upsertPolicyKey.run("digest_utc_windows", value || "09:00,18:00", "UTC times (HH:MM) when digest may run, comma-separated.");
+			}
+		}
+		if (typeof body.max_digests_per_user_per_day !== "undefined") {
+			const value = String(Math.max(0, parseInt(body.max_digests_per_user_per_day, 10) || 0));
+			if (queries.upsertPolicyKey?.run) {
+				await queries.upsertPolicyKey.run("max_digests_per_user_per_day", value, "Max digest emails per user per UTC day.");
+			}
+		}
 		const email_use_test_recipient = await getEmailUseTestRecipient(queries);
-		res.json({ email_use_test_recipient });
+		const email_dry_run_val = await getPolicyValue(queries, "email_dry_run", "true");
+		const email_dry_run = email_dry_run_val.toLowerCase() === "true" || email_dry_run_val === "1";
+		const digest_utc_windows = await getPolicyValue(queries, "digest_utc_windows", "09:00,18:00");
+		const max_digests_per_user_per_day = await getPolicyValue(queries, "max_digests_per_user_per_day", "2");
+		res.json({
+			email_use_test_recipient,
+			email_dry_run,
+			digest_utc_windows,
+			max_digests_per_user_per_day
+		});
 	});
 
 	router.get("/admin/servers/:id", async (req, res) => {

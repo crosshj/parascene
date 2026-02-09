@@ -420,9 +420,41 @@ export function renderFeatureRequest({
 	return { subject, html: emailHtml, text };
 }
 
+export function renderDigestActivity({
+	recipientName = "there",
+	activitySummary = "You have new activity on your creations.",
+	feedUrl = getBaseAppUrl()
+} = {}) {
+	const safeName = escapeHtml(recipientName);
+	const safeSummary = escapeHtml(activitySummary);
+	const subject = "Your parascene activity";
+	const preheader = activitySummary || "You have new activity on parascene.";
+	const bodyHtml = html`
+    <p style="margin:0 0 12px;">Hi ${safeName},</p>
+    <p style="margin:0 0 12px;">${safeSummary}</p>
+  `;
+	const emailHtml = baseEmailLayout({
+		preheader,
+		title: "Your activity",
+		bodyHtml,
+		ctaText: "View activity",
+		ctaUrl: feedUrl,
+		footerText: "You're receiving this because you have notifications on parascene."
+	});
+	const text = [
+		`Hi ${recipientName},`,
+		"",
+		activitySummary,
+		"",
+		`View activity: ${feedUrl}`
+	].join("\n");
+	return { subject, html: emailHtml, text };
+}
+
 export const templates = {
 	helloFromParascene: renderHelloFromParascene,
 	commentReceived: renderCommentReceived,
 	featureRequest: renderFeatureRequest,
-	passwordReset: renderPasswordReset
+	passwordReset: renderPasswordReset,
+	digestActivity: renderDigestActivity
 };

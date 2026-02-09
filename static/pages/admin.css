@@ -17,6 +17,25 @@
 	margin: 0;
 }
 
+.admin-settings-digest {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.admin-settings-label {
+	font-weight: 600;
+	font-size: 0.9rem;
+	margin-top: 8px;
+}
+
+.admin-settings-input {
+	padding: 8px 10px;
+	border-radius: 6px;
+	border: 1px solid var(--border, #e2e8f0);
+	max-width: 280px;
+}
+
 [data-route-content="users"] {
 	background: transparent;
 	border: none;

@@ -13,7 +13,7 @@
 
 ### Phase 2: Cron endpoint and dry run (no real digest send yet)
 - **Goal:** Cron endpoint exists, secured; decides who would get a digest and records to DB; does not send when dry run.
-- **Deliverables:** Tables `email_sends`, `user_email_campaign_state`; `email_link_clicks`; adapter methods; `POST /api/notifications/cron` (or `/api/email/digest-run`) with secret auth; digest-only logic (users with recent activity, window + cap); insert `email_sends`, optional `email_dry_run` setting; no Resend call when dry run.
+- **Deliverables:** Tables `email_link_clicks`, `email_sends`, `email_user_campaign_state`; adapter methods; `POST /api/notifications/cron` (or `/api/email/digest-run`) with secret auth; digest-only logic (users with recent activity, window + cap); insert `email_sends`, optional `email_dry_run` setting; no Resend call when dry run.
 - **Validate:** Set digest window to “now”, dry run on; trigger cron; DB has `email_sends` rows; no emails sent. Turn dry run off, keep test recipient on → run again → emails to `delivered@resend.dev`.
 
 ### Phase 3: Digest email and remove direct comment email

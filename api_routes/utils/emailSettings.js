@@ -27,3 +27,43 @@ export async function getEffectiveEmailRecipient(queries, intendedRecipient) {
 	const useTest = await getEmailUseTestRecipient(queries);
 	return useTest ? RESEND_TEST_ADDRESS : intendedRecipient;
 }
+
+/**
+ * Get a policy knob value by key.
+ * @param {{ selectPolicyByKey?: { get: (key: string) => Promise<{ value?: string } | null> } }} queries
+ * @param {string} key
+ * @param {string} [defaultValue]
+ * @returns {Promise<string>}
+ */
+export async function getPolicyValue(queries, key, defaultValue = "") {
+	if (!queries?.selectPolicyByKey?.get) return defaultValue;
+	const row = await queries.selectPolicyByKey.get(key);
+	const v = row?.value;
+	return typeof v === "string" ? v.trim() : defaultValue;
+}
+
+/**
+ * Settings for the digest cron: dry run, UTC windows (e.g. "09:00,18:00"), max digests per user per day.
+ * @param {{ selectPolicyByKey?: { get: (key: string) => Promise<{ value?: string } | null> } }} queries
+ * @returns {Promise<{ dryRun: boolean, windowHours: number[], maxDigestsPerUserPerDay: number }>}
+ */
+export async function getCronDigestSettings(queries) {
+	const dryRunVal = await getPolicyValue(queries, "email_dry_run", "true");
+	const dryRun = dryRunVal.toLowerCase() === "true" || dryRunVal === "1";
+
+	const windowsVal = await getPolicyValue(queries, "digest_utc_windows", "09:00,18:00");
+	const windowHours = windowsVal
+		.split(",")
+		.map((s) => s.trim())
+		.filter(Boolean)
+		.map((s) => {
+			const [h, m] = s.split(":").map(Number);
+			return Number.isFinite(h) ? h : null;
+		})
+		.filter((h) => h != null && h >= 0 && h <= 23);
+
+	const maxVal = await getPolicyValue(queries, "max_digests_per_user_per_day", "2");
+	const maxDigestsPerUserPerDay = Math.max(0, parseInt(maxVal, 10) || 2);
+
+	return { dryRun, windowHours, maxDigestsPerUserPerDay };
+}

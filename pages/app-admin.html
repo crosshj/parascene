@@ -38,6 +38,23 @@
 						<p class="admin-detail">When on, all lifecycle and transactional emails go to Resend’s test address instead of real users.</p>
 					</div>
 				</div>
+				<div class="admin-card">
+					<h2 class="admin-title">Digest / cron</h2>
+					<div class="admin-settings-digest">
+						<label class="admin-settings-toggle">
+							<input type="checkbox" id="email-dry-run" />
+							<span>Dry run (record only, do not send email)</span>
+						</label>
+						<p class="admin-detail">When on, the cron endpoint writes to the DB but does not send digest emails.</p>
+						<label class="admin-settings-label">Digest UTC windows</label>
+						<input type="text" id="digest-utc-windows" class="admin-settings-input" placeholder="09:00,18:00" />
+						<p class="admin-detail">Comma-separated HH:MM (UTC). Cron only runs digest in these hours.</p>
+						<label class="admin-settings-label">Max digests per user per day</label>
+						<input type="number" id="max-digests-per-user-per-day" class="admin-settings-input" min="0" step="1" />
+						<p class="admin-detail">Cap per user per UTC day.</p>
+						<button type="button" id="settings-digest-save" class="btn-primary">Save digest settings</button>
+					</div>
+				</div>
 			</div>
 		</section>
 	</main>
