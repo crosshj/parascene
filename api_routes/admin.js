@@ -404,10 +404,19 @@ export default function createAdminRoutes({ queries, storage }) {
 		]);
 		const total = totalRow?.count ?? 0;
 		const userIds = [...new Set((sends || []).map((s) => s.user_id).filter((id) => id != null))];
+		const userLabelByUserId = {};
 		const emailByUserId = {};
 		for (const uid of userIds) {
-			const user = await queries.selectUserById?.get?.(uid);
-			if (user?.email) emailByUserId[uid] = user.email;
+			const [user, profile] = await Promise.all([
+				queries.selectUserById?.get?.(uid),
+				queries.selectUserProfileByUserId?.get?.(uid)
+			]);
+			const email = user?.email ?? null;
+			if (email) emailByUserId[uid] = email;
+			const displayName = (profile?.display_name ?? "").trim() || null;
+			const userName = (profile?.user_name ?? "").trim() || null;
+			const emailLocal = email ? email.split("@")[0]?.trim() || null : null;
+			userLabelByUserId[uid] = displayName || userName || emailLocal || `#${uid}`;
 		}
 		const sendsWithEmail = (sends || []).map((s) => ({
 			id: s.id,
@@ -415,7 +424,8 @@ export default function createAdminRoutes({ queries, storage }) {
 			campaign: s.campaign,
 			created_at: s.created_at,
 			meta: s.meta ?? null,
-			user_email: emailByUserId[s.user_id] ?? null
+			user_email: emailByUserId[s.user_id] ?? null,
+			user_label: userLabelByUserId[s.user_id] ?? `#${s.user_id}`
 		}));
 		res.json({ sends: sendsWithEmail, total });
 	});

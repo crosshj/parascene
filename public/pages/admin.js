@@ -453,10 +453,11 @@ async function loadEmailSends() {
 		for (const row of sends) {
 			const tr = document.createElement("tr");
 			const sentAt = row.created_at ? formatRelativeTime(row.created_at, { style: "long" }) : "—";
-			const email = String(row.user_email ?? "").trim() || `#${row.user_id}`;
+			const userLabel = String(row.user_label ?? "").trim() || `#${row.user_id}`;
+			const title = row.user_email ? escapeHtml(row.user_email) : userLabel;
 			tr.innerHTML = `
 				<td class="admin-table-col-date">${escapeHtml(sentAt)}</td>
-				<td class="admin-table-col-email" title="${escapeHtml(email)}">${escapeHtml(email)}</td>
+				<td class="admin-table-col-email" title="${title}">${escapeHtml(userLabel)}</td>
 				<td class="admin-table-col-campaign">${escapeHtml(String(row.campaign ?? ""))}</td>
 				<td class="admin-table-col-id">${escapeHtml(String(row.id ?? ""))}</td>
 			`;

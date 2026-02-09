@@ -1,12 +1,5 @@
 [
   {
-    "name": "Feed for people that haven't followed",
-    "description": "When user has no follows, show a useful feed (e.g. explore-style or curated) instead of empty.",
-    "cost": 30,
-    "impact": 88,
-    "dependsOn": []
-  },
-  {
     "name": "Make follow easier",
     "description": "General UX pass to make following creators easier (visibility, one-click where appropriate).",
     "cost": 10,
