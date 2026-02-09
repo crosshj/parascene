@@ -53,7 +53,7 @@
   "functions": {
     "api/index.js": {
       "maxDuration": 60,
-      "includeFiles": "_docs/**"
+      "includeFiles": "_docs/**, pages/**"
     },
     "api/worker/create.js": {
       "maxDuration": 300

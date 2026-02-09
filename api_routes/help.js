@@ -3,7 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { marked } from "marked";
 import { injectCommonHead } from "./utils/head.js";
-import { homeIcon } from "../static/icons/svg-strings.js";
+import { homeIcon } from "../public/icons/svg-strings.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

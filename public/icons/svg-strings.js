@@ -1,4 +1,4 @@
-// SVG strings for icons (static/icons). Use across the site (DRY).
+// SVG strings for icons (public/icons). Use across the site (DRY).
 // Each icon is (className?) => string. Wrap full SVG with withAttributes to add optional class.
 
 const html = String.raw;

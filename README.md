@@ -10,7 +10,7 @@ npm run dev
 Open `http://localhost:3000/` to reach the app (routes are served only
 from `/`).
 
-Pages are served from `pages/`. Static assets are served from `static/`
+Pages are served from `pages/`. Static assets are served from `public/`
 (including `global.css`).
 
 ## local db + auth

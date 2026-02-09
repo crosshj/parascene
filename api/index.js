@@ -62,7 +62,7 @@ const port = process.env.PORT || 3000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const pagesDir = path.join(__dirname, "..", "pages");
-const staticDir = path.join(__dirname, "..", "static");
+const staticDir = path.join(__dirname, "..", "public");
 
 // Initialize database asynchronously using top-level await
 let queries, storage;
@@ -106,7 +106,11 @@ try {
 // 	next();
 // });
 
-app.use(express.static(staticDir));
+// On Vercel, static files are served from public/ automatically, so skip express.static
+// Locally, Express serves static files from public/
+if (!process.env.VERCEL) {
+	app.use(express.static(staticDir));
+}
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
