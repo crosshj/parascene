@@ -755,6 +755,80 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		upsertUserEmailCampaignStateWelcome: {
+			run: async (userId, sentAtIso) => {
+				const { error } = await serviceClient
+					.from(prefixedTable("email_user_campaign_state"))
+					.upsert(
+						{
+							user_id: userId,
+							welcome_email_sent_at: sentAtIso,
+							updated_at: new Date().toISOString()
+						},
+						{ onConflict: "user_id" }
+					);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
+		upsertUserEmailCampaignStateFirstCreationNudge: {
+			run: async (userId, sentAtIso) => {
+				const { error } = await serviceClient
+					.from(prefixedTable("email_user_campaign_state"))
+					.upsert(
+						{
+							user_id: userId,
+							first_creation_nudge_sent_at: sentAtIso,
+							updated_at: new Date().toISOString()
+						},
+						{ onConflict: "user_id" }
+					);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
+		selectUsersEligibleForWelcomeEmail: {
+			all: async (createdBeforeIso) => {
+				const { data: users, error: uErr } = await serviceClient
+					.from(prefixedTable("users"))
+					.select("id")
+					.not("email", "is", null)
+					.lte("created_at", createdBeforeIso);
+				if (uErr) throw uErr;
+				const userIds = (users ?? []).map((r) => r?.id).filter((id) => id != null);
+				if (userIds.length === 0) return [];
+				const { data: sent, error: sErr } = await serviceClient
+					.from(prefixedTable("email_user_campaign_state"))
+					.select("user_id")
+					.in("user_id", userIds)
+					.not("welcome_email_sent_at", "is", null);
+				if (sErr) throw sErr;
+				const sentSet = new Set((sent ?? []).map((r) => String(r?.user_id)));
+				return userIds.filter((id) => !sentSet.has(String(id))).map((user_id) => ({ user_id }));
+			}
+		},
+		selectUsersEligibleForFirstCreationNudge: {
+			// welcomeSentBeforeIso: only nudge users who were sent welcome at least this long ago so we never send both in the same run
+			all: async (welcomeSentBeforeIso) => {
+				const cutoff = welcomeSentBeforeIso ?? "1970-01-01T00:00:00.000Z";
+				const { data: withCreations, error: cErr } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.select("user_id");
+				if (cErr) throw cErr;
+				const hasCreation = new Set((withCreations ?? []).map((r) => String(r?.user_id)));
+				const { data: stateRows, error: stateErr } = await serviceClient
+					.from(prefixedTable("email_user_campaign_state"))
+					.select("user_id")
+					.not("welcome_email_sent_at", "is", null)
+					.lte("welcome_email_sent_at", cutoff)
+					.is("first_creation_nudge_sent_at", null);
+				if (stateErr) throw stateErr;
+				const candidateIds = (stateRows ?? [])
+					.map((r) => r?.user_id)
+					.filter((id) => id != null && !hasCreation.has(String(id)));
+				return candidateIds.map((user_id) => ({ user_id }));
+			}
+		},
 		selectEmailSendsCountForUserSince: {
 			get: async (userId, campaign, sinceIso) => {
 				const { data, error } = await serviceClient

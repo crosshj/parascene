@@ -395,11 +395,13 @@ export default function createAdminRoutes({ queries, storage }) {
 		const email_dry_run = email_dry_run_val.toLowerCase() === "true" || email_dry_run_val === "1";
 		const digest_utc_windows = await getPolicyValue(queries, "digest_utc_windows", "09:00,18:00");
 		const max_digests_per_user_per_day = await getPolicyValue(queries, "max_digests_per_user_per_day", "2");
+		const welcome_email_delay_hours = await getPolicyValue(queries, "welcome_email_delay_hours", "1");
 		res.json({
 			email_use_test_recipient,
 			email_dry_run,
 			digest_utc_windows,
-			max_digests_per_user_per_day
+			max_digests_per_user_per_day,
+			welcome_email_delay_hours
 		});
 	});
 
@@ -435,16 +437,24 @@ export default function createAdminRoutes({ queries, storage }) {
 				await queries.upsertPolicyKey.run("max_digests_per_user_per_day", value, "Max digest emails per user per UTC day.");
 			}
 		}
+		if (typeof body.welcome_email_delay_hours !== "undefined") {
+			const value = String(Math.max(0, parseInt(body.welcome_email_delay_hours, 10) || 0));
+			if (queries.upsertPolicyKey?.run) {
+				await queries.upsertPolicyKey.run("welcome_email_delay_hours", value, "Hours after signup before a user is eligible for the welcome email (0 = immediate).");
+			}
+		}
 		const email_use_test_recipient = await getEmailUseTestRecipient(queries);
 		const email_dry_run_val = await getPolicyValue(queries, "email_dry_run", "true");
 		const email_dry_run = email_dry_run_val.toLowerCase() === "true" || email_dry_run_val === "1";
 		const digest_utc_windows = await getPolicyValue(queries, "digest_utc_windows", "09:00,18:00");
 		const max_digests_per_user_per_day = await getPolicyValue(queries, "max_digests_per_user_per_day", "2");
+		const welcome_email_delay_hours = await getPolicyValue(queries, "welcome_email_delay_hours", "1");
 		res.json({
 			email_use_test_recipient,
 			email_dry_run,
 			digest_utc_windows,
-			max_digests_per_user_per_day
+			max_digests_per_user_per_day,
+			welcome_email_delay_hours
 		});
 	});
 

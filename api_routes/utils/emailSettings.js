@@ -67,3 +67,17 @@ export async function getCronDigestSettings(queries) {
 
 	return { dryRun, windowHours, maxDigestsPerUserPerDay };
 }
+
+const WELCOME_EMAIL_DELAY_HOURS_KEY = "welcome_email_delay_hours";
+
+/**
+ * Hours after account creation before a user is eligible for the welcome email.
+ * Default 1 so we don't send welcome in the same cron run as signup.
+ * @param {{ selectPolicyByKey?: { get: (key: string) => Promise<{ value?: string } | null> } }} queries
+ * @returns {Promise<number>}
+ */
+export async function getWelcomeEmailDelayHours(queries) {
+	const val = await getPolicyValue(queries, WELCOME_EMAIL_DELAY_HOURS_KEY, "1");
+	const n = parseInt(val, 10);
+	return Number.isFinite(n) && n >= 0 ? n : 1;
+}

@@ -520,10 +520,84 @@ export function renderDigestActivity({
 	return { subject, html: emailHtml, text };
 }
 
+export function renderWelcome({ recipientName = "there" } = {}) {
+	const safeName = escapeHtml(recipientName);
+	const subject = "Welcome to parascene";
+	const preheader = "You're in. Start creating.";
+	const bodyHtml = html`
+	<p style="margin:0 0 12px;">Hi ${safeName},</p>
+	<p style="margin:0 0 12px;">
+		Thanks for joining parascene. We're here to help you turn prompts into scenes that feel cinematic and personal.
+	</p>
+	<p style="margin:0 0 12px;">
+		Create your first scene, explore what others have made, or just say hello in the community.
+	</p>
+	<p style="margin:0;">— The parascene team</p>
+  `;
+	const emailHtml = baseEmailLayout({
+		preheader,
+		title: subject,
+		bodyHtml,
+		ctaText: "Go to parascene",
+		ctaUrl: getBaseAppUrl(),
+		footerText: "You're receiving this because you signed up for parascene."
+	});
+	const text = [
+		`Hi ${recipientName},`,
+		"",
+		"Thanks for joining parascene. We're here to help you turn prompts into scenes that feel cinematic and personal.",
+		"",
+		"Create your first scene, explore what others have made, or just say hello in the community.",
+		"",
+		"— The parascene team",
+		"",
+		`Go to parascene: ${getBaseAppUrl()}`
+	].join("\n");
+	return { subject, html: emailHtml, text };
+}
+
+export function renderFirstCreationNudge({ recipientName = "there" } = {}) {
+	const safeName = escapeHtml(recipientName);
+	const subject = "Your first creation is waiting";
+	const preheader = "You haven't created anything yet — here's how to start.";
+	const bodyHtml = html`
+	<p style="margin:0 0 12px;">Hi ${safeName},</p>
+	<p style="margin:0 0 12px;">
+		You've had an account for a bit but haven't made a creation yet. No pressure — but when you're ready, it only takes a prompt to get started.
+	</p>
+	<p style="margin:0 0 12px;">
+		Pick a template or describe a scene in your own words. We'll turn it into something you can share.
+	</p>
+	<p style="margin:0;">— The parascene team</p>
+  `;
+	const emailHtml = baseEmailLayout({
+		preheader,
+		title: subject,
+		bodyHtml,
+		ctaText: "Create something",
+		ctaUrl: getBaseAppUrl(),
+		footerText: "You're receiving this because you have a parascene account."
+	});
+	const text = [
+		`Hi ${recipientName},`,
+		"",
+		"You've had an account for a bit but haven't made a creation yet. No pressure — but when you're ready, it only takes a prompt to get started.",
+		"",
+		"Pick a template or describe a scene in your own words. We'll turn it into something you can share.",
+		"",
+		"— The parascene team",
+		"",
+		`Create something: ${getBaseAppUrl()}`
+	].join("\n");
+	return { subject, html: emailHtml, text };
+}
+
 export const templates = {
 	helloFromParascene: renderHelloFromParascene,
 	commentReceived: renderCommentReceived,
 	featureRequest: renderFeatureRequest,
 	passwordReset: renderPasswordReset,
-	digestActivity: renderDigestActivity
+	digestActivity: renderDigestActivity,
+	welcome: renderWelcome,
+	firstCreationNudge: renderFirstCreationNudge
 };

@@ -480,6 +480,80 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		upsertUserEmailCampaignStateWelcome: {
+			run: async (userId, sentAtIso) => {
+				const now = new Date().toISOString();
+				const existing = email_user_campaign_state.find((s) => s.user_id === userId);
+				if (existing) {
+					existing.welcome_email_sent_at = sentAtIso;
+					existing.updated_at = now;
+					return { changes: 1 };
+				}
+				email_user_campaign_state.push({
+					user_id: userId,
+					last_digest_sent_at: null,
+					welcome_email_sent_at: sentAtIso,
+					first_creation_nudge_sent_at: null,
+					last_reengagement_sent_at: null,
+					updated_at: now,
+					meta: null
+				});
+				return { changes: 1 };
+			}
+		},
+		upsertUserEmailCampaignStateFirstCreationNudge: {
+			run: async (userId, sentAtIso) => {
+				const now = new Date().toISOString();
+				const existing = email_user_campaign_state.find((s) => s.user_id === userId);
+				if (existing) {
+					existing.first_creation_nudge_sent_at = sentAtIso;
+					existing.updated_at = now;
+					return { changes: 1 };
+				}
+				email_user_campaign_state.push({
+					user_id: userId,
+					last_digest_sent_at: null,
+					welcome_email_sent_at: null,
+					first_creation_nudge_sent_at: sentAtIso,
+					last_reengagement_sent_at: null,
+					updated_at: now,
+					meta: null
+				});
+				return { changes: 1 };
+			}
+		},
+		selectUsersEligibleForWelcomeEmail: {
+			all: async (createdBeforeIso) => {
+				const userList = (typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.users) ?? users;
+				const stateList = (typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.email_user_campaign_state) ?? email_user_campaign_state;
+				return userList
+					.filter((u) => u?.email && String(u.email).trim() && String(u.email).includes("@"))
+					.filter((u) => (u?.created_at ?? "") <= (createdBeforeIso ?? ""))
+					.filter((u) => {
+						const s = stateList.find((x) => x.user_id === u.id);
+						return !s || s.welcome_email_sent_at == null;
+					})
+					.map((u) => ({ user_id: u.id }));
+			}
+		},
+		selectUsersEligibleForFirstCreationNudge: {
+			// welcomeSentBeforeIso: only nudge users who were sent welcome at least this long ago so we never send both in the same run
+			all: async (welcomeSentBeforeIso) => {
+				const userList = (typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.users) ?? users;
+				const creationList = (typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.created_images) ?? created_images ?? [];
+				const stateList = (typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.email_user_campaign_state) ?? email_user_campaign_state;
+				const hasCreation = new Set(creationList.map((c) => c?.user_id).filter((id) => id != null));
+				const cutoff = welcomeSentBeforeIso ?? "1970-01-01T00:00:00.000Z";
+				return userList
+					.filter((u) => u?.email && String(u.email).trim() && String(u.email).includes("@"))
+					.filter((u) => !hasCreation.has(u.id))
+					.filter((u) => {
+						const s = stateList.find((x) => x.user_id === u.id);
+						return s && s.welcome_email_sent_at != null && (s.welcome_email_sent_at ?? "") <= cutoff && s.first_creation_nudge_sent_at == null;
+					})
+					.map((u) => ({ user_id: u.id }));
+			}
+		},
 		selectEmailSendsCountForUserSince: {
 			get: async (userId, campaign, sinceIso) => {
 				const count = email_sends.filter(

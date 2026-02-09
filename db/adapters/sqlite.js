@@ -800,6 +800,60 @@ export async function openDb() {
 				return Promise.resolve({ changes: result.changes });
 			}
 		},
+		upsertUserEmailCampaignStateWelcome: {
+			run: async (userId, sentAtIso) => {
+				const stmt = db.prepare(
+					`INSERT INTO email_user_campaign_state (user_id, welcome_email_sent_at, updated_at)
+           VALUES (?, ?, datetime('now'))
+           ON CONFLICT (user_id) DO UPDATE SET
+             welcome_email_sent_at = excluded.welcome_email_sent_at,
+             updated_at = datetime('now')`
+				);
+				const result = stmt.run(userId, sentAtIso);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		upsertUserEmailCampaignStateFirstCreationNudge: {
+			run: async (userId, sentAtIso) => {
+				const stmt = db.prepare(
+					`INSERT INTO email_user_campaign_state (user_id, first_creation_nudge_sent_at, updated_at)
+           VALUES (?, ?, datetime('now'))
+           ON CONFLICT (user_id) DO UPDATE SET
+             first_creation_nudge_sent_at = excluded.first_creation_nudge_sent_at,
+             updated_at = datetime('now')`
+				);
+				const result = stmt.run(userId, sentAtIso);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		selectUsersEligibleForWelcomeEmail: {
+			all: async (createdBeforeIso) => {
+				const stmt = db.prepare(
+					`SELECT u.id AS user_id FROM users u
+           LEFT JOIN email_user_campaign_state s ON s.user_id = u.id
+           WHERE TRIM(u.email) != '' AND u.email LIKE '%@%'
+           AND (s.welcome_email_sent_at IS NULL OR s.user_id IS NULL)
+           AND datetime(u.created_at) <= datetime(?)`
+				);
+				const rows = stmt.all(createdBeforeIso) ?? [];
+				return Promise.resolve(rows);
+			}
+		},
+		selectUsersEligibleForFirstCreationNudge: {
+			// welcomeSentBeforeIso: only nudge users who were sent welcome at least this long ago (e.g. now - 24h) so we never send both in the same run
+			all: async (welcomeSentBeforeIso) => {
+				const stmt = db.prepare(
+					`SELECT u.id AS user_id FROM users u
+           INNER JOIN email_user_campaign_state s ON s.user_id = u.id
+           WHERE TRIM(u.email) != '' AND u.email LIKE '%@%'
+           AND s.first_creation_nudge_sent_at IS NULL
+           AND s.welcome_email_sent_at IS NOT NULL AND datetime(s.welcome_email_sent_at) <= datetime(?)
+           AND NOT EXISTS (SELECT 1 FROM created_images ci WHERE ci.user_id = u.id)`
+				);
+				const rows = stmt.all(welcomeSentBeforeIso ?? "1970-01-01T00:00:00.000Z") ?? [];
+				return Promise.resolve(rows);
+			}
+		},
 		selectEmailSendsCountForUserSince: {
 			get: async (userId, campaign, sinceIso) => {
 				const stmt = db.prepare(

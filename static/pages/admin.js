@@ -675,6 +675,7 @@ async function loadSettings() {
 	const dryRunCheckbox = document.getElementById("email-dry-run");
 	const digestWindowsInput = document.getElementById("digest-utc-windows");
 	const maxDigestsInput = document.getElementById("max-digests-per-user-per-day");
+	const welcomeDelayInput = document.getElementById("welcome-email-delay-hours");
 	const digestSaveBtn = document.getElementById("settings-digest-save");
 	if (!emailTestCheckbox) return;
 
@@ -686,6 +687,7 @@ async function loadSettings() {
 		if (dryRunCheckbox) dryRunCheckbox.checked = !!data.email_dry_run;
 		if (digestWindowsInput) digestWindowsInput.value = data.digest_utc_windows ?? "";
 		if (maxDigestsInput) maxDigestsInput.value = data.max_digests_per_user_per_day ?? "2";
+		if (welcomeDelayInput) welcomeDelayInput.value = data.welcome_email_delay_hours ?? "1";
 
 		emailTestCheckbox.addEventListener("change", async () => {
 			const next = emailTestCheckbox.checked;
@@ -713,14 +715,16 @@ async function loadSettings() {
 
 		if (digestSaveBtn && digestWindowsInput && maxDigestsInput) {
 			digestSaveBtn.addEventListener("click", async () => {
+				const payload = {
+					digest_utc_windows: digestWindowsInput.value.trim() || "09:00,18:00",
+					max_digests_per_user_per_day: parseInt(maxDigestsInput.value, 10) || 0
+				};
+				if (welcomeDelayInput) payload.welcome_email_delay_hours = Math.max(0, parseInt(welcomeDelayInput.value, 10) || 0);
 				const res = await fetch("/admin/settings", {
 					method: "PATCH",
 					credentials: "include",
 					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						digest_utc_windows: digestWindowsInput.value.trim() || "09:00,18:00",
-						max_digests_per_user_per_day: parseInt(maxDigestsInput.value, 10) || 0
-					})
+					body: JSON.stringify(payload)
 				});
 				if (res.ok) {
 					digestSaveBtn.textContent = "Saved";

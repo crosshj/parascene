@@ -21,10 +21,11 @@
 - **Deliverables:** Digest template; cron sends digest via Resend and updates `last_digest_sent_at`; remove immediate comment email in `comments.js`.
 - **Validate:** Comments create activity; cron sends one digest to test address; no per-comment email.
 
-### Phase 4: Welcome and first-creation nudge
+### Phase 4: Welcome and first-creation nudge ✅ Done
 - **Goal:** Cron sends welcome and “never created” nudge; caps so each at most once per user.
 - **Deliverables:** State `welcome_email_sent_at`, `first_creation_nudge_sent_at`; cron logic + templates.
 - **Validate:** New user gets welcome; user with no creations gets nudge; second run does not resend.
+- **How to validate (Phase 4):** See [Phase 4 validation](#phase-4-validation) below.
 
 ### Phase 5: Re-engagement and highlight
 - **Goal:** “We miss you” and “creation getting attention” emails with cooldowns.
@@ -49,3 +50,29 @@
 - **Settings store:** Use existing `policy_knobs` (key/value) for email and cron settings; admin can tweak without deploy.
 - **Cron auth:** Endpoint protected by shared secret (e.g. `Authorization: Bearer CRON_SECRET`).
 - **Sends:** Every send stored in `email_sends` for caps and admin visibility.
+
+---
+
+## Phase 4 validation
+
+**Prerequisites:** `CRON_SECRET` and `RESEND_*` env set; admin has “use test recipient” on so emails go to `delivered@resend.dev`.
+
+1. **Welcome email (once per user)**  
+   - Ensure at least one user exists whose account is older than the welcome delay (default 1 hour) and who has **never** been sent a welcome email (no `welcome_email_sent_at` in `email_user_campaign_state` for that user).  
+   - In a valid UTC digest window (or set `digest_utc_windows` so current hour is included), call:  
+     `POST /api/notifications/cron` with `Authorization: Bearer <CRON_SECRET>`.  
+   - Check the JSON response: `welcomeSent` should be ≥ 1 if such a user existed.  
+   - Check inbox for `delivered@resend.dev` (or Resend dashboard): one “Welcome to parascene” email.  
+   - Call the cron again (same or next run): `welcomeSent` for that user should be 0 and no second welcome email.
+
+2. **First-creation nudge (once per user, no creations)**  
+   - Ensure at least one user exists who has **zero** creations and has **never** been sent the first-creation nudge (no `first_creation_nudge_sent_at` for that user).  
+   - Call the cron again (same conditions as above).  
+   - Check response: `firstCreationNudgeSent` should be ≥ 1 if such a user existed.  
+   - Check inbox/Resend: one “Your first creation is waiting” email.  
+   - Call the cron again: `firstCreationNudgeSent` for that user should be 0 and no second nudge.
+
+3. **Dry run**  
+   - Turn on `email_dry_run` (or set digest dry run so no emails are sent). Trigger cron.  
+   - No welcome or first-creation-nudge emails should be sent; `welcomeSent` and `firstCreationNudgeSent` should be 0.  
+   - Turn dry run off and confirm the next run can send again (e.g. use a different eligible user or reset state in DB for one user to re-test).
