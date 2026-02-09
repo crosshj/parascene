@@ -937,6 +937,26 @@ export async function openDb() {
 				return Promise.resolve(stmt.get(userId, campaign, sinceIso));
 			}
 		},
+		countEmailSends: {
+			get: async () => {
+				const row = db.prepare("SELECT COUNT(*) AS count FROM email_sends").get();
+				return Promise.resolve({ count: row?.count ?? 0 });
+			}
+		},
+		listEmailSendsRecent: {
+			all: async (limit, offset = 0) => {
+				const cap = Math.min(Math.max(0, Number(limit) || 200), 500);
+				const off = Math.max(0, Number(offset) || 0);
+				const stmt = db.prepare(
+					`SELECT id, user_id, campaign, created_at, meta
+           FROM email_sends
+           ORDER BY created_at DESC
+           LIMIT ? OFFSET ?`
+				);
+				const rows = stmt.all(cap, off) ?? [];
+				return Promise.resolve(rows);
+			}
+		},
 		selectDigestActivityByOwnerSince: {
 			all: async (ownerUserId, sinceIso) => {
 				// Use datetime(?) so ISO 'YYYY-MM-DDTHH:MM:SS.sssZ' compares correctly with SQLite's 'YYYY-MM-DD HH:MM:SS'

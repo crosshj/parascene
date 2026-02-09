@@ -1,6 +1,13 @@
 import express from "express";
 import { buildProviderHeaders, resolveProviderAuthToken } from "./utils/providerAuth.js";
-import { getEmailUseTestRecipient, getPolicyValue } from "./utils/emailSettings.js";
+import {
+		getEmailUseTestRecipient,
+		getPolicyValue,
+		getReengagementInactiveDays,
+		getReengagementCooldownDays,
+		getCreationHighlightLookbackHours,
+		getCreationHighlightCooldownDays
+	} from "./utils/emailSettings.js";
 
 export default function createAdminRoutes({ queries, storage }) {
 	const router = express.Router();
@@ -387,6 +394,38 @@ export default function createAdminRoutes({ queries, storage }) {
 		res.json({ policies });
 	});
 
+	router.get("/admin/email-sends", async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+		const pageSize = parseInt(req.query?.limit, 10);
+		const limit = [10, 50, 100].includes(pageSize) ? pageSize : 50;
+		const page = Math.max(1, parseInt(req.query?.page, 10) || 1);
+		const offset = (page - 1) * limit;
+		if (!queries.listEmailSendsRecent?.all) {
+			return res.json({ sends: [], total: 0 });
+		}
+		const [sends, totalRow] = await Promise.all([
+			queries.listEmailSendsRecent.all(limit, offset),
+			queries.countEmailSends?.get ? queries.countEmailSends.get() : Promise.resolve({ count: 0 })
+		]);
+		const total = totalRow?.count ?? 0;
+		const userIds = [...new Set((sends || []).map((s) => s.user_id).filter((id) => id != null))];
+		const emailByUserId = {};
+		for (const uid of userIds) {
+			const user = await queries.selectUserById?.get?.(uid);
+			if (user?.email) emailByUserId[uid] = user.email;
+		}
+		const sendsWithEmail = (sends || []).map((s) => ({
+			id: s.id,
+			user_id: s.user_id,
+			campaign: s.campaign,
+			created_at: s.created_at,
+			meta: s.meta ?? null,
+			user_email: emailByUserId[s.user_id] ?? null
+		}));
+		res.json({ sends: sendsWithEmail, total });
+	});
+
 	router.get("/admin/settings", async (req, res) => {
 		const user = await requireAdmin(req, res);
 		if (!user) return;
@@ -396,12 +435,20 @@ export default function createAdminRoutes({ queries, storage }) {
 		const digest_utc_windows = await getPolicyValue(queries, "digest_utc_windows", "09:00,18:00");
 		const max_digests_per_user_per_day = await getPolicyValue(queries, "max_digests_per_user_per_day", "2");
 		const welcome_email_delay_hours = await getPolicyValue(queries, "welcome_email_delay_hours", "1");
+		const reengagement_inactive_days = await getReengagementInactiveDays(queries);
+		const reengagement_cooldown_days = await getReengagementCooldownDays(queries);
+		const creation_highlight_lookback_hours = await getCreationHighlightLookbackHours(queries);
+		const creation_highlight_cooldown_days = await getCreationHighlightCooldownDays(queries);
 		res.json({
 			email_use_test_recipient,
 			email_dry_run,
 			digest_utc_windows,
 			max_digests_per_user_per_day,
-			welcome_email_delay_hours
+			welcome_email_delay_hours,
+			reengagement_inactive_days,
+			reengagement_cooldown_days,
+			creation_highlight_lookback_hours,
+			creation_highlight_cooldown_days
 		});
 	});
 
@@ -443,18 +490,50 @@ export default function createAdminRoutes({ queries, storage }) {
 				await queries.upsertPolicyKey.run("welcome_email_delay_hours", value, "Hours after signup before a user is eligible for the welcome email (0 = immediate).");
 			}
 		}
+		if (typeof body.reengagement_inactive_days !== "undefined") {
+			const value = String(Math.max(1, parseInt(body.reengagement_inactive_days, 10) || 14));
+			if (queries.upsertPolicyKey?.run) {
+				await queries.upsertPolicyKey.run("reengagement_inactive_days", value, "Days of inactivity before a user is eligible for re-engagement email.");
+			}
+		}
+		if (typeof body.reengagement_cooldown_days !== "undefined") {
+			const value = String(Math.max(1, parseInt(body.reengagement_cooldown_days, 10) || 30));
+			if (queries.upsertPolicyKey?.run) {
+				await queries.upsertPolicyKey.run("reengagement_cooldown_days", value, "Minimum days between re-engagement emails per user.");
+			}
+		}
+		if (typeof body.creation_highlight_lookback_hours !== "undefined") {
+			const value = String(Math.max(1, parseInt(body.creation_highlight_lookback_hours, 10) || 48));
+			if (queries.upsertPolicyKey?.run) {
+				await queries.upsertPolicyKey.run("creation_highlight_lookback_hours", value, "Hours to look back for comments to consider a creation 'hot' for highlight email.");
+			}
+		}
+		if (typeof body.creation_highlight_cooldown_days !== "undefined") {
+			const value = String(Math.max(1, parseInt(body.creation_highlight_cooldown_days, 10) || 7));
+			if (queries.upsertPolicyKey?.run) {
+				await queries.upsertPolicyKey.run("creation_highlight_cooldown_days", value, "Minimum days between creation highlight emails per user.");
+			}
+		}
 		const email_use_test_recipient = await getEmailUseTestRecipient(queries);
 		const email_dry_run_val = await getPolicyValue(queries, "email_dry_run", "true");
 		const email_dry_run = email_dry_run_val.toLowerCase() === "true" || email_dry_run_val === "1";
 		const digest_utc_windows = await getPolicyValue(queries, "digest_utc_windows", "09:00,18:00");
 		const max_digests_per_user_per_day = await getPolicyValue(queries, "max_digests_per_user_per_day", "2");
 		const welcome_email_delay_hours = await getPolicyValue(queries, "welcome_email_delay_hours", "1");
+		const reengagement_inactive_days = await getReengagementInactiveDays(queries);
+		const reengagement_cooldown_days = await getReengagementCooldownDays(queries);
+		const creation_highlight_lookback_hours = await getCreationHighlightLookbackHours(queries);
+		const creation_highlight_cooldown_days = await getCreationHighlightCooldownDays(queries);
 		res.json({
 			email_use_test_recipient,
 			email_dry_run,
 			digest_utc_windows,
 			max_digests_per_user_per_day,
-			welcome_email_delay_hours
+			welcome_email_delay_hours,
+			reengagement_inactive_days,
+			reengagement_cooldown_days,
+			creation_highlight_lookback_hours,
+			creation_highlight_cooldown_days
 		});
 	});
 

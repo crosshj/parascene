@@ -665,6 +665,23 @@ export function openDb() {
 				return { count };
 			}
 		},
+		countEmailSends: {
+			get: async () => ({ count: email_sends.length })
+		},
+		listEmailSendsRecent: {
+			all: async (limit, offset = 0) => {
+				const cap = Math.min(Math.max(0, Number(limit) || 200), 500);
+				const off = Math.max(0, Number(offset) || 0);
+				const sorted = [...email_sends].sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+				return sorted.slice(off, off + cap).map((s) => ({
+					id: s.id,
+					user_id: s.user_id,
+					campaign: s.campaign,
+					created_at: s.created_at,
+					meta: s.meta ?? null
+				}));
+			}
+		},
 		selectDigestActivityByOwnerSince: {
 			all: async (ownerUserId, sinceIso) => {
 				const owned = (created_images ?? []).filter((ci) => Number(ci?.user_id) === Number(ownerUserId));

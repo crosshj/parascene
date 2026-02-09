@@ -32,12 +32,12 @@
 - **Deliverables:** State for re-engagement and highlight; cron logic + templates.
 - **Validate:** Inactive user and “hot” creation get one email each; cooldowns prevent repeat.
 
-### Phase 6: Admin sends UI
+### Phase 6: Admin sends UI ✅ Done
 - **Goal:** Admin sees recent sends.
 - **Deliverables:** Admin API list sends; admin UI table.
 - **Validate:** Run cron, open admin → see sends.
 
-### Phase 7: Admin-editable email/cron settings UI
+### Phase 7: Admin-editable email/cron settings UI ✅ Done
 - **Goal:** All tunables (windows, caps, test recipient, dry run, welcome delay, re-engagement, etc.) in `policy_knobs` and editable in admin.
 - **Deliverables:** Cron reads all values from settings; admin UI form(s) to edit.
 - **Validate:** Change e.g. max digests to 0, run cron → no digest; change back → digest sends again.

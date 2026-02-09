@@ -6,7 +6,8 @@ const adminDataLoaded = {
 	moderation: false,
 	policies: false,
 	todo: false,
-	settings: false
+	settings: false,
+	sends: false
 };
 let todoWritable = true;
 let todoPriorityMode = "gated";
@@ -83,6 +84,14 @@ function renderEmpty(container, message) {
 	empty.className = "admin-empty";
 	empty.textContent = message;
 	container.appendChild(empty);
+}
+
+function renderLoading(container, message = "Loading…") {
+	const loading = document.createElement("div");
+	loading.className = "admin-loading";
+	loading.setAttribute("aria-live", "polite");
+	loading.textContent = message;
+	container.appendChild(loading);
 }
 
 function getUserDisplayName(user) {
@@ -504,6 +513,142 @@ async function loadModeration() {
 	}
 }
 
+let emailSendsPage = 1;
+let emailSendsPageSize = 50;
+let emailSendsTotal = 0;
+
+async function loadEmailSends() {
+	const container = document.querySelector("#email-sends-container");
+	if (!container) return;
+
+	container.innerHTML = "";
+	renderLoading(container, "Loading sends…");
+
+	try {
+		const params = new URLSearchParams({
+			limit: String(emailSendsPageSize),
+			page: String(emailSendsPage)
+		});
+		const response = await fetch(`/admin/email-sends?${params}`, { credentials: "include" });
+		if (!response.ok) throw new Error("Failed to load email sends.");
+		const data = await response.json();
+
+		container.innerHTML = "";
+		const sends = data.sends ?? [];
+		emailSendsTotal = Number(data.total) ?? 0;
+
+		if (emailSendsTotal === 0) {
+			renderEmpty(container, "No email sends yet. Run the cron to generate digest/welcome/nudge sends.");
+			return;
+		}
+
+		const toolbar = document.createElement("div");
+		toolbar.className = "admin-email-sends-toolbar";
+
+		const pageSizeLabel = document.createElement("label");
+		pageSizeLabel.className = "admin-email-sends-pagesize-label";
+		pageSizeLabel.innerHTML = "Page size ";
+		const pageSizeSelect = document.createElement("select");
+		pageSizeSelect.className = "admin-email-sends-pagesize";
+		pageSizeSelect.setAttribute("aria-label", "Sends per page");
+		for (const n of [10, 50, 100]) {
+			const opt = document.createElement("option");
+			opt.value = String(n);
+			opt.textContent = String(n);
+			if (n === emailSendsPageSize) opt.selected = true;
+			pageSizeSelect.appendChild(opt);
+		}
+		pageSizeLabel.appendChild(pageSizeSelect);
+		toolbar.appendChild(pageSizeLabel);
+
+		const start = emailSendsTotal === 0 ? 0 : (emailSendsPage - 1) * emailSendsPageSize + 1;
+		const end = Math.min(emailSendsPage * emailSendsPageSize, emailSendsTotal);
+		const total = Number(emailSendsTotal);
+		const pageSize = Number(emailSendsPageSize);
+		const page = Number(emailSendsPage);
+		const noPrevPage = page <= 1;
+		const noNextPage = total === 0 || page * pageSize >= total || sends.length < pageSize;
+
+		const summary = document.createElement("span");
+		summary.className = "admin-email-sends-summary";
+		summary.textContent = `Showing ${start}–${end} of ${emailSendsTotal}`;
+		toolbar.appendChild(summary);
+
+		const nav = document.createElement("div");
+		nav.className = "admin-email-sends-nav";
+		nav.setAttribute("aria-label", "Pagination");
+		const prevBtn = document.createElement("button");
+		prevBtn.type = "button";
+		prevBtn.className = "admin-email-sends-prev btn-secondary";
+		prevBtn.textContent = "Previous";
+		prevBtn.disabled = noPrevPage;
+		nav.appendChild(prevBtn);
+
+		const nextBtn = document.createElement("button");
+		nextBtn.type = "button";
+		nextBtn.className = "admin-email-sends-next btn-secondary";
+		nextBtn.textContent = "Next";
+		nextBtn.disabled = noNextPage;
+		nav.appendChild(nextBtn);
+		toolbar.appendChild(nav);
+
+		pageSizeSelect.addEventListener("change", () => {
+			emailSendsPageSize = Number(pageSizeSelect.value) || 50;
+			emailSendsPage = 1;
+			loadEmailSends();
+		});
+		prevBtn.addEventListener("click", () => {
+			if (!noPrevPage) {
+				emailSendsPage -= 1;
+				loadEmailSends();
+			}
+		});
+		nextBtn.addEventListener("click", () => {
+			if (!noNextPage) {
+				emailSendsPage += 1;
+				loadEmailSends();
+			}
+		});
+
+		const wrapper = document.createElement("div");
+		wrapper.className = "admin-email-sends-wrapper";
+		const table = document.createElement("table");
+		table.className = "admin-table admin-email-sends-table";
+		table.setAttribute("role", "grid");
+		table.innerHTML = `
+			<thead>
+				<tr>
+					<th scope="col" class="admin-table-col-date">Sent</th>
+					<th scope="col" class="admin-table-col-email">User</th>
+					<th scope="col" class="admin-table-col-campaign">Campaign</th>
+					<th scope="col" class="admin-table-col-id">ID</th>
+				</tr>
+			</thead>
+			<tbody></tbody>
+		`;
+		const tbody = table.querySelector("tbody");
+		for (const row of sends) {
+			const tr = document.createElement("tr");
+			const sentAt = row.created_at ? formatRelativeTime(row.created_at, { style: "long" }) : "—";
+			const email = String(row.user_email ?? "").trim() || `#${row.user_id}`;
+			tr.innerHTML = `
+				<td class="admin-table-col-date">${escapeHtml(sentAt)}</td>
+				<td class="admin-table-col-email" title="${escapeHtml(email)}">${escapeHtml(email)}</td>
+				<td class="admin-table-col-campaign">${escapeHtml(String(row.campaign ?? ""))}</td>
+				<td class="admin-table-col-id">${escapeHtml(String(row.id ?? ""))}</td>
+			`;
+			tbody.appendChild(tr);
+		}
+		wrapper.appendChild(table);
+		container.appendChild(wrapper);
+		container.appendChild(toolbar);
+		adminDataLoaded.sends = true;
+	} catch (err) {
+		container.innerHTML = "";
+		renderError(container, "Error loading email sends.");
+	}
+}
+
 async function loadPolicies() {
 	const container = document.querySelector("#policies-container");
 	if (!container) return;
@@ -666,9 +811,29 @@ async function loadTodo({ force = false, mode } = {}) {
 	}
 }
 
+function syncSwitchAria(checkbox) {
+	const wrapper = checkbox?.closest?.(".form-switch");
+	if (wrapper) wrapper.setAttribute("aria-checked", String(!!checkbox?.checked));
+}
+
+function bindSwitch(checkbox, onSave) {
+	if (!checkbox) return;
+	const wrapper = checkbox.closest(".form-switch");
+	syncSwitchAria(checkbox);
+	wrapper?.addEventListener("click", (e) => {
+		if (e.target === checkbox) return;
+		e.preventDefault();
+		checkbox.checked = !checkbox.checked;
+		syncSwitchAria(checkbox);
+		checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+	});
+	checkbox.addEventListener("change", () => {
+		syncSwitchAria(checkbox);
+		onSave(checkbox.checked);
+	});
+}
+
 async function loadSettings() {
-	const container = document.querySelector("#settings-container");
-	if (!container) return;
 	if (adminDataLoaded.settings) return;
 
 	const emailTestCheckbox = document.getElementById("email-use-test-recipient");
@@ -676,7 +841,11 @@ async function loadSettings() {
 	const digestWindowsInput = document.getElementById("digest-utc-windows");
 	const maxDigestsInput = document.getElementById("max-digests-per-user-per-day");
 	const welcomeDelayInput = document.getElementById("welcome-email-delay-hours");
-	const digestSaveBtn = document.getElementById("settings-digest-save");
+	const reengagementInactiveInput = document.getElementById("reengagement-inactive-days");
+	const reengagementCooldownInput = document.getElementById("reengagement-cooldown-days");
+	const highlightLookbackInput = document.getElementById("creation-highlight-lookback-hours");
+	const highlightCooldownInput = document.getElementById("creation-highlight-cooldown-days");
+	const settingsSaveBtn = document.getElementById("settings-save");
 	if (!emailTestCheckbox) return;
 
 	try {
@@ -685,41 +854,53 @@ async function loadSettings() {
 		const data = await response.json();
 		emailTestCheckbox.checked = !!data.email_use_test_recipient;
 		if (dryRunCheckbox) dryRunCheckbox.checked = !!data.email_dry_run;
+		syncSwitchAria(emailTestCheckbox);
+		syncSwitchAria(dryRunCheckbox);
 		if (digestWindowsInput) digestWindowsInput.value = data.digest_utc_windows ?? "";
-		if (maxDigestsInput) maxDigestsInput.value = data.max_digests_per_user_per_day ?? "2";
-		if (welcomeDelayInput) welcomeDelayInput.value = data.welcome_email_delay_hours ?? "1";
+		if (maxDigestsInput) maxDigestsInput.value = String(data.max_digests_per_user_per_day ?? "2");
+		if (welcomeDelayInput) welcomeDelayInput.value = String(data.welcome_email_delay_hours ?? "1");
+		if (reengagementInactiveInput) reengagementInactiveInput.value = String(data.reengagement_inactive_days ?? "14");
+		if (reengagementCooldownInput) reengagementCooldownInput.value = String(data.reengagement_cooldown_days ?? "30");
+		if (highlightLookbackInput) highlightLookbackInput.value = String(data.creation_highlight_lookback_hours ?? "48");
+		if (highlightCooldownInput) highlightCooldownInput.value = String(data.creation_highlight_cooldown_days ?? "7");
 
-		emailTestCheckbox.addEventListener("change", async () => {
-			const next = emailTestCheckbox.checked;
+		bindSwitch(emailTestCheckbox, async (next) => {
 			const res = await fetch("/admin/settings", {
 				method: "PATCH",
 				credentials: "include",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ email_use_test_recipient: next })
 			});
-			if (!res.ok) emailTestCheckbox.checked = !next;
+			if (!res.ok) {
+				emailTestCheckbox.checked = !next;
+				syncSwitchAria(emailTestCheckbox);
+			}
 		});
 
-		if (dryRunCheckbox) {
-			dryRunCheckbox.addEventListener("change", async () => {
-				const next = dryRunCheckbox.checked;
-				const res = await fetch("/admin/settings", {
-					method: "PATCH",
-					credentials: "include",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ email_dry_run: next })
-				});
-				if (!res.ok) dryRunCheckbox.checked = !next;
+		bindSwitch(dryRunCheckbox, async (next) => {
+			const res = await fetch("/admin/settings", {
+				method: "PATCH",
+				credentials: "include",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ email_dry_run: next })
 			});
-		}
+			if (!res.ok && dryRunCheckbox) {
+				dryRunCheckbox.checked = !next;
+				syncSwitchAria(dryRunCheckbox);
+			}
+		});
 
-		if (digestSaveBtn && digestWindowsInput && maxDigestsInput) {
-			digestSaveBtn.addEventListener("click", async () => {
+		if (settingsSaveBtn) {
+			settingsSaveBtn.addEventListener("click", async () => {
 				const payload = {
-					digest_utc_windows: digestWindowsInput.value.trim() || "09:00,18:00",
-					max_digests_per_user_per_day: parseInt(maxDigestsInput.value, 10) || 0
+					digest_utc_windows: (digestWindowsInput?.value ?? "").trim() || "09:00,18:00",
+					max_digests_per_user_per_day: Math.max(0, parseInt(maxDigestsInput?.value, 10) || 0),
+					welcome_email_delay_hours: Math.max(0, parseInt(welcomeDelayInput?.value, 10) || 0),
+					reengagement_inactive_days: Math.max(1, parseInt(reengagementInactiveInput?.value, 10) || 14),
+					reengagement_cooldown_days: Math.max(1, parseInt(reengagementCooldownInput?.value, 10) || 30),
+					creation_highlight_lookback_hours: Math.max(1, parseInt(highlightLookbackInput?.value, 10) || 48),
+					creation_highlight_cooldown_days: Math.max(1, parseInt(highlightCooldownInput?.value, 10) || 7)
 				};
-				if (welcomeDelayInput) payload.welcome_email_delay_hours = Math.max(0, parseInt(welcomeDelayInput.value, 10) || 0);
 				const res = await fetch("/admin/settings", {
 					method: "PATCH",
 					credentials: "include",
@@ -727,8 +908,8 @@ async function loadSettings() {
 					body: JSON.stringify(payload)
 				});
 				if (res.ok) {
-					digestSaveBtn.textContent = "Saved";
-					setTimeout(() => { digestSaveBtn.textContent = "Save digest settings"; }, 2000);
+					settingsSaveBtn.textContent = "Saved";
+					setTimeout(() => { settingsSaveBtn.textContent = "Save settings"; }, 2000);
 				}
 			});
 		}
@@ -753,7 +934,8 @@ function handleAdminRouteChange(route) {
 		case "policy-knobs":
 			loadPolicies();
 			break;
-		case "settings":
+		case "emails":
+			loadEmailSends();
 			loadSettings();
 			break;
 		case "todo":

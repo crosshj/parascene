@@ -976,6 +976,28 @@ export function openDb() {
 				return { count: (data ?? []).length };
 			}
 		},
+		countEmailSends: {
+			get: async () => {
+				const { count, error } = await serviceClient
+					.from(prefixedTable("email_sends"))
+					.select("id", { count: "exact", head: true });
+				if (error) throw error;
+				return { count: count ?? 0 };
+			}
+		},
+		listEmailSendsRecent: {
+			all: async (limit, offset = 0) => {
+				const cap = Math.min(Math.max(0, Number(limit) || 200), 500);
+				const off = Math.max(0, Number(offset) || 0);
+				const { data, error } = await serviceClient
+					.from(prefixedTable("email_sends"))
+					.select("id, user_id, campaign, created_at, meta")
+					.order("created_at", { ascending: false })
+					.range(off, off + cap - 1);
+				if (error) throw error;
+				return data ?? [];
+			}
+		},
 		selectDigestActivityByOwnerSince: {
 			all: async (ownerUserId, sinceIso) => {
 				const { data: creations, error: creationsError } = await serviceClient

@@ -11,9 +11,21 @@ import {
 	getCreationHighlightCooldownDays
 } from "./utils/emailSettings.js";
 import { markPreviousStepsCompleted } from "./utils/emailCampaignState.js";
+import { verifyQStashRequest } from "./utils/qstashVerification.js";
 
 const CRON_SECRET_ENV = "CRON_SECRET";
 const DIGEST_ACTIVITY_HOURS_LOOKBACK = 24;
+
+/** Authorize cron request: local uses CRON_SECRET Bearer; prod uses Upstash QStash signature (same as try/worker, create). */
+async function authorizeCronRequest(req) {
+	const secret = process.env[CRON_SECRET_ENV];
+	const authHeader = req.get?.("Authorization") || req.headers?.authorization || "";
+	const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+	if (secret && token === secret) {
+		return true;
+	}
+	return await verifyQStashRequest(req);
+}
 
 function getStartOfTodayUTC() {
 	const d = new Date();
@@ -31,10 +43,12 @@ export default function createNotificationsCronRoutes({ queries }) {
 	const router = express.Router();
 
 	router.post("/api/notifications/cron", async (req, res) => {
-		const secret = process.env[CRON_SECRET_ENV];
-		const authHeader = req.get?.("Authorization") || req.headers?.authorization || "";
-		const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
-		if (!secret || token !== secret) {
+		console.log("notificationsCron", req.body);
+
+		const authorized = await authorizeCronRequest(req);
+		console.log("authorized", authorized);
+
+		if (!authorized) {
 			res.status(401).json({ error: "Unauthorized" });
 			return;
 		}

@@ -11,8 +11,8 @@
 	<app-navigation show-notifications show-profile show-mobile-menu default-route="todo">
 		<a data-route="todo">Todo</a>
 		<a data-route="users">Users</a>
+		<a data-route="emails">Emails</a>
 		<a data-route="connect">Connect</a>
-		<a data-route="settings">Settings</a>
 	</app-navigation>
 
 	<app-modal-profile></app-modal-profile>
@@ -27,37 +27,90 @@
 			<app-route-todo data-route-content="todo"></app-route-todo>
 			<app-route-users data-route-content="users"></app-route-users>
 			<app-route-servers data-route-content="connect"></app-route-servers>
-			<div id="settings-container" data-route-content="settings" class="route-content">
-				<div class="admin-card">
-					<h2 class="admin-title">Email</h2>
-					<div class="admin-settings-email">
-						<label class="admin-settings-toggle">
-							<input type="checkbox" id="email-use-test-recipient" />
-							<span>Send to test address (delivered@resend.dev)</span>
-						</label>
-						<p class="admin-detail">When on, all lifecycle and transactional emails go to Resend’s test address instead of real users.</p>
-					</div>
-				</div>
-				<div class="admin-card">
-					<h2 class="admin-title">Digest / cron</h2>
-					<div class="admin-settings-digest">
-						<label class="admin-settings-toggle">
-							<input type="checkbox" id="email-dry-run" />
-							<span>Dry run (record only, do not send email)</span>
-						</label>
-						<p class="admin-detail">When on, the cron endpoint writes to the DB but does not send digest emails.</p>
-						<label class="admin-settings-label">Digest UTC windows</label>
-						<input type="text" id="digest-utc-windows" class="admin-settings-input" placeholder="09:00,18:00" />
-						<p class="admin-detail">Comma-separated HH:MM (UTC). Cron only runs digest in these hours.</p>
-						<label class="admin-settings-label">Max digests per user per day</label>
-						<input type="number" id="max-digests-per-user-per-day" class="admin-settings-input" min="0" step="1" />
-						<p class="admin-detail">Cap per user per UTC day.</p>
-						<label class="admin-settings-label">Welcome email delay (hours)</label>
-						<input type="number" id="welcome-email-delay-hours" class="admin-settings-input" min="0" step="1" />
-						<p class="admin-detail">Hours after signup before a user is eligible for the welcome email. Use 0 for immediate (e.g. when validating).</p>
-						<button type="button" id="settings-digest-save" class="btn-primary">Save digest settings</button>
-					</div>
-				</div>
+			<div id="emails-page" data-route-content="emails" class="route-content admin-emails-page">
+				<h3>Emails</h3>
+				<app-tabs>
+					<tab data-id="sends" label="Sends" default>
+						<div id="email-sends-container" class="admin-emails-sends-panel"></div>
+					</tab>
+					<tab data-id="settings" label="Settings">
+						<div class="admin-emails-settings-panel">
+							<section class="admin-settings-section">
+								<span class="admin-settings-section-title">Delivery</span>
+								<div class="admin-settings-row">
+									<div class="form-switch admin-settings-switch" role="switch" aria-label="Send to test address">
+										<input type="checkbox" id="email-use-test-recipient" class="form-switch-input" aria-hidden="true" tabindex="-1" />
+										<span class="form-switch-track"><span class="form-switch-thumb"></span></span>
+									</div>
+									<div class="admin-settings-label-desc">
+										<label for="email-use-test-recipient" class="admin-settings-label-inline">Send to test address (delivered@resend.dev)</label>
+										<p class="admin-detail">When on, all lifecycle and transactional emails go to Resend's test address instead of real users.</p>
+									</div>
+								</div>
+							</section>
+							<section class="admin-settings-section">
+								<span class="admin-settings-section-title">Digest &amp; cron</span>
+								<div class="admin-settings-row">
+									<div class="form-switch admin-settings-switch" role="switch" aria-label="Dry run">
+										<input type="checkbox" id="email-dry-run" class="form-switch-input" aria-hidden="true" tabindex="-1" />
+										<span class="form-switch-track"><span class="form-switch-thumb"></span></span>
+									</div>
+									<div class="admin-settings-label-desc">
+										<label for="email-dry-run" class="admin-settings-label-inline">Dry run (record only, do not send)</label>
+										<p class="admin-detail">Cron writes to the DB but does not send digest emails.</p>
+									</div>
+								</div>
+								<div class="admin-settings-field">
+									<label class="admin-settings-label" for="digest-utc-windows">Digest UTC windows</label>
+									<input type="text" id="digest-utc-windows" class="admin-settings-input" placeholder="09:00,18:00" />
+									<p class="admin-detail">Comma-separated HH:MM (UTC). Cron only runs digest in these hours.</p>
+								</div>
+								<div class="admin-settings-field">
+									<label class="admin-settings-label" for="max-digests-per-user-per-day">Max digests per user per day</label>
+									<input type="number" id="max-digests-per-user-per-day" class="admin-settings-input" min="0" step="1" />
+									<p class="admin-detail">Cap per user per UTC day.</p>
+								</div>
+							</section>
+							<section class="admin-settings-section">
+								<span class="admin-settings-section-title">Welcome &amp; nudges</span>
+								<div class="admin-settings-field">
+									<label class="admin-settings-label" for="welcome-email-delay-hours">Welcome email delay (hours)</label>
+									<input type="number" id="welcome-email-delay-hours" class="admin-settings-input" min="0" step="1" />
+									<p class="admin-detail">Hours after signup before a user is eligible for the welcome email. Use 0 for immediate.</p>
+								</div>
+							</section>
+							<section class="admin-settings-section">
+								<span class="admin-settings-section-title">Re-engagement</span>
+								<div class="admin-settings-field">
+									<label class="admin-settings-label" for="reengagement-inactive-days">Inactive days before eligible</label>
+									<input type="number" id="reengagement-inactive-days" class="admin-settings-input" min="1" step="1" />
+									<p class="admin-detail">Days of inactivity before a user can receive a "we miss you" email.</p>
+								</div>
+								<div class="admin-settings-field">
+									<label class="admin-settings-label" for="reengagement-cooldown-days">Cooldown (days)</label>
+									<input type="number" id="reengagement-cooldown-days" class="admin-settings-input" min="1" step="1" />
+									<p class="admin-detail">Minimum days between re-engagement emails per user.</p>
+								</div>
+							</section>
+							<section class="admin-settings-section">
+								<span class="admin-settings-section-title">Creation highlight</span>
+								<div class="admin-settings-field">
+									<label class="admin-settings-label" for="creation-highlight-lookback-hours">Lookback (hours)</label>
+									<input type="number" id="creation-highlight-lookback-hours" class="admin-settings-input" min="1" step="1" />
+									<p class="admin-detail">Hours to look back for comments to consider a creation "hot".</p>
+								</div>
+								<div class="admin-settings-field">
+									<label class="admin-settings-label" for="creation-highlight-cooldown-days">Cooldown (days)</label>
+									<input type="number" id="creation-highlight-cooldown-days" class="admin-settings-input" min="1" step="1" />
+									<p class="admin-detail">Minimum days between creation highlight emails per user.</p>
+								</div>
+							</section>
+							<div class="admin-settings-actions">
+								<button type="button" id="settings-save" class="btn-primary">Save settings</button>
+							</div>
+						</div>
+					</tab>
+				</app-tabs>
 			</div>
 		</section>
 	</main>
