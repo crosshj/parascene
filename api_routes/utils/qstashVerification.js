@@ -2,12 +2,12 @@ import { Receiver } from "@upstash/qstash";
 
 let receiverInstance = null;
 
-function logCreation(...args) {
-	console.log("[Creation]", ...args);
+function logQStash(...args) {
+	console.log("[QStash]", ...args);
 }
 
-function logCreationError(...args) {
-	console.error("[Creation]", ...args);
+function logQStashError(...args) {
+	console.error("[QStash]", ...args);
 }
 
 function getReceiver() {
@@ -16,11 +16,11 @@ function getReceiver() {
 		const nextSigningKey = process.env.UPSTASH_QSTASH_NEXT_SIGNING_KEY;
 
 		if (!currentSigningKey && !nextSigningKey) {
-			logCreationError("QStash receiver: No signing keys configured");
+			logQStashError("QStash receiver: No signing keys configured");
 			return null;
 		}
 
-		logCreation("Initializing QStash receiver", {
+		logQStash("Initializing QStash receiver", {
 			has_current_key: !!currentSigningKey,
 			has_next_key: !!nextSigningKey
 		});
@@ -41,7 +41,7 @@ export async function verifyQStashRequest(req) {
 	const receiver = getReceiver();
 	if (!receiver) {
 		// Most common cause: signing keys not configured in the environment
-		logCreationError("QStash verification failed: No receiver instance", {
+		logQStashError("QStash verification failed: No receiver instance", {
 			has_current_key_env: !!process.env.UPSTASH_QSTASH_CURRENT_SIGNING_KEY,
 			has_next_key_env: !!process.env.UPSTASH_QSTASH_NEXT_SIGNING_KEY,
 		});
@@ -54,7 +54,7 @@ export async function verifyQStashRequest(req) {
 	const lowercaseHeader = req.get ? req.get("upstash-signature") : headers["upstash-signature"];
 	const signature = upstashHeader || lowercaseHeader;
 	if (!signature) {
-		logCreationError("QStash verification failed: No signature header", {
+		logQStashError("QStash verification failed: No signature header", {
 			has_upstash_header: !!upstashHeader,
 			has_lowercase_header: !!lowercaseHeader,
 		});
@@ -76,7 +76,7 @@ export async function verifyQStashRequest(req) {
 						: "";
 	const path = req.originalUrl || req.url || "/api/worker/create";
 
-	logCreation("Verifying QStash signature", {
+	logQStash("Verifying QStash signature", {
 		path,
 		has_body: !!body,
 		body_length: body?.length || 0,
@@ -88,10 +88,10 @@ export async function verifyQStashRequest(req) {
 			body,
 			signature,
 		});
-		logCreation("QStash signature verified successfully");
+		logQStash("QStash signature verified successfully");
 		return true;
 	} catch (err) {
-		logCreationError("QStash signature verification failed", {
+		logQStashError("QStash signature verification failed", {
 			error: err.message,
 			error_type: err.constructor.name,
 			path,
