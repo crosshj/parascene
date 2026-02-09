@@ -11,7 +11,8 @@ const EMAIL_SETTINGS_KEYS = [
 	"reengagement_inactive_days",
 	"reengagement_cooldown_days",
 	"creation_highlight_lookback_hours",
-	"creation_highlight_cooldown_days"
+	"creation_highlight_cooldown_days",
+	"creation_highlight_min_comments"
 ];
 
 function parseBool(v, defaultVal = false) {
@@ -44,6 +45,7 @@ function parseNonNegativeInt(v, defaultVal) {
  *   reengagementCooldownDays: number,
  *   creationHighlightLookbackHours: number,
  *   creationHighlightCooldownDays: number,
+ *   creationHighlightMinComments: number,
  *   digestUtcWindowsRaw: string
  * }>}
  */
@@ -74,6 +76,7 @@ export async function getEmailSettings(queries) {
 		reengagementCooldownDays: parsePositiveInt(get("reengagement_cooldown_days", "30"), 30),
 		creationHighlightLookbackHours: parsePositiveInt(get("creation_highlight_lookback_hours", "48"), 48),
 		creationHighlightCooldownDays: parsePositiveInt(get("creation_highlight_cooldown_days", "7"), 7),
+		creationHighlightMinComments: parseNonNegativeInt(get("creation_highlight_min_comments", "1"), 1),
 		digestUtcWindowsRaw
 	};
 }

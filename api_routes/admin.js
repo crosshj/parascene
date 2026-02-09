@@ -433,7 +433,8 @@ export default function createAdminRoutes({ queries, storage }) {
 			reengagement_inactive_days: s.reengagementInactiveDays,
 			reengagement_cooldown_days: s.reengagementCooldownDays,
 			creation_highlight_lookback_hours: s.creationHighlightLookbackHours,
-			creation_highlight_cooldown_days: s.creationHighlightCooldownDays
+			creation_highlight_cooldown_days: s.creationHighlightCooldownDays,
+			creation_highlight_min_comments: s.creationHighlightMinComments
 		});
 	});
 
@@ -505,6 +506,12 @@ export default function createAdminRoutes({ queries, storage }) {
 				await queries.upsertPolicyKey.run("creation_highlight_cooldown_days", value, "Minimum days between creation highlight emails per user.");
 			}
 		}
+		if (typeof body.creation_highlight_min_comments !== "undefined") {
+			const value = String(Math.max(0, parseInt(body.creation_highlight_min_comments, 10) || 1));
+			if (queries.upsertPolicyKey?.run) {
+				await queries.upsertPolicyKey.run("creation_highlight_min_comments", value, "Minimum comments on a creation in the lookback window to send a highlight email.");
+			}
+		}
 		const s = await getEmailSettings(queries);
 		res.json({
 			email_use_test_recipient: s.emailUseTestRecipient,
@@ -516,7 +523,8 @@ export default function createAdminRoutes({ queries, storage }) {
 			reengagement_inactive_days: s.reengagementInactiveDays,
 			reengagement_cooldown_days: s.reengagementCooldownDays,
 			creation_highlight_lookback_hours: s.creationHighlightLookbackHours,
-			creation_highlight_cooldown_days: s.creationHighlightCooldownDays
+			creation_highlight_cooldown_days: s.creationHighlightCooldownDays,
+			creation_highlight_min_comments: s.creationHighlightMinComments
 		});
 	});
 

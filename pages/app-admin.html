@@ -109,6 +109,11 @@
 									<input type="number" id="creation-highlight-cooldown-days" class="admin-settings-input" min="1" step="1" />
 									<p class="admin-detail">Minimum days between creation highlight emails per user.</p>
 								</div>
+								<div class="admin-settings-field">
+									<label class="admin-settings-label" for="creation-highlight-min-comments">Minimum comments</label>
+									<input type="number" id="creation-highlight-min-comments" class="admin-settings-input" min="0" step="1" />
+									<p class="admin-detail">Only send a highlight email when a creation has at least this many comments in the lookback window.</p>
+								</div>
 							</section>
 							<div class="admin-settings-actions">
 								<button type="button" id="settings-save" class="btn-primary admin-settings-save">

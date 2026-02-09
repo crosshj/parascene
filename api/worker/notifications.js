@@ -53,7 +53,7 @@ async function runNotificationsCron({ queries }) {
 	const candidateRows = await (queries.selectDistinctUserIdsWithUnreadNotificationsSince?.all(sinceIso) ?? []);
 	const userIds = candidateRows.map((r) => r?.user_id).filter((id) => id != null && Number.isFinite(Number(id)));
 
-	const { reengagementInactiveDays, reengagementCooldownDays, creationHighlightLookbackHours, creationHighlightCooldownDays, welcomeEmailDelayHours } = settings;
+	const { reengagementInactiveDays, reengagementCooldownDays, creationHighlightLookbackHours, creationHighlightCooldownDays, creationHighlightMinComments, welcomeEmailDelayHours } = settings;
 	const inactiveCutoff = new Date();
 	inactiveCutoff.setUTCDate(inactiveCutoff.getUTCDate() - reengagementInactiveDays);
 	const reengagementCooldownCutoff = new Date();
@@ -66,10 +66,14 @@ async function runNotificationsCron({ queries }) {
 	highlightSince.setUTCHours(highlightSince.getUTCHours() - creationHighlightLookbackHours, highlightSince.getUTCMinutes(), highlightSince.getUTCSeconds(), 0);
 	const highlightCooldownCutoff = new Date();
 	highlightCooldownCutoff.setUTCDate(highlightCooldownCutoff.getUTCDate() - creationHighlightCooldownDays);
-	const highlightEligibleRows = await (queries.selectCreationsEligibleForHighlight?.all(
+	const highlightEligibleRowsRaw = await (queries.selectCreationsEligibleForHighlight?.all(
 		highlightSince.toISOString(),
 		highlightCooldownCutoff.toISOString()
 	) ?? []);
+	const minComments = Math.max(0, Number(creationHighlightMinComments) || 1);
+	const highlightEligibleRows = highlightEligibleRowsRaw.filter(
+		(r) => Number(r?.comment_count ?? 0) >= minComments
+	);
 	const userIdsReceivingLaterCampaignThisRun = new Set([
 		...reengagementEligibleRows.map((r) => r?.user_id).filter((id) => id != null),
 		...highlightEligibleRows.map((r) => r?.user_id).filter((id) => id != null)

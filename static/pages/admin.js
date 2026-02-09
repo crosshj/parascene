@@ -896,6 +896,7 @@ async function loadSettings() {
 	const reengagementCooldownInput = document.getElementById("reengagement-cooldown-days");
 	const highlightLookbackInput = document.getElementById("creation-highlight-lookback-hours");
 	const highlightCooldownInput = document.getElementById("creation-highlight-cooldown-days");
+	const highlightMinCommentsInput = document.getElementById("creation-highlight-min-comments");
 	const settingsSaveBtn = document.getElementById("settings-save");
 	if (!emailTestCheckbox) return;
 
@@ -918,6 +919,7 @@ async function loadSettings() {
 		if (reengagementCooldownInput) reengagementCooldownInput.value = String(data.reengagement_cooldown_days ?? "30");
 		if (highlightLookbackInput) highlightLookbackInput.value = String(data.creation_highlight_lookback_hours ?? "48");
 		if (highlightCooldownInput) highlightCooldownInput.value = String(data.creation_highlight_cooldown_days ?? "7");
+		if (highlightMinCommentsInput) highlightMinCommentsInput.value = String(data.creation_highlight_min_comments ?? "1");
 
 		bindSwitch(emailTestCheckbox, async (next) => {
 			const res = await fetch("/admin/settings", {
@@ -961,7 +963,8 @@ async function loadSettings() {
 						reengagement_inactive_days: Math.max(1, parseInt(reengagementInactiveInput?.value, 10) || 14),
 						reengagement_cooldown_days: Math.max(1, parseInt(reengagementCooldownInput?.value, 10) || 30),
 						creation_highlight_lookback_hours: Math.max(1, parseInt(highlightLookbackInput?.value, 10) || 48),
-						creation_highlight_cooldown_days: Math.max(1, parseInt(highlightCooldownInput?.value, 10) || 7)
+						creation_highlight_cooldown_days: Math.max(1, parseInt(highlightCooldownInput?.value, 10) || 7),
+						creation_highlight_min_comments: Math.max(0, parseInt(highlightMinCommentsInput?.value, 10) ?? 1)
 					};
 					const res = await fetch("/admin/settings", {
 						method: "PATCH",
