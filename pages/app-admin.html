@@ -41,13 +41,17 @@
 							<section class="admin-settings-section">
 								<span class="admin-settings-section-title">Delivery</span>
 								<div class="admin-settings-row">
-									<div class="form-switch admin-settings-switch" role="switch" aria-label="Send to test address">
-										<input type="checkbox" id="email-use-test-recipient" class="form-switch-input" aria-hidden="true" tabindex="-1" />
+									<div class="form-switch admin-settings-switch" role="switch"
+										aria-label="Send to test address">
+										<input type="checkbox" id="email-use-test-recipient" class="form-switch-input"
+											aria-hidden="true" tabindex="-1" />
 										<span class="form-switch-track"><span class="form-switch-thumb"></span></span>
 									</div>
 									<div class="admin-settings-label-desc">
-										<label for="email-use-test-recipient" class="admin-settings-label-inline">Send to test address (delivered@resend.dev)</label>
-										<p class="admin-detail">When on, all lifecycle and transactional emails go to Resend's test address instead of real users.</p>
+										<label for="email-use-test-recipient" class="admin-settings-label-inline">Send
+											to test address (delivered@resend.dev)</label>
+										<p class="admin-detail">When on, all lifecycle and transactional emails go to
+											Resend's test address instead of real users.</p>
 									</div>
 								</div>
 							</section>
@@ -55,67 +59,94 @@
 								<span class="admin-settings-section-title">Digest &amp; cron</span>
 								<div class="admin-settings-row">
 									<div class="form-switch admin-settings-switch" role="switch" aria-label="Dry run">
-										<input type="checkbox" id="email-dry-run" class="form-switch-input" aria-hidden="true" tabindex="-1" />
+										<input type="checkbox" id="email-dry-run" class="form-switch-input"
+											aria-hidden="true" tabindex="-1" />
 										<span class="form-switch-track"><span class="form-switch-thumb"></span></span>
 									</div>
 									<div class="admin-settings-label-desc">
-										<label for="email-dry-run" class="admin-settings-label-inline">Dry run (record only, do not send)</label>
-										<p class="admin-detail">Cron writes to the DB but does not send digest emails.</p>
+										<label for="email-dry-run" class="admin-settings-label-inline">Dry run (record
+											only, do not send)</label>
+										<p class="admin-detail">Cron writes to the DB but does not send digest emails.
+										</p>
 									</div>
 								</div>
 								<div class="admin-settings-field">
-									<label class="admin-settings-label" for="digest-utc-windows">Digest windows</label>
-									<input type="text" id="digest-utc-windows" class="admin-settings-input" placeholder="09:00,18:00" />
-									<p class="admin-detail">Comma-separated times in your local timezone (HH:MM or HH). Minutes are optional; only hours are used. Converted to UTC when saved.</p>
+									<label class="admin-settings-label" for="digest-utc-windows">Digest windows (also
+										applies to other emails)</label>
+									<input type="text" id="digest-utc-windows" class="admin-settings-input"
+										placeholder="09:00,18:00" />
+									<p class="admin-detail">Comma-separated times in your local timezone (HH:MM or HH).
+										Minutes are optional; only hours are used. Converted to UTC when saved.</p>
 								</div>
 								<div class="admin-settings-field">
-									<label class="admin-settings-label" for="max-digests-per-user-per-day">Max digests per user per day</label>
-									<input type="number" id="max-digests-per-user-per-day" class="admin-settings-input" min="0" step="1" />
+									<label class="admin-settings-label" for="max-digests-per-user-per-day">Max digests
+										per user per day</label>
+									<input type="number" id="max-digests-per-user-per-day" class="admin-settings-input"
+										min="0" step="1" />
 									<p class="admin-detail">Cap per user per UTC day.</p>
 								</div>
 								<div class="admin-settings-field">
-									<label class="admin-settings-label" for="digest-activity-hours-lookback">Activity lookback (hours)</label>
-									<input type="number" id="digest-activity-hours-lookback" class="admin-settings-input" min="1" step="1" />
-									<p class="admin-detail">Hours to look back for unread activity when building digest candidates.</p>
+									<label class="admin-settings-label" for="digest-activity-hours-lookback">Activity
+										lookback (hours)</label>
+									<input type="number" id="digest-activity-hours-lookback"
+										class="admin-settings-input" min="1" step="1" />
+									<p class="admin-detail">Hours to look back for unread activity when building digest
+										candidates.</p>
 								</div>
 							</section>
 							<section class="admin-settings-section">
 								<span class="admin-settings-section-title">Welcome &amp; nudges</span>
 								<div class="admin-settings-field">
-									<label class="admin-settings-label" for="welcome-email-delay-hours">Welcome email delay (hours)</label>
-									<input type="number" id="welcome-email-delay-hours" class="admin-settings-input" min="0" step="1" />
-									<p class="admin-detail">Hours after signup before a user is eligible for the welcome email. Use 0 for immediate.</p>
+									<label class="admin-settings-label" for="welcome-email-delay-hours">Welcome email
+										delay (hours)</label>
+									<input type="number" id="welcome-email-delay-hours" class="admin-settings-input"
+										min="0" step="1" />
+									<p class="admin-detail">Hours after signup before a user is eligible for the welcome
+										email. Use 0 for immediate.</p>
 								</div>
 							</section>
 							<section class="admin-settings-section">
 								<span class="admin-settings-section-title">Re-engagement</span>
 								<div class="admin-settings-field">
-									<label class="admin-settings-label" for="reengagement-inactive-days">Inactive days before eligible</label>
-									<input type="number" id="reengagement-inactive-days" class="admin-settings-input" min="1" step="1" />
-									<p class="admin-detail">Days of inactivity before a user can receive a "we miss you" email.</p>
+									<label class="admin-settings-label" for="reengagement-inactive-days">Inactive days
+										before eligible</label>
+									<input type="number" id="reengagement-inactive-days" class="admin-settings-input"
+										min="1" step="1" />
+									<p class="admin-detail">Days of inactivity before a user can receive a "we miss you"
+										email.</p>
 								</div>
 								<div class="admin-settings-field">
-									<label class="admin-settings-label" for="reengagement-cooldown-days">Cooldown (days)</label>
-									<input type="number" id="reengagement-cooldown-days" class="admin-settings-input" min="1" step="1" />
+									<label class="admin-settings-label" for="reengagement-cooldown-days">Cooldown
+										(days)</label>
+									<input type="number" id="reengagement-cooldown-days" class="admin-settings-input"
+										min="1" step="1" />
 									<p class="admin-detail">Minimum days between re-engagement emails per user.</p>
 								</div>
 							</section>
 							<section class="admin-settings-section">
 								<span class="admin-settings-section-title">Creation highlight</span>
 								<div class="admin-settings-field">
-									<label class="admin-settings-label" for="creation-highlight-lookback-hours">Lookback (hours)</label>
-									<input type="number" id="creation-highlight-lookback-hours" class="admin-settings-input" min="1" step="1" />
-									<p class="admin-detail">Hours to look back for comments to consider a creation "hot".</p>
+									<label class="admin-settings-label" for="creation-highlight-lookback-hours">Lookback
+										(hours)</label>
+									<input type="number" id="creation-highlight-lookback-hours"
+										class="admin-settings-input" min="1" step="1" />
+									<p class="admin-detail">Hours to look back for comments to consider a creation
+										"hot".</p>
 								</div>
 								<div class="admin-settings-field">
-									<label class="admin-settings-label" for="creation-highlight-cooldown-days">Cooldown (days)</label>
-									<input type="number" id="creation-highlight-cooldown-days" class="admin-settings-input" min="1" step="1" />
+									<label class="admin-settings-label" for="creation-highlight-cooldown-days">Cooldown
+										(days)</label>
+									<input type="number" id="creation-highlight-cooldown-days"
+										class="admin-settings-input" min="1" step="1" />
 									<p class="admin-detail">Minimum days between creation highlight emails per user.</p>
 								</div>
 								<div class="admin-settings-field">
-									<label class="admin-settings-label" for="creation-highlight-min-comments">Minimum comments</label>
-									<input type="number" id="creation-highlight-min-comments" class="admin-settings-input" min="0" step="1" />
-									<p class="admin-detail">Only send a highlight email when a creation has at least this many comments in the lookback window.</p>
+									<label class="admin-settings-label" for="creation-highlight-min-comments">Minimum
+										comments</label>
+									<input type="number" id="creation-highlight-min-comments"
+										class="admin-settings-input" min="0" step="1" />
+									<p class="admin-detail">Only send a highlight email when a creation has at least
+										this many comments in the lookback window.</p>
 								</div>
 							</section>
 							<div class="admin-settings-actions">
