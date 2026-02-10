@@ -4,6 +4,7 @@ import { getThumbnailUrl } from "./utils/url.js";
 
 const MAX_COMMENT_META_SEARCH_IMAGES = 300;
 const SEARCH_IDS_REDIS_KEY_PREFIX = "explore:search:ids:v1:";
+const SEARCH_IDS_REDIS_TTL_SECONDS = 0.5/*hr*/ * 60/*min*/ * 60/*sec*/; // 0.5 hour
 
 let redis = null;
 function getRedis() {
@@ -154,8 +155,8 @@ export default function createExploreRoutes({ queries }) {
 					item.created_image_id != null && item.created_image_id !== undefined
 						? `img:${String(item.created_image_id)}`
 						: item.id != null
-						? `feed:${String(item.id)}`
-						: null;
+							? `feed:${String(item.id)}`
+							: null;
 				if (!key) continue;
 				if (!uniqueByCreation.has(key)) {
 					uniqueByCreation.set(key, item);
@@ -278,7 +279,7 @@ export default function createExploreRoutes({ queries }) {
 						.map((item) => (item && item.created_image_id != null ? Number(item.created_image_id) : null))
 						.filter((id) => Number.isFinite(id) && id > 0);
 					if (idsForCache.length > 0) {
-						await getRedis().set(idsCacheKey, idsForCache, { ex: 7 * 24 * 60 * 60 }); // 7 days
+						await getRedis().set(idsCacheKey, idsForCache, { ex: SEARCH_IDS_REDIS_TTL_SECONDS });
 					}
 				} catch {
 					// ignore Redis cache failures
