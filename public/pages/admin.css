@@ -112,8 +112,9 @@
 	}
 }
 
-/* Switch (admin settings) – matches global form-switch pattern */
-.admin-emails-settings-panel .form-switch-input {
+/* Switch (admin settings + todo modal) – matches global form-switch pattern */
+.admin-emails-settings-panel .form-switch-input,
+.todo-star-toggle-row .form-switch-input {
 	position: absolute;
 	width: 1px;
 	height: 1px;
@@ -125,7 +126,8 @@
 	border: 0;
 }
 
-.admin-emails-settings-panel .form-switch {
+.admin-emails-settings-panel .form-switch,
+.todo-star-toggle-row .form-switch {
 	position: relative;
 	display: inline-flex;
 	align-items: center;
@@ -133,13 +135,15 @@
 	cursor: pointer;
 }
 
-.admin-emails-settings-panel .form-switch:focus-visible {
+.admin-emails-settings-panel .form-switch:focus-visible,
+.todo-star-toggle-row .form-switch:focus-visible {
 	outline: 2px solid var(--accent-switch);
 	outline-offset: 2px;
 	border-radius: 999px;
 }
 
-.admin-emails-settings-panel .form-switch-track {
+.admin-emails-settings-panel .form-switch-track,
+.todo-star-toggle-row .form-switch-track {
 	display: flex;
 	align-items: center;
 	width: 2.75rem;
@@ -151,11 +155,14 @@
 }
 
 .admin-emails-settings-panel .form-switch-input:focus-visible ~ .form-switch-track,
-.admin-emails-settings-panel .form-switch:focus-visible .form-switch-track {
+.admin-emails-settings-panel .form-switch:focus-visible .form-switch-track,
+.todo-star-toggle-row .form-switch-input:focus-visible ~ .form-switch-track,
+.todo-star-toggle-row .form-switch:focus-visible .form-switch-track {
 	box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-switch) 40%, transparent);
 }
 
-.admin-emails-settings-panel .form-switch-thumb {
+.admin-emails-settings-panel .form-switch-thumb,
+.todo-star-toggle-row .form-switch-thumb {
 	width: 1.25rem;
 	height: 1.25rem;
 	border-radius: 50%;
@@ -165,13 +172,28 @@
 	transform: translateX(0);
 }
 
-.admin-emails-settings-panel .form-switch-input:checked ~ .form-switch-track {
+.admin-emails-settings-panel .form-switch-input:checked ~ .form-switch-track,
+.todo-star-toggle-row .form-switch-input:checked ~ .form-switch-track {
 	background: color-mix(in srgb, var(--accent-switch) 40%, var(--switch-track-off));
 }
 
-.admin-emails-settings-panel .form-switch-input:checked ~ .form-switch-track .form-switch-thumb {
+.admin-emails-settings-panel .form-switch-input:checked ~ .form-switch-track .form-switch-thumb,
+.todo-star-toggle-row .form-switch-input:checked ~ .form-switch-track .form-switch-thumb {
 	background: var(--accent-switch);
 	transform: translateX(1.25rem);
+}
+
+.todo-star-toggle-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin: 8px 0 4px;
+}
+
+.todo-star-toggle-label {
+	font-size: 0.9rem;
+	color: var(--text-muted);
 }
 
 [data-route-content="users"] {
@@ -1178,6 +1200,26 @@
 	justify-content: space-between;
 	gap: 12px;
 	align-items: start;
+	position: relative;
+}
+
+.todo-card-star {
+	width: 20px;
+	height: 100%;
+	padding: 0;
+	color: var(--text-muted);
+	display: flex;
+	justify-content: center;
+	align-items: center;
+}
+
+.todo-card-star-icon {
+	width: 20px;
+	height: 20px;
+}
+
+.todo-card-star-active {
+	color: var(--accent);
 }
 
 .todo-card-title {
@@ -1189,6 +1231,7 @@
 	display: grid;
 	gap: 6px;
 	min-width: 0;
+	    margin-right: auto;
 }
 
 .todo-card-description {

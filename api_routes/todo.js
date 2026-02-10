@@ -124,7 +124,8 @@ function normalizeTodoItem(item, computeFn = computePriority) {
 		impact,
 		dependsOn,
 		priority,
-		probability
+		probability,
+		starred: Boolean(item?.starred)
 	};
 }
 
@@ -219,12 +220,13 @@ async function writeTodoItems(items) {
 		if (b.priority !== a.priority) return b.priority - a.priority;
 		return a.order - b.order;
 	});
-	const serialized = normalized.map(({ name, description, cost, impact, dependsOn }) => ({
+	const serialized = normalized.map(({ name, description, cost, impact, dependsOn, starred }) => ({
 		name,
 		description,
 		cost,
 		impact,
-		dependsOn
+		dependsOn,
+		starred: Boolean(starred)
 	}));
 	await fs.writeFile(TODO_PATH, JSON.stringify(serialized, null, 2), "utf8");
 }
@@ -259,7 +261,8 @@ export default function createTodoRoutes() {
 					impact: item.impact,
 					dependsOn: item.dependsOn,
 					priority: item.priority,
-					probability: item.probability
+					probability: item.probability,
+					starred: Boolean(item.starred)
 				})),
 				writable: !process.env.VERCEL,
 				formula
@@ -274,11 +277,12 @@ export default function createTodoRoutes() {
 			return res.status(403).json({ error: "TODO.md writes are disabled on Vercel." });
 		}
 
-		const { name, description, time, impact } = req.body || {};
+		const { name, description, time, impact, starred } = req.body || {};
 		const normalizedName = String(name || "").trim();
 		const normalizedDescription = String(description || "").trim();
 		const timeValue = Number(time);
 		const impactValue = Number(impact);
+		const starredValue = Boolean(starred);
 
 		if (!normalizedName || !normalizedDescription) {
 			return res.status(400).json({ error: "Name and description are required." });
@@ -304,6 +308,7 @@ export default function createTodoRoutes() {
 				cost: timeValue,
 				impact: impactValue,
 				dependsOn: dependsOnValue,
+				starred: starredValue,
 				priority: priorityValue,
 				probability: probabilityValue
 			});
@@ -316,6 +321,7 @@ export default function createTodoRoutes() {
 					time: timeValue,
 					impact: impactValue,
 					dependsOn: dependsOnValue,
+					starred: starredValue,
 					priority: priorityValue,
 					probability: probabilityValue
 				}
@@ -330,12 +336,13 @@ export default function createTodoRoutes() {
 			return res.status(403).json({ error: "TODO.md writes are disabled on Vercel." });
 		}
 
-		const { originalName, name, description, time, impact } = req.body || {};
+		const { originalName, name, description, time, impact, starred } = req.body || {};
 		const normalizedOriginal = String(originalName || "").trim();
 		const normalizedName = String(name || "").trim();
 		const normalizedDescription = String(description || "").trim();
 		const timeValue = Number(time);
 		const impactValue = Number(impact);
+		const starredValue = Boolean(starred);
 
 		if (!normalizedOriginal) {
 			return res.status(400).json({ error: "Original name is required." });
@@ -374,6 +381,7 @@ export default function createTodoRoutes() {
 					cost: timeValue,
 					impact: impactValue,
 					dependsOn: dependsOnValue,
+					starred: starredValue,
 					priority: priorityValue,
 					probability: probabilityValue
 				};
@@ -391,10 +399,38 @@ export default function createTodoRoutes() {
 					time: timeValue,
 					impact: impactValue,
 					dependsOn: dependsOnValue,
+					starred: starredValue,
 					priority: priorityValue,
 					probability: probabilityValue
 				}
 			});
+		} catch (error) {
+			res.status(500).json({ error: "Failed to update TODO.json." });
+		}
+	});
+
+	router.patch("/api/todo", async (req, res) => {
+		if (process.env.VERCEL) {
+			return res.status(403).json({ error: "TODO.md writes are disabled on Vercel." });
+		}
+
+		const { name, starred } = req.body || {};
+		const normalizedName = String(name || "").trim();
+		const starredValue = Boolean(starred);
+
+		if (!normalizedName) {
+			return res.status(400).json({ error: "Name is required." });
+		}
+
+		try {
+			const items = await readTodoItems();
+			const found = items.find((item) => item.name === normalizedName);
+			if (!found) {
+				return res.status(404).json({ error: "Todo item not found." });
+			}
+			found.starred = starredValue;
+			await writeTodoItems(items);
+			res.json({ ok: true, item: { name: found.name, starred: found.starred } });
 		} catch (error) {
 			res.status(500).json({ error: "Failed to update TODO.json." });
 		}

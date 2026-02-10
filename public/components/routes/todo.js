@@ -1,4 +1,5 @@
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
+import { starIcon } from '../../icons/svg-strings.js';
 
 const html = String.raw;
 
@@ -115,7 +116,8 @@ class AppRouteTodo extends HTMLElement {
 				description: row.dataset.itemDescription,
 				time: row.dataset.itemTime,
 				impact: row.dataset.itemImpact,
-				dependsOn: JSON.parse(row.dataset.itemDependsOn || '[]')
+				dependsOn: JSON.parse(row.dataset.itemDependsOn || '[]'),
+				starred: row.dataset.itemStarred === '1'
 			};
 
 			if (!this._writable) {
@@ -143,7 +145,12 @@ class AppRouteTodo extends HTMLElement {
 		if (!this._list) return;
 		this._list.innerHTML = '';
 
-		const sortedItems = [...(items || [])].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+		const sortedItems = [...(items || [])].sort((a, b) => {
+			const aStar = Boolean(a.starred);
+			const bStar = Boolean(b.starred);
+			if (aStar !== bStar) return bStar ? 1 : -1;
+			return (b.priority ?? 0) - (a.priority ?? 0);
+		});
 		if (!sortedItems.length) {
 			const empty = document.createElement('div');
 			empty.className = 'todo-loading';
@@ -161,12 +168,21 @@ class AppRouteTodo extends HTMLElement {
 			row.dataset.itemTime = item.time;
 			row.dataset.itemImpact = item.impact;
 			row.dataset.itemDependsOn = JSON.stringify(Array.isArray(item.dependsOn) ? item.dependsOn : []);
+			row.dataset.itemStarred = item.starred ? '1' : '0';
 
 			const card = document.createElement('div');
 			card.className = 'todo-card-inner';
 
 			const header = document.createElement('div');
 			header.className = 'todo-card-header';
+
+			const star = document.createElement('div');
+			star.className = 'todo-card-star';
+			if (item.starred) {
+				star.classList.add('todo-card-star-active');
+			}
+			star.setAttribute('aria-hidden', 'true');
+			star.innerHTML = starIcon('todo-card-star-icon');
 
 			const text = document.createElement('div');
 			text.className = 'todo-card-text';
@@ -186,6 +202,7 @@ class AppRouteTodo extends HTMLElement {
 			dial.className = 'todo-card-dial';
 			applyDialStyles(dial, item.priority);
 
+			header.appendChild(star);
 			header.appendChild(text);
 			header.appendChild(dial);
 			card.appendChild(header);

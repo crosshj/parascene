@@ -209,14 +209,16 @@ class AppModalTodo extends HTMLElement {
 			description: form.elements.description.value,
 			time: String(form.elements.time.value),
 			impact: String(form.elements.impact.value),
-			dependsOn: form.elements.dependsOn?.value || '[]'
+			dependsOn: form.elements.dependsOn?.value || '[]',
+			starred: form.elements.starred && form.elements.starred.checked ? '1' : '0'
 		};
 		const hasChanges = !initial
 			|| initial.name !== current.name
 			|| initial.description !== current.description
 			|| initial.time !== current.time
 			|| initial.impact !== current.impact
-			|| initial.dependsOn !== current.dependsOn;
+			|| initial.dependsOn !== current.dependsOn
+			|| initial.starred !== current.starred;
 		submit.disabled = !hasChanges;
 	}
 
@@ -311,6 +313,13 @@ class AppModalTodo extends HTMLElement {
 					Description
 					<textarea name="description" rows="3" required></textarea>
 				</label>
+				<div class="todo-star-toggle-row">
+					<span class="todo-star-toggle-label">Starred</span>
+					<label class="form-switch todo-star-switch" role="switch" aria-label="Starred">
+						<input type="checkbox" name="starred" class="form-switch-input" aria-hidden="true" tabindex="-1" />
+						<span class="form-switch-track"><span class="form-switch-thumb"></span></span>
+					</label>
+				</div>
 				<input type="hidden" name="dependsOn" value="[]" />
 				<div class="todo-depends" data-todo-depends>
 					<div class="todo-depends-label">Depends on</div>
@@ -354,6 +363,9 @@ class AppModalTodo extends HTMLElement {
 		form.elements.description.value = item?.description || '';
 		form.elements.time.value = item?.time || 50;
 		form.elements.impact.value = item?.impact || 50;
+		if (form.elements.starred) {
+			form.elements.starred.checked = Boolean(item?.starred);
+		}
 		this.setDependsOn(Array.isArray(item?.dependsOn) ? item.dependsOn : []);
 
 		form.dataset.initial = JSON.stringify({
@@ -361,7 +373,8 @@ class AppModalTodo extends HTMLElement {
 			description: form.elements.description.value,
 			time: String(form.elements.time.value),
 			impact: String(form.elements.impact.value),
-			dependsOn: form.elements.dependsOn?.value || '[]'
+			dependsOn: form.elements.dependsOn?.value || '[]',
+			starred: form.elements.starred && form.elements.starred.checked ? '1' : '0'
 		});
 
 		this.updateSliderValues();
@@ -428,7 +441,8 @@ class AppModalTodo extends HTMLElement {
 			description: form.elements.description.value,
 			time: Number(form.elements.time.value),
 			impact: Number(form.elements.impact.value),
-			dependsOn: this._dependsOn
+			dependsOn: this._dependsOn,
+			starred: Boolean(form.elements.starred && form.elements.starred.checked)
 		};
 		if (mode === 'edit') {
 			payload.originalName = form.elements.originalName.value;

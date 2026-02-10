@@ -120,3 +120,11 @@ export const searchIcon = withAttributes(html`
 	</path>
 </svg>
 `);
+
+export const starIcon = withAttributes(html`
+	<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+		<path
+			d="M12 3.25l2.36 4.78 5.28.77-3.82 3.72.9 5.26L12 15.97 7.28 17.78l.9-5.26-3.82-3.72 5.28-.77L12 3.25z">
+		</path>
+	</svg>
+`);
