@@ -1,5 +1,6 @@
 import { formatDateTime, formatRelativeTime } from '../../shared/datetime.js';
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
+import { searchIcon } from '../../icons/svg-strings.js';
 
 const html = String.raw;
 
@@ -103,19 +104,34 @@ class AppRouteExplore extends HTMLElement {
 
 	connectedCallback() {
 		this.innerHTML = html`
-      <div class="explore-route">
-        <div class="route-header">
-          <h3>Explore</h3>
-          <p>Discover creations from the broader community, including people you are not friends with yet.</p>
-        </div>
-        <div class="route-cards route-cards-image-grid" data-explore-container>
-          <div class="route-empty route-empty-image-grid route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
-        </div>
-        <div class="explore-load-more-sentinel" data-explore-sentinel aria-hidden="true"></div>
-        <div class="explore-load-more-fallback" data-explore-load-more-fallback>
-          <button type="button" class="btn-secondary explore-load-more-btn" data-explore-load-more-btn>Load more</button>
-        </div>
-      </div>
+	<div class="explore-route">
+		<div class="route-header">
+			<h3>Explore</h3>
+			<p>Discover creations from the broader community, including people you are not friends with yet.</p>
+			<div class="explore-search-bar">
+				<input type="search" class="explore-search-input" placeholder="Search creations..."
+					aria-label="Search creations" id="explore-search-input" />
+				${searchIcon('explore-search-icon')}
+			</div>
+		</div>
+		<div class="explore-search-results route-cards route-cards-image-grid" data-explore-search-results hidden>
+			<div class="route-empty route-empty-image-grid">
+				<div class="route-empty-title">No creations found</div>
+			</div>
+		</div>
+		<div class="explore-main" data-explore-main>
+			<div class="route-cards route-cards-image-grid" data-explore-container>
+				<div class="route-empty route-empty-image-grid route-loading">
+					<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
+				</div>
+			</div>
+			<div class="explore-load-more-sentinel" data-explore-sentinel aria-hidden="true"></div>
+			<div class="explore-load-more-fallback" data-explore-load-more-fallback>
+				<button type="button" class="btn-secondary explore-load-more-btn" data-explore-load-more-btn>Load
+					more</button>
+			</div>
+		</div>
+	</div>
     `;
 		this.hasLoadedOnce = false;
 		this.isLoading = false;
@@ -127,6 +143,7 @@ class AppRouteExplore extends HTMLElement {
 		this.setupLoadMoreFallback();
 		this.setupImageLazyLoading();
 		this.updateLoadMoreFallback();
+		this.setupSearchUi();
 
 		const initialRoute = window.__CURRENT_ROUTE__ || null;
 		const pathname = window.location.pathname || '';
@@ -270,6 +287,185 @@ class AppRouteExplore extends HTMLElement {
 		}
 		this.imageLoadQueue = [];
 		this.imageLoadsInFlight = 0;
+
+		const searchInput = this.querySelector('.explore-search-input');
+		if (searchInput && this.searchInputListener) {
+			searchInput.removeEventListener('input', this.searchInputListener);
+		}
+		this.searchInputListener = null;
+
+		if (this.searchDebounceId) {
+			clearTimeout(this.searchDebounceId);
+			this.searchDebounceId = null;
+		}
+	}
+
+	setupSearchUi() {
+		const input = this.querySelector('.explore-search-input');
+		const main = this.querySelector('[data-explore-main]');
+		const results = this.querySelector('[data-explore-search-results]');
+		if (!input || !main || !results) return;
+
+		const updateUrlSearchParam = (value) => {
+			try {
+				const url = new URL(window.location.href);
+				if (value) {
+					url.searchParams.set('s', value);
+				} else {
+					url.searchParams.delete('s');
+				}
+				const next = url.toString();
+				if (next !== window.location.href) {
+					window.history.replaceState(null, '', next);
+				}
+			} catch {
+				// Ignore URL update errors (e.g., unsupported environment)
+			}
+		};
+
+		const updateVisibility = () => {
+			const hasText = input.value.trim().length > 0;
+			if (hasText) {
+				main.setAttribute('hidden', '');
+				main.style.display = 'none';
+				results.removeAttribute('hidden');
+				results.style.display = '';
+			} else {
+				main.removeAttribute('hidden');
+				main.style.display = '';
+				results.setAttribute('hidden', '');
+				results.style.display = 'none';
+				// When clearing the search box, reset results content but keep the
+				// empty-state placeholder so the transition back to main feels natural.
+				results.innerHTML = html`
+					<div class="route-empty route-empty-image-grid">
+						<div class="route-empty-title">No creations found</div>
+					</div>
+				`;
+			}
+		};
+
+		const handleInput = () => {
+			const raw = input.value || '';
+			const trimmed = raw.trim();
+			updateVisibility();
+
+			// Clear any pending search
+			if (this.searchDebounceId) {
+				clearTimeout(this.searchDebounceId);
+				this.searchDebounceId = null;
+			}
+
+			// If there is no text, do not perform a search.
+			if (!trimmed) {
+				this.currentSearchQuery = '';
+				updateUrlSearchParam('');
+				return;
+			}
+
+			this.currentSearchQuery = trimmed;
+			updateUrlSearchParam(trimmed);
+
+			// Show a lightweight loading state immediately so the UI feels responsive.
+			results.innerHTML = html`
+				<div class="route-empty route-empty-image-grid route-loading">
+					<div class="route-loading-spinner" aria-label="Searching" role="status"></div>
+				</div>
+			`;
+
+			// Debounce the actual network request.
+			this.searchDebounceId = window.setTimeout(() => {
+				this.searchDebounceId = null;
+				void this.performExploreSearch(trimmed);
+			}, 300);
+		};
+
+		this.searchInputListener = () => handleInput();
+		input.addEventListener('input', this.searchInputListener);
+		// Initial state: hydrate from URL if an "s" query param is present.
+		try {
+			const params = new URLSearchParams(window.location.search);
+			const initial = params.get('s') || '';
+			if (initial) {
+				input.value = initial;
+				updateVisibility();
+				this.currentSearchQuery = initial.trim();
+				results.innerHTML = html`
+					<div class="route-empty route-empty-image-grid route-loading">
+						<div class="route-loading-spinner" aria-label="Searching" role="status"></div>
+					</div>
+				`;
+				void this.performExploreSearch(this.currentSearchQuery);
+				return;
+			}
+		} catch {
+			// If URL parsing fails, just fall back to default state.
+		}
+
+		updateVisibility();
+	}
+
+	async performExploreSearch(query) {
+		const resultsEl = this.querySelector('[data-explore-search-results]');
+		if (!resultsEl) return;
+
+		const trimmed = String(query || '').trim();
+		if (!trimmed) {
+			resultsEl.innerHTML = html`
+				<div class="route-empty route-empty-image-grid">
+					<div class="route-empty-title">No creations found</div>
+				</div>
+			`;
+			return;
+		}
+
+		// Capture a token so we can ignore out-of-order responses.
+		const token = (this.searchRequestToken = (this.searchRequestToken || 0) + 1);
+
+		try {
+			const res = await fetchJsonWithStatusDeduped(
+				`/api/explore/search?q=${encodeURIComponent(trimmed)}&limit=${EXPLORE_PAGE_SIZE}`,
+				{ credentials: 'include' },
+				{ windowMs: 500 }
+			).catch(() => ({ ok: false, data: null }));
+
+			// If another search started while this one was in flight, ignore this response.
+			if (token !== this.searchRequestToken) {
+				return;
+			}
+
+			if (!res.ok) {
+				resultsEl.innerHTML = html`
+					<div class="route-empty route-empty-image-grid">
+						<div class="route-empty-title">Unable to search creations</div>
+						<div class="route-empty-message">Please try again in a moment.</div>
+					</div>
+				`;
+				return;
+			}
+
+			const items = Array.isArray(res.data?.items) ? res.data.items : [];
+			if (items.length === 0) {
+				resultsEl.innerHTML = html`
+					<div class="route-empty route-empty-image-grid">
+						<div class="route-empty-title">No creations found</div>
+					</div>
+				`;
+				return;
+			}
+
+			// Reuse the same card renderer as the main explore feed so layout stays consistent.
+			resultsEl.innerHTML = '';
+			this.appendExploreCards(resultsEl, items);
+		} catch (err) {
+			// Network / unexpected error
+			resultsEl.innerHTML = html`
+				<div class="route-empty route-empty-image-grid">
+					<div class="route-empty-title">Unable to search creations</div>
+					<div class="route-empty-message">Please try again in a moment.</div>
+				</div>
+			`;
+		}
 	}
 
 	refreshOnActivate() {
@@ -293,7 +489,9 @@ class AppRouteExplore extends HTMLElement {
 
 		this.isLoading = true;
 		if (reset) {
-			container.innerHTML = html`<div class="route-empty route-empty-image-grid route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>`;
+			container.innerHTML = html`<div class="route-empty route-empty-image-grid route-loading">
+	<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
+</div>`;
 		}
 
 		try {
@@ -319,10 +517,10 @@ class AppRouteExplore extends HTMLElement {
 
 			if (reset && items.length === 0) {
 				cont.innerHTML = html`
-          <div class="route-empty route-empty-image-grid">
-            <div class="route-empty-title">Nothing to explore yet</div>
-            <div class="route-empty-message">Published creations from the community will appear here.</div>
-          </div>
+		<div class="route-empty route-empty-image-grid">
+			<div class="route-empty-title">Nothing to explore yet</div>
+			<div class="route-empty-message">Published creations from the community will appear here.</div>
+		</div>
         `;
 				this.hasLoadedOnce = true;
 				return;
@@ -406,19 +604,21 @@ class AppRouteExplore extends HTMLElement {
 			});
 
 			card.innerHTML = html`
-        <div class="route-media" aria-hidden="true" data-image-id="${item.created_image_id ?? ''}" data-status="completed"></div>
-        <div class="route-details">
-          <div class="route-details-content">
-            <div class="route-title">${item.title != null ? item.title : 'Untitled'}</div>
-            <div class="route-summary">${item.summary != null ? item.summary : ''}</div>
-            <div class="route-meta" title="${formatDateTime(item.created_at)}">${formatRelativeTime(item.created_at)}</div>
-            <div class="route-meta">
-              By ${profileHref ? html`<a class="user-link" href="${profileHref}" data-profile-link>${authorLabel}</a>` : authorLabel}${handle ? html` <span>(${handle})</span>` : ''}
-            </div>
-            <div class="route-meta route-meta-spacer"></div>
-            <div class="route-tags">${item.tags || ''}</div>
-          </div>
-        </div>
+		<div class="route-media" aria-hidden="true" data-image-id="${item.created_image_id ?? ''}" data-status="completed">
+		</div>
+		<div class="route-details">
+			<div class="route-details-content">
+				<div class="route-title">${item.title != null ? item.title : 'Untitled'}</div>
+				<div class="route-summary">${item.summary != null ? item.summary : ''}</div>
+				<div class="route-meta" title="${formatDateTime(item.created_at)}">${formatRelativeTime(item.created_at)}</div>
+				<div class="route-meta">
+					By ${profileHref ? html`<a class="user-link" href="${profileHref}" data-profile-link>${authorLabel}</a>` :
+					authorLabel}${handle ? html` <span>(${handle})</span>` : ''}
+				</div>
+				<div class="route-meta route-meta-spacer"></div>
+				<div class="route-tags">${item.tags || ''}</div>
+			</div>
+		</div>
       `;
 
 			const mediaEl = card.querySelector('.route-media');

@@ -417,7 +417,7 @@ main {
 
 @media (max-width: 768px) {
 	main {
-		padding: 24px 8px 48px;
+		padding: 12px 8px 48px;
 	}
 }
 
@@ -2020,7 +2020,7 @@ header .hamburger-button.active span:nth-child(3) {
 
 @media (max-width: 768px) {
 	.route-header p {
-		font-size: 0.9rem;
+		display: none;
 	}
 }
 
@@ -2857,6 +2857,46 @@ app-route-feed {
 
 .explore-load-more-fallback .explore-load-more-btn {
 	min-width: 120px;
+}
+
+.explore-route {
+	padding: 2px;
+}
+
+.explore-search-bar {
+	margin-top: 4px;
+	position: relative;
+}
+
+.explore-search-icon {
+	position: absolute;
+	right: 12px;
+	top: 50%;
+	transform: translateY(-50%);
+	width: 18px;
+	height: 18px;
+	color: var(--text-muted);
+	pointer-events: none;
+}
+
+.explore-search-input {
+	width: 100%;
+	min-width: 0;
+	padding-right: 32px;
+}
+
+.explore-search-input:not(:placeholder-shown) {
+	padding-right: 12px;
+}
+
+.explore-search-input:not(:placeholder-shown) + .explore-search-icon {
+	display: none;
+}
+
+/* Make explore search loading spinner appear immediately (no long delay). */
+.explore-search-results .route-loading-spinner {
+	animation-delay: 0s !important;
+	opacity: 1;
 }
 
 @media (max-width: 1024px) {

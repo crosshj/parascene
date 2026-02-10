@@ -914,6 +914,11 @@ export function openDb() {
 					const likeCount = likes_created_image.filter((l) => Number(l.created_image_id) === id).length;
 					const commentCount = comments_created_image.filter((c) => Number(c.created_image_id) === id).length;
 					const profile = user_profiles.find((p) => Number(p.user_id) === Number(row.user_id));
+					const url =
+						row.file_path ??
+						(row.filename
+							? `/api/images/created/${row.filename}`
+							: null);
 					return {
 						id: row.id,
 						created_image_id: row.id,
@@ -924,7 +929,9 @@ export function openDb() {
 						like_count: likeCount,
 						comment_count: commentCount,
 						author_display_name: profile?.display_name ?? null,
-						author_user_name: profile?.user_name ?? null
+						author_user_name: profile?.user_name ?? null,
+						author_avatar_url: profile?.avatar_url ?? null,
+						url
 					};
 				});
 			}

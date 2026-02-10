@@ -1682,7 +1682,7 @@ export function openDb() {
 				if (authorIds.length > 0) {
 					const { data: profileRows, error: profileError } = await serviceClient
 						.from(prefixedTable("user_profiles"))
-						.select("user_id, user_name, display_name")
+						.select("user_id, user_name, display_name, avatar_url")
 						.in("user_id", authorIds);
 					if (!profileError && profileRows) {
 						profileByUserId = new Map(profileRows.map((r) => [String(r.user_id), r]));
@@ -2362,7 +2362,7 @@ export function openDb() {
 				// prsn_created_images has title, description (no summary column); use description for summary
 				const { data: images, error: imgError } = await serviceClient
 					.from(prefixedTable("created_images"))
-					.select("id, title, description, created_at, user_id")
+					.select("id, title, description, created_at, user_id, filename, file_path")
 					.in("id", safeIds);
 				if (imgError) throw imgError;
 				const orderById = new Map(safeIds.map((id, i) => [Number(id), i]));
@@ -2395,6 +2395,11 @@ export function openDb() {
 				return sorted.map((row) => {
 					const key = String(row.id);
 					const profile = row.user_id != null ? profileByUserId.get(String(row.user_id)) : null;
+					const url =
+						row.file_path ??
+						(row.filename
+							? `/api/images/created/${row.filename}`
+							: null);
 					return {
 						id: row.id,
 						created_image_id: row.id,
@@ -2405,7 +2410,9 @@ export function openDb() {
 						like_count: likeById.get(key) ?? 0,
 						comment_count: commentById.get(key) ?? 0,
 						author_display_name: profile?.display_name ?? null,
-						author_user_name: profile?.user_name ?? null
+						author_user_name: profile?.user_name ?? null,
+						author_avatar_url: profile?.avatar_url ?? null,
+						url
 					};
 				});
 			}

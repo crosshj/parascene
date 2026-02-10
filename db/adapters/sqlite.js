@@ -1144,10 +1144,12 @@ export async function openDb() {
 				const placeholders = safeIds.map(() => "?").join(",");
 				const stmt = db.prepare(
 					`SELECT ci.id, ci.title, ci.summary, ci.created_at, ci.user_id,
+						ci.filename, ci.file_path,
 						COALESCE(lc.like_count, 0) AS like_count,
 						COALESCE(cc.comment_count, 0) AS comment_count,
 						up.user_name AS author_user_name,
-						up.display_name AS author_display_name
+						up.display_name AS author_display_name,
+						up.avatar_url AS author_avatar_url
 					FROM created_images ci
 					LEFT JOIN (
 						SELECT created_image_id, COUNT(*) AS like_count
@@ -1175,7 +1177,13 @@ export async function openDb() {
 					like_count: Number(row.like_count ?? 0),
 					comment_count: Number(row.comment_count ?? 0),
 					author_display_name: row.author_display_name ?? null,
-					author_user_name: row.author_user_name ?? null
+					author_user_name: row.author_user_name ?? null,
+					author_avatar_url: row.author_avatar_url ?? null,
+					url:
+						row.file_path ??
+						(row.filename
+							? `/api/images/created/${row.filename}`
+							: null)
 				}));
 			}
 		},

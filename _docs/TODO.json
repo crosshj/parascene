@@ -21,7 +21,7 @@
     "dependsOn": []
   },
   {
-    "name": "Landing: community creations iamges",
+    "name": "Landing: community creations images",
     "description": "Show example or featured community creations to anonymous visitors (no login).",
     "cost": 25,
     "impact": 68,
@@ -32,13 +32,6 @@
     "description": "users can tip each other",
     "cost": 55,
     "impact": 75,
-    "dependsOn": []
-  },
-  {
-    "name": "Search comments/descriptions/prompts",
-    "description": "Full-text search over creation metadata: comments, descriptions, prompts.",
-    "cost": 68,
-    "impact": 85,
     "dependsOn": []
   },
   {
