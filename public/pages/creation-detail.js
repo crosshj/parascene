@@ -494,7 +494,7 @@ async function loadCreation() {
 			const publishedAtTitle = hasPublishedDate ? formatDateTime(publishedDate) : '';
 
 			publishedLabel = html`
-				<div class="creation-detail-author-published" ${publishedAtTitle ? `title="${publishedAtTitle}"` : ''}>
+				<div class="creation-detail-author-published" ${publishedAtTitle ? `title="${publishedAtTitle}" ` : '' }>
 					Published${publishedTimeAgo ? ` ${publishedTimeAgo}` : ''}
 				</div>
 			`;
@@ -590,28 +590,32 @@ async function loadCreation() {
 				descriptionParts.push(html`<div class="creation-detail-prompt-label">Prompt</div>`);
 				descriptionParts.push(escapeHtml(promptText));
 			}
-			
+
 			const descriptionInnerHtml = descriptionParts.length ? descriptionParts.join('') : '';
 
 			// Build Server/Method/Duration line (outside collapsible)
 			let metaLineHtml = '';
 			if (serverName || methodName || durationStr) {
 				const metaItems = [];
-				if (serverName) metaItems.push(html`<span class="creation-detail-description-meta-label">Server</span> <span class="creation-detail-description-meta-value">${escapeHtml(serverName)}</span>`);
-				if (methodName) metaItems.push(html`<span class="creation-detail-description-meta-label">Method</span> <span class="creation-detail-description-meta-value">${escapeHtml(methodName)}</span>`);
-				if (durationStr) metaItems.push(html`<span class="creation-detail-description-meta-label">Duration</span> <span class="creation-detail-description-meta-value">${escapeHtml(durationStr)}</span>`);
+				if (serverName) metaItems.push(html`<span class="creation-detail-description-meta-label">Server</span> <span
+	class="creation-detail-description-meta-value">${escapeHtml(serverName)}</span>`);
+				if (methodName) metaItems.push(html`<span class="creation-detail-description-meta-label">Method</span> <span
+	class="creation-detail-description-meta-value">${escapeHtml(methodName)}</span>`);
+				if (durationStr) metaItems.push(html`<span class="creation-detail-description-meta-label">Duration</span> <span
+	class="creation-detail-description-meta-value">${escapeHtml(durationStr)}</span>`);
 				metaLineHtml = html`<div class="creation-detail-description-meta-line">${metaItems.join(' • ')}</div>`;
 			}
 
 			descriptionHtml = html`
 				<div class="creation-detail-published${historyStripHtml ? ' has-history' : ''}">
 					${descriptionInnerHtml ? html`
-						<div class="creation-detail-description-wrap" data-description-wrap>
-							<div class="creation-detail-description" data-description>${descriptionInnerHtml}</div>
-							<div class="creation-detail-description-toggle-row">
-								<button type="button" class="btn-secondary creation-detail-description-toggle" data-description-toggle hidden>View Full</button>
-							</div>
+					<div class="creation-detail-description-wrap" data-description-wrap>
+						<div class="creation-detail-description" data-description>${descriptionInnerHtml}</div>
+						<div class="creation-detail-description-toggle-row">
+							<button type="button" class="btn-secondary creation-detail-description-toggle" data-description-toggle
+								hidden>View Full</button>
 						</div>
+					</div>
 					` : ''}
 					${historyStripHtml}
 					${metaLineHtml}
@@ -622,7 +626,7 @@ async function loadCreation() {
 		// More Info button: show when modal would have content after filtering (raw args or provider error).
 		const providerError = meta?.provider_error ?? null;
 		let hasDetailsModalContent = false;
-		
+
 		// Check if args would have content after filtering
 		if (args && !isPromptOnly && isPlainObject) {
 			// Simulate the filtering logic from the modal
@@ -631,7 +635,7 @@ async function loadCreation() {
 			const hasPromptInArgs = promptTextInArgs.length > 0;
 			// Hide prompt if it's shown in description section (matches description, no description, or differs from description)
 			const shouldHidePrompt = hasPromptInArgs;
-			
+
 			const filteredArgs = { ...args };
 			if (hasHistory && Object.prototype.hasOwnProperty.call(filteredArgs, 'image_url')) {
 				delete filteredArgs.image_url;
@@ -639,11 +643,11 @@ async function loadCreation() {
 			if (shouldHidePrompt && Object.prototype.hasOwnProperty.call(filteredArgs, 'prompt')) {
 				delete filteredArgs.prompt;
 			}
-			
+
 			// Check if there are any keys left after filtering
 			hasDetailsModalContent = Object.keys(filteredArgs).length > 0;
 		}
-		
+
 		// Also show if there's a provider error
 		if (!hasDetailsModalContent && providerError && typeof providerError === 'object') {
 			hasDetailsModalContent = true;
@@ -668,6 +672,30 @@ async function loadCreation() {
 		const creatorColor = getAvatarColor(creatorUserName || creatorEmailPrefix || String(creatorId || '') || creatorName);
 		const creatorProfileHref = Number.isFinite(creatorId) && creatorId > 0 ? `/user/${creatorId}` : null;
 
+		let canShowFollowButton = false;
+		let viewerFollowsCreator = false;
+
+		if (
+			Number.isFinite(creatorId) &&
+			creatorId > 0 &&
+			currentUserId &&
+			currentUserId !== creatorId
+		) {
+			try {
+				const profileSummary = await fetchJsonWithStatusDeduped(
+					`/api/users/${creatorId}/profile`,
+					{ credentials: 'include' },
+					{ windowMs: 800 }
+				);
+				if (profileSummary.ok && profileSummary.data) {
+					viewerFollowsCreator = Boolean(profileSummary.data.viewer_follows);
+					canShowFollowButton = !viewerFollowsCreator;
+				}
+			} catch {
+				// ignore follow state load failures; follow button will be hidden
+			}
+		}
+
 		const viewerUserName = typeof currentUserProfile?.user_name === 'string' ? currentUserProfile.user_name.trim() : '';
 		const viewerDisplayName = typeof currentUserProfile?.display_name === 'string' ? currentUserProfile.display_name.trim() : '';
 		const viewerEmailPrefix = currentUser?.email
@@ -679,8 +707,9 @@ async function loadCreation() {
 		const viewerColor = getAvatarColor(viewerUserName || viewerEmailPrefix || String(currentUserId || '') || viewerName);
 
 		const authorAvatar = html`
-			<span class="creation-detail-author-icon" style="background: ${creatorColor};">
-				${creatorAvatarUrl ? html`<img class="creation-detail-author-avatar" src="${creatorAvatarUrl}" alt="">` : creatorInitial}
+			<span class="creation-detail-author-icon" style="background: xxxxxxxxxxxxxxx;">
+				${creatorAvatarUrl ? html`<img class="creation-detail-author-avatar" src="${creatorAvatarUrl}" alt="">` :
+				creatorInitial}
 			</span>
 		`;
 
@@ -701,34 +730,45 @@ async function loadCreation() {
 		`;
 
 		detailContent.innerHTML = html`
-			<div class="creation-detail-author">
-				${creatorProfileHref ? html`
-					<a class="user-link creation-detail-author-avatar-slot" href="${creatorProfileHref}" aria-label="View ${creatorName} profile">
+			<div style="display: flex; justify-content: space-between;">
+				<div class="creation-detail-author">
+					${creatorProfileHref ? html`
+					<a class="user-link creation-detail-author-avatar-slot" href="${creatorProfileHref}"
+						aria-label="View ${creatorName} profile">
 						${authorAvatar}
 					</a>
-				` : html`
+					` : html`
 					<div class="creation-detail-author-avatar-slot" aria-hidden="true">
 						${authorAvatar}
 					</div>
-				`}
-
-				<div class="creation-detail-author-id">
-					${creatorProfileHref ? html`
+					`}
+			
+					<div class="creation-detail-author-id">
+						${creatorProfileHref ? html`
 						<a class="user-link creation-detail-author-id-link" href="${creatorProfileHref}">
 							${authorIdentification}
 						</a>
-					` : authorIdentification}
+						` : authorIdentification}
+					</div>
+			
+					${publishedLabel}
 				</div>
-
-				${publishedLabel}
+				${canShowFollowButton && !viewerFollowsCreator ? html`
+				<button class="btn-secondary creation-detail-follow" type="button" data-follow-button
+					data-follow-user-id="${escapeHtml(creatorId)}">
+					Follow
+				</button>
+				` : ''}
 			</div>
-			<div class="creation-detail-title${isUntitled ? ' creation-detail-title-untitled' : ''}">${escapeHtml(displayTitle)}</div>
+			<div class="creation-detail-title${isUntitled ? ' creation-detail-title-untitled' : ''}">${escapeHtml(displayTitle)}
+			</div>
 			${descriptionHtml}
 			<div class="creation-detail-meta">
 				<div class="creation-detail-meta-left">
 					${hasDetailsModalContent ? `
 					<button class="feed-card-action" type="button" data-creation-details-link>
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+							stroke-linejoin="round" aria-hidden="true">
 							<circle cx="12" cy="12" r="10"></circle>
 							<path d="M12 8v8"></path>
 							<path d="M12 6h.01"></path>
@@ -741,15 +781,20 @@ async function loadCreation() {
 				<div class="creation-detail-meta-spacer" aria-hidden="true"></div>
 				<div class="creation-detail-meta-right">
 					${hasEngagementActions ? `
-					<a class="feed-card-action creation-detail-comments-link" href="#comments" data-comments-link aria-label="Comments">
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<a class="feed-card-action creation-detail-comments-link" href="#comments" data-comments-link
+						aria-label="Comments">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+							stroke-linejoin="round" aria-hidden="true">
 							<path d="M21 15a4 4 0 0 1-4 4H8l-5 5V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
 						</svg>
 						<span class="feed-card-action-count" data-comment-count>0</span>
 					</a>
 					<button class="feed-card-action" type="button" aria-label="Like" data-like-button>
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-							<path d="M20.8 4.6a5 5 0 0 0-7.1 0L12 6.3l-1.7-1.7a5 5 0 1 0-7.1 7.1l1.7 1.7L12 21l7.1-7.6 1.7-1.7a5 5 0 0 0 0-7.1z"></path>
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+							stroke-linejoin="round">
+							<path
+								d="M20.8 4.6a5 5 0 0 0-7.1 0L12 6.3l-1.7-1.7a5 5 0 1 0-7.1 7.1l1.7 1.7L12 21l7.1-7.6 1.7-1.7a5 5 0 0 0 0-7.1z">
+							</path>
 						</svg>
 						<span class="feed-card-action-count" data-like-count>${likeCount}</span>
 					</button>
@@ -757,7 +802,8 @@ async function loadCreation() {
 					${'' /*
 					Creation detail kebab menu (disabled for now)
 					<div class="creation-detail-more">
-						<button class="feed-card-action feed-card-action-more" type="button" aria-label="More" data-creation-more-button>
+						<button class="feed-card-action feed-card-action-more" type="button" aria-label="More"
+							data-creation-more-button>
 							<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
 								<circle cx="12" cy="5" r="1.6"></circle>
 								<circle cx="12" cy="12" r="1.6"></circle>
@@ -765,31 +811,33 @@ async function loadCreation() {
 							</svg>
 						</button>
 						<div class="feed-card-menu" data-creation-menu style="display: none;">
-							${hasDetails ? `<button class="feed-card-menu-item" type="button" data-creation-menu-info>More Info</button>` : ``}
+							${hasDetails ? `<button class="feed-card-menu-item" type="button" data-creation-menu-info>More
+								Info</button>` : ``}
 							<button class="feed-card-menu-item" type="button" data-creation-menu-copy>Copy link</button>
 						</div>
 					</div>
 					*/ }
 				</div>
 			</div>
-
-			${isPublished && !isFailed ? `
+			
+			${isPublished && !isFailed ? html`
 			<div class="comment-input" data-comment-input>
 				<div class="comment-avatar" style="background: ${viewerColor};">
 					${viewerAvatarUrl ? `<img class="comment-avatar-img" src="${viewerAvatarUrl}" alt="">` : viewerInitial}
 				</div>
 				<div class="comment-input-body">
-					<textarea class="comment-textarea" rows="1" placeholder="What do you like about this creation?" data-comment-textarea></textarea>
+					<textarea class="comment-textarea" rows="1" placeholder="What do you like about this creation?"
+						data-comment-textarea></textarea>
 					<div class="comment-submit-row" data-comment-submit-row style="display: none;">
 						<button class="btn-primary comment-submit-btn" type="button" data-comment-submit>Post</button>
 					</div>
 				</div>
 			</div>
-
+			
 			<div class="comments-toolbar">
 				<div class="comments-sort">
 					<label class="comments-sort-label" for="comments-sort">Sort:</label>
-
+			
 					<select class="comments-sort-select" id="comments-sort" data-comments-sort>
 						<option value="asc">Oldest</option>
 						<option value="desc">Most recent</option>
@@ -798,7 +846,9 @@ async function loadCreation() {
 			</div>
 			<div id="comments" data-comments-anchor></div>
 			<div class="comment-list" data-comment-list>
-				<div class="route-empty route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
+				<div class="route-empty route-loading">
+					<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
+				</div>
 			</div>
 			` : ''}
 		`;
@@ -886,6 +936,41 @@ async function loadCreation() {
 						description: descriptionText
 					}
 				}));
+			});
+		}
+
+		const followButton = detailContent.querySelector('[data-follow-button]');
+		if (followButton instanceof HTMLButtonElement) {
+			let busy = false;
+
+			followButton.addEventListener('click', async () => {
+				if (busy) return;
+
+				const targetIdRaw = followButton.getAttribute('data-follow-user-id') || '';
+				const targetId = Number.parseInt(targetIdRaw, 10);
+				if (!Number.isFinite(targetId) || targetId <= 0) return;
+
+				busy = true;
+				followButton.disabled = true;
+
+				const result = await fetchJsonWithStatusDeduped(
+					`/api/users/${targetId}/follow`,
+					{
+						method: 'POST',
+						credentials: 'include'
+					},
+					{ windowMs: 0 }
+				).catch(() => ({ ok: false, status: 0, data: null }));
+
+				if (!result.ok) {
+					busy = false;
+					followButton.disabled = false;
+					return;
+				}
+
+				// Once the viewer follows the creator, hide the button to match the
+				// "only when not already following" requirement.
+				followButton.style.display = 'none';
 			});
 		}
 

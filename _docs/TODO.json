@@ -1,12 +1,5 @@
 [
   {
-    "name": "Make follow easier",
-    "description": "General UX pass to make following creators easier (visibility, one-click where appropriate).",
-    "cost": 10,
-    "impact": 72,
-    "dependsOn": []
-  },
-  {
     "name": "Abuse protection (anon generate)",
     "description": "Rate limiting and abuse controls for anonymous/try generation only (e.g. by IP/cookie, caps).",
     "cost": 15,
