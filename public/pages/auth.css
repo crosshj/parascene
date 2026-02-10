@@ -9,7 +9,7 @@ body {
 
 .auth-logo {
 	display: flex;
-	justify-content: flex-start;
+	justify-content: center;
 	margin-bottom: 24px;
 	margin-top: -90px;
 }
@@ -20,21 +20,17 @@ body {
 	cursor: pointer;
 }
 
-.parascene-logo {
-	display: inline-block;
+.auth-logo .logo {
+	display: block;
+}
+
+.auth-logo .logo-text {
 	font-family: var(--font-family);
-	font-size: 2rem;
+	font-size: 36px;
 	font-weight: 700;
 	font-style: italic;
+	fill: var(--text);
 	letter-spacing: -0.02em;
-}
-
-.parascene-logo .logo-dark {
-	color: #2b303a;
-}
-
-.parascene-logo .logo-muted {
-	color: #6b7484;
 }
 
 main {
