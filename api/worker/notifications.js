@@ -101,7 +101,7 @@ async function runNotificationsCron({ queries }) {
 			const to = getEffectiveRecipient(settings, email);
 			const recipientName = user?.display_name || user?.user_name || email.split("@")[0] || "there";
 			const feedUrl = getBaseAppUrl();
-			
+
 			// Get unread notifications to filter digest to only show creations with unread notifications
 			const unreadNotifications = await (queries.selectNotificationsForUser?.all(userId, user?.role) ?? []);
 			const unreadCreationIds = new Set();
@@ -117,10 +117,10 @@ async function runNotificationsCron({ queries }) {
 					}
 				}
 			}
-			
+
 			const ownerRows = await (queries.selectDigestActivityByOwnerSince?.all(userId, sinceIso) ?? []);
 			const commenterRows = await (queries.selectDigestActivityByCommenterSince?.all(userId, sinceIso) ?? []);
-			
+
 			// Filter to only include creations with unread notifications
 			const filteredOwnerRows = ownerRows.filter((r) => {
 				const creationId = Number(r?.created_image_id);
@@ -130,7 +130,7 @@ async function runNotificationsCron({ queries }) {
 				const creationId = Number(r?.created_image_id);
 				return Number.isFinite(creationId) && unreadCreationIds.has(creationId);
 			});
-			
+
 			const activityItems = filteredOwnerRows.map((r) => ({
 				title: r?.title && String(r.title).trim() ? String(r.title).trim() : "Untitled",
 				comment_count: Number(r?.comment_count ?? 0)
@@ -189,7 +189,7 @@ async function runNotificationsCron({ queries }) {
 					await queries.upsertUserEmailCampaignStateWelcome.run(userId, sentAt);
 				}
 				welcomeSent++;
-			} catch (err) {}
+			} catch (err) { }
 		}
 	}
 
@@ -218,7 +218,7 @@ async function runNotificationsCron({ queries }) {
 					await queries.upsertUserEmailCampaignStateFirstCreationNudge.run(userId, sentAt);
 				}
 				firstCreationNudgeSent++;
-			} catch (err) {}
+			} catch (err) { }
 		}
 	}
 
@@ -244,7 +244,7 @@ async function runNotificationsCron({ queries }) {
 				}
 				await markPreviousStepsCompleted(queries, userId, sentAt, "reengagement");
 				reengagementSent++;
-			} catch (err) {}
+			} catch (err) { }
 		}
 	}
 
@@ -278,7 +278,7 @@ async function runNotificationsCron({ queries }) {
 				}
 				await markPreviousStepsCompleted(queries, userId, sentAt, "creation_highlight");
 				creationHighlightSent++;
-			} catch (err) {}
+			} catch (err) { }
 		}
 	}
 
@@ -294,6 +294,12 @@ async function runNotificationsCron({ queries }) {
 		reengagementSent,
 		creationHighlightSent
 	};
+}
+
+// Named export to make the core cron logic directly testable without
+// needing to spin up an HTTP server or real QStash/DB wiring.
+export async function runNotificationsCronForTests(options) {
+	return runNotificationsCron(options);
 }
 
 export default async function handler(req, res) {
