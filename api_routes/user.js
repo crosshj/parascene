@@ -1059,6 +1059,11 @@ export default function createProfileRoutes({ queries }) {
 			const toUserId = Number(req.body?.toUserId);
 			const rawAmount = Number(req.body?.amount);
 			const amount = Math.round(rawAmount * 10) / 10;
+			const rawCreatedImageId = req.body?.createdImageId;
+			const createdImageId = rawCreatedImageId != null ? Number(rawCreatedImageId) : null;
+			const rawMessage = req.body?.message;
+			const message =
+				typeof rawMessage === "string" ? rawMessage.trim() : "";
 
 			if (!Number.isFinite(toUserId) || toUserId <= 0) {
 				return res.status(400).json({ error: "Invalid recipient user id" });
@@ -1068,6 +1073,24 @@ export default function createProfileRoutes({ queries }) {
 			}
 			if (toUserId === fromUserId) {
 				return res.status(400).json({ error: "Cannot tip yourself" });
+			}
+
+			if (message && message.length > 500) {
+				return res.status(400).json({ error: "Message is too long" });
+			}
+
+			let creation = null;
+			if (createdImageId !== null) {
+				if (!Number.isFinite(createdImageId) || createdImageId <= 0) {
+					return res.status(400).json({ error: "Invalid creation id" });
+				}
+				if (!queries.selectCreatedImageByIdAnyUser?.get) {
+					return res.status(500).json({ error: "Creation lookup not available" });
+				}
+				creation = await queries.selectCreatedImageByIdAnyUser.get(createdImageId);
+				if (!creation) {
+					return res.status(404).json({ error: "Creation not found" });
+				}
 			}
 
 			const sender = await queries.selectUserById.get(fromUserId);
@@ -1100,13 +1123,36 @@ export default function createProfileRoutes({ queries }) {
 				return res.status(500).json({ error: "Internal server error" });
 			}
 
-			// Best-effort notification (no link, no new tables)
+			// Log tip activity (best-effort; do not fail transfer on error)
+			try {
+				if (queries.insertTipActivity?.run) {
+					const source = createdImageId != null ? "creation" : "admin";
+					const meta = null;
+					await queries.insertTipActivity.run(
+						fromUserId,
+						toUserId,
+						createdImageId,
+						amount,
+						message || null,
+						source,
+						meta
+					);
+				}
+			} catch {
+				// ignore tip_activity failures
+			}
+
+			// Best-effort notification
 			try {
 				if (queries.insertNotification?.run) {
 					const tipperName = getTipperDisplayName(sender);
 					const title = "You received a tip";
-					const message = `${tipperName} tipped you ${amount.toFixed(1)} credits.`;
-					await queries.insertNotification.run(toUserId, null, title, message, null);
+					const notifMessage = `${tipperName} tipped you ${amount.toFixed(1)} credits.`;
+					const link =
+						createdImageId != null
+							? `/creations/${encodeURIComponent(String(createdImageId))}`
+							: null;
+					await queries.insertNotification.run(toUserId, null, title, notifMessage, link);
 				}
 			} catch (error) {
 				// console.error("Failed to insert tip notification:", error);

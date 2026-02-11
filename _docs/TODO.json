@@ -40,14 +40,6 @@
     "starred": false
   },
   {
-    "name": "User tips",
-    "description": "users can tip each other",
-    "cost": 55,
-    "impact": 75,
-    "dependsOn": [],
-    "starred": true
-  },
-  {
     "name": "Expose Stats",
     "description": "Todo list, User Activity, Creation Relationships, etc",
     "cost": 57,

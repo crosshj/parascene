@@ -225,9 +225,23 @@ export async function openDb() {
 			userId
 		);
 
+		// Tip activity linked to the user's created images
+		changes.tips_on_user_images = run(
+			`DELETE FROM tip_activity
+       WHERE created_image_id IN (SELECT id FROM created_images WHERE user_id = ?)`,
+			userId
+		);
+
 		// Clean up user's interactions on other content
 		changes.likes_by_user = run(`DELETE FROM likes_created_image WHERE user_id = ?`, userId);
 		changes.comments_by_user = run(`DELETE FROM comments_created_image WHERE user_id = ?`, userId);
+
+		// Tips sent or received by this user
+		changes.tips_by_user = run(
+			`DELETE FROM tip_activity WHERE from_user_id = ? OR to_user_id = ?`,
+			userId,
+			userId
+		);
 
 		// User-owned content
 		changes.created_images = run(`DELETE FROM created_images WHERE user_id = ?`, userId);
@@ -2247,6 +2261,79 @@ export async function openDb() {
 			run: async (fromUserId, toUserId, amount) => {
 				const result = transferCreditsTxn(Number(fromUserId), Number(toUserId), Number(amount));
 				return Promise.resolve(result);
+			}
+		},
+		insertTipActivity: {
+			run: async (fromUserId, toUserId, createdImageId, amount, message, source, meta) => {
+				const toJsonText = (value) => {
+					if (value == null) return null;
+					if (typeof value === "string") return value;
+					try {
+						return JSON.stringify(value);
+					} catch {
+						return null;
+					}
+				};
+				const stmt = db.prepare(
+					`INSERT INTO tip_activity (
+            from_user_id,
+            to_user_id,
+            created_image_id,
+            amount,
+            message,
+            source,
+            meta,
+            created_at,
+            updated_at
+          ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now')
+          )`
+				);
+				const result = stmt.run(
+					fromUserId,
+					toUserId,
+					createdImageId || null,
+					amount,
+					message ?? null,
+					source ?? null,
+					toJsonText(meta)
+				);
+				return Promise.resolve({
+					insertId: result.lastInsertRowid,
+					lastInsertRowid: result.lastInsertRowid,
+					changes: result.changes
+				});
+			}
+		},
+		selectCreatedImageTips: {
+			all: async (createdImageId, options = {}) => {
+				const order = String(options?.order || "asc").toLowerCase() === "desc" ? "DESC" : "ASC";
+				const limitRaw = Number.parseInt(String(options?.limit ?? "50"), 10);
+				const offsetRaw = Number.parseInt(String(options?.offset ?? "0"), 10);
+				const limit = Number.isFinite(limitRaw) ? Math.min(200, Math.max(1, limitRaw)) : 50;
+				const offset = Number.isFinite(offsetRaw) ? Math.max(0, offsetRaw) : 0;
+
+				const stmt = db.prepare(
+					`SELECT
+            t.id,
+            t.from_user_id AS user_id,
+            t.created_image_id,
+            t.amount,
+            t.message,
+            t.source,
+            t.meta,
+            t.created_at,
+            t.updated_at,
+            up.user_name,
+            up.display_name,
+            up.avatar_url
+           FROM tip_activity t
+           LEFT JOIN user_profiles up ON up.user_id = t.from_user_id
+           WHERE t.created_image_id = ?
+           ORDER BY t.created_at ${order}
+           LIMIT ? OFFSET ?`
+				);
+				return Promise.resolve(stmt.all(createdImageId, limit, offset));
 			}
 		},
 		deleteUserAndCleanup: {

@@ -10,12 +10,12 @@ function toQuery(params) {
 	return s ? `?${s}` : '';
 }
 
-export function buildCreatedImageCommentsUrl(createdImageId, { order, limit, offset } = {}) {
-	return `/api/created-images/${encodeURIComponent(String(createdImageId))}/comments${toQuery({ order, limit, offset })}`;
+export function buildCreatedImageActivityUrl(createdImageId, { order, limit, offset } = {}) {
+	return `/api/created-images/${encodeURIComponent(String(createdImageId))}/activity${toQuery({ order, limit, offset })}`;
 }
 
-export async function fetchCreatedImageComments(createdImageId, { order = 'asc', limit = 50, offset = 0 } = {}) {
-	const url = buildCreatedImageCommentsUrl(createdImageId, { order, limit, offset });
+export async function fetchCreatedImageActivity(createdImageId, { order = 'asc', limit = 50, offset = 0 } = {}) {
+	const url = buildCreatedImageActivityUrl(createdImageId, { order, limit, offset });
 	return fetchJsonWithStatusDeduped(url, { credentials: 'include' }, { windowMs: 500 });
 }
 

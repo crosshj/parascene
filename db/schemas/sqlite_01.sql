@@ -203,6 +203,29 @@ CREATE TABLE IF NOT EXISTS user_credits (
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
+-- Tip activity: logs credits tipped between users (optionally tied to a created image)
+CREATE TABLE IF NOT EXISTS tip_activity (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  from_user_id INTEGER NOT NULL,
+  to_user_id INTEGER NOT NULL,
+  created_image_id INTEGER,
+  amount REAL NOT NULL,
+  message TEXT,
+  source TEXT,
+  meta TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (from_user_id) REFERENCES users(id),
+  FOREIGN KEY (to_user_id) REFERENCES users(id),
+  FOREIGN KEY (created_image_id) REFERENCES created_images(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tip_activity_created_image_id_created_at
+  ON tip_activity(created_image_id, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_tip_activity_to_user_id_created_at
+  ON tip_activity(to_user_id, created_at);
+
 CREATE TABLE IF NOT EXISTS likes_created_image (
   user_id INTEGER NOT NULL,
   created_image_id INTEGER NOT NULL,

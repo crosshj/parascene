@@ -89,7 +89,7 @@ export default function createCommentsRoutes({ queries }) {
 		return res.json({ comments });
 	});
 
-	router.get("/api/created-images/:id/comments", async (req, res) => {
+	router.get("/api/created-images/:id/activity", async (req, res) => {
 		const user = await requireUser(req, res, queries);
 		if (!user) return;
 
@@ -120,7 +120,42 @@ export default function createCommentsRoutes({ queries }) {
 			// ignore count failures
 		}
 
-		return res.json({ comments, comment_count: commentCount });
+		let tips = [];
+		if (queries.selectCreatedImageTips?.all && image) {
+			try {
+				const isCreator = Number(image.user_id) === Number(user.id);
+				const isAdmin = String(user.role) === "admin";
+				if (isCreator || isAdmin) {
+					tips = await queries.selectCreatedImageTips.all(imageId, { order, limit: 200, offset: 0 }) ?? [];
+				} else {
+					// Only include tips where viewer is the tipper.
+					const allTips = await queries.selectCreatedImageTips.all(imageId, { order, limit: 200, offset: 0 }) ?? [];
+					tips = allTips.filter((t) => Number(t.user_id) === Number(user.id));
+				}
+			} catch {
+				tips = [];
+			}
+		}
+
+		const items = [
+			...comments.map((c) => ({
+				type: "comment",
+				...c
+			})),
+			...tips.map((t) => ({
+				type: "tip",
+				...t
+			}))
+		];
+
+		items.sort((a, b) => {
+			const aTime = a.created_at ?? a.createdAt ?? "";
+			const bTime = b.created_at ?? b.createdAt ?? "";
+			const cmp = String(aTime).localeCompare(String(bTime));
+			return order === "desc" ? -cmp : cmp;
+		});
+
+		return res.json({ items, comment_count: commentCount });
 	});
 
 	router.post("/api/created-images/:id/comments", async (req, res) => {

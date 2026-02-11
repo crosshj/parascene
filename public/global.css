@@ -2578,6 +2578,12 @@ app-route-feed {
 	align-items: start;
 }
 
+.comment-item.comment-item-tip {
+	background: transparent;
+	border-radius: 0;
+	padding: 0;
+}
+
 .comment-item+.comment-item {
 	padding-top: 12px;
 	border-top: 1px solid var(--border);
@@ -2635,6 +2641,48 @@ app-route-feed {
 .comment-text {
 	margin-top: 4px;
 	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.comment-tip-text {
+	margin-top: 4px;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	color: var(--text-muted);
+	font-size: 0.9rem;
+}
+
+.comment-tip-row {
+	display: grid;
+	grid-template-columns: auto auto 1fr;
+	column-gap: 6px;
+	align-items: flex-start;
+}
+
+.comment-tip-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.35em;
+	height: 1.35em;
+	flex-shrink: 0;
+	opacity: 0.7;
+}
+
+.comment-tip-icon .comment-tip-icon-svg,
+.comment-tip-icon svg {
+	width: 100%;
+	height: 100%;
+}
+
+.comment-tip-label {
+	font-weight: 500;
+	color: var(--text-muted);
+}
+
+.comment-tip-value {
+	color: var(--text);
 	word-break: break-word;
 }
 
@@ -3375,6 +3423,7 @@ body.modal-open {
 [data-server-modal],
 [data-anon-detail-modal],
 [data-image-picker-modal],
+[data-tip-creator-modal],
 #todo-modal,
 #todo-readonly-modal,
 #server-modal {
@@ -3402,6 +3451,7 @@ body.modal-open {
 [data-server-modal].open,
 [data-anon-detail-modal].open,
 [data-image-picker-modal].open,
+[data-tip-creator-modal].open,
 #todo-modal.open,
 #todo-readonly-modal.open,
 #server-modal.open {
@@ -3438,6 +3488,7 @@ body.modal-open {
 [data-server-modal].open .publish-modal,
 [data-anon-detail-modal].open .publish-modal,
 [data-image-picker-modal].open .image-picker-modal,
+[data-tip-creator-modal].open .publish-modal,
 #todo-modal.open .publish-modal,
 #todo-readonly-modal.open .publish-modal,
 #server-modal.open .publish-modal {
@@ -3679,6 +3730,100 @@ body.modal-open {
 	padding: 18px 20px;
 	border-top: 1px solid var(--border);
 	gap: 12px;
+}
+
+/* Tip Creator modal (creation detail) */
+.tip-creator-modal {
+	max-width: 400px;
+}
+
+.tip-creator-recipient {
+	margin: 0 0 16px;
+	font-size: 0.95rem;
+	color: var(--text-muted);
+}
+
+.tip-creator-label {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.tip-creator-label label {
+	font-size: 0.9rem;
+	font-weight: 500;
+	color: var(--text);
+}
+
+.tip-creator-label input {
+	width: 100%;
+	padding: 10px 12px;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: var(--input-bg);
+	color: var(--text);
+	font-size: 0.95rem;
+}
+
+.tip-creator-label input:focus {
+	outline: none;
+	border-color: var(--accent);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.tip-creator-message {
+	width: 100%;
+	min-height: 60px;
+	padding: 8px 10px;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: var(--input-bg);
+	color: var(--text);
+	font-size: 0.95rem;
+	resize: vertical;
+}
+
+.tip-creator-message:focus {
+	outline: none;
+	border-color: var(--accent);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.tip-creator-balance-hint {
+	margin: 4px 0 0;
+	font-size: 0.85rem;
+	color: var(--text-muted);
+	min-height: 1.2em;
+}
+
+.tip-creator-warning {
+	margin: 8px 0 0;
+	font-size: 0.85rem;
+	color: var(--warning-text, #f7c948);
+}
+
+.tip-creator-submit {
+	min-width: 96px;
+}
+
+.tip-creator-submit.is-loading .tip-creator-submit-label {
+	visibility: hidden;
+}
+
+.tip-creator-submit.is-loading .tip-creator-spinner {
+	display: inline-block;
+	width: 1em;
+	height: 1em;
+	border: 2px solid var(--border);
+	border-top-color: currentColor;
+	border-radius: 50%;
+	animation: spin 0.8s linear infinite;
+	vertical-align: middle;
+	margin-left: -1em;
+}
+
+.tip-creator-submit .tip-creator-spinner {
+	display: none;
 }
 
 /* Modal Loading Overlay */

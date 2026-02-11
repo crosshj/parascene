@@ -2568,6 +2568,67 @@ export function openDb() {
 				});
 			}
 		},
+		selectCreatedImageTips: {
+			all: async (createdImageId, options = {}) => {
+				const order = String(options?.order || "asc").toLowerCase() === "desc" ? "desc" : "asc";
+				const limitRaw = Number.parseInt(String(options?.limit ?? "50"), 10);
+				const offsetRaw = Number.parseInt(String(options?.offset ?? "0"), 10);
+				const limit = Number.isFinite(limitRaw) ? Math.min(200, Math.max(1, limitRaw)) : 50;
+				const offset = Number.isFinite(offsetRaw) ? Math.max(0, offsetRaw) : 0;
+
+				let q = serviceClient
+					.from(prefixedTable("tip_activity"))
+					.select("id, from_user_id, created_image_id, amount, message, source, meta, created_at, updated_at")
+					.eq("created_image_id", createdImageId)
+					.order("created_at", { ascending: order === "asc" });
+
+				q = q.range(offset, offset + limit - 1);
+
+				const { data, error } = await q;
+				if (error) throw error;
+				const tips = data ?? [];
+
+				const userIds = Array.from(new Set(
+					tips
+						.map((row) => row?.from_user_id)
+						.filter((id) => id !== null && id !== undefined)
+						.map((id) => Number(id))
+						.filter((id) => Number.isFinite(id) && id > 0)
+				));
+
+				let profileByUserId = new Map();
+				if (userIds.length > 0) {
+					const { data: profileRows, error: profileError } = await serviceClient
+						.from(prefixedTable("user_profiles"))
+						.select("user_id, user_name, display_name, avatar_url")
+						.in("user_id", userIds);
+					if (profileError) throw profileError;
+					profileByUserId = new Map(
+						(profileRows ?? []).map((row) => [String(row.user_id), row])
+					);
+				}
+
+				return tips.map((row) => {
+					const profile = row?.from_user_id !== null && row?.from_user_id !== undefined
+						? profileByUserId.get(String(row.from_user_id)) ?? null
+						: null;
+					return {
+						id: row.id,
+						user_id: row.from_user_id,
+						created_image_id: row.created_image_id,
+						amount: row.amount,
+						message: row.message,
+						source: row.source,
+						meta: row.meta,
+						created_at: row.created_at,
+						updated_at: row.updated_at,
+						user_name: profile?.user_name ?? null,
+						display_name: profile?.display_name ?? null,
+						avatar_url: profile?.avatar_url ?? null
+					};
+				});
+			}
+		},
 		selectLatestCreatedImageComments: {
 			all: async (options = {}) => {
 				const limitRaw = Number.parseInt(String(options?.limit ?? "10"), 10);
@@ -2912,6 +2973,30 @@ export function openDb() {
 				return { changes: data?.length ?? 0 };
 			}
 		},
+		insertTipActivity: {
+			run: async (fromUserId, toUserId, createdImageId, amount, message, source, meta) => {
+				const payload = {
+					from_user_id: fromUserId,
+					to_user_id: toUserId,
+					created_image_id: createdImageId || null,
+					amount,
+					message: message ?? null,
+					source: source ?? null,
+					meta: meta ?? null
+				};
+				const { data, error } = await serviceClient
+					.from(prefixedTable("tip_activity"))
+					.insert(payload)
+					.select("id")
+					.single();
+				if (error) throw error;
+				return {
+					insertId: data.id,
+					lastInsertRowid: data.id,
+					changes: 1
+				};
+			}
+		},
 		claimDailyCredits: {
 			run: async (userId, amount = 10) => {
 				// Use serviceClient to bypass RLS for backend operations
@@ -3067,6 +3152,13 @@ export function openDb() {
 					values: imageIds
 				});
 
+				// Tip activity linked to user's created images
+				changes.tips_on_user_images = await deleteByIn({
+					table: "tip_activity",
+					column: "created_image_id",
+					values: imageIds
+				});
+
 				// User's own interactions on other content
 				changes.likes_by_user = await deleteByEq({
 					table: "likes_created_image",
@@ -3077,6 +3169,12 @@ export function openDb() {
 					table: "comments_created_image",
 					column: "user_id",
 					value: userId
+				});
+
+				// Tips sent or received by this user
+				changes.tips_by_user = await deleteByOr({
+					table: "tip_activity",
+					or: `from_user_id.eq.${userId},to_user_id.eq.${userId}`
 				});
 
 				// User-owned content

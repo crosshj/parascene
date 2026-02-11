@@ -2,15 +2,18 @@ import { formatDateTime, formatRelativeTime } from '/shared/datetime.js';
 import { enableLikeButtons, getCreationLikeCount, initLikeButton } from '/shared/likes.js';
 import { fetchJsonWithStatusDeduped } from '/shared/api.js';
 import { getAvatarColor } from '/shared/avatar.js';
-import { fetchCreatedImageComments, postCreatedImageComment } from '/shared/comments.js';
+import { fetchCreatedImageActivity, postCreatedImageComment } from '/shared/comments.js';
 import { processUserText, hydrateUserTextLinks } from '/shared/urls.js';
 import { attachAutoGrowTextarea } from '/shared/autogrow.js';
 import { textsSameWithinTolerance } from '/shared/textCompare.js';
 import '../components/modals/publish.js';
 import '../components/modals/creation-details.js';
 import '../components/modals/share.js';
+import { creditIcon } from '../icons/svg-strings.js';
+import '../components/modals/tip-creator.js';
 
 const html = String.raw;
+const TIP_MIN_VISIBLE_BALANCE = 10.0;
 
 async function copyTextToClipboard(text) {
 	try {
@@ -777,6 +780,10 @@ async function loadCreation() {
 					</button>
 					` : ``}
 					${copyLinkButtonHtml}
+					<button class="feed-card-action" type="button" data-tip-creator-button aria-label="Tip Creator">
+						${creditIcon('')}
+						<span>Tip Creator</span>
+					</button>
 				</div>
 				<div class="creation-detail-meta-spacer" aria-hidden="true"></div>
 				<div class="creation-detail-meta-right">
@@ -926,6 +933,29 @@ async function loadCreation() {
 			});
 		}
 
+		const tipCreatorBtn = detailContent.querySelector('button[data-tip-creator-button]');
+		if (tipCreatorBtn instanceof HTMLButtonElement) {
+			// Hide tip button for private shares, when viewer is the creator, or when credits are below threshold.
+			const currentUserCredits = typeof currentUser?.credits === 'number' ? currentUser.credits : null;
+			if (
+				shareMountedPrivate ||
+				currentUserId === creatorId ||
+				(currentUserCredits !== null && currentUserCredits < TIP_MIN_VISIBLE_BALANCE)
+			) {
+				tipCreatorBtn.style.display = 'none';
+			}
+			tipCreatorBtn.addEventListener('click', () => {
+				document.dispatchEvent(new CustomEvent('open-tip-creator-modal', {
+					detail: {
+						userId: creatorId,
+						userName: creatorHandle || creatorName,
+						createdImageId: creationId,
+						viewerBalance: typeof currentUser?.credits === 'number' ? currentUser.credits : null
+					}
+				}));
+			});
+		}
+
 		const detailsBtn = detailContent.querySelector('[data-creation-details-link]');
 		if (detailsBtn && meta && hasDetailsModalContent) {
 			detailsBtn.addEventListener('click', () => {
@@ -1047,9 +1077,10 @@ async function loadCreation() {
 		}
 
 		let commentsDidInitialHashScroll = false;
+
 		const commentsState = {
 			order: 'asc',
-			comments: [],
+			activity: [],
 			commentCount: 0
 		};
 
@@ -1070,7 +1101,7 @@ async function loadCreation() {
 		function renderComments() {
 			if (!commentListEl) return;
 
-			const list = Array.isArray(commentsState.comments) ? commentsState.comments : [];
+			const list = Array.isArray(commentsState.activity) ? commentsState.activity : [];
 			if (list.length === 0) {
 				if (commentsToolbarEl instanceof HTMLElement) {
 					commentsToolbarEl.style.display = 'none';
@@ -1087,7 +1118,73 @@ async function loadCreation() {
 			if (commentsToolbarEl instanceof HTMLElement) {
 				commentsToolbarEl.style.display = '';
 			}
-			commentListEl.innerHTML = list.map((c) => {
+			commentListEl.innerHTML = list.map((item) => {
+				if (item?.type === 'tip') {
+					const t = item;
+					const userName = typeof t?.user_name === 'string' ? t.user_name.trim() : '';
+					const displayName = typeof t?.display_name === 'string' ? t.display_name.trim() : '';
+					const fallbackName = userName ? userName : 'User';
+					const name = displayName || fallbackName;
+					const handle = userName ? `@${userName}` : '';
+					const avatarUrl = typeof t?.avatar_url === 'string' ? t.avatar_url.trim() : '';
+					const tipperId = Number(t?.user_id ?? 0);
+					const profileHref = Number.isFinite(tipperId) && tipperId > 0 ? `/user/${tipperId}` : null;
+					const seed = userName || String(t?.user_id ?? '') || name;
+					const color = getAvatarColor(seed);
+					const initial = name.charAt(0).toUpperCase() || '?';
+					const date = t?.created_at ? new Date(t.created_at) : null;
+					const timeAgo = date ? (formatRelativeTime(date) || '') : '';
+					const timeTitle = date ? formatDateTime(date) : '';
+					const amount = Number(t?.amount ?? 0);
+					const safeMessage = t?.message ? processUserText(String(t.message)) : '';
+					const amountLabel = `${amount.toFixed(1)} credits`;
+
+					return `
+						<div class="comment-item comment-item-tip">
+							${profileHref ? `
+								<a class="user-link user-avatar-link comment-avatar" href="${profileHref}" aria-label="View ${escapeHtml(name)} profile" style="background: ${color};">
+									${avatarUrl ? `<img class="comment-avatar-img" src="${avatarUrl}" alt="">` : initial}
+								</a>
+							` : `
+								<div class="comment-avatar" style="background: ${color};">
+									${avatarUrl ? `<img class="comment-avatar-img" src="${avatarUrl}" alt="">` : initial}
+								</div>
+							`}
+							<div class="comment-body">
+								<div class="comment-top">
+									${profileHref ? `
+										<a class="user-link comment-top-left comment-author-link" href="${profileHref}">
+											<span class="comment-author-name">${escapeHtml(name)}</span>
+											${handle ? `<span class="comment-author-handle">${escapeHtml(handle)}</span>` : ''}
+										</a>
+									` : `
+										<div class="comment-top-left">
+											<span class="comment-author-name">${escapeHtml(name)}</span>
+											${handle ? `<span class="comment-author-handle">${escapeHtml(handle)}</span>` : ''}
+										</div>
+									`}
+								</div>
+								<div class="comment-text comment-tip-text">
+									<div class="comment-tip-row">
+										<span class="comment-tip-icon">${creditIcon('comment-tip-icon-svg')}</span>
+										<span class="comment-tip-label">AMT:</span>
+										<span class="comment-tip-value">${escapeHtml(amountLabel)}</span>
+									</div>
+									${safeMessage ? `
+									<div class="comment-tip-row">
+										<span class="comment-tip-icon">${creditIcon('comment-tip-icon-svg')}</span>
+										<span class="comment-tip-label">MSG:</span>
+										<span class="comment-tip-value">${safeMessage}</span>
+									</div>
+									` : ''}
+								</div>
+								${timeAgo ? `<div class="comment-time-row"><span class="comment-time" title="${escapeHtml(timeTitle)}">${escapeHtml(timeAgo)}</span></div>` : ''}
+							</div>
+						</div>
+					`;
+				}
+
+				const c = item;
 				const userName = typeof c?.user_name === 'string' ? c.user_name.trim() : '';
 				const displayName = typeof c?.display_name === 'string' ? c.display_name.trim() : '';
 				const fallbackName = userName ? userName : 'User';
@@ -1145,7 +1242,7 @@ async function loadCreation() {
 			commentListEl.innerHTML = '<div class="route-empty route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>';
 			if (commentsToolbarEl instanceof HTMLElement) commentsToolbarEl.style.display = 'none';
 
-			const res = await fetchCreatedImageComments(creationId, { order: commentsState.order, limit: 50, offset: 0 })
+			const res = await fetchCreatedImageActivity(creationId, { order: commentsState.order, limit: 50, offset: 0 })
 				.catch(() => ({ ok: false, status: 0, data: null }));
 
 			if (!res.ok) {
@@ -1158,9 +1255,9 @@ async function loadCreation() {
 				return;
 			}
 
-			const comments = Array.isArray(res.data?.comments) ? res.data.comments : [];
-			const commentCount = Number(res.data?.comment_count ?? comments.length);
-			commentsState.comments = comments;
+			const items = Array.isArray(res.data?.items) ? res.data.items : [];
+			const commentCount = Number(res.data?.comment_count ?? items.length);
+			commentsState.activity = items;
 			setCommentCount(commentCount);
 			renderComments();
 
@@ -1242,7 +1339,7 @@ async function loadCreation() {
 			actionsEl.classList.add('is-ready');
 		}
 	} catch (error) {
-		// console.error("Error loading creation detail:", error);
+		console.error("Error loading creation detail:", error);
 		detailContent.innerHTML = html`
 			<div class="route-empty">
 				<div class="route-empty-title">Unable to load creation</div>

@@ -25,6 +25,7 @@ const sessions = [];
 const user_credits = [];
 const likes_created_image = [];
 const comments_created_image = [];
+const tip_activity = [];
 const email_sends = [];
 const email_user_campaign_state = [];
 const email_link_clicks = [];
@@ -79,6 +80,7 @@ const TABLE_TIMESTAMP_FIELDS = {
 	email_sends: ["created_at"],
 	email_user_campaign_state: ["updated_at"],
 	email_link_clicks: ["clicked_at"],
+	tip_activity: ["created_at", "updated_at"],
 	feed_items: ["created_at"],
 	explore_items: ["created_at"],
 	creations: ["created_at"],
@@ -1712,6 +1714,67 @@ export function openDb() {
 				return { fromBalance: fromRow.balance, toBalance: toRow.balance };
 			}
 		},
+		insertTipActivity: {
+			run: async (fromUserId, toUserId, createdImageId, amount, message, source, meta) => {
+				const id =
+					tip_activity.length > 0
+						? Math.max(...tip_activity.map((t) => t.id || 0)) + 1
+						: 1;
+				const now = new Date().toISOString();
+				const row = {
+					id,
+					from_user_id: Number(fromUserId),
+					to_user_id: Number(toUserId),
+					created_image_id: createdImageId != null ? Number(createdImageId) : null,
+					amount: Number(amount) || 0,
+					message: message != null ? String(message) : null,
+					source: source != null ? String(source) : null,
+					meta: meta ?? null,
+					created_at: now,
+					updated_at: now
+				};
+				tip_activity.push(row);
+				return { insertId: id, lastInsertRowid: id, changes: 1 };
+			}
+		},
+		selectCreatedImageTips: {
+			all: async (createdImageId, options = {}) => {
+				const order = String(options?.order || "asc").toLowerCase() === "desc" ? "desc" : "asc";
+				const limitRaw = Number.parseInt(String(options?.limit ?? "50"), 10);
+				const offsetRaw = Number.parseInt(String(options?.offset ?? "0"), 10);
+				const limit = Number.isFinite(limitRaw) ? Math.min(200, Math.max(1, limitRaw)) : 50;
+				const offset = Number.isFinite(offsetRaw) ? Math.max(0, offsetRaw) : 0;
+
+				const cid = Number(createdImageId);
+				const filtered = tip_activity.filter(
+					(t) => Number(t.created_image_id) === cid
+				);
+				const sorted = filtered.slice().sort((a, b) => {
+					const cmp = String(a.created_at || "").localeCompare(String(b.created_at || ""));
+					return order === "desc" ? -cmp : cmp;
+				});
+
+				const slice = sorted.slice(offset, offset + limit);
+				return slice.map((t) => {
+					const fromUser = users.find((u) => u.id === Number(t.from_user_id));
+					const profile = user_profiles.find((p) => p.user_id === Number(t.from_user_id));
+					return {
+						id: t.id,
+						user_id: t.from_user_id,
+						created_image_id: t.created_image_id,
+						amount: t.amount,
+						message: t.message,
+						source: t.source,
+						meta: t.meta,
+						created_at: t.created_at,
+						updated_at: t.updated_at,
+						user_name: profile?.user_name ?? null,
+						display_name: profile?.display_name ?? (fromUser?.email ?? null),
+						avatar_url: profile?.avatar_url ?? null
+					};
+				});
+			}
+		},
 		deleteUserAndCleanup: {
 			run: async (rawUserId) => {
 				const userId = Number(rawUserId);
@@ -1935,6 +1998,9 @@ export function openDb() {
 				break;
 			case "email_link_clicks":
 				targetArray = email_link_clicks;
+				break;
+			case "tip_activity":
+				targetArray = tip_activity;
 				break;
 			case "feed_items":
 				targetArray = feed_items;
