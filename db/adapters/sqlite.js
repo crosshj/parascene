@@ -2014,13 +2014,22 @@ export async function openDb() {
 			}
 		},
 		publishCreatedImage: {
-			run: async (id, userId, title, description) => {
-				const stmt = db.prepare(
-					`UPDATE created_images
+			run: async (id, userId, title, description, isAdmin = false) => {
+				// Admin can publish any image, owner can only publish their own
+				const stmt = isAdmin
+					? db.prepare(
+						`UPDATE created_images
+           SET published = 1, published_at = datetime('now'), title = ?, description = ?
+           WHERE id = ?`
+					)
+					: db.prepare(
+						`UPDATE created_images
            SET published = 1, published_at = datetime('now'), title = ?, description = ?
            WHERE id = ? AND user_id = ?`
-				);
-				const result = stmt.run(title, description, id, userId);
+					);
+				const result = isAdmin
+					? stmt.run(title, description, id)
+					: stmt.run(title, description, id, userId);
 				return Promise.resolve({ changes: result.changes });
 			}
 		},
