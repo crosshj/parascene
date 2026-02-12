@@ -1117,21 +1117,34 @@ export default function createCreateRoutes({ queries, storage }) {
 				return res.status(400).json({ error: "Title is required" });
 			}
 
-			// Get the image to verify ownership and status
+			// Get the image to verify ownership or admin status
 			const image = await queries.selectCreatedImageById.get(
 				req.params.id,
 				user.id
 			);
 
+			// If not found as owner, check if it exists and user is admin
+			let anyImage = null;
 			if (!image) {
-				return res.status(404).json({ error: "Image not found" });
+				anyImage = await queries.selectCreatedImageByIdAnyUser?.get(req.params.id);
+				if (!anyImage) {
+					return res.status(404).json({ error: "Image not found" });
+				}
+				// Only admins can publish images they don't own
+				if (user.role !== 'admin') {
+					return res.status(403).json({ error: "Forbidden: You can only publish your own creations" });
+				}
 			}
 
-			if (image.status !== 'completed') {
+			const targetImage = image || anyImage;
+			const isAdmin = user.role === 'admin';
+			const isOwner = image && image.user_id === user.id;
+
+			if (targetImage.status !== 'completed') {
 				return res.status(400).json({ error: "Image must be completed before publishing" });
 			}
 
-			if (image.published === 1 || image.published === true) {
+			if (targetImage.published === 1 || targetImage.published === true) {
 				return res.status(400).json({ error: "Image is already published" });
 			}
 
@@ -1140,27 +1153,40 @@ export default function createCreateRoutes({ queries, storage }) {
 				req.params.id,
 				user.id,
 				title.trim(),
-				description ? description.trim() : null
+				description ? description.trim() : null,
+				isAdmin
 			);
 
 			if (publishResult.changes === 0) {
 				return res.status(500).json({ error: "Failed to publish image" });
 			}
 
+			// Keep feed attribution tied to the creation owner, not the publishing admin.
+			let feedAuthor = user.email || 'User';
+			if (targetImage.user_id) {
+				try {
+					const creator = await queries.selectUserById.get(targetImage.user_id);
+					if (creator?.email) {
+						feedAuthor = creator.email;
+					}
+				} catch {
+					// Ignore profile lookup errors; use current fallback.
+				}
+			}
+
 			// Create feed item
 			await queries.insertFeedItem.run(
 				title.trim(),
 				description ? description.trim() : '',
-				user.email || 'User',
+				feedAuthor,
 				null, // tags
 				parseInt(req.params.id)
 			);
 
 			// Get updated image
-			const updatedImage = await queries.selectCreatedImageById.get(
-				req.params.id,
-				user.id
-			);
+			const updatedImage = isOwner
+				? await queries.selectCreatedImageById.get(req.params.id, user.id)
+				: await queries.selectCreatedImageByIdAnyUser?.get(req.params.id);
 
 			return res.json({
 				id: updatedImage.id,

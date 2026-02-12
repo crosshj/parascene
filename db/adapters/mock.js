@@ -1455,9 +1455,9 @@ export function openDb() {
 			}
 		},
 		publishCreatedImage: {
-			run: async (id, userId, title, description) => {
+			run: async (id, userId, title, description, isAdmin = false) => {
 				const image = created_images.find(
-					(img) => img.id === Number(id) && img.user_id === Number(userId)
+					(img) => img.id === Number(id) && (isAdmin || img.user_id === Number(userId))
 				);
 				if (!image) {
 					return { changes: 0 };

@@ -1387,39 +1387,58 @@ export function openDb() {
 						.map((fid) => String(fid))
 				);
 
-				// Fetch only a bounded window from DB (we filter in JS, so request extra to get enough after exclusions).
-				const fetchSize = Math.min((off + lim) * 3, 500);
-				const { data, error } = await serviceClient
-					.from(prefixedTable("feed_items"))
-					.select(
-						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images(filename, file_path, user_id)"
-					)
-					.order("created_at", { ascending: false })
-					.range(0, fetchSize - 1);
-				if (error) throw error;
-
-				const items = (data ?? []).map((item) => {
-					const { prsn_created_images, ...rest } = item;
-					const filename = prsn_created_images?.filename ?? null;
-					const file_path = prsn_created_images?.file_path ?? null;
-					const user_id = prsn_created_images?.user_id ?? null;
-					return {
-						...rest,
-						filename,
-						user_id,
-						url: file_path || (filename ? `/api/images/created/${filename}` : null),
-						like_count: 0,
-						comment_count: 0,
-						viewer_liked: false
-					};
-				});
-
+				// Fetch progressively until we can satisfy this page window after exclusions.
+				// A single bounded prefetch can under-count and incorrectly produce hasMore=false.
 				const viewerIdStr = String(id);
-				const filtered = items.filter((item) => {
-					if (item.user_id === null || item.user_id === undefined) return false;
-					if (String(item.user_id) === viewerIdStr) return false;
-					return !followingIdSet.has(String(item.user_id));
-				});
+				const targetFilteredCount = off + lim;
+				const maxScanRows = 500;
+				const scanBatchSize = Math.min(Math.max(lim * 3, 100), maxScanRows);
+				const filtered = [];
+				let scanOffset = 0;
+
+				while (filtered.length < targetFilteredCount && scanOffset < maxScanRows) {
+					const remaining = maxScanRows - scanOffset;
+					const size = Math.min(scanBatchSize, remaining);
+					if (size <= 0) break;
+
+					const { data, error } = await serviceClient
+						.from(prefixedTable("feed_items"))
+						.select(
+							"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images(filename, file_path, user_id)"
+						)
+						.order("created_at", { ascending: false })
+						.range(scanOffset, scanOffset + size - 1);
+					if (error) throw error;
+
+					const rows = Array.isArray(data) ? data : [];
+					if (rows.length === 0) break;
+
+					for (const row of rows) {
+						const { prsn_created_images, ...rest } = row;
+						const filename = prsn_created_images?.filename ?? null;
+						const file_path = prsn_created_images?.file_path ?? null;
+						const user_id = prsn_created_images?.user_id ?? null;
+
+						if (user_id === null || user_id === undefined) continue;
+						if (String(user_id) === viewerIdStr) continue;
+						if (followingIdSet.has(String(user_id))) continue;
+
+						filtered.push({
+							...rest,
+							filename,
+							user_id,
+							url: file_path || (filename ? `/api/images/created/${filename}` : null),
+							like_count: 0,
+							comment_count: 0,
+							viewer_liked: false
+						});
+
+						if (filtered.length >= targetFilteredCount) break;
+					}
+
+					scanOffset += rows.length;
+					if (rows.length < size) break;
+				}
 
 				const page = filtered.slice(off, off + lim);
 				const createdImageIds = page
@@ -2753,9 +2772,9 @@ export function openDb() {
 			}
 		},
 		publishCreatedImage: {
-			run: async (id, userId, title, description) => {
+			run: async (id, userId, title, description, isAdmin = false) => {
 				// Use serviceClient to bypass RLS for backend operations
-				const { data, error } = await serviceClient
+				const query = serviceClient
 					.from(prefixedTable("created_images"))
 					.update({
 						published: true,
@@ -2763,9 +2782,13 @@ export function openDb() {
 						title,
 						description
 					})
-					.eq("id", id)
-					.eq("user_id", userId)
-					.select("id");
+					.eq("id", id);
+
+				if (!isAdmin) {
+					query.eq("user_id", userId);
+				}
+
+				const { data, error } = await query.select("id");
 				if (error) throw error;
 				return { changes: data?.length ?? 0 };
 			}
