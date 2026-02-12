@@ -61,6 +61,11 @@ class AppModalNotifications extends HTMLElement {
 				this.close();
 			});
 		});
+
+		const markAllReadBtn = this.shadowRoot.querySelector('[data-action="mark-all-read"]');
+		if (markAllReadBtn) {
+			markAllReadBtn.addEventListener('click', () => this.handleMarkAllRead());
+		}
 	}
 
 	handleOpenEvent(event) {
@@ -207,6 +212,29 @@ class AppModalNotifications extends HTMLElement {
 		}
 	}
 
+	async handleMarkAllRead() {
+		try {
+			const response = await fetch('/api/notifications/acknowledge-all', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: '{}',
+				credentials: 'include'
+			});
+			if (!response.ok) throw new Error('Failed to mark all as read');
+			const data = await response.json();
+			if (data.ok && data.updated) {
+				this.notifications.forEach((n) => {
+					if (!n.acknowledged_at) n.acknowledged_at = new Date().toISOString();
+				});
+				this.renderNotificationList();
+				document.dispatchEvent(new CustomEvent('notifications-acknowledged'));
+			}
+			await this.loadNotifications({ silent: true, force: true });
+		} catch (error) {
+			// console.error('Error marking all notifications read:', error);
+		}
+	}
+
 	selectActiveNotification() {
 		if (!this.notifications.length) {
 			this.activeIndex = 0;
@@ -257,6 +285,14 @@ class AppModalNotifications extends HTMLElement {
 				}
 			});
 		});
+
+		const footer = this.shadowRoot.querySelector('[data-mark-all-read-footer]');
+		const markAllReadBtn = this.shadowRoot.querySelector('[data-action="mark-all-read"]');
+		if (footer && markAllReadBtn) {
+			const hasUnread = this.notifications.some((n) => !n.acknowledged_at);
+			footer.style.display = this.notifications.length > 0 ? 'block' : 'none';
+			markAllReadBtn.disabled = !hasUnread;
+		}
 	}
 
 	renderNotificationDetail({ acknowledge = true } = {}) {
@@ -355,6 +391,8 @@ class AppModalNotifications extends HTMLElement {
         .notifications-modal {
           width: 760px;
           height: 560px;
+          display: flex;
+          flex-direction: column;
         }
         .notifications-overlay.open .notifications-modal,
         .notification-detail-overlay.open .notification-detail-modal {
@@ -392,12 +430,34 @@ class AppModalNotifications extends HTMLElement {
         }
         .notifications-body {
           padding: 20px;
-          padding-bottom: 36px;
+          padding-bottom: 16px;
           height: calc(100% - 64px);
           overflow-y: auto;
+          flex: 1;
+          min-height: 0;
         }
         .notifications-content {
           min-height: 100px;
+        }
+        .notifications-list-footer {
+          padding: 16px 20px;
+          border-top: 1px solid var(--border);
+          flex-shrink: 0;
+        }
+        .notifications-list-footer .notification-action {
+          width: 100%;
+        }
+        .notification-action-muted {
+          color: var(--text-muted);
+          border-color: var(--border);
+        }
+        .notification-action-muted:hover:not(:disabled) {
+          border-color: var(--text-muted);
+          background: var(--surface-strong);
+        }
+        .notification-action-muted:disabled {
+          opacity: 0.6;
+          cursor: default;
         }
         .notification-detail-body {
           padding: 20px;
@@ -550,6 +610,9 @@ class AppModalNotifications extends HTMLElement {
           </div>
           <div class="notifications-body">
             <div class="notifications-content"></div>
+          </div>
+          <div class="notifications-list-footer" data-mark-all-read-footer style="display: none;">
+            <button type="button" class="notification-action notification-action-muted" data-action="mark-all-read">Mark All Read</button>
           </div>
         </div>
       </div>

@@ -609,12 +609,13 @@ export function renderFirstCreationNudge({ recipientName = "there" } = {}) {
 	</p>
 	<p style="margin:0; font-family:Arial, Helvetica, sans-serif;">— The parascene team</p>
   `;
+	const createUrl = `${getBaseAppUrl()}/create`;
 	const emailHtml = baseEmailLayout({
 		preheader,
 		title: subject,
 		bodyHtml,
 		ctaText: "Create something",
-		ctaUrl: getBaseAppUrl(),
+		ctaUrl: createUrl,
 		footerText: "You're receiving this because you have a parascene account."
 	});
 	const text = [
@@ -626,7 +627,7 @@ export function renderFirstCreationNudge({ recipientName = "there" } = {}) {
 		"",
 		"— The parascene team",
 		"",
-		`Create something: ${getBaseAppUrl()}`
+		`Create something: ${createUrl}`
 	].join("\n");
 	return { subject, html: emailHtml, text };
 }

@@ -407,6 +407,18 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		acknowledgeAllNotificationsForUser: {
+			run: async (userId, role) => {
+				let count = 0;
+				for (const note of notifications) {
+					if (!note.acknowledged_at && (note.user_id === userId || note.role === role)) {
+						note.acknowledged_at = new Date().toISOString();
+						count++;
+					}
+				}
+				return { changes: count };
+			}
+		},
 		insertNotification: {
 			run: async (userId, role, title, message, link) => {
 				const notification = {

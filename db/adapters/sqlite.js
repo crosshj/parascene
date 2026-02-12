@@ -746,6 +746,18 @@ export async function openDb() {
 				return Promise.resolve({ changes: result.changes });
 			}
 		},
+		acknowledgeAllNotificationsForUser: {
+			run: async (userId, role) => {
+				const stmt = db.prepare(
+					`UPDATE notifications
+           SET acknowledged_at = datetime('now')
+           WHERE acknowledged_at IS NULL
+           AND (user_id = ? OR role = ?)`
+				);
+				const result = stmt.run(userId, role);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
 		insertNotification: {
 			run: async (userId, role, title, message, link) => {
 				const stmt = db.prepare(

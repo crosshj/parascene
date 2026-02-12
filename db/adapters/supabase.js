@@ -674,6 +674,28 @@ export function openDb() {
 				return { changes: 0 };
 			}
 		},
+		acknowledgeAllNotificationsForUser: {
+			run: async (userId, role) => {
+				const hasUserId = userId !== null && userId !== undefined;
+				const hasRole = role !== null && role !== undefined;
+				if (!hasUserId && !hasRole) return { changes: 0 };
+
+				let query = serviceClient
+					.from(prefixedTable("notifications"))
+					.update({ acknowledged_at: new Date().toISOString() })
+					.is("acknowledged_at", null);
+				if (hasUserId && hasRole) {
+					query = query.or(`user_id.eq.${userId},role.eq.${role}`);
+				} else if (hasUserId) {
+					query = query.eq("user_id", userId);
+				} else {
+					query = query.eq("role", role);
+				}
+				const { data, error } = await query.select("id");
+				if (error) throw error;
+				return { changes: (data ?? []).length };
+			}
+		},
 		insertNotification: {
 			run: async (userId, role, title, message, link) => {
 				// Use serviceClient to bypass RLS for backend operations

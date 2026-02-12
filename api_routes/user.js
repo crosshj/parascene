@@ -945,7 +945,7 @@ export default function createProfileRoutes({ queries }) {
 		}
 	});
 
-	router.post("/api/notifications/acknowledge", async (req, res) => {
+		router.post("/api/notifications/acknowledge", async (req, res) => {
 		try {
 			if (!req.auth?.userId) {
 				return res.status(401).json({ error: "Unauthorized" });
@@ -969,6 +969,28 @@ export default function createProfileRoutes({ queries }) {
 			return res.json({ ok: true, updated: result.changes });
 		} catch (error) {
 			// console.error("Error acknowledging notification:", error);
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	router.post("/api/notifications/acknowledge-all", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+
+			const user = await queries.selectUserById.get(req.auth.userId);
+			if (!user) {
+				return res.status(404).json({ error: "User not found" });
+			}
+
+			const result = await queries.acknowledgeAllNotificationsForUser.run(
+				user.id,
+				user.role
+			);
+			return res.json({ ok: true, updated: result.changes });
+		} catch (error) {
+			// console.error("Error acknowledging all notifications:", error);
 			return res.status(500).json({ error: "Internal server error" });
 		}
 	});
