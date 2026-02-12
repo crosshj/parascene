@@ -928,6 +928,34 @@
 	min-height: 120px;
 }
 
+.admin-emails-test-panel {
+	display: flex;
+	flex-direction: column;
+	gap: 20px;
+	min-height: 120px;
+}
+
+.admin-email-test-intro {
+	margin: 0;
+	font-size: 0.95rem;
+	color: var(--text-muted);
+}
+
+.admin-email-test-status {
+	margin-top: 4px;
+	font-size: 0.9rem;
+	color: var(--text-muted);
+	min-height: 1.4em;
+}
+
+.admin-email-test-status-success {
+	color: var(--text);
+}
+
+.admin-email-test-status-error {
+	color: var(--error-text);
+}
+
 .admin-email-template-card {
 	background: var(--surface);
 	border: 1px solid var(--border);

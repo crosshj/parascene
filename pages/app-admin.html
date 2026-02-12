@@ -36,6 +36,42 @@
 					<tab data-id="templates" label="Templates">
 						<div id="email-templates-container" class="admin-emails-templates-panel"></div>
 					</tab>
+					<tab data-id="test" label="Test">
+						<div id="email-test-container" class="admin-emails-test-panel">
+							<p class="admin-email-test-intro">Send a test email to verify templates and delivery.</p>
+							<form id="email-test-form" class="admin-email-test-form">
+								<section class="admin-settings-section">
+									<div class="admin-settings-field">
+										<label class="admin-settings-label" for="email-test-to">To</label>
+										<input type="email" id="email-test-to" name="to" class="admin-settings-input"
+											placeholder="you@example.com" required />
+									</div>
+									<div class="admin-settings-field">
+										<label class="admin-settings-label" for="email-test-template">Template</label>
+										<select id="email-test-template" name="template" class="admin-settings-input" required>
+											<option value="helloFromParascene">Hello from parascene</option>
+											<option value="commentReceived">Comment received</option>
+											<option value="commentReceivedDelegated">Comment received (delegated)</option>
+											<option value="featureRequest">Feature request</option>
+											<option value="passwordReset">Password reset</option>
+											<option value="digestActivity">Digest activity</option>
+											<option value="welcome">Welcome</option>
+											<option value="firstCreationNudge">First creation nudge</option>
+											<option value="reengagement">Re-engagement</option>
+											<option value="creationHighlight">Creation highlight</option>
+										</select>
+									</div>
+									<div class="admin-settings-actions">
+										<button type="submit" id="email-test-submit" class="btn-primary admin-settings-save">
+											<span class="admin-settings-save-label">Send test email</span>
+											<span class="admin-settings-save-spinner" aria-hidden="true"></span>
+										</button>
+									</div>
+								</section>
+							</form>
+							<div id="email-test-status" class="admin-email-test-status" role="alert" aria-live="polite"></div>
+						</div>
+					</tab>
 					<tab data-id="settings" label="Settings">
 						<div class="admin-emails-settings-panel">
 							<section class="admin-settings-section">

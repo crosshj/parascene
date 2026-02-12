@@ -481,7 +481,7 @@ function setupEmailsTabPersistence() {
 	if (!tabsEl) return;
 
 	const storageKey = "admin-emails-tab";
-	const validTabIds = ["sends", "templates", "settings"];
+	const validTabIds = ["sends", "templates", "test", "settings"];
 
 	// Restore saved tab on load
 	const savedTab = (() => {
@@ -512,6 +512,58 @@ function setupEmailsTabPersistence() {
 			// Ignore storage errors
 		}
 	});
+}
+
+let emailTestPanelInitialized = false;
+
+function initEmailTestPanel() {
+	const container = document.querySelector("#email-test-container");
+	const form = document.getElementById("email-test-form");
+	const statusEl = document.getElementById("email-test-status");
+	const submitBtn = document.getElementById("email-test-submit");
+	if (!container || !form || !statusEl || !submitBtn || emailTestPanelInitialized) return;
+	emailTestPanelInitialized = true;
+
+	function setStatus(message, isError = false) {
+		statusEl.textContent = message || "";
+		statusEl.classList.toggle("admin-email-test-status-error", isError);
+		statusEl.classList.toggle("admin-email-test-status-success", message && !isError);
+	}
+
+	form.addEventListener("submit", async (e) => {
+		e.preventDefault();
+		const to = (form.elements.to?.value ?? "").trim();
+		const template = (form.elements.template?.value ?? "").trim();
+		if (!to || !template) {
+			setStatus("Please enter an email and select a template.", true);
+			return;
+		}
+		submitBtn.disabled = true;
+		submitBtn.classList.add("is-loading");
+		setStatus("Sending…", false);
+		try {
+			const response = await fetch("/admin/send-test-email", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				credentials: "include",
+				body: JSON.stringify({ to, template })
+			});
+			const data = await response.json().catch(() => ({}));
+			if (response.ok && data?.ok) {
+				setStatus("Test email sent.");
+			} else {
+				setStatus(data?.error || "Failed to send.", true);
+			}
+		} catch {
+			setStatus("Failed to send.", true);
+		} finally {
+			submitBtn.disabled = false;
+			submitBtn.classList.remove("is-loading");
+		}
+	});
+
+	form.addEventListener("input", () => setStatus(""));
+	form.addEventListener("change", () => setStatus(""));
 }
 
 async function loadEmailTemplates() {
@@ -934,6 +986,7 @@ function handleAdminRouteChange(route) {
 			setupEmailsTabPersistence();
 			loadEmailSends();
 			loadEmailTemplates();
+			initEmailTestPanel();
 			loadSettings();
 			break;
 		case "todo":

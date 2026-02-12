@@ -455,15 +455,22 @@ export default function createAdminRoutes({ queries, storage }) {
 		}
 	});
 
-	router.get("/admin/email-templates/:templateName", async (req, res) => {
-		const adminUser = await requireAdmin(req, res);
-		if (!adminUser) return;
+	const VALID_TEST_EMAIL_TEMPLATES = [
+		"helloFromParascene",
+		"commentReceived",
+		"commentReceivedDelegated",
+		"featureRequest",
+		"passwordReset",
+		"digestActivity",
+		"welcome",
+		"firstCreationNudge",
+		"reengagement",
+		"creationHighlight"
+	];
 
-		const { templateName } = req.params;
-		const { renderEmailTemplate } = await import("../email/index.js");
-
-		// Generate sample data for each template
-		const sampleData = {
+	function getEmailTemplateSampleData() {
+		const baseUrl = getBaseAppUrl();
+		return {
 			helloFromParascene: {
 				recipientName: "Alex"
 			},
@@ -472,14 +479,14 @@ export default function createAdminRoutes({ queries, storage }) {
 				commenterName: "Jordan",
 				commentText: "This is a sample comment to show how the email template looks with real content. It demonstrates the formatting and layout.",
 				creationTitle: "Sunset Over Mountains",
-				creationUrl: `${getBaseAppUrl()}/creations/123`
+				creationUrl: `${baseUrl}/creations/123`
 			},
 			commentReceivedDelegated: {
 				recipientName: "Alex",
 				commenterName: "Jordan",
 				commentText: "This is a sample comment to show how the email template looks with real content. It demonstrates the formatting and layout.",
 				creationTitle: "Sunset Over Mountains",
-				creationUrl: `${getBaseAppUrl()}/creations/123`,
+				creationUrl: `${baseUrl}/creations/123`,
 				impersonation: {
 					originalRecipient: {
 						name: "Taylor",
@@ -500,7 +507,7 @@ export default function createAdminRoutes({ queries, storage }) {
 				message: "It would be great to have dark mode support. The current light theme is nice, but a dark option would be perfect for late-night browsing.",
 				userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
 				acceptLanguage: "en-US,en;q=0.9",
-				referer: `${getBaseAppUrl()}/feed`,
+				referer: `${baseUrl}/feed`,
 				forwardedFor: "192.168.1.1",
 				ip: "192.168.1.1",
 				ips: ["192.168.1.1"],
@@ -522,12 +529,12 @@ export default function createAdminRoutes({ queries, storage }) {
 			},
 			passwordReset: {
 				recipientName: "Alex",
-				resetUrl: `${getBaseAppUrl()}/reset-password?rt=sample-token-123`
+				resetUrl: `${baseUrl}/reset-password?rt=sample-token-123`
 			},
 			digestActivity: {
 				recipientName: "Alex",
 				activitySummary: "You have 3 creations with new comments.",
-				feedUrl: `${getBaseAppUrl()}/feed`,
+				feedUrl: `${baseUrl}/feed`,
 				activityItems: [
 					{ title: "Sunset Over Mountains", comment_count: 5 },
 					{ title: "City Lights at Night", comment_count: 2 }
@@ -548,10 +555,19 @@ export default function createAdminRoutes({ queries, storage }) {
 			creationHighlight: {
 				recipientName: "Alex",
 				creationTitle: "Sunset Over Mountains",
-				creationUrl: `${getBaseAppUrl()}/creations/123`,
+				creationUrl: `${baseUrl}/creations/123`,
 				commentCount: 8
 			}
 		};
+	}
+
+	router.get("/admin/email-templates/:templateName", async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+
+		const { templateName } = req.params;
+		const { renderEmailTemplate } = await import("../email/index.js");
+		const sampleData = getEmailTemplateSampleData();
 
 		try {
 			// Handle delegated template variants
@@ -570,6 +586,48 @@ export default function createAdminRoutes({ queries, storage }) {
 			res.send(html);
 		} catch (error) {
 			res.status(500).json({ error: error?.message || "Failed to render template" });
+		}
+	});
+
+	router.post("/admin/send-test-email", async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+
+		const to = typeof req.body?.to === "string" ? req.body.to.trim() : "";
+		const template = typeof req.body?.template === "string" ? req.body.template.trim() : "";
+
+		if (!to) {
+			return res.status(400).json({ error: "Recipient email is required." });
+		}
+		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+			return res.status(400).json({ error: "Please enter a valid email address." });
+		}
+		if (!VALID_TEST_EMAIL_TEMPLATES.includes(template)) {
+			return res.status(400).json({ error: "Invalid or unknown template." });
+		}
+
+		const sampleData = getEmailTemplateSampleData();
+		const data = sampleData[template];
+		if (!data) {
+			return res.status(400).json({ error: "Template has no sample data." });
+		}
+
+		let actualTemplateName = template;
+		if (template === "commentReceivedDelegated") {
+			actualTemplateName = "commentReceived";
+		}
+
+		try {
+			const { sendTemplatedEmail } = await import("../email/index.js");
+			const responseData = await sendTemplatedEmail({
+				to: [to],
+				template: actualTemplateName,
+				data
+			});
+			res.status(200).json({ ok: true, id: responseData?.id ?? null });
+		} catch (error) {
+			const message = error?.message || "Failed to send test email.";
+			res.status(500).json({ error: message });
 		}
 	});
 
