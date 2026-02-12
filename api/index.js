@@ -115,8 +115,8 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 
-// Redirect old domain to canonical: parascene.corsshj.com -> www.parascene.com
-const REDIRECT_SOURCE_HOST = "parascene.corsshj.com";
+// Redirect old domain to canonical: parascene.crosshj.com -> www.parascene.com
+const REDIRECT_SOURCE_HOST = "parascene.crosshj.com";
 const REDIRECT_TARGET_ORIGIN = "https://www.parascene.com";
 app.use((req, res, next) => {
 	const hostHeader = req.get("x-forwarded-host") || req.get("host") || "";
