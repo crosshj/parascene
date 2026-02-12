@@ -169,6 +169,8 @@ Creations sorted by like count (most or least) or by how often they appear in mu
 
 ## Example payload (advanced_query / advanced_generate)
 
+In examples, `<app-origin>` is the app base URL (from `getBaseAppUrl()` in code, or `APP_ORIGIN` env).
+
 ```json
 {
   "method": "advanced_query",
@@ -181,7 +183,7 @@ Creations sorted by like count (most or least) or by how often they appear in mu
         "text": "Love the colors in this one!",
         "created_at": "2025-02-04T14:30:00.000Z",
         "author": "alice",
-        "image_url": "https://parascene.crosshj.com/api/share/v1/abc123/image",
+        "image_url": "<app-origin>/api/share/v1/abc123/image",
         "image_id": 101,
         "image_title": "Sunset over the lake",
         "description": "A quick sketch from the train.",
@@ -199,7 +201,7 @@ Creations sorted by like count (most or least) or by how often they appear in mu
         "summary": "Quick doodle from the train.",
         "created_at": "2025-02-04T12:00:00.000Z",
         "author": "bob",
-        "image_url": "https://parascene.crosshj.com/api/share/v1/def456/image",
+        "image_url": "<app-origin>/api/share/v1/def456/image",
         "image_id": 202,
         "like_count": 5,
         "comment_count": 2,
@@ -218,7 +220,7 @@ Creations sorted by like count (most or least) or by how often they appear in mu
         "summary": "",
         "created_at": "2025-02-03T18:00:00.000Z",
         "author": "charlie",
-        "image_url": "https://parascene.crosshj.com/api/share/v1/ghi789/image",
+        "image_url": "<app-origin>/api/share/v1/ghi789/image",
         "like_count": 42,
         "comment_count": 8,
         "description": null,

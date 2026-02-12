@@ -159,11 +159,11 @@ export default function createCreateRoutes({ queries, storage }) {
 		return new Date().toISOString();
 	}
 
-	// Provider must fetch image URLs; it cannot access localhost. Always use production base.
-	const PROVIDER_BASE_URL = "https://parascene.crosshj.com";
+	// Provider must fetch image URLs; it cannot access localhost. Use app base URL (set APP_ORIGIN in production).
+	const providerBase = getBaseAppUrl();
 
 	function toParasceneImageUrl(raw) {
-		const base = PROVIDER_BASE_URL;
+		const base = providerBase;
 		if (typeof raw !== "string") return null;
 		const value = raw.trim();
 		if (!value) return null;
@@ -187,7 +187,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				imageId: id,
 				sharedByUserId: uid
 			});
-			return `${PROVIDER_BASE_URL}/api/share/${encodeURIComponent(ACTIVE_SHARE_VERSION)}/${encodeURIComponent(token)}/image`;
+			return `${providerBase}/api/share/${encodeURIComponent(ACTIVE_SHARE_VERSION)}/${encodeURIComponent(token)}/image`;
 		} catch {
 			return null;
 		}
@@ -703,7 +703,7 @@ export default function createCreateRoutes({ queries, storage }) {
 							imageId: source.id,
 							sharedByUserId: user.id
 						});
-						const shareUrl = `${PROVIDER_BASE_URL}/api/share/${encodeURIComponent(ACTIVE_SHARE_VERSION)}/${encodeURIComponent(token)}/image`;
+						const shareUrl = `${providerBase}/api/share/${encodeURIComponent(ACTIVE_SHARE_VERSION)}/${encodeURIComponent(token)}/image`;
 						safeArgs.image_url = shareUrl;
 						meta.args.image_url = shareUrl;
 					} catch {

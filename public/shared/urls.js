@@ -48,8 +48,10 @@ function extractCreationId(url) {
 	return Number.isFinite(id) && id > 0 ? String(id) : null;
 }
 
-/** Hostnames that are considered the parascene app (transform full URLs to relative paths). */
-const PARASCENE_HOSTS = ['parascene.crosshj.com'];
+/** Default app origin for client-side fallback (e.g. SSR). Single place to change app domain in client code. */
+export const DEFAULT_APP_ORIGIN = 'https://www.parascene.com';
+
+const PARASCENE_HOSTS = [new URL(DEFAULT_APP_ORIGIN).hostname];
 
 /**
  * If the URL points to parascene (same-origin or known parascene host), returns the relative
@@ -61,7 +63,7 @@ function getParasceneRelativePath(url) {
 			String(url || ''),
 			typeof window !== 'undefined' && window.location
 				? window.location.origin
-				: 'https://parascene.crosshj.com'
+				: DEFAULT_APP_ORIGIN
 		);
 		const host = parsed.hostname.toLowerCase();
 		const isSameOrigin =
@@ -201,14 +203,14 @@ function extractXHashtagInfo(url) {
 }
 
 /**
- * Matches full URLs that point to a creation page (e.g. https://parascene.crosshj.com/creations/219).
+ * Matches full URLs that point to a creation page (e.g. <app-origin>/creations/219).
  * Captures the creation ID for the replacement path.
  */
 const CREATION_URL_RE = /https?:\/\/[^\s"'<>]+\/creations\/(\d+)\/?/g;
 
 /**
  * Turns plain text into HTML that is safe to insert and converts full parascene URLs
- * (same-origin, e.g. https://parascene.crosshj.com/creations/219 or /feed) into relative
+ * (same-origin, e.g. <app-origin>/creations/219 or /feed) into relative
  * links that display as the path and navigate in-app.
  *
  * Also detects YouTube URLs and converts them into links with a consistent label:

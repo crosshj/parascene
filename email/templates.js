@@ -44,7 +44,7 @@ function renderImpersonationBar({ originalRecipient, reason } = {}) {
 
 // Base email layout function
 // ctaText: Text for the call-to-action button (e.g., "Visit Us", "View the creation")
-// ctaUrl: Full URL for the CTA link (e.g., "https://parascene.crosshj.com" or "https://parascene.crosshj.com/creations/123")
+// ctaUrl: Full URL for the CTA link (default getBaseAppUrl(); or pass e.g. getBaseAppUrl() + "/creations/123")
 //         Defaults to base URL (homepage) if not provided
 function baseEmailLayout({ preheader, title, bodyHtml, ctaText, ctaUrl = getBaseAppUrl(), footerText, topNotice, suppressCta = false }) {
 	const safePreheader = escapeHtml(preheader || "");
@@ -220,7 +220,7 @@ function truncateMiddle(value, max = 240) {
 }
 
 // Render comment received email template
-// creationUrl: Full URL to the specific creation (e.g., "https://parascene.crosshj.com/creations/123")
+// creationUrl: Full URL to the specific creation (e.g. getBaseAppUrl() + "/creations/123")
 //              Defaults to base URL (homepage) if not provided
 export function renderCommentReceived({
 	recipientName = "there",

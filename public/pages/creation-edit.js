@@ -1,11 +1,12 @@
 import { submitCreationWithPending } from '/shared/createSubmit.js';
 import { fetchJsonWithStatusDeduped } from '/shared/api.js';
 import { attachAutoGrowTextarea } from '/shared/autogrow.js';
+import { DEFAULT_APP_ORIGIN } from '/shared/urls.js';
 
 const html = String.raw;
 
 function toParasceneImageUrl(raw) {
-	const base = 'https://parascene.crosshj.com';
+	const base = (typeof window !== 'undefined' && window.location?.origin) || DEFAULT_APP_ORIGIN;
 	if (typeof raw !== 'string') return '';
 	const value = raw.trim();
 	if (!value) return '';

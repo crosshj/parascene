@@ -16,7 +16,7 @@ import {
 	setAuthCookie,
 	shouldLogSession
 } from "./auth.js";
-import { getThumbnailUrl } from "./utils/url.js";
+import { getBaseAppUrl, getThumbnailUrl } from "./utils/url.js";
 import { computeWelcome, WELCOME_VERSION } from "./utils/welcome.js";
 
 export default function createProfileRoutes({ queries }) {
@@ -379,7 +379,7 @@ export default function createProfileRoutes({ queries }) {
 			try {
 				await queries.setPasswordResetToken.run(user.id, tokenHash, expiresAt);
 				const resetUrl =
-					"https://parascene.crosshj.com/auth?rt=" +
+					`${getBaseAppUrl()}/auth?rt=` +
 					encodeURIComponent(rawToken) +
 					"#reset";
 				const recipientName =

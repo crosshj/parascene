@@ -49,4 +49,4 @@ Token: `t = p.s`
   - `/s/v1/AAECAwQFBgcICQ.7wQ2m5n8k1M/mb4z3a`
 
 - Example (full):
-  - `https://parascene.crosshj.com/s/v1/AAECAwQFBgcICQ.7wQ2m5n8k1M/mb4z3a`
+  - `<app-origin>/s/v1/AAECAwQFBgcICQ.7wQ2m5n8k1M/mb4z3a` (app origin from `getBaseAppUrl()` / `APP_ORIGIN`)
