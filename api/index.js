@@ -115,6 +115,19 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 
+// Redirect old domain to canonical: parascene.corsshj.com -> www.parascene.com
+const REDIRECT_SOURCE_HOST = "parascene.corsshj.com";
+const REDIRECT_TARGET_ORIGIN = "https://www.parascene.com";
+app.use((req, res, next) => {
+	const hostHeader = req.get("x-forwarded-host") || req.get("host") || "";
+	const host = hostHeader.split(":")[0].toLowerCase();
+	if (host === REDIRECT_SOURCE_HOST) {
+		const target = REDIRECT_TARGET_ORIGIN + (req.originalUrl || req.url || "/");
+		return res.redirect(301, target);
+	}
+	next();
+});
+
 // CORS: allow credentials so cookies are sent when frontend is on a different origin (e.g. dev port).
 app.use((req, res, next) => {
 	const origin = req.get("origin");
