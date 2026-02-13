@@ -2,6 +2,7 @@ import express from "express";
 import { buildProviderHeaders, resolveProviderAuthToken } from "./utils/providerAuth.js";
 import { getEmailSettings } from "./utils/emailSettings.js";
 import { getBaseAppUrl } from "./utils/url.js";
+import { RELATED_PARAM_KEYS } from "../db/adapters/relatedParams.js";
 
 export default function createAdminRoutes({ queries, storage }) {
 	const router = express.Router();
@@ -737,6 +738,53 @@ export default function createAdminRoutes({ queries, storage }) {
 			creation_highlight_lookback_hours: s.creationHighlightLookbackHours,
 			creation_highlight_cooldown_days: s.creationHighlightCooldownDays,
 			creation_highlight_min_comments: s.creationHighlightMinComments
+		});
+	});
+
+	/** GET /admin/related-settings — all related.* keys and values. Admin-only. */
+	router.get("/admin/related-settings", async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+		if (!queries.getRelatedParams?.get) {
+			return res.json({});
+		}
+		const settings = await queries.getRelatedParams.get();
+		res.json(settings);
+	});
+
+	/** PATCH /admin/related-settings — body: flat key/value (e.g. related.lineage_weight: 100). Upsert each into policy_knobs. Admin-only. */
+	router.patch("/admin/related-settings", async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+		const body = req.body && typeof req.body === "object" ? req.body : {};
+		const validKeys = new Set(RELATED_PARAM_KEYS);
+		for (const [key, value] of Object.entries(body)) {
+			if (!validKeys.has(key) || value === undefined) continue;
+			const strValue = String(value);
+			if (queries.upsertPolicyKey?.run) {
+				await queries.upsertPolicyKey.run(key, strValue, null);
+			}
+		}
+		const settings = await queries.getRelatedParams?.get?.() ?? {};
+		res.json(settings);
+	});
+
+	/** GET /admin/transitions — page, limit. Response: { items, total, page, limit, hasMore }. Sort by count desc. Admin-only. */
+	router.get("/admin/transitions", async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+		const page = Math.max(1, parseInt(req.query?.page, 10) || 1);
+		const limit = Math.min(100, Math.max(1, parseInt(req.query?.limit, 10) || 20));
+		if (!queries.selectTransitions?.list) {
+			return res.json({ items: [], total: 0, page, limit, hasMore: false });
+		}
+		const result = await queries.selectTransitions.list({ page, limit });
+		res.json({
+			items: result.items ?? [],
+			total: result.total ?? 0,
+			page: result.page ?? page,
+			limit: result.limit ?? limit,
+			hasMore: result.hasMore ?? false
 		});
 	});
 

@@ -48,14 +48,6 @@
     "starred": false
   },
   {
-    "name": "Creation Detail Related Images",
-    "description": "images that are similar or related after fold",
-    "cost": 47,
-    "impact": 54,
-    "dependsOn": [],
-    "starred": false
-  },
-  {
     "name": "Credit Purchase",
     "description": "users can buy credits using real money",
     "cost": 77,
@@ -92,9 +84,7 @@
     "description": "Optional invite welcome flow via email or shareable token, with stored invite context.",
     "cost": 100,
     "impact": 87,
-    "dependsOn": [
-      "Invite credits"
-    ],
+    "dependsOn": ["Invite credits"],
     "starred": false
   }
 ]

@@ -12,6 +12,7 @@
 		<a data-route="todo">Todo</a>
 		<a data-route="users">Users</a>
 		<a data-route="emails">Emails</a>
+		<a data-route="related">Algo</a>
 		<a data-route="connect">Connect</a>
 	</app-navigation>
 
@@ -27,6 +28,17 @@
 			<app-route-todo data-route-content="todo"></app-route-todo>
 			<app-route-users data-route-content="users"></app-route-users>
 			<app-route-servers data-route-content="connect"></app-route-servers>
+			<div id="related-page" data-route-content="related" class="route-content admin-related-page">
+				<h3>Algo</h3>
+				<app-tabs>
+					<tab data-id="transitions" label="Click-next" default>
+						<div id="related-transitions-container" class="admin-related-transitions-container"></div>
+					</tab>
+					<tab data-id="settings" label="Settings">
+						<div id="related-settings-container" class="admin-related-settings-container"></div>
+					</tab>
+				</app-tabs>
+			</div>
 			<div id="emails-page" data-route-content="emails" class="route-content admin-emails-page">
 				<h3>Emails</h3>
 				<app-tabs>

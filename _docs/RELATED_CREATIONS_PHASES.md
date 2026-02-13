@@ -4,7 +4,7 @@ Work from [PLAN_RELATED_CREATIONS.md](PLAN_RELATED_CREATIONS.md) split into phas
 
 ---
 
-## Phase 1: Config and transition storage
+## Phase 1: Config and transition storage ✅ Done
 
 **Goal:** Policy knobs for related algorithm and storage for click-next transitions. No UI yet.
 
@@ -20,7 +20,7 @@ Work from [PLAN_RELATED_CREATIONS.md](PLAN_RELATED_CREATIONS.md) split into phas
 
 ---
 
-## Phase 2: Related API (content-only)
+## Phase 2: Related API (content-only) ✅ Done
 
 **Goal:** GET related and POST transition routes. Ranking uses content signals only (click-next blend can be 0 or skipped until Phase 4).
 
@@ -34,7 +34,7 @@ Work from [PLAN_RELATED_CREATIONS.md](PLAN_RELATED_CREATIONS.md) split into phas
 
 ---
 
-## Phase 3: Creation detail UI
+## Phase 3: Creation detail UI ✅ Done
 
 **Goal:** “More like this” section on creation detail with infinite scroll and transition recording from the client.
 
@@ -50,7 +50,7 @@ Work from [PLAN_RELATED_CREATIONS.md](PLAN_RELATED_CREATIONS.md) split into phas
 
 ---
 
-## Phase 4: Click-next in ranking
+## Phase 4: Click-next in ranking ✅ Done
 
 **Goal:** Full v1 algorithm: blend click-next with content score, time decay, and eviction.
 
@@ -64,7 +64,7 @@ Work from [PLAN_RELATED_CREATIONS.md](PLAN_RELATED_CREATIONS.md) split into phas
 
 ---
 
-## Phase 5: Admin UI and APIs
+## Phase 5: Admin UI and APIs ✅ Done
 
 **Goal:** Admins can view/edit related settings and inspect the transition table.
 
@@ -83,12 +83,12 @@ Work from [PLAN_RELATED_CREATIONS.md](PLAN_RELATED_CREATIONS.md) split into phas
 
 ## Summary
 
-| Phase | Focus | User-visible |
-|-------|--------|--------------|
-| 1 | Config + transition table + record/list + stubs | No |
-| 2 | Related API (content-only) + transition POST | No (API only) |
-| 3 | Creation detail section + infinite scroll + transition recording | Yes |
-| 4 | Click-next in ranking (blend, decay, cap K) | Yes (better related results) |
-| 5 | Admin APIs + Related settings form + transitions table | Yes (admin) |
+| Phase | Focus | User-visible | Status |
+|-------|--------|--------------|--------|
+| 1 | Config + transition table + record/list + stubs | No | ✅ Done |
+| 2 | Related API (content-only) + transition POST | No (API only) | ✅ Done |
+| 3 | Creation detail section + infinite scroll + transition recording | Yes | ✅ Done |
+| 4 | Click-next in ranking (blend, decay, cap K) | Yes (better related results) | ✅ Done |
+| 5 | Admin APIs + Related settings form + transitions table | Yes (admin) | ✅ Done |
 
 Validation steps from the end of [PLAN_RELATED_CREATIONS.md](PLAN_RELATED_CREATIONS.md) apply after Phase 3 (basic) and Phase 4 (click-next), and Phase 5 (admin flows).

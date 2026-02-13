@@ -674,6 +674,9 @@ export function openDb() {
 				const randomFraction = Math.max(0, Math.min(1, parseFloat(params["related.random_fraction"], 10) || 0.1));
 				const randomSlotsPerBatch = Math.max(0, parseInt(params["related.random_slots_per_batch"], 10) || 0);
 				const fallbackEnabled = String(params["related.fallback_enabled"] ?? "true").toLowerCase() === "true";
+				const clickNextWeight = Math.max(0, parseInt(params["related.click_next_weight"], 10) || 0);
+				const decayHalfLifeDays = parseFloat(params["related.transition_decay_half_life_days"], 10);
+				const windowDays = Math.max(0, parseFloat(params["related.transition_window_days"], 10) || 0);
 
 				const imgTable = prefixedTable("created_images");
 				const { data: seedRows, error: seedErr } = await serviceClient
@@ -735,6 +738,46 @@ export function openDb() {
 				if (fallbackEnabled) {
 					const { data: fallback } = await serviceClient.from(imgTable).select("id, created_at").eq("published", true).order("created_at", { ascending: false }).limit(capPerSignal);
 					addCandidates(fallback ?? [], fallbackWeight);
+				}
+
+				// Click-next: fetch transitions for seeds, time decay, normalize, blend into content score
+				const clickScoreByToId = new Map();
+				if (clickNextWeight > 0 && seedIds.length > 0) {
+					const transTable = prefixedTable("related_transitions");
+					const { data: transRows } = await serviceClient
+						.from(transTable)
+						.select("from_created_image_id, to_created_image_id, count, last_updated")
+						.in("from_created_image_id", seedIds);
+					const nowMs = Date.now();
+					const halfLifeDays = Number.isFinite(decayHalfLifeDays) && decayHalfLifeDays > 0 ? decayHalfLifeDays : null;
+					for (const row of transRows ?? []) {
+						const toId = row.to_created_image_id != null ? Number(row.to_created_image_id) : null;
+						if (toId == null || excludeIds.has(toId) || seedIdSet.has(toId)) continue;
+						const count = Math.max(0, parseInt(row.count, 10) || 0);
+						const lastUpdated = row.last_updated ? new Date(row.last_updated).getTime() : nowMs;
+						const ageDays = (nowMs - lastUpdated) / (24 * 60 * 60 * 1000);
+						let effective;
+						if (windowDays > 0 && !halfLifeDays) {
+							effective = ageDays <= windowDays ? count : 0;
+						} else if (halfLifeDays) {
+							effective = count * Math.pow(2, -ageDays / halfLifeDays);
+						} else {
+							effective = count;
+						}
+						clickScoreByToId.set(toId, (clickScoreByToId.get(toId) ?? 0) + effective);
+					}
+					// Normalize to 0–1 by max sum
+					const maxSum = clickScoreByToId.size > 0 ? Math.max(...clickScoreByToId.values()) : 0;
+					if (maxSum > 0) {
+						for (const [id, sum] of clickScoreByToId) {
+							clickScoreByToId.set(id, sum / maxSum);
+						}
+					}
+				}
+
+				// Blend: final_score = content_score + click_next_weight * click_next_score
+				for (const entry of byId.values()) {
+					entry.score += clickNextWeight * (clickScoreByToId.get(entry.id) ?? 0);
 				}
 
 				let sorted = [...byId.values()].sort((a, b) => b.score - a.score || new Date(b.created_at || 0) - new Date(a.created_at || 0));

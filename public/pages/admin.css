@@ -114,7 +114,8 @@
 
 /* Switch (admin settings + todo modal) – matches global form-switch pattern */
 .admin-emails-settings-panel .form-switch-input,
-.todo-star-toggle-row .form-switch-input {
+.todo-star-toggle-row .form-switch-input,
+.admin-related-settings-grid .form-switch-input {
 	position: absolute;
 	width: 1px;
 	height: 1px;
@@ -127,7 +128,8 @@
 }
 
 .admin-emails-settings-panel .form-switch,
-.todo-star-toggle-row .form-switch {
+.todo-star-toggle-row .form-switch,
+.admin-related-settings-grid .form-switch {
 	position: relative;
 	display: inline-flex;
 	align-items: center;
@@ -136,14 +138,16 @@
 }
 
 .admin-emails-settings-panel .form-switch:focus-visible,
-.todo-star-toggle-row .form-switch:focus-visible {
+.todo-star-toggle-row .form-switch:focus-visible,
+.admin-related-settings-grid .form-switch:focus-visible {
 	outline: 2px solid var(--accent-switch);
 	outline-offset: 2px;
 	border-radius: 999px;
 }
 
 .admin-emails-settings-panel .form-switch-track,
-.todo-star-toggle-row .form-switch-track {
+.todo-star-toggle-row .form-switch-track,
+.admin-related-settings-grid .form-switch-track {
 	display: flex;
 	align-items: center;
 	width: 2.75rem;
@@ -157,12 +161,15 @@
 .admin-emails-settings-panel .form-switch-input:focus-visible ~ .form-switch-track,
 .admin-emails-settings-panel .form-switch:focus-visible .form-switch-track,
 .todo-star-toggle-row .form-switch-input:focus-visible ~ .form-switch-track,
-.todo-star-toggle-row .form-switch:focus-visible .form-switch-track {
+.todo-star-toggle-row .form-switch:focus-visible .form-switch-track,
+.admin-related-settings-grid .form-switch-input:focus-visible ~ .form-switch-track,
+.admin-related-settings-grid .form-switch:focus-visible .form-switch-track {
 	box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-switch) 40%, transparent);
 }
 
 .admin-emails-settings-panel .form-switch-thumb,
-.todo-star-toggle-row .form-switch-thumb {
+.todo-star-toggle-row .form-switch-thumb,
+.admin-related-settings-grid .form-switch-thumb {
 	width: 1.25rem;
 	height: 1.25rem;
 	border-radius: 50%;
@@ -173,12 +180,14 @@
 }
 
 .admin-emails-settings-panel .form-switch-input:checked ~ .form-switch-track,
-.todo-star-toggle-row .form-switch-input:checked ~ .form-switch-track {
+.todo-star-toggle-row .form-switch-input:checked ~ .form-switch-track,
+.admin-related-settings-grid .form-switch-input:checked ~ .form-switch-track {
 	background: color-mix(in srgb, var(--accent-switch) 40%, var(--switch-track-off));
 }
 
 .admin-emails-settings-panel .form-switch-input:checked ~ .form-switch-track .form-switch-thumb,
-.todo-star-toggle-row .form-switch-input:checked ~ .form-switch-track .form-switch-thumb {
+.todo-star-toggle-row .form-switch-input:checked ~ .form-switch-track .form-switch-thumb,
+.admin-related-settings-grid .form-switch-input:checked ~ .form-switch-track .form-switch-thumb {
 	background: var(--accent-switch);
 	transform: translateX(1.25rem);
 }
@@ -201,6 +210,117 @@
 	border: none;
 	padding: 0;
 	box-shadow: none;
+}
+
+/* Related algorithm admin page */
+.admin-related-page h3 {
+	margin-top: 24px;
+	margin-bottom: 16px;
+	font-size: 1.25rem;
+	font-weight: 600;
+}
+
+.admin-related-page h3:first-child {
+	margin-top: 0;
+}
+
+.admin-related-settings-container,
+.admin-related-settings-grid {
+	width: 100%;
+}
+
+.admin-related-settings-grid {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 16px 32px;
+	align-items: start;
+}
+
+.admin-related-settings-grid > .admin-settings-section-title {
+	margin-top: 0;
+	margin-bottom: 0;
+	padding-top: 12px;
+	grid-column: 1 / -1;
+	font-size: 0.7rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--text-muted);
+}
+
+.admin-related-settings-grid > .admin-settings-section-title:first-child {
+	padding-top: 0;
+}
+
+.admin-related-settings-grid > .admin-settings-field {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.admin-related-settings-grid > .admin-settings-field .admin-settings-label,
+.admin-related-settings-grid > .admin-settings-field .admin-settings-label-desc {
+	flex: 0 0 auto;
+}
+
+.admin-related-settings-grid > .admin-settings-field .admin-settings-input,
+.admin-related-settings-grid > .admin-settings-field .admin-settings-row {
+	margin-top: auto;
+}
+
+.admin-related-settings-grid > .admin-settings-actions,
+.admin-related-settings-grid > .admin-related-save-status {
+	grid-column: 1 / -1;
+}
+
+.admin-related-settings-grid .admin-settings-input.admin-related-input {
+	width: 100%;
+	max-width: none;
+	min-width: 0;
+	text-align: right;
+	box-sizing: border-box;
+}
+
+.admin-related-field-hint {
+	margin-top: 2px;
+	margin-bottom: 0;
+	font-size: 0.8rem;
+}
+
+@media (max-width: 1024px) {
+	.admin-related-settings-grid {
+		grid-template-columns: repeat(2, 1fr);
+	}
+}
+
+@media (max-width: 768px) {
+	.admin-related-settings-grid {
+		grid-template-columns: 1fr;
+		gap: 14px;
+	}
+}
+
+.admin-related-save-bar {
+	margin-top: 8px;
+	padding-top: 20px;
+	border-top: 1px solid var(--border);
+}
+
+.admin-related-save-status {
+	font-size: 0.9rem;
+	margin-top: 10px;
+}
+
+.admin-related-save-status-error {
+	color: var(--error, #b91c1c);
+}
+
+.admin-related-transitions-toolbar {
+	margin-top: 12px;
+}
+
+.admin-related-transitions-wrapper {
+	overflow-x: auto;
 }
 
 .users-cards {

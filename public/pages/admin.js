@@ -7,7 +7,8 @@ const adminDataLoaded = {
 	policies: false,
 	todo: false,
 	settings: false,
-	sends: false
+	sends: false,
+	related: false
 };
 let todoWritable = true;
 let todoPriorityMode = "gated";
@@ -514,6 +515,49 @@ function setupEmailsTabPersistence() {
 	});
 }
 
+let algoTabPersistenceInitialized = false;
+
+function setupAlgoTabPersistence() {
+	const relatedPage = document.querySelector("#related-page");
+	if (!relatedPage) return;
+
+	const tabsEl = relatedPage.querySelector("app-tabs");
+	if (!tabsEl) return;
+
+	const storageKey = "admin-algo-tab";
+	const validTabIds = ["transitions", "settings"];
+
+	const savedTab = (() => {
+		try {
+			const saved = sessionStorage.getItem(storageKey);
+			return saved && validTabIds.includes(saved) ? saved : null;
+		} catch {
+			return null;
+		}
+	})();
+
+	if (savedTab) {
+		setTimeout(() => {
+			if (typeof tabsEl.setActiveTab === "function") {
+				tabsEl.setActiveTab(savedTab, { focus: false });
+			}
+		}, 0);
+	}
+
+	if (!algoTabPersistenceInitialized) {
+		algoTabPersistenceInitialized = true;
+		tabsEl.addEventListener("tab-change", (e) => {
+			const id = e.detail?.id;
+			if (!id || !validTabIds.includes(id)) return;
+			try {
+				sessionStorage.setItem(storageKey, id);
+			} catch {
+				// Ignore storage errors
+			}
+		});
+	}
+}
+
 let emailTestPanelInitialized = false;
 
 function initEmailTestPanel() {
@@ -967,6 +1011,294 @@ async function loadSettings() {
 	}
 }
 
+const RELATED_SETTINGS_FIELDS = [
+	{ key: "related.lineage_weight", label: "Lineage weight", type: "number", section: "Signal weights", hint: "Score for parent/child lineage matches" },
+	{ key: "related.lineage_min_slots", label: "Lineage min slots", type: "number", section: "Signal weights", hint: "Min slots reserved for lineage in each batch" },
+	{ key: "related.same_server_method_weight", label: "Same server+method weight", type: "number", section: "Signal weights", hint: "Same provider + method" },
+	{ key: "related.same_creator_weight", label: "Same creator weight", type: "number", section: "Signal weights", hint: "Score when created by the same user" },
+	{ key: "related.fallback_weight", label: "Fallback weight", type: "number", section: "Signal weights", hint: "Score for random recent creations" },
+	{ key: "related.click_next_weight", label: "Click-next weight", type: "number", section: "Signal weights", hint: "Blend weight for click-through data" },
+	{ key: "related.transition_cap_k", label: "Transition cap (K per from)", type: "number", section: "Transition", hint: "Max destinations kept per source; oldest evicted" },
+	{ key: "related.transition_decay_half_life_days", label: "Decay half-life (days)", type: "number", section: "Transition", hint: "Older transitions count less" },
+	{ key: "related.transition_window_days", label: "Window (days, 0 = use decay)", type: "number", section: "Transition", hint: "Hard cutoff; 0 means use decay only" },
+	{ key: "related.random_fraction", label: "Random fraction", type: "number", section: "Random & caps", hint: "Fraction of batch filled with random items" },
+	{ key: "related.random_slots_per_batch", label: "Random slots per batch", type: "number", section: "Random & caps", hint: "Fixed number overrides fraction if set" },
+	{ key: "related.batch_size", label: "Batch size", type: "number", section: "Random & caps", hint: "Default number of related items per request" },
+	{ key: "related.candidate_cap_per_signal", label: "Candidate cap per signal", type: "number", section: "Random & caps", hint: "Max candidates pulled per signal" },
+	{ key: "related.fallback_enabled", label: "Fallback enabled", type: "checkbox", section: "Fallback", hint: "Include random recent creations when needed" }
+];
+
+let relatedTransitionsPage = 1;
+const relatedTransitionsPageSize = 20;
+
+async function loadRelatedAlgorithm() {
+	const settingsContainer = document.querySelector("#related-settings-container");
+	const transitionsContainer = document.querySelector("#related-transitions-container");
+	if (!settingsContainer || !transitionsContainer) return;
+	if (adminDataLoaded.related) {
+		loadRelatedTransitions(transitionsContainer);
+		return;
+	}
+
+	settingsContainer.innerHTML = "";
+	renderLoading(settingsContainer, "Loading related settings…");
+
+	try {
+		const response = await fetch("/admin/related-settings", { credentials: "include" });
+		if (!response.ok) throw new Error("Failed to load related settings.");
+		const data = await response.json();
+
+		settingsContainer.innerHTML = "";
+		settingsContainer.classList.add("admin-related-settings-grid");
+
+		const sectionOrder = ["Signal weights", "Transition", "Random & caps", "Fallback"];
+		const bySection = new Map();
+		for (const field of RELATED_SETTINGS_FIELDS) {
+			const sec = field.section;
+			if (!bySection.has(sec)) bySection.set(sec, []);
+			bySection.get(sec).push(field);
+		}
+
+		for (const sectionTitle of sectionOrder) {
+			const fields = bySection.get(sectionTitle);
+			if (!fields?.length) continue;
+			const title = document.createElement("span");
+			title.className = "admin-settings-section-title";
+			title.textContent = sectionTitle;
+			settingsContainer.appendChild(title);
+			for (const field of fields) {
+				const wrap = document.createElement("div");
+				wrap.className = "admin-settings-field";
+				if (field.type === "checkbox") {
+					const row = document.createElement("div");
+					row.className = "admin-settings-row";
+					const switchWrap = document.createElement("div");
+					switchWrap.className = "form-switch admin-settings-switch";
+					switchWrap.setAttribute("role", "switch");
+					switchWrap.setAttribute("aria-label", field.label);
+					const input = document.createElement("input");
+					input.type = "checkbox";
+					input.id = `related-${field.key.replace(/\./g, "-")}`;
+					input.className = "form-switch-input";
+					input.setAttribute("aria-hidden", "true");
+					input.setAttribute("tabindex", "-1");
+					input.dataset.relatedKey = field.key;
+					input.checked = String(data[field.key] ?? "true").toLowerCase() === "true";
+					switchWrap.appendChild(input);
+					const track = document.createElement("span");
+					track.className = "form-switch-track";
+					track.innerHTML = "<span class=\"form-switch-thumb\"></span>";
+					switchWrap.appendChild(track);
+					row.appendChild(switchWrap);
+					const labelDesc = document.createElement("div");
+					labelDesc.className = "admin-settings-label-desc";
+					const label = document.createElement("label");
+					label.className = "admin-settings-label-inline";
+					label.htmlFor = input.id;
+					label.textContent = field.label;
+					labelDesc.appendChild(label);
+					if (field.hint) {
+						const hint = document.createElement("p");
+						hint.className = "admin-detail admin-related-field-hint";
+						hint.textContent = field.hint;
+						labelDesc.appendChild(hint);
+					}
+					row.appendChild(labelDesc);
+					wrap.appendChild(row);
+					settingsContainer.appendChild(wrap);
+					bindSwitch(input, () => { });
+				} else {
+					const label = document.createElement("label");
+					label.className = "admin-settings-label";
+					label.setAttribute("for", `related-${field.key.replace(/\./g, "-")}`);
+					label.textContent = field.label;
+					wrap.appendChild(label);
+					if (field.hint) {
+						const hint = document.createElement("p");
+						hint.className = "admin-detail admin-related-field-hint";
+						hint.textContent = field.hint;
+						wrap.appendChild(hint);
+					}
+					const input = document.createElement("input");
+					input.type = field.type === "number" ? "number" : "text";
+					input.id = `related-${field.key.replace(/\./g, "-")}`;
+					input.className = "admin-settings-input admin-related-input";
+					input.dataset.relatedKey = field.key;
+					input.value = String(data[field.key] ?? "").trim();
+					if (field.type === "number") input.min = "0";
+					wrap.appendChild(input);
+					settingsContainer.appendChild(wrap);
+				}
+			}
+		}
+
+		const actions = document.createElement("div");
+		actions.className = "admin-settings-actions admin-related-save-bar";
+		const saveBtn = document.createElement("button");
+		saveBtn.type = "button";
+		saveBtn.className = "btn-primary admin-settings-save";
+		saveBtn.innerHTML = '<span class="admin-settings-save-label">Save changes</span><span class="admin-settings-save-spinner" aria-hidden="true"></span>';
+		actions.appendChild(saveBtn);
+		settingsContainer.appendChild(actions);
+
+		const statusEl = document.createElement("div");
+		statusEl.className = "admin-related-save-status";
+		statusEl.setAttribute("role", "alert");
+		statusEl.setAttribute("aria-live", "polite");
+		settingsContainer.appendChild(statusEl);
+
+		saveBtn.addEventListener("click", async () => {
+			saveBtn.disabled = true;
+			saveBtn.classList.add("is-loading");
+			statusEl.textContent = "";
+			const payload = {};
+			for (const field of RELATED_SETTINGS_FIELDS) {
+				const input = document.querySelector(`[data-related-key="${field.key}"]`);
+				if (!input) continue;
+				if (field.type === "checkbox") {
+					payload[field.key] = input.checked ? "true" : "false";
+				} else {
+					payload[field.key] = String(input.value ?? "").trim();
+				}
+			}
+			try {
+				const res = await fetch("/admin/related-settings", {
+					method: "PATCH",
+					credentials: "include",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify(payload)
+				});
+				const resData = await res.json().catch(() => ({}));
+				if (res.ok) {
+					statusEl.textContent = "Saved.";
+					statusEl.classList.remove("admin-related-save-status-error");
+					setTimeout(() => { statusEl.textContent = ""; }, 2000);
+				} else {
+					statusEl.textContent = resData?.error || "Failed to save.";
+					statusEl.classList.add("admin-related-save-status-error");
+				}
+			} catch {
+				statusEl.textContent = "Failed to save.";
+				statusEl.classList.add("admin-related-save-status-error");
+			} finally {
+				saveBtn.disabled = false;
+				saveBtn.classList.remove("is-loading");
+			}
+		});
+
+		adminDataLoaded.related = true;
+		loadRelatedTransitions(transitionsContainer);
+	} catch (err) {
+		settingsContainer.innerHTML = "";
+		renderError(settingsContainer, "Error loading related settings.");
+	}
+}
+
+async function loadRelatedTransitions(container) {
+	if (!container) return;
+	container.innerHTML = "";
+	renderLoading(container, "Loading transitions…");
+
+	try {
+		const params = new URLSearchParams({
+			page: String(relatedTransitionsPage),
+			limit: String(relatedTransitionsPageSize)
+		});
+		const response = await fetch(`/admin/transitions?${params}`, { credentials: "include" });
+		if (!response.ok) throw new Error("Failed to load transitions.");
+		const data = await response.json();
+
+		container.innerHTML = "";
+		const items = data.items ?? [];
+		const total = Number(data.total) ?? 0;
+		const page = Number(data.page) ?? 1;
+		const limit = Number(data.limit) ?? relatedTransitionsPageSize;
+		const hasMore = data.hasMore === true;
+
+		if (total === 0) {
+			renderEmpty(container, "No transition data yet. Click related cards on creation detail to record transitions.");
+			return;
+		}
+
+		const toolbar = document.createElement("div");
+		toolbar.className = "admin-email-sends-toolbar admin-related-transitions-toolbar";
+		const start = total === 0 ? 0 : (page - 1) * limit + 1;
+		const end = Math.min(page * limit, total);
+		const summary = document.createElement("span");
+		summary.className = "admin-email-sends-summary";
+		summary.textContent = `Showing ${start}–${end} of ${total}`;
+		toolbar.appendChild(summary);
+
+		const nav = document.createElement("div");
+		nav.className = "admin-email-sends-nav";
+		nav.setAttribute("aria-label", "Pagination");
+		const prevBtn = document.createElement("button");
+		prevBtn.type = "button";
+		prevBtn.className = "admin-email-sends-prev btn-secondary";
+		prevBtn.textContent = "Previous";
+		prevBtn.disabled = page <= 1;
+		const nextBtn = document.createElement("button");
+		nextBtn.type = "button";
+		nextBtn.className = "admin-email-sends-next btn-secondary";
+		nextBtn.textContent = "Next";
+		nextBtn.disabled = !hasMore;
+		nav.appendChild(prevBtn);
+		nav.appendChild(nextBtn);
+		toolbar.appendChild(nav);
+
+		prevBtn.addEventListener("click", () => {
+			if (page > 1) {
+				relatedTransitionsPage = page - 1;
+				loadRelatedTransitions(container);
+			}
+		});
+		nextBtn.addEventListener("click", () => {
+			if (hasMore) {
+				relatedTransitionsPage = page + 1;
+				loadRelatedTransitions(container);
+			}
+		});
+
+		const wrapper = document.createElement("div");
+		wrapper.className = "admin-email-sends-wrapper admin-related-transitions-wrapper";
+		const table = document.createElement("table");
+		table.className = "admin-table admin-email-sends-table admin-related-transitions-table";
+		table.setAttribute("role", "grid");
+		table.innerHTML = `
+			<thead>
+				<tr>
+					<th scope="col" class="admin-table-col-from">From (ID)</th>
+					<th scope="col" class="admin-table-col-to">To (ID)</th>
+					<th scope="col" class="admin-table-col-count">Count</th>
+					<th scope="col" class="admin-table-col-date">Last updated</th>
+				</tr>
+			</thead>
+			<tbody></tbody>
+		`;
+		const tbody = table.querySelector("tbody");
+		for (const row of items) {
+			const tr = document.createElement("tr");
+			const fromId = row.from_created_image_id ?? "—";
+			const toId = row.to_created_image_id ?? "—";
+			const count = row.count ?? "—";
+			const lastUpdated = row.last_updated ? formatRelativeTime(row.last_updated, { style: "long" }) : "—";
+			tr.innerHTML = `
+				<td class="admin-table-col-from">${escapeHtml(String(fromId))}</td>
+				<td class="admin-table-col-to">${escapeHtml(String(toId))}</td>
+				<td class="admin-table-col-count">${escapeHtml(String(count))}</td>
+				<td class="admin-table-col-date">${escapeHtml(lastUpdated)}</td>
+			`;
+			tbody.appendChild(tr);
+		}
+		wrapper.appendChild(table);
+		container.appendChild(wrapper);
+		container.appendChild(toolbar);
+	} catch (err) {
+		container.innerHTML = "";
+		renderError(container, "Error loading transitions.");
+	}
+}
+
 function handleAdminRouteChange(route) {
 	const normalizedRoute = route === "policies"
 		? "policy-knobs"
@@ -988,6 +1320,10 @@ function handleAdminRouteChange(route) {
 			loadEmailTemplates();
 			initEmailTestPanel();
 			loadSettings();
+			break;
+		case "related":
+			setupAlgoTabPersistence();
+			loadRelatedAlgorithm();
 			break;
 		case "todo":
 			loadTodo();
