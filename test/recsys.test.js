@@ -1,5 +1,5 @@
 import { describe, it, expect } from '@jest/globals';
-import { createRecommender, _helpers } from './recsys.js';
+import { createRecommender, _helpers } from '../db/recommend/recsys.js';
 
 function seededRng(seed = 42) {
 	let s = seed >>> 0;
@@ -79,7 +79,7 @@ describe('recsys recommender', () => {
 		expect(lineageCount).toBeGreaterThanOrEqual(2);
 	});
 
-	it('windowDays filters stale transitions when set', () => {
+	it('applies windowDays cutoff when half-life decay is disabled', () => {
 		const { pool, transitions, now } = sampleData();
 		const r = createRecommender({
 			now: () => +new Date(now),
@@ -87,7 +87,7 @@ describe('recsys recommender', () => {
 			randomFraction: 0,
 			batchSize: 6,
 			windowDays: 14,
-			decayHalfLifeDays: 7
+			decayHalfLifeDays: 0
 		});
 
 		const out = r.recommend({
@@ -96,10 +96,41 @@ describe('recsys recommender', () => {
 			transitions
 		});
 
-		// old item id 6 should not be boosted via transition due to window cutoff
+		// With half-life disabled, windowDays acts as hard cutoff for click-next.
 		const old = out.find(x => x.id === 6);
 		expect(old).toBeDefined();
 		expect(old.reasons).not.toContain('clickNext');
+	});
+
+	it('normalizes click-next effect so large counts do not dominate unboundedly', () => {
+		const { pool, transitions, now } = sampleData();
+		const r = createRecommender({
+			now: () => +new Date(now),
+			rng: seededRng(7),
+			randomFraction: 0,
+			batchSize: 6,
+			// Keep non-click signals at 0 to isolate click normalization behavior.
+			lineageWeight: 0,
+			sameCreatorWeight: 0,
+			sameServerMethodWeight: 0,
+			fallbackWeight: 0,
+			clickNextWeight: 100
+		});
+
+		const out = r.recommend({
+			anchor: pool.find(x => x.id === 1),
+			pool,
+			transitions
+		});
+
+		const item4 = out.find(x => x.id === 4);
+		const item2 = out.find(x => x.id === 2);
+		expect(item4).toBeDefined();
+		expect(item2).toBeDefined();
+		// 4 has stronger transition count than 2, but normalized score stays bounded by clickNextWeight.
+		expect(item4.score).toBeLessThanOrEqual(100);
+		expect(item2.score).toBeLessThanOrEqual(100);
+		expect(item4.score).toBeGreaterThan(item2.score);
 	});
 
 	it('random slots inject variability but remain score-sorted', () => {
@@ -119,6 +150,8 @@ describe('recsys recommender', () => {
 		});
 
 		expect(out).toHaveLength(5);
+		const ids = out.map(x => x.id);
+		expect(new Set(ids).size).toBe(ids.length);
 		for (let i = 1; i < out.length; i++) {
 			expect(out[i - 1].score).toBeGreaterThanOrEqual(out[i].score);
 		}

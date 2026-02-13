@@ -62,8 +62,7 @@ export function createRecommender(config = {}) {
 			.map(t => ({
 				...t,
 				ageDays: ageDays(t.updatedAt || t.createdAt || cfg.now(), cfg.now())
-			}))
-			.filter(t => inWindowOrDecay(t.ageDays, cfg.windowDays));
+			}));
 
 		for (const t of fromTransitions) {
 			const candidate = poolById.get(t.toId);
@@ -110,10 +109,26 @@ export function createRecommender(config = {}) {
 		for (const item of buckets.sameServerMethod) {
 			addScore(item, cfg.sameServerMethodWeight, "sameServerMethod");
 		}
+		const clickScoreById = new Map();
 		for (const c of buckets.clickNext) {
-			const decay = transitionDecay(c.t.ageDays, cfg.decayHalfLifeDays);
 			const count = Math.max(0, c.t.count || 0);
-			addScore(c.item, cfg.clickNextWeight * count * decay, "clickNext");
+			const effective = transitionEffectiveCount(
+				count,
+				c.t.ageDays,
+				cfg.decayHalfLifeDays,
+				cfg.windowDays
+			);
+			if (effective <= 0) continue;
+			clickScoreById.set(c.item.id, (clickScoreById.get(c.item.id) || 0) + effective);
+		}
+		const clickMax = clickScoreById.size > 0 ? Math.max(...clickScoreById.values()) : 0;
+		if (clickMax > 0) {
+			for (const [itemId, clickScore] of clickScoreById) {
+				const row = scored.get(itemId);
+				if (!row) continue;
+				row.score += cfg.clickNextWeight * (clickScore / clickMax);
+				row.reasons.push("clickNext");
+			}
 		}
 		for (const item of buckets.fallback) {
 			addScore(item, cfg.fallbackWeight * 0.1, "fallback");
@@ -125,6 +140,7 @@ export function createRecommender(config = {}) {
 		// 3) Enforce lineage min slots
 		const lineageSet = new Set(buckets.lineage.map(x => x.id));
 		ranked = enforceLineageMinSlots(ranked, lineageSet, cfg.lineageMinSlots);
+		ranked = dedupeRankedByItemId(ranked);
 
 		// 4) Randomness blending
 		const batchSize = cfg.batchSize;
@@ -141,7 +157,7 @@ export function createRecommender(config = {}) {
 		shuffleInPlace(randomPool, cfg.rng);
 		const randomPick = randomPool.slice(0, randomSlots);
 
-		const batch = [...topDeterministic, ...randomPick];
+		const batch = dedupeRankedByItemId([...topDeterministic, ...randomPick]);
 		batch.sort((a, b) => b.score - a.score); // keep "highest to lowest" even with randomness
 
 		return batch.slice(0, batchSize).map(x => ({
@@ -174,15 +190,19 @@ function ageDays(ts, nowTs) {
 	return Math.max(0, (n - t) / 86400000);
 }
 
-function inWindowOrDecay(age, windowDays) {
-	if (!windowDays || windowDays <= 0) return true;
-	return age <= windowDays;
-}
-
 function transitionDecay(ageDaysVal, halfLifeDays) {
 	if (!halfLifeDays || halfLifeDays <= 0) return 1;
 	// 0.5^(age/halfLife)
 	return Math.pow(0.5, ageDaysVal / halfLifeDays);
+}
+
+function transitionEffectiveCount(count, ageDaysVal, halfLifeDays, windowDays) {
+	const hasHalfLife = Number.isFinite(halfLifeDays) && halfLifeDays > 0;
+	const hasWindow = Number.isFinite(windowDays) && windowDays > 0;
+	if (hasWindow && !hasHalfLife) {
+		return ageDaysVal <= windowDays ? count : 0;
+	}
+	return count * transitionDecay(ageDaysVal, halfLifeDays);
 }
 
 function cap(arr, n) {
@@ -239,6 +259,18 @@ function shuffleInPlace(arr, rng) {
 
 function round2(x) {
 	return Math.round(x * 100) / 100;
+}
+
+function dedupeRankedByItemId(ranked) {
+	const deduped = [];
+	const seen = new Set();
+	for (const row of ranked) {
+		const id = row?.item?.id;
+		if (id == null || seen.has(id)) continue;
+		seen.add(id);
+		deduped.push(row);
+	}
+	return deduped;
 }
 
 export const _helpers = {
