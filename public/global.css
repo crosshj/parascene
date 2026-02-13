@@ -2474,6 +2474,43 @@ app-route-feed {
 	color: var(--text);
 }
 
+/* Related section: same width as explore page (break out of creation-detail-info max-width) */
+.creation-detail-related {
+	width: 100vw;
+	position: relative;
+	left: 50%;
+	right: 50%;
+	margin-left: -50vw;
+	margin-right: -50vw;
+	margin-top: 32px;
+	padding-top: 24px;
+	border-top: 1px solid var(--border);
+	box-sizing: border-box;
+}
+
+.creation-detail-related-inner {
+	max-width: 1400px;
+	margin: 0 auto;
+	padding: 0 24px;
+}
+
+@media (max-width: 768px) {
+	.creation-detail-related-inner {
+		padding: 0 8px;
+	}
+}
+
+.creation-detail-related-heading {
+	font-size: 1.25rem;
+	font-weight: 600;
+	color: var(--text);
+	margin: 0 0 16px;
+}
+
+.creation-detail-related-sentinel {
+	min-height: 20px;
+}
+
 .comments-sort {
 	display: inline-flex;
 	align-items: center;

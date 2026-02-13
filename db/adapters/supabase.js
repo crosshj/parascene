@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import path from "path";
 import sharp from "sharp";
+import { RELATED_PARAM_DEFAULTS, RELATED_PARAM_KEYS } from "./relatedParams.js";
 
 // Note: Supabase schema must be provisioned separately (SQL editor/migrations).
 // This adapter expects all tables to be prefixed with "prsn_".
@@ -566,6 +567,210 @@ export function openDb() {
 					.insert({ key, value, description: description ?? null, updated_at: now });
 				if (error) throw error;
 				return { changes: 1 };
+			}
+		},
+		getRelatedParams: {
+			get: async () => {
+				const all = await queries.selectPolicies.all();
+				const byKey = Object.fromEntries(
+					all.filter((r) => r.key.startsWith("related.")).map((r) => [r.key, r.value])
+				);
+				const out = { ...RELATED_PARAM_DEFAULTS };
+				for (const key of RELATED_PARAM_KEYS) {
+					if (byKey[key] !== undefined) out[key] = byKey[key];
+				}
+				return out;
+			}
+		},
+		recordTransition: {
+			run: async (fromId, toId) => {
+				const table = prefixedTable("related_transitions");
+				const now = new Date().toISOString();
+				const { data: existing } = await serviceClient
+					.from(table)
+					.select("to_created_image_id, count, last_updated")
+					.eq("from_created_image_id", fromId)
+					.eq("to_created_image_id", toId)
+					.maybeSingle();
+				if (existing) {
+					const { error } = await serviceClient
+						.from(table)
+						.update({ count: existing.count + 1, last_updated: now })
+						.eq("from_created_image_id", fromId)
+						.eq("to_created_image_id", toId);
+					if (error) throw error;
+				} else {
+					const { error } = await serviceClient.from(table).insert({
+						from_created_image_id: fromId,
+						to_created_image_id: toId,
+						count: 1,
+						last_updated: now
+					});
+					if (error) throw error;
+				}
+				const params = await queries.getRelatedParams.get();
+				const capK = Math.max(0, parseInt(params["related.transition_cap_k"], 10) || 50);
+				const { data: rows } = await serviceClient
+					.from(table)
+					.select("to_created_image_id, last_updated")
+					.eq("from_created_image_id", fromId)
+					.order("last_updated", { ascending: true });
+				if (rows && rows.length > capK) {
+					const toEvict = rows.slice(0, rows.length - capK).map((r) => r.to_created_image_id);
+					for (const toIdEvict of toEvict) {
+						const { error } = await serviceClient
+							.from(table)
+							.delete()
+							.eq("from_created_image_id", fromId)
+							.eq("to_created_image_id", toIdEvict);
+						if (error) throw error;
+					}
+				}
+				return { changes: 1 };
+			}
+		},
+		selectTransitions: {
+			list: async ({ page = 1, limit = 20 } = {}) => {
+				const table = prefixedTable("related_transitions");
+				const from = (page - 1) * limit;
+				const { data: items, error } = await serviceClient
+					.from(table)
+					.select("from_created_image_id, to_created_image_id, count, last_updated")
+					.order("count", { ascending: false })
+					.range(from, from + limit - 1);
+				if (error) throw error;
+				const { count: total, error: countError } = await serviceClient
+					.from(table)
+					.select("*", { count: "exact", head: true });
+				if (countError) throw countError;
+				return {
+					items: items ?? [],
+					total: total ?? 0,
+					page,
+					limit,
+					hasMore: (items?.length ?? 0) === limit && (total ?? 0) > from + limit
+				};
+			}
+		},
+		selectRelatedToCreatedImage: {
+			all: async (createdImageId, viewerId, options = {}) => {
+				const limit = Math.min(Math.max(1, parseInt(options.limit, 10) || 10), 24);
+				const seedIds = Array.isArray(options.seedIds) && options.seedIds.length > 0
+					? options.seedIds.map((id) => Number(id)).filter((n) => Number.isFinite(n) && n > 0).slice(0, 10)
+					: [Number(createdImageId)].filter((n) => Number.isFinite(n) && n > 0);
+				if (seedIds.length === 0) return { ids: [], hasMore: false };
+				const excludeIds = new Set([
+					...(Array.isArray(options.excludeIds) ? options.excludeIds.map((id) => Number(id)) : []),
+					...seedIds,
+					Number(createdImageId)
+				].filter((n) => Number.isFinite(n)));
+				const params = options.params ?? await queries.getRelatedParams.get();
+				const lineageWeight = Math.max(0, parseInt(params["related.lineage_weight"], 10) || 100);
+				const lineageMinSlots = Math.max(0, parseInt(params["related.lineage_min_slots"], 10) || 2);
+				const sameServerMethodWeight = Math.max(0, parseInt(params["related.same_server_method_weight"], 10) || 80);
+				const sameCreatorWeight = Math.max(0, parseInt(params["related.same_creator_weight"], 10) || 50);
+				const fallbackWeight = Math.max(0, parseInt(params["related.fallback_weight"], 10) || 20);
+				const capPerSignal = Math.max(1, Math.min(500, parseInt(params["related.candidate_cap_per_signal"], 10) || 100));
+				const randomFraction = Math.max(0, Math.min(1, parseFloat(params["related.random_fraction"], 10) || 0.1));
+				const randomSlotsPerBatch = Math.max(0, parseInt(params["related.random_slots_per_batch"], 10) || 0);
+				const fallbackEnabled = String(params["related.fallback_enabled"] ?? "true").toLowerCase() === "true";
+
+				const imgTable = prefixedTable("created_images");
+				const { data: seedRows, error: seedErr } = await serviceClient
+					.from(imgTable)
+					.select("id, user_id, meta")
+					.in("id", seedIds)
+					.eq("published", true);
+				if (seedErr) throw seedErr;
+				const seeds = (seedRows ?? []).map((r) => ({
+					id: Number(r.id),
+					user_id: r.user_id != null ? Number(r.user_id) : null,
+					meta: r.meta != null && typeof r.meta === "object" ? r.meta : {}
+				}));
+				const seedIdSet = new Set(seeds.map((s) => s.id));
+				const parentIds = seeds.map((s) => s.meta?.mutate_of_id != null ? Number(s.meta.mutate_of_id) : null).filter((n) => Number.isFinite(n) && !excludeIds.has(n));
+				const serverMethodPairs = [...new Set(seeds.map((s) => {
+					const sid = s.meta?.server_id; const m = s.meta?.method;
+					return sid != null && m != null ? `${sid}\t${m}` : null;
+				}).filter(Boolean))];
+				const creatorUserIds = [...new Set(seeds.map((s) => s.user_id).filter(Boolean))];
+
+				const byId = new Map();
+				function addCandidates(list, score) {
+					for (const row of list) {
+						const id = row.id != null ? Number(row.id) : null;
+						if (id == null || excludeIds.has(id) || seedIdSet.has(id)) continue;
+						const cur = byId.get(id);
+						if (cur == null || score > cur.score) byId.set(id, { id, score, created_at: row.created_at });
+					}
+				}
+
+				const lineageIds = new Set();
+				if (seedIds.length > 0) {
+					const orClause = seedIds.map((id) => `meta->>mutate_of_id.eq.${id}`).join(",");
+					const { data: children } = await serviceClient.from(imgTable).select("id, created_at").eq("published", true).or(orClause).limit(capPerSignal);
+					addCandidates(children ?? [], lineageWeight);
+					(children ?? []).forEach((r) => lineageIds.add(Number(r.id)));
+					if (parentIds.length > 0) {
+						const { data: parents } = await serviceClient.from(imgTable).select("id, created_at").in("id", parentIds).eq("published", true).limit(capPerSignal);
+						addCandidates(parents ?? [], lineageWeight);
+						(parents ?? []).forEach((r) => lineageIds.add(Number(r.id)));
+					}
+				}
+
+				if (serverMethodPairs.length > 0) {
+					const orClauses = serverMethodPairs.map((pair) => {
+						const [sid, m] = pair.split("\t");
+						return `and(meta->>server_id.eq.${sid},meta->>method.eq.${m})`;
+					});
+					const { data: sameSm } = await serviceClient.from(imgTable).select("id, created_at").eq("published", true).or(orClauses.join(",")).limit(capPerSignal);
+					addCandidates(sameSm ?? [], sameServerMethodWeight);
+				}
+
+				if (creatorUserIds.length > 0) {
+					const { data: sameCreator } = await serviceClient.from(imgTable).select("id, created_at").eq("published", true).in("user_id", creatorUserIds).limit(capPerSignal);
+					addCandidates(sameCreator ?? [], sameCreatorWeight);
+				}
+
+				if (fallbackEnabled) {
+					const { data: fallback } = await serviceClient.from(imgTable).select("id, created_at").eq("published", true).order("created_at", { ascending: false }).limit(capPerSignal);
+					addCandidates(fallback ?? [], fallbackWeight);
+				}
+
+				let sorted = [...byId.values()].sort((a, b) => b.score - a.score || new Date(b.created_at || 0) - new Date(a.created_at || 0));
+				const lineageSorted = sorted.filter((c) => lineageIds.has(c.id));
+				const otherSorted = sorted.filter((c) => !lineageIds.has(c.id));
+				const lineageTake = Math.min(lineageMinSlots, lineageSorted.length);
+				const combined = [...lineageSorted.slice(0, lineageTake), ...otherSorted];
+				const deduped = [];
+				const seen = new Set();
+				for (const c of combined) {
+					if (seen.has(c.id)) continue;
+					seen.add(c.id);
+					deduped.push(c);
+				}
+				const randomSlots = randomSlotsPerBatch > 0 ? Math.min(randomSlotsPerBatch, limit) : Math.max(0, Math.floor(limit * randomFraction));
+				/* Fetch limit+1 so we can set hasMore when there are more candidates */
+				const rankedTake = Math.max(0, limit + 1 - randomSlots);
+				const rankedIds = deduped.slice(0, rankedTake).map((c) => c.id);
+				const excludeAndRanked = new Set([...excludeIds, ...rankedIds, ...seedIds]);
+				let randomIds = [];
+				if (randomSlots > 0) {
+					const { data: randRows } = await serviceClient.from(imgTable).select("id").eq("published", true).order("created_at", { ascending: false }).limit(randomSlots * 3);
+					const pool = (randRows ?? []).map((r) => Number(r.id)).filter((id) => !excludeAndRanked.has(id));
+					for (let i = 0; i < randomSlots && pool.length > 0; i++) {
+						const idx = Math.floor(Math.random() * pool.length);
+						randomIds.push(pool[idx]);
+						excludeAndRanked.add(pool[idx]);
+						pool.splice(idx, 1);
+					}
+				}
+				const ids = [...rankedIds];
+				for (let i = 0; i < randomSlots; i++) {
+					if (randomIds[i] != null) ids.push(randomIds[i]);
+				}
+				const hasMore = ids.length > limit;
+				return { ids: ids.slice(0, limit), hasMore };
 			}
 		},
 		selectNotificationsForUser: {
@@ -2505,6 +2710,21 @@ export function openDb() {
 					.maybeSingle();
 				if (error) throw error;
 				return data ? { viewer_liked: 1 } : undefined;
+			}
+		},
+		selectViewerLikedCreationIds: {
+			all: async (userId, creationIds) => {
+				const safeIds = Array.isArray(creationIds)
+					? creationIds.map((id) => Number(id)).filter((n) => Number.isFinite(n) && n > 0)
+					: [];
+				if (safeIds.length === 0) return [];
+				const { data, error } = await serviceClient
+					.from(prefixedTable("likes_created_image"))
+					.select("created_image_id")
+					.eq("user_id", userId)
+					.in("created_image_id", safeIds);
+				if (error) throw error;
+				return (data ?? []).map((r) => Number(r.created_image_id));
 			}
 		},
 		insertCreatedImageComment: {

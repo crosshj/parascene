@@ -285,3 +285,16 @@ CREATE TABLE IF NOT EXISTS try_requests (
 );
 CREATE INDEX IF NOT EXISTS idx_try_requests_anon_cid ON try_requests(anon_cid);
 CREATE INDEX IF NOT EXISTS idx_try_requests_created_image_anon_id ON try_requests(created_image_anon_id);
+
+-- Related creations: view→next-click transitions for click-next ranking
+CREATE TABLE IF NOT EXISTS related_transitions (
+  from_created_image_id INTEGER NOT NULL REFERENCES created_images(id) ON DELETE CASCADE,
+  to_created_image_id INTEGER NOT NULL REFERENCES created_images(id) ON DELETE CASCADE,
+  count INTEGER NOT NULL DEFAULT 1,
+  last_updated TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(from_created_image_id, to_created_image_id),
+  CHECK(from_created_image_id != to_created_image_id)
+);
+CREATE INDEX IF NOT EXISTS idx_related_transitions_from ON related_transitions(from_created_image_id);
+CREATE INDEX IF NOT EXISTS idx_related_transitions_from_last_updated ON related_transitions(from_created_image_id, last_updated);
+CREATE INDEX IF NOT EXISTS idx_related_transitions_count ON related_transitions(count DESC);

@@ -21,7 +21,8 @@ const expectedTables = [
   'prsn_created_images',
   'prsn_feed_items',
   'prsn_user_credits',
-  'prsn_likes_created_image'
+  'prsn_likes_created_image',
+  'prsn_related_transitions'
 ];
 
 describe('Database Integration Tests', () => {

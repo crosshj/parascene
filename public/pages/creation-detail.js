@@ -170,6 +170,196 @@ function getPrimaryLinkUrl(creationId) {
 	return new URL(`/creations/${creationId}`, window.location.origin).toString();
 }
 
+const RELATED_BATCH_SIZE = 10;
+const RELATED_STORAGE_KEY_PREFIX = 'related_transition_';
+
+function recordTransitionFromQuery(currentCreationId) {
+	const params = new URLSearchParams(window.location.search);
+	const fromRaw = params.get('from');
+	const fromId = fromRaw != null ? parseInt(fromRaw, 10) : NaN;
+	if (!Number.isFinite(fromId) || fromId < 1 || fromId === currentCreationId) return;
+	const key = `${RELATED_STORAGE_KEY_PREFIX}${fromId}_${currentCreationId}`;
+	try {
+		if (sessionStorage.getItem(key)) return;
+	} catch {
+		return;
+	}
+	fetch('/api/creations/transitions', {
+		method: 'POST',
+		credentials: 'include',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({
+			from_created_image_id: fromId,
+			to_created_image_id: currentCreationId
+		})
+	}).then((res) => {
+		if (res.ok) {
+			try {
+				sessionStorage.setItem(key, '1');
+			} catch {
+				// ignore
+			}
+			const url = new URL(window.location.href);
+			url.searchParams.delete('from');
+			const newUrl = url.pathname + (url.search ? url.search : '') + (url.hash || '');
+			window.history.replaceState(window.history.state, '', newUrl);
+		}
+	}).catch(() => {});
+}
+
+function initRelatedSection(root, currentCreationId) {
+	const container = root.querySelector('[data-related-container]');
+	const grid = root.querySelector('[data-related-grid]');
+	const sentinel = root.querySelector('[data-related-sentinel]');
+	if (!container || !grid || !sentinel) return;
+
+	function escapeHtml(val) {
+		return String(val ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+	}
+
+	let relatedIds = [];
+	const relatedIdsSet = new Set();
+	let hasMore = false;
+	let isLoading = false;
+	let relatedObserver = null;
+
+	function relatedCardUrl(createdImageId) {
+		return `/creations/${createdImageId}?from=${currentCreationId}`;
+	}
+
+	function setRelatedMediaBackground(mediaEl, url) {
+		if (!mediaEl || !url) return;
+		if (mediaEl.dataset.bgLoadedUrl === url) return;
+		const img = new Image();
+		img.onload = () => {
+			mediaEl.dataset.bgLoadedUrl = url;
+			mediaEl.style.backgroundImage = `url("${String(url).replace(/"/g, '\\"')}")`;
+		};
+		img.src = url;
+	}
+
+		function appendRelatedCards(items) {
+		if (!items || items.length === 0) return;
+		const startIndex = grid.querySelectorAll('.route-card').length;
+		items.forEach((item, i) => {
+			if (!item || typeof item !== 'object') return;
+			const cid = item.created_image_id ?? item.id;
+			if (!cid) return;
+			const card = document.createElement('div');
+			card.className = 'route-card route-card-image';
+			card.setAttribute('role', 'listitem');
+			const authorUserId = item.user_id != null ? Number(item.user_id) : null;
+			const profileHref = Number.isFinite(authorUserId) && authorUserId > 0 ? `/user/${authorUserId}` : null;
+			const authorLabel = item.author_display_name || item.author_user_name || item.author || 'User';
+			const handleText = item.author_user_name || '';
+			const handle = handleText ? `@${handleText}` : '';
+			const href = relatedCardUrl(cid);
+			/* Match explore card structure exactly: .route-media + .route-details as direct children (no wrapper link) */
+			card.innerHTML = html`
+				<div class="route-media" aria-hidden="true" data-related-media data-image-id="${cid}" data-status="completed"></div>
+				<div class="route-details">
+					<div class="route-details-content">
+						<div class="route-title">${escapeHtml(item.title != null ? item.title : 'Untitled')}</div>
+						<div class="route-summary">${escapeHtml(item.summary != null ? item.summary : '')}</div>
+						<div class="route-meta" title="${formatDateTime(item.created_at)}">${formatRelativeTime(item.created_at)}</div>
+						<div class="route-meta">
+							By ${profileHref ? html`<a class="user-link" href="${profileHref}" data-related-profile-link>${escapeHtml(authorLabel)}</a>` : escapeHtml(authorLabel)}${handle ? html` <span>(${handle})</span>` : ''}
+						</div>
+						<div class="route-meta route-meta-spacer"></div>
+						<div class="route-tags">${escapeHtml(item.tags ?? '')}</div>
+					</div>
+				</div>
+			`;
+			card.style.cursor = 'pointer';
+			card.addEventListener('click', (e) => {
+				if (e.target.closest('.user-link')) return;
+				window.location.href = href;
+			});
+			const mediaEl = card.querySelector('[data-related-media]');
+			const bgUrl = (item.thumbnail_url || item.image_url || '').trim();
+			if (mediaEl && bgUrl) {
+				mediaEl.dataset.bgUrl = bgUrl;
+				if (startIndex + i < 6) setRelatedMediaBackground(mediaEl, bgUrl);
+				else {
+					const io = new IntersectionObserver((entries) => {
+						entries.forEach((entry) => {
+							if (entry.isIntersecting && mediaEl.dataset.bgUrl) {
+								setRelatedMediaBackground(mediaEl, mediaEl.dataset.bgUrl);
+								io.disconnect();
+							}
+						});
+					}, { rootMargin: '100px', threshold: 0 });
+					io.observe(mediaEl);
+				}
+			}
+			const profileLink = card.querySelector('[data-related-profile-link]');
+			if (profileLink) {
+				profileLink.addEventListener('click', (e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					window.location.href = profileLink.getAttribute('href') || '#';
+				});
+			}
+			grid.appendChild(card);
+		});
+	}
+
+	async function loadRelated(seedIds = null, excludeIds = null) {
+		if (isLoading) return;
+		isLoading = true;
+		try {
+			const params = new URLSearchParams();
+			params.set('limit', String(RELATED_BATCH_SIZE));
+			if (seedIds && seedIds.length > 0) params.set('seed_ids', seedIds.join(','));
+			if (excludeIds && excludeIds.length > 0) params.set('exclude_ids', excludeIds.join(','));
+			const res = await fetch(`/api/creations/${currentCreationId}/related?${params}`, { credentials: 'include' });
+			if (!res.ok) {
+				container.style.display = 'none';
+				return;
+			}
+			const data = await res.json();
+			let items = Array.isArray(data?.items) ? data.items : [];
+			hasMore = Boolean(data?.hasMore);
+			// Dedupe: only append items we haven't shown yet.
+			items = items.filter((it) => {
+				const id = it?.created_image_id ?? it?.id;
+				if (id == null || relatedIdsSet.has(id)) return false;
+				relatedIdsSet.add(id);
+				relatedIds.push(id);
+				return true;
+			});
+			if (items.length > 0) {
+				container.style.display = '';
+				appendRelatedCards(items);
+			}
+			if (!hasMore && sentinel) sentinel.style.display = 'none';
+		} finally {
+			isLoading = false;
+		}
+	}
+
+	function loadMoreRelated() {
+		if (!hasMore || isLoading || relatedIds.length === 0) return;
+		const seedIds = relatedIds.slice(-RELATED_BATCH_SIZE);
+		const excludeIds = [currentCreationId, ...relatedIds];
+		loadRelated(seedIds, excludeIds);
+	}
+
+	function observeSentinel() {
+		if (!sentinel || !hasMore) return;
+		relatedObserver = new IntersectionObserver((entries) => {
+			entries.forEach((entry) => {
+				if (entry.isIntersecting) loadMoreRelated();
+			});
+		}, { rootMargin: '200px', threshold: 0 });
+		relatedObserver.observe(sentinel);
+	}
+
+	void loadRelated().then(() => {
+		if (hasMore) observeSentinel();
+	});
+}
+
 // Store original history methods before anything else modifies them
 const originalPushState = history.pushState.bind(history);
 const originalReplaceState = history.replaceState.bind(history);
@@ -857,6 +1047,14 @@ async function loadCreation() {
 					<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
 				</div>
 			</div>
+
+			<section class="creation-detail-related" data-related-container aria-label="More like this" style="display: none;">
+				<div class="creation-detail-related-inner">
+					<h2 class="creation-detail-related-heading">More like this</h2>
+					<div class="route-cards route-cards-image-grid creation-detail-related-grid" data-related-grid role="list"></div>
+					<div class="creation-detail-related-sentinel" data-related-sentinel aria-hidden="true"></div>
+				</div>
+			</section>
 			` : ''}
 		`;
 
@@ -1329,6 +1527,12 @@ async function loadCreation() {
 		refreshCommentTextarea();
 		setSubmitVisibility();
 		void loadComments({ scrollIfHash: true });
+
+		// Related section and transition recording: only when creation is published and not failed.
+		if (isPublished && !isFailed) {
+			recordTransitionFromQuery(creationId);
+			initRelatedSection(detailContent, creationId);
+		}
 
 		// Now that the creation detail view is fully resolved, show actions.
 		if (actionsEl && actionsEl.style.display !== 'none') {

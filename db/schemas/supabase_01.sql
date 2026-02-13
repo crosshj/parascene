@@ -442,3 +442,21 @@ GROUP BY created_image_id;
 COMMENT ON VIEW public.prsn_created_image_comment_counts IS 'Parascene: aggregated comment counts per created image. SECURITY INVOKER view; access restricted via grants. All access controlled via API layer.';
 REVOKE ALL ON TABLE public.prsn_created_image_comment_counts FROM PUBLIC, anon, authenticated;
 GRANT SELECT ON TABLE public.prsn_created_image_comment_counts TO service_role;
+
+-- Related creations: view→next-click transitions for click-next ranking
+CREATE TABLE IF NOT EXISTS prsn_related_transitions (
+  from_created_image_id bigint NOT NULL REFERENCES prsn_created_images(id) ON DELETE CASCADE,
+  to_created_image_id bigint NOT NULL REFERENCES prsn_created_images(id) ON DELETE CASCADE,
+  count bigint NOT NULL DEFAULT 1,
+  last_updated timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(from_created_image_id, to_created_image_id),
+  CHECK(from_created_image_id != to_created_image_id)
+);
+CREATE INDEX IF NOT EXISTS idx_prsn_related_transitions_from
+  ON prsn_related_transitions(from_created_image_id);
+CREATE INDEX IF NOT EXISTS idx_prsn_related_transitions_from_last_updated
+  ON prsn_related_transitions(from_created_image_id, last_updated);
+CREATE INDEX IF NOT EXISTS idx_prsn_related_transitions_count
+  ON prsn_related_transitions(count DESC);
+ALTER TABLE prsn_related_transitions ENABLE ROW LEVEL SECURITY;
+COMMENT ON TABLE prsn_related_transitions IS 'Parascene: aggregated view→next-click transitions for related creations ranking. RLS enabled without policies - only service role can access.';

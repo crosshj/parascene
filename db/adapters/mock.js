@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { RELATED_PARAM_DEFAULTS, RELATED_PARAM_KEYS } from "./relatedParams.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -376,6 +377,33 @@ export function openDb() {
 				});
 				return { changes: 1 };
 			}
+		},
+		getRelatedParams: {
+			get: async () => {
+				const byKey = Object.fromEntries(
+					policy_knobs.filter((p) => p.key.startsWith("related.")).map((p) => [p.key, p.value])
+				);
+				const out = { ...RELATED_PARAM_DEFAULTS };
+				for (const key of RELATED_PARAM_KEYS) {
+					if (byKey[key] !== undefined) out[key] = byKey[key];
+				}
+				return out;
+			}
+		},
+		recordTransition: {
+			run: async () => ({ changes: 1 })
+		},
+		selectTransitions: {
+			list: async () => ({
+				items: [],
+				total: 0,
+				page: 1,
+				limit: 20,
+				hasMore: false
+			})
+		},
+		selectRelatedToCreatedImage: {
+			all: async () => ({ ids: [], hasMore: false })
 		},
 		selectNotificationsForUser: {
 			all: async (userId, role) =>
@@ -910,6 +938,18 @@ export function openDb() {
 		selectAllCreatedImageIdAndMeta: {
 			all: async () => {
 				return created_images.map((img) => ({ id: img.id, meta: img.meta }));
+			}
+		},
+		selectViewerLikedCreationIds: {
+			all: async (userId, creationIds) => {
+				const safeIds = Array.isArray(creationIds)
+					? creationIds.map((id) => Number(id)).filter((n) => Number.isFinite(n) && n > 0)
+					: [];
+				if (safeIds.length === 0) return [];
+				const idSet = new Set(safeIds);
+				return likes_created_image
+					.filter((l) => Number(l.user_id) === Number(userId) && idSet.has(Number(l.created_image_id)))
+					.map((l) => Number(l.created_image_id));
 			}
 		},
 		selectFeedItemsByCreationIds: {

@@ -711,6 +711,36 @@ export async function openDb() {
 				return { changes: 1 };
 			}
 		},
+		getRelatedParams: {
+			get: async () => {
+				const { RELATED_PARAM_DEFAULTS, RELATED_PARAM_KEYS } = await import("./relatedParams.js");
+				const stmt = db.prepare(
+					`SELECT key, value FROM policy_knobs WHERE key LIKE 'related.%'`
+				);
+				const rows = stmt.all();
+				const byKey = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+				const out = { ...RELATED_PARAM_DEFAULTS };
+				for (const key of RELATED_PARAM_KEYS) {
+					if (byKey[key] !== undefined) out[key] = byKey[key];
+				}
+				return out;
+			}
+		},
+		recordTransition: {
+			run: async () => ({ changes: 1 })
+		},
+		selectTransitions: {
+			list: async () => ({
+				items: [],
+				total: 0,
+				page: 1,
+				limit: 20,
+				hasMore: false
+			})
+		},
+		selectRelatedToCreatedImage: {
+			all: async () => ({ ids: [], hasMore: false })
+		},
 		selectNotificationsForUser: {
 			all: async (userId, role) => {
 				const stmt = db.prepare(
@@ -1927,6 +1957,20 @@ export async function openDb() {
            LIMIT 1`
 				);
 				return Promise.resolve(stmt.get(userId, createdImageId));
+			}
+		},
+		selectViewerLikedCreationIds: {
+			all: async (userId, creationIds) => {
+				const safeIds = Array.isArray(creationIds)
+					? creationIds.map((id) => Number(id)).filter((n) => Number.isFinite(n) && n > 0)
+					: [];
+				if (safeIds.length === 0) return [];
+				const placeholders = safeIds.map(() => "?").join(",");
+				const stmt = db.prepare(
+					`SELECT created_image_id FROM likes_created_image WHERE user_id = ? AND created_image_id IN (${placeholders})`
+				);
+				const rows = stmt.all(userId, ...safeIds);
+				return rows.map((r) => Number(r.created_image_id));
 			}
 		},
 		insertCreatedImageComment: {
