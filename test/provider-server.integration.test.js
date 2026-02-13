@@ -1,4 +1,3 @@
-import { describe, it, expect } from '@jest/globals';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -15,14 +14,20 @@ if (!fs.existsSync(outputDir)) {
 
 // Server URL from seed data
 const SERVER_URL = 'https://parascene-provider.vercel.app/api';
+const PROVIDER_API_KEY =
+	process.env.PROVIDER_API_KEY ||
+	process.env.PROVIDER_SERVER_API_KEY ||
+	process.env.PARASCENE_PROVIDER_API_KEY;
+const maybeIt = PROVIDER_API_KEY ? it : it.skip;
 
 describe('Provider Server Integration Test', () => {
-	it('should generate centeredTextOnWhite image and save to .output folder', async () => {
+	maybeIt('should generate centeredTextOnWhite image and save to .output folder', async () => {
 		const response = await fetch(SERVER_URL, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
-				'Accept': 'image/png'
+				'Accept': 'image/png',
+				Authorization: `Bearer ${PROVIDER_API_KEY}`
 			},
 			body: JSON.stringify({
 				method: 'centeredTextOnWhite',
@@ -34,7 +39,13 @@ describe('Provider Server Integration Test', () => {
 			signal: AbortSignal.timeout(30000)
 		});
 
-		expect(response.ok).toBe(true);
+		if (!response.ok) {
+			const bodyText = await response.text().catch(() => '');
+			throw new Error(
+				`Provider request failed: ${response.status} ${response.statusText}. ` +
+				`${bodyText.slice(0, 500)}`
+			);
+		}
 		expect(response.headers.get('content-type')).toContain('image/png');
 
 		const imageBuffer = Buffer.from(await response.arrayBuffer());

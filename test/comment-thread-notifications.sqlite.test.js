@@ -1,4 +1,3 @@
-import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import express from 'express';
 import { openDb } from '../db/index.js';
 import createCommentsRoutes from '../api_routes/comments.js';

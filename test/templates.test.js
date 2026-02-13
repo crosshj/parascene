@@ -1,4 +1,3 @@
-import { describe, it, expect } from "@jest/globals";
 import { renderHelloFromParascene, renderCommentReceived } from "../email/templates.js";
 
 describe("Email Templates", () => {

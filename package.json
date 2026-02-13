@@ -7,7 +7,7 @@
     "watch": "NODE_ENV=dev PORT=2367 nodemon api/index.js",
     "reset": "node db/reset.js",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
-    "test:integration": "RUN_INTEGRATION_TESTS=true NODE_OPTIONS=--experimental-vm-modules jest --config jest.config.js --testPathIgnorePatterns '' --testMatch '**/test/**/*.integration.test.js'",
+    "test:int": "RUN_INTEGRATION_TESTS=true NODE_OPTIONS=--experimental-vm-modules jest --config jest.config.js --testPathIgnorePatterns '^$' --testMatch '**/test/**/*.integration.test.js'",
     "vercel": "vercel"
   },
   "dependencies": {

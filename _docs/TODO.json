@@ -40,6 +40,14 @@
     "starred": false
   },
   {
+    "name": "\"delete\" actually just marks the image unavailable",
+    "description": "can still be viewed by admin",
+    "cost": 10,
+    "impact": 50,
+    "dependsOn": [],
+    "starred": false
+  },
+  {
     "name": "Expose Stats",
     "description": "Todo list, User Activity, Creation Relationships, etc",
     "cost": 57,

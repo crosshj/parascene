@@ -1,5 +1,3 @@
-import "dotenv/config";
-import { describe, it, expect } from "@jest/globals";
 import { sendTemplatedEmail } from "../email/index.js";
 
 const TEST_RECIPIENT = "parascene@crosshj.com";

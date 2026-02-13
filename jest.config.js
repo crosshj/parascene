@@ -7,5 +7,5 @@ export default {
 		'/node_modules/',
 		'\\.integration\\.test\\.js$'
 	],
-	setupFiles: ['<rootDir>/test/setup.js']
+	setupFiles: ['<rootDir>/jest.setup.js']
 };
