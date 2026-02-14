@@ -44,6 +44,7 @@ function parseRecsysConfigFromParams(params, limit) {
 
 async function buildRecsysInputsWithSupabase(client, seedId, excludeIds, params) {
 	const cap = Math.max(1, Math.min(500, parseInt(params["related.candidate_cap_per_signal"], 10) || 100));
+	const transitionCap = Math.max(1, parseInt(params["related.transition_cap_k"], 10) || 50);
 	const excludeSet = new Set((excludeIds || []).map((id) => Number(id)).filter((n) => Number.isFinite(n) && n > 0));
 	excludeSet.add(Number(seedId));
 
@@ -106,6 +107,25 @@ async function buildRecsysInputsWithSupabase(client, seedId, excludeIds, params)
 			.limit(cap)).data);
 	}
 
+	const { data: transitions, error: transErr } = await client
+		.from("prsn_related_transitions")
+		.select("from_created_image_id,to_created_image_id,count,last_updated")
+		.eq("from_created_image_id", seedId)
+		.order("last_updated", { ascending: false })
+		.limit(transitionCap);
+	if (transErr) throw transErr;
+	const transitionToIds = (transitions || [])
+		.map((row) => Number(row?.to_created_image_id))
+		.filter((id) => Number.isFinite(id) && id > 0 && !excludeSet.has(id));
+	if (transitionToIds.length > 0) {
+		addRows((await client
+			.from("prsn_created_images")
+			.select("id,user_id,created_at,published,meta,title")
+			.in("id", [...new Set(transitionToIds)])
+			.eq("published", true)
+			.limit(Math.max(cap, transitionToIds.length))).data);
+	}
+
 	addRows((await client
 		.from("prsn_created_images")
 		.select("id,user_id,created_at,published,meta,title")
@@ -113,13 +133,51 @@ async function buildRecsysInputsWithSupabase(client, seedId, excludeIds, params)
 		.order("created_at", { ascending: false })
 		.limit(cap)).data);
 
-	const { data: transitions, error: transErr } = await client
-		.from("prsn_related_transitions")
-		.select("from_created_image_id,to_created_image_id,count,last_updated")
-		.eq("from_created_image_id", seedId);
-	if (transErr) throw transErr;
-
 	return { anchor, pool: [anchor, ...byId.values()], transitions: transitions ?? [] };
+}
+
+async function selectRandomPublishedCreationIdsWithSupabase(client, currentCreationId, limit) {
+	const safeLimit = Math.max(1, limit | 0);
+	const imageTable = "prsn_created_images";
+	const currentIdNum = Number(currentCreationId);
+	const countQuery = client
+		.from(imageTable)
+		.select("id", { count: "exact", head: true })
+		.eq("published", true);
+	const { count, error: countError } = Number.isFinite(currentIdNum) && currentIdNum > 0
+		? await countQuery.neq("id", currentIdNum)
+		: await countQuery;
+	if (countError) throw countError;
+	const total = Math.max(0, Number(count) || 0);
+	if (total <= 0) return { ids: [], hasMore: false };
+
+	// Randomize by picking a random offset window, then shuffle locally.
+	const windowSize = Math.max(safeLimit * 8, safeLimit + 1);
+	const maxStart = Math.max(0, total - windowSize);
+	const start = maxStart > 0 ? Math.floor(Math.random() * (maxStart + 1)) : 0;
+	const end = Math.min(total - 1, start + windowSize - 1);
+	const pageQuery = client
+		.from(imageTable)
+		.select("id")
+		.eq("published", true)
+		.order("created_at", { ascending: false })
+		.range(start, end);
+	const { data: rows, error: rowsError } = Number.isFinite(currentIdNum) && currentIdNum > 0
+		? await pageQuery.neq("id", currentIdNum)
+		: await pageQuery;
+	if (rowsError) throw rowsError;
+
+	const ids = (rows || [])
+		.map((row) => Number(row?.id))
+		.filter((id) => Number.isFinite(id) && id > 0);
+	for (let i = ids.length - 1; i > 0; i--) {
+		const j = Math.floor(Math.random() * (i + 1));
+		[ids[i], ids[j]] = [ids[j], ids[i]];
+	}
+	return {
+		ids: ids.slice(0, safeLimit),
+		hasMore: total > safeLimit
+	};
 }
 
 function escapeHtml(value) {
@@ -280,43 +338,59 @@ export default function createCreationsRoutes({ queries }) {
 			if (!supabaseClient) {
 				return res.status(500).json({ error: "Recsys engine is unavailable." });
 			}
-			let recsysInputs = null;
-			const recsysConfig = parseRecsysConfigFromParams(params, limit);
-			if (forceRandom || seenCount >= RECSYS_RANDOM_ONLY_SEEN_THRESHOLD) {
-				recsysConfig.randomSlotsPerBatch = limit;
-				recsysConfig.fallbackEnabled = true;
-				recsysConfig.hardPreference = false;
-			}
-			const recsys = await recommendWithDataSource({
-				config: recsysConfig,
-				context: { seedId: id, userId: req.auth?.userId ?? null },
-				loadInputs: async () => {
-					const built = await buildRecsysInputsWithSupabase(
-						supabaseClient,
-						id,
-						excludeIds,
-						params
-					);
-					recsysInputs = built;
-					return built;
-				}
-			});
-			const top = recsys.items.slice(0, limit + 1);
-			ids = top.map((row) => Number(row.id)).filter((n) => Number.isFinite(n) && n > 0).slice(0, limit);
-			hasMore = top.length > limit;
-			if (recsysInputs?.anchor && Array.isArray(recsys.items)) {
-				const byId = new Map((recsysInputs.pool || []).map((x) => [Number(x?.id), x]));
-				reasonMetaByCreationId = new Map();
-				for (const row of recsys.items) {
-					const candidate = byId.get(Number(row.id));
-					const labels = Array.isArray(row.reasons) ? row.reasons : [];
-					reasonMetaByCreationId.set(Number(row.id), {
-						labels,
-						details: recsysReasonDetailsForItem(recsysInputs.anchor, candidate, labels),
-						score: row.score,
-						click_score: row.click_score,
-						click_share: row.click_share
-					});
+			const randomOnlyMode = forceRandom || seenCount >= RECSYS_RANDOM_ONLY_SEEN_THRESHOLD;
+			if (randomOnlyMode) {
+				const randomResult = await selectRandomPublishedCreationIdsWithSupabase(supabaseClient, id, limit);
+				ids = randomResult.ids;
+				hasMore = randomResult.hasMore;
+				reasonMetaByCreationId = new Map(
+					ids.map((creationId) => [creationId, {
+						labels: ["exploreRandom"],
+						details: [{
+							type: "exploreRandom",
+							label: "Random published item",
+							related_creation_id: null,
+							related_creation_title: null
+						}],
+						score: null,
+						click_score: null,
+						click_share: null
+					}])
+				);
+			} else {
+				let recsysInputs = null;
+				const recsysConfig = parseRecsysConfigFromParams(params, limit);
+				const recsys = await recommendWithDataSource({
+					config: recsysConfig,
+					context: { seedId: id, userId: req.auth?.userId ?? null },
+					loadInputs: async () => {
+						const built = await buildRecsysInputsWithSupabase(
+							supabaseClient,
+							id,
+							excludeIds,
+							params
+						);
+						recsysInputs = built;
+						return built;
+					}
+				});
+				const top = recsys.items.slice(0, limit + 1);
+				ids = top.map((row) => Number(row.id)).filter((n) => Number.isFinite(n) && n > 0).slice(0, limit);
+				hasMore = top.length > limit;
+				if (recsysInputs?.anchor && Array.isArray(recsys.items)) {
+					const byId = new Map((recsysInputs.pool || []).map((x) => [Number(x?.id), x]));
+					reasonMetaByCreationId = new Map();
+					for (const row of recsys.items) {
+						const candidate = byId.get(Number(row.id));
+						const labels = Array.isArray(row.reasons) ? row.reasons : [];
+						reasonMetaByCreationId.set(Number(row.id), {
+							labels,
+							details: recsysReasonDetailsForItem(recsysInputs.anchor, candidate, labels),
+							score: row.score,
+							click_score: row.click_score,
+							click_share: row.click_share
+						});
+					}
 				}
 			}
 
