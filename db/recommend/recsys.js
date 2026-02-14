@@ -1,41 +1,47 @@
 // Barebones "after-detail" recommender for image feeds.
 // ES module, no deps, deterministic RNG support for tests.
 
-export function createRecommender(config = {}) {
-	const cfg = {
+const DEFAULT_CONFIG = {
 		// Signal weights (map these to your UI controls)
-		lineageWeight: 100,
-		sameCreatorWeight: 50,
-		sameServerMethodWeight: 40,
-		clickNextWeight: 100,
-		fallbackWeight: 60,
+	lineageWeight: 100,
+	sameCreatorWeight: 50,
+	sameServerMethodWeight: 80,
+	clickNextWeight: 50,
+	fallbackWeight: 20,
 
-		// Transition behavior
-		transitionCapPerFrom: 30,
-		decayHalfLifeDays: 7,
-		windowDays: 0, // 0 => use decay only
+	// Transition behavior
+	transitionCapPerFrom: 50,
+	decayHalfLifeDays: 7,
+	windowDays: 0, // 0 => use decay only
 
-		// Random & caps
-		randomFraction: 0.3, // ignored if randomSlotsPerBatch > 0
-		randomSlotsPerBatch: 0,
-		candidateCapPerSignal: 100,
-		batchSize: 20,
-		lineageMinSlots: 2,
+	// Random & caps
+	randomSlotsPerBatch: 0,
+	clickNextPriorityFraction: 0.65,
+	hardPreference: true,
+	candidateCapPerSignal: 100,
+	batchSize: 20,
+	lineageMinSlots: 2,
 
-		fallbackEnabled: true,
-		now: () => Date.now(),
-		rng: Math.random,
+	fallbackEnabled: true,
+	coldMode: 'auto', // auto | guess | explore
+	coldConfidenceThreshold: 0.35,
+	coldExploreFraction: 0.7,
+	coldExploreMinGuessSlots: 2,
+	now: () => Date.now(),
+	rng: Math.random
+};
 
+export function recommend({ config = {}, anchor, pool, transitions, userId = null }) {
+	const cfg = {
+		...DEFAULT_CONFIG,
 		...config
 	};
+	if (!anchor) throw new Error("anchor is required");
+	if (!Array.isArray(pool)) throw new Error("pool must be an array");
+	if (!Array.isArray(transitions)) throw new Error("transitions must be an array");
 
-	function recommend({ anchor, pool, transitions, userId = null }) {
-		if (!anchor) throw new Error("anchor is required");
-		if (!Array.isArray(pool)) throw new Error("pool must be an array");
-		if (!Array.isArray(transitions)) throw new Error("transitions must be an array");
-
-		const poolById = new Map(pool.map(x => [x.id, x]));
-		const anchorTs = +new Date(anchor.createdAt || cfg.now());
+	const poolById = new Map(pool.map(x => [x.id, x]));
+	const anchorTs = +new Date(anchor.created_at || cfg.now());
 
 		// 1) Candidate buckets
 		const buckets = {
@@ -48,20 +54,21 @@ export function createRecommender(config = {}) {
 
 		for (const item of pool) {
 			if (item.id === anchor.id) continue;
-			if (!item.isActive && item.isActive !== undefined) continue;
+			if (!item.published && item.published !== undefined) continue;
 
 			if (isSameLineage(anchor, item)) buckets.lineage.push(item);
-			if (item.creatorId === anchor.creatorId) buckets.sameCreator.push(item);
+			if (item.user_id === anchor.user_id) buckets.sameCreator.push(item);
 			if (sameServerMethod(anchor, item)) buckets.sameServerMethod.push(item);
 		}
 
-		// click-next transitions from anchor.id
 		const fromTransitions = transitions
-			.filter(t => t.fromId === anchor.id && poolById.has(t.toId))
+			.filter(t => t.from_created_image_id === anchor.id && poolById.has(t.to_created_image_id))
 			.slice(0, cfg.transitionCapPerFrom)
 			.map(t => ({
-				...t,
-				ageDays: ageDays(t.updatedAt || t.createdAt || cfg.now(), cfg.now())
+				fromId: t.from_created_image_id,
+				toId: t.to_created_image_id,
+				count: t.count,
+				ageDays: ageDays(t.last_updated || cfg.now(), cfg.now())
 			}));
 
 		for (const t of fromTransitions) {
@@ -77,7 +84,7 @@ export function createRecommender(config = {}) {
 			// "around time period" + recent random as fallback
 			const around = pool.filter(item => {
 				if (item.id === anchor.id) return false;
-				const d = Math.abs(ageDays(item.createdAt || cfg.now(), anchorTs));
+				const d = Math.abs(ageDays(item.created_at || cfg.now(), anchorTs));
 				return d <= 7;
 			});
 			buckets.fallback = around.length ? around : pool.filter(i => i.id !== anchor.id);
@@ -124,10 +131,14 @@ export function createRecommender(config = {}) {
 		const clickMax = clickScoreById.size > 0 ? Math.max(...clickScoreById.values()) : 0;
 		if (clickMax > 0) {
 			for (const [itemId, clickScore] of clickScoreById) {
-				const row = scored.get(itemId);
-				if (!row) continue;
+				const baseItem = poolById.get(itemId);
+				if (!baseItem) continue;
+				const row = scored.get(itemId) || { item: baseItem, score: 0, reasons: [] };
+				row.clickEffectiveCount = clickScore;
+				row.clickShare = clickScore / clickMax;
 				row.score += cfg.clickNextWeight * (clickScore / clickMax);
 				row.reasons.push("clickNext");
+				scored.set(itemId, row);
 			}
 		}
 		for (const item of buckets.fallback) {
@@ -142,46 +153,112 @@ export function createRecommender(config = {}) {
 		ranked = enforceLineageMinSlots(ranked, lineageSet, cfg.lineageMinSlots);
 		ranked = dedupeRankedByItemId(ranked);
 
+		const coldConfidence = computeColdConfidence({
+			clickCandidateCount: clickScoreById.size,
+			lineageCandidateCount: buckets.lineage.length,
+			sameCreatorCandidateCount: buckets.sameCreator.length,
+			sameServerMethodCandidateCount: buckets.sameServerMethod.length
+		});
+		const coldStrategy = resolveColdStrategy(cfg.coldMode, coldConfidence, cfg.coldConfidenceThreshold);
+
 		// 4) Randomness blending
 		const batchSize = cfg.batchSize;
-		const randomSlots = cfg.randomSlotsPerBatch > 0
-			? Math.min(cfg.randomSlotsPerBatch, batchSize)
-			: Math.floor(batchSize * cfg.randomFraction);
+		const randomSlotsRaw = Math.min(Math.max(0, cfg.randomSlotsPerBatch || 0), batchSize);
+		const randomSlots = randomSlotsRaw;
+		const deterministicSlots = Math.max(0, batchSize - randomSlots);
 
-		const topDeterministic = ranked.slice(0, Math.max(0, batchSize - randomSlots));
-		const used = new Set(topDeterministic.map(x => x.item.id));
+		const clickRanked = ranked
+			.filter((x) => hasReason(x, "clickNext"))
+			.sort(compareClickRows);
+		const lineageRanked = ranked.filter((x) => hasReason(x, "lineage"));
+		const clickSlots = cfg.hardPreference === false
+			? Math.min(
+				clickRanked.length,
+				Math.max(0, Math.floor(deterministicSlots * Math.max(0, Math.min(1, cfg.clickNextPriorityFraction || 0))))
+			)
+			: Math.min(clickRanked.length, deterministicSlots);
 
-		const randomPool = ranked.slice(topDeterministic.length)
-			.filter(x => !used.has(x.item.id));
+		const topDeterministic = [];
+		const used = new Set();
+		for (const row of clickRanked) {
+			if (topDeterministic.length >= clickSlots) break;
+			if (used.has(row.item.id)) continue;
+			topDeterministic.push(row);
+			used.add(row.item.id);
+		}
+		const familyTarget = Math.min(deterministicSlots, Math.max(0, cfg.lineageMinSlots || 0));
+		let familyCount = topDeterministic.filter((x) => hasReason(x, "lineage")).length;
+		for (const row of lineageRanked) {
+			if (topDeterministic.length >= deterministicSlots) break;
+			if (familyCount >= familyTarget) break;
+			if (used.has(row.item.id)) continue;
+			topDeterministic.push(row);
+			used.add(row.item.id);
+			familyCount += 1;
+		}
+		for (const row of ranked) {
+			if (topDeterministic.length >= deterministicSlots) break;
+			if (used.has(row.item.id)) continue;
+			topDeterministic.push(row);
+			used.add(row.item.id);
+		}
 
-		shuffleInPlace(randomPool, cfg.rng);
-		const randomPick = randomPool.slice(0, randomSlots);
+		const explorePool = buckets.fallback
+			.filter((item) => !used.has(item.id))
+			.map((item) => ({ item, score: 0, reasons: ["exploreRandom"] }));
+		shuffleInPlace(explorePool, cfg.rng);
+		const randomPick = explorePool.slice(0, randomSlots);
+		const randomUsed = new Set(randomPick.map((x) => x.item.id));
+		const randomFill = ranked
+			.filter((x) => !used.has(x.item.id) && !randomUsed.has(x.item.id))
+			.slice(0, Math.max(0, randomSlots - randomPick.length))
+			.map((x) => ({ ...x, reasons: [...x.reasons, "exploreRandom"] }));
 
-		const batch = dedupeRankedByItemId([...topDeterministic, ...randomPick]);
-		batch.sort((a, b) => b.score - a.score); // keep "highest to lowest" even with randomness
+		let batch = dedupeRankedByItemId([...topDeterministic, ...randomPick, ...randomFill]);
 
-		return batch.slice(0, batchSize).map(x => ({
-			id: x.item.id,
-			score: round2(x.score),
-			reasons: x.reasons
-		}));
-	}
+		if (coldStrategy === 'explore') {
+			const guessSlots = Math.max(0, Math.min(batchSize, cfg.coldExploreMinGuessSlots));
+			const exploreSlots = Math.max(
+				0,
+				Math.min(batchSize - guessSlots, Math.floor(batchSize * cfg.coldExploreFraction))
+			);
+			const topGuess = ranked.slice(0, guessSlots);
+			const usedIds = new Set(topGuess.map((x) => x.item.id));
+			const explorePool = buckets.fallback
+				.map((item) => ({ item, score: 0, reasons: ['exploreRandom'] }))
+				.filter((row) => !usedIds.has(row.item.id));
+			shuffleInPlace(explorePool, cfg.rng);
+			const explorePick = explorePool.slice(0, exploreSlots);
+			const remainSlots = Math.max(0, batchSize - (topGuess.length + explorePick.length));
+			const fill = ranked
+				.filter((x) => !usedIds.has(x.item.id))
+				.slice(0, remainSlots);
+			batch = dedupeRankedByItemId([...topGuess, ...explorePick, ...fill]).slice(0, batchSize);
+		}
+		batch.sort((a, b) => compareRows(a, b, cfg.hardPreference !== false));
 
-	return { recommend, config: cfg };
+	return batch.slice(0, batchSize).map(x => ({
+		id: x.item.id,
+		score: round2(x.score),
+		reasons: x.reasons,
+		click_score: Number.isFinite(x.clickEffectiveCount) ? round4(x.clickEffectiveCount) : 0,
+		click_share: Number.isFinite(x.clickShare) ? round4(x.clickShare) : 0
+	}));
 }
 
 // ---------- helpers ----------
 
 function isSameLineage(a, b) {
-	if (a.familyId && b.familyId) return a.familyId === b.familyId;
-	// optional parent/child fallback
-	if (a.parentId && b.id === a.parentId) return true;
-	if (b.parentId && a.id === b.parentId) return true;
+	if (a.family_id && b.family_id) return a.family_id === b.family_id;
+	const aParentId = a.meta?.mutate_of_id;
+	const bParentId = b.meta?.mutate_of_id;
+	if (aParentId && b.id === aParentId) return true;
+	if (bParentId && a.id === bParentId) return true;
 	return false;
 }
 
 function sameServerMethod(a, b) {
-	return a.provider === b.provider && a.method === b.method;
+	return a.meta?.server_id === b.meta?.server_id && a.meta?.method === b.meta?.method;
 }
 
 function ageDays(ts, nowTs) {
@@ -261,6 +338,10 @@ function round2(x) {
 	return Math.round(x * 100) / 100;
 }
 
+function round4(x) {
+	return Math.round(x * 10000) / 10000;
+}
+
 function dedupeRankedByItemId(ranked) {
 	const deduped = [];
 	const seen = new Set();
@@ -273,9 +354,52 @@ function dedupeRankedByItemId(ranked) {
 	return deduped;
 }
 
-export const _helpers = {
-	isSameLineage,
-	sameServerMethod,
-	transitionDecay,
-	enforceLineageMinSlots
-};
+function hasReason(row, reason) {
+	return Array.isArray(row?.reasons) && row.reasons.includes(reason);
+}
+
+function reasonTier(row) {
+	if (hasReason(row, "clickNext")) return 0;
+	if (hasReason(row, "lineage")) return 1;
+	if (hasReason(row, "sameCreator") || hasReason(row, "sameServerMethod") || hasReason(row, "fallback")) return 2;
+	if (hasReason(row, "exploreRandom")) return 3;
+	return 4;
+}
+
+function compareRows(a, b, useHardPreference) {
+	if (useHardPreference) {
+		const tierDelta = reasonTier(a) - reasonTier(b);
+		if (tierDelta !== 0) return tierDelta;
+		if (reasonTier(a) === 0) {
+			const clickDelta = (b.clickEffectiveCount || 0) - (a.clickEffectiveCount || 0);
+			if (clickDelta !== 0) return clickDelta;
+		}
+	}
+	return b.score - a.score;
+}
+
+function compareClickRows(a, b) {
+	const clickDelta = (b.clickEffectiveCount || 0) - (a.clickEffectiveCount || 0);
+	if (clickDelta !== 0) return clickDelta;
+	return b.score - a.score;
+}
+
+function computeColdConfidence({
+	clickCandidateCount,
+	lineageCandidateCount,
+	sameCreatorCandidateCount,
+	sameServerMethodCandidateCount
+}) {
+	const click = Math.min(1, Math.max(0, clickCandidateCount || 0) / 3) * 0.5;
+	const lineage = Math.min(1, Math.max(0, lineageCandidateCount || 0) / 3) * 0.2;
+	const creator = Math.min(1, Math.max(0, sameCreatorCandidateCount || 0) / 5) * 0.15;
+	const serverMethod = Math.min(1, Math.max(0, sameServerMethodCandidateCount || 0) / 5) * 0.15;
+	return click + lineage + creator + serverMethod;
+}
+
+function resolveColdStrategy(mode, confidence, threshold) {
+	if (mode === 'guess') return 'guess';
+	if (mode === 'explore') return 'explore';
+	return confidence >= threshold ? 'guess' : 'explore';
+}
+

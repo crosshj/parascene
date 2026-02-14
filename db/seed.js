@@ -103,15 +103,12 @@ const seedData = {
 		{ key: "related.same_server_method_weight", value: "80", description: "Score for same server+method." },
 		{ key: "related.same_creator_weight", value: "50", description: "Score for same creator." },
 		{ key: "related.fallback_weight", value: "20", description: "Score for recent published fill." },
-		{ key: "related.click_next_weight", value: "50", description: "Weight for click-next signal when blending with content score." },
 		{ key: "related.transition_cap_k", value: "50", description: "Max destinations per from_id; evict by oldest last_updated when exceeded." },
 		{ key: "related.transition_decay_half_life_days", value: "7", description: "Half-life in days for time decay when ranking." },
 		{ key: "related.transition_window_days", value: "0", description: "If > 0, only use transitions within this many days (hard window)." },
-		{ key: "related.random_fraction", value: "0.1", description: "Fraction of slots (0–1) for random injection." },
 		{ key: "related.random_slots_per_batch", value: "0", description: "If > 0, reserve this many slots per batch for random items." },
 		{ key: "related.batch_size", value: "10", description: "Items per request / batch." },
-		{ key: "related.candidate_cap_per_signal", value: "100", description: "Max candidates per signal before merge." },
-		{ key: "related.fallback_enabled", value: "true", description: "Whether to use recent published when needed." }
+		{ key: "related.candidate_cap_per_signal", value: "100", description: "Max candidates per signal before merge." }
 	],
 
 	notifications: [

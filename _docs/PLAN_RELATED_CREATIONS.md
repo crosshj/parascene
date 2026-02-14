@@ -135,12 +135,10 @@ Use these for initial policy_knob values (or defaults when key is missing):
 | `related.same_server_method_weight` | 80 | Score for same server+method. |
 | `related.same_creator_weight` | 50 | Score for same creator. |
 | `related.fallback_weight` | 20 | Score for recent published fill. |
-| `related.click_next_weight` | 50 | Weight for click-next signal when blending with content score. Use 0 to disable; at cold start (no data) this has no effect. |
 | `related.transition_cap_k` | 50 | Max destinations per from_id; when exceeded, evict by oldest last_updated (keep K most recent) so new paths can emerge. |
 | `related.transition_decay_half_life_days` | 7 | Half-life in days for time decay when ranking: effective_count = count × 2^(-age_days / half_life). Decay approaches zero but never reaches it—old transitions always contribute a little (decayed signal is better than no signal). Use 0 to disable decay (raw count). |
 | `related.transition_window_days` | 0 | If > 0, only use transition rows where last_updated is within this many days (hard window; older rows contribute zero). Ignored if transition_decay_half_life_days > 0. Prefer decay over window so long-tail history still counts. |
-| `related.random_fraction` | 0.1 | Fraction of slots (0–1) for random injection. Ignored if `random_slots_per_batch` > 0. |
-| `related.random_slots_per_batch` | 0 | If > 0, reserve this many slots per batch for random published items; otherwise use `random_fraction`. Allows “1–2 per batch” style exploration. |
+| `related.random_slots_per_batch` | 0 | Reserve this many slots per batch for random published items. |
 | `related.batch_size` | 10 | Items per request / batch. |
 | `related.candidate_cap_per_signal` | 100 | Max candidates per signal before merge. |
 | `related.fallback_enabled` | true | Whether to use recent published when needed. |

@@ -1012,20 +1012,17 @@ async function loadSettings() {
 }
 
 const RELATED_SETTINGS_FIELDS = [
-	{ key: "related.lineage_weight", label: "Lineage weight", type: "number", section: "Signal weights", hint: "Score for parent/child lineage matches" },
-	{ key: "related.lineage_min_slots", label: "Lineage min slots", type: "number", section: "Signal weights", hint: "Min slots reserved for lineage in each batch" },
-	{ key: "related.same_server_method_weight", label: "Same server+method weight", type: "number", section: "Signal weights", hint: "Same provider + method" },
-	{ key: "related.same_creator_weight", label: "Same creator weight", type: "number", section: "Signal weights", hint: "Score when created by the same user" },
-	{ key: "related.fallback_weight", label: "Fallback weight", type: "number", section: "Signal weights", hint: "Score for random recent creations" },
-	{ key: "related.click_next_weight", label: "Click-next weight", type: "number", section: "Signal weights", hint: "Blend weight for click-through data" },
+	{ key: "related.lineage_weight", label: "Lineage weight", type: "number", section: "Signal tuning", hint: "Score for parent/child lineage matches" },
+	{ key: "related.lineage_min_slots", label: "Lineage min slots", type: "number", section: "Signal tuning", hint: "Min slots reserved for lineage in each batch" },
+	{ key: "related.same_server_method_weight", label: "Same server+method weight", type: "number", section: "Signal tuning", hint: "Same provider + method" },
+	{ key: "related.same_creator_weight", label: "Same creator weight", type: "number", section: "Signal tuning", hint: "Score when created by the same user" },
+	{ key: "related.fallback_weight", label: "Fallback weight", type: "number", section: "Signal tuning", hint: "Score for random recent creations" },
 	{ key: "related.transition_cap_k", label: "Transition cap (K per from)", type: "number", section: "Transition", hint: "Max destinations kept per source; oldest evicted" },
 	{ key: "related.transition_decay_half_life_days", label: "Decay half-life (days)", type: "number", section: "Transition", hint: "Older transitions count less" },
 	{ key: "related.transition_window_days", label: "Window (days, 0 = use decay)", type: "number", section: "Transition", hint: "Hard cutoff; 0 means use decay only" },
-	{ key: "related.random_fraction", label: "Random fraction", type: "number", section: "Random & caps", hint: "Fraction of batch filled with random items" },
-	{ key: "related.random_slots_per_batch", label: "Random slots per batch", type: "number", section: "Random & caps", hint: "Fixed number overrides fraction if set" },
+	{ key: "related.random_slots_per_batch", label: "Random slots per batch", type: "number", section: "Random & caps", hint: "Number of random items injected per batch" },
 	{ key: "related.batch_size", label: "Batch size", type: "number", section: "Random & caps", hint: "Default number of related items per request" },
-	{ key: "related.candidate_cap_per_signal", label: "Candidate cap per signal", type: "number", section: "Random & caps", hint: "Max candidates pulled per signal" },
-	{ key: "related.fallback_enabled", label: "Fallback enabled", type: "checkbox", section: "Fallback", hint: "Include random recent creations when needed" }
+	{ key: "related.candidate_cap_per_signal", label: "Candidate cap per signal", type: "number", section: "Random & caps", hint: "Max candidates pulled per signal" }
 ];
 
 let relatedTransitionsPage = 1;
@@ -1051,7 +1048,12 @@ async function loadRelatedAlgorithm() {
 		settingsContainer.innerHTML = "";
 		settingsContainer.classList.add("admin-related-settings-grid");
 
-		const sectionOrder = ["Signal weights", "Transition", "Random & caps", "Fallback"];
+		const sectionOrder = ["Transition", "Random & caps", "Signal tuning"];
+		const sectionDescriptions = {
+			Transition: "Controls how strongly recent clicks are favored (cap, decay, and optional hard window).",
+			"Random & caps": "Exploration and size controls. Sets how many random items are injected and how large each candidate/batch pool can be.",
+			"Signal tuning": "Non-click ranking. These weights order candidates when click-next is missing, sparse, or tied."
+		};
 		const bySection = new Map();
 		for (const field of RELATED_SETTINGS_FIELDS) {
 			const sec = field.section;
@@ -1064,8 +1066,16 @@ async function loadRelatedAlgorithm() {
 			if (!fields?.length) continue;
 			const title = document.createElement("span");
 			title.className = "admin-settings-section-title";
-			title.textContent = sectionTitle;
+			title.textContent = sectionTitle === "Transition" ? "Click-next transitions" : sectionTitle;
 			settingsContainer.appendChild(title);
+			const sectionHint = document.createElement("div");
+			sectionHint.className = "admin-settings-field";
+			sectionHint.style.gridColumn = "1 / -1";
+			const sectionHintText = document.createElement("p");
+			sectionHintText.className = "admin-detail admin-related-field-hint";
+			sectionHintText.textContent = sectionDescriptions[sectionTitle] || "";
+			sectionHint.appendChild(sectionHintText);
+			settingsContainer.appendChild(sectionHint);
 			for (const field of fields) {
 				const wrap = document.createElement("div");
 				wrap.className = "admin-settings-field";

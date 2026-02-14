@@ -1,5 +1,4 @@
-import { describe, it, expect } from '@jest/globals';
-import { createRecommender, _helpers } from '../db/recommend/recsys.js';
+import { recommend } from '../db/recommend/recsys.js';
 
 function seededRng(seed = 42) {
 	let s = seed >>> 0;
@@ -12,21 +11,21 @@ function seededRng(seed = 42) {
 
 function sampleData(now = '2026-02-13T00:00:00Z') {
 	const pool = [
-		{ id: 1, familyId: 'F1', creatorId: 'A', provider: 'p1', method: 'm1', createdAt: '2026-02-12T00:00:00Z', isActive: true },
-		{ id: 2, familyId: 'F1', creatorId: 'A', provider: 'p1', method: 'm1', createdAt: '2026-02-12T01:00:00Z', isActive: true }, // lineage + creator + server/method
-		{ id: 3, familyId: 'F1', creatorId: 'B', provider: 'p2', method: 'm2', createdAt: '2026-02-11T00:00:00Z', isActive: true }, // lineage only
-		{ id: 4, familyId: 'F2', creatorId: 'A', provider: 'p1', method: 'm1', createdAt: '2026-02-12T02:00:00Z', isActive: true }, // creator + server/method
-		{ id: 5, familyId: 'F3', creatorId: 'C', provider: 'p9', method: 'm9', createdAt: '2026-02-10T00:00:00Z', isActive: true }, // fallback-ish
-		{ id: 6, familyId: 'F4', creatorId: 'D', provider: 'p1', method: 'm1', createdAt: '2026-01-01T00:00:00Z', isActive: true }, // old
-		{ id: 7, familyId: 'F5', creatorId: 'E', provider: 'p8', method: 'm8', createdAt: '2026-02-12T03:00:00Z', isActive: true }
+		{ id: 1, user_id: 10, family_id: 'F1', meta: { server_id: 'p1', method: 'm1' }, created_at: '2026-02-12T00:00:00Z', published: true },
+		{ id: 2, user_id: 10, family_id: 'F1', meta: { server_id: 'p1', method: 'm1', mutate_of_id: 1 }, created_at: '2026-02-12T01:00:00Z', published: true }, // lineage + creator + server/method
+		{ id: 3, user_id: 11, family_id: 'F1', meta: { server_id: 'p2', method: 'm2', mutate_of_id: 1 }, created_at: '2026-02-11T00:00:00Z', published: true }, // lineage only
+		{ id: 4, user_id: 10, family_id: 'F2', meta: { server_id: 'p1', method: 'm1' }, created_at: '2026-02-12T02:00:00Z', published: true }, // creator + server/method
+		{ id: 5, user_id: 22, family_id: 'F3', meta: { server_id: 'p9', method: 'm9' }, created_at: '2026-02-10T00:00:00Z', published: true }, // fallback-ish
+		{ id: 6, user_id: 33, family_id: 'F4', meta: { server_id: 'p1', method: 'm1' }, created_at: '2026-01-01T00:00:00Z', published: true }, // old
+		{ id: 7, user_id: 44, family_id: 'F5', meta: { server_id: 'p8', method: 'm8' }, created_at: '2026-02-12T03:00:00Z', published: true }
 	];
 
 	const transitions = [
 		// from anchor 1 -> 4 has strongest click-next
-		{ fromId: 1, toId: 4, count: 5, updatedAt: '2026-02-12T23:00:00Z' },
-		{ fromId: 1, toId: 2, count: 2, updatedAt: '2026-02-12T23:00:00Z' },
-		{ fromId: 1, toId: 7, count: 1, updatedAt: '2026-02-12T23:00:00Z' },
-		{ fromId: 1, toId: 6, count: 10, updatedAt: '2025-12-01T00:00:00Z' } // very old; decays hard
+		{ from_created_image_id: 1, to_created_image_id: 4, count: 5, last_updated: '2026-02-12T23:00:00Z' },
+		{ from_created_image_id: 1, to_created_image_id: 2, count: 2, last_updated: '2026-02-12T23:00:00Z' },
+		{ from_created_image_id: 1, to_created_image_id: 7, count: 1, last_updated: '2026-02-12T23:00:00Z' },
+		{ from_created_image_id: 1, to_created_image_id: 6, count: 10, last_updated: '2025-12-01T00:00:00Z' } // very old; decays hard
 	];
 
 	return { pool, transitions, now };
@@ -35,40 +34,41 @@ function sampleData(now = '2026-02-13T00:00:00Z') {
 describe('recsys recommender', () => {
 	it('ranks with click-next + lineage + creator/server signals', () => {
 		const { pool, transitions, now } = sampleData();
-		const r = createRecommender({
+		const config = {
 			now: () => +new Date(now),
 			rng: seededRng(1),
-			randomFraction: 0,
 			batchSize: 5
-		});
+		};
 
-		const out = r.recommend({
+		const out = recommend({
+			config,
 			anchor: pool.find(x => x.id === 1),
 			pool,
 			transitions
 		});
 
 		expect(out).toHaveLength(5);
-		// Current scorer prioritizes id 2 in this fixture due to combined signals.
-		expect(out[0].id).toBe(2);
+		// With hard click preference enabled, strongest click-next candidate is first.
+		expect(out[0].id).toBe(4);
 		expect(out[0].reasons).toContain('clickNext');
-		expect(out[0].reasons).toContain('lineage');
+		expect(out[0].reasons).not.toContain('lineage');
 	});
 
 	it('enforces lineage min slots', () => {
 		const { pool, transitions, now } = sampleData();
-		const r = createRecommender({
+		const config = {
 			now: () => +new Date(now),
 			rng: seededRng(2),
-			randomFraction: 0,
 			batchSize: 4,
+			hardPreference: false,
 			lineageMinSlots: 2,
 			// make click-next dominate to test promotion logic
 			clickNextWeight: 500,
 			lineageWeight: 10
-		});
+		};
 
-		const out = r.recommend({
+		const out = recommend({
+			config,
 			anchor: pool.find(x => x.id === 1),
 			pool,
 			transitions
@@ -81,16 +81,16 @@ describe('recsys recommender', () => {
 
 	it('applies windowDays cutoff when half-life decay is disabled', () => {
 		const { pool, transitions, now } = sampleData();
-		const r = createRecommender({
+		const config = {
 			now: () => +new Date(now),
 			rng: seededRng(3),
-			randomFraction: 0,
 			batchSize: 6,
 			windowDays: 14,
 			decayHalfLifeDays: 0
-		});
+		};
 
-		const out = r.recommend({
+		const out = recommend({
+			config,
 			anchor: pool.find(x => x.id === 1),
 			pool,
 			transitions
@@ -104,10 +104,9 @@ describe('recsys recommender', () => {
 
 	it('normalizes click-next effect so large counts do not dominate unboundedly', () => {
 		const { pool, transitions, now } = sampleData();
-		const r = createRecommender({
+		const config = {
 			now: () => +new Date(now),
 			rng: seededRng(7),
-			randomFraction: 0,
 			batchSize: 6,
 			// Keep non-click signals at 0 to isolate click normalization behavior.
 			lineageWeight: 0,
@@ -115,9 +114,10 @@ describe('recsys recommender', () => {
 			sameServerMethodWeight: 0,
 			fallbackWeight: 0,
 			clickNextWeight: 100
-		});
+		};
 
-		const out = r.recommend({
+		const out = recommend({
+			config,
 			anchor: pool.find(x => x.id === 1),
 			pool,
 			transitions
@@ -135,15 +135,15 @@ describe('recsys recommender', () => {
 
 	it('random slots inject variability but remain score-sorted', () => {
 		const { pool, transitions, now } = sampleData();
-		const r = createRecommender({
+		const config = {
 			now: () => +new Date(now),
 			rng: seededRng(999),
 			randomSlotsPerBatch: 2,
-			randomFraction: 0,
 			batchSize: 5
-		});
+		};
 
-		const out = r.recommend({
+		const out = recommend({
+			config,
 			anchor: pool.find(x => x.id === 1),
 			pool,
 			transitions
@@ -152,18 +152,193 @@ describe('recsys recommender', () => {
 		expect(out).toHaveLength(5);
 		const ids = out.map(x => x.id);
 		expect(new Set(ids).size).toBe(ids.length);
-		for (let i = 1; i < out.length; i++) {
-			expect(out[i - 1].score).toBeGreaterThanOrEqual(out[i].score);
+		const clickRows = out.filter((x) => x.reasons.includes('clickNext'));
+		for (let i = 1; i < clickRows.length; i++) {
+			expect(clickRows[i - 1].click_score).toBeGreaterThanOrEqual(clickRows[i].click_score);
 		}
 	});
 
-	it('transition decay helper behaves correctly', () => {
-		const d0 = _helpers.transitionDecay(0, 7);
-		const d7 = _helpers.transitionDecay(7, 7);
-		const d14 = _helpers.transitionDecay(14, 7);
+	it('uses canonical recsys shape only', () => {
+		const { pool, transitions, now } = sampleData();
+		const config = {
+			now: () => +new Date(now),
+			rng: seededRng(123),
+			batchSize: 4
+		};
 
-		expect(Math.round(d0 * 1000) / 1000).toBe(1);
-		expect(Math.round(d7 * 1000) / 1000).toBe(0.5);
-		expect(Math.round(d14 * 1000) / 1000).toBe(0.25);
+		const out = recommend({
+			config,
+			anchor: pool.find(x => x.id === 1),
+			pool,
+			transitions
+		});
+
+		expect(out).toHaveLength(4);
+		expect(out[0].id).toBe(4);
+		expect(out[0].reasons).toContain('clickNext');
+		expect(out.some(item => item.reasons.includes('clickNext'))).toBe(true);
+	});
+
+	it('uses explore mode in cold scenarios when confidence is low', () => {
+		const now = '2026-02-13T00:00:00Z';
+		const pool = [
+			{ id: 1, user_id: 10, family_id: 'AX', meta: { server_id: 'a', method: 'm1' }, created_at: '2026-02-12T00:00:00Z', published: true },
+			{ id: 2, user_id: 21, family_id: 'B', meta: { server_id: 'b', method: 'm2' }, created_at: '2026-02-12T01:00:00Z', published: true },
+			{ id: 3, user_id: 22, family_id: 'C', meta: { server_id: 'c', method: 'm3' }, created_at: '2026-02-12T02:00:00Z', published: true },
+			{ id: 4, user_id: 23, family_id: 'D', meta: { server_id: 'd', method: 'm4' }, created_at: '2026-02-12T03:00:00Z', published: true },
+			{ id: 5, user_id: 24, family_id: 'E', meta: { server_id: 'e', method: 'm5' }, created_at: '2026-02-12T04:00:00Z', published: true }
+		];
+		const transitions = [];
+		const out = recommend({
+			config: {
+				now: () => +new Date(now),
+				rng: seededRng(7),
+				batchSize: 4,
+				coldMode: 'auto',
+				coldConfidenceThreshold: 0.95,
+				coldExploreFraction: 0.75,
+				coldExploreMinGuessSlots: 1
+			},
+			anchor: pool[0],
+			pool,
+			transitions
+		});
+
+		expect(out).toHaveLength(4);
+		expect(out.some((row) => row.reasons.includes('exploreRandom'))).toBe(true);
+	});
+
+	it('includes click-next candidates even without other matching signals', () => {
+		const now = '2026-02-13T00:00:00Z';
+		const pool = [
+			{ id: 1, user_id: 10, family_id: 'A', meta: { server_id: 's1', method: 'm1' }, created_at: '2026-02-12T00:00:00Z', published: true },
+			{ id: 2, user_id: 11, family_id: 'B', meta: { server_id: 's2', method: 'm2' }, created_at: '2026-02-12T01:00:00Z', published: true },
+			{ id: 3, user_id: 12, family_id: 'C', meta: { server_id: 's1', method: 'm1' }, created_at: '2026-02-12T02:00:00Z', published: true }
+		];
+		const transitions = [
+			{ from_created_image_id: 1, to_created_image_id: 2, count: 1, last_updated: '2026-02-12T23:00:00Z' }
+		];
+		const out = recommend({
+			config: {
+				now: () => +new Date(now),
+				rng: seededRng(11),
+				batchSize: 3,
+				clickNextWeight: 100,
+				fallbackWeight: 0,
+				sameCreatorWeight: 0,
+				sameServerMethodWeight: 0,
+				lineageWeight: 0,
+			},
+			anchor: pool[0],
+			pool,
+			transitions
+		});
+
+		const clickOnly = out.find((x) => x.id === 2);
+		expect(clickOnly).toBeDefined();
+		expect(clickOnly.reasons).toContain('clickNext');
+	});
+
+	it('hard preference keeps click-next ahead of non-click candidates', () => {
+		const now = '2026-02-13T00:00:00Z';
+		const pool = [
+			{ id: 1, user_id: 10, family_id: 'A', meta: { server_id: 's1', method: 'm1' }, created_at: '2026-02-12T00:00:00Z', published: true },
+			{ id: 2, user_id: 11, family_id: 'B', meta: { server_id: 's2', method: 'm2' }, created_at: '2026-02-12T01:00:00Z', published: true }, // click only
+			{ id: 3, user_id: 10, family_id: 'A', meta: { server_id: 's1', method: 'm1', mutate_of_id: 99 }, created_at: '2026-02-12T02:00:00Z', published: true }, // strong non-click
+			{ id: 4, user_id: 10, family_id: 'A', meta: { server_id: 's1', method: 'm1' }, created_at: '2026-02-12T03:00:00Z', published: true }
+		];
+		const transitions = [
+			{ from_created_image_id: 1, to_created_image_id: 2, count: 1, last_updated: '2026-02-12T23:00:00Z' }
+		];
+
+		const out = recommend({
+			config: {
+				now: () => +new Date(now),
+				rng: seededRng(13),
+				batchSize: 4,
+				clickNextWeight: 1,
+				lineageWeight: 100,
+				sameCreatorWeight: 100,
+				sameServerMethodWeight: 100,
+				fallbackWeight: 10
+			},
+			anchor: pool[0],
+			pool,
+			transitions
+		});
+
+		const clickIdx = out.findIndex((x) => x.id === 2);
+		const nonClickIdx = out.findIndex((x) => x.id === 4);
+		expect(clickIdx).toBeGreaterThanOrEqual(0);
+		expect(nonClickIdx).toBeGreaterThanOrEqual(0);
+		expect(clickIdx).toBeLessThan(nonClickIdx);
+	});
+
+	it('orders click-next candidates by click count first', () => {
+		const now = '2026-02-13T00:00:00Z';
+		const pool = [
+			{ id: 1, user_id: 10, family_id: 'A', meta: { server_id: 's1', method: 'm1' }, created_at: '2026-02-12T00:00:00Z', published: true },
+			{ id: 2, user_id: 11, family_id: 'B', meta: { server_id: 's2', method: 'm2' }, created_at: '2026-02-12T01:00:00Z', published: true },
+			{ id: 3, user_id: 12, family_id: 'C', meta: { server_id: 's3', method: 'm3' }, created_at: '2026-02-12T01:30:00Z', published: true },
+			{ id: 4, user_id: 13, family_id: 'D', meta: { server_id: 's4', method: 'm4' }, created_at: '2026-02-12T02:00:00Z', published: true },
+			{ id: 5, user_id: 10, family_id: 'A', meta: { server_id: 's1', method: 'm1' }, created_at: '2026-02-12T03:00:00Z', published: true } // strong contextual but non-click
+		];
+		const transitions = [
+			{ from_created_image_id: 1, to_created_image_id: 2, count: 10, last_updated: '2026-02-12T23:00:00Z' },
+			{ from_created_image_id: 1, to_created_image_id: 3, count: 5, last_updated: '2026-02-12T23:00:00Z' },
+			{ from_created_image_id: 1, to_created_image_id: 4, count: 1, last_updated: '2026-02-12T23:00:00Z' }
+		];
+
+		const out = recommend({
+			config: {
+				now: () => +new Date(now),
+				rng: seededRng(21),
+				batchSize: 4,
+				clickNextWeight: 1,
+				lineageWeight: 200,
+				sameCreatorWeight: 200,
+				sameServerMethodWeight: 200,
+				fallbackWeight: 0
+			},
+			anchor: pool[0],
+			pool,
+			transitions
+		});
+
+		expect(out.slice(0, 3).map((x) => x.id)).toEqual([2, 3, 4]);
+		expect(out.slice(0, 3).every((x) => x.reasons.includes('clickNext'))).toBe(true);
+	});
+
+	it('uses non-click signals as tie-breakers only when click counts tie', () => {
+		const now = '2026-02-13T00:00:00Z';
+		const pool = [
+			{ id: 1, user_id: 10, family_id: 'A', meta: { server_id: 's1', method: 'm1' }, created_at: '2026-02-12T00:00:00Z', published: true },
+			{ id: 2, user_id: 10, family_id: 'A', meta: { server_id: 's9', method: 'm9', mutate_of_id: 1 }, created_at: '2026-02-12T01:00:00Z', published: true }, // click + lineage + sameCreator
+			{ id: 3, user_id: 11, family_id: 'B', meta: { server_id: 's8', method: 'm8' }, created_at: '2026-02-12T02:00:00Z', published: true } // click only
+		];
+		const transitions = [
+			{ from_created_image_id: 1, to_created_image_id: 2, count: 4, last_updated: '2026-02-12T23:00:00Z' },
+			{ from_created_image_id: 1, to_created_image_id: 3, count: 4, last_updated: '2026-02-12T23:00:00Z' }
+		];
+
+		const out = recommend({
+			config: {
+				now: () => +new Date(now),
+				rng: seededRng(22),
+				batchSize: 2,
+				clickNextWeight: 10,
+				lineageWeight: 100,
+				sameCreatorWeight: 50,
+				sameServerMethodWeight: 0,
+				fallbackWeight: 0
+			},
+			anchor: pool[0],
+			pool,
+			transitions
+		});
+
+		expect(out.map((x) => x.id)).toEqual([2, 3]);
+		expect(out[0].click_score).toBe(out[1].click_score);
+		expect(out[0].score).toBeGreaterThan(out[1].score);
 	});
 });

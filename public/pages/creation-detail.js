@@ -170,8 +170,10 @@ function getPrimaryLinkUrl(creationId) {
 	return new URL(`/creations/${creationId}`, window.location.origin).toString();
 }
 
-const RELATED_BATCH_SIZE = 10;
+const RELATED_BATCH_SIZE = 40;
 const RELATED_STORAGE_KEY_PREFIX = 'related_transition_';
+const RELATED_EXCLUDE_IDS_CAP = 200;
+const RECSYS_RANDOM_ONLY_SEEN_THRESHOLD = 120;
 
 function recordTransitionFromQuery(currentCreationId) {
 	const params = new URLSearchParams(window.location.search);
@@ -207,24 +209,40 @@ function recordTransitionFromQuery(currentCreationId) {
 	}).catch(() => {});
 }
 
-function initRelatedSection(root, currentCreationId) {
+function initRelatedSection(root, currentCreationId, options = {}) {
 	const container = root.querySelector('[data-related-container]');
 	const grid = root.querySelector('[data-related-grid]');
 	const sentinel = root.querySelector('[data-related-sentinel]');
 	if (!container || !grid || !sentinel) return;
+	const showRecsysDebug = options?.showRecsysDebug === true;
 
 	function escapeHtml(val) {
 		return String(val ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+	}
+
+	function decodeHtmlEntities(val) {
+		const text = String(val ?? '');
+		if (!text.includes('&')) return text;
+		const textarea = document.createElement('textarea');
+		textarea.innerHTML = text;
+		return textarea.value;
 	}
 
 	let relatedIds = [];
 	const relatedIdsSet = new Set();
 	let hasMore = false;
 	let isLoading = false;
+	let randomMode = false;
 	let relatedObserver = null;
 
 	function relatedCardUrl(createdImageId) {
 		return `/creations/${createdImageId}?from=${currentCreationId}`;
+	}
+
+	function isSentinelNearViewport() {
+		if (!sentinel) return false;
+		const rect = sentinel.getBoundingClientRect();
+		return rect.top <= (window.innerHeight + 240);
 	}
 
 	function setRelatedMediaBackground(mediaEl, url) {
@@ -238,7 +256,37 @@ function initRelatedSection(root, currentCreationId) {
 		img.src = url;
 	}
 
-		function appendRelatedCards(items) {
+	function buildRelatedReasonRows(item) {
+		const rows = [];
+		if (Number.isFinite(Number(item?.recsys_score))) {
+			let scoreLine = `Score ${Number(item.recsys_score).toFixed(2)}`;
+			if (Number.isFinite(Number(item?.recsys_click_score))) {
+				const shareText = Number.isFinite(Number(item?.recsys_click_share))
+					? ` (${(Number(item.recsys_click_share) * 100).toFixed(1)}%)`
+					: '';
+				scoreLine += ` | Click ${Number(item.recsys_click_score).toFixed(4)}${shareText}`;
+			}
+			rows.push(scoreLine);
+		}
+		const details = Array.isArray(item?.reason_details) ? item.reason_details : [];
+		for (const d of details.slice(0, 3)) {
+			if (!d?.label) continue;
+			const relId = d.related_creation_id;
+			const relTitle = d.related_creation_title;
+			if (relId || relTitle) {
+				rows.push(`${d.label}: ${relTitle || 'Untitled'}${relId ? ` (#${relId})` : ''}`);
+			} else {
+				rows.push(String(d.label));
+			}
+		}
+		if (rows.length === 0) {
+			const labels = Array.isArray(item?.reason_labels) ? item.reason_labels : [];
+			for (const label of labels.slice(0, 3)) rows.push(String(label));
+		}
+		return rows;
+	}
+
+	function appendRelatedCards(items) {
 		if (!items || items.length === 0) return;
 		const startIndex = grid.querySelectorAll('.route-card').length;
 		items.forEach((item, i) => {
@@ -254,17 +302,22 @@ function initRelatedSection(root, currentCreationId) {
 			const handleText = item.author_user_name || '';
 			const handle = handleText ? `@${handleText}` : '';
 			const href = relatedCardUrl(cid);
+			const reasonRows = showRecsysDebug ? buildRelatedReasonRows(item) : [];
+			const reasonsHtml = showRecsysDebug && reasonRows.length > 0
+				? `<div class="creation-detail-related-reasons">${reasonRows.map((line) => `<div class="creation-detail-related-reason-line">${escapeHtml(line)}</div>`).join('')}</div>`
+				: '';
 			/* Match explore card structure exactly: .route-media + .route-details as direct children (no wrapper link) */
 			card.innerHTML = html`
 				<div class="route-media" aria-hidden="true" data-related-media data-image-id="${cid}" data-status="completed"></div>
 				<div class="route-details">
 					<div class="route-details-content">
-						<div class="route-title">${escapeHtml(item.title != null ? item.title : 'Untitled')}</div>
-						<div class="route-summary">${escapeHtml(item.summary != null ? item.summary : '')}</div>
+						<div class="route-title">${escapeHtml(decodeHtmlEntities(item.title != null ? item.title : 'Untitled'))}</div>
+						<div class="route-summary">${escapeHtml(decodeHtmlEntities(item.summary != null ? item.summary : ''))}</div>
 						<div class="route-meta" title="${formatDateTime(item.created_at)}">${formatRelativeTime(item.created_at)}</div>
 						<div class="route-meta">
-							By ${profileHref ? html`<a class="user-link" href="${profileHref}" data-related-profile-link>${escapeHtml(authorLabel)}</a>` : escapeHtml(authorLabel)}${handle ? html` <span>(${handle})</span>` : ''}
+							By ${profileHref ? html`<a class="user-link" href="${profileHref}" data-related-profile-link>${escapeHtml(decodeHtmlEntities(authorLabel))}</a>` : escapeHtml(decodeHtmlEntities(authorLabel))}${handle ? html` <span>(${handle})</span>` : ''}
 						</div>
+						${reasonsHtml}
 						<div class="route-meta route-meta-spacer"></div>
 						<div class="route-tags">${escapeHtml(item.tags ?? '')}</div>
 					</div>
@@ -304,45 +357,71 @@ function initRelatedSection(root, currentCreationId) {
 		});
 	}
 
-	async function loadRelated(seedIds = null, excludeIds = null) {
+	async function loadRelated(excludeIds = null) {
 		if (isLoading) return;
 		isLoading = true;
 		try {
 			const params = new URLSearchParams();
 			params.set('limit', String(RELATED_BATCH_SIZE));
-			if (seedIds && seedIds.length > 0) params.set('seed_ids', seedIds.join(','));
 			if (excludeIds && excludeIds.length > 0) params.set('exclude_ids', excludeIds.join(','));
+			if (randomMode) params.set('force_random', '1');
+			else if (relatedIds.length >= RECSYS_RANDOM_ONLY_SEEN_THRESHOLD) params.set('seen_count', String(relatedIds.length));
 			const res = await fetch(`/api/creations/${currentCreationId}/related?${params}`, { credentials: 'include' });
 			if (!res.ok) {
 				container.style.display = 'none';
 				return;
 			}
 			const data = await res.json();
-			let items = Array.isArray(data?.items) ? data.items : [];
+			const rawItems = Array.isArray(data?.items) ? data.items : [];
+			let items = [];
 			hasMore = Boolean(data?.hasMore);
-			// Dedupe: only append items we haven't shown yet.
-			items = items.filter((it) => {
-				const id = it?.created_image_id ?? it?.id;
-				if (id == null || relatedIdsSet.has(id)) return false;
-				relatedIdsSet.add(id);
-				relatedIds.push(id);
-				return true;
-			});
+			if (randomMode) {
+				// In random mode, allow previously seen IDs so the feed never stalls.
+				items = rawItems.filter((it) => {
+					const id = it?.created_image_id ?? it?.id;
+					if (id == null) return false;
+					relatedIds.push(id);
+					return true;
+				});
+			} else {
+				// Deterministic mode: dedupe strictly across what we've already rendered.
+				items = rawItems.filter((it) => {
+					const id = it?.created_image_id ?? it?.id;
+					if (id == null || relatedIdsSet.has(id)) return false;
+					relatedIdsSet.add(id);
+					relatedIds.push(id);
+					return true;
+				});
+			}
 			if (items.length > 0) {
 				container.style.display = '';
 				appendRelatedCards(items);
 			}
-			if (!hasMore && sentinel) sentinel.style.display = 'none';
+			if (!hasMore) {
+				randomMode = true;
+				hasMore = true;
+				if (sentinel) sentinel.style.display = '';
+			}
 		} finally {
 			isLoading = false;
+			// If the sentinel remains in view, continue auto-loading.
+			// Use a small delay to avoid tight request loops when responses are sparse.
+			if (hasMore && relatedIds.length > 0 && isSentinelNearViewport()) {
+				window.setTimeout(() => {
+					loadMoreRelated();
+				}, 180);
+			}
 		}
 	}
 
 	function loadMoreRelated() {
 		if (!hasMore || isLoading || relatedIds.length === 0) return;
-		const seedIds = relatedIds.slice(-RELATED_BATCH_SIZE);
-		const excludeIds = [currentCreationId, ...relatedIds];
-		loadRelated(seedIds, excludeIds);
+		// Keep excludes tighter in random mode to reduce request lock-in.
+		const excludeTail = randomMode
+			? Math.min(40, RELATED_EXCLUDE_IDS_CAP)
+			: RELATED_EXCLUDE_IDS_CAP;
+		const excludeIds = [currentCreationId, ...relatedIds.slice(-excludeTail)];
+		loadRelated(excludeIds);
 	}
 
 	function observeSentinel() {
@@ -1531,7 +1610,10 @@ async function loadCreation() {
 		// Related section and transition recording: only when creation is published and not failed.
 		if (isPublished && !isFailed) {
 			recordTransitionFromQuery(creationId);
-			initRelatedSection(detailContent, creationId);
+			const query = new URLSearchParams(window.location.search);
+			const debugRelated = query.get('debug_related') === '1';
+			const showRecsysDebug = isAdmin && debugRelated;
+			initRelatedSection(detailContent, creationId, { showRecsysDebug });
 		}
 
 		// Now that the creation detail view is fully resolved, show actions.

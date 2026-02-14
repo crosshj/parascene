@@ -671,10 +671,9 @@ export function openDb() {
 				const sameCreatorWeight = Math.max(0, parseInt(params["related.same_creator_weight"], 10) || 50);
 				const fallbackWeight = Math.max(0, parseInt(params["related.fallback_weight"], 10) || 20);
 				const capPerSignal = Math.max(1, Math.min(500, parseInt(params["related.candidate_cap_per_signal"], 10) || 100));
-				const randomFraction = Math.max(0, Math.min(1, parseFloat(params["related.random_fraction"], 10) || 0.1));
 				const randomSlotsPerBatch = Math.max(0, parseInt(params["related.random_slots_per_batch"], 10) || 0);
 				const fallbackEnabled = String(params["related.fallback_enabled"] ?? "true").toLowerCase() === "true";
-				const clickNextWeight = Math.max(0, parseInt(params["related.click_next_weight"], 10) || 0);
+				const clickNextWeight = 50;
 				const decayHalfLifeDays = parseFloat(params["related.transition_decay_half_life_days"], 10);
 				const windowDays = Math.max(0, parseFloat(params["related.transition_window_days"], 10) || 0);
 
@@ -792,7 +791,7 @@ export function openDb() {
 					seen.add(c.id);
 					deduped.push(c);
 				}
-				const randomSlots = randomSlotsPerBatch > 0 ? Math.min(randomSlotsPerBatch, limit) : Math.max(0, Math.floor(limit * randomFraction));
+				const randomSlots = Math.min(randomSlotsPerBatch, limit);
 				/* Fetch limit+1 so we can set hasMore when there are more candidates */
 				const rankedTake = Math.max(0, limit + 1 - randomSlots);
 				const rankedIds = deduped.slice(0, rankedTake).map((c) => c.id);
