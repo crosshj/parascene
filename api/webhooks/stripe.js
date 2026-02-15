@@ -110,7 +110,46 @@ export default async function handler(req, res) {
 			await grantFounderCredits(queries, userId);
 			processedEventIds.add(event.id);
 		}
-		// Optional: handle invoice.paid for recurring credits; customer.subscription.deleted for Phase D
+
+		if (event.type === "customer.subscription.deleted") {
+			const subscription = event.data?.object;
+			const subscriptionId = subscription?.id;
+			if (!subscriptionId || !queries.selectUserByStripeSubscriptionId?.get) {
+				return res.status(200).json({ received: true });
+			}
+			const user = await queries.selectUserByStripeSubscriptionId.get(subscriptionId);
+			if (!user) {
+				return res.status(200).json({ received: true });
+			}
+			const userId = String(user.id);
+			if (queries.updateUserPlan?.run) {
+				await queries.updateUserPlan.run(userId, "free");
+			}
+			if (queries.updateUserStripeSubscriptionId?.run) {
+				await queries.updateUserStripeSubscriptionId.run(userId, null);
+			}
+			processedEventIds.add(event.id);
+		}
+
+		if (event.type === "invoice.paid") {
+			const invoice = event.data?.object;
+			const billingReason = invoice?.billing_reason;
+			// Only grant credits on recurring cycle, not on initial subscription (handled by checkout.session.completed)
+			if (billingReason !== "subscription_cycle") {
+				return res.status(200).json({ received: true });
+			}
+			const subscriptionId = typeof invoice?.subscription === "string" ? invoice.subscription : invoice?.subscription?.id;
+			if (!subscriptionId || !queries.selectUserByStripeSubscriptionId?.get) {
+				return res.status(200).json({ received: true });
+			}
+			const user = await queries.selectUserByStripeSubscriptionId.get(subscriptionId);
+			if (!user) {
+				return res.status(200).json({ received: true });
+			}
+			const userId = String(user.id);
+			await grantFounderCredits(queries, userId);
+			processedEventIds.add(event.id);
+		}
 
 		return res.status(200).json({ received: true });
 	} catch (err) {

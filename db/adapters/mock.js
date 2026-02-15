@@ -113,6 +113,16 @@ export function openDb() {
 				return { ...safeUser, meta, suspended: meta.suspended === true };
 			}
 		},
+		selectUserByStripeSubscriptionId: {
+			get: async (subscriptionId) => {
+				if (subscriptionId == null || String(subscriptionId).trim() === "") return undefined;
+				const user = users.find((u) => u.meta?.stripeSubscriptionId === String(subscriptionId));
+				if (!user) return undefined;
+				const { password_hash, ...safeUser } = user;
+				const meta = safeUser.meta != null && typeof safeUser.meta === "object" ? safeUser.meta : {};
+				return { ...safeUser, meta, suspended: meta.suspended === true };
+			}
+		},
 		selectUserProfileByUserId: {
 			get: async (userId) =>
 				user_profiles.find((row) => row.user_id === Number(userId))
@@ -290,8 +300,13 @@ export function openDb() {
 				const user = users.find((u) => Number(u.id) === Number(userId));
 				if (!user) return { changes: 0 };
 				user.meta = user.meta != null && typeof user.meta === "object" ? { ...user.meta } : {};
-				if (subscriptionId != null) user.meta.stripeSubscriptionId = subscriptionId;
-				else delete user.meta.stripeSubscriptionId;
+				if (subscriptionId != null) {
+					user.meta.stripeSubscriptionId = subscriptionId;
+					delete user.meta.pendingCheckoutSessionId;
+					delete user.meta.pendingCheckoutReturnedAt;
+				} else {
+					delete user.meta.stripeSubscriptionId;
+				}
 				return { changes: 1 };
 			}
 		},

@@ -293,6 +293,18 @@ export async function openDb() {
 				return { ...row, meta, suspended: meta.suspended === true };
 			}
 		},
+		selectUserByStripeSubscriptionId: {
+			get: async (subscriptionId) => {
+				if (subscriptionId == null || String(subscriptionId).trim() === "") return undefined;
+				const stmt = db.prepare(
+					"SELECT id, email, role, created_at, meta FROM users WHERE json_extract(meta, '$.stripeSubscriptionId') = ?"
+				);
+				const row = stmt.get(String(subscriptionId));
+				if (!row) return undefined;
+				const meta = parseUserMeta(row.meta);
+				return { ...row, meta, suspended: meta.suspended === true };
+			}
+		},
 		selectUserProfileByUserId: {
 			get: async (userId) => {
 				const stmt = db.prepare(
@@ -589,8 +601,14 @@ export async function openDb() {
 				const stmt = db.prepare("SELECT meta FROM users WHERE id = ?");
 				const row = stmt.get(userId);
 				const existing = parseUserMeta(row?.meta);
-				const meta = { ...existing, stripeSubscriptionId: subscriptionId || null };
-				if (subscriptionId == null) delete meta.stripeSubscriptionId;
+				const meta = { ...existing };
+				if (subscriptionId != null) {
+					meta.stripeSubscriptionId = subscriptionId;
+					delete meta.pendingCheckoutSessionId;
+					delete meta.pendingCheckoutReturnedAt;
+				} else {
+					delete meta.stripeSubscriptionId;
+				}
 				const updateStmt = db.prepare("UPDATE users SET meta = ? WHERE id = ?");
 				const result = updateStmt.run(JSON.stringify(meta), userId);
 				return Promise.resolve({ changes: result.changes });

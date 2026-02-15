@@ -75,6 +75,20 @@ export function openDb() {
 				return { ...data, meta, suspended: meta.suspended === true };
 			}
 		},
+		selectUserByStripeSubscriptionId: {
+			get: async (subscriptionId) => {
+				if (subscriptionId == null || String(subscriptionId).trim() === "") return undefined;
+				const { data, error } = await serviceClient
+					.from(prefixedTable("users"))
+					.select("id, email, role, created_at, meta")
+					.contains("meta", { stripeSubscriptionId: subscriptionId })
+					.maybeSingle();
+				if (error) throw error;
+				if (!data) return undefined;
+				const meta = typeof data.meta === "object" && data.meta !== null ? data.meta : {};
+				return { ...data, meta, suspended: meta.suspended === true };
+			}
+		},
 		selectUserProfileByUserId: {
 			get: async (userId) => {
 				const { data, error } = await serviceClient
@@ -432,8 +446,13 @@ export function openDb() {
 				if (selectError) throw selectError;
 				const existing = current?.meta ?? null;
 				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
-				if (subscriptionId != null) meta.stripeSubscriptionId = subscriptionId;
-				else delete meta.stripeSubscriptionId;
+				if (subscriptionId != null) {
+					meta.stripeSubscriptionId = subscriptionId;
+					delete meta.pendingCheckoutSessionId;
+					delete meta.pendingCheckoutReturnedAt;
+				} else {
+					delete meta.stripeSubscriptionId;
+				}
 				const { error } = await serviceClient
 					.from(prefixedTable("users"))
 					.update({ meta })

@@ -563,7 +563,7 @@ export default function createProfileRoutes({ queries }) {
 		}
 	});
 
-	// Update current user's plan (no Stripe; direct meta update for now)
+	// Update current user's plan. When switching to free, cancel Stripe subscription if present.
 	router.put("/api/profile/plan", async (req, res) => {
 		try {
 			if (!req.auth?.userId) {
@@ -576,8 +576,31 @@ export default function createProfileRoutes({ queries }) {
 			if (!queries.updateUserPlan?.run) {
 				return res.status(500).json({ error: "Plan update not available", message: "Plan updates are not available." });
 			}
-			await queries.updateUserPlan.run(req.auth.userId, plan);
-			const user = await queries.selectUserById.get(req.auth.userId);
+			const userId = req.auth.userId;
+			if (plan === "free") {
+				const user = await queries.selectUserById.get(userId);
+				const subscriptionId = user?.meta?.stripeSubscriptionId;
+				if (subscriptionId && typeof subscriptionId === "string") {
+					const stripeSecret = process.env.STRIPE_SECRET_KEY;
+					if (stripeSecret) {
+						try {
+							const stripe = new Stripe(stripeSecret);
+							await stripe.subscriptions.cancel(subscriptionId);
+						} catch (stripeErr) {
+							console.error("[PUT /api/profile/plan] Stripe cancel failed:", stripeErr?.message || stripeErr);
+							return res.status(502).json({
+								error: "Cancel failed",
+								message: "Could not cancel subscription. Please try again or contact support."
+							});
+						}
+					}
+					if (queries.updateUserStripeSubscriptionId?.run) {
+						await queries.updateUserStripeSubscriptionId.run(userId, null);
+					}
+				}
+			}
+			await queries.updateUserPlan.run(userId, plan);
+			const user = await queries.selectUserById.get(userId);
 			const newPlan = user?.meta?.plan === "founder" ? "founder" : "free";
 			return res.json({ ok: true, plan: newPlan });
 		} catch (err) {
