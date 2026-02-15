@@ -262,6 +262,15 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		updateUserPlan: {
+			run: async (userId, plan) => {
+				const user = users.find((u) => Number(u.id) === Number(userId));
+				if (!user) return { changes: 0 };
+				user.meta = user.meta != null && typeof user.meta === "object" ? { ...user.meta } : {};
+				user.meta.plan = plan === "founder" ? "founder" : "free";
+				return { changes: 1 };
+			}
+		},
 		updateUserLastActive: {
 			run: async (userId) => {
 				const user = users.find((u) => Number(u.id) === Number(userId));
@@ -807,11 +816,14 @@ export function openDb() {
 
 				return filtered.map((item) => {
 					const profile = user_profiles.find((p) => p.user_id === Number(item.user_id));
+					const user = users.find((u) => Number(u.id) === Number(item.user_id));
+					const authorPlan = user?.meta?.plan === "founder" ? "founder" : "free";
 					return {
 						...item,
 						author_user_name: profile?.user_name ?? null,
 						author_display_name: profile?.display_name ?? null,
-						author_avatar_url: profile?.avatar_url ?? null
+						author_avatar_url: profile?.avatar_url ?? null,
+						author_plan: authorPlan
 					};
 				});
 			}
@@ -1810,6 +1822,7 @@ export function openDb() {
 				return slice.map((t) => {
 					const fromUser = users.find((u) => u.id === Number(t.from_user_id));
 					const profile = user_profiles.find((p) => p.user_id === Number(t.from_user_id));
+					const plan = fromUser?.meta?.plan === "founder" ? "founder" : "free";
 					return {
 						id: t.id,
 						user_id: t.from_user_id,
@@ -1822,7 +1835,8 @@ export function openDb() {
 						updated_at: t.updated_at,
 						user_name: profile?.user_name ?? null,
 						display_name: profile?.display_name ?? (fromUser?.email ?? null),
-						avatar_url: profile?.avatar_url ?? null
+						avatar_url: profile?.avatar_url ?? null,
+						plan
 					};
 				});
 			}

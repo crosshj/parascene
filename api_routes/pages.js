@@ -752,6 +752,60 @@ export default function createPageRoutes({ queries, pagesDir }) {
 		return res.send(htmlContent);
 	});
 
+	// Guest header (same as landing / index): Login + Sign Up
+	const guestHeaderHtml = `
+		<app-navigation>
+			<a href="/auth#login" class="header-auth-link">Login</a>
+			<a href="/auth#signup" class="header-auth-link btn-primary">Sign Up</a>
+		</app-navigation>
+	`.trim();
+
+	// Pricing page: when signed in use app header + mobile nav (like creation-detail); when not, use guest header.
+	router.get("/pricing", async (req, res) => {
+		const fs = await import("fs/promises");
+		let pageHtml = await fs.readFile(path.join(pagesDir, "pricing.html"), "utf-8");
+
+		const userId = req.auth?.userId;
+		if (userId) {
+			const user = await queries.selectUserById.get(userId);
+			if (user) {
+				const rolePageName = getPageForUser(user);
+				const rolePagePath = path.join(pagesDir, rolePageName);
+				let headerHtml = "";
+				let includeMobileBottomNav = false;
+				try {
+					const roleHtml = await fs.readFile(rolePagePath, "utf-8");
+					const headerMatch = roleHtml.match(/<app-navigation[\s\S]*?<\/app-navigation>/i);
+					if (headerMatch) headerHtml = headerMatch[0];
+					includeMobileBottomNav = /<app-navigation-mobile\b/i.test(roleHtml);
+				} catch {
+					// fallback: use guest header if role page read fails
+				}
+				pageHtml = pageHtml.replace("<!--APP_HEADER-->", headerHtml || guestHeaderHtml);
+				pageHtml = pageHtml.replace(
+					"<!--APP_MOBILE_BOTTOM_NAV-->",
+					includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
+				);
+			} else {
+				pageHtml = pageHtml.replace("<!--APP_HEADER-->", guestHeaderHtml);
+				pageHtml = pageHtml.replace("<!--APP_MOBILE_BOTTOM_NAV-->", "");
+			}
+		} else {
+			pageHtml = pageHtml.replace("<!--APP_HEADER-->", guestHeaderHtml);
+			pageHtml = pageHtml.replace("<!--APP_MOBILE_BOTTOM_NAV-->", "");
+			pageHtml = pageHtml.replace('<body class="pricing-page">', '<body class="pricing-page pricing-page-guest">');
+		}
+
+		pageHtml = injectCommonHead(pageHtml);
+		res.setHeader("Content-Type", "text/html");
+		return res.send(pageHtml);
+	});
+
+	// Canonical pricing URL is /pricing; redirect old /pricing.html.
+	router.get("/pricing.html", (req, res) => {
+		return res.redirect(301, "/pricing");
+	});
+
 	// Try page (unauthenticated). try.html includes global.css and global.js itself; do not inject common head to avoid loading them twice.
 	router.get("/try", async (req, res) => {
 		const fs = await import("fs/promises");

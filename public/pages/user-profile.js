@@ -95,7 +95,7 @@ function normalizeWebsite(raw) {
 	}
 }
 
-function renderProfilePage(container, { user, profile, stats, isSelf, viewerFollows, isAdmin = false }) {
+function renderProfilePage(container, { user, profile, stats, plan, isSelf, viewerFollows, isAdmin = false }) {
 	const fallbackName =
 		(user?.email_prefix && String(user.email_prefix).trim()) ||
 		(isSelf && user?.email ? String(user.email).split('@')[0] : '') ||
@@ -115,26 +115,35 @@ function renderProfilePage(container, { user, profile, stats, isSelf, viewerFoll
 
 	const avatarInitial = displayName.trim().charAt(0).toUpperCase() || '?';
 	const avatarColor = getAvatarColor(profile?.user_name || user?.email_prefix || user?.email || String(user?.id || ''));
+	const isFounder = plan === 'founder';
 
 	const memberSince = stats?.member_since ? formatDate(stats.member_since) : null;
 	const creationsPublished = Number(stats?.creations_published ?? 0);
 	const likesReceived = Number(stats?.likes_received ?? 0);
+
+	const avatarContent = avatarUrl
+		? html`<img class="user-profile-avatar-img" src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(displayName)}">`
+		: html`<div class="user-profile-avatar-fallback" style="--user-profile-avatar-bg: ${avatarColor};" aria-hidden="true">${escapeHtml(avatarInitial)}</div>`;
 
 	container.innerHTML = html`
 		<div class="user-profile-hero">
 			<div class="user-profile-banner" style="${buildBannerStyle(coverUrl)}"></div>
 			<div class="user-profile-hero-inner">
 				<div class="user-profile-avatar">
-					${avatarUrl ? html`
-						<img class="user-profile-avatar-img" src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(displayName)}">
-					` : html`
-						<div class="user-profile-avatar-fallback" style="--user-profile-avatar-bg: ${avatarColor};" aria-hidden="true">${escapeHtml(avatarInitial)}</div>
-					`}
+					${isFounder ? html`
+						<div class="avatar-with-founder-flair avatar-with-founder-flair--xl">
+							<div class="founder-flair-avatar-ring">
+								<div class="founder-flair-avatar-inner">
+									${avatarContent}
+								</div>
+							</div>
+						</div>
+					` : avatarContent}
 				</div>
 
 				<div class="user-profile-identity">
 					<div class="user-profile-title-row">
-						<div class="user-profile-name">${escapeHtml(displayName)}</div>
+						<div class="user-profile-name${isFounder ? ' founder-name' : ''}">${escapeHtml(displayName)}</div>
 						<div class="user-profile-actions">
 							${isSelf ? html`<button class="btn-primary user-profile-edit" type="button">Edit Profile</button>` : ''}
 							${!isSelf ? html`
@@ -147,7 +156,7 @@ function renderProfilePage(container, { user, profile, stats, isSelf, viewerFoll
 							-->
 						</div>
 					</div>
-					<div class="user-profile-handle">${escapeHtml(handle)}</div>
+					<div class="user-profile-handle${isFounder ? ' founder-name' : ''}">${escapeHtml(handle)}</div>
 
 					<div class="user-profile-stats">
 						<div class="user-profile-stat">
@@ -474,7 +483,7 @@ async function init() {
 	profile.badges = safeJsonParse(profile.badges, []);
 	profile.meta = safeJsonParse(profile.meta, {});
 
-	renderProfilePage(container, { user, profile, stats, isSelf, viewerFollows, isAdmin });
+	renderProfilePage(container, { user, profile, stats, plan: summary.plan, isSelf, viewerFollows, isAdmin });
 
 	// Hydrate any links in user-generated content (e.g., About field)
 	hydrateUserTextLinks(container);

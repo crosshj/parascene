@@ -1,4 +1,4 @@
-/* Shared layout for static content pages (ToS, Pricing, etc.) */
+/* Shared layout for static content pages (ToS, Privacy, etc.) – not for pricing (use /pages/pricing.css) */
 
 body.static-page {
 	background: var(--bg);
@@ -87,18 +87,22 @@ body.static-page {
 	cursor: pointer;
 	box-sizing: border-box;
 }
+
 .static-page a.btn-primary {
 	border-color: var(--accent);
 }
+
 .static-page a.btn-secondary {
 	border-color: var(--border);
 	background: var(--surface);
 	color: var(--text);
 	box-shadow: var(--shadow);
 }
+
 .static-page a.btn-primary:hover {
 	text-decoration: none;
 }
+
 .static-page a.btn-secondary:hover {
 	text-decoration: none;
 	background: var(--surface-strong);
@@ -120,64 +124,4 @@ body.static-page {
 .static-page .content-cta .btn-primary,
 .static-page .content-cta .btn-secondary {
 	display: inline-flex;
-}
-
-/* Pricing-specific: plan cards */
-.pricing-grid {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-	gap: 24px;
-	margin: 24px 0 32px;
-}
-
-.pricing-card {
-	background: var(--surface);
-	border: 1px solid var(--border);
-	border-radius: 12px;
-	padding: 24px;
-	box-shadow: var(--shadow);
-}
-
-.pricing-card h3 {
-	margin: 0 0 8px;
-	font-size: 1.15rem;
-	font-weight: 600;
-	color: var(--text);
-}
-
-.pricing-card .pricing-price {
-	font-size: 1.75rem;
-	font-weight: 700;
-	color: var(--text);
-	margin: 0 0 16px;
-}
-
-.pricing-card .pricing-price span {
-	font-size: 0.95rem;
-	font-weight: 500;
-	color: var(--text-muted);
-}
-
-.pricing-card ul {
-	margin: 0 0 20px;
-	padding-left: 1.25rem;
-	list-style: disc;
-}
-
-.pricing-card li {
-	font-size: 0.9rem;
-	margin-bottom: 8px;
-}
-
-.pricing-card .btn-primary,
-.pricing-card .btn-secondary {
-	width: 100%;
-	justify-content: center;
-	margin-top: 8px;
-}
-
-@media (max-width: 768px) {
-	.pricing-grid {
-		grid-template-columns: 1fr;
-	}
 }

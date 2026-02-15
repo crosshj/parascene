@@ -144,3 +144,12 @@ export const creditIcon = withAttributes(html`
 		<text x="12" y="12" text-anchor="middle" dominant-baseline="middle" font-size="10" fill="currentColor" stroke="none">P</text>
 	</svg>
 `);
+
+/** User avatar icon: square, light grey bg, darker grey head + shoulders. Circle shape from CSS (e.g. border-radius: 50%). */
+export const userAvatarIcon = withAttributes(html`
+	<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+		<rect class="user-avatar-icon-bg" width="24" height="24" rx="0"/>
+		<circle class="user-avatar-icon-figure" cx="12" cy="8" r="3.5"/>
+		<ellipse class="user-avatar-icon-figure" cx="12" cy="20.5" rx="6.5" ry="8"/>
+	</svg>
+`);

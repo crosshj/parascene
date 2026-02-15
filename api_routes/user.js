@@ -499,7 +499,43 @@ export default function createProfileRoutes({ queries }) {
 			}
 		}
 
-		return res.json({ ...user, credits: credits.balance, profile, welcome });
+		const plan = user.meta?.plan ?? "free";
+		return res.json({ ...user, credits: credits.balance, plan, profile, welcome });
+	});
+
+	// Stub: start subscription checkout (Stripe not integrated yet; walk through when we get there)
+	router.post("/api/subscription/checkout", async (req, res) => {
+		if (!req.auth?.userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+		// TODO: Create Stripe Checkout Session, return { url } to redirect. For now:
+		return res.status(503).json({
+			error: "STRIPE_NOT_CONFIGURED",
+			message: "Subscription checkout is not set up yet. We'll walk you through Stripe integration when we get there."
+		});
+	});
+
+	// Update current user's plan (no Stripe; direct meta update for now)
+	router.put("/api/profile/plan", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized", message: "You must be signed in to change your plan." });
+			}
+			const plan = req.body?.plan;
+			if (plan !== "free" && plan !== "founder") {
+				return res.status(400).json({ error: "Invalid plan", message: "plan must be 'free' or 'founder'" });
+			}
+			if (!queries.updateUserPlan?.run) {
+				return res.status(500).json({ error: "Plan update not available", message: "Plan updates are not available." });
+			}
+			await queries.updateUserPlan.run(req.auth.userId, plan);
+			const user = await queries.selectUserById.get(req.auth.userId);
+			const newPlan = user?.meta?.plan === "founder" ? "founder" : "free";
+			return res.json({ ok: true, plan: newPlan });
+		} catch (err) {
+			console.error("[PUT /api/profile/plan]", err);
+			return res.status(500).json({ error: "Update failed", message: err?.message || "Could not update plan." });
+		}
 	});
 
 	// Update current user's profile (user_profiles table)
@@ -824,9 +860,11 @@ export default function createProfileRoutes({ queries }) {
 				? { id: target.id, email: target.email, role: target.role, created_at: target.created_at }
 				: { id: target.id, role: target.role, created_at: target.created_at, email_prefix: emailPrefix };
 
+			const plan = target?.meta?.plan === "founder" ? "founder" : "free";
 			return res.json({
 				user: publicUser,
 				profile,
+				plan,
 				stats,
 				is_self: isSelf,
 				viewer_follows: viewerFollows
@@ -945,7 +983,7 @@ export default function createProfileRoutes({ queries }) {
 		}
 	});
 
-		router.post("/api/notifications/acknowledge", async (req, res) => {
+	router.post("/api/notifications/acknowledge", async (req, res) => {
 		try {
 			if (!req.auth?.userId) {
 				return res.status(401).json({ error: "Unauthorized" });

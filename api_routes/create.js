@@ -1000,7 +1000,8 @@ export default function createCreateRoutes({ queries, storage }) {
 					role: creator.role,
 					user_name: creatorProfile?.user_name ?? null,
 					display_name: creatorProfile?.display_name ?? null,
-					avatar_url: creatorProfile?.avatar_url ?? null
+					avatar_url: creatorProfile?.avatar_url ?? null,
+					plan: creator.meta?.plan === 'founder' ? 'founder' : 'free'
 				} : null
 			});
 		} catch (error) {

@@ -1,5 +1,6 @@
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 import { formatRelativeTime } from '../../shared/datetime.js';
+import { helpIcon, creditIcon, closeIcon } from '../../icons/svg-strings.js';
 
 const html = String.raw;
 
@@ -516,10 +517,7 @@ class AppModalCredits extends HTMLElement {
           <div class="credits-header">
             <div></div>
             <button class="credits-close" aria-label="Close">
-              <svg class="credits-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
+              ${closeIcon('credits-close-icon')}
             </button>
           </div>
           <div class="credits-body">
@@ -527,7 +525,7 @@ class AppModalCredits extends HTMLElement {
               <span>You have</span>
 			  <strong class="credits-balance-value">0.0</strong>
 			  <strong>credits</strong>
-			  <span>available. Explore the options below to earn more.</span>
+			  <span>available.</span>
             </div>
 
             <div class="credits-section">
@@ -540,15 +538,11 @@ class AppModalCredits extends HTMLElement {
             </div>
 
             <div class="credits-section">
-              <h3>Boost a server or participate in competitions</h3>
-              <p>Boosting and competitions are the fastest ways to earn more credits.</p>
-              <a class="btn-secondary" href="/help/credits/boost-and-compete">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="9"></circle>
-                  <path d="M12 16h.01"></path>
-                  <path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4"></path>
-                </svg>
-                Learn More
+              <h3>Get more credits</h3>
+              <p>Explore subscription options and plans.</p>
+              <a class="btn-secondary" href="/pricing">
+                ${creditIcon('icon')}
+                View plans
               </a>
             </div>
 
@@ -556,11 +550,7 @@ class AppModalCredits extends HTMLElement {
               <h3>Run a server</h3>
               <p>Run a server and earn credits for supporting the community.</p>
               <a class="btn-secondary" href="/help/credits/run-a-server">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="9"></circle>
-                  <path d="M12 16h.01"></path>
-                  <path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4"></path>
-                </svg>
+                ${helpIcon('icon')}
                 Learn More
               </a>
             </div>

@@ -554,6 +554,17 @@ export async function openDb() {
 				return Promise.resolve({ changes: result.changes });
 			}
 		},
+		updateUserPlan: {
+			run: async (userId, plan) => {
+				const stmt = db.prepare("SELECT meta FROM users WHERE id = ?");
+				const row = stmt.get(userId);
+				const existing = parseUserMeta(row?.meta);
+				const meta = { ...existing, plan: plan === "founder" ? "founder" : "free" };
+				const updateStmt = db.prepare("UPDATE users SET meta = ? WHERE id = ?");
+				const result = updateStmt.run(JSON.stringify(meta), userId);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
 		updateUserLastActive: {
 			run: async (userId) => {
 				const stmt = db.prepare(
@@ -1326,6 +1337,7 @@ export async function openDb() {
                   up.user_name AS author_user_name,
                   up.display_name AS author_display_name,
                   up.avatar_url AS author_avatar_url,
+                  CASE WHEN json_extract(u.meta,'$.plan') = 'founder' THEN 'founder' ELSE 'free' END AS author_plan,
                   COALESCE(ci.file_path, CASE WHEN ci.filename IS NOT NULL THEN '/api/images/created/' || ci.filename ELSE NULL END) as url,
                   COALESCE(lc.like_count, 0) AS like_count,
                   COALESCE(cc.comment_count, 0) AS comment_count,
@@ -1333,6 +1345,7 @@ export async function openDb() {
            FROM feed_items fi
            LEFT JOIN created_images ci ON fi.created_image_id = ci.id
            LEFT JOIN user_profiles up ON up.user_id = ci.user_id
+           LEFT JOIN users u ON u.id = ci.user_id
            LEFT JOIN (
              SELECT created_image_id, COUNT(*) AS like_count
              FROM likes_created_image
@@ -2023,9 +2036,11 @@ export async function openDb() {
 
 				const stmt = db.prepare(
 					`SELECT c.id, c.user_id, c.created_image_id, c.text, c.created_at, c.updated_at,
-                  up.user_name, up.display_name, up.avatar_url
+                  up.user_name, up.display_name, up.avatar_url,
+                  json_extract(u.meta,'$.plan') AS plan
            FROM comments_created_image c
            LEFT JOIN user_profiles up ON up.user_id = c.user_id
+           LEFT JOIN users u ON u.id = c.user_id
            WHERE c.created_image_id = ?
            ORDER BY c.created_at ${order}
            LIMIT ? OFFSET ?`
@@ -2041,22 +2056,31 @@ export async function openDb() {
 				const stmt = db.prepare(
 					`SELECT c.id, c.user_id, c.created_image_id, c.text, c.created_at, c.updated_at,
                   up.user_name, up.display_name, up.avatar_url,
+                  json_extract(u.meta,'$.plan') AS plan,
                   ci.title AS created_image_title,
                   ci.file_path AS created_image_url,
                   ci.created_at AS created_image_created_at,
                   ci.user_id AS created_image_user_id,
                   cup.user_name AS created_image_user_name,
                   cup.display_name AS created_image_display_name,
-                  cup.avatar_url AS created_image_avatar_url
+                  cup.avatar_url AS created_image_avatar_url,
+                  json_extract(cu.meta,'$.plan') AS created_image_owner_plan
            FROM comments_created_image c
            INNER JOIN created_images ci ON ci.id = c.created_image_id
            LEFT JOIN user_profiles up ON up.user_id = c.user_id
+           LEFT JOIN users u ON u.id = c.user_id
            LEFT JOIN user_profiles cup ON cup.user_id = ci.user_id
+           LEFT JOIN users cu ON cu.id = ci.user_id
            WHERE ci.published = 1
            ORDER BY c.created_at DESC
            LIMIT ?`
 				);
-				return Promise.resolve(stmt.all(limit));
+				const rows = stmt.all(limit);
+				return Promise.resolve(rows.map((r) => ({
+					...r,
+					plan: r.plan === 'founder' ? 'founder' : 'free',
+					created_image_owner_plan: r.created_image_owner_plan === 'founder' ? 'founder' : 'free'
+				})));
 			}
 		},
 		selectCreatedImageCommentCount: {
@@ -2391,9 +2415,11 @@ export async function openDb() {
             t.updated_at,
             up.user_name,
             up.display_name,
-            up.avatar_url
+            up.avatar_url,
+            json_extract(u.meta,'$.plan') AS plan
            FROM tip_activity t
            LEFT JOIN user_profiles up ON up.user_id = t.from_user_id
+           LEFT JOIN users u ON u.id = t.from_user_id
            WHERE t.created_image_id = ?
            ORDER BY t.created_at ${order}
            LIMIT ? OFFSET ?`

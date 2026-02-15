@@ -74,6 +74,7 @@ export default function createFeedRoutes({ queries }) {
 				author_user_name: item.author_user_name ?? null,
 				author_display_name: item.author_display_name ?? null,
 				author_avatar_url: item.author_avatar_url ?? null,
+				author_plan: item.author_plan === "founder" ? "founder" : "free",
 				tags: item.tags,
 				created_at: item.created_at,
 				image_url: imageUrl,

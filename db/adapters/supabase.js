@@ -379,6 +379,25 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		updateUserPlan: {
+			run: async (userId, plan) => {
+				const { data: current, error: selectError } = await serviceClient
+					.from(prefixedTable("users"))
+					.select("meta")
+					.eq("id", userId)
+					.maybeSingle();
+				if (selectError) throw selectError;
+				const existing = current?.meta ?? null;
+				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
+				meta.plan = plan === "founder" ? "founder" : "free";
+				const { error } = await serviceClient
+					.from(prefixedTable("users"))
+					.update({ meta })
+					.eq("id", userId);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
 		updateUserLastActive: {
 			run: async (userId) => {
 				const { error } = await serviceClient
@@ -1458,6 +1477,7 @@ export function openDb() {
 				));
 
 				let profileByUserId = new Map();
+				let planByUserId = new Map();
 				if (authorIds.length > 0) {
 					const { data: profileRows, error: profileError } = await serviceClient
 						.from(prefixedTable("user_profiles"))
@@ -1467,6 +1487,16 @@ export function openDb() {
 					profileByUserId = new Map(
 						(profileRows ?? []).map((row) => [String(row.user_id), row])
 					);
+					const { data: userRows, error: userError } = await serviceClient
+						.from(prefixedTable("users"))
+						.select("id, meta")
+						.in("id", authorIds);
+					if (!userError && userRows?.length) {
+						userRows.forEach((row) => {
+							const plan = row?.meta?.plan === "founder" ? "founder" : "free";
+							planByUserId.set(String(row.id), plan);
+						});
+					}
 				}
 
 				return filtered.map((item) => {
@@ -1479,6 +1509,7 @@ export function openDb() {
 					const profile = item.user_id !== null && item.user_id !== undefined
 						? profileByUserId.get(String(item.user_id)) ?? null
 						: null;
+					const authorPlan = item.user_id != null ? (planByUserId.get(String(item.user_id)) ?? "free") : "free";
 					return {
 						...item,
 						like_count: likeCount,
@@ -1486,7 +1517,8 @@ export function openDb() {
 						viewer_liked: viewerLiked,
 						author_user_name: profile?.user_name ?? null,
 						author_display_name: profile?.display_name ?? null,
-						author_avatar_url: profile?.avatar_url ?? null
+						author_avatar_url: profile?.avatar_url ?? null,
+						author_plan: authorPlan
 					};
 				});
 			}
@@ -2847,14 +2879,28 @@ export function openDb() {
 				));
 
 				let profileByUserId = new Map();
+				let planByUserId = new Map();
 				if (userIds.length > 0) {
-					const { data: profileRows, error: profileError } = await serviceClient
-						.from(prefixedTable("user_profiles"))
-						.select("user_id, user_name, display_name, avatar_url")
-						.in("user_id", userIds);
-					if (profileError) throw profileError;
+					const [profileRes, usersRes] = await Promise.all([
+						serviceClient
+							.from(prefixedTable("user_profiles"))
+							.select("user_id, user_name, display_name, avatar_url")
+							.in("user_id", userIds),
+						serviceClient
+							.from(prefixedTable("users"))
+							.select("id, meta")
+							.in("id", userIds)
+					]);
+					if (profileRes.error) throw profileRes.error;
+					if (usersRes.error) throw usersRes.error;
 					profileByUserId = new Map(
-						(profileRows ?? []).map((row) => [String(row.user_id), row])
+						(profileRes.data ?? []).map((row) => [String(row.user_id), row])
+					);
+					planByUserId = new Map(
+						(usersRes.data ?? []).map((row) => [
+							String(row.id),
+							row?.meta?.plan === "founder" ? "founder" : "free"
+						])
 					);
 				}
 
@@ -2862,11 +2908,13 @@ export function openDb() {
 					const profile = row?.user_id !== null && row?.user_id !== undefined
 						? profileByUserId.get(String(row.user_id)) ?? null
 						: null;
+					const plan = row?.user_id != null ? (planByUserId.get(String(row.user_id)) ?? "free") : "free";
 					return {
 						...row,
 						user_name: profile?.user_name ?? null,
 						display_name: profile?.display_name ?? null,
-						avatar_url: profile?.avatar_url ?? null
+						avatar_url: profile?.avatar_url ?? null,
+						plan
 					};
 				});
 			}
@@ -2900,14 +2948,28 @@ export function openDb() {
 				));
 
 				let profileByUserId = new Map();
+				let planByUserId = new Map();
 				if (userIds.length > 0) {
-					const { data: profileRows, error: profileError } = await serviceClient
-						.from(prefixedTable("user_profiles"))
-						.select("user_id, user_name, display_name, avatar_url")
-						.in("user_id", userIds);
-					if (profileError) throw profileError;
+					const [profileRes, usersRes] = await Promise.all([
+						serviceClient
+							.from(prefixedTable("user_profiles"))
+							.select("user_id, user_name, display_name, avatar_url")
+							.in("user_id", userIds),
+						serviceClient
+							.from(prefixedTable("users"))
+							.select("id, meta")
+							.in("id", userIds)
+					]);
+					if (profileRes.error) throw profileRes.error;
+					if (usersRes.error) throw usersRes.error;
 					profileByUserId = new Map(
-						(profileRows ?? []).map((row) => [String(row.user_id), row])
+						(profileRes.data ?? []).map((row) => [String(row.user_id), row])
+					);
+					planByUserId = new Map(
+						(usersRes.data ?? []).map((row) => [
+							String(row.id),
+							row?.meta?.plan === "founder" ? "founder" : "free"
+						])
 					);
 				}
 
@@ -2915,6 +2977,7 @@ export function openDb() {
 					const profile = row?.from_user_id !== null && row?.from_user_id !== undefined
 						? profileByUserId.get(String(row.from_user_id)) ?? null
 						: null;
+					const plan = row?.from_user_id != null ? (planByUserId.get(String(row.from_user_id)) ?? "free") : "free";
 					return {
 						id: row.id,
 						user_id: row.from_user_id,
@@ -2927,7 +2990,8 @@ export function openDb() {
 						updated_at: row.updated_at,
 						user_name: profile?.user_name ?? null,
 						display_name: profile?.display_name ?? null,
-						avatar_url: profile?.avatar_url ?? null
+						avatar_url: profile?.avatar_url ?? null,
+						plan
 					};
 				});
 			}
@@ -3019,6 +3083,16 @@ export function openDb() {
 						.filter((id) => Number.isFinite(id) && id > 0)
 				));
 
+				const creatorUserIdsForPlan = Array.from(new Set(
+					trimmed
+						.map((row) => row?.created_image_user_id)
+						.filter((id) => id !== null && id !== undefined)
+						.map((id) => Number(id))
+						.filter((id) => Number.isFinite(id) && id > 0)
+				));
+
+				const allUserIds = Array.from(new Set([...userIds, ...creatorUserIdsForPlan]));
+
 				let profileByUserId = new Map();
 				if (userIds.length > 0) {
 					const { data: profileRows, error: profileError } = await serviceClient
@@ -3031,15 +3105,36 @@ export function openDb() {
 					);
 				}
 
+				let planByUserId = new Map();
+				if (allUserIds.length > 0) {
+					const { data: userRows, error: userError } = await serviceClient
+						.from(prefixedTable("users"))
+						.select("id, meta")
+						.in("id", allUserIds);
+					if (userError) throw userError;
+					planByUserId = new Map(
+						(userRows ?? []).map((r) => [
+							String(r.id),
+							r?.meta?.plan === "founder" ? "founder" : "free"
+						])
+					);
+				}
+
 				return trimmed.map((row) => {
 					const profile = row?.user_id !== null && row?.user_id !== undefined
 						? profileByUserId.get(String(row.user_id)) ?? null
 						: null;
+					const plan = row?.user_id != null ? (planByUserId.get(String(row.user_id)) ?? "free") : "free";
+					const created_image_owner_plan = row?.created_image_user_id != null
+						? (planByUserId.get(String(row.created_image_user_id)) ?? "free")
+						: "free";
 					return {
 						...row,
 						user_name: profile?.user_name ?? null,
 						display_name: profile?.display_name ?? null,
-						avatar_url: profile?.avatar_url ?? null
+						avatar_url: profile?.avatar_url ?? null,
+						plan,
+						created_image_owner_plan
 					};
 				});
 			}

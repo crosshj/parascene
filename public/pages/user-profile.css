@@ -58,6 +58,16 @@
 	font-size: 1.5rem;
 }
 
+/* When profile avatar contains founder flair (inner div) */
+.user-profile-avatar:has(.avatar-with-founder-flair) {
+	width: auto;
+	height: auto;
+	border: none;
+	overflow: visible;
+	background: transparent;
+	box-shadow: none;
+}
+
 .user-profile-identity {
 	min-width: 0;
 }

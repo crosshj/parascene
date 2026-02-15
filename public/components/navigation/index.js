@@ -15,6 +15,7 @@ class AppNavigation extends HTMLElement {
 		this.creditsCount = 0;
 		this.avatarUrl = null;
 		this.avatarLoading = false;
+		this.plan = 'free';
 		this.previewNotifications = [];
 		this.previewLoadedAt = 0;
 		this.previewLoading = false;
@@ -130,13 +131,16 @@ class AppNavigation extends HTMLElement {
 		}
 	}
 
-	updateProfileAvatarUI({ loading, avatarUrl } = {}) {
+	updateProfileAvatarUI({ loading, avatarUrl, plan } = {}) {
 		if (typeof loading === 'boolean') {
 			this.avatarLoading = loading;
 		}
 		const nextAvatar = typeof avatarUrl === 'string' ? avatarUrl.trim() : '';
 		if (avatarUrl !== undefined) {
 			this.avatarUrl = nextAvatar || null;
+		}
+		if (plan !== undefined) {
+			this.plan = plan === 'founder' ? 'founder' : 'free';
 		}
 
 		const button = this.querySelector('.profile-button');
@@ -145,12 +149,33 @@ class AppNavigation extends HTMLElement {
 		button.classList.toggle('has-avatar', Boolean(this.avatarUrl));
 		button.classList.toggle('is-avatar-loading', Boolean(this.avatarLoading) && !this.avatarUrl);
 
-		const img = button.querySelector('img.profile-avatar');
-		if (img) {
-			if (this.avatarUrl) {
-				img.src = this.avatarUrl;
+		const isFounder = this.plan === 'founder';
+		const fallbackSvg = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>';
+		const avatarContent = this.avatarUrl
+			? `<img class="profile-avatar" src="${this.avatarUrl.replace(/"/g, '&quot;')}" alt="" aria-hidden="true">`
+			: fallbackSvg;
+
+		if (isFounder) {
+			button.innerHTML = `
+				<div class="avatar-with-founder-flair avatar-with-founder-flair--sm">
+					<div class="founder-flair-avatar-ring">
+						<div class="founder-flair-avatar-inner">
+							${avatarContent}
+						</div>
+					</div>
+				</div>`;
+		} else {
+			const img = button.querySelector('img.profile-avatar');
+			if (img) {
+				if (this.avatarUrl) {
+					img.src = this.avatarUrl;
+				} else {
+					img.removeAttribute('src');
+				}
 			} else {
-				img.removeAttribute('src');
+				button.innerHTML = `
+					<img class="profile-avatar" ${this.avatarUrl ? `src="${this.avatarUrl}"` : ''} alt="" aria-hidden="true">
+					${fallbackSvg}`;
 			}
 		}
 	}
@@ -208,9 +233,10 @@ class AppNavigation extends HTMLElement {
 	}
 
 	navigateToRoute(route) {
-		// Check if we're on a server-sent or standalone page (create, creation detail, etc.)
+		// Check if we're on a server-sent or standalone page (create, creation detail, pricing, etc.)
 		// If so, use full page navigation for ANY route change
 		const isServerSentPage = window.location.pathname === '/create' ||
+			window.location.pathname === '/pricing' ||
 			/^\/creations\/\d+(\/(edit|mutat|mutate))?$/.test(window.location.pathname) ||
 			window.location.pathname.startsWith('/s/') ||
 			(window.location.pathname === '/help' || window.location.pathname.startsWith('/help/')) ||
@@ -325,6 +351,7 @@ class AppNavigation extends HTMLElement {
 
 			const count = this.parseCreditsCount(user?.credits);
 			this.updateCreditsUI(count);
+			this.plan = user?.plan === 'founder' ? 'founder' : 'free';
 
 			// Avatar cache + UI
 			if (nextAvatarUrl) {
@@ -334,6 +361,7 @@ class AppNavigation extends HTMLElement {
 				this.clearStoredAvatarUrl();
 				this.updateProfileAvatarUI({ loading: false, avatarUrl: null });
 			}
+			this.updateProfileAvatarUI({ plan: this.plan });
 
 			// Store user email for future checks
 			this.writeStoredUserEmail(currentUserEmail);
@@ -616,9 +644,10 @@ class AppNavigation extends HTMLElement {
 		// First: auto-ack any notifications that point at this URL.
 		void this.autoAcknowledgeNotificationsForPath(pathname);
 
-		// If we're on a server-sent page (like creation detail), don't handle route changes
+		// If we're on a server-sent page (like creation detail, pricing), don't handle route changes
 		// Any navigation should result in a full page load
-		const isServerSentPage = /^\/creations\/\d+(\/(edit|mutat|mutate))?$/.test(pathname) ||
+		const isServerSentPage = pathname === '/pricing' ||
+			/^\/creations\/\d+(\/(edit|mutat|mutate))?$/.test(pathname) ||
 			pathname.startsWith('/s/') ||
 			(pathname === '/help' || pathname.startsWith('/help/')) ||
 			pathname === '/user' ||

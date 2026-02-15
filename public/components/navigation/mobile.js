@@ -47,7 +47,8 @@ class AppNavigationMobile extends HTMLElement {
 			return;
 		}
 
-		const isServerSentPage = /^\/creations\/\d+(\/(edit|mutat|mutate))?$/.test(window.location.pathname) ||
+		const isServerSentPage = window.location.pathname === '/pricing' ||
+			/^\/creations\/\d+(\/(edit|mutat|mutate))?$/.test(window.location.pathname) ||
 			window.location.pathname.startsWith('/s/') ||
 			(window.location.pathname === '/help' || window.location.pathname.startsWith('/help/')) ||
 			window.location.pathname === '/user' ||
@@ -101,6 +102,9 @@ class AppNavigationMobile extends HTMLElement {
 		if (pathname === '/user' || /^\/user\/\d+$/.test(pathname)) {
 			currentRoute = null;
 		}
+		if (pathname === '/pricing') {
+			currentRoute = null;
+		}
 		// Create is a standalone page at /create
 		const isCreatePage = pathname === '/create';
 		navButtons.forEach(button => {
@@ -122,13 +126,13 @@ class AppNavigationMobile extends HTMLElement {
 			${homeIcon('mobile-bottom-nav-icon mobile-bottom-nav-icon-home')}
             <span class="mobile-bottom-nav-text" aria-hidden="true">Home</span>
           </button>
-          <button class="mobile-bottom-nav-item" data-route="creations" aria-label="Creations">
+          <button class="mobile-bottom-nav-item" data-route="explore" aria-label="Explore">
             <svg class="mobile-bottom-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="3" y="5" width="18" height="14" rx="2"></rect>
-              <circle cx="8" cy="10" r="2"></circle>
-              <path d="M21 17l-5-5L5 19"></path>
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="2" y1="12" x2="22" y2="12"></line>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
             </svg>
-            <span class="mobile-bottom-nav-text" aria-hidden="true">Creations</span>
+            <span class="mobile-bottom-nav-text" aria-hidden="true">Explore</span>
           </button>
 		  <button class="mobile-bottom-nav-item create-button" data-route="create" aria-label="Create">
             <span class="create-button-icon" aria-hidden="true">
@@ -139,13 +143,13 @@ class AppNavigationMobile extends HTMLElement {
             </span>
             <span class="mobile-bottom-nav-text" aria-hidden="true">Create</span>
           </button>
-          <button class="mobile-bottom-nav-item" data-route="explore" aria-label="Explore">
+          <button class="mobile-bottom-nav-item" data-route="creations" aria-label="Creations">
             <svg class="mobile-bottom-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="2" y1="12" x2="22" y2="12"></line>
-              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+              <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+              <circle cx="8" cy="10" r="2"></circle>
+              <path d="M21 17l-5-5L5 19"></path>
             </svg>
-            <span class="mobile-bottom-nav-text" aria-hidden="true">Explore</span>
+            <span class="mobile-bottom-nav-text" aria-hidden="true">Creations</span>
           </button>
           <button class="mobile-bottom-nav-item" data-route="connect" aria-label="Connect">
             <svg class="mobile-bottom-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

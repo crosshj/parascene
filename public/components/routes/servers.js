@@ -226,16 +226,22 @@ class AppRouteServers extends HTMLElement {
 			const creatorColor = getAvatarColor(creatorSeed);
 			const creatorInitial = creatorName.charAt(0).toUpperCase() || '?';
 			const creatorAvatarUrl = typeof comment?.created_image_avatar_url === 'string' ? comment.created_image_avatar_url.trim() : '';
+			const creatorPlan = comment?.created_image_owner_plan === 'founder';
+			const creatorAvatarContent = creatorAvatarUrl ? `<img class="comment-avatar-img" src="${escapeHtml(creatorAvatarUrl)}" alt="">` : escapeHtml(creatorInitial);
+			const creatorInnerStyle = `background: ${creatorAvatarUrl ? 'var(--surface-strong)' : creatorColor};`;
+			const creatorFlairInner = creatorPlan
+				? `<div class="avatar-with-founder-flair avatar-with-founder-flair--xs"><div class="founder-flair-avatar-ring"><div class="founder-flair-avatar-inner" style="${creatorInnerStyle}" aria-hidden="true">${creatorAvatarContent}</div></div></div>`
+				: creatorAvatarContent;
 
 			const creatorAvatarHtml = creatorProfileHref
 				? `
-					<a class="user-link user-avatar-link comment-avatar" href="${creatorProfileHref}" aria-label="View ${escapeHtml(creatorName)} profile" style="background: ${creatorColor};">
-						${creatorAvatarUrl ? `<img class="comment-avatar-img" src="${escapeHtml(creatorAvatarUrl)}" alt="">` : escapeHtml(creatorInitial)}
+					<a class="user-link user-avatar-link comment-avatar" href="${creatorProfileHref}" aria-label="View ${escapeHtml(creatorName)} profile"${creatorPlan ? '' : ` style="background: ${creatorColor};"`}>
+						${creatorFlairInner}
 					</a>
 				`
 				: `
-					<div class="comment-avatar" style="background: ${creatorColor};">
-						${creatorAvatarUrl ? `<img class="comment-avatar-img" src="${escapeHtml(creatorAvatarUrl)}" alt="">` : escapeHtml(creatorInitial)}
+					<div class="comment-avatar"${creatorPlan ? '' : ` style="background: ${creatorColor};"`}>
+						${creatorFlairInner}
 					</div>
 				`;
 
@@ -244,8 +250,8 @@ class AppRouteServers extends HTMLElement {
 				<div class="connect-comment-creator-left">
 					${creatorAvatarHtml}
 					<div class="connect-comment-creator-who">
-						<span class="comment-author-name">${escapeHtml(creatorName)}</span>
-						${creatorHandle ? `<span class="comment-author-handle">${escapeHtml(creatorHandle)}</span>` : ''}
+						<span class="comment-author-name${creatorPlan ? ' founder-name' : ''}">${escapeHtml(creatorName)}</span>
+						${creatorHandle ? `<span class="comment-author-handle${creatorPlan ? ' founder-name' : ''}">${escapeHtml(creatorHandle)}</span>` : ''}
 					</div>
 				</div>
 			`;
@@ -256,16 +262,22 @@ class AppRouteServers extends HTMLElement {
 			const color = getAvatarColor(seed);
 			const initial = commenterName.charAt(0).toUpperCase() || '?';
 			const avatarUrl = typeof comment?.avatar_url === 'string' ? comment.avatar_url.trim() : '';
+			const commenterPlan = comment?.plan === 'founder';
+			const commenterAvatarContent = avatarUrl ? `<img class="comment-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">` : escapeHtml(initial);
+			const commenterInnerStyle = `background: ${avatarUrl ? 'var(--surface-strong)' : color};`;
+			const commenterFlairInner = commenterPlan
+				? `<div class="avatar-with-founder-flair avatar-with-founder-flair--xs"><div class="founder-flair-avatar-ring"><div class="founder-flair-avatar-inner" style="${commenterInnerStyle}" aria-hidden="true">${commenterAvatarContent}</div></div></div>`
+				: commenterAvatarContent;
 
 			const avatarHtml = profileHref
 				? `
-					<a class="user-link user-avatar-link comment-avatar" href="${profileHref}" aria-label="View ${escapeHtml(commenterName)} profile" style="background: ${color};">
-						${avatarUrl ? `<img class="comment-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">` : escapeHtml(initial)}
+					<a class="user-link user-avatar-link comment-avatar" href="${profileHref}" aria-label="View ${escapeHtml(commenterName)} profile"${commenterPlan ? '' : ` style="background: ${color};"`}>
+						${commenterFlairInner}
 					</a>
 				`
 				: `
-					<div class="comment-avatar" style="background: ${color};">
-						${avatarUrl ? `<img class="comment-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">` : escapeHtml(initial)}
+					<div class="comment-avatar"${commenterPlan ? '' : ` style="background: ${color};"`}>
+						${commenterFlairInner}
 					</div>
 				`;
 
@@ -283,8 +295,8 @@ class AppRouteServers extends HTMLElement {
 					${avatarHtml}
 					<div class="connect-comment-footer-who">
 						<span class="connect-comment-footer-name-handle-time">
-							<span class="comment-author-name">${escapeHtml(commenterName)}</span>
-							${commenterHandle ? `<span class="comment-author-handle">${escapeHtml(commenterHandle)}</span>` : ''}
+							<span class="comment-author-name${commenterPlan ? ' founder-name' : ''}">${escapeHtml(commenterName)}</span>
+							${commenterHandle ? `<span class="comment-author-handle${commenterPlan ? ' founder-name' : ''}">${escapeHtml(commenterHandle)}</span>` : ''}
 							${timeAgo ? `<span class="comment-time">&nbsp;·&nbsp;${escapeHtml(timeAgo)}</span>` : ''}
 						</span>
 					</div>

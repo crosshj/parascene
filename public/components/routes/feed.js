@@ -236,6 +236,23 @@ class AppRouteFeed extends HTMLElement {
 		const likesText = likeCount === 1 ? "like" : "likes";
 		const authorUserId = item.user_id != null ? Number(item.user_id) : null;
 		const profileHref = Number.isFinite(authorUserId) && authorUserId > 0 ? `/user/${authorUserId}` : null;
+		const isFounder = item.author_plan === "founder";
+		const avatarContent = avatarUrl ? html`<img src="${avatarUrl}" alt="">` : avatarInitial;
+		const avatarBlock = isFounder
+			? html`
+          <div class="avatar-with-founder-flair avatar-with-founder-flair--md">
+            <div class="founder-flair-avatar-ring">
+              <div class="founder-flair-avatar-inner" style="background: ${avatarUrl ? 'var(--surface-strong)' : avatarColor};" aria-hidden="true">
+                ${avatarContent}
+              </div>
+            </div>
+          </div>
+        `
+			: html`
+          <div class="feed-card-avatar" style="--feed-card-avatar-bg: ${avatarColor};" aria-hidden="true">
+            ${avatarUrl ? html`<img class="feed-card-avatar-img" src="${avatarUrl}" alt="">` : avatarInitial}
+          </div>
+        `;
 
 		card.innerHTML = html`
       <div class="feed-card-image">
@@ -244,21 +261,19 @@ class AppRouteFeed extends HTMLElement {
       <div class="feed-card-footer-grid">
         ${profileHref ? html`
           <a class="user-link user-avatar-link" href="${profileHref}" data-profile-link aria-label="View ${author} profile">
-            <div class="feed-card-avatar" style="--feed-card-avatar-bg: ${avatarColor};" aria-hidden="true">
-              ${avatarUrl ? html`<img class="feed-card-avatar-img" src="${avatarUrl}" alt="">` : avatarInitial}
-            </div>
+            ${avatarBlock}
           </a>
         ` : html`
-          <div class="feed-card-avatar" style="--feed-card-avatar-bg: ${avatarColor};" aria-hidden="true">
-            ${avatarUrl ? html`<img class="feed-card-avatar-img" src="${avatarUrl}" alt="">` : avatarInitial}
+          <div>
+            ${avatarBlock}
           </div>
         `}
         <div class="feed-card-content">
           <div class="feed-card-title">${title}</div>
           <div class="feed-card-metadata" title="${formatDateTime(item.created_at)}">
             ${profileHref
-				? html`<a class="user-link" href="${profileHref}" data-profile-link>${displayName} @${handle}</a>`
-				: html`${displayName} @${handle}`} • ${relativeTime}
+				? html`<a class="user-link" href="${profileHref}" data-profile-link>${isFounder ? html`<span class="founder-name">${displayName}</span> <span class="founder-name">@${handle}</span>` : html`${displayName} @${handle}`}</a>`
+				: html`${isFounder ? html`<span class="founder-name">${displayName}</span> <span class="founder-name">@${handle}</span>` : html`${displayName} @${handle}`}`} • ${relativeTime}
           </div>
         </div>
       </div>

@@ -943,6 +943,7 @@ async function loadCreation() {
 		const creatorId = Number(creation?.creator?.id ?? creation?.user_id ?? 0);
 		const creatorColor = getAvatarColor(creatorUserName || creatorEmailPrefix || String(creatorId || '') || creatorName);
 		const creatorProfileHref = Number.isFinite(creatorId) && creatorId > 0 ? `/user/${creatorId}` : null;
+		const creatorPlan = creation?.creator?.plan === 'founder';
 
 		let canShowFollowButton = false;
 		let viewerFollowsCreator = false;
@@ -977,17 +978,26 @@ async function loadCreation() {
 		const viewerInitial = viewerName.charAt(0).toUpperCase();
 		const viewerAvatarUrl = typeof currentUserProfile?.avatar_url === 'string' ? currentUserProfile.avatar_url.trim() : '';
 		const viewerColor = getAvatarColor(viewerUserName || viewerEmailPrefix || String(currentUserId || '') || viewerName);
+		const viewerPlan = currentUser?.plan === 'founder';
 
-		const authorAvatar = html`
-			<span class="creation-detail-author-icon" style="background: xxxxxxxxxxxxxxx;">
-				${creatorAvatarUrl ? html`<img class="creation-detail-author-avatar" src="${creatorAvatarUrl}" alt="">` :
-				creatorInitial}
+		const creatorAvatarContent = creatorAvatarUrl ? html`<img class="creation-detail-author-avatar" src="${creatorAvatarUrl}" alt="">` : creatorInitial;
+		const authorAvatar = creatorPlan ? html`
+			<div class="avatar-with-founder-flair avatar-with-founder-flair--sm">
+				<div class="founder-flair-avatar-ring">
+					<div class="founder-flair-avatar-inner" style="background: ${creatorAvatarUrl ? 'var(--surface-strong)' : creatorColor};" aria-hidden="true">
+						${creatorAvatarContent}
+					</div>
+				</div>
+			</div>
+		` : html`
+			<span class="creation-detail-author-icon" style="background: ${creatorColor};">
+				${creatorAvatarContent}
 			</span>
 		`;
 
 		const authorIdentification = html`
-			<span class="creation-detail-author-name">${creatorName}</span>
-			<span class="creation-detail-author-handle">${creatorHandle}</span>
+			<span class="creation-detail-author-name${creatorPlan ? ' founder-name' : ''}">${creatorName}</span>
+			<span class="creation-detail-author-handle${creatorPlan ? ' founder-name' : ''}">${creatorHandle}</span>
 		`;
 
 		const hasEngagementActions = !!(isPublished && !isFailed);
@@ -1098,8 +1108,16 @@ async function loadCreation() {
 			
 			${isPublished && !isFailed ? html`
 			<div class="comment-input" data-comment-input>
-				<div class="comment-avatar" style="background: ${viewerColor};">
-					${viewerAvatarUrl ? `<img class="comment-avatar-img" src="${viewerAvatarUrl}" alt="">` : viewerInitial}
+				<div class="comment-avatar" ${!viewerPlan ? `style="background: ${viewerColor};"` : ''}>
+					${viewerPlan ? html`
+						<div class="avatar-with-founder-flair avatar-with-founder-flair--sm">
+							<div class="founder-flair-avatar-ring">
+								<div class="founder-flair-avatar-inner" style="background: ${viewerAvatarUrl ? 'var(--surface-strong)' : viewerColor};" aria-hidden="true">
+									${viewerAvatarUrl ? `<img class="comment-avatar-img" src="${escapeHtml(viewerAvatarUrl)}" alt="">` : viewerInitial}
+								</div>
+							</div>
+						</div>
+					` : (viewerAvatarUrl ? `<img class="comment-avatar-img" src="${escapeHtml(viewerAvatarUrl)}" alt="">` : viewerInitial)}
 				</div>
 				<div class="comment-input-body">
 					<textarea class="comment-textarea" rows="1" placeholder="What do you like about this creation?"
@@ -1415,29 +1433,34 @@ async function loadCreation() {
 					const amount = Number(t?.amount ?? 0);
 					const safeMessage = t?.message ? processUserText(String(t.message)) : '';
 					const amountLabel = `${amount.toFixed(1)} credits`;
+					const isFounder = t?.plan === 'founder';
+					const tipAvatarContent = avatarUrl ? `<img class="comment-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">` : initial;
+					const tipAvatarBlock = isFounder
+						? `<div class="avatar-with-founder-flair avatar-with-founder-flair--sm"><div class="founder-flair-avatar-ring"><div class="founder-flair-avatar-inner" style="background: ${avatarUrl ? 'var(--surface-strong)' : color};" aria-hidden="true">${tipAvatarContent}</div></div></div>`
+						: tipAvatarContent;
 
 					return `
 						<div class="comment-item comment-item-tip">
 							${profileHref ? `
-								<a class="user-link user-avatar-link comment-avatar" href="${profileHref}" aria-label="View ${escapeHtml(name)} profile" style="background: ${color};">
-									${avatarUrl ? `<img class="comment-avatar-img" src="${avatarUrl}" alt="">` : initial}
+								<a class="user-link user-avatar-link comment-avatar" href="${profileHref}" aria-label="View ${escapeHtml(name)} profile" ${!isFounder ? `style="background: ${color};"` : ''}>
+									${tipAvatarBlock}
 								</a>
 							` : `
-								<div class="comment-avatar" style="background: ${color};">
-									${avatarUrl ? `<img class="comment-avatar-img" src="${avatarUrl}" alt="">` : initial}
+								<div class="comment-avatar" ${!isFounder ? `style="background: ${color};"` : ''}>
+									${tipAvatarBlock}
 								</div>
 							`}
 							<div class="comment-body">
 								<div class="comment-top">
 									${profileHref ? `
 										<a class="user-link comment-top-left comment-author-link" href="${profileHref}">
-											<span class="comment-author-name">${escapeHtml(name)}</span>
-											${handle ? `<span class="comment-author-handle">${escapeHtml(handle)}</span>` : ''}
+											<span class="comment-author-name${isFounder ? ' founder-name' : ''}">${escapeHtml(name)}</span>
+											${handle ? `<span class="comment-author-handle${isFounder ? ' founder-name' : ''}">${escapeHtml(handle)}</span>` : ''}
 										</a>
 									` : `
 										<div class="comment-top-left">
-											<span class="comment-author-name">${escapeHtml(name)}</span>
-											${handle ? `<span class="comment-author-handle">${escapeHtml(handle)}</span>` : ''}
+											<span class="comment-author-name${isFounder ? ' founder-name' : ''}">${escapeHtml(name)}</span>
+											${handle ? `<span class="comment-author-handle${isFounder ? ' founder-name' : ''}">${escapeHtml(handle)}</span>` : ''}
 										</div>
 									`}
 								</div>
@@ -1477,29 +1500,34 @@ async function loadCreation() {
 				const timeAgo = date ? (formatRelativeTime(date) || '') : '';
 				const timeTitle = date ? formatDateTime(date) : '';
 				const safeText = processUserText(c?.text ?? '');
+				const isFounder = c?.plan === 'founder';
+				const commentAvatarContent = avatarUrl ? `<img class="comment-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">` : initial;
+				const commentAvatarBlock = isFounder
+					? `<div class="avatar-with-founder-flair avatar-with-founder-flair--sm"><div class="founder-flair-avatar-ring"><div class="founder-flair-avatar-inner" style="background: ${avatarUrl ? 'var(--surface-strong)' : color};" aria-hidden="true">${commentAvatarContent}</div></div></div>`
+					: commentAvatarContent;
 
 				return `
 					<div class="comment-item">
 						${profileHref ? `
-							<a class="user-link user-avatar-link comment-avatar" href="${profileHref}" aria-label="View ${escapeHtml(name)} profile" style="background: ${color};">
-								${avatarUrl ? `<img class="comment-avatar-img" src="${avatarUrl}" alt="">` : initial}
+							<a class="user-link user-avatar-link comment-avatar" href="${profileHref}" aria-label="View ${escapeHtml(name)} profile" ${!isFounder ? `style="background: ${color};"` : ''}>
+								${commentAvatarBlock}
 							</a>
 						` : `
-							<div class="comment-avatar" style="background: ${color};">
-								${avatarUrl ? `<img class="comment-avatar-img" src="${avatarUrl}" alt="">` : initial}
+							<div class="comment-avatar" ${!isFounder ? `style="background: ${color};"` : ''}>
+								${commentAvatarBlock}
 							</div>
 						`}
 						<div class="comment-body">
 							<div class="comment-top">
 								${profileHref ? `
 									<a class="user-link comment-top-left comment-author-link" href="${profileHref}">
-										<span class="comment-author-name">${escapeHtml(name)}</span>
-										${handle ? `<span class="comment-author-handle">${escapeHtml(handle)}</span>` : ''}
+										<span class="comment-author-name${isFounder ? ' founder-name' : ''}">${escapeHtml(name)}</span>
+										${handle ? `<span class="comment-author-handle${isFounder ? ' founder-name' : ''}">${escapeHtml(handle)}</span>` : ''}
 									</a>
 								` : `
 									<div class="comment-top-left">
-										<span class="comment-author-name">${escapeHtml(name)}</span>
-										${handle ? `<span class="comment-author-handle">${escapeHtml(handle)}</span>` : ''}
+										<span class="comment-author-name${isFounder ? ' founder-name' : ''}">${escapeHtml(name)}</span>
+										${handle ? `<span class="comment-author-handle${isFounder ? ' founder-name' : ''}">${escapeHtml(handle)}</span>` : ''}
 									</div>
 								`}
 							</div>
