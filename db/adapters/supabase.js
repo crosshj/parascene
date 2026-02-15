@@ -75,6 +75,19 @@ export function openDb() {
 				return { ...data, meta, suspended: meta.suspended === true };
 			}
 		},
+		selectUserByIdForLogin: {
+			get: async (id) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("users"))
+					.select("id, password_hash, meta")
+					.eq("id", id)
+					.maybeSingle();
+				if (error) throw error;
+				if (!data) return undefined;
+				const meta = typeof data.meta === "object" && data.meta !== null ? data.meta : {};
+				return { ...data, meta, suspended: meta.suspended === true };
+			}
+		},
 		selectUserByStripeSubscriptionId: {
 			get: async (subscriptionId) => {
 				if (subscriptionId == null || String(subscriptionId).trim() === "") return undefined;
@@ -532,6 +545,19 @@ export function openDb() {
 				const { data, error } = await serviceClient
 					.from(prefixedTable("users"))
 					.update({ password_hash: passwordHash })
+					.eq("id", userId)
+					.select("id");
+				if (error) throw error;
+				const changes = Array.isArray(data) && data.length > 0 ? data.length : 0;
+				return { changes };
+			}
+		},
+		updateUserEmail: {
+			run: async (userId, newEmail) => {
+				const normalized = String(newEmail).trim().toLowerCase();
+				const { data, error } = await serviceClient
+					.from(prefixedTable("users"))
+					.update({ email: normalized })
 					.eq("id", userId)
 					.select("id");
 				if (error) throw error;

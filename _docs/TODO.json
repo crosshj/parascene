@@ -61,7 +61,8 @@
     "cost": 8,
     "impact": 1,
     "dependsOn": [],
-    "starred": false
+    "starred": false,
+    "done": true
   },
   {
     "name": "Join from Share pays out",

@@ -54,8 +54,8 @@
 			<form action="/forgot-password" method="post" autocomplete="on">
 				<input type="hidden" name="returnUrl" value="/" data-return-url />
 				<label>
-					Email
-					<input type="email" name="username" autocomplete="username" inputmode="email" required />
+					Email or username
+					<input type="text" name="username" autocomplete="username" placeholder="you@example.com or yourname" required />
 				</label>
 				<button type="submit">Send reset link</button>
 			</form>
@@ -87,7 +87,7 @@
 		<section id="sent">
 			<div class="alert margin-bottom-1">
 				<strong>Check your email</strong>
-				<p>If an account exists for that address, we sent a link to reset your password.</p>
+				<p>If an account exists for that email or username, we sent a link to reset your password.</p>
 			</div>
 			<p><a href="#login">Back to login</a></p>
 		</section>
@@ -95,7 +95,7 @@
 		<section id="login">
 			<div id="fail" class="alert error margin-bottom-1">
 				<strong>Login failed</strong>
-				<p>Please check your email and password, then try again.</p>
+				<p>Please check your email/username and password, then try again.</p>
 			</div>
 			<div id="suspended" class="alert error margin-bottom-1">
 				<strong>Account suspended</strong>
@@ -104,8 +104,8 @@
 			<form action="/login" method="post" autocomplete="on">
 				<input type="hidden" name="returnUrl" value="/" data-return-url />
 				<label>
-					Email
-					<input type="email" name="username" autocomplete="username" inputmode="email" required />
+					Email or username
+					<input type="text" name="username" autocomplete="username" placeholder="you@example.com or yourname" required />
 				</label>
 				<label>
 					Password

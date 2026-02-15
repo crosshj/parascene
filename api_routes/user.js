@@ -279,17 +279,26 @@ export default function createProfileRoutes({ queries }) {
 	});
 
 	router.post("/login", async (req, res) => {
-		const email = String(req.body.username || req.body.email || "")
-			.trim()
-			.toLowerCase();
+		const raw = String(req.body.username || req.body.email || "").trim();
 		const password = String(req.body.password || "");
 		const returnUrl = getReturnUrl(req);
 
-		if (!email || !password) {
-			return res.status(400).send("Email and password are required.");
+		if (!raw || !password) {
+			return res.status(400).send("Email/username and password are required.");
 		}
 
-		const user = await queries.selectUserByEmail.get(email);
+		let user = null;
+		if (raw.includes("@")) {
+			user = await queries.selectUserByEmail.get(raw.toLowerCase());
+		} else {
+			const un = normalizeUsername(raw);
+			if (un && queries.selectUserProfileByUsername?.get && queries.selectUserByIdForLogin?.get) {
+				const profile = await queries.selectUserProfileByUsername.get(un);
+				if (profile) user = await queries.selectUserByIdForLogin.get(profile.user_id);
+			}
+			if (!user) user = await queries.selectUserByEmail.get(raw.toLowerCase());
+		}
+
 		if (!user || !bcrypt.compareSync(password, user.password_hash)) {
 			const qs = new URLSearchParams();
 			if (returnUrl && returnUrl !== "/") {
@@ -356,13 +365,21 @@ export default function createProfileRoutes({ queries }) {
 	});
 
 	router.post("/forgot-password", async (req, res) => {
-		const email = String(req.body.username || req.body.email || "")
-			.trim()
-			.toLowerCase();
-		if (!email) {
+		const raw = String(req.body.username || req.body.email || "").trim();
+		if (!raw) {
 			return res.redirect("/auth#sent");
 		}
-		const user = await queries.selectUserByEmail.get(email);
+		let user = null;
+		if (raw.includes("@")) {
+			user = await queries.selectUserByEmail.get(raw.toLowerCase());
+		} else {
+			const un = normalizeUsername(raw);
+			if (un && queries.selectUserProfileByUsername?.get && queries.selectUserById?.get) {
+				const profile = await queries.selectUserProfileByUsername.get(un);
+				if (profile) user = await queries.selectUserById.get(profile.user_id);
+			}
+			if (!user) user = await queries.selectUserByEmail.get(raw.toLowerCase());
+		}
 		if (user && queries.setPasswordResetToken) {
 			const rawToken = crypto.randomBytes(32).toString("hex");
 			const tokenHash = hashToken(rawToken);
@@ -705,6 +722,50 @@ export default function createProfileRoutes({ queries }) {
 		} catch (error) {
 			// console.error("Error updating profile:", error);
 			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	// Change current user's email (requires current password)
+	router.put("/api/account/email", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+			const userId = req.auth.userId;
+			const newEmail = typeof req.body?.new_email === "string" ? req.body.new_email.trim().toLowerCase() : "";
+			const password = String(req.body?.password ?? "");
+
+			if (!newEmail) {
+				return res.status(400).json({ error: "New email is required" });
+			}
+			if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+				return res.status(400).json({ error: "Invalid email format" });
+			}
+			if (!password) {
+				return res.status(400).json({ error: "Current password is required to change email" });
+			}
+
+			const authUser = await queries.selectUserByIdForLogin?.get(userId);
+			if (!authUser || !bcrypt.compareSync(password, authUser.password_hash)) {
+				return res.status(401).json({ error: "Incorrect password" });
+			}
+
+			const existingByEmail = await queries.selectUserByEmail.get(newEmail);
+			if (existingByEmail && Number(existingByEmail.id) !== Number(userId)) {
+				return res.status(409).json({ error: "Email already in use", message: "That email is already associated with another account." });
+			}
+
+			if (!queries.updateUserEmail?.run) {
+				return res.status(500).json({ error: "Email update not available" });
+			}
+			const { changes } = await queries.updateUserEmail.run(userId, newEmail);
+			if (changes === 0) {
+				return res.status(409).json({ error: "Email already in use", message: "That email is already associated with another account." });
+			}
+			return res.json({ ok: true, email: newEmail });
+		} catch (err) {
+			console.error("[PUT /api/account/email]", err);
+			return res.status(500).json({ error: "Update failed", message: err?.message || "Could not update email." });
 		}
 	});
 

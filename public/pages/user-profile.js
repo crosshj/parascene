@@ -285,6 +285,24 @@ function renderProfilePage(container, { user, profile, stats, plan, isSelf, view
 						</div>
 						</div>
 
+						<div class="user-profile-form-section user-profile-account-section" data-account-email-section>
+							<h3 class="user-profile-form-section-title">Account</h3>
+							<div class="field">
+								<label>Current email</label>
+								<div class="user-profile-email-readonly" data-account-current-email>${escapeHtml(user?.email || '')}</div>
+							</div>
+							<div class="field">
+								<label>New email</label>
+								<input type="email" name="new_email" data-account-new-email placeholder="new@example.com" autocomplete="email">
+							</div>
+							<div class="field">
+								<label>Current password</label>
+								<input type="password" name="account_password" data-account-password placeholder="Required to change email" autocomplete="current-password">
+							</div>
+							<button type="button" class="btn-secondary" data-account-email-submit>Update email</button>
+							<div class="user-profile-account-message" data-account-email-message style="display: none;"></div>
+						</div>
+
 						<div class="alert error" data-profile-edit-error style="display: none;"></div>
 					</form>
 				</div>
@@ -410,7 +428,6 @@ function renderImageGrid(grid, images, showBadge = false) {
 			<div class="route-details">
 				<div class="route-details-content">
 					<div class="route-title">${escapeHtml(item.title || 'Untitled')}</div>
-					<div class="route-summary">${escapeHtml(item.width)} × ${escapeHtml(item.height)}px</div>
 					${publishedInfo}
 					<div class="route-meta">${escapeHtml(formatDate(item.created_at) || '')}</div>
 				</div>
@@ -731,6 +748,62 @@ async function init() {
 
 	if (saveButton) {
 		saveButton.addEventListener('click', () => { void saveProfile(); });
+	}
+
+	// Change email (account section in edit modal)
+	const accountEmailSection = container.querySelector('[data-account-email-section]');
+	const accountNewEmailInput = container.querySelector('[data-account-new-email]');
+	const accountPasswordInput = container.querySelector('[data-account-password]');
+	const accountEmailSubmit = container.querySelector('[data-account-email-submit]');
+	const accountCurrentEmailEl = container.querySelector('[data-account-current-email]');
+	const accountEmailMessage = container.querySelector('[data-account-email-message]');
+
+	if (accountEmailSubmit && accountNewEmailInput && accountPasswordInput && accountEmailMessage) {
+		accountEmailSubmit.addEventListener('click', async () => {
+			const newEmail = (accountNewEmailInput.value || '').trim();
+			const password = accountPasswordInput.value || '';
+
+			accountEmailMessage.style.display = 'none';
+			accountEmailMessage.textContent = '';
+			accountEmailMessage.classList.remove('error', 'success');
+
+			if (!newEmail) {
+				accountEmailMessage.textContent = 'Enter a new email address.';
+				accountEmailMessage.classList.add('error');
+				accountEmailMessage.style.display = 'block';
+				return;
+			}
+			if (!password) {
+				accountEmailMessage.textContent = 'Enter your current password to change email.';
+				accountEmailMessage.classList.add('error');
+				accountEmailMessage.style.display = 'block';
+				return;
+			}
+
+			accountEmailSubmit.disabled = true;
+			const result = await fetchJsonWithStatusDeduped('/api/account/email', {
+				method: 'PUT',
+				credentials: 'include',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ new_email: newEmail, password })
+			}, { windowMs: 0 }).catch(() => ({ ok: false, status: 0, data: null }));
+
+			accountEmailSubmit.disabled = false;
+
+			if (result.ok) {
+				accountEmailMessage.textContent = 'Email updated.';
+				accountEmailMessage.classList.add('success');
+				accountEmailMessage.style.display = 'block';
+				if (accountCurrentEmailEl) accountCurrentEmailEl.textContent = result.data?.email ?? newEmail;
+				accountNewEmailInput.value = '';
+				accountPasswordInput.value = '';
+			} else {
+				const message = result.data?.message || result.data?.error || 'Could not update email.';
+				accountEmailMessage.textContent = message;
+				accountEmailMessage.classList.add('error');
+				accountEmailMessage.style.display = 'block';
+			}
+		});
 	}
 }
 

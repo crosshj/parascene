@@ -597,11 +597,8 @@ class AppRouteCreations extends HTMLElement {
             <div class="route-details">
               <div class="route-details-content">
                 <div class="route-title">${item.title || 'Untitled'}</div>
-                <div class="route-summary">${item.width} × ${item.height}px</div>
                 ${publishedInfo}
                 <div class="route-meta" title="${formatDateTime(item.created_at)}">Created ${formatRelativeTime(item.created_at)}</div>
-                <div class="route-meta route-meta-spacer"></div>
-                <div class="route-tags">Color: ${item.color || 'N/A'}</div>
               </div>
             </div>
           `;

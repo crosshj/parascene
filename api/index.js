@@ -165,6 +165,7 @@ app.use(async (req, res, next) => {
 		const allow =
 			(pathName === "/welcome" && method === "GET") ||
 			(pathName === "/api/profile" && (method === "GET" || method === "PUT" || method === "POST")) ||
+			(pathName === "/api/account/email" && method === "PUT") ||
 			(pathName === "/api/username-suggest" && method === "GET") ||
 			(pathName === "/api/qr" && method === "GET") ||
 			(pathName === "/logout" && method === "POST") ||

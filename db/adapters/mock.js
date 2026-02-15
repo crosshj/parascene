@@ -113,6 +113,14 @@ export function openDb() {
 				return { ...safeUser, meta, suspended: meta.suspended === true };
 			}
 		},
+		selectUserByIdForLogin: {
+			get: async (id) => {
+				const user = users.find((entry) => entry.id === Number(id));
+				if (!user) return undefined;
+				const meta = user.meta != null && typeof user.meta === "object" ? user.meta : {};
+				return { id: user.id, password_hash: user.password_hash, meta, suspended: meta.suspended === true };
+			}
+		},
 		selectUserByStripeSubscriptionId: {
 			get: async (subscriptionId) => {
 				if (subscriptionId == null || String(subscriptionId).trim() === "") return undefined;
@@ -357,6 +365,17 @@ export function openDb() {
 				const user = users.find((u) => Number(u.id) === Number(userId));
 				if (!user) return { changes: 0 };
 				user.password_hash = passwordHash;
+				return { changes: 1 };
+			}
+		},
+		updateUserEmail: {
+			run: async (userId, newEmail) => {
+				const normalized = String(newEmail).trim().toLowerCase();
+				const other = users.find((u) => Number(u.id) !== Number(userId) && u.email === normalized);
+				if (other) return { changes: 0 };
+				const user = users.find((u) => Number(u.id) === Number(userId));
+				if (!user) return { changes: 0 };
+				user.email = normalized;
 				return { changes: 1 };
 			}
 		},

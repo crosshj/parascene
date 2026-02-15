@@ -306,6 +306,17 @@ export async function openDb() {
 				return { ...row, meta, suspended: meta.suspended === true };
 			}
 		},
+		selectUserByIdForLogin: {
+			get: async (id) => {
+				const stmt = db.prepare(
+					"SELECT id, password_hash, meta FROM users WHERE id = ?"
+				);
+				const row = stmt.get(id);
+				if (!row) return undefined;
+				const meta = parseUserMeta(row.meta);
+				return { ...row, meta, suspended: meta.suspended === true };
+			}
+		},
 		selectUserByStripeSubscriptionId: {
 			get: async (subscriptionId) => {
 				if (subscriptionId == null || String(subscriptionId).trim() === "") return undefined;
@@ -678,6 +689,14 @@ export async function openDb() {
 			run: async (userId, passwordHash) => {
 				const stmt = db.prepare("UPDATE users SET password_hash = ? WHERE id = ?");
 				const result = stmt.run(passwordHash, userId);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		updateUserEmail: {
+			run: async (userId, newEmail) => {
+				const normalized = String(newEmail).trim().toLowerCase();
+				const stmt = db.prepare("UPDATE users SET email = ? WHERE id = ?");
+				const result = stmt.run(normalized, userId);
 				return Promise.resolve({ changes: result.changes });
 			}
 		},
