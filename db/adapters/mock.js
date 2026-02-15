@@ -850,17 +850,22 @@ export function openDb() {
 				);
 
 				const filtered = feed_items.filter((item) => {
-					const authorId = item.user_id ?? null;
+					const ci = created_images.find((c) => Number(c.id) === Number(item.created_image_id));
+					const authorId = ci?.user_id ?? item.user_id ?? null;
 					if (authorId === null || authorId === undefined) return false;
+					if (ci?.unavailable_at != null && ci.unavailable_at !== "") return false;
 					return followingIdSet.has(String(authorId));
 				});
 
 				return filtered.map((item) => {
-					const profile = user_profiles.find((p) => p.user_id === Number(item.user_id));
-					const user = users.find((u) => Number(u.id) === Number(item.user_id));
+					const ci = created_images.find((c) => Number(c.id) === Number(item.created_image_id));
+					const authorId = ci?.user_id ?? item.user_id;
+					const profile = user_profiles.find((p) => p.user_id === Number(authorId));
+					const user = users.find((u) => Number(u.id) === Number(authorId));
 					const authorPlan = user?.meta?.plan === "founder" ? "founder" : "free";
 					return {
 						...item,
+						user_id: authorId,
 						author_user_name: profile?.user_name ?? null,
 						author_display_name: profile?.display_name ?? null,
 						author_avatar_url: profile?.avatar_url ?? null,
@@ -1363,27 +1368,38 @@ export function openDb() {
 			}
 		},
 		selectCreatedImagesForUser: {
-			all: async (userId) => {
-				return created_images.filter(
-					(img) => img.user_id === Number(userId)
-				);
+			all: async (userId, options = {}) => {
+				const includeUnavailable = options?.includeUnavailable === true;
+				return created_images.filter((img) => {
+					if (img.user_id !== Number(userId)) return false;
+					if (!includeUnavailable && (img.unavailable_at != null && img.unavailable_at !== "")) return false;
+					return true;
+				});
 			}
 		},
 		selectPublishedCreatedImagesForUser: {
 			all: async (userId) =>
 				created_images.filter(
-					(img) => img.user_id === Number(userId) && (img.published === true || img.published === 1)
+					(img) =>
+						img.user_id === Number(userId) &&
+						(img.published === true || img.published === 1) &&
+						(img.unavailable_at == null || img.unavailable_at === "")
 				)
 		},
 		selectAllCreatedImageCountForUser: {
 			get: async (userId) => ({
-				count: created_images.filter((img) => img.user_id === Number(userId)).length
+				count: created_images.filter(
+					(img) => img.user_id === Number(userId) && (img.unavailable_at == null || img.unavailable_at === "")
+				).length
 			})
 		},
 		selectPublishedCreatedImageCountForUser: {
 			get: async (userId) => ({
 				count: created_images.filter(
-					(img) => img.user_id === Number(userId) && (img.published === true || img.published === 1)
+					(img) =>
+						img.user_id === Number(userId) &&
+						(img.published === true || img.published === 1) &&
+						(img.unavailable_at == null || img.unavailable_at === "")
 				).length
 			})
 		},
@@ -1571,6 +1587,16 @@ export function openDb() {
 				image.published_at = new Date().toISOString();
 				image.title = title;
 				image.description = description;
+				return { changes: 1 };
+			}
+		},
+		markCreatedImageUnavailable: {
+			run: async (id, userId) => {
+				const image = created_images.find(
+					(img) => img.id === Number(id) && img.user_id === Number(userId)
+				);
+				if (!image) return { changes: 0 };
+				image.unavailable_at = new Date().toISOString();
 				return { changes: 1 };
 			}
 		},

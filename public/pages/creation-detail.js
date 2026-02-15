@@ -701,7 +701,7 @@ async function loadCreation() {
 		// Update mutate button - show for completed images with a URL (owner or any viewer; mutate creates a new creation from this one)
 		const mutateBtn = document.querySelector('[data-mutate-btn]');
 		if (mutateBtn) {
-			const canMutate = status === 'completed' && !isFailed && Boolean(creation.url);
+			const canMutate = !isAdmin && status === 'completed' && !isFailed && Boolean(creation.url);
 			if (!canMutate) {
 				mutateBtn.style.display = 'none';
 			} else {
@@ -725,16 +725,30 @@ async function loadCreation() {
 		// Update delete / retry buttons
 		const deleteBtn = document.querySelector('[data-delete-btn]');
 		const retryBtn = document.querySelector('[data-retry-btn]');
+		const userDeleted = Boolean(creation.user_deleted);
 
 		if (deleteBtn) {
 			if (!canEdit) {
-				// Hide delete button if user doesn't own the creation and isn't admin
+				deleteBtn.style.display = 'none';
+			} else if (isAdmin && !userDeleted) {
+				// Admin viewing a creation the user has not deleted: hide regular delete (admin only has "Permanently delete" on user-deleted items)
 				deleteBtn.style.display = 'none';
 			} else {
 				deleteBtn.style.display = '';
-				// Allow delete for failed or creating+timed-out or unpublished completed; disable otherwise.
-				const deletable = !isPublished && (status === 'failed' || (status === 'creating' && isTimedOut) || status === 'completed');
-				deleteBtn.disabled = !deletable;
+				if (userDeleted && isAdmin) {
+					deleteBtn.disabled = false;
+					deleteBtn.dataset.permanentDelete = '1';
+					if (deleteBtn.lastChild?.nodeType === Node.TEXT_NODE) {
+						deleteBtn.lastChild.textContent = ' Permanently delete';
+					}
+				} else {
+					deleteBtn.removeAttribute('data-permanent-delete');
+					const deletable = !isPublished && (status === 'failed' || (status === 'creating' && isTimedOut) || status === 'completed');
+					deleteBtn.disabled = !deletable;
+					if (deleteBtn.lastChild?.nodeType === Node.TEXT_NODE) {
+						deleteBtn.lastChild.textContent = ' Delete';
+					}
+				}
 			}
 		}
 
@@ -752,6 +766,16 @@ async function loadCreation() {
 			const actionButtons = Array.from(actionsEl.querySelectorAll('button'));
 			const anyVisible = actionButtons.some(btn => btn.style.display !== 'none');
 			actionsEl.style.display = anyVisible ? '' : 'none';
+		}
+
+		// User-deleted notice (admin only; owner gets 404)
+		let userDeletedNotice = '';
+		if (creation.user_deleted) {
+			userDeletedNotice = html`
+				<div class="creation-detail-user-deleted-notice" role="status">
+					User deleted this creation. Visible to admin only.
+				</div>
+			`;
 		}
 
 		// Published display:
@@ -1042,6 +1066,7 @@ async function loadCreation() {
 				</button>
 				` : ''}
 			</div>
+			${userDeletedNotice}
 			<div class="creation-detail-title${isUntitled ? ' creation-detail-title-untitled' : ''}">${escapeHtml(displayTitle)}
 			</div>
 			${descriptionHtml}
@@ -1773,18 +1798,22 @@ async function handleDelete() {
 		return;
 	}
 
-	// Confirm deletion
-	if (!confirm('Are you sure you want to delete this creation? This action cannot be undone.')) {
+	const deleteBtn = document.querySelector('[data-delete-btn]');
+	const isPermanent = deleteBtn?.dataset?.permanentDelete === '1';
+
+	if (!confirm(isPermanent
+		? 'Permanently delete this creation? This cannot be undone.'
+		: 'Are you sure you want to delete this creation? This action cannot be undone.')) {
 		return;
 	}
 
-	const deleteBtn = document.querySelector('[data-delete-btn]');
 	if (deleteBtn) {
 		deleteBtn.disabled = true;
 	}
 
+	const deleteUrl = isPermanent ? `/api/create/images/${creationId}?permanent=1` : `/api/create/images/${creationId}`;
 	try {
-		const response = await fetch(`/api/create/images/${creationId}`, {
+		const response = await fetch(deleteUrl, {
 			method: 'DELETE',
 			credentials: 'include'
 		});
@@ -1794,8 +1823,12 @@ async function handleDelete() {
 			throw new Error(error.error || 'Failed to delete creation');
 		}
 
-		// Success - navigate to creations page
-		window.location.href = '/creations';
+		// Success: after permanent delete (admin), go back to that user's profile; otherwise creations list
+		if (isPermanent && lastCreationMeta?.user_id) {
+			window.location.href = `/user/${lastCreationMeta.user_id}`;
+		} else {
+			window.location.href = '/creations';
+		}
 	} catch (error) {
 		// console.error('Error deleting creation:', error);
 		alert(error.message || 'Failed to delete creation. Please try again.');

@@ -991,10 +991,11 @@ export default function createProfileRoutes({ queries }) {
 			const isAdmin = viewer?.role === 'admin';
 			const include = String(req.query?.include || "").toLowerCase();
 			const wantAll = include === "all";
+			const includeUnavailable = isAdmin && (wantAll || req.query?.includeUnavailable === "1");
 
 			let images = [];
 			if ((isSelf || isAdmin) && wantAll && queries.selectCreatedImagesForUser?.all) {
-				images = await queries.selectCreatedImagesForUser.all(targetUserId);
+				images = await queries.selectCreatedImagesForUser.all(targetUserId, { includeUnavailable });
 			} else if (queries.selectPublishedCreatedImagesForUser?.all) {
 				images = await queries.selectPublishedCreatedImagesForUser.all(targetUserId);
 			} else if (queries.selectCreatedImagesForUser?.all) {
@@ -1005,6 +1006,7 @@ export default function createProfileRoutes({ queries }) {
 
 			const mapped = (Array.isArray(images) ? images : []).map((img) => {
 				const url = img.file_path || (img.filename ? `/api/images/created/${img.filename}` : null);
+				const userDeleted = !!(img.unavailable_at != null && img.unavailable_at !== "");
 				return {
 					id: img.id,
 					filename: img.filename,
@@ -1018,7 +1020,8 @@ export default function createProfileRoutes({ queries }) {
 					published: img.published === 1 || img.published === true,
 					published_at: img.published_at || null,
 					title: img.title || null,
-					description: img.description || null
+					description: img.description || null,
+					...(isAdmin && userDeleted ? { user_deleted: true } : {})
 				};
 			});
 

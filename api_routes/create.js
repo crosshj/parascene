@@ -922,6 +922,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				if (anyImage) {
 					const isPublished = anyImage.published === 1 || anyImage.published === true;
 					const isAdmin = user.role === 'admin';
+					const isUnavailable = anyImage.unavailable_at != null && anyImage.unavailable_at !== "";
 					// Optional: allow view-only access via external share token (for signed-in non-owners).
 					if (!isPublished && !isAdmin) {
 						let shareVersion = String(req.headers["x-share-version"] || "");
@@ -930,7 +931,7 @@ export default function createCreateRoutes({ queries, storage }) {
 							const verified = verifyShareToken({ version: shareVersion, token: shareToken });
 							if (verified.ok && Number(verified.imageId) === Number(anyImage.id)) {
 								const status = anyImage.status || "completed";
-								if (status === "completed") {
+								if (status === "completed" && !isUnavailable) {
 									shareAccess = { version: shareVersion, token: shareToken };
 									image = anyImage;
 								}
@@ -938,7 +939,9 @@ export default function createCreateRoutes({ queries, storage }) {
 						}
 					}
 
-					if (!image && (isPublished || isAdmin)) {
+					if (!image && (isPublished || isAdmin) && !isUnavailable) {
+						image = anyImage;
+					} else if (!image && isAdmin && isUnavailable) {
 						image = anyImage;
 					} else {
 						if (!image) {
@@ -948,6 +951,14 @@ export default function createCreateRoutes({ queries, storage }) {
 				} else {
 					return res.status(404).json({ error: "Image not found" });
 				}
+			}
+
+			// Owner viewing their own image that they deleted: treat as not found
+			const isOwner = image.user_id === user.id;
+			const isAdmin = user.role === "admin";
+			const isUnavailable = image.unavailable_at != null && image.unavailable_at !== "";
+			if (isOwner && !isAdmin && isUnavailable) {
+				return res.status(404).json({ error: "Image not found" });
 			}
 
 			// Get user information for the creator
@@ -977,7 +988,7 @@ export default function createCreateRoutes({ queries, storage }) {
 					: (image.file_path || storage.getImageUrl(image.filename)))
 				: null;
 
-			return res.json({
+			const response = {
 				id: image.id,
 				filename: image.filename,
 				url, // Use stored URL or generate one
@@ -1003,7 +1014,11 @@ export default function createCreateRoutes({ queries, storage }) {
 					avatar_url: creatorProfile?.avatar_url ?? null,
 					plan: creator.meta?.plan === 'founder' ? 'founder' : 'free'
 				} : null
-			});
+			};
+			if (isAdmin && isUnavailable) {
+				response.user_deleted = true;
+			}
+			return res.json(response);
 		} catch (error) {
 			// console.error("Error fetching image:", error);
 			return res.status(500).json({ error: "Failed to fetch image" });
@@ -1378,28 +1393,50 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	});
 
-	// DELETE /api/create/images/:id - Delete a creation
+	// DELETE /api/create/images/:id - Delete a creation (owner: mark unavailable; admin with ?permanent=1: remove permanently)
 	router.delete("/api/create/images/:id", async (req, res) => {
 		const user = await requireUser(req, res);
 		if (!user) return;
 
-		try {
-			// Get the image to verify ownership
-			const image = await queries.selectCreatedImageById.get(
-				req.params.id,
-				user.id
-			);
+		const permanent = req.query?.permanent === "1" || req.body?.permanent === true;
+		const isAdmin = user.role === "admin";
 
+		try {
+			if (isAdmin && permanent) {
+				// Admin permanent delete: any image, full cleanup
+				const image = await queries.selectCreatedImageByIdAnyUser?.get(req.params.id);
+				if (!image) {
+					return res.status(404).json({ error: "Image not found" });
+				}
+				const ownerId = image.user_id;
+				try {
+					if (image.filename && image.file_path && storage?.deleteImage) {
+						await storage.deleteImage(image.filename);
+					}
+				} catch (storageError) {
+					// Log but don't fail
+				}
+				if (queries.deleteFeedItemByCreatedImageId?.run) {
+					await queries.deleteFeedItemByCreatedImageId.run(parseInt(req.params.id));
+				}
+				if (queries.deleteAllLikesForCreatedImage?.run) {
+					await queries.deleteAllLikesForCreatedImage.run(parseInt(req.params.id));
+				}
+				if (queries.deleteAllCommentsForCreatedImage?.run) {
+					await queries.deleteAllCommentsForCreatedImage.run(parseInt(req.params.id));
+				}
+				const deleteResult = await queries.deleteCreatedImageById.run(req.params.id, ownerId);
+				if (deleteResult.changes === 0) {
+					return res.status(500).json({ error: "Failed to delete image" });
+				}
+				return res.json({ success: true, message: "Image permanently deleted" });
+			}
+
+			// Owner (or admin without permanent): mark unavailable so it no longer shows anywhere except admin
+			const image = await queries.selectCreatedImageById.get(req.params.id, user.id);
 			if (!image) {
 				return res.status(404).json({ error: "Image not found" });
 			}
-
-			// Check if image is published - cannot delete published images
-			if (image.published === 1 || image.published === true) {
-				return res.status(400).json({ error: "Cannot delete published images" });
-			}
-
-			// Allow delete for failed, or creating past timeout, or unpublished completed.
 			const meta = parseMeta(image.meta);
 			const status = image.status || "completed";
 			if (status === "creating") {
@@ -1408,31 +1445,15 @@ export default function createCreateRoutes({ queries, storage }) {
 					return res.status(400).json({ error: "Cannot delete an in-progress creation" });
 				}
 			}
-
-			// Delete the image file from storage
-			try {
-				// Only delete underlying file if we actually have one.
-				if (image.filename && image.file_path) {
-					await storage.deleteImage(image.filename);
-				}
-			} catch (storageError) {
-				// Log but don't fail if file doesn't exist
-				// console.warn(`Warning: Could not delete image file ${image.filename}:`, storageError.message);
-			}
-
-			// Delete the database record
-			const deleteResult = await queries.deleteCreatedImageById.run(
-				req.params.id,
-				user.id
-			);
-
-			if (deleteResult.changes === 0) {
+			const markResult = await queries.markCreatedImageUnavailable?.run(req.params.id, user.id);
+			if (!markResult || markResult.changes === 0) {
 				return res.status(500).json({ error: "Failed to delete image" });
 			}
-
+			if (queries.deleteFeedItemByCreatedImageId?.run) {
+				await queries.deleteFeedItemByCreatedImageId.run(parseInt(req.params.id));
+			}
 			return res.json({ success: true, message: "Image deleted successfully" });
 		} catch (error) {
-			// console.error("Error deleting image:", error);
 			return res.status(500).json({ error: "Failed to delete image" });
 		}
 	});

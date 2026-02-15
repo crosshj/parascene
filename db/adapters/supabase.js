@@ -1465,7 +1465,7 @@ export function openDb() {
 				const { data, error } = await serviceClient
 					.from(prefixedTable("feed_items"))
 					.select(
-						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images(filename, file_path, user_id)"
+						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images(filename, file_path, user_id, unavailable_at)"
 					)
 					.order("created_at", { ascending: false });
 				if (error) throw error;
@@ -1474,10 +1474,12 @@ export function openDb() {
 					const filename = prsn_created_images?.filename ?? null;
 					const file_path = prsn_created_images?.file_path ?? null;
 					const user_id = prsn_created_images?.user_id ?? null;
+					const unavailable_at = prsn_created_images?.unavailable_at ?? null;
 					return {
 						...rest,
 						filename,
 						user_id,
+						unavailable_at,
 						// Use file_path (which contains the URL) or fall back to constructing from filename
 						url: file_path || (filename ? `/api/images/created/${filename}` : null),
 						like_count: 0,
@@ -1487,6 +1489,7 @@ export function openDb() {
 				});
 				const filtered = items.filter((item) => {
 					if (item.user_id === null || item.user_id === undefined) return false;
+					if (item.unavailable_at != null && item.unavailable_at !== "") return false;
 					return followingIdSet.has(String(item.user_id));
 				});
 
@@ -2431,15 +2434,19 @@ export function openDb() {
 			}
 		},
 		selectCreatedImagesForUser: {
-			all: async (userId) => {
-				// Use serviceClient to bypass RLS for backend operations
-				const { data, error } = await serviceClient
+			all: async (userId, options = {}) => {
+				const includeUnavailable = options?.includeUnavailable === true;
+				const query = serviceClient
 					.from(prefixedTable("created_images"))
 					.select(
-						"id, filename, file_path, width, height, color, status, created_at, published, published_at, title, description, meta"
+						"id, filename, file_path, width, height, color, status, created_at, published, published_at, title, description, meta, unavailable_at"
 					)
 					.eq("user_id", userId)
 					.order("created_at", { ascending: false });
+				if (!includeUnavailable) {
+					query.is("unavailable_at", null);
+				}
+				const { data, error } = await query;
 				if (error) throw error;
 				return data ?? [];
 			}
@@ -2449,10 +2456,11 @@ export function openDb() {
 				const { data, error } = await serviceClient
 					.from(prefixedTable("created_images"))
 					.select(
-						"id, filename, file_path, width, height, color, status, created_at, published, published_at, title, description, meta"
+						"id, filename, file_path, width, height, color, status, created_at, published, published_at, title, description, meta, unavailable_at"
 					)
 					.eq("user_id", userId)
 					.eq("published", true)
+					.is("unavailable_at", null)
 					.order("created_at", { ascending: false });
 				if (error) throw error;
 				return data ?? [];
@@ -2463,7 +2471,8 @@ export function openDb() {
 				const { count, error } = await serviceClient
 					.from(prefixedTable("created_images"))
 					.select("id", { count: "exact", head: true })
-					.eq("user_id", userId);
+					.eq("user_id", userId)
+					.is("unavailable_at", null);
 				if (error) throw error;
 				return { count: count ?? 0 };
 			}
@@ -2474,19 +2483,20 @@ export function openDb() {
 					.from(prefixedTable("created_images"))
 					.select("id", { count: "exact", head: true })
 					.eq("user_id", userId)
-					.eq("published", true);
+					.eq("published", true)
+					.is("unavailable_at", null);
 				if (error) throw error;
 				return { count: count ?? 0 };
 			}
 		},
 		selectLikesReceivedForUserPublished: {
 			get: async (userId) => {
-				// First fetch published image ids for this user
 				const { data: images, error: imagesError } = await serviceClient
 					.from(prefixedTable("created_images"))
 					.select("id")
 					.eq("user_id", userId)
-					.eq("published", true);
+					.eq("published", true)
+					.is("unavailable_at", null);
 				if (imagesError) throw imagesError;
 				const ids = (images ?? []).map((row) => row.id).filter((id) => id != null);
 				if (ids.length === 0) return { count: 0 };
@@ -2501,11 +2511,10 @@ export function openDb() {
 		},
 		selectCreatedImageById: {
 			get: async (id, userId) => {
-				// Use serviceClient to bypass RLS for backend operations
 				const { data, error } = await serviceClient
 					.from(prefixedTable("created_images"))
 					.select(
-						"id, filename, file_path, width, height, color, status, created_at, published, published_at, title, description, user_id, meta"
+						"id, filename, file_path, width, height, color, status, created_at, published, published_at, title, description, user_id, meta, unavailable_at"
 					)
 					.eq("id", id)
 					.eq("user_id", userId)
@@ -2516,11 +2525,10 @@ export function openDb() {
 		},
 		selectCreatedImageByIdAnyUser: {
 			get: async (id) => {
-				// Use serviceClient to bypass RLS for backend operations
 				const { data, error } = await serviceClient
 					.from(prefixedTable("created_images"))
 					.select(
-						"id, filename, file_path, width, height, color, status, created_at, published, published_at, title, description, user_id, meta"
+						"id, filename, file_path, width, height, color, status, created_at, published, published_at, title, description, user_id, meta, unavailable_at"
 					)
 					.eq("id", id)
 					.maybeSingle();
@@ -3237,9 +3245,20 @@ export function openDb() {
 				return { changes: data?.length ?? 0 };
 			}
 		},
+		markCreatedImageUnavailable: {
+			run: async (id, userId) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.update({ unavailable_at: new Date().toISOString() })
+					.eq("id", id)
+					.eq("user_id", userId)
+					.select("id");
+				if (error) throw error;
+				return { changes: data?.length ?? 0 };
+			}
+		},
 		deleteCreatedImageById: {
 			run: async (id, userId) => {
-				// Use serviceClient to bypass RLS for backend operations
 				const { data, error } = await serviceClient
 					.from(prefixedTable("created_images"))
 					.delete()

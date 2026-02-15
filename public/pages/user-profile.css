@@ -330,6 +330,29 @@
 	}
 }
 
+/* User-deleted badge (admin view only) */
+.creation-user-deleted-badge {
+	position: absolute;
+	top: 8px;
+	left: 8px;
+	width: 32px;
+	height: 32px;
+	background: rgba(120, 53, 15, 0.85);
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 10;
+	backdrop-filter: blur(4px);
+	pointer-events: none;
+}
+
+.creation-user-deleted-badge svg {
+	width: 16px;
+	height: 16px;
+	color: white;
+}
+
 /* Published badge styles (shared with creations page) */
 .creation-published-badge {
 	position: absolute;

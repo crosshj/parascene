@@ -206,7 +206,8 @@ CREATE TABLE IF NOT EXISTS prsn_created_images (
   published_at timestamptz,
   title text,
   description text,
-  meta jsonb
+  meta jsonb,
+  unavailable_at timestamptz
 );
 ALTER TABLE prsn_created_images ENABLE ROW LEVEL SECURITY;
 COMMENT ON TABLE prsn_created_images IS 'Parascene: user-generated images with metadata and publication status. RLS enabled without policies - only service role can access. All access controlled via API layer.';

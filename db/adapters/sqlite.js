@@ -81,6 +81,18 @@ function ensureCreatedImagesMetaColumn(db) {
 	}
 }
 
+function ensureCreatedImagesUnavailableAtColumn(db) {
+	try {
+		const columns = db.prepare("PRAGMA table_info(created_images)").all();
+		const hasUnavailableAt = columns.some((column) => column.name === "unavailable_at");
+		if (!hasUnavailableAt) {
+			db.exec("ALTER TABLE created_images ADD COLUMN unavailable_at TEXT");
+		}
+	} catch (error) {
+		// console.warn("Failed to ensure unavailable_at column on created_images:", error);
+	}
+}
+
 function ensureCreatedImagesAnonPromptColumn(db) {
 	try {
 		const columns = db.prepare("PRAGMA table_info(created_images_anon)").all();
@@ -139,6 +151,7 @@ export async function openDb() {
 	ensureUsersLastActiveAtColumn(db);
 	ensureUsersMetaColumn(db);
 	ensureCreatedImagesMetaColumn(db);
+	ensureCreatedImagesUnavailableAtColumn(db);
 	ensureCreatedImagesAnonPromptColumn(db);
 	ensureCreatedImagesAnonDroppedAnonCidAndColor(db);
 	ensureTryRequestsMetaColumn(db);
@@ -1411,6 +1424,7 @@ export async function openDb() {
              ON vl.created_image_id = fi.created_image_id
             AND vl.user_id = ?
            WHERE ci.user_id IS NOT NULL
+             AND (ci.unavailable_at IS NULL OR ci.unavailable_at = '')
              AND EXISTS (
                SELECT 1
                FROM user_follows uf
@@ -1762,12 +1776,19 @@ export async function openDb() {
 			}
 		},
 		selectCreatedImagesForUser: {
-			all: async (userId) => {
+			all: async (userId, options = {}) => {
+				const includeUnavailable = options?.includeUnavailable === true;
 				const stmt = db.prepare(
-					`SELECT id, filename, file_path, width, height, color, status, created_at, 
-                  published, published_at, title, description, meta
+					includeUnavailable
+						? `SELECT id, filename, file_path, width, height, color, status, created_at,
+                  published, published_at, title, description, meta, unavailable_at
            FROM created_images
            WHERE user_id = ?
+           ORDER BY created_at DESC`
+						: `SELECT id, filename, file_path, width, height, color, status, created_at,
+                  published, published_at, title, description, meta, unavailable_at
+           FROM created_images
+           WHERE user_id = ? AND (unavailable_at IS NULL OR unavailable_at = '')
            ORDER BY created_at DESC`
 				);
 				return Promise.resolve(stmt.all(userId));
@@ -1776,10 +1797,10 @@ export async function openDb() {
 		selectPublishedCreatedImagesForUser: {
 			all: async (userId) => {
 				const stmt = db.prepare(
-					`SELECT id, filename, file_path, width, height, color, status, created_at, 
-                  published, published_at, title, description, meta
+					`SELECT id, filename, file_path, width, height, color, status, created_at,
+                  published, published_at, title, description, meta, unavailable_at
            FROM created_images
-           WHERE user_id = ? AND published = 1
+           WHERE user_id = ? AND published = 1 AND (unavailable_at IS NULL OR unavailable_at = '')
            ORDER BY created_at DESC`
 				);
 				return Promise.resolve(stmt.all(userId));
@@ -1790,7 +1811,7 @@ export async function openDb() {
 				const stmt = db.prepare(
 					`SELECT COUNT(*) AS count
            FROM created_images
-           WHERE user_id = ?`
+           WHERE user_id = ? AND (unavailable_at IS NULL OR unavailable_at = '')`
 				);
 				return Promise.resolve(stmt.get(userId));
 			}
@@ -1800,7 +1821,7 @@ export async function openDb() {
 				const stmt = db.prepare(
 					`SELECT COUNT(*) AS count
            FROM created_images
-           WHERE user_id = ? AND published = 1`
+           WHERE user_id = ? AND published = 1 AND (unavailable_at IS NULL OR unavailable_at = '')`
 				);
 				return Promise.resolve(stmt.get(userId));
 			}
@@ -1811,7 +1832,7 @@ export async function openDb() {
 					`SELECT COUNT(*) AS count
            FROM likes_created_image l
            INNER JOIN created_images ci ON ci.id = l.created_image_id
-           WHERE ci.user_id = ? AND ci.published = 1`
+           WHERE ci.user_id = ? AND ci.published = 1 AND (ci.unavailable_at IS NULL OR ci.unavailable_at = '')`
 				);
 				return Promise.resolve(stmt.get(userId));
 			}
@@ -1820,7 +1841,7 @@ export async function openDb() {
 			get: async (id, userId) => {
 				const stmt = db.prepare(
 					`SELECT id, filename, file_path, width, height, color, status, created_at,
-                  published, published_at, title, description, user_id, meta
+                  published, published_at, title, description, user_id, meta, unavailable_at
            FROM created_images
            WHERE id = ? AND user_id = ?`
 				);
@@ -1831,7 +1852,7 @@ export async function openDb() {
 			get: async (id) => {
 				const stmt = db.prepare(
 					`SELECT id, filename, file_path, width, height, color, status, created_at,
-                  published, published_at, title, description, user_id, meta
+                  published, published_at, title, description, user_id, meta, unavailable_at
            FROM created_images
            WHERE id = ?`
 				);
@@ -2161,6 +2182,18 @@ export async function openDb() {
 				const result = isAdmin
 					? stmt.run(title, description, id)
 					: stmt.run(title, description, id, userId);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		markCreatedImageUnavailable: {
+			run: async (id, userId) => {
+				const now = new Date().toISOString();
+				const stmt = db.prepare(
+					`UPDATE created_images
+           SET unavailable_at = ?
+           WHERE id = ? AND user_id = ?`
+				);
+				const result = stmt.run(now, id, userId);
 				return Promise.resolve({ changes: result.changes });
 			}
 		},

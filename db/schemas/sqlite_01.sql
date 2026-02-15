@@ -190,6 +190,7 @@ CREATE TABLE IF NOT EXISTS created_images (
   title TEXT,
   description TEXT,
   meta TEXT,
+  unavailable_at TEXT,
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
 

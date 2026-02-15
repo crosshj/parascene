@@ -440,6 +440,15 @@ body.creation-detail-page main>section:first-of-type {
 	color: var(--text-muted);
 }
 
+.creation-detail-user-deleted-notice {
+	margin-bottom: 12px;
+	padding: 8px 12px;
+	font-size: 0.85rem;
+	color: var(--text-muted);
+	background: color-mix(in srgb, var(--text-muted) 12%, transparent);
+	border-radius: 6px;
+}
+
 .creation-detail-date {
 	color: var(--text-muted);
 }
