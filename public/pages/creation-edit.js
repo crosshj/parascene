@@ -318,7 +318,7 @@ async function loadEditPage() {
 				<div class="form-group">
 					<label class="form-label" for="edit-prompt">Prompt <span class="field-required"
 							aria-hidden="true">*</span></label>
-					<textarea class="form-input form-textarea" id="edit-prompt" data-edit-prompt rows="3"
+					<textarea class="form-input form-textarea prompt-editor" id="edit-prompt" data-edit-prompt rows="3"
 						placeholder="Describe what you want to change..."></textarea>
 				</div>
 			</form>

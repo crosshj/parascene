@@ -69,6 +69,10 @@
 	overflow: hidden;
 }
 
+.creation-edit-route .form-textarea.prompt-editor {
+	overflow-y: auto;
+}
+
 .creation-edit-route .method-context {
 	color: var(--text-muted);
 	font-size: 0.875rem;

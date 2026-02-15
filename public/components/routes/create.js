@@ -65,6 +65,9 @@ class AppRouteCreate extends HTMLElement {
           overflow: hidden;
           min-height: auto;
         }
+        .create-route textarea.form-input.prompt-editor {
+          overflow-y: auto;
+        }
         .create-route .form-select {
           appearance: none;
           -webkit-appearance: none;
@@ -544,7 +547,7 @@ class AppRouteCreate extends HTMLElement {
               </div>
               <div class="form-group">
                 <label class="form-label" for="advanced-prompt">Prompt</label>
-                <textarea class="form-input" id="advanced-prompt" data-advanced-prompt rows="3" placeholder="Enter a prompt..."></textarea>
+                <textarea class="form-input prompt-editor" id="advanced-prompt" data-advanced-prompt rows="3" placeholder="Enter a prompt..."></textarea>
               </div>
               <div class="form-group create-route-advanced-data">
                 <label class="form-label">Data Builder</label>

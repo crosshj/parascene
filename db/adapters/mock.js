@@ -58,7 +58,7 @@ function ensureImagesDirAnon() {
 		if (!fs.existsSync(imagesDirAnon)) {
 			fs.mkdirSync(imagesDirAnon, { recursive: true });
 		}
-	} catch (_) {}
+	} catch (_) { }
 }
 
 function ensureGenericImagesDir() {
@@ -1425,6 +1425,30 @@ export function openDb() {
 				return created_images.find(
 					(img) => img.filename === filename
 				);
+			}
+		},
+		/** Direct children: published creations with meta.mutate_of_id = parentId, ordered by created_at asc. */
+		selectCreatedImageChildrenByParentId: {
+			all: async (parentId) => {
+				const id = Number(parentId);
+				if (!Number.isFinite(id) || id <= 0) return [];
+				const list = (typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.created_images) ?? created_images ?? [];
+				return list
+					.filter(
+						(img) =>
+							(img?.published === true || img?.published === 1) &&
+							(img?.unavailable_at == null || img?.unavailable_at === "") &&
+							Number(img?.meta?.mutate_of_id) === id
+					)
+					.sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+					.map((img) => ({
+						id: img.id,
+						filename: img.filename,
+						file_path: img.file_path,
+						title: img.title,
+						created_at: img.created_at,
+						status: img.status
+					}));
 			}
 		},
 		insertCreatedImageAnon: {

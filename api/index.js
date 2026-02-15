@@ -24,6 +24,7 @@ import createYoutubeRoutes from "../api_routes/youtube.js";
 import createXRoutes from "../api_routes/x.js";
 import createFeatureRequestRoutes from "../api_routes/feature_requests.js";
 import createShareRoutes from "../api_routes/share.js";
+import createQRRoutes from "../api_routes/qr.js";
 import createPolicyRoutes from "../api_routes/policy.js";
 import createTryRoutes from "../api_routes/try.js";
 import { computeWelcome } from "../api_routes/utils/welcome.js";
@@ -165,6 +166,7 @@ app.use(async (req, res, next) => {
 			(pathName === "/welcome" && method === "GET") ||
 			(pathName === "/api/profile" && (method === "GET" || method === "PUT" || method === "POST")) ||
 			(pathName === "/api/username-suggest" && method === "GET") ||
+			(pathName === "/api/qr" && method === "GET") ||
 			(pathName === "/logout" && method === "POST") ||
 			(pathName === "/auth.html" && method === "GET") ||
 			(pathName === "/me" && method === "GET");
@@ -201,6 +203,7 @@ app.use(createCreationsRoutes({ queries }));
 app.use(createLikesRoutes({ queries }));
 app.use(createCommentsRoutes({ queries }));
 app.use(createShareRoutes({ queries, storage }));
+app.use(createQRRoutes());
 app.use(createProviderRoutes({ queries }));
 app.use(createServersRoutes({ queries }));
 app.use(createTemplatesRoutes({ queries }));

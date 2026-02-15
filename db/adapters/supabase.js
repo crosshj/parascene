@@ -2550,6 +2550,22 @@ export function openDb() {
 				return data ?? undefined;
 			}
 		},
+		/** Direct children: published creations with meta.mutate_of_id = parentId, ordered by created_at asc. */
+		selectCreatedImageChildrenByParentId: {
+			all: async (parentId) => {
+				const id = Number(parentId);
+				if (!Number.isFinite(id) || id <= 0) return [];
+				const { data, error } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.select("id, filename, file_path, title, created_at, status")
+					.eq("published", true)
+					.is("unavailable_at", null)
+					.contains("meta", { mutate_of_id: id })
+					.order("created_at", { ascending: true });
+				if (error) throw error;
+				return data ?? [];
+			}
+		},
 		// Anonymous (try) creations (no anon_cid or color; try_requests links requesters to images)
 		insertCreatedImageAnon: {
 			run: async (prompt, filename, filePath, width, height, status, meta) => {

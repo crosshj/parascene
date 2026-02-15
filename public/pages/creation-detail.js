@@ -538,6 +538,11 @@ async function loadCreation() {
 
 		const creation = await response.json();
 
+		// Fetch direct children (published creations with mutate_of_id = this id), order by created_at
+		const childrenPromise = fetch(`/api/create/images/${creationId}/children`, { credentials: 'include' })
+			.then((r) => (r.ok ? r.json() : []))
+			.catch(() => []);
+
 		const status = creation.status || 'completed';
 		const meta = creation.meta || null;
 		const timeoutAt = meta && typeof meta.timeout_at === 'string' ? new Date(meta.timeout_at).getTime() : NaN;
@@ -820,7 +825,8 @@ async function loadCreation() {
 			</span>
 		`;
 
-		let historyStripHtml = '';
+		// Ancestors: lineage chain (current "lineage" content)
+		let ancestorsHtml = '';
 		if (historyIds.length > 0 && historyChainIds.length >= 2) {
 			const nonCurrentIds = historyChainIds.filter((id) => id !== creationId);
 			const parts = nonCurrentIds.map((id) => `
@@ -836,15 +842,46 @@ async function loadCreation() {
 				<span class="creation-detail-history-arrow" aria-hidden="true">→</span>
 			`).join('');
 
-			historyStripHtml = html`
+			ancestorsHtml = html`
 				<div class="creation-detail-history-wrap">
-					<div class="creation-detail-history-label">LINEAGE</div>
+					<div class="creation-detail-history-label">Ancestors</div>
 					<div class="creation-detail-history" data-creation-history>
 						${parts}${currentIndicatorHtml}
 					</div>
 				</div>
 			`;
 		}
+
+		// Children: direct derivatives (mutate_of_id = this creation), order by date created
+		const childrenList = await childrenPromise;
+		let childrenHtml = '';
+		if (Array.isArray(childrenList) && childrenList.length > 0) {
+			const childParts = childrenList.map((child) => {
+				const cid = child.id;
+				const thumbUrl = (child.thumbnail_url || child.url || '').trim();
+				return `
+				<a
+					class="creation-detail-history-thumb-link"
+					href="/creations/${cid}"
+					aria-label="${escapeHtml(`Go to creation #${cid}`)}"
+					data-child-id="${cid}"
+				>
+					<span class="creation-detail-history-fallback" data-child-fallback>#${cid}</span>
+					<img class="creation-detail-history-thumb" data-child-img alt="" loading="lazy" style="display: none;" data-bg-url="${escapeHtml(thumbUrl)}" />
+				</a>
+			`;
+			}).join('');
+			childrenHtml = html`
+				<div class="creation-detail-history-wrap">
+					<div class="creation-detail-history-label">Children</div>
+					<div class="creation-detail-history" data-creation-children>
+						${childParts}
+					</div>
+				</div>
+			`;
+		}
+
+		const lineageSectionHtml = ancestorsHtml + (childrenHtml || '');
 
 		// Meta-derived values for description section (Server, Method, Duration, Prompt)
 		const args = meta?.args ?? null;
@@ -861,13 +898,13 @@ async function loadCreation() {
 			: (typeof meta?.method === 'string' ? meta.method : '');
 		const durationStr = formatDuration(meta || {});
 
-		// Show description block if we have user description, history, prompt, or meta (server/method/duration).
+		// Show description block if we have user description, lineage (ancestors/children), prompt, or meta (server/method/duration).
 		let descriptionHtml = '';
 		const descriptionText = typeof creation.description === 'string' ? creation.description.trim() : '';
 		const hasDescription = descriptionText.length > 0;
 		const hasPrompt = promptText.length > 0;
 		const hasMetaInDescription = !!(serverName || methodName || durationStr);
-		const showDescriptionBlock = descriptionText || promptText || historyStripHtml || hasMetaInDescription;
+		const showDescriptionBlock = descriptionText || promptText || lineageSectionHtml || hasMetaInDescription;
 
 		if (showDescriptionBlock) {
 			const descriptionParts = [];
@@ -903,7 +940,7 @@ async function loadCreation() {
 			}
 
 			descriptionHtml = html`
-				<div class="creation-detail-published${historyStripHtml ? ' has-history' : ''}">
+				<div class="creation-detail-published${lineageSectionHtml ? ' has-history' : ''}">
 					${descriptionInnerHtml ? html`
 					<div class="creation-detail-description-wrap" data-description-wrap>
 						<div class="creation-detail-description" data-description>${descriptionInnerHtml}</div>
@@ -913,7 +950,7 @@ async function loadCreation() {
 						</div>
 					</div>
 					` : ''}
-					${historyStripHtml}
+					${lineageSectionHtml}
 					${metaLineHtml}
 				</div>
 			`;
@@ -949,8 +986,6 @@ async function loadCreation() {
 			hasDetailsModalContent = true;
 		}
 
-		// (Keep `historyStripHtml` empty now; it lives inside `descriptionHtml` above the border line.)
-		historyStripHtml = '';
 
 		// Get creator information
 		const creatorUserName = typeof creation?.creator?.user_name === 'string' ? creation.creator.user_name.trim() : '';
@@ -1217,6 +1252,21 @@ async function loadCreation() {
 						fallback.style.display = 'none';
 					}
 				}
+			}
+		}
+
+		// Hydrate children thumbnails (URLs from API).
+		const childrenRoot = detailContent.querySelector('[data-creation-children]');
+		if (childrenRoot) {
+			const imgs = childrenRoot.querySelectorAll('img[data-child-img][data-bg-url]');
+			for (const img of imgs) {
+				if (!(img instanceof HTMLImageElement)) continue;
+				const bgUrl = (img.getAttribute('data-bg-url') || '').trim();
+				if (!bgUrl) continue;
+				img.src = bgUrl;
+				img.style.display = '';
+				const fallback = img.closest('a')?.querySelector('[data-child-fallback]');
+				if (fallback instanceof HTMLElement) fallback.style.display = 'none';
 			}
 		}
 

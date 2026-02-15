@@ -1335,7 +1335,7 @@ export async function openDb() {
 					let meta = null;
 					try {
 						meta = typeof row.meta === "string" ? JSON.parse(row.meta) : row.meta;
-					} catch (_) {}
+					} catch (_) { }
 					if (!meta || typeof meta !== "object") continue;
 					const history = toHistoryArray(meta);
 					for (const v of history) {
@@ -1868,6 +1868,23 @@ export async function openDb() {
            WHERE filename = ?`
 				);
 				return Promise.resolve(stmt.get(filename));
+			}
+		},
+		/** Direct children: published creations with meta.mutate_of_id = parentId, ordered by created_at asc. */
+		selectCreatedImageChildrenByParentId: {
+			all: async (parentId) => {
+				const id = Number(parentId);
+				if (!Number.isFinite(id) || id <= 0) return [];
+				// Match mutate_of_id whether stored as number or string in JSON
+				const stmt = db.prepare(
+					`SELECT id, filename, file_path, title, created_at, status
+           FROM created_images
+           WHERE (json_extract(meta, '$.mutate_of_id') = ? OR json_extract(meta, '$.mutate_of_id') = ?)
+             AND (published = 1)
+             AND (unavailable_at IS NULL OR unavailable_at = '')
+           ORDER BY created_at ASC`
+				);
+				return Promise.resolve(stmt.all(id, String(id)));
 			}
 		},
 		// Anonymous (try) creations (no anon_cid or color; try_requests links requesters to images)

@@ -9,7 +9,8 @@ import {
 	smsIcon,
 	emailIcon,
 	shareIcon,
-	linkIcon
+	linkIcon,
+	qrCodeIcon
 } from '../../icons/svg-strings.js';
 
 async function copyTextToClipboard(text) {
@@ -55,6 +56,7 @@ class AppModalShare extends HTMLElement {
 	constructor() {
 		super();
 		this._isOpen = false;
+		this._qrModalOpen = false;
 		this._creationId = null;
 		this._shareUrl = null;
 		this._loading = false;
@@ -64,6 +66,7 @@ class AppModalShare extends HTMLElement {
 		this.handleEscape = this.handleEscape.bind(this);
 		this.handleOpen = this.handleOpen.bind(this);
 		this.handleCloseAllModals = this.handleCloseAllModals.bind(this);
+		this.closeQrModal = this.closeQrModal.bind(this);
 	}
 
 	connectedCallback() {
@@ -83,71 +86,87 @@ class AppModalShare extends HTMLElement {
 	}
 
 	render() {
+		const iconClose = closeIcon('modal-close-icon');
+		const iconCloseQr = closeIcon('qr-modal-close-icon');
+		const iconX = xIcon('share-option-icon share-option-icon-x is-brand');
+		const iconFacebook = facebookIcon('share-option-icon share-option-icon-facebook is-brand');
+		const iconReddit = redditIcon('share-option-icon share-option-icon-reddit is-brand');
+		const iconLinkedin = linkedinIcon('share-option-icon share-option-icon-linkedin is-brand');
+		const iconSms = smsIcon();
+		const iconEmail = emailIcon();
+		const iconShare = shareIcon();
+		const iconQrCode = qrCodeIcon();
+		const iconLink = linkIcon();
+
 		this.innerHTML = html`
 			<div class="modal-overlay" data-overlay>
 				<div class="modal modal-medium">
 					<div class="modal-header">
 						<h3>Share</h3>
 						<button class="modal-close" type="button" aria-label="Close">
-							${closeIcon('modal-close-icon')}
+							${iconClose}
 						</button>
 					</div>
-
+			
 					<div class="modal-body share-modal-body">
 						<!--
-						<p class="share-modal-note">
-							<span class="share-modal-note-strong">You may be rewarded if someone joins after viewing.</span>
-						</p>
-						-->
-
+												<p class="share-modal-note">
+													<span class="share-modal-note-strong">You may be rewarded if someone joins after viewing.</span>
+												</p>
+												-->
+			
 						<div class="share-action-list" role="list">
 							<button type="button" class="share-action-row" data-share-x>
 								<span class="share-action-left">
-									<span class="share-option-icon share-option-icon-x is-brand">${xIcon('share-option-icon share-option-icon-x is-brand')}</span>
+									<span class="share-option-icon share-option-icon-x is-brand">${iconX}</span>
 									<span class="share-action-text">
 										<span class="share-action-title">Share on X</span>
 										<span class="share-action-subtitle">Formerly known as Twitter</span>
 									</span>
 								</span>
-								<span class="share-action-cta share-action-cta-x" data-cta><span class="share-action-cta-label">Post</span></span>
+								<span class="share-action-cta share-action-cta-x" data-cta><span
+										class="share-action-cta-label">Post</span></span>
 							</button>
-
+			
 							<button type="button" class="share-action-row" data-share-facebook>
 								<span class="share-action-left">
-									<span class="share-option-icon share-option-icon-facebook is-brand">${facebookIcon('share-option-icon share-option-icon-facebook is-brand')}</span>
+									<span class="share-option-icon share-option-icon-facebook is-brand">${iconFacebook}</span>
 									<span class="share-action-text">
 										<span class="share-action-title">Share on Facebook</span>
 										<span class="share-action-subtitle">Show your friends</span>
 									</span>
 								</span>
-								<span class="share-action-cta share-action-cta-facebook" data-cta><span class="share-action-cta-label">Share</span></span>
+								<span class="share-action-cta share-action-cta-facebook" data-cta><span
+										class="share-action-cta-label">Share</span></span>
 							</button>
-
+			
 							<button type="button" class="share-action-row" data-share-reddit>
 								<span class="share-action-left">
-									<span class="share-option-icon share-option-icon-reddit is-brand">${redditIcon('share-option-icon share-option-icon-reddit is-brand')}</span>
+									<span class="share-option-icon share-option-icon-reddit is-brand">${iconReddit}</span>
 									<span class="share-action-text">
 										<span class="share-action-title">Post to Reddit</span>
 										<span class="share-action-subtitle">Share to a subreddit</span>
 									</span>
 								</span>
-								<span class="share-action-cta share-action-cta-reddit" data-cta><span class="share-action-cta-label">Post</span></span>
+								<span class="share-action-cta share-action-cta-reddit" data-cta><span
+										class="share-action-cta-label">Post</span></span>
 							</button>
-
+			
 							<button type="button" class="share-action-row" data-share-linkedin>
 								<span class="share-action-left">
-									<span class="share-option-icon share-option-icon-linkedin is-brand">${linkedinIcon('share-option-icon share-option-icon-linkedin is-brand')}</span>
+									<span class="share-option-icon share-option-icon-linkedin is-brand">${iconLinkedin}</span>
 									<span class="share-action-text">
 										<span class="share-action-title">Share on LinkedIn</span>
 										<span class="share-action-subtitle">Share with your network</span>
 									</span>
 								</span>
-								<span class="share-action-cta share-action-cta-linkedin" data-cta><span class="share-action-cta-label">Share</span></span>
+								<span class="share-action-cta share-action-cta-linkedin" data-cta><span
+										class="share-action-cta-label">Share</span></span>
 							</button>
-
+			
 							<button type="button" class="share-action-row" data-share-sms>
 								<span class="share-action-left">
-									<span class="share-option-icon">${smsIcon()}</span>
+									<span class="share-option-icon">${iconSms}</span>
 									<span class="share-action-text">
 										<span class="share-action-title">Text message</span>
 										<span class="share-action-subtitle">Send via Messages</span>
@@ -155,10 +174,10 @@ class AppModalShare extends HTMLElement {
 								</span>
 								<span class="share-action-cta" data-cta><span class="share-action-cta-label">Send</span></span>
 							</button>
-
+			
 							<button type="button" class="share-action-row" data-share-email>
 								<span class="share-action-left">
-									<span class="share-option-icon">${emailIcon()}</span>
+									<span class="share-option-icon">${iconEmail}</span>
 									<span class="share-action-text">
 										<span class="share-action-title">Email</span>
 										<span class="share-action-subtitle">Send a message with the link</span>
@@ -166,10 +185,10 @@ class AppModalShare extends HTMLElement {
 								</span>
 								<span class="share-action-cta" data-cta><span class="share-action-cta-label">Send</span></span>
 							</button>
-
+			
 							<button type="button" class="share-action-row" data-native-share style="display: none;">
 								<span class="share-action-left">
-									<span class="share-option-icon">${shareIcon()}</span>
+									<span class="share-option-icon">${iconShare}</span>
 									<span class="share-action-text">
 										<span class="share-action-title">Device share</span>
 										<span class="share-action-subtitle">Use your device's share menu</span>
@@ -177,10 +196,21 @@ class AppModalShare extends HTMLElement {
 								</span>
 								<span class="share-action-cta" data-cta><span class="share-action-cta-label">Open</span></span>
 							</button>
-
+			
+							<button type="button" class="share-action-row" data-qr-code>
+								<span class="share-action-left">
+									<span class="share-option-icon">${iconQrCode}</span>
+									<span class="share-action-text">
+										<span class="share-action-title">QR Code</span>
+										<span class="share-action-subtitle">Scan to open link</span>
+									</span>
+								</span>
+								<span class="share-action-cta" data-cta><span class="share-action-cta-label">Show</span></span>
+							</button>
+			
 							<button type="button" class="share-action-row" data-copy-link>
 								<span class="share-action-left">
-									<span class="share-option-icon">${linkIcon()}</span>
+									<span class="share-option-icon">${iconLink}</span>
 									<span class="share-action-text">
 										<span class="share-action-title">Copy link</span>
 										<span class="share-action-subtitle">Share it anywhere</span>
@@ -189,8 +219,20 @@ class AppModalShare extends HTMLElement {
 								<span class="share-action-cta" data-cta><span class="share-action-cta-label">Copy</span></span>
 							</button>
 						</div>
-
+			
 						<button type="button" class="share-modal-cancel" data-cancel>Cancel</button>
+					</div>
+				</div>
+			</div>
+			
+			<div class="modal-overlay qr-modal-overlay" data-qr-overlay aria-hidden="true" inert>
+				<div class="modal qr-modal">
+					<div class="qr-modal-header">
+						<button class="modal-close qr-modal-close" type="button"
+							aria-label="Close">${iconCloseQr}</button>
+					</div>
+					<div class="qr-modal-body">
+						<div class="qr-modal-svg-wrap" data-qr-content></div>
 					</div>
 				</div>
 			</div>
@@ -206,6 +248,7 @@ class AppModalShare extends HTMLElement {
 		const closeBtn = this.querySelector(".modal-close");
 		const cancelBtn = this.querySelector("[data-cancel]");
 		const copyBtn = this.querySelector("[data-copy-link]");
+		const qrBtn = this.querySelector("[data-qr-code]");
 		const nativeBtn = this.querySelector("[data-native-share]");
 		const smsBtn = this.querySelector("[data-share-sms]");
 		const emailBtn = this.querySelector("[data-share-email]");
@@ -225,7 +268,17 @@ class AppModalShare extends HTMLElement {
 		if (cancelBtn) cancelBtn.addEventListener("click", () => this.close());
 
 		if (copyBtn) copyBtn.addEventListener("click", (e) => void this.handleCopy(e.currentTarget));
+		if (qrBtn) qrBtn.addEventListener("click", (e) => void this.handleQrCode(e.currentTarget));
 		if (nativeBtn) nativeBtn.addEventListener("click", (e) => void this.handleNativeShare(e.currentTarget));
+
+		const qrOverlay = this.querySelector("[data-qr-overlay]");
+		const qrCloseBtn = this.querySelector(".qr-modal-close");
+		if (qrOverlay) {
+			qrOverlay.addEventListener("click", (e) => {
+				if (e.target === qrOverlay) this.closeQrModal();
+			});
+		}
+		if (qrCloseBtn) qrCloseBtn.addEventListener("click", () => this.closeQrModal());
 
 		if (smsBtn) smsBtn.addEventListener("click", (e) => void this.handleSms(e.currentTarget));
 		if (emailBtn) emailBtn.addEventListener("click", (e) => void this.handleEmail(e.currentTarget));
@@ -236,7 +289,12 @@ class AppModalShare extends HTMLElement {
 	}
 
 	handleEscape(e) {
-		if (e.key === "Escape" && this._isOpen && !this._loading) {
+		if (e.key !== "Escape") return;
+		if (this._qrModalOpen) {
+			this.closeQrModal();
+			return;
+		}
+		if (this._isOpen && !this._loading) {
 			this.close();
 		}
 	}
@@ -273,6 +331,7 @@ class AppModalShare extends HTMLElement {
 	}
 
 	close() {
+		this.closeQrModal();
 		this._isOpen = false;
 		this._loading = false;
 		this._creationId = null;
@@ -386,6 +445,42 @@ class AppModalShare extends HTMLElement {
 
 	shareMessage(url) {
 		return `Check this out on Parascene: ${url}\n\nCreate your own for free (your friend may be rewarded if you join after viewing).`;
+	}
+
+	closeQrModal() {
+		this._qrModalOpen = false;
+		const overlay = this.querySelector("[data-qr-overlay]");
+		if (overlay) {
+			// Move focus out before hiding so we never have focus inside an aria-hidden/inert subtree.
+			if (overlay.contains(document.activeElement)) {
+				const qrTrigger = this.querySelector("[data-qr-code]");
+				if (qrTrigger instanceof HTMLElement) qrTrigger.focus();
+			}
+			overlay.classList.remove("open");
+			overlay.setAttribute("aria-hidden", "true");
+			overlay.setAttribute("inert", "");
+		}
+		const content = this.querySelector("[data-qr-content]");
+		if (content) content.innerHTML = "";
+	}
+
+	async handleQrCode(buttonEl) {
+		await this.runCtaAction(buttonEl, async () => {
+			const url = await this.ensureShareUrl();
+			const res = await fetch(`/api/qr?url=${encodeURIComponent(url)}`);
+			if (!res.ok) throw new Error("Failed to load QR code");
+			const svgText = await res.text();
+			const content = this.querySelector("[data-qr-content]");
+			if (!content) return;
+			content.innerHTML = svgText;
+			this._qrModalOpen = true;
+			const overlay = this.querySelector("[data-qr-overlay]");
+			if (overlay) {
+				overlay.classList.add("open");
+				overlay.setAttribute("aria-hidden", "false");
+				overlay.removeAttribute("inert");
+			}
+		}, { successLabel: "Show", errorLabel: "Failed", resetMs: 800 });
 	}
 
 	async handleCopy(buttonEl) {

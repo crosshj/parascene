@@ -66,7 +66,7 @@ function createTextareaField(fieldKey, field, context) {
 	const input = document.createElement('textarea');
 	input.id = `${fieldIdPrefix}${fieldKey}`;
 	input.name = fieldKey;
-	input.className = inputClassName;
+	input.className = isPromptLikeField(fieldKey, field) ? `${inputClassName} prompt-editor` : inputClassName;
 	input.placeholder = field.label || fieldKey;
 	input.rows = typeof field.rows === 'number' && field.rows > 0 ? field.rows : 3;
 	if (field.required) input.required = true;

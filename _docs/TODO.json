@@ -1,1 +1,74 @@
-[{"name":"User Onboard++","description":"have user generate their avatar ASAP in user flow","cost":59,"impact":100,"dependsOn":[],"starred":true},{"name":"Transition Anonymous Generations","description":"creation that user generates pre-signup transition to post-sign-up account","cost":70,"impact":100,"dependsOn":[],"starred":true},{"name":"Abuse protection (anon generate)","description":"Rate limiting and abuse controls for anonymous/try generation only (e.g. by IP/cookie, caps).","cost":1,"impact":38,"dependsOn":[],"starred":false},{"name":"Share method QR Code","description":"Add QR code as a share option so users can share a link via scannable QR (e.g. in share modal).","cost":15,"impact":31,"dependsOn":[],"starred":false},{"name":"Image Formats","description":"16:9, 9:16, etc","cost":45,"impact":42,"dependsOn":[],"starred":false},{"name":"My Activity","description":"my comments, likes, follows","cost":45,"impact":42,"dependsOn":[],"starred":false},{"name":"Notifications show Display Name","description":"right now it looks like first part of email is used","cost":45,"impact":42,"dependsOn":[],"starred":false},{"name":"Landing: community creations images","description":"Show example or featured community creations to anonymous visitors (no login).","cost":16,"impact":24,"dependsOn":[],"starred":false},{"name":"Login with Username","description":"also, add ability to change email","cost":22,"impact":15,"dependsOn":[],"starred":false},{"name":"pgvector","description":"add semantic relatedness","cost":88,"impact":100,"dependsOn":[],"starred":true},{"name":"Lineage shows children (graph view)","description":"Lineage view shows children (derivatives/remixes).","cost":75,"impact":1,"dependsOn":[],"starred":false},{"name":"Join from Share pays out","description":"The original creator gets some credits.\nThe sharer gets credits.\nWhat to do about mutated creations?","cost":100,"impact":60,"dependsOn":[],"starred":false}]
+[
+  {
+    "name": "User Onboard++",
+    "description": "have user generate their avatar ASAP in user flow; this prompt will be saved in their profile",
+    "cost": 51,
+    "impact": 100,
+    "dependsOn": [],
+    "starred": true
+  },
+  {
+    "name": "Transition Anonymous Generations",
+    "description": "creation that user generates pre-signup transition to post-sign-up account",
+    "cost": 65,
+    "impact": 100,
+    "dependsOn": [],
+    "starred": true
+  },
+  {
+    "name": "Image Formats",
+    "description": "16:9, 9:16, etc",
+    "cost": 35,
+    "impact": 32,
+    "dependsOn": [],
+    "starred": false
+  },
+  {
+    "name": "My Activity",
+    "description": "my comments, likes, follows",
+    "cost": 35,
+    "impact": 32,
+    "dependsOn": [],
+    "starred": false
+  },
+  {
+    "name": "Notifications show Display Name",
+    "description": "right now it looks like first part of email is used",
+    "cost": 35,
+    "impact": 32,
+    "dependsOn": [],
+    "starred": false
+  },
+  {
+    "name": "pgvector",
+    "description": "add semantic relatedness",
+    "cost": 86,
+    "impact": 100,
+    "dependsOn": [],
+    "starred": true
+  },
+  {
+    "name": "Landing: community creations images",
+    "description": "Show example or featured community creations to anonymous visitors (no login).",
+    "cost": 1,
+    "impact": 11,
+    "dependsOn": [],
+    "starred": false
+  },
+  {
+    "name": "Login with Username",
+    "description": "also, add ability to change email",
+    "cost": 8,
+    "impact": 1,
+    "dependsOn": [],
+    "starred": false
+  },
+  {
+    "name": "Join from Share pays out",
+    "description": "The original creator gets some credits.\nThe sharer gets credits.\nWhat to do about mutated creations?",
+    "cost": 100,
+    "impact": 54,
+    "dependsOn": [],
+    "starred": false
+  }
+]

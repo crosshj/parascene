@@ -1,3 +1,5 @@
+import { getPromptEditorMaxHeightPx } from './viewport.js';
+
 const DEFAULT_MAX_HEIGHT_PX = 1200;
 
 // Track per-element minimum heights computed from "empty" content.
@@ -59,10 +61,18 @@ export function attachAutoGrowTextarea(textarea, { maxHeightPx = DEFAULT_MAX_HEI
 	if (!(textarea instanceof HTMLTextAreaElement)) return () => {};
 
 	textarea.dataset.autogrow = textarea.dataset.autogrow || 'true';
-	textarea.style.overflow = 'hidden';
-	textarea.style.resize = 'none';
+	const isPromptEditor = textarea.classList.contains('prompt-editor');
+	// Prompt editors: cap height and scroll internally to avoid iOS Safari viewport jump.
+	if (isPromptEditor) {
+		textarea.style.overflowY = 'auto';
+		textarea.style.resize = 'none';
+	} else {
+		textarea.style.overflow = 'hidden';
+		textarea.style.resize = 'none';
+	}
 
-	const refresh = () => schedule(textarea, () => resizeAutoGrowTextarea(textarea, { maxHeightPx }));
+	const getMaxPx = () => (isPromptEditor ? getPromptEditorMaxHeightPx() : maxHeightPx);
+	const refresh = () => schedule(textarea, () => resizeAutoGrowTextarea(textarea, { maxHeightPx: getMaxPx() }));
 
 	textarea.addEventListener('input', refresh);
 	textarea.addEventListener('change', refresh);

@@ -1025,6 +1025,37 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	});
 
+	// GET /api/create/images/:id/children - Direct children (mutate_of_id = id), published only, order by created_at asc
+	router.get("/api/create/images/:id/children", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		try {
+			const parentId = Number(req.params.id);
+			if (!Number.isFinite(parentId) || parentId <= 0) {
+				return res.status(400).json({ error: "Invalid creation id" });
+			}
+			const rows = await queries.selectCreatedImageChildrenByParentId?.all(parentId) ?? [];
+			const children = rows.map((row) => {
+				const status = row.status || "completed";
+				const url =
+					status === "completed"
+						? (row.file_path || storage.getImageUrl(row.filename))
+						: null;
+				return {
+					id: row.id,
+					title: row.title ?? null,
+					created_at: row.created_at,
+					url: url || null,
+					thumbnail_url: url ? getThumbnailUrl(url) : null
+				};
+			});
+			return res.json(children);
+		} catch (error) {
+			return res.status(500).json({ error: "Failed to fetch children" });
+		}
+	});
+
 	// POST /api/create/images/:id/share - Mint an external share URL (no DB write)
 	router.post("/api/create/images/:id/share", async (req, res) => {
 		const user = await requireUser(req, res);

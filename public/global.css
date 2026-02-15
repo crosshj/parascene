@@ -653,6 +653,16 @@ textarea {
 	resize: vertical;
 }
 
+/* Prompt / long-form textareas: cap height and scroll internally to avoid iOS Safari
+   layout jump (visual viewport + autosize + scroll anchoring). */
+.prompt-editor {
+	min-height: 120px;
+	max-height: 38vh;
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
+	overflow-anchor: none;
+}
+
 input[type="range"] {
 	-webkit-appearance: none;
 	appearance: none;
@@ -4419,6 +4429,107 @@ body.modal-open {
 	margin-top: 12px;
 	color: var(--text-muted);
 	font-weight: 600;
+}
+
+/* QR code modal (opened from share modal) */
+.qr-modal-overlay {
+	position: fixed;
+	inset: 0;
+	background: color-mix(in srgb, var(--text) 42%, transparent);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 100000;
+	opacity: 0;
+	visibility: hidden;
+	transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+.qr-modal-overlay.open {
+	opacity: 1;
+	visibility: visible;
+}
+
+.qr-modal {
+	background: var(--surface);
+	border-radius: 14px;
+	box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+	max-width: min(90vw, 320px);
+	position: relative;
+}
+
+.qr-modal-header {
+	position: absolute;
+	top: 0;
+	right: 0;
+	padding: 12px;
+	z-index: 1;
+}
+
+.qr-modal-close {
+	appearance: none;
+	width: 36px;
+	height: 36px;
+	border: none;
+	border-radius: 6px;
+	background: var(--surface-strong);
+	color: var(--text);
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.qr-modal-close:hover {
+	background: color-mix(in srgb, var(--text) 12%, var(--surface));
+}
+
+.qr-modal-close:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
+
+.qr-modal-close-icon {
+	width: 20px;
+	height: 20px;
+}
+
+.qr-modal-body {
+	padding: 24px;
+	padding-top: 48px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.qr-modal-svg-wrap {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--surface);
+	border-radius: 10px;
+	padding: 12px;
+}
+
+.qr-modal-svg-wrap svg {
+	display: block;
+	width: 256px;
+	height: 256px;
+	background-color: var(--surface);
+}
+
+/* Theme-colored QR: no white glow in dark mode; background = surface, modules = text (high contrast for scanners) */
+.qr-modal-svg-wrap svg path:first-of-type {
+	fill: var(--surface) !important;
+}
+
+.qr-modal-svg-wrap svg path:last-of-type {
+	stroke: var(--text) !important;
+}
+
+/* Fallback: any path used as fill (background) in API SVG */
+.qr-modal-svg-wrap svg path[fill] {
+	fill: var(--surface) !important;
 }
 
 /* ============================================

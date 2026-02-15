@@ -113,6 +113,17 @@ export const linkIcon = withAttributes(html`
 	</svg>
 `);
 
+export const qrCodeIcon = withAttributes(html`
+	<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+		<rect x="3" y="3" width="7" height="7" rx="1" />
+		<rect x="14" y="3" width="3" height="3" rx="0.5" />
+		<rect x="14" y="9" width="3" height="3" rx="0.5" />
+		<rect x="3" y="14" width="3" height="3" rx="0.5" />
+		<rect x="9" y="14" width="3" height="3" rx="0.5" />
+		<rect x="14" y="14" width="7" height="7" rx="1" />
+	</svg>
+`);
+
 export const searchIcon = withAttributes(html`
 <svg fill="currentColor" viewBox="0 0 24 24">
 	<path
@@ -123,8 +134,7 @@ export const searchIcon = withAttributes(html`
 
 export const starIcon = withAttributes(html`
 	<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-		<path
-			d="M12 3.25l2.36 4.78 5.28.77-3.82 3.72.9 5.26L12 15.97 7.28 17.78l.9-5.26-3.82-3.72 5.28-.77L12 3.25z">
+		<path d="M12 3.25l2.36 4.78 5.28.77-3.82 3.72.9 5.26L12 15.97 7.28 17.78l.9-5.26-3.82-3.72 5.28-.77L12 3.25z">
 		</path>
 	</svg>
 `);
@@ -141,15 +151,16 @@ export const creditIcon = withAttributes(html`
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
 		stroke-linejoin="round" aria-hidden="true">
 		<circle cx="12" cy="12" r="9"></circle>
-		<text x="12" y="12" text-anchor="middle" dominant-baseline="middle" font-size="10" fill="currentColor" stroke="none">P</text>
+		<text x="12" y="12" text-anchor="middle" dominant-baseline="middle" font-size="10" fill="currentColor"
+			stroke="none">P</text>
 	</svg>
 `);
 
 /** User avatar icon: square, light grey bg, darker grey head + shoulders. Circle shape from CSS (e.g. border-radius: 50%). */
 export const userAvatarIcon = withAttributes(html`
 	<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-		<rect class="user-avatar-icon-bg" width="24" height="24" rx="0"/>
-		<circle class="user-avatar-icon-figure" cx="12" cy="8" r="3.5"/>
-		<ellipse class="user-avatar-icon-figure" cx="12" cy="20.5" rx="6.5" ry="8"/>
+		<rect class="user-avatar-icon-bg" width="24" height="24" rx="0" />
+		<circle class="user-avatar-icon-figure" cx="12" cy="8" r="3.5" />
+		<ellipse class="user-avatar-icon-figure" cx="12" cy="20.5" rx="6.5" ry="8" />
 	</svg>
 `);
