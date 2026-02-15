@@ -1070,25 +1070,55 @@
 	min-height: 120px;
 }
 
-.admin-email-test-intro {
+.admin-email-send-intro {
 	margin: 0;
 	font-size: 0.95rem;
 	color: var(--text-muted);
 }
 
-.admin-email-test-status {
+.admin-email-send-recipient-selected {
+	margin: 0 0 12px;
+	padding: 10px 12px;
+	background: var(--surface-subtle);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+}
+
+.admin-email-send-to-display {
+	margin: 0;
+	font-size: 0.9rem;
+	color: var(--text);
+}
+
+.admin-email-send-status {
 	margin-top: 4px;
 	font-size: 0.9rem;
 	color: var(--text-muted);
 	min-height: 1.4em;
 }
 
-.admin-email-test-status-success {
+.admin-email-send-status-success {
 	color: var(--text);
 }
 
-.admin-email-test-status-error {
+.admin-email-send-status-error {
 	color: var(--error-text);
+}
+
+.admin-settings-textarea {
+	resize: vertical;
+	min-height: 100px;
+}
+
+.admin-email-send-textarea {
+	width: 100%;
+	max-width: 100%;
+	box-sizing: border-box;
+	min-height: 200px;
+}
+
+#email-send-feedback-field.admin-settings-field {
+	min-width: 0;
 }
 
 .admin-email-template-card {

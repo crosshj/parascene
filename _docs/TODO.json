@@ -16,6 +16,14 @@
     "starred": true
   },
   {
+    "name": "Redo Create Page",
+    "description": "hide most of what's there behind some advanced toggle.  Make a customer-facing/slick create page.",
+    "cost": 50,
+    "impact": 50,
+    "dependsOn": [],
+    "starred": false
+  },
+  {
     "name": "Image Formats",
     "description": "16:9, 9:16, etc",
     "cost": 35,
@@ -26,14 +34,6 @@
   {
     "name": "My Activity",
     "description": "my comments, likes, follows",
-    "cost": 35,
-    "impact": 32,
-    "dependsOn": [],
-    "starred": false
-  },
-  {
-    "name": "Notifications show Display Name",
-    "description": "right now it looks like first part of email is used",
     "cost": 35,
     "impact": 32,
     "dependsOn": [],

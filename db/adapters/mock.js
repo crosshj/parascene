@@ -461,6 +461,31 @@ export function openDb() {
 					(note) => note.user_id === userId || note.role === role
 				)
 		},
+		selectNotificationById: {
+			get: async (id, userId, role) => {
+				const note = notifications.find(
+					(n) => Number(n.id) === Number(id) && (n.user_id === userId || n.role === role)
+				);
+				return note ?? undefined;
+			}
+		},
+		acknowledgeNotificationsForUserAndCreation: {
+			run: async (userId, role, creationId) => {
+				const linkPattern = `/creations/${creationId}`;
+				let count = 0;
+				for (const note of notifications) {
+					if (
+						!note.acknowledged_at &&
+						(note.user_id === userId || note.role === role) &&
+						note.link === linkPattern
+					) {
+						note.acknowledged_at = new Date().toISOString();
+						count++;
+					}
+				}
+				return { changes: count };
+			}
+		},
 		selectUnreadNotificationCount: {
 			get: async (userId, role) => ({
 				count: notifications.filter(
@@ -498,7 +523,7 @@ export function openDb() {
 			}
 		},
 		insertNotification: {
-			run: async (userId, role, title, message, link) => {
+			run: async (userId, role, title, message, link, actor_user_id, type, target, meta) => {
 				const notification = {
 					id: nextNotificationId++,
 					user_id: userId ?? null,
@@ -506,6 +531,10 @@ export function openDb() {
 					title,
 					message,
 					link: link ?? null,
+					actor_user_id: actor_user_id ?? null,
+					type: type ?? null,
+					target: target != null && typeof target !== "string" ? JSON.stringify(target) : (target ?? null),
+					meta: meta != null && typeof meta !== "string" ? JSON.stringify(meta) : (meta ?? null),
 					created_at: new Date().toISOString(),
 					acknowledged_at: null
 				};

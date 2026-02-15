@@ -1,5 +1,6 @@
 import { getAvatarColor } from "../shared/avatar.js";
 import { formatRelativeTime } from "../shared/datetime.js";
+import { attachAutoGrowTextarea } from "../shared/autogrow.js";
 
 const adminDataLoaded = {
 	users: false,
@@ -492,7 +493,7 @@ function setupEmailsTabPersistence() {
 	if (!tabsEl) return;
 
 	const storageKey = "admin-emails-tab";
-	const validTabIds = ["sends", "templates", "test", "settings"];
+	const validTabIds = ["sends", "templates", "send", "settings"];
 
 	// Restore saved tab on load
 	const savedTab = (() => {
@@ -568,43 +569,226 @@ function setupAlgoTabPersistence() {
 	}
 }
 
-let emailTestPanelInitialized = false;
+let emailSendPanelInitialized = false;
+let emailSendUserList = [];
 
-function initEmailTestPanel() {
-	const container = document.querySelector("#email-test-container");
-	const form = document.getElementById("email-test-form");
-	const statusEl = document.getElementById("email-test-status");
-	const submitBtn = document.getElementById("email-test-submit");
-	if (!container || !form || !statusEl || !submitBtn || emailTestPanelInitialized) return;
-	emailTestPanelInitialized = true;
+function initEmailSendPanel() {
+	const container = document.querySelector("#email-send-container");
+	const form = document.getElementById("email-send-form");
+	const statusEl = document.getElementById("email-send-status");
+	const submitBtn = document.getElementById("email-send-submit");
+	const recipientSelect = document.getElementById("email-send-recipient");
+	const recipientSelected = document.getElementById("email-send-recipient-selected");
+	const recipientManual = document.getElementById("email-send-recipient-manual");
+	const toInput = document.getElementById("email-send-to");
+	const recipientNameInput = document.getElementById("email-send-feedback-name");
+	const templateSelect = document.getElementById("email-send-template");
+	const feedbackField = document.getElementById("email-send-feedback-field");
+	const feedbackOriginal = document.getElementById("email-send-feedback-original");
+	const feedbackMessage = document.getElementById("email-send-feedback-message");
+	const toDisplayEl = recipientSelected?.querySelector(".admin-email-send-to-display");
+	if (!container || !form || !statusEl || !submitBtn || emailSendPanelInitialized) return;
+	emailSendPanelInitialized = true;
+
+	if (feedbackOriginal) attachAutoGrowTextarea(feedbackOriginal);
+	if (feedbackMessage) attachAutoGrowTextarea(feedbackMessage);
 
 	function setStatus(message, isError = false) {
 		statusEl.textContent = message || "";
-		statusEl.classList.toggle("admin-email-test-status-error", isError);
-		statusEl.classList.toggle("admin-email-test-status-success", message && !isError);
+		statusEl.classList.toggle("admin-email-send-status-error", isError);
+		statusEl.classList.toggle("admin-email-send-status-success", message && !isError);
 	}
+
+	function updateFeedbackFieldVisibility() {
+		const isFeedback = (templateSelect?.value ?? "") === "featureRequestFeedback";
+		if (feedbackField) feedbackField.hidden = !isFeedback;
+		if (feedbackMessage) feedbackMessage.required = isFeedback;
+	}
+
+	function getFeedbackFormValues() {
+		return {
+			recipientName: (form.elements.recipientName?.value ?? "").trim(),
+			originalRequest: (form.elements.originalRequest?.value ?? "").trim(),
+			message: (form.elements.message?.value ?? "").trim()
+		};
+	}
+
+	function getToAndRecipient() {
+		const val = (recipientSelect?.value ?? "").trim();
+		if (val === "manual" || val === "") {
+			return {
+				to: (form.elements.to?.value ?? "").trim(),
+				recipientName: (form.elements.recipientName?.value ?? "").trim()
+			};
+		}
+		const id = Number.parseInt(val, 10);
+		if (!Number.isFinite(id)) return { to: "", recipientName: "" };
+		const user = emailSendUserList.find((u) => u.id === id);
+		if (!user) return { to: "", recipientName: "" };
+		const username = String(user.user_name || "").trim();
+		const recipientName = username ? `@${username}` : getUserDisplayName(user);
+		return {
+			to: String(user.email || "").trim(),
+			recipientName
+		};
+	}
+
+	function updateRecipientUI() {
+		const val = (recipientSelect?.value ?? "").trim();
+		if (val === "manual") {
+			if (recipientSelected) recipientSelected.hidden = true;
+			if (recipientManual) recipientManual.hidden = false;
+			if (toInput) {
+				toInput.removeAttribute("readonly");
+				toInput.required = true;
+			}
+			if (recipientNameInput) recipientNameInput.removeAttribute("readonly");
+			return;
+		}
+		if (val === "") {
+			if (recipientSelected) recipientSelected.hidden = true;
+			if (recipientManual) recipientManual.hidden = true;
+			if (toInput) toInput.required = false;
+			return;
+		}
+		const id = Number.parseInt(val, 10);
+		if (!Number.isFinite(id)) return;
+		const user = emailSendUserList.find((u) => u.id === id);
+		if (!user) return;
+		const email = String(user.email || "").trim();
+		const username = String(user.user_name || "").trim();
+		const nameForEmail = username ? `@${username}` : getUserDisplayName(user);
+		if (toInput) {
+			toInput.value = email;
+			toInput.setAttribute("readonly", "readonly");
+			toInput.required = false;
+		}
+		if (recipientNameInput) {
+			recipientNameInput.value = nameForEmail;
+			recipientNameInput.setAttribute("readonly", "readonly");
+		}
+		if (toDisplayEl) {
+			toDisplayEl.textContent = `To: ${email}${username ? ` (@${username})` : ""}`;
+		}
+		if (recipientSelected) recipientSelected.hidden = false;
+		if (recipientManual) recipientManual.hidden = true;
+	}
+
+	async function loadRecipientUsers() {
+		if (!recipientSelect) return;
+		try {
+			const response = await fetch("/admin/users", { credentials: "include" });
+			if (!response.ok) return;
+			const data = await response.json();
+			const active = Array.isArray(data.activeUsers) ? data.activeUsers : [];
+			const other = Array.isArray(data.otherUsers) ? data.otherUsers : [];
+			const all = [...active, ...other].filter((u) => u.role === "consumer" && !u.suspended);
+			emailSendUserList = all.sort((a, b) => {
+				const labelA = (getUserDisplayName(a) || String(a.email || "")).toLowerCase();
+				const labelB = (getUserDisplayName(b) || String(b.email || "")).toLowerCase();
+				return labelA.localeCompare(labelB, undefined, { sensitivity: "base" });
+			});
+			const manualOption = recipientSelect.querySelector('option[value="manual"]');
+			emailSendUserList.forEach((user) => {
+				const email = String(user.email || "").trim();
+				const label = getUserDisplayName(user);
+				const username = String(user.user_name || "").trim();
+				const optionLabel = username ? `${label} (@${username}) · ${email}` : `${label} · ${email}`;
+				const opt = document.createElement("option");
+				opt.value = String(user.id);
+				opt.textContent = optionLabel;
+				recipientSelect.insertBefore(opt, manualOption);
+			});
+		} catch {
+			// Ignore; user can still use "Enter manually"
+		}
+	}
+
+	const validTemplateValues = new Set([
+		"helloFromParascene", "commentReceived", "commentReceivedDelegated", "featureRequest",
+		"featureRequestFeedback", "passwordReset", "digestActivity", "welcome",
+		"firstCreationNudge", "reengagement", "creationHighlight"
+	]);
+
+	function restoreSavedSelection() {
+		try {
+			const savedTemplate = sessionStorage.getItem("admin-email-send-template");
+			if (savedTemplate && validTemplateValues.has(savedTemplate) && templateSelect) {
+				templateSelect.value = savedTemplate;
+			}
+			const savedRecipient = sessionStorage.getItem("admin-email-send-recipient");
+			if (savedRecipient != null && recipientSelect) {
+				const hasOption = Array.from(recipientSelect.options).some((o) => o.value === savedRecipient);
+				if (hasOption) recipientSelect.value = savedRecipient;
+			}
+		} catch {
+			// Ignore storage errors
+		}
+		updateRecipientUI();
+		updateFeedbackFieldVisibility();
+	}
+
+	loadRecipientUsers().then(restoreSavedSelection);
+
+	if (recipientSelect) {
+		recipientSelect.addEventListener("change", () => {
+			updateRecipientUI();
+			try {
+				sessionStorage.setItem("admin-email-send-recipient", recipientSelect.value ?? "");
+			} catch {
+				// Ignore
+			}
+		});
+	}
+	updateRecipientUI();
+
+	if (templateSelect) {
+		templateSelect.addEventListener("change", () => {
+			updateFeedbackFieldVisibility();
+			try {
+				sessionStorage.setItem("admin-email-send-template", templateSelect.value ?? "");
+			} catch {
+				// Ignore
+			}
+		});
+	}
+	updateFeedbackFieldVisibility();
 
 	form.addEventListener("submit", async (e) => {
 		e.preventDefault();
-		const to = (form.elements.to?.value ?? "").trim();
+		const { to, recipientName } = getToAndRecipient();
 		const template = (form.elements.template?.value ?? "").trim();
 		if (!to || !template) {
-			setStatus("Please enter an email and select a template.", true);
+			setStatus("Please choose a recipient and select a template.", true);
 			return;
+		}
+		if (template === "featureRequestFeedback") {
+			const { originalRequest, message } = getFeedbackFormValues();
+			if (!message) {
+				setStatus("Please enter a reply for the Feature Request Feedback template.", true);
+				return;
+			}
 		}
 		submitBtn.disabled = true;
 		submitBtn.classList.add("is-loading");
 		setStatus("Sending…", false);
 		try {
+			const body = { to, template };
+			if (template === "featureRequestFeedback") {
+				const { originalRequest, message } = getFeedbackFormValues();
+				body.recipientName = recipientName;
+				body.originalRequest = originalRequest;
+				body.message = message;
+			}
 			const response = await fetch("/admin/send-test-email", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				credentials: "include",
-				body: JSON.stringify({ to, template })
+				body: JSON.stringify(body)
 			});
 			const data = await response.json().catch(() => ({}));
 			if (response.ok && data?.ok) {
-				setStatus("Test email sent.");
+				setStatus("Email sent.");
 			} else {
 				setStatus(data?.error || "Failed to send.", true);
 			}
@@ -634,6 +818,7 @@ async function loadEmailTemplates() {
 			{ name: "commentReceived", label: "Comment received" },
 			{ name: "commentReceivedDelegated", label: "Comment received (delegated)" },
 			{ name: "featureRequest", label: "Feature request" },
+			{ name: "featureRequestFeedback", label: "Feature Request Feedback" },
 			{ name: "passwordReset", label: "Password reset" },
 			{ name: "digestActivity", label: "Digest activity" },
 			{ name: "welcome", label: "Welcome" },
@@ -1338,7 +1523,7 @@ function handleAdminRouteChange(route) {
 			setupEmailsTabPersistence();
 			loadEmailSends();
 			loadEmailTemplates();
-			initEmailTestPanel();
+			initEmailSendPanel();
 			loadSettings();
 			break;
 		case "related":

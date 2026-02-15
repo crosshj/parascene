@@ -1,5 +1,6 @@
 import { formatDateTime, formatRelativeTime } from '../../shared/datetime.js';
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
+import { closeModalsAndNavigate } from '../../shared/navigation.js';
 
 const html = String.raw;
 
@@ -269,18 +270,47 @@ class AppModalNotifications extends HTMLElement {
 		content.innerHTML = this.notifications.map((notification) => {
 			const time = formatRelativeTime(notification.created_at);
 			const timeTitle = formatDateTime(notification.created_at);
+			const isCollapsed = notification.type === 'creation_activity' && (notification.count ?? 0) > 1;
+			const unread = notification.unread_count ?? 0;
+			const countText = isCollapsed
+				? (unread > 0 ? `${notification.count} notifications, ${unread} unread` : `${notification.count} notifications`)
+				: '';
+			const countLine = countText ? html`
+		<div class="notification-list-count">${countText}</div>
+      ` : '';
 			return html`
-      <button class="notification-list-item ${notification.acknowledged_at ? 'is-read' : 'is-unread'}" data-id="${notification.id}">
-        <div class="notification-list-title">${escapeHtml(notification.title || 'Notification')}</div>
-        <div class="notification-list-message">${escapeHtml(notification.message || '')}</div>
-        <div class="notification-list-time" title="${escapeHtml(timeTitle)}">${escapeHtml(time)}</div>
-      </button>
+	<button class="notification-list-item ${notification.acknowledged_at ? 'is-read' : 'is-unread'}"
+		data-id="${notification.id}">
+		<div class="notification-list-title">${escapeHtml(notification.title || 'Notification')}</div>
+		<div class="notification-list-message">${escapeHtml(notification.message || '')}</div>
+		${countLine}
+		<div class="notification-list-time" title="${escapeHtml(timeTitle)}">${escapeHtml(time)}</div>
+		<span class="notification-list-item-spinner" aria-hidden="true"></span>
+	</button>
     `}).join('');
 
 		content.querySelectorAll('.notification-list-item').forEach((item) => {
-			item.addEventListener('click', () => {
+			item.addEventListener('click', async () => {
 				const id = Number(item.getAttribute('data-id'));
-				if (id) {
+				const notification = id ? this.notifications.find((n) => n.id === id) : null;
+				const goDirect = notification &&
+					(notification.type === 'comment' || notification.type === 'tip' || notification.type === 'creation_activity') &&
+					typeof notification.link === 'string' && notification.link.trim();
+				if (goDirect) {
+					item.classList.add('is-loading');
+					item.setAttribute('aria-busy', 'true');
+					try {
+						await fetch('/api/notifications/acknowledge', {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+							body: new URLSearchParams({ id: String(notification.id) }),
+							credentials: 'include'
+						});
+					} catch {
+						// ignore
+					}
+					closeModalsAndNavigate(notification.link.trim());
+				} else if (id) {
 					this.openDetail(id);
 				}
 			});
@@ -321,19 +351,19 @@ class AppModalNotifications extends HTMLElement {
 		const timeTitle = formatDateTime(notification.created_at);
 
 		content.innerHTML = html`
-      <div class="notification-detail">
-        <div class="notification-detail-header">
-          <div class="notification-title">${escapeHtml(notification.title || 'Notification')}</div>
-        </div>
-        <div class="notification-message">${escapeHtml(notification.message || '')}</div>
-        <div class="notification-time" title="${escapeHtml(timeTitle)}">${escapeHtml(time)}</div>
-        <div class="notification-actions">
-          <button class="notification-action" type="button">View all notifications</button>
-          ${notification.link ? html`
-            <a class="notification-action is-primary" href="${escapeHtml(notification.link)}">Open related page</a>
-          ` : ''}
-        </div>
-      </div>
+	<div class="notification-detail">
+		<div class="notification-detail-header">
+			<div class="notification-title">${escapeHtml(notification.title || 'Notification')}</div>
+		</div>
+		<div class="notification-message">${escapeHtml(notification.message || '')}</div>
+		<div class="notification-time" title="${escapeHtml(timeTitle)}">${escapeHtml(time)}</div>
+		<div class="notification-actions">
+			<button class="notification-action" type="button">View all notifications</button>
+			${notification.link ? html`
+			<a class="notification-action is-primary" href="${escapeHtml(notification.link)}">Open related page</a>
+			` : ''}
+		</div>
+	</div>
     `;
 
 		const viewAllButton = this.shadowRoot.querySelector('.notification-actions .notification-action:not(.is-primary)');
@@ -527,6 +557,29 @@ class AppModalNotifications extends HTMLElement {
         .notification-list-item:last-child {
           border-bottom: none;
         }
+        .notification-list-item.is-loading {
+          pointer-events: none;
+          opacity: 0.85;
+        }
+        .notification-list-item-spinner {
+          display: none;
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          transform: translate(-50%, -50%);
+          width: 18px;
+          height: 18px;
+          border: 2px solid var(--border);
+          border-top-color: var(--accent);
+          border-radius: 50%;
+          animation: notification-item-spin 0.8s linear infinite;
+        }
+        .notification-list-item.is-loading .notification-list-item-spinner {
+          display: block;
+        }
+        @keyframes notification-item-spin {
+          to { transform: translate(-50%, -50%) rotate(360deg); }
+        }
         .notification-list-title {
           font-weight: 600;
           font-size: 0.95rem;
@@ -537,6 +590,12 @@ class AppModalNotifications extends HTMLElement {
           color: var(--text-muted);
           overflow-wrap: anywhere;
           word-break: break-word;
+        }
+        .notification-list-count {
+          font-size: 0.8rem;
+          color: var(--text-muted);
+          opacity: 0.85;
+          margin-top: 2px;
         }
         .notification-list-time {
           font-size: 0.85rem;

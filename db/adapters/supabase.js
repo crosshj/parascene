@@ -904,7 +904,7 @@ export function openDb() {
 				// Use service client to bypass RLS for backend operations
 				let query = serviceClient
 					.from(prefixedTable("notifications"))
-					.select("id, title, message, link, created_at, acknowledged_at")
+					.select("id, title, message, link, created_at, acknowledged_at, actor_user_id, type, target, meta")
 					.order("created_at", { ascending: false });
 				const { query: filteredQuery, hasFilter } = applyUserOrRoleFilter(
 					query,
@@ -926,6 +926,39 @@ export function openDb() {
 					throw error;
 				}
 				return data ?? [];
+			}
+		},
+		selectNotificationById: {
+			get: async (id, userId, role) => {
+				let query = serviceClient
+					.from(prefixedTable("notifications"))
+					.select("id, title, message, link, created_at, acknowledged_at, actor_user_id, type, target, meta")
+					.eq("id", id);
+				const { query: filteredQuery, hasFilter } = applyUserOrRoleFilter(query, userId, role);
+				if (!hasFilter) return undefined;
+				const { data, error } = await filteredQuery.maybeSingle();
+				if (error) throw error;
+				return data ?? undefined;
+			}
+		},
+		acknowledgeNotificationsForUserAndCreation: {
+			run: async (userId, role, creationId) => {
+				const linkPattern = `/creations/${creationId}`;
+				let query = serviceClient
+					.from(prefixedTable("notifications"))
+					.update({ acknowledged_at: new Date().toISOString() })
+					.is("acknowledged_at", null)
+					.eq("link", linkPattern);
+				if (userId != null && role != null) {
+					query = query.or(`user_id.eq.${userId},role.eq.${role}`);
+				} else if (userId != null) {
+					query = query.eq("user_id", userId);
+				} else {
+					query = query.eq("role", role);
+				}
+				const { data, error } = await query.select("id");
+				if (error) throw error;
+				return { changes: (data ?? []).length };
 			}
 		},
 		selectUnreadNotificationCount: {
@@ -1028,18 +1061,23 @@ export function openDb() {
 			}
 		},
 		insertNotification: {
-			run: async (userId, role, title, message, link) => {
+			run: async (userId, role, title, message, link, actor_user_id, type, target, meta) => {
 				// Use serviceClient to bypass RLS for backend operations
+				const payload = {
+					user_id: userId ?? null,
+					role: role ?? null,
+					title,
+					message,
+					link: link ?? null,
+					acknowledged_at: null
+				};
+				if (actor_user_id != null) payload.actor_user_id = actor_user_id;
+				if (type != null) payload.type = type;
+				if (target != null) payload.target = typeof target === "string" ? target : JSON.stringify(target);
+				if (meta != null) payload.meta = typeof meta === "object" ? meta : meta;
 				const { data, error } = await serviceClient
 					.from(prefixedTable("notifications"))
-					.insert({
-						user_id: userId ?? null,
-						role: role ?? null,
-						title,
-						message,
-						link: link ?? null,
-						acknowledged_at: null
-					})
+					.insert(payload)
 					.select("id")
 					.single();
 				if (error) throw error;

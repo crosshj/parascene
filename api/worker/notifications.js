@@ -2,7 +2,7 @@ import "dotenv/config";
 import { openDb } from "../../db/index.js";
 import { verifyQStashRequest } from "../../api_routes/utils/qstashVerification.js";
 import { sendTemplatedEmail } from "../../email/index.js";
-import { getBaseAppUrl } from "../../api_routes/utils/url.js";
+import { getBaseAppUrlForEmail } from "../../api_routes/utils/url.js";
 import { getEmailSettings, getEffectiveRecipient } from "../../api_routes/utils/emailSettings.js";
 import { markPreviousStepsCompleted } from "../../api_routes/utils/emailCampaignState.js";
 
@@ -100,7 +100,7 @@ async function runNotificationsCron({ queries }) {
 		if (!dryRun && process.env.RESEND_API_KEY && process.env.RESEND_SYSTEM_EMAIL) {
 			const to = getEffectiveRecipient(settings, email);
 			const recipientName = user?.display_name || user?.user_name || email.split("@")[0] || "there";
-			const feedUrl = getBaseAppUrl();
+			const feedUrl = getBaseAppUrlForEmail();
 
 			// Get unread notifications to filter digest to only show creations with unread notifications
 			const unreadNotifications = await (queries.selectNotificationsForUser?.all(userId, user?.role) ?? []);
@@ -260,7 +260,7 @@ async function runNotificationsCron({ queries }) {
 				const recipientName = user?.display_name || user?.user_name || email.split("@")[0] || "there";
 				const creationTitle = row?.title && String(row.title).trim() ? String(row.title).trim() : "Untitled";
 				const creationId = row?.creation_id;
-				const creationUrl = creationId != null ? `${getBaseAppUrl()}/creations/${creationId}` : getBaseAppUrl();
+				const creationUrl = creationId != null ? `${getBaseAppUrlForEmail()}/creations/${creationId}` : getBaseAppUrlForEmail();
 				await sendTemplatedEmail({
 					to,
 					template: "creationHighlight",

@@ -111,11 +111,16 @@ CREATE TABLE IF NOT EXISTS prsn_notifications (
   title text NOT NULL,
   message text NOT NULL,
   link text,
+  actor_user_id bigint REFERENCES prsn_users(id),
+  type text,
+  target text,
+  meta jsonb,
   created_at timestamptz NOT NULL DEFAULT now(),
   acknowledged_at timestamptz
 );
 ALTER TABLE prsn_notifications ENABLE ROW LEVEL SECURITY;
-COMMENT ON TABLE prsn_notifications IS 'Parascene: user notifications, can be scoped by user_id or role. RLS enabled without policies - only service role can access. All access controlled via API layer.';
+COMMENT ON TABLE prsn_notifications IS 'Parascene: user notifications, can be scoped by user_id or role. When type/actor/target/meta are set, message and link are resolved at read time from type. RLS enabled without policies - only service role can access. All access controlled via API layer.';
+
 
 
 -- Email digest and engagement tracking

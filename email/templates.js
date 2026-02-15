@@ -1,4 +1,4 @@
-import { getBaseAppUrl } from "../api_routes/utils/url.js";
+import { getBaseAppUrlForEmail } from "../api_routes/utils/url.js";
 
 const html = String.raw;
 
@@ -44,9 +44,9 @@ function renderImpersonationBar({ originalRecipient, reason } = {}) {
 
 // Base email layout function
 // ctaText: Text for the call-to-action button (e.g., "Visit Us", "View the creation")
-// ctaUrl: Full URL for the CTA link (default getBaseAppUrl(); or pass e.g. getBaseAppUrl() + "/creations/123")
+// ctaUrl: Full URL for the CTA link (default getBaseAppUrlForEmail(); or pass e.g. getBaseAppUrlForEmail() + "/creations/123")
 //         Defaults to base URL (homepage) if not provided
-function baseEmailLayout({ preheader, title, bodyHtml, ctaText, ctaUrl = getBaseAppUrl(), footerText, topNotice, suppressCta = false }) {
+function baseEmailLayout({ preheader, title, bodyHtml, ctaText, ctaUrl = getBaseAppUrlForEmail(), footerText, topNotice, suppressCta = false }) {
 	const safePreheader = escapeHtml(preheader || "");
 	const safeTitle = escapeHtml(title || "");
 	const safeFooter = escapeHtml(footerText || `© ${new Date().getFullYear()} ${BRAND_NAME}. All rights reserved.`);
@@ -147,7 +147,7 @@ export function renderHelloFromParascene({ recipientName = "there" } = {}) {
 	<p style="margin:0 0 12px;">Hi ${safeName},</p>
 	<p style="margin:0 0 12px;">
 		Thanks for being part of parascene. We’re building a place to turn prompts into
-		scenes that feel cinematic and personal.
+		creations that feel cinematic and personal.
 	</p>
 	<p style="margin:0 0 12px;">
 		If you want a quick walkthrough or dive straight into creation, we've got you covered.
@@ -160,13 +160,13 @@ export function renderHelloFromParascene({ recipientName = "there" } = {}) {
 		title: subject,
 		bodyHtml,
 		ctaText: "Visit Us",
-		ctaUrl: getBaseAppUrl(),
+		ctaUrl: getBaseAppUrlForEmail(),
 		footerText: "You’re receiving this email because you’re connected to parascene."
 	});
 	const text = [
 		`Hi ${recipientName},`,
 		"",
-		"Thanks for being part of parascene. We’re building a place to turn prompts into scenes that feel cinematic and personal.",
+		"Thanks for being part of parascene. We’re building a place to turn prompts into creations that feel cinematic and personal.",
 		"",
 		"If you want a quick walkthrough or dive straight into creation, we've got you covered.",
 		"",
@@ -220,14 +220,14 @@ function truncateMiddle(value, max = 240) {
 }
 
 // Render comment received email template
-// creationUrl: Full URL to the specific creation (e.g. getBaseAppUrl() + "/creations/123")
+// creationUrl: Full URL to the specific creation (e.g. getBaseAppUrlForEmail() + "/creations/123")
 //              Defaults to base URL (homepage) if not provided
 export function renderCommentReceived({
 	recipientName = "there",
 	commenterName = "Someone",
 	commentText = "",
 	creationTitle = "",
-	creationUrl = getBaseAppUrl(), // Full URL to creation, falls back to homepage if not provided
+	creationUrl = getBaseAppUrlForEmail(), // Full URL to creation, falls back to homepage if not provided
 	impersonation = null
 } = {}) {
 	const safeRecipient = escapeHtml(recipientName);
@@ -452,6 +452,83 @@ export function renderFeatureRequest({
 	return { subject, html: emailHtml, text };
 }
 
+// Response email sent by admin to the user who submitted a feature request.
+export function renderFeatureRequestFeedback({
+	recipientName = "there",
+	originalRequest = "",
+	message = ""
+} = {}) {
+	const safeName = escapeHtml(recipientName);
+	// Escape first so user content is safe; then turn newlines into <br /> (so they render as line breaks, not literal tags)
+	const safeOriginal = escapeHtml(String(originalRequest || "").trim()).replace(/\n/g, "<br />");
+	const safeMessage = escapeHtml(String(message || "")).replace(/\n/g, "<br />");
+
+	const subject = "Re: Your feature request";
+	const preheader = "A response from the parascene team about your feature request.";
+
+	const bodyHtml = html`
+	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">Hi ${safeName},</p>
+	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">
+		Thanks for taking the time to send us your feature request. Here’s your original request and our reply:
+	</p>
+	${safeOriginal ? html`
+	<div
+		style="margin:16px 0 0; padding:14px 16px; border:1px solid #e2e8f0; border-radius:12px; background:#f1f5f9; font-family:Arial, Helvetica, sans-serif;">
+		<div style="color:#475569; font-size:13px; margin:0 0 6px; font-family:Arial, Helvetica, sans-serif;">Your request
+		</div>
+		<div style="color:#0f172a; font-size:15px; line-height:1.7; font-family:Arial, Helvetica, sans-serif;">
+			${safeOriginal}
+		</div>
+	</div>
+	` : ""}
+	<div
+		style="margin:16px 0 0; padding:14px 16px; border:1px solid #e2e8f0; border-radius:12px; background:#f8fafc; font-family:Arial, Helvetica, sans-serif;">
+		<div style="color:#475569; font-size:13px; margin:0 0 6px; font-family:Arial, Helvetica, sans-serif;">Our reply
+		</div>
+		<div style="color:#0f172a; font-size:15px; line-height:1.7; font-family:Arial, Helvetica, sans-serif;">
+			${safeMessage}
+		</div>
+	</div>
+	<p style="margin:16px 0 0; font-family:Arial, Helvetica, sans-serif;">
+		If you have more ideas or questions, just reply to this email or send another feature request from the app.
+	</p>
+	<p style="margin:0; font-family:Arial, Helvetica, sans-serif;">— The parascene team</p>
+	`;
+
+	const emailHtml = baseEmailLayout({
+		preheader,
+		title: subject,
+		bodyHtml,
+		ctaText: "Visit parascene",
+		ctaUrl: getBaseAppUrlForEmail(),
+		footerText: "You're receiving this because you submitted a feature request on parascene."
+	});
+
+	const textLines = [
+		`Hi ${recipientName},`,
+		"",
+		"Thanks for taking the time to send us your feature request. Here's your original request and our reply:",
+		""
+	];
+	if (String(originalRequest || "").trim()) {
+		textLines.push("Your request:", "", String(originalRequest || "").trim(), "");
+	}
+	textLines.push(
+		"Our reply:",
+		"",
+		String(message || "").trim(),
+		"",
+		"If you have more ideas or questions, just reply to this email or send another feature request from the app.",
+		"",
+		"— The parascene team",
+		"",
+		`Visit parascene: ${getBaseAppUrlForEmail()}`
+	);
+	const text = textLines.join("\n");
+
+	return { subject, html: emailHtml, text };
+}
+
 function renderActivityList(items, sectionTitle) {
 	const list = Array.isArray(items) ? items : [];
 	if (list.length === 0) return "";
@@ -477,7 +554,7 @@ function renderActivityList(items, sectionTitle) {
 export function renderDigestActivity({
 	recipientName = "there",
 	activitySummary = "You have new activity.",
-	feedUrl = getBaseAppUrl(),
+	feedUrl = getBaseAppUrlForEmail(),
 	activityItems = [],
 	otherCreationsActivityItems = []
 } = {}) {
@@ -577,19 +654,19 @@ export function renderWelcome({ recipientName = "there" } = {}) {
 		title: subject,
 		bodyHtml,
 		ctaText: "Go to parascene",
-		ctaUrl: getBaseAppUrl(),
+		ctaUrl: getBaseAppUrlForEmail(),
 		footerText: "You're receiving this because you signed up for parascene."
 	});
 	const text = [
 		`Hi ${recipientName},`,
 		"",
-		"Thanks for joining parascene. We're here to help you turn prompts into scenes that feel cinematic and personal.",
+		"Thanks for joining parascene. We're here to help you turn prompts into creations that feel cinematic and personal.",
 		"",
 		"Create your first scene, explore what others have made, or just say hello in the community.",
 		"",
 		"— The parascene team",
 		"",
-		`Go to parascene: ${getBaseAppUrl()}`
+		`Go to parascene: ${getBaseAppUrlForEmail()}`
 	].join("\n");
 	return { subject, html: emailHtml, text };
 }
@@ -609,7 +686,7 @@ export function renderFirstCreationNudge({ recipientName = "there" } = {}) {
 	</p>
 	<p style="margin:0; font-family:Arial, Helvetica, sans-serif;">— The parascene team</p>
   `;
-	const createUrl = `${getBaseAppUrl()}/create`;
+	const createUrl = `${getBaseAppUrlForEmail()}/create`;
 	const emailHtml = baseEmailLayout({
 		preheader,
 		title: subject,
@@ -639,8 +716,8 @@ export function renderReengagement({ recipientName = "there" } = {}) {
 	const bodyHtml = html`
 	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">Hi ${safeName},</p>
 	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">
-		It's been a while since we've seen you. Your scenes and the community are still here whenever you're ready to drop
-		back in.
+		It's been a while since we've seen you. Your creations and the community are still here whenever you're ready to
+		drop back in.
 	</p>
 	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">
 		Create something new, see what others have been making, or just say hello.
@@ -652,19 +729,19 @@ export function renderReengagement({ recipientName = "there" } = {}) {
 		title: subject,
 		bodyHtml,
 		ctaText: "Visit parascene",
-		ctaUrl: getBaseAppUrl(),
+		ctaUrl: getBaseAppUrlForEmail(),
 		footerText: "You're receiving this because you have a parascene account."
 	});
 	const text = [
 		`Hi ${recipientName},`,
 		"",
-		"It's been a while since we've seen you. Your scenes and the community are still here whenever you're ready to drop back in.",
+		"It's been a while since we've seen you. Your creations and the community are still here whenever you're ready to drop back in.",
 		"",
 		"Create something new, see what others have been making, or just say hello.",
 		"",
 		"— The parascene team",
 		"",
-		`Visit parascene: ${getBaseAppUrl()}`
+		`Visit parascene: ${getBaseAppUrlForEmail()}`
 	].join("\n");
 	return { subject, html: emailHtml, text };
 }
@@ -672,7 +749,7 @@ export function renderReengagement({ recipientName = "there" } = {}) {
 export function renderCreationHighlight({
 	recipientName = "there",
 	creationTitle = "your creation",
-	creationUrl = getBaseAppUrl(),
+	creationUrl = getBaseAppUrlForEmail(),
 	commentCount = 1
 } = {}) {
 	const safeName = escapeHtml(recipientName);
@@ -718,6 +795,7 @@ export const templates = {
 	helloFromParascene: renderHelloFromParascene,
 	commentReceived: renderCommentReceived,
 	featureRequest: renderFeatureRequest,
+	featureRequestFeedback: renderFeatureRequestFeedback,
 	passwordReset: renderPasswordReset,
 	digestActivity: renderDigestActivity,
 	welcome: renderWelcome,

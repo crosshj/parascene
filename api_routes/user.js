@@ -17,24 +17,14 @@ import {
 	setAuthCookie,
 	shouldLogSession
 } from "./auth.js";
-import { getBaseAppUrl, getThumbnailUrl } from "./utils/url.js";
+import { getBaseAppUrl, getBaseAppUrlForEmail, getThumbnailUrl } from "./utils/url.js";
 import { computeWelcome, WELCOME_VERSION } from "./utils/welcome.js";
+import { resolveNotificationDisplay } from "./utils/notificationResolver.js";
+import { collapseNotificationsByCreation, getCreationIdFromRow } from "./utils/notificationCollapse.js";
 
 export default function createProfileRoutes({ queries }) {
 	const router = express.Router();
 
-	function getTipperDisplayName(user) {
-		const name =
-			typeof user?.name === "string"
-				? user.name.trim()
-				: typeof user?.display_name === "string"
-					? user.display_name.trim()
-					: "";
-		if (name) return name;
-		const email = String(user?.email || "").trim();
-		const localPart = email.includes("@") ? email.split("@")[0] : email;
-		return `@${localPart || "user"}`;
-	}
 
 	function sanitizeReturnUrl(raw) {
 		const value = typeof raw === "string" ? raw.trim() : "";
@@ -380,7 +370,7 @@ export default function createProfileRoutes({ queries }) {
 			try {
 				await queries.setPasswordResetToken.run(user.id, tokenHash, expiresAt);
 				const resetUrl =
-					`${getBaseAppUrl()}/auth?rt=` +
+					`${getBaseAppUrlForEmail()}/auth?rt=` +
 					encodeURIComponent(rawToken) +
 					"#reset";
 				const recipientName =
@@ -1043,10 +1033,38 @@ export default function createProfileRoutes({ queries }) {
 				return res.status(404).json({ error: "User not found" });
 			}
 
-			const notifications = await queries.selectNotificationsForUser.all(
+			const rows = await queries.selectNotificationsForUser.all(
 				user.id,
 				user.role
 			);
+			const resolved = await Promise.all(
+				rows.map(async (row) => {
+					const r = typeof row?.type === "string" && row.type.trim()
+						? await resolveNotificationDisplay(row, queries)
+						: null;
+					let creationTitle = r?.creation_title ?? null;
+					if (!creationTitle && row?.meta != null) {
+						try {
+							const meta = typeof row.meta === "string" ? JSON.parse(row.meta) : row.meta;
+							creationTitle = typeof meta?.creation_title === "string" ? meta.creation_title.trim() : null;
+						} catch {
+							// ignore
+						}
+					}
+					return {
+						id: row.id,
+						title: r?.title ?? row.title ?? "Notification",
+						message: r?.message ?? row.message ?? "",
+						link: r?.link ?? row.link ?? null,
+						type: row.type ?? null,
+						created_at: row.created_at,
+						acknowledged_at: row.acknowledged_at,
+						creation_id: getCreationIdFromRow(row),
+						creation_title: creationTitle || null
+					};
+				})
+			);
+			const notifications = collapseNotificationsByCreation(resolved);
 			return res.json({ notifications });
 		} catch (error) {
 			// console.error("Error loading notifications:", error);
@@ -1092,14 +1110,39 @@ export default function createProfileRoutes({ queries }) {
 				return res.status(400).json({ error: "Notification id required" });
 			}
 
-			const result = await queries.acknowledgeNotificationById.run(
-				id,
-				user.id,
-				user.role
-			);
-			return res.json({ ok: true, updated: result.changes });
+			// When the notification is a comment/tip for a creation, we mark all notifications for that creation
+			// as read (no per-sub-item state; the collapsed row is one unit).
+			let result;
+			try {
+				if (queries.selectNotificationById?.get && queries.acknowledgeNotificationsForUserAndCreation?.run) {
+					const row = await queries.selectNotificationById.get(id, user.id, user.role);
+					if (!row) {
+						return res.status(404).json({ error: "Notification not found" });
+					}
+					const creationId = getCreationIdFromRow(row);
+					const type = typeof row.type === "string" ? row.type.trim() : null;
+					const collapseTypes = new Set(["comment", "comment_thread", "tip"]);
+					const acknowledgeByCreation = creationId != null && type && collapseTypes.has(type);
+					result = acknowledgeByCreation
+						? await queries.acknowledgeNotificationsForUserAndCreation.run(user.id, user.role, creationId)
+						: await queries.acknowledgeNotificationById.run(id, user.id, user.role);
+				} else {
+					result = await queries.acknowledgeNotificationById.run(id, user.id, user.role);
+				}
+			} catch (ackError) {
+				// Fallback: e.g. missing columns on older DB, or adapter quirk
+				if (process.env.NODE_ENV !== "production") {
+					console.error("Notification ack (by-creation path) failed, falling back to single ack:", ackError?.message ?? ackError);
+				}
+				result = await queries.acknowledgeNotificationById.run(id, user.id, user.role);
+			}
+
+			const updated = result?.changes ?? (typeof result?.updated === "number" ? result.updated : 0);
+			return res.json({ ok: true, updated });
 		} catch (error) {
-			// console.error("Error acknowledging notification:", error);
+			if (process.env.NODE_ENV !== "production") {
+				console.error("Error acknowledging notification:", error?.message ?? error);
+			}
 			return res.status(500).json({ error: "Internal server error" });
 		}
 	});
@@ -1250,6 +1293,7 @@ export default function createProfileRoutes({ queries }) {
 			if (!sender) {
 				return res.status(404).json({ error: "User not found" });
 			}
+			const senderProfile = await queries.selectUserProfileByUserId?.get(sender.id) ?? null;
 
 			const recipient = await queries.selectUserById.get(toUserId);
 			if (!recipient) {
@@ -1298,14 +1342,15 @@ export default function createProfileRoutes({ queries }) {
 			// Best-effort notification
 			try {
 				if (queries.insertNotification?.run) {
-					const tipperName = getTipperDisplayName(sender);
 					const title = "You received a tip";
-					const notifMessage = `${tipperName} tipped you ${amount.toFixed(1)} credits.`;
+					const notifMessage = `Someone tipped you ${amount.toFixed(1)} credits.`;
 					const link =
 						createdImageId != null
 							? `/creations/${encodeURIComponent(String(createdImageId))}`
-							: null;
-					await queries.insertNotification.run(toUserId, null, title, notifMessage, link);
+							: "/";
+					const target = createdImageId != null ? { creation_id: createdImageId } : {};
+					const meta = { amount };
+					await queries.insertNotification.run(toUserId, null, title, notifMessage, link, sender.id, "tip", target, meta);
 				}
 			} catch (error) {
 				// console.error("Failed to insert tip notification:", error);

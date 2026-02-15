@@ -42,29 +42,25 @@
 			<div id="emails-page" data-route-content="emails" class="route-content admin-emails-page">
 				<h3>Emails</h3>
 				<app-tabs>
-					<tab data-id="sends" label="Sends" default>
+					<tab data-id="sends" label="Automated Sends" default>
 						<div id="email-sends-container" class="admin-emails-sends-panel"></div>
 					</tab>
 					<tab data-id="templates" label="Templates">
 						<div id="email-templates-container" class="admin-emails-templates-panel"></div>
 					</tab>
-					<tab data-id="test" label="Test">
-						<div id="email-test-container" class="admin-emails-test-panel">
-							<p class="admin-email-test-intro">Send a test email to verify templates and delivery.</p>
-							<form id="email-test-form" class="admin-email-test-form">
+					<tab data-id="send" label="Manual Send">
+						<div id="email-send-container" class="admin-emails-send-panel">
+							<p class="admin-email-send-intro">Send a test email to verify templates and delivery, or send a Feature Request response.</p>
+							<form id="email-send-form" class="admin-email-send-form">
 								<section class="admin-settings-section">
 									<div class="admin-settings-field">
-										<label class="admin-settings-label" for="email-test-to">To</label>
-										<input type="email" id="email-test-to" name="to" class="admin-settings-input"
-											placeholder="you@example.com" required />
-									</div>
-									<div class="admin-settings-field">
-										<label class="admin-settings-label" for="email-test-template">Template</label>
-										<select id="email-test-template" name="template" class="admin-settings-input" required>
+										<label class="admin-settings-label" for="email-send-template">Template</label>
+										<select id="email-send-template" name="template" class="admin-settings-input" required>
 											<option value="helloFromParascene">Hello from parascene</option>
 											<option value="commentReceived">Comment received</option>
 											<option value="commentReceivedDelegated">Comment received (delegated)</option>
 											<option value="featureRequest">Feature request</option>
+											<option value="featureRequestFeedback">Feature Request Feedback</option>
 											<option value="passwordReset">Password reset</option>
 											<option value="digestActivity">Digest activity</option>
 											<option value="welcome">Welcome</option>
@@ -73,15 +69,39 @@
 											<option value="creationHighlight">Creation highlight</option>
 										</select>
 									</div>
+									<div class="admin-settings-field">
+										<label class="admin-settings-label" for="email-send-recipient">Recipient</label>
+										<select id="email-send-recipient" name="recipient" class="admin-settings-input" aria-describedby="email-send-recipient-desc">
+											<option value="">— Select user —</option>
+											<option value="manual" selected>Enter manually…</option>
+										</select>
+										<p id="email-send-recipient-desc" class="admin-detail">Choose a user from the list or enter an email and name manually.</p>
+									</div>
+									<div id="email-send-recipient-selected" class="admin-email-send-recipient-selected" hidden>
+										<p class="admin-email-send-to-display" aria-live="polite"></p>
+									</div>
+									<div id="email-send-recipient-manual" class="admin-settings-field" hidden>
+										<label class="admin-settings-label" for="email-send-to">To</label>
+										<input type="email" id="email-send-to" name="to" class="admin-settings-input"
+											placeholder="you@example.com" />
+										<label class="admin-settings-label" for="email-send-feedback-name">Recipient name</label>
+										<input type="text" id="email-send-feedback-name" name="recipientName" class="admin-settings-input" placeholder="e.g. Alex" />
+									</div>
+									<div id="email-send-feedback-field" class="admin-settings-field" hidden>
+										<label class="admin-settings-label" for="email-send-feedback-original">Original feature request</label>
+										<textarea id="email-send-feedback-original" name="originalRequest" class="admin-settings-input admin-email-send-textarea" data-autogrow rows="8" placeholder="Paste or type the original feature request…"></textarea>
+										<label class="admin-settings-label" for="email-send-feedback-message">Reply</label>
+										<textarea id="email-send-feedback-message" name="message" class="admin-settings-input admin-email-send-textarea" data-autogrow rows="8" placeholder="Type your response to the feature requester…"></textarea>
+									</div>
 									<div class="admin-settings-actions">
-										<button type="submit" id="email-test-submit" class="btn-primary admin-settings-save">
-											<span class="admin-settings-save-label">Send test email</span>
+										<button type="submit" id="email-send-submit" class="btn-primary admin-settings-save">
+											<span class="admin-settings-save-label">Send email</span>
 											<span class="admin-settings-save-spinner" aria-hidden="true"></span>
 										</button>
 									</div>
 								</section>
 							</form>
-							<div id="email-test-status" class="admin-email-test-status" role="alert" aria-live="polite"></div>
+							<div id="email-send-status" class="admin-email-send-status" role="alert" aria-live="polite"></div>
 						</div>
 					</tab>
 					<tab data-id="settings" label="Settings">

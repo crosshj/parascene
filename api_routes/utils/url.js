@@ -15,6 +15,20 @@ export function getBaseAppUrl() {
 	return `http://localhost:${port}`;
 }
 
+/** Base URL for links in emails. Never returns localhost; use APP_ORIGIN or DEFAULT_APP_ORIGIN. */
+export function getBaseAppUrlForEmail() {
+	const base = getBaseAppUrl();
+	try {
+		const u = new URL(base);
+		if (u.hostname === "localhost" || u.hostname === "127.0.0.1") {
+			return process.env.APP_ORIGIN ? process.env.APP_ORIGIN.replace(/\/$/, "") : DEFAULT_APP_ORIGIN;
+		}
+		return base;
+	} catch {
+		return DEFAULT_APP_ORIGIN;
+	}
+}
+
 export function getThumbnailUrl(url) {
   if (!url) return url;
   try {

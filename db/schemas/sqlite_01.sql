@@ -99,10 +99,20 @@ CREATE TABLE IF NOT EXISTS notifications (
   title TEXT NOT NULL,
   message TEXT NOT NULL,
   link TEXT,
+  actor_user_id INTEGER,
+  type TEXT,
+  target TEXT,
+  meta TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   acknowledged_at TEXT,
-  FOREIGN KEY (user_id) REFERENCES users(id)
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (actor_user_id) REFERENCES users(id)
 );
+-- For existing SQLite DBs, run:
+-- ALTER TABLE notifications ADD COLUMN actor_user_id INTEGER;
+-- ALTER TABLE notifications ADD COLUMN type TEXT;
+-- ALTER TABLE notifications ADD COLUMN target TEXT;
+-- ALTER TABLE notifications ADD COLUMN meta TEXT;
 
 CREATE TABLE IF NOT EXISTS email_sends (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -57,13 +57,6 @@ function normalizeOffset(raw) {
 	return Math.max(0, n);
 }
 
-function getUserDisplayName(user) {
-	const name = typeof user?.name === "string" ? user.name.trim() : "";
-	if (name) return name;
-	const email = String(user?.email || "").trim();
-	const localPart = email.includes("@") ? email.split("@")[0] : email;
-	return localPart || "Someone";
-}
 
 export default function createCommentsRoutes({ queries }) {
 	const router = express.Router();
@@ -191,18 +184,19 @@ export default function createCommentsRoutes({ queries }) {
 		try {
 			if (queries.insertNotification?.run) {
 				const commenterId = Number(user.id);
-				const commenterName = getUserDisplayName(user);
 				const creationTitle = typeof image?.title === "string" ? image.title.trim() : "";
 				const title = "New comment";
 				const link = `/creations/${encodeURIComponent(String(imageId))}`;
+				const target = { creation_id: imageId };
+				const meta = creationTitle ? { creation_title: creationTitle } : {};
 
 				// Notify creation owner when someone else comments (so they get digest / in-app).
 				const ownerUserId = Number(image?.user_id);
 				if (Number.isFinite(ownerUserId) && ownerUserId > 0 && ownerUserId !== commenterId) {
 					const message = creationTitle
-						? `${commenterName} commented on “${creationTitle}”.`
-						: `${commenterName} commented on your creation.`;
-					await queries.insertNotification.run(ownerUserId, null, title, message, link);
+						? `Someone commented on “${creationTitle}”.`
+						: `Someone commented on your creation.`;
+					await queries.insertNotification.run(ownerUserId, null, title, message, link, commenterId, "comment", target, meta);
 				}
 
 				// Notify prior commenters (excluding current commenter and owner, to avoid duplicate).
@@ -216,11 +210,11 @@ export default function createCommentsRoutes({ queries }) {
 
 					if (recipientIds.length > 0) {
 						const message = creationTitle
-							? `${commenterName} commented on “${creationTitle}”.`
-							: `${commenterName} commented on a creation you commented on.`;
+							? `Someone commented on “${creationTitle}”.`
+							: `Someone commented on a creation you commented on.`;
 
 						for (const toUserId of recipientIds) {
-							await queries.insertNotification.run(toUserId, null, title, message, link);
+							await queries.insertNotification.run(toUserId, null, title, message, link, commenterId, "comment_thread", target, meta);
 						}
 					}
 				}

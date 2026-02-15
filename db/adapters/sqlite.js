@@ -819,12 +819,38 @@ export async function openDb() {
 		selectNotificationsForUser: {
 			all: async (userId, role) => {
 				const stmt = db.prepare(
-					`SELECT id, title, message, link, created_at, acknowledged_at
+					`SELECT id, title, message, link, created_at, acknowledged_at,
+            actor_user_id, type, target, meta
            FROM notifications
            WHERE (user_id = ? OR role = ?)
            ORDER BY created_at DESC`
 				);
 				return Promise.resolve(stmt.all(userId, role));
+			}
+		},
+		selectNotificationById: {
+			get: async (id, userId, role) => {
+				const stmt = db.prepare(
+					`SELECT id, title, message, link, created_at, acknowledged_at,
+            actor_user_id, type, target, meta
+           FROM notifications
+           WHERE id = ? AND (user_id = ? OR role = ?)`
+				);
+				return Promise.resolve(stmt.get(id, userId, role));
+			}
+		},
+		acknowledgeNotificationsForUserAndCreation: {
+			run: async (userId, role, creationId) => {
+				const linkPattern = `/creations/${creationId}`;
+				const stmt = db.prepare(
+					`UPDATE notifications
+           SET acknowledged_at = datetime('now')
+           WHERE acknowledged_at IS NULL
+           AND (user_id = ? OR role = ?)
+           AND link = ?`
+				);
+				const result = stmt.run(userId, role, linkPattern);
+				return Promise.resolve({ changes: result.changes });
 			}
 		},
 		selectUnreadNotificationCount: {
@@ -864,17 +890,23 @@ export async function openDb() {
 			}
 		},
 		insertNotification: {
-			run: async (userId, role, title, message, link) => {
+			run: async (userId, role, title, message, link, actor_user_id, type, target, meta) => {
 				const stmt = db.prepare(
-					`INSERT INTO notifications (user_id, role, title, message, link)
-           VALUES (?, ?, ?, ?, ?)`
+					`INSERT INTO notifications (user_id, role, title, message, link, actor_user_id, type, target, meta)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
 				);
+				const metaText = meta != null && typeof meta !== "string" ? JSON.stringify(meta) : (meta ?? null);
+				const targetText = target != null && typeof target !== "string" ? JSON.stringify(target) : (target ?? null);
 				const result = stmt.run(
 					userId ?? null,
 					role ?? null,
 					title,
 					message,
-					link ?? null
+					link ?? null,
+					actor_user_id ?? null,
+					type ?? null,
+					targetText,
+					metaText
 				);
 				return Promise.resolve({
 					insertId: result.lastInsertRowid,

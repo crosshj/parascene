@@ -1,7 +1,7 @@
 import express from "express";
 import { buildProviderHeaders, resolveProviderAuthToken } from "./utils/providerAuth.js";
 import { getEmailSettings } from "./utils/emailSettings.js";
-import { getBaseAppUrl } from "./utils/url.js";
+import { getBaseAppUrlForEmail } from "./utils/url.js";
 import { RELATED_PARAM_KEYS } from "../db/adapters/relatedParams.js";
 
 export default function createAdminRoutes({ queries, storage }) {
@@ -461,6 +461,7 @@ export default function createAdminRoutes({ queries, storage }) {
 		"commentReceived",
 		"commentReceivedDelegated",
 		"featureRequest",
+		"featureRequestFeedback",
 		"passwordReset",
 		"digestActivity",
 		"welcome",
@@ -470,7 +471,7 @@ export default function createAdminRoutes({ queries, storage }) {
 	];
 
 	function getEmailTemplateSampleData() {
-		const baseUrl = getBaseAppUrl();
+		const baseUrl = getBaseAppUrlForEmail();
 		return {
 			helloFromParascene: {
 				recipientName: "Alex"
@@ -527,6 +528,11 @@ export default function createAdminRoutes({ queries, storage }) {
 					devicePixelRatio: 2
 				},
 				submittedAt: new Date().toISOString()
+			},
+			featureRequestFeedback: {
+				recipientName: "Alex",
+				originalRequest: "It would be great to have dark mode support. The current light theme is nice, but a dark option would be perfect for late-night browsing.",
+				message: "We've added your idea to our roadmap. We'll reach out when we have something to share."
 			},
 			passwordReset: {
 				recipientName: "Alex",
@@ -608,9 +614,22 @@ export default function createAdminRoutes({ queries, storage }) {
 		}
 
 		const sampleData = getEmailTemplateSampleData();
-		const data = sampleData[template];
+		let data = sampleData[template];
 		if (!data) {
 			return res.status(400).json({ error: "Template has no sample data." });
+		}
+
+		// Feature Request Feedback: use admin-provided fields (prefer body over sample when provided)
+		if (template === "featureRequestFeedback" && req.body) {
+			if (req.body.recipientName !== undefined) {
+				data.recipientName = typeof req.body.recipientName === "string" ? req.body.recipientName.trim() || data.recipientName : data.recipientName;
+			}
+			if (req.body.originalRequest !== undefined) {
+				data.originalRequest = typeof req.body.originalRequest === "string" ? req.body.originalRequest.trim() : "";
+			}
+			if (req.body.message !== undefined) {
+				data.message = typeof req.body.message === "string" ? req.body.message.trim() : "";
+			}
 		}
 
 		let actualTemplateName = template;
