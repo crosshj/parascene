@@ -1,92 +1,82 @@
 [
   {
-    "name": "Abuse protection (anon generate)",
-    "description": "Rate limiting and abuse controls for anonymous/try generation only (e.g. by IP/cookie, caps).",
-    "cost": 15,
-    "impact": 72,
+    "name": "User Onboard++",
+    "description": "have user generate their avatar ASAP in user flow",
+    "cost": 63,
+    "impact": 100,
     "dependsOn": [],
-    "starred": false
+    "starred": true
   },
   {
-    "name": "Invite credits",
-    "description": "Grant starter credits on invite acceptance; record inviter and source.",
-    "cost": 1,
-    "impact": 67,
+    "name": "Transition Anonymous Generations",
+    "description": "creation that user generates pre-signup transition to post-sign-up account",
+    "cost": 73,
+    "impact": 100,
+    "dependsOn": [],
+    "starred": true
+  },
+  {
+    "name": "Abuse protection (anon generate)",
+    "description": "Rate limiting and abuse controls for anonymous/try generation only (e.g. by IP/cookie, caps).",
+    "cost": 10,
+    "impact": 47,
     "dependsOn": [],
     "starred": false
   },
   {
     "name": "Share method QR Code",
     "description": "Add QR code as a share option so users can share a link via scannable QR (e.g. in share modal).",
-    "cost": 25,
-    "impact": 70,
+    "cost": 23,
+    "impact": 41,
     "dependsOn": [],
     "starred": false
   },
   {
     "name": "Landing: community creations images",
     "description": "Show example or featured community creations to anonymous visitors (no login).",
-    "cost": 25,
-    "impact": 68,
+    "cost": 24,
+    "impact": 35,
     "dependsOn": [],
     "starred": false
   },
   {
+    "name": "pgvector",
+    "description": "add semantic relatedness",
+    "cost": 89,
+    "impact": 100,
+    "dependsOn": [],
+    "starred": true
+  },
+  {
     "name": "Login with Username",
     "description": "also, add ability to change email",
-    "cost": 24,
-    "impact": 64,
+    "cost": 29,
+    "impact": 27,
     "dependsOn": [],
     "starred": false
   },
   {
     "name": "\"delete\" actually just marks the image unavailable",
     "description": "can still be viewed by admin",
-    "cost": 10,
-    "impact": 50,
-    "dependsOn": [],
-    "starred": false
-  },
-  {
-    "name": "Expose Stats",
-    "description": "Todo list, User Activity, Creation Relationships, etc",
-    "cost": 57,
-    "impact": 69,
+    "cost": 1,
+    "impact": 1,
     "dependsOn": [],
     "starred": false
   },
   {
     "name": "Join from Share pays out",
     "description": "The original creator gets some credits.\nThe sharer gets credits.\nWhat to do about mutated creations?",
-    "cost": 70,
-    "impact": 80,
+    "cost": 100,
+    "impact": 66,
     "dependsOn": [],
     "starred": false
   },
   {
     "name": "Lineage shows children (graph view)",
     "description": "Lineage view shows children (derivatives/remixes) and a graph visualization.",
-    "cost": 60,
-    "impact": 55,
+    "cost": 78,
+    "impact": 15,
     "dependsOn": [],
-    "starred": false
-  },
-  {
-    "name": "Server boosts",
-    "description": "Server-scoped boosts increase owner's credit yield with caps, no discovery lift.",
-    "cost": 54,
-    "impact": 1,
-    "dependsOn": [],
-    "starred": false
-  },
-  {
-    "name": "Invites & redemption",
-    "description": "Optional invite welcome flow via email or shareable token, with stored invite context.",
-    "cost": 100,
-    "impact": 87,
-    "dependsOn": [
-      "Invite credits"
-    ],
     "starred": false
   }
 ]
