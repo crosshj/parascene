@@ -560,6 +560,37 @@ export async function openDb() {
 				const row = stmt.get(userId);
 				const existing = parseUserMeta(row?.meta);
 				const meta = { ...existing, plan: plan === "founder" ? "founder" : "free" };
+				if (plan === "founder") {
+					delete meta.pendingCheckoutSessionId;
+					delete meta.pendingCheckoutReturnedAt;
+				}
+				const updateStmt = db.prepare("UPDATE users SET meta = ? WHERE id = ?");
+				const result = updateStmt.run(JSON.stringify(meta), userId);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		recordCheckoutReturn: {
+			run: async (userId, sessionId, returnedAt) => {
+				const stmt = db.prepare("SELECT meta FROM users WHERE id = ?");
+				const row = stmt.get(userId);
+				const existing = parseUserMeta(row?.meta);
+				const meta = {
+					...existing,
+					pendingCheckoutSessionId: sessionId,
+					pendingCheckoutReturnedAt: returnedAt
+				};
+				const updateStmt = db.prepare("UPDATE users SET meta = ? WHERE id = ?");
+				const result = updateStmt.run(JSON.stringify(meta), userId);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		updateUserStripeSubscriptionId: {
+			run: async (userId, subscriptionId) => {
+				const stmt = db.prepare("SELECT meta FROM users WHERE id = ?");
+				const row = stmt.get(userId);
+				const existing = parseUserMeta(row?.meta);
+				const meta = { ...existing, stripeSubscriptionId: subscriptionId || null };
+				if (subscriptionId == null) delete meta.stripeSubscriptionId;
 				const updateStmt = db.prepare("UPDATE users SET meta = ? WHERE id = ?");
 				const result = updateStmt.run(JSON.stringify(meta), userId);
 				return Promise.resolve({ changes: result.changes });

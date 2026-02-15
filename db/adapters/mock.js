@@ -268,6 +268,30 @@ export function openDb() {
 				if (!user) return { changes: 0 };
 				user.meta = user.meta != null && typeof user.meta === "object" ? { ...user.meta } : {};
 				user.meta.plan = plan === "founder" ? "founder" : "free";
+				if (plan === "founder") {
+					delete user.meta.pendingCheckoutSessionId;
+					delete user.meta.pendingCheckoutReturnedAt;
+				}
+				return { changes: 1 };
+			}
+		},
+		recordCheckoutReturn: {
+			run: async (userId, sessionId, returnedAt) => {
+				const user = users.find((u) => Number(u.id) === Number(userId));
+				if (!user) return { changes: 0 };
+				user.meta = user.meta != null && typeof user.meta === "object" ? { ...user.meta } : {};
+				user.meta.pendingCheckoutSessionId = sessionId;
+				user.meta.pendingCheckoutReturnedAt = returnedAt;
+				return { changes: 1 };
+			}
+		},
+		updateUserStripeSubscriptionId: {
+			run: async (userId, subscriptionId) => {
+				const user = users.find((u) => Number(u.id) === Number(userId));
+				if (!user) return { changes: 0 };
+				user.meta = user.meta != null && typeof user.meta === "object" ? { ...user.meta } : {};
+				if (subscriptionId != null) user.meta.stripeSubscriptionId = subscriptionId;
+				else delete user.meta.stripeSubscriptionId;
 				return { changes: 1 };
 			}
 		},

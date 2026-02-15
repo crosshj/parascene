@@ -5,6 +5,7 @@ import jwt from "jsonwebtoken";
 import Busboy from "busboy";
 import path from "path";
 import sharp from "sharp";
+import Stripe from "stripe";
 import { sendTemplatedEmail } from "../email/index.js";
 import { getEffectiveEmailRecipient } from "./utils/emailSettings.js";
 import {
@@ -500,19 +501,66 @@ export default function createProfileRoutes({ queries }) {
 		}
 
 		const plan = user.meta?.plan ?? "free";
-		return res.json({ ...user, credits: credits.balance, plan, profile, welcome });
+		const pendingPlanActivation = Boolean(user.meta?.pendingCheckoutSessionId);
+		return res.json({ ...user, credits: credits.balance, plan, pendingPlanActivation, profile, welcome });
 	});
 
-	// Stub: start subscription checkout (Stripe not integrated yet; walk through when we get there)
+	// Record that user returned from Stripe Checkout (store session id and timestamp for idempotency / state)
+	router.post("/api/subscription/checkout-return", async (req, res) => {
+		if (!req.auth?.userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+		const sessionId = typeof req.body?.sessionId === "string" ? req.body.sessionId.trim() : "";
+		if (!sessionId || !sessionId.startsWith("cs_")) {
+			return res.status(400).json({ error: "Invalid sessionId", message: "sessionId is required and must be a Stripe checkout session id." });
+		}
+		if (!queries.recordCheckoutReturn?.run) {
+			return res.status(500).json({ error: "Not available", message: "Checkout return recording is not available." });
+		}
+		try {
+			const returnedAt = new Date().toISOString();
+			await queries.recordCheckoutReturn.run(req.auth.userId, sessionId, returnedAt);
+			return res.json({ ok: true });
+		} catch (err) {
+			console.error("[POST /api/subscription/checkout-return]", err);
+			return res.status(500).json({ error: "Failed to record", message: err?.message || "Could not record checkout return." });
+		}
+	});
+
+	// Start Stripe Checkout for Founder subscription
 	router.post("/api/subscription/checkout", async (req, res) => {
 		if (!req.auth?.userId) {
 			return res.status(401).json({ error: "Unauthorized" });
 		}
-		// TODO: Create Stripe Checkout Session, return { url } to redirect. For now:
-		return res.status(503).json({
-			error: "STRIPE_NOT_CONFIGURED",
-			message: "Subscription checkout is not set up yet. We'll walk you through Stripe integration when we get there."
-		});
+		const secretKey = process.env.STRIPE_SECRET_KEY;
+		const priceId = process.env.STRIPE_PRICE_ID_FOUNDER;
+		if (!secretKey || !priceId) {
+			return res.status(503).json({
+				error: "STRIPE_NOT_CONFIGURED",
+				message: "Subscription checkout is not set up yet."
+			});
+		}
+		try {
+			const stripe = new Stripe(secretKey);
+			const baseUrl = getBaseAppUrl();
+			const user = await queries.selectUserById.get(req.auth.userId);
+			const customerEmail = typeof user?.email === "string" && user.email.includes("@") ? user.email : undefined;
+			const session = await stripe.checkout.sessions.create({
+				mode: "subscription",
+				line_items: [{ price: priceId, quantity: 1 }],
+				client_reference_id: String(req.auth.userId),
+				success_url: `${baseUrl}/pricing?success=1&session_id={CHECKOUT_SESSION_ID}`,
+				cancel_url: `${baseUrl}/pricing?canceled=1`,
+				...(customerEmail ? { customer_email: customerEmail } : {})
+			});
+			return res.json({ url: session.url });
+		} catch (err) {
+			console.error("[POST /api/subscription/checkout]", err);
+			return res.status(500).json({
+				error: "Checkout failed",
+				message: err?.message || "Could not start checkout."
+			});
+		}
 	});
 
 	// Update current user's plan (no Stripe; direct meta update for now)

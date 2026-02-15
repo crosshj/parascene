@@ -390,6 +390,50 @@ export function openDb() {
 				const existing = current?.meta ?? null;
 				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
 				meta.plan = plan === "founder" ? "founder" : "free";
+				if (plan === "founder") {
+					delete meta.pendingCheckoutSessionId;
+					delete meta.pendingCheckoutReturnedAt;
+				}
+				const { error } = await serviceClient
+					.from(prefixedTable("users"))
+					.update({ meta })
+					.eq("id", userId);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
+		recordCheckoutReturn: {
+			run: async (userId, sessionId, returnedAt) => {
+				const { data: current, error: selectError } = await serviceClient
+					.from(prefixedTable("users"))
+					.select("meta")
+					.eq("id", userId)
+					.maybeSingle();
+				if (selectError) throw selectError;
+				const existing = current?.meta ?? null;
+				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
+				meta.pendingCheckoutSessionId = sessionId;
+				meta.pendingCheckoutReturnedAt = returnedAt;
+				const { error } = await serviceClient
+					.from(prefixedTable("users"))
+					.update({ meta })
+					.eq("id", userId);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
+		updateUserStripeSubscriptionId: {
+			run: async (userId, subscriptionId) => {
+				const { data: current, error: selectError } = await serviceClient
+					.from(prefixedTable("users"))
+					.select("meta")
+					.eq("id", userId)
+					.maybeSingle();
+				if (selectError) throw selectError;
+				const existing = current?.meta ?? null;
+				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
+				if (subscriptionId != null) meta.stripeSubscriptionId = subscriptionId;
+				else delete meta.stripeSubscriptionId;
 				const { error } = await serviceClient
 					.from(prefixedTable("users"))
 					.update({ meta })

@@ -52,13 +52,24 @@ body.pricing-page-guest header.scrolled::before {
 	}
 }
 
-/* Loading state: show spinner until profile/plan data is ready */
+/* Hide header and description until we know state (pricing vs success) – prevents flash */
+body.pricing-page main:not(.pricing-ready):not(.pricing-success-state) .route-header {
+	display: none;
+}
+
+/* Loading state: spinner hidden for first ~2s, then fades in if still loading */
 .pricing-loading {
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	padding: 48px 24px;
 	min-height: 120px;
+	opacity: 0;
+	transition: opacity 0.25s ease;
+}
+
+.pricing-loading.pricing-loading-delayed-show {
+	opacity: 1;
 }
 
 .pricing-loading .route-loading-spinner {
@@ -70,12 +81,114 @@ body.pricing-page-guest header.scrolled::before {
 	display: none;
 }
 
-main.pricing-ready .pricing-loading {
+main.pricing-ready .pricing-loading,
+main.pricing-success-state .pricing-loading {
 	display: none;
 }
 
 main.pricing-ready .pricing-content {
 	display: block;
+}
+
+/* Success state: thank-you view (header updated in JS, only this content shown) */
+.pricing-success-state-content {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	margin-top: 32px;
+	width: 100%;
+}
+
+.pricing-success-state-content[hidden] {
+	display: none;
+}
+
+/* When showing success state, hide the tier grid and CTAs; header stays in same place (no centering) */
+main.pricing-success-state .pricing-content {
+	display: none !important;
+}
+
+main.pricing-success-state .pricing-success-state-content {
+	display: flex;
+}
+
+.pricing-success-message {
+	width: 100%;
+	max-width: 420px;
+	padding: 28px 32px;
+	border-radius: 12px;
+	border: 1px solid var(--border);
+	background: color-mix(in srgb, var(--surface-strong) 85%, rgba(34, 197, 94, 0.12));
+	color: var(--text);
+	box-sizing: border-box;
+}
+
+.pricing-success-message-title {
+	font-weight: 600;
+	margin: 0 0 16px;
+	font-size: 1.125rem;
+}
+
+.pricing-success-message p {
+	margin: 0 0 14px;
+	font-size: 0.95rem;
+	line-height: 1.55;
+	color: var(--text-muted);
+}
+
+.pricing-success-message p:last-of-type {
+	margin-bottom: 0;
+}
+
+.pricing-success-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 12px;
+	margin-top: 24px;
+	padding-top: 20px;
+	border-top: 1px solid var(--border);
+}
+
+.pricing-success-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 10px 20px;
+	border-radius: 6px;
+	font-size: 0.95rem;
+	font-weight: 500;
+	text-decoration: none;
+	cursor: pointer;
+	transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+	border: 1px solid transparent;
+}
+
+.pricing-success-btn-primary {
+	background: var(--surface-strong);
+	color: var(--text);
+	border-color: var(--border);
+}
+
+.pricing-success-btn-primary:hover {
+	background: color-mix(in srgb, var(--surface-strong) 90%, var(--text));
+	border-color: var(--text-muted);
+}
+
+.pricing-success-btn-secondary {
+	background: transparent;
+	color: var(--text-muted);
+	border-color: var(--border);
+}
+
+.pricing-success-btn-secondary:hover {
+	color: var(--text);
+	border-color: var(--text-muted);
+}
+
+.pricing-success-btn:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
 }
 
 /* Pricing grid and cards */
