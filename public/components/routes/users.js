@@ -140,6 +140,13 @@ function renderUserCard(user, onOpenModal) {
 	nameEl.className = 'user-name';
 	nameEl.textContent = displayName;
 	nameRow.appendChild(nameEl);
+	const isSubscribed = user?.meta?.plan === 'founder' || Boolean(user?.meta?.stripeSubscriptionId);
+	if (isSubscribed) {
+		const subBadge = document.createElement('span');
+		subBadge.className = 'user-card-badge user-card-badge-founder';
+		subBadge.textContent = 'Founder';
+		nameRow.appendChild(subBadge);
+	}
 	if (user.suspended) {
 		const suspendedBadge = document.createElement('span');
 		suspendedBadge.className = 'server-badge server-badge-suspended';

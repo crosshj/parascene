@@ -219,10 +219,20 @@ async function loadUsers({ force = false } = {}) {
 			const title = document.createElement("div");
 			title.className = "user-title";
 
+			const nameRow = document.createElement("div");
+			nameRow.className = "user-name-row";
 			const name = document.createElement("div");
 			name.className = "user-name";
 			name.textContent = displayName;
-			title.appendChild(name);
+			nameRow.appendChild(name);
+			const isSubscribed = user?.meta?.plan === "founder" || Boolean(user?.meta?.stripeSubscriptionId);
+			if (isSubscribed) {
+				const subBadge = document.createElement("span");
+				subBadge.className = "user-card-badge user-card-badge-founder";
+				subBadge.textContent = "Founder";
+				nameRow.appendChild(subBadge);
+			}
+			title.appendChild(nameRow);
 
 			if (user.email && user.email !== displayName) {
 				const email = document.createElement("div");

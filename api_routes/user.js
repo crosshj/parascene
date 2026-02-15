@@ -577,29 +577,32 @@ export default function createProfileRoutes({ queries }) {
 				return res.status(500).json({ error: "Plan update not available", message: "Plan updates are not available." });
 			}
 			const userId = req.auth.userId;
-			if (plan === "free") {
-				const user = await queries.selectUserById.get(userId);
-				const subscriptionId = user?.meta?.stripeSubscriptionId;
-				if (subscriptionId && typeof subscriptionId === "string") {
-					const stripeSecret = process.env.STRIPE_SECRET_KEY;
-					if (stripeSecret) {
-						try {
-							const stripe = new Stripe(stripeSecret);
-							await stripe.subscriptions.cancel(subscriptionId);
-						} catch (stripeErr) {
-							console.error("[PUT /api/profile/plan] Stripe cancel failed:", stripeErr?.message || stripeErr);
-							return res.status(502).json({
-								error: "Cancel failed",
-								message: "Could not cancel subscription. Please try again or contact support."
-							});
-						}
-					}
-					if (queries.updateUserStripeSubscriptionId?.run) {
-						await queries.updateUserStripeSubscriptionId.run(userId, null);
+			// Capture subscription id before we change anything (needed for Stripe cancel).
+			const userBefore = await queries.selectUserById.get(userId);
+			const subscriptionId = plan === "free" && userBefore?.meta?.stripeSubscriptionId
+				? String(userBefore.meta.stripeSubscriptionId).trim()
+				: null;
+
+			// Write target state to DB before calling Stripe (DB records that we are transitioning to this plan).
+			await queries.updateUserPlan.run(userId, plan);
+			if (plan === "free" && subscriptionId && queries.updateUserStripeSubscriptionId?.run) {
+				// Clear subscription id only after Stripe cancel succeeds; plan is already 'free' above.
+				const stripeSecret = process.env.STRIPE_SECRET_KEY;
+				if (stripeSecret) {
+					try {
+						const stripe = new Stripe(stripeSecret);
+						await stripe.subscriptions.cancel(subscriptionId);
+					} catch (stripeErr) {
+						console.error("[PUT /api/profile/plan] Stripe cancel failed:", stripeErr?.message || stripeErr);
+						return res.status(502).json({
+							error: "Cancel failed",
+							message: "Could not cancel subscription. Please try again or contact support."
+						});
 					}
 				}
+				await queries.updateUserStripeSubscriptionId.run(userId, null);
 			}
-			await queries.updateUserPlan.run(userId, plan);
+
 			const user = await queries.selectUserById.get(userId);
 			const newPlan = user?.meta?.plan === "founder" ? "founder" : "free";
 			return res.json({ ok: true, plan: newPlan });

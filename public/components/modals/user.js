@@ -366,6 +366,10 @@ class AppModalUser extends HTMLElement {
 				<div class="user-modal-field-label">Unread Notifications</div>
 				<div class="user-modal-field-value" data-user-unread-notifications>${unreadCount}</div>
 			</div>
+			<div class="user-modal-field">
+				<div class="user-modal-field-label">Stripe Sub</div>
+				<div class="user-modal-field-value">${escapeHtml(String(user?.meta?.stripeSubscriptionId ?? '')) || '—'}</div>
+			</div>
 		`;
 		
 		// Update suspended status in Account Status section

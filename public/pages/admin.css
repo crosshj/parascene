@@ -368,6 +368,21 @@
 	gap: 0.5rem;
 }
 
+.user-card-badge {
+	display: inline-block;
+	font-size: 0.7rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	padding: 2px 6px;
+	border-radius: 4px;
+}
+
+.user-card-badge-founder {
+	background: color-mix(in srgb, var(--accent) 18%, transparent);
+	color: var(--accent);
+}
+
 .user-name {
 	font-size: 1rem;
 	font-weight: 600;

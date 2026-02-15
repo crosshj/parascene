@@ -37,17 +37,23 @@
 		<script>
 			(function () {
 				var q = window.location.search;
-				if (q.indexOf('success=1') === -1 && q.indexOf('session_id=') === -1) return;
+				var hasSuccess = q.indexOf('success=1') !== -1 || q.indexOf('session_id=') !== -1;
+				var switchedFree = q.indexOf('switched=free') !== -1;
+				if (!hasSuccess && !switchedFree) return;
 				var main = document.querySelector('[data-pricing-main]');
 				var title = document.querySelector('[data-pricing-header-title]');
 				var subtitle = document.querySelector('[data-pricing-header-subtitle]');
 				var content = document.querySelector('[data-pricing-success-state-content]');
+				var messageEl = document.querySelector('[data-pricing-success-message]');
 				if (main) {
 					main.classList.add('pricing-success-state');
 					main.classList.add('pricing-ready');
 				}
 				if (title) title.textContent = 'Pricing';
-				if (subtitle) subtitle.textContent = 'Thank you. Your Founder plan is being activated.';
+				if (subtitle) subtitle.textContent = switchedFree ? 'You\'re now on the Free plan.' : 'Thank you. Your Founder plan is being activated.';
+				if (messageEl && switchedFree) {
+					messageEl.innerHTML = '<p class="pricing-success-message-title">Plan updated</p><p>You\'re now on the Free plan. You can resubscribe to Founder anytime.</p><div class="pricing-success-actions"><a href="/pricing" class="pricing-success-btn pricing-success-btn-primary">Continue</a></div>';
+				}
 				if (content) content.hidden = false;
 			})();
 		</script>
@@ -147,12 +153,21 @@
 			}
 		}
 
-		function showSuccessState() {
+		function showSuccessState(variant) {
 			clearSpinnerTimeout();
 			if (main) main.classList.add('pricing-success-state');
 			if (main) main.classList.add('pricing-ready');
 			if (headerTitle) headerTitle.textContent = 'Pricing';
-			if (headerSubtitle) headerSubtitle.textContent = 'Thank you. Your Founder plan is being activated.';
+			if (headerSubtitle) {
+				headerSubtitle.textContent = variant === 'deactivation'
+					? 'You\'re now on the Free plan.'
+					: 'Thank you. Your Founder plan is being activated.';
+			}
+			if (successMessage) {
+				successMessage.innerHTML = variant === 'deactivation'
+					? '<p class="pricing-success-message-title">Plan updated</p><p>You\'re now on the Free plan. You can resubscribe to Founder anytime.</p><div class="pricing-success-actions"><a href="/pricing" class="pricing-success-btn pricing-success-btn-primary">Continue</a></div>'
+					: '<p class="pricing-success-message-title">Payment successful</p><p>Thank you for subscribing. Your Founder plan is being activated — you\'ll have 700 credits per month, priority support, and Founder flair on your profile.</p><p>Refresh in a moment to see your plan update, or continue exploring.</p><p>You can switch back to Free anytime from the pricing page.</p><div class="pricing-success-actions"><a href="/pricing" class="pricing-success-btn pricing-success-btn-primary">Refresh</a></div>';
+			}
 			if (successStateContent) successStateContent.hidden = false;
 		}
 
@@ -204,8 +219,12 @@
 				const urlParams = new URLSearchParams(window.location.search);
 				const successParam = urlParams.get('success') === '1';
 				const sessionIdParam = urlParams.get('session_id') || '';
-				if (successParam && sessionIdParam) {
-					showSuccessState();
+				const switchedFreeParam = urlParams.get('switched') === 'free';
+				if (switchedFreeParam && plan === 'free') {
+					showSuccessState('deactivation');
+					history.replaceState(null, '', window.location.pathname);
+				} else if (successParam && sessionIdParam) {
+					showSuccessState('activation');
 					history.replaceState(null, '', window.location.pathname);
 					fetch('/api/subscription/checkout-return', {
 						method: 'POST',
@@ -214,9 +233,9 @@
 						body: JSON.stringify({ sessionId: sessionIdParam })
 					}).catch(function () { });
 				} else if (pendingPlanActivation && plan === 'free') {
-					showSuccessState();
+					showSuccessState('activation');
 				} else if (successParam) {
-					showSuccessState();
+					showSuccessState(plan === 'free' ? 'deactivation' : 'activation');
 					history.replaceState(null, '', window.location.pathname);
 				}
 
@@ -274,7 +293,7 @@
 						}).then(function (r) {
 							return r.json().then(function (json) {
 								if (r.ok && json && (json.plan === 'free' || json.plan === 'founder')) {
-									window.location.href = '/pricing';
+									window.location.href = json.plan === 'free' ? '/pricing?switched=free' : '/pricing';
 									return;
 								}
 								btn.removeAttribute('aria-busy');
