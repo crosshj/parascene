@@ -608,6 +608,8 @@ export async function openDb() {
 					delete meta.pendingCheckoutReturnedAt;
 				} else {
 					delete meta.stripeSubscriptionId;
+					delete meta.pendingCheckoutSessionId;
+					delete meta.pendingCheckoutReturnedAt;
 				}
 				const updateStmt = db.prepare("UPDATE users SET meta = ? WHERE id = ?");
 				const result = updateStmt.run(JSON.stringify(meta), userId);

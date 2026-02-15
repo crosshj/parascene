@@ -452,6 +452,8 @@ export function openDb() {
 					delete meta.pendingCheckoutReturnedAt;
 				} else {
 					delete meta.stripeSubscriptionId;
+					delete meta.pendingCheckoutSessionId;
+					delete meta.pendingCheckoutReturnedAt;
 				}
 				const { error } = await serviceClient
 					.from(prefixedTable("users"))

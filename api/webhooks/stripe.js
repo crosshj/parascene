@@ -104,8 +104,11 @@ export default async function handler(req, res) {
 			if (queries.updateUserPlan?.run) {
 				await queries.updateUserPlan.run(userId, "founder");
 			}
-			if (session?.subscription && queries.updateUserStripeSubscriptionId?.run) {
-				await queries.updateUserStripeSubscriptionId.run(userId, session.subscription);
+			const subId = session?.subscription
+				? (typeof session.subscription === "string" ? session.subscription : session.subscription?.id)
+				: null;
+			if (subId && queries.updateUserStripeSubscriptionId?.run) {
+				await queries.updateUserStripeSubscriptionId.run(userId, subId);
 			}
 			await grantFounderCredits(queries, userId);
 			processedEventIds.add(event.id);

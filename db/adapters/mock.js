@@ -306,6 +306,8 @@ export function openDb() {
 					delete user.meta.pendingCheckoutReturnedAt;
 				} else {
 					delete user.meta.stripeSubscriptionId;
+					delete user.meta.pendingCheckoutSessionId;
+					delete user.meta.pendingCheckoutReturnedAt;
 				}
 				return { changes: 1 };
 			}
