@@ -810,7 +810,6 @@ a.btn-secondary {
 	align-items: center;
 	gap: 6px;
 	padding: 8px 12px;
-	border-radius: 8px;
 	background: var(--surface);
 	border: 1px solid var(--border);
 	color: var(--text);
@@ -887,7 +886,6 @@ a.btn-outlined {
 	justify-content: center;
 	gap: 6px;
 	padding: 8px 12px;
-	border-radius: 8px;
 	background: transparent;
 	border: 1px solid var(--accent);
 	color: var(--accent);
@@ -935,6 +933,44 @@ button.btn-outlined:focus-visible,
 a.btn-outlined:focus-visible {
 	outline: 2px solid var(--focus);
 	outline-offset: 2px;
+}
+
+/* Button corners: 6px fallback, 12px + squircle when corner-shape is supported */
+.btn-corners-squircle,
+button.btn-corners-squircle,
+a.btn-corners-squircle,
+.btn-primary,
+button.btn-primary,
+header .action-item.btn-primary,
+header .create-button.btn-primary,
+.btn-secondary,
+a.btn-secondary,
+.btn-outlined,
+button.btn-outlined,
+a.btn-outlined,
+.btn-danger,
+button.btn-danger {
+	border-radius: 6px;
+}
+
+@supports (corner-shape: squircle) {
+	.btn-corners-squircle,
+	button.btn-corners-squircle,
+	a.btn-corners-squircle,
+	.btn-primary,
+	button.btn-primary,
+	header .action-item.btn-primary,
+	header .create-button.btn-primary,
+	.btn-secondary,
+	a.btn-secondary,
+	.btn-outlined,
+	button.btn-outlined,
+	a.btn-outlined,
+	.btn-danger,
+	button.btn-danger {
+		border-radius: 12px;
+		corner-shape: squircle;
+	}
 }
 
 input:focus-visible,
