@@ -184,12 +184,15 @@ export function openDb() {
 			}
 		},
 		selectUserFollowers: {
-			all: async (userId) => {
+			all: async (userId, options = {}) => {
+				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
+				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
 				const { data: followRows, error } = await serviceClient
 					.from(prefixedTable("user_follows"))
 					.select("follower_id, created_at")
 					.eq("following_id", userId)
-					.order("created_at", { ascending: false });
+					.order("created_at", { ascending: false })
+					.range(offset, offset + limit - 1);
 				if (error) throw error;
 
 				const followerIds = Array.from(new Set(
@@ -225,13 +228,63 @@ export function openDb() {
 				});
 			}
 		},
+		/** Like selectUserFollowers but adds viewer_follows (true if viewer follows this follower). */
+		selectUserFollowersWithViewer: {
+			all: async (targetUserId, viewerId, options = {}) => {
+				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
+				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
+				const { data: followRows, error } = await serviceClient
+					.from(prefixedTable("user_follows"))
+					.select("follower_id, created_at")
+					.eq("following_id", targetUserId)
+					.order("created_at", { ascending: false })
+					.range(offset, offset + limit - 1);
+				if (error) throw error;
+
+				const followerIds = Array.from(new Set(
+					(followRows ?? [])
+						.map((row) => row?.follower_id)
+						.filter((id) => id != null && id !== undefined)
+						.map((id) => Number(id))
+						.filter((id) => Number.isFinite(id) && id > 0)
+				));
+
+				let profileByUserId = new Map();
+				let viewerFollowsSet = new Set();
+				if (followerIds.length > 0) {
+					const [profileRes, viewerFollowsRes] = await Promise.all([
+						serviceClient.from(prefixedTable("user_profiles")).select("user_id, user_name, display_name, avatar_url").in("user_id", followerIds),
+						serviceClient.from(prefixedTable("user_follows")).select("following_id").eq("follower_id", viewerId).in("following_id", followerIds)
+					]);
+					if (profileRes.error) throw profileRes.error;
+					profileByUserId = new Map((profileRes.data ?? []).map((row) => [String(row.user_id), row]));
+					viewerFollowsSet = new Set((viewerFollowsRes.data ?? []).map((r) => r?.following_id).filter(Boolean).map(String));
+				}
+
+				return (followRows ?? []).map((row) => {
+					const id = row?.follower_id ?? null;
+					const profile = id != null ? profileByUserId.get(String(id)) ?? null : null;
+					return {
+						user_id: id,
+						followed_at: row?.created_at ?? null,
+						user_name: profile?.user_name ?? null,
+						display_name: profile?.display_name ?? null,
+						avatar_url: profile?.avatar_url ?? null,
+						viewer_follows: id != null ? viewerFollowsSet.has(String(id)) : false
+					};
+				});
+			}
+		},
 		selectUserFollowing: {
-			all: async (userId) => {
+			all: async (userId, options = {}) => {
+				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
+				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
 				const { data: followRows, error } = await serviceClient
 					.from(prefixedTable("user_follows"))
 					.select("following_id, created_at")
 					.eq("follower_id", userId)
-					.order("created_at", { ascending: false });
+					.order("created_at", { ascending: false })
+					.range(offset, offset + limit - 1);
 				if (error) throw error;
 
 				const followingIds = Array.from(new Set(
@@ -2500,7 +2553,9 @@ export function openDb() {
 		selectCreatedImagesForUser: {
 			all: async (userId, options = {}) => {
 				const includeUnavailable = options?.includeUnavailable === true;
-				const query = serviceClient
+				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
+				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
+				let query = serviceClient
 					.from(prefixedTable("created_images"))
 					.select(
 						"id, filename, file_path, width, height, color, status, created_at, published, published_at, title, description, meta, unavailable_at"
@@ -2508,15 +2563,17 @@ export function openDb() {
 					.eq("user_id", userId)
 					.order("created_at", { ascending: false });
 				if (!includeUnavailable) {
-					query.is("unavailable_at", null);
+					query = query.is("unavailable_at", null);
 				}
-				const { data, error } = await query;
+				const { data, error } = await query.range(offset, offset + limit - 1);
 				if (error) throw error;
 				return data ?? [];
 			}
 		},
 		selectPublishedCreatedImagesForUser: {
-			all: async (userId) => {
+			all: async (userId, options = {}) => {
+				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
+				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
 				const { data, error } = await serviceClient
 					.from(prefixedTable("created_images"))
 					.select(
@@ -2525,7 +2582,8 @@ export function openDb() {
 					.eq("user_id", userId)
 					.eq("published", true)
 					.is("unavailable_at", null)
-					.order("created_at", { ascending: false });
+					.order("created_at", { ascending: false })
+					.range(offset, offset + limit - 1);
 				if (error) throw error;
 				return data ?? [];
 			}
@@ -2551,6 +2609,97 @@ export function openDb() {
 					.is("unavailable_at", null);
 				if (error) throw error;
 				return { count: count ?? 0 };
+			}
+		},
+		/** Published creations this user has liked (for profile Likes tab). */
+		selectCreatedImagesLikedByUser: {
+			all: async (userId, options = {}) => {
+				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
+				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
+				const { data: likeRows, error: likeError } = await serviceClient
+					.from(prefixedTable("likes_created_image"))
+					.select("created_image_id, created_at")
+					.eq("user_id", userId)
+					.order("created_at", { ascending: false })
+					.range(offset, offset + limit - 1);
+				if (likeError) throw likeError;
+				const ids = (likeRows ?? []).map((r) => r?.created_image_id).filter((id) => id != null);
+				if (ids.length === 0) return [];
+				const { data: images, error: imgError } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.select("id, filename, file_path, width, height, color, status, created_at, published, published_at, title, description, meta, unavailable_at")
+					.in("id", ids)
+					.eq("published", true)
+					.is("unavailable_at", null);
+				if (imgError) throw imgError;
+				const byId = new Map((images ?? []).map((img) => [String(img.id), img]));
+				const orderByLiked = new Map((likeRows ?? []).map((r, i) => [String(r?.created_image_id), r?.created_at ?? ""]));
+				return ids
+					.map((id) => byId.get(String(id)))
+					.filter(Boolean)
+					.sort((a, b) => {
+						const ta = orderByLiked.get(String(a.id)) ?? a.created_at ?? "";
+						const tb = orderByLiked.get(String(b.id)) ?? b.created_at ?? "";
+						return String(tb).localeCompare(String(ta));
+					});
+			}
+		},
+		/** Comments by this user with creation context and creator/commenter profiles (for profile Comments tab). */
+		selectCommentsByUser: {
+			all: async (userId, options = {}) => {
+				const limitRaw = Number.parseInt(String(options?.limit ?? "50"), 10);
+				const limit = Number.isFinite(limitRaw) ? Math.min(200, Math.max(1, limitRaw)) : 50;
+				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
+				const { data: comments, error: commentsError } = await serviceClient
+					.from(prefixedTable("comments_created_image"))
+					.select("id, user_id, created_image_id, text, created_at, updated_at")
+					.eq("user_id", userId)
+					.order("created_at", { ascending: false })
+					.range(offset, offset + limit - 1);
+				if (commentsError) throw commentsError;
+				if (!(comments ?? []).length) return [];
+				const imageIds = [...new Set((comments ?? []).map((c) => c?.created_image_id).filter((id) => id != null))];
+				const { data: imgs, error: imgError } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.select("id, title, file_path, created_at, user_id")
+					.in("id", imageIds)
+					.eq("published", true)
+					.is("unavailable_at", null);
+				if (imgError) throw imgError;
+				const imgById = new Map((imgs ?? []).map((i) => [String(i.id), i]));
+				const creatorIds = [...new Set((imgs ?? []).map((i) => i?.user_id).filter((id) => id != null))];
+				const commenterIds = [...new Set((comments ?? []).map((c) => c?.user_id).filter((id) => id != null))];
+				const allUserIds = [...new Set([...creatorIds, ...commenterIds])];
+				let profileByUserId = new Map();
+				if (allUserIds.length > 0) {
+					const { data: profiles, error: profileError } = await serviceClient
+						.from(prefixedTable("user_profiles"))
+						.select("user_id, user_name, display_name, avatar_url")
+						.in("user_id", allUserIds);
+					if (!profileError) {
+						profileByUserId = new Map((profiles ?? []).map((p) => [String(p.user_id), p]));
+					}
+				}
+				return (comments ?? []).map((c) => {
+					const img = imgById.get(String(c?.created_image_id));
+					const creatorId = img?.user_id;
+					const commenterId = c?.user_id;
+					const creatorProfile = creatorId != null ? profileByUserId.get(String(creatorId)) : null;
+					const commenterProfile = commenterId != null ? profileByUserId.get(String(commenterId)) : null;
+					return {
+						...c,
+						created_image_title: img?.title ?? null,
+						created_image_url: img?.file_path ?? null,
+						created_image_created_at: img?.created_at ?? null,
+						created_image_user_id: creatorId ?? null,
+						creator_user_name: creatorProfile?.user_name ?? null,
+						creator_display_name: creatorProfile?.display_name ?? null,
+						creator_avatar_url: creatorProfile?.avatar_url ?? null,
+						commenter_user_name: commenterProfile?.user_name ?? null,
+						commenter_display_name: commenterProfile?.display_name ?? null,
+						commenter_avatar_url: commenterProfile?.avatar_url ?? null
+					};
+				});
 			}
 		},
 		selectLikesReceivedForUserPublished: {

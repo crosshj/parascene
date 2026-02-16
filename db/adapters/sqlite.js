@@ -445,7 +445,9 @@ export async function openDb() {
 			}
 		},
 		selectUserFollowers: {
-			all: async (userId) => {
+			all: async (userId, options = {}) => {
+				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
+				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
 				const stmt = db.prepare(
 					`SELECT
             uf.follower_id AS user_id,
@@ -456,13 +458,39 @@ export async function openDb() {
            FROM user_follows uf
            LEFT JOIN user_profiles up ON up.user_id = uf.follower_id
            WHERE uf.following_id = ?
-           ORDER BY uf.created_at DESC`
+           ORDER BY uf.created_at DESC
+           LIMIT ? OFFSET ?`
 				);
-				return Promise.resolve(stmt.all(userId));
+				return Promise.resolve(stmt.all(userId, limit, offset));
+			}
+		},
+		/** Like selectUserFollowers but adds viewer_follows (1 if viewer follows this follower). */
+		selectUserFollowersWithViewer: {
+			all: async (targetUserId, viewerId, options = {}) => {
+				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
+				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
+				const stmt = db.prepare(
+					`SELECT
+            uf.follower_id AS user_id,
+            uf.created_at AS followed_at,
+            up.user_name,
+            up.display_name,
+            up.avatar_url,
+            (SELECT 1 FROM user_follows uf2 WHERE uf2.follower_id = ? AND uf2.following_id = uf.follower_id LIMIT 1) AS viewer_follows
+           FROM user_follows uf
+           LEFT JOIN user_profiles up ON up.user_id = uf.follower_id
+           WHERE uf.following_id = ?
+           ORDER BY uf.created_at DESC
+           LIMIT ? OFFSET ?`
+				);
+				const rows = await Promise.resolve(stmt.all(viewerId, targetUserId, limit, offset));
+				return rows.map((r) => ({ ...r, viewer_follows: r?.viewer_follows === 1 }));
 			}
 		},
 		selectUserFollowing: {
-			all: async (userId) => {
+			all: async (userId, options = {}) => {
+				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
+				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
 				const stmt = db.prepare(
 					`SELECT
             uf.following_id AS user_id,
@@ -473,9 +501,10 @@ export async function openDb() {
            FROM user_follows uf
            LEFT JOIN user_profiles up ON up.user_id = uf.following_id
            WHERE uf.follower_id = ?
-           ORDER BY uf.created_at DESC`
+           ORDER BY uf.created_at DESC
+           LIMIT ? OFFSET ?`
 				);
-				return Promise.resolve(stmt.all(userId));
+				return Promise.resolve(stmt.all(userId, limit, offset));
 			}
 		},
 		selectSessionByTokenHash: {
@@ -1829,32 +1858,39 @@ export async function openDb() {
 		selectCreatedImagesForUser: {
 			all: async (userId, options = {}) => {
 				const includeUnavailable = options?.includeUnavailable === true;
+				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
+				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
 				const stmt = db.prepare(
 					includeUnavailable
 						? `SELECT id, filename, file_path, width, height, color, status, created_at,
                   published, published_at, title, description, meta, unavailable_at
            FROM created_images
            WHERE user_id = ?
-           ORDER BY created_at DESC`
+           ORDER BY created_at DESC
+           LIMIT ? OFFSET ?`
 						: `SELECT id, filename, file_path, width, height, color, status, created_at,
                   published, published_at, title, description, meta, unavailable_at
            FROM created_images
            WHERE user_id = ? AND (unavailable_at IS NULL OR unavailable_at = '')
-           ORDER BY created_at DESC`
+           ORDER BY created_at DESC
+           LIMIT ? OFFSET ?`
 				);
-				return Promise.resolve(stmt.all(userId));
+				return Promise.resolve(includeUnavailable ? stmt.all(userId, limit, offset) : stmt.all(userId, limit, offset));
 			}
 		},
 		selectPublishedCreatedImagesForUser: {
-			all: async (userId) => {
+			all: async (userId, options = {}) => {
+				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
+				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
 				const stmt = db.prepare(
 					`SELECT id, filename, file_path, width, height, color, status, created_at,
                   published, published_at, title, description, meta, unavailable_at
            FROM created_images
            WHERE user_id = ? AND published = 1 AND (unavailable_at IS NULL OR unavailable_at = '')
-           ORDER BY created_at DESC`
+           ORDER BY created_at DESC
+           LIMIT ? OFFSET ?`
 				);
-				return Promise.resolve(stmt.all(userId));
+				return Promise.resolve(stmt.all(userId, limit, offset));
 			}
 		},
 		selectAllCreatedImageCountForUser: {
@@ -1875,6 +1911,45 @@ export async function openDb() {
            WHERE user_id = ? AND published = 1 AND (unavailable_at IS NULL OR unavailable_at = '')`
 				);
 				return Promise.resolve(stmt.get(userId));
+			}
+		},
+		/** Published creations this user has liked (for profile Likes tab). */
+		selectCreatedImagesLikedByUser: {
+			all: async (userId, options = {}) => {
+				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
+				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
+				const stmt = db.prepare(
+					`SELECT ci.id, ci.filename, ci.file_path, ci.width, ci.height, ci.color, ci.status, ci.created_at,
+                  ci.published, ci.published_at, ci.title, ci.description, ci.meta, ci.unavailable_at
+           FROM likes_created_image l
+           INNER JOIN created_images ci ON ci.id = l.created_image_id
+           WHERE l.user_id = ? AND ci.published = 1 AND (ci.unavailable_at IS NULL OR ci.unavailable_at = '')
+           ORDER BY l.created_at DESC
+           LIMIT ? OFFSET ?`
+				);
+				return Promise.resolve(stmt.all(userId, limit, offset));
+			}
+		},
+		/** Comments by this user with creation context and creator/commenter profiles (for profile Comments tab). */
+		selectCommentsByUser: {
+			all: async (userId, options = {}) => {
+				const limitRaw = Number.parseInt(String(options?.limit ?? "50"), 10);
+				const limit = Number.isFinite(limitRaw) ? Math.min(200, Math.max(1, limitRaw)) : 50;
+				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
+				const stmt = db.prepare(
+					`SELECT c.id, c.user_id, c.created_image_id, c.text, c.created_at, c.updated_at,
+                  ci.title AS created_image_title, ci.file_path AS created_image_url, ci.created_at AS created_image_created_at, ci.user_id AS created_image_user_id,
+                  up.user_name AS commenter_user_name, up.display_name AS commenter_display_name, up.avatar_url AS commenter_avatar_url,
+                  cup.user_name AS creator_user_name, cup.display_name AS creator_display_name, cup.avatar_url AS creator_avatar_url
+           FROM comments_created_image c
+           INNER JOIN created_images ci ON ci.id = c.created_image_id
+           LEFT JOIN user_profiles up ON up.user_id = c.user_id
+           LEFT JOIN user_profiles cup ON cup.user_id = ci.user_id
+           WHERE c.user_id = ? AND ci.published = 1 AND (ci.unavailable_at IS NULL OR ci.unavailable_at = '')
+           ORDER BY c.created_at DESC
+           LIMIT ? OFFSET ?`
+				);
+				return Promise.resolve(stmt.all(userId, limit, offset));
 			}
 		},
 		selectLikesReceivedForUserPublished: {

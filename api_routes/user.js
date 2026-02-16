@@ -1043,16 +1043,19 @@ export default function createProfileRoutes({ queries }) {
 			const include = String(req.query?.include || "").toLowerCase();
 			const wantAll = include === "all";
 			const includeUnavailable = isAdmin && (wantAll || req.query?.includeUnavailable === "1");
+			const limit = Math.min(200, Math.max(1, Number.parseInt(String(req.query?.limit ?? "24"), 10) || 24));
+			const offset = Math.max(0, Number.parseInt(String(req.query?.offset ?? "0"), 10) || 0);
+			const pagination = { limit, offset };
 
 			let images = [];
 			if ((isSelf || isAdmin) && wantAll && queries.selectCreatedImagesForUser?.all) {
-				images = await queries.selectCreatedImagesForUser.all(targetUserId, { includeUnavailable });
+				images = await queries.selectCreatedImagesForUser.all(targetUserId, { includeUnavailable, ...pagination });
 			} else if (queries.selectPublishedCreatedImagesForUser?.all) {
-				images = await queries.selectPublishedCreatedImagesForUser.all(targetUserId);
+				images = await queries.selectPublishedCreatedImagesForUser.all(targetUserId, pagination);
 			} else if (queries.selectCreatedImagesForUser?.all) {
-				// Fallback: filter in memory
-				const all = await queries.selectCreatedImagesForUser.all(targetUserId);
-				images = Array.isArray(all) ? all.filter((img) => img?.published === 1 || img?.published === true) : [];
+				// Fallback: filter in memory (no pagination)
+				const all = await queries.selectCreatedImagesForUser.all(targetUserId, { includeUnavailable });
+				images = Array.isArray(all) ? all.filter((img) => img?.published === 1 || img?.published === true).slice(offset, offset + limit) : [];
 			}
 
 			const mapped = (Array.isArray(images) ? images : []).map((img) => {
@@ -1076,9 +1079,86 @@ export default function createProfileRoutes({ queries }) {
 				};
 			});
 
-			return res.json({ images: mapped, is_self: isSelf, scope: isSelf && wantAll ? "all" : "published" });
+			const has_more = mapped.length === limit;
+			return res.json({ images: mapped, has_more, is_self: isSelf, scope: isSelf && wantAll ? "all" : "published" });
 		} catch (error) {
 			// console.error("Error loading user created images:", error);
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	// Creations this user has liked (published only; for profile Likes tab)
+	router.get("/api/users/:id/liked-creations", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+			const viewer = await queries.selectUserById.get(req.auth.userId);
+			if (!viewer) {
+				return res.status(404).json({ error: "User not found" });
+			}
+			const targetUserId = Number.parseInt(req.params.id, 10);
+			if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+				return res.status(400).json({ error: "Invalid user id" });
+			}
+			const target = await queries.selectUserById.get(targetUserId);
+			if (!target) {
+				return res.status(404).json({ error: "User not found" });
+			}
+			if (!queries.selectCreatedImagesLikedByUser?.all) {
+				return res.json({ images: [], has_more: false });
+			}
+			const limit = Math.min(200, Math.max(1, Number.parseInt(String(req.query?.limit ?? "24"), 10) || 24));
+			const offset = Math.max(0, Number.parseInt(String(req.query?.offset ?? "0"), 10) || 0);
+			const images = await queries.selectCreatedImagesLikedByUser.all(targetUserId, { limit, offset });
+			const mapped = (Array.isArray(images) ? images : []).map((img) => {
+				const url = img.file_path || (img.filename ? `/api/images/created/${img.filename}` : null);
+				return {
+					id: img.id,
+					filename: img.filename,
+					url,
+					thumbnail_url: getThumbnailUrl(url),
+					width: img.width,
+					height: img.height,
+					color: img.color,
+					created_at: img.created_at,
+					title: img.title || null,
+					description: img.description || null
+				};
+			});
+			return res.json({ images: mapped, has_more: mapped.length === limit });
+		} catch (error) {
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	// Comments by this user with creation context (for profile Comments tab)
+	router.get("/api/users/:id/comments", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+			const viewer = await queries.selectUserById.get(req.auth.userId);
+			if (!viewer) {
+				return res.status(404).json({ error: "User not found" });
+			}
+			const targetUserId = Number.parseInt(req.params.id, 10);
+			if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+				return res.status(400).json({ error: "Invalid user id" });
+			}
+			const target = await queries.selectUserById.get(targetUserId);
+			if (!target) {
+				return res.status(404).json({ error: "User not found" });
+			}
+			const limit = Math.min(200, Math.max(1, Number.parseInt(String(req.query?.limit ?? "20"), 10) || 20));
+			const offset = Math.max(0, Number.parseInt(String(req.query?.offset ?? "0"), 10) || 0);
+			const commentsRaw = await queries.selectCommentsByUser?.all(targetUserId, { limit, offset }) ?? [];
+			const comments = (Array.isArray(commentsRaw) ? commentsRaw : []).map((c) => ({
+				...c,
+				created_image_thumbnail_url: c?.created_image_url ? getThumbnailUrl(c.created_image_url) : null
+			}));
+			return res.json({ comments, has_more: comments.length === limit });
+		} catch (error) {
 			return res.status(500).json({ error: "Internal server error" });
 		}
 	});

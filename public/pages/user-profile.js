@@ -194,15 +194,42 @@ function renderProfilePage(container, { user, profile, stats, plan, isSelf, view
 		</div>
 
 		<div class="user-profile-content">
-		${isSelf ? html`
-			<div class="user-profile-tabs">
-				<button type="button" class="user-profile-tab" data-tab="all">All</button>
-				<button type="button" class="user-profile-tab is-active" data-tab="published">Published</button>
-			</div>
-		` : ''}
-			<div class="route-cards route-cards-image-grid" data-profile-grid>
-				<div class="route-empty route-empty-image-grid route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
-			</div>
+			<app-tabs class="user-profile-tabs-pending" data-profile-tabs>
+				<tab data-id="creations" label="Creations" default>
+					<div class="user-profile-tab-content" data-profile-tab-content="creations">
+						<div class="route-cards route-cards-image-grid" data-profile-grid>
+							<div class="route-empty route-empty-image-grid route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
+						</div>
+						<div class="user-profile-load-more" data-profile-load-more="creations" hidden></div>
+					</div>
+				</tab>
+				<tab data-id="likes" label="Likes">
+					<div class="user-profile-tab-content" data-profile-tab-content="likes">
+						<div class="route-empty" data-profile-likes>Coming soon.</div>
+						<div class="user-profile-load-more" data-profile-load-more="likes" hidden></div>
+					</div>
+				</tab>
+				${(isSelf || isAdmin) ? html`
+				<tab data-id="follows" label="${isSelf ? 'You follow' : 'User follows'}">
+					<div class="user-profile-tab-content" data-profile-tab-content="follows">
+						<div class="route-empty" data-profile-follows>Coming soon.</div>
+						<div class="user-profile-load-more" data-profile-load-more="follows" hidden></div>
+					</div>
+				</tab>
+				` : ''}
+				<tab data-id="following" label="${isSelf ? 'Follows you' : isAdmin ? 'Follows user' : 'Followers'}">
+					<div class="user-profile-tab-content" data-profile-tab-content="following">
+						<div class="route-empty" data-profile-following>Coming soon.</div>
+						<div class="user-profile-load-more" data-profile-load-more="following" hidden></div>
+					</div>
+				</tab>
+				<tab data-id="comments" label="Comments">
+					<div class="user-profile-tab-content" data-profile-tab-content="comments">
+						<div class="route-empty" data-profile-comments>Coming soon.</div>
+						<div class="user-profile-load-more" data-profile-load-more="comments" hidden></div>
+					</div>
+				</tab>
+			</app-tabs>
 		</div>
 
 		<div class="modal-overlay" data-profile-edit-overlay>
@@ -348,15 +375,15 @@ function setRouteMediaBackgroundImage(mediaEl, url) {
 	probe.src = url;
 }
 
-function renderImageGrid(grid, images, showBadge = false) {
+function renderImageGrid(grid, images, showBadge = false, emptyTitle = 'No published creations yet', emptyMessage = "When this user publishes creations, they'll show up here.") {
 	if (!grid) return;
 
 	const list = Array.isArray(images) ? images : [];
 	if (list.length === 0) {
 		grid.innerHTML = html`
 			<div class="route-empty route-empty-image-grid">
-				<div class="route-empty-title">No published creations yet</div>
-				<div class="route-empty-message">When this user publishes creations, they’ll show up here.</div>
+				<div class="route-empty-title">${escapeHtml(emptyTitle)}</div>
+				<div class="route-empty-message">${escapeHtml(emptyMessage)}</div>
 			</div>
 		`;
 		return;
@@ -455,13 +482,151 @@ async function loadProfileSummary(targetUserId) {
 	return result.data;
 }
 
-async function loadUserImages(targetUserId, { includeAll = false } = {}) {
-	const url = includeAll ? `/api/users/${targetUserId}/created-images?include=all` : `/api/users/${targetUserId}/created-images`;
+const PROFILE_PAGE_SIZE = {
+	creations: 24,
+	likes: 24,
+	comments: 20,
+	follows: 20,
+	following: 20
+};
+
+async function loadUserImages(targetUserId, { includeAll = false, limit = PROFILE_PAGE_SIZE.creations, offset = 0 } = {}) {
+	const params = new URLSearchParams();
+	if (includeAll) params.set('include', 'all');
+	params.set('limit', String(limit));
+	params.set('offset', String(offset));
+	const url = `/api/users/${targetUserId}/created-images?${params.toString()}`;
 	const result = await fetchJsonWithStatusDeduped(url, { credentials: 'include' }, { windowMs: 800 });
 	if (!result.ok) {
 		throw new Error('Failed to load images');
 	}
-	return Array.isArray(result.data?.images) ? result.data.images : [];
+	const images = Array.isArray(result.data?.images) ? result.data.images : [];
+	const has_more = Boolean(result.data?.has_more);
+	return { images, has_more };
+}
+
+function renderUserList(container, users, emptyTitle, emptyMessage, options = {}) {
+	if (!container) return;
+	const { showUnfollow = false, showFollow = false, viewerFollowsByUserId = new Set(), viewerUserId = null } = options;
+	const list = Array.isArray(users) ? users : [];
+	if (list.length === 0) {
+		container.innerHTML = html`
+			<div class="route-empty">
+				<div class="route-empty-title">${escapeHtml(emptyTitle)}</div>
+				<div class="route-empty-message">${escapeHtml(emptyMessage)}</div>
+			</div>
+		`;
+		return;
+	}
+	const viewerFollows = (uid) => viewerFollowsByUserId instanceof Set ? viewerFollowsByUserId.has(uid) : Boolean(viewerFollowsByUserId[uid]);
+	const isSelf = (uid) => viewerUserId != null && Number(uid) === Number(viewerUserId);
+	container.innerHTML = html`
+		<ul class="user-profile-list">
+			${list.map((u) => {
+				const id = u?.user_id ?? u?.id;
+				const name = (u?.display_name || u?.user_name || '').trim() || 'User';
+				const handle = u?.user_name ? `@${u.user_name}` : '';
+				const avatarUrl = typeof u?.avatar_url === 'string' ? u.avatar_url.trim() : '';
+				const color = getAvatarColor(u?.user_name || u?.user_id || name);
+				const initial = name.charAt(0).toUpperCase() || '?';
+				const href = Number.isFinite(id) && id > 0 ? `/user/${id}` : '#';
+				const avatarContent = avatarUrl
+					? html`<img class="user-profile-list-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">`
+					: html`<div class="user-profile-list-avatar-fallback" style="--user-profile-avatar-bg: ${color};" aria-hidden="true">${escapeHtml(initial)}</div>`;
+				const hideActions = isSelf(id);
+				const showUnfollowBtn = showUnfollow && id != null && !hideActions;
+				const showFollowBtn = showFollow && id != null && !viewerFollows(Number(id)) && !hideActions;
+				return html`
+					<li class="user-profile-list-item">
+						<a href="${escapeHtml(href)}" class="user-profile-list-link">
+							<span class="user-profile-list-avatar">${avatarContent}</span>
+							<span class="user-profile-list-info">
+								<span class="user-profile-list-name">${escapeHtml(name)}</span>
+								${handle ? html`<span class="user-profile-list-handle">${escapeHtml(handle)}</span>` : ''}
+							</span>
+						</a>
+						${showUnfollowBtn ? html`<button type="button" class="btn-secondary user-profile-list-action" data-action="unfollow" data-user-id="${escapeHtml(String(id ?? ''))}">Unfollow</button>` : ''}
+						${showFollowBtn ? html`<button type="button" class="btn-secondary user-profile-list-action" data-action="follow" data-user-id="${escapeHtml(String(id ?? ''))}">Follow</button>` : ''}
+					</li>
+				`;
+			}).join('')}
+		</ul>
+	`;
+}
+
+function renderCommentsList(container, comments, emptyMessage) {
+	if (!container) return;
+	const list = Array.isArray(comments) ? comments : [];
+	if (list.length === 0) {
+		container.innerHTML = html`
+			<div class="route-empty">
+				<div class="route-empty-title">No comments yet</div>
+				<div class="route-empty-message">${escapeHtml(emptyMessage)}</div>
+			</div>
+		`;
+		return;
+	}
+	function renderUserCell(u, prefix) {
+		const id = u?.user_id ?? u?.id;
+		const name = (u?.display_name || u?.user_name || '').trim() || 'User';
+		const handle = u?.user_name ? `@${u.user_name}` : '';
+		const avatarUrl = typeof u?.avatar_url === 'string' ? u.avatar_url.trim() : '';
+		const color = getAvatarColor(u?.user_name || u?.user_id || name);
+		const initial = name.charAt(0).toUpperCase() || '?';
+		const href = Number.isFinite(id) && id > 0 ? `/user/${id}` : '#';
+		const avatarContent = avatarUrl
+			? html`<img class="user-profile-comment-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">`
+			: html`<span class="user-profile-comment-avatar-fallback" style="--user-profile-avatar-bg: ${color};" aria-hidden="true">${escapeHtml(initial)}</span>`;
+		return html`
+			<a href="${escapeHtml(href)}" class="user-profile-comment-user">
+				<span class="user-profile-comment-avatar">${avatarContent}</span>
+				<span class="user-profile-comment-user-info">
+					<span class="user-profile-comment-user-name">${escapeHtml(name)}</span>
+					${handle ? html`<span class="user-profile-comment-user-handle">${escapeHtml(handle)}</span>` : ''}
+				</span>
+			</a>
+		`;
+	}
+	container.innerHTML = html`
+		<div class="user-profile-comments-list">
+			${list.map((c) => {
+				const creationId = c?.created_image_id;
+				const title = (c?.created_image_title || 'Creation').trim() || 'Creation';
+				const text = (c?.text || '').trim() || '';
+				const createdAt = c?.created_at ? formatRelativeTime(new Date(c.created_at)) : '';
+				const creationHref = Number.isFinite(creationId) && creationId > 0 ? `/creations/${creationId}` : '#';
+				const thumbUrl = (c?.created_image_thumbnail_url || c?.created_image_url || '').trim();
+				const creator = {
+					user_id: c?.created_image_user_id,
+					display_name: c?.creator_display_name,
+					user_name: c?.creator_user_name,
+					avatar_url: c?.creator_avatar_url
+				};
+				const commenter = {
+					user_id: c?.user_id,
+					display_name: c?.commenter_display_name,
+					user_name: c?.commenter_user_name,
+					avatar_url: c?.commenter_avatar_url
+				};
+				return html`
+					<div class="user-profile-comment-block">
+						<a href="${escapeHtml(creationHref)}" class="user-profile-comment-thumb">
+							${thumbUrl ? html`<img src="${escapeHtml(thumbUrl)}" alt="" class="user-profile-comment-thumb-img" loading="lazy">` : html`<span class="user-profile-comment-thumb-placeholder">?</span>`}
+						</a>
+						<div class="user-profile-comment-title-creator">
+							<a href="${escapeHtml(creationHref)}" class="user-profile-comment-name">${escapeHtml(title)}</a>
+							<div class="user-profile-comment-creator">${renderUserCell(creator, 'creator')}</div>
+						</div>
+						<div class="user-profile-comment-text">${escapeHtml(text)}</div>
+						<div class="user-profile-comment-footer">
+							${renderUserCell(commenter, 'commenter')}
+							${createdAt ? html`<span class="user-profile-comment-date">${escapeHtml(createdAt)}</span>` : ''}
+						</div>
+					</div>
+				`;
+			}).join('')}
+		</div>
+	`;
 }
 
 async function init() {
@@ -500,12 +665,14 @@ async function init() {
 	const isSelf = Boolean(summary.is_self);
 	const viewerFollows = Boolean(summary.viewer_follows);
 
-	// Get current user to check admin role
+	// Get current user for admin role and to hide follow/unfollow on self in lists
 	let isAdmin = false;
+	let viewerUserId = null;
 	try {
 		const currentUser = await fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 500 });
 		if (currentUser.ok && currentUser.data) {
 			isAdmin = currentUser.data.role === 'admin';
+			if (currentUser.data.id != null) viewerUserId = Number(currentUser.data.id);
 		}
 	} catch {
 		// ignore errors
@@ -522,47 +689,242 @@ async function init() {
 	hydrateUserTextLinks(container);
 
 	const grid = container.querySelector('[data-profile-grid]');
-	const tabButtons = Array.from(container.querySelectorAll('.user-profile-tab'));
 	const overlay = container.querySelector('[data-profile-edit-overlay]');
 
-	const publishedImages = await loadUserImages(targetUserId, { includeAll: false }).catch(() => []);
-	let allImagesCache = null;
+	// Tab state: { items, hasMore } per tab for pagination
+	const tabData = {
+		creations: { items: [], hasMore: false },
+		likes: { items: [], hasMore: false },
+		follows: { items: [], hasMore: false },
+		following: { items: [], hasMore: false },
+		comments: { items: [], hasMore: false }
+	};
 
-	// If admin viewing another user's profile, default to "All" tab
-	const defaultTab = (isAdmin && !isSelf) ? 'all' : 'published';
-	const defaultTabButton = tabButtons.find(btn => btn.getAttribute('data-tab') === defaultTab);
-	if (defaultTabButton) {
-		defaultTabButton.classList.add('is-active');
+	function updateLoadMore(containerEl, tabId, hasMore) {
+		const el = containerEl.querySelector(`[data-profile-load-more="${tabId}"]`);
+		if (!el) return;
+		if (hasMore) {
+			el.hidden = false;
+			el.innerHTML = html`<div class="user-profile-load-more-inner"><button type="button" class="btn-secondary user-profile-load-more-btn" data-load-more-tab="${escapeHtml(tabId)}">Load more</button></div>`;
+		} else {
+			el.hidden = true;
+			el.innerHTML = '';
+		}
 	}
 
-	// Load initial content based on default tab
-	if (defaultTab === 'all' && (isSelf || isAdmin)) {
-		allImagesCache = await loadUserImages(targetUserId, { includeAll: true }).catch(() => []);
-		renderImageGrid(grid, allImagesCache, true);
-	} else {
-		renderImageGrid(grid, publishedImages, false);
-	}
-
-	tabButtons.forEach((btn) => {
-		btn.addEventListener('click', async () => {
-			tabButtons.forEach((b) => b.classList.remove('is-active'));
-			btn.classList.add('is-active');
-
-			const tab = btn.getAttribute('data-tab');
-			if (!grid) return;
-
-			grid.innerHTML = html`<div class="route-empty route-empty-image-grid route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>`;
-
-			if (tab === 'all' && (isSelf || isAdmin)) {
-				if (!allImagesCache) {
-					allImagesCache = await loadUserImages(targetUserId, { includeAll: true }).catch(() => []);
-				}
-				renderImageGrid(grid, allImagesCache, true);
-				return;
+	function renderTabContent(tabId) {
+		const data = tabData[tabId];
+		if (!data) return;
+		if (tabId === 'creations') {
+			renderImageGrid(grid, data.items, showBadge);
+			updateLoadMore(container, 'creations', data.hasMore);
+		} else if (tabId === 'likes') {
+			const panel = container.querySelector('[data-profile-likes]');
+			if (panel) {
+				renderImageGrid(panel, data.items, false, 'No likes yet', 'Creations this user likes will appear here.');
+				updateLoadMore(container, 'likes', data.hasMore);
 			}
+		} else if (tabId === 'follows') {
+			const panel = container.querySelector('[data-profile-follows]');
+			if (panel) {
+				renderUserList(panel, data.items, isSelf ? "You're not following anyone yet" : "This user isn't following anyone yet", isSelf ? "When you follow others, they'll show up here." : "When this user follows others, they'll show up here.", { showUnfollow: true, viewerUserId });
+				updateLoadMore(container, 'follows', data.hasMore);
+			}
+		} else if (tabId === 'following') {
+			const panel = container.querySelector('[data-profile-following]');
+			if (panel) {
+				const viewerFollowsSet = new Set((data.items || []).filter((u) => u?.viewer_follows === true).map((u) => Number(u?.user_id ?? u?.id)).filter(Number.isFinite));
+				renderUserList(panel, data.items, isSelf ? "No one follows you yet" : "No followers yet", isSelf ? "When others follow you, they'll show up here." : "When others follow this user, they'll show up here.", { showFollow: true, viewerFollowsByUserId: viewerFollowsSet, viewerUserId });
+				updateLoadMore(container, 'following', data.hasMore);
+			}
+		} else if (tabId === 'comments') {
+			const panel = container.querySelector('[data-profile-comments]');
+			if (panel) {
+				renderCommentsList(panel, data.items, 'Comments this user has left will appear here.');
+				updateLoadMore(container, 'comments', data.hasMore);
+			}
+		}
+	}
 
-			renderImageGrid(grid, publishedImages, false);
+	// Creations tab: initial load with limit
+	const includeAllForAdmin = isAdmin;
+	const showBadge = isAdmin;
+	try {
+		const result = await loadUserImages(targetUserId, { includeAll: includeAllForAdmin, limit: PROFILE_PAGE_SIZE.creations, offset: 0 });
+		tabData.creations = { items: result.images, hasMore: result.has_more };
+	} catch {
+		tabData.creations = { items: [], hasMore: false };
+	}
+	renderImageGrid(grid, tabData.creations.items, showBadge);
+	updateLoadMore(container, 'creations', tabData.creations.hasMore);
+
+	// Lazy-load Likes, Follows, Following, Comments when user switches to that tab
+	const tabsEl = container.querySelector('[data-profile-tabs]');
+	const loadedTabs = new Set(['creations']);
+	const loadingHtml = html`<div class="route-empty route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>`;
+
+	async function loadTabContent(tabId, forceRefresh = false) {
+		if (!forceRefresh && loadedTabs.has(tabId)) return;
+		const selectors = {
+			likes: '[data-profile-likes]',
+			follows: '[data-profile-follows]',
+			following: '[data-profile-following]',
+			comments: '[data-profile-comments]'
+		};
+		const panel = container.querySelector(selectors[tabId]);
+		if (!panel) return;
+		if (!forceRefresh) {
+			panel.innerHTML = loadingHtml;
+			loadedTabs.add(tabId);
+		}
+		try {
+			if (tabId === 'likes') {
+				const limit = PROFILE_PAGE_SIZE.likes;
+				const res = await fetchJsonWithStatusDeduped(`/api/users/${targetUserId}/liked-creations?limit=${limit}&offset=0`, { credentials: 'include' }, { windowMs: 800 });
+				const images = Array.isArray(res?.data?.images) ? res.data.images : [];
+				tabData.likes = { items: images, hasMore: Boolean(res?.data?.has_more) };
+				panel.className = 'route-cards route-cards-image-grid';
+				panel.setAttribute('data-profile-likes', '');
+				panel.innerHTML = '';
+				renderImageGrid(panel, tabData.likes.items, false, 'No likes yet', 'Creations this user likes will appear here.');
+				updateLoadMore(container, 'likes', tabData.likes.hasMore);
+			} else if (tabId === 'follows') {
+				const limit = PROFILE_PAGE_SIZE.follows;
+				const res = await fetchJsonWithStatusDeduped(`/api/users/${targetUserId}/following?limit=${limit}&offset=0`, { credentials: 'include' }, { windowMs: 800 });
+				const users = Array.isArray(res?.data?.following) ? res.data.following : [];
+				tabData.follows = { items: users, hasMore: Boolean(res?.data?.has_more) };
+				const followsEmptyTitle = isSelf ? "You're not following anyone yet" : 'This user isn\'t following anyone yet';
+				const followsEmptyMsg = isSelf ? "When you follow others, they'll show up here." : "When this user follows others, they'll show up here.";
+				renderUserList(panel, users, followsEmptyTitle, followsEmptyMsg, { showUnfollow: true, viewerUserId });
+				updateLoadMore(container, 'follows', tabData.follows.hasMore);
+			} else if (tabId === 'following') {
+				const limit = PROFILE_PAGE_SIZE.following;
+				const res = await fetchJsonWithStatusDeduped(`/api/users/${targetUserId}/followers?limit=${limit}&offset=0`, { credentials: 'include' }, { windowMs: 800 });
+				const users = Array.isArray(res?.data?.followers) ? res.data.followers : [];
+				tabData.following = { items: users, hasMore: Boolean(res?.data?.has_more) };
+				const viewerFollowsSet = new Set(
+					(users || []).filter((u) => u?.viewer_follows === true).map((u) => Number(u?.user_id ?? u?.id)).filter(Number.isFinite)
+				);
+				const followingEmptyTitle = isSelf ? "No one follows you yet" : 'No followers yet';
+				const followingEmptyMsg = isSelf ? "When others follow you, they'll show up here." : "When others follow this user, they'll show up here.";
+				renderUserList(panel, users, followingEmptyTitle, followingEmptyMsg, { showFollow: true, viewerFollowsByUserId: viewerFollowsSet, viewerUserId });
+				updateLoadMore(container, 'following', tabData.following.hasMore);
+			} else if (tabId === 'comments') {
+				const limit = PROFILE_PAGE_SIZE.comments;
+				const res = await fetchJsonWithStatusDeduped(`/api/users/${targetUserId}/comments?limit=${limit}&offset=0`, { credentials: 'include' }, { windowMs: 800 });
+				const comments = Array.isArray(res?.data?.comments) ? res.data.comments : [];
+				tabData.comments = { items: comments, hasMore: Boolean(res?.data?.has_more) };
+				renderCommentsList(panel, comments, 'Comments this user has left will appear here.');
+				updateLoadMore(container, 'comments', tabData.comments.hasMore);
+			}
+		} catch {
+			panel.innerHTML = html`<div class="route-empty"><div class="route-empty-title">Unable to load</div><div class="route-empty-message">Something went wrong. Try again later.</div></div>`;
+			loadedTabs.delete(tabId);
+		}
+	}
+
+	async function loadMoreForTab(tabId) {
+		const data = tabData[tabId];
+		if (!data || !data.hasMore) return;
+		const offset = data.items.length;
+		const limit = PROFILE_PAGE_SIZE[tabId] ?? 20;
+		const loadMoreEl = container.querySelector(`[data-profile-load-more="${tabId}"]`);
+		const btn = loadMoreEl?.querySelector('.user-profile-load-more-btn');
+		if (btn) btn.disabled = true;
+		try {
+			if (tabId === 'creations') {
+				const result = await loadUserImages(targetUserId, { includeAll: includeAllForAdmin, limit, offset });
+				data.items = data.items.concat(result.images);
+				data.hasMore = result.has_more;
+				renderTabContent('creations');
+			} else if (tabId === 'likes') {
+				const res = await fetchJsonWithStatusDeduped(`/api/users/${targetUserId}/liked-creations?limit=${limit}&offset=${offset}`, { credentials: 'include' }, { windowMs: 800 });
+				const images = Array.isArray(res?.data?.images) ? res.data.images : [];
+				data.items = data.items.concat(images);
+				data.hasMore = Boolean(res?.data?.has_more);
+				renderTabContent('likes');
+			} else if (tabId === 'follows') {
+				const res = await fetchJsonWithStatusDeduped(`/api/users/${targetUserId}/following?limit=${limit}&offset=${offset}`, { credentials: 'include' }, { windowMs: 800 });
+				const users = Array.isArray(res?.data?.following) ? res.data.following : [];
+				data.items = data.items.concat(users);
+				data.hasMore = Boolean(res?.data?.has_more);
+				renderTabContent('follows');
+			} else if (tabId === 'following') {
+				const res = await fetchJsonWithStatusDeduped(`/api/users/${targetUserId}/followers?limit=${limit}&offset=${offset}`, { credentials: 'include' }, { windowMs: 800 });
+				const users = Array.isArray(res?.data?.followers) ? res.data.followers : [];
+				data.items = data.items.concat(users);
+				data.hasMore = Boolean(res?.data?.has_more);
+				renderTabContent('following');
+			} else if (tabId === 'comments') {
+				const res = await fetchJsonWithStatusDeduped(`/api/users/${targetUserId}/comments?limit=${limit}&offset=${offset}`, { credentials: 'include' }, { windowMs: 800 });
+				const comments = Array.isArray(res?.data?.comments) ? res.data.comments : [];
+				data.items = data.items.concat(comments);
+				data.hasMore = Boolean(res?.data?.has_more);
+				renderTabContent('comments');
+			}
+		} finally {
+			if (btn) btn.disabled = false;
+		}
+	}
+
+	if (tabsEl) {
+		tabsEl.addEventListener('tab-change', (e) => {
+			const id = e.detail?.id;
+			if (id && ['likes', 'follows', 'following', 'comments'].includes(id)) {
+				void loadTabContent(id);
+			}
+			// Remember tab in URL so refresh keeps the same tab
+			if (id) {
+				const base = `${window.location.pathname}${window.location.search}`;
+				const newUrl = `${base}#${id}`;
+				if (window.location.hash !== `#${id}`) {
+					history.replaceState(undefined, '', newUrl);
+				}
+			}
 		});
+
+		// Restore tab from URL hash on load
+		const hashTab = (window.location.hash || '').replace(/^#/, '');
+		if (hashTab && ['creations', 'likes', 'follows', 'following', 'comments'].includes(hashTab) && hashTab !== 'creations') {
+			tabsEl.setActiveTab(hashTab, { focus: false });
+			void loadTabContent(hashTab);
+		}
+
+		// Show tab bar now that initial tab has been auto-selected (and content loaded)
+		tabsEl.classList.remove('user-profile-tabs-pending');
+	}
+
+	// Load more button (event delegation)
+	container.addEventListener('click', async (e) => {
+		const loadMoreBtn = e.target?.closest?.('.user-profile-load-more-btn');
+		if (loadMoreBtn && loadMoreBtn instanceof HTMLButtonElement) {
+			const tabId = loadMoreBtn.getAttribute('data-load-more-tab');
+			if (tabId) {
+				e.preventDefault();
+				await loadMoreForTab(tabId);
+			}
+			return;
+		}
+
+		const btn = e.target?.closest?.('[data-action="unfollow"], [data-action="follow"]');
+		if (!btn || !(btn instanceof HTMLButtonElement)) return;
+		e.preventDefault();
+		const userId = Number.parseInt(btn.getAttribute('data-user-id') || '', 10);
+		if (!Number.isFinite(userId) || userId <= 0) return;
+		const action = btn.getAttribute('data-action');
+		const panel = btn.closest('[data-profile-follows], [data-profile-following]');
+		const tabId = panel?.hasAttribute('data-profile-follows') ? 'follows' : panel?.hasAttribute('data-profile-following') ? 'following' : null;
+		if (!tabId) return;
+		btn.disabled = true;
+		const method = action === 'unfollow' ? 'DELETE' : 'POST';
+		const result = await fetchJsonWithStatusDeduped(`/api/users/${userId}/follow`, {
+			method,
+			credentials: 'include'
+		}, { windowMs: 0 }).catch(() => ({ ok: false }));
+		btn.disabled = false;
+		if (result?.ok) {
+			await loadTabContent(tabId, true);
+		}
 	});
 
 	const shareButton = container.querySelector('.user-profile-share');

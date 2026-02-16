@@ -169,6 +169,17 @@
 	margin-top: 16px;
 }
 
+/* Hide tab bar until initial tab has been auto-selected and content is ready */
+[data-profile-tabs].user-profile-tabs-pending [data-app-tabs] {
+	visibility: hidden;
+	height: 0;
+	overflow: hidden;
+	margin: 0;
+	padding: 0;
+	border: none;
+	min-height: 0;
+}
+
 .user-profile-tabs {
 	display: inline-flex;
 	gap: 6px;
@@ -397,6 +408,316 @@
 	width: 18px;
 	height: 18px;
 	color: white;
+}
+
+/* Profile tab lists: Follows / Following */
+.user-profile-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+}
+
+.user-profile-list-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	border-bottom: 1px solid var(--border);
+}
+
+.user-profile-list-item:last-child {
+	border-bottom: none;
+}
+
+.user-profile-list-link {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 12px 0;
+	color: var(--text);
+	text-decoration: none;
+	border-radius: 6px;
+	transition: background-color 0.2s;
+}
+
+.user-profile-list-action {
+	flex-shrink: 0;
+}
+
+.user-profile-list-link:hover {
+	background: var(--surface-strong);
+}
+
+.user-profile-list-avatar {
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
+	overflow: hidden;
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--surface-strong);
+}
+
+.user-profile-list-avatar-img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.user-profile-list-avatar-fallback {
+	width: 100%;
+	height: 100%;
+	background: var(--user-profile-avatar-bg, #6b7280);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #fff;
+	font-weight: 600;
+	font-size: 1rem;
+}
+
+.user-profile-list-info {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.user-profile-list-name {
+	font-weight: 600;
+	color: var(--text);
+}
+
+.user-profile-list-handle {
+	font-size: 0.875rem;
+	color: var(--text-muted);
+}
+
+/* Load more button below tab content */
+.user-profile-load-more {
+	margin-top: 16px;
+	text-align: center;
+}
+
+.user-profile-load-more-inner {
+	display: flex;
+	justify-content: center;
+}
+
+.user-profile-load-more-btn {
+	min-width: 120px;
+}
+
+/* Profile tab: Comments (3 columns, 3 rows; thumb spans 3 rows; comment text spans 2 rows; footer = commenter + date) */
+.user-profile-comments-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+}
+
+.user-profile-comment-block {
+	display: grid;
+	grid-template-columns: 72px 300px 1fr;
+	grid-template-rows: auto auto;
+	gap: 0 12px;
+	align-items: start;
+	padding: 12px 0;
+	border-bottom: 1px solid var(--border);
+}
+
+.user-profile-comment-block:last-child {
+	border-bottom: none;
+}
+
+.user-profile-comment-thumb {
+	grid-column: 1;
+	grid-row: 1 / -1;
+	display: block;
+	border-radius: 8px;
+	overflow: hidden;
+	background: var(--surface-strong);
+	aspect-ratio: 1;
+}
+
+.user-profile-comment-thumb-img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+
+.user-profile-comment-thumb-placeholder {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	aspect-ratio: 1;
+	background: var(--surface-strong);
+	color: var(--text-muted);
+	font-size: 1.25rem;
+}
+
+.user-profile-comment-title-creator {
+	grid-column: 2;
+	grid-row: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+
+.user-profile-comment-name {
+	text-align: left;
+	color: var(--accent);
+	text-decoration: none;
+	font-weight: 600;
+	font-size: 0.9375rem;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.user-profile-comment-name:hover {
+	text-decoration: underline;
+}
+
+.user-profile-comment-creator {
+	text-align: left;
+}
+
+.user-profile-comment-text {
+	grid-column: 3;
+	grid-row: 1;
+	text-align: left;
+	white-space: pre-wrap;
+	color: var(--text);
+	font-size: 0.9375rem;
+	line-height: 1.4;
+	min-width: 0;
+}
+
+.user-profile-comment-footer {
+	grid-column: 3;
+	grid-row: 2;
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px 12px;
+	text-align: left;
+	padding-top: 4px;
+}
+
+.user-profile-comment-date {
+	font-size: 0.8125rem;
+	color: var(--text-muted);
+	white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+	.user-profile-comment-block {
+		grid-template-columns: 1fr;
+		grid-template-rows: auto auto auto auto;
+		gap: 8px 0;
+		padding: 16px 0;
+	}
+
+	.user-profile-comment-thumb {
+		grid-column: 1;
+		grid-row: 1;
+		max-height: 180px;
+		aspect-ratio: 16 / 10;
+	}
+
+	.user-profile-comment-title-creator {
+		grid-column: 1;
+		grid-row: 2;
+	}
+
+	.user-profile-comment-name {
+		white-space: normal;
+		overflow: visible;
+		text-overflow: clip;
+	}
+
+	.user-profile-comment-text {
+		grid-column: 1;
+		grid-row: 3;
+	}
+
+	.user-profile-comment-footer {
+		grid-column: 1;
+		grid-row: 4;
+	}
+}
+
+.user-profile-comment-user {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--text);
+	text-decoration: none;
+	font-size: 0.875rem;
+}
+
+.user-profile-comment-user:hover {
+	color: var(--accent);
+}
+
+.user-profile-comment-avatar {
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	overflow: hidden;
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--surface-strong);
+}
+
+.user-profile-comment-avatar-img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.user-profile-comment-avatar-fallback {
+	width: 100%;
+	height: 100%;
+	background: var(--user-profile-avatar-bg, #6b7280);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #fff;
+	font-weight: 600;
+	font-size: 0.75rem;
+}
+
+.user-profile-comment-user-info {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 4px 6px;
+	line-height: 1.25;
+	min-width: 0;
+}
+
+.user-profile-comment-user-name {
+	font-weight: 600;
+}
+
+.user-profile-comment-user-handle {
+	font-size: 0.8125rem;
+	color: var(--text-muted);
 }
 
 @media (prefers-color-scheme: light) {

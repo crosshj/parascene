@@ -79,7 +79,7 @@ export default function createFollowsRoutes({ queries }) {
 		}
 	});
 
-	// List followers for a user
+	// List followers for a user (includes viewer_follows when selectUserFollowersWithViewer is available)
 	router.get("/api/users/:id/followers", async (req, res) => {
 		try {
 			const viewerId = requireAuth(req, res);
@@ -99,8 +99,18 @@ export default function createFollowsRoutes({ queries }) {
 				return res.status(500).json({ error: "Follow storage not available" });
 			}
 
-			const followers = await queries.selectUserFollowers.all(targetUserId);
-			return res.json({ followers: Array.isArray(followers) ? followers : [] });
+			const limit = Math.min(200, Math.max(1, Number.parseInt(String(req.query?.limit ?? "20"), 10) || 20));
+			const offset = Math.max(0, Number.parseInt(String(req.query?.offset ?? "0"), 10) || 0);
+			const pagination = { limit, offset };
+
+			const followers = queries.selectUserFollowersWithViewer?.all
+				? await queries.selectUserFollowersWithViewer.all(targetUserId, viewerId, pagination)
+				: await queries.selectUserFollowers.all(targetUserId, pagination);
+			const list = Array.isArray(followers) ? followers : [];
+			if (list.length && list[0].viewer_follows === undefined) {
+				list.forEach((u) => { u.viewer_follows = false; });
+			}
+			return res.json({ followers: list, has_more: list.length === limit });
 		} catch (error) {
 			// console.error("Error loading followers:", error);
 			return res.status(500).json({ error: "Internal server error" });
@@ -127,8 +137,11 @@ export default function createFollowsRoutes({ queries }) {
 				return res.status(500).json({ error: "Follow storage not available" });
 			}
 
-			const following = await queries.selectUserFollowing.all(targetUserId);
-			return res.json({ following: Array.isArray(following) ? following : [] });
+			const limit = Math.min(200, Math.max(1, Number.parseInt(String(req.query?.limit ?? "20"), 10) || 20));
+			const offset = Math.max(0, Number.parseInt(String(req.query?.offset ?? "0"), 10) || 0);
+			const following = await queries.selectUserFollowing.all(targetUserId, { limit, offset });
+			const list = Array.isArray(following) ? following : [];
+			return res.json({ following: list, has_more: list.length === limit });
 		} catch (error) {
 			// console.error("Error loading following:", error);
 			return res.status(500).json({ error: "Internal server error" });

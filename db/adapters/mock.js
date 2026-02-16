@@ -1181,11 +1181,14 @@ export function openDb() {
 			}
 		},
 		selectUserFollowers: {
-			all: async (userId) => {
+			all: async (userId, options = {}) => {
+				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
+				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
 				const id = Number(userId);
 				const rows = user_follows
 					.filter((row) => row.following_id === id)
-					.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+					.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+					.slice(offset, offset + limit);
 				return rows.map((row) => {
 					const profile = user_profiles.find((p) => p.user_id === Number(row.follower_id));
 					return {
@@ -1198,12 +1201,40 @@ export function openDb() {
 				});
 			}
 		},
+		selectUserFollowersWithViewer: {
+			all: async (targetUserId, viewerId, options = {}) => {
+				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
+				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
+				const id = Number(targetUserId);
+				const viewerIdNum = Number(viewerId);
+				const rows = user_follows
+					.filter((row) => row.following_id === id)
+					.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+					.slice(offset, offset + limit);
+				return rows.map((row) => {
+					const profile = user_profiles.find((p) => p.user_id === Number(row.follower_id));
+					return {
+						user_id: row.follower_id,
+						followed_at: row.created_at,
+						user_name: profile?.user_name ?? null,
+						display_name: profile?.display_name ?? null,
+						avatar_url: profile?.avatar_url ?? null,
+						viewer_follows: user_follows.some(
+							(f) => Number(f.follower_id) === viewerIdNum && Number(f.following_id) === Number(row.follower_id)
+						)
+					};
+				});
+			}
+		},
 		selectUserFollowing: {
-			all: async (userId) => {
+			all: async (userId, options = {}) => {
+				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
+				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
 				const id = Number(userId);
 				const rows = user_follows
 					.filter((row) => row.follower_id === id)
-					.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+					.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+					.slice(offset, offset + limit);
 				return rows.map((row) => {
 					const profile = user_profiles.find((p) => p.user_id === Number(row.following_id));
 					return {
@@ -1418,21 +1449,28 @@ export function openDb() {
 		selectCreatedImagesForUser: {
 			all: async (userId, options = {}) => {
 				const includeUnavailable = options?.includeUnavailable === true;
-				return created_images.filter((img) => {
+				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
+				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
+				const filtered = created_images.filter((img) => {
 					if (img.user_id !== Number(userId)) return false;
 					if (!includeUnavailable && (img.unavailable_at != null && img.unavailable_at !== "")) return false;
 					return true;
-				});
+				}).sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
+				return filtered.slice(offset, offset + limit);
 			}
 		},
 		selectPublishedCreatedImagesForUser: {
-			all: async (userId) =>
-				created_images.filter(
+			all: async (userId, options = {}) => {
+				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
+				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
+				const filtered = created_images.filter(
 					(img) =>
 						img.user_id === Number(userId) &&
 						(img.published === true || img.published === 1) &&
 						(img.unavailable_at == null || img.unavailable_at === "")
-				)
+				).sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
+				return filtered.slice(offset, offset + limit);
+			}
 		},
 		selectAllCreatedImageCountForUser: {
 			get: async (userId) => ({
@@ -1450,6 +1488,12 @@ export function openDb() {
 						(img.unavailable_at == null || img.unavailable_at === "")
 				).length
 			})
+		},
+		selectCreatedImagesLikedByUser: {
+			all: async (_userId, _options = {}) => []
+		},
+		selectCommentsByUser: {
+			all: async (_userId, _options = {}) => []
 		},
 		selectLikesReceivedForUserPublished: {
 			get: async () => ({ count: 0 })
