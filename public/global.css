@@ -935,6 +935,27 @@ a.btn-outlined:focus-visible {
 	outline-offset: 2px;
 }
 
+/* Outlined danger variant (transparent bg, error border/text) */
+.btn-outlined.btn-danger-outlined,
+button.btn-outlined.btn-danger-outlined {
+	background: transparent;
+	border-color: var(--error-text);
+	color: var(--error-text);
+}
+
+.btn-outlined.btn-danger-outlined:hover:not(:disabled),
+button.btn-outlined.btn-danger-outlined:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--error-text) 10%, transparent);
+	border-color: var(--error-text);
+	color: var(--error-text);
+}
+
+.btn-outlined.btn-danger-outlined:disabled,
+button.btn-outlined.btn-danger-outlined:disabled {
+	color: var(--text-muted);
+	border-color: var(--border);
+}
+
 /* Button corners: 6px fallback, 12px + squircle when corner-shape is supported */
 .btn-corners-squircle,
 button.btn-corners-squircle,
