@@ -56,15 +56,6 @@
     "starred": false
   },
   {
-    "name": "Login with Username",
-    "description": "also, add ability to change email",
-    "cost": 8,
-    "impact": 1,
-    "dependsOn": [],
-    "starred": false,
-    "done": true
-  },
-  {
     "name": "Join from Share pays out",
     "description": "The original creator gets some credits.\nThe sharer gets credits.\nWhat to do about mutated creations?",
     "cost": 100,
