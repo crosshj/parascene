@@ -954,6 +954,7 @@ button.btn-danger {
 }
 
 @supports (corner-shape: squircle) {
+
 	.btn-corners-squircle,
 	button.btn-corners-squircle,
 	a.btn-corners-squircle,
@@ -968,7 +969,7 @@ button.btn-danger {
 	a.btn-outlined,
 	.btn-danger,
 	button.btn-danger {
-		border-radius: 12px;
+		border-radius: 14px;
 		corner-shape: squircle;
 	}
 }

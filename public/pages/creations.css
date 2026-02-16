@@ -157,28 +157,13 @@ body.creation-detail-page main>section:first-of-type {
 	pointer-events: auto;
 }
 
+/* Global .btn-primary, .btn-secondary, .btn-danger provide base styles; only row-specific tweaks here */
 .creation-detail-action-btn {
-	padding: 10px 20px;
-	background: var(--surface);
-	border: 1px solid var(--border);
-	border-radius: 6px;
-	color: var(--text);
-	font-size: 0.9rem;
-	cursor: pointer;
-	transition: background 0.2s ease, border-color 0.2s ease;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-}
-
-.creation-detail-action-btn:hover:not(:disabled) {
-	background: var(--surface-muted);
-	border-color: var(--accent);
-}
-
-.creation-detail-action-btn:disabled {
-	opacity: 0.5;
-	cursor: not-allowed;
+	font-size: 0.9rem;
+	padding: 10px 20px;
 }
 
 /* Publish Modal - uses standardized modal pattern from global.css */

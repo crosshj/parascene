@@ -160,29 +160,6 @@ class AppRouteCreate extends HTMLElement {
           align-items: flex-start;
           margin-top: 1.5rem;
         }
-        .create-route .create-button {
-          padding: 10px 20px;
-          background: var(--accent);
-          color: var(--accent-text);
-          border: none;
-          border-radius: 6px;
-          font-size: 0.95rem;
-          font-weight: 500;
-          cursor: pointer;
-          transition: background 0.2s ease, transform 0.1s ease;
-        }
-        .create-route .create-button:hover:not(:disabled) {
-          background: var(--focus);
-          transform: translateY(-1px);
-        }
-        .create-route .create-button:active:not(:disabled) {
-          transform: translateY(0);
-        }
-        .create-route .create-button:disabled {
-          background: var(--surface-strong);
-          color: var(--text-muted);
-          cursor: not-allowed;
-        }
         .create-route .create-button-spinner {
           display: inline-block;
           width: 20px;
@@ -531,7 +508,7 @@ class AppRouteCreate extends HTMLElement {
               </div>
             </form>
             <div class="create-controls">
-              <button class="create-button" data-create-button disabled>
+              <button type="button" class="btn-primary create-button" data-create-button disabled>
                 Create
               </button>
               <p class="create-cost" data-create-cost>Select a server and method to see cost</p>
@@ -598,7 +575,7 @@ class AppRouteCreate extends HTMLElement {
               </p>
               </div>
               <div class="create-route-advanced-actions">
-                <button type="button" class="create-button" data-advanced-create-button disabled>
+                <button type="button" class="btn-primary create-button" data-advanced-create-button disabled>
                   Query
                 </button>
                 <p class="create-cost" data-advanced-create-cost>Turn on at least one Data Builder option to create.</p>
@@ -612,7 +589,7 @@ class AppRouteCreate extends HTMLElement {
           <div class="create-route-advanced-confirm-panel">
             <p class="create-cost" data-advanced-confirm-message></p>
             <div class="create-route-advanced-confirm-actions">
-              <button type="button" class="create-button" data-advanced-confirm-create>Create</button>
+              <button type="button" class="btn-primary create-button" data-advanced-confirm-create>Create</button>
               <button type="button" class="btn-secondary" data-advanced-confirm-cancel>Cancel</button>
             </div>
           </div>
@@ -632,7 +609,7 @@ class AppRouteCreate extends HTMLElement {
             <pre class="create-route-advanced-preview-json" data-advanced-preview-json></pre>
             <div class="create-route-advanced-confirm-actions create-route-advanced-preview-actions">
               <button type="button" class="btn-secondary" data-advanced-preview-close>Close</button>
-              <button type="button" class="create-button" data-advanced-preview-copy>Copy</button>
+              <button type="button" class="btn-primary create-button" data-advanced-preview-copy>Copy</button>
             </div>
           </div>
         </div>

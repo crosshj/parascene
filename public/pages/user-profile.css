@@ -426,6 +426,7 @@
 	justify-content: space-between;
 	gap: 12px;
 	border-bottom: 1px solid var(--border);
+	min-height: 64px;
 }
 
 .user-profile-list-item:last-child {
@@ -447,6 +448,7 @@
 
 .user-profile-list-action {
 	flex-shrink: 0;
+	align-self: center;
 }
 
 .user-profile-list-link:hover {

@@ -497,7 +497,6 @@ class AppModalCredits extends HTMLElement {
         /* Ensure btn-secondary matches button height in this modal */
         app-modal-credits .btn-secondary {
           padding: 10px 16px;
-          border-radius: 10px;
         }
         .credits-claim-note {
           color: var(--text-muted);

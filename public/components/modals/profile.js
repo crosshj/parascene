@@ -173,18 +173,18 @@ class AppModalProfile extends HTMLElement {
 		};
 
 		content.innerHTML = html`
-      <div class="field">
-        <label>Email</label>
-        <div class="value">${escapeHtml(user.email)}</div>
-      </div>
-      <div class="field">
-        <label>Role</label>
-        <div class="value">${escapeHtml(roleLabels[user.role] || user.role)}</div>
-      </div>
-      <div class="field">
-        <label>Member Since</label>
-        <div class="value">${formatDate(user.created_at) || 'N/A'}</div>
-      </div>
+	<div class="field">
+		<label>Email</label>
+		<div class="value">${escapeHtml(user.email)}</div>
+	</div>
+	<div class="field">
+		<label>Role</label>
+		<div class="value">${escapeHtml(roleLabels[user.role] || user.role)}</div>
+	</div>
+	<div class="field">
+		<label>Member Since</label>
+		<div class="value">${formatDate(user.created_at) || 'N/A'}</div>
+	</div>
     `;
 	}
 
@@ -271,36 +271,49 @@ class AppModalProfile extends HTMLElement {
         .profile-actions form {
           margin: 0;
         }
-        .profile-action-button {
-          height: 40px;
-          padding: 0 14px;
-          border-radius: 10px;
-          border: 1px solid var(--border);
-          background: transparent;
-          color: var(--text);
-          cursor: pointer;
-          font-weight: 600;
-          text-decoration: none;
+        /* Mirror global .btn-secondary (shadow DOM does not inherit global.css) */
+        .btn-secondary,
+        a.btn-secondary {
           display: inline-flex;
           align-items: center;
-          justify-content: center;
-          box-sizing: border-box;
-          line-height: 1;
+          gap: 6px;
+          padding: 8px 12px;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          color: var(--text);
+          text-decoration: none;
+          font-size: 0.95rem;
+          transition: background-color 0.2s, border-color 0.2s;
+          box-shadow: var(--shadow);
+          cursor: pointer;
+          font: inherit;
+          border-radius: 6px;
           -webkit-appearance: none;
           appearance: none;
+          box-sizing: border-box;
+          line-height: 1;
         }
-        .profile-action-button:hover {
+        @supports (corner-shape: squircle) {
+          .btn-secondary,
+          a.btn-secondary {
+            border-radius: 14px;
+            corner-shape: squircle;
+          }
+        }
+        .btn-secondary:hover:not(:disabled),
+        a.btn-secondary:hover {
+          background: var(--surface-strong);
           border-color: var(--accent);
+        }
+        .btn-secondary.is-logout {
           background: var(--surface-strong);
         }
-        .profile-action-button.is-logout {
-          background: var(--surface-strong);
-        }
-        .profile-action-button.is-logout:hover {
+        .btn-secondary.is-logout:hover {
           border-color: var(--accent);
           background: var(--surface);
         }
-        .profile-action-button .profile-action-icon {
+        .btn-secondary .profile-action-icon,
+        a.btn-secondary .profile-action-icon {
           width: 18px;
           height: 18px;
           margin-right: 8px;
@@ -343,10 +356,10 @@ class AppModalProfile extends HTMLElement {
             <div class="profile-content"></div>
           </div>
           <div class="profile-actions">
-            <a class="profile-action-button" href="/help">${helpIcon('profile-action-icon')} Help</a>
-            <a class="profile-action-button" href="/user" data-full-profile-link>View Full Profile</a>
+            <a class="btn-secondary" href="/help">${helpIcon('profile-action-icon')} Help</a>
+            <a class="btn-secondary" href="/user" data-full-profile-link>View Full Profile</a>
             <form action="/logout" method="post">
-              <button type="submit" class="profile-action-button is-logout">Logout</button>
+              <button type="submit" class="btn-secondary is-logout">Logout</button>
             </form>
           </div>
         </div>
