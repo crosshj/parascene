@@ -148,11 +148,17 @@ export const notifyIcon = withAttributes(html`
 `);
 
 export const creditIcon = withAttributes(html`
+
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
 		stroke-linejoin="round" aria-hidden="true">
+	
 		<circle cx="12" cy="12" r="9"></circle>
-		<text x="12" y="12" text-anchor="middle" dominant-baseline="middle" font-size="10" fill="currentColor"
-			stroke="none">P</text>
+	
+		<path
+			d="M 9.301 16.612 L 9.301 7.758 L 12.641 7.758 C 13.231 7.758 13.678 7.786 13.988 7.841 C 14.424 7.915 14.788 8.053 15.08 8.257 C 15.376 8.459 15.614 8.745 15.791 9.112 C 15.97 9.477 16.06 9.881 16.06 10.318 C 16.06 11.071 15.821 11.709 15.34 12.231 C 14.862 12.753 13.996 13.013 12.744 13.013 L 10.474 13.013 L 10.474 16.612 L 9.301 16.612 Z M 10.474 11.967 L 12.762 11.967 C 13.518 11.967 14.057 11.826 14.375 11.544 C 14.694 11.264 14.853 10.866 14.853 10.354 C 14.853 9.985 14.759 9.667 14.572 9.403 C 14.385 9.141 14.138 8.967 13.832 8.881 C 13.634 8.829 13.271 8.803 12.739 8.803 L 10.474 8.803 L 10.474 11.967 Z"
+			stroke="none" fill="currentColor"></path>
+	
+	
 	</svg>
 `);
 

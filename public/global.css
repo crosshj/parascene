@@ -880,7 +880,8 @@ a.btn-secondary .icon {
 
 /* Outlined button style */
 .btn-outlined,
-button.btn-outlined {
+button.btn-outlined,
+a.btn-outlined {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -893,20 +894,31 @@ button.btn-outlined {
 	text-decoration: none;
 	font-size: 0.95rem;
 	font-weight: 500;
+	white-space: nowrap;
+	flex-shrink: 0;
 	transition: background-color 0.2s, border-color 0.2s, color 0.2s;
 	cursor: pointer;
 	font: inherit;
 }
 
+.btn-outlined .icon,
+a.btn-outlined .icon {
+	width: 20px;
+	height: 20px;
+	flex-shrink: 0;
+}
+
 .btn-outlined:hover:not(:disabled),
-button.btn-outlined:hover:not(:disabled) {
+button.btn-outlined:hover:not(:disabled),
+a.btn-outlined:hover {
 	background: color-mix(in srgb, var(--accent) 10%, transparent);
 	border-color: var(--accent);
 	color: var(--accent);
 }
 
 .btn-outlined:active:not(:disabled),
-button.btn-outlined:active:not(:disabled) {
+button.btn-outlined:active:not(:disabled),
+a.btn-outlined:active {
 	background: color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
@@ -919,7 +931,8 @@ button.btn-outlined:disabled {
 }
 
 .btn-outlined:focus-visible,
-button.btn-outlined:focus-visible {
+button.btn-outlined:focus-visible,
+a.btn-outlined:focus-visible {
 	outline: 2px solid var(--focus);
 	outline-offset: 2px;
 }
@@ -3202,6 +3215,37 @@ app-route-feed {
 }
 
 .explore-load-more-fallback .explore-load-more-btn {
+	min-width: 120px;
+}
+
+.creations-load-more-sentinel {
+	height: 1px;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+}
+
+.creations-load-more-fallback {
+	padding: 24px 0 32px;
+	text-align: center;
+	opacity: 0;
+	pointer-events: none;
+	animation: creations-load-more-reveal 0.01s 2s forwards;
+}
+
+.creations-load-more-fallback[hidden] {
+	animation: none;
+	display: none !important;
+}
+
+@keyframes creations-load-more-reveal {
+	to {
+		opacity: 1;
+		pointer-events: auto;
+	}
+}
+
+.creations-load-more-fallback .creations-load-more-btn {
 	min-width: 120px;
 }
 

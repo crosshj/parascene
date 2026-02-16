@@ -864,13 +864,15 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	});
 
-	// GET /api/create/images - List all images for user
+	// GET /api/create/images - List images for user (paginated; supports limit & offset)
 	router.get("/api/create/images", async (req, res) => {
 		const user = await requireUser(req, res);
 		if (!user) return;
 
 		try {
-			const images = await queries.selectCreatedImagesForUser.all(user.id);
+			const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
+			const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+			const images = await queries.selectCreatedImagesForUser.all(user.id, { limit, offset });
 
 			// Transform to include URLs (use file_path from DB which now contains the URL)
 			const imagesWithUrls = images.map((img) => {
@@ -895,7 +897,8 @@ export default function createCreateRoutes({ queries, storage }) {
 				};
 			});
 
-			return res.json({ images: imagesWithUrls });
+			const has_more = images.length === limit;
+			return res.json({ images: imagesWithUrls, has_more });
 		} catch (error) {
 			// console.error("Error fetching images:", error);
 			return res.status(500).json({ error: "Failed to fetch images" });

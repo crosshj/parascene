@@ -21,6 +21,8 @@ function isTimedOut(status, meta) {
 	return Date.now() > timeoutAt;
 }
 
+const CREATIONS_PAGE_SIZE = 50;
+
 function scheduleImageWork(start, { immediate = true, wakeOnVisible = true } = {}) {
 	if (typeof start !== 'function') return Promise.resolve();
 
@@ -130,15 +132,24 @@ class AppRouteCreations extends HTMLElement {
         <div class="route-cards route-cards-image-grid" data-creations-container>
           <div class="route-empty route-empty-image-grid route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
         </div>
+        <div class="creations-load-more-sentinel" data-creations-sentinel aria-hidden="true"></div>
+        <div class="creations-load-more-fallback" data-creations-load-more-fallback>
+          <button type="button" class="btn-secondary creations-load-more-btn" data-creations-load-more-btn>Load more</button>
+        </div>
       </div>
     `;
 		this.pollInterval = null;
 		this.hasLoadedOnce = false;
 		this.isLoading = false;
+		this.isLoadingMore = false;
 		this.isActiveRoute = false;
 		this.creationsWasVisible = false;
 		this.lastLoadFromCheckAt = 0;
+		this.creationsOffset = 0;
+		this.hasMoreCreations = true;
 		this.setupRouteListener();
+		this.setupLoadMoreFallback();
+		this.updateLoadMoreFallback();
 		this.pendingUpdateHandler = () => {
 			if (this.isActiveRoute) {
 				this.loadCreations({ force: true });
@@ -176,12 +187,17 @@ class AppRouteCreations extends HTMLElement {
 				if (!this.pollInterval) {
 					this.startPolling();
 				}
+				requestAnimationFrame(() => {
+					if (this.hasMoreCreations) this.observeLoadMoreSentinel();
+				});
 			} else {
 				this.isActiveRoute = false;
 				this.stopPolling();
 				if (this.imageObserver) this.imageObserver.disconnect();
 				this.imageLoadQueue = [];
 				this.imageLoadsInFlight = 0;
+				this.sentinelObserver?.disconnect();
+				this.sentinelObserver = null;
 			}
 		};
 		document.addEventListener('route-change', this.routeChangeHandler);
@@ -209,6 +225,48 @@ class AppRouteCreations extends HTMLElement {
 		});
 
 		this.intersectionObserver.observe(this);
+	}
+
+	observeLoadMoreSentinel() {
+		this.sentinelObserver?.disconnect();
+		this.sentinelObserver = null;
+		if (!this.hasMoreCreations) return;
+		const sentinel = this.querySelector('[data-creations-sentinel]');
+		if (!sentinel) return;
+		this.sentinelObserver = new IntersectionObserver(
+			(entries) => {
+				const entry = entries[0];
+				if (!entry?.isIntersecting) return;
+				if (!this.hasMoreCreations || this.isLoadingMore || this.isLoading || !this.isRouteActive()) return;
+				this.loadMoreCreations();
+			},
+			{ root: null, rootMargin: '800px 0px', threshold: 0 }
+		);
+		this.sentinelObserver.observe(sentinel);
+	}
+
+	updateLoadMoreFallback() {
+		const wrap = this.querySelector('[data-creations-load-more-fallback]');
+		const btn = this.querySelector('[data-creations-load-more-btn]');
+		if (!wrap || !btn) return;
+		if (!this.hasMoreCreations) {
+			wrap.setAttribute('hidden', '');
+			wrap.style.display = 'none';
+			return;
+		}
+		wrap.removeAttribute('hidden');
+		wrap.style.display = '';
+		btn.disabled = false;
+		btn.textContent = 'Load more';
+	}
+
+	setupLoadMoreFallback() {
+		const btn = this.querySelector('[data-creations-load-more-btn]');
+		if (!btn) return;
+		btn.addEventListener('click', () => {
+			if (!this.hasMoreCreations || this.isLoadingMore || this.isLoading) return;
+			this.loadMoreCreations();
+		});
 	}
 
 	setupImageLazyLoading() {
@@ -281,6 +339,8 @@ class AppRouteCreations extends HTMLElement {
 		if (this.intersectionObserver) {
 			this.intersectionObserver.disconnect();
 		}
+		this.sentinelObserver?.disconnect();
+		this.sentinelObserver = null;
 		if (this.imageObserver) {
 			this.imageObserver.disconnect();
 			this.imageObserver = null;
@@ -370,19 +430,26 @@ class AppRouteCreations extends HTMLElement {
 		this.resumeImageLazyLoading();
 	}
 
-	async loadCreations({ force = false } = {}) {
+	async loadCreations({ force = false, reset = false } = {}) {
 		const container = this.querySelector("[data-creations-container]");
 		if (!container) return;
 		if (this.isLoading) return;
 		if (!this.isRouteActive()) return;
-		if (!force && this.hasLoadedOnce) return;
+		if (force && this.hasLoadedOnce) reset = true;
+		if (!force && !reset && this.hasLoadedOnce) return;
 
 		this.isLoading = true;
+		if (reset || !this.hasLoadedOnce) {
+			this.creationsOffset = 0;
+			this.hasMoreCreations = true;
+		}
 		try {
-			// Fetch created creations only
-			const creationsResult = await fetchJsonWithStatusDeduped("/api/create/images", {
-				credentials: 'include'
-			}, { windowMs: 500 }).catch(() => ({ ok: false, status: 0, data: null }));
+			const offset = reset || !this.hasLoadedOnce ? 0 : this.creationsOffset;
+			const creationsResult = await fetchJsonWithStatusDeduped(
+				`/api/create/images?limit=${CREATIONS_PAGE_SIZE}&offset=${offset}`,
+				{ credentials: 'include' },
+				{ windowMs: 500 }
+			).catch(() => ({ ok: false, status: 0, data: null }));
 
 			let cont = this.querySelector("[data-creations-container]");
 			if (!cont) return;
@@ -390,6 +457,10 @@ class AppRouteCreations extends HTMLElement {
 			const creationsRaw = creationsResult.ok
 				? (Array.isArray(creationsResult.data?.images) ? creationsResult.data.images : [])
 				: [];
+			const apiHasMore = creationsResult.ok && creationsResult.data?.has_more === true;
+			if (reset || !this.hasLoadedOnce) {
+				this.hasMoreCreations = apiHasMore && creationsRaw.length >= CREATIONS_PAGE_SIZE;
+			}
 
 			const creations = creationsRaw;
 
@@ -465,34 +536,50 @@ class AppRouteCreations extends HTMLElement {
         `;
 
 				this.hasLoadedOnce = true;
+				this.creationsOffset = 0;
+				this.hasMoreCreations = false;
+				this.updateLoadMoreFallback();
 				return;
 			}
 
 			// Sort creations by created_at (newest first)
 			const sortedCreations = combinedCreations.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-			sortedCreations.forEach((item, index) => {
-				const card = document.createElement("div");
-				card.className = "route-card route-card-image";
+			this.appendCreationCards(cont, sortedCreations, 0);
+			this.hasLoadedOnce = true;
+			this.creationsOffset = creationsRaw.length;
+			this.updateLoadMoreFallback();
+			if (this.hasMoreCreations) this.observeLoadMoreSentinel();
+		} catch (error) {
+			// console.error("Error loading creations:", error);
+			const errCont = this.querySelector("[data-creations-container]");
+			if (errCont) errCont.innerHTML = html`
+        <div class="route-empty route-empty-image-grid">Unable to load creations.</div>
+      `;
+		} finally {
+			this.isLoading = false;
+			this.updateLoadMoreFallback();
+		}
+	}
 
-				const meta = parseMeta(item.meta);
-				const rawStatus = item.status || 'completed';
-				const timedOut = isTimedOut(rawStatus, meta);
-				const status = timedOut && rawStatus === 'creating' ? 'failed' : rawStatus;
+	appendCreationCards(cont, items, startEagerIndex) {
+		items.forEach((item, i) => {
+			const index = startEagerIndex + i;
+			const card = document.createElement("div");
+			card.className = "route-card route-card-image";
 
-				const isPending = status === 'pending';
-				const isCreating = status === 'creating';
-				const isFailed = status === 'failed';
+			const meta = parseMeta(item.meta);
+			const rawStatus = item.status || 'completed';
+			const timedOut = isTimedOut(rawStatus, meta);
+			const status = timedOut && rawStatus === 'creating' ? 'failed' : rawStatus;
 
-				if (isPending) {
-					// Local pending item (no DB row yet)
-					card.innerHTML = html`
-            <div 
-              class="route-media loading"
-              data-image-id="${item.id}"
-              data-status="pending"
-              aria-hidden="true"
-            ></div>
+			const isPending = status === 'pending';
+			const isCreating = status === 'creating';
+			const isFailed = status === 'failed';
+
+			if (isPending) {
+				card.innerHTML = html`
+            <div class="route-media loading" data-image-id="${item.id}" data-status="pending" aria-hidden="true"></div>
             <div class="route-details">
               <div class="route-details-content">
                 <div class="route-title">Creating...</div>
@@ -501,19 +588,10 @@ class AppRouteCreations extends HTMLElement {
               </div>
             </div>
           `;
-					// Pending-only should still poll so the tile can resolve quickly.
-					if (this.isActiveRoute && !this.pollInterval) {
-						this.startPolling();
-					}
-				} else if (isCreating) {
-					// DB row still creating
-					card.innerHTML = html`
-            <div 
-              class="route-media loading"
-              data-image-id="${item.id}"
-              data-status="creating"
-              aria-hidden="true"
-            ></div>
+				if (this.isActiveRoute && !this.pollInterval) this.startPolling();
+			} else if (isCreating) {
+				card.innerHTML = html`
+            <div class="route-media loading" data-image-id="${item.id}" data-status="creating" aria-hidden="true"></div>
             <div class="route-details">
               <div class="route-details-content">
                 <div class="route-title">Creating...</div>
@@ -522,54 +600,31 @@ class AppRouteCreations extends HTMLElement {
               </div>
             </div>
           `;
-					// Restart polling if it was stopped
-					if (this.isActiveRoute && !this.pollInterval) {
-						this.startPolling();
-					}
-				} else if (isFailed) {
-					// Failed or timed-out creation: show error placeholder; click opens detail view.
-					const reason =
-						(meta && typeof meta.error === 'string' && meta.error) ||
-						(meta && meta.error_code === 'timeout'
-							? 'This creation timed out.'
-							: 'This creation failed.');
-
-					card.style.cursor = 'pointer';
-					card.addEventListener('click', () => {
-						window.location.href = `/creations/${item.id}`;
-					});
-
-					card.innerHTML = html`
-            <div 
-              class="route-media route-media-error"
-              data-image-id="${item.id}"
-              data-status="failed"
-              aria-hidden="true"
-            ></div>
+				if (this.isActiveRoute && !this.pollInterval) this.startPolling();
+			} else if (isFailed) {
+				const reason =
+					(meta && typeof meta.error === 'string' && meta.error) ||
+					(meta && meta.error_code === 'timeout' ? 'This creation timed out.' : 'This creation failed.');
+				card.style.cursor = 'pointer';
+				card.addEventListener('click', () => { window.location.href = `/creations/${item.id}`; });
+				card.innerHTML = html`
+            <div class="route-media route-media-error" data-image-id="${item.id}" data-status="failed" aria-hidden="true"></div>
             <div class="route-details">
               <div class="route-details-content">
                 <div class="route-title">Creation unavailable</div>
                 <div class="route-summary">${reason}</div>
-                <div class="route-meta" title="${formatDateTime(item.created_at)}">Created ${formatRelativeTime(
-						item.created_at
-					)}</div>
+                <div class="route-meta" title="${formatDateTime(item.created_at)}">Created ${formatRelativeTime(item.created_at)}</div>
               </div>
             </div>
           `;
-				} else {
-					// Show completed image - make it clickable
-					card.style.cursor = 'pointer';
-					card.addEventListener('click', () => {
-						// Navigate to server route for creation detail
-						window.location.href = `/creations/${item.id}`;
-					});
-
-					const isPublished = item.published === true || item.published === 1;
-					let publishedBadge = '';
-					let publishedInfo = '';
-
-					if (isPublished) {
-						publishedBadge = html`
+			} else {
+				card.style.cursor = 'pointer';
+				card.addEventListener('click', () => { window.location.href = `/creations/${item.id}`; });
+				const isPublished = item.published === true || item.published === 1;
+				let publishedBadge = '';
+				let publishedInfo = '';
+				if (isPublished) {
+					publishedBadge = html`
               <div class="creation-published-badge" title="Published">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <circle cx="12" cy="12" r="10"></circle>
@@ -578,21 +633,12 @@ class AppRouteCreations extends HTMLElement {
                 </svg>
               </div>
             `;
-					}
-
-					if (isPublished && item.published_at) {
-						const publishedDate = new Date(item.published_at);
-						const publishedTimeAgo = formatRelativeTime(publishedDate);
-						publishedInfo = html`<div class="route-meta" title="${formatDateTime(item.published_at)}">Published ${publishedTimeAgo}</div>`;
-					}
-
-					card.innerHTML = html`
-            <div 
-              class="route-media"
-              aria-hidden="true"
-              data-image-id="${item.id}"
-              data-status="completed"
-            ></div>
+				}
+				if (isPublished && item.published_at) {
+					publishedInfo = html`<div class="route-meta" title="${formatDateTime(item.published_at)}">Published ${formatRelativeTime(item.published_at)}</div>`;
+				}
+				card.innerHTML = html`
+            <div class="route-media" aria-hidden="true" data-image-id="${item.id}" data-status="completed"></div>
             ${publishedBadge}
             <div class="route-details">
               <div class="route-details-content">
@@ -602,29 +648,48 @@ class AppRouteCreations extends HTMLElement {
               </div>
             </div>
           `;
-
-					const mediaEl = card.querySelector('.route-media');
-					const url = item.thumbnail_url || item.url;
+				const mediaEl = card.querySelector('.route-media');
+				const url = item.thumbnail_url || item.url;
+				if (mediaEl) {
 					if (index < this.eagerImageCount) {
 						setRouteMediaBackgroundImage(mediaEl, url, { lowPriority: !this.isRouteActive() });
-					} else if (this.imageObserver && mediaEl) {
+					} else if (this.imageObserver) {
 						mediaEl.dataset.bgUrl = url;
 						mediaEl.dataset.bgQueued = '0';
 						this.imageObserver.observe(mediaEl);
 					}
 				}
+			}
+			cont.appendChild(card);
+		});
+	}
 
-				cont.appendChild(card);
-			});
-			this.hasLoadedOnce = true;
-		} catch (error) {
-			// console.error("Error loading creations:", error);
-			const errCont = this.querySelector("[data-creations-container]");
-			if (errCont) errCont.innerHTML = html`
-        <div class="route-empty route-empty-image-grid">Unable to load creations.</div>
-      `;
+	async loadMoreCreations() {
+		if (!this.hasMoreCreations || this.isLoadingMore || this.isLoading || !this.isRouteActive()) return;
+		this.isLoadingMore = true;
+		this.updateLoadMoreFallback();
+		try {
+			const res = await fetchJsonWithStatusDeduped(
+				`/api/create/images?limit=${CREATIONS_PAGE_SIZE}&offset=${this.creationsOffset}`,
+				{ credentials: 'include' },
+				{ windowMs: 500 }
+			).catch(() => ({ ok: false, data: null }));
+			const container = this.querySelector("[data-creations-container]");
+			if (!container || !res.ok) {
+				this.isLoadingMore = false;
+				this.updateLoadMoreFallback();
+				return;
+			}
+			const items = Array.isArray(res.data?.images) ? res.data.images : [];
+			const apiHasMore = res.data?.has_more === true;
+			this.hasMoreCreations = apiHasMore && items.length >= CREATIONS_PAGE_SIZE;
+			const startEagerIndex = container.querySelectorAll('.route-card').length;
+			this.appendCreationCards(container, items, startEagerIndex);
+			this.creationsOffset += items.length;
+			if (this.hasMoreCreations) this.observeLoadMoreSentinel();
 		} finally {
-			this.isLoading = false;
+			this.isLoadingMore = false;
+			this.updateLoadMoreFallback();
 		}
 	}
 

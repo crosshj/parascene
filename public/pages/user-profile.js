@@ -2,6 +2,7 @@ import { formatDate, formatDateTime, formatRelativeTime } from '../shared/dateti
 import { fetchJsonWithStatusDeduped } from '../shared/api.js';
 import { getAvatarColor } from '../shared/avatar.js';
 import { processUserText, hydrateUserTextLinks } from '../shared/urls.js';
+import { createInfiniteScroll } from '../shared/infinite-scroll.js';
 
 const html = String.raw;
 
@@ -472,6 +473,133 @@ function renderImageGrid(grid, images, showBadge = false, emptyTitle = 'No publi
 	});
 }
 
+/** Appends image cards without clearing the grid (avoids flash on load-more). */
+function appendImageGridCards(grid, items, showBadge = false) {
+	if (!grid || !Array.isArray(items) || items.length === 0) return;
+	const observer = new IntersectionObserver((entries) => {
+		entries.forEach((entry) => {
+			if (!entry.isIntersecting) return;
+			const el = entry.target;
+			const url = el.dataset.bgUrl;
+			if (!url) return;
+			observer.unobserve(el);
+			setRouteMediaBackgroundImage(el, url);
+		});
+	}, { root: null, rootMargin: '600px 0px', threshold: 0.01 });
+
+	items.forEach((item) => {
+		const card = document.createElement('div');
+		card.className = 'route-card route-card-image';
+		card.style.cursor = 'pointer';
+		card.addEventListener('click', () => { window.location.href = `/creations/${item.id}`; });
+
+		const isPublished = item.published === true || item.published === 1;
+		const userDeleted = Boolean(item.user_deleted);
+		let publishedBadge = '';
+		let userDeletedBadge = '';
+		let publishedInfo = '';
+		if (userDeleted) {
+			userDeletedBadge = html`<div class="creation-user-deleted-badge" title="User deleted this creation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></div>`;
+		}
+		if (isPublished && showBadge) {
+			publishedBadge = html`<div class="creation-published-badge" title="Published"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></div>`;
+		}
+		if (isPublished && item.published_at) {
+			publishedInfo = html`<div class="route-meta" title="${formatDateTime(item.published_at)}">Published ${formatRelativeTime(new Date(item.published_at))}</div>`;
+		}
+		card.innerHTML = html`<div class="route-media" aria-hidden="true"></div>${userDeletedBadge}${publishedBadge}<div class="route-details"><div class="route-details-content"><div class="route-title">${escapeHtml(item.title || 'Untitled')}</div>${publishedInfo}<div class="route-meta">${escapeHtml(formatDate(item.created_at) || '')}</div></div></div>`;
+		const mediaEl = card.querySelector('.route-media');
+		const url = item.thumbnail_url || item.url;
+		if (mediaEl && url) {
+			mediaEl.dataset.bgUrl = url;
+			observer.observe(mediaEl);
+		}
+		grid.appendChild(card);
+	});
+}
+
+/** Appends user list items to the existing ul (avoids flash on load-more). */
+function appendUserListItems(container, users, options = {}) {
+	const ul = container?.querySelector('.user-profile-list');
+	if (!ul || !Array.isArray(users) || users.length === 0) return;
+	const { showUnfollow = false, showFollow = false, viewerFollowsByUserId = new Set(), viewerUserId = null } = options;
+	const viewerFollows = (uid) => viewerFollowsByUserId instanceof Set ? viewerFollowsByUserId.has(uid) : Boolean(viewerFollowsByUserId[uid]);
+	const isSelf = (uid) => viewerUserId != null && Number(uid) === Number(viewerUserId);
+
+	users.forEach((u) => {
+		const id = u?.user_id ?? u?.id;
+		const name = (u?.display_name || u?.user_name || '').trim() || 'User';
+		const handle = u?.user_name ? `@${u.user_name}` : '';
+		const avatarUrl = typeof u?.avatar_url === 'string' ? u.avatar_url.trim() : '';
+		const color = getAvatarColor(u?.user_name || u?.user_id || name);
+		const initial = name.charAt(0).toUpperCase() || '?';
+		const href = Number.isFinite(id) && id > 0 ? `/user/${id}` : '#';
+		const avatarContent = avatarUrl
+			? html`<img class="user-profile-list-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">`
+			: html`<div class="user-profile-list-avatar-fallback" style="--user-profile-avatar-bg: ${color};" aria-hidden="true">${escapeHtml(initial)}</div>`;
+		const hideActions = isSelf(id);
+		const showUnfollowBtn = showUnfollow && id != null && !hideActions;
+		const showFollowBtn = showFollow && id != null && !viewerFollows(Number(id)) && !hideActions;
+		const li = document.createElement('li');
+		li.className = 'user-profile-list-item';
+		li.innerHTML = html`
+			<a href="${escapeHtml(href)}" class="user-profile-list-link">
+				<span class="user-profile-list-avatar">${avatarContent}</span>
+				<span class="user-profile-list-info">
+					<span class="user-profile-list-name">${escapeHtml(name)}</span>
+					${handle ? html`<span class="user-profile-list-handle">${escapeHtml(handle)}</span>` : ''}
+				</span>
+			</a>
+			${showUnfollowBtn ? html`<button type="button" class="btn-secondary user-profile-list-action" data-action="unfollow" data-user-id="${escapeHtml(String(id ?? ''))}">Unfollow</button>` : ''}
+			${showFollowBtn ? html`<button type="button" class="btn-secondary user-profile-list-action" data-action="follow" data-user-id="${escapeHtml(String(id ?? ''))}">Follow</button>` : ''}
+		`;
+		ul.appendChild(li);
+	});
+}
+
+/** Appends comment blocks to the existing list (avoids flash on load-more). */
+function appendCommentsListItems(container, comments) {
+	const listEl = container?.querySelector('.user-profile-comments-list');
+	if (!listEl || !Array.isArray(comments) || comments.length === 0) return;
+
+	function renderUserCell(u) {
+		const id = u?.user_id ?? u?.id;
+		const name = (u?.display_name || u?.user_name || '').trim() || 'User';
+		const handle = u?.user_name ? `@${u.user_name}` : '';
+		const avatarUrl = typeof u?.avatar_url === 'string' ? u.avatar_url.trim() : '';
+		const color = getAvatarColor(u?.user_name || u?.user_id || name);
+		const initial = name.charAt(0).toUpperCase() || '?';
+		const href = Number.isFinite(id) && id > 0 ? `/user/${id}` : '#';
+		const avatarContent = avatarUrl
+			? html`<img class="user-profile-comment-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">`
+			: html`<span class="user-profile-comment-avatar-fallback" style="--user-profile-avatar-bg: ${color};" aria-hidden="true">${escapeHtml(initial)}</span>`;
+		return html`<a href="${escapeHtml(href)}" class="user-profile-comment-user"><span class="user-profile-comment-avatar">${avatarContent}</span><span class="user-profile-comment-user-info"><span class="user-profile-comment-user-name">${escapeHtml(name)}</span>${handle ? html`<span class="user-profile-comment-user-handle">${escapeHtml(handle)}</span>` : ''}</span></a>`;
+	}
+
+	comments.forEach((c) => {
+		const creationId = c?.created_image_id;
+		const title = (c?.created_image_title || 'Creation').trim() || 'Creation';
+		const text = (c?.text || '').trim() || '';
+		const createdAt = c?.created_at ? formatRelativeTime(new Date(c.created_at)) : '';
+		const creationHref = Number.isFinite(creationId) && creationId > 0 ? `/creations/${creationId}` : '#';
+		const thumbUrl = (c?.created_image_thumbnail_url || c?.created_image_url || '').trim();
+		const creator = { user_id: c?.created_image_user_id, display_name: c?.creator_display_name, user_name: c?.creator_user_name, avatar_url: c?.creator_avatar_url };
+		const commenter = { user_id: c?.user_id, display_name: c?.commenter_display_name, user_name: c?.commenter_user_name, avatar_url: c?.commenter_avatar_url };
+		const div = document.createElement('div');
+		div.className = 'user-profile-comment-block';
+		div.innerHTML = html`
+			<a href="${escapeHtml(creationHref)}" class="user-profile-comment-thumb">${thumbUrl ? html`<img src="${escapeHtml(thumbUrl)}" alt="" class="user-profile-comment-thumb-img" loading="lazy">` : html`<span class="user-profile-comment-thumb-placeholder">?</span>`}</a>
+			<div class="user-profile-comment-title-creator">
+				<a href="${escapeHtml(creationHref)}" class="user-profile-comment-name">${escapeHtml(title)}</a>
+				<div class="user-profile-comment-creator">${renderUserCell(creator)}</div>
+			</div>
+			<div class="user-profile-comment-text">${escapeHtml(text)}</div>
+			<div class="user-profile-comment-footer">${renderUserCell(commenter)}${createdAt ? html`<span class="user-profile-comment-date">${escapeHtml(createdAt)}</span>` : ''}</div>
+		`;
+		listEl.appendChild(div);
+	});
+}
+
 async function loadProfileSummary(targetUserId) {
 	const result = await fetchJsonWithStatusDeduped(`/api/users/${targetUserId}/profile`, {
 		credentials: 'include'
@@ -700,6 +828,8 @@ async function init() {
 		comments: { items: [], hasMore: false }
 	};
 
+	const infiniteScrollByTab = {};
+
 	function updateLoadMore(containerEl, tabId, hasMore) {
 		const el = containerEl.querySelector(`[data-profile-load-more="${tabId}"]`);
 		if (!el) return;
@@ -710,6 +840,21 @@ async function init() {
 			el.hidden = true;
 			el.innerHTML = '';
 		}
+		if (infiniteScrollByTab[tabId]) {
+			infiniteScrollByTab[tabId].setHasMore(hasMore);
+		}
+	}
+
+	function setupInfiniteScrollForTab(tabId, listContainer) {
+		if (!listContainer || infiniteScrollByTab[tabId]) return;
+		infiniteScrollByTab[tabId] = createInfiniteScroll({
+			listContainer,
+			rootMargin: '400px 0px',
+			onLoadMore: async () => {
+				await loadMoreForTab(tabId);
+				return { hasMore: tabData[tabId]?.hasMore ?? false };
+			}
+		});
 	}
 
 	function renderTabContent(tabId) {
@@ -757,6 +902,7 @@ async function init() {
 	}
 	renderImageGrid(grid, tabData.creations.items, showBadge);
 	updateLoadMore(container, 'creations', tabData.creations.hasMore);
+	setupInfiniteScrollForTab('creations', grid);
 
 	// Lazy-load Likes, Follows, Following, Comments when user switches to that tab
 	const tabsEl = container.querySelector('[data-profile-tabs]');
@@ -788,6 +934,7 @@ async function init() {
 				panel.innerHTML = '';
 				renderImageGrid(panel, tabData.likes.items, false, 'No likes yet', 'Creations this user likes will appear here.');
 				updateLoadMore(container, 'likes', tabData.likes.hasMore);
+				setupInfiniteScrollForTab('likes', panel);
 			} else if (tabId === 'follows') {
 				const limit = PROFILE_PAGE_SIZE.follows;
 				const res = await fetchJsonWithStatusDeduped(`/api/users/${targetUserId}/following?limit=${limit}&offset=0`, { credentials: 'include' }, { windowMs: 800 });
@@ -797,6 +944,7 @@ async function init() {
 				const followsEmptyMsg = isSelf ? "When you follow others, they'll show up here." : "When this user follows others, they'll show up here.";
 				renderUserList(panel, users, followsEmptyTitle, followsEmptyMsg, { showUnfollow: true, viewerUserId });
 				updateLoadMore(container, 'follows', tabData.follows.hasMore);
+				setupInfiniteScrollForTab('follows', panel);
 			} else if (tabId === 'following') {
 				const limit = PROFILE_PAGE_SIZE.following;
 				const res = await fetchJsonWithStatusDeduped(`/api/users/${targetUserId}/followers?limit=${limit}&offset=0`, { credentials: 'include' }, { windowMs: 800 });
@@ -809,6 +957,7 @@ async function init() {
 				const followingEmptyMsg = isSelf ? "When others follow you, they'll show up here." : "When others follow this user, they'll show up here.";
 				renderUserList(panel, users, followingEmptyTitle, followingEmptyMsg, { showFollow: true, viewerFollowsByUserId: viewerFollowsSet, viewerUserId });
 				updateLoadMore(container, 'following', tabData.following.hasMore);
+				setupInfiniteScrollForTab('following', panel);
 			} else if (tabId === 'comments') {
 				const limit = PROFILE_PAGE_SIZE.comments;
 				const res = await fetchJsonWithStatusDeduped(`/api/users/${targetUserId}/comments?limit=${limit}&offset=0`, { credentials: 'include' }, { windowMs: 800 });
@@ -816,6 +965,7 @@ async function init() {
 				tabData.comments = { items: comments, hasMore: Boolean(res?.data?.has_more) };
 				renderCommentsList(panel, comments, 'Comments this user has left will appear here.');
 				updateLoadMore(container, 'comments', tabData.comments.hasMore);
+				setupInfiniteScrollForTab('comments', panel);
 			}
 		} catch {
 			panel.innerHTML = html`<div class="route-empty"><div class="route-empty-title">Unable to load</div><div class="route-empty-message">Something went wrong. Try again later.</div></div>`;
@@ -836,32 +986,38 @@ async function init() {
 				const result = await loadUserImages(targetUserId, { includeAll: includeAllForAdmin, limit, offset });
 				data.items = data.items.concat(result.images);
 				data.hasMore = result.has_more;
-				renderTabContent('creations');
+				appendImageGridCards(grid, result.images, showBadge);
 			} else if (tabId === 'likes') {
 				const res = await fetchJsonWithStatusDeduped(`/api/users/${targetUserId}/liked-creations?limit=${limit}&offset=${offset}`, { credentials: 'include' }, { windowMs: 800 });
 				const images = Array.isArray(res?.data?.images) ? res.data.images : [];
 				data.items = data.items.concat(images);
 				data.hasMore = Boolean(res?.data?.has_more);
-				renderTabContent('likes');
+				const panel = container.querySelector('[data-profile-likes]');
+				if (panel) appendImageGridCards(panel, images, false);
 			} else if (tabId === 'follows') {
 				const res = await fetchJsonWithStatusDeduped(`/api/users/${targetUserId}/following?limit=${limit}&offset=${offset}`, { credentials: 'include' }, { windowMs: 800 });
 				const users = Array.isArray(res?.data?.following) ? res.data.following : [];
 				data.items = data.items.concat(users);
 				data.hasMore = Boolean(res?.data?.has_more);
-				renderTabContent('follows');
+				const panel = container.querySelector('[data-profile-follows]');
+				if (panel) appendUserListItems(panel, users, { showUnfollow: true, viewerUserId });
 			} else if (tabId === 'following') {
 				const res = await fetchJsonWithStatusDeduped(`/api/users/${targetUserId}/followers?limit=${limit}&offset=${offset}`, { credentials: 'include' }, { windowMs: 800 });
 				const users = Array.isArray(res?.data?.followers) ? res.data.followers : [];
 				data.items = data.items.concat(users);
 				data.hasMore = Boolean(res?.data?.has_more);
-				renderTabContent('following');
+				const panel = container.querySelector('[data-profile-following]');
+				const viewerFollowsSet = new Set((data.items || []).filter((u) => u?.viewer_follows === true).map((u) => Number(u?.user_id ?? u?.id)).filter(Number.isFinite));
+				if (panel) appendUserListItems(panel, users, { showFollow: true, viewerFollowsByUserId: viewerFollowsSet, viewerUserId });
 			} else if (tabId === 'comments') {
 				const res = await fetchJsonWithStatusDeduped(`/api/users/${targetUserId}/comments?limit=${limit}&offset=${offset}`, { credentials: 'include' }, { windowMs: 800 });
 				const comments = Array.isArray(res?.data?.comments) ? res.data.comments : [];
 				data.items = data.items.concat(comments);
 				data.hasMore = Boolean(res?.data?.has_more);
-				renderTabContent('comments');
+				const panel = container.querySelector('[data-profile-comments]');
+				if (panel) appendCommentsListItems(panel, comments);
 			}
+			updateLoadMore(container, tabId, data.hasMore);
 		} finally {
 			if (btn) btn.disabled = false;
 		}

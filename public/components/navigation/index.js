@@ -66,6 +66,8 @@ class AppNavigation extends HTMLElement {
 		this.prefetchNotificationPreview();
 		// Establish current route immediately so route components can react on mount.
 		this.handleRouteChange();
+		// Defer again so route content sections (which may not be parsed yet) get display/active set and route-change is heard.
+		setTimeout(() => this.handleRouteChange(), 0);
 	}
 
 	disconnectedCallback() {

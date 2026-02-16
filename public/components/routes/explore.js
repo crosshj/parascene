@@ -151,6 +151,9 @@ class AppRouteExplore extends HTMLElement {
 		this.isActiveRoute = inferred === 'explore';
 		if (this.isRouteActive()) {
 			this.refreshOnActivate();
+			requestAnimationFrame(() => {
+				if (this.hasMore) this.observeLoadMoreSentinel();
+			});
 		}
 	}
 
@@ -164,7 +167,9 @@ class AppRouteExplore extends HTMLElement {
 				if (this.hasLoadedOnce) {
 					this.resumeImageLazyLoading();
 				}
-				this.observeLoadMoreSentinel();
+				requestAnimationFrame(() => {
+					if (this.hasMore) this.observeLoadMoreSentinel();
+				});
 			} else {
 				this.isActiveRoute = false;
 				if (this.imageObserver) this.imageObserver.disconnect();
@@ -544,11 +549,13 @@ class AppRouteExplore extends HTMLElement {
 		} finally {
 			this.isLoading = false;
 			this.updateLoadMoreFallback();
+			if (this.hasMore) this.observeLoadMoreSentinel();
 		}
 	}
 
 	async loadMore() {
 		if (!this.hasMore || this.isLoadingMore || this.isLoading || !this.isRouteActive()) return;
+		if (!this.hasLoadedOnce) return;
 
 		this.isLoadingMore = true;
 		this.updateLoadMoreFallback();
