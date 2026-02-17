@@ -559,7 +559,13 @@ class AppModalNotifications extends HTMLElement {
         }
         .notification-list-item.is-loading {
           pointer-events: none;
-          opacity: 0.85;
+          color: var(--text);
+        }
+        .notification-list-item.is-loading .notification-list-title,
+        .notification-list-item.is-loading .notification-list-message,
+        .notification-list-item.is-loading .notification-list-time,
+        .notification-list-item.is-loading .notification-list-count {
+          visibility: hidden;
         }
         .notification-list-item-spinner {
           display: none;
@@ -570,7 +576,7 @@ class AppModalNotifications extends HTMLElement {
           width: 18px;
           height: 18px;
           border: 2px solid var(--border);
-          border-top-color: var(--accent);
+          border-top-color: currentColor;
           border-radius: 50%;
           animation: notification-item-spin 0.8s linear infinite;
         }

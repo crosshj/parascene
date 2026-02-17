@@ -1155,20 +1155,29 @@ export function openDb() {
 				const hasRole = role !== null && role !== undefined;
 				if (!hasUserId && !hasRole) return { changes: 0 };
 
-				let query = serviceClient
-					.from(prefixedTable("notifications"))
-					.update({ acknowledged_at: new Date().toISOString() })
-					.is("acknowledged_at", null);
-				if (hasUserId && hasRole) {
-					query = query.or(`user_id.eq.${userId},role.eq.${role}`);
-				} else if (hasUserId) {
-					query = query.eq("user_id", userId);
-				} else {
-					query = query.eq("role", role);
+				const baseUpdate = () =>
+					serviceClient
+						.from(prefixedTable("notifications"))
+						.update({ acknowledged_at: new Date().toISOString() })
+						.is("acknowledged_at", null);
+				let total = 0;
+				let didRoleUpdate = false;
+				// PostgREST doesn't support .or() on UPDATE reliably; run user_id then role (same pattern as acknowledgeNotificationById).
+				if (hasUserId) {
+					let { data, error } = await baseUpdate().eq("user_id", userId).select("id");
+					if (error?.code === "42703" && error?.message?.includes("user_id") && hasRole) {
+						({ data, error } = await baseUpdate().eq("role", role).select("id"));
+						didRoleUpdate = true;
+					}
+					if (error) throw error;
+					total += (data ?? []).length;
 				}
-				const { data, error } = await query.select("id");
-				if (error) throw error;
-				return { changes: (data ?? []).length };
+				if (hasRole && !didRoleUpdate) {
+					const { data, error } = await baseUpdate().eq("role", role).select("id");
+					if (error) throw error;
+					total += (data ?? []).length;
+				}
+				return { changes: total };
 			}
 		},
 		insertNotification: {
