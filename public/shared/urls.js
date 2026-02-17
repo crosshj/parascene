@@ -28,12 +28,26 @@ function splitUrlTrailingPunctuation(rawUrl) {
 			safety++;
 			continue;
 		}
-		// Sometimes URLs are wrapped like "(https://...)".
+		// Sometimes URLs are wrapped like "(https://...)". Only strip closing brackets
+		// when they are unmatched (more closing than opening), so that URLs which
+		// legitimately end with ) like Wikipedia's Death_Dealer_(painting) stay intact.
 		if ((last === ')' || last === ']' || last === '}') && url.length > 1) {
-			trailing = last + trailing;
-			url = url.slice(0, -1);
-			safety++;
-			continue;
+			const openCount = (url.match(/\(/g) || []).length;
+			const closeCount = (url.match(/\)/g) || []).length;
+			const openB = (url.match(/\[/g) || []).length;
+			const closeB = (url.match(/\]/g) || []).length;
+			const openC = (url.match(/\{/g) || []).length;
+			const closeC = (url.match(/\}/g) || []).length;
+			const unmatched =
+				(last === ')' && closeCount > openCount) ||
+				(last === ']' && closeB > openB) ||
+				(last === '}' && closeC > openC);
+			if (unmatched) {
+				trailing = last + trailing;
+				url = url.slice(0, -1);
+				safety++;
+				continue;
+			}
 		}
 		break;
 	}
