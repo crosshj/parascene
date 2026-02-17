@@ -1029,21 +1029,24 @@ export function openDb() {
 						.update({ acknowledged_at: new Date().toISOString() })
 						.is("acknowledged_at", null)
 						.eq("link", linkPattern);
-				let query;
-				if (userId != null && role != null) {
-					query = baseUpdate().or(`user_id.eq.${userId},role.eq.${role}`);
-				} else if (userId != null) {
-					query = baseUpdate().eq("user_id", userId);
-				} else {
-					query = baseUpdate().eq("role", role);
+				let total = 0;
+				let didRoleUpdate = false;
+				// PostgREST doesn't support .or() on UPDATE reliably; run user_id then role (same pattern as acknowledgeNotificationById).
+				if (userId != null) {
+					let { data, error } = await baseUpdate().eq("user_id", userId).select("id");
+					if (error?.code === "42703" && error?.message?.includes("user_id") && role != null) {
+						({ data, error } = await baseUpdate().eq("role", role).select("id"));
+						didRoleUpdate = true;
+					}
+					if (error) throw error;
+					total += (data ?? []).length;
 				}
-				let { data, error } = await query.select("id");
-				// Prod may have notifications table without user_id column (older schema)
-				if (error?.code === "42703" && error?.message?.includes("user_id") && role != null) {
-					({ data, error } = await baseUpdate().eq("role", role).select("id"));
+				if (role != null && !didRoleUpdate) {
+					const { data, error } = await baseUpdate().eq("role", role).select("id");
+					if (error) throw error;
+					total += (data ?? []).length;
 				}
-				if (error) throw error;
-				return { changes: (data ?? []).length };
+				return { changes: total };
 			}
 		},
 		selectUnreadNotificationCount: {

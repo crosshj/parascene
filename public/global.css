@@ -1560,7 +1560,14 @@ header .notification-preview-count {
 
 header .notification-preview-item.is-loading {
 	pointer-events: none;
-	opacity: 0.85;
+	color: var(--text);
+}
+
+header .notification-preview-item.is-loading .notification-preview-title,
+header .notification-preview-item.is-loading .notification-preview-message,
+header .notification-preview-item.is-loading .notification-preview-time,
+header .notification-preview-item.is-loading .notification-preview-count {
+	visibility: hidden;
 }
 
 @keyframes notification-preview-spin {
@@ -1577,7 +1584,7 @@ header .notification-preview-item-spinner {
 	width: 18px;
 	height: 18px;
 	border: 2px solid var(--border);
-	border-top-color: var(--accent);
+	border-top-color: currentColor;
 	border-radius: 50%;
 	animation: notification-preview-spin 0.8s linear infinite;
 }

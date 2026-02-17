@@ -628,6 +628,19 @@ class AppNavigation extends HTMLElement {
 		if (!this.hasAttribute('show-notifications')) return;
 		const path = typeof pathname === 'string' && pathname ? pathname.split('#')[0].split('?')[0] : '';
 		if (!path) return;
+		// Avoid duplicate runs when handleRouteChange fires multiple times (e.g. connect + setTimeout, desktop + mobile nav).
+		const now = Date.now();
+		try {
+			const last = window.__autoAckPathDedup;
+			if (last?.path === path && (now - (last.t || 0)) < 1500) return;
+		} catch {
+			// ignore
+		}
+		try {
+			window.__autoAckPathDedup = { path, t: now };
+		} catch {
+			// ignore
+		}
 
 		try {
 			const result = await fetchJsonWithStatusDeduped(
