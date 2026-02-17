@@ -1023,19 +1023,25 @@ export function openDb() {
 		acknowledgeNotificationsForUserAndCreation: {
 			run: async (userId, role, creationId) => {
 				const linkPattern = `/creations/${creationId}`;
-				let query = serviceClient
-					.from(prefixedTable("notifications"))
-					.update({ acknowledged_at: new Date().toISOString() })
-					.is("acknowledged_at", null)
-					.eq("link", linkPattern);
+				const baseUpdate = () =>
+					serviceClient
+						.from(prefixedTable("notifications"))
+						.update({ acknowledged_at: new Date().toISOString() })
+						.is("acknowledged_at", null)
+						.eq("link", linkPattern);
+				let query;
 				if (userId != null && role != null) {
-					query = query.or(`user_id.eq.${userId},role.eq.${role}`);
+					query = baseUpdate().or(`user_id.eq.${userId},role.eq.${role}`);
 				} else if (userId != null) {
-					query = query.eq("user_id", userId);
+					query = baseUpdate().eq("user_id", userId);
 				} else {
-					query = query.eq("role", role);
+					query = baseUpdate().eq("role", role);
 				}
-				const { data, error } = await query.select("id");
+				let { data, error } = await query.select("id");
+				// Prod may have notifications table without user_id column (older schema)
+				if (error?.code === "42703" && error?.message?.includes("user_id") && role != null) {
+					({ data, error } = await baseUpdate().eq("role", role).select("id"));
+				}
 				if (error) throw error;
 				return { changes: (data ?? []).length };
 			}
@@ -1084,7 +1090,7 @@ export function openDb() {
 
 				// Try with user_id first if provided
 				if (hasUserId) {
-					const { data, error } = await serviceClient
+					let { data, error } = await serviceClient
 						.from(prefixedTable("notifications"))
 						.update({ acknowledged_at: new Date().toISOString() })
 						.eq("id", id)
@@ -1092,6 +1098,16 @@ export function openDb() {
 						.eq("user_id", userId)
 						.select("id");
 
+					// Prod may have table without user_id column (older schema)
+					if (error?.code === "42703" && error?.message?.includes("user_id") && hasRole) {
+						({ data, error } = await serviceClient
+							.from(prefixedTable("notifications"))
+							.update({ acknowledged_at: new Date().toISOString() })
+							.eq("id", id)
+							.is("acknowledged_at", null)
+							.eq("role", role)
+							.select("id"));
+					}
 					if (error) throw error;
 					if (data && data.length > 0) {
 						return { changes: data.length };
@@ -1115,6 +1131,19 @@ export function openDb() {
 				}
 
 				return { changes: 0 };
+			}
+		},
+		/** Update a single notification by id only (no user/role check). For diagnostic/maintenance use only. */
+		updateNotificationAcknowledgedAtById: {
+			run: async (id) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("notifications"))
+					.update({ acknowledged_at: new Date().toISOString() })
+					.eq("id", id)
+					.is("acknowledged_at", null)
+					.select("id");
+				if (error) throw error;
+				return { changes: (data ?? []).length };
 			}
 		},
 		acknowledgeAllNotificationsForUser: {

@@ -925,6 +925,15 @@ export async function openDb() {
 				return Promise.resolve({ changes: result.changes });
 			}
 		},
+		updateNotificationAcknowledgedAtById: {
+			run: async (id) => {
+				const stmt = db.prepare(
+					`UPDATE notifications SET acknowledged_at = datetime('now') WHERE id = ? AND acknowledged_at IS NULL`
+				);
+				const result = stmt.run(id);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
 		acknowledgeAllNotificationsForUser: {
 			run: async (userId, role) => {
 				const stmt = db.prepare(

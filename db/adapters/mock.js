@@ -529,6 +529,14 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		updateNotificationAcknowledgedAtById: {
+			run: async (id) => {
+				const note = notifications.find((n) => n.id === Number(id) && !n.acknowledged_at);
+				if (!note) return { changes: 0 };
+				note.acknowledged_at = new Date().toISOString();
+				return { changes: 1 };
+			}
+		},
 		acknowledgeAllNotificationsForUser: {
 			run: async (userId, role) => {
 				let count = 0;
