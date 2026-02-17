@@ -807,8 +807,9 @@ class AppRouteCreate extends HTMLElement {
 				this.servers = Array.isArray(result.data?.servers) ? result.data.servers : [];
 				// Show servers where user is owner or member.
 				// Additionally, the special server with id = 1 should always appear.
+				// Exclude suspended servers from the create dropdown for everyone (including admin).
 				this.servers = this.servers.filter(server =>
-					server.id === 1 || server.is_owner === true || server.is_member === true
+					!server.suspended && (server.id === 1 || server.is_owner === true || server.is_member === true)
 				);
 				// Parse server_config if it's a string
 				this.servers = this.servers.map(server => {

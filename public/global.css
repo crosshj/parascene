@@ -2180,6 +2180,12 @@ header .hamburger-button.active span:nth-child(3) {
 	margin-top: 0;
 }
 
+@media (min-width: 1040px) {
+	.admin-cards {
+		grid-template-columns: repeat(3, minmax(320px, 1fr));
+	}
+}
+
 app-route-feed {
 	margin-top: -16px;
 }
@@ -3246,9 +3252,9 @@ app-route-feed {
 	}
 }
 
-/* Image grid layouts */
+/* Image grid layouts (max 3 columns) */
 .route-cards-image-grid {
-	grid-template-columns: repeat(5, minmax(0, 1fr));
+	grid-template-columns: repeat(3, minmax(0, 1fr));
 	gap: 6px;
 }
 
@@ -3355,12 +3361,6 @@ app-route-feed {
 }
 
 @media (max-width: 1024px) {
-	.route-cards-image-grid {
-		grid-template-columns: repeat(4, minmax(0, 1fr));
-	}
-}
-
-@media (max-width: 860px) {
 	.route-cards-image-grid {
 		grid-template-columns: repeat(3, minmax(0, 1fr));
 	}
@@ -3709,6 +3709,12 @@ app-route-feed {
 	grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
 }
 
+@media (min-width: 1000px) {
+	.cards-grid-auto {
+		grid-template-columns: repeat(3, minmax(300px, 1fr));
+	}
+}
+
 @media (max-width: 768px) {
 	.cards-grid-auto {
 		grid-template-columns: 1fr;
@@ -3732,6 +3738,18 @@ app-route-feed {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: 8px;
+}
+
+@media (min-width: 800px) {
+	.grid-auto-fit {
+		grid-template-columns: repeat(3, minmax(240px, 1fr));
+	}
+}
+
+@media (min-width: 760px) {
+	.grid-auto-fit-sm {
+		grid-template-columns: repeat(3, minmax(220px, 1fr));
+	}
 }
 
 @media (max-width: 768px) {
@@ -4700,14 +4718,18 @@ body.modal-open {
 }
 
 .server-badge-suspended {
-	background: var(--surface-strong);
-	color: var(--text-muted);
+	background: color-mix(in srgb, var(--error-text) 15%, transparent);
+	color: var(--error-text);
 }
 
 .server-card {
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
+}
+
+.server-card-description {
+	white-space: pre-wrap;
 }
 
 .server-card-actions {

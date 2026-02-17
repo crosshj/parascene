@@ -67,6 +67,8 @@ class AppRouteServers extends HTMLElement {
 		this.loadServers();
 		this.setupFeatureRequestForm();
 		this.setupConnectTabHash();
+		this._onServersUpdated = () => this.loadServers();
+		document.addEventListener('servers-updated', this._onServersUpdated);
 	}
 
 	/** Sync Connect tab from URL hash (#servers, #latest-comments, #feature-requests) and update hash when tab changes. */
@@ -118,6 +120,7 @@ class AppRouteServers extends HTMLElement {
 	}
 
 	disconnectedCallback() {
+		document.removeEventListener('servers-updated', this._onServersUpdated);
 		if (typeof this._connectTabHashCleanup === 'function') {
 			this._connectTabHashCleanup();
 		}
@@ -447,14 +450,15 @@ class AppRouteServers extends HTMLElement {
 			}
 
 			const servers = Array.isArray(result.data?.servers) ? result.data.servers : [];
-			this.renderServers(servers, container);
+			const viewerIsAdmin = Boolean(result.data?.viewer_is_admin);
+			this.renderServers(servers, container, viewerIsAdmin);
 		} catch (error) {
 			// console.error('Error loading servers:', error);
 			container.innerHTML = '<div class="route-empty">Error loading servers.</div>';
 		}
 	}
 
-	renderServers(servers, container) {
+	renderServers(servers, container, viewerIsAdmin = false) {
 		container.innerHTML = '';
 
 		// Rely on server-side (ID ascending) ordering so client matches API.
@@ -467,6 +471,10 @@ class AppRouteServers extends HTMLElement {
 			card.style.cursor = 'pointer';
 
 			const badges = [];
+			// Admin-only: show suspended tag (only admins see suspended servers in the list).
+			if (server.suspended) {
+				badges.push('<span class="server-badge server-badge-suspended">Suspended</span>');
+			}
 			// Special "home" server (id = 1) has a dedicated Home tag.
 			if (server.id === 1) {
 				badges.push('<span class="server-badge server-badge-member">Home</span>');
@@ -490,7 +498,7 @@ class AppRouteServers extends HTMLElement {
 
 			if (hasDescription) {
 				const desc = document.createElement('div');
-				desc.className = 'admin-detail';
+				desc.className = 'admin-detail server-card-description';
 				desc.textContent = descriptionText;
 				card.appendChild(desc);
 			}
@@ -537,17 +545,18 @@ class AppRouteServers extends HTMLElement {
 				card.appendChild(ownerInfo);
 			}
 
-			// Status and timestamp on one line
-			const meta = document.createElement('div');
-			meta.className = 'admin-meta';
-			const statusText = server.status || 'unknown';
-			const memberText = (typeof server.members_count === 'number' && server.id !== 1)
-				? ` • ${server.members_count} member${server.members_count !== 1 ? 's' : ''}`
-				: '';
-			const timeText = server.created_at ? formatRelativeTime(server.created_at, { style: 'long' }) : '—';
-			meta.textContent = `${statusText}${memberText} • ${timeText}`;
-
-			card.appendChild(meta);
+			// Status and timestamp on one line (admin only)
+			if (viewerIsAdmin) {
+				const meta = document.createElement('div');
+				meta.className = 'admin-meta';
+				const statusText = server.status || 'unknown';
+				const memberText = (typeof server.members_count === 'number' && server.id !== 1)
+					? ` • ${server.members_count} member${server.members_count !== 1 ? 's' : ''}`
+					: '';
+				const timeText = server.created_at ? formatRelativeTime(server.created_at, { style: 'long' }) : '—';
+				meta.textContent = `${statusText}${memberText} • ${timeText}`;
+				card.appendChild(meta);
+			}
 
 			// Click card to view details
 			card.addEventListener('click', () => {

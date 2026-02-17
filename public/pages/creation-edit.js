@@ -125,8 +125,9 @@ async function loadMutateServerOptions() {
 
 		// Match create route behavior: show servers where user is owner or member.
 		// Additionally, the special server with id = 1 should always appear.
+		// Exclude suspended servers from the dropdown.
 		return servers
-			.filter(server => server.id === 1 || server.is_owner === true || server.is_member === true)
+			.filter(server => !server.suspended && (server.id === 1 || server.is_owner === true || server.is_member === true))
 			.map(normalizeServerConfig)
 			.filter(Boolean);
 	} catch {

@@ -45,7 +45,8 @@ export default function createServersRoutes({ queries }) {
 				is_member: isMember,
 				can_manage: canManage,
 				// Any authenticated user can conceptually join/leave; frontend / special rules decide controls.
-				can_join_leave: !isSpecial
+				can_join_leave: !isSpecial,
+				suspended: server.status === 'suspended'
 			};
 
 			// Include owner information for display
@@ -91,7 +92,11 @@ export default function createServersRoutes({ queries }) {
 		if (!user) return;
 
 		const isAdmin = user.role === 'admin';
-		const servers = await queries.selectServers.all();
+		let servers = await queries.selectServers.all();
+		// Non-admins never see suspended servers (status = 'suspended').
+		if (!isAdmin) {
+			servers = servers.filter(s => s.status !== 'suspended');
+		}
 		// Ensure stable ascending ID order from the API.
 		servers.sort((a, b) => {
 			const aId = Number(a?.id) || 0;
@@ -100,7 +105,7 @@ export default function createServersRoutes({ queries }) {
 		});
 		const serversWithFlags = await addPermissionFlags(servers, user.id, isAdmin);
 
-		return res.json({ servers: serversWithFlags });
+		return res.json({ servers: serversWithFlags, viewer_is_admin: isAdmin });
 	});
 
 	// GET /api/servers/:id - Get server details with permission-based filtering
@@ -118,6 +123,12 @@ export default function createServersRoutes({ queries }) {
 			return res.status(404).json({ error: "Server not found" });
 		}
 
+		const isAdmin = user.role === 'admin';
+		// Non-admins cannot see suspended servers (status = 'suspended').
+		if (server.status === 'suspended' && !isAdmin) {
+			return res.status(404).json({ error: "Server not found" });
+		}
+
 		const isSpecial = server.id === 1;
 		// "Owner" means the user who originally created the server.
 		// Admins can still manage all servers, but are not treated as owners.
@@ -126,7 +137,7 @@ export default function createServersRoutes({ queries }) {
 		if (isSpecial) {
 			isMember = true;
 		}
-		const canManage = isOwner || user.role === 'admin';
+		const canManage = isOwner || isAdmin;
 
 		const result = {
 			id: server.id,
@@ -139,7 +150,9 @@ export default function createServersRoutes({ queries }) {
 			is_owner: isOwner,
 			is_member: isMember,
 			can_manage: canManage,
-			can_join_leave: !isSpecial
+			can_join_leave: !isSpecial,
+			suspended: server.status === 'suspended',
+			viewer_is_admin: isAdmin
 		};
 
 		// Include owner information for display
@@ -320,6 +333,12 @@ export default function createServersRoutes({ queries }) {
 			const nextStatus = String(payload.status || "").trim();
 			if (!nextStatus) {
 				return res.status(400).json({ error: "status must be a non-empty string when provided" });
+			}
+			// Only admins can set or clear status 'suspended'.
+			if (nextStatus === 'suspended' || server.status === 'suspended') {
+				if (!isAdmin) {
+					return res.status(403).json({ error: "Forbidden: Only admins can set or change suspended status" });
+				}
 			}
 			nextServer.status = nextStatus;
 		}

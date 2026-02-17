@@ -1551,6 +1551,7 @@ export async function openDb() {
 				const stmt = db.prepare(
 					`SELECT 
             ps.id, 
+            ps.user_id,
             ps.name, 
             ps.status, 
             ps.members_count, 

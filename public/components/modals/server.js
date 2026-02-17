@@ -449,6 +449,10 @@ class AppModalServer extends HTMLElement {
 					font-size: 0.95rem;
 				}
 
+				.server-description-text {
+					white-space: pre-wrap;
+				}
+
 				.server-auth-controls {
 					display: flex;
 					gap: 0.5rem;
@@ -620,6 +624,20 @@ class AppModalServer extends HTMLElement {
 					font-weight: 500;
 					margin-bottom: 1rem;
 				}
+
+				.server-suspended-notice {
+					padding: 1rem;
+					background: color-mix(in srgb, var(--error-text) 12%, transparent);
+					border-radius: 6px;
+					color: var(--error-text);
+					font-weight: 500;
+					margin-bottom: 1rem;
+				}
+
+				.server-suspended-notice strong {
+					display: block;
+					margin-bottom: 0.25rem;
+				}
 			</style>
 			<div class="server-modal-overlay">
 				<div class="server-modal">
@@ -704,6 +722,12 @@ class AppModalServer extends HTMLElement {
 
 			body.innerHTML = html`
 				<form class="server-modal-form" data-server-form>
+					${this.serverData.suspended ? html`
+						<div class="server-detail-row server-suspended-notice">
+							<strong>Suspended</strong>
+							<span>This server is suspended. It does not appear in the create dropdown or in the servers list for non-admins.</span>
+						</div>
+					` : ''}
 					<label>
 						Name
 						<input type="text" name="name" required value="${this.escapeHtml(this.serverData.name || '')}" />
@@ -722,6 +746,7 @@ class AppModalServer extends HTMLElement {
 							<option value="active" ${this.serverData.status === 'active' ? 'selected' : ''}>Active</option>
 							<option value="pending" ${this.serverData.status === 'pending' ? 'selected' : ''}>Pending</option>
 							<option value="inactive" ${this.serverData.status === 'inactive' ? 'selected' : ''}>Inactive</option>
+							${this.serverData.viewer_is_admin ? html`<option value="suspended" ${this.serverData.status === 'suspended' ? 'selected' : ''}>Suspended</option>` : ''}
 						</select>
 					</label>
 					<label>
@@ -793,6 +818,12 @@ class AppModalServer extends HTMLElement {
 
 			body.innerHTML = html`
 				<div class="server-details">
+					${this.serverData.suspended ? html`
+						<div class="server-detail-row server-suspended-notice">
+							<strong>Suspended</strong>
+							<span>This server is suspended. It does not appear in the create dropdown or in the servers list for non-admins.</span>
+						</div>
+					` : ''}
 					<div class="server-detail-row">
 						<strong>Status</strong>
 						<span>${this.serverData.status || '—'}</span>
@@ -800,7 +831,7 @@ class AppModalServer extends HTMLElement {
 					${this.serverData.description ? html`
 						<div class="server-detail-row">
 							<strong>Description</strong>
-							<span>${this.escapeHtml(this.serverData.description)}</span>
+							<span class="server-description-text">${this.escapeHtml(this.serverData.description)}</span>
 						</div>
 					` : ''}
 					<div class="server-detail-row">
@@ -827,7 +858,7 @@ class AppModalServer extends HTMLElement {
 		}
 
 		if (actions) {
-			// Special server (id = 1): users cannot join/leave; hide actions entirely.
+			// Special server (id = 1): users cannot join/leave; hide actions.
 			if (this.serverData.id === 1) {
 				actions.style.display = 'none';
 				actions.innerHTML = '';
@@ -1020,6 +1051,7 @@ class AppModalServer extends HTMLElement {
 			this.serverData = data.server;
 			this.renderEditMode();
 			document.dispatchEvent(new CustomEvent('server-updated'));
+			document.dispatchEvent(new CustomEvent('servers-updated', { bubbles: true }));
 		} catch (error) {
 			alert(error.message || 'Failed to save server');
 		} finally {
