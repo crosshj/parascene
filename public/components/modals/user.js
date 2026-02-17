@@ -1,9 +1,22 @@
 const html = String.raw;
 
+/** Matches server: subscription ID for admin-granted founder (no payment). */
+const GIFTED_FOUNDER_SUBSCRIPTION_ID = "gifted_founder";
+
 function escapeHtml(text) {
 	const div = document.createElement('div');
 	div.textContent = text;
 	return div.innerHTML;
+}
+
+function hasRealFounderSubscription(user) {
+	const plan = user?.meta?.plan;
+	const subId = user?.meta?.stripeSubscriptionId;
+	return plan === "founder" && subId != null && String(subId).trim() !== "" && subId !== GIFTED_FOUNDER_SUBSCRIPTION_ID;
+}
+
+function hasGiftedFounder(user) {
+	return user?.meta?.plan === "founder" && user?.meta?.stripeSubscriptionId === GIFTED_FOUNDER_SUBSCRIPTION_ID;
 }
 
 class AppModalUser extends HTMLElement {
@@ -60,6 +73,11 @@ class AppModalUser extends HTMLElement {
 		this._suspendConfirmError = this.querySelector('[data-user-suspend-confirm-error]');
 		this._suspendConfirmSubmit = this.querySelector('[data-user-suspend-confirm-submit]');
 		this._suspendConfirmButtonText = this.querySelector('[data-user-suspend-confirm-button-text]');
+		this._founderZone = this.querySelector('[data-user-founder-zone]');
+		this._founderValue = this.querySelector('[data-user-founder-value]');
+		this._grantFounderButton = this.querySelector('[data-user-grant-founder-button]');
+		this._revokeFounderButton = this.querySelector('[data-user-revoke-founder-button]');
+		this._founderError = this.querySelector('[data-user-founder-error]');
 		this._overlay?.addEventListener('click', (e) => {
 			if (e.target?.dataset?.userClose !== undefined || e.target === this._overlay) this.close();
 		});
@@ -86,6 +104,8 @@ class AppModalUser extends HTMLElement {
 		this._suspendConfirmInput?.addEventListener('input', () => this.updateSuspendConfirmButton());
 		this._suspendConfirmSubmit?.addEventListener('click', () => this.handleSaveSuspend());
 		this.querySelector('[data-user-suspend-confirm-cancel]')?.addEventListener('click', () => this.hideSuspendConfirm());
+		this._grantFounderButton?.addEventListener('click', () => this.handleGrantFounder());
+		this._revokeFounderButton?.addEventListener('click', () => this.handleRevokeFounder());
 		this.loadViewerUser();
 	}
 
@@ -122,7 +142,7 @@ class AppModalUser extends HTMLElement {
 
 		const canDelete = isAdmin && hasValidUserId && isNotSelf;
 		const canSuspend = isAdmin && hasValidUserId;
-		
+
 		if (this._suspendZone) {
 			if (canSuspend) {
 				this._suspendZone.style.display = '';
@@ -140,6 +160,39 @@ class AppModalUser extends HTMLElement {
 			} else {
 				this._suspendZone.style.display = 'none';
 			}
+		}
+
+		if (this._founderZone) {
+			if (isAdmin && hasValidUserId) {
+				this._founderZone.style.display = '';
+				this.updateFounderZone(user);
+			} else {
+				this._founderZone.style.display = 'none';
+			}
+		}
+	}
+
+	updateFounderZone(user) {
+		if (!this._founderValue) return;
+		const real = hasRealFounderSubscription(user);
+		const gifted = hasGiftedFounder(user);
+		const plan = user?.meta?.plan;
+		if (real) {
+			this._founderValue.textContent = "Founder (paid)";
+			if (this._grantFounderButton) this._grantFounderButton.style.display = 'none';
+			if (this._revokeFounderButton) this._revokeFounderButton.style.display = 'none';
+		} else if (gifted) {
+			this._founderValue.textContent = "Founder (gifted)";
+			if (this._grantFounderButton) this._grantFounderButton.style.display = 'none';
+			if (this._revokeFounderButton) this._revokeFounderButton.style.display = '';
+		} else {
+			this._founderValue.textContent = plan === "founder" ? "Founder" : "Free";
+			if (this._grantFounderButton) this._grantFounderButton.style.display = '';
+			if (this._revokeFounderButton) this._revokeFounderButton.style.display = 'none';
+		}
+		if (this._founderError) {
+			this._founderError.hidden = true;
+			this._founderError.textContent = '';
 		}
 	}
 
@@ -168,6 +221,20 @@ class AppModalUser extends HTMLElement {
 									<button type="button" class="btn-secondary user-delete-button" data-user-delete-button style="display: none;">Delete</button>
 								</div>
 								<div class="alert error user-suspend-error" data-user-suspend-error hidden></div>
+							</div>
+						</div>
+						<div class="user-modal-section" data-user-founder-zone style="display: none;">
+							<div class="user-modal-section-title user-modal-section-title-no-border">Founder status</div>
+							<div class="user-founder-zone">
+								<div class="user-modal-field">
+									<div class="user-modal-field-label">Plan</div>
+									<div class="user-modal-field-value" data-user-founder-value>—</div>
+								</div>
+								<div class="user-status-actions">
+									<button type="button" class="btn-secondary user-grant-founder-button" data-user-grant-founder-button style="display: none;">Grant founder status (gifted)</button>
+									<button type="button" class="btn-secondary user-revoke-founder-button" data-user-revoke-founder-button style="display: none;">Revoke gifted founder</button>
+								</div>
+								<div class="alert error user-founder-error" data-user-founder-error hidden></div>
 							</div>
 						</div>
 					</div>
@@ -386,6 +453,12 @@ class AppModalUser extends HTMLElement {
 			}
 		} else if (this._suspendZone) {
 			this._suspendZone.style.display = 'none';
+		}
+		if (this._founderZone && this._viewerRole === 'admin' && Number.isFinite(Number(user?.id))) {
+			this._founderZone.style.display = '';
+			this.updateFounderZone(user);
+		} else if (this._founderZone) {
+			this._founderZone.style.display = 'none';
 		}
 	}
 
@@ -626,6 +699,94 @@ class AppModalUser extends HTMLElement {
 		if (!this._suspendButton || !this._currentUser) return;
 		const isSuspended = Boolean(this._currentUser?.suspended === true || this._currentUser?.meta?.suspended === true);
 		this._suspendButton.textContent = isSuspended ? 'Unsuspend' : 'Suspend';
+	}
+
+	async handleGrantFounder() {
+		const userId = Number(this._currentUser?.id);
+		if (!Number.isFinite(userId) || userId <= 0) return;
+		if (this._viewerRole !== 'admin') return;
+		if (hasRealFounderSubscription(this._currentUser)) return;
+
+		if (this._founderError) {
+			this._founderError.hidden = true;
+			this._founderError.textContent = '';
+		}
+		const btn = this._grantFounderButton;
+		if (btn) {
+			btn.disabled = true;
+			btn.classList.add('is-loading');
+		}
+		try {
+			const res = await fetch(`/admin/users/${userId}/grant-founder`, {
+				method: 'POST',
+				credentials: 'include',
+				headers: { 'Content-Type': 'application/json' }
+			});
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				const message = data?.message || data?.error || 'Failed to grant founder status.';
+				if (this._founderError) {
+					this._founderError.hidden = false;
+					this._founderError.textContent = message;
+				} else alert(message);
+				return;
+			}
+			if (data?.user) {
+				this._currentUser = { ...this._currentUser, ...data.user, meta: { ...this._currentUser?.meta, ...data.user?.meta } };
+				await this.renderDetails(this._currentUser);
+				this.updateFounderZone(this._currentUser);
+			}
+			document.dispatchEvent(new CustomEvent('user-updated', { detail: { userId } }));
+		} finally {
+			if (btn) {
+				btn.disabled = false;
+				btn.classList.remove('is-loading');
+			}
+		}
+	}
+
+	async handleRevokeFounder() {
+		const userId = Number(this._currentUser?.id);
+		if (!Number.isFinite(userId) || userId <= 0) return;
+		if (this._viewerRole !== 'admin') return;
+		if (!hasGiftedFounder(this._currentUser)) return;
+
+		if (this._founderError) {
+			this._founderError.hidden = true;
+			this._founderError.textContent = '';
+		}
+		const btn = this._revokeFounderButton;
+		if (btn) {
+			btn.disabled = true;
+			btn.classList.add('is-loading');
+		}
+		try {
+			const res = await fetch(`/admin/users/${userId}/revoke-founder`, {
+				method: 'POST',
+				credentials: 'include',
+				headers: { 'Content-Type': 'application/json' }
+			});
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				const message = data?.message || data?.error || 'Failed to revoke gifted founder.';
+				if (this._founderError) {
+					this._founderError.hidden = false;
+					this._founderError.textContent = message;
+				} else alert(message);
+				return;
+			}
+			if (data?.user) {
+				this._currentUser = { ...this._currentUser, ...data.user, meta: { ...this._currentUser?.meta, ...data.user?.meta } };
+				await this.renderDetails(this._currentUser);
+				this.updateFounderZone(this._currentUser);
+			}
+			document.dispatchEvent(new CustomEvent('user-updated', { detail: { userId } }));
+		} finally {
+			if (btn) {
+				btn.disabled = false;
+				btn.classList.remove('is-loading');
+			}
+		}
 	}
 
 	showSuspendConfirm() {

@@ -4,6 +4,9 @@ import { getEmailSettings } from "./utils/emailSettings.js";
 import { getBaseAppUrlForEmail } from "./utils/url.js";
 import { RELATED_PARAM_KEYS } from "../db/adapters/relatedParams.js";
 
+/** Subscription ID stored in user.meta when admin grants founder status without payment. Not a Stripe ID. */
+const GIFTED_FOUNDER_SUBSCRIPTION_ID = "gifted_founder";
+
 export default function createAdminRoutes({ queries, storage }) {
 	const router = express.Router();
 
@@ -173,6 +176,106 @@ export default function createAdminRoutes({ queries, storage }) {
 			user: {
 				...updated,
 				suspended,
+				credits: creditsBalance
+			}
+		});
+	});
+
+	function hasRealFounderSubscription(user) {
+		const plan = user?.meta?.plan;
+		const subId = user?.meta?.stripeSubscriptionId;
+		return plan === "founder" && subId != null && String(subId).trim() !== "" && subId !== GIFTED_FOUNDER_SUBSCRIPTION_ID;
+	}
+
+	function hasGiftedFounder(user) {
+		return user?.meta?.plan === "founder" && user?.meta?.stripeSubscriptionId === GIFTED_FOUNDER_SUBSCRIPTION_ID;
+	}
+
+	// Admin-only: grant founder status without payment (gifted founder). Not allowed for users who have a real Stripe subscription.
+	router.post("/admin/users/:id/grant-founder", async (req, res) => {
+		const admin = await requireAdmin(req, res);
+		if (!admin) return;
+
+		const targetUserId = Number.parseInt(String(req.params?.id || ""), 10);
+		if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+			return res.status(400).json({ error: "Invalid user id" });
+		}
+
+		const target = await queries.selectUserById.get(targetUserId);
+		if (!target) {
+			return res.status(404).json({ error: "User not found" });
+		}
+
+		if (hasRealFounderSubscription(target)) {
+			return res.status(400).json({
+				error: "User has a paid subscription",
+				message: "Cannot grant gifted founder to a user who has already subscribed."
+			});
+		}
+
+		if (!queries.updateUserPlan?.run || !queries.updateUserStripeSubscriptionId?.run) {
+			return res.status(500).json({ error: "Founder update not available" });
+		}
+
+		await queries.updateUserPlan.run(targetUserId, "founder");
+		await queries.updateUserStripeSubscriptionId.run(targetUserId, GIFTED_FOUNDER_SUBSCRIPTION_ID);
+		const updated = await queries.selectUserById.get(targetUserId);
+		let creditsBalance = 0;
+		try {
+			const creditsRow = await queries.selectUserCredits.get(targetUserId);
+			creditsBalance = creditsRow?.balance ?? 0;
+		} catch {
+			// ignore
+		}
+		res.json({
+			ok: true,
+			user: {
+				...updated,
+				credits: creditsBalance
+			}
+		});
+	});
+
+	// Admin-only: revoke gifted founder status. Only allowed when user has the gifted_founder subscription id (not a real Stripe subscription).
+	router.post("/admin/users/:id/revoke-founder", async (req, res) => {
+		const admin = await requireAdmin(req, res);
+		if (!admin) return;
+
+		const targetUserId = Number.parseInt(String(req.params?.id || ""), 10);
+		if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+			return res.status(400).json({ error: "Invalid user id" });
+		}
+
+		const target = await queries.selectUserById.get(targetUserId);
+		if (!target) {
+			return res.status(404).json({ error: "User not found" });
+		}
+
+		if (!hasGiftedFounder(target)) {
+			return res.status(400).json({
+				error: "Not a gifted founder",
+				message: "User does not have gifted founder status. Only gifted founder status can be revoked here."
+			});
+		}
+
+		if (!queries.updateUserPlan?.run || !queries.updateUserStripeSubscriptionId?.run) {
+			return res.status(500).json({ error: "Founder update not available" });
+		}
+
+		await queries.updateUserPlan.run(targetUserId, "free");
+		await queries.updateUserStripeSubscriptionId.run(targetUserId, null);
+		const updated = await queries.selectUserById.get(targetUserId);
+		let creditsBalance = 0;
+		try {
+			const creditsRow = await queries.selectUserCredits.get(targetUserId);
+			creditsBalance = creditsRow?.balance ?? 0;
+		} catch {
+			// ignore
+		}
+		res.json({
+			ok: true,
+			user: {
+				...updated,
 				credits: creditsBalance
 			}
 		});
