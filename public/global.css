@@ -2501,6 +2501,18 @@ app-route-feed {
 	color: var(--accent);
 }
 
+.mention-link {
+	color: color-mix(in srgb, var(--accent) 55%, var(--text-muted));
+	font-weight: 500;
+	text-decoration-color: color-mix(in srgb, var(--accent) 35%, transparent);
+	text-underline-offset: 2px;
+}
+
+.mention-link:hover {
+	color: color-mix(in srgb, var(--accent) 65%, var(--text));
+	text-decoration-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
 .user-avatar-link:hover {
 	text-decoration: none;
 }
@@ -3617,6 +3629,7 @@ app-route-feed {
 	color: var(--text-muted);
 }
 
+.route-empty-state,
 .feed-empty-state {
 	display: flex;
 	flex-direction: column;
@@ -3626,16 +3639,19 @@ app-route-feed {
 	min-height: 400px;
 }
 
+.route-empty-icon,
 .feed-empty-icon {
 	margin-bottom: 24px;
 	opacity: 0.4;
 	color: var(--text-muted);
 }
 
+.route-empty-state .route-empty-title,
 .feed-empty-state .route-empty-title {
 	margin-bottom: 12px;
 }
 
+.route-empty-state .route-empty-message,
 .feed-empty-state .route-empty-message {
 	max-width: 500px;
 	margin: 0 auto;

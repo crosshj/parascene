@@ -243,7 +243,9 @@ class AppNavigation extends HTMLElement {
 			window.location.pathname.startsWith('/s/') ||
 			(window.location.pathname === '/help' || window.location.pathname.startsWith('/help/')) ||
 			window.location.pathname === '/user' ||
-			/^\/user\/\d+$/.test(window.location.pathname);
+			/^\/user\/\d+$/.test(window.location.pathname) ||
+			/^\/p\/[a-z0-9][a-z0-9_-]{2,23}$/i.test(window.location.pathname) ||
+			/^\/t\/[a-z0-9][a-z0-9_-]{1,31}$/i.test(window.location.pathname);
 		if (isServerSentPage) {
 			// Use full page navigation for server-sent pages
 			window.location.href = `/${route}`;
@@ -709,7 +711,9 @@ class AppNavigation extends HTMLElement {
 			pathname.startsWith('/s/') ||
 			(pathname === '/help' || pathname.startsWith('/help/')) ||
 			pathname === '/user' ||
-			/^\/user\/\d+$/.test(pathname);
+			/^\/user\/\d+$/.test(pathname) ||
+			/^\/p\/[a-z0-9][a-z0-9_-]{2,23}$/i.test(pathname) ||
+			/^\/t\/[a-z0-9][a-z0-9_-]{1,31}$/i.test(pathname);
 		if (isServerSentPage) {
 			return;
 		}

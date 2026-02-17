@@ -1,3 +1,4 @@
+import { buildProfilePath } from '../../shared/profileLinks.js';
 const html = String.raw;
 
 /** Matches server: subscription ID for admin-granted founder (no payment). */
@@ -357,7 +358,7 @@ class AppModalUser extends HTMLElement {
 		this.updateButtonVisibility(user);
 
 		// Update profile link in footer
-		const profileHref = user?.id ? `/user/${user.id}` : null;
+		const profileHref = buildProfilePath({ userName: user?.user_name, userId: user?.id });
 		if (this._profileLink) {
 			if (profileHref) {
 				this._profileLink.style.display = '';
@@ -393,7 +394,7 @@ class AppModalUser extends HTMLElement {
 	async renderDetails(user) {
 		if (!this._details) return;
 		const creditsValue = typeof user?.credits === 'number' ? user.credits : 0;
-		const profileHref = user?.id ? `/user/${user.id}` : null;
+		const profileHref = buildProfilePath({ userName: user?.user_name, userId: user?.id });
 		
 		// Fetch unread notifications count
 		let unreadCount = 0;

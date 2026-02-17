@@ -2,8 +2,9 @@ import { formatRelativeTime } from '../../shared/datetime.js';
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 import { getAvatarColor } from '../../shared/avatar.js';
 import { fetchLatestComments } from '../../shared/comments.js';
-import { processUserText, hydrateUserTextLinks } from '../../shared/urls.js';
+import { processUserText, hydrateUserTextLinks } from '../../shared/userText.js';
 import { attachAutoGrowTextarea } from '../../shared/autogrow.js';
+import { buildProfilePath } from '../../shared/profileLinks.js';
 
 const html = String.raw;
 
@@ -222,7 +223,7 @@ class AppRouteServers extends HTMLElement {
 			creatorRow.className = 'connect-comment-creator';
 
 			const creatorId = Number(comment?.created_image_user_id ?? 0);
-			const creatorProfileHref = Number.isFinite(creatorId) && creatorId > 0 ? `/user/${creatorId}` : null;
+			const creatorProfileHref = buildProfilePath({ userName: creatorUserName, userId: creatorId });
 			const creatorName = creatorDisplayName || (creatorUserName ? creatorUserName : 'User');
 			const creatorHandle = creatorUserName ? `@${creatorUserName}` : '';
 			const creatorSeed = creatorUserName || String(creatorId || '') || creatorName;
@@ -260,7 +261,7 @@ class AppRouteServers extends HTMLElement {
 			`;
 
 			const commenterId = Number(comment?.user_id ?? 0);
-			const profileHref = Number.isFinite(commenterId) && commenterId > 0 ? `/user/${commenterId}` : null;
+			const profileHref = buildProfilePath({ userName, userId: commenterId });
 			const seed = userName || String(comment?.user_id ?? '') || commenterName;
 			const color = getAvatarColor(seed);
 			const initial = commenterName.charAt(0).toUpperCase() || '?';

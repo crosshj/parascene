@@ -1480,6 +1480,70 @@ export function openDb() {
 				return filtered.slice(offset, offset + limit);
 			}
 		},
+		selectPublishedCreationsByPersonalityMention: {
+			all: async (personality, options = {}) => {
+				const normalized = String(personality || "").trim().toLowerCase();
+				if (!/^[a-z0-9][a-z0-9_-]{2,23}$/.test(normalized)) return [];
+				const needle = `@${normalized}`;
+				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
+				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
+
+				const creationList = (typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.created_images) ?? created_images ?? [];
+				const commentList = (typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.comments_created_image) ?? comments_created_image ?? [];
+
+				const idsFromComments = new Set(
+					(commentList ?? [])
+						.filter((c) => String(c?.text || "").toLowerCase().includes(needle))
+						.map((c) => Number(c?.created_image_id))
+						.filter((id) => Number.isFinite(id) && id > 0)
+				);
+
+				const matched = (creationList ?? [])
+					.filter((img) => {
+						const isPublished = img?.published === true || img?.published === 1;
+						if (!isPublished) return false;
+						if (!(img?.unavailable_at == null || img?.unavailable_at === "")) return false;
+						const descMatch = String(img?.description || "").toLowerCase().includes(needle);
+						const commentMatch = idsFromComments.has(Number(img?.id));
+						return descMatch || commentMatch;
+					})
+					.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
+
+				return matched.slice(offset, offset + limit);
+			}
+		},
+		selectPublishedCreationsByTagMention: {
+			all: async (tag, options = {}) => {
+				const normalized = String(tag || "").trim().toLowerCase();
+				if (!/^[a-z0-9][a-z0-9_-]{1,31}$/.test(normalized)) return [];
+				const needle = `#${normalized}`;
+				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
+				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
+
+				const creationList = (typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.created_images) ?? created_images ?? [];
+				const commentList = (typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.comments_created_image) ?? comments_created_image ?? [];
+
+				const idsFromComments = new Set(
+					(commentList ?? [])
+						.filter((c) => String(c?.text || "").toLowerCase().includes(needle))
+						.map((c) => Number(c?.created_image_id))
+						.filter((id) => Number.isFinite(id) && id > 0)
+				);
+
+				const matched = (creationList ?? [])
+					.filter((img) => {
+						const isPublished = img?.published === true || img?.published === 1;
+						if (!isPublished) return false;
+						if (!(img?.unavailable_at == null || img?.unavailable_at === "")) return false;
+						const descMatch = String(img?.description || "").toLowerCase().includes(needle);
+						const commentMatch = idsFromComments.has(Number(img?.id));
+						return descMatch || commentMatch;
+					})
+					.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
+
+				return matched.slice(offset, offset + limit);
+			}
+		},
 		selectAllCreatedImageCountForUser: {
 			get: async (userId) => ({
 				count: created_images.filter(

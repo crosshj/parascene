@@ -1,8 +1,9 @@
 import { formatDate, formatDateTime, formatRelativeTime } from '../shared/datetime.js';
 import { fetchJsonWithStatusDeduped } from '../shared/api.js';
 import { getAvatarColor } from '../shared/avatar.js';
-import { processUserText, hydrateUserTextLinks } from '../shared/urls.js';
+import { processUserText, hydrateUserTextLinks } from '../shared/userText.js';
 import { createInfiniteScroll } from '../shared/infinite-scroll.js';
+import { buildProfilePath } from '../shared/profileLinks.js';
 
 const html = String.raw;
 
@@ -25,14 +26,65 @@ function safeJsonParse(text, fallback) {
 	}
 }
 
-function getPathUserId() {
+function getPathUserTarget() {
 	const pathname = window.location.pathname || '';
-	if (pathname === '/user') return { kind: 'me', userId: null };
+	if (pathname === '/user') return { kind: 'me', mode: 'id', userId: null, userName: null };
 	const match = pathname.match(/^\/user\/(\d+)$/);
-	if (!match) return { kind: 'invalid', userId: null };
-	const id = Number.parseInt(match[1], 10);
-	if (!Number.isFinite(id) || id <= 0) return { kind: 'invalid', userId: null };
-	return { kind: 'other', userId: id };
+	if (match) {
+		const id = Number.parseInt(match[1], 10);
+		if (!Number.isFinite(id) || id <= 0) return { kind: 'invalid', mode: 'id', userId: null, userName: null };
+		return { kind: 'other', mode: 'id', userId: id, userName: null };
+	}
+	const personalityMatch = pathname.match(/^\/p\/([a-z0-9][a-z0-9_-]{2,23})$/i);
+	if (personalityMatch) {
+		return { kind: 'other', mode: 'username', userId: null, userName: String(personalityMatch[1] || '').toLowerCase() };
+	}
+	const tagMatch = pathname.match(/^\/t\/([a-z0-9][a-z0-9_-]{1,31})$/i);
+	if (tagMatch) {
+		return { kind: 'other', mode: 'tag', userId: null, userName: String(tagMatch[1] || '').toLowerCase() };
+	}
+	return { kind: 'invalid', mode: 'id', userId: null, userName: null };
+}
+
+function buildTargetUserApiBase(target) {
+	if (target?.mode === 'username' && target?.userName) {
+		return `/api/users/by-username/${encodeURIComponent(target.userName)}`;
+	}
+	if (Number.isFinite(target?.userId) && target.userId > 0) {
+		return `/api/users/${target.userId}`;
+	}
+	return null;
+}
+
+function getServerProfileContext() {
+	const ctx = window.__ps_profile_context;
+	return ctx && typeof ctx === 'object' ? ctx : null;
+}
+
+function renderProfileUnavailableState(container, {
+	title = 'Unable to load profile',
+	message = 'Something went wrong. Please try again.',
+	icon = 'warning'
+} = {}) {
+	const iconSvg = icon === 'user-not-found'
+		? html`<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+			<circle cx="10" cy="8" r="3"></circle>
+			<path d="M4 19c0-3.3 2.7-6 6-6s6 2.7 6 6"></path>
+			<path d="M16 8l4 4"></path>
+			<path d="M20 8l-4 4"></path>
+		</svg>`
+		: html`<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+			<circle cx="12" cy="12" r="9"></circle>
+			<path d="M12 8v5"></path>
+			<circle cx="12" cy="16.5" r="0.8" fill="currentColor"></circle>
+		</svg>`;
+	container.innerHTML = html`
+		<div class="route-empty route-empty-image-grid route-empty-state">
+			<div class="route-empty-icon">${iconSvg}</div>
+			<div class="route-empty-title">${escapeHtml(title)}</div>
+			<div class="route-empty-message">${escapeHtml(message)}</div>
+		</div>
+	`;
 }
 
 async function copyTextToClipboard(text) {
@@ -546,7 +598,7 @@ function appendUserListItems(container, users, options = {}) {
 		const avatarUrl = typeof u?.avatar_url === 'string' ? u.avatar_url.trim() : '';
 		const color = getAvatarColor(u?.user_name || u?.user_id || name);
 		const initial = name.charAt(0).toUpperCase() || '?';
-		const href = Number.isFinite(id) && id > 0 ? `/user/${id}` : '#';
+		const href = buildProfilePath({ userName: u?.user_name, userId: id }) || '#';
 		const avatarContent = avatarUrl
 			? html`<img class="user-profile-list-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">`
 			: html`<div class="user-profile-list-avatar-fallback" style="--user-profile-avatar-bg: ${color};" aria-hidden="true">${escapeHtml(initial)}</div>`;
@@ -582,7 +634,7 @@ function appendCommentsListItems(container, comments) {
 		const avatarUrl = typeof u?.avatar_url === 'string' ? u.avatar_url.trim() : '';
 		const color = getAvatarColor(u?.user_name || u?.user_id || name);
 		const initial = name.charAt(0).toUpperCase() || '?';
-		const href = Number.isFinite(id) && id > 0 ? `/user/${id}` : '#';
+		const href = buildProfilePath({ userName: u?.user_name, userId: id }) || '#';
 		const avatarContent = avatarUrl
 			? html`<img class="user-profile-comment-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">`
 			: html`<span class="user-profile-comment-avatar-fallback" style="--user-profile-avatar-bg: ${color};" aria-hidden="true">${escapeHtml(initial)}</span>`;
@@ -613,8 +665,10 @@ function appendCommentsListItems(container, comments) {
 	});
 }
 
-async function loadProfileSummary(targetUserId) {
-	const result = await fetchJsonWithStatusDeduped(`/api/users/${targetUserId}/profile`, {
+async function loadProfileSummary(target) {
+	const apiBase = buildTargetUserApiBase(target);
+	if (!apiBase) throw new Error('Invalid target user');
+	const result = await fetchJsonWithStatusDeduped(`${apiBase}/profile`, {
 		credentials: 'include'
 	}, { windowMs: 1000 });
 	if (!result.ok) {
@@ -631,12 +685,14 @@ const PROFILE_PAGE_SIZE = {
 	following: 20
 };
 
-async function loadUserImages(targetUserId, { includeAll = false, limit = PROFILE_PAGE_SIZE.creations, offset = 0 } = {}) {
+async function loadUserImages(target, { includeAll = false, limit = PROFILE_PAGE_SIZE.creations, offset = 0 } = {}) {
+	const apiBase = buildTargetUserApiBase(target);
+	if (!apiBase) throw new Error('Invalid target user');
 	const params = new URLSearchParams();
 	if (includeAll) params.set('include', 'all');
 	params.set('limit', String(limit));
 	params.set('offset', String(offset));
-	const url = `/api/users/${targetUserId}/created-images?${params.toString()}`;
+	const url = `${apiBase}/created-images?${params.toString()}`;
 	const result = await fetchJsonWithStatusDeduped(url, { credentials: 'include' }, { windowMs: 800 });
 	if (!result.ok) {
 		throw new Error('Failed to load images');
@@ -664,20 +720,20 @@ function renderUserList(container, users, emptyTitle, emptyMessage, options = {}
 	container.innerHTML = html`
 		<ul class="user-profile-list">
 			${list.map((u) => {
-				const id = u?.user_id ?? u?.id;
-				const name = (u?.display_name || u?.user_name || '').trim() || 'User';
-				const handle = u?.user_name ? `@${u.user_name}` : '';
-				const avatarUrl = typeof u?.avatar_url === 'string' ? u.avatar_url.trim() : '';
-				const color = getAvatarColor(u?.user_name || u?.user_id || name);
-				const initial = name.charAt(0).toUpperCase() || '?';
-				const href = Number.isFinite(id) && id > 0 ? `/user/${id}` : '#';
-				const avatarContent = avatarUrl
-					? html`<img class="user-profile-list-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">`
-					: html`<div class="user-profile-list-avatar-fallback" style="--user-profile-avatar-bg: ${color};" aria-hidden="true">${escapeHtml(initial)}</div>`;
-				const hideActions = isSelf(id);
-				const showUnfollowBtn = showUnfollow && id != null && !hideActions;
-				const showFollowBtn = showFollow && id != null && !viewerFollows(Number(id)) && !hideActions;
-				return html`
+		const id = u?.user_id ?? u?.id;
+		const name = (u?.display_name || u?.user_name || '').trim() || 'User';
+		const handle = u?.user_name ? `@${u.user_name}` : '';
+		const avatarUrl = typeof u?.avatar_url === 'string' ? u.avatar_url.trim() : '';
+		const color = getAvatarColor(u?.user_name || u?.user_id || name);
+		const initial = name.charAt(0).toUpperCase() || '?';
+		const href = buildProfilePath({ userName: u?.user_name, userId: id }) || '#';
+		const avatarContent = avatarUrl
+			? html`<img class="user-profile-list-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">`
+			: html`<div class="user-profile-list-avatar-fallback" style="--user-profile-avatar-bg: ${color};" aria-hidden="true">${escapeHtml(initial)}</div>`;
+		const hideActions = isSelf(id);
+		const showUnfollowBtn = showUnfollow && id != null && !hideActions;
+		const showFollowBtn = showFollow && id != null && !viewerFollows(Number(id)) && !hideActions;
+		return html`
 					<li class="user-profile-list-item">
 						<a href="${escapeHtml(href)}" class="user-profile-list-link">
 							<span class="user-profile-list-avatar">${avatarContent}</span>
@@ -690,7 +746,7 @@ function renderUserList(container, users, emptyTitle, emptyMessage, options = {}
 						${showFollowBtn ? html`<button type="button" class="btn-secondary user-profile-list-action" data-action="follow" data-user-id="${escapeHtml(String(id ?? ''))}">Follow</button>` : ''}
 					</li>
 				`;
-			}).join('')}
+	}).join('')}
 		</ul>
 	`;
 }
@@ -714,7 +770,7 @@ function renderCommentsList(container, comments, emptyMessage) {
 		const avatarUrl = typeof u?.avatar_url === 'string' ? u.avatar_url.trim() : '';
 		const color = getAvatarColor(u?.user_name || u?.user_id || name);
 		const initial = name.charAt(0).toUpperCase() || '?';
-		const href = Number.isFinite(id) && id > 0 ? `/user/${id}` : '#';
+		const href = buildProfilePath({ userName: u?.user_name, userId: id }) || '#';
 		const avatarContent = avatarUrl
 			? html`<img class="user-profile-comment-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">`
 			: html`<span class="user-profile-comment-avatar-fallback" style="--user-profile-avatar-bg: ${color};" aria-hidden="true">${escapeHtml(initial)}</span>`;
@@ -731,25 +787,25 @@ function renderCommentsList(container, comments, emptyMessage) {
 	container.innerHTML = html`
 		<div class="user-profile-comments-list">
 			${list.map((c) => {
-				const creationId = c?.created_image_id;
-				const title = (c?.created_image_title || 'Creation').trim() || 'Creation';
-				const text = (c?.text || '').trim() || '';
-				const createdAt = c?.created_at ? formatRelativeTime(new Date(c.created_at)) : '';
-				const creationHref = Number.isFinite(creationId) && creationId > 0 ? `/creations/${creationId}` : '#';
-				const thumbUrl = (c?.created_image_thumbnail_url || c?.created_image_url || '').trim();
-				const creator = {
-					user_id: c?.created_image_user_id,
-					display_name: c?.creator_display_name,
-					user_name: c?.creator_user_name,
-					avatar_url: c?.creator_avatar_url
-				};
-				const commenter = {
-					user_id: c?.user_id,
-					display_name: c?.commenter_display_name,
-					user_name: c?.commenter_user_name,
-					avatar_url: c?.commenter_avatar_url
-				};
-				return html`
+		const creationId = c?.created_image_id;
+		const title = (c?.created_image_title || 'Creation').trim() || 'Creation';
+		const text = (c?.text || '').trim() || '';
+		const createdAt = c?.created_at ? formatRelativeTime(new Date(c.created_at)) : '';
+		const creationHref = Number.isFinite(creationId) && creationId > 0 ? `/creations/${creationId}` : '#';
+		const thumbUrl = (c?.created_image_thumbnail_url || c?.created_image_url || '').trim();
+		const creator = {
+			user_id: c?.created_image_user_id,
+			display_name: c?.creator_display_name,
+			user_name: c?.creator_user_name,
+			avatar_url: c?.creator_avatar_url
+		};
+		const commenter = {
+			user_id: c?.user_id,
+			display_name: c?.commenter_display_name,
+			user_name: c?.commenter_user_name,
+			avatar_url: c?.commenter_avatar_url
+		};
+		return html`
 					<div class="user-profile-comment-block">
 						<a href="${escapeHtml(creationHref)}" class="user-profile-comment-thumb">
 							${thumbUrl ? html`<img src="${escapeHtml(thumbUrl)}" alt="" class="user-profile-comment-thumb-img" loading="lazy">` : html`<span class="user-profile-comment-thumb-placeholder">?</span>`}
@@ -765,38 +821,169 @@ function renderCommentsList(container, comments, emptyMessage) {
 						</div>
 					</div>
 				`;
-			}).join('')}
+	}).join('')}
 		</div>
 	`;
+}
+
+async function loadPersonalityCreations(personality, { limit = 100, offset = 0 } = {}) {
+	const normalized = String(personality || '').trim().toLowerCase();
+	const url = `/api/personalities/${encodeURIComponent(normalized)}/creations?limit=${encodeURIComponent(String(limit))}&offset=${encodeURIComponent(String(offset))}`;
+	const result = await fetchJsonWithStatusDeduped(url, { credentials: 'include' }, { windowMs: 1200 });
+	if (!result.ok) {
+		throw new Error('Failed to search personality creations');
+	}
+	const items = Array.isArray(result.data?.images) ? result.data.images : [];
+	return { items, hasMore: Boolean(result.data?.has_more) };
+}
+
+async function loadTagCreations(tag, { limit = 100, offset = 0 } = {}) {
+	const normalized = String(tag || '').trim().toLowerCase();
+	const url = `/api/tags/${encodeURIComponent(normalized)}/creations?limit=${encodeURIComponent(String(limit))}&offset=${encodeURIComponent(String(offset))}`;
+	const result = await fetchJsonWithStatusDeduped(url, { credentials: 'include' }, { windowMs: 1200 });
+	if (!result.ok) {
+		throw new Error('Failed to search tag creations');
+	}
+	const items = Array.isArray(result.data?.images) ? result.data.images : [];
+	return { items, hasMore: Boolean(result.data?.has_more) };
+}
+
+function renderPersonalityDiscoveryPage(container, personality, items, { hasMore = false, prefix = '@' } = {}) {
+	const safePersonality = String(personality || '').trim().toLowerCase();
+	const token = `${prefix}${safePersonality}`;
+	container.innerHTML = html`
+		<div class="route-header">
+			<h3>${escapeHtml(token)}</h3>
+		</div>
+		<div class="route-cards content-cards-image-grid" data-personality-grid>
+			<div class="route-empty route-empty-image-grid route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
+		</div>
+		${hasMore ? html`<div class="route-empty"><div class="route-empty-message">Showing top results. Refine the personality name to narrow matches.</div></div>` : ''}
+	`;
+	const grid = container.querySelector('[data-personality-grid]');
+	renderImageGrid(
+		grid,
+		items,
+		false,
+		'No results found',
+		`No creations currently match ${token}.`
+	);
 }
 
 async function init() {
 	const container = document.querySelector('.user-profile-page');
 	if (!container) return;
+	const serverContext = getServerProfileContext();
 
-	const info = getPathUserId();
-	let targetUserId = info.userId;
+	const info = getPathUserTarget();
+	let target = { mode: info.mode, userId: info.userId, userName: info.userName };
 
 	if (info.kind === 'me') {
 		const me = await fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 500 })
 			.catch(() => ({ ok: false, status: 0, data: null }));
 		if (!me.ok) {
-			container.innerHTML = html`<div class="route-empty">Please log in to view your profile.</div>`;
+			renderProfileUnavailableState(container, {
+				title: 'Please log in',
+				message: 'Sign in to view your profile.',
+				icon: 'warning'
+			});
 			return;
 		}
-		targetUserId = me.data?.id ?? null;
+		target = { mode: 'id', userId: me.data?.id ?? null, userName: null };
 	}
 
-	if (!targetUserId) {
-		container.innerHTML = html`<div class="route-empty">User not found.</div>`;
+	// For server-sent /user/:id or /p/:personality routes where no backing user exists,
+	// render a stable "not found" profile state instead of surfacing a hard error.
+	const requestedType = typeof serverContext?.requested?.type === 'string' ? serverContext.requested.type : '';
+	const targetExists = serverContext?.resolved?.target_exists;
+	if (requestedType === 'user-id' && targetExists === false) {
+		renderProfileUnavailableState(container, {
+			title: 'User not found',
+			message: 'User not found!',
+			icon: 'user-not-found'
+		});
+		return;
+	}
+	if (requestedType === 'user-name' && targetExists === false) {
+		const personality = String(serverContext?.requested?.user_name || target?.userName || '').trim().toLowerCase();
+		if (!personality) {
+			renderProfileUnavailableState(container, {
+				title: 'Personality not found',
+				message: 'This personality could not be resolved.',
+				icon: 'warning'
+			});
+			return;
+		}
+		try {
+			const result = await loadPersonalityCreations(personality, { limit: 100, offset: 0 });
+			if (!Array.isArray(result.items) || result.items.length === 0) {
+				renderProfileUnavailableState(container, {
+					title: 'Personality not found',
+					message: `No results found for @${personality}.`,
+					icon: 'user-not-found'
+				});
+				return;
+			}
+			renderPersonalityDiscoveryPage(container, personality, result.items, { hasMore: result.hasMore });
+		} catch {
+			renderProfileUnavailableState(container, {
+				title: 'Unable to load personality results',
+				message: 'An error occurred while searching creations for this personality.',
+				icon: 'warning'
+			});
+		}
+		return;
+	}
+	if (requestedType === 'tag') {
+		const tag = String(serverContext?.requested?.user_name || target?.userName || '').trim().toLowerCase();
+		if (!tag) {
+			renderProfileUnavailableState(container, {
+				title: 'Tag not found',
+				message: 'No results found.',
+				icon: 'warning'
+			});
+			return;
+		}
+		try {
+			const result = await loadTagCreations(tag, { limit: 100, offset: 0 });
+			if (!Array.isArray(result.items) || result.items.length === 0) {
+				renderProfileUnavailableState(container, {
+					title: 'Tag not found',
+					message: `No results found for #${tag}.`,
+					icon: 'user-not-found'
+				});
+				return;
+			}
+			renderPersonalityDiscoveryPage(container, tag, result.items, { hasMore: result.hasMore, prefix: '#' });
+		} catch {
+			renderProfileUnavailableState(container, {
+				title: 'Unable to load tag results',
+				message: 'An error occurred while searching creations for this tag.',
+				icon: 'warning'
+			});
+		}
+		return;
+	}
+
+	const targetApiBase = buildTargetUserApiBase(target);
+	if (!targetApiBase) {
+		renderProfileUnavailableState(container, {
+			title: 'User not found',
+			message: 'This profile could not be resolved.',
+			icon: 'user-not-found'
+		});
 		return;
 	}
 
 	let summary;
 	try {
-		summary = await loadProfileSummary(targetUserId);
+		summary = await loadProfileSummary(target);
 	} catch {
-		container.innerHTML = html`<div class="route-empty">Unable to load profile.</div>`;
+		renderProfileUnavailableState(container, {
+			title: 'Unable to load profile',
+			message: 'An error occurred while loading this profile.',
+			icon: 'warning'
+		});
 		return;
 	}
 
@@ -908,7 +1095,7 @@ async function init() {
 	const includeAllForAdmin = isAdmin;
 	const showBadge = isAdmin;
 	try {
-		const result = await loadUserImages(targetUserId, { includeAll: includeAllForAdmin, limit: PROFILE_PAGE_SIZE.creations, offset: 0 });
+		const result = await loadUserImages(target, { includeAll: includeAllForAdmin, limit: PROFILE_PAGE_SIZE.creations, offset: 0 });
 		tabData.creations = { items: result.images, hasMore: result.has_more };
 	} catch {
 		tabData.creations = { items: [], hasMore: false };
@@ -939,7 +1126,7 @@ async function init() {
 		try {
 			if (tabId === 'likes') {
 				const limit = PROFILE_PAGE_SIZE.likes;
-				const res = await fetchJsonWithStatusDeduped(`/api/users/${targetUserId}/liked-creations?limit=${limit}&offset=0`, { credentials: 'include' }, { windowMs: 800 });
+				const res = await fetchJsonWithStatusDeduped(`${targetApiBase}/liked-creations?limit=${limit}&offset=0`, { credentials: 'include' }, { windowMs: 800 });
 				const images = Array.isArray(res?.data?.images) ? res.data.images : [];
 				tabData.likes = { items: images, hasMore: Boolean(res?.data?.has_more) };
 				panel.className = 'route-cards content-cards-image-grid';
@@ -950,7 +1137,7 @@ async function init() {
 				setupInfiniteScrollForTab('likes', panel);
 			} else if (tabId === 'follows') {
 				const limit = PROFILE_PAGE_SIZE.follows;
-				const res = await fetchJsonWithStatusDeduped(`/api/users/${targetUserId}/following?limit=${limit}&offset=0`, { credentials: 'include' }, { windowMs: 800 });
+				const res = await fetchJsonWithStatusDeduped(`${targetApiBase}/following?limit=${limit}&offset=0`, { credentials: 'include' }, { windowMs: 800 });
 				const users = Array.isArray(res?.data?.following) ? res.data.following : [];
 				tabData.follows = { items: users, hasMore: Boolean(res?.data?.has_more) };
 				const followsEmptyTitle = isSelf ? "You're not following anyone yet" : 'This user isn\'t following anyone yet';
@@ -960,7 +1147,7 @@ async function init() {
 				setupInfiniteScrollForTab('follows', panel);
 			} else if (tabId === 'following') {
 				const limit = PROFILE_PAGE_SIZE.following;
-				const res = await fetchJsonWithStatusDeduped(`/api/users/${targetUserId}/followers?limit=${limit}&offset=0`, { credentials: 'include' }, { windowMs: 800 });
+				const res = await fetchJsonWithStatusDeduped(`${targetApiBase}/followers?limit=${limit}&offset=0`, { credentials: 'include' }, { windowMs: 800 });
 				const users = Array.isArray(res?.data?.followers) ? res.data.followers : [];
 				tabData.following = { items: users, hasMore: Boolean(res?.data?.has_more) };
 				const viewerFollowsSet = new Set(
@@ -973,7 +1160,7 @@ async function init() {
 				setupInfiniteScrollForTab('following', panel);
 			} else if (tabId === 'comments') {
 				const limit = PROFILE_PAGE_SIZE.comments;
-				const res = await fetchJsonWithStatusDeduped(`/api/users/${targetUserId}/comments?limit=${limit}&offset=0`, { credentials: 'include' }, { windowMs: 800 });
+				const res = await fetchJsonWithStatusDeduped(`${targetApiBase}/comments?limit=${limit}&offset=0`, { credentials: 'include' }, { windowMs: 800 });
 				const comments = Array.isArray(res?.data?.comments) ? res.data.comments : [];
 				tabData.comments = { items: comments, hasMore: Boolean(res?.data?.has_more) };
 				renderCommentsList(panel, comments, 'Comments this user has left will appear here.');
@@ -996,26 +1183,26 @@ async function init() {
 		if (btn) btn.disabled = true;
 		try {
 			if (tabId === 'creations') {
-				const result = await loadUserImages(targetUserId, { includeAll: includeAllForAdmin, limit, offset });
+				const result = await loadUserImages(target, { includeAll: includeAllForAdmin, limit, offset });
 				data.items = data.items.concat(result.images);
 				data.hasMore = result.has_more;
 				appendImageGridCards(grid, result.images, showBadge);
 			} else if (tabId === 'likes') {
-				const res = await fetchJsonWithStatusDeduped(`/api/users/${targetUserId}/liked-creations?limit=${limit}&offset=${offset}`, { credentials: 'include' }, { windowMs: 800 });
+				const res = await fetchJsonWithStatusDeduped(`${targetApiBase}/liked-creations?limit=${limit}&offset=${offset}`, { credentials: 'include' }, { windowMs: 800 });
 				const images = Array.isArray(res?.data?.images) ? res.data.images : [];
 				data.items = data.items.concat(images);
 				data.hasMore = Boolean(res?.data?.has_more);
 				const panel = container.querySelector('[data-profile-likes]');
 				if (panel) appendImageGridCards(panel, images, false);
 			} else if (tabId === 'follows') {
-				const res = await fetchJsonWithStatusDeduped(`/api/users/${targetUserId}/following?limit=${limit}&offset=${offset}`, { credentials: 'include' }, { windowMs: 800 });
+				const res = await fetchJsonWithStatusDeduped(`${targetApiBase}/following?limit=${limit}&offset=${offset}`, { credentials: 'include' }, { windowMs: 800 });
 				const users = Array.isArray(res?.data?.following) ? res.data.following : [];
 				data.items = data.items.concat(users);
 				data.hasMore = Boolean(res?.data?.has_more);
 				const panel = container.querySelector('[data-profile-follows]');
 				if (panel) appendUserListItems(panel, users, { showUnfollow: true, viewerUserId });
 			} else if (tabId === 'following') {
-				const res = await fetchJsonWithStatusDeduped(`/api/users/${targetUserId}/followers?limit=${limit}&offset=${offset}`, { credentials: 'include' }, { windowMs: 800 });
+				const res = await fetchJsonWithStatusDeduped(`${targetApiBase}/followers?limit=${limit}&offset=${offset}`, { credentials: 'include' }, { windowMs: 800 });
 				const users = Array.isArray(res?.data?.followers) ? res.data.followers : [];
 				data.items = data.items.concat(users);
 				data.hasMore = Boolean(res?.data?.has_more);
@@ -1023,7 +1210,7 @@ async function init() {
 				const viewerFollowsSet = new Set((data.items || []).filter((u) => u?.viewer_follows === true).map((u) => Number(u?.user_id ?? u?.id)).filter(Number.isFinite));
 				if (panel) appendUserListItems(panel, users, { showFollow: true, viewerFollowsByUserId: viewerFollowsSet, viewerUserId });
 			} else if (tabId === 'comments') {
-				const res = await fetchJsonWithStatusDeduped(`/api/users/${targetUserId}/comments?limit=${limit}&offset=${offset}`, { credentials: 'include' }, { windowMs: 800 });
+				const res = await fetchJsonWithStatusDeduped(`${targetApiBase}/comments?limit=${limit}&offset=${offset}`, { credentials: 'include' }, { windowMs: 800 });
 				const comments = Array.isArray(res?.data?.comments) ? res.data.comments : [];
 				data.items = data.items.concat(comments);
 				data.hasMore = Boolean(res?.data?.has_more);

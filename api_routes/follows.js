@@ -9,6 +9,46 @@ export default function createFollowsRoutes({ queries }) {
 		return id;
 	}
 
+	function normalizeUsername(input) {
+		const raw = typeof input === "string" ? input.trim() : "";
+		if (!raw) return null;
+		const normalized = raw.toLowerCase();
+		if (!/^[a-z0-9][a-z0-9_]{2,23}$/.test(normalized)) return null;
+		return normalized;
+	}
+
+	async function resolveTargetUserFromParams(req, { allowUsername = false } = {}) {
+		if (allowUsername && typeof req.params?.username === "string" && req.params.username.trim()) {
+			const normalizedUserName = normalizeUsername(req.params.username);
+			if (!normalizedUserName) {
+				return { error: { status: 400, body: { error: "Invalid username" } } };
+			}
+			if (!queries.selectUserProfileByUsername?.get) {
+				return { error: { status: 500, body: { error: "Username lookup unavailable" } } };
+			}
+			const profile = await queries.selectUserProfileByUsername.get(normalizedUserName);
+			const targetUserId = Number.parseInt(String(profile?.user_id ?? ""), 10);
+			if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+				return { error: { status: 404, body: { error: "User not found" } } };
+			}
+			const target = await queries.selectUserById.get(targetUserId);
+			if (!target) {
+				return { error: { status: 404, body: { error: "User not found" } } };
+			}
+			return { targetUserId, target };
+		}
+
+		const targetUserId = parseUserId(req.params.id);
+		if (!targetUserId) {
+			return { error: { status: 400, body: { error: "Invalid user id" } } };
+		}
+		const target = await queries.selectUserById.get(targetUserId);
+		if (!target) {
+			return { error: { status: 404, body: { error: "User not found" } } };
+		}
+		return { targetUserId, target };
+	}
+
 	function requireAuth(req, res) {
 		if (!req.auth?.userId) {
 			res.status(401).json({ error: "Unauthorized" });
@@ -18,22 +58,18 @@ export default function createFollowsRoutes({ queries }) {
 	}
 
 	// Follow a user (idempotent)
-	router.post("/api/users/:id/follow", async (req, res) => {
+	router.post(["/api/users/:id/follow", "/api/users/by-username/:username/follow"], async (req, res) => {
 		try {
 			const viewerId = requireAuth(req, res);
 			if (!viewerId) return;
 
-			const targetUserId = parseUserId(req.params.id);
-			if (!targetUserId) {
-				return res.status(400).json({ error: "Invalid user id" });
+			const resolved = await resolveTargetUserFromParams(req, { allowUsername: true });
+			if (resolved?.error) {
+				return res.status(resolved.error.status).json(resolved.error.body);
 			}
+			const targetUserId = resolved.targetUserId;
 			if (targetUserId === viewerId) {
 				return res.status(400).json({ error: "Cannot follow yourself" });
-			}
-
-			const target = await queries.selectUserById.get(targetUserId);
-			if (!target) {
-				return res.status(404).json({ error: "User not found" });
 			}
 
 			if (!queries.insertUserFollow?.run) {
@@ -49,22 +85,18 @@ export default function createFollowsRoutes({ queries }) {
 	});
 
 	// Unfollow a user (idempotent)
-	router.delete("/api/users/:id/follow", async (req, res) => {
+	router.delete(["/api/users/:id/follow", "/api/users/by-username/:username/follow"], async (req, res) => {
 		try {
 			const viewerId = requireAuth(req, res);
 			if (!viewerId) return;
 
-			const targetUserId = parseUserId(req.params.id);
-			if (!targetUserId) {
-				return res.status(400).json({ error: "Invalid user id" });
+			const resolved = await resolveTargetUserFromParams(req, { allowUsername: true });
+			if (resolved?.error) {
+				return res.status(resolved.error.status).json(resolved.error.body);
 			}
+			const targetUserId = resolved.targetUserId;
 			if (targetUserId === viewerId) {
 				return res.status(400).json({ error: "Cannot unfollow yourself" });
-			}
-
-			const target = await queries.selectUserById.get(targetUserId);
-			if (!target) {
-				return res.status(404).json({ error: "User not found" });
 			}
 
 			if (!queries.deleteUserFollow?.run) {
@@ -80,20 +112,16 @@ export default function createFollowsRoutes({ queries }) {
 	});
 
 	// List followers for a user (includes viewer_follows when selectUserFollowersWithViewer is available)
-	router.get("/api/users/:id/followers", async (req, res) => {
+	router.get(["/api/users/:id/followers", "/api/users/by-username/:username/followers"], async (req, res) => {
 		try {
 			const viewerId = requireAuth(req, res);
 			if (!viewerId) return;
 
-			const targetUserId = parseUserId(req.params.id);
-			if (!targetUserId) {
-				return res.status(400).json({ error: "Invalid user id" });
+			const resolved = await resolveTargetUserFromParams(req, { allowUsername: true });
+			if (resolved?.error) {
+				return res.status(resolved.error.status).json(resolved.error.body);
 			}
-
-			const target = await queries.selectUserById.get(targetUserId);
-			if (!target) {
-				return res.status(404).json({ error: "User not found" });
-			}
+			const targetUserId = resolved.targetUserId;
 
 			if (!queries.selectUserFollowers?.all) {
 				return res.status(500).json({ error: "Follow storage not available" });
@@ -118,20 +146,16 @@ export default function createFollowsRoutes({ queries }) {
 	});
 
 	// List who a user is following
-	router.get("/api/users/:id/following", async (req, res) => {
+	router.get(["/api/users/:id/following", "/api/users/by-username/:username/following"], async (req, res) => {
 		try {
 			const viewerId = requireAuth(req, res);
 			if (!viewerId) return;
 
-			const targetUserId = parseUserId(req.params.id);
-			if (!targetUserId) {
-				return res.status(400).json({ error: "Invalid user id" });
+			const resolved = await resolveTargetUserFromParams(req, { allowUsername: true });
+			if (resolved?.error) {
+				return res.status(resolved.error.status).json(resolved.error.body);
 			}
-
-			const target = await queries.selectUserById.get(targetUserId);
-			if (!target) {
-				return res.status(404).json({ error: "User not found" });
-			}
+			const targetUserId = resolved.targetUserId;
 
 			if (!queries.selectUserFollowing?.all) {
 				return res.status(500).json({ error: "Follow storage not available" });

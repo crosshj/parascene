@@ -12,6 +12,91 @@ function escapeHtml(value) {
 		.replace(/'/g, '&#39;');
 }
 
+function escapeRegExp(value) {
+	return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function replaceTokenWithBoundaries(
+	input,
+	token,
+	replacement,
+	{ caseInsensitive = false } = {}
+) {
+	const leftBoundary = '(^|[\\s([{"\'`>])';
+	const rightBoundary = '(?=$|[\\s)\\]}<"\'`.,!?;:])';
+	const flags = caseInsensitive ? 'gi' : 'g';
+	const re = new RegExp(
+		`${leftBoundary}${escapeRegExp(token)}${rightBoundary}`,
+		flags
+	);
+	return input.replace(re, `$1${replacement}`);
+}
+
+/**
+ * Applies conservative emoticon-to-emoji replacements in plain text segments.
+ * This runs only on non-URL text, so detected links are never mutated.
+ */
+function applyEmojiTextTransforms(text) {
+	let out = String(text ?? '');
+	if (!out) return '';
+
+	const transforms = [
+		{ token: '</3', emoji: '💔' },
+		{ token: '<3', emoji: '❤️' },
+		{ token: ':-D', emoji: '😄' },
+		{ token: ':D', emoji: '😄' },
+		{ token: ':-)', emoji: '🙂' },
+		{ token: ':)', emoji: '🙂' },
+		{ token: ':-(', emoji: '🙁' },
+		{ token: ':(', emoji: '🙁' },
+		{ token: ';-)', emoji: '😉' },
+		{ token: ';)', emoji: '😉' },
+		{ token: ':-P', emoji: '😛', caseInsensitive: true },
+		{ token: ':P', emoji: '😛', caseInsensitive: true },
+	];
+
+	for (const { token, emoji, caseInsensitive = false } of transforms) {
+		out = replaceTokenWithBoundaries(out, token, emoji, { caseInsensitive });
+	}
+
+	return out;
+}
+
+function renderPlainUserTextSegment(text) {
+	const transformed = applyEmojiTextTransforms(String(text ?? ''));
+	if (!transformed) return '';
+
+	// Conservative personality/tag token pattern:
+	// - Starts with @ (personality) or # (tag)
+	// - Bounded so we don't transform emails/embedded tokens.
+	const tokenRe = /(^|[^a-zA-Z0-9_-])([@#])([a-zA-Z0-9][a-zA-Z0-9_-]{1,31})(?=$|[^a-zA-Z0-9_-])/g;
+	let out = '';
+	let lastIndex = 0;
+	let match;
+	while ((match = tokenRe.exec(transformed)) !== null) {
+		const leading = match[1] || '';
+		const sigil = match[2] || '';
+		const rawToken = match[3] || '';
+		const mentionStart = match.index + leading.length;
+		const mentionEnd = mentionStart + 1 + rawToken.length;
+
+		out += escapeHtml(transformed.slice(lastIndex, mentionStart));
+
+		const normalized = rawToken.toLowerCase();
+		if (sigil === '@' && /^[a-z0-9][a-z0-9_-]{2,23}$/.test(normalized)) {
+			out += `<a href="/p/${escapeHtml(normalized)}" class="user-link mention-link">@${escapeHtml(rawToken)}</a>`;
+		} else if (sigil === '#' && /^[a-z0-9][a-z0-9_-]{1,31}$/.test(normalized)) {
+			out += `<a href="/t/${escapeHtml(normalized)}" class="user-link mention-link">#${escapeHtml(rawToken)}</a>`;
+		} else {
+			out += escapeHtml(`${sigil}${rawToken}`);
+		}
+		lastIndex = mentionEnd;
+	}
+
+	out += escapeHtml(transformed.slice(lastIndex));
+	return out;
+}
+
 function splitUrlTrailingPunctuation(rawUrl) {
 	let url = String(rawUrl || '');
 	let trailing = '';
@@ -255,7 +340,7 @@ export function textWithCreationLinks(text) {
 		const start = match.index;
 		const rawUrl = match[0];
 
-		out += escapeHtml(raw.slice(lastIndex, start));
+		out += renderPlainUserTextSegment(raw.slice(lastIndex, start));
 
 		const { url, trailing } = splitUrlTrailingPunctuation(rawUrl);
 		const relativePath = getParasceneRelativePath(url);
@@ -304,7 +389,7 @@ export function textWithCreationLinks(text) {
 		lastIndex = start + rawUrl.length;
 	}
 
-	out += escapeHtml(raw.slice(lastIndex));
+	out += renderPlainUserTextSegment(raw.slice(lastIndex));
 	return out;
 }
 

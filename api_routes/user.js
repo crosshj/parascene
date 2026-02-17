@@ -131,6 +131,38 @@ export default function createProfileRoutes({ queries }) {
 		return null;
 	}
 
+	async function resolveTargetUserFromParams(req, { allowUsername = false } = {}) {
+		if (allowUsername && typeof req.params?.username === "string" && req.params.username.trim()) {
+			const normalizedUserName = normalizeUsername(req.params.username);
+			if (!normalizedUserName) {
+				return { error: { status: 400, body: { error: "Invalid username" } } };
+			}
+			if (!queries.selectUserProfileByUsername?.get) {
+				return { error: { status: 500, body: { error: "Username lookup unavailable" } } };
+			}
+			const profile = await queries.selectUserProfileByUsername.get(normalizedUserName);
+			const targetUserId = Number.parseInt(String(profile?.user_id ?? ""), 10);
+			if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+				return { error: { status: 404, body: { error: "User not found" } } };
+			}
+			const target = await queries.selectUserById.get(targetUserId);
+			if (!target) {
+				return { error: { status: 404, body: { error: "User not found" } } };
+			}
+			return { targetUserId, target };
+		}
+
+		const targetUserId = Number.parseInt(String(req.params?.id ?? ""), 10);
+		if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+			return { error: { status: 400, body: { error: "Invalid user id" } } };
+		}
+		const target = await queries.selectUserById.get(targetUserId);
+		if (!target) {
+			return { error: { status: 404, body: { error: "User not found" } } };
+		}
+		return { targetUserId, target };
+	}
+
 	function extractGenericKey(url) {
 		const raw = typeof url === "string" ? url.trim() : "";
 		if (!raw) return null;
@@ -951,7 +983,7 @@ export default function createProfileRoutes({ queries }) {
 	});
 
 	// Public-ish profile summary (auth required for now)
-	router.get("/api/users/:id/profile", async (req, res) => {
+	router.get(["/api/users/:id/profile", "/api/users/by-username/:username/profile"], async (req, res) => {
 		try {
 			if (!req.auth?.userId) {
 				return res.status(401).json({ error: "Unauthorized" });
@@ -962,15 +994,12 @@ export default function createProfileRoutes({ queries }) {
 				return res.status(404).json({ error: "User not found" });
 			}
 
-			const targetUserId = Number.parseInt(req.params.id, 10);
-			if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
-				return res.status(400).json({ error: "Invalid user id" });
+			const resolved = await resolveTargetUserFromParams(req, { allowUsername: true });
+			if (resolved?.error) {
+				return res.status(resolved.error.status).json(resolved.error.body);
 			}
-
-			const target = await queries.selectUserById.get(targetUserId);
-			if (!target) {
-				return res.status(404).json({ error: "User not found" });
-			}
+			const targetUserId = resolved.targetUserId;
+			const target = resolved.target;
 
 			const emailPrefix = (() => {
 				const email = String(target?.email || "").trim();
@@ -1022,7 +1051,7 @@ export default function createProfileRoutes({ queries }) {
 	});
 
 	// Created images for a user (published-only unless viewer is owner and include=all)
-	router.get("/api/users/:id/created-images", async (req, res) => {
+	router.get(["/api/users/:id/created-images", "/api/users/by-username/:username/created-images"], async (req, res) => {
 		try {
 			if (!req.auth?.userId) {
 				return res.status(401).json({ error: "Unauthorized" });
@@ -1033,15 +1062,11 @@ export default function createProfileRoutes({ queries }) {
 				return res.status(404).json({ error: "User not found" });
 			}
 
-			const targetUserId = Number.parseInt(req.params.id, 10);
-			if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
-				return res.status(400).json({ error: "Invalid user id" });
+			const resolved = await resolveTargetUserFromParams(req, { allowUsername: true });
+			if (resolved?.error) {
+				return res.status(resolved.error.status).json(resolved.error.body);
 			}
-
-			const target = await queries.selectUserById.get(targetUserId);
-			if (!target) {
-				return res.status(404).json({ error: "User not found" });
-			}
+			const targetUserId = resolved.targetUserId;
 
 			const isSelf = Number(targetUserId) === Number(req.auth.userId);
 			const isAdmin = viewer?.role === 'admin';
@@ -1093,7 +1118,7 @@ export default function createProfileRoutes({ queries }) {
 	});
 
 	// Creations this user has liked (published only; for profile Likes tab)
-	router.get("/api/users/:id/liked-creations", async (req, res) => {
+	router.get(["/api/users/:id/liked-creations", "/api/users/by-username/:username/liked-creations"], async (req, res) => {
 		try {
 			if (!req.auth?.userId) {
 				return res.status(401).json({ error: "Unauthorized" });
@@ -1102,14 +1127,11 @@ export default function createProfileRoutes({ queries }) {
 			if (!viewer) {
 				return res.status(404).json({ error: "User not found" });
 			}
-			const targetUserId = Number.parseInt(req.params.id, 10);
-			if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
-				return res.status(400).json({ error: "Invalid user id" });
+			const resolved = await resolveTargetUserFromParams(req, { allowUsername: true });
+			if (resolved?.error) {
+				return res.status(resolved.error.status).json(resolved.error.body);
 			}
-			const target = await queries.selectUserById.get(targetUserId);
-			if (!target) {
-				return res.status(404).json({ error: "User not found" });
-			}
+			const targetUserId = resolved.targetUserId;
 			if (!queries.selectCreatedImagesLikedByUser?.all) {
 				return res.json({ images: [], has_more: false });
 			}
@@ -1138,7 +1160,7 @@ export default function createProfileRoutes({ queries }) {
 	});
 
 	// Comments by this user with creation context (for profile Comments tab)
-	router.get("/api/users/:id/comments", async (req, res) => {
+	router.get(["/api/users/:id/comments", "/api/users/by-username/:username/comments"], async (req, res) => {
 		try {
 			if (!req.auth?.userId) {
 				return res.status(401).json({ error: "Unauthorized" });
@@ -1147,14 +1169,11 @@ export default function createProfileRoutes({ queries }) {
 			if (!viewer) {
 				return res.status(404).json({ error: "User not found" });
 			}
-			const targetUserId = Number.parseInt(req.params.id, 10);
-			if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
-				return res.status(400).json({ error: "Invalid user id" });
+			const resolved = await resolveTargetUserFromParams(req, { allowUsername: true });
+			if (resolved?.error) {
+				return res.status(resolved.error.status).json(resolved.error.body);
 			}
-			const target = await queries.selectUserById.get(targetUserId);
-			if (!target) {
-				return res.status(404).json({ error: "User not found" });
-			}
+			const targetUserId = resolved.targetUserId;
 			const limit = Math.min(200, Math.max(1, Number.parseInt(String(req.query?.limit ?? "20"), 10) || 20));
 			const offset = Math.max(0, Number.parseInt(String(req.query?.offset ?? "0"), 10) || 0);
 			const commentsRaw = await queries.selectCommentsByUser?.all(targetUserId, { limit, offset }) ?? [];

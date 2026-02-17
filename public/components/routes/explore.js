@@ -1,6 +1,7 @@
 import { formatDateTime, formatRelativeTime } from '../../shared/datetime.js';
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 import { searchIcon } from '../../icons/svg-strings.js';
+import { buildProfilePath } from '../../shared/profileLinks.js';
 
 const html = String.raw;
 
@@ -594,9 +595,9 @@ class AppRouteExplore extends HTMLElement {
 			const card = document.createElement('div');
 			card.className = 'route-card route-card-image';
 
-			const authorUserId = item.user_id != null ? Number(item.user_id) : null;
-			const profileHref = Number.isFinite(authorUserId) && authorUserId > 0 ? `/user/${authorUserId}` : null;
 			const authorUserName = typeof item.author_user_name === 'string' ? item.author_user_name.trim() : '';
+			const authorUserId = item.user_id != null ? Number(item.user_id) : null;
+			const profileHref = buildProfilePath({ userName: authorUserName, userId: authorUserId });
 			const authorDisplayName = typeof item.author_display_name === 'string' ? item.author_display_name.trim() : '';
 			const emailPrefix = typeof item.author === 'string' && item.author.includes('@') ? item.author.split('@')[0] : '';
 			const authorLabel = authorDisplayName || authorUserName || emailPrefix || item.author || 'User';

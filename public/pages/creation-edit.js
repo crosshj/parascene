@@ -1,7 +1,7 @@
 import { submitCreationWithPending, formatMentionsFailureForDialog } from '/shared/createSubmit.js';
 import { fetchJsonWithStatusDeduped } from '/shared/api.js';
 import { attachAutoGrowTextarea } from '/shared/autogrow.js';
-import { DEFAULT_APP_ORIGIN } from '/shared/urls.js';
+import { DEFAULT_APP_ORIGIN } from '/shared/userText.js';
 
 const html = String.raw;
 

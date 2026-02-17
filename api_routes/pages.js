@@ -63,6 +63,10 @@ export default function createPageRoutes({ queries, pagesDir }) {
 		return out;
 	}
 
+	function serializeInlineScript(value) {
+		return JSON.stringify(value).replace(/</g, "\\u003c");
+	}
+
 	// External share page (unauthed, unfurl-first)
 	router.get("/s/:version/:token/:bust?", async (req, res) => {
 		const version = String(req.params.version || "");
@@ -454,22 +458,97 @@ export default function createPageRoutes({ queries, pagesDir }) {
 		return res.send(htmlContent);
 	});
 
-	// User profile page - /user (me) and /user/:id (view user)
-	router.get(["/user", "/user/:id"], async (req, res) => {
+	// User/profile discovery page - /user (me), /user/:id, /p/:personality, /t/:tag
+	router.get(["/user", "/user/:id", "/p/:personality", "/t/:tag"], async (req, res) => {
 		const user = await requireLoggedInUser(req, res);
 		if (!user) return;
 
-		// If /user/:id, validate target exists (avoid blank profile pages)
+		// Resolve profile target context. We always serve the profile page shell
+		// and let the page decide how to render "not found / non-user" states.
 		const rawTargetId = req.params?.id;
+		const rawTargetUserName = req.params?.personality;
+		const rawTargetTag = req.params?.tag;
+		const profileRouteContext = {
+			requested: {
+				type: "me",
+				user_id: null,
+				user_name: null
+			},
+			resolved: {
+				target_exists: true,
+				user_id: null,
+				user_name: null
+			},
+			target_kind: "user"
+		};
 		if (rawTargetId) {
+			profileRouteContext.requested = {
+				type: "user-id",
+				user_id: Number.parseInt(String(rawTargetId || ""), 10),
+				user_name: null
+			};
 			const targetId = Number.parseInt(rawTargetId, 10);
-			if (!Number.isFinite(targetId) || targetId <= 0) {
-				return res.status(404).send("Not found");
+			if (Number.isFinite(targetId) && targetId > 0) {
+				const target = await queries.selectUserById.get(targetId);
+				if (target) {
+					profileRouteContext.resolved = {
+						target_exists: true,
+						user_id: Number(target.id),
+						user_name: null
+					};
+				} else {
+					profileRouteContext.resolved.target_exists = false;
+					profileRouteContext.target_kind = "personality";
+				}
+			} else {
+				profileRouteContext.resolved.target_exists = false;
+				profileRouteContext.target_kind = "personality";
 			}
-			const target = await queries.selectUserById.get(targetId);
-			if (!target) {
-				return res.status(404).send("User not found");
+		}
+		if (rawTargetUserName) {
+			const normalizedUserName = String(rawTargetUserName || "").trim().toLowerCase();
+			profileRouteContext.requested = {
+				type: "user-name",
+				user_id: null,
+				user_name: normalizedUserName || null
+			};
+			if (/^[a-z0-9][a-z0-9_-]{2,23}$/.test(normalizedUserName) && queries.selectUserProfileByUsername?.get) {
+				const profile = await queries.selectUserProfileByUsername.get(normalizedUserName);
+				const targetId = Number.parseInt(String(profile?.user_id ?? ""), 10);
+				if (Number.isFinite(targetId) && targetId > 0) {
+					const target = await queries.selectUserById.get(targetId);
+					if (target) {
+						profileRouteContext.resolved = {
+							target_exists: true,
+							user_id: Number(target.id),
+							user_name: normalizedUserName
+						};
+					} else {
+						profileRouteContext.resolved.target_exists = false;
+						profileRouteContext.target_kind = "personality";
+					}
+				} else {
+					profileRouteContext.resolved.target_exists = false;
+					profileRouteContext.target_kind = "personality";
+				}
+			} else {
+				profileRouteContext.resolved.target_exists = false;
+				profileRouteContext.target_kind = "personality";
 			}
+		}
+		if (rawTargetTag) {
+			const normalizedTag = String(rawTargetTag || "").trim().toLowerCase();
+			profileRouteContext.requested = {
+				type: "tag",
+				user_id: null,
+				user_name: normalizedTag || null
+			};
+			profileRouteContext.resolved = {
+				target_exists: false,
+				user_id: null,
+				user_name: null
+			};
+			profileRouteContext.target_kind = "tag";
 		}
 
 		try {
@@ -499,6 +578,11 @@ export default function createPageRoutes({ queries, pagesDir }) {
 			pageHtml = pageHtml.replace(
 				"<!--APP_MOBILE_BOTTOM_NAV-->",
 				includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
+			);
+			const profileContextScript = `<script>window.__ps_profile_context=${serializeInlineScript(profileRouteContext)};</script>`;
+			pageHtml = pageHtml.replace(
+				/<script\s+type="module"\s+src="\/pages\/user-profile\.js"><\/script>/i,
+				`${profileContextScript}\n\t<script type="module" src="/pages/user-profile.js"></script>`
 			);
 
 			pageHtml = injectCommonHead(pageHtml);

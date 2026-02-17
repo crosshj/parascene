@@ -2629,6 +2629,106 @@ export function openDb() {
 				return data ?? [];
 			}
 		},
+		selectPublishedCreationsByPersonalityMention: {
+			all: async (personality, options = {}) => {
+				const normalized = String(personality || "").trim().toLowerCase();
+				if (!/^[a-z0-9][a-z0-9_-]{2,23}$/.test(normalized)) return [];
+				const mentionNeedle = `@${normalized}`;
+				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
+				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
+
+				const [descriptionRes, commentsRes] = await Promise.all([
+					serviceClient
+						.from(prefixedTable("created_images"))
+						.select("id")
+						.eq("published", true)
+						.is("unavailable_at", null)
+						.ilike("description", `%${mentionNeedle}%`)
+						.limit(5000),
+					serviceClient
+						.from(prefixedTable("comments_created_image"))
+						.select("created_image_id")
+						.ilike("text", `%${mentionNeedle}%`)
+						.limit(5000)
+				]);
+				if (descriptionRes.error) throw descriptionRes.error;
+				if (commentsRes.error) throw commentsRes.error;
+
+				const idSet = new Set();
+				for (const row of descriptionRes.data ?? []) {
+					const id = Number(row?.id);
+					if (Number.isFinite(id) && id > 0) idSet.add(id);
+				}
+				for (const row of commentsRes.data ?? []) {
+					const id = Number(row?.created_image_id);
+					if (Number.isFinite(id) && id > 0) idSet.add(id);
+				}
+				const ids = Array.from(idSet);
+				if (ids.length === 0) return [];
+
+				const { data: images, error: imgError } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.select("id, filename, file_path, width, height, color, status, created_at, published, published_at, title, description, meta, user_id, unavailable_at")
+					.in("id", ids)
+					.eq("published", true)
+					.is("unavailable_at", null);
+				if (imgError) throw imgError;
+
+				return (images ?? [])
+					.sort((a, b) => new Date(b?.created_at || 0).getTime() - new Date(a?.created_at || 0).getTime())
+					.slice(offset, offset + limit);
+			}
+		},
+		selectPublishedCreationsByTagMention: {
+			all: async (tag, options = {}) => {
+				const normalized = String(tag || "").trim().toLowerCase();
+				if (!/^[a-z0-9][a-z0-9_-]{1,31}$/.test(normalized)) return [];
+				const tagNeedle = `#${normalized}`;
+				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
+				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
+
+				const [descriptionRes, commentsRes] = await Promise.all([
+					serviceClient
+						.from(prefixedTable("created_images"))
+						.select("id")
+						.eq("published", true)
+						.is("unavailable_at", null)
+						.ilike("description", `%${tagNeedle}%`)
+						.limit(5000),
+					serviceClient
+						.from(prefixedTable("comments_created_image"))
+						.select("created_image_id")
+						.ilike("text", `%${tagNeedle}%`)
+						.limit(5000)
+				]);
+				if (descriptionRes.error) throw descriptionRes.error;
+				if (commentsRes.error) throw commentsRes.error;
+
+				const idSet = new Set();
+				for (const row of descriptionRes.data ?? []) {
+					const id = Number(row?.id);
+					if (Number.isFinite(id) && id > 0) idSet.add(id);
+				}
+				for (const row of commentsRes.data ?? []) {
+					const id = Number(row?.created_image_id);
+					if (Number.isFinite(id) && id > 0) idSet.add(id);
+				}
+				const ids = Array.from(idSet);
+				if (ids.length === 0) return [];
+
+				const { data: images, error: imgError } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.select("id, filename, file_path, width, height, color, status, created_at, published, published_at, title, description, meta, user_id, unavailable_at")
+					.in("id", ids)
+					.eq("published", true)
+					.is("unavailable_at", null);
+				if (imgError) throw imgError;
+
+				return (images ?? [])
+					.sort((a, b) => new Date(b?.created_at || 0).getTime() - new Date(a?.created_at || 0).getTime())
+					.slice(offset, offset + limit);
+			}
+		},
 		selectAllCreatedImageCountForUser: {
 			get: async (userId) => {
 				const { count, error } = await serviceClient

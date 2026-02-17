@@ -3,9 +3,10 @@ import { enableLikeButtons, getCreationLikeCount, initLikeButton } from '/shared
 import { fetchJsonWithStatusDeduped } from '/shared/api.js';
 import { getAvatarColor } from '/shared/avatar.js';
 import { fetchCreatedImageActivity, postCreatedImageComment } from '/shared/comments.js';
-import { processUserText, hydrateUserTextLinks } from '/shared/urls.js';
+import { processUserText, hydrateUserTextLinks } from '/shared/userText.js';
 import { attachAutoGrowTextarea } from '/shared/autogrow.js';
 import { textsSameWithinTolerance } from '/shared/textCompare.js';
+import { buildProfilePath } from '/shared/profileLinks.js';
 import '../components/modals/publish.js';
 import '../components/modals/creation-details.js';
 import '../components/modals/share.js';
@@ -297,7 +298,7 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 			card.className = 'route-card route-card-image';
 			card.setAttribute('role', 'listitem');
 			const authorUserId = item.user_id != null ? Number(item.user_id) : null;
-			const profileHref = Number.isFinite(authorUserId) && authorUserId > 0 ? `/user/${authorUserId}` : null;
+			const profileHref = buildProfilePath({ userName: item.author_user_name, userId: authorUserId });
 			const authorLabel = item.author_display_name || item.author_user_name || item.author || 'User';
 			const handleText = item.author_user_name || '';
 			const handle = handleText ? `@${handleText}` : '';
@@ -1001,7 +1002,7 @@ async function loadCreation() {
 		const creatorAvatarUrl = typeof creation?.creator?.avatar_url === 'string' ? creation.creator.avatar_url.trim() : '';
 		const creatorId = Number(creation?.creator?.id ?? creation?.user_id ?? 0);
 		const creatorColor = getAvatarColor(creatorUserName || creatorEmailPrefix || String(creatorId || '') || creatorName);
-		const creatorProfileHref = Number.isFinite(creatorId) && creatorId > 0 ? `/user/${creatorId}` : null;
+		const creatorProfileHref = buildProfilePath({ userName: creatorUserName, userId: creatorId });
 		const creatorPlan = creation?.creator?.plan === 'founder';
 
 		let canShowFollowButton = false;
@@ -1498,7 +1499,7 @@ async function loadCreation() {
 					const handle = userName ? `@${userName}` : '';
 					const avatarUrl = typeof t?.avatar_url === 'string' ? t.avatar_url.trim() : '';
 					const tipperId = Number(t?.user_id ?? 0);
-					const profileHref = Number.isFinite(tipperId) && tipperId > 0 ? `/user/${tipperId}` : null;
+					const profileHref = buildProfilePath({ userName, userId: tipperId });
 					const seed = userName || String(t?.user_id ?? '') || name;
 					const color = getAvatarColor(seed);
 					const initial = name.charAt(0).toUpperCase() || '?';
@@ -1567,7 +1568,7 @@ async function loadCreation() {
 				const handle = userName ? `@${userName}` : '';
 				const avatarUrl = typeof c?.avatar_url === 'string' ? c.avatar_url.trim() : '';
 				const commenterId = Number(c?.user_id ?? 0);
-				const profileHref = Number.isFinite(commenterId) && commenterId > 0 ? `/user/${commenterId}` : null;
+				const profileHref = buildProfilePath({ userName, userId: commenterId });
 				const seed = userName || String(c?.user_id ?? '') || name;
 				const color = getAvatarColor(seed);
 				const initial = name.charAt(0).toUpperCase() || '?';
@@ -1875,7 +1876,11 @@ async function handleDelete() {
 
 		// Success: after permanent delete (admin), go back to that user's profile; otherwise creations list
 		if (isPermanent && lastCreationMeta?.user_id) {
-			window.location.href = `/user/${lastCreationMeta.user_id}`;
+			const profilePath = buildProfilePath({
+				userName: lastCreationMeta?.creator?.user_name || lastCreationMeta?.user_name || null,
+				userId: lastCreationMeta.user_id
+			});
+			window.location.href = profilePath || `/user/${lastCreationMeta.user_id}`;
 		} else {
 			window.location.href = '/creations';
 		}

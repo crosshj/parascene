@@ -69,6 +69,20 @@ function itemMatchesSearch(item, needleLower, extrasByCreationId) {
 	return haystack.includes(needleLower);
 }
 
+function normalizePersonality(input) {
+	const raw = typeof input === "string" ? input.trim().toLowerCase() : "";
+	if (!raw) return null;
+	if (!/^[a-z0-9][a-z0-9_-]{2,23}$/.test(raw)) return null;
+	return raw;
+}
+
+function normalizeTag(input) {
+	const raw = typeof input === "string" ? input.trim().toLowerCase() : "";
+	if (!raw) return null;
+	if (!/^[a-z0-9][a-z0-9_-]{1,31}$/.test(raw)) return null;
+	return raw;
+}
+
 export default function createExploreRoutes({ queries }) {
 	const router = express.Router();
 
@@ -310,6 +324,120 @@ export default function createExploreRoutes({ queries }) {
 			console.error("[explore search] Error:", err);
 			if (!res.headersSent) {
 				res.status(500).json({ error: "Unable to search explore." });
+			}
+		}
+	});
+
+	// Personality discovery: published creations that mention @personality
+	// in either creation description or any comment text.
+	router.get("/api/personalities/:personality/creations", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+			const user = await queries.selectUserById.get(req.auth?.userId);
+			if (!user) {
+				return res.status(404).json({ error: "User not found" });
+			}
+
+			const personality = normalizePersonality(req.params?.personality);
+			if (!personality) {
+				return res.status(400).json({ error: "Invalid personality" });
+			}
+			const personalityQueries = queries.selectPublishedCreationsByPersonalityMention;
+			if (typeof personalityQueries?.all !== "function") {
+				return res.status(500).json({ error: "Personality search not available" });
+			}
+
+			const limit = Math.min(Math.max(1, parseInt(req.query.limit, 10) || 24), 200);
+			const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+			const rows = await personalityQueries.all(personality, { limit: limit + 1, offset });
+			const list = Array.isArray(rows) ? rows : [];
+			const has_more = list.length > limit;
+			const page = has_more ? list.slice(0, limit) : list;
+
+			const images = page.map((img) => {
+				const url = img?.file_path || (img?.filename ? `/api/images/created/${img.filename}` : null);
+				return {
+					id: img?.id,
+					filename: img?.filename ?? null,
+					url,
+					thumbnail_url: getThumbnailUrl(url),
+					width: img?.width ?? null,
+					height: img?.height ?? null,
+					color: img?.color ?? null,
+					status: img?.status || "completed",
+					created_at: img?.created_at ?? null,
+					published: img?.published === 1 || img?.published === true,
+					published_at: img?.published_at || null,
+					title: img?.title || null,
+					description: img?.description || null,
+					user_id: img?.user_id ?? null
+				};
+			});
+
+			return res.json({ images, has_more, personality });
+		} catch (err) {
+			console.error("[personality creations] Error:", err);
+			if (!res.headersSent) {
+				res.status(500).json({ error: "Unable to load personality creations." });
+			}
+		}
+	});
+
+	// Tag discovery: published creations that mention #tag
+	// in either creation description or any comment text.
+	router.get("/api/tags/:tag/creations", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+			const user = await queries.selectUserById.get(req.auth?.userId);
+			if (!user) {
+				return res.status(404).json({ error: "User not found" });
+			}
+
+			const tag = normalizeTag(req.params?.tag);
+			if (!tag) {
+				return res.status(400).json({ error: "Invalid tag" });
+			}
+			const tagQueries = queries.selectPublishedCreationsByTagMention;
+			if (typeof tagQueries?.all !== "function") {
+				return res.status(500).json({ error: "Tag search not available" });
+			}
+
+			const limit = Math.min(Math.max(1, parseInt(req.query.limit, 10) || 24), 200);
+			const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+			const rows = await tagQueries.all(tag, { limit: limit + 1, offset });
+			const list = Array.isArray(rows) ? rows : [];
+			const has_more = list.length > limit;
+			const page = has_more ? list.slice(0, limit) : list;
+
+			const images = page.map((img) => {
+				const url = img?.file_path || (img?.filename ? `/api/images/created/${img.filename}` : null);
+				return {
+					id: img?.id,
+					filename: img?.filename ?? null,
+					url,
+					thumbnail_url: getThumbnailUrl(url),
+					width: img?.width ?? null,
+					height: img?.height ?? null,
+					color: img?.color ?? null,
+					status: img?.status || "completed",
+					created_at: img?.created_at ?? null,
+					published: img?.published === 1 || img?.published === true,
+					published_at: img?.published_at || null,
+					title: img?.title || null,
+					description: img?.description || null,
+					user_id: img?.user_id ?? null
+				};
+			});
+
+			return res.json({ images, has_more, tag });
+		} catch (err) {
+			console.error("[tag creations] Error:", err);
+			if (!res.headersSent) {
+				res.status(500).json({ error: "Unable to load tag creations." });
 			}
 		}
 	});

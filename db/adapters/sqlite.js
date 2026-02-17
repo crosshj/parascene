@@ -1903,6 +1903,62 @@ export async function openDb() {
 				return Promise.resolve(stmt.all(userId, limit, offset));
 			}
 		},
+		selectPublishedCreationsByPersonalityMention: {
+			all: async (personality, options = {}) => {
+				const normalized = String(personality || "").trim().toLowerCase();
+				if (!/^[a-z0-9][a-z0-9_-]{2,23}$/.test(normalized)) return [];
+				const needle = `@${normalized}`;
+				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
+				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
+				const stmt = db.prepare(
+					`SELECT ci.id, ci.filename, ci.file_path, ci.width, ci.height, ci.color, ci.status, ci.created_at,
+                  ci.published, ci.published_at, ci.title, ci.description, ci.meta, ci.user_id, ci.unavailable_at
+           FROM created_images ci
+           WHERE ci.published = 1
+             AND (ci.unavailable_at IS NULL OR ci.unavailable_at = '')
+             AND (
+               lower(coalesce(ci.description, '')) LIKE '%' || ? || '%'
+               OR EXISTS (
+                 SELECT 1
+                 FROM comments_created_image c
+                 WHERE c.created_image_id = ci.id
+                   AND lower(coalesce(c.text, '')) LIKE '%' || ? || '%'
+               )
+             )
+           ORDER BY ci.created_at DESC
+           LIMIT ? OFFSET ?`
+				);
+				return Promise.resolve(stmt.all(needle, needle, limit, offset));
+			}
+		},
+		selectPublishedCreationsByTagMention: {
+			all: async (tag, options = {}) => {
+				const normalized = String(tag || "").trim().toLowerCase();
+				if (!/^[a-z0-9][a-z0-9_-]{1,31}$/.test(normalized)) return [];
+				const needle = `#${normalized}`;
+				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
+				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
+				const stmt = db.prepare(
+					`SELECT ci.id, ci.filename, ci.file_path, ci.width, ci.height, ci.color, ci.status, ci.created_at,
+                  ci.published, ci.published_at, ci.title, ci.description, ci.meta, ci.user_id, ci.unavailable_at
+           FROM created_images ci
+           WHERE ci.published = 1
+             AND (ci.unavailable_at IS NULL OR ci.unavailable_at = '')
+             AND (
+               lower(coalesce(ci.description, '')) LIKE '%' || ? || '%'
+               OR EXISTS (
+                 SELECT 1
+                 FROM comments_created_image c
+                 WHERE c.created_image_id = ci.id
+                   AND lower(coalesce(c.text, '')) LIKE '%' || ? || '%'
+               )
+             )
+           ORDER BY ci.created_at DESC
+           LIMIT ? OFFSET ?`
+				);
+				return Promise.resolve(stmt.all(needle, needle, limit, offset));
+			}
+		},
 		selectAllCreatedImageCountForUser: {
 			get: async (userId) => {
 				const stmt = db.prepare(

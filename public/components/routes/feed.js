@@ -2,6 +2,7 @@ import { formatDateTime, formatRelativeTime } from '../../shared/datetime.js';
 import { enableLikeButtons, initLikeButton } from '../../shared/likes.js';
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 import { getAvatarColor } from '../../shared/avatar.js';
+import { buildProfilePath } from '../../shared/profileLinks.js';
 
 const html = String.raw;
 
@@ -235,7 +236,7 @@ class AppRouteFeed extends HTMLElement {
 		const likeCount = item.like_count ?? 0;
 		const likesText = likeCount === 1 ? "like" : "likes";
 		const authorUserId = item.user_id != null ? Number(item.user_id) : null;
-		const profileHref = Number.isFinite(authorUserId) && authorUserId > 0 ? `/user/${authorUserId}` : null;
+		const profileHref = buildProfilePath({ userName: authorUserName, userId: authorUserId });
 		const isFounder = item.author_plan === "founder";
 		const avatarContent = avatarUrl ? html`<img src="${avatarUrl}" alt="">` : avatarInitial;
 		const avatarBlock = isFounder
@@ -577,8 +578,8 @@ class AppRouteFeed extends HTMLElement {
 			container.innerHTML = "";
 			if (items.length === 0) {
 				container.innerHTML = html`
-					<div class="route-empty route-empty-image-grid feed-empty-state">
-						<div class="feed-empty-icon">
+					<div class="route-empty route-empty-image-grid route-empty-state">
+						<div class="route-empty-icon">
 						<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
 							<circle cx="12" cy="12" r="10"></circle>
 							<line x1="2" y1="12" x2="22" y2="12"></line>
