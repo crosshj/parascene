@@ -108,6 +108,7 @@ function renderProfilePage(container, { user, profile, stats, plan, isSelf, view
 
 	const handle = guessHandle({ user, profile });
 	const about = typeof profile?.about === 'string' ? profile.about.trim() : '';
+	const characterDescription = typeof profile?.character_description === 'string' ? profile.character_description.trim() : '';
 	const website = normalizeWebsite(profile?.socials?.website);
 	const avatarUrl = typeof profile?.avatar_url === 'string' ? profile.avatar_url.trim() : '';
 	const coverUrl = typeof profile?.cover_image_url === 'string' ? profile.cover_image_url.trim() : '';
@@ -174,12 +175,18 @@ function renderProfilePage(container, { user, profile, stats, plan, isSelf, view
 						</div>
 					</div>
 
-					${(about || website) ? html`
+					${(about || characterDescription || website) ? html`
 						<div class="user-profile-meta">
 							${about ? html`
 								<div class="user-profile-meta-row">
 									<span class="user-profile-meta-label">About</span>
 									<span class="user-profile-meta-text">${processUserText(about)}</span>
+								</div>
+							` : ''}
+							${characterDescription ? html`
+								<div class="user-profile-meta-row">
+									<span class="user-profile-meta-label">Character</span>
+									<span class="user-profile-meta-text">${processUserText(characterDescription)}</span>
 								</div>
 							` : ''}
 							${website ? html`
@@ -272,7 +279,14 @@ function renderProfilePage(container, { user, profile, stats, plan, isSelf, view
 						</div>
 
 						<div class="user-profile-form-section">
-						<div class="grid-2-col">
+						<div class="field">
+							<label>Character</label>
+							<textarea name="character_description" rows="3" placeholder="e.g. short, middle-aged Asian female with medium-length black hair">${escapeHtml(profile?.character_description || '')}</textarea>
+							<div class="user-profile-help">Used when others @mention you in AI prompts. Keep it brief so it fits well in context. No line breaks.</div>
+						</div>
+						</div>
+
+						<div class="user-profile-form-section">
 							<div class="field">
 								<label>Avatar</label>
 								<div class="user-profile-upload" data-upload="avatar">
@@ -303,7 +317,6 @@ function renderProfilePage(container, { user, profile, stats, plan, isSelf, view
 									<div class="user-profile-upload-hydrate" data-upload-existing="cover" data-url="${escapeHtml(profile.cover_image_url)}"></div>
 								` : ''}
 							</div>
-						</div>
 						</div>
 
 						<div class="user-profile-form-section">

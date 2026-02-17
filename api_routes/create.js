@@ -494,6 +494,91 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	});
 
+	router.post("/api/create/validate", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		try {
+			const rawArgs = req.body && typeof req.body === "object"
+				? (req.body.args && typeof req.body.args === "object" ? req.body.args : req.body)
+				: {};
+			const prompt = typeof rawArgs?.prompt === "string" ? rawArgs.prompt : "";
+
+			const normalizeUsername = (input) => {
+				const raw = typeof input === "string" ? input.trim() : "";
+				if (!raw) return null;
+				const normalized = raw.toLowerCase();
+				if (!/^[a-z0-9][a-z0-9_]{2,23}$/.test(normalized)) return null;
+				return normalized;
+			};
+
+			const mentions = [];
+			const seen = new Set();
+			const re = /@([a-zA-Z0-9_]+)/g;
+			let match;
+			while ((match = re.exec(prompt)) !== null) {
+				const token = match[1] || "";
+				const originalMention = `@${token}`;
+				const normalized = normalizeUsername(token);
+				const key = normalized ? `@${normalized}` : originalMention;
+				if (seen.has(key)) continue;
+				seen.add(key);
+				mentions.push({ originalMention, normalized });
+			}
+
+			// No mentions: treat as valid.
+			if (mentions.length === 0) {
+				return res.json({
+					ok: true,
+					valid: true,
+					failed_mentions: []
+				});
+			}
+
+			const failed_mentions = [];
+			for (const m of mentions) {
+				if (!m.normalized) {
+					failed_mentions.push({ mention: m.originalMention, reason: "invalid_username" });
+					continue;
+				}
+				if (!queries.selectUserProfileByUsername?.get) {
+					failed_mentions.push({ mention: `@${m.normalized}`, reason: "profiles_unavailable" });
+					continue;
+				}
+				const profile = await queries.selectUserProfileByUsername.get(m.normalized);
+				if (!profile) {
+					failed_mentions.push({ mention: `@${m.normalized}`, reason: "user_not_found" });
+					continue;
+				}
+				const meta = parseMeta(profile.meta) || {};
+				const cd = typeof meta.character_description === "string" ? meta.character_description.trim() : "";
+				if (!cd) {
+					failed_mentions.push({ mention: `@${m.normalized}`, reason: "no_character_description" });
+				}
+			}
+
+			if (failed_mentions.length > 0) {
+				const parts = failed_mentions.map((f) => `${f.mention} (${f.reason})`).join(", ");
+				return res.status(400).json({
+					error: "Invalid mentions",
+					message: `Character could not be found for: ${parts}.`,
+					failed_mentions
+				});
+			}
+
+			return res.json({
+				ok: true,
+				valid: true,
+				failed_mentions: []
+			});
+		} catch {
+			return res.status(500).json({
+				error: "Validation failed",
+				message: "Validation endpoint encountered an unexpected error."
+			});
+		}
+	});
+
 	// POST /api/create - Create a new image (accepts JSON or multipart with optional image_file)
 	router.post("/api/create", async (req, res) => {
 		const user = await requireUser(req, res);
@@ -540,7 +625,8 @@ export default function createCreateRoutes({ queries, storage }) {
 					creation_token: fields.creation_token,
 					retry_of_id: fields.retry_of_id,
 					mutate_of_id: fields.mutate_of_id,
-					credit_cost: fields.credit_cost
+					credit_cost: fields.credit_cost,
+					hydrate_mentions: fields.hydrate_mentions
 				};
 			} catch (err) {
 				if (err?.code === "FILE_TOO_LARGE" || err?.message === "File too large") {
@@ -550,8 +636,9 @@ export default function createCreateRoutes({ queries, storage }) {
 			}
 		}
 
-		const { server_id, method, args, creation_token, retry_of_id, mutate_of_id, credit_cost: bodyCreditCost } = req.body;
+		const { server_id, method, args, creation_token, retry_of_id, mutate_of_id, credit_cost: bodyCreditCost, hydrate_mentions } = req.body;
 		const safeArgs = args && typeof args === "object" ? { ...args } : {};
+		const hydrateMentions = hydrate_mentions === true || hydrate_mentions === "true" || hydrate_mentions === 1 || hydrate_mentions === "1";
 
 		// Validate required fields
 		if (!server_id || !method) {
@@ -612,6 +699,9 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 				CREATION_CREDIT_COST = methodConfig.credits ?? 0.5;
 			}
+
+			// Keep a stable copy of args for storage (meta.args) separate from any provider-only transformations.
+			argsForProvider = argsForProvider && typeof argsForProvider === "object" ? { ...argsForProvider } : {};
 
 			// Provider must fetch image_url; relative paths fail. Normalize to absolute URL.
 			if (typeof argsForProvider.image_url === "string") {
@@ -712,6 +802,64 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			}
 
+			const normalizeUsername = (input) => {
+				const raw = typeof input === "string" ? input.trim() : "";
+				if (!raw) return null;
+				const normalized = raw.toLowerCase();
+				if (!/^[a-z0-9][a-z0-9_]{2,23}$/.test(normalized)) return null;
+				return normalized;
+			};
+
+			const extractMentions = (text) => {
+				const out = [];
+				const seen = new Set();
+				const re = /@([a-zA-Z0-9_]+)/g;
+				let match;
+				while ((match = re.exec(text || "")) !== null) {
+					const token = match[1] || "";
+					const originalMention = `@${token}`;
+					const normalized = normalizeUsername(token);
+					const key = normalized ? `@${normalized}` : originalMention;
+					if (seen.has(key)) continue;
+					seen.add(key);
+					out.push({ originalMention, normalized });
+				}
+				return out;
+			};
+
+			const hydrateMentionsToCast = async (promptText) => {
+				const cast = {};
+				const failed_mentions = [];
+				const promptStr = typeof promptText === "string" ? promptText : "";
+				const mentions = extractMentions(promptStr);
+				if (mentions.length === 0) return { cast, failed_mentions, mentions };
+
+				for (const m of mentions) {
+					if (!m.normalized) {
+						failed_mentions.push({ mention: m.originalMention, reason: "invalid_username" });
+						continue;
+					}
+					if (!queries.selectUserProfileByUsername?.get) {
+						failed_mentions.push({ mention: `@${m.normalized}`, reason: "profiles_unavailable" });
+						continue;
+					}
+					const profile = await queries.selectUserProfileByUsername.get(m.normalized);
+					if (!profile) {
+						failed_mentions.push({ mention: `@${m.normalized}`, reason: "user_not_found" });
+						continue;
+					}
+					const meta = parseMeta(profile.meta) || {};
+					const cd = typeof meta.character_description === "string" ? meta.character_description.trim() : "";
+					if (!cd) {
+						failed_mentions.push({ mention: `@${m.normalized}`, reason: "no_character_description" });
+						continue;
+					}
+					cast[`@${m.normalized}`] = cd;
+				}
+
+				return { cast, failed_mentions, mentions };
+			};
+
 			// Retry in place: reuse the same creation row instead of inserting a new one
 			if (retry_of_id != null && Number.isFinite(Number(retry_of_id))) {
 				const existingId = Number(retry_of_id);
@@ -741,6 +889,36 @@ export default function createCreateRoutes({ queries, storage }) {
 				if (Array.isArray(existingMeta.history)) {
 					meta.history = existingMeta.history;
 				}
+
+				let argsForJob = meta.args;
+				if (hydrateMentions === true) {
+					const promptText = typeof meta.args?.prompt === "string" ? meta.args.prompt : "";
+					const { cast, failed_mentions } = await hydrateMentionsToCast(promptText);
+					if (failed_mentions.length > 0) {
+						const failedAt = nowIso();
+						const nextMeta = {
+							...meta,
+							failed_at: failedAt,
+							error_code: "hydrate_mentions_failed",
+							error: "Unable to hydrate one or more mentioned users.",
+							failed_mentions,
+							hydrate_mentions: true
+						};
+						await queries.updateCreatedImageJobFailed.run(existingId, user.id, { meta: nextMeta });
+						const updatedCredits = await queries.selectUserCredits.get(user.id);
+						return res.json({
+							id: existingId,
+							status: "failed",
+							created_at: started_at,
+							meta: nextMeta,
+							credits_remaining: updatedCredits?.balance ?? credits?.balance ?? 0
+						});
+					}
+					if (Object.keys(cast).length > 0) {
+						argsForJob = { ...meta.args, prompt: JSON.stringify({ cast, prompt: promptText }, null, 2) };
+					}
+				}
+
 				// Refund previous attempt if it was never refunded (so we don't double-charge)
 				if (existingMeta.credits_refunded !== true && Number(existingMeta.credit_cost) > 0) {
 					await queries.updateUserCreditsBalance.run(user.id, Number(existingMeta.credit_cost));
@@ -756,7 +934,7 @@ export default function createCreateRoutes({ queries, storage }) {
 						user_id: user.id,
 						server_id: Number(server_id),
 						method,
-						args: argsForProvider,
+						args: argsForJob,
 						credit_cost: CREATION_CREDIT_COST,
 					},
 					runCreationJob: ({ payload }) => runCreationJob({ queries, storage, payload }),
@@ -772,6 +950,45 @@ export default function createCreateRoutes({ queries, storage }) {
 			}
 
 			// New creation: insert a durable row BEFORE provider call
+			let argsForJob = meta.args;
+			if (hydrateMentions === true) {
+				const promptText = typeof meta.args?.prompt === "string" ? meta.args.prompt : "";
+				const { cast, failed_mentions } = await hydrateMentionsToCast(promptText);
+				if (failed_mentions.length > 0) {
+					const failedAt = nowIso();
+					const failedFilename = `failed_hydrate_${user.id}_${Date.now()}.png`;
+					const nextMeta = {
+						...meta,
+						failed_at: failedAt,
+						error_code: "hydrate_mentions_failed",
+						error: "Unable to hydrate one or more mentioned users.",
+						failed_mentions,
+						hydrate_mentions: true
+					};
+					const result = await queries.insertCreatedImage.run(
+						user.id,
+						failedFilename,
+						"", // file_path placeholder (schema requires non-null)
+						1024,
+						1024,
+						null,
+						"failed",
+						nextMeta
+					);
+					const updatedCredits = await queries.selectUserCredits.get(user.id);
+					return res.json({
+						id: result.insertId,
+						status: "failed",
+						created_at: started_at,
+						meta: nextMeta,
+						credits_remaining: updatedCredits?.balance ?? credits?.balance ?? 0
+					});
+				}
+				if (Object.keys(cast).length > 0) {
+					argsForJob = { ...meta.args, prompt: JSON.stringify({ cast, prompt: promptText }, null, 2) };
+				}
+			}
+
 			await queries.updateUserCreditsBalance.run(user.id, -CREATION_CREDIT_COST);
 
 			const result = await queries.insertCreatedImage.run(
@@ -793,7 +1010,7 @@ export default function createCreateRoutes({ queries, storage }) {
 					user_id: user.id,
 					server_id: Number(server_id),
 					method,
-					args: argsForProvider,
+					args: argsForJob,
 					credit_cost: CREATION_CREDIT_COST,
 				},
 				runCreationJob: ({ payload }) => runCreationJob({ queries, storage, payload }),

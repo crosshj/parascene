@@ -1,4 +1,4 @@
-import { submitCreationWithPending } from '/shared/createSubmit.js';
+import { submitCreationWithPending, formatMentionsFailureForDialog } from '/shared/createSubmit.js';
 import { fetchJsonWithStatusDeduped } from '/shared/api.js';
 import { attachAutoGrowTextarea } from '/shared/autogrow.js';
 import { DEFAULT_APP_ORIGIN } from '/shared/urls.js';
@@ -585,19 +585,67 @@ document.addEventListener('click', (e) => {
 	if (!normalizedImageUrl) return;
 	if (!Number.isFinite(mutateOfId) || mutateOfId <= 0) return;
 
-	// Clear dirty state so navigation isn't blocked by our leave-confirm.
-	isMutateDirty = false;
-	btn.disabled = true;
+	const extractMentions = (text) => {
+		const out = [];
+		const seen = new Set();
+		const re = /@([a-zA-Z0-9_]+)/g;
+		let match;
+		while ((match = re.exec(text || '')) !== null) {
+			const full = `@${match[1]}`;
+			if (seen.has(full)) continue;
+			seen.add(full);
+			out.push(full);
+		}
+		return out;
+	};
 
-	submitCreationWithPending({
-		serverId,
-		methodKey,
-		mutateOfId,
-		args: {
-			image_url: normalizedImageUrl,
-			prompt
-		},
-		navigate: 'full'
-	});
+	const doSubmit = (hydrateMentions) => {
+		// Clear dirty state so navigation isn't blocked by our leave-confirm.
+		isMutateDirty = false;
+		btn.disabled = true;
+		submitCreationWithPending({
+			serverId,
+			methodKey,
+			mutateOfId,
+			args: {
+				image_url: normalizedImageUrl,
+				prompt
+			},
+			hydrateMentions,
+			navigate: 'full'
+		});
+	};
+
+	const mentions = extractMentions(prompt);
+	if (mentions.length === 0) {
+		doSubmit(false);
+		return;
+	}
+
+	fetch('/api/create/validate', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		credentials: 'include',
+		body: JSON.stringify({ args: { prompt } })
+	})
+		.then(async (res) => {
+			const data = await res.json().catch(() => ({}));
+			if (res.ok) return { ok: true, data };
+			return { ok: false, data };
+		})
+		.then(({ ok, data }) => {
+			if (ok) {
+				doSubmit(true);
+				return;
+			}
+			const message = formatMentionsFailureForDialog(data);
+			const proceed = window.confirm(message);
+			if (proceed) doSubmit(false);
+		})
+		.catch(() => {
+			const message = formatMentionsFailureForDialog({});
+			const proceed = window.confirm(message);
+			if (proceed) doSubmit(false);
+		});
 });
 

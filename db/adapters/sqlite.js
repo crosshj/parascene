@@ -342,7 +342,7 @@ export async function openDb() {
 		selectUserProfileByUsername: {
 			get: async (username) => {
 				const stmt = db.prepare(
-					`SELECT user_id, user_name
+					`SELECT user_id, user_name, meta
            FROM user_profiles
            WHERE user_name = ?`
 				);

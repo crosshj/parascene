@@ -71,6 +71,7 @@ export default function createProfileRoutes({ queries }) {
 				user_name: null,
 				display_name: null,
 				about: null,
+				character_description: null,
 				socials: {},
 				avatar_url: null,
 				cover_image_url: null,
@@ -80,15 +81,17 @@ export default function createProfileRoutes({ queries }) {
 				updated_at: null
 			};
 		}
+		const meta = safeJsonParse(row.meta, {});
 		return {
 			user_name: row.user_name ?? null,
 			display_name: row.display_name ?? null,
 			about: row.about ?? null,
+			character_description: typeof meta.character_description === "string" ? meta.character_description : null,
 			socials: safeJsonParse(row.socials, {}),
 			avatar_url: row.avatar_url ?? null,
 			cover_image_url: row.cover_image_url ?? null,
 			badges: safeJsonParse(row.badges, []),
-			meta: safeJsonParse(row.meta, {}),
+			meta,
 			created_at: row.created_at ?? null,
 			updated_at: row.updated_at ?? null
 		};
@@ -699,6 +702,7 @@ export default function createProfileRoutes({ queries }) {
 				nextMeta.welcome_version = Math.max(prevVersion, WELCOME_VERSION);
 				delete nextMeta["onb_version"];
 			}
+			nextMeta.character_description = typeof req.body?.character_description === "string" ? req.body.character_description.trim() || null : (existingProfile.meta?.character_description ?? null);
 
 			const payload = {
 				user_name: finalUserName,
@@ -859,6 +863,7 @@ export default function createProfileRoutes({ queries }) {
 				meta.welcome_version = Math.max(prevVersion, WELCOME_VERSION);
 				delete meta["onb_version"];
 			}
+			meta.character_description = typeof fields?.character_description === "string" ? fields.character_description.trim() || null : (existingProfile.meta?.character_description ?? null);
 
 			let avatar_url = avatarRemove ? null : (oldAvatarUrl || null);
 			let cover_image_url = coverRemove ? null : (oldCoverUrl || null);

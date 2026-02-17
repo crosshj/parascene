@@ -76,6 +76,30 @@ export async function uploadImageFile(file) {
 	return data.url;
 }
 
+const MENTION_FAILURE_LABELS = {
+	user_not_found: 'User not found',
+	no_character_description: 'No character description set',
+	invalid_username: 'Invalid username'
+};
+
+/**
+ * Format mention validation failure for the "submit anyway?" dialog.
+ * Returns a single string with newlines; use with white-space: pre-line or in window.confirm.
+ */
+export function formatMentionsFailureForDialog(data) {
+	const failed = Array.isArray(data?.failed_mentions) ? data.failed_mentions : [];
+	if (failed.length === 0) {
+		const fallback = data?.message || data?.error || 'Mentions could not be validated.';
+		return `${fallback}\n\nIf you submit, @mentions will not be expanded or understood by the image generator.`;
+	}
+	const lines = failed.map((f) => {
+		const m = typeof f?.mention === 'string' ? f.mention : '';
+		const r = MENTION_FAILURE_LABELS[f?.reason] || f?.reason || 'Unknown';
+		return m ? `• ${m} — ${r}` : `• ${r}`;
+	}).filter(Boolean);
+	return `Some @mentions couldn't be validated:\n\n${lines.join('\n')}\n\nIf you submit, @mentions will not be expanded or understood by the image generator.`;
+}
+
 /**
  * Shared submit helper for /create and /creations/:id/mutate.
  * - Adds a pending creation entry (sessionStorage)
@@ -89,6 +113,7 @@ export function submitCreationWithPending({
 	args,
 	mutateOfId,
 	creditCost,
+	hydrateMentions,
 	navigate = 'spa', // 'spa' | 'full'
 	onInsufficientCredits,
 	onError
@@ -114,7 +139,8 @@ export function submitCreationWithPending({
 		args: args || {},
 		creation_token: creationToken,
 		...(Number.isFinite(Number(mutateOfId)) && Number(mutateOfId) > 0 ? { mutate_of_id: Number(mutateOfId) } : {}),
-		...(Number.isFinite(Number(creditCost)) && Number(creditCost) > 0 ? { credit_cost: Number(creditCost) } : {})
+		...(Number.isFinite(Number(creditCost)) && Number(creditCost) > 0 ? { credit_cost: Number(creditCost) } : {}),
+		...(typeof hydrateMentions === 'boolean' ? { hydrate_mentions: hydrateMentions } : {})
 	};
 
 	const doFetch = () =>

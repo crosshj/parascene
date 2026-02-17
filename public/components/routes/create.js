@@ -1,5 +1,5 @@
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
-import { submitCreationWithPending, uploadImageFile } from '../../shared/createSubmit.js';
+import { submitCreationWithPending, uploadImageFile, formatMentionsFailureForDialog } from '../../shared/createSubmit.js';
 import { renderFields, isPromptLikeField } from '../../shared/providerFormFields.js';
 import { attachAutoGrowTextarea } from '../../shared/autogrow.js';
 
@@ -17,6 +17,7 @@ class AppRouteCreate extends HTMLElement {
 		this.storageKey = 'create-page-selections';
 		this._advancedConfirm = null; // { serverId, args, cost } when cost dialog is open
 		this._promptFromUrl = null; // prompt from ?prompt= (landing page); applied when Basic tab has a prompt field
+		this._confirmPrimaryAction = null;
 	}
 
 	connectedCallback() {
@@ -327,11 +328,22 @@ class AppRouteCreate extends HTMLElement {
         }
         .create-route-advanced-confirm-panel .create-cost {
           margin: 0 0 1rem 0;
+          white-space: pre-line;
         }
         .create-route-advanced-confirm-actions {
           display: flex;
           gap: 0.75rem;
           flex-wrap: wrap;
+        }
+        .create-route-advanced-confirm-actions .btn-primary,
+        .create-route-advanced-confirm-actions .btn-secondary {
+          height: 40px;
+          min-height: 40px;
+          padding: 0 1rem;
+          box-sizing: border-box;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
         }
         .create-route-advanced-preview-panel {
           width: 100%;
@@ -696,7 +708,7 @@ class AppRouteCreate extends HTMLElement {
 		const confirmCancelBtn = this.querySelector("[data-advanced-confirm-cancel]");
 		if (confirmOverlay) confirmOverlay.addEventListener("click", () => this.closeAdvancedConfirm());
 		if (confirmCancelBtn) confirmCancelBtn.addEventListener("click", () => this.closeAdvancedConfirm());
-		if (confirmCreateBtn) confirmCreateBtn.addEventListener("click", () => this.submitAdvancedCreate());
+		if (confirmCreateBtn) confirmCreateBtn.addEventListener("click", () => this.handleConfirmPrimary());
 		// Advanced tab: switch toggles
 		this.querySelectorAll("[data-advanced-option]").forEach((btn) => {
 			btn.addEventListener("click", (e) => {
@@ -1021,12 +1033,27 @@ class AppRouteCreate extends HTMLElement {
 		}
 	}
 
-	showAdvancedConfirm(message, showCreateButton) {
+	handleConfirmPrimary() {
+		const action = this._confirmPrimaryAction;
+		if (typeof action === 'function') {
+			try { action(); } catch { /* ignore */ }
+			return;
+		}
+		this.submitAdvancedCreate();
+	}
+
+	showAdvancedConfirm(message, showCreateButton, { primaryLabel, onPrimary } = {}) {
 		const dialog = this.querySelector("[data-advanced-confirm-dialog]");
 		const msgEl = this.querySelector("[data-advanced-confirm-message]");
 		const createBtn = this.querySelector("[data-advanced-confirm-create]");
 		if (msgEl) msgEl.textContent = message;
-		if (createBtn) createBtn.hidden = !showCreateButton;
+		if (createBtn) {
+			createBtn.hidden = !showCreateButton;
+			createBtn.textContent = typeof primaryLabel === 'string' && primaryLabel.trim()
+				? primaryLabel.trim()
+				: 'Create';
+		}
+		this._confirmPrimaryAction = typeof onPrimary === 'function' ? onPrimary : null;
 		if (dialog) {
 			dialog.hidden = false;
 			dialog.classList.add('open');
@@ -1040,6 +1067,39 @@ class AppRouteCreate extends HTMLElement {
 			dialog.classList.remove('open');
 		}
 		this._advancedConfirm = null;
+		this._confirmPrimaryAction = null;
+	}
+
+	extractMentions(prompt) {
+		const text = typeof prompt === 'string' ? prompt : '';
+		if (!text) return [];
+		const out = [];
+		const seen = new Set();
+		const re = /@([a-zA-Z0-9_]+)/g;
+		let match;
+		while ((match = re.exec(text)) !== null) {
+			const full = `@${match[1]}`;
+			if (seen.has(full)) continue;
+			seen.add(full);
+			out.push(full);
+		}
+		return out;
+	}
+
+	async validateMentions({ args } = {}) {
+		const prompt = typeof args?.prompt === 'string' ? args.prompt : '';
+		const mentions = this.extractMentions(prompt);
+		if (mentions.length === 0) return { ok: true, mentions };
+
+		const res = await fetch('/api/create/validate', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			credentials: 'include',
+			body: JSON.stringify({ args: args || {} })
+		});
+		const data = await res.json().catch(() => ({}));
+		if (res.ok) return { ok: true, mentions, data };
+		return { ok: false, mentions, data, status: res.status };
 	}
 
 	async handlePreviewPayload() {
@@ -1120,23 +1180,49 @@ class AppRouteCreate extends HTMLElement {
 		} catch (e) { }
 	}
 
-	submitAdvancedCreate() {
+	async submitAdvancedCreate() {
 		const pending = this._advancedConfirm;
 		if (!pending) {
 			this.closeAdvancedConfirm();
 			return;
 		}
-		this.closeAdvancedConfirm();
-		const isStandaloneCreatePage = window.location.pathname === '/create';
-		submitCreationWithPending({
-			serverId: pending.serverId,
-			methodKey: 'advanced_generate',
-			args: pending.args,
-			creditCost: pending.cost,
-			navigate: isStandaloneCreatePage ? 'full' : 'spa',
-			onInsufficientCredits: async () => { await this.loadCredits(); },
-			onError: async () => { await this.loadCredits(); }
-		});
+		const runSubmit = (hydrateMentions) => {
+			this.closeAdvancedConfirm();
+			const isStandaloneCreatePage = window.location.pathname === '/create';
+			submitCreationWithPending({
+				serverId: pending.serverId,
+				methodKey: 'advanced_generate',
+				args: pending.args,
+				creditCost: pending.cost,
+				hydrateMentions,
+				navigate: isStandaloneCreatePage ? 'full' : 'spa',
+				onInsufficientCredits: async () => { await this.loadCredits(); },
+				onError: async () => { await this.loadCredits(); }
+			});
+		};
+
+		const prompt = typeof pending?.args?.prompt === 'string' ? pending.args.prompt : '';
+		const mentions = this.extractMentions(prompt);
+		if (mentions.length === 0) {
+			runSubmit(false);
+			return;
+		}
+
+		const validateResult = await this.validateMentions({ args: pending.args });
+		if (validateResult.ok) {
+			runSubmit(true);
+			return;
+		}
+
+		const message = formatMentionsFailureForDialog(validateResult.data);
+		this.showAdvancedConfirm(
+			message,
+			true,
+			{
+				primaryLabel: 'Submit anyway',
+				onPrimary: () => runSubmit(false)
+			}
+		);
 	}
 
 	handleServerChange(serverId) {
@@ -1478,20 +1564,60 @@ class AppRouteCreate extends HTMLElement {
 
 		// Standalone create page (/create) needs full navigation to /creations; SPA only works when create is in-app.
 		const isStandaloneCreatePage = window.location.pathname === '/create';
-		submitCreationWithPending({
-			serverId: this.selectedServer.id,
-			methodKey,
-			args: collectedArgs || {},
-			navigate: isStandaloneCreatePage ? 'full' : 'spa',
-			onInsufficientCredits: async () => {
-				this.resetCreateButton(button);
-				await this.loadCredits();
-			},
-			onError: async () => {
-				this.resetCreateButton(button);
-				await this.loadCredits();
+		const argsToSend = collectedArgs || {};
+		// Hydration only supports the canonical `prompt` arg for now.
+		const prompt = typeof argsToSend?.prompt === 'string' ? String(argsToSend.prompt) : '';
+		const mentions = this.extractMentions(prompt);
+
+		const doSubmit = (hydrateMentions) => {
+			submitCreationWithPending({
+				serverId: this.selectedServer.id,
+				methodKey,
+				args: argsToSend,
+				hydrateMentions,
+				navigate: isStandaloneCreatePage ? 'full' : 'spa',
+				onInsufficientCredits: async () => {
+					this.resetCreateButton(button);
+					await this.loadCredits();
+				},
+				onError: async () => {
+					this.resetCreateButton(button);
+					await this.loadCredits();
+				}
+			});
+		};
+
+		if (mentions.length === 0) {
+			doSubmit(false);
+			return;
+		}
+
+		const validateResult = await this.validateMentions({ args: { prompt } });
+		if (validateResult.ok) {
+			doSubmit(true);
+			return;
+		}
+
+		this.resetCreateButton(button);
+		const message = formatMentionsFailureForDialog(validateResult.data);
+		this.showAdvancedConfirm(
+			message,
+			true,
+			{
+				primaryLabel: 'Submit anyway',
+				onPrimary: () => {
+					this.closeAdvancedConfirm();
+					// Re-apply loading state to the Create button and submit without hydration.
+					try {
+						button.style.minWidth = `${button.offsetWidth}px`;
+						button.disabled = true;
+						button.innerHTML = '<span class="create-button-spinner" aria-hidden="true"></span>';
+						void button.offsetHeight;
+					} catch { /* ignore */ }
+					doSubmit(false);
+				}
 			}
-		});
+		);
 	}
 
 	resetCreateButton(button) {

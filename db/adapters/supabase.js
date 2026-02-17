@@ -117,7 +117,7 @@ export function openDb() {
 			get: async (userName) => {
 				const { data, error } = await serviceClient
 					.from(prefixedTable("user_profiles"))
-					.select("user_id, user_name")
+					.select("user_id, user_name, meta")
 					.eq("user_name", userName)
 					.maybeSingle();
 				if (error) throw error;
