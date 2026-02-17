@@ -205,7 +205,7 @@ function renderProfilePage(container, { user, profile, stats, plan, isSelf, view
 			<app-tabs class="user-profile-tabs-pending" data-profile-tabs>
 				<tab data-id="creations" label="Creations" default>
 					<div class="user-profile-tab-content" data-profile-tab-content="creations">
-						<div class="route-cards route-cards-image-grid" data-profile-grid>
+						<div class="route-cards content-cards-image-grid" data-profile-grid>
 							<div class="route-empty route-empty-image-grid route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
 						</div>
 						<div class="user-profile-load-more" data-profile-load-more="creations" hidden></div>
@@ -942,7 +942,7 @@ async function init() {
 				const res = await fetchJsonWithStatusDeduped(`/api/users/${targetUserId}/liked-creations?limit=${limit}&offset=0`, { credentials: 'include' }, { windowMs: 800 });
 				const images = Array.isArray(res?.data?.images) ? res.data.images : [];
 				tabData.likes = { items: images, hasMore: Boolean(res?.data?.has_more) };
-				panel.className = 'route-cards route-cards-image-grid';
+				panel.className = 'route-cards content-cards-image-grid';
 				panel.setAttribute('data-profile-likes', '');
 				panel.innerHTML = '';
 				renderImageGrid(panel, tabData.likes.items, false, 'No likes yet', 'Creations this user likes will appear here.');

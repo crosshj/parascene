@@ -1208,7 +1208,7 @@ async function loadCreation() {
 			<section class="creation-detail-related" data-related-container aria-label="More like this" style="display: none;">
 				<div class="creation-detail-related-inner">
 					<h2 class="creation-detail-related-heading">More like this</h2>
-					<div class="route-cards route-cards-image-grid creation-detail-related-grid" data-related-grid role="list"></div>
+					<div class="route-cards content-cards-image-grid creation-detail-related-grid" data-related-grid role="list"></div>
 					<div class="creation-detail-related-sentinel" data-related-sentinel aria-hidden="true"></div>
 				</div>
 			</section>

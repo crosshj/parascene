@@ -129,7 +129,7 @@ class AppRouteCreations extends HTMLElement {
           <h3>Creations</h3>
           <p>Your generated creations. Share them when you're ready.</p>
         </div>
-        <div class="route-cards route-cards-image-grid" data-creations-container>
+        <div class="route-cards content-cards-image-grid" data-creations-container>
           <div class="route-empty route-empty-image-grid route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
         </div>
         <div class="creations-load-more-sentinel" data-creations-sentinel aria-hidden="true"></div>

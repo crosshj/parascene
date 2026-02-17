@@ -3252,9 +3252,9 @@ app-route-feed {
 	}
 }
 
-/* Image grid layouts (max 3 columns) */
-.route-cards-image-grid {
-	grid-template-columns: repeat(3, minmax(0, 1fr));
+/* Content image grid layouts */
+.content-cards-image-grid {
+	grid-template-columns: repeat(5, minmax(0, 1fr));
 	gap: 6px;
 }
 
@@ -3361,13 +3361,13 @@ app-route-feed {
 }
 
 @media (max-width: 1024px) {
-	.route-cards-image-grid {
-		grid-template-columns: repeat(3, minmax(0, 1fr));
+	.content-cards-image-grid {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
 	}
 }
 
 @media (max-width: 860px) {
-	.route-cards-image-grid {
+	.content-cards-image-grid {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
 

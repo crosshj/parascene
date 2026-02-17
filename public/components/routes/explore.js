@@ -114,13 +114,13 @@ class AppRouteExplore extends HTMLElement {
 				${searchIcon('explore-search-icon')}
 			</div>
 		</div>
-		<div class="explore-search-results route-cards route-cards-image-grid" data-explore-search-results hidden>
+		<div class="explore-search-results route-cards content-cards-image-grid" data-explore-search-results hidden>
 			<div class="route-empty route-empty-image-grid">
 				<div class="route-empty-title">No creations found</div>
 			</div>
 		</div>
 		<div class="explore-main" data-explore-main>
-			<div class="route-cards route-cards-image-grid" data-explore-container>
+			<div class="route-cards content-cards-image-grid" data-explore-container>
 				<div class="route-empty route-empty-image-grid route-loading">
 					<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
 				</div>
