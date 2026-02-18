@@ -30,6 +30,10 @@
 		</div>
 
 		<section id="signup">
+			<div id="signup-email-taken" class="alert error margin-bottom-1" style="display:none;">
+				<strong>Email already registered</strong>
+				<p>An account with that email already exists. <a href="#login">Log in</a> or use a different email.</p>
+			</div>
 			<form action="/signup" method="post" autocomplete="on">
 				<input type="hidden" name="returnUrl" value="/" data-return-url />
 				<input type="hidden" name="referrer_user_id" value="" data-referrer-user-id />
@@ -155,6 +159,10 @@
 					if (params.get('error') === 'invalid' && hash === 'reset') {
 						var resetError = document.getElementById('reset-error');
 						if (resetError) resetError.style.display = 'block';
+					}
+					if (params.get('error') === 'email_taken' && hash === 'signup') {
+						var signupEmailTaken = document.getElementById('signup-email-taken');
+						if (signupEmailTaken) signupEmailTaken.style.display = 'block';
 					}
 				} catch (e) {
 					// ignore

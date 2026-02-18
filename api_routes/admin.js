@@ -305,10 +305,14 @@ export default function createAdminRoutes({ queries, storage }) {
 		}
 
 		// Pre-fetch assets to delete from storage (best-effort, after DB cleanup).
+		// Includes all created images (e.g. welcome-flow avatar in creations bucket).
 		let createdImages = [];
 		try {
 			if (queries.selectCreatedImagesForUser?.all) {
-				createdImages = await queries.selectCreatedImagesForUser.all(targetUserId);
+				createdImages = await queries.selectCreatedImagesForUser.all(targetUserId, {
+					includeUnavailable: true,
+					limit: 500
+				});
 			}
 		} catch {
 			createdImages = [];

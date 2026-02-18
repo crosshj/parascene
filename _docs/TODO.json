@@ -1,13 +1,5 @@
 [
   {
-    "name": "User Onboard++",
-    "description": "have user generate their avatar ASAP in user flow; this prompt will be saved in their profile",
-    "cost": 50,
-    "impact": 100,
-    "dependsOn": [],
-    "starred": true
-  },
-  {
     "name": "Transition Anonymous Generations",
     "description": "creation that user generates pre-signup transition to post-sign-up account",
     "cost": 65,
@@ -30,14 +22,6 @@
     "impact": 100,
     "dependsOn": [],
     "starred": true
-  },
-  {
-    "name": "Image Formats",
-    "description": "16:9, 9:16, etc",
-    "cost": 35,
-    "impact": 24,
-    "dependsOn": [],
-    "starred": false
   },
   {
     "name": "Landing: community creations images",

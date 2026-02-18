@@ -265,7 +265,14 @@ export default function createProfileRoutes({ queries }) {
 
 		const existingUser = await queries.selectUserByEmail.get(email);
 		if (existingUser) {
-			return res.status(409).send("Email already registered.");
+			const qs = new URLSearchParams();
+			qs.set("error", "email_taken");
+			if (returnUrl && returnUrl !== "/") {
+				qs.set("returnUrl", returnUrl);
+			}
+			const queryString = qs.toString();
+			const url = queryString ? `/auth?${queryString}#signup` : "/auth?error=email_taken#signup";
+			return res.redirect(url);
 		}
 
 		const passwordHash = bcrypt.hashSync(password, 12);
@@ -752,8 +759,69 @@ export default function createProfileRoutes({ queries }) {
 			}
 
 			await queries.upsertUserProfile.run(req.auth.userId, payload);
-			const updatedRow = await queries.selectUserProfileByUserId?.get(req.auth.userId);
-			const profile = normalizeProfileRow(updatedRow);
+			let updatedRow = await queries.selectUserProfileByUserId?.get(req.auth.userId);
+			let profile = normalizeProfileRow(updatedRow);
+
+			// Welcome complete: promote try avatar to creations, create created_image row, and publish
+			const welcomeComplete = req.body?.welcome_complete === true;
+			const avatarUrl = payload.avatar_url || "";
+			const tryPrefix = "/api/try/images/";
+			if (welcomeComplete && avatarUrl.includes(tryPrefix)) {
+				const storage = req.app?.locals?.storage;
+				const afterPrefix = avatarUrl.split(tryPrefix)[1];
+				const filename = afterPrefix ? afterPrefix.split("/")[0].split("?")[0].trim() : "";
+				if (
+					filename &&
+					!filename.includes("..") &&
+					storage?.getImageBufferAnon &&
+					storage?.uploadImage &&
+					queries.insertCreatedImage?.run &&
+					queries.publishCreatedImage?.run &&
+					queries.insertFeedItem?.run
+				) {
+					try {
+						const buffer = await storage.getImageBufferAnon(filename);
+						const newFilename = `welcome_${req.auth.userId}_${Date.now()}.png`;
+						const newUrl = await storage.uploadImage(buffer, newFilename);
+						const avatarPrompt = typeof req.body?.avatar_prompt === "string" ? req.body.avatar_prompt.trim() || null : null;
+						const welcomeMeta = avatarPrompt ? { args: { prompt: avatarPrompt } } : null;
+						const insertResult = await queries.insertCreatedImage.run(
+							req.auth.userId,
+							newFilename,
+							newUrl,
+							1024,
+							1024,
+							null,
+							"completed",
+							welcomeMeta
+						);
+						const createdImageId = insertResult?.insertId ?? insertResult?.lastInsertRowid;
+						if (createdImageId) {
+							payload.avatar_url = newUrl;
+							await queries.upsertUserProfile.run(req.auth.userId, payload);
+							const title = payload.display_name
+								? `Welcome @${String(payload.user_name).trim()}`
+								: "Profile portrait";
+							const description = avatarPrompt || (payload.meta?.character_description ?? "").trim() || "";
+							await queries.publishCreatedImage.run(
+								createdImageId,
+								req.auth.userId,
+								title,
+								description || null,
+								false
+							);
+							const feedAuthor = (payload.display_name && String(payload.display_name).trim()) || user?.email || "User";
+							await queries.insertFeedItem.run(title, description, feedAuthor, null, createdImageId);
+						}
+						updatedRow = await queries.selectUserProfileByUserId?.get(req.auth.userId);
+						profile = normalizeProfileRow(updatedRow);
+					} catch (promoteErr) {
+						// Profile already saved with try URL; log and return success
+						// console.warn("Welcome avatar promote failed:", promoteErr?.message || promoteErr);
+					}
+				}
+			}
+
 			return res.json({ ok: true, profile });
 		} catch (error) {
 			// console.error("Error updating profile:", error);

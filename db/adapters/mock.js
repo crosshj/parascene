@@ -2252,6 +2252,65 @@ export function openDb() {
 					changes.user_credits = b - user_credits.length;
 				}
 
+				// Tip activity on user's created images
+				{
+					const b = before(tip_activity);
+					for (let i = tip_activity.length - 1; i >= 0; i -= 1) {
+						if (userImageIds.has(Number(tip_activity[i]?.created_image_id))) {
+							tip_activity.splice(i, 1);
+						}
+					}
+					changes.tips_on_user_images = b - tip_activity.length;
+				}
+				// Tip activity sent or received by this user
+				{
+					const b = before(tip_activity);
+					for (let i = tip_activity.length - 1; i >= 0; i -= 1) {
+						if (
+							Number(tip_activity[i]?.from_user_id) === userId ||
+							Number(tip_activity[i]?.to_user_id) === userId
+						) {
+							tip_activity.splice(i, 1);
+						}
+					}
+					changes.tips_by_user = b - tip_activity.length;
+				}
+
+				// Email: link clicks for this user's sends, then sends, then campaign state
+				const userEmailSendIds = new Set(
+					email_sends
+						.filter((s) => Number(s?.user_id) === userId)
+						.map((s) => Number(s?.id))
+						.filter((id) => Number.isFinite(id) && id > 0)
+				);
+				{
+					const b = before(email_link_clicks);
+					for (let i = email_link_clicks.length - 1; i >= 0; i -= 1) {
+						if (userEmailSendIds.has(Number(email_link_clicks[i]?.email_send_id))) {
+							email_link_clicks.splice(i, 1);
+						}
+					}
+					changes.email_link_clicks = b - email_link_clicks.length;
+				}
+				{
+					const b = before(email_sends);
+					for (let i = email_sends.length - 1; i >= 0; i -= 1) {
+						if (Number(email_sends[i]?.user_id) === userId) {
+							email_sends.splice(i, 1);
+						}
+					}
+					changes.email_sends = b - email_sends.length;
+				}
+				{
+					const b = before(email_user_campaign_state);
+					for (let i = email_user_campaign_state.length - 1; i >= 0; i -= 1) {
+						if (Number(email_user_campaign_state[i]?.user_id) === userId) {
+							email_user_campaign_state.splice(i, 1);
+						}
+					}
+					changes.email_user_campaign_state = b - email_user_campaign_state.length;
+				}
+
 				// Social graph + profile
 				{
 					const b = before(user_follows);

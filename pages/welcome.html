@@ -28,35 +28,133 @@
 		</div>
 
 		<section class="welcome-section">
-			<p class="welcome-subtitle">Get started by picking a unique handle.</p>
-
-			<div class="alert welcome-alert" data-error hidden></div>
-
-			<form class="welcome-form" data-form autocomplete="off">
-				<label class="label-muted">
-					User name
-					<div class="welcome-username-wrap">
-						<span class="welcome-prefix" aria-hidden="true">@</span>
-						<input name="user_name" type="text" inputmode="text" autocapitalize="none" autocomplete="off"
-							spellcheck="false" placeholder="your unique username" required data-username />
+			<div class="welcome-setup" data-welcome-setup>
+				<div class="welcome-stepper" aria-label="Onboarding steps">
+					<div class="welcome-stepper-progress">
+						<div class="welcome-stepper-progress-bar" data-step-progress></div>
 					</div>
-				</label>
-
-				<div class="welcome-suggestion" data-suggestion hidden></div>
-
-				<div class="welcome-help">
-					3–24 characters. Lowercase letters, numbers, and underscores only.
-					<strong>This cannot be changed later.</strong>
+					<ol class="welcome-stepper-list">
+						<li class="welcome-stepper-item" data-step-item="1">Welcome</li>
+						<li class="welcome-stepper-item" data-step-item="2">User</li>
+						<li class="welcome-stepper-item" data-step-item="3">Avatar</li>
+						<li class="welcome-stepper-item" data-step-item="4">Done</li>
+					</ol>
 				</div>
 
-				<button class="btn-primary welcome-submit" type="submit" data-submit>
-					Continue
-				</button>
-			</form>
+				<div class="alert welcome-alert" data-error hidden></div>
 
-			<form action="/logout" method="post" class="welcome-logout">
-				<button type="submit" class="welcome-logout-link">Logout</button>
-			</form>
+				<form class="welcome-form" data-form autocomplete="off">
+					<div class="welcome-step-panel" data-step-panel="1">
+						<p class="welcome-panel-subtitle">Welcome to the club! We are excited to have you here.</p>
+						<p class="welcome-panel-subtitle">
+							Set up your user, create character with avatar &mdash; then
+							you are ready
+							to create!</p>
+
+						<div class="welcome-actions">
+							<button class="btn-secondary welcome-back" type="button" disabled
+								aria-disabled="true">Back</button>
+							<button class="btn-primary welcome-next" type="button" data-step-next="1">Let&rsquo;s
+								Begin!</button>
+						</div>
+					</div>
+
+					<div class="welcome-step-panel" data-step-panel="2" hidden>
+						<p class="welcome-panel-subtitle">User Name is your unique public handle, eg. john_doe23564; it
+							cannot be changed later.
+						</p>
+
+						<label class="label-muted">
+							User name
+							<div class="welcome-username-wrap">
+								<span class="welcome-prefix" aria-hidden="true">@</span>
+								<input name="user_name" type="text" inputmode="text" autocapitalize="none"
+									autocomplete="off" spellcheck="false" placeholder="your unique username" required
+									data-username />
+							</div>
+						</label>
+						<div class="welcome-suggestion" data-suggestion hidden></div>
+						<div class="welcome-username-availability" data-username-availability aria-live="polite" hidden>
+						</div>
+
+						<p class="welcome-panel-subtitle" style="margin-top: 3em;">Display Name is a friendly name for
+							your profile, eg. John
+							Doe.
+						</p>
+
+						<label class="label-muted">
+							Display name
+							<input name="display_name" type="text" inputmode="text" autocomplete="name"
+								placeholder="How you want to be shown" data-display-name />
+						</label>
+
+						<div class="welcome-actions">
+							<button class="btn-secondary welcome-back" type="button" data-step-back="2">Back</button>
+							<button class="btn-primary welcome-next" type="button" data-step-next="2">That&rsquo;s
+								Me</button>
+						</div>
+					</div>
+
+					<div class="welcome-step-panel" data-step-panel="3" hidden>
+						<p class="welcome-panel-subtitle">Describe your character and generate an avatar. You
+							can change this later. Try [shuffle] if you are out of ideas.</p>
+						<div class="welcome-avatar-preview-wrap" data-avatar-preview-wrap>
+							<div class="welcome-avatar-placeholder" data-avatar-placeholder aria-hidden="true"></div>
+							<img data-avatar-preview alt="Generated profile portrait preview" hidden />
+						</div>
+
+						<div class="welcome-character-label-row">
+							<label class="label-muted" for="welcome-character-description">Character</label>
+							<button type="button" class="welcome-shuffle-link" data-shuffle-character
+								aria-label="Generate random character description">[shuffle]</button>
+						</div>
+						<textarea id="welcome-character-description" name="character_description" rows="4"
+							placeholder="Example: curious sci-fi botanist with short silver hair and round glasses."
+							required data-character-description></textarea>
+
+						<div class="welcome-avatar-tools">
+							<button class="btn-secondary welcome-avatar-generate" type="button" data-generate-avatar>
+								<span class="welcome-avatar-btn-spinner" data-avatar-spinner hidden
+									aria-hidden="true"></span>
+								<span class="welcome-avatar-btn-text" data-avatar-btn-text>Generate Avatar</span>
+							</button>
+						</div>
+
+						<div class="welcome-actions">
+							<button class="btn-secondary welcome-back" type="button" data-step-back="3">Back</button>
+							<button class="btn-primary welcome-next" type="button" data-step-next="3">Look&rsquo;s
+								Good</button>
+						</div>
+					</div>
+
+					<div class="welcome-step-panel" data-step-panel="4" hidden>
+						<p class="welcome-panel-subtitle">Confirm your setup and continue into the app.</p>
+
+						<div class="welcome-review-card">
+							<div class="welcome-review-avatar-wrap" data-review-avatar-wrap hidden>
+								<img data-review-avatar alt="Profile portrait review" />
+							</div>
+							<p class="welcome-review-identity" data-review-identity aria-hidden="true">
+								<span data-review-identity-name></span><span class="welcome-review-username"
+									data-review-identity-handle></span>
+							</p>
+							<div class="welcome-review-row">
+								<span class="welcome-review-label">Character</span>
+								<span class="welcome-review-value" data-review-description></span>
+							</div>
+						</div>
+
+						<div class="welcome-actions">
+							<button class="btn-secondary welcome-back" type="button" data-step-back="4">Back</button>
+							<button class="btn-primary welcome-submit" type="submit" data-submit>
+								<span class="welcome-submit-spinner" data-submit-spinner hidden aria-hidden="true"></span>
+								<span class="welcome-submit-text" data-submit-text>That&rsquo;s Correct</span>
+							</button>
+						</div>
+					</div>
+				</form>
+			</div>
+
 		</section>
 	</main>
 

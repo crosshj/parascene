@@ -269,6 +269,14 @@ export async function openDb() {
 		changes.sessions = run(`DELETE FROM sessions WHERE user_id = ?`, userId);
 		changes.user_credits = run(`DELETE FROM user_credits WHERE user_id = ?`, userId);
 
+		// Email sends and link clicks (email_link_clicks references email_sends)
+		changes.email_link_clicks = run(
+			`DELETE FROM email_link_clicks WHERE email_send_id IN (SELECT id FROM email_sends WHERE user_id = ?)`,
+			userId
+		);
+		changes.email_sends = run(`DELETE FROM email_sends WHERE user_id = ?`, userId);
+		changes.email_user_campaign_state = run(`DELETE FROM email_user_campaign_state WHERE user_id = ?`, userId);
+
 		// Social graph + profile
 		changes.user_follows = run(
 			`DELETE FROM user_follows WHERE follower_id = ? OR following_id = ?`,

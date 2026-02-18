@@ -4031,11 +4031,18 @@ export function openDb() {
 					value: userId
 				});
 
-				// Tips sent or received by this user
-				changes.tips_by_user = await deleteByOr({
+				// Tips sent or received by this user (two deletes to avoid .or() schema-cache issues)
+				const tipsFrom = await deleteByEq({
 					table: "tip_activity",
-					or: `from_user_id.eq.${userId},to_user_id.eq.${userId}`
+					column: "from_user_id",
+					value: userId
 				});
+				const tipsTo = await deleteByEq({
+					table: "tip_activity",
+					column: "to_user_id",
+					value: userId
+				});
+				changes.tips_by_user = tipsFrom + tipsTo;
 
 				// User-owned content
 				changes.created_images = await deleteByEq({
@@ -4078,6 +4085,33 @@ export function openDb() {
 					table: "user_credits",
 					column: "user_id",
 					value: userId
+				});
+
+				// Email sends and link clicks (email_link_clicks references email_sends)
+				const { data: emailSendRows } = await serviceClient
+					.from(prefixedTable("email_sends"))
+					.select("id")
+					.eq("user_id", userId);
+				const emailSendIds = (Array.isArray(emailSendRows) ? emailSendRows : [])
+					.map((row) => Number(row?.id))
+					.filter((id) => Number.isFinite(id) && id > 0);
+				if (emailSendIds.length > 0) {
+					changes.email_link_clicks = await deleteByIn({
+						table: "email_link_clicks",
+						column: "email_send_id",
+						values: emailSendIds
+					});
+				}
+				changes.email_sends = await deleteByEq({
+					table: "email_sends",
+					column: "user_id",
+					value: userId
+				});
+				changes.email_user_campaign_state = await deleteByEq({
+					table: "email_user_campaign_state",
+					column: "user_id",
+					value: userId,
+					selectColumns: "user_id"
 				});
 
 				// Social graph + profile

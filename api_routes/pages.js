@@ -387,6 +387,13 @@ export default function createPageRoutes({ queries, pagesDir }) {
 		return res.redirect(`/auth.html?${qs.toString()}`);
 	}
 
+	function isWelcomeTestMode(req) {
+		const testEmail = String(req?.query?.testEmail ?? "").trim();
+		if (testEmail.length > 0) return true;
+		const raw = String(req?.query?.test ?? "").trim().toLowerCase();
+		return raw === "1" || raw === "true" || raw === "yes";
+	}
+
 	async function requireLoggedInUser(req, res) {
 		const userId = req.auth?.userId;
 		if (!userId) {
@@ -409,8 +416,10 @@ export default function createPageRoutes({ queries, pagesDir }) {
 
 	// Welcome (server-sent, minimal chrome)
 	router.get("/welcome", async (req, res) => {
-		const user = await requireLoggedInUser(req, res);
-		if (!user) return;
+		if (!isWelcomeTestMode(req)) {
+			const user = await requireLoggedInUser(req, res);
+			if (!user) return;
+		}
 		try {
 			const fs = await import("fs/promises");
 			let htmlContent = await fs.readFile(path.join(pagesDir, "welcome.html"), "utf-8");

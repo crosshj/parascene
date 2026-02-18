@@ -747,6 +747,7 @@ body.creation-detail-page main>section:first-of-type {
 .landscape-modal-content {
 	flex: 1 1 auto;
 	min-height: 0;
+	width: 100%;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -787,6 +788,7 @@ body.creation-detail-page main>section:first-of-type {
 .landscape-image {
 	width: 100%;
 	max-width: 100%;
+	aspect-ratio: 1824 / 1024;
 	max-height: 80vh;
 	height: auto;
 	object-fit: contain;

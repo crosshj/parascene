@@ -167,6 +167,10 @@ app.use(async (req, res, next) => {
 			(pathName === "/api/profile" && (method === "GET" || method === "PUT" || method === "POST")) ||
 			(pathName === "/api/account/email" && method === "PUT") ||
 			(pathName === "/api/username-suggest" && method === "GET") ||
+			(pathName === "/api/policy/seen" && method === "POST") ||
+			(pathName === "/api/try/create" && method === "POST") ||
+			(pathName === "/api/try/list" && method === "GET") ||
+			(pathName.startsWith("/api/try/images/") && method === "GET") ||
 			(pathName === "/api/qr" && method === "GET") ||
 			(pathName === "/logout" && method === "POST") ||
 			(pathName === "/auth.html" && method === "GET") ||
