@@ -1956,6 +1956,7 @@ function openLandscapeModal(creationId, { landscapeUrl, isOwner, isLoading, erro
 		landscapeCloseBtn.onclick = () => landscapeModal?.close();
 	}
 
+	document.body.classList.add('modal-open');
 	landscapeModal?.showModal();
 }
 
@@ -2004,6 +2005,14 @@ function landscapeStartGenerate(creationId, cost) {
 		.catch((err) => {
 			openLandscapeModal(creationId, { landscapeUrl: null, isOwner: landscapeModalIsOwner, isLoading: false, errorMsg: err?.message || 'Failed to start landscape' });
 		});
+}
+
+// Prevent background scroll when landscape or cost dialog is open (same as other modals)
+if (landscapeModal) {
+	landscapeModal.addEventListener('close', () => document.body.classList.remove('modal-open'));
+}
+if (landscapeCostDialog) {
+	landscapeCostDialog.addEventListener('close', () => document.body.classList.remove('modal-open'));
 }
 
 if (landscapeCostCancel) {
@@ -2059,6 +2068,7 @@ if (landscapePrimaryBtn) {
 			landscapePendingCost = { creationId, cost };
 			setLandscapePrimaryButtonLoading(false);
 			if (landscapeCostDialogMessage) landscapeCostDialogMessage.textContent = `This will cost ${cost} credit${cost === 1 ? '' : 's'}.`;
+			document.body.classList.add('modal-open');
 			landscapeCostDialog?.showModal();
 		} catch (err) {
 			setLandscapePrimaryButtonLoading(false);
