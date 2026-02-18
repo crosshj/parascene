@@ -1844,6 +1844,24 @@ export async function openDb() {
 				return Promise.resolve({ changes: result.changes });
 			}
 		},
+		updateCreatedImageMeta: {
+			run: async (id, userId, meta) => {
+				const toJsonText = (value) => {
+					if (value == null) return null;
+					if (typeof value === "string") return value;
+					try {
+						return JSON.stringify(value);
+					} catch {
+						return null;
+					}
+				};
+				const stmt = db.prepare(
+					`UPDATE created_images SET meta = ? WHERE id = ? AND user_id = ?`
+				);
+				const result = stmt.run(toJsonText(meta), id, userId);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
 		updateCreatedImageStatus: {
 			run: async (id, userId, status, color = null) => {
 				if (color) {

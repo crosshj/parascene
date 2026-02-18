@@ -3,11 +3,11 @@ import path from "path";
 import { fileURLToPath } from "url";
 import Busboy from "busboy";
 import sharp from "sharp";
-import { getThumbnailUrl } from "./utils/url.js";
-import { getBaseAppUrl } from "./utils/url.js";
+import { getThumbnailUrl, getBaseAppUrl, getBaseAppUrlForEmail } from "./utils/url.js";
 import { buildProviderHeaders } from "./utils/providerAuth.js";
 import { runCreationJob, PROVIDER_TIMEOUT_MS } from "./utils/creationJob.js";
-import { scheduleCreationJob } from "./utils/scheduleCreationJob.js";
+import { runLandscapeJob } from "./utils/landscapeJob.js";
+import { scheduleCreationJob, scheduleLandscapeJob } from "./utils/scheduleCreationJob.js";
 import { verifyQStashRequest } from "./utils/qstashVerification.js";
 import { ACTIVE_SHARE_VERSION, mintShareToken, verifyShareToken } from "./utils/shareLink.js";
 
@@ -78,15 +78,35 @@ export default function createCreateRoutes({ queries, storage }) {
 	const imagesDir = path.join(__dirname, "..", "db", "data", "images", "created");
 	router.use("/images/created", express.static(imagesDir));
 
-	// GET /api/images/created/:filename - Serve image through backend
-	// This route handles images from Supabase Storage and provides authorization
-	router.get("/api/images/created/:filename", async (req, res) => {
-		const filename = req.params.filename;
+	// GET /api/images/created/* - Serve image through backend
+	// This route handles images from Supabase Storage and provides authorization.
+	// Supports nested paths like "landscape/USERID_IMAGEID_timestamp_random.png".
+	router.get("/api/images/created/*", async (req, res) => {
+		const filename = req.params[0] || "";
 		const variant = req.query?.variant;
 
 		try {
-			// Find the image in the database by filename
-			const image = await queries.selectCreatedImageByFilename?.get(filename);
+			let image = null;
+
+			// Landscape files are stored under "landscape/{userId}_{imageId}_{ts}_{rand}.png"
+			// They don't have their own created_images row, so we derive imageId from the filename
+			// and look up the original creation.
+			if (filename.startsWith("landscape/")) {
+				const afterPrefix = filename.slice("landscape/".length);
+				const baseName = afterPrefix.split("/").pop() || "";
+				const withoutExt = baseName.replace(/\.[^.]+$/, "");
+				const parts = withoutExt.split("_");
+				const imageId = Number(parts[1]); // landscape/{userId}_{imageId}_{timestamp}_{random}.png
+
+				if (!Number.isFinite(imageId) || imageId <= 0) {
+					return res.status(404).json({ error: "Image not found" });
+				}
+
+				image = await queries.selectCreatedImageByIdAnyUser?.get(imageId);
+			} else {
+				// Main created image: look up by filename column
+				image = await queries.selectCreatedImageByFilename?.get(filename);
+			}
 
 			if (!image) {
 				return res.status(404).json({ error: "Image not found" });
@@ -159,8 +179,8 @@ export default function createCreateRoutes({ queries, storage }) {
 		return new Date().toISOString();
 	}
 
-	// Provider must fetch image URLs; it cannot access localhost. Use app base URL (set APP_ORIGIN in production).
-	const providerBase = getBaseAppUrl();
+	// Provider must fetch image URLs; it cannot access localhost. Always use production host (https://www.parascene.com or APP_ORIGIN).
+	const providerBase = getBaseAppUrlForEmail();
 
 	function toParasceneImageUrl(raw) {
 		const base = providerBase;
@@ -492,6 +512,176 @@ export default function createCreateRoutes({ queries, storage }) {
 				message: err?.message || "Failed to query server"
 			});
 		}
+	});
+
+	// POST /api/create/landscape/query - Query cost for landscape (outpaint) for a creation. Owner only.
+	router.post("/api/create/landscape/query", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		const creation_id = req.body?.creation_id;
+		if (!creation_id) {
+			return res.status(400).json({ error: "Missing required fields", message: "creation_id is required" });
+		}
+
+		const creationId = Number(creation_id);
+		if (!Number.isFinite(creationId) || creationId <= 0) {
+			return res.status(400).json({ error: "Invalid creation_id" });
+		}
+
+		const image = await queries.selectCreatedImageById.get(creationId, user.id);
+		if (!image) {
+			return res.status(404).json({ error: "Creation not found" });
+		}
+		if (image.status !== "completed" || !image.filename) {
+			return res.status(400).json({ error: "Creation is not ready for landscape" });
+		}
+
+		let server = null;
+		const meta = parseMeta(image.meta) || {};
+		if (meta.server_id && Number.isFinite(Number(meta.server_id))) {
+			server = await queries.selectServerById.get(Number(meta.server_id));
+		}
+		if (!server || server.status !== "active") {
+			const allServers = (await queries.selectServers?.all?.()) ?? [];
+			server = allServers.find((s) => s.status === "active") ?? null;
+		}
+		if (!server) {
+			return res.status(400).json({ error: "No server available", message: "No active server available for landscape." });
+		}
+
+		const imageUrl = shareUrlForImage(creationId, user.id);
+		if (!imageUrl) {
+			return res.status(500).json({ error: "Failed to build image URL", message: "Could not generate share URL for provider." });
+		}
+
+		try {
+			const providerArgs = { operation: "outpaint", image_url: imageUrl };
+			const providerResponse = await fetch(server.server_url, {
+				method: "POST",
+				headers: buildProviderHeaders(
+					{ "Content-Type": "application/json", Accept: "application/json" },
+					server.auth_token
+				),
+				body: JSON.stringify({ method: "advanced_query", args: providerArgs }),
+				signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS)
+			});
+
+			const contentType = String(providerResponse.headers.get("content-type") || "").toLowerCase();
+			let body = null;
+			if (contentType.includes("application/json")) {
+				body = await providerResponse.json().catch(() => null);
+			} else {
+				const text = await providerResponse.text().catch(() => "");
+				return res.status(502).json({
+					error: "Invalid provider response",
+					message: "Server did not return JSON"
+				});
+			}
+
+			if (!providerResponse.ok) {
+				return res.status(502).json({
+					error: "Provider error",
+					message: body?.error || body?.message || providerResponse.statusText,
+					provider: body
+				});
+			}
+
+			return res.json(body);
+		} catch (err) {
+			if (err?.name === "AbortError") {
+				return res.status(504).json({ error: "Timeout", message: "Server did not respond in time" });
+			}
+			return res.status(500).json({
+				error: "Landscape query failed",
+				message: err?.message || "Failed to query server"
+			});
+		}
+	});
+
+	// POST /api/create/landscape - Start landscape (outpaint) job. Owner only. Deducts credits, sets meta.landscapeUrl = "loading", enqueues job.
+	router.post("/api/create/landscape", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		const creation_id = req.body?.creation_id;
+		const credit_cost = req.body?.credit_cost;
+		if (!creation_id) {
+			return res.status(400).json({ error: "Missing required fields", message: "creation_id is required" });
+		}
+		if (typeof credit_cost !== "number" || !Number.isFinite(credit_cost) || credit_cost <= 0) {
+			return res.status(400).json({ error: "Missing required fields", message: "credit_cost is required and must be a positive number" });
+		}
+
+		const creationId = Number(creation_id);
+		if (!Number.isFinite(creationId) || creationId <= 0) {
+			return res.status(400).json({ error: "Invalid creation_id" });
+		}
+
+		const image = await queries.selectCreatedImageById.get(creationId, user.id);
+		if (!image) {
+			return res.status(404).json({ error: "Creation not found" });
+		}
+		if (image.status !== "completed" || !image.filename) {
+			return res.status(400).json({ error: "Creation is not ready for landscape" });
+		}
+
+		const existingMeta = parseMeta(image.meta) || {};
+		if (existingMeta.landscapeUrl === "loading") {
+			return res.status(409).json({ error: "Landscape in progress", message: "A landscape is already being generated." });
+		}
+
+		let server = null;
+		if (existingMeta.server_id && Number.isFinite(Number(existingMeta.server_id))) {
+			server = await queries.selectServerById.get(Number(existingMeta.server_id));
+		}
+		if (!server || server.status !== "active") {
+			const allServers = (await queries.selectServers?.all?.()) ?? [];
+			server = allServers.find((s) => s.status === "active") ?? null;
+		}
+		if (!server) {
+			return res.status(400).json({ error: "No server available", message: "No active server available for landscape." });
+		}
+
+		const imageUrl = shareUrlForImage(creationId, user.id);
+		if (!imageUrl) {
+			return res.status(500).json({ error: "Failed to build image URL", message: "Could not generate share URL for provider." });
+		}
+
+		let credits = await queries.selectUserCredits.get(user.id);
+		if (!credits) {
+			await queries.insertUserCredits.run(user.id, 100, null);
+			credits = await queries.selectUserCredits.get(user.id);
+		}
+		if (!credits || credits.balance < credit_cost) {
+			return res.status(402).json({
+				error: "Insufficient credits",
+				message: `Landscape requires ${credit_cost} credits. You have ${credits?.balance ?? 0} credits.`,
+				required: credit_cost,
+				current: credits?.balance ?? 0
+			});
+		}
+
+		const nextMeta = { ...existingMeta, landscapeUrl: "loading" };
+		await queries.updateCreatedImageMeta.run(creationId, user.id, nextMeta);
+		await queries.updateUserCreditsBalance.run(user.id, -credit_cost);
+
+		await scheduleLandscapeJob({
+			payload: {
+				created_image_id: creationId,
+				user_id: user.id,
+				server_id: server.id,
+				image_url: imageUrl,
+				credit_cost
+			},
+			runLandscapeJob: ({ payload }) => runLandscapeJob({ queries, storage, payload })
+		});
+
+		const updatedCredits = await queries.selectUserCredits.get(user.id);
+		return res.json({
+			ok: true,
+			credits_remaining: updatedCredits?.balance ?? credits?.balance ?? 0
+		});
 	});
 
 	router.post("/api/create/validate", async (req, res) => {
@@ -1644,6 +1834,45 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	});
 
+	// DELETE /api/create/images/:id/landscape - Remove landscape from a creation. Owner only.
+	router.delete("/api/create/images/:id/landscape", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		const creationId = Number(req.params.id);
+		if (!Number.isFinite(creationId) || creationId <= 0) {
+			return res.status(400).json({ error: "Invalid creation id" });
+		}
+
+		const image = await queries.selectCreatedImageById.get(creationId, user.id);
+		if (!image) {
+			return res.status(404).json({ error: "Creation not found" });
+		}
+
+		const meta = parseMeta(image.meta) || {};
+		const landscapeFilename = meta.landscapeFilename;
+		const hadLandscape = landscapeFilename || (meta.landscapeUrl && meta.landscapeUrl !== "loading" && !String(meta.landscapeUrl).startsWith("error:"));
+
+		if (landscapeFilename && storage?.deleteImage) {
+			try {
+				await storage.deleteImage(landscapeFilename);
+			} catch (storageError) {
+				// Log but don't fail the request
+			}
+		}
+
+		const nextMeta = { ...meta };
+		delete nextMeta.landscapeUrl;
+		delete nextMeta.landscapeFilename;
+		delete nextMeta.credits_refunded;
+		await queries.updateCreatedImageMeta.run(creationId, user.id, nextMeta);
+
+		return res.json({
+			ok: true,
+			removed: !!hadLandscape
+		});
+	});
+
 	// DELETE /api/create/images/:id - Delete a creation (owner: mark unavailable; admin with ?permanent=1: remove permanently)
 	router.delete("/api/create/images/:id", async (req, res) => {
 		const user = await requireUser(req, res);
@@ -1654,7 +1883,7 @@ export default function createCreateRoutes({ queries, storage }) {
 
 		try {
 			if (isAdmin && permanent) {
-				// Admin permanent delete: any image, full cleanup
+				// Admin permanent delete: any image, full cleanup (main image + landscape if present)
 				const image = await queries.selectCreatedImageByIdAnyUser?.get(req.params.id);
 				if (!image) {
 					return res.status(404).json({ error: "Image not found" });
@@ -1666,6 +1895,14 @@ export default function createCreateRoutes({ queries, storage }) {
 					}
 				} catch (storageError) {
 					// Log but don't fail
+				}
+				const permMeta = parseMeta(image.meta) || {};
+				if (permMeta.landscapeFilename && storage?.deleteImage) {
+					try {
+						await storage.deleteImage(permMeta.landscapeFilename);
+					} catch (landscapeStorageError) {
+						// Log but don't fail
+					}
 				}
 				if (queries.deleteFeedItemByCreatedImageId?.run) {
 					await queries.deleteFeedItemByCreatedImageId.run(parseInt(req.params.id));

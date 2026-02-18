@@ -767,6 +767,16 @@ async function loadCreation() {
 			}
 		}
 
+		const clearErrorBtn = document.querySelector('[data-clear-error-btn]');
+		if (clearErrorBtn) {
+			if (!canEdit || !isFailed) {
+				clearErrorBtn.style.display = 'none';
+			} else {
+				clearErrorBtn.style.display = '';
+				clearErrorBtn.disabled = false;
+			}
+		}
+
 		// If no actions are visible, hide the whole actions row to avoid empty spacing.
 		if (actionsEl) {
 			const actionButtons = Array.from(actionsEl.querySelectorAll('button'));
@@ -1120,6 +1130,13 @@ async function loadCreation() {
 					</button>
 					` : ``}
 					${copyLinkButtonHtml}
+					<button class="feed-card-action" type="button" data-landscape-btn aria-label="Landscape" style="display: none;">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+							stroke-linejoin="round" aria-hidden="true">
+							<rect x="2" y="6" width="20" height="12" rx="1.5" />
+						</svg>
+						<span data-landscape-btn-text>Landscape</span>
+					</button>
 					<button class="feed-card-action" type="button" data-tip-creator-button aria-label="Tip Creator">
 						${creditIcon('')}
 						<span>Tip Creator</span>
@@ -1215,6 +1232,25 @@ async function loadCreation() {
 			</section>
 			` : ''}
 		`;
+
+		// Landscape (meta row): show when (owner && completed && !failed) OR (!owner && landscape URL exists).
+		// Label is always "Landscape"; user can open modal to see loading state in the placeholder.
+		const landscapeBtn = detailContent.querySelector('[data-landscape-btn]');
+		if (landscapeBtn) {
+			const lurl = meta?.landscapeUrl;
+			const hasLandscapeUrl = typeof lurl === 'string' && lurl !== 'loading' && !lurl.startsWith('error:') && (lurl.startsWith('http') || lurl.startsWith('/'));
+			const showLandscape = (isOwner && status === 'completed' && !isFailed) || (!isOwner && hasLandscapeUrl);
+			if (!showLandscape) {
+				landscapeBtn.style.display = 'none';
+			} else {
+				landscapeBtn.style.display = '';
+				landscapeBtn.disabled = false;
+				landscapeBtn.dataset.landscapeHasUrl = hasLandscapeUrl ? '1' : '0';
+				landscapeBtn.dataset.landscapeIsSelf = isOwner ? '1' : '0';
+				const labelEl = landscapeBtn.querySelector('[data-landscape-btn-text]');
+				if (labelEl) labelEl.textContent = 'Landscape';
+			}
+		}
 
 		// After rendering description (and initial scaffold), hydrate any special link labels.
 		hydrateUserTextLinks(detailContent);
@@ -1817,6 +1853,15 @@ document.addEventListener('click', (e) => {
 	}
 });
 
+// Clear error button handler (failed creations: mark unavailable, no storage cleanup)
+document.addEventListener('click', (e) => {
+	const clearErrorBtn = e.target.closest('[data-clear-error-btn]');
+	if (clearErrorBtn && !clearErrorBtn.disabled) {
+		e.preventDefault();
+		handleClearError();
+	}
+});
+
 // Mutate button handler
 document.addEventListener('click', (e) => {
 	const mutateBtn = e.target.closest('[data-mutate-btn]');
@@ -1841,6 +1886,259 @@ document.addEventListener('click', (e) => {
 	}
 });
 
+// Landscape: single modal — opens with placeholder or image; cost query only when user clicks Generate/Re-generate
+const landscapeModal = document.querySelector('[data-landscape-modal]');
+const landscapeGeneratePrompt = document.querySelector('[data-landscape-generate-prompt]');
+const landscapePlaceholder = document.querySelector('[data-landscape-placeholder]');
+const landscapePlaceholderSpinner = document.querySelector('[data-landscape-placeholder-spinner]');
+const landscapeImage = document.querySelector('[data-landscape-image]');
+const landscapeErrorEl = document.querySelector('[data-landscape-error]');
+const landscapeCostDialog = document.querySelector('[data-landscape-cost-dialog]');
+const landscapeCostDialogMessage = document.querySelector('[data-landscape-cost-dialog-message]');
+const landscapeCostCancel = document.querySelector('[data-landscape-cost-cancel]');
+const landscapeCostContinue = document.querySelector('[data-landscape-cost-continue]');
+const landscapePrimaryBtn = document.querySelector('[data-landscape-primary-btn]');
+const landscapePrimaryBtnText = document.querySelector('[data-landscape-btn-text]');
+const landscapePrimaryBtnSpinner = document.querySelector('[data-landscape-btn-spinner]');
+const landscapeRemoveBtn = document.querySelector('[data-landscape-remove-btn]');
+const landscapeCloseBtn = document.querySelector('[data-landscape-close-btn]');
+
+let landscapeModalCreationId = null;
+let landscapeModalIsOwner = false;
+let landscapePendingCost = null;
+
+function setLandscapePrimaryButtonLoading(loading) {
+	if (!landscapePrimaryBtn) return;
+	landscapePrimaryBtn.classList.toggle('is-loading', !!loading);
+	landscapePrimaryBtn.disabled = !!loading;
+	if (landscapePrimaryBtnSpinner) landscapePrimaryBtnSpinner.style.display = loading ? 'block' : 'none';
+	if (landscapePrimaryBtnText) landscapePrimaryBtnText.style.visibility = loading ? 'hidden' : '';
+}
+
+function openLandscapeModal(creationId, { landscapeUrl, isOwner, isLoading, errorMsg } = {}) {
+	landscapeModalCreationId = creationId;
+	landscapeModalIsOwner = isOwner;
+	landscapePendingCost = null;
+	setLandscapePrimaryButtonLoading(false);
+
+	const hasImage = typeof landscapeUrl === 'string' && (landscapeUrl.startsWith('http') || landscapeUrl.startsWith('/'));
+	const showPlaceholder = !hasImage || isLoading;
+	const showSpinner = isLoading;
+
+	if (landscapeGeneratePrompt) {
+		landscapeGeneratePrompt.style.display = !hasImage && !showSpinner && !errorMsg ? 'block' : 'none';
+	}
+	if (landscapePlaceholder) {
+		landscapePlaceholder.style.display = showPlaceholder ? 'flex' : 'none';
+		landscapePlaceholder.classList.toggle('is-loading', !!showSpinner);
+	}
+	if (landscapePlaceholderSpinner) {
+		landscapePlaceholderSpinner.style.display = showSpinner ? 'block' : 'none';
+	}
+	if (landscapeImage) {
+		landscapeImage.style.display = hasImage && !showSpinner ? 'block' : 'none';
+		if (hasImage && landscapeUrl) landscapeImage.src = landscapeUrl;
+	}
+	if (landscapeErrorEl) {
+		landscapeErrorEl.style.display = errorMsg ? 'block' : 'none';
+		landscapeErrorEl.textContent = errorMsg || '';
+	}
+
+	if (landscapePrimaryBtn) {
+		landscapePrimaryBtn.style.display = isOwner ? '' : 'none';
+		landscapePrimaryBtn.disabled = !!isLoading;
+		if (landscapePrimaryBtnText) landscapePrimaryBtnText.textContent = hasImage ? 'Re-generate' : 'Generate';
+	}
+	if (landscapeRemoveBtn) {
+		landscapeRemoveBtn.style.display = isOwner && hasImage ? '' : 'none';
+		landscapeRemoveBtn.disabled = !!isLoading;
+	}
+	if (landscapeCloseBtn) {
+		landscapeCloseBtn.onclick = () => landscapeModal?.close();
+	}
+
+	landscapeModal?.showModal();
+}
+
+async function landscapePollUntilDone(creationId) {
+	const pollMs = 2500;
+	const maxPolls = 120;
+	for (let i = 0; i < maxPolls; i++) {
+		await new Promise(r => setTimeout(r, pollMs));
+		const res = await fetch(`/api/create/images/${creationId}`, { credentials: 'include' });
+		if (!res.ok) continue;
+		const creation = await res.json();
+		const meta = creation?.meta || {};
+		const lurl = meta.landscapeUrl;
+		if (typeof lurl === 'string' && lurl.startsWith('error:')) {
+			const msg = lurl.slice(6).trim() || 'The image failed to generate.';
+			openLandscapeModal(creationId, { landscapeUrl: null, isOwner: landscapeModalIsOwner, isLoading: false, errorMsg: msg });
+			return;
+		}
+		if (typeof lurl === 'string' && (lurl.startsWith('http') || lurl.startsWith('/'))) {
+			lastCreationMeta = creation;
+			openLandscapeModal(creationId, { landscapeUrl: lurl, isOwner: landscapeModalIsOwner, isLoading: false });
+			loadCreation();
+			return;
+		}
+	}
+	openLandscapeModal(creationId, { landscapeUrl: null, isOwner: landscapeModalIsOwner, isLoading: false, errorMsg: 'Taking longer than usual. You can close and check back later.' });
+}
+
+function landscapeStartGenerate(creationId, cost) {
+	landscapePendingCost = null;
+	openLandscapeModal(creationId, { landscapeUrl: null, isOwner: landscapeModalIsOwner, isLoading: true });
+	fetch('/api/create/landscape', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		credentials: 'include',
+		body: JSON.stringify({ creation_id: creationId, credit_cost: cost })
+	})
+		.then(async (res) => {
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				openLandscapeModal(creationId, { landscapeUrl: null, isOwner: landscapeModalIsOwner, isLoading: false, errorMsg: data?.message || data?.error || 'Failed to start' });
+				return;
+			}
+			landscapePollUntilDone(creationId);
+		})
+		.catch((err) => {
+			openLandscapeModal(creationId, { landscapeUrl: null, isOwner: landscapeModalIsOwner, isLoading: false, errorMsg: err?.message || 'Failed to start landscape' });
+		});
+}
+
+if (landscapeCostCancel) {
+	landscapeCostCancel.addEventListener('click', () => {
+		landscapePendingCost = null;
+		landscapeCostDialog?.close();
+		const meta = lastCreationMeta?.meta || {};
+		const lurl = meta?.landscapeUrl;
+		const hasImage = typeof lurl === 'string' && (lurl.startsWith('http') || lurl.startsWith('/'));
+		openLandscapeModal(landscapeModalCreationId, { landscapeUrl: hasImage ? lurl : null, isOwner: landscapeModalIsOwner, isLoading: false });
+	});
+}
+
+if (landscapeCostContinue) {
+	landscapeCostContinue.addEventListener('click', () => {
+		if (!landscapePendingCost) return;
+		const { creationId, cost } = landscapePendingCost;
+		landscapePendingCost = null;
+		landscapeCostDialog?.close();
+		landscapeStartGenerate(creationId, cost);
+	});
+}
+
+if (landscapePrimaryBtn) {
+	landscapePrimaryBtn.addEventListener('click', async () => {
+		const creationId = landscapeModalCreationId;
+		if (!creationId || !landscapeModalIsOwner) return;
+		landscapePendingCost = null;
+		setLandscapePrimaryButtonLoading(true);
+		try {
+			const queryRes = await fetch('/api/create/landscape/query', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify({ creation_id: creationId })
+			});
+			const queryData = await queryRes.json().catch(() => ({}));
+			const meta = lastCreationMeta?.meta || {};
+			const lurl = meta?.landscapeUrl;
+			const hasImage = typeof lurl === 'string' && (lurl.startsWith('http') || lurl.startsWith('/'));
+			if (!queryRes.ok) {
+				setLandscapePrimaryButtonLoading(false);
+				openLandscapeModal(creationId, { landscapeUrl: hasImage ? lurl : null, isOwner: true, isLoading: false, errorMsg: queryData?.message || queryData?.error || 'Failed to query' });
+				return;
+			}
+			const supported = queryData?.supported === true || queryData?.supported === 'true';
+			const cost = typeof queryData.cost === 'number' ? queryData.cost : Number(queryData.cost);
+			if (!supported || !Number.isFinite(cost) || cost <= 0) {
+				setLandscapePrimaryButtonLoading(false);
+				openLandscapeModal(creationId, { landscapeUrl: hasImage ? lurl : null, isOwner: true, isLoading: false, errorMsg: 'This server does not support landscape for this creation.' });
+				return;
+			}
+			landscapePendingCost = { creationId, cost };
+			setLandscapePrimaryButtonLoading(false);
+			if (landscapeCostDialogMessage) landscapeCostDialogMessage.textContent = `This will cost ${cost} credit${cost === 1 ? '' : 's'}.`;
+			landscapeCostDialog?.showModal();
+		} catch (err) {
+			setLandscapePrimaryButtonLoading(false);
+			openLandscapeModal(creationId, { landscapeUrl: null, isOwner: true, isLoading: false, errorMsg: err?.message || 'Failed to query' });
+		}
+	});
+}
+
+if (landscapeRemoveBtn) {
+	landscapeRemoveBtn.addEventListener('click', async () => {
+		const creationId = landscapeModalCreationId;
+		if (!creationId || !landscapeModalIsOwner) return;
+		landscapeRemoveBtn.disabled = true;
+		try {
+			const res = await fetch(`/api/create/images/${creationId}/landscape`, { method: 'DELETE', credentials: 'include' });
+			if (!res.ok) throw new Error('Failed to remove');
+			landscapeModal?.close();
+			loadCreation();
+		} catch (err) {
+			alert(err?.message || 'Failed to remove landscape');
+		} finally {
+			landscapeRemoveBtn.disabled = false;
+		}
+	});
+}
+
+document.addEventListener('click', (e) => {
+	const landscapeBtn = e.target.closest('[data-landscape-btn]');
+	if (!landscapeBtn || landscapeBtn.disabled) return;
+	e.preventDefault();
+	const creationId = getCreationId();
+	if (!creationId) return;
+	const isOwner = landscapeBtn.dataset.landscapeIsSelf === '1';
+	const hasUrl = landscapeBtn.dataset.landscapeHasUrl === '1';
+	const meta = lastCreationMeta?.meta || {};
+	const landscapeUrl = meta.landscapeUrl;
+	const isLoading = landscapeUrl === 'loading';
+	const hasImage = typeof landscapeUrl === 'string' && (landscapeUrl.startsWith('http') || landscapeUrl.startsWith('/'));
+	const errorMsg = typeof landscapeUrl === 'string' && landscapeUrl.startsWith('error:') ? landscapeUrl.slice(6).trim() : null;
+
+	openLandscapeModal(creationId, {
+		landscapeUrl: hasImage ? landscapeUrl : null,
+		isOwner,
+		isLoading,
+		errorMsg: errorMsg || null
+	});
+});
+
+async function handleClearError() {
+	const creationId = getCreationId();
+	if (!creationId) {
+		alert('Invalid creation ID');
+		return;
+	}
+
+	if (!confirm('Clear this failed creation? It will be removed from your creations.')) {
+		return;
+	}
+
+	const clearErrorBtn = document.querySelector('[data-clear-error-btn]');
+	if (clearErrorBtn) clearErrorBtn.disabled = true;
+
+	try {
+		const response = await fetch(`/api/create/images/${creationId}`, {
+			method: 'DELETE',
+			credentials: 'include'
+		});
+
+		if (!response.ok) {
+			const error = await response.json();
+			throw new Error(error.error || 'Failed to clear creation');
+		}
+
+		window.location.href = '/creations';
+	} catch (error) {
+		alert(error.message || 'Failed to clear creation. Please try again.');
+		if (clearErrorBtn) clearErrorBtn.disabled = false;
+	}
+}
 
 async function handleDelete() {
 	const creationId = getCreationId();

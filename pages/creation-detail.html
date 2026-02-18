@@ -17,6 +17,43 @@
 	<app-modal-share></app-modal-share>
 	<app-modal-tip-creator></app-modal-tip-creator>
 
+	<!-- Landscape: single modal with placeholder or image + bottom buttons -->
+	<dialog class="creation-detail-dialog landscape-modal" data-landscape-modal aria-labelledby="landscape-modal-title">
+		<button class="modal-close" type="button" aria-label="Close" data-landscape-close-btn>
+			<svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+				stroke-linecap="round" stroke-linejoin="round">
+				<line x1="18" y1="6" x2="6" y2="18"></line>
+				<line x1="6" y1="6" x2="18" y2="18"></line>
+			</svg>
+		</button>
+		<h2 id="landscape-modal-title" class="dialog-title">Landscape (16:9)</h2>
+		<div class="landscape-modal-content" data-landscape-content>
+			<div class="landscape-placeholder" data-landscape-placeholder>
+				<div class="landscape-placeholder-spinner" data-landscape-placeholder-spinner style="display: none;" aria-label="Loading" role="status"></div>
+				<p class="landscape-placeholder-message landscape-generate-prompt" data-landscape-generate-prompt style="display: none;">Generate a 16:9 landscape version of this creation.</p>
+				<p class="landscape-placeholder-message landscape-error" data-landscape-error style="display: none;"></p>
+			</div>
+			<img class="landscape-image" data-landscape-image alt="Landscape" style="display: none;" />
+		</div>
+		<div class="landscape-modal-actions" data-landscape-modal-actions>
+			<button type="button" class="btn-primary" data-landscape-primary-btn>
+				<span class="landscape-btn-spinner" data-landscape-btn-spinner style="display: none;" aria-hidden="true"></span>
+				<span class="landscape-btn-text" data-landscape-btn-text>Generate</span>
+			</button>
+			<button type="button" class="btn-outlined landscape-menu-item-danger" data-landscape-remove-btn style="display: none;">Remove</button>
+		</div>
+	</dialog>
+
+	<!-- Landscape cost confirm: small modal with Cancel / Continue -->
+	<dialog class="creation-detail-dialog landscape-cost-dialog" data-landscape-cost-dialog aria-labelledby="landscape-cost-dialog-title">
+		<h2 id="landscape-cost-dialog-title" class="dialog-title">Landscape</h2>
+		<p class="landscape-cost-dialog-message" data-landscape-cost-dialog-message></p>
+		<div class="dialog-actions">
+			<button type="button" class="btn-secondary" data-landscape-cost-cancel>Cancel</button>
+			<button type="button" class="btn-primary" data-landscape-cost-continue>Continue</button>
+		</div>
+	</dialog>
+
 	<!--APP_MOBILE_BOTTOM_NAV-->
 
 	<main>
@@ -85,6 +122,14 @@
 								stroke-linecap="round" stroke-linejoin="round" />
 						</svg>
 						Retry
+					</button>
+					<button type="button" class="creation-detail-action-btn btn-outlined" data-clear-error-btn style="display: none;">
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+							style="margin-right: 6px; vertical-align: middle;">
+							<path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="1.5"
+								stroke-linecap="round" stroke-linejoin="round" />
+						</svg>
+						Clear error
 					</button>
 					<button type="button" class="creation-detail-action-btn btn-outlined btn-danger-outlined" data-delete-btn disabled>
 						<svg width="16" height="16" viewBox="0 0 16 16" fill="none"

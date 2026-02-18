@@ -704,3 +704,199 @@ body.creation-detail-page main>section:first-of-type {
 		font-size: 0.85rem;
 	}
 }
+
+/* Landscape modal - single dialog; app colors, full width with small padding */
+.creation-detail-dialog.landscape-modal {
+	width: calc(100vw - 24px);
+	max-width: calc(100vw - 24px);
+	max-height: 90vh;
+	border-radius: 14px;
+	padding: 24px;
+	display: flex;
+	flex-direction: column;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+}
+
+.landscape-modal .dialog-title {
+	margin: 0 0 16px 0;
+	font-size: 1.25rem;
+	font-weight: 600;
+	color: var(--text);
+}
+
+.landscape-modal .modal-close {
+	position: absolute;
+	top: 12px;
+	right: 12px;
+}
+
+.landscape-placeholder-message {
+	margin: 0;
+	padding: 0 16px;
+	max-width: 100%;
+	text-align: center;
+}
+
+.landscape-generate-prompt {
+	color: var(--text-muted);
+	font-size: 0.95rem;
+}
+
+.landscape-modal-content {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin-bottom: 16px;
+}
+
+.landscape-placeholder {
+	width: 100%;
+	max-width: 100%;
+	aspect-ratio: 1824 / 1024;
+	background: var(--surface-muted);
+	border-radius: 10px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	position: relative;
+	border: 1px solid var(--border);
+}
+
+.landscape-placeholder.is-loading {
+	background: linear-gradient(90deg,
+			color-mix(in srgb, var(--text) 8%, transparent),
+			color-mix(in srgb, var(--text) 14%, transparent),
+			color-mix(in srgb, var(--text) 8%, transparent));
+	background-size: 200% 100%;
+	animation: image-loading-shimmer 2.6s ease-in-out infinite;
+}
+
+.landscape-placeholder-spinner {
+	width: 40px;
+	height: 40px;
+	border: 3px solid var(--border);
+	border-top-color: var(--text);
+	border-radius: 50%;
+	animation: spin 0.8s linear infinite;
+}
+
+.landscape-image {
+	width: 100%;
+	max-width: 100%;
+	max-height: 80vh;
+	height: auto;
+	object-fit: contain;
+	border-radius: 10px;
+}
+
+.landscape-error {
+	color: var(--text);
+}
+
+/* Cost confirm: small modal, narrow to content */
+.creation-detail-dialog.landscape-cost-dialog {
+	width: max-content;
+	max-width: min(400px, 90vw);
+	padding: 24px;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 14px;
+}
+
+.landscape-cost-dialog .dialog-title {
+	margin: 0 0 12px 0;
+	font-size: 1.15rem;
+	color: var(--text);
+}
+
+.landscape-cost-dialog-message {
+	margin: 0 0 20px 0;
+	color: var(--text);
+}
+
+.landscape-cost-dialog .dialog-actions {
+	display: flex;
+	gap: 12px;
+	justify-content: flex-end;
+}
+
+/* Spinner on Generate button */
+.landscape-primary-btn.is-loading {
+	position: relative;
+	color: transparent;
+}
+
+.landscape-primary-btn.is-loading .landscape-btn-spinner {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	margin-left: -10px;
+	margin-top: -10px;
+	width: 20px;
+	height: 20px;
+	border: 2px solid var(--border);
+	border-top-color: var(--text);
+	border-radius: 50%;
+	animation: spin 0.8s linear infinite;
+}
+
+.landscape-modal-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	justify-content: center;
+}
+
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+.landscape-dropdown {
+	display: flex;
+	flex-direction: column;
+	position: absolute;
+	top: 100%;
+	left: 0;
+	margin-top: 4px;
+	background: var(--bg);
+	border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+	border-radius: 8px;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+	min-width: 140px;
+	z-index: 20;
+}
+
+.landscape-menu-item {
+	display: block;
+	width: 100%;
+	padding: 10px 14px;
+	text-align: left;
+	background: none;
+	border: none;
+	color: var(--text);
+	font: inherit;
+	cursor: pointer;
+	text-decoration: none;
+}
+
+.landscape-menu-item:hover {
+	background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.landscape-menu-item:first-child {
+	border-radius: 8px 8px 0 0;
+}
+
+.landscape-menu-item:last-child {
+	border-radius: 0 0 8px 8px;
+}
+
+.landscape-menu-item-danger {
+	color: var(--danger, #c00);
+}

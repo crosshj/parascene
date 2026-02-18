@@ -1439,6 +1439,18 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		updateCreatedImageMeta: {
+			run: async (id, userId, meta) => {
+				const image = created_images.find(
+					(img) => img.id === Number(id) && img.user_id === Number(userId)
+				);
+				if (!image) {
+					return { changes: 0 };
+				}
+				image.meta = meta;
+				return { changes: 1 };
+			}
+		},
 		resetCreatedImageForRetry: {
 			run: async (id, userId, { meta, filename }) => {
 				const image = created_images.find(

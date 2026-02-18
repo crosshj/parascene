@@ -7,6 +7,7 @@ import "dotenv/config";
 import { openDb } from "../../db/index.js";
 import { verifyQStashRequest } from "../../api_routes/utils/qstashVerification.js";
 import { runCreationJob } from "../../api_routes/utils/creationJob.js";
+import { runLandscapeJob } from "../../api_routes/utils/landscapeJob.js";
 
 // Log immediately when module loads to verify function is being deployed
 console.log("[Worker] Module loaded at", new Date().toISOString());
@@ -64,10 +65,17 @@ export default async function handler(req, res) {
 		logCreation("Initializing database");
 		const { queries, storage } = await openDb();
 
-		// Run the creation job
-		logCreation("QStash signature verified, running job");
-		await runCreationJob({ queries, storage, payload: req.body });
-		logCreation("Worker job completed successfully");
+		const jobType = req.body?.job_type;
+		if (jobType === "landscape") {
+			logCreation("QStash signature verified, running landscape job");
+			await runLandscapeJob({ queries, storage, payload: req.body });
+			logCreation("Landscape job completed successfully");
+		} else {
+			// Run the creation job
+			logCreation("QStash signature verified, running job");
+			await runCreationJob({ queries, storage, payload: req.body });
+			logCreation("Worker job completed successfully");
+		}
 
 		return res.json({ ok: true });
 	} catch (error) {

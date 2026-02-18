@@ -2591,6 +2591,18 @@ export function openDb() {
 				return { changes: data?.length ?? 0 };
 			}
 		},
+		updateCreatedImageMeta: {
+			run: async (id, userId, meta) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.update({ meta })
+					.eq("id", id)
+					.eq("user_id", userId)
+					.select("id");
+				if (error) throw error;
+				return { changes: data?.length ?? 0 };
+			}
+		},
 		selectCreatedImagesForUser: {
 			all: async (userId, options = {}) => {
 				const includeUnavailable = options?.includeUnavailable === true;
