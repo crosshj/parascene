@@ -1233,13 +1233,12 @@ async function loadCreation() {
 			` : ''}
 		`;
 
-		// Landscape (meta row): show when (owner && completed && !failed) OR (!owner && landscape URL exists).
-		// Label is always "Landscape"; user can open modal to see loading state in the placeholder.
+		// Landscape (meta row): only on published items. Owner sees when completed; viewer when landscape URL exists.
 		const landscapeBtn = detailContent.querySelector('[data-landscape-btn]');
 		if (landscapeBtn) {
 			const lurl = meta?.landscapeUrl;
 			const hasLandscapeUrl = typeof lurl === 'string' && lurl !== 'loading' && !lurl.startsWith('error:') && (lurl.startsWith('http') || lurl.startsWith('/'));
-			const showLandscape = (isOwner && status === 'completed' && !isFailed) || (!isOwner && hasLandscapeUrl);
+			const showLandscape = isPublished && ((isOwner && status === 'completed' && !isFailed) || (!isOwner && hasLandscapeUrl));
 			if (!showLandscape) {
 				landscapeBtn.style.display = 'none';
 			} else {
