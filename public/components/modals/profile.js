@@ -1,5 +1,6 @@
 import { formatDate } from '../../shared/datetime.js';
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
+import { buildProfilePath } from '../../shared/profileLinks.js';
 import { helpIcon } from '../../icons/svg-strings.js';
 
 const html = String.raw;
@@ -157,7 +158,16 @@ class AppModalProfile extends HTMLElement {
 
 	displayProfile(user) {
 		const content = this.shadowRoot.querySelector('.profile-content');
+		const fullProfileLink = this.shadowRoot.querySelector('[data-full-profile-link]');
 		if (!content) return;
+
+		if (fullProfileLink) {
+			const profileHref = buildProfilePath({
+				userName: user?.profile?.user_name,
+				userId: user?.id
+			});
+			fullProfileLink.setAttribute('href', profileHref || '/user');
+		}
 
 		const roleLabels = {
 			consumer: 'Consumer',

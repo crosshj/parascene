@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import path from "path";
 import sharp from "sharp";
 import { RELATED_PARAM_DEFAULTS, RELATED_PARAM_KEYS } from "./relatedParams.js";
+import { getThumbnailUrl } from "../../api_routes/utils/url.js";
 
 // Note: Supabase schema must be provisioned separately (SQL editor/migrations).
 // This adapter expects all tables to be prefixed with "prsn_".
@@ -1789,6 +1790,7 @@ export function openDb() {
 						filename,
 						user_id,
 						url: file_path || (filename ? `/api/images/created/${filename}` : null),
+						thumbnail_url: getThumbnailUrl(file_path || (filename ? `/api/images/created/${filename}` : null)),
 						like_count: 0,
 						comment_count: 0,
 						viewer_liked: false
@@ -1914,60 +1916,50 @@ export function openDb() {
 						.map((fid) => String(fid))
 				);
 
-				// Fetch progressively until we can satisfy this page window after exclusions.
-				// A single bounded prefetch can under-count and incorrectly produce hasMore=false.
-				const viewerIdStr = String(id);
-				const targetFilteredCount = off + lim;
-				const maxScanRows = 500;
-				const scanBatchSize = Math.min(Math.max(lim * 3, 100), maxScanRows);
-				const filtered = [];
-				let scanOffset = 0;
-
-				while (filtered.length < targetFilteredCount && scanOffset < maxScanRows) {
-					const remaining = maxScanRows - scanOffset;
-					const size = Math.min(scanBatchSize, remaining);
-					if (size <= 0) break;
-
-					const { data, error } = await serviceClient
-						.from(prefixedTable("feed_items"))
-						.select(
-							"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images(filename, file_path, user_id)"
-						)
-						.order("created_at", { ascending: false })
-						.range(scanOffset, scanOffset + size - 1);
-					if (error) throw error;
-
-					const rows = Array.isArray(data) ? data : [];
-					if (rows.length === 0) break;
-
-					for (const row of rows) {
-						const { prsn_created_images, ...rest } = row;
-						const filename = prsn_created_images?.filename ?? null;
-						const file_path = prsn_created_images?.file_path ?? null;
-						const user_id = prsn_created_images?.user_id ?? null;
-
-						if (user_id === null || user_id === undefined) continue;
-						if (String(user_id) === viewerIdStr) continue;
-						if (followingIdSet.has(String(user_id))) continue;
-
-						filtered.push({
-							...rest,
-							filename,
-							user_id,
-							url: file_path || (filename ? `/api/images/created/${filename}` : null),
-							like_count: 0,
-							comment_count: 0,
-							viewer_liked: false
-						});
-
-						if (filtered.length >= targetFilteredCount) break;
-					}
-
-					scanOffset += rows.length;
-					if (rows.length < size) break;
+				// Single paginated query path:
+				// fetch the requested page directly with DB-side exclusion filters.
+				const excludedAuthorIds = Array.from(
+					new Set(
+						[String(id), ...followingIdSet]
+							.map((value) => Number(value))
+							.filter((value) => Number.isFinite(value) && value > 0)
+					)
+				);
+				let query = serviceClient
+					.from(prefixedTable("feed_items"))
+					.select(
+						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images!inner(filename, file_path, user_id, unavailable_at)"
+					)
+					.not("prsn_created_images.user_id", "is", null)
+					.is("prsn_created_images.unavailable_at", null)
+					.order("created_at", { ascending: false })
+					.range(off, off + lim - 1);
+				if (excludedAuthorIds.length > 0) {
+					query = query.not("prsn_created_images.user_id", "in", `(${excludedAuthorIds.join(",")})`);
 				}
 
-				const page = filtered.slice(off, off + lim);
+				const { data, error } = await query;
+				if (error) throw error;
+
+				const page = (Array.isArray(data) ? data : [])
+					.map((row) => {
+						const { prsn_created_images, ...rest } = row;
+					const filename = prsn_created_images?.filename ?? null;
+					const file_path = prsn_created_images?.file_path ?? null;
+					const user_id = prsn_created_images?.user_id ?? null;
+						const resolvedUrl = file_path || (filename ? `/api/images/created/${filename}` : null);
+					return {
+						...rest,
+						filename,
+						user_id,
+							url: resolvedUrl,
+							thumbnail_url: getThumbnailUrl(resolvedUrl),
+						like_count: 0,
+						comment_count: 0,
+						viewer_liked: false
+					};
+					})
+					.filter((item) => item?.user_id != null && typeof item?.url === "string" && item.url.length > 0);
 				const createdImageIds = page
 					.map((item) => item.created_image_id)
 					.filter((cid) => cid !== null && cid !== undefined);

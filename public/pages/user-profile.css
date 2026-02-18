@@ -494,11 +494,15 @@
 .user-profile-list-name {
 	font-weight: 600;
 	color: var(--text);
+	margin-left: 0;
+	margin-right: auto;
 }
 
 .user-profile-list-handle {
 	font-size: 0.875rem;
 	color: var(--text-muted);
+	margin-left: 0;
+	margin-right: auto;
 }
 
 /* Load more button below tab content */

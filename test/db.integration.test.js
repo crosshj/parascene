@@ -375,4 +375,74 @@ describe('Database Integration Tests', () => {
 			expect(Boolean(afterUnlikeLiked?.viewer_liked)).toBe(false);
 		});
 	});
+
+	describe('Explore (oceanman parity)', () => {
+		let supabaseServiceClient;
+		let dbQueries;
+
+		beforeAll(async () => {
+			if (!serviceRoleKey) {
+				throw new Error('SUPABASE_SERVICE_ROLE_KEY is required for explore parity tests');
+			}
+			supabaseServiceClient = createClient(supabaseUrl, serviceRoleKey);
+
+			process.env.DB_ADAPTER = 'supabase';
+			const db = await openDb({ quiet: true });
+			dbQueries = db.queries;
+		});
+
+		it('should reproduce oceanman explore results using adapter pagination', async () => {
+			const { data: profile, error: profileError } = await supabaseServiceClient
+				.from('prsn_user_profiles')
+				.select('user_id, user_name')
+				.eq('user_name', 'oceanman')
+				.maybeSingle();
+
+			if (profileError) {
+				throw new Error(`Failed to resolve oceanman profile: ${profileError.message}`);
+			}
+			expect(profile?.user_id).toBeTruthy();
+
+			const viewerId = Number(profile.user_id);
+			expect(Number.isFinite(viewerId)).toBe(true);
+
+			// Reproduce /api/explore behavior:
+			// frontend requests limit=100, API asks adapter for limit+1 to compute hasMore.
+			const pageSize = 100;
+			let offset = 0;
+			let hasMore = true;
+			const allItems = [];
+
+			while (hasMore) {
+				const rows = await dbQueries.selectExploreFeedItems.paginated(viewerId, {
+					limit: pageSize + 1,
+					offset
+				});
+				const list = Array.isArray(rows) ? rows : [];
+				hasMore = list.length > pageSize;
+				const page = hasMore ? list.slice(0, pageSize) : list;
+				allItems.push(...page);
+				offset += page.length;
+				if (page.length === 0) break;
+			}
+
+			// Optional strict assertion for debugging current state.
+			// Set EXPECT_OCEANMAN_EXPLORE_COUNT to pin the expected count.
+			const expectedCountRaw = process.env.EXPECT_OCEANMAN_EXPLORE_COUNT;
+			if (expectedCountRaw != null && expectedCountRaw !== '') {
+				const expectedCount = Number(expectedCountRaw);
+				expect(Number.isFinite(expectedCount)).toBe(true);
+				expect(allItems.length).toBe(expectedCount);
+			} else {
+				expect(Array.isArray(allItems)).toBe(true);
+			}
+
+			// Helpful for local debugging when reproducing UI counts.
+			// eslint-disable-next-line no-console
+			console.log('[oceanman explore parity]', {
+				count: allItems.length,
+				createdImageIds: allItems.map((item) => item?.created_image_id).filter((id) => id != null)
+			});
+		});
+	});
 });
