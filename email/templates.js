@@ -791,6 +791,111 @@ export function renderCreationHighlight({
 	return { subject, html: emailHtml, text };
 }
 
+export function renderSupportReport({
+	requesterName = "Someone",
+	requesterEmail = "",
+	requesterUserId = null,
+	requesterUserName = "",
+	requesterDisplayName = "",
+	report = {},
+	userAgent = "",
+	acceptLanguage = "",
+	referer = "",
+	ip = "",
+	submittedAt = null
+} = {}) {
+	const safeRequesterName = escapeHtml(requesterName || "Someone");
+	const safeRequesterEmail = escapeHtml(requesterEmail || "unknown");
+	const safeUserId = escapeHtml(
+		Number.isFinite(Number(requesterUserId)) ? Number(requesterUserId) : "unknown"
+	);
+	const safeUserName = escapeHtml(requesterUserName || "");
+	const safeDisplayName = escapeHtml(requesterDisplayName || "");
+	const safeUserAgent = escapeHtml(truncateMiddle(userAgent, 400));
+	const safeReferer = escapeHtml(truncateMiddle(referer, 600));
+	const safeIp = escapeHtml(ip || "");
+	const safeAcceptLanguage = escapeHtml(truncateMiddle(acceptLanguage, 200));
+	const timestamp = submittedAt ? new Date(submittedAt) : new Date();
+	const safeWhen = escapeHtml(timestamp.toISOString());
+
+	let reportStr = "";
+	try {
+		reportStr = JSON.stringify(report, null, 2);
+	} catch {
+		reportStr = String(report);
+	}
+	const safeReport = escapeHtml(truncateMiddle(reportStr, 12000));
+
+	const creationId = report?.creationId ?? report?.landscape?.creationId;
+	const userSummary = report?.userSummary ?? "";
+	const safeUserSummary = escapeHtml(String(userSummary).trim()).replace(/\n/g, "<br />");
+	const subject = `Support report: ${creationId ? `creation ${creationId}` : "Landscape"}`;
+	const preheader = `${requesterName || "Someone"} sent a support report to help troubleshoot.`;
+
+	const bodyHtml = html`
+		${safeUserSummary ? html`
+		<div style="margin:0 0 14px; padding:14px 16px; border:1px solid #e2e8f0; border-radius:12px; background:#ffffff; font-family:Arial, Helvetica, sans-serif;">
+			<div style="color:#475569; font-size:13px; margin:0 0 6px;">Summary</div>
+			<div style="color:#0f172a; font-size:15px; line-height:1.6; font-family:Arial, Helvetica, sans-serif;">${safeUserSummary}</div>
+		</div>
+		` : ""}
+		<div style="margin:0 0 14px; font-family:Arial, Helvetica, sans-serif;">
+			<div style="color:#475569; font-size:13px; margin:0 0 6px;">From</div>
+			<div style="font-size:15px; line-height:1.6;">
+				<strong>${safeRequesterName}</strong> (${safeRequesterEmail})<br />
+				<span style="color:#64748b;">User ID:</span> ${safeUserId}<br />
+				${(safeUserName || safeDisplayName) ? html`
+				<span style="color:#64748b;">Profile:</span>
+				${safeDisplayName ? html`<span>${safeDisplayName}</span>` : ""}
+				${safeUserName ? html`${safeDisplayName ? " · " : ""}<span>@${safeUserName}</span>` : ""}<br />
+				` : ""}
+				<span style="color:#64748b;">Submitted:</span> ${safeWhen}
+			</div>
+		</div>
+		<div style="margin:14px 0 0; font-family:Arial, Helvetica, sans-serif;">
+			<div style="color:#475569; font-size:13px; margin:0 0 6px;">Context</div>
+			<div style="font-size:15px; line-height:1.6;">
+				${safeIp ? html`<span style="color:#64748b;">IP:</span> ${safeIp}<br />` : ""}
+				${safeReferer ? html`<span style="color:#64748b;">Referrer:</span> ${safeReferer}<br />` : ""}
+				${safeAcceptLanguage ? html`<span style="color:#64748b;">Accept-Language:</span> ${safeAcceptLanguage}<br />` : ""}
+				${safeUserAgent ? html`<span style="color:#64748b;">User agent:</span> ${safeUserAgent}<br />` : ""}
+			</div>
+		</div>
+		<div style="margin:14px 0 0; padding:14px 16px; border:1px solid #e2e8f0; border-radius:12px; background:#f8fafc; font-family:Arial, Helvetica, sans-serif;">
+			<div style="color:#475569; font-size:13px; margin:0 0 6px;">Report payload</div>
+			<pre style="margin:0; font-size:12px; line-height:1.5; white-space:pre-wrap; word-break:break-all; color:#0f172a;">${safeReport}</pre>
+		</div>
+	`;
+
+	const emailHtml = baseEmailLayout({
+		preheader,
+		title: "Support report",
+		bodyHtml,
+		suppressCta: true,
+		footerText: "You're receiving this because you're the parascene admin."
+	});
+
+	const text = [
+		"Support report",
+		"",
+		userSummary ? ["Summary:", String(userSummary).trim(), ""].join("\n") : "",
+		`From: ${requesterName || "Someone"} (${requesterEmail || "unknown"})`,
+		`User ID: ${Number.isFinite(Number(requesterUserId)) ? Number(requesterUserId) : "unknown"}`,
+		`Submitted: ${timestamp.toISOString()}`,
+		"",
+		"Context:",
+		ip ? `IP: ${ip}` : "",
+		referer ? `Referrer: ${referer}` : "",
+		acceptLanguage ? `Accept-Language: ${acceptLanguage}` : "",
+		userAgent ? `User agent: ${userAgent}` : "",
+		"",
+		"Report payload:",
+		reportStr
+	].filter(Boolean).join("\n");
+
+	return { subject, html: emailHtml, text };
+}
+
 export const templates = {
 	helloFromParascene: renderHelloFromParascene,
 	commentReceived: renderCommentReceived,
@@ -801,5 +906,6 @@ export const templates = {
 	welcome: renderWelcome,
 	firstCreationNudge: renderFirstCreationNudge,
 	reengagement: renderReengagement,
-	creationHighlight: renderCreationHighlight
+	creationHighlight: renderCreationHighlight,
+	supportReport: renderSupportReport
 };

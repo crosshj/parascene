@@ -208,10 +208,13 @@ class AppRouteUsers extends HTMLElement {
 			<h3>Users</h3>
 			<app-tabs>
 				<tab data-id="active" label="Active" default>
-					<div class="users-cards" data-users-active-container>
-						<div class="route-empty route-loading">
-							<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
+					<div class="users-active-wrap">
+						<div class="users-cards" data-users-active-container>
+							<div class="route-empty route-loading">
+								<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
+							</div>
 						</div>
+						<div class="text-muted users-list-count" data-users-active-count aria-live="polite"></div>
 					</div>
 				</tab>
 				<tab data-id="anonymous" label="Anonymous">
@@ -461,6 +464,12 @@ class AppRouteUsers extends HTMLElement {
 					activeContainer.appendChild(renderUserCard(user, (u) => this.openUserModal(u)));
 				}
 			}
+			const activeCountEl = this.querySelector('[data-users-active-count]');
+			if (activeCountEl) {
+				activeCountEl.textContent = activeUsers.length === 1
+				? 'TOTAL: 1 active user'
+				: `TOTAL: ${activeUsers.length} active users`;
+			}
 
 			if (otherUsers.length === 0) {
 				const empty = document.createElement('div');
@@ -480,6 +489,8 @@ class AppRouteUsers extends HTMLElement {
 		} catch (err) {
 			activeContainer.innerHTML = '';
 			otherContainer.innerHTML = '';
+			const activeCountEl = this.querySelector('[data-users-active-count]');
+			if (activeCountEl) activeCountEl.textContent = '';
 			const error = document.createElement('div');
 			error.className = 'admin-error';
 			error.textContent = 'Error loading users.';

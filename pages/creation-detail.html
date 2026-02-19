@@ -19,6 +19,13 @@
 
 	<!-- Landscape: single modal with placeholder or image + bottom buttons -->
 	<dialog class="creation-detail-dialog landscape-modal" data-landscape-modal aria-labelledby="landscape-modal-title">
+		<div class="landscape-modal-title-row">
+			<h2 id="landscape-modal-title" class="dialog-title">Landscape (16:9)</h2>
+			<button type="button" class="landscape-debug-btn" data-landscape-copy-debug aria-label="Copy debug info for support">
+				<span class="landscape-debug-icon" aria-hidden="true">?</span>
+				<span class="landscape-debug-label">debug</span>
+			</button>
+		</div>
 		<button class="modal-close" type="button" aria-label="Close" data-landscape-close-btn>
 			<svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
 				stroke-linecap="round" stroke-linejoin="round">
@@ -26,7 +33,6 @@
 				<line x1="6" y1="6" x2="18" y2="18"></line>
 			</svg>
 		</button>
-		<h2 id="landscape-modal-title" class="dialog-title">Landscape (16:9)</h2>
 		<div class="landscape-modal-content" data-landscape-content>
 			<div class="landscape-placeholder" data-landscape-placeholder>
 				<div class="landscape-placeholder-spinner" data-landscape-placeholder-spinner style="display: none;" aria-label="Loading" role="status"></div>
@@ -41,6 +47,21 @@
 				<span class="landscape-btn-text" data-landscape-btn-text>Generate</span>
 			</button>
 			<button type="button" class="btn-outlined landscape-menu-item-danger" data-landscape-remove-btn style="display: none;">Remove</button>
+		</div>
+	</dialog>
+
+	<!-- Support report: send debug info to administrator -->
+	<dialog class="creation-detail-dialog debug-copied-modal" data-debug-copied-modal aria-labelledby="debug-copied-title">
+		<h2 id="debug-copied-title" class="dialog-title">Support</h2>
+		<p class="debug-copied-message" data-debug-copied-message>We'll send a report to the administrator to help troubleshoot.</p>
+		<div class="debug-copied-summary-wrap">
+			<label for="debug-copied-summary" class="debug-copied-summary-label">Summarize the issue</label>
+			<textarea id="debug-copied-summary" class="debug-copied-summary" data-debug-copied-summary rows="6" placeholder="Describe what you see (e.g. blank screen, missing button), what you expected, and your device or browser if relevant. This will be included in the report sent to support."></textarea>
+		</div>
+		<p class="debug-copied-status" data-debug-copied-status role="alert" aria-live="polite"></p>
+		<div class="dialog-actions">
+			<button type="button" class="btn-secondary" data-debug-copied-cancel>Cancel</button>
+			<button type="button" class="btn-primary" data-debug-copied-send>Send</button>
 		</div>
 	</dialog>
 

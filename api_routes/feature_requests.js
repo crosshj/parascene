@@ -140,6 +140,52 @@ export default function createFeatureRequestRoutes({ queries }) {
 		}
 	});
 
+	// Support report (e.g. Landscape modal troubleshooting): same admin email, rich payload
+	router.post("/api/support-report", async (req, res) => {
+		const userBundle = await requireUser(req, res, queries);
+		if (!userBundle) return;
+
+		const report = req.body?.report && typeof req.body.report === "object" ? req.body.report : {};
+		if (!process.env.RESEND_API_KEY || !process.env.RESEND_SYSTEM_EMAIL) {
+			return res.status(503).json({ error: "Email is not configured on this environment." });
+		}
+
+		const { user, profile } = userBundle;
+		const requesterEmail = String(user?.email || "").trim();
+		const requesterName = getUserDisplayName({ user, profile });
+		const requesterUserId = user?.id ?? null;
+		const requesterUserName = typeof profile?.user_name === "string" ? profile.user_name.trim() : "";
+		const requesterDisplayName = typeof profile?.display_name === "string" ? profile.display_name.trim() : "";
+		const userAgent = String(req.get("user-agent") || "").trim();
+		const acceptLanguage = String(req.get("accept-language") || "").trim();
+		const referer = String(req.get("referer") || "").trim();
+		const ip = String(req.ip || "").trim();
+
+		try {
+			await sendTemplatedEmail({
+				to: ADMIN_FEATURE_REQUEST_EMAIL,
+				template: "supportReport",
+				replyTo: requesterEmail || undefined,
+				data: {
+					requesterName,
+					requesterEmail,
+					requesterUserId,
+					requesterUserName,
+					requesterDisplayName,
+					report,
+					userAgent,
+					acceptLanguage,
+					referer,
+					ip,
+					submittedAt: new Date().toISOString()
+				}
+			});
+			return res.json({ ok: true });
+		} catch (error) {
+			return res.status(500).json({ error: error?.message || "Failed to send support report." });
+		}
+	});
+
 	return router;
 }
 

@@ -1901,10 +1901,19 @@ const landscapePrimaryBtnText = document.querySelector('[data-landscape-btn-text
 const landscapePrimaryBtnSpinner = document.querySelector('[data-landscape-btn-spinner]');
 const landscapeRemoveBtn = document.querySelector('[data-landscape-remove-btn]');
 const landscapeCloseBtn = document.querySelector('[data-landscape-close-btn]');
+const landscapeCopyDebugBtn = document.querySelector('[data-landscape-copy-debug]');
+const debugCopiedModal = document.querySelector('[data-debug-copied-modal]');
+const debugCopiedMessage = document.querySelector('[data-debug-copied-message]');
+const debugCopiedSummary = document.querySelector('[data-debug-copied-summary]');
+const debugCopiedStatus = document.querySelector('[data-debug-copied-status]');
+const debugCopiedCancel = document.querySelector('[data-debug-copied-cancel]');
+const debugCopiedSend = document.querySelector('[data-debug-copied-send]');
 
 let landscapeModalCreationId = null;
 let landscapeModalIsOwner = false;
 let landscapePendingCost = null;
+/** Last modal open state, for "Copy debug info" (remote troubleshooting without DevTools). */
+let lastLandscapeDiagnostic = null;
 
 function setLandscapePrimaryButtonLoading(loading) {
 	if (!landscapePrimaryBtn) return;
@@ -1923,6 +1932,11 @@ function openLandscapeModal(creationId, { landscapeUrl, isOwner, isLoading, erro
 	const hasImage = typeof landscapeUrl === 'string' && (landscapeUrl.startsWith('http') || landscapeUrl.startsWith('/'));
 	const showPlaceholder = !hasImage || isLoading;
 	const showSpinner = isLoading;
+
+	lastLandscapeDiagnostic = { creationId, isOwner: !!isOwner, hasImage, isLoading: !!isLoading, errorMsg: errorMsg || null };
+	if (typeof console !== 'undefined' && console.debug) {
+		console.debug('[Landscape modal]', { ...lastLandscapeDiagnostic, generateButtonShown: lastLandscapeDiagnostic.isOwner });
+	}
 
 	if (landscapeGeneratePrompt) {
 		landscapeGeneratePrompt.style.display = !hasImage && !showSpinner && !errorMsg ? 'block' : 'none';
@@ -1958,6 +1972,142 @@ function openLandscapeModal(creationId, { landscapeUrl, isOwner, isLoading, erro
 
 	document.body.classList.add('modal-open');
 	landscapeModal?.showModal();
+}
+
+function buildSupportReportPayload() {
+	const d = lastLandscapeDiagnostic || (() => {
+		const creationId = getCreationId();
+		const meta = lastCreationMeta?.meta || {};
+		const lurl = meta.landscapeUrl;
+		const hasImage = typeof lurl === 'string' && (lurl.startsWith('http') || lurl.startsWith('/'));
+		const isLoading = lurl === 'loading';
+		const errorMsg = typeof lurl === 'string' && lurl.startsWith('error:') ? lurl.slice(6).trim() : null;
+		return { creationId: creationId || 0, isOwner: !!landscapeModalIsOwner, hasImage, isLoading, errorMsg };
+	})();
+	const genBtnExists = !!landscapePrimaryBtn;
+	const genBtnDisplay = genBtnExists && typeof getComputedStyle === 'function'
+		? getComputedStyle(landscapePrimaryBtn).display
+		: (genBtnExists ? (landscapePrimaryBtn.style.display || '') || 'inline-block' : 'n/a');
+	const genBtnVisible = genBtnExists && genBtnDisplay !== 'none' && !landscapePrimaryBtn.disabled;
+	const genPromptDisplay = landscapeGeneratePrompt && typeof getComputedStyle === 'function'
+		? getComputedStyle(landscapeGeneratePrompt).display
+		: (landscapeGeneratePrompt ? (landscapeGeneratePrompt.style.display || '') : 'n/a');
+	const placeholderDisplay = landscapePlaceholder && typeof getComputedStyle === 'function'
+		? getComputedStyle(landscapePlaceholder).display
+		: (landscapePlaceholder ? (landscapePlaceholder.style.display || '') : 'n/a');
+	const errorDisplay = landscapeErrorEl && typeof getComputedStyle === 'function'
+		? getComputedStyle(landscapeErrorEl).display
+		: (landscapeErrorEl ? (landscapeErrorEl.style.display || '') : 'n/a');
+
+	const landscape = {
+		creationId: d.creationId,
+		isOwner: d.isOwner,
+		hasImage: d.hasImage,
+		loading: d.isLoading,
+		errorMsg: d.errorMsg || null,
+		genBtnExists,
+		genBtnVisible,
+		genBtnDisplay,
+		genPromptDisplay,
+		placeholderDisplay,
+		errorElDisplay: errorDisplay
+	};
+
+	const domSummary = {};
+	if (landscapeModal) {
+		try {
+			const cs = typeof getComputedStyle === 'function' ? getComputedStyle(landscapeModal) : null;
+			domSummary.modalDisplay = cs ? cs.display : (landscapeModal.style?.display || '');
+			domSummary.modalOpen = landscapeModal.open;
+		} catch (e) {
+			domSummary.modalError = String(e?.message || e);
+		}
+		if (landscapePlaceholder) {
+			try {
+				domSummary.placeholderDisplay = typeof getComputedStyle === 'function'
+					? getComputedStyle(landscapePlaceholder).display : landscapePlaceholder.style?.display;
+				domSummary.placeholderVisible = landscapePlaceholder.offsetParent != null;
+			} catch (e) {
+				domSummary.placeholderError = String(e?.message || e);
+			}
+		}
+		if (landscapePrimaryBtn) {
+			try {
+				domSummary.primaryBtnDisplay = typeof getComputedStyle === 'function'
+					? getComputedStyle(landscapePrimaryBtn).display : landscapePrimaryBtn.style?.display;
+				domSummary.primaryBtnVisible = landscapePrimaryBtn.offsetParent != null;
+				domSummary.primaryBtnDisabled = landscapePrimaryBtn.disabled;
+			} catch (e) {
+				domSummary.primaryBtnError = String(e?.message || e);
+			}
+		}
+		// Truncated HTML snippet of modal content for deep debugging (no user content)
+		try {
+			const content = landscapeModal.querySelector('[data-landscape-content]');
+			if (content) {
+				const raw = content.innerHTML.replace(/\s+/g, ' ').trim();
+				domSummary.modalContentLength = raw.length;
+				domSummary.modalContentSnippet = raw.slice(0, 800) + (raw.length > 800 ? '…' : '');
+			}
+		} catch (e) {
+			domSummary.contentError = String(e?.message || e);
+		}
+	}
+
+	const context = {
+		url: typeof window?.location?.href === 'string' ? window.location.href : '',
+		viewportWidth: typeof window?.innerWidth === 'number' ? window.innerWidth : null,
+		viewportHeight: typeof window?.innerHeight === 'number' ? window.innerHeight : null,
+		screenWidth: typeof window?.screen?.width === 'number' ? window.screen.width : null,
+		screenHeight: typeof window?.screen?.height === 'number' ? window.screen.height : null,
+		devicePixelRatio: typeof window?.devicePixelRatio === 'number' ? window.devicePixelRatio : null
+	};
+
+	return {
+		creationId: d.creationId,
+		landscape,
+		domSummary,
+		context
+	};
+}
+
+function openSupportReportModal() {
+	if (debugCopiedStatus) debugCopiedStatus.textContent = '';
+	if (debugCopiedSend) debugCopiedSend.disabled = false;
+	debugCopiedModal?.showModal();
+}
+
+async function sendSupportReport() {
+	if (!debugCopiedSend) return;
+	debugCopiedSend.disabled = true;
+	if (debugCopiedStatus) debugCopiedStatus.textContent = 'Sending…';
+	const report = buildSupportReportPayload();
+	const userSummary = debugCopiedSummary?.value?.trim() ?? '';
+	if (userSummary) report.userSummary = userSummary;
+	try {
+		const res = await fetch('/api/support-report', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			credentials: 'include',
+			body: JSON.stringify({ report })
+		});
+		const data = await res.json().catch(() => ({}));
+		if (res.ok && data?.ok) {
+			if (debugCopiedStatus) debugCopiedStatus.textContent = 'Report sent.';
+			if (debugCopiedSummary) debugCopiedSummary.value = '';
+			setTimeout(() => {
+				debugCopiedModal?.close();
+				if (debugCopiedStatus) debugCopiedStatus.textContent = '';
+				if (debugCopiedSend) debugCopiedSend.disabled = false;
+			}, 1500);
+		} else {
+			if (debugCopiedStatus) debugCopiedStatus.textContent = data?.error || 'Failed to send report.';
+			debugCopiedSend.disabled = false;
+		}
+	} catch (err) {
+		if (debugCopiedStatus) debugCopiedStatus.textContent = err?.message || 'Failed to send report.';
+		debugCopiedSend.disabled = false;
+	}
 }
 
 async function landscapePollUntilDone(creationId) {
@@ -2095,6 +2245,18 @@ if (landscapeRemoveBtn) {
 	});
 }
 
+if (landscapeCopyDebugBtn) {
+	landscapeCopyDebugBtn.addEventListener('click', openSupportReportModal);
+}
+
+if (debugCopiedCancel) {
+	debugCopiedCancel.addEventListener('click', () => debugCopiedModal?.close());
+}
+
+if (debugCopiedSend) {
+	debugCopiedSend.addEventListener('click', () => void sendSupportReport());
+}
+
 document.addEventListener('click', (e) => {
 	const landscapeBtn = e.target.closest('[data-landscape-btn]');
 	if (!landscapeBtn || landscapeBtn.disabled) return;
@@ -2103,6 +2265,16 @@ document.addEventListener('click', (e) => {
 	if (!creationId) return;
 	const isOwner = landscapeBtn.dataset.landscapeIsSelf === '1';
 	const hasUrl = landscapeBtn.dataset.landscapeHasUrl === '1';
+	// Diagnostic: button state when opening modal (helps troubleshoot Brave/Windows "no Generate" reports).
+	if (typeof console !== 'undefined' && console.debug) {
+		console.debug('[Landscape click]', {
+			creationId,
+			'data-landscape-is-self': landscapeBtn.dataset.landscapeIsSelf,
+			'data-landscape-has-url': landscapeBtn.dataset.landscapeHasUrl,
+			derivedIsOwner: isOwner,
+			derivedHasUrl: hasUrl
+		});
+	}
 	const meta = lastCreationMeta?.meta || {};
 	const landscapeUrl = meta.landscapeUrl;
 	const isLoading = landscapeUrl === 'loading';

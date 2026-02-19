@@ -330,6 +330,13 @@
 	margin-top: 0;
 }
 
+.users-list-count {
+	margin-top: 16px;
+	margin-bottom: 8px;
+	text-align: center;
+	font-size: 0.875rem;
+}
+
 .user-card,
 .admin-card {
 	/* Extends .card from global.css */

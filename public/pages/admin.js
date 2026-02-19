@@ -707,7 +707,7 @@ function initEmailSendPanel() {
 	const validTemplateValues = new Set([
 		"helloFromParascene", "commentReceived", "commentReceivedDelegated", "featureRequest",
 		"featureRequestFeedback", "passwordReset", "digestActivity", "welcome",
-		"firstCreationNudge", "reengagement", "creationHighlight"
+		"firstCreationNudge", "reengagement", "creationHighlight", "supportReport"
 	]);
 
 	function restoreSavedSelection() {
@@ -824,7 +824,8 @@ async function loadEmailTemplates() {
 			{ name: "welcome", label: "Welcome" },
 			{ name: "firstCreationNudge", label: "First creation nudge" },
 			{ name: "reengagement", label: "Re-engagement" },
-			{ name: "creationHighlight", label: "Creation highlight" }
+			{ name: "creationHighlight", label: "Creation highlight" },
+			{ name: "supportReport", label: "Support report" }
 		];
 
 		container.innerHTML = "";

@@ -719,11 +719,126 @@ body.creation-detail-page main>section:first-of-type {
 	box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
 }
 
-.landscape-modal .dialog-title {
+.landscape-modal-title-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
 	margin: 0 0 16px 0;
+	flex-wrap: wrap;
+}
+
+.landscape-modal .dialog-title {
+	margin: 0;
 	font-size: 1.25rem;
 	font-weight: 600;
 	color: var(--text);
+}
+
+.landscape-debug-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 10px 4px 4px;
+	background: var(--surface-muted);
+	border: 1px solid var(--border);
+	border-radius: 999px;
+	font-size: 0.8rem;
+	color: var(--text-muted);
+	cursor: pointer;
+	transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+
+.landscape-debug-btn:hover {
+	color: var(--text);
+	border-color: var(--text-muted);
+	background: var(--surface-strong);
+}
+
+.landscape-debug-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 20px;
+	height: 20px;
+	border-radius: 50%;
+	background: var(--surface);
+	color: var(--text-muted);
+	font-weight: 600;
+	font-size: 0.75rem;
+	line-height: 1;
+}
+
+.landscape-debug-label {
+	font-weight: 500;
+}
+
+/* Support info copied confirmation modal */
+.creation-detail-dialog.debug-copied-modal {
+	width: max-content;
+	max-width: min(360px, 90vw);
+	padding: 24px;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 14px;
+}
+
+.debug-copied-modal .dialog-title {
+	margin: 0 0 12px 0;
+	font-size: 1.15rem;
+	color: var(--text);
+}
+
+.debug-copied-message {
+	margin: 0 0 12px 0;
+	color: var(--text);
+	font-size: 0.95rem;
+}
+
+.debug-copied-summary-wrap {
+	margin: 0 0 16px 0;
+}
+
+.debug-copied-summary-label {
+	display: block;
+	margin: 0 0 6px 0;
+	font-size: 0.9rem;
+	font-weight: 500;
+	color: var(--text);
+}
+
+.debug-copied-summary {
+	display: block;
+	width: 100%;
+	min-height: 140px;
+	padding: 10px 12px;
+	font-size: 0.95rem;
+	font-family: inherit;
+	color: var(--text);
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	resize: vertical;
+}
+
+.debug-copied-summary::placeholder {
+	color: var(--text-muted);
+}
+
+.debug-copied-status {
+	margin: 0 0 20px 0;
+	min-height: 1.4em;
+	font-size: 0.9rem;
+	color: var(--text-muted);
+}
+
+.debug-copied-status:not(:empty) {
+	color: var(--text);
+}
+
+.debug-copied-modal .dialog-actions {
+	display: flex;
+	gap: 12px;
+	justify-content: flex-end;
 }
 
 .landscape-modal .modal-close {

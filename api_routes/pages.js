@@ -836,8 +836,16 @@ export default function createPageRoutes({ queries, pagesDir }) {
 		}
 	});
 
-	// Auth page (supports returnUrl query param).
+	// Auth page (supports returnUrl query param). Logged-in users are redirected away.
 	router.get("/auth.html", async (req, res) => {
+		const userId = req.auth?.userId;
+		if (userId) {
+			const user = await queries.selectUserById.get(userId);
+			if (user) {
+				const returnUrl = normalizeReturnUrl(req?.query?.returnUrl || "/");
+				return res.redirect(returnUrl);
+			}
+		}
 		const fs = await import("fs/promises");
 		let htmlContent = await fs.readFile(path.join(pagesDir, "auth.html"), "utf-8");
 		htmlContent = injectCommonHead(htmlContent);
@@ -949,6 +957,12 @@ export default function createPageRoutes({ queries, pagesDir }) {
 				clearAuthCookie(res, req);
 			}
 			return redirectToAuth(req, res);
+		}
+
+		// Logged-in user on auth URL (e.g. /auth or /auth#login from another tab) → redirect to app
+		if (req.path === "/auth" || req.path === "/auth.html") {
+			const returnUrl = normalizeReturnUrl(req?.query?.returnUrl || "/");
+			return res.redirect(returnUrl);
 		}
 
 		// User is logged in and has a role → serve their role-based page

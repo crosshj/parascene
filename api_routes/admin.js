@@ -574,7 +574,8 @@ export default function createAdminRoutes({ queries, storage }) {
 		"welcome",
 		"firstCreationNudge",
 		"reengagement",
-		"creationHighlight"
+		"creationHighlight",
+		"supportReport"
 	];
 
 	function getEmailTemplateSampleData() {
@@ -671,6 +672,54 @@ export default function createAdminRoutes({ queries, storage }) {
 				creationTitle: "Sunset Over Mountains",
 				creationUrl: `${baseUrl}/creations/123`,
 				commentCount: 8
+			},
+			supportReport: {
+				requesterName: "Sam",
+				requesterEmail: "sam@example.com",
+				requesterUserId: 42,
+				requesterUserName: "sam",
+				requesterDisplayName: "Sam",
+				report: {
+					userSummary: "I see a grey box in the Landscape modal and no Generate button. I'm on Windows 11 with Brave.",
+					creationId: 2116,
+					landscape: {
+						creationId: 2116,
+						isOwner: true,
+						hasImage: false,
+						loading: false,
+						errorMsg: null,
+						genBtnExists: true,
+						genBtnVisible: false,
+						genBtnDisplay: "none",
+						genPromptDisplay: "block",
+						placeholderDisplay: "flex",
+						errorElDisplay: "none"
+					},
+					domSummary: {
+						modalDisplay: "block",
+						modalOpen: true,
+						placeholderDisplay: "flex",
+						placeholderVisible: true,
+						primaryBtnDisplay: "none",
+						primaryBtnVisible: false,
+						primaryBtnDisabled: false,
+						modalContentLength: 420,
+						modalContentSnippet: "<div class=\"landscape-placeholder\" data-landscape-placeholder>…"
+					},
+					context: {
+						url: `${baseUrl}/creations/2116`,
+						viewportWidth: 1920,
+						viewportHeight: 1080,
+						screenWidth: 1920,
+						screenHeight: 1080,
+						devicePixelRatio: 2
+					}
+				},
+				userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+				acceptLanguage: "en-US,en;q=0.9",
+				referer: `${baseUrl}/creations/2116`,
+				ip: "192.168.1.1",
+				submittedAt: new Date().toISOString()
 			}
 		};
 	}
@@ -680,10 +729,11 @@ export default function createAdminRoutes({ queries, storage }) {
 		if (!adminUser) return;
 
 		const { templateName } = req.params;
-		const { renderEmailTemplate } = await import("../email/index.js");
-		const sampleData = getEmailTemplateSampleData();
 
 		try {
+			const { renderEmailTemplate } = await import("../email/index.js");
+			const sampleData = getEmailTemplateSampleData();
+
 			// Handle delegated template variants
 			let actualTemplateName = templateName;
 			if (templateName === "commentReceivedDelegated") {
@@ -699,6 +749,8 @@ export default function createAdminRoutes({ queries, storage }) {
 			res.setHeader("Content-Type", "text/html; charset=utf-8");
 			res.send(html);
 		} catch (error) {
+			console.error("[admin] email-templates render failed:", templateName, error?.message || error);
+			if (error?.stack) console.error(error.stack);
 			res.status(500).json({ error: error?.message || "Failed to render template" });
 		}
 	});

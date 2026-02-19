@@ -701,6 +701,19 @@ class AppNavigation extends HTMLElement {
 	handleRouteChange() {
 		const pathname = window.location.pathname;
 
+		// Logged-in user on auth URL (e.g. /auth#login from another tab) → redirect to app so we don't show a blank content area
+		if (pathname === '/auth' || pathname === '/auth.html') {
+			const params = new URLSearchParams(window.location.search);
+			let returnUrl = params.get('returnUrl') || '';
+			if (returnUrl === '/auth' || returnUrl === '/auth.html') returnUrl = '';
+			const target = (returnUrl && returnUrl.startsWith('/') && !returnUrl.startsWith('//') && !returnUrl.includes('://'))
+				? returnUrl
+				: `/${this.defaultRoute || 'feed'}`;
+			window.history.replaceState(null, '', target);
+			this.handleRouteChange();
+			return;
+		}
+
 		// First: auto-ack any notifications that point at this URL.
 		void this.autoAcknowledgeNotificationsForPath(pathname);
 
