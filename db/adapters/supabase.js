@@ -794,13 +794,16 @@ export function openDb() {
 			}
 		},
 		selectTransitions: {
-			list: async ({ page = 1, limit = 20 } = {}) => {
+			list: async ({ page = 1, limit = 20, sortBy = "count", sortDir = "desc" } = {}) => {
 				const table = prefixedTable("related_transitions");
 				const from = (page - 1) * limit;
+				const validColumns = ["from_created_image_id", "to_created_image_id", "count", "last_updated"];
+				const orderColumn = validColumns.includes(sortBy) ? sortBy : "count";
+				const ascending = sortDir === "asc";
 				const { data: items, error } = await serviceClient
 					.from(table)
 					.select("from_created_image_id, to_created_image_id, count, last_updated")
-					.order("count", { ascending: false })
+					.order(orderColumn, { ascending })
 					.range(from, from + limit - 1);
 				if (error) throw error;
 				const { count: total, error: countError } = await serviceClient

@@ -973,16 +973,19 @@ export default function createAdminRoutes({ queries, storage }) {
 		res.json(settings);
 	});
 
-	/** GET /admin/transitions — page, limit. Response: { items, total, page, limit, hasMore }. Sort by count desc. Admin-only. */
+	/** GET /admin/transitions — page, limit, sort_by, sort_dir. Response: { items, total, page, limit, hasMore }. Admin-only. */
 	router.get("/admin/transitions", async (req, res) => {
 		const adminUser = await requireAdmin(req, res);
 		if (!adminUser) return;
 		const page = Math.max(1, parseInt(req.query?.page, 10) || 1);
 		const limit = Math.min(100, Math.max(1, parseInt(req.query?.limit, 10) || 20));
+		const validSortBy = ["from_created_image_id", "to_created_image_id", "count", "last_updated"];
+		const sortBy = validSortBy.includes(req.query?.sort_by) ? req.query.sort_by : "count";
+		const sortDir = String(req.query?.sort_dir || "desc").toLowerCase() === "asc" ? "asc" : "desc";
 		if (!queries.selectTransitions?.list) {
 			return res.json({ items: [], total: 0, page, limit, hasMore: false });
 		}
-		const result = await queries.selectTransitions.list({ page, limit });
+		const result = await queries.selectTransitions.list({ page, limit, sortBy, sortDir });
 		res.json({
 			items: result.items ?? [],
 			total: result.total ?? 0,

@@ -536,7 +536,7 @@ function setupAlgoTabPersistence() {
 	if (!tabsEl) return;
 
 	const storageKey = "admin-algo-tab";
-	const validTabIds = ["transitions", "settings"];
+	const validTabIds = ["transitions", "graph", "settings"];
 
 	const savedTab = (() => {
 		try {
@@ -564,6 +564,10 @@ function setupAlgoTabPersistence() {
 				sessionStorage.setItem(storageKey, id);
 			} catch {
 				// Ignore storage errors
+			}
+			if (id === "graph") {
+				const graphContainer = document.querySelector("#related-graph-container");
+				if (graphContainer) loadRelatedGraph(graphContainer);
 			}
 		});
 	}
@@ -1223,6 +1227,10 @@ const RELATED_SETTINGS_FIELDS = [
 
 let relatedTransitionsPage = 1;
 const relatedTransitionsPageSize = 20;
+const relatedTransitionsSortByDefault = "count";
+const relatedTransitionsSortDirDefault = "desc";
+let relatedTransitionsSortBy = relatedTransitionsSortByDefault;
+let relatedTransitionsSortDir = relatedTransitionsSortDirDefault;
 
 async function loadRelatedAlgorithm() {
 	const settingsContainer = document.querySelector("#related-settings-container");
@@ -1230,6 +1238,14 @@ async function loadRelatedAlgorithm() {
 	if (!settingsContainer || !transitionsContainer) return;
 	if (adminDataLoaded.related) {
 		loadRelatedTransitions(transitionsContainer);
+		try {
+			if (sessionStorage.getItem("admin-algo-tab") === "graph") {
+				const graphContainer = document.querySelector("#related-graph-container");
+				if (graphContainer) loadRelatedGraph(graphContainer);
+			}
+		} catch {
+			// ignore
+		}
 		return;
 	}
 
@@ -1394,6 +1410,14 @@ async function loadRelatedAlgorithm() {
 
 		adminDataLoaded.related = true;
 		loadRelatedTransitions(transitionsContainer);
+		try {
+			if (sessionStorage.getItem("admin-algo-tab") === "graph") {
+				const graphContainer = document.querySelector("#related-graph-container");
+				if (graphContainer) loadRelatedGraph(graphContainer);
+			}
+		} catch {
+			// ignore
+		}
 	} catch (err) {
 		settingsContainer.innerHTML = "";
 		renderError(settingsContainer, "Error loading related settings.");
@@ -1408,7 +1432,9 @@ async function loadRelatedTransitions(container) {
 	try {
 		const params = new URLSearchParams({
 			page: String(relatedTransitionsPage),
-			limit: String(relatedTransitionsPageSize)
+			limit: String(relatedTransitionsPageSize),
+			sort_by: relatedTransitionsSortBy,
+			sort_dir: relatedTransitionsSortDir
 		});
 		const response = await fetch(`/admin/transitions?${params}`, { credentials: "include" });
 		if (!response.ok) throw new Error("Failed to load transitions.");
@@ -1470,38 +1496,355 @@ async function loadRelatedTransitions(container) {
 		const table = document.createElement("table");
 		table.className = "admin-table admin-email-sends-table admin-related-transitions-table";
 		table.setAttribute("role", "grid");
-		table.innerHTML = `
-			<thead>
-				<tr>
-					<th scope="col" class="admin-table-col-from">From (ID)</th>
-					<th scope="col" class="admin-table-col-to">To (ID)</th>
-					<th scope="col" class="admin-table-col-count">Count</th>
-					<th scope="col" class="admin-table-col-date">Last updated</th>
-				</tr>
-			</thead>
-			<tbody></tbody>
-		`;
-		const tbody = table.querySelector("tbody");
+		const columns = [
+			{ key: "from_created_image_id", label: "From (ID)", className: "admin-table-col-from" },
+			{ key: "to_created_image_id", label: "To (ID)", className: "admin-table-col-to" },
+			{ key: "count", label: "Count", className: "admin-table-col-count" },
+			{ key: "last_updated", label: "Last updated", className: "admin-table-col-date" }
+		];
+		const thead = document.createElement("thead");
+		const headerRow = document.createElement("tr");
+		for (const col of columns) {
+			const th = document.createElement("th");
+			th.scope = "col";
+			th.className = col.className + " admin-table-sortable";
+			th.dataset.sort = col.key;
+			const isActive = relatedTransitionsSortBy === col.key;
+			const arrow = isActive ? (relatedTransitionsSortDir === "asc" ? " \u2191" : " \u2193") : "";
+			th.textContent = col.label + arrow;
+			th.setAttribute("aria-sort", isActive ? (relatedTransitionsSortDir === "asc" ? "ascending" : "descending") : "none");
+			th.addEventListener("click", () => {
+				if (relatedTransitionsSortBy === col.key) {
+					relatedTransitionsSortDir = relatedTransitionsSortDir === "desc" ? "asc" : "desc";
+				} else {
+					relatedTransitionsSortBy = col.key;
+					relatedTransitionsSortDir = "desc";
+				}
+				relatedTransitionsPage = 1;
+				loadRelatedTransitions(container);
+			});
+			headerRow.appendChild(th);
+		}
+		thead.appendChild(headerRow);
+		table.appendChild(thead);
+		const tbody = document.createElement("tbody");
 		for (const row of items) {
 			const tr = document.createElement("tr");
-			const fromId = row.from_created_image_id ?? "—";
-			const toId = row.to_created_image_id ?? "—";
+			const fromIdRaw = row.from_created_image_id;
+			const toIdRaw = row.to_created_image_id;
+			const fromId = Number.isFinite(Number(fromIdRaw)) && fromIdRaw != null
+				? `<a href="/creations/${escapeHtml(String(fromIdRaw))}">${escapeHtml(String(fromIdRaw))}</a>`
+				: escapeHtml(String(fromIdRaw ?? "—"));
+			const toId = Number.isFinite(Number(toIdRaw)) && toIdRaw != null
+				? `<a href="/creations/${escapeHtml(String(toIdRaw))}">${escapeHtml(String(toIdRaw))}</a>`
+				: escapeHtml(String(toIdRaw ?? "—"));
 			const count = row.count ?? "—";
 			const lastUpdated = row.last_updated ? formatRelativeTime(row.last_updated, { style: "long" }) : "—";
 			tr.innerHTML = `
-				<td class="admin-table-col-from">${escapeHtml(String(fromId))}</td>
-				<td class="admin-table-col-to">${escapeHtml(String(toId))}</td>
+				<td class="admin-table-col-from">${fromId}</td>
+				<td class="admin-table-col-to">${toId}</td>
 				<td class="admin-table-col-count">${escapeHtml(String(count))}</td>
 				<td class="admin-table-col-date">${escapeHtml(lastUpdated)}</td>
 			`;
 			tbody.appendChild(tr);
 		}
+		table.appendChild(tbody);
 		wrapper.appendChild(table);
 		container.appendChild(wrapper);
 		container.appendChild(toolbar);
 	} catch (err) {
 		container.innerHTML = "";
 		renderError(container, "Error loading transitions.");
+	}
+}
+
+function applyForceDirectedLayout(nodes, edges, w, h) {
+	const centerX = w / 2;
+	const centerY = h / 2;
+	const maxRadius = 0.42 * Math.min(w, h);
+
+	const degreeByNode = new Map();
+	for (const n of nodes) degreeByNode.set(n, 0);
+	for (const e of edges) {
+		degreeByNode.set(e.from, (degreeByNode.get(e.from) || 0) + 1);
+		degreeByNode.set(e.to, (degreeByNode.get(e.to) || 0) + 1);
+	}
+	const maxDegree = Math.max(1, ...degreeByNode.values());
+
+	const byDegree = [...nodes].sort((a, b) => (degreeByNode.get(b) || 0) - (degreeByNode.get(a) || 0));
+	const initialRadius = 0.18 * Math.min(w, h);
+	byDegree.forEach((n, i) => {
+		const t = i / Math.max(byDegree.length - 1, 1);
+		const r = initialRadius * t;
+		const angle = (2 * Math.PI * i) / Math.max(byDegree.length, 1) + i * 0.7;
+		n.x = centerX + r * Math.cos(angle);
+		n.y = centerY + r * Math.sin(angle);
+	});
+
+	const repulsion = 500;
+	const attraction = 0.06;
+	const centerPullBase = 0.04;
+	const iterations = 80;
+	for (let iter = 0; iter < iterations; iter++) {
+		for (let i = 0; i < nodes.length; i++) {
+			for (let j = i + 1; j < nodes.length; j++) {
+				const a = nodes[i];
+				const b = nodes[j];
+				const dx = b.x - a.x;
+				const dy = b.y - a.y;
+				const d = Math.sqrt(dx * dx + dy * dy) || 0.1;
+				const f = repulsion / (d * d);
+				const fx = (f * dx) / d;
+				const fy = (f * dy) / d;
+				a.x -= fx;
+				a.y -= fy;
+				b.x += fx;
+				b.y += fy;
+			}
+		}
+		for (const e of edges) {
+			const dx = e.to.x - e.from.x;
+			const dy = e.to.y - e.from.y;
+			const d = Math.sqrt(dx * dx + dy * dy) || 0.1;
+			const f = d * attraction * Math.min(e.count, 10);
+			const fx = (f * dx) / d;
+			const fy = (f * dy) / d;
+			e.from.x += fx;
+			e.from.y += fy;
+			e.to.x -= fx;
+			e.to.y -= fy;
+		}
+		for (const n of nodes) {
+			const degree = degreeByNode.get(n) || 0;
+			const centerWeight = 0.25 + 0.75 * (degree / maxDegree);
+			const dx = centerX - n.x;
+			const dy = centerY - n.y;
+			const dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
+			const pull = centerPullBase * centerWeight * (1 + dist / 100);
+			n.x += (dx / dist) * Math.min(pull * dist, dist * 0.18);
+			n.y += (dy / dist) * Math.min(pull * dist, dist * 0.18);
+			const r = Math.sqrt((n.x - centerX) ** 2 + (n.y - centerY) ** 2);
+			if (r > maxRadius) {
+				const scale = maxRadius / r;
+				n.x = centerX + (n.x - centerX) * scale;
+				n.y = centerY + (n.y - centerY) * scale;
+			}
+		}
+	}
+}
+
+function applyCircularLayout(nodes, cx, cy, radius) {
+	const n = nodes.length;
+	nodes.forEach((node, i) => {
+		const angle = (2 * Math.PI * i) / n - Math.PI / 2;
+		node.x = cx + radius * Math.cos(angle);
+		node.y = cy + radius * Math.sin(angle);
+	});
+}
+
+async function loadRelatedGraph(container) {
+	if (!container) return;
+	container.innerHTML = "";
+	renderLoading(container, "Loading graph…");
+
+	try {
+		const allItems = [];
+		let page = 1;
+		const limit = 100;
+		while (true) {
+			const params = new URLSearchParams({
+				page: String(page),
+				limit: String(limit),
+				sort_by: "count",
+				sort_dir: "desc"
+			});
+			const res = await fetch(`/admin/transitions?${params}`, { credentials: "include" });
+			if (!res.ok) throw new Error("Failed to load transitions.");
+			const data = await res.json();
+			const items = data.items ?? [];
+			allItems.push(...items);
+			if (!data.hasMore || items.length < limit) break;
+			page += 1;
+		}
+
+		if (allItems.length === 0) {
+			container.innerHTML = "";
+			renderEmpty(container, "No transition data yet. Click related cards on creation detail to record transitions.");
+			return;
+		}
+
+		const nodeIds = new Set();
+		for (const r of allItems) {
+			if (r.from_created_image_id != null) nodeIds.add(Number(r.from_created_image_id));
+			if (r.to_created_image_id != null) nodeIds.add(Number(r.to_created_image_id));
+		}
+		const nodes = Array.from(nodeIds).map((id) => ({ id, x: 0, y: 0 }));
+		const nodeById = new Map(nodes.map((n) => [n.id, n]));
+		const edges = allItems
+			.map((r) => ({
+				from: nodeById.get(Number(r.from_created_image_id)),
+				to: nodeById.get(Number(r.to_created_image_id)),
+				count: Number(r.count) || 1
+			}))
+			.filter((e) => e.from && e.to);
+
+		const w = 800;
+		const h = 400;
+		const layoutCenterX = 400;
+		const layoutCenterY = 200;
+		const circleRadius = 160;
+
+		function renderGraph(layoutAlgo) {
+			if (layoutAlgo === "circular") {
+				applyCircularLayout(nodes, layoutCenterX, layoutCenterY, circleRadius);
+			} else {
+				applyForceDirectedLayout(nodes, edges, w, h);
+			}
+			const padding = 50;
+			let minX = Infinity;
+			let minY = Infinity;
+			let maxX = -Infinity;
+			let maxY = -Infinity;
+			for (const n of nodes) {
+				minX = Math.min(minX, n.x);
+				minY = Math.min(minY, n.y);
+				maxX = Math.max(maxX, n.x);
+				maxY = Math.max(maxY, n.y);
+			}
+			minX -= padding;
+			minY -= padding;
+			maxX += padding;
+			maxY += padding;
+			const vbW = maxX - minX || 1;
+			const vbH = maxY - minY || 1;
+			const r = 2;
+			const lineEls = edges
+				.map(
+					(e) =>
+						`<line x1="${e.from.x}" y1="${e.from.y}" x2="${e.to.x}" y2="${e.to.y}" class="admin-related-graph-edge"/>`
+				)
+				.join("");
+			const nodeEls = nodes
+				.map(
+					(n) =>
+						`<a href="/creations/${n.id}" class="admin-related-graph-node-link"><circle cx="${n.x}" cy="${n.y}" r="${r}" class="admin-related-graph-node" data-id="${escapeHtml(String(n.id))}"/></a>`
+				)
+				.join("");
+			return {
+				viewBox: { minX, minY, width: vbW, height: vbH },
+				innerHTML: `<g class="admin-related-graph-edges">${lineEls}</g><g class="admin-related-graph-nodes">${nodeEls}</g>`
+			};
+		}
+
+		let currentLayout = "force";
+		let { viewBox: initialViewBox, innerHTML } = renderGraph(currentLayout);
+		let currentViewBox = { ...initialViewBox, minX: initialViewBox.minX, minY: initialViewBox.minY, width: initialViewBox.width, height: initialViewBox.height };
+
+		const toolbar = document.createElement("div");
+		toolbar.className = "admin-related-graph-toolbar";
+		const layoutLabel = document.createElement("label");
+		layoutLabel.className = "admin-related-graph-layout-label";
+		layoutLabel.textContent = "Layout ";
+		const layoutSelect = document.createElement("select");
+		layoutSelect.className = "admin-related-graph-layout-select";
+		layoutSelect.innerHTML = "<option value=\"force\">Force-directed</option><option value=\"circular\">Circular</option>";
+		layoutSelect.value = currentLayout;
+		layoutLabel.appendChild(layoutSelect);
+		toolbar.appendChild(layoutLabel);
+		const resetBtn = document.createElement("button");
+		resetBtn.type = "button";
+		resetBtn.className = "btn-secondary admin-related-graph-reset";
+		resetBtn.textContent = "Reset view";
+		toolbar.appendChild(resetBtn);
+
+		container.innerHTML = "";
+		container.appendChild(toolbar);
+		const graphWrap = document.createElement("div");
+		graphWrap.className = "admin-related-graph-wrap";
+		const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+		svg.setAttribute("class", "admin-related-graph-svg");
+		svg.setAttribute("aria-label", "Click-next transitions graph");
+		svg.setAttribute("viewBox", `${currentViewBox.minX} ${currentViewBox.minY} ${currentViewBox.width} ${currentViewBox.height}`);
+		svg.innerHTML = innerHTML;
+		graphWrap.appendChild(svg);
+
+		const zoomControls = document.createElement("div");
+		zoomControls.className = "admin-related-graph-zoom";
+		zoomControls.setAttribute("aria-label", "Zoom");
+		const zoomOutBtn = document.createElement("button");
+		zoomOutBtn.type = "button";
+		zoomOutBtn.className = "admin-related-graph-zoom-btn";
+		zoomOutBtn.textContent = "−";
+		zoomOutBtn.setAttribute("aria-label", "Zoom out");
+		const zoomInBtn = document.createElement("button");
+		zoomInBtn.type = "button";
+		zoomInBtn.className = "admin-related-graph-zoom-btn";
+		zoomInBtn.textContent = "+";
+		zoomInBtn.setAttribute("aria-label", "Zoom in");
+		zoomControls.appendChild(zoomOutBtn);
+		zoomControls.appendChild(zoomInBtn);
+		graphWrap.appendChild(zoomControls);
+		container.appendChild(graphWrap);
+
+		function setViewBox(vb) {
+			currentViewBox = vb;
+			svg.setAttribute("viewBox", `${vb.minX} ${vb.minY} ${vb.width} ${vb.height}`);
+		}
+
+		function zoomBy(factor) {
+			const cx = currentViewBox.minX + currentViewBox.width / 2;
+			const cy = currentViewBox.minY + currentViewBox.height / 2;
+			const newW = currentViewBox.width * factor;
+			const newH = currentViewBox.height * factor;
+			setViewBox({
+				...currentViewBox,
+				minX: cx - newW / 2,
+				minY: cy - newH / 2,
+				width: newW,
+				height: newH
+			});
+		}
+
+		zoomInBtn.addEventListener("click", () => zoomBy(0.9));
+		zoomOutBtn.addEventListener("click", () => zoomBy(1 / 0.9));
+
+		resetBtn.addEventListener("click", () => {
+			setViewBox({ ...initialViewBox, minX: initialViewBox.minX, minY: initialViewBox.minY, width: initialViewBox.width, height: initialViewBox.height });
+		});
+
+		layoutSelect.addEventListener("change", () => {
+			currentLayout = layoutSelect.value;
+			const out = renderGraph(currentLayout);
+			initialViewBox = out.viewBox;
+			setViewBox({ ...initialViewBox, minX: initialViewBox.minX, minY: initialViewBox.minY, width: initialViewBox.width, height: initialViewBox.height });
+			svg.innerHTML = out.innerHTML;
+		});
+
+		let panStart = null;
+		svg.addEventListener("mousedown", (e) => {
+			if (e.button !== 0 || e.target.closest("a")) return;
+			panStart = { screenX: e.clientX, screenY: e.clientY, minX: currentViewBox.minX, minY: currentViewBox.minY };
+		});
+		svg.addEventListener("mousemove", (e) => {
+			if (!panStart) return;
+			const scaleX = currentViewBox.width / svg.clientWidth;
+			const scaleY = currentViewBox.height / svg.clientHeight;
+			setViewBox({
+				...currentViewBox,
+				minX: panStart.minX - (e.clientX - panStart.screenX) * scaleX,
+				minY: panStart.minY - (e.clientY - panStart.screenY) * scaleY
+			});
+		});
+		svg.addEventListener("mouseup", () => { panStart = null; });
+		svg.addEventListener("mouseleave", () => { panStart = null; });
+
+		svg.style.cursor = "grab";
+		svg.addEventListener("mousedown", () => { if (panStart) svg.style.cursor = "grabbing"; });
+		svg.addEventListener("mouseup", () => { svg.style.cursor = "grab"; });
+		svg.addEventListener("mouseleave", () => { svg.style.cursor = "grab"; });
+	} catch (err) {
+		container.innerHTML = "";
+		renderError(container, "Error loading graph.");
 	}
 }
 

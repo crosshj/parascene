@@ -323,6 +323,102 @@
 	overflow-x: auto;
 }
 
+.admin-related-graph-container {
+	width: 100%;
+	margin-top: 8px;
+}
+
+.admin-related-graph-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-bottom: 8px;
+}
+
+.admin-related-graph-layout-label {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 0.9rem;
+	color: var(--text-muted);
+}
+
+.admin-related-graph-layout-select {
+	padding: 4px 8px;
+	border-radius: 6px;
+	border: 1px solid var(--border);
+	background: var(--bg);
+	color: var(--text);
+	font-size: 0.9rem;
+}
+
+.admin-related-graph-wrap {
+	position: relative;
+	width: 100%;
+	aspect-ratio: 1;
+	overflow: hidden;
+	border-radius: 8px;
+}
+
+.admin-related-graph-zoom {
+	position: absolute;
+	bottom: 12px;
+	right: 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	z-index: 2;
+}
+
+.admin-related-graph-zoom-btn {
+	width: 36px;
+	height: 32px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	font-size: 1.25rem;
+	line-height: 1;
+	border-radius: 6px;
+	border: 1px solid var(--border);
+	background: var(--bg);
+	color: var(--text);
+	cursor: pointer;
+}
+
+.admin-related-graph-zoom-btn:hover {
+	background: var(--surface-strong);
+}
+
+.admin-related-graph-svg {
+	width: 100%;
+	height: 100%;
+	display: block;
+	background: var(--bg);
+	border-radius: 8px;
+	border: 1px solid var(--border);
+}
+
+.admin-related-graph-edge {
+	stroke: color-mix(in srgb, var(--text) 65%, transparent);
+	stroke-opacity: 0.95;
+	stroke-width: 0.5;
+}
+
+.admin-related-graph-node {
+	fill: var(--accent);
+	stroke: color-mix(in srgb, var(--text) 25%, transparent);
+	stroke-width: 1.5;
+}
+
+.admin-related-graph-node-link:hover .admin-related-graph-node {
+	fill: color-mix(in srgb, var(--accent) 85%, white);
+}
+
+.admin-related-graph-node-link {
+	cursor: pointer;
+}
+
 .users-cards {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -1291,6 +1387,11 @@
 	font-weight: 600;
 	color: var(--text-muted);
 	white-space: nowrap;
+}
+
+.admin-table.admin-email-sends-table th.admin-table-sortable {
+	cursor: pointer;
+	user-select: none;
 }
 
 .admin-table-col-email {

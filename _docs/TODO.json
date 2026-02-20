@@ -1,7 +1,7 @@
 [
   {
-    "name": "TROUBLESHOOT: next-clicks",
-    "description": "I only ever see a max of \"2\" for clicks, why?",
+    "name": "BUG: User Profile Save Error",
+    "description": "Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received\n\nPOST https://www.parascene.com/api/profile net::ERR_CERT_VERIFIER_CHANGED\nPOST https://www.parascene.com/api/profile net::ERR_CERT_VERIFIER_CHANGED\nPOST https://www.parascene.com/api/profile net::ERR_CERT_VERIFIER_CHANGED\n\napi.js:98",
     "cost": 50,
     "impact": 50,
     "dependsOn": [],
