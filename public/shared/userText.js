@@ -12,29 +12,10 @@ function escapeHtml(value) {
 		.replace(/'/g, '&#39;');
 }
 
-function escapeRegExp(value) {
-	return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function replaceTokenWithBoundaries(
-	input,
-	token,
-	replacement,
-	{ caseInsensitive = false } = {}
-) {
-	const leftBoundary = '(^|[\\s([{"\'`>])';
-	const rightBoundary = '(?=$|[\\s)\\]}<"\'`.,!?;:])';
-	const flags = caseInsensitive ? 'gi' : 'g';
-	const re = new RegExp(
-		`${leftBoundary}${escapeRegExp(token)}${rightBoundary}`,
-		flags
-	);
-	return input.replace(re, `$1${replacement}`);
-}
-
 /**
- * Applies conservative emoticon-to-emoji replacements in plain text segments.
- * This runs only on non-URL text, so detected links are never mutated.
+ * Applies emoticon-to-emoji replacements in plain text segments.
+ * Uses replaceAll so consecutive tokens (e.g. "<3<3<3") all convert.
+ * Order matters: </3 before <3 so broken-heart is applied first.
  */
 function applyEmojiTextTransforms(text) {
 	let out = String(text ?? '');
@@ -56,10 +37,29 @@ function applyEmojiTextTransforms(text) {
 	];
 
 	for (const { token, emoji, caseInsensitive = false } of transforms) {
-		out = replaceTokenWithBoundaries(out, token, emoji, { caseInsensitive });
+		const re = caseInsensitive
+			? new RegExp(escapeRegExp(token), 'gi')
+			: new RegExp(escapeRegExp(token), 'g');
+		out = out.replaceAll(re, (match, offset, fullString) => {
+			if (token !== '<3' && token !== '</3') return emoji;
+			const before = fullString[offset - 1] ?? '';
+			const after = fullString[offset + match.length] ?? '';
+			// Don't replace when digit after (e.g. "1 <35") or digit before (e.g. "1<35") — but "3" before can be from "<3<3", so allow that
+			const digitBefore = /\d/.test(before);
+			const digitAfter = /\d/.test(after);
+			const beforeIsFromHeart = token === '<3'
+				? fullString.slice(offset - 2, offset) === '<3'
+				: fullString.slice(offset - 3, offset) === '</3';
+			if (digitAfter || (digitBefore && !beforeIsFromHeart)) return match;
+			return emoji;
+		});
 	}
 
 	return out;
+}
+
+function escapeRegExp(value) {
+	return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function renderPlainUserTextSegment(text) {
