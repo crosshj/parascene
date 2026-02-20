@@ -82,6 +82,11 @@ export function collapseNotificationsByCreation(notifications) {
 	const collapsed = [];
 	for (const [, group] of byCreation) {
 		group.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+		// Only collapse when there are 2+ items; single items stay as individual notifications
+		if (group.length === 1) {
+			ungroupedRecent.push(group[0]);
+			continue;
+		}
 		const latest = group[0];
 		const commentCount = group.filter((n) => n.type === "comment" || n.type === "comment_thread").length;
 		const tipCount = group.filter((n) => n.type === "tip").length;
@@ -96,7 +101,8 @@ export function collapseNotificationsByCreation(notifications) {
 		if (commentCount > 0) parts.push(commentCount === 1 ? "1 comment" : `${commentCount} comments`);
 		if (tipCount > 0) parts.push(tipCount === 1 ? "1 tip" : `${tipCount} tips`);
 		const activityText = parts.length ? parts.join(", ") : "New activity";
-		const message = creationTitle ? `${activityText} on "${creationTitle}"` : activityText;
+		// Message is just the activity summary; title already includes creation name, so don't repeat it
+		const message = activityText;
 		const title = creationTitle ? `Activity on "${creationTitle}"` : "Activity on your creation";
 
 		collapsed.push({
@@ -112,10 +118,17 @@ export function collapseNotificationsByCreation(notifications) {
 		});
 	}
 
-	collapsed.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+	const unreadFirstThenCreated = (a, b) => {
+		const aUnread = !a.acknowledged_at;
+		const bUnread = !b.acknowledged_at;
+		if (aUnread !== bUnread) return bUnread - aUnread; // unread first
+		return (b.created_at || "").localeCompare(a.created_at || "");
+	};
+	collapsed.sort(unreadFirstThenCreated);
 	const recentResult = [...collapsed, ...ungroupedRecent.map(stripForResponse)];
-	recentResult.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+	recentResult.sort(unreadFirstThenCreated);
 	const olderResult = older.map(stripForResponse);
+	olderResult.sort(unreadFirstThenCreated);
 	return [...recentResult, ...olderResult];
 }
 

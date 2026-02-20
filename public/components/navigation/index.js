@@ -588,15 +588,6 @@ class AppNavigation extends HTMLElement {
 
 				item.appendChild(title);
 				item.appendChild(message);
-				if (notification.type === 'creation_activity' && (notification.count ?? 0) > 1) {
-					const countLine = document.createElement('div');
-					countLine.className = 'notification-preview-count';
-					const unread = notification.unread_count ?? 0;
-					countLine.textContent = unread > 0
-						? `${notification.count} notifications, ${unread} unread`
-						: `${notification.count} notifications`;
-					item.appendChild(countLine);
-				}
 				item.appendChild(time);
 				fragment.appendChild(item);
 			}

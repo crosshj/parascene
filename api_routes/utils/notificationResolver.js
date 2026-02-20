@@ -51,17 +51,17 @@ export async function resolveNotificationDisplay(row, queries) {
 
 	switch (type) {
 		case "comment": {
-			const title = "New comment";
-			const message = creationTitle
-				? `${actorName} commented on "${creationTitle}".`
-				: `${actorName} commented on your creation.`;
+			const title = creationTitle
+				? `Comment on "${creationTitle}"`
+				: "Comment on your creation";
+			const message = `${actorName} commented`;
 			return { title, message, link: baseLink, creation_title: creationTitle || null };
 		}
 		case "comment_thread": {
-			const title = "New comment";
-			const message = creationTitle
-				? `${actorName} commented on "${creationTitle}".`
-				: `${actorName} commented on a creation you commented on.`;
+			const title = creationTitle
+				? `Comment on "${creationTitle}"`
+				: "Comment on a creation you commented on";
+			const message = `${actorName} commented`;
 			return { title, message, link: baseLink, creation_title: creationTitle || null };
 		}
 		case "tip": {

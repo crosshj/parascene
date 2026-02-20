@@ -270,20 +270,11 @@ class AppModalNotifications extends HTMLElement {
 		content.innerHTML = this.notifications.map((notification) => {
 			const time = formatRelativeTime(notification.created_at);
 			const timeTitle = formatDateTime(notification.created_at);
-			const isCollapsed = notification.type === 'creation_activity' && (notification.count ?? 0) > 1;
-			const unread = notification.unread_count ?? 0;
-			const countText = isCollapsed
-				? (unread > 0 ? `${notification.count} notifications, ${unread} unread` : `${notification.count} notifications`)
-				: '';
-			const countLine = countText ? html`
-		<div class="notification-list-count">${countText}</div>
-      ` : '';
 			return html`
 	<button class="notification-list-item ${notification.acknowledged_at ? 'is-read' : 'is-unread'}"
 		data-id="${notification.id}">
 		<div class="notification-list-title">${escapeHtml(notification.title || 'Notification')}</div>
 		<div class="notification-list-message">${escapeHtml(notification.message || '')}</div>
-		${countLine}
 		<div class="notification-list-time" title="${escapeHtml(timeTitle)}">${escapeHtml(time)}</div>
 		<span class="notification-list-item-spinner" aria-hidden="true"></span>
 	</button>
