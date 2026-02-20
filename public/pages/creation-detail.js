@@ -767,16 +767,6 @@ async function loadCreation() {
 			}
 		}
 
-		const clearErrorBtn = document.querySelector('[data-clear-error-btn]');
-		if (clearErrorBtn) {
-			if (!canEdit || !isFailed) {
-				clearErrorBtn.style.display = 'none';
-			} else {
-				clearErrorBtn.style.display = '';
-				clearErrorBtn.disabled = false;
-			}
-		}
-
 		// If no actions are visible, hide the whole actions row to avoid empty spacing.
 		if (actionsEl) {
 			const actionButtons = Array.from(actionsEl.querySelectorAll('button'));
@@ -1852,15 +1842,6 @@ document.addEventListener('click', (e) => {
 	}
 });
 
-// Clear error button handler (failed creations: mark unavailable, no storage cleanup)
-document.addEventListener('click', (e) => {
-	const clearErrorBtn = e.target.closest('[data-clear-error-btn]');
-	if (clearErrorBtn && !clearErrorBtn.disabled) {
-		e.preventDefault();
-		handleClearError();
-	}
-});
-
 // Mutate button handler
 document.addEventListener('click', (e) => {
 	const mutateBtn = e.target.closest('[data-mutate-btn]');
@@ -2288,38 +2269,6 @@ document.addEventListener('click', (e) => {
 		errorMsg: errorMsg || null
 	});
 });
-
-async function handleClearError() {
-	const creationId = getCreationId();
-	if (!creationId) {
-		alert('Invalid creation ID');
-		return;
-	}
-
-	if (!confirm('Clear this failed creation? It will be removed from your creations.')) {
-		return;
-	}
-
-	const clearErrorBtn = document.querySelector('[data-clear-error-btn]');
-	if (clearErrorBtn) clearErrorBtn.disabled = true;
-
-	try {
-		const response = await fetch(`/api/create/images/${creationId}`, {
-			method: 'DELETE',
-			credentials: 'include'
-		});
-
-		if (!response.ok) {
-			const error = await response.json();
-			throw new Error(error.error || 'Failed to clear creation');
-		}
-
-		window.location.href = '/creations';
-	} catch (error) {
-		alert(error.message || 'Failed to clear creation. Please try again.');
-		if (clearErrorBtn) clearErrorBtn.disabled = false;
-	}
-}
 
 async function handleDelete() {
 	const creationId = getCreationId();

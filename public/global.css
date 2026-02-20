@@ -4352,6 +4352,13 @@ body.modal-open {
 	max-height: 90vh;
 }
 
+/* More Info / Creation Details Modal */
+app-modal-creation-details .creation-details-args {
+	white-space: pre-wrap;
+	word-break: break-word;
+	overflow-wrap: break-word;
+}
+
 /* Share Modal (creation detail) */
 .share-modal-body {
 	overflow-y: auto;
