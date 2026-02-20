@@ -1161,7 +1161,26 @@ export default function createProfileRoutes({ queries }) {
 				const userDeleted = !!(img.unavailable_at != null && img.unavailable_at !== "");
 				const status = img.status || "completed";
 				const meta = typeof img.meta === "string" ? (() => { try { return JSON.parse(img.meta); } catch { return null; } })() : img.meta ?? null;
-				const isModeratedError = status === "failed" && meta != null && (() => { try { return JSON.stringify(meta).toLowerCase().includes("moderated"); } catch { return false; } })();
+				const isModeratedError = (() => {
+					if (status !== "failed" || meta == null) return false;
+					try {
+						const parts = [];
+						if (typeof meta.error === "string" && meta.error.trim()) parts.push(meta.error.trim());
+						const pe = meta.provider_error;
+						if (pe != null && typeof pe === "object" && pe.body != null) {
+							const b = pe.body;
+							if (typeof b === "string") parts.push(b.trim());
+							else if (typeof b === "object") {
+								if (typeof b.error === "string" && b.error.trim()) parts.push(b.error.trim());
+								else if (typeof b.message === "string" && b.message.trim()) parts.push(b.message.trim());
+							}
+						}
+						const errorText = parts.join(" ").toLowerCase();
+						return errorText.length > 0 && errorText.includes("moderated");
+					} catch {
+						return false;
+					}
+				})();
 				return {
 					id: img.id,
 					filename: img.filename,

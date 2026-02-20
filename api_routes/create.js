@@ -175,11 +175,23 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	}
 
+	/** Only true when the provider/error message text explicitly indicates moderation. */
 	function isModeratedError(status, meta) {
-		if (status !== "failed") return false;
-		if (meta == null) return false;
+		if (status !== "failed" || meta == null) return false;
 		try {
-			return JSON.stringify(meta).toLowerCase().includes("moderated");
+			const parts = [];
+			if (typeof meta.error === "string" && meta.error.trim()) parts.push(meta.error.trim());
+			const pe = meta.provider_error;
+			if (pe != null && typeof pe === "object" && pe.body != null) {
+				const b = pe.body;
+				if (typeof b === "string") parts.push(b.trim());
+				else if (typeof b === "object") {
+					if (typeof b.error === "string" && b.error.trim()) parts.push(b.error.trim());
+					else if (typeof b.message === "string" && b.message.trim()) parts.push(b.message.trim());
+				}
+			}
+			const errorText = parts.join(" ").toLowerCase();
+			return errorText.length > 0 && errorText.includes("moderated");
 		} catch {
 			return false;
 		}
