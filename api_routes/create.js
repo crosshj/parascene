@@ -175,6 +175,16 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	}
 
+	function isModeratedError(status, meta) {
+		if (status !== "failed") return false;
+		if (meta == null) return false;
+		try {
+			return JSON.stringify(meta).toLowerCase().includes("moderated");
+		} catch {
+			return false;
+		}
+	}
+
 	function nowIso() {
 		return new Date().toISOString();
 	}
@@ -1300,7 +1310,8 @@ export default function createCreateRoutes({ queries, storage }) {
 					published_at: img.published_at || null,
 					title: img.title || null,
 					description: img.description || null,
-					meta
+					meta,
+					is_moderated_error: isModeratedError(status, meta)
 				};
 			});
 
@@ -1415,6 +1426,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				viewer_liked: viewerLiked,
 				user_id: image.user_id,
 				meta,
+				is_moderated_error: isModeratedError(status, meta),
 				creator: creator ? {
 					id: creator.id,
 					email: creator.email,

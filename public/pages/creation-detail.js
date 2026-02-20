@@ -599,11 +599,7 @@ async function loadCreation() {
 		} else if (isFailed) {
 			// Failed or timed out: show error placeholder (use imageWrapper so we target the same hero element we cleared)
 			if (imageWrapper) {
-				// Check entire creation payload so we never miss "moderated" regardless of meta shape
-				let isModerated = false;
-				try {
-					isModerated = JSON.stringify(creation).toLowerCase().includes('moderated');
-				} catch (_) {}
+				const isModerated = creation.is_moderated_error === true;
 				if (!isModerated) {
 					const existingModIcon = imageWrapper.querySelector('.creation-detail-error-icon-moderated');
 					if (existingModIcon) existingModIcon.remove();

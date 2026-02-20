@@ -151,6 +151,29 @@ img {
 	opacity: 0.85;
 }
 
+.route-media.route-media-error.route-media-error-moderated::after {
+	display: none;
+}
+
+.route-media-error-moderated-icon {
+	position: absolute;
+	inset: 0;
+	margin: auto;
+	width: 40px;
+	height: 40px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--text);
+	opacity: 0.36;
+	pointer-events: none;
+}
+
+.route-media-error-moderated-icon svg {
+	width: 100%;
+	height: 100%;
+}
+
 /* Hide content until page is fully loaded */
 body:not(.loaded) {
 	visibility: hidden;

@@ -1159,6 +1159,9 @@ export default function createProfileRoutes({ queries }) {
 			const mapped = (Array.isArray(images) ? images : []).map((img) => {
 				const url = img.file_path || (img.filename ? `/api/images/created/${img.filename}` : null);
 				const userDeleted = !!(img.unavailable_at != null && img.unavailable_at !== "");
+				const status = img.status || "completed";
+				const meta = typeof img.meta === "string" ? (() => { try { return JSON.parse(img.meta); } catch { return null; } })() : img.meta ?? null;
+				const isModeratedError = status === "failed" && meta != null && (() => { try { return JSON.stringify(meta).toLowerCase().includes("moderated"); } catch { return false; } })();
 				return {
 					id: img.id,
 					filename: img.filename,
@@ -1167,12 +1170,13 @@ export default function createProfileRoutes({ queries }) {
 					width: img.width,
 					height: img.height,
 					color: img.color,
-					status: img.status || "completed",
+					status,
 					created_at: img.created_at,
 					published: img.published === 1 || img.published === true,
 					published_at: img.published_at || null,
 					title: img.title || null,
 					description: img.description || null,
+					is_moderated_error: isModeratedError,
 					...(isAdmin && userDeleted ? { user_deleted: true } : {})
 				};
 			});

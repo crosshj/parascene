@@ -1,5 +1,6 @@
 import { formatDateTime, formatRelativeTime } from '../../shared/datetime.js';
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
+import { eyeHiddenIcon } from '../../icons/svg-strings.js';
 
 const html = String.raw;
 
@@ -605,10 +606,11 @@ class AppRouteCreations extends HTMLElement {
 				const reason =
 					(meta && typeof meta.error === 'string' && meta.error) ||
 					(meta && meta.error_code === 'timeout' ? 'This creation timed out.' : 'This creation failed.');
+				const isModerated = item.is_moderated_error === true;
 				card.style.cursor = 'pointer';
 				card.addEventListener('click', () => { window.location.href = `/creations/${item.id}`; });
 				card.innerHTML = html`
-            <div class="route-media route-media-error" data-image-id="${item.id}" data-status="failed" aria-hidden="true"></div>
+            <div class="route-media route-media-error${isModerated ? ' route-media-error-moderated' : ''}" data-image-id="${item.id}" data-status="failed" aria-hidden="true">${isModerated ? html`<span class="route-media-error-moderated-icon" role="img" aria-label="Content moderated">${eyeHiddenIcon()}</span>` : ''}</div>
             <div class="route-details">
               <div class="route-details-content">
                 <div class="route-title">Creation unavailable</div>
