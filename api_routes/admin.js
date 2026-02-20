@@ -426,7 +426,7 @@ export default function createAdminRoutes({ queries, storage }) {
 		return res.json({ ok: true, profile: normalizeProfileRow(updated) });
 	});
 
-	/** GET /admin/anonymous-users — list unique anon_cids from try_requests with request count (excludes __pool__). */
+	/** GET /admin/anonymous-users — list unique anon_cids from try_requests with request count and transitioned user (excludes __pool__). */
 	router.get("/admin/anonymous-users", async (req, res) => {
 		const adminUser = await requireAdmin(req, res);
 		if (!adminUser) return;
@@ -435,7 +435,33 @@ export default function createAdminRoutes({ queries, storage }) {
 			return res.json({ anonCids: [] });
 		}
 		const rows = await queries.selectTryRequestAnonCidsWithCount.all();
-		res.json({ anonCids: rows });
+		const transitionedByCid = new Map();
+		if (queries.selectTryRequestsTransitionedMeta?.all) {
+			const transitionedRows = await queries.selectTryRequestsTransitionedMeta.all();
+			for (const r of transitionedRows ?? []) {
+				const meta = r.meta && typeof r.meta === "object" ? r.meta : typeof r.meta === "string" ? safeJsonParse(r.meta, {}) : {};
+				const userId = meta?.transitioned?.user_id != null ? Number(meta.transitioned.user_id) : null;
+				if (userId && Number.isFinite(userId) && !transitionedByCid.has(r.anon_cid)) {
+					transitionedByCid.set(r.anon_cid, userId);
+				}
+			}
+		}
+		const userIds = [...new Set(transitionedByCid.values())];
+		const userNameByUserId = new Map();
+		for (const uid of userIds) {
+			const profile = await queries.selectUserProfileByUserId?.get?.(uid);
+			const name = profile?.user_name && String(profile.user_name).trim() ? String(profile.user_name).trim() : null;
+			userNameByUserId.set(uid, name);
+		}
+		const anonCids = rows.map((row) => {
+			const userId = transitionedByCid.get(row.anon_cid);
+			return {
+				...row,
+				transitioned_user_id: userId ?? null,
+				transitioned_user_name: (userId != null ? userNameByUserId.get(userId) : null) ?? null
+			};
+		});
+		res.json({ anonCids });
 	});
 
 	/** GET /admin/anonymous-users/:cid — requests for this anon_cid (datetime desc) with image details and view URL. */

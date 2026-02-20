@@ -6,9 +6,9 @@ do something like this
 		modifiers: "",
 		imageFile: ""
 }, {
-		title: "NightCafe",
+		title: "Default",
 		modifiers: "detailed matte painting, deep color, fantastical, intricate detail, splash screen, complementary colors, fantasy concept art, 8k resolution trending on Artstation Unreal Engine 5",
-		imageFile: "nightcafe-4.jpg"
+		imageFile: "Default-4.jpg"
 }, {
 		title: "Cinematic",
 		modifiers: "Cinematic film still, shot on v-raptor XL, film grain, vignette, color graded, post-processed, cinematic lighting, 35mm film, live-action, best quality, atmospheric, a masterpiece, epic, stunning, dramatic",
@@ -192,7 +192,7 @@ do something like this
 }]
 	, l = [{
 		key: "nc-favs",
-		title: "NightCafe favorites",
+		title: "Default favorites",
 		items: ["detailed matte painting", "by Greg Rutkowski", "bokeh", "trending on Artstation", "Unreal Engine", "8k resolution concept art", "art nouveau rococo architecture", "Ukiyo-e", "Eldritch", "art deco", "gouache", "hyperdetailed", "intricately detailed", "triadic colors", "dynamic lighting", "Splash art", "volumetric lighting"]
 }, {
 		key: "artists",

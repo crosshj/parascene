@@ -1675,6 +1675,41 @@ export function openDb() {
 					.slice(0, safeLimit);
 			}
 		},
+		selectCreatedImageAnonByFilename: {
+			get: async (filename) => {
+				if (!filename || typeof filename !== "string" || filename.includes("..") || filename.includes("/"))
+					return undefined;
+				const matches = created_images_anon
+					.filter((r) => r.filename === filename.trim())
+					.sort((a, b) => (b.id || 0) - (a.id || 0));
+				return matches[0] ?? undefined;
+			}
+		},
+		updateTryRequestsTransitionedByCreatedImageAnonId: {
+			run: async (createdImageAnonId, { userId, createdImageId }) => {
+				const id = Number(createdImageAnonId);
+				const at = new Date().toISOString();
+				const transitioned = { at, user_id: Number(userId), created_image_id: Number(createdImageId) };
+				let count = 0;
+				for (const row of try_requests) {
+					if (row.created_image_anon_id === id) {
+						row.created_image_anon_id = null;
+						const meta = typeof row.meta === "object" && row.meta !== null ? { ...row.meta, transitioned } : { transitioned };
+						row.meta = meta;
+						count++;
+					}
+				}
+				return Promise.resolve({ changes: count });
+			}
+		},
+		deleteCreatedImageAnon: {
+			run: async (id) => {
+				const idx = created_images_anon.findIndex((r) => r.id === Number(id));
+				if (idx === -1) return Promise.resolve({ changes: 0 });
+				created_images_anon.splice(idx, 1);
+				return Promise.resolve({ changes: 1 });
+			}
+		},
 		selectTryRequestByCidAndPrompt: {
 			get: async (anonCid, prompt) => {
 				if (prompt == null || String(prompt).trim() === "") return undefined;
@@ -1712,6 +1747,14 @@ export function openDb() {
 					const bAt = b.last_request_at || "";
 					return bAt.localeCompare(aAt);
 				});
+			}
+		},
+		/** Rows where created_image_anon_id IS NULL (transitioned); returns anon_cid, meta for building transition map. */
+		selectTryRequestsTransitionedMeta: {
+			all: async () => {
+				return try_requests
+					.filter((r) => r.created_image_anon_id == null && r.meta && r.meta.transitioned != null)
+					.map((r) => ({ anon_cid: r.anon_cid, meta: r.meta }));
 			}
 		},
 		updateCreatedImageAnonJobCompleted: {
@@ -2543,6 +2586,14 @@ export function openDb() {
 				throw new Error(`Image not found: ${filename}`);
 			}
 			return fs.readFileSync(filePath);
+		},
+
+		deleteImageAnon: async (filename) => {
+			if (!filename || filename.includes("..") || filename.includes("/")) return;
+			try {
+				const filePath = path.join(imagesDirAnon, filename);
+				if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+			} catch (_) {}
 		},
 
 		getGenericImageBuffer: async (key) => {

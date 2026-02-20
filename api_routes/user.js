@@ -762,10 +762,94 @@ export default function createProfileRoutes({ queries }) {
 			let updatedRow = await queries.selectUserProfileByUserId?.get(req.auth.userId);
 			let profile = normalizeProfileRow(updatedRow);
 
-			// Welcome complete: promote try avatar to creations, create created_image row, and publish
 			const welcomeComplete = req.body?.welcome_complete === true;
 			const avatarUrl = payload.avatar_url || "";
 			const tryPrefix = "/api/try/images/";
+			const anonCid = typeof req.cookies?.ps_cid === "string" ? req.cookies.ps_cid.trim() : null;
+			const avatarFilename =
+				avatarUrl.includes(tryPrefix) && avatarUrl.split(tryPrefix)[1]
+					? (avatarUrl.split(tryPrefix)[1].split("/")[0].split("?")[0].trim() || null)
+					: null;
+
+			// Transition try images (N) for this anon_cid into created_images (unpublished). Copy to user, then remove from try storage and DB. Idempotent via meta.source_anon_id.
+			if (
+				welcomeComplete &&
+				anonCid &&
+				queries.selectTryRequestsByCid?.all &&
+				queries.selectCreatedImagesAnonByIds?.all &&
+				queries.selectCreatedImagesForUser?.all &&
+				queries.insertCreatedImage?.run &&
+				queries.updateTryRequestsTransitionedByCreatedImageAnonId?.run &&
+				queries.deleteCreatedImageAnon?.run
+			) {
+				try {
+					const storage = req.app?.locals?.storage;
+					if (storage?.getImageBufferAnon && storage?.uploadImage && storage?.deleteImageAnon) {
+						const existingCreations = await queries.selectCreatedImagesForUser.all(req.auth.userId, { limit: 500 });
+						const sourceAnonIds = new Set(
+							(existingCreations || [])
+								.map((c) => (c.meta && typeof c.meta === "object" && c.meta.source_anon_id != null ? Number(c.meta.source_anon_id) : null))
+								.filter((id) => Number.isFinite(id))
+						);
+						const reqs = await queries.selectTryRequestsByCid.all(anonCid);
+						const anonIds = [...new Set((reqs || []).map((r) => r.created_image_anon_id).filter(Boolean))];
+						if (anonIds.length > 0) {
+							const images = await queries.selectCreatedImagesAnonByIds.all(anonIds);
+							const byId = new Map((images || []).map((i) => [i.id, i]));
+							for (const id of anonIds) {
+								const row = byId.get(id);
+								if (
+									!row ||
+									row.status !== "completed" ||
+									!row.filename ||
+									row.filename.includes("..") ||
+									row.filename.includes("/")
+								)
+									continue;
+								if (avatarFilename && row.filename === avatarFilename) continue;
+								const alreadyHas = sourceAnonIds.has(Number(row.id));
+								try {
+									let createdImageId = null;
+									if (!alreadyHas) {
+										const buffer = await storage.getImageBufferAnon(row.filename);
+										const newFilename = `transition_${req.auth.userId}_${row.id}_${Date.now()}.png`;
+										const newUrl = await storage.uploadImage(buffer, newFilename);
+										const meta = row.meta && typeof row.meta === "object" ? { ...row.meta, source_anon_id: row.id } : { source_anon_id: row.id };
+										const insertResult = await queries.insertCreatedImage.run(
+											req.auth.userId,
+											newFilename,
+											newUrl,
+											row.width ?? 1024,
+											row.height ?? 1024,
+											null,
+											"completed",
+											meta
+										);
+										createdImageId = insertResult?.insertId ?? insertResult?.lastInsertRowid;
+									} else {
+										const existing = (existingCreations || []).find((c) => c.meta?.source_anon_id === row.id || c.meta?.source_anon_id === Number(row.id));
+										createdImageId = existing?.id;
+									}
+									if (createdImageId != null) {
+										await queries.updateTryRequestsTransitionedByCreatedImageAnonId.run(row.id, {
+											userId: req.auth.userId,
+											createdImageId
+										});
+									}
+									await queries.deleteCreatedImageAnon.run(row.id);
+									await storage.deleteImageAnon(row.filename);
+								} catch (err) {
+									// skip this image, continue with others
+								}
+							}
+						}
+					}
+				} catch (transitionErr) {
+					// non-fatal; profile and avatar block still run
+				}
+			}
+
+			// Welcome complete: promote try avatar to creations, create created_image row, and publish
 			if (welcomeComplete && avatarUrl.includes(tryPrefix)) {
 				const storage = req.app?.locals?.storage;
 				const afterPrefix = avatarUrl.split(tryPrefix)[1];
@@ -784,7 +868,12 @@ export default function createProfileRoutes({ queries }) {
 						const newFilename = `welcome_${req.auth.userId}_${Date.now()}.png`;
 						const newUrl = await storage.uploadImage(buffer, newFilename);
 						const avatarPrompt = typeof req.body?.avatar_prompt === "string" ? req.body.avatar_prompt.trim() || null : null;
-						const welcomeMeta = avatarPrompt ? { args: { prompt: avatarPrompt } } : null;
+						const avatarAnonRow = await queries.selectCreatedImageAnonByFilename?.get?.(filename);
+						const welcomeMeta = {
+							...(avatarPrompt ? { args: { prompt: avatarPrompt } } : {}),
+							...(avatarAnonRow?.id != null ? { source_anon_id: avatarAnonRow.id } : {})
+						};
+						const welcomeMetaOrNull = Object.keys(welcomeMeta).length > 0 ? welcomeMeta : null;
 						const insertResult = await queries.insertCreatedImage.run(
 							req.auth.userId,
 							newFilename,
@@ -793,7 +882,7 @@ export default function createProfileRoutes({ queries }) {
 							1024,
 							null,
 							"completed",
-							welcomeMeta
+							welcomeMetaOrNull
 						);
 						const createdImageId = insertResult?.insertId ?? insertResult?.lastInsertRowid;
 						if (createdImageId) {
@@ -812,6 +901,17 @@ export default function createProfileRoutes({ queries }) {
 							);
 							const feedAuthor = (payload.display_name && String(payload.display_name).trim()) || user?.email || "User";
 							await queries.insertFeedItem.run(title, description, feedAuthor, null, createdImageId);
+						}
+						// Record transition on try_requests and remove anon row + file
+						if (avatarAnonRow?.id && createdImageId && queries.updateTryRequestsTransitionedByCreatedImageAnonId?.run && queries.deleteCreatedImageAnon?.run && storage?.deleteImageAnon) {
+							try {
+								await queries.updateTryRequestsTransitionedByCreatedImageAnonId.run(avatarAnonRow.id, {
+									userId: req.auth.userId,
+									createdImageId
+								});
+								await queries.deleteCreatedImageAnon.run(avatarAnonRow.id);
+								await storage.deleteImageAnon(avatarAnonRow.filename);
+							} catch (_) {}
 						}
 						updatedRow = await queries.selectUserProfileByUserId?.get(req.auth.userId);
 						profile = normalizeProfileRow(updatedRow);

@@ -527,6 +527,19 @@
 	font-variant-numeric: tabular-nums;
 }
 
+.anon-table-col-transitioned {
+	white-space: nowrap;
+}
+
+.anon-table-transitioned-link {
+	color: var(--link);
+	text-decoration: none;
+}
+
+.anon-table-transitioned-link:hover {
+	text-decoration: underline;
+}
+
 .anon-detail-modal-body {
 	max-height: 85vh;
 	overflow-y: auto;

@@ -3011,6 +3011,52 @@ export function openDb() {
 				return Array.isArray(data) ? data : [];
 			}
 		},
+		selectCreatedImageAnonByFilename: {
+			get: async (filename) => {
+				if (!filename || typeof filename !== "string" || filename.includes("..") || filename.includes("/"))
+					return undefined;
+				const { data, error } = await serviceClient
+					.from(prefixedTable("created_images_anon"))
+					.select("id, prompt, filename, file_path, width, height, status, created_at, meta")
+					.eq("filename", filename.trim())
+					.order("id", { ascending: false })
+					.limit(1)
+					.maybeSingle();
+				if (error) throw error;
+				return data ?? undefined;
+			}
+		},
+		updateTryRequestsTransitionedByCreatedImageAnonId: {
+			run: async (createdImageAnonId, { userId, createdImageId }) => {
+				const id = Number(createdImageAnonId);
+				const { data: rows, error: selectErr } = await serviceClient
+					.from(prefixedTable("try_requests"))
+					.select("id, meta")
+					.eq("created_image_anon_id", id);
+				if (selectErr) throw selectErr;
+				const at = new Date().toISOString();
+				const transitioned = { at, user_id: Number(userId), created_image_id: Number(createdImageId) };
+				for (const row of rows ?? []) {
+					const meta = typeof row.meta === "object" && row.meta !== null ? { ...row.meta, transitioned } : { transitioned };
+					const { error } = await serviceClient
+						.from(prefixedTable("try_requests"))
+						.update({ created_image_anon_id: null, meta })
+						.eq("id", row.id);
+					if (error) throw error;
+				}
+				return Promise.resolve({ changes: (rows ?? []).length });
+			}
+		},
+		deleteCreatedImageAnon: {
+			run: async (id) => {
+				const { error } = await serviceClient
+					.from(prefixedTable("created_images_anon"))
+					.delete()
+					.eq("id", Number(id));
+				if (error) throw error;
+				return Promise.resolve({ changes: 1 });
+			}
+		},
 		selectTryRequestByCidAndPrompt: {
 			get: async (anonCid, prompt) => {
 				if (prompt == null || String(prompt).trim() === "") return undefined;
@@ -3063,6 +3109,18 @@ export function openDb() {
 					const bAt = b.last_request_at || "";
 					return bAt.localeCompare(aAt);
 				});
+			}
+		},
+		/** Rows where created_image_anon_id IS NULL (transitioned); returns anon_cid, meta for building transition map. */
+		selectTryRequestsTransitionedMeta: {
+			all: async () => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("try_requests"))
+					.select("anon_cid, meta")
+					.is("created_image_anon_id", null)
+					.not("meta", "is", null);
+				if (error) throw error;
+				return (data ?? []).filter((r) => r.meta != null && typeof r.meta === "object" && r.meta.transitioned != null);
 			}
 		},
 		updateCreatedImageAnonJobCompleted: {
@@ -4312,6 +4370,13 @@ export function openDb() {
 			}
 			const arrayBuffer = await data.arrayBuffer();
 			return Buffer.from(arrayBuffer);
+		},
+
+		deleteImageAnon: async (filename) => {
+			if (!filename || filename.includes("..") || filename.includes("/")) return;
+			try {
+				await storageClient.storage.from(STORAGE_BUCKET_ANON).remove([filename]);
+			} catch (_) {}
 		},
 
 		getImageBuffer: async (filename, options = {}) => {

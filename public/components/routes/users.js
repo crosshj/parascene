@@ -1,5 +1,6 @@
 import { getAvatarColor } from '../../shared/avatar.js';
 import { formatRelativeTime, formatDateTime } from '../../shared/datetime.js';
+import { buildProfilePath } from '../../shared/profileLinks.js';
 
 const html = String.raw;
 
@@ -73,6 +74,7 @@ function renderAnonTable(anonCids, onSelectRow) {
 				<th scope="col" class="anon-table-col-cid">Client ID</th>
 				<th scope="col" class="anon-table-col-dates">Request Time</th>
 				<th scope="col" class="anon-table-col-count">Count</th>
+				<th scope="col" class="anon-table-col-transitioned">Transitioned</th>
 			</tr>
 		</thead>
 		<tbody></tbody>
@@ -85,7 +87,10 @@ function renderAnonTable(anonCids, onSelectRow) {
 		tr.dataset.anonCid = row.anon_cid;
 		tr.setAttribute('role', 'button');
 		tr.setAttribute('aria-label', `View requests for ${truncateCid(row.anon_cid)}`);
-		tr.addEventListener('click', () => onSelectRow(row.anon_cid));
+		tr.addEventListener('click', (e) => {
+			if (e.target.closest('a')) return;
+			onSelectRow(row.anon_cid);
+		});
 		tr.addEventListener('keydown', (e) => {
 			if (e.key === 'Enter' || e.key === ' ') {
 				e.preventDefault();
@@ -96,6 +101,13 @@ function renderAnonTable(anonCids, onSelectRow) {
 		const lastDt = formatLocalDateTime(row.last_request_at);
 		const cidEscaped = (row.anon_cid || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 		const cidDisplay = truncateCid(row.anon_cid).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+		const transitionedUserId = row.transitioned_user_id != null ? Number(row.transitioned_user_id) : null;
+		const transitionedUserName = row.transitioned_user_name && String(row.transitioned_user_name).trim() ? String(row.transitioned_user_name).trim() : null;
+		const profileHref = transitionedUserId != null ? (buildProfilePath({ userName: transitionedUserName, userId: transitionedUserId }) || `/user/${transitionedUserId}`) : null;
+		const transitionedLabel = transitionedUserId != null ? (transitionedUserName ? `@${transitionedUserName}` : `User ${transitionedUserId}`) : null;
+		const transitionedCell = profileHref && transitionedLabel
+			? `<a href="${profileHref.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}" class="anon-table-transitioned-link" onclick="event.stopPropagation()">${transitionedLabel.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</a>`
+			: (transitionedUserId != null ? 'Yes' : '—');
 		tr.innerHTML = `
 			<td class="anon-table-col-cid" title="${cidEscaped}">${cidDisplay}</td>
 			<td class="anon-table-col-dates">
@@ -105,6 +117,7 @@ function renderAnonTable(anonCids, onSelectRow) {
 				</div>
 			</td>
 			<td class="anon-table-col-count">${row.request_count}</td>
+			<td class="anon-table-col-transitioned">${transitionedCell}</td>
 		`;
 		tbody.appendChild(tr);
 	}

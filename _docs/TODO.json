@@ -1,11 +1,11 @@
 [
   {
-    "name": "Transition Anonymous Generations",
-    "description": "creation that user generates pre-signup transition to post-sign-up account",
-    "cost": 65,
-    "impact": 100,
+    "name": "TROUBLESHOOT: next-clicks",
+    "description": "I only ever see a max of \"2\" for clicks, why?",
+    "cost": 50,
+    "impact": 50,
     "dependsOn": [],
-    "starred": true
+    "starred": false
   },
   {
     "name": "Redo Create Page",

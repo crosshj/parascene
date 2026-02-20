@@ -120,6 +120,17 @@ function ensureCreatedImagesAnonDroppedAnonCidAndColor(db) {
 	}
 }
 
+function ensureCreatedImagesAnonDroppedTransitionedToUserId(db) {
+	try {
+		const columns = db.prepare("PRAGMA table_info(created_images_anon)").all();
+		if (columns.some((c) => c.name === "transitioned_to_user_id")) {
+			db.exec("ALTER TABLE created_images_anon DROP COLUMN transitioned_to_user_id");
+		}
+	} catch (error) {
+		// ignore (e.g. SQLite < 3.35 without DROP COLUMN)
+	}
+}
+
 function ensureTryRequestsMetaColumn(db) {
 	try {
 		const columns = db.prepare("PRAGMA table_info(try_requests)").all();
@@ -128,6 +139,33 @@ function ensureTryRequestsMetaColumn(db) {
 		}
 	} catch (error) {
 		// ignore
+	}
+}
+
+/** Make created_image_anon_id nullable so we can set NULL when image is transitioned to a user. */
+function ensureTryRequestsCreatedImageAnonIdNullable(db) {
+	try {
+		const info = db.prepare("PRAGMA table_info(try_requests)").all();
+		const col = info.find((c) => c.name === "created_image_anon_id");
+		if (!col) return;
+		if (col.notnull === 0) return; // already nullable
+		db.exec(`CREATE TABLE try_requests_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      anon_cid TEXT NOT NULL,
+      prompt TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      fulfilled_at TEXT,
+      created_image_anon_id INTEGER NULL,
+      meta TEXT,
+      FOREIGN KEY (created_image_anon_id) REFERENCES created_images_anon(id)
+    )`);
+		db.exec("INSERT INTO try_requests_new (id, anon_cid, prompt, created_at, fulfilled_at, created_image_anon_id, meta) SELECT id, anon_cid, prompt, created_at, fulfilled_at, created_image_anon_id, meta FROM try_requests");
+		db.exec("DROP TABLE try_requests");
+		db.exec("ALTER TABLE try_requests_new RENAME TO try_requests");
+		db.exec("CREATE INDEX IF NOT EXISTS idx_try_requests_anon_cid ON try_requests(anon_cid)");
+		db.exec("CREATE INDEX IF NOT EXISTS idx_try_requests_created_image_anon_id ON try_requests(created_image_anon_id)");
+	} catch (error) {
+		// ignore (e.g. already migrated)
 	}
 }
 
@@ -154,7 +192,9 @@ export async function openDb() {
 	ensureCreatedImagesUnavailableAtColumn(db);
 	ensureCreatedImagesAnonPromptColumn(db);
 	ensureCreatedImagesAnonDroppedAnonCidAndColor(db);
+	ensureCreatedImagesAnonDroppedTransitionedToUserId(db);
 	ensureTryRequestsMetaColumn(db);
+	ensureTryRequestsCreatedImageAnonIdNullable(db);
 
 	const transferCreditsTxn = db.transaction((fromUserId, toUserId, amount) => {
 		const ensureCreditsRowStmt = db.prepare(
@@ -2155,6 +2195,45 @@ export async function openDb() {
 				return Promise.resolve(stmt.all(String(prompt).trim(), sinceIso, safeLimit));
 			}
 		},
+		selectCreatedImageAnonByFilename: {
+			get: async (filename) => {
+				if (!filename || typeof filename !== "string" || filename.includes("..") || filename.includes("/"))
+					return undefined;
+				const stmt = db.prepare(
+					`SELECT id, prompt, filename, file_path, width, height, status, created_at, meta
+           FROM created_images_anon WHERE filename = ? ORDER BY id DESC LIMIT 1`
+				);
+				return Promise.resolve(stmt.get(filename.trim()));
+			}
+		},
+		updateTryRequestsTransitionedByCreatedImageAnonId: {
+			run: async (createdImageAnonId, { userId, createdImageId }) => {
+				const id = Number(createdImageAnonId);
+				const rows = db.prepare(`SELECT id, meta FROM try_requests WHERE created_image_anon_id = ?`).all(id);
+				const at = new Date().toISOString();
+				const transitioned = { at, user_id: Number(userId), created_image_id: Number(createdImageId) };
+				const updateStmt = db.prepare(`UPDATE try_requests SET created_image_anon_id = NULL, meta = ? WHERE id = ?`);
+				for (const row of rows) {
+					let meta = null;
+					try {
+						meta = row.meta && typeof row.meta === "string" ? JSON.parse(row.meta) : typeof row.meta === "object" ? row.meta : {};
+					} catch {
+						meta = {};
+					}
+					if (typeof meta !== "object" || meta === null) meta = {};
+					meta = { ...meta, transitioned };
+					updateStmt.run(JSON.stringify(meta), row.id);
+				}
+				return Promise.resolve({ changes: rows.length });
+			}
+		},
+		deleteCreatedImageAnon: {
+			run: async (id) => {
+				const stmt = db.prepare(`DELETE FROM created_images_anon WHERE id = ?`);
+				const result = stmt.run(Number(id));
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
 		selectTryRequestByCidAndPrompt: {
 			get: async (anonCid, prompt) => {
 				if (prompt == null || String(prompt).trim() === "") return undefined;
@@ -2180,6 +2259,15 @@ export async function openDb() {
 				const stmt = db.prepare(
 					`SELECT anon_cid, COUNT(*) AS request_count, MIN(created_at) AS first_request_at, MAX(created_at) AS last_request_at
            FROM try_requests WHERE anon_cid != '__pool__' GROUP BY anon_cid ORDER BY last_request_at DESC`
+				);
+				return Promise.resolve(stmt.all());
+			}
+		},
+		/** Rows where created_image_anon_id IS NULL (transitioned); returns anon_cid, meta for building transition map. */
+		selectTryRequestsTransitionedMeta: {
+			all: async () => {
+				const stmt = db.prepare(
+					`SELECT anon_cid, meta FROM try_requests WHERE created_image_anon_id IS NULL AND meta IS NOT NULL AND meta != ''`
 				);
 				return Promise.resolve(stmt.all());
 			}
@@ -2874,6 +2962,14 @@ export async function openDb() {
 				throw new Error(`Image not found: ${filename}`);
 			}
 			return fs.readFileSync(filePath);
+		},
+
+		deleteImageAnon: async (filename) => {
+			if (!filename || filename.includes("..") || filename.includes("/")) return;
+			const filePath = path.join(imagesDirAnon, filename);
+			try {
+				if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+			} catch (_) {}
 		},
 
 		getGenericImageBuffer: async (key) => {

@@ -283,14 +283,14 @@ CREATE TABLE IF NOT EXISTS created_images_anon (
 );
 CREATE INDEX IF NOT EXISTS idx_created_images_anon_prompt ON created_images_anon(prompt);
 
--- Try requests: one row per try create call, keyed by anon_cid. Maps request to how it was served.
+-- Try requests: one row per try create call, keyed by anon_cid. When anon image is transitioned to a user, created_image_anon_id is set NULL and meta.transitioned records where it went.
 CREATE TABLE IF NOT EXISTS try_requests (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   anon_cid TEXT NOT NULL,
   prompt TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   fulfilled_at TEXT,
-  created_image_anon_id INTEGER NOT NULL,
+  created_image_anon_id INTEGER NULL,
   meta TEXT,
   FOREIGN KEY (created_image_anon_id) REFERENCES created_images_anon(id)
 );
