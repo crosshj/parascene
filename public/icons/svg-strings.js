@@ -113,6 +113,27 @@ export const linkIcon = withAttributes(html`
 	</svg>
 `);
 
+/** Shield icon (e.g. for content policy / moderated state). */
+export const shieldIcon = withAttributes(html`
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+		stroke-linejoin="round" aria-hidden="true">
+		<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+	</svg>
+`);
+
+/** Eye with slash through the pupil (e.g. content hidden / not visible / moderated). Balanced proportions, not pinched vertically. */
+export const eyeHiddenIcon = withAttributes(html`
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+		stroke-linejoin="round" aria-hidden="true">
+	
+		<path d="M 1.166 11.968 C 8.351 3.687 15.535 3.687 22.721 11.968 C 15.535 20.252 8.351 20.252 1.166 11.968 Z">
+		</path>
+		<circle cx="12.027" cy="12.053" r="5.632"></circle>
+		<line x1="6.986" y1="7.246" x2="16.571" y2="16.832"></line>
+	
+	</svg>
+`);
+
 export const qrCodeIcon = withAttributes(html`
 	<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
 		<rect x="3" y="3" width="7" height="7" rx="1" />

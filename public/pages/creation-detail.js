@@ -10,7 +10,7 @@ import { buildProfilePath } from '/shared/profileLinks.js';
 import '../components/modals/publish.js';
 import '../components/modals/creation-details.js';
 import '../components/modals/share.js';
-import { creditIcon } from '../icons/svg-strings.js';
+import { creditIcon, eyeHiddenIcon } from '../icons/svg-strings.js';
 import '../components/modals/tip-creator.js';
 
 const html = String.raw;
@@ -478,8 +478,9 @@ async function loadCreation() {
 		imageEl.dataset.fallbackAttached = '1';
 
 		imageEl.addEventListener('load', () => {
-			imageWrapper?.classList.remove('image-loading');
-			imageWrapper?.classList.remove('image-error');
+			const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
+			if (modIcon) modIcon.remove();
+			imageWrapper?.classList.remove('image-loading', 'image-error', 'image-error-moderated');
 			if (imageEl.dataset.currentUrl) {
 				backgroundEl.style.backgroundImage = `url('${imageEl.dataset.currentUrl}')`;
 			}
@@ -487,6 +488,7 @@ async function loadCreation() {
 		});
 
 		imageEl.addEventListener('error', () => {
+			// Show error placeholder; do not clear moderated state — loadCreation() may have already set it for a failed creation
 			imageWrapper?.classList.remove('image-loading');
 			imageWrapper?.classList.add('image-error');
 			backgroundEl.style.backgroundImage = '';
@@ -583,15 +585,45 @@ async function loadCreation() {
 		imageEl.src = '';
 
 		if (status === 'completed' && creation.url) {
+			const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
+			if (modIcon) modIcon.remove();
+			imageWrapper?.classList.remove('image-error-moderated');
 			imageWrapper?.classList.add('image-loading');
 			imageEl.dataset.currentUrl = creation.url;
 			imageEl.src = creation.url;
 		} else if (status === 'creating' && !isTimedOut) {
-			// Still creating: show loading placeholder
+			const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
+			if (modIcon) modIcon.remove();
+			imageWrapper?.classList.remove('image-error-moderated');
 			imageWrapper?.classList.add('image-loading');
 		} else if (isFailed) {
-			// Failed or timed out: show error placeholder
-			imageWrapper?.classList.add('image-error');
+			// Failed or timed out: show error placeholder (use imageWrapper so we target the same hero element we cleared)
+			if (imageWrapper) {
+				// Check entire creation payload so we never miss "moderated" regardless of meta shape
+				let isModerated = false;
+				try {
+					isModerated = JSON.stringify(creation).toLowerCase().includes('moderated');
+				} catch (_) {}
+				if (!isModerated) {
+					const existingModIcon = imageWrapper.querySelector('.creation-detail-error-icon-moderated');
+					if (existingModIcon) existingModIcon.remove();
+					imageWrapper.classList.remove('image-error-moderated');
+				}
+				imageWrapper.classList.add('image-error');
+				if (isModerated) {
+					imageWrapper.classList.add('image-error-moderated');
+					if (!imageWrapper.querySelector('.creation-detail-error-icon-moderated')) {
+						const moderatedIconEl = document.createElement('span');
+						moderatedIconEl.className = 'creation-detail-error-icon-moderated';
+						moderatedIconEl.setAttribute('role', 'img');
+						moderatedIconEl.setAttribute('aria-label', 'Content moderated');
+						moderatedIconEl.innerHTML = eyeHiddenIcon();
+						imageWrapper.appendChild(moderatedIconEl);
+					}
+				}
+			} else {
+				imageWrapper?.classList.add('image-error');
+			}
 		}
 
 		// Format date (tooltip only; no visible "time ago" on this page)
@@ -1753,6 +1785,7 @@ async function loadCreation() {
 			actionsEl.style.pointerEvents = '';
 			actionsEl.classList.add('is-ready');
 		}
+
 	} catch (error) {
 		console.error("Error loading creation detail:", error);
 		detailContent.innerHTML = html`
