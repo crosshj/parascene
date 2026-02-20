@@ -52,7 +52,9 @@ class AppNavigationMobile extends HTMLElement {
 			window.location.pathname.startsWith('/s/') ||
 			(window.location.pathname === '/help' || window.location.pathname.startsWith('/help/')) ||
 			window.location.pathname === '/user' ||
-			/^\/user\/\d+$/.test(window.location.pathname);
+			/^\/user\/\d+$/.test(window.location.pathname) ||
+			window.location.pathname.startsWith('/p/') ||
+			window.location.pathname.startsWith('/t/');
 		if (isServerSentPage) {
 			window.location.href = `/${route}`;
 			return;
@@ -99,7 +101,7 @@ class AppNavigationMobile extends HTMLElement {
 		if (pathname.startsWith('/s/')) {
 			currentRoute = null;
 		}
-		if (pathname === '/user' || /^\/user\/\d+$/.test(pathname)) {
+		if (pathname === '/user' || /^\/user\/\d+$/.test(pathname) || pathname.startsWith('/p/') || pathname.startsWith('/t/')) {
 			currentRoute = null;
 		}
 		if (pathname === '/pricing') {
