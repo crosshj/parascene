@@ -543,7 +543,7 @@ class AppNavigation extends HTMLElement {
 				item.setAttribute('role', 'button');
 				item.setAttribute('tabindex', '0');
 				item.addEventListener('click', async () => {
-					const goDirect = (notification.type === 'comment' || notification.type === 'tip' || notification.type === 'creation_activity') &&
+					const goDirect = (notification.type === 'comment' || notification.type === 'comment_thread' || notification.type === 'tip' || notification.type === 'creation_activity') &&
 						typeof notification.link === 'string' && notification.link.trim();
 					if (goDirect) {
 						item.classList.add('is-loading');

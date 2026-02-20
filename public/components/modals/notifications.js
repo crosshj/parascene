@@ -285,7 +285,7 @@ class AppModalNotifications extends HTMLElement {
 				const id = Number(item.getAttribute('data-id'));
 				const notification = id ? this.notifications.find((n) => n.id === id) : null;
 				const goDirect = notification &&
-					(notification.type === 'comment' || notification.type === 'tip' || notification.type === 'creation_activity') &&
+					(notification.type === 'comment' || notification.type === 'comment_thread' || notification.type === 'tip' || notification.type === 'creation_activity') &&
 					typeof notification.link === 'string' && notification.link.trim();
 				if (goDirect) {
 					item.classList.add('is-loading');
