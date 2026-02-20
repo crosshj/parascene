@@ -1026,6 +1026,9 @@ async function init() {
 	const grid = container.querySelector('[data-profile-grid]');
 	const overlay = container.querySelector('[data-profile-edit-overlay]');
 
+	// Keep last tab content height so we can set min-height when loading another tab (prevents scroll jump)
+	let lastTabContentHeight = 0;
+
 	// Tab state: { items, hasMore } per tab for pagination
 	const tabData = {
 		creations: { items: [], hasMore: false },
@@ -1119,6 +1122,8 @@ async function init() {
 	renderImageGrid(grid, tabData.creations.items, showBadge);
 	updateLoadMore(container, 'creations', tabData.creations.hasMore);
 	setupInfiniteScrollForTab('creations', grid);
+	const creationsWrapper = container.querySelector('[data-profile-tab-content="creations"]');
+	if (creationsWrapper) lastTabContentHeight = creationsWrapper.offsetHeight;
 
 	// Lazy-load Likes, Follows, Following, Comments when user switches to that tab
 	const tabsEl = container.querySelector('[data-profile-tabs]');
@@ -1136,7 +1141,11 @@ async function init() {
 		};
 		const panel = container.querySelector(selectors[tabId]);
 		if (!panel) return;
+		const tabContentWrapper = panel.closest('[data-profile-tab-content]');
 		if (!forceRefresh) {
+			if (tabContentWrapper && lastTabContentHeight > 0) {
+				tabContentWrapper.style.minHeight = `${lastTabContentHeight}px`;
+			}
 			panel.innerHTML = loadingHtml;
 			loadedTabs.add(tabId);
 		}
@@ -1194,7 +1203,14 @@ async function init() {
 				updateLoadMore(container, 'comments', tabData.comments.hasMore);
 				setupInfiniteScrollForTab('comments', panel);
 			}
+			if (tabContentWrapper) {
+				requestAnimationFrame(() => {
+					tabContentWrapper.style.minHeight = '';
+					lastTabContentHeight = tabContentWrapper.offsetHeight;
+				});
+			}
 		} catch {
+			if (tabContentWrapper) tabContentWrapper.style.minHeight = '';
 			panel.innerHTML = html`<div class="route-empty"><div class="route-empty-title">Unable to load</div><div class="route-empty-message">Something went wrong. Try again later.</div></div>`;
 			loadedTabs.delete(tabId);
 		}
