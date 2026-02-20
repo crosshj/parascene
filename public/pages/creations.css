@@ -729,10 +729,12 @@ body.creation-detail-page main>section:first-of-type {
 	}
 }
 
-/* Landscape modal - single dialog; app colors, full width with small padding */
+/* Landscape modal - single dialog; app colors, full width with small padding.
+   Constrain height and overflow so header/footer stay visible; image/placeholder fit without scrolling. */
 .creation-detail-dialog.landscape-modal {
 	width: calc(100vw - 24px);
 	max-width: calc(100vw - 24px);
+	height: 90vh;
 	max-height: 90vh;
 	border-radius: 14px;
 	padding: 24px;
@@ -741,6 +743,7 @@ body.creation-detail-page main>section:first-of-type {
 	background: var(--surface);
 	border: 1px solid var(--border);
 	box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+	overflow: hidden;
 }
 
 .landscape-modal-title-row {
@@ -749,6 +752,7 @@ body.creation-detail-page main>section:first-of-type {
 	gap: 12px;
 	margin: 0 0 16px 0;
 	flex-wrap: wrap;
+	flex-shrink: 0;
 }
 
 .landscape-modal .dialog-title {
@@ -891,12 +895,14 @@ body.creation-detail-page main>section:first-of-type {
 	align-items: center;
 	justify-content: center;
 	margin-bottom: 16px;
+	overflow: hidden;
+	container-type: size;
 }
 
+/* Exact 16:9 within available space on any viewport (dialog has height: 90vh so container size is defined) */
 .landscape-placeholder {
-	width: 100%;
-	max-width: 100%;
-	aspect-ratio: 1824 / 1024;
+	width: min(100cqw, 100cqh * 1824 / 1024);
+	height: min(100cqh, 100cqw * 1024 / 1824);
 	background: var(--surface-muted);
 	border-radius: 10px;
 	display: flex;
@@ -927,8 +933,7 @@ body.creation-detail-page main>section:first-of-type {
 .landscape-image {
 	width: 100%;
 	max-width: 100%;
-	aspect-ratio: 1824 / 1024;
-	max-height: 80vh;
+	max-height: 100%;
 	height: auto;
 	object-fit: contain;
 	border-radius: 10px;
@@ -990,6 +995,49 @@ body.creation-detail-page main>section:first-of-type {
 	flex-wrap: wrap;
 	gap: 10px;
 	justify-content: center;
+	flex-shrink: 0;
+}
+
+/* Mobile: size modal to content so it isn't forced to 90vh and doesn't dominate the screen.
+   Use fit-content so the dialog is exactly as tall as its contents (auto can expand incorrectly). */
+@media (max-width: 768px) {
+	.creation-detail-dialog.landscape-modal {
+		height: fit-content;
+		min-height: 0;
+		max-height: 85vh;
+		display: block;
+	}
+
+	.landscape-modal-title-row {
+		flex-shrink: 0;
+	}
+
+	.landscape-modal-content {
+		display: block;
+		flex: none;
+		min-height: 0;
+		max-height: none;
+		container-type: normal;
+		margin-bottom: 16px;
+	}
+
+	.landscape-placeholder {
+		width: 100%;
+		height: auto;
+		aspect-ratio: 1824 / 1024;
+	}
+
+	.landscape-image {
+		width: 100%;
+		height: auto;
+		max-height: none;
+		display: block;
+		vertical-align: top;
+	}
+
+	.landscape-modal-actions {
+		flex-shrink: 0;
+	}
 }
 
 @keyframes spin {
