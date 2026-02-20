@@ -1944,6 +1944,7 @@ export async function openDb() {
              AND (ci.unavailable_at IS NULL OR ci.unavailable_at = '')
              AND (
                lower(coalesce(ci.description, '')) LIKE '%' || ? || '%'
+               OR lower(coalesce(ci.title, '')) LIKE '%' || ? || '%'
                OR EXISTS (
                  SELECT 1
                  FROM comments_created_image c
@@ -1954,7 +1955,7 @@ export async function openDb() {
            ORDER BY ci.created_at DESC
            LIMIT ? OFFSET ?`
 				);
-				return Promise.resolve(stmt.all(needle, needle, limit, offset));
+				return Promise.resolve(stmt.all(needle, needle, needle, limit, offset));
 			}
 		},
 		selectPublishedCreationsByTagMention: {
@@ -1972,6 +1973,7 @@ export async function openDb() {
              AND (ci.unavailable_at IS NULL OR ci.unavailable_at = '')
              AND (
                lower(coalesce(ci.description, '')) LIKE '%' || ? || '%'
+               OR lower(coalesce(ci.title, '')) LIKE '%' || ? || '%'
                OR EXISTS (
                  SELECT 1
                  FROM comments_created_image c
@@ -1982,7 +1984,7 @@ export async function openDb() {
            ORDER BY ci.created_at DESC
            LIMIT ? OFFSET ?`
 				);
-				return Promise.resolve(stmt.all(needle, needle, limit, offset));
+				return Promise.resolve(stmt.all(needle, needle, needle, limit, offset));
 			}
 		},
 		selectAllCreatedImageCountForUser: {

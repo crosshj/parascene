@@ -2641,7 +2641,7 @@ export function openDb() {
 				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
 				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
 
-				const [descriptionRes, commentsRes] = await Promise.all([
+				const [descriptionRes, titleRes, commentsRes] = await Promise.all([
 					serviceClient
 						.from(prefixedTable("created_images"))
 						.select("id")
@@ -2650,16 +2650,28 @@ export function openDb() {
 						.ilike("description", `%${mentionNeedle}%`)
 						.limit(5000),
 					serviceClient
+						.from(prefixedTable("created_images"))
+						.select("id")
+						.eq("published", true)
+						.is("unavailable_at", null)
+						.ilike("title", `%${mentionNeedle}%`)
+						.limit(5000),
+					serviceClient
 						.from(prefixedTable("comments_created_image"))
 						.select("created_image_id")
 						.ilike("text", `%${mentionNeedle}%`)
 						.limit(5000)
 				]);
 				if (descriptionRes.error) throw descriptionRes.error;
+				if (titleRes.error) throw titleRes.error;
 				if (commentsRes.error) throw commentsRes.error;
 
 				const idSet = new Set();
 				for (const row of descriptionRes.data ?? []) {
+					const id = Number(row?.id);
+					if (Number.isFinite(id) && id > 0) idSet.add(id);
+				}
+				for (const row of titleRes.data ?? []) {
 					const id = Number(row?.id);
 					if (Number.isFinite(id) && id > 0) idSet.add(id);
 				}
@@ -2691,7 +2703,7 @@ export function openDb() {
 				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
 				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
 
-				const [descriptionRes, commentsRes] = await Promise.all([
+				const [descriptionRes, titleRes, commentsRes] = await Promise.all([
 					serviceClient
 						.from(prefixedTable("created_images"))
 						.select("id")
@@ -2700,16 +2712,28 @@ export function openDb() {
 						.ilike("description", `%${tagNeedle}%`)
 						.limit(5000),
 					serviceClient
+						.from(prefixedTable("created_images"))
+						.select("id")
+						.eq("published", true)
+						.is("unavailable_at", null)
+						.ilike("title", `%${tagNeedle}%`)
+						.limit(5000),
+					serviceClient
 						.from(prefixedTable("comments_created_image"))
 						.select("created_image_id")
 						.ilike("text", `%${tagNeedle}%`)
 						.limit(5000)
 				]);
 				if (descriptionRes.error) throw descriptionRes.error;
+				if (titleRes.error) throw titleRes.error;
 				if (commentsRes.error) throw commentsRes.error;
 
 				const idSet = new Set();
 				for (const row of descriptionRes.data ?? []) {
+					const id = Number(row?.id);
+					if (Number.isFinite(id) && id > 0) idSet.add(id);
+				}
+				for (const row of titleRes.data ?? []) {
 					const id = Number(row?.id);
 					if (Number.isFinite(id) && id > 0) idSet.add(id);
 				}

@@ -1516,8 +1516,9 @@ export function openDb() {
 						if (!isPublished) return false;
 						if (!(img?.unavailable_at == null || img?.unavailable_at === "")) return false;
 						const descMatch = String(img?.description || "").toLowerCase().includes(needle);
+						const titleMatch = String(img?.title || "").toLowerCase().includes(needle);
 						const commentMatch = idsFromComments.has(Number(img?.id));
-						return descMatch || commentMatch;
+						return descMatch || titleMatch || commentMatch;
 					})
 					.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
 
@@ -1548,8 +1549,9 @@ export function openDb() {
 						if (!isPublished) return false;
 						if (!(img?.unavailable_at == null || img?.unavailable_at === "")) return false;
 						const descMatch = String(img?.description || "").toLowerCase().includes(needle);
+						const titleMatch = String(img?.title || "").toLowerCase().includes(needle);
 						const commentMatch = idsFromComments.has(Number(img?.id));
-						return descMatch || commentMatch;
+						return descMatch || titleMatch || commentMatch;
 					})
 					.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
 

@@ -263,6 +263,12 @@ function renderProfilePage(container, { user, profile, stats, plan, isSelf, view
 						<div class="user-profile-load-more" data-profile-load-more="creations" hidden></div>
 					</div>
 				</tab>
+				<tab data-id="mentions" label="Mentions">
+					<div class="user-profile-tab-content" data-profile-tab-content="mentions">
+						<div class="route-empty" data-profile-mentions>Coming soon.</div>
+						<div class="user-profile-load-more" data-profile-load-more="mentions" hidden></div>
+					</div>
+				</tab>
 				<tab data-id="likes" label="Likes">
 					<div class="user-profile-tab-content" data-profile-tab-content="likes">
 						<div class="route-empty" data-profile-likes>Coming soon.</div>
@@ -679,6 +685,7 @@ async function loadProfileSummary(target) {
 
 const PROFILE_PAGE_SIZE = {
 	creations: 24,
+	mentions: 24,
 	likes: 24,
 	comments: 20,
 	follows: 20,
@@ -1022,11 +1029,14 @@ async function init() {
 	// Tab state: { items, hasMore } per tab for pagination
 	const tabData = {
 		creations: { items: [], hasMore: false },
+		mentions: { items: [], hasMore: false },
 		likes: { items: [], hasMore: false },
 		follows: { items: [], hasMore: false },
 		following: { items: [], hasMore: false },
 		comments: { items: [], hasMore: false }
 	};
+
+	const profileUserName = (profile?.user_name ?? '').trim().toLowerCase();
 
 	const infiniteScrollByTab = {};
 
@@ -1063,6 +1073,12 @@ async function init() {
 		if (tabId === 'creations') {
 			renderImageGrid(grid, data.items, showBadge);
 			updateLoadMore(container, 'creations', data.hasMore);
+		} else if (tabId === 'mentions') {
+			const panel = container.querySelector('[data-profile-mentions]');
+			if (panel) {
+				renderImageGrid(panel, data.items, false, 'No mentions yet', `Creations that mention @${escapeHtml(profileUserName)} will appear here.`);
+				updateLoadMore(container, 'mentions', data.hasMore);
+			}
 		} else if (tabId === 'likes') {
 			const panel = container.querySelector('[data-profile-likes]');
 			if (panel) {
@@ -1112,6 +1128,7 @@ async function init() {
 	async function loadTabContent(tabId, forceRefresh = false) {
 		if (!forceRefresh && loadedTabs.has(tabId)) return;
 		const selectors = {
+			mentions: '[data-profile-mentions]',
 			likes: '[data-profile-likes]',
 			follows: '[data-profile-follows]',
 			following: '[data-profile-following]',
@@ -1124,7 +1141,17 @@ async function init() {
 			loadedTabs.add(tabId);
 		}
 		try {
-			if (tabId === 'likes') {
+			if (tabId === 'mentions') {
+				const limit = PROFILE_PAGE_SIZE.mentions;
+				const result = await loadPersonalityCreations(profileUserName, { limit, offset: 0 });
+				tabData.mentions = { items: result.items, hasMore: result.hasMore };
+				panel.className = 'route-cards content-cards-image-grid';
+				panel.setAttribute('data-profile-mentions', '');
+				panel.innerHTML = '';
+				renderImageGrid(panel, tabData.mentions.items, false, 'No mentions yet', `Creations that mention @${escapeHtml(profileUserName)} will appear here.`);
+				updateLoadMore(container, 'mentions', tabData.mentions.hasMore);
+				setupInfiniteScrollForTab('mentions', panel);
+			} else if (tabId === 'likes') {
 				const limit = PROFILE_PAGE_SIZE.likes;
 				const res = await fetchJsonWithStatusDeduped(`${targetApiBase}/liked-creations?limit=${limit}&offset=0`, { credentials: 'include' }, { windowMs: 800 });
 				const images = Array.isArray(res?.data?.images) ? res.data.images : [];
@@ -1187,6 +1214,12 @@ async function init() {
 				data.items = data.items.concat(result.images);
 				data.hasMore = result.has_more;
 				appendImageGridCards(grid, result.images, showBadge);
+			} else if (tabId === 'mentions') {
+				const result = await loadPersonalityCreations(profileUserName, { limit, offset });
+				data.items = data.items.concat(result.items);
+				data.hasMore = result.hasMore;
+				const panel = container.querySelector('[data-profile-mentions]');
+				if (panel) appendImageGridCards(panel, result.items, false);
 			} else if (tabId === 'likes') {
 				const res = await fetchJsonWithStatusDeduped(`${targetApiBase}/liked-creations?limit=${limit}&offset=${offset}`, { credentials: 'include' }, { windowMs: 800 });
 				const images = Array.isArray(res?.data?.images) ? res.data.images : [];
@@ -1226,7 +1259,7 @@ async function init() {
 	if (tabsEl) {
 		tabsEl.addEventListener('tab-change', (e) => {
 			const id = e.detail?.id;
-			if (id && ['likes', 'follows', 'following', 'comments'].includes(id)) {
+			if (id && ['mentions', 'likes', 'follows', 'following', 'comments'].includes(id)) {
 				void loadTabContent(id);
 			}
 			// Remember tab in URL so refresh keeps the same tab
@@ -1241,7 +1274,7 @@ async function init() {
 
 		// Restore tab from URL hash on load
 		const hashTab = (window.location.hash || '').replace(/^#/, '');
-		if (hashTab && ['creations', 'likes', 'follows', 'following', 'comments'].includes(hashTab) && hashTab !== 'creations') {
+		if (hashTab && ['creations', 'mentions', 'likes', 'follows', 'following', 'comments'].includes(hashTab) && hashTab !== 'creations') {
 			tabsEl.setActiveTab(hashTab, { focus: false });
 			void loadTabContent(hashTab);
 		}
