@@ -99,10 +99,21 @@
 			font-weight: 600;
 		}
 
-		.main .meta .summary {
+		.main .meta .summary,
+		.main .meta .description,
+		.main .meta .prompt {
 			font-size: 0.875rem;
 			margin-top: 0.25rem;
 			opacity: 0.9;
+		}
+
+		.main .meta .meta-label {
+			font-size: 0.7rem;
+			text-transform: uppercase;
+			letter-spacing: 0.03em;
+			opacity: 0.7;
+			margin-top: 0.5rem;
+			margin-bottom: 0.15rem;
 		}
 
 		.grid {
@@ -168,17 +179,21 @@
 </head>
 
 <body>
+	<header>
+		<h1><a href="/test/">Embeddings test</a></h1>
+		<p style="font-size:0.875rem; margin:0.25rem 0 0; opacity:0.85;">Search by text or add <code>?id=123</code> to the URL to load by creation ID.</p>
+	</header>
 	<main>
 		<section id="emb-main-section" hidden>
 			<div class="main" id="emb-main-card"></div>
 		</section>
-		<section id="emb-results-section" hidden>
+		<section id="emb-results-section">
 			<div class="row">
 				<input id="emb-search-q" type="text" placeholder="e.g. star wars t-shirt" />
 				<button type="button" id="emb-search-btn">Search</button>
 				<button type="button" id="emb-clear-search-btn" hidden>Clear search</button>
 			</div>
-			<div id="emb-neighbours-wrap">
+			<div id="emb-neighbours-wrap" hidden>
 				<div class="grid" id="emb-neighbours"></div>
 				<div class="row load-more-row">
 					<button type="button" id="emb-load-more-neighbours" hidden>Load more</button>
@@ -225,13 +240,17 @@
 				return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#39;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 			}
 
-			function renderMain(main) {
-				if (!main) { mainSection.hidden = true; resultsSection.hidden = true; return; }
+			function renderMain(main, promptText) {
+				if (!main) { mainSection.hidden = true; resultsSection.hidden = false; return; }
 				mainSection.hidden = false;
 				resultsSection.hidden = false;
 				var src = imgUrl(main);
+				var titleHtml = "<div class=\"title\">" + escHtml(main.title || "Untitled") + "</div>";
+				var desc = (main.summary != null && main.summary !== "") ? main.summary : "";
+				var descHtml = desc ? "<div class=\"meta-label\">Description</div><div class=\"description\">" + escHtml(desc) + "</div>" : "";
+				var promptHtml = (promptText && promptText.trim()) ? "<div class=\"meta-label\">Prompt</div><div class=\"prompt\">" + escHtml(promptText) + "</div>" : "";
 				mainCard.innerHTML = (src ? "<img src=\"" + escAttr(src) + "\" alt=\"\" />" : "") +
-					"<div class=\"meta\"><div class=\"title\">" + escHtml(main.title || "Untitled") + "</div><div class=\"summary\">" + escHtml(main.summary || "") + "</div></div>";
+					"<div class=\"meta\">" + titleHtml + descHtml + promptHtml + "</div>";
 			}
 
 			function itemToCardHtml(item, withDist) {
@@ -280,6 +299,15 @@
 							renderItems(data.items, neighboursEl, true);
 							loadMoreNeighboursBtn.hidden = !data.has_more;
 						}
+						// Optional: if user is logged in, fetch creation detail for prompt (no backend change)
+						fetch(base() + "/api/create/images/" + num, { credentials: "include" })
+							.then(function (r) { return r.ok ? r.json() : null; })
+							.catch(function () { return null; })
+							.then(function (detail) {
+								if (!detail || currentCreationId !== num) return;
+								var prompt = (detail.meta && detail.meta.args && typeof detail.meta.args.prompt === "string") ? detail.meta.args.prompt : "";
+								if (prompt) renderMain(data.main, prompt);
+							});
 					})
 					.catch(function (err) {
 						mainCard.innerHTML = "<span class=\"err\">" + escHtml(err.message) + "</span>";

@@ -1411,7 +1411,7 @@ export async function openDb() {
 				if (safeIds.length === 0) return [];
 				const placeholders = safeIds.map(() => "?").join(",");
 				const stmt = db.prepare(
-					`SELECT ci.id, ci.title, ci.summary, ci.created_at, ci.user_id,
+					`SELECT ci.id, ci.title, ci.description, ci.created_at, ci.user_id,
 						ci.filename, ci.file_path,
 						COALESCE(lc.like_count, 0) AS like_count,
 						COALESCE(cc.comment_count, 0) AS comment_count,
@@ -1435,24 +1435,27 @@ export async function openDb() {
 				const rows = stmt.all(...safeIds);
 				const orderById = new Map(safeIds.map((id, i) => [id, i]));
 				const sorted = (rows ?? []).slice().sort((a, b) => (orderById.get(Number(a.id)) ?? 999) - (orderById.get(Number(b.id)) ?? 999));
-				return sorted.map((row) => ({
-					id: row.id,
-					created_image_id: row.id,
-					title: row.title ?? "",
-					summary: row.summary ?? "",
-					created_at: row.created_at,
-					user_id: row.user_id,
-					like_count: Number(row.like_count ?? 0),
-					comment_count: Number(row.comment_count ?? 0),
-					author_display_name: row.author_display_name ?? null,
-					author_user_name: row.author_user_name ?? null,
-					author_avatar_url: row.author_avatar_url ?? null,
-					url:
-						row.file_path ??
-						(row.filename
-							? `/api/images/created/${row.filename}`
-							: null)
-				}));
+				return sorted.map((row) => {
+					const summary = row.description ?? "";
+					return {
+						id: row.id,
+						created_image_id: row.id,
+						title: row.title ?? "",
+						summary,
+						created_at: row.created_at,
+						user_id: row.user_id,
+						like_count: Number(row.like_count ?? 0),
+						comment_count: Number(row.comment_count ?? 0),
+						author_display_name: row.author_display_name ?? null,
+						author_user_name: row.author_user_name ?? null,
+						author_avatar_url: row.author_avatar_url ?? null,
+						url:
+							row.file_path ??
+							(row.filename
+								? `/api/images/created/${row.filename}`
+								: null)
+					};
+				});
 			}
 		},
 		selectMostMutatedFeedItems: {
