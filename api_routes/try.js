@@ -303,6 +303,50 @@ export default function createTryRoutes({ queries, storage }) {
 		return res.json(items);
 	});
 
+	// POST /api/try/discard — require ps_cid; body: { url } or { filename }. Unlinks and deletes the anon image for this session; deletes file only if no other anon row references it.
+	router.post("/api/try/discard", async (req, res) => {
+		const anonCid = requireAnonCid(req, res);
+		if (!anonCid) return;
+
+		const body = req.body && typeof req.body === "object" ? req.body : {};
+		let filename = typeof body.filename === "string" ? body.filename.trim() : "";
+		if (!filename && typeof body.url === "string") {
+			const u = body.url.trim();
+			const prefix = "/api/try/images/";
+			if (u.startsWith(prefix)) {
+				const after = u.slice(prefix.length);
+				filename = after ? after.split("/")[0].split("?")[0].trim() : "";
+			}
+		}
+		if (!filename || filename.includes("..") || filename.includes("/")) {
+			return res.status(400).json({ error: "Invalid url or filename" });
+		}
+
+		const reqs = await queries.selectTryRequestsByCid?.all?.(anonCid) ?? [];
+		const anonIds = [...new Set(reqs.map((r) => r.created_image_anon_id).filter(Boolean))];
+		if (anonIds.length === 0) return res.status(404).json({ error: "No try image to discard" });
+
+		const images = await queries.selectCreatedImagesAnonByIds?.all?.(anonIds) ?? [];
+		const anonRow = images.find((row) => row.filename === filename);
+		if (!anonRow) return res.status(404).json({ error: "Try image not found or not yours" });
+
+		const countRow = await queries.countCreatedImagesAnonByFilename?.get?.(filename);
+		const onlyReference = countRow && Number(countRow.count) === 1;
+
+		if (queries.updateTryRequestsNullAnonId?.run) {
+			await queries.updateTryRequestsNullAnonId.run(anonRow.id);
+		}
+		if (queries.deleteCreatedImageAnon?.run) {
+			await queries.deleteCreatedImageAnon.run(anonRow.id);
+		}
+		if (onlyReference && storage.deleteImageAnon) {
+			try {
+				await storage.deleteImageAnon(filename);
+			} catch (_) {}
+		}
+		return res.status(200).json({ ok: true });
+	});
+
 	// GET /api/try/images/:filename — serve anon image (no auth; anyone with link can view)
 	router.get("/api/try/images/:filename", async (req, res) => {
 		const filename = req.params.filename;

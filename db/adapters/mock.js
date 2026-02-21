@@ -1685,6 +1685,27 @@ export function openDb() {
 				return matches[0] ?? undefined;
 			}
 		},
+		countCreatedImagesAnonByFilename: {
+			get: async (filename) => {
+				if (!filename || typeof filename !== "string" || filename.includes("..") || filename.includes("/"))
+					return { count: 0 };
+				const count = created_images_anon.filter((r) => r.filename === filename.trim()).length;
+				return Promise.resolve({ count });
+			}
+		},
+		updateTryRequestsNullAnonId: {
+			run: async (createdImageAnonId) => {
+				const id = Number(createdImageAnonId);
+				let count = 0;
+				for (const row of try_requests) {
+					if (row.created_image_anon_id === id) {
+						row.created_image_anon_id = null;
+						count++;
+					}
+				}
+				return Promise.resolve({ changes: count });
+			}
+		},
 		updateTryRequestsTransitionedByCreatedImageAnonId: {
 			run: async (createdImageAnonId, { userId, createdImageId }) => {
 				const id = Number(createdImageAnonId);

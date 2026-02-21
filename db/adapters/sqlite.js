@@ -2206,6 +2206,24 @@ export async function openDb() {
 				return Promise.resolve(stmt.get(filename.trim()));
 			}
 		},
+		countCreatedImagesAnonByFilename: {
+			get: async (filename) => {
+				if (!filename || typeof filename !== "string" || filename.includes("..") || filename.includes("/"))
+					return { count: 0 };
+				const row = db.prepare(`SELECT COUNT(*) AS count FROM created_images_anon WHERE filename = ?`).get(filename.trim());
+				return Promise.resolve(row ? { count: row.count } : { count: 0 });
+			}
+		},
+		/** Set created_image_anon_id = null for all try_requests pointing to this anon id (e.g. when discarding). */
+		updateTryRequestsNullAnonId: {
+			run: async (createdImageAnonId) => {
+				const id = Number(createdImageAnonId);
+				const rows = db.prepare(`SELECT id FROM try_requests WHERE created_image_anon_id = ?`).all(id);
+				const updateStmt = db.prepare(`UPDATE try_requests SET created_image_anon_id = NULL WHERE id = ?`);
+				for (const row of rows) updateStmt.run(row.id);
+				return Promise.resolve({ changes: rows.length });
+			}
+		},
 		updateTryRequestsTransitionedByCreatedImageAnonId: {
 			run: async (createdImageAnonId, { userId, createdImageId }) => {
 				const id = Number(createdImageAnonId);

@@ -1095,7 +1095,42 @@ export default function createProfileRoutes({ queries }) {
 				});
 				avatar_url = buildGenericUrl(stored);
 				if (oldAvatarKey && storage.deleteGenericImage) pendingDeletes.push(oldAvatarKey);
-			} else if (avatarRemove && oldAvatarKey && storage.deleteGenericImage) {
+			} else if (!avatarRemove && !avatarFile?.buffer?.length) {
+				const tryUrl = typeof fields?.avatar_try_url === "string" ? fields.avatar_try_url.trim() : "";
+				const tryPrefix = "/api/try/images/";
+				if (tryUrl.startsWith(tryPrefix)) {
+					const afterPrefix = tryUrl.slice(tryPrefix.length);
+					const filename = afterPrefix ? afterPrefix.split("/")[0].split("?")[0].trim() : "";
+					if (filename && !filename.includes("..") && !filename.includes("/") && storage.getImageBufferAnon) {
+						try {
+							const buffer = await storage.getImageBufferAnon(filename);
+							const resized = await sharp(buffer)
+								.rotate()
+								.resize(128, 128, { fit: "cover" })
+								.png()
+								.toBuffer();
+							const key = `profile/${req.auth.userId}/avatar_${now}_${rand}.png`;
+							const stored = await storage.uploadGenericImage(resized, key, {
+								contentType: "image/png"
+							});
+							avatar_url = buildGenericUrl(stored);
+							if (oldAvatarKey && storage.deleteGenericImage) pendingDeletes.push(oldAvatarKey);
+							if (storage.deleteImageAnon && queries.selectCreatedImageAnonByFilename?.get && queries.deleteCreatedImageAnon?.run) {
+								try {
+									const anonRow = await queries.selectCreatedImageAnonByFilename.get(filename);
+									if (anonRow?.id) {
+										await queries.deleteCreatedImageAnon.run(anonRow.id);
+										await storage.deleteImageAnon(filename);
+									}
+								} catch (_) {}
+							}
+						} catch (tryErr) {
+							// non-fatal: leave avatar_url as existing or null
+						}
+					}
+				}
+			}
+			if (avatarRemove && oldAvatarKey && storage.deleteGenericImage) {
 				pendingDeletes.push(oldAvatarKey);
 			}
 

@@ -170,6 +170,7 @@ app.use(async (req, res, next) => {
 			(pathName === "/api/policy/seen" && method === "POST") ||
 			(pathName === "/api/try/create" && method === "POST") ||
 			(pathName === "/api/try/list" && method === "GET") ||
+			(pathName === "/api/try/discard" && method === "POST") ||
 			(pathName.startsWith("/api/try/images/") && method === "GET") ||
 			(pathName === "/api/qr" && method === "GET") ||
 			(pathName === "/logout" && method === "POST") ||

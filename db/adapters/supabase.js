@@ -3029,6 +3029,29 @@ export function openDb() {
 				return data ?? undefined;
 			}
 		},
+		countCreatedImagesAnonByFilename: {
+			get: async (filename) => {
+				if (!filename || typeof filename !== "string" || filename.includes("..") || filename.includes("/"))
+					return { count: 0 };
+				const { count, error } = await serviceClient
+					.from(prefixedTable("created_images_anon"))
+					.select("id", { count: "exact", head: true })
+					.eq("filename", filename.trim());
+				if (error) throw error;
+				return { count: count ?? 0 };
+			}
+		},
+		updateTryRequestsNullAnonId: {
+			run: async (createdImageAnonId) => {
+				const id = Number(createdImageAnonId);
+				const { error } = await serviceClient
+					.from(prefixedTable("try_requests"))
+					.update({ created_image_anon_id: null })
+					.eq("created_image_anon_id", id);
+				if (error) throw error;
+				return Promise.resolve({ changes: 1 });
+			}
+		},
 		updateTryRequestsTransitionedByCreatedImageAnonId: {
 			run: async (createdImageAnonId, { userId, createdImageId }) => {
 				const id = Number(createdImageAnonId);

@@ -67,17 +67,19 @@ function renderProfileUnavailableState(container, {
 	icon = 'warning'
 } = {}) {
 	const iconSvg = icon === 'user-not-found'
-		? html`<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-			<circle cx="10" cy="8" r="3"></circle>
-			<path d="M4 19c0-3.3 2.7-6 6-6s6 2.7 6 6"></path>
-			<path d="M16 8l4 4"></path>
-			<path d="M20 8l-4 4"></path>
-		</svg>`
-		: html`<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-			<circle cx="12" cy="12" r="9"></circle>
-			<path d="M12 8v5"></path>
-			<circle cx="12" cy="16.5" r="0.8" fill="currentColor"></circle>
-		</svg>`;
+		? html`<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+	stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	<circle cx="10" cy="8" r="3"></circle>
+	<path d="M4 19c0-3.3 2.7-6 6-6s6 2.7 6 6"></path>
+	<path d="M16 8l4 4"></path>
+	<path d="M20 8l-4 4"></path>
+</svg>`
+		: html`<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+	stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	<circle cx="12" cy="12" r="9"></circle>
+	<path d="M12 8v5"></path>
+	<circle cx="12" cy="16.5" r="0.8" fill="currentColor"></circle>
+</svg>`;
 	container.innerHTML = html`
 		<div class="route-empty route-empty-image-grid route-empty-state">
 			<div class="route-empty-icon">${iconSvg}</div>
@@ -177,7 +179,7 @@ function renderProfilePage(container, { user, profile, stats, plan, isSelf, view
 
 	const avatarContent = avatarUrl
 		? html`<img class="user-profile-avatar-img" src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(displayName)}">`
-		: html`<div class="user-profile-avatar-fallback" style="--user-profile-avatar-bg: ${avatarColor};" aria-hidden="true">${escapeHtml(avatarInitial)}</div>`;
+: html`<div class="user-profile-avatar-fallback" style="--user-profile-avatar-bg: ${avatarColor};" aria-hidden="true">${escapeHtml(avatarInitial)}</div>`;
 
 	container.innerHTML = html`
 		<div class="user-profile-hero">
@@ -185,33 +187,35 @@ function renderProfilePage(container, { user, profile, stats, plan, isSelf, view
 			<div class="user-profile-hero-inner">
 				<div class="user-profile-avatar">
 					${isFounder ? html`
-						<div class="avatar-with-founder-flair avatar-with-founder-flair--xl">
-							<div class="founder-flair-avatar-ring">
-								<div class="founder-flair-avatar-inner">
-									${avatarContent}
-								</div>
+					<div class="avatar-with-founder-flair avatar-with-founder-flair--xl">
+						<div class="founder-flair-avatar-ring">
+							<div class="founder-flair-avatar-inner">
+								${avatarContent}
 							</div>
 						</div>
+					</div>
 					` : avatarContent}
 				</div>
-
+		
 				<div class="user-profile-identity">
 					<div class="user-profile-title-row">
 						<div class="user-profile-name${isFounder ? ' founder-name' : ''}">${escapeHtml(displayName)}</div>
 						<div class="user-profile-actions">
-							${isSelf ? html`<button class="btn-primary user-profile-edit" type="button">Edit Profile</button>` : ''}
+							${isSelf ? html`<button class="btn-primary user-profile-edit" type="button">Edit Profile</button>` :
+							''}
 							${!isSelf ? html`
-								<button class="${viewerFollows ? 'btn-secondary' : 'btn-primary'} user-profile-follow" type="button" data-follow-button data-follow-user-id="${escapeHtml(user?.id ?? '')}">
-									${viewerFollows ? 'Unfollow' : 'Follow'}
-								</button>
+							<button class="${viewerFollows ? 'btn-secondary' : 'btn-primary'} user-profile-follow" type="button"
+								data-follow-button data-follow-user-id="${escapeHtml(user?.id ?? '')}">
+								${viewerFollows ? 'Unfollow' : 'Follow'}
+							</button>
 							` : ''}
 							<!--
-							<button class="btn-secondary user-profile-share" type="button">Share</button>
-							-->
+																	<button class="btn-secondary user-profile-share" type="button">Share</button>
+																	-->
 						</div>
 					</div>
 					<div class="user-profile-handle${isFounder ? ' founder-name' : ''}">${escapeHtml(handle)}</div>
-
+		
 					<div class="user-profile-stats">
 						<div class="user-profile-stat">
 							<div class="user-profile-stat-value">${creationsPublished}</div>
@@ -226,39 +230,42 @@ function renderProfilePage(container, { user, profile, stats, plan, isSelf, view
 							<div class="user-profile-stat-label">Member Since</div>
 						</div>
 					</div>
-
+		
 					${(about || characterDescription || website) ? html`
-						<div class="user-profile-meta">
-							${about ? html`
-								<div class="user-profile-meta-row">
-									<span class="user-profile-meta-label">About</span>
-									<span class="user-profile-meta-text">${processUserText(about)}</span>
-								</div>
-							` : ''}
-							${characterDescription ? html`
-								<div class="user-profile-meta-row">
-									<span class="user-profile-meta-label">Character</span>
-									<span class="user-profile-meta-text">${processUserText(characterDescription)}</span>
-								</div>
-							` : ''}
-							${website ? html`
-								<div class="user-profile-meta-row">
-									<span class="user-profile-meta-label">Website</span>
-									<a class="user-profile-meta-link" href="${escapeHtml(website.href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(website.label)}</a>
-								</div>
-							` : ''}
+					<div class="user-profile-meta">
+						${about ? html`
+						<div class="user-profile-meta-row">
+							<span class="user-profile-meta-label">About</span>
+							<span class="user-profile-meta-text">${processUserText(about)}</span>
 						</div>
+						` : ''}
+						${characterDescription ? html`
+						<div class="user-profile-meta-row">
+							<span class="user-profile-meta-label">Character</span>
+							<span class="user-profile-meta-text">${processUserText(characterDescription)}</span>
+						</div>
+						` : ''}
+						${website ? html`
+						<div class="user-profile-meta-row">
+							<span class="user-profile-meta-label">Website</span>
+							<a class="user-profile-meta-link" href="${escapeHtml(website.href)}" target="_blank"
+								rel="noopener noreferrer">${escapeHtml(website.label)}</a>
+						</div>
+						` : ''}
+					</div>
 					` : ''}
 				</div>
 			</div>
 		</div>
-
+		
 		<div class="user-profile-content">
 			<app-tabs class="user-profile-tabs-pending" data-profile-tabs>
 				<tab data-id="creations" label="Creations" default>
 					<div class="user-profile-tab-content" data-profile-tab-content="creations">
 						<div class="route-cards content-cards-image-grid" data-profile-grid>
-							<div class="route-empty route-empty-image-grid route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
+							<div class="route-empty route-empty-image-grid route-loading">
+								<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
+							</div>
 						</div>
 						<div class="user-profile-load-more" data-profile-load-more="creations" hidden></div>
 					</div>
@@ -297,13 +304,14 @@ function renderProfilePage(container, { user, profile, stats, plan, isSelf, view
 				</tab>
 			</app-tabs>
 		</div>
-
+		
 		<div class="modal-overlay" data-profile-edit-overlay>
 			<div class="modal modal-large">
 				<div class="modal-header">
 					<h2>Edit profile</h2>
 					<button class="modal-close" type="button" aria-label="Close" data-profile-edit-close>
-						<svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+							stroke-linecap="round" stroke-linejoin="round">
 							<line x1="18" y1="6" x2="6" y2="18"></line>
 							<line x1="6" y1="6" x2="18" y2="18"></line>
 						</svg>
@@ -312,96 +320,126 @@ function renderProfilePage(container, { user, profile, stats, plan, isSelf, view
 				<div class="modal-body">
 					<form class="user-profile-edit-form" data-profile-edit-form>
 						<div class="user-profile-form-section">
-						<div class="field">
-							<label>Username</label>
-							<input name="user_name" placeholder="e.g. oceanman" value="${escapeHtml(userNameValue)}" ${userNameLocked ? 'disabled' : ''}>
-							<div class="user-profile-help">
-								${userNameLocked
-			? 'Username is permanent and cannot be changed.'
-			: '3–24 characters. Lowercase letters, numbers, and underscores only. This cannot be changed later.'}
+							<div class="field">
+								<label>Username</label>
+								<input name="user_name" placeholder="e.g. oceanman" value="${escapeHtml(userNameValue)}"
+									${userNameLocked ? 'disabled' : '' }>
+								<div class="user-profile-help">
+									${userNameLocked
+									? 'Username is permanent and cannot be changed.'
+									: 'Cannot be changed later.'}
+								</div>
+							</div>
+							<div class="field">
+								<label>Display name</label>
+								<input name="display_name" placeholder="e.g. OceanMan"
+									value="${escapeHtml(profile?.display_name || '')}">
+								<div class="user-profile-help">Shown on your profile. You can use spaces and caps here.</div>
 							</div>
 						</div>
-						<div class="field">
-							<label>Display name</label>
-							<input name="display_name" placeholder="e.g. OceanMan" value="${escapeHtml(profile?.display_name || '')}">
-							<div class="user-profile-help">Shown on your profile. You can use spaces and caps here.</div>
-						</div>
-						</div>
-
+		
 						<div class="user-profile-form-section">
-						<div class="field">
-							<label>Bio</label>
-							<textarea name="about" rows="4" placeholder="A short bio...">${escapeHtml(profile?.about || '')}</textarea>
-							<div class="user-profile-help">Keep it short and readable. Line breaks are allowed.</div>
+							<div class="field">
+								<label>Bio</label>
+								<textarea name="about" rows="4"
+									placeholder="A short bio...">${escapeHtml(profile?.about || '')}</textarea>
+								<div class="user-profile-help">Keep it short and readable. Line breaks are allowed.</div>
+							</div>
 						</div>
-						</div>
-
+		
 						<div class="user-profile-form-section">
-						<div class="field">
-							<label>Character</label>
-							<textarea name="character_description" rows="3" placeholder="e.g. short, middle-aged Asian female with medium-length black hair">${escapeHtml(profile?.character_description || '')}</textarea>
-							<div class="user-profile-help">Used when others @mention you in AI prompts. Keep it brief so it fits well in context. No line breaks.</div>
+							<div class="field">
+								<label>Character</label>
+								<textarea name="character_description" rows="3"
+									placeholder="e.g. short, middle-aged Asian female with medium-length black hair">${escapeHtml(profile?.character_description || '')}</textarea>
+								<div class="user-profile-help">Used when others @mention you in AI prompts. Keep it brief so it
+									fits well in context. No line breaks.</div>
+							</div>
 						</div>
-						</div>
-
+		
 						<div class="user-profile-form-section">
 							<div class="field">
 								<label>Avatar</label>
 								<div class="user-profile-upload" data-upload="avatar">
-									<input class="user-profile-file-input" type="file" name="avatar_file" accept="image/*" data-upload-input="avatar">
+									<input class="user-profile-file-input" type="file" name="avatar_file" accept="image/*"
+										data-upload-input="avatar">
 									<input type="hidden" name="avatar_remove" value="" data-upload-remove="avatar">
-									<button class="user-profile-upload-button btn-secondary" type="button" data-upload-trigger="avatar">Upload avatar</button>
+									<div class="user-profile-avatar-actions">
+										<button class="user-profile-upload-button btn-secondary" type="button"
+											data-upload-trigger="avatar">Upload avatar</button>
+										<button class="user-profile-upload-button btn-secondary user-profile-generate-avatar-btn" type="button"
+											data-avatar-generate-from-character>
+											<span class="user-profile-generate-avatar-spinner" aria-hidden="true" hidden></span>
+											<span class="user-profile-generate-avatar-btn-text">Generate from character</span>
+										</button>
+									</div>
 									<div class="user-profile-upload-preview" data-upload-preview="avatar" hidden>
 										<img class="user-profile-upload-img" alt="Avatar preview" data-upload-img="avatar">
-										<button class="user-profile-upload-remove" type="button" aria-label="Remove avatar" data-upload-clear="avatar">✕</button>
+										<div class="user-profile-avatar-generating-placeholder" data-avatar-generating-placeholder hidden aria-busy="true">
+											<div class="user-profile-avatar-generating-spinner" aria-hidden="true"></div>
+										</div>
+										<button class="user-profile-upload-remove" type="button" aria-label="Remove avatar"
+											data-upload-clear="avatar">✕</button>
 									</div>
 								</div>
 								${profile?.avatar_url ? html`
-									<div class="user-profile-upload-hydrate" data-upload-existing="avatar" data-url="${escapeHtml(profile.avatar_url)}"></div>
+								<div class="user-profile-upload-hydrate" data-upload-existing="avatar"
+									data-url="${escapeHtml(profile.avatar_url)}">
+								</div>
 								` : ''}
 							</div>
 							<div class="field">
 								<label>Cover</label>
 								<div class="user-profile-upload" data-upload="cover">
-									<input class="user-profile-file-input" type="file" name="cover_file" accept="image/*" data-upload-input="cover">
+									<input class="user-profile-file-input" type="file" name="cover_file" accept="image/*"
+										data-upload-input="cover">
 									<input type="hidden" name="cover_remove" value="" data-upload-remove="cover">
-									<button class="user-profile-upload-button btn-secondary" type="button" data-upload-trigger="cover">Upload cover</button>
-									<div class="user-profile-upload-preview user-profile-upload-preview-cover" data-upload-preview="cover" hidden>
+									<button class="user-profile-upload-button btn-secondary" type="button"
+										data-upload-trigger="cover">Upload cover</button>
+									<div class="user-profile-upload-preview user-profile-upload-preview-cover"
+										data-upload-preview="cover" hidden>
 										<img class="user-profile-upload-img" alt="Cover preview" data-upload-img="cover">
-										<button class="user-profile-upload-remove" type="button" aria-label="Remove cover image" data-upload-clear="cover">✕</button>
+										<button class="user-profile-upload-remove" type="button" aria-label="Remove cover image"
+											data-upload-clear="cover">✕</button>
 									</div>
 								</div>
 								${profile?.cover_image_url ? html`
-									<div class="user-profile-upload-hydrate" data-upload-existing="cover" data-url="${escapeHtml(profile.cover_image_url)}"></div>
+								<div class="user-profile-upload-hydrate" data-upload-existing="cover"
+									data-url="${escapeHtml(profile.cover_image_url)}">
+								</div>
 								` : ''}
 							</div>
 						</div>
-
+		
 						<div class="user-profile-form-section">
-						<div class="field">
-							<label>Website</label>
-							<input name="social_website" placeholder="https://example.com" value="${escapeHtml(profile?.socials?.website || '')}">
+							<div class="field">
+								<label>Website</label>
+								<input name="social_website" placeholder="https://example.com"
+									value="${escapeHtml(profile?.socials?.website || '')}">
+							</div>
 						</div>
-						</div>
-
+		
 						<div class="user-profile-form-section user-profile-account-section" data-account-email-section>
 							<h3 class="user-profile-form-section-title">Account</h3>
 							<div class="field">
 								<label>Current email</label>
-								<div class="user-profile-email-readonly" data-account-current-email>${escapeHtml(user?.email || '')}</div>
+								<div class="user-profile-email-readonly" data-account-current-email>${escapeHtml(user?.email ||
+				'')}</div>
 							</div>
 							<div class="field">
 								<label>New email</label>
-								<input type="email" name="new_email" data-account-new-email placeholder="new@example.com" autocomplete="email">
+								<input type="email" name="new_email" data-account-new-email placeholder="new@example.com"
+									autocomplete="email">
 							</div>
 							<div class="field">
 								<label>Current password</label>
-								<input type="password" name="account_password" data-account-password placeholder="Required to change email" autocomplete="current-password">
+								<input type="password" name="account_password" data-account-password
+									placeholder="Required to change email" autocomplete="current-password">
 							</div>
 							<button type="button" class="btn-secondary" data-account-email-submit>Update email</button>
 							<div class="user-profile-account-message" data-account-email-message style="display: none;"></div>
 						</div>
-
+		
 						<div class="alert error" data-profile-edit-error style="display: none;"></div>
 					</form>
 				</div>
@@ -409,9 +447,12 @@ function renderProfilePage(container, { user, profile, stats, plan, isSelf, view
 					<button class="btn-secondary" type="button" data-profile-edit-cancel>Cancel</button>
 					<button class="btn-primary" type="button" data-profile-edit-save>Save</button>
 				</div>
+				<div class="user-profile-edit-generating-overlay" data-profile-edit-generating-overlay hidden aria-busy="true" aria-live="polite">
+					<div class="user-profile-edit-generating-spinner" aria-hidden="true"></div>
+				</div>
 			</div>
 		</div>
-	`;
+		`;
 }
 
 function setModalOpen(overlay, open) {
@@ -492,7 +533,8 @@ function renderImageGrid(grid, images, showBadge = false, emptyTitle = 'No publi
 		if (userDeleted) {
 			userDeletedBadge = html`
 				<div class="creation-user-deleted-badge" title="User deleted this creation">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+						stroke-linejoin="round">
 						<polyline points="3 6 5 6 21 6"></polyline>
 						<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
 						<line x1="10" y1="11" x2="10" y2="17"></line>
@@ -505,7 +547,8 @@ function renderImageGrid(grid, images, showBadge = false, emptyTitle = 'No publi
 		if (isPublished && showBadge) {
 			publishedBadge = html`
 				<div class="creation-published-badge" title="Published">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+						stroke-linejoin="round">
 						<circle cx="12" cy="12" r="10"></circle>
 						<line x1="2" y1="12" x2="22" y2="12"></line>
 						<path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
@@ -570,15 +613,32 @@ function appendImageGridCards(grid, items, showBadge = false) {
 		let userDeletedBadge = '';
 		let publishedInfo = '';
 		if (userDeleted) {
-			userDeletedBadge = html`<div class="creation-user-deleted-badge" title="User deleted this creation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></div>`;
+			userDeletedBadge = html`<div class="creation-user-deleted-badge" title="User deleted this creation"><svg viewBox="0 0 24 24" fill="none"
+		stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+		<polyline points="3 6 5 6 21 6"></polyline>
+		<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+		<line x1="10" y1="11" x2="10" y2="17"></line>
+		<line x1="14" y1="11" x2="14" y2="17"></line>
+	</svg></div>`;
 		}
 		if (isPublished && showBadge) {
-			publishedBadge = html`<div class="creation-published-badge" title="Published"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></div>`;
+			publishedBadge = html`<div class="creation-published-badge" title="Published"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+		stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+		<circle cx="12" cy="12" r="10"></circle>
+		<line x1="2" y1="12" x2="22" y2="12"></line>
+		<path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+	</svg></div>`;
 		}
 		if (isPublished && item.published_at) {
-			publishedInfo = html`<div class="route-meta" title="${formatDateTime(item.published_at)}">Published ${formatRelativeTime(new Date(item.published_at))}</div>`;
+			publishedInfo = html`<div class="route-meta" title="${formatDateTime(item.published_at)}">Published ${formatRelativeTime(new
+	Date(item.published_at))}</div>`;
 		}
-		card.innerHTML = html`<div class="route-media" aria-hidden="true"></div>${userDeletedBadge}${publishedBadge}<div class="route-details"><div class="route-details-content"><div class="route-title">${escapeHtml(item.title || 'Untitled')}</div>${publishedInfo}<div class="route-meta">${escapeHtml(formatDate(item.created_at) || '')}</div></div></div>`;
+		card.innerHTML = html`<div class="route-media" aria-hidden="true"></div>${userDeletedBadge}${publishedBadge}<div class="route-details">
+	<div class="route-details-content">
+		<div class="route-title">${escapeHtml(item.title || 'Untitled')}</div>${publishedInfo}<div class="route-meta">
+			${escapeHtml(formatDate(item.created_at) || '')}</div>
+	</div>
+</div>`;
 		const mediaEl = card.querySelector('.route-media');
 		const url = item.thumbnail_url || item.url;
 		if (mediaEl && url) {
@@ -621,8 +681,10 @@ function appendUserListItems(container, users, options = {}) {
 					${handle ? html`<span class="user-profile-list-handle">${escapeHtml(handle)}</span>` : ''}
 				</span>
 			</a>
-			${showUnfollowBtn ? html`<button type="button" class="btn-secondary user-profile-list-action" data-action="unfollow" data-user-id="${escapeHtml(String(id ?? ''))}">Unfollow</button>` : ''}
-			${showFollowBtn ? html`<button type="button" class="btn-secondary user-profile-list-action" data-action="follow" data-user-id="${escapeHtml(String(id ?? ''))}">Follow</button>` : ''}
+			${showUnfollowBtn ? html`<button type="button" class="btn-secondary user-profile-list-action" data-action="unfollow"
+				data-user-id="${escapeHtml(String(id ?? ''))}">Unfollow</button>` : ''}
+			${showFollowBtn ? html`<button type="button" class="btn-secondary user-profile-list-action" data-action="follow"
+				data-user-id="${escapeHtml(String(id ?? ''))}">Follow</button>` : ''}
 		`;
 		ul.appendChild(li);
 	});
@@ -644,7 +706,10 @@ function appendCommentsListItems(container, comments) {
 		const avatarContent = avatarUrl
 			? html`<img class="user-profile-comment-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">`
 			: html`<span class="user-profile-comment-avatar-fallback" style="--user-profile-avatar-bg: ${color};" aria-hidden="true">${escapeHtml(initial)}</span>`;
-		return html`<a href="${escapeHtml(href)}" class="user-profile-comment-user"><span class="user-profile-comment-avatar">${avatarContent}</span><span class="user-profile-comment-user-info"><span class="user-profile-comment-user-name">${escapeHtml(name)}</span>${handle ? html`<span class="user-profile-comment-user-handle">${escapeHtml(handle)}</span>` : ''}</span></a>`;
+		return html`<a href="${escapeHtml(href)}" class="user-profile-comment-user"><span
+		class="user-profile-comment-avatar">${avatarContent}</span><span class="user-profile-comment-user-info"><span
+			class="user-profile-comment-user-name">${escapeHtml(name)}</span>${handle ? html`<span
+			class="user-profile-comment-user-handle">${escapeHtml(handle)}</span>` : ''}</span></a>`;
 	}
 
 	comments.forEach((c) => {
@@ -659,13 +724,16 @@ function appendCommentsListItems(container, comments) {
 		const div = document.createElement('div');
 		div.className = 'user-profile-comment-block';
 		div.innerHTML = html`
-			<a href="${escapeHtml(creationHref)}" class="user-profile-comment-thumb">${thumbUrl ? html`<img src="${escapeHtml(thumbUrl)}" alt="" class="user-profile-comment-thumb-img" loading="lazy">` : html`<span class="user-profile-comment-thumb-placeholder">?</span>`}</a>
+			<a href="${escapeHtml(creationHref)}" class="user-profile-comment-thumb">${thumbUrl ? html`<img
+					src="${escapeHtml(thumbUrl)}" alt="" class="user-profile-comment-thumb-img" loading="lazy">` : html`<span
+					class="user-profile-comment-thumb-placeholder">?</span>`}</a>
 			<div class="user-profile-comment-title-creator">
 				<a href="${escapeHtml(creationHref)}" class="user-profile-comment-name">${escapeHtml(title)}</a>
 				<div class="user-profile-comment-creator">${renderUserCell(creator)}</div>
 			</div>
 			<div class="user-profile-comment-text">${escapeHtml(text)}</div>
-			<div class="user-profile-comment-footer">${renderUserCell(commenter)}${createdAt ? html`<span class="user-profile-comment-date">${escapeHtml(createdAt)}</span>` : ''}</div>
+			<div class="user-profile-comment-footer">${renderUserCell(commenter)}${createdAt ? html`<span
+					class="user-profile-comment-date">${escapeHtml(createdAt)}</span>` : ''}</div>
 		`;
 		listEl.appendChild(div);
 	});
@@ -727,33 +795,36 @@ function renderUserList(container, users, emptyTitle, emptyMessage, options = {}
 	container.innerHTML = html`
 		<ul class="user-profile-list">
 			${list.map((u) => {
-		const id = u?.user_id ?? u?.id;
-		const name = (u?.display_name || u?.user_name || '').trim() || 'User';
-		const handle = u?.user_name ? `@${u.user_name}` : '';
-		const avatarUrl = typeof u?.avatar_url === 'string' ? u.avatar_url.trim() : '';
-		const color = getAvatarColor(u?.user_name || u?.user_id || name);
-		const initial = name.charAt(0).toUpperCase() || '?';
-		const href = buildProfilePath({ userName: u?.user_name, userId: id }) || '#';
-		const avatarContent = avatarUrl
+			const id = u?.user_id ?? u?.id;
+			const name = (u?.display_name || u?.user_name || '').trim() || 'User';
+			const handle = u?.user_name ? `@${u.user_name}` : '';
+			const avatarUrl = typeof u?.avatar_url === 'string' ? u.avatar_url.trim() : '';
+			const color = getAvatarColor(u?.user_name || u?.user_id || name);
+			const initial = name.charAt(0).toUpperCase() || '?';
+			const href = buildProfilePath({ userName: u?.user_name, userId: id }) || '#';
+			const avatarContent = avatarUrl
 			? html`<img class="user-profile-list-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">`
-			: html`<div class="user-profile-list-avatar-fallback" style="--user-profile-avatar-bg: ${color};" aria-hidden="true">${escapeHtml(initial)}</div>`;
-		const hideActions = isSelf(id);
-		const showUnfollowBtn = showUnfollow && id != null && !hideActions;
-		const showFollowBtn = showFollow && id != null && !viewerFollows(Number(id)) && !hideActions;
-		return html`
-					<li class="user-profile-list-item">
-						<a href="${escapeHtml(href)}" class="user-profile-list-link">
-							<span class="user-profile-list-avatar">${avatarContent}</span>
-							<span class="user-profile-list-info">
-								<span class="user-profile-list-name">${escapeHtml(name)}</span>
-								${handle ? html`<span class="user-profile-list-handle">${escapeHtml(handle)}</span>` : ''}
-							</span>
-						</a>
-						${showUnfollowBtn ? html`<button type="button" class="btn-secondary user-profile-list-action" data-action="unfollow" data-user-id="${escapeHtml(String(id ?? ''))}">Unfollow</button>` : ''}
-						${showFollowBtn ? html`<button type="button" class="btn-secondary user-profile-list-action" data-action="follow" data-user-id="${escapeHtml(String(id ?? ''))}">Follow</button>` : ''}
-					</li>
-				`;
-	}).join('')}
+			: html`<div class="user-profile-list-avatar-fallback" style="--user-profile-avatar-bg: ${color};"
+				aria-hidden="true">${escapeHtml(initial)}</div>`;
+			const hideActions = isSelf(id);
+			const showUnfollowBtn = showUnfollow && id != null && !hideActions;
+			const showFollowBtn = showFollow && id != null && !viewerFollows(Number(id)) && !hideActions;
+			return html`
+			<li class="user-profile-list-item">
+				<a href="${escapeHtml(href)}" class="user-profile-list-link">
+					<span class="user-profile-list-avatar">${avatarContent}</span>
+					<span class="user-profile-list-info">
+						<span class="user-profile-list-name">${escapeHtml(name)}</span>
+						${handle ? html`<span class="user-profile-list-handle">${escapeHtml(handle)}</span>` : ''}
+					</span>
+				</a>
+				${showUnfollowBtn ? html`<button type="button" class="btn-secondary user-profile-list-action"
+					data-action="unfollow" data-user-id="${escapeHtml(String(id ?? ''))}">Unfollow</button>` : ''}
+				${showFollowBtn ? html`<button type="button" class="btn-secondary user-profile-list-action" data-action="follow"
+					data-user-id="${escapeHtml(String(id ?? ''))}">Follow</button>` : ''}
+			</li>
+			`;
+			}).join('')}
 		</ul>
 	`;
 }
@@ -794,41 +865,42 @@ function renderCommentsList(container, comments, emptyMessage) {
 	container.innerHTML = html`
 		<div class="user-profile-comments-list">
 			${list.map((c) => {
-		const creationId = c?.created_image_id;
-		const title = (c?.created_image_title || 'Creation').trim() || 'Creation';
-		const text = (c?.text || '').trim() || '';
-		const createdAt = c?.created_at ? formatRelativeTime(new Date(c.created_at)) : '';
-		const creationHref = Number.isFinite(creationId) && creationId > 0 ? `/creations/${creationId}` : '#';
-		const thumbUrl = (c?.created_image_thumbnail_url || c?.created_image_url || '').trim();
-		const creator = {
+			const creationId = c?.created_image_id;
+			const title = (c?.created_image_title || 'Creation').trim() || 'Creation';
+			const text = (c?.text || '').trim() || '';
+			const createdAt = c?.created_at ? formatRelativeTime(new Date(c.created_at)) : '';
+			const creationHref = Number.isFinite(creationId) && creationId > 0 ? `/creations/${creationId}` : '#';
+			const thumbUrl = (c?.created_image_thumbnail_url || c?.created_image_url || '').trim();
+			const creator = {
 			user_id: c?.created_image_user_id,
 			display_name: c?.creator_display_name,
 			user_name: c?.creator_user_name,
 			avatar_url: c?.creator_avatar_url
-		};
-		const commenter = {
+			};
+			const commenter = {
 			user_id: c?.user_id,
 			display_name: c?.commenter_display_name,
 			user_name: c?.commenter_user_name,
 			avatar_url: c?.commenter_avatar_url
-		};
-		return html`
-					<div class="user-profile-comment-block">
-						<a href="${escapeHtml(creationHref)}" class="user-profile-comment-thumb">
-							${thumbUrl ? html`<img src="${escapeHtml(thumbUrl)}" alt="" class="user-profile-comment-thumb-img" loading="lazy">` : html`<span class="user-profile-comment-thumb-placeholder">?</span>`}
-						</a>
-						<div class="user-profile-comment-title-creator">
-							<a href="${escapeHtml(creationHref)}" class="user-profile-comment-name">${escapeHtml(title)}</a>
-							<div class="user-profile-comment-creator">${renderUserCell(creator, 'creator')}</div>
-						</div>
-						<div class="user-profile-comment-text">${escapeHtml(text)}</div>
-						<div class="user-profile-comment-footer">
-							${renderUserCell(commenter, 'commenter')}
-							${createdAt ? html`<span class="user-profile-comment-date">${escapeHtml(createdAt)}</span>` : ''}
-						</div>
-					</div>
-				`;
-	}).join('')}
+			};
+			return html`
+			<div class="user-profile-comment-block">
+				<a href="${escapeHtml(creationHref)}" class="user-profile-comment-thumb">
+					${thumbUrl ? html`<img src="${escapeHtml(thumbUrl)}" alt="" class="user-profile-comment-thumb-img"
+						loading="lazy">` : html`<span class="user-profile-comment-thumb-placeholder">?</span>`}
+				</a>
+				<div class="user-profile-comment-title-creator">
+					<a href="${escapeHtml(creationHref)}" class="user-profile-comment-name">${escapeHtml(title)}</a>
+					<div class="user-profile-comment-creator">${renderUserCell(creator, 'creator')}</div>
+				</div>
+				<div class="user-profile-comment-text">${escapeHtml(text)}</div>
+				<div class="user-profile-comment-footer">
+					${renderUserCell(commenter, 'commenter')}
+					${createdAt ? html`<span class="user-profile-comment-date">${escapeHtml(createdAt)}</span>` : ''}
+				</div>
+			</div>
+			`;
+			}).join('')}
 		</div>
 	`;
 }
@@ -863,9 +935,13 @@ function renderPersonalityDiscoveryPage(container, personality, items, { hasMore
 			<h3>${escapeHtml(token)}</h3>
 		</div>
 		<div class="route-cards content-cards-image-grid" data-personality-grid>
-			<div class="route-empty route-empty-image-grid route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
+			<div class="route-empty route-empty-image-grid route-loading">
+				<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
+			</div>
 		</div>
-		${hasMore ? html`<div class="route-empty"><div class="route-empty-message">Showing top results. Refine the personality name to narrow matches.</div></div>` : ''}
+		${hasMore ? html`<div class="route-empty">
+			<div class="route-empty-message">Showing top results. Refine the personality name to narrow matches.</div>
+		</div>` : ''}
 	`;
 	const grid = container.querySelector('[data-personality-grid]');
 	renderImageGrid(
@@ -1048,7 +1124,8 @@ async function init() {
 		if (!el) return;
 		if (hasMore) {
 			el.hidden = false;
-			el.innerHTML = html`<div class="user-profile-load-more-inner"><button type="button" class="btn-secondary user-profile-load-more-btn" data-load-more-tab="${escapeHtml(tabId)}">Load more</button></div>`;
+			el.innerHTML = html`<div class="user-profile-load-more-inner"><button type="button" class="btn-secondary user-profile-load-more-btn"
+		data-load-more-tab="${escapeHtml(tabId)}">Load more</button></div>`;
 		} else {
 			el.hidden = true;
 			el.innerHTML = '';
@@ -1128,7 +1205,9 @@ async function init() {
 	// Lazy-load Likes, Follows, Following, Comments when user switches to that tab
 	const tabsEl = container.querySelector('[data-profile-tabs]');
 	const loadedTabs = new Set(['creations']);
-	const loadingHtml = html`<div class="route-empty route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>`;
+	const loadingHtml = html`<div class="route-empty route-loading">
+	<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
+</div>`;
 
 	async function loadTabContent(tabId, forceRefresh = false) {
 		if (!forceRefresh && loadedTabs.has(tabId)) return;
@@ -1211,7 +1290,10 @@ async function init() {
 			}
 		} catch {
 			if (tabContentWrapper) tabContentWrapper.style.minHeight = '';
-			panel.innerHTML = html`<div class="route-empty"><div class="route-empty-title">Unable to load</div><div class="route-empty-message">Something went wrong. Try again later.</div></div>`;
+			panel.innerHTML = html`<div class="route-empty">
+	<div class="route-empty-title">Unable to load</div>
+	<div class="route-empty-message">Something went wrong. Try again later.</div>
+</div>`;
 			loadedTabs.delete(tabId);
 		}
 	}
@@ -1393,6 +1475,191 @@ async function init() {
 	const saveButton = container.querySelector('[data-profile-edit-save]');
 	const form = container.querySelector('[data-profile-edit-form]');
 	const errorBox = container.querySelector('[data-profile-edit-error]');
+	const generatingOverlay = container.querySelector('[data-profile-edit-generating-overlay]');
+	const avatarGeneratingPlaceholder = container.querySelector('[data-avatar-generating-placeholder]');
+
+	// Banner strip aspect (width/height) and max output size. Matches .user-profile-banner (180px height, wide).
+	const BANNER_ASPECT = 7; // 1260/180
+	const BANNER_MAX_WIDTH = 1260;
+	const BANNER_MAX_HEIGHT = 180;
+
+	// Resize image file for smaller uploads (canvas + toBlob). Returns a Promise<Blob>.
+	function resizeImageFile(file, { maxWidth, maxHeight, quality = 0.9, mimeType = 'image/jpeg' } = {}) {
+		if (!(file instanceof File) || !file.type.startsWith('image/')) {
+			return Promise.reject(new Error('Not an image file'));
+		}
+		return new Promise((resolve, reject) => {
+			const img = new Image();
+			const url = URL.createObjectURL(file);
+			img.onload = () => {
+				URL.revokeObjectURL(url);
+				const w = img.naturalWidth;
+				const h = img.naturalHeight;
+				let targetW = w;
+				let targetH = h;
+				if (maxWidth > 0 && maxHeight > 0 && (w > maxWidth || h > maxHeight)) {
+					const r = Math.min(maxWidth / w, maxHeight / h);
+					targetW = Math.round(w * r);
+					targetH = Math.round(h * r);
+				}
+				const canvas = document.createElement('canvas');
+				canvas.width = targetW;
+				canvas.height = targetH;
+				const ctx = canvas.getContext('2d');
+				if (!ctx) {
+					reject(new Error('Canvas not supported'));
+					return;
+				}
+				ctx.drawImage(img, 0, 0, targetW, targetH);
+				canvas.toBlob(
+					(blob) => (blob ? resolve(blob) : reject(new Error('Resize failed'))),
+					mimeType,
+					quality
+				);
+			};
+			img.onerror = () => {
+				URL.revokeObjectURL(url);
+				reject(new Error('Failed to load image'));
+			};
+			img.src = url;
+		});
+	}
+
+	// Crop image to the top strip (banner aspect) then resize. Only the strip is uploaded.
+	function resizeCoverToBannerStrip(file, { quality = 0.85, mimeType = 'image/jpeg' } = {}) {
+		if (!(file instanceof File) || !file.type.startsWith('image/')) {
+			return Promise.reject(new Error('Not an image file'));
+		}
+		return new Promise((resolve, reject) => {
+			const img = new Image();
+			const url = URL.createObjectURL(file);
+			img.onload = () => {
+				URL.revokeObjectURL(url);
+				const w = img.naturalWidth;
+				const h = img.naturalHeight;
+				// Always take the top strip only: full width, height = just enough for banner aspect.
+				const sx = 0;
+				const sy = 0;
+				const sw = w;
+				const sh = Math.max(1, Math.min(h, Math.round(w / BANNER_ASPECT)));
+				// Scale crop to max banner size.
+				let targetW = sw;
+				let targetH = sh;
+				if (sw > BANNER_MAX_WIDTH || sh > BANNER_MAX_HEIGHT) {
+					const r = Math.min(BANNER_MAX_WIDTH / sw, BANNER_MAX_HEIGHT / sh);
+					targetW = Math.round(sw * r);
+					targetH = Math.round(sh * r);
+				}
+				const canvas = document.createElement('canvas');
+				canvas.width = targetW;
+				canvas.height = targetH;
+				const ctx = canvas.getContext('2d');
+				if (!ctx) {
+					reject(new Error('Canvas not supported'));
+					return;
+				}
+				ctx.drawImage(img, sx, sy, sw, sh, 0, 0, targetW, targetH);
+				canvas.toBlob(
+					(blob) => (blob ? resolve(blob) : reject(new Error('Resize failed'))),
+					mimeType,
+					quality
+				);
+			};
+			img.onerror = () => {
+				URL.revokeObjectURL(url);
+				reject(new Error('Failed to load image'));
+			};
+			img.src = url;
+		});
+	}
+
+	// Generate avatar from character (try endpoint); state and helpers
+	const TRY_POLL_MS = 2000;
+	const TRY_MAX_POLLS = 120;
+	const TRY_SERVER_ID = 1;
+	const TRY_METHOD = 'fluxImageKlein';
+
+	function buildAvatarPrompt(description, variationKey) {
+		const core = typeof description === 'string' ? description.trim() : '';
+		return [
+			`Portrait of ${core}. Avoid showing body, focus on face and head.`,
+			'Head-and-shoulders framing, square composition.',
+			'Clean, plain and simple background colorful and contrasting with subject.',
+			'Expressive eyes, clear facial details, emotive head position.',
+			'Stylized digital portrait suitable for a social profile photo.',
+			`No text, no logo, no watermark, no frame. Variation hint: ${variationKey}.`
+		].join('\n');
+	}
+
+	async function ensureTryIdentityCookie() {
+		const tz = typeof Intl !== 'undefined' && Intl.DateTimeFormat
+			? (Intl.DateTimeFormat().resolvedOptions()?.timeZone || '')
+			: '';
+		const screenHint = typeof window.screen !== 'undefined'
+			? `${window.screen.width}x${window.screen.height}`
+			: '';
+		await fetch('/api/policy/seen', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			credentials: 'include',
+			body: JSON.stringify({ tz, screen: screenHint })
+		}).catch(() => null);
+	}
+
+	async function createTryImage(prompt) {
+		const response = await fetch('/api/try/create', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			credentials: 'include',
+			body: JSON.stringify({
+				server_id: TRY_SERVER_ID,
+				method: TRY_METHOD,
+				args: { prompt, resolution: 'ai_latest' }
+			})
+		});
+		const data = await response.json().catch(() => ({}));
+		return { ok: response.ok, status: response.status, data };
+	}
+
+	async function pollTryImageById(id) {
+		for (let i = 0; i < TRY_MAX_POLLS; i++) {
+			await new Promise((r) => setTimeout(r, TRY_POLL_MS));
+			const listRes = await fetch('/api/try/list', { credentials: 'include' }).catch(() => null);
+			if (!listRes?.ok) continue;
+			const list = await listRes.json().catch(() => []);
+			const item = Array.isArray(list) ? list.find((entry) => Number(entry?.id) === Number(id)) : null;
+			if (!item) continue;
+			if (item.status === 'completed' && typeof item.url === 'string' && item.url.trim()) {
+				return { ok: true, url: item.url.trim() };
+			}
+			if (item.status === 'failed') {
+				return { ok: false, error: String(item.meta?.error || '').trim() || 'Generation failed.' };
+			}
+		}
+		return { ok: false, error: 'Timed out. Try again.' };
+	}
+
+	async function discardTryImage(url) {
+		if (!url || typeof url !== 'string' || !url.trim()) return;
+		await fetch('/api/try/discard', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			credentials: 'include',
+			body: JSON.stringify({ url: url.trim() })
+		}).catch(() => null);
+	}
+
+	let generatedAvatarBlob = null;
+	let generatedAvatarObjectUrl = null;
+	let isGeneratingAvatar = false;
+
+	function revokeGeneratedAvatar() {
+		if (generatedAvatarObjectUrl) {
+			try { URL.revokeObjectURL(generatedAvatarObjectUrl); } catch { /* ignore */ }
+			generatedAvatarObjectUrl = null;
+		}
+		generatedAvatarBlob = null;
+	}
 
 	// Image upload UX (avatar/cover): button -> file picker, preview -> remove X
 	const objectUrls = { avatar: null, cover: null };
@@ -1419,6 +1686,13 @@ async function init() {
 		}
 		if (trigger) {
 			trigger.hidden = showPreview;
+		}
+		// Avatar: both "Upload avatar" and "Generate from character" get the same visibility (one place, no second selector).
+		if (kind === 'avatar') {
+			const actions = container.querySelector('.user-profile-avatar-actions');
+			if (actions) {
+				actions.querySelectorAll('.user-profile-upload-button').forEach((btn) => { btn.hidden = showPreview; });
+			}
 		}
 	}
 
@@ -1470,6 +1744,93 @@ async function init() {
 	setupUpload('avatar');
 	setupUpload('cover');
 
+	const avatarInput = container.querySelector('[data-upload-input="avatar"]');
+	const avatarRemoveField = container.querySelector('[data-upload-remove="avatar"]');
+	const avatarClearBtn = container.querySelector('[data-upload-clear="avatar"]');
+
+	if (avatarInput) {
+		avatarInput.addEventListener('change', () => revokeGeneratedAvatar());
+	}
+	if (avatarClearBtn) {
+		avatarClearBtn.addEventListener('click', () => revokeGeneratedAvatar());
+	}
+
+	// Delegate generate-from-character clicks to the form so the handler runs even if the button ref wasn’t found at setup.
+	if (form) {
+		form.addEventListener('click', async (e) => {
+			const avatarActions = form.querySelector('[data-upload="avatar"] .user-profile-avatar-actions');
+			const avatarActionButtons = avatarActions?.querySelectorAll?.('.user-profile-upload-button') ?? [];
+			const btn = avatarActionButtons[1];
+			if (!btn || !btn.contains(e.target)) return;
+			e.preventDefault();
+			const characterField = form.querySelector('textarea[name="character_description"]');
+			if (!characterField) return;
+			if (isGeneratingAvatar) return;
+			const description = (characterField.value || '').trim();
+			if (description.length < 12) {
+				if (errorBox) {
+					errorBox.style.display = 'block';
+					errorBox.textContent = 'Add a character description (at least 12 characters) to generate an avatar.';
+				}
+				return;
+			}
+			if (errorBox) {
+				errorBox.style.display = 'none';
+				errorBox.textContent = '';
+			}
+			isGeneratingAvatar = true;
+			btn.disabled = true;
+			btn.classList.add('is-loading');
+			if (generatingOverlay) generatingOverlay.hidden = false;
+			setUploadState('avatar', { showPreview: true, src: '', removed: false });
+			if (avatarGeneratingPlaceholder) avatarGeneratingPlaceholder.hidden = false;
+			try {
+				await ensureTryIdentityCookie();
+				const variationKey = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+				const prompt = buildAvatarPrompt(description, variationKey);
+				const created = await createTryImage(prompt);
+				if (!created.ok) {
+					const msg = created.data?.message || created.data?.error || 'Could not start generation.';
+					throw new Error(msg);
+				}
+				let url = null;
+				if (created.data?.status === 'completed' && typeof created.data?.url === 'string' && created.data.url.trim()) {
+					url = created.data.url.trim();
+				} else if (created.data?.id) {
+					const polled = await pollTryImageById(created.data.id);
+					if (polled.ok && polled.url) url = polled.url;
+					else throw new Error(polled.error || 'Generation failed.');
+				} else {
+					throw new Error('No image returned.');
+				}
+				// Fetch image as blob, then discard from try so save uses the same path as file upload.
+				const res = await fetch(url, { credentials: 'include' });
+				if (!res.ok) throw new Error('Failed to load generated image.');
+				const blob = await res.blob();
+				await discardTryImage(url);
+				revokeGeneratedAvatar();
+				generatedAvatarBlob = blob;
+				generatedAvatarObjectUrl = URL.createObjectURL(blob);
+				revoke('avatar');
+				if (avatarRemoveField) avatarRemoveField.value = '';
+				setUploadState('avatar', { showPreview: true, src: generatedAvatarObjectUrl, removed: false });
+			} catch (err) {
+				const msg = String(err?.message || '').trim() || 'Generation failed.';
+				if (errorBox) {
+					errorBox.style.display = 'block';
+					errorBox.textContent = msg;
+				}
+				setUploadState('avatar', { showPreview: false, src: '', removed: false });
+			} finally {
+				isGeneratingAvatar = false;
+				btn.disabled = false;
+				btn.classList.remove('is-loading');
+				if (generatingOverlay) generatingOverlay.hidden = true;
+				if (avatarGeneratingPlaceholder) avatarGeneratingPlaceholder.hidden = true;
+			}
+		});
+	}
+
 	function closeModal() {
 		setModalOpen(overlay, false);
 	}
@@ -1486,21 +1847,80 @@ async function init() {
 	});
 
 	async function saveProfile() {
-		if (!form) return;
+		if (!form || !saveButton) return;
 		if (errorBox) {
 			errorBox.style.display = 'none';
 			errorBox.textContent = '';
 		}
 
-		const fd = new FormData(form);
-		const result = await fetchJsonWithStatusDeduped('/api/profile', {
-			method: 'POST',
-			credentials: 'include',
-			body: fd,
-		}, { windowMs: 0 }).catch(() => ({ ok: false, status: 0, data: null }));
+		const fd = new FormData();
+		let hasAvatarFile = false;
+		for (const [name, value] of new FormData(form)) {
+			if (name === 'avatar_file' && value instanceof File && value.size > 0) {
+				hasAvatarFile = true;
+				try {
+					const blob = await resizeImageFile(value, {
+						maxWidth: 128,
+						maxHeight: 128,
+						quality: 0.9,
+						mimeType: 'image/jpeg'
+					});
+					fd.append(name, blob, 'avatar.jpg');
+				} catch {
+					fd.append(name, value);
+				}
+			} else if (name === 'avatar_file' && value instanceof File && value.size === 0) {
+				// Skip empty avatar_file from form so generated blob can be appended as sole avatar_file
+				continue;
+			} else if (name === 'cover_file' && value instanceof File && value.size > 0) {
+				try {
+					const blob = await resizeCoverToBannerStrip(value, {
+						quality: 0.85,
+						mimeType: 'image/jpeg'
+					});
+					fd.append(name, blob, 'cover.jpg');
+				} catch {
+					fd.append(name, value);
+				}
+			} else {
+				fd.append(name, value);
+			}
+		}
+
+		if (!hasAvatarFile && generatedAvatarBlob) {
+			try {
+				const file = new File([generatedAvatarBlob], 'avatar.png', { type: generatedAvatarBlob.type || 'image/png' });
+				const blob = await resizeImageFile(file, {
+					maxWidth: 128,
+					maxHeight: 128,
+					quality: 0.9,
+					mimeType: 'image/jpeg'
+				});
+				fd.append('avatar_file', blob, 'avatar.jpg');
+			} catch {
+				// fallback: append as-is
+				fd.append('avatar_file', generatedAvatarBlob, 'avatar.png');
+			}
+		}
+
+		saveButton.disabled = true;
+		let result;
+		try {
+			result = await fetchJsonWithStatusDeduped('/api/profile', {
+				method: 'POST',
+				credentials: 'include',
+				body: fd,
+			}, { windowMs: 0 });
+		} catch {
+			result = { ok: false, status: 0, data: null };
+		} finally {
+			saveButton.disabled = false;
+		}
 
 		if (!result.ok) {
-			const message = result.data?.error || 'Failed to save profile.';
+			const message = result.status === 0
+				? 'Network error. Check your connection and try again.'
+				: (result.data?.error || 'Failed to save profile.');
 			if (errorBox) {
 				errorBox.style.display = 'block';
 				errorBox.textContent = message;
