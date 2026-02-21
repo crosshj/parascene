@@ -1318,7 +1318,7 @@ export async function openDb() {
 				const lim = Math.min(Math.max(0, Number(limit) || 24), 500);
 				const off = Math.max(0, Number(offset) || 0);
 				const stmt = db.prepare(
-					`SELECT fi.id, fi.title, fi.summary, fi.author, fi.tags, fi.created_at, 
+					`SELECT fi.id, fi.title, fi.summary, fi.author, fi.tags, fi.created_at,
                   fi.created_image_id, ci.filename, ci.file_path, ci.user_id,
                   up.user_name AS author_user_name,
                   up.display_name AS author_display_name,
@@ -1355,6 +1355,38 @@ export async function openDb() {
            LIMIT ? OFFSET ?`
 				);
 				return Promise.resolve(stmt.all(id, id, id, id, lim, off));
+			}
+		},
+		selectNewestPublishedFeedItems: {
+			all: async (userId) => {
+				// All published feed items, newest first (no viewer/follow filtering). Used for Advanced create "Newest".
+				const stmt = db.prepare(
+					`SELECT fi.id, fi.title, fi.summary, fi.author, fi.tags, fi.created_at,
+                  fi.created_image_id, ci.filename, ci.file_path, ci.user_id,
+                  up.user_name AS author_user_name,
+                  up.display_name AS author_display_name,
+                  up.avatar_url AS author_avatar_url,
+                  COALESCE(ci.file_path, CASE WHEN ci.filename IS NOT NULL THEN '/api/images/created/' || ci.filename ELSE NULL END) as url,
+                  COALESCE(lc.like_count, 0) AS like_count,
+                  COALESCE(cc.comment_count, 0) AS comment_count,
+                  0 AS viewer_liked
+           FROM feed_items fi
+           LEFT JOIN created_images ci ON fi.created_image_id = ci.id
+           LEFT JOIN user_profiles up ON up.user_id = ci.user_id
+           LEFT JOIN (
+             SELECT created_image_id, COUNT(*) AS like_count
+             FROM likes_created_image
+             GROUP BY created_image_id
+           ) lc ON lc.created_image_id = fi.created_image_id
+           LEFT JOIN (
+             SELECT created_image_id, COUNT(*) AS comment_count
+             FROM comments_created_image
+             GROUP BY created_image_id
+           ) cc ON cc.created_image_id = fi.created_image_id
+           WHERE ci.user_id IS NOT NULL
+           ORDER BY fi.created_at DESC`
+				);
+				return Promise.resolve(stmt.all());
 			}
 		},
 		selectNewbieFeedItems: {

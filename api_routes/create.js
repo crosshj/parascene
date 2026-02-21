@@ -339,8 +339,8 @@ export default function createCreateRoutes({ queries, storage }) {
 				});
 			}
 		}
-		if (recent_posts && queries.selectExploreFeedItems?.all) {
-			const feedItems = await queries.selectExploreFeedItems.all(userId);
+		if (recent_posts && queries.selectNewestPublishedFeedItems?.all) {
+			const feedItems = await queries.selectNewestPublishedFeedItems.all(userId);
 			for (const item of (feedItems || []).slice(0, perOptionLimit)) {
 				const imageId = item?.created_image_id || null;
 				const imageUrl = shareUrlForImage(imageId, userId) ?? null;
@@ -359,8 +359,8 @@ export default function createCreateRoutes({ queries, storage }) {
 				});
 			}
 		}
-		if (top_likes && queries.selectExploreFeedItems?.all) {
-			const feedItems = await queries.selectExploreFeedItems.all(userId) || [];
+		if (top_likes && queries.selectNewestPublishedFeedItems?.all) {
+			const feedItems = await queries.selectNewestPublishedFeedItems.all(userId) || [];
 			const sorted = [...feedItems].filter(i => i?.like_count !== undefined).sort((a, b) => Number(b?.like_count || 0) - Number(a?.like_count || 0)).slice(0, perOptionLimit);
 			for (const item of sorted) {
 				const imageId = item?.created_image_id || item?.id || null;
@@ -379,8 +379,8 @@ export default function createCreateRoutes({ queries, storage }) {
 				});
 			}
 		}
-		if (bottom_likes && queries.selectExploreFeedItems?.all) {
-			const feedItems = await queries.selectExploreFeedItems.all(userId) || [];
+		if (bottom_likes && queries.selectNewestPublishedFeedItems?.all) {
+			const feedItems = await queries.selectNewestPublishedFeedItems.all(userId) || [];
 			const sorted = [...feedItems].filter(i => i?.like_count !== undefined).sort((a, b) => Number(a?.like_count || 0) - Number(b?.like_count || 0)).slice(0, perOptionLimit);
 			for (const item of sorted) {
 				const imageId = item?.created_image_id || item?.id || null;

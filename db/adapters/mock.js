@@ -1006,6 +1006,37 @@ export function openDb() {
 				paginated: explorePaginated
 			};
 		})(),
+		selectNewestPublishedFeedItems: {
+			// All published feed items, newest first (no viewer/follow filtering). Used for Advanced create "Newest".
+			all: async (userId) => {
+				const itemsWithUser = feed_items.map((item) => {
+					const user_id = item.user_id != null ? Number(item.user_id) : (() => {
+						const ci = created_images.find((c) => Number(c.id) === Number(item.created_image_id));
+						return ci?.user_id != null ? Number(ci.user_id) : null;
+					})();
+					return { ...item, user_id };
+				});
+				const filtered = itemsWithUser
+					.filter((item) => item.user_id != null && item.user_id !== undefined)
+					.slice()
+					.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+				return filtered.map((item) => {
+					const cid = Number(item.created_image_id);
+					const likeCount = likes_created_image.filter((l) => Number(l.created_image_id) === cid).length;
+					const commentCount = comments_created_image.filter((c) => Number(c.created_image_id) === cid).length;
+					const profile = user_profiles.find((p) => p.user_id === Number(item.user_id));
+					return {
+						...item,
+						like_count: likeCount,
+						comment_count: commentCount,
+						viewer_liked: false,
+						author_user_name: profile?.user_name ?? null,
+						author_display_name: profile?.display_name ?? null,
+						author_avatar_url: profile?.avatar_url ?? null
+					};
+				});
+			}
+		},
 		selectNewbieFeedItems: {
 			all: async (viewerId) => {
 				const id = viewerId ?? null;

@@ -498,9 +498,9 @@ export default function createCreationsRoutes({ queries }) {
 									related_creation_title: null
 								}],
 								score: null,
-									click_score: null,
-									click_share: null
-								});
+								click_score: null,
+								click_share: null
+							});
 						}
 					}
 				} else {

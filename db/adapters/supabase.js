@@ -1947,20 +1947,20 @@ export function openDb() {
 				const page = (Array.isArray(data) ? data : [])
 					.map((row) => {
 						const { prsn_created_images, ...rest } = row;
-					const filename = prsn_created_images?.filename ?? null;
-					const file_path = prsn_created_images?.file_path ?? null;
-					const user_id = prsn_created_images?.user_id ?? null;
+						const filename = prsn_created_images?.filename ?? null;
+						const file_path = prsn_created_images?.file_path ?? null;
+						const user_id = prsn_created_images?.user_id ?? null;
 						const resolvedUrl = file_path || (filename ? `/api/images/created/${filename}` : null);
-					return {
-						...rest,
-						filename,
-						user_id,
+						return {
+							...rest,
+							filename,
+							user_id,
 							url: resolvedUrl,
 							thumbnail_url: getThumbnailUrl(resolvedUrl),
-						like_count: 0,
-						comment_count: 0,
-						viewer_liked: false
-					};
+							like_count: 0,
+							comment_count: 0,
+							viewer_liked: false
+						};
 					})
 					.filter((item) => item?.user_id != null && typeof item?.url === "string" && item.url.length > 0);
 				const createdImageIds = page
@@ -2037,6 +2037,91 @@ export function openDb() {
 				paginated: explorePaginated
 			};
 		})(),
+		selectNewestPublishedFeedItems: {
+			// All published feed items, newest first (no viewer/follow filtering). Used for Advanced create "Newest".
+			all: async (userId) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("feed_items"))
+					.select(
+						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images(filename, file_path, user_id)"
+					)
+					.order("created_at", { ascending: false });
+				if (error) throw error;
+
+				const items = (data ?? []).map((item) => {
+					const { prsn_created_images, ...rest } = item;
+					const filename = prsn_created_images?.filename ?? null;
+					const file_path = prsn_created_images?.file_path ?? null;
+					const user_id = prsn_created_images?.user_id ?? null;
+					return {
+						...rest,
+						filename,
+						user_id,
+						url: file_path || (filename ? `/api/images/created/${filename}` : null),
+						thumbnail_url: getThumbnailUrl(file_path || (filename ? `/api/images/created/${filename}` : null)),
+						like_count: 0,
+						comment_count: 0,
+						viewer_liked: false
+					};
+				});
+
+				const filtered = items.filter((item) => item.user_id != null && item.user_id !== undefined);
+				const createdImageIds = filtered
+					.map((item) => item.created_image_id)
+					.filter((id) => id != null && id !== undefined);
+
+				if (createdImageIds.length === 0) return filtered;
+
+				const { data: countRows, error: countError } = await serviceClient
+					.from(prefixedTable("created_image_like_counts"))
+					.select("created_image_id, like_count")
+					.in("created_image_id", createdImageIds);
+				if (countError) throw countError;
+				const countById = new Map(
+					(countRows ?? []).map((row) => [String(row.created_image_id), Number(row.like_count ?? 0)])
+				);
+
+				const { data: commentCountRows, error: commentCountError } = await serviceClient
+					.from(prefixedTable("created_image_comment_counts"))
+					.select("created_image_id, comment_count")
+					.in("created_image_id", createdImageIds);
+				if (commentCountError) throw commentCountError;
+				const commentCountById = new Map(
+					(commentCountRows ?? []).map((row) => [String(row.created_image_id), Number(row.comment_count ?? 0)])
+				);
+
+				const authorIds = [...new Set(
+					filtered
+						.map((item) => item.user_id)
+						.filter((uid) => uid != null && Number.isFinite(Number(uid)))
+				)].map(Number).filter((n) => n > 0);
+				let profileByUserId = new Map();
+				if (authorIds.length > 0) {
+					const { data: profileRows, error: profileError } = await serviceClient
+						.from(prefixedTable("user_profiles"))
+						.select("user_id, user_name, display_name, avatar_url")
+						.in("user_id", authorIds);
+					if (profileError) throw profileError;
+					profileByUserId = new Map((profileRows ?? []).map((row) => [String(row.user_id), row]));
+				}
+
+				return filtered.map((item) => {
+					const key = item.created_image_id != null ? String(item.created_image_id) : null;
+					const likeCount = key ? (countById.get(key) ?? 0) : 0;
+					const commentCount = key ? (commentCountById.get(key) ?? 0) : 0;
+					const profile = item.user_id != null ? profileByUserId.get(String(item.user_id)) ?? null : null;
+					return {
+						...item,
+						like_count: likeCount,
+						comment_count: commentCount,
+						viewer_liked: false,
+						author_user_name: profile?.user_name ?? null,
+						author_display_name: profile?.display_name ?? null,
+						author_avatar_url: profile?.avatar_url ?? null
+					};
+				});
+			}
+		},
 		selectNewbieFeedItems: {
 			all: async (viewerId) => {
 				const id = viewerId ?? null;
@@ -4402,7 +4487,7 @@ export function openDb() {
 			if (!filename || filename.includes("..") || filename.includes("/")) return;
 			try {
 				await storageClient.storage.from(STORAGE_BUCKET_ANON).remove([filename]);
-			} catch (_) {}
+			} catch (_) { }
 		},
 
 		getImageBuffer: async (filename, options = {}) => {

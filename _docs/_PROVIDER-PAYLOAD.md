@@ -126,7 +126,7 @@ Latest comments across the platform, each tied to a creation.
 
 ### Type: `post` (source: `recent_posts`)
 
-Feed items for “newest” creations (one per creation in the explore feed).
+Feed items for “newest” creations (all published on the platform, newest first; one per creation).
 
 | Field          | Type   | Description |
 |----------------|--------|-------------|
@@ -148,7 +148,7 @@ Feed items for “newest” creations (one per creation in the explore feed).
 
 ### Type: `image` (source: `top_likes`, `bottom_likes`, or `most_mutated`)
 
-Creations sorted by like count (most or least) or by how often they appear in mutation lineages (meta.history). Here `id` is the creation (image) ID.
+Creations from the platform: **top_likes** / **bottom_likes** are all published creations sorted by like count (most or least); **most_mutated** are creations that appear most in mutation lineages (meta.history). Here `id` is the creation (image) ID.
 
 | Field          | Type   | Description |
 |----------------|--------|-------------|

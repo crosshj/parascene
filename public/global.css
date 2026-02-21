@@ -4418,6 +4418,12 @@ body.modal-open {
 }
 
 /* More Info / Creation Details Modal */
+app-modal-creation-details .modal-body {
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
+	min-height: 0;
+}
+
 app-modal-creation-details .creation-details-args {
 	white-space: pre-wrap;
 	word-break: break-word;
