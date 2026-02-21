@@ -1101,7 +1101,83 @@ export default function createProfileRoutes({ queries }) {
 				if (tryUrl.startsWith(tryPrefix)) {
 					const afterPrefix = tryUrl.slice(tryPrefix.length);
 					const filename = afterPrefix ? afterPrefix.split("/")[0].split("?")[0].trim() : "";
-					if (filename && !filename.includes("..") && !filename.includes("/") && storage.getImageBufferAnon) {
+					if (
+						filename &&
+						!filename.includes("..") &&
+						!filename.includes("/") &&
+						storage.getImageBufferAnon &&
+						storage.uploadImage &&
+						queries.insertCreatedImage?.run
+					) {
+						try {
+							const avatarAnonRow = await queries.selectCreatedImageAnonByFilename?.get?.(filename);
+							// Idempotent: if we already promoted this anon to a creation (e.g. retry or double-submit), reuse it and avoid saving twice.
+							let createdImageId = null;
+							let newUrl = null;
+							if (avatarAnonRow?.id != null && queries.selectCreatedImagesForUser?.all) {
+								const existingCreations = await queries.selectCreatedImagesForUser.all(req.auth.userId, { limit: 500 });
+								const existing = (existingCreations || []).find(
+									(c) => c.meta && typeof c.meta === "object" && (Number(c.meta.source_anon_id) === Number(avatarAnonRow.id))
+								);
+								if (existing && (existing.file_path || existing.filename)) {
+									newUrl = existing.file_path || (existing.filename ? `/api/images/created/${existing.filename}` : null);
+									createdImageId = existing.id;
+								}
+							}
+							if (newUrl && createdImageId != null) {
+								avatar_url = newUrl;
+								if (oldAvatarKey && storage.deleteGenericImage) pendingDeletes.push(oldAvatarKey);
+								if (queries.updateTryRequestsTransitionedByCreatedImageAnonId?.run && queries.deleteCreatedImageAnon?.run && storage.deleteImageAnon) {
+									try {
+										await queries.updateTryRequestsTransitionedByCreatedImageAnonId.run(avatarAnonRow.id, {
+											userId: req.auth.userId,
+											createdImageId
+										});
+										await queries.deleteCreatedImageAnon.run(avatarAnonRow.id);
+										await storage.deleteImageAnon(avatarAnonRow.filename);
+									} catch (_) {}
+								}
+							} else {
+								const buffer = await storage.getImageBufferAnon(filename);
+								const newFilename = `profile_avatar_${req.auth.userId}_${Date.now()}.png`;
+								newUrl = await storage.uploadImage(buffer, newFilename);
+								const promptText = (typeof meta?.character_description === "string" && meta.character_description.trim()) ? meta.character_description.trim() : null;
+								const creationMeta = {
+									...(promptText ? { args: { prompt: promptText } } : {}),
+									...(avatarAnonRow?.id != null ? { source_anon_id: avatarAnonRow.id } : {})
+								};
+								const creationMetaOrNull = Object.keys(creationMeta).length > 0 ? creationMeta : null;
+								const insertResult = await queries.insertCreatedImage.run(
+									req.auth.userId,
+									newFilename,
+									newUrl,
+									1024,
+									1024,
+									null,
+									"completed",
+									creationMetaOrNull
+								);
+								createdImageId = insertResult?.insertId ?? insertResult?.lastInsertRowid;
+								if (createdImageId) {
+									avatar_url = newUrl;
+									if (oldAvatarKey && storage.deleteGenericImage) pendingDeletes.push(oldAvatarKey);
+									if (avatarAnonRow?.id && queries.updateTryRequestsTransitionedByCreatedImageAnonId?.run && queries.deleteCreatedImageAnon?.run && storage.deleteImageAnon) {
+										try {
+											await queries.updateTryRequestsTransitionedByCreatedImageAnonId.run(avatarAnonRow.id, {
+												userId: req.auth.userId,
+												createdImageId
+											});
+											await queries.deleteCreatedImageAnon.run(avatarAnonRow.id);
+											await storage.deleteImageAnon(avatarAnonRow.filename);
+										} catch (_) {}
+									}
+								}
+							}
+						} catch (tryErr) {
+							// non-fatal: leave avatar_url as existing or null
+						}
+					} else if (filename && !filename.includes("..") && !filename.includes("/") && storage.getImageBufferAnon) {
+						// Fallback: copy to profile storage only (no creation)
 						try {
 							const buffer = await storage.getImageBufferAnon(filename);
 							const resized = await sharp(buffer)
@@ -1125,7 +1201,7 @@ export default function createProfileRoutes({ queries }) {
 								} catch (_) {}
 							}
 						} catch (tryErr) {
-							// non-fatal: leave avatar_url as existing or null
+							// non-fatal
 						}
 					}
 				}
@@ -1182,6 +1258,70 @@ export default function createProfileRoutes({ queries }) {
 			}
 			// console.error("Error updating profile (multipart):", error);
 			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	// Set current user's avatar from one of their creations (owner only)
+	router.post("/api/profile/avatar-from-creation", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+			const creationId = req.body?.creation_id != null ? Number(req.body.creation_id) : null;
+			if (!Number.isFinite(creationId) || creationId <= 0) {
+				return res.status(400).json({ error: "Invalid creation_id" });
+			}
+			if (!queries.selectCreatedImageById?.get) {
+				return res.status(500).json({ error: "Profile storage not available" });
+			}
+			const image = await queries.selectCreatedImageById.get(creationId, req.auth.userId);
+			if (!image || Number(image.user_id) !== Number(req.auth.userId)) {
+				return res.status(404).json({ error: "Creation not found or you do not own it" });
+			}
+			if (image.status !== "completed" || !image.filename || image.filename.includes("..") || image.filename.includes("/")) {
+				return res.status(400).json({ error: "Creation image is not available" });
+			}
+			const storage = req.app?.locals?.storage;
+			if (!storage?.getImageBuffer || !storage?.uploadGenericImage) {
+				return res.status(500).json({ error: "Image storage not available" });
+			}
+			const existingRow = await queries.selectUserProfileByUserId?.get(req.auth.userId);
+			const existingProfile = normalizeProfileRow(existingRow);
+			const oldAvatarUrl = existingProfile.avatar_url || null;
+			const oldAvatarKey = extractGenericKey(oldAvatarUrl);
+			const buffer = await storage.getImageBuffer(image.filename);
+			const now = Date.now();
+			const rand = Math.random().toString(36).slice(2, 9);
+			const resized = await sharp(buffer)
+				.rotate()
+				.resize(128, 128, { fit: "cover" })
+				.png()
+				.toBuffer();
+			const key = `profile/${req.auth.userId}/avatar_${now}_${rand}.png`;
+			const stored = await storage.uploadGenericImage(resized, key, { contentType: "image/png" });
+			const avatar_url = buildGenericUrl(stored);
+			const payload = {
+				user_name: existingProfile.user_name ?? null,
+				display_name: existingProfile.display_name ?? null,
+				about: existingProfile.about ?? null,
+				socials: existingProfile.socials ?? {},
+				avatar_url,
+				cover_image_url: existingProfile.cover_image_url ?? null,
+				badges: existingProfile.badges ?? [],
+				meta: existingProfile.meta ?? {}
+			};
+			await queries.upsertUserProfile.run(req.auth.userId, payload);
+			if (oldAvatarKey && storage.deleteGenericImage) {
+				try {
+					await storage.deleteGenericImage(oldAvatarKey);
+				} catch (_) {}
+			}
+			const updatedRow = await queries.selectUserProfileByUserId?.get(req.auth.userId);
+			const profile = normalizeProfileRow(updatedRow);
+			return res.json({ ok: true, profile });
+		} catch (err) {
+			// console.error("Error setting avatar from creation:", err);
+			return res.status(500).json({ error: err?.message || "Internal server error" });
 		}
 	});
 
@@ -1566,6 +1706,9 @@ export default function createProfileRoutes({ queries }) {
 				return res.status(401).json({ error: "Unauthorized" });
 			}
 
+			const user = await queries.selectUserById?.get?.(req.auth.userId);
+			const isAdmin = user?.role === "admin";
+
 			const credits = await queries.selectUserCredits.get(req.auth.userId);
 
 			// If no credits record exists, initialize with 100
@@ -1575,7 +1718,7 @@ export default function createProfileRoutes({ queries }) {
 					const newCredits = await queries.selectUserCredits.get(req.auth.userId);
 					return res.json({
 						balance: newCredits.balance,
-						canClaim: true,
+						canClaim: isAdmin ? false : true,
 						lastClaimDate: null
 					});
 				} catch (error) {
@@ -1584,8 +1727,9 @@ export default function createProfileRoutes({ queries }) {
 				}
 			}
 
-			// Check if can claim (last claim was not today in UTC)
-			const canClaim = (() => {
+			// Check if can claim (last claim was not today in UTC). Admins cannot claim.
+			let canClaim = (() => {
+				if (isAdmin) return false;
 				if (!credits.last_daily_claim_at) return true;
 				const now = new Date();
 				const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -1609,6 +1753,11 @@ export default function createProfileRoutes({ queries }) {
 		try {
 			if (!req.auth?.userId) {
 				return res.status(401).json({ error: "Unauthorized" });
+			}
+
+			const user = await queries.selectUserById?.get?.(req.auth.userId);
+			if (user?.role === "admin") {
+				return res.status(403).json({ error: "Admins cannot claim daily credits" });
 			}
 
 			const result = await queries.claimDailyCredits.run(req.auth.userId, 10);

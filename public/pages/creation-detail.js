@@ -1098,6 +1098,15 @@ async function loadCreation() {
 				<span data-copy-link-label>Copy link</span>
 			</button>
 		`;
+		const setAvatarButtonHtml = isOwner ? `
+			<button class="feed-card-action" type="button" data-set-avatar-button aria-label="Set as profile picture">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+					<circle cx="12" cy="7" r="4"></circle>
+				</svg>
+				<span data-set-avatar-label>Set as profile picture</span>
+			</button>
+		` : '';
 
 		detailContent.innerHTML = html`
 			<div style="display: flex; justify-content: space-between;">
@@ -1148,6 +1157,7 @@ async function loadCreation() {
 					</button>
 					` : ``}
 					${copyLinkButtonHtml}
+					${setAvatarButtonHtml}
 					<button class="feed-card-action" type="button" data-landscape-btn aria-label="Landscape" style="display: none;">
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
 							stroke-linejoin="round" aria-hidden="true">
@@ -1354,6 +1364,43 @@ async function loadCreation() {
 						copyLinkLabel.textContent = 'Copy link';
 					}
 				}, 1500);
+			});
+		}
+
+		const setAvatarBtn = detailContent.querySelector('button[data-set-avatar-button]');
+		const setAvatarLabel = detailContent.querySelector('[data-set-avatar-label]');
+		if (setAvatarBtn instanceof HTMLButtonElement && setAvatarLabel) {
+			let setAvatarBusy = false;
+			setAvatarBtn.addEventListener('click', async () => {
+				if (setAvatarBusy) return;
+				setAvatarBusy = true;
+				setAvatarBtn.disabled = true;
+				const originalText = setAvatarLabel.textContent;
+				try {
+					const result = await fetchJsonWithStatusDeduped('/api/profile/avatar-from-creation', {
+						method: 'POST',
+						credentials: 'include',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ creation_id: creationId })
+					}, { windowMs: 0 });
+					if (result.ok) {
+						window.location.reload();
+						return;
+					} else {
+						setAvatarLabel.textContent = result.data?.error || 'Failed';
+						window.setTimeout(() => {
+							if (setAvatarLabel?.isConnected) setAvatarLabel.textContent = originalText;
+						}, 3000);
+					}
+				} catch {
+					setAvatarLabel.textContent = 'Failed';
+					window.setTimeout(() => {
+						if (setAvatarLabel?.isConnected) setAvatarLabel.textContent = originalText;
+					}, 3000);
+				} finally {
+					setAvatarBusy = false;
+					setAvatarBtn.disabled = false;
+				}
 			});
 		}
 

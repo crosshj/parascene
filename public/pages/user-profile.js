@@ -131,7 +131,7 @@ function buildBannerStyle(coverImageUrl) {
 	// IMPORTANT: This string is injected into an HTML attribute wrapped in double quotes.
 	// So we must avoid double quotes inside the value, otherwise the attribute breaks.
 	const safeUrl = url.replace(/'/g, "\\'");
-	return `background-image: linear-gradient(135deg, rgba(124, 58, 237, 0.32), rgba(5, 199, 111, 0.22)), linear-gradient(180deg, rgba(0, 0, 0, 0.15), transparent), url('${safeUrl}');`;
+	return `background-image: url('${safeUrl}');`;
 }
 
 function normalizeWebsite(raw) {
@@ -181,6 +181,7 @@ function renderProfilePage(container, { user, profile, stats, plan, isSelf, view
 		? html`<img class="user-profile-avatar-img" src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(displayName)}">`
 : html`<div class="user-profile-avatar-fallback" style="--user-profile-avatar-bg: ${avatarColor};" aria-hidden="true">${escapeHtml(avatarInitial)}</div>`;
 
+	const usernameHint = '3–24 characters. Lowercase letters, numbers, and underscores only. This cannot be changed later.'
 	container.innerHTML = html`
 		<div class="user-profile-hero">
 			<div class="user-profile-banner" style="${buildBannerStyle(coverUrl)}"></div>
@@ -327,7 +328,7 @@ function renderProfilePage(container, { user, profile, stats, plan, isSelf, view
 								<div class="user-profile-help">
 									${userNameLocked
 									? 'Username is permanent and cannot be changed.'
-									: 'Cannot be changed later.'}
+									: usernameHint}
 								</div>
 							</div>
 							<div class="field">
@@ -364,13 +365,14 @@ function renderProfilePage(container, { user, profile, stats, plan, isSelf, view
 									<input class="user-profile-file-input" type="file" name="avatar_file" accept="image/*"
 										data-upload-input="avatar">
 									<input type="hidden" name="avatar_remove" value="" data-upload-remove="avatar">
+									<input type="hidden" name="avatar_try_url" value="" data-avatar-try-url>
 									<div class="user-profile-avatar-actions">
 										<button class="user-profile-upload-button btn-secondary" type="button"
 											data-upload-trigger="avatar">Upload avatar</button>
 										<button class="user-profile-upload-button btn-secondary user-profile-generate-avatar-btn" type="button"
 											data-avatar-generate-from-character>
 											<span class="user-profile-generate-avatar-spinner" aria-hidden="true" hidden></span>
-											<span class="user-profile-generate-avatar-btn-text">Generate from character</span>
+											<span class="user-profile-generate-avatar-btn-text">Generate</span>
 										</button>
 									</div>
 									<div class="user-profile-upload-preview" data-upload-preview="avatar" hidden>
@@ -449,6 +451,30 @@ function renderProfilePage(container, { user, profile, stats, plan, isSelf, view
 				</div>
 				<div class="user-profile-edit-generating-overlay" data-profile-edit-generating-overlay hidden aria-busy="true" aria-live="polite">
 					<div class="user-profile-edit-generating-spinner" aria-hidden="true"></div>
+				</div>
+			</div>
+			<div class="user-profile-generate-confirm-overlay" data-profile-generate-confirm-overlay hidden>
+				<div class="modal user-profile-generate-confirm-modal">
+					<div class="modal-header">
+						<h3>Generate avatar</h3>
+						<button class="modal-close" type="button" aria-label="Close" data-profile-generate-confirm-close>
+							<svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+								<line x1="18" y1="6" x2="6" y2="18"></line>
+								<line x1="6" y1="6" x2="18" y2="18"></line>
+							</svg>
+						</button>
+					</div>
+					<div class="modal-body" data-profile-generate-confirm-body>
+						<p>This costs <strong>3 credits</strong> and requires the <strong>Character</strong> field to be filled out (at least 12 characters) in the form behind this dialog.</p>
+						<div class="alert error" data-profile-generate-confirm-error style="display: none;"></div>
+					</div>
+					<div class="modal-footer">
+						<button class="btn-secondary" type="button" data-profile-generate-confirm-cancel>Cancel</button>
+						<button class="btn-primary user-profile-generate-confirm-cta" type="button" data-profile-generate-confirm-cta>
+							<span class="user-profile-generate-confirm-cta-text">Generate avatar</span>
+							<span class="user-profile-generate-confirm-cta-spinner" aria-hidden="true" hidden role="status"></span>
+						</button>
+					</div>
 				</div>
 			</div>
 		</div>
@@ -1477,6 +1503,12 @@ async function init() {
 	const errorBox = container.querySelector('[data-profile-edit-error]');
 	const generatingOverlay = container.querySelector('[data-profile-edit-generating-overlay]');
 	const avatarGeneratingPlaceholder = container.querySelector('[data-avatar-generating-placeholder]');
+	const generateConfirmOverlay = container.querySelector('[data-profile-generate-confirm-overlay]');
+	const generateConfirmClose = container.querySelector('[data-profile-generate-confirm-close]');
+	const generateConfirmCancel = container.querySelector('[data-profile-generate-confirm-cancel]');
+	const generateConfirmCta = container.querySelector('[data-profile-generate-confirm-cta]');
+	const generateConfirmBody = container.querySelector('[data-profile-generate-confirm-body]');
+	const avatarTryUrlInput = container.querySelector('[data-avatar-try-url]');
 
 	// Banner strip aspect (width/height) and max output size. Matches .user-profile-banner (180px height, wide).
 	const BANNER_ASPECT = 7; // 1260/180
@@ -1606,7 +1638,8 @@ async function init() {
 		}).catch(() => null);
 	}
 
-	async function createTryImage(prompt) {
+	async function createTryImage(prompt, options = {}) {
+		const { chargeCredits = 0 } = options;
 		const response = await fetch('/api/try/create', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
@@ -1614,7 +1647,8 @@ async function init() {
 			body: JSON.stringify({
 				server_id: TRY_SERVER_ID,
 				method: TRY_METHOD,
-				args: { prompt, resolution: 'ai_latest' }
+				args: { prompt, resolution: 'ai_latest' },
+				...(chargeCredits > 0 ? { charge_credits: chargeCredits } : {})
 			})
 		});
 		const data = await response.json().catch(() => ({}));
@@ -1687,7 +1721,7 @@ async function init() {
 		if (trigger) {
 			trigger.hidden = showPreview;
 		}
-		// Avatar: both "Upload avatar" and "Generate from character" get the same visibility (one place, no second selector).
+		// Avatar: both buttons hidden when preview is showing.
 		if (kind === 'avatar') {
 			const actions = container.querySelector('.user-profile-avatar-actions');
 			if (actions) {
@@ -1765,7 +1799,6 @@ async function init() {
 			e.preventDefault();
 			const characterField = form.querySelector('textarea[name="character_description"]');
 			if (!characterField) return;
-			if (isGeneratingAvatar) return;
 			const description = (characterField.value || '').trim();
 			if (description.length < 12) {
 				if (errorBox) {
@@ -1778,17 +1811,76 @@ async function init() {
 				errorBox.style.display = 'none';
 				errorBox.textContent = '';
 			}
+			openGenerateConfirmModal();
+		});
+	}
+
+	function openGenerateConfirmModal() {
+		if (generateConfirmOverlay) generateConfirmOverlay.hidden = false;
+	}
+
+	function closeGenerateConfirmModal() {
+		if (generateConfirmOverlay) generateConfirmOverlay.hidden = true;
+		const confirmError = container.querySelector('[data-profile-generate-confirm-error]');
+		if (confirmError) {
+			confirmError.style.display = 'none';
+			confirmError.textContent = '';
+		}
+	}
+
+	function setGenerateConfirmLoading(loading) {
+		if (!generateConfirmCta) return;
+		const textEl = generateConfirmCta.querySelector('.user-profile-generate-confirm-cta-text');
+		const spinnerEl = generateConfirmCta.querySelector('.user-profile-generate-confirm-cta-spinner');
+		generateConfirmCta.disabled = loading;
+		if (textEl) textEl.hidden = loading;
+		if (spinnerEl) spinnerEl.hidden = !loading;
+		if (generateConfirmBody) generateConfirmBody.style.pointerEvents = loading ? 'none' : '';
+		if (generateConfirmBody) generateConfirmBody.style.opacity = loading ? '0.6' : '';
+		if (generateConfirmCancel) generateConfirmCancel.disabled = loading;
+		if (generateConfirmClose) {
+			generateConfirmClose.disabled = loading;
+			generateConfirmClose.setAttribute('aria-disabled', loading ? 'true' : 'false');
+		}
+		if (generateConfirmOverlay) {
+			if (loading) generateConfirmOverlay.classList.add('user-profile-generate-confirm-loading');
+			else generateConfirmOverlay.classList.remove('user-profile-generate-confirm-loading');
+		}
+	}
+
+	if (generateConfirmClose) {
+		generateConfirmClose.addEventListener('click', () => closeGenerateConfirmModal());
+	}
+	if (generateConfirmCancel) {
+		generateConfirmCancel.addEventListener('click', () => closeGenerateConfirmModal());
+	}
+
+	if (generateConfirmCta) {
+		generateConfirmCta.addEventListener('click', async () => {
+			if (isGeneratingAvatar) return;
+			const characterField = form?.querySelector('textarea[name="character_description"]');
+			if (!characterField) return;
+			const description = (characterField.value || '').trim();
+			if (description.length < 12) {
+				const confirmError = container.querySelector('[data-profile-generate-confirm-error]');
+				if (confirmError) {
+					confirmError.style.display = 'block';
+					confirmError.textContent = 'Character description must be at least 12 characters.';
+				}
+				return;
+			}
+			const confirmErrorEl = container.querySelector('[data-profile-generate-confirm-error]');
+			if (confirmErrorEl) {
+				confirmErrorEl.style.display = 'none';
+				confirmErrorEl.textContent = '';
+			}
 			isGeneratingAvatar = true;
-			btn.disabled = true;
-			btn.classList.add('is-loading');
-			if (generatingOverlay) generatingOverlay.hidden = false;
-			setUploadState('avatar', { showPreview: true, src: '', removed: false });
-			if (avatarGeneratingPlaceholder) avatarGeneratingPlaceholder.hidden = false;
+			setGenerateConfirmLoading(true);
 			try {
 				await ensureTryIdentityCookie();
 				const variationKey = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 				const prompt = buildAvatarPrompt(description, variationKey);
-				const created = await createTryImage(prompt);
+				const created = await createTryImage(prompt, { chargeCredits: 3 });
 				if (!created.ok) {
 					const msg = created.data?.message || created.data?.error || 'Could not start generation.';
 					throw new Error(msg);
@@ -1803,30 +1895,21 @@ async function init() {
 				} else {
 					throw new Error('No image returned.');
 				}
-				// Fetch image as blob, then discard from try so save uses the same path as file upload.
-				const res = await fetch(url, { credentials: 'include' });
-				if (!res.ok) throw new Error('Failed to load generated image.');
-				const blob = await res.blob();
-				await discardTryImage(url);
-				revokeGeneratedAvatar();
-				generatedAvatarBlob = blob;
-				generatedAvatarObjectUrl = URL.createObjectURL(blob);
+				if (avatarTryUrlInput) avatarTryUrlInput.value = url;
 				revoke('avatar');
 				if (avatarRemoveField) avatarRemoveField.value = '';
-				setUploadState('avatar', { showPreview: true, src: generatedAvatarObjectUrl, removed: false });
+				setUploadState('avatar', { showPreview: true, src: url, removed: false });
+				closeGenerateConfirmModal();
+				// Do not save here; created_image is created only when user clicks Save (profile POST promotes try URL).
 			} catch (err) {
 				const msg = String(err?.message || '').trim() || 'Generation failed.';
-				if (errorBox) {
-					errorBox.style.display = 'block';
-					errorBox.textContent = msg;
+				if (confirmErrorEl) {
+					confirmErrorEl.style.display = 'block';
+					confirmErrorEl.textContent = msg;
 				}
-				setUploadState('avatar', { showPreview: false, src: '', removed: false });
 			} finally {
 				isGeneratingAvatar = false;
-				btn.disabled = false;
-				btn.classList.remove('is-loading');
-				if (generatingOverlay) generatingOverlay.hidden = true;
-				if (avatarGeneratingPlaceholder) avatarGeneratingPlaceholder.hidden = true;
+				setGenerateConfirmLoading(false);
 			}
 		});
 	}
@@ -1846,7 +1929,8 @@ async function init() {
 		btn.addEventListener('click', closeModal);
 	});
 
-	async function saveProfile() {
+	async function saveProfile(opts) {
+		const keepEditOpen = opts && opts.keepEditOpen === true;
 		if (!form || !saveButton) return;
 		if (errorBox) {
 			errorBox.style.display = 'none';
@@ -1887,22 +1971,6 @@ async function init() {
 			}
 		}
 
-		if (!hasAvatarFile && generatedAvatarBlob) {
-			try {
-				const file = new File([generatedAvatarBlob], 'avatar.png', { type: generatedAvatarBlob.type || 'image/png' });
-				const blob = await resizeImageFile(file, {
-					maxWidth: 128,
-					maxHeight: 128,
-					quality: 0.9,
-					mimeType: 'image/jpeg'
-				});
-				fd.append('avatar_file', blob, 'avatar.jpg');
-			} catch {
-				// fallback: append as-is
-				fd.append('avatar_file', generatedAvatarBlob, 'avatar.png');
-			}
-		}
-
 		saveButton.disabled = true;
 		let result;
 		try {
@@ -1928,6 +1996,10 @@ async function init() {
 			return;
 		}
 
+		if (keepEditOpen) {
+			// Leave edit modal open (e.g. after generating avatar)
+			return;
+		}
 		closeModal();
 		// Reload page to reflect new hero/avatar quickly (simple + robust)
 		window.location.reload();

@@ -214,6 +214,31 @@ export default function createTryRoutes({ queries, storage }) {
 			});
 		}
 
+		const chargeCredits = Number(body.charge_credits);
+		const AVATAR_GENERATE_CREDITS = 3;
+		let chargedUserId = null;
+		if (Number.isFinite(chargeCredits) && chargeCredits === AVATAR_GENERATE_CREDITS) {
+			const userId = req.auth?.userId;
+			if (!userId) {
+				return res.status(401).json({
+					error: "Unauthorized",
+					message: "Sign in to generate an avatar from your character.",
+				});
+			}
+			const credits = await queries.selectUserCredits?.get?.(userId);
+			const balance = credits?.balance ?? 0;
+			if (balance < AVATAR_GENERATE_CREDITS) {
+				return res.status(400).json({
+					error: "Insufficient credits",
+					message: `Generate from character costs ${AVATAR_GENERATE_CREDITS} credits. You have ${balance} credits.`,
+					required: AVATAR_GENERATE_CREDITS,
+					current: balance,
+				});
+			}
+			await queries.updateUserCreditsBalance.run(userId, -AVATAR_GENERATE_CREDITS);
+			chargedUserId = userId;
+		}
+
 		const placeholderFilename = `creating_anon_${Date.now()}.png`;
 		const started_at = new Date().toISOString();
 		const meta = {
@@ -235,6 +260,9 @@ export default function createTryRoutes({ queries, storage }) {
 		);
 		const id = result.insertId;
 		if (!id) {
+			if (chargedUserId && queries.updateUserCreditsBalance?.run) {
+				await queries.updateUserCreditsBalance.run(chargedUserId, AVATAR_GENERATE_CREDITS);
+			}
 			return res.status(500).json({ error: "Failed to create try record" });
 		}
 
@@ -252,6 +280,9 @@ export default function createTryRoutes({ queries, storage }) {
 					runAnonCreationJob({ queries, storage, payload: opts.payload }),
 			});
 		} catch (err) {
+			if (chargedUserId && queries.updateUserCreditsBalance?.run) {
+				await queries.updateUserCreditsBalance.run(chargedUserId, AVATAR_GENERATE_CREDITS);
+			}
 			await queries.updateCreatedImageAnonJobFailed.run(id, {
 				meta: { ...meta, failed_at: new Date().toISOString(), error: err?.message || "Schedule failed" },
 			});

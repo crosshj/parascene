@@ -366,6 +366,49 @@
 	animation: spin 0.8s linear infinite;
 }
 
+/* Generate avatar confirm modal (over edit modal) */
+.user-profile-generate-confirm-overlay {
+	display: none;
+	position: absolute;
+	inset: 0;
+	z-index: 20;
+	background: rgba(0, 0, 0, 0.5);
+	align-items: center;
+	justify-content: center;
+	pointer-events: auto;
+}
+
+.user-profile-generate-confirm-overlay:not([hidden]) {
+	display: flex;
+}
+
+.user-profile-generate-confirm-cta {
+	position: relative;
+	min-width: 160px;
+}
+
+.user-profile-generate-confirm-cta-spinner {
+	display: none;
+	width: 1.25em;
+	height: 1.25em;
+	border: 2px solid var(--border);
+	border-top-color: currentColor;
+	border-radius: 50%;
+	animation: spin 0.8s linear infinite;
+	vertical-align: middle;
+}
+
+.user-profile-generate-confirm-cta-spinner:not([hidden]) {
+	display: inline-block;
+}
+
+.user-profile-generate-confirm-overlay.user-profile-generate-confirm-loading [data-profile-generate-confirm-close],
+.user-profile-generate-confirm-overlay.user-profile-generate-confirm-loading [data-profile-generate-confirm-cancel] {
+	pointer-events: none;
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
 .user-profile-upload-preview {
 	position: relative;
 	margin-top: 10px;
