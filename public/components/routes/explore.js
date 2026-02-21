@@ -108,10 +108,11 @@ class AppRouteExplore extends HTMLElement {
 	<div class="explore-route">
 		<div class="route-header">
 			<h3>Explore</h3>
-			<p>Discover creations from the broader community, including people you are not friends with yet.</p>
+			<p>Discover creations from those you don't follow or search across all creations.</p>
 			<div class="explore-search-bar">
 				<input type="search" class="explore-search-input" placeholder="Search creations..."
 					aria-label="Search creations" id="explore-search-input" />
+				<button type="button" class="btn-secondary explore-search-btn" data-explore-search-btn>Search</button>
 				${searchIcon('explore-search-icon')}
 			</div>
 		</div>
@@ -294,23 +295,26 @@ class AppRouteExplore extends HTMLElement {
 		this.imageLoadQueue = [];
 		this.imageLoadsInFlight = 0;
 
-		const searchInput = this.querySelector('.explore-search-input');
-		if (searchInput && this.searchInputListener) {
-			searchInput.removeEventListener('input', this.searchInputListener);
-		}
-		this.searchInputListener = null;
-
-		if (this.searchDebounceId) {
-			clearTimeout(this.searchDebounceId);
-			this.searchDebounceId = null;
-		}
 	}
 
 	setupSearchUi() {
 		const input = this.querySelector('.explore-search-input');
 		const main = this.querySelector('[data-explore-main]');
 		const results = this.querySelector('[data-explore-search-results]');
+		const searchBtn = this.querySelector('[data-explore-search-btn]');
 		if (!input || !main || !results) return;
+
+		const updateSearchButtonPrimary = () => {
+			if (!searchBtn) return;
+			const hasText = (input.value || '').trim().length > 0;
+			if (hasText) {
+				searchBtn.classList.remove('btn-secondary');
+				searchBtn.classList.add('btn-primary');
+			} else {
+				searchBtn.classList.remove('btn-primary');
+				searchBtn.classList.add('btn-secondary');
+			}
+		};
 
 		const updateUrlSearchParam = (value) => {
 			try {
@@ -329,86 +333,126 @@ class AppRouteExplore extends HTMLElement {
 			}
 		};
 
-		const updateVisibility = () => {
-			const hasText = input.value.trim().length > 0;
-			if (hasText) {
-				main.setAttribute('hidden', '');
-				main.style.display = 'none';
-				results.removeAttribute('hidden');
-				results.style.display = '';
-			} else {
-				main.removeAttribute('hidden');
-				main.style.display = '';
-				results.setAttribute('hidden', '');
-				results.style.display = 'none';
-				// When clearing the search box, reset results content but keep the
-				// empty-state placeholder so the transition back to main feels natural.
-				results.innerHTML = html`
-					<div class="route-empty route-empty-image-grid">
-						<div class="route-empty-title">No creations found</div>
-					</div>
-				`;
-			}
+		const showResults = () => {
+			main.setAttribute('hidden', '');
+			main.style.display = 'none';
+			results.removeAttribute('hidden');
+			results.style.display = '';
 		};
 
-		const handleInput = () => {
-			const raw = input.value || '';
-			const trimmed = raw.trim();
-			updateVisibility();
+		const showMain = () => {
+			main.removeAttribute('hidden');
+			main.style.display = '';
+			results.setAttribute('hidden', '');
+			results.style.display = 'none';
+			results.innerHTML = html`
+				<div class="route-empty route-empty-image-grid">
+					<div class="route-empty-title">No creations found</div>
+				</div>
+			`;
+		};
 
-			// Clear any pending search
-			if (this.searchDebounceId) {
-				clearTimeout(this.searchDebounceId);
-				this.searchDebounceId = null;
-			}
+		const runSearch = () => {
+			const trimmed = (input.value || '').trim();
+			if (!trimmed) return;
+			this.currentSearchQuery = trimmed;
+			updateUrlSearchParam(trimmed);
+			showResults();
+			void this.performExploreSearch(trimmed);
+		};
 
-			// If there is no text, do not perform a search.
+		input.addEventListener('input', () => {
+			updateSearchButtonPrimary();
+			const trimmed = (input.value || '').trim();
 			if (!trimmed) {
 				this.currentSearchQuery = '';
 				updateUrlSearchParam('');
-				return;
+				showMain();
 			}
+		});
+		input.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter') {
+				e.preventDefault();
+				runSearch();
+			}
+		});
+		if (searchBtn) searchBtn.addEventListener('click', runSearch);
 
-			this.currentSearchQuery = trimmed;
-			updateUrlSearchParam(trimmed);
-
-			// Show a lightweight loading state immediately so the UI feels responsive.
-			results.innerHTML = html`
-				<div class="route-empty route-empty-image-grid route-loading">
-					<div class="route-loading-spinner" aria-label="Searching" role="status"></div>
-				</div>
-			`;
-
-			// Debounce the actual network request.
-			this.searchDebounceId = window.setTimeout(() => {
-				this.searchDebounceId = null;
-				void this.performExploreSearch(trimmed);
-			}, 300);
-		};
-
-		this.searchInputListener = () => handleInput();
-		input.addEventListener('input', this.searchInputListener);
-		// Initial state: hydrate from URL if an "s" query param is present.
+		// Hydrate from URL if "s" query param is present (no auto-search on type).
 		try {
 			const params = new URLSearchParams(window.location.search);
 			const initial = params.get('s') || '';
 			if (initial) {
 				input.value = initial;
-				updateVisibility();
 				this.currentSearchQuery = initial.trim();
-				results.innerHTML = html`
-					<div class="route-empty route-empty-image-grid route-loading">
-						<div class="route-loading-spinner" aria-label="Searching" role="status"></div>
-					</div>
-				`;
+				showResults();
 				void this.performExploreSearch(this.currentSearchQuery);
-				return;
 			}
+			updateSearchButtonPrimary();
 		} catch {
-			// If URL parsing fails, just fall back to default state.
+			// Ignore URL parsing errors.
 		}
+	}
 
-		updateVisibility();
+	/**
+	 * Build rank maps (1-based) and a display score 1/(k+rank) per list. k = 60.
+	 * Used for tooltip score when appending second list (no reorder).
+	 */
+	_searchScoreForItem(item, keywordRank, semanticRank, k = 60) {
+		const id = item?.created_image_id ?? item?.id;
+		if (id == null) return null;
+		const n = Number(id);
+		const sk = keywordRank.has(n) ? 1 / (k + keywordRank.get(n)) : 0;
+		const ss = semanticRank.has(n) ? 1 / (k + semanticRank.get(n)) : 0;
+		return sk + ss;
+	}
+
+	_renderSearchResults(resultsEl, token) {
+		if (!resultsEl || token !== this.searchRequestToken) return;
+		const keyword = this._searchKeywordItems ?? [];
+		const semantic = this._searchSemanticItems ?? [];
+		const bothSettled = this._searchKeywordSettled && this._searchSemanticSettled;
+		let items = [];
+		const k = 60;
+		const keywordRank = new Map();
+		keyword.forEach((item, i) => {
+			const id = item?.created_image_id ?? item?.id;
+			if (id != null) keywordRank.set(Number(id), i + 1);
+		});
+		const semanticRank = new Map();
+		semantic.forEach((item, i) => {
+			const id = item?.created_image_id ?? item?.id;
+			if (id != null) semanticRank.set(Number(id), i + 1);
+		});
+
+		if (keyword.length > 0 && semantic.length > 0) {
+			// Append second list to first (no reorder). First = whichever was shown first.
+			const firstList = this._searchFirstList === 'semantic' ? semantic : keyword;
+			const secondList = this._searchFirstList === 'semantic' ? keyword : semantic;
+			const firstIds = new Set(firstList.map((i) => i?.created_image_id ?? i?.id).filter(Boolean));
+			const appended = secondList.filter((i) => !firstIds.has(i?.created_image_id ?? i?.id));
+			items = [...firstList, ...appended].map((item) => {
+				const score = this._searchScoreForItem(item, keywordRank, semanticRank, k);
+				return score != null ? { ...item, searchScore: score } : item;
+			});
+		} else if (keyword.length > 0) {
+			this._searchFirstList = 'keyword';
+			items = keyword.map((item, i) => ({ ...item, searchScore: 1 / (k + i + 1) }));
+		} else if (semantic.length > 0) {
+			this._searchFirstList = 'semantic';
+			items = semantic.map((item, i) => ({ ...item, searchScore: 1 / (k + i + 1) }));
+		} else if (bothSettled) {
+			resultsEl.innerHTML = html`
+				<div class="route-empty route-empty-image-grid">
+					<div class="route-empty-title">No creations found</div>
+				</div>
+			`;
+			return;
+		} else {
+			return;
+		}
+		resultsEl.innerHTML = '';
+		this.appendExploreCards(resultsEl, items);
 	}
 
 	async performExploreSearch(query) {
@@ -425,53 +469,54 @@ class AppRouteExplore extends HTMLElement {
 			return;
 		}
 
-		// Capture a token so we can ignore out-of-order responses.
 		const token = (this.searchRequestToken = (this.searchRequestToken || 0) + 1);
+		this._searchKeywordItems = undefined;
+		this._searchSemanticItems = undefined;
+		this._searchKeywordSettled = false;
+		this._searchSemanticSettled = false;
+		this._searchFirstList = undefined;
 
-		try {
-			const res = await fetchJsonWithStatusDeduped(
-				`/api/explore/search?q=${encodeURIComponent(trimmed)}&limit=${EXPLORE_PAGE_SIZE}`,
-				{ credentials: 'include' },
-				{ windowMs: 500 }
-			).catch(() => ({ ok: false, data: null }));
+		resultsEl.innerHTML = html`
+			<div class="route-empty route-empty-image-grid route-loading">
+				<div class="route-loading-spinner" aria-label="Searching" role="status"></div>
+			</div>
+		`;
 
-			// If another search started while this one was in flight, ignore this response.
-			if (token !== this.searchRequestToken) {
-				return;
-			}
+		const q = encodeURIComponent(trimmed);
+		const keywordUrl = `/api/explore/search?q=${q}&limit=${EXPLORE_PAGE_SIZE}`;
+		const semanticUrl = `/api/explore/search/semantic?q=${q}&limit=${EXPLORE_PAGE_SIZE}`;
+		const opts = { credentials: 'include' };
 
-			if (!res.ok) {
-				resultsEl.innerHTML = html`
-					<div class="route-empty route-empty-image-grid">
-						<div class="route-empty-title">Unable to search creations</div>
-						<div class="route-empty-message">Please try again in a moment.</div>
-					</div>
-				`;
-				return;
-			}
-
-			const items = Array.isArray(res.data?.items) ? res.data.items : [];
-			if (items.length === 0) {
-				resultsEl.innerHTML = html`
-					<div class="route-empty route-empty-image-grid">
-						<div class="route-empty-title">No creations found</div>
-					</div>
-				`;
-				return;
-			}
-
-			// Reuse the same card renderer as the main explore feed so layout stays consistent.
-			resultsEl.innerHTML = '';
-			this.appendExploreCards(resultsEl, items);
-		} catch (err) {
-			// Network / unexpected error
-			resultsEl.innerHTML = html`
-				<div class="route-empty route-empty-image-grid">
-					<div class="route-empty-title">Unable to search creations</div>
-					<div class="route-empty-message">Please try again in a moment.</div>
-				</div>
-			`;
-		}
+		const onKeyword = (res) => {
+			if (token !== this.searchRequestToken) return;
+			this._searchKeywordSettled = true;
+			this._searchKeywordItems = res?.ok && Array.isArray(res?.data?.items) ? res.data.items : [];
+			this._renderSearchResults(resultsEl, token);
+		};
+		const onSemantic = (res) => {
+			if (token !== this.searchRequestToken) return;
+			this._searchSemanticSettled = true;
+			this._searchSemanticItems = res?.ok && Array.isArray(res?.data?.items) ? res.data.items : [];
+			this._renderSearchResults(resultsEl, token);
+		};
+		fetch(keywordUrl, opts)
+			.then((r) => r.json().then((data) => ({ ok: r.ok, data })).catch(() => ({ ok: false, data: null })))
+			.then(onKeyword)
+			.catch(() => {
+				if (token !== this.searchRequestToken) return;
+				this._searchKeywordSettled = true;
+				this._searchKeywordItems = [];
+				this._renderSearchResults(resultsEl, token);
+			});
+		fetch(semanticUrl, opts)
+			.then((r) => r.json().then((data) => ({ ok: r.ok, data })).catch(() => ({ ok: false, data: null })))
+			.then(onSemantic)
+			.catch(() => {
+				if (token !== this.searchRequestToken) return;
+				this._searchSemanticSettled = true;
+				this._searchSemanticItems = [];
+				this._renderSearchResults(resultsEl, token);
+			});
 	}
 
 	refreshOnActivate() {
@@ -605,6 +650,9 @@ class AppRouteExplore extends HTMLElement {
 			const handle = handleText ? `@${handleText}` : '';
 
 			card.style.cursor = 'pointer';
+			if (item.searchScore != null && Number.isFinite(Number(item.searchScore))) {
+				card.title = `Score: ${Number(item.searchScore).toFixed(4)}`;
+			}
 			card.addEventListener('click', () => {
 				if (item.created_image_id) {
 					window.location.href = `/creations/${item.created_image_id}`;

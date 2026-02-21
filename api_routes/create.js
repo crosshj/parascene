@@ -3,7 +3,16 @@ import path from "path";
 import { fileURLToPath } from "url";
 import Busboy from "busboy";
 import sharp from "sharp";
+import { createClient } from "@supabase/supabase-js";
+import Replicate from "replicate";
 import { getThumbnailUrl, getBaseAppUrl, getBaseAppUrlForEmail } from "./utils/url.js";
+import { buildPublicImageUrl } from "./utils/publicImageUrl.js";
+import {
+	buildEmbeddingText,
+	getEmbeddingFromReplicate,
+	REPLICATE_CLIP_MODEL,
+	upsertCreationEmbedding
+} from "./utils/embeddings.js";
 import { buildProviderHeaders } from "./utils/providerAuth.js";
 import { runCreationJob, PROVIDER_TIMEOUT_MS } from "./utils/creationJob.js";
 import { runLandscapeJob } from "./utils/landscapeJob.js";
@@ -13,6 +22,34 @@ import { ACTIVE_SHARE_VERSION, mintShareToken, verifyShareToken } from "./utils/
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+/** Best-effort: compute and store CLIP embedding for a creation. Does not throw. */
+async function tryStoreEmbeddingForCreation(creation) {
+	if (!creation) return;
+	try {
+		const supabaseUrl = process.env.SUPABASE_URL;
+		const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+		const replicateToken = process.env.REPLICATE_API_TOKEN;
+		if (!supabaseUrl || !supabaseKey || !replicateToken) return;
+		const creationId = Number(creation.id);
+		const userId = Number(creation.user_id);
+		const baseUrl = getBaseAppUrlForEmail();
+		const imagePublicUrl = buildPublicImageUrl(creationId, userId, baseUrl);
+		if (!imagePublicUrl) return;
+		const title = creation.title ?? "";
+		const description = creation.description ?? "";
+		const prompt = (creation.meta && typeof creation.meta === "object" && creation.meta.args?.prompt) ?? "";
+		const text = buildEmbeddingText({ title, description, prompt });
+		const replicate = new Replicate({ auth: replicateToken });
+		const output = await getEmbeddingFromReplicate(replicate, { text, image: imagePublicUrl });
+		const embedding = output?.embedding;
+		if (!Array.isArray(embedding)) return;
+		const supabase = createClient(supabaseUrl, supabaseKey);
+		await upsertCreationEmbedding(supabase, creationId, embedding, REPLICATE_CLIP_MODEL);
+	} catch (e) {
+		console.warn("[create] Embedding store failed:", e?.message || e);
+	}
+}
 
 function isPng(buffer) {
 	return (
@@ -1669,6 +1706,9 @@ export default function createCreateRoutes({ queries, storage }) {
 				? await queries.selectCreatedImageById.get(req.params.id, user.id)
 				: await queries.selectCreatedImageByIdAnyUser?.get(req.params.id);
 
+			// Compute and store embedding at publish (only time we create it).
+			await tryStoreEmbeddingForCreation(updatedImage);
+
 			return res.json({
 				id: updatedImage.id,
 				filename: updatedImage.filename,
@@ -1751,6 +1791,11 @@ export default function createCreateRoutes({ queries, storage }) {
 			const updatedImage = isOwner
 				? await queries.selectCreatedImageById.get(req.params.id, user.id)
 				: await queries.selectCreatedImageByIdAnyUser?.get(req.params.id);
+
+			// If published, refresh embedding so semantic uses updated title/description.
+			if (updatedImage && (updatedImage.published === 1 || updatedImage.published === true)) {
+				await tryStoreEmbeddingForCreation(updatedImage);
+			}
 
 			return res.json({
 				id: updatedImage.id,

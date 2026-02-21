@@ -108,7 +108,11 @@ const seedData = {
 		{ key: "related.transition_window_days", value: "0", description: "If > 0, only use transitions within this many days (hard window)." },
 		{ key: "related.random_slots_per_batch", value: "0", description: "If > 0, reserve this many slots per batch for random items." },
 		{ key: "related.batch_size", value: "10", description: "Items per request / batch." },
-		{ key: "related.candidate_cap_per_signal", value: "100", description: "Max candidates per signal before merge." }
+		{ key: "related.candidate_cap_per_signal", value: "100", description: "Max candidates per signal before merge." },
+		{ key: "related.recsys_weight", value: "50", description: "Weight for recsys when this creation has click-next data." },
+		{ key: "related.semantic_weight", value: "50", description: "Weight for vector when click-next exists. 0 = semantic not used in blend." },
+		{ key: "related.semantic_weight_no_click_next", value: "95", description: "When no click-next from this creation, strongly prefer semantic (0–100)." },
+		{ key: "related.semantic_distance_max", value: "0.8", description: "Max cosine distance to include semantic neighbours (above = orthogonal/opposite, excluded)." }
 	],
 
 	notifications: [

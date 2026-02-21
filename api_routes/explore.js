@@ -151,9 +151,8 @@ export default function createExploreRoutes({ queries }) {
 			const exploreQueries = queries.selectExploreFeedItems;
 			const feedQueries = queries.selectFeedItems;
 
-			// Load both explore items (people you don't follow) and feed items
-			// (people you do follow), then union them so search covers all
-			// creations visible in the product.
+			// Load both explore items (people you don't follow) and feed items (people you do follow),
+			// then union so search covers all creations site-wide (including current user's own).
 			const [exploreItems, feedItems] = await Promise.all([
 				typeof exploreQueries?.all === "function" ? exploreQueries.all(user.id) : [],
 				typeof feedQueries?.all === "function" ? feedQueries.all(user.id) : []
@@ -322,6 +321,55 @@ export default function createExploreRoutes({ queries }) {
 			return res.json({ items: itemsWithImages, hasMore });
 		} catch (err) {
 			console.error("[explore search] Error:", err);
+			if (!res.headersSent) {
+				res.status(500).json({ error: "Unable to search explore." });
+			}
+		}
+	});
+
+	// Semantic search over global pool (all creations with embeddings), same as /test/embed.html. Used with keyword in parallel; client merges.
+	router.get("/api/explore/search/semantic", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+			const rawQuery = String(req.query.q || "").trim();
+			if (!rawQuery) {
+				return res.json({ items: [], hasMore: false });
+			}
+			const limit = Math.min(Math.max(1, parseInt(req.query.limit, 10) || 50), 100);
+			const baseUrl = process.env.APP_URL || `${req.protocol || "https"}://${req.get("host") || req.headers?.host || "localhost"}`;
+			const searchUrl = `${baseUrl}/api/embeddings/search?q=${encodeURIComponent(rawQuery)}&limit=${Math.max(limit, 200)}`;
+			let searchRes;
+			try {
+				searchRes = await fetch(searchUrl);
+			} catch (fetchErr) {
+				console.error("[explore search/semantic] fetch embeddings/search:", fetchErr);
+				return res.status(502).json({ error: "Semantic search unavailable." });
+			}
+			if (!searchRes.ok) {
+				return res.status(searchRes.status).json({ error: "Semantic search failed." });
+			}
+			const searchData = await searchRes.json().catch(() => ({}));
+			const rawItems = Array.isArray(searchData?.items) ? searchData.items : [];
+			const orderedIds = rawItems
+				.map((item) => item?.created_image_id ?? item?.id)
+				.filter((id) => id != null && Number.isFinite(Number(id)));
+			const dedupedIds = [...new Set(orderedIds)].slice(0, limit);
+			if (dedupedIds.length === 0) {
+				return res.json({ items: [], hasMore: searchData?.has_more === true });
+			}
+			const feedByCreation = queries.selectFeedItemsByCreationIds?.all;
+			if (typeof feedByCreation !== "function") {
+				return res.json({ items: [], hasMore: false });
+			}
+			const rows = await feedByCreation(dedupedIds);
+			const orderIdx = new Map(dedupedIds.map((id, i) => [Number(id), i]));
+			const sorted = (Array.isArray(rows) ? rows : []).slice().sort((a, b) => (orderIdx.get(Number(a?.created_image_id ?? a?.id)) ?? 999) - (orderIdx.get(Number(b?.created_image_id ?? b?.id)) ?? 999));
+			const itemsWithImages = mapExploreItemsToResponse(sorted);
+			return res.json({ items: itemsWithImages, hasMore: searchData?.has_more === true });
+		} catch (err) {
+			console.error("[explore search/semantic] Error:", err);
 			if (!res.headersSent) {
 				res.status(500).json({ error: "Unable to search explore." });
 			}

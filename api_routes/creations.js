@@ -1,11 +1,39 @@
 import express from "express";
 import { createClient } from "@supabase/supabase-js";
+import Replicate from "replicate";
 import { getThumbnailUrl } from "./utils/url.js";
+import { getTextEmbeddingFromReplicate } from "./utils/embeddings.js";
 import { recommendWithDataSource } from "../db/recommend/recsysWrapper.js";
 
 const RELATED_LIMIT_CAP = 40;
 const RELATED_EXCLUDE_IDS_CAP = 200;
 const RECSYS_RANDOM_ONLY_SEEN_THRESHOLD = 120;
+/** Default limit when not set; max cap for semantic related/search. */
+const SEMANTIC_DEFAULT_LIMIT = 24;
+const SEMANTIC_MAX_LIMIT = 100;
+
+const SEMANTIC_MAX_OFFSET = 500;
+
+function parseSemanticLimit(queryLimit) {
+	const n = parseInt(queryLimit, 10);
+	return Number.isFinite(n) && n >= 1 ? Math.min(n, SEMANTIC_MAX_LIMIT) : SEMANTIC_DEFAULT_LIMIT;
+}
+
+function parseSemanticOffset(queryOffset) {
+	const n = parseInt(queryOffset, 10);
+	return Number.isFinite(n) && n >= 0 ? Math.min(n, SEMANTIC_MAX_OFFSET) : 0;
+}
+const EMBEDDINGS_TABLE = "prsn_created_embeddings";
+const RPC_NEAREST = "prsn_created_embeddings_nearest";
+const SEARCH_CACHE_TABLE = "prsn_search_embedding_cache";
+const RPC_SEARCH_CACHE_RECORD_USAGE = "prsn_search_embedding_cache_record_usage";
+
+/** Normalize search query for cache key: trim, lowercase, collapse whitespace. */
+function normalizeSearchQuery(q) {
+	if (typeof q !== "string") return "";
+	return q.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 let supabaseServiceClient = null;
 
 function getSupabaseServiceClient() {
@@ -358,8 +386,18 @@ export default function createCreationsRoutes({ queries }) {
 					}])
 				);
 			} else {
+				const recsysWeight = Math.max(0, parseInt(params["related.recsys_weight"], 10) || 50);
+				const semanticWeight = Math.max(0, parseInt(params["related.semantic_weight"], 10) || 50);
+				const semanticWeightNoClickNext = Math.max(0, Math.min(100, parseInt(params["related.semantic_weight_no_click_next"], 10) || 95));
+				const semanticDistanceMax = Math.max(0, Math.min(2, parseFloat(params["related.semantic_distance_max"]) || 0.8));
+				const semanticOffset = Math.max(0, (excludeIds?.length ?? 0) - 1);
+				const mergePoolSize = Math.min(SEMANTIC_MAX_LIMIT, Math.max(limit * 2, limit + 50));
+				const mayBlend = semanticWeight > 0 || semanticWeightNoClickNext > 0;
+				const recsysBatchSize = mayBlend ? mergePoolSize : limit + 1;
+
 				let recsysInputs = null;
 				const recsysConfig = parseRecsysConfigFromParams(params, limit);
+				recsysConfig.batchSize = recsysBatchSize;
 				const recsys = await recommendWithDataSource({
 					config: recsysConfig,
 					context: { seedId: id, userId: req.auth?.userId ?? null },
@@ -374,22 +412,136 @@ export default function createCreationsRoutes({ queries }) {
 						return built;
 					}
 				});
-				const top = recsys.items.slice(0, limit + 1);
-				ids = top.map((row) => Number(row.id)).filter((n) => Number.isFinite(n) && n > 0).slice(0, limit);
-				hasMore = top.length > limit;
+
+				const excludeSet = new Set([id, ...(excludeIds ?? [])]);
+				const recsysById = new Map(
+					recsys.items
+						.map((row) => ({ id: Number(row.id), score: Number(row.score) || 0, row }))
+						.filter((x) => Number.isFinite(x.id) && x.id > 0 && !excludeSet.has(x.id))
+						.map((x) => [x.id, x])
+				);
+				reasonMetaByCreationId = new Map();
 				if (recsysInputs?.anchor && Array.isArray(recsys.items)) {
 					const byId = new Map((recsysInputs.pool || []).map((x) => [Number(x?.id), x]));
-					reasonMetaByCreationId = new Map();
 					for (const row of recsys.items) {
-						const candidate = byId.get(Number(row.id));
+						const cid = Number(row.id);
+						if (!Number.isFinite(cid) || cid < 1 || excludeSet.has(cid)) continue;
+						const candidate = byId.get(cid);
 						const labels = Array.isArray(row.reasons) ? row.reasons : [];
-						reasonMetaByCreationId.set(Number(row.id), {
+						reasonMetaByCreationId.set(cid, {
 							labels,
 							details: recsysReasonDetailsForItem(recsysInputs.anchor, candidate, labels),
 							score: row.score,
 							click_score: row.click_score,
 							click_share: row.click_share
 						});
+					}
+				}
+
+				const hasClickNext = Array.isArray(recsysInputs?.transitions) && recsysInputs.transitions.length > 0;
+				const effectiveRecsysW = hasClickNext ? recsysWeight : Math.max(0, 100 - semanticWeightNoClickNext);
+				const effectiveSemanticW = hasClickNext ? semanticWeight : semanticWeightNoClickNext;
+
+				let semanticByDistance = null;
+				let semanticPageFull = false;
+				if (effectiveSemanticW > 0) {
+					const { data: embeddingRow, error: fetchErr } = await supabaseClient
+						.from(EMBEDDINGS_TABLE)
+						.select("embedding_multi")
+						.eq("created_image_id", id)
+						.maybeSingle();
+					if (!fetchErr && embeddingRow?.embedding_multi) {
+						const semLimit = Math.min(mergePoolSize, SEMANTIC_MAX_LIMIT);
+						const { data: nearestRaw, error: rpcErr } = await supabaseClient.rpc(RPC_NEAREST, {
+							target_embedding: embeddingRow.embedding_multi,
+							exclude_id: id,
+							lim: semLimit,
+							off: Math.min(semanticOffset, SEMANTIC_MAX_OFFSET)
+						});
+						if (!rpcErr && Array.isArray(nearestRaw) && nearestRaw.length > 0) {
+							semanticPageFull = nearestRaw.length >= semLimit;
+							semanticByDistance = new Map(
+								nearestRaw
+									.map((r) => ({ id: Number(r?.created_image_id), distance: Number(r?.distance) }))
+									.filter((x) => Number.isFinite(x.id) && x.id > 0 && !excludeSet.has(x.id) && x.distance <= semanticDistanceMax)
+									.map((x) => [x.id, x.distance])
+							);
+						}
+					}
+				}
+
+				if (effectiveSemanticW > 0 && semanticByDistance && semanticByDistance.size > 0 && (effectiveRecsysW > 0 || recsysById.size === 0)) {
+					const totalW = effectiveRecsysW + effectiveSemanticW;
+					const recsysScores = [...recsysById.values()].map((x) => x.score);
+					const recsysMax = Math.max(1, ...recsysScores);
+					const allIds = new Set([...recsysById.keys(), ...semanticByDistance.keys()]);
+					const combined = [];
+					for (const cid of allIds) {
+						const r = recsysById.get(cid);
+						const recsysNorm = r ? r.score / recsysMax : 0;
+						const dist = semanticByDistance.get(cid);
+						const semanticSim = dist != null ? 1 / (1 + Math.max(0, dist)) : 0;
+						const score = totalW > 0 ? (effectiveRecsysW * recsysNorm + effectiveSemanticW * semanticSim) / totalW : semanticSim;
+						combined.push({ id: cid, score });
+					}
+					combined.sort((a, b) => b.score - a.score);
+					ids = combined.slice(0, limit).map((x) => x.id);
+					hasMore = combined.length > limit || semanticPageFull;
+					for (const cid of ids) {
+						if (!reasonMetaByCreationId.has(cid)) {
+							reasonMetaByCreationId.set(cid, {
+								labels: ["semanticSimilar"],
+								details: [{
+									type: "semanticSimilar",
+									label: "Visually similar",
+									related_creation_id: null,
+									related_creation_title: null
+								}],
+								score: null,
+									click_score: null,
+									click_share: null
+								});
+						}
+					}
+				} else {
+					ids = [...recsysById.keys()].slice(0, limit);
+					hasMore = recsys.items.length > limit;
+					if (ids.length < limit && effectiveSemanticW > 0) {
+						const { data: embeddingRow, error: fetchErr } = await supabaseClient
+							.from(EMBEDDINGS_TABLE)
+							.select("embedding_multi")
+							.eq("created_image_id", id)
+							.maybeSingle();
+						if (!fetchErr && embeddingRow?.embedding_multi) {
+							const need = limit - ids.length;
+							const lim = Math.min(need + (excludeIds?.length ?? 0) + ids.length + 10, SEMANTIC_MAX_LIMIT);
+							const { data: nearestRaw, error: rpcErr } = await supabaseClient.rpc(RPC_NEAREST, {
+								target_embedding: embeddingRow.embedding_multi,
+								exclude_id: id,
+								lim,
+								off: Math.min(semanticOffset, SEMANTIC_MAX_OFFSET)
+							});
+							if (!rpcErr && Array.isArray(nearestRaw)) {
+								const filled = new Set(ids);
+								for (const r of nearestRaw) {
+									const fid = Number(r?.created_image_id);
+									const dist = Number(r?.distance);
+									if (!Number.isFinite(fid) || fid <= 0 || excludeSet.has(fid) || filled.has(fid)) continue;
+									if (dist > semanticDistanceMax) continue;
+									filled.add(fid);
+									ids.push(fid);
+									reasonMetaByCreationId.set(fid, {
+										labels: ["semanticSimilar"],
+										details: [{ type: "semanticSimilar", label: "Visually similar", related_creation_id: null, related_creation_title: null }],
+										score: null,
+										click_score: null,
+										click_share: null
+									});
+									if (ids.length >= limit) break;
+								}
+								if (nearestRaw.length >= lim) hasMore = true;
+							}
+						}
 					}
 				}
 			}
@@ -409,6 +561,140 @@ export default function createCreationsRoutes({ queries }) {
 		} catch (err) {
 			console.error("[creations] related error:", err);
 			if (!res.headersSent) res.status(500).json({ error: "Unable to load related creations." });
+		}
+	});
+
+	// Semantic related (pgvector). No auth so test page works.
+	router.get("/api/creations/:id/semantic-related", async (req, res) => {
+		try {
+			const id = parseInt(req.params.id, 10);
+			if (!Number.isFinite(id) || id < 1) {
+				return res.status(400).json({ error: "Invalid creation id" });
+			}
+			const limit = parseSemanticLimit(req.query.limit);
+			const offset = parseSemanticOffset(req.query.offset);
+			const supabase = getSupabaseServiceClient();
+			if (!supabase) return res.status(503).json({ error: "Embeddings unavailable." });
+
+			const { data: row, error: fetchErr } = await supabase
+				.from(EMBEDDINGS_TABLE)
+				.select("embedding_multi")
+				.eq("created_image_id", id)
+				.maybeSingle();
+			if (fetchErr) {
+				console.error("[creations] semantic-related fetch embedding:", fetchErr);
+				return res.status(500).json({ error: "Failed to load embedding." });
+			}
+			if (!row?.embedding_multi) {
+				return res.status(404).json({ error: "No embedding for this creation." });
+			}
+
+			const { data: nearestRaw, error: rpcErr } = await supabase.rpc(RPC_NEAREST, {
+				target_embedding: row.embedding_multi,
+				exclude_id: id,
+				lim: limit + 1,
+				off: offset
+			});
+			const hasMore = Array.isArray(nearestRaw) && nearestRaw.length > limit;
+			const nearest = hasMore ? nearestRaw.slice(0, limit) : (nearestRaw ?? []);
+			if (rpcErr) {
+				console.error("[creations] semantic-related RPC:", rpcErr);
+				return res.status(500).json({ error: "Similarity search failed." });
+			}
+			const ids = (nearest ?? []).map((r) => Number(r?.created_image_id)).filter((n) => Number.isFinite(n) && n > 0);
+			if (ids.length === 0) {
+				const feedByCreation = queries.selectFeedItemsByCreationIds?.all;
+				const mainRows = typeof feedByCreation === "function" ? await feedByCreation([id]) : [];
+				const mainMapped = mapRelatedItemsToResponse(mainRows, [], null);
+				return res.json({ main: mainMapped[0] ?? null, items: [], distances: {}, has_more: false });
+			}
+
+			const feedByCreation = queries.selectFeedItemsByCreationIds?.all;
+			const mainRows = typeof feedByCreation === "function" ? await feedByCreation([id]) : [];
+			const neighbourRows = await feedByCreation(ids);
+			const idToDistance = new Map((nearest ?? []).map((r) => [Number(r.created_image_id), Number(r.distance)]));
+			const orderIdx = new Map(ids.map((id, i) => [id, i]));
+			const sorted = neighbourRows.slice().sort((a, b) => (orderIdx.get(Number(a.id)) ?? 999) - (orderIdx.get(Number(b.id)) ?? 999));
+			const items = mapRelatedItemsToResponse(sorted, [], null).map((item) => ({
+				...item,
+				distance: idToDistance.get(Number(item.created_image_id)) ?? null
+			}));
+			const mainMapped = mapRelatedItemsToResponse(mainRows, [], null);
+			return res.json({ main: mainMapped[0] ?? null, items, distances: Object.fromEntries(idToDistance), has_more: hasMore });
+		} catch (err) {
+			console.error("[creations] semantic-related error:", err);
+			if (!res.headersSent) res.status(500).json({ error: "Unable to load semantic related." });
+		}
+	});
+
+	// Semantic search by text (embed query → nearest). No auth for test page. Uses cache to avoid Replicate when possible.
+	router.get("/api/embeddings/search", async (req, res) => {
+		try {
+			const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+			if (!q) return res.status(400).json({ error: "Missing query (q)." });
+			const normalized = normalizeSearchQuery(q);
+			if (!normalized) return res.status(400).json({ error: "Missing query (q)." });
+			const limit = parseSemanticLimit(req.query.limit);
+			const offset = parseSemanticOffset(req.query.offset);
+			const supabase = getSupabaseServiceClient();
+			if (!supabase) return res.status(503).json({ error: "Embeddings unavailable." });
+
+			let embedding = null;
+			const { data: cached, error: cacheErr } = await supabase
+				.from(SEARCH_CACHE_TABLE)
+				.select("id, embedding")
+				.eq("normalized_query", normalized)
+				.maybeSingle();
+			if (!cacheErr && cached?.embedding) {
+				await supabase.rpc(RPC_SEARCH_CACHE_RECORD_USAGE, { p_cache_id: cached.id });
+				embedding = cached.embedding;
+			}
+			if (!embedding || !Array.isArray(embedding)) {
+				const token = process.env.REPLICATE_API_TOKEN;
+				if (!token) return res.status(503).json({ error: "Search unavailable (no REPLICATE_API_TOKEN)." });
+				const replicate = new Replicate({ auth: token });
+				embedding = await getTextEmbeddingFromReplicate(replicate, q);
+				if (!embedding || !Array.isArray(embedding)) {
+					return res.status(502).json({ error: "Failed to embed query." });
+				}
+				const { data: inserted, error: insertErr } = await supabase
+					.from(SEARCH_CACHE_TABLE)
+					.insert({ normalized_query: normalized, embedding })
+					.select("id")
+					.single();
+				if (!insertErr && inserted?.id) {
+					await supabase.rpc(RPC_SEARCH_CACHE_RECORD_USAGE, { p_cache_id: inserted.id });
+				}
+			}
+
+			const { data: nearestRaw, error: rpcErr } = await supabase.rpc(RPC_NEAREST, {
+				target_embedding: embedding,
+				exclude_id: null,
+				lim: limit + 1,
+				off: offset
+			});
+			if (rpcErr) {
+				console.error("[creations] embeddings/search RPC:", rpcErr);
+				return res.status(500).json({ error: "Similarity search failed." });
+			}
+			const hasMore = Array.isArray(nearestRaw) && nearestRaw.length > limit;
+			const nearest = hasMore ? nearestRaw.slice(0, limit) : (nearestRaw ?? []);
+			const ids = nearest.map((r) => Number(r?.created_image_id)).filter((n) => Number.isFinite(n) && n > 0);
+			if (ids.length === 0) return res.json({ items: [], distances: {}, has_more: false });
+
+			const feedByCreation = queries.selectFeedItemsByCreationIds?.all;
+			const neighbourRows = await feedByCreation(ids);
+			const idToDistance = new Map((nearest ?? []).map((r) => [Number(r.created_image_id), Number(r.distance)]));
+			const orderIdx = new Map(ids.map((id, i) => [id, i]));
+			const sorted = neighbourRows.slice().sort((a, b) => (orderIdx.get(Number(a.id)) ?? 999) - (orderIdx.get(Number(b.id)) ?? 999));
+			const items = mapRelatedItemsToResponse(sorted, [], null).map((item) => ({
+				...item,
+				distance: idToDistance.get(Number(item.created_image_id)) ?? null
+			}));
+			return res.json({ items, distances: Object.fromEntries(idToDistance), has_more: hasMore });
+		} catch (err) {
+			console.error("[creations] embeddings/search error:", err);
+			if (!res.headersSent) res.status(500).json({ error: "Search failed." });
 		}
 	});
 

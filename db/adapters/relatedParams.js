@@ -13,7 +13,11 @@ export const RELATED_PARAM_DEFAULTS = {
 	"related.transition_window_days": "0",
 	"related.random_slots_per_batch": "0",
 	"related.batch_size": "10",
-	"related.candidate_cap_per_signal": "100"
+	"related.candidate_cap_per_signal": "100",
+	"related.recsys_weight": "50",
+	"related.semantic_weight": "50",
+	"related.semantic_weight_no_click_next": "95",
+	"related.semantic_distance_max": "0.8"
 };
 
 /** @type {string[]} */
