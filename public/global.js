@@ -358,30 +358,26 @@ async function initPage() {
 				if (!userPrompt) return;
 				const selectedCard = styleSection?.querySelector('.create-style-card.is-selected');
 				const styleKey = selectedCard?.getAttribute('data-key') || 'none';
-				const { getModifiersForStyle } = await import('./pages/create-styles.js');
-				const modifiers = getModifiersForStyle(styleKey);
-				const prompt = modifiers
-					? `# style\n${modifiers}\n\n# prompt\n${userPrompt}`
-					: userPrompt;
 				const { submitCreationWithPending, formatMentionsFailureForDialog } = await import('./shared/createSubmit.js');
 
 				const doSubmit = (hydrateMentions) => {
 					submitCreationWithPending({
 						serverId: 1,
 						methodKey: 'fluxImage',
-						args: { prompt },
+						args: { prompt: userPrompt },
+						styleKey: styleKey !== 'none' ? styleKey : undefined,
 						hydrateMentions,
 						navigate: 'full'
 					});
 				};
 
-				const mentions = extractMentions(prompt);
+				const mentions = extractMentions(userPrompt);
 				if (mentions.length === 0) {
 					doSubmit(false);
 					return;
 				}
 
-				const validateResult = await validateMentionsSimple({ args: { prompt } });
+				const validateResult = await validateMentionsSimple({ args: { prompt: userPrompt } });
 				if (validateResult.ok) {
 					doSubmit(true);
 					return;

@@ -1030,6 +1030,13 @@ body.creation-detail-page main>section:first-of-type {
 	margin-bottom: 4px;
 }
 
+.creation-detail-style-modifiers {
+	margin-top: 4px;
+	font-size: 0.9rem;
+	color: var(--text-muted);
+	line-height: 1.4;
+}
+
 .creation-detail-description-meta-line {
 	margin-top: 8px;
 	font-size: 0.95rem;

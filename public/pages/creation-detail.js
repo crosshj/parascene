@@ -917,8 +917,11 @@ async function loadCreation() {
 		const isPlainObject = args && typeof args === 'object' && !Array.isArray(args);
 		const argKeys = isPlainObject ? Object.keys(args) : [];
 		const isPromptOnly = isPlainObject && argKeys.length === 1 && Object.prototype.hasOwnProperty.call(args, 'prompt');
-		// Extract prompt text if it exists (whether prompt-only or part of larger args)
-		const promptText = isPlainObject && Object.prototype.hasOwnProperty.call(args, 'prompt') && typeof args.prompt === 'string' ? args.prompt.trim() : '';
+		// Show raw user prompt when stored (style flow); otherwise show args.prompt
+		const storedUserPrompt = typeof meta?.user_prompt === 'string' ? meta.user_prompt.trim() : '';
+		const promptText = storedUserPrompt !== ''
+			? storedUserPrompt
+			: (isPlainObject && Object.prototype.hasOwnProperty.call(args, 'prompt') && typeof args.prompt === 'string' ? args.prompt.trim() : '');
 		const serverName = typeof meta?.server_name === 'string' && meta.server_name.trim()
 			? meta.server_name.trim()
 			: (meta?.server_id != null ? String(meta.server_id) : '');
@@ -927,13 +930,19 @@ async function loadCreation() {
 			: (typeof meta?.method === 'string' ? meta.method : '');
 		const durationStr = formatDuration(meta || {});
 
-		// Show description block if we have user description, lineage (ancestors/children), prompt, or meta (server/method/duration).
+		// Style from meta (stored when created via create.html with a style)
+		const styleMeta = meta?.style && typeof meta.style === 'object' ? meta.style : null;
+		const styleLabel = styleMeta && typeof styleMeta.label === 'string' ? styleMeta.label.trim() : '';
+		const styleModifiers = styleMeta && typeof styleMeta.modifiers === 'string' ? styleMeta.modifiers.trim() : '';
+		const hasStyle = styleLabel.length > 0;
+
+		// Show description block if we have user description, lineage (ancestors/children), prompt, style, or meta (server/method/duration).
 		let descriptionHtml = '';
 		const descriptionText = typeof creation.description === 'string' ? creation.description.trim() : '';
 		const hasDescription = descriptionText.length > 0;
 		const hasPrompt = promptText.length > 0;
 		const hasMetaInDescription = !!(serverName || methodName || durationStr);
-		const showDescriptionBlock = descriptionText || promptText || lineageSectionHtml || hasMetaInDescription;
+		const showDescriptionBlock = descriptionText || promptText || hasStyle || lineageSectionHtml || hasMetaInDescription;
 
 		if (showDescriptionBlock) {
 			const descriptionParts = [];
@@ -951,6 +960,15 @@ async function loadCreation() {
 				}
 				descriptionParts.push(html`<div class="creation-detail-prompt-label">Prompt</div>`);
 				descriptionParts.push(escapeHtml(promptText));
+			}
+
+			if (hasStyle) {
+				if (descriptionParts.length) descriptionParts.push('<br><br>');
+				descriptionParts.push(html`<div class="creation-detail-prompt-label">Style</div>`);
+				descriptionParts.push(escapeHtml(styleLabel));
+				if (styleModifiers) {
+					descriptionParts.push(html`<div class="creation-detail-style-modifiers">${escapeHtml(styleModifiers)}</div>`);
+				}
 			}
 
 			const descriptionInnerHtml = descriptionParts.length ? descriptionParts.join('') : '';

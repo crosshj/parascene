@@ -114,6 +114,7 @@ export function submitCreationWithPending({
 	mutateOfId,
 	creditCost,
 	hydrateMentions,
+	styleKey,
 	navigate = 'spa', // 'spa' | 'full'
 	onInsufficientCredits,
 	onError
@@ -140,7 +141,8 @@ export function submitCreationWithPending({
 		creation_token: creationToken,
 		...(Number.isFinite(Number(mutateOfId)) && Number(mutateOfId) > 0 ? { mutate_of_id: Number(mutateOfId) } : {}),
 		...(Number.isFinite(Number(creditCost)) && Number(creditCost) > 0 ? { credit_cost: Number(creditCost) } : {}),
-		...(typeof hydrateMentions === 'boolean' ? { hydrate_mentions: hydrateMentions } : {})
+		...(typeof hydrateMentions === 'boolean' ? { hydrate_mentions: hydrateMentions } : {}),
+		...(styleKey && typeof styleKey === 'string' && styleKey.trim() ? { style_key: styleKey.trim() } : {})
 	};
 
 	const doFetch = () =>

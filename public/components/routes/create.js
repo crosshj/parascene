@@ -497,7 +497,7 @@ class AppRouteCreate extends HTMLElement {
         <div class="route-header">
           <h3>Create</h3>
         </div>
-        <app-tabs>
+        <app-tabs active="basic">
           <tab data-id="basic" label="Advanced" default>
             <div class="route-header">
               <p>Select a server and generation method to create a new image.</p>
@@ -748,7 +748,7 @@ class AppRouteCreate extends HTMLElement {
 				}
 			};
 
-			// Prefer URL hash over sessionStorage when present
+			// Prefer URL hash over sessionStorage when present; default to basic when neither is set
 			if (window.location.pathname === '/create') {
 				const hash = (window.location.hash || '').replace(/^#/, '').toLowerCase();
 				if (hash === 'basic' || hash === 'advanced') {
@@ -764,15 +764,16 @@ class AppRouteCreate extends HTMLElement {
 				} else {
 					try {
 						const stored = sessionStorage.getItem(this.storageKey);
-						if (stored) {
-							const selections = JSON.parse(stored);
-							const tab = selections?.tab;
-							if (tab === 'basic' || tab === 'advanced') {
-								tabsEl.setActiveTab(tab);
-							}
+						const selections = stored ? JSON.parse(stored) : {};
+						const tab = selections?.tab;
+						if (tab === 'basic' || tab === 'advanced') {
+							tabsEl.setActiveTab(tab);
+						} else {
+							tabsEl.setActiveTab('basic');
 						}
 					} catch (e) {
 						// Ignore storage errors
+						tabsEl.setActiveTab('basic');
 					}
 				}
 			}

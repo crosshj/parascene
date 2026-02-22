@@ -19,6 +19,7 @@ import { runLandscapeJob } from "./utils/landscapeJob.js";
 import { scheduleCreationJob, scheduleLandscapeJob } from "./utils/scheduleCreationJob.js";
 import { verifyQStashRequest } from "./utils/qstashVerification.js";
 import { ACTIVE_SHARE_VERSION, mintShareToken, verifyShareToken } from "./utils/shareLink.js";
+import { getStyleInfo } from "./utils/createStyles.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -875,7 +876,8 @@ export default function createCreateRoutes({ queries, storage }) {
 					retry_of_id: fields.retry_of_id,
 					mutate_of_id: fields.mutate_of_id,
 					credit_cost: fields.credit_cost,
-					hydrate_mentions: fields.hydrate_mentions
+					hydrate_mentions: fields.hydrate_mentions,
+					style_key: fields.style_key
 				};
 			} catch (err) {
 				if (err?.code === "FILE_TOO_LARGE" || err?.message === "File too large") {
@@ -885,7 +887,7 @@ export default function createCreateRoutes({ queries, storage }) {
 			}
 		}
 
-		const { server_id, method, args, creation_token, retry_of_id, mutate_of_id, credit_cost: bodyCreditCost, hydrate_mentions } = req.body;
+		const { server_id, method, args, creation_token, retry_of_id, mutate_of_id, credit_cost: bodyCreditCost, hydrate_mentions, style_key } = req.body;
 		const safeArgs = args && typeof args === "object" ? { ...args } : {};
 		const hydrateMentions = hydrate_mentions === true || hydrate_mentions === "true" || hydrate_mentions === 1 || hydrate_mentions === "1";
 
@@ -952,6 +954,23 @@ export default function createCreateRoutes({ queries, storage }) {
 			// Keep a stable copy of args for storage (meta.args) separate from any provider-only transformations.
 			argsForProvider = argsForProvider && typeof argsForProvider === "object" ? { ...argsForProvider } : {};
 
+			// Apply style transformation when style_key is provided (create.html flow). Store style + raw user prompt in meta.
+			let styleForMeta = null;
+			let userPromptForMeta = null;
+			if (style_key && typeof style_key === "string" && !isAdvancedGenerate) {
+				const styleInfo = getStyleInfo(style_key.trim());
+				if (styleInfo) {
+					styleForMeta = { key: styleInfo.key, label: styleInfo.label, modifiers: styleInfo.modifiers };
+					if (styleInfo.modifiers && typeof argsForProvider.prompt === "string") {
+						const userPrompt = argsForProvider.prompt.trim();
+						if (userPrompt) {
+							userPromptForMeta = userPrompt;
+							argsForProvider.prompt = `# style\n${styleInfo.modifiers}\n\n# prompt\n${userPrompt}`;
+						}
+					}
+				}
+			}
+
 			// Provider must fetch image_url; relative paths fail. Normalize to absolute URL.
 			if (typeof argsForProvider.image_url === "string") {
 				const absolute = toParasceneImageUrl(argsForProvider.image_url);
@@ -993,6 +1012,8 @@ export default function createCreateRoutes({ queries, storage }) {
 				started_at,
 				timeout_at,
 				credit_cost: CREATION_CREDIT_COST,
+				...(styleForMeta ? { style: styleForMeta } : {}),
+				...(userPromptForMeta != null ? { user_prompt: userPromptForMeta } : {}),
 			};
 
 			// Mutate lineage: create/extend meta.history
