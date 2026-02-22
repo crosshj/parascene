@@ -226,6 +226,23 @@ async function initPage() {
 			allStyleCards.forEach((card, i) => {
 				card.setAttribute('data-color-index', String(i % 9));
 			});
+			// Thumbnails (manual for now; server will build in long run)
+			const { getStyleThumbUrl } = await import('./pages/create-styles.js');
+			allStyleCards.forEach((card) => {
+				const key = card.getAttribute('data-key');
+				if (!key) return;
+				const url = key === 'none' ? '/assets/style-thumbs/none.webp' : getStyleThumbUrl(key);
+				if (!url) return;
+				const img = document.createElement('img');
+				img.className = 'create-style-card-thumb';
+				img.src = url;
+				img.width = 140;
+				img.height = 160;
+				img.loading = 'lazy';
+				img.decoding = 'async';
+				img.alt = '';
+				card.insertBefore(img, card.firstChild);
+			});
 			allStyleCards.forEach((card) => {
 				card.addEventListener('click', () => {
 					const key = card.getAttribute('data-key');

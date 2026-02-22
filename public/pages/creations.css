@@ -352,6 +352,7 @@ body.create-page .create-btn-generate:focus-visible,
 }
 
 .create-style-card {
+	position: relative;
 	width: 140px;
 	height: 160px;
 	border-radius: 10px;
@@ -361,6 +362,15 @@ body.create-page .create-btn-generate:focus-visible,
 	justify-content: center;
 	padding-bottom: 12px;
 	cursor: pointer;
+}
+
+.create-style-card-thumb {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	border-radius: inherit;
 }
 
 /* Temporary pastel differentiation: 9 colors, ordered so no adjacent card has similar hue */
@@ -404,12 +414,25 @@ body.create-page .create-btn-generate:focus-visible,
 	border-color: var(--accent);
 }
 
+.create-style-card.is-selected::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	border-radius: inherit;
+	background: color-mix(in srgb, var(--accent) 30%, transparent);
+	z-index: 1;
+	box-shadow: inset 0px 0px 0px 2px var(--accent);
+}
+
 .create-style-card-label {
+	position: relative;
+	z-index: 2;
 	font-size: 0.75rem;
 	font-weight: 600;
 	letter-spacing: 0.05em;
-	color: var(--text-muted);
+	color: #fff;
 	text-align: center;
+	text-shadow: 0 0 3px #000, 0 0 5px #000, 1px 0 2px #000, -1px 0 2px #000, 0 1px 2px #000, 0 -1px 2px #000;
 }
 
 .create-style-dots {

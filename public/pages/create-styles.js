@@ -63,3 +63,20 @@ export function getModifiersForStyle(key) {
 	const style = CREATE_STYLES[key];
 	return style ? (style.modifiers || '').trim() : '';
 }
+
+/** Base path for style thumbnail images (140×160 or 280×320). No trailing slash. */
+export const STYLE_THUMB_BASE = '/assets/style-thumbs';
+
+/**
+ * Get thumbnail URL for a style key. Returns empty string if the style has no thumbnail (e.g. 'none').
+ * Use with loading="lazy" (or eager + fetchpriority="high" for first few cards) and decoding="async".
+ * @param {string} key - data-key of the style
+ * @returns {string} URL to thumbnail image, or '' if none
+ */
+export function getStyleThumbUrl(key) {
+	if (!key || key === 'none') return '';
+	const style = CREATE_STYLES[key];
+	const file = style?.imageFile;
+	if (!file) return `${STYLE_THUMB_BASE}/${key}.webp`;
+	return `${STYLE_THUMB_BASE}/${file}`;
+}

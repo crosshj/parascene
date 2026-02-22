@@ -240,6 +240,17 @@ do something like this
 }]
 
 
+### Style thumbnails – loading performance
+
+**Approach:** URL-based server build + cache. Path is `/create/txt2img/{styleName}`. Server builds the page for that style. Cache key is the URL; repeat hits don’t rebuild. On style click, client sets URL via `history.pushState` (no reload). On Create, style comes from URL or current selection.
+
+**Decisions:**
+- Server gets style from path; builds HTML with correct `loading` / `fetchpriority` for visible window around that style.
+- Server sets initial scroll and dot indicator in HTML (e.g. `data-style-column` on the strip and `is-active` on the right dots, or inline script that sets `scrollLeft` once layout is ready). No need to restore from localStorage on load.
+- Thumbnails: 140×160 or 2×, WebP, `decoding="async"`. Thumbs as static assets with long cache.
+- Img: explicit width/height 140×160, `object-fit: cover`. Keep colored card as placeholder until loaded.
+- Thumb URL helper and base path in one place (e.g. `getStyleThumbUrl(key)`, `/assets/style-thumbs/`).
+
 ### generate thumbnails
 
 none
