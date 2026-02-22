@@ -1,5 +1,443 @@
 /* Shared styles for creations + creation detail */
 
+/* Create page */
+body.create-page main {
+	max-width: 1400px;
+	margin: 0 auto;
+	padding: 16px 16px 48px;
+}
+
+.create-page-footer {
+	width: auto;
+	max-width: 600px;
+	margin-inline: auto;
+	margin-top: 7rem;
+	padding-top: 1rem;
+	border-top: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+	text-align: center;
+}
+
+.create-page-footer a {
+	color: var(--text-muted, rgba(255, 255, 255, 0.6));
+	font-size: 0.875rem;
+}
+
+.create-page-footer a:hover {
+	color: var(--text);
+}
+
+.create-content {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 1rem;
+	width: 100%;
+	/* 4 style cards (140px each) + 3 gaps (0.75rem) */
+	max-width: calc(4 * 140px + 3 * 0.75rem);
+	margin: 0 auto;
+	padding: 0;
+}
+
+.create-content app-tabs {
+	width: 100%;
+}
+
+.create-content .app-tabs {
+	border-bottom: 0;
+	justify-content: center;
+}
+
+.create-content .app-tabs-button::after {
+	left: 50%;
+	width: 80%;
+	margin-left: -40%;
+}
+
+.create-content .app-tabs-button.is-active::after,
+.create-content .app-tabs-button:focus-visible::after {
+	left: 50%;
+	width: 80%;
+	margin-left: -40%;
+}
+
+.create-content .app-tabs-panel {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 1rem;
+	width: 100%;
+}
+
+.create-image-edit-wrap {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	width: 50%;
+	max-width: 50%;
+}
+
+.create-image-edit-box {
+	width: 100%;
+	aspect-ratio: 1 / 1;
+	min-height: 120px;
+	background: var(--surface-muted);
+	border: 1px dashed var(--border);
+	border-radius: 10px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	position: relative;
+}
+
+.create-image-edit-area {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	position: absolute;
+	inset: 0;
+	border-radius: inherit;
+}
+
+.create-image-edit-thumb {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+	border-radius: inherit;
+	pointer-events: none;
+}
+
+.create-image-edit-area .create-choose-image-btn {
+	flex-shrink: 0;
+	z-index: 1;
+	margin: auto;
+}
+
+.create-image-edit-area .create-choose-image-btn.is-hidden {
+	display: none;
+}
+
+.create-change-image-link {
+	visibility: hidden;
+	display: block;
+	width: 100%;
+	margin-top: 0.5rem;
+	text-align: center;
+	font-size: 0.875rem;
+	color: var(--text-muted);
+	min-height: 1.5em;
+}
+
+.create-change-image-link.is-visible {
+	visibility: visible;
+}
+
+.create-change-image-link:hover {
+	color: var(--text);
+}
+
+.create-title {
+	margin: 0 0 0.25rem 0;
+	font-size: 1.25rem;
+	font-weight: 600;
+	color: var(--text);
+	text-align: center;
+}
+
+.create-prompt-wrap {
+	position: relative;
+	width: 100%;
+	max-width: 100%;
+}
+
+.create-prompt-clear {
+	position: absolute;
+	right: 0.5rem;
+	bottom: -0.75rem;
+	z-index: 2;
+	font-size: 0.75rem;
+	color: var(--text-muted);
+	pointer-events: none;
+	visibility: hidden;
+}
+
+.create-prompt-clear.is-visible {
+	pointer-events: auto;
+	visibility: visible;
+}
+
+.create-prompt-clear:hover {
+	color: var(--text);
+}
+
+.create-prompt-input {
+	width: 100%;
+	min-height: 2.75rem;
+	padding: 0.75rem 1rem;
+	border-radius: 6px;
+	border: 1px solid var(--border);
+	background: var(--input-bg);
+	color: var(--text);
+	font-size: 0.95rem;
+	font-family: inherit;
+	line-height: 1.4;
+	box-sizing: border-box;
+	resize: none;
+	overflow: hidden;
+}
+
+.create-prompt-input::placeholder {
+	color: var(--text-muted);
+}
+
+.create-prompt-input:focus {
+	outline: none;
+	border-color: var(--accent);
+}
+
+.create-action-pills {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	flex-wrap: wrap;
+}
+
+.create-pill {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.35rem;
+	padding: 0.5rem 1rem;
+	border-radius: 999px;
+	border: 1px solid var(--border);
+	background: var(--surface-strong);
+	color: var(--text);
+	font-size: 0.9rem;
+	font-family: inherit;
+	cursor: pointer;
+	transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.create-pill:hover {
+	background: var(--surface-muted);
+	border-color: color-mix(in srgb, var(--text) 18%, transparent);
+}
+
+.create-pill-icon {
+	width: 14px;
+	height: 14px;
+	background-color: var(--text-muted);
+	-webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") center / contain no-repeat;
+	mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+/* Generate button: same gradient as CTA Get Started (teal/green in dark, purple in light) */
+body.create-page {
+	--create-generate-btn-1: #5b329a;
+	--create-generate-btn-2: #ab3eff;
+	--create-generate-btn-3: #e9e3ff;
+	--create-generate-btn-bg: linear-gradient(155deg, var(--create-generate-btn-1) 50%, var(--create-generate-btn-2) 80%, var(--create-generate-btn-3) 100%);
+	--create-generate-btn-accent: #ce4cff;
+	--create-generate-btn-text: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+	body.create-page {
+		--create-generate-btn-1: #0a6464;
+		--create-generate-btn-2: #00b4a0;
+		--create-generate-btn-3: #00c8b4;
+		--create-generate-btn-accent: rgba(0, 200, 180, 0.5);
+		--create-generate-btn-text: #ffffff;
+	}
+}
+
+body.create-page .create-btn-generate,
+.create-page .create-btn-generate {
+	width: 100%;
+	max-width: 250px;
+	min-width: 0;
+	align-self: center;
+	padding: 0.75rem 1.5rem;
+	border-radius: 999px;
+	font-size: 1rem;
+	font-weight: 600;
+	color: var(--create-generate-btn-text) !important;
+	background: var(--create-generate-btn-bg) !important;
+	border: 0.25px solid var(--create-generate-btn-accent) !important;
+	box-shadow: none !important;
+	cursor: pointer;
+	transition: transform 0.2s ease, filter 0.2s ease;
+}
+
+body.create-page .create-btn-generate:hover:not(:disabled),
+.create-page .create-btn-generate:hover:not(:disabled) {
+	transform: translateY(-1px);
+	filter: brightness(1.06);
+	border-color: var(--create-generate-btn-accent) !important;
+	background: var(--create-generate-btn-bg) !important;
+}
+
+body.create-page .create-btn-generate:focus-visible,
+.create-page .create-btn-generate:focus-visible {
+	outline: none;
+	border-color: var(--create-generate-btn-accent) !important;
+	box-shadow: none !important;
+}
+
+.create-style-divider {
+	display: flex;
+	align-items: center;
+	width: 100%;
+	gap: 1rem;
+	margin-top: 1.5rem;
+}
+
+.create-style-divider::before,
+.create-style-divider::after {
+	content: "";
+	flex: 1;
+	height: 1px;
+	background: var(--border);
+}
+
+.create-style-divider-text {
+	font-size: 0.9rem;
+	font-weight: 500;
+	color: var(--text-muted);
+	white-space: nowrap;
+}
+
+.create-style-section {
+	width: 100%;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.75rem;
+}
+
+.create-style-cards {
+	display: flex;
+	flex-direction: row;
+	gap: 0.75rem;
+	overflow-x: auto;
+	overflow-y: hidden;
+	width: 100%;
+	height: calc(160px * 2 + 0.75rem);
+	padding-bottom: 4px;
+	scroll-snap-type: x mandatory;
+	-webkit-overflow-scrolling: touch;
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+	overscroll-behavior-x: contain;
+	list-style: none;
+	margin: 0;
+	padding: 0 0 4px 0;
+}
+
+.create-style-cards::-webkit-scrollbar {
+	display: none;
+}
+
+.create-style-column {
+	flex: 0 0 140px;
+	width: 140px;
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+	scroll-snap-align: start;
+	scroll-snap-stop: always;
+}
+
+.create-style-card {
+	width: 140px;
+	height: 160px;
+	border-radius: 10px;
+	border: 1px solid var(--border);
+	display: flex;
+	align-items: flex-end;
+	justify-content: center;
+	padding-bottom: 12px;
+	cursor: pointer;
+}
+
+/* Temporary pastel differentiation: 9 colors, ordered so no adjacent card has similar hue */
+.create-style-card[data-color-index="0"] {
+	background: color-mix(in srgb, hsl(0, 48%, 62%) 33.33%, transparent);
+}
+
+.create-style-card[data-color-index="1"] {
+	background: color-mix(in srgb, hsl(160, 48%, 62%) 33.33%, transparent);
+}
+
+.create-style-card[data-color-index="2"] {
+	background: color-mix(in srgb, hsl(320, 48%, 62%) 33.33%, transparent);
+}
+
+.create-style-card[data-color-index="3"] {
+	background: color-mix(in srgb, hsl(80, 48%, 62%) 33.33%, transparent);
+}
+
+.create-style-card[data-color-index="4"] {
+	background: color-mix(in srgb, hsl(240, 48%, 62%) 33.33%, transparent);
+}
+
+.create-style-card[data-color-index="5"] {
+	background: color-mix(in srgb, hsl(40, 48%, 62%) 33.33%, transparent);
+}
+
+.create-style-card[data-color-index="6"] {
+	background: color-mix(in srgb, hsl(200, 48%, 62%) 33.33%, transparent);
+}
+
+.create-style-card[data-color-index="7"] {
+	background: color-mix(in srgb, hsl(280, 48%, 62%) 33.33%, transparent);
+}
+
+.create-style-card[data-color-index="8"] {
+	background: color-mix(in srgb, hsl(120, 48%, 62%) 33.33%, transparent);
+}
+
+.create-style-card.is-selected {
+	border-color: var(--accent);
+}
+
+.create-style-card-label {
+	font-size: 0.75rem;
+	font-weight: 600;
+	letter-spacing: 0.05em;
+	color: var(--text-muted);
+	text-align: center;
+}
+
+.create-style-dots {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+}
+
+.create-style-dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: color-mix(in srgb, var(--text) 20%, transparent);
+	transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.create-style-dot.is-active {
+	background: var(--text);
+	transform: scale(1.15);
+}
+
+@media (max-width: 768px) {
+	body.create-page main {
+		padding-bottom: calc(96px + env(safe-area-inset-bottom));
+	}
+}
+
 /* Creation Detail Image Loading/Error States */
 .creation-detail-image-wrapper.image-loading,
 .creation-detail-image-wrapper.image-error {

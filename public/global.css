@@ -4122,6 +4122,24 @@ body.modal-open {
 	cursor: pointer;
 }
 
+.image-picker-panel .image-choose-btn {
+	display: inline-block;
+	padding: 0.5rem 1rem;
+	font-size: 0.9rem;
+	border-radius: 6px;
+	border: 1px solid var(--border);
+	background: var(--input-bg, var(--surface-muted));
+	color: var(--text);
+	cursor: pointer;
+	font-family: inherit;
+	transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.image-picker-panel .image-choose-btn:hover {
+	background: var(--surface-muted);
+	border-color: var(--text-muted);
+}
+
 .image-picker-attach-btn {
 	padding: 0.5rem 1rem;
 	font-size: 0.9rem;

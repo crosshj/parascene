@@ -498,7 +498,7 @@ class AppRouteCreate extends HTMLElement {
           <h3>Create</h3>
         </div>
         <app-tabs>
-          <tab data-id="basic" label="Basic" default>
+          <tab data-id="basic" label="Advanced" default>
             <div class="route-header">
               <p>Select a server and generation method to create a new image.</p>
             </div>
@@ -526,7 +526,7 @@ class AppRouteCreate extends HTMLElement {
               <p class="create-cost" data-create-cost>Select a server and method to see cost</p>
             </div>
           </tab>
-          <tab data-id="advanced" label="Advanced">
+          <tab data-id="advanced" label="Data Builder">
             <div class="create-route-advanced">
               <div class="create-route-advanced-server form-group">
                 <label class="form-label" for="advanced-server-select">Server</label>

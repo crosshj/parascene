@@ -151,21 +151,16 @@ export function submitCreationWithPending({
 			body: JSON.stringify(payload)
 		});
 
-	// Full navigate: use sendBeacon so request survives page unload.
+	// Full navigate: use fetch with keepalive so request survives page unload and Content-Type is set (so server parses JSON and hydrate_mentions).
 	if (navigate === 'full') {
 		try {
-			if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
-				const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
-				navigator.sendBeacon('/api/create', blob);
-			} else {
-				fetch('/api/create', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					credentials: 'include',
-					body: JSON.stringify(payload),
-					keepalive: true
-				}).catch(() => null);
-			}
+			fetch('/api/create', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify(payload),
+				keepalive: true
+			}).catch(() => null);
 		} catch {
 			// ignore
 		}

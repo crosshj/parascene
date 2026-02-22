@@ -190,8 +190,10 @@ do something like this
 		modifiers: "heavenly sunshine beams divine bright soft focus holy in the clouds",
 		imageFile: "heavenly.jpg"
 }]
+
+
+///NOTE: DO NOT USE AFTER THIS POINT
 	, l = [{
-		key: "nc-favs",
 		title: "Default favorites",
 		items: ["detailed matte painting", "by Greg Rutkowski", "bokeh", "trending on Artstation", "Unreal Engine", "8k resolution concept art", "art nouveau rococo architecture", "Ukiyo-e", "Eldritch", "art deco", "gouache", "hyperdetailed", "intricately detailed", "triadic colors", "dynamic lighting", "Splash art", "volumetric lighting"]
 }, {
@@ -236,3 +238,144 @@ do something like this
 		title: "Negative Prompts",
 		items: ["ugly", "tiling", "poorly drawn hands", "poorly drawn feet", "poorly drawn face", "out of frame", "extra limbs", "disfigured", "deformed", "body out of frame", "blurry", "bad anatomy", "blurred", "watermark", "grainy", "signature", "cut off", "draft", "amateur", "frame", "border"]
 }]
+
+
+### generate thumbnails
+
+none
+simple neutral gray sphere centered on dark background, soft studio lighting, minimal, high contrast, clean composition, no texture
+
+default
+heroic fantasy knight standing on cliff edge, glowing sky behind, dramatic rim lighting, detailed matte painting, bold silhouette, centered composition
+
+isometricVoxel
+isometric voxel castle floating on small island, blocky geometry, clean edges, bright colors, minimal sky background, centered
+
+cinematic
+lone figure walking through rain-soaked street at night, strong backlight, heavy shadows, cinematic film still, shallow depth of field, centered
+
+realistic-anime
+anime warrior girl holding glowing sword, semi-realistic shading, dynamic lighting, strong contrast, centered portrait framing
+
+artistic-portrait
+stylized head-and-shoulders portrait of elegant woman, dramatic lighting, painterly brush detail, dark background, centered
+
+striking
+sharp high-contrast portrait of man with intense gaze, dramatic side lighting, deep shadows, centered, hyper-detailed
+
+2-5d-anime
+anime character standing in stylized city street, cel-shaded, subtle depth, cinematic lighting, centered full-body
+
+anime-v2
+anime key visual of heroic boy with wind blowing hair, bold colors, clean linework, simple sky background, centered
+
+hyperreal
+hyperreal close-up of face with dramatic lighting, ultra sharp detail, high contrast background, centered portrait
+
+vibrant
+graffiti-style tiger face bursting with color splashes, neon paint splatter, bold contrast, centered on dark wall
+
+epic-origami
+origami dragon folded from crisp white paper, strong shadows, minimal background, centered composition
+
+3d-game-v2
+fantasy game character in armor standing heroically, Unreal Engine style lighting, glowing rim light, centered
+
+color-painting
+abstract swirling color explosion, bold complementary colors, strong central focus, simple backdrop
+
+mecha
+massive mech robot standing front-facing, glowing accents, dramatic lighting, minimal smoky background, centered
+
+cgi-character
+stylized 3D cartoon hero character, Pixar-like proportions, soft gradient background, centered
+
+epic
+epic fantasy warrior with cape flowing, storm clouds behind, glowing highlights, bold silhouette, centered
+
+dark-fantasy
+dark armored knight in mist, glowing eyes, purple and yellow lighting contrast, moody atmosphere, centered
+
+modern-comic
+superhero bust portrait, bold ink lines, vibrant comic shading, flat background, centered
+
+abstract-curves
+smooth abstract flowing neon curves on dark background, glossy reflections, centered
+
+bon-voyage
+fantasy traveler with glowing lantern on cliff edge, orange and teal sky, dramatic lighting, centered
+
+cubist-v2
+cubist portrait fragmented geometric face, bold color blocks, strong angular shapes, centered
+
+detailed-gouache
+gouache painting of fox head, thick textured brush strokes, simple neutral background, centered
+
+neo-impressionist
+neo-impressionist landscape tree silhouette, visible paint dots, bold color contrast, centered
+
+pop-art
+pop art portrait with bold triadic colors, halftone dots, flat background, centered face
+
+anime
+Studio Ghibli inspired character standing in golden sunlight field, soft glow, centered
+
+candy-v2
+whimsical candy castle made of colorful sweets, glossy highlights, high saturation, centered
+
+photo
+professional portrait photo of confident person, soft natural light, blurred background, centered
+
+bw-portrait
+black and white close-up portrait with dramatic shadows, strong texture, centered face
+
+color-portrait
+color studio portrait, vibrant skin tones, clean backdrop, centered head-and-shoulders
+
+oil-painting
+classical oil painting portrait, rich brush strokes, dark background, centered composition
+
+cosmic
+cosmic astral figure floating in space, glowing nebula behind, vibrant purples and blues, centered
+
+sinister
+hooded figure with faint glowing eyes in darkness, high contrast shadows, centered
+
+candy
+bright candy swirl lollipop close-up, saturated colors, simple background, centered
+
+cubist
+cubist still life geometric fruit arrangement, bold shapes, centered
+
+3d-game
+fantasy game hero character mid-shot, dynamic lighting, clean background, centered
+
+fantasy
+ethereal elf standing in glowing forest mist, soft light beams, centered
+
+gouache
+gouache style painted mountain peak, thick brush texture, simple sky, centered
+
+matte
+fantasy matte painting castle on cliff, dramatic sky, strong silhouette, centered
+
+charcoal
+charcoal sketch portrait, heavy shading, high contrast, white background, centered
+
+horror
+horror creature emerging from darkness, sharp lighting from below, centered
+
+surreal
+surreal melting clock floating in minimal desert, bold shapes, centered composition
+
+steampunk
+steampunk mechanical owl with brass gears, centered, dark background
+
+cyberpunk
+cyberpunk city skyline with neon lights, strong magenta and teal contrast, centered focal building
+
+synthwave
+synthwave sunset with grid horizon and neon sun, bold pink and purple, centered
+
+heavenly
+angelic figure in bright clouds, sunbeams radiating, soft glow, centered

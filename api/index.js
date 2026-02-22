@@ -214,7 +214,7 @@ app.use(createProviderRoutes({ queries }));
 app.use(createServersRoutes({ queries }));
 app.use(createTemplatesRoutes({ queries }));
 app.use(createHelpRoutes({ pagesDir, queries }));
-app.use(createPageRoutes({ queries, pagesDir }));
+app.use(createPageRoutes({ queries, pagesDir, staticDir }));
 app.use(createTodoRoutes());
 app.use(createPolicyRoutes());
 app.use(createTryRoutes({ queries, storage }));

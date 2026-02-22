@@ -918,7 +918,7 @@ button.landing-generate-btn:focus-visible,
 	background: var(--cta-btn-bg);
 	color: var(--cta-btn-text);
 	border: 0.25px solid var(--cta-btn-accent) !important;
-	border-radius: 10px;
+	border-radius: 999px;
 	padding: 14px 32px;
 	font-size: 1.1rem;
 	font-weight: 600;

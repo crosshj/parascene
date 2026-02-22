@@ -613,6 +613,282 @@ function createImageField(fieldKey, field, context) {
 	return wrapper;
 }
 
+/**
+ * Open the same "Choose image" modal used by image fields (Paste image / Paste link / Upload file).
+ * Call onSelect with the chosen image as string (URL) or File, then closes the modal.
+ * @param {{ onSelect: (value: string | File) => void }} options
+ */
+export function openImagePickerModal({ onSelect }) {
+	const modalOverlay = document.createElement('div');
+	modalOverlay.className = 'image-picker-modal-overlay';
+	modalOverlay.setAttribute('data-image-picker-modal', '');
+	const modal = document.createElement('div');
+	modal.className = 'image-picker-modal modal';
+	const modalHeader = document.createElement('div');
+	modalHeader.className = 'modal-header';
+	const modalTitle = document.createElement('h3');
+	modalTitle.textContent = 'Choose image';
+	const modalClose = document.createElement('button');
+	modalClose.type = 'button';
+	modalClose.className = 'modal-close';
+	modalClose.setAttribute('aria-label', 'Close');
+	modalClose.textContent = '×';
+	modalHeader.appendChild(modalTitle);
+	modalHeader.appendChild(modalClose);
+	modal.appendChild(modalHeader);
+	const modalBody = document.createElement('div');
+	modalBody.className = 'image-picker-modal-body';
+
+	const methodButtons = document.createElement('div');
+	methodButtons.className = 'image-picker-methods';
+	const btnPasteImage = document.createElement('button');
+	btnPasteImage.type = 'button';
+	btnPasteImage.className = 'image-picker-method-btn';
+	btnPasteImage.textContent = 'Paste image';
+	const btnPasteLink = document.createElement('button');
+	btnPasteLink.type = 'button';
+	btnPasteLink.className = 'image-picker-method-btn';
+	btnPasteLink.textContent = 'Paste link';
+	const btnUploadFile = document.createElement('button');
+	btnUploadFile.type = 'button';
+	btnUploadFile.className = 'image-picker-method-btn';
+	btnUploadFile.textContent = 'Upload file';
+	methodButtons.appendChild(btnPasteImage);
+	methodButtons.appendChild(btnPasteLink);
+	methodButtons.appendChild(btnUploadFile);
+
+	const pastePanel = document.createElement('div');
+	pastePanel.className = 'image-picker-panel';
+	pastePanel.setAttribute('data-image-picker-panel', 'paste_image');
+	pastePanel.hidden = true;
+	const pasteZone = document.createElement('div');
+	pasteZone.setAttribute('tabindex', '0');
+	pasteZone.setAttribute('role', 'button');
+	pasteZone.setAttribute('aria-label', 'Paste image here. Focus then Ctrl+V or Cmd+V.');
+	pasteZone.className = 'image-picker-paste-zone';
+	pasteZone.textContent = 'Paste image here — focus this box, then Ctrl+V (or Cmd+V)';
+	const pasteReady = document.createElement('div');
+	pasteReady.className = 'image-picker-ready';
+	pasteReady.hidden = true;
+	const pasteReadyThumb = document.createElement('img');
+	pasteReadyThumb.className = 'image-picker-ready-thumb';
+	pasteReadyThumb.alt = '';
+	const pasteReadyText = document.createElement('span');
+	pasteReadyText.className = 'image-picker-ready-text';
+	pasteReady.appendChild(pasteReadyThumb);
+	pasteReady.appendChild(pasteReadyText);
+	const pasteAttachBtn = document.createElement('button');
+	pasteAttachBtn.type = 'button';
+	pasteAttachBtn.className = 'image-picker-attach-btn';
+	pasteAttachBtn.textContent = 'Attach';
+	pasteAttachBtn.disabled = true;
+	pastePanel.appendChild(pasteZone);
+	pastePanel.appendChild(pasteReady);
+	pastePanel.appendChild(pasteAttachBtn);
+
+	const linkPanel = document.createElement('div');
+	linkPanel.className = 'image-picker-panel';
+	linkPanel.setAttribute('data-image-picker-panel', 'paste_link');
+	linkPanel.hidden = true;
+	const urlInput = document.createElement('input');
+	urlInput.type = 'url';
+	urlInput.className = 'form-input image-url-input';
+	urlInput.placeholder = 'Paste or enter image URL';
+	urlInput.setAttribute('data-image-url-input', '');
+	const linkAttachBtn = document.createElement('button');
+	linkAttachBtn.type = 'button';
+	linkAttachBtn.className = 'image-picker-attach-btn';
+	linkAttachBtn.textContent = 'Attach';
+	linkAttachBtn.disabled = true;
+	linkPanel.appendChild(urlInput);
+	linkPanel.appendChild(linkAttachBtn);
+
+	const uploadPanel = document.createElement('div');
+	uploadPanel.className = 'image-picker-panel';
+	uploadPanel.setAttribute('data-image-picker-panel', 'upload_file');
+	uploadPanel.hidden = true;
+	const chooseLabel = document.createElement('label');
+	chooseLabel.className = 'image-choose-label';
+	const chooseSpan = document.createElement('span');
+	chooseSpan.className = 'image-choose-btn';
+	chooseSpan.textContent = 'Choose file';
+	const fileInput = document.createElement('input');
+	fileInput.type = 'file';
+	fileInput.className = 'image-file-input';
+	fileInput.accept = 'image/*';
+	fileInput.hidden = true;
+	chooseLabel.appendChild(chooseSpan);
+	chooseLabel.appendChild(fileInput);
+	const uploadReady = document.createElement('div');
+	uploadReady.className = 'image-picker-ready';
+	uploadReady.hidden = true;
+	const uploadReadyText = document.createElement('span');
+	uploadReadyText.className = 'image-picker-ready-text';
+	uploadReady.appendChild(uploadReadyText);
+	const uploadAttachBtn = document.createElement('button');
+	uploadAttachBtn.type = 'button';
+	uploadAttachBtn.className = 'image-picker-attach-btn';
+	uploadAttachBtn.textContent = 'Attach';
+	uploadAttachBtn.disabled = true;
+	uploadPanel.appendChild(chooseLabel);
+	uploadPanel.appendChild(uploadReady);
+	uploadPanel.appendChild(uploadAttachBtn);
+
+	const modalError = document.createElement('p');
+	modalError.className = 'image-field-error image-picker-modal-error';
+	modalError.setAttribute('role', 'alert');
+	modalError.hidden = true;
+	modalBody.appendChild(methodButtons);
+	modalBody.appendChild(pastePanel);
+	modalBody.appendChild(linkPanel);
+	modalBody.appendChild(uploadPanel);
+	modalBody.appendChild(modalError);
+	modal.appendChild(modalBody);
+	modalOverlay.appendChild(modal);
+	document.body.appendChild(modalOverlay);
+
+	let pastePreviewUrl = null;
+	let pendingPasteFile = null;
+	let pendingUploadFile = null;
+
+	function revokePastePreview() {
+		if (pastePreviewUrl) {
+			URL.revokeObjectURL(pastePreviewUrl);
+			pastePreviewUrl = null;
+		}
+	}
+
+	function closeModal() {
+		modalOverlay.classList.remove('open');
+		methodButtons.hidden = false;
+		pastePanel.hidden = true;
+		linkPanel.hidden = true;
+		uploadPanel.hidden = true;
+		pasteAttachBtn.disabled = true;
+		linkAttachBtn.disabled = true;
+		uploadAttachBtn.disabled = true;
+		urlInput.value = '';
+		fileInput.value = '';
+		pendingPasteFile = null;
+		pendingUploadFile = null;
+		revokePastePreview();
+		pasteReady.hidden = true;
+		pasteZone.hidden = false;
+		uploadReady.hidden = true;
+		modalError.textContent = '';
+		modalError.hidden = true;
+		document.removeEventListener('keydown', handleEscape);
+		modalOverlay.remove();
+	}
+
+	function showPanel(source) {
+		methodButtons.hidden = true;
+		pastePanel.hidden = source !== 'paste_image';
+		linkPanel.hidden = source !== 'paste_link';
+		uploadPanel.hidden = source !== 'upload_file';
+		pasteAttachBtn.disabled = true;
+		linkAttachBtn.disabled = !(urlInput.value || '').trim();
+		uploadAttachBtn.disabled = true;
+		pendingPasteFile = null;
+		pendingUploadFile = null;
+		revokePastePreview();
+		pasteReady.hidden = true;
+		pasteZone.hidden = false;
+		uploadReady.hidden = true;
+		if (source === 'paste_link') setTimeout(() => urlInput.focus(), 0);
+		if (source === 'paste_image') setTimeout(() => pasteZone.focus(), 0);
+	}
+
+	function handleEscape(e) {
+		if (e.key === 'Escape' && modalOverlay.classList.contains('open')) {
+			closeModal();
+			e.preventDefault();
+		}
+	}
+
+	modalOverlay.classList.add('open');
+	document.addEventListener('keydown', handleEscape);
+
+	modalClose.addEventListener('click', () => closeModal());
+	modalOverlay.addEventListener('click', (e) => {
+		if (e.target === modalOverlay) closeModal();
+	});
+	modal.addEventListener('click', (e) => e.stopPropagation());
+
+	btnPasteImage.addEventListener('click', () => showPanel('paste_image'));
+	btnPasteLink.addEventListener('click', () => showPanel('paste_link'));
+	btnUploadFile.addEventListener('click', () => showPanel('upload_file'));
+
+	pasteZone.addEventListener('paste', (e) => {
+		const items = e.clipboardData?.items;
+		if (!items) return;
+		for (const item of items) {
+			if (item.type.startsWith('image/')) {
+				e.preventDefault();
+				const file = item.getAsFile();
+				if (file) {
+					pendingPasteFile = file;
+					if (pastePreviewUrl) URL.revokeObjectURL(pastePreviewUrl);
+					pastePreviewUrl = URL.createObjectURL(file);
+					pasteReadyThumb.src = pastePreviewUrl;
+					pasteReadyText.textContent = `Image ready — ${file.name || 'pasted image'}`;
+					pasteReady.hidden = false;
+					pasteZone.hidden = true;
+					pasteAttachBtn.disabled = false;
+					modalError.hidden = true;
+				}
+				return;
+			}
+		}
+	});
+	pasteAttachBtn.addEventListener('click', () => {
+		if (pendingPasteFile) {
+			onSelect(pendingPasteFile);
+			closeModal();
+		}
+	});
+
+	urlInput.addEventListener('input', () => {
+		linkAttachBtn.disabled = !(urlInput.value || '').trim();
+		modalError.hidden = true;
+	});
+	urlInput.addEventListener('change', () => {
+		linkAttachBtn.disabled = !(urlInput.value || '').trim();
+	});
+	linkAttachBtn.addEventListener('click', () => {
+		const v = (urlInput.value || '').trim();
+		if (v) {
+			onSelect(v);
+			closeModal();
+		}
+	});
+
+	fileInput.addEventListener('change', () => {
+		const file = fileInput.files?.[0];
+		if (!file || !file.type.startsWith('image/')) {
+			if (file) {
+				modalError.textContent = 'Please choose an image file.';
+				modalError.hidden = false;
+			}
+			uploadAttachBtn.disabled = true;
+			pendingUploadFile = null;
+			uploadReady.hidden = true;
+			return;
+		}
+		pendingUploadFile = file;
+		uploadReadyText.textContent = `Selected: ${file.name}`;
+		uploadReady.hidden = false;
+		uploadAttachBtn.disabled = false;
+		modalError.hidden = true;
+	});
+	uploadAttachBtn.addEventListener('click', () => {
+		if (pendingUploadFile) {
+			onSelect(pendingUploadFile);
+			closeModal();
+		}
+	});
+}
+
 // --- Handler resolution ---
 
 const FIELD_HANDLERS = {

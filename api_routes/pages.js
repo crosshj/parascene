@@ -15,8 +15,19 @@ function getPageForUser(user) {
 	return roleToPage[user.role] || "app.html";
 }
 
-export default function createPageRoutes({ queries, pagesDir }) {
+export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 	const router = express.Router();
+
+	// Serve create page CSS so it loads when static middleware isn't used (e.g. Vercel)
+	if (staticDir) {
+		router.get("/pages/creations.css", (req, res, next) => {
+			const cssPath = path.join(staticDir, "pages", "creations.css");
+			res.type("text/css");
+			res.sendFile(cssPath, (err) => {
+				if (err) next();
+			});
+		});
+	}
 
 	let cachedShareTemplate = null;
 	async function getShareTemplate() {
@@ -604,7 +615,8 @@ export default function createPageRoutes({ queries, pagesDir }) {
 		}
 	});
 
-	// Create page - standalone /create
+	// Create page - single /create route; cookie create_editor=simple → create.html, else → createAdvanced.html
+	const CREATE_EDITOR_COOKIE = "create_editor";
 	router.get("/create", async (req, res) => {
 		const user = await requireLoggedInUser(req, res);
 		if (!user) return;
@@ -613,7 +625,9 @@ export default function createPageRoutes({ queries, pagesDir }) {
 			const fs = await import("fs/promises");
 			const rolePageName = getPageForUser(user);
 			const rolePagePath = path.join(pagesDir, rolePageName);
-			const htmlPath = path.join(pagesDir, "create.html");
+			// When cookie is set to "simple", serve simple create; when not set, serve advanced
+			const useSimple = req.cookies?.[CREATE_EDITOR_COOKIE] === "simple";
+			const htmlPath = path.join(pagesDir, useSimple ? "create.html" : "createAdvanced.html");
 			let pageHtml = await fs.readFile(htmlPath, "utf-8");
 
 			let headerHtml = "";
