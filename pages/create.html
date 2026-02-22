@@ -34,7 +34,7 @@
 						</button>
 					</div>
 					-->
-					<button type="button" class="create-btn-generate btn-primary">Create Image</button>
+					<button type="button" class="create-btn-generate btn-primary" disabled>Create Image</button>
 					<div class="create-style-divider">
 						<span class="create-style-divider-text">Choose a style</span>
 					</div>
@@ -210,9 +210,8 @@
 					<h1 class="create-title">What do you want to change?</h1>
 					<div class="create-image-edit-wrap">
 						<div class="create-image-edit-box">
-							<div class="create-image-edit-area">
-								<button type="button" class="create-choose-image-btn btn-secondary">Choose
-									image</button>
+							<div class="create-image-edit-area" role="button" tabindex="0" data-choose-image aria-label="Choose image">
+								<span class="create-image-edit-placeholder">Choose image</span>
 							</div>
 						</div>
 						<a href="#" class="create-change-image-link" id="create-change-image-link">change image</a>
@@ -222,7 +221,7 @@
 							rows="3" data-autogrow="true"></textarea>
 						<a href="#" class="create-prompt-clear" aria-label="Clear field" data-prompt-clear>clear</a>
 					</div>
-					<button type="button" class="create-btn-generate btn-primary">Edit Image</button>
+					<button type="button" class="create-btn-generate btn-primary" disabled>Edit Image</button>
 				</tab>
 			</app-tabs>
 		</div>

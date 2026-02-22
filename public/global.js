@@ -65,9 +65,8 @@ async function initPage() {
 	// Show the page
 	document.body.classList.add('loaded');
 
-	// Create page: wire "Choose image" and "change image" to shared image picker modal
+	// Create page: wire image-edit area (placeholder) and "change image" to shared image picker modal
 	if (document.body.classList.contains('create-page')) {
-		const chooseBtn = document.querySelector('.create-choose-image-btn');
 		const changeLink = document.getElementById('create-change-image-link');
 		const area = document.querySelector('.create-image-edit-area');
 		/** @type {string|File|null} */
@@ -96,7 +95,7 @@ async function initPage() {
 							}
 							thumb.src = thumbSrc;
 							thumb.hidden = false;
-							chooseBtn?.classList.add('is-hidden');
+							area.querySelector('.create-image-edit-placeholder')?.classList.add('is-hidden');
 							changeLink?.classList.add('is-visible');
 						}
 						if (typeof updateEditImageButtonState === 'function') updateEditImageButtonState();
@@ -105,7 +104,17 @@ async function initPage() {
 			});
 		}
 
-		if (chooseBtn) chooseBtn.addEventListener('click', openImagePicker);
+		if (area) {
+			area.addEventListener('click', () => {
+				if (!area.querySelector('.create-image-edit-placeholder.is-hidden')) openImagePicker();
+			});
+			area.addEventListener('keydown', (e) => {
+				if ((e.key === 'Enter' || e.key === ' ') && !area.querySelector('.create-image-edit-placeholder.is-hidden')) {
+					e.preventDefault();
+					openImagePicker();
+				}
+			});
+		}
 		if (changeLink) {
 			changeLink.addEventListener('click', (e) => {
 				e.preventDefault();
@@ -161,7 +170,7 @@ async function initPage() {
 		}
 		try { refreshAutoGrowTextareas(document); } catch (_) {}
 
-		// Prompt clear links (run after prompts restored so visibility reflects saved values)
+		// Prompt clear links and empty state (glow when no text)
 		document.querySelectorAll('.create-content .create-prompt-wrap').forEach((wrap) => {
 			const field = wrap.querySelector('.create-prompt-input');
 			const clearLink = wrap.querySelector('.create-prompt-clear');
@@ -169,13 +178,18 @@ async function initPage() {
 			function updateClearVisibility() {
 				clearLink.classList.toggle('is-visible', (field.value || '').trim().length > 0);
 			}
-			field.addEventListener('input', updateClearVisibility);
-			field.addEventListener('change', updateClearVisibility);
+			function updateEmptyState() {
+				wrap.classList.toggle('is-empty', !(field.value || '').trim().length);
+			}
+			field.addEventListener('input', () => { updateClearVisibility(); updateEmptyState(); });
+			field.addEventListener('change', () => { updateClearVisibility(); updateEmptyState(); });
 			updateClearVisibility();
+			updateEmptyState();
 			clearLink.addEventListener('click', (e) => {
 				e.preventDefault();
 				field.value = '';
 				clearLink.classList.remove('is-visible');
+				wrap.classList.add('is-empty');
 				field.dispatchEvent(new Event('input', { bubbles: true }));
 				try { refreshAutoGrowTextareas(document); } catch (_) {}
 			});
@@ -209,6 +223,15 @@ async function initPage() {
 								selectedCard.classList.add('is-selected');
 							}
 						}
+					}
+				}
+				const hasSelection = styleCards.querySelector('.create-style-card.is-selected');
+				if (!hasSelection) {
+					const noneCard = Array.from(styleCards.querySelectorAll('.create-style-card')).find((c) => c.getAttribute('data-key') === 'none');
+					if (noneCard) {
+						noneCard.classList.add('is-selected');
+						const column = noneCard.closest('.create-style-column');
+						if (column) scrollIndex = Array.from(styleColumns).indexOf(column);
 					}
 				}
 				if (scrollIndex == null && savedStyleIndex != null && savedStyleIndex >= 0) {

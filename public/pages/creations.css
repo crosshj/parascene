@@ -76,6 +76,16 @@ body.create-page main {
 	max-width: 50%;
 }
 
+/* Glow pulse when no image chosen (starts sooner than prompt glow). */
+@keyframes create-image-edit-glow-pulse {
+	0%, 4%, 100% {
+		box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15), 0 0 24px rgba(139, 92, 246, 0.35), 0 0 48px rgba(139, 92, 246, 0.15);
+	}
+	2% {
+		box-shadow: 0 2px 14px rgba(0, 0, 0, 0.18), 0 0 32px rgba(139, 92, 246, 0.5), 0 0 56px rgba(139, 92, 246, 0.22);
+	}
+}
+
 .create-image-edit-box {
 	width: 100%;
 	aspect-ratio: 1 / 1;
@@ -87,6 +97,17 @@ body.create-page main {
 	align-items: center;
 	justify-content: center;
 	position: relative;
+	transition: box-shadow 0.2s ease;
+}
+
+.create-image-edit-box:has(.create-image-edit-placeholder:not(.is-hidden)) {
+	box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15), 0 0 24px rgba(139, 92, 246, 0.35), 0 0 48px rgba(139, 92, 246, 0.15);
+	animation: create-image-edit-glow-pulse 20s ease-in-out 0.3s infinite;
+}
+
+.create-image-edit-box:has(.create-image-edit-placeholder:not(.is-hidden)):focus-within {
+	animation: none;
+	box-shadow: 0 2px 16px rgba(0, 0, 0, 0.2), 0 0 0 2px rgba(139, 92, 246, 0.35), 0 0 32px rgba(139, 92, 246, 0.5), 0 0 64px rgba(139, 92, 246, 0.25);
 }
 
 .create-image-edit-area {
@@ -98,6 +119,21 @@ body.create-page main {
 	border-radius: inherit;
 }
 
+.create-image-edit-area:has(.create-image-edit-placeholder:not(.is-hidden)) {
+	cursor: pointer;
+}
+
+.create-image-edit-placeholder {
+	color: var(--text-muted);
+	font-size: 0.95rem;
+	z-index: 1;
+	pointer-events: none;
+}
+
+.create-image-edit-placeholder.is-hidden {
+	display: none;
+}
+
 .create-image-edit-thumb {
 	position: absolute;
 	inset: 0;
@@ -106,16 +142,6 @@ body.create-page main {
 	object-fit: contain;
 	border-radius: inherit;
 	pointer-events: none;
-}
-
-.create-image-edit-area .create-choose-image-btn {
-	flex-shrink: 0;
-	z-index: 1;
-	margin: auto;
-}
-
-.create-image-edit-area .create-choose-image-btn.is-hidden {
-	display: none;
 }
 
 .create-change-image-link {
@@ -171,6 +197,16 @@ body.create-page main {
 	color: var(--text);
 }
 
+/* Glow pulse when prompt is empty (same idea as landing input on index). */
+@keyframes create-prompt-glow-pulse {
+	0%, 4%, 100% {
+		box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15), 0 0 24px rgba(139, 92, 246, 0.35), 0 0 48px rgba(139, 92, 246, 0.15);
+	}
+	2% {
+		box-shadow: 0 2px 14px rgba(0, 0, 0, 0.18), 0 0 32px rgba(139, 92, 246, 0.5), 0 0 56px rgba(139, 92, 246, 0.22);
+	}
+}
+
 .create-prompt-input {
 	width: 100%;
 	min-height: 2.75rem;
@@ -185,10 +221,23 @@ body.create-page main {
 	box-sizing: border-box;
 	resize: none;
 	overflow: hidden;
+	transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .create-prompt-input::placeholder {
 	color: var(--text-muted);
+}
+
+.create-prompt-wrap.is-empty .create-prompt-input,
+.create-prompt-input:placeholder-shown {
+	box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15), 0 0 24px rgba(139, 92, 246, 0.35), 0 0 48px rgba(139, 92, 246, 0.15);
+	animation: create-prompt-glow-pulse 20s ease-in-out 1.2s infinite;
+}
+
+.create-prompt-wrap.is-empty .create-prompt-input:focus,
+.create-prompt-input:placeholder-shown:focus {
+	animation: none;
+	box-shadow: 0 2px 16px rgba(0, 0, 0, 0.2), 0 0 0 2px rgba(139, 92, 246, 0.35), 0 0 32px rgba(139, 92, 246, 0.5), 0 0 64px rgba(139, 92, 246, 0.25);
 }
 
 .create-prompt-input:focus {
