@@ -1,10 +1,20 @@
 [
   {
+    "name": "Replicate models",
+    "description": "add the ability to use replicate models in a dynamic way",
+    "cost": 50,
+    "impact": 100,
+    "dependsOn": [],
+    "starred": false
+  },
+  {
     "name": "Styles: Dynamic Management",
     "description": "Users besides admin should be able to maintain the styles list.    Styles should have the option to be bound to different models.",
     "cost": 50,
     "impact": 50,
-    "dependsOn": [],
+    "dependsOn": [
+      "Replicate models"
+    ],
     "starred": false
   },
   {
