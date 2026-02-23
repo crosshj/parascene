@@ -3993,6 +3993,22 @@ body.modal-open {
 	z-index: 1;
 }
 
+/* Edit / Publish creation modal: wider and larger description field */
+app-modal-publish .publish-modal {
+	max-width: 580px;
+	width: 94%;
+}
+
+app-modal-publish .publish-field textarea {
+	min-height: 200px;
+}
+
+@media (min-width: 768px) {
+	app-modal-publish .publish-modal {
+		max-width: 680px;
+	}
+}
+
 .modal-overlay.open .modal,
 .publish-modal-overlay.open .publish-modal,
 .image-picker-modal-overlay.open .image-picker-modal,

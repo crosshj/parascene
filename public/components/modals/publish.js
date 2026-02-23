@@ -66,7 +66,7 @@ class AppModalPublish extends HTMLElement {
 						</div>
 						<div class="publish-field">
 							<label for="publish-description">Description</label>
-							<textarea id="publish-description" name="description" rows="4"
+							<textarea id="publish-description" name="description" rows="8"
 								placeholder="Describe your creation..."></textarea>
 						</div>
 					</div>

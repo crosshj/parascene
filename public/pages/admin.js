@@ -1,6 +1,7 @@
 import { getAvatarColor } from "../shared/avatar.js";
 import { formatRelativeTime } from "../shared/datetime.js";
 import { attachAutoGrowTextarea } from "../shared/autogrow.js";
+import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, forceRadial } from "d3-force";
 
 const adminDataLoaded = {
 	users: false,
@@ -1563,6 +1564,130 @@ async function loadRelatedTransitions(container) {
 	}
 }
 
+function applyNetLayout(nodes, edges, width, height) {
+	const idealLength = 80;
+	const springK = 0.05;
+	const repulsionRadius = 100;
+	const repulsionK = 0.8;
+	const baseDamping = 0.85;
+	const iterations = 400;
+
+	const margin = 40; // boundary influence zone
+
+	const cx = width / 2;
+	const cy = height / 2;
+
+	for (const n of nodes) {
+		n.x = cx + (Math.random() - 0.5) * 200;
+		n.y = cy + (Math.random() - 0.5) * 200;
+		n.vx = 0;
+		n.vy = 0;
+	}
+
+	for (let iter = 0; iter < iterations; iter++) {
+		const cooling = 1 - iter / iterations;
+
+		// --- Local repulsion ---
+		for (let i = 0; i < nodes.length; i++) {
+			for (let j = i + 1; j < nodes.length; j++) {
+				const a = nodes[i];
+				const b = nodes[j];
+
+				let dx = b.x - a.x;
+				let dy = b.y - a.y;
+				let d = Math.sqrt(dx * dx + dy * dy) || 0.01;
+
+				if (d < repulsionRadius) {
+					const force = repulsionK * (repulsionRadius - d);
+					const fx = (force * dx) / d;
+					const fy = (force * dy) / d;
+
+					a.vx -= fx * cooling;
+					a.vy -= fy * cooling;
+					b.vx += fx * cooling;
+					b.vy += fy * cooling;
+				}
+			}
+		}
+
+		// --- Springs ---
+		for (const e of edges) {
+			const a = e.from;
+			const b = e.to;
+
+			let dx = b.x - a.x;
+			let dy = b.y - a.y;
+			let d = Math.sqrt(dx * dx + dy * dy) || 0.01;
+
+			const force = springK * (d - idealLength);
+			const fx = (force * dx) / d;
+			const fy = (force * dy) / d;
+
+			a.vx += fx * cooling;
+			a.vy += fy * cooling;
+			b.vx -= fx * cooling;
+			b.vy -= fy * cooling;
+		}
+
+		// --- Soft boundary forces ---
+		for (const n of nodes) {
+			const distLeft = n.x;
+			const distRight = width - n.x;
+			const distTop = n.y;
+			const distBottom = height - n.y;
+
+			// push from left
+			if (distLeft < margin) {
+				const strength = ((margin - distLeft) / margin) ** 2;
+				n.vx += 5 * strength;
+			}
+
+			// push from right
+			if (distRight < margin) {
+				const strength = ((margin - distRight) / margin) ** 2;
+				n.vx -= 5 * strength;
+			}
+
+			// push from top
+			if (distTop < margin) {
+				const strength = ((margin - distTop) / margin) ** 2;
+				n.vy += 5 * strength;
+			}
+
+			// push from bottom
+			if (distBottom < margin) {
+				const strength = ((margin - distBottom) / margin) ** 2;
+				n.vy -= 5 * strength;
+			}
+		}
+
+		// --- Integrate with edge friction ---
+		for (const n of nodes) {
+			const edgeProximity = Math.min(
+				n.x,
+				width - n.x,
+				n.y,
+				height - n.y
+			);
+
+			const frictionBoost =
+				edgeProximity < margin
+					? 0.6 + 0.4 * (edgeProximity / margin)
+					: 1;
+
+			n.vx *= baseDamping * frictionBoost;
+			n.vy *= baseDamping * frictionBoost;
+
+			n.x += n.vx;
+			n.y += n.vy;
+
+			// absolute safety clamp
+			n.x = Math.max(0, Math.min(width, n.x));
+			n.y = Math.max(0, Math.min(height, n.y));
+		}
+	}
+}
+
 function applyForceDirectedLayout(nodes, edges, w, h) {
 	const centerX = w / 2;
 	const centerY = h / 2;
@@ -1647,6 +1772,25 @@ function applyCircularLayout(nodes, cx, cy, radius) {
 	});
 }
 
+function applyD3ForceLayout(nodes, edges, w, h) {
+	const cx = w / 2;
+	const cy = h / 2;
+	const d3Links = edges.map((e) => ({ source: e.from, target: e.to, count: e.count }));
+	const nodeRadius = 14;
+	// Limit spread: max distance from center (tune to keep graph compact)
+	const maxRadius = 0.42 * Math.min(w, h);
+
+	const sim = forceSimulation(nodes)
+		.force("link", forceLink(d3Links).id((n) => n.id).distance(5).strength(0.35))
+		.force("charge", forceManyBody().strength(-380))
+		.force("center", forceCenter(cx, cy))
+		.force("collide", forceCollide().radius(nodeRadius).strength(1))
+		.force("radial", forceRadial(maxRadius, cx, cy).strength(0.12));
+
+	sim.stop();
+	for (let i = 0; i < 450; i++) sim.tick();
+}
+
 async function loadRelatedGraph(container) {
 	if (!container) return;
 	container.innerHTML = "";
@@ -1702,6 +1846,10 @@ async function loadRelatedGraph(container) {
 		function renderGraph(layoutAlgo) {
 			if (layoutAlgo === "circular") {
 				applyCircularLayout(nodes, layoutCenterX, layoutCenterY, circleRadius);
+			} else if (layoutAlgo === "net") {
+				applyNetLayout(nodes, edges, w, h);
+			} else if (layoutAlgo === "d3") {
+				applyD3ForceLayout(nodes, edges, w, h);
 			} else {
 				applyForceDirectedLayout(nodes, edges, w, h);
 			}
@@ -1724,10 +1872,11 @@ async function loadRelatedGraph(container) {
 			const vbH = maxY - minY || 1;
 			const r = 2;
 			const lineEls = edges
-				.map(
-					(e) =>
-						`<line x1="${e.from.x}" y1="${e.from.y}" x2="${e.to.x}" y2="${e.to.y}" class="admin-related-graph-edge"/>`
-				)
+				.map((e) => {
+					const c = e.count || 1;
+					const strokeWidth = Math.max(0.5, Math.min(4, 0.5 + c * 0.25));
+					return `<line x1="${e.from.x}" y1="${e.from.y}" x2="${e.to.x}" y2="${e.to.y}" class="admin-related-graph-edge" stroke-width="${strokeWidth}"/>`;
+				})
 				.join("");
 			const nodeEls = nodes
 				.map(
@@ -1741,7 +1890,7 @@ async function loadRelatedGraph(container) {
 			};
 		}
 
-		let currentLayout = "force";
+		let currentLayout = "d3";
 		let { viewBox: initialViewBox, innerHTML } = renderGraph(currentLayout);
 		let currentViewBox = { ...initialViewBox, minX: initialViewBox.minX, minY: initialViewBox.minY, width: initialViewBox.width, height: initialViewBox.height };
 
@@ -1752,7 +1901,7 @@ async function loadRelatedGraph(container) {
 		layoutLabel.textContent = "Layout ";
 		const layoutSelect = document.createElement("select");
 		layoutSelect.className = "admin-related-graph-layout-select";
-		layoutSelect.innerHTML = "<option value=\"force\">Force-directed</option><option value=\"circular\">Circular</option>";
+		layoutSelect.innerHTML = "<option value=\"force\">Force-directed</option><option value=\"d3\">D3 force</option><option value=\"net\">ApplyNetLayout</option><option value=\"circular\">Circular</option>";
 		layoutSelect.value = currentLayout;
 		layoutLabel.appendChild(layoutSelect);
 		toolbar.appendChild(layoutLabel);

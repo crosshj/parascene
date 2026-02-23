@@ -1,9 +1,9 @@
 [
   {
-    "name": "Redo Create Page",
-    "description": "hide most of what's there behind some advanced toggle.  Make a customer-facing/slick create page.",
+    "name": "Styles: Dynamic Management",
+    "description": "Users besides admin should be able to maintain the styles list.    Styles should have the option to be bound to different models.",
     "cost": 50,
-    "impact": 44,
+    "impact": 50,
     "dependsOn": [],
     "starred": false
   },
