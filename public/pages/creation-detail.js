@@ -1175,14 +1175,16 @@ async function loadCreation() {
 					</button>
 					` : ``}
 					${copyLinkButtonHtml}
-					${setAvatarButtonHtml}
-					<button class="feed-card-action" type="button" data-landscape-btn aria-label="Landscape" style="display: none;">
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
-							stroke-linejoin="round" aria-hidden="true">
-							<rect x="2" y="6" width="20" height="12" rx="1.5" />
-						</svg>
-						<span data-landscape-btn-text>Landscape</span>
-					</button>
+					<div class="creation-detail-meta-more-desktop">
+						${setAvatarButtonHtml}
+						<button class="feed-card-action" type="button" data-landscape-btn aria-label="Landscape" style="display: none;">
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+								stroke-linejoin="round" aria-hidden="true">
+								<rect x="2" y="6" width="20" height="12" rx="1.5" />
+							</svg>
+							<span data-landscape-btn-text>Landscape</span>
+						</button>
+					</div>
 					<button class="feed-card-action" type="button" data-tip-creator-button aria-label="Tip Creator">
 						${creditIcon('')}
 						<span>Tip Creator</span>
@@ -1209,8 +1211,6 @@ async function loadCreation() {
 						<span class="feed-card-action-count" data-like-count>${likeCount}</span>
 					</button>
 					` : ``}
-					${'' /*
-					Creation detail kebab menu (disabled for now)
 					<div class="creation-detail-more">
 						<button class="feed-card-action feed-card-action-more" type="button" aria-label="More"
 							data-creation-more-button>
@@ -1221,12 +1221,10 @@ async function loadCreation() {
 							</svg>
 						</button>
 						<div class="feed-card-menu" data-creation-menu style="display: none;">
-							${hasDetails ? `<button class="feed-card-menu-item" type="button" data-creation-menu-info>More
-								Info</button>` : ``}
-							<button class="feed-card-menu-item" type="button" data-creation-menu-copy>Copy link</button>
+							${isOwner ? `<button class="feed-card-menu-item" type="button" data-creation-menu-set-avatar>Set as profile picture</button>` : ''}
+							<button class="feed-card-menu-item" type="button" data-creation-menu-landscape style="display: none;">Landscape</button>
 						</div>
 					</div>
-					*/ }
 				</div>
 			</div>
 			
@@ -1281,12 +1279,14 @@ async function loadCreation() {
 
 		// Landscape (meta row): only on published items. Owner sees when completed; viewer when landscape URL exists.
 		const landscapeBtn = detailContent.querySelector('[data-landscape-btn]');
+		const landscapeMenuBtn = detailContent.querySelector('[data-creation-menu-landscape]');
 		if (landscapeBtn) {
 			const lurl = meta?.landscapeUrl;
 			const hasLandscapeUrl = typeof lurl === 'string' && lurl !== 'loading' && !lurl.startsWith('error:') && (lurl.startsWith('http') || lurl.startsWith('/'));
 			const showLandscape = isPublished && ((isOwner && status === 'completed' && !isFailed) || (!isOwner && hasLandscapeUrl));
 			if (!showLandscape) {
 				landscapeBtn.style.display = 'none';
+				if (landscapeMenuBtn) landscapeMenuBtn.style.display = 'none';
 			} else {
 				landscapeBtn.style.display = '';
 				landscapeBtn.disabled = false;
@@ -1294,6 +1294,7 @@ async function loadCreation() {
 				landscapeBtn.dataset.landscapeIsSelf = isOwner ? '1' : '0';
 				const labelEl = landscapeBtn.querySelector('[data-landscape-btn-text]');
 				if (labelEl) labelEl.textContent = 'Landscape';
+				if (landscapeMenuBtn) landscapeMenuBtn.style.display = '';
 			}
 		}
 
@@ -1493,12 +1494,10 @@ async function loadCreation() {
 			});
 		}
 
-		/*
-		Creation detail kebab menu handlers (disabled for now)
+		// Kebab menu (mobile): Set as profile pic, Landscape (Copy link stays inline)
 		const moreBtn = detailContent.querySelector('[data-creation-more-button]');
 		const menu = detailContent.querySelector('[data-creation-menu]');
-		const menuInfoBtn = detailContent.querySelector('[data-creation-menu-info]');
-		const copyLinkMenuBtn = detailContent.querySelector('[data-creation-menu-copy]');
+		const setAvatarMenuBtn = detailContent.querySelector('[data-creation-menu-set-avatar]');
 		const moreWrap = detailContent.querySelector('.creation-detail-more');
 
 		if (moreBtn instanceof HTMLButtonElement && menu instanceof HTMLElement && moreWrap instanceof HTMLElement) {
@@ -1532,28 +1531,35 @@ async function loadCreation() {
 				}
 			});
 
-			if (menuInfoBtn instanceof HTMLButtonElement && detailsBtn) {
-				menuInfoBtn.addEventListener('click', (e) => {
+			if (setAvatarMenuBtn instanceof HTMLButtonElement) {
+				setAvatarMenuBtn.addEventListener('click', async (e) => {
 					e.preventDefault();
 					e.stopPropagation();
 					menu.style.display = 'none';
 					document.removeEventListener('click', closeMenu);
-					detailsBtn.click();
+					const setAvatarBtn = detailContent.querySelector('button[data-set-avatar-button]');
+					if (setAvatarBtn) setAvatarBtn.click();
 				});
 			}
 
-			if (copyLinkMenuBtn instanceof HTMLButtonElement) {
-				copyLinkMenuBtn.addEventListener('click', async (e) => {
+			if (landscapeMenuBtn instanceof HTMLButtonElement) {
+				landscapeMenuBtn.addEventListener('click', (e) => {
 					e.preventDefault();
 					e.stopPropagation();
 					menu.style.display = 'none';
 					document.removeEventListener('click', closeMenu);
-					const url = getPrimaryLinkUrl(creationId);
-					await copyTextToClipboard(url);
+					const landscapeBtn = detailContent.querySelector('[data-landscape-btn]');
+					if (landscapeBtn && !landscapeBtn.disabled) landscapeBtn.click();
 				});
 			}
+
+			// Hide kebab when no menu items are visible
+			const hasVisibleItem = [setAvatarMenuBtn, landscapeMenuBtn].some((el) => {
+				if (!el) return false;
+				return el.style.display !== 'none';
+			});
+			if (!hasVisibleItem) moreWrap.classList.add('creation-detail-more-empty');
 		}
-		*/
 
 		if (!shareMountedPrivate) {
 			enableLikeButtons(detailContent);

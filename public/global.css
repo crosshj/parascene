@@ -2746,7 +2746,7 @@ app-route-feed {
 	background: var(--surface);
 	border: 1px solid var(--border);
 	border-radius: 6px;
-	min-width: 160px;
+	min-width: 220px;
 	overflow: hidden;
 	z-index: 1000;
 }

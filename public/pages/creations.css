@@ -1206,6 +1206,17 @@ body.creation-detail-page main>section:first-of-type {
 	color: var(--text-muted);
 }
 
+.creation-detail-meta-more-desktop {
+	display: inline-flex;
+	align-items: center;
+	gap: 12px;
+}
+
+/* Kebab menu: hidden on desktop, shown on mobile */
+body.creation-detail-page .creation-detail-more {
+	display: none;
+}
+
 @media (max-width: 768px) {
 	.creation-detail-hero {
 		min-height: 50vh;
@@ -1243,6 +1254,18 @@ body.creation-detail-page main>section:first-of-type {
 	.creation-detail-action-btn {
 		padding: 8px 16px;
 		font-size: 0.85rem;
+	}
+
+	.creation-detail-meta-more-desktop {
+		display: none;
+	}
+
+	body.creation-detail-page .creation-detail-more {
+		display: inline-flex;
+	}
+
+	body.creation-detail-page .creation-detail-more.creation-detail-more-empty {
+		display: none !important;
 	}
 }
 
