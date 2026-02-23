@@ -6,6 +6,10 @@
       "destination": "/api/worker/create.js"
     },
     {
+      "source": "/api/worker/jobs",
+      "destination": "/api/worker/jobs.js"
+    },
+    {
       "source": "/api/worker/notifications",
       "destination": "/api/worker/notifications.js"
     },
@@ -21,6 +25,23 @@
   "headers": [
     {
       "source": "/api/worker/create",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, no-cache, must-revalidate, private"
+        },
+        {
+          "key": "Pragma",
+          "value": "no-cache"
+        },
+        {
+          "key": "Expires",
+          "value": "0"
+        }
+      ]
+    },
+    {
+      "source": "/api/worker/jobs",
       "headers": [
         {
           "key": "Cache-Control",
@@ -77,6 +98,9 @@
       "includeFiles": "_docs/**, pages/**"
     },
     "api/worker/create.js": {
+      "maxDuration": 300
+    },
+    "api/worker/jobs.js": {
       "maxDuration": 300
     },
     "api/worker/notifications.js": {

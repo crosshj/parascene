@@ -522,6 +522,20 @@ export default function createAdminRoutes({ queries, storage }) {
 		res.json({ policies });
 	});
 
+	router.get("/admin/jobs", async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+		const jobType = typeof req.query?.job_type === "string" ? req.query.job_type.trim() || null : null;
+		const status = typeof req.query?.status === "string" ? req.query.status.trim() || null : null;
+		const limit = Math.min(100, Math.max(1, parseInt(req.query?.limit, 10) || 50));
+		const offset = Math.max(0, parseInt(req.query?.offset, 10) || 0);
+		if (!queries.selectJobs?.all) {
+			return res.json({ jobs: [], total: 0 });
+		}
+		const jobs = await queries.selectJobs.all({ jobType, status, limit, offset });
+		res.json({ jobs });
+	});
+
 	router.get("/admin/email-sends", async (req, res) => {
 		const adminUser = await requireAdmin(req, res);
 		if (!adminUser) return;

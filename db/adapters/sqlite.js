@@ -2599,6 +2599,51 @@ export async function openDb() {
 				});
 			}
 		},
+		insertJob: {
+			run: async (jobType, args, status = "pending") => {
+				const argsJson = typeof args === "string" ? args : JSON.stringify(args ?? {});
+				const stmt = db.prepare(
+					`INSERT INTO jobs (job_type, status, args, meta) VALUES (?, ?, ?, '{}')`
+				);
+				const result = stmt.run(jobType, status, argsJson);
+				return Promise.resolve({
+					insertId: result.lastInsertRowid,
+					changes: result.changes
+				});
+			}
+		},
+		updateJobStatus: {
+			run: async (jobId, status, metaPatch = {}) => {
+				const now = new Date().toISOString();
+				const getStmt = db.prepare("SELECT meta FROM jobs WHERE id = ?");
+				const row = getStmt.get(jobId);
+				const existing = row?.meta ? (() => { try { return JSON.parse(row.meta); } catch { return {}; } })() : {};
+				const merged = { ...existing, ...(typeof metaPatch === "object" && metaPatch !== null ? metaPatch : {}) };
+				const stmt = db.prepare("UPDATE jobs SET status = ?, meta = ?, updated_at = ? WHERE id = ?");
+				const result = stmt.run(status, JSON.stringify(merged), now, jobId);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		selectJobs: {
+			all: async ({ jobType, status, limit = 50, offset = 0 } = {}) => {
+				let query = "SELECT id, job_type, status, args, meta, created_at, updated_at FROM jobs WHERE 1=1";
+				const params = [];
+				if (jobType) {
+					params.push(jobType);
+					query += " AND job_type = ?";
+				}
+				if (status) {
+					params.push(status);
+					query += " AND status = ?";
+				}
+				query += " ORDER BY created_at DESC LIMIT ? OFFSET ?";
+				params.push(limit, offset);
+				const stmt = db.prepare(query);
+				const rows = stmt.all(...params);
+				const parse = (v, d) => { try { return v ? JSON.parse(v) : d; } catch { return d; } };
+				return Promise.resolve(rows.map((r) => ({ ...r, args: parse(r.args, {}), meta: parse(r.meta, {}) })));
+			}
+		},
 		selectFeedItemByCreatedImageId: {
 			get: async (createdImageId) => {
 				const stmt = db.prepare(

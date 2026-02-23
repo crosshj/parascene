@@ -18,6 +18,7 @@
 	<app-navigation show-notifications show-profile show-mobile-menu default-route="todo">
 		<a data-route="todo">Todo</a>
 		<a data-route="users">Users</a>
+		<a data-route="jobs">Jobs</a>
 		<a data-route="emails">Emails</a>
 		<a data-route="related">Algo</a>
 		<a data-route="connect">Connect</a>
@@ -34,6 +35,10 @@
 		<section>
 			<app-route-todo data-route-content="todo"></app-route-todo>
 			<app-route-users data-route-content="users"></app-route-users>
+			<div id="jobs-page" data-route-content="jobs" class="route-content admin-jobs-page">
+				<h3>Jobs</h3>
+				<div id="jobs-container" class="admin-jobs-container"></div>
+			</div>
 			<app-route-servers data-route-content="connect"></app-route-servers>
 			<div id="related-page" data-route-content="related" class="route-content admin-related-page">
 				<h3>Algo</h3>

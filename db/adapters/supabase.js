@@ -3858,6 +3858,54 @@ export function openDb() {
 				};
 			}
 		},
+		insertJob: {
+			run: async (jobType, args, status = "pending") => {
+				const argsVal = args && typeof args === "object" ? args : {};
+				const { data, error } = await serviceClient
+					.from(prefixedTable("jobs"))
+					.insert({
+						job_type: jobType,
+						status,
+						args: argsVal,
+						meta: {}
+					})
+					.select("id")
+					.single();
+				if (error) throw error;
+				return { insertId: data.id, changes: 1 };
+			}
+		},
+		updateJobStatus: {
+			run: async (jobId, status, metaPatch = {}) => {
+				const { data: existing } = await serviceClient
+					.from(prefixedTable("jobs"))
+					.select("meta")
+					.eq("id", jobId)
+					.maybeSingle();
+				const currentMeta = (existing?.meta && typeof existing.meta === "object") ? existing.meta : {};
+				const merged = { ...currentMeta, ...(metaPatch && typeof metaPatch === "object" ? metaPatch : {}) };
+				const { error } = await serviceClient
+					.from(prefixedTable("jobs"))
+					.update({ status, meta: merged, updated_at: new Date().toISOString() })
+					.eq("id", jobId);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
+		selectJobs: {
+			all: async ({ jobType, status, limit = 50, offset = 0 } = {}) => {
+				let query = serviceClient
+					.from(prefixedTable("jobs"))
+					.select("id, job_type, status, args, meta, created_at, updated_at")
+					.order("created_at", { ascending: false })
+					.range(offset, offset + limit - 1);
+				if (jobType) query = query.eq("job_type", jobType);
+				if (status) query = query.eq("status", status);
+				const { data, error } = await query;
+				if (error) throw error;
+				return data ?? [];
+			}
+		},
 		selectFeedItemByCreatedImageId: {
 			get: async (createdImageId) => {
 				const { data, error } = await serviceClient

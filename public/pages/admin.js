@@ -10,7 +10,8 @@ const adminDataLoaded = {
 	todo: false,
 	settings: false,
 	sends: false,
-	related: false
+	related: false,
+	jobs: false
 };
 let todoWritable = true;
 let todoPriorityMode = "gated";
@@ -294,6 +295,58 @@ async function loadUsers({ force = false } = {}) {
 	} catch (err) {
 		container.innerHTML = "";
 		renderError(container, "Error loading users.");
+	}
+}
+
+async function loadJobs({ force = false } = {}) {
+	const container = document.querySelector("#jobs-container");
+	if (!container) return;
+	if (adminDataLoaded.jobs && !force) return;
+
+	try {
+		const response = await fetch("/admin/jobs", { credentials: "include" });
+		if (!response.ok) throw new Error("Failed to load jobs.");
+		const data = await response.json();
+
+		container.innerHTML = "";
+		if (!data.jobs || data.jobs.length === 0) {
+			renderEmpty(container, "No jobs yet.");
+			adminDataLoaded.jobs = true;
+			return;
+		}
+
+		const table = document.createElement("table");
+		table.className = "admin-table admin-jobs-table";
+		table.setAttribute("role", "grid");
+		const thead = document.createElement("thead");
+		thead.innerHTML = "<tr><th>ID</th><th>Type</th><th>Status</th><th>Created</th><th>Updated</th><th>Meta</th></tr>";
+		table.appendChild(thead);
+		const tbody = document.createElement("tbody");
+		for (const job of data.jobs) {
+			const tr = document.createElement("tr");
+			const metaSummary = job.meta && typeof job.meta === "object"
+				? [
+					job.meta.error ? `error: ${String(job.meta.error).slice(0, 40)}` : null,
+					job.meta.duration_ms != null ? `${job.meta.duration_ms}ms` : null,
+					job.meta.qstash_message_id ? `msg: ${String(job.meta.qstash_message_id).slice(0, 12)}` : null
+				].filter(Boolean).join(" · ") || "—"
+				: "—";
+			tr.innerHTML = `
+				<td>${job.id}</td>
+				<td>${escapeHtml(String(job.job_type || "—"))}</td>
+				<td>${escapeHtml(String(job.status || "—"))}</td>
+				<td>${escapeHtml(formatRelativeTime(job.created_at, { style: "short" }) || job.created_at || "—")}</td>
+				<td>${escapeHtml(formatRelativeTime(job.updated_at, { style: "short" }) || job.updated_at || "—")}</td>
+				<td class="admin-jobs-meta">${escapeHtml(metaSummary)}</td>
+			`;
+			tbody.appendChild(tr);
+		}
+		table.appendChild(tbody);
+		container.appendChild(table);
+		adminDataLoaded.jobs = true;
+	} catch (err) {
+		container.innerHTML = "";
+		renderError(container, "Error loading jobs.");
 	}
 }
 
@@ -2012,6 +2065,7 @@ function handleAdminRouteChange(route) {
 			loadModeration();
 			break;
 		case "servers":
+		case "connect":
 			// Unified app-route-servers component handles its own data loading.
 			break;
 		case "policy-knobs":
@@ -2030,6 +2084,9 @@ function handleAdminRouteChange(route) {
 			break;
 		case "todo":
 			loadTodo();
+			break;
+		case "jobs":
+			loadJobs();
 			break;
 		case "users":
 		default:

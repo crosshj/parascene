@@ -309,3 +309,17 @@ CREATE TABLE IF NOT EXISTS related_transitions (
 CREATE INDEX IF NOT EXISTS idx_related_transitions_from ON related_transitions(from_created_image_id);
 CREATE INDEX IF NOT EXISTS idx_related_transitions_from_last_updated ON related_transitions(from_created_image_id, last_updated);
 CREATE INDEX IF NOT EXISTS idx_related_transitions_count ON related_transitions(count DESC);
+
+-- Jobs: async job tracking for admin visibility and troubleshooting. meta holds job-specific data and QStash info when available.
+CREATE TABLE IF NOT EXISTS jobs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_type TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  args TEXT NOT NULL DEFAULT '{}',
+  meta TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_jobs_job_type ON jobs(job_type);
+CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at);
