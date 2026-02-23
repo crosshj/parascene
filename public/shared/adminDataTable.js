@@ -8,7 +8,7 @@
  *   columns: Array<{ key: string, label: string, className?: string, sortKey?: string, render?: (row) => string }>
  *   defaultSortBy?: string (sortKey value)
  *   defaultSortDir?: 'asc' | 'desc'
- *   pageSize: number
+ *   pageSize?: number (default ADMIN_TABLE_PAGE_SIZE, 20)
  *   emptyMessage: string
  *   ariaLabelPagination?: string
  *   getExtraParams?: () => Record<string, string>
@@ -18,6 +18,9 @@
  */
 
 import { createPagedTableToolbar } from './pagedTable.js';
+
+/** Default page size for all admin tables. */
+export const ADMIN_TABLE_PAGE_SIZE = 20;
 
 function escapeHtml(text) {
 	const s = String(text ?? '');
@@ -45,7 +48,7 @@ function getState(container) {
  * @param {Array<{ key: string, label: string, className?: string, sortKey?: string, render?: (row) => string }>} config.columns
  * @param {string} [config.defaultSortBy]
  * @param {'asc'|'desc'} [config.defaultSortDir='desc']
- * @param {number} config.pageSize
+ * @param {number} [config.pageSize=20]
  * @param {string} config.emptyMessage
  * @param {string} [config.ariaLabelPagination='Pagination']
  * @param {() => Record<string,string>} [config.getExtraParams]
@@ -61,7 +64,7 @@ export async function loadAdminDataTable(container, config) {
 		columns,
 		defaultSortBy,
 		defaultSortDir = 'desc',
-		pageSize,
+		pageSize = ADMIN_TABLE_PAGE_SIZE,
 		emptyMessage,
 		ariaLabelPagination = 'Pagination',
 		getExtraParams,

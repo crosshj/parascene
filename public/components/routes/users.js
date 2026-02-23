@@ -162,8 +162,6 @@ function renderUserCard(user, onOpenModal) {
 
 const USERS_TAB_IDS = ['active', 'share', 'anonymous', 'other'];
 
-const SHARE_PAGE_SIZE = 50;
-const ANON_PAGE_SIZE = 50;
 
 class AppRouteUsers extends HTMLElement {
 	connectedCallback() {
@@ -394,7 +392,6 @@ class AppRouteUsers extends HTMLElement {
 				],
 				defaultSortBy: 'last_request_at',
 				defaultSortDir: 'desc',
-				pageSize: ANON_PAGE_SIZE,
 				emptyMessage: 'No try flow requests yet.',
 				ariaLabelPagination: 'Try flow pagination',
 				onRowClick: (row) => this.showAnonDetail(row.anon_cid),
@@ -457,7 +454,6 @@ class AppRouteUsers extends HTMLElement {
 				],
 				defaultSortBy: 'viewed_at',
 				defaultSortDir: 'desc',
-				pageSize: SHARE_PAGE_SIZE,
 				emptyMessage: 'No share page views yet.',
 				ariaLabelPagination: 'Share page views pagination',
 				tableClassName: 'admin-table share-table anon-table'

@@ -341,7 +341,6 @@ async function loadJobs({ force = false } = {}) {
 			],
 			defaultSortBy: "created_at",
 			defaultSortDir: "desc",
-			pageSize: 50,
 			emptyMessage: "No jobs yet.",
 			ariaLabelPagination: "Jobs pagination",
 			tableClassName: "admin-table admin-jobs-table"
@@ -440,7 +439,6 @@ async function loadEmailSends() {
 			],
 			defaultSortBy: "created_at",
 			defaultSortDir: "desc",
-			pageSize: 50,
 			emptyMessage: "No email sends yet. Run the cron to generate digest/welcome/nudge sends.",
 			ariaLabelPagination: "Email sends pagination",
 			tableClassName: "admin-table admin-email-sends-table"
@@ -1436,7 +1434,6 @@ async function loadRelatedTransitions(container) {
 			],
 			defaultSortBy: "count",
 			defaultSortDir: "desc",
-			pageSize: 20,
 			emptyMessage: "No transition data yet. Click related cards on creation detail to record transitions.",
 			ariaLabelPagination: "Transitions pagination",
 			tableClassName: "admin-table admin-email-sends-table admin-related-transitions-table"
