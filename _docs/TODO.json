@@ -8,6 +8,14 @@
     "starred": false
   },
   {
+    "name": "Creation Detail Actions++",
+    "description": "make this closer to youtube",
+    "cost": 50,
+    "impact": 50,
+    "dependsOn": [],
+    "starred": false
+  },
+  {
     "name": "Landing: community creations images",
     "description": "Show example or featured community creations to anonymous visitors (no login).",
     "cost": 1,
