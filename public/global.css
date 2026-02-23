@@ -900,6 +900,64 @@ a.btn-secondary .icon {
 	flex-shrink: 0;
 }
 
+/* Paged table toolbar (shared: admin users Share/Try flow, etc.) */
+.paged-table-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px 16px;
+	margin-top: 0;
+	padding: 14px 0 4px;
+	border-top: 1px solid var(--border);
+}
+
+.paged-table-summary {
+	font-size: 0.875rem;
+	color: var(--text-muted);
+	order: 0;
+	width: 100%;
+	flex-basis: 100%;
+	text-align: center;
+}
+
+.paged-table-nav {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.paged-table-prev,
+.paged-table-next {
+	min-width: 88px;
+	min-height: 40px;
+	padding: 8px 14px;
+	font-size: 0.875rem;
+}
+
+@media (min-width: 480px) {
+	.paged-table-summary {
+		width: auto;
+		flex-basis: auto;
+		order: unset;
+		text-align: left;
+	}
+}
+
+@media (max-width: 768px) {
+	.paged-table-toolbar {
+		padding: 14px 0 0;
+		gap: 14px;
+	}
+
+	.paged-table-prev,
+	.paged-table-next {
+		min-height: 44px;
+		min-width: 0;
+		flex: 1;
+	}
+}
+
 /* Outlined button style */
 .btn-outlined,
 button.btn-outlined,

@@ -382,13 +382,16 @@ export function openDb() {
 			}
 		},
 		listSharePageViews: {
-			all: async (limit, offset = 0) => {
+			all: async (limit, offset = 0, sortBy = "viewed_at", sortDir = "desc") => {
 				const cap = Math.min(Math.max(0, Number(limit) || 50), 200);
 				const off = Math.max(0, Number(offset) || 0);
+				const validOrder = ["id", "viewed_at", "sharer_user_id", "created_image_id", "created_by_user_id", "referer", "anon_cid"];
+				const orderCol = validOrder.includes(sortBy) ? sortBy : "viewed_at";
+				const ascending = sortDir === "asc";
 				const { data, error } = await serviceClient
 					.from(prefixedTable("share_page_views"))
 					.select("id, viewed_at, sharer_user_id, created_image_id, created_by_user_id, referer, anon_cid")
-					.order("viewed_at", { ascending: false })
+					.order(orderCol, { ascending })
 					.range(off, off + cap - 1);
 				if (error) throw error;
 				return data ?? [];
@@ -1572,13 +1575,16 @@ export function openDb() {
 			}
 		},
 		listEmailSendsRecent: {
-			all: async (limit, offset = 0) => {
+			all: async (limit, offset = 0, sortBy = "created_at", sortDir = "desc") => {
 				const cap = Math.min(Math.max(0, Number(limit) || 200), 500);
 				const off = Math.max(0, Number(offset) || 0);
+				const validOrder = ["id", "user_id", "campaign", "created_at"];
+				const orderCol = validOrder.includes(sortBy) ? sortBy : "created_at";
+				const ascending = sortDir === "asc";
 				const { data, error } = await serviceClient
 					.from(prefixedTable("email_sends"))
 					.select("id, user_id, campaign, created_at, meta")
-					.order("created_at", { ascending: false })
+					.order(orderCol, { ascending })
 					.range(off, off + cap - 1);
 				if (error) throw error;
 				return data ?? [];
@@ -3964,17 +3970,32 @@ export function openDb() {
 			}
 		},
 		selectJobs: {
-			all: async ({ jobType, status, limit = 50, offset = 0 } = {}) => {
+			all: async ({ jobType, status, limit = 50, offset = 0, sortBy = "created_at", sortDir = "desc" } = {}) => {
+				const validOrder = ["id", "job_type", "status", "created_at", "updated_at"];
+				const orderCol = validOrder.includes(sortBy) ? sortBy : "created_at";
+				const ascending = sortDir === "asc";
 				let query = serviceClient
 					.from(prefixedTable("jobs"))
 					.select("id, job_type, status, args, meta, created_at, updated_at")
-					.order("created_at", { ascending: false })
+					.order(orderCol, { ascending })
 					.range(offset, offset + limit - 1);
 				if (jobType) query = query.eq("job_type", jobType);
 				if (status) query = query.eq("status", status);
 				const { data, error } = await query;
 				if (error) throw error;
 				return data ?? [];
+			}
+		},
+		countJobs: {
+			get: async ({ jobType, status } = {}) => {
+				let query = serviceClient
+					.from(prefixedTable("jobs"))
+					.select("id", { count: "exact", head: true });
+				if (jobType) query = query.eq("job_type", jobType);
+				if (status) query = query.eq("status", status);
+				const { count, error } = await query;
+				if (error) throw error;
+				return { count: count ?? 0 };
 			}
 		},
 		selectFeedItemByCreatedImageId: {

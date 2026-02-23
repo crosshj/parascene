@@ -1,8 +1,14 @@
 import { getAvatarColor } from '../../shared/avatar.js';
 import { formatRelativeTime, formatDateTime } from '../../shared/datetime.js';
 import { buildProfilePath } from '../../shared/profileLinks.js';
+import { loadAdminDataTable } from '../../shared/adminDataTable.js';
 
 const html = String.raw;
+
+function escapeHtml(text) {
+	const s = String(text ?? '');
+	return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
 
 function getUserDisplayName(user) {
 	const displayName = String(user?.display_name || '').trim();
@@ -62,129 +68,10 @@ function formatLocalDateTime(value) {
 	return `${y}-${pad(m)}-${pad(day)} ${pad(h)}:${pad(min)}`;
 }
 
-function renderAnonTable(anonCids, onSelectRow) {
-	const wrapper = document.createElement('div');
-	wrapper.className = 'anon-table-wrapper';
-	const table = document.createElement('table');
-	table.className = 'anon-table';
-	table.setAttribute('role', 'grid');
-	table.innerHTML = `
-		<thead>
-			<tr>
-				<th scope="col" class="anon-table-col-cid">Client ID</th>
-				<th scope="col" class="anon-table-col-source">Source</th>
-				<th scope="col" class="anon-table-col-dates">Request Time</th>
-				<th scope="col" class="anon-table-col-count">Count</th>
-				<th scope="col" class="anon-table-col-transitioned">Transitioned</th>
-			</tr>
-		</thead>
-		<tbody></tbody>
-	`;
-	const tbody = table.querySelector('tbody');
-	for (const row of anonCids) {
-		const tr = document.createElement('tr');
-		tr.className = 'anon-table-row';
-		tr.tabIndex = 0;
-		tr.dataset.anonCid = row.anon_cid;
-		tr.setAttribute('role', 'button');
-		tr.setAttribute('aria-label', `View requests for ${truncateCid(row.anon_cid)}`);
-		tr.addEventListener('click', (e) => {
-			if (e.target.closest('a')) return;
-			onSelectRow(row.anon_cid);
-		});
-		tr.addEventListener('keydown', (e) => {
-			if (e.key === 'Enter' || e.key === ' ') {
-				e.preventDefault();
-				onSelectRow(row.anon_cid);
-			}
-		});
-		const firstDt = formatLocalDateTime(row.first_request_at);
-		const lastDt = formatLocalDateTime(row.last_request_at);
-		const cidEscaped = (row.anon_cid || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-		const cidDisplay = truncateCid(row.anon_cid).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-		const transitionedUserId = row.transitioned_user_id != null ? Number(row.transitioned_user_id) : null;
-		const transitionedUserName = row.transitioned_user_name && String(row.transitioned_user_name).trim() ? String(row.transitioned_user_name).trim() : null;
-		const profileHref = transitionedUserId != null ? (buildProfilePath({ userName: transitionedUserName, userId: transitionedUserId }) || `/user/${transitionedUserId}`) : null;
-		const transitionedLabel = transitionedUserId != null ? (transitionedUserName ? `@${transitionedUserName}` : `User ${transitionedUserId}`) : null;
-		const transitionedCell = profileHref && transitionedLabel
-			? `<a href="${profileHref.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}" class="anon-table-transitioned-link" onclick="event.stopPropagation()">${transitionedLabel.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</a>`
-			: (transitionedUserId != null ? 'Yes' : '—');
-		const sourceCell = row.from_share ? 'share' : '';
-		tr.innerHTML = `
-			<td class="anon-table-col-cid" title="${cidEscaped}">${cidDisplay}</td>
-			<td class="anon-table-col-source">${sourceCell}</td>
-			<td class="anon-table-col-dates">
-				<div class="anon-table-dates-cell">
-					<span class="anon-table-date-line"><span class="anon-table-date-label">Last</span> ${lastDt}</span>
-					<span class="anon-table-date-line"><span class="anon-table-date-label">First</span> ${firstDt}</span>
-				</div>
-			</td>
-			<td class="anon-table-col-count">${row.request_count}</td>
-			<td class="anon-table-col-transitioned">${transitionedCell}</td>
-		`;
-		tbody.appendChild(tr);
-	}
-	wrapper.appendChild(table);
-	return wrapper;
-}
-
 function truncateStr(s, maxLen = 40) {
 	const str = typeof s === 'string' ? s.trim() : '';
 	if (!str) return '—';
 	return str.length <= maxLen ? str : str.slice(0, maxLen) + '…';
-}
-
-function renderShareTable(items, total) {
-	const wrapper = document.createElement('div');
-	wrapper.className = 'share-table-wrapper';
-	const table = document.createElement('table');
-	table.className = 'share-table anon-table';
-	table.setAttribute('role', 'grid');
-	table.innerHTML = `
-		<thead>
-			<tr>
-				<th scope="col" class="share-table-col-date">Viewed</th>
-				<th scope="col" class="share-table-col-sharer">Sharer</th>
-				<th scope="col" class="share-table-col-creator">Creator</th>
-				<th scope="col" class="share-table-col-creation">Creation</th>
-				<th scope="col" class="share-table-col-referer">Referer</th>
-				<th scope="col" class="share-table-col-cid">anon_cid</th>
-			</tr>
-		</thead>
-		<tbody></tbody>
-	`;
-	const tbody = table.querySelector('tbody');
-	for (const row of items) {
-		const tr = document.createElement('tr');
-		tr.className = 'share-table-row';
-		const viewedAt = row.viewed_at ? formatRelativeTime(row.viewed_at, { style: 'long' }) : '—';
-		const creationHref = row.created_image_id ? `/creations/${row.created_image_id}` : null;
-		const creationCell = creationHref
-			? `<a href="${creationHref}" class="share-table-creation-link" target="_blank" rel="noopener noreferrer">#${row.created_image_id}</a>`
-			: `#${row.created_image_id ?? '—'}`;
-		const sharerEsc = (row.sharer_label || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-		const creatorEsc = (row.creator_label || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-		const refererEsc = truncateStr(row.referer, 50).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-		const cidEsc = truncateStr(row.anon_cid, 12).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-		tr.innerHTML = `
-			<td class="share-table-col-date" title="${(row.viewed_at || '').replace(/"/g, '&quot;')}">${viewedAt}</td>
-			<td class="share-table-col-sharer">${sharerEsc}</td>
-			<td class="share-table-col-creator">${creatorEsc}</td>
-			<td class="share-table-col-creation">${creationCell}</td>
-			<td class="share-table-col-referer" title="${(row.referer || '').replace(/"/g, '&quot;')}">${refererEsc}</td>
-			<td class="share-table-col-cid" title="${(row.anon_cid || '').replace(/"/g, '&quot;')}">${cidEsc}</td>
-		`;
-		tbody.appendChild(tr);
-	}
-	wrapper.appendChild(table);
-	if (total != null && total > 0) {
-		const countEl = document.createElement('p');
-		countEl.className = 'text-muted users-list-count';
-		countEl.setAttribute('aria-live', 'polite');
-		countEl.textContent = `Showing ${items.length} of ${total} share page views.`;
-		wrapper.appendChild(countEl);
-	}
-	return wrapper;
 }
 
 function renderUserCard(user, onOpenModal) {
@@ -274,6 +161,9 @@ function renderUserCard(user, onOpenModal) {
 }
 
 const USERS_TAB_IDS = ['active', 'share', 'anonymous', 'other'];
+
+const SHARE_PAGE_SIZE = 50;
+const ANON_PAGE_SIZE = 50;
 
 class AppRouteUsers extends HTMLElement {
 	connectedCallback() {
@@ -456,20 +346,60 @@ class AppRouteUsers extends HTMLElement {
 		const container = this.querySelector('[data-anon-table-container]');
 		if (!container) return;
 		try {
-			const response = await fetch('/admin/anonymous-users', { credentials: 'include' });
-			if (!response.ok) throw new Error('Failed to load try flow data.');
-			const data = await response.json();
 			this._anonDataLoaded = true;
-			container.innerHTML = '';
-			const anonCids = data.anonCids ?? [];
-			if (anonCids.length === 0) {
-				const empty = document.createElement('div');
-				empty.className = 'admin-empty';
-				empty.textContent = 'No try flow requests yet.';
-				container.appendChild(empty);
-			} else {
-				container.appendChild(renderAnonTable(anonCids, (cid) => this.showAnonDetail(cid)));
-			}
+			await loadAdminDataTable(container, {
+				fetchUrl: '/admin/anonymous-users',
+				responseItemsKey: 'anonCids',
+				columns: [
+					{
+						key: 'anon_cid',
+						label: 'Client ID',
+						sortKey: 'anon_cid',
+						className: 'anon-table-col-cid',
+						render: (row) => escapeHtml(truncateCid(row.anon_cid))
+					},
+					{
+						key: 'from_share',
+						label: 'Source',
+						className: 'anon-table-col-source',
+						render: (row) => (row.from_share ? 'share' : '')
+					},
+					{
+						key: 'last_request_at',
+						label: 'Request Time',
+						sortKey: 'last_request_at',
+						className: 'anon-table-col-dates',
+						render: (row) => {
+							const first = formatLocalDateTime(row.first_request_at);
+							const last = formatLocalDateTime(row.last_request_at);
+							return `<div class="anon-table-dates-cell"><span class="anon-table-date-line"><span class="anon-table-date-label">Last</span> ${escapeHtml(last)}</span><span class="anon-table-date-line"><span class="anon-table-date-label">First</span> ${escapeHtml(first)}</span></div>`;
+						}
+					},
+					{ key: 'request_count', label: 'Count', sortKey: 'request_count', className: 'anon-table-col-count' },
+					{
+						key: 'transitioned_user_id',
+						label: 'Transitioned',
+						className: 'anon-table-col-transitioned',
+						render: (row) => {
+							const uid = row.transitioned_user_id;
+							const name = row.transitioned_user_name && String(row.transitioned_user_name).trim() ? String(row.transitioned_user_name).trim() : null;
+							const profileHref = uid != null ? (buildProfilePath({ userName: name, userId: uid }) || `/user/${uid}`) : null;
+							const label = uid != null ? (name ? `@${name}` : `User ${uid}`) : null;
+							if (profileHref && label) {
+								return `<a href="${escapeHtml(profileHref)}" class="anon-table-transitioned-link" onclick="event.stopPropagation()">${escapeHtml(label)}</a>`;
+							}
+							return uid != null ? 'Yes' : '—';
+						}
+					}
+				],
+				defaultSortBy: 'last_request_at',
+				defaultSortDir: 'desc',
+				pageSize: ANON_PAGE_SIZE,
+				emptyMessage: 'No try flow requests yet.',
+				ariaLabelPagination: 'Try flow pagination',
+				onRowClick: (row) => this.showAnonDetail(row.anon_cid),
+				tableClassName: 'admin-table anon-table'
+			});
 		} catch (err) {
 			container.innerHTML = '';
 			const error = document.createElement('div');
@@ -483,21 +413,55 @@ class AppRouteUsers extends HTMLElement {
 		const container = this.querySelector('[data-share-table-container]');
 		if (!container) return;
 		try {
-			const response = await fetch('/admin/share-views?limit=50&offset=0', { credentials: 'include' });
-			if (!response.ok) throw new Error('Failed to load share views.');
-			const data = await response.json();
 			this._shareDataLoaded = true;
-			container.innerHTML = '';
-			const items = data.items ?? [];
-			const total = data.total ?? 0;
-			if (items.length === 0) {
-				const empty = document.createElement('div');
-				empty.className = 'admin-empty';
-				empty.textContent = 'No share page views yet.';
-				container.appendChild(empty);
-			} else {
-				container.appendChild(renderShareTable(items, total));
-			}
+			await loadAdminDataTable(container, {
+				fetchUrl: '/admin/share-views',
+				responseItemsKey: 'items',
+				columns: [
+					{
+						key: 'viewed_at',
+						label: 'Viewed',
+						sortKey: 'viewed_at',
+						className: 'share-table-col-date',
+						render: (row) => escapeHtml(row.viewed_at ? formatRelativeTime(row.viewed_at, { style: 'long' }) : '—')
+					},
+					{ key: 'sharer_label', label: 'Sharer', sortKey: 'sharer_user_id', className: 'share-table-col-sharer' },
+					{ key: 'creator_label', label: 'Creator', sortKey: 'created_by_user_id', className: 'share-table-col-creator' },
+					{
+						key: 'created_image_id',
+						label: 'Creation',
+						sortKey: 'created_image_id',
+						className: 'share-table-col-creation',
+						render: (row) => {
+							const id = row.created_image_id;
+							if (id) {
+								return `<a href="/creations/${escapeHtml(String(id))}" class="share-table-creation-link" target="_blank" rel="noopener noreferrer">#${escapeHtml(String(id))}</a>`;
+							}
+							return escapeHtml(String(id ?? '—'));
+						}
+					},
+					{
+						key: 'referer',
+						label: 'Referer',
+						sortKey: 'referer',
+						className: 'share-table-col-referer',
+						render: (row) => escapeHtml(truncateStr(row.referer, 50))
+					},
+					{
+						key: 'anon_cid',
+						label: 'anon_cid',
+						sortKey: 'anon_cid',
+						className: 'share-table-col-cid',
+						render: (row) => escapeHtml(truncateStr(row.anon_cid, 12))
+					}
+				],
+				defaultSortBy: 'viewed_at',
+				defaultSortDir: 'desc',
+				pageSize: SHARE_PAGE_SIZE,
+				emptyMessage: 'No share page views yet.',
+				ariaLabelPagination: 'Share page views pagination',
+				tableClassName: 'admin-table share-table anon-table'
+			});
 		} catch (err) {
 			container.innerHTML = '';
 			const error = document.createElement('div');

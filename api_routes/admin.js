@@ -426,13 +426,19 @@ export default function createAdminRoutes({ queries, storage }) {
 		return res.json({ ok: true, profile: normalizeProfileRow(updated) });
 	});
 
-	/** GET /admin/anonymous-users — list unique anon_cids from try_requests with request count and transitioned user (excludes __pool__). */
+	/** GET /admin/anonymous-users — list unique anon_cids from try_requests with request count and transitioned user (excludes __pool__). Supports limit, offset (0-based). Returns { anonCids, total }. */
 	router.get("/admin/anonymous-users", async (req, res) => {
 		const adminUser = await requireAdmin(req, res);
 		if (!adminUser) return;
 
+		const limit = Math.min(200, Math.max(1, parseInt(req.query?.limit, 10) || 50));
+		const offset = Math.max(0, parseInt(req.query?.offset, 10) || 0);
+		const validSortBy = ["last_request_at", "first_request_at", "request_count", "anon_cid"];
+		const sortBy = validSortBy.includes(req.query?.sort_by) ? req.query.sort_by : "last_request_at";
+		const sortDir = String(req.query?.sort_dir || "desc").toLowerCase() === "asc" ? "asc" : "desc";
+
 		if (!queries.selectTryRequestAnonCidsWithCount?.all) {
-			return res.json({ anonCids: [] });
+			return res.json({ anonCids: [], total: 0 });
 		}
 		const rows = await queries.selectTryRequestAnonCidsWithCount.all();
 		const transitionedByCid = new Map();
@@ -456,7 +462,7 @@ export default function createAdminRoutes({ queries, storage }) {
 		const cidsFromShare = new Set(
 			(await queries.selectAnonCidsWithShareView?.all?.()) ?? []
 		);
-		const anonCids = rows.map((row) => {
+		let allAnonCids = rows.map((row) => {
 			const userId = transitionedByCid.get(row.anon_cid);
 			return {
 				...row,
@@ -465,7 +471,21 @@ export default function createAdminRoutes({ queries, storage }) {
 				from_share: cidsFromShare.has(row.anon_cid)
 			};
 		});
-		res.json({ anonCids });
+		const cmp = (a, b) => {
+			const va = a[sortBy];
+			const vb = b[sortBy];
+			if (va == null && vb == null) return 0;
+			if (va == null) return sortDir === "asc" ? 1 : -1;
+			if (vb == null) return sortDir === "asc" ? -1 : 1;
+			if (typeof va === "number" && typeof vb === "number") return sortDir === "asc" ? va - vb : vb - va;
+			const sa = String(va);
+			const sb = String(vb);
+			return sortDir === "asc" ? sa.localeCompare(sb) : sb.localeCompare(sa);
+		};
+		allAnonCids.sort(cmp);
+		const total = allAnonCids.length;
+		const anonCids = allAnonCids.slice(offset, offset + limit);
+		res.json({ anonCids, total });
 	});
 
 	/** GET /admin/anonymous-users/:cid — requests for this anon_cid (datetime desc) with image details and view URL. */
@@ -516,11 +536,14 @@ export default function createAdminRoutes({ queries, storage }) {
 		if (!adminUser) return;
 		const limit = Math.min(200, Math.max(1, parseInt(req.query?.limit, 10) || 50));
 		const offset = Math.max(0, parseInt(req.query?.offset, 10) || 0);
+		const validSortBy = ["id", "viewed_at", "sharer_user_id", "created_image_id", "created_by_user_id", "referer", "anon_cid"];
+		const sortBy = validSortBy.includes(req.query?.sort_by) ? req.query.sort_by : "viewed_at";
+		const sortDir = String(req.query?.sort_dir || "desc").toLowerCase() === "asc" ? "asc" : "desc";
 		if (!queries.listSharePageViews?.all) {
 			return res.json({ items: [], total: 0 });
 		}
 		const [items, totalRow] = await Promise.all([
-			queries.listSharePageViews.all(limit, offset),
+			queries.listSharePageViews.all(limit, offset, sortBy, sortDir),
 			queries.countSharePageViews?.get ? queries.countSharePageViews.get() : Promise.resolve({ count: 0 })
 		]);
 		const total = totalRow?.count ?? 0;
@@ -567,25 +590,33 @@ export default function createAdminRoutes({ queries, storage }) {
 		const status = typeof req.query?.status === "string" ? req.query.status.trim() || null : null;
 		const limit = Math.min(100, Math.max(1, parseInt(req.query?.limit, 10) || 50));
 		const offset = Math.max(0, parseInt(req.query?.offset, 10) || 0);
+		const validSortBy = ["id", "job_type", "status", "created_at", "updated_at"];
+		const sortBy = validSortBy.includes(req.query?.sort_by) ? req.query.sort_by : "created_at";
+		const sortDir = String(req.query?.sort_dir || "desc").toLowerCase() === "asc" ? "asc" : "desc";
 		if (!queries.selectJobs?.all) {
 			return res.json({ jobs: [], total: 0 });
 		}
-		const jobs = await queries.selectJobs.all({ jobType, status, limit, offset });
-		res.json({ jobs });
+		const [jobs, totalRow] = await Promise.all([
+			queries.selectJobs.all({ jobType, status, limit, offset, sortBy, sortDir }),
+			queries.countJobs?.get ? queries.countJobs.get({ jobType, status }) : Promise.resolve({ count: 0 })
+		]);
+		const total = totalRow?.count ?? 0;
+		res.json({ jobs, total });
 	});
 
 	router.get("/admin/email-sends", async (req, res) => {
 		const adminUser = await requireAdmin(req, res);
 		if (!adminUser) return;
-		const pageSize = parseInt(req.query?.limit, 10);
-		const limit = [10, 50, 100].includes(pageSize) ? pageSize : 50;
-		const page = Math.max(1, parseInt(req.query?.page, 10) || 1);
-		const offset = (page - 1) * limit;
+		const limit = Math.min(100, Math.max(1, parseInt(req.query?.limit, 10) || 50));
+		const offset = Math.max(0, parseInt(req.query?.offset, 10) || 0);
+		const validSortBy = ["id", "user_id", "campaign", "created_at"];
+		const sortBy = validSortBy.includes(req.query?.sort_by) ? req.query.sort_by : "created_at";
+		const sortDir = String(req.query?.sort_dir || "desc").toLowerCase() === "asc" ? "asc" : "desc";
 		if (!queries.listEmailSendsRecent?.all) {
 			return res.json({ sends: [], total: 0 });
 		}
 		const [sends, totalRow] = await Promise.all([
-			queries.listEmailSendsRecent.all(limit, offset),
+			queries.listEmailSendsRecent.all(limit, offset, sortBy, sortDir),
 			queries.countEmailSends?.get ? queries.countEmailSends.get() : Promise.resolve({ count: 0 })
 		]);
 		const total = totalRow?.count ?? 0;
@@ -1025,26 +1056,26 @@ export default function createAdminRoutes({ queries, storage }) {
 		res.json(settings);
 	});
 
-	/** GET /admin/transitions — page, limit, sort_by, sort_dir. Response: { items, total, page, limit, hasMore }. Admin-only. */
+	/** GET /admin/transitions — offset or page, limit, sort_by, sort_dir. Response: { items, total, hasMore }. Admin-only. */
 	router.get("/admin/transitions", async (req, res) => {
 		const adminUser = await requireAdmin(req, res);
 		if (!adminUser) return;
-		const page = Math.max(1, parseInt(req.query?.page, 10) || 1);
 		const limit = Math.min(100, Math.max(1, parseInt(req.query?.limit, 10) || 20));
+		const offset = typeof req.query?.offset !== "undefined"
+			? Math.max(0, parseInt(req.query.offset, 10) || 0)
+			: (Math.max(1, parseInt(req.query?.page, 10) || 1) - 1) * limit;
+		const page = Math.floor(offset / limit) + 1;
 		const validSortBy = ["from_created_image_id", "to_created_image_id", "count", "last_updated"];
 		const sortBy = validSortBy.includes(req.query?.sort_by) ? req.query.sort_by : "count";
 		const sortDir = String(req.query?.sort_dir || "desc").toLowerCase() === "asc" ? "asc" : "desc";
 		if (!queries.selectTransitions?.list) {
-			return res.json({ items: [], total: 0, page, limit, hasMore: false });
+			return res.json({ items: [], total: 0, hasMore: false });
 		}
 		const result = await queries.selectTransitions.list({ page, limit, sortBy, sortDir });
-		res.json({
-			items: result.items ?? [],
-			total: result.total ?? 0,
-			page: result.page ?? page,
-			limit: result.limit ?? limit,
-			hasMore: result.hasMore ?? false
-		});
+		const items = result.items ?? [];
+		const total = result.total ?? 0;
+		const hasMore = result.hasMore ?? (offset + items.length < total);
+		res.json({ items, total, hasMore });
 	});
 
 	router.get("/admin/servers/:id", async (req, res) => {

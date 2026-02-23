@@ -610,12 +610,15 @@ export async function openDb() {
 			}
 		},
 		listSharePageViews: {
-			all: async (limit, offset = 0) => {
+			all: async (limit, offset = 0, sortBy = "viewed_at", sortDir = "desc") => {
 				const cap = Math.min(Math.max(0, Number(limit) || 50), 200);
 				const off = Math.max(0, Number(offset) || 0);
+				const validOrder = ["id", "viewed_at", "sharer_user_id", "created_image_id", "created_by_user_id", "referer", "anon_cid"];
+				const orderCol = validOrder.includes(sortBy) ? sortBy : "viewed_at";
+				const asc = sortDir === "asc";
 				const stmt = db.prepare(
 					`SELECT id, viewed_at, sharer_user_id, created_image_id, created_by_user_id, referer, anon_cid
-					 FROM share_page_views ORDER BY viewed_at DESC LIMIT ? OFFSET ?`
+					 FROM share_page_views ORDER BY ${orderCol} ${asc ? "ASC" : "DESC"} LIMIT ? OFFSET ?`
 				);
 				const rows = stmt.all(cap, off) ?? [];
 				return Promise.resolve(rows);
@@ -1271,13 +1274,16 @@ export async function openDb() {
 			}
 		},
 		listEmailSendsRecent: {
-			all: async (limit, offset = 0) => {
+			all: async (limit, offset = 0, sortBy = "created_at", sortDir = "desc") => {
 				const cap = Math.min(Math.max(0, Number(limit) || 200), 500);
 				const off = Math.max(0, Number(offset) || 0);
+				const validOrder = ["id", "user_id", "campaign", "created_at"];
+				const orderCol = validOrder.includes(sortBy) ? sortBy : "created_at";
+				const asc = sortDir === "asc";
 				const stmt = db.prepare(
 					`SELECT id, user_id, campaign, created_at, meta
            FROM email_sends
-           ORDER BY created_at DESC
+           ORDER BY ${orderCol} ${asc ? "ASC" : "DESC"}
            LIMIT ? OFFSET ?`
 				);
 				const rows = stmt.all(cap, off) ?? [];
@@ -2684,7 +2690,10 @@ export async function openDb() {
 			}
 		},
 		selectJobs: {
-			all: async ({ jobType, status, limit = 50, offset = 0 } = {}) => {
+			all: async ({ jobType, status, limit = 50, offset = 0, sortBy = "created_at", sortDir = "desc" } = {}) => {
+				const validOrder = ["id", "job_type", "status", "created_at", "updated_at"];
+				const orderCol = validOrder.includes(sortBy) ? sortBy : "created_at";
+				const asc = sortDir === "asc";
 				let query = "SELECT id, job_type, status, args, meta, created_at, updated_at FROM jobs WHERE 1=1";
 				const params = [];
 				if (jobType) {
@@ -2695,12 +2704,28 @@ export async function openDb() {
 					params.push(status);
 					query += " AND status = ?";
 				}
-				query += " ORDER BY created_at DESC LIMIT ? OFFSET ?";
+				query += ` ORDER BY ${orderCol} ${asc ? "ASC" : "DESC"} LIMIT ? OFFSET ?`;
 				params.push(limit, offset);
 				const stmt = db.prepare(query);
 				const rows = stmt.all(...params);
 				const parse = (v, d) => { try { return v ? JSON.parse(v) : d; } catch { return d; } };
 				return Promise.resolve(rows.map((r) => ({ ...r, args: parse(r.args, {}), meta: parse(r.meta, {}) })));
+			}
+		},
+		countJobs: {
+			get: async ({ jobType, status } = {}) => {
+				let query = "SELECT COUNT(*) AS count FROM jobs WHERE 1=1";
+				const params = [];
+				if (jobType) {
+					params.push(jobType);
+					query += " AND job_type = ?";
+				}
+				if (status) {
+					params.push(status);
+					query += " AND status = ?";
+				}
+				const row = db.prepare(query).get(...params);
+				return Promise.resolve({ count: row?.count ?? 0 });
 			}
 		},
 		selectFeedItemByCreatedImageId: {

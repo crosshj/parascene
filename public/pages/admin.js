@@ -1,6 +1,7 @@
 import { getAvatarColor } from "../shared/avatar.js";
 import { formatRelativeTime } from "../shared/datetime.js";
 import { attachAutoGrowTextarea } from "../shared/autogrow.js";
+import { loadAdminDataTable } from "../shared/adminDataTable.js";
 import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, forceRadial } from "d3-force";
 
 const adminDataLoaded = {
@@ -304,45 +305,47 @@ async function loadJobs({ force = false } = {}) {
 	if (adminDataLoaded.jobs && !force) return;
 
 	try {
-		const response = await fetch("/admin/jobs", { credentials: "include" });
-		if (!response.ok) throw new Error("Failed to load jobs.");
-		const data = await response.json();
-
-		container.innerHTML = "";
-		if (!data.jobs || data.jobs.length === 0) {
-			renderEmpty(container, "No jobs yet.");
-			adminDataLoaded.jobs = true;
-			return;
-		}
-
-		const table = document.createElement("table");
-		table.className = "admin-table admin-jobs-table";
-		table.setAttribute("role", "grid");
-		const thead = document.createElement("thead");
-		thead.innerHTML = "<tr><th>ID</th><th>Type</th><th>Status</th><th>Created</th><th>Updated</th><th>Meta</th></tr>";
-		table.appendChild(thead);
-		const tbody = document.createElement("tbody");
-		for (const job of data.jobs) {
-			const tr = document.createElement("tr");
-			const metaSummary = job.meta && typeof job.meta === "object"
-				? [
-					job.meta.error ? `error: ${String(job.meta.error).slice(0, 40)}` : null,
-					job.meta.duration_ms != null ? `${job.meta.duration_ms}ms` : null,
-					job.meta.qstash_message_id ? `msg: ${String(job.meta.qstash_message_id).slice(0, 12)}` : null
-				].filter(Boolean).join(" · ") || "—"
-				: "—";
-			tr.innerHTML = `
-				<td>${job.id}</td>
-				<td>${escapeHtml(String(job.job_type || "—"))}</td>
-				<td>${escapeHtml(String(job.status || "—"))}</td>
-				<td>${escapeHtml(formatRelativeTime(job.created_at, { style: "short" }) || job.created_at || "—")}</td>
-				<td>${escapeHtml(formatRelativeTime(job.updated_at, { style: "short" }) || job.updated_at || "—")}</td>
-				<td class="admin-jobs-meta">${escapeHtml(metaSummary)}</td>
-			`;
-			tbody.appendChild(tr);
-		}
-		table.appendChild(tbody);
-		container.appendChild(table);
+		await loadAdminDataTable(container, {
+			fetchUrl: "/admin/jobs",
+			responseItemsKey: "jobs",
+			columns: [
+				{ key: "id", label: "ID", sortKey: "id" },
+				{ key: "job_type", label: "Type", sortKey: "job_type" },
+				{ key: "status", label: "Status", sortKey: "status" },
+				{
+					key: "created_at",
+					label: "Created",
+					sortKey: "created_at",
+					render: (row) => escapeHtml(formatRelativeTime(row.created_at, { style: "short" }) || row.created_at || "—")
+				},
+				{
+					key: "updated_at",
+					label: "Updated",
+					sortKey: "updated_at",
+					render: (row) => escapeHtml(formatRelativeTime(row.updated_at, { style: "short" }) || row.updated_at || "—")
+				},
+				{
+					key: "meta",
+					label: "Meta",
+					className: "admin-jobs-meta",
+					render: (row) => {
+						const meta = row.meta && typeof row.meta === "object" ? row.meta : {};
+						const metaSummary = [
+							meta.error ? `error: ${String(meta.error).slice(0, 40)}` : null,
+							meta.duration_ms != null ? `${meta.duration_ms}ms` : null,
+							meta.qstash_message_id ? `msg: ${String(meta.qstash_message_id).slice(0, 12)}` : null
+						].filter(Boolean).join(" · ") || "—";
+						return escapeHtml(metaSummary);
+					}
+				}
+			],
+			defaultSortBy: "created_at",
+			defaultSortDir: "desc",
+			pageSize: 50,
+			emptyMessage: "No jobs yet.",
+			ariaLabelPagination: "Jobs pagination",
+			tableClassName: "admin-table admin-jobs-table"
+		});
 		adminDataLoaded.jobs = true;
 	} catch (err) {
 		container.innerHTML = "";
@@ -402,10 +405,6 @@ async function loadModeration() {
 	}
 }
 
-let emailSendsPage = 1;
-let emailSendsPageSize = 50;
-let emailSendsTotal = 0;
-
 async function loadEmailSends() {
 	const container = document.querySelector("#email-sends-container");
 	if (!container) return;
@@ -414,124 +413,38 @@ async function loadEmailSends() {
 	renderLoading(container, "Loading sends…");
 
 	try {
-		const params = new URLSearchParams({
-			limit: String(emailSendsPageSize),
-			page: String(emailSendsPage)
+		await loadAdminDataTable(container, {
+			fetchUrl: "/admin/email-sends",
+			responseItemsKey: "sends",
+			columns: [
+				{
+					key: "created_at",
+					label: "Sent",
+					sortKey: "created_at",
+					className: "admin-table-col-date",
+					render: (row) => escapeHtml(row.created_at ? formatRelativeTime(row.created_at, { style: "long" }) : "—")
+				},
+				{
+					key: "user_label",
+					label: "User",
+					sortKey: "user_id",
+					className: "admin-table-col-email",
+					render: (row) => {
+						const userLabel = String(row.user_label ?? "").trim() || `#${row.user_id}`;
+						const title = row.user_email ? escapeHtml(row.user_email) : userLabel;
+						return `<span title="${title}">${escapeHtml(userLabel)}</span>`;
+					}
+				},
+				{ key: "campaign", label: "Campaign", sortKey: "campaign", className: "admin-table-col-campaign" },
+				{ key: "id", label: "ID", sortKey: "id", className: "admin-table-col-id" }
+			],
+			defaultSortBy: "created_at",
+			defaultSortDir: "desc",
+			pageSize: 50,
+			emptyMessage: "No email sends yet. Run the cron to generate digest/welcome/nudge sends.",
+			ariaLabelPagination: "Email sends pagination",
+			tableClassName: "admin-table admin-email-sends-table"
 		});
-		const response = await fetch(`/admin/email-sends?${params}`, { credentials: "include" });
-		if (!response.ok) throw new Error("Failed to load email sends.");
-		const data = await response.json();
-
-		container.innerHTML = "";
-		const sends = data.sends ?? [];
-		emailSendsTotal = Number(data.total) ?? 0;
-
-		if (emailSendsTotal === 0) {
-			renderEmpty(container, "No email sends yet. Run the cron to generate digest/welcome/nudge sends.");
-			return;
-		}
-
-		const toolbar = document.createElement("div");
-		toolbar.className = "admin-email-sends-toolbar";
-
-		const pageSizeLabel = document.createElement("label");
-		pageSizeLabel.className = "admin-email-sends-pagesize-label";
-		pageSizeLabel.innerHTML = "Page size ";
-		const pageSizeSelect = document.createElement("select");
-		pageSizeSelect.className = "admin-email-sends-pagesize";
-		pageSizeSelect.setAttribute("aria-label", "Sends per page");
-		for (const n of [10, 50, 100]) {
-			const opt = document.createElement("option");
-			opt.value = String(n);
-			opt.textContent = String(n);
-			if (n === emailSendsPageSize) opt.selected = true;
-			pageSizeSelect.appendChild(opt);
-		}
-		pageSizeLabel.appendChild(pageSizeSelect);
-		toolbar.appendChild(pageSizeLabel);
-
-		const start = emailSendsTotal === 0 ? 0 : (emailSendsPage - 1) * emailSendsPageSize + 1;
-		const end = Math.min(emailSendsPage * emailSendsPageSize, emailSendsTotal);
-		const total = Number(emailSendsTotal);
-		const pageSize = Number(emailSendsPageSize);
-		const page = Number(emailSendsPage);
-		const noPrevPage = page <= 1;
-		const noNextPage = total === 0 || page * pageSize >= total || sends.length < pageSize;
-
-		const summary = document.createElement("span");
-		summary.className = "admin-email-sends-summary";
-		summary.textContent = `Showing ${start}–${end} of ${emailSendsTotal}`;
-		toolbar.appendChild(summary);
-
-		const nav = document.createElement("div");
-		nav.className = "admin-email-sends-nav";
-		nav.setAttribute("aria-label", "Pagination");
-		const prevBtn = document.createElement("button");
-		prevBtn.type = "button";
-		prevBtn.className = "admin-email-sends-prev btn-secondary";
-		prevBtn.textContent = "Previous";
-		prevBtn.disabled = noPrevPage;
-		nav.appendChild(prevBtn);
-
-		const nextBtn = document.createElement("button");
-		nextBtn.type = "button";
-		nextBtn.className = "admin-email-sends-next btn-secondary";
-		nextBtn.textContent = "Next";
-		nextBtn.disabled = noNextPage;
-		nav.appendChild(nextBtn);
-		toolbar.appendChild(nav);
-
-		pageSizeSelect.addEventListener("change", () => {
-			emailSendsPageSize = Number(pageSizeSelect.value) || 50;
-			emailSendsPage = 1;
-			loadEmailSends();
-		});
-		prevBtn.addEventListener("click", () => {
-			if (!noPrevPage) {
-				emailSendsPage -= 1;
-				loadEmailSends();
-			}
-		});
-		nextBtn.addEventListener("click", () => {
-			if (!noNextPage) {
-				emailSendsPage += 1;
-				loadEmailSends();
-			}
-		});
-
-		const wrapper = document.createElement("div");
-		wrapper.className = "admin-email-sends-wrapper";
-		const table = document.createElement("table");
-		table.className = "admin-table admin-email-sends-table";
-		table.setAttribute("role", "grid");
-		table.innerHTML = `
-			<thead>
-				<tr>
-					<th scope="col" class="admin-table-col-date">Sent</th>
-					<th scope="col" class="admin-table-col-email">User</th>
-					<th scope="col" class="admin-table-col-campaign">Campaign</th>
-					<th scope="col" class="admin-table-col-id">ID</th>
-				</tr>
-			</thead>
-			<tbody></tbody>
-		`;
-		const tbody = table.querySelector("tbody");
-		for (const row of sends) {
-			const tr = document.createElement("tr");
-			const sentAt = row.created_at ? formatRelativeTime(row.created_at, { style: "long" }) : "—";
-			const userLabel = String(row.user_label ?? "").trim() || `#${row.user_id}`;
-			const title = row.user_email ? escapeHtml(row.user_email) : userLabel;
-			tr.innerHTML = `
-				<td class="admin-table-col-date">${escapeHtml(sentAt)}</td>
-				<td class="admin-table-col-email" title="${title}">${escapeHtml(userLabel)}</td>
-				<td class="admin-table-col-campaign">${escapeHtml(String(row.campaign ?? ""))}</td>
-				<td class="admin-table-col-id">${escapeHtml(String(row.id ?? ""))}</td>
-			`;
-			tbody.appendChild(tr);
-		}
-		wrapper.appendChild(table);
-		container.appendChild(wrapper);
-		container.appendChild(toolbar);
 		adminDataLoaded.sends = true;
 	} catch (err) {
 		container.innerHTML = "";
@@ -1283,13 +1196,6 @@ const RELATED_SETTINGS_FIELDS = [
 	{ key: "related.candidate_cap_per_signal", label: "Candidate cap per signal", type: "number", section: "Random & caps", hint: "Max candidates per signal." }
 ];
 
-let relatedTransitionsPage = 1;
-const relatedTransitionsPageSize = 20;
-const relatedTransitionsSortByDefault = "count";
-const relatedTransitionsSortDirDefault = "desc";
-let relatedTransitionsSortBy = relatedTransitionsSortByDefault;
-let relatedTransitionsSortDir = relatedTransitionsSortDirDefault;
-
 const RELATED_SECTION_ORDER = ["Recsys vs semantic", "Transition", "Random & caps", "Signal tuning"];
 const RELATED_SECTION_DESCRIPTIONS = {
 	"Recsys vs semantic": "Blend recsys with vector similarity; weights and distance max control the mix.",
@@ -1489,128 +1395,52 @@ async function loadRelatedTransitions(container) {
 	renderLoading(container, "Loading transitions…");
 
 	try {
-		const params = new URLSearchParams({
-			page: String(relatedTransitionsPage),
-			limit: String(relatedTransitionsPageSize),
-			sort_by: relatedTransitionsSortBy,
-			sort_dir: relatedTransitionsSortDir
-		});
-		const response = await fetch(`/admin/transitions?${params}`, { credentials: "include" });
-		if (!response.ok) throw new Error("Failed to load transitions.");
-		const data = await response.json();
-
-		container.innerHTML = "";
-		const items = data.items ?? [];
-		const total = Number(data.total) ?? 0;
-		const page = Number(data.page) ?? 1;
-		const limit = Number(data.limit) ?? relatedTransitionsPageSize;
-		const hasMore = data.hasMore === true;
-
-		if (total === 0) {
-			renderEmpty(container, "No transition data yet. Click related cards on creation detail to record transitions.");
-			return;
-		}
-
-		const toolbar = document.createElement("div");
-		toolbar.className = "admin-email-sends-toolbar admin-related-transitions-toolbar";
-		const start = total === 0 ? 0 : (page - 1) * limit + 1;
-		const end = Math.min(page * limit, total);
-		const summary = document.createElement("span");
-		summary.className = "admin-email-sends-summary";
-		summary.textContent = `Showing ${start}–${end} of ${total}`;
-		toolbar.appendChild(summary);
-
-		const nav = document.createElement("div");
-		nav.className = "admin-email-sends-nav";
-		nav.setAttribute("aria-label", "Pagination");
-		const prevBtn = document.createElement("button");
-		prevBtn.type = "button";
-		prevBtn.className = "admin-email-sends-prev btn-secondary";
-		prevBtn.textContent = "Previous";
-		prevBtn.disabled = page <= 1;
-		const nextBtn = document.createElement("button");
-		nextBtn.type = "button";
-		nextBtn.className = "admin-email-sends-next btn-secondary";
-		nextBtn.textContent = "Next";
-		nextBtn.disabled = !hasMore;
-		nav.appendChild(prevBtn);
-		nav.appendChild(nextBtn);
-		toolbar.appendChild(nav);
-
-		prevBtn.addEventListener("click", () => {
-			if (page > 1) {
-				relatedTransitionsPage = page - 1;
-				loadRelatedTransitions(container);
-			}
-		});
-		nextBtn.addEventListener("click", () => {
-			if (hasMore) {
-				relatedTransitionsPage = page + 1;
-				loadRelatedTransitions(container);
-			}
-		});
-
-		const wrapper = document.createElement("div");
-		wrapper.className = "admin-email-sends-wrapper admin-related-transitions-wrapper";
-		const table = document.createElement("table");
-		table.className = "admin-table admin-email-sends-table admin-related-transitions-table";
-		table.setAttribute("role", "grid");
-		const columns = [
-			{ key: "from_created_image_id", label: "From (ID)", className: "admin-table-col-from" },
-			{ key: "to_created_image_id", label: "To (ID)", className: "admin-table-col-to" },
-			{ key: "count", label: "Count", className: "admin-table-col-count" },
-			{ key: "last_updated", label: "Last updated", className: "admin-table-col-date" }
-		];
-		const thead = document.createElement("thead");
-		const headerRow = document.createElement("tr");
-		for (const col of columns) {
-			const th = document.createElement("th");
-			th.scope = "col";
-			th.className = col.className + " admin-table-sortable";
-			th.dataset.sort = col.key;
-			const isActive = relatedTransitionsSortBy === col.key;
-			const arrow = isActive ? (relatedTransitionsSortDir === "asc" ? " \u2191" : " \u2193") : "";
-			th.textContent = col.label + arrow;
-			th.setAttribute("aria-sort", isActive ? (relatedTransitionsSortDir === "asc" ? "ascending" : "descending") : "none");
-			th.addEventListener("click", () => {
-				if (relatedTransitionsSortBy === col.key) {
-					relatedTransitionsSortDir = relatedTransitionsSortDir === "desc" ? "asc" : "desc";
-				} else {
-					relatedTransitionsSortBy = col.key;
-					relatedTransitionsSortDir = "desc";
+		await loadAdminDataTable(container, {
+			fetchUrl: "/admin/transitions",
+			responseItemsKey: "items",
+			columns: [
+				{
+					key: "from_created_image_id",
+					label: "From (ID)",
+					sortKey: "from_created_image_id",
+					className: "admin-table-col-from",
+					render: (row) => {
+						const raw = row.from_created_image_id;
+						if (raw != null && Number.isFinite(Number(raw))) {
+							return `<a href="/creations/${escapeHtml(String(raw))}">${escapeHtml(String(raw))}</a>`;
+						}
+						return escapeHtml(String(raw ?? "—"));
+					}
+				},
+				{
+					key: "to_created_image_id",
+					label: "To (ID)",
+					sortKey: "to_created_image_id",
+					className: "admin-table-col-to",
+					render: (row) => {
+						const raw = row.to_created_image_id;
+						if (raw != null && Number.isFinite(Number(raw))) {
+							return `<a href="/creations/${escapeHtml(String(raw))}">${escapeHtml(String(raw))}</a>`;
+						}
+						return escapeHtml(String(raw ?? "—"));
+					}
+				},
+				{ key: "count", label: "Count", sortKey: "count", className: "admin-table-col-count" },
+				{
+					key: "last_updated",
+					label: "Last updated",
+					sortKey: "last_updated",
+					className: "admin-table-col-date",
+					render: (row) => escapeHtml(row.last_updated ? formatRelativeTime(row.last_updated, { style: "long" }) : "—")
 				}
-				relatedTransitionsPage = 1;
-				loadRelatedTransitions(container);
-			});
-			headerRow.appendChild(th);
-		}
-		thead.appendChild(headerRow);
-		table.appendChild(thead);
-		const tbody = document.createElement("tbody");
-		for (const row of items) {
-			const tr = document.createElement("tr");
-			const fromIdRaw = row.from_created_image_id;
-			const toIdRaw = row.to_created_image_id;
-			const fromId = Number.isFinite(Number(fromIdRaw)) && fromIdRaw != null
-				? `<a href="/creations/${escapeHtml(String(fromIdRaw))}">${escapeHtml(String(fromIdRaw))}</a>`
-				: escapeHtml(String(fromIdRaw ?? "—"));
-			const toId = Number.isFinite(Number(toIdRaw)) && toIdRaw != null
-				? `<a href="/creations/${escapeHtml(String(toIdRaw))}">${escapeHtml(String(toIdRaw))}</a>`
-				: escapeHtml(String(toIdRaw ?? "—"));
-			const count = row.count ?? "—";
-			const lastUpdated = row.last_updated ? formatRelativeTime(row.last_updated, { style: "long" }) : "—";
-			tr.innerHTML = `
-				<td class="admin-table-col-from">${fromId}</td>
-				<td class="admin-table-col-to">${toId}</td>
-				<td class="admin-table-col-count">${escapeHtml(String(count))}</td>
-				<td class="admin-table-col-date">${escapeHtml(lastUpdated)}</td>
-			`;
-			tbody.appendChild(tr);
-		}
-		table.appendChild(tbody);
-		wrapper.appendChild(table);
-		container.appendChild(wrapper);
-		container.appendChild(toolbar);
+			],
+			defaultSortBy: "count",
+			defaultSortDir: "desc",
+			pageSize: 20,
+			emptyMessage: "No transition data yet. Click related cards on creation detail to record transitions.",
+			ariaLabelPagination: "Transitions pagination",
+			tableClassName: "admin-table admin-email-sends-table admin-related-transitions-table"
+		});
 	} catch (err) {
 		container.innerHTML = "";
 		renderError(container, "Error loading transitions.");
