@@ -403,6 +403,17 @@ export function openDb() {
 				return { count: count ?? 0 };
 			}
 		},
+		selectAnonCidsWithShareView: {
+			all: async () => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("share_page_views"))
+					.select("anon_cid")
+					.not("anon_cid", "is", null);
+				if (error) throw error;
+				const cids = [...new Set((data ?? []).map((r) => r.anon_cid).filter(Boolean))];
+				return cids;
+			}
+		},
 		refreshSessionExpiry: {
 			run: async (id, expiresAt) => {
 				// Use serviceClient to bypass RLS for authentication

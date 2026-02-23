@@ -72,6 +72,7 @@ function renderAnonTable(anonCids, onSelectRow) {
 		<thead>
 			<tr>
 				<th scope="col" class="anon-table-col-cid">Client ID</th>
+				<th scope="col" class="anon-table-col-source">Source</th>
 				<th scope="col" class="anon-table-col-dates">Request Time</th>
 				<th scope="col" class="anon-table-col-count">Count</th>
 				<th scope="col" class="anon-table-col-transitioned">Transitioned</th>
@@ -108,8 +109,10 @@ function renderAnonTable(anonCids, onSelectRow) {
 		const transitionedCell = profileHref && transitionedLabel
 			? `<a href="${profileHref.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}" class="anon-table-transitioned-link" onclick="event.stopPropagation()">${transitionedLabel.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</a>`
 			: (transitionedUserId != null ? 'Yes' : '—');
+		const sourceCell = row.from_share ? 'share' : '';
 		tr.innerHTML = `
 			<td class="anon-table-col-cid" title="${cidEscaped}">${cidDisplay}</td>
+			<td class="anon-table-col-source">${sourceCell}</td>
 			<td class="anon-table-col-dates">
 				<div class="anon-table-dates-cell">
 					<span class="anon-table-date-line"><span class="anon-table-date-label">Last</span> ${lastDt}</span>

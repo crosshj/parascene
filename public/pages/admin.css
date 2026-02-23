@@ -623,6 +623,10 @@
 	font-variant-numeric: tabular-nums;
 }
 
+.anon-table-col-source {
+	white-space: nowrap;
+}
+
 .anon-table-col-transitioned {
 	white-space: nowrap;
 }

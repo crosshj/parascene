@@ -627,6 +627,15 @@ export async function openDb() {
 				return Promise.resolve({ count: row?.count ?? 0 });
 			}
 		},
+		selectAnonCidsWithShareView: {
+			all: async () => {
+				const stmt = db.prepare(
+					"SELECT DISTINCT anon_cid FROM share_page_views WHERE anon_cid IS NOT NULL AND anon_cid != ''"
+				);
+				const rows = stmt.all() ?? [];
+				return Promise.resolve(rows.map((r) => r.anon_cid));
+			}
+		},
 		refreshSessionExpiry: {
 			run: async (id, expiresAt) => {
 				const stmt = db.prepare(

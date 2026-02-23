@@ -453,12 +453,16 @@ export default function createAdminRoutes({ queries, storage }) {
 			const name = profile?.user_name && String(profile.user_name).trim() ? String(profile.user_name).trim() : null;
 			userNameByUserId.set(uid, name);
 		}
+		const cidsFromShare = new Set(
+			(await queries.selectAnonCidsWithShareView?.all?.()) ?? []
+		);
 		const anonCids = rows.map((row) => {
 			const userId = transitionedByCid.get(row.anon_cid);
 			return {
 				...row,
 				transitioned_user_id: userId ?? null,
-				transitioned_user_name: (userId != null ? userNameByUserId.get(userId) : null) ?? null
+				transitioned_user_name: (userId != null ? userNameByUserId.get(userId) : null) ?? null,
+				from_share: cidsFromShare.has(row.anon_cid)
 			};
 		});
 		res.json({ anonCids });

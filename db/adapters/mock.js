@@ -216,6 +216,9 @@ export function openDb() {
 		countSharePageViews: {
 			get: async () => ({ count: 0 })
 		},
+		selectAnonCidsWithShareView: {
+			all: async () => []
+		},
 		updateUserReferral: {
 			run: async (userId, referral) => ({ changes: 1 })
 		},
