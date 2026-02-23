@@ -125,6 +125,65 @@ function renderAnonTable(anonCids, onSelectRow) {
 	return wrapper;
 }
 
+function truncateStr(s, maxLen = 40) {
+	const str = typeof s === 'string' ? s.trim() : '';
+	if (!str) return '—';
+	return str.length <= maxLen ? str : str.slice(0, maxLen) + '…';
+}
+
+function renderShareTable(items, total) {
+	const wrapper = document.createElement('div');
+	wrapper.className = 'share-table-wrapper';
+	const table = document.createElement('table');
+	table.className = 'share-table anon-table';
+	table.setAttribute('role', 'grid');
+	table.innerHTML = `
+		<thead>
+			<tr>
+				<th scope="col" class="share-table-col-date">Viewed</th>
+				<th scope="col" class="share-table-col-sharer">Sharer</th>
+				<th scope="col" class="share-table-col-creator">Creator</th>
+				<th scope="col" class="share-table-col-creation">Creation</th>
+				<th scope="col" class="share-table-col-referer">Referer</th>
+				<th scope="col" class="share-table-col-cid">anon_cid</th>
+			</tr>
+		</thead>
+		<tbody></tbody>
+	`;
+	const tbody = table.querySelector('tbody');
+	for (const row of items) {
+		const tr = document.createElement('tr');
+		tr.className = 'share-table-row';
+		const viewedAt = row.viewed_at ? formatRelativeTime(row.viewed_at, { style: 'long' }) : '—';
+		const creationHref = row.created_image_id ? `/creations/${row.created_image_id}` : null;
+		const creationCell = creationHref
+			? `<a href="${creationHref}" class="share-table-creation-link" target="_blank" rel="noopener noreferrer">#${row.created_image_id}</a>`
+			: `#${row.created_image_id ?? '—'}`;
+		const sharerEsc = (row.sharer_label || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+		const creatorEsc = (row.creator_label || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+		const refererEsc = truncateStr(row.referer, 50).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+		const cidEsc = truncateStr(row.anon_cid, 12).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+		tr.innerHTML = `
+			<td class="share-table-col-date" title="${(row.viewed_at || '').replace(/"/g, '&quot;')}">${viewedAt}</td>
+			<td class="share-table-col-sharer">${sharerEsc}</td>
+			<td class="share-table-col-creator">${creatorEsc}</td>
+			<td class="share-table-col-creation">${creationCell}</td>
+			<td class="share-table-col-referer" title="${(row.referer || '').replace(/"/g, '&quot;')}">${refererEsc}</td>
+			<td class="share-table-col-cid" title="${(row.anon_cid || '').replace(/"/g, '&quot;')}">${cidEsc}</td>
+		`;
+		tbody.appendChild(tr);
+	}
+	wrapper.appendChild(table);
+	if (total != null && total > 0) {
+		const countEl = document.createElement('p');
+		countEl.className = 'text-muted users-list-count';
+		countEl.setAttribute('aria-live', 'polite');
+		countEl.textContent = `Showing ${items.length} of ${total} share page views.`;
+		wrapper.appendChild(countEl);
+	}
+	return wrapper;
+}
+
 function renderUserCard(user, onOpenModal) {
 	const card = document.createElement('div');
 	card.className = 'card user-card';
@@ -211,12 +270,13 @@ function renderUserCard(user, onOpenModal) {
 	return card;
 }
 
-const USERS_TAB_IDS = ['active', 'other', 'anonymous'];
+const USERS_TAB_IDS = ['active', 'share', 'anonymous', 'other'];
 
 class AppRouteUsers extends HTMLElement {
 	connectedCallback() {
 		this._selectedAnonCid = null;
 		this._anonDataLoaded = false;
+		this._shareDataLoaded = false;
 		this.innerHTML = html`
 			<h3>Users</h3>
 			<app-tabs>
@@ -230,7 +290,16 @@ class AppRouteUsers extends HTMLElement {
 						<div class="text-muted users-list-count" data-users-active-count aria-live="polite"></div>
 					</div>
 				</tab>
-				<tab data-id="anonymous" label="Anonymous">
+				<tab data-id="share" label="Share">
+					<div class="share-tab-content" data-share-tab-content>
+						<div class="share-table-container" data-share-table-container>
+							<div class="route-empty route-loading">
+								<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
+							</div>
+						</div>
+					</div>
+				</tab>
+				<tab data-id="anonymous" label="Try flow">
 					<div class="anon-tab-content" data-anon-tab-content>
 						<div class="anon-table-container" data-anon-table-container>
 							<div class="route-empty route-loading">
@@ -266,6 +335,9 @@ class AppRouteUsers extends HTMLElement {
 			if (e.detail?.id === 'anonymous' && !this._anonDataLoaded) {
 				this.loadAnonCids();
 			}
+			if (e.detail?.id === 'share' && !this._shareDataLoaded) {
+				this.loadShareViews();
+			}
 		});
 		this.setupUsersTabHash();
 		this._anonModalOverlay = this.querySelector('[data-anon-detail-modal]');
@@ -292,7 +364,7 @@ class AppRouteUsers extends HTMLElement {
 		if (this._usersTabHashCleanup) this._usersTabHashCleanup();
 	}
 
-	/** Sync Users tab from URL hash (#active, #other, #anonymous) and update hash when tab changes (same pattern as Connect). */
+	/** Sync Users tab from URL hash (#active, #share, #anonymous, #other) and update hash when tab changes (same pattern as Connect). */
 	setupUsersTabHash() {
 		const isOnUsersRoute = () => {
 			const path = window.location.pathname || '';
@@ -310,6 +382,9 @@ class AppRouteUsers extends HTMLElement {
 			}
 			if (id === 'anonymous' && !this._anonDataLoaded) {
 				this.loadAnonCids();
+			}
+			if (id === 'share' && !this._shareDataLoaded) {
+				this.loadShareViews();
 			}
 		};
 
@@ -379,7 +454,7 @@ class AppRouteUsers extends HTMLElement {
 		if (!container) return;
 		try {
 			const response = await fetch('/admin/anonymous-users', { credentials: 'include' });
-			if (!response.ok) throw new Error('Failed to load anonymous users.');
+			if (!response.ok) throw new Error('Failed to load try flow data.');
 			const data = await response.json();
 			this._anonDataLoaded = true;
 			container.innerHTML = '';
@@ -387,7 +462,7 @@ class AppRouteUsers extends HTMLElement {
 			if (anonCids.length === 0) {
 				const empty = document.createElement('div');
 				empty.className = 'admin-empty';
-				empty.textContent = 'No anonymous try requests yet.';
+				empty.textContent = 'No try flow requests yet.';
 				container.appendChild(empty);
 			} else {
 				container.appendChild(renderAnonTable(anonCids, (cid) => this.showAnonDetail(cid)));
@@ -396,7 +471,35 @@ class AppRouteUsers extends HTMLElement {
 			container.innerHTML = '';
 			const error = document.createElement('div');
 			error.className = 'admin-error';
-			error.textContent = 'Error loading anonymous users.';
+			error.textContent = 'Error loading try flow data.';
+			container.appendChild(error);
+		}
+	}
+
+	async loadShareViews() {
+		const container = this.querySelector('[data-share-table-container]');
+		if (!container) return;
+		try {
+			const response = await fetch('/admin/share-views?limit=50&offset=0', { credentials: 'include' });
+			if (!response.ok) throw new Error('Failed to load share views.');
+			const data = await response.json();
+			this._shareDataLoaded = true;
+			container.innerHTML = '';
+			const items = data.items ?? [];
+			const total = data.total ?? 0;
+			if (items.length === 0) {
+				const empty = document.createElement('div');
+				empty.className = 'admin-empty';
+				empty.textContent = 'No share page views yet.';
+				container.appendChild(empty);
+			} else {
+				container.appendChild(renderShareTable(items, total));
+			}
+		} catch (err) {
+			container.innerHTML = '';
+			const error = document.createElement('div');
+			error.className = 'admin-error';
+			error.textContent = 'Error loading share views.';
 			container.appendChild(error);
 		}
 	}

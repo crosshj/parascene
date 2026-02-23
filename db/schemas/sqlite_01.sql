@@ -297,6 +297,20 @@ CREATE TABLE IF NOT EXISTS try_requests (
 CREATE INDEX IF NOT EXISTS idx_try_requests_anon_cid ON try_requests(anon_cid);
 CREATE INDEX IF NOT EXISTS idx_try_requests_created_image_anon_id ON try_requests(created_image_anon_id);
 
+-- Share page views: log sharer/creator when someone hits a share page (before try flow).
+CREATE TABLE IF NOT EXISTS share_page_views (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  viewed_at TEXT NOT NULL DEFAULT (datetime('now')),
+  sharer_user_id INTEGER NOT NULL REFERENCES users(id),
+  created_image_id INTEGER NOT NULL REFERENCES created_images(id),
+  created_by_user_id INTEGER NOT NULL REFERENCES users(id),
+  referer TEXT,
+  anon_cid TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_share_page_views_sharer_user_id ON share_page_views(sharer_user_id);
+CREATE INDEX IF NOT EXISTS idx_share_page_views_created_image_id ON share_page_views(created_image_id);
+CREATE INDEX IF NOT EXISTS idx_share_page_views_viewed_at ON share_page_views(viewed_at);
+
 -- Related creations: view→next-click transitions for click-next ranking
 CREATE TABLE IF NOT EXISTS related_transitions (
   from_created_image_id INTEGER NOT NULL REFERENCES created_images(id) ON DELETE CASCADE,

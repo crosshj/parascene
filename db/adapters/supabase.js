@@ -366,6 +366,43 @@ export function openDb() {
 				};
 			}
 		},
+		insertSharePageView: {
+			run: async (sharerUserId, createdImageId, createdByUserId, referer, anonCid) => {
+				const { error } = await serviceClient
+					.from(prefixedTable("share_page_views"))
+					.insert({
+						sharer_user_id: sharerUserId,
+						created_image_id: createdImageId,
+						created_by_user_id: createdByUserId,
+						referer: referer ?? null,
+						anon_cid: anonCid ?? null
+					});
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
+		listSharePageViews: {
+			all: async (limit, offset = 0) => {
+				const cap = Math.min(Math.max(0, Number(limit) || 50), 200);
+				const off = Math.max(0, Number(offset) || 0);
+				const { data, error } = await serviceClient
+					.from(prefixedTable("share_page_views"))
+					.select("id, viewed_at, sharer_user_id, created_image_id, created_by_user_id, referer, anon_cid")
+					.order("viewed_at", { ascending: false })
+					.range(off, off + cap - 1);
+				if (error) throw error;
+				return data ?? [];
+			}
+		},
+		countSharePageViews: {
+			get: async () => {
+				const { count, error } = await serviceClient
+					.from(prefixedTable("share_page_views"))
+					.select("id", { count: "exact", head: true });
+				if (error) throw error;
+				return { count: count ?? 0 };
+			}
+		},
 		refreshSessionExpiry: {
 			run: async (id, expiresAt) => {
 				// Use serviceClient to bypass RLS for authentication
@@ -452,6 +489,29 @@ export function openDb() {
 				const existing = current?.meta ?? null;
 				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
 				meta.suspended = Boolean(suspended);
+				const { error } = await serviceClient
+					.from(prefixedTable("users"))
+					.update({ meta })
+					.eq("id", userId);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
+		updateUserReferral: {
+			run: async (userId, referral) => {
+				if (!referral || typeof referral !== "object") return { changes: 0 };
+				const { data: current, error: selectError } = await serviceClient
+					.from(prefixedTable("users"))
+					.select("meta")
+					.eq("id", userId)
+					.maybeSingle();
+				if (selectError) throw selectError;
+				const existing = current?.meta ?? null;
+				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
+				if (Number.isFinite(Number(referral.referrer_user_id))) meta.referrer_user_id = Number(referral.referrer_user_id);
+				if (typeof referral.referral_source === "string") meta.referral_source = referral.referral_source.trim() || null;
+				if (Number.isFinite(Number(referral.referral_image_id))) meta.referral_image_id = Number(referral.referral_image_id);
+				if (Number.isFinite(Number(referral.referral_created_by_user_id))) meta.referral_created_by_user_id = Number(referral.referral_created_by_user_id);
 				const { error } = await serviceClient
 					.from(prefixedTable("users"))
 					.update({ meta })

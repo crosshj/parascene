@@ -507,6 +507,40 @@ export default function createAdminRoutes({ queries, storage }) {
 		res.json({ anon_cid: cid, requests: requestsWithImage });
 	});
 
+	router.get("/admin/share-views", async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+		const limit = Math.min(200, Math.max(1, parseInt(req.query?.limit, 10) || 50));
+		const offset = Math.max(0, parseInt(req.query?.offset, 10) || 0);
+		if (!queries.listSharePageViews?.all) {
+			return res.json({ items: [], total: 0 });
+		}
+		const [items, totalRow] = await Promise.all([
+			queries.listSharePageViews.all(limit, offset),
+			queries.countSharePageViews?.get ? queries.countSharePageViews.get() : Promise.resolve({ count: 0 })
+		]);
+		const total = totalRow?.count ?? 0;
+		const userIds = [...new Set([
+			...(items || []).map((v) => v.sharer_user_id),
+			...(items || []).map((v) => v.created_by_user_id)
+		].filter((id) => id != null))];
+		const userLabelByUserId = {};
+		for (const uid of userIds) {
+			const profile = await queries.selectUserProfileByUserId?.get?.(uid);
+			const user = await queries.selectUserById?.get?.(uid);
+			const userName = (profile?.user_name ?? "").trim() || null;
+			const displayName = (profile?.display_name ?? "").trim() || null;
+			const emailLocal = user?.email ? String(user.email).split("@")[0]?.trim() || null : null;
+			userLabelByUserId[uid] = displayName || userName || emailLocal || `#${uid}`;
+		}
+		const enriched = (items || []).map((v) => ({
+			...v,
+			sharer_label: userLabelByUserId[v.sharer_user_id] ?? `#${v.sharer_user_id}`,
+			creator_label: userLabelByUserId[v.created_by_user_id] ?? `#${v.created_by_user_id}`
+		}));
+		res.json({ items: enriched, total });
+	});
+
 	router.get("/admin/moderation", async (req, res) => {
 		const items = await queries.selectModerationQueue.all();
 		res.json({ items });

@@ -226,12 +226,90 @@ body.share-page {
 	font-weight: 800;
 }
 
+/* Create prompt form (same pattern as landing / try) */
+.share-generate-form {
+	display: flex;
+	align-items: stretch;
+	gap: 0;
+	width: 100%;
+	margin: 0 0 8px;
+	border-radius: 12px;
+	overflow: hidden;
+	background: color-mix(in srgb, var(--text) 8%, var(--bg));
+	border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.share-generate-form:focus-within {
+	border-color: var(--accent);
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.share-generate-input {
+	flex: 1;
+	min-width: 0;
+	padding: 14px 18px;
+	border: 0;
+	background: transparent;
+	color: var(--text);
+	font-family: var(--font-family);
+	font-size: 1rem;
+}
+
+.share-generate-input::placeholder {
+	color: var(--text-muted);
+}
+
+.share-generate-input:focus {
+	outline: none;
+}
+
+.share-generate-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	padding: 14px 20px;
+	border: 0;
+	border-radius: 0;
+	background: var(--accent);
+	color: var(--accent-text);
+	font-family: var(--font-family);
+	font-size: 1rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: filter 0.2s ease, transform 0.1s ease;
+}
+
+.share-generate-btn:hover {
+	filter: brightness(1.08);
+	transform: translateY(-1px);
+}
+
+.share-generate-btn:active {
+	transform: translateY(0);
+}
+
+.share-generate-btn-icon {
+	flex-shrink: 0;
+}
+
+.share-generate-copy {
+	margin: 0 0 18px;
+	color: var(--text-muted);
+	font-size: clamp(0.9rem, 2vw, 1rem);
+}
+
 .share-cta-row {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 12px;
 	align-items: center;
 	justify-content: center;
+}
+
+.share-cta-secondary {
+	margin-top: 4px;
 }
 
 /* CTA button (share page has no global.css so we define here) */
@@ -290,6 +368,17 @@ body.share-page {
 @media (max-width: 900px) {
 	.share-main {
 		padding-bottom: 84px;
+	}
+}
+
+@media (max-width: 520px) {
+	.share-generate-form {
+		flex-direction: column;
+		max-width: none;
+	}
+
+	.share-generate-btn {
+		border-radius: 0 0 10px 10px;
 	}
 }
 

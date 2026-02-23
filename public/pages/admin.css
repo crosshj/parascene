@@ -636,6 +636,36 @@
 	text-decoration: underline;
 }
 
+.share-table-container {
+	overflow-x: auto;
+	margin-top: 0;
+}
+
+.share-table-wrapper {
+	overflow-x: auto;
+}
+
+.share-table-col-referer,
+.share-table-col-cid {
+	max-width: 180px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.share-table-col-cid {
+	font-family: ui-monospace, monospace;
+}
+
+.share-table-creation-link {
+	color: var(--link);
+	text-decoration: none;
+}
+
+.share-table-creation-link:hover {
+	text-decoration: underline;
+}
+
 .anon-detail-modal-body {
 	max-height: 85vh;
 	overflow-y: auto;

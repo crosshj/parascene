@@ -593,6 +593,40 @@ export async function openDb() {
 				});
 			}
 		},
+		insertSharePageView: {
+			run: async (sharerUserId, createdImageId, createdByUserId, referer, anonCid) => {
+				const stmt = db.prepare(
+					`INSERT INTO share_page_views (sharer_user_id, created_image_id, created_by_user_id, referer, anon_cid)
+					 VALUES (?, ?, ?, ?, ?)`
+				);
+				const result = stmt.run(
+					sharerUserId,
+					createdImageId,
+					createdByUserId,
+					referer ?? null,
+					anonCid ?? null
+				);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		listSharePageViews: {
+			all: async (limit, offset = 0) => {
+				const cap = Math.min(Math.max(0, Number(limit) || 50), 200);
+				const off = Math.max(0, Number(offset) || 0);
+				const stmt = db.prepare(
+					`SELECT id, viewed_at, sharer_user_id, created_image_id, created_by_user_id, referer, anon_cid
+					 FROM share_page_views ORDER BY viewed_at DESC LIMIT ? OFFSET ?`
+				);
+				const rows = stmt.all(cap, off) ?? [];
+				return Promise.resolve(rows);
+			}
+		},
+		countSharePageViews: {
+			get: async () => {
+				const row = db.prepare("SELECT COUNT(*) AS count FROM share_page_views").get();
+				return Promise.resolve({ count: row?.count ?? 0 });
+			}
+		},
 		refreshSessionExpiry: {
 			run: async (id, expiresAt) => {
 				const stmt = db.prepare(
@@ -662,6 +696,22 @@ export async function openDb() {
 				const row = stmt.get(userId);
 				const existing = parseUserMeta(row?.meta);
 				const meta = { ...existing, suspended: Boolean(suspended) };
+				const updateStmt = db.prepare("UPDATE users SET meta = ? WHERE id = ?");
+				const result = updateStmt.run(JSON.stringify(meta), userId);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		updateUserReferral: {
+			run: async (userId, referral) => {
+				if (!referral || typeof referral !== "object") return { changes: 0 };
+				const stmt = db.prepare("SELECT meta FROM users WHERE id = ?");
+				const row = stmt.get(userId);
+				const existing = parseUserMeta(row?.meta);
+				const meta = { ...existing };
+				if (Number.isFinite(Number(referral.referrer_user_id))) meta.referrer_user_id = Number(referral.referrer_user_id);
+				if (typeof referral.referral_source === "string") meta.referral_source = referral.referral_source.trim() || null;
+				if (Number.isFinite(Number(referral.referral_image_id))) meta.referral_image_id = Number(referral.referral_image_id);
+				if (Number.isFinite(Number(referral.referral_created_by_user_id))) meta.referral_created_by_user_id = Number(referral.referral_created_by_user_id);
 				const updateStmt = db.prepare("UPDATE users SET meta = ? WHERE id = ?");
 				const result = updateStmt.run(JSON.stringify(meta), userId);
 				return Promise.resolve({ changes: result.changes });

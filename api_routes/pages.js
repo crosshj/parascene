@@ -183,55 +183,25 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 				});
 			}
 
-			// If the viewer is already signed in and would normally have access in-app,
-			// serve the in-app creation detail page at this URL.
-			const viewerId = Number(req.auth?.userId || 0);
-			if (viewerId > 0) {
-				const fs = await import("fs/promises");
-				const viewer = await queries.selectUserById?.get(viewerId).catch(() => null);
-				if (viewer) {
-					const rolePageName = getPageForUser(viewer);
-					const rolePagePath = path.join(pagesDir, rolePageName);
-					const htmlPath = path.join(pagesDir, "creation-detail.html");
-					let pageHtml = await fs.readFile(htmlPath, "utf-8");
-
-					let headerHtml = "";
-					let includeMobileBottomNav = false;
-					try {
-						const roleHtml = await fs.readFile(rolePagePath, "utf-8");
-						const headerMatch = roleHtml.match(/<app-navigation[\s\S]*?<\/app-navigation>/i);
-						if (headerMatch) {
-							headerHtml = headerMatch[0];
-						}
-						includeMobileBottomNav = /<app-navigation-mobile\b/i.test(roleHtml);
-					} catch {
-						// ignore
-					}
-
-					if (headerHtml) {
-						pageHtml = pageHtml.replace("<!--APP_HEADER-->", headerHtml);
-					}
-					pageHtml = pageHtml.replace(
-						"<!--APP_MOBILE_BOTTOM_NAV-->",
-						includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
-					);
-
-					const shareContext = `<script>window.__ps_share_context=${JSON.stringify({
-						creationId: Number(image.id) || 0,
-						version: String(version || ""),
-						token: String(token || "")
-					})};</script>`;
-					pageHtml = pageHtml.replace(
-						/<script\s+type="module"\s+src="\/pages\/creation-detail\.js"><\/script>/i,
-						`${shareContext}\n\t<script type="module" src="/pages/creation-detail.js"></script>`
-					);
-
-					pageHtml = injectCommonHead(pageHtml);
-					res.setHeader("Content-Type", "text/html");
-					res.setHeader("Cache-Control", "no-store");
-					return res.status(200).send(pageHtml);
-				}
+			// Log share page view (sharer/creator) before they go through try — so we have attribution either way.
+			const sharerId = Number(verified.sharedByUserId);
+			const creatorId = Number(image.user_id ?? 0);
+			const referer = typeof req.get("referer") === "string" ? req.get("referer").trim() || null : null;
+			const anonCid = typeof req.cookies?.ps_cid === "string" ? req.cookies.ps_cid.trim() || null : null;
+			if (
+				queries.insertSharePageView?.run &&
+				sharerId > 0 &&
+				creatorId > 0 &&
+				Number.isFinite(Number(image.id))
+			) {
+				queries.insertSharePageView
+					.run(sharerId, Number(image.id), creatorId, referer, anonCid)
+					.catch(() => {});
 			}
+
+			// Always serve the public share page (with create prompt, sign up, sign in) so the
+			// experience is the same for everyone. Logged-in users can open the creation in-app
+			// via the app’s creation detail route if they want the full editor.
 
 			const cacheKey = `${version}:${token}`;
 			const cached = shareHtmlCache.get(cacheKey);
@@ -241,8 +211,6 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 				return res.send(cached.html);
 			}
 
-			const sharerId = Number(verified.sharedByUserId);
-			const creatorId = Number(image.user_id ?? 0);
 			const hasCreator = Number.isFinite(creatorId) && creatorId > 0;
 
 			const [template, sharerProfile, sharerUser, creatorProfile, creatorUser] = await Promise.all([
@@ -352,6 +320,10 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 			const shareImageSrc = `/api/share/${encodeURIComponent(version)}/${encodeURIComponent(token)}/image`;
 			const signInUrl = `/auth?returnUrl=${encodeURIComponent(req.originalUrl || req.path || "/")}#login`;
 
+			const shareIntroHtml = showCreator
+				? `${escapeHtml(heroSharer)} shared this with you. It was created by ${escapeHtml(heroCreator)} on Parascene.`
+				: `${escapeHtml(heroSharer)} shared this creation with you — they made it on Parascene.`;
+
 			let html = replaceTemplateTokens(template, {
 				PAGE_TITLE: escapeHtml(title),
 				PAGE_DESCRIPTION: escapeHtml(description),
@@ -364,6 +336,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 				OVERLAY_TITLE_HTML: overlayTitleHtml,
 				SHARER_AVATAR_HTML: sharerAvatarHtml,
 				SHARER_NAME: escapeHtml(heroSharer),
+				SHARE_INTRO_HTML: shareIntroHtml,
 				CREATOR_BLOCK_HTML: creatorBlockHtml,
 				SIGNIN_URL: escapeHtml(signInUrl),
 				REFERRER_USER_ID: String(Number(verified.sharedByUserId) || 0),

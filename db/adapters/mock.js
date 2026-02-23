@@ -204,6 +204,21 @@ export function openDb() {
 				return { insertId: session.id, lastInsertRowid: session.id, changes: 1 };
 			}
 		},
+		insertSharePageView: {
+			run: async (sharerUserId, createdImageId, createdByUserId, referer, anonCid) => {
+				// No-op for mock; real adapters persist to share_page_views.
+				return { changes: 1 };
+			}
+		},
+		listSharePageViews: {
+			all: async (limit, offset = 0) => []
+		},
+		countSharePageViews: {
+			get: async () => ({ count: 0 })
+		},
+		updateUserReferral: {
+			run: async (userId, referral) => ({ changes: 1 })
+		},
 		refreshSessionExpiry: {
 			run: async (id, expiresAt) => {
 				const session = sessions.find((entry) => entry.id === Number(id));

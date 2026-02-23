@@ -280,6 +280,18 @@ export default function createProfileRoutes({ queries }) {
 		// Support both insertId (standardized) and lastInsertRowid (legacy SQLite)
 		const userId = info.insertId || info.lastInsertRowid;
 
+		// Persist referral (sharer/source) from share page → auth form so we know who referred this user
+		const referrerUserId = req.body.referrer_user_id != null ? Number(req.body.referrer_user_id) : null;
+		if (queries.updateUserReferral?.run && Number.isFinite(referrerUserId) && referrerUserId > 0) {
+			const referral = {
+				referrer_user_id: referrerUserId,
+				referral_source: typeof req.body.referral_source === "string" ? req.body.referral_source.trim() || null : null,
+				referral_image_id: req.body.referral_image_id != null ? Number(req.body.referral_image_id) : null,
+				referral_created_by_user_id: req.body.referral_created_by_user_id != null ? Number(req.body.referral_created_by_user_id) : null
+			};
+			queries.updateUserReferral.run(userId, referral).catch(() => {});
+		}
+
 		// Initialize credits for new user with 100 starting credits
 		try {
 			await queries.insertUserCredits.run(userId, 100, null);
