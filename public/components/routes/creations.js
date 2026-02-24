@@ -62,8 +62,8 @@ class AppRouteCreations extends HTMLElement {
             <h3>Creations</h3>
             <div class="creation-detail-more creations-page-kebab">
               ${renderCreationKebabHtml({
-                menuContentHtml: '<button class="feed-card-menu-item" type="button" data-creations-bulk-actions>Bulk Actions</button><button class="feed-card-menu-item" type="button" data-creations-refresh>Refresh</button>'
-              })}
+			menuContentHtml: '<button class="feed-card-menu-item" type="button" data-creations-bulk-actions>Bulk Actions</button><button class="feed-card-menu-item" type="button" data-creations-refresh>Refresh</button>'
+		})}
             </div>
           </div>
           <p>Your generated creations. Share them when you're ready.</p>
@@ -764,6 +764,11 @@ class AppRouteCreations extends HTMLElement {
 			const isCreating = status === 'creating';
 			const isFailed = status === 'failed';
 
+			const bulkOverlay = () => html`
+			<div class="creations-card-bulk-overlay" data-creations-bulk-overlay aria-hidden="true">
+				<input type="checkbox" class="creations-card-bulk-checkbox" data-creations-bulk-checkbox aria-label="Select creation" />
+			</div>`;
+
 			if (isPending) {
 				card.innerHTML = html`
             <div class="route-media loading" data-image-id="${item.id}" data-status="pending" aria-hidden="true"></div>
@@ -794,17 +799,19 @@ class AppRouteCreations extends HTMLElement {
 					(meta && meta.error_code === 'timeout' ? 'This creation timed out.' : 'This creation failed.');
 				const isModerated = item.is_moderated_error === true;
 				card.style.cursor = 'pointer';
+				card.dataset.imageId = String(item.id);
 				card.addEventListener('click', () => { window.location.href = `/creations/${item.id}`; });
 				card.innerHTML = html`
-            <div class="route-media route-media-error${isModerated ? ' route-media-error-moderated' : ''}" data-image-id="${item.id}" data-status="failed" aria-hidden="true">${isModerated ? html`<span class="route-media-error-moderated-icon" role="img" aria-label="Content moderated">${eyeHiddenIcon()}</span>` : ''}</div>
-            <div class="route-details">
-              <div class="route-details-content">
-                <div class="route-title">Creation unavailable</div>
-                <div class="route-summary">${reason}</div>
-                <div class="route-meta" title="${formatDateTime(item.created_at)}">Created ${formatRelativeTime(item.created_at)}</div>
-              </div>
-            </div>
-          `;
+					<div class="route-media route-media-error${isModerated ? ' route-media-error-moderated' : ''}" data-image-id="${item.id}" data-status="failed" aria-hidden="true">${isModerated ? html`<span class="route-media-error-moderated-icon" role="img" aria-label="Content moderated">${eyeHiddenIcon()}</span>` : ''}</div>
+					<div class="route-details">
+					<div class="route-details-content">
+						<div class="route-title">Creation unavailable</div>
+						<div class="route-summary">${reason}</div>
+						<div class="route-meta" title="${formatDateTime(item.created_at)}">Created ${formatRelativeTime(item.created_at)}</div>
+					</div>
+					</div>
+					${bulkOverlay()}
+				`;
 			} else {
 				card.style.cursor = 'pointer';
 				card.addEventListener('click', () => { window.location.href = `/creations/${item.id}`; });
@@ -823,15 +830,12 @@ class AppRouteCreations extends HTMLElement {
                 <div class="route-title">${item.title || 'Untitled'}</div>
                 ${publishedInfo}
                 <div class="route-meta" title="${formatDateTime(item.created_at)}">Created ${formatRelativeTime(item.created_at)}</div>`;
-				const bulkOverlay = html`
-            <div class="creations-card-bulk-overlay" data-creations-bulk-overlay aria-hidden="true">
-              <input type="checkbox" class="creations-card-bulk-checkbox" data-creations-bulk-checkbox aria-label="Select creation" />
-            </div>`;
+
 				card.innerHTML = buildCreationCardShell({
 					mediaAttrs: { 'data-image-id': String(item.id), 'data-status': 'completed' },
 					badgesHtml: publishedBadge,
 					detailsContentHtml: detailsContent,
-					bulkOverlayHtml: bulkOverlay,
+					bulkOverlayHtml: bulkOverlay(),
 				});
 				const mediaEl = card.querySelector('.route-media');
 				const url = item.thumbnail_url || item.url;
