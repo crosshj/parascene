@@ -3,6 +3,7 @@
  * Loads only nav, nav-mobile, modals (profile, credits, notifications, server), and those routes.
  */
 
+import '../components/elements/tabs.js';
 import '../components/navigation/index.js';
 import '../components/navigation/mobile.js';
 import '../components/modals/profile.js';
@@ -27,6 +28,7 @@ const APP_TAGS = [
 	'app-route-explore',
 	'app-route-creations',
 	'app-route-servers',
+	'app-tabs',
 ];
 
 export async function init() {
