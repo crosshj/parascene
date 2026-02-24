@@ -1,5 +1,6 @@
 import { formatDateTime, formatRelativeTime } from '../../shared/datetime.js';
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
+import { renderCreationKebabHtml, setupKebabDropdown } from '../../shared/kebabMenu.js';
 import { eyeHiddenIcon } from '../../icons/svg-strings.js';
 
 const html = String.raw;
@@ -127,8 +128,24 @@ class AppRouteCreations extends HTMLElement {
 		this.innerHTML = html`
       <div class="creations-route">
         <div class="route-header">
-          <h3>Creations</h3>
+          <div class="route-header-title-row">
+            <h3>Creations</h3>
+            <div class="creation-detail-more creations-page-kebab">
+              ${renderCreationKebabHtml({
+                menuContentHtml: '<button class="feed-card-menu-item" type="button" data-creations-bulk-actions>Bulk Actions</button><button class="feed-card-menu-item" type="button" data-creations-refresh>Refresh</button>'
+              })}
+            </div>
+          </div>
           <p>Your generated creations. Share them when you're ready.</p>
+        </div>
+        <div class="creations-bulk-bar" data-creations-bulk-bar aria-hidden="true">
+          <div class="creations-bulk-bar-inner">
+            <span class="creations-bulk-bar-label">Bulk Actions</span>
+            <div class="creations-bulk-actions">
+              <button type="button" class="btn-secondary creations-bulk-delete-btn" data-creations-bulk-delete disabled>Delete</button>
+            </div>
+            <button type="button" class="creations-bulk-bar-close" data-creations-bulk-close aria-label="Close bulk actions">×</button>
+          </div>
         </div>
         <div class="route-cards content-cards-image-grid" data-creations-container>
           <div class="route-empty route-empty-image-grid route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
@@ -136,6 +153,20 @@ class AppRouteCreations extends HTMLElement {
         <div class="creations-load-more-sentinel" data-creations-sentinel aria-hidden="true"></div>
         <div class="creations-load-more-fallback" data-creations-load-more-fallback>
           <button type="button" class="btn-secondary creations-load-more-btn" data-creations-load-more-btn>Load more</button>
+        </div>
+        <div class="creations-bulk-delete-modal-overlay" data-creations-bulk-delete-modal aria-hidden="true">
+          <div class="creations-bulk-delete-modal">
+            <h3>Delete selected creations?</h3>
+            <p class="creations-bulk-delete-modal-message" data-creations-bulk-delete-message></p>
+            <p class="creations-bulk-delete-modal-error" data-creations-bulk-delete-error role="alert"></p>
+            <div class="creations-bulk-delete-modal-footer">
+              <button type="button" class="btn-secondary" data-creations-bulk-delete-cancel>Cancel</button>
+              <button type="button" class="btn-danger creations-bulk-delete-confirm-btn" data-creations-bulk-delete-confirm>
+                <span class="creations-bulk-delete-confirm-label">Delete</span>
+                <span class="creations-bulk-delete-confirm-spinner" aria-hidden="true"></span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     `;
@@ -167,6 +198,233 @@ class AppRouteCreations extends HTMLElement {
 			this.refreshOnActivate();
 			this.startPolling();
 		}
+		this.setupCreationsPageKebab();
+		this.setupBulkActions();
+	}
+
+	setupCreationsPageKebab() {
+		const wrap = this.querySelector('.creations-page-kebab');
+		const moreBtn = this.querySelector('.creations-page-kebab [data-creation-more-button]');
+		const menu = this.querySelector('.creations-page-kebab [data-creation-menu]');
+		const refreshBtn = this.querySelector('[data-creations-refresh]');
+		const bulkActionsBtn = this.querySelector('[data-creations-bulk-actions]');
+		if (moreBtn && menu && wrap) {
+			setupKebabDropdown(moreBtn, menu, { wrapEl: wrap });
+		}
+		if (refreshBtn) {
+			refreshBtn.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				menu?.style && (menu.style.display = 'none');
+				this.loadCreations({ force: true });
+			});
+		}
+		if (bulkActionsBtn) {
+			bulkActionsBtn.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				menu?.style && (menu.style.display = 'none');
+				this.enterBulkMode();
+			});
+		}
+	}
+
+	enterBulkMode() {
+		const route = this.querySelector('.creations-route');
+		if (route) route.classList.add('is-bulk-mode');
+		const bar = this.querySelector('[data-creations-bulk-bar]');
+		if (bar) {
+			bar.removeAttribute('aria-hidden');
+		}
+		this.clearBulkSelection();
+		this.updateBulkBarSelection();
+	}
+
+	exitBulkMode() {
+		const route = this.querySelector('.creations-route');
+		if (route) route.classList.remove('is-bulk-mode');
+		const bar = this.querySelector('[data-creations-bulk-bar]');
+		if (bar) bar.setAttribute('aria-hidden', 'true');
+		this.clearBulkSelection();
+		this.updateBulkBarSelection();
+	}
+
+	clearBulkSelection() {
+		this.querySelectorAll('[data-creations-bulk-checkbox]').forEach((cb) => {
+			cb.checked = false;
+		});
+	}
+
+	updateBulkBarSelection() {
+		const bar = this.querySelector('[data-creations-bulk-bar]');
+		const deleteBtn = this.querySelector('[data-creations-bulk-delete]');
+		if (!bar || !deleteBtn) return;
+		const checked = this.querySelectorAll('[data-creations-bulk-checkbox]:checked').length;
+		const hasSelection = checked > 0;
+		bar.classList.toggle('has-selection', hasSelection);
+		deleteBtn.disabled = !hasSelection;
+	}
+
+	setupBulkActions() {
+		const container = this.querySelector('[data-creations-container]');
+		const bulkClose = this.querySelector('[data-creations-bulk-close]');
+		const bulkDelete = this.querySelector('[data-creations-bulk-delete]');
+		const modalOverlay = this.querySelector('[data-creations-bulk-delete-modal]');
+		const modalCancel = this.querySelector('[data-creations-bulk-delete-cancel]');
+		const modalConfirm = this.querySelector('[data-creations-bulk-delete-confirm]');
+		const modalError = this.querySelector('[data-creations-bulk-delete-error]');
+
+		if (bulkClose) {
+			bulkClose.addEventListener('click', () => this.exitBulkMode());
+		}
+
+		if (container) {
+			// Use capture phase so we run before the card's click handler (which would navigate to detail)
+			container.addEventListener('click', (e) => {
+				const overlay = e.target.closest('[data-creations-bulk-overlay]');
+				if (!overlay) return;
+				e.stopPropagation();
+				if (e.target.matches('[data-creations-bulk-checkbox]')) {
+					// Checkbox toggles itself; we only stop propagation so card doesn't navigate
+					return;
+				}
+				e.preventDefault();
+				const cb = overlay.querySelector('[data-creations-bulk-checkbox]');
+				if (cb) {
+					cb.checked = !cb.checked;
+					this.updateBulkBarSelection();
+				}
+			}, true);
+			container.addEventListener('change', (e) => {
+				if (e.target.matches('[data-creations-bulk-checkbox]')) this.updateBulkBarSelection();
+			});
+		}
+
+		if (bulkDelete) {
+			bulkDelete.addEventListener('click', (e) => {
+				e.preventDefault();
+				this.openBulkDeleteModal();
+			});
+		}
+
+		if (modalOverlay) {
+			modalOverlay.addEventListener('click', (e) => {
+				if (e.target === modalOverlay) this.closeBulkDeleteModal();
+			});
+		}
+		if (modalCancel) {
+			modalCancel.addEventListener('click', () => this.closeBulkDeleteModal());
+		}
+		if (modalConfirm) {
+			modalConfirm.addEventListener('click', () => this.confirmBulkDelete());
+		}
+	}
+
+	getBulkDeleteCounts() {
+		const cards = Array.from(this.querySelectorAll('.route-card.route-card-image[data-image-id]'));
+		let toDelete = 0;
+		let published = 0;
+		for (const card of cards) {
+			const cb = card.querySelector('[data-creations-bulk-checkbox]:checked');
+			if (!cb) continue;
+			if (card.dataset.published === '1') published += 1;
+			else toDelete += 1;
+		}
+		return { toDelete, published };
+	}
+
+	openBulkDeleteModal() {
+		const modal = this.querySelector('[data-creations-bulk-delete-modal]');
+		const messageEl = this.querySelector('[data-creations-bulk-delete-message]');
+		const errorEl = this.querySelector('[data-creations-bulk-delete-error]');
+		const confirmBtn = this.querySelector('[data-creations-bulk-delete-confirm]');
+		const { toDelete, published } = this.getBulkDeleteCounts();
+
+		if (messageEl) {
+			const parts = [];
+			if (toDelete > 0) {
+				parts.push(`${toDelete} item${toDelete === 1 ? '' : 's'} will be deleted.`);
+			} else {
+				parts.push('No items will be deleted.');
+			}
+			if (published > 0) {
+				parts.push(`${published} published item${published === 1 ? '' : 's'} selected will not be deleted.`);
+			}
+			messageEl.textContent = parts.join(' ');
+		}
+		if (confirmBtn) {
+			confirmBtn.disabled = toDelete === 0;
+			confirmBtn.classList.remove('is-loading');
+		}
+		if (errorEl) {
+			errorEl.classList.remove('visible');
+			errorEl.textContent = '';
+		}
+		if (modal) {
+			modal.classList.add('open');
+			modal.removeAttribute('aria-hidden');
+			document.body.classList.add('modal-open');
+		}
+	}
+
+	closeBulkDeleteModal() {
+		const modal = this.querySelector('[data-creations-bulk-delete-modal]');
+		if (modal) {
+			modal.classList.remove('open');
+			modal.setAttribute('aria-hidden', 'true');
+			document.body.classList.remove('modal-open');
+		}
+	}
+
+	async confirmBulkDelete() {
+		const confirmBtn = this.querySelector('[data-creations-bulk-delete-confirm]');
+		const errorEl = this.querySelector('[data-creations-bulk-delete-error]');
+		const cards = Array.from(this.querySelectorAll('.route-card.route-card-image[data-image-id]'));
+		const selected = cards.filter((card) => {
+			const cb = card.querySelector('[data-creations-bulk-checkbox]:checked');
+			return cb && card.dataset.published !== '1';
+		});
+		const idsToDelete = selected.map((c) => c.dataset.imageId).filter(Boolean);
+
+		if (idsToDelete.length === 0) {
+			this.closeBulkDeleteModal();
+			return;
+		}
+
+		confirmBtn.disabled = true;
+		confirmBtn.classList.add('is-loading');
+		if (errorEl) {
+			errorEl.classList.remove('visible');
+			errorEl.textContent = '';
+		}
+
+		let lastError = null;
+		for (const id of idsToDelete) {
+			try {
+				const res = await fetch(`/api/create/images/${id}`, { method: 'DELETE', credentials: 'include' });
+				if (!res.ok) {
+					const data = await res.json().catch(() => ({}));
+					lastError = data?.error || res.statusText || 'Delete failed';
+					break;
+				}
+			} catch (err) {
+				lastError = err?.message || 'Network error';
+				break;
+			}
+		}
+
+		if (lastError) {
+			if (errorEl) {
+				errorEl.textContent = lastError;
+				errorEl.classList.add('visible');
+			}
+			confirmBtn.disabled = false;
+			confirmBtn.classList.remove('is-loading');
+			return;
+		}
+
+		this.closeBulkDeleteModal();
+		window.location.reload();
 	}
 
 	setupRouteListener() {
@@ -623,6 +881,8 @@ class AppRouteCreations extends HTMLElement {
 				card.style.cursor = 'pointer';
 				card.addEventListener('click', () => { window.location.href = `/creations/${item.id}`; });
 				const isPublished = item.published === true || item.published === 1;
+				card.dataset.imageId = String(item.id);
+				card.dataset.published = isPublished ? '1' : '0';
 				let publishedBadge = '';
 				let publishedInfo = '';
 				if (isPublished) {
@@ -648,6 +908,9 @@ class AppRouteCreations extends HTMLElement {
                 ${publishedInfo}
                 <div class="route-meta" title="${formatDateTime(item.created_at)}">Created ${formatRelativeTime(item.created_at)}</div>
               </div>
+            </div>
+            <div class="creations-card-bulk-overlay" data-creations-bulk-overlay aria-hidden="true">
+              <input type="checkbox" class="creations-card-bulk-checkbox" data-creations-bulk-checkbox aria-label="Select creation" />
             </div>
           `;
 				const mediaEl = card.querySelector('.route-media');

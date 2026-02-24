@@ -7,6 +7,7 @@ import { processUserText, hydrateUserTextLinks } from '/shared/userText.js';
 import { attachAutoGrowTextarea } from '/shared/autogrow.js';
 import { textsSameWithinTolerance } from '/shared/textCompare.js';
 import { buildProfilePath } from '/shared/profileLinks.js';
+import { renderCreationKebabHtml, setupKebabDropdown } from '/shared/kebabMenu.js';
 import '../components/modals/publish.js';
 import '../components/modals/creation-details.js';
 import '../components/modals/share.js';
@@ -1212,18 +1213,9 @@ async function loadCreation() {
 					</button>
 					` : ``}
 					<div class="creation-detail-more">
-						<button class="feed-card-action feed-card-action-more" type="button" aria-label="More"
-							data-creation-more-button>
-							<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-								<circle cx="12" cy="5" r="1.6"></circle>
-								<circle cx="12" cy="12" r="1.6"></circle>
-								<circle cx="12" cy="19" r="1.6"></circle>
-							</svg>
-						</button>
-						<div class="feed-card-menu" data-creation-menu style="display: none;">
-							${isOwner ? `<button class="feed-card-menu-item" type="button" data-creation-menu-set-avatar>Set as profile picture</button>` : ''}
-							<button class="feed-card-menu-item" type="button" data-creation-menu-landscape style="display: none;">Landscape</button>
-						</div>
+						${renderCreationKebabHtml({
+							menuContentHtml: `${isOwner ? `<button class="feed-card-menu-item" type="button" data-creation-menu-set-avatar>Set as profile picture</button>` : ''}<button class="feed-card-menu-item" type="button" data-creation-menu-landscape style="display: none;">Landscape</button>`
+						})}
 					</div>
 				</div>
 			</div>
@@ -1501,42 +1493,13 @@ async function loadCreation() {
 		const moreWrap = detailContent.querySelector('.creation-detail-more');
 
 		if (moreBtn instanceof HTMLButtonElement && menu instanceof HTMLElement && moreWrap instanceof HTMLElement) {
-			const closeMenu = (e) => {
-				if (!menu.contains(e.target) && !moreBtn.contains(e.target)) {
-					menu.style.display = 'none';
-					document.removeEventListener('click', closeMenu);
-				}
-			};
-
-			moreBtn.addEventListener('click', (e) => {
-				e.preventDefault();
-				e.stopPropagation();
-
-				const isVisible = menu.style.display !== 'none';
-				menu.style.display = isVisible ? 'none' : 'block';
-
-				if (!isVisible) {
-					const buttonRect = moreBtn.getBoundingClientRect();
-					const wrapRect = moreWrap.getBoundingClientRect();
-					menu.style.position = 'absolute';
-					menu.style.right = `${wrapRect.right - buttonRect.right}px`;
-					menu.style.bottom = `${wrapRect.bottom - buttonRect.top + 4}px`;
-					menu.style.zIndex = '1000';
-
-					setTimeout(() => {
-						document.addEventListener('click', closeMenu);
-					}, 0);
-				} else {
-					document.removeEventListener('click', closeMenu);
-				}
-			});
+			setupKebabDropdown(moreBtn, menu, { wrapEl: moreWrap });
 
 			if (setAvatarMenuBtn instanceof HTMLButtonElement) {
 				setAvatarMenuBtn.addEventListener('click', async (e) => {
 					e.preventDefault();
 					e.stopPropagation();
 					menu.style.display = 'none';
-					document.removeEventListener('click', closeMenu);
 					const setAvatarBtn = detailContent.querySelector('button[data-set-avatar-button]');
 					if (setAvatarBtn) setAvatarBtn.click();
 				});
@@ -1547,7 +1510,6 @@ async function loadCreation() {
 					e.preventDefault();
 					e.stopPropagation();
 					menu.style.display = 'none';
-					document.removeEventListener('click', closeMenu);
 					const landscapeBtn = detailContent.querySelector('[data-landscape-btn]');
 					if (landscapeBtn && !landscapeBtn.disabled) landscapeBtn.click();
 				});

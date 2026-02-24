@@ -24,6 +24,7 @@
 	--error-bg: #fef2f2;
 	--error-border: #fecaca;
 	--error-text: #b91c1c;
+	--error: var(--error-text);
 
 	/* Share vendor colors */
 	--share-brand-text: #ffffff;
@@ -81,6 +82,7 @@
 		--error-bg: #2a1520;
 		--error-border: #5b1f35;
 		--error-text: #fda4af;
+		--error: var(--error-text);
 
 		/* Share vendor colors (dark mode tweaks) */
 		--share-x-bg: #ffffff;
@@ -464,6 +466,11 @@ main>section:first-of-type:not(.hero) {
 
 section {
 	overflow-x: auto;
+}
+
+/* Allow sticky bulk bar to stick to viewport: avoid overflow containment when section contains creations route */
+section:has(.creations-route) {
+	overflow: visible;
 }
 
 section+section {
@@ -2219,6 +2226,18 @@ header .hamburger-button.active span:nth-child(3) {
 	gap: 0.75rem;
 }
 
+.route-header-title-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	overflow: visible;
+}
+
+.route-header-title-row h3 {
+	margin: 0;
+}
+
 .route-header h3 {
 	margin: 0;
 }
@@ -2844,6 +2863,7 @@ app-route-feed {
 	position: relative;
 	display: inline-flex;
 	align-items: center;
+	overflow: visible;
 }
 
 .creation-detail-meta-spacer {
@@ -3411,6 +3431,229 @@ app-route-feed {
 
 .creations-load-more-fallback .creations-load-more-btn {
 	min-width: 120px;
+}
+
+/* Creations list – bulk actions bar and card overlays */
+.creations-bulk-bar {
+	display: none;
+	position: sticky;
+	top: 0;
+	z-index: 100;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	padding: 12px 16px;
+	margin-bottom: 12px;
+	box-shadow: var(--shadow);
+}
+
+.creations-route.is-bulk-mode .creations-bulk-bar {
+	display: block;
+}
+
+.creations-bulk-bar-inner {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+}
+
+.creations-bulk-bar-label {
+	font-weight: 600;
+	font-size: 0.9375rem;
+	color: var(--text);
+	margin: 0;
+}
+
+.creations-bulk-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.creations-bulk-bar .creations-bulk-delete-btn {
+	/* Secondary by default */
+}
+
+.creations-bulk-bar.has-selection .creations-bulk-delete-btn {
+	/* Primary + error/danger when selection exists */
+	background: var(--error);
+	color: var(--accent-text);
+	border-color: var(--error);
+	font-weight: 600;
+}
+
+.creations-bulk-bar.has-selection .creations-bulk-delete-btn:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--error) 90%, black);
+	border-color: color-mix(in srgb, var(--error) 90%, black);
+}
+
+.creations-bulk-bar-close {
+	margin-left: auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	height: 36px;
+	padding: 0;
+	background: transparent;
+	border: none;
+	border-radius: 6px;
+	color: var(--text-muted);
+	cursor: pointer;
+	font-size: 1.25rem;
+	line-height: 1;
+	transition: color 0.2s, background 0.2s;
+}
+
+.creations-bulk-bar-close:hover {
+	color: var(--text);
+	background: var(--surface-strong);
+}
+
+.creations-bulk-bar-close:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
+
+/* Card overlay when bulk mode is active */
+.creations-card-bulk-overlay {
+	position: absolute;
+	inset: 0;
+	z-index: 2;
+	display: none;
+	align-items: flex-start;
+	justify-content: flex-start;
+	padding: 10px;
+	background: color-mix(in srgb, var(--bg) 40%, transparent);
+	pointer-events: none;
+	border-radius: inherit;
+}
+
+.creations-route.is-bulk-mode .creations-card-bulk-overlay {
+	display: flex;
+	pointer-events: auto;
+}
+
+.creations-card-bulk-checkbox {
+	width: 22px;
+	height: 22px;
+	border-radius: 6px;
+	border: 2px solid var(--border);
+	background: var(--surface);
+	cursor: pointer;
+	accent-color: var(--accent);
+	flex-shrink: 0;
+	pointer-events: auto;
+}
+
+.creations-card-bulk-checkbox:checked {
+	background: var(--accent);
+	border-color: var(--accent);
+}
+
+.creations-route .route-card:has(.creations-card-bulk-checkbox:checked) {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+	border-radius: 6px;
+}
+
+/* Bulk delete confirm modal (small) */
+.creations-bulk-delete-modal-overlay {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.5);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 10000;
+	opacity: 0;
+	visibility: hidden;
+	transition: opacity 0.2s, visibility 0.2s;
+}
+
+.creations-bulk-delete-modal-overlay.open {
+	opacity: 1;
+	visibility: visible;
+}
+
+.creations-bulk-delete-modal {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 14px;
+	box-shadow: var(--shadow);
+	max-width: 380px;
+	width: 90%;
+	padding: 20px;
+	transform: scale(0.95);
+	transition: transform 0.2s;
+}
+
+.creations-bulk-delete-modal-overlay.open .creations-bulk-delete-modal {
+	transform: scale(1);
+}
+
+.creations-bulk-delete-modal h3 {
+	margin: 0 0 12px;
+	font-size: 1.125rem;
+	font-weight: 600;
+	color: var(--text);
+}
+
+.creations-bulk-delete-modal p {
+	margin: 0 0 16px;
+	color: var(--text-muted);
+	font-size: 0.9375rem;
+	line-height: 1.45;
+}
+
+.creations-bulk-delete-modal-error {
+	margin: 0 0 12px;
+	padding: 10px 12px;
+	background: var(--error-bg);
+	border: 1px solid var(--error-border);
+	border-radius: 6px;
+	color: var(--error-text);
+	font-size: 0.875rem;
+	display: none;
+}
+
+.creations-bulk-delete-modal-error.visible {
+	display: block;
+}
+
+.creations-bulk-delete-modal-footer {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 16px;
+}
+
+.creations-bulk-delete-modal-footer .btn-secondary {
+	min-width: 80px;
+}
+
+.creations-bulk-delete-modal-footer .creations-bulk-delete-confirm-btn {
+	min-width: 100px;
+}
+
+.creations-bulk-delete-confirm-btn .creations-bulk-delete-confirm-spinner {
+	display: none;
+	width: 1em;
+	height: 1em;
+	border: 2px solid var(--border);
+	border-top-color: currentColor;
+	border-radius: 50%;
+	animation: spin 0.8s linear infinite;
+	vertical-align: middle;
+}
+
+.creations-bulk-delete-confirm-btn.is-loading .creations-bulk-delete-confirm-label {
+	visibility: hidden;
+}
+
+.creations-bulk-delete-confirm-btn.is-loading .creations-bulk-delete-confirm-spinner {
+	display: inline-block;
 }
 
 .explore-route {
