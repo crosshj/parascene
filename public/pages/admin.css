@@ -713,6 +713,14 @@
 	font-weight: 500;
 }
 
+.anon-request-user-agent {
+	display: block;
+	width: 100%;
+	word-break: break-all;
+	font-size: 0.75rem;
+	opacity: 0.9;
+}
+
 .anon-request-prompt {
 	grid-column: 1;
 	font-size: 0.9rem;

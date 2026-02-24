@@ -3,6 +3,7 @@ import { fetchJsonWithStatusDeduped } from '/shared/api.js';
 import { attachAutoGrowTextarea } from '/shared/autogrow.js';
 import { DEFAULT_APP_ORIGIN } from '/shared/userText.js';
 import { getMethodIntentList, loadMutateServerOptions } from '/shared/mutateOptions.js';
+import { renderEmptyState, renderEmptyLoading, renderEmptyError } from '/shared/emptyState.js';
 
 const html = String.raw;
 
@@ -99,25 +100,19 @@ async function loadEditPage() {
 
 	const creationId = getCreationId();
 	if (!creationId) {
-		editContent.innerHTML = html`
-			<div class="route-empty">
-				<div class="route-empty-title">Invalid creation ID</div>
-			</div>
-		`;
+		editContent.innerHTML = renderEmptyState({ title: 'Invalid creation ID' });
 		return;
 	}
 
-	editContent.innerHTML = '<div class="route-empty route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>';
+	editContent.innerHTML = renderEmptyLoading({});
 
 	try {
 		const response = await fetch(`/api/create/images/${creationId}`, { credentials: 'include' });
 		if (!response.ok) {
-			editContent.innerHTML = html`
-				<div class="route-empty">
-					<div class="route-empty-title">Unable to load creation</div>
-					<div class="route-empty-message">The creation you're trying to edit doesn't exist or you don't have access.</div>
-				</div>
-			`;
+			editContent.innerHTML = renderEmptyState({
+				title: 'Unable to load creation',
+				message: "The creation you're trying to edit doesn't exist or you don't have access.",
+			});
 			return;
 		}
 
@@ -139,12 +134,10 @@ async function loadEditPage() {
 		}
 
 		if (!canEdit) {
-			editContent.innerHTML = html`
-				<div class="route-empty">
-					<div class="route-empty-title">This creation is not ready to mutate</div>
-					<div class="route-empty-message">Wait for it to finish rendering, then try again.</div>
-				</div>
-			`;
+			editContent.innerHTML = renderEmptyState({
+				title: 'This creation is not ready to mutate',
+				message: 'Wait for it to finish rendering, then try again.',
+			});
 			return;
 		}
 
@@ -180,13 +173,10 @@ async function loadEditPage() {
 		});
 
 		if (flattened.length === 0) {
-			editContent.innerHTML = html`
-				<div class="route-empty">
-					<div class="route-empty-title">No mutate methods available</div>
-					<div class="route-empty-message">No servers currently expose a method with intent <strong>image_mutate</strong>.
-					</div>
-				</div>
-			`;
+			editContent.innerHTML = renderEmptyState({
+				title: 'No mutate methods available',
+				messageHtml: 'No servers currently expose a method with intent <strong>image_mutate</strong>.',
+			});
 			return;
 		}
 
@@ -503,12 +493,10 @@ async function loadEditPage() {
 			});
 		}
 	} catch {
-		editContent.innerHTML = html`
-			<div class="route-empty">
-				<div class="route-empty-title">Unable to load creation</div>
-				<div class="route-empty-message">An error occurred while loading the creation.</div>
-			</div>
-		`;
+		editContent.innerHTML = renderEmptyState({
+			title: 'Unable to load creation',
+			message: 'An error occurred while loading the creation.',
+		});
 	}
 }
 

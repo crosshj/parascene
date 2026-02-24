@@ -367,7 +367,8 @@ export function openDb() {
 			}
 		},
 		insertSharePageView: {
-			run: async (sharerUserId, createdImageId, createdByUserId, referer, anonCid) => {
+			run: async (sharerUserId, createdImageId, createdByUserId, referer, anonCid, meta = null) => {
+				const metaVal = typeof meta === "object" && meta !== null ? meta : meta == null ? null : meta;
 				const { error } = await serviceClient
 					.from(prefixedTable("share_page_views"))
 					.insert({
@@ -375,7 +376,8 @@ export function openDb() {
 						created_image_id: createdImageId,
 						created_by_user_id: createdByUserId,
 						referer: referer ?? null,
-						anon_cid: anonCid ?? null
+						anon_cid: anonCid ?? null,
+						meta: metaVal
 					});
 				if (error) throw error;
 				return { changes: 1 };
@@ -390,7 +392,7 @@ export function openDb() {
 				const ascending = sortDir === "asc";
 				const { data, error } = await serviceClient
 					.from(prefixedTable("share_page_views"))
-					.select("id, viewed_at, sharer_user_id, created_image_id, created_by_user_id, referer, anon_cid")
+					.select("id, viewed_at, sharer_user_id, created_image_id, created_by_user_id, referer, anon_cid, meta")
 					.order(orderCol, { ascending })
 					.range(off, off + cap - 1);
 				if (error) throw error;
@@ -3264,7 +3266,7 @@ export function openDb() {
 			all: async (anonCid) => {
 				const { data, error } = await serviceClient
 					.from(prefixedTable("try_requests"))
-					.select("id, anon_cid, prompt, created_at, fulfilled_at, created_image_anon_id")
+					.select("id, anon_cid, prompt, created_at, fulfilled_at, created_image_anon_id, meta")
 					.eq("anon_cid", anonCid)
 					.order("created_at", { ascending: false });
 				if (error) throw error;
@@ -3297,6 +3299,24 @@ export function openDb() {
 					const bAt = b.last_request_at || "";
 					return bAt.localeCompare(aAt);
 				});
+			}
+		},
+		/** Latest try_request (by created_at) per anon_cid for given cids; returns rows with anon_cid, meta. Used to attach last_user_agent to anon list. */
+		selectTryRequestsLatestMetaByCids: {
+			all: async (cids) => {
+				if (!Array.isArray(cids) || cids.length === 0) return [];
+				const { data, error } = await serviceClient
+					.from(prefixedTable("try_requests"))
+					.select("anon_cid, meta, created_at")
+					.in("anon_cid", cids)
+					.order("created_at", { ascending: false });
+				if (error) throw error;
+				const rows = data ?? [];
+				const byCid = new Map();
+				for (const r of rows) {
+					if (!byCid.has(r.anon_cid)) byCid.set(r.anon_cid, { anon_cid: r.anon_cid, meta: r.meta });
+				}
+				return Array.from(byCid.values());
 			}
 		},
 		/** Rows where created_image_anon_id IS NULL (transitioned); returns anon_cid, meta for building transition map. */

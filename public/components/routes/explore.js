@@ -2,80 +2,11 @@ import { formatDateTime, formatRelativeTime } from '../../shared/datetime.js';
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 import { searchIcon } from '../../icons/svg-strings.js';
 import { buildProfilePath } from '../../shared/profileLinks.js';
+import { setRouteMediaBackgroundImage } from '../../shared/routeMedia.js';
+import { renderEmptyState, renderEmptyLoading, renderEmptyError } from '../../shared/emptyState.js';
+import { buildCreationCardShell } from '../../shared/creationCard.js';
 
 const html = String.raw;
-
-function scheduleImageWork(start, { immediate = true, wakeOnVisible = true } = {}) {
-	if (typeof start !== 'function') return Promise.resolve();
-
-	const isVisible = document.visibilityState === 'visible';
-	if (immediate && isVisible) {
-		start();
-		return Promise.resolve();
-	}
-
-	return new Promise((resolve) => {
-		let idleHandle = null;
-		let timeoutHandle = null;
-
-		function onVisibilityChange() {
-			if (document.visibilityState === 'visible') runNow();
-		}
-
-		function runNow() {
-			if (idleHandle !== null && typeof cancelIdleCallback === 'function') cancelIdleCallback(idleHandle);
-			if (timeoutHandle !== null) clearTimeout(timeoutHandle);
-			if (wakeOnVisible) document.removeEventListener('visibilitychange', onVisibilityChange);
-			start();
-			resolve();
-		}
-
-		if (wakeOnVisible) {
-			document.addEventListener('visibilitychange', onVisibilityChange);
-		}
-
-		if (typeof requestIdleCallback === 'function') {
-			idleHandle = requestIdleCallback(() => runNow(), { timeout: 2000 });
-		} else {
-			timeoutHandle = setTimeout(() => runNow(), 500);
-		}
-	});
-}
-
-function setRouteMediaBackgroundImage(mediaEl, url, { lowPriority = false } = {}) {
-	if (!mediaEl || !url) return;
-
-	if (mediaEl.dataset.bgLoadedUrl === url) {
-		return Promise.resolve(true);
-	}
-
-	mediaEl.classList.remove('route-media-error');
-	mediaEl.style.backgroundImage = '';
-
-	return new Promise((resolve) => {
-		const startProbe = () => {
-			const probe = new Image();
-			probe.decoding = 'async';
-			if ('fetchPriority' in probe) {
-				probe.fetchPriority = lowPriority ? 'low' : (document.visibilityState === 'visible' ? 'auto' : 'low');
-			}
-			probe.onload = () => {
-				mediaEl.dataset.bgLoadedUrl = url;
-				mediaEl.classList.remove('route-media-error');
-				mediaEl.style.backgroundImage = `url("${String(url).replace(/"/g, '\\"')}")`;
-				resolve(true);
-			};
-			probe.onerror = () => {
-				mediaEl.classList.add('route-media-error');
-				mediaEl.style.backgroundImage = '';
-				resolve(false);
-			};
-			probe.src = url;
-		};
-
-		void scheduleImageWork(startProbe, { immediate: !lowPriority, wakeOnVisible: !lowPriority });
-	});
-}
 
 /** Page size for explore (one window per load). */
 const EXPLORE_PAGE_SIZE = 100;
@@ -117,15 +48,11 @@ class AppRouteExplore extends HTMLElement {
 			</div>
 		</div>
 		<div class="explore-search-results route-cards content-cards-image-grid" data-explore-search-results hidden>
-			<div class="route-empty route-empty-image-grid">
-				<div class="route-empty-title">No creations found</div>
-			</div>
+			${renderEmptyState({ className: 'route-empty-image-grid', title: 'No creations found' })}
 		</div>
 		<div class="explore-main" data-explore-main>
 			<div class="route-cards content-cards-image-grid" data-explore-container>
-				<div class="route-empty route-empty-image-grid route-loading">
-					<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
-				</div>
+				${renderEmptyLoading({ className: 'route-empty-image-grid' })}
 			</div>
 			<div class="explore-load-more-sentinel" data-explore-sentinel aria-hidden="true"></div>
 			<div class="explore-load-more-fallback" data-explore-load-more-fallback>
@@ -345,11 +272,7 @@ class AppRouteExplore extends HTMLElement {
 			main.style.display = '';
 			results.setAttribute('hidden', '');
 			results.style.display = 'none';
-			results.innerHTML = html`
-				<div class="route-empty route-empty-image-grid">
-					<div class="route-empty-title">No creations found</div>
-				</div>
-			`;
+			results.innerHTML = renderEmptyState({ className: 'route-empty-image-grid', title: 'No creations found' });
 		};
 
 		const runSearch = () => {
@@ -442,11 +365,7 @@ class AppRouteExplore extends HTMLElement {
 			this._searchFirstList = 'semantic';
 			items = semantic.map((item, i) => ({ ...item, searchScore: 1 / (k + i + 1) }));
 		} else if (bothSettled) {
-			resultsEl.innerHTML = html`
-				<div class="route-empty route-empty-image-grid">
-					<div class="route-empty-title">No creations found</div>
-				</div>
-			`;
+			resultsEl.innerHTML = renderEmptyState({ className: 'route-empty-image-grid', title: 'No creations found' });
 			return;
 		} else {
 			return;
@@ -461,11 +380,7 @@ class AppRouteExplore extends HTMLElement {
 
 		const trimmed = String(query || '').trim();
 		if (!trimmed) {
-			resultsEl.innerHTML = html`
-				<div class="route-empty route-empty-image-grid">
-					<div class="route-empty-title">No creations found</div>
-				</div>
-			`;
+			resultsEl.innerHTML = renderEmptyState({ className: 'route-empty-image-grid', title: 'No creations found' });
 			return;
 		}
 
@@ -476,11 +391,7 @@ class AppRouteExplore extends HTMLElement {
 		this._searchSemanticSettled = false;
 		this._searchFirstList = undefined;
 
-		resultsEl.innerHTML = html`
-			<div class="route-empty route-empty-image-grid route-loading">
-				<div class="route-loading-spinner" aria-label="Searching" role="status"></div>
-			</div>
-		`;
+		resultsEl.innerHTML = renderEmptyLoading({ className: 'route-empty-image-grid', loadingAriaLabel: 'Searching' });
 
 		const q = encodeURIComponent(trimmed);
 		const keywordUrl = `/api/explore/search?q=${q}&limit=${EXPLORE_PAGE_SIZE}`;
@@ -540,9 +451,7 @@ class AppRouteExplore extends HTMLElement {
 
 		this.isLoading = true;
 		if (reset) {
-			container.innerHTML = html`<div class="route-empty route-empty-image-grid route-loading">
-	<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
-</div>`;
+			container.innerHTML = renderEmptyLoading({ className: 'route-empty-image-grid' });
 		}
 
 		try {
@@ -557,7 +466,7 @@ class AppRouteExplore extends HTMLElement {
 			if (!cont) return;
 
 			if (!res.ok) {
-				cont.innerHTML = html`<div class="route-empty route-empty-image-grid">Unable to load explore.</div>`;
+				cont.innerHTML = renderEmptyError('Unable to load explore.', { className: 'route-empty-image-grid' });
 				return;
 			}
 
@@ -567,12 +476,11 @@ class AppRouteExplore extends HTMLElement {
 			this.updateLoadMoreFallback();
 
 			if (reset && items.length === 0) {
-				cont.innerHTML = html`
-		<div class="route-empty route-empty-image-grid">
-			<div class="route-empty-title">Nothing to explore yet</div>
-			<div class="route-empty-message">Published creations from the community will appear here.</div>
-		</div>
-        `;
+				cont.innerHTML = renderEmptyState({
+					className: 'route-empty-image-grid',
+					title: 'Nothing to explore yet',
+					message: 'Published creations from the community will appear here.',
+				});
 				this.hasLoadedOnce = true;
 				return;
 			}
@@ -591,7 +499,7 @@ class AppRouteExplore extends HTMLElement {
 			if (this.hasMore) this.observeLoadMoreSentinel();
 		} catch (err) {
 			const errCont = this.querySelector("[data-explore-container]");
-			if (errCont) errCont.innerHTML = html`<div class="route-empty route-empty-image-grid">Unable to load explore.</div>`;
+			if (errCont) errCont.innerHTML = renderEmptyError('Unable to load explore.', { className: 'route-empty-image-grid' });
 		} finally {
 			this.isLoading = false;
 			this.updateLoadMoreFallback();
@@ -659,11 +567,7 @@ class AppRouteExplore extends HTMLElement {
 				}
 			});
 
-			card.innerHTML = html`
-		<div class="route-media" aria-hidden="true" data-image-id="${item.created_image_id ?? ''}" data-status="completed">
-		</div>
-		<div class="route-details">
-			<div class="route-details-content">
+				const detailsContent = html`
 				<div class="route-title">${item.title != null ? item.title : 'Untitled'}</div>
 				<div class="route-summary">${item.summary != null ? item.summary : ''}</div>
 				<div class="route-meta" title="${formatDateTime(item.created_at)}">${formatRelativeTime(item.created_at)}</div>
@@ -672,10 +576,11 @@ class AppRouteExplore extends HTMLElement {
 					authorLabel}${handle ? html` <span>(${handle})</span>` : ''}
 				</div>
 				<div class="route-meta route-meta-spacer"></div>
-				<div class="route-tags">${item.tags || ''}</div>
-			</div>
-		</div>
-      `;
+				<div class="route-tags">${item.tags || ''}</div>`;
+			card.innerHTML = buildCreationCardShell({
+				mediaAttrs: { 'data-image-id': item.created_image_id ?? '', 'data-status': 'completed' },
+				detailsContentHtml: detailsContent,
+			});
 
 			const mediaEl = card.querySelector('.route-media');
 			const url = item.thumbnail_url || item.image_url;

@@ -1,6 +1,10 @@
 import { formatDateTime, formatRelativeTime } from '../../shared/datetime.js';
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 import { renderCreationKebabHtml, setupKebabDropdown } from '../../shared/kebabMenu.js';
+import { setRouteMediaBackgroundImage } from '../../shared/routeMedia.js';
+import { renderEmptyState, renderEmptyLoading, renderEmptyError } from '../../shared/emptyState.js';
+import { publishedBadgeHtml } from '../../shared/creationBadges.js';
+import { buildCreationCardShell } from '../../shared/creationCard.js';
 import { eyeHiddenIcon } from '../../icons/svg-strings.js';
 
 const html = String.raw;
@@ -24,80 +28,6 @@ function isTimedOut(status, meta) {
 }
 
 const CREATIONS_PAGE_SIZE = 50;
-
-function scheduleImageWork(start, { immediate = true, wakeOnVisible = true } = {}) {
-	if (typeof start !== 'function') return Promise.resolve();
-
-	const isVisible = document.visibilityState === 'visible';
-	if (immediate && isVisible) {
-		start();
-		return Promise.resolve();
-	}
-
-	return new Promise((resolve) => {
-		let idleHandle = null;
-		let timeoutHandle = null;
-
-		function onVisibilityChange() {
-			if (document.visibilityState === 'visible') runNow();
-		}
-
-		function runNow() {
-			if (idleHandle !== null && typeof cancelIdleCallback === 'function') cancelIdleCallback(idleHandle);
-			if (timeoutHandle !== null) clearTimeout(timeoutHandle);
-			if (wakeOnVisible) document.removeEventListener('visibilitychange', onVisibilityChange);
-			start();
-			resolve();
-		}
-
-		if (wakeOnVisible) {
-			document.addEventListener('visibilitychange', onVisibilityChange);
-		}
-
-		// Low priority: wait for idle time (and/or small delay).
-		if (typeof requestIdleCallback === 'function') {
-			idleHandle = requestIdleCallback(() => runNow(), { timeout: 2000 });
-		} else {
-			timeoutHandle = setTimeout(() => runNow(), 500);
-		}
-	});
-}
-
-function setRouteMediaBackgroundImage(mediaEl, url, { lowPriority = false } = {}) {
-	if (!mediaEl || !url) return;
-
-	// Skip if we already have this URL loaded (avoids duplicate requests)
-	if (mediaEl.dataset.bgLoadedUrl === url) {
-		return Promise.resolve(true);
-	}
-
-	mediaEl.classList.remove('route-media-error');
-	mediaEl.style.backgroundImage = '';
-
-	return new Promise((resolve) => {
-		const startProbe = () => {
-			const probe = new Image();
-			probe.decoding = 'async';
-			if ('fetchPriority' in probe) {
-				probe.fetchPriority = lowPriority ? 'low' : (document.visibilityState === 'visible' ? 'auto' : 'low');
-			}
-			probe.onload = () => {
-				mediaEl.dataset.bgLoadedUrl = url;
-				mediaEl.classList.remove('route-media-error');
-				mediaEl.style.backgroundImage = `url("${String(url).replace(/"/g, '\\"')}")`;
-				resolve(true);
-			};
-			probe.onerror = () => {
-				mediaEl.classList.add('route-media-error');
-				mediaEl.style.backgroundImage = '';
-				resolve(false);
-			};
-			probe.src = url;
-		};
-
-		void scheduleImageWork(startProbe, { immediate: !lowPriority, wakeOnVisible: !lowPriority });
-	});
-}
 
 class AppRouteCreations extends HTMLElement {
 	isRouteActive() {
@@ -148,7 +78,7 @@ class AppRouteCreations extends HTMLElement {
           </div>
         </div>
         <div class="route-cards content-cards-image-grid" data-creations-container>
-          <div class="route-empty route-empty-image-grid route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
+          ${renderEmptyLoading({ className: 'route-empty-image-grid' })}
         </div>
         <div class="creations-load-more-sentinel" data-creations-sentinel aria-hidden="true"></div>
         <div class="creations-load-more-fallback" data-creations-load-more-fallback>
@@ -786,13 +716,13 @@ class AppRouteCreations extends HTMLElement {
 			const combinedCreations = [...filteredPending, ...creations];
 
 			if (combinedCreations.length === 0) {
-				cont.innerHTML = html`
-          <div class="route-empty route-empty-image-grid">
-            <div class="route-empty-title">No creations yet</div>
-            <div class="route-empty-message">Start creating to see your work here.</div>
-            <a href="/create" class="route-empty-button">Get Started</a>
-          </div>
-        `;
+				cont.innerHTML = renderEmptyState({
+					className: 'route-empty-image-grid',
+					title: 'No creations yet',
+					message: 'Start creating to see your work here.',
+					buttonText: 'Get Started',
+					buttonHref: '/create',
+				});
 
 				this.hasLoadedOnce = true;
 				this.creationsOffset = 0;
@@ -812,9 +742,7 @@ class AppRouteCreations extends HTMLElement {
 		} catch (error) {
 			// console.error("Error loading creations:", error);
 			const errCont = this.querySelector("[data-creations-container]");
-			if (errCont) errCont.innerHTML = html`
-        <div class="route-empty route-empty-image-grid">Unable to load creations.</div>
-      `;
+			if (errCont) errCont.innerHTML = renderEmptyError('Unable to load creations.', { className: 'route-empty-image-grid' });
 		} finally {
 			this.isLoading = false;
 			this.updateLoadMoreFallback();
@@ -886,33 +814,25 @@ class AppRouteCreations extends HTMLElement {
 				let publishedBadge = '';
 				let publishedInfo = '';
 				if (isPublished) {
-					publishedBadge = html`
-              <div class="creation-published-badge" title="Published">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <line x1="2" y1="12" x2="22" y2="12"></line>
-                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
-                </svg>
-              </div>
-            `;
+					publishedBadge = publishedBadgeHtml();
 				}
 				if (isPublished && item.published_at) {
 					publishedInfo = html`<div class="route-meta" title="${formatDateTime(item.published_at)}">Published ${formatRelativeTime(item.published_at)}</div>`;
 				}
-				card.innerHTML = html`
-            <div class="route-media" aria-hidden="true" data-image-id="${item.id}" data-status="completed"></div>
-            ${publishedBadge}
-            <div class="route-details">
-              <div class="route-details-content">
+				const detailsContent = html`
                 <div class="route-title">${item.title || 'Untitled'}</div>
                 ${publishedInfo}
-                <div class="route-meta" title="${formatDateTime(item.created_at)}">Created ${formatRelativeTime(item.created_at)}</div>
-              </div>
-            </div>
+                <div class="route-meta" title="${formatDateTime(item.created_at)}">Created ${formatRelativeTime(item.created_at)}</div>`;
+				const bulkOverlay = html`
             <div class="creations-card-bulk-overlay" data-creations-bulk-overlay aria-hidden="true">
               <input type="checkbox" class="creations-card-bulk-checkbox" data-creations-bulk-checkbox aria-label="Select creation" />
-            </div>
-          `;
+            </div>`;
+				card.innerHTML = buildCreationCardShell({
+					mediaAttrs: { 'data-image-id': String(item.id), 'data-status': 'completed' },
+					badgesHtml: publishedBadge,
+					detailsContentHtml: detailsContent,
+					bulkOverlayHtml: bulkOverlay,
+				});
 				const mediaEl = card.querySelector('.route-media');
 				const url = item.thumbnail_url || item.url;
 				if (mediaEl) {

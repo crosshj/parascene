@@ -3,6 +3,8 @@ import { enableLikeButtons, initLikeButton } from '../../shared/likes.js';
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 import { getAvatarColor } from '../../shared/avatar.js';
 import { buildProfilePath } from '../../shared/profileLinks.js';
+import { setRouteMediaBackgroundImage } from '../../shared/routeMedia.js';
+import { renderEmptyState, renderEmptyLoading, renderEmptyError } from '../../shared/emptyState.js';
 
 const html = String.raw;
 
@@ -33,71 +35,6 @@ function isFeedItemHidden(itemId) {
 	return hidden.includes(itemId);
 }
 
-function scheduleImageWork(start) {
-	if (typeof start !== 'function') return Promise.resolve();
-	if (document.visibilityState === 'visible') {
-		start();
-		return Promise.resolve();
-	}
-
-	return new Promise((resolve) => {
-		let idleHandle = null;
-		let timeoutHandle = null;
-
-		function onVisibilityChange() {
-			if (document.visibilityState === 'visible') runNow();
-		}
-
-		function runNow() {
-			if (idleHandle !== null && typeof cancelIdleCallback === 'function') cancelIdleCallback(idleHandle);
-			if (timeoutHandle !== null) clearTimeout(timeoutHandle);
-			document.removeEventListener('visibilitychange', onVisibilityChange);
-			start();
-			resolve();
-		}
-
-		document.addEventListener('visibilitychange', onVisibilityChange);
-
-		// Still preload in background, but at low priority (idle time).
-		if (typeof requestIdleCallback === 'function') {
-			idleHandle = requestIdleCallback(() => runNow(), { timeout: 2000 });
-		} else {
-			timeoutHandle = setTimeout(() => runNow(), 500);
-		}
-	});
-}
-
-function setRouteMediaBackgroundImage(mediaEl, url) {
-	if (!mediaEl || !url) return;
-
-	// Always preload, but let visible work take priority.
-	// If hidden, start the request during idle time and use low fetch priority.
-	mediaEl.classList.remove('route-media-has-image');
-	mediaEl.classList.remove('route-media-error');
-	mediaEl.style.backgroundImage = '';
-
-	const startProbe = () => {
-		const probe = new Image();
-		probe.decoding = 'async';
-		if ('fetchPriority' in probe) {
-			probe.fetchPriority = document.visibilityState === 'visible' ? 'auto' : 'low';
-		}
-		probe.onload = () => {
-			mediaEl.classList.remove('route-media-error');
-			mediaEl.classList.add('route-media-has-image');
-			mediaEl.style.backgroundImage = `url("${String(url).replace(/"/g, '\\"')}")`;
-		};
-		probe.onerror = () => {
-			mediaEl.classList.remove('route-media-has-image');
-			mediaEl.classList.add('route-media-error');
-			mediaEl.style.backgroundImage = '';
-		};
-		probe.src = url;
-	};
-
-	void scheduleImageWork(startProbe);
-}
-
 class AppRouteFeed extends HTMLElement {
 	connectedCallback() {
 		this.innerHTML = html`
@@ -126,7 +63,7 @@ class AppRouteFeed extends HTMLElement {
         </div>
 		-->
         <div class="route-cards feed-cards" data-feed-container>
-        <div class="route-empty route-empty-image-grid route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
+        ${renderEmptyLoading({ className: 'route-empty-image-grid' })}
         </div>
       </div>
     `;
@@ -577,20 +514,15 @@ class AppRouteFeed extends HTMLElement {
 
 			container.innerHTML = "";
 			if (items.length === 0) {
-				container.innerHTML = html`
-					<div class="route-empty route-empty-image-grid route-empty-state">
-						<div class="route-empty-icon">
-						<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-							<circle cx="12" cy="12" r="10"></circle>
-							<line x1="2" y1="12" x2="22" y2="12"></line>
-							<path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
-						</svg>
-						</div>
-						<div class="route-empty-title">Your feed is empty</div>
-						<div class="route-empty-message">Your feed shows creations from people you follow. Explore the community, follow a few creators, and your feed will start filling up.</div>
-						<a class="route-empty-button" href="/explore" data-route="explore">Explore creators</a>
-					</div>
-				`;
+				container.innerHTML = renderEmptyState({
+					className: 'route-empty-image-grid',
+					icon: '<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>',
+					title: 'Your feed is empty',
+					message: 'Your feed shows creations from people you follow. Explore the community, follow a few creators, and your feed will start filling up.',
+					buttonText: 'Explore creators',
+					buttonHref: '/explore',
+					buttonRoute: 'explore',
+				});
 
 				// Use client-side routing for the CTA (matches other routes’ empty states).
 				const button = container.querySelector('.route-empty-button[data-route="explore"]');
@@ -614,7 +546,7 @@ class AppRouteFeed extends HTMLElement {
 			this.sentinelWasIntersecting = false;
 			this.renderNextBatch();
 		} catch (error) {
-			container.innerHTML = html`<div class="route-empty route-empty-image-grid">Unable to load feed.</div>`;
+			container.innerHTML = renderEmptyError('Unable to load feed.', { className: 'route-empty-image-grid' });
 		} finally {
 			this.isLoading = false;
 		}

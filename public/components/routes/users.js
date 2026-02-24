@@ -364,7 +364,7 @@ class AppRouteUsers extends HTMLElement {
 					},
 					{
 						key: 'last_request_at',
-						label: 'Request Time',
+						label: 'Date',
 						sortKey: 'last_request_at',
 						className: 'anon-table-col-dates',
 						render: (row) => {
@@ -374,6 +374,12 @@ class AppRouteUsers extends HTMLElement {
 						}
 					},
 					{ key: 'request_count', label: 'Count', sortKey: 'request_count', className: 'anon-table-col-count' },
+					{
+						key: 'user_agent',
+						label: 'User agent',
+						className: 'anon-table-col-user-agent',
+						render: (row) => escapeHtml(truncateStr(row.user_agent ?? '', 60))
+					},
 					{
 						key: 'transitioned_user_id',
 						label: 'Transitioned',
@@ -420,7 +426,7 @@ class AppRouteUsers extends HTMLElement {
 						label: 'Viewed',
 						sortKey: 'viewed_at',
 						className: 'share-table-col-date',
-						render: (row) => escapeHtml(row.viewed_at ? formatRelativeTime(row.viewed_at, { style: 'long' }) : '—')
+						render: (row) => escapeHtml(row.viewed_at ? formatLocalDateTime(row.viewed_at) : '—')
 					},
 					{ key: 'sharer_label', label: 'Sharer', sortKey: 'sharer_user_id', className: 'share-table-col-sharer' },
 					{ key: 'creator_label', label: 'Creator', sortKey: 'created_by_user_id', className: 'share-table-col-creator' },
@@ -430,12 +436,18 @@ class AppRouteUsers extends HTMLElement {
 						sortKey: 'created_image_id',
 						className: 'share-table-col-creation',
 						render: (row) => {
-							const id = row.created_image_id;
-							if (id) {
-								return `<a href="/creations/${escapeHtml(String(id))}" class="share-table-creation-link" target="_blank" rel="noopener noreferrer">#${escapeHtml(String(id))}</a>`;
+							const raw = row.created_image_id;
+							if (raw != null && Number.isFinite(Number(raw))) {
+								return `<a href="/creations/${escapeHtml(String(raw))}">${escapeHtml(String(raw))}</a>`;
 							}
-							return escapeHtml(String(id ?? '—'));
+							return escapeHtml(String(raw ?? '—'));
 						}
+					},
+					{
+						key: 'user_agent',
+						label: 'User agent',
+						className: 'share-table-col-user-agent',
+						render: (row) => escapeHtml(truncateStr(row.user_agent ?? '', 60))
 					},
 					{
 						key: 'referer',
@@ -489,6 +501,9 @@ class AppRouteUsers extends HTMLElement {
 				const createdLabel = req.created_at ? formatRelativeTime(req.created_at, { style: 'long' }) : '—';
 				const fulfilledLabel = req.fulfilled_at ? formatRelativeTime(req.fulfilled_at, { style: 'long' }) : '—';
 				const promptEscaped = (req.prompt || '—').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+				const userAgentDisplay = truncateStr(req.user_agent ?? '', 50);
+				const userAgentEscaped = (userAgentDisplay || '—').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+				const userAgentTitle = req.user_agent ? req.user_agent.replace(/"/g, '&quot;') : '';
 				let imageBlock = '<span class="anon-request-no-image">No image</span>';
 				if (req.image) {
 					const img = req.image;
@@ -503,6 +518,7 @@ class AppRouteUsers extends HTMLElement {
 					<div class="anon-request-meta">
 						<span class="anon-request-datetime" title="${(req.created_at || '').replace(/"/g, '&quot;')}">${createdLabel}</span>
 						<span class="anon-request-fulfilled">Fulfilled ${fulfilledLabel}</span>
+						${req.user_agent ? `<span class="anon-request-user-agent" title="${userAgentTitle}">${userAgentEscaped}</span>` : ''}
 					</div>
 					<div class="anon-request-image">${imageBlock}</div>
 				`;

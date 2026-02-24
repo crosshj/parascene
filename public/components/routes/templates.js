@@ -1,4 +1,5 @@
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
+import { renderEmptyState, renderEmptyLoading, renderEmptyError } from '../../shared/emptyState.js';
 
 const html = String.raw;
 
@@ -10,7 +11,7 @@ class AppRouteTemplates extends HTMLElement {
         <p>Templates ready to bootstrap new workspaces.</p>
       </div>
       <div class="route-cards cards-grid-auto" data-templates-container>
-        <div class="route-empty route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>
+        ${renderEmptyLoading({})}
       </div>
     `;
     this.loadTemplates();
@@ -29,7 +30,7 @@ class AppRouteTemplates extends HTMLElement {
 
       container.innerHTML = "";
       if (templates.length === 0) {
-        container.innerHTML = html`<div class="route-empty">No templates yet.</div>`;
+        container.innerHTML = renderEmptyState({ title: 'No templates yet.' });
         return;
       }
 
@@ -44,7 +45,7 @@ class AppRouteTemplates extends HTMLElement {
         container.appendChild(card);
       }
     } catch (error) {
-      container.innerHTML = html`<div class="route-empty">Unable to load templates.</div>`;
+      container.innerHTML = renderEmptyError('Unable to load templates.');
     }
   }
 }

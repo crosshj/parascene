@@ -500,52 +500,6 @@
 	}
 }
 
-/* User-deleted badge (admin view only) */
-.creation-user-deleted-badge {
-	position: absolute;
-	top: 8px;
-	left: 8px;
-	width: 32px;
-	height: 32px;
-	background: rgba(120, 53, 15, 0.85);
-	border-radius: 50%;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	z-index: 10;
-	backdrop-filter: blur(4px);
-	pointer-events: none;
-}
-
-.creation-user-deleted-badge svg {
-	width: 16px;
-	height: 16px;
-	color: white;
-}
-
-/* Published badge styles (shared with creations page) */
-.creation-published-badge {
-	position: absolute;
-	top: 8px;
-	right: 8px;
-	width: 32px;
-	height: 32px;
-	background: rgba(0, 0, 0, 0.7);
-	border-radius: 50%;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	z-index: 10;
-	backdrop-filter: blur(4px);
-	pointer-events: none;
-}
-
-.creation-published-badge svg {
-	width: 18px;
-	height: 18px;
-	color: white;
-}
-
 /* Profile tab lists: Follows / Following */
 .user-profile-list {
 	list-style: none;
@@ -860,16 +814,6 @@
 .user-profile-comment-user-handle {
 	font-size: 0.8125rem;
 	color: var(--text-muted);
-}
-
-@media (prefers-color-scheme: light) {
-	.creation-published-badge {
-		background: rgba(255, 255, 255, 0.9);
-	}
-
-	.creation-published-badge svg {
-		color: var(--accent);
-	}
 }
 
 @media (max-width: 768px) {

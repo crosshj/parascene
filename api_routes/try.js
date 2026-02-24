@@ -160,7 +160,8 @@ export default function createTryRoutes({ queries, storage }) {
 					const id = result.insertId;
 					if (id) {
 						const fulfilledAt = new Date().toISOString();
-						queries.insertTryRequest?.run?.(anonCid, canonicalPrompt, id, fulfilledAt);
+						const tryMeta = typeof req.get?.("user-agent") === "string" ? { user_agent: req.get("user-agent").trim() || null } : null;
+						queries.insertTryRequest?.run?.(anonCid, canonicalPrompt, id, fulfilledAt, tryMeta);
 						const url = storage.getImageUrlAnon
 							? storage.getImageUrlAnon(cached.filename)
 							: `/api/try/images/${cached.filename}`;
@@ -266,7 +267,8 @@ export default function createTryRoutes({ queries, storage }) {
 			return res.status(500).json({ error: "Failed to create try record" });
 		}
 
-		queries.insertTryRequest?.run?.(anonCid, canonicalPrompt, id, null);
+		const tryMeta = typeof req.get?.("user-agent") === "string" ? { user_agent: req.get("user-agent").trim() || null } : null;
+		queries.insertTryRequest?.run?.(anonCid, canonicalPrompt, id, null, tryMeta);
 
 		try {
 			await scheduleAnonCreationJob({

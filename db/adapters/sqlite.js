@@ -142,6 +142,17 @@ function ensureTryRequestsMetaColumn(db) {
 	}
 }
 
+function ensureSharePageViewsMetaColumn(db) {
+	try {
+		const columns = db.prepare("PRAGMA table_info(share_page_views)").all();
+		if (!columns.some((c) => c.name === "meta")) {
+			db.exec("ALTER TABLE share_page_views ADD COLUMN meta TEXT");
+		}
+	} catch (error) {
+		// ignore
+	}
+}
+
 /** Make created_image_anon_id nullable so we can set NULL when image is transitioned to a user. */
 function ensureTryRequestsCreatedImageAnonIdNullable(db) {
 	try {
@@ -195,6 +206,7 @@ export async function openDb() {
 	ensureCreatedImagesAnonDroppedTransitionedToUserId(db);
 	ensureTryRequestsMetaColumn(db);
 	ensureTryRequestsCreatedImageAnonIdNullable(db);
+	ensureSharePageViewsMetaColumn(db);
 
 	const transferCreditsTxn = db.transaction((fromUserId, toUserId, amount) => {
 		const ensureCreditsRowStmt = db.prepare(
@@ -594,17 +606,19 @@ export async function openDb() {
 			}
 		},
 		insertSharePageView: {
-			run: async (sharerUserId, createdImageId, createdByUserId, referer, anonCid) => {
+			run: async (sharerUserId, createdImageId, createdByUserId, referer, anonCid, meta = null) => {
+				const toJsonText = (v) => (v == null ? null : typeof v === "string" ? v : JSON.stringify(v));
 				const stmt = db.prepare(
-					`INSERT INTO share_page_views (sharer_user_id, created_image_id, created_by_user_id, referer, anon_cid)
-					 VALUES (?, ?, ?, ?, ?)`
+					`INSERT INTO share_page_views (sharer_user_id, created_image_id, created_by_user_id, referer, anon_cid, meta)
+					 VALUES (?, ?, ?, ?, ?, ?)`
 				);
 				const result = stmt.run(
 					sharerUserId,
 					createdImageId,
 					createdByUserId,
 					referer ?? null,
-					anonCid ?? null
+					anonCid ?? null,
+					toJsonText(meta)
 				);
 				return Promise.resolve({ changes: result.changes });
 			}
@@ -617,7 +631,7 @@ export async function openDb() {
 				const orderCol = validOrder.includes(sortBy) ? sortBy : "viewed_at";
 				const asc = sortDir === "asc";
 				const stmt = db.prepare(
-					`SELECT id, viewed_at, sharer_user_id, created_image_id, created_by_user_id, referer, anon_cid
+					`SELECT id, viewed_at, sharer_user_id, created_image_id, created_by_user_id, referer, anon_cid, meta
 					 FROM share_page_views ORDER BY ${orderCol} ${asc ? "ASC" : "DESC"} LIMIT ? OFFSET ?`
 				);
 				const rows = stmt.all(cap, off) ?? [];
@@ -2365,7 +2379,7 @@ export async function openDb() {
 		selectTryRequestsByCid: {
 			all: async (anonCid) => {
 				const stmt = db.prepare(
-					`SELECT id, anon_cid, prompt, created_at, fulfilled_at, created_image_anon_id
+					`SELECT id, anon_cid, prompt, created_at, fulfilled_at, created_image_anon_id, meta
            FROM try_requests WHERE anon_cid = ? ORDER BY created_at DESC`
 				);
 				return Promise.resolve(stmt.all(anonCid));
@@ -2379,6 +2393,22 @@ export async function openDb() {
            FROM try_requests WHERE anon_cid != '__pool__' GROUP BY anon_cid ORDER BY last_request_at DESC`
 				);
 				return Promise.resolve(stmt.all());
+			}
+		},
+		/** Latest try_request (by created_at) per anon_cid for given cids; returns rows with anon_cid, meta. Used to attach last_user_agent to anon list. */
+		selectTryRequestsLatestMetaByCids: {
+			all: async (cids) => {
+				if (!Array.isArray(cids) || cids.length === 0) return [];
+				const placeholders = cids.map(() => "?").join(",");
+				const stmt = db.prepare(
+					`SELECT anon_cid, meta, created_at FROM try_requests WHERE anon_cid IN (${placeholders}) ORDER BY created_at DESC`
+				);
+				const rows = stmt.all(...cids) ?? [];
+				const byCid = new Map();
+				for (const r of rows) {
+					if (!byCid.has(r.anon_cid)) byCid.set(r.anon_cid, { anon_cid: r.anon_cid, meta: r.meta });
+				}
+				return Array.from(byCid.values());
 			}
 		},
 		/** Rows where created_image_anon_id IS NULL (transitioned); returns anon_cid, meta for building transition map. */

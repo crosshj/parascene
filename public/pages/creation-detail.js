@@ -13,6 +13,9 @@ import '../components/modals/creation-details.js';
 import '../components/modals/share.js';
 import { creditIcon, eyeHiddenIcon } from '../icons/svg-strings.js';
 import '../components/modals/tip-creator.js';
+import { renderEmptyState, renderEmptyLoading, renderEmptyError } from '/shared/emptyState.js';
+import { buildCreationCardShell } from '/shared/creationCard.js';
+import { renderCommentAvatarHtml } from '/shared/commentItem.js';
 
 const html = String.raw;
 const TIP_MIN_VISIBLE_BALANCE = 10.0;
@@ -308,11 +311,7 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 			const reasonsHtml = showRecsysDebug && reasonRows.length > 0
 				? `<div class="creation-detail-related-reasons">${reasonRows.map((line) => `<div class="creation-detail-related-reason-line">${escapeHtml(line)}</div>`).join('')}</div>`
 				: '';
-			/* Match explore card structure exactly: .route-media + .route-details as direct children (no wrapper link) */
-			card.innerHTML = html`
-				<div class="route-media" aria-hidden="true" data-related-media data-image-id="${cid}" data-status="completed"></div>
-				<div class="route-details">
-					<div class="route-details-content">
+			const detailsContent = html`
 						<div class="route-title">${escapeHtml(decodeHtmlEntities(item.title != null ? item.title : 'Untitled'))}</div>
 						<div class="route-summary">${escapeHtml(decodeHtmlEntities(item.summary != null ? item.summary : ''))}</div>
 						<div class="route-meta" title="${formatDateTime(item.created_at)}">${formatRelativeTime(item.created_at)}</div>
@@ -321,10 +320,11 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 						</div>
 						${reasonsHtml}
 						<div class="route-meta route-meta-spacer"></div>
-						<div class="route-tags">${escapeHtml(item.tags ?? '')}</div>
-					</div>
-				</div>
-			`;
+						<div class="route-tags">${escapeHtml(item.tags ?? '')}</div>`;
+			card.innerHTML = buildCreationCardShell({
+				mediaAttrs: { 'data-related-media': true, 'data-image-id': cid, 'data-status': 'completed' },
+				detailsContentHtml: detailsContent,
+			});
 			card.style.cursor = 'pointer';
 			card.addEventListener('click', (e) => {
 				if (e.target.closest('.user-link')) return;
@@ -500,16 +500,12 @@ async function loadCreation() {
 
 	const creationId = getCreationId();
 	if (!creationId) {
-		detailContent.innerHTML = html`
-			<div class="route-empty">
-				<div class="route-empty-title">Invalid creation ID</div>
-			</div>
-		`;
+		detailContent.innerHTML = renderEmptyState({ title: 'Invalid creation ID' });
 		if (actionsEl) actionsEl.style.display = 'none';
 		return;
 	}
 
-	detailContent.innerHTML = '<div class="route-empty route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>';
+	detailContent.innerHTML = renderEmptyLoading({});
 
 	try {
 		const headers = {};
@@ -528,12 +524,10 @@ async function loadCreation() {
 		});
 		if (!response.ok) {
 			if (response.status === 404) {
-				detailContent.innerHTML = html`
-					<div class="route-empty">
-						<div class="route-empty-title">Creation not found</div>
-						<div class="route-empty-message">The creation you're looking for doesn't exist or you don't have access to it.</div>
-					</div>
-				`;
+				detailContent.innerHTML = renderEmptyState({
+					title: 'Creation not found',
+					message: "The creation you're looking for doesn't exist or you don't have access to it.",
+				});
 				if (actionsEl) actionsEl.style.display = 'none';
 				return;
 			}
@@ -1254,9 +1248,7 @@ async function loadCreation() {
 			</div>
 			<div id="comments" data-comments-anchor></div>
 			<div class="comment-list" data-comment-list>
-				<div class="route-empty route-loading">
-					<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
-				</div>
+				${renderEmptyLoading({})}
 			</div>
 
 			<section class="creation-detail-related" data-related-container aria-label="More like this" style="display: none;">
@@ -1563,12 +1555,11 @@ async function loadCreation() {
 				if (commentsToolbarEl instanceof HTMLElement) {
 					commentsToolbarEl.style.display = 'none';
 				}
-				commentListEl.innerHTML = html`
-					<div class="route-empty comments-empty">
-						<div class="route-empty-title">No comments yet</div>
-						<div class="route-empty-message">Be the first to say something.</div>
-					</div>
-				`;
+				commentListEl.innerHTML = renderEmptyState({
+					className: 'comments-empty',
+					title: 'No comments yet',
+					message: 'Be the first to say something.',
+				});
 				return;
 			}
 
@@ -1596,22 +1587,18 @@ async function loadCreation() {
 					const safeMessage = t?.message ? processUserText(String(t.message)) : '';
 					const amountLabel = `${amount.toFixed(1)} credits`;
 					const isFounder = t?.plan === 'founder';
-					const tipAvatarContent = avatarUrl ? `<img class="comment-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">` : initial;
-					const tipAvatarBlock = isFounder
-						? `<div class="avatar-with-founder-flair avatar-with-founder-flair--sm"><div class="founder-flair-avatar-ring"><div class="founder-flair-avatar-inner" style="background: ${avatarUrl ? 'var(--surface-strong)' : color};" aria-hidden="true">${tipAvatarContent}</div></div></div>`
-						: tipAvatarContent;
+					const tipAvatarHtml = renderCommentAvatarHtml({
+						avatarUrl,
+						displayName: name,
+						color,
+						href: profileHref,
+						isFounder,
+						flairSize: 'sm',
+					});
 
 					return `
 						<div class="comment-item comment-item-tip">
-							${profileHref ? `
-								<a class="user-link user-avatar-link comment-avatar" href="${profileHref}" aria-label="View ${escapeHtml(name)} profile" ${!isFounder ? `style="background: ${color};"` : ''}>
-									${tipAvatarBlock}
-								</a>
-							` : `
-								<div class="comment-avatar" ${!isFounder ? `style="background: ${color};"` : ''}>
-									${tipAvatarBlock}
-								</div>
-							`}
+							${tipAvatarHtml}
 							<div class="comment-body">
 								<div class="comment-top">
 									${profileHref ? `
@@ -1663,22 +1650,18 @@ async function loadCreation() {
 				const timeTitle = date ? formatDateTime(date) : '';
 				const safeText = processUserText(c?.text ?? '');
 				const isFounder = c?.plan === 'founder';
-				const commentAvatarContent = avatarUrl ? `<img class="comment-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">` : initial;
-				const commentAvatarBlock = isFounder
-					? `<div class="avatar-with-founder-flair avatar-with-founder-flair--sm"><div class="founder-flair-avatar-ring"><div class="founder-flair-avatar-inner" style="background: ${avatarUrl ? 'var(--surface-strong)' : color};" aria-hidden="true">${commentAvatarContent}</div></div></div>`
-					: commentAvatarContent;
+				const commentAvatarHtml = renderCommentAvatarHtml({
+					avatarUrl,
+					displayName: name,
+					color,
+					href: profileHref,
+					isFounder,
+					flairSize: 'sm',
+				});
 
 				return `
 					<div class="comment-item">
-						${profileHref ? `
-							<a class="user-link user-avatar-link comment-avatar" href="${profileHref}" aria-label="View ${escapeHtml(name)} profile" ${!isFounder ? `style="background: ${color};"` : ''}>
-								${commentAvatarBlock}
-							</a>
-						` : `
-							<div class="comment-avatar" ${!isFounder ? `style="background: ${color};"` : ''}>
-								${commentAvatarBlock}
-							</div>
-						`}
+						${commentAvatarHtml}
 						<div class="comment-body">
 							<div class="comment-top">
 								${profileHref ? `
@@ -1706,7 +1689,7 @@ async function loadCreation() {
 
 		async function loadComments({ scrollIfHash = false } = {}) {
 			if (!commentListEl) return;
-			commentListEl.innerHTML = '<div class="route-empty route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>';
+			commentListEl.innerHTML = renderEmptyLoading({});
 			if (commentsToolbarEl instanceof HTMLElement) commentsToolbarEl.style.display = 'none';
 
 			const res = await fetchCreatedImageActivity(creationId, { order: commentsState.order, limit: 50, offset: 0 })
@@ -1714,11 +1697,7 @@ async function loadCreation() {
 
 			if (!res.ok) {
 				if (commentsToolbarEl instanceof HTMLElement) commentsToolbarEl.style.display = 'none';
-				commentListEl.innerHTML = html`
-					<div class="route-empty comments-empty">
-						<div class="route-empty-title">Unable to load comments</div>
-					</div>
-				`;
+				commentListEl.innerHTML = renderEmptyState({ className: 'comments-empty', title: 'Unable to load comments' });
 				return;
 			}
 
@@ -1817,12 +1796,10 @@ async function loadCreation() {
 
 	} catch (error) {
 		console.error("Error loading creation detail:", error);
-		detailContent.innerHTML = html`
-			<div class="route-empty">
-				<div class="route-empty-title">Unable to load creation</div>
-				<div class="route-empty-message">An error occurred while loading the creation.</div>
-			</div>
-		`;
+		detailContent.innerHTML = renderEmptyState({
+			title: 'Unable to load creation',
+			message: 'An error occurred while loading the creation.',
+		});
 		if (actionsEl) actionsEl.style.display = 'none';
 	}
 }
