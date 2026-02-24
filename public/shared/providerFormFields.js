@@ -89,6 +89,9 @@ function createTextField(fieldKey, field, context) {
 	input.placeholder = field.label || fieldKey;
 	if (field.required) input.required = true;
 
+	const defaultValue = typeof field?.default === 'string' ? field.default : '';
+	if (defaultValue) input.value = defaultValue;
+
 	const notify = (value) => onValueChange(fieldKey, value);
 	notify(input.value);
 	input.addEventListener('input', (e) => notify(e.target.value));
