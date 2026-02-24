@@ -2296,6 +2296,15 @@ app-route-feed {
 	gap: 0;
 }
 
+/* Ensure initial feed loading spinner is centered within the feed column */
+.feed-route .route-cards.feed-cards .route-empty-image-grid {
+	width: 100%;
+	min-height: calc(100vh - 140px);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
 @media (min-width: 769px) {
 	.feed-route .route-cards.feed-cards {
 		max-width: 600px;
@@ -3986,6 +3995,17 @@ app-route-feed {
 	text-align: center;
 	padding: 24px;
 	color: var(--text-muted);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+/* Span full grid width when inside a grid so empty state is centered */
+.content-cards-image-grid > .route-empty,
+.cards-grid-auto > .route-empty,
+.admin-cards > .route-empty,
+.users-cards > .route-empty {
+	grid-column: 1 / -1;
 }
 
 .route-empty-image-grid {

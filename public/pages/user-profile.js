@@ -277,33 +277,33 @@ function renderProfilePage(container, { user, profile, stats, plan, isSelf, view
 				</tab>
 				<tab data-id="mentions" label="Mentions">
 					<div class="user-profile-tab-content" data-profile-tab-content="mentions">
-						<div class="route-empty" data-profile-mentions>Coming soon.</div>
+						<div data-profile-mentions><div class="route-empty">Coming soon.</div></div>
 						<div class="user-profile-load-more" data-profile-load-more="mentions" hidden></div>
 					</div>
 				</tab>
 				<tab data-id="likes" label="Likes">
 					<div class="user-profile-tab-content" data-profile-tab-content="likes">
-						<div class="route-empty" data-profile-likes>Coming soon.</div>
+						<div data-profile-likes><div class="route-empty">Coming soon.</div></div>
 						<div class="user-profile-load-more" data-profile-load-more="likes" hidden></div>
 					</div>
 				</tab>
 				${(isSelf || isAdmin) ? html`
 				<tab data-id="follows" label="${isSelf ? 'You follow' : 'User follows'}">
 					<div class="user-profile-tab-content" data-profile-tab-content="follows">
-						<div class="route-empty" data-profile-follows>Coming soon.</div>
+						<div data-profile-follows><div class="route-empty">Coming soon.</div></div>
 						<div class="user-profile-load-more" data-profile-load-more="follows" hidden></div>
 					</div>
 				</tab>
 				` : ''}
 				<tab data-id="following" label="${isSelf ? 'Follows you' : isAdmin ? 'Follows user' : 'Followers'}">
 					<div class="user-profile-tab-content" data-profile-tab-content="following">
-						<div class="route-empty" data-profile-following>Coming soon.</div>
+						<div data-profile-following><div class="route-empty">Coming soon.</div></div>
 						<div class="user-profile-load-more" data-profile-load-more="following" hidden></div>
 					</div>
 				</tab>
 				<tab data-id="comments" label="Comments">
 					<div class="user-profile-tab-content" data-profile-tab-content="comments">
-						<div class="route-empty" data-profile-comments>Coming soon.</div>
+						<div data-profile-comments><div class="route-empty">Coming soon.</div></div>
 						<div class="user-profile-load-more" data-profile-load-more="comments" hidden></div>
 					</div>
 				</tab>

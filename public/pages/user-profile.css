@@ -168,6 +168,14 @@
 	margin-top: 16px;
 }
 
+.user-profile-tab-content {
+	width: 100%;
+}
+
+[data-profile-tabs] > tab {
+	width: 100%;
+}
+
 /* Hide tab bar until initial tab has been auto-selected and content is ready */
 [data-profile-tabs].user-profile-tabs-pending [data-app-tabs] {
 	visibility: hidden;
@@ -177,6 +185,20 @@
 	padding: 0;
 	border: none;
 	min-height: 0;
+}
+
+/* Center "no items found" empty states in profile tabs (Likes, Mentions, etc.) */
+.user-profile-tab-content .route-empty {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	text-align: center;
+	width: 100%;
+}
+
+.user-profile-tab-content .route-empty .route-empty-title,
+.user-profile-tab-content .route-empty .route-empty-message {
+	text-align: center;
 }
 
 .user-profile-tabs {
@@ -508,6 +530,7 @@
 	display: flex;
 	flex-direction: column;
 	gap: 0;
+	width: 100%;
 }
 
 .user-profile-list-item {
