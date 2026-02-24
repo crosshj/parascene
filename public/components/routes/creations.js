@@ -771,27 +771,27 @@ class AppRouteCreations extends HTMLElement {
 
 			if (isPending) {
 				card.innerHTML = html`
-            <div class="route-media loading" data-image-id="${item.id}" data-status="pending" aria-hidden="true"></div>
-            <div class="route-details">
-              <div class="route-details-content">
-                <div class="route-title">Creating...</div>
-                <div class="route-summary">Your creation is being processed...</div>
-                <div class="route-meta" title="${formatDateTime(item.created_at)}">${formatRelativeTime(item.created_at)}</div>
-              </div>
-            </div>
-          `;
+					<div class="route-media loading" data-image-id="${item.id}" data-status="pending" aria-hidden="true"></div>
+					<div class="route-details">
+					<div class="route-details-content">
+						<div class="route-title">Creating...</div>
+						<div class="route-summary">Your creation is being processed...</div>
+						<div class="route-meta" title="${formatDateTime(item.created_at)}">${formatRelativeTime(item.created_at)}</div>
+					</div>
+					</div>
+				`;
 				if (this.isActiveRoute && !this.pollInterval) this.startPolling();
 			} else if (isCreating) {
 				card.innerHTML = html`
-            <div class="route-media loading" data-image-id="${item.id}" data-status="creating" aria-hidden="true"></div>
-            <div class="route-details">
-              <div class="route-details-content">
-                <div class="route-title">Creating...</div>
-                <div class="route-summary">Your creation is being processed...</div>
-                <div class="route-meta" title="${formatDateTime(item.created_at)}">${formatRelativeTime(item.created_at)}</div>
-              </div>
-            </div>
-          `;
+					<div class="route-media loading" data-image-id="${item.id}" data-status="creating" aria-hidden="true"></div>
+					<div class="route-details">
+					<div class="route-details-content">
+						<div class="route-title">Creating...</div>
+						<div class="route-summary">Your creation is being processed...</div>
+						<div class="route-meta" title="${formatDateTime(item.created_at)}">${formatRelativeTime(item.created_at)}</div>
+					</div>
+					</div>
+				`;
 				if (this.isActiveRoute && !this.pollInterval) this.startPolling();
 			} else if (isFailed) {
 				const reason =
@@ -827,9 +827,10 @@ class AppRouteCreations extends HTMLElement {
 					publishedInfo = html`<div class="route-meta" title="${formatDateTime(item.published_at)}">Published ${formatRelativeTime(item.published_at)}</div>`;
 				}
 				const detailsContent = html`
-                <div class="route-title">${item.title || 'Untitled'}</div>
-                ${publishedInfo}
-                <div class="route-meta" title="${formatDateTime(item.created_at)}">Created ${formatRelativeTime(item.created_at)}</div>`;
+					<div class="route-title">${item.title || 'Untitled'}</div>
+					${publishedInfo}
+					<div class="route-meta" title="${formatDateTime(item.created_at)}">Created ${formatRelativeTime(item.created_at)}</div>
+				`;
 
 				card.innerHTML = buildCreationCardShell({
 					mediaAttrs: { 'data-image-id': String(item.id), 'data-status': 'completed' },
