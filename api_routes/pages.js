@@ -189,7 +189,11 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 			const referer = typeof req.get("referer") === "string" ? req.get("referer").trim() || null : null;
 			const anonCid = typeof req.cookies?.ps_cid === "string" ? req.cookies.ps_cid.trim() || null : null;
 			const userAgent = typeof req.get("user-agent") === "string" ? req.get("user-agent").trim() || null : null;
-			const meta = userAgent ? { user_agent: userAgent } : null;
+			const ip = typeof req.ip === "string" ? req.ip.trim() || null : (req.socket?.remoteAddress ?? null);
+			const meta =
+				userAgent || ip
+					? { page: "share", ...(userAgent ? { user_agent: userAgent } : {}), ...(ip ? { ip } : {}) }
+					: { page: "share" };
 			if (
 				queries.insertSharePageView?.run &&
 				sharerId > 0 &&

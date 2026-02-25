@@ -491,13 +491,17 @@ export default function createAdminRoutes({ queries, storage }) {
 			const latestRows = await queries.selectTryRequestsLatestMetaByCids.all(cids);
 			for (const row of latestRows ?? []) {
 				const meta = row.meta && typeof row.meta === "object" ? row.meta : typeof row.meta === "string" ? safeJsonParse(row.meta, {}) : {};
-				lastMetaByCid.set(row.anon_cid, meta?.user_agent ?? null);
+				lastMetaByCid.set(row.anon_cid, { user_agent: meta?.user_agent ?? null, ip: meta?.ip ?? null });
 			}
 		}
-		const anonCidsWithUserAgent = anonCids.map((r) => ({
-			...r,
-			user_agent: lastMetaByCid.get(r.anon_cid) ?? null
-		}));
+		const anonCidsWithUserAgent = anonCids.map((r) => {
+			const lastMeta = lastMetaByCid.get(r.anon_cid);
+			return {
+				...r,
+				user_agent: lastMeta?.user_agent ?? null,
+				ip: lastMeta?.ip ?? null
+			};
+		});
 		res.json({ anonCids: anonCidsWithUserAgent, total });
 	});
 
@@ -539,6 +543,7 @@ export default function createAdminRoutes({ queries, storage }) {
 				fulfilled_at: r.fulfilled_at,
 				created_image_anon_id: r.created_image_anon_id,
 				user_agent: meta?.user_agent ?? null,
+				ip: meta?.ip ?? null,
 				image: img
 					? {
 							id: img.id,
@@ -602,7 +607,8 @@ export default function createAdminRoutes({ queries, storage }) {
 				...v,
 				sharer_label: userLabelByUserId[v.sharer_user_id] ?? `#${v.sharer_user_id}`,
 				creator_label: userLabelByUserId[v.created_by_user_id] ?? `#${v.created_by_user_id}`,
-				user_agent: meta?.user_agent ?? null
+				user_agent: meta?.user_agent ?? null,
+				ip: meta?.ip ?? null
 			};
 		});
 		res.json({ items: enriched, total });

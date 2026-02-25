@@ -381,6 +381,12 @@ class AppRouteUsers extends HTMLElement {
 						render: (row) => escapeHtml(truncateStr(row.user_agent ?? '', 60))
 					},
 					{
+						key: 'ip',
+						label: 'IP',
+						className: 'anon-table-col-ip',
+						render: (row) => escapeHtml(truncateStr(row.ip ?? '', 45))
+					},
+					{
 						key: 'transitioned_user_id',
 						label: 'Transitioned',
 						className: 'anon-table-col-transitioned',
@@ -450,6 +456,12 @@ class AppRouteUsers extends HTMLElement {
 						render: (row) => escapeHtml(truncateStr(row.user_agent ?? '', 60))
 					},
 					{
+						key: 'ip',
+						label: 'IP',
+						className: 'share-table-col-ip',
+						render: (row) => escapeHtml(truncateStr(row.ip ?? '', 45))
+					},
+					{
 						key: 'referer',
 						label: 'Referer',
 						sortKey: 'referer',
@@ -504,6 +516,7 @@ class AppRouteUsers extends HTMLElement {
 				const userAgentDisplay = truncateStr(req.user_agent ?? '', 50);
 				const userAgentEscaped = (userAgentDisplay || '—').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 				const userAgentTitle = req.user_agent ? req.user_agent.replace(/"/g, '&quot;') : '';
+				const ipEscaped = (req.ip ?? '—').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 				let imageBlock = '<span class="anon-request-no-image">No image</span>';
 				if (req.image) {
 					const img = req.image;
@@ -518,6 +531,7 @@ class AppRouteUsers extends HTMLElement {
 					<div class="anon-request-meta">
 						<span class="anon-request-datetime" title="${(req.created_at || '').replace(/"/g, '&quot;')}">${createdLabel}</span>
 						<span class="anon-request-fulfilled">Fulfilled ${fulfilledLabel}</span>
+						${req.ip ? `<span class="anon-request-ip">${ipEscaped}</span>` : ''}
 						${req.user_agent ? `<span class="anon-request-user-agent" title="${userAgentTitle}">${userAgentEscaped}</span>` : ''}
 					</div>
 					<div class="anon-request-image">${imageBlock}</div>

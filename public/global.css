@@ -3996,6 +3996,7 @@ app-route-feed {
 	padding: 24px;
 	color: var(--text-muted);
 	display: flex;
+	flex-direction: column;
 	align-items: center;
 	justify-content: center;
 }
@@ -4041,6 +4042,12 @@ app-route-feed {
 .feed-empty-state .route-empty-message {
 	max-width: 500px;
 	margin: 0 auto;
+}
+
+/* Comments empty: lighter padding and no min-height so it doesn’t dominate the section */
+.comments-empty.route-empty-state {
+	padding: 24px;
+	min-height: 0;
 }
 
 .route-empty-title {
