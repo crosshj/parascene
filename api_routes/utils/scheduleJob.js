@@ -1,4 +1,4 @@
-import { getBaseAppUrl } from "./url.js";
+import { getQStashCallbackBaseUrl } from "./url.js";
 
 function hasNonEmpty(value) {
 	return typeof value === "string" && value.trim().length > 0;
@@ -32,7 +32,7 @@ export async function scheduleJob({ jobType, args, jobId, runJob, log = console 
 	});
 
 	if (isVercel && hasNonEmpty(qstashToken)) {
-		const callbackUrl = new URL("/api/worker/jobs", getBaseAppUrl()).toString();
+		const callbackUrl = new URL("/api/worker/jobs", getQStashCallbackBaseUrl()).toString();
 		const qstashBaseUrl = process.env.UPSTASH_QSTASH_URL;
 		const publishUrl = `${qstashBaseUrl}/v2/publish/${callbackUrl}`;
 
