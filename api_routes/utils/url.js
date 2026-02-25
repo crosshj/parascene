@@ -1,12 +1,16 @@
 /** Default production origin. Override with APP_ORIGIN env. Single place to change app domain. */
 const DEFAULT_APP_ORIGIN = "https://www.parascene.com";
 
-/** Base URL for QStash callbacks (where QStash POSTs when a job runs). Defaults to api.parascene.com. */
-const DEFAULT_QSTASH_CALLBACK_ORIGIN = "https://api.parascene.com";
+/** Hostname for the API subdomain. Used for QStash callbacks and to restrict api subdomain to /api paths only. */
+const API_HOSTNAME = "api.parascene.com";
 
+export function getApiHostname() {
+	return API_HOSTNAME;
+}
+
+/** Base URL for QStash callbacks (where QStash POSTs when a job runs). */
 export function getQStashCallbackBaseUrl() {
-	const base = process.env.API_ORIGIN || DEFAULT_QSTASH_CALLBACK_ORIGIN;
-	return base.replace(/\/$/, "");
+	return `https://${getApiHostname()}`;
 }
 
 export function getBaseAppUrl() {
