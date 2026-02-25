@@ -544,6 +544,8 @@ export default function createAdminRoutes({ queries, storage }) {
 				created_image_anon_id: r.created_image_anon_id,
 				user_agent: meta?.user_agent ?? null,
 				ip: meta?.ip ?? null,
+				ip_source: meta?.ip_source ?? null,
+				cf_ray: meta?.cf_ray ?? null,
 				image: img
 					? {
 							id: img.id,
@@ -608,7 +610,12 @@ export default function createAdminRoutes({ queries, storage }) {
 				sharer_label: userLabelByUserId[v.sharer_user_id] ?? `#${v.sharer_user_id}`,
 				creator_label: userLabelByUserId[v.created_by_user_id] ?? `#${v.created_by_user_id}`,
 				user_agent: meta?.user_agent ?? null,
-				ip: meta?.ip ?? null
+				ip: meta?.ip ?? null,
+				ip_source: meta?.ip_source ?? null,
+				country: meta?.country ?? null,
+				region: meta?.region ?? null,
+				city: meta?.city ?? null,
+				cf_ray: meta?.cf_ray ?? null
 			};
 		});
 		res.json({ items: enriched, total });

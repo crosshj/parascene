@@ -459,7 +459,35 @@ class AppRouteUsers extends HTMLElement {
 						key: 'ip',
 						label: 'IP',
 						className: 'share-table-col-ip',
-						render: (row) => escapeHtml(truncateStr(row.ip ?? '', 45))
+						render: (row) => {
+							const ip = row.ip ?? '';
+							const src = row.ip_source ?? '';
+							const ipStr = escapeHtml(truncateStr(ip, 45));
+							if (!ipStr) return '—';
+							if (src) {
+								return `${ipStr} <span class="share-table-ip-source" title="IP from header: ${escapeHtml(src)}">${escapeHtml(src)}</span>`;
+							}
+							return ipStr;
+						}
+					},
+					{
+						key: 'location',
+						label: 'Location',
+						className: 'share-table-col-location',
+						render: (row) => {
+							const parts = [row.city, row.region, row.country].filter(Boolean);
+							return parts.length ? escapeHtml(parts.join(', ')) : '—';
+						}
+					},
+					{
+						key: 'cf_ray',
+						label: 'CF Ray',
+						className: 'share-table-col-cf-ray',
+						render: (row) => {
+							const ray = row.cf_ray ?? '';
+							if (!ray) return '—';
+							return `<span class="share-table-cf-ray" title="Cloudflare request ID: search in Cloudflare Logs / Log Explorer to match this request">${escapeHtml(truncateStr(ray, 24))}</span>`;
+						}
 					},
 					{
 						key: 'referer',
@@ -517,6 +545,8 @@ class AppRouteUsers extends HTMLElement {
 				const userAgentEscaped = (userAgentDisplay || '—').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 				const userAgentTitle = req.user_agent ? req.user_agent.replace(/"/g, '&quot;') : '';
 				const ipEscaped = (req.ip ?? '—').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+				const ipSourceEscaped = (req.ip_source ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+				const cfRayEscaped = (req.cf_ray ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 				let imageBlock = '<span class="anon-request-no-image">No image</span>';
 				if (req.image) {
 					const img = req.image;
@@ -531,7 +561,8 @@ class AppRouteUsers extends HTMLElement {
 					<div class="anon-request-meta">
 						<span class="anon-request-datetime" title="${(req.created_at || '').replace(/"/g, '&quot;')}">${createdLabel}</span>
 						<span class="anon-request-fulfilled">Fulfilled ${fulfilledLabel}</span>
-						${req.ip ? `<span class="anon-request-ip">${ipEscaped}</span>` : ''}
+						${req.ip ? `<span class="anon-request-ip" title="${ipSourceEscaped ? `Source: ${ipSourceEscaped}` : ''}">${ipEscaped}${req.ip_source ? ` <span class="anon-request-ip-source">(${ipSourceEscaped})</span>` : ''}</span>` : ''}
+						${req.cf_ray ? `<span class="anon-request-cf-ray" title="Cloudflare Ray ID: search in CF Logs to correlate">${cfRayEscaped}</span>` : ''}
 						${req.user_agent ? `<span class="anon-request-user-agent" title="${userAgentTitle}">${userAgentEscaped}</span>` : ''}
 					</div>
 					<div class="anon-request-image">${imageBlock}</div>

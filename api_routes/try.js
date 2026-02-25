@@ -1,5 +1,6 @@
 import express from "express";
 import sharp from "sharp";
+import { getClientIp, getCloudflareRay } from "./utils/requestClientIp.js";
 import { runAnonCreationJob } from "./utils/creationJob.js";
 import { scheduleAnonCreationJob } from "./utils/scheduleCreationJob.js";
 import { verifyQStashRequest } from "./utils/qstashVerification.js";
@@ -13,13 +14,18 @@ const TRY_PROMPT_POOL_MAX = 5;
 /** anon_cid used for pool-refill rows (background generations that fill the prompt pool; not tied to a specific user). */
 const ANON_CID_POOL = "__pool__";
 
-/** Build meta object for try_request (user_agent, ip). Only includes keys with truthy values. */
+/** Build meta object for try_request (user_agent, ip, ip_source, cf_ray). Only includes keys with truthy values. */
 function buildTryRequestMeta(req) {
 	const userAgent = typeof req.get?.("user-agent") === "string" ? req.get("user-agent").trim() || null : null;
-	const ip = typeof req.ip === "string" ? req.ip.trim() || null : (req.socket?.remoteAddress ?? null);
+	const { ip, source: ipSource } = getClientIp(req);
+	const cfRay = getCloudflareRay(req);
 	const meta = {};
 	if (userAgent) meta.user_agent = userAgent;
-	if (ip) meta.ip = ip;
+	if (ip) {
+		meta.ip = ip;
+		if (ipSource) meta.ip_source = ipSource;
+	}
+	if (cfRay) meta.cf_ray = cfRay;
 	return Object.keys(meta).length ? meta : null;
 }
 

@@ -4,6 +4,7 @@ import { clearAuthCookie, COOKIE_NAME } from "./auth.js";
 import { injectCommonHead } from "./utils/head.js";
 import { getBaseAppUrl } from "./utils/url.js";
 import { verifyShareToken } from "./utils/shareLink.js";
+import { getClientIp, getVercelGeo, getCloudflareRay } from "./utils/requestClientIp.js";
 
 function getPageForUser(user) {
 	const roleToPage = {
@@ -189,11 +190,16 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 			const referer = typeof req.get("referer") === "string" ? req.get("referer").trim() || null : null;
 			const anonCid = typeof req.cookies?.ps_cid === "string" ? req.cookies.ps_cid.trim() || null : null;
 			const userAgent = typeof req.get("user-agent") === "string" ? req.get("user-agent").trim() || null : null;
-			const ip = typeof req.ip === "string" ? req.ip.trim() || null : (req.socket?.remoteAddress ?? null);
-			const meta =
-				userAgent || ip
-					? { page: "share", ...(userAgent ? { user_agent: userAgent } : {}), ...(ip ? { ip } : {}) }
-					: { page: "share" };
+			const { ip, source: ipSource } = getClientIp(req);
+			const vercelGeo = getVercelGeo(req);
+			const cfRay = getCloudflareRay(req);
+			const meta = {
+				page: "share",
+				...(userAgent ? { user_agent: userAgent } : {}),
+				...(ip ? { ip, ...(ipSource ? { ip_source: ipSource } : {}) } : {}),
+				...(Object.keys(vercelGeo).length ? vercelGeo : {}),
+				...(cfRay ? { cf_ray: cfRay } : {})
+			};
 			if (
 				queries.insertSharePageView?.run &&
 				sharerId > 0 &&

@@ -58,6 +58,8 @@ process.on("unhandledRejection", (reason, promise) => {
 });
 
 const app = express();
+// Trust proxy so req.ip reflects the client when behind nginx/Vercel/etc. (X-Forwarded-For).
+app.set("trust proxy", true);
 const port = process.env.PORT || 3000;
 
 const __filename = fileURLToPath(import.meta.url);
