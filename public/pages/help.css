@@ -149,6 +149,11 @@
 	color: var(--text-muted);
 }
 
+/* Ungrouped items (e.g. Privacy, Terms) align with section headers */
+.help-nav-section--ungrouped .help-nav-item {
+	padding-left: 14px;
+}
+
 .help-nav-item {
 	padding: 10px 14px;
 	padding-left: 20px;

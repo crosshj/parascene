@@ -145,6 +145,11 @@ class AppModalCreationDetails extends HTMLElement {
 						if (shouldHidePrompt && Object.prototype.hasOwnProperty.call(argsToDisplay, "prompt")) {
 							delete argsToDisplay.prompt;
 						}
+						// Don't show model in modal; it's shown in the creation meta bar instead
+						const modelVal = argsToDisplay.model;
+						if (modelVal != null && String(modelVal).trim() !== "") {
+							delete argsToDisplay.model;
+						}
 					}
 					const pretty = JSON.stringify(argsToDisplay ?? {}, null, 2);
 					argsEl.textContent = pretty;

@@ -925,6 +925,14 @@ async function loadCreation() {
 			: (typeof meta?.method === 'string' ? meta.method : '');
 		const durationStr = formatDuration(meta || {});
 
+		// Display model from args (to the right of Method in meta bar). Strip after first colon if present.
+		const rawModel = isPlainObject && Object.prototype.hasOwnProperty.call(args, 'model')
+			? (typeof args.model === 'string' ? args.model.trim() : String(args.model ?? '').trim())
+			: '';
+		const displayModel = rawModel === ''
+			? ''
+			: (rawModel.includes(':') ? rawModel.split(':')[0] : rawModel);
+
 		// Style from meta (stored when created via create.html with a style)
 		const styleMeta = meta?.style && typeof meta.style === 'object' ? meta.style : null;
 		const styleLabel = styleMeta && typeof styleMeta.label === 'string' ? styleMeta.label.trim() : '';
@@ -936,7 +944,7 @@ async function loadCreation() {
 		const descriptionText = typeof creation.description === 'string' ? creation.description.trim() : '';
 		const hasDescription = descriptionText.length > 0;
 		const hasPrompt = promptText.length > 0;
-		const hasMetaInDescription = !!(serverName || methodName || durationStr);
+		const hasMetaInDescription = !!(serverName || methodName || displayModel || durationStr);
 		const showDescriptionBlock = descriptionText || promptText || hasStyle || lineageSectionHtml || hasMetaInDescription;
 
 		if (showDescriptionBlock) {
@@ -970,12 +978,14 @@ async function loadCreation() {
 
 			// Build Server/Method/Duration line (outside collapsible)
 			let metaLineHtml = '';
-			if (serverName || methodName || durationStr) {
+			if (serverName || methodName || displayModel || durationStr) {
 				const metaItems = [];
-				if (serverName) metaItems.push(html`<span class="creation-detail-description-meta-label">Server</span> <span
+				if (serverName && serverName !== 'Parascene') metaItems.push(html`<span class="creation-detail-description-meta-label">Server</span> <span
 	class="creation-detail-description-meta-value">${escapeHtml(serverName)}</span>`);
-				if (methodName) metaItems.push(html`<span class="creation-detail-description-meta-label">Method</span> <span
+				if (methodName && methodName !== 'Replicate') metaItems.push(html`<span class="creation-detail-description-meta-label">Method</span> <span
 	class="creation-detail-description-meta-value">${escapeHtml(methodName)}</span>`);
+				if (displayModel) metaItems.push(html`<span class="creation-detail-description-meta-label">Model</span> <span
+	class="creation-detail-description-meta-value">${escapeHtml(displayModel)}</span>`);
 				if (durationStr) metaItems.push(html`<span class="creation-detail-description-meta-label">Duration</span> <span
 	class="creation-detail-description-meta-value">${escapeHtml(durationStr)}</span>`);
 				metaLineHtml = html`<div class="creation-detail-description-meta-line">${metaItems.join(' • ')}</div>`;
@@ -1017,6 +1027,13 @@ async function loadCreation() {
 			}
 			if (shouldHidePrompt && Object.prototype.hasOwnProperty.call(filteredArgs, 'prompt')) {
 				delete filteredArgs.prompt;
+			}
+			// Model is shown in meta bar, not in modal
+			if (Object.prototype.hasOwnProperty.call(filteredArgs, 'model')) {
+				const mv = filteredArgs.model;
+				if (mv != null && String(mv).trim() !== '') {
+					delete filteredArgs.model;
+				}
 			}
 
 			// Check if there are any keys left after filtering

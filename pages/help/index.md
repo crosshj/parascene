@@ -34,3 +34,8 @@ Browse by topic or use the search above.
 - [Tipping](/help/credits/tipping) — Tip creators and support work you like.
 - [Boost and compete](/help/credits/boost-and-compete) — Earn through boosts and competitions.
 - [Run a server](/help/credits/run-a-server) — Run a server and earn when others use it.
+
+<br />
+
+[Privacy Notice](/help/privacy) — How we collect, use, and share your information.   
+[Terms of Service](/help/terms-of-service) — The terms that govern your use of parascene.   

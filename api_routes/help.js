@@ -78,9 +78,12 @@ async function scanHelpDirectory(dir, baseDir, section = '') {
 			const content = await fs.readFile(fullPath, 'utf-8');
 			const { metadata, body } = parseFrontmatter(content);
 			
-			// Section for display/grouping (prefix stripped); sortSection for ordering (raw)
-			const rawSection = section || (relativePath.includes('/') ? path.dirname(relativePath) : '');
-			const fileSection = stripPathPrefix(rawSection);
+			// Section for display/grouping (prefix stripped); sortSection for ordering (raw). Frontmatter can override.
+			// Root-level files use filename (e.g. 05-privacy) as sortSection so numeric prefix controls nav order.
+			const rawSection = section || (relativePath.includes('/') ? path.dirname(relativePath) : entry.name.replace(/\.md$/i, ''));
+			const fileSection = typeof metadata.section === 'string' && metadata.section.trim()
+				? metadata.section.trim()
+				: stripPathPrefix(rawSection);
 			// Title from filename: strip numeric prefix (e.g. 01-) then format
 			const nameWithoutExt = entry.name.replace(/\.md$/i, '');
 			const nameForTitle = stripSegmentPrefix(nameWithoutExt);
@@ -210,12 +213,16 @@ const SECTION_DISPLAY_NAMES = {
 	'create': 'Create',
 	'connect': 'Connect',
 	'discover': 'Discover',
-	'credits': 'Credits'
+	'credits': 'Credits',
+	'privacy': 'Privacy',
+	'terms': 'Terms',
+	'ungrouped': ''
 };
 
 function formatSectionName(section) {
 	if (!section) return 'General';
-	if (SECTION_DISPLAY_NAMES[section]) return SECTION_DISPLAY_NAMES[section];
+	const name = SECTION_DISPLAY_NAMES[section];
+	if (name !== undefined) return name;
 	return section.split('/').map(part =>
 		SECTION_DISPLAY_NAMES[part] || part.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
 	).join(' / ');
@@ -231,9 +238,10 @@ function generateHelpPageHtml({ title, description, html, navigation, isIndex = 
 			</a>
 		`).join('');
 		
+		const isUngrouped = !sectionTitle;
 		return `
-			<div class="help-nav-section" data-section="${escapeHtml(sectionGroup.section || '')}">
-				<div class="help-nav-section-title">${sectionTitle}</div>
+			<div class="help-nav-section${isUngrouped ? ' help-nav-section--ungrouped' : ''}" data-section="${escapeHtml(sectionGroup.section || '')}">
+				${sectionTitle ? `<div class="help-nav-section-title">${sectionTitle}</div>` : ''}
 				${itemsHtml}
 			</div>
 		`;
@@ -246,7 +254,7 @@ function generateHelpPageHtml({ title, description, html, navigation, isIndex = 
 				const sectionTitle = formatSectionName(sectionGroup.section);
 				return `
 					<div class="help-index-section">
-						<h3 class="help-index-section-title">${sectionTitle}</h3>
+						${sectionTitle ? `<h3 class="help-index-section-title">${sectionTitle}</h3>` : ''}
 						<div class="help-index-list">
 							${sectionGroup.items.map(item => `
 								<div class="help-index-item">
@@ -390,6 +398,10 @@ export default function createHelpRoutes({ pagesDir, queries }) {
 			res.status(500).json({ error: 'Error searching help articles' });
 		}
 	});
+
+	// Redirect legacy static legal pages to help
+	router.get('/privacy.html', (req, res) => res.redirect(301, '/help/privacy'));
+	router.get('/tos.html', (req, res) => res.redirect(301, '/help/terms-of-service'));
 	
 	// Help index page - serve index.md if present, otherwise show topic list
 	router.get('/help', async (req, res) => {
@@ -476,6 +488,8 @@ export default function createHelpRoutes({ pagesDir, queries }) {
 	
 	// Redirects for old help URLs (Create / Connect / Discover / Credits structure)
 	const HELP_REDIRECTS = {
+		'legal/privacy': 'privacy',
+		'legal/terms-of-service': 'terms-of-service',
 		'creating/creating': 'create/basic',
 		'creating-and-sharing/creating': 'create/basic',
 		'create/creating': 'create/basic',
