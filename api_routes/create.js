@@ -193,7 +193,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			}
 			const errorText = parts.join(" ").toLowerCase();
-			return errorText.length > 0 && errorText.includes("moderated");
+			return errorText.length > 0 && (errorText.includes("moderated") || errorText.includes("flagged as sensitive"));
 		} catch {
 			return false;
 		}
