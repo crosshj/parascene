@@ -37,7 +37,7 @@ import {
 	shouldLogSession
 } from "../api_routes/auth.js";
 import { injectCommonHead } from "../api_routes/utils/head.js";
-import { getApiHostname } from "../api_routes/utils/url.js";
+import { getApiHostname, getBaseAppUrl } from "../api_routes/utils/url.js";
 
 function shouldLogStartup() {
 	return process.env.ENABLE_STARTUP_LOGS === "true";
@@ -140,7 +140,8 @@ app.use((req, res, next) => {
 	const host = (req.hostname || req.get("host") || "").split(":")[0].toLowerCase();
 	const path = (req.path || req.originalUrl || "").split("?")[0];
 	if (host === apiHostname && !path.startsWith("/api")) {
-		return res.status(404).send("Not found");
+		const target = `${getBaseAppUrl()}${req.originalUrl || req.url || path}`;
+		return res.redirect(302, target);
 	}
 	next();
 });
