@@ -1450,6 +1450,13 @@ export default function createCreateRoutes({ queries, storage }) {
 					: (image.file_path || storage.getImageUrl(image.filename)))
 				: null;
 
+			// If creation is NSFW and viewer has not enabled NSFW, return not found (owners and admins may still view).
+			const isNsfw = !!meta?.nsfw;
+			const viewerEnableNsfw = user.meta?.enableNsfw === true;
+			if (isNsfw && !viewerEnableNsfw && image.user_id !== user.id && user.role !== 'admin') {
+				return res.status(404).json({ error: "Image not found" });
+			}
+
 			const response = {
 				id: image.id,
 				filename: image.filename,
@@ -1511,7 +1518,8 @@ export default function createCreateRoutes({ queries, storage }) {
 					title: row.title ?? null,
 					created_at: row.created_at,
 					url: url || null,
-					thumbnail_url: url ? getThumbnailUrl(url) : null
+					thumbnail_url: url ? getThumbnailUrl(url) : null,
+					nsfw: !!(row.nsfw)
 				};
 			});
 			return res.json(children);

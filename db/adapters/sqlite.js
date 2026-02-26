@@ -1496,7 +1496,8 @@ export async function openDb() {
                   COALESCE(ci.file_path, CASE WHEN ci.filename IS NOT NULL THEN '/api/images/created/' || ci.filename ELSE NULL END) as url,
                   COALESCE(lc.like_count, 0) AS like_count,
                   COALESCE(cc.comment_count, 0) AS comment_count,
-                  CASE WHEN ? IS NOT NULL AND vl.user_id IS NOT NULL THEN 1 ELSE 0 END AS viewer_liked
+                  CASE WHEN ? IS NOT NULL AND vl.user_id IS NOT NULL THEN 1 ELSE 0 END AS viewer_liked,
+                  (json_extract(ci.meta,'$.nsfw') = 1 OR json_extract(ci.meta,'$.nsfw') = 'true') AS nsfw
            FROM feed_items fi
            LEFT JOIN created_images ci ON fi.created_image_id = ci.id
            LEFT JOIN user_profiles up ON up.user_id = ci.user_id
@@ -2267,14 +2268,30 @@ export async function openDb() {
 				if (!Number.isFinite(id) || id <= 0) return [];
 				// Match mutate_of_id whether stored as number or string in JSON
 				const stmt = db.prepare(
-					`SELECT id, filename, file_path, title, created_at, status
+					`SELECT id, filename, file_path, title, created_at, status,
+                  (json_extract(meta,'$.nsfw') = 1 OR json_extract(meta,'$.nsfw') = 'true') AS nsfw
            FROM created_images
            WHERE (json_extract(meta, '$.mutate_of_id') = ? OR json_extract(meta, '$.mutate_of_id') = ?)
              AND (published = 1)
              AND (unavailable_at IS NULL OR unavailable_at = '')
            ORDER BY created_at ASC`
 				);
-				return Promise.resolve(stmt.all(id, String(id)));
+				return Promise.resolve(stmt.all(id, String(id)).map((r) => ({ ...r, nsfw: !!(r.nsfw) })));
+			}
+		},
+		/** Return id and nsfw for given creation ids (for lineage NSFW flags). */
+		selectCreatedImageNsfwByIds: {
+			all: async (ids) => {
+				const safeIds = Array.isArray(ids)
+					? ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
+					: [];
+				if (safeIds.length === 0) return [];
+				const placeholders = safeIds.map(() => "?").join(",");
+				const stmt = db.prepare(
+					`SELECT id, (json_extract(meta,'$.nsfw') = 1 OR json_extract(meta,'$.nsfw') = 'true') AS nsfw
+					 FROM created_images WHERE id IN (${placeholders})`
+				);
+				return Promise.resolve(stmt.all(...safeIds).map((r) => ({ id: r.id, nsfw: !!(r.nsfw) })));
 			}
 		},
 		// Anonymous (try) creations (no anon_cid or color; try_requests links requesters to images)

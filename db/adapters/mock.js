@@ -1099,11 +1099,14 @@ export function openDb() {
 
 				return filtered.map((item) => {
 					const cid = Number(item.created_image_id);
+					const ci = created_images.find((c) => Number(c.id) === cid);
+					const nsfw = !!(ci?.meta && typeof ci.meta === "object" && ci.meta.nsfw);
 					const likeCount = likes_created_image.filter((l) => Number(l.created_image_id) === cid).length;
 					const commentCount = comments_created_image.filter((c) => Number(c.created_image_id) === cid).length;
 					const profile = user_profiles.find((p) => p.user_id === Number(item.user_id));
 					return {
 						...item,
+						nsfw,
 						like_count: likeCount,
 						comment_count: commentCount,
 						viewer_liked: Boolean(likes_created_image.some((l) => Number(l.created_image_id) === cid && Number(l.user_id) === viewerIdNum)),
@@ -1693,7 +1696,25 @@ export function openDb() {
 						file_path: img.file_path,
 						title: img.title,
 						created_at: img.created_at,
-						status: img.status
+						status: img.status,
+						nsfw: !!(img?.meta && typeof img.meta === "object" && img.meta.nsfw)
+					}));
+			}
+		},
+		/** Return id and nsfw for given creation ids (for lineage NSFW flags). */
+		selectCreatedImageNsfwByIds: {
+			all: async (ids) => {
+				const safeIds = Array.isArray(ids)
+					? ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
+					: [];
+				if (safeIds.length === 0) return [];
+				const idSet = new Set(safeIds);
+				const list = (typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.created_images) ?? created_images ?? [];
+				return list
+					.filter((img) => img?.id != null && idSet.has(Number(img.id)))
+					.map((img) => ({
+						id: img.id,
+						nsfw: !!(img?.meta && typeof img.meta === "object" && img.meta.nsfw)
 					}));
 			}
 		},

@@ -318,6 +318,31 @@ export default function createCreationsRoutes({ queries }) {
 		return res.json({ creations });
 	});
 
+	// GET /api/creations/nsfw-flags?ids=1,2,3 - Returns { "1": false, "2": true } for lineage (ancestors/children) NSFW handling.
+	router.get("/api/creations/nsfw-flags", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+			const idsRaw = req.query.ids;
+			const ids = typeof idsRaw === "string" && idsRaw
+				? idsRaw.split(",").map((s) => parseInt(s.trim(), 10)).filter((n) => Number.isFinite(n) && n > 0)
+				: [];
+			if (ids.length === 0) {
+				return res.json({});
+			}
+			const rows = await queries.selectCreatedImageNsfwByIds?.all?.(ids) ?? [];
+			const flags = {};
+			for (const row of rows) {
+				if (row?.id != null) flags[String(row.id)] = Boolean(row.nsfw);
+			}
+			return res.json(flags);
+		} catch (err) {
+			console.error("[creations] nsfw-flags error:", err);
+			if (!res.headersSent) res.status(500).json({ error: "Unable to load NSFW flags." });
+		}
+	});
+
 	router.get("/api/creations/:id/related", async (req, res) => {
 		try {
 			if (!req.auth?.userId) {

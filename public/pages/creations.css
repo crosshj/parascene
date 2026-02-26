@@ -1142,6 +1142,25 @@ body.creation-detail-page main>section:first-of-type {
 	outline-offset: 2px;
 }
 
+/* NSFW ancestor/child when user has not enabled NSFW: blank placeholder, not clickable */
+.creation-detail-history-nsfw-blank {
+	width: 128px;
+	height: 128px;
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 0;
+	border: 1px solid var(--border);
+	background: var(--surface-muted);
+	cursor: default;
+	pointer-events: none;
+	color: var(--text-muted);
+	font-size: 0.9rem;
+	font-weight: 700;
+	opacity: 0.7;
+}
+
 .creation-detail-history-thumb {
 	width: 100%;
 	height: 100%;

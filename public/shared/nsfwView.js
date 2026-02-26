@@ -148,8 +148,9 @@ export function handleNsfwClick(e) {
 
 	const onDetailPage = typeof window !== 'undefined' && window.location?.pathname?.match?.(/^\/creations\/[^/]+$/);
 
-	// On creation-detail: reveal only this image (no storage, no body class)
+	// On creation-detail: reveal only when user has enabled NSFW in profile; otherwise swallow click (no reveal).
 	if (onDetailPage) {
+		if (document.body.dataset.enableNsfw !== '1') return true;
 		if (document.body.classList.contains(NSFW_VIEW_BODY_CLASS)) return false;
 		const nsfwEl = e.target?.classList?.contains?.('nsfw') ? e.target : e.target?.closest?.('.nsfw');
 		if (!nsfwEl) return false;

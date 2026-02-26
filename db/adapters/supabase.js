@@ -2237,7 +2237,7 @@ export function openDb() {
 				const { data, error } = await serviceClient
 					.from(prefixedTable("feed_items"))
 					.select(
-						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images(filename, file_path, user_id)"
+						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images(filename, file_path, user_id, meta)"
 					)
 					.order("created_at", { ascending: false });
 				if (error) throw error;
@@ -2247,10 +2247,13 @@ export function openDb() {
 					const filename = prsn_created_images?.filename ?? null;
 					const file_path = prsn_created_images?.file_path ?? null;
 					const user_id = prsn_created_images?.user_id ?? null;
+					const meta = prsn_created_images?.meta;
+					const nsfw = !!(meta && typeof meta === "object" && meta.nsfw);
 					return {
 						...rest,
 						filename,
 						user_id,
+						nsfw,
 						url: file_path || (filename ? `/api/images/created/${filename}` : null),
 						like_count: 0,
 						comment_count: 0,
@@ -3132,13 +3135,37 @@ export function openDb() {
 				if (!Number.isFinite(id) || id <= 0) return [];
 				const { data, error } = await serviceClient
 					.from(prefixedTable("created_images"))
-					.select("id, filename, file_path, title, created_at, status")
+					.select("id, filename, file_path, title, created_at, status, meta")
 					.eq("published", true)
 					.is("unavailable_at", null)
 					.contains("meta", { mutate_of_id: id })
 					.order("created_at", { ascending: true });
 				if (error) throw error;
-				return data ?? [];
+				return (data ?? []).map((row) => {
+					const meta = row?.meta;
+					const nsfw = !!(meta && typeof meta === "object" && meta.nsfw);
+					const { meta: _m, ...rest } = row;
+					return { ...rest, nsfw };
+				});
+			}
+		},
+		/** Return id and nsfw for given creation ids (for lineage NSFW flags). */
+		selectCreatedImageNsfwByIds: {
+			all: async (ids) => {
+				const safeIds = Array.isArray(ids)
+					? ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
+					: [];
+				if (safeIds.length === 0) return [];
+				const { data, error } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.select("id, meta")
+					.in("id", safeIds);
+				if (error) throw error;
+				return (data ?? []).map((row) => {
+					const meta = row?.meta;
+					const nsfw = !!(meta && typeof meta === "object" && meta.nsfw);
+					return { id: row.id, nsfw };
+				});
 			}
 		},
 		// Anonymous (try) creations (no anon_cid or color; try_requests links requesters to images)

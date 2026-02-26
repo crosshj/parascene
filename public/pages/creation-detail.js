@@ -7,6 +7,7 @@ import { processUserText, hydrateUserTextLinks } from '/shared/userText.js';
 import { attachAutoGrowTextarea } from '/shared/autogrow.js';
 import { textsSameWithinTolerance } from '/shared/textCompare.js';
 import { buildProfilePath } from '/shared/profileLinks.js';
+import { getNsfwObscure, NSFW_VIEW_BODY_CLASS } from '/shared/nsfwView.js';
 import { renderCreationKebabHtml, setupKebabDropdown } from '/shared/kebabMenu.js';
 import '../components/modals/publish.js';
 import '../components/modals/creation-details.js';
@@ -501,6 +502,13 @@ async function loadCreation() {
 
 	const creationId = getCreationId();
 	if (!creationId) {
+		imageWrapper?.classList.remove('image-loading', 'nsfw', 'image-error-moderated');
+		imageWrapper?.classList.add('image-error');
+		imageWrapper?.removeAttribute('data-creation-id');
+		backgroundEl.style.backgroundImage = '';
+		imageEl.style.visibility = 'hidden';
+		imageEl.src = '';
+		delete imageEl.dataset.currentUrl;
 		detailContent.innerHTML = renderEmptyState({ title: 'Invalid creation ID' });
 		if (actionsEl) actionsEl.style.display = 'none';
 		return;
@@ -525,6 +533,14 @@ async function loadCreation() {
 		});
 		if (!response.ok) {
 			if (response.status === 404) {
+				// Show image-error state (rectangle-with-slash icon), not loading animation
+				imageWrapper?.classList.remove('image-loading', 'nsfw', 'image-error-moderated');
+				imageWrapper?.classList.add('image-error');
+				imageWrapper?.removeAttribute('data-creation-id');
+				backgroundEl.style.backgroundImage = '';
+				imageEl.style.visibility = 'hidden';
+				imageEl.src = '';
+				delete imageEl.dataset.currentUrl;
 				detailContent.innerHTML = renderEmptyState({
 					title: 'Creation not found',
 					message: "The creation you're looking for doesn't exist or you don't have access to it.",
@@ -654,6 +670,10 @@ async function loadCreation() {
 		const isOwner = currentUserId && creation.user_id && currentUserId === creation.user_id;
 		const isAdmin = currentUser?.role === 'admin';
 		const canEdit = isOwner || isAdmin;
+		const enableNsfw = currentUser?.enableNsfw === true;
+		const showUnobscured = !getNsfwObscure() || document.body.classList.contains(NSFW_VIEW_BODY_CLASS);
+		// Let global NSFW click handler know whether click-to-reveal is allowed on this page
+		document.body.dataset.enableNsfw = enableNsfw ? '1' : '0';
 
 		function escapeHtml(value) {
 			return String(value ?? '')
@@ -858,22 +878,42 @@ async function loadCreation() {
 			</span>
 		`;
 
-		// Ancestors: lineage chain (current "lineage" content)
+		// Ancestors: lineage chain (current "lineage" content). NSFW ancestors: blank + no link when !enableNsfw; blurred/unobscured when enableNsfw.
 		let ancestorsHtml = '';
+		let nsfwById = new Map();
 		if (historyIds.length > 0 && historyChainIds.length >= 2) {
 			const nonCurrentIds = historyChainIds.filter((id) => id !== creationId);
-			const parts = nonCurrentIds.map((id) => `
+			try {
+				const flagsRes = await fetch(`/api/creations/nsfw-flags?ids=${nonCurrentIds.join(',')}`, { credentials: 'include' });
+				if (flagsRes.ok) {
+					const flags = await flagsRes.json();
+					if (flags && typeof flags === 'object') {
+						for (const [k, v] of Object.entries(flags)) nsfwById.set(k, v === true);
+					}
+				}
+			} catch {
+				// ignore
+			}
+			const parts = nonCurrentIds.map((id) => {
+				const nsfw = nsfwById.get(String(id)) === true;
+				if (!enableNsfw && nsfw) {
+					return `<span class="creation-detail-history-thumb-link creation-detail-history-nsfw-blank" data-history-id="${id}" aria-label="${escapeHtml(`Creation #${id} (hidden)`)}">#${id}</span><span class="creation-detail-history-arrow" aria-hidden="true">→</span>`;
+				}
+				const nsfwClass = enableNsfw && nsfw ? (showUnobscured ? ' nsfw nsfw-revealed' : ' nsfw') : '';
+				const dataCreationId = enableNsfw && nsfw ? ` data-creation-id="${id}"` : '';
+				return `
 				<a
-					class="creation-detail-history-thumb-link"
+					class="creation-detail-history-thumb-link${nsfwClass}"
 					href="/creations/${id}"
 					aria-label="${escapeHtml(`Go to creation #${id}`)}"
-					data-history-id="${id}"
+					data-history-id="${id}"${dataCreationId}
 				>
 					<span class="creation-detail-history-fallback" data-history-fallback>#${id}</span>
 					<img class="creation-detail-history-thumb" data-history-img alt="" loading="lazy" style="display: none;" />
 				</a>
 				<span class="creation-detail-history-arrow" aria-hidden="true">→</span>
-			`).join('');
+			`;
+			}).join('');
 
 			ancestorsHtml = html`
 				<div class="creation-detail-history-wrap">
@@ -885,19 +925,25 @@ async function loadCreation() {
 			`;
 		}
 
-		// Children: direct derivatives (mutate_of_id = this creation), order by date created
+		// Children: direct derivatives (mutate_of_id = this creation). NSFW children: blank + no link when !enableNsfw; blurred/unobscured when enableNsfw.
 		const childrenList = await childrenPromise;
 		let childrenHtml = '';
 		if (Array.isArray(childrenList) && childrenList.length > 0) {
 			const childParts = childrenList.map((child) => {
 				const cid = child.id;
+				const childNsfw = !!child.nsfw;
 				const thumbUrl = (child.thumbnail_url || child.url || '').trim();
+				if (!enableNsfw && childNsfw) {
+					return `<span class="creation-detail-history-thumb-link creation-detail-history-nsfw-blank" data-child-id="${cid}" aria-label="${escapeHtml(`Creation #${cid} (hidden)`)}">#${cid}</span>`;
+				}
+				const nsfwClass = enableNsfw && childNsfw ? (showUnobscured ? ' nsfw nsfw-revealed' : ' nsfw') : '';
+				const dataCreationId = enableNsfw && childNsfw ? ` data-creation-id="${cid}"` : '';
 				return `
 				<a
-					class="creation-detail-history-thumb-link"
+					class="creation-detail-history-thumb-link${nsfwClass}"
 					href="/creations/${cid}"
 					aria-label="${escapeHtml(`Go to creation #${cid}`)}"
-					data-child-id="${cid}"
+					data-child-id="${cid}"${dataCreationId}
 				>
 					<span class="creation-detail-history-fallback" data-child-fallback>#${cid}</span>
 					<img class="creation-detail-history-thumb" data-child-img alt="" loading="lazy" style="display: none;" data-bg-url="${escapeHtml(thumbUrl)}" />
@@ -1314,13 +1360,13 @@ async function loadCreation() {
 		hydrateUserTextLinks(detailContent);
 		setupCollapsibleDescription(detailContent);
 
-		// Hydrate history thumbnails (best-effort).
+		// Hydrate history thumbnails (best-effort). Skip fetching thumbs for NSFW ancestors when user has not enabled NSFW (they are blank spans).
 		if (historyIds.length > 0) {
 			const historyRoot = detailContent.querySelector('[data-creation-history]');
 			if (historyRoot) {
 				const thumbMap = new Map();
-
-				const idsToFetch = historyChainIds.filter((id) => id !== creationId);
+				const nonCurrentIds = historyChainIds.filter((id) => id !== creationId);
+				const idsToFetch = nonCurrentIds.filter((id) => enableNsfw || nsfwById.get(String(id)) !== true);
 				const results = await Promise.allSettled(idsToFetch.map((id) => fetchCreationThumbUrl(id)));
 				for (let i = 0; i < idsToFetch.length; i++) {
 					const id = idsToFetch[i];
@@ -1350,7 +1396,7 @@ async function loadCreation() {
 			}
 		}
 
-		// Hydrate children thumbnails (URLs from API).
+		// Hydrate children thumbnails (URLs from API). NSFW blanks are spans with no img; for NSFW links add nsfw-revealed when showUnobscured.
 		const childrenRoot = detailContent.querySelector('[data-creation-children]');
 		if (childrenRoot) {
 			const imgs = childrenRoot.querySelectorAll('img[data-child-img][data-bg-url]');
@@ -1360,7 +1406,11 @@ async function loadCreation() {
 				if (!bgUrl) continue;
 				img.src = bgUrl;
 				img.style.display = '';
-				const fallback = img.closest('a')?.querySelector('[data-child-fallback]');
+				const link = img.closest('a');
+				if (link && showUnobscured && link.classList.contains('nsfw')) {
+					link.classList.add('nsfw-revealed');
+				}
+				const fallback = link?.querySelector('[data-child-fallback]');
 				if (fallback instanceof HTMLElement) fallback.style.display = 'none';
 			}
 		}

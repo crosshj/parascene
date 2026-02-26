@@ -4475,6 +4475,12 @@ body.view-nsfw .nsfw::after {
 	display: none;
 }
 
+/* When user has not enabled NSFW, creation-detail hero should not suggest click (no pointer cursor) */
+body[data-enable-nsfw="0"] .nsfw,
+body[data-enable-nsfw="0"] .nsfw::before {
+	cursor: default;
+}
+
 /* Edit / Publish creation modal: wider and larger description field */
 app-modal-publish .publish-modal {
 	max-width: 580px;
