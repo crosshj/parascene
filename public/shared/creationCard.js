@@ -18,11 +18,12 @@ function escapeAttr(v) {
 /**
  * Build the HTML string for one creation card shell.
  * @param {{
- *   mediaAttrs?: Record<string, string>,
+ *   mediaAttrs?: Record<string, string | boolean>,
  *   mediaContent?: string,
  *   badgesHtml?: string,
  *   detailsContentHtml: string,
- *   bulkOverlayHtml?: string
+ *   bulkOverlayHtml?: string,
+ *   nsfw?: boolean
  * }} options
  * @returns {string}
  */
@@ -33,13 +34,15 @@ export function buildCreationCardShell(options) {
 		badgesHtml = '',
 		detailsContentHtml,
 		bulkOverlayHtml = '',
+		nsfw = false,
 	} = options;
 
 	const attrs = Object.entries(mediaAttrs)
 		.filter(([, v]) => v != null && v !== '')
 		.map(([k, v]) => (v === true ? k : `${k}="${escapeAttr(v)}"`))
 		.join(' ');
-	const mediaTag = html`<div class="route-media" aria-hidden="true"${attrs ? ' ' + attrs : ''}>${mediaContent}</div>`;
+	const mediaClass = 'route-media' + (nsfw ? ' nsfw' : '');
+	const mediaTag = html`<div class="${mediaClass}" aria-hidden="true"${attrs ? ' ' + attrs : ''}>${mediaContent}</div>`;
 
 	return html`<div class="route-card route-card-image">
 ${mediaTag}
