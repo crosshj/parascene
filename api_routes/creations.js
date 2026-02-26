@@ -1,8 +1,9 @@
 import express from "express";
-import { createClient } from "@supabase/supabase-js";
 import Replicate from "replicate";
 import { getThumbnailUrl } from "./utils/url.js";
 import { getTextEmbeddingFromReplicate } from "./utils/embeddings.js";
+import { getSupabaseServiceClient } from "./utils/supabaseService.js";
+import { runSemanticSearch } from "./utils/embeddingsSearch.js";
 import { recommendWithDataSource } from "../db/recommend/recsysWrapper.js";
 
 const RELATED_LIMIT_CAP = 40;
@@ -25,25 +26,6 @@ function parseSemanticOffset(queryOffset) {
 }
 const EMBEDDINGS_TABLE = "prsn_created_embeddings";
 const RPC_NEAREST = "prsn_created_embeddings_nearest";
-const SEARCH_CACHE_TABLE = "prsn_search_embedding_cache";
-const RPC_SEARCH_CACHE_RECORD_USAGE = "prsn_search_embedding_cache_record_usage";
-
-/** Normalize search query for cache key: trim, lowercase, collapse whitespace. */
-function normalizeSearchQuery(q) {
-	if (typeof q !== "string") return "";
-	return q.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-let supabaseServiceClient = null;
-
-function getSupabaseServiceClient() {
-	if (supabaseServiceClient) return supabaseServiceClient;
-	const url = process.env.SUPABASE_URL;
-	const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-	if (!url || !key) return null;
-	supabaseServiceClient = createClient(url, key);
-	return supabaseServiceClient;
-}
 
 function parseRecsysConfigFromParams(params, limit) {
 	return {
@@ -639,64 +621,24 @@ export default function createCreationsRoutes({ queries }) {
 		}
 	});
 
-	// Semantic search by text (embed query → nearest). No auth for test page. Uses cache to avoid Replicate when possible.
+	// Semantic search by text (embed query → nearest). No auth for test page. Uses shared runSemanticSearch.
 	router.get("/api/embeddings/search", async (req, res) => {
 		try {
 			const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
-			if (!q) return res.status(400).json({ error: "Missing query (q)." });
-			const normalized = normalizeSearchQuery(q);
-			if (!normalized) return res.status(400).json({ error: "Missing query (q)." });
 			const limit = parseSemanticLimit(req.query.limit);
 			const offset = parseSemanticOffset(req.query.offset);
-			const supabase = getSupabaseServiceClient();
-			if (!supabase) return res.status(503).json({ error: "Embeddings unavailable." });
-
-			let embedding = null;
-			const { data: cached, error: cacheErr } = await supabase
-				.from(SEARCH_CACHE_TABLE)
-				.select("id, embedding")
-				.eq("normalized_query", normalized)
-				.maybeSingle();
-			if (!cacheErr && cached?.embedding) {
-				await supabase.rpc(RPC_SEARCH_CACHE_RECORD_USAGE, { p_cache_id: cached.id });
-				embedding = cached.embedding;
+			let result;
+			try {
+				result = await runSemanticSearch({ q, limit, offset });
+			} catch (e) {
+				if (e?.statusCode) return res.status(e.statusCode).json({ error: e.message });
+				throw e;
 			}
-			if (!embedding || !Array.isArray(embedding)) {
-				const token = process.env.REPLICATE_API_TOKEN;
-				if (!token) return res.status(503).json({ error: "Search unavailable (no REPLICATE_API_TOKEN)." });
-				const replicate = new Replicate({ auth: token });
-				embedding = await getTextEmbeddingFromReplicate(replicate, q);
-				if (!embedding || !Array.isArray(embedding)) {
-					return res.status(502).json({ error: "Failed to embed query." });
-				}
-				const { data: inserted, error: insertErr } = await supabase
-					.from(SEARCH_CACHE_TABLE)
-					.insert({ normalized_query: normalized, embedding })
-					.select("id")
-					.single();
-				if (!insertErr && inserted?.id) {
-					await supabase.rpc(RPC_SEARCH_CACHE_RECORD_USAGE, { p_cache_id: inserted.id });
-				}
-			}
-
-			const { data: nearestRaw, error: rpcErr } = await supabase.rpc(RPC_NEAREST, {
-				target_embedding: embedding,
-				exclude_id: null,
-				lim: limit + 1,
-				off: offset
-			});
-			if (rpcErr) {
-				console.error("[creations] embeddings/search RPC:", rpcErr);
-				return res.status(500).json({ error: "Similarity search failed." });
-			}
-			const hasMore = Array.isArray(nearestRaw) && nearestRaw.length > limit;
-			const nearest = hasMore ? nearestRaw.slice(0, limit) : (nearestRaw ?? []);
-			const ids = nearest.map((r) => Number(r?.created_image_id)).filter((n) => Number.isFinite(n) && n > 0);
+			const { ids, idToDistance, hasMore } = result;
 			if (ids.length === 0) return res.json({ items: [], distances: {}, has_more: false });
 
 			const feedByCreation = queries.selectFeedItemsByCreationIds?.all;
 			const neighbourRows = await feedByCreation(ids);
-			const idToDistance = new Map((nearest ?? []).map((r) => [Number(r.created_image_id), Number(r.distance)]));
 			const orderIdx = new Map(ids.map((id, i) => [id, i]));
 			const sorted = neighbourRows.slice().sort((a, b) => (orderIdx.get(Number(a.id)) ?? 999) - (orderIdx.get(Number(b.id)) ?? 999));
 			const items = mapRelatedItemsToResponse(sorted, [], null).map((item) => ({

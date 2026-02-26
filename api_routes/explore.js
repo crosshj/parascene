@@ -1,6 +1,7 @@
 import express from "express";
 import { Redis } from "@upstash/redis";
 import { getThumbnailUrl } from "./utils/url.js";
+import { runSemanticSearch } from "./utils/embeddingsSearch.js";
 
 const MAX_COMMENT_META_SEARCH_IMAGES = 300;
 const SEARCH_IDS_REDIS_KEY_PREFIX = "explore:search:ids:v1:";
@@ -343,50 +344,59 @@ export default function createExploreRoutes({ queries }) {
 				return res.status(401).json({ error: "Unauthorized" });
 			}
 			const user = await queries.selectUserById.get(req.auth?.userId);
-			const enableNsfw = user?.meta?.enableNsfw === true;
+			if (!user) {
+				return res.status(404).json({ error: "User not found" });
+			}
+			const enableNsfw = user.meta?.enableNsfw === true;
 
 			const rawQuery = String(req.query.q || "").trim();
 			if (!rawQuery) {
 				return res.json({ items: [], hasMore: false });
 			}
 			const limit = Math.min(Math.max(1, parseInt(req.query.limit, 10) || 50), 100);
-			const baseUrl = process.env.APP_URL || `${req.protocol || "https"}://${req.get("host") || req.headers?.host || "localhost"}`;
-			const searchUrl = `${baseUrl}/api/embeddings/search?q=${encodeURIComponent(rawQuery)}&limit=${Math.max(limit, 200)}`;
-			let searchRes;
+			let searchResult;
 			try {
-				searchRes = await fetch(searchUrl);
-			} catch (fetchErr) {
-				console.error("[explore search/semantic] fetch embeddings/search:", fetchErr);
-				return res.status(502).json({ error: "Semantic search unavailable." });
+				searchResult = await runSemanticSearch({
+					q: rawQuery,
+					limit: Math.max(limit, 200),
+					offset: 0
+				});
+			} catch (e) {
+				if (e?.statusCode) {
+					return res.status(e.statusCode).json({ error: e.message });
+				}
+				throw e;
 			}
-			if (!searchRes.ok) {
-				return res.status(searchRes.status).json({ error: "Semantic search failed." });
-			}
-			const searchData = await searchRes.json().catch(() => ({}));
-			const rawItems = Array.isArray(searchData?.items) ? searchData.items : [];
-			const orderedIds = rawItems
-				.map((item) => item?.created_image_id ?? item?.id)
-				.filter((id) => id != null && Number.isFinite(Number(id)));
-			const dedupedIds = [...new Set(orderedIds)].slice(0, limit);
+			const dedupedIds = searchResult.ids.slice(0, limit);
 			if (dedupedIds.length === 0) {
-				return res.json({ items: [], hasMore: searchData?.has_more === true });
+				return res.json({ items: [], hasMore: searchResult.hasMore });
 			}
 			const feedByCreation = queries.selectFeedItemsByCreationIds?.all;
 			if (typeof feedByCreation !== "function") {
-				return res.json({ items: [], hasMore: false });
+				return res.status(503).json({ error: "Semantic search backend not available (feed lookup missing)." });
 			}
-			const rows = await feedByCreation(dedupedIds);
+			let rows;
+			try {
+				rows = await feedByCreation(dedupedIds);
+			} catch (dbErr) {
+				console.error("[explore search/semantic] feed lookup:", dbErr);
+				const reason = dbErr?.message && String(dbErr.message).length < 100 ? String(dbErr.message) : "Database lookup failed.";
+				return res.status(500).json({ error: `Semantic search failed: ${reason}` });
+			}
 			const orderIdx = new Map(dedupedIds.map((id, i) => [Number(id), i]));
 			const sorted = (Array.isArray(rows) ? rows : []).slice().sort((a, b) => (orderIdx.get(Number(a?.created_image_id ?? a?.id)) ?? 999) - (orderIdx.get(Number(b?.created_image_id ?? b?.id)) ?? 999));
 			let itemsWithImages = mapExploreItemsToResponse(sorted);
 			if (!enableNsfw) {
 				itemsWithImages = itemsWithImages.filter((item) => !item.nsfw);
 			}
-			return res.json({ items: itemsWithImages, hasMore: searchData?.has_more === true });
+			return res.json({ items: itemsWithImages, hasMore: searchResult.hasMore });
 		} catch (err) {
 			console.error("[explore search/semantic] Error:", err);
 			if (!res.headersSent) {
-				res.status(500).json({ error: "Unable to search explore." });
+				const reason = err?.code === "ECONNREFUSED" ? "Connection refused."
+					: err?.code === "ETIMEDOUT" ? "Connection timed out."
+					: err?.message && String(err.message).length < 120 && !String(err.message).includes(" at ") ? String(err.message) : null;
+				res.status(500).json({ error: reason ? `Semantic search failed: ${reason}` : "Semantic search failed." });
 			}
 		}
 	});
