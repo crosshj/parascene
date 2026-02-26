@@ -315,7 +315,12 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 				? `<img class="share-avatar-img" src="${escapeHtml(creatorAvatarUrl)}" alt="" />`
 				: `<span class="share-avatar-fallback" aria-hidden="true">${creatorAvatarFallback}</span>`;
 
-			const overlayTitleHtml = hasTitle ? `<h1 class="share-overlay-title">${escapeHtml(titleRaw)}</h1>` : ``;
+			const shareDetailsTitleHtml = hasTitle ? `<h2 class="share-details-title">${escapeHtml(titleRaw)}</h2>` : ``;
+
+			const descriptionRaw = typeof image.description === "string" ? image.description.trim() : "";
+			const imageDescriptionHtml = descriptionRaw
+				? `<p class="share-image-description">${escapeHtml(clampText(descriptionRaw, { maxChars: 400 }))}</p>`
+				: "";
 
 			const creatorBlockHtml = showCreator ? `
 						<div class="share-person">
@@ -349,7 +354,8 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 				OG_IMAGE_DIMS_META: ogDimsMeta,
 				IMAGE_ALT: escapeHtml(imageAlt),
 				SHARE_IMAGE_SRC: escapeHtml(shareImageSrc),
-				OVERLAY_TITLE_HTML: overlayTitleHtml,
+				SHARE_DETAILS_TITLE_HTML: shareDetailsTitleHtml,
+				IMAGE_DESCRIPTION_HTML: imageDescriptionHtml,
 				SHARER_AVATAR_HTML: sharerAvatarHtml,
 				SHARER_NAME: escapeHtml(heroSharer),
 				SHARE_INTRO_HTML: shareIntroHtml,

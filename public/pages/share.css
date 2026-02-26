@@ -80,39 +80,26 @@ body.share-page {
 }
 
 .share-hero-media {
-	position: relative;
-	background: transparent;
 	border-radius: 16px;
 	overflow: hidden;
 	width: 100%;
 }
 
-.share-overlay {
-	position: absolute;
-	left: 0;
-	right: 0;
-	bottom: 0;
-	padding: 18px 18px 16px;
-	background: linear-gradient(
-		to top,
-		rgba(0, 0, 0, 0.72) 0%,
-		rgba(0, 0, 0, 0.38) 40%,
-		rgba(0, 0, 0, 0.0) 100%
-	);
-	color: rgba(255, 255, 255, 0.92);
-	text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55);
+.share-hero-details {
+	width: 100%;
+	padding-top: 14px;
 }
 
-.share-overlay-title {
-	margin: 0 0 10px;
-	font-size: clamp(1.5rem, 3.8vw, 2.35rem);
-	line-height: 1.05;
-	letter-spacing: -0.04em;
+.share-details-title {
+	margin: 0 0 12px;
+	font-size: clamp(1.35rem, 3.5vw, 2rem);
+	line-height: 1.15;
+	letter-spacing: -0.03em;
 	font-weight: 800;
-	color: rgba(255, 255, 255, 0.98);
+	color: var(--text);
 }
 
-.share-overlay-rows {
+.share-details-rows {
 	display: flex;
 	gap: 14px;
 	flex-wrap: wrap;
@@ -130,8 +117,8 @@ body.share-page {
 	height: 34px;
 	border-radius: 50%;
 	overflow: hidden;
-	background: rgba(255, 255, 255, 0.14);
-	border: 1px solid rgba(255, 255, 255, 0.18);
+	background: color-mix(in srgb, var(--text) 12%, transparent);
+	border: 1px solid color-mix(in srgb, var(--text) 22%, transparent);
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -147,7 +134,7 @@ body.share-page {
 
 .share-avatar-fallback {
 	font-weight: 800;
-	color: rgba(255, 255, 255, 0.92);
+	color: var(--text-muted);
 }
 
 .share-person-text {
@@ -160,14 +147,14 @@ body.share-page {
 	font-size: clamp(0.68rem, 2vw, 0.78rem);
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
-	color: rgba(255, 255, 255, 0.72);
+	color: var(--text-muted);
 	font-weight: 700;
 }
 
 .share-person-name {
 	font-size: clamp(1rem, 2.6vw, 1.15rem);
 	font-weight: 800;
-	color: rgba(255, 255, 255, 0.94);
+	color: var(--text);
 }
 
 .share-image {
@@ -184,6 +171,24 @@ body.share-page {
 		radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 55%),
 		radial-gradient(circle at 70% 65%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 58%),
 		linear-gradient(135deg, color-mix(in srgb, var(--text) 8%, transparent), transparent);
+}
+
+.share-image-description {
+	margin: 12px 0 0;
+	padding: 0;
+	width: 100%;
+	color: var(--text-muted);
+	font-size: clamp(0.95rem, 2.2vw, 1.08rem);
+	line-height: 1.5;
+}
+
+.share-hero-divider {
+	margin: 20px 0 18px;
+	padding: 0;
+	border: 0;
+	height: 1px;
+	background: color-mix(in srgb, var(--text) 18%, transparent);
+	width: 100%;
 }
 
 .share-hero-copy {
@@ -207,6 +212,31 @@ body.share-page {
 	letter-spacing: -0.01em;
 }
 
+.share-value-title-row {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+	flex-wrap: nowrap;
+	margin-top: 2em;
+	line-height: 1.2;
+	width: 100%;
+}
+
+.share-value-title-row .share-value-strong {
+	margin-top: 0;
+	display: inline-block;
+	flex-shrink: 0;
+}
+
+.share-value-title-row .share-prompt-links {
+	margin-bottom: 0;
+	min-height: 0;
+	width: auto;
+	flex-shrink: 0;
+	align-items: baseline;
+}
+
 .share-subtitle {
 	margin: 0 0 14px;
 	color: var(--text-muted);
@@ -224,6 +254,45 @@ body.share-page {
 .share-reward-strong {
 	color: var(--text);
 	font-weight: 800;
+}
+
+/* Shuffle / clear small buttons above the create form */
+.share-prompt-links {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 6px;
+	width: 100%;
+	margin-bottom: 8px;
+	min-height: 1.5em;
+}
+
+.share-prompt-link {
+	display: inline-block;
+	padding: 4px 10px;
+	font-size: 0.8125rem;
+	font-weight: 500;
+	color: var(--text-muted);
+	background: color-mix(in srgb, var(--text) 6%, var(--bg));
+	border: 1px solid color-mix(in srgb, var(--text) 16%, transparent);
+	border-radius: 6px;
+	cursor: pointer;
+	text-decoration: none;
+	font-family: var(--font-family);
+	transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.share-prompt-link:hover {
+	color: var(--text);
+	border-color: color-mix(in srgb, var(--text) 28%, transparent);
+}
+
+.share-prompt-links-sep {
+	color: var(--text-muted);
+	font-size: 0.75rem;
+	font-weight: 400;
+	user-select: none;
+	opacity: 0.7;
 }
 
 /* Create prompt form (same pattern as landing / try) */

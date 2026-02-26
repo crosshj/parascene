@@ -146,15 +146,33 @@ app.use((req, res, next) => {
 	next();
 });
 
-// Share subdomain (sh.parascene.com) only serves /s/*; everything else redirects to www.
+// Share subdomain (sh.parascene.com): serve only when "is a share page on sh. requesting this resource?"
+// Allow: (1) share page document + assets by path (/s/, /api/share/, favicon, share.css, share.js), or (2) Referer from share page on this host.
 app.use((req, res, next) => {
 	const host = (req.hostname || req.get("host") || "").split(":")[0].toLowerCase();
+	if (host !== SHARE_HOSTNAME) return next();
 	const path = (req.path || "").split("?")[0];
-	if (host === SHARE_HOSTNAME && !path.startsWith("/s/")) {
-		const pathAndQuery = (req.originalUrl || req.url || path || "/").replace(/^(?![/])/, "/");
-		return res.redirect(302, `${getBaseAppUrl()}${pathAndQuery}`);
+	if (
+		path.startsWith("/s/") ||
+		path.startsWith("/api/share/") ||
+		path === "/favicon.svg" ||
+		path === "/pages/share.css" ||
+		path === "/pages/share.js"
+	)
+		return next();
+	const referer = req.get("referer");
+	if (referer && typeof referer === "string") {
+		try {
+			const refUrl = new URL(referer);
+			if (refUrl.hostname.toLowerCase() === SHARE_HOSTNAME && refUrl.pathname.startsWith("/s/")) {
+				return next();
+			}
+		} catch {
+			// invalid referer
+		}
 	}
-	next();
+	const pathAndQuery = (req.originalUrl || req.url || path || "/").replace(/^(?![/])/, "/");
+	return res.redirect(302, `${getBaseAppUrl()}${pathAndQuery}`);
 });
 
 // Make storage accessible to routes that need it.

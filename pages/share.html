@@ -23,7 +23,7 @@
 	<meta property="og:image" content="{{OG_IMAGE_URL}}" />
 	<meta property="og:image:secure_url" content="{{OG_IMAGE_SECURE_URL}}" />
 	<meta property="og:image:type" content="image/png" />
-{{OG_IMAGE_DIMS_META}}
+	{{OG_IMAGE_DIMS_META}}
 	<meta property="og:image:alt" content="{{IMAGE_ALT}}" />
 
 	<meta name="twitter:card" content="summary_large_image" />
@@ -56,45 +56,51 @@
 		<section class="share-hero">
 			<div class="share-hero-media">
 				<img class="share-image" src="{{SHARE_IMAGE_SRC}}" alt="{{IMAGE_ALT}}" />
-				<div class="share-overlay" aria-label="Image details">
-					{{OVERLAY_TITLE_HTML}}
-
-					<div class="share-overlay-rows">
-						<div class="share-person">
-							<div class="share-avatar">
-								{{SHARER_AVATAR_HTML}}
-							</div>
-							<div class="share-person-text">
-								<div class="share-person-label">Shared by</div>
-								<div class="share-person-name">{{SHARER_NAME}}</div>
-							</div>
-						</div>
-
-						{{CREATOR_BLOCK_HTML}}
-					</div>
-				</div>
 			</div>
-
+			<div class="share-hero-details">
+				{{SHARE_DETAILS_TITLE_HTML}}
+				<div class="share-details-rows">
+					<div class="share-person">
+						<div class="share-avatar">
+							{{SHARER_AVATAR_HTML}}
+						</div>
+						<div class="share-person-text">
+							<div class="share-person-label">Shared by</div>
+							<div class="share-person-name">{{SHARER_NAME}}</div>
+						</div>
+					</div>
+					{{CREATOR_BLOCK_HTML}}
+				</div>
+				{{IMAGE_DESCRIPTION_HTML}}
+			</div>
+			<hr class="share-hero-divider" aria-hidden="true" />
 			<div class="share-hero-copy">
 				<p class="share-value">
 					{{SHARE_INTRO_HTML}}
-					<span class="share-value-strong">Now it's your turn</span>
+					<span class="share-value-title-row">
+						<span class="share-value-strong">Now it's your turn</span>
+						<span class="share-prompt-links">
+							<button type="button" class="share-prompt-link" data-share-shuffle
+									aria-label="Pick a random prompt">shuffle</button>
+							<span class="share-prompt-links-sep" aria-hidden="true">·</span>
+							<a href="#" class="share-prompt-link" data-share-clear aria-label="Clear field">clear</a>
+						</span>
+					</span>
 				</p>
-
 				<form class="share-generate-form" action="/create" method="get" role="search">
-					<input type="text" name="prompt" class="share-generate-input"
-						placeholder="Enter your idea here..." aria-label="Enter your idea" autocomplete="off" />
+					<input type="text" name="prompt" class="share-generate-input" placeholder="Enter your idea here..."
+						aria-label="Enter your idea" autocomplete="off" />
 					<button type="submit" class="share-generate-btn">
 						<span>Create</span>
-						<svg class="share-generate-btn-icon" width="20" height="20" viewBox="0 0 24 24"
-							fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
-							stroke-linejoin="round" aria-hidden="true">
+						<svg class="share-generate-btn-icon" width="20" height="20" viewBox="0 0 24 24" fill="none"
+							stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+							aria-hidden="true">
 							<path d="M5 12h14" />
 							<path d="M13 6l6 6-6 6" />
 						</svg>
 					</button>
 				</form>
-				<p class="share-generate-copy">No payment required — start creating now.</p>
+				<p class="share-generate-copy">No payment or signup required — start creating now.</p>
 			</div>
 		</section>
 	</main>

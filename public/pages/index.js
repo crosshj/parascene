@@ -67,7 +67,7 @@ function updatePolicyCta() {
 		.then((res) => (res.ok ? res.json() : Promise.reject(new Error("policy error"))))
 		.then((data) => {
 			if (data && typeof data.seen === "boolean") {
-				setCtaNoteText(data.seen ? "No credit card required — start creating now." : "No payment required — start creating now.");
+				setCtaNoteText(data.seen ? "No credit card required — start creating now." : "No payment or signuprequired — start creating now.");
 			} else {
 				setCtaNoteText("No credit card needed — start creating now.");
 			}

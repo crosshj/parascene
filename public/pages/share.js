@@ -84,4 +84,21 @@ function handleShareCreateSubmit(e) {
 	if (promptInput && SHARE_PROMPTS.length > 0) {
 		promptInput.value = SHARE_PROMPTS[Math.floor(Math.random() * SHARE_PROMPTS.length)];
 	}
+
+	const shuffleBtn = document.querySelector("[data-share-shuffle]");
+	if (shuffleBtn && promptInput && SHARE_PROMPTS.length > 0) {
+		shuffleBtn.addEventListener("click", () => {
+			promptInput.value = SHARE_PROMPTS[Math.floor(Math.random() * SHARE_PROMPTS.length)];
+			promptInput.focus();
+		});
+	}
+
+	const clearLink = document.querySelector("[data-share-clear]");
+	if (clearLink && promptInput) {
+		clearLink.addEventListener("click", (e) => {
+			e.preventDefault();
+			promptInput.value = "";
+			promptInput.focus();
+		});
+	}
 })();
