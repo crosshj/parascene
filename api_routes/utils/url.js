@@ -1,6 +1,9 @@
 /** Default production origin. Override with APP_ORIGIN env. Single place to change app domain. */
 const DEFAULT_APP_ORIGIN = "https://www.parascene.com";
 
+/** Hostname for the share subdomain. Share links use this; only /s/* is served there, rest redirects to www. */
+export const SHARE_HOSTNAME = "sh.parascene.com";
+
 /** Hostname for the API subdomain. Used for QStash callbacks and to restrict api subdomain to /api paths only. */
 const API_HOSTNAME = "api.parascene.com";
 
@@ -25,6 +28,14 @@ export function getBaseAppUrl() {
 	}
 	const port = Number(process.env.PORT) || 2367;
 	return `http://localhost:${port}`;
+}
+
+/** Base URL for share links (e.g. https://sh.parascene.com). All share URLs use this so they look like sh.parascene.com/s/... */
+export function getShareBaseUrl() {
+	if (process.env.VERCEL_ENV === "production") {
+		return `https://${SHARE_HOSTNAME}`;
+	}
+	return getBaseAppUrl();
 }
 
 /** Base URL for links in emails. Never returns localhost; use APP_ORIGIN or DEFAULT_APP_ORIGIN. */

@@ -37,7 +37,7 @@ import {
 	shouldLogSession
 } from "../api_routes/auth.js";
 import { injectCommonHead } from "../api_routes/utils/head.js";
-import { getApiHostname, getBaseAppUrl } from "../api_routes/utils/url.js";
+import { getApiHostname, getBaseAppUrl, SHARE_HOSTNAME } from "../api_routes/utils/url.js";
 
 function shouldLogStartup() {
 	return process.env.ENABLE_STARTUP_LOGS === "true";
@@ -142,6 +142,17 @@ app.use((req, res, next) => {
 	if (host === apiHostname && !path.startsWith("/api")) {
 		const target = `${getBaseAppUrl()}${req.originalUrl || req.url || path}`;
 		return res.redirect(302, target);
+	}
+	next();
+});
+
+// Share subdomain (sh.parascene.com) only serves /s/*; everything else redirects to www.
+app.use((req, res, next) => {
+	const host = (req.hostname || req.get("host") || "").split(":")[0].toLowerCase();
+	const path = (req.path || "").split("?")[0];
+	if (host === SHARE_HOSTNAME && !path.startsWith("/s/")) {
+		const pathAndQuery = (req.originalUrl || req.url || path || "/").replace(/^(?![/])/, "/");
+		return res.redirect(302, `${getBaseAppUrl()}${pathAndQuery}`);
 	}
 	next();
 });

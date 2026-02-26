@@ -2,7 +2,7 @@ import express from "express";
 import path from "path";
 import { clearAuthCookie, COOKIE_NAME } from "./auth.js";
 import { injectCommonHead } from "./utils/head.js";
-import { getBaseAppUrl } from "./utils/url.js";
+import { getBaseAppUrl, getShareBaseUrl } from "./utils/url.js";
 import { verifyShareToken } from "./utils/shareLink.js";
 import { getClientIp, getVercelGeo, getCloudflareRay } from "./utils/requestClientIp.js";
 
@@ -79,14 +79,18 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 		return JSON.stringify(value).replace(/</g, "\\u003c");
 	}
 
-	// External share page (unauthed, unfurl-first)
+	// External share page (unauthed, unfurl-first).
+	// Must be reachable by crawlers (Slackbot, Slack-ImgProxy, Discord, etc.) for link unfurling.
+	// If unfurl gets 403, allowlist these User-Agents at the edge (e.g. Cloudflare Bot Fight Mode / WAF).
 	router.get("/s/:version/:token/:bust?", async (req, res) => {
 		const version = String(req.params.version || "");
 		const token = String(req.params.token || "");
 		const bust = String(req.params.bust || "").trim();
 
 		const base = getBaseAppUrl();
-		const requestUrl = new URL(String(req.originalUrl || req.path || "/"), base).toString();
+		const shareBase = getShareBaseUrl();
+		const pathAndQuery = (req.originalUrl || req.path || "/").replace(/^(?!\/)/, "/");
+		const requestUrl = `${shareBase}${pathAndQuery}`;
 
 		function clampText(value, { maxChars = 200 } = {}) {
 			const v = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";

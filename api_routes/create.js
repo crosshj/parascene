@@ -3,7 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import Busboy from "busboy";
 import sharp from "sharp";
-import { getThumbnailUrl, getBaseAppUrl, getBaseAppUrlForEmail } from "./utils/url.js";
+import { getThumbnailUrl, getBaseAppUrl, getBaseAppUrlForEmail, getShareBaseUrl } from "./utils/url.js";
 import { buildProviderHeaders } from "./utils/providerAuth.js";
 import { runCreationJob, PROVIDER_TIMEOUT_MS } from "./utils/creationJob.js";
 import { runLandscapeJob } from "./utils/landscapeJob.js";
@@ -1567,8 +1567,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				sharedByUserId: Number(user.id)
 			});
 			const bust = Math.floor(Date.now() / 1000).toString(36);
-			const base = getBaseAppUrl();
-			const url = `${base}/s/${ACTIVE_SHARE_VERSION}/${token}/${bust}`;
+			const url = `${getShareBaseUrl()}/s/${ACTIVE_SHARE_VERSION}/${token}/${bust}`;
 			return res.json({ url });
 		} catch (error) {
 			return res.status(500).json({ error: "Failed to mint share link" });
