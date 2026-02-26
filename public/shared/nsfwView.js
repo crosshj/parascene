@@ -137,8 +137,12 @@ export function revealNsfwElementOnly(nsfwEl) {
  * @returns {boolean} - True if click was handled (caller should preventDefault/stopPropagation)
  */
 export function handleNsfwClick(e) {
-	// Don't intercept on feed or grid cards: let the card's click handler navigate to creation detail
-	if (e.target?.closest?.('.feed-card') || e.target?.closest?.('.route-card')) return false;
+	// Don't intercept on feed or grid cards: only navigate to creation detail, never reveal or show confirm
+	if (
+		e.target?.closest?.('.feed-card') ||
+		e.target?.closest?.('.feed-card-image') ||
+		e.target?.closest?.('.route-card')
+	) return false;
 	const creationId = getCreationIdFromNsfwElement(e.target);
 	if (!creationId) return false;
 
