@@ -1350,8 +1350,12 @@ export default function createCreateRoutes({ queries, storage }) {
 				};
 			});
 
+			// When user has not enabled NSFW in profile, exclude NSFW creations from the list.
+			const enableNsfw = Boolean(user.meta && user.meta.enableNsfw === true);
+			const filtered = enableNsfw ? imagesWithUrls : imagesWithUrls.filter((img) => !img.nsfw);
+
 			const has_more = images.length === limit;
-			return res.json({ images: imagesWithUrls, has_more });
+			return res.json({ images: filtered, has_more });
 		} catch (error) {
 			// console.error("Error fetching images:", error);
 			return res.status(500).json({ error: "Failed to fetch images" });

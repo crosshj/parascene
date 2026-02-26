@@ -113,6 +113,7 @@ class AppModalProfile extends HTMLElement {
 					if (this.profileData) this.profileData.enableNsfw = enabled;
 					setNsfwContentEnabled(enabled);
 					applyNsfwPreference();
+					document.dispatchEvent(new CustomEvent('nsfw-preference-changed'));
 				} else {
 					enableCheckbox.checked = !enabled;
 					syncObscureVisibility();

@@ -64,7 +64,8 @@ export default function createFeedRoutes({ queries }) {
 			isNewbieFeed = true;
 		}
 
-		const enableNsfw = user.meta?.enableNsfw === true;
+		// Only include NSFW items when the user has explicitly enabled NSFW in profile. Default is off.
+		const enableNsfw = Boolean(user.meta && user.meta.enableNsfw === true);
 
 		const transformItem = (item) => {
 			const imageUrl = item.url || null;
@@ -91,6 +92,7 @@ export default function createFeedRoutes({ queries }) {
 		};
 
 		let itemsWithImages = rows.map(transformItem);
+		// When NSFW is not enabled, exclude NSFW items from the feed entirely.
 		if (!enableNsfw) {
 			itemsWithImages = itemsWithImages.filter((item) => !item.nsfw);
 		}

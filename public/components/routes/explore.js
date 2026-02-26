@@ -109,6 +109,10 @@ class AppRouteExplore extends HTMLElement {
 			}
 		};
 		document.addEventListener('route-change', this.routeChangeHandler);
+		this.nsfwPreferenceHandler = () => {
+			if (this.isActiveRoute) this.loadExplore({ reset: true });
+		};
+		document.addEventListener('nsfw-preference-changed', this.nsfwPreferenceHandler);
 	}
 
 	/** Single observer: when sentinel is visible, call loadMore() (same as the button). Re-attach after each load. */
@@ -212,6 +216,9 @@ class AppRouteExplore extends HTMLElement {
 	disconnectedCallback() {
 		if (this.routeChangeHandler) {
 			document.removeEventListener('route-change', this.routeChangeHandler);
+		}
+		if (this.nsfwPreferenceHandler) {
+			document.removeEventListener('nsfw-preference-changed', this.nsfwPreferenceHandler);
 		}
 		this.sentinelObserver?.disconnect();
 		this.sentinelObserver = null;

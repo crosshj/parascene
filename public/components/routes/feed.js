@@ -79,6 +79,8 @@ class AppRouteFeed extends HTMLElement {
 			if (route === 'feed') this.loadFeed();
 		};
 		document.addEventListener('route-change', this.routeChangeHandler);
+		this.nsfwPreferenceHandler = () => this.loadFeed({ force: true });
+		document.addEventListener('nsfw-preference-changed', this.nsfwPreferenceHandler);
 		// Only load feed when feed is the active route (avoids loading on explore/creations and reduces API storm)
 		const initialRoute = window.__CURRENT_ROUTE__ || (window.location.pathname === '/' || window.location.pathname === '' ? 'feed' : window.location.pathname.slice(1).split('/')[0]);
 		if (initialRoute === 'feed') {
@@ -89,6 +91,9 @@ class AppRouteFeed extends HTMLElement {
 	disconnectedCallback() {
 		if (this.routeChangeHandler) {
 			document.removeEventListener('route-change', this.routeChangeHandler);
+		}
+		if (this.nsfwPreferenceHandler) {
+			document.removeEventListener('nsfw-preference-changed', this.nsfwPreferenceHandler);
 		}
 		if (this.feedObserver) {
 			this.feedObserver.disconnect();
@@ -481,13 +486,14 @@ class AppRouteFeed extends HTMLElement {
 		return card;
 	}
 
-	async loadFeed() {
+	async loadFeed(options = {}) {
 		const container = this.querySelector("[data-feed-container]");
 		if (!container) return;
 
 		if (this.isLoading) return;
 		// Skip refetch if we already have feed data (avoids loop from repeated loadFeed calls)
-		if (Array.isArray(this.feedItems) && this.feedItems.length > 0) {
+		const force = options.force === true;
+		if (!force && Array.isArray(this.feedItems) && this.feedItems.length > 0) {
 			return;
 		}
 

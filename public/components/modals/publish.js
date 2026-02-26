@@ -229,8 +229,8 @@ class AppModalPublish extends HTMLElement {
 
 			const nsfwCheckbox = this.querySelector('#publish-nsfw');
 			if (nsfwCheckbox) {
-				const fromCreation = creation.nsfw ?? creation.meta?.nsfw;
-				nsfwCheckbox.checked = typeof fromCreation === 'boolean' ? fromCreation : getNsfwContentEnabled();
+				const creationIsNsfw = creation.nsfw === true || creation.meta?.nsfw === true;
+				nsfwCheckbox.checked = creationIsNsfw || getNsfwContentEnabled();
 			}
 
 			// Update submit button state based on title
@@ -283,8 +283,8 @@ class AppModalPublish extends HTMLElement {
 			if (descriptionTextarea) descriptionTextarea.value = creation.description || '';
 			const nsfwCheckbox = this.querySelector('#publish-nsfw');
 			if (nsfwCheckbox) {
-				const fromCreation = creation.nsfw ?? creation.meta?.nsfw;
-				nsfwCheckbox.checked = typeof fromCreation === 'boolean' ? fromCreation : getNsfwContentEnabled();
+				const creationIsNsfw = creation.nsfw === true || creation.meta?.nsfw === true;
+				nsfwCheckbox.checked = creationIsNsfw || getNsfwContentEnabled();
 			}
 
 			// Update submit button state based on title

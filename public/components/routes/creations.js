@@ -400,6 +400,10 @@ class AppRouteCreations extends HTMLElement {
 			}
 		};
 		document.addEventListener('route-change', this.routeChangeHandler);
+		this.nsfwPreferenceHandler = () => {
+			if (this.isRouteActive()) this.loadCreations({ force: true });
+		};
+		document.addEventListener('nsfw-preference-changed', this.nsfwPreferenceHandler);
 
 		// Only react when we transition to visible (avoids repeated refreshOnActivate / load loops)
 		this.intersectionObserver = new IntersectionObserver((entries) => {
@@ -534,6 +538,9 @@ class AppRouteCreations extends HTMLElement {
 		}
 		if (this.routeChangeHandler) {
 			document.removeEventListener('route-change', this.routeChangeHandler);
+		}
+		if (this.nsfwPreferenceHandler) {
+			document.removeEventListener('nsfw-preference-changed', this.nsfwPreferenceHandler);
 		}
 		if (this.pendingUpdateHandler) {
 			document.removeEventListener('creations-pending-updated', this.pendingUpdateHandler);
