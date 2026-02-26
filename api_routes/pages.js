@@ -273,7 +273,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 				// ignore
 			}
 
-			const imageUrlBase = `${base}/api/share/${encodeURIComponent(version)}/${encodeURIComponent(token)}/image`;
+			const imageUrlBase = `${shareBase}/api/share/${encodeURIComponent(version)}/${encodeURIComponent(token)}/image`;
 			const imageUrl = `${imageUrlBase}?variant=wide&v=${encodeURIComponent(bust || token)}`;
 			const secureImageUrl = imageUrl.startsWith("http://") ? `https://${imageUrl.slice("http://".length)}` : imageUrl;
 
