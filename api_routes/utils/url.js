@@ -32,10 +32,7 @@ export function getBaseAppUrl() {
 
 /** Base URL for share links (e.g. https://sh.parascene.com). All share URLs use this so they look like sh.parascene.com/s/... */
 export function getShareBaseUrl() {
-	if (process.env.VERCEL_ENV === "production") {
-		return `https://${SHARE_HOSTNAME}`;
-	}
-	return getBaseAppUrl();
+	return `https://${SHARE_HOSTNAME}`;
 }
 
 /** Base URL for links in emails. Never returns localhost; use APP_ORIGIN or DEFAULT_APP_ORIGIN. */
