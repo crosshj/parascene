@@ -9,6 +9,8 @@ import { runCreationJob, PROVIDER_TIMEOUT_MS } from "./utils/creationJob.js";
 import { runLandscapeJob } from "./utils/landscapeJob.js";
 import { scheduleCreationJob, scheduleLandscapeJob } from "./utils/scheduleCreationJob.js";
 import { scheduleEmbeddingJob } from "./utils/embeddingJob.js";
+import { deleteCreationEmbedding } from "./utils/embeddings.js";
+import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { verifyQStashRequest } from "./utils/qstashVerification.js";
 import { ACTIVE_SHARE_VERSION, mintShareToken, verifyShareToken } from "./utils/shareLink.js";
 import { getStyleInfo } from "./utils/createStyles.js";
@@ -1891,6 +1893,16 @@ export default function createCreateRoutes({ queries, storage }) {
 			// Delete all comments for this created image
 			if (queries.deleteAllCommentsForCreatedImage) {
 				await queries.deleteAllCommentsForCreatedImage.run(parseInt(req.params.id));
+			}
+
+			// Remove embedding so unpublished item drops out of semantic search / related
+			const supabase = getSupabaseServiceClient();
+			if (supabase) {
+				try {
+					await deleteCreationEmbedding(supabase, parseInt(req.params.id));
+				} catch (err) {
+					console.warn("[create] Failed to delete embedding on unpublish:", err?.message || err);
+				}
 			}
 
 			// Get updated image

@@ -79,3 +79,18 @@ export async function upsertCreationEmbedding(supabase, creationId, embedding, m
 		);
 	if (error) throw error;
 }
+
+/**
+ * Delete a creation's embedding from prsn_created_embeddings (e.g. when unpublishing).
+ * No-op if no row exists. Used so unpublished items drop out of semantic search / related.
+ * @param {import("@supabase/supabase-js").SupabaseClient} supabase
+ * @param {number} createdImageId
+ */
+export async function deleteCreationEmbedding(supabase, createdImageId) {
+	if (!supabase || !Number.isFinite(createdImageId) || createdImageId < 1) return;
+	const { error } = await supabase
+		.from(EMBEDDINGS_TABLE)
+		.delete()
+		.eq("created_image_id", createdImageId);
+	if (error) throw error;
+}
