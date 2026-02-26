@@ -37,5 +37,6 @@ Browse by topic or use the search above.
 
 <br />
 
-[Privacy Notice](/help/privacy) — How we collect, use, and share your information.   
+[Content safety](/help/content-safety) — How NSFW content works and how to control what you see.  
+[Privacy Notice](/help/privacy) — How we collect, use, and share your information.  
 [Terms of Service](/help/terms-of-service) — The terms that govern your use of parascene.   

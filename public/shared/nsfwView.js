@@ -127,6 +127,8 @@ const NSFW_CONFIRM_MESSAGE =
  */
 export function handleNsfwClick(e) {
 	if (document.body.classList.contains(NSFW_VIEW_BODY_CLASS)) return false;
+	// Don't intercept on feed or grid cards: let the card's click handler navigate to creation detail
+	if (e.target?.closest?.('.feed-card') || e.target?.closest?.('.route-card')) return false;
 	const creationId = getCreationIdFromNsfwElement(e.target);
 	if (!creationId) return false;
 	if (!window.confirm(NSFW_CONFIRM_MESSAGE)) return true;

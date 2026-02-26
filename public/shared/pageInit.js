@@ -1,11 +1,13 @@
 /**
  * Shared page initialization: wait for custom elements, show page, and register
- * global listeners (modal link handling, modal-open body class, autogrow, service worker).
+ * global listeners (modal link handling, modal-open body class, autogrow, service worker,
+ * NSFW view preference and click-to-reveal).
  * Used by entry-*.js after loading their components.
  */
 
 import { refreshAutoGrowTextareas } from './autogrow.js';
 import { closeModalsAndNavigate } from './navigation.js';
+import { initNsfwViewPreference, handleNsfwClick } from './nsfwView.js';
 
 /**
  * Wait for DOM and the given custom element tags to be defined, then add body.loaded.
@@ -36,6 +38,24 @@ export async function waitForComponents(customElementTags) {
  * Call once per page load (e.g. from entry.js after entry module init).
  */
 export function runCommonAppInit() {
+	// Apply NSFW view preference from localStorage so body.view-nsfw is set on load
+	try {
+		initNsfwViewPreference();
+	} catch {
+		// ignore
+	}
+	// NSFW overlay click: if user clicks a blurred NSFW image and hasn't enabled view, confirm then enable
+	document.addEventListener(
+		'click',
+		(e) => {
+			if (handleNsfwClick(e)) {
+				e.preventDefault();
+				e.stopPropagation();
+			}
+		},
+		true
+	);
+
 	try {
 		refreshAutoGrowTextareas(document);
 	} catch {

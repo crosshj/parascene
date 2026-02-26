@@ -4452,11 +4452,11 @@ body.modal-open {
 	user-select: none;
 }
 
-/* Scale blur with image/container size (6% of width: 200px → 12px, 400px → 24px) */
+/* Scale blur with image/container size (10cqi) */
 @supports (width: 1cqi) {
 	.nsfw::after {
-		backdrop-filter: blur(4cqi);
-		-webkit-backdrop-filter: blur(4cqi);
+		backdrop-filter: blur(10cqi);
+		-webkit-backdrop-filter: blur(10cqi);
 	}
 }
 
