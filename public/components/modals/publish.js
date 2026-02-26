@@ -1,4 +1,5 @@
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
+import { getNsfwContentEnabled } from '../../shared/nsfwView.js';
 
 const html = String.raw;
 
@@ -228,7 +229,8 @@ class AppModalPublish extends HTMLElement {
 
 			const nsfwCheckbox = this.querySelector('#publish-nsfw');
 			if (nsfwCheckbox) {
-				nsfwCheckbox.checked = !!(creation.nsfw ?? creation.meta?.nsfw);
+				const fromCreation = creation.nsfw ?? creation.meta?.nsfw;
+				nsfwCheckbox.checked = typeof fromCreation === 'boolean' ? fromCreation : getNsfwContentEnabled();
 			}
 
 			// Update submit button state based on title
@@ -280,7 +282,10 @@ class AppModalPublish extends HTMLElement {
 			if (titleInput) titleInput.value = creation.title || '';
 			if (descriptionTextarea) descriptionTextarea.value = creation.description || '';
 			const nsfwCheckbox = this.querySelector('#publish-nsfw');
-			if (nsfwCheckbox) nsfwCheckbox.checked = !!(creation.nsfw ?? creation.meta?.nsfw);
+			if (nsfwCheckbox) {
+				const fromCreation = creation.nsfw ?? creation.meta?.nsfw;
+				nsfwCheckbox.checked = typeof fromCreation === 'boolean' ? fromCreation : getNsfwContentEnabled();
+			}
 
 			// Update submit button state based on title
 			const submitBtn = this.querySelector('[data-publish-submit]');
