@@ -25,7 +25,7 @@ The two NSFW controls live in the **Profile modal**:
 
 **Show NSFW Unobscured** (second checkbox; only visible when “Enable NSFW Content” is on)
 
-- **Off** — NSFW images stay **blurred** even though you’ve allowed them. You can still open creation pages and, if you want, click the blur once to reveal for that session.
+- **Off** — NSFW images stay **blurred** even though you’ve allowed them. You can still open creation pages and, if you want, click the blur once to reveal only that image on that page (no setting is changed).
 - **On** — NSFW images are shown **without blur** everywhere (feed, explore, creation detail, profile grids).
 
 Both settings are saved immediately and apply across the app. You can change them anytime by opening the Profile modal again.
@@ -33,7 +33,7 @@ Both settings are saved immediately and apply across the app. You can change the
 ## How to interact with NSFW in the app
 
 - **Feed and Explore** — Clicking an NSFW card (blurred or not) takes you to the **creation detail** page. No extra confirmation.
-- **Creation detail** — On the creation page, if the image is still blurred and you haven’t enabled viewing, you can click the overlay to confirm once and reveal it for that session, or turn on **Show NSFW Unobscured** in the Profile modal for a permanent setting.
+- **Creation detail** — On the creation page, if the image is still blurred and you haven’t enabled viewing, you can click the overlay to confirm once and reveal **only that image on that page** (no setting is changed). For unobscured viewing everywhere, turn on **Show NSFW Unobscured** in the Profile modal for a permanent setting.
 - **Your Creations** — When [publishing](/help/connect/share-your-creations) or editing a creation, you can check **Not Suitable for Work (NSFW)** so it’s blurred for others by default.
 
 ## Summary

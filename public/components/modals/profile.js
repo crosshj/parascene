@@ -228,6 +228,8 @@ class AppModalProfile extends HTMLElement {
 				this.displayProfile(user);
 			}
 			this.profileLoadedAt = Date.now();
+			// Keep localStorage in sync with server so publish modal and others get correct default
+			if (user) setNsfwContentEnabled(user.enableNsfw === true);
 			this.syncNsfwTogglesFromStorage();
 		} catch (error) {
 			// console.error('Error loading profile:', error);

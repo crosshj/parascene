@@ -267,26 +267,33 @@ class AppModalNotifications extends HTMLElement {
 			return div.innerHTML;
 		};
 
+		const hasClickTarget = (n) => {
+			if (!n) return false;
+			const hasLink = typeof n.link === 'string' && n.link.trim();
+			if (n.type === 'tip') return hasLink && n.creation_id != null;
+			return (n.type === 'comment' || n.type === 'comment_thread' || n.type === 'creation_activity') && hasLink;
+		};
+
 		content.innerHTML = this.notifications.map((notification) => {
 			const time = formatRelativeTime(notification.created_at);
 			const timeTitle = formatDateTime(notification.created_at);
+			const clickable = hasClickTarget(notification);
+			const tag = clickable ? 'button' : 'div';
 			return html`
-	<button class="notification-list-item ${notification.acknowledged_at ? 'is-read' : 'is-unread'}"
-		data-id="${notification.id}">
+	<${tag} class="notification-list-item ${notification.acknowledged_at ? 'is-read' : 'is-unread'} ${clickable ? '' : 'notification-list-item--static'}"
+		${clickable ? `data-id="${notification.id}"` : ''}>
 		<div class="notification-list-title">${escapeHtml(notification.title || 'Notification')}</div>
 		<div class="notification-list-message">${escapeHtml(notification.message || '')}</div>
 		<div class="notification-list-time" title="${escapeHtml(timeTitle)}">${escapeHtml(time)}</div>
 		<span class="notification-list-item-spinner" aria-hidden="true"></span>
-	</button>
+	</${tag}>
     `}).join('');
 
-		content.querySelectorAll('.notification-list-item').forEach((item) => {
+		content.querySelectorAll('.notification-list-item[data-id]').forEach((item) => {
 			item.addEventListener('click', async () => {
 				const id = Number(item.getAttribute('data-id'));
 				const notification = id ? this.notifications.find((n) => n.id === id) : null;
-				const goDirect = notification &&
-					(notification.type === 'comment' || notification.type === 'comment_thread' || notification.type === 'tip' || notification.type === 'creation_activity') &&
-					typeof notification.link === 'string' && notification.link.trim();
+				const goDirect = hasClickTarget(notification);
 				if (goDirect) {
 					item.classList.add('is-loading');
 					item.setAttribute('aria-busy', 'true');
@@ -350,7 +357,7 @@ class AppModalNotifications extends HTMLElement {
 		<div class="notification-time" title="${escapeHtml(timeTitle)}">${escapeHtml(time)}</div>
 		<div class="notification-actions">
 			<button class="notification-action" type="button">View all notifications</button>
-			${notification.link ? html`
+			${notification.link && (notification.type !== 'tip' || notification.creation_id != null) ? html`
 			<a class="notification-action is-primary" href="${escapeHtml(notification.link)}">Open related page</a>
 			` : ''}
 		</div>
@@ -547,6 +554,9 @@ class AppModalNotifications extends HTMLElement {
         }
         .notification-list-item:last-child {
           border-bottom: none;
+        }
+        .notification-list-item--static {
+          cursor: default;
         }
         .notification-list-item.is-loading {
           pointer-events: none;

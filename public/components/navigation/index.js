@@ -1,5 +1,6 @@
 import { formatDateTime, formatRelativeTime } from '../../shared/datetime.js';
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
+import { setNsfwContentEnabled } from '../../shared/nsfwView.js';
 import { notifyIcon, creditIcon } from '../../icons/svg-strings.js';
 
 const html = String.raw;
@@ -333,6 +334,8 @@ class AppNavigation extends HTMLElement {
 			const user = profile.data;
 			const currentUserEmail = user?.email || null;
 			const nextAvatarUrl = typeof user?.profile?.avatar_url === 'string' ? user.profile.avatar_url.trim() : '';
+			// Sync NSFW preference so publish modal and other code get correct default
+			setNsfwContentEnabled(user?.enableNsfw === true);
 
 			// If no signed-in user, clear cache
 			if (!currentUserEmail) {
@@ -531,6 +534,12 @@ class AppNavigation extends HTMLElement {
 				return;
 			}
 
+			const hasClickTarget = (n) => {
+				const hasLink = typeof n.link === 'string' && n.link.trim();
+				if (n.type === 'tip') return hasLink && n.creation_id != null;
+				return (n.type === 'comment' || n.type === 'comment_thread' || n.type === 'tip' || n.type === 'creation_activity') && hasLink;
+			};
+
 			const fragment = document.createDocumentFragment();
 			for (const notification of notifications) {
 				const item = document.createElement('div');
@@ -540,38 +549,42 @@ class AppNavigation extends HTMLElement {
 				} else {
 					item.classList.add('is-new');
 				}
-				item.setAttribute('role', 'button');
-				item.setAttribute('tabindex', '0');
-				item.addEventListener('click', async () => {
-					const goDirect = (notification.type === 'comment' || notification.type === 'comment_thread' || notification.type === 'tip' || notification.type === 'creation_activity') &&
-						typeof notification.link === 'string' && notification.link.trim();
-					if (goDirect) {
-						item.classList.add('is-loading');
-						item.setAttribute('aria-busy', 'true');
-						const spinner = document.createElement('div');
-						spinner.className = 'notification-preview-item-spinner';
-						spinner.setAttribute('aria-hidden', 'true');
-						item.appendChild(spinner);
-						try {
-							await fetch('/api/notifications/acknowledge', {
-								method: 'POST',
-								headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-								body: new URLSearchParams({ id: String(notification.id) }),
-								credentials: 'include'
-							});
-						} catch {
-							// ignore
+				const clickable = hasClickTarget(notification);
+				if (clickable) {
+					item.setAttribute('role', 'button');
+					item.setAttribute('tabindex', '0');
+					item.addEventListener('click', async () => {
+						const goDirect = hasClickTarget(notification);
+						if (goDirect) {
+							item.classList.add('is-loading');
+							item.setAttribute('aria-busy', 'true');
+							const spinner = document.createElement('div');
+							spinner.className = 'notification-preview-item-spinner';
+							spinner.setAttribute('aria-hidden', 'true');
+							item.appendChild(spinner);
+							try {
+								await fetch('/api/notifications/acknowledge', {
+									method: 'POST',
+									headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+									body: new URLSearchParams({ id: String(notification.id) }),
+									credentials: 'include'
+								});
+							} catch {
+								// ignore
+							}
+							this.closeNotificationsMenu();
+							document.dispatchEvent(new CustomEvent('close-all-modals'));
+							window.location.href = notification.link.trim();
+						} else {
+							document.dispatchEvent(new CustomEvent('open-notifications', {
+								detail: { notificationId: notification.id }
+							}));
+							this.closeNotificationsMenu();
 						}
-						this.closeNotificationsMenu();
-						document.dispatchEvent(new CustomEvent('close-all-modals'));
-						window.location.href = notification.link.trim();
-					} else {
-						document.dispatchEvent(new CustomEvent('open-notifications', {
-							detail: { notificationId: notification.id }
-						}));
-						this.closeNotificationsMenu();
-					}
-				});
+					});
+				} else {
+					item.classList.add('notification-preview-item--static');
+				}
 
 				const title = document.createElement('div');
 				title.className = 'notification-preview-title';

@@ -1592,6 +1592,10 @@ header .notification-preview-item {
 	cursor: pointer;
 }
 
+header .notification-preview-item--static {
+	cursor: default;
+}
+
 header .notification-preview-item+.notification-preview-item {
 	border-top: 1px solid var(--border);
 }
@@ -4462,6 +4466,12 @@ body.modal-open {
 
 body.view-nsfw .nsfw::before,
 body.view-nsfw .nsfw::after {
+	display: none;
+}
+
+/* Creation detail: one-off reveal for this image only (no body class / no storage) */
+.creation-detail-image-wrapper.nsfw-revealed::before,
+.creation-detail-image-wrapper.nsfw-revealed::after {
 	display: none;
 }
 

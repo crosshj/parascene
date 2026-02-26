@@ -115,28 +115,49 @@ export function getCreationIdFromNsfwElement(el) {
 	return null;
 }
 
-const NSFW_CONFIRM_MESSAGE =
+const NSFW_CONFIRM_MESSAGE_SESSION =
 	'This will enable showing NSFW content for this session. Blurred content will be visible until you close this tab. Continue?';
+const NSFW_CONFIRM_MESSAGE_THIS_IMAGE =
+	'Do you want to temporarily reveal this item?';
+
+/**
+ * Reveal only the given NSFW element (e.g. creation-detail hero). Does not set sessionStorage or body class.
+ */
+export function revealNsfwElementOnly(nsfwEl) {
+	if (nsfwEl?.classList?.contains?.('nsfw')) {
+		nsfwEl.classList.add('nsfw-revealed');
+	}
+}
 
 /**
  * Handle a click that might be on an NSFW overlay. If view is not yet enabled, show confirm
- * and on confirm enable view and navigate to the creation. Returns true if the click was
- * handled (intercepted); false if the caller should allow default behavior.
+ * and on confirm either reveal only that image (creation-detail) or enable session view and navigate.
+ * Returns true if the click was handled (intercepted); false if the caller should allow default behavior.
  * @param {Event} e - Click event
  * @returns {boolean} - True if click was handled (caller should preventDefault/stopPropagation)
  */
 export function handleNsfwClick(e) {
-	if (document.body.classList.contains(NSFW_VIEW_BODY_CLASS)) return false;
 	// Don't intercept on feed or grid cards: let the card's click handler navigate to creation detail
 	if (e.target?.closest?.('.feed-card') || e.target?.closest?.('.route-card')) return false;
 	const creationId = getCreationIdFromNsfwElement(e.target);
 	if (!creationId) return false;
-	if (!window.confirm(NSFW_CONFIRM_MESSAGE)) return true;
-	enableNsfwView();
-	// On creation-detail we're already on the page; just reveal. Otherwise navigate.
+
 	const onDetailPage = typeof window !== 'undefined' && window.location?.pathname?.match?.(/^\/creations\/[^/]+$/);
-	if (!onDetailPage) {
-		window.location.href = `/creations/${creationId}`;
+
+	// On creation-detail: reveal only this image (no storage, no body class)
+	if (onDetailPage) {
+		if (document.body.classList.contains(NSFW_VIEW_BODY_CLASS)) return false;
+		const nsfwEl = e.target?.classList?.contains?.('nsfw') ? e.target : e.target?.closest?.('.nsfw');
+		if (!nsfwEl) return false;
+		if (!window.confirm(NSFW_CONFIRM_MESSAGE_THIS_IMAGE)) return true;
+		revealNsfwElementOnly(nsfwEl);
+		return true;
 	}
+
+	// Else: e.g. NSFW overlay outside cards — confirm then enable session-wide and navigate
+	if (document.body.classList.contains(NSFW_VIEW_BODY_CLASS)) return false;
+	if (!window.confirm(NSFW_CONFIRM_MESSAGE_SESSION)) return true;
+	enableNsfwView();
+	window.location.href = `/creations/${creationId}`;
 	return true;
 }
