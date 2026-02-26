@@ -181,6 +181,15 @@ export const creditIcon = withAttributes(html`
 	</svg>
 `);
 
+/** Globe icon (e.g. empty feed, published badge). */
+export const globeIcon = withAttributes(html`
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+		<circle cx="12" cy="12" r="10"></circle>
+		<line x1="2" y1="12" x2="22" y2="12"></line>
+		<path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+	</svg>
+`);
+
 /** User avatar icon: square, light grey bg, darker grey head + shoulders. Circle shape from CSS (e.g. border-radius: 50%). */
 export const userAvatarIcon = withAttributes(html`
 	<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">

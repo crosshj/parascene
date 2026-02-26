@@ -18,6 +18,7 @@ class AppRouteCreate extends HTMLElement {
 		this._advancedConfirm = null; // { serverId, args, cost } when cost dialog is open
 		this._promptFromUrl = null; // prompt from ?prompt= (landing page); applied when Basic tab has a prompt field
 		this._confirmPrimaryAction = null;
+		this.showHiddenFields = false;
 	}
 
 	connectedCallback() {
@@ -182,6 +183,24 @@ class AppRouteCreate extends HTMLElement {
         }
         .create-route .field-required {
           color: var(--error, #e74c3c);
+        }
+        .create-route [data-fields-container] .field-hidden {
+          display: none;
+        }
+        .create-route [data-fields-container].show-hidden-fields .field-hidden {
+          display: flex;
+        }
+        .create-route .create-fields-toggle {
+          margin-bottom: 0.25rem;
+        }
+        .create-route .create-fields-toggle-link {
+          font-size: 0.875rem;
+          color: var(--text-muted);
+          text-decoration: none;
+        }
+        .create-route .create-fields-toggle-link:hover {
+          color: var(--accent);
+          text-decoration: underline;
         }
         /* Advanced tab: context options list + switch */
         .create-route .create-route-advanced {
@@ -516,6 +535,9 @@ class AppRouteCreate extends HTMLElement {
                 </select>
               </div>
               <div class="form-group" data-fields-group style="display: none;">
+                <div class="create-fields-toggle" data-fields-toggle style="display: none;">
+                  <a href="#" class="create-fields-toggle-link" data-toggle-hidden-fields>Show hidden fields</a>
+                </div>
                 <div data-fields-container></div>
               </div>
             </form>
@@ -670,6 +692,17 @@ class AppRouteCreate extends HTMLElement {
 		const methodSelect = this.querySelector("[data-method-select]");
 		if (methodSelect) {
 			methodSelect.addEventListener("change", (e) => this.handleMethodChange(e.target.value));
+		}
+
+		const toggleHiddenLink = this.querySelector("[data-toggle-hidden-fields]");
+		const fieldsContainer = this.querySelector("[data-fields-container]");
+		if (toggleHiddenLink && fieldsContainer) {
+			toggleHiddenLink.addEventListener("click", (e) => {
+				e.preventDefault();
+				this.showHiddenFields = !this.showHiddenFields;
+				fieldsContainer.classList.toggle("show-hidden-fields", this.showHiddenFields);
+				toggleHiddenLink.textContent = this.showHiddenFields ? "Hide hidden fields" : "Show hidden fields";
+			});
 		}
 
 		// Advanced tab: server select and Create button
@@ -1301,13 +1334,17 @@ class AppRouteCreate extends HTMLElement {
 
 		methodGroup.style.display = 'flex';
 
-		// Auto-select first method if available (unless skipping auto-select)
+		// Auto-select method: prefer one with default: true, otherwise first (unless skipping auto-select)
 		if (!skipAutoSelect && methodKeys.length > 0) {
-			const firstMethodKey = methodKeys[0];
-			methodSelect.value = firstMethodKey;
+			const defaultMethodKey = methodKeys.find(key => {
+				const m = methods[key];
+				return m && (m.default === true || m.default === 'true');
+			});
+			const methodKeyToSelect = defaultMethodKey ?? methodKeys[0];
+			methodSelect.value = methodKeyToSelect;
 			// Use microtask to ensure DOM is ready and method selection happens after render
 			Promise.resolve().then(() => {
-				this.handleMethodChange(firstMethodKey);
+				this.handleMethodChange(methodKeyToSelect);
 			});
 		} else if (methodKeys.length === 0) {
 			methodSelect.value = '';
@@ -1374,6 +1411,21 @@ class AppRouteCreate extends HTMLElement {
 				this.saveSelections();
 			}
 		});
+
+		const hasHiddenFields = Object.values(fields).some(f => f && (f.hidden === true || f.hidden === 'true'));
+		const toggleWrap = this.querySelector("[data-fields-toggle]");
+		const toggleLink = this.querySelector("[data-toggle-hidden-fields]");
+		if (toggleWrap && toggleLink) {
+			if (hasHiddenFields) {
+				toggleWrap.style.display = '';
+				this.showHiddenFields = false;
+				fieldsContainer.classList.remove("show-hidden-fields");
+				toggleLink.textContent = "Show hidden fields";
+			} else {
+				toggleWrap.style.display = 'none';
+			}
+		}
+
 		fieldsGroup.style.display = 'flex';
 		this.applyUrlPromptToBasicFields();
 	}

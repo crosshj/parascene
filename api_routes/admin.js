@@ -485,7 +485,24 @@ export default function createAdminRoutes({ queries, storage }) {
 		allAnonCids.sort(cmp);
 		const total = allAnonCids.length;
 		const anonCids = allAnonCids.slice(offset, offset + limit);
-		res.json({ anonCids, total });
+		const cids = anonCids.map((r) => r.anon_cid);
+		let lastMetaByCid = new Map();
+		if (queries.selectTryRequestsLatestMetaByCids?.all && cids.length > 0) {
+			const latestRows = await queries.selectTryRequestsLatestMetaByCids.all(cids);
+			for (const row of latestRows ?? []) {
+				const meta = row.meta && typeof row.meta === "object" ? row.meta : typeof row.meta === "string" ? safeJsonParse(row.meta, {}) : {};
+				lastMetaByCid.set(row.anon_cid, { user_agent: meta?.user_agent ?? null, ip: meta?.ip ?? null });
+			}
+		}
+		const anonCidsWithUserAgent = anonCids.map((r) => {
+			const lastMeta = lastMetaByCid.get(r.anon_cid);
+			return {
+				...r,
+				user_agent: lastMeta?.user_agent ?? null,
+				ip: lastMeta?.ip ?? null
+			};
+		});
+		res.json({ anonCids: anonCidsWithUserAgent, total });
 	});
 
 	/** GET /admin/anonymous-users/:cid — requests for this anon_cid (datetime desc) with image details and view URL. */
@@ -503,9 +520,21 @@ export default function createAdminRoutes({ queries, storage }) {
 		const images = (await queries.selectCreatedImagesAnonByIds?.all?.(imageIds)) ?? [];
 		const imageById = new Map(images.map((img) => [Number(img.id), img]));
 
+		const parseMeta = (m) => {
+			if (m == null) return null;
+			if (typeof m === "object") return m;
+			if (typeof m !== "string" || !m.trim()) return null;
+			try {
+				return JSON.parse(m);
+			} catch {
+				return null;
+			}
+		};
+
 		const requestsWithImage = requests.map((r) => {
 			const img = imageById.get(Number(r.created_image_anon_id));
 			const imagePath = img?.filename ? `/api/try/images/${encodeURIComponent(img.filename)}` : null;
+			const meta = parseMeta(r.meta);
 			return {
 				id: r.id,
 				anon_cid: r.anon_cid,
@@ -513,6 +542,10 @@ export default function createAdminRoutes({ queries, storage }) {
 				created_at: r.created_at,
 				fulfilled_at: r.fulfilled_at,
 				created_image_anon_id: r.created_image_anon_id,
+				user_agent: meta?.user_agent ?? null,
+				ip: meta?.ip ?? null,
+				ip_source: meta?.ip_source ?? null,
+				cf_ray: meta?.cf_ray ?? null,
 				image: img
 					? {
 							id: img.id,
@@ -560,11 +593,31 @@ export default function createAdminRoutes({ queries, storage }) {
 			const emailLocal = user?.email ? String(user.email).split("@")[0]?.trim() || null : null;
 			userLabelByUserId[uid] = displayName || userName || emailLocal || `#${uid}`;
 		}
-		const enriched = (items || []).map((v) => ({
-			...v,
-			sharer_label: userLabelByUserId[v.sharer_user_id] ?? `#${v.sharer_user_id}`,
-			creator_label: userLabelByUserId[v.created_by_user_id] ?? `#${v.created_by_user_id}`
-		}));
+		const parseMeta = (m) => {
+			if (m == null) return null;
+			if (typeof m === "object") return m;
+			if (typeof m !== "string" || !m.trim()) return null;
+			try {
+				return JSON.parse(m);
+			} catch {
+				return null;
+			}
+		};
+		const enriched = (items || []).map((v) => {
+			const meta = parseMeta(v.meta);
+			return {
+				...v,
+				sharer_label: userLabelByUserId[v.sharer_user_id] ?? `#${v.sharer_user_id}`,
+				creator_label: userLabelByUserId[v.created_by_user_id] ?? `#${v.created_by_user_id}`,
+				user_agent: meta?.user_agent ?? null,
+				ip: meta?.ip ?? null,
+				ip_source: meta?.ip_source ?? null,
+				country: meta?.country ?? null,
+				region: meta?.region ?? null,
+				city: meta?.city ?? null,
+				cf_ray: meta?.cf_ray ?? null
+			};
+		});
 		res.json({ items: enriched, total });
 	});
 

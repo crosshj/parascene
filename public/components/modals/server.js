@@ -34,6 +34,15 @@ function renderProviderCapabilities(container, capabilities) {
 			methodName.textContent = method.name || methodKey;
 			methodHeader.appendChild(methodName);
 
+			const badgesWrap = document.createElement("div");
+			badgesWrap.className = "method-header-badges";
+			const isDefault = method && (method.default === true || method.default === 'true');
+			if (isDefault) {
+				const defaultBadge = document.createElement("span");
+				defaultBadge.className = "method-default-badge";
+				defaultBadge.textContent = "Default";
+				badgesWrap.appendChild(defaultBadge);
+			}
 			const intentList = Array.isArray(method?.intents)
 				? method.intents.filter(v => typeof v === 'string' && v.trim().length > 0).map(v => v.trim())
 				: (typeof method?.intent === 'string' && method.intent.trim().length > 0 ? [method.intent.trim()] : []);
@@ -46,7 +55,10 @@ function renderProviderCapabilities(container, capabilities) {
 					badge.textContent = intent;
 					intents.appendChild(badge);
 				});
-				methodHeader.appendChild(intents);
+				badgesWrap.appendChild(intents);
+			}
+			if (badgesWrap.childNodes.length > 0) {
+				methodHeader.appendChild(badgesWrap);
 			}
 
 			methodCard.appendChild(methodHeader);
@@ -89,6 +101,14 @@ function renderProviderCapabilities(container, capabilities) {
 					fieldBadge.className = `field-badge ${field.required ? 'required' : 'optional'}`;
 					fieldBadge.textContent = field.required ? 'Required' : 'Optional';
 					fieldItem.appendChild(fieldBadge);
+
+					const isHidden = field && (field.hidden === true || field.hidden === 'true');
+					if (isHidden) {
+						const hiddenBadge = document.createElement("span");
+						hiddenBadge.className = "field-badge field-badge-hidden";
+						hiddenBadge.textContent = "Hidden";
+						fieldItem.appendChild(hiddenBadge);
+					}
 
 					fieldList.appendChild(fieldItem);
 				});
@@ -511,11 +531,28 @@ class AppModalServer extends HTMLElement {
 					margin-bottom: 0.5rem;
 				}
 
+				.method-header-badges {
+					display: flex;
+					flex-wrap: wrap;
+					gap: 6px;
+					align-items: center;
+					justify-content: flex-end;
+				}
+
+				.method-default-badge {
+					font-size: 0.75rem;
+					padding: 0.25rem 0.6rem;
+					border-radius: 999px;
+					font-weight: 600;
+					background: color-mix(in srgb, var(--accent) 20%, transparent);
+					color: var(--accent);
+					white-space: nowrap;
+				}
+
 				.method-intents {
 					display: flex;
 					flex-wrap: wrap;
 					gap: 6px;
-					justify-content: flex-end;
 				}
 
 				.method-intent-badge {
@@ -598,6 +635,11 @@ class AppModalServer extends HTMLElement {
 
 				.field-badge.optional {
 					background: var(--surface-strong);
+					color: var(--text-muted);
+				}
+
+				.field-badge.field-badge-hidden {
+					background: color-mix(in srgb, var(--text-muted) 25%, transparent);
 					color: var(--text-muted);
 				}
 

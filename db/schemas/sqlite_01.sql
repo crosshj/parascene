@@ -297,7 +297,7 @@ CREATE TABLE IF NOT EXISTS try_requests (
 CREATE INDEX IF NOT EXISTS idx_try_requests_anon_cid ON try_requests(anon_cid);
 CREATE INDEX IF NOT EXISTS idx_try_requests_created_image_anon_id ON try_requests(created_image_anon_id);
 
--- Share page views: log sharer/creator when someone hits a share page (before try flow).
+-- Share page views: log sharer/creator when someone hits a share page (before try flow). meta holds e.g. user_agent.
 CREATE TABLE IF NOT EXISTS share_page_views (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   viewed_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -305,7 +305,8 @@ CREATE TABLE IF NOT EXISTS share_page_views (
   created_image_id INTEGER NOT NULL REFERENCES created_images(id),
   created_by_user_id INTEGER NOT NULL REFERENCES users(id),
   referer TEXT,
-  anon_cid TEXT
+  anon_cid TEXT,
+  meta TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_share_page_views_sharer_user_id ON share_page_views(sharer_user_id);
 CREATE INDEX IF NOT EXISTS idx_share_page_views_created_image_id ON share_page_views(created_image_id);

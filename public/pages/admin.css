@@ -670,6 +670,28 @@
 	text-decoration: underline;
 }
 
+.share-table-ip-source {
+	display: inline-block;
+	margin-left: 4px;
+	font-size: 0.75rem;
+	color: var(--muted, #64748b);
+	font-weight: normal;
+}
+
+.share-table-col-location {
+	max-width: 160px;
+}
+
+.share-table-col-cf-ray {
+	max-width: 140px;
+	font-family: ui-monospace, monospace;
+	font-size: 0.8rem;
+}
+
+.share-table-cf-ray {
+	color: var(--muted, #64748b);
+}
+
 .anon-detail-modal-body {
 	max-height: 85vh;
 	overflow-y: auto;
@@ -711,6 +733,26 @@
 
 .anon-request-datetime {
 	font-weight: 500;
+}
+
+.anon-request-ip-source {
+	font-size: 0.7rem;
+	color: var(--muted, #64748b);
+}
+
+.anon-request-cf-ray {
+	display: inline-block;
+	font-family: ui-monospace, monospace;
+	font-size: 0.7rem;
+	color: var(--muted, #64748b);
+}
+
+.anon-request-user-agent {
+	display: block;
+	width: 100%;
+	word-break: break-all;
+	font-size: 0.75rem;
+	opacity: 0.9;
 }
 
 .anon-request-prompt {

@@ -973,6 +973,10 @@ export function renderFields(container, fields, options = {}) {
 		const fieldGroup = document.createElement('div');
 		const type = getFieldType(fieldKey, field);
 		fieldGroup.className = type === 'boolean' ? 'form-group form-group-checkbox' : 'form-group';
+		if (field && (field.hidden === true || field.hidden === 'true')) {
+			fieldGroup.classList.add('field-hidden');
+			fieldGroup.setAttribute('data-field-hidden', 'true');
+		}
 
 		const label = createLabel(fieldKey, type === 'image' ? { ...field, label: 'Image' } : field, {
 			labelClassName: opts.labelClassName,

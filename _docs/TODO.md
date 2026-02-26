@@ -36,3 +36,12 @@ When I ask for a "rebalance" of TODO `cost` and `impact` values, I mean:
 ## Remove / Add
 
 If an item is removed or added, rerun the rebalance so the scores stay aligned to the new set.
+
+
+## Categories (not implemented - FUTURE USE)
+Create — tasks that improve users making/posting/editing things.
+Consume — tasks that improve viewing/reading/watching/browsing.
+Interact — tasks that improve general site operation (nav, lists, install, settings).
+Connect — tasks that improve social behaviors (follow, like, message, collaborate).
+Transact — tasks that improve earning/paying/buying/subscribing.
+Oversee — tasks that improve admin/moderation/audit/monitoring capabilities or admin workflows.

@@ -1,4 +1,4 @@
-import { getBaseAppUrl } from "./url.js";
+import { getQStashCallbackBaseUrl } from "./url.js";
 
 function hasNonEmpty(value) {
 	return typeof value === "string" && value.trim().length > 0;
@@ -32,7 +32,7 @@ export async function scheduleCreationJob({ payload, runCreationJob, log = conso
 		throw error;
 	}
 	if (isVercel && hasNonEmpty(qstashToken)) {
-		const callbackUrl = new URL("/api/worker/create", getBaseAppUrl()).toString();
+		const callbackUrl = new URL("/api/worker/create", getQStashCallbackBaseUrl()).toString();
 		const qstashBaseUrl = process.env.UPSTASH_QSTASH_URL;
 		const publishUrl = `${qstashBaseUrl}/v2/publish/${callbackUrl}`;
 
@@ -97,7 +97,7 @@ export async function scheduleLandscapeJob({ payload, runLandscapeJob, log = con
 		throw error;
 	}
 	if (isVercel && hasNonEmpty(qstashToken)) {
-		const callbackUrl = new URL("/api/worker/create", getBaseAppUrl()).toString();
+		const callbackUrl = new URL("/api/worker/create", getQStashCallbackBaseUrl()).toString();
 		const qstashBaseUrl = process.env.UPSTASH_QSTASH_URL;
 		const publishUrl = `${qstashBaseUrl}/v2/publish/${callbackUrl}`;
 		logCreation("Publishing landscape job to QStash", { callback_url: callbackUrl });
@@ -148,7 +148,7 @@ export async function scheduleAnonCreationJob({ payload, runAnonCreationJob, log
 		throw error;
 	}
 	if (isVercel && hasNonEmpty(qstashToken)) {
-		const callbackUrl = new URL("/api/try/worker", getBaseAppUrl()).toString();
+		const callbackUrl = new URL("/api/try/worker", getQStashCallbackBaseUrl()).toString();
 		const qstashBaseUrl = process.env.UPSTASH_QSTASH_URL;
 		const publishUrl = `${qstashBaseUrl}/v2/publish/${callbackUrl}`;
 		logCreation("Publishing anon job to QStash", { callback_url: callbackUrl });

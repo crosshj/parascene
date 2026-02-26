@@ -4,6 +4,11 @@ import { getAvatarColor } from '../shared/avatar.js';
 import { processUserText, hydrateUserTextLinks } from '../shared/userText.js';
 import { createInfiniteScroll } from '../shared/infinite-scroll.js';
 import { buildProfilePath } from '../shared/profileLinks.js';
+import { setRouteMediaBackgroundImage } from '../shared/routeMedia.js';
+import { renderEmptyState, renderEmptyLoading, renderEmptyError } from '../shared/emptyState.js';
+import { publishedBadgeHtml, userDeletedBadgeHtml } from '../shared/creationBadges.js';
+import { buildCreationCardShell } from '../shared/creationCard.js';
+import { buildUserListRowHtml } from '../shared/userCard.js';
 
 const html = String.raw;
 
@@ -80,13 +85,12 @@ function renderProfileUnavailableState(container, {
 	<path d="M12 8v5"></path>
 	<circle cx="12" cy="16.5" r="0.8" fill="currentColor"></circle>
 </svg>`;
-	container.innerHTML = html`
-		<div class="route-empty route-empty-image-grid route-empty-state">
-			<div class="route-empty-icon">${iconSvg}</div>
-			<div class="route-empty-title">${escapeHtml(title)}</div>
-			<div class="route-empty-message">${escapeHtml(message)}</div>
-		</div>
-	`;
+	container.innerHTML = renderEmptyState({
+		className: 'route-empty-image-grid',
+		icon: iconSvg,
+		title,
+		message,
+	});
 }
 
 async function copyTextToClipboard(text) {
@@ -273,33 +277,33 @@ function renderProfilePage(container, { user, profile, stats, plan, isSelf, view
 				</tab>
 				<tab data-id="mentions" label="Mentions">
 					<div class="user-profile-tab-content" data-profile-tab-content="mentions">
-						<div class="route-empty" data-profile-mentions>Coming soon.</div>
+						<div data-profile-mentions><div class="route-empty">Coming soon.</div></div>
 						<div class="user-profile-load-more" data-profile-load-more="mentions" hidden></div>
 					</div>
 				</tab>
 				<tab data-id="likes" label="Likes">
 					<div class="user-profile-tab-content" data-profile-tab-content="likes">
-						<div class="route-empty" data-profile-likes>Coming soon.</div>
+						<div data-profile-likes><div class="route-empty">Coming soon.</div></div>
 						<div class="user-profile-load-more" data-profile-load-more="likes" hidden></div>
 					</div>
 				</tab>
 				${(isSelf || isAdmin) ? html`
 				<tab data-id="follows" label="${isSelf ? 'You follow' : 'User follows'}">
 					<div class="user-profile-tab-content" data-profile-tab-content="follows">
-						<div class="route-empty" data-profile-follows>Coming soon.</div>
+						<div data-profile-follows><div class="route-empty">Coming soon.</div></div>
 						<div class="user-profile-load-more" data-profile-load-more="follows" hidden></div>
 					</div>
 				</tab>
 				` : ''}
 				<tab data-id="following" label="${isSelf ? 'Follows you' : isAdmin ? 'Follows user' : 'Followers'}">
 					<div class="user-profile-tab-content" data-profile-tab-content="following">
-						<div class="route-empty" data-profile-following>Coming soon.</div>
+						<div data-profile-following><div class="route-empty">Coming soon.</div></div>
 						<div class="user-profile-load-more" data-profile-load-more="following" hidden></div>
 					</div>
 				</tab>
 				<tab data-id="comments" label="Comments">
 					<div class="user-profile-tab-content" data-profile-tab-content="comments">
-						<div class="route-empty" data-profile-comments>Coming soon.</div>
+						<div data-profile-comments><div class="route-empty">Coming soon.</div></div>
 						<div class="user-profile-load-more" data-profile-load-more="comments" hidden></div>
 					</div>
 				</tab>
@@ -493,38 +497,16 @@ function setModalOpen(overlay, open) {
 	}
 }
 
-function setRouteMediaBackgroundImage(mediaEl, url) {
-	if (!mediaEl || !url) return;
-	mediaEl.classList.remove('route-media-error');
-	mediaEl.style.backgroundImage = '';
-
-	const probe = new Image();
-	probe.decoding = 'async';
-	if ('fetchPriority' in probe) {
-		probe.fetchPriority = document.visibilityState === 'visible' ? 'auto' : 'low';
-	}
-	probe.onload = () => {
-		mediaEl.classList.remove('route-media-error');
-		mediaEl.style.backgroundImage = `url("${String(url).replace(/"/g, '\\"')}")`;
-	};
-	probe.onerror = () => {
-		mediaEl.classList.add('route-media-error');
-		mediaEl.style.backgroundImage = '';
-	};
-	probe.src = url;
-}
-
 function renderImageGrid(grid, images, showBadge = false, emptyTitle = 'No published creations yet', emptyMessage = "When this user publishes creations, they'll show up here.") {
 	if (!grid) return;
 
 	const list = Array.isArray(images) ? images : [];
 	if (list.length === 0) {
-		grid.innerHTML = html`
-			<div class="route-empty route-empty-image-grid">
-				<div class="route-empty-title">${escapeHtml(emptyTitle)}</div>
-				<div class="route-empty-message">${escapeHtml(emptyMessage)}</div>
-			</div>
-		`;
+		grid.innerHTML = renderEmptyState({
+			className: 'route-empty-image-grid',
+			title: emptyTitle,
+			message: emptyMessage,
+		});
 		return;
 	}
 
@@ -557,30 +539,11 @@ function renderImageGrid(grid, images, showBadge = false, emptyTitle = 'No publi
 		let publishedInfo = '';
 
 		if (userDeleted) {
-			userDeletedBadge = html`
-				<div class="creation-user-deleted-badge" title="User deleted this creation">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-						stroke-linejoin="round">
-						<polyline points="3 6 5 6 21 6"></polyline>
-						<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-						<line x1="10" y1="11" x2="10" y2="17"></line>
-						<line x1="14" y1="11" x2="14" y2="17"></line>
-					</svg>
-				</div>
-			`;
+			userDeletedBadge = userDeletedBadgeHtml();
 		}
 
 		if (isPublished && showBadge) {
-			publishedBadge = html`
-				<div class="creation-published-badge" title="Published">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-						stroke-linejoin="round">
-						<circle cx="12" cy="12" r="10"></circle>
-						<line x1="2" y1="12" x2="22" y2="12"></line>
-						<path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
-					</svg>
-				</div>
-			`;
+			publishedBadge = publishedBadgeHtml();
 		}
 
 		if (isPublished && item.published_at) {
@@ -639,32 +602,21 @@ function appendImageGridCards(grid, items, showBadge = false) {
 		let userDeletedBadge = '';
 		let publishedInfo = '';
 		if (userDeleted) {
-			userDeletedBadge = html`<div class="creation-user-deleted-badge" title="User deleted this creation"><svg viewBox="0 0 24 24" fill="none"
-		stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-		<polyline points="3 6 5 6 21 6"></polyline>
-		<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-		<line x1="10" y1="11" x2="10" y2="17"></line>
-		<line x1="14" y1="11" x2="14" y2="17"></line>
-	</svg></div>`;
+			userDeletedBadge = userDeletedBadgeHtml();
 		}
 		if (isPublished && showBadge) {
-			publishedBadge = html`<div class="creation-published-badge" title="Published"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-		stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-		<circle cx="12" cy="12" r="10"></circle>
-		<line x1="2" y1="12" x2="22" y2="12"></line>
-		<path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
-	</svg></div>`;
+			publishedBadge = publishedBadgeHtml();
 		}
 		if (isPublished && item.published_at) {
-			publishedInfo = html`<div class="route-meta" title="${formatDateTime(item.published_at)}">Published ${formatRelativeTime(new
-	Date(item.published_at))}</div>`;
+			publishedInfo = html`<div class="route-meta" title="${formatDateTime(item.published_at)}">Published ${formatRelativeTime(new Date(item.published_at))}</div>`;
 		}
-		card.innerHTML = html`<div class="route-media${item.nsfw ? ' nsfw' : ''}" aria-hidden="true"></div>${userDeletedBadge}${publishedBadge}<div class="route-details">
-	<div class="route-details-content">
-		<div class="route-title">${escapeHtml(item.title || 'Untitled')}</div>${publishedInfo}<div class="route-meta">
-			${escapeHtml(formatDate(item.created_at) || '')}</div>
-	</div>
-</div>`;
+		const detailsContent = html`
+		<div class="route-title">${escapeHtml(item.title || 'Untitled')}</div>${publishedInfo}<div class="route-meta">${escapeHtml(formatDate(item.created_at) || '')}</div>`;
+		card.innerHTML = buildCreationCardShell({
+			badgesHtml: userDeletedBadge + publishedBadge,
+			detailsContentHtml: detailsContent,
+			nsfw: Boolean(item.nsfw),
+		});
 		const mediaEl = card.querySelector('.route-media');
 		const url = item.thumbnail_url || item.url;
 		if (mediaEl && url) {
@@ -679,39 +631,10 @@ function appendImageGridCards(grid, items, showBadge = false) {
 function appendUserListItems(container, users, options = {}) {
 	const ul = container?.querySelector('.user-profile-list');
 	if (!ul || !Array.isArray(users) || users.length === 0) return;
-	const { showUnfollow = false, showFollow = false, viewerFollowsByUserId = new Set(), viewerUserId = null } = options;
-	const viewerFollows = (uid) => viewerFollowsByUserId instanceof Set ? viewerFollowsByUserId.has(uid) : Boolean(viewerFollowsByUserId[uid]);
-	const isSelf = (uid) => viewerUserId != null && Number(uid) === Number(viewerUserId);
-
 	users.forEach((u) => {
-		const id = u?.user_id ?? u?.id;
-		const name = (u?.display_name || u?.user_name || '').trim() || 'User';
-		const handle = u?.user_name ? `@${u.user_name}` : '';
-		const avatarUrl = typeof u?.avatar_url === 'string' ? u.avatar_url.trim() : '';
-		const color = getAvatarColor(u?.user_name || u?.user_id || name);
-		const initial = name.charAt(0).toUpperCase() || '?';
-		const href = buildProfilePath({ userName: u?.user_name, userId: id }) || '#';
-		const avatarContent = avatarUrl
-			? html`<img class="user-profile-list-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">`
-			: html`<div class="user-profile-list-avatar-fallback" style="--user-profile-avatar-bg: ${color};" aria-hidden="true">${escapeHtml(initial)}</div>`;
-		const hideActions = isSelf(id);
-		const showUnfollowBtn = showUnfollow && id != null && !hideActions;
-		const showFollowBtn = showFollow && id != null && !viewerFollows(Number(id)) && !hideActions;
 		const li = document.createElement('li');
 		li.className = 'user-profile-list-item';
-		li.innerHTML = html`
-			<a href="${escapeHtml(href)}" class="user-profile-list-link">
-				<span class="user-profile-list-avatar">${avatarContent}</span>
-				<span class="user-profile-list-info">
-					<span class="user-profile-list-name">${escapeHtml(name)}</span>
-					${handle ? html`<span class="user-profile-list-handle">${escapeHtml(handle)}</span>` : ''}
-				</span>
-			</a>
-			${showUnfollowBtn ? html`<button type="button" class="btn-secondary user-profile-list-action" data-action="unfollow"
-				data-user-id="${escapeHtml(String(id ?? ''))}">Unfollow</button>` : ''}
-			${showFollowBtn ? html`<button type="button" class="btn-secondary user-profile-list-action" data-action="follow"
-				data-user-id="${escapeHtml(String(id ?? ''))}">Follow</button>` : ''}
-		`;
+		li.innerHTML = buildUserListRowHtml(u, options);
 		ul.appendChild(li);
 	});
 }
@@ -816,41 +739,9 @@ function renderUserList(container, users, emptyTitle, emptyMessage, options = {}
 		`;
 		return;
 	}
-	const viewerFollows = (uid) => viewerFollowsByUserId instanceof Set ? viewerFollowsByUserId.has(uid) : Boolean(viewerFollowsByUserId[uid]);
-	const isSelf = (uid) => viewerUserId != null && Number(uid) === Number(viewerUserId);
 	container.innerHTML = html`
 		<ul class="user-profile-list">
-			${list.map((u) => {
-			const id = u?.user_id ?? u?.id;
-			const name = (u?.display_name || u?.user_name || '').trim() || 'User';
-			const handle = u?.user_name ? `@${u.user_name}` : '';
-			const avatarUrl = typeof u?.avatar_url === 'string' ? u.avatar_url.trim() : '';
-			const color = getAvatarColor(u?.user_name || u?.user_id || name);
-			const initial = name.charAt(0).toUpperCase() || '?';
-			const href = buildProfilePath({ userName: u?.user_name, userId: id }) || '#';
-			const avatarContent = avatarUrl
-			? html`<img class="user-profile-list-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">`
-			: html`<div class="user-profile-list-avatar-fallback" style="--user-profile-avatar-bg: ${color};"
-				aria-hidden="true">${escapeHtml(initial)}</div>`;
-			const hideActions = isSelf(id);
-			const showUnfollowBtn = showUnfollow && id != null && !hideActions;
-			const showFollowBtn = showFollow && id != null && !viewerFollows(Number(id)) && !hideActions;
-			return html`
-			<li class="user-profile-list-item">
-				<a href="${escapeHtml(href)}" class="user-profile-list-link">
-					<span class="user-profile-list-avatar">${avatarContent}</span>
-					<span class="user-profile-list-info">
-						<span class="user-profile-list-name">${escapeHtml(name)}</span>
-						${handle ? html`<span class="user-profile-list-handle">${escapeHtml(handle)}</span>` : ''}
-					</span>
-				</a>
-				${showUnfollowBtn ? html`<button type="button" class="btn-secondary user-profile-list-action"
-					data-action="unfollow" data-user-id="${escapeHtml(String(id ?? ''))}">Unfollow</button>` : ''}
-				${showFollowBtn ? html`<button type="button" class="btn-secondary user-profile-list-action" data-action="follow"
-					data-user-id="${escapeHtml(String(id ?? ''))}">Follow</button>` : ''}
-			</li>
-			`;
-			}).join('')}
+			${list.map((u) => html`<li class="user-profile-list-item">${buildUserListRowHtml(u, { showUnfollow, showFollow, viewerFollowsByUserId, viewerUserId })}</li>`).join('')}
 		</ul>
 	`;
 }
@@ -1316,10 +1207,10 @@ async function init() {
 			}
 		} catch {
 			if (tabContentWrapper) tabContentWrapper.style.minHeight = '';
-			panel.innerHTML = html`<div class="route-empty">
-	<div class="route-empty-title">Unable to load</div>
-	<div class="route-empty-message">Something went wrong. Try again later.</div>
-</div>`;
+			panel.innerHTML = renderEmptyState({
+				title: 'Unable to load',
+				message: 'Something went wrong. Try again later.',
+			});
 			loadedTabs.delete(tabId);
 		}
 	}

@@ -1,5 +1,6 @@
 import express from "express";
 import sharp from "sharp";
+import { getClientIp, getCloudflareRay } from "./utils/requestClientIp.js";
 import { runAnonCreationJob } from "./utils/creationJob.js";
 import { scheduleAnonCreationJob } from "./utils/scheduleCreationJob.js";
 import { verifyQStashRequest } from "./utils/qstashVerification.js";
@@ -12,6 +13,21 @@ const TRY_PROMPT_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const TRY_PROMPT_POOL_MAX = 5;
 /** anon_cid used for pool-refill rows (background generations that fill the prompt pool; not tied to a specific user). */
 const ANON_CID_POOL = "__pool__";
+
+/** Build meta object for try_request (user_agent, ip, ip_source, cf_ray). Only includes keys with truthy values. */
+function buildTryRequestMeta(req) {
+	const userAgent = typeof req.get?.("user-agent") === "string" ? req.get("user-agent").trim() || null : null;
+	const { ip, source: ipSource } = getClientIp(req);
+	const cfRay = getCloudflareRay(req);
+	const meta = {};
+	if (userAgent) meta.user_agent = userAgent;
+	if (ip) {
+		meta.ip = ip;
+		if (ipSource) meta.ip_source = ipSource;
+	}
+	if (cfRay) meta.cf_ray = cfRay;
+	return Object.keys(meta).length ? meta : null;
+}
 
 function parseMeta(raw) {
 	if (raw == null) return null;
@@ -160,7 +176,8 @@ export default function createTryRoutes({ queries, storage }) {
 					const id = result.insertId;
 					if (id) {
 						const fulfilledAt = new Date().toISOString();
-						queries.insertTryRequest?.run?.(anonCid, canonicalPrompt, id, fulfilledAt);
+						const tryMeta = buildTryRequestMeta(req);
+						queries.insertTryRequest?.run?.(anonCid, canonicalPrompt, id, fulfilledAt, tryMeta);
 						const url = storage.getImageUrlAnon
 							? storage.getImageUrlAnon(cached.filename)
 							: `/api/try/images/${cached.filename}`;
@@ -266,7 +283,8 @@ export default function createTryRoutes({ queries, storage }) {
 			return res.status(500).json({ error: "Failed to create try record" });
 		}
 
-		queries.insertTryRequest?.run?.(anonCid, canonicalPrompt, id, null);
+		const tryMeta = buildTryRequestMeta(req);
+		queries.insertTryRequest?.run?.(anonCid, canonicalPrompt, id, null, tryMeta);
 
 		try {
 			await scheduleAnonCreationJob({

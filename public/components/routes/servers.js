@@ -3,8 +3,10 @@ import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 import { getAvatarColor } from '../../shared/avatar.js';
 import { fetchLatestComments } from '../../shared/comments.js';
 import { processUserText, hydrateUserTextLinks } from '../../shared/userText.js';
+import { renderEmptyState, renderEmptyLoading, renderEmptyError } from '../../shared/emptyState.js';
 import { attachAutoGrowTextarea } from '../../shared/autogrow.js';
 import { buildProfilePath } from '../../shared/profileLinks.js';
+import { renderCommentAvatarHtml } from '../../shared/commentItem.js';
 
 const html = String.raw;
 
@@ -28,17 +30,13 @@ class AppRouteServers extends HTMLElement {
 		<app-tabs>
 			<tab data-id="latest-comments" label="Comments" default>
 				<div class="comment-list" data-comments-container>
-					<div class="route-empty route-loading">
-						<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
-					</div>
+					${renderEmptyLoading({})}
 				</div>
 			</tab>
 
 			<tab data-id="servers" label="Servers">
 				<div class="route-cards admin-cards" data-servers-container>
-					<div class="route-empty route-loading">
-						<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
-					</div>
+					${renderEmptyLoading({})}
 				</div>
 			</tab>
 
@@ -139,7 +137,7 @@ class AppRouteServers extends HTMLElement {
 			const comments = Array.isArray(result.data?.comments) ? result.data.comments : [];
 			this.renderLatestComments(comments, container);
 		} catch {
-			container.innerHTML = '<div class="route-empty">Error loading comments.</div>';
+			container.innerHTML = renderEmptyError('Error loading comments.');
 		}
 	}
 
@@ -147,7 +145,7 @@ class AppRouteServers extends HTMLElement {
 		container.innerHTML = '';
 
 		if (!Array.isArray(comments) || comments.length === 0) {
-			container.innerHTML = '<div class="route-empty">No recent comments yet.</div>';
+			container.innerHTML = renderEmptyState({ title: 'No recent comments yet.' });
 			return;
 		}
 
@@ -231,23 +229,14 @@ class AppRouteServers extends HTMLElement {
 			const creatorInitial = creatorName.charAt(0).toUpperCase() || '?';
 			const creatorAvatarUrl = typeof comment?.created_image_avatar_url === 'string' ? comment.created_image_avatar_url.trim() : '';
 			const creatorPlan = comment?.created_image_owner_plan === 'founder';
-			const creatorAvatarContent = creatorAvatarUrl ? `<img class="comment-avatar-img" src="${escapeHtml(creatorAvatarUrl)}" alt="">` : escapeHtml(creatorInitial);
-			const creatorInnerStyle = `background: ${creatorAvatarUrl ? 'var(--surface-strong)' : creatorColor};`;
-			const creatorFlairInner = creatorPlan
-				? `<div class="avatar-with-founder-flair avatar-with-founder-flair--xs"><div class="founder-flair-avatar-ring"><div class="founder-flair-avatar-inner" style="${creatorInnerStyle}" aria-hidden="true">${creatorAvatarContent}</div></div></div>`
-				: creatorAvatarContent;
-
-			const creatorAvatarHtml = creatorProfileHref
-				? `
-					<a class="user-link user-avatar-link comment-avatar" href="${creatorProfileHref}" aria-label="View ${escapeHtml(creatorName)} profile"${creatorPlan ? '' : ` style="background: ${creatorColor};"`}>
-						${creatorFlairInner}
-					</a>
-				`
-				: `
-					<div class="comment-avatar"${creatorPlan ? '' : ` style="background: ${creatorColor};"`}>
-						${creatorFlairInner}
-					</div>
-				`;
+			const creatorAvatarHtml = renderCommentAvatarHtml({
+				avatarUrl: creatorAvatarUrl,
+				displayName: creatorName,
+				color: creatorColor,
+				href: creatorProfileHref,
+				isFounder: creatorPlan,
+				flairSize: 'xs',
+			});
 
 			// Note: on Connect, we intentionally hide the creation timestamp to reduce clutter.
 			creatorRow.innerHTML = `
@@ -264,26 +253,16 @@ class AppRouteServers extends HTMLElement {
 			const profileHref = buildProfilePath({ userName, userId: commenterId });
 			const seed = userName || String(comment?.user_id ?? '') || commenterName;
 			const color = getAvatarColor(seed);
-			const initial = commenterName.charAt(0).toUpperCase() || '?';
 			const avatarUrl = typeof comment?.avatar_url === 'string' ? comment.avatar_url.trim() : '';
 			const commenterPlan = comment?.plan === 'founder';
-			const commenterAvatarContent = avatarUrl ? `<img class="comment-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">` : escapeHtml(initial);
-			const commenterInnerStyle = `background: ${avatarUrl ? 'var(--surface-strong)' : color};`;
-			const commenterFlairInner = commenterPlan
-				? `<div class="avatar-with-founder-flair avatar-with-founder-flair--xs"><div class="founder-flair-avatar-ring"><div class="founder-flair-avatar-inner" style="${commenterInnerStyle}" aria-hidden="true">${commenterAvatarContent}</div></div></div>`
-				: commenterAvatarContent;
-
-			const avatarHtml = profileHref
-				? `
-					<a class="user-link user-avatar-link comment-avatar" href="${profileHref}" aria-label="View ${escapeHtml(commenterName)} profile"${commenterPlan ? '' : ` style="background: ${color};"`}>
-						${commenterFlairInner}
-					</a>
-				`
-				: `
-					<div class="comment-avatar"${commenterPlan ? '' : ` style="background: ${color};"`}>
-						${commenterFlairInner}
-					</div>
-				`;
+			const avatarHtml = renderCommentAvatarHtml({
+				avatarUrl,
+				displayName: commenterName,
+				color,
+				href: profileHref,
+				isFounder: commenterPlan,
+				flairSize: 'xs',
+			});
 
 			const timeAgo = comment?.created_at ? (formatRelativeTime(comment.created_at) || '') : '';
 			const safeText = processUserText(comment?.text ?? '');
@@ -455,7 +434,7 @@ class AppRouteServers extends HTMLElement {
 			this.renderServers(servers, container, viewerIsAdmin);
 		} catch (error) {
 			// console.error('Error loading servers:', error);
-			container.innerHTML = '<div class="route-empty">Error loading servers.</div>';
+			container.innerHTML = renderEmptyError('Error loading servers.');
 		}
 	}
 

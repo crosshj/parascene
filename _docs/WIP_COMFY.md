@@ -2,10 +2,11 @@
 
 https://www.parascene.com/s/v1/AAShAAAa.8-_DNk29yM9p/tadcbl
 
+SD 3/Flux
 ```
 {
 "6": { "class_type": "CLIPTextEncode", "inputs": { "clip": [ "40", 0 ],
-     "text": "high-quality cartoon mascot anthropomorphic cigarette, full body, centered, playful but clear tone. Exact structure of subject from bottom to top (do not change): 1) bottom 1/3: brown filter with subtle fake texture speckles, 2) middle/top 2/3: long smooth **white** paper body and face, 3) very top: small ashy cap with thin gray smoke rising. The cigarette is tall and slender with expressive cartoon arms, hands, legs, and feet, friendly face, readable silhouette, sharp focus, vibrant but balanced colors. Add a comic-style speech bubble with this exact text: \"Hey, kids! Smoking is good for you!\""
+     "text": ""
 }},
 "30": { "class_type": "CheckpointLoaderSimple", "inputs": {
       "ckpt_name": "flux1-dev-fp8.safetensors",
@@ -38,3 +39,107 @@ https://www.parascene.com/s/v1/AAShAAAa.8-_DNk29yM9p/tadcbl
 "33": { "class_type": "CLIPTextEncode", "inputs": { "text": "", "clip": ["40", 0 ] }}
 }
 ```
+
+
+SD 1.5
+```
+{
+"6": { "class_type": "CLIPTextEncode", "inputs": {
+      "clip": [ "30", 1 ],
+      "text": "Slow motion chrome liquid splash in the Crystal catacombs, Stephen Gammell, Brian Froud, Robert Williams, Craola Simkins"
+}},
+"30": { "class_type": "CheckpointLoaderSimple", "inputs": {
+      "ckpt_name": "dreamshaper_8.safetensors"
+}},
+"31": { "class_type": "KSampler", "inputs": {
+      "seed": 1119851866655636,
+      "steps": 30,
+      "cfg": 7,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "normal",
+      "denoise": 1,
+      "model": ["30", 0 ],
+      "positive": [ "6", 0 ],
+      "negative": [ "33", 0 ],
+      "latent_image": ["27", 0 ]
+}},
+"27": { "class_type": "EmptyLatentImage", "inputs": {
+      "width": 768,
+      "height": 768,
+      "batch_size": 1
+}},
+"8": { "class_type": "VAEDecode", "inputs": {
+      "samples": ["31", 0 ],
+      "vae": ["30", 2 ]
+}},
+"9": { "class_type": "SaveImage", "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": ["8", 0]
+}},
+"33": { "class_type": "CLIPTextEncode", "inputs": {
+      "text": "",
+      "clip": ["30", 1 ]
+}}
+}
+```
+
+
+SD 1.5 Upscale to 1024
+```
+{
+"6": { "class_type": "CLIPTextEncode", "inputs": {
+      "clip": [ "30", 1 ],
+      "text": "Slow motion chrome liquid splash in the Crystal catacombs, Stephen Gammell, Brian Froud, Robert Williams, Craola Simkins"
+}},
+"30": { "class_type": "CheckpointLoaderSimple", "inputs": {
+      "ckpt_name": "dreamshaper_8.safetensors"
+}},
+"31": { "class_type": "KSampler", "inputs": {
+      "seed": 1119851866655636,
+      "steps": 28,
+      "cfg": 7,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "normal",
+      "denoise": 1,
+      "model": ["30", 0 ],
+      "positive": [ "6", 0 ],
+      "negative": [ "33", 0 ],
+      "latent_image": ["27", 0 ]
+}},
+"27": { "class_type": "EmptyLatentImage", "inputs": {
+      "width": 768,
+      "height": 768,
+      "batch_size": 1
+}},
+"50": { "class_type": "LatentUpscale", "inputs": {
+      "samples": ["31", 0],
+      "width": 1024,
+      "height": 1024,
+      "upscale_method": "nearest-exact",
+      "crop": "disabled"
+}},
+"51": { "class_type": "KSampler", "inputs": {
+      "seed": 1119851866655636,
+      "steps": 18,
+      "cfg": 7,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "normal",
+      "denoise": 0.45,
+      "model": ["30", 0 ],
+      "positive": [ "6", 0 ],
+      "negative": [ "33", 0 ],
+      "latent_image": ["50", 0 ]
+}},
+"8": { "class_type": "VAEDecode", "inputs": {
+      "samples": ["51", 0 ],
+      "vae": ["30", 2 ]
+}},
+"9": { "class_type": "SaveImage", "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": ["8", 0]
+}},
+"33": { "class_type": "CLIPTextEncode", "inputs": {
+      "text": "",
+      "clip": ["30", 1 ]
+}}
+}

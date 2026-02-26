@@ -205,7 +205,7 @@ export function openDb() {
 			}
 		},
 		insertSharePageView: {
-			run: async (sharerUserId, createdImageId, createdByUserId, referer, anonCid) => {
+			run: async (sharerUserId, createdImageId, createdByUserId, referer, anonCid, meta = null) => {
 				// No-op for mock; real adapters persist to share_page_views.
 				return { changes: 1 };
 			}
@@ -1836,6 +1836,18 @@ export function openDb() {
 					const bAt = b.last_request_at || "";
 					return bAt.localeCompare(aAt);
 				});
+			}
+		},
+		selectTryRequestsLatestMetaByCids: {
+			all: async (cids) => {
+				if (!Array.isArray(cids) || cids.length === 0) return [];
+				const set = new Set(cids);
+				const filtered = try_requests.filter((r) => set.has(r.anon_cid)).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+				const byCid = new Map();
+				for (const r of filtered) {
+					if (!byCid.has(r.anon_cid)) byCid.set(r.anon_cid, { anon_cid: r.anon_cid, meta: r.meta });
+				}
+				return Array.from(byCid.values());
 			}
 		},
 		/** Rows where created_image_anon_id IS NULL (transitioned); returns anon_cid, meta for building transition map. */

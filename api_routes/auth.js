@@ -8,6 +8,7 @@ const SESSION_REFRESH_SKIP_PREFIXES = [
 	"/static",
 	"/favicon",
 	"/robots.txt",
+	"/sitemap.xml",
 	"/api/images/created/"
 ];
 const SESSION_REFRESH_SKIP_EXTENSIONS = new Set([

@@ -7,11 +7,15 @@ import { processUserText, hydrateUserTextLinks } from '/shared/userText.js';
 import { attachAutoGrowTextarea } from '/shared/autogrow.js';
 import { textsSameWithinTolerance } from '/shared/textCompare.js';
 import { buildProfilePath } from '/shared/profileLinks.js';
+import { renderCreationKebabHtml, setupKebabDropdown } from '/shared/kebabMenu.js';
 import '../components/modals/publish.js';
 import '../components/modals/creation-details.js';
 import '../components/modals/share.js';
 import { creditIcon, eyeHiddenIcon } from '../icons/svg-strings.js';
 import '../components/modals/tip-creator.js';
+import { renderEmptyState, renderEmptyLoading, renderEmptyError } from '/shared/emptyState.js';
+import { buildCreationCardShell } from '/shared/creationCard.js';
+import { renderCommentAvatarHtml } from '/shared/commentItem.js';
 
 const html = String.raw;
 const TIP_MIN_VISIBLE_BALANCE = 10.0;
@@ -307,11 +311,7 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 			const reasonsHtml = showRecsysDebug && reasonRows.length > 0
 				? `<div class="creation-detail-related-reasons">${reasonRows.map((line) => `<div class="creation-detail-related-reason-line">${escapeHtml(line)}</div>`).join('')}</div>`
 				: '';
-			/* Match explore card structure exactly: .route-media + .route-details as direct children (no wrapper link) */
-			card.innerHTML = html`
-				<div class="route-media${item.nsfw ? ' nsfw' : ''}" aria-hidden="true" data-related-media data-image-id="${cid}" data-status="completed"></div>
-				<div class="route-details">
-					<div class="route-details-content">
+			const detailsContent = html`
 						<div class="route-title">${escapeHtml(decodeHtmlEntities(item.title != null ? item.title : 'Untitled'))}</div>
 						<div class="route-summary">${escapeHtml(decodeHtmlEntities(item.summary != null ? item.summary : ''))}</div>
 						<div class="route-meta" title="${formatDateTime(item.created_at)}">${formatRelativeTime(item.created_at)}</div>
@@ -320,10 +320,12 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 						</div>
 						${reasonsHtml}
 						<div class="route-meta route-meta-spacer"></div>
-						<div class="route-tags">${escapeHtml(item.tags ?? '')}</div>
-					</div>
-				</div>
-			`;
+						<div class="route-tags">${escapeHtml(item.tags ?? '')}</div>`;
+			card.innerHTML = buildCreationCardShell({
+				mediaAttrs: { 'data-related-media': true, 'data-image-id': cid, 'data-status': 'completed' },
+				detailsContentHtml: detailsContent,
+				nsfw: Boolean(item.nsfw),
+			});
 			card.style.cursor = 'pointer';
 			card.addEventListener('click', (e) => {
 				if (e.target.closest('.user-link')) return;
@@ -499,16 +501,12 @@ async function loadCreation() {
 
 	const creationId = getCreationId();
 	if (!creationId) {
-		detailContent.innerHTML = html`
-			<div class="route-empty">
-				<div class="route-empty-title">Invalid creation ID</div>
-			</div>
-		`;
+		detailContent.innerHTML = renderEmptyState({ title: 'Invalid creation ID' });
 		if (actionsEl) actionsEl.style.display = 'none';
 		return;
 	}
 
-	detailContent.innerHTML = '<div class="route-empty route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>';
+	detailContent.innerHTML = renderEmptyLoading({});
 
 	try {
 		const headers = {};
@@ -527,12 +525,10 @@ async function loadCreation() {
 		});
 		if (!response.ok) {
 			if (response.status === 404) {
-				detailContent.innerHTML = html`
-					<div class="route-empty">
-						<div class="route-empty-title">Creation not found</div>
-						<div class="route-empty-message">The creation you're looking for doesn't exist or you don't have access to it.</div>
-					</div>
-				`;
+				detailContent.innerHTML = renderEmptyState({
+					title: 'Creation not found',
+					message: "The creation you're looking for doesn't exist or you don't have access to it.",
+				});
 				if (actionsEl) actionsEl.style.display = 'none';
 				return;
 			}
@@ -938,6 +934,14 @@ async function loadCreation() {
 			: (typeof meta?.method === 'string' ? meta.method : '');
 		const durationStr = formatDuration(meta || {});
 
+		// Display model from args (to the right of Method in meta bar). Strip after first colon if present.
+		const rawModel = isPlainObject && Object.prototype.hasOwnProperty.call(args, 'model')
+			? (typeof args.model === 'string' ? args.model.trim() : String(args.model ?? '').trim())
+			: '';
+		const displayModel = rawModel === ''
+			? ''
+			: (rawModel.includes(':') ? rawModel.split(':')[0] : rawModel);
+
 		// Style from meta (stored when created via create.html with a style)
 		const styleMeta = meta?.style && typeof meta.style === 'object' ? meta.style : null;
 		const styleLabel = styleMeta && typeof styleMeta.label === 'string' ? styleMeta.label.trim() : '';
@@ -949,7 +953,7 @@ async function loadCreation() {
 		const descriptionText = typeof creation.description === 'string' ? creation.description.trim() : '';
 		const hasDescription = descriptionText.length > 0;
 		const hasPrompt = promptText.length > 0;
-		const hasMetaInDescription = !!(serverName || methodName || durationStr);
+		const hasMetaInDescription = !!(serverName || methodName || displayModel || durationStr);
 		const showDescriptionBlock = descriptionText || promptText || hasStyle || lineageSectionHtml || hasMetaInDescription;
 
 		if (showDescriptionBlock) {
@@ -983,12 +987,14 @@ async function loadCreation() {
 
 			// Build Server/Method/Duration line (outside collapsible)
 			let metaLineHtml = '';
-			if (serverName || methodName || durationStr) {
+			if (serverName || methodName || displayModel || durationStr) {
 				const metaItems = [];
-				if (serverName) metaItems.push(html`<span class="creation-detail-description-meta-label">Server</span> <span
+				if (serverName && serverName !== 'Parascene') metaItems.push(html`<span class="creation-detail-description-meta-label">Server</span> <span
 	class="creation-detail-description-meta-value">${escapeHtml(serverName)}</span>`);
-				if (methodName) metaItems.push(html`<span class="creation-detail-description-meta-label">Method</span> <span
+				if (methodName && methodName !== 'Replicate') metaItems.push(html`<span class="creation-detail-description-meta-label">Method</span> <span
 	class="creation-detail-description-meta-value">${escapeHtml(methodName)}</span>`);
+				if (displayModel) metaItems.push(html`<span class="creation-detail-description-meta-label">Model</span> <span
+	class="creation-detail-description-meta-value">${escapeHtml(displayModel)}</span>`);
 				if (durationStr) metaItems.push(html`<span class="creation-detail-description-meta-label">Duration</span> <span
 	class="creation-detail-description-meta-value">${escapeHtml(durationStr)}</span>`);
 				metaLineHtml = html`<div class="creation-detail-description-meta-line">${metaItems.join(' • ')}</div>`;
@@ -1030,6 +1036,13 @@ async function loadCreation() {
 			}
 			if (shouldHidePrompt && Object.prototype.hasOwnProperty.call(filteredArgs, 'prompt')) {
 				delete filteredArgs.prompt;
+			}
+			// Model is shown in meta bar, not in modal
+			if (Object.prototype.hasOwnProperty.call(filteredArgs, 'model')) {
+				const mv = filteredArgs.model;
+				if (mv != null && String(mv).trim() !== '') {
+					delete filteredArgs.model;
+				}
 			}
 
 			// Check if there are any keys left after filtering
@@ -1222,18 +1235,9 @@ async function loadCreation() {
 					</button>
 					` : ``}
 					<div class="creation-detail-more">
-						<button class="feed-card-action feed-card-action-more" type="button" aria-label="More"
-							data-creation-more-button>
-							<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-								<circle cx="12" cy="5" r="1.6"></circle>
-								<circle cx="12" cy="12" r="1.6"></circle>
-								<circle cx="12" cy="19" r="1.6"></circle>
-							</svg>
-						</button>
-						<div class="feed-card-menu" data-creation-menu style="display: none;">
-							${isOwner ? `<button class="feed-card-menu-item" type="button" data-creation-menu-set-avatar>Set as profile picture</button>` : ''}
-							<button class="feed-card-menu-item" type="button" data-creation-menu-landscape style="display: none;">Landscape</button>
-						</div>
+						${renderCreationKebabHtml({
+							menuContentHtml: `${isOwner ? `<button class="feed-card-menu-item" type="button" data-creation-menu-set-avatar>Set as profile picture</button>` : ''}<button class="feed-card-menu-item" type="button" data-creation-menu-landscape style="display: none;">Landscape</button>`
+						})}
 					</div>
 				</div>
 			</div>
@@ -1272,9 +1276,7 @@ async function loadCreation() {
 			</div>
 			<div id="comments" data-comments-anchor></div>
 			<div class="comment-list" data-comment-list>
-				<div class="route-empty route-loading">
-					<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
-				</div>
+				${renderEmptyLoading({})}
 			</div>
 
 			<section class="creation-detail-related" data-related-container aria-label="More like this" style="display: none;">
@@ -1511,42 +1513,13 @@ async function loadCreation() {
 		const moreWrap = detailContent.querySelector('.creation-detail-more');
 
 		if (moreBtn instanceof HTMLButtonElement && menu instanceof HTMLElement && moreWrap instanceof HTMLElement) {
-			const closeMenu = (e) => {
-				if (!menu.contains(e.target) && !moreBtn.contains(e.target)) {
-					menu.style.display = 'none';
-					document.removeEventListener('click', closeMenu);
-				}
-			};
-
-			moreBtn.addEventListener('click', (e) => {
-				e.preventDefault();
-				e.stopPropagation();
-
-				const isVisible = menu.style.display !== 'none';
-				menu.style.display = isVisible ? 'none' : 'block';
-
-				if (!isVisible) {
-					const buttonRect = moreBtn.getBoundingClientRect();
-					const wrapRect = moreWrap.getBoundingClientRect();
-					menu.style.position = 'absolute';
-					menu.style.right = `${wrapRect.right - buttonRect.right}px`;
-					menu.style.bottom = `${wrapRect.bottom - buttonRect.top + 4}px`;
-					menu.style.zIndex = '1000';
-
-					setTimeout(() => {
-						document.addEventListener('click', closeMenu);
-					}, 0);
-				} else {
-					document.removeEventListener('click', closeMenu);
-				}
-			});
+			setupKebabDropdown(moreBtn, menu, { wrapEl: moreWrap });
 
 			if (setAvatarMenuBtn instanceof HTMLButtonElement) {
 				setAvatarMenuBtn.addEventListener('click', async (e) => {
 					e.preventDefault();
 					e.stopPropagation();
 					menu.style.display = 'none';
-					document.removeEventListener('click', closeMenu);
 					const setAvatarBtn = detailContent.querySelector('button[data-set-avatar-button]');
 					if (setAvatarBtn) setAvatarBtn.click();
 				});
@@ -1557,7 +1530,6 @@ async function loadCreation() {
 					e.preventDefault();
 					e.stopPropagation();
 					menu.style.display = 'none';
-					document.removeEventListener('click', closeMenu);
 					const landscapeBtn = detailContent.querySelector('[data-landscape-btn]');
 					if (landscapeBtn && !landscapeBtn.disabled) landscapeBtn.click();
 				});
@@ -1611,12 +1583,11 @@ async function loadCreation() {
 				if (commentsToolbarEl instanceof HTMLElement) {
 					commentsToolbarEl.style.display = 'none';
 				}
-				commentListEl.innerHTML = html`
-					<div class="route-empty comments-empty">
-						<div class="route-empty-title">No comments yet</div>
-						<div class="route-empty-message">Be the first to say something.</div>
-					</div>
-				`;
+				commentListEl.innerHTML = renderEmptyState({
+					className: 'comments-empty',
+					title: 'No comments yet',
+					message: 'Be the first to say something.',
+				});
 				return;
 			}
 
@@ -1644,22 +1615,18 @@ async function loadCreation() {
 					const safeMessage = t?.message ? processUserText(String(t.message)) : '';
 					const amountLabel = `${amount.toFixed(1)} credits`;
 					const isFounder = t?.plan === 'founder';
-					const tipAvatarContent = avatarUrl ? `<img class="comment-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">` : initial;
-					const tipAvatarBlock = isFounder
-						? `<div class="avatar-with-founder-flair avatar-with-founder-flair--sm"><div class="founder-flair-avatar-ring"><div class="founder-flair-avatar-inner" style="background: ${avatarUrl ? 'var(--surface-strong)' : color};" aria-hidden="true">${tipAvatarContent}</div></div></div>`
-						: tipAvatarContent;
+					const tipAvatarHtml = renderCommentAvatarHtml({
+						avatarUrl,
+						displayName: name,
+						color,
+						href: profileHref,
+						isFounder,
+						flairSize: 'sm',
+					});
 
 					return `
 						<div class="comment-item comment-item-tip">
-							${profileHref ? `
-								<a class="user-link user-avatar-link comment-avatar" href="${profileHref}" aria-label="View ${escapeHtml(name)} profile" ${!isFounder ? `style="background: ${color};"` : ''}>
-									${tipAvatarBlock}
-								</a>
-							` : `
-								<div class="comment-avatar" ${!isFounder ? `style="background: ${color};"` : ''}>
-									${tipAvatarBlock}
-								</div>
-							`}
+							${tipAvatarHtml}
 							<div class="comment-body">
 								<div class="comment-top">
 									${profileHref ? `
@@ -1711,22 +1678,18 @@ async function loadCreation() {
 				const timeTitle = date ? formatDateTime(date) : '';
 				const safeText = processUserText(c?.text ?? '');
 				const isFounder = c?.plan === 'founder';
-				const commentAvatarContent = avatarUrl ? `<img class="comment-avatar-img" src="${escapeHtml(avatarUrl)}" alt="">` : initial;
-				const commentAvatarBlock = isFounder
-					? `<div class="avatar-with-founder-flair avatar-with-founder-flair--sm"><div class="founder-flair-avatar-ring"><div class="founder-flair-avatar-inner" style="background: ${avatarUrl ? 'var(--surface-strong)' : color};" aria-hidden="true">${commentAvatarContent}</div></div></div>`
-					: commentAvatarContent;
+				const commentAvatarHtml = renderCommentAvatarHtml({
+					avatarUrl,
+					displayName: name,
+					color,
+					href: profileHref,
+					isFounder,
+					flairSize: 'sm',
+				});
 
 				return `
 					<div class="comment-item">
-						${profileHref ? `
-							<a class="user-link user-avatar-link comment-avatar" href="${profileHref}" aria-label="View ${escapeHtml(name)} profile" ${!isFounder ? `style="background: ${color};"` : ''}>
-								${commentAvatarBlock}
-							</a>
-						` : `
-							<div class="comment-avatar" ${!isFounder ? `style="background: ${color};"` : ''}>
-								${commentAvatarBlock}
-							</div>
-						`}
+						${commentAvatarHtml}
 						<div class="comment-body">
 							<div class="comment-top">
 								${profileHref ? `
@@ -1754,7 +1717,7 @@ async function loadCreation() {
 
 		async function loadComments({ scrollIfHash = false } = {}) {
 			if (!commentListEl) return;
-			commentListEl.innerHTML = '<div class="route-empty route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>';
+			commentListEl.innerHTML = renderEmptyLoading({});
 			if (commentsToolbarEl instanceof HTMLElement) commentsToolbarEl.style.display = 'none';
 
 			const res = await fetchCreatedImageActivity(creationId, { order: commentsState.order, limit: 50, offset: 0 })
@@ -1762,11 +1725,7 @@ async function loadCreation() {
 
 			if (!res.ok) {
 				if (commentsToolbarEl instanceof HTMLElement) commentsToolbarEl.style.display = 'none';
-				commentListEl.innerHTML = html`
-					<div class="route-empty comments-empty">
-						<div class="route-empty-title">Unable to load comments</div>
-					</div>
-				`;
+				commentListEl.innerHTML = renderEmptyState({ className: 'comments-empty', title: 'Unable to load comments' });
 				return;
 			}
 
@@ -1865,12 +1824,10 @@ async function loadCreation() {
 
 	} catch (error) {
 		console.error("Error loading creation detail:", error);
-		detailContent.innerHTML = html`
-			<div class="route-empty">
-				<div class="route-empty-title">Unable to load creation</div>
-				<div class="route-empty-message">An error occurred while loading the creation.</div>
-			</div>
-		`;
+		detailContent.innerHTML = renderEmptyState({
+			title: 'Unable to load creation',
+			message: 'An error occurred while loading the creation.',
+		});
 		if (actionsEl) actionsEl.style.display = 'none';
 	}
 }
