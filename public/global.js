@@ -1,4 +1,8 @@
 // Global components that all pages will use
+import { initNsfwViewPreference, handleNsfwClick } from './shared/nsfwView.js';
+
+initNsfwViewPreference();
+
 import './components/navigation/index.js';
 import './components/navigation/mobile.js';
 import './components/elements/tabs.js';
@@ -548,6 +552,14 @@ document.addEventListener('modal-closed', () => {
 	shadowModalCount = Math.max(0, shadowModalCount - 1);
 	updateBodyClass();
 });
+
+// NSFW overlay click: if user clicks a blurred NSFW image and hasn't enabled view, confirm then enable and navigate
+document.addEventListener('click', (e) => {
+	if (handleNsfwClick(e)) {
+		e.preventDefault();
+		e.stopPropagation();
+	}
+}, true);
 
 // Standard modal navigation: intercept links inside modals and use closeModalsAndNavigate
 // Use composedPath() so we find the real link when the click is inside shadow DOM (event is retargeted to host)

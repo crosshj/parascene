@@ -660,7 +660,7 @@ class AppRouteExplore extends HTMLElement {
 			});
 
 			card.innerHTML = html`
-		<div class="route-media" aria-hidden="true" data-image-id="${item.created_image_id ?? ''}" data-status="completed">
+		<div class="route-media${item.nsfw ? ' nsfw' : ''}" aria-hidden="true" data-image-id="${item.created_image_id ?? ''}" data-status="completed">
 		</div>
 		<div class="route-details">
 			<div class="route-details-content">

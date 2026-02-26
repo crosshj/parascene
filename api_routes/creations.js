@@ -241,6 +241,7 @@ function mapRelatedItemsToResponse(items, viewerLikedIds, reasonMetaByCreationId
 			like_count: Number(item?.like_count ?? 0),
 			comment_count: Number(item?.comment_count ?? 0),
 			viewer_liked: likedSet.has(String(item?.id ?? item?.created_image_id)),
+			nsfw: !!(item?.nsfw),
 			reason_labels: Array.isArray(reasonMeta?.labels) ? reasonMeta.labels : [],
 			reason_details: Array.isArray(reasonMeta?.details) ? reasonMeta.details : [],
 			recsys_score: Number.isFinite(Number(reasonMeta?.score)) ? Number(reasonMeta.score) : null,
@@ -555,7 +556,12 @@ export default function createCreationsRoutes({ queries }) {
 			const viewerLikedIds = typeof queries.selectViewerLikedCreationIds?.all === "function"
 				? await queries.selectViewerLikedCreationIds.all(req.auth?.userId, ids)
 				: [];
-			const itemsWithImages = mapRelatedItemsToResponse(items, viewerLikedIds, reasonMetaByCreationId);
+			let itemsWithImages = mapRelatedItemsToResponse(items, viewerLikedIds, reasonMetaByCreationId);
+			const user = await queries.selectUserById?.get?.(req.auth?.userId);
+			const enableNsfw = user?.meta?.enableNsfw === true;
+			if (!enableNsfw) {
+				itemsWithImages = itemsWithImages.filter((item) => !item.nsfw);
+			}
 
 			return res.json({ items: itemsWithImages, hasMore: !!hasMore });
 		} catch (err) {
@@ -615,11 +621,17 @@ export default function createCreationsRoutes({ queries }) {
 			const idToDistance = new Map((nearest ?? []).map((r) => [Number(r.created_image_id), Number(r.distance)]));
 			const orderIdx = new Map(ids.map((id, i) => [id, i]));
 			const sorted = neighbourRows.slice().sort((a, b) => (orderIdx.get(Number(a.id)) ?? 999) - (orderIdx.get(Number(b.id)) ?? 999));
-			const items = mapRelatedItemsToResponse(sorted, [], null).map((item) => ({
+			let items = mapRelatedItemsToResponse(sorted, [], null).map((item) => ({
 				...item,
 				distance: idToDistance.get(Number(item.created_image_id)) ?? null
 			}));
 			const mainMapped = mapRelatedItemsToResponse(mainRows, [], null);
+			if (req.auth?.userId && queries.selectUserById?.get) {
+				const user = await queries.selectUserById.get(req.auth.userId);
+				if (!user?.meta?.enableNsfw) {
+					items = items.filter((item) => !item.nsfw);
+				}
+			}
 			return res.json({ main: mainMapped[0] ?? null, items, distances: Object.fromEntries(idToDistance), has_more: hasMore });
 		} catch (err) {
 			console.error("[creations] semantic-related error:", err);
@@ -719,7 +731,13 @@ export default function createCreationsRoutes({ queries }) {
 				? await queries.selectViewerLikedCreationIds.all(req.auth?.userId, [id])
 				: [];
 			const items = mapRelatedItemsToResponse(rows, viewerLikedIds);
-			return res.json({ item: items[0] || null });
+			const item = items[0] || null;
+			const user = await queries.selectUserById?.get?.(req.auth?.userId);
+			const enableNsfw = user?.meta?.enableNsfw === true;
+			if (item?.nsfw && !enableNsfw) {
+				return res.status(404).json({ error: "Creation not found" });
+			}
+			return res.json({ item });
 		} catch (err) {
 			console.error("[creations] summary error:", err);
 			if (!res.headersSent) res.status(500).json({ error: "Unable to load creation summary." });

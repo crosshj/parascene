@@ -311,6 +311,15 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		updateUserEnableNsfw: {
+			run: async (userId, enableNsfw) => {
+				const user = users.find((u) => Number(u.id) === Number(userId));
+				if (!user) return { changes: 0 };
+				user.meta = user.meta != null && typeof user.meta === "object" ? { ...user.meta } : {};
+				user.meta.enableNsfw = Boolean(enableNsfw);
+				return { changes: 1 };
+			}
+		},
 		recordCheckoutReturn: {
 			run: async (userId, sessionId, returnedAt) => {
 				const user = users.find((u) => Number(u.id) === Number(userId));
@@ -937,13 +946,16 @@ export function openDb() {
 					const profile = user_profiles.find((p) => p.user_id === Number(authorId));
 					const user = users.find((u) => Number(u.id) === Number(authorId));
 					const authorPlan = user?.meta?.plan === "founder" ? "founder" : "free";
+					const meta = ci?.meta;
+					const nsfw = !!(meta && typeof meta === "object" && meta.nsfw);
 					return {
 						...item,
 						user_id: authorId,
 						author_user_name: profile?.user_name ?? null,
 						author_display_name: profile?.display_name ?? null,
 						author_avatar_url: profile?.avatar_url ?? null,
-						author_plan: authorPlan
+						author_plan: authorPlan,
+						nsfw
 					};
 				});
 			}
@@ -972,11 +984,13 @@ export function openDb() {
 
 				return filtered.map((item) => {
 					const profile = user_profiles.find((p) => p.user_id === Number(item.user_id));
+					const ci = created_images.find((c) => Number(c.id) === Number(item.created_image_id));
 					return {
 						...item,
 						author_user_name: profile?.user_name ?? null,
 						author_display_name: profile?.display_name ?? null,
-						author_avatar_url: profile?.avatar_url ?? null
+						author_avatar_url: profile?.avatar_url ?? null,
+						nsfw: !!(ci?.meta?.nsfw)
 					};
 				});
 			};
@@ -1010,11 +1024,13 @@ export function openDb() {
 
 				return page.map((item) => {
 					const profile = user_profiles.find((p) => p.user_id === Number(item.user_id));
+					const ci = created_images.find((c) => Number(c.id) === Number(item.created_image_id));
 					return {
 						...item,
 						author_user_name: profile?.user_name ?? null,
 						author_display_name: profile?.display_name ?? null,
-						author_avatar_url: profile?.avatar_url ?? null
+						author_avatar_url: profile?.avatar_url ?? null,
+						nsfw: !!(ci?.meta?.nsfw)
 					};
 				});
 			};
@@ -1131,6 +1147,8 @@ export function openDb() {
 					const likeCount = likes_created_image.filter((l) => Number(l.created_image_id) === id).length;
 					const commentCount = comments_created_image.filter((c) => Number(c.created_image_id) === id).length;
 					const profile = user_profiles.find((p) => Number(p.user_id) === Number(row.user_id));
+					const meta = row.meta;
+					const nsfw = !!(meta && typeof meta === "object" && meta.nsfw);
 					const url =
 						row.file_path ??
 						(row.filename
@@ -1148,6 +1166,7 @@ export function openDb() {
 						author_display_name: profile?.display_name ?? null,
 						author_user_name: profile?.user_name ?? null,
 						author_avatar_url: profile?.avatar_url ?? null,
+						nsfw,
 						url
 					};
 				});

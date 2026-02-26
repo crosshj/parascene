@@ -557,6 +557,25 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		updateUserEnableNsfw: {
+			run: async (userId, enableNsfw) => {
+				const { data: current, error: selectError } = await serviceClient
+					.from(prefixedTable("users"))
+					.select("meta")
+					.eq("id", userId)
+					.maybeSingle();
+				if (selectError) throw selectError;
+				const existing = current?.meta ?? null;
+				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
+				meta.enableNsfw = Boolean(enableNsfw);
+				const { error } = await serviceClient
+					.from(prefixedTable("users"))
+					.update({ meta })
+					.eq("id", userId);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
 		recordCheckoutReturn: {
 			run: async (userId, sessionId, returnedAt) => {
 				const { data: current, error: selectError } = await serviceClient
@@ -1704,7 +1723,7 @@ export function openDb() {
 				const { data, error } = await serviceClient
 					.from(prefixedTable("feed_items"))
 					.select(
-						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images(filename, file_path, user_id, unavailable_at)"
+						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images(filename, file_path, user_id, unavailable_at, meta)"
 					)
 					.order("created_at", { ascending: false });
 				if (error) throw error;
@@ -1714,11 +1733,14 @@ export function openDb() {
 					const file_path = prsn_created_images?.file_path ?? null;
 					const user_id = prsn_created_images?.user_id ?? null;
 					const unavailable_at = prsn_created_images?.unavailable_at ?? null;
+					const meta = prsn_created_images?.meta;
+					const nsfw = !!(meta && typeof meta === "object" && meta.nsfw);
 					return {
 						...rest,
 						filename,
 						user_id,
 						unavailable_at,
+						nsfw,
 						// Use file_path (which contains the URL) or fall back to constructing from filename
 						url: file_path || (filename ? `/api/images/created/${filename}` : null),
 						like_count: 0,
@@ -1855,7 +1877,7 @@ export function openDb() {
 				const { data, error } = await serviceClient
 					.from(prefixedTable("feed_items"))
 					.select(
-						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images(filename, file_path, user_id)"
+						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images(filename, file_path, user_id, meta)"
 					)
 					.order("created_at", { ascending: false });
 				if (error) throw error;
@@ -1865,10 +1887,12 @@ export function openDb() {
 					const filename = prsn_created_images?.filename ?? null;
 					const file_path = prsn_created_images?.file_path ?? null;
 					const user_id = prsn_created_images?.user_id ?? null;
+					const nsfw = !!(prsn_created_images?.meta && typeof prsn_created_images.meta === "object" && prsn_created_images.meta.nsfw);
 					return {
 						...rest,
 						filename,
 						user_id,
+						nsfw,
 						url: file_path || (filename ? `/api/images/created/${filename}` : null),
 						thumbnail_url: getThumbnailUrl(file_path || (filename ? `/api/images/created/${filename}` : null)),
 						like_count: 0,
@@ -2008,7 +2032,7 @@ export function openDb() {
 				let query = serviceClient
 					.from(prefixedTable("feed_items"))
 					.select(
-						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images!inner(filename, file_path, user_id, unavailable_at)"
+						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images!inner(filename, file_path, user_id, unavailable_at, meta)"
 					)
 					.not("prsn_created_images.user_id", "is", null)
 					.is("prsn_created_images.unavailable_at", null)
@@ -2027,11 +2051,13 @@ export function openDb() {
 						const filename = prsn_created_images?.filename ?? null;
 						const file_path = prsn_created_images?.file_path ?? null;
 						const user_id = prsn_created_images?.user_id ?? null;
+						const nsfw = !!(prsn_created_images?.meta && typeof prsn_created_images.meta === "object" && prsn_created_images.meta.nsfw);
 						const resolvedUrl = file_path || (filename ? `/api/images/created/${filename}` : null);
 						return {
 							...rest,
 							filename,
 							user_id,
+							nsfw,
 							url: resolvedUrl,
 							thumbnail_url: getThumbnailUrl(resolvedUrl),
 							like_count: 0,
@@ -3399,7 +3425,7 @@ export function openDb() {
 				// prsn_created_images has title, description (no summary column); use description for summary
 				const { data: images, error: imgError } = await serviceClient
 					.from(prefixedTable("created_images"))
-					.select("id, title, description, created_at, user_id, filename, file_path")
+					.select("id, title, description, created_at, user_id, filename, file_path, meta")
 					.in("id", safeIds);
 				if (imgError) throw imgError;
 				const orderById = new Map(safeIds.map((id, i) => [Number(id), i]));
@@ -3432,6 +3458,8 @@ export function openDb() {
 				return sorted.map((row) => {
 					const key = String(row.id);
 					const profile = row.user_id != null ? profileByUserId.get(String(row.user_id)) : null;
+					const meta = row.meta;
+					const nsfw = !!(meta && typeof meta === "object" && meta.nsfw);
 					const url =
 						row.file_path ??
 						(row.filename
@@ -3444,6 +3472,7 @@ export function openDb() {
 						summary: row.description ?? "",
 						created_at: row.created_at,
 						user_id: row.user_id,
+						nsfw,
 						like_count: likeById.get(key) ?? 0,
 						comment_count: commentById.get(key) ?? 0,
 						author_display_name: profile?.display_name ?? null,
@@ -3742,7 +3771,7 @@ export function openDb() {
 				if (createdImageIds.length > 0) {
 					const { data: imageRows, error: imageError } = await serviceClient
 						.from(prefixedTable("created_images"))
-						.select("id, title, published, user_id, file_path, created_at")
+						.select("id, title, published, user_id, file_path, created_at, meta")
 						.in("id", createdImageIds);
 					if (imageError) throw imageError;
 					imageById = new Map((imageRows ?? []).map((row) => [String(row.id), row]));
@@ -3776,6 +3805,7 @@ export function openDb() {
 						const creatorProfile = image?.user_id !== null && image?.user_id !== undefined
 							? creatorProfileByUserId.get(String(image.user_id)) ?? null
 							: null;
+						const nsfw = !!(image?.meta && typeof image.meta === "object" && image.meta.nsfw);
 						return {
 							...row,
 							created_image_title: image?.title ?? null,
@@ -3785,7 +3815,8 @@ export function openDb() {
 							created_image_user_id: image?.user_id ?? null,
 							created_image_user_name: creatorProfile?.user_name ?? null,
 							created_image_display_name: creatorProfile?.display_name ?? null,
-							created_image_avatar_url: creatorProfile?.avatar_url ?? null
+							created_image_avatar_url: creatorProfile?.avatar_url ?? null,
+							nsfw
 						};
 					})
 					.filter((row) => row?.created_image_published === true);

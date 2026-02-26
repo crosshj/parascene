@@ -972,12 +972,33 @@ body.creation-detail-page main>section:first-of-type {
 	color: var(--text-muted);
 }
 
+.creation-detail-title-row {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 10px 12px;
+	margin-bottom: 12px;
+}
+
+.creation-detail-nsfw-tag {
+	display: inline-block;
+	font-size: 0.6rem;
+	font-weight: 100;
+	letter-spacing: 0;
+	color: var(--text);
+	border: 1px solid currentColor;
+	background: transparent;
+	padding: 0 1px;
+	border-radius: 0;
+	flex-shrink: 0;
+}
+
 .creation-detail-title {
 	font-size: 1.5rem;
 	font-weight: 600;
 	color: var(--text);
-	margin-bottom: 12px;
 	line-height: 1.3;
+	margin: 0;
 }
 
 .creation-detail-title-untitled {

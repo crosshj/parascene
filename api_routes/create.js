@@ -1345,6 +1345,7 @@ export default function createCreateRoutes({ queries, storage }) {
 					title: img.title || null,
 					description: img.description || null,
 					meta,
+					nsfw: !!meta?.nsfw,
 					is_moderated_error: isModeratedError(status, meta)
 				};
 			});
@@ -1460,6 +1461,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				viewer_liked: viewerLiked,
 				user_id: image.user_id,
 				meta,
+				nsfw: !!meta?.nsfw,
 				is_moderated_error: isModeratedError(status, meta),
 				creator: creator ? {
 					id: creator.id,
@@ -1614,7 +1616,7 @@ export default function createCreateRoutes({ queries, storage }) {
 		if (!user) return;
 
 		try {
-			const { title, description } = req.body;
+			const { title, description, nsfw } = req.body;
 
 			if (!title || title.trim() === '') {
 				return res.status(400).json({ error: "Title is required" });
@@ -1664,6 +1666,13 @@ export default function createCreateRoutes({ queries, storage }) {
 				return res.status(500).json({ error: "Failed to publish image" });
 			}
 
+			// Persist NSFW flag in meta when provided
+			if (typeof nsfw !== 'undefined') {
+				const currentMeta = parseMeta(targetImage.meta) || {};
+				const mergedMeta = { ...currentMeta, nsfw: !!nsfw };
+				await queries.updateCreatedImageMeta.run(req.params.id, targetImage.user_id, mergedMeta);
+			}
+
 			// Keep feed attribution tied to the creation owner, not the publishing admin.
 			let feedAuthor = user.email || 'User';
 			if (targetImage.user_id) {
@@ -1686,7 +1695,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				parseInt(req.params.id)
 			);
 
-			// Get updated image
+			// Get updated image (includes meta with nsfw if we updated it)
 			const updatedImage = isOwner
 				? await queries.selectCreatedImageById.get(req.params.id, user.id)
 				: await queries.selectCreatedImageByIdAnyUser?.get(req.params.id);
@@ -1696,6 +1705,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				console.warn("[create] Failed to schedule embedding job:", err?.message || err);
 			});
 
+			const updatedMeta = parseMeta(updatedImage?.meta);
 			return res.json({
 				id: updatedImage.id,
 				filename: updatedImage.filename,
@@ -1708,7 +1718,9 @@ export default function createCreateRoutes({ queries, storage }) {
 				published: true,
 				published_at: updatedImage.published_at,
 				title: updatedImage.title,
-				description: updatedImage.description
+				description: updatedImage.description,
+				meta: updatedMeta,
+				nsfw: !!updatedMeta?.nsfw
 			});
 		} catch (error) {
 			// console.error("Error publishing image:", error);
@@ -1722,7 +1734,7 @@ export default function createCreateRoutes({ queries, storage }) {
 		if (!user) return;
 
 		try {
-			const { title, description } = req.body;
+			const { title, description, nsfw } = req.body;
 
 			if (!title || title.trim() === '') {
 				return res.status(400).json({ error: "Title is required" });
@@ -1764,6 +1776,13 @@ export default function createCreateRoutes({ queries, storage }) {
 				return res.status(500).json({ error: "Failed to update image" });
 			}
 
+			// Persist NSFW flag in meta when provided
+			if (typeof nsfw !== 'undefined') {
+				const currentMeta = parseMeta(targetImage.meta) || {};
+				const mergedMeta = { ...currentMeta, nsfw: !!nsfw };
+				await queries.updateCreatedImageMeta.run(req.params.id, targetImage.user_id, mergedMeta);
+			}
+
 			// Update the associated feed item if it exists
 			const feedItem = await queries.selectFeedItemByCreatedImageId?.get(parseInt(req.params.id));
 			if (feedItem) {
@@ -1786,6 +1805,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				});
 			}
 
+			const updatedMeta = parseMeta(updatedImage?.meta);
 			return res.json({
 				id: updatedImage.id,
 				filename: updatedImage.filename,
@@ -1798,7 +1818,9 @@ export default function createCreateRoutes({ queries, storage }) {
 				published: updatedImage.published === 1 || updatedImage.published === true,
 				published_at: updatedImage.published_at,
 				title: updatedImage.title,
-				description: updatedImage.description
+				description: updatedImage.description,
+				meta: updatedMeta,
+				nsfw: !!updatedMeta?.nsfw
 			});
 		} catch (error) {
 			// console.error("Error updating image:", error);

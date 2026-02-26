@@ -200,7 +200,7 @@ class AppRouteServers extends HTMLElement {
 			}
 
 			const thumbWrap = document.createElement('div');
-			thumbWrap.className = 'connect-comment-thumb';
+			thumbWrap.className = `connect-comment-thumb${comment.nsfw ? ' nsfw' : ''}`;
 			thumbWrap.setAttribute('aria-hidden', 'true');
 			const thumbUrl = typeof comment?.created_image_thumbnail_url === 'string' ? comment.created_image_thumbnail_url.trim() : '';
 			const imageUrl = typeof comment?.created_image_url === 'string' ? comment.created_image_url.trim() : '';

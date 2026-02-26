@@ -3349,6 +3349,8 @@ app-route-feed {
 .content-cards-image-grid {
 	grid-template-columns: repeat(5, minmax(0, 1fr));
 	gap: 6px;
+	width: 100%;
+	min-width: 0;
 }
 
 .explore-load-more-sentinel {
@@ -3544,6 +3546,7 @@ app-route-feed {
 	aspect-ratio: 1 / 1;
 	width: 100%;
 	height: 100%;
+	min-width: 0;
 	display: flex;
 	align-items: stretch;
 	padding: 0;
@@ -3552,11 +3555,28 @@ app-route-feed {
 .route-media {
 	position: absolute;
 	inset: 0;
+	width: 100%;
+	height: 100%;
 	border-radius: 6px;
 	background-color: var(--image-placeholder);
 	background-size: cover;
 	background-position: center;
 	border: none;
+}
+
+/* Child img fills container; min/max 100% avoids 0 width when parent size comes from aspect-ratio/grid */
+.route-media-img {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	min-width: 100%;
+	min-height: 100%;
+	max-width: 100%;
+	max-height: 100%;
+	object-fit: cover;
+	display: block;
+	border-radius: inherit;
 }
 
 .route-media.loading {
@@ -4051,6 +4071,75 @@ body.modal-open {
 	z-index: 1;
 }
 
+/* NSFW content: frosted overlay unless user has enabled "View NSFW" (body.view-nsfw).
+   Blur amount scales with container size via container query units (cqi). */
+.route-card-image,
+.feed-card-image,
+.creation-detail-image-wrapper,
+.connect-comment-thumb {
+	container-type: inline-size;
+}
+
+.nsfw {
+	position: relative;
+	overflow: hidden;
+}
+
+.nsfw::before {
+	content: 'NSFW';
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	transform: translate(-50%, -50%);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 1.125rem;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	color: rgba(255, 255, 255, 0.65);
+	background: rgba(0, 0, 0, 0.35);
+	border: 1px solid rgba(255, 255, 255, 0.25);
+	padding: 10px 20px;
+	border-radius: 16px;
+	pointer-events: auto;
+	cursor: pointer;
+	user-select: none;
+	z-index: 1;
+}
+
+@supports (width: 1cqi) {
+	.nsfw::before {
+		font-size: min(5cqi, 1.125rem);
+		padding: min(2cqi, 10px) min(4cqi, 20px);
+		border-radius: min(2.5cqi, 16px);
+	}
+}
+
+.nsfw::after {
+	content: '';
+	position: absolute;
+	inset: -1px;
+	backdrop-filter: blur(40px);
+	-webkit-backdrop-filter: blur(40px);
+	background: rgba(255, 255, 255, 0.08);
+	pointer-events: none;
+	user-select: none;
+}
+
+/* Scale blur with image/container size (6% of width: 200px → 12px, 400px → 24px) */
+@supports (width: 1cqi) {
+	.nsfw::after {
+		backdrop-filter: blur(4cqi);
+		-webkit-backdrop-filter: blur(4cqi);
+	}
+}
+
+body.view-nsfw .nsfw::before,
+body.view-nsfw .nsfw::after {
+	display: none;
+}
+
 /* Edit / Publish creation modal: wider and larger description field */
 app-modal-publish .publish-modal {
 	max-width: 580px;
@@ -4059,6 +4148,24 @@ app-modal-publish .publish-modal {
 
 app-modal-publish .publish-field textarea {
 	min-height: 200px;
+}
+
+app-modal-publish .publish-field-checkbox {
+	margin-top: 4px;
+}
+
+app-modal-publish .publish-checkbox-label {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	cursor: pointer;
+	font-size: 0.95rem;
+}
+
+app-modal-publish .publish-checkbox-label input[type="checkbox"] {
+	width: 18px;
+	height: 18px;
+	accent-color: var(--accent, #6366f1);
 }
 
 @media (min-width: 768px) {

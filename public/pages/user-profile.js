@@ -590,7 +590,7 @@ function renderImageGrid(grid, images, showBadge = false, emptyTitle = 'No publi
 		}
 
 		card.innerHTML = html`
-			<div class="route-media" aria-hidden="true"></div>
+			<div class="route-media${item.nsfw ? ' nsfw' : ''}" aria-hidden="true"></div>
 			${userDeletedBadge}
 			${publishedBadge}
 			<div class="route-details">
@@ -659,7 +659,7 @@ function appendImageGridCards(grid, items, showBadge = false) {
 			publishedInfo = html`<div class="route-meta" title="${formatDateTime(item.published_at)}">Published ${formatRelativeTime(new
 	Date(item.published_at))}</div>`;
 		}
-		card.innerHTML = html`<div class="route-media" aria-hidden="true"></div>${userDeletedBadge}${publishedBadge}<div class="route-details">
+		card.innerHTML = html`<div class="route-media${item.nsfw ? ' nsfw' : ''}" aria-hidden="true"></div>${userDeletedBadge}${publishedBadge}<div class="route-details">
 	<div class="route-details-content">
 		<div class="route-title">${escapeHtml(item.title || 'Untitled')}</div>${publishedInfo}<div class="route-meta">
 			${escapeHtml(formatDate(item.created_at) || '')}</div>

@@ -2,6 +2,14 @@ import { formatDate } from '../../shared/datetime.js';
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 import { buildProfilePath } from '../../shared/profileLinks.js';
 import { helpIcon } from '../../icons/svg-strings.js';
+import {
+	getNsfwContentEnabled,
+	setNsfwContentEnabled,
+	getNsfwObscure,
+	setNsfwObscure,
+	applyNsfwPreference,
+	NSFW_VIEW_BODY_CLASS
+} from '../../shared/nsfwView.js';
 
 const html = String.raw;
 
@@ -63,6 +71,78 @@ class AppModalProfile extends HTMLElement {
 				this.clearCreditsStorage();
 			});
 		}
+
+		this.setupNsfwToggles();
+	}
+
+	setupNsfwToggles() {
+		const enableCheckbox = this.shadowRoot.querySelector('[data-nsfw-enable]');
+		const obscureWrap = this.shadowRoot.querySelector('[data-nsfw-obscure-wrap]');
+		const obscureCheckbox = this.shadowRoot.querySelector('[data-nsfw-obscure]');
+		if (!enableCheckbox || !obscureWrap || !obscureCheckbox) return;
+
+		const syncObscureVisibility = () => {
+			const enableOn = enableCheckbox.checked === true;
+			if (enableOn) {
+				obscureWrap.removeAttribute('hidden');
+			} else {
+				obscureWrap.setAttribute('hidden', '');
+			}
+		};
+		const syncFromProfileAndStorage = () => {
+			const enableFromApi = this.profileData?.enableNsfw === true;
+			enableCheckbox.checked = enableFromApi ?? getNsfwContentEnabled();
+			const showingUnobscured = !getNsfwObscure() || document.body.classList.contains(NSFW_VIEW_BODY_CLASS);
+			obscureCheckbox.checked = showingUnobscured;
+			syncObscureVisibility();
+		};
+
+		syncFromProfileAndStorage();
+
+		enableCheckbox.addEventListener('change', async () => {
+			const enabled = enableCheckbox.checked;
+			syncObscureVisibility();
+			try {
+				const res = await fetchJsonWithStatusDeduped('/api/profile', {
+					method: 'PATCH',
+					credentials: 'include',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ enableNsfw: enabled })
+				}, { windowMs: 0 });
+				if (res?.ok) {
+					if (this.profileData) this.profileData.enableNsfw = enabled;
+					setNsfwContentEnabled(enabled);
+					applyNsfwPreference();
+				} else {
+					enableCheckbox.checked = !enabled;
+					syncObscureVisibility();
+				}
+			} catch {
+				enableCheckbox.checked = !enabled;
+				syncObscureVisibility();
+			}
+		});
+
+		obscureCheckbox.addEventListener('change', () => {
+			setNsfwObscure(!obscureCheckbox.checked);
+			applyNsfwPreference();
+		});
+	}
+
+	/** Sync NSFW checkbox state from profile (API) and localStorage when modal opens or profile loads. */
+	syncNsfwTogglesFromStorage() {
+		const enableCheckbox = this.shadowRoot.querySelector('[data-nsfw-enable]');
+		const obscureWrap = this.shadowRoot.querySelector('[data-nsfw-obscure-wrap]');
+		const obscureCheckbox = this.shadowRoot.querySelector('[data-nsfw-obscure]');
+		if (!enableCheckbox || !obscureWrap || !obscureCheckbox) return;
+		enableCheckbox.checked = this.profileData?.enableNsfw === true || getNsfwContentEnabled();
+		const showingUnobscured = !getNsfwObscure() || document.body.classList.contains(NSFW_VIEW_BODY_CLASS);
+		obscureCheckbox.checked = showingUnobscured;
+		if (!enableCheckbox.checked) {
+			obscureWrap.setAttribute('hidden', '');
+		} else {
+			obscureWrap.removeAttribute('hidden');
+		}
 	}
 
 	handleOpenEvent() {
@@ -95,6 +175,7 @@ class AppModalProfile extends HTMLElement {
 			overlay.classList.add('open');
 			this.loadProfile({ silent: true });
 		}
+		this.syncNsfwTogglesFromStorage();
 		// Dispatch event to close notifications if open
 		document.dispatchEvent(new CustomEvent('close-notifications'));
 		document.dispatchEvent(new CustomEvent('modal-opened'));
@@ -146,6 +227,7 @@ class AppModalProfile extends HTMLElement {
 				this.displayProfile(user);
 			}
 			this.profileLoadedAt = Date.now();
+			this.syncNsfwTogglesFromStorage();
 		} catch (error) {
 			// console.error('Error loading profile:', error);
 			if (!silent && !this.profileData) {
@@ -350,6 +432,36 @@ class AppModalProfile extends HTMLElement {
           font-size: 1rem;
           color: var(--text);
         }
+        .profile-nsfw-toggles {
+          margin-top: 20px;
+          padding-top: 16px;
+          border-top: 1px solid var(--border);
+        }
+        .profile-nsfw-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin: 10px 0;
+        }
+        .profile-nsfw-row:first-child {
+          margin-top: 0;
+        }
+        .profile-nsfw-row label {
+          margin: 0;
+          font-weight: 600;
+          color: var(--text-muted);
+          font-size: 0.9rem;
+        }
+        .profile-nsfw-row input[type="checkbox"] {
+          width: 18px;
+          height: 18px;
+          cursor: pointer;
+          accent-color: var(--accent);
+        }
+        [data-nsfw-obscure-wrap][hidden] {
+          display: none !important;
+        }
       </style>
       <div class="profile-overlay">
         <div class="profile-modal">
@@ -364,6 +476,16 @@ class AppModalProfile extends HTMLElement {
           </div>
           <div class="profile-body">
             <div class="profile-content"></div>
+            <div class="profile-nsfw-toggles">
+              <div class="profile-nsfw-row">
+                <label for="profile-nsfw-enable">Enable NSFW Content</label>
+                <input type="checkbox" id="profile-nsfw-enable" data-nsfw-enable aria-describedby="profile-nsfw-enable-desc" />
+              </div>
+              <div class="profile-nsfw-row" data-nsfw-obscure-wrap hidden>
+                <label for="profile-nsfw-obscure">Show NSFW Unobscured</label>
+                <input type="checkbox" id="profile-nsfw-obscure" data-nsfw-obscure aria-describedby="profile-nsfw-obscure-desc" />
+              </div>
+            </div>
           </div>
           <div class="profile-actions">
             <a class="btn-secondary" href="/help">${helpIcon('profile-action-icon')} Help</a>

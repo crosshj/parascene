@@ -255,8 +255,11 @@ class AppRouteFeed extends HTMLElement {
           </div>
         `;
 
+		if (item.created_image_id) {
+			card.setAttribute('data-creation-id', String(item.created_image_id));
+		}
 		card.innerHTML = html`
-      <div class="feed-card-image">
+      <div class="feed-card-image${item.nsfw ? ' nsfw' : ''}">
         <img class="feed-card-img" alt="${item.title || 'Feed image'}" loading="lazy" decoding="async">
       </div>
       <div class="feed-card-footer-grid">

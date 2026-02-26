@@ -64,6 +64,8 @@ export default function createFeedRoutes({ queries }) {
 			isNewbieFeed = true;
 		}
 
+		const enableNsfw = user.meta?.enableNsfw === true;
+
 		const transformItem = (item) => {
 			const imageUrl = item.url || null;
 			return {
@@ -83,11 +85,15 @@ export default function createFeedRoutes({ queries }) {
 				user_id: item.user_id || null,
 				like_count: Number(item.like_count ?? 0),
 				comment_count: Number(item.comment_count ?? 0),
-				viewer_liked: Boolean(item.viewer_liked)
+				viewer_liked: Boolean(item.viewer_liked),
+				nsfw: !!(item.nsfw)
 			};
 		};
 
-		const itemsWithImages = rows.map(transformItem);
+		let itemsWithImages = rows.map(transformItem);
+		if (!enableNsfw) {
+			itemsWithImages = itemsWithImages.filter((item) => !item.nsfw);
+		}
 
 		let items = itemsWithImages;
 		if (isNewbieFeed && itemsWithImages.length > 0) {

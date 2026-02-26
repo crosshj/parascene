@@ -309,7 +309,7 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 				: '';
 			/* Match explore card structure exactly: .route-media + .route-details as direct children (no wrapper link) */
 			card.innerHTML = html`
-				<div class="route-media" aria-hidden="true" data-related-media data-image-id="${cid}" data-status="completed"></div>
+				<div class="route-media${item.nsfw ? ' nsfw' : ''}" aria-hidden="true" data-related-media data-image-id="${cid}" data-status="completed"></div>
 				<div class="route-details">
 					<div class="route-details-content">
 						<div class="route-title">${escapeHtml(decodeHtmlEntities(item.title != null ? item.title : 'Untitled'))}</div>
@@ -579,6 +579,14 @@ async function loadCreation() {
 		// Set image and blurred background depending on status
 		imageWrapper?.classList.remove('image-error');
 		imageWrapper?.classList.remove('image-loading');
+		imageWrapper?.classList.toggle('nsfw', !!(creation.nsfw ?? creation.meta?.nsfw));
+		if (imageWrapper) {
+			if (creation.nsfw ?? creation.meta?.nsfw) {
+				imageWrapper.setAttribute('data-creation-id', String(creationId));
+			} else {
+				imageWrapper.removeAttribute('data-creation-id');
+			}
+		}
 		backgroundEl.style.backgroundImage = '';
 		imageEl.style.visibility = 'hidden';
 		imageEl.dataset.currentUrl = '';
@@ -1158,7 +1166,9 @@ async function loadCreation() {
 				` : ''}
 			</div>
 			${userDeletedNotice}
-			<div class="creation-detail-title${isUntitled ? ' creation-detail-title-untitled' : ''}">${escapeHtml(displayTitle)}
+			<div class="creation-detail-title-row">
+				${(creation.nsfw ?? creation.meta?.nsfw) ? html`<span class="creation-detail-nsfw-tag">NSFW</span>` : ''}
+				<div class="creation-detail-title${isUntitled ? ' creation-detail-title-untitled' : ''}">${escapeHtml(displayTitle)}</div>
 			</div>
 			${descriptionHtml}
 			<div class="creation-detail-meta">

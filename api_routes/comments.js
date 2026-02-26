@@ -70,7 +70,7 @@ export default function createCommentsRoutes({ queries }) {
 		const commentsRaw = await queries.selectLatestCreatedImageComments?.all({ limit })
 			?? [];
 
-		const comments = (commentsRaw || []).map((row) => {
+		let comments = (commentsRaw || []).map((row) => {
 			const createdImageUrl = row?.created_image_url ?? null;
 			return {
 				...row,
@@ -78,6 +78,11 @@ export default function createCommentsRoutes({ queries }) {
 				created_image_thumbnail_url: getThumbnailUrl(createdImageUrl)
 			};
 		});
+
+		const enableNsfw = user.meta?.enableNsfw === true;
+		if (!enableNsfw) {
+			comments = comments.filter((c) => !c.nsfw);
+		}
 
 		return res.json({ comments });
 	});

@@ -563,7 +563,29 @@ export default function createProfileRoutes({ queries }) {
 
 		const plan = user.meta?.plan ?? "free";
 		const pendingPlanActivation = Boolean(user.meta?.pendingCheckoutSessionId);
-		return res.json({ ...user, credits: credits.balance, plan, pendingPlanActivation, profile, welcome });
+		const enableNsfw = user.meta?.enableNsfw === true;
+		return res.json({ ...user, credits: credits.balance, plan, pendingPlanActivation, profile, welcome, enableNsfw });
+	});
+
+	// Update current user's Enable NSFW setting (user meta).
+	router.patch("/api/profile", async (req, res) => {
+		if (!req.auth?.userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+		const enableNsfw = req.body?.enableNsfw;
+		if (typeof enableNsfw !== "boolean") {
+			return res.status(400).json({ error: "Invalid request", message: "enableNsfw must be a boolean." });
+		}
+		if (!queries.updateUserEnableNsfw?.run) {
+			return res.status(500).json({ error: "Not available", message: "Profile update is not available." });
+		}
+		try {
+			await queries.updateUserEnableNsfw.run(req.auth.userId, enableNsfw);
+			return res.json({ ok: true, enableNsfw });
+		} catch (err) {
+			console.error("[PATCH /api/profile]", err);
+			return res.status(500).json({ error: "Failed to update", message: err?.message || "Could not update profile." });
+		}
 	});
 
 	// Record that user returned from Stripe Checkout (store session id and timestamp for idempotency / state)
@@ -1482,13 +1504,19 @@ export default function createProfileRoutes({ queries }) {
 					published_at: img.published_at || null,
 					title: img.title || null,
 					description: img.description || null,
+					nsfw: !!(meta && meta.nsfw),
 					is_moderated_error: isModeratedError,
 					...(isAdmin && userDeleted ? { user_deleted: true } : {})
 				};
 			});
 
+			let resultMapped = mapped;
+			const enableNsfw = viewer?.meta?.enableNsfw === true;
+			if (!enableNsfw) {
+				resultMapped = mapped.filter((img) => !img.nsfw);
+			}
 			const has_more = mapped.length === limit;
-			return res.json({ images: mapped, has_more, is_self: isSelf, scope: isSelf && wantAll ? "all" : "published" });
+			return res.json({ images: resultMapped, has_more, is_self: isSelf, scope: isSelf && wantAll ? "all" : "published" });
 		} catch (error) {
 			// console.error("Error loading user created images:", error);
 			return res.status(500).json({ error: "Internal server error" });
@@ -1516,8 +1544,11 @@ export default function createProfileRoutes({ queries }) {
 			const limit = Math.min(200, Math.max(1, Number.parseInt(String(req.query?.limit ?? "24"), 10) || 24));
 			const offset = Math.max(0, Number.parseInt(String(req.query?.offset ?? "0"), 10) || 0);
 			const images = await queries.selectCreatedImagesLikedByUser.all(targetUserId, { limit, offset });
+			const metaParse = (m) => (typeof m === "string" ? (() => { try { return JSON.parse(m); } catch { return null; } })() : m) ?? null;
 			const mapped = (Array.isArray(images) ? images : []).map((img) => {
 				const url = img.file_path || (img.filename ? `/api/images/created/${img.filename}` : null);
+				const meta = metaParse(img.meta);
+				const nsfw = !!(meta && meta.nsfw);
 				return {
 					id: img.id,
 					filename: img.filename,
@@ -1528,10 +1559,13 @@ export default function createProfileRoutes({ queries }) {
 					color: img.color,
 					created_at: img.created_at,
 					title: img.title || null,
-					description: img.description || null
+					description: img.description || null,
+					nsfw
 				};
 			});
-			return res.json({ images: mapped, has_more: mapped.length === limit });
+			const enableNsfw = viewer?.meta?.enableNsfw === true;
+			const resultMapped = enableNsfw ? mapped : mapped.filter((img) => !img.nsfw);
+			return res.json({ images: resultMapped, has_more: mapped.length === limit });
 		} catch (error) {
 			return res.status(500).json({ error: "Internal server error" });
 		}

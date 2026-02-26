@@ -71,8 +71,36 @@ function setRouteMediaBackgroundImage(mediaEl, url, { lowPriority = false } = {}
 	}
 
 	mediaEl.classList.remove('route-media-error');
-	mediaEl.style.backgroundImage = '';
+	const imgEl = mediaEl.querySelector('.route-media-img');
 
+	// Use inner <img> when present (creations page) so NSFW backdrop-filter has content to blur
+	if (imgEl) {
+		return new Promise((resolve) => {
+			const startProbe = () => {
+				const probe = new Image();
+				probe.decoding = 'async';
+				if ('fetchPriority' in probe) {
+					probe.fetchPriority = lowPriority ? 'low' : (document.visibilityState === 'visible' ? 'auto' : 'low');
+				}
+				probe.onload = () => {
+					mediaEl.dataset.bgLoadedUrl = url;
+					mediaEl.classList.remove('route-media-error');
+					imgEl.src = url;
+					resolve(true);
+				};
+				probe.onerror = () => {
+					mediaEl.classList.add('route-media-error');
+					imgEl.removeAttribute('src');
+					resolve(false);
+				};
+				probe.src = url;
+			};
+			void scheduleImageWork(startProbe, { immediate: !lowPriority, wakeOnVisible: !lowPriority });
+		});
+	}
+
+	// Fallback: set background on container (other routes)
+	mediaEl.style.backgroundImage = '';
 	return new Promise((resolve) => {
 		const startProbe = () => {
 			const probe = new Image();
@@ -93,7 +121,6 @@ function setRouteMediaBackgroundImage(mediaEl, url, { lowPriority = false } = {}
 			};
 			probe.src = url;
 		};
-
 		void scheduleImageWork(startProbe, { immediate: !lowPriority, wakeOnVisible: !lowPriority });
 	});
 }
@@ -114,7 +141,8 @@ class AppRouteCreations extends HTMLElement {
 		pendingTiles.forEach((mediaEl) => {
 			if (!mediaEl) return;
 			if (mediaEl.classList.contains('route-media-error')) return;
-			// If it already has a background image, don't reload.
+			// If already loaded (background or inner img), don't reload.
+			if (mediaEl.dataset.bgLoadedUrl) return;
 			if (mediaEl.style && typeof mediaEl.style.backgroundImage === 'string' && mediaEl.style.backgroundImage) return;
 			if (!mediaEl.dataset.bgUrl) return;
 			mediaEl.dataset.bgQueued = '0';
@@ -640,7 +668,9 @@ class AppRouteCreations extends HTMLElement {
 					publishedInfo = html`<div class="route-meta" title="${formatDateTime(item.published_at)}">Published ${formatRelativeTime(item.published_at)}</div>`;
 				}
 				card.innerHTML = html`
-            <div class="route-media" aria-hidden="true" data-image-id="${item.id}" data-status="completed"></div>
+            <div class="route-media${item.nsfw ? ' nsfw' : ''}" aria-hidden="true" data-image-id="${item.id}" data-status="completed">
+              <img class="route-media-img" alt="" decoding="async" />
+            </div>
             ${publishedBadge}
             <div class="route-details">
               <div class="route-details-content">

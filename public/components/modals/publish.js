@@ -53,8 +53,8 @@ class AppModalPublish extends HTMLElement {
 						<div class="publish-alert" data-publish-alert style="display: none;">
 							<span class="publish-alert-message" data-publish-alert-message></span>
 							<button class="publish-alert-close" data-publish-alert-close aria-label="Close alert">
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-									stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+									stroke-linecap="round" stroke-linejoin="round">
 									<line x1="18" y1="6" x2="6" y2="18"></line>
 									<line x1="6" y1="6" x2="18" y2="18"></line>
 								</svg>
@@ -62,12 +62,19 @@ class AppModalPublish extends HTMLElement {
 						</div>
 						<div class="publish-field">
 							<label for="publish-title">Title <span class="field-required" aria-hidden="true">*</span></label>
-							<input type="text" id="publish-title" name="title" placeholder="Enter a title for your creation" required />
+							<input type="text" id="publish-title" name="title" placeholder="Enter a title for your creation"
+								required />
 						</div>
 						<div class="publish-field">
 							<label for="publish-description">Description</label>
 							<textarea id="publish-description" name="description" rows="8"
 								placeholder="Describe your creation..."></textarea>
+						</div>
+						<div class="publish-field publish-field-checkbox">
+							<label class="publish-checkbox-label">
+								<input type="checkbox" id="publish-nsfw" name="nsfw" />
+								<span>Not Suitable for Work (NSFW)</span>
+							</label>
 						</div>
 					</div>
 					<div class="publish-modal-footer">
@@ -219,6 +226,11 @@ class AppModalPublish extends HTMLElement {
 				descriptionTextarea.value = savedDescription || '';
 			}
 
+			const nsfwCheckbox = this.querySelector('#publish-nsfw');
+			if (nsfwCheckbox) {
+				nsfwCheckbox.checked = !!(creation.nsfw ?? creation.meta?.nsfw);
+			}
+
 			// Update submit button state based on title
 			const submitBtn = this.querySelector('[data-publish-submit]');
 			if (submitBtn) {
@@ -267,6 +279,8 @@ class AppModalPublish extends HTMLElement {
 
 			if (titleInput) titleInput.value = creation.title || '';
 			if (descriptionTextarea) descriptionTextarea.value = creation.description || '';
+			const nsfwCheckbox = this.querySelector('#publish-nsfw');
+			if (nsfwCheckbox) nsfwCheckbox.checked = !!(creation.nsfw ?? creation.meta?.nsfw);
 
 			// Update submit button state based on title
 			const submitBtn = this.querySelector('[data-publish-submit]');
@@ -332,9 +346,11 @@ class AppModalPublish extends HTMLElement {
 		// Clear form
 		const titleInput = this.querySelector('#publish-title');
 		const descriptionTextarea = this.querySelector('#publish-description');
+		const nsfwCheckbox = this.querySelector('#publish-nsfw');
 		const submitBtn = this.querySelector('[data-publish-submit]');
 		if (titleInput) titleInput.value = '';
 		if (descriptionTextarea) descriptionTextarea.value = '';
+		if (nsfwCheckbox) nsfwCheckbox.checked = false;
 		if (submitBtn) submitBtn.disabled = true;
 		this.hideAlert();
 	}
@@ -366,6 +382,7 @@ class AppModalPublish extends HTMLElement {
 
 		const titleInput = this.querySelector('#publish-title');
 		const descriptionTextarea = this.querySelector('#publish-description');
+		const nsfwCheckbox = this.querySelector('#publish-nsfw');
 		const loadingOverlay = this.querySelector('.publish-modal-loading');
 		const submitBtn = this.querySelector('[data-publish-submit]');
 		const cancelLink = this.querySelector('.publish-cancel-link');
@@ -374,6 +391,7 @@ class AppModalPublish extends HTMLElement {
 
 		const title = titleInput.value.trim();
 		const description = descriptionTextarea ? descriptionTextarea.value.trim() : '';
+		const nsfw = nsfwCheckbox ? nsfwCheckbox.checked : false;
 
 		if (!title) {
 			this.showAlert('Title is required', true);
@@ -389,6 +407,7 @@ class AppModalPublish extends HTMLElement {
 		loadingOverlay.classList.add('active');
 		titleInput.disabled = true;
 		if (descriptionTextarea) descriptionTextarea.disabled = true;
+		if (nsfwCheckbox) nsfwCheckbox.disabled = true;
 		if (submitBtn) submitBtn.disabled = true;
 		if (cancelLink) {
 			cancelLink.style.pointerEvents = 'none';
@@ -397,9 +416,9 @@ class AppModalPublish extends HTMLElement {
 
 		try {
 			if (this._mode === 'edit') {
-				await this.handleEditSubmit(title, description);
+				await this.handleEditSubmit(title, description, nsfw);
 			} else {
-				await this.handlePublishSubmit(title, description);
+				await this.handlePublishSubmit(title, description, nsfw);
 			}
 		} catch (error) {
 			// console.error(`Error ${this._mode === 'edit' ? 'updating' : 'publishing'} creation:`, error);
@@ -409,6 +428,7 @@ class AppModalPublish extends HTMLElement {
 			loadingOverlay.classList.remove('active');
 			titleInput.disabled = false;
 			if (descriptionTextarea) descriptionTextarea.disabled = false;
+			if (nsfwCheckbox) nsfwCheckbox.disabled = false;
 			if (submitBtn) submitBtn.disabled = false;
 			if (cancelLink) {
 				cancelLink.style.pointerEvents = '';
@@ -418,13 +438,13 @@ class AppModalPublish extends HTMLElement {
 		}
 	}
 
-	async handlePublishSubmit(title, description) {
+	async handlePublishSubmit(title, description, nsfw) {
 		const response = await fetch(`/api/create/images/${this._creationId}/publish`, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json'
 			},
-			body: JSON.stringify({ title, description }),
+			body: JSON.stringify({ title, description, nsfw }),
 			credentials: 'include'
 		});
 
@@ -437,13 +457,13 @@ class AppModalPublish extends HTMLElement {
 		window.location.href = `/creations/${this._creationId}`;
 	}
 
-	async handleEditSubmit(title, description) {
+	async handleEditSubmit(title, description, nsfw) {
 		const response = await fetch(`/api/create/images/${this._creationId}`, {
 			method: 'PUT',
 			headers: {
 				'Content-Type': 'application/json'
 			},
-			body: JSON.stringify({ title, description }),
+			body: JSON.stringify({ title, description, nsfw }),
 			credentials: 'include'
 		});
 

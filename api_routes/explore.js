@@ -43,7 +43,8 @@ function mapExploreItemsToResponse(items) {
 			user_id: item?.user_id || null,
 			like_count: Number(item?.like_count ?? 0),
 			comment_count: Number(item?.comment_count ?? 0),
-			viewer_liked: Boolean(item?.viewer_liked)
+			viewer_liked: Boolean(item?.viewer_liked),
+			nsfw: !!(item?.nsfw)
 		};
 	});
 }
@@ -113,7 +114,11 @@ export default function createExploreRoutes({ queries }) {
 			const hasMore = list.length > limit;
 			const page = hasMore ? list.slice(0, limit) : list;
 
-			const itemsWithImages = mapExploreItemsToResponse(page);
+			let itemsWithImages = mapExploreItemsToResponse(page);
+			const enableNsfw = user.meta?.enableNsfw === true;
+			if (!enableNsfw) {
+				itemsWithImages = itemsWithImages.filter((item) => !item.nsfw);
+			}
 
 			return res.json({ items: itemsWithImages, hasMore });
 		} catch (err) {
@@ -316,7 +321,11 @@ export default function createExploreRoutes({ queries }) {
 			const hasMore = windowItems.length > limit;
 			const page = hasMore ? windowItems.slice(0, limit) : windowItems;
 
-			const itemsWithImages = mapExploreItemsToResponse(page);
+			let itemsWithImages = mapExploreItemsToResponse(page);
+			const enableNsfw = user.meta?.enableNsfw === true;
+			if (!enableNsfw) {
+				itemsWithImages = itemsWithImages.filter((item) => !item.nsfw);
+			}
 
 			return res.json({ items: itemsWithImages, hasMore });
 		} catch (err) {
@@ -333,6 +342,9 @@ export default function createExploreRoutes({ queries }) {
 			if (!req.auth?.userId) {
 				return res.status(401).json({ error: "Unauthorized" });
 			}
+			const user = await queries.selectUserById.get(req.auth?.userId);
+			const enableNsfw = user?.meta?.enableNsfw === true;
+
 			const rawQuery = String(req.query.q || "").trim();
 			if (!rawQuery) {
 				return res.json({ items: [], hasMore: false });
@@ -366,7 +378,10 @@ export default function createExploreRoutes({ queries }) {
 			const rows = await feedByCreation(dedupedIds);
 			const orderIdx = new Map(dedupedIds.map((id, i) => [Number(id), i]));
 			const sorted = (Array.isArray(rows) ? rows : []).slice().sort((a, b) => (orderIdx.get(Number(a?.created_image_id ?? a?.id)) ?? 999) - (orderIdx.get(Number(b?.created_image_id ?? b?.id)) ?? 999));
-			const itemsWithImages = mapExploreItemsToResponse(sorted);
+			let itemsWithImages = mapExploreItemsToResponse(sorted);
+			if (!enableNsfw) {
+				itemsWithImages = itemsWithImages.filter((item) => !item.nsfw);
+			}
 			return res.json({ items: itemsWithImages, hasMore: searchData?.has_more === true });
 		} catch (err) {
 			console.error("[explore search/semantic] Error:", err);

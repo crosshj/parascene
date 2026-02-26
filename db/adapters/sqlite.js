@@ -744,6 +744,17 @@ export async function openDb() {
 				return Promise.resolve({ changes: result.changes });
 			}
 		},
+		updateUserEnableNsfw: {
+			run: async (userId, enableNsfw) => {
+				const stmt = db.prepare("SELECT meta FROM users WHERE id = ?");
+				const row = stmt.get(userId);
+				const existing = parseUserMeta(row?.meta);
+				const meta = { ...existing, enableNsfw: Boolean(enableNsfw) };
+				const updateStmt = db.prepare("UPDATE users SET meta = ? WHERE id = ?");
+				const result = updateStmt.run(JSON.stringify(meta), userId);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
 		recordCheckoutReturn: {
 			run: async (userId, sessionId, returnedAt) => {
 				const stmt = db.prepare("SELECT meta FROM users WHERE id = ?");
@@ -1345,7 +1356,8 @@ export async function openDb() {
                   COALESCE(ci.file_path, CASE WHEN ci.filename IS NOT NULL THEN '/api/images/created/' || ci.filename ELSE NULL END) as url,
                   COALESCE(lc.like_count, 0) AS like_count,
                   COALESCE(cc.comment_count, 0) AS comment_count,
-                  CASE WHEN ? IS NOT NULL AND vl.user_id IS NOT NULL THEN 1 ELSE 0 END AS viewer_liked
+                  CASE WHEN ? IS NOT NULL AND vl.user_id IS NOT NULL THEN 1 ELSE 0 END AS viewer_liked,
+                  (json_extract(ci.meta,'$.nsfw') = 1 OR json_extract(ci.meta,'$.nsfw') = 'true') AS nsfw
            FROM feed_items fi
            LEFT JOIN created_images ci ON fi.created_image_id = ci.id
            LEFT JOIN user_profiles up ON up.user_id = ci.user_id
@@ -1372,7 +1384,7 @@ export async function openDb() {
              )
            ORDER BY fi.created_at DESC`
 				);
-				return Promise.resolve(stmt.all(id, id, id, id));
+				return Promise.resolve(stmt.all(id, id, id, id).map((r) => ({ ...r, nsfw: !!(r.nsfw) })));
 			},
 			paginated: async (viewerId, { limit = 24, offset = 0 } = {}) => {
 				const id = viewerId ?? null;
@@ -1391,7 +1403,8 @@ export async function openDb() {
                   COALESCE(ci.file_path, CASE WHEN ci.filename IS NOT NULL THEN '/api/images/created/' || ci.filename ELSE NULL END) as url,
                   COALESCE(lc.like_count, 0) AS like_count,
                   COALESCE(cc.comment_count, 0) AS comment_count,
-                  CASE WHEN ? IS NOT NULL AND vl.user_id IS NOT NULL THEN 1 ELSE 0 END AS viewer_liked
+                  CASE WHEN ? IS NOT NULL AND vl.user_id IS NOT NULL THEN 1 ELSE 0 END AS viewer_liked,
+                  (json_extract(ci.meta,'$.nsfw') = 1 OR json_extract(ci.meta,'$.nsfw') = 'true') AS nsfw
            FROM feed_items fi
            LEFT JOIN created_images ci ON fi.created_image_id = ci.id
            LEFT JOIN user_profiles up ON up.user_id = ci.user_id
@@ -1419,7 +1432,7 @@ export async function openDb() {
            ORDER BY fi.created_at DESC
            LIMIT ? OFFSET ?`
 				);
-				return Promise.resolve(stmt.all(id, id, id, id, lim, off));
+				return Promise.resolve(stmt.all(id, id, id, id, lim, off).map((r) => ({ ...r, nsfw: !!(r.nsfw) })));
 			}
 		},
 		selectNewestPublishedFeedItems: {
@@ -1514,7 +1527,8 @@ export async function openDb() {
 						COALESCE(cc.comment_count, 0) AS comment_count,
 						up.user_name AS author_user_name,
 						up.display_name AS author_display_name,
-						up.avatar_url AS author_avatar_url
+						up.avatar_url AS author_avatar_url,
+						(json_extract(ci.meta,'$.nsfw') = 1 OR json_extract(ci.meta,'$.nsfw') = 'true') AS nsfw
 					FROM created_images ci
 					LEFT JOIN (
 						SELECT created_image_id, COUNT(*) AS like_count
@@ -1546,6 +1560,7 @@ export async function openDb() {
 						author_display_name: row.author_display_name ?? null,
 						author_user_name: row.author_user_name ?? null,
 						author_avatar_url: row.author_avatar_url ?? null,
+						nsfw: !!(row.nsfw),
 						url:
 							row.file_path ??
 							(row.filename
@@ -1642,7 +1657,8 @@ export async function openDb() {
                   COALESCE(ci.file_path, CASE WHEN ci.filename IS NOT NULL THEN '/api/images/created/' || ci.filename ELSE NULL END) as url,
                   COALESCE(lc.like_count, 0) AS like_count,
                   COALESCE(cc.comment_count, 0) AS comment_count,
-                  CASE WHEN ? IS NOT NULL AND vl.user_id IS NOT NULL THEN 1 ELSE 0 END AS viewer_liked
+                  CASE WHEN ? IS NOT NULL AND vl.user_id IS NOT NULL THEN 1 ELSE 0 END AS viewer_liked,
+                  (json_extract(ci.meta,'$.nsfw') = 1 OR json_extract(ci.meta,'$.nsfw') = 'true') AS nsfw
            FROM feed_items fi
            LEFT JOIN created_images ci ON fi.created_image_id = ci.id
            LEFT JOIN user_profiles up ON up.user_id = ci.user_id
@@ -2579,7 +2595,8 @@ export async function openDb() {
                   cup.user_name AS created_image_user_name,
                   cup.display_name AS created_image_display_name,
                   cup.avatar_url AS created_image_avatar_url,
-                  json_extract(cu.meta,'$.plan') AS created_image_owner_plan
+                  json_extract(cu.meta,'$.plan') AS created_image_owner_plan,
+                  (json_extract(ci.meta,'$.nsfw') = 1 OR json_extract(ci.meta,'$.nsfw') = 'true') AS nsfw
            FROM comments_created_image c
            INNER JOIN created_images ci ON ci.id = c.created_image_id
            LEFT JOIN user_profiles up ON up.user_id = c.user_id
@@ -2594,7 +2611,8 @@ export async function openDb() {
 				return Promise.resolve(rows.map((r) => ({
 					...r,
 					plan: r.plan === 'founder' ? 'founder' : 'free',
-					created_image_owner_plan: r.created_image_owner_plan === 'founder' ? 'founder' : 'free'
+					created_image_owner_plan: r.created_image_owner_plan === 'founder' ? 'founder' : 'free',
+					nsfw: !!(r.nsfw)
 				})));
 			}
 		},
