@@ -937,10 +937,27 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			}
 
-			// Provider must fetch image_url; relative paths fail. Normalize to absolute URL.
-			if (typeof argsForProvider.image_url === "string") {
-				const absolute = toParasceneImageUrl(argsForProvider.image_url);
-				if (absolute) argsForProvider.image_url = absolute;
+			// Provider must fetch image URLs; relative paths fail. Normalize any field of type image_url or image_url_array to absolute URL(s).
+			const methodFields = methodConfig?.fields && typeof methodConfig.fields === "object" ? methodConfig.fields : {};
+			const imageUrlKeys = Object.keys(methodFields).filter((k) => methodFields[k]?.type === "image_url");
+			if (imageUrlKeys.length === 0 && typeof argsForProvider.image_url === "string") {
+				imageUrlKeys.push("image_url");
+			}
+			const imageUrlArrayKeys = Object.keys(methodFields).filter((k) => methodFields[k]?.type === "image_url_array");
+			for (const key of imageUrlKeys) {
+				if (typeof argsForProvider[key] === "string") {
+					const absolute = toParasceneImageUrl(argsForProvider[key]);
+					if (absolute) argsForProvider[key] = absolute;
+				}
+			}
+			for (const key of imageUrlArrayKeys) {
+				if (Array.isArray(argsForProvider[key])) {
+					argsForProvider[key] = argsForProvider[key].map((v) => {
+						if (typeof v !== "string") return v;
+						const absolute = toParasceneImageUrl(v);
+						return absolute || v;
+					});
+				}
 			}
 
 			// Check user's credit balance
@@ -1010,17 +1027,30 @@ export default function createCreateRoutes({ queries, storage }) {
 				meta.history = [...priorIds, sourceId];
 				meta.mutate_of_id = sourceId;
 
-				// Normalize image_url for mutate flows only.
-				if (typeof safeArgs.image_url === "string") {
-					const normalized = toParasceneImageUrl(safeArgs.image_url);
-					if (normalized) {
-						safeArgs.image_url = normalized;
-						meta.args.image_url = normalized;
+				// Normalize all image_url- and image_url_array-typed fields for mutate flows.
+				for (const key of imageUrlKeys) {
+					if (typeof safeArgs[key] === "string") {
+						const normalized = toParasceneImageUrl(safeArgs[key]);
+						if (normalized) {
+							safeArgs[key] = normalized;
+							meta.args[key] = normalized;
+						}
+					}
+				}
+				for (const key of imageUrlArrayKeys) {
+					if (Array.isArray(safeArgs[key])) {
+						const normalized = safeArgs[key].map((v) => {
+							if (typeof v !== "string") return v;
+							const n = toParasceneImageUrl(v);
+							return n || v;
+						});
+						safeArgs[key] = normalized;
+						meta.args[key] = normalized;
 					}
 				}
 
 				// Unpublished sources: provider cannot use /api/images/created/:filename (403).
-				// Use share URL so provider can fetch without auth.
+				// Use share URL so provider can fetch without auth. Replace source image: image_url key, or the single image_url-typed key.
 				const sourcePublished = source.published === 1 || source.published === true;
 				if (!sourcePublished && source.status === "completed" && source.filename) {
 					try {
@@ -1030,8 +1060,15 @@ export default function createCreateRoutes({ queries, storage }) {
 							sharedByUserId: user.id
 						});
 						const shareUrl = `${providerBase}/api/share/${encodeURIComponent(ACTIVE_SHARE_VERSION)}/${encodeURIComponent(token)}/image`;
-						safeArgs.image_url = shareUrl;
-						meta.args.image_url = shareUrl;
+						const keyToReplace = imageUrlKeys.includes("image_url")
+							? "image_url"
+							: imageUrlKeys.length === 1
+								? imageUrlKeys[0]
+								: null;
+						if (keyToReplace) {
+							safeArgs[keyToReplace] = shareUrl;
+							meta.args[keyToReplace] = shareUrl;
+						}
 					} catch {
 						// If mint fails, keep existing image_url; provider may 403 for unpublished
 					}
@@ -1317,19 +1354,25 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	});
 
-	// GET /api/create/images - List images for user (paginated; supports limit & offset)
 	router.get("/api/create/images", async (req, res) => {
 		const user = await requireUser(req, res);
 		if (!user) return;
 
 		try {
-			const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
+			const pageLimit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
 			const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
-			const images = await queries.selectCreatedImagesForUser.all(user.id, { limit, offset });
 
-			// Transform to include URLs (use file_path from DB which now contains the URL)
-			const imagesWithUrls = images.map((img) => {
-				const status = img.status || 'completed';
+			const enableNsfw = Boolean(user.meta && user.meta.enableNsfw === true);
+			const images = await queries.selectCreatedImagesForUser.all(user.id, {
+				limit: pageLimit,
+				offset,
+				// Supabase adapter will honor this to filter at DB level.
+				// Other adapters will ignore it and rely on the JS filter below.
+				viewerEnableNsfw: enableNsfw
+			});
+
+			const imagesWithUrls = (Array.isArray(images) ? images : []).map((img) => {
+				const status = img.status || "completed";
 				const url = status === "completed" ? (img.file_path || storage.getImageUrl(img.filename)) : null;
 				const meta = parseMeta(img.meta);
 				return {
@@ -1340,7 +1383,7 @@ export default function createCreateRoutes({ queries, storage }) {
 					width: img.width,
 					height: img.height,
 					color: img.color,
-					status, // Default to completed for backward compatibility
+					status,
 					created_at: img.created_at,
 					published: img.published === 1 || img.published === true,
 					published_at: img.published_at || null,
@@ -1352,11 +1395,10 @@ export default function createCreateRoutes({ queries, storage }) {
 				};
 			});
 
-			// When user has not enabled NSFW in profile, exclude NSFW creations from the list.
-			const enableNsfw = Boolean(user.meta && user.meta.enableNsfw === true);
+			// For non-Supabase adapters, still enforce NSFW filtering in JS.
 			const filtered = enableNsfw ? imagesWithUrls : imagesWithUrls.filter((img) => !img.nsfw);
+			const has_more = images.length === pageLimit;
 
-			const has_more = images.length === limit;
 			return res.json({ images: filtered, has_more });
 		} catch (error) {
 			// console.error("Error fetching images:", error);

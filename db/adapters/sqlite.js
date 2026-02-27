@@ -2094,7 +2094,7 @@ export async function openDb() {
                   published, published_at, title, description, meta, unavailable_at
            FROM created_images
            WHERE user_id = ? AND published = 1 AND (unavailable_at IS NULL OR unavailable_at = '')
-           ORDER BY created_at DESC
+           ORDER BY COALESCE(published_at, created_at) DESC
            LIMIT ? OFFSET ?`
 				);
 				return Promise.resolve(stmt.all(userId, limit, offset));

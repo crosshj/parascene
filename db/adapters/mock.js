@@ -1559,7 +1559,11 @@ export function openDb() {
 						img.user_id === Number(userId) &&
 						(img.published === true || img.published === 1) &&
 						(img.unavailable_at == null || img.unavailable_at === "")
-				).sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
+				).sort((a, b) => {
+					const aTs = String(a.published_at || a.created_at || "");
+					const bTs = String(b.published_at || b.created_at || "");
+					return bTs.localeCompare(aTs);
+				});
 				return filtered.slice(offset, offset + limit);
 			}
 		},

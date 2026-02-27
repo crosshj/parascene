@@ -1454,11 +1454,18 @@ export default function createProfileRoutes({ queries }) {
 			const offset = Math.max(0, Number.parseInt(String(req.query?.offset ?? "0"), 10) || 0);
 			const pagination = { limit, offset };
 
+			const enableNsfw = viewer?.meta?.enableNsfw === true;
+
 			let images = [];
 			if ((isSelf || isAdmin) && wantAll && queries.selectCreatedImagesForUser?.all) {
 				images = await queries.selectCreatedImagesForUser.all(targetUserId, { includeUnavailable, ...pagination });
 			} else if (queries.selectPublishedCreatedImagesForUser?.all) {
-				images = await queries.selectPublishedCreatedImagesForUser.all(targetUserId, pagination);
+				images = await queries.selectPublishedCreatedImagesForUser.all(targetUserId, {
+					...pagination,
+					// Supabase adapter will honor this to filter NSFW at DB level;
+					// sqlite/mock ignore it and rely on JS filter below.
+					viewerEnableNsfw: enableNsfw
+				});
 			} else if (queries.selectCreatedImagesForUser?.all) {
 				// Fallback: filter in memory (no pagination)
 				const all = await queries.selectCreatedImagesForUser.all(targetUserId, { includeUnavailable });
@@ -1511,7 +1518,6 @@ export default function createProfileRoutes({ queries }) {
 			});
 
 			let resultMapped = mapped;
-			const enableNsfw = viewer?.meta?.enableNsfw === true;
 			if (!enableNsfw) {
 				resultMapped = mapped.filter((img) => !img.nsfw);
 			}

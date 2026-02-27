@@ -2806,6 +2806,14 @@ export function openDb() {
 				if (!includeUnavailable) {
 					query = query.is("unavailable_at", null);
 				}
+				// For Supabase/Postgres, filter NSFW at the DB level so
+				// limit/offset operate over the visible list, not raw rows.
+				// meta is a json/jsonb column; we treat meta->>'nsfw' === 'true'
+				// as NSFW and exclude those rows when the viewer has not enabled NSFW.
+				// Keep rows where nsfw flag is either absent (NULL) or explicitly false.
+				if (options?.viewerEnableNsfw === false) {
+					query = query.or("meta->>nsfw.is.null,meta->>nsfw.eq.false");
+				}
 				const { data, error } = await query.range(offset, offset + limit - 1);
 				if (error) throw error;
 				return data ?? [];
@@ -2815,7 +2823,7 @@ export function openDb() {
 			all: async (userId, options = {}) => {
 				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
 				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
-				const { data, error } = await serviceClient
+				let query = serviceClient
 					.from(prefixedTable("created_images"))
 					.select(
 						"id, filename, file_path, width, height, color, status, created_at, published, published_at, title, description, meta, unavailable_at"
@@ -2823,8 +2831,14 @@ export function openDb() {
 					.eq("user_id", userId)
 					.eq("published", true)
 					.is("unavailable_at", null)
-					.order("created_at", { ascending: false })
-					.range(offset, offset + limit - 1);
+					.order("published_at", { ascending: false })
+					.order("created_at", { ascending: false });
+				// When viewer has not enabled NSFW, filter NSFW at DB level so
+				// limit/offset operate over the visible list, not raw rows.
+				if (options?.viewerEnableNsfw === false) {
+					query = query.or("meta->>nsfw.is.null,meta->>nsfw.eq.false");
+				}
+				const { data, error } = await query.range(offset, offset + limit - 1);
 				if (error) throw error;
 				return data ?? [];
 			}

@@ -1,6 +1,6 @@
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 import { submitCreationWithPending, uploadImageFile, formatMentionsFailureForDialog } from '../../shared/createSubmit.js';
-import { renderFields, isPromptLikeField } from '../../shared/providerFormFields.js';
+import { renderFields, isPromptLikeField, isImageUrlField, isImageUrlArrayField } from '../../shared/providerFormFields.js';
 import { attachAutoGrowTextarea } from '../../shared/autogrow.js';
 
 const html = String.raw;
@@ -1586,6 +1586,19 @@ class AppRouteCreate extends HTMLElement {
 			if (input) {
 				if (field?.type === 'boolean' || input.type === 'checkbox') {
 					collectedArgs[fieldKey] = input.checked;
+				} else if (isImageUrlArrayField(field)) {
+					const raw = this.fieldValues[fieldKey] ?? input.value ?? '';
+					let arr = [];
+					if (Array.isArray(raw)) arr = raw;
+					else if (typeof raw === 'string' && raw.trim()) {
+						try {
+							const a = JSON.parse(raw);
+							arr = Array.isArray(a) ? a : [];
+						} catch {
+							// leave arr []
+						}
+					}
+					collectedArgs[fieldKey] = arr;
 				} else {
 					collectedArgs[fieldKey] = input.value || this.fieldValues[fieldKey] || '';
 				}
@@ -1601,10 +1614,38 @@ class AppRouteCreate extends HTMLElement {
 			return;
 		}
 
-		// If image_url is a File (paste or upload), upload it first while spinner is showing; then submit with the URL.
-		if (collectedArgs.image_url instanceof File) {
+		// If any field of type image_url has a File (paste or upload), upload it first; then submit with the URL.
+		for (const fieldKey of Object.keys(fields)) {
+			const field = fields[fieldKey];
+			if (!isImageUrlField(field)) continue;
+			const value = collectedArgs[fieldKey];
+			if (value instanceof File) {
+				try {
+					collectedArgs[fieldKey] = await uploadImageFile(value);
+				} catch (err) {
+					this.resetCreateButton(button);
+					if (typeof this.showCreateError === 'function') {
+						this.showCreateError(err?.message || 'Image upload failed');
+					} else {
+						alert(err?.message || 'Image upload failed');
+					}
+					return;
+				}
+			}
+		}
+
+		// If any field of type image_url_array has Files, upload each and replace with URLs.
+		for (const fieldKey of Object.keys(fields)) {
+			const field = fields[fieldKey];
+			if (!isImageUrlArrayField(field)) continue;
+			const arr = collectedArgs[fieldKey];
+			if (!Array.isArray(arr)) continue;
+			const hasFile = arr.some((v) => v instanceof File);
+			if (!hasFile) continue;
 			try {
-				collectedArgs.image_url = await uploadImageFile(collectedArgs.image_url);
+				collectedArgs[fieldKey] = await Promise.all(
+					arr.map((v) => (v instanceof File ? uploadImageFile(v) : Promise.resolve(v)))
+				);
 			} catch (err) {
 				this.resetCreateButton(button);
 				if (typeof this.showCreateError === 'function') {

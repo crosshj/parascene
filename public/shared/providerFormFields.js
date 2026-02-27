@@ -617,6 +617,176 @@ function createImageField(fieldKey, field, context) {
 }
 
 /**
+ * Parse default value for image_url_array: array of URLs or JSON string.
+ */
+function parseImageArrayDefault(defaultValue) {
+	if (Array.isArray(defaultValue)) {
+		return defaultValue.filter((v) => typeof v === 'string' && v.trim());
+	}
+	if (typeof defaultValue === 'string' && defaultValue.trim()) {
+		try {
+			const parsed = JSON.parse(defaultValue);
+			return Array.isArray(parsed) ? parsed.filter((v) => typeof v === 'string' && v.trim()) : [];
+		} catch {
+			return [];
+		}
+	}
+	return [];
+}
+
+function createImageArrayField(fieldKey, field, context) {
+	const { inputClassName, fieldIdPrefix, onValueChange } = context;
+	const defaultArr = parseImageArrayDefault(field?.default);
+
+	const wrapper = document.createElement('div');
+	wrapper.className = 'image-field image-field-multi image-field-array';
+
+	// Match single-image structure: a "thumb container" that owns the visible UI
+	const thumbContainer = document.createElement('div');
+	thumbContainer.className = 'image-thumb-container image-array-container';
+	thumbContainer.setAttribute('data-image-thumb-container', '');
+
+	const listEl = document.createElement('div');
+	listEl.className = 'image-array-list';
+	listEl.setAttribute('data-image-array-list', '');
+
+	const addBtn = document.createElement('button');
+	addBtn.type = 'button';
+	addBtn.className = 'image-thumb-placeholder image-array-add';
+	addBtn.textContent = 'Add image';
+	addBtn.setAttribute('aria-label', 'Add image');
+
+	thumbContainer.appendChild(listEl);
+	thumbContainer.appendChild(addBtn);
+	wrapper.appendChild(thumbContainer);
+
+	const hiddenInput = document.createElement('input');
+	hiddenInput.type = 'hidden';
+	hiddenInput.id = `${fieldIdPrefix}${fieldKey}`;
+	hiddenInput.name = fieldKey;
+	if (field.required) hiddenInput.required = true;
+	wrapper.appendChild(hiddenInput);
+
+	// Match single-image error element (even if you don’t use it yet)
+	const errorEl = document.createElement('p');
+	errorEl.className = 'image-field-error';
+	errorEl.setAttribute('role', 'alert');
+	errorEl.setAttribute('aria-live', 'polite');
+	errorEl.hidden = true;
+	wrapper.appendChild(errorEl);
+
+	// Optional helper if you later want to surface validation failures
+	function setError(msg) {
+		errorEl.textContent = msg || '';
+		errorEl.hidden = !msg;
+	}
+
+	const objectUrls = new Map();
+
+	function revokeObjectUrlForIndex(i) {
+		const url = objectUrls.get(i);
+		if (url) {
+			URL.revokeObjectURL(url);
+			objectUrls.delete(i);
+		}
+	}
+
+	function getDisplayUrl(item) {
+		if (typeof item === 'string' && item.trim()) return item.trim();
+		if (item instanceof File) return null;
+		return null;
+	}
+
+	function getThumbSrc(item, index) {
+		const url = getDisplayUrl(item);
+		if (url) return url;
+		if (item instanceof File) {
+			let objUrl = objectUrls.get(index);
+			if (!objUrl) {
+				objUrl = URL.createObjectURL(item);
+				objectUrls.set(index, objUrl);
+			}
+			return objUrl;
+		}
+		return '';
+	}
+
+	let items = [...defaultArr];
+
+	function syncHiddenInput() {
+		// Keep parity with existing behavior: only serialize when all are URL strings.
+		const allStrings = items.every((v) => typeof v === 'string' && v.trim());
+		hiddenInput.value = allStrings ? JSON.stringify(items.map((v) => v.trim())) : '';
+	}
+
+	function setItems(next) {
+		items.forEach((_, i) => revokeObjectUrlForIndex(i));
+		objectUrls.clear();
+		items = next;
+		syncHiddenInput();
+		onValueChange(fieldKey, items);
+		renderList();
+	}
+
+	function removeAt(index) {
+		revokeObjectUrlForIndex(index);
+		objectUrls.clear();
+		items = items.filter((_, i) => i !== index);
+		syncHiddenInput();
+		onValueChange(fieldKey, items);
+		renderList();
+	}
+
+	function renderList() {
+		listEl.innerHTML = '';
+		items.forEach((item, index) => {
+			const src = getThumbSrc(item, index);
+
+			const wrap = document.createElement('div');
+			wrap.className = 'image-array-item';
+
+			const thumbWrap = document.createElement('div');
+			thumbWrap.className = 'image-thumb-wrap loaded';
+
+			const img = document.createElement('img');
+			img.className = 'image-thumb';
+			img.alt = '';
+			if (src) img.src = src;
+
+			thumbWrap.appendChild(img);
+
+			const removeBtn = document.createElement('button');
+			removeBtn.type = 'button';
+			removeBtn.className = 'image-pick-another';
+			removeBtn.textContent = 'Remove';
+			removeBtn.addEventListener('click', () => removeAt(index));
+
+			wrap.appendChild(thumbWrap);
+			wrap.appendChild(removeBtn);
+			listEl.appendChild(wrap);
+		});
+	}
+
+	addBtn.addEventListener('click', () => {
+		setError('');
+		openImagePickerModal({
+			onSelect(value) {
+				items = [...items, value];
+				syncHiddenInput();
+				onValueChange(fieldKey, items);
+				renderList();
+			}
+		});
+	});
+
+	syncHiddenInput();
+	onValueChange(fieldKey, items);
+	renderList();
+
+	return wrapper;
+}
+
+/**
  * Open the same "Choose image" modal used by image fields (Paste image / Paste link / Upload file).
  * Call onSelect with the chosen image as string (URL) or File, then closes the modal.
  * @param {{ onSelect: (value: string | File) => void }} options
@@ -900,22 +1070,31 @@ const FIELD_HANDLERS = {
 	text: createTextField,
 	select: createSelectField,
 	boolean: createBooleanField,
-	image: createImageField
+	image: createImageField,
+	image_array: createImageArrayField
 };
 
 /**
- * Returns the handler key for a given field (e.g. 'color', 'textarea', 'text', 'select', 'boolean').
+ * Returns true when the field config has type 'image_url' (image URL input + upload/paste).
  * Used to look up the handler in FIELD_HANDLERS.
  */
-export function isImageUrlField(fieldKey) {
-	return String(fieldKey || '').toLowerCase() === 'image_url';
+export function isImageUrlField(field) {
+	return field?.type === 'image_url';
+}
+
+/**
+ * Returns true when the field config has type 'image_url_array' (array of image URLs).
+ */
+export function isImageUrlArrayField(field) {
+	return field?.type === 'image_url_array';
 }
 
 export function getFieldType(fieldKey, field) {
 	if (field?.type === 'color') return 'color';
 	if (field?.type === 'select') return 'select';
 	if (field?.type === 'boolean') return 'boolean';
-	if (isImageUrlField(fieldKey)) return 'image';
+	if (isImageUrlField(field)) return 'image';
+	if (isImageUrlArrayField(field)) return 'image_array';
 	if (isMultilineField(fieldKey, field)) return 'textarea';
 	return 'text';
 }
@@ -978,7 +1157,7 @@ export function renderFields(container, fields, options = {}) {
 			fieldGroup.setAttribute('data-field-hidden', 'true');
 		}
 
-		const label = createLabel(fieldKey, type === 'image' ? { ...field, label: 'Image' } : field, {
+		const label = createLabel(fieldKey, type === 'image' ? { ...field, label: 'Image' } : type === 'image_array' ? { ...field, label: field?.label || 'Images' } : field, {
 			labelClassName: opts.labelClassName,
 			requiredClassName: opts.requiredClassName,
 			fieldIdPrefix: opts.fieldIdPrefix
