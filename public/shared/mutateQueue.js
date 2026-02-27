@@ -12,10 +12,18 @@ function readQueue() {
 				const sourceIdNum = Number(item.sourceId);
 				const imageUrl = typeof item.imageUrl === 'string' ? item.imageUrl.trim() : '';
 				if (!imageUrl) return null;
+				// Preserve published when present; legacy items may not have it (treat as unknown).
+				const published =
+					item.published === true || item.published === 1
+						? true
+						: item.published === false || item.published === 0
+							? false
+							: undefined;
 				return {
 					sourceId: Number.isFinite(sourceIdNum) && sourceIdNum > 0 ? sourceIdNum : null,
 					imageUrl,
-					queuedAt: Number.isFinite(Number(item.queuedAt)) ? Number(item.queuedAt) : Date.now()
+					queuedAt: Number.isFinite(Number(item.queuedAt)) ? Number(item.queuedAt) : Date.now(),
+					published
 				};
 			})
 			.filter(Boolean);
@@ -37,17 +45,19 @@ export function loadMutateQueue() {
 	return readQueue();
 }
 
-export function addToMutateQueue({ sourceId, imageUrl }) {
+export function addToMutateQueue({ sourceId, imageUrl, published }) {
 	const url = typeof imageUrl === 'string' ? imageUrl.trim() : '';
 	const idNum = Number(sourceId);
 	if (!url) return;
 
 	const current = readQueue();
 	const filtered = current.filter((item) => item.imageUrl !== url && item.sourceId !== idNum);
+	const isPublished = published === true || published === 1;
 	const nextItem = {
 		sourceId: Number.isFinite(idNum) && idNum > 0 ? idNum : null,
 		imageUrl: url,
-		queuedAt: Date.now()
+		queuedAt: Date.now(),
+		published: isPublished
 	};
 	filtered.unshift(nextItem);
 	writeQueue(filtered);

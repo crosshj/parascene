@@ -295,8 +295,9 @@ class AppRouteCreations extends HTMLElement {
 			if (!url.startsWith('http://') && !url.startsWith('https://') && origin) {
 				url = origin + (url.startsWith('/') ? url : `/${url}`);
 			}
+			const published = card.dataset.published === '1';
 			try {
-				addToMutateQueue({ sourceId: Number(id), imageUrl: url });
+				addToMutateQueue({ sourceId: Number(id), imageUrl: url, published });
 			} catch {
 				// ignore storage errors
 			}

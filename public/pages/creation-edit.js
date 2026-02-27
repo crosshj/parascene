@@ -571,8 +571,9 @@ async function loadEditPage() {
 				if (!Number.isFinite(sourceId) || sourceId <= 0) return;
 				queueState = 'queueing';
 				renderQueueButton();
+				const published = creation.published === true || creation.published === 1;
 				try {
-					addToMutateQueue({ sourceId, imageUrl: normalizedImageUrl });
+					addToMutateQueue({ sourceId, imageUrl: normalizedImageUrl, published });
 				} catch {
 					// ignore storage errors
 				}

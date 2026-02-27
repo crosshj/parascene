@@ -1732,37 +1732,98 @@ class AppRouteCreate extends HTMLElement {
 			});
 		};
 
-		if (mentions.length === 0) {
-			doSubmit(false);
-			return;
-		}
-
-		const validateResult = await this.validateMentions({ args: { prompt } });
-		if (validateResult.ok) {
-			doSubmit(true);
-			return;
-		}
-
-		this.resetCreateButton(button);
-		const message = formatMentionsFailureForDialog(validateResult.data);
-		this.showAdvancedConfirm(
-			message,
-			true,
-			{
-				primaryLabel: 'Submit anyway',
-				onPrimary: () => {
-					this.closeAdvancedConfirm();
-					// Re-apply loading state to the Create button and submit without hydration.
-					try {
-						button.style.minWidth = `${button.offsetWidth}px`;
-						button.disabled = true;
-						button.innerHTML = '<span class="create-button-spinner" aria-hidden="true"></span>';
-						void button.offsetHeight;
-					} catch { /* ignore */ }
-					doSubmit(false);
+		// Collect image URLs used in args (normalized to full URL for comparison).
+		const imageUrlsInArgs = new Set();
+		const origin = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '';
+		Object.keys(fields).forEach((fieldKey) => {
+			const field = fields[fieldKey];
+			if (isImageUrlField(field)) {
+				const v = argsToSend[fieldKey];
+				if (typeof v === 'string' && v.trim()) {
+					const u = v.trim();
+					imageUrlsInArgs.add(u.startsWith('http') ? u : origin + (u.startsWith('/') ? u : `/${u}`));
+				}
+			} else if (isImageUrlArrayField(field)) {
+				const arr = argsToSend[fieldKey];
+				if (Array.isArray(arr)) {
+					arr.forEach((v) => {
+						if (typeof v === 'string' && v.trim()) {
+							const u = v.trim();
+							imageUrlsInArgs.add(u.startsWith('http') ? u : origin + (u.startsWith('/') ? u : `/${u}`));
+						}
+					});
 				}
 			}
-		);
+		});
+
+		let hasUnpublishedInArgs = false;
+		try {
+			const queueForCheck = loadMutateQueue();
+			for (const item of queueForCheck || []) {
+				const url = typeof item?.imageUrl === 'string' ? item.imageUrl.trim() : '';
+				if (!url) continue;
+				if (item.published === false && imageUrlsInArgs.has(url)) {
+					hasUnpublishedInArgs = true;
+					break;
+				}
+			}
+		} catch {
+			// ignore
+		}
+
+		async function runMentionsCheckAndSubmit() {
+			if (mentions.length === 0) {
+				doSubmit(false);
+				return;
+			}
+			const validateResult = await this.validateMentions({ args: { prompt } });
+			if (validateResult.ok) {
+				doSubmit(true);
+				return;
+			}
+			this.resetCreateButton(button);
+			this.showAdvancedConfirm(
+				formatMentionsFailureForDialog(validateResult.data),
+				true,
+				{
+					primaryLabel: 'Submit anyway',
+					onPrimary: () => {
+						this.closeAdvancedConfirm();
+						try {
+							button.style.minWidth = `${button.offsetWidth}px`;
+							button.disabled = true;
+							button.innerHTML = '<span class="create-button-spinner" aria-hidden="true"></span>';
+							void button.offsetHeight;
+						} catch { /* ignore */ }
+						doSubmit(false);
+					}
+				}
+			);
+		}
+
+		if (hasUnpublishedInArgs) {
+			this.resetCreateButton(button);
+			this.showAdvancedConfirm(
+				'Some of the images are from unpublished creations. These creations will not be available.',
+				true,
+				{
+					primaryLabel: 'Continue',
+					onPrimary: () => {
+						this.closeAdvancedConfirm();
+						try {
+							button.style.minWidth = `${button.offsetWidth}px`;
+							button.disabled = true;
+							button.innerHTML = '<span class="create-button-spinner" aria-hidden="true"></span>';
+							void button.offsetHeight;
+						} catch { /* ignore */ }
+						void runMentionsCheckAndSubmit.call(this);
+					}
+				}
+			);
+			return;
+		}
+
+		void runMentionsCheckAndSubmit.call(this);
 	}
 
 	resetCreateButton(button) {
