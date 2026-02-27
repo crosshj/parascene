@@ -107,14 +107,15 @@ function normalizeSelectOptions(options) {
 	if (!Array.isArray(options)) return [];
 	return options.map((item) => {
 		if (typeof item === 'string') {
-			return { value: item, label: item };
+			return { value: item, label: item, hint: '' };
 		}
 		if (item && typeof item === 'object') {
 			const value = item.value ?? item.id ?? item.label ?? '';
 			const label = item.label ?? item.value ?? item.id ?? String(value);
-			return { value: String(value), label: String(label) };
+			const hint = typeof item.hint === 'string' ? item.hint : '';
+			return { value: String(value), label: String(label), hint };
 		}
-		return { value: '', label: '' };
+		return { value: '', label: '', hint: '' };
 	});
 }
 
@@ -130,10 +131,11 @@ function createSelectField(fieldKey, field, context) {
 	const options = normalizeSelectOptions(field.options || []);
 	const defaultValue = field.default !== undefined && field.default !== null ? String(field.default) : '';
 
-	options.forEach(({ value, label }) => {
+	options.forEach(({ value, label, hint }) => {
 		const option = document.createElement('option');
 		option.value = value;
 		option.textContent = label;
+		if (hint) option.dataset.hint = hint;
 		if (value === defaultValue) option.selected = true;
 		select.appendChild(option);
 	});
@@ -1171,6 +1173,29 @@ export function renderFields(container, fields, options = {}) {
 
 		fieldGroup.appendChild(label);
 		fieldGroup.appendChild(input);
+
+		// For select fields, show a muted hint below the field when options provide hints.
+		if (type === 'select' && Array.isArray(field?.options) && field.options.length > 0) {
+			const normalizedOptions = normalizeSelectOptions(field.options);
+			const hasHints = normalizedOptions.some((opt) => opt.hint);
+			if (hasHints && input && input.tagName === 'SELECT') {
+				const hintEl = document.createElement('p');
+				hintEl.className = 'form-hint';
+
+				const updateHint = () => {
+					const currentValue = input.value;
+					const match = normalizedOptions.find((opt) => String(opt.value) === String(currentValue));
+					const text = match?.hint || field?.hint || '';
+					hintEl.textContent = text;
+					hintEl.hidden = !text;
+				};
+
+				updateHint();
+				input.addEventListener('change', updateHint);
+				fieldGroup.appendChild(hintEl);
+			}
+		}
+
 		container.appendChild(fieldGroup);
 	});
 }

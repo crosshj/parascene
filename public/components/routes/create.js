@@ -177,6 +177,11 @@ class AppRouteCreate extends HTMLElement {
           color: var(--text-muted);
           margin: 0;
         }
+        .create-route .form-hint {
+          font-size: 0.85rem;
+          color: var(--text-muted);
+          margin: -0.15rem 0 0 0;
+        }
         .create-route .create-cost.insufficient {
           color: var(--error, #e74c3c);
           font-weight: 500;
