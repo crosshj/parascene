@@ -841,6 +841,7 @@ export default function createCreateRoutes({ queries, storage }) {
 					creation_token: fields.creation_token,
 					retry_of_id: fields.retry_of_id,
 					mutate_of_id: fields.mutate_of_id,
+					mutate_parent_ids: fields.mutate_parent_ids,
 					credit_cost: fields.credit_cost,
 					hydrate_mentions: fields.hydrate_mentions,
 					style_key: fields.style_key
@@ -853,8 +854,8 @@ export default function createCreateRoutes({ queries, storage }) {
 			}
 		}
 
-		const { server_id, method, args, creation_token, retry_of_id, mutate_of_id, credit_cost: bodyCreditCost, hydrate_mentions, style_key } = req.body;
-		const safeArgs = args && typeof args === "object" ? { ...args } : {};
+			const { server_id, method, args, creation_token, retry_of_id, mutate_of_id, mutate_parent_ids, credit_cost: bodyCreditCost, hydrate_mentions, style_key } = req.body;
+			const safeArgs = args && typeof args === "object" ? { ...args } : {};
 		const hydrateMentions = hydrate_mentions === true || hydrate_mentions === "true" || hydrate_mentions === 1 || hydrate_mentions === "1";
 
 		// Validate required fields
@@ -957,6 +958,37 @@ export default function createCreateRoutes({ queries, storage }) {
 						const absolute = toParasceneImageUrl(v);
 						return absolute || v;
 					});
+				}
+			}
+
+			// Normalize and validate mutate_parent_ids (optional list of additional ancestor IDs)
+			let mutateParentIds = [];
+			if (Array.isArray(mutate_parent_ids)) {
+				const seen = new Set();
+				mutateParentIds = mutate_parent_ids
+					.map((v) => Number(v))
+					.filter((n) => {
+						if (!Number.isFinite(n) || n <= 0) return false;
+						if (seen.has(n)) return false;
+						seen.add(n);
+						return true;
+					});
+			} else if (typeof mutate_parent_ids === "string" && mutate_parent_ids.trim()) {
+				try {
+					const parsed = JSON.parse(mutate_parent_ids);
+					if (Array.isArray(parsed)) {
+						const seen = new Set();
+						mutateParentIds = parsed
+							.map((v) => Number(v))
+							.filter((n) => {
+								if (!Number.isFinite(n) || n <= 0) return false;
+								if (seen.has(n)) return false;
+								seen.add(n);
+								return true;
+							});
+					}
+				} catch {
+					// ignore malformed mutate_parent_ids
 				}
 			}
 
@@ -1072,6 +1104,24 @@ export default function createCreateRoutes({ queries, storage }) {
 					} catch {
 						// If mint fails, keep existing image_url; provider may 403 for unpublished
 					}
+				}
+			}
+
+			// Merge any additional ancestor IDs into meta.history so lineage can reference multiple parents.
+			if (mutateParentIds.length > 0) {
+				const base = Array.isArray(meta.history) ? meta.history : [];
+				const merged = [...base, ...mutateParentIds];
+				const seenMerge = new Set();
+				const mergedIds = merged
+					.map((v) => Number(v))
+					.filter((n) => {
+						if (!Number.isFinite(n) || n <= 0) return false;
+						if (seenMerge.has(n)) return false;
+						seenMerge.add(n);
+						return true;
+					});
+				if (mergedIds.length > 0) {
+					meta.history = mergedIds;
 				}
 			}
 

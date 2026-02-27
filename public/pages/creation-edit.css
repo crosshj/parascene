@@ -87,6 +87,39 @@
 	margin-top: 1.5rem;
 }
 
+.creation-edit-route .create-controls-buttons {
+	display: flex;
+	flex-direction: row;
+	gap: 8px;
+	align-items: center;
+	width: 100%;
+}
+
+.creation-edit-route [data-queue-mutate-btn] {
+	margin-left: auto;
+}
+
+.creation-edit-route .queue-button-spinner {
+	display: inline-block;
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	border: 2px solid color-mix(in srgb, var(--accent-text) 40%, transparent);
+	border-top-color: var(--accent-text);
+	animation: creation-edit-queue-spin 0.8s linear infinite;
+	margin-right: 6px;
+	vertical-align: middle;
+}
+
+@keyframes creation-edit-queue-spin {
+	0% {
+		transform: rotate(0deg);
+	}
+	100% {
+		transform: rotate(360deg);
+	}
+}
+
 .creation-edit-route .create-cost {
 	font-size: 0.875rem;
 	color: var(--text-muted);

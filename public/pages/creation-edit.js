@@ -4,6 +4,7 @@ import { attachAutoGrowTextarea } from '/shared/autogrow.js';
 import { DEFAULT_APP_ORIGIN } from '/shared/userText.js';
 import { getMethodIntentList, loadMutateServerOptions } from '/shared/mutateOptions.js';
 import { renderEmptyState, renderEmptyLoading, renderEmptyError } from '/shared/emptyState.js';
+import { addToMutateQueue, loadMutateQueue, removeFromMutateQueueByImageUrl } from '/shared/mutateQueue.js';
 
 const html = String.raw;
 
@@ -271,9 +272,14 @@ async function loadEditPage() {
 			</form>
 			
 			<div class="create-controls">
-				<button class="create-button" data-generate-btn disabled>
-					Mutate
-				</button>
+				<div class="create-controls-buttons">
+					<button class="create-button" data-generate-btn disabled>
+						Mutate
+					</button>
+					<button type="button" class="btn-secondary" data-queue-mutate-btn>
+						Queue for later
+					</button>
+				</div>
 				<p class="create-cost" data-mutate-cost>Loading credits…</p>
 			</div>
 		`;
@@ -315,6 +321,7 @@ async function loadEditPage() {
 
 		const promptEl = editContent.querySelector('[data-edit-prompt]');
 		const generateBtn = editContent.querySelector('[data-generate-btn]');
+		const queueBtn = editContent.querySelector('[data-queue-mutate-btn]');
 		const costEl = editContent.querySelector('[data-mutate-cost]');
 
 		// Server/method selection elements
@@ -363,6 +370,24 @@ async function loadEditPage() {
 		editContent.dataset.mutateServerId = selectionState.serverId ? String(selectionState.serverId) : '';
 		editContent.dataset.mutateMethodKey = selectionState.methodKey ? String(selectionState.methodKey) : '';
 		editContent.dataset.mutateImageUrl = sourceImageUrl;
+
+		const normalizedImageUrlForQueue = toParasceneImageUrl(sourceImageUrl);
+		let isImageQueued = false;
+		if (normalizedImageUrlForQueue) {
+			try {
+				const queueItems = loadMutateQueue();
+				const creationIdNum = Number(creationId);
+				isImageQueued = queueItems.some((item) => {
+					const itemUrl = typeof item?.imageUrl === 'string' ? item.imageUrl : '';
+					const itemSourceIdNum = Number(item?.sourceId);
+					const matchesSourceId = Number.isFinite(itemSourceIdNum) && itemSourceIdNum > 0 && itemSourceIdNum === creationIdNum;
+					const matchesUrl = itemUrl === normalizedImageUrlForQueue;
+					return matchesSourceId || matchesUrl;
+				});
+			} catch {
+				// Ignore storage errors
+			}
+		}
 
 		function getSelectedMethodCost() {
 			if (!selectionState.serverId || !selectionState.methodKey) return null;
@@ -490,6 +515,73 @@ async function loadEditPage() {
 				selectionState.methodKey = methodSelect.value || null;
 				editContent.dataset.mutateMethodKey = selectionState.methodKey ? String(selectionState.methodKey) : '';
 				updateCostAndButtonState();
+			});
+		}
+
+		if (queueBtn instanceof HTMLButtonElement) {
+			const MIN_SPINNER_MS = 350;
+			let queueState = isImageQueued ? 'queued' : 'idle';
+
+			function renderQueueButton() {
+				if (!(queueBtn instanceof HTMLButtonElement)) return;
+				if (queueState === 'queueing') {
+					queueBtn.disabled = true;
+					queueBtn.innerHTML = '<span class="queue-button-spinner" aria-hidden="true"></span><span class="queue-button-label">Queuing…</span>';
+					return;
+				}
+				if (queueState === 'removing') {
+					queueBtn.disabled = true;
+					queueBtn.innerHTML = '<span class="queue-button-spinner" aria-hidden="true"></span><span class="queue-button-label">Removing…</span>';
+					return;
+				}
+				queueBtn.disabled = false;
+				queueBtn.textContent = queueState === 'queued' ? 'Remove from queue' : 'Queue for later';
+			}
+
+			renderQueueButton();
+
+			queueBtn.addEventListener('click', () => {
+				if (queueState === 'queueing' || queueState === 'removing') return;
+
+				const sourceIdRaw = editContent.dataset.mutateSourceId || '';
+				const imageUrlRaw = editContent.dataset.mutateImageUrl || '';
+				const sourceId = Number(sourceIdRaw);
+				const normalizedImageUrl = toParasceneImageUrl(imageUrlRaw);
+				if (!normalizedImageUrl) return;
+
+				const start = performance.now();
+
+				if (queueState === 'queued') {
+					queueState = 'removing';
+					renderQueueButton();
+					try {
+						removeFromMutateQueueByImageUrl(normalizedImageUrl);
+					} catch {
+						// ignore storage errors
+					}
+					const elapsed = performance.now() - start;
+					const remaining = Math.max(0, MIN_SPINNER_MS - elapsed);
+					setTimeout(() => {
+						queueState = 'idle';
+						renderQueueButton();
+					}, remaining);
+					return;
+				}
+
+				if (!Number.isFinite(sourceId) || sourceId <= 0) return;
+				queueState = 'queueing';
+				renderQueueButton();
+				try {
+					addToMutateQueue({ sourceId, imageUrl: normalizedImageUrl });
+				} catch {
+					// ignore storage errors
+				}
+				const elapsed = performance.now() - start;
+				const remaining = Math.max(0, MIN_SPINNER_MS - elapsed);
+				setTimeout(() => {
+					queueState = 'queued';
+					renderQueueButton();
+				}, remaining);
 			});
 		}
 	} catch {

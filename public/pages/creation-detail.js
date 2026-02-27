@@ -894,10 +894,12 @@ async function loadCreation() {
 			} catch {
 				// ignore
 			}
-			const parts = nonCurrentIds.map((id) => {
+			const parts = nonCurrentIds.map((id, index) => {
+				const isLastAncestor = index === nonCurrentIds.length - 1;
+				const separator = nonCurrentIds.length >= 2 && !isLastAncestor ? '+' : '→';
 				const nsfw = nsfwById.get(String(id)) === true;
 				if (!enableNsfw && nsfw) {
-					return `<span class="creation-detail-history-thumb-link creation-detail-history-nsfw-blank" data-history-id="${id}" aria-label="${escapeHtml(`Creation #${id} (hidden)`)}">#${id}</span><span class="creation-detail-history-arrow" aria-hidden="true">→</span>`;
+					return `<span class="creation-detail-history-thumb-link creation-detail-history-nsfw-blank" data-history-id="${id}" aria-label="${escapeHtml(`Creation #${id} (hidden)`)}">#${id}</span><span class="creation-detail-history-arrow" aria-hidden="true">${separator}</span>`;
 				}
 				const nsfwClass = enableNsfw && nsfw ? (showUnobscured ? ' nsfw nsfw-revealed' : ' nsfw') : '';
 				const dataCreationId = enableNsfw && nsfw ? ` data-creation-id="${id}"` : '';
@@ -911,7 +913,7 @@ async function loadCreation() {
 					<span class="creation-detail-history-fallback" data-history-fallback>#${id}</span>
 					<img class="creation-detail-history-thumb" data-history-img alt="" loading="lazy" style="display: none;" />
 				</a>
-				<span class="creation-detail-history-arrow" aria-hidden="true">→</span>
+				<span class="creation-detail-history-arrow" aria-hidden="true">${separator}</span>
 			`;
 			}).join('');
 

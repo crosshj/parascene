@@ -1,6 +1,7 @@
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 import { submitCreationWithPending, uploadImageFile, formatMentionsFailureForDialog } from '../../shared/createSubmit.js';
 import { renderFields, isPromptLikeField, isImageUrlField, isImageUrlArrayField } from '../../shared/providerFormFields.js';
+import { loadMutateQueue } from '../../shared/mutateQueue.js';
 import { attachAutoGrowTextarea } from '../../shared/autogrow.js';
 
 const html = String.raw;
@@ -1665,6 +1666,49 @@ class AppRouteCreate extends HTMLElement {
 		// Standalone create page (/create) needs full navigation to /creations; SPA only works when create is in-app.
 		const isStandaloneCreatePage = window.location.pathname === '/create';
 		const argsToSend = collectedArgs || {};
+		let mutateParentIds = [];
+
+		// Map any queued images used as inputs to their parent creation IDs so they become ancestors.
+		try {
+			const queueItems = loadMutateQueue();
+			if (Array.isArray(queueItems) && queueItems.length > 0) {
+				const byUrl = new Map();
+				queueItems.forEach((item) => {
+					const url = typeof item?.imageUrl === 'string' ? item.imageUrl.trim() : '';
+					const sid = Number(item?.sourceId);
+					if (!url || !Number.isFinite(sid) || sid <= 0) return;
+					if (!byUrl.has(url)) byUrl.set(url, sid);
+				});
+				if (byUrl.size > 0) {
+					const parentSet = new Set();
+					Object.keys(fields).forEach((fieldKey) => {
+						const field = fields[fieldKey];
+						if (isImageUrlField(field)) {
+							const v = argsToSend[fieldKey];
+							if (typeof v === 'string') {
+								const id = byUrl.get(v.trim());
+								if (Number.isFinite(id) && id > 0) parentSet.add(id);
+							}
+						} else if (isImageUrlArrayField(field)) {
+							const arr = argsToSend[fieldKey];
+							if (Array.isArray(arr)) {
+								arr.forEach((v) => {
+									if (typeof v !== 'string') return;
+									const id = byUrl.get(v.trim());
+									if (Number.isFinite(id) && id > 0) parentSet.add(id);
+								});
+							}
+						}
+					});
+					if (parentSet.size > 0) {
+						mutateParentIds = Array.from(parentSet);
+					}
+				}
+			}
+		} catch {
+			// ignore storage errors
+		}
+
 		// Hydration only supports the canonical `prompt` arg for now.
 		const prompt = typeof argsToSend?.prompt === 'string' ? String(argsToSend.prompt) : '';
 		const mentions = this.extractMentions(prompt);
@@ -1674,6 +1718,7 @@ class AppRouteCreate extends HTMLElement {
 				serverId: this.selectedServer.id,
 				methodKey,
 				args: argsToSend,
+				mutateParentIds,
 				hydrateMentions,
 				navigate: isStandaloneCreatePage ? 'full' : 'spa',
 				onInsufficientCredits: async () => {

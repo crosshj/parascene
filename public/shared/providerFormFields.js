@@ -4,6 +4,7 @@
  */
 
 import { attachAutoGrowTextarea } from './autogrow.js';
+import { loadMutateQueue, removeFromMutateQueueByImageUrl } from './mutateQueue.js';
 
 // --- Field type detection (used to choose handler) ---
 
@@ -210,6 +211,18 @@ function createBooleanField(fieldKey, field, context) {
 function createImageField(fieldKey, field, context) {
 	const { inputClassName, fieldIdPrefix, onValueChange } = context;
 	const defaultValue = typeof field?.default === 'string' ? field.default : '';
+	let initialValue = defaultValue;
+	if (!initialValue && typeof window !== 'undefined' && window.location?.pathname === '/create') {
+		try {
+			const queued = loadMutateQueue();
+			const first = queued.find((item) => typeof item?.imageUrl === 'string' && item.imageUrl.trim());
+			if (first) {
+				initialValue = first.imageUrl.trim();
+			}
+		} catch {
+			// ignore storage errors
+		}
+	}
 
 	const wrapper = document.createElement('div');
 	wrapper.className = 'image-field image-field-multi';
@@ -375,7 +388,7 @@ function createImageField(fieldKey, field, context) {
 	hiddenInput.type = 'hidden';
 	hiddenInput.id = `${fieldIdPrefix}${fieldKey}`;
 	hiddenInput.name = fieldKey;
-	hiddenInput.value = defaultValue;
+	hiddenInput.value = initialValue;
 	if (field.required) hiddenInput.required = true;
 	wrapper.appendChild(hiddenInput);
 
@@ -487,6 +500,7 @@ function createImageField(fieldKey, field, context) {
 	}
 
 	function clearValue() {
+		const prevUrl = (hiddenInput.value || urlInput.value || '').trim();
 		revokeObjectUrl();
 		hiddenInput.value = '';
 		urlInput.value = '';
@@ -496,6 +510,13 @@ function createImageField(fieldKey, field, context) {
 		fileInput.value = '';
 		setError('');
 		onValueChange(fieldKey, '');
+		if (prevUrl && typeof window !== 'undefined' && window.location?.pathname === '/create') {
+			try {
+				removeFromMutateQueueByImageUrl(prevUrl);
+			} catch {
+				// ignore storage errors
+			}
+		}
 	}
 
 	function showPanel(source) {
@@ -605,14 +626,14 @@ function createImageField(fieldKey, field, context) {
 		}
 	});
 
-	const hasInitial = typeof defaultValue === 'string' && defaultValue.trim().length > 0;
-	urlInput.value = typeof defaultValue === 'string' ? defaultValue : '';
+	const hasInitial = typeof initialValue === 'string' && initialValue.trim().length > 0;
+	urlInput.value = typeof initialValue === 'string' ? initialValue : '';
 	thumbPlaceholder.hidden = !!hasInitial;
 	thumbContainer.hidden = !hasInitial;
-	onValueChange(fieldKey, defaultValue != null ? defaultValue : (hiddenInput.value || '').trim());
+	onValueChange(fieldKey, initialValue != null ? initialValue : (hiddenInput.value || '').trim());
 
-	if (defaultValue && typeof defaultValue === 'string') {
-		setThumbSrc(defaultValue);
+	if (initialValue && typeof initialValue === 'string') {
+		setThumbSrc(initialValue);
 	}
 
 	return wrapper;
@@ -639,6 +660,20 @@ function parseImageArrayDefault(defaultValue) {
 function createImageArrayField(fieldKey, field, context) {
 	const { inputClassName, fieldIdPrefix, onValueChange } = context;
 	const defaultArr = parseImageArrayDefault(field?.default);
+	let initialItems = [...defaultArr];
+	if (initialItems.length === 0 && typeof window !== 'undefined' && window.location?.pathname === '/create') {
+		try {
+			const queued = loadMutateQueue();
+			const urls = queued
+				.map((item) => (typeof item?.imageUrl === 'string' ? item.imageUrl.trim() : ''))
+				.filter(Boolean);
+			if (urls.length) {
+				initialItems = urls;
+			}
+		} catch {
+			// ignore storage errors
+		}
+	}
 
 	const wrapper = document.createElement('div');
 	wrapper.className = 'image-field image-field-multi image-field-array';
@@ -713,7 +748,7 @@ function createImageArrayField(fieldKey, field, context) {
 		return '';
 	}
 
-	let items = [...defaultArr];
+	let items = [...initialItems];
 
 	function syncHiddenInput() {
 		// Keep parity with existing behavior: only serialize when all are URL strings.
@@ -731,12 +766,21 @@ function createImageArrayField(fieldKey, field, context) {
 	}
 
 	function removeAt(index) {
+		const prev = items[index];
+		const prevUrl = typeof prev === 'string' ? prev.trim() : '';
 		revokeObjectUrlForIndex(index);
 		objectUrls.clear();
 		items = items.filter((_, i) => i !== index);
 		syncHiddenInput();
 		onValueChange(fieldKey, items);
 		renderList();
+		if (prevUrl && typeof window !== 'undefined' && window.location?.pathname === '/create') {
+			try {
+				removeFromMutateQueueByImageUrl(prevUrl);
+			} catch {
+				// ignore storage errors
+			}
+		}
 	}
 
 	function renderList() {

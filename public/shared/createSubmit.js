@@ -112,6 +112,7 @@ export function submitCreationWithPending({
 	methodKey,
 	args,
 	mutateOfId,
+	mutateParentIds,
 	creditCost,
 	hydrateMentions,
 	styleKey,
@@ -134,12 +135,26 @@ export function submitCreationWithPending({
 		// ignore
 	}
 
+	let parentIds = [];
+	if (Array.isArray(mutateParentIds)) {
+		const seen = new Set();
+		parentIds = mutateParentIds
+			.map((v) => Number(v))
+			.filter((n) => {
+				if (!Number.isFinite(n) || n <= 0) return false;
+				if (seen.has(n)) return false;
+				seen.add(n);
+				return true;
+			});
+	}
+
 	const payload = {
 		server_id: serverId,
 		method: methodKey,
 		args: args || {},
 		creation_token: creationToken,
 		...(Number.isFinite(Number(mutateOfId)) && Number(mutateOfId) > 0 ? { mutate_of_id: Number(mutateOfId) } : {}),
+		...(parentIds.length > 0 ? { mutate_parent_ids: parentIds } : {}),
 		...(Number.isFinite(Number(creditCost)) && Number(creditCost) > 0 ? { credit_cost: Number(creditCost) } : {}),
 		...(typeof hydrateMentions === 'boolean' ? { hydrate_mentions: hydrateMentions } : {}),
 		...(styleKey && typeof styleKey === 'string' && styleKey.trim() ? { style_key: styleKey.trim() } : {})
