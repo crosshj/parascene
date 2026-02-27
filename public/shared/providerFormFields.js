@@ -783,6 +783,13 @@ function createImageArrayField(fieldKey, field, context) {
 		}
 	}
 
+	function moveLeftAt(index) {
+		if (index <= 0 || index >= items.length) return;
+		const next = [...items];
+		[next[index - 1], next[index]] = [next[index], next[index - 1]];
+		setItems(next);
+	}
+
 	function renderList() {
 		listEl.innerHTML = '';
 		items.forEach((item, index) => {
@@ -800,6 +807,20 @@ function createImageArrayField(fieldKey, field, context) {
 			if (src) img.src = src;
 
 			thumbWrap.appendChild(img);
+
+			if (index > 0) {
+				const moveLeftBtn = document.createElement('button');
+				moveLeftBtn.type = 'button';
+				moveLeftBtn.className = 'image-array-move-left';
+				moveLeftBtn.setAttribute('aria-label', 'Move left');
+				moveLeftBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>';
+				moveLeftBtn.addEventListener('click', (e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					moveLeftAt(index);
+				});
+				thumbWrap.appendChild(moveLeftBtn);
+			}
 
 			const removeBtn = document.createElement('button');
 			removeBtn.type = 'button';

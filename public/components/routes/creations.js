@@ -6,6 +6,7 @@ import { renderEmptyState, renderEmptyLoading, renderEmptyError } from '../../sh
 import { publishedBadgeHtml } from '../../shared/creationBadges.js';
 import { buildCreationCardShell } from '../../shared/creationCard.js';
 import { eyeHiddenIcon } from '../../icons/svg-strings.js';
+import { addToMutateQueue } from '../../shared/mutateQueue.js';
 
 const html = String.raw;
 
@@ -73,6 +74,7 @@ class AppRouteCreations extends HTMLElement {
           <div class="creations-bulk-bar-inner">
             <span class="creations-bulk-bar-label">Bulk Actions</span>
             <div class="creations-bulk-actions">
+              <button type="button" class="btn-secondary creations-bulk-queue-btn" data-creations-bulk-queue disabled>Queue for later</button>
               <button type="button" class="btn-secondary creations-bulk-delete-btn" data-creations-bulk-delete disabled>Delete</button>
             </div>
             <button type="button" class="creations-bulk-bar-close" data-creations-bulk-close aria-label="Close bulk actions">×</button>
@@ -198,11 +200,20 @@ class AppRouteCreations extends HTMLElement {
 	updateBulkBarSelection() {
 		const bar = this.querySelector('[data-creations-bulk-bar]');
 		const deleteBtn = this.querySelector('[data-creations-bulk-delete]');
+		const queueBtn = this.querySelector('[data-creations-bulk-queue]');
 		if (!bar || !deleteBtn) return;
 		const checked = this.querySelectorAll('[data-creations-bulk-checkbox]:checked').length;
 		const hasSelection = checked > 0;
+		const queueableCards = hasSelection
+			? Array.from(this.querySelectorAll('.route-card.route-card-image[data-image-id]')).filter((card) => {
+				const cb = card.querySelector('[data-creations-bulk-checkbox]:checked');
+				const url = (card.dataset.imageUrl || '').trim();
+				return cb && url;
+			})
+			: [];
 		bar.classList.toggle('has-selection', hasSelection);
 		deleteBtn.disabled = !hasSelection;
+		if (queueBtn) queueBtn.disabled = queueableCards.length === 0;
 	}
 
 	setupBulkActions() {
@@ -247,6 +258,14 @@ class AppRouteCreations extends HTMLElement {
 			});
 		}
 
+		const bulkQueue = this.querySelector('[data-creations-bulk-queue]');
+		if (bulkQueue) {
+			bulkQueue.addEventListener('click', (e) => {
+				e.preventDefault();
+				this.bulkQueueSelected();
+			});
+		}
+
 		if (modalOverlay) {
 			modalOverlay.addEventListener('click', (e) => {
 				if (e.target === modalOverlay) this.closeBulkDeleteModal();
@@ -258,6 +277,31 @@ class AppRouteCreations extends HTMLElement {
 		if (modalConfirm) {
 			modalConfirm.addEventListener('click', () => this.confirmBulkDelete());
 		}
+	}
+
+	bulkQueueSelected() {
+		const cards = Array.from(this.querySelectorAll('.route-card.route-card-image[data-image-id]'));
+		const selected = cards.filter((card) => {
+			const cb = card.querySelector('[data-creations-bulk-checkbox]:checked');
+			const url = (card.dataset.imageUrl || '').trim();
+			return cb && url;
+		});
+		if (selected.length === 0) return;
+		const origin = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '';
+		selected.forEach((card) => {
+			const id = card.dataset.imageId;
+			let url = (card.dataset.imageUrl || '').trim();
+			if (!url || !id) return;
+			if (!url.startsWith('http://') && !url.startsWith('https://') && origin) {
+				url = origin + (url.startsWith('/') ? url : `/${url}`);
+			}
+			try {
+				addToMutateQueue({ sourceId: Number(id), imageUrl: url });
+			} catch {
+				// ignore storage errors
+			}
+		});
+		this.exitBulkMode();
 	}
 
 	getBulkDeleteCounts() {
@@ -838,6 +882,8 @@ class AppRouteCreations extends HTMLElement {
 				const isPublished = item.published === true || item.published === 1;
 				card.dataset.imageId = String(item.id);
 				card.dataset.published = isPublished ? '1' : '0';
+				const imageUrl = item.url || item.thumbnail_url || '';
+				card.dataset.imageUrl = typeof imageUrl === 'string' ? imageUrl : '';
 				let publishedBadge = '';
 				let publishedInfo = '';
 				if (isPublished) {

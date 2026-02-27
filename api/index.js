@@ -151,10 +151,12 @@ app.use((req, res, next) => {
 app.use((req, res, next) => {
 	const host = (req.hostname || req.get("host") || "").split(":")[0].toLowerCase();
 	if (host !== SHARE_HOSTNAME) return next();
-	const path = (req.path || "").split("?")[0];
+	// Use originalUrl so we match the path the client requested (important behind proxies/rewrites)
+	const path = (req.originalUrl || req.url || req.path || "").split("?")[0].replace(/^(?!\/)/, "/");
 	if (
 		path.startsWith("/s/") ||
 		path.startsWith("/api/share/") ||
+		path.startsWith("/api/images/created") ||
 		path === "/favicon.svg" ||
 		path === "/pages/share.css" ||
 		path === "/pages/share.js"

@@ -4745,6 +4745,54 @@ app-modal-publish .publish-checkbox-label input[type="checkbox"] {
 	gap: 0.25rem;
 }
 
+.image-field-array .image-array-item .image-thumb-wrap {
+	position: relative;
+}
+
+.image-field-array .image-array-move-left {
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: 2em;
+	height: 2em;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid var(--border);
+	background: var(--surface);
+	color: var(--text);
+	cursor: pointer;
+	opacity: 0;
+	transition: opacity 0.2s ease, background-color 0.2s, border-color 0.2s;
+	margin: auto;
+	right: 0;
+}
+
+.image-field-array .image-array-move-left svg {
+	display: block;
+	flex-shrink: 0;
+}
+
+.image-field-array .image-array-item:hover .image-array-move-left {
+	opacity: 1;
+}
+
+.image-field-array .image-array-move-left:hover {
+	background: var(--surface-strong);
+	border-color: var(--accent);
+}
+
+.image-field-array .image-array-move-left:focus-visible {
+	opacity: 1;
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
+
+.image-field-array .image-array-move-left:focus-visible:hover {
+	border-color: var(--accent);
+}
+
 .image-field-array .image-array-add {
 	margin-top: 0;
 }

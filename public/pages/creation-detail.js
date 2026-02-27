@@ -894,9 +894,17 @@ async function loadCreation() {
 			} catch {
 				// ignore
 			}
+			const directParentIds = Array.isArray(meta?.direct_parent_ids)
+				? meta.direct_parent_ids.map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0)
+				: [];
+			const directParentSet = new Set(directParentIds);
+			const usePlusBetween = directParentSet.size >= 2;
+
 			const parts = nonCurrentIds.map((id, index) => {
 				const isLastAncestor = index === nonCurrentIds.length - 1;
-				const separator = nonCurrentIds.length >= 2 && !isLastAncestor ? '+' : '→';
+				const nextId = nonCurrentIds[index + 1];
+				const bothDirect = usePlusBetween && !isLastAncestor && directParentSet.has(id) && directParentSet.has(nextId);
+				const separator = bothDirect ? '+' : '→';
 				const nsfw = nsfwById.get(String(id)) === true;
 				if (!enableNsfw && nsfw) {
 					return `<span class="creation-detail-history-thumb-link creation-detail-history-nsfw-blank" data-history-id="${id}" aria-label="${escapeHtml(`Creation #${id} (hidden)`)}">#${id}</span><span class="creation-detail-history-arrow" aria-hidden="true">${separator}</span>`;

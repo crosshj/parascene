@@ -3,7 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import Busboy from "busboy";
 import sharp from "sharp";
-import { getThumbnailUrl, getBaseAppUrl, getBaseAppUrlForEmail, getShareBaseUrl } from "./utils/url.js";
+import { getThumbnailUrl, getBaseAppUrl, getShareBaseUrl } from "./utils/url.js";
 import { buildProviderHeaders } from "./utils/providerAuth.js";
 import { runCreationJob, PROVIDER_TIMEOUT_MS } from "./utils/creationJob.js";
 import { runLandscapeJob } from "./utils/landscapeJob.js";
@@ -205,8 +205,8 @@ export default function createCreateRoutes({ queries, storage }) {
 		return new Date().toISOString();
 	}
 
-	// Provider must fetch image URLs; it cannot access localhost. Always use production host (https://www.parascene.com or APP_ORIGIN).
-	const providerBase = getBaseAppUrlForEmail();
+	// Provider must fetch image URLs; use share subdomain (sh.parascene.com) so unauthenticated provider requests are allowed.
+	const providerBase = getShareBaseUrl();
 
 	function toParasceneImageUrl(raw) {
 		const base = providerBase;
@@ -1058,6 +1058,7 @@ export default function createCreateRoutes({ queries, storage }) {
 					: [];
 				meta.history = [...priorIds, sourceId];
 				meta.mutate_of_id = sourceId;
+				meta.direct_parent_ids = [sourceId];
 
 				// Normalize all image_url- and image_url_array-typed fields for mutate flows.
 				for (const key of imageUrlKeys) {
@@ -1107,6 +1108,58 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			}
 
+			// Single parent from create flow (e.g. one queued image): track lineage like mutate so we don't lose the chain.
+			if (
+				(mutate_of_id == null || !Number.isFinite(Number(mutate_of_id))) &&
+				mutateParentIds.length === 1
+			) {
+				const sourceId = Number(mutateParentIds[0]);
+				let source = await queries.selectCreatedImageById.get(sourceId, user.id);
+				if (!source) {
+					const any = await queries.selectCreatedImageByIdAnyUser?.get(sourceId);
+					if (any) {
+						const isPublished = any.published === 1 || any.published === true;
+						const isAdmin = user.role === 'admin';
+						if (isPublished || isAdmin) {
+							source = any;
+						}
+					}
+				}
+				if (source) {
+					const sourceMeta = parseMeta(source.meta) || {};
+					const prior = Array.isArray(sourceMeta.history) ? sourceMeta.history : null;
+					const priorIds = Array.isArray(prior)
+						? prior.map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0)
+						: [];
+					meta.history = [...priorIds, sourceId];
+					meta.mutate_of_id = sourceId;
+					meta.direct_parent_ids = [sourceId];
+					// Unpublished source: use share URL so provider can fetch (same as mutate flow).
+					const sourcePublished = source.published === 1 || source.published === true;
+					if (!sourcePublished && source.status === "completed" && source.filename) {
+						try {
+							const token = mintShareToken({
+								version: ACTIVE_SHARE_VERSION,
+								imageId: source.id,
+								sharedByUserId: user.id
+							});
+							const shareUrl = `${providerBase}/api/share/${encodeURIComponent(ACTIVE_SHARE_VERSION)}/${encodeURIComponent(token)}/image`;
+							const keyToReplace = imageUrlKeys.includes("image_url")
+								? "image_url"
+								: imageUrlKeys.length === 1
+									? imageUrlKeys[0]
+									: null;
+							if (keyToReplace) {
+								safeArgs[keyToReplace] = shareUrl;
+								meta.args[keyToReplace] = shareUrl;
+							}
+						} catch {
+							// If mint fails, keep existing image_url
+						}
+					}
+				}
+			}
+
 			// Merge any additional ancestor IDs into meta.history so lineage can reference multiple parents.
 			if (mutateParentIds.length > 0) {
 				const base = Array.isArray(meta.history) ? meta.history : [];
@@ -1123,6 +1176,16 @@ export default function createCreateRoutes({ queries, storage }) {
 				if (mergedIds.length > 0) {
 					meta.history = mergedIds;
 				}
+				// Record which IDs were direct parents in this generation (for display: + between combined parents).
+				const existing = Array.isArray(meta.direct_parent_ids) ? meta.direct_parent_ids : [];
+				const seen = new Set();
+				meta.direct_parent_ids = [...existing, ...mutateParentIds].filter((n) => {
+					const num = Number(n);
+					if (!Number.isFinite(num) || num <= 0) return false;
+					if (seen.has(num)) return false;
+					seen.add(num);
+					return true;
+				});
 			}
 
 			const normalizeUsername = (input) => {
