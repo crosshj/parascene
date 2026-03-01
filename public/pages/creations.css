@@ -1142,6 +1142,12 @@ body.creation-detail-page main>section:first-of-type {
 	flex-shrink: 0;
 }
 
+/* Filled heart when creation is liked */
+.creation-detail-action-strip-pill[data-like-button][aria-pressed="true"] svg path {
+	fill: currentColor;
+	stroke: currentColor;
+}
+
 /* Icon wrapper for shared icons (e.g. Mutate, Share): center SVG in fixed size */
 .creation-detail-action-strip-pill-icon {
 	display: inline-flex;
