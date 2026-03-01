@@ -1,5 +1,16 @@
 const html = String.raw;
 
+/** Cache-bust: BUILD_ID, ASSET_VERSION, or Vercel git SHA. Used so {{V}} in HTML becomes ?v=xxx. */
+function getAssetVersion() {
+	return process.env.BUILD_ID || process.env.ASSET_VERSION || process.env.VERCEL_GIT_COMMIT_SHA || process.env.VERCEL_GIT_PREVIOUS_COMMIT_SHA || "";
+}
+
+/** Tokens for replacePageTokens. V: "?v=xxx" when asset version is set, else "". */
+export function getPageTokens() {
+	const v = getAssetVersion();
+	return { V: v ? `?v=${v}` : "" };
+}
+
 function getCommonHead() {
 	return html`
 		<meta charset="utf-8" />
@@ -19,8 +30,8 @@ function getCommonHead() {
 		<link rel="preconnect" href="https://fonts.googleapis.com">
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
-		<link rel="stylesheet" href="/global.css" />
-		<script type="module" src="/entry.js"></script>
+		<link rel="stylesheet" href="/global.css{{V}}" />
+		<script type="module" src="/entry.js{{V}}"></script>
 	`.trimEnd();
 }
 

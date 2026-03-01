@@ -239,8 +239,8 @@ function renderCreationDetailSkeleton() {
 </div>`;
 }
 
-/** Renders visible actions as pills for the mobile scroll row. Only actions with inKebabMenu === false are shown (items in the more menu are not duplicated as pills). */
-function renderCreationDetailMobilePills(ctx) {
+/** Renders visible actions as pills in the action strip. Only actions with inKebabMenu === false are shown (items in the more menu are not duplicated as pills). */
+function renderCreationDetailActionStripPills(ctx) {
 	if (!ctx) return '';
 	const visible = CREATION_DETAIL_ACTION_DEFS.filter((def) => def.show(ctx) && !def.inKebabMenu);
 	return visible.map((def) => {
@@ -1371,7 +1371,7 @@ async function loadCreation() {
 						data-follow-user-id="${escapeHtml(creatorId)}">Follow</button>
 					` : ''}
 					${hasEngagementActions && !shareMountedPrivate ? html`
-					<button type="button" class="creation-detail-action-strip-pill" aria-label="Like" data-like-button>
+					<button type="button" class="creation-detail-action-strip-pill${creationWithLikes?.viewer_liked ? ' is-liked' : ''}" aria-label="Like" aria-pressed="${creationWithLikes?.viewer_liked ? 'true' : 'false'}" data-like-button>
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
 							stroke-linejoin="round" aria-hidden="true">
 							<path
@@ -1381,7 +1381,7 @@ async function loadCreation() {
 						<span class="creation-detail-action-strip-pill-count" data-like-count>${likeCount}</span>
 					</button>
 					` : ''}
-					${renderCreationDetailMobilePills(actionsContext)}
+					${renderCreationDetailActionStripPills(actionsContext)}
 					${!isOwner && !isAdmin ? html`
 					<button type="button" class="creation-detail-action-strip-pill" data-tip-creator-button
 						aria-label="Tip">

@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import { clearAuthCookie, COOKIE_NAME } from "./auth.js";
-import { injectCommonHead } from "./utils/head.js";
+import { injectCommonHead, getPageTokens } from "./utils/head.js";
 import { getBaseAppUrl, getShareBaseUrl } from "./utils/url.js";
 import { verifyShareToken } from "./utils/shareLink.js";
 import { getClientIp, getVercelGeo, getCloudflareRay } from "./utils/requestClientIp.js";
@@ -18,12 +18,6 @@ function getPageForUser(user) {
 
 export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 	const router = express.Router();
-
-	// Cache-bust: {{V}} in HTML becomes ?v=xxx (or ""). Short name so unreplaced token is less obvious.
-	const assetVersion = process.env.BUILD_ID || process.env.ASSET_VERSION || process.env.VERCEL_GIT_COMMIT_SHA || process.env.VERCEL_GIT_PREVIOUS_COMMIT_SHA || "";
-	function getPageTokens() {
-		return { V: assetVersion ? `?v=${assetVersion}` : "" };
-	}
 
 	// Serve create page CSS so it loads when static middleware isn't used (e.g. Vercel)
 	if (staticDir) {
@@ -353,6 +347,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 				: `${escapeHtml(heroSharer)} shared this creation with you — they made it on Parascene.`;
 
 			let html = replaceTemplateTokens(template, {
+				...getPageTokens(),
 				PAGE_TITLE: escapeHtml(title),
 				PAGE_DESCRIPTION: escapeHtml(description),
 				REQUEST_URL: escapeHtml(requestUrl),
@@ -928,7 +923,8 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 	// Try page (unauthenticated). try.html includes global.css and entry.js itself; do not inject common head to avoid loading them twice.
 	router.get("/try", async (req, res) => {
 		const fs = await import("fs/promises");
-		const htmlContent = await fs.readFile(path.join(pagesDir, "try.html"), "utf-8");
+		let htmlContent = await fs.readFile(path.join(pagesDir, "try.html"), "utf-8");
+		htmlContent = replaceTemplateTokens(htmlContent, getPageTokens());
 		res.setHeader("Content-Type", "text/html");
 		return res.send(htmlContent);
 	});

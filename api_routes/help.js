@@ -2,7 +2,7 @@ import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import { marked } from "marked";
-import { injectCommonHead } from "./utils/head.js";
+import { injectCommonHead, getPageTokens } from "./utils/head.js";
 import { homeIcon } from "../public/icons/svg-strings.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -299,7 +299,7 @@ function generateHelpPageHtml({ title, description, html, navigation, isIndex = 
 <html lang="en">
 <head>
 	<title>${title} - Help - parascene</title>
-	<link rel="stylesheet" href="/pages/help.css" />
+	<link rel="stylesheet" href="/pages/help.css{{V}}" />
 </head>
 <body class="help-page">
 	<!--APP_HEADER-->
@@ -379,11 +379,6 @@ export default function createHelpRoutes({ pagesDir, queries }) {
 		} catch {
 			return '';
 		}
-	}
-
-	const assetVersion = process.env.BUILD_ID || process.env.ASSET_VERSION || process.env.VERCEL_GIT_COMMIT_SHA || process.env.VERCEL_GIT_PREVIOUS_COMMIT_SHA || "";
-	function getPageTokens() {
-		return { V: assetVersion ? `?v=${assetVersion}` : "" };
 	}
 
 	// Search API endpoint

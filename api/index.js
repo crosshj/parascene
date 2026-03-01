@@ -36,7 +36,7 @@ import {
 	sessionMiddleware,
 	shouldLogSession
 } from "../api_routes/auth.js";
-import { injectCommonHead } from "../api_routes/utils/head.js";
+import { injectCommonHead, getPageTokens } from "../api_routes/utils/head.js";
 import { getApiHostname, getBaseAppUrl, SHARE_HOSTNAME } from "../api_routes/utils/url.js";
 
 function shouldLogStartup() {
@@ -295,7 +295,7 @@ app.use(async (err, req, res, next) => {
 	if (req.path === "/auth.html") {
 		const fs = await import("fs/promises");
 		let htmlContent = await fs.readFile(path.join(pagesDir, "auth.html"), "utf-8");
-		htmlContent = injectCommonHead(htmlContent);
+		htmlContent = injectCommonHead(htmlContent, getPageTokens());
 		res.setHeader("Content-Type", "text/html");
 		return res.send(htmlContent);
 	}
@@ -310,7 +310,7 @@ app.use(async (err, req, res, next) => {
 	} catch {
 		const fs = await import("fs/promises");
 		let htmlContent = await fs.readFile(path.join(pagesDir, "auth.html"), "utf-8");
-		htmlContent = injectCommonHead(htmlContent);
+		htmlContent = injectCommonHead(htmlContent, getPageTokens());
 		res.setHeader("Content-Type", "text/html");
 		return res.send(htmlContent);
 	}
