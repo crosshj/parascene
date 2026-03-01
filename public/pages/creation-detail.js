@@ -55,7 +55,7 @@ const CREATION_DETAIL_ACTION_DEFS = [
 		dataAttr: 'data-mutate-btn',
 		btnClass: 'btn-outlined',
 		inKebabMenu: false,
-		inner: html`<span class="creation-detail-mobile-pill-icon">${sparkleIcon('')}</span>
+		inner: html`<span class="creation-detail-action-strip-pill-icon">${sparkleIcon('')}</span>
 		Mutate`,
 		show: (c) => c?.showMutate,
 		disabled: (c) => !c?.showMutate
@@ -65,7 +65,7 @@ const CREATION_DETAIL_ACTION_DEFS = [
 		dataAttr: 'data-share-btn',
 		btnClass: 'btn-outlined',
 		inKebabMenu: false,
-		inner: html`<span class="creation-detail-mobile-pill-icon">${shareIcon('')}</span>
+		inner: html`<span class="creation-detail-action-strip-pill-icon">${shareIcon('')}</span>
 		Share`,
 		show: (c) => c?.showShare,
 		disabled: (c) => !c?.showShare
@@ -112,7 +112,7 @@ const CREATION_DETAIL_ACTION_DEFS = [
 		dataAttr: 'data-more-info-btn',
 		btnClass: 'btn-outlined',
 		inKebabMenu: false,
-		inner: html`<span class="creation-detail-mobile-pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v8"></path><path d="M12 6h.01"></path></svg></span>
+		inner: html`<span class="creation-detail-action-strip-pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v8"></path><path d="M12 6h.01"></path></svg></span>
 		More Info`,
 		show: (c) => c?.showMoreInfoPill,
 		disabled: () => false
@@ -163,7 +163,7 @@ function renderCreationDetailMobilePills(ctx) {
 		const disabled = def.disabled(ctx);
 		const extraAttrs = def.extraAttrs ? def.extraAttrs(ctx) : '';
 		const label = def.label ? def.label(ctx) : '';
-		return `<button type="button" class="creation-detail-mobile-pill" ${def.dataAttr}${disabled ? ' disabled' : ''}${extraAttrs}>${def.inner}${label}</button>`;
+		return `<button type="button" class="creation-detail-action-strip-pill" ${def.dataAttr}${disabled ? ' disabled' : ''}${extraAttrs}>${def.inner}${label}</button>`;
 	}).join('\n\t\t\t\t');
 }
 
@@ -1265,80 +1265,80 @@ async function loadCreation() {
 				<div class="creation-detail-title${isUntitled ? ' creation-detail-title-untitled' : ''}">${escapeHtml(displayTitle)}</div>
 			</div>
 			<div class="creation-detail-title-byline creation-detail-title-byline-mobile">${escapeHtml(creatorHandle)} ${escapeHtml(mobileBylineText)}</div>
-			<div class="creation-detail-mobile-actions-row">
-				<div class="creation-detail-mobile-actions-scroll">
+			<div class="creation-detail-action-strip">
+				<div class="creation-detail-action-strip-scroll">
 					${creatorProfileHref ? html`
-					<a class="creation-detail-mobile-avatar" href="${creatorProfileHref}" aria-label="View ${escapeHtml(creatorName)} profile">${authorAvatar}</a>
+					<a class="creation-detail-action-strip-avatar" href="${creatorProfileHref}" aria-label="View ${escapeHtml(creatorName)} profile">${authorAvatar}</a>
 					` : html`
-					<div class="creation-detail-mobile-avatar" aria-hidden="true">${authorAvatar}</div>
+					<div class="creation-detail-action-strip-avatar" aria-hidden="true">${authorAvatar}</div>
 					`}
-					<div class="creation-detail-mobile-creator-info">
-						<div class="creation-detail-mobile-creator-name">${escapeHtml(creatorName)}</div>
-						<div class="creation-detail-mobile-creator-followers">${creatorFollowerCount} Followers</div>
+					<div class="creation-detail-action-strip-creator-info">
+						<div class="creation-detail-action-strip-creator-name">${escapeHtml(creatorName)}</div>
+						<div class="creation-detail-action-strip-creator-followers">${creatorFollowerCount} Followers</div>
 					</div>
 					${!isAdmin && canShowFollowButton && !viewerFollowsCreator ? html`
-					<button type="button" class="creation-detail-mobile-follow" data-follow-button data-follow-user-id="${escapeHtml(creatorId)}">Follow</button>
+					<button type="button" class="creation-detail-action-strip-follow" data-follow-button data-follow-user-id="${escapeHtml(creatorId)}">Follow</button>
 					` : ''}
 					${hasEngagementActions && !shareMountedPrivate ? html`
-					<button type="button" class="creation-detail-mobile-pill" aria-label="Like" data-like-button>
+					<button type="button" class="creation-detail-action-strip-pill" aria-label="Like" data-like-button>
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 							<path d="M20.8 4.6a5 5 0 0 0-7.1 0L12 6.3l-1.7-1.7a5 5 0 1 0-7.1 7.1l1.7 1.7L12 21l7.1-7.6 1.7-1.7a5 5 0 0 0 0-7.1z"></path>
 						</svg>
-						<span class="creation-detail-mobile-pill-count" data-like-count>${likeCount}</span>
+						<span class="creation-detail-action-strip-pill-count" data-like-count>${likeCount}</span>
 					</button>
 					` : ''}
 					${renderCreationDetailMobilePills(actionsContext)}
 					${!isOwner && !isAdmin ? html`
-					<button type="button" class="creation-detail-mobile-pill" data-tip-creator-button aria-label="Tip Creator">
-						<span class="creation-detail-mobile-pill-icon">${creditIcon('')}</span>
+					<button type="button" class="creation-detail-action-strip-pill" data-tip-creator-button aria-label="Tip Creator">
+						<span class="creation-detail-action-strip-pill-icon">${creditIcon('')}</span>
 						<span>Tip Creator</span>
 					</button>
 					` : ''}
 					${!isFailed ? html`
-					<button type="button" class="creation-detail-mobile-more-btn" aria-label="More options" data-creation-mobile-more-btn>
-						<span class="creation-detail-mobile-more-dots" aria-hidden="true"></span>
+					<button type="button" class="creation-detail-more-btn" aria-label="More options" data-creation-more-btn>
+						<span class="creation-detail-more-dots" aria-hidden="true"></span>
 					</button>
 					` : ''}
 				</div>
 			</div>
-			<div class="creation-detail-mobile-more-menu" data-creation-mobile-more-menu aria-hidden="true" role="menu">
+			<div class="creation-detail-more-menu" data-creation-more-menu aria-hidden="true" role="menu">
 				${!isFailed ? html`
-				<button type="button" class="creation-detail-mobile-more-menu-item" role="menuitem" data-mobile-menu-action="copy-link">
+				<button type="button" class="creation-detail-more-menu-item" role="menuitem" data-creation-more-action="copy-link">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
 					<span>Copy link</span>
 				</button>
 				${actionsContext?.showQueueForLater ? html`
-				<button type="button" class="creation-detail-mobile-more-menu-item" role="menuitem" data-mobile-menu-action="queue-for-later">
+				<button type="button" class="creation-detail-more-menu-item" role="menuitem" data-creation-more-action="queue-for-later">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
 					<span data-queue-for-later-label>${actionsContext.queueForLaterLabel}</span>
 				</button>
 				` : ''}
 				${isOwner ? html`
-				<button type="button" class="creation-detail-mobile-more-menu-item" role="menuitem" data-mobile-menu-action="set-avatar">
+				<button type="button" class="creation-detail-more-menu-item" role="menuitem" data-creation-more-action="set-avatar">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
 					<span>Set as profile picture</span>
 				</button>
 				` : ''}
 				${isOwner && !isAdmin ? html`
-				<button type="button" class="creation-detail-mobile-more-menu-item" role="menuitem" data-mobile-menu-action="landscape">
+				<button type="button" class="creation-detail-more-menu-item" role="menuitem" data-creation-more-action="landscape">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="1.5" /></svg>
 					<span>Landscape</span>
 				</button>
 				` : ''}
 				${hasDetailsModalContent ? html`
-				<button type="button" class="creation-detail-mobile-more-menu-item" role="menuitem" data-mobile-menu-action="more-info">
+				<button type="button" class="creation-detail-more-menu-item" role="menuitem" data-creation-more-action="more-info">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v8"></path><path d="M12 6h.01"></path></svg>
 					<span>More Info</span>
 				</button>
 				` : ''}
 				${actionsContext?.showUnpublish ? html`
-				<button type="button" class="creation-detail-mobile-more-menu-item" role="menuitem" data-mobile-menu-action="unpublish">
+				<button type="button" class="creation-detail-more-menu-item" role="menuitem" data-creation-more-action="unpublish">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z"></path></svg>
 					<span>Un-publish</span>
 				</button>
 				` : ''}
 				${actionsContext?.showDelete ? html`
-				<button type="button" class="creation-detail-mobile-more-menu-item creation-detail-mobile-more-menu-item-danger" role="menuitem" data-mobile-menu-action="delete">
+				<button type="button" class="creation-detail-more-menu-item creation-detail-more-menu-item-danger" role="menuitem" data-creation-more-action="delete">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
 					<span>${typeof actionsContext?.deleteLabel === 'string' ? actionsContext.deleteLabel.trim() : 'Delete'}</span>
 				</button>
@@ -1638,53 +1638,53 @@ async function loadCreation() {
 		});
 
 		// Mobile more button popup: open/close and trigger same actions as meta row
-		const mobileMoreBtn = detailContent.querySelector('[data-creation-mobile-more-btn]');
-		const mobileMoreMenu = detailContent.querySelector('[data-creation-mobile-more-menu]');
-		if (mobileMoreBtn instanceof HTMLButtonElement && mobileMoreMenu instanceof HTMLElement) {
+		const moreBtn = detailContent.querySelector('[data-creation-more-btn]');
+		const moreMenu = detailContent.querySelector('[data-creation-more-menu]');
+		if (moreBtn instanceof HTMLButtonElement && moreMenu instanceof HTMLElement) {
 			const closeMobileMoreMenu = () => {
-				mobileMoreMenu.setAttribute('aria-hidden', 'true');
-				mobileMoreMenu.style.display = 'none';
+				moreMenu.setAttribute('aria-hidden', 'true');
+				moreMenu.style.display = 'none';
 				document.body.style.overflow = '';
 				document.removeEventListener('click', onDocumentClick);
 			};
 			const onDocumentClick = (e) => {
-				if (!mobileMoreMenu.contains(e.target) && !mobileMoreBtn.contains(e.target)) {
+				if (!moreMenu.contains(e.target) && !moreBtn.contains(e.target)) {
 					closeMobileMoreMenu();
 				}
 			};
-			mobileMoreBtn.addEventListener('click', (e) => {
+			moreBtn.addEventListener('click', (e) => {
 				e.preventDefault();
 				e.stopPropagation();
-				const isOpen = mobileMoreMenu.getAttribute('aria-hidden') !== 'true';
+				const isOpen = moreMenu.getAttribute('aria-hidden') !== 'true';
 				if (isOpen) {
 					closeMobileMoreMenu();
 					return;
 				}
-				const rect = mobileMoreBtn.getBoundingClientRect();
+				const rect = moreBtn.getBoundingClientRect();
 				const gap = 8;
-				mobileMoreMenu.style.position = 'fixed';
-				mobileMoreMenu.style.display = 'block';
-				mobileMoreMenu.style.bottom = '';
-				const menuW = mobileMoreMenu.offsetWidth || 200;
-				const menuH = mobileMoreMenu.offsetHeight || 200;
+				moreMenu.style.position = 'fixed';
+				moreMenu.style.display = 'block';
+				moreMenu.style.bottom = '';
+				const menuW = moreMenu.offsetWidth || 200;
+				const menuH = moreMenu.offsetHeight || 200;
 				const spaceBelow = window.innerHeight - rect.bottom - gap;
 				const openAbove = spaceBelow < menuH && rect.top >= menuH + gap;
 				if (openAbove) {
-					mobileMoreMenu.style.top = `${Math.max(gap, rect.top - menuH - 4)}px`;
+					moreMenu.style.top = `${Math.max(gap, rect.top - menuH - 4)}px`;
 				} else {
-					mobileMoreMenu.style.top = `${Math.min(window.innerHeight - menuH - gap, rect.bottom + 4)}px`;
+					moreMenu.style.top = `${Math.min(window.innerHeight - menuH - gap, rect.bottom + 4)}px`;
 				}
-				mobileMoreMenu.style.left = `${Math.max(gap, Math.min(rect.right - menuW, window.innerWidth - menuW - gap))}px`;
-				mobileMoreMenu.setAttribute('aria-hidden', 'false');
+				moreMenu.style.left = `${Math.max(gap, Math.min(rect.right - menuW, window.innerWidth - menuW - gap))}px`;
+				moreMenu.setAttribute('aria-hidden', 'false');
 				document.body.style.overflow = 'hidden';
 				setTimeout(() => document.addEventListener('click', onDocumentClick), 0);
 			});
-			mobileMoreMenu.addEventListener('click', (e) => {
-				const item = e.target?.closest?.('[data-mobile-menu-action]');
+			moreMenu.addEventListener('click', (e) => {
+				const item = e.target?.closest?.('[data-creation-more-action]');
 				if (!item) return;
 				e.preventDefault();
 				e.stopPropagation();
-				const action = item.getAttribute('data-mobile-menu-action');
+				const action = item.getAttribute('data-creation-more-action');
 				const targets = {
 					'more-info': () => detailContent.querySelector('[data-creation-details-link]')?.click(),
 					'copy-link': () => detailContent.querySelector('[data-copy-link-button]')?.click(),

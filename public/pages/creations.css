@@ -964,8 +964,8 @@ body.creation-detail-page main>section:first-of-type {
 	margin: 0 0 12px;
 }
 
-/* Horizontal scroll row under byline: avatar, follow, like pill, action pills (mobile and desktop) */
-.creation-detail-mobile-actions-row {
+/* Horizontal scroll row under byline: avatar, follow, like pill, action pills (all viewports) */
+.creation-detail-action-strip {
 	display: block;
 	margin-bottom: 12px;
 	overflow-x: auto;
@@ -978,11 +978,11 @@ body.creation-detail-page main>section:first-of-type {
 	display: none !important;
 }
 
-.creation-detail-mobile-actions-row::-webkit-scrollbar {
+.creation-detail-action-strip::-webkit-scrollbar {
 	display: none;
 }
 
-.creation-detail-mobile-actions-scroll {
+.creation-detail-action-strip-scroll {
 	display: flex;
 	align-items: center;
 	gap: 10px;
@@ -990,7 +990,7 @@ body.creation-detail-page main>section:first-of-type {
 	padding: 4px 2px;
 }
 
-.creation-detail-mobile-avatar {
+.creation-detail-action-strip-avatar {
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -1002,20 +1002,20 @@ body.creation-detail-page main>section:first-of-type {
 }
 
 /* Founder flair extends below the circle; allow it to show fully (match author row below) */
-.creation-detail-mobile-avatar:has(.avatar-with-founder-flair) {
+.creation-detail-action-strip-avatar:has(.avatar-with-founder-flair) {
 	overflow: visible;
 	width: auto;
 	height: auto;
 }
 
-.creation-detail-mobile-avatar .creation-detail-author-icon {
+.creation-detail-action-strip-avatar .creation-detail-author-icon {
 	width: 40px;
 	height: 40px;
 	border-radius: 50%;
 }
 
 /* Two-row block to the right of avatar: username (bold) + follower count (muted) */
-.creation-detail-mobile-creator-info {
+.creation-detail-action-strip-creator-info {
 	display: flex;
 	flex-direction: column;
 	align-items: flex-start;
@@ -1025,25 +1025,25 @@ body.creation-detail-page main>section:first-of-type {
 }
 
 @media (max-width: 768px) {
-	.creation-detail-mobile-creator-info {
+	.creation-detail-action-strip-creator-info {
 		display: none;
 	}
 }
 
-.creation-detail-mobile-creator-name {
+.creation-detail-action-strip-creator-name {
 	font-weight: 600;
 	font-size: 0.875rem;
 	color: var(--text);
 	line-height: 1.25;
 }
 
-.creation-detail-mobile-creator-followers {
+.creation-detail-action-strip-creator-followers {
 	font-size: 0.8125rem;
 	color: var(--text-muted);
 	line-height: 1.25;
 }
 
-.creation-detail-mobile-follow {
+.creation-detail-action-strip-follow {
 	flex-shrink: 0;
 	border-radius: 999px;
 	padding: 8px 20px;
@@ -1055,7 +1055,7 @@ body.creation-detail-page main>section:first-of-type {
 	color: var(--bg);
 }
 
-.creation-detail-mobile-pill {
+.creation-detail-action-strip-pill {
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
@@ -1071,20 +1071,20 @@ body.creation-detail-page main>section:first-of-type {
 }
 
 /* Publish pill: same style as Follow button (filled, high contrast) */
-.creation-detail-mobile-pill[data-publish-btn] {
+.creation-detail-action-strip-pill[data-publish-btn] {
 	background: var(--text);
 	color: var(--bg);
 	padding: 8px 20px;
 	font-weight: 600;
 }
 
-.creation-detail-mobile-pill:disabled {
+.creation-detail-action-strip-pill:disabled {
 	opacity: 0.6;
 	cursor: not-allowed;
 }
 
 /* Prevent baseline misalignment of icons with text */
-.creation-detail-mobile-pill svg {
+.creation-detail-action-strip-pill svg {
 	display: block;
 	width: 18px;
 	height: 18px;
@@ -1092,7 +1092,7 @@ body.creation-detail-page main>section:first-of-type {
 }
 
 /* Icon wrapper for shared icons (e.g. Mutate, Share): center SVG in fixed size */
-.creation-detail-mobile-pill-icon {
+.creation-detail-action-strip-pill-icon {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -1101,17 +1101,17 @@ body.creation-detail-page main>section:first-of-type {
 	flex-shrink: 0;
 }
 
-.creation-detail-mobile-pill-icon svg {
+.creation-detail-action-strip-pill-icon svg {
 	width: 100%;
 	height: 100%;
 }
 
-.creation-detail-mobile-pill-count {
+.creation-detail-action-strip-pill-count {
 	font-weight: 500;
 }
 
 /* Circular "more options" button at end of row (three horizontal dots); same height and bg as pills */
-.creation-detail-mobile-more-btn {
+.creation-detail-more-btn {
 	flex-shrink: 0;
 	width: 34px;
 	height: 34px;
@@ -1126,11 +1126,11 @@ body.creation-detail-page main>section:first-of-type {
 	color: var(--text);
 }
 
-.creation-detail-mobile-more-btn:hover {
+.creation-detail-more-btn:hover {
 	background: color-mix(in srgb, var(--text) 22%, var(--surface));
 }
 
-.creation-detail-mobile-more-dots {
+.creation-detail-more-dots {
 	display: block;
 	width: 4px;
 	height: 4px;
@@ -1139,8 +1139,8 @@ body.creation-detail-page main>section:first-of-type {
 	box-shadow: -6px 0 0 currentColor, 6px 0 0 currentColor;
 }
 
-/* Mobile more menu popup (icon + label per item; theme-aware) */
-.creation-detail-mobile-more-menu {
+/* More options menu popup (icon + label per item; theme-aware) */
+.creation-detail-more-menu {
 	display: none;
 	position: fixed;
 	z-index: 1000;
@@ -1153,11 +1153,11 @@ body.creation-detail-page main>section:first-of-type {
 	overflow: hidden;
 }
 
-.creation-detail-mobile-more-menu[aria-hidden="false"] {
+.creation-detail-more-menu[aria-hidden="false"] {
 	display: block;
 }
 
-.creation-detail-mobile-more-menu-item {
+.creation-detail-more-menu-item {
 	display: flex;
 	align-items: center;
 	gap: 12px;
@@ -1171,21 +1171,21 @@ body.creation-detail-page main>section:first-of-type {
 	cursor: pointer;
 }
 
-.creation-detail-mobile-more-menu-item:hover {
+.creation-detail-more-menu-item:hover {
 	background: var(--surface-strong);
 }
 
-.creation-detail-mobile-more-menu-item svg {
+.creation-detail-more-menu-item svg {
 	width: 20px;
 	height: 20px;
 	flex-shrink: 0;
 }
 
-.creation-detail-mobile-more-menu-item-danger {
+.creation-detail-more-menu-item-danger {
 	color: var(--error-text, #b91c1c);
 }
 
-.creation-detail-mobile-more-menu-item-danger:hover {
+.creation-detail-more-menu-item-danger:hover {
 	background: color-mix(in srgb, var(--error-text, #b91c1c) 12%, var(--surface));
 }
 
