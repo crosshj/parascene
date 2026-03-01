@@ -1602,6 +1602,175 @@ function applyD3ForceLayout(nodes, edges, w, h) {
 	for (let i = 0; i < 450; i++) sim.tick();
 }
 
+async function applyCoseBilkentLayout(nodes, edges) {
+	console.log("[graph] CoSE-Bilkent: loading and running…");
+	const [{ default: cytoscape }, { default: coseBilkent }] = await Promise.all([
+		import("cytoscape"),
+		import("cytoscape-cose-bilkent")
+	]);
+	cytoscape.use(coseBilkent);
+
+	const elements = [
+		...nodes.map((n) => ({ data: { id: String(n.id) } })),
+		...edges.map((e, i) => ({
+			data: { id: "e" + i, source: String(e.from.id), target: String(e.to.id) }
+		}))
+	];
+
+	const cy = cytoscape({
+		headless: true,
+		elements
+	});
+
+	const layout = cy.layout({
+		name: "cose-bilkent",
+		animate: false,
+		nodeRepulsion: 10000,
+		idealEdgeLength: 80,
+		quality: "default"
+	});
+	await new Promise((resolve) => {
+		layout.on("layoutstop", () => {
+			console.log("[graph] CoSE-Bilkent: finished.");
+			resolve();
+		});
+		layout.run();
+	});
+
+	const posById = new Map();
+	cy.nodes().forEach((n) => {
+		posById.set(n.id(), { x: n.position("x"), y: n.position("y") });
+	});
+	nodes.forEach((n) => {
+		const p = posById.get(String(n.id));
+		if (p) {
+			n.x = p.x;
+			n.y = p.y;
+		}
+	});
+}
+
+async function applyFcoseLayout(nodes, edges) {
+	console.log("[graph] fCoSE: loading and running…");
+	const [{ default: cytoscape }, { default: fcose }] = await Promise.all([
+		import("cytoscape"),
+		import("cytoscape-fcose")
+	]);
+	cytoscape.use(fcose);
+
+	const elements = [
+		...nodes.map((n) => ({ data: { id: String(n.id) } })),
+		...edges.map((e, i) => ({
+			data: { id: "e" + i, source: String(e.from.id), target: String(e.to.id) }
+		}))
+	];
+
+	const cy = cytoscape({
+		headless: true,
+		elements
+	});
+
+	const layout = cy.layout({
+		name: "fcose",
+		animate: false,
+		packComponents: false,
+		nodeRepulsion: 10000,
+		idealEdgeLength: () => 80,
+		nodeSeparation: 75,
+		quality: "proof",
+		numIter: 6000,
+		gravity: 0.005,
+		gravityRange: 1
+	});
+	await new Promise((resolve) => {
+		layout.on("layoutstop", () => {
+			console.log("[graph] fCoSE: finished.");
+			resolve();
+		});
+		layout.run();
+	});
+
+	const posById = new Map();
+	cy.nodes().forEach((n) => {
+		posById.set(n.id(), { x: n.position("x"), y: n.position("y") });
+	});
+	nodes.forEach((n) => {
+		const p = posById.get(String(n.id));
+		if (p) {
+			n.x = p.x;
+			n.y = p.y;
+		}
+	});
+
+	// Degree-based radial adjustment: high-degree nodes stay near center, low-degree move out
+	const degreeById = new Map();
+	nodes.forEach((n) => degreeById.set(n.id, 0));
+	edges.forEach((e) => {
+		degreeById.set(e.from.id, (degreeById.get(e.from.id) || 0) + 1);
+		degreeById.set(e.to.id, (degreeById.get(e.to.id) || 0) + 1);
+	});
+	const maxDegree = Math.max(1, ...degreeById.values());
+	const centroidX = nodes.reduce((s, n) => s + n.x, 0) / nodes.length;
+	const centroidY = nodes.reduce((s, n) => s + n.y, 0) / nodes.length;
+	const minScale = 0.45;
+	const maxScale = 1.75;
+	nodes.forEach((n) => {
+		const degree = degreeById.get(n.id) ?? 0;
+		const t = maxDegree > 0 ? degree / maxDegree : 0;
+		const scale = minScale + (1 - t) * (maxScale - minScale);
+		n.x = centroidX + (n.x - centroidX) * scale;
+		n.y = centroidY + (n.y - centroidY) * scale;
+	});
+}
+
+async function applyElkLayout(nodes, edges) {
+	console.log("[graph] ELK (disco): loading and running…");
+	const [{ default: cytoscape }, { default: elk }] = await Promise.all([
+		import("cytoscape"),
+		import("cytoscape-elk")
+	]);
+	cytoscape.use(elk);
+
+	const elements = [
+		...nodes.map((n) => ({ data: { id: String(n.id) } })),
+		...edges.map((e, i) => ({
+			data: { id: "e" + i, source: String(e.from.id), target: String(e.to.id) }
+		}))
+	];
+
+	const cy = cytoscape({
+		headless: true,
+		elements
+	});
+
+	const layout = cy.layout({
+		name: "elk",
+		animate: false,
+		elk: {
+			algorithm: "disco"
+		}
+	});
+	await new Promise((resolve) => {
+		layout.on("layoutstop", () => {
+			console.log("[graph] ELK (disco): finished.");
+			resolve();
+		});
+		layout.run();
+	});
+
+	const posById = new Map();
+	cy.nodes().forEach((n) => {
+		posById.set(n.id(), { x: n.position("x"), y: n.position("y") });
+	});
+	nodes.forEach((n) => {
+		const p = posById.get(String(n.id));
+		if (p) {
+			n.x = p.x;
+			n.y = p.y;
+		}
+	});
+}
+
 async function loadRelatedGraph(container) {
 	if (!container) return;
 	container.innerHTML = "";
@@ -1654,13 +1823,19 @@ async function loadRelatedGraph(container) {
 		const layoutCenterY = 200;
 		const circleRadius = 160;
 
-		function renderGraph(layoutAlgo) {
+		async function renderGraph(layoutAlgo) {
 			if (layoutAlgo === "circular") {
 				applyCircularLayout(nodes, layoutCenterX, layoutCenterY, circleRadius);
 			} else if (layoutAlgo === "net") {
 				applyNetLayout(nodes, edges, w, h);
 			} else if (layoutAlgo === "d3") {
 				applyD3ForceLayout(nodes, edges, w, h);
+			} else if (layoutAlgo === "cose-bilkent") {
+				await applyCoseBilkentLayout(nodes, edges);
+			} else if (layoutAlgo === "fcose") {
+				await applyFcoseLayout(nodes, edges);
+			} else if (layoutAlgo === "elk") {
+				await applyElkLayout(nodes, edges);
 			} else {
 				applyForceDirectedLayout(nodes, edges, w, h);
 			}
@@ -1702,7 +1877,8 @@ async function loadRelatedGraph(container) {
 		}
 
 		let currentLayout = "d3";
-		let { viewBox: initialViewBox, innerHTML } = renderGraph(currentLayout);
+		let initialResult = await renderGraph(currentLayout);
+		let { viewBox: initialViewBox, innerHTML } = initialResult;
 		let currentViewBox = { ...initialViewBox, minX: initialViewBox.minX, minY: initialViewBox.minY, width: initialViewBox.width, height: initialViewBox.height };
 
 		const toolbar = document.createElement("div");
@@ -1712,7 +1888,7 @@ async function loadRelatedGraph(container) {
 		layoutLabel.textContent = "Layout ";
 		const layoutSelect = document.createElement("select");
 		layoutSelect.className = "admin-related-graph-layout-select";
-		layoutSelect.innerHTML = "<option value=\"force\">Force-directed</option><option value=\"d3\">D3 force</option><option value=\"net\">ApplyNetLayout</option><option value=\"circular\">Circular</option>";
+		layoutSelect.innerHTML = "<option value=\"force\">Force-directed</option><option value=\"d3\">D3 force</option><option value=\"cose-bilkent\">CoSE-Bilkent</option><option value=\"fcose\">fCoSE</option><option value=\"elk\">ELK (disco)</option><option value=\"net\">ApplyNetLayout</option><option value=\"circular\">Circular</option>";
 		layoutSelect.value = currentLayout;
 		layoutLabel.appendChild(layoutSelect);
 		toolbar.appendChild(layoutLabel);
@@ -1777,9 +1953,9 @@ async function loadRelatedGraph(container) {
 			setViewBox({ ...initialViewBox, minX: initialViewBox.minX, minY: initialViewBox.minY, width: initialViewBox.width, height: initialViewBox.height });
 		});
 
-		layoutSelect.addEventListener("change", () => {
+		layoutSelect.addEventListener("change", async () => {
 			currentLayout = layoutSelect.value;
-			const out = renderGraph(currentLayout);
+			const out = await renderGraph(currentLayout);
 			initialViewBox = out.viewBox;
 			setViewBox({ ...initialViewBox, minX: initialViewBox.minX, minY: initialViewBox.minY, width: initialViewBox.width, height: initialViewBox.height });
 			svg.innerHTML = out.innerHTML;
