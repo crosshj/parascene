@@ -1188,6 +1188,62 @@ export default function createCreateRoutes({ queries, storage }) {
 				});
 			}
 
+			// Replace every parascene image URL that points to an unpublished creation with a share URL
+			// so the provider can fetch it (create flow with multiple images, or any URL not covered by single-parent blocks above).
+			function filenameFromParasceneImageUrl(raw) {
+				const normalized = toParasceneImageUrl(raw);
+				if (!normalized) return null;
+				try {
+					const u = new URL(normalized);
+					const path = u.pathname || "";
+					// Backend serves at /api/images/created/*; some adapters (sqlite/mock) return /images/created/ in getImageUrl.
+					const prefixWithApi = "/api/images/created/";
+					const prefixNoApi = "/images/created/";
+					if (path.startsWith(prefixWithApi)) return path.slice(prefixWithApi.length) || null;
+					if (path.startsWith(prefixNoApi)) return path.slice(prefixNoApi.length) || null;
+					return null;
+				} catch {
+					return null;
+				}
+			}
+			async function replaceUnpublishedUrlWithShareUrl(url) {
+				const filename = filenameFromParasceneImageUrl(url);
+				if (!filename || !queries.selectCreatedImageByFilename?.get) {
+					return toParasceneImageUrl(url) || url;
+				}
+				const image = await queries.selectCreatedImageByFilename.get(filename);
+				if (!image) {
+					return toParasceneImageUrl(url) || url;
+				}
+				const isPublished = image.published === 1 || image.published === true;
+				if (isPublished || (image.status || "") !== "completed" || !image.filename) {
+					return toParasceneImageUrl(url) || url;
+				}
+				const isOwner = image.user_id === user.id;
+				const isAdmin = user.role === "admin";
+				if (!isOwner && !isAdmin) {
+					return toParasceneImageUrl(url) || url;
+				}
+				// Use share URL so provider can fetch without auth (published and unpublished).
+				const shareUrl = shareUrlForImage(image.id, user.id);
+				return shareUrl || toParasceneImageUrl(url) || url;
+			}
+			for (const key of imageUrlKeys) {
+				if (typeof safeArgs[key] === "string") {
+					safeArgs[key] = await replaceUnpublishedUrlWithShareUrl(safeArgs[key]);
+					meta.args[key] = safeArgs[key];
+				}
+			}
+			for (const key of imageUrlArrayKeys) {
+				if (Array.isArray(safeArgs[key])) {
+					const arr = await Promise.all(
+						safeArgs[key].map((v) => (typeof v === "string" ? replaceUnpublishedUrlWithShareUrl(v) : Promise.resolve(v)))
+					);
+					safeArgs[key] = arr;
+					meta.args[key] = arr;
+				}
+			}
+
 			const normalizeUsername = (input) => {
 				const raw = typeof input === "string" ? input.trim() : "";
 				if (!raw) return null;

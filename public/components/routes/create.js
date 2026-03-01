@@ -6,6 +6,21 @@ import { attachAutoGrowTextarea } from '../../shared/autogrow.js';
 
 const html = String.raw;
 
+/** Normalize image URL to a canonical form (origin + path) so queue and form values match regardless of relative/absolute. */
+function normalizeImageUrlForMatch(raw) {
+	if (typeof raw !== 'string') return '';
+	const value = raw.trim();
+	if (!value) return '';
+	const origin = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '';
+	try {
+		const parsed = new URL(value, origin);
+		if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+		return `${parsed.origin}${parsed.pathname}${parsed.search}${parsed.hash}`;
+	} catch {
+		return '';
+	}
+}
+
 class AppRouteCreate extends HTMLElement {
 	constructor() {
 		super();
@@ -1669,24 +1684,30 @@ class AppRouteCreate extends HTMLElement {
 		let mutateParentIds = [];
 
 		// Map any queued images used as inputs to their parent creation IDs so they become ancestors.
+		// Use normalized URLs so relative/absolute or different origins still match; backend then replaces
+		// unpublished image URLs with share URLs so the provider can fetch them (same as mutate flow).
 		try {
 			const queueItems = loadMutateQueue();
 			if (Array.isArray(queueItems) && queueItems.length > 0) {
-				const byUrl = new Map();
+				const byNormalizedUrl = new Map();
 				queueItems.forEach((item) => {
 					const url = typeof item?.imageUrl === 'string' ? item.imageUrl.trim() : '';
 					const sid = Number(item?.sourceId);
 					if (!url || !Number.isFinite(sid) || sid <= 0) return;
-					if (!byUrl.has(url)) byUrl.set(url, sid);
+					const norm = normalizeImageUrlForMatch(url);
+					if (norm && !byNormalizedUrl.has(norm)) byNormalizedUrl.set(norm, sid);
+					// Also key by raw URL so exact match still works
+					if (url && !byNormalizedUrl.has(url)) byNormalizedUrl.set(url, sid);
 				});
-				if (byUrl.size > 0) {
+				if (byNormalizedUrl.size > 0) {
 					const parentSet = new Set();
 					Object.keys(fields).forEach((fieldKey) => {
 						const field = fields[fieldKey];
 						if (isImageUrlField(field)) {
 							const v = argsToSend[fieldKey];
 							if (typeof v === 'string') {
-								const id = byUrl.get(v.trim());
+								const trimmed = v.trim();
+								const id = byNormalizedUrl.get(trimmed) ?? byNormalizedUrl.get(normalizeImageUrlForMatch(trimmed));
 								if (Number.isFinite(id) && id > 0) parentSet.add(id);
 							}
 						} else if (isImageUrlArrayField(field)) {
@@ -1694,7 +1715,8 @@ class AppRouteCreate extends HTMLElement {
 							if (Array.isArray(arr)) {
 								arr.forEach((v) => {
 									if (typeof v !== 'string') return;
-									const id = byUrl.get(v.trim());
+									const trimmed = v.trim();
+									const id = byNormalizedUrl.get(trimmed) ?? byNormalizedUrl.get(normalizeImageUrlForMatch(trimmed));
 									if (Number.isFinite(id) && id > 0) parentSet.add(id);
 								});
 							}
@@ -1713,11 +1735,13 @@ class AppRouteCreate extends HTMLElement {
 		const prompt = typeof argsToSend?.prompt === 'string' ? String(argsToSend.prompt) : '';
 		const mentions = this.extractMentions(prompt);
 
+		const mutateOfId = mutateParentIds.length === 1 ? mutateParentIds[0] : undefined;
 		const doSubmit = (hydrateMentions) => {
 			submitCreationWithPending({
 				serverId: this.selectedServer.id,
 				methodKey,
 				args: argsToSend,
+				mutateOfId,
 				mutateParentIds,
 				hydrateMentions,
 				navigate: isStandaloneCreatePage ? 'full' : 'spa',
@@ -1731,45 +1755,6 @@ class AppRouteCreate extends HTMLElement {
 				}
 			});
 		};
-
-		// Collect image URLs used in args (normalized to full URL for comparison).
-		const imageUrlsInArgs = new Set();
-		const origin = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '';
-		Object.keys(fields).forEach((fieldKey) => {
-			const field = fields[fieldKey];
-			if (isImageUrlField(field)) {
-				const v = argsToSend[fieldKey];
-				if (typeof v === 'string' && v.trim()) {
-					const u = v.trim();
-					imageUrlsInArgs.add(u.startsWith('http') ? u : origin + (u.startsWith('/') ? u : `/${u}`));
-				}
-			} else if (isImageUrlArrayField(field)) {
-				const arr = argsToSend[fieldKey];
-				if (Array.isArray(arr)) {
-					arr.forEach((v) => {
-						if (typeof v === 'string' && v.trim()) {
-							const u = v.trim();
-							imageUrlsInArgs.add(u.startsWith('http') ? u : origin + (u.startsWith('/') ? u : `/${u}`));
-						}
-					});
-				}
-			}
-		});
-
-		let hasUnpublishedInArgs = false;
-		try {
-			const queueForCheck = loadMutateQueue();
-			for (const item of queueForCheck || []) {
-				const url = typeof item?.imageUrl === 'string' ? item.imageUrl.trim() : '';
-				if (!url) continue;
-				if (item.published === false && imageUrlsInArgs.has(url)) {
-					hasUnpublishedInArgs = true;
-					break;
-				}
-			}
-		} catch {
-			// ignore
-		}
 
 		async function runMentionsCheckAndSubmit() {
 			if (mentions.length === 0) {
@@ -1799,28 +1784,6 @@ class AppRouteCreate extends HTMLElement {
 					}
 				}
 			);
-		}
-
-		if (hasUnpublishedInArgs) {
-			this.resetCreateButton(button);
-			this.showAdvancedConfirm(
-				'Some of the images are from unpublished creations. These creations will not be available.',
-				true,
-				{
-					primaryLabel: 'Continue',
-					onPrimary: () => {
-						this.closeAdvancedConfirm();
-						try {
-							button.style.minWidth = `${button.offsetWidth}px`;
-							button.disabled = true;
-							button.innerHTML = '<span class="create-button-spinner" aria-hidden="true"></span>';
-							void button.offsetHeight;
-						} catch { /* ignore */ }
-						void runMentionsCheckAndSubmit.call(this);
-					}
-				}
-			);
-			return;
 		}
 
 		void runMentionsCheckAndSubmit.call(this);

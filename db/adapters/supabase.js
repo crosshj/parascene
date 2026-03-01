@@ -184,6 +184,16 @@ export function openDb() {
 				return data ? { viewer_follows: 1 } : undefined;
 			}
 		},
+		selectFollowerCountForUser: {
+			get: async (userId) => {
+				const { count, error } = await serviceClient
+					.from(prefixedTable("user_follows"))
+					.select("follower_id", { count: "exact", head: true })
+					.eq("following_id", userId);
+				if (error) throw error;
+				return { count: count ?? 0 };
+			}
+		},
 		selectUserFollowers: {
 			all: async (userId, options = {}) => {
 				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));

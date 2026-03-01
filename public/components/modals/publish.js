@@ -230,7 +230,8 @@ class AppModalPublish extends HTMLElement {
 			const nsfwCheckbox = this.querySelector('#publish-nsfw');
 			if (nsfwCheckbox) {
 				const creationIsNsfw = creation.nsfw === true || creation.meta?.nsfw === true;
-				nsfwCheckbox.checked = creationIsNsfw || getNsfwContentEnabled();
+				const hasBeenEdited = !!(creation.meta?.mutate_of_id || (Array.isArray(creation.meta?.history) && creation.meta.history.length > 0));
+				nsfwCheckbox.checked = creationIsNsfw ? true : (hasBeenEdited ? false : getNsfwContentEnabled());
 			}
 
 			// Update submit button state based on title
@@ -284,7 +285,8 @@ class AppModalPublish extends HTMLElement {
 			const nsfwCheckbox = this.querySelector('#publish-nsfw');
 			if (nsfwCheckbox) {
 				const creationIsNsfw = creation.nsfw === true || creation.meta?.nsfw === true;
-				nsfwCheckbox.checked = creationIsNsfw || getNsfwContentEnabled();
+				const hasBeenEdited = !!(creation.meta?.mutate_of_id || (Array.isArray(creation.meta?.history) && creation.meta.history.length > 0));
+				nsfwCheckbox.checked = creationIsNsfw ? true : (hasBeenEdited ? false : getNsfwContentEnabled());
 			}
 
 			// Update submit button state based on title

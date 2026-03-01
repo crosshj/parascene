@@ -1393,11 +1393,13 @@ export default function createProfileRoutes({ queries }) {
 			const allCountRow = await queries.selectAllCreatedImageCountForUser?.get(targetUserId);
 			const publishedCountRow = await queries.selectPublishedCreatedImageCountForUser?.get(targetUserId);
 			const likesCountRow = await queries.selectLikesReceivedForUserPublished?.get(targetUserId);
+			const followerCountRow = await queries.selectFollowerCountForUser?.get(targetUserId);
 
 			const stats = {
 				creations_total: Number(allCountRow?.count ?? 0),
 				creations_published: Number(publishedCountRow?.count ?? 0),
 				likes_received: Number(likesCountRow?.count ?? 0),
+				followers_count: Number(followerCountRow?.count ?? 0),
 				member_since: target.created_at ?? null
 			};
 

@@ -95,13 +95,8 @@ export const emailIcon = withAttributes(html`
 `);
 
 export const shareIcon = withAttributes(html`
-	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
-		stroke-linejoin="round" aria-hidden="true">
-		<circle cx="18" cy="5" r="2"></circle>
-		<circle cx="6" cy="12" r="2"></circle>
-		<circle cx="18" cy="19" r="2"></circle>
-		<path d="M8 12l8-6"></path>
-		<path d="M8 12l8 6"></path>
+	<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+		<path d="M10 3.158V7.51c-5.428.223-8.27 3.75-8.875 11.199-.04.487-.07.975-.09 1.464l-.014.395c-.014.473.578.684.88.32.302-.368.61-.73.925-1.086l.244-.273c1.79-1.967 3-2.677 4.93-2.917a18.011 18.011 0 012-.112v4.346a1 1 0 001.646.763l9.805-8.297 1.55-1.31-1.55-1.31-9.805-8.297A1 1 0 0010 3.158Zm2 6.27v.002-4.116l7.904 6.688L12 18.689v-4.212l-2.023.024c-1.935.022-3.587.17-5.197 1.024a9 9 0 00-1.348.893c.355-1.947.916-3.39 1.63-4.425 1.062-1.541 2.607-2.385 5.02-2.485L12 9.428Z"></path>
 	</svg>
 `);
 
@@ -157,6 +152,13 @@ export const starIcon = withAttributes(html`
 	<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
 		<path d="M12 3.25l2.36 4.78 5.28.77-3.82 3.72.9 5.26L12 15.97 7.28 17.78l.9-5.26-3.82-3.72 5.28-.77L12 3.25z">
 		</path>
+	</svg>
+`);
+
+/** Single filled sparkle (e.g. Mutate action). */
+export const sparkleIcon = withAttributes(html`
+	<svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true">
+		<path d="M480-80q0-83-31.5-156T363-363q-54-54-127-85.5T80-480q83 0 156-31.5T363-597q54-54 85.5-127T480-880q0 83 31.5 156T597-597q54 54 127 85.5T880-480q-83 0-156 31.5T597-363q-54 54-85.5 127T480-80Z"></path>
 	</svg>
 `);
 

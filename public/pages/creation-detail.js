@@ -8,11 +8,11 @@ import { attachAutoGrowTextarea } from '/shared/autogrow.js';
 import { textsSameWithinTolerance } from '/shared/textCompare.js';
 import { buildProfilePath } from '/shared/profileLinks.js';
 import { getNsfwObscure, NSFW_VIEW_BODY_CLASS } from '/shared/nsfwView.js';
-import { renderCreationKebabHtml, setupKebabDropdown } from '/shared/kebabMenu.js';
+import { addToMutateQueue, loadMutateQueue, removeFromMutateQueueByImageUrl } from '/shared/mutateQueue.js';
 import '../components/modals/publish.js';
 import '../components/modals/creation-details.js';
 import '../components/modals/share.js';
-import { creditIcon, eyeHiddenIcon } from '../icons/svg-strings.js';
+import { creditIcon, eyeHiddenIcon, shareIcon, sparkleIcon } from '../icons/svg-strings.js';
 import '../components/modals/tip-creator.js';
 import { renderEmptyState, renderEmptyLoading, renderEmptyError } from '/shared/emptyState.js';
 import { buildCreationCardShell } from '/shared/creationCard.js';
@@ -20,6 +20,152 @@ import { renderCommentAvatarHtml } from '/shared/commentItem.js';
 
 const html = String.raw;
 const TIP_MIN_VISIBLE_BALANCE = 10.0;
+
+/** Normalize image URL for queue match (origin + path). Same idea as creation-edit toParasceneImageUrl. */
+function normalizeImageUrlForQueue(raw) {
+	const base = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '';
+	if (typeof raw !== 'string') return '';
+	const value = raw.trim();
+	if (!value) return '';
+	try {
+		const parsed = new URL(value, base);
+		if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+		return `${base}${parsed.pathname}${parsed.search}${parsed.hash}`;
+	} catch {
+		return '';
+	}
+}
+
+/** SVG + label for each creation-detail action. inKebabMenu: true = only in more menu (no pill); false = only as pill. */
+const CREATION_DETAIL_ACTION_DEFS = [
+	{
+		key: 'publish',
+		dataAttr: 'data-publish-btn',
+		btnClass: 'btn-primary',
+		inKebabMenu: false,
+		inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 6px; vertical-align: middle;">
+			<path d="M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+		</svg>
+		Publish`,
+		show: (c) => c?.showPublish,
+		disabled: (c) => !c?.showPublish
+	},
+	{
+		key: 'mutate',
+		dataAttr: 'data-mutate-btn',
+		btnClass: 'btn-outlined',
+		inKebabMenu: false,
+		inner: html`<span class="creation-detail-mobile-pill-icon">${sparkleIcon('')}</span>
+		Mutate`,
+		show: (c) => c?.showMutate,
+		disabled: (c) => !c?.showMutate
+	},
+	{
+		key: 'share',
+		dataAttr: 'data-share-btn',
+		btnClass: 'btn-outlined',
+		inKebabMenu: false,
+		inner: html`<span class="creation-detail-mobile-pill-icon">${shareIcon('')}</span>
+		Share`,
+		show: (c) => c?.showShare,
+		disabled: (c) => !c?.showShare
+	},
+	{
+		key: 'edit',
+		dataAttr: 'data-edit-btn',
+		btnClass: 'btn-outlined',
+		inKebabMenu: false,
+		inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 6px; vertical-align: middle;">
+			<path d="M11.5 2.5L13.5 4.5L5.5 12.5H3.5V10.5L11.5 2.5Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+		</svg>
+		Edit`,
+		show: (c) => c?.showEdit,
+		disabled: (c) => !c?.showEdit
+	},
+	{
+		key: 'unpublish',
+		dataAttr: 'data-unpublish-btn',
+		btnClass: 'btn-outlined',
+		inKebabMenu: true,
+		inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 6px; vertical-align: middle;">
+			<path d="M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+		</svg>
+		Un-publish`,
+		show: (c) => c?.showUnpublish,
+		disabled: (c) => !c?.showUnpublish
+	},
+	{
+		key: 'retry',
+		dataAttr: 'data-retry-btn',
+		btnClass: 'btn-outlined',
+		inKebabMenu: false,
+		inner: html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="margin-right: 6px; vertical-align: middle;">
+			<path d="M3 12a9 9 0 1 0 3-6.708" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+			<polyline points="3 4 3 10 9 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+		</svg>
+		Retry`,
+		show: (c) => c?.showRetry,
+		disabled: (c) => !c?.showRetry
+	},
+	{
+		key: 'more-info',
+		dataAttr: 'data-more-info-btn',
+		btnClass: 'btn-outlined',
+		inKebabMenu: false,
+		inner: html`<span class="creation-detail-mobile-pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v8"></path><path d="M12 6h.01"></path></svg></span>
+		More Info`,
+		show: (c) => c?.showMoreInfoPill,
+		disabled: () => false
+	},
+	{
+		key: 'delete',
+		dataAttr: 'data-delete-btn',
+		btnClass: 'btn-outlined btn-danger-outlined',
+		inKebabMenu: true,
+		inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 6px; vertical-align: middle;">
+			<path d="M2 4H14M12.5 4V13.5C12.5 14.3284 11.8284 15 11 15H5C4.17157 15 3.5 14.3284 3.5 13.5V4M5.5 4V2.5C5.5 1.67157 6.17157 1 7 1H9C9.82843 1 10.5 1.67157 10.5 2.5V4M6.5 7.5V11.5M9.5 7.5V11.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+		</svg>`,
+		show: (c) => c?.showDelete,
+		disabled: (c) => c?.deleteDisabled !== false,
+		extraAttrs: (c) => c?.deletePermanent ? ' data-permanent-delete="1"' : '',
+		label: (c) => (c?.deleteLabel ?? ' Delete')
+	}
+];
+
+/**
+ * Renders the creation-detail-actions bar. Builds the list of actions that should be shown from ctx, then renders only those.
+ * @param {object} [ctx] - When omitted (loading/error states), no buttons are shown. When provided (success), only actions with show(ctx) true are rendered.
+ */
+function renderCreationDetailActions(ctx) {
+	const visible = ctx ? CREATION_DETAIL_ACTION_DEFS.filter((def) => def.show(ctx)) : [];
+	const containerStyle = visible.length === 0
+		? ' style="opacity: 0; visibility: hidden; pointer-events: none; display: none;"'
+		: ' style="opacity: 0; visibility: hidden; pointer-events: none;"';
+
+	const buttonsHtml = visible.map((def) => {
+		const disabled = def.disabled(ctx);
+		const extraAttrs = def.extraAttrs ? def.extraAttrs(ctx) : '';
+		const label = def.label ? def.label(ctx) : '';
+		return `<button type="button" class="creation-detail-action-btn ${def.btnClass}" ${def.dataAttr}${disabled ? ' disabled' : ''}${extraAttrs}>${def.inner}${label}</button>`;
+	}).join('\n\t');
+
+	return html`
+<div class="creation-detail-actions"${containerStyle}>
+	${buttonsHtml}
+</div>`;
+}
+
+/** Renders visible actions as pills for the mobile scroll row. Only actions with inKebabMenu === false are shown (items in the more menu are not duplicated as pills). */
+function renderCreationDetailMobilePills(ctx) {
+	if (!ctx) return '';
+	const visible = CREATION_DETAIL_ACTION_DEFS.filter((def) => def.show(ctx) && !def.inKebabMenu);
+	return visible.map((def) => {
+		const disabled = def.disabled(ctx);
+		const extraAttrs = def.extraAttrs ? def.extraAttrs(ctx) : '';
+		const label = def.label ? def.label(ctx) : '';
+		return `<button type="button" class="creation-detail-mobile-pill" ${def.dataAttr}${disabled ? ' disabled' : ''}${extraAttrs}>${def.inner}${label}</button>`;
+	}).join('\n\t\t\t\t');
+}
 
 async function copyTextToClipboard(text) {
 	try {
@@ -463,11 +609,12 @@ async function loadCreation() {
 	const imageEl = document.querySelector('[data-image]');
 	const backgroundEl = document.querySelector('[data-background]');
 	const imageWrapper = imageEl?.closest?.('.creation-detail-image-wrapper');
-	const actionsEl = document.querySelector('.creation-detail-actions');
 
 	if (!detailContent || !imageEl || !backgroundEl) return;
 
-	// Hide actions until the page has loaded and ownership is resolved (prevents flash).
+	// Render actions + loading so we have a live actions element; hide until ownership is resolved.
+	detailContent.innerHTML = renderCreationDetailActions() + renderEmptyLoading({});
+	let actionsEl = detailContent.querySelector('.creation-detail-actions');
 	if (actionsEl) {
 		actionsEl.classList.remove('is-ready');
 		actionsEl.style.display = '';
@@ -509,12 +656,14 @@ async function loadCreation() {
 		imageEl.style.visibility = 'hidden';
 		imageEl.src = '';
 		delete imageEl.dataset.currentUrl;
-		detailContent.innerHTML = renderEmptyState({ title: 'Invalid creation ID' });
+		detailContent.innerHTML = renderCreationDetailActions() + renderEmptyState({ title: 'Invalid creation ID' });
+		actionsEl = detailContent.querySelector('.creation-detail-actions');
 		if (actionsEl) actionsEl.style.display = 'none';
 		return;
 	}
 
-	detailContent.innerHTML = renderEmptyLoading({});
+	detailContent.innerHTML = renderCreationDetailActions() + renderEmptyLoading({});
+	actionsEl = detailContent.querySelector('.creation-detail-actions');
 
 	try {
 		const headers = {};
@@ -541,10 +690,11 @@ async function loadCreation() {
 				imageEl.style.visibility = 'hidden';
 				imageEl.src = '';
 				delete imageEl.dataset.currentUrl;
-				detailContent.innerHTML = renderEmptyState({
+				detailContent.innerHTML = renderCreationDetailActions() + renderEmptyState({
 					title: 'Creation not found',
 					message: "The creation you're looking for doesn't exist or you don't have access to it.",
 				});
+				actionsEl = detailContent.querySelector('.creation-detail-actions');
 				if (actionsEl) actionsEl.style.display = 'none';
 				return;
 			}
@@ -696,135 +846,47 @@ async function loadCreation() {
 			}
 		}
 
-		// Update publish button - hide if not owner/admin, already published, or creation not successfully completed
-		const publishBtn = document.querySelector('[data-publish-btn]');
-		if (publishBtn) {
-			if (!canEdit || isPublished || status !== 'completed' || isFailed) {
-				// Hide publish button if user doesn't own/admin, if already published,
-				// or if the creation is not a successfully completed image (creating/failed/etc.)
-				publishBtn.style.display = 'none';
-			} else {
-				// Button is active (enabled) when not already published
-				publishBtn.style.display = '';
-				publishBtn.disabled = false;
-
-				// Create SVG icon
-				const svgIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-				svgIcon.setAttribute('width', '16');
-				svgIcon.setAttribute('height', '16');
-				svgIcon.setAttribute('viewBox', '0 0 16 16');
-				svgIcon.setAttribute('fill', 'none');
-				svgIcon.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-				svgIcon.style.marginRight = '6px';
-				svgIcon.style.verticalAlign = 'middle';
-
-				const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-				path.setAttribute('d', 'M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z');
-				path.setAttribute('stroke', 'currentColor');
-				path.setAttribute('stroke-width', '1.5');
-				path.setAttribute('stroke-linecap', 'round');
-				path.setAttribute('stroke-linejoin', 'round');
-				path.setAttribute('fill', 'none');
-				svgIcon.appendChild(path);
-
-				// Update button content
-				publishBtn.innerHTML = '';
-				publishBtn.appendChild(svgIcon);
-				publishBtn.appendChild(document.createTextNode(' Publish'));
-			}
-		}
-
-		// Update edit button - show for completed creations if owner/admin and not failed (published or not)
-		const editBtn = document.querySelector('[data-edit-btn]');
-		if (editBtn) {
-			if (!canEdit || status !== 'completed' || isFailed) {
-				editBtn.style.display = 'none';
-			} else {
-				editBtn.style.display = '';
-				editBtn.disabled = false;
-			}
-		}
-
-		// Update unpublish button - show for published creations if owner/admin and not failed
-		const unpublishBtn = document.querySelector('[data-unpublish-btn]');
-		if (unpublishBtn) {
-			if (!canEdit || !isPublished || isFailed) {
-				unpublishBtn.style.display = 'none';
-			} else {
-				unpublishBtn.style.display = '';
-				unpublishBtn.disabled = false;
-			}
-		}
-
-		// Update mutate button - show for completed images with a URL (owner or any viewer; mutate creates a new creation from this one)
-		const mutateBtn = document.querySelector('[data-mutate-btn]');
-		if (mutateBtn) {
-			const canMutate = !isAdmin && status === 'completed' && !isFailed && Boolean(creation.url);
-			if (!canMutate) {
-				mutateBtn.style.display = 'none';
-			} else {
-				mutateBtn.style.display = '';
-				mutateBtn.disabled = false;
-			}
-		}
-
-		// Update share button - show for completed images (works for private via tokenized share page)
-		const shareBtn = document.querySelector('[data-share-btn]');
-		if (shareBtn) {
-			const canShare = !shareMountedPrivate && status === 'completed' && !isFailed;
-			if (!canShare) {
-				shareBtn.style.display = 'none';
-			} else {
-				shareBtn.style.display = '';
-				shareBtn.disabled = false;
-			}
-		}
-
-		// Update delete / retry buttons
-		const deleteBtn = document.querySelector('[data-delete-btn]');
-		const retryBtn = document.querySelector('[data-retry-btn]');
+		// Action buttons: visibility and disabled state (matches original DOM-update logic for all roles and creation states).
+		// Publish/Edit/Unpublish/Retry/Delete: canEdit (owner or admin). Mutate: non-admin viewers only. Share: any viewer when not private share.
+		// When admin is viewing a user-deleted creation, hide Publish and Edit (admin only gets e.g. Permanently delete).
 		const userDeleted = Boolean(creation.user_deleted);
-
-		if (deleteBtn) {
-			if (!canEdit) {
-				deleteBtn.style.display = 'none';
-			} else if (isAdmin && !userDeleted) {
-				// Admin viewing a creation the user has not deleted: hide regular delete (admin only has "Permanently delete" on user-deleted items)
-				deleteBtn.style.display = 'none';
-			} else {
-				deleteBtn.style.display = '';
-				if (userDeleted && isAdmin) {
-					deleteBtn.disabled = false;
-					deleteBtn.dataset.permanentDelete = '1';
-					if (deleteBtn.lastChild?.nodeType === Node.TEXT_NODE) {
-						deleteBtn.lastChild.textContent = ' Permanently delete';
-					}
-				} else {
-					deleteBtn.removeAttribute('data-permanent-delete');
-					const deletable = !isPublished && (status === 'failed' || (status === 'creating' && isTimedOut) || status === 'completed');
-					deleteBtn.disabled = !deletable;
-					if (deleteBtn.lastChild?.nodeType === Node.TEXT_NODE) {
-						deleteBtn.lastChild.textContent = ' Delete';
-					}
-				}
+		const adminViewingUserDeleted = isAdmin && userDeleted;
+		const showQueueForLater = !isAdmin && status === 'completed' && !isFailed && Boolean(creation.url);
+		const normalizedImageUrlForQueue = showQueueForLater ? normalizeImageUrlForQueue(creation.url) : '';
+		let isQueuedForLater = false;
+		if (showQueueForLater && normalizedImageUrlForQueue) {
+			try {
+				const queueItems = loadMutateQueue();
+				const creationIdNum = Number(creationId);
+				isQueuedForLater = queueItems.some((item) => {
+					const itemUrl = typeof item?.imageUrl === 'string' ? item.imageUrl : '';
+					const itemSourceIdNum = Number(item?.sourceId);
+					const matchesSourceId = Number.isFinite(itemSourceIdNum) && itemSourceIdNum > 0 && itemSourceIdNum === creationIdNum;
+					const matchesUrl = itemUrl === normalizedImageUrlForQueue || normalizeImageUrlForQueue(itemUrl) === normalizedImageUrlForQueue;
+					return matchesSourceId || matchesUrl;
+				});
+			} catch {
+				// ignore storage errors
 			}
 		}
-
-		if (retryBtn) {
-			if (!canEdit || !isFailed) {
-				retryBtn.style.display = 'none';
-			} else {
-				retryBtn.style.display = '';
-				retryBtn.disabled = false;
-			}
-		}
-
-		// If no actions are visible, hide the whole actions row to avoid empty spacing.
-		if (actionsEl) {
-			const actionButtons = Array.from(actionsEl.querySelectorAll('button'));
-			const anyVisible = actionButtons.some(btn => btn.style.display !== 'none');
-			actionsEl.style.display = anyVisible ? '' : 'none';
-		}
+		const queueForLaterLabel = isQueuedForLater ? 'Remove from queue' : 'Queue for later';
+		const hasDetailsForFailed = isFailed && (Object.keys(meta?.args || {}).length > 0 || (meta?.provider_error != null && typeof meta.provider_error === 'object'));
+		const actionsContext = {
+			showPublish: canEdit && !isPublished && status === 'completed' && !isFailed && !adminViewingUserDeleted,
+			showEdit: canEdit && status === 'completed' && !isFailed && !adminViewingUserDeleted,
+			showUnpublish: canEdit && isPublished && !isFailed && !adminViewingUserDeleted,
+			showMutate: !isAdmin && status === 'completed' && !isFailed && Boolean(creation.url),
+			showShare: !shareMountedPrivate && status === 'completed' && !isFailed,
+			showRetry: canEdit && isFailed,
+			showMoreInfoPill: hasDetailsForFailed,
+			showDelete: canEdit && !(isAdmin && !userDeleted),
+			showQueueForLater,
+			queueForLaterLabel,
+			isFailed,
+			deleteDisabled: (userDeleted && isAdmin) ? false : !(!isPublished && (status === 'failed' || (status === 'creating' && isTimedOut) || status === 'completed')),
+			deletePermanent: userDeleted && isAdmin,
+			deleteLabel: userDeleted && isAdmin ? ' Permanently delete' : ' Delete'
+		};
 
 		// User-deleted notice (admin only; owner gets 404)
 		let userDeletedNotice = '';
@@ -839,20 +901,23 @@ async function loadCreation() {
 		// Published display:
 		// - Show "Published {time ago}" directly under the user identification line.
 		// - Keep description as its own block further down.
+		const publishedDateRaw = creation.published_at || creation.created_at || null;
+		const publishedDate = publishedDateRaw ? new Date(publishedDateRaw) : null;
+		const hasPublishedDate = publishedDate instanceof Date && Number.isFinite(publishedDate.valueOf());
+		const publishedTimeAgo = hasPublishedDate ? formatRelativeTime(publishedDate) : '';
+		const publishedAtTitle = hasPublishedDate ? formatDateTime(publishedDate) : '';
+
 		let publishedLabel = '';
 		if (isPublished) {
-			const publishedDateRaw = creation.published_at || creation.created_at || null;
-			const publishedDate = publishedDateRaw ? new Date(publishedDateRaw) : null;
-			const hasPublishedDate = publishedDate instanceof Date && Number.isFinite(publishedDate.valueOf());
-			const publishedTimeAgo = hasPublishedDate ? formatRelativeTime(publishedDate) : '';
-			const publishedAtTitle = hasPublishedDate ? formatDateTime(publishedDate) : '';
-
 			publishedLabel = html`
 				<div class="creation-detail-author-published" ${publishedAtTitle ? `title="${publishedAtTitle}" ` : '' }>
 					Published${publishedTimeAgo ? ` ${publishedTimeAgo}` : ''}
 				</div>
 			`;
 		}
+
+		// Mobile-only byline under title: "@handle Published 3 hr. ago" or "@handle Not Published"
+		const mobileBylineText = isPublished ? (`Published${publishedTimeAgo ? ` ${publishedTimeAgo}` : ''}`) : 'Not Published';
 
 		// Show description whenever it exists, regardless of publication status
 		// History thumbnails (mutations lineage)
@@ -1073,17 +1138,14 @@ async function loadCreation() {
 			`;
 		}
 
-		// More Info button: show when modal would have content after filtering (raw args or provider error).
+		// More Info: show only when the details modal would have content (filtered args or provider error).
 		const providerError = meta?.provider_error ?? null;
 		let hasDetailsModalContent = false;
 
-		// Check if args would have content after filtering
 		if (args && !isPromptOnly && isPlainObject) {
-			// Simulate the filtering logic from the modal
 			const hasHistory = historyIds.length > 0;
 			const promptTextInArgs = Object.prototype.hasOwnProperty.call(args, 'prompt') && typeof args.prompt === 'string' ? args.prompt.trim() : '';
 			const hasPromptInArgs = promptTextInArgs.length > 0;
-			// Hide prompt if it's shown in description section (matches description, no description, or differs from description)
 			const shouldHidePrompt = hasPromptInArgs;
 
 			const filteredArgs = { ...args };
@@ -1093,19 +1155,14 @@ async function loadCreation() {
 			if (shouldHidePrompt && Object.prototype.hasOwnProperty.call(filteredArgs, 'prompt')) {
 				delete filteredArgs.prompt;
 			}
-			// Model is shown in meta bar, not in modal
 			if (Object.prototype.hasOwnProperty.call(filteredArgs, 'model')) {
 				const mv = filteredArgs.model;
 				if (mv != null && String(mv).trim() !== '') {
 					delete filteredArgs.model;
 				}
 			}
-
-			// Check if there are any keys left after filtering
 			hasDetailsModalContent = Object.keys(filteredArgs).length > 0;
 		}
-
-		// Also show if there's a provider error
 		if (!hasDetailsModalContent && providerError && typeof providerError === 'object') {
 			hasDetailsModalContent = true;
 		}
@@ -1130,13 +1187,9 @@ async function loadCreation() {
 
 		let canShowFollowButton = false;
 		let viewerFollowsCreator = false;
+		let creatorFollowerCount = 0;
 
-		if (
-			Number.isFinite(creatorId) &&
-			creatorId > 0 &&
-			currentUserId &&
-			currentUserId !== creatorId
-		) {
+		if (Number.isFinite(creatorId) && creatorId > 0) {
 			try {
 				const profileSummary = await fetchJsonWithStatusDeduped(
 					`/api/users/${creatorId}/profile`,
@@ -1144,8 +1197,11 @@ async function loadCreation() {
 					{ windowMs: 800 }
 				);
 				if (profileSummary.ok && profileSummary.data) {
-					viewerFollowsCreator = Boolean(profileSummary.data.viewer_follows);
-					canShowFollowButton = !viewerFollowsCreator;
+					creatorFollowerCount = Number(profileSummary.data.stats?.followers_count ?? 0) || 0;
+					if (currentUserId && currentUserId !== creatorId) {
+						viewerFollowsCreator = Boolean(profileSummary.data.viewer_follows);
+						canShowFollowButton = !viewerFollowsCreator;
+					}
 				}
 			} catch {
 				// ignore follow state load failures; follow button will be hidden
@@ -1204,100 +1260,110 @@ async function loadCreation() {
 		` : '';
 
 		detailContent.innerHTML = html`
-			<div style="display: flex; justify-content: space-between;">
-				<div class="creation-detail-author">
-					${creatorProfileHref ? html`
-					<a class="user-link creation-detail-author-avatar-slot" href="${creatorProfileHref}"
-						aria-label="View ${creatorName} profile">
-						${authorAvatar}
-					</a>
-					` : html`
-					<div class="creation-detail-author-avatar-slot" aria-hidden="true">
-						${authorAvatar}
-					</div>
-					`}
-			
-					<div class="creation-detail-author-id">
-						${creatorProfileHref ? html`
-						<a class="user-link creation-detail-author-id-link" href="${creatorProfileHref}">
-							${authorIdentification}
-						</a>
-						` : authorIdentification}
-					</div>
-			
-					${publishedLabel}
-				</div>
-				${canShowFollowButton && !viewerFollowsCreator ? html`
-				<button class="btn-secondary creation-detail-follow" type="button" data-follow-button
-					data-follow-user-id="${escapeHtml(creatorId)}">
-					Follow
-				</button>
-				` : ''}
-			</div>
-			${userDeletedNotice}
 			<div class="creation-detail-title-row">
 				${(creation.nsfw ?? creation.meta?.nsfw) ? html`<span class="creation-detail-nsfw-tag">NSFW</span>` : ''}
 				<div class="creation-detail-title${isUntitled ? ' creation-detail-title-untitled' : ''}">${escapeHtml(displayTitle)}</div>
 			</div>
-			${descriptionHtml}
-			<div class="creation-detail-meta">
-				<div class="creation-detail-meta-left">
-					${hasDetailsModalContent ? `
-					<button class="feed-card-action" type="button" data-creation-details-link>
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
-							stroke-linejoin="round" aria-hidden="true">
-							<circle cx="12" cy="12" r="10"></circle>
-							<path d="M12 8v8"></path>
-							<path d="M12 6h.01"></path>
-						</svg>
-						<span>More Info</span>
-					</button>
-					` : ``}
-					${copyLinkButtonHtml}
-					<div class="creation-detail-meta-more-desktop">
-						${setAvatarButtonHtml}
-						<button class="feed-card-action" type="button" data-landscape-btn aria-label="Landscape" style="display: none;">
-							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
-								stroke-linejoin="round" aria-hidden="true">
-								<rect x="2" y="6" width="20" height="12" rx="1.5" />
-							</svg>
-							<span data-landscape-btn-text>Landscape</span>
-						</button>
+			<div class="creation-detail-title-byline creation-detail-title-byline-mobile">${escapeHtml(creatorHandle)} ${escapeHtml(mobileBylineText)}</div>
+			<div class="creation-detail-mobile-actions-row">
+				<div class="creation-detail-mobile-actions-scroll">
+					${creatorProfileHref ? html`
+					<a class="creation-detail-mobile-avatar" href="${creatorProfileHref}" aria-label="View ${escapeHtml(creatorName)} profile">${authorAvatar}</a>
+					` : html`
+					<div class="creation-detail-mobile-avatar" aria-hidden="true">${authorAvatar}</div>
+					`}
+					<div class="creation-detail-mobile-creator-info">
+						<div class="creation-detail-mobile-creator-name">${escapeHtml(creatorName)}</div>
+						<div class="creation-detail-mobile-creator-followers">${creatorFollowerCount} Followers</div>
 					</div>
-					<button class="feed-card-action" type="button" data-tip-creator-button aria-label="Tip Creator">
-						${creditIcon('')}
+					${!isAdmin && canShowFollowButton && !viewerFollowsCreator ? html`
+					<button type="button" class="creation-detail-mobile-follow" data-follow-button data-follow-user-id="${escapeHtml(creatorId)}">Follow</button>
+					` : ''}
+					${hasEngagementActions && !shareMountedPrivate ? html`
+					<button type="button" class="creation-detail-mobile-pill" aria-label="Like" data-like-button>
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<path d="M20.8 4.6a5 5 0 0 0-7.1 0L12 6.3l-1.7-1.7a5 5 0 1 0-7.1 7.1l1.7 1.7L12 21l7.1-7.6 1.7-1.7a5 5 0 0 0 0-7.1z"></path>
+						</svg>
+						<span class="creation-detail-mobile-pill-count" data-like-count>${likeCount}</span>
+					</button>
+					` : ''}
+					${renderCreationDetailMobilePills(actionsContext)}
+					${!isOwner && !isAdmin ? html`
+					<button type="button" class="creation-detail-mobile-pill" data-tip-creator-button aria-label="Tip Creator">
+						<span class="creation-detail-mobile-pill-icon">${creditIcon('')}</span>
 						<span>Tip Creator</span>
 					</button>
-				</div>
-				<div class="creation-detail-meta-spacer" aria-hidden="true"></div>
-				<div class="creation-detail-meta-right">
-					${hasEngagementActions ? `
-					<a class="feed-card-action creation-detail-comments-link" href="#comments" data-comments-link
-						aria-label="Comments">
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
-							stroke-linejoin="round" aria-hidden="true">
-							<path d="M21 15a4 4 0 0 1-4 4H8l-5 5V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
-						</svg>
-						<span class="feed-card-action-count" data-comment-count>0</span>
-					</a>
-					<button class="feed-card-action" type="button" aria-label="Like" data-like-button>
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
-							stroke-linejoin="round">
-							<path
-								d="M20.8 4.6a5 5 0 0 0-7.1 0L12 6.3l-1.7-1.7a5 5 0 1 0-7.1 7.1l1.7 1.7L12 21l7.1-7.6 1.7-1.7a5 5 0 0 0 0-7.1z">
-							</path>
-						</svg>
-						<span class="feed-card-action-count" data-like-count>${likeCount}</span>
+					` : ''}
+					${!isFailed ? html`
+					<button type="button" class="creation-detail-mobile-more-btn" aria-label="More options" data-creation-mobile-more-btn>
+						<span class="creation-detail-mobile-more-dots" aria-hidden="true"></span>
 					</button>
-					` : ``}
-					<div class="creation-detail-more">
-						${renderCreationKebabHtml({
-							menuContentHtml: `${isOwner ? `<button class="feed-card-menu-item" type="button" data-creation-menu-set-avatar>Set as profile picture</button>` : ''}<button class="feed-card-menu-item" type="button" data-creation-menu-landscape style="display: none;">Landscape</button>`
-						})}
-					</div>
+					` : ''}
 				</div>
 			</div>
-			
+			<div class="creation-detail-mobile-more-menu" data-creation-mobile-more-menu aria-hidden="true" role="menu">
+				${!isFailed ? html`
+				<button type="button" class="creation-detail-mobile-more-menu-item" role="menuitem" data-mobile-menu-action="copy-link">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+					<span>Copy link</span>
+				</button>
+				${actionsContext?.showQueueForLater ? html`
+				<button type="button" class="creation-detail-mobile-more-menu-item" role="menuitem" data-mobile-menu-action="queue-for-later">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+					<span data-queue-for-later-label>${actionsContext.queueForLaterLabel}</span>
+				</button>
+				` : ''}
+				${isOwner ? html`
+				<button type="button" class="creation-detail-mobile-more-menu-item" role="menuitem" data-mobile-menu-action="set-avatar">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+					<span>Set as profile picture</span>
+				</button>
+				` : ''}
+				${isOwner && !isAdmin ? html`
+				<button type="button" class="creation-detail-mobile-more-menu-item" role="menuitem" data-mobile-menu-action="landscape">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="1.5" /></svg>
+					<span>Landscape</span>
+				</button>
+				` : ''}
+				${hasDetailsModalContent ? html`
+				<button type="button" class="creation-detail-mobile-more-menu-item" role="menuitem" data-mobile-menu-action="more-info">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v8"></path><path d="M12 6h.01"></path></svg>
+					<span>More Info</span>
+				</button>
+				` : ''}
+				${actionsContext?.showUnpublish ? html`
+				<button type="button" class="creation-detail-mobile-more-menu-item" role="menuitem" data-mobile-menu-action="unpublish">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z"></path></svg>
+					<span>Un-publish</span>
+				</button>
+				` : ''}
+				${actionsContext?.showDelete ? html`
+				<button type="button" class="creation-detail-mobile-more-menu-item creation-detail-mobile-more-menu-item-danger" role="menuitem" data-mobile-menu-action="delete">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+					<span>${typeof actionsContext?.deleteLabel === 'string' ? actionsContext.deleteLabel.trim() : 'Delete'}</span>
+				</button>
+				` : ''}
+				` : ''}
+			</div>
+			${renderCreationDetailActions(actionsContext)}
+			${userDeletedNotice}
+
+			${descriptionHtml}
+			<div class="creation-detail-meta-hidden" aria-hidden="true">
+				${hasDetailsModalContent ? `
+				<button class="feed-card-action" type="button" data-creation-details-link>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v8"></path><path d="M12 6h.01"></path></svg>
+					<span>More Info</span>
+				</button>
+				` : ''}
+				${copyLinkButtonHtml}
+				${setAvatarButtonHtml}
+				<button class="feed-card-action" type="button" data-landscape-btn aria-label="Landscape" style="display: none;">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="1.5" /></svg>
+					<span data-landscape-btn-text>Landscape</span>
+				</button>
+			</div>
+
 			${isPublished && !isFailed ? html`
 			<div class="comment-input" data-comment-input>
 				<div class="comment-avatar" ${!viewerPlan ? `style="background: ${viewerColor};"` : ''}>
@@ -1321,8 +1387,9 @@ async function loadCreation() {
 			</div>
 			
 			<div class="comments-toolbar">
+				<h3 class="comments-heading"><span data-comment-count>0 Comments</span></h3>
 				<div class="comments-sort">
-					<label class="comments-sort-label" for="comments-sort">Sort:</label>
+					<label class="comments-sort-label" for="comments-sort">Sort by</label>
 			
 					<select class="comments-sort-select" id="comments-sort" data-comments-sort>
 						<option value="asc">Oldest</option>
@@ -1344,17 +1411,16 @@ async function loadCreation() {
 			</section>
 			` : ''}
 		`;
+		actionsEl = detailContent.querySelector('.creation-detail-actions');
 
-		// Landscape (meta row): only on published items. Owner sees when completed; viewer when landscape URL exists.
+		// Landscape (hidden trigger): only for owner, not admin, when published and completed.
 		const landscapeBtn = detailContent.querySelector('[data-landscape-btn]');
-		const landscapeMenuBtn = detailContent.querySelector('[data-creation-menu-landscape]');
 		if (landscapeBtn) {
 			const lurl = meta?.landscapeUrl;
 			const hasLandscapeUrl = typeof lurl === 'string' && lurl !== 'loading' && !lurl.startsWith('error:') && (lurl.startsWith('http') || lurl.startsWith('/'));
-			const showLandscape = isPublished && ((isOwner && status === 'completed' && !isFailed) || (!isOwner && hasLandscapeUrl));
+			const showLandscape = isPublished && isOwner && !isAdmin && status === 'completed' && !isFailed;
 			if (!showLandscape) {
 				landscapeBtn.style.display = 'none';
-				if (landscapeMenuBtn) landscapeMenuBtn.style.display = 'none';
 			} else {
 				landscapeBtn.style.display = '';
 				landscapeBtn.disabled = false;
@@ -1362,7 +1428,6 @@ async function loadCreation() {
 				landscapeBtn.dataset.landscapeIsSelf = isOwner ? '1' : '0';
 				const labelEl = landscapeBtn.querySelector('[data-landscape-btn-text]');
 				if (labelEl) labelEl.textContent = 'Landscape';
-				if (landscapeMenuBtn) landscapeMenuBtn.style.display = '';
 			}
 		}
 
@@ -1425,11 +1490,11 @@ async function loadCreation() {
 			}
 		}
 
-		const likeButton = detailContent.querySelector('button[data-like-button]');
-		if (likeButton && !shareMountedPrivate) {
-			initLikeButton(likeButton, creationWithLikes);
-		} else if (likeButton && shareMountedPrivate) {
-			likeButton.style.display = 'none';
+		const likeButtons = detailContent.querySelectorAll('button[data-like-button]');
+		if (!shareMountedPrivate) {
+			likeButtons.forEach((btn) => initLikeButton(btn, creationWithLikes));
+		} else {
+			likeButtons.forEach((btn) => { btn.style.display = 'none'; });
 		}
 
 		const copyLinkBtn = detailContent.querySelector('button[data-copy-link-button]');
@@ -1519,20 +1584,27 @@ async function loadCreation() {
 		}
 
 		const detailsBtn = detailContent.querySelector('[data-creation-details-link]');
+		const openDetailsModal = () => {
+			document.dispatchEvent(new CustomEvent('open-creation-details-modal', {
+				detail: {
+					creationId,
+					meta,
+					description: descriptionText
+				}
+			}));
+		};
 		if (detailsBtn && meta && hasDetailsModalContent) {
-			detailsBtn.addEventListener('click', () => {
-				document.dispatchEvent(new CustomEvent('open-creation-details-modal', {
-					detail: {
-						creationId,
-						meta,
-						description: descriptionText
-					}
-				}));
-			});
+			detailsBtn.addEventListener('click', openDetailsModal);
 		}
+		detailContent.querySelectorAll('[data-more-info-btn]').forEach((btn) => {
+			if (btn instanceof HTMLButtonElement && meta) {
+				btn.addEventListener('click', openDetailsModal);
+			}
+		});
 
-		const followButton = detailContent.querySelector('[data-follow-button]');
-		if (followButton instanceof HTMLButtonElement) {
+		const followButtons = detailContent.querySelectorAll('[data-follow-button]');
+		followButtons.forEach((followButton) => {
+			if (!(followButton instanceof HTMLButtonElement)) return;
 			let busy = false;
 
 			followButton.addEventListener('click', async () => {
@@ -1543,7 +1615,7 @@ async function loadCreation() {
 				if (!Number.isFinite(targetId) || targetId <= 0) return;
 
 				busy = true;
-				followButton.disabled = true;
+				followButtons.forEach((btn) => { btn.disabled = true; });
 
 				const result = await fetchJsonWithStatusDeduped(
 					`/api/users/${targetId}/follow`,
@@ -1556,51 +1628,99 @@ async function loadCreation() {
 
 				if (!result.ok) {
 					busy = false;
-					followButton.disabled = false;
+					followButtons.forEach((btn) => { btn.disabled = false; });
 					return;
 				}
 
-				// Once the viewer follows the creator, hide the button to match the
-				// "only when not already following" requirement.
-				followButton.style.display = 'none';
+				// Once the viewer follows the creator, hide all follow buttons.
+				followButtons.forEach((btn) => { btn.style.display = 'none'; });
 			});
-		}
+		});
 
-		// Kebab menu (mobile): Set as profile pic, Landscape (Copy link stays inline)
-		const moreBtn = detailContent.querySelector('[data-creation-more-button]');
-		const menu = detailContent.querySelector('[data-creation-menu]');
-		const setAvatarMenuBtn = detailContent.querySelector('[data-creation-menu-set-avatar]');
-		const moreWrap = detailContent.querySelector('.creation-detail-more');
-
-		if (moreBtn instanceof HTMLButtonElement && menu instanceof HTMLElement && moreWrap instanceof HTMLElement) {
-			setupKebabDropdown(moreBtn, menu, { wrapEl: moreWrap });
-
-			if (setAvatarMenuBtn instanceof HTMLButtonElement) {
-				setAvatarMenuBtn.addEventListener('click', async (e) => {
-					e.preventDefault();
-					e.stopPropagation();
-					menu.style.display = 'none';
-					const setAvatarBtn = detailContent.querySelector('button[data-set-avatar-button]');
-					if (setAvatarBtn) setAvatarBtn.click();
-				});
-			}
-
-			if (landscapeMenuBtn instanceof HTMLButtonElement) {
-				landscapeMenuBtn.addEventListener('click', (e) => {
-					e.preventDefault();
-					e.stopPropagation();
-					menu.style.display = 'none';
-					const landscapeBtn = detailContent.querySelector('[data-landscape-btn]');
-					if (landscapeBtn && !landscapeBtn.disabled) landscapeBtn.click();
-				});
-			}
-
-			// Hide kebab when no menu items are visible
-			const hasVisibleItem = [setAvatarMenuBtn, landscapeMenuBtn].some((el) => {
-				if (!el) return false;
-				return el.style.display !== 'none';
+		// Mobile more button popup: open/close and trigger same actions as meta row
+		const mobileMoreBtn = detailContent.querySelector('[data-creation-mobile-more-btn]');
+		const mobileMoreMenu = detailContent.querySelector('[data-creation-mobile-more-menu]');
+		if (mobileMoreBtn instanceof HTMLButtonElement && mobileMoreMenu instanceof HTMLElement) {
+			const closeMobileMoreMenu = () => {
+				mobileMoreMenu.setAttribute('aria-hidden', 'true');
+				mobileMoreMenu.style.display = 'none';
+				document.body.style.overflow = '';
+				document.removeEventListener('click', onDocumentClick);
+			};
+			const onDocumentClick = (e) => {
+				if (!mobileMoreMenu.contains(e.target) && !mobileMoreBtn.contains(e.target)) {
+					closeMobileMoreMenu();
+				}
+			};
+			mobileMoreBtn.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				const isOpen = mobileMoreMenu.getAttribute('aria-hidden') !== 'true';
+				if (isOpen) {
+					closeMobileMoreMenu();
+					return;
+				}
+				const rect = mobileMoreBtn.getBoundingClientRect();
+				const gap = 8;
+				mobileMoreMenu.style.position = 'fixed';
+				mobileMoreMenu.style.display = 'block';
+				mobileMoreMenu.style.bottom = '';
+				const menuW = mobileMoreMenu.offsetWidth || 200;
+				const menuH = mobileMoreMenu.offsetHeight || 200;
+				const spaceBelow = window.innerHeight - rect.bottom - gap;
+				const openAbove = spaceBelow < menuH && rect.top >= menuH + gap;
+				if (openAbove) {
+					mobileMoreMenu.style.top = `${Math.max(gap, rect.top - menuH - 4)}px`;
+				} else {
+					mobileMoreMenu.style.top = `${Math.min(window.innerHeight - menuH - gap, rect.bottom + 4)}px`;
+				}
+				mobileMoreMenu.style.left = `${Math.max(gap, Math.min(rect.right - menuW, window.innerWidth - menuW - gap))}px`;
+				mobileMoreMenu.setAttribute('aria-hidden', 'false');
+				document.body.style.overflow = 'hidden';
+				setTimeout(() => document.addEventListener('click', onDocumentClick), 0);
 			});
-			if (!hasVisibleItem) moreWrap.classList.add('creation-detail-more-empty');
+			mobileMoreMenu.addEventListener('click', (e) => {
+				const item = e.target?.closest?.('[data-mobile-menu-action]');
+				if (!item) return;
+				e.preventDefault();
+				e.stopPropagation();
+				const action = item.getAttribute('data-mobile-menu-action');
+				const targets = {
+					'more-info': () => detailContent.querySelector('[data-creation-details-link]')?.click(),
+					'copy-link': () => detailContent.querySelector('[data-copy-link-button]')?.click(),
+					'set-avatar': () => detailContent.querySelector('button[data-set-avatar-button]')?.click(),
+					'landscape': () => { const b = detailContent.querySelector('[data-landscape-btn]'); if (b && !b.disabled) b.click(); },
+					'unpublish': () => { const b = detailContent.querySelector('[data-unpublish-btn]'); if (b && !b.disabled) b.click(); },
+					'delete': () => { const b = detailContent.querySelector('[data-delete-btn]'); if (b && !b.disabled) b.click(); },
+					'queue-for-later': () => {
+						if (!showQueueForLater || !normalizedImageUrlForQueue) return;
+						const sourceId = Number(creationId);
+						const labelEl = item.querySelector('[data-queue-for-later-label]');
+						const currentlyQueued = loadMutateQueue().some((q) => {
+							const sid = Number(q?.sourceId);
+							const url = typeof q?.imageUrl === 'string' ? q.imageUrl : '';
+							return (Number.isFinite(sid) && sid === sourceId) || url === normalizedImageUrlForQueue || normalizeImageUrlForQueue(url) === normalizedImageUrlForQueue;
+						});
+						if (currentlyQueued) {
+							try {
+								removeFromMutateQueueByImageUrl(normalizedImageUrlForQueue);
+								if (labelEl) labelEl.textContent = 'Queue for later';
+							} catch {
+								// ignore storage errors
+							}
+						} else {
+							try {
+								addToMutateQueue({ sourceId, imageUrl: normalizedImageUrlForQueue, published: isPublished });
+								if (labelEl) labelEl.textContent = 'Remove from queue';
+							} catch {
+								// ignore storage errors
+							}
+						}
+					}
+				};
+				if (typeof targets[action] === 'function') targets[action]();
+				closeMobileMoreMenu();
+			});
 		}
 
 		if (!shareMountedPrivate) {
@@ -1632,7 +1752,10 @@ async function loadCreation() {
 		function setCommentCount(nextCount) {
 			const n = Number(nextCount ?? 0);
 			commentsState.commentCount = Number.isFinite(n) ? Math.max(0, n) : 0;
-			if (commentCountEl) commentCountEl.textContent = String(commentsState.commentCount);
+			if (commentCountEl) {
+				const c = commentsState.commentCount;
+				commentCountEl.textContent = c === 1 ? '1 Comment' : `${c} Comments`;
+			}
 		}
 
 		function renderComments() {
@@ -1870,7 +1993,7 @@ async function loadCreation() {
 			const query = new URLSearchParams(window.location.search);
 			const debugRelated = query.get('debug_related') === '1';
 			const showRecsysDebug = isAdmin && debugRelated;
-			initRelatedSection(detailContent, creationId, { showRecsysDebug });
+			initRelatedSection(detailContent.parentElement, creationId, { showRecsysDebug });
 		}
 
 		// Now that the creation detail view is fully resolved, show actions.
@@ -1884,10 +2007,11 @@ async function loadCreation() {
 
 	} catch (error) {
 		console.error("Error loading creation detail:", error);
-		detailContent.innerHTML = renderEmptyState({
+		detailContent.innerHTML = renderCreationDetailActions() + renderEmptyState({
 			title: 'Unable to load creation',
 			message: 'An error occurred while loading the creation.',
 		});
+		actionsEl = detailContent.querySelector('.creation-detail-actions');
 		if (actionsEl) actionsEl.style.display = 'none';
 	}
 }

@@ -143,6 +143,8 @@ export function handleNsfwClick(e) {
 		e.target?.closest?.('.feed-card-image') ||
 		e.target?.closest?.('.route-card')
 	) return false;
+	// Ancestor/child lineage links: just navigate to that creation's detail page, don't ask to reveal NSFW
+	if (e.target?.closest?.('.creation-detail-history-thumb-link')) return false;
 	const creationId = getCreationIdFromNsfwElement(e.target);
 	if (!creationId) return false;
 

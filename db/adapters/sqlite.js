@@ -504,6 +504,14 @@ export async function openDb() {
 				return Promise.resolve(stmt.get(followerId, followingId));
 			}
 		},
+		selectFollowerCountForUser: {
+			get: async (userId) => {
+				const stmt = db.prepare(
+					`SELECT COUNT(*) AS count FROM user_follows WHERE following_id = ?`
+				);
+				return Promise.resolve(stmt.get(userId));
+			}
+		},
 		selectUserFollowers: {
 			all: async (userId, options = {}) => {
 				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
