@@ -142,6 +142,21 @@ More Info`,
 		disabled: (c) => c?.deleteDisabled !== false,
 		extraAttrs: (c) => c?.deletePermanent ? ' data-permanent-delete="1"' : '',
 		label: (c) => (c?.deleteLabel ?? ' Delete')
+	},
+	{
+		key: 'permanent-delete',
+		dataAttr: 'data-delete-btn',
+		btnClass: 'btn-outlined btn-danger-outlined',
+		inKebabMenu: false,
+		inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 6px; vertical-align: middle;">
+	<path
+		d="M2 4H14M12.5 4V13.5C12.5 14.3284 11.8284 15 11 15H5C4.17157 15 3.5 14.3284 3.5 13.5V4M5.5 4V2.5C5.5 1.67157 6.17157 1 7 1H9C9.82843 1 10.5 1.67157 10.5 2.5V4M6.5 7.5V11.5M9.5 7.5V11.5"
+		stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+</svg>`,
+		show: (c) => c?.deletePermanent,
+		disabled: () => false,
+		extraAttrs: () => ' data-permanent-delete="1"',
+		label: () => ' Permanently delete'
 	}
 ];
 
@@ -948,7 +963,7 @@ async function loadCreation() {
 			showUnpublish: canEdit && isPublished && !isFailed && !adminViewingUserDeleted,
 			showMutate: !isAdmin && status === 'completed' && !isFailed && Boolean(creation.url),
 			showShare: !shareMountedPrivate && status === 'completed' && !isFailed,
-			showRetry: canEdit && isFailed,
+			showRetry: canEdit && isFailed && !adminViewingUserDeleted,
 			showMoreInfoPill: hasDetailsForFailed,
 			showDelete: canEdit && !(isAdmin && !userDeleted),
 			showQueueForLater,
@@ -1442,7 +1457,7 @@ async function loadCreation() {
 					<span>Un-publish</span>
 				</button>
 				` : ''}
-				${actionsContext?.showDelete ? html`
+				${actionsContext?.showDelete && !actionsContext?.deletePermanent ? html`
 				<button type="button" class="creation-detail-more-menu-item creation-detail-more-menu-item-danger" role="menuitem"
 					data-creation-more-action="delete">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
@@ -1483,6 +1498,7 @@ async function loadCreation() {
 			</div>
 			
 			${isPublished && !isFailed ? html`
+			${!isAdmin ? html`
 			<div class="comment-input" data-comment-input>
 				<div class="comment-avatar" ${!viewerPlan ? `style="background: ${viewerColor};" ` : '' }>
 					${viewerPlan ? html`
@@ -1506,21 +1522,22 @@ async function loadCreation() {
 					</div>
 				</div>
 			</div>
+			` : ''}
 			
-			<div class="comments-toolbar">
-				<h3 class="comments-heading"><span data-comment-count>0 Comments</span></h3>
-				<div class="comments-sort">
-					<label class="comments-sort-label" for="comments-sort">Sort by</label>
-			
-					<select class="comments-sort-select" id="comments-sort" data-comments-sort>
-						<option value="asc">Oldest</option>
-						<option value="desc">Most recent</option>
-					</select>
+			<div class="creation-detail-comments-section" data-comments-section style="display: none;">
+				<div class="comments-toolbar">
+					<h3 class="comments-heading"><span data-comment-count>0 Comments</span></h3>
+					<div class="comments-sort">
+						<label class="comments-sort-label" for="comments-sort">Sort by</label>
+				
+						<select class="comments-sort-select" id="comments-sort" data-comments-sort>
+							<option value="asc">Oldest</option>
+							<option value="desc">Most recent</option>
+						</select>
+					</div>
 				</div>
-			</div>
-			<div id="comments" data-comments-anchor></div>
-			<div class="comment-list" data-comment-list>
-				${renderEmptyLoading({})}
+				<div id="comments" data-comments-anchor></div>
+				<div class="comment-list" data-comment-list></div>
 			</div>
 			
 			<section class="creation-detail-related" data-related-container aria-label="More like this" style="display: none;">
@@ -1888,11 +1905,18 @@ async function loadCreation() {
 				if (commentsToolbarEl instanceof HTMLElement) {
 					commentsToolbarEl.style.display = 'none';
 				}
-				commentListEl.innerHTML = renderEmptyState({
-					className: 'comments-empty',
-					title: 'No comments yet',
-					message: 'Be the first to say something.',
-				});
+				if (isAdmin) {
+					commentListEl.innerHTML = renderEmptyState({
+						className: 'comments-empty',
+						title: 'No comments',
+					});
+				} else {
+					commentListEl.innerHTML = renderEmptyState({
+						className: 'comments-empty',
+						title: 'No comments yet',
+						message: 'Be the first to say something.',
+					});
+				}
 				return;
 			}
 
@@ -2022,11 +2046,12 @@ async function loadCreation() {
 
 		async function loadComments({ scrollIfHash = false } = {}) {
 			if (!commentListEl) return;
-			commentListEl.innerHTML = renderEmptyLoading({});
-			if (commentsToolbarEl instanceof HTMLElement) commentsToolbarEl.style.display = 'none';
 
 			const res = await fetchCreatedImageActivity(creationId, { order: commentsState.order, limit: 50, offset: 0 })
 				.catch(() => ({ ok: false, status: 0, data: null }));
+
+			const commentsSection = detailContent.querySelector('[data-comments-section]');
+			if (commentsSection) commentsSection.style.display = '';
 
 			if (!res.ok) {
 				if (commentsToolbarEl instanceof HTMLElement) commentsToolbarEl.style.display = 'none';

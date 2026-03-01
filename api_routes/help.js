@@ -380,7 +380,12 @@ export default function createHelpRoutes({ pagesDir, queries }) {
 			return '';
 		}
 	}
-	
+
+	const assetVersion = process.env.BUILD_ID || process.env.ASSET_VERSION || process.env.VERCEL_GIT_COMMIT_SHA || process.env.VERCEL_GIT_PREVIOUS_COMMIT_SHA || "";
+	function getPageTokens() {
+		return { V: assetVersion ? `?v=${assetVersion}` : "" };
+	}
+
 	// Search API endpoint
 	router.get('/api/help/search', async (req, res) => {
 		try {
@@ -440,7 +445,7 @@ export default function createHelpRoutes({ pagesDir, queries }) {
 				showMobileHomeLink: false
 			});
 			
-			const htmlWithHead = injectCommonHead(html);
+			const htmlWithHead = injectCommonHead(html, getPageTokens());
 			
 			// Inject header if user is logged in
 			const userId = req.auth?.userId;
@@ -543,7 +548,7 @@ export default function createHelpRoutes({ pagesDir, queries }) {
 					showMobileHomeLink: true
 				});
 				
-				const htmlWithHead = injectCommonHead(html);
+				const htmlWithHead = injectCommonHead(html, getPageTokens());
 				
 				// Inject header if user is logged in
 				const userId = req.auth?.userId;
@@ -598,7 +603,7 @@ export default function createHelpRoutes({ pagesDir, queries }) {
 				showMobileHomeLink: true
 			});
 			
-			const htmlWithHead = injectCommonHead(html);
+			const htmlWithHead = injectCommonHead(html, getPageTokens());
 			
 			// Inject header if user is logged in
 			const userId = req.auth?.userId;

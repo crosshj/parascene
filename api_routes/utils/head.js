@@ -24,14 +24,29 @@ function getCommonHead() {
 	`.trimEnd();
 }
 
-export function injectCommonHead(htmlContent) {
+/**
+ * Replace {{TOKEN}} placeholders in HTML. Use short token names (e.g. {{V}}) so if
+ * replacement is ever skipped, the raw placeholder is less obvious in the output.
+ * extraTokens: { TOKEN_NAME: "value" }.
+ */
+function replacePageTokens(htmlContent, extraTokens) {
+	if (!extraTokens || typeof extraTokens !== "object") return htmlContent;
+	let out = String(htmlContent ?? "");
+	for (const [key, value] of Object.entries(extraTokens)) {
+		out = out.split(`{{${key}}}`).join(String(value ?? ""));
+	}
+	return out;
+}
+
+export function injectCommonHead(htmlContent, extraTokens) {
 	// Inject common head elements before existing head content
 	const headMatch = htmlContent.match(/<head>([\s\S]*?)<\/head>/i);
 	if (!headMatch) {
-		return htmlContent;
+		return replacePageTokens(htmlContent, extraTokens);
 	}
 
 	const commonHead = getCommonHead();
 	const existingHeadContent = headMatch[1];
-	return htmlContent.replace(/<head>[\s\S]*?<\/head>/i, `<head>\n${commonHead}${existingHeadContent}</head>`);
+	const withHead = htmlContent.replace(/<head>[\s\S]*?<\/head>/i, `<head>\n${commonHead}${existingHeadContent}</head>`);
+	return replacePageTokens(withHead, extraTokens);
 }

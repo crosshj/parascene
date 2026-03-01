@@ -1129,6 +1129,11 @@ body.creation-detail-page main>section:first-of-type {
 	font-weight: 600;
 }
 
+/* Admin permanent delete pill (user-deleted item) */
+.creation-detail-action-strip-pill[data-delete-btn][data-permanent-delete="1"] {
+	color: var(--error-text, #b91c1c);
+}
+
 .creation-detail-action-strip-pill:disabled {
 	opacity: 0.6;
 	cursor: not-allowed;

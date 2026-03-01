@@ -19,11 +19,18 @@ function getPageForUser(user) {
 export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 	const router = express.Router();
 
+	// Cache-bust: {{V}} in HTML becomes ?v=xxx (or ""). Short name so unreplaced token is less obvious.
+	const assetVersion = process.env.BUILD_ID || process.env.ASSET_VERSION || process.env.VERCEL_GIT_COMMIT_SHA || process.env.VERCEL_GIT_PREVIOUS_COMMIT_SHA || "";
+	function getPageTokens() {
+		return { V: assetVersion ? `?v=${assetVersion}` : "" };
+	}
+
 	// Serve create page CSS so it loads when static middleware isn't used (e.g. Vercel)
 	if (staticDir) {
 		router.get("/pages/creations.css", (req, res, next) => {
 			const cssPath = path.join(staticDir, "pages", "creations.css");
 			res.type("text/css");
+			res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
 			res.sendFile(cssPath, (err) => {
 				if (err) next();
 			});
@@ -429,7 +436,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 		try {
 			const fs = await import("fs/promises");
 			let htmlContent = await fs.readFile(path.join(pagesDir, "welcome.html"), "utf-8");
-			htmlContent = injectCommonHead(htmlContent);
+			htmlContent = injectCommonHead(htmlContent, getPageTokens());
 			res.setHeader("Content-Type", "text/html");
 			return res.send(htmlContent);
 		} catch (error) {
@@ -445,7 +452,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 		if (!userId) {
 			const fs = await import("fs/promises");
 			let htmlContent = await fs.readFile(path.join(pagesDir, "index.html"), "utf-8");
-			htmlContent = injectCommonHead(htmlContent);
+			htmlContent = injectCommonHead(htmlContent, getPageTokens());
 			res.setHeader("Content-Type", "text/html");
 			return res.send(htmlContent);
 		}
@@ -459,7 +466,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 			}
 			const fs = await import("fs/promises");
 			let htmlContent = await fs.readFile(path.join(pagesDir, "index.html"), "utf-8");
-			htmlContent = injectCommonHead(htmlContent);
+			htmlContent = injectCommonHead(htmlContent, getPageTokens());
 			res.setHeader("Content-Type", "text/html");
 			return res.send(htmlContent);
 		}
@@ -468,7 +475,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 		const page = getPageForUser(user);
 		const fs = await import("fs/promises");
 		let htmlContent = await fs.readFile(path.join(pagesDir, page), "utf-8");
-		htmlContent = injectCommonHead(htmlContent);
+		htmlContent = injectCommonHead(htmlContent, getPageTokens());
 		res.setHeader("Content-Type", "text/html");
 		return res.send(htmlContent);
 	});
@@ -600,7 +607,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 				`${profileContextScript}\n\t<script type="module" src="/pages/user-profile.js"></script>`
 			);
 
-			pageHtml = injectCommonHead(pageHtml);
+			pageHtml = injectCommonHead(pageHtml, getPageTokens());
 
 			res.setHeader("Content-Type", "text/html");
 			return res.send(pageHtml);
@@ -646,7 +653,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 				includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
 			);
 
-			pageHtml = injectCommonHead(pageHtml);
+			pageHtml = injectCommonHead(pageHtml, getPageTokens());
 
 			res.setHeader("Content-Type", "text/html");
 			return res.send(pageHtml);
@@ -713,7 +720,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 				includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
 			);
 
-			pageHtml = injectCommonHead(pageHtml);
+			pageHtml = injectCommonHead(pageHtml, getPageTokens());
 
 			res.setHeader('Content-Type', 'text/html');
 			return res.send(pageHtml);
@@ -752,7 +759,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 				includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
 			);
 
-			pageHtml = injectCommonHead(pageHtml);
+			pageHtml = injectCommonHead(pageHtml, getPageTokens());
 
 			res.setHeader("Content-Type", "text/html");
 			return res.status(404).send(pageHtml);
@@ -835,9 +842,11 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 				includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
 			);
 
-			pageHtml = injectCommonHead(pageHtml);
+			pageHtml = injectCommonHead(pageHtml, getPageTokens());
 
-			res.setHeader('Content-Type', 'text/html');
+			res.setHeader("Content-Type", "text/html");
+			res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+			res.setHeader("Pragma", "no-cache");
 			return res.send(pageHtml);
 		} catch (error) {
 			// console.error("Error loading creation detail:", error);
@@ -857,7 +866,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 		}
 		const fs = await import("fs/promises");
 		let htmlContent = await fs.readFile(path.join(pagesDir, "auth.html"), "utf-8");
-		htmlContent = injectCommonHead(htmlContent);
+		htmlContent = injectCommonHead(htmlContent, getPageTokens());
 		res.setHeader("Content-Type", "text/html");
 		return res.send(htmlContent);
 	});
@@ -906,7 +915,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 			pageHtml = pageHtml.replace('<body class="pricing-page">', '<body class="pricing-page pricing-page-guest">');
 		}
 
-		pageHtml = injectCommonHead(pageHtml);
+		pageHtml = injectCommonHead(pageHtml, getPageTokens());
 		res.setHeader("Content-Type", "text/html");
 		return res.send(pageHtml);
 	});
@@ -951,7 +960,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 			if (req.path === "/auth" || req.path === "/auth.html") {
 				const fs = await import("fs/promises");
 				let htmlContent = await fs.readFile(path.join(pagesDir, "auth.html"), "utf-8");
-				htmlContent = injectCommonHead(htmlContent);
+				htmlContent = injectCommonHead(htmlContent, getPageTokens());
 				res.setHeader("Content-Type", "text/html");
 				return res.send(htmlContent);
 			}
@@ -979,7 +988,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 		const page = getPageForUser(user);
 		const fs = await import("fs/promises");
 		let htmlContent = await fs.readFile(path.join(pagesDir, page), "utf-8");
-		htmlContent = injectCommonHead(htmlContent);
+		htmlContent = injectCommonHead(htmlContent, getPageTokens());
 		res.setHeader("Content-Type", "text/html");
 		return res.send(htmlContent);
 	});
