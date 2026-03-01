@@ -9,6 +9,9 @@
 	--text-muted: #525a6b;
 	/* Used as a subtle backdrop while images are still loading */
 	--image-placeholder: rgba(15, 23, 42, 0.06);
+	/* Skeleton loaders: theme-aware base and shimmer */
+	--skeleton: color-mix(in srgb, var(--text) 12%, var(--surface));
+	--skeleton-shine: rgba(0, 0, 0, 0.06);
 	/* Used for "image unavailable" fallbacks – simple frame + slash */
 	--icon-image-unavailable: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='6' width='16' height='12' rx='1.5'/%3E%3Cpath d='M4 18L20 6'/%3E%3C/g%3E%3C/svg%3E");
 	--border: #e2e8f0;
@@ -68,6 +71,8 @@
 		--text-muted: #b3b7c3;
 		/* Used as a subtle backdrop while images are still loading */
 		--image-placeholder: rgba(237, 233, 254, 0.08);
+		--skeleton: color-mix(in srgb, var(--text) 8%, var(--surface));
+		--skeleton-shine: rgba(255, 255, 255, 0.04);
 		--border: #3d3552;
 		/* --accent: #7c3aed; */
 		--accent: #05c76f;
@@ -4026,10 +4031,10 @@ app-route-feed {
 }
 
 /* Span full grid width when inside a grid so empty state is centered */
-.content-cards-image-grid > .route-empty,
-.cards-grid-auto > .route-empty,
-.admin-cards > .route-empty,
-.users-cards > .route-empty {
+.content-cards-image-grid>.route-empty,
+.cards-grid-auto>.route-empty,
+.admin-cards>.route-empty,
+.users-cards>.route-empty {
 	grid-column: 1 / -1;
 }
 
@@ -4299,6 +4304,112 @@ app-route-feed {
 	.route-loading-spinner {
 		animation: spin 0.8s linear infinite;
 		opacity: 1;
+	}
+}
+
+/* ============================================
+   Skeleton loaders (reusable, subtle)
+   ============================================ */
+
+@keyframes skeleton-shimmer {
+	0% {
+		background-position: -300vw 0;
+	}
+
+	100% {
+		background-position: 0 0;
+	}
+}
+
+/* Base: solid background, clip shimmer with overflow + border-radius */
+.skeleton {
+	position: relative;
+	overflow: hidden;
+	background: var(--skeleton);
+	border-radius: 4px;
+}
+
+.skeleton::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background: linear-gradient(90deg, transparent, var(--skeleton-shine), transparent);
+	background-size: 300vw 100%;
+	border-radius: inherit;
+	animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+.skeleton-line {
+	height: 1em;
+	position: relative;
+	overflow: hidden;
+	background: var(--skeleton);
+	border-radius: 4px;
+}
+
+.skeleton-line::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background: linear-gradient(90deg, transparent, var(--skeleton-shine), transparent);
+	background-size: 300vw 100%;
+	border-radius: inherit;
+	animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+.skeleton-line.skeleton-line--short {
+	max-width: 60%;
+}
+
+.skeleton-line.skeleton-line--medium {
+	max-width: 80%;
+}
+
+.skeleton-circle {
+	position: relative;
+	overflow: hidden;
+	background: var(--skeleton);
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+
+.skeleton-circle::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background: linear-gradient(90deg, transparent, var(--skeleton-shine), transparent);
+	background-size: 300vw 100%;
+	border-radius: 50%;
+	animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+.skeleton-pill {
+	height: 34px;
+	position: relative;
+	overflow: hidden;
+	background: var(--skeleton);
+	border-radius: 999px;
+	flex-shrink: 0;
+}
+
+.skeleton-pill::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background: linear-gradient(90deg, transparent, var(--skeleton-shine), transparent);
+	background-size: 300vw 100%;
+	border-radius: 999px;
+	animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+	.skeleton::after,
+	.skeleton-line::after,
+	.skeleton-circle::after,
+	.skeleton-pill::after {
+		animation: none;
+		display: none;
 	}
 }
 

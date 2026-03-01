@@ -15,6 +15,7 @@ import '../components/modals/share.js';
 import { creditIcon, eyeHiddenIcon, shareIcon, sparkleIcon } from '../icons/svg-strings.js';
 import '../components/modals/tip-creator.js';
 import { renderEmptyState, renderEmptyLoading, renderEmptyError } from '/shared/emptyState.js';
+import { skeletonLine, skeletonCircle, skeletonPill } from '/shared/skeleton.js';
 import { buildCreationCardShell } from '/shared/creationCard.js';
 import { renderCommentAvatarHtml } from '/shared/commentItem.js';
 
@@ -44,9 +45,10 @@ const CREATION_DETAIL_ACTION_DEFS = [
 		btnClass: 'btn-primary',
 		inKebabMenu: false,
 		inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 6px; vertical-align: middle;">
-			<path d="M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none" />
-		</svg>
-		Publish`,
+	<path d="M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+		stroke-linejoin="round" fill="none" />
+</svg>
+Publish`,
 		show: (c) => c?.showPublish,
 		disabled: (c) => !c?.showPublish
 	},
@@ -56,7 +58,7 @@ const CREATION_DETAIL_ACTION_DEFS = [
 		btnClass: 'btn-outlined',
 		inKebabMenu: false,
 		inner: html`<span class="creation-detail-action-strip-pill-icon">${sparkleIcon('')}</span>
-		Mutate`,
+Mutate`,
 		show: (c) => c?.showMutate,
 		disabled: (c) => !c?.showMutate
 	},
@@ -66,7 +68,7 @@ const CREATION_DETAIL_ACTION_DEFS = [
 		btnClass: 'btn-outlined',
 		inKebabMenu: false,
 		inner: html`<span class="creation-detail-action-strip-pill-icon">${shareIcon('')}</span>
-		Share`,
+Share`,
 		show: (c) => c?.showShare,
 		disabled: (c) => !c?.showShare
 	},
@@ -76,9 +78,10 @@ const CREATION_DETAIL_ACTION_DEFS = [
 		btnClass: 'btn-outlined',
 		inKebabMenu: false,
 		inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 6px; vertical-align: middle;">
-			<path d="M11.5 2.5L13.5 4.5L5.5 12.5H3.5V10.5L11.5 2.5Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none" />
-		</svg>
-		Edit`,
+	<path d="M11.5 2.5L13.5 4.5L5.5 12.5H3.5V10.5L11.5 2.5Z" stroke="currentColor" stroke-width="1.5"
+		stroke-linecap="round" stroke-linejoin="round" fill="none" />
+</svg>
+Edit`,
 		show: (c) => c?.showEdit,
 		disabled: (c) => !c?.showEdit
 	},
@@ -88,9 +91,10 @@ const CREATION_DETAIL_ACTION_DEFS = [
 		btnClass: 'btn-outlined',
 		inKebabMenu: true,
 		inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 6px; vertical-align: middle;">
-			<path d="M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none" />
-		</svg>
-		Un-publish`,
+	<path d="M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+		stroke-linejoin="round" fill="none" />
+</svg>
+Un-publish`,
 		show: (c) => c?.showUnpublish,
 		disabled: (c) => !c?.showUnpublish
 	},
@@ -100,10 +104,12 @@ const CREATION_DETAIL_ACTION_DEFS = [
 		btnClass: 'btn-outlined',
 		inKebabMenu: false,
 		inner: html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="margin-right: 6px; vertical-align: middle;">
-			<path d="M3 12a9 9 0 1 0 3-6.708" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-			<polyline points="3 4 3 10 9 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-		</svg>
-		Retry`,
+	<path d="M3 12a9 9 0 1 0 3-6.708" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+		stroke-linejoin="round" />
+	<polyline points="3 4 3 10 9 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+		stroke-linejoin="round" />
+</svg>
+Retry`,
 		show: (c) => c?.showRetry,
 		disabled: (c) => !c?.showRetry
 	},
@@ -112,8 +118,13 @@ const CREATION_DETAIL_ACTION_DEFS = [
 		dataAttr: 'data-more-info-btn',
 		btnClass: 'btn-outlined',
 		inKebabMenu: false,
-		inner: html`<span class="creation-detail-action-strip-pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v8"></path><path d="M12 6h.01"></path></svg></span>
-		More Info`,
+		inner: html`<span class="creation-detail-action-strip-pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+		stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+		<circle cx="12" cy="12" r="10"></circle>
+		<path d="M12 8v8"></path>
+		<path d="M12 6h.01"></path>
+	</svg></span>
+More Info`,
 		show: (c) => c?.showMoreInfoPill,
 		disabled: () => false
 	},
@@ -123,8 +134,10 @@ const CREATION_DETAIL_ACTION_DEFS = [
 		btnClass: 'btn-outlined btn-danger-outlined',
 		inKebabMenu: true,
 		inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 6px; vertical-align: middle;">
-			<path d="M2 4H14M12.5 4V13.5C12.5 14.3284 11.8284 15 11 15H5C4.17157 15 3.5 14.3284 3.5 13.5V4M5.5 4V2.5C5.5 1.67157 6.17157 1 7 1H9C9.82843 1 10.5 1.67157 10.5 2.5V4M6.5 7.5V11.5M9.5 7.5V11.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-		</svg>`,
+	<path
+		d="M2 4H14M12.5 4V13.5C12.5 14.3284 11.8284 15 11 15H5C4.17157 15 3.5 14.3284 3.5 13.5V4M5.5 4V2.5C5.5 1.67157 6.17157 1 7 1H9C9.82843 1 10.5 1.67157 10.5 2.5V4M6.5 7.5V11.5M9.5 7.5V11.5"
+		stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+</svg>`,
 		show: (c) => c?.showDelete,
 		disabled: (c) => c?.deleteDisabled !== false,
 		extraAttrs: (c) => c?.deletePermanent ? ' data-permanent-delete="1"' : '',
@@ -150,8 +163,64 @@ function renderCreationDetailActions(ctx) {
 	}).join('\n\t');
 
 	return html`
-<div class="creation-detail-actions"${containerStyle}>
+<div class="creation-detail-actions" ${containerStyle}>
 	${buttonsHtml}
+</div>`;
+}
+
+/** Skeleton placeholder for creation-detail-info while content is loading. Mirrors the loaded layout for a smooth transition. */
+function renderCreationDetailSkeleton() {
+	return html`
+<div class="creation-detail-skeleton" aria-label="Loading" aria-busy="true">
+	<div class="creation-detail-title-row">
+		<div class="skeleton skeleton-line" style="width: 72%; max-width: 320px;"></div>
+	</div>
+	<div class="creation-detail-title-row">
+		<div class="skeleton skeleton-line" style="width: 62%; max-width: 220px;"></div>
+	</div>
+	<div class="creation-detail-title-byline creation-detail-title-byline-mobile">
+		<span class="skeleton skeleton-line skeleton-line--short"></span>
+	</div>
+	<div class="creation-detail-action-strip">
+		<div class="creation-detail-action-strip-scroll">
+			<div class="creation-detail-action-strip-avatar">${skeletonCircle(40)}</div>
+			<div class="creation-detail-action-strip-creator-info">
+				<div class="skeleton skeleton-line skeleton-line--short" style="margin-bottom: 4px;"></div>
+				<div class="skeleton skeleton-line skeleton-line--medium"></div>
+			</div>
+			${skeletonPill('72px')}
+			${skeletonPill('64px')}
+			${skeletonPill('88px')}
+			<span class="skeleton skeleton-circle" style="width: 34px; height: 34px;"></span>
+		</div>
+	</div>
+	<div class="creation-detail-skeleton-description">
+		<span class="skeleton skeleton-line" style="display: block; margin-bottom: 6px;"></span>
+		<span class="skeleton skeleton-line" style="display: block; margin-bottom: 6px; width: 95%;"></span>
+		<span class="skeleton skeleton-line skeleton-line--medium" style="display: block;"></span>
+	</div>
+	<div class="comment-input">
+		<div class="comment-avatar">${skeletonCircle(32)}</div>
+		<div class="comment-input-body">
+			<span class="skeleton skeleton-line" style="display: block; height: 40px; border-radius: 8px;"></span>
+		</div>
+	</div>
+	<div class="comments-toolbar">
+		<div class="skeleton skeleton-line" style="width: 120px;"></div>
+		<div class="skeleton skeleton-line" style="width: 100px; margin-left: auto;"></div>
+	</div>
+	<div class="comment-list">
+		<div class="creation-detail-skeleton-comment">${skeletonCircle(32)}<div><span
+					class="skeleton skeleton-line skeleton-line--short"
+					style="display: block; margin-bottom: 4px;"></span><span
+					class="skeleton skeleton-line skeleton-line--medium" style="display: block;"></span></div>
+		</div>
+		<div class="creation-detail-skeleton-comment">${skeletonCircle(32)}<div><span
+					class="skeleton skeleton-line skeleton-line--medium"
+					style="display: block; margin-bottom: 4px;"></span><span
+					class="skeleton skeleton-line skeleton-line--short" style="display: block;"></span></div>
+		</div>
+	</div>
 </div>`;
 }
 
@@ -358,7 +427,7 @@ function recordTransitionFromQuery(currentCreationId) {
 			const newUrl = url.pathname + (url.search ? url.search : '') + (url.hash || '');
 			window.history.replaceState(window.history.state, '', newUrl);
 		}
-	}).catch(() => {});
+	}).catch(() => { });
 }
 
 function initRelatedSection(root, currentCreationId, options = {}) {
@@ -463,7 +532,9 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 						<div class="route-summary">${escapeHtml(decodeHtmlEntities(item.summary != null ? item.summary : ''))}</div>
 						<div class="route-meta" title="${formatDateTime(item.created_at)}">${formatRelativeTime(item.created_at)}</div>
 						<div class="route-meta">
-							By ${profileHref ? html`<a class="user-link" href="${profileHref}" data-related-profile-link>${escapeHtml(decodeHtmlEntities(authorLabel))}</a>` : escapeHtml(decodeHtmlEntities(authorLabel))}${handle ? html` <span>(${handle})</span>` : ''}
+							By ${profileHref ? html`<a class="user-link" href="${profileHref}"
+								data-related-profile-link>${escapeHtml(decodeHtmlEntities(authorLabel))}</a>` :
+							escapeHtml(decodeHtmlEntities(authorLabel))}${handle ? html` <span>(${handle})</span>` : ''}
 						</div>
 						${reasonsHtml}
 						<div class="route-meta route-meta-spacer"></div>
@@ -612,8 +683,8 @@ async function loadCreation() {
 
 	if (!detailContent || !imageEl || !backgroundEl) return;
 
-	// Render actions + loading so we have a live actions element; hide until ownership is resolved.
-	detailContent.innerHTML = renderCreationDetailActions() + renderEmptyLoading({});
+	// Render actions + skeleton so we have a live actions element; hide until ownership is resolved.
+	detailContent.innerHTML = renderCreationDetailActions() + renderCreationDetailSkeleton();
 	let actionsEl = detailContent.querySelector('.creation-detail-actions');
 	if (actionsEl) {
 		actionsEl.classList.remove('is-ready');
@@ -662,7 +733,7 @@ async function loadCreation() {
 		return;
 	}
 
-	detailContent.innerHTML = renderCreationDetailActions() + renderEmptyLoading({});
+	detailContent.innerHTML = renderCreationDetailActions() + renderCreationDetailSkeleton();
 	actionsEl = detailContent.querySelector('.creation-detail-actions');
 
 	try {
@@ -910,7 +981,7 @@ async function loadCreation() {
 		let publishedLabel = '';
 		if (isPublished) {
 			publishedLabel = html`
-				<div class="creation-detail-author-published" ${publishedAtTitle ? `title="${publishedAtTitle}" ` : '' }>
+				<div class="creation-detail-author-published" ${publishedAtTitle ? `title="${publishedAtTitle}" ` : ''}>
 					Published${publishedTimeAgo ? ` ${publishedTimeAgo}` : ''}
 				</div>
 			`;
@@ -1223,13 +1294,14 @@ async function loadCreation() {
 		const authorAvatar = creatorPlan ? html`
 			<div class="avatar-with-founder-flair avatar-with-founder-flair--sm">
 				<div class="founder-flair-avatar-ring">
-					<div class="founder-flair-avatar-inner" style="background: ${creatorAvatarUrl ? 'var(--surface-strong)' : creatorColor};" aria-hidden="true">
+					<div class="founder-flair-avatar-inner"
+						style="background: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx;" aria-hidden="true">
 						${creatorAvatarContent}
 					</div>
 				</div>
 			</div>
 		` : html`
-			<span class="creation-detail-author-icon" style="background: ${creatorColor};">
+			<span class="creation-detail-author-icon" style="background: xxxxxxxxxxxxxxx;">
 				${creatorAvatarContent}
 			</span>
 		`;
@@ -1262,13 +1334,16 @@ async function loadCreation() {
 		detailContent.innerHTML = html`
 			<div class="creation-detail-title-row">
 				${(creation.nsfw ?? creation.meta?.nsfw) ? html`<span class="creation-detail-nsfw-tag">NSFW</span>` : ''}
-				<div class="creation-detail-title${isUntitled ? ' creation-detail-title-untitled' : ''}">${escapeHtml(displayTitle)}</div>
+				<div class="creation-detail-title${isUntitled ? ' creation-detail-title-untitled' : ''}">${escapeHtml(displayTitle)}
+				</div>
 			</div>
-			<div class="creation-detail-title-byline creation-detail-title-byline-mobile">${escapeHtml(creatorHandle)} ${escapeHtml(mobileBylineText)}</div>
+			<div class="creation-detail-title-byline creation-detail-title-byline-mobile">${escapeHtml(creatorHandle)}
+				${escapeHtml(mobileBylineText)}</div>
 			<div class="creation-detail-action-strip">
 				<div class="creation-detail-action-strip-scroll">
 					${creatorProfileHref ? html`
-					<a class="creation-detail-action-strip-avatar" href="${creatorProfileHref}" aria-label="View ${escapeHtml(creatorName)} profile">${authorAvatar}</a>
+					<a class="creation-detail-action-strip-avatar" href="${creatorProfileHref}"
+						aria-label="View ${escapeHtml(creatorName)} profile">${authorAvatar}</a>
 					` : html`
 					<div class="creation-detail-action-strip-avatar" aria-hidden="true">${authorAvatar}</div>
 					`}
@@ -1277,19 +1352,24 @@ async function loadCreation() {
 						<div class="creation-detail-action-strip-creator-followers">${creatorFollowerCount} Followers</div>
 					</div>
 					${!isAdmin && canShowFollowButton && !viewerFollowsCreator ? html`
-					<button type="button" class="creation-detail-action-strip-follow" data-follow-button data-follow-user-id="${escapeHtml(creatorId)}">Follow</button>
+					<button type="button" class="creation-detail-action-strip-follow" data-follow-button
+						data-follow-user-id="${escapeHtml(creatorId)}">Follow</button>
 					` : ''}
 					${hasEngagementActions && !shareMountedPrivate ? html`
 					<button type="button" class="creation-detail-action-strip-pill" aria-label="Like" data-like-button>
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-							<path d="M20.8 4.6a5 5 0 0 0-7.1 0L12 6.3l-1.7-1.7a5 5 0 1 0-7.1 7.1l1.7 1.7L12 21l7.1-7.6 1.7-1.7a5 5 0 0 0 0-7.1z"></path>
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+							stroke-linejoin="round" aria-hidden="true">
+							<path
+								d="M20.8 4.6a5 5 0 0 0-7.1 0L12 6.3l-1.7-1.7a5 5 0 1 0-7.1 7.1l1.7 1.7L12 21l7.1-7.6 1.7-1.7a5 5 0 0 0 0-7.1z">
+							</path>
 						</svg>
 						<span class="creation-detail-action-strip-pill-count" data-like-count>${likeCount}</span>
 					</button>
 					` : ''}
 					${renderCreationDetailMobilePills(actionsContext)}
 					${!isOwner && !isAdmin ? html`
-					<button type="button" class="creation-detail-action-strip-pill" data-tip-creator-button aria-label="Tip Creator">
+					<button type="button" class="creation-detail-action-strip-pill" data-tip-creator-button
+						aria-label="Tip Creator">
 						<span class="creation-detail-action-strip-pill-icon">${creditIcon('')}</span>
 						<span>Tip Creator</span>
 					</button>
@@ -1304,42 +1384,73 @@ async function loadCreation() {
 			<div class="creation-detail-more-menu" data-creation-more-menu aria-hidden="true" role="menu">
 				${!isFailed ? html`
 				<button type="button" class="creation-detail-more-menu-item" role="menuitem" data-creation-more-action="copy-link">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+						stroke-linejoin="round" aria-hidden="true">
+						<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+						<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+					</svg>
 					<span>Copy link</span>
 				</button>
 				${actionsContext?.showQueueForLater ? html`
-				<button type="button" class="creation-detail-more-menu-item" role="menuitem" data-creation-more-action="queue-for-later">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+				<button type="button" class="creation-detail-more-menu-item" role="menuitem"
+					data-creation-more-action="queue-for-later">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+						stroke-linejoin="round" aria-hidden="true">
+						<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+						<line x1="16" y1="2" x2="16" y2="6"></line>
+						<line x1="8" y1="2" x2="8" y2="6"></line>
+						<line x1="3" y1="10" x2="21" y2="10"></line>
+					</svg>
 					<span data-queue-for-later-label>${actionsContext.queueForLaterLabel}</span>
 				</button>
 				` : ''}
 				${isOwner ? html`
 				<button type="button" class="creation-detail-more-menu-item" role="menuitem" data-creation-more-action="set-avatar">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+						stroke-linejoin="round" aria-hidden="true">
+						<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+						<circle cx="12" cy="7" r="4"></circle>
+					</svg>
 					<span>Set as profile picture</span>
 				</button>
 				` : ''}
 				${isOwner && !isAdmin ? html`
 				<button type="button" class="creation-detail-more-menu-item" role="menuitem" data-creation-more-action="landscape">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="1.5" /></svg>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+						stroke-linejoin="round" aria-hidden="true">
+						<rect x="2" y="6" width="20" height="12" rx="1.5" /></svg>
 					<span>Landscape</span>
 				</button>
 				` : ''}
 				${hasDetailsModalContent ? html`
 				<button type="button" class="creation-detail-more-menu-item" role="menuitem" data-creation-more-action="more-info">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v8"></path><path d="M12 6h.01"></path></svg>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+						stroke-linejoin="round" aria-hidden="true">
+						<circle cx="12" cy="12" r="10"></circle>
+						<path d="M12 8v8"></path>
+						<path d="M12 6h.01"></path>
+					</svg>
 					<span>More Info</span>
 				</button>
 				` : ''}
 				${actionsContext?.showUnpublish ? html`
 				<button type="button" class="creation-detail-more-menu-item" role="menuitem" data-creation-more-action="unpublish">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z"></path></svg>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+						stroke-linejoin="round" aria-hidden="true">
+						<path d="M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z"></path>
+					</svg>
 					<span>Un-publish</span>
 				</button>
 				` : ''}
 				${actionsContext?.showDelete ? html`
-				<button type="button" class="creation-detail-more-menu-item creation-detail-more-menu-item-danger" role="menuitem" data-creation-more-action="delete">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+				<button type="button" class="creation-detail-more-menu-item creation-detail-more-menu-item-danger" role="menuitem"
+					data-creation-more-action="delete">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+						stroke-linejoin="round" aria-hidden="true">
+						<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+						<line x1="10" y1="11" x2="10" y2="17"></line>
+						<line x1="14" y1="11" x2="14" y2="17"></line>
+					</svg>
 					<span>${typeof actionsContext?.deleteLabel === 'string' ? actionsContext.deleteLabel.trim() : 'Delete'}</span>
 				</button>
 				` : ''}
@@ -1347,35 +1458,45 @@ async function loadCreation() {
 			</div>
 			${renderCreationDetailActions(actionsContext)}
 			${userDeletedNotice}
-
+			
 			${descriptionHtml}
 			<div class="creation-detail-meta-hidden" aria-hidden="true">
 				${hasDetailsModalContent ? `
 				<button class="feed-card-action" type="button" data-creation-details-link>
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v8"></path><path d="M12 6h.01"></path></svg>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+						stroke-linejoin="round" aria-hidden="true">
+						<circle cx="12" cy="12" r="10"></circle>
+						<path d="M12 8v8"></path>
+						<path d="M12 6h.01"></path>
+					</svg>
 					<span>More Info</span>
 				</button>
 				` : ''}
 				${copyLinkButtonHtml}
 				${setAvatarButtonHtml}
 				<button class="feed-card-action" type="button" data-landscape-btn aria-label="Landscape" style="display: none;">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="1.5" /></svg>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+						stroke-linejoin="round" aria-hidden="true">
+						<rect x="2" y="6" width="20" height="12" rx="1.5" /></svg>
 					<span data-landscape-btn-text>Landscape</span>
 				</button>
 			</div>
-
+			
 			${isPublished && !isFailed ? html`
 			<div class="comment-input" data-comment-input>
-				<div class="comment-avatar" ${!viewerPlan ? `style="background: ${viewerColor};"` : ''}>
+				<div class="comment-avatar" ${!viewerPlan ? `style="background: ${viewerColor};" ` : '' }>
 					${viewerPlan ? html`
-						<div class="avatar-with-founder-flair avatar-with-founder-flair--sm">
-							<div class="founder-flair-avatar-ring">
-								<div class="founder-flair-avatar-inner" style="background: ${viewerAvatarUrl ? 'var(--surface-strong)' : viewerColor};" aria-hidden="true">
-									${viewerAvatarUrl ? `<img class="comment-avatar-img" src="${escapeHtml(viewerAvatarUrl)}" alt="">` : viewerInitial}
-								</div>
+					<div class="avatar-with-founder-flair avatar-with-founder-flair--sm">
+						<div class="founder-flair-avatar-ring">
+							<div class="founder-flair-avatar-inner"
+								style="background: ${viewerAvatarUrl ? 'var(--surface-strong)' : viewerColor};" aria-hidden="true">
+								${viewerAvatarUrl ? `<img class="comment-avatar-img" src="${escapeHtml(viewerAvatarUrl)}" alt="">` :
+								viewerInitial}
 							</div>
 						</div>
-					` : (viewerAvatarUrl ? `<img class="comment-avatar-img" src="${escapeHtml(viewerAvatarUrl)}" alt="">` : viewerInitial)}
+					</div>
+					` : (viewerAvatarUrl ? `<img class="comment-avatar-img" src="${escapeHtml(viewerAvatarUrl)}" alt="">` :
+					viewerInitial)}
 				</div>
 				<div class="comment-input-body">
 					<textarea class="comment-textarea" rows="1" placeholder="What do you like about this creation?"
@@ -1401,11 +1522,12 @@ async function loadCreation() {
 			<div class="comment-list" data-comment-list>
 				${renderEmptyLoading({})}
 			</div>
-
+			
 			<section class="creation-detail-related" data-related-container aria-label="More like this" style="display: none;">
 				<div class="creation-detail-related-inner">
 					<h2 class="creation-detail-related-heading">More like this</h2>
-					<div class="route-cards content-cards-image-grid creation-detail-related-grid" data-related-grid role="list"></div>
+					<div class="route-cards content-cards-image-grid creation-detail-related-grid" data-related-grid role="list">
+					</div>
 					<div class="creation-detail-related-sentinel" data-related-sentinel aria-hidden="true"></div>
 				</div>
 			</section>

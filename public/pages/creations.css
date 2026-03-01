@@ -863,6 +863,57 @@ body.creation-detail-page main>section:first-of-type {
 	word-break: break-word;
 }
 
+/* Skeleton placeholder for creation-detail-info (uses global .skeleton classes) */
+.creation-detail-skeleton {
+	margin-top: 6px;
+	padding-top: 4px;
+}
+
+.creation-detail-skeleton .creation-detail-title-row {
+	margin-bottom: 10px;
+}
+
+.creation-detail-skeleton .creation-detail-title-byline {
+	margin-bottom: 14px;
+}
+
+.creation-detail-skeleton .creation-detail-action-strip {
+	margin-bottom: 16px;
+}
+
+.creation-detail-skeleton-description {
+	margin-top: 4px;
+	margin-bottom: 20px;
+}
+
+.creation-detail-skeleton .comment-input {
+	margin-top: 20px;
+	margin-bottom: 16px;
+}
+
+.creation-detail-skeleton .comments-toolbar {
+	margin-top: 20px;
+	margin-bottom: 12px;
+}
+
+.creation-detail-skeleton .comment-list {
+	margin-top: 4px;
+}
+
+.creation-detail-skeleton-comment {
+	display: grid;
+	grid-template-columns: 32px 1fr;
+	gap: 10px;
+	align-items: start;
+	padding-top: 12px;
+	border-top: 1px solid var(--border);
+}
+
+.creation-detail-skeleton-comment:first-child {
+	padding-top: 0;
+	border-top: none;
+}
+
 .creation-detail-author {
 	display: grid;
 	grid-template-columns: 32px minmax(0, 1fr);
