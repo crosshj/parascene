@@ -1369,9 +1369,9 @@ async function loadCreation() {
 					${renderCreationDetailMobilePills(actionsContext)}
 					${!isOwner && !isAdmin ? html`
 					<button type="button" class="creation-detail-action-strip-pill" data-tip-creator-button
-						aria-label="Tip Creator">
+						aria-label="Tip">
 						<span class="creation-detail-action-strip-pill-icon">${creditIcon('')}</span>
-						<span>Tip Creator</span>
+						<span>Tip</span>
 					</button>
 					` : ''}
 					${!isFailed ? html`

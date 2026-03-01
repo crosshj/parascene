@@ -3,7 +3,7 @@
 	--font-family: "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 	--bg: #f6f7fb;
 	--surface: #ffffff;
-	--surface-strong: #f0f2f7;
+	--surface-strong: #f5f6fa;
 	--surface-muted: #f8f9fc;
 	--text: #0f172a;
 	--text-muted: #525a6b;
@@ -65,7 +65,7 @@
 	:root {
 		--bg: #0f0d1a;
 		--surface: #1a1628;
-		--surface-strong: #25203a;
+		--surface-strong: #191627;
 		--surface-muted: #120f1d;
 		--text: #ede9fe;
 		--text-muted: #b3b7c3;
@@ -4984,7 +4984,7 @@ app-modal-publish .publish-checkbox-label input[type="checkbox"] {
 	gap: 12px;
 }
 
-/* Tip Creator modal (creation detail) */
+/* Tip modal (creation detail) */
 .tip-creator-modal {
 	max-width: 400px;
 }

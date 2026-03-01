@@ -1117,7 +1117,7 @@ body.creation-detail-page main>section:first-of-type {
 	cursor: pointer;
 	font-size: 0.875rem;
 	line-height: 1;
-	background: color-mix(in srgb, var(--text) 12%, var(--surface));
+	background: color-mix(in srgb, var(--text) 16%, var(--surface));
 	color: var(--text);
 }
 
@@ -1173,7 +1173,7 @@ body.creation-detail-page main>section:first-of-type {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	background: color-mix(in srgb, var(--text) 12%, var(--surface));
+	background: color-mix(in srgb, var(--text) 16%, var(--surface));
 	color: var(--text);
 }
 

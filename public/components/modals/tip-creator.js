@@ -69,10 +69,10 @@ class AppModalTipCreator extends HTMLElement {
 	render() {
 		this.innerHTML = html`
 			<div class="publish-modal-overlay" data-tip-creator-modal-overlay data-tip-creator-modal hidden
-				aria-label="Tip Creator" role="dialog" aria-modal="true">
+				aria-label="Tip" role="dialog" aria-modal="true">
 				<div class="publish-modal tip-creator-modal">
 					<header class="publish-modal-header">
-						<h3>Tip Creator</h3>
+						<h3>Tip</h3>
 						<button type="button" class="publish-modal-close" data-tip-creator-close aria-label="Close">✕</button>
 					</header>
 					<div class="publish-modal-body">
