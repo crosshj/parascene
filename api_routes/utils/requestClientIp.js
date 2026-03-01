@@ -49,16 +49,31 @@ export function getCloudflareRay(req) {
 }
 
 /**
+ * Decode a string if it looks URL-encoded (e.g. "Kuwait%20City" -> "Kuwait City").
+ * @param {string} s
+ * @returns {string}
+ */
+function safeDecodeUriComponent(s) {
+	if (typeof s !== "string" || !s) return s;
+	try {
+		const decoded = decodeURIComponent(s);
+		return decoded !== s ? decoded : s;
+	} catch {
+		return s;
+	}
+}
+
+/**
  * Get Vercel geo headers when present (country, region, city). Only includes
- * non-empty values. Useful for share view attribution without a separate geo lookup.
+ * non-empty values. Decodes URL-encoded values (e.g. %20) so "Kuwait%20City" becomes "Kuwait City".
  * @param {import("express").Request} req
  * @returns {{ country?: string, region?: string, city?: string }}
  */
 export function getVercelGeo(req) {
 	const headers = req.headers ?? {};
-	const country = headerValue(headers["x-vercel-ip-country"]);
-	const region = headerValue(headers["x-vercel-ip-region"]);
-	const city = headerValue(headers["x-vercel-ip-city"]);
+	const country = safeDecodeUriComponent(headerValue(headers["x-vercel-ip-country"]));
+	const region = safeDecodeUriComponent(headerValue(headers["x-vercel-ip-region"]));
+	const city = safeDecodeUriComponent(headerValue(headers["x-vercel-ip-city"]));
 	const out = {};
 	if (country) out.country = country;
 	if (region) out.region = region;

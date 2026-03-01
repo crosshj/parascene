@@ -161,25 +161,186 @@ More Info`,
 ];
 
 /**
- * Renders the creation-detail-actions bar. Builds the list of actions that should be shown from ctx, then renders only those.
- * @param {object} [ctx] - When omitted (loading/error states), no buttons are shown. When provided (success), only actions with show(ctx) true are rendered.
+ * Strip segment defs: each has show(stripData) and render(stripData, escapeFn). Rendered in order; only segments with show() true are included.
  */
-function renderCreationDetailActions(ctx) {
-	const visible = ctx ? CREATION_DETAIL_ACTION_DEFS.filter((def) => def.show(ctx)) : [];
-	const containerStyle = visible.length === 0
-		? ' style="opacity: 0; visibility: hidden; pointer-events: none; display: none;"'
-		: ' style="opacity: 0; visibility: hidden; pointer-events: none;"';
+const STRIP_SEGMENT_DEFS = [
+	{
+		key: 'avatar',
+		show: () => true,
+		render: (d, escapeFn) => d.creatorProfileHref
+			? html`<a class="creation-detail-action-strip-avatar" href="${d.creatorProfileHref}"
+				aria-label="View ${escapeFn(d.creatorName)} profile">${d.authorAvatar}</a>`
+			: html`<div class="creation-detail-action-strip-avatar" aria-hidden="true">${d.authorAvatar}</div>`
+	},
+	{
+		key: 'creatorInfo',
+		show: () => true,
+		render: (d, escapeFn) => html`
+					<div class="creation-detail-action-strip-creator-info">
+						<div class="creation-detail-action-strip-creator-name">${escapeFn(d.creatorName)}</div>
+						<div class="creation-detail-action-strip-creator-followers">${d.creatorFollowerCount} Followers</div>
+					</div>`
+	},
+	{
+		key: 'follow',
+		show: (d) => !d.isAdmin && d.canShowFollowButton && !d.viewerFollowsCreator,
+		render: (d, escapeFn) => html`
+					<button type="button" class="creation-detail-action-strip-follow" data-follow-button
+						data-follow-user-id="${escapeFn(d.creatorId)}">Follow</button>`
+	},
+	{
+		key: 'like',
+		show: (d) => d.hasEngagementActions && !d.shareMountedPrivate && !d.isAdmin,
+		render: (d) => html`
+					<button type="button" class="creation-detail-action-strip-pill${d.creationWithLikes?.viewer_liked ? ' is-liked' : ''}" aria-label="Like" aria-pressed="${d.creationWithLikes?.viewer_liked ? 'true' : 'false'}" data-like-button>
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+							stroke-linejoin="round" aria-hidden="true">
+							<path
+								d="M20.8 4.6a5 5 0 0 0-7.1 0L12 6.3l-1.7-1.7a5 5 0 1 0-7.1 7.1l1.7 1.7L12 21l7.1-7.6 1.7-1.7a5 5 0 0 0 0-7.1z">
+							</path>
+						</svg>
+						<span class="creation-detail-action-strip-pill-count" data-like-count>${d.likeCount}</span>
+					</button>`
+	},
+	{
+		key: 'pills',
+		show: () => true,
+		render: (d) => renderCreationDetailActionStripPills(d.actionsContext)
+	},
+	{
+		key: 'tip',
+		show: (d) => !d.isOwner && !d.isAdmin,
+		render: () => html`
+					<button type="button" class="creation-detail-action-strip-pill" data-tip-creator-button
+						aria-label="Tip">
+						<span class="creation-detail-action-strip-pill-icon">${creditIcon('')}</span>
+						<span>Tip</span>
+					</button>`
+	},
+	{
+		key: 'more',
+		show: (d) => !d.isFailed,
+		render: () => html`
+					<button type="button" class="creation-detail-more-btn" aria-label="More options" data-creation-more-btn>
+						<span class="creation-detail-more-dots" aria-hidden="true"></span>
+					</button>`
+	}
+];
 
-	const buttonsHtml = visible.map((def) => {
-		const disabled = def.disabled(ctx);
-		const extraAttrs = def.extraAttrs ? def.extraAttrs(ctx) : '';
-		const label = def.label ? def.label(ctx) : '';
-		return `<button type="button" class="creation-detail-action-btn ${def.btnClass}" ${def.dataAttr}${disabled ? ' disabled' : ''}${extraAttrs}>${def.inner}${label}</button>`;
-	}).join('\n\t');
-
+/**
+ * Renders the creation-detail-action-strip from segment defs. Builds items that should be shown from stripData, then injects into the strip template.
+ * @param {object} stripData - Data for avatar, creator, follow, like, pills, tip, more (creatorName, authorAvatar, actionsContext, etc.)
+ * @param {(s: string) => string} escapeFn - escapeHtml for safe attribute/text output
+ * @returns {string}
+ */
+function renderCreationDetailActionStrip(stripData, escapeFn) {
+	const segments = STRIP_SEGMENT_DEFS.filter((def) => def.show(stripData)).map((def) => def.render(stripData, escapeFn));
 	return html`
-<div class="creation-detail-actions" ${containerStyle}>
-	${buttonsHtml}
+<div class="creation-detail-action-strip">
+	<div class="creation-detail-action-strip-scroll">
+		${segments.join('')}
+	</div>
+</div>`;
+}
+
+/** More menu item defs: each has action (data-creation-more-action), show(menuData), icon (svg string), label (string or (menuData)=>string), danger?: boolean. */
+const MORE_MENU_ITEM_DEFS = [
+	{
+		action: 'copy-link',
+		show: () => true,
+		icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+						stroke-linejoin="round" aria-hidden="true">
+						<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+						<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+					</svg>`,
+		label: 'Copy link'
+	},
+	{
+		action: 'queue-for-later',
+		show: (d) => d.actionsContext?.showQueueForLater,
+		icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+						stroke-linejoin="round" aria-hidden="true">
+						<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+						<line x1="16" y1="2" x2="16" y2="6"></line>
+						<line x1="8" y1="2" x2="8" y2="6"></line>
+						<line x1="3" y1="10" x2="21" y2="10"></line>
+					</svg>`,
+		label: (d) => (d.actionsContext?.queueForLaterLabel ?? 'Queue for later')
+	},
+	{
+		action: 'set-avatar',
+		show: (d) => d.isOwner,
+		icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+						stroke-linejoin="round" aria-hidden="true">
+						<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+						<circle cx="12" cy="7" r="4"></circle>
+					</svg>`,
+		label: 'Set as profile picture'
+	},
+	{
+		action: 'landscape',
+		show: (d) => d.isOwner && !d.isAdmin,
+		icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+						stroke-linejoin="round" aria-hidden="true">
+						<rect x="2" y="6" width="20" height="12" rx="1.5" /></svg>`,
+		label: 'Landscape'
+	},
+	{
+		action: 'more-info',
+		show: (d) => d.hasDetailsModalContent,
+		icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+						stroke-linejoin="round" aria-hidden="true">
+						<circle cx="12" cy="12" r="10"></circle>
+						<path d="M12 8v8"></path>
+						<path d="M12 6h.01"></path>
+					</svg>`,
+		label: 'More Info'
+	},
+	{
+		action: 'unpublish',
+		show: (d) => d.actionsContext?.showUnpublish,
+		icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+						stroke-linejoin="round" aria-hidden="true">
+						<path d="M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z"></path>
+					</svg>`,
+		label: 'Un-publish'
+	},
+	{
+		action: 'delete',
+		show: (d) => d.actionsContext?.showDelete && !d.actionsContext?.deletePermanent,
+		icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+						stroke-linejoin="round" aria-hidden="true">
+						<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+						<line x1="10" y1="11" x2="10" y2="17"></line>
+						<line x1="14" y1="11" x2="14" y2="17"></line>
+					</svg>`,
+		label: (d) => (typeof d.actionsContext?.deleteLabel === 'string' ? d.actionsContext.deleteLabel.trim() : 'Delete'),
+		danger: true
+	}
+];
+
+/**
+ * Renders the creation-detail-more-menu from item defs. Only rendered when !menuData.isFailed.
+ * @param {object} menuData - isFailed, hasDetailsModalContent, isOwner, isAdmin, actionsContext
+ * @param {(s: string) => string} escapeFn - escapeHtml for labels
+ * @returns {string}
+ */
+function renderCreationDetailMoreMenu(menuData, escapeFn) {
+	if (menuData.isFailed) return '';
+	const items = MORE_MENU_ITEM_DEFS.filter((def) => def.show(menuData)).map((def) => {
+		const label = typeof def.label === 'function' ? def.label(menuData) : def.label;
+		const itemClass = def.danger ? 'creation-detail-more-menu-item creation-detail-more-menu-item-danger' : 'creation-detail-more-menu-item';
+		const labelHtml = def.action === 'queue-for-later'
+			? html`<span data-queue-for-later-label>${escapeFn(label)}</span>`
+			: html`<span>${escapeFn(label)}</span>`;
+		return html`<button type="button" class="${itemClass}" role="menuitem" data-creation-more-action="${def.action}">
+					${def.icon}
+					${labelHtml}
+				</button>`;
+	});
+	return html`
+<div class="creation-detail-more-menu" data-creation-more-menu aria-hidden="true" role="menu">
+	${items.join('')}
 </div>`;
 }
 
@@ -679,17 +840,6 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 const originalPushState = history.pushState.bind(history);
 const originalReplaceState = history.replaceState.bind(history);
 
-function setActionsLoadingState() {
-	const actionsEl = document.querySelector('.creation-detail-actions');
-	if (!actionsEl) return;
-	actionsEl.classList.remove('is-ready');
-	actionsEl.style.display = '';
-	// Also enforce hidden state in case inline styles exist.
-	actionsEl.style.opacity = '0';
-	actionsEl.style.visibility = 'hidden';
-	actionsEl.style.pointerEvents = 'none';
-}
-
 async function loadCreation() {
 	const detailContent = document.querySelector('[data-detail-content]');
 	const imageEl = document.querySelector('[data-image]');
@@ -698,18 +848,9 @@ async function loadCreation() {
 
 	if (!detailContent || !imageEl || !backgroundEl) return;
 
-	// Render actions + skeleton so we have a live actions element; hide until ownership is resolved.
-	detailContent.innerHTML = renderCreationDetailActions() + renderCreationDetailSkeleton();
-	let actionsEl = detailContent.querySelector('.creation-detail-actions');
-	if (actionsEl) {
-		actionsEl.classList.remove('is-ready');
-		actionsEl.style.display = '';
-		actionsEl.style.opacity = '0';
-		actionsEl.style.visibility = 'hidden';
-		actionsEl.style.pointerEvents = 'none';
-	}
+		detailContent.innerHTML = renderCreationDetailSkeleton();
 
-	// Attach image load/error handlers once, so broken-image icons never show
+		// Attach image load/error handlers once, so broken-image icons never show
 	if (!imageEl.dataset.fallbackAttached) {
 		imageEl.dataset.fallbackAttached = '1';
 
@@ -742,14 +883,11 @@ async function loadCreation() {
 		imageEl.style.visibility = 'hidden';
 		imageEl.src = '';
 		delete imageEl.dataset.currentUrl;
-		detailContent.innerHTML = renderCreationDetailActions() + renderEmptyState({ title: 'Invalid creation ID' });
-		actionsEl = detailContent.querySelector('.creation-detail-actions');
-		if (actionsEl) actionsEl.style.display = 'none';
+		detailContent.innerHTML = renderEmptyState({ title: 'Invalid creation ID' });
 		return;
 	}
 
-	detailContent.innerHTML = renderCreationDetailActions() + renderCreationDetailSkeleton();
-	actionsEl = detailContent.querySelector('.creation-detail-actions');
+	detailContent.innerHTML = renderCreationDetailSkeleton();
 
 	try {
 		const headers = {};
@@ -776,12 +914,10 @@ async function loadCreation() {
 				imageEl.style.visibility = 'hidden';
 				imageEl.src = '';
 				delete imageEl.dataset.currentUrl;
-				detailContent.innerHTML = renderCreationDetailActions() + renderEmptyState({
+				detailContent.innerHTML = renderEmptyState({
 					title: 'Creation not found',
 					message: "The creation you're looking for doesn't exist or you don't have access to it.",
 				});
-				actionsEl = detailContent.querySelector('.creation-detail-actions');
-				if (actionsEl) actionsEl.style.display = 'none';
 				return;
 			}
 			throw new Error('Failed to load creation');
@@ -1346,6 +1482,25 @@ async function loadCreation() {
 			</button>
 		` : '';
 
+		const stripData = {
+			creatorProfileHref,
+			creatorName,
+			authorAvatar,
+			creatorFollowerCount,
+			creatorId,
+			isAdmin,
+			canShowFollowButton,
+			viewerFollowsCreator,
+			hasEngagementActions,
+			shareMountedPrivate,
+			creationWithLikes,
+			likeCount,
+			actionsContext,
+			isOwner,
+			isFailed
+		};
+		const menuData = { isFailed, hasDetailsModalContent, isOwner, isAdmin, actionsContext };
+
 		detailContent.innerHTML = html`
 			<div class="creation-detail-title-row">
 				${(creation.nsfw ?? creation.meta?.nsfw) ? html`<span class="creation-detail-nsfw-tag">NSFW</span>` : ''}
@@ -1354,124 +1509,8 @@ async function loadCreation() {
 			</div>
 			<div class="creation-detail-title-byline creation-detail-title-byline-mobile">${escapeHtml(creatorHandle)}
 				${escapeHtml(mobileBylineText)}</div>
-			<div class="creation-detail-action-strip">
-				<div class="creation-detail-action-strip-scroll">
-					${creatorProfileHref ? html`
-					<a class="creation-detail-action-strip-avatar" href="${creatorProfileHref}"
-						aria-label="View ${escapeHtml(creatorName)} profile">${authorAvatar}</a>
-					` : html`
-					<div class="creation-detail-action-strip-avatar" aria-hidden="true">${authorAvatar}</div>
-					`}
-					<div class="creation-detail-action-strip-creator-info">
-						<div class="creation-detail-action-strip-creator-name">${escapeHtml(creatorName)}</div>
-						<div class="creation-detail-action-strip-creator-followers">${creatorFollowerCount} Followers</div>
-					</div>
-					${!isAdmin && canShowFollowButton && !viewerFollowsCreator ? html`
-					<button type="button" class="creation-detail-action-strip-follow" data-follow-button
-						data-follow-user-id="${escapeHtml(creatorId)}">Follow</button>
-					` : ''}
-					${hasEngagementActions && !shareMountedPrivate ? html`
-					<button type="button" class="creation-detail-action-strip-pill${creationWithLikes?.viewer_liked ? ' is-liked' : ''}" aria-label="Like" aria-pressed="${creationWithLikes?.viewer_liked ? 'true' : 'false'}" data-like-button>
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
-							stroke-linejoin="round" aria-hidden="true">
-							<path
-								d="M20.8 4.6a5 5 0 0 0-7.1 0L12 6.3l-1.7-1.7a5 5 0 1 0-7.1 7.1l1.7 1.7L12 21l7.1-7.6 1.7-1.7a5 5 0 0 0 0-7.1z">
-							</path>
-						</svg>
-						<span class="creation-detail-action-strip-pill-count" data-like-count>${likeCount}</span>
-					</button>
-					` : ''}
-					${renderCreationDetailActionStripPills(actionsContext)}
-					${!isOwner && !isAdmin ? html`
-					<button type="button" class="creation-detail-action-strip-pill" data-tip-creator-button
-						aria-label="Tip">
-						<span class="creation-detail-action-strip-pill-icon">${creditIcon('')}</span>
-						<span>Tip</span>
-					</button>
-					` : ''}
-					${!isFailed ? html`
-					<button type="button" class="creation-detail-more-btn" aria-label="More options" data-creation-more-btn>
-						<span class="creation-detail-more-dots" aria-hidden="true"></span>
-					</button>
-					` : ''}
-				</div>
-			</div>
-			<div class="creation-detail-more-menu" data-creation-more-menu aria-hidden="true" role="menu">
-				${!isFailed ? html`
-				<button type="button" class="creation-detail-more-menu-item" role="menuitem" data-creation-more-action="copy-link">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
-						stroke-linejoin="round" aria-hidden="true">
-						<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-						<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-					</svg>
-					<span>Copy link</span>
-				</button>
-				${actionsContext?.showQueueForLater ? html`
-				<button type="button" class="creation-detail-more-menu-item" role="menuitem"
-					data-creation-more-action="queue-for-later">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
-						stroke-linejoin="round" aria-hidden="true">
-						<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-						<line x1="16" y1="2" x2="16" y2="6"></line>
-						<line x1="8" y1="2" x2="8" y2="6"></line>
-						<line x1="3" y1="10" x2="21" y2="10"></line>
-					</svg>
-					<span data-queue-for-later-label>${actionsContext.queueForLaterLabel}</span>
-				</button>
-				` : ''}
-				${isOwner ? html`
-				<button type="button" class="creation-detail-more-menu-item" role="menuitem" data-creation-more-action="set-avatar">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
-						stroke-linejoin="round" aria-hidden="true">
-						<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-						<circle cx="12" cy="7" r="4"></circle>
-					</svg>
-					<span>Set as profile picture</span>
-				</button>
-				` : ''}
-				${isOwner && !isAdmin ? html`
-				<button type="button" class="creation-detail-more-menu-item" role="menuitem" data-creation-more-action="landscape">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
-						stroke-linejoin="round" aria-hidden="true">
-						<rect x="2" y="6" width="20" height="12" rx="1.5" /></svg>
-					<span>Landscape</span>
-				</button>
-				` : ''}
-				${hasDetailsModalContent ? html`
-				<button type="button" class="creation-detail-more-menu-item" role="menuitem" data-creation-more-action="more-info">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
-						stroke-linejoin="round" aria-hidden="true">
-						<circle cx="12" cy="12" r="10"></circle>
-						<path d="M12 8v8"></path>
-						<path d="M12 6h.01"></path>
-					</svg>
-					<span>More Info</span>
-				</button>
-				` : ''}
-				${actionsContext?.showUnpublish ? html`
-				<button type="button" class="creation-detail-more-menu-item" role="menuitem" data-creation-more-action="unpublish">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
-						stroke-linejoin="round" aria-hidden="true">
-						<path d="M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z"></path>
-					</svg>
-					<span>Un-publish</span>
-				</button>
-				` : ''}
-				${actionsContext?.showDelete && !actionsContext?.deletePermanent ? html`
-				<button type="button" class="creation-detail-more-menu-item creation-detail-more-menu-item-danger" role="menuitem"
-					data-creation-more-action="delete">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
-						stroke-linejoin="round" aria-hidden="true">
-						<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-						<line x1="10" y1="11" x2="10" y2="17"></line>
-						<line x1="14" y1="11" x2="14" y2="17"></line>
-					</svg>
-					<span>${typeof actionsContext?.deleteLabel === 'string' ? actionsContext.deleteLabel.trim() : 'Delete'}</span>
-				</button>
-				` : ''}
-				` : ''}
-			</div>
-			${renderCreationDetailActions(actionsContext)}
+			${renderCreationDetailActionStrip(stripData, escapeHtml)}
+			${renderCreationDetailMoreMenu(menuData, escapeHtml)}
 			${userDeletedNotice}
 			
 			${descriptionHtml}
@@ -1550,7 +1589,6 @@ async function loadCreation() {
 			</section>
 			` : ''}
 		`;
-		actionsEl = detailContent.querySelector('.creation-detail-actions');
 
 		// Landscape (hidden trigger): only for owner, not admin, when published and completed.
 		const landscapeBtn = detailContent.querySelector('[data-landscape-btn]');
@@ -1829,8 +1867,8 @@ async function loadCreation() {
 					'copy-link': () => detailContent.querySelector('[data-copy-link-button]')?.click(),
 					'set-avatar': () => detailContent.querySelector('button[data-set-avatar-button]')?.click(),
 					'landscape': () => { const b = detailContent.querySelector('[data-landscape-btn]'); if (b && !b.disabled) b.click(); },
-					'unpublish': () => { const b = detailContent.querySelector('[data-unpublish-btn]'); if (b && !b.disabled) b.click(); },
-					'delete': () => { const b = detailContent.querySelector('[data-delete-btn]'); if (b && !b.disabled) b.click(); },
+					'unpublish': () => handleUnpublish(),
+					'delete': () => handleDelete(actionsContext?.deletePermanent),
 					'queue-for-later': () => {
 						if (!showQueueForLater || !normalizedImageUrlForQueue) return;
 						const sourceId = Number(creationId);
@@ -2143,23 +2181,12 @@ async function loadCreation() {
 			initRelatedSection(detailContent.parentElement, creationId, { showRecsysDebug });
 		}
 
-		// Now that the creation detail view is fully resolved, show actions.
-		if (actionsEl && actionsEl.style.display !== 'none') {
-			// Clear inline hidden styles (set in HTML / loading state) so CSS can reveal.
-			actionsEl.style.opacity = '';
-			actionsEl.style.visibility = '';
-			actionsEl.style.pointerEvents = '';
-			actionsEl.classList.add('is-ready');
-		}
-
 	} catch (error) {
 		console.error("Error loading creation detail:", error);
-		detailContent.innerHTML = renderCreationDetailActions() + renderEmptyState({
+		detailContent.innerHTML = renderEmptyState({
 			title: 'Unable to load creation',
 			message: 'An error occurred while loading the creation.',
 		});
-		actionsEl = detailContent.querySelector('.creation-detail-actions');
-		if (actionsEl) actionsEl.style.display = 'none';
 	}
 }
 
@@ -2171,7 +2198,6 @@ function checkAndLoadCreation() {
 	// console.log('checkAndLoadCreation called, creationId:', creationId, 'currentCreationId:', currentCreationId);
 	// Only reload if the creation ID has changed
 	if (creationId && creationId !== currentCreationId) {
-		setActionsLoadingState();
 		// console.log('Creation ID changed, loading new creation');
 		currentCreationId = creationId;
 		loadCreation();
@@ -2668,7 +2694,10 @@ document.addEventListener('click', (e) => {
 	});
 });
 
-async function handleDelete() {
+/**
+ * @param {boolean} [isPermanent] - When true, permanent delete (admin). When omitted, derived from a [data-delete-btn][data-permanent-delete] in the DOM if present.
+ */
+async function handleDelete(isPermanent) {
 	const creationId = getCreationId();
 	if (!creationId) {
 		alert('Invalid creation ID');
@@ -2676,9 +2705,9 @@ async function handleDelete() {
 	}
 
 	const deleteBtn = document.querySelector('[data-delete-btn]');
-	const isPermanent = deleteBtn?.dataset?.permanentDelete === '1';
+	const resolvedPermanent = typeof isPermanent === 'boolean' ? isPermanent : (deleteBtn?.dataset?.permanentDelete === '1');
 
-	if (!confirm(isPermanent
+	if (!confirm(resolvedPermanent
 		? 'Permanently delete this creation? This cannot be undone.'
 		: 'Are you sure you want to delete this creation? This action cannot be undone.')) {
 		return;
@@ -2688,7 +2717,7 @@ async function handleDelete() {
 		deleteBtn.disabled = true;
 	}
 
-	const deleteUrl = isPermanent ? `/api/create/images/${creationId}?permanent=1` : `/api/create/images/${creationId}`;
+	const deleteUrl = resolvedPermanent ? `/api/create/images/${creationId}?permanent=1` : `/api/create/images/${creationId}`;
 	try {
 		const response = await fetch(deleteUrl, {
 			method: 'DELETE',
@@ -2701,7 +2730,7 @@ async function handleDelete() {
 		}
 
 		// Success: after permanent delete (admin), go back to that user's profile; otherwise creations list
-		if (isPermanent && lastCreationMeta?.user_id) {
+		if (resolvedPermanent && lastCreationMeta?.user_id) {
 			const profilePath = buildProfilePath({
 				userName: lastCreationMeta?.creator?.user_name || lastCreationMeta?.user_name || null,
 				userId: lastCreationMeta.user_id
@@ -2882,7 +2911,6 @@ document.addEventListener('route-change', (e) => {
 	// console.log('route-change event fired', e.detail?.route);
 	const route = e.detail?.route;
 	if (route && route.startsWith('creations/')) {
-		setActionsLoadingState();
 		checkAndLoadCreation();
 	}
 });

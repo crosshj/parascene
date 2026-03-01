@@ -3,6 +3,30 @@ import { getNsfwContentEnabled } from '../../shared/nsfwView.js';
 
 const html = String.raw;
 
+/**
+ * Default NSFW checkbox state for publish/edit modal.
+ * - Already marked NSFW → checked.
+ * - Prior choice was "not NSFW" (published without NSFW, or edited and unchecked) → unchecked (don't re-tick).
+ * - Mutated from NSFW creation → checked.
+ * - User in NSFW mode (first-time or no prior choice) → checked.
+ * - Otherwise → unchecked.
+ * @param {{ nsfw?: boolean, meta?: { nsfw?: boolean }, published?: boolean, published_at?: string|null, mutate_of_nsfw?: boolean }} creation
+ * @returns {boolean}
+ */
+function defaultNsfwChecked(creation) {
+	const creationIsNsfw = creation?.nsfw === true || creation?.meta?.nsfw === true;
+	if (creationIsNsfw) return true;
+
+	// Respect prior choice: they published without NSFW, or they edited and left it unchecked (meta.nsfw explicitly false).
+	const wasPreviouslyPublished = creation?.published === true || (creation?.published_at != null && creation.published_at !== '');
+	const explicitNotNsfw = creation?.meta?.nsfw === false;
+	if ((wasPreviouslyPublished && !creationIsNsfw) || explicitNotNsfw) return false;
+
+	if (creation?.mutate_of_nsfw === true) return true;
+	if (getNsfwContentEnabled()) return true;
+	return false;
+}
+
 class AppModalPublish extends HTMLElement {
 	constructor() {
 		super();
@@ -228,11 +252,7 @@ class AppModalPublish extends HTMLElement {
 			}
 
 			const nsfwCheckbox = this.querySelector('#publish-nsfw');
-			if (nsfwCheckbox) {
-				const creationIsNsfw = creation.nsfw === true || creation.meta?.nsfw === true;
-				const hasBeenEdited = !!(creation.meta?.mutate_of_id || (Array.isArray(creation.meta?.history) && creation.meta.history.length > 0));
-				nsfwCheckbox.checked = creationIsNsfw ? true : (hasBeenEdited ? false : getNsfwContentEnabled());
-			}
+			if (nsfwCheckbox) nsfwCheckbox.checked = defaultNsfwChecked(creation);
 
 			// Update submit button state based on title
 			const submitBtn = this.querySelector('[data-publish-submit]');
@@ -283,11 +303,7 @@ class AppModalPublish extends HTMLElement {
 			if (titleInput) titleInput.value = creation.title || '';
 			if (descriptionTextarea) descriptionTextarea.value = creation.description || '';
 			const nsfwCheckbox = this.querySelector('#publish-nsfw');
-			if (nsfwCheckbox) {
-				const creationIsNsfw = creation.nsfw === true || creation.meta?.nsfw === true;
-				const hasBeenEdited = !!(creation.meta?.mutate_of_id || (Array.isArray(creation.meta?.history) && creation.meta.history.length > 0));
-				nsfwCheckbox.checked = creationIsNsfw ? true : (hasBeenEdited ? false : getNsfwContentEnabled());
-			}
+			if (nsfwCheckbox) nsfwCheckbox.checked = defaultNsfwChecked(creation);
 
 			// Update submit button state based on title
 			const submitBtn = this.querySelector('[data-publish-submit]');

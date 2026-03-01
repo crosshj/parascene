@@ -1668,6 +1668,21 @@ export default function createCreateRoutes({ queries, storage }) {
 				return res.status(404).json({ error: "Image not found" });
 			}
 
+			// When creation was mutated from another, expose parent's NSFW so publish modal can auto-tick when appropriate.
+			let mutateOfNsfw = null;
+			const mutateOfId = meta?.mutate_of_id != null ? Number(meta.mutate_of_id) : NaN;
+			if (Number.isFinite(mutateOfId) && mutateOfId > 0) {
+				try {
+					const parentRow = await queries.selectCreatedImageByIdAnyUser?.get(mutateOfId);
+					if (parentRow?.meta) {
+						const parentMeta = parseMeta(parentRow.meta);
+						mutateOfNsfw = !!(parentMeta?.nsfw);
+					}
+				} catch {
+					// ignore; mutate_of_nsfw stays null
+				}
+			}
+
 			const response = {
 				id: image.id,
 				filename: image.filename,
@@ -1697,6 +1712,9 @@ export default function createCreateRoutes({ queries, storage }) {
 					plan: creator.meta?.plan === 'founder' ? 'founder' : 'free'
 				} : null
 			};
+			if (mutateOfNsfw !== null) {
+				response.mutate_of_nsfw = mutateOfNsfw;
+			}
 			if (isAdmin && isUnavailable) {
 				response.user_deleted = true;
 			}

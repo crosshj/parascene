@@ -603,6 +603,15 @@ export default function createAdminRoutes({ queries, storage }) {
 				return null;
 			}
 		};
+		const decodeGeo = (s) => {
+			if (s == null || typeof s !== "string" || !s.trim()) return null;
+			try {
+				const decoded = decodeURIComponent(s.trim());
+				return decoded || null;
+			} catch {
+				return s.trim() || null;
+			}
+		};
 		const enriched = (items || []).map((v) => {
 			const meta = parseMeta(v.meta);
 			return {
@@ -612,9 +621,9 @@ export default function createAdminRoutes({ queries, storage }) {
 				user_agent: meta?.user_agent ?? null,
 				ip: meta?.ip ?? null,
 				ip_source: meta?.ip_source ?? null,
-				country: meta?.country ?? null,
-				region: meta?.region ?? null,
-				city: meta?.city ?? null,
+				country: decodeGeo(meta?.country) ?? null,
+				region: decodeGeo(meta?.region) ?? null,
+				city: decodeGeo(meta?.city) ?? null,
 				cf_ray: meta?.cf_ray ?? null
 			};
 		});

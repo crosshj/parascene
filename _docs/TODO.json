@@ -8,14 +8,6 @@
     "starred": false
   },
   {
-    "name": "Creation Detail Actions++",
-    "description": "make this closer to youtube",
-    "cost": 50,
-    "impact": 50,
-    "dependsOn": [],
-    "starred": false
-  },
-  {
     "name": "personas++",
     "description": "we should be able to @persona to include in a prompt",
     "cost": 50,
