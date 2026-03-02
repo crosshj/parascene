@@ -19,7 +19,6 @@ function escapeAttr(v) {
  * Build the HTML string for one creation card shell.
  * @param {{
  *   mediaAttrs?: Record<string, string | boolean>,
- *   mediaContent?: string,
  *   badgesHtml?: string,
  *   detailsContentHtml: string,
  *   bulkOverlayHtml?: string,
@@ -30,7 +29,6 @@ function escapeAttr(v) {
 export function buildCreationCardShell(options) {
 	const {
 		mediaAttrs = {},
-		mediaContent = '',
 		badgesHtml = '',
 		detailsContentHtml,
 		bulkOverlayHtml = '',
@@ -42,7 +40,7 @@ export function buildCreationCardShell(options) {
 		.map(([k, v]) => (v === true ? k : `${k}="${escapeAttr(v)}"`))
 		.join(' ');
 	const mediaClass = 'route-media' + (nsfw ? ' nsfw' : '');
-	const mediaTag = html`<div class="${mediaClass}" aria-hidden="true"${attrs ? ' ' + attrs : ''}>${mediaContent}</div>`;
+	const mediaTag = html`<div class="${mediaClass}" aria-hidden="true"${attrs ? ' ' + attrs : ''}></div>`;
 
 	return html`<div class="route-card route-card-image">
 ${mediaTag}

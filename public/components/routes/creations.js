@@ -900,7 +900,6 @@ class AppRouteCreations extends HTMLElement {
 
 				card.innerHTML = buildCreationCardShell({
 					mediaAttrs: { 'data-image-id': String(item.id), 'data-status': 'completed' },
-					mediaContent: item.nsfw ? '<img class="route-media-img" alt="" decoding="async" />' : '',
 					badgesHtml: publishedBadge,
 					detailsContentHtml: detailsContent,
 					bulkOverlayHtml: bulkOverlay(),
