@@ -1,10 +1,10 @@
 /* Shared styles for creations + creation detail */
 
-/* Create page */
+/* Create page: enough top padding so sticky header doesn't cover first row (e.g. Input Images Remove buttons) */
 body.create-page main {
 	max-width: 1400px;
 	margin: 0 auto;
-	padding: 16px 16px 48px;
+	padding: 72px 16px 48px;
 }
 
 .create-page-footer {
@@ -992,22 +992,81 @@ body.creation-detail-page main>section:first-of-type {
 .creation-detail-action-strip {
 	display: block;
 	margin-bottom: 12px;
-	overflow-x: auto;
-	overflow-y: hidden;
-	scrollbar-width: none;
-	-ms-overflow-style: none;
+	margin-left: -24px;
+	padding-left: 24px;
+	overflow: hidden;
+	position: relative;
+	background: var(--surface-strong);
 }
 
-.creation-detail-action-strip::-webkit-scrollbar {
-	display: none;
+/* Fade on left when scrolled (content hidden to the left); above scroll content via z-index */
+.creation-detail-action-strip::before {
+	content: '';
+	position: absolute;
+	top: 0;
+	left: 23px;
+	bottom: 0;
+	width: 120px;
+	pointer-events: none;
+	background: linear-gradient(to right, var(--surface-strong), transparent);
+	opacity: 0;
+	transition: opacity 0.2s ease;
+	z-index: 2;
 }
 
+.creation-detail-action-strip.has-overflow-left::before {
+	opacity: 1;
+}
+
+/* Fade on right when content overflows (stays fixed to strip edge; overflow is on inner so it doesn't scroll) */
+.creation-detail-action-strip::after {
+	content: '';
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	width: 88px;
+	pointer-events: none;
+	background: linear-gradient(to right, transparent, var(--surface-strong));
+	opacity: 0;
+	transition: opacity 0.2s ease;
+	z-index: 2;
+}
+
+.creation-detail-action-strip.has-overflow-right::after {
+	opacity: 1;
+}
+
+/* Scroll container must not grow to content width or there is no internal overflow to scroll;
+   strip has overflow:hidden so if scroll div grows, it gets clipped and user cannot scroll. */
 .creation-detail-action-strip-scroll {
 	display: flex;
 	align-items: center;
 	gap: 10px;
-	min-width: min-content;
+	width: 100%;
+	max-width: 100%;
 	padding: 4px 2px;
+	overflow-x: auto;
+	overflow-y: hidden;
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+	-webkit-overflow-scrolling: touch;
+	overscroll-behavior-x: contain;
+	position: relative;
+	z-index: 1;
+}
+
+.creation-detail-action-strip-scroll::-webkit-scrollbar {
+	display: none;
+}
+
+/* Small spacer so last button can scroll fully into view (past the right edge) */
+.creation-detail-action-strip-scroll-spacer {
+	flex: 0 0 1px;
+	width: 1px;
+	min-width: 1px;
+	height: 1px;
+	pointer-events: none;
 }
 
 .creation-detail-action-strip-avatar {

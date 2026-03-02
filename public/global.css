@@ -3577,6 +3577,40 @@ app-route-feed {
 	border-radius: 6px;
 }
 
+/* Toast: center-bottom confirmation messages */
+.app-toast-container {
+	position: fixed;
+	left: 50%;
+	bottom: 75px;
+	transform: translateX(-50%);
+	padding-bottom: env(safe-area-inset-bottom, 0);
+	z-index: 10001;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	pointer-events: none;
+}
+
+.app-toast {
+	padding: 10px 16px;
+	background: color-mix(in srgb, var(--surface-strong) 90%, white);
+	color: var(--text);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	box-shadow: var(--shadow);
+	font-size: 0.875rem;
+	white-space: nowrap;
+	opacity: 0;
+	transform: translateY(8px);
+	transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.app-toast.app-toast-visible {
+	opacity: 1;
+	transform: translateY(0);
+}
+
 /* Bulk delete confirm modal (small) */
 .creations-bulk-delete-modal-overlay {
 	position: fixed;
@@ -3655,25 +3689,142 @@ app-route-feed {
 
 .creations-bulk-delete-modal-footer .creations-bulk-delete-confirm-btn {
 	min-width: 100px;
+	position: relative;
 }
 
 .creations-bulk-delete-confirm-btn .creations-bulk-delete-confirm-spinner {
 	display: none;
 	width: 1em;
 	height: 1em;
-	border: 2px solid var(--border);
+	border: 2px solid color-mix(in srgb, currentColor 40%, transparent);
 	border-top-color: currentColor;
 	border-radius: 50%;
 	animation: spin 0.8s linear infinite;
-	vertical-align: middle;
 }
 
 .creations-bulk-delete-confirm-btn.is-loading .creations-bulk-delete-confirm-label {
 	visibility: hidden;
 }
 
+/* Use margin-based centering (not transform) so spin animation isn't overridden */
 .creations-bulk-delete-confirm-btn.is-loading .creations-bulk-delete-confirm-spinner {
-	display: inline-block;
+	display: block;
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	margin-left: -0.5em;
+	margin-top: -0.5em;
+}
+
+/* Keep danger styling during loading (don't switch to disabled gray) */
+.creations-bulk-delete-confirm-btn.is-loading:disabled {
+	background: var(--error-text);
+	color: var(--accent-text);
+	border-color: var(--error-text);
+}
+
+/* Set as profile picture confirm modal (creation detail) */
+.creation-detail-set-avatar-modal-overlay {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.5);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 10000;
+	opacity: 0;
+	visibility: hidden;
+	transition: opacity 0.2s, visibility 0.2s;
+}
+
+.creation-detail-set-avatar-modal-overlay.open {
+	opacity: 1;
+	visibility: visible;
+}
+
+.creation-detail-set-avatar-modal {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 14px;
+	box-shadow: var(--shadow);
+	max-width: 380px;
+	width: 90%;
+	padding: 20px;
+	transform: scale(0.95);
+	transition: transform 0.2s;
+}
+
+.creation-detail-set-avatar-modal-overlay.open .creation-detail-set-avatar-modal {
+	transform: scale(1);
+}
+
+.creation-detail-set-avatar-modal h3 {
+	margin: 0 0 12px;
+	font-size: 1.125rem;
+	font-weight: 600;
+	color: var(--text);
+}
+
+.creation-detail-set-avatar-modal p {
+	margin: 0 0 16px;
+	color: var(--text-muted);
+	font-size: 0.9375rem;
+	line-height: 1.45;
+}
+
+.creation-detail-set-avatar-modal-error {
+	margin: 0 0 12px;
+	padding: 10px 12px;
+	background: var(--error-bg);
+	border: 1px solid var(--error-border);
+	border-radius: 6px;
+	color: var(--error-text);
+	font-size: 0.875rem;
+	display: none;
+}
+
+.creation-detail-set-avatar-modal-error.visible {
+	display: block;
+}
+
+.creation-detail-set-avatar-modal-footer {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 16px;
+}
+
+.creation-detail-set-avatar-modal-footer .btn-secondary {
+	min-width: 80px;
+}
+
+.creation-detail-set-avatar-modal-footer .creation-detail-set-avatar-confirm-btn {
+	min-width: 140px;
+	position: relative;
+}
+
+.creation-detail-set-avatar-confirm-btn .creation-detail-set-avatar-confirm-spinner {
+	display: none;
+	width: 1em;
+	height: 1em;
+	border: 2px solid color-mix(in srgb, currentColor 40%, transparent);
+	border-top-color: currentColor;
+	border-radius: 50%;
+	animation: spin 0.8s linear infinite;
+}
+
+.creation-detail-set-avatar-confirm-btn.is-loading .creation-detail-set-avatar-confirm-label {
+	visibility: hidden;
+}
+
+.creation-detail-set-avatar-confirm-btn.is-loading .creation-detail-set-avatar-confirm-spinner {
+	display: block;
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	margin-left: -0.5em;
+	margin-top: -0.5em;
 }
 
 .explore-route {
@@ -4845,7 +4996,7 @@ app-modal-publish .publish-checkbox-label input[type="checkbox"] {
 .image-array-list {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 0.75rem;
+	gap: 0.5rem;
 	margin-bottom: 0.5rem;
 }
 
@@ -4892,6 +5043,13 @@ app-modal-publish .publish-checkbox-label input[type="checkbox"] {
 .image-field-array .image-array-move-left:hover {
 	background: var(--surface-strong);
 	border-color: var(--accent);
+}
+
+/* Show move-left on mobile so users can discover it without hover */
+@media (max-width: 768px) {
+	.image-field-array .image-array-move-left {
+		opacity: 1;
+	}
 }
 
 .image-field-array .image-array-move-left:focus-visible {

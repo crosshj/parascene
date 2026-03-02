@@ -9,6 +9,7 @@ import { textsSameWithinTolerance } from '/shared/textCompare.js';
 import { buildProfilePath } from '/shared/profileLinks.js';
 import { getNsfwObscure, NSFW_VIEW_BODY_CLASS } from '/shared/nsfwView.js';
 import { addToMutateQueue, loadMutateQueue, removeFromMutateQueueByImageUrl } from '/shared/mutateQueue.js';
+import { showToast } from '/shared/toast.js';
 import '../components/modals/publish.js';
 import '../components/modals/creation-details.js';
 import '../components/modals/share.js';
@@ -219,7 +220,7 @@ const STRIP_SEGMENT_DEFS = [
 	},
 	{
 		key: 'more',
-		show: (d) => !d.isFailed,
+		show: (d) => !d.isFailed || (d.isFailed && d.actionsContext?.showDelete),
 		render: () => html`
 					<button type="button" class="creation-detail-more-btn" aria-label="More options" data-creation-more-btn>
 						<span class="creation-detail-more-dots" aria-hidden="true"></span>
@@ -236,9 +237,10 @@ const STRIP_SEGMENT_DEFS = [
 function renderCreationDetailActionStrip(stripData, escapeFn) {
 	const segments = STRIP_SEGMENT_DEFS.filter((def) => def.show(stripData)).map((def) => def.render(stripData, escapeFn));
 	return html`
-<div class="creation-detail-action-strip">
+<div class="creation-detail-action-strip has-overflow-right">
 	<div class="creation-detail-action-strip-scroll">
 		${segments.join('')}
+		<span class="creation-detail-action-strip-scroll-spacer" aria-hidden="true"></span>
 	</div>
 </div>`;
 }
@@ -320,13 +322,12 @@ const MORE_MENU_ITEM_DEFS = [
 ];
 
 /**
- * Renders the creation-detail-more-menu from item defs. Only rendered when !menuData.isFailed.
+ * Renders the creation-detail-more-menu from item defs. Renders for failed creations when owner can delete.
  * @param {object} menuData - isFailed, hasDetailsModalContent, isOwner, isAdmin, actionsContext
  * @param {(s: string) => string} escapeFn - escapeHtml for labels
  * @returns {string}
  */
 function renderCreationDetailMoreMenu(menuData, escapeFn) {
-	if (menuData.isFailed) return '';
 	const items = MORE_MENU_ITEM_DEFS.filter((def) => def.show(menuData)).map((def) => {
 		const label = typeof def.label === 'function' ? def.label(menuData) : def.label;
 		const itemClass = def.danger ? 'creation-detail-more-menu-item creation-detail-more-menu-item-danger' : 'creation-detail-more-menu-item';
@@ -1101,12 +1102,12 @@ async function loadCreation() {
 			showShare: !shareMountedPrivate && status === 'completed' && !isFailed,
 			showRetry: canEdit && isFailed && !adminViewingUserDeleted,
 			showMoreInfoPill: hasDetailsForFailed,
-			showDelete: canEdit && !(isAdmin && !userDeleted),
+			showDelete: canEdit && !isAdmin,
 			showQueueForLater,
 			queueForLaterLabel,
 			isFailed,
 			deleteDisabled: (userDeleted && isAdmin) ? false : !(!isPublished && (status === 'failed' || (status === 'creating' && isTimedOut) || status === 'completed')),
-			deletePermanent: userDeleted && isAdmin,
+			deletePermanent: false,
 			deleteLabel: userDeleted && isAdmin ? ' Permanently delete' : ' Delete'
 		};
 
@@ -1588,6 +1589,20 @@ async function loadCreation() {
 				</div>
 			</section>
 			` : ''}
+			<div class="creation-detail-set-avatar-modal-overlay" data-set-avatar-modal aria-hidden="true">
+				<div class="creation-detail-set-avatar-modal">
+					<h3>Set as profile picture?</h3>
+					<p class="creation-detail-set-avatar-modal-message">This image will replace your current profile picture.</p>
+					<p class="creation-detail-set-avatar-modal-error" data-set-avatar-modal-error role="alert"></p>
+					<div class="creation-detail-set-avatar-modal-footer">
+						<button type="button" class="btn-secondary" data-set-avatar-modal-cancel>Cancel</button>
+						<button type="button" class="btn-primary creation-detail-set-avatar-confirm-btn" data-set-avatar-modal-confirm>
+							<span class="creation-detail-set-avatar-confirm-label">Set as profile picture</span>
+							<span class="creation-detail-set-avatar-confirm-spinner" aria-hidden="true"></span>
+						</button>
+					</div>
+				</div>
+			</div>
 		`;
 
 		// Landscape (hidden trigger): only for owner, not admin, when published and completed.
@@ -1683,32 +1698,87 @@ async function loadCreation() {
 			copyLinkBtn.addEventListener('click', async () => {
 				const url = getPrimaryLinkUrl(creationId);
 				const ok = await copyTextToClipboard(url);
-				if (!copyLinkLabel) return;
-
-				if (ok) {
-					copyLinkLabel.textContent = 'Copied';
-				} else {
-					copyLinkLabel.textContent = 'Copy failed';
-				}
-
-				window.setTimeout(() => {
-					// Only reset if the element still exists
-					if (copyLinkLabel && copyLinkLabel.isConnected) {
-						copyLinkLabel.textContent = 'Copy link';
+				if (copyLinkLabel) {
+					if (ok) {
+						copyLinkLabel.textContent = 'Copied';
+						showToast('Link copied');
+					} else {
+						copyLinkLabel.textContent = 'Copy failed';
+						showToast('Copy failed');
 					}
-				}, 1500);
+					window.setTimeout(() => {
+						if (copyLinkLabel && copyLinkLabel.isConnected) {
+							copyLinkLabel.textContent = 'Copy link';
+						}
+					}, 1500);
+				} else if (ok) {
+					showToast('Link copied');
+				} else {
+					showToast('Copy failed');
+				}
 			});
 		}
 
 		const setAvatarBtn = detailContent.querySelector('button[data-set-avatar-button]');
 		const setAvatarLabel = detailContent.querySelector('[data-set-avatar-label]');
-		if (setAvatarBtn instanceof HTMLButtonElement && setAvatarLabel) {
-			let setAvatarBusy = false;
-			setAvatarBtn.addEventListener('click', async () => {
-				if (setAvatarBusy) return;
-				setAvatarBusy = true;
-				setAvatarBtn.disabled = true;
-				const originalText = setAvatarLabel.textContent;
+		const setAvatarModal = detailContent.querySelector('[data-set-avatar-modal]');
+		const setAvatarModalCancel = detailContent.querySelector('[data-set-avatar-modal-cancel]');
+		const setAvatarModalConfirm = detailContent.querySelector('[data-set-avatar-modal-confirm]');
+		const setAvatarModalError = detailContent.querySelector('[data-set-avatar-modal-error]');
+
+		function openSetAvatarModal() {
+			if (setAvatarModal) {
+				setAvatarModal.classList.add('open');
+				setAvatarModal.removeAttribute('aria-hidden');
+				document.body.classList.add('modal-open');
+				setAvatarModalEscapeHandler = (e) => {
+					if (e.key !== 'Escape') return;
+					e.preventDefault();
+					closeSetAvatarModal();
+				};
+				document.addEventListener('keydown', setAvatarModalEscapeHandler);
+			}
+			if (setAvatarModalError) {
+				setAvatarModalError.textContent = '';
+				setAvatarModalError.classList.remove('visible');
+			}
+			if (setAvatarModalConfirm) {
+				setAvatarModalConfirm.disabled = false;
+				setAvatarModalConfirm.classList.remove('is-loading');
+			}
+		}
+
+		let setAvatarModalEscapeHandler = null;
+
+		function closeSetAvatarModal() {
+			if (setAvatarModal) {
+				setAvatarModal.classList.remove('open');
+				setAvatarModal.setAttribute('aria-hidden', 'true');
+				document.body.classList.remove('modal-open');
+				if (setAvatarModalEscapeHandler) {
+					document.removeEventListener('keydown', setAvatarModalEscapeHandler);
+					setAvatarModalEscapeHandler = null;
+				}
+			}
+		}
+
+		if (setAvatarBtn instanceof HTMLButtonElement) {
+			setAvatarBtn.addEventListener('click', () => openSetAvatarModal());
+		}
+
+		if (setAvatarModalCancel) {
+			setAvatarModalCancel.addEventListener('click', () => closeSetAvatarModal());
+		}
+
+		if (setAvatarModalConfirm) {
+			setAvatarModalConfirm.addEventListener('click', async () => {
+				if (setAvatarModalConfirm.classList.contains('is-loading')) return;
+				if (setAvatarModalError) {
+					setAvatarModalError.textContent = '';
+					setAvatarModalError.classList.remove('visible');
+				}
+				setAvatarModalConfirm.disabled = true;
+				setAvatarModalConfirm.classList.add('is-loading');
 				try {
 					const result = await fetchJsonWithStatusDeduped('/api/profile/avatar-from-creation', {
 						method: 'POST',
@@ -1719,22 +1789,47 @@ async function loadCreation() {
 					if (result.ok) {
 						window.location.reload();
 						return;
-					} else {
-						setAvatarLabel.textContent = result.data?.error || 'Failed';
-						window.setTimeout(() => {
-							if (setAvatarLabel?.isConnected) setAvatarLabel.textContent = originalText;
-						}, 3000);
+					}
+					const errMsg = result.data?.error || 'Failed to set profile picture';
+					if (setAvatarModalError) {
+						setAvatarModalError.textContent = errMsg;
+						setAvatarModalError.classList.add('visible');
 					}
 				} catch {
-					setAvatarLabel.textContent = 'Failed';
-					window.setTimeout(() => {
-						if (setAvatarLabel?.isConnected) setAvatarLabel.textContent = originalText;
-					}, 3000);
+					if (setAvatarModalError) {
+						setAvatarModalError.textContent = 'Something went wrong. Please try again.';
+						setAvatarModalError.classList.add('visible');
+					}
 				} finally {
-					setAvatarBusy = false;
-					setAvatarBtn.disabled = false;
+					setAvatarModalConfirm.disabled = false;
+					setAvatarModalConfirm.classList.remove('is-loading');
 				}
 			});
+		}
+
+		// Close set-avatar modal on overlay click
+		if (setAvatarModal) {
+			setAvatarModal.addEventListener('click', (e) => {
+				if (e.target === setAvatarModal) closeSetAvatarModal();
+			});
+		}
+
+		// Overflow indicators: left fade when scrolled, right fade when more content to scroll (fades are on outer strip so they stay fixed)
+		const actionStrip = detailContent.querySelector('.creation-detail-action-strip');
+		const actionStripScroll = detailContent.querySelector('.creation-detail-action-strip-scroll');
+		const scrollEl = actionStripScroll || actionStrip;
+		if (actionStrip && scrollEl) {
+			const updateOverflowIndicator = () => {
+				const hasOverflow = scrollEl.scrollWidth > scrollEl.clientWidth;
+				const atStart = scrollEl.scrollLeft <= 2;
+				const atEnd = scrollEl.scrollLeft >= scrollEl.scrollWidth - scrollEl.clientWidth - 2;
+				actionStrip.classList.toggle('has-overflow-left', hasOverflow && !atStart);
+				actionStrip.classList.toggle('has-overflow-right', hasOverflow && !atEnd);
+			};
+			updateOverflowIndicator();
+			scrollEl.addEventListener('scroll', updateOverflowIndicator);
+			const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(updateOverflowIndicator) : null;
+			if (ro) ro.observe(scrollEl);
 		}
 
 		const tipCreatorBtn = detailContent.querySelector('button[data-tip-creator-button]');
@@ -1882,6 +1977,7 @@ async function loadCreation() {
 							try {
 								removeFromMutateQueueByImageUrl(normalizedImageUrlForQueue);
 								if (labelEl) labelEl.textContent = 'Queue for later';
+								showToast('Removed from queue');
 							} catch {
 								// ignore storage errors
 							}
@@ -1889,6 +1985,7 @@ async function loadCreation() {
 							try {
 								addToMutateQueue({ sourceId, imageUrl: normalizedImageUrlForQueue, published: isPublished });
 								if (labelEl) labelEl.textContent = 'Remove from queue';
+								showToast('Added to queue');
 							} catch {
 								// ignore storage errors
 							}

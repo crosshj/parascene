@@ -694,7 +694,7 @@ function createImageArrayField(fieldKey, field, context) {
 	addBtn.setAttribute('aria-label', 'Add image');
 
 	thumbContainer.appendChild(listEl);
-	thumbContainer.appendChild(addBtn);
+	listEl.appendChild(addBtn);
 	wrapper.appendChild(thumbContainer);
 
 	const hiddenInput = document.createElement('input');
@@ -832,6 +832,7 @@ function createImageArrayField(fieldKey, field, context) {
 			wrap.appendChild(removeBtn);
 			listEl.appendChild(wrap);
 		});
+		listEl.appendChild(addBtn);
 	}
 
 	addBtn.addEventListener('click', () => {
