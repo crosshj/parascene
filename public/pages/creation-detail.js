@@ -355,9 +355,9 @@ function renderCreationDetailSkeleton() {
 	<div class="creation-detail-title-row">
 		<div class="skeleton skeleton-line" style="width: 62%; max-width: 220px;"></div>
 	</div>
-	<div class="creation-detail-title-byline creation-detail-title-byline-mobile">
+	<!-- <div class="creation-detail-title-byline creation-detail-title-byline-mobile">
 		<span class="skeleton skeleton-line skeleton-line--short"></span>
-	</div>
+	</div> -->
 	<div class="creation-detail-action-strip">
 		<div class="creation-detail-action-strip-scroll">
 			<div class="creation-detail-action-strip-avatar">${skeletonCircle(40)}</div>
@@ -371,10 +371,10 @@ function renderCreationDetailSkeleton() {
 			<span class="skeleton skeleton-circle" style="width: 34px; height: 34px;"></span>
 		</div>
 	</div>
-	<div class="creation-detail-skeleton-description">
-		<span class="skeleton skeleton-line" style="display: block; margin-bottom: 6px;"></span>
-		<span class="skeleton skeleton-line" style="display: block; margin-bottom: 6px; width: 95%;"></span>
-		<span class="skeleton skeleton-line skeleton-line--medium" style="display: block;"></span>
+	<div class="creation-detail-skeleton-description" style="margin-bottom: 40px;">
+		<span class="skeleton skeleton-line" style="display: block; margin-bottom: 8px;"></span>
+		<span class="skeleton skeleton-line" style="display: block; margin-bottom: 12px; width: 95%;"></span>
+		<span class="skeleton skeleton-line skeleton-line--medium" style="display: block; margin-bottom: 12px;"></span>
 	</div>
 	<div class="comment-input">
 		<div class="comment-avatar">${skeletonCircle(32)}</div>
@@ -711,7 +711,7 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 						<div class="route-meta">
 							By ${profileHref ? html`<a class="user-link" href="${profileHref}"
 								data-related-profile-link>${escapeHtml(decodeHtmlEntities(authorLabel))}</a>` :
-							escapeHtml(decodeHtmlEntities(authorLabel))}${handle ? html` <span>(${handle})</span>` : ''}
+					escapeHtml(decodeHtmlEntities(authorLabel))}${handle ? html` <span>(${handle})</span>` : ''}
 						</div>
 						${reasonsHtml}
 						<div class="route-meta route-meta-spacer"></div>
@@ -849,9 +849,9 @@ async function loadCreation() {
 
 	if (!detailContent || !imageEl || !backgroundEl) return;
 
-		detailContent.innerHTML = renderCreationDetailSkeleton();
+	detailContent.innerHTML = renderCreationDetailSkeleton();
 
-		// Attach image load/error handlers once, so broken-image icons never show
+	// Attach image load/error handlers once, so broken-image icons never show
 	if (!imageEl.dataset.fallbackAttached) {
 		imageEl.dataset.fallbackAttached = '1';
 
@@ -1540,19 +1540,19 @@ async function loadCreation() {
 			${isPublished && !isFailed ? html`
 			${!isAdmin ? html`
 			<div class="comment-input" data-comment-input>
-				<div class="comment-avatar" ${!viewerPlan ? `style="background: ${viewerColor};" ` : '' }>
+				<div class="comment-avatar" ${!viewerPlan ? `style="background: ${viewerColor};" ` : ''}>
 					${viewerPlan ? html`
 					<div class="avatar-with-founder-flair avatar-with-founder-flair--sm">
 						<div class="founder-flair-avatar-ring">
 							<div class="founder-flair-avatar-inner"
 								style="background: ${viewerAvatarUrl ? 'var(--surface-strong)' : viewerColor};" aria-hidden="true">
 								${viewerAvatarUrl ? `<img class="comment-avatar-img" src="${escapeHtml(viewerAvatarUrl)}" alt="">` :
-								viewerInitial}
+							viewerInitial}
 							</div>
 						</div>
 					</div>
 					` : (viewerAvatarUrl ? `<img class="comment-avatar-img" src="${escapeHtml(viewerAvatarUrl)}" alt="">` :
-					viewerInitial)}
+						viewerInitial)}
 				</div>
 				<div class="comment-input-body">
 					<textarea class="comment-textarea" rows="1" placeholder="What do you like about this creation?"
