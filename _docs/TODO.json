@@ -1,15 +1,31 @@
 [
   {
-    "name": "Styles: Dynamic Management",
-    "description": "Users besides admin should be able to maintain the styles list.    Styles should have the option to be bound to different models.",
+    "name": "Styles Management",
+    "description": "Styles are not really styles. Users besides admin should be able to maintain the styles list.    Styles should have the option to be bound to different models.",
     "cost": 50,
     "impact": 50,
     "dependsOn": [],
     "starred": false
   },
   {
-    "name": "personas++",
-    "description": "we should be able to @persona to include in a prompt",
+    "name": "Personas++",
+    "description": "we should be able to @persona to include in a prompt.  Personas should interact with users.",
+    "cost": 50,
+    "impact": 50,
+    "dependsOn": [],
+    "starred": false
+  },
+  {
+    "name": "Animated Content",
+    "description": "something that moves: mpg, gif, slideshow",
+    "cost": 50,
+    "impact": 50,
+    "dependsOn": [],
+    "starred": false
+  },
+  {
+    "name": "Feed Content++",
+    "description": "something different than yessterday",
     "cost": 50,
     "impact": 50,
     "dependsOn": [],
