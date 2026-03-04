@@ -144,3 +144,5 @@ vite.config.ts.timestamp-*
 /.output
 .vercel
 .env*.local
+_video/
+.DS_Store
