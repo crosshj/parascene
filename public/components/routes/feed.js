@@ -99,6 +99,10 @@ class AppRouteFeed extends HTMLElement {
 			this.feedObserver.disconnect();
 			this.feedObserver = null;
 		}
+		if (this.videoObserver) {
+			this.videoObserver.disconnect();
+			this.videoObserver = null;
+		}
 	}
 
 	setupInfiniteScroll() {
@@ -197,12 +201,16 @@ class AppRouteFeed extends HTMLElement {
           </div>
         `;
 
+		const mediaType = typeof item.media_type === "string" ? item.media_type : "image";
+		const isVideo = mediaType === "video" && typeof item.video_url === "string" && item.video_url;
+
 		if (item.created_image_id) {
 			card.setAttribute('data-creation-id', String(item.created_image_id));
 		}
 		card.innerHTML = html`
-      <div class="feed-card-image${item.nsfw ? ' nsfw' : ''}">
+      <div class="feed-card-image${item.nsfw ? ' nsfw' : ''}${isVideo ? ' feed-card-image-video' : ''}">
         <img class="feed-card-img" alt="${item.title || 'Feed image'}" loading="lazy" decoding="async">
+        ${isVideo ? html`<video class="feed-card-video" playsinline muted></video>` : ''}
       </div>
       <div class="feed-card-footer-grid">
         ${profileHref ? html`
@@ -408,6 +416,25 @@ class AppRouteFeed extends HTMLElement {
 			}
 		}
 
+		// Auto-play looping preview for video feed items when in view.
+		if (isVideo) {
+			const videoEl = card.querySelector('.feed-card-video');
+			if (videoEl) {
+				const posterUrl = item.thumbnail_url || item.image_url || "";
+				if (posterUrl) {
+					videoEl.poster = posterUrl;
+				}
+				videoEl.muted = true;
+				videoEl.playsInline = true;
+				videoEl.loop = true;
+				videoEl.setAttribute('playsinline', '');
+				videoEl.setAttribute('muted', '');
+				videoEl.setAttribute('loop', '');
+				videoEl.dataset.feedVideoSrc = item.video_url;
+				this.setupFeedVideoAutoplay(videoEl);
+			}
+		}
+
 		if (item.image_url && item.created_image_id) {
 			// Make the entire card clickable except the actions row
 			card.style.cursor = 'pointer';
@@ -437,6 +464,56 @@ class AppRouteFeed extends HTMLElement {
 		}
 
 		return card;
+	}
+
+	setupFeedVideoAutoplay(videoEl) {
+		if (!('IntersectionObserver' in window)) {
+			// Fallback: play immediately if observer is unavailable.
+			const src = videoEl.dataset.feedVideoSrc;
+			if (src) {
+				videoEl.src = src;
+				try {
+					videoEl.play();
+				} catch {
+					// ignore
+				}
+			}
+			return;
+		}
+
+		if (!this.videoObserver) {
+			this.videoObserver = new IntersectionObserver((entries) => {
+				entries.forEach((entry) => {
+					const el = entry.target;
+					if (!(el instanceof HTMLVideoElement)) return;
+					const src = el.dataset.feedVideoSrc || "";
+					if (entry.isIntersecting) {
+						if (!el.src && src) {
+							el.src = src;
+						}
+						try {
+							el.play();
+							el.classList.add('is-active');
+						} catch {
+							// ignore autoplay errors
+						}
+					} else {
+						try {
+							el.pause();
+						} catch {
+							// ignore
+						}
+						el.classList.remove('is-active');
+					}
+				});
+			}, {
+				threshold: 0.5,
+				root: null,
+				rootMargin: '0px 0px 0px 0px'
+			});
+		}
+
+		this.videoObserver.observe(videoEl);
 	}
 
 	buildTipCard(item) {

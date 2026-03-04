@@ -561,6 +561,9 @@ body.create-page .create-btn-generate:focus-visible,
 
 .creation-detail-image-wrapper.image-error::after {
 	content: "";
+	position: absolute;
+	inset: 0;
+	margin: auto;
 	width: 56px;
 	height: 56px;
 	background-color: color-mix(in srgb, var(--text) 42%, transparent);
@@ -598,7 +601,7 @@ body.create-page .create-btn-generate:focus-visible,
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	padding: 16px;
+	padding: 0;
 }
 
 .creation-detail-image-wrapper.image-loading .creation-detail-image,
@@ -667,6 +670,10 @@ body.creation-detail-page main>section:first-of-type {
 	box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
 	border-radius: 8px;
 	object-fit: contain;
+}
+
+.creation-detail-image-wrapper video.creation-detail-image {
+	object-fit: cover;
 }
 
 .creation-detail-image:not([src]),

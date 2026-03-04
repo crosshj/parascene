@@ -69,11 +69,20 @@ export default function createFeedRoutes({ queries }) {
 
 		const transformItem = (item) => {
 			const imageUrl = item.url || null;
+			// meta may be a JSON string from SQLite; parse once for media_type and video
+			let meta = item.meta;
+			if (typeof meta === "string" && meta) {
+				try {
+					meta = JSON.parse(meta);
+				} catch {
+					meta = null;
+				}
+			}
 			const mediaType =
 				typeof item.media_type === "string"
 					? item.media_type
-					: (item.meta && typeof item.meta.media_type === "string" ? item.meta.media_type : "image");
-			const videoMeta = item.meta && typeof item.meta === "object" ? item.meta.video : null;
+					: (meta && typeof meta.media_type === "string" ? meta.media_type : "image");
+			const videoMeta = meta && typeof meta === "object" ? meta.video : null;
 			const videoUrl =
 				typeof item.video_url === "string" && item.video_url
 					? item.video_url

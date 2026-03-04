@@ -875,7 +875,12 @@ async function loadCreation() {
 			imageEl.style.visibility = 'visible';
 		});
 
-		imageEl.addEventListener('error', () => {
+		imageEl.addEventListener('error', (event) => {
+			// eslint-disable-next-line no-console
+			console.error('[creation-detail] image load error', {
+				src: imageEl?.currentSrc || imageEl?.src || null,
+				event
+			});
 			// Show error placeholder; do not clear moderated state — loadCreation() may have already set it for a failed creation
 			imageWrapper?.classList.remove('image-loading');
 			imageWrapper?.classList.add('image-error');
@@ -886,21 +891,30 @@ async function loadCreation() {
 	}
 
 	// Attach video load/error handlers once for video creations
-	if (videoEl && !videoEl.dataset.fallbackAttached) {
-		videoEl.dataset.fallbackAttached = '1';
+	if (videoEl) {
+		// Attach video load/error handlers once for video creations
+		if (!videoEl.dataset.fallbackAttached) {
+			videoEl.dataset.fallbackAttached = '1';
 
-		videoEl.addEventListener('loadeddata', () => {
-			const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
-			if (modIcon) modIcon.remove();
-			imageWrapper?.classList.remove('image-loading', 'image-error', 'image-error-moderated');
-			videoEl.style.display = 'block';
-		});
+			videoEl.addEventListener('loadeddata', () => {
+				const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
+				if (modIcon) modIcon.remove();
+				imageWrapper?.classList.remove('image-loading', 'image-error', 'image-error-moderated');
+				videoEl.style.display = 'block';
+			});
 
-		videoEl.addEventListener('error', () => {
-			imageWrapper?.classList.remove('image-loading');
-			imageWrapper?.classList.add('image-error');
-			backgroundEl.style.backgroundImage = '';
-			if (videoEl) {
+			videoEl.addEventListener('error', (event) => {
+				const mediaError = videoEl?.error || null;
+				// eslint-disable-next-line no-console
+				console.error('[creation-detail] video error', {
+					src: videoEl?.currentSrc || videoEl?.src || null,
+					code: mediaError && typeof mediaError.code === 'number' ? mediaError.code : null,
+					message: mediaError && mediaError.message ? mediaError.message : null,
+					event
+				});
+				imageWrapper?.classList.remove('image-loading');
+				imageWrapper?.classList.add('image-error');
+				backgroundEl.style.backgroundImage = '';
 				videoEl.style.display = 'none';
 				videoEl.removeAttribute('src');
 				try {
@@ -908,18 +922,38 @@ async function loadCreation() {
 				} catch {
 					// ignore
 				}
-			}
-		});
+			});
+		}
+
+		// Show controls only after the first user click; unmute at that moment.
+		if (!videoEl.dataset.controlsOnClickAttached) {
+			videoEl.dataset.controlsOnClickAttached = '1';
+			videoEl.addEventListener('click', () => {
+				if (!videoEl.controls) {
+					videoEl.controls = true;
+					videoEl.setAttribute('controls', '');
+					videoEl.muted = false;
+					videoEl.removeAttribute('muted');
+					try {
+						videoEl.play();
+					} catch {
+						// ignore play errors; user can press play in controls
+					}
+				}
+			});
+		}
 	}
 
 	const creationId = getCreationId();
 	if (!creationId) {
+		// eslint-disable-next-line no-console
+		console.error('[creation-detail] missing creation id; showing image-error');
 		imageWrapper?.classList.remove('image-loading', 'nsfw', 'image-error-moderated');
 		imageWrapper?.classList.add('image-error');
 		imageWrapper?.removeAttribute('data-creation-id');
 		backgroundEl.style.backgroundImage = '';
 		imageEl.style.visibility = 'hidden';
-		imageEl.src = '';
+		imageEl.removeAttribute('src');
 		delete imageEl.dataset.currentUrl;
 		detailContent.innerHTML = renderEmptyState({ title: 'Invalid creation ID' });
 		return;
@@ -944,13 +978,15 @@ async function loadCreation() {
 		});
 		if (!response.ok) {
 			if (response.status === 404) {
+				// eslint-disable-next-line no-console
+				console.error('[creation-detail] /api/create/images/:id returned 404; showing image-error', { creationId });
 				// Show image-error state (rectangle-with-slash icon), not loading animation
 				imageWrapper?.classList.remove('image-loading', 'nsfw', 'image-error-moderated');
 				imageWrapper?.classList.add('image-error');
 				imageWrapper?.removeAttribute('data-creation-id');
 				backgroundEl.style.backgroundImage = '';
 				imageEl.style.visibility = 'hidden';
-				imageEl.src = '';
+				imageEl.removeAttribute('src');
 				delete imageEl.dataset.currentUrl;
 				detailContent.innerHTML = renderEmptyState({
 					title: 'Creation not found',
@@ -1015,9 +1051,10 @@ async function loadCreation() {
 		backgroundEl.style.backgroundImage = '';
 		imageEl.style.visibility = 'hidden';
 		imageEl.dataset.currentUrl = '';
-		imageEl.src = '';
+		imageEl.removeAttribute('src');
 		if (videoEl) {
 			videoEl.style.display = 'none';
+			videoEl.pause?.();
 			videoEl.removeAttribute('src');
 			try {
 				videoEl.load();
@@ -1045,15 +1082,27 @@ async function loadCreation() {
 			}
 
 			if (videoEl) {
+				// Use bgUrl (creation image or thumbnail) as poster while video loads.
 				if (bgUrl) {
 					videoEl.setAttribute('poster', bgUrl);
 				} else {
 					videoEl.removeAttribute('poster');
 				}
-				videoEl.src = creation.video_url;
 				videoEl.style.display = 'block';
 				videoEl.muted = true;
 				videoEl.playsInline = true;
+				videoEl.autoplay = true;
+				videoEl.loop = true;
+				videoEl.setAttribute('playsinline', '');
+				videoEl.setAttribute('muted', '');
+				videoEl.setAttribute('autoplay', '');
+				videoEl.setAttribute('loop', '');
+				videoEl.src = creation.video_url;
+				try {
+					videoEl.play();
+				} catch {
+					// ignore autoplay errors; user can manually play
+				}
 			}
 		} else if (status === 'creating' && !isTimedOut) {
 			const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
@@ -1061,6 +1110,11 @@ async function loadCreation() {
 			imageWrapper?.classList.remove('image-error-moderated');
 			imageWrapper?.classList.add('image-loading');
 		} else if (isFailed) {
+			// eslint-disable-next-line no-console
+			console.error('[creation-detail] creation status is failed/timed-out; showing image-error', {
+				status,
+				meta
+			});
 			// Failed or timed out: show error placeholder (use imageWrapper so we target the same hero element we cleared)
 			if (imageWrapper) {
 				const isModerated = creation.is_moderated_error === true;

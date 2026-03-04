@@ -1753,6 +1753,7 @@ export function openDb() {
 						user_id,
 						unavailable_at,
 						nsfw,
+						meta,
 						// Use file_path (which contains the URL) or fall back to constructing from filename
 						url: file_path || (filename ? `/api/images/created/${filename}` : null),
 						like_count: 0,

@@ -79,6 +79,25 @@ async function ensurePngBuffer(buffer) {
 	}
 }
 
+async function createPlaceholderImageBuffer(width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT) {
+	try {
+		return await sharp({
+			create: {
+				width,
+				height,
+				channels: 4,
+				background: { r: 24, g: 24, b: 32, alpha: 1 },
+			},
+		})
+			.png()
+			.toBuffer();
+	} catch (err) {
+		const e = new Error(`Failed to generate placeholder image: ${safeErrorMessage(err)}`);
+		e.code = "PLACEHOLDER_IMAGE_FAILED";
+		throw e;
+	}
+}
+
 async function fetchImageBufferFromUrl(imageUrl) {
 	if (!imageUrl || typeof imageUrl !== "string") {
 		const err = new Error("Missing image_url for video thumbnail");
@@ -240,6 +259,7 @@ export async function runCreationJob({ queries, storage, payload }) {
 	let isVideo = false;
 	let videoBuffer = null;
 	let videoContentType = null;
+	let sourceImageUrlForMeta = null;
 
 	const argsForProvider = args || {};
 	const providerPayload = { method, args: argsForProvider };
@@ -280,16 +300,24 @@ export async function runCreationJob({ queries, storage, payload }) {
 			const arrayBuffer = await providerResponse.arrayBuffer();
 			videoBuffer = Buffer.from(arrayBuffer);
 
-			const sourceImageUrl =
+			let sourceImageUrl =
 				(typeof argsForProvider.image_url === "string" && argsForProvider.image_url) ||
+				(typeof argsForProvider.image === "string" && argsForProvider.image) ||
 				null;
-			if (!sourceImageUrl) {
-				const err = new Error("Provider returned a video but args.image_url is missing");
-				err.code = "MISSING_IMAGE_URL";
-				throw err;
+			sourceImageUrlForMeta = sourceImageUrl || null;
+
+			if (sourceImageUrl) {
+				try {
+					imageBuffer = await fetchImageBufferFromUrl(sourceImageUrl);
+				} catch (thumbnailErr) {
+					logCreationWarn("Failed to fetch source image for video thumbnail; using placeholder instead", safeErrorMessage(thumbnailErr));
+					imageBuffer = await createPlaceholderImageBuffer();
+				}
+			} else {
+				logCreationWarn("No image_url or image provided for video; using placeholder thumbnail");
+				imageBuffer = await createPlaceholderImageBuffer();
 			}
 
-			imageBuffer = await fetchImageBufferFromUrl(sourceImageUrl);
 			try {
 				const meta = await sharp(imageBuffer, { failOn: "none" }).metadata();
 				if (typeof meta.width === "number" && meta.width > 0) {
@@ -418,8 +446,7 @@ export async function runCreationJob({ queries, storage, payload }) {
 						file_path: videoUrl,
 						content_type: videoContentType || "video/mp4"
 					},
-					source_image_url:
-						(typeof argsForProvider.image_url === "string" && argsForProvider.image_url) || null
+					source_image_url: sourceImageUrlForMeta
 			  }
 			: {})
 	});
