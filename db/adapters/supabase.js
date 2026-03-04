@@ -1900,11 +1900,13 @@ export function openDb() {
 					const filename = prsn_created_images?.filename ?? null;
 					const file_path = prsn_created_images?.file_path ?? null;
 					const user_id = prsn_created_images?.user_id ?? null;
-					const nsfw = !!(prsn_created_images?.meta && typeof prsn_created_images.meta === "object" && prsn_created_images.meta.nsfw);
+					const meta = prsn_created_images?.meta ?? null;
+					const nsfw = !!(meta && typeof meta === "object" && meta.nsfw);
 					return {
 						...rest,
 						filename,
 						user_id,
+						meta,
 						nsfw,
 						url: file_path || (filename ? `/api/images/created/${filename}` : null),
 						thumbnail_url: getThumbnailUrl(file_path || (filename ? `/api/images/created/${filename}` : null)),
@@ -2064,12 +2066,14 @@ export function openDb() {
 						const filename = prsn_created_images?.filename ?? null;
 						const file_path = prsn_created_images?.file_path ?? null;
 						const user_id = prsn_created_images?.user_id ?? null;
-						const nsfw = !!(prsn_created_images?.meta && typeof prsn_created_images.meta === "object" && prsn_created_images.meta.nsfw);
+						const meta = prsn_created_images?.meta ?? null;
+						const nsfw = !!(meta && typeof meta === "object" && meta.nsfw);
 						const resolvedUrl = file_path || (filename ? `/api/images/created/${filename}` : null);
 						return {
 							...rest,
 							filename,
 							user_id,
+							meta,
 							nsfw,
 							url: resolvedUrl,
 							thumbnail_url: getThumbnailUrl(resolvedUrl),
@@ -3532,6 +3536,9 @@ export function openDb() {
 					const profile = row.user_id != null ? profileByUserId.get(String(row.user_id)) : null;
 					const meta = row.meta;
 					const nsfw = !!(meta && typeof meta === "object" && meta.nsfw);
+					const mediaType = typeof meta?.media_type === "string" ? meta.media_type : "image";
+					const videoMeta = meta && typeof meta === "object" ? meta.video : null;
+					const videoUrl = videoMeta && typeof videoMeta.file_path === "string" && videoMeta.file_path ? videoMeta.file_path : null;
 					const url =
 						row.file_path ??
 						(row.filename
@@ -3545,6 +3552,9 @@ export function openDb() {
 						created_at: row.created_at,
 						user_id: row.user_id,
 						nsfw,
+						meta,
+						media_type: mediaType,
+						video_url: videoUrl,
 						like_count: likeById.get(key) ?? 0,
 						comment_count: commentById.get(key) ?? 0,
 						author_display_name: profile?.display_name ?? null,
@@ -3878,6 +3888,7 @@ export function openDb() {
 							? creatorProfileByUserId.get(String(image.user_id)) ?? null
 							: null;
 						const nsfw = !!(image?.meta && typeof image.meta === "object" && image.meta.nsfw);
+						const created_image_media_type = image?.meta?.media_type === "video" ? "video" : "image";
 						return {
 							...row,
 							created_image_title: image?.title ?? null,
@@ -3888,7 +3899,8 @@ export function openDb() {
 							created_image_user_name: creatorProfile?.user_name ?? null,
 							created_image_display_name: creatorProfile?.display_name ?? null,
 							created_image_avatar_url: creatorProfile?.avatar_url ?? null,
-							nsfw
+							nsfw,
+							created_image_media_type
 						};
 					})
 					.filter((row) => row?.created_image_published === true);

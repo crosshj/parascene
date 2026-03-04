@@ -199,6 +199,9 @@ class AppRouteServers extends HTMLElement {
 
 			const thumbWrap = document.createElement('div');
 			thumbWrap.className = `connect-comment-thumb${comment.nsfw ? ' nsfw' : ''}`;
+			if (comment.created_image_media_type === 'video') {
+				thumbWrap.setAttribute('data-media-type', 'video');
+			}
 			thumbWrap.setAttribute('aria-hidden', 'true');
 			const thumbUrl = typeof comment?.created_image_thumbnail_url === 'string' ? comment.created_image_thumbnail_url.trim() : '';
 			const imageUrl = typeof comment?.created_image_url === 'string' ? comment.created_image_url.trim() : '';

@@ -1152,6 +1152,8 @@ export function openDb() {
 					const profile = user_profiles.find((p) => Number(p.user_id) === Number(row.user_id));
 					const meta = row.meta;
 					const nsfw = !!(meta && typeof meta === "object" && meta.nsfw);
+					const mediaType = typeof meta?.media_type === "string" ? meta.media_type : "image";
+					const videoUrl = meta?.video?.file_path && typeof meta.video.file_path === "string" ? meta.video.file_path : null;
 					const url =
 						row.file_path ??
 						(row.filename
@@ -1164,12 +1166,15 @@ export function openDb() {
 						summary: row.summary ?? "",
 						created_at: row.created_at,
 						user_id: row.user_id,
+						nsfw,
+						meta,
+						media_type: mediaType,
+						video_url: videoUrl,
 						like_count: likeCount,
 						comment_count: commentCount,
 						author_display_name: profile?.display_name ?? null,
 						author_user_name: profile?.user_name ?? null,
 						author_avatar_url: profile?.avatar_url ?? null,
-						nsfw,
 						url
 					};
 				});

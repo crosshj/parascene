@@ -1545,7 +1545,7 @@ export async function openDb() {
 				const placeholders = safeIds.map(() => "?").join(",");
 				const stmt = db.prepare(
 					`SELECT ci.id, ci.title, ci.description, ci.created_at, ci.user_id,
-						ci.filename, ci.file_path,
+						ci.filename, ci.file_path, ci.meta,
 						COALESCE(lc.like_count, 0) AS like_count,
 						COALESCE(cc.comment_count, 0) AS comment_count,
 						up.user_name AS author_user_name,
@@ -1571,6 +1571,9 @@ export async function openDb() {
 				const sorted = (rows ?? []).slice().sort((a, b) => (orderById.get(Number(a.id)) ?? 999) - (orderById.get(Number(b.id)) ?? 999));
 				return sorted.map((row) => {
 					const summary = row.description ?? "";
+					const meta = typeof row.meta === "string" ? (() => { try { return JSON.parse(row.meta); } catch { return null; } })() : row.meta ?? null;
+					const mediaType = typeof meta?.media_type === "string" ? meta.media_type : "image";
+					const videoUrl = meta?.video?.file_path && typeof meta.video.file_path === "string" ? meta.video.file_path : null;
 					return {
 						id: row.id,
 						created_image_id: row.id,
@@ -1578,12 +1581,15 @@ export async function openDb() {
 						summary,
 						created_at: row.created_at,
 						user_id: row.user_id,
+						nsfw: !!(row.nsfw),
+						meta,
+						media_type: mediaType,
+						video_url: videoUrl,
 						like_count: Number(row.like_count ?? 0),
 						comment_count: Number(row.comment_count ?? 0),
 						author_display_name: row.author_display_name ?? null,
 						author_user_name: row.author_user_name ?? null,
 						author_avatar_url: row.author_avatar_url ?? null,
-						nsfw: !!(row.nsfw),
 						url:
 							row.file_path ??
 							(row.filename
@@ -2651,7 +2657,8 @@ export async function openDb() {
                   cup.display_name AS created_image_display_name,
                   cup.avatar_url AS created_image_avatar_url,
                   json_extract(cu.meta,'$.plan') AS created_image_owner_plan,
-                  (json_extract(ci.meta,'$.nsfw') = 1 OR json_extract(ci.meta,'$.nsfw') = 'true') AS nsfw
+                  (json_extract(ci.meta,'$.nsfw') = 1 OR json_extract(ci.meta,'$.nsfw') = 'true') AS nsfw,
+                  json_extract(ci.meta,'$.media_type') AS created_image_media_type
            FROM comments_created_image c
            INNER JOIN created_images ci ON ci.id = c.created_image_id
            LEFT JOIN user_profiles up ON up.user_id = c.user_id
@@ -2667,7 +2674,8 @@ export async function openDb() {
 					...r,
 					plan: r.plan === 'founder' ? 'founder' : 'free',
 					created_image_owner_plan: r.created_image_owner_plan === 'founder' ? 'founder' : 'free',
-					nsfw: !!(r.nsfw)
+					nsfw: !!(r.nsfw),
+					created_image_media_type: r.created_image_media_type === 'video' ? 'video' : 'image'
 				})));
 			}
 		},

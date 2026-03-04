@@ -1499,6 +1499,8 @@ export default function createProfileRoutes({ queries }) {
 						return false;
 					}
 				})();
+				const mediaType = meta && typeof meta.media_type === "string" ? meta.media_type : "image";
+				const videoUrl = meta?.video?.file_path && typeof meta.video.file_path === "string" ? meta.video.file_path : null;
 				return {
 					id: img.id,
 					filename: img.filename,
@@ -1514,6 +1516,8 @@ export default function createProfileRoutes({ queries }) {
 					title: img.title || null,
 					description: img.description || null,
 					nsfw: !!(meta && meta.nsfw),
+					media_type: mediaType,
+					video_url: videoUrl,
 					is_moderated_error: isModeratedError,
 					...(isAdmin && userDeleted ? { user_deleted: true } : {})
 				};
@@ -1557,6 +1561,8 @@ export default function createProfileRoutes({ queries }) {
 				const url = img.file_path || (img.filename ? `/api/images/created/${img.filename}` : null);
 				const meta = metaParse(img.meta);
 				const nsfw = !!(meta && meta.nsfw);
+				const mediaType = meta && typeof meta.media_type === "string" ? meta.media_type : "image";
+				const videoUrl = meta?.video?.file_path && typeof meta.video.file_path === "string" ? meta.video.file_path : null;
 				return {
 					id: img.id,
 					filename: img.filename,
@@ -1568,7 +1574,9 @@ export default function createProfileRoutes({ queries }) {
 					created_at: img.created_at,
 					title: img.title || null,
 					description: img.description || null,
-					nsfw
+					nsfw,
+					media_type: mediaType,
+					video_url: videoUrl
 				};
 			});
 			const enableNsfw = viewer?.meta?.enableNsfw === true;

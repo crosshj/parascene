@@ -893,6 +893,7 @@ class AppRouteCreations extends HTMLElement {
 				if (isPublished && item.published_at) {
 					publishedInfo = html`<div class="route-meta" title="${formatDateTime(item.published_at)}">Published ${formatRelativeTime(item.published_at)}</div>`;
 				}
+				const meta = parseMeta(item.meta);
 				const mediaType =
 					typeof item.media_type === 'string'
 						? item.media_type

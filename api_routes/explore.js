@@ -440,8 +440,13 @@ export default function createExploreRoutes({ queries }) {
 			const has_more = list.length > limit;
 			const page = has_more ? list.slice(0, limit) : list;
 
+			const metaParse = (m) => (typeof m === "string" ? (() => { try { return JSON.parse(m); } catch { return null; } })() : m) ?? null;
 			const images = page.map((img) => {
 				const url = img?.file_path || (img?.filename ? `/api/images/created/${img.filename}` : null);
+				const meta = metaParse(img?.meta);
+				const nsfw = !!(meta && meta.nsfw);
+				const mediaType = meta && typeof meta.media_type === "string" ? meta.media_type : "image";
+				const videoUrl = meta?.video?.file_path && typeof meta.video.file_path === "string" ? meta.video.file_path : null;
 				return {
 					id: img?.id,
 					filename: img?.filename ?? null,
@@ -456,7 +461,10 @@ export default function createExploreRoutes({ queries }) {
 					published_at: img?.published_at || null,
 					title: img?.title || null,
 					description: img?.description || null,
-					user_id: img?.user_id ?? null
+					user_id: img?.user_id ?? null,
+					nsfw,
+					media_type: mediaType,
+					video_url: videoUrl
 				};
 			});
 
@@ -497,8 +505,13 @@ export default function createExploreRoutes({ queries }) {
 			const has_more = list.length > limit;
 			const page = has_more ? list.slice(0, limit) : list;
 
+			const metaParse = (m) => (typeof m === "string" ? (() => { try { return JSON.parse(m); } catch { return null; } })() : m) ?? null;
 			const images = page.map((img) => {
 				const url = img?.file_path || (img?.filename ? `/api/images/created/${img.filename}` : null);
+				const meta = metaParse(img?.meta);
+				const nsfw = !!(meta && meta.nsfw);
+				const mediaType = meta && typeof meta.media_type === "string" ? meta.media_type : "image";
+				const videoUrl = meta?.video?.file_path && typeof meta.video.file_path === "string" ? meta.video.file_path : null;
 				return {
 					id: img?.id,
 					filename: img?.filename ?? null,
@@ -513,7 +526,10 @@ export default function createExploreRoutes({ queries }) {
 					published_at: img?.published_at || null,
 					title: img?.title || null,
 					description: img?.description || null,
-					user_id: img?.user_id ?? null
+					user_id: img?.user_id ?? null,
+					nsfw,
+					media_type: mediaType,
+					video_url: videoUrl
 				};
 			});
 

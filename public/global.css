@@ -210,6 +210,7 @@ img {
 /* When NSFW is shown unobscured, show play icon on video thumbnails (explore, profile, creations, etc.) */
 body.view-nsfw .route-media[data-media-type="video"]:not(.route-media-error).nsfw::before {
 	content: "";
+	display: block;
 	position: absolute;
 	left: 50%;
 	top: 50%;
@@ -217,11 +218,14 @@ body.view-nsfw .route-media[data-media-type="video"]:not(.route-media-error).nsf
 	height: 28px;
 	border-radius: 50%;
 	background-color: rgba(0, 0, 0, 0.7);
+	border: none;
 	transform: translate(-50%, -50%);
+	z-index: 1;
 }
 
 body.view-nsfw .route-media[data-media-type="video"]:not(.route-media-error).nsfw::after {
 	content: "";
+	display: block;
 	position: absolute;
 	left: 50%;
 	top: 50%;
@@ -230,7 +234,12 @@ body.view-nsfw .route-media[data-media-type="video"]:not(.route-media-error).nsf
 	border-top: 7px solid transparent;
 	border-bottom: 7px solid transparent;
 	border-left: 11px solid rgba(255, 255, 255, 0.9);
+	border-right: none;
+	background: transparent;
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
 	transform: translate(-40%, -50%);
+	z-index: 1;
 }
 
 /* Hide content until page is fully loaded */
@@ -3298,12 +3307,73 @@ app-route-feed {
 
 .connect-comment-thumb {
 	grid-area: thumb;
+	position: relative;
 	width: 128px;
 	height: 128px;
 	border-radius: 0;
 	background: var(--surface-muted);
 	border: 1px solid var(--border);
 	overflow: hidden;
+}
+
+/* Play icon on video thumbnails in Connect > Comments (non-NSFW or when NSFW unobscured) */
+.connect-comment-thumb[data-media-type="video"]:not(.nsfw)::before {
+	content: "";
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	background-color: rgba(0, 0, 0, 0.7);
+	transform: translate(-50%, -50%);
+}
+
+.connect-comment-thumb[data-media-type="video"]:not(.nsfw)::after {
+	content: "";
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 0;
+	height: 0;
+	border-top: 7px solid transparent;
+	border-bottom: 7px solid transparent;
+	border-left: 11px solid rgba(255, 255, 255, 0.9);
+	transform: translate(-40%, -50%);
+}
+
+body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::before {
+	content: "";
+	display: block;
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	background-color: rgba(0, 0, 0, 0.7);
+	border: none;
+	transform: translate(-50%, -50%);
+	z-index: 1;
+}
+
+body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
+	content: "";
+	display: block;
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 0;
+	height: 0;
+	border-top: 7px solid transparent;
+	border-bottom: 7px solid transparent;
+	border-left: 11px solid rgba(255, 255, 255, 0.9);
+	border-right: none;
+	background: transparent;
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+	transform: translate(-40%, -50%);
+	z-index: 1;
 }
 
 .connect-comment-thumb-img {
