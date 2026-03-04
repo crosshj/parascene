@@ -207,6 +207,32 @@ img {
 	transform: translate(-40%, -50%);
 }
 
+/* When NSFW is shown unobscured, show play icon on video thumbnails (explore, profile, creations, etc.) */
+body.view-nsfw .route-media[data-media-type="video"]:not(.route-media-error).nsfw::before {
+	content: "";
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	background-color: rgba(0, 0, 0, 0.7);
+	transform: translate(-50%, -50%);
+}
+
+body.view-nsfw .route-media[data-media-type="video"]:not(.route-media-error).nsfw::after {
+	content: "";
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 0;
+	height: 0;
+	border-top: 7px solid transparent;
+	border-bottom: 7px solid transparent;
+	border-left: 11px solid rgba(255, 255, 255, 0.9);
+	transform: translate(-40%, -50%);
+}
+
 /* Hide content until page is fully loaded */
 body:not(.loaded) {
 	visibility: hidden;
