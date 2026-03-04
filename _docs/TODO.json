@@ -16,14 +16,6 @@
     "starred": false
   },
   {
-    "name": "Animated Content",
-    "description": "something that moves: mpg, gif, slideshow",
-    "cost": 50,
-    "impact": 50,
-    "dependsOn": [],
-    "starred": false
-  },
-  {
     "name": "Feed Content++",
     "description": "something different than yesterday",
     "cost": 50,
