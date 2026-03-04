@@ -166,6 +166,15 @@ body.share-page {
 	background: var(--image-placeholder);
 }
 
+.share-video {
+	display: block;
+	width: 100%;
+	height: auto;
+	aspect-ratio: 1 / 1;
+	object-fit: cover;
+	background: var(--image-placeholder);
+}
+
 .share-image-fallback {
 	background:
 		radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 55%),

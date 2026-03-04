@@ -342,6 +342,29 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 			const shareImageSrc = `/api/share/${encodeURIComponent(version)}/${encodeURIComponent(token)}/image`;
 			const signInUrl = `/auth?returnUrl=${encodeURIComponent(req.originalUrl || req.path || "/")}#login`;
 
+			// Support video on share page: parse meta and build hero media (img or video).
+			let imageMeta = image.meta;
+			if (typeof imageMeta === "string") {
+				try {
+					imageMeta = JSON.parse(imageMeta);
+				} catch {
+					imageMeta = null;
+				}
+			}
+			const isVideo =
+				imageMeta &&
+				imageMeta.media_type === "video" &&
+				typeof imageMeta.video?.file_path === "string" &&
+				imageMeta.video.file_path.trim() !== "";
+			const videoPath = isVideo ? imageMeta.video.file_path.trim() : null;
+			const shareVideoUrl =
+				videoPath && videoPath.startsWith("/")
+					? `${base.replace(/\/$/, "")}${videoPath}`
+					: videoPath;
+			const shareHeroMediaHtml = isVideo && shareVideoUrl
+				? `<video class="share-image share-video" playsinline muted loop autoplay poster="${escapeHtml(shareImageSrc)}" src="${escapeHtml(shareVideoUrl)}" aria-label="${escapeHtml(imageAlt)}"></video>`
+				: `<img class="share-image" src="${escapeHtml(shareImageSrc)}" alt="${escapeHtml(imageAlt)}" />`;
+
 			const shareIntroHtml = showCreator
 				? `${escapeHtml(heroSharer)} shared this with you. It was created by ${escapeHtml(heroCreator)} on Parascene.`
 				: `${escapeHtml(heroSharer)} shared this creation with you — they made it on Parascene.`;
@@ -356,6 +379,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 				OG_IMAGE_DIMS_META: ogDimsMeta,
 				IMAGE_ALT: escapeHtml(imageAlt),
 				SHARE_IMAGE_SRC: escapeHtml(shareImageSrc),
+				SHARE_HERO_MEDIA_HTML: shareHeroMediaHtml,
 				SHARE_DETAILS_TITLE_HTML: shareDetailsTitleHtml,
 				IMAGE_DESCRIPTION_HTML: imageDescriptionHtml,
 				SHARER_AVATAR_HTML: sharerAvatarHtml,
