@@ -893,13 +893,24 @@ class AppRouteCreations extends HTMLElement {
 				if (isPublished && item.published_at) {
 					publishedInfo = html`<div class="route-meta" title="${formatDateTime(item.published_at)}">Published ${formatRelativeTime(item.published_at)}</div>`;
 				}
+				const mediaType =
+					typeof item.media_type === 'string'
+						? item.media_type
+						: (meta && typeof meta.media_type === 'string' ? meta.media_type : 'image');
+				const mediaAttrs = {
+					'data-image-id': String(item.id),
+					'data-status': 'completed'
+				};
+				if (mediaType === 'video') {
+					mediaAttrs['data-media-type'] = 'video';
+				}
 				const detailsContent = html`
                 <div class="route-title">${item.title || 'Untitled'}</div>
                 ${publishedInfo}
                 <div class="route-meta" title="${formatDateTime(item.created_at)}">Created ${formatRelativeTime(item.created_at)}</div>`;
 
 				card.innerHTML = buildCreationCardShell({
-					mediaAttrs: { 'data-image-id': String(item.id), 'data-status': 'completed' },
+					mediaAttrs,
 					badgesHtml: publishedBadge,
 					detailsContentHtml: detailsContent,
 					bulkOverlayHtml: bulkOverlay(),

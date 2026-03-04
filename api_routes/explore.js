@@ -28,6 +28,15 @@ function mapExploreItemsToResponse(items) {
 	const list = Array.isArray(items) ? items : [];
 	return list.map((item) => {
 		const imageUrl = item?.url || null;
+		const mediaType =
+			typeof item?.media_type === "string"
+				? item.media_type
+				: (item?.meta && typeof item.meta.media_type === "string" ? item.meta.media_type : "image");
+		const videoMeta = item?.meta && typeof item.meta === "object" ? item.meta.video : null;
+		const videoUrl =
+			typeof item?.video_url === "string" && item.video_url
+				? item.video_url
+				: (videoMeta && typeof videoMeta.file_path === "string" && videoMeta.file_path ? videoMeta.file_path : null);
 		return {
 			id: item?.id,
 			title: escapeHtml(item?.title != null ? item.title : "Untitled"),
@@ -45,7 +54,9 @@ function mapExploreItemsToResponse(items) {
 			like_count: Number(item?.like_count ?? 0),
 			comment_count: Number(item?.comment_count ?? 0),
 			viewer_liked: Boolean(item?.viewer_liked),
-			nsfw: !!(item?.nsfw)
+			nsfw: !!(item?.nsfw),
+			media_type: mediaType,
+			video_url: videoUrl
 		};
 	});
 }

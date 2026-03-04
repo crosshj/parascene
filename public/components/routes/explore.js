@@ -584,8 +584,16 @@ class AppRouteExplore extends HTMLElement {
 				</div>
 				<div class="route-meta route-meta-spacer"></div>
 				<div class="route-tags">${item.tags || ''}</div>`;
+			const mediaType = typeof item.media_type === 'string' ? item.media_type : 'image';
+			const mediaAttrs = {
+				'data-image-id': item.created_image_id ?? '',
+				'data-status': 'completed'
+			};
+			if (mediaType === 'video') {
+				mediaAttrs['data-media-type'] = 'video';
+			}
 			card.innerHTML = buildCreationCardShell({
-				mediaAttrs: { 'data-image-id': item.created_image_id ?? '', 'data-status': 'completed' },
+				mediaAttrs,
 				detailsContentHtml: detailsContent,
 				nsfw: Boolean(item.nsfw),
 			});

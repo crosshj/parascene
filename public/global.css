@@ -181,6 +181,32 @@ img {
 	height: 100%;
 }
 
+.route-media[data-media-type="video"]:not(.route-media-error)::before {
+	content: "";
+	position: absolute;
+	right: 8px;
+	bottom: 8px;
+	width: 26px;
+	height: 26px;
+	border-radius: 50%;
+	background-color: rgba(0, 0, 0, 0.7);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.route-media[data-media-type="video"]:not(.route-media-error)::after {
+	content: "";
+	position: absolute;
+	right: 8px;
+	bottom: 8px;
+	width: 0;
+	height: 0;
+	border-top: 6px solid transparent;
+	border-bottom: 6px solid transparent;
+	border-left: 10px solid rgba(255, 255, 255, 0.9);
+}
+
 /* Hide content until page is fully loaded */
 body:not(.loaded) {
 	visibility: hidden;

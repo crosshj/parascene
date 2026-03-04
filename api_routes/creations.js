@@ -206,6 +206,12 @@ function mapRelatedItemsToResponse(items, viewerLikedIds, reasonMetaByCreationId
 		const author = item?.author_display_name ?? item?.author_user_name ?? "";
 		const creationId = item?.created_image_id ?? item?.id ?? null;
 		const reasonMeta = reasonMetaByCreationId?.get?.(Number(creationId));
+		const mediaType = typeof item?.meta?.media_type === "string" ? item.meta.media_type : "image";
+		const videoMeta = item?.meta && typeof item.meta === "object" ? item.meta.video : null;
+		const videoUrl =
+			videoMeta && typeof videoMeta.file_path === "string" && videoMeta.file_path
+				? videoMeta.file_path
+				: null;
 		return {
 			id: item?.id,
 			title: escapeHtml(item?.title != null ? item.title : "Untitled"),
@@ -228,7 +234,9 @@ function mapRelatedItemsToResponse(items, viewerLikedIds, reasonMetaByCreationId
 			reason_details: Array.isArray(reasonMeta?.details) ? reasonMeta.details : [],
 			recsys_score: Number.isFinite(Number(reasonMeta?.score)) ? Number(reasonMeta.score) : null,
 			recsys_click_score: Number.isFinite(Number(reasonMeta?.click_score)) ? Number(reasonMeta.click_score) : null,
-			recsys_click_share: Number.isFinite(Number(reasonMeta?.click_share)) ? Number(reasonMeta.click_share) : null
+			recsys_click_share: Number.isFinite(Number(reasonMeta?.click_share)) ? Number(reasonMeta.click_share) : null,
+			media_type: mediaType,
+			video_url: videoUrl
 		};
 	});
 }

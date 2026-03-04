@@ -3147,7 +3147,7 @@ export async function openDb() {
 		}
 	}
 
-	// Storage interface for images
+	// Storage interface for images and videos
 	const imagesDir = path.join(dataDir, "images", "created");
 	const imagesDirAnon = path.join(dataDir, "images", "created_anon");
 	const genericImagesDir = path.join(dataDir, "images", "generic");
@@ -3190,6 +3190,13 @@ export async function openDb() {
 			return `/images/created/${filename}`;
 		},
 
+		uploadVideo: async (buffer, filename, _options = {}) => {
+			ensureImagesDir();
+			const filePath = path.join(imagesDir, filename);
+			fs.writeFileSync(filePath, buffer);
+			return `/api/videos/created/${filename}`;
+		},
+
 		getImageUrl: (filename) => {
 			return `/images/created/${filename}`;
 		},
@@ -3198,6 +3205,14 @@ export async function openDb() {
 			const filePath = path.join(imagesDir, filename);
 			if (!fs.existsSync(filePath)) {
 				throw new Error(`Image not found: ${filename}`);
+			}
+			return fs.readFileSync(filePath);
+		},
+
+		getVideoBuffer: async (filename) => {
+			const filePath = path.join(imagesDir, filename);
+			if (!fs.existsSync(filePath)) {
+				throw new Error(`Video not found: ${filename}`);
 			}
 			return fs.readFileSync(filePath);
 		},

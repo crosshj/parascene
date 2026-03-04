@@ -79,6 +79,39 @@ async function ensurePngBuffer(buffer) {
 	}
 }
 
+async function fetchImageBufferFromUrl(imageUrl) {
+	if (!imageUrl || typeof imageUrl !== "string") {
+		const err = new Error("Missing image_url for video thumbnail");
+		err.code = "MISSING_IMAGE_URL";
+		throw err;
+	}
+
+	let response;
+	try {
+		response = await fetch(imageUrl, {
+			method: "GET",
+			headers: {
+				Accept: "image/*"
+			},
+			signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS)
+		});
+	} catch (err) {
+		const e = new Error(`Failed to fetch source image for video: ${safeErrorMessage(err)}`);
+		e.code = "SOURCE_IMAGE_FETCH_FAILED";
+		throw e;
+	}
+
+	if (!response.ok) {
+		const e = new Error(`Failed to fetch source image for video: ${response.status} ${response.statusText}`);
+		e.code = "SOURCE_IMAGE_FETCH_FAILED";
+		throw e;
+	}
+
+	const arrayBuffer = await response.arrayBuffer();
+	const rawBuffer = Buffer.from(arrayBuffer);
+	return ensurePngBuffer(rawBuffer);
+}
+
 async function readProviderErrorPayload(response) {
 	if (!response) return { ok: false, body: null, contentType: "" };
 	const contentType = response.headers?.get?.("content-type") || "";
@@ -204,6 +237,9 @@ export async function runCreationJob({ queries, storage, payload }) {
 	let width = DEFAULT_WIDTH;
 	let height = DEFAULT_HEIGHT;
 	let providerError = null;
+	let isVideo = false;
+	let videoBuffer = null;
+	let videoContentType = null;
 
 	const argsForProvider = args || {};
 	const providerPayload = { method, args: argsForProvider };
@@ -238,20 +274,49 @@ export async function runCreationJob({ queries, storage, payload }) {
 		}
 
 		const providerContentType = String(providerResponse.headers.get("content-type") || "").toLowerCase();
-		if (providerContentType && !providerContentType.includes("image/png")) {
-			logCreationWarn("Provider returned non-PNG; converting to PNG", { providerContentType });
+		if (providerContentType.startsWith("video/")) {
+			isVideo = true;
+			videoContentType = providerContentType || "video/mp4";
+			const arrayBuffer = await providerResponse.arrayBuffer();
+			videoBuffer = Buffer.from(arrayBuffer);
+
+			const sourceImageUrl =
+				(typeof argsForProvider.image_url === "string" && argsForProvider.image_url) ||
+				null;
+			if (!sourceImageUrl) {
+				const err = new Error("Provider returned a video but args.image_url is missing");
+				err.code = "MISSING_IMAGE_URL";
+				throw err;
+			}
+
+			imageBuffer = await fetchImageBufferFromUrl(sourceImageUrl);
+			try {
+				const meta = await sharp(imageBuffer, { failOn: "none" }).metadata();
+				if (typeof meta.width === "number" && meta.width > 0) {
+					width = meta.width;
+				}
+				if (typeof meta.height === "number" && meta.height > 0) {
+					height = meta.height;
+				}
+			} catch {
+				// If dimension extraction fails, fall back to defaults.
+			}
+		} else {
+			if (providerContentType && !providerContentType.includes("image/png")) {
+				logCreationWarn("Provider returned non-PNG; converting to PNG", { providerContentType });
+			}
+
+			const rawBuffer = Buffer.from(await providerResponse.arrayBuffer());
+			imageBuffer = await ensurePngBuffer(rawBuffer);
+
+			const headerColor = providerResponse.headers.get("X-Image-Color");
+			const headerWidth = providerResponse.headers.get("X-Image-Width");
+			const headerHeight = providerResponse.headers.get("X-Image-Height");
+
+			if (headerColor) color = headerColor;
+			if (headerWidth) width = Number.parseInt(headerWidth, 10) || width;
+			if (headerHeight) height = Number.parseInt(headerHeight, 10) || height;
 		}
-
-		const rawBuffer = Buffer.from(await providerResponse.arrayBuffer());
-		imageBuffer = await ensurePngBuffer(rawBuffer);
-
-		const headerColor = providerResponse.headers.get("X-Image-Color");
-		const headerWidth = providerResponse.headers.get("X-Image-Width");
-		const headerHeight = providerResponse.headers.get("X-Image-Height");
-
-		if (headerColor) color = headerColor;
-		if (headerWidth) width = Number.parseInt(headerWidth, 10) || width;
-		if (headerHeight) height = Number.parseInt(headerHeight, 10) || height;
 	} catch (err) {
 		providerError = err;
 	}
@@ -313,6 +378,27 @@ export async function runCreationJob({ queries, storage, payload }) {
 	const uploadDuration = Date.now() - uploadStartTime;
 	logCreation(`Image uploaded in ${uploadDuration}ms`, { filename, url: imageUrl });
 
+	let videoFilename = null;
+	let videoUrl = null;
+	if (isVideo && videoBuffer && typeof storage.uploadVideo === "function") {
+		try {
+			const baseExt =
+				typeof videoContentType === "string" && videoContentType.startsWith("video/") && videoContentType.split("/")[1]
+					? videoContentType.split("/")[1]
+					: "mp4";
+			const safeExt = baseExt.split("+")[0].split(";")[0].trim() || "mp4";
+			videoFilename = `video/${userId}_${imageId}_${timestamp}_${random}.${safeExt}`;
+			videoUrl = await storage.uploadVideo(videoBuffer, videoFilename, {
+				contentType: videoContentType || "video/mp4"
+			});
+			logCreation("Video uploaded for creation", { imageId, videoFilename, videoUrl, contentType: videoContentType });
+		} catch (err) {
+			logCreationWarn("Failed to upload video for creation; continuing with image only", safeErrorMessage(err));
+			videoFilename = null;
+			videoUrl = null;
+		}
+	}
+
 	const completedAtIso = new Date().toISOString();
 	const startedAtMs = existingMeta && existingMeta.started_at ? Date.parse(existingMeta.started_at) : NaN;
 	const completedAtMs = Date.parse(completedAtIso);
@@ -324,6 +410,18 @@ export async function runCreationJob({ queries, storage, payload }) {
 	const completedMeta = mergeMeta(existingMeta, {
 		completed_at: completedAtIso,
 		...(Number.isFinite(durationMs) && durationMs >= 0 ? { duration_ms: durationMs } : {}),
+		media_type: isVideo ? "video" : "image",
+		...(isVideo && videoUrl
+			? {
+					video: {
+						filename: videoFilename,
+						file_path: videoUrl,
+						content_type: videoContentType || "video/mp4"
+					},
+					source_image_url:
+						(typeof argsForProvider.image_url === "string" && argsForProvider.image_url) || null
+			  }
+			: {})
 	});
 
 	logCreation(`Updating database - marking job as completed`, {

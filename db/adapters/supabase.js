@@ -4697,6 +4697,22 @@ export function openDb() {
 			return `/api/images/created/${filename}`;
 		},
 
+		uploadVideo: async (buffer, filename, options = {}) => {
+			const contentType = String(options?.contentType || "video/mp4");
+			const { error } = await storageClient.storage
+				.from(STORAGE_BUCKET)
+				.upload(filename, buffer, {
+					contentType,
+					upsert: true
+				});
+
+			if (error) {
+				throw new Error(`Failed to upload video to Supabase Storage: ${error.message}`);
+			}
+
+			return `/api/videos/created/${filename}`;
+		},
+
 		getImageUrl: (filename) => {
 			// Return backend route URL - images are served through the backend
 			return `/api/images/created/${filename}`;
@@ -4761,6 +4777,17 @@ export function openDb() {
 			}
 
 			// Convert blob to buffer
+			const arrayBuffer = await data.arrayBuffer();
+			return Buffer.from(arrayBuffer);
+		},
+
+		getVideoBuffer: async (filename) => {
+			const { data, error } = await storageClient.storage
+				.from(STORAGE_BUCKET)
+				.download(filename);
+			if (error) {
+				throw new Error(`Video not found: ${filename}`);
+			}
 			const arrayBuffer = await data.arrayBuffer();
 			return Buffer.from(arrayBuffer);
 		},
