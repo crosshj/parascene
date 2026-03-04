@@ -25,7 +25,7 @@
   },
   {
     "name": "Feed Content++",
-    "description": "something different than yessterday",
+    "description": "something different than yesterday",
     "cost": 50,
     "impact": 50,
     "dependsOn": [],
