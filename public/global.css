@@ -181,7 +181,8 @@ img {
 	height: 100%;
 }
 
-.route-media[data-media-type="video"]:not(.route-media-error)::before {
+/* Play icon only when not NSFW — NSFW uses ::before/::after for label and blur overlay */
+.route-media[data-media-type="video"]:not(.route-media-error):not(.nsfw)::before {
 	content: "";
 	position: absolute;
 	left: 50%;
@@ -193,7 +194,7 @@ img {
 	transform: translate(-50%, -50%);
 }
 
-.route-media[data-media-type="video"]:not(.route-media-error)::after {
+.route-media[data-media-type="video"]:not(.route-media-error):not(.nsfw)::after {
 	content: "";
 	position: absolute;
 	left: 50%;
