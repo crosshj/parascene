@@ -153,6 +153,74 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	});
 
+	// GET /api/videos/created/* - Serve videos through backend with same auth rules as images.
+	router.get("/api/videos/created/*", async (req, res) => {
+		const filename = req.params[0] || "";
+
+		try {
+			if (!filename || typeof storage.getVideoBuffer !== "function") {
+				return res.status(404).json({ error: "Video not found" });
+			}
+
+			let image = null;
+
+			// Video files are stored under "video/{userId}_{imageId}_{timestamp}_{random}.ext"
+			// Derive imageId from the filename and look up the original creation.
+			if (filename.startsWith("video/")) {
+				const afterPrefix = filename.slice("video/".length);
+				const baseName = afterPrefix.split("/").pop() || "";
+				const withoutExt = baseName.replace(/\.[^.]+$/, "");
+				const parts = withoutExt.split("_");
+				const imageId = Number(parts[1]); // video/{userId}_{imageId}_{timestamp}_{random}.ext
+
+				if (!Number.isFinite(imageId) || imageId <= 0) {
+					return res.status(404).json({ error: "Video not found" });
+				}
+
+				image = await queries.selectCreatedImageByIdAnyUser?.get(imageId);
+			}
+
+			if (!image) {
+				return res.status(404).json({ error: "Video not found" });
+			}
+
+			const userId = req.auth?.userId;
+			const isOwner = userId && image.user_id === userId;
+			const isPublished = image.published === 1 || image.published === true;
+
+			let isAdmin = false;
+			if (userId && !isOwner && !isPublished) {
+				try {
+					const user = await queries.selectUserById.get(userId);
+					isAdmin = user?.role === "admin";
+				} catch {
+					// ignore errors checking user
+				}
+			}
+
+			if (!isOwner && !isPublished && !isAdmin) {
+				return res.status(403).json({ error: "Access denied" });
+			}
+
+			const meta = parseMeta(image.meta);
+			const videoMeta = meta && typeof meta === "object" ? meta.video : null;
+			let contentType = "video/mp4";
+			if (videoMeta && typeof videoMeta.content_type === "string" && videoMeta.content_type) {
+				contentType = videoMeta.content_type;
+			}
+
+			const videoBuffer = await storage.getVideoBuffer(filename);
+			res.setHeader("Content-Type", contentType);
+			res.setHeader("Cache-Control", "public, max-age=3600");
+			return res.send(videoBuffer);
+		} catch (error) {
+			if (error.message && error.message.includes("not found")) {
+				return res.status(404).json({ error: "Video not found" });
+			}
+			return res.status(500).json({ error: "Failed to serve video" });
+		}
+	});
+
 	async function requireUser(req, res) {
 		if (!req.auth?.userId) {
 			res.status(401).json({ error: "Unauthorized" });
@@ -1544,6 +1612,13 @@ export default function createCreateRoutes({ queries, storage }) {
 				const status = img.status || "completed";
 				const url = status === "completed" ? (img.file_path || storage.getImageUrl(img.filename)) : null;
 				const meta = parseMeta(img.meta);
+				const mediaType = typeof meta?.media_type === "string" ? meta.media_type : "image";
+				const videoMeta = meta && typeof meta === "object" ? meta.video : null;
+				const videoUrl =
+					videoMeta && typeof videoMeta.file_path === "string" && videoMeta.file_path
+						? videoMeta.file_path
+						: null;
+
 				return {
 					id: img.id,
 					filename: img.filename,
@@ -1560,7 +1635,9 @@ export default function createCreateRoutes({ queries, storage }) {
 					description: img.description || null,
 					meta,
 					nsfw: !!meta?.nsfw,
-					is_moderated_error: isModeratedError(status, meta)
+					is_moderated_error: isModeratedError(status, meta),
+					media_type: mediaType,
+					video_url: videoUrl
 				};
 			});
 
@@ -1661,6 +1738,17 @@ export default function createCreateRoutes({ queries, storage }) {
 					: (image.file_path || storage.getImageUrl(image.filename)))
 				: null;
 
+			const mediaType = typeof meta?.media_type === "string" ? meta.media_type : "image";
+			const videoMeta = meta && typeof meta === "object" ? meta.video : null;
+			const videoUrl =
+				videoMeta && typeof videoMeta.file_path === "string" && videoMeta.file_path
+					? videoMeta.file_path
+					: null;
+			const sourceImageUrl =
+				typeof meta?.source_image_url === "string" && meta.source_image_url
+					? meta.source_image_url
+					: null;
+
 			// If creation is NSFW and viewer has not enabled NSFW, return not found (owners and admins may still view).
 			const isNsfw = !!meta?.nsfw;
 			const viewerEnableNsfw = user.meta?.enableNsfw === true;
@@ -1702,6 +1790,9 @@ export default function createCreateRoutes({ queries, storage }) {
 				meta,
 				nsfw: !!meta?.nsfw,
 				is_moderated_error: isModeratedError(status, meta),
+				media_type: mediaType,
+				video_url: videoUrl,
+				source_image_url: sourceImageUrl,
 				creator: creator ? {
 					id: creator.id,
 					email: creator.email,
@@ -1742,13 +1833,22 @@ export default function createCreateRoutes({ queries, storage }) {
 					status === "completed"
 						? (row.file_path || storage.getImageUrl(row.filename))
 						: null;
+				const meta = parseMeta(row.meta);
+				const mediaType = typeof meta?.media_type === "string" ? meta.media_type : "image";
+				const videoMeta = meta && typeof meta === "object" ? meta.video : null;
+				const videoUrl =
+					videoMeta && typeof videoMeta.file_path === "string" && videoMeta.file_path
+						? videoMeta.file_path
+						: null;
 				return {
 					id: row.id,
 					title: row.title ?? null,
 					created_at: row.created_at,
 					url: url || null,
 					thumbnail_url: url ? getThumbnailUrl(url) : null,
-					nsfw: !!(row.nsfw)
+					nsfw: !!(row.nsfw),
+					media_type: mediaType,
+					video_url: videoUrl
 				};
 			});
 			return res.json(children);

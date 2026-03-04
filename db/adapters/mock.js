@@ -2675,6 +2675,17 @@ export function openDb() {
 			}
 		},
 
+		uploadVideo: async (buffer, filename, _options = {}) => {
+			try {
+				ensureImagesDir();
+				const filePath = path.join(imagesDir, filename);
+				fs.writeFileSync(filePath, buffer);
+				return `/api/videos/created/${filename}`;
+			} catch {
+				return `/api/videos/created/${filename}`;
+			}
+		},
+
 		getImageUrl: (filename) => {
 			return `/images/created/${filename}`;
 		},
@@ -2691,6 +2702,14 @@ export function openDb() {
 				// throw a clear error
 				throw new Error(`Image file not available: ${filename}. This may occur on serverless platforms. Consider using Supabase adapter.`);
 			}
+		},
+
+		getVideoBuffer: async (filename) => {
+			const filePath = path.join(imagesDir, filename);
+			if (!fs.existsSync(filePath)) {
+				throw new Error(`Video not found: ${filename}`);
+			}
+			return fs.readFileSync(filePath);
 		},
 
 		uploadImageAnon: async (buffer, filename) => {

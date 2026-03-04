@@ -716,8 +716,17 @@ function initRelatedSection(root, currentCreationId, options = {}) {
 						${reasonsHtml}
 						<div class="route-meta route-meta-spacer"></div>
 						<div class="route-tags">${escapeHtml(item.tags ?? '')}</div>`;
+			const mediaType = typeof item.media_type === 'string' ? item.media_type : 'image';
+			const mediaAttrs = {
+				'data-related-media': true,
+				'data-image-id': cid,
+				'data-status': 'completed'
+			};
+			if (mediaType === 'video') {
+				mediaAttrs['data-media-type'] = 'video';
+			}
 			card.innerHTML = buildCreationCardShell({
-				mediaAttrs: { 'data-related-media': true, 'data-image-id': cid, 'data-status': 'completed' },
+				mediaAttrs,
 				detailsContentHtml: detailsContent,
 				nsfw: Boolean(item.nsfw),
 			});
@@ -846,6 +855,7 @@ async function loadCreation() {
 	const imageEl = document.querySelector('[data-image]');
 	const backgroundEl = document.querySelector('[data-background]');
 	const imageWrapper = imageEl?.closest?.('.creation-detail-image-wrapper');
+	const videoEl = document.querySelector('[data-video]');
 
 	if (!detailContent || !imageEl || !backgroundEl) return;
 
@@ -872,6 +882,33 @@ async function loadCreation() {
 			backgroundEl.style.backgroundImage = '';
 			// Hide default browser broken-image UI
 			imageEl.style.visibility = 'hidden';
+		});
+	}
+
+	// Attach video load/error handlers once for video creations
+	if (videoEl && !videoEl.dataset.fallbackAttached) {
+		videoEl.dataset.fallbackAttached = '1';
+
+		videoEl.addEventListener('loadeddata', () => {
+			const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
+			if (modIcon) modIcon.remove();
+			imageWrapper?.classList.remove('image-loading', 'image-error', 'image-error-moderated');
+			videoEl.style.display = 'block';
+		});
+
+		videoEl.addEventListener('error', () => {
+			imageWrapper?.classList.remove('image-loading');
+			imageWrapper?.classList.add('image-error');
+			backgroundEl.style.backgroundImage = '';
+			if (videoEl) {
+				videoEl.style.display = 'none';
+				videoEl.removeAttribute('src');
+				try {
+					videoEl.load();
+				} catch {
+					// ignore
+				}
+			}
 		});
 	}
 
@@ -933,6 +970,9 @@ async function loadCreation() {
 
 		const status = creation.status || 'completed';
 		const meta = creation.meta || null;
+		const mediaType = typeof creation.media_type === 'string'
+			? creation.media_type
+			: (meta && typeof meta.media_type === 'string' ? meta.media_type : 'image');
 		const timeoutAt = meta && typeof meta.timeout_at === 'string' ? new Date(meta.timeout_at).getTime() : NaN;
 		const isTimedOut = status === 'creating' && Number.isFinite(timeoutAt) && Date.now() > timeoutAt;
 		const isFailed = status === 'failed' || isTimedOut;
@@ -976,14 +1016,45 @@ async function loadCreation() {
 		imageEl.style.visibility = 'hidden';
 		imageEl.dataset.currentUrl = '';
 		imageEl.src = '';
+		if (videoEl) {
+			videoEl.style.display = 'none';
+			videoEl.removeAttribute('src');
+			try {
+				videoEl.load();
+			} catch {
+				// ignore
+			}
+		}
 
-		if (status === 'completed' && creation.url) {
+		if (status === 'completed' && mediaType === 'image' && creation.url) {
 			const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
 			if (modIcon) modIcon.remove();
 			imageWrapper?.classList.remove('image-error-moderated');
 			imageWrapper?.classList.add('image-loading');
 			imageEl.dataset.currentUrl = creation.url;
 			imageEl.src = creation.url;
+		} else if (status === 'completed' && mediaType === 'video' && creation.video_url) {
+			const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
+			if (modIcon) modIcon.remove();
+			imageWrapper?.classList.remove('image-error-moderated');
+			imageWrapper?.classList.add('image-loading');
+
+			const bgUrl = creation.url || creation.thumbnail_url || null;
+			if (bgUrl) {
+				backgroundEl.style.backgroundImage = `url('${bgUrl}')`;
+			}
+
+			if (videoEl) {
+				if (bgUrl) {
+					videoEl.setAttribute('poster', bgUrl);
+				} else {
+					videoEl.removeAttribute('poster');
+				}
+				videoEl.src = creation.video_url;
+				videoEl.style.display = 'block';
+				videoEl.muted = true;
+				videoEl.playsInline = true;
+			}
 		} else if (status === 'creating' && !isTimedOut) {
 			const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
 			if (modIcon) modIcon.remove();

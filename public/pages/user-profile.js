@@ -552,8 +552,10 @@ function renderImageGrid(grid, images, showBadge = false, emptyTitle = 'No publi
 			publishedInfo = html`<div class="route-meta" title="${formatDateTime(publishedDate)}">Published ${publishedTimeAgo}</div>`;
 		}
 
+		const isVideo = item.media_type === 'video' || (item.meta && item.meta.media_type === 'video');
+		const mediaAttrs = isVideo ? ' data-media-type="video"' : '';
 		card.innerHTML = html`
-			<div class="route-media${item.nsfw ? ' nsfw' : ''}" aria-hidden="true"></div>
+			<div class="route-media${item.nsfw ? ' nsfw' : ''}" aria-hidden="true"${mediaAttrs}></div>
 			${userDeletedBadge}
 			${publishedBadge}
 			<div class="route-details">
@@ -612,7 +614,13 @@ function appendImageGridCards(grid, items, showBadge = false) {
 		}
 		const detailsContent = html`
 		<div class="route-title">${escapeHtml(item.title || 'Untitled')}</div>${publishedInfo}<div class="route-meta">${escapeHtml(formatDate(item.created_at) || '')}</div>`;
+		const isVideo = item.media_type === 'video' || (item.meta && item.meta.media_type === 'video');
+		const mediaAttrs = {};
+		if (isVideo) {
+			mediaAttrs['data-media-type'] = 'video';
+		}
 		card.innerHTML = buildCreationCardShell({
+			mediaAttrs,
 			badgesHtml: userDeletedBadge + publishedBadge,
 			detailsContentHtml: detailsContent,
 			nsfw: Boolean(item.nsfw),
