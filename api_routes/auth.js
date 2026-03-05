@@ -280,6 +280,19 @@ function isSecureRequest(req) {
 	return process.env.NODE_ENV === "production";
 }
 
+/** Cookie domain so session is shared across www and sh. Omit for host-only cookie (e.g. localhost). */
+function getCookieDomain(req) {
+	const hostname = req?.hostname || req?.host?.split(":")[0] || "";
+	if (
+		hostname === "www.parascene.com" ||
+		hostname === "sh.parascene.com" ||
+		hostname === "parascene.com"
+	) {
+		return ".parascene.com";
+	}
+	return undefined;
+}
+
 function setAuthCookie(res, token, req = null) {
 	const isSecure = isSecureRequest(req);
 	// For Vercel/production, use 'none' with secure to ensure cookies work with fetch requests
@@ -292,6 +305,8 @@ function setAuthCookie(res, token, req = null) {
 		maxAge: ONE_WEEK_MS,
 		path: "/"
 	};
+	const domain = getCookieDomain(req);
+	if (domain) cookieOptions.domain = domain;
 	if (shouldLogSession()) {
 		// console.log(`[setAuthCookie] Setting cookie with options:`, {
 		//   sameSite,
@@ -313,6 +328,8 @@ function clearAuthCookie(res, req = null) {
 		secure: isSecure,
 		path: "/"
 	};
+	const domain = getCookieDomain(req);
+	if (domain) cookieOptions.domain = domain;
 	const path = req?.path || "unknown";
 	if (shouldLogSession()) {
 		// console.log(`[clearAuthCookie] Clearing cookie for path: ${path}`, {
