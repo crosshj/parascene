@@ -1638,6 +1638,16 @@ async function loadCreation() {
 			${renderCreationDetailActionStrip(stripData, escapeHtml)}
 			${renderCreationDetailMoreMenu(menuData, escapeHtml)}
 			${userDeletedNotice}
+			${isAdmin ? html`
+			<div class="creation-detail-admin-upload-video" data-admin-upload-video>
+				<div class="creation-detail-admin-upload-video-label">Admin: Attach video to this creation</div>
+				<form class="creation-detail-admin-upload-video-form" data-admin-upload-video-form enctype="multipart/form-data">
+					<input type="file" name="video" accept="video/*" class="creation-detail-admin-upload-video-input" data-admin-upload-video-input aria-label="Choose video file" />
+					<button type="submit" class="btn-secondary creation-detail-admin-upload-video-btn" data-admin-upload-video-btn disabled>Upload video</button>
+				</form>
+				<p class="creation-detail-admin-upload-video-error" data-admin-upload-video-error role="alert" aria-live="polite" style="display: none;"></p>
+			</div>
+			` : ''}
 			
 			${descriptionHtml}
 			<div class="creation-detail-meta-hidden" aria-hidden="true">
@@ -2120,6 +2130,61 @@ async function loadCreation() {
 				if (typeof targets[action] === 'function') targets[action]();
 				closeMobileMoreMenu();
 			});
+		}
+
+		// Admin: upload video to creation
+		const adminUploadSection = detailContent.querySelector('[data-admin-upload-video]');
+		if (adminUploadSection) {
+			const form = adminUploadSection.querySelector('[data-admin-upload-video-form]');
+			const fileInput = adminUploadSection.querySelector('[data-admin-upload-video-input]');
+			const submitBtn = adminUploadSection.querySelector('[data-admin-upload-video-btn]');
+			const errorEl = adminUploadSection.querySelector('[data-admin-upload-video-error]');
+			if (fileInput) {
+				fileInput.addEventListener('change', () => {
+					if (submitBtn) submitBtn.disabled = !(fileInput.files && fileInput.files.length > 0);
+					if (errorEl) { errorEl.textContent = ''; errorEl.style.display = 'none'; }
+				});
+			}
+			if (form && submitBtn) {
+				form.addEventListener('submit', async (e) => {
+					e.preventDefault();
+					if (!fileInput?.files?.length) return;
+					const file = fileInput.files[0];
+					if (!file || !file.type.startsWith('video/')) {
+						if (errorEl) { errorEl.textContent = 'Please choose a video file.'; errorEl.style.display = 'block'; }
+						return;
+					}
+					submitBtn.disabled = true;
+					if (errorEl) { errorEl.textContent = ''; errorEl.style.display = 'none'; }
+					try {
+						const fd = new FormData();
+						fd.append('video', file);
+						const res = await fetch(`/admin/creations/${creationId}/upload-video`, {
+							method: 'POST',
+							credentials: 'include',
+							body: fd
+						});
+						const data = await res.json().catch(() => ({}));
+						if (!res.ok) {
+							if (errorEl) {
+								errorEl.textContent = data?.error || data?.message || `Upload failed (${res.status})`;
+								errorEl.style.display = 'block';
+							}
+							submitBtn.disabled = false;
+							return;
+						}
+						fileInput.value = '';
+						submitBtn.disabled = true;
+						loadCreation();
+					} catch (err) {
+						if (errorEl) {
+							errorEl.textContent = err?.message || 'Upload failed';
+							errorEl.style.display = 'block';
+						}
+						submitBtn.disabled = false;
+					}
+				});
+			}
 		}
 
 		if (!shareMountedPrivate) {

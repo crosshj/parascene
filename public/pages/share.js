@@ -41,6 +41,22 @@ function getPolicyHints() {
 	return { tz, screen: screenHint };
 }
 
+/** Origin for create/try redirects: use www when on sh subdomain so Create submits to www. */
+function getCreateOrigin() {
+	const hostname = typeof window.location?.hostname === "string" ? window.location.hostname : "";
+	if (hostname.startsWith("sh.")) {
+		return window.location.protocol + "//www." + hostname.slice(3);
+	}
+	return window.location.origin;
+}
+
+/** Build full URL for create/try redirect (www when on sh). */
+function buildCreateUrl(path, queryString) {
+	const origin = getCreateOrigin();
+	const pathStr = path.startsWith("/") ? path : "/" + path;
+	return queryString ? `${origin}${pathStr}?${queryString}` : `${origin}${pathStr}`;
+}
+
 /** On Create submit: if policy says never seen, go to /try?prompt=...; else go to /create?prompt=... (same as index). */
 function handleShareCreateSubmit(e) {
 	const form = e.target?.closest?.("form.share-generate-form");
@@ -61,18 +77,18 @@ function handleShareCreateSubmit(e) {
 			const prompt = formData.get("prompt");
 			const promptStr = prompt != null ? String(prompt).trim() : "";
 			if (data && data.seen === false) {
-				const tryUrl = promptStr ? "/try?prompt=" + encodeURIComponent(promptStr) : "/try";
-				window.location.replace(tryUrl);
+				const tryQuery = promptStr ? "prompt=" + encodeURIComponent(promptStr) : "";
+				window.location.replace(buildCreateUrl("/try", tryQuery));
 				return;
 			}
 			const action = (form.getAttribute("action") || "/create").trim();
 			const query = new URLSearchParams(formData).toString();
-			window.location.href = query ? `${action}?${query}` : action;
+			window.location.href = buildCreateUrl(action, query);
 		})
 		.catch(() => {
 			const action = (form.getAttribute("action") || "/create").trim();
 			const query = new URLSearchParams(new FormData(form)).toString();
-			window.location.href = query ? `${action}?${query}` : action;
+			window.location.href = buildCreateUrl(action, query);
 		});
 }
 

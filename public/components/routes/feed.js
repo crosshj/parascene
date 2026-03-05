@@ -4,7 +4,8 @@ import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 import { getAvatarColor } from '../../shared/avatar.js';
 import { buildProfilePath } from '../../shared/profileLinks.js';
 import { setRouteMediaBackgroundImage } from '../../shared/routeMedia.js';
-import { renderEmptyState, renderEmptyLoading, renderEmptyError } from '../../shared/emptyState.js';
+import { renderEmptyState, renderEmptyError } from '../../shared/emptyState.js';
+import { renderFeedCardsSkeleton } from '../../shared/skeleton.js';
 
 const html = String.raw;
 
@@ -62,8 +63,8 @@ class AppRouteFeed extends HTMLElement {
 			<p>See creations shared by friends and people you already follow, with the newest highlights at the top.</p>
         </div>
 		-->
-        <div class="route-cards feed-cards" data-feed-container>
-        ${renderEmptyLoading({ className: 'route-empty-image-grid' })}
+        <div class="route-cards feed-cards" data-feed-container aria-busy="true" aria-label="Loading">
+        ${renderFeedCardsSkeleton(4)}
         </div>
       </div>
     `;
@@ -599,6 +600,8 @@ class AppRouteFeed extends HTMLElement {
 			});
 
 			container.innerHTML = "";
+			container.removeAttribute('aria-busy');
+			container.removeAttribute('aria-label');
 			if (items.length === 0) {
 				container.innerHTML = renderEmptyState({
 					className: 'route-empty-image-grid',
@@ -632,6 +635,8 @@ class AppRouteFeed extends HTMLElement {
 			this.sentinelWasIntersecting = false;
 			this.renderNextBatch();
 		} catch (error) {
+			container.removeAttribute('aria-busy');
+			container.removeAttribute('aria-label');
 			container.innerHTML = renderEmptyError('Unable to load feed.', { className: 'route-empty-image-grid' });
 		} finally {
 			this.isLoading = false;

@@ -975,6 +975,38 @@ body.creation-detail-page main>section:first-of-type {
 	border-radius: 6px;
 }
 
+.creation-detail-admin-upload-video {
+	margin-bottom: 12px;
+	padding: 10px 12px;
+	background: color-mix(in srgb, var(--text-muted) 8%, transparent);
+	border-radius: 6px;
+}
+
+.creation-detail-admin-upload-video-label {
+	font-size: 0.85rem;
+	color: var(--text-muted);
+	margin-bottom: 8px;
+}
+
+.creation-detail-admin-upload-video-form {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 12px;
+}
+
+.creation-detail-admin-upload-video-input {
+	font-size: 0.875rem;
+	max-width: 100%;
+}
+
+.creation-detail-admin-upload-video-error {
+	font-size: 0.85rem;
+	color: var(--error, #c00);
+	margin-top: 8px;
+	margin-bottom: 0;
+}
+
 .creation-detail-date {
 	color: var(--text-muted);
 }
