@@ -75,8 +75,13 @@
 			</div>
 			<hr class="share-hero-divider" aria-hidden="true" />
 			<div class="share-hero-copy">
-				<p class="share-value">
-					{{SHARE_INTRO_HTML}}
+				<p class="share-view-creation-wrap" id="share-view-creation-wrap"{{SHARE_VIEW_LINK_ATTR}}>
+					<a href="{{CREATION_DETAIL_URL}}" class="share-view-creation" id="share-view-creation">View creation</a>
+				</p>
+				<div class="share-create-block" id="share-create-block"{{SHARE_CREATE_BLOCK_ATTR}}>
+					<p class="share-value">
+						{{SHARE_INTRO_HTML}}
+					</p>
 					<span class="share-value-title-row">
 						<span class="share-value-strong">Now it's your turn</span>
 						<span class="share-prompt-links">
@@ -86,21 +91,21 @@
 							<a href="#" class="share-prompt-link" data-share-clear aria-label="Clear field">clear</a>
 						</span>
 					</span>
-				</p>
-				<form class="share-generate-form" action="/create" method="get" role="search">
-					<input type="text" name="prompt" class="share-generate-input" placeholder="Enter your idea here..."
-						aria-label="Enter your idea" autocomplete="off" />
-					<button type="submit" class="share-generate-btn">
-						<span>Create</span>
-						<svg class="share-generate-btn-icon" width="20" height="20" viewBox="0 0 24 24" fill="none"
-							stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
-							aria-hidden="true">
-							<path d="M5 12h14" />
-							<path d="M13 6l6 6-6 6" />
-						</svg>
-					</button>
-				</form>
-				<p class="share-generate-copy">No payment or signup required — start creating now.</p>
+					<form class="share-generate-form" action="/create" method="get" role="search">
+						<input type="text" name="prompt" class="share-generate-input" placeholder="Enter your idea here..."
+							aria-label="Enter your idea" autocomplete="off" />
+						<button type="submit" class="share-generate-btn">
+							<span>Create</span>
+							<svg class="share-generate-btn-icon" width="20" height="20" viewBox="0 0 24 24" fill="none"
+								stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+								aria-hidden="true">
+								<path d="M5 12h14" />
+								<path d="M13 6l6 6-6 6" />
+							</svg>
+						</button>
+					</form>
+					<p class="share-generate-copy">No payment or signup required — start creating now.</p>
+				</div>
 			</div>
 		</section>
 	</main>
