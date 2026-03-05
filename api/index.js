@@ -146,33 +146,26 @@ app.use((req, res, next) => {
 	next();
 });
 
-// Share subdomain (sh.parascene.com): serve only when "is a share page on sh. requesting this resource?"
-// Allow: (1) share page document + assets by path (/s/, /api/share/, favicon, share.css, share.js), or (2) Referer from share page on this host.
+// Share subdomain (sh.parascene.com): share page + its assets served here; navigations redirect to www.
+// Allow by path: /s/* (share page), /api/*, /pages/*. Other requests: allow if Referer is share page and Sec-Fetch-Dest is not "document"; else redirect to www.
 app.use((req, res, next) => {
 	const host = (req.hostname || req.get("host") || "").split(":")[0].toLowerCase();
 	if (host !== SHARE_HOSTNAME) return next();
-	// Use originalUrl so we match the path the client requested (important behind proxies/rewrites)
 	const path = (req.originalUrl || req.url || req.path || "").split("?")[0].replace(/^(?!\/)/, "/");
-	if (
-		path.startsWith("/s/") ||
-		path.startsWith("/api/share/") ||
-		path.startsWith("/api/images/created") ||
-		path === "/favicon.svg" ||
-		path === "/pages/share.css" ||
-		path === "/pages/share.js"
-	)
+	if (path.startsWith("/s/") || path.startsWith("/api/") || path.startsWith("/pages/"))
 		return next();
+	const isDocumentNav = (req.get("sec-fetch-dest") || "").toLowerCase() === "document";
+	let refererIsSharePage = false;
 	const referer = req.get("referer");
 	if (referer && typeof referer === "string") {
 		try {
 			const refUrl = new URL(referer);
-			if (refUrl.hostname.toLowerCase() === SHARE_HOSTNAME && refUrl.pathname.startsWith("/s/")) {
-				return next();
-			}
+			refererIsSharePage = refUrl.hostname.toLowerCase() === SHARE_HOSTNAME && refUrl.pathname.startsWith("/s/");
 		} catch {
 			// invalid referer
 		}
 	}
+	if (refererIsSharePage && !isDocumentNav) return next();
 	const pathAndQuery = (req.originalUrl || req.url || path || "/").replace(/^(?![/])/, "/");
 	return res.redirect(302, `${getBaseAppUrl()}${pathAndQuery}`);
 });
