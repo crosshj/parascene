@@ -29,7 +29,7 @@ export async function init() {
 }
 
 function runCreatePageInit() {
-	if (!document.body.classList.contains('create-page')) return;
+	if (!document.body.classList.contains('create-page') && !document.body.classList.contains('create-page-advanced')) return;
 
 	const changeLink = document.getElementById('create-change-image-link');
 	const area = document.querySelector('.create-image-edit-area');
