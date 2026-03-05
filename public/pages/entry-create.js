@@ -15,13 +15,10 @@ import '../components/routes/create.js';
 import { waitForComponents } from '../shared/pageInit.js';
 import { refreshAutoGrowTextareas } from '../shared/autogrow.js';
 
+// Only wait for above-the-fold / interactive shell; modals hydrate in background
 const TAGS = [
 	'app-navigation',
 	'app-navigation-mobile',
-	'app-modal-profile',
-	'app-modal-credits',
-	'app-modal-notifications',
-	'app-modal-server',
 	'app-tabs',
 	'app-route-create',
 ];

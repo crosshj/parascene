@@ -39,500 +39,6 @@ class AppRouteCreate extends HTMLElement {
 
 	connectedCallback() {
 		this.innerHTML = html`
-      <style>
-        .create-route .create-form {
-          display: flex;
-          flex-direction: column;
-          gap: 1.25rem;
-          margin-bottom: 1.5rem;
-        }
-        .create-route [data-fields-container] {
-          display: flex;
-          flex-direction: column;
-          gap: 1.25rem;
-        }
-        .create-route .form-group {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-        }
-        .create-route .form-label {
-          font-size: 0.9rem;
-          font-weight: 500;
-          color: var(--text);
-          display: inline-block;
-        }
-        .create-route .field-required {
-          display: inline;
-          margin-left: 2px;
-        }
-        .create-route .form-input,
-        .create-route .form-select {
-          padding: 0.75rem 1rem;
-          border-radius: 8px;
-          border: 1px solid var(--border);
-          background: var(--input-bg);
-          color: var(--text);
-          font-size: 0.95rem;
-          font-family: inherit;
-          transition: border-color 0.2s ease, box-shadow 0.2s ease;
-        }
-        .create-route .form-input[type="textarea"],
-        .create-route textarea.form-input {
-          resize: none;
-          overflow: hidden;
-          min-height: auto;
-        }
-        .create-route textarea.form-input.prompt-editor {
-          overflow-y: auto;
-        }
-        .create-route .form-select {
-          appearance: none;
-          -webkit-appearance: none;
-          -moz-appearance: none;
-          padding-right: 2.25rem;
-          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a0a0a0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-          background-repeat: no-repeat;
-          background-position: right 0.75rem center;
-          background-size: 1rem;
-          cursor: pointer;
-        }
-        .create-route .form-input:focus-visible,
-        .create-route .form-select:focus-visible {
-          outline: none;
-          border-color: var(--accent);
-          box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
-        }
-        .create-route .form-input::placeholder {
-          color: var(--text-muted);
-        }
-        .create-route .form-input[type="color"] {
-          height: 48px;
-          cursor: pointer;
-        }
-        .create-route .form-group-checkbox {
-          flex-direction: row;
-          align-items: center;
-          gap: 0.75rem;
-        }
-        .create-route .form-group-checkbox .form-label {
-          margin-bottom: 0;
-        }
-        .create-route .form-switch-input {
-          position: absolute;
-          width: 1px;
-          height: 1px;
-          padding: 0;
-          margin: -1px;
-          overflow: hidden;
-          clip: rect(0, 0, 0, 0);
-          white-space: nowrap;
-          border: 0;
-        }
-        .create-route .form-switch {
-          position: relative;
-          display: inline-flex;
-          align-items: center;
-          flex-shrink: 0;
-          cursor: pointer;
-        }
-        .create-route .form-switch:focus-visible {
-          outline: 2px solid var(--accent-switch);
-          outline-offset: 2px;
-          border-radius: 999px;
-        }
-        .create-route .form-switch-track {
-          display: flex;
-          align-items: center;
-          width: 2.75rem;
-          height: 1.5rem;
-          padding: 2px;
-          border-radius: 999px;
-          background: var(--switch-track-off);
-          transition: background 0.2s ease, box-shadow 0.2s ease;
-        }
-        .create-route .form-switch-input:focus-visible ~ .form-switch-track,
-        .create-route .form-switch:focus-visible .form-switch-track {
-          box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-switch) 40%, transparent);
-        }
-        .create-route .form-switch-thumb {
-          width: 1.25rem;
-          height: 1.25rem;
-          border-radius: 50%;
-          background: var(--switch-thumb-off);
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-          transition: transform 0.2s ease;
-          transform: translateX(0);
-        }
-        .create-route .form-switch-input:checked ~ .form-switch-track {
-          background: color-mix(in srgb, var(--accent-switch) 40%, var(--switch-track-off));
-        }
-        .create-route .form-switch-input:checked ~ .form-switch-track .form-switch-thumb {
-          background: var(--accent-switch);
-          transform: translateX(1.25rem);
-        }
-        .create-route .create-controls {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-          align-items: flex-start;
-          margin-top: 1.5rem;
-        }
-        .create-route .create-button-spinner {
-          display: inline-block;
-          width: 20px;
-          height: 20px;
-          border: 2px solid color-mix(in srgb, var(--accent-text) 40%, transparent);
-          border-top-color: var(--accent-text);
-          border-radius: 50%;
-          animation: spin 0.8s linear infinite;
-          vertical-align: middle;
-        }
-        .create-route .create-cost {
-          font-size: 0.875rem;
-          color: var(--text-muted);
-          margin: 0;
-        }
-        .create-route .form-hint {
-          font-size: 0.85rem;
-          color: var(--text-muted);
-          margin: -0.15rem 0 0 0;
-        }
-        .create-route .create-cost.insufficient {
-          color: var(--error, #e74c3c);
-          font-weight: 500;
-        }
-        .create-route .field-required {
-          color: var(--error, #e74c3c);
-        }
-        .create-route [data-fields-container] .field-hidden {
-          display: none;
-        }
-        .create-route [data-fields-container].show-hidden-fields .field-hidden {
-          display: flex;
-        }
-        .create-route .create-fields-toggle {
-          margin-bottom: 0.25rem;
-        }
-        .create-route .create-fields-toggle-link {
-          font-size: 0.875rem;
-          color: var(--text-muted);
-          text-decoration: none;
-        }
-        .create-route .create-fields-toggle-link:hover {
-          color: var(--accent);
-          text-decoration: underline;
-        }
-        /* Advanced tab: context options list + switch */
-        .create-route .create-route-advanced {
-          display: flex;
-          flex-direction: column;
-          gap: 1.5rem;
-        }
-        .create-route .create-route-advanced-server {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-        }
-        .create-route .create-route-advanced-list {
-          list-style: none;
-          margin: 0;
-          padding: 0;
-          display: flex;
-          flex-direction: column;
-          gap: 0;
-          border-radius: 10px;
-          border: 1px solid var(--border);
-          overflow: hidden;
-          background: var(--surface);
-        }
-        .create-route .create-route-advanced-item {
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-          padding: 1rem 1.25rem;
-          border-bottom: 1px solid var(--border);
-          background: var(--surface);
-        }
-        .create-route .create-route-advanced-item:last-child {
-          border-bottom: none;
-        }
-        .create-route .create-route-advanced-item-desc {
-          flex: 1;
-          font-size: 0.95rem;
-          color: var(--text);
-          line-height: 1.4;
-        }
-        .create-route .create-route-advanced-item-desc strong {
-          display: block;
-          font-weight: 600;
-          margin-bottom: 0.15rem;
-        }
-        .create-route .create-route-advanced-switch {
-          position: relative;
-          width: 44px;
-          height: 24px;
-          flex-shrink: 0;
-          border-radius: 999px;
-          background: var(--border);
-          cursor: pointer;
-          transition: background 0.2s ease;
-          border: none;
-          padding: 0;
-        }
-        .create-route .create-route-advanced-switch[aria-checked="true"] {
-          background: var(--accent);
-        }
-        .create-route .create-route-advanced-switch::after {
-          content: '';
-          position: absolute;
-          top: 2px;
-          left: 2px;
-          width: 20px;
-          height: 20px;
-          border-radius: 50%;
-          background: var(--surface);
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-          transition: transform 0.2s ease;
-        }
-        .create-route .create-route-advanced-switch[aria-checked="true"]::after {
-          transform: translateX(20px);
-        }
-        .create-route .create-route-advanced-actions {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-          align-items: flex-start;
-          margin-top: 0.25rem;
-        }
-        .create-route .create-route-advanced-preview-hint {
-          margin: 0.5rem 0 0 0;
-          font-size: 0.85rem;
-          color: var(--text-muted);
-          text-align: right;
-        }
-        .create-route .create-route-advanced-preview-link {
-          background: none;
-          border: none;
-          padding: 0;
-          font-size: inherit;
-          color: var(--text-muted);
-          text-decoration: underline;
-          cursor: pointer;
-          font-family: inherit;
-        }
-        .create-route .create-route-advanced-preview-link:hover {
-          color: var(--text);
-        }
-        .create-route .create-route-advanced-preview-link:focus-visible {
-          outline: 2px solid var(--accent);
-          outline-offset: 2px;
-          border-radius: 2px;
-        }
-        /* Advanced confirm dialog (cost + Create) */
-        .create-route-advanced-confirm {
-          position: fixed;
-          inset: 0;
-          z-index: 1000;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 1rem;
-          visibility: hidden;
-          opacity: 0;
-          transition: visibility 0.2s ease, opacity 0.2s ease;
-        }
-        .create-route-advanced-confirm.open {
-          visibility: visible;
-          opacity: 1;
-        }
-        .create-route-advanced-confirm[data-advanced-preview-dialog] {
-          padding: 0.25rem;
-          align-items: stretch;
-          justify-content: stretch;
-        }
-        .create-route-advanced-confirm-overlay {
-          position: absolute;
-          inset: 0;
-          background: rgba(0, 0, 0, 0.5);
-        }
-        .create-route-advanced-confirm-panel {
-          position: relative;
-          background: var(--surface);
-          border: 1px solid var(--border);
-          border-radius: 14px;
-          padding: 1.5rem;
-          max-width: 360px;
-          width: 100%;
-          box-shadow: var(--shadow);
-        }
-        .create-route-advanced-confirm-panel .create-cost {
-          margin: 0 0 1rem 0;
-          white-space: pre-line;
-        }
-        .create-route-advanced-confirm-actions {
-          display: flex;
-          gap: 0.75rem;
-          flex-wrap: wrap;
-        }
-        .create-route-advanced-confirm-actions .btn-primary,
-        .create-route-advanced-confirm-actions .btn-secondary {
-          height: 40px;
-          min-height: 40px;
-          padding: 0 1rem;
-          box-sizing: border-box;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-        }
-        .create-route-advanced-preview-panel {
-          width: 100%;
-          height: 100%;
-          max-width: none;
-          padding: 0.5rem;
-          display: flex;
-          flex-direction: column;
-        }
-        .create-route-advanced-preview-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 0.5rem;
-          margin-bottom: 0.25rem;
-          flex-shrink: 0;
-        }
-        .create-route-advanced-preview-actions {
-          justify-content: flex-end;
-        }
-        .create-route-advanced-preview-title {
-          font-size: 0.95rem;
-          font-weight: 600;
-          color: var(--text);
-          margin: 0;
-        }
-        .create-route-advanced-preview-json {
-          flex: 1;
-          min-height: 0;
-          overflow: auto;
-          margin: 0 0 0.5rem 0;
-          padding: 0.25rem 0.5rem;
-          border-radius: 6px;
-          background: var(--surface-strong);
-          border: 1px solid var(--border);
-          font-size: 0.8rem;
-          line-height: 1.4;
-          color: var(--text);
-          white-space: pre-wrap;
-          word-break: break-word;
-        }
-        /* Image field (image_url): radios + one source block + thumbnail when set */
-        .create-route .image-field-multi {
-          display: flex;
-          flex-direction: column;
-          gap: 0.75rem;
-        }
-        .create-route .image-source-radios {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 1rem 1.5rem;
-          align-items: center;
-        }
-        .create-route .image-source-radio-label {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.35rem;
-          cursor: pointer;
-          font-size: 0.95rem;
-          color: var(--text);
-        }
-        .create-route .image-source-radio-label input {
-          margin: 0;
-        }
-        .create-route .image-source-block {
-          min-height: 0;
-        }
-        .create-route .image-source-block .form-input,
-        .create-route .image-source-block .image-url-input {
-          width: 100%;
-        }
-        .create-route .image-source-block[data-image-block="paste_image"] {
-          padding: 1rem;
-          border-radius: 8px;
-          border: 1px dashed var(--border);
-          background: var(--surface-muted);
-          color: var(--text-muted);
-          font-size: 0.9rem;
-          outline: none;
-          transition: border-color 0.2s ease, box-shadow 0.2s ease;
-        }
-        .create-route .image-source-block[data-image-block="paste_image"]:focus {
-          border-color: var(--accent);
-          box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
-        }
-        .create-route .image-source-block[data-image-block="paste_image"]:focus-visible {
-          border-color: var(--accent);
-          box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
-        }
-        .create-route .image-thumb-container {
-          display: flex;
-          align-items: flex-start;
-          gap: 0.75rem;
-        }
-        .create-route .image-thumb-container .image-thumb-wrap {
-          width: 120px;
-          height: 120px;
-          border-radius: 8px;
-          overflow: hidden;
-          border: 1px solid var(--border);
-          background: color-mix(in srgb, var(--text) 6%, transparent);
-          flex: 0 0 auto;
-          position: relative;
-        }
-        .create-route .image-thumb-container .image-thumb-wrap.loading {
-          background: linear-gradient(90deg, var(--surface-muted), var(--surface-strong), var(--surface-muted));
-          background-size: 200% 100%;
-          animation: loading 4s linear infinite;
-        }
-        .create-route .image-thumb-container .image-thumb-wrap.error {
-          background: var(--image-placeholder, #333);
-        }
-        .create-route .image-thumb-container .image-thumb {
-          width: 100%;
-          height: 100%;
-          display: block;
-          object-fit: cover;
-          opacity: 0;
-          transition: opacity 0.3s ease;
-        }
-        .create-route .image-thumb-container .image-thumb-wrap.loaded .image-thumb {
-          opacity: 1;
-        }
-        .create-route .image-choose-btn {
-          padding: 0.5rem 0.75rem;
-          font-size: 0.875rem;
-          border-radius: 6px;
-          border: 1px solid var(--border);
-          background: var(--input-bg);
-          color: var(--text);
-          cursor: pointer;
-          font-family: inherit;
-          transition: border-color 0.2s ease, background 0.2s ease;
-          display: inline-block;
-        }
-        .create-route .image-choose-btn:hover {
-          background: var(--surface-muted);
-          border-color: var(--text-muted);
-        }
-        .create-route .image-choose-label {
-          margin: 0;
-          cursor: pointer;
-        }
-        .create-route .image-field-error {
-          font-size: 0.875rem;
-          color: var(--error, #e74c3c);
-          margin: 0;
-        }
-      </style>
       <div class="create-route">
         <div class="route-header">
           <h3>Create</h3>
@@ -671,8 +177,13 @@ class AppRouteCreate extends HTMLElement {
       </div>
     `;
 		this.setupEventListeners();
-		this.loadServers();
-		this.loadCredits();
+		// Defer API calls until after first paint to improve perceived load
+		const runDataLoad = () => { this.loadServers(); this.loadCredits(); };
+		if (typeof requestIdleCallback !== 'undefined') {
+			requestIdleCallback(runDataLoad, { timeout: 120 });
+		} else {
+			setTimeout(runDataLoad, 0);
+		}
 		// Attach autogrow to prompt textarea
 		const promptTextarea = this.querySelector('[data-advanced-prompt]');
 		if (promptTextarea) {
@@ -855,51 +366,73 @@ class AppRouteCreate extends HTMLElement {
 		document.addEventListener('credits-updated', this.handleCreditsUpdated);
 	}
 
-	async loadServers() {
-		try {
-			const result = await fetchJsonWithStatusDeduped('/api/servers', { credentials: 'include' }, { windowMs: 2000 });
-			if (result.ok) {
-				this.servers = Array.isArray(result.data?.servers) ? result.data.servers : [];
-				// Show servers where user is owner or member.
-				// Additionally, the special server with id = 1 should always appear.
-				// Exclude suspended servers from the create dropdown for everyone (including admin).
-				this.servers = this.servers.filter(server =>
-					!server.suspended && (server.id === 1 || server.is_owner === true || server.is_member === true)
-				);
-				// Parse server_config if it's a string
-				this.servers = this.servers.map(server => {
-					if (server.server_config && typeof server.server_config === 'string') {
-						try {
-							server.server_config = JSON.parse(server.server_config);
-						} catch (e) {
-							// console.warn('Failed to parse server_config for server', server.id, e);
-							server.server_config = null;
-						}
-					}
-					return server;
-				});
-				this.renderServerOptions();
-				this.renderAdvancedServerOptions();
-
-				// Try to restore selections, otherwise auto-select first server (Basic and Advanced)
-				const restored = this.restoreSelections();
-				if (!restored && this.servers.length > 0) {
-					const firstServer = this.servers[0];
-					const serverSelect = this.querySelector("[data-server-select]");
-					if (serverSelect) {
-						serverSelect.value = firstServer.id;
-						this.handleServerChange(firstServer.id);
-					}
-					const advancedSelect = this.querySelector("[data-advanced-server-select]");
-					if (advancedSelect) {
-						advancedSelect.value = firstServer.id;
-						this.updateAdvancedCreateButton();
-					}
+	/** Process raw API servers (filter + parse server_config) into form we use. */
+	processServers(rawServers) {
+		let list = Array.isArray(rawServers) ? rawServers : [];
+		list = list.filter(server =>
+			!server.suspended && (server.id === 1 || server.is_owner === true || server.is_member === true)
+		);
+		return list.map(server => {
+			const s = { ...server };
+			if (s.server_config && typeof s.server_config === 'string') {
+				try {
+					s.server_config = JSON.parse(s.server_config);
+				} catch (e) {
+					s.server_config = null;
 				}
 			}
-		} catch (error) {
-			// console.error('Error loading servers:', error);
+			return s;
+		});
+	}
+
+	/** Apply a processed server list to state and UI; then restore or auto-select. */
+	applyServers(servers) {
+		if (!Array.isArray(servers) || servers.length === 0) return;
+		this.servers = servers;
+		this.renderServerOptions();
+		this.renderAdvancedServerOptions();
+		const restored = this.restoreSelections();
+		if (!restored && this.servers.length > 0) {
+			const firstServer = this.servers[0];
+			const serverSelect = this.querySelector("[data-server-select]");
+			if (serverSelect) {
+				serverSelect.value = firstServer.id;
+				this.handleServerChange(firstServer.id);
+			}
+			const advancedSelect = this.querySelector("[data-advanced-server-select]");
+			if (advancedSelect) {
+				advancedSelect.value = firstServer.id;
+				this.updateAdvancedCreateButton();
+			}
 		}
+	}
+
+	/** Cache-then-refresh: show cached servers immediately if available, then refresh in background. */
+	loadServers() {
+		const CACHE_KEY = 'create-servers-cache';
+		try {
+			const cached = sessionStorage.getItem(CACHE_KEY);
+			if (cached) {
+				const { servers } = JSON.parse(cached);
+				if (Array.isArray(servers) && servers.length > 0) {
+					this.applyServers(servers);
+				}
+			}
+		} catch (e) {
+			// ignore invalid cache
+		}
+		fetchJsonWithStatusDeduped('/api/servers', { credentials: 'include' }, { windowMs: 2000 })
+			.then((result) => {
+				if (!result?.ok || !Array.isArray(result.data?.servers)) return;
+				const processed = this.processServers(result.data.servers);
+				try {
+					sessionStorage.setItem(CACHE_KEY, JSON.stringify({ servers: processed, cachedAt: Date.now() }));
+				} catch (e) {
+					// ignore
+				}
+				// UI not updated here; next refresh/revisit will show fresh data from cache
+			})
+			.catch(() => {});
 	}
 
 	renderServerOptions() {
@@ -1472,22 +1005,41 @@ class AppRouteCreate extends HTMLElement {
 		}
 	}
 
-	async loadCredits() {
+	/** Cache-then-refresh: show cached credits immediately if available, then refresh in background. */
+	loadCredits() {
+		const CACHE_KEY = 'create-credits-cache';
 		try {
-			const result = await fetchJsonWithStatusDeduped('/api/credits', { credentials: 'include' }, { windowMs: 2000 });
-			if (result.ok) {
-				this.creditsCount = this.normalizeCredits(result.data?.balance ?? 0);
-				this.updateButtonState();
-			} else {
-				this.creditsCount = 0;
-				this.updateButtonState();
+			const cached = sessionStorage.getItem(CACHE_KEY);
+			if (cached) {
+				const { balance } = JSON.parse(cached);
+				if (typeof balance === 'number' && Number.isFinite(balance)) {
+					this.creditsCount = this.normalizeCredits(balance);
+					this.updateButtonState();
+				}
 			}
-		} catch {
-			// Fallback to localStorage if available
-			const stored = window.localStorage?.getItem('credits-balance');
-			this.creditsCount = stored !== null ? this.normalizeCredits(stored) : 0;
-			this.updateButtonState();
+		} catch (e) {
+			// ignore invalid cache
 		}
+		fetchJsonWithStatusDeduped('/api/credits', { credentials: 'include' }, { windowMs: 2000 })
+			.then((result) => {
+				if (result?.ok) {
+					const balance = result.data?.balance ?? 0;
+					this.creditsCount = this.normalizeCredits(balance);
+					try {
+						sessionStorage.setItem(CACHE_KEY, JSON.stringify({ balance, cachedAt: Date.now() }));
+					} catch (e) {
+						// ignore
+					}
+				} else {
+					this.creditsCount = 0;
+				}
+				this.updateButtonState();
+			})
+			.catch(() => {
+				const stored = window.localStorage?.getItem('credits-balance');
+				this.creditsCount = stored !== null ? this.normalizeCredits(stored) : 0;
+				this.updateButtonState();
+			});
 	}
 
 	normalizeCredits(value) {

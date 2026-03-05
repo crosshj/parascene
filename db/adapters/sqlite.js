@@ -399,6 +399,36 @@ export async function openDb() {
 				return Promise.resolve(stmt.get(userId));
 			}
 		},
+		selectUsersByIds: async (ids) => {
+			const idList = Array.isArray(ids) ? ids.filter((id) => id != null && Number.isFinite(Number(id))) : [];
+			if (idList.length === 0) return new Map();
+			const placeholders = idList.map(() => "?").join(",");
+			const stmt = db.prepare(
+				`SELECT id, email, role, created_at, meta FROM users WHERE id IN (${placeholders})`
+			);
+			const rows = stmt.all(...idList);
+			const map = new Map();
+			for (const row of rows) {
+				const meta = parseUserMeta(row.meta);
+				map.set(Number(row.id), { ...row, meta, suspended: meta.suspended === true });
+			}
+			return map;
+		},
+		selectUserProfilesByUserIds: async (userIds) => {
+			const idList = Array.isArray(userIds) ? userIds.filter((id) => id != null && Number.isFinite(Number(id))) : [];
+			if (idList.length === 0) return new Map();
+			const placeholders = idList.map(() => "?").join(",");
+			const stmt = db.prepare(
+				`SELECT user_id, user_name, display_name, about, socials, avatar_url, cover_image_url, badges, meta, created_at, updated_at
+           FROM user_profiles WHERE user_id IN (${placeholders})`
+			);
+			const rows = stmt.all(...idList);
+			const map = new Map();
+			for (const row of rows) {
+				map.set(Number(row.user_id), row);
+			}
+			return map;
+		},
 		selectUserProfileByUsername: {
 			get: async (username) => {
 				const stmt = db.prepare(
@@ -1933,6 +1963,16 @@ export async function openDb() {
 				const result = stmt.get(serverId, userId);
 				return result !== undefined;
 			}
+		},
+		checkServerMembershipsForUser: async (serverIds, userId) => {
+			const ids = Array.isArray(serverIds) ? serverIds.filter((id) => id != null && Number.isFinite(Number(id))) : [];
+			if (ids.length === 0) return new Set();
+			const placeholders = ids.map(() => "?").join(",");
+			const stmt = db.prepare(
+				`SELECT server_id FROM server_members WHERE server_id IN (${placeholders}) AND user_id = ?`
+			);
+			const rows = stmt.all(...ids, userId);
+			return new Set(rows.map((r) => Number(r.server_id)).filter(Boolean));
 		},
 		addServerMember: {
 			run: async (serverId, userId) => {

@@ -114,6 +114,37 @@ export function openDb() {
 				return data ?? undefined;
 			}
 		},
+		/** Batch: return Map<id, user> for GET /api/servers owner resolution. */
+		selectUsersByIds: async (ids) => {
+			const idList = Array.isArray(ids) ? ids.filter((id) => id != null && Number.isFinite(Number(id))) : [];
+			if (idList.length === 0) return new Map();
+			const { data, error } = await serviceClient
+				.from(prefixedTable("users"))
+				.select("id, email, role, created_at, meta")
+				.in("id", idList);
+			if (error) throw error;
+			const map = new Map();
+			for (const row of data ?? []) {
+				const meta = typeof row.meta === "object" && row.meta !== null ? row.meta : {};
+				map.set(Number(row.id), { ...row, meta, suspended: meta.suspended === true });
+			}
+			return map;
+		},
+		/** Batch: return Map<user_id, profile> for GET /api/servers owner resolution. */
+		selectUserProfilesByUserIds: async (userIds) => {
+			const idList = Array.isArray(userIds) ? userIds.filter((id) => id != null && Number.isFinite(Number(id))) : [];
+			if (idList.length === 0) return new Map();
+			const { data, error } = await serviceClient
+				.from(prefixedTable("user_profiles"))
+				.select("user_id, user_name, display_name, about, socials, avatar_url, cover_image_url, badges, meta, created_at, updated_at")
+				.in("user_id", idList);
+			if (error) throw error;
+			const map = new Map();
+			for (const row of data ?? []) {
+				map.set(Number(row.user_id), row);
+			}
+			return map;
+		},
 		selectUserProfileByUsername: {
 			get: async (userName) => {
 				const { data, error } = await serviceClient
@@ -2803,6 +2834,18 @@ export function openDb() {
 				if (error) throw error;
 				return data !== null;
 			}
+		},
+		/** Batch: return Set of server_ids where user is a member. Reduces N round-trips to 1 for GET /api/servers. */
+		checkServerMembershipsForUser: async (serverIds, userId) => {
+			const ids = Array.isArray(serverIds) ? serverIds.filter((id) => id != null && Number.isFinite(Number(id))) : [];
+			if (ids.length === 0) return new Set();
+			const { data, error } = await serviceClient
+				.from(prefixedTable("server_members"))
+				.select("server_id")
+				.in("server_id", ids)
+				.eq("user_id", userId);
+			if (error) throw error;
+			return new Set((data ?? []).map((r) => Number(r.server_id)).filter(Boolean));
 		},
 		addServerMember: {
 			run: async (serverId, userId) => {
