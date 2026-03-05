@@ -158,6 +158,9 @@ CREATE TABLE IF NOT EXISTS feed_items (
   created_image_id INTEGER
 );
 
+CREATE INDEX IF NOT EXISTS idx_feed_items_created_at ON feed_items(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_feed_items_created_image_id ON feed_items(created_image_id);
+
 CREATE TABLE IF NOT EXISTS explore_items (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   title TEXT NOT NULL,

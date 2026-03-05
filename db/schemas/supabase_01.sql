@@ -214,6 +214,7 @@ CREATE TABLE IF NOT EXISTS prsn_created_images (
   meta jsonb,
   unavailable_at timestamptz
 );
+CREATE INDEX IF NOT EXISTS idx_prsn_created_images_user_id ON prsn_created_images(user_id);
 ALTER TABLE prsn_created_images ENABLE ROW LEVEL SECURITY;
 COMMENT ON TABLE prsn_created_images IS 'Parascene: user-generated images with metadata and publication status. RLS enabled without policies - only service role can access. All access controlled via API layer.';
 
@@ -278,6 +279,8 @@ CREATE TABLE IF NOT EXISTS prsn_feed_items (
   created_at timestamptz NOT NULL DEFAULT now(),
   created_image_id bigint REFERENCES prsn_created_images(id)
 );
+CREATE INDEX IF NOT EXISTS idx_prsn_feed_items_created_at ON prsn_feed_items(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_prsn_feed_items_created_image_id ON prsn_feed_items(created_image_id);
 ALTER TABLE prsn_feed_items ENABLE ROW LEVEL SECURITY;
 COMMENT ON TABLE prsn_feed_items IS 'Parascene: feed items for the main content feed, can reference created images. RLS enabled without policies - only service role can access. All access controlled via API layer.';
 
@@ -465,6 +468,72 @@ GROUP BY created_image_id;
 COMMENT ON VIEW public.prsn_created_image_comment_counts IS 'Parascene: aggregated comment counts per created image. SECURITY INVOKER view; access restricted via grants. All access controlled via API layer.';
 REVOKE ALL ON TABLE public.prsn_created_image_comment_counts FROM PUBLIC, anon, authenticated;
 GRANT SELECT ON TABLE public.prsn_created_image_comment_counts TO service_role;
+
+-- Feed page in one round-trip (reduces latency vs multiple API calls)
+CREATE OR REPLACE FUNCTION public.prsn_get_feed_page(p_viewer_id bigint, p_limit int DEFAULT 20, p_offset int DEFAULT 0)
+RETURNS TABLE (
+  id bigint,
+  title text,
+  summary text,
+  author text,
+  tags text,
+  created_at timestamptz,
+  created_image_id bigint,
+  filename text,
+  file_path text,
+  user_id bigint,
+  meta jsonb,
+  url text,
+  like_count bigint,
+  comment_count bigint,
+  viewer_liked boolean,
+  nsfw boolean,
+  author_user_name text,
+  author_display_name text,
+  author_avatar_url text,
+  author_plan text
+)
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+AS $$
+  SELECT
+    fi.id,
+    fi.title,
+    fi.summary,
+    fi.author,
+    fi.tags,
+    fi.created_at,
+    fi.created_image_id,
+    ci.filename,
+    ci.file_path,
+    ci.user_id,
+    ci.meta,
+    COALESCE(NULLIF(TRIM(ci.file_path), ''), CASE WHEN ci.filename IS NOT NULL AND TRIM(ci.filename) <> '' THEN '/api/images/created/' || ci.filename ELSE NULL END) AS url,
+    COALESCE(lc.like_count, 0)::bigint AS like_count,
+    COALESCE(cc.comment_count, 0)::bigint AS comment_count,
+    (vl.user_id IS NOT NULL) AS viewer_liked,
+    (COALESCE(ci.meta->>'nsfw', '') IN ('true', 't', '1') OR (ci.meta->'nsfw') = 'true'::jsonb) AS nsfw,
+    up.user_name AS author_user_name,
+    up.display_name AS author_display_name,
+    up.avatar_url AS author_avatar_url,
+    CASE WHEN (u.meta->>'plan') = 'founder' THEN 'founder' ELSE 'free' END AS author_plan
+  FROM public.prsn_feed_items fi
+  INNER JOIN public.prsn_created_images ci ON ci.id = fi.created_image_id
+  INNER JOIN public.prsn_user_follows uf ON uf.following_id = ci.user_id AND uf.follower_id = p_viewer_id
+  LEFT JOIN public.prsn_user_profiles up ON up.user_id = ci.user_id
+  LEFT JOIN public.prsn_users u ON u.id = ci.user_id
+  LEFT JOIN public.prsn_created_image_like_counts lc ON lc.created_image_id = fi.created_image_id
+  LEFT JOIN public.prsn_created_image_comment_counts cc ON cc.created_image_id = fi.created_image_id
+  LEFT JOIN public.prsn_likes_created_image vl ON vl.created_image_id = fi.created_image_id AND vl.user_id = p_viewer_id
+  WHERE (ci.unavailable_at IS NULL OR TRIM(ci.unavailable_at::text) = '')
+  ORDER BY fi.created_at DESC
+  LIMIT (p_limit + 1)
+  OFFSET p_offset
+$$;
+REVOKE ALL ON FUNCTION public.prsn_get_feed_page(bigint, int, int) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.prsn_get_feed_page(bigint, int, int) TO service_role;
+COMMENT ON FUNCTION public.prsn_get_feed_page(bigint, int, int) IS 'Parascene: one-page feed for viewer; single round-trip. All access controlled via API layer.';
 
 -- Related creations: view→next-click transitions for click-next ranking
 CREATE TABLE IF NOT EXISTS prsn_related_transitions (

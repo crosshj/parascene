@@ -919,7 +919,8 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
-		selectFeedItems: {
+		selectFeedItems: (() => {
+			const selectFeedItems = {
 			all: async (excludeUserId) => {
 				const viewerId = excludeUserId ?? null;
 				if (viewerId === null || viewerId === undefined) {
@@ -958,8 +959,18 @@ export function openDb() {
 						nsfw
 					};
 				});
+			},
+			getPage: async (viewerId, { limit = 20, offset = 0 } = {}) => {
+				const full = await selectFeedItems.all(viewerId);
+				const safeLimit = Math.min(Math.max(1, Number(limit) || 20), 100);
+				const safeOffset = Math.max(0, Number(offset) || 0);
+				const rows = Array.isArray(full) ? full.slice(safeOffset, safeOffset + safeLimit) : [];
+				const hasMore = Array.isArray(full) && full.length > safeOffset + safeLimit;
+				return { rows, hasMore };
 			}
-		},
+			};
+			return selectFeedItems;
+		})(),
 		selectExploreFeedItems: (() => {
 			const exploreAll = async (viewerId) => {
 				const id = viewerId ?? null;

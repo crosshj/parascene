@@ -70,6 +70,8 @@ class AppRouteFeed extends HTMLElement {
     `;
 		this.feedItems = [];
 		this.feedIndex = 0;
+		this.feedOffset = 0;
+		this.hasMoreFeed = false;
 		this.feedBatchSize = 6;
 		this.sentinelWasIntersecting = false;
 		this.isLoading = false;
@@ -124,7 +126,12 @@ class AppRouteFeed extends HTMLElement {
 			entries.forEach((entry) => {
 				const nowIntersecting = entry.isIntersecting;
 				if (nowIntersecting && !this.sentinelWasIntersecting) {
-					this.renderNextBatch();
+					// If we have more items in memory, render them; else load next page
+					if (this.feedIndex < this.feedItems.length) {
+						this.renderNextBatch();
+					} else if (this.hasMoreFeed && !this.isLoading) {
+						this.loadFeedMore();
+					}
 				}
 				this.sentinelWasIntersecting = nowIntersecting;
 			});
@@ -154,6 +161,13 @@ class AppRouteFeed extends HTMLElement {
 		}
 
 		this.feedIndex = end;
+
+		// Prefetch next page when user has scrolled past 10 items and we're within 10 items of the end
+		const pastTen = this.feedIndex >= 10;
+		const lowOnItems = this.feedItems.length - this.feedIndex <= 10;
+		if (pastTen && lowOnItems && this.hasMoreFeed && !this.isLoading) {
+			this.loadFeedMore();
+		}
 	}
 
 	buildFeedCard(item, itemIndex) {
@@ -585,11 +599,12 @@ class AppRouteFeed extends HTMLElement {
 				currentUserId = profile.data?.id ?? null;
 			}
 
-			const feed = await fetchJsonWithStatusDeduped("/api/feed", {
+			const feed = await fetchJsonWithStatusDeduped("/api/feed?limit=20&offset=0", {
 				credentials: 'include'
 			}, { windowMs: 30000 });
 			if (!feed.ok) throw new Error("Failed to load feed.");
 			let items = Array.isArray(feed.data?.items) ? feed.data.items : [];
+			const hasMore = Boolean(feed.data?.hasMore);
 
 			// Filter out hidden items (only creation items; tips are not hideable)
 			const hiddenIds = getHiddenFeedItems();
@@ -632,12 +647,43 @@ class AppRouteFeed extends HTMLElement {
 
 			this.feedItems = items;
 			this.feedIndex = 0;
+			this.feedOffset = items.length;
+			this.hasMoreFeed = hasMore;
 			this.sentinelWasIntersecting = false;
 			this.renderNextBatch();
 		} catch (error) {
 			container.removeAttribute('aria-busy');
 			container.removeAttribute('aria-label');
 			container.innerHTML = renderEmptyError('Unable to load feed.', { className: 'route-empty-image-grid' });
+		} finally {
+			this.isLoading = false;
+		}
+	}
+
+	async loadFeedMore() {
+		if (this.isLoading || !this.hasMoreFeed) return;
+		const container = this.querySelector("[data-feed-container]");
+		if (!container) return;
+
+		this.isLoading = true;
+		try {
+			const feed = await fetchJsonWithStatusDeduped(
+				`/api/feed?limit=20&offset=${Number(this.feedOffset) || 0}`,
+				{ credentials: 'include' },
+				{ windowMs: 30000 }
+			);
+			if (!feed.ok) return;
+			let items = Array.isArray(feed.data?.items) ? feed.data.items : [];
+			const hiddenIds = getHiddenFeedItems();
+			items = items.filter(item => {
+				if (item.type === "tip") return true;
+				const itemId = String(item.created_image_id || item.id);
+				return !hiddenIds.includes(itemId);
+			});
+			this.feedItems.push(...items);
+			this.feedOffset = this.feedItems.length;
+			this.hasMoreFeed = Boolean(feed.data?.hasMore);
+			this.renderNextBatch();
 		} finally {
 			this.isLoading = false;
 		}

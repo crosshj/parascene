@@ -1708,7 +1708,8 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
-		selectFeedItems: {
+		selectFeedItems: (() => {
+			const selectFeedItems = {
 			all: async (excludeUserId) => {
 				const viewerId = excludeUserId ?? null;
 				if (viewerId === null || viewerId === undefined) {
@@ -1841,7 +1842,7 @@ export function openDb() {
 					}
 				}
 
-				return filtered.map((item) => {
+				const mapped = filtered.map((item) => {
 					const key = item.created_image_id === null || item.created_image_id === undefined
 						? null
 						: String(item.created_image_id);
@@ -1863,8 +1864,215 @@ export function openDb() {
 						author_plan: authorPlan
 					};
 				});
+				return mapped;
+			},
+			getPage: async (viewerId, { limit = 20, offset = 0 } = {}) => {
+				const safeLimit = Math.min(Math.max(1, Number(limit) || 20), 100);
+				const safeOffset = Math.max(0, Number(offset) || 0);
+
+				if (viewerId === null || viewerId === undefined) {
+					return { rows: [], hasMore: false };
+				}
+
+				// Single round-trip RPC when available (much faster than 3+ API calls)
+				const rpcResult = await serviceClient.rpc("prsn_get_feed_page", {
+					p_viewer_id: viewerId,
+					p_limit: safeLimit,
+					p_offset: safeOffset
+				});
+				if (!rpcResult.error && Array.isArray(rpcResult.data)) {
+					const all = rpcResult.data;
+					const hasMore = all.length > safeLimit;
+					const rows = all.slice(0, safeLimit).map((row) => ({
+						id: row.id,
+						title: row.title,
+						summary: row.summary,
+						author: row.author,
+						tags: row.tags,
+						created_at: row.created_at,
+						created_image_id: row.created_image_id,
+						filename: row.filename,
+						file_path: row.file_path,
+						user_id: row.user_id,
+						meta: row.meta,
+						url: row.url,
+						like_count: Number(row.like_count ?? 0),
+						comment_count: Number(row.comment_count ?? 0),
+						viewer_liked: Boolean(row.viewer_liked),
+						nsfw: Boolean(row.nsfw),
+						author_user_name: row.author_user_name ?? null,
+						author_display_name: row.author_display_name ?? null,
+						author_avatar_url: row.author_avatar_url ?? null,
+						author_plan: row.author_plan ?? "free"
+					}));
+					return { rows, hasMore };
+				}
+
+				// Fallback: multi-query path (when RPC not deployed or errors)
+				const { data: followRows, error: followError } = await serviceClient
+					.from(prefixedTable("user_follows"))
+					.select("following_id")
+					.eq("follower_id", viewerId);
+				if (followError) throw followError;
+
+				const followingIdSet = new Set(
+					(followRows ?? [])
+						.map((row) => row?.following_id)
+						.filter((id) => id !== null && id !== undefined)
+						.map((id) => String(id))
+				);
+				if (followingIdSet.size === 0) {
+					return { rows: [], hasMore: false };
+				}
+
+				const followingIds = Array.from(followingIdSet);
+				// Fetch one page from DB (limit+1 to compute hasMore); filter by followed users via inner join
+				const { data: pageData, error: pageError } = await serviceClient
+					.from(prefixedTable("feed_items"))
+					.select(
+						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images!inner(filename, file_path, user_id, unavailable_at, meta)"
+					)
+					.in("prsn_created_images.user_id", followingIds)
+					.order("created_at", { ascending: false })
+					.range(safeOffset, safeOffset + safeLimit);
+				if (pageError) throw pageError;
+
+				const items = (pageData ?? []).map((item) => {
+					const { prsn_created_images, ...rest } = item;
+					const filename = prsn_created_images?.filename ?? null;
+					const file_path = prsn_created_images?.file_path ?? null;
+					const user_id = prsn_created_images?.user_id ?? null;
+					const unavailable_at = prsn_created_images?.unavailable_at ?? null;
+					const meta = prsn_created_images?.meta;
+					const nsfw = !!(meta && typeof meta === "object" && meta.nsfw);
+					return {
+						...rest,
+						filename,
+						user_id,
+						unavailable_at,
+						nsfw,
+						meta,
+						url: file_path || (filename ? `/api/images/created/${filename}` : null),
+						like_count: 0,
+						comment_count: 0,
+						viewer_liked: false
+					};
+				});
+				const filtered = items.filter((item) => {
+					if (item.user_id === null || item.user_id === undefined) return false;
+					if (item.unavailable_at != null && item.unavailable_at !== "") return false;
+					return followingIdSet.has(String(item.user_id));
+				});
+
+				const hasMore = filtered.length > safeLimit;
+				const pageRows = filtered.slice(0, safeLimit);
+
+				const createdImageIds = pageRows
+					.map((item) => item.created_image_id)
+					.filter((id) => id !== null && id !== undefined);
+
+				if (createdImageIds.length === 0) {
+					return { rows: pageRows, hasMore };
+				}
+
+				const authorIds = Array.from(new Set(
+					pageRows
+						.map((item) => item.user_id)
+						.filter((id) => id !== null && id !== undefined)
+						.map((id) => Number(id))
+						.filter((id) => Number.isFinite(id) && id > 0)
+				));
+
+				// Run enrichment queries in parallel (saves ~4 round-trips)
+				const [
+					likeCountResult,
+					commentCountResult,
+					likedResult,
+					profileResult,
+					userResult
+				] = await Promise.all([
+					serviceClient
+						.from(prefixedTable("created_image_like_counts"))
+						.select("created_image_id, like_count")
+						.in("created_image_id", createdImageIds),
+					serviceClient
+						.from(prefixedTable("created_image_comment_counts"))
+						.select("created_image_id, comment_count")
+						.in("created_image_id", createdImageIds),
+					viewerId != null
+						? serviceClient
+							.from(prefixedTable("likes_created_image"))
+							.select("created_image_id")
+							.eq("user_id", viewerId)
+							.in("created_image_id", createdImageIds)
+						: Promise.resolve({ data: [], error: null }),
+					authorIds.length > 0
+						? serviceClient
+							.from(prefixedTable("user_profiles"))
+							.select("user_id, user_name, display_name, avatar_url")
+							.in("user_id", authorIds)
+						: Promise.resolve({ data: [], error: null }),
+					authorIds.length > 0
+						? serviceClient
+							.from(prefixedTable("users"))
+							.select("id, meta")
+							.in("id", authorIds)
+						: Promise.resolve({ data: [], error: null })
+				]);
+
+				if (likeCountResult.error) throw likeCountResult.error;
+				if (commentCountResult.error) throw commentCountResult.error;
+				if (likedResult.error) throw likedResult.error;
+				if (profileResult.error) throw profileResult.error;
+				if (userResult.error) throw userResult.error;
+
+				const countById = new Map(
+					(likeCountResult.data ?? []).map((row) => [String(row.created_image_id), Number(row.like_count ?? 0)])
+				);
+				const commentCountById = new Map(
+					(commentCountResult.data ?? []).map((row) => [String(row.created_image_id), Number(row.comment_count ?? 0)])
+				);
+				const likedIdSet = likedResult.data?.length
+					? new Set((likedResult.data ?? []).map((row) => String(row.created_image_id)))
+					: null;
+
+				const profileByUserId = new Map(
+					(profileResult.data ?? []).map((row) => [String(row.user_id), row])
+				);
+				const planByUserId = new Map();
+				(userResult.data ?? []).forEach((row) => {
+					const plan = row?.meta?.plan === "founder" ? "founder" : "free";
+					planByUserId.set(String(row.id), plan);
+				});
+
+				const mapped = pageRows.map((item) => {
+					const key = item.created_image_id === null || item.created_image_id === undefined
+						? null
+						: String(item.created_image_id);
+					const likeCount = key ? (countById.get(key) ?? 0) : 0;
+					const commentCount = key ? (commentCountById.get(key) ?? 0) : 0;
+					const viewerLiked = key && likedIdSet ? likedIdSet.has(key) : false;
+					const profile = item.user_id !== null && item.user_id !== undefined
+						? profileByUserId.get(String(item.user_id)) ?? null
+						: null;
+					const authorPlan = item.user_id != null ? (planByUserId.get(String(item.user_id)) ?? "free") : "free";
+					return {
+						...item,
+						like_count: likeCount,
+						comment_count: commentCount,
+						viewer_liked: viewerLiked,
+						author_user_name: profile?.user_name ?? null,
+						author_display_name: profile?.display_name ?? null,
+						author_avatar_url: profile?.avatar_url ?? null,
+						author_plan: authorPlan
+					};
+				});
+
+				return { rows: mapped, hasMore };
 			}
-		},
+			};
+			return selectFeedItems;
+		})(),
 		selectExploreFeedItems: (() => {
 			const exploreAll = async (viewerId) => {
 				const id = viewerId ?? null;

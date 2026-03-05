@@ -57,11 +57,28 @@ export default function createFeedRoutes({ queries }) {
 			return res.status(404).json({ error: "User not found" });
 		}
 
-		let rows = await queries.selectFeedItems.all(user.id);
+		const limit = Math.min(Math.max(1, Number(req.query?.limit) || 20), 100);
+		const offset = Math.max(0, Number(req.query?.offset) || 0);
+
+		let rows;
+		let hasMore = false;
 		let isNewbieFeed = false;
-		if (rows.length === 0 && queries.selectNewbieFeedItems) {
-			rows = await queries.selectNewbieFeedItems.all(user.id) ?? [];
+
+		if (typeof queries.selectFeedItems?.getPage === "function") {
+			const page = await queries.selectFeedItems.getPage(user.id, { limit, offset });
+			rows = page?.rows ?? [];
+			hasMore = Boolean(page?.hasMore);
+		} else {
+			const all = await queries.selectFeedItems.all(user.id) ?? [];
+			rows = all.slice(offset, offset + limit);
+			hasMore = all.length > offset + limit;
+		}
+
+		if (rows.length === 0 && offset === 0 && queries.selectNewbieFeedItems) {
+			const newbieRows = await queries.selectNewbieFeedItems.all(user.id) ?? [];
 			isNewbieFeed = true;
+			rows = newbieRows.slice(0, limit);
+			hasMore = newbieRows.length > limit;
 		}
 
 		// Only include NSFW items when the user has explicitly enabled NSFW in profile. Default is off.
@@ -139,7 +156,7 @@ export default function createFeedRoutes({ queries }) {
 			}
 		}
 
-		return res.json({ items });
+		return res.json({ items, hasMore });
 	});
 
 	return router;
