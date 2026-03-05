@@ -320,25 +320,29 @@ function setAuthCookie(res, token, req = null) {
 
 function clearAuthCookie(res, req = null) {
 	const isSecure = isSecureRequest(req);
-	// Must match the same options used in setAuthCookie for clearCookie to work
+	// Must match the same options used in setAuthCookie for clearCookie to work.
+	// Clear with all option variants so we also remove "old" cookies that were set
+	// with different path/domain (e.g. legacy host-only or legacy .parascene.com).
 	const sameSite = isSecure ? "none" : "lax";
-	const cookieOptions = {
+	const baseOptions = {
 		httpOnly: true,
 		sameSite: sameSite,
 		secure: isSecure,
 		path: "/"
 	};
 	const domain = getCookieDomain(req);
-	if (domain) cookieOptions.domain = domain;
-	const path = req?.path || "unknown";
-	if (shouldLogSession()) {
-		// console.log(`[clearAuthCookie] Clearing cookie for path: ${path}`, {
-		//   sameSite,
-		//   secure: isSecure,
-		//   path: cookieOptions.path
-		// });
+
+	// Clear with current domain (or no domain for host-only)
+	res.clearCookie(COOKIE_NAME, { ...baseOptions, ...(domain ? { domain } : {}) });
+
+	// Also clear alternate forms so old cookies are removed
+	if (domain) {
+		// Clear host-only in case an old cookie was set without domain
+		res.clearCookie(COOKIE_NAME, { ...baseOptions });
+	} else {
+		// Clear with .parascene.com in case an old cookie was set with domain (e.g. prod)
+		res.clearCookie(COOKIE_NAME, { ...baseOptions, domain: ".parascene.com" });
 	}
-	res.clearCookie(COOKIE_NAME, cookieOptions);
 }
 
 export {
