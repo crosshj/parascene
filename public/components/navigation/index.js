@@ -248,8 +248,9 @@ class AppNavigation extends HTMLElement {
 			/^\/p\/[a-z0-9][a-z0-9_-]{2,23}$/i.test(window.location.pathname) ||
 			/^\/t\/[a-z0-9][a-z0-9_-]{1,31}$/i.test(window.location.pathname);
 		if (isServerSentPage) {
-			// Use full page navigation for server-sent pages
-			window.location.href = `/${route}`;
+			const navV = this.getNavVersion();
+			const v = navV ? `?v=${navV}` : '';
+			window.location.href = `/${route}${v}`;
 			return;
 		}
 		// Use History API with pathname-based routing for client-side pages
@@ -956,7 +957,8 @@ class AppNavigation extends HTMLElement {
 				} else if (action === 'profile') {
 					document.dispatchEvent(new CustomEvent('open-profile'));
 				} else if (action === 'create') {
-					window.location.href = '/create';
+					const navV = this.getNavVersion();
+					window.location.href = '/create' + (navV ? `?v=${navV}` : '');
 				}
 			});
 		});
@@ -1037,6 +1039,10 @@ class AppNavigation extends HTMLElement {
 	}
 
 
+	getNavVersion() {
+		return document.querySelector('meta[name="asset-version"]')?.getAttribute('content') || '';
+	}
+
 	render() {
 		const showNotifications = this.hasAttribute('show-notifications') && !this.hasAttribute('hide-notifications');
 		const showProfile = this.hasAttribute('show-profile');
@@ -1045,6 +1051,8 @@ class AppNavigation extends HTMLElement {
 		const showCredits = this.hasAttribute('show-profile') && !this.hasAttribute('hide-credits');
 		const hasAuthLinks = (this.authLinks || []).length > 0;
 		const hasMobileActions = showCreate || showNotifications || showCredits || showProfile;
+		const navV = this.getNavVersion();
+		const v = navV ? `?v=${navV}` : '';
 
 		this.innerHTML = html`
 	<header>
@@ -1087,12 +1095,11 @@ class AppNavigation extends HTMLElement {
 				${(this.routes || []).map(route => {
 				const routeId = route.id;
 				const routeLabel = route.label;
-				// Generate clean URL path (e.g., /feed, /explore)
-				return html`<a href="/${routeId}" class="nav-link" data-route="${routeId}">${routeLabel}</a>`;
+				return html`<a href="/${routeId}${v}" class="nav-link" data-route="${routeId}">${routeLabel}</a>`;
 				}).join('')}
 			</nav>
 			${showCreate ? html`
-			<a href="/create" class="action-item create-button btn-primary">
+			<a href="/create${v}" class="action-item create-button btn-primary">
 				Create
 			</a>
 			` : ''}
@@ -1179,14 +1186,14 @@ class AppNavigation extends HTMLElement {
 				${(this.routes || []).map(route => {
 				const routeId = route.id;
 				const routeLabel = route.label;
-				return html`<a href="/${routeId}" class="nav-link" data-route="${routeId}">${routeLabel}</a>`;
+				return html`<a href="/${routeId}${v}" class="nav-link" data-route="${routeId}">${routeLabel}</a>`;
 				}).join('')}
-				<a href="/help" class="mobile-menu-help">Help</a>
+				<a href="/help${v}" class="mobile-menu-help">Help</a>
 			</nav>
 			${hasMobileActions ? html`
 			<div class="mobile-menu-actions">
 				${showCreate ? html`
-				<a href="/create" class="create-button btn-primary">
+				<a href="/create${v}" class="create-button btn-primary">
 					Create
 				</a>
 				` : ''}

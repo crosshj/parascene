@@ -37,13 +37,16 @@ class AppNavigationMobile extends HTMLElement {
 		const route = button?.getAttribute('data-route');
 		if (!route) return;
 
+		const navV = document.querySelector('meta[name="asset-version"]')?.getAttribute('content') || '';
+		const v = navV ? `?v=${navV}` : '';
+
 		// Create is a standalone page; full navigation to/from it
 		if (route === 'create') {
-			window.location.href = '/create';
+			window.location.href = '/create' + v;
 			return;
 		}
 		if (window.location.pathname === '/create') {
-			window.location.href = `/${route}`;
+			window.location.href = `/${route}${v}`;
 			return;
 		}
 
@@ -56,7 +59,7 @@ class AppNavigationMobile extends HTMLElement {
 			window.location.pathname.startsWith('/p/') ||
 			window.location.pathname.startsWith('/t/');
 		if (isServerSentPage) {
-			window.location.href = `/${route}`;
+			window.location.href = `/${route}${v}`;
 			return;
 		}
 
