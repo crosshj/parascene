@@ -60,7 +60,7 @@ const TRY_DEFAULT_MODEL = "prunaai/p-image";
 
 /** Appended to try prompts so p-image (and similar) consistently produce polished, high-quality results. */
 const TRY_PROMPT_STYLE_SUFFIX =
-	", high quality, detailed, professional, beautiful composition, sharp focus";
+	"";
 
 function getTryServerAndArgs(prompt) {
 	const trimmed = typeof prompt === "string" && prompt.trim() ? prompt.trim() : null;
@@ -71,7 +71,7 @@ function getTryServerAndArgs(prompt) {
 		method: TRY_DEFAULT_METHOD,
 		args:
 			promptWithStyle != null
-				? { prompt: promptWithStyle, model: TRY_DEFAULT_MODEL }
+				? { prompt: promptWithStyle, model: TRY_DEFAULT_MODEL, prompt_upsampling: true }
 				: {},
 	};
 }
