@@ -5,10 +5,10 @@ function getAssetVersion() {
 	return process.env.BUILD_ID || process.env.ASSET_VERSION || process.env.VERCEL_GIT_COMMIT_SHA || process.env.VERCEL_GIT_PREVIOUS_COMMIT_SHA || "";
 }
 
-/** Tokens for replacePageTokens. V: "?v=xxx" for asset URLs; VALUE: raw version for client (e.g. nav link cache bust). */
+/** Tokens for replacePageTokens. V: "?v=xxx" when asset version is set, else "". */
 export function getPageTokens() {
 	const v = getAssetVersion();
-	return { V: v ? `?v=${v}` : "", VALUE: v };
+	return { V: v ? `?v=${v}` : "" };
 }
 
 function getCommonHead() {
@@ -32,7 +32,6 @@ function getCommonHead() {
 		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 		<link rel="stylesheet" href="/global.css{{V}}" />
 		<script type="module" src="/entry.js{{V}}"></script>
-		<meta name="asset-version" content="{{VALUE}}" />
 	`.trimEnd();
 }
 
