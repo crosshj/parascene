@@ -1,19 +1,8 @@
 /**
  * Create page: nav, nav-mobile, modals, tabs (create.html), route-create (createAdvanced.html).
  * Also runs create-page-specific wiring (image picker, localStorage, style cards, submit buttons).
+ * Imports are dynamic with cache-busting (version) so components are not served from cache.
  */
-
-import '../components/navigation/index.js';
-import '../components/navigation/mobile.js';
-import '../components/modals/profile.js';
-import '../components/modals/credits.js';
-import '../components/modals/notifications.js';
-import '../components/modals/server.js';
-import '../components/elements/tabs.js';
-import '../components/routes/create.js';
-
-import { waitForComponents } from '../shared/pageInit.js';
-import { refreshAutoGrowTextareas } from '../shared/autogrow.js';
 
 // Only wait for above-the-fold / interactive shell; modals hydrate in background
 const TAGS = [
@@ -23,12 +12,29 @@ const TAGS = [
 	'app-route-create',
 ];
 
-export async function init() {
-	await waitForComponents(TAGS);
-	runCreatePageInit();
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
 }
 
-function runCreatePageInit() {
+export async function init(version) {
+	const qs = getImportQuery(version);
+	await Promise.all([
+		import(`../components/navigation/index.js${qs}`),
+		import(`../components/navigation/mobile.js${qs}`),
+		import(`../components/modals/profile.js${qs}`),
+		import(`../components/modals/credits.js${qs}`),
+		import(`../components/modals/notifications.js${qs}`),
+		import(`../components/modals/server.js${qs}`),
+		import(`../components/elements/tabs.js${qs}`),
+		import(`../components/routes/create.js${qs}`),
+	]);
+	const { waitForComponents } = await import(`../shared/pageInit.js${qs}`);
+	const { refreshAutoGrowTextareas } = await import(`../shared/autogrow.js${qs}`);
+	await waitForComponents(TAGS);
+	runCreatePageInit(refreshAutoGrowTextareas);
+}
+
+function runCreatePageInit(refreshAutoGrowTextareas) {
 	if (!document.body.classList.contains('create-page') && !document.body.classList.contains('create-page-advanced')) return;
 
 	// Green dot under the red one (advanced page only)

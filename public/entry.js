@@ -48,7 +48,7 @@ async function main() {
 		mod = await import(`./pages/entry-app.js${qs}`);
 	}
 	if (mod && typeof mod.init === 'function') {
-		await mod.init();
+		await mod.init(v);
 	}
 	runCommonAppInit();
 }
