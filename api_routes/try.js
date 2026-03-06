@@ -53,15 +53,26 @@ async function ensurePngBuffer(buffer) {
 	return await sharp(buffer, { failOn: "none" }).png().toBuffer();
 }
 
-/** Hardcoded server/method for try/create (matches create page: server 1, fluxImage). */
+/** Single config for try flow and avatar generation: Parascene server, Replicate, PrunaAI P-Image with turbo. */
 const TRY_DEFAULT_SERVER_ID = 1;
-const TRY_DEFAULT_METHOD = "fluxImage";
+const TRY_DEFAULT_METHOD = "replicate";
+const TRY_DEFAULT_MODEL = "prunaai/p-image";
+
+/** Appended to try prompts so p-image (and similar) consistently produce polished, high-quality results. */
+const TRY_PROMPT_STYLE_SUFFIX =
+	", high quality, detailed, professional, beautiful composition, sharp focus";
 
 function getTryServerAndArgs(prompt) {
+	const trimmed = typeof prompt === "string" && prompt.trim() ? prompt.trim() : null;
+	const promptWithStyle =
+		trimmed != null ? (trimmed + TRY_PROMPT_STYLE_SUFFIX).trim() : null;
 	return {
 		server_id: TRY_DEFAULT_SERVER_ID,
 		method: TRY_DEFAULT_METHOD,
-		args: typeof prompt === "string" && prompt.trim() ? { prompt: prompt.trim() } : {},
+		args:
+			promptWithStyle != null
+				? { prompt: promptWithStyle, model: TRY_DEFAULT_MODEL }
+				: {},
 	};
 }
 
@@ -159,11 +170,11 @@ export default function createTryRoutes({ queries, storage }) {
 					const filePath =
 						cached.file_path ||
 						(storage.getImageUrlAnon ? storage.getImageUrlAnon(cached.filename) : `/api/try/images/${cached.filename}`);
-				const meta = {
-					from_cache: true,
-					cached_at: new Date().toISOString(),
-					original_created_at: cached.created_at,
-				};
+					const meta = {
+						from_cache: true,
+						cached_at: new Date().toISOString(),
+						original_created_at: cached.created_at,
+					};
 					const result = await queries.insertCreatedImageAnon.run(
 						canonicalPrompt,
 						cached.filename,
@@ -391,7 +402,7 @@ export default function createTryRoutes({ queries, storage }) {
 		if (onlyReference && storage.deleteImageAnon) {
 			try {
 				await storage.deleteImageAnon(filename);
-			} catch (_) {}
+			} catch (_) { }
 		}
 		return res.status(200).json({ ok: true });
 	});

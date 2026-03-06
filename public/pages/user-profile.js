@@ -1512,8 +1512,6 @@ async function init() {
 	// Generate avatar from character (try endpoint); state and helpers
 	const TRY_POLL_MS = 2000;
 	const TRY_MAX_POLLS = 120;
-	const TRY_SERVER_ID = 1;
-	const TRY_METHOD = 'fluxImageKlein';
 
 	function buildAvatarPrompt(description, variationKey) {
 		const core = typeof description === 'string' ? description.trim() : '';
@@ -1549,9 +1547,7 @@ async function init() {
 			headers: { 'content-type': 'application/json' },
 			credentials: 'include',
 			body: JSON.stringify({
-				server_id: TRY_SERVER_ID,
-				method: TRY_METHOD,
-				args: { prompt, resolution: 'ai_latest' },
+				prompt,
 				...(chargeCredits > 0 ? { charge_credits: chargeCredits } : {})
 			})
 		});

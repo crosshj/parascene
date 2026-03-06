@@ -90,7 +90,7 @@
 			}
 
 			var loadingStartTime = 0;
-			var minLoadingMs = 5000;
+			var minLoadingMs = 2000;
 
 			async function ensureMinLoadingTime() {
 				var elapsed = Date.now() - loadingStartTime;
@@ -143,7 +143,8 @@
 				}
 				var data = await createRes.json();
 				if (data.status === 'completed' && data.url) {
-					await ensureMinLoadingTime();
+					// Only enforce minimum loading time when serving from pool (from_cache)
+					if (data.from_cache) await ensureMinLoadingTime();
 					logElapsed('Completed');
 					showImage(data.url);
 					return;
@@ -154,11 +155,14 @@
 					return;
 				}
 
-				var pollMs = 2000;
+				var initialPollDelayMs = 2000;
+				var pollIntervalMs = 1000;
 				var maxPolls = 120;
 				var pollCount = 0;
 				while (pollCount < maxPolls) {
-					await new Promise(function (r) { setTimeout(r, pollMs); });
+					await new Promise(function (r) {
+						setTimeout(r, pollCount === 0 ? initialPollDelayMs : pollIntervalMs);
+					});
 					pollCount++;
 					var listRes = await fetch('/api/try/list', { credentials: 'include' });
 					if (!listRes.ok) break;
@@ -166,7 +170,7 @@
 					var item = Array.isArray(list) ? list.find(function (i) { return i.id === id; }) : null;
 					if (!item) continue;
 					if (item.status === 'completed' && item.url) {
-						await ensureMinLoadingTime();
+						// Not from cache (job just finished); show immediately
 						logElapsed('Completed');
 						showImage(item.url);
 						return;

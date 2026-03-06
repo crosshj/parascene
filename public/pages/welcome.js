@@ -3,8 +3,6 @@ import { genProfile, toMentionText } from '../shared/characterGenerator.js';
 
 const TRY_POLL_MS = 2000;
 const TRY_MAX_POLLS = 120;
-const WELCOME_TRY_SERVER_ID = 1;
-const WELCOME_TRY_METHOD = 'fluxImageKlein';
 
 function $(sel) {
 	return document.querySelector(sel);
@@ -196,11 +194,7 @@ async function createTryImage(prompt) {
 		method: 'POST',
 		headers: { 'content-type': 'application/json' },
 		credentials: 'include',
-		body: JSON.stringify({
-			server_id: WELCOME_TRY_SERVER_ID,
-			method: WELCOME_TRY_METHOD,
-			args: { prompt, resolution: 'ai_latest' }
-		})
+		body: JSON.stringify({ prompt })
 	});
 	const data = await response.json().catch(() => ({}));
 	return { ok: response.ok, status: response.status, data };
