@@ -2266,6 +2266,86 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	});
 
+	// POST /api/create/images/:id/admin-add-video - Admin only: add or replace video on a completed creation.
+	router.post("/api/create/images/:id/admin-add-video", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		if (user.role !== "admin") {
+			return res.status(403).json({ error: "Forbidden: Admin role required" });
+		}
+
+		const id = Number(req.params.id);
+		if (!Number.isFinite(id) || id <= 0) {
+			return res.status(400).json({ error: "Invalid creation id" });
+		}
+
+		const image = await queries.selectCreatedImageByIdAnyUser?.get(id);
+		if (!image) {
+			return res.status(404).json({ error: "Creation not found" });
+		}
+
+		if ((image.status || "") !== "completed") {
+			return res.status(400).json({ error: "Only completed creations can have a video added" });
+		}
+
+		if (typeof storage.uploadVideo !== "function") {
+			return res.status(503).json({ error: "Video upload not available" });
+		}
+
+		if (!req.is("multipart/form-data")) {
+			return res.status(400).json({ error: "Request must be multipart/form-data with a video file" });
+		}
+
+		try {
+			const maxVideoBytes = 200 * 1024 * 1024; // 200MB
+			const { files } = await parseMultipartCreate(req, { maxFileBytes: maxVideoBytes });
+			const videoFile = files?.video;
+			if (!videoFile || !Buffer.isBuffer(videoFile.buffer) || videoFile.buffer.length === 0) {
+				return res.status(400).json({ error: "No video file provided; use form field name 'video'" });
+			}
+			const mimeType = typeof videoFile.mimeType === "string" ? videoFile.mimeType.trim() : "";
+			if (!mimeType.startsWith("video/")) {
+				return res.status(400).json({ error: "File must be a video (e.g. video/mp4)" });
+			}
+
+			const baseExt = mimeType.split("/")[1]?.split("+")[0]?.split(";")[0]?.trim() || "mp4";
+			const safeExt = (baseExt && /^[a-z0-9]+$/i.test(baseExt)) ? baseExt : "mp4";
+			const timestamp = Date.now();
+			const random = Math.random().toString(36).substring(2, 9);
+			const videoFilename = `video/${image.user_id}_${id}_${timestamp}_${random}.${safeExt}`;
+
+			const videoUrl = await storage.uploadVideo(videoFile.buffer, videoFilename, {
+				contentType: mimeType || "video/mp4"
+			});
+
+			const existingMeta = parseMeta(image.meta) || {};
+			const mergedMeta = {
+				...existingMeta,
+				media_type: "video",
+				video: {
+					filename: videoFilename,
+					file_path: videoUrl,
+					content_type: mimeType || "video/mp4"
+				}
+			};
+
+			const updateResult = await queries.updateCreatedImageMeta.run(id, image.user_id, mergedMeta);
+			if (updateResult.changes === 0) {
+				return res.status(500).json({ error: "Failed to update creation meta" });
+			}
+
+			return res.json({
+				ok: true,
+				video_url: videoUrl
+			});
+		} catch (err) {
+			// console.error("Error adding admin video:", err);
+			const message = err?.message && typeof err.message === "string" ? err.message : "Failed to add video";
+			return res.status(500).json({ error: "Failed to add video", message });
+		}
+	});
+
 	// DELETE /api/create/images/:id/landscape - Remove landscape from a creation. Owner only.
 	router.delete("/api/create/images/:id/landscape", async (req, res) => {
 		const user = await requireUser(req, res);

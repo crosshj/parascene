@@ -3865,6 +3865,40 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 	border-color: var(--error-text);
 }
 
+/* Admin: add/replace video on creation detail */
+.creation-detail-admin-video {
+	margin: 12px 0 16px;
+	padding: 12px 14px;
+	background: var(--surface-strong);
+	border: 1px solid var(--border);
+	border-radius: 10px;
+}
+
+.creation-detail-admin-video-label {
+	margin: 0 0 8px;
+	font-size: 0.875rem;
+	font-weight: 600;
+	color: var(--text);
+}
+
+.creation-detail-admin-video-form {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+}
+
+.creation-detail-admin-video-input {
+	font-size: 0.875rem;
+	max-width: 100%;
+}
+
+.creation-detail-admin-video-error {
+	margin: 8px 0 0;
+	font-size: 0.875rem;
+	color: var(--error-text);
+}
+
 /* Set as profile picture confirm modal (creation detail) */
 .creation-detail-set-avatar-modal-overlay {
 	position: fixed;

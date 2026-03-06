@@ -1638,6 +1638,16 @@ async function loadCreation() {
 			${renderCreationDetailActionStrip(stripData, escapeHtml)}
 			${renderCreationDetailMoreMenu(menuData, escapeHtml)}
 			${userDeletedNotice}
+			${isAdmin && status === 'completed' && !isFailed ? html`
+			<div class="creation-detail-admin-video" data-admin-video-section>
+				<p class="creation-detail-admin-video-label">${creation.video_url ? 'Replace video' : 'Add video'}</p>
+				<form class="creation-detail-admin-video-form" data-admin-video-form>
+					<input type="file" name="video" accept="video/*" class="creation-detail-admin-video-input" data-admin-video-input />
+					<button type="submit" class="btn-primary creation-detail-admin-video-submit" data-admin-video-submit>${creation.video_url ? 'Replace' : 'Upload'}</button>
+				</form>
+				<p class="creation-detail-admin-video-error" data-admin-video-error role="alert" style="display: none;"></p>
+			</div>
+			` : ''}
 			
 			${descriptionHtml}
 			<div class="creation-detail-meta-hidden" aria-hidden="true">
@@ -1936,6 +1946,58 @@ async function loadCreation() {
 		if (setAvatarModal) {
 			setAvatarModal.addEventListener('click', (e) => {
 				if (e.target === setAvatarModal) closeSetAvatarModal();
+			});
+		}
+
+		// Admin: add or replace video on completed creation
+		const adminVideoForm = detailContent.querySelector('[data-admin-video-form]');
+		if (adminVideoForm) {
+			const adminVideoInput = detailContent.querySelector('[data-admin-video-input]');
+			const adminVideoSubmit = detailContent.querySelector('[data-admin-video-submit]');
+			const adminVideoError = detailContent.querySelector('[data-admin-video-error]');
+			adminVideoForm.addEventListener('submit', async (e) => {
+				e.preventDefault();
+				if (!adminVideoInput?.files?.length) {
+					if (adminVideoError) {
+						adminVideoError.textContent = 'Please select a video file.';
+						adminVideoError.style.display = '';
+					}
+					return;
+				}
+				if (adminVideoError) {
+					adminVideoError.textContent = '';
+					adminVideoError.style.display = 'none';
+				}
+				if (adminVideoSubmit) {
+					adminVideoSubmit.disabled = true;
+				}
+				try {
+					const formData = new FormData();
+					formData.append('video', adminVideoInput.files[0]);
+					const res = await fetch(`/api/create/images/${creationId}/admin-add-video`, {
+						method: 'POST',
+						credentials: 'include',
+						body: formData
+					});
+					const data = await res.json().catch(() => ({}));
+					if (!res.ok) {
+						if (adminVideoError) {
+							adminVideoError.textContent = data?.message || data?.error || 'Upload failed.';
+							adminVideoError.style.display = '';
+						}
+						return;
+					}
+					await loadCreation();
+				} catch {
+					if (adminVideoError) {
+						adminVideoError.textContent = 'Upload failed. Please try again.';
+						adminVideoError.style.display = '';
+					}
+				} finally {
+					if (adminVideoSubmit) {
+						adminVideoSubmit.disabled = false;
+					}
+				}
 			});
 		}
 
