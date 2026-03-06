@@ -3,7 +3,8 @@ import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 import { getAvatarColor } from '../../shared/avatar.js';
 import { fetchLatestComments } from '../../shared/comments.js';
 import { processUserText, hydrateUserTextLinks } from '../../shared/userText.js';
-import { renderEmptyState, renderEmptyLoading, renderEmptyError } from '../../shared/emptyState.js';
+import { renderEmptyState, renderEmptyError } from '../../shared/emptyState.js';
+import { renderCommentRowsSkeleton, renderServerCardsSkeleton } from '../../shared/skeleton.js';
 import { attachAutoGrowTextarea } from '../../shared/autogrow.js';
 import { buildProfilePath } from '../../shared/profileLinks.js';
 import { renderCommentAvatarHtml } from '../../shared/commentItem.js';
@@ -29,14 +30,14 @@ class AppRouteServers extends HTMLElement {
         </div>
 		<app-tabs>
 			<tab data-id="latest-comments" label="Comments" default>
-				<div class="comment-list" data-comments-container>
-					${renderEmptyLoading({})}
+				<div class="comment-list" data-comments-container aria-busy="true" aria-label="Loading">
+					${renderCommentRowsSkeleton(10)}
 				</div>
 			</tab>
 
 			<tab data-id="servers" label="Servers">
-				<div class="route-cards admin-cards" data-servers-container>
-					${renderEmptyLoading({})}
+				<div class="route-cards admin-cards" data-servers-container aria-busy="true" aria-label="Loading">
+					${renderServerCardsSkeleton(4)}
 				</div>
 			</tab>
 
@@ -134,9 +135,13 @@ class AppRouteServers extends HTMLElement {
 			if (!result.ok) {
 				throw new Error('Failed to load comments');
 			}
+			container.removeAttribute('aria-busy');
+			container.removeAttribute('aria-label');
 			const comments = Array.isArray(result.data?.comments) ? result.data.comments : [];
 			this.renderLatestComments(comments, container);
 		} catch {
+			container.removeAttribute('aria-busy');
+			container.removeAttribute('aria-label');
 			container.innerHTML = renderEmptyError('Error loading comments.');
 		}
 	}
@@ -432,11 +437,15 @@ class AppRouteServers extends HTMLElement {
 				throw new Error('Failed to load servers');
 			}
 
+			container.removeAttribute('aria-busy');
+			container.removeAttribute('aria-label');
 			const servers = Array.isArray(result.data?.servers) ? result.data.servers : [];
 			const viewerIsAdmin = Boolean(result.data?.viewer_is_admin);
 			this.renderServers(servers, container, viewerIsAdmin);
 		} catch (error) {
 			// console.error('Error loading servers:', error);
+			container.removeAttribute('aria-busy');
+			container.removeAttribute('aria-label');
 			container.innerHTML = renderEmptyError('Error loading servers.');
 		}
 	}

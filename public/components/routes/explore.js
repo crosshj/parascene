@@ -4,6 +4,7 @@ import { searchIcon } from '../../icons/svg-strings.js';
 import { buildProfilePath } from '../../shared/profileLinks.js';
 import { setRouteMediaBackgroundImage } from '../../shared/routeMedia.js';
 import { renderEmptyState, renderEmptyLoading, renderEmptyError } from '../../shared/emptyState.js';
+import { renderGridSkeleton } from '../../shared/skeleton.js';
 import { buildCreationCardShell } from '../../shared/creationCard.js';
 
 const html = String.raw;
@@ -51,8 +52,8 @@ class AppRouteExplore extends HTMLElement {
 			${renderEmptyState({ className: 'route-empty-image-grid', title: 'No creations found' })}
 		</div>
 		<div class="explore-main" data-explore-main>
-			<div class="route-cards content-cards-image-grid" data-explore-container>
-				${renderEmptyLoading({ className: 'route-empty-image-grid' })}
+			<div class="route-cards content-cards-image-grid" data-explore-container aria-busy="true" aria-label="Loading">
+				${renderGridSkeleton(25)}
 			</div>
 			<div class="explore-load-more-sentinel" data-explore-sentinel aria-hidden="true"></div>
 			<div class="explore-load-more-fallback" data-explore-load-more-fallback>
@@ -458,7 +459,9 @@ class AppRouteExplore extends HTMLElement {
 
 		this.isLoading = true;
 		if (reset) {
-			container.innerHTML = renderEmptyLoading({ className: 'route-empty-image-grid' });
+			container.innerHTML = renderGridSkeleton(25);
+			container.setAttribute('aria-busy', 'true');
+			container.setAttribute('aria-label', 'Loading');
 		}
 
 		try {
@@ -483,6 +486,8 @@ class AppRouteExplore extends HTMLElement {
 			this.updateLoadMoreFallback();
 
 			if (reset && items.length === 0) {
+				cont.removeAttribute('aria-busy');
+				cont.removeAttribute('aria-label');
 				cont.innerHTML = renderEmptyState({
 					className: 'route-empty-image-grid',
 					title: 'Nothing to explore yet',
@@ -494,6 +499,8 @@ class AppRouteExplore extends HTMLElement {
 
 			if (reset) {
 				cont.innerHTML = '';
+				cont.removeAttribute('aria-busy');
+				cont.removeAttribute('aria-label');
 				if (this.imageObserver) this.imageObserver.disconnect();
 				this.imageLoadQueue = [];
 				this.imageLoadsInFlight = 0;
@@ -506,7 +513,11 @@ class AppRouteExplore extends HTMLElement {
 			if (this.hasMore) this.observeLoadMoreSentinel();
 		} catch (err) {
 			const errCont = this.querySelector("[data-explore-container]");
-			if (errCont) errCont.innerHTML = renderEmptyError('Unable to load explore.', { className: 'route-empty-image-grid' });
+			if (errCont) {
+				errCont.removeAttribute('aria-busy');
+				errCont.removeAttribute('aria-label');
+				errCont.innerHTML = renderEmptyError('Unable to load explore.', { className: 'route-empty-image-grid' });
+			}
 		} finally {
 			this.isLoading = false;
 			this.updateLoadMoreFallback();

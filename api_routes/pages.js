@@ -66,6 +66,35 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 			.replace(/'/g, "&#39;");
 	}
 
+	/** Turn @mentions and #hashtags into links; matches client logic in userText.js */
+	function linkifyMentionsAndHashtags(text) {
+		const raw = String(text ?? "");
+		if (!raw) return "";
+		const tokenRe = /(^|[^a-zA-Z0-9_-])([@#])([a-zA-Z0-9][a-zA-Z0-9_-]{1,31})(?=$|[^a-zA-Z0-9_-])/g;
+		let out = "";
+		let lastIndex = 0;
+		let match;
+		while ((match = tokenRe.exec(raw)) !== null) {
+			const leading = match[1] || "";
+			const sigil = match[2] || "";
+			const rawToken = match[3] || "";
+			const mentionStart = match.index + leading.length;
+			const mentionEnd = mentionStart + 1 + rawToken.length;
+			out += escapeHtml(raw.slice(lastIndex, mentionStart));
+			const normalized = rawToken.toLowerCase();
+			if (sigil === "@" && /^[a-z0-9][a-z0-9_-]{2,23}$/.test(normalized)) {
+				out += `<a href="/p/${escapeHtml(normalized)}" class="user-link mention-link">@${escapeHtml(rawToken)}</a>`;
+			} else if (sigil === "#" && /^[a-z0-9][a-z0-9_-]{1,31}$/.test(normalized)) {
+				out += `<a href="/t/${escapeHtml(normalized)}" class="user-link mention-link">#${escapeHtml(rawToken)}</a>`;
+			} else {
+				out += escapeHtml(sigil + rawToken);
+			}
+			lastIndex = mentionEnd;
+		}
+		out += escapeHtml(raw.slice(lastIndex));
+		return out;
+	}
+
 	function replaceTemplateTokens(template, tokens) {
 		let out = String(template ?? "");
 		const map = tokens && typeof tokens === "object" ? tokens : {};
@@ -93,8 +122,11 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 		const pathAndQuery = (req.originalUrl || req.path || "/").replace(/^(?!\/)/, "/");
 		const requestUrl = `${shareBase}${pathAndQuery}`;
 
-		function clampText(value, { maxChars = 200 } = {}) {
-			const v = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+		function clampText(value, { maxChars = 200, preserveNewlines = false } = {}) {
+			const raw = typeof value === "string" ? value : "";
+			const v = preserveNewlines
+				? raw.replace(/[ \t]+/g, " ").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim()
+				: raw.replace(/\s+/g, " ").trim();
 			if (!v) return "";
 			if (v.length <= maxChars) return v;
 			return `${v.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
@@ -216,11 +248,10 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 					.catch(() => {});
 			}
 
-			// Always serve the public share page (with create prompt, sign up, sign in) so the
-			// experience is the same for everyone. Logged-in users can open the creation in-app
-			// via the app’s creation detail route if they want the full editor.
+			// Vary by auth: logged-in see "View creation" link only; anon see create block only.
 
-			const cacheKey = `${version}:${token}`;
+			const isLoggedIn = Boolean(req.auth?.userId);
+			const cacheKey = `${version}:${token}:${isLoggedIn ? "in" : "out"}`;
 			const cached = shareHtmlCache.get(cacheKey);
 			if (cached && Date.now() - cached.ts < SHARE_CACHE_TTL_MS) {
 				res.setHeader("Content-Type", "text/html");
@@ -319,8 +350,9 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 			const shareDetailsTitleHtml = hasTitle ? `<h2 class="share-details-title">${escapeHtml(titleRaw)}</h2>` : ``;
 
 			const descriptionRaw = typeof image.description === "string" ? image.description.trim() : "";
+			const descriptionClamped = clampText(descriptionRaw, { maxChars: 400, preserveNewlines: true });
 			const imageDescriptionHtml = descriptionRaw
-				? `<p class="share-image-description">${escapeHtml(clampText(descriptionRaw, { maxChars: 400 }))}</p>`
+				? `<p class="share-image-description">${isLoggedIn ? linkifyMentionsAndHashtags(descriptionClamped) : escapeHtml(descriptionClamped)}</p>`
 				: "";
 
 			const creatorBlockHtml = showCreator ? `
@@ -369,6 +401,12 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 				? `${escapeHtml(heroSharer)} shared this with you. It was created by ${escapeHtml(heroCreator)} on Parascene.`
 				: `${escapeHtml(heroSharer)} shared this creation with you — they made it on Parascene.`;
 
+			const baseAppUrl = getBaseAppUrl();
+			const creationDetailUrl = `${baseAppUrl}/creations/${image.id}`;
+			// Server-side either/or: logged in → view link visible, create block hidden; anon → opposite
+			const shareViewLinkAttr = isLoggedIn ? "" : " hidden";
+			const shareCreateBlockAttr = isLoggedIn ? " hidden" : "";
+
 			let html = replaceTemplateTokens(template, {
 				...getPageTokens(),
 				PAGE_TITLE: escapeHtml(title),
@@ -389,7 +427,10 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 				SIGNIN_URL: escapeHtml(signInUrl),
 				REFERRER_USER_ID: String(Number(verified.sharedByUserId) || 0),
 				IMAGE_ID: String(Number(image.id) || 0),
-				CREATED_BY_USER_ID: String(Number(image.user_id) || 0)
+				CREATED_BY_USER_ID: String(Number(image.user_id) || 0),
+				CREATION_DETAIL_URL: escapeHtml(creationDetailUrl),
+				SHARE_VIEW_LINK_ATTR: shareViewLinkAttr,
+				SHARE_CREATE_BLOCK_ATTR: shareCreateBlockAttr
 			});
 
 			shareHtmlCache.set(cacheKey, { html, ts: Date.now() });

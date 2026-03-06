@@ -399,6 +399,36 @@ export async function openDb() {
 				return Promise.resolve(stmt.get(userId));
 			}
 		},
+		selectUsersByIds: async (ids) => {
+			const idList = Array.isArray(ids) ? ids.filter((id) => id != null && Number.isFinite(Number(id))) : [];
+			if (idList.length === 0) return new Map();
+			const placeholders = idList.map(() => "?").join(",");
+			const stmt = db.prepare(
+				`SELECT id, email, role, created_at, meta FROM users WHERE id IN (${placeholders})`
+			);
+			const rows = stmt.all(...idList);
+			const map = new Map();
+			for (const row of rows) {
+				const meta = parseUserMeta(row.meta);
+				map.set(Number(row.id), { ...row, meta, suspended: meta.suspended === true });
+			}
+			return map;
+		},
+		selectUserProfilesByUserIds: async (userIds) => {
+			const idList = Array.isArray(userIds) ? userIds.filter((id) => id != null && Number.isFinite(Number(id))) : [];
+			if (idList.length === 0) return new Map();
+			const placeholders = idList.map(() => "?").join(",");
+			const stmt = db.prepare(
+				`SELECT user_id, user_name, display_name, about, socials, avatar_url, cover_image_url, badges, meta, created_at, updated_at
+           FROM user_profiles WHERE user_id IN (${placeholders})`
+			);
+			const rows = stmt.all(...idList);
+			const map = new Map();
+			for (const row of rows) {
+				map.set(Number(row.user_id), row);
+			}
+			return map;
+		},
 		selectUserProfileByUsername: {
 			get: async (username) => {
 				const stmt = db.prepare(
@@ -1716,6 +1746,66 @@ export async function openDb() {
            ORDER BY fi.created_at DESC`
 				);
 				return Promise.resolve(stmt.all(viewerId, viewerId, viewerId));
+			},
+			getPage: async (viewerId, { limit = 20, offset = 0 } = {}) => {
+				const safeLimit = Math.min(Math.max(1, Number(limit) || 20), 100);
+				const safeOffset = Math.max(0, Number(offset) || 0);
+				// Main query without full-table like/comment aggregates (biggest bottleneck)
+				const stmt = db.prepare(
+					`SELECT fi.id, fi.title, fi.summary, fi.author, fi.tags, fi.created_at,
+                  fi.created_image_id, ci.filename, ci.file_path, ci.user_id, ci.meta,
+                  up.user_name AS author_user_name,
+                  up.display_name AS author_display_name,
+                  up.avatar_url AS author_avatar_url,
+                  CASE WHEN json_extract(u.meta,'$.plan') = 'founder' THEN 'founder' ELSE 'free' END AS author_plan,
+                  COALESCE(ci.file_path, CASE WHEN ci.filename IS NOT NULL THEN '/api/images/created/' || ci.filename ELSE NULL END) as url,
+                  0 AS like_count,
+                  0 AS comment_count,
+                  CASE WHEN ? IS NOT NULL AND vl.user_id IS NOT NULL THEN 1 ELSE 0 END AS viewer_liked,
+                  (json_extract(ci.meta,'$.nsfw') = 1 OR json_extract(ci.meta,'$.nsfw') = 'true') AS nsfw
+           FROM feed_items fi
+           LEFT JOIN created_images ci ON fi.created_image_id = ci.id
+           LEFT JOIN user_profiles up ON up.user_id = ci.user_id
+           LEFT JOIN users u ON u.id = ci.user_id
+           LEFT JOIN likes_created_image vl
+             ON vl.created_image_id = fi.created_image_id
+            AND vl.user_id = ?
+           WHERE ci.user_id IS NOT NULL
+             AND (ci.unavailable_at IS NULL OR ci.unavailable_at = '')
+             AND EXISTS (
+               SELECT 1
+               FROM user_follows uf
+               WHERE uf.follower_id = ?
+                 AND uf.following_id = ci.user_id
+             )
+           ORDER BY fi.created_at DESC
+           LIMIT ? OFFSET ?`
+				);
+				const rows = stmt.all(viewerId, viewerId, viewerId, safeLimit + 1, safeOffset);
+				const hasMore = rows.length > safeLimit;
+				const pageRows = rows.slice(0, safeLimit);
+
+				// Fetch like/comment counts only for this page's created_image_ids (avoids full-table aggregates)
+				const cids = [...new Set(pageRows.map((r) => r.created_image_id).filter((id) => id != null))];
+				if (cids.length > 0) {
+					const placeholders = cids.map(() => "?").join(",");
+					const likeRows = db.prepare(
+						`SELECT created_image_id, COUNT(*) AS like_count FROM likes_created_image WHERE created_image_id IN (${placeholders}) GROUP BY created_image_id`
+					).all(...cids);
+					const commentRows = db.prepare(
+						`SELECT created_image_id, COUNT(*) AS comment_count FROM comments_created_image WHERE created_image_id IN (${placeholders}) GROUP BY created_image_id`
+					).all(...cids);
+					const likeByCid = new Map(likeRows.map((r) => [r.created_image_id, Number(r.like_count)]));
+					const commentByCid = new Map(commentRows.map((r) => [r.created_image_id, Number(r.comment_count)]));
+					for (const row of pageRows) {
+						if (row.created_image_id != null) {
+							row.like_count = likeByCid.get(row.created_image_id) ?? 0;
+							row.comment_count = commentByCid.get(row.created_image_id) ?? 0;
+						}
+					}
+				}
+
+				return { rows: pageRows, hasMore };
 			}
 		},
 		selectExploreItems: {
@@ -1873,6 +1963,16 @@ export async function openDb() {
 				const result = stmt.get(serverId, userId);
 				return result !== undefined;
 			}
+		},
+		checkServerMembershipsForUser: async (serverIds, userId) => {
+			const ids = Array.isArray(serverIds) ? serverIds.filter((id) => id != null && Number.isFinite(Number(id))) : [];
+			if (ids.length === 0) return new Set();
+			const placeholders = ids.map(() => "?").join(",");
+			const stmt = db.prepare(
+				`SELECT server_id FROM server_members WHERE server_id IN (${placeholders}) AND user_id = ?`
+			);
+			const rows = stmt.all(...ids, userId);
+			return new Set(rows.map((r) => Number(r.server_id)).filter(Boolean));
 		},
 		addServerMember: {
 			run: async (serverId, userId) => {

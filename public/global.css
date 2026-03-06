@@ -4725,6 +4725,279 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 	}
 }
 
+/* Composite skeleton layouts (reusable across Feed, Explore, Creations, profile, Connect) */
+
+.skeleton-feed-card {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 6px 0 16px;
+	position: relative;
+}
+
+.skeleton-feed-card + .skeleton-feed-card {
+	padding-top: 16px;
+}
+
+.skeleton-feed-card-image {
+	width: 100%;
+	aspect-ratio: 1 / 1;
+	border-radius: 0;
+	overflow: hidden;
+	background: var(--skeleton);
+	position: relative;
+}
+
+.skeleton-feed-card-image::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background: linear-gradient(90deg, transparent, var(--skeleton-shine), transparent);
+	background-size: 300vw 100%;
+	border-radius: inherit;
+	animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+.skeleton-feed-card-footer {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 12px;
+	align-items: start;
+	padding: 0 4px 0;
+}
+
+.skeleton-feed-card-content {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+
+.skeleton-feed-card-actions {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 0 4px 0 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.skeleton-feed-card-image::after {
+		animation: none;
+		display: none;
+	}
+}
+
+.skeleton-grid-tile {
+	width: 100%;
+	aspect-ratio: 1 / 1;
+	border-radius: 6px;
+	overflow: hidden;
+	background: var(--skeleton);
+	position: relative;
+	min-width: 0;
+}
+
+.skeleton-grid-tile::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background: linear-gradient(90deg, transparent, var(--skeleton-shine), transparent);
+	background-size: 300vw 100%;
+	border-radius: inherit;
+	animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.skeleton-grid-tile::after {
+		animation: none;
+		display: none;
+	}
+}
+
+.skeleton-comment-row {
+	display: grid;
+	grid-template-columns: 128px 1fr;
+	column-gap: 12px;
+	row-gap: 6px;
+	align-items: start;
+	padding: 12px 0;
+	border-top: 1px solid var(--border);
+}
+
+.skeleton-comment-row:first-child {
+	border-top: none;
+	padding-top: 0;
+}
+
+.skeleton-comment-row-thumb {
+	width: 128px;
+	height: 128px;
+	border-radius: 0;
+	overflow: hidden;
+	background: var(--skeleton);
+	position: relative;
+	flex-shrink: 0;
+}
+
+.skeleton-comment-row-thumb::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background: linear-gradient(90deg, transparent, var(--skeleton-shine), transparent);
+	background-size: 300vw 100%;
+	border-radius: inherit;
+	animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+.skeleton-comment-row-body {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+	min-height: 100px;
+}
+
+.skeleton-comment-row-body .skeleton-line {
+	flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.skeleton-comment-row-thumb::after {
+		animation: none;
+		display: none;
+	}
+}
+
+@media (max-width: 768px) {
+	.skeleton-comment-row {
+		grid-template-columns: 64px 1fr;
+		gap: 10px;
+		padding: 10px 0;
+	}
+
+	.skeleton-comment-row-thumb {
+		width: 64px;
+		height: 64px;
+	}
+}
+
+.skeleton-profile-hero {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+	border: 1px solid var(--border);
+	border-radius: 14px;
+	background: var(--surface);
+	overflow: hidden;
+	box-shadow: var(--shadow);
+}
+
+.skeleton-profile-banner {
+	height: 180px;
+	width: 100%;
+	background: var(--skeleton);
+	position: relative;
+	overflow: hidden;
+	flex-shrink: 0;
+}
+
+.skeleton-profile-banner::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background: linear-gradient(90deg, transparent, var(--skeleton-shine), transparent);
+	background-size: 300vw 100%;
+	border-radius: inherit;
+	animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.skeleton-profile-banner::after {
+		animation: none;
+		display: none;
+	}
+}
+
+.skeleton-profile-hero-inner {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 16px;
+}
+
+.skeleton-profile-hero-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.skeleton-profile-hero-stats {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 10px;
+}
+
+.skeleton-profile-hero-stats .skeleton-pill {
+	width: 100%;
+	max-width: 120px;
+	height: 44px;
+}
+
+.skeleton-profile-hero-meta {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-height: 140px;
+}
+
+.skeleton-profile-hero-meta .skeleton-line {
+	flex-shrink: 0;
+}
+
+.skeleton-tabs {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+	margin-top: 24px;
+	margin-bottom: 0;
+}
+
+.skeleton-tabs .skeleton-pill {
+	width: 88px;
+	height: 36px;
+}
+
+.skeleton-profile-page {
+	display: block;
+}
+
+.skeleton-profile-page .skeleton-profile-grid-wrap {
+	margin-top: 24px;
+}
+
+.skeleton-server-card {
+	display: block;
+	padding: 14px;
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	background: var(--surface);
+	margin-bottom: 12px;
+}
+
+.skeleton-server-card:last-child {
+	margin-bottom: 0;
+}
+
+.skeleton-server-card .skeleton-line {
+	margin-bottom: 8px;
+}
+
+.skeleton-server-card .skeleton-line:last-child {
+	margin-bottom: 0;
+}
+
 /* ============================================
    Status Badge/Indicator
    ============================================ */

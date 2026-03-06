@@ -1,5 +1,8 @@
 import express from "express";
+import Busboy from "busboy";
+import sharp from "sharp";
 import { buildProviderHeaders, resolveProviderAuthToken } from "./utils/providerAuth.js";
+import { fetchImageBufferFromUrl, createPlaceholderImageBuffer } from "./utils/creationJob.js";
 import { getEmailSettings } from "./utils/emailSettings.js";
 import { getBaseAppUrlForEmail } from "./utils/url.js";
 import { RELATED_PARAM_KEYS } from "../db/adapters/relatedParams.js";
@@ -1320,6 +1323,204 @@ export default function createAdminRoutes({ queries, storage }) {
 				server_url: normalizedUrl
 			});
 		}
+	});
+
+	/** POST /admin/creations/:id/upload-video — Admin-only: upload a video file to attach to a creation (failed or completed). Makes it a video creation. */
+	router.post("/admin/creations/:id/upload-video", async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+
+		const creationId = Number(req.params.id);
+		if (!Number.isFinite(creationId) || creationId <= 0) {
+			return res.status(400).json({ error: "Invalid creation ID" });
+		}
+
+		const creation = await queries.selectCreatedImageByIdAnyUser?.get(creationId);
+		if (!creation) {
+			return res.status(404).json({ error: "Creation not found" });
+		}
+
+		if (!req.is("multipart/form-data")) {
+			return res.status(400).json({ error: "Content-Type must be multipart/form-data with a video file" });
+		}
+
+		if (typeof storage?.uploadVideo !== "function") {
+			return res.status(503).json({ error: "Video upload not supported" });
+		}
+
+		const maxVideoBytes = 150 * 1024 * 1024; // 150 MB
+		let videoBuffer = null;
+		let contentType = "video/mp4";
+
+		try {
+			const result = await new Promise((resolve, reject) => {
+				let resolved = false;
+				const busboy = Busboy({ headers: req.headers, limits: { fileSize: maxVideoBytes, files: 1, fields: 5 } });
+				busboy.on("file", (name, file, info) => {
+					if (name !== "video" && name !== "video_file") return file.resume();
+					const chunks = [];
+					let total = 0;
+					file.on("data", (data) => {
+						total += data.length;
+						chunks.push(data);
+					});
+					file.on("limit", () => reject(new Error("File too large")));
+					file.on("end", () => {
+						if (!resolved && total > 0) {
+							resolved = true;
+							resolve({
+								buffer: Buffer.concat(chunks),
+								contentType: (info?.mimeType && info.mimeType.startsWith("video/")) ? info.mimeType : "video/mp4"
+							});
+						}
+					});
+				});
+				busboy.on("error", reject);
+				busboy.on("finish", () => {
+					if (!resolved) resolve(null);
+				});
+				req.pipe(busboy);
+			});
+
+			if (!result?.buffer || result.buffer.length === 0) {
+				return res.status(400).json({ error: "No video file provided. Use form field 'video' or 'video_file'." });
+			}
+			videoBuffer = result.buffer;
+			contentType = result.contentType || "video/mp4";
+		} catch (err) {
+			if (err?.message === "File too large") {
+				return res.status(413).json({ error: "Video file too large" });
+			}
+			return res.status(400).json({ error: "Invalid multipart body", message: err?.message || "Bad request" });
+		}
+
+		const ext = contentType.startsWith("video/") ? contentType.split("/")[1].split("+")[0].split(";")[0].trim() || "mp4" : "mp4";
+		const timestamp = Date.now();
+		const random = Math.random().toString(36).substring(2, 9);
+		const videoFilename = `video/${creation.user_id}_${creationId}_${timestamp}_${random}.${ext}`;
+
+		let videoUrl;
+		try {
+			videoUrl = await storage.uploadVideo(videoBuffer, videoFilename, { contentType });
+		} catch (err) {
+			return res.status(500).json({ error: "Failed to upload video", message: err?.message || "Upload failed" });
+		}
+
+		function parseMeta(raw) {
+			if (raw == null) return {};
+			if (typeof raw === "object") return raw;
+			if (typeof raw !== "string" || !raw.trim()) return {};
+			try {
+				return JSON.parse(raw);
+			} catch {
+				return {};
+			}
+		}
+
+		const existingMeta = parseMeta(creation.meta);
+
+		function firstImageUrlFromMeta(meta) {
+			if (!meta || typeof meta !== "object") return null;
+			const trim = (v) => (typeof v === "string" ? v.trim() : "") || null;
+			const looksLikeUrl = (s) => typeof s === "string" && s.length > 4 && (s.startsWith("http") || s.startsWith("/"));
+			const candidates = [
+				meta.source_image_url,
+				meta.args?.image_url,
+				meta.args?.image,
+				meta.args?.input_image,
+				meta.args?.reference_image,
+				meta.args?.init_image,
+				meta.args?.source_url,
+				meta.args?.source_image,
+			];
+			for (const v of candidates) {
+				const s = trim(v);
+				if (s && looksLikeUrl(s)) return s;
+			}
+			const args = meta.args && typeof meta.args === "object" ? meta.args : {};
+			const imageUrlLikeKeys = ["image_url", "image", "input_image", "reference_image", "init_image", "source_url", "source_image", "url"];
+			for (const k of imageUrlLikeKeys) {
+				const s = trim(args[k]);
+				if (s && looksLikeUrl(s)) return s;
+			}
+			if (Array.isArray(meta.args?.items) && meta.args.items.length > 0) {
+				const first = meta.args.items[0];
+				if (first && typeof first === "object") {
+					for (const k of imageUrlLikeKeys) {
+						const s = trim(first[k]);
+						if (s && looksLikeUrl(s)) return s;
+					}
+				}
+			}
+			for (const [k, v] of Object.entries(args)) {
+				if (typeof v === "string" && looksLikeUrl(v)) return v.trim();
+			}
+			return null;
+		}
+
+		const sourceImageUrl = firstImageUrlFromMeta(existingMeta);
+		const mergedMeta = {
+			...existingMeta,
+			media_type: "video",
+			...(sourceImageUrl ? { source_image_url: sourceImageUrl } : {}),
+			video: {
+				filename: videoFilename,
+				file_path: videoUrl,
+				content_type: contentType
+			}
+		};
+
+		const hasThumbnail = creation.file_path && String(creation.file_path).trim() !== "";
+		if (!hasThumbnail && typeof storage.uploadImage === "function") {
+			let thumbBuffer;
+			try {
+				thumbBuffer = sourceImageUrl
+					? await fetchImageBufferFromUrl(sourceImageUrl)
+					: await createPlaceholderImageBuffer();
+			} catch (err) {
+				thumbBuffer = await createPlaceholderImageBuffer();
+			}
+			const thumbFilename = `${creation.user_id}_${creationId}_${timestamp}_${random}.png`;
+			let thumbUrl;
+			try {
+				thumbUrl = await storage.uploadImage(thumbBuffer, thumbFilename);
+			} catch (err) {
+				return res.status(500).json({ error: "Failed to upload thumbnail image", message: err?.message || "Upload failed" });
+			}
+			let width = creation.width ?? null;
+			let height = creation.height ?? null;
+			try {
+				const metaSharp = await sharp(thumbBuffer, { failOn: "none" }).metadata();
+				if (typeof metaSharp.width === "number" && metaSharp.width > 0) width = metaSharp.width;
+				if (typeof metaSharp.height === "number" && metaSharp.height > 0) height = metaSharp.height;
+			} catch {
+				// keep existing or null
+			}
+			const completedResult = await queries.updateCreatedImageJobCompleted.run(creationId, creation.user_id, {
+				filename: thumbFilename,
+				file_path: thumbUrl,
+				width,
+				height,
+				color: creation.color ?? null,
+				meta: mergedMeta
+			});
+			if (completedResult.changes === 0) {
+				return res.status(500).json({ error: "Failed to update creation with thumbnail" });
+			}
+			return res.json({ ok: true, video_url: videoUrl });
+		}
+
+		const updateMetaResult = await queries.updateCreatedImageMeta.run(creationId, creation.user_id, mergedMeta);
+		if (updateMetaResult.changes === 0) {
+			return res.status(500).json({ error: "Failed to update creation meta" });
+		}
+
+		const status = creation.status || "completed";
+		if (status === "failed") {
+			await queries.updateCreatedImageStatus?.run(creationId, creation.user_id, "completed");
+		}
+
+		return res.json({ ok: true, video_url: videoUrl });
 	});
 
 	router.post("/admin/servers/:id/refresh", async (req, res) => {

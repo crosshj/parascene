@@ -2,7 +2,8 @@ import { formatDateTime, formatRelativeTime } from '../../shared/datetime.js';
 import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
 import { renderCreationKebabHtml, setupKebabDropdown } from '../../shared/kebabMenu.js';
 import { setRouteMediaBackgroundImage } from '../../shared/routeMedia.js';
-import { renderEmptyState, renderEmptyLoading, renderEmptyError } from '../../shared/emptyState.js';
+import { renderEmptyState, renderEmptyError } from '../../shared/emptyState.js';
+import { renderGridSkeleton } from '../../shared/skeleton.js';
 import { publishedBadgeHtml } from '../../shared/creationBadges.js';
 import { buildCreationCardShell } from '../../shared/creationCard.js';
 import { eyeHiddenIcon } from '../../icons/svg-strings.js';
@@ -80,8 +81,8 @@ class AppRouteCreations extends HTMLElement {
             <button type="button" class="creations-bulk-bar-close" data-creations-bulk-close aria-label="Close bulk actions">×</button>
           </div>
         </div>
-        <div class="route-cards content-cards-image-grid" data-creations-container>
-          ${renderEmptyLoading({ className: 'route-empty-image-grid' })}
+        <div class="route-cards content-cards-image-grid" data-creations-container aria-busy="true" aria-label="Loading">
+          ${renderGridSkeleton(25)}
         </div>
         <div class="creations-load-more-sentinel" data-creations-sentinel aria-hidden="true"></div>
         <div class="creations-load-more-fallback" data-creations-load-more-fallback>
@@ -719,6 +720,8 @@ class AppRouteCreations extends HTMLElement {
 			const creations = creationsRaw;
 
 			cont.innerHTML = "";
+			cont.removeAttribute('aria-busy');
+			cont.removeAttribute('aria-label');
 			// New content means new media elements; clear previous observers/queue.
 			if (this.imageObserver) this.imageObserver.disconnect();
 			this.imageLoadQueue = [];
@@ -807,7 +810,11 @@ class AppRouteCreations extends HTMLElement {
 		} catch (error) {
 			// console.error("Error loading creations:", error);
 			const errCont = this.querySelector("[data-creations-container]");
-			if (errCont) errCont.innerHTML = renderEmptyError('Unable to load creations.', { className: 'route-empty-image-grid' });
+			if (errCont) {
+				errCont.removeAttribute('aria-busy');
+				errCont.removeAttribute('aria-label');
+				errCont.innerHTML = renderEmptyError('Unable to load creations.', { className: 'route-empty-image-grid' });
+			}
 		} finally {
 			this.isLoading = false;
 			this.updateLoadMoreFallback();

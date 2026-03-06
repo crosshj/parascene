@@ -280,6 +280,19 @@ function isSecureRequest(req) {
 	return process.env.NODE_ENV === "production";
 }
 
+/** Cookie domain so session is shared across www and sh. Omit for host-only cookie (e.g. localhost). */
+function getCookieDomain(req) {
+	const hostname = req?.hostname || req?.host?.split(":")[0] || "";
+	if (
+		hostname === "www.parascene.com" ||
+		hostname === "sh.parascene.com" ||
+		hostname === "parascene.com"
+	) {
+		return ".parascene.com";
+	}
+	return undefined;
+}
+
 function setAuthCookie(res, token, req = null) {
 	const isSecure = isSecureRequest(req);
 	// For Vercel/production, use 'none' with secure to ensure cookies work with fetch requests
@@ -292,6 +305,8 @@ function setAuthCookie(res, token, req = null) {
 		maxAge: ONE_WEEK_MS,
 		path: "/"
 	};
+	const domain = getCookieDomain(req);
+	if (domain) cookieOptions.domain = domain;
 	if (shouldLogSession()) {
 		// console.log(`[setAuthCookie] Setting cookie with options:`, {
 		//   sameSite,
@@ -305,23 +320,29 @@ function setAuthCookie(res, token, req = null) {
 
 function clearAuthCookie(res, req = null) {
 	const isSecure = isSecureRequest(req);
-	// Must match the same options used in setAuthCookie for clearCookie to work
+	// Must match the same options used in setAuthCookie for clearCookie to work.
+	// Clear with all option variants so we also remove "old" cookies that were set
+	// with different path/domain (e.g. legacy host-only or legacy .parascene.com).
 	const sameSite = isSecure ? "none" : "lax";
-	const cookieOptions = {
+	const baseOptions = {
 		httpOnly: true,
 		sameSite: sameSite,
 		secure: isSecure,
 		path: "/"
 	};
-	const path = req?.path || "unknown";
-	if (shouldLogSession()) {
-		// console.log(`[clearAuthCookie] Clearing cookie for path: ${path}`, {
-		//   sameSite,
-		//   secure: isSecure,
-		//   path: cookieOptions.path
-		// });
+	const domain = getCookieDomain(req);
+
+	// Clear with current domain (or no domain for host-only)
+	res.clearCookie(COOKIE_NAME, { ...baseOptions, ...(domain ? { domain } : {}) });
+
+	// Also clear alternate forms so old cookies are removed
+	if (domain) {
+		// Clear host-only in case an old cookie was set without domain
+		res.clearCookie(COOKIE_NAME, { ...baseOptions });
+	} else {
+		// Clear with .parascene.com in case an old cookie was set with domain (e.g. prod)
+		res.clearCookie(COOKIE_NAME, { ...baseOptions, domain: ".parascene.com" });
 	}
-	res.clearCookie(COOKIE_NAME, cookieOptions);
 }
 
 export {

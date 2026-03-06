@@ -19,18 +19,52 @@ export default function createServersRoutes({ queries }) {
 		return user;
 	}
 
-	// Helper function to add permission flags to servers
+	// Helper: add permission flags using batch queries (1 wave of 3 parallel requests instead of 3 waves of N).
 	async function addPermissionFlags(servers, userId, isAdmin = false) {
-		return Promise.all(servers.map(async (server) => {
+		const serverIds = servers.map((s) => s.id);
+		const ownerIds = [...new Set(servers.map((s) => s.user_id).filter(Boolean))];
+
+		const batchMemberships = typeof queries.checkServerMembershipsForUser === "function";
+		const batchUsers = typeof queries.selectUsersByIds === "function";
+		const batchProfiles = typeof queries.selectUserProfilesByUserIds === "function";
+
+		const [membershipSet, usersMap, profilesMap] = await (batchMemberships && batchUsers && batchProfiles
+			? Promise.all([
+				queries.checkServerMembershipsForUser(serverIds, userId),
+				ownerIds.length ? queries.selectUsersByIds(ownerIds) : Promise.resolve(new Map()),
+				ownerIds.length ? queries.selectUserProfilesByUserIds(ownerIds) : Promise.resolve(new Map())
+			])
+			: (async () => {
+				// Fallback: one membership set and maps built from N queries (slower)
+				const [mSet, uMap, pMap] = await Promise.all([
+					Promise.all(serverIds.map((sid) => queries.checkServerMembership.get(sid, userId))).then((results) => {
+						const set = new Set();
+						serverIds.forEach((id, i) => { if (results[i]) set.add(id); });
+						return set;
+					}),
+					ownerIds.length
+						? Promise.all(ownerIds.map((id) => queries.selectUserById.get(id))).then((results) => {
+							const map = new Map();
+							ownerIds.forEach((id, i) => { if (results[i]) map.set(id, results[i]); });
+							return map;
+						})
+						: Promise.resolve(new Map()),
+					ownerIds.length
+						? Promise.all(ownerIds.map((id) => queries.selectUserProfileByUserId?.get(id))).then((results) => {
+							const map = new Map();
+							ownerIds.forEach((id, i) => { if (results[i]) map.set(id, results[i]); });
+							return map;
+						})
+						: Promise.resolve(new Map())
+				]);
+				return [mSet, uMap, pMap];
+			})());
+
+		return servers.map((server) => {
 			const isSpecial = server.id === 1;
-			// "Owner" means the user who originally created the server.
-			// Admins can still manage all servers, but are not treated as owners.
 			const isOwner = server.user_id === userId;
-			let isMember = await queries.checkServerMembership.get(server.id, userId);
-			if (isSpecial) {
-				// All authenticated users are treated as members of the special server.
-				isMember = true;
-			}
+			let isMember = membershipSet.has(server.id);
+			if (isSpecial) isMember = true;
 			const canManage = isOwner || isAdmin;
 
 			const result = {
@@ -38,28 +72,23 @@ export default function createServersRoutes({ queries }) {
 				name: server.name,
 				description: server.description,
 				status: server.status,
-				// Special server should not expose member counts.
 				members_count: isSpecial ? null : (server.members_count || 0),
 				created_at: server.created_at,
 				is_owner: isOwner,
 				is_member: isMember,
 				can_manage: canManage,
-				// Any authenticated user can conceptually join/leave; frontend / special rules decide controls.
 				can_join_leave: !isSpecial,
-				suspended: server.status === 'suspended'
+				suspended: server.status === "suspended"
 			};
 
-			// Include owner information for display
 			if (server.user_id) {
-				const ownerUser = await queries.selectUserById.get(server.user_id);
-				const ownerProfile = ownerUser ? await queries.selectUserProfileByUserId?.get(server.user_id) : null;
-
+				const ownerUser = usersMap.get(server.user_id);
+				const ownerProfile = profilesMap.get(server.user_id) ?? null;
 				if (ownerUser) {
-					const emailPrefix = ownerUser.email ? ownerUser.email.split('@')[0] : null;
+					const emailPrefix = ownerUser.email ? ownerUser.email.split("@")[0] : null;
 					const displayName = ownerProfile?.display_name?.trim() || ownerProfile?.user_name?.trim() || emailPrefix || `User ${ownerUser.id}`;
 					const userName = ownerProfile?.user_name?.trim() || emailPrefix || null;
 					const avatarUrl = ownerProfile?.avatar_url?.trim() || null;
-
 					result.owner = {
 						id: ownerUser.id,
 						display_name: displayName,
@@ -70,20 +99,16 @@ export default function createServersRoutes({ queries }) {
 				}
 			}
 
-			// Only include sensitive fields if user can manage
 			if (canManage) {
 				result.server_url = server.server_url;
 				result.auth_token = server.auth_token;
 				result.server_config = server.server_config;
 			} else if (server.server_config && (isSpecial || isMember)) {
-				// Special server's generation methods are available to all users.
-				// For non-special servers, expose server_config to members so they can
-				// use the generation methods, but do not expose URL or auth_token.
 				result.server_config = server.server_config;
 			}
 
 			return result;
-		}));
+		});
 	}
 
 	// GET /api/servers - List all servers with permission flags

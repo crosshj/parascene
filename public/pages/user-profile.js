@@ -6,6 +6,7 @@ import { createInfiniteScroll } from '../shared/infinite-scroll.js';
 import { buildProfilePath } from '../shared/profileLinks.js';
 import { setRouteMediaBackgroundImage } from '../shared/routeMedia.js';
 import { renderEmptyState, renderEmptyLoading, renderEmptyError } from '../shared/emptyState.js';
+import { renderGridSkeleton, renderProfilePageSkeleton } from '../shared/skeleton.js';
 import { publishedBadgeHtml, userDeletedBadgeHtml } from '../shared/creationBadges.js';
 import { buildCreationCardShell } from '../shared/creationCard.js';
 import { buildUserListRowHtml } from '../shared/userCard.js';
@@ -267,10 +268,8 @@ function renderProfilePage(container, { user, profile, stats, plan, isSelf, view
 			<app-tabs class="user-profile-tabs-pending" data-profile-tabs>
 				<tab data-id="creations" label="Creations" default>
 					<div class="user-profile-tab-content" data-profile-tab-content="creations">
-						<div class="route-cards content-cards-image-grid" data-profile-grid>
-							<div class="route-empty route-empty-image-grid route-loading">
-								<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
-							</div>
+						<div class="route-cards content-cards-image-grid" data-profile-grid aria-busy="true" aria-label="Loading">
+							${renderGridSkeleton(25)}
 						</div>
 						<div class="user-profile-load-more" data-profile-load-more="creations" hidden></div>
 					</div>
@@ -499,6 +498,9 @@ function setModalOpen(overlay, open) {
 
 function renderImageGrid(grid, images, showBadge = false, emptyTitle = 'No published creations yet', emptyMessage = "When this user publishes creations, they'll show up here.") {
 	if (!grid) return;
+
+	grid.removeAttribute('aria-busy');
+	grid.removeAttribute('aria-label');
 
 	const list = Array.isArray(images) ? images : [];
 	if (list.length === 0) {
@@ -881,6 +883,9 @@ function renderPersonalityDiscoveryPage(container, personality, items, { hasMore
 async function init() {
 	const container = document.querySelector('.user-profile-page');
 	if (!container) return;
+
+	container.innerHTML = renderProfilePageSkeleton();
+
 	const serverContext = getServerProfileContext();
 
 	const info = getPathUserTarget();
@@ -1027,6 +1032,10 @@ async function init() {
 	const grid = container.querySelector('[data-profile-grid]');
 	const overlay = container.querySelector('[data-profile-edit-overlay]');
 
+	// Show tab bar immediately so user sees Creations tab (grid skeleton) without waiting for loadUserImages
+	const tabsEl = container.querySelector('[data-profile-tabs]');
+	if (tabsEl) tabsEl.classList.remove('user-profile-tabs-pending');
+
 	// Keep last tab content height so we can set min-height when loading another tab (prevents scroll jump)
 	let lastTabContentHeight = 0;
 
@@ -1128,7 +1137,6 @@ async function init() {
 	if (creationsWrapper) lastTabContentHeight = creationsWrapper.offsetHeight;
 
 	// Lazy-load Likes, Follows, Following, Comments when user switches to that tab
-	const tabsEl = container.querySelector('[data-profile-tabs]');
 	const loadedTabs = new Set(['creations']);
 	const loadingHtml = html`<div class="route-empty route-loading">
 	<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
@@ -1301,9 +1309,6 @@ async function init() {
 			tabsEl.setActiveTab(hashTab, { focus: false });
 			void loadTabContent(hashTab);
 		}
-
-		// Show tab bar now that initial tab has been auto-selected (and content loaded)
-		tabsEl.classList.remove('user-profile-tabs-pending');
 	}
 
 	// Load more button (event delegation)

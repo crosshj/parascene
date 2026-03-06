@@ -2184,6 +2184,61 @@ async function loadCreation() {
 			});
 		}
 
+		// Admin: upload video to creation
+		const adminUploadSection = detailContent.querySelector('[data-admin-upload-video]');
+		if (adminUploadSection) {
+			const form = adminUploadSection.querySelector('[data-admin-upload-video-form]');
+			const fileInput = adminUploadSection.querySelector('[data-admin-upload-video-input]');
+			const submitBtn = adminUploadSection.querySelector('[data-admin-upload-video-btn]');
+			const errorEl = adminUploadSection.querySelector('[data-admin-upload-video-error]');
+			if (fileInput) {
+				fileInput.addEventListener('change', () => {
+					if (submitBtn) submitBtn.disabled = !(fileInput.files && fileInput.files.length > 0);
+					if (errorEl) { errorEl.textContent = ''; errorEl.style.display = 'none'; }
+				});
+			}
+			if (form && submitBtn) {
+				form.addEventListener('submit', async (e) => {
+					e.preventDefault();
+					if (!fileInput?.files?.length) return;
+					const file = fileInput.files[0];
+					if (!file || !file.type.startsWith('video/')) {
+						if (errorEl) { errorEl.textContent = 'Please choose a video file.'; errorEl.style.display = 'block'; }
+						return;
+					}
+					submitBtn.disabled = true;
+					if (errorEl) { errorEl.textContent = ''; errorEl.style.display = 'none'; }
+					try {
+						const fd = new FormData();
+						fd.append('video', file);
+						const res = await fetch(`/admin/creations/${creationId}/upload-video`, {
+							method: 'POST',
+							credentials: 'include',
+							body: fd
+						});
+						const data = await res.json().catch(() => ({}));
+						if (!res.ok) {
+							if (errorEl) {
+								errorEl.textContent = data?.error || data?.message || `Upload failed (${res.status})`;
+								errorEl.style.display = 'block';
+							}
+							submitBtn.disabled = false;
+							return;
+						}
+						fileInput.value = '';
+						submitBtn.disabled = true;
+						loadCreation();
+					} catch (err) {
+						if (errorEl) {
+							errorEl.textContent = err?.message || 'Upload failed';
+							errorEl.style.display = 'block';
+						}
+						submitBtn.disabled = false;
+					}
+				});
+			}
+		}
+
 		if (!shareMountedPrivate) {
 			enableLikeButtons(detailContent);
 		}

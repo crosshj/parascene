@@ -1,7 +1,10 @@
 /**
  * Shared logic for choosing server + method for image mutate (edit) flows.
  * Used by the creation edit page and the simple create page Image Edit tab so both call the same server/method.
+ * Uses fetchJsonWithStatusDeduped so /api/servers is shared with create route (one request, not two).
  */
+
+import { fetchJsonWithStatusDeduped } from './api.js';
 
 export function getMethodIntentList(method) {
 	if (Array.isArray(method?.intents)) {
@@ -35,10 +38,9 @@ function normalizeServerConfig(server) {
  */
 export async function loadMutateServerOptions() {
 	try {
-		const res = await fetch('/api/servers', { credentials: 'include' });
-		if (!res.ok) return [];
-		const data = await res.json();
-		const servers = Array.isArray(data?.servers) ? data.servers : [];
+		const result = await fetchJsonWithStatusDeduped('/api/servers', { credentials: 'include' }, { windowMs: 2000 });
+		if (!result?.ok) return [];
+		const servers = Array.isArray(result.data?.servers) ? result.data.servers : [];
 		return servers
 			.filter(server => !server.suspended && (server.id === 1 || server.is_owner === true || server.is_member === true))
 			.map(normalizeServerConfig)

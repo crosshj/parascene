@@ -79,57 +79,6 @@ async function ensurePngBuffer(buffer) {
 	}
 }
 
-async function createPlaceholderImageBuffer(width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT) {
-	try {
-		return await sharp({
-			create: {
-				width,
-				height,
-				channels: 4,
-				background: { r: 24, g: 24, b: 32, alpha: 1 },
-			},
-		})
-			.png()
-			.toBuffer();
-	} catch (err) {
-		const e = new Error(`Failed to generate placeholder image: ${safeErrorMessage(err)}`);
-		e.code = "PLACEHOLDER_IMAGE_FAILED";
-		throw e;
-	}
-}
-
-async function fetchImageBufferFromUrl(imageUrl) {
-	if (!imageUrl || typeof imageUrl !== "string") {
-		const err = new Error("Missing image_url for video thumbnail");
-		err.code = "MISSING_IMAGE_URL";
-		throw err;
-	}
-
-	let response;
-	try {
-		response = await fetch(imageUrl, {
-			method: "GET",
-			headers: {
-				Accept: "image/*"
-			},
-			signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS)
-		});
-	} catch (err) {
-		const e = new Error(`Failed to fetch source image for video: ${safeErrorMessage(err)}`);
-		e.code = "SOURCE_IMAGE_FETCH_FAILED";
-		throw e;
-	}
-
-	if (!response.ok) {
-		const e = new Error(`Failed to fetch source image for video: ${response.status} ${response.statusText}`);
-		e.code = "SOURCE_IMAGE_FETCH_FAILED";
-		throw e;
-	}
-
-	const arrayBuffer = await response.arrayBuffer();
-	const rawBuffer = Buffer.from(arrayBuffer);
-	return ensurePngBuffer(rawBuffer);
-}
 
 async function readProviderErrorPayload(response) {
 	if (!response) return { ok: false, body: null, contentType: "" };
@@ -168,6 +117,52 @@ function providerBodyToMessage(body) {
 		}
 	}
 	return String(body);
+}
+
+async function fetchImageBufferFromUrl(imageUrl) {
+	if (!imageUrl || typeof imageUrl !== "string") {
+		const err = new Error("Missing image_url for video thumbnail");
+		err.code = "MISSING_IMAGE_URL";
+		throw err;
+	}
+	let response;
+	try {
+		response = await fetch(imageUrl, {
+			method: "GET",
+			headers: { Accept: "image/*" },
+			signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS)
+		});
+	} catch (err) {
+		const e = new Error(`Failed to fetch source image for video: ${safeErrorMessage(err)}`);
+		e.code = "SOURCE_IMAGE_FETCH_FAILED";
+		throw e;
+	}
+	if (!response.ok) {
+		const e = new Error(`Failed to fetch source image for video: ${response.status} ${response.statusText}`);
+		e.code = "SOURCE_IMAGE_FETCH_FAILED";
+		throw e;
+	}
+	const arrayBuffer = await response.arrayBuffer();
+	const rawBuffer = Buffer.from(arrayBuffer);
+	return ensurePngBuffer(rawBuffer);
+}
+
+async function createPlaceholderImageBuffer(width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT) {
+	return await createPlaceholderImageBufferInternal(width, height);
+}
+
+async function createPlaceholderImageBufferInternal(width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT) {
+	try {
+		return await sharp({
+			create: { width, height, channels: 4, background: { r: 24, g: 24, b: 32, alpha: 1 } },
+		})
+			.png()
+			.toBuffer();
+	} catch (err) {
+		const e = new Error(`Failed to generate placeholder image: ${safeErrorMessage(err)}`);
+		e.code = "PLACEHOLDER_IMAGE_FAILED";
+		throw e;
+	}
 }
 
 export async function runCreationJob({ queries, storage, payload }) {
@@ -311,11 +306,11 @@ export async function runCreationJob({ queries, storage, payload }) {
 					imageBuffer = await fetchImageBufferFromUrl(sourceImageUrl);
 				} catch (thumbnailErr) {
 					logCreationWarn("Failed to fetch source image for video thumbnail; using placeholder instead", safeErrorMessage(thumbnailErr));
-					imageBuffer = await createPlaceholderImageBuffer();
+					imageBuffer = await createPlaceholderImageBufferInternal();
 				}
 			} else {
 				logCreationWarn("No image_url or image provided for video; using placeholder thumbnail");
-				imageBuffer = await createPlaceholderImageBuffer();
+				imageBuffer = await createPlaceholderImageBufferInternal();
 			}
 
 			try {
@@ -639,5 +634,5 @@ export async function runAnonCreationJob({ queries, storage, payload }) {
 	return { ok: true, id: imageId, filename, url: imageUrl, width, height };
 }
 
-export { PROVIDER_TIMEOUT_MS };
+export { PROVIDER_TIMEOUT_MS, fetchImageBufferFromUrl, createPlaceholderImageBuffer };
 

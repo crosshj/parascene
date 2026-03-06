@@ -189,6 +189,19 @@ body.share-page {
 	color: var(--text-muted);
 	font-size: clamp(0.95rem, 2.2vw, 1.08rem);
 	line-height: 1.5;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+	word-wrap: break-word;
+	word-break: break-word;
+}
+
+.share-image-description .user-link {
+	color: var(--accent);
+	text-decoration: none;
+}
+
+.share-image-description .user-link:hover {
+	text-decoration: underline;
 }
 
 .share-hero-divider {
@@ -211,6 +224,52 @@ body.share-page {
 	color: var(--text-muted);
 	font-size: clamp(1rem, 2.3vw, 1.15rem);
 	line-height: 1.65;
+}
+
+/* Enforce either/or: our display rules override [hidden] so both blocks respect the attribute */
+.share-view-creation-wrap[hidden],
+.share-create-block[hidden],
+.share-hero-copy > p.share-value[hidden] {
+	display: none !important;
+}
+
+.share-view-creation-wrap {
+	margin: 0 0 18px;
+	text-align: center;
+}
+
+.share-view-creation {
+	display: inline-block;
+	padding: 10px 16px;
+	font-size: 1rem;
+	font-weight: 600;
+	color: var(--accent-text);
+	background: var(--accent);
+	border: none;
+	border-radius: 8px;
+	text-decoration: none;
+	transition: filter 0.15s, transform 0.15s;
+}
+
+.share-view-creation:hover {
+	filter: brightness(1.08);
+	transform: translateY(-1px);
+	color: var(--accent-text);
+}
+
+.share-view-creation:active {
+	transform: translateY(0);
+}
+
+.share-create-block {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+}
+
+.share-create-block .share-value-title-row {
+	margin-top: 4px;
+	margin-bottom: 14px;
 }
 
 .share-value-strong {
