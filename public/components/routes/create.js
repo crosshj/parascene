@@ -3,6 +3,7 @@ import { submitCreationWithPending, uploadImageFile, formatMentionsFailureForDia
 import { renderFields, isPromptLikeField, isImageUrlField, isImageUrlArrayField } from '../../shared/providerFormFields.js';
 import { loadMutateQueue } from '../../shared/mutateQueue.js';
 import { attachAutoGrowTextarea } from '../../shared/autogrow.js';
+import { renderCreateFormSkeleton } from '../../shared/skeleton.js';
 
 const html = String.raw;
 
@@ -38,8 +39,18 @@ class AppRouteCreate extends HTMLElement {
 	}
 
 	connectedCallback() {
+		this._serversLoading = true;
 		this.innerHTML = html`
       <div class="create-route">
+        <div class="create-route-loading" data-create-loading>
+          ${renderCreateFormSkeleton()}
+        </div>
+        <div class="create-route-content" data-create-content hidden aria-hidden="true">
+        <div class="create-route-empty-wrap route-empty route-empty-state" data-create-empty hidden aria-hidden="true">
+          <div class="route-empty-title">No servers available</div>
+          <div class="route-empty-message">You don't have access to any servers yet. Add a server to get started.</div>
+        </div>
+        <div class="create-route-form-wrap" data-create-form-wrap hidden aria-hidden="true">
         <div class="route-header">
           <h3>Create</h3>
         </div>
@@ -174,6 +185,11 @@ class AppRouteCreate extends HTMLElement {
             </div>
           </div>
         </div>
+        </div>
+        <footer class="create-page-footer">
+          <a href="/create" class="create-switch-to-basic" data-create-switch-to-basic>basic mode</a>
+        </footer>
+        </div>
       </div>
     `;
 		this.setupEventListeners();
@@ -294,6 +310,15 @@ class AppRouteCreate extends HTMLElement {
 		this.applyPromptFromUrl(); // run first so URL prompt can supersede saved state
 		this.restoreAdvancedOptions();
 
+		const switchToBasic = this.querySelector('[data-create-switch-to-basic]');
+		if (switchToBasic) {
+			switchToBasic.addEventListener('click', (e) => {
+				e.preventDefault();
+				document.cookie = 'create_editor=simple; path=/; max-age=31536000';
+				window.location.href = '/create';
+			});
+		}
+
 		// Restore and persist active tab (Basic / Advanced); sync with URL hash (#basic, #advanced)
 		const tabsEl = this.querySelector('app-tabs');
 		if (tabsEl) {
@@ -407,15 +432,47 @@ class AppRouteCreate extends HTMLElement {
 		}
 	}
 
-	/** Cache-then-refresh: show cached servers immediately if available, then refresh in background. */
+	/** Show content only when loaded. Hide loading, show form or empty state. */
+	updateCreateFormVisibility() {
+		const loadingWrap = this.querySelector('[data-create-loading]');
+		const contentWrap = this.querySelector('[data-create-content]');
+		const formWrap = this.querySelector('[data-create-form-wrap]');
+		const emptyWrap = this.querySelector('[data-create-empty]');
+		if (!loadingWrap || !contentWrap || !formWrap) return;
+		const hasOptions = Array.isArray(this.servers) && this.servers.length > 0;
+		const loaded = this._serversLoading === false;
+		if (!loaded) {
+			loadingWrap.hidden = false;
+			contentWrap.hidden = true;
+			return;
+		}
+		loadingWrap.hidden = true;
+		contentWrap.hidden = false;
+		if (hasOptions) {
+			formWrap.hidden = false;
+			if (emptyWrap) emptyWrap.hidden = true;
+		} else {
+			formWrap.hidden = true;
+			if (emptyWrap) emptyWrap.hidden = false;
+		}
+	}
+
+	/** Cache-then-refresh: show cached servers immediately if available (localStorage), then refresh in background. */
 	loadServers() {
 		const CACHE_KEY = 'create-servers-cache';
+		const storage = typeof localStorage !== 'undefined' ? localStorage : null;
 		try {
-			const cached = sessionStorage.getItem(CACHE_KEY);
+			const cached = storage?.getItem(CACHE_KEY);
 			if (cached) {
 				const { servers } = JSON.parse(cached);
 				if (Array.isArray(servers) && servers.length > 0) {
 					this.applyServers(servers);
+					this._serversLoading = false;
+					this.updateCreateFormVisibility();
+					// Still fetch in background to refresh cache
+				} else {
+					this._serversLoading = false;
+					this.updateCreateFormVisibility();
 				}
 			}
 		} catch (e) {
@@ -423,16 +480,27 @@ class AppRouteCreate extends HTMLElement {
 		}
 		fetchJsonWithStatusDeduped('/api/servers', { credentials: 'include' }, { windowMs: 2000 })
 			.then((result) => {
-				if (!result?.ok || !Array.isArray(result.data?.servers)) return;
+				this._serversLoading = false;
+				if (!result?.ok || !Array.isArray(result.data?.servers)) {
+					this.updateCreateFormVisibility();
+					return;
+				}
 				const processed = this.processServers(result.data.servers);
 				try {
-					sessionStorage.setItem(CACHE_KEY, JSON.stringify({ servers: processed, cachedAt: Date.now() }));
+					if (storage) {
+						storage.setItem(CACHE_KEY, JSON.stringify({ servers: processed, cachedAt: Date.now() }));
+					}
 				} catch (e) {
 					// ignore
 				}
-				// UI not updated here; next refresh/revisit will show fresh data from cache
+				// Always update UI when fetch completes (handles empty cache on first load)
+				this.applyServers(processed);
+				this.updateCreateFormVisibility();
 			})
-			.catch(() => {});
+			.catch(() => {
+				this._serversLoading = false;
+				this.updateCreateFormVisibility();
+			});
 	}
 
 	renderServerOptions() {
@@ -1005,11 +1073,12 @@ class AppRouteCreate extends HTMLElement {
 		}
 	}
 
-	/** Cache-then-refresh: show cached credits immediately if available, then refresh in background. */
+	/** Cache-then-refresh: show cached credits immediately if available (localStorage), then refresh in background. */
 	loadCredits() {
 		const CACHE_KEY = 'create-credits-cache';
+		const storage = typeof localStorage !== 'undefined' ? localStorage : null;
 		try {
-			const cached = sessionStorage.getItem(CACHE_KEY);
+			const cached = storage?.getItem(CACHE_KEY);
 			if (cached) {
 				const { balance } = JSON.parse(cached);
 				if (typeof balance === 'number' && Number.isFinite(balance)) {
@@ -1026,7 +1095,9 @@ class AppRouteCreate extends HTMLElement {
 					const balance = result.data?.balance ?? 0;
 					this.creditsCount = this.normalizeCredits(balance);
 					try {
-						sessionStorage.setItem(CACHE_KEY, JSON.stringify({ balance, cachedAt: Date.now() }));
+						if (storage) {
+							storage.setItem(CACHE_KEY, JSON.stringify({ balance, cachedAt: Date.now() }));
+						}
 					} catch (e) {
 						// ignore
 					}
@@ -1036,7 +1107,7 @@ class AppRouteCreate extends HTMLElement {
 				this.updateButtonState();
 			})
 			.catch(() => {
-				const stored = window.localStorage?.getItem('credits-balance');
+				const stored = storage?.getItem('credits-balance');
 				this.creditsCount = stored !== null ? this.normalizeCredits(stored) : 0;
 				this.updateButtonState();
 			});

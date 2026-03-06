@@ -179,3 +179,15 @@ export function renderServerCardsSkeleton(count = 4) {
 	const n = Math.max(1, Math.min(8, Number(count) || 4));
 	return Array.from({ length: n }, () => renderServerCardSkeleton()).join('');
 }
+
+/**
+ * @returns {string} HTML for create form skeleton
+ */
+export function renderCreateFormSkeleton() {
+	return `<div class="create-route-skeleton" aria-busy="true" aria-label="Loading servers">
+		${skeletonLine('40%')}
+		${skeletonLine('90%', 'skeleton-line--medium')}
+		${skeletonPill('100%', 44)}
+		${skeletonPill('100%', 44)}
+	</div>`;
+}
