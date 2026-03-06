@@ -37,23 +37,6 @@ export async function init(version) {
 function runCreatePageInit(refreshAutoGrowTextareas) {
 	if (!document.body.classList.contains('create-page') && !document.body.classList.contains('create-page-advanced')) return;
 
-	// Green dot under the red one (advanced page only)
-	if (document.body.classList.contains('create-page-advanced')) {
-		const greenDot = document.createElement('div');
-		greenDot.setAttribute('aria-hidden', 'true');
-		Object.assign(greenDot.style, {
-			position: 'fixed',
-			top: 'calc(12.5% + 12px)',
-			right: '12px',
-			width: '8px',
-			height: '8px',
-			borderRadius: '50%',
-			background: 'green',
-			zIndex: '9998',
-		});
-		document.body.appendChild(greenDot);
-	}
-
 	const changeLink = document.getElementById('create-change-image-link');
 	const area = document.querySelector('.create-image-edit-area');
 	/** @type {string|File|null} */

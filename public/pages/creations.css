@@ -1,18 +1,5 @@
 /* Shared styles for creations + creation detail */
 
-/* Create advanced page: small red dot at top right, 1/8 from top */
-body.create-page-advanced::after {
-	content: '';
-	position: fixed;
-	top: 12.5%;
-	right: 12px;
-	width: 8px;
-	height: 8px;
-	border-radius: 50%;
-	background: red;
-	z-index: 9999;
-}
-
 /* Create page: enough top padding so sticky header doesn't cover first row (e.g. Input Images Remove buttons) */
 body.create-page main {
 	max-width: 1400px;
