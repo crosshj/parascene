@@ -1101,6 +1101,43 @@ async function loadSettings() {
 				}
 			});
 		}
+
+		const runCronBtn = document.getElementById("run-notifications-cron-btn");
+		const runCronStatus = document.getElementById("run-notifications-cron-status");
+		if (runCronBtn && runCronStatus) {
+			runCronBtn.addEventListener("click", async () => {
+				runCronBtn.disabled = true;
+				runCronStatus.hidden = false;
+				runCronStatus.textContent = "Running…";
+				runCronStatus.classList.remove("admin-cron-result-error");
+				try {
+					const res = await fetch("/admin/run-notifications-cron", {
+						method: "POST",
+						credentials: "include",
+						headers: { "Content-Type": "application/json" }
+					});
+					const data = await res.json().catch(() => ({}));
+					if (!res.ok) {
+						runCronStatus.textContent = data.error || `Error ${res.status}`;
+						runCronStatus.classList.add("admin-cron-result-error");
+						return;
+					}
+					const parts = [];
+					if (data.reason === "not_in_window") {
+						parts.push(`Not in window (UTC hour ${data.currentHourUTC ?? "?"}, windows: ${JSON.stringify(data.windowHours ?? [])}).`);
+					} else {
+						if (data.dryRun) parts.push("Dry run: no emails sent.");
+						parts.push(`Digest: ${data.sent ?? 0} sent, ${data.skipped ?? 0} skipped.`);
+						parts.push(`Welcome: ${data.welcomeSent ?? 0}. Nudge: ${data.firstCreationNudgeSent ?? 0}. Reengagement: ${data.reengagementSent ?? 0}. Highlight: ${data.creationHighlightSent ?? 0}.`);
+					}
+					runCronStatus.textContent = parts.join(" ");
+					if (adminDataLoaded.sends) loadEmailSends();
+				} finally {
+					runCronBtn.disabled = false;
+				}
+			});
+		}
+
 		adminDataLoaded.settings = true;
 	} catch (err) {
 		// Optionally show error in container

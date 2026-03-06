@@ -6,6 +6,7 @@ import { fetchImageBufferFromUrl, createPlaceholderImageBuffer } from "./utils/c
 import { getEmailSettings } from "./utils/emailSettings.js";
 import { getBaseAppUrlForEmail } from "./utils/url.js";
 import { RELATED_PARAM_KEYS } from "../db/adapters/relatedParams.js";
+import { runNotificationsCronForTests } from "../api/worker/notifications.js";
 
 /** Subscription ID stored in user.meta when admin grants founder status without payment. Not a Stripe ID. */
 const GIFTED_FOUNDER_SUBSCRIPTION_ID = "gifted_founder";
@@ -981,6 +982,19 @@ export default function createAdminRoutes({ queries, storage }) {
 		} catch (error) {
 			const message = error?.message || "Failed to send test email.";
 			res.status(500).json({ error: message });
+		}
+	});
+
+	/** POST /admin/run-notifications-cron — run the notifications/digest cron now (admin-only). Returns same payload as cron handler. */
+	router.post("/admin/run-notifications-cron", async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+		try {
+			const result = await runNotificationsCronForTests({ queries });
+			res.status(200).json(result);
+		} catch (error) {
+			console.error("[Admin] run-notifications-cron failed:", error);
+			res.status(500).json({ ok: false, error: error?.message ?? "Cron failed" });
 		}
 	});
 

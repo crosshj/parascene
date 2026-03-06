@@ -1297,6 +1297,20 @@
 	color: var(--error-text);
 }
 
+.admin-settings-row-actions {
+	flex-wrap: wrap;
+	gap: 0.5rem;
+}
+
+.admin-cron-result {
+	margin-top: 0.25rem;
+	width: 100%;
+}
+
+.admin-cron-result-error {
+	color: var(--error-text);
+}
+
 .admin-settings-textarea {
 	resize: vertical;
 	min-height: 100px;
