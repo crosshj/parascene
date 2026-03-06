@@ -31,14 +31,21 @@ function getEntry() {
 	return 'app';
 }
 
+function getAssetVersionParam() {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	return meta?.getAttribute('content')?.trim() || '';
+}
+
 async function main() {
 	const entry = getEntry();
+	const v = getAssetVersionParam();
+	const qs = v ? `?v=${encodeURIComponent(v)}` : '';
 	let mod;
 	try {
-		mod = await import(`./pages/entry-${entry}.js`);
+		mod = await import(`./pages/entry-${entry}.js${qs}`);
 	} catch (e) {
 		console.warn(`Entry "entry-${entry}.js" not found, using entry-app.`, e);
-		mod = await import('./pages/entry-app.js');
+		mod = await import(`./pages/entry-app.js${qs}`);
 	}
 	if (mod && typeof mod.init === 'function') {
 		await mod.init();

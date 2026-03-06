@@ -5,10 +5,10 @@ function getAssetVersion() {
 	return process.env.BUILD_ID || process.env.ASSET_VERSION || process.env.VERCEL_GIT_COMMIT_SHA || process.env.VERCEL_GIT_PREVIOUS_COMMIT_SHA || "";
 }
 
-/** Tokens for replacePageTokens. V: "?v=xxx" when asset version is set, else "". */
+/** Tokens for replacePageTokens. V: "?v=xxx" when asset version is set, else "". V_PARAM: raw version for JS cache-busting. */
 export function getPageTokens() {
 	const v = getAssetVersion();
-	return { V: v ? `?v=${v}` : "" };
+	return { V: v ? `?v=${v}` : "", V_PARAM: v };
 }
 
 function getCommonHead() {
@@ -31,6 +31,7 @@ function getCommonHead() {
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 		<link rel="stylesheet" href="/global.css{{V}}" />
+		<meta name="asset-version" content="{{V_PARAM}}" />
 		<script type="module" src="/entry.js{{V}}"></script>
 	`.trimEnd();
 }
