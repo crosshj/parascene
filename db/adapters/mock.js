@@ -1927,6 +1927,16 @@ export function openDb() {
 				return Promise.resolve({ changes: 1 });
 			}
 		},
+		selectFailedCreatedImagesAnonRecent: {
+			all: async (limit = 50) => {
+				const n = Math.min(100, Math.max(1, Number(limit) || 50));
+				return created_images_anon
+					.filter((r) => r.status === "failed")
+					.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+					.slice(0, n)
+					.map((r) => ({ id: r.id, prompt: r.prompt, created_at: r.created_at, meta: r.meta }));
+			}
+		},
 		insertTryRequest: {
 			run: async (anonCid, prompt, created_image_anon_id, fulfilled_at = null, meta = null) => {
 				const id =

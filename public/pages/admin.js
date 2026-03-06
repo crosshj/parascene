@@ -13,7 +13,8 @@ const adminDataLoaded = {
 	settings: false,
 	sends: false,
 	related: false,
-	jobs: false
+	jobs: false,
+	tryFailures: false
 };
 let todoWritable = true;
 let todoPriorityMode = "gated";
@@ -326,6 +327,52 @@ async function loadJobs({ force = false } = {}) {
 	} catch (err) {
 		container.innerHTML = "";
 		renderError(container, "Error loading jobs.");
+	}
+}
+
+async function loadTryFailures({ force = false } = {}) {
+	const container = document.querySelector("#try-failures-container");
+	if (!container) return;
+	if (adminDataLoaded.tryFailures && !force) return;
+
+	try {
+		const response = await fetch("/admin/try-failures?limit=50", { credentials: "include" });
+		if (!response.ok) throw new Error("Failed to load try failures.");
+		const data = await response.json();
+		const items = Array.isArray(data?.items) ? data.items : [];
+
+		container.innerHTML = "";
+		if (items.length === 0) {
+			renderEmpty(container, "No recent try failures.");
+			adminDataLoaded.tryFailures = true;
+			return;
+		}
+
+		const table = document.createElement("table");
+		table.className = "admin-table admin-try-failures-table";
+		table.setAttribute("aria-label", "Try page failures");
+		const thead = document.createElement("thead");
+		thead.innerHTML = "<tr><th scope=\"col\">ID</th><th scope=\"col\">Prompt</th><th scope=\"col\">When</th><th scope=\"col\">Error</th></tr>";
+		table.appendChild(thead);
+		const tbody = document.createElement("tbody");
+		for (const row of items) {
+			const meta = row.meta && typeof row.meta === "object" ? row.meta : {};
+			const errMsg = meta.error != null ? String(meta.error).trim() : (meta.error_code || "—");
+			const promptText = (row.prompt != null ? String(row.prompt).trim() : "") || "—";
+			const tr = document.createElement("tr");
+			tr.innerHTML =
+				"<td>" + escapeHtml(String(row.id ?? "")) + "</td>" +
+				"<td class=\"admin-try-failures-prompt\">" + escapeHtml(promptText.slice(0, 80)) + (promptText.length > 80 ? "…" : "") + "</td>" +
+				"<td>" + escapeHtml(formatRelativeTime(row.created_at, { style: "short" }) || row.created_at || "—") + "</td>" +
+				"<td class=\"admin-try-failures-error\">" + escapeHtml(errMsg.slice(0, 120)) + (String(errMsg).length > 120 ? "…" : "") + "</td>";
+			tbody.appendChild(tr);
+		}
+		table.appendChild(tbody);
+		container.appendChild(table);
+		adminDataLoaded.tryFailures = true;
+	} catch (err) {
+		container.innerHTML = "";
+		renderError(container, "Error loading try failures.");
 	}
 }
 
@@ -2058,6 +2105,7 @@ function handleAdminRouteChange(route) {
 			break;
 		case "jobs":
 			loadJobs();
+			loadTryFailures();
 			break;
 		case "users":
 		default:

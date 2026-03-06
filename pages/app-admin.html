@@ -41,7 +41,15 @@
 			<app-route-users data-route-content="users"></app-route-users>
 			<div id="jobs-page" data-route-content="jobs" class="route-content admin-jobs-page">
 				<h3>Jobs</h3>
-				<div id="jobs-container" class="admin-jobs-container"></div>
+				<app-tabs>
+					<tab data-id="jobs" label="Jobs" default>
+						<div id="jobs-container" class="admin-jobs-container"></div>
+					</tab>
+					<tab data-id="try-failures" label="Try failures">
+						<p class="admin-detail">Recent failed anonymous (try) image generations. Check when users see &quot;Could not start generation&quot; or &quot;Generation failed.&quot;</p>
+						<div id="try-failures-container" class="admin-try-failures-container"></div>
+					</tab>
+				</app-tabs>
 			</div>
 			<app-route-servers data-route-content="connect"></app-route-servers>
 			<div id="related-page" data-route-content="related" class="route-content admin-related-page">

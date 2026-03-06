@@ -3693,6 +3693,20 @@ export function openDb() {
 				return Promise.resolve({ changes: 1 });
 			}
 		},
+		/** Recent failed try (anon) generations for admin. Order by created_at desc. */
+		selectFailedCreatedImagesAnonRecent: {
+			all: async (limit = 50) => {
+				const n = Math.min(100, Math.max(1, Number(limit) || 50));
+				const { data, error } = await serviceClient
+					.from(prefixedTable("created_images_anon"))
+					.select("id, prompt, created_at, meta")
+					.eq("status", "failed")
+					.order("created_at", { ascending: false })
+					.limit(n);
+				if (error) throw error;
+				return data ?? [];
+			}
+		},
 		insertTryRequest: {
 			run: async (anonCid, prompt, created_image_anon_id, fulfilled_at = null, meta = null) => {
 				const metaVal = typeof meta === "object" && meta !== null ? meta : meta == null ? null : meta;

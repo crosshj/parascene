@@ -125,7 +125,20 @@
 				if (!createRes.ok) {
 					await ensureMinLoadingTime();
 					logElapsed('Failed (create)');
-					showError(createRes.status === 400 ? 'Please enable cookies and refresh.' : 'Could not start generation.');
+					var errMsg = 'Could not start generation.';
+					if (createRes.status === 400) {
+						try {
+							var errBody = await createRes.clone().json();
+							if (errBody && typeof errBody.message === 'string' && errBody.message.trim()) {
+								errMsg = errBody.message.trim();
+							} else {
+								errMsg = 'Please enable cookies and refresh.';
+							}
+						} catch (_) {
+							errMsg = 'Please enable cookies and refresh.';
+						}
+					}
+					showError(errMsg);
 					return;
 				}
 				var data = await createRes.json();

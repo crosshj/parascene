@@ -670,6 +670,18 @@ export default function createAdminRoutes({ queries, storage }) {
 		res.json({ jobs, total });
 	});
 
+	/** GET /admin/try-failures — recent failed try-page generations (created_images_anon status=failed) for visibility. */
+	router.get("/admin/try-failures", async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+		const limit = Math.min(100, Math.max(1, parseInt(req.query?.limit, 10) || 50));
+		if (!queries.selectFailedCreatedImagesAnonRecent?.all) {
+			return res.json({ items: [] });
+		}
+		const items = await queries.selectFailedCreatedImagesAnonRecent.all(limit);
+		res.json({ items });
+	});
+
 	router.get("/admin/email-sends", async (req, res) => {
 		const adminUser = await requireAdmin(req, res);
 		if (!adminUser) return;

@@ -2589,6 +2589,18 @@ export async function openDb() {
 				return Promise.resolve({ changes: result.changes });
 			}
 		},
+		/** Recent failed try (anon) generations for admin. Order by created_at desc. */
+		selectFailedCreatedImagesAnonRecent: {
+			all: async (limit = 50) => {
+				const n = Math.min(100, Math.max(1, Number(limit) || 50));
+				const stmt = db.prepare(
+					`SELECT id, prompt, created_at, meta FROM created_images_anon
+					 WHERE status = 'failed' ORDER BY created_at DESC LIMIT ?`
+				);
+				const rows = stmt.all(n);
+				return rows ?? [];
+			}
+		},
 		insertTryRequest: {
 			run: async (anonCid, prompt, created_image_anon_id, fulfilled_at = null, meta = null) => {
 				const toJsonText = (v) => (v == null ? null : typeof v === "string" ? v : JSON.stringify(v));
