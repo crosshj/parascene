@@ -74,6 +74,21 @@ export default function createFeedRoutes({ queries }) {
 			hasMore = all.length > offset + limit;
 		}
 
+		// When the user follows nobody, the main feed is empty. Fall back to explore (discovery) feed for this page.
+		// Use explore for any offset so infinite scroll works (same limit/offset as the request).
+		if (rows.length === 0 && queries.selectExploreFeedItems) {
+			const explorePaginated = queries.selectExploreFeedItems.paginated ?? queries.selectExploreFeedItems.getPage;
+			if (typeof explorePaginated === "function") {
+				const exploreLimit = limit + 1;
+				const exploreResult = await explorePaginated(user.id, { limit: exploreLimit, offset });
+				const exploreRows = Array.isArray(exploreResult) ? exploreResult : (exploreResult?.rows ?? []);
+				if (exploreRows.length > 0) {
+					rows = exploreRows.slice(0, limit);
+					hasMore = exploreRows.length > limit;
+				}
+			}
+		}
+
 		if (rows.length === 0 && offset === 0 && queries.selectNewbieFeedItems) {
 			const newbieRows = await queries.selectNewbieFeedItems.all(user.id) ?? [];
 			isNewbieFeed = true;

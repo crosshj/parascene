@@ -1401,7 +1401,7 @@ export async function openDb() {
 				}
 				const stmt = db.prepare(
 					`SELECT fi.id, fi.title, fi.summary, fi.author, fi.tags, fi.created_at, 
-                  fi.created_image_id, ci.filename, ci.file_path, ci.user_id,
+                  fi.created_image_id, ci.filename, ci.file_path, ci.user_id, ci.meta,
                   up.user_name AS author_user_name,
                   up.display_name AS author_display_name,
                   up.avatar_url AS author_avatar_url,
@@ -1448,7 +1448,7 @@ export async function openDb() {
 				const off = Math.max(0, Number(offset) || 0);
 				const stmt = db.prepare(
 					`SELECT fi.id, fi.title, fi.summary, fi.author, fi.tags, fi.created_at,
-                  fi.created_image_id, ci.filename, ci.file_path, ci.user_id,
+                  fi.created_image_id, ci.filename, ci.file_path, ci.user_id, ci.meta,
                   up.user_name AS author_user_name,
                   up.display_name AS author_display_name,
                   up.avatar_url AS author_avatar_url,

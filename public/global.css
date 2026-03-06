@@ -2550,7 +2550,8 @@ app-route-feed {
 	justify-content: center;
 	position: relative;
 	z-index: 0;
-	background: var(--surface-strong);
+	/* --avatar-bg set in JS when showing initial only (no image); otherwise surface-strong for image container */
+	background: var(--avatar-bg, var(--surface-strong));
 	color: #fff;
 	font-weight: 600;
 	font-size: calc(var(--founder-flair-size) * 0.25);

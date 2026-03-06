@@ -1679,8 +1679,7 @@ async function loadCreation() {
 					${viewerPlan ? html`
 					<div class="avatar-with-founder-flair avatar-with-founder-flair--sm">
 						<div class="founder-flair-avatar-ring">
-							<div class="founder-flair-avatar-inner"
-								style="background: ${viewerAvatarUrl ? 'var(--surface-strong)' : viewerColor};" aria-hidden="true">
+							<div class="founder-flair-avatar-inner" data-founder-flair-avatar-bg aria-hidden="true">
 								${viewerAvatarUrl ? `<img class="comment-avatar-img" src="${escapeHtml(viewerAvatarUrl)}" alt="">` :
 							viewerInitial}
 							</div>
@@ -1739,6 +1738,10 @@ async function loadCreation() {
 				</div>
 			</div>
 		`;
+
+		/* When showing initial only (no avatar image), set --avatar-bg so the class uses it; with image, CSS uses var(--surface-strong) */
+		const founderFlairEl = detailContent.querySelector('[data-founder-flair-avatar-bg]');
+		if (founderFlairEl && !viewerAvatarUrl) founderFlairEl.style.setProperty('--avatar-bg', viewerColor);
 
 		// Landscape (hidden trigger): only for owner, not admin, when published and completed.
 		const landscapeBtn = detailContent.querySelector('[data-landscape-btn]');

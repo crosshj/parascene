@@ -1036,12 +1036,18 @@ export function openDb() {
 				return page.map((item) => {
 					const profile = user_profiles.find((p) => p.user_id === Number(item.user_id));
 					const ci = created_images.find((c) => Number(c.id) === Number(item.created_image_id));
+					const url = item.url ?? (ci?.file_path ?? (ci?.filename ? `/api/images/created/${ci.filename}` : null));
 					return {
 						...item,
+						url,
 						author_user_name: profile?.user_name ?? null,
 						author_display_name: profile?.display_name ?? null,
 						author_avatar_url: profile?.avatar_url ?? null,
-						nsfw: !!(ci?.meta?.nsfw)
+						nsfw: !!(ci?.meta?.nsfw),
+						meta: ci?.meta ?? null,
+						like_count: item.like_count ?? 0,
+						comment_count: item.comment_count ?? 0,
+						viewer_liked: item.viewer_liked ?? false
 					};
 				});
 			};
