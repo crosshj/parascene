@@ -1,5 +1,22 @@
 {
   "version": 2,
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "header", "key": "host", "value": "parascene.com" }],
+      "destination": "https://www.parascene.com/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [
+        { "type": "header", "key": "host", "value": "www.parascene.com" },
+        { "type": "header", "key": "x-forwarded-proto", "value": "http" }
+      ],
+      "destination": "https://www.parascene.com/:path*",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/worker/create",

@@ -27,17 +27,17 @@ import createShareRoutes from "../api_routes/share.js";
 import createQRRoutes from "../api_routes/qr.js";
 import createPolicyRoutes from "../api_routes/policy.js";
 import createTryRoutes from "../api_routes/try.js";
-import { computeWelcome } from "../api_routes/utils/welcome.js";
 import {
 	authMiddleware,
-	clearAuthCookie,
-	COOKIE_NAME,
 	probabilisticSessionCleanup,
 	sessionMiddleware,
 	shouldLogSession
 } from "../api_routes/auth.js";
-import { injectCommonHead, getPageTokens } from "../api_routes/utils/head.js";
-import { getApiHostname, getBaseAppUrl, SHARE_HOSTNAME } from "../api_routes/utils/url.js";
+import { canonicalHostRedirect } from "../api_routes/middleware/canonicalHost.js";
+import { apiSubdomainRedirect } from "../api_routes/middleware/apiSubdomainRedirect.js";
+import { shareSubdomainRedirect } from "../api_routes/middleware/shareSubdomainRedirect.js";
+import { createWelcomeGate } from "../api_routes/middleware/welcomeGate.js";
+import { createUnauthorizedHandler } from "../api_routes/middleware/unauthorizedHandler.js";
 
 function shouldLogStartup() {
 	return process.env.ENABLE_STARTUP_LOGS === "true";
@@ -134,41 +134,9 @@ app.use((req, res, next) => {
 	next();
 });
 
-// Reject non-API paths when request host is the API subdomain (e.g. api.parascene.com).
-const apiHostname = getApiHostname();
-app.use((req, res, next) => {
-	const host = (req.hostname || req.get("host") || "").split(":")[0].toLowerCase();
-	const path = (req.path || req.originalUrl || "").split("?")[0];
-	if (host === apiHostname && !path.startsWith("/api")) {
-		const target = `${getBaseAppUrl()}${req.originalUrl || req.url || path}`;
-		return res.redirect(302, target);
-	}
-	next();
-});
-
-// Share subdomain (sh.parascene.com): share page + its assets served here; navigations redirect to www.
-// Allow by path: /s/* (share page), /api/*, /pages/*. Other requests: allow if Referer is share page and Sec-Fetch-Dest is not "document"; else redirect to www.
-app.use((req, res, next) => {
-	const host = (req.hostname || req.get("host") || "").split(":")[0].toLowerCase();
-	if (host !== SHARE_HOSTNAME) return next();
-	const path = (req.originalUrl || req.url || req.path || "").split("?")[0].replace(/^(?!\/)/, "/");
-	if (path.startsWith("/s/") || path.startsWith("/api/") || path.startsWith("/pages/"))
-		return next();
-	const isDocumentNav = (req.get("sec-fetch-dest") || "").toLowerCase() === "document";
-	let refererIsSharePage = false;
-	const referer = req.get("referer");
-	if (referer && typeof referer === "string") {
-		try {
-			const refUrl = new URL(referer);
-			refererIsSharePage = refUrl.hostname.toLowerCase() === SHARE_HOSTNAME && refUrl.pathname.startsWith("/s/");
-		} catch {
-			// invalid referer
-		}
-	}
-	if (refererIsSharePage && !isDocumentNav) return next();
-	const pathAndQuery = (req.originalUrl || req.url || path || "/").replace(/^(?![/])/, "/");
-	return res.redirect(302, `${getBaseAppUrl()}${pathAndQuery}`);
-});
+app.use(canonicalHostRedirect);
+app.use(apiSubdomainRedirect);
+app.use(shareSubdomainRedirect);
 
 // Make storage accessible to routes that need it.
 app.locals.storage = storage;
@@ -189,52 +157,7 @@ app.use((req, res, next) => {
 app.use(authMiddleware());
 app.use(sessionMiddleware(queries));
 app.use(probabilisticSessionCleanup(queries));
-
-// Welcome gate: block most authenticated actions until user is welcomed.
-app.use(async (req, res, next) => {
-	const userId = req.auth?.userId;
-	if (!userId) {
-		return next();
-	}
-
-	try {
-		const method = String(req.method || "GET").toUpperCase();
-		const pathName = String(req.path || "");
-
-		const allow =
-			(pathName === "/welcome" && method === "GET") ||
-			(pathName === "/api/profile" && (method === "GET" || method === "PUT" || method === "POST")) ||
-			(pathName === "/api/account/email" && method === "PUT") ||
-			(pathName === "/api/username-suggest" && method === "GET") ||
-			(pathName === "/api/policy/seen" && method === "POST") ||
-			(pathName === "/api/try/create" && method === "POST") ||
-			(pathName === "/api/try/list" && method === "GET") ||
-			(pathName === "/api/try/discard" && method === "POST") ||
-			(pathName.startsWith("/api/try/images/") && method === "GET") ||
-			(pathName === "/api/qr" && method === "GET") ||
-			(pathName === "/logout" && method === "POST") ||
-			(pathName === "/auth.html" && method === "GET") ||
-			(pathName === "/me" && method === "GET");
-		if (allow) {
-			return next();
-		}
-
-		const profileRow = await queries.selectUserProfileByUserId?.get(userId);
-		const welcome = computeWelcome({ profileRow });
-		if (!welcome.required) {
-			return next();
-		}
-
-		if (pathName.startsWith("/api/")) {
-			return res.status(409).json({ error: "WELCOME_REQUIRED", welcome });
-		}
-
-		return res.redirect("/welcome");
-	} catch {
-		// Fail-open on unexpected errors to avoid hard-locking the app.
-		return next();
-	}
-});
+app.use(createWelcomeGate(queries));
 
 app.use(createUserRoutes({ queries }));
 app.use(createFollowsRoutes({ queries }));
@@ -261,53 +184,7 @@ app.use(createYoutubeRoutes());
 app.use(createXRoutes());
 app.use(createFeatureRequestRoutes({ queries }));
 
-app.use(async (err, req, res, next) => {
-	if (err?.name !== "UnauthorizedError") {
-		return next(err);
-	}
-
-	console.log("[ErrorHandler] UnauthorizedError", {
-		path: req.path,
-		originalUrl: req.originalUrl,
-		hasCookie: !!req.cookies?.[COOKIE_NAME],
-		error: err.message
-	});
-
-	// Only clear cookie if one was actually sent in the request
-	// This prevents clearing cookies that weren't sent (e.g., due to SameSite issues)
-	if (req.cookies?.[COOKIE_NAME]) {
-		clearAuthCookie(res, req);
-	}
-
-	if (req.path.startsWith("/api/") || req.path === "/me") {
-		return res.status(401).json({ error: "Unauthorized" });
-	}
-
-	// Preserve the user's original destination so login can return them there.
-	// Avoid redirect loops when the user is already on the auth page.
-	if (req.path === "/auth.html") {
-		const fs = await import("fs/promises");
-		let htmlContent = await fs.readFile(path.join(pagesDir, "auth.html"), "utf-8");
-		htmlContent = injectCommonHead(htmlContent, getPageTokens());
-		res.setHeader("Content-Type", "text/html");
-		return res.send(htmlContent);
-	}
-	try {
-		const rawReturnUrl = typeof req.originalUrl === "string" ? req.originalUrl : "/";
-		const returnUrl =
-			rawReturnUrl.startsWith("/") && !rawReturnUrl.startsWith("//") && !rawReturnUrl.includes("://")
-				? rawReturnUrl
-				: "/";
-		const qs = new URLSearchParams({ returnUrl });
-		return res.redirect(`/auth.html?${qs.toString()}`);
-	} catch {
-		const fs = await import("fs/promises");
-		let htmlContent = await fs.readFile(path.join(pagesDir, "auth.html"), "utf-8");
-		htmlContent = injectCommonHead(htmlContent, getPageTokens());
-		res.setHeader("Content-Type", "text/html");
-		return res.send(htmlContent);
-	}
-});
+app.use(createUnauthorizedHandler(pagesDir));
 
 if (process.env.NODE_ENV !== "production") {
 	app.listen(port, () => {

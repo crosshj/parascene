@@ -440,7 +440,7 @@ export default function createHelpRoutes({ pagesDir, queries }) {
 				showMobileHomeLink: false
 			});
 			
-			const htmlWithHead = injectCommonHead(html, getPageTokens());
+			const htmlWithHead = injectCommonHead(html, getPageTokens(req));
 			
 			// Inject header if user is logged in
 			const userId = req.auth?.userId;
@@ -543,7 +543,7 @@ export default function createHelpRoutes({ pagesDir, queries }) {
 					showMobileHomeLink: true
 				});
 				
-				const htmlWithHead = injectCommonHead(html, getPageTokens());
+				const htmlWithHead = injectCommonHead(html, getPageTokens(req));
 				
 				// Inject header if user is logged in
 				const userId = req.auth?.userId;
@@ -598,7 +598,7 @@ export default function createHelpRoutes({ pagesDir, queries }) {
 				showMobileHomeLink: true
 			});
 			
-			const htmlWithHead = injectCommonHead(html, getPageTokens());
+			const htmlWithHead = injectCommonHead(html, getPageTokens(req));
 			
 			// Inject header if user is logged in
 			const userId = req.auth?.userId;

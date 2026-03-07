@@ -11,6 +11,11 @@ export function getApiHostname() {
 	return API_HOSTNAME;
 }
 
+/** Normalized hostname from the request (no port, lowercase). Use in host-based middleware. */
+export function getRequestHost(req) {
+	return (req.hostname || req.get("host") || "").split(":")[0].toLowerCase();
+}
+
 /** Base URL for QStash callbacks (where QStash POSTs when a job runs). */
 export function getQStashCallbackBaseUrl() {
 	return `https://${getApiHostname()}`;
@@ -33,6 +38,16 @@ export function getBaseAppUrl() {
 /** Base URL for share links (e.g. https://sh.parascene.com). All share URLs use this so they look like sh.parascene.com/s/... */
 export function getShareBaseUrl() {
 	return `https://${SHARE_HOSTNAME}`;
+}
+
+/**
+ * Canonical URL for the current request (path only, no query). Use for <link rel="canonical"> and og:url.
+ * Single source of truth so all pages use the same origin (www) and path normalization.
+ */
+export function getCanonicalUrlForRequest(req) {
+	const pathOnly = (req.originalUrl || req.path || "/").split("?")[0].replace(/^(?!\/)/, "/");
+	const base = getBaseAppUrl().replace(/\/$/, "");
+	return pathOnly === "/" ? `${base}/` : `${base}${pathOnly}`;
 }
 
 /** Base URL for links in emails. Never returns localhost; use APP_ORIGIN or DEFAULT_APP_ORIGIN. */

@@ -1,3 +1,5 @@
+import { getCanonicalUrlForRequest } from "./url.js";
+
 const html = String.raw;
 
 /** Cache-bust: BUILD_ID, ASSET_VERSION, or Vercel git SHA. Used so {{V}} in HTML becomes ?v=xxx. */
@@ -5,10 +7,14 @@ function getAssetVersion() {
 	return process.env.BUILD_ID || process.env.ASSET_VERSION || process.env.VERCEL_GIT_COMMIT_SHA || process.env.VERCEL_GIT_PREVIOUS_COMMIT_SHA || "";
 }
 
-/** Tokens for replacePageTokens. V: "?v=xxx" when asset version is set, else "". V_PARAM: raw version for JS cache-busting. */
-export function getPageTokens() {
+/** Tokens for replacePageTokens. V: "?v=xxx" when asset version is set, else "". V_PARAM: raw version for JS cache-busting. Optional req: when provided, includes CANONICAL_LINK for the request. */
+export function getPageTokens(req) {
 	const v = getAssetVersion();
-	return { V: v ? `?v=${v}` : "", V_PARAM: v };
+	const tokens = { V: v ? `?v=${v}` : "", V_PARAM: v };
+	if (req) {
+		tokens.CANONICAL_LINK = getCanonicalLinkForRequest(req);
+	}
+	return tokens;
 }
 
 function getCommonHead() {
@@ -33,7 +39,25 @@ function getCommonHead() {
 		<link rel="stylesheet" href="/global.css{{V}}" />
 		<meta name="asset-version" content="{{V_PARAM}}" />
 		<script type="module" src="/entry.js{{V}}"></script>
+		{{CANONICAL_LINK}}
 	`.trimEnd();
+}
+
+/** Build canonical link tag for a given URL. */
+export function getCanonicalLinkHtml(canonicalUrl) {
+	if (!canonicalUrl) return "";
+	const u = String(canonicalUrl);
+	const escaped = u
+		.replace(/&/g, "&amp;")
+		.replace(/"/g, "&quot;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;");
+	return `<link rel="canonical" href="${escaped}" />`;
+}
+
+/** Self-referencing canonical link tag for the current request. Composes getCanonicalUrlForRequest + getCanonicalLinkHtml. */
+export function getCanonicalLinkForRequest(req) {
+	return getCanonicalLinkHtml(getCanonicalUrlForRequest(req));
 }
 
 /**
@@ -59,6 +83,7 @@ export function injectCommonHead(htmlContent, extraTokens) {
 
 	const commonHead = getCommonHead();
 	const existingHeadContent = headMatch[1];
+	const tokens = { CANONICAL_LINK: "", ...extraTokens };
 	const withHead = htmlContent.replace(/<head>[\s\S]*?<\/head>/i, `<head>\n${commonHead}${existingHeadContent}</head>`);
-	return replacePageTokens(withHead, extraTokens);
+	return replacePageTokens(withHead, tokens);
 }
