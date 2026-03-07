@@ -1848,12 +1848,13 @@ export default function createProfileRoutes({ queries }) {
 			if (!req.auth?.userId) {
 				return res.status(401).json({ error: "Unauthorized" });
 			}
+			const fromUserId = Number(req.auth.userId);
+			console.log("[POST /api/credits/tip] request", { fromUserId, toUserId: req.body?.toUserId, amount: req.body?.amount });
 
 			if (!queries.transferCredits?.run) {
 				return res.status(500).json({ error: "Credits transfer not available" });
 			}
 
-			const fromUserId = Number(req.auth.userId);
 			const toUserId = Number(req.body?.toUserId);
 			const rawAmount = Number(req.body?.amount);
 			const amount = Math.round(rawAmount * 10) / 10;
@@ -1896,6 +1897,51 @@ export default function createProfileRoutes({ queries }) {
 				return res.status(404).json({ error: "User not found" });
 			}
 			const senderProfile = await queries.selectUserProfileByUserId?.get(sender.id) ?? null;
+
+			// Policy: minimum days before tipping (free accounts only; upgraded plans exempt)
+			const hasUpgradedPlan =
+				sender.meta?.plan === "founder" ||
+				(sender.meta?.stripeSubscriptionId != null && String(sender.meta.stripeSubscriptionId).trim() !== "");
+			const hasPolicyQuery = Boolean(queries.selectPolicyByKey?.get);
+			console.log("[POST /api/credits/tip] Min-days check:", {
+				fromUserId,
+				toUserId,
+				hasUpgradedPlan,
+				hasPolicyQuery,
+				senderCreatedAt: sender.created_at ?? null
+			});
+			if (!hasUpgradedPlan && hasPolicyQuery) {
+				const policyRow = await queries.selectPolicyByKey.get("min_days_before_tip");
+				const minDaysRaw = policyRow?.value != null ? String(policyRow.value).trim() : "";
+				const minDays = Math.max(0, parseInt(minDaysRaw, 10) || 60);
+				let daysPresent = 0;
+				if (sender.created_at) {
+					const createdMs = new Date(sender.created_at).getTime();
+					if (Number.isFinite(createdMs)) {
+						daysPresent = (Date.now() - createdMs) / (24 * 60 * 60 * 1000);
+					}
+				}
+				const blocked = minDays > 0 && daysPresent < minDays;
+				console.log("[POST /api/credits/tip] Min-days result:", {
+					fromUserId,
+					minDays,
+					daysPresent: Math.round(daysPresent * 10) / 10,
+					blocked
+				});
+				if (blocked) {
+					const daysRemaining = Math.max(0, Math.ceil(minDays - daysPresent));
+					const daysWord = daysRemaining === 1 ? "day" : "days";
+					const errorText = `You have ${daysRemaining} more ${daysWord} before you can tip. You can upgrade your account to tip now — see the pricing page.`;
+					const errorHtml = errorText.replace(
+						"pricing page",
+						'<a href="/pricing" class="tip-error-pricing-link">pricing</a> page'
+					);
+					return res.status(403).json({
+						error: errorText,
+						errorHtml
+					});
+				}
+			}
 
 			const recipient = await queries.selectUserById.get(toUserId);
 			if (!recipient) {

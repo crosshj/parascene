@@ -634,6 +634,44 @@ export default function createAdminRoutes({ queries, storage }) {
 		res.json({ items: enriched, total });
 	});
 
+	/** GET /admin/tips — list tip activity with from/to labels and message. Supports limit, offset, sort_by, sort_dir. Returns { items, total }. */
+	router.get("/admin/tips", async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+		const limit = Math.min(200, Math.max(1, parseInt(req.query?.limit, 10) || 50));
+		const offset = Math.max(0, parseInt(req.query?.offset, 10) || 0);
+		const validSortBy = ["id", "created_at", "from_user_id", "to_user_id", "amount", "created_image_id"];
+		const sortBy = validSortBy.includes(req.query?.sort_by) ? req.query.sort_by : "created_at";
+		const sortDir = String(req.query?.sort_dir || "desc").toLowerCase() === "asc" ? "asc" : "desc";
+		if (!queries.listTipActivity?.all || !queries.countTipActivity?.get) {
+			return res.json({ items: [], total: 0 });
+		}
+		const [items, totalRow] = await Promise.all([
+			queries.listTipActivity.all(limit, offset, sortBy, sortDir),
+			queries.countTipActivity.get()
+		]);
+		const total = totalRow?.count ?? 0;
+		const userIds = [...new Set([
+			...(items || []).map((r) => r.from_user_id),
+			...(items || []).map((r) => r.to_user_id)
+		].filter((id) => id != null))];
+		const userLabelByUserId = {};
+		for (const uid of userIds) {
+			const profile = await queries.selectUserProfileByUserId?.get?.(uid);
+			const user = await queries.selectUserById?.get?.(uid);
+			const userName = (profile?.user_name ?? "").trim() || null;
+			const displayName = (profile?.display_name ?? "").trim() || null;
+			const emailLocal = user?.email ? String(user.email).split("@")[0]?.trim() || null : null;
+			userLabelByUserId[uid] = displayName || userName || emailLocal || `#${uid}`;
+		}
+		const enriched = (items || []).map((r) => ({
+			...r,
+			from_label: userLabelByUserId[r.from_user_id] ?? `#${r.from_user_id}`,
+			to_label: userLabelByUserId[r.to_user_id] ?? `#${r.to_user_id}`
+		}));
+		res.json({ items: enriched, total });
+	});
+
 	router.get("/admin/moderation", async (req, res) => {
 		const items = await queries.selectModerationQueue.all();
 		res.json({ items });
@@ -1117,6 +1155,37 @@ export default function createAdminRoutes({ queries, storage }) {
 			creation_highlight_cooldown_days: s.creationHighlightCooldownDays,
 			creation_highlight_min_comments: s.creationHighlightMinComments
 		});
+	});
+
+	/** GET /admin/users/settings — user/tip policy settings for the Users page. Admin-only. */
+	router.get("/admin/users/settings", async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+		const minDaysRow = await queries.selectPolicyByKey?.get?.("min_days_before_tip");
+		const minDaysRaw = minDaysRow?.value != null ? String(minDaysRow.value).trim() : "";
+		const minDaysBeforeTip = Math.max(0, parseInt(minDaysRaw, 10) || 60);
+		res.json({ min_days_before_tip: minDaysBeforeTip });
+	});
+
+	/** PATCH /admin/users/settings — update user/tip policy settings. Admin-only. */
+	router.patch("/admin/users/settings", async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+		const body = req.body || {};
+		if (typeof body.min_days_before_tip !== "undefined") {
+			const value = String(Math.max(0, parseInt(body.min_days_before_tip, 10) || 60));
+			if (queries.upsertPolicyKey?.run) {
+				await queries.upsertPolicyKey.run(
+					"min_days_before_tip",
+					value,
+					"Minimum days a user must be present before they can tip (free accounts only; upgraded plans are exempt)."
+				);
+			}
+		}
+		const minDaysRow = await queries.selectPolicyByKey?.get?.("min_days_before_tip");
+		const minDaysRaw = minDaysRow?.value != null ? String(minDaysRow.value).trim() : "";
+		const minDaysBeforeTip = Math.max(0, parseInt(minDaysRaw, 10) || 60);
+		res.json({ min_days_before_tip: minDaysBeforeTip });
 	});
 
 	/** GET /admin/related-settings — all related.* keys and values. Admin-only. */

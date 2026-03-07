@@ -617,6 +617,18 @@ form {
 	color: var(--error-text);
 }
 
+.alert.error a,
+.tip-error-pricing-link {
+	color: var(--error-text);
+	text-decoration: underline;
+}
+
+.alert.error a:hover,
+.tip-error-pricing-link:hover {
+	text-decoration: underline;
+	opacity: 0.9;
+}
+
 .margin-bottom-1 {
 	margin-bottom: 8px;
 }

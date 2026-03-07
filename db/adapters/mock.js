@@ -2311,6 +2311,33 @@ export function openDb() {
 				});
 			}
 		},
+		listTipActivity: {
+			all: async (limit, offset = 0, sortBy = "created_at", sortDir = "desc") => {
+				const cap = Math.min(Math.max(1, Number(limit) || 50), 200);
+				const off = Math.max(0, Number(offset) || 0);
+				const validOrder = ["id", "created_at", "from_user_id", "to_user_id", "amount", "created_image_id"];
+				const orderCol = validOrder.includes(sortBy) ? sortBy : "created_at";
+				const sorted = tip_activity.slice().sort((a, b) => {
+					const av = a[orderCol] != null ? (orderCol === "created_at" ? String(a[orderCol]) : a[orderCol]) : "";
+					const bv = b[orderCol] != null ? (orderCol === "created_at" ? String(b[orderCol]) : b[orderCol]) : "";
+					const cmp = orderCol === "created_at" ? String(av).localeCompare(String(bv)) : (Number(av) - Number(bv));
+					return sortDir === "asc" ? cmp : -cmp;
+				});
+				return sorted.slice(off, off + cap).map((t) => ({
+					id: t.id,
+					from_user_id: t.from_user_id,
+					to_user_id: t.to_user_id,
+					created_image_id: t.created_image_id,
+					amount: t.amount,
+					message: t.message,
+					source: t.source,
+					created_at: t.created_at
+				}));
+			}
+		},
+		countTipActivity: {
+			get: async () => ({ count: tip_activity.length })
+		},
 		deleteUserAndCleanup: {
 			run: async (rawUserId) => {
 				const userId = Number(rawUserId);

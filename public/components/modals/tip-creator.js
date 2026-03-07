@@ -249,9 +249,14 @@ class AppModalTipCreator extends HTMLElement {
 			const data = await response.json().catch(() => ({}));
 			if (!response.ok) {
 				const message = data?.error || 'Failed to tip credits.';
+				const messageHtml = data?.errorHtml;
 				if (this._errorEl) {
 					this._errorEl.hidden = false;
-					this._errorEl.textContent = message;
+					if (messageHtml && typeof messageHtml === 'string') {
+						this._errorEl.innerHTML = messageHtml;
+					} else {
+						this._errorEl.textContent = message;
+					}
 				} else alert(message);
 				return;
 			}

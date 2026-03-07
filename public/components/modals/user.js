@@ -524,9 +524,14 @@ class AppModalUser extends HTMLElement {
 			const data = await response.json().catch(() => ({}));
 			if (!response.ok) {
 				const message = data?.error || 'Failed to tip credits.';
+				const messageHtml = data?.errorHtml;
 				if (this._error) {
 					this._error.hidden = false;
-					this._error.textContent = message;
+					if (messageHtml && typeof messageHtml === 'string') {
+						this._error.innerHTML = messageHtml;
+					} else {
+						this._error.textContent = message;
+					}
 				} else alert(message);
 				return;
 			}

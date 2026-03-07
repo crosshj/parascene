@@ -3211,6 +3211,26 @@ export async function openDb() {
 				return Promise.resolve(stmt.all(createdImageId, limit, offset));
 			}
 		},
+		listTipActivity: {
+			all: async (limit, offset = 0, sortBy = "created_at", sortDir = "desc") => {
+				const cap = Math.min(Math.max(1, Number(limit) || 50), 200);
+				const off = Math.max(0, Number(offset) || 0);
+				const validOrder = ["id", "created_at", "from_user_id", "to_user_id", "amount", "created_image_id"];
+				const orderCol = validOrder.includes(sortBy) ? sortBy : "created_at";
+				const asc = sortDir === "asc";
+				const stmt = db.prepare(
+					`SELECT id, from_user_id, to_user_id, created_image_id, amount, message, source, created_at
+					 FROM tip_activity ORDER BY ${orderCol} ${asc ? "ASC" : "DESC"} LIMIT ? OFFSET ?`
+				);
+				return Promise.resolve(stmt.all(cap, off) ?? []);
+			}
+		},
+		countTipActivity: {
+			get: async () => {
+				const row = db.prepare("SELECT COUNT(*) AS count FROM tip_activity").get();
+				return Promise.resolve({ count: row?.count ?? 0 });
+			}
+		},
 		deleteUserAndCleanup: {
 			run: async (userId) => {
 				const result = deleteUserAndCleanupTxn(userId);

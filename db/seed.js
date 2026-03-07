@@ -112,7 +112,8 @@ const seedData = {
 		{ key: "related.recsys_weight", value: "50", description: "Weight for recsys when this creation has click-next data." },
 		{ key: "related.semantic_weight", value: "50", description: "Weight for vector when click-next exists. 0 = semantic not used in blend." },
 		{ key: "related.semantic_weight_no_click_next", value: "95", description: "When no click-next from this creation, strongly prefer semantic (0–100)." },
-		{ key: "related.semantic_distance_max", value: "0.8", description: "Max cosine distance to include semantic neighbours (above = orthogonal/opposite, excluded)." }
+		{ key: "related.semantic_distance_max", value: "0.8", description: "Max cosine distance to include semantic neighbours (above = orthogonal/opposite, excluded)." },
+		{ key: "min_days_before_tip", value: "60", description: "Minimum days a user must be present before they can tip (free accounts only; upgraded plans are exempt)." }
 	],
 
 	notifications: [

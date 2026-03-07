@@ -160,7 +160,7 @@ function renderUserCard(user, onOpenModal) {
 	return card;
 }
 
-const USERS_TAB_IDS = ['active', 'share', 'anonymous', 'other'];
+const USERS_TAB_IDS = ['active', 'share', 'anonymous', 'other', 'tips', 'settings'];
 
 
 class AppRouteUsers extends HTMLElement {
@@ -206,6 +206,34 @@ class AppRouteUsers extends HTMLElement {
 						</div>
 					</div>
 				</tab>
+				<tab data-id="tips" label="Tips">
+					<div class="tips-tab-content" data-tips-tab-content>
+						<div class="tips-table-container" data-tips-table-container>
+							<div class="route-empty route-loading">
+								<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
+							</div>
+						</div>
+					</div>
+				</tab>
+				<tab data-id="settings" label="Settings">
+					<div class="admin-users-settings-panel" data-users-settings-panel>
+						<section class="admin-settings-section">
+							<span class="admin-settings-section-title">Tipping</span>
+							<div class="admin-settings-field">
+								<label class="admin-settings-label" for="users-settings-min-days-before-tip">Minimum days before tipping</label>
+								<input type="number" id="users-settings-min-days-before-tip" class="admin-settings-input"
+									data-users-settings-min-days min="0" step="1" />
+								<p class="admin-detail">Free accounts must have been present for this many days before they can tip. Users with an upgraded plan are exempt. Use 0 to allow tipping immediately.</p>
+							</div>
+						</section>
+						<div class="admin-settings-actions">
+							<button type="button" data-users-settings-save class="btn-primary admin-settings-save">
+								<span class="admin-settings-save-label">Save settings</span>
+								<span class="admin-settings-save-spinner" aria-hidden="true"></span>
+							</button>
+						</div>
+					</div>
+				</tab>
 			</app-tabs>
 			<div class="publish-modal-overlay" data-anon-detail-modal role="dialog" aria-modal="true"
 				aria-labelledby="anon-detail-modal-title">
@@ -228,6 +256,12 @@ class AppRouteUsers extends HTMLElement {
 			}
 			if (e.detail?.id === 'share' && !this._shareDataLoaded) {
 				this.loadShareViews();
+			}
+			if (e.detail?.id === 'tips' && !this._tipsDataLoaded) {
+				this.loadTips();
+			}
+			if (e.detail?.id === 'settings') {
+				this.loadUserSettings();
 			}
 		});
 		this.setupUsersTabHash();
@@ -276,6 +310,12 @@ class AppRouteUsers extends HTMLElement {
 			}
 			if (id === 'share' && !this._shareDataLoaded) {
 				this.loadShareViews();
+			}
+			if (id === 'tips' && !this._tipsDataLoaded) {
+				this.loadTips();
+			}
+			if (id === 'settings') {
+				this.loadUserSettings();
 			}
 		};
 
@@ -575,6 +615,144 @@ class AppRouteUsers extends HTMLElement {
 			error.className = 'admin-error';
 			error.textContent = 'Error loading request details.';
 			requestsEl.appendChild(error);
+		}
+	}
+
+	async loadTips() {
+		const container = this.querySelector('[data-tips-table-container]');
+		if (!container) return;
+		try {
+			this._tipsDataLoaded = true;
+			await loadAdminDataTable(container, {
+				fetchUrl: '/admin/tips',
+				responseItemsKey: 'items',
+				columns: [
+					{
+						key: 'created_at',
+						label: 'Date',
+						sortKey: 'created_at',
+						className: 'tips-table-col-date',
+						render: (row) => escapeHtml(row.created_at ? formatLocalDateTime(row.created_at) : '—')
+					},
+					{
+						key: 'from_label',
+						label: 'From',
+						sortKey: 'from_user_id',
+						className: 'tips-table-col-from',
+						render: (row) => {
+							const label = escapeHtml(row.from_label ?? '—');
+							const uid = row.from_user_id;
+							if (uid != null) {
+								const href = buildProfilePath({ userId: uid }) || `/user/${uid}`;
+								return `<a href="${escapeHtml(href)}" class="tips-table-user-link" onclick="event.stopPropagation()">${label}</a>`;
+							}
+							return label;
+						}
+					},
+					{
+						key: 'to_label',
+						label: 'To',
+						sortKey: 'to_user_id',
+						className: 'tips-table-col-to',
+						render: (row) => {
+							const label = escapeHtml(row.to_label ?? '—');
+							const uid = row.to_user_id;
+							if (uid != null) {
+								const href = buildProfilePath({ userId: uid }) || `/user/${uid}`;
+								return `<a href="${escapeHtml(href)}" class="tips-table-user-link" onclick="event.stopPropagation()">${label}</a>`;
+							}
+							return label;
+						}
+					},
+					{
+						key: 'amount',
+						label: 'Amount',
+						sortKey: 'amount',
+						className: 'tips-table-col-amount',
+						render: (row) => (row.amount != null && Number.isFinite(Number(row.amount)) ? `${Number(row.amount).toFixed(1)} credits` : '—')
+					},
+					{
+						key: 'created_image_id',
+						label: 'Creation',
+						sortKey: 'created_image_id',
+						className: 'tips-table-col-creation',
+						render: (row) => {
+							const raw = row.created_image_id;
+							if (raw != null && Number.isFinite(Number(raw))) {
+								return `<a href="/creations/${escapeHtml(String(raw))}" onclick="event.stopPropagation()">${escapeHtml(String(raw))}</a>`;
+							}
+							return '—';
+						}
+					},
+					{
+						key: 'message',
+						label: 'Message',
+						className: 'tips-table-col-message',
+						render: (row) => {
+							const msg = typeof row.message === 'string' ? row.message.trim() : '';
+							return msg ? escapeHtml(truncateStr(msg, 80)) : '—';
+						}
+					}
+				],
+				defaultSortBy: 'created_at',
+				defaultSortDir: 'desc',
+				emptyMessage: 'No tips yet.',
+				ariaLabelPagination: 'Tips pagination',
+				tableClassName: 'admin-table tips-table'
+			});
+		} catch (err) {
+			container.innerHTML = '';
+			const error = document.createElement('div');
+			error.className = 'admin-error';
+			error.textContent = 'Error loading tips.';
+			container.appendChild(error);
+		}
+	}
+
+	async loadUserSettings() {
+		const panel = this.querySelector('[data-users-settings-panel]');
+		const input = this.querySelector('[data-users-settings-min-days]');
+		const saveBtn = this.querySelector('[data-users-settings-save]');
+		if (!panel || !input) return;
+		try {
+			const response = await fetch('/admin/users/settings', { credentials: 'include' });
+			if (!response.ok) throw new Error('Failed to load settings.');
+			const data = await response.json();
+			const minDays = typeof data.min_days_before_tip === 'number' ? data.min_days_before_tip : 60;
+			input.value = String(Math.max(0, minDays));
+		} catch (err) {
+			input.value = '60';
+		}
+		if (saveBtn && !this._userSettingsSaveBound) {
+			this._userSettingsSaveBound = true;
+			saveBtn.addEventListener('click', async () => {
+				saveBtn.disabled = true;
+				saveBtn.classList.add('is-loading');
+				const saveLabel = saveBtn.querySelector('.admin-settings-save-label');
+				try {
+					const value = Math.max(0, parseInt(input.value, 10) || 60);
+					const res = await fetch('/admin/users/settings', {
+						method: 'PATCH',
+						credentials: 'include',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ min_days_before_tip: value })
+					});
+					if (res.ok) {
+						saveBtn.classList.remove('is-loading');
+						if (saveLabel) saveLabel.textContent = 'Saved';
+						setTimeout(() => {
+							saveBtn.disabled = false;
+							if (saveLabel) saveLabel.textContent = 'Save settings';
+						}, 2000);
+					} else {
+						saveBtn.classList.remove('is-loading');
+						saveBtn.disabled = false;
+					}
+				} catch {
+					saveBtn.classList.remove('is-loading');
+					saveBtn.disabled = false;
+				}
+			});
 		}
 	}
 

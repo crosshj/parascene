@@ -4546,6 +4546,31 @@ export function openDb() {
 				return { changes: data?.length ?? 0 };
 			}
 		},
+		listTipActivity: {
+			all: async (limit, offset = 0, sortBy = "created_at", sortDir = "desc") => {
+				const cap = Math.min(Math.max(1, Number(limit) || 50), 200);
+				const off = Math.max(0, Number(offset) || 0);
+				const validOrder = ["id", "created_at", "from_user_id", "to_user_id", "amount", "created_image_id"];
+				const orderCol = validOrder.includes(sortBy) ? sortBy : "created_at";
+				const ascending = sortDir === "asc";
+				const { data, error } = await serviceClient
+					.from(prefixedTable("tip_activity"))
+					.select("id, from_user_id, to_user_id, created_image_id, amount, message, source, created_at")
+					.order(orderCol, { ascending })
+					.range(off, off + cap - 1);
+				if (error) throw error;
+				return data ?? [];
+			}
+		},
+		countTipActivity: {
+			get: async () => {
+				const { count, error } = await serviceClient
+					.from(prefixedTable("tip_activity"))
+					.select("id", { count: "exact", head: true });
+				if (error) throw error;
+				return { count: count ?? 0 };
+			}
+		},
 		insertTipActivity: {
 			run: async (fromUserId, toUserId, createdImageId, amount, message, source, meta) => {
 				const payload = {
