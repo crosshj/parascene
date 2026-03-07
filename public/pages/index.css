@@ -971,6 +971,36 @@ button.landing-generate-btn:focus-visible,
 	color: var(--text-muted);
 }
 
+.landing-pricing-link {
+	margin-top: 4px;
+	margin-bottom: 0;
+	font-size: 0.9rem;
+}
+
+.landing-pricing-link a {
+	color: var(--accent);
+	text-decoration: none;
+}
+
+.landing-pricing-link a:hover {
+	text-decoration: underline;
+}
+
+.cta-pricing-note {
+	font-size: 1rem;
+	color: var(--text-muted);
+	margin: 0 0 24px;
+}
+
+.cta-pricing-note a {
+	color: var(--accent);
+	text-decoration: none;
+}
+
+.cta-pricing-note a:hover {
+	text-decoration: underline;
+}
+
 @media (max-width: 768px) {
 	.cta-section {
 		padding: 80px 20px;

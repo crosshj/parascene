@@ -7,12 +7,24 @@ function getAssetVersion() {
 	return process.env.BUILD_ID || process.env.ASSET_VERSION || process.env.VERCEL_GIT_COMMIT_SHA || process.env.VERCEL_GIT_PREVIOUS_COMMIT_SHA || "";
 }
 
-/** Tokens for replacePageTokens. V: "?v=xxx" when asset version is set, else "". V_PARAM: raw version for JS cache-busting. Optional req: when provided, includes CANONICAL_LINK for the request. */
+function escapeHtmlUrl(url) {
+	return String(url ?? "")
+		.replace(/&/g, "&amp;")
+		.replace(/"/g, "&quot;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;");
+}
+
+/** Tokens for replacePageTokens. V: "?v=xxx" when asset version is set, else "". V_PARAM: raw version for JS cache-busting. Optional req: when provided, includes CANONICAL_LINK and OG_URL_TAG (canonical www) for the request. */
 export function getPageTokens(req) {
 	const v = getAssetVersion();
-	const tokens = { V: v ? `?v=${v}` : "", V_PARAM: v };
+	const tokens = { V: v ? `?v=${v}` : "", V_PARAM: v, OG_URL_TAG: "" };
 	if (req) {
 		tokens.CANONICAL_LINK = getCanonicalLinkForRequest(req);
+		const canonicalUrl = getCanonicalUrlForRequest(req);
+		if (canonicalUrl) {
+			tokens.OG_URL_TAG = `<meta property="og:url" content="${escapeHtmlUrl(canonicalUrl)}" />\n\t\t<meta property="og:type" content="website" />`;
+		}
 	}
 	return tokens;
 }
@@ -40,6 +52,7 @@ function getCommonHead() {
 		<meta name="asset-version" content="{{V_PARAM}}" />
 		<script type="module" src="/entry.js{{V}}"></script>
 		{{CANONICAL_LINK}}
+		{{OG_URL_TAG}}
 	`.trimEnd();
 }
 

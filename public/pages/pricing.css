@@ -77,6 +77,14 @@ body.pricing-page main:not(.pricing-ready):not(.pricing-success-state) .route-he
 	opacity: 1;
 }
 
+.pricing-intro {
+	font-size: 1rem;
+	color: var(--text-muted);
+	line-height: 1.6;
+	margin: 12px 0 0;
+	max-width: 560px;
+}
+
 .pricing-content {
 	display: none;
 }

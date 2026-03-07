@@ -162,7 +162,6 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 	<meta property="og:title" content="${escapeHtml(title)}" />
 	<meta property="og:description" content="${escapeHtml(message)}" />
 	<link rel="canonical" href="${escapeHtml(requestUrl)}" />
-	<link rel="canonical" href="${escapeHtml(requestUrl)}" />
 	<meta property="og:url" content="${escapeHtml(requestUrl)}" />
 
 	<meta name="twitter:card" content="summary" />

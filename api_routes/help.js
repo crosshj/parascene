@@ -331,6 +331,16 @@ function generateHelpPageHtml({ title, description, html, navigation, isIndex = 
 			</div>
 		</div>
 	</main>
+
+	<footer class="site-footer" role="contentinfo">
+		<nav class="site-footer-nav" aria-label="Footer">
+			<a href="https://www.parascene.com/pricing">Pricing</a>
+			<a href="https://www.parascene.com/help">Help</a>
+			<a href="https://www.parascene.com/help/privacy">Privacy Policy</a>
+			<a href="https://www.parascene.com/help/terms-of-service">Terms of Service</a>
+		</nav>
+		<p class="site-footer-copy">&copy; 2026 parascene. All rights reserved.</p>
+	</footer>
 	
 	<script type="module" src="/pages/help.js"></script>
 </body>

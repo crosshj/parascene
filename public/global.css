@@ -6236,6 +6236,39 @@ app-modal-creation-details .creation-details-args {
 	color: var(--text-muted);
 }
 
+/* Site footer (landing, pricing) */
+.site-footer {
+	padding: 48px 24px 32px;
+	text-align: center;
+	border-top: 1px solid var(--border);
+	background: var(--surface-muted);
+}
+
+.site-footer-nav {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 16px 24px;
+	justify-content: center;
+	margin-bottom: 16px;
+}
+
+.site-footer-nav a {
+	color: var(--text-muted);
+	text-decoration: none;
+	font-size: 0.95rem;
+}
+
+.site-footer-nav a:hover {
+	color: var(--accent);
+	text-decoration: underline;
+}
+
+.site-footer-copy {
+	font-size: 0.85rem;
+	color: var(--text-muted);
+	margin: 0;
+}
+
 /* ============================================
    Creation Detail Page Styles
    ============================================ */

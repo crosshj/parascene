@@ -67,7 +67,7 @@ function updatePolicyCta() {
 		.then((res) => (res.ok ? res.json() : Promise.reject(new Error("policy error"))))
 		.then((data) => {
 			if (data && typeof data.seen === "boolean") {
-				setCtaNoteText(data.seen ? "No credit card required — start creating now." : "No payment or signuprequired — start creating now.");
+				setCtaNoteText(data.seen ? "No credit card required — start creating now." : "No payment or signup required — start creating now.");
 			} else {
 				setCtaNoteText("No credit card needed — start creating now.");
 			}
@@ -182,23 +182,23 @@ document.addEventListener('DOMContentLoaded', () => {
 		sectionObserver.observe(section);
 	});
 
-	// Header fade-in on scroll
-	const header = document.querySelector('header');
-	if (header) {
+	// Header glass effect on scroll (header is inside app-navigation; retry until it exists)
+	function setupHeaderScroll(retries) {
+		retries = retries || 0;
+		if (!document.body.classList.contains('landing-page') || retries > 30) return;
+		const header = document.querySelector('header');
+		if (!header) {
+			requestAnimationFrame(() => setupHeaderScroll(retries + 1));
+			return;
+		}
 		const handleScroll = () => {
 			const scrollY = window.scrollY || window.pageYOffset;
-			if (scrollY > 50) {
-				header.classList.add('scrolled');
-			} else {
-				header.classList.remove('scrolled');
-			}
+			if (scrollY > 50) header.classList.add('scrolled');
+			else header.classList.remove('scrolled');
 		};
-
-		// Check initial scroll position
 		handleScroll();
-
-		// Listen for scroll events
 		window.addEventListener('scroll', handleScroll, { passive: true });
 	}
+	setupHeaderScroll(0);
 });
 
