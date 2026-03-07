@@ -709,10 +709,26 @@ button.landing-generate-btn:focus-visible,
 	}
 }
 
+/* Two-tone gradient for feature icons: accent → complementary hue */
+body.landing-page {
+	--feature-icon-grad-end: #06b6d4;
+}
+
+@media (prefers-color-scheme: dark) {
+	body.landing-page {
+		--feature-icon-grad-end: #a78bfa;
+	}
+}
+
 .feature-icon {
-	font-size: 3rem;
 	margin-bottom: 20px;
 	display: block;
+}
+
+.feature-icon svg {
+	width: 3rem;
+	height: 3rem;
+	color: var(--accent);
 }
 
 .feature-card h3 {
@@ -816,13 +832,14 @@ button.landing-generate-btn:focus-visible,
 	border: 1px solid var(--border);
 	border-radius: 12px;
 	padding: 32px;
-	transition: transform 0.2s, border-color 0.2s;
+	transition: transform 0.2s, box-shadow 0.2s;
+	box-shadow: var(--shadow);
 }
 
 @media (hover: hover) and (pointer: fine) {
 	.use-case-card:hover {
-		transform: translateY(-2px);
-		border-color: var(--accent);
+		transform: translateY(-4px);
+		box-shadow: 0 16px 32px rgba(15, 23, 42, 0.12);
 	}
 }
 

@@ -7,6 +7,60 @@
 </head>
 
 <body class="landing-page">
+	<!-- SVG sprite: icons referenced via <use href="#icon-name"> -->
+	<svg aria-hidden="true" style="position:absolute;width:0;height:0;">
+		<defs>
+			<linearGradient id="icon-feature-grad" x1="0" y1="24" x2="24" y2="0" gradientUnits="userSpaceOnUse">
+				<stop offset="0%" style="stop-color: var(--accent)" />
+				<stop offset="100%" style="stop-color: var(--feature-icon-grad-end)" />
+			</linearGradient>
+		</defs>
+		<symbol id="icon-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+			stroke-linecap="round" stroke-linejoin="round">
+			<path d="M5 12h14" />
+			<path d="M13 6l6 6-6 6" />
+		</symbol>
+		<symbol id="icon-users" viewBox="0 0 24 24" fill="none" stroke="url(#icon-feature-grad)" stroke-width="2"
+			stroke-linecap="round" stroke-linejoin="round">
+			<path d="M18 21a8 8 0 0 0-16 0" />
+			<circle cx="10" cy="8" r="5" />
+			<path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3" />
+		</symbol>
+		<symbol id="icon-play-circle" viewBox="0 0 24 24" fill="none" stroke="url(#icon-feature-grad)" stroke-width="2"
+			stroke-linecap="round" stroke-linejoin="round">
+			<circle cx="12" cy="12" r="10" />
+			<polygon points="10 8 16 12 10 16 10 8" fill="url(#icon-feature-grad)" stroke="none" />
+		</symbol>
+		<symbol id="icon-turntable" viewBox="0 0 24 24" fill="none" stroke="url(#icon-feature-grad)" stroke-width="2"
+			stroke-linecap="round" stroke-linejoin="round">
+			<path d="M10 12.01h.01" />
+			<path d="M18 8v4a8 8 0 0 1-1.07 4" />
+			<circle cx="10" cy="12" r="4" />
+			<rect x="2" y="4" width="20" height="16" rx="2" />
+		</symbol>
+		<symbol id="icon-cog" viewBox="0 0 24 24" fill="none" stroke="url(#icon-feature-grad)" stroke-width="2"
+			stroke-linecap="round" stroke-linejoin="round">
+			<path
+				d="M14 11a2 2 0 1 1-4 0 4 4 0 0 1 8 0 6 6 0 0 1-12 0 8 8 0 0 1 16 0 10 10 0 1 1-20 0 11.93 11.93 0 0 1 2.42-7.22 2 2 0 1 1 3.16 2.44" />
+		</symbol>
+		<symbol id="icon-bot" viewBox="0 0 24 24" fill="none" stroke="url(#icon-feature-grad)" stroke-width="2"
+			stroke-linecap="round" stroke-linejoin="round">
+			<path d="M12 8V4H8" />
+			<rect width="16" height="12" x="4" y="8" rx="2" />
+			<path d="M2 14h2" />
+			<path d="M20 14h2" />
+			<path d="M15 13v2" />
+			<path d="M9 13v2" />
+		</symbol>
+		<symbol id="icon-brain" viewBox="0 0 24 24" fill="none" stroke="url(#icon-feature-grad)" stroke-width="2"
+			stroke-linecap="round" stroke-linejoin="round">
+			<path d="M15.236 22a3 3 0 0 0-2.2-5" />
+			<path d="M16 20a3 3 0 0 1 3-3h1a2 2 0 0 0 2-2v-2a4 4 0 0 0-4-4V4" />
+			<path d="M18 13h.01" />
+			<path
+				d="M18 6a4 4 0 0 0-4 4 7 7 0 0 0-7 7c0-5 4-5 4-10.5a4.5 4.5 0 1 0-9 0 2.5 2.5 0 0 0 5 0C7 10 3 11 3 17c0 2.8 2.2 5 5 5h10" />
+		</symbol>
+	</svg>
 	<app-navigation>
 		<a href="/auth#login" class="header-auth-link">Login</a>
 		<a href="/auth#signup" class="header-auth-link btn-primary">Sign Up</a>
@@ -25,11 +79,8 @@
 							placeholder="Enter your idea here..." aria-label="Enter your idea" autocomplete="off" />
 						<button type="submit" class="landing-generate-btn">
 							<span>Create</span>
-							<svg class="landing-generate-btn-icon" width="20" height="20" viewBox="0 0 24 24"
-								fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
-								stroke-linejoin="round" aria-hidden="true">
-								<path d="M5 12h14" />
-								<path d="M13 6l6 6-6 6" />
+							<svg class="landing-generate-btn-icon" width="20" height="20" aria-hidden="true">
+								<use href="#icon-arrow-right" />
 							</svg>
 						</button>
 					</form>
@@ -38,7 +89,7 @@
 				<nav class="hero-pills" aria-label="Jump to section">
 					<a href="#who-its-for" class="hero-pill">Who It's For</a>
 					<a href="#community-creators" class="hero-pill">Community & Creators</a>
-					<a href="#powerful-generative-tools" class="hero-pill">Powerful Generative Tools</a>
+					<a href="#powerful-generative-tools" class="hero-pill">Powerful Tools</a>
 					<a href="#get-involved" class="hero-pill">Get Involved</a>
 				</nav>
 			</div>
@@ -58,9 +109,9 @@
 				</div>
 				<div class="use-case-card fade-in-item">
 					<h3>For Creators</h3>
-					<p>Use AI and ML to bring your creative visions to life (or bring your own robots). The technology
-						amplifies your creativity,
-						making creation more accessible and fun.</p>
+					<p>Use our tech bring your creative visions to life or share your own robots. Amplify your
+						creativity,
+						and make creation more accessible and fun.</p>
 				</div>
 				<div class="use-case-card fade-in-item">
 					<h3>For Everyone</h3>
@@ -78,21 +129,36 @@
 			</div>
 			<div class="features-grid">
 				<div class="feature-card fade-in-item">
-					<div class="feature-icon">👥</div>
-					<h3>Vibrant Community</h3>
-					<p>This is where technology and human creativity come together.</p>
-				</div>
-				<div class="feature-card fade-in-item">
-					<div class="feature-icon">🎭</div>
-					<h3>Entertainment & Involvement</h3>
+					<span class="feature-icon" aria-hidden="true">
+						<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+							stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+							<use href="#icon-play-circle" />
+						</svg>
+					</span>
+					<h3>Entertainment</h3>
 					<p>Whether you're here to create, explore, or simply be entertained, there's always something
 						happening in the community.</p>
 				</div>
 				<div class="feature-card fade-in-item">
-					<div class="feature-icon">✨</div>
-					<h3>Creative Expression</h3>
-					<p>Express yourself freely. Our technology removes barriers, letting you focus on what matters—your
-						creativity and vision.</p>
+					<span class="feature-icon" aria-hidden="true">
+						<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+							stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+							<use href="#icon-users" />
+						</svg>
+					</span>
+					<h3>Vibrant Community</h3>
+					<p>This is where technology and human creativity come together.</p>
+				</div>
+				<div class="feature-card fade-in-item">
+					<span class="feature-icon" aria-hidden="true">
+						<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+							stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+							<use href="#icon-turntable" />
+						</svg>
+					</span>
+					<h3>Expression</h3>
+					<p>Our technology removes barriers, letting you focus on what
+						matters — your vision.</p>
 				</div>
 			</div>
 			<p class="features-more fade-in-item">
@@ -100,27 +166,44 @@
 			</p>
 		</section>
 
-		<!-- Powerful Generative Tools -->
+		<!-- Powerful Tools -->
 		<section id="powerful-generative-tools" class="features fade-in-section">
 			<div class="section-header">
-				<h2>Powerful Generative Tools</h2>
-				<p>AI, machine learning, and algorithms that make creation accessible to everyone.</p>
+				<h2>Powerful Tools</h2>
+				<p>Discover, combine, and create with better tools.</p>
 			</div>
 			<div class="features-grid">
 				<div class="feature-card fade-in-item">
-					<div class="feature-icon">⚙️</div>
+					<span class="feature-icon" aria-hidden="true">
+						<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+							stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+							<use href="#icon-bot" />
+						</svg>
+					</span>
+					<h3>Community Bots</h3>
+					<p>Use generators built and shared by other creators. The community powers the tools—you pick what
+						fits your vision and bring ideas to life.</p>
+				</div>
+				<div class="feature-card fade-in-item">
+					<span class="feature-icon" aria-hidden="true">
+						<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+							stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+							<use href="#icon-cog" />
+						</svg>
+					</span>
 					<h3>Smart Algorithms</h3>
 					<p>Sophisticated algorithms power discovery, recommendations, and creation workflows.</p>
 				</div>
 				<div class="feature-card fade-in-item">
-					<div class="feature-icon">🤖</div>
-					<h3>AI-Powered Creation</h3>
-					<p>Advanced artificial intelligence algorithms transform your ideas into stunning visuals.</p>
-				</div>
-				<div class="feature-card fade-in-item">
-					<div class="feature-icon">🧠</div>
+					<span class="feature-icon" aria-hidden="true">
+						<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+							stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+							<use href="#icon-brain" />
+						</svg>
+					</span>
 					<h3>Machine Learning</h3>
-					<p>Our ML models learn from the community, getting smarter with every creation.</p>
+					<p>We keep pace with frontier models so the tools you use stay at the cutting edge—no need to wait
+						for the next wave.</p>
 				</div>
 			</div>
 		</section>
