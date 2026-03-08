@@ -5,6 +5,7 @@ import { getAvatarColor } from '/shared/avatar.js';
 import { fetchCreatedImageActivity, postCreatedImageComment } from '/shared/comments.js';
 import { processUserText, hydrateUserTextLinks } from '/shared/userText.js';
 import { attachAutoGrowTextarea } from '/shared/autogrow.js';
+import { attachMentionSuggest, addPageUsers, clearPageUsers } from '/shared/triggeredSuggest.js';
 import { textsSameWithinTolerance } from '/shared/textCompare.js';
 import { buildProfilePath } from '/shared/profileLinks.js';
 import { getNsfwObscure, NSFW_VIEW_BODY_CLASS } from '/shared/nsfwView.js';
@@ -945,6 +946,7 @@ async function loadCreation() {
 	}
 
 	const creationId = getCreationId();
+	clearPageUsers();
 	if (!creationId) {
 		// eslint-disable-next-line no-console
 		console.error('[creation-detail] missing creation id; showing image-error');
@@ -1532,6 +1534,13 @@ async function loadCreation() {
 		const creatorColor = getAvatarColor(creatorUserName || creatorEmailPrefix || String(creatorId || '') || creatorName);
 		const creatorProfileHref = buildProfilePath({ userName: creatorUserName, userId: creatorId });
 		const creatorPlan = creation?.creator?.plan === 'founder';
+
+		addPageUsers([{
+			user_id: creatorId,
+			user_name: creatorUserName || (creation?.creator?.email ? creatorEmailPrefix : undefined),
+			display_name: creatorDisplayName,
+			avatar_url: creatorAvatarUrl
+		}]);
 
 		let canShowFollowButton = false;
 		let viewerFollowsCreator = false;
@@ -2443,6 +2452,12 @@ async function loadCreation() {
 			const commentCount = Number(res.data?.comment_count ?? items.length);
 			commentsState.activity = items;
 			setCommentCount(commentCount);
+			addPageUsers(items.map((c) => ({
+				user_id: c?.user_id,
+				user_name: c?.user_name,
+				display_name: c?.display_name,
+				avatar_url: c?.avatar_url
+			})));
 			renderComments();
 
 			if (scrollIfHash && window.location.hash === '#comments' && !commentsDidInitialHashScroll) {
@@ -2470,6 +2485,7 @@ async function loadCreation() {
 			: () => { };
 
 		if (commentTextarea instanceof HTMLTextAreaElement) {
+			attachMentionSuggest(commentTextarea);
 			commentTextarea.addEventListener('input', () => {
 				refreshCommentTextarea();
 				setSubmitVisibility();

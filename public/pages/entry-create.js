@@ -163,6 +163,10 @@ function runCreatePageInit(refreshAutoGrowTextareas) {
 		refreshAutoGrowTextareas(document);
 	} catch (_) {}
 
+	import('../shared/triggeredSuggest.js').then(({ attachMentionSuggest }) => {
+		document.querySelectorAll('.create-content .create-prompt-input').forEach((el) => attachMentionSuggest(el));
+	}).catch(() => {});
+
 	document.querySelectorAll('.create-content .create-prompt-wrap').forEach((wrap) => {
 		const field = wrap.querySelector('.create-prompt-input');
 		const clearLink = wrap.querySelector('.create-prompt-clear');

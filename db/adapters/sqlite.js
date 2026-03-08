@@ -439,6 +439,22 @@ export async function openDb() {
 				return Promise.resolve(stmt.get(username));
 			}
 		},
+		/** Prefix + substring search for suggest/autocomplete; prefix matches first (e.g. "an" → andy before evan). */
+		searchUserProfilesByPrefix: async (prefix, limit = 10) => {
+			if (typeof prefix !== "string" || !prefix.trim()) return [];
+			const normalized = String(prefix).toLowerCase().trim();
+			const cap = Math.min(Math.max(1, Number(limit) || 10), 20);
+			const prefixPattern = normalized + "%";
+			const substrPattern = "%" + normalized + "%";
+			const stmt = db.prepare(
+				`SELECT user_id, user_name, display_name, avatar_url
+           FROM user_profiles
+           WHERE lower(user_name) LIKE ? OR lower(user_name) LIKE ?
+           ORDER BY (lower(user_name) LIKE ?) DESC, user_name ASC
+           LIMIT ?`
+			);
+			return Promise.resolve(stmt.all(prefixPattern, substrPattern, prefixPattern, cap));
+		},
 		upsertUserProfile: {
 			run: async (userId, profile) => {
 				const toJsonText = (value) => {

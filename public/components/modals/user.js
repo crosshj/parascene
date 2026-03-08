@@ -290,6 +290,10 @@ class AppModalUser extends HTMLElement {
 									<label for="user-tip-modal-amount">Amount</label>
 									<input id="user-tip-modal-amount" type="number" name="amount" min="0.1" step="0.1" inputmode="decimal" required placeholder="0.0" />
 								</div>
+								<div class="user-tip-label">
+									<label for="user-tip-modal-message">Message (optional)</label>
+									<textarea id="user-tip-modal-message" name="message" rows="2" maxlength="500" class="user-tip-message" placeholder="Optional note to the recipient"></textarea>
+								</div>
 								<div class="alert error user-tip-error" data-user-tip-error hidden></div>
 							</form>
 						</div>
@@ -513,13 +517,15 @@ class AppModalUser extends HTMLElement {
 
 		const toUserId = Number(this._form.elements.toUserId.value);
 		const amount = Number(this._form.elements.amount.value);
+		const rawMessage = this._form.elements.message ? String(this._form.elements.message.value || '').trim() : '';
+		const message = rawMessage.length > 500 ? rawMessage.slice(0, 500) : rawMessage;
 
 		try {
 			const response = await fetch('/api/credits/tip', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				credentials: 'include',
-				body: JSON.stringify({ toUserId, amount })
+				body: JSON.stringify({ toUserId, amount, message: message || undefined })
 			});
 			const data = await response.json().catch(() => ({}));
 			if (!response.ok) {

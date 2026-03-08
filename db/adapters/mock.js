@@ -139,6 +139,26 @@ export function openDb() {
 			get: async (userName) =>
 				user_profiles.find((row) => row.user_name === String(userName))
 		},
+		searchUserProfilesByPrefix: async (prefix, limit = 10) => {
+			if (typeof prefix !== "string" || !prefix.trim()) return [];
+			const normalized = String(prefix).toLowerCase().trim();
+			const cap = Math.min(Math.max(1, Number(limit) || 10), 20);
+			const withUserName = user_profiles.filter((row) => row.user_name && String(row.user_name).toLowerCase().includes(normalized));
+			const prefixFirst = withUserName.sort((a, b) => {
+				const aName = String(a.user_name).toLowerCase();
+				const bName = String(b.user_name).toLowerCase();
+				const aPrefix = aName.startsWith(normalized) ? 0 : 1;
+				const bPrefix = bName.startsWith(normalized) ? 0 : 1;
+				if (aPrefix !== bPrefix) return aPrefix - bPrefix;
+				return aName.localeCompare(bName);
+			});
+			return prefixFirst.slice(0, cap).map((row) => ({
+				user_id: row.user_id,
+				user_name: row.user_name,
+				display_name: row.display_name,
+				avatar_url: row.avatar_url
+			}));
+		},
 		upsertUserProfile: {
 			run: async (userId, profile) => {
 				const id = Number(userId);

@@ -1,6 +1,7 @@
 import { submitCreationWithPending, formatMentionsFailureForDialog } from '/shared/createSubmit.js';
 import { fetchJsonWithStatusDeduped } from '/shared/api.js';
 import { attachAutoGrowTextarea } from '/shared/autogrow.js';
+import { attachMentionSuggest, addPageUsers, clearPageUsers } from '/shared/triggeredSuggest.js';
 import { DEFAULT_APP_ORIGIN } from '/shared/userText.js';
 import { getMethodIntentList, loadMutateServerOptions } from '/shared/mutateOptions.js';
 import { renderEmptyState, renderEmptyLoading, renderEmptyError } from '/shared/emptyState.js';
@@ -100,6 +101,7 @@ async function loadEditPage() {
 	installNavigationGuardOnce();
 
 	const creationId = getCreationId();
+	clearPageUsers();
 	if (!creationId) {
 		editContent.innerHTML = renderEmptyState({ title: 'Invalid creation ID' });
 		return;
@@ -118,6 +120,14 @@ async function loadEditPage() {
 		}
 
 		const creation = await response.json();
+		if (creation?.creator?.id != null || creation?.user_id != null) {
+			addPageUsers([{
+				user_id: creation.creator?.id ?? creation.user_id,
+				user_name: creation.creator?.user_name,
+				display_name: creation.creator?.display_name,
+				avatar_url: creation.creator?.avatar_url
+			}]);
+		}
 		const status = creation.status || 'completed';
 		const canEdit = status === 'completed' && Boolean(creation.url);
 		const title = typeof creation.title === 'string' && creation.title.trim() ? creation.title.trim() : 'Untitled';
@@ -435,6 +445,7 @@ async function loadEditPage() {
 		// Auto-grow prompt like comments, min 3 rows.
 		if (promptEl instanceof HTMLTextAreaElement) {
 			attachAutoGrowTextarea(promptEl);
+			attachMentionSuggest(promptEl);
 		}
 
 		// Load credits (match create)

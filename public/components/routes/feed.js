@@ -6,8 +6,18 @@ import { buildProfilePath } from '../../shared/profileLinks.js';
 import { setRouteMediaBackgroundImage } from '../../shared/routeMedia.js';
 import { renderEmptyState, renderEmptyError } from '../../shared/emptyState.js';
 import { renderFeedCardsSkeleton } from '../../shared/skeleton.js';
+import { addPageUsers, clearPageUsers } from '../../shared/triggeredSuggest.js';
 
 const html = String.raw;
+
+function feedItemToUser(item) {
+	return {
+		user_id: item?.user_id,
+		user_name: item?.author_user_name ?? item?.user_name,
+		display_name: item?.author_display_name ?? item?.display_name,
+		avatar_url: item?.author_avatar_url ?? item?.avatar_url
+	};
+}
 
 // localStorage helpers for hidden feed items
 function getHiddenFeedItems() {
@@ -614,6 +624,7 @@ class AppRouteFeed extends HTMLElement {
 				return !hiddenIds.includes(itemId);
 			});
 
+			clearPageUsers();
 			container.innerHTML = "";
 			container.removeAttribute('aria-busy');
 			container.removeAttribute('aria-label');
@@ -650,6 +661,7 @@ class AppRouteFeed extends HTMLElement {
 			this.feedOffset = items.length;
 			this.hasMoreFeed = hasMore;
 			this.sentinelWasIntersecting = false;
+			addPageUsers(items.map(feedItemToUser));
 			this.renderNextBatch();
 		} catch (error) {
 			container.removeAttribute('aria-busy');
@@ -683,6 +695,7 @@ class AppRouteFeed extends HTMLElement {
 			this.feedItems.push(...items);
 			this.feedOffset = this.feedItems.length;
 			this.hasMoreFeed = Boolean(feed.data?.hasMore);
+			addPageUsers(items.map(feedItemToUser));
 			this.renderNextBatch();
 		} finally {
 			this.isLoading = false;

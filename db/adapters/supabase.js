@@ -156,6 +156,29 @@ export function openDb() {
 				return data ?? undefined;
 			}
 		},
+		/** Prefix + substring search for suggest/autocomplete; prefix matches first (e.g. "an" → andy before evan). Expects normalized query. */
+		searchUserProfilesByPrefix: async (prefix, limit = 10) => {
+			if (typeof prefix !== "string" || !prefix.trim()) return [];
+			const normalized = String(prefix).toLowerCase().trim();
+			const cap = Math.min(Math.max(1, Number(limit) || 10), 20);
+			const { data: prefixData, error: prefixError } = await serviceClient
+				.from(prefixedTable("user_profiles"))
+				.select("user_id, user_name, display_name, avatar_url")
+				.ilike("user_name", `${normalized}%`)
+				.limit(cap);
+			if (prefixError) throw prefixError;
+			const prefixRows = prefixData ?? [];
+			if (prefixRows.length >= cap) return prefixRows;
+			const prefixIds = new Set(prefixRows.map((r) => r.user_id));
+			const { data: substrData, error: substrError } = await serviceClient
+				.from(prefixedTable("user_profiles"))
+				.select("user_id, user_name, display_name, avatar_url")
+				.ilike("user_name", `%${normalized}%`)
+				.limit(cap * 3);
+			if (substrError) throw substrError;
+			const extra = (substrData ?? []).filter((r) => !prefixIds.has(r.user_id)).slice(0, cap - prefixRows.length);
+			return [...prefixRows, ...extra];
+		},
 		upsertUserProfile: {
 			run: async (userId, profile) => {
 				const payload = {

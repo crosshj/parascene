@@ -3,6 +3,7 @@ import { submitCreationWithPending, uploadImageFile, formatMentionsFailureForDia
 import { renderFields, isPromptLikeField, isImageUrlField, isImageUrlArrayField } from '../../shared/providerFormFields.js';
 import { loadMutateQueue } from '../../shared/mutateQueue.js';
 import { attachAutoGrowTextarea } from '../../shared/autogrow.js';
+import { attachMentionSuggest } from '../../shared/triggeredSuggest.js';
 import { renderCreateFormSkeleton } from '../../shared/skeleton.js';
 
 const html = String.raw;
@@ -200,10 +201,11 @@ class AppRouteCreate extends HTMLElement {
 		} else {
 			setTimeout(runDataLoad, 0);
 		}
-		// Attach autogrow to prompt textarea
+		// Attach autogrow and mention suggest to prompt textarea
 		const promptTextarea = this.querySelector('[data-advanced-prompt]');
 		if (promptTextarea) {
 			attachAutoGrowTextarea(promptTextarea);
+			attachMentionSuggest(promptTextarea);
 		}
 	}
 
@@ -1050,6 +1052,7 @@ class AppRouteCreate extends HTMLElement {
 
 		fieldsGroup.style.display = 'flex';
 		this.applyUrlPromptToBasicFields();
+		fieldsContainer.querySelectorAll('.prompt-editor').forEach((el) => attachMentionSuggest(el));
 	}
 
 	hideMethodGroup() {
