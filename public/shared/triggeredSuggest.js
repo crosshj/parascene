@@ -8,6 +8,8 @@
  * - attachMentionSuggest(textarea)
  */
 
+import { getAvatarColor } from './avatar.js';
+
 const DEBOUNCE_MS = 130;
 const POPUP_ID = "triggered-suggest-listbox";
 const POPUP_CLASS = "triggered-suggest-popup";
@@ -21,6 +23,8 @@ const POPUP_OPEN_ABOVE_THRESHOLD = 240;
 const SUGGEST_CACHE_TTL_MS = 5 * 60 * 1000;
 const SUGGEST_CACHE_MAX_ENTRIES = 100;
 const suggestCache = new Map();
+/** In-flight requests by cache key so we can wait for a parent query instead of starting a new one. */
+const pendingByKey = new Map();
 
 const pageUsersMap = new Map();
 const stateByTextarea = new WeakMap();
@@ -43,9 +47,11 @@ function getPopup() {
 }
 
 function evictSuggestCacheIfNeeded() {
-	if (suggestCache.size < SUGGEST_CACHE_MAX_ENTRIES) return;
-	const firstKey = suggestCache.keys().next().value;
-	if (firstKey != null) suggestCache.delete(firstKey);
+	while (suggestCache.size >= SUGGEST_CACHE_MAX_ENTRIES) {
+		const firstKey = suggestCache.keys().next().value;
+		if (firstKey == null) return;
+		suggestCache.delete(firstKey);
+	}
 }
 
 function cacheGet(key) {
@@ -63,32 +69,100 @@ function cacheSet(key, items) {
 	suggestCache.set(key, { items, ts: Date.now() });
 }
 
+const capForLimit = (limit) => Math.min(Math.max(1, Number(limit) || 10), 20);
+
+function filterItemsByQuery(items, queryLower) {
+	const q = queryLower;
+	const matches = (item) => {
+		const handle = itemHandle(item);
+		const label = (item?.label ?? "").toLowerCase();
+		return handle.includes(q) || label.includes(q);
+	};
+	return items.filter(matches);
+}
+
+/** If a shorter query (prefix of current) returned fewer than limit, the longer query cannot have more results — filter parent cache and skip the API. */
+function cacheGetByParent(source, queryLower, limit) {
+	const cap = capForLimit(limit);
+	for (let len = queryLower.length - 1; len >= 1; len--) {
+		const prefix = queryLower.slice(0, len);
+		const parentKey = `${source}:${prefix}:${cap}`;
+		const parentItems = cacheGet(parentKey);
+		if (!parentItems || parentItems.length >= cap) continue;
+		return filterItemsByQuery(parentItems, queryLower);
+	}
+	return null;
+}
+
+/** Longest prefix of queryLower that has an in-flight request, or null. */
+function getPendingParentKey(source, queryLower, limit) {
+	const cap = capForLimit(limit);
+	for (let len = queryLower.length - 1; len >= 1; len--) {
+		const prefix = queryLower.slice(0, len);
+		const parentKey = `${source}:${prefix}:${cap}`;
+		if (pendingByKey.has(parentKey)) return parentKey;
+	}
+	return null;
+}
+
+function isAbortError(err) {
+	return err?.name === "AbortError";
+}
+
 function defaultGetSuggestions({ source, q, limit }, signal) {
 	const query = String(q).trim();
-	const key = `${source}:${query.toLowerCase()}:${limit}`;
+	const qLower = query.toLowerCase();
+	const cap = capForLimit(limit);
+	const key = `${source}:${qLower}:${cap}`;
 	const cached = cacheGet(key);
 	if (cached) return Promise.resolve(cached);
 
-	const params = new URLSearchParams({
-		source,
-		q: query,
-		limit: String(limit)
-	});
+	const fromParent = cacheGetByParent(source, qLower, limit);
+	if (fromParent !== null) {
+		cacheSet(key, fromParent);
+		return Promise.resolve(fromParent);
+	}
 
-	return fetch(`/api/suggest?${params}`, {
-		credentials: "include",
-		signal
-	})
-		.then((r) => (r.ok ? r.json() : { items: [] }))
-		.then((data) => {
-			const items = Array.isArray(data?.items) ? data.items : [];
-			cacheSet(key, items);
-			return items;
-		})
-		.catch((err) => {
-			if (err?.name === "AbortError") return [];
-			return [];
-		});
+	const sameKeyPending = pendingByKey.get(key);
+	if (sameKeyPending) return sameKeyPending;
+
+	const parentPendingKey = getPendingParentKey(source, qLower, limit);
+	if (parentPendingKey) {
+		const parentPromise = pendingByKey.get(parentPendingKey);
+		return parentPromise
+			.then((parentItems) => {
+				if (parentItems.length >= cap) return doFetchDefault();
+				const filtered = filterItemsByQuery(parentItems, qLower);
+				cacheSet(key, filtered);
+				return filtered;
+			})
+			.catch(() => doFetchDefault());
+	}
+
+	function doFetchDefault() {
+		const params = new URLSearchParams({ source, q: query, limit: String(limit) });
+		const promise = fetch(`/api/suggest?${params}`, { credentials: "include", signal })
+			.then((r) => {
+				if (!r.ok) throw new Error(`Suggest failed: ${r.status}`);
+				return r.json();
+			})
+			.then((data) => {
+				const items = Array.isArray(data?.items) ? data.items : [];
+				cacheSet(key, items);
+				return items;
+			})
+			.catch((err) => {
+				if (isAbortError(err)) return [];
+				throw err;
+			})
+			.finally(() => {
+				pendingByKey.delete(key);
+			});
+		pendingByKey.set(key, promise);
+		return promise;
+	}
+
+	return doFetchDefault();
 }
 
 function defaultGetInsertText(item, trigger) {
@@ -167,48 +241,112 @@ function filterAndSortMentionItems(items, qLower) {
 	return rows.map(({ item }) => item);
 }
 
+function getCachedEntriesForSource(source) {
+	const prefix = `${source}:`;
+	const out = [];
+	for (const [key, entry] of suggestCache.entries()) {
+		if (!key.startsWith(prefix)) continue;
+		if (Date.now() - entry.ts >= SUGGEST_CACHE_TTL_MS) {
+			suggestCache.delete(key);
+			continue;
+		}
+		out.push(entry.items);
+	}
+	return out;
+}
+
+function mergeUniqueItems(items) {
+	const out = [];
+	const seen = new Set();
+	for (const item of items) {
+		if (!item) continue;
+		const id = item?.id != null ? `id:${String(item.id)}` : "";
+		const handle = itemHandle(item);
+		const key = id || `handle:${handle}`;
+		if (!key || seen.has(key)) continue;
+		seen.add(key);
+		out.push(item);
+	}
+	return out;
+}
+
+function getMentionLocalCandidates(qLower) {
+	const cachedRemote = getCachedEntriesForSource("users").flat();
+	return mergeUniqueItems([
+		...filterAndSortMentionItems(Array.from(pageUsersMap.values()), qLower),
+		...filterAndSortMentionItems(cachedRemote, qLower)
+	]);
+}
+
 function getMentionSuggestions({ source, q, limit }, signal) {
 	const qTrimmed = String(q).trim();
 	const qLower = qTrimmed.toLowerCase();
-	const limitNum = Math.min(Math.max(1, Number(limit) || 10), 20);
-
-	const pageList = filterAndSortMentionItems(Array.from(pageUsersMap.values()), qLower);
-	const pageIds = new Set(pageList.map((item) => String(item.id)));
-
+	const limitNum = capForLimit(limit);
 	const key = `${source}:${qLower}:${limitNum}`;
-	const cached = cacheGet(key);
-	const apiPromise = cached
-		? Promise.resolve(cached)
-		: fetch(`/api/suggest?source=users&q=${encodeURIComponent(qTrimmed)}&limit=${limitNum}`, {
+	const exactCached = cacheGet(key);
+	const local = getMentionLocalCandidates(qLower).slice(0, limitNum);
+
+	if (exactCached) {
+		return Promise.resolve(mergeUniqueItems([...local, ...exactCached]).slice(0, limitNum));
+	}
+
+	const fromParent = cacheGetByParent(source, qLower, limitNum);
+	if (fromParent !== null) {
+		cacheSet(key, fromParent);
+		return Promise.resolve(mergeUniqueItems([...local, ...fromParent]).slice(0, limitNum));
+	}
+
+	const sameKeyPending = pendingByKey.get(key);
+	if (sameKeyPending) {
+		return sameKeyPending.then((items) => mergeUniqueItems([...local, ...items]).slice(0, limitNum));
+	}
+
+	const parentPendingKey = getPendingParentKey(source, qLower, limitNum);
+	if (parentPendingKey) {
+		const parentPromise = pendingByKey.get(parentPendingKey);
+		return parentPromise
+			.then((parentItems) => {
+				if (parentItems.length >= limitNum) return doFetchMention();
+				const filtered = filterItemsByQuery(parentItems, qLower);
+				cacheSet(key, filtered);
+				return mergeUniqueItems([...local, ...filtered]).slice(0, limitNum);
+			})
+			.catch(() => doFetchMention());
+	}
+
+	function doFetchMention() {
+		const remotePromise = fetch(`/api/suggest?source=users&q=${encodeURIComponent(qTrimmed)}&limit=${limitNum}`, {
 			credentials: "include",
 			signal
 		})
-			.then((r) => (r.ok ? r.json() : { items: [] }))
+			.then((r) => {
+				if (!r.ok) throw new Error(`Suggest failed: ${r.status}`);
+				return r.json();
+			})
 			.then((data) => {
 				const items = Array.isArray(data?.items) ? data.items : [];
 				cacheSet(key, items);
 				return items;
 			})
 			.catch((err) => {
-				if (err?.name === "AbortError") return [];
-				return [];
+				if (isAbortError(err)) return [];
+				throw err;
+			})
+			.finally(() => {
+				pendingByKey.delete(key);
 			});
+		pendingByKey.set(key, remotePromise);
+		return remotePromise.then((items) => mergeUniqueItems([...local, ...items]).slice(0, limitNum));
+	}
 
-	return apiPromise.then((apiItems) => {
-		const merged = [...pageList];
-		for (const item of apiItems) {
-			if (merged.length >= limitNum) break;
-			const id = item?.id != null ? String(item.id) : "";
-			if (!id || pageIds.has(id)) continue;
-			merged.push(item);
-		}
-		return merged.slice(0, limitNum);
-	});
+	return doFetchMention();
 }
 
 function attachWindowListeners() {
 	if (windowListenersAttached) return;
 	windowListenersAttached = true;
+	// Create and append popup once so it is already in the DOM; avoids focus loss when opening (listbox "popping in" coincided with focus loss)
+	getPopup();
 
 	const reposition = () => {
 		if (!popupOwner) return;
@@ -241,9 +379,11 @@ function positionPopup(textarea, popup) {
 	if (openAbove) {
 		popup.style.top = "";
 		popup.style.bottom = `${Math.max(0, window.innerHeight - rect.top)}px`;
+		popup.classList.add("triggered-suggest-popup--above");
 	} else {
 		popup.style.bottom = "";
 		popup.style.top = `${Math.max(0, rect.bottom)}px`;
+		popup.classList.remove("triggered-suggest-popup--above");
 	}
 }
 
@@ -260,10 +400,8 @@ function closePopupFor(textarea) {
 		clearTimeout(state.debounceTimer);
 		state.debounceTimer = null;
 	}
-	if (state.requestController) {
-		state.requestController.abort();
-		state.requestController = null;
-	}
+	// Do not abort in-flight request: let it complete and cache so if user refocuses we have results
+	// state.requestController is left as-is; request will complete and .then() will no-op (token check)
 
 	state.isOpen = false;
 	state.items = [];
@@ -271,6 +409,8 @@ function closePopupFor(textarea) {
 	state.currentTrigger = null;
 	state.triggerStart = -1;
 	state.requestToken += 1;
+	state.displayedQuery = "";
+	state.pendingQuery = "";
 
 	const popup = getPopup();
 	if (popupOwner === textarea) {
@@ -331,6 +471,8 @@ function renderPopup(textarea, mode) {
 				img.className = "triggered-suggest-item-avatar";
 				icon.appendChild(img);
 			} else {
+				const seed = (item?.sublabel || "").replace(/^@/, "").trim() || item?.id || item?.label || "";
+				icon.style.background = getAvatarColor(seed);
 				icon.textContent = String(item?.label || "?").charAt(0).toUpperCase();
 			}
 
@@ -369,7 +511,7 @@ function renderPopup(textarea, mode) {
 	}
 
 	positionPopup(textarea, popup);
-	popup.style.display = "block";
+	popup.style.display = "flex";
 	popup.setAttribute("aria-hidden", "false");
 
 	state.isOpen = true;
@@ -383,6 +525,13 @@ function renderPopup(textarea, mode) {
 
 	const selectedEl = popup.querySelector(`.${ITEM_SELECTED_CLASS}`);
 	if (selectedEl) selectedEl.scrollIntoView({ block: "nearest" });
+
+	// Restore focus to textarea after showing popup; appending/displaying the listbox can cause the browser to move focus
+	requestAnimationFrame(() => {
+		if (stateByTextarea.get(textarea)?.isOpen && document.activeElement !== textarea) {
+			textarea.focus();
+		}
+	});
 }
 
 function updateSelection(textarea, nextIndex) {
@@ -461,28 +610,54 @@ function applyLocalFilter(source, items, qLower) {
 	return items.filter((item) => itemHandle(item).startsWith(qLower));
 }
 
-function requestSuggestions(textarea, ctx) {
+function getLocalCandidatesForTrigger(trigger, qLower) {
+	if (trigger.source === "users") return getMentionLocalCandidates(qLower);
+	return [];
+}
+
+function shouldOpenFromEvent(event) {
+	if (!event) return false;
+	if (typeof event.isTrusted === "boolean") return event.isTrusted;
+	return true;
+}
+
+function requestSuggestions(textarea, ctx, reason) {
 	const state = stateByTextarea.get(textarea);
 	if (!state) return;
+	if (reason !== "user") return;
+	if (!state.hasUserInteracted) return;
 
-	if (state.requestController) state.requestController.abort();
+	// Do not abort in-flight request: let it complete and cache (upsert) so we keep server results for other queries
 	state.requestController = new AbortController();
 	state.requestToken += 1;
 	const token = state.requestToken;
 
 	state.triggerStart = ctx.start;
 	state.currentTrigger = ctx.trigger;
+	state.pendingQuery = ctx.query;
 
 	const requestedQuery = ctx.query;
 	const qLower = requestedQuery.toLowerCase();
-	const filtered = applyLocalFilter(ctx.trigger.source, state.items, qLower);
-	if (filtered.length > 0) {
-		state.items = filtered;
-		state.selectedIndex = 0;
+	const localCandidates = getLocalCandidatesForTrigger(ctx.trigger, qLower);
+	const localMatches = applyLocalFilter(ctx.trigger.source, localCandidates, qLower).slice(0, 10);
+
+	state.items = localMatches;
+	state.selectedIndex = localMatches.length > 0 ? 0 : -1;
+	state.displayedQuery = requestedQuery;
+
+	const exactCacheKey = `${ctx.trigger.source}:${qLower}:10`;
+	const exactCached = cacheGet(exactCacheKey);
+	if (exactCached) {
+		const merged = mergeUniqueItems([...localMatches, ...exactCached]).slice(0, 10);
+		state.items = merged;
+		state.selectedIndex = merged.length > 0 ? 0 : -1;
+		renderPopup(textarea, merged.length > 0 ? undefined : "empty");
+		return;
+	}
+
+	if (localMatches.length > 0) {
 		renderPopup(textarea);
 	} else {
-		state.items = [];
-		state.selectedIndex = -1;
 		renderPopup(textarea, "loading");
 	}
 
@@ -490,28 +665,39 @@ function requestSuggestions(textarea, ctx) {
 		source: ctx.trigger.source,
 		q: requestedQuery,
 		limit: 10
-	}, state.requestController.signal).then((items) => {
-		const current = stateByTextarea.get(textarea);
-		if (!current || token !== current.requestToken) return;
-		if (document.activeElement !== textarea) return;
+	}, state.requestController.signal)
+		.then((items) => {
+			const current = stateByTextarea.get(textarea);
+			if (!current || token !== current.requestToken) return;
+			if (document.activeElement !== textarea) return;
 
-		const nowCtx = getTriggerContext(textarea, current.triggers);
-		if (!nowCtx || nowCtx.trigger.char !== ctx.trigger.char) {
-			closePopupFor(textarea);
-			return;
-		}
+			const nowCtx = getTriggerContext(textarea, current.triggers);
+			if (!nowCtx || nowCtx.trigger.char !== ctx.trigger.char) {
+				closePopupFor(textarea);
+				return;
+			}
 
-		const nowLower = nowCtx.query.toLowerCase();
-		const nextItems = nowCtx.query === requestedQuery
-			? items
-			: applyLocalFilter(nowCtx.trigger.source, items, nowLower);
+			const nowLower = nowCtx.query.toLowerCase();
+			const base = getLocalCandidatesForTrigger(nowCtx.trigger, nowLower);
+			const nextLocal = applyLocalFilter(nowCtx.trigger.source, base, nowLower).slice(0, 10);
+			const nextRemote = nowCtx.query === requestedQuery ? items : applyLocalFilter(nowCtx.trigger.source, items, nowLower);
+			const nextItems = mergeUniqueItems([...nextLocal, ...nextRemote]).slice(0, 10);
 
-		current.triggerStart = nowCtx.start;
-		current.currentTrigger = nowCtx.trigger;
-		current.items = nextItems;
-		current.selectedIndex = nextItems.length > 0 ? 0 : -1;
-		renderPopup(textarea, nextItems.length > 0 ? undefined : "empty");
-	});
+			current.triggerStart = nowCtx.start;
+			current.currentTrigger = nowCtx.trigger;
+			current.items = nextItems;
+			current.selectedIndex = nextItems.length > 0 ? 0 : -1;
+			current.displayedQuery = nowCtx.query;
+			renderPopup(textarea, nextItems.length > 0 ? undefined : "empty");
+		})
+		.catch(() => {
+			const current = stateByTextarea.get(textarea);
+			if (!current || token !== current.requestToken) return;
+			// Server/network failed (not "empty list"); show empty so UI doesn't hang
+			current.items = [];
+			current.selectedIndex = -1;
+			renderPopup(textarea, "empty");
+		});
 }
 
 export function attachTriggeredSuggest(textarea, options) {
@@ -538,11 +724,14 @@ export function attachTriggeredSuggest(textarea, options) {
 		selectedIndex: -1,
 		currentTrigger: null,
 		triggerStart: -1,
-		isOpen: false
+		isOpen: false,
+		hasUserInteracted: false,
+		displayedQuery: "",
+		pendingQuery: ""
 	};
 	stateByTextarea.set(textarea, state);
 
-	function scheduleRefresh() {
+	function scheduleRefresh(reason) {
 		const current = stateByTextarea.get(textarea);
 		if (!current) return;
 		if (current.debounceTimer) clearTimeout(current.debounceTimer);
@@ -555,34 +744,24 @@ export function attachTriggeredSuggest(textarea, options) {
 
 		current.debounceTimer = setTimeout(() => {
 			current.debounceTimer = null;
-			requestSuggestions(textarea, ctx);
+			requestSuggestions(textarea, ctx, reason);
 		}, DEBOUNCE_MS);
 	}
 
-	function refreshImmediately() {
+	function markInteracted() {
 		const current = stateByTextarea.get(textarea);
 		if (!current) return;
-		if (current.debounceTimer) {
-			clearTimeout(current.debounceTimer);
-			current.debounceTimer = null;
-		}
-
-		const ctx = getTriggerContext(textarea, current.triggers);
-		if (!ctx) {
-			closePopupFor(textarea);
-			return;
-		}
-		requestSuggestions(textarea, ctx);
+		current.hasUserInteracted = true;
 	}
 
-	function onInput() {
-		scheduleRefresh();
+	function onInput(e) {
+		if (!shouldOpenFromEvent(e)) return;
+		markInteracted();
+		scheduleRefresh("user");
 	}
 
 	function onFocus() {
-		const ctx = getTriggerContext(textarea, triggers);
-		if (!ctx) return;
-		refreshImmediately();
+		// Intentional: focus alone should not resurrect suggestions for restored/programmatic text.
 	}
 
 	function onBlur() {
@@ -594,9 +773,17 @@ export function attachTriggeredSuggest(textarea, options) {
 		}, 0);
 	}
 
+	function onPointerDown() {
+		markInteracted();
+	}
+
 	function onKeydown(e) {
 		const current = stateByTextarea.get(textarea);
 		if (!current) return;
+
+		if (e.key.length === 1 || e.key === "Backspace" || e.key === "Delete") {
+			markInteracted();
+		}
 
 		const popupOpen = isPopupOpenFor(textarea);
 		const hasSelection = current.selectedIndex >= 0 && !!current.items[current.selectedIndex];
@@ -610,27 +797,43 @@ export function attachTriggeredSuggest(textarea, options) {
 
 		if (!popupOpen) return;
 
+		const popup = getPopup();
+		const isAbove = popup.classList.contains("triggered-suggest-popup--above");
+		const maxIdx = Math.max(0, current.items.length - 1);
+
 		if (e.key === "ArrowDown") {
 			e.preventDefault();
-			updateSelection(textarea, current.selectedIndex < 0 ? 0 : current.selectedIndex + 1);
+			// When popup is above (column-reverse), "down" is toward the input = lower index
+			if (current.selectedIndex < 0) {
+				updateSelection(textarea, 0);
+			} else {
+				const next = isAbove ? current.selectedIndex - 1 : current.selectedIndex + 1;
+				updateSelection(textarea, Math.max(0, Math.min(next, maxIdx)));
+			}
 			return;
 		}
 
 		if (e.key === "ArrowUp") {
 			e.preventDefault();
-			updateSelection(textarea, current.selectedIndex <= 0 ? 0 : current.selectedIndex - 1);
+			// When popup is above (column-reverse), "up" is away from the input = higher index
+			if (current.selectedIndex < 0) {
+				updateSelection(textarea, maxIdx);
+			} else {
+				const next = isAbove ? current.selectedIndex + 1 : current.selectedIndex - 1;
+				updateSelection(textarea, Math.max(0, Math.min(next, maxIdx)));
+			}
 			return;
 		}
 
 		if (e.key === "Home") {
 			e.preventDefault();
-			updateSelection(textarea, 0);
+			updateSelection(textarea, isAbove ? maxIdx : 0);
 			return;
 		}
 
 		if (e.key === "End") {
 			e.preventDefault();
-			updateSelection(textarea, current.items.length - 1);
+			updateSelection(textarea, isAbove ? 0 : maxIdx);
 			return;
 		}
 
@@ -656,6 +859,7 @@ export function attachTriggeredSuggest(textarea, options) {
 	textarea.addEventListener("input", onInput);
 	textarea.addEventListener("focus", onFocus);
 	textarea.addEventListener("blur", onBlur);
+	textarea.addEventListener("pointerdown", onPointerDown);
 	textarea.addEventListener("keydown", onKeydown);
 }
 

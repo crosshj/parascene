@@ -156,28 +156,37 @@ export function openDb() {
 				return data ?? undefined;
 			}
 		},
-		/** Prefix + substring search for suggest/autocomplete; prefix matches first (e.g. "an" → andy before evan). Expects normalized query. */
+		/** Single query: user_profiles joined to users (role = consumer, not suspended). Prefix + substring on user_name and display_name; prefix matches first. */
 		searchUserProfilesByPrefix: async (prefix, limit = 10) => {
 			if (typeof prefix !== "string" || !prefix.trim()) return [];
 			const normalized = String(prefix).toLowerCase().trim();
 			const cap = Math.min(Math.max(1, Number(limit) || 10), 20);
-			const { data: prefixData, error: prefixError } = await serviceClient
-				.from(prefixedTable("user_profiles"))
-				.select("user_id, user_name, display_name, avatar_url")
-				.ilike("user_name", `${normalized}%`)
-				.limit(cap);
-			if (prefixError) throw prefixError;
-			const prefixRows = prefixData ?? [];
-			if (prefixRows.length >= cap) return prefixRows;
-			const prefixIds = new Set(prefixRows.map((r) => r.user_id));
-			const { data: substrData, error: substrError } = await serviceClient
-				.from(prefixedTable("user_profiles"))
-				.select("user_id, user_name, display_name, avatar_url")
-				.ilike("user_name", `%${normalized}%`)
-				.limit(cap * 3);
-			if (substrError) throw substrError;
-			const extra = (substrData ?? []).filter((r) => !prefixIds.has(r.user_id)).slice(0, cap - prefixRows.length);
-			return [...prefixRows, ...extra];
+			const profilesTable = prefixedTable("user_profiles");
+			const usersTable = prefixedTable("users");
+			const orClause = `user_name.ilike.${normalized}%,user_name.ilike.%${normalized}%,display_name.ilike.${normalized}%,display_name.ilike.%${normalized}%`;
+			const { data: rows, error } = await serviceClient
+				.from(profilesTable)
+				.select(`user_id, user_name, display_name, avatar_url, ${usersTable}!inner(role, meta)`)
+				.or(orClause)
+				.eq(`${usersTable}.role`, "consumer")
+				.limit(cap * 4);
+			if (error) throw error;
+			const raw = (rows ?? []).filter((r) => {
+				const u = r[usersTable];
+				return u && (u.meta == null || u.meta.suspended !== true);
+			});
+			const byUserId = (r) => r.user_id;
+			const un = (r) => String(r.user_name || "").toLowerCase();
+			const dn = (r) => String(r.display_name || "").toLowerCase();
+			const isPrefix = (r) => un(r).startsWith(normalized) || dn(r).startsWith(normalized);
+			const deduped = [...new Map(raw.map((r) => [r.user_id, { user_id: r.user_id, user_name: r.user_name, display_name: r.display_name, avatar_url: r.avatar_url }])).values()];
+			const prefixFirst = deduped.sort((a, b) => {
+				const aP = isPrefix(a) ? 0 : 1;
+				const bP = isPrefix(b) ? 0 : 1;
+				if (aP !== bP) return aP - bP;
+				return (un(a) || dn(a)).localeCompare(un(b) || dn(b));
+			});
+			return prefixFirst.slice(0, cap);
 		},
 		upsertUserProfile: {
 			run: async (userId, profile) => {

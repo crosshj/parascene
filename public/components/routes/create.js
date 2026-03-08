@@ -393,6 +393,12 @@ class AppRouteCreate extends HTMLElement {
 		document.addEventListener('credits-updated', this.handleCreditsUpdated);
 	}
 
+	/** True if both arrays have the same length and same id/name per index (so we can skip re-rendering). */
+	serversListSame(a, b) {
+		if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+		return a.every((s, i) => s?.id === b[i]?.id && s?.name === b[i]?.name);
+	}
+
 	/** Process raw API servers (filter + parse server_config) into form we use. */
 	processServers(rawServers) {
 		let list = Array.isArray(rawServers) ? rawServers : [];
@@ -444,11 +450,9 @@ class AppRouteCreate extends HTMLElement {
 		const hasOptions = Array.isArray(this.servers) && this.servers.length > 0;
 		const loaded = this._serversLoading === false;
 		if (!loaded) {
-			// Move focus out before hiding so we never have focus inside an aria-hidden subtree
+			// Move focus out before hiding so we never have focus inside an aria-hidden subtree (blur only to avoid stealing focus)
 			if (contentWrap.contains(document.activeElement)) {
-				const fallback = loadingWrap.querySelector('a, button, [tabindex]:not([tabindex="-1"])') || this.querySelector('a[href], button, [tabindex]:not([tabindex="-1"])');
-				if (fallback && !contentWrap.contains(fallback)) fallback.focus();
-				else document.activeElement?.blur?.();
+				document.activeElement?.blur?.();
 			}
 			contentWrap.setAttribute('aria-hidden', 'true');
 			loadingWrap.hidden = false;
@@ -459,27 +463,36 @@ class AppRouteCreate extends HTMLElement {
 		contentWrap.hidden = false;
 		contentWrap.setAttribute('aria-hidden', 'false');
 		if (hasOptions) {
-			// Showing form, hiding empty: move focus out of empty first if it had focus
+			// Showing form, hiding empty: blur out of empty only (do not focus form — avoids stealing focus if user focused input “too early”)
 			if (emptyWrap?.contains(document.activeElement)) {
-				const fallback = formWrap.querySelector('a, button, input, select, textarea, [tabindex]:not([tabindex="-1"])') || this.querySelector('a[href], button, [tabindex]:not([tabindex="-1"])');
-				if (fallback && !emptyWrap.contains(fallback)) fallback.focus();
-				else document.activeElement?.blur?.();
+				document.activeElement?.blur?.();
 			}
 			emptyWrap?.setAttribute?.('aria-hidden', 'true');
 			if (emptyWrap) emptyWrap.hidden = true;
 			formWrap.setAttribute('aria-hidden', 'false');
 			formWrap.hidden = false;
+			// createAdvanced only: add body.loaded when form is visible (deferred in pageInit) so visibility transition doesn't steal focus
+			if (document.body.classList.contains('create-page-advanced')) {
+				document.body.classList.add('loaded');
+				requestAnimationFrame(() => {
+					if (formWrap.contains(document.activeElement) && typeof document.activeElement.focus === 'function') {
+						document.activeElement.focus();
+					}
+				});
+			}
 		} else {
-			// Showing empty, hiding form: move focus out of form first so we never have focus inside aria-hidden (e.g. textarea)
+			// Showing empty, hiding form: blur out of form only (do not focus empty — avoids stealing focus from prompt)
 			if (formWrap.contains(document.activeElement)) {
-				const fallback = emptyWrap?.querySelector('a, button, [tabindex]:not([tabindex="-1"])') || this.querySelector('a[href], button, [tabindex]:not([tabindex="-1"])');
-				if (fallback && !formWrap.contains(fallback)) fallback.focus();
-				else document.activeElement?.blur?.();
+				document.activeElement?.blur?.();
 			}
 			formWrap.setAttribute('aria-hidden', 'true');
 			formWrap.hidden = true;
 			emptyWrap?.setAttribute?.('aria-hidden', 'false');
 			if (emptyWrap) emptyWrap.hidden = false;
+			// createAdvanced: body.loaded was deferred in pageInit; add when we show content (form or empty)
+			if (document.body.classList.contains('create-page-advanced')) {
+				document.body.classList.add('loaded');
+			}
 		}
 	}
 
@@ -508,7 +521,7 @@ class AppRouteCreate extends HTMLElement {
 			.then((result) => {
 				this._serversLoading = false;
 				if (!result?.ok || !Array.isArray(result.data?.servers)) {
-					this.updateCreateFormVisibility();
+					setTimeout(() => this.updateCreateFormVisibility(), 0);
 					return;
 				}
 				const processed = this.processServers(result.data.servers);
@@ -519,13 +532,22 @@ class AppRouteCreate extends HTMLElement {
 				} catch (e) {
 					// ignore
 				}
-				// Always update UI when fetch completes (handles empty cache on first load)
+				// Skip DOM update when API returned the same list (avoids rebuild + focus steal)
+				if (this.serversListSame(processed, this.servers)) return;
+				// Save focus before servers update; applyServers mutates selects and can steal focus
+				const promptEl = this.querySelector('[data-advanced-prompt]');
+				const hadFocusOnPrompt = promptEl && document.activeElement === promptEl;
 				this.applyServers(processed);
-				this.updateCreateFormVisibility();
+				setTimeout(() => {
+					this.updateCreateFormVisibility();
+					if (hadFocusOnPrompt && document.activeElement !== promptEl) {
+						requestAnimationFrame(() => promptEl.focus());
+					}
+				}, 0);
 			})
 			.catch(() => {
 				this._serversLoading = false;
-				this.updateCreateFormVisibility();
+				setTimeout(() => this.updateCreateFormVisibility(), 0);
 			});
 	}
 

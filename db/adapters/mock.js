@@ -143,14 +143,25 @@ export function openDb() {
 			if (typeof prefix !== "string" || !prefix.trim()) return [];
 			const normalized = String(prefix).toLowerCase().trim();
 			const cap = Math.min(Math.max(1, Number(limit) || 10), 20);
-			const withUserName = user_profiles.filter((row) => row.user_name && String(row.user_name).toLowerCase().includes(normalized));
-			const prefixFirst = withUserName.sort((a, b) => {
-				const aName = String(a.user_name).toLowerCase();
-				const bName = String(b.user_name).toLowerCase();
-				const aPrefix = aName.startsWith(normalized) ? 0 : 1;
-				const bPrefix = bName.startsWith(normalized) ? 0 : 1;
+			const allowedUserIds = new Set(
+				users.filter((u) => u.role === "consumer" && !u.meta?.suspended).map((u) => u.id)
+			);
+			const matches = (row) => {
+				if (!allowedUserIds.has(row.user_id)) return false;
+				const un = row.user_name && String(row.user_name).toLowerCase();
+				const dn = row.display_name && String(row.display_name).toLowerCase();
+				return (un && un.includes(normalized)) || (dn && dn.includes(normalized));
+			};
+			const withMatch = user_profiles.filter(matches);
+			const prefixFirst = withMatch.sort((a, b) => {
+				const aUn = String(a.user_name || "").toLowerCase();
+				const bUn = String(b.user_name || "").toLowerCase();
+				const aDn = String(a.display_name || "").toLowerCase();
+				const bDn = String(b.display_name || "").toLowerCase();
+				const aPrefix = (aUn.startsWith(normalized) || aDn.startsWith(normalized)) ? 0 : 1;
+				const bPrefix = (bUn.startsWith(normalized) || bDn.startsWith(normalized)) ? 0 : 1;
 				if (aPrefix !== bPrefix) return aPrefix - bPrefix;
-				return aName.localeCompare(bName);
+				return (aUn || aDn).localeCompare(bUn || bDn);
 			});
 			return prefixFirst.slice(0, cap).map((row) => ({
 				user_id: row.user_id,

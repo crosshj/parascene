@@ -3167,6 +3167,8 @@ app-route-feed {
 .triggered-suggest-popup {
 	position: absolute;
 	z-index: 1002;
+	display: flex;
+	flex-direction: column;
 	background: var(--surface);
 	border: 1px solid var(--border);
 	border-radius: 10px;
@@ -3174,6 +3176,11 @@ app-route-feed {
 	max-height: 280px;
 	overflow-y: auto;
 	padding: 6px 0;
+}
+
+/* When open above the input, reverse list so first item is nearest to the field */
+.triggered-suggest-popup--above {
+	flex-direction: column-reverse;
 }
 
 .triggered-suggest-item {
@@ -3188,9 +3195,12 @@ app-route-feed {
 	margin: 0 4px;
 }
 
-.triggered-suggest-item:hover,
+.triggered-suggest-item:hover {
+	background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+
 .triggered-suggest-item--selected {
-	background: var(--surface-muted);
+	background: color-mix(in srgb, var(--accent) 16%, var(--surface));
 }
 
 .triggered-suggest-item-icon {

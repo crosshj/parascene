@@ -439,7 +439,7 @@ export async function openDb() {
 				return Promise.resolve(stmt.get(username));
 			}
 		},
-		/** Prefix + substring search for suggest/autocomplete; prefix matches first (e.g. "an" → andy before evan). */
+		/** Prefix + substring search for suggest/autocomplete on user_name and display_name; prefix matches first. Only returns users with role consumer and not suspended. */
 		searchUserProfilesByPrefix: async (prefix, limit = 10) => {
 			if (typeof prefix !== "string" || !prefix.trim()) return [];
 			const normalized = String(prefix).toLowerCase().trim();
@@ -447,13 +447,16 @@ export async function openDb() {
 			const prefixPattern = normalized + "%";
 			const substrPattern = "%" + normalized + "%";
 			const stmt = db.prepare(
-				`SELECT user_id, user_name, display_name, avatar_url
-           FROM user_profiles
-           WHERE lower(user_name) LIKE ? OR lower(user_name) LIKE ?
-           ORDER BY (lower(user_name) LIKE ?) DESC, user_name ASC
+				`SELECT up.user_id, up.user_name, up.display_name, up.avatar_url
+           FROM user_profiles up
+           INNER JOIN users u ON u.id = up.user_id
+           WHERE (lower(up.user_name) LIKE ? OR lower(up.user_name) LIKE ? OR lower(up.display_name) LIKE ? OR lower(up.display_name) LIKE ?)
+             AND u.role = 'consumer'
+             AND (u.meta IS NULL OR json_extract(u.meta, '$.suspended') IS NULL OR json_extract(u.meta, '$.suspended') = 0 OR json_extract(u.meta, '$.suspended') = 'false')
+           ORDER BY (lower(up.user_name) LIKE ? OR lower(up.display_name) LIKE ?) DESC, up.user_name ASC
            LIMIT ?`
 			);
-			return Promise.resolve(stmt.all(prefixPattern, substrPattern, prefixPattern, cap));
+			return Promise.resolve(stmt.all(prefixPattern, substrPattern, prefixPattern, substrPattern, prefixPattern, prefixPattern, cap));
 		},
 		upsertUserProfile: {
 			run: async (userId, profile) => {
