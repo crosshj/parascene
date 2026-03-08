@@ -370,6 +370,20 @@ function attachWindowListeners() {
 		if (popup.contains(e.target) || popupOwner.contains(e.target)) return;
 		closePopupFor(popupOwner);
 	});
+
+	// Mobile: handle tap in capture phase so we run before blur; use delegation so we don't rely on option listeners.
+	document.addEventListener("touchend", (e) => {
+		if (!popupOwner) return;
+		const popup = getPopup();
+		if (!popup.contains(e.target)) return;
+		const option = e.target.closest(`.${ITEM_CLASS}`);
+		if (!option || option.classList.contains("triggered-suggest-item--loading") || option.classList.contains("triggered-suggest-item--empty")) return;
+		const indexStr = option.getAttribute("data-index");
+		if (indexStr == null) return;
+		e.preventDefault();
+		e.stopPropagation();
+		acceptSelection(popupOwner, parseInt(indexStr, 10));
+	}, { capture: true, passive: false });
 }
 
 function positionPopup(textarea, popup) {
@@ -507,11 +521,6 @@ function renderPopup(textarea, mode) {
 			option.addEventListener("mousedown", (e) => {
 				e.preventDefault();
 			});
-			// On mobile, touch causes textarea blur before click; handle touchend so selection is applied before blur closes the popup.
-			option.addEventListener("touchend", (e) => {
-				e.preventDefault();
-				acceptSelection(textarea, i);
-			}, { passive: false });
 			option.addEventListener("click", (e) => {
 				e.preventDefault();
 				acceptSelection(textarea, i);
@@ -776,7 +785,7 @@ export function attachTriggeredSuggest(textarea, options) {
 	function onBlur() {
 		// Delay so that on mobile a tap on a suggestion can complete (touchend) before we close;
 		// otherwise blur fires first and closes the popup before the tap is handled.
-		const delay = 100;
+		const delay = 200;
 		setTimeout(() => {
 			if (document.activeElement === textarea) return;
 			const popup = getPopup();
