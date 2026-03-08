@@ -444,17 +444,41 @@ class AppRouteCreate extends HTMLElement {
 		const hasOptions = Array.isArray(this.servers) && this.servers.length > 0;
 		const loaded = this._serversLoading === false;
 		if (!loaded) {
+			// Move focus out before hiding so we never have focus inside an aria-hidden subtree
+			if (contentWrap.contains(document.activeElement)) {
+				const fallback = loadingWrap.querySelector('a, button, [tabindex]:not([tabindex="-1"])') || this.querySelector('a[href], button, [tabindex]:not([tabindex="-1"])');
+				if (fallback && !contentWrap.contains(fallback)) fallback.focus();
+				else document.activeElement?.blur?.();
+			}
+			contentWrap.setAttribute('aria-hidden', 'true');
 			loadingWrap.hidden = false;
 			contentWrap.hidden = true;
 			return;
 		}
 		loadingWrap.hidden = true;
 		contentWrap.hidden = false;
+		contentWrap.setAttribute('aria-hidden', 'false');
 		if (hasOptions) {
-			formWrap.hidden = false;
+			// Showing form, hiding empty: move focus out of empty first if it had focus
+			if (emptyWrap?.contains(document.activeElement)) {
+				const fallback = formWrap.querySelector('a, button, input, select, textarea, [tabindex]:not([tabindex="-1"])') || this.querySelector('a[href], button, [tabindex]:not([tabindex="-1"])');
+				if (fallback && !emptyWrap.contains(fallback)) fallback.focus();
+				else document.activeElement?.blur?.();
+			}
+			emptyWrap?.setAttribute?.('aria-hidden', 'true');
 			if (emptyWrap) emptyWrap.hidden = true;
+			formWrap.setAttribute('aria-hidden', 'false');
+			formWrap.hidden = false;
 		} else {
+			// Showing empty, hiding form: move focus out of form first so we never have focus inside aria-hidden (e.g. textarea)
+			if (formWrap.contains(document.activeElement)) {
+				const fallback = emptyWrap?.querySelector('a, button, [tabindex]:not([tabindex="-1"])') || this.querySelector('a[href], button, [tabindex]:not([tabindex="-1"])');
+				if (fallback && !formWrap.contains(fallback)) fallback.focus();
+				else document.activeElement?.blur?.();
+			}
+			formWrap.setAttribute('aria-hidden', 'true');
 			formWrap.hidden = true;
+			emptyWrap?.setAttribute?.('aria-hidden', 'false');
 			if (emptyWrap) emptyWrap.hidden = false;
 		}
 	}
