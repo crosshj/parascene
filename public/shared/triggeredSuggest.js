@@ -19,6 +19,7 @@ const ATTR_ATTACHED = "data-triggered-suggest-attached";
 
 const POPUP_MAX_HEIGHT = 280;
 const POPUP_OPEN_ABOVE_THRESHOLD = 240;
+const DEFAULT_SUGGEST_LIMIT = 10;
 
 const SUGGEST_CACHE_TTL_MS = 5 * 60 * 1000;
 const SUGGEST_CACHE_MAX_ENTRIES = 100;
@@ -69,7 +70,12 @@ function cacheSet(key, items) {
 	suggestCache.set(key, { items, ts: Date.now() });
 }
 
-const capForLimit = (limit) => Math.min(Math.max(1, Number(limit) || 10), 20);
+const capForLimit = (limit) => Math.min(Math.max(1, Number(limit) || DEFAULT_SUGGEST_LIMIT), 20);
+
+function setItems(state, items) {
+	state.items = items;
+	state.selectedIndex = items.length > 0 ? 0 : -1;
+}
 
 function filterItemsByQuery(items, queryLower) {
 	const q = queryLower;
@@ -140,7 +146,7 @@ function defaultGetSuggestions({ source, q, limit }, signal) {
 	}
 
 	function doFetchDefault() {
-		const params = new URLSearchParams({ source, q: query, limit: String(limit) });
+		const params = new URLSearchParams({ source, q: query, limit: String(cap) });
 		const promise = fetch(`/api/suggest?${params}`, { credentials: "include", signal })
 			.then((r) => {
 				if (!r.ok) throw new Error(`Suggest failed: ${r.status}`);
@@ -404,8 +410,8 @@ function closePopupFor(textarea) {
 	// state.requestController is left as-is; request will complete and .then() will no-op (token check)
 
 	state.isOpen = false;
-	state.items = [];
-	state.selectedIndex = -1;
+	state.requestController = null;
+	setItems(state, []);
 	state.currentTrigger = null;
 	state.triggerStart = -1;
 	state.requestToken += 1;
@@ -639,18 +645,16 @@ function requestSuggestions(textarea, ctx, reason) {
 	const requestedQuery = ctx.query;
 	const qLower = requestedQuery.toLowerCase();
 	const localCandidates = getLocalCandidatesForTrigger(ctx.trigger, qLower);
-	const localMatches = applyLocalFilter(ctx.trigger.source, localCandidates, qLower).slice(0, 10);
+	const localMatches = applyLocalFilter(ctx.trigger.source, localCandidates, qLower).slice(0, DEFAULT_SUGGEST_LIMIT);
 
-	state.items = localMatches;
-	state.selectedIndex = localMatches.length > 0 ? 0 : -1;
+	setItems(state, localMatches);
 	state.displayedQuery = requestedQuery;
 
-	const exactCacheKey = `${ctx.trigger.source}:${qLower}:10`;
+	const exactCacheKey = `${ctx.trigger.source}:${qLower}:${DEFAULT_SUGGEST_LIMIT}`;
 	const exactCached = cacheGet(exactCacheKey);
 	if (exactCached) {
-		const merged = mergeUniqueItems([...localMatches, ...exactCached]).slice(0, 10);
-		state.items = merged;
-		state.selectedIndex = merged.length > 0 ? 0 : -1;
+		const merged = mergeUniqueItems([...localMatches, ...exactCached]).slice(0, DEFAULT_SUGGEST_LIMIT);
+		setItems(state, merged);
 		renderPopup(textarea, merged.length > 0 ? undefined : "empty");
 		return;
 	}
@@ -664,7 +668,7 @@ function requestSuggestions(textarea, ctx, reason) {
 	state.getSuggestions({
 		source: ctx.trigger.source,
 		q: requestedQuery,
-		limit: 10
+		limit: DEFAULT_SUGGEST_LIMIT
 	}, state.requestController.signal)
 		.then((items) => {
 			const current = stateByTextarea.get(textarea);
@@ -679,14 +683,13 @@ function requestSuggestions(textarea, ctx, reason) {
 
 			const nowLower = nowCtx.query.toLowerCase();
 			const base = getLocalCandidatesForTrigger(nowCtx.trigger, nowLower);
-			const nextLocal = applyLocalFilter(nowCtx.trigger.source, base, nowLower).slice(0, 10);
+			const nextLocal = applyLocalFilter(nowCtx.trigger.source, base, nowLower).slice(0, DEFAULT_SUGGEST_LIMIT);
 			const nextRemote = nowCtx.query === requestedQuery ? items : applyLocalFilter(nowCtx.trigger.source, items, nowLower);
-			const nextItems = mergeUniqueItems([...nextLocal, ...nextRemote]).slice(0, 10);
+			const nextItems = mergeUniqueItems([...nextLocal, ...nextRemote]).slice(0, DEFAULT_SUGGEST_LIMIT);
 
 			current.triggerStart = nowCtx.start;
 			current.currentTrigger = nowCtx.trigger;
-			current.items = nextItems;
-			current.selectedIndex = nextItems.length > 0 ? 0 : -1;
+			setItems(current, nextItems);
 			current.displayedQuery = nowCtx.query;
 			renderPopup(textarea, nextItems.length > 0 ? undefined : "empty");
 		})
@@ -694,8 +697,7 @@ function requestSuggestions(textarea, ctx, reason) {
 			const current = stateByTextarea.get(textarea);
 			if (!current || token !== current.requestToken) return;
 			// Server/network failed (not "empty list"); show empty so UI doesn't hang
-			current.items = [];
-			current.selectedIndex = -1;
+			setItems(current, []);
 			renderPopup(textarea, "empty");
 		});
 }
@@ -743,7 +745,9 @@ export function attachTriggeredSuggest(textarea, options) {
 		}
 
 		current.debounceTimer = setTimeout(() => {
-			current.debounceTimer = null;
+			const latest = stateByTextarea.get(textarea);
+			if (!latest) return;
+			latest.debounceTimer = null;
 			requestSuggestions(textarea, ctx, reason);
 		}, DEBOUNCE_MS);
 	}
