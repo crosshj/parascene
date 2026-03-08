@@ -507,6 +507,11 @@ function renderPopup(textarea, mode) {
 			option.addEventListener("mousedown", (e) => {
 				e.preventDefault();
 			});
+			// On mobile, touch causes textarea blur before click; handle touchend so selection is applied before blur closes the popup.
+			option.addEventListener("touchend", (e) => {
+				e.preventDefault();
+				acceptSelection(textarea, i);
+			}, { passive: false });
 			option.addEventListener("click", (e) => {
 				e.preventDefault();
 				acceptSelection(textarea, i);
@@ -769,12 +774,15 @@ export function attachTriggeredSuggest(textarea, options) {
 	}
 
 	function onBlur() {
+		// Delay so that on mobile a tap on a suggestion can complete (touchend) before we close;
+		// otherwise blur fires first and closes the popup before the tap is handled.
+		const delay = 100;
 		setTimeout(() => {
 			if (document.activeElement === textarea) return;
 			const popup = getPopup();
 			if (popup.contains(document.activeElement)) return;
 			closePopupFor(textarea);
-		}, 0);
+		}, delay);
 	}
 
 	function onPointerDown() {
