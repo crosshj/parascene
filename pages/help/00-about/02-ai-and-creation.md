@@ -18,7 +18,7 @@ Our view of “AI art” also grows out of a longer‑standing respect for gener
 
 ## Why do we defend access and generative tools?
 
-We care about access. Saying “no” to AI across the board often ends up saying “no” to people who don’t have the money, time, or training to hire or become traditional illustrators. We think there’s real value in lowering that barrier so more ideas can move around, not fewer, while still respecting working artists and the realities of markets and attention.
+We care about access. Saying “no” to AI across the board often ends up saying “no” to people who don’t have the money, time, or training to hire or become traditional artists. We think there’s real value in lowering that barrier so more ideas can move around, not fewer, while still respecting working artists and the realities of markets and attention.
 
 There is also a wide range of ways to use these tools. Asking a model to clean up the lines on your own sketch, or to nudge a photo toward a look you already designed, is still overwhelmingly human work. When critics treat this as theft while accepting every other digital shortcut—or insist that nothing is “real” unless the artist also made the paper, paint, and camera—that doesn’t feel very honest. Lumping those uses in with plagiarism and “AI doom” talking points mostly muddies the water instead of helping anyone.
 
