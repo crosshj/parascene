@@ -18,6 +18,7 @@ We want creation to be first-class, algorithms to serve people, and value to sta
 
 ## Learn more
 
+- [Our AI Stance](/help/about/ai-and-creation) — How we think about AI, art, and models
 - [Create](/help/create/basic) — Making and managing creations
 - [Connect](/help/connect/share-your-creations) — Share, follow, servers, and feedback
 - [Discover](/help/discover/feed-list) — Feed, Explore, and comments

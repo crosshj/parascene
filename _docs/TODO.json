@@ -24,6 +24,22 @@
     "starred": false
   },
   {
+    "name": "Inline Feed Callouts",
+    "description": "currently the newbie feed has callouts, but the other people's feed do not.  Imagine: upcoming events + discord + nudges, etc",
+    "cost": 50,
+    "impact": 50,
+    "dependsOn": [],
+    "starred": false
+  },
+  {
+    "name": "channels",
+    "description": "Private/public channels where only way to get image is to be part of channel",
+    "cost": 50,
+    "impact": 50,
+    "dependsOn": [],
+    "starred": false
+  },
+  {
     "name": "Landing: community creations images",
     "description": "Show example or featured community creations to anonymous visitors (no login).",
     "cost": 1,

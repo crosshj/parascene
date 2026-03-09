@@ -44,6 +44,9 @@ export function createNotificationsCronQueries(overrides = {}) {
 		selectUsersEligibleForFirstCreationNudge: {
 			all: jest.fn(async () => [])
 		},
+		selectPublishedNonWelcomeCreationCountForUser: {
+			get: jest.fn(async () => ({ count: 0 }))
+		},
 		insertEmailSend: {
 			run: insertEmailSendRun
 		},

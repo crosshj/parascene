@@ -673,16 +673,21 @@ export function renderWelcome({ recipientName = "there" } = {}) {
 
 export function renderFirstCreationNudge({ recipientName = "there" } = {}) {
 	const safeName = escapeHtml(recipientName);
-	const subject = "Your first creation is waiting";
-	const preheader = "You haven't created anything yet — here's how to start.";
+	const subject = "Your first creation to share is waiting";
+	const preheader = "When you're ready, a single prompt is all it takes.";
+	const ideasUrl = `${getBaseAppUrlForEmail()}/help/create/ideas-and-examples`;
 	const bodyHtml = html`
 	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">Hi ${safeName},</p>
 	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">
-		You've had an account for a bit but haven't made a creation yet. No pressure — but when you're ready, it only takes
-		a prompt to get started.
+		You've had an account for a bit. If you haven't made a creation yet, or you've only shared your profile so far — no
+		pressure. When you're ready, it only takes a prompt to get started.
 	</p>
 	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">
 		Describe what you want to see in your own words. We'll turn that into something you can share.
+	</p>
+	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">
+		Not sure what to make? Our help center has prompt ideas, examples, and tips:
+		<a href="${ideasUrl}" style="color:${ACCENT_COLOR}; text-decoration:underline;">Ideas &amp; examples</a>.
 	</p>
 	<p style="margin:0; font-family:Arial, Helvetica, sans-serif;">— The parascene team</p>
   `;
@@ -698,9 +703,12 @@ export function renderFirstCreationNudge({ recipientName = "there" } = {}) {
 	const text = [
 		`Hi ${recipientName},`,
 		"",
-		"You've had an account for a bit but haven't made a creation yet. No pressure — but when you're ready, it only takes a prompt to get started.",
+		"You've had an account for a bit. If you haven't made a creation yet, or you've only shared your profile so far — no pressure. When you're ready, it only takes a prompt to get started.",
 		"",
 		"Describe what you want to see in your own words. We'll turn that into something you can share.",
+		"",
+		"Not sure what to make? Our help center has prompt ideas, examples, and tips:",
+		ideasUrl,
 		"",
 		"— The parascene team",
 		"",

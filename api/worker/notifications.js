@@ -200,6 +200,15 @@ async function runNotificationsCron({ queries }) {
 		const userId = row?.user_id;
 		if (userId == null || !Number.isFinite(Number(userId))) continue;
 		if (userIdsReceivingLaterCampaignThisRun.has(userId)) continue;
+		// Defensive check: never nudge users who have published a creation other than the welcome/avatar
+		// (avatar and unpublished try creations do not count).
+		if (queries.selectPublishedNonWelcomeCreationCountForUser?.get) {
+			const countRow = await queries.selectPublishedNonWelcomeCreationCountForUser.get(userId);
+			const publishedNonWelcomeCount = Number(countRow?.count ?? 0);
+			if (Number.isFinite(publishedNonWelcomeCount) && publishedNonWelcomeCount > 0) {
+				continue;
+			}
+		}
 		const user = await queries.selectUserById?.get(userId);
 		const email = user?.email ? String(user.email).trim() : "";
 		if (!email || !email.includes("@")) continue;

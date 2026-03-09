@@ -1324,8 +1324,22 @@ export async function openDb() {
 				return Promise.resolve(rows);
 			}
 		},
+		/** Count of published, available creations that are NOT the welcome/avatar creation. Used for first-creation nudge eligibility (avatar and unpublished try creations do not count). */
+		selectPublishedNonWelcomeCreationCountForUser: {
+			get: async (userId) => {
+				const stmt = db.prepare(
+					`SELECT COUNT(*) AS count FROM created_images
+           WHERE user_id = ? AND published = 1 AND (unavailable_at IS NULL OR unavailable_at = '')
+           AND (COALESCE(title,'') NOT LIKE 'Welcome @%')
+           AND (COALESCE(title,'') <> 'Profile portrait')
+           AND (COALESCE(filename,'') NOT LIKE 'welcome_%')`
+				);
+				return Promise.resolve(stmt.get(userId));
+			}
+		},
 		selectUsersEligibleForFirstCreationNudge: {
 			// welcomeSentBeforeIso: only nudge users who were sent welcome at least this long ago (e.g. now - 24h) so we never send both in the same run
+			// Eligible if user has no *published non-welcome* creation (welcome/avatar and unpublished try creations do not disqualify)
 			all: async (welcomeSentBeforeIso) => {
 				const stmt = db.prepare(
 					`SELECT u.id AS user_id FROM users u
@@ -1333,7 +1347,13 @@ export async function openDb() {
            WHERE TRIM(u.email) != '' AND u.email LIKE '%@%'
            AND s.first_creation_nudge_sent_at IS NULL
            AND s.welcome_email_sent_at IS NOT NULL AND datetime(s.welcome_email_sent_at) <= datetime(?)
-           AND NOT EXISTS (SELECT 1 FROM created_images ci WHERE ci.user_id = u.id)`
+           AND NOT EXISTS (
+             SELECT 1 FROM created_images ci
+             WHERE ci.user_id = u.id AND ci.published = 1 AND (ci.unavailable_at IS NULL OR ci.unavailable_at = '')
+             AND (COALESCE(ci.title,'') NOT LIKE 'Welcome @%')
+             AND (COALESCE(ci.title,'') <> 'Profile portrait')
+             AND (COALESCE(ci.filename,'') NOT LIKE 'welcome_%')
+           )`
 				);
 				const rows = stmt.all(welcomeSentBeforeIso ?? "1970-01-01T00:00:00.000Z") ?? [];
 				return Promise.resolve(rows);

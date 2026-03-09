@@ -14,4 +14,8 @@ Credits flow through the community: earning and spending stay visible and tied t
 
 You can earn credits through daily claims when the product supports it. Check in-app for how and when daily credits are available.
 
-For other ways to earn, see [Tipping](/help/credits/tipping), [Boost and compete](/help/credits/boost-and-compete), and [Run a server](/help/credits/run-a-server).
+For other ways to earn or add credits, see:
+
+- [Tipping](/help/credits/tipping) — support creators and move credits through the community.
+- [Upgrade your plan](/help/credits/upgrade-plan) — get more credits with a paid plan.
+- [Run a server](/help/credits/run-a-server) — earn when others use your server.

@@ -1625,15 +1625,46 @@ export function openDb() {
 				return userIds.filter((id) => !sentSet.has(String(id))).map((user_id) => ({ user_id }));
 			}
 		},
+		/** Count of published, available creations that are NOT the welcome/avatar creation. Used for first-creation nudge eligibility (avatar and unpublished try creations do not count). */
+		selectPublishedNonWelcomeCreationCountForUser: {
+			get: async (userId) => {
+				const { data: rows, error } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.select("id, title, filename")
+					.eq("user_id", userId)
+					.eq("published", true)
+					.is("unavailable_at", null);
+				if (error) throw error;
+				const title = (r) => (r?.title != null ? String(r.title).trim() : "");
+				const filename = (r) => (r?.filename != null ? String(r.filename) : "");
+				const isWelcomeAvatar = (r) =>
+					title(r).startsWith("Welcome @") ||
+					title(r) === "Profile portrait" ||
+					filename(r).startsWith("welcome_");
+				const count = (rows ?? []).filter((r) => !isWelcomeAvatar(r)).length;
+				return { count };
+			}
+		},
 		selectUsersEligibleForFirstCreationNudge: {
 			// welcomeSentBeforeIso: only nudge users who were sent welcome at least this long ago so we never send both in the same run
+			// Eligible if user has no *published non-welcome* creation (welcome/avatar and unpublished try creations do not disqualify)
 			all: async (welcomeSentBeforeIso) => {
 				const cutoff = welcomeSentBeforeIso ?? "1970-01-01T00:00:00.000Z";
-				const { data: withCreations, error: cErr } = await serviceClient
+				const { data: publishedRows, error: cErr } = await serviceClient
 					.from(prefixedTable("created_images"))
-					.select("user_id");
+					.select("user_id, title, filename")
+					.eq("published", true)
+					.is("unavailable_at", null);
 				if (cErr) throw cErr;
-				const hasCreation = new Set((withCreations ?? []).map((r) => String(r?.user_id)));
+				const title = (r) => (r?.title != null ? String(r.title).trim() : "");
+				const filename = (r) => (r?.filename != null ? String(r.filename) : "");
+				const isWelcomeAvatar = (r) =>
+					title(r).startsWith("Welcome @") ||
+					title(r) === "Profile portrait" ||
+					filename(r).startsWith("welcome_");
+				const hasPublishedNonWelcome = new Set(
+					(publishedRows ?? []).filter((r) => r?.user_id != null && !isWelcomeAvatar(r)).map((r) => String(r.user_id))
+				);
 				const { data: stateRows, error: stateErr } = await serviceClient
 					.from(prefixedTable("email_user_campaign_state"))
 					.select("user_id")
@@ -1643,7 +1674,7 @@ export function openDb() {
 				if (stateErr) throw stateErr;
 				const candidateIds = (stateRows ?? [])
 					.map((r) => r?.user_id)
-					.filter((id) => id != null && !hasCreation.has(String(id)));
+					.filter((id) => id != null && !hasPublishedNonWelcome.has(String(id)));
 				return candidateIds.map((user_id) => ({ user_id }));
 			}
 		},

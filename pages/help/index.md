@@ -8,12 +8,14 @@ Browse by topic or use the search above.
 **About**
 
 - [How parascene works](/help/about/site-and-mission) — Mission and where to learn more.
+- [Our AI stance](/help/about/ai-and-creation) — How we think about AI, art, and models.
 
 **Create**
 
 - [Basic](/help/create/basic) — Get started with templates and simple prompts.
 - [Advanced](/help/create/advanced) — More control over prompts and settings.
 - [Creations list](/help/create/creations-list) — Managing your creations.
+- [Ideas & examples](/help/create/ideas-and-examples) — Prompt ideas and tips if you're not sure what to make.
 
 **Connect**
 
@@ -32,7 +34,7 @@ Browse by topic or use the search above.
 
 - [Daily credits](/help/credits/daily-credits) — What credits are and daily claims.
 - [Tipping](/help/credits/tipping) — Tip creators and support work you like.
-- [Boost and compete](/help/credits/boost-and-compete) — Earn through boosts and competitions.
+- [Upgrade your plan](/help/credits/upgrade-plan) — Get more credits with a paid plan.
 - [Run a server](/help/credits/run-a-server) — Run a server and earn when others use it.
 
 <br />

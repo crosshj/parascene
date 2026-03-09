@@ -845,17 +845,49 @@ export function openDb() {
 					.map((u) => ({ user_id: u.id }));
 			}
 		},
+		/** Count of published, available creations that are NOT the welcome/avatar creation. Used for first-creation nudge eligibility. */
+		selectPublishedNonWelcomeCreationCountForUser: {
+			get: async (userId) => {
+				const creationList = (typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.created_images) ?? created_images ?? [];
+				const title = (c) => (c?.title != null ? String(c.title).trim() : "");
+				const filename = (c) => (c?.filename != null ? String(c.filename) : "");
+				const isWelcomeAvatar = (c) =>
+					title(c).startsWith("Welcome @") || title(c) === "Profile portrait" || filename(c).startsWith("welcome_");
+				const count = creationList.filter(
+					(c) =>
+						c?.user_id === userId &&
+						(c?.published === true || c?.published === 1) &&
+						(c?.unavailable_at == null || c?.unavailable_at === "")
+				).filter((c) => !isWelcomeAvatar(c)).length;
+				return { count };
+			}
+		},
 		selectUsersEligibleForFirstCreationNudge: {
 			// welcomeSentBeforeIso: only nudge users who were sent welcome at least this long ago so we never send both in the same run
+			// Eligible if user has no *published non-welcome* creation (welcome/avatar and unpublished try creations do not disqualify)
 			all: async (welcomeSentBeforeIso) => {
 				const userList = (typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.users) ?? users;
 				const creationList = (typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.created_images) ?? created_images ?? [];
 				const stateList = (typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.email_user_campaign_state) ?? email_user_campaign_state;
-				const hasCreation = new Set(creationList.map((c) => c?.user_id).filter((id) => id != null));
+				const title = (c) => (c?.title != null ? String(c.title).trim() : "");
+				const filename = (c) => (c?.filename != null ? String(c.filename) : "");
+				const isWelcomeAvatar = (c) =>
+					title(c).startsWith("Welcome @") || title(c) === "Profile portrait" || filename(c).startsWith("welcome_");
+				const hasPublishedNonWelcome = new Set(
+					creationList
+						.filter(
+							(c) =>
+								c?.user_id != null &&
+								(c?.published === true || c?.published === 1) &&
+								(c?.unavailable_at == null || c?.unavailable_at === "") &&
+								!isWelcomeAvatar(c)
+						)
+						.map((c) => c.user_id)
+				);
 				const cutoff = welcomeSentBeforeIso ?? "1970-01-01T00:00:00.000Z";
 				return userList
 					.filter((u) => u?.email && String(u.email).trim() && String(u.email).includes("@"))
-					.filter((u) => !hasCreation.has(u.id))
+					.filter((u) => !hasPublishedNonWelcome.has(u.id))
 					.filter((u) => {
 						const s = stateList.find((x) => x.user_id === u.id);
 						return s && s.welcome_email_sent_at != null && (s.welcome_email_sent_at ?? "") <= cutoff && s.first_creation_nudge_sent_at == null;
