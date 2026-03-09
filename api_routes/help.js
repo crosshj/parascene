@@ -229,6 +229,9 @@ function formatSectionName(section) {
 }
 
 function generateHelpPageHtml({ title, description, html, navigation, isIndex = false, beta = false, allFiles = [], notFound = false, searchQuery = '', showMobileHomeLink = true }) {
+	const safeTitle = escapeHtml(title || 'Help');
+	const safeDescription = escapeHtml(description || '');
+
 	// Generate sidebar navigation with sections
 	const navHtml = navigation.map(sectionGroup => {
 		const sectionTitle = formatSectionName(sectionGroup.section);
@@ -287,8 +290,8 @@ function generateHelpPageHtml({ title, description, html, navigation, isIndex = 
 			${beta ? `<div class="alert alert-warning" style="margin-bottom: 24px;">
 				<p><strong>Beta:</strong> This documentation is in beta and may not reflect current functionality. The features described may also be in beta state and subject to change.</p>
 			</div>` : ''}
-			<h1>${title}</h1>
-			${description ? `<p class="help-description">${description}</p>` : ''}
+			<h1>${safeTitle}</h1>
+			${description ? `<p class="help-description">${safeDescription}</p>` : ''}
 			<div class="help-body">
 				${html}
 			</div>
@@ -298,7 +301,12 @@ function generateHelpPageHtml({ title, description, html, navigation, isIndex = 
 	return `<!doctype html>
 <html lang="en">
 <head>
-	<title>${title} - Help - parascene</title>
+	<title>${safeTitle} - Help - parascene</title>
+	<meta property="og:title" content="${safeTitle} - Help - parascene" />
+	${description ? `<meta property="og:description" content="${safeDescription}" />` : ''}
+	<meta name="twitter:card" content="summary" />
+	<meta name="twitter:title" content="${safeTitle} - Help - parascene" />
+	${description ? `<meta name="twitter:description" content="${safeDescription}" />` : ''}
 	<link rel="stylesheet" href="/pages/help.css{{V}}" />
 </head>
 <body class="help-page">
@@ -450,7 +458,11 @@ export default function createHelpRoutes({ pagesDir, queries }) {
 				showMobileHomeLink: false
 			});
 			
-			const htmlWithHead = injectCommonHead(html, getPageTokens(req));
+			const tokens = getPageTokens(req);
+			if (indexDescription) {
+				tokens.PAGE_META_DESCRIPTION = indexDescription;
+			}
+			const htmlWithHead = injectCommonHead(html, tokens);
 			
 			// Inject header if user is logged in
 			const userId = req.auth?.userId;
@@ -553,7 +565,9 @@ export default function createHelpRoutes({ pagesDir, queries }) {
 					showMobileHomeLink: true
 				});
 				
-				const htmlWithHead = injectCommonHead(html, getPageTokens(req));
+				const tokens = getPageTokens(req);
+				tokens.PAGE_META_DESCRIPTION = 'Help article not found on parascene.';
+				const htmlWithHead = injectCommonHead(html, tokens);
 				
 				// Inject header if user is logged in
 				const userId = req.auth?.userId;
@@ -596,9 +610,10 @@ export default function createHelpRoutes({ pagesDir, queries }) {
 			}
 			
 			const searchQuery = String(req.query.q || '').trim();
+			const pageDescription = helpFile.description || `${helpFile.title} — parascene help article.`;
 			const html = generateHelpPageHtml({
 				title: helpFile.title,
-				description: helpFile.description,
+				description: pageDescription,
 				html: helpFile.html,
 				navigation,
 				isIndex: false,
@@ -608,7 +623,9 @@ export default function createHelpRoutes({ pagesDir, queries }) {
 				showMobileHomeLink: true
 			});
 			
-			const htmlWithHead = injectCommonHead(html, getPageTokens(req));
+			const tokens = getPageTokens(req);
+			tokens.PAGE_META_DESCRIPTION = pageDescription;
+			const htmlWithHead = injectCommonHead(html, tokens);
 			
 			// Inject header if user is logged in
 			const userId = req.auth?.userId;

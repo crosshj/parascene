@@ -15,10 +15,22 @@ function escapeHtmlUrl(url) {
 		.replace(/>/g, "&gt;");
 }
 
-/** Tokens for replacePageTokens. V: "?v=xxx" when asset version is set, else "". V_PARAM: raw version for JS cache-busting. Optional req: when provided, includes CANONICAL_LINK and OG_URL_TAG (canonical www) for the request. */
+/** Tokens for replacePageTokens.
+ * - V: "?v=xxx" when asset version is set, else "".
+ * - V_PARAM: raw version for JS cache-busting.
+ * - PAGE_META_DESCRIPTION: meta description content for the page (defaults to site-wide description).
+ * - Optional req: when provided, includes CANONICAL_LINK and OG_URL_TAG (canonical www) for the request.
+ */
 export function getPageTokens(req) {
 	const v = getAssetVersion();
-	const tokens = { V: v ? `?v=${v}` : "", V_PARAM: v, OG_URL_TAG: "" };
+	const defaultDescription =
+		"parascene is a community that uses AI, ML, and algorithms to support creation. Join us for creativity, entertainment, and involvement.";
+	const tokens = {
+		V: v ? `?v=${v}` : "",
+		V_PARAM: v,
+		OG_URL_TAG: "",
+		PAGE_META_DESCRIPTION: defaultDescription
+	};
 	if (req) {
 		tokens.CANONICAL_LINK = getCanonicalLinkForRequest(req);
 		const canonicalUrl = getCanonicalUrlForRequest(req);
@@ -40,6 +52,7 @@ function getCommonHead() {
 		<meta name="mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-title" content="Parascene" />
+		<meta name="description" content="{{PAGE_META_DESCRIPTION}}" />
 
 		<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 		<link rel="manifest" href="/manifest.webmanifest" />
