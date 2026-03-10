@@ -1,12 +1,65 @@
-import { formatDateTime, formatRelativeTime } from '../../shared/datetime.js';
-import { enableLikeButtons, initLikeButton } from '../../shared/likes.js';
-import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
-import { getAvatarColor } from '../../shared/avatar.js';
-import { buildProfilePath } from '../../shared/profileLinks.js';
-import { setRouteMediaBackgroundImage } from '../../shared/routeMedia.js';
-import { renderEmptyState, renderEmptyError } from '../../shared/emptyState.js';
-import { renderFeedCardsSkeleton } from '../../shared/skeleton.js';
-import { addPageUsers, clearPageUsers } from '../../shared/triggeredSuggest.js';
+let formatDateTime;
+let formatRelativeTime;
+let enableLikeButtons;
+let initLikeButton;
+let fetchJsonWithStatusDeduped;
+let getAvatarColor;
+let buildProfilePath;
+let setRouteMediaBackgroundImage;
+let renderEmptyState;
+let renderEmptyError;
+let renderFeedCardsSkeleton;
+let addPageUsers;
+let clearPageUsers;
+
+function getAssetVersionParam() {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	return meta?.getAttribute('content')?.trim() || '';
+}
+
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
+}
+
+let _depsPromise;
+async function loadDeps() {
+	if (_depsPromise) return _depsPromise;
+	const v = getAssetVersionParam();
+	const qs = getImportQuery(v);
+	_depsPromise = (async () => {
+		const datetimeMod = await import(`../../shared/datetime.js${qs}`);
+		formatDateTime = datetimeMod.formatDateTime;
+		formatRelativeTime = datetimeMod.formatRelativeTime;
+
+		const likesMod = await import(`../../shared/likes.js${qs}`);
+		enableLikeButtons = likesMod.enableLikeButtons;
+		initLikeButton = likesMod.initLikeButton;
+
+		const apiMod = await import(`../../shared/api.js${qs}`);
+		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
+
+		const avatarMod = await import(`../../shared/avatar.js${qs}`);
+		getAvatarColor = avatarMod.getAvatarColor;
+
+		const profileLinksMod = await import(`../../shared/profileLinks.js${qs}`);
+		buildProfilePath = profileLinksMod.buildProfilePath;
+
+		const routeMediaMod = await import(`../../shared/routeMedia.js${qs}`);
+		setRouteMediaBackgroundImage = routeMediaMod.setRouteMediaBackgroundImage;
+
+		const emptyStateMod = await import(`../../shared/emptyState.js${qs}`);
+		renderEmptyState = emptyStateMod.renderEmptyState;
+		renderEmptyError = emptyStateMod.renderEmptyError;
+
+		const skeletonMod = await import(`../../shared/skeleton.js${qs}`);
+		renderFeedCardsSkeleton = skeletonMod.renderFeedCardsSkeleton;
+
+		const suggestMod = await import(`../../shared/triggeredSuggest.js${qs}`);
+		addPageUsers = suggestMod.addPageUsers;
+		clearPageUsers = suggestMod.clearPageUsers;
+	})();
+	return _depsPromise;
+}
 
 const html = String.raw;
 
@@ -47,7 +100,8 @@ function isFeedItemHidden(itemId) {
 }
 
 class AppRouteFeed extends HTMLElement {
-	connectedCallback() {
+	async connectedCallback() {
+		await loadDeps();
 		this.innerHTML = html`
       <style>
         .feed-route .route-media:not(.route-media-has-image) {

@@ -1,7 +1,41 @@
-import { formatDateTime, formatRelativeTime } from '../../shared/datetime.js';
-import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
-import { setNsfwContentEnabled } from '../../shared/nsfwView.js';
-import { notifyIcon, creditIcon } from '../../icons/svg-strings.js';
+let formatDateTime;
+let formatRelativeTime;
+let fetchJsonWithStatusDeduped;
+let setNsfwContentEnabled;
+let notifyIcon;
+let creditIcon;
+
+function getAssetVersionParam() {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	return meta?.getAttribute('content')?.trim() || '';
+}
+
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
+}
+
+let _depsPromise;
+async function loadDeps() {
+	if (_depsPromise) return _depsPromise;
+	const v = getAssetVersionParam();
+	const qs = getImportQuery(v);
+	_depsPromise = (async () => {
+		const datetimeMod = await import(`../../shared/datetime.js${qs}`);
+		formatDateTime = datetimeMod.formatDateTime;
+		formatRelativeTime = datetimeMod.formatRelativeTime;
+
+		const apiMod = await import(`../../shared/api.js${qs}`);
+		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
+
+		const nsfwMod = await import(`../../shared/nsfwView.js${qs}`);
+		setNsfwContentEnabled = nsfwMod.setNsfwContentEnabled;
+
+		const iconsMod = await import(`../../icons/svg-strings.js${qs}`);
+		notifyIcon = iconsMod.notifyIcon;
+		creditIcon = iconsMod.creditIcon;
+	})();
+	return _depsPromise;
+}
 
 const html = String.raw;
 
@@ -38,7 +72,8 @@ class AppNavigation extends HTMLElement {
 		return ['show-notifications', 'hide-notifications', 'show-profile', 'show-create', 'show-mobile-menu', 'hide-credits', 'default-route', 'credits-count'];
 	}
 
-	connectedCallback() {
+	async connectedCallback() {
+		await loadDeps();
 		// Establish avatar loading state before first render to avoid icon flicker.
 		if (this.hasAttribute('show-profile')) {
 			this.avatarUrl = this.readStoredAvatarUrl();

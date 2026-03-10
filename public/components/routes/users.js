@@ -1,7 +1,39 @@
-import { getAvatarColor } from '../../shared/avatar.js';
-import { formatRelativeTime, formatDateTime } from '../../shared/datetime.js';
-import { buildProfilePath } from '../../shared/profileLinks.js';
-import { loadAdminDataTable } from '../../shared/adminDataTable.js';
+let getAvatarColor;
+let formatRelativeTime;
+let formatDateTime;
+let buildProfilePath;
+let loadAdminDataTable;
+
+function getAssetVersionParam() {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	return meta?.getAttribute('content')?.trim() || '';
+}
+
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
+}
+
+let _depsPromise;
+async function loadDeps() {
+	if (_depsPromise) return _depsPromise;
+	const v = getAssetVersionParam();
+	const qs = getImportQuery(v);
+	_depsPromise = (async () => {
+		const avatarMod = await import(`../../shared/avatar.js${qs}`);
+		getAvatarColor = avatarMod.getAvatarColor;
+
+		const datetimeMod = await import(`../../shared/datetime.js${qs}`);
+		formatRelativeTime = datetimeMod.formatRelativeTime;
+		formatDateTime = datetimeMod.formatDateTime;
+
+		const profileLinksMod = await import(`../../shared/profileLinks.js${qs}`);
+		buildProfilePath = profileLinksMod.buildProfilePath;
+
+		const adminDataTableMod = await import(`../../shared/adminDataTable.js${qs}`);
+		loadAdminDataTable = adminDataTableMod.loadAdminDataTable;
+	})();
+	return _depsPromise;
+}
 
 const html = String.raw;
 
@@ -164,7 +196,8 @@ const USERS_TAB_IDS = ['active', 'share', 'anonymous', 'other', 'tips', 'setting
 
 
 class AppRouteUsers extends HTMLElement {
-	connectedCallback() {
+	async connectedCallback() {
+		await loadDeps();
 		this._selectedAnonCid = null;
 		this._anonDataLoaded = false;
 		this._shareDataLoaded = false;

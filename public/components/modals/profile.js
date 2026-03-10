@@ -1,15 +1,51 @@
-import { formatDate } from '../../shared/datetime.js';
-import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
-import { buildProfilePath } from '../../shared/profileLinks.js';
-import { helpIcon } from '../../icons/svg-strings.js';
-import {
-	getNsfwContentEnabled,
-	setNsfwContentEnabled,
-	getNsfwObscure,
-	setNsfwObscure,
-	applyNsfwPreference,
-	NSFW_VIEW_BODY_CLASS
-} from '../../shared/nsfwView.js';
+let formatDate;
+let fetchJsonWithStatusDeduped;
+let buildProfilePath;
+let helpIcon;
+let getNsfwContentEnabled;
+let setNsfwContentEnabled;
+let getNsfwObscure;
+let setNsfwObscure;
+let applyNsfwPreference;
+let NSFW_VIEW_BODY_CLASS;
+
+function getAssetVersionParam() {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	return meta?.getAttribute('content')?.trim() || '';
+}
+
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
+}
+
+let _depsPromise;
+async function loadDeps() {
+	if (_depsPromise) return _depsPromise;
+	const v = getAssetVersionParam();
+	const qs = getImportQuery(v);
+	_depsPromise = (async () => {
+		const datetimeMod = await import(`../../shared/datetime.js${qs}`);
+		formatDate = datetimeMod.formatDate;
+
+		const apiMod = await import(`../../shared/api.js${qs}`);
+		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
+
+		const profileLinksMod = await import(`../../shared/profileLinks.js${qs}`);
+		buildProfilePath = profileLinksMod.buildProfilePath;
+
+		const iconsMod = await import(`../../icons/svg-strings.js${qs}`);
+		helpIcon = iconsMod.helpIcon;
+
+		const nsfwMod = await import(`../../shared/nsfwView.js${qs}`);
+		getNsfwContentEnabled = nsfwMod.getNsfwContentEnabled;
+		setNsfwContentEnabled = nsfwMod.setNsfwContentEnabled;
+		getNsfwObscure = nsfwMod.getNsfwObscure;
+		setNsfwObscure = nsfwMod.setNsfwObscure;
+		applyNsfwPreference = nsfwMod.applyNsfwPreference;
+		NSFW_VIEW_BODY_CLASS = nsfwMod.NSFW_VIEW_BODY_CLASS;
+	})();
+	return _depsPromise;
+}
 
 const html = String.raw;
 
@@ -27,7 +63,8 @@ class AppModalProfile extends HTMLElement {
 		this.handleCloseAllModals = this.handleCloseAllModals.bind(this);
 	}
 
-	connectedCallback() {
+	async connectedCallback() {
+		await loadDeps();
 		this.setAttribute('data-modal', '');
 		this.render();
 		this.setupEventListeners();

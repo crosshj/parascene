@@ -1,7 +1,41 @@
-import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
-import { starIcon } from '../../icons/svg-strings.js';
-import { renderEmptyLoading } from '../../shared/emptyState.js';
-import { buildTodoRowElement, buildTodoGhostRow, applyDialStyles } from '../../shared/todoCard.js';
+let fetchJsonWithStatusDeduped;
+let starIcon;
+let renderEmptyLoading;
+let buildTodoRowElement;
+let buildTodoGhostRow;
+let applyDialStyles;
+
+function getAssetVersionParam() {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	return meta?.getAttribute('content')?.trim() || '';
+}
+
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
+}
+
+let _depsPromise;
+async function loadDeps() {
+	if (_depsPromise) return _depsPromise;
+	const v = getAssetVersionParam();
+	const qs = getImportQuery(v);
+	_depsPromise = (async () => {
+		const apiMod = await import(`../../shared/api.js${qs}`);
+		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
+
+		const iconsMod = await import(`../../icons/svg-strings.js${qs}`);
+		starIcon = iconsMod.starIcon;
+
+		const emptyStateMod = await import(`../../shared/emptyState.js${qs}`);
+		renderEmptyLoading = emptyStateMod.renderEmptyLoading;
+
+		const todoCardMod = await import(`../../shared/todoCard.js${qs}`);
+		buildTodoRowElement = todoCardMod.buildTodoRowElement;
+		buildTodoGhostRow = todoCardMod.buildTodoGhostRow;
+		applyDialStyles = todoCardMod.applyDialStyles;
+	})();
+	return _depsPromise;
+}
 
 const html = String.raw;
 
@@ -13,7 +47,8 @@ function normalizeTodoMode(mode) {
 }
 
 class AppRouteTodo extends HTMLElement {
-	connectedCallback() {
+	async connectedCallback() {
+		await loadDeps();
 		this._priorityMode = 'gated';
 		this._writable = true;
 		this._itemsCache = [];

@@ -1,4 +1,25 @@
-import { homeIcon } from '../../icons/svg-strings.js';
+let homeIcon;
+
+function getAssetVersionParam() {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	return meta?.getAttribute('content')?.trim() || '';
+}
+
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
+}
+
+let _depsPromise;
+async function loadDeps() {
+	if (_depsPromise) return _depsPromise;
+	const v = getAssetVersionParam();
+	const qs = getImportQuery(v);
+	_depsPromise = (async () => {
+		const iconsMod = await import(`../../icons/svg-strings.js${qs}`);
+		homeIcon = iconsMod.homeIcon;
+	})();
+	return _depsPromise;
+}
 
 const html = String.raw;
 
@@ -9,7 +30,8 @@ class AppNavigationMobile extends HTMLElement {
 		this.handleRouteChange = this.handleRouteChange.bind(this);
 	}
 
-	connectedCallback() {
+	async connectedCallback() {
+		await loadDeps();
 		this.render();
 		this.setupEventListeners();
 		window.addEventListener('popstate', this.handleRouteChange);

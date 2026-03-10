@@ -1,10 +1,39 @@
-import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
-import { renderEmptyState, renderEmptyLoading, renderEmptyError } from '../../shared/emptyState.js';
+let fetchJsonWithStatusDeduped;
+let renderEmptyState;
+let renderEmptyLoading;
+let renderEmptyError;
+
+function getAssetVersionParam() {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	return meta?.getAttribute('content')?.trim() || '';
+}
+
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
+}
+
+let _depsPromise;
+async function loadDeps() {
+	if (_depsPromise) return _depsPromise;
+	const v = getAssetVersionParam();
+	const qs = getImportQuery(v);
+	_depsPromise = (async () => {
+		const apiMod = await import(`../../shared/api.js${qs}`);
+		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
+
+		const emptyStateMod = await import(`../../shared/emptyState.js${qs}`);
+		renderEmptyState = emptyStateMod.renderEmptyState;
+		renderEmptyLoading = emptyStateMod.renderEmptyLoading;
+		renderEmptyError = emptyStateMod.renderEmptyError;
+	})();
+	return _depsPromise;
+}
 
 const html = String.raw;
 
 class AppRouteTemplates extends HTMLElement {
-  connectedCallback() {
+  async connectedCallback() {
+    await loadDeps();
     this.innerHTML = html`
       <div class="route-header">
         <h3>Templates</h3>

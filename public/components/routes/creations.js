@@ -1,13 +1,67 @@
-import { formatDateTime, formatRelativeTime } from '../../shared/datetime.js';
-import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
-import { renderCreationKebabHtml, setupKebabDropdown } from '../../shared/kebabMenu.js';
-import { setRouteMediaBackgroundImage } from '../../shared/routeMedia.js';
-import { renderEmptyState, renderEmptyError } from '../../shared/emptyState.js';
-import { renderGridSkeleton } from '../../shared/skeleton.js';
-import { publishedBadgeHtml } from '../../shared/creationBadges.js';
-import { buildCreationCardShell } from '../../shared/creationCard.js';
-import { eyeHiddenIcon } from '../../icons/svg-strings.js';
-import { addToMutateQueue } from '../../shared/mutateQueue.js';
+let formatDateTime;
+let formatRelativeTime;
+let fetchJsonWithStatusDeduped;
+let renderCreationKebabHtml;
+let setupKebabDropdown;
+let setRouteMediaBackgroundImage;
+let renderEmptyState;
+let renderEmptyError;
+let renderGridSkeleton;
+let publishedBadgeHtml;
+let buildCreationCardShell;
+let eyeHiddenIcon;
+let addToMutateQueue;
+
+function getAssetVersionParam() {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	return meta?.getAttribute('content')?.trim() || '';
+}
+
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
+}
+
+let _depsPromise;
+async function loadDeps() {
+	if (_depsPromise) return _depsPromise;
+	const v = getAssetVersionParam();
+	const qs = getImportQuery(v);
+	_depsPromise = (async () => {
+		const datetimeMod = await import(`../../shared/datetime.js${qs}`);
+		formatDateTime = datetimeMod.formatDateTime;
+		formatRelativeTime = datetimeMod.formatRelativeTime;
+
+		const apiMod = await import(`../../shared/api.js${qs}`);
+		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
+
+		const kebabMod = await import(`../../shared/kebabMenu.js${qs}`);
+		renderCreationKebabHtml = kebabMod.renderCreationKebabHtml;
+		setupKebabDropdown = kebabMod.setupKebabDropdown;
+
+		const routeMediaMod = await import(`../../shared/routeMedia.js${qs}`);
+		setRouteMediaBackgroundImage = routeMediaMod.setRouteMediaBackgroundImage;
+
+		const emptyStateMod = await import(`../../shared/emptyState.js${qs}`);
+		renderEmptyState = emptyStateMod.renderEmptyState;
+		renderEmptyError = emptyStateMod.renderEmptyError;
+
+		const skeletonMod = await import(`../../shared/skeleton.js${qs}`);
+		renderGridSkeleton = skeletonMod.renderGridSkeleton;
+
+		const badgesMod = await import(`../../shared/creationBadges.js${qs}`);
+		publishedBadgeHtml = badgesMod.publishedBadgeHtml;
+
+		const creationCardMod = await import(`../../shared/creationCard.js${qs}`);
+		buildCreationCardShell = creationCardMod.buildCreationCardShell;
+
+		const iconsMod = await import(`../../icons/svg-strings.js${qs}`);
+		eyeHiddenIcon = iconsMod.eyeHiddenIcon;
+
+		const mutateQueueMod = await import(`../../shared/mutateQueue.js${qs}`);
+		addToMutateQueue = mutateQueueMod.addToMutateQueue;
+	})();
+	return _depsPromise;
+}
 
 const html = String.raw;
 
@@ -57,7 +111,8 @@ class AppRouteCreations extends HTMLElement {
 		this.drainImageLoadQueue();
 	}
 
-	connectedCallback() {
+	async connectedCallback() {
+		await loadDeps();
 		this.innerHTML = html`
       <div class="creations-route">
         <div class="route-header">

@@ -1,6 +1,37 @@
-import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
-import { formatRelativeTime } from '../../shared/datetime.js';
-import { helpIcon, creditIcon, closeIcon } from '../../icons/svg-strings.js';
+let fetchJsonWithStatusDeduped;
+let formatRelativeTime;
+let helpIcon;
+let creditIcon;
+let closeIcon;
+
+function getAssetVersionParam() {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	return meta?.getAttribute('content')?.trim() || '';
+}
+
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
+}
+
+let _depsPromise;
+async function loadDeps() {
+	if (_depsPromise) return _depsPromise;
+	const v = getAssetVersionParam();
+	const qs = getImportQuery(v);
+	_depsPromise = (async () => {
+		const apiMod = await import(`../../shared/api.js${qs}`);
+		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
+
+		const datetimeMod = await import(`../../shared/datetime.js${qs}`);
+		formatRelativeTime = datetimeMod.formatRelativeTime;
+
+		const iconsMod = await import(`../../icons/svg-strings.js${qs}`);
+		helpIcon = iconsMod.helpIcon;
+		creditIcon = iconsMod.creditIcon;
+		closeIcon = iconsMod.closeIcon;
+	})();
+	return _depsPromise;
+}
 
 const html = String.raw;
 
@@ -20,7 +51,8 @@ class AppModalCredits extends HTMLElement {
 		this.handleClaimCredits = this.handleClaimCredits.bind(this);
 	}
 
-	connectedCallback() {
+	async connectedCallback() {
+		await loadDeps();
 		this.setAttribute('data-modal', '');
 		this.render();
 		this.setupEventListeners();

@@ -1,10 +1,59 @@
-import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
-import { submitCreationWithPending, uploadImageFile, formatMentionsFailureForDialog } from '../../shared/createSubmit.js';
-import { renderFields, isPromptLikeField, isImageUrlField, isImageUrlArrayField } from '../../shared/providerFormFields.js';
-import { loadMutateQueue } from '../../shared/mutateQueue.js';
-import { attachAutoGrowTextarea } from '../../shared/autogrow.js';
-import { attachMentionSuggest } from '../../shared/triggeredSuggest.js';
-import { renderCreateFormSkeleton } from '../../shared/skeleton.js';
+let fetchJsonWithStatusDeduped;
+let submitCreationWithPending;
+let uploadImageFile;
+let formatMentionsFailureForDialog;
+let renderFields;
+let isPromptLikeField;
+let isImageUrlField;
+let isImageUrlArrayField;
+let loadMutateQueue;
+let attachAutoGrowTextarea;
+let attachMentionSuggest;
+let renderCreateFormSkeleton;
+
+function getAssetVersionParam() {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	return meta?.getAttribute('content')?.trim() || '';
+}
+
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
+}
+
+let _depsPromise;
+async function loadDeps() {
+	if (_depsPromise) return _depsPromise;
+	const v = getAssetVersionParam();
+	const qs = getImportQuery(v);
+	_depsPromise = (async () => {
+		const apiMod = await import(`../../shared/api.js${qs}`);
+		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
+
+		const createSubmitMod = await import(`../../shared/createSubmit.js${qs}`);
+		submitCreationWithPending = createSubmitMod.submitCreationWithPending;
+		uploadImageFile = createSubmitMod.uploadImageFile;
+		formatMentionsFailureForDialog = createSubmitMod.formatMentionsFailureForDialog;
+
+		const providerFormFieldsMod = await import(`../../shared/providerFormFields.js${qs}`);
+		renderFields = providerFormFieldsMod.renderFields;
+		isPromptLikeField = providerFormFieldsMod.isPromptLikeField;
+		isImageUrlField = providerFormFieldsMod.isImageUrlField;
+		isImageUrlArrayField = providerFormFieldsMod.isImageUrlArrayField;
+
+		const mutateQueueMod = await import(`../../shared/mutateQueue.js${qs}`);
+		loadMutateQueue = mutateQueueMod.loadMutateQueue;
+
+		const autogrowMod = await import(`../../shared/autogrow.js${qs}`);
+		attachAutoGrowTextarea = autogrowMod.attachAutoGrowTextarea;
+
+		const suggestMod = await import(`../../shared/triggeredSuggest.js${qs}`);
+		attachMentionSuggest = suggestMod.attachMentionSuggest;
+
+		const skeletonMod = await import(`../../shared/skeleton.js${qs}`);
+		renderCreateFormSkeleton = skeletonMod.renderCreateFormSkeleton;
+	})();
+	return _depsPromise;
+}
 
 const html = String.raw;
 
@@ -39,7 +88,8 @@ class AppRouteCreate extends HTMLElement {
 		this.showHiddenFields = false;
 	}
 
-	connectedCallback() {
+	async connectedCallback() {
+		await loadDeps();
 		this._serversLoading = true;
 		this.innerHTML = html`
       <div class="create-route">

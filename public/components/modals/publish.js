@@ -1,5 +1,29 @@
-import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
-import { getNsfwContentEnabled } from '../../shared/nsfwView.js';
+let fetchJsonWithStatusDeduped;
+let getNsfwContentEnabled;
+
+function getAssetVersionParam() {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	return meta?.getAttribute('content')?.trim() || '';
+}
+
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
+}
+
+let _depsPromise;
+async function loadDeps() {
+	if (_depsPromise) return _depsPromise;
+	const v = getAssetVersionParam();
+	const qs = getImportQuery(v);
+	_depsPromise = (async () => {
+		const apiMod = await import(`../../shared/api.js${qs}`);
+		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
+
+		const nsfwMod = await import(`../../shared/nsfwView.js${qs}`);
+		getNsfwContentEnabled = nsfwMod.getNsfwContentEnabled;
+	})();
+	return _depsPromise;
+}
 
 const html = String.raw;
 
@@ -43,7 +67,8 @@ class AppModalPublish extends HTMLElement {
 		this.handleSubmit = this.handleSubmit.bind(this);
 	}
 
-	connectedCallback() {
+	async connectedCallback() {
+		await loadDeps();
 		this.setAttribute('data-modal', '');
 		this.render();
 		this.setupEventListeners();

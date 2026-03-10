@@ -1,4 +1,25 @@
-import { formatRelativeTime } from '../../shared/datetime.js';
+let formatRelativeTime;
+
+function getAssetVersionParam() {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	return meta?.getAttribute('content')?.trim() || '';
+}
+
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
+}
+
+let _depsPromise;
+async function loadDeps() {
+	if (_depsPromise) return _depsPromise;
+	const v = getAssetVersionParam();
+	const qs = getImportQuery(v);
+	_depsPromise = (async () => {
+		const datetimeMod = await import(`../../shared/datetime.js${qs}`);
+		formatRelativeTime = datetimeMod.formatRelativeTime;
+	})();
+	return _depsPromise;
+}
 
 const html = String.raw;
 
@@ -136,7 +157,8 @@ class AppModalServer extends HTMLElement {
 		this.handleCloseAllModals = this.handleCloseAllModals.bind(this);
 	}
 
-	connectedCallback() {
+	async connectedCallback() {
+		await loadDeps();
 		this.setAttribute('data-modal', '');
 		this.render();
 		this.setupEventListeners();

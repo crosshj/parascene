@@ -1,11 +1,59 @@
-import { formatDateTime, formatRelativeTime } from '../../shared/datetime.js';
-import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
-import { searchIcon } from '../../icons/svg-strings.js';
-import { buildProfilePath } from '../../shared/profileLinks.js';
-import { setRouteMediaBackgroundImage } from '../../shared/routeMedia.js';
-import { renderEmptyState, renderEmptyLoading, renderEmptyError } from '../../shared/emptyState.js';
-import { renderGridSkeleton } from '../../shared/skeleton.js';
-import { buildCreationCardShell } from '../../shared/creationCard.js';
+let formatDateTime;
+let formatRelativeTime;
+let fetchJsonWithStatusDeduped;
+let searchIcon;
+let buildProfilePath;
+let setRouteMediaBackgroundImage;
+let renderEmptyState;
+let renderEmptyLoading;
+let renderEmptyError;
+let renderGridSkeleton;
+let buildCreationCardShell;
+
+function getAssetVersionParam() {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	return meta?.getAttribute('content')?.trim() || '';
+}
+
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
+}
+
+let _depsPromise;
+async function loadDeps() {
+	if (_depsPromise) return _depsPromise;
+	const v = getAssetVersionParam();
+	const qs = getImportQuery(v);
+	_depsPromise = (async () => {
+		const datetimeMod = await import(`../../shared/datetime.js${qs}`);
+		formatDateTime = datetimeMod.formatDateTime;
+		formatRelativeTime = datetimeMod.formatRelativeTime;
+
+		const apiMod = await import(`../../shared/api.js${qs}`);
+		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
+
+		const iconsMod = await import(`../../icons/svg-strings.js${qs}`);
+		searchIcon = iconsMod.searchIcon;
+
+		const profileLinksMod = await import(`../../shared/profileLinks.js${qs}`);
+		buildProfilePath = profileLinksMod.buildProfilePath;
+
+		const routeMediaMod = await import(`../../shared/routeMedia.js${qs}`);
+		setRouteMediaBackgroundImage = routeMediaMod.setRouteMediaBackgroundImage;
+
+		const emptyStateMod = await import(`../../shared/emptyState.js${qs}`);
+		renderEmptyState = emptyStateMod.renderEmptyState;
+		renderEmptyLoading = emptyStateMod.renderEmptyLoading;
+		renderEmptyError = emptyStateMod.renderEmptyError;
+
+		const skeletonMod = await import(`../../shared/skeleton.js${qs}`);
+		renderGridSkeleton = skeletonMod.renderGridSkeleton;
+
+		const creationCardMod = await import(`../../shared/creationCard.js${qs}`);
+		buildCreationCardShell = creationCardMod.buildCreationCardShell;
+	})();
+	return _depsPromise;
+}
 
 const html = String.raw;
 
@@ -35,7 +83,8 @@ class AppRouteExplore extends HTMLElement {
 		this.drainImageLoadQueue();
 	}
 
-	connectedCallback() {
+	async connectedCallback() {
+		await loadDeps();
 		this.innerHTML = html`
 	<div class="explore-route">
 		<div class="route-header">

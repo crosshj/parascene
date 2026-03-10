@@ -1,17 +1,45 @@
-const html = String.raw;
+let closeIcon;
+let xIcon;
+let facebookIcon;
+let redditIcon;
+let linkedinIcon;
+let smsIcon;
+let emailIcon;
+let shareIcon;
+let linkIcon;
+let qrCodeIcon;
 
-import {
-	closeIcon,
-	xIcon,
-	facebookIcon,
-	redditIcon,
-	linkedinIcon,
-	smsIcon,
-	emailIcon,
-	shareIcon,
-	linkIcon,
-	qrCodeIcon
-} from '../../icons/svg-strings.js';
+function getAssetVersionParam() {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	return meta?.getAttribute('content')?.trim() || '';
+}
+
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
+}
+
+let _depsPromise;
+async function loadDeps() {
+	if (_depsPromise) return _depsPromise;
+	const v = getAssetVersionParam();
+	const qs = getImportQuery(v);
+	_depsPromise = (async () => {
+		const iconsMod = await import(`../../icons/svg-strings.js${qs}`);
+		closeIcon = iconsMod.closeIcon;
+		xIcon = iconsMod.xIcon;
+		facebookIcon = iconsMod.facebookIcon;
+		redditIcon = iconsMod.redditIcon;
+		linkedinIcon = iconsMod.linkedinIcon;
+		smsIcon = iconsMod.smsIcon;
+		emailIcon = iconsMod.emailIcon;
+		shareIcon = iconsMod.shareIcon;
+		linkIcon = iconsMod.linkIcon;
+		qrCodeIcon = iconsMod.qrCodeIcon;
+	})();
+	return _depsPromise;
+}
+
+const html = String.raw;
 
 async function copyTextToClipboard(text) {
 	try {
@@ -69,7 +97,8 @@ class AppModalShare extends HTMLElement {
 		this.closeQrModal = this.closeQrModal.bind(this);
 	}
 
-	connectedCallback() {
+	async connectedCallback() {
+		await loadDeps();
 		this.setAttribute('data-modal', '');
 		this.render();
 		this.setupEventListeners();

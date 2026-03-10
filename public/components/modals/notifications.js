@@ -1,6 +1,35 @@
-import { formatDateTime, formatRelativeTime } from '../../shared/datetime.js';
-import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
-import { closeModalsAndNavigate } from '../../shared/navigation.js';
+let formatDateTime;
+let formatRelativeTime;
+let fetchJsonWithStatusDeduped;
+let closeModalsAndNavigate;
+
+function getAssetVersionParam() {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	return meta?.getAttribute('content')?.trim() || '';
+}
+
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
+}
+
+let _depsPromise;
+async function loadDeps() {
+	if (_depsPromise) return _depsPromise;
+	const v = getAssetVersionParam();
+	const qs = getImportQuery(v);
+	_depsPromise = (async () => {
+		const datetimeMod = await import(`../../shared/datetime.js${qs}`);
+		formatDateTime = datetimeMod.formatDateTime;
+		formatRelativeTime = datetimeMod.formatRelativeTime;
+
+		const apiMod = await import(`../../shared/api.js${qs}`);
+		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
+
+		const navMod = await import(`../../shared/navigation.js${qs}`);
+		closeModalsAndNavigate = navMod.closeModalsAndNavigate;
+	})();
+	return _depsPromise;
+}
 
 const html = String.raw;
 
@@ -21,7 +50,8 @@ class AppModalNotifications extends HTMLElement {
 		this.handleCloseAllModals = this.handleCloseAllModals.bind(this);
 	}
 
-	connectedCallback() {
+	async connectedCallback() {
+		await loadDeps();
 		this.setAttribute('data-modal', '');
 		this.render();
 		this.setupEventListeners();

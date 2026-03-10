@@ -1,14 +1,73 @@
-import { formatRelativeTime } from '../../shared/datetime.js';
-import { fetchJsonWithStatusDeduped } from '../../shared/api.js';
-import { getAvatarColor } from '../../shared/avatar.js';
-import { fetchLatestComments } from '../../shared/comments.js';
-import { processUserText, hydrateUserTextLinks } from '../../shared/userText.js';
-import { renderEmptyState, renderEmptyError } from '../../shared/emptyState.js';
-import { renderCommentRowsSkeleton, renderServerCardsSkeleton } from '../../shared/skeleton.js';
-import { attachAutoGrowTextarea } from '../../shared/autogrow.js';
-import { buildProfilePath } from '../../shared/profileLinks.js';
-import { renderCommentAvatarHtml } from '../../shared/commentItem.js';
-import { REACTION_ORDER, REACTION_ICONS } from '../../icons/svg-strings.js';
+let formatRelativeTime;
+let fetchJsonWithStatusDeduped;
+let getAvatarColor;
+let fetchLatestComments;
+let processUserText;
+let hydrateUserTextLinks;
+let renderEmptyState;
+let renderEmptyError;
+let renderCommentRowsSkeleton;
+let renderServerCardsSkeleton;
+let attachAutoGrowTextarea;
+let buildProfilePath;
+let renderCommentAvatarHtml;
+let REACTION_ORDER;
+let REACTION_ICONS;
+
+function getAssetVersionParam() {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	return meta?.getAttribute('content')?.trim() || '';
+}
+
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
+}
+
+let _depsPromise;
+async function loadDeps() {
+	if (_depsPromise) return _depsPromise;
+	const v = getAssetVersionParam();
+	const qs = getImportQuery(v);
+	_depsPromise = (async () => {
+		const datetimeMod = await import(`../../shared/datetime.js${qs}`);
+		formatRelativeTime = datetimeMod.formatRelativeTime;
+
+		const apiMod = await import(`../../shared/api.js${qs}`);
+		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
+
+		const avatarMod = await import(`../../shared/avatar.js${qs}`);
+		getAvatarColor = avatarMod.getAvatarColor;
+
+		const commentsMod = await import(`../../shared/comments.js${qs}`);
+		fetchLatestComments = commentsMod.fetchLatestComments;
+
+		const userTextMod = await import(`../../shared/userText.js${qs}`);
+		processUserText = userTextMod.processUserText;
+		hydrateUserTextLinks = userTextMod.hydrateUserTextLinks;
+
+		const emptyStateMod = await import(`../../shared/emptyState.js${qs}`);
+		renderEmptyState = emptyStateMod.renderEmptyState;
+		renderEmptyError = emptyStateMod.renderEmptyError;
+
+		const skeletonMod = await import(`../../shared/skeleton.js${qs}`);
+		renderCommentRowsSkeleton = skeletonMod.renderCommentRowsSkeleton;
+		renderServerCardsSkeleton = skeletonMod.renderServerCardsSkeleton;
+
+		const autogrowMod = await import(`../../shared/autogrow.js${qs}`);
+		attachAutoGrowTextarea = autogrowMod.attachAutoGrowTextarea;
+
+		const profileLinksMod = await import(`../../shared/profileLinks.js${qs}`);
+		buildProfilePath = profileLinksMod.buildProfilePath;
+
+		const commentItemMod = await import(`../../shared/commentItem.js${qs}`);
+		renderCommentAvatarHtml = commentItemMod.renderCommentAvatarHtml;
+
+		const iconsMod = await import(`../../icons/svg-strings.js${qs}`);
+		REACTION_ORDER = iconsMod.REACTION_ORDER;
+		REACTION_ICONS = iconsMod.REACTION_ICONS;
+	})();
+	return _depsPromise;
+}
 
 const html = String.raw;
 
@@ -22,7 +81,8 @@ function escapeHtml(str) {
 }
 
 class AppRouteServers extends HTMLElement {
-	connectedCallback() {
+	async connectedCallback() {
+		await loadDeps();
 		this.innerHTML = html`
       <div class="servers-route">
         <div class="route-header">

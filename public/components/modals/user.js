@@ -1,4 +1,26 @@
-import { buildProfilePath } from '../../shared/profileLinks.js';
+let buildProfilePath;
+
+function getAssetVersionParam() {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	return meta?.getAttribute('content')?.trim() || '';
+}
+
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
+}
+
+let _depsPromise;
+async function loadDeps() {
+	if (_depsPromise) return _depsPromise;
+	const v = getAssetVersionParam();
+	const qs = getImportQuery(v);
+	_depsPromise = (async () => {
+		const profileLinksMod = await import(`../../shared/profileLinks.js${qs}`);
+		buildProfilePath = profileLinksMod.buildProfilePath;
+	})();
+	return _depsPromise;
+}
+
 const html = String.raw;
 
 /** Matches server: subscription ID for admin-granted founder (no payment). */
@@ -42,7 +64,8 @@ class AppModalUser extends HTMLElement {
 		this._boundCloseAllModals = () => this.close();
 	}
 
-	connectedCallback() {
+	async connectedCallback() {
+		await loadDeps();
 		this.setAttribute('data-modal', '');
 		this.render();
 		this._overlay = this.querySelector('[data-user-modal-overlay]');
