@@ -2887,6 +2887,23 @@ export async function openDb() {
 				return Promise.resolve(stmt.all(...ids));
 			}
 		},
+		/** Reactors per (comment, emoji_key): [{ comment_id, emoji_key, user_id, display_name, user_name }]. */
+		selectCommentReactionReactorsByCommentIds: {
+			all: async (commentIds) => {
+				if (!Array.isArray(commentIds) || commentIds.length === 0) return [];
+				const placeholders = commentIds.map(() => "?").join(",");
+				const ids = commentIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0);
+				if (ids.length === 0) return [];
+				const stmt = db.prepare(
+					`SELECT cr.comment_id, cr.emoji_key, cr.user_id, up.display_name, up.user_name
+           FROM comment_reactions cr
+           LEFT JOIN user_profiles up ON up.user_id = cr.user_id
+           WHERE cr.comment_id IN (${placeholders})
+           ORDER BY cr.comment_id, cr.emoji_key, up.display_name, up.user_name`
+				);
+				return Promise.resolve(stmt.all(...ids));
+			}
+		},
 		/** Viewer's reactions for given comments: [{ comment_id, emoji_key }]. */
 		selectViewerReactionsByCommentIds: {
 			all: async (viewerId, commentIds) => {

@@ -13,6 +13,7 @@ let buildProfilePath;
 let renderCommentAvatarHtml;
 let REACTION_ORDER;
 let REACTION_ICONS;
+let setupReactionTooltipTap;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -61,6 +62,9 @@ async function loadDeps() {
 
 		const commentItemMod = await import(`../../shared/commentItem.js${qs}`);
 		renderCommentAvatarHtml = commentItemMod.renderCommentAvatarHtml;
+
+		const tooltipTapMod = await import(`../../shared/reactionTooltipTap.js${qs}`);
+		setupReactionTooltipTap = tooltipTapMod.setupReactionTooltipTap;
 
 		const iconsMod = await import(`../../icons/svg-strings.js${qs}`);
 		REACTION_ORDER = iconsMod.REACTION_ORDER;
@@ -132,15 +136,18 @@ class AppRouteServers extends HTMLElement {
 		document.addEventListener('servers-updated', this._onServersUpdated);
 	}
 
-	/** Sync Connect tab from URL hash (#servers, #latest-comments, #feature-requests) and update hash when tab changes. */
-	setupConnectTabHash() {
-		const CONNECT_TAB_IDS = ['latest-comments', 'servers', 'feature-requests'];
+		/** Sync Connect tab from URL hash (#servers, #latest-comments, #comments, #feature-requests) and update hash when tab changes. */
+		setupConnectTabHash() {
+			const CONNECT_TAB_IDS = ['latest-comments', 'servers', 'feature-requests'];
+			const HASH_ALIASES = { 'comments': 'latest-comments' };
 
-		const syncTabFromHash = () => {
-			const path = window.location.pathname || '';
-			if (path !== '/connect' && !path.startsWith('/connect/')) return;
-			const hash = (window.location.hash || '').replace(/^#/, '').toLowerCase();
-			if (!hash || !CONNECT_TAB_IDS.includes(hash)) return;
+			const syncTabFromHash = () => {
+				const path = window.location.pathname || '';
+				if (path !== '/connect' && !path.startsWith('/connect/')) return;
+				let hash = (window.location.hash || '').replace(/^#/, '').toLowerCase();
+				if (!hash) return;
+				hash = HASH_ALIASES[hash] || hash;
+				if (!CONNECT_TAB_IDS.includes(hash)) return;
 			const tabs = this.querySelector('app-tabs');
 			if (tabs && typeof tabs.setActiveTab === 'function') {
 				tabs.setActiveTab(hash, { focus: false });
@@ -200,9 +207,10 @@ class AppRouteServers extends HTMLElement {
 			container.removeAttribute('aria-label');
 			const comments = Array.isArray(result.data?.comments) ? result.data.comments : [];
 			this.renderLatestComments(comments, container);
-		} catch {
+		} catch (err) {
 			container.removeAttribute('aria-busy');
 			container.removeAttribute('aria-label');
+			console.error('[Connect] Error loading comments:', err);
 			container.innerHTML = renderEmptyError('Error loading comments.');
 		}
 	}
@@ -340,19 +348,43 @@ class AppRouteServers extends HTMLElement {
 			commentText.className = 'comment-text';
 			commentText.innerHTML = safeText;
 
-			const reactionCounts = comment?.reaction_counts && typeof comment.reaction_counts === 'object' ? comment.reaction_counts : {};
-			const chipsWithCount = REACTION_ORDER.filter((key) => (Number(reactionCounts[key]) || 0) > 0);
+			const reactions = comment?.reactions && typeof comment.reactions === 'object' ? comment.reactions : {};
+			let chipsWithCount = [];
+			let reactionsEl = null;
+			try {
+				chipsWithCount = Array.isArray(REACTION_ORDER) ? REACTION_ORDER.filter((key) => {
+					const arr = Array.isArray(reactions[key]) ? reactions[key] : [];
+					const last = arr[arr.length - 1];
+					const others = typeof last === 'number' ? last : 0;
+					const strings = typeof last === 'number' ? arr.slice(0, -1) : arr;
+					return strings.length + others > 0;
+				}) : [];
+			} catch (e) {
+				console.error('[Connect] Error filtering reaction chips:', e);
+			}
 			if (chipsWithCount.length > 0) {
-				const reactionsEl = document.createElement('div');
+				reactionsEl = document.createElement('div');
 				reactionsEl.className = 'comment-reactions comment-reactions-readonly';
-				reactionsEl.innerHTML = chipsWithCount.map((key) => {
-					const count = Number(reactionCounts[key]) || 0;
-					const iconFn = REACTION_ICONS[key];
-					const iconHtml = iconFn ? iconFn('comment-reaction-icon') : '';
-					const countLabel = count > 99 ? '99+' : String(count);
-					return `<span class="comment-reaction-chip" aria-label="${escapeHtml(key)}: ${escapeHtml(countLabel)}"><span class="comment-reaction-icon-wrap" aria-hidden="true">${iconHtml}</span><span class="comment-reaction-count">${escapeHtml(countLabel)}</span></span>`;
-				}).join('');
-				row.appendChild(reactionsEl);
+				try {
+					const pillsHtml = chipsWithCount.map((key) => {
+						const arr = Array.isArray(reactions[key]) ? reactions[key] : [];
+						const last = arr[arr.length - 1];
+						const others = typeof last === 'number' ? last : 0;
+						const strings = (typeof last === 'number' ? arr.slice(0, -1) : arr).filter((s) => typeof s === 'string');
+						const count = strings.length + others;
+						const countLabel = count > 99 ? '99+' : String(count);
+						const tooltip = strings.length > 0 || others > 0
+							? [...strings, others > 0 ? `and ${others} ${others === 1 ? 'other' : 'others'}` : ''].filter(Boolean).join(', ')
+							: '';
+						const iconFn = REACTION_ICONS?.[key];
+						const iconHtml = (typeof iconFn === 'function' ? iconFn('comment-reaction-icon') : '') || '';
+						const tooltipAttr = tooltip ? ` data-tooltip="${escapeHtml(tooltip)}"` : '';
+						return `<span class="comment-reaction-pill" aria-label="${escapeHtml(key)}: ${escapeHtml(countLabel)}"${tooltipAttr}><span class="comment-reaction-icon-wrap" aria-hidden="true">${iconHtml}</span><span class="comment-reaction-count">${escapeHtml(countLabel)}</span></span>`;
+					}).join('');
+					reactionsEl.innerHTML = `<div class="comment-reaction-pills"><div class="comment-reaction-pills-inner">${pillsHtml}</div></div>`;
+				} catch (e) {
+					console.error('[Connect] Error rendering reaction chips for comment:', comment?.id, e);
+				}
 			}
 
 			const footer = document.createElement('div');
@@ -374,15 +406,21 @@ class AppRouteServers extends HTMLElement {
 			row.appendChild(creationTitle);
 			row.appendChild(creatorRow);
 			row.appendChild(commentText);
-			if (chipsWithCount.length > 0) {
+			row.appendChild(footer);
+			if (reactionsEl?.innerHTML) {
+				row.classList.add('has-reactions');
 				row.appendChild(reactionsEl);
 			}
-			row.appendChild(footer);
 			container.appendChild(row);
 		});
 
 		// Comments were rendered; hydrate any special link labels within them.
 		hydrateUserTextLinks(container);
+
+		// Tap-to-show tooltip for mobile (readonly pills; interactive pills elsewhere have their own tap action).
+		if (typeof setupReactionTooltipTap === 'function') {
+			setupReactionTooltipTap(container);
+		}
 	}
 
 	// Listen for server updates from modal

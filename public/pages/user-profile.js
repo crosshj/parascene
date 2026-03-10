@@ -19,6 +19,7 @@ let buildCreationCardShell;
 let buildUserListRowHtml;
 let REACTION_ORDER;
 let REACTION_ICONS;
+let setupReactionTooltipTap;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -81,6 +82,9 @@ async function loadDeps() {
 		const iconsMod = await import(`../icons/svg-strings.js${qs}`);
 		REACTION_ORDER = iconsMod.REACTION_ORDER;
 		REACTION_ICONS = iconsMod.REACTION_ICONS;
+
+		const tooltipTapMod = await import(`../shared/reactionTooltipTap.js${qs}`);
+		setupReactionTooltipTap = tooltipTapMod.setupReactionTooltipTap;
 	})();
 	return _depsPromise;
 }
@@ -884,15 +888,29 @@ function renderCommentsList(container, comments, emptyMessage) {
 			user_name: c?.commenter_user_name,
 			avatar_url: c?.commenter_avatar_url
 			};
-			const reactionCounts = c?.reaction_counts && typeof c.reaction_counts === 'object' ? c.reaction_counts : {};
+			const reactions = c?.reactions && typeof c.reactions === 'object' ? c.reactions : {};
 			const reactionChips = REACTION_ORDER
-				.filter((key) => (Number(reactionCounts[key]) || 0) > 0)
+				.filter((key) => {
+					const arr = Array.isArray(reactions[key]) ? reactions[key] : [];
+					const last = arr[arr.length - 1];
+					const others = typeof last === 'number' ? last : 0;
+					const strings = typeof last === 'number' ? arr.slice(0, -1) : arr;
+					return strings.length + others > 0;
+				})
 				.map((key) => {
-					const count = Number(reactionCounts[key]) || 0;
+					const arr = Array.isArray(reactions[key]) ? reactions[key] : [];
+					const last = arr[arr.length - 1];
+					const others = typeof last === 'number' ? last : 0;
+					const strings = (typeof last === 'number' ? arr.slice(0, -1) : arr).filter((s) => typeof s === 'string');
+					const count = strings.length + others;
+					const countLabel = count > 99 ? '99+' : String(count);
+					const tooltip = strings.length > 0 || others > 0
+						? [...strings, others > 0 ? `and ${others} ${others === 1 ? 'other' : 'others'}` : ''].filter(Boolean).join(', ')
+						: '';
 					const iconFn = REACTION_ICONS[key];
 					const iconHtml = iconFn ? iconFn('comment-reaction-icon') : '';
-					const countLabel = count > 99 ? '99+' : String(count);
-					return html`<span class="comment-reaction-chip" aria-label="${escapeHtml(key)}: ${escapeHtml(countLabel)}"><span class="comment-reaction-icon-wrap" aria-hidden="true">${iconHtml}</span><span class="comment-reaction-count">${escapeHtml(countLabel)}</span></span>`;
+					const tooltipAttr = tooltip ? ` data-tooltip="${escapeHtml(tooltip)}"` : '';
+					return html`<span class="comment-reaction-chip" aria-label="${escapeHtml(key)}: ${escapeHtml(countLabel)}"${tooltipAttr}><span class="comment-reaction-icon-wrap" aria-hidden="true">${iconHtml}</span><span class="comment-reaction-count">${escapeHtml(countLabel)}</span></span>`;
 				})
 				.join('');
 			return html`
@@ -916,6 +934,9 @@ function renderCommentsList(container, comments, emptyMessage) {
 			}).join('')}
 		</div>
 	`;
+	if (typeof setupReactionTooltipTap === 'function') {
+		setupReactionTooltipTap(container);
+	}
 }
 
 async function loadPersonalityCreations(personality, { limit = 100, offset = 0 } = {}) {

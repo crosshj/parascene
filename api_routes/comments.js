@@ -7,16 +7,19 @@ export const REACTION_ORDER = [
 	"clap", "hundred", "fire", "thinking", "eyes", "rocket", "pray"
 ];
 
-export function buildEmptyReactionCounts() {
-	const o = {};
-	for (const key of REACTION_ORDER) o[key] = 0;
-	return o;
+const MAX_REACTORS_IN_RESPONSE = 5;
+
+function formatReactorLabel(userName, displayName) {
+	const un = (userName || displayName || "").trim();
+	return un ? `@${un}` : "";
 }
 
 /**
- * Fetch reaction counts and viewer reactions for the given comment ids, then return
- * a Map: commentId -> { reaction_counts: { thumbsUp: N, ... }, viewer_reactions: ['thumbsUp', ...] }.
- * reaction_counts includes all REACTION_ORDER keys (0 or count).
+ * Fetch reactions for the given comment ids.
+ * Returns a Map: commentId -> {
+ *   reactions: { [emojiKey]: [...strings, maybe number] },  // strings = display names, optional number = others count
+ *   viewer_reactions: ['thumbsUp', ...]
+ * }.
  */
 export async function getReactionsForCommentIds(queries, commentIds, viewerId) {
 	if (!queries.selectCommentReactionCountsByCommentIds?.all || !Array.isArray(commentIds) || commentIds.length === 0) {
@@ -25,33 +28,55 @@ export async function getReactionsForCommentIds(queries, commentIds, viewerId) {
 	const ids = commentIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0);
 	if (ids.length === 0) return new Map();
 
-	const [countRows, viewerRows] = await Promise.all([
+	const [countRows, viewerRows, reactorRows] = await Promise.all([
 		queries.selectCommentReactionCountsByCommentIds.all(ids),
 		viewerId != null && Number.isFinite(Number(viewerId))
 			? queries.selectViewerReactionsByCommentIds.all(viewerId, ids)
+			: Promise.resolve([]),
+		queries.selectCommentReactionReactorsByCommentIds?.all
+			? queries.selectCommentReactionReactorsByCommentIds.all(ids)
 			: Promise.resolve([])
 	]);
 
 	const byComment = new Map();
 	for (const id of ids) {
-		byComment.set(id, {
-			reaction_counts: { ...buildEmptyReactionCounts() },
-			viewer_reactions: []
-		});
+		byComment.set(id, { reactions: {}, viewer_reactions: [] });
 	}
+
+	const reactorGroups = new Map();
+	for (const row of reactorRows ?? []) {
+		const cid = Number(row?.comment_id);
+		const key = row?.emoji_key;
+		if (!Number.isFinite(cid) || !key || !REACTION_ORDER.includes(key)) continue;
+		const k = `${cid}:${key}`;
+		if (!reactorGroups.has(k)) reactorGroups.set(k, []);
+		reactorGroups.get(k).push(row);
+	}
+
 	for (const row of countRows ?? []) {
 		const cid = Number(row?.comment_id);
 		const key = row?.emoji_key;
 		if (!Number.isFinite(cid) || !key || !REACTION_ORDER.includes(key)) continue;
+		const total = Number(row.count) || 0;
+		if (total <= 0) continue;
 		const entry = byComment.get(cid);
-		if (entry) entry.reaction_counts[key] = Number(row.count) || 0;
+		if (!entry) continue;
+		const rows = reactorGroups.get(`${cid}:${key}`) ?? [];
+		const strings = rows.slice(0, MAX_REACTORS_IN_RESPONSE).map((r) =>
+			formatReactorLabel(r?.user_name, r?.display_name)
+		).filter(Boolean);
+		const others = Math.max(0, total - strings.length);
+		entry.reactions[key] = others > 0 ? [...strings, others] : strings;
 	}
+
 	for (const row of viewerRows ?? []) {
 		const cid = Number(row?.comment_id);
 		const key = row?.emoji_key;
 		if (!Number.isFinite(cid) || !key || !REACTION_ORDER.includes(key)) continue;
 		const entry = byComment.get(cid);
-		if (entry && !entry.viewer_reactions.includes(key)) entry.viewer_reactions.push(key);
+		if (entry && entry.reactions[key] && !entry.viewer_reactions.includes(key)) {
+			entry.viewer_reactions.push(key);
+		}
 	}
 	return byComment;
 }
@@ -145,10 +170,10 @@ export default function createCommentsRoutes({ queries }) {
 			if (c.id == null) continue;
 			const r = reactionsByComment.get(Number(c.id));
 			if (r) {
-				c.reaction_counts = r.reaction_counts;
-				c.viewer_reactions = r.viewer_reactions;
+				c.reactions = r.reactions ?? {};
+				c.viewer_reactions = r.viewer_reactions ?? [];
 			} else {
-				c.reaction_counts = buildEmptyReactionCounts();
+				c.reactions = {};
 				c.viewer_reactions = [];
 			}
 		}
@@ -228,10 +253,10 @@ export default function createCommentsRoutes({ queries }) {
 			if (it.type !== "comment" || it.id == null) continue;
 			const r = reactionsByComment.get(Number(it.id));
 			if (r) {
-				it.reaction_counts = r.reaction_counts;
-				it.viewer_reactions = r.viewer_reactions;
+				it.reactions = r.reactions ?? {};
+				it.viewer_reactions = r.viewer_reactions ?? [];
 			} else {
-				it.reaction_counts = buildEmptyReactionCounts();
+				it.reactions = {};
 				it.viewer_reactions = [];
 			}
 		}

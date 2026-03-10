@@ -2516,23 +2516,39 @@ async function loadCreation() {
 					isFounder,
 					flairSize: 'sm',
 				});
-				const reactionCounts = c?.reaction_counts && typeof c.reaction_counts === 'object' ? c.reaction_counts : {};
+				const reactions = c?.reactions && typeof c.reactions === 'object' ? c.reactions : {};
 				const viewerReactions = Array.isArray(c?.viewer_reactions) ? c.viewer_reactions : [];
 				const commentId = c?.id != null ? String(c.id) : '';
-				const hasAnyReactions = REACTION_ORDER.some((key) => (Number(reactionCounts[key]) || 0) > 0);
-				const reactionPillCount = REACTION_ORDER.filter((key) => (Number(reactionCounts[key]) || 0) > 0).length;
+				const getCount = (arr) => {
+					if (!Array.isArray(arr) || arr.length === 0) return 0;
+					const last = arr[arr.length - 1];
+					const others = typeof last === 'number' ? last : 0;
+					const strings = typeof last === 'number' ? arr.slice(0, -1) : arr;
+					return strings.filter((s) => typeof s === 'string').length + others;
+				};
+				const keysWithReactions = REACTION_ORDER.filter((key) => getCount(reactions[key]) > 0);
+				const hasAnyReactions = keysWithReactions.length > 0;
 				const reactionOverflowLimit = typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches ? 3 : 5;
-				const hasMoreThan3Reactions = reactionPillCount > reactionOverflowLimit;
-				const hasUnusedReactions = REACTION_ORDER.some((key) => (Number(reactionCounts[key]) || 0) === 0);
+				const hasMoreThan3Reactions = keysWithReactions.length > reactionOverflowLimit;
+				const hasUnusedReactions = REACTION_ORDER.some((key) => getCount(reactions[key]) === 0);
 				const reactionPills = hasAnyReactions
-					? REACTION_ORDER.filter((key) => (Number(reactionCounts[key]) || 0) > 0).map((key) => {
-						const count = Number(reactionCounts[key]) || 0;
-						const hasViewer = viewerReactions.includes(key);
+					? keysWithReactions.map((key) => {
+						const arr = Array.isArray(reactions[key]) ? reactions[key] : [];
+						const last = arr[arr.length - 1];
+						const others = typeof last === 'number' ? last : 0;
+						const strings = (typeof last === 'number' ? arr.slice(0, -1) : arr).filter((s) => typeof s === 'string');
+						const count = strings.length + others;
 						const countLabel = count > 99 ? '99+' : String(count);
+						const hasViewer = viewerReactions.includes(key);
 						const iconFn = REACTION_ICONS[key];
 						const iconHtml = iconFn ? iconFn('comment-reaction-icon') : '';
 						const actionLabel = hasViewer ? `Remove ${key}` : `Add ${key}`;
-						return `<button type="button" class="comment-reaction-pill${hasViewer ? ' is-viewer' : ''}" data-emoji-key="${escapeHtml(key)}" data-comment-id="${escapeHtml(commentId)}" aria-label="${escapeHtml(actionLabel)}" title="${escapeHtml(actionLabel)}"><span class="comment-reaction-icon-wrap" aria-hidden="true">${iconHtml}</span><span class="comment-reaction-count">${escapeHtml(countLabel)}</span></button>`;
+						const tooltip = strings.length > 0 || others > 0
+							? [...strings, others > 0 ? `and ${others} ${others === 1 ? 'other' : 'others'}` : ''].filter(Boolean).join(', ')
+							: '';
+						const tooltipAttr = tooltip ? ` data-tooltip="${escapeHtml(tooltip)}"` : '';
+						/* title = action only; who-reacted comes from CSS tooltip (data-tooltip) to avoid duplicate */
+						return `<button type="button" class="comment-reaction-pill${hasViewer ? ' is-viewer' : ''}" data-emoji-key="${escapeHtml(key)}" data-comment-id="${escapeHtml(commentId)}" aria-label="${escapeHtml(actionLabel)}" title="${escapeHtml(actionLabel)}"${tooltipAttr}><span class="comment-reaction-icon-wrap" aria-hidden="true">${iconHtml}</span><span class="comment-reaction-count">${escapeHtml(countLabel)}</span></button>`;
 					}).join('')
 					: '';
 				const addReactionBtn = hasUnusedReactions ? `<button type="button" class="comment-reaction-add" data-comment-id="${escapeHtml(commentId)}" aria-label="Add reaction" title="Add reaction"><span class="comment-reaction-icon-wrap" aria-hidden="true">${smileIcon('comment-reaction-add-icon')}</span></button>` : '';
@@ -2669,58 +2685,84 @@ async function loadCreation() {
 			activeReactionPicker = panel;
 		}
 
+		const viewerReactionLabel = (viewerUserName || viewerDisplayName) ? `@${viewerUserName || viewerDisplayName}` : null;
+
 		function applyReactionChange(commentId, emojiKey, added) {
 			const item = commentsState.activity.find((it) => it.type === 'comment' && Number(it.id) === commentId);
 			if (!item) return;
-			item.reaction_counts = item.reaction_counts && typeof item.reaction_counts === 'object' ? { ...item.reaction_counts } : {};
+			item.reactions = item.reactions && typeof item.reactions === 'object' ? { ...item.reactions } : {};
+			item.reactions[emojiKey] = Array.isArray(item.reactions[emojiKey]) ? [...item.reactions[emojiKey]] : [];
 			item.viewer_reactions = Array.isArray(item.viewer_reactions) ? [...item.viewer_reactions] : [];
+			const arr = item.reactions[emojiKey];
+			const last = arr[arr.length - 1];
+			const others = typeof last === 'number' ? last : 0;
 			if (added) {
 				item.viewer_reactions.push(emojiKey);
-				item.reaction_counts[emojiKey] = (Number(item.reaction_counts[emojiKey]) || 0) + 1;
+				if (typeof last === 'number') {
+					arr[arr.length - 1] = others + 1;
+				} else if (arr.length === 0) {
+					arr.push(viewerReactionLabel ?? 1);
+				} else {
+					arr.push(viewerReactionLabel ?? 1);
+				}
 			} else {
 				item.viewer_reactions = item.viewer_reactions.filter((k) => k !== emojiKey);
-				item.reaction_counts[emojiKey] = Math.max(0, (Number(item.reaction_counts[emojiKey]) || 0) - 1);
+				if (typeof last === 'number') {
+					if (others > 1) arr[arr.length - 1] = others - 1;
+					else arr.pop();
+				} else if (arr.length > 0) {
+					arr.pop();
+				}
+				if (arr.length === 0) delete item.reactions[emojiKey];
 			}
 			renderComments();
 		}
 
-		commentListEl.addEventListener('click', async (e) => {
-			const pill = e.target?.closest?.('.comment-reaction-pill[data-emoji-key][data-comment-id]');
-			if (pill && pill instanceof HTMLElement) {
-				const commentId = Number(pill.dataset.commentId);
-				const emojiKey = pill.dataset.emojiKey;
-				if (!Number.isFinite(commentId) || !emojiKey) return;
-				const item = commentsState.activity.find((it) => it.type === 'comment' && Number(it.id) === commentId);
-				const currentlyAdded = Array.isArray(item?.viewer_reactions) && item.viewer_reactions.includes(emojiKey);
-				const optimisticAdded = !currentlyAdded;
-				applyReactionChange(commentId, emojiKey, optimisticAdded);
-				const res = await toggleCommentReaction(commentId, emojiKey);
-				if (!res?.ok || res.data == null) {
-					applyReactionChange(commentId, emojiKey, currentlyAdded);
+		if (commentListEl) {
+			commentListEl.addEventListener('click', async (e) => {
+				const pill = e.target?.closest?.('.comment-reaction-pill[data-emoji-key][data-comment-id]');
+				if (pill && pill instanceof HTMLElement) {
+					const commentId = Number(pill.dataset.commentId);
+					const emojiKey = pill.dataset.emojiKey;
+					if (!Number.isFinite(commentId) || !emojiKey) return;
+					const item = commentsState.activity.find((it) => it.type === 'comment' && Number(it.id) === commentId);
+					const currentlyAdded = Array.isArray(item?.viewer_reactions) && item.viewer_reactions.includes(emojiKey);
+					const optimisticAdded = !currentlyAdded;
+					applyReactionChange(commentId, emojiKey, optimisticAdded);
+					const res = await toggleCommentReaction(commentId, emojiKey);
+					if (!res?.ok || res.data == null) {
+						applyReactionChange(commentId, emojiKey, currentlyAdded);
+					}
+					return;
 				}
-				return;
-			}
 
-			const addBtn = e.target?.closest?.('.comment-reaction-add[data-comment-id]');
-			if (addBtn && addBtn instanceof HTMLElement) {
-				e.preventDefault();
-				e.stopPropagation();
-				const commentId = Number(addBtn.dataset.commentId);
-				if (!Number.isFinite(commentId)) return;
-				const item = commentsState.activity.find((it) => it.type === 'comment' && Number(it.id) === commentId);
-				const reactionCounts = item?.reaction_counts && typeof item.reaction_counts === 'object' ? item.reaction_counts : {};
-				const unusedKeys = REACTION_ORDER.filter((key) => (Number(reactionCounts[key]) || 0) === 0);
-				if (unusedKeys.length === 0) return;
-				showReactionPicker(addBtn, commentId, unusedKeys, (pickedCommentId, pickedEmojiKey) => {
-					applyReactionChange(pickedCommentId, pickedEmojiKey, true);
-					toggleCommentReaction(pickedCommentId, pickedEmojiKey).then((res) => {
-						if (!res?.ok || res.data == null) {
-							applyReactionChange(pickedCommentId, pickedEmojiKey, false);
-						}
+				const addBtn = e.target?.closest?.('.comment-reaction-add[data-comment-id]');
+				if (addBtn && addBtn instanceof HTMLElement) {
+					e.preventDefault();
+					e.stopPropagation();
+					const commentId = Number(addBtn.dataset.commentId);
+					if (!Number.isFinite(commentId)) return;
+					const item = commentsState.activity.find((it) => it.type === 'comment' && Number(it.id) === commentId);
+					const reactions = item?.reactions && typeof item.reactions === 'object' ? item.reactions : {};
+					const getCount = (arr) => {
+						if (!Array.isArray(arr) || arr.length === 0) return 0;
+						const last = arr[arr.length - 1];
+						const others = typeof last === 'number' ? last : 0;
+						return (typeof last === 'number' ? arr.slice(0, -1) : arr).filter((s) => typeof s === 'string').length + others;
+					};
+					const unusedKeys = REACTION_ORDER.filter((key) => getCount(reactions[key]) === 0);
+					if (unusedKeys.length === 0) return;
+					showReactionPicker(addBtn, commentId, unusedKeys, (pickedCommentId, pickedEmojiKey) => {
+						applyReactionChange(pickedCommentId, pickedEmojiKey, true);
+						toggleCommentReaction(pickedCommentId, pickedEmojiKey).then((res) => {
+							if (!res?.ok || res.data == null) {
+								applyReactionChange(pickedCommentId, pickedEmojiKey, false);
+							}
+						});
 					});
-				});
-			}
-		});
+				}
+			});
+		}
 
 		async function loadComments({ scrollIfHash = false } = {}) {
 			if (!commentListEl) return;

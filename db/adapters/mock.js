@@ -2183,6 +2183,7 @@ export function openDb() {
 		},
 		selectCommentById: { get: async () => null },
 		selectCommentReactionCountsByCommentIds: { all: async () => [] },
+		selectCommentReactionReactorsByCommentIds: { all: async () => [] },
 		selectViewerReactionsByCommentIds: { all: async () => [] },
 		insertCommentReaction: { run: async () => ({ changes: 1 }) },
 		deleteCommentReaction: { run: async () => ({ changes: 0 }) },

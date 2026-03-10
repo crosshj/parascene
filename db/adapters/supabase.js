@@ -4343,6 +4343,39 @@ export function openDb() {
 				});
 			}
 		},
+		/** Reactors per (comment, emoji_key): [{ comment_id, emoji_key, user_id, display_name, user_name }]. */
+		selectCommentReactionReactorsByCommentIds: {
+			all: async (commentIds) => {
+				if (!Array.isArray(commentIds) || commentIds.length === 0) return [];
+				const ids = commentIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0);
+				if (ids.length === 0) return [];
+				const { data: reactionRows, error: err1 } = await serviceClient
+					.from(prefixedTable("comment_reactions"))
+					.select("comment_id, emoji_key, user_id")
+					.in("comment_id", ids);
+				if (err1) throw err1;
+				const rows = reactionRows ?? [];
+				if (rows.length === 0) return [];
+				const userIds = [...new Set(rows.map((r) => r.user_id).filter((id) => id != null))];
+				if (userIds.length === 0) return [];
+				const { data: profiles, error: err2 } = await serviceClient
+					.from(prefixedTable("user_profiles"))
+					.select("user_id, display_name, user_name")
+					.in("user_id", userIds);
+				if (err2) throw err2;
+				const byUserId = new Map((profiles ?? []).map((p) => [p.user_id, p]));
+				return rows.map((r) => {
+					const p = byUserId.get(r.user_id) ?? {};
+					return {
+						comment_id: r.comment_id,
+						emoji_key: r.emoji_key,
+						user_id: r.user_id,
+						display_name: p.display_name ?? null,
+						user_name: p.user_name ?? null
+					};
+				});
+			}
+		},
 		selectViewerReactionsByCommentIds: {
 			all: async (viewerId, commentIds) => {
 				if (!Number.isFinite(Number(viewerId)) || !Array.isArray(commentIds) || commentIds.length === 0) return [];

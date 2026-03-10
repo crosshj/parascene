@@ -21,7 +21,7 @@ import { getBaseAppUrl, getBaseAppUrlForEmail, getThumbnailUrl } from "./utils/u
 import { computeWelcome, WELCOME_VERSION } from "./utils/welcome.js";
 import { resolveNotificationDisplay } from "./utils/notificationResolver.js";
 import { collapseNotificationsByCreation, getCreationIdFromRow } from "./utils/notificationCollapse.js";
-import { getReactionsForCommentIds, buildEmptyReactionCounts } from "./comments.js";
+import { getReactionsForCommentIds } from "./comments.js";
 
 export default function createProfileRoutes({ queries }) {
 	const router = express.Router();
@@ -1616,10 +1616,10 @@ export default function createProfileRoutes({ queries }) {
 				if (c.id == null) continue;
 				const r = reactionsByComment.get(Number(c.id));
 				if (r) {
-					c.reaction_counts = r.reaction_counts;
-					c.viewer_reactions = r.viewer_reactions;
+					c.reactions = r.reactions ?? {};
+					c.viewer_reactions = r.viewer_reactions ?? [];
 				} else {
-					c.reaction_counts = buildEmptyReactionCounts();
+					c.reactions = {};
 					c.viewer_reactions = [];
 				}
 			}
