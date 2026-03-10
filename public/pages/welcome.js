@@ -1,5 +1,31 @@
-import { fetchJsonWithStatusDeduped } from '../shared/api.js';
-import { genProfile, toMentionText } from '../shared/characterGenerator.js';
+let fetchJsonWithStatusDeduped;
+let genProfile;
+let toMentionText;
+
+function getAssetVersionParam() {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	return meta?.getAttribute('content')?.trim() || '';
+}
+
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
+}
+
+let _depsPromise;
+async function loadDeps() {
+	if (_depsPromise) return _depsPromise;
+	const v = getAssetVersionParam();
+	const qs = getImportQuery(v);
+	_depsPromise = (async () => {
+		const apiMod = await import(`../shared/api.js${qs}`);
+		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
+
+		const charGenMod = await import(`../shared/characterGenerator.js${qs}`);
+		genProfile = charGenMod.genProfile;
+		toMentionText = charGenMod.toMentionText;
+	})();
+	return _depsPromise;
+}
 
 const TRY_POLL_MS = 2000;
 const TRY_MAX_POLLS = 120;
@@ -220,6 +246,7 @@ async function pollTryImageById(id) {
 }
 
 async function init() {
+	await loadDeps();
 	const setup = $('[data-welcome-setup]');
 	const form = $('[data-form]');
 	const displayNameInput = $('[data-display-name]');

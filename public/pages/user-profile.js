@@ -1,16 +1,89 @@
-import { formatDate, formatDateTime, formatRelativeTime } from '../shared/datetime.js';
-import { fetchJsonWithStatusDeduped } from '../shared/api.js';
-import { getAvatarColor } from '../shared/avatar.js';
-import { processUserText, hydrateUserTextLinks } from '../shared/userText.js';
-import { createInfiniteScroll } from '../shared/infinite-scroll.js';
-import { buildProfilePath } from '../shared/profileLinks.js';
-import { setRouteMediaBackgroundImage } from '../shared/routeMedia.js';
-import { renderEmptyState, renderEmptyLoading, renderEmptyError } from '../shared/emptyState.js';
-import { renderGridSkeleton, renderProfilePageSkeleton } from '../shared/skeleton.js';
-import { publishedBadgeHtml, userDeletedBadgeHtml } from '../shared/creationBadges.js';
-import { buildCreationCardShell } from '../shared/creationCard.js';
-import { buildUserListRowHtml } from '../shared/userCard.js';
-import { REACTION_ORDER, REACTION_ICONS } from '../icons/svg-strings.js';
+let formatDate;
+let formatDateTime;
+let formatRelativeTime;
+let fetchJsonWithStatusDeduped;
+let getAvatarColor;
+let processUserText;
+let hydrateUserTextLinks;
+let createInfiniteScroll;
+let buildProfilePath;
+let setRouteMediaBackgroundImage;
+let renderEmptyState;
+let renderEmptyLoading;
+let renderEmptyError;
+let renderGridSkeleton;
+let renderProfilePageSkeleton;
+let publishedBadgeHtml;
+let userDeletedBadgeHtml;
+let buildCreationCardShell;
+let buildUserListRowHtml;
+let REACTION_ORDER;
+let REACTION_ICONS;
+
+function getAssetVersionParam() {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	return meta?.getAttribute('content')?.trim() || '';
+}
+
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
+}
+
+let _depsPromise;
+async function loadDeps() {
+	if (_depsPromise) return _depsPromise;
+	const v = getAssetVersionParam();
+	const qs = getImportQuery(v);
+	_depsPromise = (async () => {
+		const datetimeMod = await import(`../shared/datetime.js${qs}`);
+		formatDate = datetimeMod.formatDate;
+		formatDateTime = datetimeMod.formatDateTime;
+		formatRelativeTime = datetimeMod.formatRelativeTime;
+
+		const apiMod = await import(`../shared/api.js${qs}`);
+		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
+
+		const avatarMod = await import(`../shared/avatar.js${qs}`);
+		getAvatarColor = avatarMod.getAvatarColor;
+
+		const userTextMod = await import(`../shared/userText.js${qs}`);
+		processUserText = userTextMod.processUserText;
+		hydrateUserTextLinks = userTextMod.hydrateUserTextLinks;
+
+		const infiniteScrollMod = await import(`../shared/infinite-scroll.js${qs}`);
+		createInfiniteScroll = infiniteScrollMod.createInfiniteScroll;
+
+		const profileLinksMod = await import(`../shared/profileLinks.js${qs}`);
+		buildProfilePath = profileLinksMod.buildProfilePath;
+
+		const routeMediaMod = await import(`../shared/routeMedia.js${qs}`);
+		setRouteMediaBackgroundImage = routeMediaMod.setRouteMediaBackgroundImage;
+
+		const emptyStateMod = await import(`../shared/emptyState.js${qs}`);
+		renderEmptyState = emptyStateMod.renderEmptyState;
+		renderEmptyLoading = emptyStateMod.renderEmptyLoading;
+		renderEmptyError = emptyStateMod.renderEmptyError;
+
+		const skeletonMod = await import(`../shared/skeleton.js${qs}`);
+		renderGridSkeleton = skeletonMod.renderGridSkeleton;
+		renderProfilePageSkeleton = skeletonMod.renderProfilePageSkeleton;
+
+		const creationBadgesMod = await import(`../shared/creationBadges.js${qs}`);
+		publishedBadgeHtml = creationBadgesMod.publishedBadgeHtml;
+		userDeletedBadgeHtml = creationBadgesMod.userDeletedBadgeHtml;
+
+		const creationCardMod = await import(`../shared/creationCard.js${qs}`);
+		buildCreationCardShell = creationCardMod.buildCreationCardShell;
+
+		const userCardMod = await import(`../shared/userCard.js${qs}`);
+		buildUserListRowHtml = userCardMod.buildUserListRowHtml;
+
+		const iconsMod = await import(`../icons/svg-strings.js${qs}`);
+		REACTION_ORDER = iconsMod.REACTION_ORDER;
+		REACTION_ICONS = iconsMod.REACTION_ICONS;
+	})();
+	return _depsPromise;
+}
 
 const html = String.raw;
 
@@ -894,6 +967,7 @@ function renderPersonalityDiscoveryPage(container, personality, items, { hasMore
 }
 
 async function init() {
+	await loadDeps();
 	const container = document.querySelector('.user-profile-page');
 	if (!container) return;
 

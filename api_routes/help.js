@@ -350,7 +350,7 @@ function generateHelpPageHtml({ title, description, html, navigation, isIndex = 
 		<p class="site-footer-copy">&copy; 2026 parascene. All rights reserved.</p>
 	</footer>
 	
-	<script type="module" src="/pages/help.js"></script>
+	<script type="module" src="/pages/help.js{{V}}"></script>
 </body>
 </html>`;
 }

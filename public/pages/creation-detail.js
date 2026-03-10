@@ -1,25 +1,135 @@
-import { formatDateTime, formatRelativeTime } from '/shared/datetime.js';
-import { enableLikeButtons, getCreationLikeCount, initLikeButton } from '/shared/likes.js';
-import { fetchJsonWithStatusDeduped } from '/shared/api.js';
-import { getAvatarColor } from '/shared/avatar.js';
-import { fetchCreatedImageActivity, postCreatedImageComment, toggleCommentReaction } from '/shared/comments.js';
-import { processUserText, hydrateUserTextLinks } from '/shared/userText.js';
-import { attachAutoGrowTextarea } from '/shared/autogrow.js';
-import { attachMentionSuggest, addPageUsers, clearPageUsers } from '/shared/triggeredSuggest.js';
-import { textsSameWithinTolerance } from '/shared/textCompare.js';
-import { buildProfilePath } from '/shared/profileLinks.js';
-import { getNsfwObscure, NSFW_VIEW_BODY_CLASS } from '/shared/nsfwView.js';
-import { addToMutateQueue, loadMutateQueue, removeFromMutateQueueByImageUrl } from '/shared/mutateQueue.js';
-import { showToast } from '/shared/toast.js';
-import '../components/modals/publish.js';
-import '../components/modals/creation-details.js';
-import '../components/modals/share.js';
-import { creditIcon, eyeHiddenIcon, shareIcon, sparkleIcon, REACTION_ORDER, REACTION_ICONS, smileIcon } from '../icons/svg-strings.js';
-import '../components/modals/tip-creator.js';
-import { renderEmptyState, renderEmptyLoading, renderEmptyError } from '/shared/emptyState.js';
-import { skeletonLine, skeletonCircle, skeletonPill } from '/shared/skeleton.js';
-import { buildCreationCardShell } from '/shared/creationCard.js';
-import { renderCommentAvatarHtml } from '/shared/commentItem.js';
+let formatDateTime;
+let formatRelativeTime;
+let enableLikeButtons;
+let getCreationLikeCount;
+let initLikeButton;
+let fetchJsonWithStatusDeduped;
+let getAvatarColor;
+let fetchCreatedImageActivity;
+let postCreatedImageComment;
+let toggleCommentReaction;
+let processUserText;
+let hydrateUserTextLinks;
+let attachAutoGrowTextarea;
+let attachMentionSuggest;
+let addPageUsers;
+let clearPageUsers;
+let textsSameWithinTolerance;
+let buildProfilePath;
+let getNsfwObscure;
+let NSFW_VIEW_BODY_CLASS;
+let addToMutateQueue;
+let loadMutateQueue;
+let removeFromMutateQueueByImageUrl;
+let showToast;
+let creditIcon;
+let eyeHiddenIcon;
+let shareIcon;
+let sparkleIcon;
+let REACTION_ORDER;
+let REACTION_ICONS;
+let smileIcon;
+let renderEmptyState;
+let renderEmptyLoading;
+let renderEmptyError;
+let skeletonLine;
+let skeletonCircle;
+let skeletonPill;
+let buildCreationCardShell;
+let renderCommentAvatarHtml;
+
+function getAssetVersionParam() {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	return meta?.getAttribute('content')?.trim() || '';
+}
+
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
+}
+
+let _depsPromise;
+async function loadDeps() {
+	if (_depsPromise) return _depsPromise;
+	const v = getAssetVersionParam();
+	const qs = getImportQuery(v);
+	_depsPromise = (async () => {
+		const datetimeMod = await import(`/shared/datetime.js${qs}`);
+		formatDateTime = datetimeMod.formatDateTime;
+		formatRelativeTime = datetimeMod.formatRelativeTime;
+
+		const likesMod = await import(`/shared/likes.js${qs}`);
+		enableLikeButtons = likesMod.enableLikeButtons;
+		getCreationLikeCount = likesMod.getCreationLikeCount;
+		initLikeButton = likesMod.initLikeButton;
+
+		const apiMod = await import(`/shared/api.js${qs}`);
+		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
+
+		const avatarMod = await import(`/shared/avatar.js${qs}`);
+		getAvatarColor = avatarMod.getAvatarColor;
+
+		const commentsMod = await import(`/shared/comments.js${qs}`);
+		fetchCreatedImageActivity = commentsMod.fetchCreatedImageActivity;
+		postCreatedImageComment = commentsMod.postCreatedImageComment;
+		toggleCommentReaction = commentsMod.toggleCommentReaction;
+
+		const userTextMod = await import(`/shared/userText.js${qs}`);
+		processUserText = userTextMod.processUserText;
+		hydrateUserTextLinks = userTextMod.hydrateUserTextLinks;
+
+		const autogrowMod = await import(`/shared/autogrow.js${qs}`);
+		attachAutoGrowTextarea = autogrowMod.attachAutoGrowTextarea;
+
+		const suggestMod = await import(`/shared/triggeredSuggest.js${qs}`);
+		attachMentionSuggest = suggestMod.attachMentionSuggest;
+		addPageUsers = suggestMod.addPageUsers;
+		clearPageUsers = suggestMod.clearPageUsers;
+
+		const textCompareMod = await import(`/shared/textCompare.js${qs}`);
+		textsSameWithinTolerance = textCompareMod.textsSameWithinTolerance;
+
+		const profileLinksMod = await import(`/shared/profileLinks.js${qs}`);
+		buildProfilePath = profileLinksMod.buildProfilePath;
+
+		const nsfwMod = await import(`/shared/nsfwView.js${qs}`);
+		getNsfwObscure = nsfwMod.getNsfwObscure;
+		NSFW_VIEW_BODY_CLASS = nsfwMod.NSFW_VIEW_BODY_CLASS;
+
+		const mutateQueueMod = await import(`/shared/mutateQueue.js${qs}`);
+		addToMutateQueue = mutateQueueMod.addToMutateQueue;
+		loadMutateQueue = mutateQueueMod.loadMutateQueue;
+		removeFromMutateQueueByImageUrl = mutateQueueMod.removeFromMutateQueueByImageUrl;
+
+		const toastMod = await import(`/shared/toast.js${qs}`);
+		showToast = toastMod.showToast;
+
+		const iconsMod = await import(`../icons/svg-strings.js${qs}`);
+		creditIcon = iconsMod.creditIcon;
+		eyeHiddenIcon = iconsMod.eyeHiddenIcon;
+		shareIcon = iconsMod.shareIcon;
+		sparkleIcon = iconsMod.sparkleIcon;
+		REACTION_ORDER = iconsMod.REACTION_ORDER;
+		REACTION_ICONS = iconsMod.REACTION_ICONS;
+		smileIcon = iconsMod.smileIcon;
+
+		const emptyStateMod = await import(`/shared/emptyState.js${qs}`);
+		renderEmptyState = emptyStateMod.renderEmptyState;
+		renderEmptyLoading = emptyStateMod.renderEmptyLoading;
+		renderEmptyError = emptyStateMod.renderEmptyError;
+
+		const skeletonMod = await import(`/shared/skeleton.js${qs}`);
+		skeletonLine = skeletonMod.skeletonLine;
+		skeletonCircle = skeletonMod.skeletonCircle;
+		skeletonPill = skeletonMod.skeletonPill;
+
+		const creationCardMod = await import(`/shared/creationCard.js${qs}`);
+		buildCreationCardShell = creationCardMod.buildCreationCardShell;
+
+		const commentItemMod = await import(`/shared/commentItem.js${qs}`);
+		renderCommentAvatarHtml = commentItemMod.renderCommentAvatarHtml;
+	})();
+	return _depsPromise;
+}
 
 const html = String.raw;
 const TIP_MIN_VISIBLE_BALANCE = 10.0;
@@ -40,36 +150,37 @@ function normalizeImageUrlForQueue(raw) {
 }
 
 /** SVG + label for each creation-detail action. inKebabMenu: true = only in more menu (no pill); false = only as pill. */
-const CREATION_DETAIL_ACTION_DEFS = [
-	{
-		key: 'publish',
-		dataAttr: 'data-publish-btn',
-		btnClass: 'btn-primary',
-		inKebabMenu: false,
-		inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 6px; vertical-align: middle;">
+function getCreationDetailActionDefs() {
+	return [
+		{
+			key: 'publish',
+			dataAttr: 'data-publish-btn',
+			btnClass: 'btn-primary',
+			inKebabMenu: false,
+			inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 6px; vertical-align: middle;">
 	<path d="M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
 		stroke-linejoin="round" fill="none" />
 </svg>
 Publish`,
-		show: (c) => c?.showPublish,
-		disabled: (c) => !c?.showPublish
-	},
-	{
-		key: 'mutate',
-		dataAttr: 'data-mutate-btn',
-		btnClass: 'btn-outlined',
-		inKebabMenu: false,
-		inner: html`<span class="creation-detail-action-strip-pill-icon">${sparkleIcon('')}</span>
+			show: (c) => c?.showPublish,
+			disabled: (c) => !c?.showPublish
+		},
+		{
+			key: 'mutate',
+			dataAttr: 'data-mutate-btn',
+			btnClass: 'btn-outlined',
+			inKebabMenu: false,
+			inner: html`<span class="creation-detail-action-strip-pill-icon">${sparkleIcon('')}</span>
 Mutate`,
-		show: (c) => c?.showMutate,
-		disabled: (c) => !c?.showMutate
-	},
-	{
-		key: 'share',
-		dataAttr: 'data-share-btn',
-		btnClass: 'btn-outlined',
-		inKebabMenu: false,
-		inner: html`<span class="creation-detail-action-strip-pill-icon">${shareIcon('')}</span>
+			show: (c) => c?.showMutate,
+			disabled: (c) => !c?.showMutate
+		},
+		{
+			key: 'share',
+			dataAttr: 'data-share-btn',
+			btnClass: 'btn-outlined',
+			inKebabMenu: false,
+			inner: html`<span class="creation-detail-action-strip-pill-icon">${shareIcon('')}</span>
 Share`,
 		show: (c) => c?.showShare,
 		disabled: (c) => !c?.showShare
@@ -160,7 +271,8 @@ More Info`,
 		extraAttrs: () => ' data-permanent-delete="1"',
 		label: () => ' Permanently delete'
 	}
-];
+	];
+}
 
 /**
  * Strip segment defs: each has show(stripData) and render(stripData, escapeFn). Rendered in order; only segments with show() true are included.
@@ -405,7 +517,7 @@ function renderCreationDetailSkeleton() {
 /** Renders visible actions as pills in the action strip. Only actions with inKebabMenu === false are shown (items in the more menu are not duplicated as pills). */
 function renderCreationDetailActionStripPills(ctx) {
 	if (!ctx) return '';
-	const visible = CREATION_DETAIL_ACTION_DEFS.filter((def) => def.show(ctx) && !def.inKebabMenu);
+	const visible = getCreationDetailActionDefs().filter((def) => def.show(ctx) && !def.inKebabMenu);
 	return visible.map((def) => {
 		const disabled = def.disabled(ctx);
 		const extraAttrs = def.extraAttrs ? def.extraAttrs(ctx) : '';
@@ -2728,7 +2840,8 @@ async function loadCreation() {
 let currentCreationId = null;
 let lastCreationMeta = null;
 
-function checkAndLoadCreation() {
+async function checkAndLoadCreation() {
+	await loadDeps();
 	const creationId = getCreationId();
 	// console.log('checkAndLoadCreation called, creationId:', creationId, 'currentCreationId:', currentCreationId);
 	// Only reload if the creation ID has changed

@@ -1,9 +1,47 @@
-import { getAvatarColor } from "../shared/avatar.js";
-import { formatRelativeTime } from "../shared/datetime.js";
-import { attachAutoGrowTextarea } from "../shared/autogrow.js";
-import { loadAdminDataTable } from "../shared/adminDataTable.js";
-import { buildTodoRowElement, buildTodoGhostRow, applyDialStyles } from "../shared/todoCard.js";
 import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, forceRadial } from "d3-force";
+
+let getAvatarColor;
+let formatRelativeTime;
+let attachAutoGrowTextarea;
+let loadAdminDataTable;
+let buildTodoRowElement;
+let buildTodoGhostRow;
+let applyDialStyles;
+
+function getAssetVersionParam() {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	return meta?.getAttribute('content')?.trim() || '';
+}
+
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
+}
+
+let _depsPromise;
+async function loadDeps() {
+	if (_depsPromise) return _depsPromise;
+	const v = getAssetVersionParam();
+	const qs = getImportQuery(v);
+	_depsPromise = (async () => {
+		const avatarMod = await import(`../shared/avatar.js${qs}`);
+		getAvatarColor = avatarMod.getAvatarColor;
+
+		const datetimeMod = await import(`../shared/datetime.js${qs}`);
+		formatRelativeTime = datetimeMod.formatRelativeTime;
+
+		const autogrowMod = await import(`../shared/autogrow.js${qs}`);
+		attachAutoGrowTextarea = autogrowMod.attachAutoGrowTextarea;
+
+		const adminDataTableMod = await import(`../shared/adminDataTable.js${qs}`);
+		loadAdminDataTable = adminDataTableMod.loadAdminDataTable;
+
+		const todoCardMod = await import(`../shared/todoCard.js${qs}`);
+		buildTodoRowElement = todoCardMod.buildTodoRowElement;
+		buildTodoGhostRow = todoCardMod.buildTodoGhostRow;
+		applyDialStyles = todoCardMod.applyDialStyles;
+	})();
+	return _depsPromise;
+}
 
 const adminDataLoaded = {
 	users: false,
@@ -2114,6 +2152,9 @@ function handleAdminRouteChange(route) {
 	}
 }
 
+(async () => {
+	await loadDeps();
+
 const adminHeader = document.querySelector("app-navigation");
 if (adminHeader) {
 	adminHeader.addEventListener("route-change", (event) => {
@@ -2487,5 +2528,7 @@ if (todoModalForm) {
 		updateTodoSaveState();
 	});
 }
+
+})();
 
 // Legacy server admin modal and provider registry logic has been removed.

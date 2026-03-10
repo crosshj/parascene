@@ -1,11 +1,69 @@
-import { submitCreationWithPending, formatMentionsFailureForDialog } from '/shared/createSubmit.js';
-import { fetchJsonWithStatusDeduped } from '/shared/api.js';
-import { attachAutoGrowTextarea } from '/shared/autogrow.js';
-import { attachMentionSuggest, addPageUsers, clearPageUsers } from '/shared/triggeredSuggest.js';
-import { DEFAULT_APP_ORIGIN } from '/shared/userText.js';
-import { getMethodIntentList, loadMutateServerOptions } from '/shared/mutateOptions.js';
-import { renderEmptyState, renderEmptyLoading, renderEmptyError } from '/shared/emptyState.js';
-import { addToMutateQueue, loadMutateQueue, removeFromMutateQueueByImageUrl } from '/shared/mutateQueue.js';
+let submitCreationWithPending;
+let formatMentionsFailureForDialog;
+let fetchJsonWithStatusDeduped;
+let attachAutoGrowTextarea;
+let attachMentionSuggest;
+let addPageUsers;
+let clearPageUsers;
+let DEFAULT_APP_ORIGIN;
+let getMethodIntentList;
+let loadMutateServerOptions;
+let renderEmptyState;
+let renderEmptyLoading;
+let renderEmptyError;
+let addToMutateQueue;
+let loadMutateQueue;
+let removeFromMutateQueueByImageUrl;
+
+function getAssetVersionParam() {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	return meta?.getAttribute('content')?.trim() || '';
+}
+
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
+}
+
+let _depsPromise;
+async function loadDeps() {
+	if (_depsPromise) return _depsPromise;
+	const v = getAssetVersionParam();
+	const qs = getImportQuery(v);
+	_depsPromise = (async () => {
+		const createSubmitMod = await import(`/shared/createSubmit.js${qs}`);
+		submitCreationWithPending = createSubmitMod.submitCreationWithPending;
+		formatMentionsFailureForDialog = createSubmitMod.formatMentionsFailureForDialog;
+
+		const apiMod = await import(`/shared/api.js${qs}`);
+		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
+
+		const autogrowMod = await import(`/shared/autogrow.js${qs}`);
+		attachAutoGrowTextarea = autogrowMod.attachAutoGrowTextarea;
+
+		const suggestMod = await import(`/shared/triggeredSuggest.js${qs}`);
+		attachMentionSuggest = suggestMod.attachMentionSuggest;
+		addPageUsers = suggestMod.addPageUsers;
+		clearPageUsers = suggestMod.clearPageUsers;
+
+		const userTextMod = await import(`/shared/userText.js${qs}`);
+		DEFAULT_APP_ORIGIN = userTextMod.DEFAULT_APP_ORIGIN;
+
+		const mutateOptionsMod = await import(`/shared/mutateOptions.js${qs}`);
+		getMethodIntentList = mutateOptionsMod.getMethodIntentList;
+		loadMutateServerOptions = mutateOptionsMod.loadMutateServerOptions;
+
+		const emptyStateMod = await import(`/shared/emptyState.js${qs}`);
+		renderEmptyState = emptyStateMod.renderEmptyState;
+		renderEmptyLoading = emptyStateMod.renderEmptyLoading;
+		renderEmptyError = emptyStateMod.renderEmptyError;
+
+		const mutateQueueMod = await import(`/shared/mutateQueue.js${qs}`);
+		addToMutateQueue = mutateQueueMod.addToMutateQueue;
+		loadMutateQueue = mutateQueueMod.loadMutateQueue;
+		removeFromMutateQueueByImageUrl = mutateQueueMod.removeFromMutateQueueByImageUrl;
+	})();
+	return _depsPromise;
+}
 
 const html = String.raw;
 
@@ -95,6 +153,7 @@ function withVariant(url, variant) {
 }
 
 async function loadEditPage() {
+	await loadDeps();
 	const editContent = document.querySelector('[data-edit-content]');
 	if (!editContent) return;
 

@@ -664,8 +664,8 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 			);
 			const profileContextScript = `<script>window.__ps_profile_context=${serializeInlineScript(profileRouteContext)};</script>`;
 			pageHtml = pageHtml.replace(
-				/<script\s+type="module"\s+src="\/pages\/user-profile\.js"><\/script>/i,
-				`${profileContextScript}\n\t<script type="module" src="/pages/user-profile.js"></script>`
+				/<script\s+type="module"\s+src="\/pages\/user-profile\.js\{\{V\}\}"><\/script>/i,
+				`${profileContextScript}\n\t<script type="module" src="/pages/user-profile.js{{V}}"></script>`
 			);
 
 			pageHtml = injectCommonHead(pageHtml, getPageTokens(req));
