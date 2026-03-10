@@ -285,9 +285,9 @@ function renderProfilePage(container, { user, profile, stats, plan, isSelf, view
 					<div class="user-profile-title-row">
 						<div class="user-profile-name${isFounder ? ' founder-name' : ''}">${escapeHtml(displayName)}</div>
 						<div class="user-profile-actions">
-							${isSelf ? html`<button class="btn-primary user-profile-edit" type="button">Edit Profile</button>` :
+							${(isSelf || isAdmin) ? html`<button class="btn-primary user-profile-edit" type="button">Edit Profile</button>` :
 							''}
-							${!isSelf ? html`
+							${!isSelf && !isAdmin ? html`
 							<button class="${viewerFollows ? 'btn-secondary' : 'btn-primary'} user-profile-follow" type="button"
 								data-follow-button data-follow-user-id="${escapeHtml(user?.id ?? '')}">
 								${viewerFollows ? 'Unfollow' : 'Follow'}
@@ -390,7 +390,7 @@ function renderProfilePage(container, { user, profile, stats, plan, isSelf, view
 		<div class="modal-overlay" data-profile-edit-overlay>
 			<div class="modal modal-large">
 				<div class="modal-header">
-					<h2>Edit profile</h2>
+					<h2>${isAdmin && !isSelf ? 'Edit profile (admin)' : 'Edit profile'}</h2>
 					<button class="modal-close" type="button" aria-label="Close" data-profile-edit-close>
 						<svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
 							stroke-linecap="round" stroke-linejoin="round">
@@ -502,7 +502,7 @@ function renderProfilePage(container, { user, profile, stats, plan, isSelf, view
 							</div>
 						</div>
 		
-						<div class="user-profile-form-section user-profile-account-section" data-account-email-section>
+						<div class="user-profile-form-section user-profile-account-section" data-account-email-section ${(isAdmin && !isSelf) ? 'style="display: none;"' : ''}>
 							<h3 class="user-profile-form-section-title">Account</h3>
 							<div class="field">
 								<label>Current email</label>
@@ -1945,53 +1945,92 @@ async function init() {
 			errorBox.textContent = '';
 		}
 
-		const fd = new FormData();
-		let hasAvatarFile = false;
-		for (const [name, value] of new FormData(form)) {
-			if (name === 'avatar_file' && value instanceof File && value.size > 0) {
-				hasAvatarFile = true;
-				try {
-					const blob = await resizeImageFile(value, {
-						maxWidth: 128,
-						maxHeight: 128,
-						quality: 0.9,
-						mimeType: 'image/jpeg'
-					});
-					fd.append(name, blob, 'avatar.jpg');
-				} catch {
+		saveButton.disabled = true;
+		let result;
+
+		if (isAdmin && !isSelf && user?.id) {
+			const fd = new FormData();
+			for (const [name, value] of new FormData(form)) {
+				if (name === 'avatar_file' && value instanceof File && value.size > 0) {
+					try {
+						const blob = await resizeImageFile(value, {
+							maxWidth: 128,
+							maxHeight: 128,
+							quality: 0.9,
+							mimeType: 'image/jpeg'
+						});
+						fd.append(name, blob, 'avatar.jpg');
+					} catch {
+						fd.append(name, value);
+					}
+				} else if (name === 'avatar_file' && value instanceof File && value.size === 0) {
+					continue;
+				} else if (name === 'cover_file' && value instanceof File && value.size > 0) {
+					try {
+						const blob = await resizeCoverToBannerStrip(value, {
+							quality: 0.85,
+							mimeType: 'image/jpeg'
+						});
+						fd.append(name, blob, 'cover.jpg');
+					} catch {
+						fd.append(name, value);
+					}
+				} else {
 					fd.append(name, value);
 				}
-			} else if (name === 'avatar_file' && value instanceof File && value.size === 0) {
-				// Skip empty avatar_file from form so generated blob can be appended as sole avatar_file
-				continue;
-			} else if (name === 'cover_file' && value instanceof File && value.size > 0) {
-				try {
-					const blob = await resizeCoverToBannerStrip(value, {
-						quality: 0.85,
-						mimeType: 'image/jpeg'
-					});
-					fd.append(name, blob, 'cover.jpg');
-				} catch {
+			}
+			try {
+				result = await fetchJsonWithStatusDeduped(`/admin/users/${user.id}/profile`, {
+					method: 'POST',
+					credentials: 'include',
+					body: fd,
+				}, { windowMs: 0 });
+			} catch {
+				result = { ok: false, status: 0, data: null };
+			}
+		} else {
+			const fd = new FormData();
+			for (const [name, value] of new FormData(form)) {
+				if (name === 'avatar_file' && value instanceof File && value.size > 0) {
+					try {
+						const blob = await resizeImageFile(value, {
+							maxWidth: 128,
+							maxHeight: 128,
+							quality: 0.9,
+							mimeType: 'image/jpeg'
+						});
+						fd.append(name, blob, 'avatar.jpg');
+					} catch {
+						fd.append(name, value);
+					}
+				} else if (name === 'avatar_file' && value instanceof File && value.size === 0) {
+					continue;
+				} else if (name === 'cover_file' && value instanceof File && value.size > 0) {
+					try {
+						const blob = await resizeCoverToBannerStrip(value, {
+							quality: 0.85,
+							mimeType: 'image/jpeg'
+						});
+						fd.append(name, blob, 'cover.jpg');
+					} catch {
+						fd.append(name, value);
+					}
+				} else {
 					fd.append(name, value);
 				}
-			} else {
-				fd.append(name, value);
+			}
+			try {
+				result = await fetchJsonWithStatusDeduped('/api/profile', {
+					method: 'POST',
+					credentials: 'include',
+					body: fd,
+				}, { windowMs: 0 });
+			} catch {
+				result = { ok: false, status: 0, data: null };
 			}
 		}
 
-		saveButton.disabled = true;
-		let result;
-		try {
-			result = await fetchJsonWithStatusDeduped('/api/profile', {
-				method: 'POST',
-				credentials: 'include',
-				body: fd,
-			}, { windowMs: 0 });
-		} catch {
-			result = { ok: false, status: 0, data: null };
-		} finally {
-			saveButton.disabled = false;
-		}
+		saveButton.disabled = false;
 
 		if (!result.ok) {
 			const message = result.status === 0
@@ -2005,11 +2044,9 @@ async function init() {
 		}
 
 		if (keepEditOpen) {
-			// Leave edit modal open (e.g. after generating avatar)
 			return;
 		}
 		closeModal();
-		// Reload page to reflect new hero/avatar quickly (simple + robust)
 		window.location.reload();
 	}
 

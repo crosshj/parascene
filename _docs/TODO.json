@@ -1,13 +1,5 @@
 [
   {
-    "name": "admin can update a user's profile",
-    "description": "let admin modify the user's profile for them",
-    "cost": 50,
-    "impact": 79,
-    "dependsOn": [],
-    "starred": false
-  },
-  {
     "name": "Styles Management",
     "description": "Styles are not really styles. Users besides admin should be able to maintain the styles list.    Styles should have the option to be bound to different models.",
     "cost": 50,

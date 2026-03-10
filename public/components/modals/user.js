@@ -194,6 +194,7 @@ class AppModalUser extends HTMLElement {
 				this._founderZone.style.display = 'none';
 			}
 		}
+
 	}
 
 	updateFounderZone(user) {
@@ -448,10 +449,6 @@ class AppModalUser extends HTMLElement {
 			<div class="user-modal-field">
 				<div class="user-modal-field-label">Email</div>
 				<div class="user-modal-field-value">${escapeHtml(String(user?.email ?? ''))}</div>
-			</div>
-			<div class="user-modal-field">
-				<div class="user-modal-field-label">Role</div>
-				<div class="user-modal-field-value user-modal-role">${escapeHtml(String(user?.role ?? ''))}</div>
 			</div>
 			<div class="user-modal-field">
 				<div class="user-modal-field-label">Credits</div>

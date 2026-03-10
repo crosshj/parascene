@@ -1,8 +1,10 @@
 import express from "express";
+import path from "path";
 import Busboy from "busboy";
 import sharp from "sharp";
 import { buildProviderHeaders, resolveProviderAuthToken } from "./utils/providerAuth.js";
-import { fetchImageBufferFromUrl, createPlaceholderImageBuffer } from "./utils/creationJob.js";
+import { fetchImageBufferFromUrl, createPlaceholderImageBuffer, runAnonCreationJob } from "./utils/creationJob.js";
+import { scheduleAnonCreationJob } from "./utils/scheduleCreationJob.js";
 import { getEmailSettings } from "./utils/emailSettings.js";
 import { getBaseAppUrlForEmail } from "./utils/url.js";
 import { RELATED_PARAM_KEYS } from "../db/adapters/relatedParams.js";
@@ -82,6 +84,45 @@ export default function createAdminRoutes({ queries, storage }) {
 		}
 
 		return user;
+	}
+
+	function buildGenericUrl(key) {
+		const segments = String(key || "")
+			.split("/")
+			.filter(Boolean)
+			.map((seg) => encodeURIComponent(seg));
+		return `/api/images/generic/${segments.join("/")}`;
+	}
+
+	function parseMultipart(req, { maxFileBytes = 12 * 1024 * 1024 } = {}) {
+		return new Promise((resolve, reject) => {
+			const busboy = Busboy({
+				headers: req.headers,
+				limits: { fileSize: maxFileBytes, files: 2, fields: 50 }
+			});
+			const fields = {};
+			const files = {};
+			busboy.on("field", (name, value) => { fields[name] = value; });
+			busboy.on("file", (name, file, info) => {
+				const { filename, mimeType } = info || {};
+				const chunks = [];
+				let total = 0;
+				file.on("data", (data) => { total += data.length; chunks.push(data); });
+				file.on("limit", () => reject(new Error("File too large")));
+				file.on("end", () => {
+					if (total > 0) {
+						files[name] = {
+							filename: filename || "",
+							mimeType: mimeType || "application/octet-stream",
+							buffer: Buffer.concat(chunks)
+						};
+					}
+				});
+			});
+			busboy.on("error", reject);
+			busboy.on("finish", () => resolve({ fields, files }));
+			req.pipe(busboy);
+		});
 	}
 
 	function extractGenericKey(url) {
@@ -428,6 +469,402 @@ export default function createAdminRoutes({ queries, storage }) {
 
 		const updated = await queries.selectUserProfileByUserId?.get(targetUserId);
 		return res.json({ ok: true, profile: normalizeProfileRow(updated) });
+	});
+
+	// Admin-only: update a user's profile (display_name, about, character_description, avatar_url, etc.)
+	router.put("/admin/users/:id/profile", async (req, res) => {
+		const admin = await requireAdmin(req, res);
+		if (!admin) return;
+
+		const targetUserId = Number.parseInt(String(req.params?.id || ""), 10);
+		if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+			return res.status(400).json({ error: "Invalid user id" });
+		}
+
+		const target = await queries.selectUserById.get(targetUserId);
+		if (!target) {
+			return res.status(404).json({ error: "User not found" });
+		}
+
+		if (!queries.upsertUserProfile?.run) {
+			return res.status(500).json({ error: "Profile storage not available" });
+		}
+
+		const existingRow = await queries.selectUserProfileByUserId?.get(targetUserId);
+		const existingProfile = normalizeProfileRow(existingRow);
+		const existingMeta = typeof existingProfile.meta === "object" && existingProfile.meta ? existingProfile.meta : {};
+
+		const body = req.body && typeof req.body === "object" ? req.body : {};
+		let display_name = body.display_name;
+		let about = body.about;
+		let character_description = body.character_description;
+		let avatar_url = body.avatar_url;
+
+		if (display_name !== undefined) {
+			display_name = typeof display_name === "string" ? display_name.trim() || null : existingProfile.display_name;
+		} else {
+			display_name = existingProfile.display_name;
+		}
+		if (about !== undefined) {
+			about = typeof about === "string" ? about.trim() || null : existingProfile.about;
+		} else {
+			about = existingProfile.about;
+		}
+		if (character_description !== undefined) {
+			character_description = typeof character_description === "string" ? character_description.trim() || null : existingMeta.character_description ?? null;
+		} else {
+			character_description = existingMeta.character_description ?? null;
+		}
+
+		const nextMeta = { ...existingMeta, character_description };
+
+		let finalAvatarUrl = avatar_url !== undefined
+			? (typeof avatar_url === "string" ? avatar_url.trim() || null : null)
+			: existingProfile.avatar_url;
+
+		const tryPrefix = "/api/try/images/";
+		const storageInst = req.app?.locals?.storage ?? storage;
+		if (
+			finalAvatarUrl &&
+			typeof finalAvatarUrl === "string" &&
+			finalAvatarUrl.startsWith(tryPrefix) &&
+			storageInst?.getImageBufferAnon &&
+			storageInst?.uploadGenericImage
+		) {
+			const afterPrefix = finalAvatarUrl.slice(tryPrefix.length);
+			const filename = afterPrefix ? afterPrefix.split("/")[0].split("?")[0].trim() : "";
+			if (filename && !filename.includes("..") && !filename.includes("/")) {
+				try {
+					const buffer = await storageInst.getImageBufferAnon(filename);
+					const resized = await sharp(buffer)
+						.rotate()
+						.resize(128, 128, { fit: "cover" })
+						.png()
+						.toBuffer();
+					const now = Date.now();
+					const rand = Math.random().toString(36).slice(2, 9);
+					const key = `profile/${targetUserId}/avatar_${now}_${rand}.png`;
+					const stored = await storageInst.uploadGenericImage(resized, key, { contentType: "image/png" });
+					finalAvatarUrl = buildGenericUrl(stored ?? key);
+					const oldAvatarKey = extractGenericKey(existingProfile.avatar_url);
+					if (oldAvatarKey && storageInst?.deleteGenericImage) {
+						try {
+							await storageInst.deleteGenericImage(oldAvatarKey);
+						} catch {
+							// ignore
+						}
+					}
+					if (queries.selectCreatedImageAnonByFilename?.get && queries.deleteCreatedImageAnon?.run && storageInst.deleteImageAnon) {
+						try {
+							const anonRow = await queries.selectCreatedImageAnonByFilename.get(filename);
+							if (anonRow?.id) {
+								await queries.deleteCreatedImageAnon.run(anonRow.id);
+								await storageInst.deleteImageAnon(filename);
+							}
+						} catch {
+							// ignore
+						}
+					}
+				} catch (promoteErr) {
+					// non-fatal; keep existing avatar or null
+					finalAvatarUrl = existingProfile.avatar_url;
+				}
+			}
+		}
+
+		const payload = {
+			user_name: existingProfile.user_name ?? null,
+			display_name,
+			about,
+			socials: typeof existingProfile.socials === "object" && existingProfile.socials ? existingProfile.socials : {},
+			avatar_url: finalAvatarUrl,
+			cover_image_url: existingProfile.cover_image_url ?? null,
+			badges: Array.isArray(existingProfile.badges) ? existingProfile.badges : [],
+			meta: nextMeta
+		};
+
+		await queries.upsertUserProfile.run(targetUserId, payload);
+		const updated = await queries.selectUserProfileByUserId?.get(targetUserId);
+		return res.json({ ok: true, profile: normalizeProfileRow(updated) });
+	});
+
+	// Admin-only: update user profile via multipart (avatar, cover, display_name, about, character_description)
+	router.post("/admin/users/:id/profile", async (req, res) => {
+		const admin = await requireAdmin(req, res);
+		if (!admin) return;
+
+		const targetUserId = Number.parseInt(String(req.params?.id || ""), 10);
+		if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+			return res.status(400).json({ error: "Invalid user id" });
+		}
+
+		const target = await queries.selectUserById.get(targetUserId);
+		if (!target) {
+			return res.status(404).json({ error: "User not found" });
+		}
+
+		if (!queries.upsertUserProfile?.run) {
+			return res.status(500).json({ error: "Profile storage not available" });
+		}
+
+		let fields, files;
+		try {
+			const parsed = await parseMultipart(req);
+			fields = parsed.fields;
+			files = parsed.files;
+		} catch (err) {
+			if (err?.code === "FILE_TOO_LARGE" || err?.message === "File too large") {
+				return res.status(413).json({ error: "Image too large" });
+			}
+			return res.status(400).json({ error: "Invalid request", message: err?.message });
+		}
+
+		const existingRow = await queries.selectUserProfileByUserId?.get(targetUserId);
+		const existingProfile = normalizeProfileRow(existingRow);
+		const existingMeta = typeof existingProfile.meta === "object" && existingProfile.meta ? existingProfile.meta : {};
+
+		const avatarRemove = Boolean(fields?.avatar_remove);
+		const coverRemove = Boolean(fields?.cover_remove);
+		const avatarFile = files?.avatar_file || null;
+		const coverFile = files?.cover_file || null;
+
+		const oldAvatarUrl = existingProfile.avatar_url || null;
+		const oldCoverUrl = existingProfile.cover_image_url || null;
+		const oldAvatarKey = extractGenericKey(oldAvatarUrl);
+		const oldCoverKey = extractGenericKey(oldCoverUrl);
+
+		const nextSocials = {
+			...(typeof existingProfile.socials === "object" && existingProfile.socials ? existingProfile.socials : {})
+		};
+		if (typeof fields?.social_website === "string") {
+			const website = fields.social_website.trim();
+			if (website) nextSocials.website = website;
+			else delete nextSocials.website;
+		}
+
+		const character_description = typeof fields?.character_description === "string" ? fields.character_description.trim() || null : (existingMeta.character_description ?? null);
+		const nextMeta = { ...existingMeta, character_description };
+
+		let avatar_url = avatarRemove ? null : (oldAvatarUrl || null);
+		let cover_image_url = coverRemove ? null : (oldCoverUrl || null);
+
+		const now = Date.now();
+		const rand = Math.random().toString(36).slice(2, 9);
+		const pendingDeletes = [];
+
+		const storageInst = req.app?.locals?.storage ?? storage;
+		if (!storageInst?.uploadGenericImage) {
+			return res.status(500).json({ error: "Generic images storage not available" });
+		}
+
+		if (!avatarRemove && avatarFile?.buffer?.length) {
+			let resized;
+			try {
+				resized = await sharp(avatarFile.buffer)
+					.rotate()
+					.resize(128, 128, { fit: "cover" })
+					.png()
+					.toBuffer();
+			} catch {
+				return res.status(400).json({ error: "Invalid avatar image" });
+			}
+			const key = `profile/${targetUserId}/avatar_${now}_${rand}.png`;
+			const stored = await storageInst.uploadGenericImage(resized, key, { contentType: "image/png" });
+			avatar_url = buildGenericUrl(stored ?? key);
+			if (oldAvatarKey && storageInst.deleteGenericImage) pendingDeletes.push(oldAvatarKey);
+		} else if (!avatarRemove && !avatarFile?.buffer?.length) {
+			const tryUrl = typeof fields?.avatar_try_url === "string" ? fields.avatar_try_url.trim() : "";
+			const tryPrefix = "/api/try/images/";
+			if (tryUrl.startsWith(tryPrefix)) {
+				const afterPrefix = tryUrl.slice(tryPrefix.length);
+				const filename = afterPrefix ? afterPrefix.split("/")[0].split("?")[0].trim() : "";
+				if (filename && !filename.includes("..") && !filename.includes("/") && storageInst.getImageBufferAnon) {
+					try {
+						const buffer = await storageInst.getImageBufferAnon(filename);
+						const resized = await sharp(buffer)
+							.rotate()
+							.resize(128, 128, { fit: "cover" })
+							.png()
+							.toBuffer();
+						const key = `profile/${targetUserId}/avatar_${now}_${rand}.png`;
+						const stored = await storageInst.uploadGenericImage(resized, key, { contentType: "image/png" });
+						avatar_url = buildGenericUrl(stored ?? key);
+						if (oldAvatarKey && storageInst.deleteGenericImage) pendingDeletes.push(oldAvatarKey);
+						if (queries.selectCreatedImageAnonByFilename?.get && queries.deleteCreatedImageAnon?.run && storageInst.deleteImageAnon) {
+							try {
+								const anonRow = await queries.selectCreatedImageAnonByFilename.get(filename);
+								if (anonRow?.id) {
+									await queries.deleteCreatedImageAnon.run(anonRow.id);
+									await storageInst.deleteImageAnon(filename);
+								}
+							} catch {
+								// ignore
+							}
+						}
+					} catch {
+						// non-fatal
+					}
+				}
+			}
+		}
+		if (avatarRemove && oldAvatarKey && storageInst.deleteGenericImage) {
+			pendingDeletes.push(oldAvatarKey);
+		}
+
+		if (!coverRemove && coverFile?.buffer?.length) {
+			const ext = path.extname(coverFile.filename) || ".png";
+			const key = `profile/${targetUserId}/cover_${now}_${rand}${ext}`;
+			const stored = await storageInst.uploadGenericImage(coverFile.buffer, key, {
+				contentType: coverFile.mimeType
+			});
+			cover_image_url = buildGenericUrl(stored ?? key);
+			if (oldCoverKey && storageInst.deleteGenericImage) pendingDeletes.push(oldCoverKey);
+		} else if (coverRemove && oldCoverKey && storageInst.deleteGenericImage) {
+			pendingDeletes.push(oldCoverKey);
+		}
+
+		const payload = {
+			user_name: existingProfile.user_name ?? null,
+			display_name: typeof fields?.display_name === "string" ? fields.display_name.trim() || null : existingProfile.display_name,
+			about: typeof fields?.about === "string" ? fields.about.trim() || null : existingProfile.about,
+			socials: nextSocials,
+			avatar_url,
+			cover_image_url,
+			badges: Array.isArray(existingProfile.badges) ? existingProfile.badges : [],
+			meta: nextMeta
+		};
+
+		await queries.upsertUserProfile.run(targetUserId, payload);
+
+		if (storageInst.deleteGenericImage && pendingDeletes.length > 0) {
+			for (const k of pendingDeletes) {
+				try {
+					await storageInst.deleteGenericImage(k);
+				} catch {
+					// ignore
+				}
+			}
+		}
+
+		const updated = await queries.selectUserProfileByUserId?.get(targetUserId);
+		return res.json({ ok: true, profile: normalizeProfileRow(updated) });
+	});
+
+	/** Build avatar prompt from character description (same as user-profile/welcome). */
+	function buildAvatarPrompt(description, variationKey) {
+		const core = typeof description === "string" ? description.trim() : "";
+		return [
+			`Portrait of ${core}. Avoid showing body, focus on face and head.`,
+			"Head-and-shoulders framing, square composition.",
+			"Clean, plain and simple background colorful and contrasting with subject.",
+			"Expressive eyes, clear facial details, emotive head position.",
+			"Stylized digital portrait suitable for a social profile photo.",
+			`No text, no logo, no watermark, no frame. Variation hint: ${variationKey}.`
+		].join("\n");
+	}
+
+	/** Admin-only: generate avatar from user's character prompt. Associates with admin's ps_cid so admin can poll /api/try/list. Returns { id } for polling. No credit charge. */
+	router.post("/admin/users/:id/generate-avatar", async (req, res) => {
+		const admin = await requireAdmin(req, res);
+		if (!admin) return;
+
+		const targetUserId = Number.parseInt(String(req.params?.id || ""), 10);
+		if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+			return res.status(400).json({ error: "Invalid user id" });
+		}
+
+		const target = await queries.selectUserById.get(targetUserId);
+		if (!target) {
+			return res.status(404).json({ error: "User not found" });
+		}
+
+		const anonCid = req.cookies?.ps_cid;
+		if (!anonCid || typeof anonCid !== "string" || !anonCid.trim()) {
+			return res.status(400).json({
+				error: "Missing identity",
+				message: "Cookie ps_cid is required. Call POST /api/policy/seen first."
+			});
+		}
+
+		const profileRow = await queries.selectUserProfileByUserId?.get?.(targetUserId);
+		const existingProfile = normalizeProfileRow(profileRow);
+		const existingMeta = typeof existingProfile.meta === "object" && existingProfile.meta ? existingProfile.meta : {};
+		const characterDescription = typeof req.body?.character_description === "string" && req.body.character_description.trim()
+			? req.body.character_description.trim()
+			: (existingMeta.character_description && String(existingMeta.character_description).trim()) || null;
+
+		if (!characterDescription) {
+			return res.status(400).json({
+				error: "No character description",
+				message: "User has no character description. Set one in the profile or pass character_description in the request body."
+			});
+		}
+
+		const TRY_DEFAULT_SERVER_ID = 1;
+		const TRY_DEFAULT_METHOD = "replicate";
+		const TRY_DEFAULT_MODEL = "prunaai/p-image";
+		const variationKey = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+		const prompt = buildAvatarPrompt(characterDescription, variationKey);
+		const server_id = TRY_DEFAULT_SERVER_ID;
+		const method = TRY_DEFAULT_METHOD;
+		const args = { prompt, model: TRY_DEFAULT_MODEL, prompt_upsampling: true };
+
+		const server = await queries.selectServerById.get(server_id);
+		if (!server || server.status !== "active") {
+			return res.status(400).json({
+				error: "Invalid server",
+				message: "Server not found or not active"
+			});
+		}
+
+		const placeholderFilename = `creating_anon_admin_${Date.now()}.png`;
+		const meta = {
+			server_id: Number(server_id),
+			server_name: typeof server.name === "string" ? server.name : null,
+			method,
+			args,
+			started_at: new Date().toISOString(),
+			admin_generate_for_user_id: targetUserId
+		};
+
+		const result = await queries.insertCreatedImageAnon.run(
+			prompt,
+			placeholderFilename,
+			"",
+			1024,
+			1024,
+			"creating",
+			meta
+		);
+		const id = result.insertId;
+		if (!id) {
+			return res.status(500).json({ error: "Failed to create try record" });
+		}
+
+		queries.insertTryRequest?.run?.(anonCid.trim(), prompt, id, null, null);
+
+		try {
+			await scheduleAnonCreationJob({
+				payload: {
+					created_image_anon_id: id,
+					server_id: Number(server_id),
+					method,
+					args
+				},
+				runAnonCreationJob: (opts) => runAnonCreationJob({ queries, storage, payload: opts.payload })
+			});
+		} catch (err) {
+			await queries.updateCreatedImageAnonJobFailed?.run?.(id, {
+				meta: { ...meta, failed_at: new Date().toISOString(), error: err?.message || "Schedule failed" }
+			});
+			return res.status(500).json({ error: "Failed to schedule creation", message: err?.message });
+		}
+
+		return res.status(201).json({
+			id,
+			status: "creating",
+			message: "Poll /api/try/list for completion. When status is completed, use the url in PUT /admin/users/:id/profile with avatar_url."
+		});
 	});
 
 	/** GET /admin/anonymous-users — list unique anon_cids from try_requests with request count and transitioned user (excludes __pool__). Supports limit, offset (0-based). Returns { anonCids, total }. */
