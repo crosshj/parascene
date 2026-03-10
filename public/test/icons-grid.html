@@ -73,7 +73,9 @@
 	<div id="container"></div>
 
 	<script type="module">
-		import * as Icons from '../icons/svg-strings.js';
+		const _v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
+		const _qs = _v ? `?v=${encodeURIComponent(_v)}` : '';
+		const Icons = await import(`../icons/svg-strings.js${_qs}`);
 
 		const container = document.getElementById('container');
 

@@ -2,7 +2,11 @@
  * Shared todo card row builder and dial styling. Used by todo route and admin page.
  */
 
-import { starIcon } from '../icons/svg-strings.js';
+const _qs = (() => {
+	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
+	return v ? `?v=${encodeURIComponent(v)}` : '';
+})();
+const { starIcon } = await import(`../icons/svg-strings.js${_qs}`);
 
 function getDialColor(value) {
 	const clamped = Math.max(0, Math.min(100, Number(value) || 0));

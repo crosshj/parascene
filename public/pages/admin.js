@@ -1,5 +1,9 @@
-import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, forceRadial } from "d3-force";
-
+let forceSimulation;
+let forceLink;
+let forceManyBody;
+let forceCenter;
+let forceCollide;
+let forceRadial;
 let getAvatarColor;
 let formatRelativeTime;
 let attachAutoGrowTextarea;
@@ -1726,9 +1730,10 @@ function applyD3ForceLayout(nodes, edges, w, h) {
 
 async function applyCoseBilkentLayout(nodes, edges) {
 	console.log("[graph] CoSE-Bilkent: loading and running…");
+	const cytoscapeQs = getAssetVersionParam() ? `?v=${encodeURIComponent(getAssetVersionParam())}` : '';
 	const [{ default: cytoscape }, { default: coseBilkent }] = await Promise.all([
-		import("cytoscape"),
-		import("cytoscape-cose-bilkent")
+		import(`https://esm.sh/cytoscape@3${cytoscapeQs}`),
+		import(`https://esm.sh/cytoscape-cose-bilkent@4${cytoscapeQs}`)
 	]);
 	cytoscape.use(coseBilkent);
 
@@ -1774,9 +1779,10 @@ async function applyCoseBilkentLayout(nodes, edges) {
 
 async function applyFcoseLayout(nodes, edges) {
 	console.log("[graph] fCoSE: loading and running…");
+	const cytoscapeQs = getAssetVersionParam() ? `?v=${encodeURIComponent(getAssetVersionParam())}` : '';
 	const [{ default: cytoscape }, { default: fcose }] = await Promise.all([
-		import("cytoscape"),
-		import("cytoscape-fcose")
+		import(`https://esm.sh/cytoscape@3${cytoscapeQs}`),
+		import(`https://esm.sh/cytoscape-fcose@2${cytoscapeQs}`)
 	]);
 	cytoscape.use(fcose);
 
@@ -1847,9 +1853,10 @@ async function applyFcoseLayout(nodes, edges) {
 
 async function applyElkLayout(nodes, edges) {
 	console.log("[graph] ELK (disco): loading and running…");
+	const cytoscapeQs = getAssetVersionParam() ? `?v=${encodeURIComponent(getAssetVersionParam())}` : '';
 	const [{ default: cytoscape }, { default: elk }] = await Promise.all([
-		import("cytoscape"),
-		import("cytoscape-elk")
+		import(`https://esm.sh/cytoscape@3${cytoscapeQs}`),
+		import(`https://esm.sh/cytoscape-elk@2${cytoscapeQs}`)
 	]);
 	cytoscape.use(elk);
 

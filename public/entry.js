@@ -4,8 +4,6 @@
  * Replaces the previous global.js "load everything" model so each page only loads its components.
  */
 
-import { runCommonAppInit } from './shared/pageInit.js';
-
 const ENTRY_FROM_BODY_CLASS = {
 	'landing-page': 'landing',
 	'create-page': 'create',
@@ -50,11 +48,15 @@ async function main() {
 	if (mod && typeof mod.init === 'function') {
 		await mod.init(v);
 	}
-	runCommonAppInit();
+	const { runCommonAppInit } = await import(`./shared/pageInit.js${qs}`);
+	await runCommonAppInit();
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
 	console.error('Entry init failed:', err);
 	document.body.classList.add('loaded');
-	runCommonAppInit();
+	const v = getAssetVersionParam();
+	const qs = v ? `?v=${encodeURIComponent(v)}` : '';
+	const { runCommonAppInit } = await import(`./shared/pageInit.js${qs}`);
+	await runCommonAppInit();
 });

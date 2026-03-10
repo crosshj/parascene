@@ -17,7 +17,11 @@
  *   usePageParam?: boolean — if true, send page (1-based) instead of offset (transitions API)
  */
 
-import { createPagedTableToolbar } from './pagedTable.js';
+const _qs = (() => {
+	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
+	return v ? `?v=${encodeURIComponent(v)}` : '';
+})();
+const { createPagedTableToolbar } = await import(`./pagedTable.js${_qs}`);
 
 /** Default page size for all admin tables. */
 export const ADMIN_TABLE_PAGE_SIZE = 20;

@@ -3,7 +3,11 @@
  * Use with .creation-published-badge and .creation-user-deleted-badge (styles in global.css).
  */
 
-import { globeIcon } from '../icons/svg-strings.js';
+const _qs = (() => {
+	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
+	return v ? `?v=${encodeURIComponent(v)}` : '';
+})();
+const { globeIcon } = await import(`../icons/svg-strings.js${_qs}`);
 
 const html = String.raw;
 

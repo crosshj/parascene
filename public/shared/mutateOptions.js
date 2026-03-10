@@ -4,7 +4,11 @@
  * Uses fetchJsonWithStatusDeduped so /api/servers is shared with create route (one request, not two).
  */
 
-import { fetchJsonWithStatusDeduped } from './api.js';
+const _qs = (() => {
+	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
+	return v ? `?v=${encodeURIComponent(v)}` : '';
+})();
+const { fetchJsonWithStatusDeduped } = await import(`./api.js${_qs}`);
 
 export function getMethodIntentList(method) {
 	if (Array.isArray(method?.intents)) {

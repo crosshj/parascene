@@ -2,8 +2,14 @@
  * Shared user list row HTML. Used by user-profile (follows/following lists).
  */
 
-import { getAvatarColor } from './avatar.js';
-import { buildProfilePath } from './profileLinks.js';
+const _qs = (() => {
+	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
+	return v ? `?v=${encodeURIComponent(v)}` : '';
+})();
+const [{ getAvatarColor }, { buildProfilePath }] = await Promise.all([
+	import(`./avatar.js${_qs}`),
+	import(`./profileLinks.js${_qs}`)
+]);
 
 const html = String.raw;
 

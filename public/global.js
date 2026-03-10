@@ -8,7 +8,9 @@ if (document.body && !document.body.dataset.entry) {
 	document.body.dataset.entry = 'app';
 }
 
-import('./entry.js').catch((err) => {
+const _v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
+const _qs = _v ? `?v=${encodeURIComponent(_v)}` : '';
+import(`./entry.js${_qs}`).catch((err) => {
 	console.error('global.js fallback failed:', err);
 	document.body.classList.add('loaded');
 });

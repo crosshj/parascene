@@ -1,4 +1,8 @@
-import { fetchJsonWithStatusDeduped } from '/shared/api.js';
+const _qs = (() => {
+	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
+	return v ? `?v=${encodeURIComponent(v)}` : '';
+})();
+const { fetchJsonWithStatusDeduped } = await import(`/shared/api.js${_qs}`);
 
 function toQuery(params) {
 	const qs = new URLSearchParams();

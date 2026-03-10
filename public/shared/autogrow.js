@@ -1,4 +1,8 @@
-import { getPromptEditorMaxHeightPx } from './viewport.js';
+const _qs = (() => {
+	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
+	return v ? `?v=${encodeURIComponent(v)}` : '';
+})();
+const { getPromptEditorMaxHeightPx } = await import(`./viewport.js${_qs}`);
 
 const DEFAULT_MAX_HEIGHT_PX = 1200;
 

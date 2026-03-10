@@ -3,8 +3,14 @@
  * Field types are handled by separate handlers so new types can be added easily.
  */
 
-import { attachAutoGrowTextarea } from './autogrow.js';
-import { loadMutateQueue, removeFromMutateQueueByImageUrl } from './mutateQueue.js';
+const _qs = (() => {
+	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
+	return v ? `?v=${encodeURIComponent(v)}` : '';
+})();
+const [{ attachAutoGrowTextarea }, { loadMutateQueue, removeFromMutateQueueByImageUrl }] = await Promise.all([
+	import(`./autogrow.js${_qs}`),
+	import(`./mutateQueue.js${_qs}`)
+]);
 
 // --- Field type detection (used to choose handler) ---
 

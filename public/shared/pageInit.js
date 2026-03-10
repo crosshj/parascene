@@ -5,9 +5,38 @@
  * Used by entry-*.js after loading their components.
  */
 
-import { refreshAutoGrowTextareas } from './autogrow.js';
-import { closeModalsAndNavigate } from './navigation.js';
-import { initNsfwViewPreference, handleNsfwClick } from './nsfwView.js';
+let refreshAutoGrowTextareas;
+let closeModalsAndNavigate;
+let initNsfwViewPreference;
+let handleNsfwClick;
+
+function getAssetVersionParam() {
+	const meta = document.querySelector('meta[name="asset-version"]');
+	return meta?.getAttribute('content')?.trim() || '';
+}
+
+function getImportQuery(version) {
+	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
+}
+
+let _depsPromise;
+async function loadDeps() {
+	if (_depsPromise) return _depsPromise;
+	const v = getAssetVersionParam();
+	const qs = getImportQuery(v);
+	_depsPromise = (async () => {
+		const autogrowMod = await import(`./autogrow.js${qs}`);
+		refreshAutoGrowTextareas = autogrowMod.refreshAutoGrowTextareas;
+
+		const navMod = await import(`./navigation.js${qs}`);
+		closeModalsAndNavigate = navMod.closeModalsAndNavigate;
+
+		const nsfwMod = await import(`./nsfwView.js${qs}`);
+		initNsfwViewPreference = nsfwMod.initNsfwViewPreference;
+		handleNsfwClick = nsfwMod.handleNsfwClick;
+	})();
+	return _depsPromise;
+}
 
 /**
  * Wait for DOM and the given custom element tags to be defined, then add body.loaded.
@@ -37,7 +66,8 @@ export async function waitForComponents(customElementTags) {
  * (autogrow on tab/route/modal/resize, modal-open body class, modal link interception, service worker).
  * Call once per page load (e.g. from entry.js after entry module init).
  */
-export function runCommonAppInit() {
+export async function runCommonAppInit() {
+	await loadDeps();
 	// Apply NSFW view preference from localStorage so body.view-nsfw is set on load
 	try {
 		initNsfwViewPreference();

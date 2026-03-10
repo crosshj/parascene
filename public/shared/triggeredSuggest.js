@@ -8,7 +8,11 @@
  * - attachMentionSuggest(textarea)
  */
 
-import { getAvatarColor } from './avatar.js';
+const _qs = (() => {
+	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
+	return v ? `?v=${encodeURIComponent(v)}` : '';
+})();
+const { getAvatarColor } = await import(`./avatar.js${_qs}`);
 
 const DEBOUNCE_MS = 130;
 const POPUP_ID = "triggered-suggest-listbox";

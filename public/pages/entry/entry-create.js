@@ -43,7 +43,9 @@ function runCreatePageInit(refreshAutoGrowTextareas) {
 	let imageEditValue = null;
 
 	function openImagePicker() {
-		import('../../shared/providerFormFields.js').then(({ openImagePickerModal }) => {
+		const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
+		const qs = v ? `?v=${encodeURIComponent(v)}` : '';
+		import(`../../shared/providerFormFields.js${qs}`).then(({ openImagePickerModal }) => {
 			openImagePickerModal({
 				onSelect(value) {
 					const box = area?.closest('.create-image-edit-box');
