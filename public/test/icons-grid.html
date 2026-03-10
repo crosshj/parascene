@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Icons grid – Parascene</title>
+	<style>
+		body {
+			font: 1rem/1.5 system-ui, sans-serif;
+			background: var(--bg, #f6f7fb);
+			color: var(--text, #1e293b);
+			margin: 0;
+			padding: 24px;
+		}
+		h1 {
+			font-size: 1.25rem;
+			margin: 0 0 8px;
+		}
+		p.subtitle {
+			margin: 0 0 24px;
+			color: var(--text-muted, #64748b);
+			font-size: 0.875rem;
+		}
+		.section-title {
+			font-size: 0.875rem;
+			font-weight: 600;
+			margin: 24px 0 12px;
+			color: var(--text, #1e293b);
+		}
+		.section-title:first-of-type {
+			margin-top: 0;
+		}
+		.icons-grid {
+			display: grid;
+			grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+			gap: 16px;
+			max-width: 800px;
+		}
+		.icon-cell {
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			gap: 8px;
+			padding: 12px;
+			background: var(--surface, #fff);
+			border: 1px solid var(--border, #e2e8f0);
+			border-radius: 10px;
+		}
+		.icon-cell .icon-wrap {
+			width: 20px;
+			height: 20px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			flex-shrink: 0;
+		}
+		.icon-cell .icon-wrap svg {
+			width: 100%;
+			height: 100%;
+			display: block;
+		}
+		.icon-cell .label {
+			font-size: 0.7rem;
+			text-align: center;
+			word-break: break-word;
+			color: var(--text-muted, #64748b);
+		}
+	</style>
+</head>
+<body>
+	<h1>Icons (svg-strings.js)</h1>
+	<p class="subtitle">Grid at 20×20px – same size as header/button icons in the app.</p>
+	<div id="container"></div>
+
+	<script type="module">
+		import * as Icons from '../icons/svg-strings.js';
+
+		const container = document.getElementById('container');
+
+		function escapeHtml(str) {
+			return String(str)
+				.replace(/&/g, '&amp;')
+				.replace(/</g, '&lt;')
+				.replace(/>/g, '&gt;')
+				.replace(/"/g, '&quot;')
+				.replace(/'/g, '&#039;');
+		}
+
+		function makeCell(name, svgString) {
+			const wrap = document.createElement('div');
+			wrap.className = 'icon-cell';
+			wrap.innerHTML = `
+				<div class="icon-wrap"></div>
+				<span class="label">${escapeHtml(name)}</span>
+			`;
+			wrap.querySelector('.icon-wrap').insertAdjacentHTML('afterbegin', svgString);
+			return wrap;
+		}
+
+		// Icons (non-emoji)
+		const iconsTitle = document.createElement('h2');
+		iconsTitle.className = 'section-title';
+		iconsTitle.textContent = 'Icons';
+		container.appendChild(iconsTitle);
+		const iconsGrid = document.createElement('div');
+		iconsGrid.className = 'icons-grid';
+		container.appendChild(iconsGrid);
+
+		for (const [name, value] of Object.entries(Icons)) {
+			if (name === 'REACTION_ICONS') continue;
+			if (typeof value !== 'function') continue;
+			if (name.endsWith('ReactionIcon')) continue;
+
+			iconsGrid.appendChild(makeCell(name, value('')));
+		}
+
+		// Reaction emojis (grouped together)
+		const emojisTitle = document.createElement('h2');
+		emojisTitle.className = 'section-title';
+		emojisTitle.textContent = 'Reaction emojis';
+		container.appendChild(emojisTitle);
+		const emojisGrid = document.createElement('div');
+		emojisGrid.className = 'icons-grid';
+		container.appendChild(emojisGrid);
+
+		for (const [key, iconFn] of Object.entries(Icons.REACTION_ICONS || {})) {
+			if (typeof iconFn !== 'function') continue;
+			emojisGrid.appendChild(makeCell(key, iconFn('')));
+		}
+	</script>
+</body>
+</html>

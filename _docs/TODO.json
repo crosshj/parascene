@@ -1,5 +1,21 @@
 [
   {
+    "name": "admin can update a user's profile",
+    "description": "let admin modify the user's profile for them",
+    "cost": 50,
+    "impact": 79,
+    "dependsOn": [],
+    "starred": false
+  },
+  {
+    "name": "comment reactions",
+    "description": "emoji reactions to comments",
+    "cost": 50,
+    "impact": 76,
+    "dependsOn": [],
+    "starred": false
+  },
+  {
     "name": "Styles Management",
     "description": "Styles are not really styles. Users besides admin should be able to maintain the styles list.    Styles should have the option to be bound to different models.",
     "cost": 50,
@@ -34,6 +50,14 @@
   {
     "name": "channels",
     "description": "Private/public channels where only way to get image is to be part of channel",
+    "cost": 50,
+    "impact": 50,
+    "dependsOn": [],
+    "starred": false
+  },
+  {
+    "name": "expose todo/roadmap",
+    "description": "give people an idea what is upcoming + merge with feature requests",
     "cost": 50,
     "impact": 50,
     "dependsOn": [],
