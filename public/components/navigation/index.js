@@ -1073,6 +1073,10 @@ class AppNavigation extends HTMLElement {
 
 
 	render() {
+		if (typeof notifyIcon !== 'function' || typeof creditIcon !== 'function') {
+			loadDeps().then(() => this.render());
+			return;
+		}
 		const showNotifications = this.hasAttribute('show-notifications') && !this.hasAttribute('hide-notifications');
 		const showProfile = this.hasAttribute('show-profile');
 		const showCreate = this.hasAttribute('show-create');
