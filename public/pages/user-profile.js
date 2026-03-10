@@ -10,6 +10,7 @@ import { renderGridSkeleton, renderProfilePageSkeleton } from '../shared/skeleto
 import { publishedBadgeHtml, userDeletedBadgeHtml } from '../shared/creationBadges.js';
 import { buildCreationCardShell } from '../shared/creationCard.js';
 import { buildUserListRowHtml } from '../shared/userCard.js';
+import { REACTION_ORDER, REACTION_ICONS } from '../icons/svg-strings.js';
 
 const html = String.raw;
 
@@ -810,6 +811,17 @@ function renderCommentsList(container, comments, emptyMessage) {
 			user_name: c?.commenter_user_name,
 			avatar_url: c?.commenter_avatar_url
 			};
+			const reactionCounts = c?.reaction_counts && typeof c.reaction_counts === 'object' ? c.reaction_counts : {};
+			const reactionChips = REACTION_ORDER
+				.filter((key) => (Number(reactionCounts[key]) || 0) > 0)
+				.map((key) => {
+					const count = Number(reactionCounts[key]) || 0;
+					const iconFn = REACTION_ICONS[key];
+					const iconHtml = iconFn ? iconFn('comment-reaction-icon') : '';
+					const countLabel = count > 99 ? '99+' : String(count);
+					return html`<span class="comment-reaction-chip" aria-label="${escapeHtml(key)}: ${escapeHtml(countLabel)}"><span class="comment-reaction-icon-wrap" aria-hidden="true">${iconHtml}</span><span class="comment-reaction-count">${escapeHtml(countLabel)}</span></span>`;
+				})
+				.join('');
 			return html`
 			<div class="user-profile-comment-block">
 				<a href="${escapeHtml(creationHref)}" class="user-profile-comment-thumb">
@@ -821,6 +833,7 @@ function renderCommentsList(container, comments, emptyMessage) {
 					<div class="user-profile-comment-creator">${renderUserCell(creator, 'creator')}</div>
 				</div>
 				<div class="user-profile-comment-text">${escapeHtml(text)}</div>
+				${reactionChips ? html`<div class="comment-reactions comment-reactions-readonly">${reactionChips}</div>` : ''}
 				<div class="user-profile-comment-footer">
 					${renderUserCell(commenter, 'commenter')}
 					${createdAt ? html`<span class="user-profile-comment-date">${escapeHtml(createdAt)}</span>` : ''}

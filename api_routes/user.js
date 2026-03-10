@@ -21,6 +21,7 @@ import { getBaseAppUrl, getBaseAppUrlForEmail, getThumbnailUrl } from "./utils/u
 import { computeWelcome, WELCOME_VERSION } from "./utils/welcome.js";
 import { resolveNotificationDisplay } from "./utils/notificationResolver.js";
 import { collapseNotificationsByCreation, getCreationIdFromRow } from "./utils/notificationCollapse.js";
+import { getReactionsForCommentIds, buildEmptyReactionCounts } from "./comments.js";
 
 export default function createProfileRoutes({ queries }) {
 	const router = express.Router();
@@ -1609,6 +1610,19 @@ export default function createProfileRoutes({ queries }) {
 				...c,
 				created_image_thumbnail_url: c?.created_image_url ? getThumbnailUrl(c.created_image_url) : null
 			}));
+			const commentIds = comments.map((c) => c.id).filter((id) => id != null);
+			const reactionsByComment = await getReactionsForCommentIds(queries, commentIds, viewer?.id ?? null);
+			for (const c of comments) {
+				if (c.id == null) continue;
+				const r = reactionsByComment.get(Number(c.id));
+				if (r) {
+					c.reaction_counts = r.reaction_counts;
+					c.viewer_reactions = r.viewer_reactions;
+				} else {
+					c.reaction_counts = buildEmptyReactionCounts();
+					c.viewer_reactions = [];
+				}
+			}
 			return res.json({ comments, has_more: comments.length === limit });
 		} catch (error) {
 			return res.status(500).json({ error: "Internal server error" });

@@ -4310,6 +4310,91 @@ export function openDb() {
 				return { comment_count: Number(data?.comment_count ?? 0) };
 			}
 		},
+		selectCommentById: {
+			get: async (commentId) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("comments_created_image"))
+					.select("id, created_image_id")
+					.eq("id", commentId)
+					.maybeSingle();
+				if (error) throw error;
+				return data ?? null;
+			}
+		},
+		selectCommentReactionCountsByCommentIds: {
+			all: async (commentIds) => {
+				if (!Array.isArray(commentIds) || commentIds.length === 0) return [];
+				const ids = commentIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0);
+				if (ids.length === 0) return [];
+				const { data, error } = await serviceClient
+					.from(prefixedTable("comment_reactions"))
+					.select("comment_id, emoji_key")
+					.in("comment_id", ids);
+				if (error) throw error;
+				const rows = data ?? [];
+				const byKey = new Map();
+				for (const row of rows) {
+					const k = `${row.comment_id}:${row.emoji_key}`;
+					byKey.set(k, (byKey.get(k) ?? 0) + 1);
+				}
+				return Array.from(byKey.entries()).map(([k, count]) => {
+					const [comment_id, emoji_key] = k.split(":");
+					return { comment_id: Number(comment_id), emoji_key, count };
+				});
+			}
+		},
+		selectViewerReactionsByCommentIds: {
+			all: async (viewerId, commentIds) => {
+				if (!Number.isFinite(Number(viewerId)) || !Array.isArray(commentIds) || commentIds.length === 0) return [];
+				const ids = commentIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0);
+				if (ids.length === 0) return [];
+				const { data, error } = await serviceClient
+					.from(prefixedTable("comment_reactions"))
+					.select("comment_id, emoji_key")
+					.eq("user_id", viewerId)
+					.in("comment_id", ids);
+				if (error) throw error;
+				return (data ?? []).map((row) => ({ comment_id: row.comment_id, emoji_key: row.emoji_key }));
+			}
+		},
+		insertCommentReaction: {
+			run: async (commentId, userId, emojiKey) => {
+				const { error } = await serviceClient
+					.from(prefixedTable("comment_reactions"))
+					.upsert(
+						{ comment_id: commentId, user_id: userId, emoji_key: emojiKey },
+						{ onConflict: "comment_id,user_id,emoji_key" }
+					);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
+		deleteCommentReaction: {
+			run: async (commentId, userId, emojiKey) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("comment_reactions"))
+					.delete()
+					.eq("comment_id", commentId)
+					.eq("user_id", userId)
+					.eq("emoji_key", emojiKey)
+					.select("comment_id");
+				if (error) throw error;
+				return { changes: data?.length ?? 0 };
+			}
+		},
+		selectCommentReactionExists: {
+			get: async (commentId, userId, emojiKey) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("comment_reactions"))
+					.select("comment_id")
+					.eq("comment_id", commentId)
+					.eq("user_id", userId)
+					.eq("emoji_key", emojiKey)
+					.maybeSingle();
+				if (error) throw error;
+				return data ? { one: 1 } : null;
+			}
+		},
 		publishCreatedImage: {
 			run: async (id, userId, title, description, isAdmin = false) => {
 				// Use serviceClient to bypass RLS for backend operations

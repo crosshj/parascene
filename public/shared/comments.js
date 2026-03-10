@@ -56,3 +56,19 @@ export async function postCreatedImageComment(createdImageId, text) {
 	return { ok: response.ok, status: response.status, data };
 }
 
+/**
+ * Toggle a reaction on a comment. POST /api/comments/:commentId/reactions with { emoji_key }.
+ * @returns {Promise<{ ok: boolean, status: number, data?: { added: boolean, count: number } }>}
+ */
+export async function toggleCommentReaction(commentId, emojiKey) {
+	const url = `/api/comments/${encodeURIComponent(String(commentId))}/reactions`;
+	const response = await fetch(url, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ emoji_key: emojiKey }),
+		credentials: 'include'
+	});
+	const data = await readResponsePayload(response);
+	return { ok: response.ok, status: response.status, data };
+}
+

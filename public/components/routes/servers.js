@@ -8,6 +8,7 @@ import { renderCommentRowsSkeleton, renderServerCardsSkeleton } from '../../shar
 import { attachAutoGrowTextarea } from '../../shared/autogrow.js';
 import { buildProfilePath } from '../../shared/profileLinks.js';
 import { renderCommentAvatarHtml } from '../../shared/commentItem.js';
+import { REACTION_ORDER, REACTION_ICONS } from '../../icons/svg-strings.js';
 
 const html = String.raw;
 
@@ -279,6 +280,21 @@ class AppRouteServers extends HTMLElement {
 			commentText.className = 'comment-text';
 			commentText.innerHTML = safeText;
 
+			const reactionCounts = comment?.reaction_counts && typeof comment.reaction_counts === 'object' ? comment.reaction_counts : {};
+			const chipsWithCount = REACTION_ORDER.filter((key) => (Number(reactionCounts[key]) || 0) > 0);
+			if (chipsWithCount.length > 0) {
+				const reactionsEl = document.createElement('div');
+				reactionsEl.className = 'comment-reactions comment-reactions-readonly';
+				reactionsEl.innerHTML = chipsWithCount.map((key) => {
+					const count = Number(reactionCounts[key]) || 0;
+					const iconFn = REACTION_ICONS[key];
+					const iconHtml = iconFn ? iconFn('comment-reaction-icon') : '';
+					const countLabel = count > 99 ? '99+' : String(count);
+					return `<span class="comment-reaction-chip" aria-label="${escapeHtml(key)}: ${escapeHtml(countLabel)}"><span class="comment-reaction-icon-wrap" aria-hidden="true">${iconHtml}</span><span class="comment-reaction-count">${escapeHtml(countLabel)}</span></span>`;
+				}).join('');
+				row.appendChild(reactionsEl);
+			}
+
 			const footer = document.createElement('div');
 			footer.className = 'connect-comment-footer';
 			footer.innerHTML = `
@@ -298,6 +314,9 @@ class AppRouteServers extends HTMLElement {
 			row.appendChild(creationTitle);
 			row.appendChild(creatorRow);
 			row.appendChild(commentText);
+			if (chipsWithCount.length > 0) {
+				row.appendChild(reactionsEl);
+			}
 			row.appendChild(footer);
 			container.appendChild(row);
 		});

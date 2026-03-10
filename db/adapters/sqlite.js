@@ -153,6 +153,27 @@ function ensureSharePageViewsMetaColumn(db) {
 	}
 }
 
+/** Comment reactions: one row per (comment, user, emoji_key). */
+function ensureCommentReactionsTable(db) {
+	try {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS comment_reactions (
+				comment_id INTEGER NOT NULL,
+				user_id INTEGER NOT NULL,
+				emoji_key TEXT NOT NULL,
+				created_at TEXT NOT NULL DEFAULT (datetime('now')),
+				FOREIGN KEY (comment_id) REFERENCES comments_created_image(id) ON DELETE CASCADE,
+				FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+				UNIQUE(comment_id, user_id, emoji_key)
+			)
+		`);
+		db.exec("CREATE INDEX IF NOT EXISTS idx_comment_reactions_comment_id ON comment_reactions(comment_id)");
+		db.exec("CREATE INDEX IF NOT EXISTS idx_comment_reactions_user_id ON comment_reactions(user_id)");
+	} catch (error) {
+		// ignore (e.g. already exists)
+	}
+}
+
 /** Make created_image_anon_id nullable so we can set NULL when image is transitioned to a user. */
 function ensureTryRequestsCreatedImageAnonIdNullable(db) {
 	try {
@@ -207,6 +228,7 @@ export async function openDb() {
 	ensureTryRequestsMetaColumn(db);
 	ensureTryRequestsCreatedImageAnonIdNullable(db);
 	ensureSharePageViewsMetaColumn(db);
+	ensureCommentReactionsTable(db);
 
 	const transferCreditsTxn = db.transaction((fromUserId, toUserId, amount) => {
 		const ensureCreditsRowStmt = db.prepare(
@@ -2838,6 +2860,72 @@ export async function openDb() {
            WHERE created_image_id = ?`
 				);
 				return Promise.resolve(stmt.get(createdImageId));
+			}
+		},
+		/** Single comment by id (for reaction route access check). */
+		selectCommentById: {
+			get: async (commentId) => {
+				const stmt = db.prepare(
+					`SELECT id, created_image_id FROM comments_created_image WHERE id = ?`
+				);
+				return Promise.resolve(stmt.get(commentId));
+			}
+		},
+		/** Aggregated reaction counts per comment: [{ comment_id, emoji_key, count }]. */
+		selectCommentReactionCountsByCommentIds: {
+			all: async (commentIds) => {
+				if (!Array.isArray(commentIds) || commentIds.length === 0) return [];
+				const placeholders = commentIds.map(() => "?").join(",");
+				const ids = commentIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0);
+				if (ids.length === 0) return [];
+				const stmt = db.prepare(
+					`SELECT comment_id, emoji_key, COUNT(*) AS count
+           FROM comment_reactions
+           WHERE comment_id IN (${placeholders})
+           GROUP BY comment_id, emoji_key`
+				);
+				return Promise.resolve(stmt.all(...ids));
+			}
+		},
+		/** Viewer's reactions for given comments: [{ comment_id, emoji_key }]. */
+		selectViewerReactionsByCommentIds: {
+			all: async (viewerId, commentIds) => {
+				if (!Number.isFinite(Number(viewerId)) || !Array.isArray(commentIds) || commentIds.length === 0) return [];
+				const placeholders = commentIds.map(() => "?").join(",");
+				const ids = commentIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0);
+				if (ids.length === 0) return [];
+				const stmt = db.prepare(
+					`SELECT comment_id, emoji_key
+           FROM comment_reactions
+           WHERE user_id = ? AND comment_id IN (${placeholders})`
+				);
+				return Promise.resolve(stmt.all(viewerId, ...ids));
+			}
+		},
+		insertCommentReaction: {
+			run: async (commentId, userId, emojiKey) => {
+				const stmt = db.prepare(
+					`INSERT INTO comment_reactions (comment_id, user_id, emoji_key) VALUES (?, ?, ?)`
+				);
+				const r = stmt.run(commentId, userId, emojiKey);
+				return Promise.resolve({ changes: r.changes });
+			}
+		},
+		deleteCommentReaction: {
+			run: async (commentId, userId, emojiKey) => {
+				const stmt = db.prepare(
+					`DELETE FROM comment_reactions WHERE comment_id = ? AND user_id = ? AND emoji_key = ?`
+				);
+				const r = stmt.run(commentId, userId, emojiKey);
+				return Promise.resolve({ changes: r.changes });
+			}
+		},
+		selectCommentReactionExists: {
+			get: async (commentId, userId, emojiKey) => {
+				const stmt = db.prepare(
+					`SELECT 1 AS one FROM comment_reactions WHERE comment_id = ? AND user_id = ? AND emoji_key = ?`
+				);
+				return Promise.resolve(stmt.get(commentId, userId, emojiKey));
 			}
 		},
 		publishCreatedImage: {

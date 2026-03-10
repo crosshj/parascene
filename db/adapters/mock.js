@@ -2181,6 +2181,12 @@ export function openDb() {
 				return [];
 			}
 		},
+		selectCommentById: { get: async () => null },
+		selectCommentReactionCountsByCommentIds: { all: async () => [] },
+		selectViewerReactionsByCommentIds: { all: async () => [] },
+		insertCommentReaction: { run: async () => ({ changes: 1 }) },
+		deleteCommentReaction: { run: async () => ({ changes: 0 }) },
+		selectCommentReactionExists: { get: async () => null },
 		selectUserCredits: {
 			get: async (userId) =>
 				user_credits.find((row) => row.user_id === Number(userId))

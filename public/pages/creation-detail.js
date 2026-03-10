@@ -2,7 +2,7 @@ import { formatDateTime, formatRelativeTime } from '/shared/datetime.js';
 import { enableLikeButtons, getCreationLikeCount, initLikeButton } from '/shared/likes.js';
 import { fetchJsonWithStatusDeduped } from '/shared/api.js';
 import { getAvatarColor } from '/shared/avatar.js';
-import { fetchCreatedImageActivity, postCreatedImageComment } from '/shared/comments.js';
+import { fetchCreatedImageActivity, postCreatedImageComment, toggleCommentReaction } from '/shared/comments.js';
 import { processUserText, hydrateUserTextLinks } from '/shared/userText.js';
 import { attachAutoGrowTextarea } from '/shared/autogrow.js';
 import { attachMentionSuggest, addPageUsers, clearPageUsers } from '/shared/triggeredSuggest.js';
@@ -14,7 +14,7 @@ import { showToast } from '/shared/toast.js';
 import '../components/modals/publish.js';
 import '../components/modals/creation-details.js';
 import '../components/modals/share.js';
-import { creditIcon, eyeHiddenIcon, shareIcon, sparkleIcon } from '../icons/svg-strings.js';
+import { creditIcon, eyeHiddenIcon, shareIcon, sparkleIcon, REACTION_ORDER, REACTION_ICONS, smileIcon } from '../icons/svg-strings.js';
 import '../components/modals/tip-creator.js';
 import { renderEmptyState, renderEmptyLoading, renderEmptyError } from '/shared/emptyState.js';
 import { skeletonLine, skeletonCircle, skeletonPill } from '/shared/skeleton.js';
@@ -2404,9 +2404,39 @@ async function loadCreation() {
 					isFounder,
 					flairSize: 'sm',
 				});
+				const reactionCounts = c?.reaction_counts && typeof c.reaction_counts === 'object' ? c.reaction_counts : {};
+				const viewerReactions = Array.isArray(c?.viewer_reactions) ? c.viewer_reactions : [];
+				const commentId = c?.id != null ? String(c.id) : '';
+				const hasAnyReactions = REACTION_ORDER.some((key) => (Number(reactionCounts[key]) || 0) > 0);
+				const reactionPillCount = REACTION_ORDER.filter((key) => (Number(reactionCounts[key]) || 0) > 0).length;
+				const reactionOverflowLimit = typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches ? 3 : 5;
+				const hasMoreThan3Reactions = reactionPillCount > reactionOverflowLimit;
+				const hasUnusedReactions = REACTION_ORDER.some((key) => (Number(reactionCounts[key]) || 0) === 0);
+				const reactionPills = hasAnyReactions
+					? REACTION_ORDER.filter((key) => (Number(reactionCounts[key]) || 0) > 0).map((key) => {
+						const count = Number(reactionCounts[key]) || 0;
+						const hasViewer = viewerReactions.includes(key);
+						const countLabel = count > 99 ? '99+' : String(count);
+						const iconFn = REACTION_ICONS[key];
+						const iconHtml = iconFn ? iconFn('comment-reaction-icon') : '';
+						const actionLabel = hasViewer ? `Remove ${key}` : `Add ${key}`;
+						return `<button type="button" class="comment-reaction-pill${hasViewer ? ' is-viewer' : ''}" data-emoji-key="${escapeHtml(key)}" data-comment-id="${escapeHtml(commentId)}" aria-label="${escapeHtml(actionLabel)}" title="${escapeHtml(actionLabel)}"><span class="comment-reaction-icon-wrap" aria-hidden="true">${iconHtml}</span><span class="comment-reaction-count">${escapeHtml(countLabel)}</span></button>`;
+					}).join('')
+					: '';
+				const addReactionBtn = hasUnusedReactions ? `<button type="button" class="comment-reaction-add" data-comment-id="${escapeHtml(commentId)}" aria-label="Add reaction" title="Add reaction"><span class="comment-reaction-icon-wrap" aria-hidden="true">${smileIcon('comment-reaction-add-icon')}</span></button>` : '';
+				const metaRowHtml = `<div class="comment-meta-row">
+					<div class="comment-meta-top">
+						${timeAgo ? `<span class="comment-time" title="${escapeHtml(timeTitle)}">${escapeHtml(timeAgo)}</span>` : ''}
+						<div class="comment-meta-right">
+							${reactionPills && !hasMoreThan3Reactions ? `<div class="comment-reaction-pills"><div class="comment-reaction-pills-inner">${reactionPills}</div></div>` : ''}
+							${addReactionBtn ? `<div class="comment-reaction-add-wrap">${addReactionBtn}</div>` : ''}
+						</div>
+					</div>
+					${reactionPills && hasMoreThan3Reactions ? `<div class="comment-reaction-pills comment-reaction-pills--below"><div class="comment-reaction-pills-inner">${reactionPills}</div></div>` : ''}
+				</div>`;
 
 				return `
-					<div class="comment-item">
+					<div class="comment-item" data-comment-id="${escapeHtml(commentId)}">
 						${commentAvatarHtml}
 						<div class="comment-body">
 							<div class="comment-top">
@@ -2423,7 +2453,7 @@ async function loadCreation() {
 								`}
 							</div>
 							<div class="comment-text">${safeText}</div>
-							${timeAgo ? `<div class="comment-time-row"><span class="comment-time" title="${escapeHtml(timeTitle)}">${escapeHtml(timeAgo)}</span></div>` : ''}
+							${metaRowHtml}
 						</div>
 					</div>
 				`;
@@ -2432,6 +2462,153 @@ async function loadCreation() {
 			// Comments were re-rendered; hydrate any special link labels within them.
 			hydrateUserTextLinks(commentListEl);
 		}
+
+		let activeReactionPicker = null;
+
+		function closeReactionPicker() {
+			if (activeReactionPicker && activeReactionPicker.parentNode) {
+				activeReactionPicker.parentNode.removeChild(activeReactionPicker);
+				document.removeEventListener('click', activeReactionPicker._outsideClick);
+				activeReactionPicker = null;
+			}
+		}
+
+		function showReactionPicker(anchor, commentId, unusedKeys, onApplied) {
+			closeReactionPicker();
+			const panel = document.createElement('div');
+			panel.className = 'comment-reaction-picker';
+			panel.setAttribute('role', 'dialog');
+			panel.setAttribute('aria-label', 'Add reaction');
+
+			const grid = document.createElement('div');
+			grid.className = 'comment-reaction-picker-grid';
+			for (const key of unusedKeys) {
+				const iconFn = REACTION_ICONS[key];
+				const iconHtml = iconFn ? iconFn('comment-reaction-icon') : '';
+				const btn = document.createElement('button');
+				btn.type = 'button';
+				btn.className = 'comment-reaction-picker-item';
+				btn.dataset.emojiKey = key;
+				btn.dataset.commentId = String(commentId);
+				btn.innerHTML = `<span class="comment-reaction-icon-wrap" aria-hidden="true">${iconHtml}</span>`;
+				btn.setAttribute('aria-label', `Add ${key}`);
+				btn.addEventListener('click', (e) => {
+					e.stopPropagation();
+					const emojiKey = btn.dataset.emojiKey;
+					onApplied(commentId, emojiKey);
+					closeReactionPicker();
+				});
+				grid.appendChild(btn);
+			}
+			panel.appendChild(grid);
+
+			document.body.appendChild(panel);
+
+			const rect = anchor.getBoundingClientRect();
+			const vw = window.innerWidth;
+			const vh = window.innerHeight;
+			const pad = 8;
+			const pickerW = 200;
+			const pickerH = Math.min(180, 36 * Math.ceil(unusedKeys.length / 5) + 24);
+
+			let top = rect.bottom + pad;
+			let left = rect.left;
+			const preferAbove = rect.top > vh / 2;
+			const preferLeft = rect.right > vw - pickerW - pad;
+
+			if (preferAbove && rect.top - pickerH - pad >= 0) {
+				top = rect.top - pickerH - pad;
+			} else if (!preferAbove && rect.bottom + pickerH + pad <= vh) {
+				top = rect.bottom + pad;
+			} else if (rect.top >= pickerH + pad) {
+				top = rect.top - pickerH - pad;
+			}
+
+			if (preferLeft && rect.right - pickerW >= pad) {
+				left = rect.right - pickerW;
+			} else if (!preferLeft && rect.left + pickerW <= vw - pad) {
+				left = rect.left;
+			} else {
+				left = Math.max(pad, Math.min(vw - pickerW - pad, rect.left));
+			}
+
+			panel.style.top = `${top}px`;
+			panel.style.left = `${left}px`;
+
+			// Clamp to viewport so picker never goes offscreen
+			const panelRect = panel.getBoundingClientRect();
+			let adjLeft = parseFloat(panel.style.left) || left;
+			let adjTop = parseFloat(panel.style.top) || top;
+			if (panelRect.right > vw - pad) adjLeft = vw - panelRect.width - pad;
+			if (panelRect.left < pad) adjLeft = pad;
+			if (panelRect.bottom > vh - pad) adjTop = vh - panelRect.height - pad;
+			if (panelRect.top < pad) adjTop = pad;
+			panel.style.left = `${adjLeft}px`;
+			panel.style.top = `${adjTop}px`;
+
+			const outsideClick = (e) => {
+				if (!panel.contains(e.target) && !anchor.contains(e.target)) {
+					closeReactionPicker();
+				}
+			};
+			panel._outsideClick = outsideClick;
+			requestAnimationFrame(() => document.addEventListener('click', outsideClick));
+
+			activeReactionPicker = panel;
+		}
+
+		function applyReactionChange(commentId, emojiKey, added) {
+			const item = commentsState.activity.find((it) => it.type === 'comment' && Number(it.id) === commentId);
+			if (!item) return;
+			item.reaction_counts = item.reaction_counts && typeof item.reaction_counts === 'object' ? { ...item.reaction_counts } : {};
+			item.viewer_reactions = Array.isArray(item.viewer_reactions) ? [...item.viewer_reactions] : [];
+			if (added) {
+				item.viewer_reactions.push(emojiKey);
+				item.reaction_counts[emojiKey] = (Number(item.reaction_counts[emojiKey]) || 0) + 1;
+			} else {
+				item.viewer_reactions = item.viewer_reactions.filter((k) => k !== emojiKey);
+				item.reaction_counts[emojiKey] = Math.max(0, (Number(item.reaction_counts[emojiKey]) || 0) - 1);
+			}
+			renderComments();
+		}
+
+		commentListEl.addEventListener('click', async (e) => {
+			const pill = e.target?.closest?.('.comment-reaction-pill[data-emoji-key][data-comment-id]');
+			if (pill && pill instanceof HTMLElement) {
+				const commentId = Number(pill.dataset.commentId);
+				const emojiKey = pill.dataset.emojiKey;
+				if (!Number.isFinite(commentId) || !emojiKey) return;
+				const item = commentsState.activity.find((it) => it.type === 'comment' && Number(it.id) === commentId);
+				const currentlyAdded = Array.isArray(item?.viewer_reactions) && item.viewer_reactions.includes(emojiKey);
+				const optimisticAdded = !currentlyAdded;
+				applyReactionChange(commentId, emojiKey, optimisticAdded);
+				const res = await toggleCommentReaction(commentId, emojiKey);
+				if (!res?.ok || res.data == null) {
+					applyReactionChange(commentId, emojiKey, currentlyAdded);
+				}
+				return;
+			}
+
+			const addBtn = e.target?.closest?.('.comment-reaction-add[data-comment-id]');
+			if (addBtn && addBtn instanceof HTMLElement) {
+				e.preventDefault();
+				e.stopPropagation();
+				const commentId = Number(addBtn.dataset.commentId);
+				if (!Number.isFinite(commentId)) return;
+				const item = commentsState.activity.find((it) => it.type === 'comment' && Number(it.id) === commentId);
+				const reactionCounts = item?.reaction_counts && typeof item.reaction_counts === 'object' ? item.reaction_counts : {};
+				const unusedKeys = REACTION_ORDER.filter((key) => (Number(reactionCounts[key]) || 0) === 0);
+				if (unusedKeys.length === 0) return;
+				showReactionPicker(addBtn, commentId, unusedKeys, (pickedCommentId, pickedEmojiKey) => {
+					applyReactionChange(pickedCommentId, pickedEmojiKey, true);
+					toggleCommentReaction(pickedCommentId, pickedEmojiKey).then((res) => {
+						if (!res?.ok || res.data == null) {
+							applyReactionChange(pickedCommentId, pickedEmojiKey, false);
+						}
+					});
+				});
+			}
+		});
 
 		async function loadComments({ scrollIfHash = false } = {}) {
 			if (!commentListEl) return;
