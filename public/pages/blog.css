@@ -1,0 +1,97 @@
+.blog-page {
+	padding: 0;
+	min-height: 100vh;
+	display: flex;
+	flex-direction: column;
+}
+
+.blog-header {
+	background: var(--bg);
+	border-bottom: 0;
+	position: relative;
+}
+
+.blog-header .header-content {
+	max-width: 720px;
+	margin: 0 auto;
+	padding: 0;
+}
+
+.blog-header .header-logo a {
+	text-decoration: none;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	gap: 0.25em;
+}
+
+.blog-header .header-logo .blog-header-title {
+	color: var(--text-muted);
+}
+
+.blog-main {
+	max-width: 720px;
+	margin: 0 auto;
+	/* padding: 32px 16px 96px; */
+	padding: 16px 2px;
+	flex: 1 0 auto;
+}
+
+.blog-layout {
+	display: block;
+}
+
+.blog-article {
+	min-width: 0;
+}
+
+.blog-content h1 {
+	margin-top: 0;
+	/* margin-bottom: 0; */
+	font-size: 1.3em;
+}
+
+.blog-description {
+	margin-top: 0;
+	margin-bottom: 24px;
+	font-size: 15px;
+	opacity: 0.85;
+}
+
+.blog-body {
+	font-size: 15px;
+	line-height: 1.7;
+}
+
+.blog-body h2 {
+	margin-top: 24px;
+	margin-bottom: 8px;
+	font-size: 20px;
+}
+
+.blog-body p {
+	margin: 0 0 12px;
+}
+
+.blog-body ul,
+.blog-body ol {
+	margin: 0 0 16px 20px;
+}
+
+.blog-body li+li {
+	margin-top: 4px;
+}
+
+.blog-index-list {
+	/* Legacy class retained intentionally; layout for index is handled by markdown content. */
+}
+
+@media (max-width: 768px) {
+	.blog-header {
+		padding: 0 16px;
+	}
+
+	.blog-main {
+		padding: 24px 16px 96px;
+	}
+}
