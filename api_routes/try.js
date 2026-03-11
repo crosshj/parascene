@@ -1,6 +1,6 @@
 import express from "express";
 import sharp from "sharp";
-import { getClientIp, getCloudflareRay } from "./utils/requestClientIp.js";
+import { buildRequestMeta } from "./utils/analytics.js";
 import { runAnonCreationJob } from "./utils/creationJob.js";
 import { scheduleAnonCreationJob } from "./utils/scheduleCreationJob.js";
 import { verifyQStashRequest } from "./utils/qstashVerification.js";
@@ -13,21 +13,6 @@ const TRY_PROMPT_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const TRY_PROMPT_POOL_MAX = 5;
 /** anon_cid used for pool-refill rows (background generations that fill the prompt pool; not tied to a specific user). */
 const ANON_CID_POOL = "__pool__";
-
-/** Build meta object for try_request (user_agent, ip, ip_source, cf_ray). Only includes keys with truthy values. */
-function buildTryRequestMeta(req) {
-	const userAgent = typeof req.get?.("user-agent") === "string" ? req.get("user-agent").trim() || null : null;
-	const { ip, source: ipSource } = getClientIp(req);
-	const cfRay = getCloudflareRay(req);
-	const meta = {};
-	if (userAgent) meta.user_agent = userAgent;
-	if (ip) {
-		meta.ip = ip;
-		if (ipSource) meta.ip_source = ipSource;
-	}
-	if (cfRay) meta.cf_ray = cfRay;
-	return Object.keys(meta).length ? meta : null;
-}
 
 function parseMeta(raw) {
 	if (raw == null) return null;
@@ -137,6 +122,24 @@ export default function createTryRoutes({ queries, storage }) {
 		let server_id = body.server_id;
 		let method = body.method;
 		let args = body.args && typeof body.args === "object" ? { ...body.args } : {};
+		const chargeCredits = Number(body.charge_credits);
+
+		// Optional caller-provided context (whitelisted fields only).
+		let callerSource = null;
+		let callerFeature = null;
+		if (body.context && typeof body.context === "object") {
+			if (typeof body.context.source === "string") {
+				callerSource = body.context.source;
+			}
+			if (typeof body.context.feature === "string") {
+				callerFeature = body.context.feature;
+			}
+		}
+
+		const baseRouteHint =
+			typeof req.originalUrl === "string" && req.originalUrl.trim()
+				? req.originalUrl.split("?")[0]
+				: (typeof req.path === "string" && req.path.trim() ? req.path : "/api/try/create");
 
 		if (server_id == null || !method) {
 			const prompt = body.prompt;
@@ -187,7 +190,12 @@ export default function createTryRoutes({ queries, storage }) {
 					const id = result.insertId;
 					if (id) {
 						const fulfilledAt = new Date().toISOString();
-						const tryMeta = buildTryRequestMeta(req);
+						const tryMeta = buildRequestMeta(req, {
+							source: callerSource,
+							feature: callerFeature,
+							route: baseRouteHint,
+							charge_credits: Number.isFinite(chargeCredits) && chargeCredits > 0 ? chargeCredits : undefined
+						});
 						queries.insertTryRequest?.run?.(anonCid, canonicalPrompt, id, fulfilledAt, tryMeta);
 						const url = storage.getImageUrlAnon
 							? storage.getImageUrlAnon(cached.filename)
@@ -242,7 +250,6 @@ export default function createTryRoutes({ queries, storage }) {
 			});
 		}
 
-		const chargeCredits = Number(body.charge_credits);
 		const AVATAR_GENERATE_CREDITS = 3;
 		let chargedUserId = null;
 		if (Number.isFinite(chargeCredits) && chargeCredits === AVATAR_GENERATE_CREDITS) {
@@ -294,7 +301,12 @@ export default function createTryRoutes({ queries, storage }) {
 			return res.status(500).json({ error: "Failed to create try record" });
 		}
 
-		const tryMeta = buildTryRequestMeta(req);
+		const tryMeta = buildRequestMeta(req, {
+			source: callerSource,
+			feature: callerFeature,
+			route: baseRouteHint,
+			charge_credits: Number.isFinite(chargeCredits) && chargeCredits > 0 ? chargeCredits : undefined
+		});
 		queries.insertTryRequest?.run?.(anonCid, canonicalPrompt, id, null, tryMeta);
 
 		try {

@@ -80,3 +80,34 @@ export function getVercelGeo(req) {
 	if (city) out.city = city;
 	return out;
 }
+
+/**
+ * Build a standard analytics meta object for this request (user_agent, ip, ip_source,
+ * cf_ray, Vercel geo), optionally merged with a shallow context object.
+ * @param {import("express").Request} req
+ * @param {Record<string, any>} [context]
+ * @returns {Record<string, any>}
+ */
+export function buildRequestMeta(req, context = {}) {
+	const userAgent = typeof req.get?.("user-agent") === "string" ? req.get("user-agent").trim() || null : null;
+	const { ip, source: ipSource } = getClientIp(req);
+	const cfRay = getCloudflareRay(req);
+	const vercelGeo = getVercelGeo(req);
+	const meta = {};
+	if (userAgent) meta.user_agent = userAgent;
+	if (ip) {
+		meta.ip = ip;
+		if (ipSource) meta.ip_source = ipSource;
+	}
+	if (cfRay) meta.cf_ray = cfRay;
+	if (vercelGeo && Object.keys(vercelGeo).length) Object.assign(meta, vercelGeo);
+
+	for (const [key, value] of Object.entries(context || {})) {
+		if (value == null) continue;
+		if (typeof value === "string" && !value.trim()) continue;
+		meta[key] = value;
+	}
+
+	return meta;
+}
+

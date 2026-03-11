@@ -424,7 +424,7 @@ class AppRouteUsers extends HTMLElement {
 				columns: [
 					{
 						key: 'anon_cid',
-						label: 'Client ID',
+						label: 'Anon CID',
 						sortKey: 'anon_cid',
 						className: 'anon-table-col-cid',
 						render: (row) => escapeHtml(truncateCid(row.anon_cid))
@@ -433,7 +433,13 @@ class AppRouteUsers extends HTMLElement {
 						key: 'from_share',
 						label: 'Source',
 						className: 'anon-table-col-source',
-						render: (row) => (row.from_share ? 'share' : '')
+						render: (row) => {
+							// Prefer explicit backend source label; fall back to "share" flag.
+							if (typeof row.source === 'string' && row.source.trim()) {
+								return escapeHtml(row.source.trim());
+							}
+							return row.from_share ? 'share' : '';
+						}
 					},
 					{
 						key: 'last_request_at',
@@ -457,7 +463,35 @@ class AppRouteUsers extends HTMLElement {
 						key: 'ip',
 						label: 'IP',
 						className: 'anon-table-col-ip',
-						render: (row) => escapeHtml(truncateStr(row.ip ?? '', 45))
+						render: (row) => {
+							const ip = row.ip ?? '';
+							const src = row.ip_source ?? '';
+							const ipStr = escapeHtml(truncateStr(ip, 45));
+							if (!ipStr) return '—';
+							if (src) {
+								return `${ipStr} <span class="share-table-ip-source" title="IP from header: ${escapeHtml(src)}">${escapeHtml(src)}</span>`;
+							}
+							return ipStr;
+						}
+					},
+					{
+						key: 'location',
+						label: 'Location',
+						className: 'anon-table-col-location',
+						render: (row) => {
+							const parts = [row.city, row.region, row.country].filter(Boolean);
+							return parts.length ? escapeHtml(parts.join(', ')) : '—';
+						}
+					},
+					{
+						key: 'cf_ray',
+						label: 'CF Ray',
+						className: 'anon-table-col-cf-ray',
+						render: (row) => {
+							const ray = row.cf_ray ?? '';
+							if (!ray) return '—';
+							return `<span class="share-table-cf-ray" title="Cloudflare request ID: search in Cloudflare Logs / Log Explorer to match this request">${escapeHtml(truncateStr(ray, 24))}</span>`;
+						}
 					},
 					{
 						key: 'transitioned_user_id',
@@ -500,6 +534,13 @@ class AppRouteUsers extends HTMLElement {
 				fetchUrl: '/admin/share-views',
 				responseItemsKey: 'items',
 				columns: [
+					{
+						key: 'anon_cid',
+						label: 'Anon CID',
+						sortKey: 'anon_cid',
+						className: 'share-table-col-cid',
+						render: (row) => escapeHtml(truncateStr(row.anon_cid, 12))
+					},
 					{
 						key: 'viewed_at',
 						label: 'Viewed',
@@ -568,13 +609,6 @@ class AppRouteUsers extends HTMLElement {
 						sortKey: 'referer',
 						className: 'share-table-col-referer',
 						render: (row) => escapeHtml(truncateStr(row.referer, 50))
-					},
-					{
-						key: 'anon_cid',
-						label: 'anon_cid',
-						sortKey: 'anon_cid',
-						className: 'share-table-col-cid',
-						render: (row) => escapeHtml(truncateStr(row.anon_cid, 12))
 					}
 				],
 				defaultSortBy: 'viewed_at',

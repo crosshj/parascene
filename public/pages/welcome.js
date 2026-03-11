@@ -220,7 +220,10 @@ async function createTryImage(prompt) {
 		method: 'POST',
 		headers: { 'content-type': 'application/json' },
 		credentials: 'include',
-		body: JSON.stringify({ prompt })
+		body: JSON.stringify({
+			prompt,
+			context: { source: 'welcome_avatar', feature: 'welcome_avatar_try' }
+		})
 	});
 	const data = await response.json().catch(() => ({}));
 	return { ok: response.ok, status: response.status, data };

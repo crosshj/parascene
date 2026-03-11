@@ -1656,7 +1656,11 @@ async function init() {
 			credentials: 'include',
 			body: JSON.stringify({
 				prompt,
-				...(chargeCredits > 0 ? { charge_credits: chargeCredits } : {})
+				...(chargeCredits > 0 ? { charge_credits: chargeCredits } : {}),
+				context: {
+					source: 'profile_avatar',
+					feature: 'profile_avatar_try'
+				}
 			})
 		});
 		const data = await response.json().catch(() => ({}));

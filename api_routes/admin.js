@@ -841,7 +841,11 @@ export default function createAdminRoutes({ queries, storage }) {
 			return res.status(500).json({ error: "Failed to create try record" });
 		}
 
-		queries.insertTryRequest?.run?.(anonCid.trim(), prompt, id, null, null);
+		queries.insertTryRequest?.run?.(anonCid.trim(), prompt, id, null, {
+			source: "admin_avatar",
+			feature: "admin_avatar_try",
+			route: "/admin/users/avatar"
+		});
 
 		try {
 			await scheduleAnonCreationJob({
@@ -931,19 +935,41 @@ export default function createAdminRoutes({ queries, storage }) {
 		if (queries.selectTryRequestsLatestMetaByCids?.all && cids.length > 0) {
 			const latestRows = await queries.selectTryRequestsLatestMetaByCids.all(cids);
 			for (const row of latestRows ?? []) {
-				const meta = row.meta && typeof row.meta === "object" ? row.meta : typeof row.meta === "string" ? safeJsonParse(row.meta, {}) : {};
-				lastMetaByCid.set(row.anon_cid, { user_agent: meta?.user_agent ?? null, ip: meta?.ip ?? null });
+				const meta =
+					row.meta && typeof row.meta === "object"
+						? row.meta
+						: typeof row.meta === "string"
+						? safeJsonParse(row.meta, {})
+						: {};
+				lastMetaByCid.set(row.anon_cid, {
+					user_agent: meta?.user_agent ?? null,
+					ip: meta?.ip ?? null,
+					ip_source: meta?.ip_source ?? null,
+					country: meta?.country ?? null,
+					region: meta?.region ?? null,
+					city: meta?.city ?? null,
+					cf_ray: meta?.cf_ray ?? null,
+					source: meta?.source ?? null,
+					route: meta?.route ?? null
+				});
 			}
 		}
-		const anonCidsWithUserAgent = anonCids.map((r) => {
+		const anonCidsWithMeta = anonCids.map((r) => {
 			const lastMeta = lastMetaByCid.get(r.anon_cid);
 			return {
 				...r,
 				user_agent: lastMeta?.user_agent ?? null,
-				ip: lastMeta?.ip ?? null
+				ip: lastMeta?.ip ?? null,
+				ip_source: lastMeta?.ip_source ?? null,
+				country: lastMeta?.country ?? null,
+				region: lastMeta?.region ?? null,
+				city: lastMeta?.city ?? null,
+				cf_ray: lastMeta?.cf_ray ?? null,
+				source: lastMeta?.source ?? null,
+				route: lastMeta?.route ?? null
 			};
 		});
-		res.json({ anonCids: anonCidsWithUserAgent, total });
+		res.json({ anonCids: anonCidsWithMeta, total });
 	});
 
 	/** GET /admin/anonymous-users/:cid — requests for this anon_cid (datetime desc) with image details and view URL. */
