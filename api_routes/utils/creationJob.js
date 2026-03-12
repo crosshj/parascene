@@ -313,6 +313,7 @@ export async function runCreationJob({ queries, storage, payload }) {
 		method,
 		args,
 		credit_cost,
+		async: asyncRequestedFlag,
 	} = payload || {};
 
 	logCreation("runCreationJob started", {
@@ -397,7 +398,10 @@ export async function runCreationJob({ queries, storage, payload }) {
 	let sourceImageUrlForMeta = null;
 
 	const argsForProvider = args || {};
-	const providerPayload = { method, args: argsForProvider };
+	const asyncRequested = asyncRequestedFlag === true;
+	const providerPayload = asyncRequested
+		? { method, args: argsForProvider, async: true }
+		: { method, args: argsForProvider };
 	console.log("[Creation] Sending to provider:", JSON.stringify(providerPayload, null, 2));
 
 	try {
@@ -439,7 +443,6 @@ export async function runCreationJob({ queries, storage, payload }) {
 				body = null;
 			}
 
-			const asyncRequested = argsForProvider && argsForProvider._async === true;
 			const asyncEnv = isRemoteAsyncEnv();
 			if (asyncEnv && asyncRequested && isAsyncAckBody(body, method)) {
 				const asyncBody = body || {};

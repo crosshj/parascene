@@ -993,9 +993,7 @@ export default function createCreateRoutes({ queries, storage }) {
 			const asyncSupportedForMethod =
 				methodConfig && (methodConfig.async === true || methodConfig.async === "true");
 			const asyncEnv = !!process.env.VERCEL && !!process.env.UPSTASH_QSTASH_TOKEN;
-			if (asyncSupportedForMethod && asyncEnv) {
-				argsForProvider._async = true;
-			}
+			const asyncRequestedForMethod = Boolean(asyncSupportedForMethod && asyncEnv);
 
 			// Apply style transformation when style_key is provided (create.html flow). Store style + raw user prompt in meta.
 			let styleForMeta = null;
@@ -1446,14 +1444,15 @@ export default function createCreateRoutes({ queries, storage }) {
 					meta,
 					filename: placeholderFilename
 				});
-			await scheduleCreationJob({
+				await scheduleCreationJob({
 					payload: {
 						created_image_id: existingId,
 						user_id: user.id,
 						server_id: Number(server_id),
 						method,
-					args: argsForJob,
+						args: argsForJob,
 						credit_cost: CREATION_CREDIT_COST,
+						async: asyncRequestedForMethod,
 					},
 					runCreationJob: ({ payload }) => runCreationJob({ queries, storage, payload }),
 				});
@@ -1530,6 +1529,7 @@ export default function createCreateRoutes({ queries, storage }) {
 					method,
 					args: argsForJob,
 					credit_cost: CREATION_CREDIT_COST,
+					async: asyncRequestedForMethod,
 				},
 				runCreationJob: ({ payload }) => runCreationJob({ queries, storage, payload }),
 			});
