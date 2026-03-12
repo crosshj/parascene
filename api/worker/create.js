@@ -6,7 +6,7 @@
 import "dotenv/config";
 import { openDb } from "../../db/index.js";
 import { verifyQStashRequest } from "../../api_routes/utils/qstashVerification.js";
-import { runCreationJob } from "../../api_routes/utils/creationJob.js";
+import { runCreationJob, runProviderPollJob } from "../../api_routes/utils/creationJob.js";
 import { runLandscapeJob } from "../../api_routes/utils/landscapeJob.js";
 
 // Log immediately when module loads to verify function is being deployed
@@ -70,6 +70,10 @@ export default async function handler(req, res) {
 			logCreation("QStash signature verified, running landscape job");
 			await runLandscapeJob({ queries, storage, payload: req.body });
 			logCreation("Landscape job completed successfully");
+		} else if (jobType === "poll_provider") {
+			logCreation("QStash signature verified, running provider poll job");
+			await runProviderPollJob({ queries, storage, payload: req.body });
+			logCreation("Provider poll job completed successfully");
 		} else {
 			// Run the creation job
 			logCreation("QStash signature verified, running job");

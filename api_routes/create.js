@@ -5,7 +5,7 @@ import Busboy from "busboy";
 import sharp from "sharp";
 import { getThumbnailUrl, getBaseAppUrl, getShareBaseUrl } from "./utils/url.js";
 import { buildProviderHeaders } from "./utils/providerAuth.js";
-import { runCreationJob, PROVIDER_TIMEOUT_MS } from "./utils/creationJob.js";
+import { runCreationJob, runProviderPollJob, PROVIDER_TIMEOUT_MS } from "./utils/creationJob.js";
 import { runLandscapeJob } from "./utils/landscapeJob.js";
 import { scheduleCreationJob, scheduleLandscapeJob } from "./utils/scheduleCreationJob.js";
 import { scheduleEmbeddingJob } from "./utils/embeddingJob.js";
@@ -989,6 +989,14 @@ export default function createCreateRoutes({ queries, storage }) {
 			// Keep a stable copy of args for storage (meta.args) separate from any provider-only transformations.
 			argsForProvider = argsForProvider && typeof argsForProvider === "object" ? { ...argsForProvider } : {};
 
+			// Async hint: only for methods that explicitly support async and only in remote/QStash envs.
+			const asyncSupportedForMethod =
+				methodConfig && (methodConfig.async === true || methodConfig.async === "true");
+			const asyncEnv = !!process.env.VERCEL && !!process.env.UPSTASH_QSTASH_TOKEN;
+			if (asyncSupportedForMethod && asyncEnv) {
+				argsForProvider._async = true;
+			}
+
 			// Apply style transformation when style_key is provided (create.html flow). Store style + raw user prompt in meta.
 			let styleForMeta = null;
 			let userPromptForMeta = null;
@@ -1438,13 +1446,13 @@ export default function createCreateRoutes({ queries, storage }) {
 					meta,
 					filename: placeholderFilename
 				});
-				await scheduleCreationJob({
+			await scheduleCreationJob({
 					payload: {
 						created_image_id: existingId,
 						user_id: user.id,
 						server_id: Number(server_id),
 						method,
-						args: argsForJob,
+					args: argsForJob,
 						credit_cost: CREATION_CREDIT_COST,
 					},
 					runCreationJob: ({ payload }) => runCreationJob({ queries, storage, payload }),
@@ -1576,9 +1584,20 @@ export default function createCreateRoutes({ queries, storage }) {
 				return res.status(401).json({ error: "Invalid QStash signature" });
 			}
 
-			logCreation("QStash signature verified, running job");
-			await runCreationJob({ queries, storage, payload: req.body });
-			logCreation("Worker job completed successfully");
+			const jobType = req.body?.job_type;
+			if (jobType === "landscape") {
+				logCreation("QStash signature verified, running landscape job");
+				await runLandscapeJob({ queries, storage, payload: req.body });
+				logCreation("Landscape job completed successfully");
+			} else if (jobType === "poll_provider") {
+				logCreation("QStash signature verified, running provider poll job");
+				await runProviderPollJob({ queries, storage, payload: req.body });
+				logCreation("Provider poll job completed successfully");
+			} else {
+				logCreation("QStash signature verified, running job");
+				await runCreationJob({ queries, storage, payload: req.body });
+				logCreation("Worker job completed successfully");
+			}
 			return res.json({ ok: true });
 		} catch (error) {
 			logCreationError("Worker failed with error:", {

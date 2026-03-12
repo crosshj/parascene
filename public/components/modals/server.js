@@ -64,6 +64,13 @@ function renderProviderCapabilities(container, capabilities) {
 				defaultBadge.textContent = "Default";
 				badgesWrap.appendChild(defaultBadge);
 			}
+			const isAsync = method && (method.async === true || method.async === 'true');
+			if (isAsync) {
+				const asyncBadge = document.createElement("span");
+				asyncBadge.className = "method-async-badge";
+				asyncBadge.textContent = "Async";
+				badgesWrap.appendChild(asyncBadge);
+			}
 			const intentList = Array.isArray(method?.intents)
 				? method.intents.filter(v => typeof v === 'string' && v.trim().length > 0).map(v => v.trim())
 				: (typeof method?.intent === 'string' && method.intent.trim().length > 0 ? [method.intent.trim()] : []);
@@ -568,6 +575,16 @@ class AppModalServer extends HTMLElement {
 					font-weight: 600;
 					background: color-mix(in srgb, var(--accent) 20%, transparent);
 					color: var(--accent);
+					white-space: nowrap;
+				}
+
+				.method-async-badge {
+					font-size: 0.75rem;
+					padding: 0.25rem 0.6rem;
+					border-radius: 999px;
+					font-weight: 600;
+					background: color-mix(in srgb, var(--success) 20%, transparent);
+					color: var(--success);
 					white-space: nowrap;
 				}
 

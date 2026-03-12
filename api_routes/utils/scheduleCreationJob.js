@@ -180,3 +180,69 @@ export async function scheduleAnonCreationJob({ payload, runAnonCreationJob, log
 	return { enqueued: false };
 }
 
+export async function scheduleProviderPollJob({ payload, delaySeconds = 10, log = console }) {
+	const qstashToken = process.env.UPSTASH_QSTASH_TOKEN;
+	const isVercel = !!process.env.VERCEL;
+	const body = { ...payload, job_type: payload?.job_type || "poll_provider" };
+
+	logCreation("scheduleProviderPollJob called", {
+		isVercel,
+		has_qstash_token: !!qstashToken,
+		created_image_id: body?.created_image_id,
+		user_id: body?.user_id,
+		server_id: body?.server_id,
+		delaySeconds,
+	});
+
+	if (!isVercel) {
+		logCreation("scheduleProviderPollJob: running locally; async polling is disabled");
+		return { enqueued: false };
+	}
+
+	if (!hasNonEmpty(qstashToken)) {
+		const error = new Error("QStash token is required on Vercel for async provider polling. Set UPSTASH_QSTASH_TOKEN.");
+		logCreationError("QStash token missing on Vercel (provider poll)");
+		throw error;
+	}
+
+	const callbackUrl = new URL("/api/worker/create", getQStashCallbackBaseUrl()).toString();
+	const qstashBaseUrl = process.env.UPSTASH_QSTASH_URL;
+	const publishUrl = `${qstashBaseUrl}/v2/publish/${callbackUrl}`;
+	const delayHeaderSeconds = Math.max(0, Math.floor(delaySeconds || 0));
+
+	logCreation("Publishing provider poll job to QStash", {
+		callback_url: callbackUrl,
+		delaySeconds: delayHeaderSeconds,
+	});
+
+	const headers = {
+		Authorization: `Bearer ${qstashToken}`,
+		"Content-Type": "application/json",
+	};
+	if (delayHeaderSeconds > 0) {
+		headers["Upstash-Delay"] = `${delayHeaderSeconds}s`;
+	}
+
+	const res = await fetch(publishUrl, {
+		method: "POST",
+		headers,
+		body: JSON.stringify(body),
+	});
+
+	if (!res.ok) {
+		const text = await res.text().catch(() => "");
+		const error = new Error(
+			`Failed to publish QStash provider poll job: ${res.status} ${res.statusText} ${text}`.trim(),
+		);
+		logCreationError("QStash provider poll publish failed", {
+			status: res.status,
+			statusText: res.statusText,
+			response: text.substring(0, 200),
+		});
+		throw error;
+	}
+
+	logCreation("Provider poll job successfully enqueued to QStash");
+	return { enqueued: true };
+}
+
