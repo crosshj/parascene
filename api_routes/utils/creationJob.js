@@ -47,7 +47,9 @@ function isAsyncAckBody(body, fallbackMethod) {
 	if (typeof body.job_id !== "string" || !body.job_id) return false;
 	if (typeof body.status !== "string" || !body.status) return false;
 	const status = body.status.toLowerCase();
-	if (!["processing", "queued", "pending", "running"].includes(status)) return false;
+	// Treat any non-terminal async status as an ack; only reject obviously
+	// terminal statuses so providers can use custom progress strings like "starting".
+	if (["failed", "error"].includes(status)) return false;
 	if (body.method && typeof body.method !== "string") return false;
 	// If provided, method should match or at least not contradict the requested method.
 	if (typeof body.method === "string" && fallbackMethod && body.method !== fallbackMethod) {
