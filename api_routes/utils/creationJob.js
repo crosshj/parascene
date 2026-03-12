@@ -853,6 +853,18 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 	const pollAttempts = Number(existingMeta.provider_poll_attempts ?? 0) + 1;
 
 	try {
+		const pollMethod = existingMeta.provider_method || existingMeta.method || payload?.method;
+		const pollJobId =
+			(argsPayload && typeof argsPayload.job_id === "string" && argsPayload.job_id) ||
+			(existingMeta && typeof existingMeta.provider_job_id === "string" && existingMeta.provider_job_id) ||
+			null;
+
+		const pollBody = {
+			method: pollMethod,
+			async: true,
+			args: pollJobId ? { job_id: pollJobId } : {},
+		};
+
 		const providerResponse = await fetch(server.server_url, {
 			method: "POST",
 			headers: buildProviderHeaders(
@@ -862,7 +874,7 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 				},
 				server.auth_token,
 			),
-			body: JSON.stringify(argsPayload),
+			body: JSON.stringify(pollBody),
 			signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
 		});
 
