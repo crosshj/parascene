@@ -969,7 +969,11 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 			const arrayBuffer = await providerResponse.arrayBuffer();
 			videoBuffer = Buffer.from(arrayBuffer);
 
+			// Use original request args (existingMeta.args) for thumbnail; argsPayload is the provider ack (job_id, status), not the request.
+			const originalArgs = existingMeta.args && typeof existingMeta.args === "object" ? existingMeta.args : {};
 			let sourceImageUrl =
+				(typeof originalArgs.image_url === "string" && originalArgs.image_url) ||
+				(typeof originalArgs.image === "string" && originalArgs.image) ||
 				(typeof argsPayload.image_url === "string" && argsPayload.image_url) ||
 				(typeof argsPayload.image === "string" && argsPayload.image) ||
 				null;
