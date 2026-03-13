@@ -1,11 +1,11 @@
 /**
- * Triggered suggestions for textarea controls, e.g. @mentions.
+ * Triggered suggestions for textarea and text input controls, e.g. @mentions.
  *
  * Public API preserved:
  * - addPageUsers(items)
  * - clearPageUsers()
- * - attachTriggeredSuggest(textarea, options)
- * - attachMentionSuggest(textarea)
+ * - attachTriggeredSuggest(field, options)  — field: HTMLTextAreaElement or HTMLInputElement (type text)
+ * - attachMentionSuggest(field)
  */
 
 const _qs = (() => {
@@ -720,8 +720,17 @@ function requestSuggestions(textarea, ctx, reason) {
 		});
 }
 
+function isSupportedField(el) {
+	if (el instanceof HTMLTextAreaElement) return true;
+	if (el instanceof HTMLInputElement) {
+		const t = (el.type || "text").toLowerCase();
+		return t === "text" || t === "search" || t === "url" || t === "tel";
+	}
+	return false;
+}
+
 export function attachTriggeredSuggest(textarea, options) {
-	if (!(textarea instanceof HTMLTextAreaElement)) return;
+	if (!isSupportedField(textarea)) return;
 	if (textarea.getAttribute(ATTR_ATTACHED) === "true") return;
 
 	const triggers = Array.isArray(options?.triggers) ? options.triggers.filter((t) => t?.char) : [];
