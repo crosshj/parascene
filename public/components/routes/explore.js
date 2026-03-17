@@ -9,6 +9,8 @@ let renderEmptyLoading;
 let renderEmptyError;
 let renderGridSkeleton;
 let buildCreationCardShell;
+let processUserText;
+let hydrateUserTextLinks;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -37,6 +39,10 @@ async function loadDeps() {
 
 		const profileLinksMod = await import(`../../shared/profileLinks.js${qs}`);
 		buildProfilePath = profileLinksMod.buildProfilePath;
+
+		const userTextMod = await import(`../../shared/userText.js${qs}`);
+		processUserText = userTextMod.processUserText;
+		hydrateUserTextLinks = userTextMod.hydrateUserTextLinks;
 
 		const routeMediaMod = await import(`../../shared/routeMedia.js${qs}`);
 		setRouteMediaBackgroundImage = routeMediaMod.setRouteMediaBackgroundImage;
@@ -636,14 +642,14 @@ class AppRouteExplore extends HTMLElement {
 
 			const detailsContent = html`
 				<div class="route-title">${item.title != null ? item.title : 'Untitled'}</div>
-				<div class="route-summary">${item.summary != null ? item.summary : ''}</div>
+				<div class="route-summary">${processUserText(item.summary != null ? item.summary : '')}</div>
 				<div class="route-meta" title="${formatDateTime(item.created_at)}">${formatRelativeTime(item.created_at)}</div>
 				<div class="route-meta">
 					By ${profileHref ? html`<a class="user-link" href="${profileHref}" data-profile-link>${authorLabel}</a>` :
 					authorLabel}${handle ? html` <span>(${handle})</span>` : ''}
 				</div>
 				<div class="route-meta route-meta-spacer"></div>
-				<div class="route-tags">${item.tags || ''}</div>`;
+				<div class="route-tags">${processUserText(item.tags || '')}</div>`;
 			const mediaType = typeof item.media_type === 'string' ? item.media_type : 'image';
 			const mediaAttrs = {
 				'data-image-id': item.created_image_id ?? '',
@@ -657,6 +663,10 @@ class AppRouteExplore extends HTMLElement {
 				detailsContentHtml: detailsContent,
 				nsfw: Boolean(item.nsfw),
 			});
+
+			if (typeof hydrateUserTextLinks === 'function') {
+				hydrateUserTextLinks(card);
+			}
 
 			const mediaEl = card.querySelector('.route-media');
 			const url = item.thumbnail_url || item.image_url;

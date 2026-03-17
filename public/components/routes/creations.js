@@ -85,6 +85,15 @@ function isTimedOut(status, meta) {
 
 const CREATIONS_PAGE_SIZE = 50;
 
+function escapeHtml(str) {
+	return String(str ?? '')
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#39;');
+}
+
 class AppRouteCreations extends HTMLElement {
 	isRouteActive() {
 		try {
@@ -933,7 +942,7 @@ class AppRouteCreations extends HTMLElement {
 					<div class="route-details">
 					<div class="route-details-content">
 						<div class="route-title">Creation unavailable</div>
-						<div class="route-summary">${reason}</div>
+						<div class="route-summary">${escapeHtml(reason)}</div>
 						<div class="route-meta" title="${formatDateTime(item.created_at)}">Created ${formatRelativeTime(item.created_at)}</div>
 					</div>
 					</div>
