@@ -414,7 +414,8 @@ export async function runCreationJob({ queries, storage, payload }) {
 					"Content-Type": "application/json",
 					Accept: "image/png",
 				},
-				server.auth_token
+				server.auth_token,
+				server.server_config?.custom_headers
 			),
 			body: JSON.stringify(providerPayload),
 			signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
@@ -689,7 +690,8 @@ export async function runAnonCreationJob({ queries, storage, payload }) {
 			method: "POST",
 			headers: buildProviderHeaders(
 				{ "Content-Type": "application/json", Accept: "image/png" },
-				server.auth_token
+				server.auth_token,
+				server.server_config?.custom_headers
 			),
 			body: JSON.stringify({ method, args: args || {} }),
 			signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
@@ -873,6 +875,7 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 					Accept: "image/png",
 				},
 				server.auth_token,
+				server.server_config?.custom_headers
 			),
 			body: JSON.stringify(pollBody),
 			signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),

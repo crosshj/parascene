@@ -221,7 +221,7 @@ export default function createServersRoutes({ queries }) {
 		const user = await requireUser(req, res);
 		if (!user) return;
 
-		const { name, server_url, auth_token, description, status = 'active' } = req.body;
+		const { name, server_url, auth_token, description, status = 'active', custom_headers } = req.body;
 
 		// Validate required fields
 		if (!name || typeof name !== 'string' || name.trim() === '') {
@@ -236,6 +236,35 @@ export default function createServersRoutes({ queries }) {
 		}
 
 		const resolvedAuthToken = resolveProviderAuthToken(auth_token);
+
+		let customHeaders = null;
+		if (custom_headers != null) {
+			try {
+				if (typeof custom_headers === "string") {
+					if (custom_headers.trim() !== "") {
+						const parsed = JSON.parse(custom_headers);
+						if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+							return res.status(400).json({ error: "custom_headers must be a JSON object when provided" });
+						}
+						customHeaders = {};
+						for (const [key, value] of Object.entries(parsed)) {
+							if (value == null) continue;
+							customHeaders[key] = String(value);
+						}
+					}
+				} else if (typeof custom_headers === "object" && !Array.isArray(custom_headers)) {
+					customHeaders = {};
+					for (const [key, value] of Object.entries(custom_headers)) {
+						if (value == null) continue;
+						customHeaders[key] = String(value);
+					}
+				} else {
+					return res.status(400).json({ error: "custom_headers must be a JSON object when provided" });
+				}
+			} catch (err) {
+				return res.status(400).json({ error: "custom_headers must be valid JSON when provided" });
+			}
+		}
 
 		// Validate server_url is a valid URL
 		let providerUrl;
@@ -256,9 +285,13 @@ export default function createServersRoutes({ queries }) {
 		try {
 			const response = await fetch(normalizedUrl, {
 				method: 'GET',
-				headers: buildProviderHeaders({
-					'Accept': 'application/json'
-				}, resolvedAuthToken),
+				headers: buildProviderHeaders(
+					{
+						'Accept': 'application/json'
+					},
+					resolvedAuthToken,
+					customHeaders
+				),
 				signal: AbortSignal.timeout(10000) // 10 second timeout
 			});
 
@@ -278,6 +311,13 @@ export default function createServersRoutes({ queries }) {
 					server_url: normalizedUrl
 				});
 			}
+
+			if (customHeaders) {
+				capabilities = {
+					...capabilities,
+					custom_headers: customHeaders
+				};
+			}
 		} catch (fetchError) {
 			if (fetchError.name === 'AbortError') {
 				return res.status(400).json({
@@ -293,15 +333,15 @@ export default function createServersRoutes({ queries }) {
 
 		// Insert server into database
 		try {
-			const insertResult = await queries.insertServer.run(
-				user.id,
-				name.trim(),
-				status,
-				normalizedUrl,
-				capabilities,
-				resolvedAuthToken,
-				description?.trim() || null
-			);
+				const insertResult = await queries.insertServer.run(
+					user.id,
+					name.trim(),
+					status,
+					normalizedUrl,
+					capabilities,
+					resolvedAuthToken,
+					description?.trim() || null
+				);
 
 			const newServer = await queries.selectServerById.get(insertResult.insertId);
 			if (!newServer) {
@@ -393,6 +433,43 @@ export default function createServersRoutes({ queries }) {
 
 		if (payload.description !== undefined) {
 			nextServer.description = payload.description || null;
+		}
+
+		if (payload.custom_headers !== undefined) {
+			let customHeaders = null;
+			try {
+				if (typeof payload.custom_headers === "string") {
+					if (payload.custom_headers.trim() !== "") {
+						const parsed = JSON.parse(payload.custom_headers);
+						if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+							return res.status(400).json({ error: "custom_headers must be a JSON object when provided" });
+						}
+						customHeaders = {};
+						for (const [key, value] of Object.entries(parsed)) {
+							if (value == null) continue;
+							customHeaders[key] = String(value);
+						}
+					}
+				} else if (typeof payload.custom_headers === "object" && !Array.isArray(payload.custom_headers)) {
+					customHeaders = {};
+					for (const [key, value] of Object.entries(payload.custom_headers)) {
+						if (value == null) continue;
+						customHeaders[key] = String(value);
+					}
+				} else if (payload.custom_headers !== null) {
+					return res.status(400).json({ error: "custom_headers must be a JSON object when provided" });
+				}
+			} catch (err) {
+				return res.status(400).json({ error: "custom_headers must be valid JSON when provided" });
+			}
+
+			const existingConfig = server.server_config && typeof server.server_config === "object"
+				? server.server_config
+				: {};
+			nextServer.server_config = {
+				...existingConfig,
+				...(customHeaders ? { custom_headers: customHeaders } : {})
+			};
 		}
 
 		const updateResult = await queries.updateServer.run(serverId, nextServer);
@@ -517,9 +594,13 @@ export default function createServersRoutes({ queries }) {
 		try {
 			const response = await fetch(normalizedUrl, {
 				method: 'GET',
-				headers: buildProviderHeaders({
-					'Accept': 'application/json'
-				}, server.auth_token),
+				headers: buildProviderHeaders(
+					{
+						'Accept': 'application/json'
+					},
+					server.auth_token,
+					server.server_config?.custom_headers
+				),
 				signal: AbortSignal.timeout(10000) // 10 second timeout
 			});
 
@@ -587,13 +668,48 @@ export default function createServersRoutes({ queries }) {
 		// Normalize server_url (remove trailing slash)
 		const normalizedUrl = serverUrl.toString().replace(/\/$/, '');
 
+		// Optional: allow overriding headers for this refresh call only (not persisted)
+		let overrideHeaders = null;
+		const { custom_headers: customHeadersOverride } = req.body || {};
+		if (customHeadersOverride !== undefined) {
+			try {
+				if (typeof customHeadersOverride === "string") {
+					if (customHeadersOverride.trim() !== "") {
+						const parsed = JSON.parse(customHeadersOverride);
+						if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+							return res.status(400).json({ error: "custom_headers must be a JSON object when provided" });
+						}
+						overrideHeaders = {};
+						for (const [key, value] of Object.entries(parsed)) {
+							if (value == null) continue;
+							overrideHeaders[key] = String(value);
+						}
+					}
+				} else if (typeof customHeadersOverride === "object" && !Array.isArray(customHeadersOverride)) {
+					overrideHeaders = {};
+					for (const [key, value] of Object.entries(customHeadersOverride)) {
+						if (value == null) continue;
+						overrideHeaders[key] = String(value);
+					}
+				} else if (customHeadersOverride !== null) {
+					return res.status(400).json({ error: "custom_headers must be a JSON object when provided" });
+				}
+			} catch (err) {
+				return res.status(400).json({ error: "custom_headers must be valid JSON when provided" });
+			}
+		}
+
 		// Call provider server to get capabilities
 		try {
 			const response = await fetch(normalizedUrl, {
 				method: 'GET',
-				headers: buildProviderHeaders({
-					'Accept': 'application/json'
-				}, server.auth_token),
+				headers: buildProviderHeaders(
+					{
+						'Accept': 'application/json'
+					},
+					server.auth_token,
+					overrideHeaders || server.server_config?.custom_headers
+				),
 				signal: AbortSignal.timeout(10000) // 10 second timeout
 			});
 
@@ -614,8 +730,14 @@ export default function createServersRoutes({ queries }) {
 				});
 			}
 
+			// Preserve any existing custom_headers value on refresh.
+			const capabilitiesWithCustom = {
+				...capabilities,
+				custom_headers: server.server_config?.custom_headers ?? capabilities.custom_headers
+			};
+
 			// Update server config in database
-			const updateResult = await queries.updateServerConfig.run(serverId, capabilities);
+			const updateResult = await queries.updateServerConfig.run(serverId, capabilitiesWithCustom);
 
 			if (updateResult.changes === 0) {
 				return res.status(500).json({

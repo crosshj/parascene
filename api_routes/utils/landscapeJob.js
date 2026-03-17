@@ -160,7 +160,8 @@ export async function runLandscapeJob({ queries, storage, payload }) {
 			method: "POST",
 			headers: buildProviderHeaders(
 				{ "Content-Type": "application/json", Accept: "image/png" },
-				server.auth_token
+				server.auth_token,
+				server.server_config?.custom_headers
 			),
 			body: JSON.stringify(providerPayload),
 			signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),

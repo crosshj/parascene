@@ -570,7 +570,8 @@ export default function createCreateRoutes({ queries, storage }) {
 				method: "POST",
 				headers: buildProviderHeaders(
 					{ "Content-Type": "application/json", Accept: "application/json" },
-					server.auth_token
+					server.auth_token,
+					server.server_config?.custom_headers
 				),
 				body: JSON.stringify({ method: "advanced_query", args: providerArgs }),
 				signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS)
@@ -655,7 +656,8 @@ export default function createCreateRoutes({ queries, storage }) {
 				method: "POST",
 				headers: buildProviderHeaders(
 					{ "Content-Type": "application/json", Accept: "application/json" },
-					server.auth_token
+					server.auth_token,
+					server.server_config?.custom_headers
 				),
 				body: JSON.stringify({ method: "advanced_query", args: providerArgs }),
 				signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS)

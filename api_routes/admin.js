@@ -1842,9 +1842,13 @@ export default function createAdminRoutes({ queries, storage }) {
 		try {
 			const response = await fetch(normalizedUrl, {
 				method: 'GET',
-				headers: buildProviderHeaders({
-					'Accept': 'application/json'
-				}, server.auth_token),
+				headers: buildProviderHeaders(
+					{
+						'Accept': 'application/json'
+					},
+					server.auth_token,
+					server.server_config?.custom_headers
+				),
 				signal: AbortSignal.timeout(10000) // 10 second timeout
 			});
 
@@ -2107,9 +2111,13 @@ export default function createAdminRoutes({ queries, storage }) {
 		try {
 			const response = await fetch(normalizedUrl, {
 				method: 'GET',
-				headers: buildProviderHeaders({
-					'Accept': 'application/json'
-				}, server.auth_token),
+				headers: buildProviderHeaders(
+					{
+						'Accept': 'application/json'
+					},
+					server.auth_token,
+					server.server_config?.custom_headers
+				),
 				signal: AbortSignal.timeout(10000) // 10 second timeout
 			});
 
@@ -2129,9 +2137,13 @@ export default function createAdminRoutes({ queries, storage }) {
 					server_url: normalizedUrl
 				});
 			}
+			const capabilitiesWithCustom = {
+				...capabilities,
+				custom_headers: server.server_config?.custom_headers ?? capabilities.custom_headers
+			};
 
 			// Update server config in database
-			const updateResult = await queries.updateServerConfig.run(serverId, capabilities);
+			const updateResult = await queries.updateServerConfig.run(serverId, capabilitiesWithCustom);
 
 			if (updateResult.changes === 0) {
 				return res.status(500).json({

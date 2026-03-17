@@ -757,6 +757,10 @@ class AppModalServer extends HTMLElement {
 						<input type="text" name="auth_token" placeholder="Auth token" />
 					</label>
 					<label>
+						Additional headers (JSON object, optional)
+						<textarea name="custom_headers" placeholder='e.g. { "X-Org": "acme", "X-Env": "prod" }'></textarea>
+					</label>
+					<label>
 						Description (optional)
 						<textarea name="description" placeholder="Server description"></textarea>
 					</label>
@@ -820,6 +824,14 @@ class AppModalServer extends HTMLElement {
 					<label>
 						Auth Token
 						<input type="text" name="auth_token" value="${this.escapeHtml(resolvedAuthToken)}" />
+					</label>
+					<label>
+						Additional headers (JSON object, optional)
+						<textarea name="custom_headers" placeholder='e.g. { "X-Org": "acme", "X-Env": "prod" }'>${
+							this.serverData?.server_config?.custom_headers
+								? this.escapeHtml(JSON.stringify(this.serverData.server_config.custom_headers, null, 2))
+								: ""
+						}</textarea>
 					</label>
 					<label>
 						Status
@@ -975,6 +987,25 @@ class AppModalServer extends HTMLElement {
 
 		const serverUrl = form.querySelector('input[name="server_url"]')?.value?.trim();
 		const authToken = form.querySelector('input[name="auth_token"]')?.value?.trim() || '';
+		const customHeadersRaw = form.querySelector('textarea[name="custom_headers"]')?.value?.trim() || '';
+
+		let customHeaders = null;
+		if (customHeadersRaw) {
+			try {
+				const parsed = JSON.parse(customHeadersRaw);
+				if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+					throw new Error('Custom headers must be a JSON object of key/value pairs.');
+				}
+				customHeaders = {};
+				for (const [key, value] of Object.entries(parsed)) {
+					if (value == null) continue;
+					customHeaders[key] = String(value);
+				}
+			} catch (err) {
+				alert(err.message || 'Custom headers must be valid JSON.');
+				return;
+			}
+		}
 
 		if (!serverUrl) {
 			alert('Please enter a server URL');
@@ -995,7 +1026,8 @@ class AppModalServer extends HTMLElement {
 					method: 'GET',
 					headers: {
 						'Accept': 'application/json',
-						...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
+						...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
+						...(customHeaders || {})
 					},
 					signal: AbortSignal.timeout(10000)
 				});
@@ -1057,11 +1089,14 @@ class AppModalServer extends HTMLElement {
 		if (!form) return;
 
 		const formData = new FormData(form);
+		const customHeadersRaw = (formData.get('custom_headers') || '').toString().trim();
+
 		const payload = {
 			name: formData.get('name'),
 			server_url: formData.get('server_url'),
 			auth_token: formData.get('auth_token') || null,
-			description: formData.get('description') || null
+			description: formData.get('description') || null,
+			custom_headers: customHeadersRaw || null
 		};
 
 		const registerBtn = this.shadowRoot.querySelector('[data-register-btn]');
@@ -1101,12 +1136,15 @@ class AppModalServer extends HTMLElement {
 		if (!form || !this.serverId) return;
 
 		const formData = new FormData(form);
+		const customHeadersRaw = (formData.get('custom_headers') || '').toString().trim();
+
 		const payload = {
 			name: formData.get('name'),
 			server_url: formData.get('server_url'),
 			status: formData.get('status'),
 			description: formData.get('description') || null,
-			auth_token: formData.get('auth_token') || null
+			auth_token: formData.get('auth_token') || null,
+			custom_headers: customHeadersRaw || null
 		};
 
 		const saveBtn = this.shadowRoot.querySelector('[data-save-btn]');
@@ -1212,10 +1250,45 @@ class AppModalServer extends HTMLElement {
 			container.innerHTML = '<div class="server-loading">Refreshing server methods...</div>';
 		}
 
+		// Allow using unsaved custom headers from the form, same as Test Server.
+		const form = this.shadowRoot.querySelector('[data-server-form]');
+		let customHeaders = null;
+		if (form) {
+			const raw = form.querySelector('textarea[name="custom_headers"]')?.value?.trim() || '';
+			if (raw) {
+				try {
+					const parsed = JSON.parse(raw);
+					if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+						throw new Error('Custom headers must be a JSON object of key/value pairs.');
+					}
+					customHeaders = {};
+					for (const [key, value] of Object.entries(parsed)) {
+						if (value == null) continue;
+						customHeaders[key] = String(value);
+					}
+				} catch (err) {
+					if (container) {
+						container.innerHTML = html`
+							<div class="server-error">✗ ${err.message || 'Custom headers must be valid JSON.'}</div>
+						`;
+					}
+					if (refreshBtn) {
+						refreshBtn.disabled = false;
+						refreshBtn.textContent = originalText;
+					}
+					return;
+				}
+			}
+		}
+
 		try {
 			const response = await fetch(`/api/servers/${this.serverId}/refresh`, {
 				method: 'POST',
-				credentials: 'include'
+				credentials: 'include',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					...(customHeaders ? { custom_headers: customHeaders } : {})
+				})
 			});
 
 			const data = await response.json();
