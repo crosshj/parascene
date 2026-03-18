@@ -42,6 +42,32 @@ function escapeHtml(text) {
 	return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+async function copyTextToClipboard(text) {
+	const str = String(text ?? '');
+	if (navigator?.clipboard?.writeText) {
+		try {
+			await navigator.clipboard.writeText(str);
+			return;
+		} catch {
+			// Fall back below.
+		}
+	}
+
+	// Fallback for environments without async Clipboard API.
+	const textarea = document.createElement('textarea');
+	textarea.value = str;
+	textarea.setAttribute('readonly', 'true');
+	textarea.style.position = 'fixed';
+	textarea.style.top = '-1000px';
+	textarea.style.left = '-1000px';
+	document.body.appendChild(textarea);
+	textarea.select();
+	textarea.setSelectionRange(0, textarea.value.length);
+	const ok = document.execCommand('copy');
+	document.body.removeChild(textarea);
+	if (!ok) throw new Error('Copy to clipboard failed.');
+}
+
 function getUserDisplayName(user) {
 	const displayName = String(user?.display_name || '').trim();
 	if (displayName) return displayName;
@@ -201,6 +227,8 @@ class AppRouteUsers extends HTMLElement {
 		this._selectedAnonCid = null;
 		this._anonDataLoaded = false;
 		this._shareDataLoaded = false;
+		this._shareExportInFlight = false;
+		this._anonExportInFlight = false;
 		this.innerHTML = html`
 			<h3>Users</h3>
 			<app-tabs>
@@ -216,6 +244,12 @@ class AppRouteUsers extends HTMLElement {
 				</tab>
 				<tab data-id="share" label="Share">
 					<div class="share-tab-content" data-share-tab-content>
+						<div class="users-export-bar" data-share-export-bar>
+							<button type="button" class="btn-secondary" data-share-export-copy>
+								Copy share export
+							</button>
+							<div class="users-export-status" data-share-export-status aria-live="polite"></div>
+						</div>
 						<div class="share-table-container" data-share-table-container>
 							<div class="route-empty route-loading">
 								<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
@@ -225,6 +259,15 @@ class AppRouteUsers extends HTMLElement {
 				</tab>
 				<tab data-id="anonymous" label="Try flow">
 					<div class="anon-tab-content" data-anon-tab-content>
+						<div class="users-export-bar users-export-bar-anon" data-anon-export-bar>
+							<button type="button" class="btn-secondary" data-anon-export-summary>
+								Copy anon summary
+							</button>
+							<button type="button" class="btn-secondary" data-anon-export-expanded>
+								Copy anon requests
+							</button>
+							<div class="users-export-status" data-anon-export-status aria-live="polite"></div>
+						</div>
 						<div class="anon-table-container" data-anon-table-container>
 							<div class="route-empty route-loading">
 								<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
@@ -312,6 +355,28 @@ class AppRouteUsers extends HTMLElement {
 		this.loadUsers();
 		this._boundRefresh = () => this.loadUsers({ force: true });
 		document.addEventListener('user-updated', this._boundRefresh);
+
+		const shareExportBtn = this.querySelector('[data-share-export-copy]');
+		const shareExportStatus = this.querySelector('[data-share-export-status]');
+		if (shareExportBtn && !this._shareExportBound) {
+			this._shareExportBound = true;
+			shareExportBtn.addEventListener('click', async () => {
+				await this.exportShareViewsForChatGPT({ statusEl: shareExportStatus });
+			});
+		}
+
+		const anonSummaryBtn = this.querySelector('[data-anon-export-summary]');
+		const anonExpandedBtn = this.querySelector('[data-anon-export-expanded]');
+		const anonExportStatus = this.querySelector('[data-anon-export-status]');
+		if ((anonSummaryBtn || anonExpandedBtn) && !this._anonExportBound) {
+			this._anonExportBound = true;
+			anonSummaryBtn?.addEventListener('click', async () => {
+				await this.exportAnonUsersForChatGPT({ mode: 'summary', statusEl: anonExportStatus });
+			});
+			anonExpandedBtn?.addEventListener('click', async () => {
+				await this.exportAnonUsersForChatGPT({ mode: 'expanded', statusEl: anonExportStatus });
+			});
+		}
 	}
 
 	disconnectedCallback() {
@@ -623,6 +688,177 @@ class AppRouteUsers extends HTMLElement {
 			error.className = 'admin-error';
 			error.textContent = 'Error loading share views.';
 			container.appendChild(error);
+		}
+	}
+
+	async exportShareViewsForChatGPT({ statusEl } = {}) {
+		if (this._shareExportInFlight) return;
+		this._shareExportInFlight = true;
+
+		const setStatus = (msg) => {
+			if (statusEl) statusEl.textContent = msg || '';
+		};
+
+		try {
+			setStatus('Preparing share export…');
+
+			const limit = 200;
+			const sortBy = 'viewed_at';
+			const sortDir = 'desc';
+			let offset = 0;
+			const allItems = [];
+			let total = null;
+
+			while (true) {
+				const params = new URLSearchParams({
+					limit: String(limit),
+					offset: String(offset),
+					sort_by: sortBy,
+					sort_dir: sortDir
+				});
+				const res = await fetch(`/admin/share-views?${params}`, { credentials: 'include' });
+				if (!res.ok) throw new Error('Failed to load share views.');
+				const data = await res.json();
+
+				const items = Array.isArray(data?.items) ? data.items : [];
+				total = Number(data?.total) ?? total ?? 0;
+				allItems.push(...items);
+
+				if (items.length === 0) break;
+				if (total != null && allItems.length >= total) break;
+				offset += items.length;
+			}
+
+			const payload = {
+				export_version: 1,
+				exported_at: new Date().toISOString(),
+				scope: '/users#share',
+				item_count: allItems.length,
+				field_notes: [
+					'`cf_ray` is a Cloudflare request id; use it to correlate logs.',
+					'`ip_source` is derived from headers if available.'
+				],
+				data: {
+					shareViews: allItems
+				}
+			};
+
+			const text = `PARASCENE_ADMIN_EXPORT\n\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\`\n`;
+			await copyTextToClipboard(text);
+			window.__parasceneAdminChatGPTExport = text;
+			setStatus('Copied share export to clipboard.');
+		} catch (err) {
+			setStatus(`Export failed: ${err?.message || String(err)}`);
+		} finally {
+			this._shareExportInFlight = false;
+		}
+	}
+
+	async exportAnonUsersForChatGPT({ mode = 'summary', statusEl } = {}) {
+		if (this._anonExportInFlight) return;
+		this._anonExportInFlight = true;
+
+		const setStatus = (msg) => {
+			if (statusEl) statusEl.textContent = msg || '';
+		};
+
+		try {
+			setStatus(mode === 'expanded' ? 'Preparing anon requests export…' : 'Preparing anon summary export…');
+
+			const limit = 200;
+			const sortBy = 'last_request_at';
+			const sortDir = 'desc';
+
+			let offset = 0;
+			const anonRows = [];
+			let total = null;
+
+			while (true) {
+				const params = new URLSearchParams({
+					limit: String(limit),
+					offset: String(offset),
+					sort_by: sortBy,
+					sort_dir: sortDir
+				});
+				const res = await fetch(`/admin/anonymous-users?${params}`, { credentials: 'include' });
+				if (!res.ok) throw new Error('Failed to load anonymous user data.');
+				const data = await res.json();
+
+				const items = Array.isArray(data?.anonCids) ? data.anonCids : [];
+				total = Number(data?.total) ?? total ?? 0;
+				anonRows.push(...items);
+
+				if (items.length === 0) break;
+				if (total != null && anonRows.length >= total) break;
+				offset += items.length;
+			}
+
+			if (mode === 'summary') {
+				const payload = {
+					export_version: 1,
+					exported_at: new Date().toISOString(),
+					scope: '/users#anonymous (summary)',
+					item_count: anonRows.length,
+					field_notes: [
+						'`from_share` indicates whether this anon cid appears in the share-views data.',
+						'`transitioned_user_id` is the logged-in user the try-flow was transitioned into (if available).'
+					],
+					data: {
+						anonCids: anonRows
+					}
+				};
+
+				const text = `PARASCENE_ADMIN_EXPORT\n\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\`\n`;
+				await copyTextToClipboard(text);
+				window.__parasceneAdminChatGPTExport = text;
+				setStatus('Copied anon summary to clipboard.');
+				return;
+			}
+
+			// Expanded mode: include request prompts + image details for the first N cids.
+			const MAX_CIDS_WITH_REQUESTS = 30;
+			const anonCids = anonRows.map((r) => r.anon_cid).filter(Boolean).slice(0, MAX_CIDS_WITH_REQUESTS);
+
+			const byCid = [];
+			for (let i = 0; i < anonCids.length; i++) {
+				const cid = anonCids[i];
+				setStatus(`Fetching anon requests… (${i + 1}/${anonCids.length})`);
+				const res = await fetch(`/admin/anonymous-users/${encodeURIComponent(cid)}`, { credentials: 'include' });
+				if (!res.ok) throw new Error(`Failed to load request details for anon_cid=${cid}`);
+				const data = await res.json();
+				byCid.push({
+					anon_cid: data?.anon_cid ?? cid,
+					requests: Array.isArray(data?.requests) ? data.requests : []
+				});
+			}
+
+			const payload = {
+				export_version: 1,
+				exported_at: new Date().toISOString(),
+				scope: '/users#anonymous (expanded)',
+				anon_cids_total: anonRows.length,
+				anon_cids_included: byCid.length,
+				truncated: anonRows.length > byCid.length,
+				truncation_note: byCid.length < anonRows.length
+					? `Expanded export is capped at ${MAX_CIDS_WITH_REQUESTS} anon_cids for practicality.`
+					: null,
+				data: {
+					anonRequestsByCid: byCid
+				},
+				field_notes: [
+					'Request `prompt` is the raw try-flow prompt text.',
+					'`image.image_url` points to the admin-served try image route when available.'
+				]
+			};
+
+			const text = `PARASCENE_ADMIN_EXPORT\n\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\`\n`;
+			await copyTextToClipboard(text);
+			window.__parasceneAdminChatGPTExport = text;
+			setStatus('Copied anon requests to clipboard.');
+		} catch (err) {
+			setStatus(`Export failed: ${err?.message || String(err)}`);
+		} finally {
+			this._anonExportInFlight = false;
 		}
 	}
 
