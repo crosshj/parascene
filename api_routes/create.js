@@ -991,11 +991,11 @@ export default function createCreateRoutes({ queries, storage }) {
 			// Keep a stable copy of args for storage (meta.args) separate from any provider-only transformations.
 			argsForProvider = argsForProvider && typeof argsForProvider === "object" ? { ...argsForProvider } : {};
 
-			// Async hint: only for methods that explicitly support async and only in remote/QStash envs.
+			// Async hint: only for methods that explicitly support async.
+			// Cloud uses QStash-based polling; local mirrors the same behavior with in-process polling.
 			const asyncSupportedForMethod =
 				methodConfig && (methodConfig.async === true || methodConfig.async === "true");
-			const asyncEnv = !!process.env.VERCEL && !!process.env.UPSTASH_QSTASH_TOKEN;
-			const asyncRequestedForMethod = Boolean(asyncSupportedForMethod && asyncEnv);
+			const asyncRequestedForMethod = Boolean(asyncSupportedForMethod);
 
 			// Apply style transformation when style_key is provided (create.html flow). Store style + raw user prompt in meta.
 			let styleForMeta = null;

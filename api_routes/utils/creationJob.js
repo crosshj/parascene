@@ -252,13 +252,13 @@ async function finalizeCreationJob({
 		media_type: isVideo ? "video" : "image",
 		...(isVideo && videoUrl
 			? {
-					video: {
-						filename: videoFilename,
-						file_path: videoUrl,
-						content_type: videoContentType || "video/mp4",
-					},
-					source_image_url: sourceImageUrlForMeta,
-			  }
+				video: {
+					filename: videoFilename,
+					file_path: videoUrl,
+					content_type: videoContentType || "video/mp4",
+				},
+				source_image_url: sourceImageUrlForMeta,
+			}
 			: {}),
 	});
 
@@ -446,8 +446,8 @@ export async function runCreationJob({ queries, storage, payload }) {
 				body = null;
 			}
 
-			const asyncEnv = isRemoteAsyncEnv();
-			if (asyncEnv && asyncRequested && isAsyncAckBody(body, method)) {
+			if (asyncRequested && isAsyncAckBody(body, method)) {
+				const asyncEnv = isRemoteAsyncEnv();
 				const asyncBody = body || {};
 				const jobId = asyncBody.job_id;
 				const status = asyncBody.status || "processing";
@@ -480,24 +480,49 @@ export async function runCreationJob({ queries, storage, payload }) {
 					job_id: jobId,
 					status,
 				});
-
 				if (queries.updateCreatedImageMeta?.run) {
 					await queries.updateCreatedImageMeta.run(imageId, userId, nextMeta);
 				}
 
-				await scheduleProviderPollJob({
-					payload: {
-						job_type: "poll_provider",
-						created_image_id: imageId,
-						user_id: userId,
-						server_id,
-						credit_cost,
-					},
-					delaySeconds,
-					log: console,
+				if (asyncEnv) {
+					// Cloud: schedule polling via QStash worker.
+					await scheduleProviderPollJob({
+						payload: {
+							job_type: "poll_provider",
+							created_image_id: imageId,
+							user_id: userId,
+							server_id,
+							credit_cost,
+						},
+						delaySeconds,
+						log: console,
+					});
+
+					return { ok: true, reason: "async_queued" };
+				}
+
+				// Local: run the same polling state machine in-process so dev
+				// mirrors cloud behavior without requiring QStash.
+
+				// Fire-and-forget first poll; subsequent polls schedule themselves.
+				queueMicrotask(() => {
+					Promise.resolve(
+						runProviderPollJob({
+							queries,
+							storage,
+							payload: {
+								created_image_id: imageId,
+								user_id: userId,
+								server_id,
+								credit_cost,
+							},
+						}),
+					).catch((err) => {
+						void err;
+					});
 				});
 
-				return { ok: true, reason: "async_queued" };
+				return { ok: true, reason: "async_queued_local" };
 			}
 
 			// JSON but not async-ack: treat as provider error in the same shape as non-2xx.
@@ -906,9 +931,29 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 			}
 
 			if (isAsyncAckBody(body, existingMeta.method)) {
+				const asyncEnv = isRemoteAsyncEnv();
 				const asyncBody = body || {};
 				const jobId = asyncBody.job_id;
 				const status = asyncBody.status || "processing";
+				const statusLower = status.toLowerCase();
+
+				// If provider reports a terminal completed status in JSON, treat that as
+				// end-of-polling and do NOT schedule further polls. The image row will
+				// already have been finalized by the bytes response.
+				if (["completed", "succeeded", "done"].includes(statusLower)) {
+					const nextMeta = mergeMeta(existingMeta, {
+						provider_job_id: jobId,
+						provider_status: status,
+						provider_last_payload: asyncBody,
+					});
+
+					if (queries.updateCreatedImageMeta?.run) {
+						await queries.updateCreatedImageMeta.run(imageId, userId, nextMeta);
+					}
+
+					return { ok: true, reason: "async_poll_completed" };
+				}
+
 				const delaySeconds = DEFAULT_PROVIDER_POLL_DELAY_SECONDS;
 				const nextPollAtIso = new Date(Date.now() + delaySeconds * 1000).toISOString();
 
@@ -933,17 +978,38 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 				}
 
 				if (pollAttempts < MAX_PROVIDER_POLL_ATTEMPTS) {
-					await scheduleProviderPollJob({
-						payload: {
-							job_type: "poll_provider",
-							created_image_id: imageId,
-							user_id: userId,
-							server_id,
-							credit_cost,
-						},
-						delaySeconds,
-						log: console,
-					});
+					if (asyncEnv) {
+						// Cloud: enqueue next poll via QStash worker.
+						await scheduleProviderPollJob({
+							payload: {
+								job_type: "poll_provider",
+								created_image_id: imageId,
+								user_id: userId,
+								server_id,
+								credit_cost,
+							},
+							delaySeconds,
+							log: console,
+						});
+					} else {
+						// Local: schedule next poll in-process with a delay to mirror QStash timing.
+						setTimeout(() => {
+							Promise.resolve(
+								runProviderPollJob({
+									queries,
+									storage,
+									payload: {
+										created_image_id: imageId,
+										user_id: userId,
+										server_id,
+										credit_cost,
+									},
+								}),
+							).catch((err) => {
+								void err;
+							});
+						}, delaySeconds * 1000);
+					}
 				} else {
 					logCreationWarn("Poll: reached max poll attempts without completion", {
 						imageId,
@@ -951,7 +1017,7 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 					});
 				}
 
-				return { ok: true, reason: "async_poll_scheduled" };
+				return { ok: true, reason: asyncEnv ? "async_poll_scheduled" : "async_poll_scheduled_local" };
 			}
 
 			const providerMessage = providerBodyToMessage(body);
