@@ -229,11 +229,19 @@ class AppRouteUsers extends HTMLElement {
 		this._shareDataLoaded = false;
 		this._shareExportInFlight = false;
 		this._anonExportInFlight = false;
+		this._activeExportInFlight = false;
+		this._activeUsersSnapshot = [];
 		this.innerHTML = html`
 			<h3>Users</h3>
 			<app-tabs>
 				<tab data-id="active" label="Active" default>
 					<div class="users-active-wrap">
+						<div class="users-export-bar" data-active-export-bar>
+							<button type="button" class="btn-secondary" data-active-export-copy>
+								Copy active users
+							</button>
+							<div class="users-export-status" data-active-export-status aria-live="polite"></div>
+						</div>
 						<div class="users-cards" data-users-active-container>
 							<div class="route-empty route-loading">
 								<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
@@ -362,6 +370,15 @@ class AppRouteUsers extends HTMLElement {
 			this._shareExportBound = true;
 			shareExportBtn.addEventListener('click', async () => {
 				await this.exportShareViewsForChatGPT({ statusEl: shareExportStatus });
+			});
+		}
+
+		const activeExportBtn = this.querySelector('[data-active-export-copy]');
+		const activeExportStatus = this.querySelector('[data-active-export-status]');
+		if (activeExportBtn && !this._activeExportBound) {
+			this._activeExportBound = true;
+			activeExportBtn.addEventListener('click', async () => {
+				await this.exportActiveUsersForChatGPT({ statusEl: activeExportStatus });
 			});
 		}
 
@@ -754,6 +771,47 @@ class AppRouteUsers extends HTMLElement {
 		}
 	}
 
+	async exportActiveUsersForChatGPT({ statusEl } = {}) {
+		if (this._activeExportInFlight) return;
+		this._activeExportInFlight = true;
+
+		const setStatus = (msg) => {
+			if (statusEl) statusEl.textContent = msg || '';
+		};
+
+		try {
+			setStatus('Preparing active users export…');
+			let activeUsers = Array.isArray(this._activeUsersSnapshot) ? this._activeUsersSnapshot : [];
+
+			// Use cached users when available to avoid unnecessary refetches.
+			if (activeUsers.length === 0) {
+				const response = await fetch('/admin/users', { credentials: 'include' });
+				if (!response.ok) throw new Error('Failed to load users.');
+				const data = await response.json();
+				activeUsers = Array.isArray(data?.activeUsers) ? data.activeUsers : [];
+			}
+
+			const payload = {
+				export_version: 1,
+				exported_at: new Date().toISOString(),
+				scope: '/users#active',
+				item_count: activeUsers.length,
+				data: {
+					activeUsers
+				}
+			};
+
+			const text = `PARASCENE_ADMIN_EXPORT\n\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\`\n`;
+			await copyTextToClipboard(text);
+			window.__parasceneAdminChatGPTExport = text;
+			setStatus('Copied active users to clipboard.');
+		} catch (err) {
+			setStatus(`Export failed: ${err?.message || String(err)}`);
+		} finally {
+			this._activeExportInFlight = false;
+		}
+	}
+
 	async exportAnonUsersForChatGPT({ mode = 'summary', statusEl } = {}) {
 		if (this._anonExportInFlight) return;
 		this._anonExportInFlight = true;
@@ -1071,6 +1129,7 @@ class AppRouteUsers extends HTMLElement {
 
 			const activeUsers = data.activeUsers ?? [];
 			const otherUsers = data.otherUsers ?? [];
+			this._activeUsersSnapshot = Array.isArray(activeUsers) ? activeUsers : [];
 
 			activeContainer.innerHTML = '';
 			otherContainer.innerHTML = '';
@@ -1110,6 +1169,7 @@ class AppRouteUsers extends HTMLElement {
 		} catch (err) {
 			activeContainer.innerHTML = '';
 			otherContainer.innerHTML = '';
+			this._activeUsersSnapshot = [];
 			const activeCountEl = this.querySelector('[data-users-active-count]');
 			if (activeCountEl) activeCountEl.textContent = '';
 			const error = document.createElement('div');
