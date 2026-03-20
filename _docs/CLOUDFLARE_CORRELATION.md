@@ -6,6 +6,8 @@ When Cloudflare is in front of the app, you can tie what you see in the Cloudfla
 
 We store the **Cf-Ray** header in `share_page_views.meta.cf_ray` and `try_requests.meta.cf_ray` when present. Cloudflare sends this ID to the origin for every request.
 
+Share and try rows also include **`meta.prsn_cid`** and **`meta.client_id`** (same UUID) from the first-party **`prsn_cid`** cookie, so you can link events across the anonymous try session cookie (`ps_cid` / `anon_cid`) when the browser keeps `prsn_cid`.
+
 - **In admin:** Share views table has a "CF Ray" column; anonymous user detail shows the Ray next to each try request when available.
 - **In Cloudflare:** If you have Logpush, Instant Logs, or Log Explorer, you can search by `RayID` (or the Ray ID field) to get the corresponding request in CF (path, status, country, etc.). That’s the same request as the row you’re looking at in admin.
 

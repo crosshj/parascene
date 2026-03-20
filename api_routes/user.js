@@ -22,6 +22,8 @@ import { computeWelcome, WELCOME_VERSION } from "./utils/welcome.js";
 import { resolveNotificationDisplay } from "./utils/notificationResolver.js";
 import { collapseNotificationsByCreation, getCreationIdFromRow } from "./utils/notificationCollapse.js";
 import { getReactionsForCommentIds } from "./comments.js";
+import { getClientIdFromRequest, mergePrsnCidsIntoProfileMeta, prsnCidFromMeta } from "./utils/prsnCids.js";
+import { appendPrsnCidsForUserId, tryRequestMetaFromRow } from "./utils/userPrsnCids.js";
 
 export default function createProfileRoutes({ queries }) {
 	const router = express.Router();
@@ -78,11 +80,15 @@ export default function createProfileRoutes({ queries }) {
 				cover_image_url: null,
 				badges: [],
 				meta: {},
+				prsn_cids: [],
 				created_at: null,
 				updated_at: null
 			};
 		}
 		const meta = safeJsonParse(row.meta, {});
+		const prsn_cids = Array.isArray(meta.prsn_cids)
+			? [...new Set(meta.prsn_cids.filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim()))]
+			: [];
 		return {
 			user_name: row.user_name ?? null,
 			display_name: row.display_name ?? null,
@@ -93,6 +99,7 @@ export default function createProfileRoutes({ queries }) {
 			cover_image_url: row.cover_image_url ?? null,
 			badges: safeJsonParse(row.badges, []),
 			meta,
+			prsn_cids,
 			created_at: row.created_at ?? null,
 			updated_at: row.updated_at ?? null
 		};
@@ -330,6 +337,8 @@ export default function createProfileRoutes({ queries }) {
 			}
 		}
 
+		await appendPrsnCidsForUserId(queries, userId, req).catch(() => {});
+
 		return res.redirect(returnUrl || "/");
 	});
 
@@ -400,6 +409,8 @@ export default function createProfileRoutes({ queries }) {
 				// Don't fail login if session creation fails - cookie is still set
 			}
 		}
+		await appendPrsnCidsForUserId(queries, user.id, req).catch(() => {});
+
 		return res.redirect(returnUrl || "/");
 	});
 
@@ -539,6 +550,8 @@ export default function createProfileRoutes({ queries }) {
 		if (!req.auth?.userId) {
 			return res.status(401).json({ error: "Unauthorized" });
 		}
+
+		// Client ids: merge runs in `prsnCidPersistMiddleware` (throttled + skip static assets) and on login/signup / profile saves.
 
 		const user = await queries.selectUserById.get(req.auth.userId);
 		if (!user) {
@@ -760,10 +773,29 @@ export default function createProfileRoutes({ queries }) {
 			const requestedMeta = typeof req.body?.meta === "object" && req.body.meta && !Array.isArray(req.body.meta)
 				? req.body.meta
 				: null;
-			const nextMeta = {
-				...(typeof existingProfile.meta === "object" && existingProfile.meta ? existingProfile.meta : {}),
-				...(requestedMeta || {})
+			const nextMetaBase = {
+				...(typeof existingProfile.meta === "object" && existingProfile.meta ? existingProfile.meta : {})
 			};
+			if (requestedMeta) {
+				const { prsn_cids: _prsnDrop, ...restRequested } = requestedMeta;
+				Object.assign(nextMetaBase, restRequested);
+			}
+
+			const anonCidForPrsn =
+				typeof req.cookies?.ps_cid === "string" ? req.cookies.ps_cid.trim() || null : null;
+			let tryPrsnIds = [];
+			/** Reused in welcome transition block to avoid a second list fetch. */
+			let cachedTryReqsForAnon = null;
+			if (anonCidForPrsn && queries.selectTryRequestsByCid?.all) {
+				cachedTryReqsForAnon = (await queries.selectTryRequestsByCid.all(anonCidForPrsn)) || [];
+				tryPrsnIds = cachedTryReqsForAnon
+					.map((r) => prsnCidFromMeta(tryRequestMetaFromRow(r.meta)))
+					.filter(Boolean);
+			}
+			let nextMeta = mergePrsnCidsIntoProfileMeta(nextMetaBase, [
+				getClientIdFromRequest(req),
+				...tryPrsnIds
+			]);
 
 			const finalUserName = hasExistingUserName
 				? existingUserName
@@ -826,7 +858,7 @@ export default function createProfileRoutes({ queries }) {
 								.map((c) => (c.meta && typeof c.meta === "object" && c.meta.source_anon_id != null ? Number(c.meta.source_anon_id) : null))
 								.filter((id) => Number.isFinite(id))
 						);
-						const reqs = await queries.selectTryRequestsByCid.all(anonCid);
+						const reqs = cachedTryReqsForAnon || [];
 						const anonIds = [...new Set((reqs || []).map((r) => r.created_image_anon_id).filter(Boolean))];
 						if (anonIds.length > 0) {
 							const images = await queries.selectCreatedImagesAnonByIds.all(anonIds);
@@ -1081,10 +1113,11 @@ export default function createProfileRoutes({ queries }) {
 			if (!Array.isArray(badges)) {
 				return res.status(400).json({ error: "Badges must be a JSON array" });
 			}
-			const meta = parseJsonField(fields?.meta, existingProfile.meta || {}, "Meta must be valid JSON.");
+			let meta = parseJsonField(fields?.meta, existingProfile.meta || {}, "Meta must be valid JSON.");
 			if (meta == null || typeof meta !== "object" || Array.isArray(meta)) {
 				return res.status(400).json({ error: "Meta must be a JSON object" });
 			}
+			delete meta.prsn_cids;
 			if (hasExistingUserName) {
 				const legacy = meta?.["onb_version"];
 				const prev = Number(meta.welcome_version ?? legacy);
@@ -1257,6 +1290,15 @@ export default function createProfileRoutes({ queries }) {
 				pendingDeletes.push(oldCoverKey);
 			}
 
+			const anonCidForPrsnPost =
+				typeof req.cookies?.ps_cid === "string" ? req.cookies.ps_cid.trim() || null : null;
+			let tryPrsnIdsPost = [];
+			if (anonCidForPrsnPost && queries.selectTryRequestsByCid?.all) {
+				const tr = (await queries.selectTryRequestsByCid.all(anonCidForPrsnPost)) || [];
+				tryPrsnIdsPost = tr.map((r) => prsnCidFromMeta(tryRequestMetaFromRow(r.meta))).filter(Boolean);
+			}
+			meta = mergePrsnCidsIntoProfileMeta(meta, [getClientIdFromRequest(req), ...tryPrsnIdsPost]);
+
 			const payload = {
 				user_name: hasExistingUserName ? existingUserName : (userName || null),
 				display_name: typeof fields?.display_name === "string" ? fields.display_name.trim() : existingProfile.display_name || null,
@@ -1335,6 +1377,7 @@ export default function createProfileRoutes({ queries }) {
 			const key = `profile/${req.auth.userId}/avatar_${now}_${rand}.png`;
 			const stored = await storage.uploadGenericImage(resized, key, { contentType: "image/png" });
 			const avatar_url = buildGenericUrl(stored);
+			const metaMerged = mergePrsnCidsIntoProfileMeta(existingProfile.meta ?? {}, getClientIdFromRequest(req));
 			const payload = {
 				user_name: existingProfile.user_name ?? null,
 				display_name: existingProfile.display_name ?? null,
@@ -1343,7 +1386,7 @@ export default function createProfileRoutes({ queries }) {
 				avatar_url,
 				cover_image_url: existingProfile.cover_image_url ?? null,
 				badges: existingProfile.badges ?? [],
-				meta: existingProfile.meta ?? {}
+				meta: metaMerged
 			};
 			await queries.upsertUserProfile.run(req.auth.userId, payload);
 			if (oldAvatarKey && storage.deleteGenericImage) {
@@ -1389,7 +1432,12 @@ export default function createProfileRoutes({ queries }) {
 
 			const isSelf = Number(targetUserId) === Number(req.auth.userId);
 			const profileRow = await queries.selectUserProfileByUserId?.get(targetUserId);
-			const profile = normalizeProfileRow(profileRow);
+			let profile = normalizeProfileRow(profileRow);
+			if (!isSelf && profile) {
+				const m = profile.meta && typeof profile.meta === "object" ? { ...profile.meta } : {};
+				delete m.prsn_cids;
+				profile = { ...profile, meta: m, prsn_cids: [] };
+			}
 
 			const allCountRow = await queries.selectAllCreatedImageCountForUser?.get(targetUserId);
 			const publishedCountRow = await queries.selectPublishedCreatedImageCountForUser?.get(targetUserId);

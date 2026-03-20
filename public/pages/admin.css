@@ -688,6 +688,16 @@
 	font-family: ui-monospace, monospace;
 }
 
+.share-table-col-prsn-cid,
+.anon-table-col-prsn-cid {
+	max-width: 200px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-family: ui-monospace, monospace;
+	font-size: 0.85rem;
+}
+
 .share-table-creation-link {
 	color: var(--link);
 	text-decoration: none;
@@ -768,6 +778,13 @@
 }
 
 .anon-request-cf-ray {
+	display: inline-block;
+	font-family: ui-monospace, monospace;
+	font-size: 0.7rem;
+	color: var(--muted, #64748b);
+}
+
+.anon-request-prsn {
 	display: inline-block;
 	font-family: ui-monospace, monospace;
 	font-size: 0.7rem;

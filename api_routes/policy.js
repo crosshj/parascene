@@ -54,7 +54,8 @@ export default function createPolicyRoutes() {
 
 	// POST /api/policy/seen — WRITE / INIT. MUST: mutating by design (may set cookie, write Redis).
 	// Call only on first meaningful action (e.g. first Create click, or after first generation success).
-	// MUST: Cookie ps_cid is the primary truth; we set it here when missing.
+	// MUST: Cookie ps_cid is the primary truth for anon try sessions; we set it here when missing.
+	// Stable browser identity for share/try linkage (prsn_cid) is set globally by clientIdMiddleware.
 	// Body: optional tz, screen (fingerprint hints).
 	// Returns: { ok: true, seen: true }
 	router.post("/api/policy/seen", async (req, res) => {

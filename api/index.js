@@ -38,8 +38,10 @@ import {
 import { canonicalHostRedirect } from "../api_routes/middleware/canonicalHost.js";
 import { apiSubdomainRedirect } from "../api_routes/middleware/apiSubdomainRedirect.js";
 import { shareSubdomainRedirect } from "../api_routes/middleware/shareSubdomainRedirect.js";
+import { clientIdMiddleware } from "../api_routes/middleware/clientId.js";
 import { createWelcomeGate } from "../api_routes/middleware/welcomeGate.js";
 import { createUnauthorizedHandler } from "../api_routes/middleware/unauthorizedHandler.js";
+import { createPrsnCidPersistMiddleware } from "../api_routes/middleware/prsnCidPersist.js";
 
 function shouldLogStartup() {
 	return process.env.ENABLE_STARTUP_LOGS === "true";
@@ -121,6 +123,9 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 
+// Ensure every browser/client gets a stable first-party ID for analytics linkage.
+app.use(clientIdMiddleware);
+
 // CORS: allow credentials so cookies are sent when frontend is on a different origin (e.g. dev port).
 app.use((req, res, next) => {
 	const origin = req.get("origin");
@@ -158,6 +163,7 @@ app.use((req, res, next) => {
 
 app.use(authMiddleware());
 app.use(sessionMiddleware(queries));
+app.use(createPrsnCidPersistMiddleware(queries));
 app.use(probabilisticSessionCleanup(queries));
 app.use(createWelcomeGate(queries));
 

@@ -9,6 +9,8 @@ import { getEmailSettings } from "./utils/emailSettings.js";
 import { getBaseAppUrlForEmail } from "./utils/url.js";
 import { RELATED_PARAM_KEYS } from "../db/adapters/relatedParams.js";
 import { runNotificationsCronForTests } from "../api/worker/notifications.js";
+import { buildRequestMeta } from "./utils/analytics.js";
+import { prsnCidFromMeta } from "./utils/prsnCids.js";
 
 /** Subscription ID stored in user.meta when admin grants founder status without payment. Not a Stripe ID. */
 const GIFTED_FOUNDER_SUBSCRIPTION_ID = "gifted_founder";
@@ -841,11 +843,17 @@ export default function createAdminRoutes({ queries, storage }) {
 			return res.status(500).json({ error: "Failed to create try record" });
 		}
 
-		queries.insertTryRequest?.run?.(anonCid.trim(), prompt, id, null, {
-			source: "admin_avatar",
-			feature: "admin_avatar_try",
-			route: "/admin/users/avatar"
-		});
+		queries.insertTryRequest?.run?.(
+			anonCid.trim(),
+			prompt,
+			id,
+			null,
+			buildRequestMeta(req, {
+				source: "admin_avatar",
+				feature: "admin_avatar_try",
+				route: "/admin/users/avatar"
+			})
+		);
 
 		try {
 			await scheduleAnonCreationJob({
@@ -878,7 +886,7 @@ export default function createAdminRoutes({ queries, storage }) {
 
 		const limit = Math.min(200, Math.max(1, parseInt(req.query?.limit, 10) || 50));
 		const offset = Math.max(0, parseInt(req.query?.offset, 10) || 0);
-		const validSortBy = ["last_request_at", "first_request_at", "request_count", "anon_cid"];
+		const validSortBy = ["last_request_at", "first_request_at", "request_count", "anon_cid", "prsn_cid"];
 		const sortBy = validSortBy.includes(req.query?.sort_by) ? req.query.sort_by : "last_request_at";
 		const sortDir = String(req.query?.sort_dir || "desc").toLowerCase() === "asc" ? "asc" : "desc";
 
@@ -907,33 +915,10 @@ export default function createAdminRoutes({ queries, storage }) {
 		const cidsFromShare = new Set(
 			(await queries.selectAnonCidsWithShareView?.all?.()) ?? []
 		);
-		let allAnonCids = rows.map((row) => {
-			const userId = transitionedByCid.get(row.anon_cid);
-			return {
-				...row,
-				transitioned_user_id: userId ?? null,
-				transitioned_user_name: (userId != null ? userNameByUserId.get(userId) : null) ?? null,
-				from_share: cidsFromShare.has(row.anon_cid)
-			};
-		});
-		const cmp = (a, b) => {
-			const va = a[sortBy];
-			const vb = b[sortBy];
-			if (va == null && vb == null) return 0;
-			if (va == null) return sortDir === "asc" ? 1 : -1;
-			if (vb == null) return sortDir === "asc" ? -1 : 1;
-			if (typeof va === "number" && typeof vb === "number") return sortDir === "asc" ? va - vb : vb - va;
-			const sa = String(va);
-			const sb = String(vb);
-			return sortDir === "asc" ? sa.localeCompare(sb) : sb.localeCompare(sa);
-		};
-		allAnonCids.sort(cmp);
-		const total = allAnonCids.length;
-		const anonCids = allAnonCids.slice(offset, offset + limit);
-		const cids = anonCids.map((r) => r.anon_cid);
+		const allCids = rows.map((r) => r.anon_cid);
 		let lastMetaByCid = new Map();
-		if (queries.selectTryRequestsLatestMetaByCids?.all && cids.length > 0) {
-			const latestRows = await queries.selectTryRequestsLatestMetaByCids.all(cids);
+		if (queries.selectTryRequestsLatestMetaByCids?.all && allCids.length > 0) {
+			const latestRows = await queries.selectTryRequestsLatestMetaByCids.all(allCids);
 			for (const row of latestRows ?? []) {
 				const meta =
 					row.meta && typeof row.meta === "object"
@@ -950,14 +935,19 @@ export default function createAdminRoutes({ queries, storage }) {
 					city: meta?.city ?? null,
 					cf_ray: meta?.cf_ray ?? null,
 					source: meta?.source ?? null,
-					route: meta?.route ?? null
+					route: meta?.route ?? null,
+					prsn_cid: prsnCidFromMeta(meta)
 				});
 			}
 		}
-		const anonCidsWithMeta = anonCids.map((r) => {
-			const lastMeta = lastMetaByCid.get(r.anon_cid);
+		let allAnonCids = rows.map((row) => {
+			const userId = transitionedByCid.get(row.anon_cid);
+			const lastMeta = lastMetaByCid.get(row.anon_cid);
 			return {
-				...r,
+				...row,
+				transitioned_user_id: userId ?? null,
+				transitioned_user_name: (userId != null ? userNameByUserId.get(userId) : null) ?? null,
+				from_share: cidsFromShare.has(row.anon_cid),
 				user_agent: lastMeta?.user_agent ?? null,
 				ip: lastMeta?.ip ?? null,
 				ip_source: lastMeta?.ip_source ?? null,
@@ -966,10 +956,25 @@ export default function createAdminRoutes({ queries, storage }) {
 				city: lastMeta?.city ?? null,
 				cf_ray: lastMeta?.cf_ray ?? null,
 				source: lastMeta?.source ?? null,
-				route: lastMeta?.route ?? null
+				route: lastMeta?.route ?? null,
+				prsn_cid: lastMeta?.prsn_cid ?? null
 			};
 		});
-		res.json({ anonCids: anonCidsWithMeta, total });
+		const cmp = (a, b) => {
+			const va = a[sortBy];
+			const vb = b[sortBy];
+			if (va == null && vb == null) return 0;
+			if (va == null) return sortDir === "asc" ? 1 : -1;
+			if (vb == null) return sortDir === "asc" ? -1 : 1;
+			if (typeof va === "number" && typeof vb === "number") return sortDir === "asc" ? va - vb : vb - va;
+			const sa = String(va);
+			const sb = String(vb);
+			return sortDir === "asc" ? sa.localeCompare(sb) : sb.localeCompare(sa);
+		};
+		allAnonCids.sort(cmp);
+		const total = allAnonCids.length;
+		const anonCids = allAnonCids.slice(offset, offset + limit);
+		res.json({ anonCids, total });
 	});
 
 	/** GET /admin/anonymous-users/:cid — requests for this anon_cid (datetime desc) with image details and view URL. */
@@ -1009,6 +1014,7 @@ export default function createAdminRoutes({ queries, storage }) {
 				created_at: r.created_at,
 				fulfilled_at: r.fulfilled_at,
 				created_image_anon_id: r.created_image_anon_id,
+				prsn_cid: prsnCidFromMeta(meta),
 				user_agent: meta?.user_agent ?? null,
 				ip: meta?.ip ?? null,
 				ip_source: meta?.ip_source ?? null,
@@ -1085,6 +1091,7 @@ export default function createAdminRoutes({ queries, storage }) {
 				...v,
 				sharer_label: userLabelByUserId[v.sharer_user_id] ?? `#${v.sharer_user_id}`,
 				creator_label: userLabelByUserId[v.created_by_user_id] ?? `#${v.created_by_user_id}`,
+				prsn_cid: prsnCidFromMeta(meta),
 				user_agent: meta?.user_agent ?? null,
 				ip: meta?.ip ?? null,
 				ip_source: meta?.ip_source ?? null,

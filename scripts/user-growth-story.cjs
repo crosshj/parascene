@@ -390,28 +390,45 @@ async function loadFromDbInstance(dbInstance, minIso) {
 		events.push({ user_id: userId, ts, type, ...extra })
 	}
 	const buildShareTryFunnel = (shareRows, tryRows) => {
+		const clientIdFromMeta = (m) => {
+			const a = typeof m?.prsn_cid === 'string' ? m.prsn_cid.trim() : ''
+			const b = typeof m?.client_id === 'string' ? m.client_id.trim() : ''
+			return a || b
+		}
 		const safeShare = Array.isArray(shareRows) ? shareRows : []
 		const safeTry = Array.isArray(tryRows) ? tryRows : []
 		const shareCids = new Set(safeShare.map((r) => String(r?.anon_cid || '').trim()).filter(Boolean))
+		const shareClientIds = new Set()
 		const tryCids = new Set()
 		const tryFromShareCids = new Set()
 		const transitionedCids = new Set()
 		const transitionedFromShareCids = new Set()
 		const transitionedUserIds = new Set()
+		const tryClientIds = new Set()
+		const tryCidsWithClientId = new Set()
+		const transitionedClientIds = new Set()
 		let shareViews30 = 0
 		let tryRequests30 = 0
 		const shareCids30 = new Set()
+		const shareClientIds30 = new Set()
 		const tryCids30 = new Set()
 		const transitionedCids30 = new Set()
 		const transitionedFromShareCids30 = new Set()
 		const transitionedUsers30 = new Set()
+		const tryClientIds30 = new Set()
+		const tryCidsWithClientId30 = new Set()
+		const transitionedClientIds30 = new Set()
 
 		for (const row of safeShare) {
 			const cid = String(row?.anon_cid || '').trim()
+			const meta = parseEventMeta(row?.meta)
+			const clientId = clientIdFromMeta(meta)
+			if (clientId) shareClientIds.add(clientId)
 			const at = safeDate(row?.viewed_at)
 			if (at && at >= window30Start) {
 				shareViews30++
 				if (cid) shareCids30.add(cid)
+				if (clientId) shareClientIds30.add(clientId)
 			}
 		}
 
@@ -420,21 +437,32 @@ async function loadFromDbInstance(dbInstance, minIso) {
 			if (!cid || cid === '__pool__') continue
 			const createdAt = safeDate(row?.created_at)
 			const meta = parseEventMeta(row?.meta)
+			const clientId = clientIdFromMeta(meta)
 			const transitionedUserId = Number(meta?.transitioned?.user_id)
 			const transitioned = Number.isFinite(transitionedUserId) && transitionedUserId > 0
 			tryCids.add(cid)
+			if (clientId) {
+				tryClientIds.add(clientId)
+				tryCidsWithClientId.add(cid)
+			}
 			if (shareCids.has(cid)) tryFromShareCids.add(cid)
 			if (transitioned) {
 				transitionedCids.add(cid)
 				transitionedUserIds.add(transitionedUserId)
+				if (clientId) transitionedClientIds.add(clientId)
 				if (shareCids.has(cid)) transitionedFromShareCids.add(cid)
 			}
 			if (createdAt && createdAt >= window30Start) {
 				tryRequests30++
 				tryCids30.add(cid)
+				if (clientId) {
+					tryClientIds30.add(clientId)
+					tryCidsWithClientId30.add(cid)
+				}
 				if (transitioned) {
 					transitionedCids30.add(cid)
 					transitionedUsers30.add(transitionedUserId)
+					if (clientId) transitionedClientIds30.add(clientId)
 					if (shareCids.has(cid)) transitionedFromShareCids30.add(cid)
 				}
 			}
@@ -454,6 +482,12 @@ async function loadFromDbInstance(dbInstance, minIso) {
 				try_unique_anon_cids: tryCids.size,
 				try_unique_cids_from_share: tryFromShareCids.size,
 				try_from_share_rate_by_cid: safeRate(tryFromShareCids.size, tryCids.size),
+				share_unique_client_ids: shareClientIds.size,
+				try_unique_client_ids: tryClientIds.size,
+				try_unique_cids_with_client_id: tryCidsWithClientId.size,
+				try_client_id_coverage_by_cid: safeRate(tryCidsWithClientId.size, tryCids.size),
+				transitioned_unique_client_ids: transitionedClientIds.size,
+				try_client_to_transition_rate: safeRate(transitionedClientIds.size, tryClientIds.size),
 				transitioned_unique_anon_cids: transitionedCids.size,
 				transitioned_unique_users: transitionedUserIds.size,
 				transitioned_from_share_unique_cids: transitionedFromShareCids.size,
@@ -465,6 +499,12 @@ async function loadFromDbInstance(dbInstance, minIso) {
 				share_unique_anon_cids: shareCids30.size,
 				try_requests: tryRequests30,
 				try_unique_anon_cids: tryCids30.size,
+				share_unique_client_ids: shareClientIds30.size,
+				try_unique_client_ids: tryClientIds30.size,
+				try_unique_cids_with_client_id: tryCidsWithClientId30.size,
+				try_client_id_coverage_by_cid: safeRate(tryCidsWithClientId30.size, tryCids30.size),
+				transitioned_unique_client_ids: transitionedClientIds30.size,
+				try_client_to_transition_rate: safeRate(transitionedClientIds30.size, tryClientIds30.size),
 				transitioned_unique_anon_cids: transitionedCids30.size,
 				transitioned_unique_users: transitionedUsers30.size,
 				transitioned_from_share_unique_cids: transitionedFromShareCids30.size,
@@ -499,7 +539,7 @@ async function loadFromDbInstance(dbInstance, minIso) {
 			fetchSupabaseRows(client, 'prsn_comment_reactions', 'user_id,created_at'),
 			fetchSupabaseRows(client, 'prsn_sessions', 'user_id,created_at'),
 			fetchSupabaseRows(client, 'prsn_tip_activity', 'from_user_id,to_user_id,created_at'),
-			fetchSupabaseRows(client, 'prsn_share_page_views', 'viewed_at,anon_cid'),
+			fetchSupabaseRows(client, 'prsn_share_page_views', 'viewed_at,anon_cid,meta'),
 			fetchSupabaseRows(client, 'prsn_try_requests', 'anon_cid,created_at,meta')
 		])
 
@@ -533,7 +573,7 @@ async function loadFromDbInstance(dbInstance, minIso) {
 		let shareRows = []
 		let tryRows = []
 		try {
-			shareRows = dbInstance.db.prepare(`SELECT viewed_at, anon_cid FROM share_page_views`).all()
+			shareRows = dbInstance.db.prepare(`SELECT viewed_at, anon_cid, meta FROM share_page_views`).all()
 		} catch {
 			shareRows = []
 		}
@@ -1024,6 +1064,35 @@ ${report.shareTryFunnel ? `
 		{ label: 'Share->transition rate', html: r => typeof r.share_to_transition === 'number' ? pct(r.share_to_transition, 1) : '—' }
 	])}
 	<p class="small">“Transitioned” is a proxy for try-flow visits converting into an identified user via transition metadata.</p>
+	${table([
+		{
+			window: 'All-time',
+			share_clients: report.shareTryFunnel.all_time.share_unique_client_ids,
+			try_clients: report.shareTryFunnel.all_time.try_unique_client_ids,
+			try_cids_with_client: report.shareTryFunnel.all_time.try_unique_cids_with_client_id,
+			try_client_coverage: report.shareTryFunnel.all_time.try_client_id_coverage_by_cid,
+			transitioned_clients: report.shareTryFunnel.all_time.transitioned_unique_client_ids,
+			client_to_transition: report.shareTryFunnel.all_time.try_client_to_transition_rate
+		},
+		{
+			window: `Last ${WINDOW_DAYS}d`,
+			share_clients: report.shareTryFunnel.last_30d.share_unique_client_ids,
+			try_clients: report.shareTryFunnel.last_30d.try_unique_client_ids,
+			try_cids_with_client: report.shareTryFunnel.last_30d.try_unique_cids_with_client_id,
+			try_client_coverage: report.shareTryFunnel.last_30d.try_client_id_coverage_by_cid,
+			transitioned_clients: report.shareTryFunnel.last_30d.transitioned_unique_client_ids,
+			client_to_transition: report.shareTryFunnel.last_30d.try_client_to_transition_rate
+		}
+	], [
+		{ label: 'Window', key: 'window' },
+		{ label: 'Share unique prsn_cid', key: 'share_clients' },
+		{ label: 'Try unique prsn_cid', key: 'try_clients' },
+		{ label: 'Try cids with prsn_cid', key: 'try_cids_with_client' },
+		{ label: 'Try prsn_cid coverage', html: r => typeof r.try_client_coverage === 'number' ? pct(r.try_client_coverage, 1) : '—' },
+		{ label: 'Transitioned prsn_cid', key: 'transitioned_clients' },
+		{ label: 'prsn_cid→transition rate', html: r => typeof r.client_to_transition === 'number' ? pct(r.client_to_transition, 1) : '—' }
+	])}
+	<p class="small">Identity graph coverage: how well prsn_cid is present and linked across share/try/transition events.</p>
 </section>
 ` : ''}
 

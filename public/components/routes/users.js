@@ -505,8 +505,18 @@ class AppRouteUsers extends HTMLElement {
 				responseItemsKey: 'anonCids',
 				columns: [
 					{
+						key: 'prsn_cid',
+						label: 'Client Id',
+						sortKey: 'prsn_cid',
+						className: 'anon-table-col-prsn-cid',
+						render: (row) => {
+							const pc = row.prsn_cid && String(row.prsn_cid).trim();
+							return pc ? escapeHtml(truncateCid(pc, 18)) : '—';
+						}
+					},
+					{
 						key: 'anon_cid',
-						label: 'Anon CID',
+						label: 'Anon Id',
 						sortKey: 'anon_cid',
 						className: 'anon-table-col-cid',
 						render: (row) => escapeHtml(truncateCid(row.anon_cid))
@@ -617,8 +627,17 @@ class AppRouteUsers extends HTMLElement {
 				responseItemsKey: 'items',
 				columns: [
 					{
+						key: 'prsn_cid',
+						label: 'Client Id',
+						className: 'share-table-col-prsn-cid',
+						render: (row) => {
+							const pc = row.prsn_cid && String(row.prsn_cid).trim();
+							return pc ? escapeHtml(truncateCid(pc, 18)) : '—';
+						}
+					},
+					{
 						key: 'anon_cid',
-						label: 'Anon CID',
+						label: 'Anon Id',
 						sortKey: 'anon_cid',
 						className: 'share-table-col-cid',
 						render: (row) => escapeHtml(truncateStr(row.anon_cid, 12))
@@ -752,6 +771,7 @@ class AppRouteUsers extends HTMLElement {
 				scope: '/users#share',
 				item_count: allItems.length,
 				field_notes: [
+					'`prsn_cid` on each row is the Client Id (stable browser id, also meta.client_id); links rows across anon sessions.',
 					'`cf_ray` is a Cloudflare request id; use it to correlate logs.',
 					'`ip_source` is derived from headers if available.'
 				],
@@ -858,6 +878,7 @@ class AppRouteUsers extends HTMLElement {
 					scope: '/users#anonymous (summary)',
 					item_count: anonRows.length,
 					field_notes: [
+						'`prsn_cid` is the Client Id from try meta (stable browser id; links across ps_cid sessions when present).',
 						'`from_share` indicates whether this anon cid appears in the share-views data.',
 						'`transitioned_user_id` is the logged-in user the try-flow was transitioned into (if available).'
 					],
@@ -904,6 +925,7 @@ class AppRouteUsers extends HTMLElement {
 					anonRequestsByCid: byCid
 				},
 				field_notes: [
+					'Each request includes Client Id as `prsn_cid` in JSON when stored in meta (stable browser id).',
 					'Request `prompt` is the raw try-flow prompt text.',
 					'`image.image_url` points to the admin-served try image route when available.'
 				]
@@ -945,6 +967,10 @@ class AppRouteUsers extends HTMLElement {
 				const userAgentDisplay = truncateStr(req.user_agent ?? '', 50);
 				const userAgentEscaped = (userAgentDisplay || '—').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 				const userAgentTitle = req.user_agent ? req.user_agent.replace(/"/g, '&quot;') : '';
+				const prsnRaw = req.prsn_cid && String(req.prsn_cid).trim();
+				const prsnEscaped = prsnRaw
+					? prsnRaw.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+					: '';
 				const ipEscaped = (req.ip ?? '—').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 				const ipSourceEscaped = (req.ip_source ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 				const cfRayEscaped = (req.cf_ray ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -963,6 +989,7 @@ class AppRouteUsers extends HTMLElement {
 						<span class="anon-request-datetime" title="${(req.created_at || '').replace(/"/g, '&quot;')}">${createdLabel}</span>
 						<span class="anon-request-fulfilled">Fulfilled ${fulfilledLabel}</span>
 						${req.ip ? `<span class="anon-request-ip" title="${ipSourceEscaped ? `Source: ${ipSourceEscaped}` : ''}">${ipEscaped}${req.ip_source ? ` <span class="anon-request-ip-source">(${ipSourceEscaped})</span>` : ''}</span>` : ''}
+						${prsnRaw ? `<span class="anon-request-prsn" title="Client Id (prsn_cid cookie) — stable browser id; links share/try across ps_cid sessions">${prsnEscaped}</span>` : ''}
 						${req.cf_ray ? `<span class="anon-request-cf-ray" title="Cloudflare Ray ID: search in CF Logs to correlate">${cfRayEscaped}</span>` : ''}
 						${req.user_agent ? `<span class="anon-request-user-agent" title="${userAgentTitle}">${userAgentEscaped}</span>` : ''}
 					</div>

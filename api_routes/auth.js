@@ -355,5 +355,6 @@ export {
 	hashToken,
 	setAuthCookie,
 	clearAuthCookie,
-	shouldLogSession
+	shouldLogSession,
+	shouldSkipSessionRefresh
 };
