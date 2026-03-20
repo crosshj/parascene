@@ -361,6 +361,10 @@ class AppModalUser extends HTMLElement {
 		this._currentUser = user;
 		const title = this.querySelector('#user-modal-title');
 		if (title) title.textContent = user?.email || 'User';
+
+		// Load viewer before renderDetails (needs role for Client Ids fetch and button visibility).
+		await this.loadViewerUser();
+
 		await this.renderDetails(user);
 		if (this._form) {
 			this._form.reset();
@@ -377,10 +381,6 @@ class AppModalUser extends HTMLElement {
 			this._deleteError.hidden = true;
 			this._deleteError.textContent = '';
 		}
-
-		// Ensure viewer user is loaded before checking permissions
-		// Always reload to ensure we have the latest role
-		await this.loadViewerUser();
 
 		// Update button visibility - this will show/hide suspend and delete buttons
 		this.updateButtonVisibility(user);
@@ -439,6 +439,14 @@ class AppModalUser extends HTMLElement {
 				// Ignore errors
 			}
 		}
+
+		const prsnList = Array.isArray(user?.prsn_cids) ? user.prsn_cids : [];
+		const clientIdsBlock =
+			prsnList.length > 0
+				? `<ul class="user-modal-prsn-cids">${prsnList
+						.map((id) => `<li><code>${escapeHtml(String(id))}</code></li>`)
+						.join('')}</ul>`
+				: '<span class="user-modal-muted">—</span>';
 		
 		// Check suspended status - database uses 'suspended' boolean, not 'suspended_at'
 		this._details.innerHTML = `
@@ -457,6 +465,10 @@ class AppModalUser extends HTMLElement {
 			<div class="user-modal-field">
 				<div class="user-modal-field-label">Unread Notifications</div>
 				<div class="user-modal-field-value" data-user-unread-notifications>${unreadCount}</div>
+			</div>
+			<div class="user-modal-field">
+				<div class="user-modal-field-label">Client Ids <span class="user-modal-field-hint" title="Stable browser ids (prsn_cid) linked to this account">ⓘ</span></div>
+				<div class="user-modal-field-value user-modal-field-value-prsn">${clientIdsBlock}</div>
 			</div>
 			<div class="user-modal-field">
 				<div class="user-modal-field-label">Stripe Sub</div>

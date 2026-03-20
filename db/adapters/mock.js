@@ -309,6 +309,14 @@ export function openDb() {
 						(row) => row.user_id === Number(safeUser.id)
 					);
 					const meta = safeUser.meta != null && typeof safeUser.meta === "object" ? safeUser.meta : {};
+					const profileMeta =
+						profile?.meta != null && typeof profile.meta === "object" && !Array.isArray(profile.meta)
+							? profile.meta
+							: {};
+					const raw = profileMeta.prsn_cids;
+					const prsn_cids = Array.isArray(raw)
+						? [...new Set(raw.filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim()))]
+						: [];
 					return {
 						...safeUser,
 						last_active_at: safeUser.last_active_at ?? null,
@@ -316,7 +324,8 @@ export function openDb() {
 						suspended: meta.suspended === true,
 						user_name: profile?.user_name ?? null,
 						display_name: profile?.display_name ?? null,
-						avatar_url: profile?.avatar_url ?? null
+						avatar_url: profile?.avatar_url ?? null,
+						prsn_cids
 					};
 				})
 		},

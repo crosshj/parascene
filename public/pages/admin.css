@@ -915,6 +915,28 @@
 	word-break: break-word;
 }
 
+.user-modal-field-hint {
+	font-weight: normal;
+	color: var(--muted, #64748b);
+	cursor: help;
+}
+
+.user-modal-muted {
+	color: var(--muted, #64748b);
+}
+
+.user-modal-field-value-prsn .user-modal-prsn-cids {
+	margin: 0;
+	padding-left: 1.1rem;
+	font-size: 0.8rem;
+}
+
+.user-modal-field-value-prsn code {
+	font-family: ui-monospace, monospace;
+	font-size: 0.8rem;
+	word-break: break-all;
+}
+
 .user-modal-role {
 	text-transform: capitalize;
 }

@@ -212,6 +212,14 @@ function parseUserMeta(value) {
 	}
 }
 
+function prsnCidsFromProfileMeta(meta) {
+	const m = meta && typeof meta === "object" ? meta : {};
+	const raw = m.prsn_cids;
+	return Array.isArray(raw)
+		? [...new Set(raw.filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim()))]
+		: [];
+}
+
 export async function openDb() {
 	const DbClass = await loadDatabase();
 	ensureDataDir();
@@ -779,7 +787,8 @@ export async function openDb() {
             u.meta,
             up.user_name,
             up.display_name,
-            up.avatar_url
+            up.avatar_url,
+            up.meta AS profile_meta
            FROM users u
            LEFT JOIN user_profiles up ON up.user_id = u.id
            ORDER BY u.id ASC`
@@ -787,10 +796,19 @@ export async function openDb() {
 				const rows = stmt.all();
 				return rows.map((row) => {
 					const meta = parseUserMeta(row.meta);
+					const profileMeta = parseUserMeta(row.profile_meta);
 					return {
-						...row,
+						id: row.id,
+						email: row.email,
+						role: row.role,
+						created_at: row.created_at,
+						last_active_at: row.last_active_at ?? null,
 						meta,
-						suspended: meta.suspended === true
+						suspended: meta.suspended === true,
+						user_name: row.user_name ?? null,
+						display_name: row.display_name ?? null,
+						avatar_url: row.avatar_url ?? null,
+						prsn_cids: prsnCidsFromProfileMeta(profileMeta)
 					};
 				});
 			}

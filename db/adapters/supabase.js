@@ -544,7 +544,8 @@ export function openDb() {
             ${prefixedTable("user_profiles")} (
               user_name,
               display_name,
-              avatar_url
+              avatar_url,
+              meta
             )
           `)
 					.order("id", { ascending: true });
@@ -552,6 +553,12 @@ export function openDb() {
 				return (data ?? []).map((row) => {
 					const profile = row?.[prefixedTable("user_profiles")] || null;
 					const meta = typeof row.meta === "object" && row.meta !== null ? row.meta : {};
+					const profileMeta =
+						profile?.meta && typeof profile.meta === "object" && !Array.isArray(profile.meta) ? profile.meta : {};
+					const raw = profileMeta.prsn_cids;
+					const prsn_cids = Array.isArray(raw)
+						? [...new Set(raw.filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim()))]
+						: [];
 					return {
 						id: row.id,
 						email: row.email,
@@ -562,7 +569,8 @@ export function openDb() {
 						suspended: meta.suspended === true,
 						user_name: profile?.user_name ?? null,
 						display_name: profile?.display_name ?? null,
-						avatar_url: profile?.avatar_url ?? null
+						avatar_url: profile?.avatar_url ?? null,
+						prsn_cids
 					};
 				});
 			}
