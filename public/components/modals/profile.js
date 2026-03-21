@@ -301,9 +301,7 @@ class AppModalProfile extends HTMLElement {
 		};
 
 		const hasKey = user.hasApiKey === true;
-		const prefixDisplay = typeof user.apiKeyPrefix === 'string' && user.apiKeyPrefix.trim()
-			? escapeHtml(user.apiKeyPrefix.trim())
-			: 'psn_…';
+		const apiKeyMasked = '•'.repeat(24);
 
 		const revealBlock = this.revealedApiKey
 			? html`
@@ -318,7 +316,7 @@ class AppModalProfile extends HTMLElement {
 
 		const keyActions = hasKey
 			? html`
-			<p class="profile-api-active">Active key: <span class="profile-api-prefix">${prefixDisplay}</span></p>
+			<p class="profile-api-active">Active key: <span class="profile-api-masked" aria-hidden="true">${apiKeyMasked}</span></p>
 			<div class="profile-api-actions">
 				<button type="button" class="btn-secondary" data-profile-api-generate>Generate new key</button>
 				<button type="button" class="btn-secondary is-logout" data-profile-api-remove>Remove API key</button>
@@ -603,8 +601,10 @@ class AppModalProfile extends HTMLElement {
           font-size: 0.95rem;
           color: var(--text);
         }
-        .profile-api-prefix {
+        .profile-api-masked {
           font-family: ui-monospace, monospace;
+          letter-spacing: 0.12em;
+          user-select: none;
         }
         .profile-api-actions {
           display: flex;

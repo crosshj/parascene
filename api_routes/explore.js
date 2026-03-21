@@ -2,6 +2,7 @@ import express from "express";
 import { Redis } from "@upstash/redis";
 import { getThumbnailUrl } from "./utils/url.js";
 import { runSemanticSearch } from "./utils/embeddingsSearch.js";
+import { normalizeTag } from "./utils/tag.js";
 
 const MAX_COMMENT_META_SEARCH_IMAGES = 300;
 const SEARCH_IDS_REDIS_KEY_PREFIX = "explore:search:ids:v1:";
@@ -86,13 +87,6 @@ function normalizePersonality(input) {
 	const raw = typeof input === "string" ? input.trim().toLowerCase() : "";
 	if (!raw) return null;
 	if (!/^[a-z0-9][a-z0-9_-]{2,23}$/.test(raw)) return null;
-	return raw;
-}
-
-function normalizeTag(input) {
-	const raw = typeof input === "string" ? input.trim().toLowerCase() : "";
-	if (!raw) return null;
-	if (!/^[a-z0-9][a-z0-9_-]{1,31}$/.test(raw)) return null;
 	return raw;
 }
 
