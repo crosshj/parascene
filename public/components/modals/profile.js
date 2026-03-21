@@ -2,6 +2,7 @@ let formatDate;
 let fetchJsonWithStatusDeduped;
 let buildProfilePath;
 let helpIcon;
+let getHelpHref;
 let getNsfwContentEnabled;
 let setNsfwContentEnabled;
 let getNsfwObscure;
@@ -43,6 +44,9 @@ async function loadDeps() {
 		setNsfwObscure = nsfwMod.setNsfwObscure;
 		applyNsfwPreference = nsfwMod.applyNsfwPreference;
 		NSFW_VIEW_BODY_CLASS = nsfwMod.NSFW_VIEW_BODY_CLASS;
+
+		const helpUrlMod = await import(`../../shared/helpUrl.js${qs}`);
+		getHelpHref = helpUrlMod.getHelpHref;
 	})();
 	return _depsPromise;
 }
@@ -667,7 +671,7 @@ class AppModalProfile extends HTMLElement {
             </div>
           </div>
           <div class="profile-actions">
-            <a class="btn-secondary" href="/help">${helpIcon('profile-action-icon')} Help</a>
+            <a class="btn-secondary" href="${getHelpHref("/help")}">${helpIcon('profile-action-icon')} Help</a>
             <a class="btn-secondary" href="/user" data-full-profile-link>View Full Profile</a>
             <form action="/logout" method="post">
               <button type="submit" class="btn-secondary is-logout">Logout</button>

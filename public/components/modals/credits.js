@@ -3,6 +3,7 @@ let formatRelativeTime;
 let helpIcon;
 let creditIcon;
 let closeIcon;
+let getHelpHref;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -29,6 +30,9 @@ async function loadDeps() {
 		helpIcon = iconsMod.helpIcon;
 		creditIcon = iconsMod.creditIcon;
 		closeIcon = iconsMod.closeIcon;
+
+		const helpUrlMod = await import(`../../shared/helpUrl.js${qs}`);
+		getHelpHref = helpUrlMod.getHelpHref;
 	})();
 	return _depsPromise;
 }
@@ -580,7 +584,7 @@ class AppModalCredits extends HTMLElement {
             <div class="credits-section">
               <h3>Run a server</h3>
               <p>Run a server and earn credits for supporting the community.</p>
-              <a class="btn-secondary" href="/help/credits/run-a-server">
+              <a class="btn-secondary" href="${getHelpHref("/help/credits/run-a-server")}">
                 ${helpIcon('icon')}
                 Learn More
               </a>

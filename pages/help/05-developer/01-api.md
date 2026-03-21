@@ -1,5 +1,5 @@
 ---
-title: API Access
+title: API Overview
 description: Create a key and call the parascene API programmatically
 ---
 
@@ -29,7 +29,7 @@ Use **`https://api.parascene.com`** as the origin for all `/api/...` requests in
 
 ## API overview
 
-Signed-in routes mirror the web app. Field-level contracts are not specified here—use the site’s network panel if you need exact bodies.
+Signed-in routes mirror the web app. For most routes, field-level contracts are not spelled out here—use the site’s network panel if you need exact bodies. **Chat** (DM + hashtag channels, messages, pagination) is documented in **[API - Chat](/help/developer/api-chat)**.
 
 Image and video URLs for creations are returned on API objects; you do not need separate “asset path” routes for normal integration.
 
@@ -102,6 +102,16 @@ Image and video URLs for creations are returned on API objects; you do not need 
 - `GET` `/api/created-images/:id/activity`
 - `POST` `/api/created-images/:id/comments`
 - `POST` `/api/comments/:commentId/reactions`
+
+### Chat
+
+- `POST` `/api/chat/dm`
+- `POST` `/api/chat/channels`
+- `GET` `/api/chat/threads/:threadId`
+- `GET` `/api/chat/threads/:threadId/messages`
+- `POST` `/api/chat/threads/:threadId/messages`
+
+Details: **[API - Chat](/help/developer/api-chat)**
 
 ### Servers
 

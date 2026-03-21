@@ -1,4 +1,11 @@
 // Help page search functionality
+import { getHelpHref } from "../shared/helpUrl.js";
+
+function slugFromHelpHref(href) {
+	if (!href) return null;
+	const pathOnly = String(href).split("?")[0];
+	return pathOnly.replace(/^\/help\/?/, "").replace(/\/$/, "") || null;
+}
 
 document.addEventListener('DOMContentLoaded', () => {
 	const searchInput = document.getElementById('help-search');
@@ -53,7 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			
 			return `
 				${divider}
-				<a href="/help/${result.slug}" class="help-search-result">
+				<a href="${getHelpHref(`/help/${result.slug}`)}" class="help-search-result">
 					<div class="help-search-result-header">
 						<span class="help-search-result-title">${result.title}</span>
 						<div class="help-search-result-meta">
@@ -129,7 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		const navItems = document.querySelectorAll('.help-nav-item');
 		navItems.forEach(item => {
 			const href = item.getAttribute('href') || '';
-			const slug = href.replace(/^\/help\/?/, '').replace(/\/$/, '') || null;
+			const slug = slugFromHelpHref(href);
 			if (slug && matchingSlugs.has(slug)) {
 				item.classList.add('help-nav-item-match');
 			} else {
@@ -147,7 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		const currentPath = (window.location.pathname || '').replace(/^\/help\/?/, '').replace(/\/$/, '');
 		navItems.forEach(item => {
 			const href = item.getAttribute('href') || '';
-			const slug = href.replace(/^\/help\/?/, '').replace(/\/$/, '');
+			const slug = slugFromHelpHref(href) || "";
 			item.classList.toggle('active', slug === currentPath);
 		});
 	}

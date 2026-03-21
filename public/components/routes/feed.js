@@ -11,6 +11,7 @@ let renderEmptyError;
 let renderFeedCardsSkeleton;
 let addPageUsers;
 let clearPageUsers;
+let getHelpHref;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -57,6 +58,9 @@ async function loadDeps() {
 		const suggestMod = await import(`../../shared/triggeredSuggest.js${qs}`);
 		addPageUsers = suggestMod.addPageUsers;
 		clearPageUsers = suggestMod.clearPageUsers;
+
+		const helpUrlMod = await import(`../../shared/helpUrl.js${qs}`);
+		getHelpHref = helpUrlMod.getHelpHref;
 	})();
 	return _depsPromise;
 }
@@ -601,7 +605,8 @@ class AppRouteFeed extends HTMLElement {
 		const title = item.title || "Tip";
 		const message = item.message || "";
 		const cta = item.cta || "Explore";
-		const ctaRoute = (item.ctaRoute || "/explore").trim();
+		const rawCta = (item.ctaRoute || "/explore").trim();
+		const ctaRoute = rawCta.startsWith("/help") ? getHelpHref(rawCta) : rawCta;
 		const isExternal = ctaRoute.startsWith("http://") || ctaRoute.startsWith("https://");
 		const openInNewTab = isExternal && (item.ctaTarget === "_blank" || item.ctaRoute?.startsWith("http"));
 		const targetAttr = openInNewTab ? ' target="_blank" rel="noopener noreferrer"' : "";

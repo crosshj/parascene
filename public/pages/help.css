@@ -101,6 +101,7 @@
 		min-width: 0;
 		padding: 8px 12px;
 	}
+
 	.help-home-label {
 		display: inline;
 		margin-left: 6px;
@@ -307,7 +308,7 @@
 	border-radius: 4px;
 	font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
 	font-size: 0.9em;
-	color: var(--accent);
+	color: color-mix(in srgb, var(--focus) 30%, var(--text));
 }
 
 .help-body pre {
@@ -556,20 +557,20 @@
 		padding: 60px 24px;
 		min-height: 400px;
 	}
-	
+
 	.help-not-found-icon {
 		margin-bottom: 24px;
 	}
-	
+
 	.help-not-found-icon svg {
 		width: 64px;
 		height: 64px;
 	}
-	
+
 	.help-not-found h1 {
 		font-size: 1.75rem;
 	}
-	
+
 	.help-not-found-message {
 		font-size: 1rem;
 	}

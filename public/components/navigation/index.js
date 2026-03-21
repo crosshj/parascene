@@ -4,6 +4,7 @@ let fetchJsonWithStatusDeduped;
 let setNsfwContentEnabled;
 let notifyIcon;
 let creditIcon;
+let getHelpHref;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -33,6 +34,9 @@ async function loadDeps() {
 		const iconsMod = await import(`../../icons/svg-strings.js${qs}`);
 		notifyIcon = iconsMod.notifyIcon;
 		creditIcon = iconsMod.creditIcon;
+
+		const helpUrlMod = await import(`../../shared/helpUrl.js${qs}`);
+		getHelpHref = helpUrlMod.getHelpHref;
 	})();
 	return _depsPromise;
 }
@@ -1220,7 +1224,7 @@ class AppNavigation extends HTMLElement {
 				const routeLabel = route.label;
 				return html`<a href="/${routeId}" class="nav-link" data-route="${routeId}">${routeLabel}</a>`;
 				}).join('')}
-				<a href="/help" class="mobile-menu-help">Help</a>
+				<a href="${getHelpHref("/help")}" class="mobile-menu-help">Help</a>
 			</nav>
 			${hasMobileActions ? html`
 			<div class="mobile-menu-actions">

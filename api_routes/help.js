@@ -228,6 +228,33 @@ function formatSectionName(section) {
 	).join(' / ');
 }
 
+/** Append {{V}} to /help hrefs so injectCommonHead replaces with ?v= for HTML cache busting. */
+function addHelpCacheBustToHtml(html) {
+	return String(html ?? "")
+		.replace(
+			/href="((?:https:\/\/www\.parascene\.com)?\/help[^"]*)"/gi,
+			(match, url) => {
+				if (url.includes("{{V}}")) return match;
+				const hashIdx = url.indexOf("#");
+				const base = hashIdx === -1 ? url : url.slice(0, hashIdx);
+				const frag = hashIdx === -1 ? "" : url.slice(hashIdx);
+				if (base.includes("?")) return match;
+				return `href="${base}{{V}}${frag}"`;
+			}
+		)
+		.replace(
+			/href='((?:https:\/\/www\.parascene\.com)?\/help[^']*)'/gi,
+			(match, url) => {
+				if (url.includes("{{V}}")) return match;
+				const hashIdx = url.indexOf("#");
+				const base = hashIdx === -1 ? url : url.slice(0, hashIdx);
+				const frag = hashIdx === -1 ? "" : url.slice(hashIdx);
+				if (base.includes("?")) return match;
+				return `href='${base}{{V}}${frag}'`;
+			}
+		);
+}
+
 function generateHelpPageHtml({ title, description, html, navigation, isIndex = false, beta = false, allFiles = [], notFound = false, searchQuery = '', showMobileHomeLink = true }) {
 	const safeTitle = escapeHtml(title || 'Help');
 	const safeDescription = escapeHtml(description || '');
@@ -298,7 +325,7 @@ function generateHelpPageHtml({ title, description, html, navigation, isIndex = 
 		</div>
 	`;
 	
-	return `<!doctype html>
+	return addHelpCacheBustToHtml(`<!doctype html>
 <html lang="en">
 <head>
 	<title>${safeTitle} - Help - parascene</title>
@@ -352,7 +379,7 @@ function generateHelpPageHtml({ title, description, html, navigation, isIndex = 
 	
 	<script type="module" src="/pages/help.js{{V}}"></script>
 </body>
-</html>`;
+</html>`);
 }
 
 export default function createHelpRoutes({ pagesDir, queries }) {
@@ -544,7 +571,8 @@ export default function createHelpRoutes({ pagesDir, queries }) {
 			// Extract slug from path - remove /help/ prefix and trailing slash
 			let slug = req.path.replace(/^\/help\/?/, '').replace(/\/$/, '') || '';
 			if (HELP_REDIRECTS[slug]) {
-				res.redirect(302, `/help/${HELP_REDIRECTS[slug]}`);
+				const { V } = getPageTokens(req);
+				res.redirect(302, `/help/${HELP_REDIRECTS[slug]}${V}`);
 				return;
 			}
 			const helpFiles = await getHelpFilesCached();
