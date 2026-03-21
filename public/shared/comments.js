@@ -76,3 +76,19 @@ export async function toggleCommentReaction(commentId, emojiKey) {
 	return { ok: response.ok, status: response.status, data };
 }
 
+/**
+ * Toggle a reaction on a chat message. POST /api/chat/messages/:messageId/reactions with { emoji_key }.
+ * @returns {Promise<{ ok: boolean, status: number, data?: { added: boolean, count: number } }>}
+ */
+export async function toggleChatMessageReaction(messageId, emojiKey) {
+	const url = `/api/chat/messages/${encodeURIComponent(String(messageId))}/reactions`;
+	const response = await fetch(url, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ emoji_key: emojiKey }),
+		credentials: 'include'
+	});
+	const data = await readResponsePayload(response);
+	return { ok: response.ok, status: response.status, data };
+}
+

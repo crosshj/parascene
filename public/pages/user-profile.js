@@ -233,7 +233,10 @@ function normalizeWebsite(raw) {
 	}
 }
 
-function renderProfilePage(container, { user, profile, stats, plan, isSelf, viewerFollows, isAdmin = false }) {
+function renderProfilePage(
+	container,
+	{ user, profile, stats, plan, isSelf, viewerFollows, isAdmin = false, viewerUserId = null }
+) {
 	const fallbackName =
 		(user?.email_prefix && String(user.email_prefix).trim()) ||
 		(isSelf && user?.email ? String(user.email).split('@')[0] : '') ||
@@ -287,6 +290,9 @@ function renderProfilePage(container, { user, profile, stats, plan, isSelf, view
 						<div class="user-profile-actions">
 							${(isSelf || isAdmin) ? html`<button class="btn-primary user-profile-edit" type="button">Edit Profile</button>` :
 							''}
+							${!isSelf && viewerUserId != null && Number(user?.id) > 0 ? html`
+							<a class="btn-secondary user-profile-dm" href="/chat/dm/${encodeURIComponent(userNameValue ? userNameValue.toLowerCase() : String(user.id))}" aria-label="Message ${escapeHtml(displayName)}">Message</a>
+							` : ''}
 							${!isSelf && !isAdmin ? html`
 							<button class="${viewerFollows ? 'btn-secondary' : 'btn-primary'} user-profile-follow" type="button"
 								data-follow-button data-follow-user-id="${escapeHtml(user?.id ?? '')}">
@@ -1132,7 +1138,16 @@ async function init() {
 	profile.badges = safeJsonParse(profile.badges, []);
 	profile.meta = safeJsonParse(profile.meta, {});
 
-	renderProfilePage(container, { user, profile, stats, plan: summary.plan, isSelf, viewerFollows, isAdmin });
+	renderProfilePage(container, {
+		user,
+		profile,
+		stats,
+		plan: summary.plan,
+		isSelf,
+		viewerFollows,
+		isAdmin,
+		viewerUserId
+	});
 
 	// Hydrate any links in user-generated content (e.g., About field)
 	hydrateUserTextLinks(container);

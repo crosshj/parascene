@@ -1,5 +1,9 @@
 let formatRelativeTime;
 let fetchJsonWithStatusDeduped;
+let readCachedChatThreads;
+let writeCachedChatThreads;
+let clearCachedChatThreads;
+let isChatThreadsCacheStale;
 let getAvatarColor;
 let fetchLatestComments;
 let processUserText;
@@ -35,6 +39,12 @@ async function loadDeps() {
 
 		const apiMod = await import(`../../shared/api.js${qs}`);
 		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
+
+		const chatThreadsCacheMod = await import(`../../shared/chatThreadsCache.js${qs}`);
+		readCachedChatThreads = chatThreadsCacheMod.readCachedChatThreads;
+		writeCachedChatThreads = chatThreadsCacheMod.writeCachedChatThreads;
+		clearCachedChatThreads = chatThreadsCacheMod.clearCachedChatThreads;
+		isChatThreadsCacheStale = chatThreadsCacheMod.isChatThreadsCacheStale;
 
 		const avatarMod = await import(`../../shared/avatar.js${qs}`);
 		getAvatarColor = avatarMod.getAvatarColor;
@@ -84,6 +94,40 @@ function escapeHtml(str) {
 		.replace(/'/g, '&#039;');
 }
 
+const CONNECT_HASH_TAB_IDS = ['chat', 'latest-comments', 'servers', 'feature-requests'];
+const CONNECT_HASH_ALIASES = { comments: 'latest-comments' };
+
+/** Parse `/connect` location hash: #chat, #latest-comments, #servers, … (tab id only). */
+function parseConnectLocationHash(hash) {
+	const raw = (hash || '').replace(/^#/, '');
+	if (!raw) return { tab: null };
+	const first = raw.split('/')[0].trim().toLowerCase();
+	const head = (CONNECT_HASH_ALIASES[first] || first).toLowerCase();
+	if (CONNECT_HASH_TAB_IDS.includes(head)) return { tab: head };
+	return { tab: null };
+}
+
+function buildChatThreadUrl(meta) {
+	if (!meta) return '/connect#chat';
+	if (meta.type === 'channel' && meta.channel_slug) {
+		return `/chat/c/${encodeURIComponent(String(meta.channel_slug))}`;
+	}
+	if (meta.type === 'dm') {
+		const un = typeof meta.other_user?.user_name === 'string' ? meta.other_user.user_name.trim() : '';
+		if (un) {
+			return `/chat/dm/${encodeURIComponent(un.toLowerCase())}`;
+		}
+		if (Number.isFinite(Number(meta.other_user_id))) {
+			return `/chat/dm/${encodeURIComponent(String(meta.other_user_id))}`;
+		}
+	}
+	const id = Number(meta.id);
+	if (Number.isFinite(id) && id > 0) {
+		return `/chat/t/${encodeURIComponent(String(id))}`;
+	}
+	return '/connect#chat';
+}
+
 class AppRouteServers extends HTMLElement {
 	async connectedCallback() {
 		await loadDeps();
@@ -91,10 +135,26 @@ class AppRouteServers extends HTMLElement {
       <div class="servers-route">
         <div class="route-header">
           <h3>Connect</h3>
-          <p>See what the community is talking about, manage your image generation servers, and send feature requests directly to the team.</p>
+          <p>Chat in hashtag channels and DMs, see recent comments on creations, manage your image generation servers, and send feature requests to the team.</p>
         </div>
 		<app-tabs>
-			<tab data-id="latest-comments" label="Comments" default>
+			<tab data-id="chat" label="Chat" default>
+				<div class="connect-chat" data-connect-chat>
+					<div class="connect-chat-toolbar">
+						<label class="connect-chat-label" for="connect-chat-channel-input">Open a channel</label>
+						<div class="connect-chat-toolbar-row">
+							<input type="text" id="connect-chat-channel-input" class="connect-chat-input" placeholder="e.g. pixelart" maxlength="40" autocomplete="off" data-connect-chat-tag-input />
+							<button type="button" class="btn-primary connect-chat-open-channel" data-connect-chat-open-channel>Open</button>
+						</div>
+						<p class="connect-chat-hint">Tags match Explore: lowercase, 2–32 characters, letters, numbers, <code>_</code> and <code>-</code>. Opens in full-screen chat.</p>
+					</div>
+					<div class="connect-chat-sidebar">
+						<div class="connect-chat-thread-list" data-connect-chat-thread-list aria-busy="true" aria-label="Loading conversations"></div>
+					</div>
+					<p class="connect-chat-error" data-connect-chat-error hidden></p>
+				</div>
+			</tab>
+			<tab data-id="latest-comments" label="Comments">
 				<div class="comment-list" data-comments-container aria-busy="true" aria-label="Loading">
 					${renderCommentRowsSkeleton(10)}
 				</div>
@@ -128,30 +188,27 @@ class AppRouteServers extends HTMLElement {
       </div>
     `;
 
+		this._appDocTitleBase = typeof document !== 'undefined' ? document.title : 'parascene';
+
 		this.loadLatestComments();
 		this.loadServers();
 		this.setupFeatureRequestForm();
+		this.setupConnectChat();
 		this.setupConnectTabHash();
 		this._onServersUpdated = () => this.loadServers();
 		document.addEventListener('servers-updated', this._onServersUpdated);
 	}
 
-		/** Sync Connect tab from URL hash (#servers, #latest-comments, #comments, #feature-requests) and update hash when tab changes. */
-		setupConnectTabHash() {
-			const CONNECT_TAB_IDS = ['latest-comments', 'servers', 'feature-requests'];
-			const HASH_ALIASES = { 'comments': 'latest-comments' };
-
-			const syncTabFromHash = () => {
-				const path = window.location.pathname || '';
-				if (path !== '/connect' && !path.startsWith('/connect/')) return;
-				let hash = (window.location.hash || '').replace(/^#/, '').toLowerCase();
-				if (!hash) return;
-				hash = HASH_ALIASES[hash] || hash;
-				if (!CONNECT_TAB_IDS.includes(hash)) return;
+	/** Sync Connect tab from URL hash (#chat, #servers, …). */
+	setupConnectTabHash() {
+		const syncTabFromHash = () => {
+			const path = window.location.pathname || '';
+			if (path !== '/connect' && !path.startsWith('/connect/')) return;
+			const parsed = parseConnectLocationHash(window.location.hash);
+			if (!parsed.tab) return;
 			const tabs = this.querySelector('app-tabs');
-			if (tabs && typeof tabs.setActiveTab === 'function') {
-				tabs.setActiveTab(hash, { focus: false });
-			}
+			if (!tabs || typeof tabs.setActiveTab !== 'function') return;
+			tabs.setActiveTab(parsed.tab, { focus: false });
 		};
 
 		const onRouteChange = (e) => {
@@ -191,6 +248,195 @@ class AppRouteServers extends HTMLElement {
 		document.removeEventListener('servers-updated', this._onServersUpdated);
 		if (typeof this._connectTabHashCleanup === 'function') {
 			this._connectTabHashCleanup();
+		}
+		if (typeof this._connectChatCleanup === 'function') {
+			this._connectChatCleanup();
+		}
+		if (this._appDocTitleBase) {
+			document.title = this._appDocTitleBase;
+		}
+	}
+
+	setupConnectChat() {
+		const root = this.querySelector('[data-connect-chat]');
+		if (!root) return;
+
+		this._chatViewerId = null;
+		this._chatThreads = [];
+
+		this._onTabChangeForChat = (e) => {
+			if (e.detail?.id !== 'chat') return;
+			const ourTabs = this.querySelector('app-tabs');
+			if (e.target !== ourTabs) return;
+			this.loadChatThreads();
+		};
+		document.addEventListener('tab-change', this._onTabChangeForChat);
+
+		const openChannelBtn = root.querySelector('[data-connect-chat-open-channel]');
+		const tagInput = root.querySelector('[data-connect-chat-tag-input]');
+
+		if (openChannelBtn instanceof HTMLButtonElement && tagInput instanceof HTMLInputElement) {
+			openChannelBtn.addEventListener('click', () => this.openConnectChatChannel());
+			tagInput.addEventListener('keydown', (ev) => {
+				if (ev.key === 'Enter') {
+					ev.preventDefault();
+					this.openConnectChatChannel();
+				}
+			});
+		}
+
+		this.loadChatThreads();
+
+		this._connectChatCleanup = () => {
+			document.removeEventListener('tab-change', this._onTabChangeForChat);
+		};
+	}
+
+	async loadChatThreads(options = {}) {
+		const forceNetwork = options.forceNetwork === true;
+		const listEl = this.querySelector('[data-connect-chat-thread-list]');
+		if (!listEl) return;
+
+		const cached = readCachedChatThreads();
+		const needNetwork =
+			forceNetwork || !cached || isChatThreadsCacheStale(cached.cachedAt);
+
+		if (cached) {
+			this._chatViewerId = cached.viewerId;
+			this._chatThreads = cached.threads;
+			this.renderConnectChatThreadList();
+			const errEl = this.querySelector('[data-connect-chat-error]');
+			if (errEl instanceof HTMLElement) {
+				errEl.hidden = true;
+				errEl.textContent = '';
+			}
+		}
+
+		if (!needNetwork) {
+			return;
+		}
+
+		try {
+			const result = await fetchJsonWithStatusDeduped(
+				'/api/chat/threads',
+				{ credentials: 'include' },
+				{ windowMs: 2000 }
+			);
+			if (!result.ok) {
+				if (result.status === 401) {
+					clearCachedChatThreads();
+					listEl.removeAttribute('aria-busy');
+					listEl.removeAttribute('aria-label');
+					listEl.innerHTML = renderEmptyState({
+						title: 'Sign in to use chat.',
+						message: 'You need an account to open channels and DMs.'
+					});
+					return;
+				}
+				if (cached) {
+					return;
+				}
+				throw new Error(result.data?.message || 'Failed to load conversations');
+			}
+			const viewerId = result.data?.viewer_id != null ? Number(result.data.viewer_id) : null;
+			const threads = Array.isArray(result.data?.threads) ? result.data.threads : [];
+			this._chatViewerId = viewerId;
+			this._chatThreads = threads;
+			if (viewerId != null && Number.isFinite(viewerId)) {
+				writeCachedChatThreads(viewerId, threads);
+			}
+			this.renderConnectChatThreadList();
+			const errEl = this.querySelector('[data-connect-chat-error]');
+			if (errEl instanceof HTMLElement) {
+				errEl.hidden = true;
+				errEl.textContent = '';
+			}
+		} catch (err) {
+			console.error('[Connect chat] load threads:', err);
+			if (cached) {
+				return;
+			}
+			listEl.removeAttribute('aria-busy');
+			listEl.removeAttribute('aria-label');
+			listEl.innerHTML = renderEmptyError(err?.message || 'Chat unavailable.');
+		}
+	}
+
+	renderConnectChatThreadList() {
+		const listEl = this.querySelector('[data-connect-chat-thread-list]');
+		if (!listEl) return;
+
+		listEl.removeAttribute('aria-busy');
+		listEl.removeAttribute('aria-label');
+		listEl.innerHTML = '';
+
+		const threads = this._chatThreads || [];
+		if (threads.length === 0) {
+			listEl.innerHTML = renderEmptyState({
+				title: 'No conversations yet.',
+				message: 'Open a channel above to get started.'
+			});
+			return;
+		}
+
+		threads.forEach((t) => {
+			const title = typeof t.title === 'string' && t.title.trim() ? t.title.trim() : 'Chat';
+			const last = t.last_message;
+			const preview = last && typeof last.body === 'string'
+				? last.body.trim().replace(/\s+/g, ' ').slice(0, 120)
+				: '';
+
+			const row = document.createElement('a');
+			row.className = 'connect-chat-thread-row';
+			row.href = buildChatThreadUrl(t);
+			row.innerHTML = `
+				<span class="connect-chat-thread-row-title">${escapeHtml(title)}</span>
+				${preview ? `<span class="connect-chat-thread-row-preview">${escapeHtml(preview)}</span>` : ''}
+			`;
+			listEl.appendChild(row);
+		});
+	}
+
+	async openConnectChatChannel() {
+		const input = this.querySelector('[data-connect-chat-tag-input]');
+		const errEl = this.querySelector('[data-connect-chat-error]');
+		if (!(input instanceof HTMLInputElement)) return;
+
+		const raw = String(input.value || '').trim();
+		if (!raw) {
+			if (errEl instanceof HTMLElement) {
+				errEl.hidden = false;
+				errEl.textContent = 'Enter a channel tag.';
+			}
+			return;
+		}
+		if (errEl instanceof HTMLElement) {
+			errEl.hidden = true;
+			errEl.textContent = '';
+		}
+
+		try {
+			const res = await fetch('/api/chat/channels', {
+				method: 'POST',
+				credentials: 'include',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ tag: raw })
+			});
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				throw new Error(data.message || data.error || 'Could not open channel');
+			}
+			const slug = (data?.thread?.channel_slug && String(data.thread.channel_slug).trim())
+				? String(data.thread.channel_slug).trim()
+				: raw.toLowerCase().trim();
+			input.value = '';
+			window.location.href = `/chat/c/${encodeURIComponent(slug)}`;
+		} catch (err) {
+			console.error('[Connect chat] open channel:', err);
+			if (errEl instanceof HTMLElement) {
+				errEl.hidden = false;
+				errEl.textContent = err?.message || 'Could not open channel.';
+			}
 		}
 	}
 

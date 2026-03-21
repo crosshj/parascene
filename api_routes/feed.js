@@ -25,9 +25,16 @@ const NEWBIE_FEED_TIPS = [
 		ctaRoute: "/explore"
 	},
 	{
+		id: "tip-connect-chat",
+		title: "Chat on Connect",
+		message: "Open hashtag channels and DMs in the app under Connect. It’s the home for text chat here.",
+		cta: "Connect",
+		ctaRoute: "/connect#chat"
+	},
+	{
 		id: "tip-discord",
 		title: "Join our Discord",
-		message: "Chat with the community, get help, and share feedback. We’d love to have you.",
+		message: "For voice, events, and the wider community outside the app, join our Discord server.",
 		cta: "Join Discord",
 		ctaRoute: "https://discord.gg/pqzWstTb8f",
 		ctaTarget: "_blank"

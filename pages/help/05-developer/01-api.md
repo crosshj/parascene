@@ -105,11 +105,13 @@ Image and video URLs for creations are returned on API objects; you do not need 
 
 ### Chat
 
+- `GET` `/api/chat/threads`
 - `POST` `/api/chat/dm`
 - `POST` `/api/chat/channels`
 - `GET` `/api/chat/threads/:threadId`
 - `GET` `/api/chat/threads/:threadId/messages`
 - `POST` `/api/chat/threads/:threadId/messages`
+- `POST` `/api/chat/messages/:messageId/reactions`
 
 Details: **[API - Chat](/help/developer/api-chat)**
 

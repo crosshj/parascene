@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en" class="chat-page">
+
+<head>
+	<title>Chat · parascene</title>
+	<link rel="stylesheet" href="/pages/creations.css{{V}}" />
+</head>
+
+<body data-entry="chat" class="chat-page">
+	<main class="chat-page-outer" id="chat-page-main">
+		<div class="chat-route" data-chat-page>
+			<header class="chat-page-topbar">
+				<a href="/connect#chat" class="chat-page-back" aria-label="Back to Connect">
+					<!-- do not change this to ←, it's not a real arrow -->
+					<span class="chat-page-back-icon" aria-hidden="true">&lt;-</span>
+				</a>
+				<h1 class="chat-page-title" data-chat-title>Chat</h1>
+			</header>
+			<div class="chat-page-messages" data-chat-messages role="log" aria-label="Messages"></div>
+			<p class="chat-page-error connect-chat-error" data-chat-error hidden role="alert"></p>
+			<form class="chat-page-composer connect-chat-composer" data-chat-composer aria-label="Send a message">
+				<div class="chat-page-input-shell">
+					<textarea class="connect-chat-composer-input chat-page-composer-input" name="body" rows="1"
+						maxlength="4000" placeholder="Message…" data-chat-body-input
+						aria-label="Message text"></textarea>
+					<button type="submit" class="chat-page-send-btn" data-chat-send hidden aria-label="Send"></button>
+				</div>
+			</form>
+		</div>
+	</main>
+</body>
+
+</html>

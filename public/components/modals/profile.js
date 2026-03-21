@@ -697,6 +697,8 @@ class AppModalProfile extends HTMLElement {
 			window.localStorage?.removeItem('credits-user-email');
 			window.localStorage?.removeItem('credits-last-claim');
 			window.localStorage?.removeItem('profile-avatar-url');
+			// Match CHAT_THREADS_CACHE_KEY in shared/chatThreadsCache.js
+			window.localStorage?.removeItem('prsn-chat-threads-v1');
 		} catch {
 			// ignore storage errors
 		}

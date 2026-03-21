@@ -150,6 +150,21 @@ function extractCreationId(url) {
 /** Default app origin for client-side fallback (e.g. SSR). Single place to change app domain in client code. */
 export const DEFAULT_APP_ORIGIN = 'https://www.parascene.com';
 
+/**
+ * Expands bare paths like `/creations/123` (not already `https://...`) into absolute URLs
+ * so the main URL pass can turn them into same-origin links. Does not match `/creations/123/edit`.
+ */
+function expandBareCreationPathsToAbsoluteUrls(text) {
+	const origin =
+		typeof window !== 'undefined' && window.location?.origin
+			? window.location.origin
+			: DEFAULT_APP_ORIGIN;
+	return String(text ?? '').replace(
+		/(^|[\s(])(\/creations\/\d+)\/?(?=\s|$|[.,!?;:)]|\)|\?|#)/g,
+		(_, prefix, path) => `${prefix}${origin}${path}`
+	);
+}
+
 const PARASCENE_HOSTS = [new URL(DEFAULT_APP_ORIGIN).hostname];
 
 /**
@@ -328,7 +343,7 @@ const CREATION_URL_RE = /https?:\/\/[^\s"'<>]+\/creations\/(\d+)\/?/g;
  * @returns {string} - HTML-safe string with parascene URLs as relative <a href="..."> links
  */
 export function textWithCreationLinks(text) {
-	const raw = String(text ?? '');
+	const raw = expandBareCreationPathsToAbsoluteUrls(String(text ?? ''));
 	if (!raw) return '';
 
 	const urlRe = /https?:\/\/[^\s"'<>]+/g;
@@ -615,6 +630,170 @@ export function hydrateXLinkTitles(rootEl) {
 			const label = formatXLabel(title);
 			if (label) a.textContent = label;
 			a.dataset.xTitleHydrated = 'true';
+		});
+	}
+}
+
+const creationEmbedDataCache = new Map();
+const creationEmbedFetchInFlight = new Map();
+
+function getCreationDetailIdFromHref(href) {
+	try {
+		const u = new URL(
+			String(href || ''),
+			typeof window !== 'undefined' && window.location
+				? window.location.origin
+				: DEFAULT_APP_ORIGIN
+		);
+		const m = (u.pathname || '').match(/^\/creations\/(\d+)\/?$/i);
+		if (!m) return null;
+		const id = Number(m[1]);
+		return Number.isFinite(id) && id > 0 ? String(id) : null;
+	} catch {
+		return null;
+	}
+}
+
+function trimWhitespaceOnlyTextNodes(el) {
+	if (!(el instanceof HTMLElement)) return;
+	let n = el.lastChild;
+	while (n && n.nodeType === Node.TEXT_NODE && /^\s*$/.test(n.textContent)) {
+		const prev = n.previousSibling;
+		el.removeChild(n);
+		n = prev;
+	}
+	n = el.firstChild;
+	while (n && n.nodeType === Node.TEXT_NODE && /^\s*$/.test(n.textContent)) {
+		const next = n.nextSibling;
+		el.removeChild(n);
+		n = next;
+	}
+}
+
+async function fetchCreationForChatEmbed(id) {
+	if (creationEmbedDataCache.has(id)) {
+		return creationEmbedDataCache.get(id);
+	}
+	let p = creationEmbedFetchInFlight.get(id);
+	if (!p) {
+		p = (async () => {
+			const res = await fetch(`/api/create/images/${encodeURIComponent(id)}`, {
+				method: 'GET',
+				credentials: 'include',
+				headers: { Accept: 'application/json' },
+			});
+			if (!res.ok) {
+				return { _error: true, status: res.status };
+			}
+			const data = await res.json().catch(() => null);
+			if (!data || typeof data !== 'object') {
+				return { _error: true };
+			}
+			creationEmbedDataCache.set(id, data);
+			return data;
+		})().finally(() => {
+			creationEmbedFetchInFlight.delete(id);
+		});
+		creationEmbedFetchInFlight.set(id, p);
+	}
+	return p;
+}
+
+/**
+ * After chat bubbles render `processUserText`, call this to fetch creation metadata and show
+ * an image (or video) preview for `/creations/:id` links the viewer can access (same rules as GET /api/create/images/:id).
+ *
+ * @param {Element|Document} rootEl - Container (e.g. [data-chat-messages])
+ */
+export function hydrateChatCreationEmbeds(rootEl) {
+	const root =
+		rootEl instanceof Element || rootEl instanceof Document ? rootEl : document;
+	if (!root || typeof root.querySelectorAll !== 'function') return;
+
+	const links = Array.from(root.querySelectorAll('a.creation-link[href]'));
+	for (const a of links) {
+		if (!(a instanceof HTMLAnchorElement)) continue;
+		if (a.dataset.chatCreationEmbed === 'true') continue;
+		const creationId = getCreationDetailIdFromHref(a.getAttribute('href') || '');
+		if (!creationId) continue;
+		a.dataset.chatCreationEmbed = 'true';
+
+		const wrap = document.createElement('div');
+		wrap.className =
+			'connect-chat-creation-embed connect-chat-creation-embed--loading connect-chat-creation-embed--square';
+		wrap.setAttribute('data-creation-id', creationId);
+		wrap.innerHTML =
+			'<div class="connect-chat-creation-embed-skeleton" aria-hidden="true"></div>';
+		a.insertAdjacentElement('afterend', wrap);
+
+		void fetchCreationForChatEmbed(creationId).then((data) => {
+			if (!wrap.parentNode) return;
+			wrap.classList.remove('connect-chat-creation-embed--loading');
+
+			if (!data || data._error) {
+				wrap.classList.add('connect-chat-creation-embed--error');
+				wrap.innerHTML =
+					'<span class="connect-chat-creation-embed-msg">Preview unavailable</span>';
+				wrap.setAttribute('role', 'status');
+				return;
+			}
+
+			const moderated = !!data.is_moderated_error;
+			if (moderated) {
+				wrap.classList.add('connect-chat-creation-embed--error');
+				wrap.innerHTML =
+					'<span class="connect-chat-creation-embed-msg">Unavailable</span>';
+				wrap.setAttribute('role', 'status');
+				return;
+			}
+
+			const status = data.status || 'completed';
+			const mediaType =
+				typeof data.media_type === 'string' ? data.media_type : 'image';
+			const videoUrl =
+				typeof data.video_url === 'string' ? data.video_url.trim() : '';
+			const url = typeof data.url === 'string' ? data.url.trim() : '';
+			const titleRaw =
+				typeof data.title === 'string' ? data.title.trim() : '';
+			const titleHtml = titleRaw
+				? `<div class="connect-chat-creation-embed-title">${escapeHtml(titleRaw)}</div>`
+				: '';
+
+			const isNsfw = !!data.nsfw;
+			const nsfwClass = isNsfw ? ' nsfw' : '';
+			const nsfwDataAttr = isNsfw
+				? ` data-creation-id="${escapeHtml(String(creationId))}"`
+				: '';
+
+			if (status !== 'completed' || (!url && !(mediaType === 'video' && videoUrl))) {
+				wrap.classList.add('connect-chat-creation-embed--pending');
+				wrap.innerHTML =
+					'<span class="connect-chat-creation-embed-msg">Still processing…</span>';
+				wrap.setAttribute('role', 'status');
+				return;
+			}
+
+			if (mediaType === 'video' && videoUrl) {
+				wrap.classList.remove('connect-chat-creation-embed--square');
+				const poster = url ? ` poster="${escapeHtml(url)}"` : '';
+				/* No whitespace between tags — otherwise pre-wrap line-height creates stray text nodes and gaps. */
+				wrap.innerHTML = `<div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--video${nsfwClass}"${nsfwDataAttr}><video class="connect-chat-creation-embed-video" controls playsinline preload="metadata" src="${escapeHtml(videoUrl)}"${poster}></video></div>${titleHtml}`;
+				trimWhitespaceOnlyTextNodes(wrap);
+				return;
+			}
+
+			if (url) {
+				const alt =
+					titleRaw.length > 0 ? escapeHtml(titleRaw) : 'Creation preview';
+				wrap.innerHTML = `<div class="connect-chat-creation-embed-inner${nsfwClass}"${nsfwDataAttr}><img class="connect-chat-creation-embed-img" src="${escapeHtml(url)}" alt="${alt}" loading="lazy" decoding="async" /></div>${titleHtml}`;
+				trimWhitespaceOnlyTextNodes(wrap);
+				return;
+			}
+
+			wrap.classList.add('connect-chat-creation-embed--error');
+			wrap.innerHTML =
+				'<span class="connect-chat-creation-embed-msg">Preview unavailable</span>';
+			wrap.setAttribute('role', 'status');
 		});
 	}
 }

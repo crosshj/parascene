@@ -3,7 +3,8 @@
 ## Scope
 
 - **In:** Supabase Postgres (source of truth), Express API on Vercel, smoke test script (`scripts/test-chat.js`).
-- **Later:** WebSockets / Supabase Realtime, UI.
+- **Later:** WebSockets / Supabase Realtime.
+- **UI:** Connect route (`app-route-servers`): **Chat** tab (default), list + channel opener + thread view; uses **`GET /api/chat/threads`** (requires **`prsn_chat_threads_for_user`** in `db/schemas/supabase_04.sql`).
 
 ## Data model
 

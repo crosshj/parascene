@@ -37,6 +37,11 @@ Browse by topic or use the search above.
 - [Upgrade your plan](/help/credits/upgrade-plan) — Get more credits with a paid plan.
 - [Run a server](/help/credits/run-a-server) — Run a server and earn when others use it.
 
+**Developer**
+
+- [API Overview](/help/developer/api) — Create an API key, base URL, and full route index.
+- [API - Chat](/help/developer/api-chat) — DM and channel threads, messages, and reactions.
+
 <br />
 
 [Content safety](/help/content-safety) — How NSFW content works and how to control what you see.  

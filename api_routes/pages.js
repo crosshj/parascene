@@ -1035,6 +1035,18 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 			return res.redirect(returnUrl);
 		}
 
+		// Standalone chat UI (no app chrome). List/inbox stays on /connect#chat.
+		if (req.path === "/chat" || req.path === "/chat/") {
+			return res.redirect(302, "/connect#chat");
+		}
+		if (req.path.startsWith("/chat/")) {
+			const fs = await import("fs/promises");
+			let htmlContent = await fs.readFile(path.join(pagesDir, "chat.html"), "utf-8");
+			htmlContent = injectCommonHead(htmlContent, getPageTokens(req));
+			res.setHeader("Content-Type", "text/html");
+			return res.send(htmlContent);
+		}
+
 		// User is logged in and has a role → serve their role-based page
 		// Client-side routing handles the rest (feed, explore, etc.)
 		const page = getPageForUser(user);

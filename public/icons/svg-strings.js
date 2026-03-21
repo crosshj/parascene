@@ -47,6 +47,13 @@ export const xIcon = withAttributes(html`
 	</svg>
 `);
 
+/** Chat / DM send (filled paper-plane). */
+export const sendIcon = withAttributes(html`
+	<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+		<path fill="currentColor" d="M6.6 10.02 14 11.4a.6.6 0 0 1 0 1.18L6.6 14l-2.94 5.87a1.48 1.48 0 0 0 1.99 1.98l17.03-8.52a1.48 1.48 0 0 0 0-2.64L5.65 2.16a1.48 1.48 0 0 0-1.99 1.98l2.94 5.88Z"></path>
+	</svg>
+`);
+
 export const facebookIcon = withAttributes(html`
 	<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
 		<path d="M14 9h3V6h-3c-2.2 0-4 1.8-4 4v2H7v3h3v7h3v-7h3l1-3h-4v-2c0-.6.4-1 1-1z"></path>

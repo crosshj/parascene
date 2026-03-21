@@ -2,6 +2,53 @@ import express from "express";
 import { Redis } from "@upstash/redis";
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { normalizeTag } from "./utils/tag.js";
+import { getNotificationDisplayName } from "./utils/displayName.js";
+import { REACTION_ORDER } from "./comments.js";
+
+function normalizeChatReactionsBucket(raw) {
+	const out = {};
+	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+	for (const k of Object.keys(raw)) {
+		if (!REACTION_ORDER.includes(k)) continue;
+		const arr = Array.isArray(raw[k]) ? raw[k] : [];
+		const uids = [...new Set(arr.map((x) => Number(x)).filter((n) => Number.isFinite(n) && n > 0))];
+		if (uids.length > 0) out[k] = uids;
+	}
+	return out;
+}
+
+/** Stored on each message as jsonb: { emoji_key: [user_id, ...] }. Response uses numeric counts (not comment-style name lists). */
+function enrichChatReactionsFromMessageColumn(messages, viewerId) {
+	const viewerIdNum =
+		viewerId != null && Number.isFinite(Number(viewerId)) ? Number(viewerId) : null;
+	return messages.map((m) => {
+		const bucket = normalizeChatReactionsBucket(m.reactions);
+		const reactions = {};
+		const viewer_reactions = [];
+		for (const emojiKey of REACTION_ORDER) {
+			const userIds = bucket[emojiKey] || [];
+			const total = userIds.length;
+			if (total === 0) continue;
+			reactions[emojiKey] = total;
+			if (viewerIdNum != null && userIds.includes(viewerIdNum)) {
+				viewer_reactions.push(emojiKey);
+			}
+		}
+		return { ...m, reactions, viewer_reactions };
+	});
+}
+
+function otherUserIdFromDmPair(dmPairKey, userId) {
+	if (!dmPairKey || typeof dmPairKey !== "string") return null;
+	const parts = dmPairKey.split(":");
+	if (parts.length !== 2) return null;
+	const a = Number(parts[0]);
+	const b = Number(parts[1]);
+	if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+	if (a === userId) return b;
+	if (b === userId) return a;
+	return null;
+}
 
 const MAX_MESSAGE_CHARS = 4000;
 const DEFAULT_PAGE_LIMIT = 50;
@@ -22,6 +69,15 @@ function dmPairKey(a, b) {
 	const lo = Math.min(x, y);
 	const hi = Math.max(x, y);
 	return `${lo}:${hi}`;
+}
+
+/** Same rules as `normalizeUsername` in user.js — public handle for DM URLs. */
+function normalizeDmUsernameInput(input) {
+	const raw = typeof input === "string" ? input.trim() : "";
+	if (!raw) return null;
+	const normalized = raw.startsWith("@") ? raw.slice(1).trim().toLowerCase() : raw.toLowerCase();
+	if (!/^[a-z0-9][a-z0-9_]{2,23}$/.test(normalized)) return null;
+	return normalized;
 }
 
 function encodeCursor(createdAt, id) {
@@ -53,6 +109,46 @@ async function rateLimitSend(userId) {
 	} catch {
 		return true;
 	}
+}
+
+/** Attach `sender_user_name` and `sender_avatar_url` from `prsn_user_profiles` for each message row. */
+async function enrichChatMessagesWithSenderProfiles(sb, messages) {
+	if (!Array.isArray(messages) || messages.length === 0) return [];
+	const ids = [
+		...new Set(
+			messages
+				.map((m) => Number(m?.sender_id))
+				.filter((n) => Number.isFinite(n) && n > 0)
+		)
+	];
+	if (ids.length === 0) {
+		return messages.map((m) => ({
+			...m,
+			sender_user_name: null,
+			sender_avatar_url: null
+		}));
+	}
+	const { data: rows, error } = await sb
+		.from("prsn_user_profiles")
+		.select("user_id, user_name, avatar_url")
+		.in("user_id", ids);
+	if (error) throw error;
+	const map = new Map();
+	for (const row of rows || []) {
+		map.set(Number(row.user_id), {
+			user_name: row.user_name != null ? String(row.user_name) : null,
+			avatar_url: row.avatar_url != null ? String(row.avatar_url) : null
+		});
+	}
+	return messages.map((m) => {
+		const sid = Number(m.sender_id);
+		const p = map.get(sid);
+		return {
+			...m,
+			sender_user_name: p?.user_name ?? null,
+			sender_avatar_url: p?.avatar_url ?? null
+		};
+	});
 }
 
 export default function createChatRoutes({ queries }) {
@@ -87,17 +183,121 @@ export default function createChatRoutes({ queries }) {
 		return !!data;
 	}
 
-	// POST /api/chat/dm  { other_user_id }
+	// GET /api/chat/threads — threads the current user belongs to (with last message preview)
+	router.get("/api/chat/threads", async (req, res) => {
+		const userId = requireUser(req, res);
+		if (userId == null) return;
+		const sb = getSb(res);
+		if (!sb) return;
+
+		try {
+			const { data: rows, error } = await sb.rpc("prsn_chat_threads_for_user", {
+				p_user_id: userId
+			});
+			if (error) throw error;
+
+			const list = Array.isArray(rows) ? rows : [];
+			const otherIds = new Set();
+			for (const row of list) {
+				if (row?.thread_type === "dm" && row?.dm_pair_key) {
+					const oid = otherUserIdFromDmPair(row.dm_pair_key, userId);
+					if (oid != null) otherIds.add(oid);
+				}
+			}
+
+			let profileMap = new Map();
+			if (otherIds.size > 0 && typeof queries.selectUserProfilesByUserIds === "function") {
+				profileMap = await queries.selectUserProfilesByUserIds([...otherIds]);
+			}
+
+			const threads = list.map((row) => {
+				const id = Number(row.thread_id);
+				const type = row.thread_type;
+				const lastMessage =
+					row.last_message_at && row.last_message_body != null
+						? {
+								body: String(row.last_message_body),
+								created_at: row.last_message_at,
+								sender_id: Number(row.last_sender_id)
+							}
+						: null;
+
+				if (type === "channel") {
+					const slug = row.channel_slug ? String(row.channel_slug) : "";
+					return {
+						id,
+						type: "channel",
+						channel_slug: slug,
+						title: slug ? `#${slug}` : "Channel",
+						last_message: lastMessage
+					};
+				}
+
+				const otherId = otherUserIdFromDmPair(row.dm_pair_key, userId);
+				const profile = otherId != null ? profileMap.get(otherId) : null;
+				const title = getNotificationDisplayName(null, profile || undefined);
+				return {
+					id,
+					type: "dm",
+					dm_pair_key: row.dm_pair_key,
+					other_user_id: otherId,
+					title,
+					other_user:
+						otherId != null
+							? {
+									id: otherId,
+									display_name: profile?.display_name ?? null,
+									user_name: profile?.user_name ?? null,
+									avatar_url: profile?.avatar_url ?? null
+								}
+							: null,
+					last_message: lastMessage
+				};
+			});
+
+			return res.status(200).json({ viewer_id: userId, threads });
+		} catch (err) {
+			console.error("[GET /api/chat/threads]", err);
+			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
+		}
+	});
+
+	// POST /api/chat/dm  { other_user_id } | { other_user_name }
 	router.post("/api/chat/dm", async (req, res) => {
 		const userId = requireUser(req, res);
 		if (userId == null) return;
 		const sb = getSb(res);
 		if (!sb) return;
 
-		const otherRaw = req.body?.other_user_id ?? req.body?.otherUserId;
-		const otherId = Number(otherRaw);
-		if (!Number.isFinite(otherId) || otherId <= 0) {
-			return res.status(400).json({ error: "Bad request", message: "other_user_id required" });
+		const idRaw = req.body?.other_user_id ?? req.body?.otherUserId;
+		const nameRaw = req.body?.other_user_name ?? req.body?.otherUsername ?? req.body?.username;
+
+		let otherId = null;
+		if (idRaw != null && String(idRaw).trim() !== "") {
+			const n = Number(idRaw);
+			if (Number.isFinite(n) && n > 0) otherId = n;
+		}
+
+		if (otherId == null) {
+			const un = normalizeDmUsernameInput(typeof nameRaw === "string" ? nameRaw : "");
+			if (!un) {
+				return res.status(400).json({
+					error: "Bad request",
+					message: "other_user_id or other_user_name required"
+				});
+			}
+			if (!queries.selectUserProfileByUsername?.get) {
+				return res.status(503).json({
+					error: "Service unavailable",
+					message: "Username lookup unavailable"
+				});
+			}
+			const profile = await queries.selectUserProfileByUsername.get(un);
+			const uid = Number(profile?.user_id);
+			if (!Number.isFinite(uid) || uid <= 0) {
+				return res.status(404).json({ error: "Not found", message: "User not found" });
+			}
+			otherId = uid;
 		}
 		if (otherId === userId) {
 			return res.status(400).json({ error: "Bad request", message: "Cannot open DM with yourself" });
@@ -299,14 +499,17 @@ export default function createChatRoutes({ queries }) {
 			const page = hasMore ? list.slice(0, limit) : list;
 			page.reverse();
 
+			let messagesOut = await enrichChatMessagesWithSenderProfiles(sb, page);
+			messagesOut = enrichChatReactionsFromMessageColumn(messagesOut, userId);
+
 			let nextBefore = null;
-			if (page.length > 0) {
-				const oldest = page[0];
+			if (messagesOut.length > 0) {
+				const oldest = messagesOut[0];
 				nextBefore = encodeCursor(oldest.created_at, oldest.id);
 			}
 
 			return res.status(200).json({
-				messages: page,
+				messages: messagesOut,
 				hasMore,
 				nextBefore
 			});
@@ -363,6 +566,74 @@ export default function createChatRoutes({ queries }) {
 			return res.status(201).json({ message: ins.data });
 		} catch (err) {
 			console.error("[POST .../messages]", err);
+			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
+		}
+	});
+
+	// POST /api/chat/messages/:messageId/reactions  { emoji_key } — toggle; stored on message.reactions jsonb
+	router.post("/api/chat/messages/:messageId/reactions", async (req, res) => {
+		const userId = requireUser(req, res);
+		if (userId == null) return;
+		const sb = getSb(res);
+		if (!sb) return;
+
+		const messageId = Number(req.params.messageId);
+		if (!Number.isFinite(messageId) || messageId <= 0) {
+			return res.status(400).json({ error: "Bad request", message: "Invalid message id" });
+		}
+
+		const emojiKey = typeof req.body?.emoji_key === "string" ? req.body.emoji_key.trim() : "";
+		if (!emojiKey || !REACTION_ORDER.includes(emojiKey)) {
+			return res.status(400).json({ error: "Bad request", message: "Invalid or missing emoji_key" });
+		}
+
+		try {
+			const { data: msg, error: msgErr } = await sb
+				.from("prsn_chat_messages")
+				.select("id, thread_id, reactions")
+				.eq("id", messageId)
+				.maybeSingle();
+			if (msgErr) throw msgErr;
+			if (!msg) {
+				return res.status(404).json({ error: "Not found", message: "Message not found" });
+			}
+
+			const threadId = Number(msg.thread_id);
+			if (!(await isMember(sb, threadId, userId))) {
+				return res.status(403).json({ error: "Forbidden", message: "Not a member of this thread" });
+			}
+
+			const bucket = normalizeChatReactionsBucket(msg.reactions);
+			const uid = Number(userId);
+			let arr = Array.isArray(bucket[emojiKey]) ? [...bucket[emojiKey]].map((x) => Number(x)) : [];
+			arr = [...new Set(arr.filter((n) => Number.isFinite(n) && n > 0))];
+			const idx = arr.indexOf(uid);
+			let added;
+			if (idx >= 0) {
+				arr.splice(idx, 1);
+				added = false;
+				if (arr.length === 0) {
+					delete bucket[emojiKey];
+				} else {
+					bucket[emojiKey] = arr;
+				}
+			} else {
+				arr.push(uid);
+				bucket[emojiKey] = arr;
+				added = true;
+			}
+
+			const { error: upErr } = await sb
+				.from("prsn_chat_messages")
+				.update({ reactions: bucket })
+				.eq("id", messageId);
+			if (upErr) throw upErr;
+
+			const count = Array.isArray(bucket[emojiKey]) ? bucket[emojiKey].length : 0;
+
+			return res.json({ added, count });
+		} catch (err) {
+			console.error("[POST /api/chat/messages/:messageId/reactions]", err);
 			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
 		}
 	});

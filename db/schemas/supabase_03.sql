@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS prsn_chat_messages (
 	thread_id bigint NOT NULL REFERENCES prsn_chat_threads(id) ON DELETE CASCADE,
 	sender_id bigint NOT NULL REFERENCES prsn_users(id) ON DELETE CASCADE,
 	body text NOT NULL,
-	created_at timestamptz NOT NULL DEFAULT now()
+	created_at timestamptz NOT NULL DEFAULT now(),
+	reactions jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 
 CREATE INDEX IF NOT EXISTS idx_prsn_chat_messages_thread_created
@@ -70,3 +71,46 @@ AS $$
 	ORDER BY m.created_at DESC, m.id DESC
 	LIMIT p_limit;
 $$;
+
+-- Chat: list threads for a user (last message preview). Run after supabase_03.sql.
+
+CREATE OR REPLACE FUNCTION prsn_chat_threads_for_user(p_user_id bigint)
+RETURNS TABLE (
+	thread_id bigint,
+	thread_type text,
+	dm_pair_key text,
+	channel_slug text,
+	thread_created_at timestamptz,
+	last_message_at timestamptz,
+	last_message_body text,
+	last_sender_id bigint
+)
+LANGUAGE sql
+STABLE
+AS $$
+	SELECT
+		t.id,
+		t.type,
+		t.dm_pair_key,
+		t.channel_slug,
+		t.created_at,
+		lm.created_at,
+		lm.body,
+		lm.sender_id
+	FROM prsn_chat_members m
+	INNER JOIN prsn_chat_threads t ON t.id = m.thread_id
+	LEFT JOIN LATERAL (
+		SELECT m2.created_at, m2.body, m2.sender_id
+		FROM prsn_chat_messages m2
+		WHERE m2.thread_id = t.id
+		ORDER BY m2.created_at DESC, m2.id DESC
+		LIMIT 1
+	) lm ON true
+	WHERE m.user_id = p_user_id
+	ORDER BY COALESCE(lm.created_at, t.created_at) DESC;
+$$;
+
+-- Reactions live on the message row: reactions jsonb = { "thumbsUp": [user_id, ...], ... }.
+-- If you previously created prsn_chat_message_reactions, migrate then: DROP TABLE IF EXISTS prsn_chat_message_reactions;
+ALTER TABLE prsn_chat_messages ADD COLUMN IF NOT EXISTS reactions jsonb NOT NULL DEFAULT '{}'::jsonb;
+COMMENT ON COLUMN prsn_chat_messages.reactions IS 'Parascene chat: emoji_key -> user id list (API validates keys against REACTION_ORDER).';

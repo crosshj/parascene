@@ -145,6 +145,19 @@ export function handleNsfwClick(e) {
 	) return false;
 	// Ancestor/child lineage links: just navigate to that creation's detail page, don't ask to reveal NSFW
 	if (e.target?.closest?.('.creation-detail-history-thumb-link')) return false;
+
+	// Chat creation embed: reveal in place (stay in chat), same confirm as creation-detail thumbs
+	const chatEmbedNsfw = e.target?.closest?.(
+		'.connect-chat-creation-embed .nsfw:not(.nsfw-revealed)'
+	);
+	if (chatEmbedNsfw) {
+		if (document.body.classList.contains(NSFW_VIEW_BODY_CLASS)) return false;
+		if (!getNsfwContentEnabled()) return false;
+		if (!window.confirm(NSFW_CONFIRM_MESSAGE_THIS_IMAGE)) return true;
+		revealNsfwElementOnly(chatEmbedNsfw);
+		return true;
+	}
+
 	const creationId = getCreationIdFromNsfwElement(e.target);
 	if (!creationId) return false;
 
@@ -162,6 +175,7 @@ export function handleNsfwClick(e) {
 	}
 
 	// Else: e.g. NSFW overlay outside cards — confirm then enable session-wide and navigate
+	if (e.target?.closest?.('.connect-chat-creation-embed')) return false;
 	if (document.body.classList.contains(NSFW_VIEW_BODY_CLASS)) return false;
 	if (!window.confirm(NSFW_CONFIRM_MESSAGE_SESSION)) return true;
 	enableNsfwView();
