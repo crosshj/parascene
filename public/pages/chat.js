@@ -901,5 +901,18 @@ export async function initChatPage(root) {
 		messagesContainerForReactions.addEventListener('click', onChatMessagesClick);
 	}
 
+	const refreshBtn = root.querySelector('[data-chat-refresh]');
+	if (refreshBtn instanceof HTMLButtonElement) {
+		refreshBtn.addEventListener('click', () => {
+			if (refreshBtn.disabled) return;
+			refreshBtn.disabled = true;
+			refreshBtn.setAttribute('aria-busy', 'true');
+			void openThreadForCurrentPath().finally(() => {
+				refreshBtn.disabled = false;
+				refreshBtn.removeAttribute('aria-busy');
+			});
+		});
+	}
+
 	await openThreadForCurrentPath();
 }

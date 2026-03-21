@@ -3810,6 +3810,57 @@ body.chat-page .chat-route {
 	white-space: nowrap;
 }
 
+.chat-page-refresh {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 36px;
+	height: 36px;
+	margin: -4px -4px -4px 0;
+	padding: 0;
+	border: 1px solid color-mix(in srgb, var(--text-muted) 42%, var(--border));
+	border-radius: 6px;
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
+	touch-action: manipulation;
+	transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+	font: inherit;
+}
+
+.chat-page-refresh:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--text-muted) 8%, transparent);
+	border-color: color-mix(in srgb, var(--text-muted) 55%, var(--border));
+	color: var(--text);
+}
+
+.chat-page-refresh:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
+
+.chat-page-refresh:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+
+.chat-page-refresh-icon {
+	display: block;
+	flex-shrink: 0;
+}
+
+.chat-page-refresh[aria-busy='true'] .chat-page-refresh-icon {
+	animation: chat-page-refresh-spin 0.75s linear infinite;
+}
+
+@keyframes chat-page-refresh-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
 .chat-page-messages {
 	flex: 1 1 auto;
 	min-height: 0;
