@@ -28,6 +28,11 @@ import { appendPrsnCidsForUserId, tryRequestMetaFromRow } from "./utils/userPrsn
 export default function createProfileRoutes({ queries }) {
 	const router = express.Router();
 
+	function sanitizeUserMetaForClient(meta) {
+		if (!meta || typeof meta !== "object") return meta;
+		const { apiKeyHash: _h, ...rest } = meta;
+		return rest;
+	}
 
 	function sanitizeReturnUrl(raw) {
 		const value = typeof raw === "string" ? raw.trim() : "";
@@ -578,7 +583,70 @@ export default function createProfileRoutes({ queries }) {
 		const plan = user.meta?.plan ?? "free";
 		const pendingPlanActivation = Boolean(user.meta?.pendingCheckoutSessionId);
 		const enableNsfw = user.meta?.enableNsfw === true;
-		return res.json({ ...user, credits: credits.balance, plan, pendingPlanActivation, profile, welcome, enableNsfw });
+		const hasApiKey = Boolean(user.meta?.apiKeyHash);
+		const apiKeyPrefix = typeof user.meta?.apiKeyPrefix === "string" ? user.meta.apiKeyPrefix : null;
+		const metaPublic = sanitizeUserMetaForClient(user.meta);
+		return res.json({
+			...user,
+			meta: metaPublic,
+			credits: credits.balance,
+			plan,
+			pendingPlanActivation,
+			profile,
+			welcome,
+			enableNsfw,
+			hasApiKey,
+			apiKeyPrefix
+		});
+	});
+
+	// Create or rotate API key (website session only; full key returned once).
+	router.post("/api/profile/api-key", async (req, res) => {
+		if (!req.auth?.userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+		if (req.auth?.apiKeyAuth) {
+			return res.status(403).json({
+				error: "Forbidden",
+				message: "Manage API keys while signed in on the website."
+			});
+		}
+		if (!queries.updateUserApiKey?.run) {
+			return res.status(500).json({ error: "Not available", message: "API keys are not available." });
+		}
+		const raw = crypto.randomBytes(32).toString("base64url");
+		const apiKey = `psn_${raw}`;
+		const apiKeyHash = crypto.createHash("sha256").update(apiKey).digest("hex");
+		const apiKeyPrefix = `${apiKey.slice(0, 10)}…`;
+		try {
+			await queries.updateUserApiKey.run(req.auth.userId, { apiKeyHash, apiKeyPrefix });
+			return res.json({ ok: true, apiKey });
+		} catch (err) {
+			console.error("[POST /api/profile/api-key]", err);
+			return res.status(500).json({ error: "Failed to save API key", message: err?.message });
+		}
+	});
+
+	router.delete("/api/profile/api-key", async (req, res) => {
+		if (!req.auth?.userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+		if (req.auth?.apiKeyAuth) {
+			return res.status(403).json({
+				error: "Forbidden",
+				message: "Manage API keys while signed in on the website."
+			});
+		}
+		if (!queries.updateUserApiKey?.run) {
+			return res.status(500).json({ error: "Not available", message: "API keys are not available." });
+		}
+		try {
+			await queries.updateUserApiKey.run(req.auth.userId, { apiKeyHash: null, apiKeyPrefix: null });
+			return res.json({ ok: true });
+		} catch (err) {
+			console.error("[DELETE /api/profile/api-key]", err);
+			return res.status(500).json({ error: "Failed to remove API key", message: err?.message });
+		}
 	});
 
 	// Update current user's Enable NSFW setting (user meta).

@@ -48,6 +48,30 @@ function authMiddleware() {
 	});
 }
 
+/** After JWT-from-cookie: accept `Authorization: Bearer psn_…` and set req.auth from stored key hash. */
+function apiKeyBearerMiddleware(queries) {
+	return async function apiKeyBearer(req, res, next) {
+		if (req.auth?.userId) return next();
+		const authz = req.headers.authorization || "";
+		const m = /^Bearer\s+(\S+)/i.exec(authz);
+		if (!m) return next();
+		const token = m[1];
+		if (!token.startsWith("psn_")) return next();
+		if (!queries.selectUserIdByApiKeyHash?.get) return next();
+		try {
+			const digest = crypto.createHash("sha256").update(token).digest("hex");
+			const row = await queries.selectUserIdByApiKeyHash.get(digest);
+			if (!row?.id) {
+				return res.status(401).json({ error: "Unauthorized", message: "Invalid API key" });
+			}
+			req.auth = { userId: row.id, apiKeyAuth: true };
+			return next();
+		} catch (err) {
+			return next(err);
+		}
+	};
+}
+
 function hashToken(token) {
 	return crypto.createHash("sha256").update(token).digest("hex");
 }
@@ -350,6 +374,7 @@ export {
 	ONE_WEEK_MS,
 	getJwtSecret,
 	authMiddleware,
+	apiKeyBearerMiddleware,
 	sessionMiddleware,
 	probabilisticSessionCleanup,
 	hashToken,

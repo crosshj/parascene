@@ -3,7 +3,8 @@ import { computeWelcome } from "../utils/welcome.js";
 /** Paths that are allowed even when welcome is required (no redirect/block). */
 const ALLOWED_PATHS = [
 	{ path: "/welcome", method: "GET" },
-	{ path: "/api/profile", methods: ["GET", "PUT", "POST"] },
+	{ path: "/api/profile", methods: ["GET", "PUT", "POST", "PATCH"] },
+	{ path: "/api/profile/api-key", methods: ["POST", "DELETE"] },
 	{ path: "/api/account/email", methods: ["PUT"] },
 	{ path: "/api/username-suggest", methods: ["GET"] },
 	{ path: "/api/policy/seen", methods: ["POST"] },

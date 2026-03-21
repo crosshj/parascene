@@ -866,6 +866,34 @@ export async function openDb() {
 				return Promise.resolve({ changes: result.changes });
 			}
 		},
+		updateUserApiKey: {
+			run: async (userId, { apiKeyHash, apiKeyPrefix } = {}) => {
+				const stmt = db.prepare("SELECT meta FROM users WHERE id = ?");
+				const row = stmt.get(userId);
+				const existing = parseUserMeta(row?.meta);
+				const meta = { ...existing };
+				if (apiKeyHash == null || apiKeyHash === "") {
+					delete meta.apiKeyHash;
+					delete meta.apiKeyPrefix;
+				} else {
+					meta.apiKeyHash = String(apiKeyHash);
+					meta.apiKeyPrefix = typeof apiKeyPrefix === "string" ? apiKeyPrefix : "";
+				}
+				const updateStmt = db.prepare("UPDATE users SET meta = ? WHERE id = ?");
+				const result = updateStmt.run(JSON.stringify(meta), userId);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		selectUserIdByApiKeyHash: {
+			get: async (hash) => {
+				if (hash == null || typeof hash !== "string" || !hash.trim()) return undefined;
+				const stmt = db.prepare(
+					"SELECT id FROM users WHERE json_extract(meta, '$.apiKeyHash') = ?"
+				);
+				const row = stmt.get(hash.trim());
+				return row ? { id: row.id } : undefined;
+			}
+		},
 		recordCheckoutReturn: {
 			run: async (userId, sessionId, returnedAt) => {
 				const stmt = db.prepare("SELECT meta FROM users WHERE id = ?");

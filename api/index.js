@@ -31,6 +31,7 @@ import createPolicyRoutes from "../api_routes/policy.js";
 import createTryRoutes from "../api_routes/try.js";
 import {
 	authMiddleware,
+	apiKeyBearerMiddleware,
 	probabilisticSessionCleanup,
 	sessionMiddleware,
 	shouldLogSession
@@ -162,6 +163,7 @@ app.use((req, res, next) => {
 });
 
 app.use(authMiddleware());
+app.use(apiKeyBearerMiddleware(queries));
 app.use(sessionMiddleware(queries));
 app.use(createPrsnCidPersistMiddleware(queries));
 app.use(probabilisticSessionCleanup(queries));

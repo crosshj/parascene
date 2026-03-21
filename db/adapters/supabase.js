@@ -659,6 +659,43 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		updateUserApiKey: {
+			run: async (userId, { apiKeyHash, apiKeyPrefix } = {}) => {
+				const { data: current, error: selectError } = await serviceClient
+					.from(prefixedTable("users"))
+					.select("meta")
+					.eq("id", userId)
+					.maybeSingle();
+				if (selectError) throw selectError;
+				const existing = current?.meta ?? null;
+				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
+				if (apiKeyHash == null || apiKeyHash === "") {
+					delete meta.apiKeyHash;
+					delete meta.apiKeyPrefix;
+				} else {
+					meta.apiKeyHash = String(apiKeyHash);
+					meta.apiKeyPrefix = typeof apiKeyPrefix === "string" ? apiKeyPrefix : "";
+				}
+				const { error } = await serviceClient
+					.from(prefixedTable("users"))
+					.update({ meta })
+					.eq("id", userId);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
+		selectUserIdByApiKeyHash: {
+			get: async (hash) => {
+				if (hash == null || typeof hash !== "string" || !hash.trim()) return undefined;
+				const { data, error } = await serviceClient
+					.from(prefixedTable("users"))
+					.select("id")
+					.contains("meta", { apiKeyHash: hash.trim() })
+					.maybeSingle();
+				if (error) throw error;
+				return data?.id != null ? { id: data.id } : undefined;
+			}
+		},
 		recordCheckoutReturn: {
 			run: async (userId, sessionId, returnedAt) => {
 				const { data: current, error: selectError } = await serviceClient

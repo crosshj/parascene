@@ -57,6 +57,7 @@ class AppModalProfile extends HTMLElement {
 		this.profileLoading = false;
 		this.profileLoadedAt = 0;
 		this.profileData = null;
+		this.revealedApiKey = null;
 		this.handleEscape = this.handleEscape.bind(this);
 		this.handleOpenEvent = this.handleOpenEvent.bind(this);
 		this.handleCloseEvent = this.handleCloseEvent.bind(this);
@@ -110,6 +111,7 @@ class AppModalProfile extends HTMLElement {
 		}
 
 		this.setupNsfwToggles();
+		this.setupApiKeyActions();
 	}
 
 	setupNsfwToggles() {
@@ -222,6 +224,7 @@ class AppModalProfile extends HTMLElement {
 	close() {
 		if (!this._isOpen) return;
 		this._isOpen = false;
+		this.revealedApiKey = null;
 		const overlay = this.shadowRoot.querySelector('.profile-overlay');
 		if (overlay) {
 			overlay.classList.remove('open');
@@ -254,10 +257,10 @@ class AppModalProfile extends HTMLElement {
 
 			const user = result.data;
 			const nextKey = user
-				? `${user.email || ''}|${user.role || ''}|${user.created_at || ''}`
+				? `${user.email || ''}|${user.hasApiKey ? '1' : '0'}|${user.apiKeyPrefix || ''}|${user.created_at || ''}`
 				: '';
 			const currentKey = this.profileData
-				? `${this.profileData.email || ''}|${this.profileData.role || ''}|${this.profileData.created_at || ''}`
+				? `${this.profileData.email || ''}|${this.profileData.hasApiKey ? '1' : '0'}|${this.profileData.apiKeyPrefix || ''}|${this.profileData.created_at || ''}`
 				: '';
 
 			if (nextKey !== currentKey) {
@@ -291,18 +294,39 @@ class AppModalProfile extends HTMLElement {
 			fullProfileLink.setAttribute('href', profileHref || '/user');
 		}
 
-		const roleLabels = {
-			consumer: 'Consumer',
-			creator: 'Creator',
-			provider: 'Provider',
-			admin: 'Administrator'
-		};
-
 		const escapeHtml = (text) => {
 			const div = document.createElement('div');
 			div.textContent = text;
 			return div.innerHTML;
 		};
+
+		const hasKey = user.hasApiKey === true;
+		const prefixDisplay = typeof user.apiKeyPrefix === 'string' && user.apiKeyPrefix.trim()
+			? escapeHtml(user.apiKeyPrefix.trim())
+			: 'psn_…';
+
+		const revealBlock = this.revealedApiKey
+			? html`
+			<div class="profile-api-reveal" role="status">
+				<p class="profile-api-reveal-label">Copy your key now — it won’t be shown again.</p>
+				<div class="profile-api-reveal-row">
+					<code class="profile-api-reveal-code">${escapeHtml(this.revealedApiKey)}</code>
+					<button type="button" class="btn-secondary" data-profile-api-copy>Copy</button>
+				</div>
+			</div>`
+			: '';
+
+		const keyActions = hasKey
+			? html`
+			<p class="profile-api-active">Active key: <span class="profile-api-prefix">${prefixDisplay}</span></p>
+			<div class="profile-api-actions">
+				<button type="button" class="btn-secondary" data-profile-api-generate>Generate new key</button>
+				<button type="button" class="btn-secondary is-logout" data-profile-api-remove>Remove API key</button>
+			</div>`
+			: html`
+			<div class="profile-api-actions">
+				<button type="button" class="btn-secondary" data-profile-api-generate>Generate API key</button>
+			</div>`;
 
 		content.innerHTML = html`
 	<div class="field">
@@ -310,14 +334,76 @@ class AppModalProfile extends HTMLElement {
 		<div class="value">${escapeHtml(user.email)}</div>
 	</div>
 	<div class="field">
-		<label>Role</label>
-		<div class="value">${escapeHtml(roleLabels[user.role] || user.role)}</div>
-	</div>
-	<div class="field">
 		<label>Member Since</label>
 		<div class="value">${formatDate(user.created_at) || 'N/A'}</div>
 	</div>
+	<div class="profile-api-key-section">
+		<div class="field">
+			<label>API key</label>
+			<p class="profile-api-hint">Use in the Authorization header: Bearer &lt;key&gt;</p>
+			${revealBlock}
+			${keyActions}
+		</div>
+	</div>
     `;
+	}
+
+	setupApiKeyActions() {
+		this.shadowRoot.addEventListener('click', async (e) => {
+			const gen = e.target.closest?.('[data-profile-api-generate]');
+			const rem = e.target.closest?.('[data-profile-api-remove]');
+			const copy = e.target.closest?.('[data-profile-api-copy]');
+			if (gen) {
+				e.preventDefault();
+				try {
+					const res = await fetchJsonWithStatusDeduped('/api/profile/api-key', {
+						method: 'POST',
+						credentials: 'include',
+						headers: { 'Content-Type': 'application/json' }
+					}, { windowMs: 0 });
+					if (res?.ok && typeof res.data?.apiKey === 'string') {
+						this.revealedApiKey = res.data.apiKey;
+						if (this.profileData) {
+							this.profileData.hasApiKey = true;
+							this.profileData.apiKeyPrefix = `${res.data.apiKey.slice(0, 10)}…`;
+						}
+						this.displayProfile(this.profileData || {});
+					}
+				} catch {
+					// ignore
+				}
+				return;
+			}
+			if (rem) {
+				e.preventDefault();
+				if (!window.confirm('Remove this API key? Apps using it will stop working.')) return;
+				try {
+					const res = await fetchJsonWithStatusDeduped('/api/profile/api-key', {
+						method: 'DELETE',
+						credentials: 'include'
+					}, { windowMs: 0 });
+					if (res?.ok) {
+						this.revealedApiKey = null;
+						if (this.profileData) {
+							this.profileData.hasApiKey = false;
+							this.profileData.apiKeyPrefix = null;
+						}
+						await this.loadProfile({ silent: true, force: true });
+					}
+				} catch {
+					// ignore
+				}
+				return;
+			}
+			if (copy && this.revealedApiKey) {
+				e.preventDefault();
+				try {
+					await navigator.clipboard.writeText(this.revealedApiKey);
+				} catch {
+					// ignore
+				}
+			}
+		});
 	}
 
 	render() {
@@ -471,6 +557,59 @@ class AppModalProfile extends HTMLElement {
         .field .value {
           font-size: 1rem;
           color: var(--text);
+        }
+        .profile-api-key-section {
+          margin-top: 4px;
+          padding-top: 16px;
+          border-top: 1px solid var(--border);
+        }
+        .profile-api-hint {
+          font-size: 0.85rem;
+          color: var(--text-muted);
+          margin: 0 0 12px 0;
+          line-height: 1.35;
+        }
+        .profile-api-reveal {
+          margin-bottom: 12px;
+          padding: 12px;
+          border-radius: 10px;
+          background: var(--surface-strong);
+          border: 1px solid var(--border);
+        }
+        .profile-api-reveal-label {
+          margin: 0 0 8px 0;
+          font-size: 0.9rem;
+          color: var(--text-muted);
+        }
+        .profile-api-reveal-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+        .profile-api-reveal-code {
+          flex: 1;
+          min-width: 0;
+          font-size: 0.8rem;
+          word-break: break-all;
+          padding: 8px 10px;
+          border-radius: 6px;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          font-family: ui-monospace, monospace;
+        }
+        .profile-api-active {
+          margin: 0 0 10px 0;
+          font-size: 0.95rem;
+          color: var(--text);
+        }
+        .profile-api-prefix {
+          font-family: ui-monospace, monospace;
+        }
+        .profile-api-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
         }
         .profile-nsfw-toggles {
           margin-top: 20px;

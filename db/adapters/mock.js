@@ -360,6 +360,28 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		updateUserApiKey: {
+			run: async (userId, { apiKeyHash, apiKeyPrefix } = {}) => {
+				const user = users.find((u) => Number(u.id) === Number(userId));
+				if (!user) return { changes: 0 };
+				user.meta = user.meta != null && typeof user.meta === "object" ? { ...user.meta } : {};
+				if (apiKeyHash == null || apiKeyHash === "") {
+					delete user.meta.apiKeyHash;
+					delete user.meta.apiKeyPrefix;
+				} else {
+					user.meta.apiKeyHash = String(apiKeyHash);
+					user.meta.apiKeyPrefix = typeof apiKeyPrefix === "string" ? apiKeyPrefix : "";
+				}
+				return { changes: 1 };
+			}
+		},
+		selectUserIdByApiKeyHash: {
+			get: async (hash) => {
+				if (hash == null || typeof hash !== "string" || !hash.trim()) return undefined;
+				const user = users.find((u) => u.meta?.apiKeyHash === hash.trim());
+				return user ? { id: user.id } : undefined;
+			}
+		},
 		recordCheckoutReturn: {
 			run: async (userId, sessionId, returnedAt) => {
 				const user = users.find((u) => Number(u.id) === Number(userId));
