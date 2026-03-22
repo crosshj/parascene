@@ -163,6 +163,9 @@ class AppRouteAnalytics extends HTMLElement {
 			if (e.detail?.id === 'share' && !this._shareDataLoaded) {
 				this.loadShareViews();
 			}
+			if (e.detail?.id === 'blog' && !this._blogDataLoaded) {
+				this.loadBlogAnalytics();
+			}
 		});
 		this.setupAnalyticsTabHash();
 		this._anonModalOverlay = this.querySelector('[data-anon-detail-modal]');
