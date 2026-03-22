@@ -5,6 +5,9 @@
 
 import { createClient } from '@supabase/supabase-js';
 
+/** Set to false (or remove logs) once Phase 1 / Realtime is validated. */
+const PRSN_DEBUG_SUPABASE_SESSION = true;
+
 let _client = null;
 
 export function getSupabaseBrowserConfig() {
@@ -45,6 +48,9 @@ export async function ensureSupabaseSessionForApp() {
 
 	const { data: existing } = await sb.auth.getSession();
 	if (existing?.session?.access_token) {
+		if (PRSN_DEBUG_SUPABASE_SESSION) {
+			console.log('[Parascene] Supabase Auth session ready (restored from storage)');
+		}
 		return existing.session;
 	}
 
@@ -82,6 +88,9 @@ export async function ensureSupabaseSessionForApp() {
 	});
 	if (error || !data?.session) {
 		return null;
+	}
+	if (PRSN_DEBUG_SUPABASE_SESSION) {
+		console.log('[Parascene] Supabase Auth session ready (from /api/auth/supabase-session)');
 	}
 	return data.session;
 }
