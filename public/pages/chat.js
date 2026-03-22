@@ -412,9 +412,6 @@ export async function initChatPage(root) {
 		if (!hasAnyReactions) {
 			return '';
 		}
-		const reactionOverflowLimit =
-			typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches ? 3 : 5;
-		const hasMoreThan3Reactions = keysWithReactions.length > reactionOverflowLimit;
 		const hasUnusedReactions = REACTION_ORDER.some((key) => chatReactionGetCount(reactions[key]) === 0);
 		const reactionPills = keysWithReactions
 					.map((key) => {
@@ -446,11 +443,11 @@ export async function initChatPage(root) {
 		return `<div class="comment-meta-row connect-chat-msg-reaction-row">
 			<div class="comment-meta-top">
 				<div class="comment-meta-right">
-					${reactionPills && !hasMoreThan3Reactions ? `<div class="comment-reaction-pills"><div class="comment-reaction-pills-inner">${reactionPills}</div></div>` : ''}
-					${addReactionBtn ? `<div class="comment-reaction-add-wrap">${addReactionBtn}</div>` : ''}
+					<div class="comment-reaction-pills">
+						<div class="comment-reaction-pills-inner">${reactionPills}${addReactionBtn}</div>
+					</div>
 				</div>
 			</div>
-			${reactionPills && hasMoreThan3Reactions ? `<div class="comment-reaction-pills comment-reaction-pills--below"><div class="comment-reaction-pills-inner">${reactionPills}</div></div>` : ''}
 		</div>`;
 	}
 

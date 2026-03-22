@@ -2528,8 +2528,6 @@ async function loadCreation() {
 				};
 				const keysWithReactions = REACTION_ORDER.filter((key) => getCount(reactions[key]) > 0);
 				const hasAnyReactions = keysWithReactions.length > 0;
-				const reactionOverflowLimit = typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches ? 3 : 5;
-				const hasMoreThan3Reactions = keysWithReactions.length > reactionOverflowLimit;
 				const hasUnusedReactions = REACTION_ORDER.some((key) => getCount(reactions[key]) === 0);
 				const reactionPills = hasAnyReactions
 					? keysWithReactions.map((key) => {
@@ -2552,15 +2550,17 @@ async function loadCreation() {
 					}).join('')
 					: '';
 				const addReactionBtn = hasUnusedReactions ? `<button type="button" class="comment-reaction-add" data-comment-id="${escapeHtml(commentId)}" aria-label="Add reaction" title="Add reaction"><span class="comment-reaction-icon-wrap" aria-hidden="true">${smileIcon('comment-reaction-add-icon')}</span></button>` : '';
+				const reactionPillsRow =
+					hasAnyReactions || hasUnusedReactions
+						? `<div class="comment-reaction-pills"><div class="comment-reaction-pills-inner">${reactionPills}${addReactionBtn}</div></div>`
+						: '';
 				const metaRowHtml = `<div class="comment-meta-row">
 					<div class="comment-meta-top">
 						${timeAgo ? `<span class="comment-time" title="${escapeHtml(timeTitle)}">${escapeHtml(timeAgo)}</span>` : ''}
 						<div class="comment-meta-right">
-							${reactionPills && !hasMoreThan3Reactions ? `<div class="comment-reaction-pills"><div class="comment-reaction-pills-inner">${reactionPills}</div></div>` : ''}
-							${addReactionBtn ? `<div class="comment-reaction-add-wrap">${addReactionBtn}</div>` : ''}
+							${reactionPillsRow}
 						</div>
 					</div>
-					${reactionPills && hasMoreThan3Reactions ? `<div class="comment-reaction-pills comment-reaction-pills--below"><div class="comment-reaction-pills-inner">${reactionPills}</div></div>` : ''}
 				</div>`;
 
 				return `

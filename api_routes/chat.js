@@ -5,6 +5,8 @@ import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { normalizeTag } from "./utils/tag.js";
 import { getNotificationDisplayName } from "./utils/displayName.js";
 import { REACTION_ORDER } from "./comments.js";
+import { getShareBaseUrl } from "./utils/url.js";
+import { ACTIVE_SHARE_VERSION, mintShareToken } from "./utils/shareLink.js";
 
 function normalizeChatReactionsBucket(raw) {
 	const out = {};
@@ -56,6 +58,133 @@ const DEFAULT_PAGE_LIMIT = 50;
 const MAX_PAGE_LIMIT = 100;
 const SEND_RATE_WINDOW_SEC = 60;
 const SEND_RATE_MAX = 60;
+
+/** Match trailing punctuation on pasted URLs (aligned with client `splitUrlTrailingPunctuation`). */
+function splitUrlTrailingPunctuationForChat(rawUrl) {
+	let url = String(rawUrl || "");
+	let trailing = "";
+	const stripChars = ".,!?:;";
+	let safety = 0;
+	while (url && safety < 8) {
+		const last = url[url.length - 1];
+		if (stripChars.includes(last)) {
+			trailing = last + trailing;
+			url = url.slice(0, -1);
+			safety++;
+			continue;
+		}
+		if ((last === ")" || last === "]" || last === "}") && url.length > 1) {
+			const openCount = (url.match(/\(/g) || []).length;
+			const closeCount = (url.match(/\)/g) || []).length;
+			const openB = (url.match(/\[/g) || []).length;
+			const closeB = (url.match(/\]/g) || []).length;
+			const openC = (url.match(/\{/g) || []).length;
+			const closeC = (url.match(/\}/g) || []).length;
+			const unmatched =
+				(last === ")" && closeCount > openCount) ||
+				(last === "]" && closeB > openB) ||
+				(last === "}" && closeC > openC);
+			if (unmatched) {
+				trailing = last + trailing;
+				url = url.slice(0, -1);
+				safety++;
+				continue;
+			}
+		}
+		break;
+	}
+	return { url, trailing };
+}
+
+/**
+ * Spans in `text` that are bare `/creations/:id` or http(s) URLs whose path is exactly `/creations/:id` (not `/edit`, etc.).
+ */
+function collectCreationDetailUrlSpansInChatBody(text) {
+	const spans = [];
+	const t = String(text || "");
+	const urlRe = /https?:\/\/[^\s"'<>]+/g;
+	let m;
+	while ((m = urlRe.exec(t)) !== null) {
+		const raw = m[0];
+		const { url } = splitUrlTrailingPunctuationForChat(raw);
+		try {
+			const u = new URL(url);
+			const mm = (u.pathname || "").match(/^\/creations\/(\d+)\/?$/i);
+			if (mm) {
+				const id = Number(mm[1]);
+				if (Number.isFinite(id) && id > 0) {
+					spans.push({ start: m.index, end: m.index + raw.length, id });
+				}
+			}
+		} catch {
+			// ignore
+		}
+	}
+	const bareRe = /(^|[\s(])\/creations\/(\d+)(?=\/?(?:[\s]|$|[.,!?;:)]|\)|\?|#))/gi;
+	while ((m = bareRe.exec(t)) !== null) {
+		const id = Number(m[2]);
+		const start = m.index + m[1].length;
+		const end = bareRe.lastIndex;
+		if (Number.isFinite(id) && id > 0) {
+			spans.push({ start, end, id });
+		}
+	}
+	spans.sort((a, b) => a.start - b.start || b.end - a.end - (b.start - a.start));
+	const out = [];
+	let lastEnd = -1;
+	for (const s of spans) {
+		if (s.start < lastEnd) continue;
+		out.push(s);
+		lastEnd = s.end;
+	}
+	return out;
+}
+
+async function mintShareUrlForOwnerUnpublishedCreation(id, senderUserId, queries, shareBase, bust) {
+	try {
+		const row = await queries.selectCreatedImageById?.get(id, senderUserId);
+		if (!row) return null;
+		const pub = row.published === 1 || row.published === true;
+		if (pub) return null;
+		const status = row.status || "completed";
+		if (status !== "completed") return null;
+		if (row.unavailable_at != null && String(row.unavailable_at) !== "") return null;
+		const token = mintShareToken({
+			version: ACTIVE_SHARE_VERSION,
+			imageId: Number(id),
+			sharedByUserId: Number(senderUserId)
+		});
+		return `${shareBase}/s/${ACTIVE_SHARE_VERSION}/${token}/${bust}`;
+	} catch {
+		return null;
+	}
+}
+
+/** Replace in-app creation detail URLs with share URLs when the sender owns the creation and it is not published (so recipients can load previews via share token headers). */
+async function normalizeUnpublishedCreationUrlsInChatBody(body, senderUserId, queries) {
+	if (!queries?.selectCreatedImageById?.get) return body;
+	const spans = collectCreationDetailUrlSpansInChatBody(body);
+	if (spans.length === 0) return body;
+
+	const shareBase = getShareBaseUrl();
+	const bust = Math.floor(Date.now() / 1000).toString(36);
+	const ids = [...new Set(spans.map((s) => s.id))];
+	const shareUrlById = new Map();
+
+	for (const id of ids) {
+		const url = await mintShareUrlForOwnerUnpublishedCreation(id, senderUserId, queries, shareBase, bust);
+		if (url) shareUrlById.set(id, url);
+	}
+
+	let out = body;
+	const toApply = spans
+		.filter((s) => shareUrlById.has(s.id))
+		.sort((a, b) => b.start - a.start);
+	for (const s of toApply) {
+		out = out.slice(0, s.start) + shareUrlById.get(s.id) + out.slice(s.end);
+	}
+	return out;
+}
 
 let redis = null;
 function getRedis() {
@@ -533,7 +662,7 @@ export default function createChatRoutes({ queries }) {
 		}
 
 		const bodyRaw = req.body?.body;
-		const body =
+		let body =
 			typeof bodyRaw === "string"
 				? bodyRaw.replace(/\u0000/g, "").trim()
 				: "";
@@ -554,6 +683,14 @@ export default function createChatRoutes({ queries }) {
 
 			if (!(await rateLimitSend(userId))) {
 				return res.status(429).json({ error: "Too many requests", message: "Rate limit exceeded" });
+			}
+
+			body = await normalizeUnpublishedCreationUrlsInChatBody(body, userId, queries);
+			if (body.length > MAX_MESSAGE_CHARS) {
+				return res.status(400).json({
+					error: "Bad request",
+					message: `body must be at most ${MAX_MESSAGE_CHARS} characters`
+				});
 			}
 
 			const ins = await sb

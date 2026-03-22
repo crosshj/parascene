@@ -150,6 +150,9 @@ function extractCreationId(url) {
 /** Default app origin for client-side fallback (e.g. SSR). Single place to change app domain in client code. */
 export const DEFAULT_APP_ORIGIN = 'https://www.parascene.com';
 
+/** Share links host (must match `SHARE_HOSTNAME` in api_routes/utils/url.js). */
+const PARASCENE_SHARE_HOST = 'sh.parascene.com';
+
 /**
  * Expands bare paths like `/creations/123` (not already `https://...`) into absolute URLs
  * so the main URL pass can turn them into same-origin links. Does not match `/creations/123/edit`.
@@ -654,6 +657,53 @@ function getCreationDetailIdFromHref(href) {
 	}
 }
 
+/**
+ * Reads creation id from the signed share token payload (first segment before `.`), same encoding as server `mintShareToken`.
+ */
+function decodeImageIdFromShareTokenPayload(fullToken) {
+	const raw = String(fullToken || '').trim();
+	if (!raw.includes('.')) return null;
+	const p = raw.split('.')[0];
+	if (!p) return null;
+	const padded =
+		p.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((p.length + 3) % 4);
+	try {
+		const binary = atob(padded);
+		if (binary.length < 3) return null;
+		const b0 = binary.charCodeAt(0);
+		const b1 = binary.charCodeAt(1);
+		const b2 = binary.charCodeAt(2);
+		const id = (b0 << 16) | (b1 << 8) | b2;
+		return Number.isFinite(id) && id > 0 ? String(id) : null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * @returns {{ id: string, shareVersion: string, shareToken: string } | null}
+ */
+function parseParasceneShareEmbedParams(href) {
+	try {
+		const u = new URL(
+			String(href || ''),
+			typeof window !== 'undefined' && window.location
+				? window.location.origin
+				: DEFAULT_APP_ORIGIN
+		);
+		if (u.hostname.toLowerCase() !== PARASCENE_SHARE_HOST) return null;
+		const m = (u.pathname || '').match(/^\/s\/([^/]+)\/([^/]+)\/[^/]+\/?$/);
+		if (!m) return null;
+		const shareVersion = m[1];
+		const shareToken = m[2];
+		const id = decodeImageIdFromShareTokenPayload(shareToken);
+		if (!id) return null;
+		return { id, shareVersion, shareToken };
+	} catch {
+		return null;
+	}
+}
+
 function trimWhitespaceOnlyTextNodes(el) {
 	if (!(el instanceof HTMLElement)) return;
 	let n = el.lastChild;
@@ -670,17 +720,28 @@ function trimWhitespaceOnlyTextNodes(el) {
 	}
 }
 
-async function fetchCreationForChatEmbed(id) {
-	if (creationEmbedDataCache.has(id)) {
-		return creationEmbedDataCache.get(id);
+async function fetchCreationForChatEmbed(id, shareOpts) {
+	const shareVersion =
+		shareOpts && typeof shareOpts.shareVersion === 'string' ? shareOpts.shareVersion.trim() : '';
+	const shareToken =
+		shareOpts && typeof shareOpts.shareToken === 'string' ? shareOpts.shareToken.trim() : '';
+	const cacheKey =
+		shareVersion && shareToken ? `${id}\0${shareVersion}\0${shareToken}` : id;
+	if (creationEmbedDataCache.has(cacheKey)) {
+		return creationEmbedDataCache.get(cacheKey);
 	}
-	let p = creationEmbedFetchInFlight.get(id);
+	let p = creationEmbedFetchInFlight.get(cacheKey);
 	if (!p) {
 		p = (async () => {
+			const headers = { Accept: 'application/json' };
+			if (shareVersion && shareToken) {
+				headers['X-Share-Version'] = shareVersion;
+				headers['X-Share-Token'] = shareToken;
+			}
 			const res = await fetch(`/api/create/images/${encodeURIComponent(id)}`, {
 				method: 'GET',
 				credentials: 'include',
-				headers: { Accept: 'application/json' },
+				headers,
 			});
 			if (!res.ok) {
 				return { _error: true, status: res.status };
@@ -689,19 +750,20 @@ async function fetchCreationForChatEmbed(id) {
 			if (!data || typeof data !== 'object') {
 				return { _error: true };
 			}
-			creationEmbedDataCache.set(id, data);
+			creationEmbedDataCache.set(cacheKey, data);
 			return data;
 		})().finally(() => {
-			creationEmbedFetchInFlight.delete(id);
+			creationEmbedFetchInFlight.delete(cacheKey);
 		});
-		creationEmbedFetchInFlight.set(id, p);
+		creationEmbedFetchInFlight.set(cacheKey, p);
 	}
 	return p;
 }
 
 /**
  * After chat bubbles render `processUserText`, call this to fetch creation metadata and show
- * an image (or video) preview for `/creations/:id` links the viewer can access (same rules as GET /api/create/images/:id).
+ * an image (or video) preview for `/creations/:id` or Parascene share links (`sh…/s/…`) the viewer can access
+ * (GET /api/create/images/:id, with optional `X-Share-Version` / `X-Share-Token` for unpublished creations).
  *
  * @param {Element|Document} rootEl - Container (e.g. [data-chat-messages])
  */
@@ -714,8 +776,15 @@ export function hydrateChatCreationEmbeds(rootEl) {
 	for (const a of links) {
 		if (!(a instanceof HTMLAnchorElement)) continue;
 		if (a.dataset.chatCreationEmbed === 'true') continue;
-		const creationId = getCreationDetailIdFromHref(a.getAttribute('href') || '');
+		const href = a.getAttribute('href') || '';
+		const detailId = getCreationDetailIdFromHref(href);
+		const share = parseParasceneShareEmbedParams(href);
+		const creationId = detailId || (share ? share.id : null);
 		if (!creationId) continue;
+		const shareOpts =
+			share && !detailId
+				? { shareVersion: share.shareVersion, shareToken: share.shareToken }
+				: null;
 		a.dataset.chatCreationEmbed = 'true';
 
 		const wrap = document.createElement('div');
@@ -723,10 +792,11 @@ export function hydrateChatCreationEmbeds(rootEl) {
 			'connect-chat-creation-embed connect-chat-creation-embed--loading connect-chat-creation-embed--square';
 		wrap.setAttribute('data-creation-id', creationId);
 		wrap.innerHTML =
-			'<div class="connect-chat-creation-embed-skeleton" aria-hidden="true"></div>';
+			'<div class="connect-chat-creation-embed-skeleton" aria-hidden="true"></div>' +
+			'<div class="connect-chat-creation-embed-title connect-chat-creation-embed-title--placeholder" aria-hidden="true"></div>';
 		a.insertAdjacentElement('afterend', wrap);
 
-		void fetchCreationForChatEmbed(creationId).then((data) => {
+		void fetchCreationForChatEmbed(creationId, shareOpts).then((data) => {
 			if (!wrap.parentNode) return;
 			wrap.classList.remove('connect-chat-creation-embed--loading');
 
@@ -757,7 +827,7 @@ export function hydrateChatCreationEmbeds(rootEl) {
 				typeof data.title === 'string' ? data.title.trim() : '';
 			const titleHtml = titleRaw
 				? `<div class="connect-chat-creation-embed-title">${escapeHtml(titleRaw)}</div>`
-				: '';
+				: '<div class="connect-chat-creation-embed-title"><em>untitled</em></div>';
 
 			const isNsfw = !!data.nsfw;
 			const nsfwClass = isNsfw ? ' nsfw' : '';
@@ -784,7 +854,7 @@ export function hydrateChatCreationEmbeds(rootEl) {
 
 			if (url) {
 				const alt =
-					titleRaw.length > 0 ? escapeHtml(titleRaw) : 'Creation preview';
+					titleRaw.length > 0 ? escapeHtml(titleRaw) : 'untitled';
 				wrap.innerHTML = `<div class="connect-chat-creation-embed-inner${nsfwClass}"${nsfwDataAttr}><img class="connect-chat-creation-embed-img" src="${escapeHtml(url)}" alt="${alt}" loading="lazy" decoding="async" /></div>${titleHtml}`;
 				trimWhitespaceOnlyTextNodes(wrap);
 				return;
