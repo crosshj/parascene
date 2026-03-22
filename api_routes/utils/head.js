@@ -38,7 +38,30 @@ export function getPageTokens(req) {
 			tokens.OG_URL_TAG = `<meta property="og:url" content="${escapeHtmlUrl(canonicalUrl)}" />\n\t\t<meta property="og:type" content="website" />`;
 		}
 	}
+	const authed = !!(req?.auth?.userId);
+	tokens.PRSN_SUPABASE_BOOT = authed ? getSupabaseBootHtml() : "";
 	return tokens;
+}
+
+/**
+ * Inline import map + window config for logged-in shell (no bundler). Empty when env missing.
+ */
+function getSupabaseBootHtml() {
+	const url = process.env.SUPABASE_URL?.trim();
+	const anon = process.env.SUPABASE_ANON_KEY?.trim();
+	if (!url || !anon) {
+		return "";
+	}
+	const cfg = JSON.stringify({ url, anonKey: anon }).replace(/</g, "\\u003c");
+	const importMapJson = JSON.stringify({
+		imports: {
+			"@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.39.0"
+		}
+	}).replace(/</g, "\\u003c");
+	return (
+		`<script type="importmap">${importMapJson}</script>` +
+		`\n\t\t<script>window.__PRSN_SUPABASE__=${cfg};</script>`
+	);
 }
 
 function getCommonHead() {
@@ -63,6 +86,7 @@ function getCommonHead() {
 		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 		<link rel="stylesheet" href="/global.css{{V}}" />
 		<meta name="asset-version" content="{{V_PARAM}}" />
+		{{PRSN_SUPABASE_BOOT}}
 		<script type="module" src="/entry.js{{V}}"></script>
 		{{CANONICAL_LINK}}
 		{{OG_URL_TAG}}
@@ -109,7 +133,7 @@ export function injectCommonHead(htmlContent, extraTokens) {
 
 	const commonHead = getCommonHead();
 	const existingHeadContent = headMatch[1];
-	const tokens = { CANONICAL_LINK: "", ...extraTokens };
+	const tokens = { CANONICAL_LINK: "", PRSN_SUPABASE_BOOT: "", ...extraTokens };
 	const withHead = htmlContent.replace(/<head>[\s\S]*?<\/head>/i, `<head>\n${commonHead}${existingHeadContent}</head>`);
 	return replacePageTokens(withHead, tokens);
 }

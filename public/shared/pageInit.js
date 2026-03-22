@@ -68,6 +68,39 @@ export async function waitForComponents(customElementTags) {
  */
 export async function runCommonAppInit() {
 	await loadDeps();
+	// Phase 1: Supabase Auth session for Realtime (private channels). No-op without __PRSN_SUPABASE__ / SESSION_SECRET on server.
+	try {
+		if (typeof window !== 'undefined' && window.__PRSN_SUPABASE__) {
+			const v = getAssetVersionParam();
+			const qs = v ? `?v=${encodeURIComponent(v)}` : '';
+			const mod = await import(`./supabaseBrowser.js${qs}`);
+			await mod.ensureSupabaseSessionForApp();
+		}
+	} catch {
+		// ignore
+	}
+
+	document.addEventListener(
+		'submit',
+		(e) => {
+			const form = e.target;
+			if (!(form instanceof HTMLFormElement)) return;
+			const action = (form.getAttribute('action') || '').trim();
+			if (action !== '/logout') return;
+			void (async () => {
+				try {
+					const v = getAssetVersionParam();
+					const qs = v ? `?v=${encodeURIComponent(v)}` : '';
+					const mod = await import(`./supabaseBrowser.js${qs}`);
+					await mod.signOutSupabaseIfConfigured();
+				} catch {
+					// ignore
+				}
+			})();
+		},
+		true
+	);
+
 	// Apply NSFW view preference from localStorage so body.view-nsfw is set on load
 	try {
 		initNsfwViewPreference();

@@ -25,6 +25,7 @@ import createYoutubeRoutes from "../api_routes/youtube.js";
 import createXRoutes from "../api_routes/x.js";
 import createFeatureRequestRoutes from "../api_routes/feature_requests.js";
 import createChatRoutes from "../api_routes/chat.js";
+import createSupabaseSessionRoutes from "../api_routes/supabaseSession.js";
 import createShareRoutes from "../api_routes/share.js";
 import createSuggestRoutes from "../api_routes/suggest.js";
 import createQRRoutes from "../api_routes/qr.js";
@@ -170,6 +171,7 @@ app.use(createPrsnCidPersistMiddleware(queries));
 app.use(probabilisticSessionCleanup(queries));
 app.use(createWelcomeGate(queries));
 
+app.use(createSupabaseSessionRoutes({ queries }));
 app.use(createUserRoutes({ queries }));
 app.use(createFollowsRoutes({ queries }));
 
