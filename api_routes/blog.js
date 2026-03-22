@@ -508,6 +508,7 @@ export default function createBlogRoutes({ pagesDir, queries }) {
 
 	router.get("/blog/*", async (req, res) => {
 		try {
+			const fs = await import("fs/promises");
 			const raw = req.path.replace(/^\/blog\/?/, "").replace(/\/$/, "") || "";
 			const segments = raw ? raw.split("/").filter(Boolean) : [];
 			const { post, campaign, slugUsed } = await resolvePublishedPostForBlogPath(segments);
