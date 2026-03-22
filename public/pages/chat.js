@@ -230,11 +230,99 @@ export async function initChatPage(root) {
 	let roomBroadcastTeardown = null;
 	/** @type {null | (() => void)} */
 	let visibilityResyncCleanup = null;
+	/** True when the viewer is pinned to the latest messages (used for lazy embeds + viewport resize). */
+	let chatStickToBottom = true;
+	/** @type {ResizeObserver | null} */
+	let chatMessagesRowResizeObserver = null;
+	/** @type {MutationObserver | null} */
+	let chatMessagesChildListObserver = null;
+	/** @type {null | (() => void)} */
+	let chatMessagesScrollCleanup = null;
 
+	const CHAT_BOTTOM_THRESHOLD_PX = 56;
+
+	function updateChatStickToBottomFromScroll() {
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		if (!messagesEl) return;
+		const dist = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight;
+		chatStickToBottom = dist <= CHAT_BOTTOM_THRESHOLD_PX;
+	}
+
+	/**
+	 * Scroll the thread to the latest message. Call after render/send; also re-runs on the next
+	 * animation frames so mobile WebKit finishes layout before we read scrollHeight.
+	 * Async creation embeds and images still grow the list after this — ResizeObserver keeps the bottom pinned.
+	 */
 	function scrollChatMessagesToEnd() {
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!messagesEl) return;
-		messagesEl.scrollTop = messagesEl.scrollHeight;
+		chatStickToBottom = true;
+		const apply = () => {
+			messagesEl.scrollTop = messagesEl.scrollHeight;
+		};
+		apply();
+		requestAnimationFrame(() => {
+			apply();
+			requestAnimationFrame(apply);
+		});
+	}
+
+	/** Re-scroll after visual viewport changes only if the user was already following the thread. */
+	function nudgeChatScrollIfStuckToBottom() {
+		if (!chatStickToBottom) return;
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		if (!messagesEl) return;
+		const apply = () => {
+			messagesEl.scrollTop = messagesEl.scrollHeight;
+		};
+		apply();
+		requestAnimationFrame(apply);
+	}
+
+	function setupChatMessagesScrollAssist() {
+		teardownChatMessagesScrollAssist();
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		if (!messagesEl) return;
+
+		const onScroll = () => updateChatStickToBottomFromScroll();
+		messagesEl.addEventListener('scroll', onScroll, { passive: true });
+		chatMessagesScrollCleanup = () => messagesEl.removeEventListener('scroll', onScroll);
+
+		/* Observing the scroll box misses inner growth (fixed height + overflow). Observe each row so
+		 * async embeds / images changing height re-pin the list when we’re following the thread. */
+		if (typeof ResizeObserver === 'undefined') return;
+		const ro = new ResizeObserver(() => {
+			if (!chatStickToBottom) return;
+			requestAnimationFrame(() => {
+				messagesEl.scrollTop = messagesEl.scrollHeight;
+			});
+		});
+		const syncRowObservers = () => {
+			ro.disconnect();
+			for (const child of messagesEl.children) {
+				ro.observe(child);
+			}
+		};
+		syncRowObservers();
+		const mo = new MutationObserver(syncRowObservers);
+		mo.observe(messagesEl, { childList: true });
+		chatMessagesRowResizeObserver = ro;
+		chatMessagesChildListObserver = mo;
+	}
+
+	function teardownChatMessagesScrollAssist() {
+		if (typeof chatMessagesScrollCleanup === 'function') {
+			chatMessagesScrollCleanup();
+			chatMessagesScrollCleanup = null;
+		}
+		if (chatMessagesRowResizeObserver) {
+			chatMessagesRowResizeObserver.disconnect();
+			chatMessagesRowResizeObserver = null;
+		}
+		if (chatMessagesChildListObserver) {
+			chatMessagesChildListObserver.disconnect();
+			chatMessagesChildListObserver = null;
+		}
 	}
 
 	function syncChatSendButton() {
@@ -293,7 +381,7 @@ export async function initChatPage(root) {
 			const h = vv.height;
 			document.documentElement.style.height = `${h}px`;
 			document.body.style.height = `${h}px`;
-			requestAnimationFrame(() => scrollChatMessagesToEnd());
+			requestAnimationFrame(() => nudgeChatScrollIfStuckToBottom());
 		};
 
 		chatViewportHandler = apply;
@@ -940,6 +1028,7 @@ export async function initChatPage(root) {
 	}
 
 	setupChatViewportSync();
+	setupChatMessagesScrollAssist();
 
 	try {
 		document.documentElement.dataset.route = 'chat';
@@ -952,6 +1041,7 @@ export async function initChatPage(root) {
 		tearDownRoomBroadcast();
 		closeReactionPicker();
 		teardownChatViewportSync();
+		teardownChatMessagesScrollAssist();
 		try {
 			delete document.documentElement.dataset.route;
 		} catch {
