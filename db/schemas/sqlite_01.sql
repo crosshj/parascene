@@ -161,6 +161,24 @@ CREATE TABLE IF NOT EXISTS feed_items (
 CREATE INDEX IF NOT EXISTS idx_feed_items_created_at ON feed_items(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_feed_items_created_image_id ON feed_items(created_image_id);
 
+-- Blog posts (admin-authored; public reads only when status = published)
+CREATE TABLE IF NOT EXISTS blog_posts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug TEXT NOT NULL UNIQUE,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  body_md TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published', 'archived')),
+  published_at TEXT,
+  author_user_id INTEGER NOT NULL REFERENCES users(id),
+  updated_by_user_id INTEGER REFERENCES users(id),
+  meta TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_blog_posts_status ON blog_posts(status);
+CREATE INDEX IF NOT EXISTS idx_blog_posts_published_at ON blog_posts(published_at DESC);
+
 CREATE TABLE IF NOT EXISTS explore_items (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   title TEXT NOT NULL,

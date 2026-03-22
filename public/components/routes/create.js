@@ -57,6 +57,17 @@ async function loadDeps() {
 
 const html = String.raw;
 
+function escapeHtml(text) {
+	return String(text ?? "")
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;");
+}
+
+/** Inline SVG for blog table action buttons (sized in CSS). */
+const blogIcEdit = html`<svg class="create-route-blog-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>`;
+
 /** Normalize image URL to a canonical form (origin + path) so queue and form values match regardless of relative/absolute. */
 function normalizeImageUrlForMatch(raw) {
 	if (typeof raw !== 'string') return '';
@@ -90,6 +101,39 @@ class AppRouteCreate extends HTMLElement {
 
 	async connectedCallback() {
 		await loadDeps();
+		let showBlogTab = false;
+		try {
+			// Dedicated dedupe key: generic /api/profile responses can be cached from before login (401);
+			// sharing that cache would hide the Blog tab until expiry even after sign-in.
+			const pr = await fetchJsonWithStatusDeduped(
+				"/api/profile",
+				{ credentials: "include" },
+				{ windowMs: 30000, dedupeKey: "app-route-create-profile-blog-gate" }
+			);
+			const p = pr.data;
+			const plan = p?.plan ?? p?.meta?.plan;
+			if (pr.ok && (p?.role === "admin" || plan === "founder")) showBlogTab = true;
+		} catch (_) {
+			// offline / profile unavailable
+		}
+		this._showBlogTab = showBlogTab;
+		const blogTabSection = showBlogTab
+			? html`
+          <tab data-id="blog" label="Blog">
+            <div class="create-route-blog">
+              <div class="route-header">
+                <p>Manage blog posts (draft, publish, archive).</p>
+              </div>
+              <div class="create-route-blog-toolbar">
+                <button type="button" class="btn-primary create-button" data-blog-new>New draft</button>
+                <button type="button" class="btn-secondary" data-blog-refresh>Refresh</button>
+              </div>
+              <div class="create-route-blog-table-container" data-blog-table-container></div>
+              <p class="create-cost" data-blog-status aria-live="polite"></p>
+            </div>
+          </tab>
+        `
+			: "";
 		this._serversLoading = true;
 		this.innerHTML = html`
       <div class="create-route">
@@ -206,6 +250,7 @@ class AppRouteCreate extends HTMLElement {
               </div>
             </div>
           </tab>
+          ${blogTabSection}
         </app-tabs>
         <div class="create-route-advanced-confirm" data-advanced-confirm-dialog hidden>
           <div class="create-route-advanced-confirm-overlay" data-advanced-confirm-overlay></div>
@@ -244,6 +289,9 @@ class AppRouteCreate extends HTMLElement {
       </div>
     `;
 		this.setupEventListeners();
+		if (this._showBlogTab) {
+			this.setupBlogTab();
+		}
 		// Defer API calls until after first paint to improve perceived load
 		const runDataLoad = () => { this.loadServers(); this.loadCredits(); };
 		if (typeof requestIdleCallback !== 'undefined') {
@@ -371,14 +419,14 @@ class AppRouteCreate extends HTMLElement {
 			});
 		}
 
-		// Restore and persist active tab (Basic / Advanced); sync with URL hash (#basic, #advanced)
+		// Restore and persist active tab (Basic / Advanced / Blog); sync with URL hash (#basic, #advanced, #blog)
 		const tabsEl = this.querySelector('app-tabs');
 		if (tabsEl) {
-			const CREATE_TAB_IDS = ['basic', 'advanced'];
+			const CREATE_TAB_IDS = this._showBlogTab ? ['basic', 'advanced', 'blog'] : ['basic', 'advanced'];
 			const syncTabFromHash = () => {
 				if (window.location.pathname !== '/create') return;
 				const hash = (window.location.hash || '').replace(/^#/, '').toLowerCase();
-				if (hash !== 'basic' && hash !== 'advanced') return;
+				if (!CREATE_TAB_IDS.includes(hash)) return;
 				tabsEl.setActiveTab(hash, { focus: false });
 				try {
 					const stored = sessionStorage.getItem(this.storageKey);
@@ -393,7 +441,7 @@ class AppRouteCreate extends HTMLElement {
 			// Prefer URL hash over sessionStorage when present; default to basic when neither is set
 			if (window.location.pathname === '/create') {
 				const hash = (window.location.hash || '').replace(/^#/, '').toLowerCase();
-				if (hash === 'basic' || hash === 'advanced') {
+				if (CREATE_TAB_IDS.includes(hash)) {
 					tabsEl.setActiveTab(hash);
 					try {
 						const stored = sessionStorage.getItem(this.storageKey);
@@ -408,7 +456,7 @@ class AppRouteCreate extends HTMLElement {
 						const stored = sessionStorage.getItem(this.storageKey);
 						const selections = stored ? JSON.parse(stored) : {};
 						const tab = selections?.tab;
-						if (tab === 'basic' || tab === 'advanced') {
+						if (CREATE_TAB_IDS.includes(tab)) {
 							tabsEl.setActiveTab(tab);
 						} else {
 							tabsEl.setActiveTab('basic');
@@ -424,7 +472,7 @@ class AppRouteCreate extends HTMLElement {
 
 			tabsEl.addEventListener('tab-change', (e) => {
 				const id = e.detail?.id;
-				if (id !== 'basic' && id !== 'advanced') return;
+				if (!CREATE_TAB_IDS.includes(id)) return;
 				try {
 					const stored = sessionStorage.getItem(this.storageKey);
 					const selections = stored ? JSON.parse(stored) : {};
@@ -1609,6 +1657,102 @@ class AppRouteCreate extends HTMLElement {
 			// Ignore storage errors
 			return false;
 		}
+	}
+
+	setupBlogTab() {
+		const newBtn = this.querySelector("[data-blog-new]");
+		const refreshBtn = this.querySelector("[data-blog-refresh]");
+		newBtn?.addEventListener("click", () => this.onBlogNewDraft());
+		refreshBtn?.addEventListener("click", () => this.loadBlogPosts());
+		const tabsEl = this.querySelector("app-tabs");
+		tabsEl?.addEventListener("tab-change", (e) => {
+			if (e.detail?.id === "blog") this.loadBlogPosts();
+		});
+		this.loadBlogPosts();
+	}
+
+	async onBlogNewDraft() {
+		const slugRaw = window.prompt("URL slug (lowercase, hyphens, e.g. my-new-post):", "");
+		if (slugRaw == null) return;
+		const titleRaw = window.prompt("Title:", "");
+		if (titleRaw == null || !String(titleRaw).trim()) return;
+		const res = await fetch("/api/blog/posts", {
+			method: "POST",
+			credentials: "include",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ slug: slugRaw.trim(), title: String(titleRaw).trim() })
+		});
+		const data = await res.json().catch(() => ({}));
+		if (!res.ok) {
+			window.alert(data?.error || "Could not create draft.");
+			return;
+		}
+		const id = data?.post?.id;
+		if (id) {
+			window.location.href = `/create/blog/${id}`;
+		}
+	}
+
+	async loadBlogPosts() {
+		const container = this.querySelector("[data-blog-table-container]");
+		const statusEl = this.querySelector("[data-blog-status]");
+		if (!container) return;
+		statusEl.textContent = "Loading…";
+		const r = await fetchJsonWithStatusDeduped("/api/blog/posts", { credentials: "include" }, { windowMs: 5000 });
+		if (!r.ok) {
+			statusEl.textContent = r.data?.error || "Failed to load posts.";
+			container.innerHTML = "";
+			return;
+		}
+		statusEl.textContent = "";
+		const posts = Array.isArray(r.data?.posts) ? r.data.posts : [];
+		if (posts.length === 0) {
+			container.innerHTML = html`<p class="create-cost">No blog posts yet.</p>`;
+			return;
+		}
+		const rows = posts
+			.map((p) => {
+				const id = p.id;
+				const st = String(p.status || "");
+				const updated = p.updated_at ? String(p.updated_at).slice(0, 19).replace("T", " ") : "";
+				const authorUser =
+					p.author_username != null && String(p.author_username).trim() !== ""
+						? String(p.author_username).trim()
+						: "";
+				const authorCell = authorUser || "\u2014";
+				const stKey = ["draft", "published", "archived"].includes(st) ? st : "draft";
+				return html`<tr class="create-route-blog-row">
+					<td class="create-route-blog-title-cell">${escapeHtml(String(p.title || ""))}</td>
+					<td><span class="create-route-blog-author">${escapeHtml(authorCell)}</span></td>
+					<td><span class="create-route-blog-status create-route-blog-status--${stKey}">${escapeHtml(st)}</span></td>
+					<td class="create-route-blog-date">${escapeHtml(updated)}</td>
+					<td class="create-route-blog-actions">
+						<button type="button" class="create-route-blog-edit" data-blog-edit="${id}" aria-label="Edit post">
+							${blogIcEdit}
+							<span class="create-route-blog-edit-label">Edit</span>
+						</button>
+					</td>
+				</tr>`;
+			})
+			.join("");
+		container.innerHTML = html`<table class="create-route-blog-table" role="grid">
+					<thead>
+						<tr>
+							<th scope="col">Title</th>
+							<th scope="col">Author</th>
+							<th scope="col">Status</th>
+							<th scope="col">Updated</th>
+							<th scope="col" class="create-route-blog-th-edit"><span class="create-route-blog-sr-only">Edit</span></th>
+						</tr>
+					</thead>
+					<tbody>${rows}</tbody>
+				</table>`;
+		container.querySelectorAll("[data-blog-edit]").forEach((btn) => {
+			btn.addEventListener("click", () => {
+				const id = btn.getAttribute("data-blog-edit");
+				if (id) window.location.href = `/create/blog/${id}`;
+			});
+		});
 	}
 
 	restoreFieldValues(savedFieldValues) {

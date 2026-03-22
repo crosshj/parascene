@@ -4686,6 +4686,160 @@ export function openDb() {
 				return { changes: data?.length ?? 0 };
 			}
 		},
+		selectBlogPostById: {
+			get: async (id) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("blog_posts"))
+					.select(
+						"id, slug, title, description, body_md, status, published_at, author_user_id, updated_by_user_id, meta, created_at, updated_at"
+					)
+					.eq("id", id)
+					.maybeSingle();
+				if (error) throw error;
+				return data ?? undefined;
+			}
+		},
+		selectBlogPostPublishedBySlug: {
+			get: async (slug) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("blog_posts"))
+					.select(
+						"id, slug, title, description, body_md, status, published_at, author_user_id, updated_by_user_id, meta, created_at, updated_at"
+					)
+					.eq("slug", slug)
+					.eq("status", "published")
+					.maybeSingle();
+				if (error) throw error;
+				return data ?? undefined;
+			}
+		},
+		selectBlogPostBySlugAny: {
+			get: async (slug) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("blog_posts"))
+					.select(
+						"id, slug, title, description, body_md, status, published_at, author_user_id, updated_by_user_id, meta, created_at, updated_at"
+					)
+					.eq("slug", slug)
+					.maybeSingle();
+				if (error) throw error;
+				return data ?? undefined;
+			}
+		},
+		selectPublishedBlogPosts: {
+			all: async () => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("blog_posts"))
+					.select(
+						"id, slug, title, description, body_md, status, published_at, author_user_id, updated_by_user_id, meta, created_at, updated_at"
+					)
+					.eq("status", "published")
+					.order("published_at", { ascending: false });
+				if (error) throw error;
+				return data ?? [];
+			}
+		},
+		selectPublishedBlogPostsForFeed: {
+			all: async (limit = 30) => {
+				const lim = Math.min(Math.max(1, Number(limit) || 30), 100);
+				const { data, error } = await serviceClient
+					.from(prefixedTable("blog_posts"))
+					.select(
+						"id, slug, title, description, body_md, status, published_at, author_user_id, updated_by_user_id, meta, created_at, updated_at"
+					)
+					.eq("status", "published")
+					.order("published_at", { ascending: false })
+					.limit(lim);
+				if (error) throw error;
+				return data ?? [];
+			}
+		},
+		selectBlogPostsAdmin: {
+			all: async ({ status: statusFilter, limit = 200, offset = 0, authorUserId } = {}) => {
+				const lim = Math.min(Math.max(1, Number(limit) || 200), 500);
+				const off = Math.max(0, Number(offset) || 0);
+				let q = serviceClient.from(prefixedTable("blog_posts")).select(
+					"id, slug, title, description, body_md, status, published_at, author_user_id, updated_by_user_id, meta, created_at, updated_at"
+				);
+				if (statusFilter && typeof statusFilter === "string") {
+					q = q.eq("status", statusFilter);
+				}
+				if (authorUserId != null && authorUserId !== "") {
+					q = q.eq("author_user_id", Number(authorUserId));
+				}
+				q = q.order("updated_at", { ascending: false }).range(off, off + lim - 1);
+				const { data, error } = await q;
+				if (error) throw error;
+				return data ?? [];
+			}
+		},
+		insertBlogPost: {
+			run: async ({
+				slug,
+				title,
+				description = "",
+				body_md = "",
+				status = "draft",
+				author_user_id,
+				updated_by_user_id = null,
+				published_at = null,
+				meta = {}
+			}) => {
+				const metaVal = meta && typeof meta === "object" ? meta : {};
+				const { data, error } = await serviceClient
+					.from(prefixedTable("blog_posts"))
+					.insert({
+						slug,
+						title,
+						description,
+						body_md,
+						status,
+						published_at,
+						author_user_id,
+						updated_by_user_id,
+						meta: metaVal
+					})
+					.select("id")
+					.single();
+				if (error) throw error;
+				return { insertId: data.id, lastInsertRowid: data.id, changes: 1 };
+			}
+		},
+		updateBlogPost: {
+			run: async (id, patch = {}) => {
+				const { data: existing } = await serviceClient
+					.from(prefixedTable("blog_posts"))
+					.select("meta")
+					.eq("id", id)
+					.maybeSingle();
+				if (!existing) return { changes: 0 };
+				const currentMeta =
+					existing.meta && typeof existing.meta === "object" ? existing.meta : {};
+				const nextMeta =
+					patch.meta != null && typeof patch.meta === "object"
+						? { ...currentMeta, ...patch.meta }
+						: currentMeta;
+				const row = {
+					updated_at: new Date().toISOString()
+				};
+				if (patch.slug != null) row.slug = patch.slug;
+				if (patch.title != null) row.title = patch.title;
+				if (patch.description != null) row.description = patch.description;
+				if (patch.body_md != null) row.body_md = patch.body_md;
+				if (patch.status != null) row.status = patch.status;
+				if (patch.published_at !== undefined) row.published_at = patch.published_at;
+				if (patch.author_user_id !== undefined) row.author_user_id = Number(patch.author_user_id);
+				if (patch.updated_by_user_id !== undefined) row.updated_by_user_id = patch.updated_by_user_id;
+				if (patch.meta != null && typeof patch.meta === "object") row.meta = nextMeta;
+				const { data, error } = await serviceClient
+					.from(prefixedTable("blog_posts"))
+					.update(row)
+					.eq("id", id)
+					.select("id");
+				if (error) throw error;
+				return { changes: data?.length ?? 0 };
+			}
+		},
 		deleteAllLikesForCreatedImage: {
 			run: async (createdImageId) => {
 				// Use serviceClient to bypass RLS for backend operations

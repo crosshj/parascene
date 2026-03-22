@@ -2625,3 +2625,180 @@ body.creation-detail-page main>section:first-of-type {
 .landscape-menu-item-danger {
 	color: var(--danger, #c00);
 }
+
+/* Blog admin (Advanced Create tab) */
+.create-route-blog-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.75rem;
+	margin-bottom: 1rem;
+}
+
+.create-route-blog-table-container {
+	overflow-x: auto;
+	width: 100%;
+	max-width: 100%;
+	-webkit-overflow-scrolling: touch;
+	border-radius: 10px;
+	border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+	background: color-mix(in srgb, var(--text) 2.5%, transparent);
+}
+
+.create-route-blog-sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}
+
+.create-route-blog-table {
+	width: 100%;
+	border-collapse: separate;
+	border-spacing: 0;
+	font-size: 0.8125rem;
+}
+
+.create-route-blog-table thead th {
+	padding: 0.4rem 0.5rem 0.55rem;
+	text-align: left;
+	font-size: 0.6875rem;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--text-muted, rgba(255, 255, 255, 0.5));
+	border-bottom: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+	vertical-align: bottom;
+}
+
+.create-route-blog-th-edit {
+	width: 4.5rem;
+	text-align: right;
+}
+
+.create-route-blog-table tbody td {
+	padding: 0.45rem 0.5rem;
+	text-align: left;
+	vertical-align: middle;
+	border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+	color: var(--text);
+}
+
+.create-route-blog-table tbody tr.create-route-blog-row:hover td {
+	background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.create-route-blog-table tbody tr.create-route-blog-row:last-child td {
+	border-bottom: none;
+}
+
+.create-route-blog-title-cell {
+	font-weight: 500;
+	max-width: min(28rem, 42vw);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.create-route-blog-author {
+	font-size: 0.8125rem;
+	color: var(--text-muted, rgba(255, 255, 255, 0.62));
+	max-width: 10rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.create-route-blog-date {
+	font-size: 0.75rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-muted, rgba(255, 255, 255, 0.55));
+	white-space: nowrap;
+}
+
+.create-route-blog-status {
+	display: inline-block;
+	padding: 0.12rem 0.45rem;
+	border-radius: 999px;
+	font-size: 0.6875rem;
+	font-weight: 600;
+	letter-spacing: 0.03em;
+	text-transform: uppercase;
+	line-height: 1.35;
+	border: 1px solid transparent;
+}
+
+.create-route-blog-status--draft {
+	color: var(--text-muted, rgba(255, 255, 255, 0.75));
+	background: color-mix(in srgb, var(--text-muted) 14%, transparent);
+	border-color: color-mix(in srgb, var(--text-muted) 25%, transparent);
+}
+
+.create-route-blog-status--published {
+	color: var(--accent-text);
+	background: var(--accent);
+	border-color: transparent;
+}
+
+.create-route-blog-status--archived {
+	color: var(--text-muted, rgba(255, 255, 255, 0.7));
+	background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+	border-color: color-mix(in srgb, var(--text-muted) 20%, transparent);
+}
+
+.create-route-blog-actions {
+	text-align: right;
+	width: 1%;
+	white-space: nowrap;
+}
+
+.create-route-blog-edit {
+	display: inline-flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 0.35rem;
+	padding: 0.3rem 0.45rem;
+	margin: 0;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--text-muted, rgba(255, 255, 255, 0.55));
+	font-size: 0.8125rem;
+	font-weight: 500;
+	font-family: inherit;
+	cursor: pointer;
+	transition: color 0.15s ease, background 0.15s ease;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.create-route-blog-edit:hover {
+	color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.create-route-blog-edit:focus-visible {
+	outline: none;
+	color: var(--accent);
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.create-route-blog-edit-label {
+	position: relative;
+	top: 0.5px;
+}
+
+.create-route-blog-icon {
+	width: 15px;
+	height: 15px;
+	display: block;
+	flex-shrink: 0;
+	opacity: 0.88;
+}
+
+.create-route-blog-edit:hover .create-route-blog-icon {
+	opacity: 1;
+}

@@ -242,6 +242,9 @@ class AppRouteFeed extends HTMLElement {
 		if (item.type === "tip") {
 			return this.buildTipCard(item);
 		}
+		if (item.type === "blog_post") {
+			return this.buildBlogPostCard(item);
+		}
 
 		const card = document.createElement("div");
 		card.className = "feed-card";
@@ -258,13 +261,13 @@ class AppRouteFeed extends HTMLElement {
 		const displayName = authorDisplayName || authorUserName || emailPrefix || author;
 		const avatarUrl = typeof item.author_avatar_url === "string" ? item.author_avatar_url.trim() : "";
 		const avatarInitial = displayName.trim().charAt(0).toUpperCase() || "?";
+		const authorUserId = item.user_id != null ? Number(item.user_id) : null;
 		const colorSeed = authorUserName || emailPrefix || String(authorUserId || '') || displayName;
 		const avatarColor = getAvatarColor(colorSeed);
 		const relativeTime = formatRelativeTime(item.created_at) || "recently";
 		const title = item.title || "";
 		const likeCount = item.like_count ?? 0;
 		const likesText = likeCount === 1 ? "like" : "likes";
-		const authorUserId = item.user_id != null ? Number(item.user_id) : null;
 		const profileHref = buildProfilePath({ userName: authorUserName, userId: authorUserId });
 		const isFounder = item.author_plan === "founder";
 		const avatarContent = avatarUrl ? html`<img src="${avatarUrl}" alt="">` : avatarInitial;
@@ -599,6 +602,79 @@ class AppRouteFeed extends HTMLElement {
 		this.videoObserver.observe(videoEl);
 	}
 
+	buildBlogPostCard(item) {
+		const card = document.createElement("div");
+		card.className = "feed-card feed-card-blog";
+		const slug = typeof item.slug === "string" ? item.slug.trim() : "";
+		const href = slug ? `/blog/${encodeURIComponent(slug)}` : "/blog";
+		const rawTitle = item.title || "Blog post";
+		const safeTitle = String(rawTitle)
+			.replace(/&/g, "&amp;")
+			.replace(/</g, "&lt;")
+			.replace(/>/g, "&gt;");
+		const author = item.author || "Anonymous";
+		const authorUserName = typeof item.author_user_name === "string" ? item.author_user_name.trim() : "";
+		const authorDisplayName = typeof item.author_display_name === "string" ? item.author_display_name.trim() : "";
+		const emailPrefix = typeof item.author === "string" && item.author.includes("@")
+			? item.author.split("@")[0]
+			: author;
+		const handle = (authorUserName || emailPrefix || author)
+			.toLowerCase()
+			.slice(0, 48) || "user";
+		const displayName = authorDisplayName || authorUserName || emailPrefix || author;
+		const avatarUrl = typeof item.author_avatar_url === "string" ? item.author_avatar_url.trim() : "";
+		const avatarInitial = displayName.trim().charAt(0).toUpperCase() || "?";
+		const authorUserId = item.user_id != null ? Number(item.user_id) : null;
+		const colorSeed = authorUserName || emailPrefix || String(authorUserId || '') || displayName;
+		const avatarColor = getAvatarColor(colorSeed);
+		const relativeTime = formatRelativeTime(item.created_at) || "recently";
+		const profileHref = buildProfilePath({ userName: authorUserName, userId: authorUserId });
+		const isFounder = item.author_plan === "founder";
+		const avatarContent = avatarUrl ? html`<img src="${avatarUrl}" alt="">` : avatarInitial;
+		const avatarBlock = isFounder
+			? html`
+          <div class="avatar-with-founder-flair avatar-with-founder-flair--md">
+            <div class="founder-flair-avatar-ring">
+              <div class="founder-flair-avatar-inner" style="background: ${avatarUrl ? 'var(--surface-strong)' : avatarColor};" aria-hidden="true">
+                ${avatarContent}
+              </div>
+            </div>
+          </div>
+        `
+			: html`
+          <div class="feed-card-avatar" style="--feed-card-avatar-bg: ${avatarColor};" aria-hidden="true">
+            ${avatarUrl ? html`<img class="feed-card-avatar-img" src="${avatarUrl}" alt="">` : avatarInitial}
+          </div>
+        `;
+		card.innerHTML = html`
+			<a href="${href}" class="feed-card-blog-link feed-card-blog-link--hero">
+				<div class="feed-card-image feed-card-blog-image" aria-hidden="true">
+					<span class="feed-card-blog-badge">Blog</span>
+				</div>
+			</a>
+			<div class="feed-card-footer-grid">
+				${profileHref ? html`
+          <a class="user-link user-avatar-link" href="${profileHref}" data-profile-link aria-label="View ${author} profile">
+            ${avatarBlock}
+          </a>
+        ` : html`
+          <div>
+            ${avatarBlock}
+          </div>
+        `}
+				<div class="feed-card-content">
+					<a href="${href}" class="feed-card-title feed-card-blog-title-link">${safeTitle}</a>
+					<div class="feed-card-metadata" title="${formatDateTime(item.created_at)}">
+						${profileHref
+				? html`<a class="user-link" href="${profileHref}" data-profile-link>${isFounder ? html`<span class="founder-name">${displayName}</span> <span class="founder-name">@${handle}</span>` : html`${displayName} @${handle}`}</a>`
+				: html`${isFounder ? html`<span class="founder-name">${displayName}</span> <span class="founder-name">@${handle}</span>` : html`${displayName} @${handle}`}`} • ${relativeTime}
+					</div>
+				</div>
+			</div>
+		`;
+		return card;
+	}
+
 	buildTipCard(item) {
 		const card = document.createElement("div");
 		card.className = "feed-card feed-card-tip";
@@ -678,7 +754,7 @@ class AppRouteFeed extends HTMLElement {
 			// Filter out hidden items (only creation items; tips are not hideable)
 			const hiddenIds = getHiddenFeedItems();
 			items = items.filter(item => {
-				if (item.type === "tip") return true;
+				if (item.type === "tip" || item.type === "blog_post") return true;
 				const itemId = String(item.created_image_id || item.id);
 				return !hiddenIds.includes(itemId);
 			});
@@ -747,7 +823,7 @@ class AppRouteFeed extends HTMLElement {
 			let items = Array.isArray(feed.data?.items) ? feed.data.items : [];
 			const hiddenIds = getHiddenFeedItems();
 			items = items.filter(item => {
-				if (item.type === "tip") return true;
+				if (item.type === "tip" || item.type === "blog_post") return true;
 				const itemId = String(item.created_image_id || item.id);
 				return !hiddenIds.includes(itemId);
 			});

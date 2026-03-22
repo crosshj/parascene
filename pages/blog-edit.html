@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en" class="blog-edit-page">
+
+<head>
+	<title>Blog · parascene</title>
+	<link rel="stylesheet" href="/pages/creations.css{{V}}" />
+</head>
+
+<body data-entry="blog-edit" class="blog-edit-page">
+	<main class="blog-edit-outer">
+		<div class="blog-edit-route">
+			<header class="blog-edit-topbar">
+				<a href="/create#blog" class="blog-edit-back" aria-label="Back to blog posts">
+					<span class="blog-edit-back-icon" aria-hidden="true">&lt;-</span>
+				</a>
+				<h1 class="blog-edit-title" data-blog-heading>Edit post</h1>
+				<div class="blog-edit-toolbar">
+					<button type="button" class="blog-edit-tool-btn blog-edit-tool-btn--primary" data-blog-save>Save</button>
+				</div>
+			</header>
+			<p class="blog-edit-message" data-blog-message role="status" aria-live="polite"></p>
+			<form class="blog-edit-form" data-blog-form>
+				<div class="blog-edit-meta" data-blog-meta>
+					<input type="text" class="blog-edit-meta-input" data-blog-title name="title" placeholder="Title" required
+						autocomplete="off" />
+					<div class="blog-edit-meta-field blog-edit-meta-field--status">
+						<label class="blog-edit-meta-label" for="blog-status">Status</label>
+						<select id="blog-status" class="blog-edit-meta-select" name="status" data-blog-status
+							aria-label="Publication status">
+							<option value="draft">Draft</option>
+							<option value="published">Published</option>
+							<option value="archived">Archived</option>
+						</select>
+					</div>
+					<input type="text" class="blog-edit-meta-input blog-edit-meta-input--span" data-blog-slug name="slug" placeholder="url-slug" required
+						pattern="[a-z0-9]+(?:-[a-z0-9]+)*" title="Lowercase letters, numbers, hyphens" autocomplete="off" />
+					<input type="text" class="blog-edit-meta-input blog-edit-meta-input--span" data-blog-description name="description"
+						placeholder="Description (optional)" autocomplete="off" />
+					<div class="blog-edit-author-wrap" data-blog-author-row hidden>
+						<label class="blog-edit-sr-only" for="blog-author">Author</label>
+						<select id="blog-author" class="blog-edit-meta-select" name="author_user_id" data-blog-author
+							aria-label="Post author"></select>
+					</div>
+				</div>
+				<div class="blog-edit-editor">
+					<label class="blog-edit-sr-only" for="blog-body">Body (Markdown)</label>
+					<textarea id="blog-body" class="blog-edit-body" name="body_md" data-blog-body rows="1"
+						placeholder="Write markdown…" spellcheck="true"></textarea>
+				</div>
+			</form>
+		</div>
+	</main>
+	<script type="module" src="/pages/blog-edit.js{{V}}"></script>
+</body>
+
+</html>

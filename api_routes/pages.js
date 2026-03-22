@@ -713,6 +713,29 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 		}
 	});
 
+	router.get("/create/blog/:id", async (req, res) => {
+		const user = await requireLoggedInUser(req, res);
+		if (!user) return;
+		const plan = user.meta?.plan ?? "free";
+		if (user.role !== "admin" && plan !== "founder") {
+			return res.status(403).send("Forbidden");
+		}
+		const id = parseInt(req.params.id, 10);
+		if (!id) return res.status(404).send("Not found");
+		try {
+			const fs = await import("fs/promises");
+			const htmlPath = path.join(pagesDir, "blog-edit.html");
+			let pageHtml = await fs.readFile(htmlPath, "utf-8");
+
+			pageHtml = injectCommonHead(pageHtml, getPageTokens(req));
+
+			res.setHeader("Content-Type", "text/html");
+			return res.send(pageHtml);
+		} catch (error) {
+			return res.status(500).send("Internal server error");
+		}
+	});
+
 	async function serveCreationMutatePage(req, res) {
 		const user = await requireLoggedInUser(req, res);
 		if (!user) return;

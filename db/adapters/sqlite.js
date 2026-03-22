@@ -3060,6 +3060,210 @@ export async function openDb() {
 				});
 			}
 		},
+		selectBlogPostById: {
+			get: async (id) => {
+				const stmt = db.prepare(
+					`SELECT id, slug, title, description, body_md, status, published_at, author_user_id, updated_by_user_id, meta, created_at, updated_at
+           FROM blog_posts WHERE id = ?`
+				);
+				const row = stmt.get(id);
+				if (!row) return Promise.resolve(undefined);
+				let meta = {};
+				try {
+					meta = row.meta ? JSON.parse(row.meta) : {};
+				} catch {
+					meta = {};
+				}
+				return Promise.resolve({ ...row, meta });
+			}
+		},
+		selectBlogPostPublishedBySlug: {
+			get: async (slug) => {
+				const stmt = db.prepare(
+					`SELECT id, slug, title, description, body_md, status, published_at, author_user_id, updated_by_user_id, meta, created_at, updated_at
+           FROM blog_posts WHERE slug = ? AND status = 'published'`
+				);
+				const row = stmt.get(slug);
+				if (!row) return Promise.resolve(undefined);
+				let meta = {};
+				try {
+					meta = row.meta ? JSON.parse(row.meta) : {};
+				} catch {
+					meta = {};
+				}
+				return Promise.resolve({ ...row, meta });
+			}
+		},
+		selectBlogPostBySlugAny: {
+			get: async (slug) => {
+				const stmt = db.prepare(
+					`SELECT id, slug, title, description, body_md, status, published_at, author_user_id, updated_by_user_id, meta, created_at, updated_at
+           FROM blog_posts WHERE slug = ?`
+				);
+				const row = stmt.get(slug);
+				if (!row) return Promise.resolve(undefined);
+				let meta = {};
+				try {
+					meta = row.meta ? JSON.parse(row.meta) : {};
+				} catch {
+					meta = {};
+				}
+				return Promise.resolve({ ...row, meta });
+			}
+		},
+		selectPublishedBlogPosts: {
+			all: async () => {
+				const stmt = db.prepare(
+					`SELECT id, slug, title, description, body_md, status, published_at, author_user_id, updated_by_user_id, meta, created_at, updated_at
+           FROM blog_posts WHERE status = 'published' ORDER BY COALESCE(published_at, created_at) DESC`
+				);
+				const rows = stmt.all();
+				return Promise.resolve(
+					rows.map((row) => {
+						let meta = {};
+						try {
+							meta = row.meta ? JSON.parse(row.meta) : {};
+						} catch {
+							meta = {};
+						}
+						return { ...row, meta };
+					})
+				);
+			}
+		},
+		selectPublishedBlogPostsForFeed: {
+			all: async (limit = 30) => {
+				const lim = Math.min(Math.max(1, Number(limit) || 30), 100);
+				const stmt = db.prepare(
+					`SELECT id, slug, title, description, body_md, status, published_at, author_user_id, updated_by_user_id, meta, created_at, updated_at
+           FROM blog_posts WHERE status = 'published' ORDER BY COALESCE(published_at, created_at) DESC LIMIT ?`
+				);
+				const rows = stmt.all(lim);
+				return Promise.resolve(
+					rows.map((row) => {
+						let meta = {};
+						try {
+							meta = row.meta ? JSON.parse(row.meta) : {};
+						} catch {
+							meta = {};
+						}
+						return { ...row, meta };
+					})
+				);
+			}
+		},
+		selectBlogPostsAdmin: {
+			all: async ({ status: statusFilter, limit = 200, offset = 0, authorUserId } = {}) => {
+				const lim = Math.min(Math.max(1, Number(limit) || 200), 500);
+				const off = Math.max(0, Number(offset) || 0);
+				let sql = `SELECT id, slug, title, description, body_md, status, published_at, author_user_id, updated_by_user_id, meta, created_at, updated_at FROM blog_posts`;
+				const params = [];
+				const conds = [];
+				if (statusFilter && typeof statusFilter === "string") {
+					conds.push(`status = ?`);
+					params.push(statusFilter);
+				}
+				if (authorUserId != null && authorUserId !== "") {
+					conds.push(`author_user_id = ?`);
+					params.push(Number(authorUserId));
+				}
+				if (conds.length) sql += ` WHERE ${conds.join(" AND ")}`;
+				sql += ` ORDER BY updated_at DESC LIMIT ? OFFSET ?`;
+				params.push(lim, off);
+				const stmt = db.prepare(sql);
+				const rows = stmt.all(...params);
+				return Promise.resolve(
+					rows.map((row) => {
+						let meta = {};
+						try {
+							meta = row.meta ? JSON.parse(row.meta) : {};
+						} catch {
+							meta = {};
+						}
+						return { ...row, meta };
+					})
+				);
+			}
+		},
+		insertBlogPost: {
+			run: async ({
+				slug,
+				title,
+				description = "",
+				body_md = "",
+				status = "draft",
+				author_user_id,
+				updated_by_user_id = null,
+				published_at = null,
+				meta = {}
+			}) => {
+				const metaJson = typeof meta === "string" ? meta : JSON.stringify(meta ?? {});
+				const now = new Date().toISOString();
+				const stmt = db.prepare(
+					`INSERT INTO blog_posts (slug, title, description, body_md, status, published_at, author_user_id, updated_by_user_id, meta, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+				);
+				const result = stmt.run(
+					slug,
+					title,
+					description,
+					body_md,
+					status,
+					published_at,
+					author_user_id,
+					updated_by_user_id,
+					metaJson,
+					now,
+					now
+				);
+				return Promise.resolve({
+					insertId: result.lastInsertRowid,
+					lastInsertRowid: result.lastInsertRowid,
+					changes: result.changes
+				});
+			}
+		},
+		updateBlogPost: {
+			run: async (id, patch = {}) => {
+				const row = db.prepare(`SELECT meta FROM blog_posts WHERE id = ?`).get(id);
+				if (!row) return Promise.resolve({ changes: 0 });
+				let existingMeta = {};
+				try {
+					existingMeta = row.meta ? JSON.parse(row.meta) : {};
+				} catch {
+					existingMeta = {};
+				}
+				const next = { ...existingMeta };
+				if (patch.meta != null && typeof patch.meta === "object") {
+					Object.assign(next, patch.meta);
+				}
+				const fields = [];
+				const vals = [];
+				const set = (col, val) => {
+					fields.push(`${col} = ?`);
+					vals.push(val);
+				};
+				if (patch.slug != null) set("slug", patch.slug);
+				if (patch.title != null) set("title", patch.title);
+				if (patch.description != null) set("description", patch.description);
+				if (patch.body_md != null) set("body_md", patch.body_md);
+				if (patch.status != null) set("status", patch.status);
+				if (patch.published_at !== undefined) set("published_at", patch.published_at);
+				if (patch.author_user_id !== undefined) set("author_user_id", Number(patch.author_user_id));
+				if (patch.updated_by_user_id !== undefined) set("updated_by_user_id", patch.updated_by_user_id);
+				if (patch.meta != null && typeof patch.meta === "object") {
+					set("meta", JSON.stringify(next));
+				}
+				if (fields.length === 0) return Promise.resolve({ changes: 0 });
+				const now = new Date().toISOString();
+				fields.push("updated_at = ?");
+				vals.push(now);
+				vals.push(id);
+				const stmt = db.prepare(`UPDATE blog_posts SET ${fields.join(", ")} WHERE id = ?`);
+				const result = stmt.run(...vals);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
 		updateJobStatus: {
 			run: async (jobId, status, metaPatch = {}) => {
 				const now = new Date().toISOString();

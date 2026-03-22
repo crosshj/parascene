@@ -1,123 +1,16 @@
 import express from "express";
 import path from "path";
-import { fileURLToPath } from "url";
 import { marked } from "marked";
+import { getAvatarColor } from "../public/shared/avatar.js";
 import { injectCommonHead, getPageTokens } from "./utils/head.js";
+import { scanBlogDirectory, sortBlogPosts } from "../lib/blog/parseAndScan.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Configure marked for safe rendering (match help page behavior)
 marked.setOptions({
 	gfm: true,
 	breaks: false,
 	headerIds: true,
 	mangle: false
 });
-
-function parseFrontmatter(content) {
-	const frontmatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/;
-	const match = content.match(frontmatterRegex);
-
-	if (match) {
-		const frontmatterText = match[1];
-		const body = match[2];
-		const metadata = {};
-
-		for (const line of frontmatterText.split("\n")) {
-			const colonIndex = line.indexOf(":");
-			if (colonIndex > 0) {
-				const key = line.slice(0, colonIndex).trim();
-				let value = line.slice(colonIndex + 1).trim().replace(/^["']|["']$/g, "");
-				if (value === "true") {
-					value = true;
-				} else if (value === "false") {
-					value = false;
-				}
-				metadata[key] = value;
-			}
-		}
-
-		return { metadata, body };
-	}
-
-	return { metadata: {}, body: content };
-}
-
-function stripSegmentPrefix(segment) {
-	return segment.replace(/^\d+-/, "");
-}
-
-function stripPathPrefix(pathStr) {
-	const normalized = pathStr.replace(/\\/g, "/");
-	return normalized.split("/").map(stripSegmentPrefix).join("/");
-}
-
-async function scanBlogDirectory(dir, baseDir) {
-	const fs = await import("fs/promises");
-	let entries;
-
-	try {
-		entries = await fs.readdir(dir, { withFileTypes: true });
-	} catch {
-		// Directory does not exist yet – no posts
-		return [];
-	}
-
-	const posts = [];
-
-	for (const entry of entries) {
-		const fullPath = path.join(dir, entry.name);
-
-		if (entry.isDirectory() && !entry.name.startsWith("_")) {
-			const subPosts = await scanBlogDirectory(fullPath, baseDir);
-			posts.push(...subPosts);
-		} else if (
-			entry.isFile() &&
-			entry.name.endsWith(".md") &&
-			!entry.name.startsWith("_") &&
-			entry.name.toLowerCase() !== "index.md"
-		) {
-			const relativePath = path
-				.relative(baseDir, fullPath)
-				.replace(/\\/g, "/");
-			const slug = stripPathPrefix(relativePath).replace(/\.md$/, "");
-			const content = await fs.readFile(fullPath, "utf-8");
-			const { metadata, body } = parseFrontmatter(content);
-
-			const nameWithoutExt = entry.name.replace(/\.md$/i, "");
-			const nameForTitle = stripSegmentPrefix(nameWithoutExt);
-			const titleFromFilename = nameForTitle
-				.replace(/-/g, " ")
-				.replace(/\b\w/g, (l) => l.toUpperCase());
-
-			posts.push({
-				slug,
-				title: metadata.title || titleFromFilename,
-				description: metadata.description || "",
-				date: metadata.date || "",
-				content: body,
-				html: marked.parse(body)
-			});
-		}
-	}
-
-	return posts;
-}
-
-async function getBlogPosts(blogDir) {
-	const posts = await scanBlogDirectory(blogDir, blogDir);
-
-	posts.sort((a, b) => {
-		// Sort by date desc when available, else by title
-		if (a.date && b.date && a.date !== b.date) {
-			return String(b.date).localeCompare(String(a.date));
-		}
-		return a.title.localeCompare(b.title);
-	});
-
-	return posts;
-}
 
 function escapeHtml(text) {
 	return String(text || "")
@@ -128,7 +21,129 @@ function escapeHtml(text) {
 		.replace(/'/g, "&#039;");
 }
 
-function generateBlogPageHtml({ title, description, html, notFound = false }) {
+function normalizeUserNameForProfile(userName) {
+	const value = typeof userName === "string" ? userName.trim().toLowerCase() : "";
+	if (!value) return null;
+	if (!/^[a-z0-9][a-z0-9_]{2,23}$/.test(value)) return null;
+	return value;
+}
+
+function buildPublicProfilePath({ userName, userId } = {}) {
+	const normalizedUserName = normalizeUserNameForProfile(userName);
+	if (normalizedUserName) {
+		return `/p/${encodeURIComponent(normalizedUserName)}`;
+	}
+	const id = Number.parseInt(String(userId ?? ""), 10);
+	if (Number.isFinite(id) && id > 0) {
+		return `/user/${id}`;
+	}
+	return null;
+}
+
+function formatBlogDateParts(post) {
+	if (post?.published_at) {
+		const d = new Date(post.published_at);
+		if (!Number.isNaN(d.getTime())) {
+			return {
+				label: d.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }),
+				datetimeAttr: d.toISOString().slice(0, 10)
+			};
+		}
+	}
+	const raw = post?.date;
+	if (raw != null && String(raw).trim()) {
+		const s = String(raw).trim();
+		const parsed = /^\d{4}-\d{2}-\d{2}/.test(s) ? new Date(`${s.slice(0, 10)}T12:00:00.000Z`) : new Date(s);
+		if (!Number.isNaN(parsed.getTime())) {
+			return {
+				label: parsed.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }),
+				datetimeAttr: parsed.toISOString().slice(0, 10)
+			};
+		}
+	}
+	return { label: "", datetimeAttr: "" };
+}
+
+function emailLocalPart(email) {
+	if (typeof email !== "string" || !email.includes("@")) return "";
+	return email.split("@")[0].trim();
+}
+
+function blogBylineAvatarHtml({ avatarUrl, initial, colorSeed }) {
+	const seed = String(colorSeed ?? "").trim() || "x";
+	const bg = getAvatarColor(seed);
+	const ch = (initial && String(initial).trim().charAt(0).toUpperCase()) || "?";
+	const safeUrl = typeof avatarUrl === "string" ? avatarUrl.trim() : "";
+	if (safeUrl) {
+		return `<span class="blog-byline-avatar blog-byline-avatar--img" aria-hidden="true"><img class="blog-byline-avatar-img" src="${escapeHtml(safeUrl)}" alt="" width="36" height="36" loading="lazy" decoding="async" /></span>`;
+	}
+	return `<span class="blog-byline-avatar blog-byline-avatar--fallback" style="--blog-byline-avatar-bg:${escapeHtml(bg)}" aria-hidden="true">${escapeHtml(ch)}</span>`;
+}
+
+function buildBlogBylineHtml(post) {
+	if (!post) return "";
+	const { label: dateLabel, datetimeAttr } = formatBlogDateParts(post);
+	const chunks = [];
+
+	if (post._source === "file") {
+		const a = typeof post.author === "string" ? post.author.trim() : "";
+		if (a) {
+			const av = blogBylineAvatarHtml({
+				avatarUrl: "",
+				initial: a,
+				colorSeed: a
+			});
+			chunks.push(
+				`<span class="blog-byline-file-author"><span class="blog-byline-profile blog-byline-profile--static">${av}<span class="blog-byline-names">${escapeHtml(a)}</span></span></span>`
+			);
+		}
+	} else if (post.author_user_id != null) {
+		const prof = post._profile;
+		const u = post._authorUser;
+		const isFounder = u?.meta?.plan === "founder";
+		const userName = prof && typeof prof.user_name === "string" ? prof.user_name.trim() : "";
+		const emailPrefix = emailLocalPart(u?.email);
+		const avatarUrl = prof && typeof prof.avatar_url === "string" ? prof.avatar_url.trim() : "";
+		const handleLabel = userName
+			? `@${userName}`
+			: emailPrefix
+				? `@${emailPrefix}`
+				: `user_${post.author_user_id}`;
+		const initialSource = userName || emailPrefix || String(post.author_user_id);
+		const href = buildPublicProfilePath({ userName, userId: post.author_user_id });
+		if (href) {
+			const colorSeed = userName || emailPrefix || String(post.author_user_id);
+			const av = blogBylineAvatarHtml({
+				avatarUrl,
+				initial: initialSource,
+				colorSeed
+			});
+			const namesInner = isFounder
+				? `<span class="founder-name">${escapeHtml(handleLabel)}</span>`
+				: escapeHtml(handleLabel);
+			chunks.push(
+				`<a class="blog-byline-profile" href="${escapeHtml(href)}">${av}<span class="blog-byline-names">${namesInner}</span></a>`
+			);
+		}
+	}
+
+	if (chunks.length === 0 && !dateLabel) {
+		return "";
+	}
+
+	const authorHtml = chunks.length ? `<span class="blog-byline-who">${chunks.join(" ")}</span>` : "";
+	const parts = [];
+	if (authorHtml) parts.push(authorHtml);
+	if (dateLabel) {
+		parts.push(
+			`<time class="blog-byline-date" datetime="${escapeHtml(datetimeAttr)}">${escapeHtml(dateLabel)}</time>`
+		);
+	}
+	if (parts.length === 0) return "";
+	return `<p class="blog-byline">${parts.join('<span class="blog-byline-sep" aria-hidden="true"> · </span>')}</p>`;
+}
+
+function generateBlogPageHtml({ title, description, html, notFound = false, bylineHtml = "" }) {
 	const hasTitle = Boolean(title && String(title).trim());
 	const safeTitle = hasTitle ? escapeHtml(title) : "";
 	const safeDescription = escapeHtml(description || "");
@@ -145,6 +160,7 @@ function generateBlogPageHtml({ title, description, html, notFound = false }) {
 		mainContent = `
 			<div class="blog-content">
 				${hasTitle ? `<h1>${safeTitle}</h1>` : ""}
+				${bylineHtml || ""}
 				${description ? `<p class="blog-description">${safeDescription}</p>` : ""}
 				<div class="blog-body">
 					${html}
@@ -160,6 +176,93 @@ function generateBlogPageHtml({ title, description, html, notFound = false }) {
 			</section>
 		</div>
 	`;
+}
+
+function rowDateFromMeta(meta) {
+	if (meta && typeof meta === "object" && typeof meta.source_date === "string") {
+		return meta.source_date;
+	}
+	return "";
+}
+
+function rowToMergedPost(row) {
+	const meta =
+		row.meta && typeof row.meta === "object"
+			? row.meta
+			: typeof row.meta === "string"
+				? (() => {
+						try {
+							return JSON.parse(row.meta);
+						} catch {
+							return {};
+						}
+					})()
+				: {};
+	const body = row.body_md ?? "";
+	const publishedAtIso = row.published_at ? String(row.published_at) : "";
+	const published = publishedAtIso ? publishedAtIso.slice(0, 10) : "";
+	const date = rowDateFromMeta(meta) || published;
+	const authorUserId =
+		row.author_user_id != null && Number.isFinite(Number(row.author_user_id))
+			? Number(row.author_user_id)
+			: null;
+	return {
+		slug: row.slug,
+		title: row.title,
+		description: row.description ?? "",
+		date,
+		published_at: publishedAtIso || null,
+		author_user_id: authorUserId,
+		content: body,
+		html: marked.parse(body),
+		_source: "db"
+	};
+}
+
+/** Escape markdown link label text for [label](url) lists. */
+function escapeMarkdownLinkLabel(text) {
+	return String(text ?? "")
+		.replace(/\\/g, "\\\\")
+		.replace(/\[/g, "\\[")
+		.replace(/\]/g, "\\]");
+}
+
+/** Build bullet list markdown from merged published posts (DB + repo fallback). */
+function formatMergedPostsAsIndexMarkdown(posts) {
+	if (!Array.isArray(posts) || posts.length === 0) {
+		return "_No posts published yet._";
+	}
+	return posts
+		.map((p) => {
+			const slug = String(p.slug || "").trim();
+			const title = escapeMarkdownLinkLabel(p.title || slug);
+			return `- [${title}](/blog/${slug})`;
+		})
+		.join("\n");
+}
+
+async function getMergedBlogPosts(blogDir, queries) {
+	const filePosts = await scanBlogDirectory(blogDir, blogDir);
+	const fileMapped = filePosts.map((p) => ({
+		...p,
+		html: marked.parse(p.content),
+		_source: "file"
+	}));
+
+	let dbPosts = [];
+	if (queries?.selectPublishedBlogPosts?.all) {
+		try {
+			const rows = await queries.selectPublishedBlogPosts.all();
+			dbPosts = Array.isArray(rows) ? rows.map(rowToMergedPost) : [];
+		} catch {
+			dbPosts = [];
+		}
+	}
+
+	const dbSlugs = new Set(dbPosts.map((p) => p.slug));
+	const onlyFile = fileMapped.filter((p) => !dbSlugs.has(p.slug));
+	const merged = sortBlogPosts([...dbPosts, ...onlyFile]);
+	return merged;
 }
 
 export default function createBlogRoutes({ pagesDir, queries }) {
@@ -185,7 +288,7 @@ export default function createBlogRoutes({ pagesDir, queries }) {
 		if (postsCache && now - postsCacheTime < CACHE_TTL_MS) {
 			return postsCache;
 		}
-		postsCache = await getBlogPosts(blogDir);
+		postsCache = await getMergedBlogPosts(blogDir, queries);
 		postsCacheTime = now;
 		return postsCache;
 	}
@@ -202,6 +305,57 @@ export default function createBlogRoutes({ pagesDir, queries }) {
 		}
 	}
 
+	async function resolvePublishedPost(slug) {
+		if (queries?.selectBlogPostPublishedBySlug?.get) {
+			try {
+				const row = await queries.selectBlogPostPublishedBySlug.get(slug);
+				if (row) {
+					const merged = rowToMergedPost(row);
+					if (merged.author_user_id != null && queries.selectUserProfileByUserId?.get) {
+						merged._profile = await queries.selectUserProfileByUserId.get(merged.author_user_id);
+					}
+					if (merged.author_user_id != null && queries.selectUserById?.get) {
+						merged._authorUser = await queries.selectUserById.get(merged.author_user_id);
+					}
+					return merged;
+				}
+			} catch {
+				// fall through
+			}
+		}
+		const filePosts = await scanBlogDirectory(blogDir, blogDir);
+		const fp = filePosts.find((p) => p.slug === slug);
+		if (!fp) return null;
+		return {
+			slug: fp.slug,
+			title: fp.title,
+			description: fp.description,
+			date: fp.date,
+			author: fp.author || "",
+			published_at: null,
+			author_user_id: null,
+			content: fp.content,
+			html: marked.parse(fp.content),
+			_source: "file"
+		};
+	}
+
+	/**
+	 * Replace {{BLOG_POST_LIST}} or <!-- BLOG_POST_LIST --> in index.md body with a markdown list
+	 * of published posts (same merge order as elsewhere). Uses getBlogPostsCached for TTL alignment.
+	 */
+	async function injectBlogIndexPostList(body) {
+		if (typeof body !== "string") return body;
+		const hasCurly = /\{\{\s*BLOG_POST_LIST\s*\}\}/i.test(body);
+		const hasComment = /<!--\s*BLOG_POST_LIST\s*-->/i.test(body);
+		if (!hasCurly && !hasComment) return body;
+		const posts = await getBlogPostsCached();
+		const listMd = formatMergedPostsAsIndexMarkdown(posts);
+		return body
+			.replace(/\{\{\s*BLOG_POST_LIST\s*\}\}/gi, listMd)
+			.replace(/<!--\s*BLOG_POST_LIST\s*-->/gi, listMd);
+	}
+
 	router.get("/blog", async (req, res) => {
 		try {
 			const fs = await import("fs/promises");
@@ -212,13 +366,14 @@ export default function createBlogRoutes({ pagesDir, queries }) {
 			let indexDescription = "";
 
 			try {
+				const { parseFrontmatter } = await import("../lib/blog/parseAndScan.js");
 				const indexContent = await fs.readFile(indexPath, "utf-8");
 				const { metadata, body } = parseFrontmatter(indexContent);
-				indexHtml = marked.parse(body);
+				const bodyWithPostList = await injectBlogIndexPostList(body);
+				indexHtml = marked.parse(bodyWithPostList);
 				indexTitle = metadata.title || indexTitle;
 				indexDescription = metadata.description || indexDescription;
 			} catch {
-				// No index.md – treat as not found using generic not-found layout
 				const layoutHtml = generateBlogPageHtml({
 					title: "",
 					description: "",
@@ -296,7 +451,6 @@ export default function createBlogRoutes({ pagesDir, queries }) {
 			res.setHeader("Content-Type", "text/html");
 			return res.send(htmlWithHead);
 		} catch (error) {
-			// console.error("Error rendering blog index:", error);
 			return res.status(500).send("Error loading blog");
 		}
 	});
@@ -304,18 +458,18 @@ export default function createBlogRoutes({ pagesDir, queries }) {
 	router.get("/blog/*", async (req, res) => {
 		try {
 			const fs = await import("fs/promises");
-
 			let slug = req.path.replace(/^\/blog\/?/, "").replace(/\/$/, "") || "";
-			const posts = await getBlogPostsCached();
-			const post = posts.find((p) => p.slug === slug);
+			const post = await resolvePublishedPost(slug);
 
 			const pageDescription = post?.description || (post ? `${post.title} — parascene blog post.` : "");
 
+			const bylineHtml = post ? buildBlogBylineHtml(post) : "";
 			const layoutHtml = generateBlogPageHtml({
 				title: post ? post.title : "Post Not Found",
 				description: pageDescription,
 				html: post ? post.html : "",
-				notFound: !post
+				notFound: !post,
+				bylineHtml
 			});
 
 			const templatePath = path.join(pagesDir, "blog.html");
@@ -364,11 +518,9 @@ export default function createBlogRoutes({ pagesDir, queries }) {
 			res.setHeader("Content-Type", "text/html");
 			return res.status(post ? 200 : 404).send(htmlWithHead);
 		} catch (error) {
-			// console.error("Error rendering blog post:", error);
 			return res.status(500).send("Error loading blog post");
 		}
 	});
 
 	return router;
 }
-

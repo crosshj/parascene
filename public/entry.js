@@ -6,6 +6,7 @@
 
 const ENTRY_FROM_BODY_CLASS = {
 	'landing-page': 'landing',
+	'blog-edit-page': 'blog-edit',
 	'create-page': 'create',
 	'try-page': 'try',
 	'share-page': 'try', // try.html has share-page too; use try entry

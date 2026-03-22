@@ -14,6 +14,7 @@ const server_members = [];
 const policy_knobs = [];
 const notifications = [];
 const feed_items = [];
+const blog_posts = [];
 const explore_items = [];
 const creations = [];
 const templates = [];
@@ -113,6 +114,19 @@ export function openDb() {
 				return { ...safeUser, meta, suspended: meta.suspended === true };
 			}
 		},
+		selectUsersByIds: async (ids) => {
+			const idList = Array.isArray(ids) ? ids.filter((id) => id != null && Number.isFinite(Number(id))) : [];
+			if (idList.length === 0) return new Map();
+			const map = new Map();
+			for (const uid of idList) {
+				const user = users.find((entry) => Number(entry.id) === Number(uid));
+				if (!user) continue;
+				const { password_hash, ...safeUser } = user;
+				const meta = safeUser.meta != null && typeof safeUser.meta === "object" ? safeUser.meta : {};
+				map.set(Number(uid), { ...safeUser, meta, suspended: meta.suspended === true });
+			}
+			return map;
+		},
 		selectUserByIdForLogin: {
 			get: async (id) => {
 				const user = users.find((entry) => entry.id === Number(id));
@@ -134,6 +148,16 @@ export function openDb() {
 		selectUserProfileByUserId: {
 			get: async (userId) =>
 				user_profiles.find((row) => row.user_id === Number(userId))
+		},
+		selectUserProfilesByUserIds: async (userIds) => {
+			const idList = Array.isArray(userIds) ? userIds.filter((id) => id != null && Number.isFinite(Number(id))) : [];
+			if (idList.length === 0) return new Map();
+			const map = new Map();
+			for (const uid of idList) {
+				const row = user_profiles.find((r) => Number(r.user_id) === Number(uid));
+				if (row) map.set(Number(uid), row);
+			}
+			return map;
 		},
 		selectUserProfileByUsername: {
 			get: async (userName) =>
@@ -2185,6 +2209,118 @@ export function openDb() {
 				feed_items.length = 0;
 				feed_items.push(...filtered);
 				return { changes: initialLength - feed_items.length };
+			}
+		},
+		selectBlogPostById: {
+			get: async (id) => {
+				return blog_posts.find((p) => Number(p.id) === Number(id));
+			}
+		},
+		selectBlogPostPublishedBySlug: {
+			get: async (slug) => {
+				return blog_posts.find((p) => p.slug === slug && p.status === "published");
+			}
+		},
+		selectBlogPostBySlugAny: {
+			get: async (slug) => {
+				return blog_posts.find((p) => p.slug === slug);
+			}
+		},
+		selectPublishedBlogPosts: {
+			all: async () => {
+				return blog_posts
+					.filter((p) => p.status === "published")
+					.slice()
+					.sort((a, b) =>
+						String(b.published_at || b.created_at || "").localeCompare(
+							String(a.published_at || a.created_at || "")
+						)
+					);
+			}
+		},
+		selectPublishedBlogPostsForFeed: {
+			all: async (limit = 30) => {
+				const lim = Math.min(Math.max(1, Number(limit) || 30), 100);
+				return blog_posts
+					.filter((p) => p.status === "published")
+					.slice()
+					.sort((a, b) =>
+						String(b.published_at || b.created_at || "").localeCompare(
+							String(a.published_at || a.created_at || "")
+						)
+					)
+					.slice(0, lim);
+			}
+		},
+		selectBlogPostsAdmin: {
+			all: async ({ status: statusFilter, limit = 200, offset = 0, authorUserId } = {}) => {
+				let rows = blog_posts.slice();
+				if (statusFilter && typeof statusFilter === "string") {
+					rows = rows.filter((p) => p.status === statusFilter);
+				}
+				if (authorUserId != null && authorUserId !== "") {
+					const aid = Number(authorUserId);
+					rows = rows.filter((p) => Number(p.author_user_id) === aid);
+				}
+				rows.sort((a, b) =>
+					String(b.updated_at || "").localeCompare(String(a.updated_at || ""))
+				);
+				const off = Math.max(0, Number(offset) || 0);
+				const lim = Math.min(Math.max(1, Number(limit) || 200), 500);
+				return rows.slice(off, off + lim);
+			}
+		},
+		insertBlogPost: {
+			run: async ({
+				slug,
+				title,
+				description = "",
+				body_md = "",
+				status = "draft",
+				author_user_id,
+				updated_by_user_id = null,
+				published_at = null,
+				meta = {}
+			}) => {
+				const id =
+					blog_posts.length > 0 ? Math.max(...blog_posts.map((p) => p.id || 0)) + 1 : 1;
+				const now = new Date().toISOString();
+				const row = {
+					id,
+					slug,
+					title,
+					description,
+					body_md,
+					status,
+					published_at,
+					author_user_id,
+					updated_by_user_id,
+					meta: meta && typeof meta === "object" ? { ...meta } : {},
+					created_at: now,
+					updated_at: now
+				};
+				blog_posts.push(row);
+				return { insertId: id, lastInsertRowid: id, changes: 1 };
+			}
+		},
+		updateBlogPost: {
+			run: async (id, patch = {}) => {
+				const row = blog_posts.find((p) => Number(p.id) === Number(id));
+				if (!row) return { changes: 0 };
+				const now = new Date().toISOString();
+				if (patch.slug != null) row.slug = patch.slug;
+				if (patch.title != null) row.title = patch.title;
+				if (patch.description != null) row.description = patch.description;
+				if (patch.body_md != null) row.body_md = patch.body_md;
+				if (patch.status != null) row.status = patch.status;
+				if (patch.published_at !== undefined) row.published_at = patch.published_at;
+				if (patch.author_user_id !== undefined) row.author_user_id = Number(patch.author_user_id);
+				if (patch.updated_by_user_id !== undefined) row.updated_by_user_id = patch.updated_by_user_id;
+				if (patch.meta != null && typeof patch.meta === "object") {
+					row.meta = { ...(row.meta || {}), ...patch.meta };
+				}
+				row.updated_at = now;
+				return { changes: 1 };
 			}
 		},
 		deleteAllLikesForCreatedImage: {
