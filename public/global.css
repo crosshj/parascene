@@ -4081,9 +4081,9 @@ body.chat-page .chat-page-send-btn.is-sending .chat-page-send-spinner.route-load
 
 .connect-chat-thread-row {
 	display: flex;
-	flex-direction: column;
-	align-items: flex-start;
-	gap: 4px;
+	flex-direction: row;
+	align-items: center;
+	gap: 10px;
 	width: 100%;
 	box-sizing: border-box;
 	text-align: left;
@@ -4099,6 +4099,28 @@ body.chat-page .chat-page-send-btn.is-sending .chat-page-send-spinner.route-load
 
 .connect-chat-thread-row:hover {
 	border-color: var(--border-strong);
+}
+
+.connect-chat-thread-row .comment-avatar {
+	width: 40px;
+	height: 40px;
+	margin-top: 0;
+	flex-shrink: 0;
+	font-size: 0.95rem;
+}
+
+.connect-chat-thread-row-channel-avatar {
+	color: #ffffff;
+	font-weight: 600;
+}
+
+.connect-chat-thread-row-body {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 4px;
+	min-width: 0;
+	flex: 1;
 }
 
 .connect-chat-thread-row-title {

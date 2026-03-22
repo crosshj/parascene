@@ -132,6 +132,41 @@ function buildChatThreadUrl(meta) {
 	return '/connect#chat';
 }
 
+/** Avatar for Connect chat thread rows: DM uses profile image or initial; channel uses # on getAvatarColor(slug). */
+function buildConnectChatThreadAvatarHtml(t) {
+	if (t?.type === 'dm') {
+		const ou = t.other_user;
+		const displayName =
+			(typeof ou?.display_name === 'string' && ou.display_name.trim()) ||
+			(typeof ou?.user_name === 'string' && ou.user_name.trim()) ||
+			(typeof t.title === 'string' && t.title.trim().startsWith('@')
+				? t.title.trim().slice(1)
+				: String(t.title || '').trim()) ||
+			'User';
+		const seed =
+			(typeof ou?.user_name === 'string' && ou.user_name.trim()) ||
+			(ou?.id != null ? String(ou.id) : '') ||
+			displayName;
+		const avatarUrl = ou && typeof ou.avatar_url === 'string' ? ou.avatar_url.trim() : '';
+		return renderCommentAvatarHtml({
+			avatarUrl,
+			displayName,
+			color: getAvatarColor(seed),
+			href: '',
+			isFounder: false,
+			flairSize: 'xs'
+		});
+	}
+	const slugRaw =
+		(typeof t?.channel_slug === 'string' && t.channel_slug.trim()) ||
+		(typeof t?.title === 'string' && t.title.trim().startsWith('#')
+			? t.title.trim().slice(1)
+			: '') ||
+		'';
+	const color = getAvatarColor(slugRaw.toLowerCase() || 'channel');
+	return `<div class="comment-avatar connect-chat-thread-row-channel-avatar" style="background: ${color};" aria-hidden="true">#</div>`;
+}
+
 class AppRouteServers extends HTMLElement {
 	async connectedCallback() {
 		await loadDeps();
@@ -467,9 +502,13 @@ class AppRouteServers extends HTMLElement {
 			const row = document.createElement('a');
 			row.className = 'connect-chat-thread-row';
 			row.href = buildChatThreadUrl(t);
+			const avatarHtml = buildConnectChatThreadAvatarHtml(t);
 			row.innerHTML = `
-				<span class="connect-chat-thread-row-title">${escapeHtml(title)}</span>
-				${preview ? `<span class="connect-chat-thread-row-preview">${escapeHtml(preview)}</span>` : ''}
+				${avatarHtml}
+				<div class="connect-chat-thread-row-body">
+					<span class="connect-chat-thread-row-title">${escapeHtml(title)}</span>
+					${preview ? `<span class="connect-chat-thread-row-preview">${escapeHtml(preview)}</span>` : ''}
+				</div>
 			`;
 			listEl.appendChild(row);
 		});
