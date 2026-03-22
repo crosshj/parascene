@@ -612,20 +612,27 @@ class AppRouteFeed extends HTMLElement {
 			.replace(/&/g, "&amp;")
 			.replace(/</g, "&lt;")
 			.replace(/>/g, "&gt;");
-		const author = item.author || "Anonymous";
+		const plainSummary = String(item.summary || "")
+			.replace(/<[^>]*>/g, " ")
+			.replace(/\s+/g, " ")
+			.trim();
+		const truncated =
+			plainSummary.length > 220 ? `${plainSummary.slice(0, 217).trim()}…` : plainSummary;
+		const safeSummary = truncated
+			.replace(/&/g, "&amp;")
+			.replace(/</g, "&lt;")
+			.replace(/>/g, "&gt;");
 		const authorUserName = typeof item.author_user_name === "string" ? item.author_user_name.trim() : "";
-		const authorDisplayName = typeof item.author_display_name === "string" ? item.author_display_name.trim() : "";
-		const emailPrefix = typeof item.author === "string" && item.author.includes("@")
-			? item.author.split("@")[0]
-			: author;
-		const handle = (authorUserName || emailPrefix || author)
-			.toLowerCase()
-			.slice(0, 48) || "user";
-		const displayName = authorDisplayName || authorUserName || emailPrefix || author;
+		const emailPrefix =
+			typeof item.author === "string" && item.author.includes("@")
+				? item.author.split("@")[0]
+				: "";
+		const handleForLabel = authorUserName ? `@${authorUserName}` : emailPrefix ? `@${emailPrefix}` : "";
+		const initialSource = authorUserName || emailPrefix || "user";
 		const avatarUrl = typeof item.author_avatar_url === "string" ? item.author_avatar_url.trim() : "";
-		const avatarInitial = displayName.trim().charAt(0).toUpperCase() || "?";
+		const avatarInitial = initialSource.replace(/^@/, "").trim().charAt(0).toUpperCase() || "?";
 		const authorUserId = item.user_id != null ? Number(item.user_id) : null;
-		const colorSeed = authorUserName || emailPrefix || String(authorUserId || '') || displayName;
+		const colorSeed = authorUserName || emailPrefix || String(authorUserId || "") || "blog";
 		const avatarColor = getAvatarColor(colorSeed);
 		const relativeTime = formatRelativeTime(item.created_at) || "recently";
 		const profileHref = buildProfilePath({ userName: authorUserName, userId: authorUserId });
@@ -633,7 +640,7 @@ class AppRouteFeed extends HTMLElement {
 		const avatarContent = avatarUrl ? html`<img src="${avatarUrl}" alt="">` : avatarInitial;
 		const avatarBlock = isFounder
 			? html`
-          <div class="avatar-with-founder-flair avatar-with-founder-flair--md">
+          <div class="avatar-with-founder-flair avatar-with-founder-flair--sm">
             <div class="founder-flair-avatar-ring">
               <div class="founder-flair-avatar-inner" style="background: ${avatarUrl ? 'var(--surface-strong)' : avatarColor};" aria-hidden="true">
                 ${avatarContent}
@@ -642,36 +649,50 @@ class AppRouteFeed extends HTMLElement {
           </div>
         `
 			: html`
-          <div class="feed-card-avatar" style="--feed-card-avatar-bg: ${avatarColor};" aria-hidden="true">
+          <div class="feed-card-avatar feed-card-blog-avatar-chip" style="--feed-card-avatar-bg: ${avatarColor};" aria-hidden="true">
             ${avatarUrl ? html`<img class="feed-card-avatar-img" src="${avatarUrl}" alt="">` : avatarInitial}
           </div>
         `;
+		const safeHandleForHtml = handleForLabel
+			.replace(/&/g, "&amp;")
+			.replace(/</g, "&lt;")
+			.replace(/>/g, "&gt;");
+		const handleLinkInner =
+			isFounder && handleForLabel
+				? html`<span class="founder-name">${safeHandleForHtml}</span>`
+				: safeHandleForHtml;
+		const metaLine =
+			handleForLabel && profileHref
+				? html`<a class="feed-card-blog-meta-link" href="${profileHref}" data-profile-link>${handleLinkInner}</a><span class="feed-card-blog-meta-sep" aria-hidden="true"> · </span><span>${relativeTime}</span>`
+				: handleForLabel
+					? html`<span>${handleLinkInner}</span><span class="feed-card-blog-meta-sep" aria-hidden="true"> · </span><span>${relativeTime}</span>`
+					: html`<span>${relativeTime}</span>`;
 		card.innerHTML = html`
-			<a href="${href}" class="feed-card-blog-link feed-card-blog-link--hero">
-				<div class="feed-card-image feed-card-blog-image" aria-hidden="true">
-					<span class="feed-card-blog-badge">Blog</span>
+			<div class="feed-card-blog-inner">
+				<div class="feed-card-blog-kicker">Blog</div>
+				<a href="${href}" class="feed-card-blog-card-title">${safeTitle}</a>
+				${safeSummary ? html`<div class="feed-card-blog-message">${safeSummary}</div>` : ""}
+				<div class="feed-card-blog-meta-row">
+					${profileHref ? html`<a class="feed-card-blog-avatar-slot user-link user-avatar-link" href="${profileHref}" data-profile-link aria-label="View profile">${avatarBlock}</a>` : html`<span class="feed-card-blog-avatar-slot">${avatarBlock}</span>`}
+					<div class="feed-card-blog-meta-text" title="${formatDateTime(item.created_at)}">${metaLine}</div>
 				</div>
-			</a>
-			<div class="feed-card-footer-grid">
-				${profileHref ? html`
-          <a class="user-link user-avatar-link" href="${profileHref}" data-profile-link aria-label="View ${author} profile">
-            ${avatarBlock}
-          </a>
-        ` : html`
-          <div>
-            ${avatarBlock}
-          </div>
-        `}
-				<div class="feed-card-content">
-					<a href="${href}" class="feed-card-title feed-card-blog-title-link">${safeTitle}</a>
-					<div class="feed-card-metadata" title="${formatDateTime(item.created_at)}">
-						${profileHref
-				? html`<a class="user-link" href="${profileHref}" data-profile-link>${isFounder ? html`<span class="founder-name">${displayName}</span> <span class="founder-name">@${handle}</span>` : html`${displayName} @${handle}`}</a>`
-				: html`${isFounder ? html`<span class="founder-name">${displayName}</span> <span class="founder-name">@${handle}</span>` : html`${displayName} @${handle}`}`} • ${relativeTime}
-					</div>
-				</div>
+				<a class="route-empty-button feed-card-blog-cta" href="${href}">Read post</a>
 			</div>
 		`;
+		const blogInner = card.querySelector(".feed-card-blog-inner");
+		if (blogInner && typeof IntersectionObserver !== "undefined") {
+			const observer = new IntersectionObserver(
+				(entries) => {
+					const entry = entries[0];
+					if (entry?.isIntersecting) {
+						card.classList.add("feed-card-blog-in-view");
+						observer.disconnect();
+					}
+				},
+				{ threshold: 0.25, rootMargin: "0px 0px -40px 0px" }
+			);
+			observer.observe(blogInner);
+		}
 		return card;
 	}
 
