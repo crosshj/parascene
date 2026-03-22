@@ -128,3 +128,12 @@ When the user asks about TODOs or wants to manage TODO items:
 - **Read** `_docs/TODO.md` - This contains documentation about how TODO.json works (cost, impact, rebalancing, etc.)
 - The TODO.json file is used by the API route at `api_routes/todo.js` to serve and manage TODO items
 - Do not modify TODO.md when TODO.json changes - TODO.md is documentation only
+
+## Plan documents
+
+When the user asks for a plan document (or a file whose purpose is an implementation/rollout plan):
+
+- **Location and name:** Write it under `_docs/` with filename prefix `PLAN_` (e.g. `_docs/PLAN_feature_name.md`).
+- **Tone and shape:** Keep it **very terse.** Short lines, plain language, scannable in a few seconds.
+- **Markdown — use sparingly:** Prefer a single top-level title (`# Plan: …`) then plain paragraphs and simple `-` bullets. Avoid tables, blockquotes, emoji, and deep heading hierarchies (`##` / `###` only when they genuinely separate major chunks). Avoid bold/italic except where one emphasis per section helps scanning. Skip horizontal rules unless they separate two large phases. Use fenced code blocks only for real code, paths, or API snippets — not for prose.
+- **Goal:** Someone glancing at the raw file or a preview should grasp phases, dependencies, and done criteria without parsing heavy formatting.
