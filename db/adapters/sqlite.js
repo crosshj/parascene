@@ -3264,6 +3264,87 @@ export async function openDb() {
 				return Promise.resolve({ changes: result.changes });
 			}
 		},
+		insertBlogPostView: {
+			run: async ({ blog_post_id = null, post_slug, campaign_id = null, referer = null, anon_cid = null, meta = null }) => {
+				const toJsonText = (v) => (v == null ? null : typeof v === "string" ? v : JSON.stringify(v));
+				const stmt = db.prepare(
+					`INSERT INTO blog_post_views (blog_post_id, post_slug, campaign_id, referer, anon_cid, meta)
+					 VALUES (?, ?, ?, ?, ?, ?)`
+				);
+				const result = stmt.run(
+					blog_post_id ?? null,
+					post_slug ?? "",
+					campaign_id ?? null,
+					referer ?? null,
+					anon_cid ?? null,
+					toJsonText(meta)
+				);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		selectBlogPostViewStats: {
+			all: async () => {
+				const byPost = db
+					.prepare(
+						`SELECT blog_post_id AS id, COUNT(*) AS views
+						 FROM blog_post_views WHERE blog_post_id IS NOT NULL GROUP BY blog_post_id`
+					)
+					.all();
+				const byCampaign = db
+					.prepare(
+						`SELECT COALESCE(campaign_id, '') AS campaign_id, COUNT(*) AS views
+						 FROM blog_post_views GROUP BY campaign_id`
+					)
+					.all();
+				const totalRow = db.prepare("SELECT COUNT(*) AS count FROM blog_post_views").get();
+				return Promise.resolve({
+					byPost: (byPost ?? []).map((r) => ({ blog_post_id: Number(r.id), views: Number(r.views) })),
+					byCampaign: (byCampaign ?? []).map((r) => ({
+						campaign_id: r.campaign_id === "" ? null : r.campaign_id,
+						views: Number(r.views)
+					})),
+					total: Number(totalRow?.count ?? 0)
+				});
+			}
+		},
+		selectBlogCampaigns: {
+			all: async () => {
+				const rows = db.prepare("SELECT id, label, notes, active, created_at FROM blog_campaigns ORDER BY created_at ASC").all();
+				return Promise.resolve(rows ?? []);
+			}
+		},
+		insertBlogCampaign: {
+			run: async ({ id, label = "", notes = "", active = true }) => {
+				const stmt = db.prepare(
+					`INSERT INTO blog_campaigns (id, label, notes, active, created_at) VALUES (?, ?, ?, ?, datetime('now'))`
+				);
+				const result = stmt.run(id, label ?? "", notes ?? "", active ? 1 : 0);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		updateBlogCampaign: {
+			run: async (id, patch = {}) => {
+				const fields = [];
+				const vals = [];
+				if (patch.label != null) {
+					fields.push("label = ?");
+					vals.push(patch.label);
+				}
+				if (patch.notes != null) {
+					fields.push("notes = ?");
+					vals.push(patch.notes);
+				}
+				if (patch.active != null) {
+					fields.push("active = ?");
+					vals.push(patch.active ? 1 : 0);
+				}
+				if (fields.length === 0) return Promise.resolve({ changes: 0 });
+				vals.push(id);
+				const stmt = db.prepare(`UPDATE blog_campaigns SET ${fields.join(", ")} WHERE id = ?`);
+				const result = stmt.run(...vals);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
 		updateJobStatus: {
 			run: async (jobId, status, metaPatch = {}) => {
 				const now = new Date().toISOString();

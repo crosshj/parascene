@@ -2,8 +2,11 @@ import express from "express";
 import path from "path";
 import { marked } from "marked";
 import { getAvatarColor } from "../public/shared/avatar.js";
-import { injectCommonHead, getPageTokens } from "./utils/head.js";
+import { injectCommonHead, getPageTokens, getCanonicalLinkHtml } from "./utils/head.js";
+import { buildRequestMeta } from "./utils/analytics.js";
+import { getBaseAppUrl } from "./utils/url.js";
 import { scanBlogDirectory, sortBlogPosts } from "../lib/blog/parseAndScan.js";
+import { parseBlogPathSegments } from "../lib/blog/campaignPath.js";
 
 marked.setOptions({
 	gfm: true,
@@ -207,6 +210,7 @@ function rowToMergedPost(row) {
 			? Number(row.author_user_id)
 			: null;
 	return {
+		id: row.id != null ? Number(row.id) : null,
 		slug: row.slug,
 		title: row.title,
 		description: row.description ?? "",
@@ -327,6 +331,7 @@ export default function createBlogRoutes({ pagesDir, queries }) {
 		const fp = filePosts.find((p) => p.slug === slug);
 		if (!fp) return null;
 		return {
+			id: null,
 			slug: fp.slug,
 			title: fp.title,
 			description: fp.description,
@@ -338,6 +343,52 @@ export default function createBlogRoutes({ pagesDir, queries }) {
 			html: marked.parse(fp.content),
 			_source: "file"
 		};
+	}
+
+	function canonicalBlogUrlForSlug(slug) {
+		const base = getBaseAppUrl().replace(/\/$/, "");
+		if (!slug) return `${base}/blog`;
+		const enc = String(slug)
+			.split("/")
+			.filter(Boolean)
+			.map((s) => encodeURIComponent(s))
+			.join("/");
+		return `${base}/blog/${enc}`;
+	}
+
+	function tryLogBlogPostView(req, queries, { post, campaign, slugUsed }) {
+		if (!post || !queries?.insertBlogPostView?.run) return;
+		const referer = typeof req.get("referer") === "string" ? req.get("referer").trim() || null : null;
+		const anonCid = typeof req.cookies?.ps_cid === "string" ? req.cookies.ps_cid.trim() || null : null;
+		const blog_post_id = post._source === "db" && post.id != null ? Number(post.id) : null;
+		const meta = buildRequestMeta(req, {
+			page: "blog",
+			post_slug: post.slug || slugUsed,
+			campaign: campaign ?? null
+		});
+		queries.insertBlogPostView
+			.run({
+				blog_post_id,
+				post_slug: post.slug || slugUsed || "",
+				campaign_id: campaign ?? null,
+				referer,
+				anon_cid: anonCid,
+				meta
+			})
+			.catch(() => {});
+	}
+
+	async function resolvePublishedPostForBlogPath(segments) {
+		const parsed = parseBlogPathSegments(segments);
+		let post = await resolvePublishedPost(parsed.slug);
+		let campaign = parsed.campaign;
+		let slugUsed = parsed.slug;
+		if (parsed.tryCampaignFallback && !post) {
+			post = await resolvePublishedPost(segments.join("/"));
+			campaign = null;
+			slugUsed = segments.join("/");
+		}
+		return { post, campaign, slugUsed };
 	}
 
 	/**
@@ -457,9 +508,9 @@ export default function createBlogRoutes({ pagesDir, queries }) {
 
 	router.get("/blog/*", async (req, res) => {
 		try {
-			const fs = await import("fs/promises");
-			let slug = req.path.replace(/^\/blog\/?/, "").replace(/\/$/, "") || "";
-			const post = await resolvePublishedPost(slug);
+			const raw = req.path.replace(/^\/blog\/?/, "").replace(/\/$/, "") || "";
+			const segments = raw ? raw.split("/").filter(Boolean) : [];
+			const { post, campaign, slugUsed } = await resolvePublishedPostForBlogPath(segments);
 
 			const pageDescription = post?.description || (post ? `${post.title} — parascene blog post.` : "");
 
@@ -513,6 +564,23 @@ export default function createBlogRoutes({ pagesDir, queries }) {
 				htmlWithHead = htmlWithHead
 					.replace("<!--APP_HEADER-->", publicHeader)
 					.replace("<!--APP_MOBILE_BOTTOM_NAV-->", "");
+			}
+
+			if (post) {
+				tryLogBlogPostView(req, queries, { post, campaign, slugUsed });
+				if (campaign != null && post.slug) {
+					const canUrl = canonicalBlogUrlForSlug(post.slug);
+					htmlWithHead = htmlWithHead.replace(/<link rel="canonical" href="[^"]*"\s*\/>/i, getCanonicalLinkHtml(canUrl));
+					const ogEsc = canUrl
+						.replace(/&/g, "&amp;")
+						.replace(/"/g, "&quot;")
+						.replace(/</g, "&lt;")
+						.replace(/>/g, "&gt;");
+					htmlWithHead = htmlWithHead.replace(
+						/<meta property="og:url" content="[^"]*"\s*\/>/i,
+						`<meta property="og:url" content="${ogEsc}" />`
+					);
+				}
 			}
 
 			res.setHeader("Content-Type", "text/html");

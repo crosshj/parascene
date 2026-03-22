@@ -179,6 +179,28 @@ CREATE TABLE IF NOT EXISTS blog_posts (
 CREATE INDEX IF NOT EXISTS idx_blog_posts_status ON blog_posts(status);
 CREATE INDEX IF NOT EXISTS idx_blog_posts_published_at ON blog_posts(published_at DESC);
 
+CREATE TABLE IF NOT EXISTS blog_post_views (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  viewed_at TEXT NOT NULL DEFAULT (datetime('now')),
+  blog_post_id INTEGER REFERENCES blog_posts(id),
+  post_slug TEXT NOT NULL,
+  campaign_id TEXT,
+  referer TEXT,
+  anon_cid TEXT,
+  meta TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_blog_post_views_viewed_at ON blog_post_views(viewed_at);
+CREATE INDEX IF NOT EXISTS idx_blog_post_views_blog_post_id ON blog_post_views(blog_post_id);
+CREATE INDEX IF NOT EXISTS idx_blog_post_views_campaign_id ON blog_post_views(campaign_id);
+
+CREATE TABLE IF NOT EXISTS blog_campaigns (
+  id TEXT PRIMARY KEY,
+  label TEXT,
+  notes TEXT,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS explore_items (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   title TEXT NOT NULL,

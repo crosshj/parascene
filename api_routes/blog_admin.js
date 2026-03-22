@@ -1,4 +1,6 @@
 import express from "express";
+import { BLOG_CAMPAIGN_TOKEN_RE } from "../lib/blog/campaignPath.js";
+import { getBaseAppUrl } from "./utils/url.js";
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -8,11 +10,17 @@ function normalizeSlug(input) {
 	return s;
 }
 
-function normalizeText(input, max) {
-	const t = typeof input === "string" ? input : "";
-	if (t.length > max) return t.slice(0, max);
-	return t;
-}
+	function normalizeText(input, max) {
+		const t = typeof input === "string" ? input : "";
+		if (t.length > max) return t.slice(0, max);
+		return t;
+	}
+
+	function normalizeCampaignId(input) {
+		const s = typeof input === "string" ? input.trim().toLowerCase() : "";
+		if (!s || !BLOG_CAMPAIGN_TOKEN_RE.test(s)) return null;
+		return s;
+	}
 
 export default function createBlogAdminRoutes({ queries }) {
 	const router = express.Router();
@@ -164,7 +172,22 @@ export default function createBlogAdminRoutes({ queries }) {
 			if (authorIds.length && typeof queries.selectUserProfilesByUserIds === "function") {
 				profileMap = await queries.selectUserProfilesByUserIds(authorIds);
 			}
-			return res.json({ posts: rows.map((row) => postJsonWithAuthorUsername(row, profileMap)) });
+			let viewByPostId = new Map();
+			if (typeof queries.selectBlogPostViewStats?.all === "function") {
+				try {
+					const stats = await queries.selectBlogPostViewStats.all();
+					viewByPostId = new Map((stats.byPost ?? []).map((r) => [Number(r.blog_post_id), r.views]));
+				} catch {
+					viewByPostId = new Map();
+				}
+			}
+			return res.json({
+				posts: rows.map((row) => {
+					const j = postJsonWithAuthorUsername(row, profileMap);
+					const v = viewByPostId.get(Number(row.id));
+					return v != null ? { ...j, view_count: v } : { ...j, view_count: 0 };
+				})
+			});
 		} catch (e) {
 			return res.status(500).json({ error: e?.message || "Failed to list posts" });
 		}
@@ -333,6 +356,127 @@ export default function createBlogAdminRoutes({ queries }) {
 			return res.json({ post: rowToJson(row) });
 		} catch (e) {
 			return res.status(500).json({ error: e?.message || "Failed to unpublish" });
+		}
+	});
+
+	/** Admin-only: raw view stats + per-post view counts. */
+	router.get("/api/blog/analytics/summary", async (req, res) => {
+		const user = await requireAuthedUser(req, res);
+		if (!user) return;
+		if (!isAdmin(user)) {
+			return res.status(403).json({ error: "Forbidden" });
+		}
+		if (typeof queries.selectBlogPostViewStats?.all !== "function") {
+			return res.json({ total: 0, byPost: [], byCampaign: [], posts: [] });
+		}
+		try {
+			const stats = await queries.selectBlogPostViewStats.all();
+			const byPostMap = new Map((stats.byPost ?? []).map((r) => [Number(r.blog_post_id), r.views]));
+			const rows = await queries.selectBlogPostsAdmin.all({ limit: 500, offset: 0 });
+			const posts = (rows ?? []).map((r) => ({
+				id: r.id,
+				slug: r.slug,
+				title: r.title,
+				status: r.status,
+				views: byPostMap.get(Number(r.id)) ?? 0
+			}));
+			return res.json({
+				total: stats.total ?? 0,
+				byPost: stats.byPost ?? [],
+				byCampaign: stats.byCampaign ?? [],
+				posts
+			});
+		} catch (e) {
+			return res.status(500).json({ error: e?.message || "Failed to load analytics" });
+		}
+	});
+
+	router.get("/api/blog/campaigns", async (req, res) => {
+		const user = await requireBlogContributor(req, res);
+		if (!user) return;
+		if (typeof queries.selectBlogCampaigns?.all !== "function") {
+			return res.json({ campaigns: [] });
+		}
+		try {
+			const campaigns = await queries.selectBlogCampaigns.all();
+			return res.json({ campaigns: campaigns ?? [] });
+		} catch (e) {
+			return res.status(500).json({ error: e?.message || "Failed to list campaigns" });
+		}
+	});
+
+	router.post("/api/blog/campaigns", async (req, res) => {
+		const user = await requireAuthedUser(req, res);
+		if (!user) return;
+		if (!isAdmin(user)) {
+			return res.status(403).json({ error: "Forbidden" });
+		}
+		const id = normalizeCampaignId(req.body?.id);
+		if (!id) {
+			return res.status(400).json({ error: "Invalid campaign id (use 1–12 lowercase letters/numbers)" });
+		}
+		const label = normalizeText(req.body?.label ?? "", 200);
+		const notes = normalizeText(req.body?.notes ?? "", 2000);
+		const active = req.body?.active !== false;
+		try {
+			await queries.insertBlogCampaign.run({ id, label, notes, active });
+			return res.status(201).json({ campaign: { id, label, notes, active } });
+		} catch (e) {
+			if (e?.code === "23505" || e?.message?.includes("UNIQUE")) {
+				return res.status(409).json({ error: "Campaign id already exists" });
+			}
+			return res.status(500).json({ error: e?.message || "Failed to create campaign" });
+		}
+	});
+
+	router.patch("/api/blog/campaigns/:id", async (req, res) => {
+		const user = await requireAuthedUser(req, res);
+		if (!user) return;
+		if (!isAdmin(user)) {
+			return res.status(403).json({ error: "Forbidden" });
+		}
+		const id = normalizeCampaignId(req.params.id);
+		if (!id) return res.status(400).json({ error: "Invalid id" });
+		try {
+			const patch = {};
+			if (req.body?.label != null) patch.label = normalizeText(req.body.label, 200);
+			if (req.body?.notes != null) patch.notes = normalizeText(req.body.notes, 2000);
+			if (req.body?.active != null) patch.active = Boolean(req.body.active);
+			const r = await queries.updateBlogCampaign.run(id, patch);
+			if (!r.changes) return res.status(404).json({ error: "Not found" });
+			return res.json({ ok: true });
+		} catch (e) {
+			return res.status(500).json({ error: e?.message || "Failed to update campaign" });
+		}
+	});
+
+	/** Tracked URL for a post (campaign prefix + canonical). Blog contributors who can edit the post. */
+	router.get("/api/blog/posts/:id/tracked-url", async (req, res) => {
+		const user = await requireBlogContributor(req, res);
+		if (!user) return;
+		const id = parseInt(req.params.id, 10);
+		const campaignId = normalizeCampaignId(req.query?.campaign);
+		if (!id) return res.status(400).json({ error: "Invalid id" });
+		if (!campaignId) {
+			return res.status(400).json({ error: "Query campaign=campaignId required" });
+		}
+		try {
+			const row = await queries.selectBlogPostById.get(id);
+			if (!row) return res.status(404).json({ error: "Not found" });
+			if (!canManageBlogPost(user, row)) {
+				return res.status(403).json({ error: "Forbidden" });
+			}
+			const base = getBaseAppUrl().replace(/\/$/, "");
+			const slug = String(row.slug || "").trim();
+			const enc = slug
+				.split("/")
+				.filter(Boolean)
+				.map((s) => encodeURIComponent(s))
+				.join("/");
+			const url = `${base}/blog/${encodeURIComponent(campaignId)}/${enc}`;
+			return res.json({ url, canonical: `${base}/blog/${enc}` });
+		} catch (e) {
+			return res.status(500).json({ error: e?.message || "Failed to build URL" });
 		}
 	});
 

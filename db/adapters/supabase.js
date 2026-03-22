@@ -4840,6 +4840,88 @@ export function openDb() {
 				return { changes: data?.length ?? 0 };
 			}
 		},
+		insertBlogPostView: {
+			run: async ({ blog_post_id = null, post_slug, campaign_id = null, referer = null, anon_cid = null, meta = null }) => {
+				const metaVal = meta && typeof meta === "object" && meta !== null ? meta : meta == null ? null : meta;
+				const { error } = await serviceClient.from(prefixedTable("blog_post_views")).insert({
+					blog_post_id: blog_post_id ?? null,
+					post_slug: post_slug ?? "",
+					campaign_id: campaign_id ?? null,
+					referer: referer ?? null,
+					anon_cid: anon_cid ?? null,
+					meta: metaVal
+				});
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
+		selectBlogPostViewStats: {
+			all: async () => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("blog_post_views"))
+					.select("blog_post_id, campaign_id");
+				if (error) throw error;
+				const rows = data ?? [];
+				const byPostMap = new Map();
+				let total = 0;
+				const byCampaignMap = new Map();
+				for (const row of rows) {
+					total += 1;
+					if (row.blog_post_id != null) {
+						const id = Number(row.blog_post_id);
+						byPostMap.set(id, (byPostMap.get(id) || 0) + 1);
+					}
+					const c = row.campaign_id ?? "";
+					byCampaignMap.set(c, (byCampaignMap.get(c) || 0) + 1);
+				}
+				return {
+					byPost: [...byPostMap.entries()].map(([blog_post_id, views]) => ({ blog_post_id, views })),
+					byCampaign: [...byCampaignMap.entries()].map(([c, views]) => ({
+						campaign_id: c === "" ? null : c,
+						views
+					})),
+					total
+				};
+			}
+		},
+		selectBlogCampaigns: {
+			all: async () => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("blog_campaigns"))
+					.select("id, label, notes, active, created_at")
+					.order("created_at", { ascending: true });
+				if (error) throw error;
+				return data ?? [];
+			}
+		},
+		insertBlogCampaign: {
+			run: async ({ id, label = "", notes = "", active = true }) => {
+				const { error } = await serviceClient.from(prefixedTable("blog_campaigns")).insert({
+					id,
+					label: label ?? "",
+					notes: notes ?? "",
+					active: active !== false
+				});
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
+		updateBlogCampaign: {
+			run: async (id, patch = {}) => {
+				const row = {};
+				if (patch.label != null) row.label = patch.label;
+				if (patch.notes != null) row.notes = patch.notes;
+				if (patch.active != null) row.active = patch.active;
+				if (Object.keys(row).length === 0) return { changes: 0 };
+				const { data, error } = await serviceClient
+					.from(prefixedTable("blog_campaigns"))
+					.update(row)
+					.eq("id", id)
+					.select("id");
+				if (error) throw error;
+				return { changes: data?.length ?? 0 };
+			}
+		},
 		deleteAllLikesForCreatedImage: {
 			run: async (createdImageId) => {
 				// Use serviceClient to bypass RLS for backend operations

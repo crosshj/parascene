@@ -73,6 +73,11 @@
 	line-height: 1.4;
 }
 
+.blog-analytics-edit-link {
+	font-size: 0.85rem;
+	color: var(--text-muted);
+}
+
 .admin-settings-actions {
 	padding-top: 20px;
 	margin-top: 8px;

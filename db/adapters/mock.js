@@ -15,6 +15,8 @@ const policy_knobs = [];
 const notifications = [];
 const feed_items = [];
 const blog_posts = [];
+const blog_post_views = [];
+const blog_campaigns = [];
 const explore_items = [];
 const creations = [];
 const templates = [];
@@ -2320,6 +2322,82 @@ export function openDb() {
 					row.meta = { ...(row.meta || {}), ...patch.meta };
 				}
 				row.updated_at = now;
+				return { changes: 1 };
+			}
+		},
+		insertBlogPostView: {
+			run: async ({ blog_post_id = null, post_slug, campaign_id = null, referer = null, anon_cid = null, meta = null }) => {
+				const id =
+					blog_post_views.length > 0 ? Math.max(...blog_post_views.map((v) => v.id || 0)) + 1 : 1;
+				const now = new Date().toISOString();
+				blog_post_views.push({
+					id,
+					viewed_at: now,
+					blog_post_id: blog_post_id ?? null,
+					post_slug: post_slug ?? "",
+					campaign_id: campaign_id ?? null,
+					referer: referer ?? null,
+					anon_cid: anon_cid ?? null,
+					meta: meta && typeof meta === "object" ? { ...meta } : meta
+				});
+				return { changes: 1 };
+			}
+		},
+		selectBlogPostViewStats: {
+			all: async () => {
+				const byPostMap = new Map();
+				let total = 0;
+				const byCampaignMap = new Map();
+				for (const row of blog_post_views) {
+					total += 1;
+					if (row.blog_post_id != null) {
+						const pid = Number(row.blog_post_id);
+						byPostMap.set(pid, (byPostMap.get(pid) || 0) + 1);
+					}
+					const c = row.campaign_id ?? "";
+					byCampaignMap.set(c, (byCampaignMap.get(c) || 0) + 1);
+				}
+				return {
+					byPost: [...byPostMap.entries()].map(([blog_post_id, views]) => ({ blog_post_id, views })),
+					byCampaign: [...byCampaignMap.entries()].map(([c, views]) => ({
+						campaign_id: c === "" ? null : c,
+						views
+					})),
+					total
+				};
+			}
+		},
+		selectBlogCampaigns: {
+			all: async () =>
+				blog_campaigns
+					.slice()
+					.sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
+		},
+		insertBlogCampaign: {
+			run: async ({ id, label = "", notes = "", active = true }) => {
+				if (blog_campaigns.some((c) => c.id === id)) {
+					const err = new Error("Campaign id already exists");
+					err.code = "DUPLICATE";
+					throw err;
+				}
+				const now = new Date().toISOString();
+				blog_campaigns.push({
+					id,
+					label: label ?? "",
+					notes: notes ?? "",
+					active: active !== false,
+					created_at: now
+				});
+				return { changes: 1 };
+			}
+		},
+		updateBlogCampaign: {
+			run: async (id, patch = {}) => {
+				const row = blog_campaigns.find((c) => c.id === id);
+				if (!row) return { changes: 0 };
+				if (patch.label != null) row.label = patch.label;
+				if (patch.notes != null) row.notes = patch.notes;
+				if (patch.active != null) row.active = patch.active;
 				return { changes: 1 };
 			}
 		},

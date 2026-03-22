@@ -218,17 +218,12 @@ function renderUserCard(user, onOpenModal) {
 	return card;
 }
 
-const USERS_TAB_IDS = ['active', 'share', 'anonymous', 'other', 'tips', 'settings'];
+const USERS_TAB_IDS = ['active', 'other', 'tips', 'settings'];
 
 
 class AppRouteUsers extends HTMLElement {
 	async connectedCallback() {
 		await loadDeps();
-		this._selectedAnonCid = null;
-		this._anonDataLoaded = false;
-		this._shareDataLoaded = false;
-		this._shareExportInFlight = false;
-		this._anonExportInFlight = false;
 		this._activeExportInFlight = false;
 		this._activeUsersSnapshot = [];
 		this.innerHTML = html`
@@ -248,39 +243,6 @@ class AppRouteUsers extends HTMLElement {
 							</div>
 						</div>
 						<div class="text-muted users-list-count" data-users-active-count aria-live="polite"></div>
-					</div>
-				</tab>
-				<tab data-id="share" label="Share">
-					<div class="share-tab-content" data-share-tab-content>
-						<div class="users-export-bar" data-share-export-bar>
-							<button type="button" class="btn-secondary" data-share-export-copy>
-								Copy share export
-							</button>
-							<div class="users-export-status" data-share-export-status aria-live="polite"></div>
-						</div>
-						<div class="share-table-container" data-share-table-container>
-							<div class="route-empty route-loading">
-								<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
-							</div>
-						</div>
-					</div>
-				</tab>
-				<tab data-id="anonymous" label="Try flow">
-					<div class="anon-tab-content" data-anon-tab-content>
-						<div class="users-export-bar users-export-bar-anon" data-anon-export-bar>
-							<button type="button" class="btn-secondary" data-anon-export-summary>
-								Copy anon summary
-							</button>
-							<button type="button" class="btn-secondary" data-anon-export-expanded>
-								Copy anon requests
-							</button>
-							<div class="users-export-status" data-anon-export-status aria-live="polite"></div>
-						</div>
-						<div class="anon-table-container" data-anon-table-container>
-							<div class="route-empty route-loading">
-								<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
-							</div>
-						</div>
 					</div>
 				</tab>
 				<tab data-id="other" label="Other">
@@ -319,28 +281,10 @@ class AppRouteUsers extends HTMLElement {
 					</div>
 				</tab>
 			</app-tabs>
-			<div class="publish-modal-overlay" data-anon-detail-modal role="dialog" aria-modal="true"
-				aria-labelledby="anon-detail-modal-title">
-				<div class="publish-modal anon-detail-modal">
-					<header class="publish-modal-header">
-						<h3 id="anon-detail-modal-title" class="anon-detail-modal-title" data-anon-detail-title>Requests</h3>
-						<button type="button" class="publish-modal-close" data-anon-detail-close aria-label="Close">✕</button>
-					</header>
-					<div class="publish-modal-body anon-detail-modal-body">
-						<div class="anon-detail-requests" data-anon-detail-requests></div>
-					</div>
-				</div>
-			</div>
 		`;
 		this._tabsEl = this.querySelector('app-tabs');
 		this._tabsEl?.addEventListener('tab-change', (e) => {
 			if (e.detail?.id) this._activeTabId = e.detail.id;
-			if (e.detail?.id === 'anonymous' && !this._anonDataLoaded) {
-				this.loadAnonCids();
-			}
-			if (e.detail?.id === 'share' && !this._shareDataLoaded) {
-				this.loadShareViews();
-			}
 			if (e.detail?.id === 'tips' && !this._tipsDataLoaded) {
 				this.loadTips();
 			}
@@ -349,29 +293,9 @@ class AppRouteUsers extends HTMLElement {
 			}
 		});
 		this.setupUsersTabHash();
-		this._anonModalOverlay = this.querySelector('[data-anon-detail-modal]');
-		this._anonModalOverlay?.addEventListener('click', (e) => {
-			if (e.target === this._anonModalOverlay) this.closeAnonDetailModal();
-		});
-		this.querySelector('[data-anon-detail-close]')?.addEventListener('click', () => this.closeAnonDetailModal());
-		this._boundAnonModalEscape = (e) => {
-			if (e.key === 'Escape' && this._anonModalOverlay?.classList.contains('open')) {
-				this.closeAnonDetailModal();
-			}
-		};
-		document.addEventListener('keydown', this._boundAnonModalEscape);
 		this.loadUsers();
 		this._boundRefresh = () => this.loadUsers({ force: true });
 		document.addEventListener('user-updated', this._boundRefresh);
-
-		const shareExportBtn = this.querySelector('[data-share-export-copy]');
-		const shareExportStatus = this.querySelector('[data-share-export-status]');
-		if (shareExportBtn && !this._shareExportBound) {
-			this._shareExportBound = true;
-			shareExportBtn.addEventListener('click', async () => {
-				await this.exportShareViewsForChatGPT({ statusEl: shareExportStatus });
-			});
-		}
 
 		const activeExportBtn = this.querySelector('[data-active-export-copy]');
 		const activeExportStatus = this.querySelector('[data-active-export-status]');
@@ -382,29 +306,14 @@ class AppRouteUsers extends HTMLElement {
 			});
 		}
 
-		const anonSummaryBtn = this.querySelector('[data-anon-export-summary]');
-		const anonExpandedBtn = this.querySelector('[data-anon-export-expanded]');
-		const anonExportStatus = this.querySelector('[data-anon-export-status]');
-		if ((anonSummaryBtn || anonExpandedBtn) && !this._anonExportBound) {
-			this._anonExportBound = true;
-			anonSummaryBtn?.addEventListener('click', async () => {
-				await this.exportAnonUsersForChatGPT({ mode: 'summary', statusEl: anonExportStatus });
-			});
-			anonExpandedBtn?.addEventListener('click', async () => {
-				await this.exportAnonUsersForChatGPT({ mode: 'expanded', statusEl: anonExportStatus });
-			});
-		}
 	}
 
 	disconnectedCallback() {
 		document.removeEventListener('user-updated', this._boundRefresh);
-		if (this._boundAnonModalEscape) {
-			document.removeEventListener('keydown', this._boundAnonModalEscape);
-		}
 		if (this._usersTabHashCleanup) this._usersTabHashCleanup();
 	}
 
-	/** Sync Users tab from URL hash (#active, #share, #anonymous, #other) and update hash when tab changes (same pattern as Connect). */
+	/** Sync Users tab from URL hash (#active, #other, #tips, #settings) and update hash when tab changes (same pattern as Connect). */
 	setupUsersTabHash() {
 		const isOnUsersRoute = () => {
 			const path = window.location.pathname || '';
@@ -419,12 +328,6 @@ class AppRouteUsers extends HTMLElement {
 			const tabs = this._tabsEl || this.querySelector('app-tabs');
 			if (tabs && typeof tabs.setActiveTab === 'function') {
 				tabs.setActiveTab(id, { focus: false });
-			}
-			if (id === 'anonymous' && !this._anonDataLoaded) {
-				this.loadAnonCids();
-			}
-			if (id === 'share' && !this._shareDataLoaded) {
-				this.loadShareViews();
 			}
 			if (id === 'tips' && !this._tipsDataLoaded) {
 				this.loadTips();
@@ -474,323 +377,6 @@ class AppRouteUsers extends HTMLElement {
 		if (modal) modal.open(user);
 	}
 
-	closeAnonDetailModal() {
-		this._selectedAnonCid = null;
-		if (this._anonModalOverlay) this._anonModalOverlay.classList.remove('open');
-		document.body.classList.remove('modal-open');
-	}
-
-	showAnonDetail(cid) {
-		this._selectedAnonCid = cid;
-		const titleEl = this.querySelector('[data-anon-detail-title]');
-		const requestsEl = this.querySelector('[data-anon-detail-requests]');
-		if (titleEl) titleEl.textContent = `Requests for ${truncateCid(cid)}`;
-		if (requestsEl) {
-			requestsEl.innerHTML = '<div class="route-empty route-loading"><div class="route-loading-spinner" aria-label="Loading" role="status"></div></div>';
-		}
-		if (this._anonModalOverlay) {
-			this._anonModalOverlay.classList.add('open');
-			document.body.classList.add('modal-open');
-		}
-		this.loadAnonDetail(cid);
-	}
-
-	async loadAnonCids() {
-		const container = this.querySelector('[data-anon-table-container]');
-		if (!container) return;
-		try {
-			this._anonDataLoaded = true;
-			await loadAdminDataTable(container, {
-				fetchUrl: '/admin/anonymous-users',
-				responseItemsKey: 'anonCids',
-				columns: [
-					{
-						key: 'prsn_cid',
-						label: 'Client Id',
-						sortKey: 'prsn_cid',
-						className: 'anon-table-col-prsn-cid',
-						render: (row) => {
-							const pc = row.prsn_cid && String(row.prsn_cid).trim();
-							return pc ? escapeHtml(truncateCid(pc, 18)) : '—';
-						}
-					},
-					{
-						key: 'anon_cid',
-						label: 'Anon Id',
-						sortKey: 'anon_cid',
-						className: 'anon-table-col-cid',
-						render: (row) => escapeHtml(truncateCid(row.anon_cid))
-					},
-					{
-						key: 'from_share',
-						label: 'Source',
-						className: 'anon-table-col-source',
-						render: (row) => {
-							// Prefer explicit backend source label; fall back to "share" flag.
-							if (typeof row.source === 'string' && row.source.trim()) {
-								return escapeHtml(row.source.trim());
-							}
-							return row.from_share ? 'share' : '';
-						}
-					},
-					{
-						key: 'last_request_at',
-						label: 'Date',
-						sortKey: 'last_request_at',
-						className: 'anon-table-col-dates',
-						render: (row) => {
-							const first = formatLocalDateTime(row.first_request_at);
-							const last = formatLocalDateTime(row.last_request_at);
-							return `<div class="anon-table-dates-cell"><span class="anon-table-date-line"><span class="anon-table-date-label">Last</span> ${escapeHtml(last)}</span><span class="anon-table-date-line"><span class="anon-table-date-label">First</span> ${escapeHtml(first)}</span></div>`;
-						}
-					},
-					{ key: 'request_count', label: 'Count', sortKey: 'request_count', className: 'anon-table-col-count' },
-					{
-						key: 'user_agent',
-						label: 'User agent',
-						className: 'anon-table-col-user-agent',
-						render: (row) => escapeHtml(truncateStr(row.user_agent ?? '', 60))
-					},
-					{
-						key: 'ip',
-						label: 'IP',
-						className: 'anon-table-col-ip',
-						render: (row) => {
-							const ip = row.ip ?? '';
-							const src = row.ip_source ?? '';
-							const ipStr = escapeHtml(truncateStr(ip, 45));
-							if (!ipStr) return '—';
-							if (src) {
-								return `${ipStr} <span class="share-table-ip-source" title="IP from header: ${escapeHtml(src)}">${escapeHtml(src)}</span>`;
-							}
-							return ipStr;
-						}
-					},
-					{
-						key: 'location',
-						label: 'Location',
-						className: 'anon-table-col-location',
-						render: (row) => {
-							const parts = [row.city, row.region, row.country].filter(Boolean);
-							return parts.length ? escapeHtml(parts.join(', ')) : '—';
-						}
-					},
-					{
-						key: 'cf_ray',
-						label: 'CF Ray',
-						className: 'anon-table-col-cf-ray',
-						render: (row) => {
-							const ray = row.cf_ray ?? '';
-							if (!ray) return '—';
-							return `<span class="share-table-cf-ray" title="Cloudflare request ID: search in Cloudflare Logs / Log Explorer to match this request">${escapeHtml(truncateStr(ray, 24))}</span>`;
-						}
-					},
-					{
-						key: 'transitioned_user_id',
-						label: 'Transitioned',
-						className: 'anon-table-col-transitioned',
-						render: (row) => {
-							const uid = row.transitioned_user_id;
-							const name = row.transitioned_user_name && String(row.transitioned_user_name).trim() ? String(row.transitioned_user_name).trim() : null;
-							const profileHref = uid != null ? (buildProfilePath({ userName: name, userId: uid }) || `/user/${uid}`) : null;
-							const label = uid != null ? (name ? `@${name}` : `User ${uid}`) : null;
-							if (profileHref && label) {
-								return `<a href="${escapeHtml(profileHref)}" class="anon-table-transitioned-link" onclick="event.stopPropagation()">${escapeHtml(label)}</a>`;
-							}
-							return uid != null ? 'Yes' : '—';
-						}
-					}
-				],
-				defaultSortBy: 'last_request_at',
-				defaultSortDir: 'desc',
-				emptyMessage: 'No try flow requests yet.',
-				ariaLabelPagination: 'Try flow pagination',
-				onRowClick: (row) => this.showAnonDetail(row.anon_cid),
-				tableClassName: 'admin-table anon-table'
-			});
-		} catch (err) {
-			container.innerHTML = '';
-			const error = document.createElement('div');
-			error.className = 'admin-error';
-			error.textContent = 'Error loading try flow data.';
-			container.appendChild(error);
-		}
-	}
-
-	async loadShareViews() {
-		const container = this.querySelector('[data-share-table-container]');
-		if (!container) return;
-		try {
-			this._shareDataLoaded = true;
-			await loadAdminDataTable(container, {
-				fetchUrl: '/admin/share-views',
-				responseItemsKey: 'items',
-				columns: [
-					{
-						key: 'prsn_cid',
-						label: 'Client Id',
-						className: 'share-table-col-prsn-cid',
-						render: (row) => {
-							const pc = row.prsn_cid && String(row.prsn_cid).trim();
-							return pc ? escapeHtml(truncateCid(pc, 18)) : '—';
-						}
-					},
-					{
-						key: 'anon_cid',
-						label: 'Anon Id',
-						sortKey: 'anon_cid',
-						className: 'share-table-col-cid',
-						render: (row) => escapeHtml(truncateStr(row.anon_cid, 12))
-					},
-					{
-						key: 'viewed_at',
-						label: 'Viewed',
-						sortKey: 'viewed_at',
-						className: 'share-table-col-date',
-						render: (row) => escapeHtml(row.viewed_at ? formatLocalDateTime(row.viewed_at) : '—')
-					},
-					{ key: 'sharer_label', label: 'Sharer', sortKey: 'sharer_user_id', className: 'share-table-col-sharer' },
-					{ key: 'creator_label', label: 'Creator', sortKey: 'created_by_user_id', className: 'share-table-col-creator' },
-					{
-						key: 'created_image_id',
-						label: 'Creation',
-						sortKey: 'created_image_id',
-						className: 'share-table-col-creation',
-						render: (row) => {
-							const raw = row.created_image_id;
-							if (raw != null && Number.isFinite(Number(raw))) {
-								return `<a href="/creations/${escapeHtml(String(raw))}">${escapeHtml(String(raw))}</a>`;
-							}
-							return escapeHtml(String(raw ?? '—'));
-						}
-					},
-					{
-						key: 'user_agent',
-						label: 'User agent',
-						className: 'share-table-col-user-agent',
-						render: (row) => escapeHtml(truncateStr(row.user_agent ?? '', 60))
-					},
-					{
-						key: 'ip',
-						label: 'IP',
-						className: 'share-table-col-ip',
-						render: (row) => {
-							const ip = row.ip ?? '';
-							const src = row.ip_source ?? '';
-							const ipStr = escapeHtml(truncateStr(ip, 45));
-							if (!ipStr) return '—';
-							if (src) {
-								return `${ipStr} <span class="share-table-ip-source" title="IP from header: ${escapeHtml(src)}">${escapeHtml(src)}</span>`;
-							}
-							return ipStr;
-						}
-					},
-					{
-						key: 'location',
-						label: 'Location',
-						className: 'share-table-col-location',
-						render: (row) => {
-							const parts = [row.city, row.region, row.country].filter(Boolean);
-							return parts.length ? escapeHtml(parts.join(', ')) : '—';
-						}
-					},
-					{
-						key: 'cf_ray',
-						label: 'CF Ray',
-						className: 'share-table-col-cf-ray',
-						render: (row) => {
-							const ray = row.cf_ray ?? '';
-							if (!ray) return '—';
-							return `<span class="share-table-cf-ray" title="Cloudflare request ID: search in Cloudflare Logs / Log Explorer to match this request">${escapeHtml(truncateStr(ray, 24))}</span>`;
-						}
-					},
-					{
-						key: 'referer',
-						label: 'Referer',
-						sortKey: 'referer',
-						className: 'share-table-col-referer',
-						render: (row) => escapeHtml(truncateStr(row.referer, 50))
-					}
-				],
-				defaultSortBy: 'viewed_at',
-				defaultSortDir: 'desc',
-				emptyMessage: 'No share page views yet.',
-				ariaLabelPagination: 'Share page views pagination',
-				tableClassName: 'admin-table share-table anon-table'
-			});
-		} catch (err) {
-			container.innerHTML = '';
-			const error = document.createElement('div');
-			error.className = 'admin-error';
-			error.textContent = 'Error loading share views.';
-			container.appendChild(error);
-		}
-	}
-
-	async exportShareViewsForChatGPT({ statusEl } = {}) {
-		if (this._shareExportInFlight) return;
-		this._shareExportInFlight = true;
-
-		const setStatus = (msg) => {
-			if (statusEl) statusEl.textContent = msg || '';
-		};
-
-		try {
-			setStatus('Preparing share export…');
-
-			const limit = 200;
-			const sortBy = 'viewed_at';
-			const sortDir = 'desc';
-			let offset = 0;
-			const allItems = [];
-			let total = null;
-
-			while (true) {
-				const params = new URLSearchParams({
-					limit: String(limit),
-					offset: String(offset),
-					sort_by: sortBy,
-					sort_dir: sortDir
-				});
-				const res = await fetch(`/admin/share-views?${params}`, { credentials: 'include' });
-				if (!res.ok) throw new Error('Failed to load share views.');
-				const data = await res.json();
-
-				const items = Array.isArray(data?.items) ? data.items : [];
-				total = Number(data?.total) ?? total ?? 0;
-				allItems.push(...items);
-
-				if (items.length === 0) break;
-				if (total != null && allItems.length >= total) break;
-				offset += items.length;
-			}
-
-			const payload = {
-				export_version: 1,
-				exported_at: new Date().toISOString(),
-				scope: '/users#share',
-				item_count: allItems.length,
-				field_notes: [
-					'`prsn_cid` on each row is the Client Id (stable browser id, also meta.client_id); links rows across anon sessions.',
-					'`cf_ray` is a Cloudflare request id; use it to correlate logs.',
-					'`ip_source` is derived from headers if available.'
-				],
-				data: {
-					shareViews: allItems
-				}
-			};
-
-			const text = `PARASCENE_ADMIN_EXPORT\n\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\`\n`;
-			await copyTextToClipboard(text);
-			window.__parasceneAdminChatGPTExport = text;
-			setStatus('Copied share export to clipboard.');
-		} catch (err) {
-			setStatus(`Export failed: ${err?.message || String(err)}`);
-		} finally {
-			this._shareExportInFlight = false;
-		}
-	}
-
 	async exportActiveUsersForChatGPT({ statusEl } = {}) {
 		if (this._activeExportInFlight) return;
 		this._activeExportInFlight = true;
@@ -829,180 +415,6 @@ class AppRouteUsers extends HTMLElement {
 			setStatus(`Export failed: ${err?.message || String(err)}`);
 		} finally {
 			this._activeExportInFlight = false;
-		}
-	}
-
-	async exportAnonUsersForChatGPT({ mode = 'summary', statusEl } = {}) {
-		if (this._anonExportInFlight) return;
-		this._anonExportInFlight = true;
-
-		const setStatus = (msg) => {
-			if (statusEl) statusEl.textContent = msg || '';
-		};
-
-		try {
-			setStatus(mode === 'expanded' ? 'Preparing anon requests export…' : 'Preparing anon summary export…');
-
-			const limit = 200;
-			const sortBy = 'last_request_at';
-			const sortDir = 'desc';
-
-			let offset = 0;
-			const anonRows = [];
-			let total = null;
-
-			while (true) {
-				const params = new URLSearchParams({
-					limit: String(limit),
-					offset: String(offset),
-					sort_by: sortBy,
-					sort_dir: sortDir
-				});
-				const res = await fetch(`/admin/anonymous-users?${params}`, { credentials: 'include' });
-				if (!res.ok) throw new Error('Failed to load anonymous user data.');
-				const data = await res.json();
-
-				const items = Array.isArray(data?.anonCids) ? data.anonCids : [];
-				total = Number(data?.total) ?? total ?? 0;
-				anonRows.push(...items);
-
-				if (items.length === 0) break;
-				if (total != null && anonRows.length >= total) break;
-				offset += items.length;
-			}
-
-			if (mode === 'summary') {
-				const payload = {
-					export_version: 1,
-					exported_at: new Date().toISOString(),
-					scope: '/users#anonymous (summary)',
-					item_count: anonRows.length,
-					field_notes: [
-						'`prsn_cid` is the Client Id from try meta (stable browser id; links across ps_cid sessions when present).',
-						'`from_share` indicates whether this anon cid appears in the share-views data.',
-						'`transitioned_user_id` is the logged-in user the try-flow was transitioned into (if available).'
-					],
-					data: {
-						anonCids: anonRows
-					}
-				};
-
-				const text = `PARASCENE_ADMIN_EXPORT\n\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\`\n`;
-				await copyTextToClipboard(text);
-				window.__parasceneAdminChatGPTExport = text;
-				setStatus('Copied anon summary to clipboard.');
-				return;
-			}
-
-			// Expanded mode: include request prompts + image details for the first N cids.
-			const MAX_CIDS_WITH_REQUESTS = 30;
-			const anonCids = anonRows.map((r) => r.anon_cid).filter(Boolean).slice(0, MAX_CIDS_WITH_REQUESTS);
-
-			const byCid = [];
-			for (let i = 0; i < anonCids.length; i++) {
-				const cid = anonCids[i];
-				setStatus(`Fetching anon requests… (${i + 1}/${anonCids.length})`);
-				const res = await fetch(`/admin/anonymous-users/${encodeURIComponent(cid)}`, { credentials: 'include' });
-				if (!res.ok) throw new Error(`Failed to load request details for anon_cid=${cid}`);
-				const data = await res.json();
-				byCid.push({
-					anon_cid: data?.anon_cid ?? cid,
-					requests: Array.isArray(data?.requests) ? data.requests : []
-				});
-			}
-
-			const payload = {
-				export_version: 1,
-				exported_at: new Date().toISOString(),
-				scope: '/users#anonymous (expanded)',
-				anon_cids_total: anonRows.length,
-				anon_cids_included: byCid.length,
-				truncated: anonRows.length > byCid.length,
-				truncation_note: byCid.length < anonRows.length
-					? `Expanded export is capped at ${MAX_CIDS_WITH_REQUESTS} anon_cids for practicality.`
-					: null,
-				data: {
-					anonRequestsByCid: byCid
-				},
-				field_notes: [
-					'Each request includes Client Id as `prsn_cid` in JSON when stored in meta (stable browser id).',
-					'Request `prompt` is the raw try-flow prompt text.',
-					'`image.image_url` points to the admin-served try image route when available.'
-				]
-			};
-
-			const text = `PARASCENE_ADMIN_EXPORT\n\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\`\n`;
-			await copyTextToClipboard(text);
-			window.__parasceneAdminChatGPTExport = text;
-			setStatus('Copied anon requests to clipboard.');
-		} catch (err) {
-			setStatus(`Export failed: ${err?.message || String(err)}`);
-		} finally {
-			this._anonExportInFlight = false;
-		}
-	}
-
-	async loadAnonDetail(cid) {
-		const requestsEl = this.querySelector('[data-anon-detail-requests]');
-		if (!requestsEl) return;
-		try {
-			const response = await fetch(`/admin/anonymous-users/${encodeURIComponent(cid)}`, { credentials: 'include' });
-			if (!response.ok) throw new Error('Failed to load request details.');
-			const data = await response.json();
-			const requests = data.requests ?? [];
-			requestsEl.innerHTML = '';
-			if (requests.length === 0) {
-				const empty = document.createElement('div');
-				empty.className = 'admin-empty';
-				empty.textContent = 'No requests.';
-				requestsEl.appendChild(empty);
-				return;
-			}
-			for (const req of requests) {
-				const row = document.createElement('div');
-				row.className = 'anon-request-row';
-				const createdLabel = req.created_at ? formatRelativeTime(req.created_at, { style: 'long' }) : '—';
-				const fulfilledLabel = req.fulfilled_at ? formatRelativeTime(req.fulfilled_at, { style: 'long' }) : '—';
-				const promptEscaped = (req.prompt || '—').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-				const userAgentDisplay = truncateStr(req.user_agent ?? '', 50);
-				const userAgentEscaped = (userAgentDisplay || '—').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-				const userAgentTitle = req.user_agent ? req.user_agent.replace(/"/g, '&quot;') : '';
-				const prsnRaw = req.prsn_cid && String(req.prsn_cid).trim();
-				const prsnEscaped = prsnRaw
-					? prsnRaw.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-					: '';
-				const ipEscaped = (req.ip ?? '—').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-				const ipSourceEscaped = (req.ip_source ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-				const cfRayEscaped = (req.cf_ray ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-				let imageBlock = '<span class="anon-request-no-image">No image</span>';
-				if (req.image) {
-					const img = req.image;
-					const url = img.image_url || '';
-					const altEscaped = (img.filename ? `Request image: ${img.filename}` : 'Request image').replace(/"/g, '&quot;');
-					imageBlock = url
-						? `<a href="${url}" target="_blank" rel="noopener noreferrer" class="anon-request-image-link"><img src="${url}" alt="${altEscaped}" class="anon-request-thumb" loading="lazy" decoding="async" /></a>`
-						: `<span class="anon-request-no-image">${String(img.status || '—').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>`;
-				}
-				row.innerHTML = `
-					<div class="anon-request-prompt">${promptEscaped}</div>
-					<div class="anon-request-meta">
-						<span class="anon-request-datetime" title="${(req.created_at || '').replace(/"/g, '&quot;')}">${createdLabel}</span>
-						<span class="anon-request-fulfilled">Fulfilled ${fulfilledLabel}</span>
-						${req.ip ? `<span class="anon-request-ip" title="${ipSourceEscaped ? `Source: ${ipSourceEscaped}` : ''}">${ipEscaped}${req.ip_source ? ` <span class="anon-request-ip-source">(${ipSourceEscaped})</span>` : ''}</span>` : ''}
-						${prsnRaw ? `<span class="anon-request-prsn" title="Client Id (prsn_cid cookie) — stable browser id; links share/try across ps_cid sessions">${prsnEscaped}</span>` : ''}
-						${req.cf_ray ? `<span class="anon-request-cf-ray" title="Cloudflare Ray ID: search in CF Logs to correlate">${cfRayEscaped}</span>` : ''}
-						${req.user_agent ? `<span class="anon-request-user-agent" title="${userAgentTitle}">${userAgentEscaped}</span>` : ''}
-					</div>
-					<div class="anon-request-image">${imageBlock}</div>
-				`;
-				requestsEl.appendChild(row);
-			}
-		} catch (err) {
-			requestsEl.innerHTML = '';
-			const error = document.createElement('div');
-			error.className = 'admin-error';
-			error.textContent = 'Error loading request details.';
-			requestsEl.appendChild(error);
 		}
 	}
 

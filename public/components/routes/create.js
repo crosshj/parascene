@@ -68,6 +68,27 @@ function escapeHtml(text) {
 /** Inline SVG for blog table action buttons (sized in CSS). */
 const blogIcEdit = html`<svg class="create-route-blog-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>`;
 
+const blogIcCampaign = html`<svg class="create-route-blog-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`;
+
+/** Matches server `BLOG_CAMPAIGN_TOKEN_RE` for custom campaign ids in tracked URLs. */
+const BLOG_CAMPAIGN_ID_RE = /^[a-z0-9]{1,12}$/;
+
+/** Public site origin for shareable blog links shown in the campaigns modal (not the current app host). */
+const PARASCENE_BLOG_PUBLIC_ORIGIN = "https://www.parascene.com";
+
+/** Same path rules as `api_routes/blog_admin.js` tracked-url handler. */
+function buildParasceneBlogPublicUrls(slug, campaignId) {
+	const enc = String(slug || "")
+		.trim()
+		.split("/")
+		.filter(Boolean)
+		.map((s) => encodeURIComponent(s))
+		.join("/");
+	const canonical = `${PARASCENE_BLOG_PUBLIC_ORIGIN}/blog/${enc}`;
+	const tracked = `${PARASCENE_BLOG_PUBLIC_ORIGIN}/blog/${encodeURIComponent(campaignId)}/${enc}`;
+	return { tracked, canonical };
+}
+
 /** Normalize image URL to a canonical form (origin + path) so queue and form values match regardless of relative/absolute. */
 function normalizeImageUrlForMatch(raw) {
 	if (typeof raw !== 'string') return '';
@@ -113,10 +134,12 @@ class AppRouteCreate extends HTMLElement {
 			const p = pr.data;
 			const plan = p?.plan ?? p?.meta?.plan;
 			if (pr.ok && (p?.role === "admin" || plan === "founder")) showBlogTab = true;
+			if (pr.ok) this._blogUserIsAdmin = p?.role === "admin";
 		} catch (_) {
 			// offline / profile unavailable
 		}
 		this._showBlogTab = showBlogTab;
+		if (this._blogUserIsAdmin == null) this._blogUserIsAdmin = false;
 		const blogTabSection = showBlogTab
 			? html`
           <tab data-id="blog" label="Blog">
@@ -130,6 +153,21 @@ class AppRouteCreate extends HTMLElement {
               </div>
               <div class="create-route-blog-table-container" data-blog-table-container></div>
               <p class="create-cost" data-blog-status aria-live="polite"></p>
+              <div class="create-route-advanced-confirm create-route-blog-campaign-dialog" data-blog-campaign-dialog hidden>
+                <div class="create-route-advanced-confirm-overlay" data-blog-campaign-overlay></div>
+                <div class="create-route-advanced-confirm-panel create-route-blog-campaign-panel">
+                  <div class="create-route-advanced-preview-header">
+                    <p class="create-route-advanced-preview-title" data-blog-campaign-title>Campaigns</p>
+                    <button type="button" class="modal-close" data-blog-campaign-close-x aria-label="Close">
+                      <svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
+                    </button>
+                  </div>
+                  <div class="create-route-blog-campaign-body" data-blog-campaign-body></div>
+                </div>
+              </div>
             </div>
           </tab>
         `
@@ -377,6 +415,11 @@ class AppRouteCreate extends HTMLElement {
 		if (previewCopyBtn) previewCopyBtn.addEventListener("click", () => this.copyPreviewPayload());
 		this._boundPreviewEscape = (e) => {
 			if (e.key === "Escape") {
+				const blogD = this.querySelector("[data-blog-campaign-dialog]");
+				if (blogD && !blogD.hidden && blogD.classList.contains("open")) {
+					this.closeBlogCampaignModal();
+					return;
+				}
 				const d = this.querySelector("[data-advanced-preview-dialog]");
 				if (d && !d.hidden && d.classList.contains("open")) this.closePreviewPayload();
 			}
@@ -1668,7 +1711,311 @@ class AppRouteCreate extends HTMLElement {
 		tabsEl?.addEventListener("tab-change", (e) => {
 			if (e.detail?.id === "blog") this.loadBlogPosts();
 		});
+		const blogOverlay = this.querySelector("[data-blog-campaign-overlay]");
+		const blogCloseX = this.querySelector("[data-blog-campaign-close-x]");
+		if (blogOverlay) blogOverlay.addEventListener("click", () => this.closeBlogCampaignModal());
+		if (blogCloseX) blogCloseX.addEventListener("click", () => this.closeBlogCampaignModal());
+		const campaignBody = this.querySelector("[data-blog-campaign-body]");
+		if (campaignBody) {
+			campaignBody.addEventListener("change", (e) => {
+				const t = e.target;
+				if (t?.matches?.("[data-blog-campaign-select]")) {
+					const wrap = this.querySelector("[data-blog-campaign-custom-wrap]");
+					if (wrap) wrap.hidden = t.value !== "__custom__";
+					if (t.value && t.value !== "__custom__") this.fetchTrackedUrlForBlogCampaign();
+				}
+				if (t?.matches?.("[data-blog-campaign-active]")) {
+					this.patchBlogCampaignActive(t.getAttribute("data-blog-campaign-active"), t.checked);
+				}
+			});
+			campaignBody.addEventListener("click", (e) => {
+				const t = e.target;
+				if (t?.matches?.("[data-blog-copy-tracked]")) this.copyBlogCampaignTrackedField("tracked");
+				if (t?.matches?.("[data-blog-copy-canonical]")) this.copyBlogCampaignTrackedField("canonical");
+				if (t?.matches?.("[data-blog-campaign-add-btn]")) this.submitBlogCampaignAdd(e);
+			});
+			campaignBody.addEventListener("input", (e) => {
+				const t = e.target;
+				if (t?.matches?.("[data-blog-campaign-custom-input]")) {
+					clearTimeout(this._blogCampaignCustomDebounce);
+					this._blogCampaignCustomDebounce = setTimeout(() => this.fetchTrackedUrlForBlogCampaign(), 320);
+				}
+			});
+		}
 		this.loadBlogPosts();
+	}
+
+	closeBlogCampaignModal() {
+		const dialog = this.querySelector("[data-blog-campaign-dialog]");
+		if (dialog) {
+			dialog.hidden = true;
+			dialog.classList.remove("open");
+		}
+		this._blogCampaignPost = null;
+		const body = this.querySelector("[data-blog-campaign-body]");
+		if (body) body.innerHTML = "";
+	}
+
+	async openBlogCampaignModal(post) {
+		const dialog = this.querySelector("[data-blog-campaign-dialog]");
+		const titleEl = this.querySelector("[data-blog-campaign-title]");
+		const body = this.querySelector("[data-blog-campaign-body]");
+		if (!dialog || !body) return;
+		this._blogCampaignPost = {
+			id: Number(post.id),
+			slug: String(post.slug || "").trim(),
+			title: String(post.title || "").trim() || "Post"
+		};
+		if (titleEl) titleEl.textContent = `Campaigns — ${this._blogCampaignPost.title}`;
+		body.innerHTML = html`<p class="create-cost">Loading…</p>`;
+		dialog.hidden = false;
+		dialog.classList.add("open");
+		let campaigns = [];
+		try {
+			const r = await fetch("/api/blog/campaigns", { credentials: "include" });
+			const data = await r.json().catch(() => ({}));
+			if (r.ok) campaigns = Array.isArray(data?.campaigns) ? data.campaigns : [];
+		} catch (_) {
+			// ignore
+		}
+		this._blogCampaignList = campaigns;
+		this.renderBlogCampaignModalContent();
+	}
+
+	renderBlogCampaignModalContent() {
+		const body = this.querySelector("[data-blog-campaign-body]");
+		const post = this._blogCampaignPost;
+		if (!body || !post) return;
+
+		const opts = (this._blogCampaignList || [])
+			.filter((c) => c && typeof c.id === "string")
+			.map(
+				(c) =>
+					html`<option value="${escapeHtml(String(c.id))}">${escapeHtml(String(c.label || c.id || ""))}</option>`
+			)
+			.join("");
+
+		const adminAdd = this._blogUserIsAdmin
+			? html`
+				<div class="create-route-blog-campaign-section">
+					<p class="form-label">Add campaign (registry)</p>
+					<div class="create-route-blog-campaign-add-grid">
+						<input type="text" class="form-input" data-blog-new-campaign-id placeholder="id (a–z, 0–9, max 12)" maxlength="12" autocomplete="off" />
+						<input type="text" class="form-input" data-blog-new-campaign-label placeholder="Label" maxlength="200" />
+					</div>
+					<textarea class="form-input create-route-blog-campaign-notes" data-blog-new-campaign-notes rows="2" placeholder="Notes (optional)" maxlength="2000"></textarea>
+					<button type="button" class="btn-secondary" data-blog-campaign-add-btn>Add campaign</button>
+					<p class="create-cost create-route-blog-campaign-hint" data-blog-campaign-add-status aria-live="polite"></p>
+				</div>
+			`
+			: "";
+
+		const registryRows = (this._blogCampaignList || [])
+			.map((c) => {
+				const rawId = String(c.id || "");
+				const idEsc = escapeHtml(rawId);
+				const label = escapeHtml(String(c.label || c.id || ""));
+				const active = c.active !== false;
+				const activeCtrl = this._blogUserIsAdmin
+					? html`<label class="create-route-blog-campaign-active-label"><input type="checkbox" data-blog-campaign-active="${rawId}" ${active ? "checked" : ""} /> Active</label>`
+					: html`<span class="create-route-blog-campaign-active-ro">${active ? "Active" : "Off"}</span>`;
+				return html`<tr>
+					<td class="create-route-blog-campaign-reg-id">${idEsc}</td>
+					<td>${label}</td>
+					<td class="create-route-blog-campaign-reg-active">${activeCtrl}</td>
+				</tr>`;
+			})
+			.join("");
+
+		const registryTable =
+			(this._blogCampaignList || []).length > 0
+				? html`<table class="create-route-blog-campaign-registry" role="grid">
+						<thead>
+							<tr>
+								<th scope="col">Id</th>
+								<th scope="col">Label</th>
+								<th scope="col">Active</th>
+							</tr>
+						</thead>
+						<tbody>${registryRows}</tbody>
+					</table>`
+				: html`<p class="create-cost">No campaigns in the registry yet.${this._blogUserIsAdmin ? " Add one below." : ""}</p>`;
+
+		body.innerHTML = html`
+			<div class="create-route-blog-campaign-section">
+				<p class="form-label">Tracked link</p>
+				<p class="create-cost create-route-blog-campaign-lead">Choose a campaign id to build a URL that attributes views in analytics. Custom ids must be 1–12 lowercase letters or numbers.</p>
+				<select class="form-select" data-blog-campaign-select>
+					<option value="">Select campaign…</option>
+					${opts}
+					<option value="__custom__">Custom id…</option>
+				</select>
+				<div class="create-route-blog-campaign-custom-wrap" data-blog-campaign-custom-wrap hidden>
+					<label class="form-label" for="blog-campaign-custom-input">Custom campaign id</label>
+					<input type="text" id="blog-campaign-custom-input" class="form-input" data-blog-campaign-custom-input placeholder="e.g. feed12" maxlength="12" autocomplete="off" />
+				</div>
+				<p class="create-cost create-route-blog-campaign-url-status" data-blog-campaign-url-status aria-live="polite"></p>
+				<div class="create-route-blog-campaign-url-row">
+					<label class="form-label" for="blog-campaign-tracked-out">Tracked URL</label>
+					<div class="create-route-blog-campaign-url-fields">
+						<input type="text" id="blog-campaign-tracked-out" class="form-input" data-blog-tracked-out readonly />
+						<button type="button" class="btn-secondary" data-blog-copy-tracked>Copy</button>
+					</div>
+				</div>
+				<div class="create-route-blog-campaign-url-row">
+					<label class="form-label" for="blog-campaign-canonical-out">Canonical URL</label>
+					<div class="create-route-blog-campaign-url-fields">
+						<input type="text" id="blog-campaign-canonical-out" class="form-input" data-blog-canonical-out readonly />
+						<button type="button" class="btn-secondary" data-blog-copy-canonical>Copy</button>
+					</div>
+				</div>
+			</div>
+			<div class="create-route-blog-campaign-section">
+				<p class="form-label">Campaign registry</p>
+				${registryTable}
+			</div>
+			${adminAdd}
+		`;
+	}
+
+	async fetchTrackedUrlForBlogCampaign() {
+		const post = this._blogCampaignPost;
+		const body = this.querySelector("[data-blog-campaign-body]");
+		const statusEl = body?.querySelector("[data-blog-campaign-url-status]");
+		const trackedEl = body?.querySelector("[data-blog-tracked-out]");
+		const canonEl = body?.querySelector("[data-blog-canonical-out]");
+		if (!post?.id || !trackedEl || !canonEl) return;
+		const select = body.querySelector("[data-blog-campaign-select]");
+		const customIn = body.querySelector("[data-blog-campaign-custom-input]");
+		let raw = select?.value || "";
+		if (raw === "__custom__") {
+			raw = (customIn?.value || "").trim().toLowerCase();
+		}
+		if (!raw) {
+			trackedEl.value = "";
+			canonEl.value = "";
+			if (statusEl) statusEl.textContent = "";
+			return;
+		}
+		if (!BLOG_CAMPAIGN_ID_RE.test(raw)) {
+			if (statusEl) statusEl.textContent = "Campaign id must be 1–12 lowercase letters or numbers.";
+			trackedEl.value = "";
+			canonEl.value = "";
+			return;
+		}
+		if (statusEl) statusEl.textContent = "Loading URL…";
+		try {
+			const res = await fetch(
+				`/api/blog/posts/${post.id}/tracked-url?campaign=${encodeURIComponent(raw)}`,
+				{ credentials: "include" }
+			);
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				if (statusEl) statusEl.textContent = data?.error || "Could not build URL.";
+				trackedEl.value = "";
+				canonEl.value = "";
+				return;
+			}
+			const built = buildParasceneBlogPublicUrls(post.slug, raw);
+			trackedEl.value = built.tracked;
+			canonEl.value = built.canonical;
+			if (statusEl) statusEl.textContent = "";
+		} catch (e) {
+			if (statusEl) statusEl.textContent = "Could not build URL.";
+			trackedEl.value = "";
+			canonEl.value = "";
+		}
+	}
+
+	copyBlogCampaignTrackedField(which) {
+		const body = this.querySelector("[data-blog-campaign-body]");
+		const sel = which === "canonical" ? "[data-blog-canonical-out]" : "[data-blog-tracked-out]";
+		const inp = body?.querySelector(sel);
+		if (!inp || !inp.value) return;
+		navigator.clipboard.writeText(inp.value).then(() => {
+			const btn = body.querySelector(which === "canonical" ? "[data-blog-copy-canonical]" : "[data-blog-copy-tracked]");
+			if (btn) {
+				const prev = btn.textContent;
+				btn.textContent = "Copied";
+				setTimeout(() => {
+					btn.textContent = prev;
+				}, 1500);
+			}
+		}).catch(() => {});
+	}
+
+	async patchBlogCampaignActive(campaignId, active) {
+		if (!this._blogUserIsAdmin || !campaignId) return;
+		try {
+			const res = await fetch(`/api/blog/campaigns/${encodeURIComponent(campaignId)}`, {
+				method: "PATCH",
+				credentials: "include",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ active })
+			});
+			if (!res.ok) {
+				const data = await res.json().catch(() => ({}));
+				window.alert(data?.error || "Could not update campaign.");
+				return;
+			}
+			const r = await fetch("/api/blog/campaigns", { credentials: "include" });
+			const data = await r.json().catch(() => ({}));
+			if (r.ok) this._blogCampaignList = Array.isArray(data?.campaigns) ? data.campaigns : [];
+			this.renderBlogCampaignModalContent();
+		} catch (_) {
+			window.alert("Could not update campaign.");
+		}
+	}
+
+	async submitBlogCampaignAdd(e) {
+		e.preventDefault();
+		if (!this._blogUserIsAdmin) return;
+		const body = this.querySelector("[data-blog-campaign-body]");
+		const statusEl = body?.querySelector("[data-blog-campaign-add-status]");
+		const idIn = body?.querySelector("[data-blog-new-campaign-id]");
+		const labelIn = body?.querySelector("[data-blog-new-campaign-label]");
+		const notesIn = body?.querySelector("[data-blog-new-campaign-notes]");
+		const rawId = (idIn?.value || "").trim().toLowerCase();
+		if (!BLOG_CAMPAIGN_ID_RE.test(rawId)) {
+			if (statusEl) statusEl.textContent = "Id must be 1–12 lowercase letters or numbers.";
+			return;
+		}
+		if (statusEl) statusEl.textContent = "Saving…";
+		try {
+			const res = await fetch("/api/blog/campaigns", {
+				method: "POST",
+				credentials: "include",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					id: rawId,
+					label: (labelIn?.value || "").trim(),
+					notes: (notesIn?.value || "").trim(),
+					active: true
+				})
+			});
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				if (statusEl) statusEl.textContent = data?.error || "Could not add campaign.";
+				return;
+			}
+			if (idIn) idIn.value = "";
+			if (labelIn) labelIn.value = "";
+			if (notesIn) notesIn.value = "";
+			if (statusEl) statusEl.textContent = "Campaign added.";
+			const r = await fetch("/api/blog/campaigns", { credentials: "include" });
+			const listData = await r.json().catch(() => ({}));
+			if (r.ok) this._blogCampaignList = Array.isArray(listData?.campaigns) ? listData.campaigns : [];
+			this.renderBlogCampaignModalContent();
+			const sel = body.querySelector("[data-blog-campaign-select]");
+			if (sel) {
+				sel.value = rawId;
+				const wrap = body.querySelector("[data-blog-campaign-custom-wrap]");
+				if (wrap) wrap.hidden = true;
+				this.fetchTrackedUrlForBlogCampaign();
+			}
+		} catch (_) {
+			if (statusEl) statusEl.textContent = "Could not add campaign.";
+		}
 	}
 
 	async onBlogNewDraft() {
@@ -1713,6 +2060,7 @@ class AppRouteCreate extends HTMLElement {
 		const rows = posts
 			.map((p) => {
 				const id = p.id;
+				const slug = String(p.slug || "").trim();
 				const st = String(p.status || "");
 				const updated = p.updated_at ? String(p.updated_at).slice(0, 19).replace("T", " ") : "";
 				const authorUser =
@@ -1721,16 +2069,30 @@ class AppRouteCreate extends HTMLElement {
 						: "";
 				const authorCell = authorUser || "\u2014";
 				const stKey = ["draft", "published", "archived"].includes(st) ? st : "draft";
+				const views = Number.isFinite(Number(p.view_count)) ? Number(p.view_count) : 0;
+				const titleEsc = escapeHtml(String(p.title || ""));
+				const slugEsc = escapeHtml(slug);
 				return html`<tr class="create-route-blog-row">
-					<td class="create-route-blog-title-cell">${escapeHtml(String(p.title || ""))}</td>
+					<td class="create-route-blog-title-cell">${titleEsc}</td>
 					<td><span class="create-route-blog-author">${escapeHtml(authorCell)}</span></td>
 					<td><span class="create-route-blog-status create-route-blog-status--${stKey}">${escapeHtml(st)}</span></td>
+					<td class="create-route-blog-views">${views}</td>
 					<td class="create-route-blog-date">${escapeHtml(updated)}</td>
 					<td class="create-route-blog-actions">
-						<button type="button" class="create-route-blog-edit" data-blog-edit="${id}" aria-label="Edit post">
-							${blogIcEdit}
-							<span class="create-route-blog-edit-label">Edit</span>
-						</button>
+						<span class="create-route-blog-actions-inner">
+							<button type="button" class="create-route-blog-campaigns" data-blog-campaign-open
+								data-blog-post-id="${String(id)}"
+								data-blog-post-slug="${slugEsc}"
+								data-blog-post-title="${titleEsc}"
+								aria-label="Campaigns and tracked links">
+								${blogIcCampaign}
+								<span class="create-route-blog-campaigns-label">Campaigns</span>
+							</button>
+							<button type="button" class="create-route-blog-edit" data-blog-edit="${id}" aria-label="Edit post">
+								${blogIcEdit}
+								<span class="create-route-blog-edit-label">Edit</span>
+							</button>
+						</span>
 					</td>
 				</tr>`;
 			})
@@ -1741,8 +2103,9 @@ class AppRouteCreate extends HTMLElement {
 							<th scope="col">Title</th>
 							<th scope="col">Author</th>
 							<th scope="col">Status</th>
+							<th scope="col">Views</th>
 							<th scope="col">Updated</th>
-							<th scope="col" class="create-route-blog-th-edit"><span class="create-route-blog-sr-only">Edit</span></th>
+							<th scope="col" class="create-route-blog-th-actions"><span class="create-route-blog-sr-only">Actions</span></th>
 						</tr>
 					</thead>
 					<tbody>${rows}</tbody>
@@ -1751,6 +2114,14 @@ class AppRouteCreate extends HTMLElement {
 			btn.addEventListener("click", () => {
 				const id = btn.getAttribute("data-blog-edit");
 				if (id) window.location.href = `/create/blog/${id}`;
+			});
+		});
+		container.querySelectorAll("[data-blog-campaign-open]").forEach((btn) => {
+			btn.addEventListener("click", () => {
+				const id = btn.getAttribute("data-blog-post-id");
+				const slug = btn.getAttribute("data-blog-post-slug") || "";
+				const title = btn.getAttribute("data-blog-post-title") || "";
+				if (id) this.openBlogCampaignModal({ id, slug, title });
 			});
 		});
 	}

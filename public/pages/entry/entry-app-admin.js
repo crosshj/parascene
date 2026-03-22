@@ -1,5 +1,5 @@
 /**
- * Admin app shell: Todo, Users, Connect; modals (profile, credits, notifications, server, user, todo); tabs.
+ * Admin app shell: Todo, Users, Analytics, Jobs, Emails, Algo, Connect; modals; tabs.
  */
 
 const TAGS = [
@@ -12,6 +12,7 @@ const TAGS = [
 	'app-modal-todo',
 	'app-route-todo',
 	'app-route-users',
+	'app-route-analytics',
 	'app-route-servers',
 	'app-tabs',
 ];
@@ -32,6 +33,7 @@ export async function init(version) {
 		import(`../../components/modals/todo.js${qs}`),
 		import(`../../components/routes/todo.js${qs}`),
 		import(`../../components/routes/users.js${qs}`),
+		import(`../../components/routes/analytics.js${qs}`),
 		import(`../../components/routes/servers.js${qs}`),
 		import(`../../components/elements/tabs.js${qs}`),
 	]);
