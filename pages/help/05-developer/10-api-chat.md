@@ -131,8 +131,6 @@ List **threads you belong to** (DMs and channels), each with a **`title`** for d
 }
 ```
 
-The database must define **`prsn_chat_threads_for_user`** (see `db/schemas/supabase_04.sql`).
-
 ### `GET` `/api/chat/threads/:threadId`
 
 Return thread metadata if you are a member.

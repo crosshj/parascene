@@ -6,6 +6,8 @@ Terse phased rollout. Full context: [`supabase-chat-broadcast-guide.md`](./supab
 
 ## Phase 1 — Browser Supabase session + env
 
+**Status:** Complete (implemented: `api_routes/utils/head.js` boot + import map, `api_routes/supabaseSession.js` + `SESSION_SECRET` bridge, `public/shared/supabaseBrowser.js`, `public/shared/pageInit.js`).
+
 **Implement**
 
 - **Public config from server:** The server reads Supabase **project URL** and **anon key** from env and **injects them into logged-in pages** (inline script, `window` config, etc.) so static client JS never hardcodes secrets. The anon key is **public by design** (RLS enforces access); still **never** send `service_role` to the browser.
@@ -14,29 +16,29 @@ Terse phased rollout. Full context: [`supabase-chat-broadcast-guide.md`](./supab
 
 **Validate**
 
-Phase 1 is **done when you can prove** the browser auth + config plumbing — **not** yet that private Realtime channels work (that needs Phase 2 RLS before subscriptions succeed).
+Phase 1 is **done when you can prove** the browser auth + config plumbing — **not** yet that private Realtime channels work (that needs Phase 2 broadcast policies before subscriptions succeed).
 
 - **Config:** Logged-in shell exposes URL + anon key to JS (inspect `window` / inline boot); **no `service_role`** anywhere.
 - **Session:** After app login, `supabase.auth.getSession()` returns a session with a usable **access token**; after reload or long idle, refresh still succeeds (or user is signed out consistently).
 - **Cross-route:** Navigate feed → chat → profile (or equivalent): same session, no duplicate `createClient` init, no missing singleton on a route.
-- **Identity for later RLS:** You can read the JWT payload (e.g. `sub` / custom claims) and know how it will map to **`prsn_chat_members`** in Phase 2 — no need to subscribe to a channel yet.
+- **Identity:** You can read the JWT (e.g. `user_metadata.prsn_user_id`) for app user id — no need to subscribe to a channel yet.
 
 ---
 
 ## Phase 2 — `realtime.messages` RLS
 
+**Status:** Implemented (same file as chat schema: [`db/schemas/supabase_03_chat.sql`](../db/schemas/supabase_03_chat.sql), Realtime section at end). In the dashboard, disable **Allow public access** under Realtime settings so only **authenticated** clients can use private channels (anon has no policies).
+
+**Model (simpler):** **Authenticated** users may **select** (subscribe) for **broadcast** on **any** topic (`user:…`, `room:…`, etc.). **Insert/send** is not granted to them; **service_role** bypasses RLS for server/worker publishes. **No** per-topic membership in Realtime; **authorization for real data stays in the API.** Tradeoff: invalidation hints may be observable without API consent; payloads stay minimal.
+
 **Implement**
 
-- Policies on `realtime.messages` so **authenticated** users may only **select** (subscribe) and **insert** (client broadcast, if ever needed) for:
-	- `user:<appUserId>` where `appUserId` matches the current user.
-	- `room:<threadId>` only if `prsn_chat_members` has `(thread_id, user_id)` for that user.
-- Use `realtime.topic()` / `realtime.messages.extension = 'broadcast'` per Supabase docs for Broadcast.
-- Policies must express `auth.uid()` (or the JWT claim you use) in terms of **`prsn_users` / `prsn_chat_members.user_id`** — consistent with how Phase 1 issues tokens.
+- `realtime.messages.extension = 'broadcast'` on policies per [Realtime authorization](https://supabase.com/docs/guides/realtime/authorization).
 
 **Validate**
 
-- User A subscribed to `room:<T>` receives nothing when not a member; after membership, subscription succeeds.
-- User B cannot subscribe to `user:<A’s id>`.
+- Without a Supabase session, private channel subscribe fails.
+- With a session, subscribe to `room:<T>` / `user:<id>` succeeds; **GET** message APIs still enforce membership as today.
 
 ---
 
@@ -98,6 +100,6 @@ Phase 1 is **done when you can prove** the browser auth + config plumbing — **
 
 ## Exit criteria (whole feature)
 
-- [ ] Private channels only; unauthorized users cannot subscribe to others’ `user:` or non-member `room:`.
+- [ ] Unauthenticated clients cannot subscribe to private Broadcast channels; authenticated clients can (topic-level gating is optional; API is authoritative for data).
 - [ ] Broadcast payloads never contain full message body.
 - [ ] Chat source of truth remains API + `prsn_chat_*`; Realtime is invalidation only.

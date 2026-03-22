@@ -1,5 +1,6 @@
 import express from "express";
 import { Redis } from "@upstash/redis";
+import { broadcastRoomDirty } from "./utils/realtimeBroadcast.js";
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { normalizeTag } from "./utils/tag.js";
 import { getNotificationDisplayName } from "./utils/displayName.js";
@@ -562,6 +563,10 @@ export default function createChatRoutes({ queries }) {
 				.single();
 
 			if (ins.error) throw ins.error;
+
+			if (ins.data?.id != null) {
+				void broadcastRoomDirty(threadId, ins.data.id);
+			}
 
 			return res.status(201).json({ message: ins.data });
 		} catch (err) {

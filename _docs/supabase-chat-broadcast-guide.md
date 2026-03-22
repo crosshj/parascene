@@ -29,7 +29,7 @@ Chat data stays authoritative in our API and database (`prsn_chat_*`, see `db/sc
 
 1. **Browser:** `createClient` with project URL + anon key (exposed to browser-side JS without a bundler — e.g. inlined from server env), then `channel(\`room:${threadId}\`, { config: { private: true } }).on('broadcast', { event: 'dirty' }, …).subscribe()` (and the same pattern for `user:${userId}`). Remove channel on thread leave.
 2. **Server:** after a successful insert in `POST /api/chat/threads/:threadId/messages`, call `channel.send({ type: 'broadcast', event: 'dirty', payload: { … } })` via the service client (same topic names as above).
-3. **RLS on `realtime.messages`:** policies must allow `select`/`insert` (broadcast) only for `user:<own id>` and `room:<threadId>` where the user appears in **`prsn_chat_members`**, not the generic `room_members` template from older drafts. Map Supabase `auth` identity to `prsn_chat_members.user_id` however this project exposes it to Realtime.
+3. **RLS on `realtime.messages`:** **authenticated** may `select` (receive) broadcast; **insert** is not granted to them — **service_role** bypasses RLS for server publishes. Defined in `db/schemas/supabase_03_chat.sql`.
 
 ## Payload shape (keep minimal)
 

@@ -226,6 +226,8 @@ export async function initChatPage(root) {
 	let chatViewportHandler = null;
 	let activeReactionPicker = null;
 	let lastChatMessagesPayload = [];
+	/** @type {null | (() => void)} */
+	let roomBroadcastTeardown = null;
 
 	function scrollChatMessagesToEnd() {
 		const messagesEl = root.querySelector('[data-chat-messages]');
@@ -605,6 +607,31 @@ export async function initChatPage(root) {
 		}
 	}
 
+	function tearDownRoomBroadcast() {
+		if (typeof roomBroadcastTeardown === 'function') {
+			try {
+				roomBroadcastTeardown();
+			} catch {
+				// ignore
+			}
+		}
+		roomBroadcastTeardown = null;
+	}
+
+	async function bindRoomBroadcast(threadId) {
+		tearDownRoomBroadcast();
+		const tid = Number(threadId);
+		if (!Number.isFinite(tid) || tid <= 0) return;
+		try {
+			const mod = await import(`../shared/realtimeBroadcast.js${qs}`);
+			roomBroadcastTeardown = await mod.subscribeRoomBroadcast(tid, () => {
+				void loadMessages();
+			});
+		} catch (err) {
+			console.warn('[Chat page] realtime:', err);
+		}
+	}
+
 	function onChatMessagesClick(e) {
 		const pill = e.target?.closest?.('.comment-reaction-pill[data-emoji-key][data-chat-message-id]');
 		if (pill && pill instanceof HTMLElement) {
@@ -734,6 +761,7 @@ export async function initChatPage(root) {
 		}
 
 		try {
+			tearDownRoomBroadcast();
 			await loadChatThreads();
 
 			if (parsed.kind === 'thread') {
@@ -742,6 +770,7 @@ export async function initChatPage(root) {
 				const meta = (chatThreads || []).find((t) => Number(t.id) === parsed.threadId);
 				updateTitleFromMeta(meta);
 				await loadMessages();
+				await bindRoomBroadcast(activeThreadId);
 				return;
 			}
 
@@ -754,6 +783,7 @@ export async function initChatPage(root) {
 					activeThreadId = Number(match.id);
 					updateTitleFromMeta(match);
 					await loadMessages();
+					await bindRoomBroadcast(activeThreadId);
 					return;
 				}
 				const res = await fetch('/api/chat/channels', {
@@ -774,6 +804,7 @@ export async function initChatPage(root) {
 					const meta = (chatThreads || []).find((t) => Number(t.id) === tid);
 					updateTitleFromMeta(meta);
 					await loadMessages();
+					await bindRoomBroadcast(activeThreadId);
 				} else if (messagesEl) {
 					messagesEl.removeAttribute('aria-busy');
 					messagesEl.innerHTML = '';
@@ -805,6 +836,7 @@ export async function initChatPage(root) {
 					activeThreadId = Number(match.id);
 					updateTitleFromMeta(match);
 					await loadMessages();
+					await bindRoomBroadcast(activeThreadId);
 					return;
 				}
 				const res = await fetch('/api/chat/dm', {
@@ -829,6 +861,7 @@ export async function initChatPage(root) {
 					const meta = (chatThreads || []).find((t) => Number(t.id) === tid);
 					updateTitleFromMeta(meta);
 					await loadMessages();
+					await bindRoomBroadcast(activeThreadId);
 				} else if (messagesEl) {
 					messagesEl.removeAttribute('aria-busy');
 					messagesEl.innerHTML = '';
@@ -839,6 +872,7 @@ export async function initChatPage(root) {
 				}
 			}
 		} catch (err) {
+			tearDownRoomBroadcast();
 			console.error('[Chat page]', err);
 			if (messagesEl) {
 				messagesEl.innerHTML = '';
@@ -884,6 +918,7 @@ export async function initChatPage(root) {
 	}
 
 	const onPageHide = () => {
+		tearDownRoomBroadcast();
 		closeReactionPicker();
 		teardownChatViewportSync();
 		try {
