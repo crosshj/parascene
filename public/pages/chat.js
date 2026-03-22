@@ -228,6 +228,8 @@ export async function initChatPage(root) {
 	let lastChatMessagesPayload = [];
 	/** @type {null | (() => void)} */
 	let roomBroadcastTeardown = null;
+	/** @type {null | (() => void)} */
+	let visibilityResyncCleanup = null;
 
 	function scrollChatMessagesToEnd() {
 		const messagesEl = root.querySelector('[data-chat-messages]');
@@ -618,14 +620,40 @@ export async function initChatPage(root) {
 		roomBroadcastTeardown = null;
 	}
 
+	function tearDownVisibilityResync() {
+		if (typeof visibilityResyncCleanup === 'function') {
+			try {
+				visibilityResyncCleanup();
+			} catch {
+				// ignore
+			}
+		}
+		visibilityResyncCleanup = null;
+	}
+
+	function bindVisibilityResync() {
+		tearDownVisibilityResync();
+		const onVis = () => {
+			if (document.visibilityState !== 'visible') return;
+			if (!activeThreadId || loadingMessages) return;
+			void loadMessages();
+		};
+		document.addEventListener('visibilitychange', onVis);
+		visibilityResyncCleanup = () => document.removeEventListener('visibilitychange', onVis);
+	}
+
 	async function bindRoomBroadcast(threadId) {
 		tearDownRoomBroadcast();
+		bindVisibilityResync();
 		const tid = Number(threadId);
 		if (!Number.isFinite(tid) || tid <= 0) return;
 		try {
 			const mod = await import(`../shared/realtimeBroadcast.js${qs}`);
-			roomBroadcastTeardown = await mod.subscribeRoomBroadcast(tid, () => {
+			const refetch = () => {
 				void loadMessages();
+			};
+			roomBroadcastTeardown = await mod.subscribeRoomBroadcast(tid, refetch, {
+				onReconnect: refetch
 			});
 		} catch (err) {
 			console.warn('[Chat page] realtime:', err);
@@ -761,6 +789,7 @@ export async function initChatPage(root) {
 		}
 
 		try {
+			tearDownVisibilityResync();
 			tearDownRoomBroadcast();
 			await loadChatThreads();
 
@@ -872,6 +901,7 @@ export async function initChatPage(root) {
 				}
 			}
 		} catch (err) {
+			tearDownVisibilityResync();
 			tearDownRoomBroadcast();
 			console.error('[Chat page]', err);
 			if (messagesEl) {
@@ -918,6 +948,7 @@ export async function initChatPage(root) {
 	}
 
 	const onPageHide = () => {
+		tearDownVisibilityResync();
 		tearDownRoomBroadcast();
 		closeReactionPicker();
 		teardownChatViewportSync();

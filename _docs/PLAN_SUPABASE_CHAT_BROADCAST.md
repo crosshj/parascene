@@ -44,6 +44,8 @@ Phase 1 is **done when you can prove** the browser auth + config plumbing — **
 
 ## Phase 3 — Server broadcast after write
 
+**Status:** Complete (`broadcastRoomDirty` / `broadcastToChannel` in `api_routes/utils/realtimeBroadcast.js`; `POST …/messages` in `api_routes/chat.js`).
+
 **Implement**
 
 - After `POST /api/chat/threads/:threadId/messages` persists a row successfully, call `getSupabaseServiceClient()`, `channel('room:<threadId>', { config: { private: true } })`, `send({ type: 'broadcast', event: 'dirty', payload: { … } })` (minimal payload; `roomId` = thread id).
@@ -56,45 +58,35 @@ Phase 1 is **done when you can prove** the browser auth + config plumbing — **
 
 ---
 
-## Phase 4 — Delta fetch from API
+## Phase 4 — Client lifecycle + resync
+
+**Full refetch** on `dirty` is acceptable for now (no `after`/`since` required). **Delta** is optional — see Phase 5.
+
+**Status:** Partial — `public/shared/realtimeBroadcast.js` (`subscribeBroadcast`, `subscribeRoomBroadcast`); chat page subscribes `room:<threadId>` on thread open and tears down on leave. **`user:<viewerId>` subscription and resync-on-reconnect/focus** still open.
 
 **Implement**
 
-- On `dirty`, debounce 100–300 ms, then refetch **authoritative** messages (e.g. extend `GET /api/chat/threads/:threadId/messages` with `after`/`since` if current `before=` paging cannot load “only new” efficiently).
-
-**Validate**
-
-- Two clients in same thread: message from A appears in B’s UI after event without full reload.
-- No duplicate rows if event replays or debounce fires twice (idempotent merge by message id).
-
----
-
-## Phase 5 — Client subscribe lifecycle
-
-**Implement**
-
-- **Shared client module** (e.g. under `public/shared/`): expose **`subscribe`** (topic + event handler for `dirty`) and **`unsubscribe`** (or a returned teardown function). Callers must not scatter raw `supabase.channel(...).on(...).subscribe()` — the module owns `private: true`, channel naming (`user:` / `room:`), and `removeChannel` / cleanup.
-- On app load (or post-auth): subscribe `user:<viewerId>`.
-- On thread open: subscribe `room:<threadId>`; on navigate away / unmount: unsubscribe via that module.
+- **Module:** Shared Realtime helpers own `private: true`, topic naming, teardown (`removeChannel`). Avoid scattered raw `supabase.channel(…)` in pages.
+- **Thread:** On thread open → subscribe `room:<threadId>`; on navigate away / unmount → unsubscribe.
+- **Optional:** On app load (post-auth) → subscribe `user:<viewerId>` for list/unread hints (not required for thread-only correctness).
+- **Resync without trusting Realtime:** At least one authoritative **full** thread refetch on: Realtime reconnect, `document.visibilitychange` to **visible** (with thread open), and thread open (if not already loading). Same `GET` as today; no delta.
 - No `service_role` in browser.
 
 **Validate**
 
-- Leaving thread does not leave zombie subscriptions (channel count stable in devtools / no duplicate events).
-- Opening thread again re-subscribes cleanly.
-- Subscribing twice to the same topic is prevented or idempotent (no duplicate handlers).
+- Two clients in same thread: message from A appears in B’s UI after `dirty` (or after focus/reconnect resync if broadcast was missed).
+- Leaving a thread does not leave zombie subscriptions; reopening re-subscribes cleanly.
+- After airplane mode / sleep / killed WS: when focus or reconnect returns, UI matches server after one fetch.
 
 ---
 
-## Phase 6 — Resync when Realtime is unreliable
+## Phase 5 — Delta fetch
 
-**Implement**
-
-- One authoritative delta or thread refetch on: Realtime reconnect, `document.visibilitychange` to visible, thread open.
+**Optional optimization.** Extend `GET /api/chat/threads/:threadId/messages` with `after` / `since` (or cursor) so `dirty` triggers a **small** fetch instead of reloading the whole page. Merge by message id so duplicate events or debounce are idempotent.
 
 **Validate**
 
-- Missed broadcast (airplane mode toggle, sleep, or killed WS): after reconnect or focus, UI matches server after one fetch.
+- No duplicate rows if event replays; new messages appear without full list reload.
 
 ---
 

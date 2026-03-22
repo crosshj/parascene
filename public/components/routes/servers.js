@@ -257,12 +257,49 @@ class AppRouteServers extends HTMLElement {
 		}
 	}
 
+	_tearDownConnectChatUserBroadcast() {
+		if (typeof this._userBroadcastTeardown === 'function') {
+			try {
+				this._userBroadcastTeardown();
+			} catch {
+				// ignore
+			}
+		}
+		this._userBroadcastTeardown = null;
+		this._userBroadcastViewerBound = null;
+	}
+
+	async _bindConnectChatUserBroadcast() {
+		const vid = this._chatViewerId;
+		if (!Number.isFinite(vid) || vid <= 0) {
+			this._tearDownConnectChatUserBroadcast();
+			return;
+		}
+		if (this._userBroadcastViewerBound === vid && typeof this._userBroadcastTeardown === 'function') {
+			return;
+		}
+		this._tearDownConnectChatUserBroadcast();
+		const v = getAssetVersionParam();
+		const qs = getImportQuery(v);
+		try {
+			const mod = await import(`../../shared/realtimeBroadcast.js${qs}`);
+			this._userBroadcastTeardown = await mod.subscribeUserBroadcast(vid, () => {
+				void this.loadChatThreads({ forceNetwork: true });
+			});
+			this._userBroadcastViewerBound = vid;
+		} catch (err) {
+			console.warn('[Connect chat] user realtime:', err);
+		}
+	}
+
 	setupConnectChat() {
 		const root = this.querySelector('[data-connect-chat]');
 		if (!root) return;
 
 		this._chatViewerId = null;
 		this._chatThreads = [];
+		this._userBroadcastTeardown = null;
+		this._userBroadcastViewerBound = null;
 
 		this._onTabChangeForChat = (e) => {
 			if (e.detail?.id !== 'chat') return;
@@ -289,6 +326,7 @@ class AppRouteServers extends HTMLElement {
 
 		this._connectChatCleanup = () => {
 			document.removeEventListener('tab-change', this._onTabChangeForChat);
+			this._tearDownConnectChatUserBroadcast();
 		};
 	}
 
@@ -313,6 +351,7 @@ class AppRouteServers extends HTMLElement {
 		}
 
 		if (!needNetwork) {
+			void this._bindConnectChatUserBroadcast();
 			return;
 		}
 
@@ -324,6 +363,7 @@ class AppRouteServers extends HTMLElement {
 			);
 			if (!result.ok) {
 				if (result.status === 401) {
+					this._tearDownConnectChatUserBroadcast();
 					clearCachedChatThreads();
 					listEl.removeAttribute('aria-busy');
 					listEl.removeAttribute('aria-label');
@@ -346,6 +386,7 @@ class AppRouteServers extends HTMLElement {
 				writeCachedChatThreads(viewerId, threads);
 			}
 			this.renderConnectChatThreadList();
+			void this._bindConnectChatUserBroadcast();
 			const errEl = this.querySelector('[data-connect-chat-error]');
 			if (errEl instanceof HTMLElement) {
 				errEl.hidden = true;

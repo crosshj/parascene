@@ -7,6 +7,8 @@ import { ensureSupabaseSessionForApp, getSupabaseBrowserClient } from "./supabas
 
 const DEFAULT_ROOM_DEBOUNCE_MS = 220;
 
+const RT_SUBSCRIBED = 'SUBSCRIBED';
+
 /**
  * Subscribe to a private Broadcast channel. Callers own topic naming (`room:`, `user:`, etc.).
  * @param {object} opts
@@ -14,9 +16,10 @@ const DEFAULT_ROOM_DEBOUNCE_MS = 220;
  * @param {string} opts.event — Broadcast event name
  * @param {(envelope?: { payload?: unknown }) => void} opts.onBroadcast — receives the Supabase broadcast envelope (`payload` may be nested per event)
  * @param {number} [opts.debounceMs=0] — debounce rapid fires; `0` = every event
+ * @param {() => void} [opts.onReconnect] — after transport/channel recovery (not initial subscribe); use for authoritative refetch
  * @returns {Promise<() => void>} teardown
  */
-export async function subscribeBroadcast({ topic, event, onBroadcast, debounceMs = 0 }) {
+export async function subscribeBroadcast({ topic, event, onBroadcast, debounceMs = 0, onReconnect }) {
 	if (typeof topic !== "string" || !topic.trim()) {
 		return () => {};
 	}
@@ -37,10 +40,22 @@ export async function subscribeBroadcast({ topic, event, onBroadcast, debounceMs
 	let debounceTimer = null;
 	const ms = Number(debounceMs);
 	const useDebounce = Number.isFinite(ms) && ms > 0;
+	/** @type {string | null} */
+	let prevSubscribeStatus = null;
+	let droppedAfterLive = false;
 
 	const run = (envelope) => {
 		try {
 			onBroadcast(envelope);
+		} catch {
+			// ignore
+		}
+	};
+
+	const runReconnect = () => {
+		if (typeof onReconnect !== "function") return;
+		try {
+			onReconnect();
 		} catch {
 			// ignore
 		}
@@ -59,7 +74,15 @@ export async function subscribeBroadcast({ topic, event, onBroadcast, debounceMs
 			}
 		})
 		.subscribe((status, err) => {
-			if (status !== "SUBSCRIBED" && err) {
+			if (prevSubscribeStatus === RT_SUBSCRIBED && status !== RT_SUBSCRIBED) {
+				droppedAfterLive = true;
+			}
+			if (status === RT_SUBSCRIBED && droppedAfterLive) {
+				droppedAfterLive = false;
+				runReconnect();
+			}
+			prevSubscribeStatus = status;
+			if (status !== RT_SUBSCRIBED && err) {
 				console.warn("[realtime]", err);
 			}
 		});
@@ -78,17 +101,42 @@ export async function subscribeBroadcast({ topic, event, onBroadcast, debounceMs
  * Subscribe to `dirty` on `room:<threadId>` with debounced invalidation callback (chat thread stream).
  * @param {number} threadId
  * @param {() => void} onDirty
+ * @param {{ onReconnect?: () => void }} [extra]
  * @returns {Promise<() => void>}
  */
-export async function subscribeRoomBroadcast(threadId, onDirty) {
+export async function subscribeRoomBroadcast(threadId, onDirty, extra = {}) {
 	const tid = Number(threadId);
 	if (!Number.isFinite(tid) || tid <= 0) {
 		return () => {};
 	}
+	const onReconnect = typeof extra.onReconnect === "function" ? extra.onReconnect : undefined;
 	return subscribeBroadcast({
 		topic: `room:${tid}`,
 		event: "dirty",
 		onBroadcast: () => onDirty(),
-		debounceMs: DEFAULT_ROOM_DEBOUNCE_MS
+		debounceMs: DEFAULT_ROOM_DEBOUNCE_MS,
+		onReconnect
+	});
+}
+
+const DEFAULT_USER_DEBOUNCE_MS = 280;
+
+/**
+ * `dirty` on `user:<appUserId>` — inbox / thread-list hints (debounced).
+ * @param {number} userId — `prsn_users.id` / API viewer id
+ * @param {() => void} onDirty
+ * @returns {Promise<() => void>}
+ */
+export async function subscribeUserBroadcast(userId, onDirty) {
+	const uid = Number(userId);
+	if (!Number.isFinite(uid) || uid <= 0) {
+		return () => {};
+	}
+	return subscribeBroadcast({
+		topic: `user:${uid}`,
+		event: "dirty",
+		onBroadcast: () => onDirty(),
+		debounceMs: DEFAULT_USER_DEBOUNCE_MS,
+		onReconnect: () => onDirty()
 	});
 }

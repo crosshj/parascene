@@ -80,3 +80,27 @@ export async function broadcastRoomDirty(threadId, messageId) {
 		}
 	});
 }
+
+/**
+ * Inbox / thread-list invalidation for each member (minimal payload; API is authoritative).
+ * @param {number} threadId
+ * @param {number[]} memberUserIds — `prsn_users.id` values
+ */
+export async function broadcastUserInboxDirty(threadId, memberUserIds) {
+	const tid = Number(threadId);
+	if (!Number.isFinite(tid) || tid <= 0) return;
+	const ids = [
+		...new Set(
+			(memberUserIds || [])
+				.map(Number)
+				.filter((n) => Number.isFinite(n) && n > 0)
+		)
+	];
+	for (const uid of ids) {
+		void broadcastToChannel({
+			topic: `user:${uid}`,
+			event: "dirty",
+			payload: { threadId: String(tid) }
+		});
+	}
+}

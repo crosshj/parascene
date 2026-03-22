@@ -1,6 +1,6 @@
 import express from "express";
 import { Redis } from "@upstash/redis";
-import { broadcastRoomDirty } from "./utils/realtimeBroadcast.js";
+import { broadcastRoomDirty, broadcastUserInboxDirty } from "./utils/realtimeBroadcast.js";
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { normalizeTag } from "./utils/tag.js";
 import { getNotificationDisplayName } from "./utils/displayName.js";
@@ -566,6 +566,12 @@ export default function createChatRoutes({ queries }) {
 
 			if (ins.data?.id != null) {
 				void broadcastRoomDirty(threadId, ins.data.id);
+				const mem = await sb
+					.from("prsn_chat_members")
+					.select("user_id")
+					.eq("thread_id", threadId);
+				const uids = Array.isArray(mem.data) ? mem.data.map((r) => r.user_id) : [];
+				void broadcastUserInboxDirty(threadId, uids);
 			}
 
 			return res.status(201).json({ message: ins.data });
