@@ -3,7 +3,7 @@ import { Redis } from "@upstash/redis";
 import { broadcastRoomDirty, broadcastUserInboxDirty } from "./utils/realtimeBroadcast.js";
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { normalizeTag } from "./utils/tag.js";
-import { getNotificationDisplayName } from "./utils/displayName.js";
+import { dmChatInboxTitleFromProfile } from "./utils/dmChatInboxTitle.js";
 import { REACTION_ORDER } from "./comments.js";
 import { getShareBaseUrl } from "./utils/url.js";
 import { ACTIVE_SHARE_VERSION, mintShareToken } from "./utils/shareLink.js";
@@ -365,7 +365,7 @@ export default function createChatRoutes({ queries }) {
 
 				const otherId = otherUserIdFromDmPair(row.dm_pair_key, userId);
 				const profile = otherId != null ? profileMap.get(otherId) : null;
-				const title = getNotificationDisplayName(null, profile || undefined);
+				const title = dmChatInboxTitleFromProfile(profile, otherId);
 				return {
 					id,
 					type: "dm",
@@ -581,7 +581,24 @@ export default function createChatRoutes({ queries }) {
 				return res.status(404).json({ error: "Not found", message: "Thread not found" });
 			}
 
-			return res.status(200).json({ thread });
+			const out = { ...thread };
+			if (thread.type === "channel") {
+				const slug = thread.channel_slug ? String(thread.channel_slug) : "";
+				out.title = slug ? `#${slug}` : "Channel";
+			} else if (thread.type === "dm" && thread.dm_pair_key) {
+				const otherId = otherUserIdFromDmPair(thread.dm_pair_key, userId);
+				let profile = null;
+				if (otherId != null && typeof queries.selectUserProfileByUserId?.get === "function") {
+					try {
+						profile = await queries.selectUserProfileByUserId.get(otherId);
+					} catch {
+						profile = null;
+					}
+				}
+				out.title = dmChatInboxTitleFromProfile(profile, otherId);
+			}
+
+			return res.status(200).json({ thread: out });
 		} catch (err) {
 			console.error("[GET /api/chat/threads/:threadId]", err);
 			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });

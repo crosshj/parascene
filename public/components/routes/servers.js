@@ -18,6 +18,7 @@ let renderCommentAvatarHtml;
 let REACTION_ORDER;
 let REACTION_ICONS;
 let setupReactionTooltipTap;
+let serverChannelTagFromServerName;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -76,6 +77,9 @@ async function loadDeps() {
 		const tooltipTapMod = await import(`../../shared/reactionTooltipTap.js${qs}`);
 		setupReactionTooltipTap = tooltipTapMod.setupReactionTooltipTap;
 
+		const serverChatTagMod = await import(`../../shared/serverChatTag.js${qs}`);
+		serverChannelTagFromServerName = serverChatTagMod.serverChannelTagFromServerName;
+
 		const iconsMod = await import(`../../icons/svg-strings.js${qs}`);
 		REACTION_ORDER = iconsMod.REACTION_ORDER;
 		REACTION_ICONS = iconsMod.REACTION_ICONS;
@@ -132,24 +136,29 @@ class AppRouteServers extends HTMLElement {
 	async connectedCallback() {
 		await loadDeps();
 		this.innerHTML = html`
-      <div class="servers-route">
-        <div class="route-header">
-          <h3>Connect</h3>
-          <p>Chat in hashtag channels and DMs, see recent comments on creations, manage your image generation servers, and send feature requests to the team.</p>
-        </div>
+	<div class="servers-route">
+		<div class="route-header">
+			<h3>Connect</h3>
+			<p>See what the community is talking about, manage your image generation servers, and send feature requests
+				directly to the team.</p>
+		</div>
 		<app-tabs>
 			<tab data-id="chat" label="Chat" default>
 				<div class="connect-chat" data-connect-chat>
 					<div class="connect-chat-toolbar">
 						<label class="connect-chat-label" for="connect-chat-channel-input">Open a channel</label>
 						<div class="connect-chat-toolbar-row">
-							<input type="text" id="connect-chat-channel-input" class="connect-chat-input" placeholder="e.g. pixelart" maxlength="40" autocomplete="off" data-connect-chat-tag-input />
-							<button type="button" class="btn-primary connect-chat-open-channel" data-connect-chat-open-channel>Open</button>
+							<input type="text" id="connect-chat-channel-input" class="connect-chat-input"
+								placeholder="e.g. pixelart" maxlength="40" autocomplete="off" data-connect-chat-tag-input />
+							<button type="button" class="btn-primary connect-chat-open-channel"
+								data-connect-chat-open-channel>Open</button>
 						</div>
-						<p class="connect-chat-hint">Tags match Explore: lowercase, 2–32 characters, letters, numbers, <code>_</code> and <code>-</code>. Opens in full-screen chat.</p>
+						<p class="connect-chat-hint">Tags match Explore: lowercase, 2–32 characters, letters, numbers,
+							<code>_</code> and <code>-</code>. Opens in full-screen chat.</p>
 					</div>
 					<div class="connect-chat-sidebar">
-						<div class="connect-chat-thread-list" data-connect-chat-thread-list aria-busy="true" aria-label="Loading conversations"></div>
+						<div class="connect-chat-thread-list" data-connect-chat-thread-list aria-busy="true"
+							aria-label="Loading conversations"></div>
 					</div>
 					<p class="connect-chat-error" data-connect-chat-error hidden></p>
 				</div>
@@ -159,33 +168,27 @@ class AppRouteServers extends HTMLElement {
 					${renderCommentRowsSkeleton(10)}
 				</div>
 			</tab>
-
+	
 			<tab data-id="servers" label="Servers">
 				<div class="route-cards admin-cards" data-servers-container aria-busy="true" aria-label="Loading">
 					${renderServerCardsSkeleton(4)}
 				</div>
 			</tab>
-
-			<tab data-id="feature-requests" label="Feature Requests">
+	
+			<tab data-id="feature-requests" label="Feedback">
 				<div class="route-header">
 					<p>Tell us what you want to see next. We read every submission.</p>
 				</div>
 				<div class="alert" data-feature-request-status hidden></div>
 				<form data-feature-request-form>
-					<textarea
-						name="message"
-						rows="10"
-						maxlength="5000"
-						placeholder="What should we build? What problem does it solve?"
-						aria-label="Feature request details"
-						data-feature-request-message
-						required
-					></textarea>
+					<textarea name="message" rows="10" maxlength="5000"
+						placeholder="What should we build? What problem does it solve?" aria-label="Feature request details"
+						data-feature-request-message required></textarea>
 					<button type="submit" class="btn-primary btn-inline" data-feature-request-submit>Send</button>
 				</form>
 			</tab>
 		</app-tabs>
-      </div>
+	</div>
     `;
 
 		this._appDocTitleBase = typeof document !== 'undefined' ? document.title : 'parascene';
@@ -298,6 +301,7 @@ class AppRouteServers extends HTMLElement {
 
 		this._chatViewerId = null;
 		this._chatThreads = [];
+		this._joinedServersForChat = [];
 		this._userBroadcastTeardown = null;
 		this._userBroadcastViewerBound = null;
 
@@ -403,6 +407,39 @@ class AppRouteServers extends HTMLElement {
 		}
 	}
 
+	/** Merge GET /api/chat/threads with joined servers (slug from server name only; deduped vs threads and duplicate names). */
+	_getMergedChatThreadRows() {
+		const threads = Array.isArray(this._chatThreads) ? this._chatThreads : [];
+		const existingSlugs = new Set();
+		for (const t of threads) {
+			if (t && t.type === 'channel' && t.channel_slug) {
+				existingSlugs.add(String(t.channel_slug).toLowerCase());
+			}
+		}
+		const tagFn =
+			typeof serverChannelTagFromServerName === 'function'
+				? serverChannelTagFromServerName
+				: null;
+		const joined = Array.isArray(this._joinedServersForChat) ? this._joinedServersForChat : [];
+		const joinedSorted = [...joined].sort((a, b) => Number(a.id) - Number(b.id));
+		const extras = [];
+		const usedExtraSlugs = new Set();
+		for (const s of joinedSorted) {
+			const nameRaw = typeof s?.name === 'string' ? s.name : '';
+			const slug = tagFn ? tagFn(nameRaw) : null;
+			const key = slug ? slug.toLowerCase() : '';
+			if (!slug || existingSlugs.has(key) || usedExtraSlugs.has(key)) continue;
+			usedExtraSlugs.add(key);
+			extras.push({
+				type: 'channel',
+				channel_slug: slug,
+				title: `#${slug}`,
+				last_message: null
+			});
+		}
+		return [...threads, ...extras];
+	}
+
 	renderConnectChatThreadList() {
 		const listEl = this.querySelector('[data-connect-chat-thread-list]');
 		if (!listEl) return;
@@ -411,8 +448,8 @@ class AppRouteServers extends HTMLElement {
 		listEl.removeAttribute('aria-label');
 		listEl.innerHTML = '';
 
-		const threads = this._chatThreads || [];
-		if (threads.length === 0) {
+		const rows = this._getMergedChatThreadRows();
+		if (rows.length === 0) {
 			listEl.innerHTML = renderEmptyState({
 				title: 'No conversations yet.',
 				message: 'Open a channel above to get started.'
@@ -420,7 +457,7 @@ class AppRouteServers extends HTMLElement {
 			return;
 		}
 
-		threads.forEach((t) => {
+		rows.forEach((t) => {
 			const title = typeof t.title === 'string' && t.title.trim() ? t.title.trim() : 'Chat';
 			const last = t.last_message;
 			const preview = last && typeof last.body === 'string'
@@ -845,7 +882,15 @@ class AppRouteServers extends HTMLElement {
 			container.removeAttribute('aria-label');
 			const servers = Array.isArray(result.data?.servers) ? result.data.servers : [];
 			const viewerIsAdmin = Boolean(result.data?.viewer_is_admin);
+			this._joinedServersForChat = servers
+				.filter((s) => s && s.is_member)
+				.map((s) => ({
+					id: Number(s.id),
+					name: typeof s.name === 'string' ? s.name.trim() : ''
+				}))
+				.filter((s) => Number.isFinite(s.id) && s.id > 0);
 			this.renderServers(servers, container, viewerIsAdmin);
+			this.renderConnectChatThreadList();
 		} catch (error) {
 			// console.error('Error loading servers:', error);
 			container.removeAttribute('aria-busy');

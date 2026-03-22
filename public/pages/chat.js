@@ -566,11 +566,12 @@ export async function initChatPage(root) {
 		const t = data.thread;
 		const viewerId = chatViewerId;
 		if (t.type === 'channel' && t.channel_slug) {
+			const slug = String(t.channel_slug);
 			chatThreads.push({
 				id: tid,
 				type: 'channel',
-				channel_slug: t.channel_slug,
-				title: `#${t.channel_slug}`
+				channel_slug: slug,
+				title: typeof t.title === 'string' && t.title.trim() ? t.title.trim() : `#${slug}`
 			});
 		} else if (t.type === 'dm' && t.dm_pair_key) {
 			const otherId = otherUserIdFromDmPair(t.dm_pair_key, viewerId);
@@ -579,7 +580,12 @@ export async function initChatPage(root) {
 				type: 'dm',
 				dm_pair_key: t.dm_pair_key,
 				other_user_id: otherId,
-				title: otherId != null ? `User ${otherId}` : 'Chat'
+				title:
+					typeof t.title === 'string' && t.title.trim()
+						? t.title.trim()
+						: otherId != null
+							? `User ${otherId}`
+							: 'Chat'
 			});
 		} else {
 			chatThreads.push({ id: tid, type: t.type || 'dm', title: 'Chat' });
