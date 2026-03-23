@@ -1141,7 +1141,7 @@ export default function createAdminRoutes({ queries, storage }) {
 			const raw = campaignId != null && String(campaignId).trim() ? String(campaignId).trim() : "";
 			if (!raw) return "Organic";
 			if (raw === BLOG_CAMPAIGN_INTERNAL) return "Feed";
-			if (raw === BLOG_CAMPAIGN_INDEX) return "BlogIndex";
+			if (raw === BLOG_CAMPAIGN_INDEX) return "Blog Index";
 			const row = campaignLabelById.get(raw);
 			const lbl = row && typeof row.label === "string" ? row.label.trim() : "";
 			if (lbl) return lbl;

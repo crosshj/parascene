@@ -1734,6 +1734,13 @@ class AppRouteCreate extends HTMLElement {
 				const t = e.target;
 				if (t?.matches?.("[data-blog-copy-tracked]")) this.copyBlogCampaignTrackedField("tracked");
 				if (t?.matches?.("[data-blog-copy-canonical]")) this.copyBlogCampaignTrackedField("canonical");
+				if (t?.matches?.("[data-blog-campaign-copy-tracked-simple]")) {
+					const id = t.getAttribute("data-blog-campaign-copy-tracked-simple");
+					this.copyBlogCampaignSimpleTracked(id, t);
+				}
+				if (t?.matches?.("[data-blog-campaign-copy-canonical-simple]")) {
+					this.copyBlogCampaignCanonicalSimple(t);
+				}
 				if (t?.matches?.("[data-blog-campaign-add-btn]")) this.submitBlogCampaignAdd(e);
 			});
 			campaignBody.addEventListener("input", (e) => {
@@ -1788,6 +1795,33 @@ class AppRouteCreate extends HTMLElement {
 		const body = this.querySelector("[data-blog-campaign-body]");
 		const post = this._blogCampaignPost;
 		if (!body || !post) return;
+
+		if (!this._blogUserIsAdmin) {
+			const list = (this._blogCampaignList || []).filter((c) => c && typeof c.id === "string");
+			const campaignRows = list
+				.map((c) => {
+					const rawId = String(c.id);
+					const idAttr = escapeHtml(rawId);
+					const label = escapeHtml(String(c.label || c.id || ""));
+					return html`<li class="create-route-blog-campaign-simple-row">
+						<span class="create-route-blog-campaign-simple-label">${label}</span>
+						<button type="button" class="btn-secondary create-route-blog-campaign-simple-copy" data-blog-campaign-copy-tracked-simple="${idAttr}">Copy</button>
+					</li>`;
+				})
+				.join("");
+			const emptyNote =
+				list.length === 0
+					? html`<p class="create-cost create-route-blog-campaign-simple-note">No named campaigns in the registry yet.</p>`
+					: "";
+			body.innerHTML = html`<ul class="create-route-blog-campaign-simple-list">
+				<li class="create-route-blog-campaign-simple-row">
+					<span class="create-route-blog-campaign-simple-label">Generic</span>
+					<button type="button" class="btn-secondary create-route-blog-campaign-simple-copy" data-blog-campaign-copy-canonical-simple>Copy</button>
+				</li>
+				${campaignRows}
+			</ul>${emptyNote}`;
+			return;
+		}
 
 		const opts = (this._blogCampaignList || [])
 			.filter((c) => c && typeof c.id === "string")
@@ -1927,6 +1961,39 @@ class AppRouteCreate extends HTMLElement {
 			trackedEl.value = "";
 			canonEl.value = "";
 		}
+	}
+
+	copyBlogCampaignSimpleTracked(campaignId, btn) {
+		const post = this._blogCampaignPost;
+		if (!post?.slug || campaignId == null) return;
+		const raw = String(campaignId).trim().toLowerCase();
+		if (!BLOG_CAMPAIGN_ID_RE.test(raw)) return;
+		const built = buildParasceneBlogPublicUrls(post.slug, raw);
+		navigator.clipboard.writeText(built.tracked).then(() => {
+			if (btn) {
+				const prev = btn.textContent;
+				btn.textContent = "Copied";
+				setTimeout(() => {
+					btn.textContent = prev;
+				}, 1500);
+			}
+		}).catch(() => {});
+	}
+
+	/** Canonical public URL (no campaign segment); same as admin “Canonical URL” field. */
+	copyBlogCampaignCanonicalSimple(btn) {
+		const post = this._blogCampaignPost;
+		if (!post?.slug) return;
+		const { canonical } = buildParasceneBlogPublicUrls(post.slug, "x");
+		navigator.clipboard.writeText(canonical).then(() => {
+			if (btn) {
+				const prev = btn.textContent;
+				btn.textContent = "Copied";
+				setTimeout(() => {
+					btn.textContent = prev;
+				}, 1500);
+			}
+		}).catch(() => {});
 	}
 
 	copyBlogCampaignTrackedField(which) {
