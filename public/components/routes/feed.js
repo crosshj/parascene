@@ -1,4 +1,4 @@
-import { buildBlogPostPublicPath, BLOG_CAMPAIGN_INTERNAL } from '../../../lib/blog/campaignPath.js';
+import { buildBlogPostPublicPath, BLOG_CAMPAIGN_INTERNAL } from '../../shared/blogCampaignPath.js';
 
 let formatDateTime;
 let formatRelativeTime;

@@ -1,4 +1,4 @@
-import { isSystemReservedBlogCampaignId } from '../../../lib/blog/campaignPath.js';
+import { isSystemReservedBlogCampaignId } from '../../shared/blogCampaignPath.js';
 
 let fetchJsonWithStatusDeduped;
 let submitCreationWithPending;
