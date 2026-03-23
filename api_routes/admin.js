@@ -925,8 +925,8 @@ export default function createAdminRoutes({ queries, storage }) {
 					row.meta && typeof row.meta === "object"
 						? row.meta
 						: typeof row.meta === "string"
-						? safeJsonParse(row.meta, {})
-						: {};
+							? safeJsonParse(row.meta, {})
+							: {};
 				lastMetaByCid.set(row.anon_cid, {
 					user_agent: meta?.user_agent ?? null,
 					ip: meta?.ip ?? null,
@@ -1022,15 +1022,15 @@ export default function createAdminRoutes({ queries, storage }) {
 				cf_ray: meta?.cf_ray ?? null,
 				image: img
 					? {
-							id: img.id,
-							filename: img.filename,
-							file_path: img.file_path,
-							width: img.width,
-							height: img.height,
-							status: img.status,
-							created_at: img.created_at,
-							image_url: imagePath
-						}
+						id: img.id,
+						filename: img.filename,
+						file_path: img.file_path,
+						width: img.width,
+						height: img.height,
+						status: img.status,
+						created_at: img.created_at,
+						image_url: imagePath
+					}
 					: null
 			};
 		});
@@ -1140,8 +1140,8 @@ export default function createAdminRoutes({ queries, storage }) {
 		function sourceLabelForBlogView(campaignId) {
 			const raw = campaignId != null && String(campaignId).trim() ? String(campaignId).trim() : "";
 			if (!raw) return "Organic";
-			if (raw === BLOG_CAMPAIGN_INTERNAL) return "In-app (feed)";
-			if (raw === BLOG_CAMPAIGN_INDEX) return "Blog index";
+			if (raw === BLOG_CAMPAIGN_INTERNAL) return "Feed";
+			if (raw === BLOG_CAMPAIGN_INDEX) return "BlogIndex";
 			const row = campaignLabelById.get(raw);
 			const lbl = row && typeof row.label === "string" ? row.label.trim() : "";
 			if (lbl) return lbl;
