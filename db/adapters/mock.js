@@ -2367,6 +2367,41 @@ export function openDb() {
 				};
 			}
 		},
+		listBlogPostViews: {
+			all: async (limit, offset = 0, sortBy = "viewed_at", sortDir = "desc") => {
+				const cap = Math.min(Math.max(0, Number(limit) || 50), 200);
+				const off = Math.max(0, Number(offset) || 0);
+				const validOrder = ["id", "viewed_at", "blog_post_id", "post_slug", "campaign_id", "referer", "anon_cid"];
+				const key = validOrder.includes(sortBy) ? sortBy : "viewed_at";
+				const asc = sortDir === "asc";
+				const sorted = [...blog_post_views].sort((a, b) => {
+					const va = a[key];
+					const vb = b[key];
+					if (va == null && vb == null) return 0;
+					if (va == null) return asc ? -1 : 1;
+					if (vb == null) return asc ? 1 : -1;
+					if (typeof va === "number" && typeof vb === "number") return asc ? va - vb : vb - va;
+					const sa = String(va);
+					const sb = String(vb);
+					const c = sa.localeCompare(sb);
+					return asc ? c : -c;
+				});
+				const slice = sorted.slice(off, off + cap);
+				return slice.map((row) => {
+					const post =
+						row.blog_post_id != null
+							? blog_posts.find((p) => Number(p.id) === Number(row.blog_post_id))
+							: null;
+					return {
+						...row,
+						post_title: post?.title ?? null
+					};
+				});
+			}
+		},
+		countBlogPostViews: {
+			get: async () => ({ count: blog_post_views.length })
+		},
 		selectBlogCampaigns: {
 			all: async () =>
 				blog_campaigns

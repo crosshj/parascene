@@ -3307,6 +3307,30 @@ export async function openDb() {
 				});
 			}
 		},
+		listBlogPostViews: {
+			all: async (limit, offset = 0, sortBy = "viewed_at", sortDir = "desc") => {
+				const cap = Math.min(Math.max(0, Number(limit) || 50), 200);
+				const off = Math.max(0, Number(offset) || 0);
+				const validOrder = ["id", "viewed_at", "blog_post_id", "post_slug", "campaign_id", "referer", "anon_cid"];
+				const orderCol = validOrder.includes(sortBy) ? sortBy : "viewed_at";
+				const asc = sortDir === "asc";
+				const stmt = db.prepare(
+					`SELECT v.id, v.viewed_at, v.blog_post_id, v.post_slug, v.campaign_id, v.referer, v.anon_cid, v.meta,
+					        p.title AS post_title
+					 FROM blog_post_views v
+					 LEFT JOIN blog_posts p ON p.id = v.blog_post_id
+					 ORDER BY v.${orderCol} ${asc ? "ASC" : "DESC"} LIMIT ? OFFSET ?`
+				);
+				const rows = stmt.all(cap, off) ?? [];
+				return Promise.resolve(rows);
+			}
+		},
+		countBlogPostViews: {
+			get: async () => {
+				const row = db.prepare("SELECT COUNT(*) AS count FROM blog_post_views").get();
+				return Promise.resolve({ count: row?.count ?? 0 });
+			}
+		},
 		selectBlogCampaigns: {
 			all: async () => {
 				const rows = db.prepare("SELECT id, label, notes, active, created_at FROM blog_campaigns ORDER BY created_at ASC").all();

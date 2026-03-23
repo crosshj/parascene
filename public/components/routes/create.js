@@ -1,3 +1,5 @@
+import { isSystemReservedBlogCampaignId } from '../../../lib/blog/campaignPath.js';
+
 let fetchJsonWithStatusDeduped;
 let submitCreationWithPending;
 let uploadImageFile;
@@ -1978,6 +1980,13 @@ class AppRouteCreate extends HTMLElement {
 		const rawId = (idIn?.value || "").trim().toLowerCase();
 		if (!BLOG_CAMPAIGN_ID_RE.test(rawId)) {
 			if (statusEl) statusEl.textContent = "Id must be 1–12 lowercase letters or numbers.";
+			return;
+		}
+		if (isSystemReservedBlogCampaignId(rawId)) {
+			if (statusEl) {
+				statusEl.textContent =
+					"Ids n and i are reserved for feed and blog index links; choose another id.";
+			}
 			return;
 		}
 		if (statusEl) statusEl.textContent = "Saving…";

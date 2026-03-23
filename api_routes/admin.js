@@ -11,6 +11,7 @@ import { RELATED_PARAM_KEYS } from "../db/adapters/relatedParams.js";
 import { runNotificationsCronForTests } from "../api/worker/notifications.js";
 import { buildRequestMeta } from "./utils/analytics.js";
 import { prsnCidFromMeta } from "./utils/prsnCids.js";
+import { BLOG_CAMPAIGN_INDEX, BLOG_CAMPAIGN_INTERNAL } from "../lib/blog/campaignPath.js";
 
 /** Subscription ID stored in user.meta when admin grants founder status without payment. Not a Stripe ID. */
 const GIFTED_FOUNDER_SUBSCRIPTION_ID = "gifted_founder";
@@ -1091,6 +1092,91 @@ export default function createAdminRoutes({ queries, storage }) {
 				...v,
 				sharer_label: userLabelByUserId[v.sharer_user_id] ?? `#${v.sharer_user_id}`,
 				creator_label: userLabelByUserId[v.created_by_user_id] ?? `#${v.created_by_user_id}`,
+				prsn_cid: prsnCidFromMeta(meta),
+				user_agent: meta?.user_agent ?? null,
+				ip: meta?.ip ?? null,
+				ip_source: meta?.ip_source ?? null,
+				country: decodeGeo(meta?.country) ?? null,
+				region: decodeGeo(meta?.region) ?? null,
+				city: decodeGeo(meta?.city) ?? null,
+				cf_ray: meta?.cf_ray ?? null
+			};
+		});
+		res.json({ items: enriched, total });
+	});
+
+	/** GET /admin/blog-views — raw blog post view hits (admin). Same shape enrichment as share-views (meta → prsn_cid, IP, geo, cf_ray). */
+	router.get("/admin/blog-views", async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+		const limit = Math.min(200, Math.max(1, parseInt(req.query?.limit, 10) || 50));
+		const offset = Math.max(0, parseInt(req.query?.offset, 10) || 0);
+		const validSortBy = ["id", "viewed_at", "blog_post_id", "post_slug", "campaign_id", "referer", "anon_cid"];
+		const sortBy = validSortBy.includes(req.query?.sort_by) ? req.query.sort_by : "viewed_at";
+		const sortDir = String(req.query?.sort_dir || "desc").toLowerCase() === "asc" ? "asc" : "desc";
+		if (!queries.listBlogPostViews?.all) {
+			return res.json({ items: [], total: 0 });
+		}
+		const [items, totalRow] = await Promise.all([
+			queries.listBlogPostViews.all(limit, offset, sortBy, sortDir),
+			queries.countBlogPostViews?.get ? queries.countBlogPostViews.get() : Promise.resolve({ count: 0 })
+		]);
+		const total = totalRow?.count ?? 0;
+
+		const campaignLabelById = new Map();
+		if (typeof queries.selectBlogCampaigns?.all === "function") {
+			try {
+				const campaigns = await queries.selectBlogCampaigns.all();
+				for (const c of campaigns ?? []) {
+					if (c?.id != null && String(c.id).trim()) {
+						campaignLabelById.set(String(c.id).trim(), c);
+					}
+				}
+			} catch {
+				// registry optional for display
+			}
+		}
+
+		function sourceLabelForBlogView(campaignId) {
+			const raw = campaignId != null && String(campaignId).trim() ? String(campaignId).trim() : "";
+			if (!raw) return "Organic";
+			if (raw === BLOG_CAMPAIGN_INTERNAL) return "In-app (feed)";
+			if (raw === BLOG_CAMPAIGN_INDEX) return "Blog index";
+			const row = campaignLabelById.get(raw);
+			const lbl = row && typeof row.label === "string" ? row.label.trim() : "";
+			if (lbl) return lbl;
+			return raw;
+		}
+
+		const parseMeta = (m) => {
+			if (m == null) return null;
+			if (typeof m === "object") return m;
+			if (typeof m !== "string" || !m.trim()) return null;
+			try {
+				return JSON.parse(m);
+			} catch {
+				return null;
+			}
+		};
+		const decodeGeo = (s) => {
+			if (s == null || typeof s !== "string" || !s.trim()) return null;
+			try {
+				const decoded = decodeURIComponent(s.trim());
+				return decoded || null;
+			} catch {
+				return s.trim() || null;
+			}
+		};
+		const enriched = (items || []).map((v) => {
+			const meta = parseMeta(v.meta);
+			const slug = String(v.post_slug || "").trim();
+			const campaignRaw = v.campaign_id != null && String(v.campaign_id).trim() ? String(v.campaign_id).trim() : "";
+			const postTitle = v.post_title != null && String(v.post_title).trim() ? String(v.post_title).trim() : "";
+			return {
+				...v,
+				post_label: postTitle || slug || "—",
+				campaign_or_source: campaignRaw || "organic",
+				source_label: sourceLabelForBlogView(v.campaign_id),
 				prsn_cid: prsnCidFromMeta(meta),
 				user_agent: meta?.user_agent ?? null,
 				ip: meta?.ip ?? null,

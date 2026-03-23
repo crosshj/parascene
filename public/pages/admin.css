@@ -73,11 +73,6 @@
 	line-height: 1.4;
 }
 
-.blog-analytics-edit-link {
-	font-size: 0.85rem;
-	color: var(--text-muted);
-}
-
 .admin-settings-actions {
 	padding-top: 20px;
 	margin-top: 8px;
@@ -681,6 +676,11 @@
 	overflow-x: auto;
 }
 
+.admin-datatable-wrapper .admin-table td,
+.admin-datatable-wrapper .admin-table th {
+	vertical-align: middle;
+}
+
 .share-table-col-referer,
 .share-table-col-cid {
 	max-width: 180px;
@@ -732,6 +732,19 @@
 
 .share-table-cf-ray {
 	color: var(--muted, #64748b);
+}
+
+.blog-views-col-post {
+	max-width: 200px;
+	overflow: hidden;
+}
+
+.blog-views-col-post .blog-views-post-title {
+	display: block;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .anon-detail-modal-body {

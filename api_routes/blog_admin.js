@@ -1,5 +1,5 @@
 import express from "express";
-import { BLOG_CAMPAIGN_TOKEN_RE } from "../lib/blog/campaignPath.js";
+import { BLOG_CAMPAIGN_TOKEN_RE, isSystemReservedBlogCampaignId } from "../lib/blog/campaignPath.js";
 import { getBaseAppUrl } from "./utils/url.js";
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -414,6 +414,11 @@ export default function createBlogAdminRoutes({ queries }) {
 		const id = normalizeCampaignId(req.body?.id);
 		if (!id) {
 			return res.status(400).json({ error: "Invalid campaign id (use 1–12 lowercase letters/numbers)" });
+		}
+		if (isSystemReservedBlogCampaignId(id)) {
+			return res.status(400).json({
+				error: "Campaign ids n and i are reserved for in-app and blog index links and cannot be registered."
+			});
 		}
 		const label = normalizeText(req.body?.label ?? "", 200);
 		const notes = normalizeText(req.body?.notes ?? "", 2000);

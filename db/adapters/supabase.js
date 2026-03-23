@@ -4884,6 +4884,47 @@ export function openDb() {
 				};
 			}
 		},
+		listBlogPostViews: {
+			all: async (limit, offset = 0, sortBy = "viewed_at", sortDir = "desc") => {
+				const cap = Math.min(Math.max(0, Number(limit) || 50), 200);
+				const off = Math.max(0, Number(offset) || 0);
+				const validOrder = ["id", "viewed_at", "blog_post_id", "post_slug", "campaign_id", "referer", "anon_cid"];
+				const orderCol = validOrder.includes(sortBy) ? sortBy : "viewed_at";
+				const ascending = sortDir === "asc";
+				const { data: views, error } = await serviceClient
+					.from(prefixedTable("blog_post_views"))
+					.select("id, viewed_at, blog_post_id, post_slug, campaign_id, referer, anon_cid, meta")
+					.order(orderCol, { ascending })
+					.range(off, off + cap - 1);
+				if (error) throw error;
+				const rows = views ?? [];
+				const ids = [...new Set(rows.map((r) => r.blog_post_id).filter((id) => id != null))];
+				let titleById = {};
+				if (ids.length) {
+					const { data: posts, error: pe } = await serviceClient
+						.from(prefixedTable("blog_posts"))
+						.select("id, title")
+						.in("id", ids);
+					if (pe) throw pe;
+					for (const p of posts ?? []) {
+						titleById[Number(p.id)] = p.title ?? null;
+					}
+				}
+				return rows.map((r) => ({
+					...r,
+					post_title: r.blog_post_id != null ? titleById[Number(r.blog_post_id)] ?? null : null
+				}));
+			}
+		},
+		countBlogPostViews: {
+			get: async () => {
+				const { count, error } = await serviceClient
+					.from(prefixedTable("blog_post_views"))
+					.select("id", { count: "exact", head: true });
+				if (error) throw error;
+				return { count: count ?? 0 };
+			}
+		},
 		selectBlogCampaigns: {
 			all: async () => {
 				const { data, error } = await serviceClient

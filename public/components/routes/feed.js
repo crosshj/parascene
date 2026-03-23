@@ -1,3 +1,5 @@
+import { buildBlogPostPublicPath, BLOG_CAMPAIGN_INTERNAL } from '../../../lib/blog/campaignPath.js';
+
 let formatDateTime;
 let formatRelativeTime;
 let enableLikeButtons;
@@ -606,7 +608,7 @@ class AppRouteFeed extends HTMLElement {
 		const card = document.createElement("div");
 		card.className = "feed-card feed-card-blog";
 		const slug = typeof item.slug === "string" ? item.slug.trim() : "";
-		const href = slug ? `/blog/${encodeURIComponent(slug)}` : "/blog";
+		const href = slug ? buildBlogPostPublicPath(slug, BLOG_CAMPAIGN_INTERNAL) : "/blog";
 		const rawTitle = item.title || "Blog post";
 		const safeTitle = String(rawTitle)
 			.replace(/&/g, "&amp;")

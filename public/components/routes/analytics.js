@@ -86,6 +86,9 @@ function truncateStr(s, maxLen = 40) {
 	return str.length <= maxLen ? str : str.slice(0, maxLen) + '…';
 }
 
+/** Max characters shown in Blog analytics Post column (ellipsis when longer). */
+const BLOG_ANALYTICS_POST_TITLE_MAX_LEN = 40;
+
 const ANALYTICS_TAB_IDS = ['share', 'anonymous', 'blog'];
 
 class AppRouteAnalytics extends HTMLElement {
@@ -96,6 +99,7 @@ class AppRouteAnalytics extends HTMLElement {
 		this._shareDataLoaded = false;
 		this._shareExportInFlight = false;
 		this._anonExportInFlight = false;
+		this._blogExportInFlight = false;
 		this._blogDataLoaded = false;
 		this.innerHTML = html`
 			<h3>Analytics</h3>
@@ -134,9 +138,17 @@ class AppRouteAnalytics extends HTMLElement {
 					</div>
 				</tab>
 				<tab data-id="blog" label="Blog">
-					<div class="blog-analytics-tab" data-blog-analytics-root>
-						<div class="route-empty route-loading">
-							<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
+					<div class="blog-tab-content" data-blog-tab-content>
+						<div class="users-export-bar" data-blog-export-bar>
+							<button type="button" class="btn-secondary" data-blog-export-copy>
+								Copy blog views export
+							</button>
+							<div class="users-export-status" data-blog-export-status aria-live="polite"></div>
+						</div>
+						<div class="blog-table-container" data-blog-table-container>
+							<div class="route-empty route-loading">
+								<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
+							</div>
 						</div>
 					</div>
 				</tab>
@@ -199,6 +211,15 @@ class AppRouteAnalytics extends HTMLElement {
 			});
 			anonExpandedBtn?.addEventListener('click', async () => {
 				await this.exportAnonUsersForChatGPT({ mode: 'expanded', statusEl: anonExportStatus });
+			});
+		}
+
+		const blogExportBtn = this.querySelector('[data-blog-export-copy]');
+		const blogExportStatus = this.querySelector('[data-blog-export-status]');
+		if (blogExportBtn && !this._blogExportBound) {
+			this._blogExportBound = true;
+			blogExportBtn.addEventListener('click', async () => {
+				await this.exportBlogViewsForChatGPT({ statusEl: blogExportStatus });
 			});
 		}
 	}
@@ -522,159 +543,199 @@ class AppRouteAnalytics extends HTMLElement {
 	}
 
 	async loadBlogAnalytics() {
-		const container = this.querySelector('[data-blog-analytics-root]');
+		const container = this.querySelector('[data-blog-table-container]');
 		if (!container) return;
 		try {
-			const res = await fetch('/api/blog/analytics/summary', { credentials: 'include' });
-			if (!res.ok) {
-				const errText = res.status === 403 ? 'Forbidden' : 'Failed to load blog analytics.';
-				throw new Error(errText);
-			}
-			const data = await res.json();
 			this._blogDataLoaded = true;
-			this.renderBlogAnalytics(container, data);
+			await loadAdminDataTable(container, {
+				fetchUrl: '/admin/blog-views',
+				responseItemsKey: 'items',
+				columns: [
+					{
+						key: 'prsn_cid',
+						label: 'Client Id',
+						className: 'share-table-col-prsn-cid',
+						render: (row) => {
+							const pc = row.prsn_cid && String(row.prsn_cid).trim();
+							return pc ? escapeHtml(truncateCid(pc, 18)) : '—';
+						}
+					},
+					{
+						key: 'anon_cid',
+						label: 'Anon Id',
+						sortKey: 'anon_cid',
+						className: 'share-table-col-cid',
+						render: (row) => escapeHtml(truncateStr(row.anon_cid ?? '', 12))
+					},
+					{
+						key: 'post_label',
+						label: 'Post',
+						sortKey: 'post_slug',
+						className: 'blog-views-col-post',
+						render: (row) => {
+							const slug = String(row.post_slug || '').trim();
+							const path =
+								slug.length > 0
+									? slug
+											.split('/')
+											.filter(Boolean)
+											.map((s) => encodeURIComponent(s))
+											.join('/')
+									: '';
+							const href = path ? `/blog/${path}` : null;
+							const fullRaw = String(row.post_label || slug || '—');
+							const full = fullRaw.trim() || '—';
+							const short = truncateStr(full, BLOG_ANALYTICS_POST_TITLE_MAX_LEN);
+							const labelHtml = escapeHtml(short);
+							const titleAttr = escapeHtml(full);
+							if (href) {
+								return `<a class="blog-views-post-title" href="${escapeHtml(href)}" title="${titleAttr}">${labelHtml}</a>`;
+							}
+							return `<span class="blog-views-post-title" title="${titleAttr}">${labelHtml}</span>`;
+						}
+					},
+					{
+						key: 'source_label',
+						label: 'Campaign',
+						sortKey: 'campaign_id',
+						className: 'blog-views-col-campaign',
+						render: (row) => escapeHtml(String(row.source_label ?? ''))
+					},
+					{
+						key: 'viewed_at',
+						label: 'Viewed',
+						sortKey: 'viewed_at',
+						className: 'share-table-col-date',
+						render: (row) => escapeHtml(row.viewed_at ? formatLocalDateTime(row.viewed_at) : '—')
+					},
+					{
+						key: 'user_agent',
+						label: 'User agent',
+						className: 'share-table-col-user-agent',
+						render: (row) => escapeHtml(truncateStr(row.user_agent ?? '', 60))
+					},
+					{
+						key: 'ip',
+						label: 'IP',
+						className: 'share-table-col-ip',
+						render: (row) => {
+							const ip = row.ip ?? '';
+							const src = row.ip_source ?? '';
+							const ipStr = escapeHtml(truncateStr(ip, 45));
+							if (!ipStr) return '—';
+							if (src) {
+								return `${ipStr} <span class="share-table-ip-source" title="IP from header: ${escapeHtml(src)}">${escapeHtml(src)}</span>`;
+							}
+							return ipStr;
+						}
+					},
+					{
+						key: 'location',
+						label: 'Location',
+						className: 'share-table-col-location',
+						render: (row) => {
+							const parts = [row.city, row.region, row.country].filter(Boolean);
+							return parts.length ? escapeHtml(parts.join(', ')) : '—';
+						}
+					},
+					{
+						key: 'cf_ray',
+						label: 'CF Ray',
+						className: 'share-table-col-cf-ray',
+						render: (row) => {
+							const ray = row.cf_ray ?? '';
+							if (!ray) return '—';
+							return `<span class="share-table-cf-ray" title="Cloudflare request ID: search in Cloudflare Logs / Log Explorer to match this request">${escapeHtml(truncateStr(ray, 24))}</span>`;
+						}
+					},
+					{
+						key: 'referer',
+						label: 'Referer',
+						sortKey: 'referer',
+						className: 'share-table-col-referer',
+						render: (row) => escapeHtml(truncateStr(row.referer, 50))
+					}
+				],
+				defaultSortBy: 'viewed_at',
+				defaultSortDir: 'desc',
+				emptyMessage: 'No blog page views yet.',
+				ariaLabelPagination: 'Blog views pagination',
+				tableClassName: 'admin-table share-table anon-table'
+			});
 		} catch (err) {
 			container.innerHTML = '';
 			const error = document.createElement('div');
 			error.className = 'admin-error';
-			error.textContent = err?.message || 'Error loading blog analytics.';
+			error.textContent = 'Error loading blog views.';
 			container.appendChild(error);
 		}
 	}
 
-	renderBlogAnalytics(container, data) {
-		container.innerHTML = '';
-		const total = Number(data.total) || 0;
-		const posts = Array.isArray(data.posts) ? [...data.posts] : [];
-		const byCampaign = Array.isArray(data.byCampaign) ? [...data.byCampaign] : [];
+	async exportBlogViewsForChatGPT({ statusEl } = {}) {
+		if (this._blogExportInFlight) return;
+		this._blogExportInFlight = true;
 
-		posts.sort((a, b) => Number(b.views) - Number(a.views));
-		byCampaign.sort((a, b) => Number(b.views) - Number(a.views));
+		const setStatus = (msg) => {
+			if (statusEl) statusEl.textContent = msg || '';
+		};
 
-		const wrap = document.createElement('div');
-		wrap.className = 'blog-analytics-content';
+		try {
+			setStatus('Preparing blog views export…');
 
-		const totalP = document.createElement('p');
-		totalP.className = 'admin-detail';
-		totalP.textContent = `Total recorded views: ${total}`;
-		wrap.appendChild(totalP);
+			const limit = 200;
+			const sortBy = 'viewed_at';
+			const sortDir = 'desc';
+			let offset = 0;
+			const allItems = [];
+			let total = null;
 
-		const postsSection = document.createElement('section');
-		postsSection.className = 'admin-settings-section';
+			while (true) {
+				const params = new URLSearchParams({
+					limit: String(limit),
+					offset: String(offset),
+					sort_by: sortBy,
+					sort_dir: sortDir
+				});
+				const res = await fetch(`/admin/blog-views?${params}`, { credentials: 'include' });
+				if (!res.ok) throw new Error('Failed to load blog views.');
+				const data = await res.json();
 
-		const postsTitle = document.createElement('span');
-		postsTitle.className = 'admin-settings-section-title';
-		postsTitle.textContent = 'Posts';
-		postsSection.appendChild(postsTitle);
+				const items = Array.isArray(data?.items) ? data.items : [];
+				total = Number(data?.total) ?? total ?? 0;
+				allItems.push(...items);
 
-		if (posts.length === 0) {
-			const empty = document.createElement('div');
-			empty.className = 'admin-empty';
-			empty.textContent = 'No blog posts.';
-			postsSection.appendChild(empty);
-		} else {
-			const table = document.createElement('table');
-			table.className = 'admin-table blog-analytics-posts-table';
-			table.setAttribute('role', 'grid');
-			const thead = document.createElement('thead');
-			const thr = document.createElement('tr');
-			for (const label of ['Post', 'Slug', 'Status', 'Views']) {
-				const th = document.createElement('th');
-				th.scope = 'col';
-				th.textContent = label;
-				thr.appendChild(th);
+				if (items.length === 0) break;
+				if (total != null && allItems.length >= total) break;
+				offset += items.length;
 			}
-			thead.appendChild(thr);
-			table.appendChild(thead);
-			const tbody = document.createElement('tbody');
-			for (const p of posts) {
-				const tr = document.createElement('tr');
-				const slug = String(p.slug || '').trim();
-				const title = String(p.title || '').trim() || '—';
-				const href = slug ? `/blog/${encodeURIComponent(slug)}` : null;
-				const id = p.id;
 
-				const tdPost = document.createElement('td');
-				tdPost.className = 'blog-analytics-col-post';
-				if (href) {
-					const titleLink = document.createElement('a');
-					titleLink.href = href;
-					titleLink.textContent = title;
-					tdPost.appendChild(titleLink);
-				} else {
-					tdPost.textContent = title;
+			const payload = {
+				export_version: 1,
+				exported_at: new Date().toISOString(),
+				scope: '/analytics#blog',
+				item_count: allItems.length,
+				field_notes: [
+					'Each row is one recorded blog page view (hit).',
+					'`prsn_cid` is the Client Id from request meta (stable browser id; links across sessions when present).',
+					'`source_label` is the campaign registry label when present (Organic / In-app (feed) / Blog index / custom label); `campaign_id` is the raw id.',
+					'`post_slug` is the path segment used for the post; `post_label` is title when known.',
+					'`cf_ray` is a Cloudflare request id; use it to correlate logs.',
+					'`ip_source` is derived from headers when available.'
+				],
+				data: {
+					blogViews: allItems
 				}
-				if (id != null) {
-					tdPost.appendChild(document.createTextNode(' '));
-					const edit = document.createElement('a');
-					edit.href = `/create/blog/${id}`;
-					edit.className = 'blog-analytics-edit-link';
-					edit.textContent = 'Edit';
-					tdPost.appendChild(edit);
-				}
-				tr.appendChild(tdPost);
+			};
 
-				const tdSlug = document.createElement('td');
-				tdSlug.className = 'blog-analytics-col-slug';
-				tdSlug.textContent = slug || '—';
-				tr.appendChild(tdSlug);
-
-				const tdStatus = document.createElement('td');
-				tdStatus.textContent = String(p.status || '—');
-				tr.appendChild(tdStatus);
-
-				const tdViews = document.createElement('td');
-				tdViews.textContent = String(Number(p.views) || 0);
-				tr.appendChild(tdViews);
-
-				tbody.appendChild(tr);
-			}
-			table.appendChild(tbody);
-			postsSection.appendChild(table);
+			const text = `PARASCENE_ADMIN_EXPORT\n\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\`\n`;
+			await copyTextToClipboard(text);
+			window.__parasceneAdminChatGPTExport = text;
+			setStatus('Copied blog views export to clipboard.');
+		} catch (err) {
+			setStatus(`Export failed: ${err?.message || String(err)}`);
+		} finally {
+			this._blogExportInFlight = false;
 		}
-		wrap.appendChild(postsSection);
-
-		if (byCampaign.length > 0) {
-			const campSection = document.createElement('section');
-			campSection.className = 'admin-settings-section';
-
-			const campTitle = document.createElement('span');
-			campTitle.className = 'admin-settings-section-title';
-			campTitle.textContent = 'Views by campaign';
-			campSection.appendChild(campTitle);
-
-			const ctable = document.createElement('table');
-			ctable.className = 'admin-table blog-analytics-campaign-table';
-			ctable.setAttribute('role', 'grid');
-			const cthead = document.createElement('thead');
-			const cthr = document.createElement('tr');
-			for (const label of ['Campaign', 'Views']) {
-				const th = document.createElement('th');
-				th.scope = 'col';
-				th.textContent = label;
-				cthr.appendChild(th);
-			}
-			cthead.appendChild(cthr);
-			ctable.appendChild(cthead);
-			const cbody = document.createElement('tbody');
-			for (const row of byCampaign) {
-				const tr = document.createElement('tr');
-				const cid = row.campaign_id;
-				const label = cid == null || cid === '' ? '—' : String(cid);
-				const tdC = document.createElement('td');
-				tdC.textContent = label;
-				tr.appendChild(tdC);
-				const tdV = document.createElement('td');
-				tdV.textContent = String(Number(row.views) || 0);
-				tr.appendChild(tdV);
-				cbody.appendChild(tr);
-			}
-			ctable.appendChild(cbody);
-			campSection.appendChild(ctable);
-			wrap.appendChild(campSection);
-		}
-
-		container.appendChild(wrap);
 	}
 
 	async exportShareViewsForChatGPT({ statusEl } = {}) {

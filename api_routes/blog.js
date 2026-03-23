@@ -6,7 +6,7 @@ import { injectCommonHead, getPageTokens, getCanonicalLinkHtml } from "./utils/h
 import { buildRequestMeta } from "./utils/analytics.js";
 import { getBaseAppUrl } from "./utils/url.js";
 import { scanBlogDirectory, sortBlogPosts } from "../lib/blog/parseAndScan.js";
-import { parseBlogPathSegments } from "../lib/blog/campaignPath.js";
+import { parseBlogPathSegments, buildBlogPostPublicPath, BLOG_CAMPAIGN_INDEX } from "../lib/blog/campaignPath.js";
 
 marked.setOptions({
 	gfm: true,
@@ -240,7 +240,7 @@ function formatMergedPostsAsIndexMarkdown(posts) {
 		.map((p) => {
 			const slug = String(p.slug || "").trim();
 			const title = escapeMarkdownLinkLabel(p.title || slug);
-			return `- [${title}](/blog/${slug})`;
+			return `- [${title}](${buildBlogPostPublicPath(slug, BLOG_CAMPAIGN_INDEX)})`;
 		})
 		.join("\n");
 }
