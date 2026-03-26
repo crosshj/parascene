@@ -254,6 +254,9 @@ export async function initChatPage(root) {
 	let lastReadThreadIdForMark = null;
 	/** @type {IntersectionObserver | null} */
 	let latestMessageReadObserver = null;
+	/** @type {ReturnType<typeof setTimeout> | null} */
+	let bottomDwellTimer = null;
+	let bottomDwellThreadId = null;
 
 	const CHAT_BOTTOM_THRESHOLD_PX = 56;
 
@@ -270,6 +273,23 @@ export async function initChatPage(root) {
 		if (!Number.isFinite(tid) || tid <= 0 || !patch || typeof patch !== 'object') return;
 		const row = (chatThreads || []).find((t) => Number(t.id) === tid);
 		if (row) Object.assign(row, patch);
+	}
+
+	function clearNewMessagesRuleInDom() {
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		if (!messagesEl) return;
+		const rule = messagesEl.querySelector('.chat-page-new-messages-rule');
+		if (rule && rule.parentNode) {
+			rule.parentNode.removeChild(rule);
+		}
+	}
+
+	function teardownBottomDwellTimer() {
+		if (bottomDwellTimer != null) {
+			clearTimeout(bottomDwellTimer);
+			bottomDwellTimer = null;
+		}
+		bottomDwellThreadId = null;
 	}
 
 	/** Mark read only after the latest message row is visible (IntersectionObserver). */
@@ -300,6 +320,7 @@ export async function initChatPage(root) {
 			if (Number.isFinite(lr) && lr > 0) {
 				patchChatThreadRow(threadId, { last_read_message_id: lr, unread_count: 0 });
 			}
+			clearNewMessagesRuleInDom();
 			dispatchChatUnreadRefresh();
 			void refreshChatSidebar({ skipThreadsFetch: true });
 		} catch {
@@ -367,7 +388,27 @@ export async function initChatPage(root) {
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!messagesEl) return;
 		const dist = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight;
-		chatStickToBottom = dist <= CHAT_BOTTOM_THRESHOLD_PX;
+		const nextStick = dist <= CHAT_BOTTOM_THRESHOLD_PX;
+		const prevStick = chatStickToBottom;
+		chatStickToBottom = nextStick;
+		if (!nextStick) {
+			teardownBottomDwellTimer();
+			return;
+		}
+		// If the user stays pinned to the bottom briefly, treat that as "caught up" even if IO is flaky.
+		const threadId = activeThreadId;
+		if (!threadId) return;
+		if (prevStick && bottomDwellTimer != null && bottomDwellThreadId === threadId) {
+			return;
+		}
+		teardownBottomDwellTimer();
+		bottomDwellThreadId = threadId;
+		bottomDwellTimer = setTimeout(() => {
+			bottomDwellTimer = null;
+			if (activeThreadId !== threadId) return;
+			if (!chatStickToBottom) return;
+			void markLatestMessageRead();
+		}, 4000);
 	}
 
 	/**
@@ -379,6 +420,7 @@ export async function initChatPage(root) {
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!messagesEl) return;
 		chatStickToBottom = true;
+		teardownBottomDwellTimer();
 		const apply = () => {
 			messagesEl.scrollTop = messagesEl.scrollHeight;
 		};
@@ -434,6 +476,7 @@ export async function initChatPage(root) {
 
 	function teardownChatMessagesScrollAssist() {
 		teardownLatestMessageReadObserver();
+		teardownBottomDwellTimer();
 		if (typeof chatMessagesScrollCleanup === 'function') {
 			chatMessagesScrollCleanup();
 			chatMessagesScrollCleanup = null;
@@ -1225,6 +1268,7 @@ export async function initChatPage(root) {
 				patchChatThreadRow(threadId, { last_read_message_id: newMid, unread_count: 0 });
 				lastMarkReadSentId = newMid;
 			}
+			clearNewMessagesRuleInDom();
 			dispatchChatUnreadRefresh();
 			void refreshChatSidebar({ skipThreadsFetch: true });
 		} catch (err) {
