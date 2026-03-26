@@ -80,6 +80,15 @@ export async function runCommonAppInit() {
 		// ignore
 	}
 
+	try {
+		const v = getAssetVersionParam();
+		const qs = v ? `?v=${encodeURIComponent(v)}` : '';
+		const mod = await import(`./presenceHeartbeat.js${qs}`);
+		mod.startPresenceHeartbeat();
+	} catch {
+		// ignore
+	}
+
 	document.addEventListener(
 		'submit',
 		(e) => {

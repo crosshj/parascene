@@ -393,7 +393,12 @@ export async function openDb() {
 				const row = stmt.get(id);
 				if (!row) return undefined;
 				const meta = parseUserMeta(row.meta);
-				return { ...row, meta, suspended: meta.suspended === true };
+				return {
+					...row,
+					meta,
+					suspended: meta.suspended === true,
+					appear_offline: meta.appear_offline === true
+				};
 			}
 		},
 		selectUserByIdForLogin: {
@@ -937,6 +942,48 @@ export async function openDb() {
 				);
 				const result = stmt.run(userId);
 				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		presenceHeartbeat: {
+			run: async (userId) => {
+				const sel = db.prepare("SELECT meta FROM users WHERE id = ?");
+				const row = sel.get(userId);
+				if (!row) return Promise.resolve({ changes: 0 });
+				const meta = parseUserMeta(row.meta);
+				meta.presence_last_seen_at = new Date().toISOString();
+				const upd = db.prepare("UPDATE users SET meta = ? WHERE id = ?");
+				const result = upd.run(JSON.stringify(meta), userId);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		setUserAppearOffline: {
+			run: async (userId, appearOffline) => {
+				const sel = db.prepare("SELECT meta FROM users WHERE id = ?");
+				const row = sel.get(userId);
+				if (!row) return Promise.resolve({ changes: 0 });
+				const meta = parseUserMeta(row.meta);
+				meta.appear_offline = Boolean(appearOffline);
+				const upd = db.prepare("UPDATE users SET meta = ? WHERE id = ?");
+				const result = upd.run(JSON.stringify(meta), userId);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		listPresenceOnlineUsers: {
+			all: async (sinceIso, limit = 200) => {
+				const cap = Math.min(Math.max(1, Number(limit) || 200), 500);
+				const stmt = db.prepare(
+					`SELECT u.id AS user_id, p.user_name, p.display_name, p.avatar_url
+					 FROM users u
+					 INNER JOIN user_profiles p ON p.user_id = u.id
+					 WHERE u.role = 'consumer'
+					   AND json_extract(u.meta, '$.presence_last_seen_at') IS NOT NULL
+					   AND json_extract(u.meta, '$.presence_last_seen_at') >= ?
+					   AND (json_extract(u.meta, '$.appear_offline') IS NULL OR json_extract(u.meta, '$.appear_offline') = 0 OR json_extract(u.meta, '$.appear_offline') = 'false')
+					   AND (u.meta IS NULL OR json_extract(u.meta, '$.suspended') IS NULL OR json_extract(u.meta, '$.suspended') = 0 OR json_extract(u.meta, '$.suspended') = 'false')
+					 ORDER BY json_extract(u.meta, '$.presence_last_seen_at') DESC
+					 LIMIT ?`
+				);
+				return Promise.resolve(stmt.all(sinceIso, cap));
 			}
 		},
 		setPasswordResetToken: {

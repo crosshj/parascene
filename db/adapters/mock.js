@@ -113,7 +113,12 @@ export function openDb() {
 				if (!user) return undefined;
 				const { password_hash, ...safeUser } = user;
 				const meta = safeUser.meta != null && typeof safeUser.meta === "object" ? safeUser.meta : {};
-				return { ...safeUser, meta, suspended: meta.suspended === true };
+				return {
+					...safeUser,
+					meta,
+					suspended: meta.suspended === true,
+					appear_offline: meta.appear_offline === true
+				};
 			}
 		},
 		selectUsersByIds: async (ids) => {
@@ -445,6 +450,50 @@ export function openDb() {
 				if (last !== null && last > fifteenMinAgo) return { changes: 0 };
 				user.last_active_at = now.toISOString();
 				return { changes: 1 };
+			}
+		},
+		presenceHeartbeat: {
+			run: async (userId) => {
+				const user = users.find((u) => Number(u.id) === Number(userId));
+				if (!user) return { changes: 0 };
+				user.meta = user.meta != null && typeof user.meta === "object" ? { ...user.meta } : {};
+				user.meta.presence_last_seen_at = new Date().toISOString();
+				return { changes: 1 };
+			}
+		},
+		setUserAppearOffline: {
+			run: async (userId, appearOffline) => {
+				const user = users.find((u) => Number(u.id) === Number(userId));
+				if (!user) return { changes: 0 };
+				user.meta = user.meta != null && typeof user.meta === "object" ? { ...user.meta } : {};
+				user.meta.appear_offline = Boolean(appearOffline);
+				return { changes: 1 };
+			}
+		},
+		listPresenceOnlineUsers: {
+			all: async (sinceIso, limit = 200) => {
+				const sinceMs = Date.parse(sinceIso);
+				const cap = Math.min(Math.max(1, Number(limit) || 200), 500);
+				const out = [];
+				for (const u of users) {
+					if (u.role !== "consumer") continue;
+					const meta = u.meta != null && typeof u.meta === "object" ? u.meta : {};
+					if (meta.appear_offline === true) continue;
+					if (meta.suspended === true) continue;
+					const last = meta.presence_last_seen_at
+						? Date.parse(meta.presence_last_seen_at)
+						: NaN;
+					if (!Number.isFinite(last) || last < sinceMs) continue;
+					const prof = user_profiles.find((p) => Number(p.user_id) === Number(u.id));
+					out.push({
+						user_id: u.id,
+						user_name: prof?.user_name ?? null,
+						display_name: prof?.display_name ?? null,
+						avatar_url: prof?.avatar_url ?? null
+					});
+					if (out.length >= cap) break;
+				}
+				return out;
 			}
 		},
 		setPasswordResetToken: {

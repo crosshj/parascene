@@ -115,6 +115,7 @@ class AppModalProfile extends HTMLElement {
 		}
 
 		this.setupNsfwToggles();
+		this.setupAppearOfflineToggle();
 		this.setupApiKeyActions();
 	}
 
@@ -173,6 +174,39 @@ class AppModalProfile extends HTMLElement {
 		});
 	}
 
+	setupAppearOfflineToggle() {
+		const checkbox = this.shadowRoot.querySelector('[data-appear-offline]');
+		if (!checkbox) return;
+
+		const syncFromProfile = () => {
+			checkbox.checked = this.profileData?.appear_offline === true;
+		};
+		syncFromProfile();
+
+		checkbox.addEventListener('change', async () => {
+			const appearOffline = checkbox.checked === true;
+			try {
+				const res = await fetchJsonWithStatusDeduped(
+					'/api/presence/settings',
+					{
+						method: 'PATCH',
+						credentials: 'include',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ appear_offline: appearOffline })
+					},
+					{ windowMs: 0 }
+				);
+				if (res?.ok) {
+					if (this.profileData) this.profileData.appear_offline = appearOffline;
+				} else {
+					checkbox.checked = !appearOffline;
+				}
+			} catch {
+				checkbox.checked = !appearOffline;
+			}
+		});
+	}
+
 	/** Sync NSFW checkbox state from profile (API) and localStorage when modal opens or profile loads. */
 	syncNsfwTogglesFromStorage() {
 		const enableCheckbox = this.shadowRoot.querySelector('[data-nsfw-enable]');
@@ -186,6 +220,10 @@ class AppModalProfile extends HTMLElement {
 			obscureWrap.setAttribute('hidden', '');
 		} else {
 			obscureWrap.removeAttribute('hidden');
+		}
+		const appearOfflineBox = this.shadowRoot.querySelector('[data-appear-offline]');
+		if (appearOfflineBox) {
+			appearOfflineBox.checked = this.profileData?.appear_offline === true;
 		}
 	}
 
@@ -615,6 +653,31 @@ class AppModalProfile extends HTMLElement {
           flex-wrap: wrap;
           gap: 8px;
         }
+        .profile-presence-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin: 10px 0 0 0;
+        }
+        .profile-presence-row label {
+          margin: 0;
+          font-weight: 600;
+          color: var(--text-muted);
+          font-size: 0.9rem;
+        }
+        .profile-presence-row input[type="checkbox"] {
+          width: 18px;
+          height: 18px;
+          cursor: pointer;
+          accent-color: var(--accent);
+        }
+        .profile-presence-hint {
+          margin: 6px 0 0 0;
+          font-size: 0.85rem;
+          color: var(--text-muted);
+          line-height: 1.35;
+        }
         .profile-nsfw-toggles {
           margin-top: 20px;
           padding-top: 16px;
@@ -659,6 +722,13 @@ class AppModalProfile extends HTMLElement {
           </div>
           <div class="profile-body">
             <div class="profile-content"></div>
+            <div class="profile-presence-block">
+              <div class="profile-presence-row">
+                <label for="profile-appear-offline">Appear offline</label>
+                <input type="checkbox" id="profile-appear-offline" data-appear-offline aria-describedby="profile-appear-offline-desc" />
+              </div>
+              <p id="profile-appear-offline-desc" class="profile-presence-hint">When checked, you are hidden from the public online list.</p>
+            </div>
             <div class="profile-nsfw-toggles">
               <div class="profile-nsfw-row">
                 <label for="profile-nsfw-enable">Enable NSFW Content</label>

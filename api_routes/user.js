@@ -30,7 +30,7 @@ export default function createProfileRoutes({ queries }) {
 
 	function sanitizeUserMetaForClient(meta) {
 		if (!meta || typeof meta !== "object") return meta;
-		const { apiKeyHash: _h, ...rest } = meta;
+		const { apiKeyHash: _h, presence_last_seen_at: _p, appear_offline: _a, ...rest } = meta;
 		return rest;
 	}
 
@@ -585,6 +585,7 @@ export default function createProfileRoutes({ queries }) {
 		const enableNsfw = user.meta?.enableNsfw === true;
 		const hasApiKey = Boolean(user.meta?.apiKeyHash);
 		const apiKeyPrefix = typeof user.meta?.apiKeyPrefix === "string" ? user.meta.apiKeyPrefix : null;
+		const appearOffline = user.appear_offline === true;
 		const metaPublic = sanitizeUserMetaForClient(user.meta);
 		return res.json({
 			...user,
@@ -596,7 +597,8 @@ export default function createProfileRoutes({ queries }) {
 			welcome,
 			enableNsfw,
 			hasApiKey,
-			apiKeyPrefix
+			apiKeyPrefix,
+			appear_offline: appearOffline
 		});
 	});
 

@@ -20,6 +20,7 @@ import createTemplatesRoutes from "../api_routes/templates.js";
 import createLikesRoutes from "../api_routes/likes.js";
 import createCommentsRoutes from "../api_routes/comments.js";
 import createUserRoutes from "../api_routes/user.js";
+import createPresenceRoutes from "../api_routes/presence.js";
 import createFollowsRoutes from "../api_routes/follows.js";
 import createTodoRoutes from "../api_routes/todo.js";
 import createYoutubeRoutes from "../api_routes/youtube.js";
@@ -174,6 +175,7 @@ app.use(createWelcomeGate(queries));
 
 app.use(createSupabaseSessionRoutes({ queries }));
 app.use(createUserRoutes({ queries }));
+app.use(createPresenceRoutes({ queries }));
 app.use(createFollowsRoutes({ queries }));
 
 app.use(createAdminRoutes({ queries, storage }));

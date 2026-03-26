@@ -73,7 +73,12 @@ export function openDb() {
 				if (error) throw error;
 				if (!data) return undefined;
 				const meta = typeof data.meta === "object" && data.meta !== null ? data.meta : {};
-				return { ...data, meta, suspended: meta.suspended === true };
+				return {
+					...data,
+					meta,
+					suspended: meta.suspended === true,
+					appear_offline: meta.appear_offline === true
+				};
 			}
 		},
 		selectUserByIdForLogin: {
@@ -752,6 +757,93 @@ export function openDb() {
 					.or("last_active_at.is.null,last_active_at.lt." + new Date(Date.now() - 15 * 60 * 1000).toISOString());
 				if (error) throw error;
 				return { changes: 1 };
+			}
+		},
+		/** Presence lives in users.meta until a dedicated table exists: presence_last_seen_at (ISO), appear_offline (boolean). */
+		presenceHeartbeat: {
+			run: async (userId) => {
+				const { data: current, error: selectError } = await serviceClient
+					.from(prefixedTable("users"))
+					.select("meta")
+					.eq("id", userId)
+					.maybeSingle();
+				if (selectError) throw selectError;
+				const existing = current?.meta ?? null;
+				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
+				meta.presence_last_seen_at = new Date().toISOString();
+				const { error } = await serviceClient
+					.from(prefixedTable("users"))
+					.update({ meta })
+					.eq("id", userId);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
+		setUserAppearOffline: {
+			run: async (userId, appearOffline) => {
+				const { data: current, error: selectError } = await serviceClient
+					.from(prefixedTable("users"))
+					.select("meta")
+					.eq("id", userId)
+					.maybeSingle();
+				if (selectError) throw selectError;
+				const existing = current?.meta ?? null;
+				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
+				meta.appear_offline = Boolean(appearOffline);
+				const { error } = await serviceClient
+					.from(prefixedTable("users"))
+					.update({ meta })
+					.eq("id", userId);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
+		listPresenceOnlineUsers: {
+			all: async (sinceIso, limit = 200) => {
+				const cap = Math.min(Math.max(1, Number(limit) || 200), 500);
+				const usersTable = prefixedTable("users");
+				const profilesTable = prefixedTable("user_profiles");
+				const selectCols = `id, meta, ${profilesTable}(user_name, display_name, avatar_url)`;
+				let rows;
+				const filtered = (raw) => {
+					const out = [];
+					for (const row of raw ?? []) {
+						const meta = typeof row.meta === "object" && row.meta !== null ? row.meta : {};
+						if (meta.suspended === true) continue;
+						if (meta.appear_offline === true) continue;
+						const ts = meta.presence_last_seen_at;
+						if (typeof ts !== "string" || ts < sinceIso) continue;
+						const prof = row[profilesTable];
+						const p = Array.isArray(prof) ? prof[0] : prof;
+						if (!p) continue;
+						out.push({
+							user_id: Number(row.id),
+							user_name: p.user_name ?? null,
+							display_name: p.display_name ?? null,
+							avatar_url: p.avatar_url ?? null
+						});
+						if (out.length >= cap) break;
+					}
+					return out;
+				};
+				const primary = await serviceClient
+					.from(usersTable)
+					.select(selectCols)
+					.eq("role", "consumer")
+					.gte("meta->presence_last_seen_at", sinceIso)
+					.limit(cap * 3);
+				if (primary.error) {
+					const fallback = await serviceClient
+						.from(usersTable)
+						.select(selectCols)
+						.eq("role", "consumer")
+						.limit(Math.min(2000, cap * 20));
+					if (fallback.error) throw fallback.error;
+					rows = fallback.data;
+				} else {
+					rows = primary.data;
+				}
+				return filtered(rows);
 			}
 		},
 		setPasswordResetToken: {
