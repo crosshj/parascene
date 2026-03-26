@@ -197,6 +197,7 @@ export async function initChatPage(root) {
 	const v = getAssetVersionParam();
 	const qs = getImportQuery(v);
 	const { sendIcon, REACTION_ORDER, REACTION_ICONS, smileIcon } = await import(`../icons/svg-strings.js${qs}`);
+	const rosterMod = await import(`../shared/chatSidebarRoster.js${qs}`);
 
 	function chatReactionGetCount(val) {
 		if (typeof val === 'number' && Number.isFinite(val)) return Math.max(0, val);
@@ -238,6 +239,14 @@ export async function initChatPage(root) {
 	let chatMessagesChildListObserver = null;
 	/** @type {null | (() => void)} */
 	let chatMessagesScrollCleanup = null;
+	/** @type {ReturnType<typeof setInterval> | null} */
+	let chatSidebarPollTimer = null;
+	/** @type {null | (() => void)} */
+	let chatSidebarServersHandler = null;
+	/** @type {null | ((e: Event) => void)} */
+	let chatSidebarNavClickHandler = null;
+	/** @type {null | (() => void)} */
+	let chatSidebarPopstateHandler = null;
 
 	const CHAT_BOTTOM_THRESHOLD_PX = 56;
 
@@ -553,6 +562,161 @@ export async function initChatPage(root) {
 		}
 		chatViewerId = result.data?.viewer_id != null ? Number(result.data.viewer_id) : null;
 		chatThreads = Array.isArray(result.data?.threads) ? result.data.threads : [];
+	}
+
+	function normalizePathForCompare(p) {
+		const s = String(p || '')
+			.replace(/\/+$/, '')
+			.trim();
+		return s || '/';
+	}
+
+	function isChatHrefActive(href) {
+		const cur = normalizePathForCompare(window.location.pathname);
+		let pathOnly = href;
+		if (typeof href === 'string' && href.startsWith('/')) {
+			pathOnly = href.split('?')[0].split('#')[0];
+		} else {
+			try {
+				pathOnly = new URL(href, window.location.origin).pathname;
+			} catch {
+				return false;
+			}
+		}
+		return normalizePathForCompare(pathOnly) === cur;
+	}
+
+	async function fetchJoinedServersForChat() {
+		const result = await fetchJsonWithStatusDeduped(
+			'/api/servers',
+			{ credentials: 'include' },
+			{ windowMs: 2000 }
+		);
+		if (!result.ok) return [];
+		const servers = Array.isArray(result.data?.servers) ? result.data.servers : [];
+		return servers
+			.filter((s) => s && s.is_member)
+			.map((s) => ({
+				id: Number(s.id),
+				name: typeof s.name === 'string' ? s.name.trim() : ''
+			}))
+			.filter((s) => Number.isFinite(s.id) && s.id > 0);
+	}
+
+	async function fetchPresenceOnlineIds() {
+		try {
+			const res = await fetch('/api/presence/online', { credentials: 'include' });
+			if (!res.ok) return new Set();
+			const data = await res.json().catch(() => ({}));
+			const users = Array.isArray(data.users) ? data.users : [];
+			const set = new Set();
+			for (const u of users) {
+				const id = Number(u.user_id);
+				if (Number.isFinite(id) && id > 0) set.add(id);
+			}
+			return set;
+		} catch {
+			return new Set();
+		}
+	}
+
+	async function refreshChatSidebar(options = {}) {
+		const skipThreads = options.skipThreadsFetch === true;
+		const sidebar = document.querySelector('[data-chat-sidebar]');
+		if (!sidebar) return;
+		const chEl = sidebar.querySelector('[data-chat-sidebar-channels]');
+		const dmEl = sidebar.querySelector('[data-chat-sidebar-users]');
+		if (!chEl || !dmEl) return;
+		if (!skipThreads) {
+			try {
+				await loadChatThreads();
+			} catch {
+				chEl.innerHTML = '';
+				dmEl.innerHTML = '';
+				return;
+			}
+		}
+		const joined = await fetchJoinedServersForChat();
+		const merged = rosterMod.mergeThreadRowsWithJoinedServers(chatThreads, joined);
+		const onlineIds = await fetchPresenceOnlineIds();
+		const deps = { renderCommentAvatarHtml, getAvatarColor };
+
+		const channels = merged.filter((t) => t && t.type === 'channel');
+		const dms = merged.filter((t) => t && t.type === 'dm');
+
+		function rowHtml(t) {
+			const href = rosterMod.buildChatThreadUrl(t);
+			const active = isChatHrefActive(href);
+			const title = typeof t.title === 'string' && t.title.trim() ? t.title.trim() : 'Chat';
+			const last = t.last_message;
+			const preview =
+				last && typeof last.body === 'string'
+					? last.body.trim().replace(/\s+/g, ' ').slice(0, 120)
+					: '';
+			const avatarHtml = rosterMod.buildChatThreadRowAvatarHtml(t, deps);
+			let presenceClass = '';
+			if (t.type === 'dm') {
+				const oid = rosterMod.getDmOtherUserId(t);
+				const online = oid != null && onlineIds.has(oid);
+				presenceClass = online ? 'is-online' : 'is-offline';
+			}
+			const activeClass = active ? ' is-active' : '';
+			const pc = presenceClass ? ` ${presenceClass}` : '';
+			return `<a class="chat-page-sidebar-row${activeClass}${pc}" href="${escapeHtml(href)}">
+				${avatarHtml}
+				<div class="chat-page-sidebar-row-body">
+					<span class="chat-page-sidebar-row-title">${escapeHtml(title)}</span>
+					${preview ? `<span class="chat-page-sidebar-row-preview">${escapeHtml(preview)}</span>` : ''}
+				</div>
+			</a>`;
+		}
+
+		chEl.innerHTML = channels.length
+			? channels.map(rowHtml).join('')
+			: '<p class="chat-page-sidebar-empty">No channels yet.</p>';
+		dmEl.innerHTML = dms.length
+			? dms.map(rowHtml).join('')
+			: '<p class="chat-page-sidebar-empty">No direct messages yet.</p>';
+	}
+
+	function setupChatSidebarClientNav() {
+		const sidebar = document.querySelector('[data-chat-sidebar]');
+		if (!sidebar) return;
+
+		chatSidebarNavClickHandler = (e) => {
+			const a = e.target?.closest?.('a.chat-page-sidebar-row');
+			if (!(a instanceof HTMLAnchorElement)) return;
+			if (e.defaultPrevented) return;
+			if (e.button !== 0) return;
+			if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+			let nextUrl;
+			try {
+				nextUrl = new URL(a.href, window.location.href);
+			} catch {
+				return;
+			}
+			if (nextUrl.origin !== window.location.origin) return;
+			if (!nextUrl.pathname.startsWith('/chat')) return;
+			const cur = normalizePathForCompare(window.location.pathname);
+			const next = normalizePathForCompare(nextUrl.pathname);
+			if (cur === next) {
+				e.preventDefault();
+				return;
+			}
+			e.preventDefault();
+			history.pushState({ prsnChat: true }, '', nextUrl.pathname + nextUrl.search + nextUrl.hash);
+			void openThreadForCurrentPath().then(() => {
+				void refreshChatSidebar({ skipThreadsFetch: true });
+			});
+		};
+		sidebar.addEventListener('click', chatSidebarNavClickHandler);
+
+		chatSidebarPopstateHandler = () => {
+			void openThreadForCurrentPath().then(() => {
+				void refreshChatSidebar({ skipThreadsFetch: true });
+			});
+		};
+		window.addEventListener('popstate', chatSidebarPopstateHandler);
 	}
 
 	async function ensureThreadMetaForList(threadId) {
@@ -1045,6 +1209,23 @@ export async function initChatPage(root) {
 		closeReactionPicker();
 		teardownChatViewportSync();
 		teardownChatMessagesScrollAssist();
+		if (chatSidebarPollTimer != null) {
+			clearInterval(chatSidebarPollTimer);
+			chatSidebarPollTimer = null;
+		}
+		if (typeof chatSidebarServersHandler === 'function') {
+			document.removeEventListener('servers-updated', chatSidebarServersHandler);
+			chatSidebarServersHandler = null;
+		}
+		const sidebarNav = document.querySelector('[data-chat-sidebar]');
+		if (sidebarNav && typeof chatSidebarNavClickHandler === 'function') {
+			sidebarNav.removeEventListener('click', chatSidebarNavClickHandler);
+			chatSidebarNavClickHandler = null;
+		}
+		if (typeof chatSidebarPopstateHandler === 'function') {
+			window.removeEventListener('popstate', chatSidebarPopstateHandler);
+			chatSidebarPopstateHandler = null;
+		}
 		try {
 			delete document.documentElement.dataset.route;
 		} catch {
@@ -1069,9 +1250,15 @@ export async function initChatPage(root) {
 			void openThreadForCurrentPath().finally(() => {
 				refreshBtn.disabled = false;
 				refreshBtn.removeAttribute('aria-busy');
+				void refreshChatSidebar({ skipThreadsFetch: true });
 			});
 		});
 	}
 
 	await openThreadForCurrentPath();
+	void refreshChatSidebar({ skipThreadsFetch: true });
+	chatSidebarPollTimer = setInterval(() => void refreshChatSidebar(), 30000);
+	chatSidebarServersHandler = () => void refreshChatSidebar();
+	document.addEventListener('servers-updated', chatSidebarServersHandler);
+	setupChatSidebarClientNav();
 }
