@@ -5190,6 +5190,29 @@ body.blog-edit-page .blog-edit-route {
 	line-height: 0;
 }
 
+/* Square creation previews: videos should use the same 1×1 frame as images. */
+.connect-chat-creation-embed--square .connect-chat-creation-embed-inner.connect-chat-creation-embed-inner--video {
+	display: block;
+	position: relative;
+	width: 100%;
+	aspect-ratio: 1 / 1;
+	min-width: 0;
+	border-radius: 12px;
+	overflow: hidden;
+	line-height: 0;
+}
+
+.connect-chat-creation-embed--square .connect-chat-creation-embed-video {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	max-height: none;
+	object-fit: cover;
+	object-position: center;
+	border-radius: inherit;
+}
+
 /*
  * Square creation previews: one 1×1 frame for skeleton + image so they align on swap.
  * Image fills the frame (cover) so there’s no letterboxing vs the placeholder.

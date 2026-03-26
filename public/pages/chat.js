@@ -647,6 +647,147 @@ export async function initChatPage(root) {
 		</div>`;
 	}
 
+	/**
+	 * Update cached message + reaction footer only (avoids full `loadMessages()` so embedded videos keep playing).
+	 * @param {number} messageId
+	 * @param {string} emojiKey
+	 * @param {{ added?: boolean, count?: number } | undefined} data — JSON from POST …/reactions
+	 */
+	function applyChatReactionAfterToggle(messageId, emojiKey, data) {
+		if (!data || typeof data.count !== 'number' || !Number.isFinite(data.count)) {
+			void loadMessages();
+			return;
+		}
+		const count = Math.max(0, Math.floor(data.count));
+		const added = data.added === true;
+		const mid = Number(messageId);
+		const m = lastChatMessagesPayload.find((x) => Number(x.id) === mid);
+		if (!m) {
+			void loadMessages();
+			return;
+		}
+		m.reactions = m.reactions && typeof m.reactions === 'object' ? { ...m.reactions } : {};
+		m.viewer_reactions = Array.isArray(m.viewer_reactions) ? [...m.viewer_reactions] : [];
+		if (count > 0) {
+			m.reactions[emojiKey] = count;
+		} else {
+			delete m.reactions[emojiKey];
+		}
+		if (added) {
+			if (!m.viewer_reactions.includes(emojiKey)) m.viewer_reactions.push(emojiKey);
+		} else {
+			m.viewer_reactions = m.viewer_reactions.filter((k) => k !== emojiKey);
+		}
+		patchChatMessageReactionDom(mid, m);
+	}
+
+	function patchChatMessageReactionDom(messageId, m) {
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		if (!messagesEl) return;
+		const row = messagesEl.querySelector(`.connect-chat-msg[data-chat-message-id="${messageId}"]`);
+		if (!row) return;
+		const inner = row.querySelector('.connect-chat-msg-inner');
+		if (!inner) return;
+		const reactionHtml = buildChatReactionMetaRowHtml(m);
+		let footer = inner.querySelector('.connect-chat-msg-footer');
+		if (reactionHtml) {
+			if (!footer) {
+				footer = document.createElement('div');
+				footer.className = 'connect-chat-msg-footer';
+				inner.appendChild(footer);
+			}
+			footer.innerHTML = reactionHtml.trim();
+		} else if (footer) {
+			footer.remove();
+		}
+		if (messageHasAnyReactions(m)) {
+			row.classList.remove('connect-chat-msg--reaction-empty');
+		} else {
+			row.classList.add('connect-chat-msg--reaction-empty');
+		}
+	}
+
+	/**
+	 * Preserve embed video playback across `loadMessages()` re-renders.
+	 * Keyed by message id + video src. Best-effort: if any step fails, we simply don't restore.
+	 */
+	function captureChatVideoPlaybackStates(messagesEl) {
+		try {
+			const out = [];
+			for (const v of messagesEl.querySelectorAll('video')) {
+				if (!(v instanceof HTMLVideoElement)) continue;
+				const row = v.closest('.connect-chat-msg[data-chat-message-id]');
+				const messageId = row ? Number(row.getAttribute('data-chat-message-id')) : null;
+				if (!Number.isFinite(messageId) || messageId <= 0) continue;
+				const src = v.currentSrc || v.getAttribute('src') || '';
+				if (!src) continue;
+				const t = Number(v.currentTime);
+				if (!Number.isFinite(t) || t < 0) continue;
+				out.push({
+					messageId,
+					src,
+					currentTime: t,
+					wasPaused: v.paused,
+					muted: v.muted,
+					volume: typeof v.volume === 'number' ? v.volume : 1
+				});
+			}
+			return out;
+		} catch {
+			return [];
+		}
+	}
+
+	function restoreChatVideoPlaybackStates(messagesEl, states) {
+		if (!Array.isArray(states) || states.length === 0) return;
+		for (const s of states) {
+			const mid = Number(s?.messageId);
+			const src = typeof s?.src === 'string' ? s.src : '';
+			const t = Number(s?.currentTime);
+			const wasPaused = s?.wasPaused === true;
+			const prevMuted = s?.muted;
+			const prevVol = s?.volume;
+			if (!Number.isFinite(mid) || mid <= 0 || !src || !Number.isFinite(t) || t < 0) continue;
+			const row = messagesEl.querySelector(`.connect-chat-msg[data-chat-message-id="${mid}"]`);
+			if (!row) continue;
+			const vids = [...row.querySelectorAll('video')].filter((v) => v instanceof HTMLVideoElement);
+			if (vids.length === 0) continue;
+			const v =
+				vids.find((vv) => (vv.currentSrc || vv.getAttribute('src') || '') === src) ||
+				vids.find((vv) => (vv.currentSrc || vv.getAttribute('src') || '').includes(src)) ||
+				vids[0];
+			if (!(v instanceof HTMLVideoElement)) continue;
+
+			const apply = () => {
+				try {
+					if (typeof prevVol === 'number' && Number.isFinite(prevVol)) {
+						v.volume = Math.min(1, Math.max(0, prevVol));
+					}
+					if (typeof prevMuted === 'boolean') {
+						v.muted = prevMuted;
+					}
+					v.currentTime = t;
+					if (!wasPaused) {
+						const p = v.play();
+						if (p && typeof p.catch === 'function') p.catch(() => {});
+					}
+				} catch {
+					// ignore
+				}
+			};
+
+			if (v.readyState >= 1) {
+				apply();
+			} else {
+				const onMeta = () => {
+					v.removeEventListener('loadedmetadata', onMeta);
+					apply();
+				};
+				v.addEventListener('loadedmetadata', onMeta);
+			}
+		}
+	}
+
 	function closeReactionPicker() {
 		if (activeReactionPicker && activeReactionPicker.parentNode) {
 			activeReactionPicker.parentNode.removeChild(activeReactionPicker);
@@ -1032,6 +1173,7 @@ export async function initChatPage(root) {
 		}
 		loadingMessages = true;
 		messagesEl.setAttribute('aria-busy', 'true');
+		const prevVideoStates = captureChatVideoPlaybackStates(messagesEl);
 
 		const viewerId = chatViewerId;
 		try {
@@ -1207,6 +1349,7 @@ export async function initChatPage(root) {
 			for (const embed of messagesEl.querySelectorAll('.connect-chat-creation-embed')) {
 				trimChatCreationEmbedWhitespace(embed);
 			}
+			restoreChatVideoPlaybackStates(messagesEl, prevVideoStates);
 			setupReactionTooltipTap(messagesEl);
 			const firstUnread = messagesEl.querySelector('.connect-chat-msg.is-unread');
 			if (firstUnread) {
@@ -1284,7 +1427,7 @@ export async function initChatPage(root) {
 			const emojiKey = pill.dataset.emojiKey;
 			if (!Number.isFinite(messageId) || !emojiKey) return;
 			void toggleChatMessageReaction(messageId, emojiKey).then((res) => {
-				if (res?.ok) void loadMessages();
+				if (res?.ok) applyChatReactionAfterToggle(messageId, emojiKey, res.data);
 			});
 			return;
 		}
@@ -1309,7 +1452,7 @@ export async function initChatPage(root) {
 			if (unusedKeys.length === 0) return;
 			showReactionPicker(addBtn, messageId, unusedKeys, (mid, ek) => {
 				void toggleChatMessageReaction(mid, ek).then((res) => {
-					if (res?.ok) void loadMessages();
+					if (res?.ok) applyChatReactionAfterToggle(mid, ek, res.data);
 				});
 			});
 			return;
@@ -1334,7 +1477,7 @@ export async function initChatPage(root) {
 			const anchor = msgRow;
 			showReactionPicker(anchor, messageId, [...REACTION_ORDER], (mid, ek) => {
 				void toggleChatMessageReaction(mid, ek).then((res) => {
-					if (res?.ok) void loadMessages();
+					if (res?.ok) applyChatReactionAfterToggle(mid, ek, res.data);
 				});
 			});
 		}

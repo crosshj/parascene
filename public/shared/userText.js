@@ -844,10 +844,10 @@ export function hydrateChatCreationEmbeds(rootEl) {
 			}
 
 			if (mediaType === 'video' && videoUrl) {
-				wrap.classList.remove('connect-chat-creation-embed--square');
+				// Keep --square on video too so it matches image dimensions (CSS handles square video frame).
 				const poster = url ? ` poster="${escapeHtml(url)}"` : '';
 				/* No whitespace between tags — otherwise pre-wrap line-height creates stray text nodes and gaps. */
-				wrap.innerHTML = `<div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--video${nsfwClass}"${nsfwDataAttr}><video class="connect-chat-creation-embed-video" controls playsinline preload="metadata" src="${escapeHtml(videoUrl)}"${poster}></video></div>${titleHtml}`;
+				wrap.innerHTML = `<div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--video${nsfwClass}"${nsfwDataAttr}><video class="connect-chat-creation-embed-video" autoplay muted loop controls playsinline preload="metadata" src="${escapeHtml(videoUrl)}"${poster}></video></div>${titleHtml}`;
 				trimWhitespaceOnlyTextNodes(wrap);
 				return;
 			}
