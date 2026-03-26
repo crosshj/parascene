@@ -4337,7 +4337,8 @@ body.chat-page .chat-route {
 	padding: 8px 12px;
 	display: flex;
 	flex-direction: column;
-	gap: 10px;
+	gap: 0;
+	position: relative;
 }
 
 /* Thread open: same delayed .route-loading-spinner as elsewhere (global .route-loading-spinner) */
@@ -4967,56 +4968,63 @@ body.blog-edit-page .blog-edit-route {
 	word-break: break-word;
 }
 
-.chat-page-new-messages-rule {
-	display: flex;
-	flex-direction: row;
-	align-items: center;
-	gap: 12px;
-	margin: 18px 0;
+/* Unread highlight: per-message class, visually connected across gaps (no wrapper/overlay). */
+.connect-chat-msg.is-unread {
+	position: relative;
 	width: 100%;
 }
 
-.chat-page-new-messages-rule::before,
-.chat-page-new-messages-rule::after {
+.connect-chat-msg.is-unread::before {
 	content: '';
-	flex: 1;
-	height: 2px;
-	border-radius: 1px;
-	background: var(--border);
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	bottom: 0;
+	background: color-mix(in srgb, var(--text) 6%, transparent);
+	opacity: 1;
+	transition: opacity 2.2s ease;
+	pointer-events: none;
+	border-radius: 12px;
 }
 
-.chat-page-new-messages-rule-chip {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 4px;
-	padding: 10px 18px;
-	border-radius: 10px;
-	background: var(--surface);
-	border: 1px solid var(--border-strong);
-	box-shadow: var(--shadow);
-	flex-shrink: 0;
-	max-width: min(100%, 280px);
-	text-align: center;
+.connect-chat-msg.is-unread.is-unread-first::before {
+	border-bottom-left-radius: 0;
+	border-bottom-right-radius: 0;
 }
 
-.chat-page-new-messages-rule-label {
-	font-size: 0.8125rem;
-	font-weight: 700;
-	color: var(--text);
-	text-transform: uppercase;
-	letter-spacing: 0.05em;
-	white-space: nowrap;
+.connect-chat-msg.is-unread.is-unread-middle::before {
+	border-radius: 0;
 }
 
-.chat-page-new-messages-rule-hint {
-	font-size: 0.72rem;
-	font-weight: 500;
-	color: var(--text-muted);
-	line-height: 1.3;
+.connect-chat-msg.is-unread.is-unread-last::before {
+	border-top-left-radius: 0;
+	border-top-right-radius: 0;
+}
+
+.connect-chat-msg.is-unread.is-unread-clearing::before {
+	opacity: 0;
+}
+
+.connect-chat-msg.is-unread > * {
+	position: relative;
+	z-index: 1;
 }
 
 .connect-chat-msg {
+	display: block;
+	width: 100%;
+	max-width: 100%;
+}
+
+/* Chat page: spacing lives inside each row container so unread blocks connect cleanly. */
+.chat-page-messages .connect-chat-msg {
+	padding-top: 5px;
+	padding-bottom: 5px;
+	box-sizing: border-box;
+}
+
+.connect-chat-msg-inner {
 	display: flex;
 	flex-direction: column;
 	align-items: flex-start;
@@ -5030,7 +5038,7 @@ body.blog-edit-page .blog-edit-route {
 }
 
 /* Same sender as the message above: only the first row in the run shows meta */
-.chat-page-messages .connect-chat-msg.is-group-continue {
+.chat-page-messages .connect-chat-msg.is-group-continue .connect-chat-msg-inner {
 	margin-block-start: -4px;
 }
 

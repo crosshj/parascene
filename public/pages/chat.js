@@ -259,6 +259,24 @@ export async function initChatPage(root) {
 	let bottomDwellThreadId = null;
 
 	const CHAT_BOTTOM_THRESHOLD_PX = 56;
+	const DM_OFFLINE_GRACE_MS = 45 * 1000;
+	/** @type {Map<number, number>} */
+	const dmLastSeenOnlineAtByUserId = new Map();
+
+	function isDmConsideredOnlineWithGrace(otherUserId, onlineIds) {
+		const oid = Number(otherUserId);
+		if (!Number.isFinite(oid) || oid <= 0) return false;
+		const now = Date.now();
+		if (onlineIds && onlineIds.has(oid)) {
+			dmLastSeenOnlineAtByUserId.set(oid, now);
+			return true;
+		}
+		const last = dmLastSeenOnlineAtByUserId.get(oid);
+		if (last != null && now - last < DM_OFFLINE_GRACE_MS) {
+			return true;
+		}
+		return false;
+	}
 
 	function dispatchChatUnreadRefresh() {
 		try {
@@ -275,13 +293,25 @@ export async function initChatPage(root) {
 		if (row) Object.assign(row, patch);
 	}
 
-	function clearNewMessagesRuleInDom() {
+	function fadeOutUnreadHighlightsInDom() {
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!messagesEl) return;
-		const rule = messagesEl.querySelector('.chat-page-new-messages-rule');
-		if (rule && rule.parentNode) {
-			rule.parentNode.removeChild(rule);
+		const rows = [...messagesEl.querySelectorAll('.connect-chat-msg.is-unread')];
+		if (rows.length === 0) return;
+		for (const row of rows) {
+			row.classList.add('is-unread-clearing');
 		}
+		window.setTimeout(() => {
+			for (const row of rows) {
+				if (!row.isConnected) continue;
+				row.classList.remove('is-unread-clearing');
+				row.classList.remove('is-unread');
+				row.classList.remove('is-unread-first');
+				row.classList.remove('is-unread-middle');
+				row.classList.remove('is-unread-last');
+				row.classList.remove('is-unread-solo');
+			}
+		}, 2300);
 	}
 
 	function teardownBottomDwellTimer() {
@@ -320,7 +350,7 @@ export async function initChatPage(root) {
 			if (Number.isFinite(lr) && lr > 0) {
 				patchChatThreadRow(threadId, { last_read_message_id: lr, unread_count: 0 });
 			}
-			clearNewMessagesRuleInDom();
+			fadeOutUnreadHighlightsInDom();
 			dispatchChatUnreadRefresh();
 			void refreshChatSidebar({ skipThreadsFetch: true });
 		} catch {
@@ -367,12 +397,12 @@ export async function initChatPage(root) {
 		latestMessageReadObserver.observe(lastRow);
 	}
 
-	function scrollChatMessagesToNewDivider(ruleEl) {
+	function scrollChatMessagesToFirstUnread(unreadEl) {
 		const messagesEl = root.querySelector('[data-chat-messages]');
-		if (!messagesEl || !ruleEl) return;
+		if (!messagesEl || !unreadEl) return;
 		chatStickToBottom = false;
 		const apply = () => {
-			ruleEl.scrollIntoView({ block: 'center', behavior: 'auto' });
+			unreadEl.scrollIntoView({ block: 'center', behavior: 'auto' });
 		};
 		apply();
 		requestAnimationFrame(() => {
@@ -707,7 +737,26 @@ export async function initChatPage(root) {
 		activeReactionPicker = panel;
 	}
 
-	async function loadChatThreads() {
+	async function loadChatThreads(options = {}) {
+		const forceNetwork = options.forceNetwork === true;
+		const allowCache = options.allowCache !== false;
+
+		const cached = allowCache ? readCachedChatThreads?.() : null;
+		const needNetwork =
+			forceNetwork ||
+			!cached ||
+			isChatThreadsCacheStale?.(cached.cachedAt);
+
+		// Paint from cache immediately (sidebar can render synchronously).
+		if (cached && !forceNetwork) {
+			chatViewerId = cached.viewerId;
+			chatThreads = cached.threads;
+		}
+
+		if (!needNetwork) {
+			return { fromCache: Boolean(cached), fromNetwork: false };
+		}
+
 		const result = await fetchJsonWithStatusDeduped(
 			'/api/chat/threads',
 			{ credentials: 'include' },
@@ -719,6 +768,14 @@ export async function initChatPage(root) {
 		}
 		chatViewerId = result.data?.viewer_id != null ? Number(result.data.viewer_id) : null;
 		chatThreads = Array.isArray(result.data?.threads) ? result.data.threads : [];
+		if (chatViewerId != null && Number.isFinite(chatViewerId)) {
+			try {
+				writeCachedChatThreads?.(chatViewerId, chatThreads);
+			} catch {
+				// ignore
+			}
+		}
+		return { fromCache: Boolean(cached), fromNetwork: true };
 	}
 
 	function normalizePathForCompare(p) {
@@ -784,68 +841,90 @@ export async function initChatPage(root) {
 		const chEl = sidebar.querySelector('[data-chat-sidebar-channels]');
 		const dmEl = sidebar.querySelector('[data-chat-sidebar-users]');
 		if (!chEl || !dmEl) return;
-		if (!skipThreads) {
+
+		// Phase 1: fast paint from cache (no extra fetches) if we have nothing rendered yet.
+		if (!skipThreads && (chatThreads || []).length === 0) {
 			try {
-				await loadChatThreads();
+				await loadChatThreads({ allowCache: true, forceNetwork: false });
 			} catch {
-				chEl.innerHTML = '';
-				dmEl.innerHTML = '';
-				return;
+				// ignore: we'll handle on the network attempt below
 			}
 		}
-		const joined = await fetchJoinedServersForChat();
-		const merged = rosterMod.mergeThreadRowsWithJoinedServers(chatThreads, joined);
-		const onlineIds = await fetchPresenceOnlineIds();
+
 		const deps = { renderCommentAvatarHtml, getAvatarColor };
+		const render = (threads, joined, onlineIds) => {
+			const merged = rosterMod.mergeThreadRowsWithJoinedServers(threads, joined);
+			const channels = merged.filter((t) => t && t.type === 'channel');
+			const dms = merged.filter((t) => t && t.type === 'dm');
 
-		const channels = merged.filter((t) => t && t.type === 'channel');
-		const dms = merged.filter((t) => t && t.type === 'dm');
-
-		function rowHtml(t) {
-			const href = rosterMod.buildChatThreadUrl(t);
-			const active = isChatHrefActive(href);
-			const title = typeof t.title === 'string' && t.title.trim() ? t.title.trim() : 'Chat';
-			const last = t.last_message;
-			const preview =
-				last && typeof last.body === 'string'
-					? last.body.trim().replace(/\s+/g, ' ').slice(0, 120)
+			function rowHtml(t) {
+				const href = rosterMod.buildChatThreadUrl(t);
+				const active = isChatHrefActive(href);
+				const title = typeof t.title === 'string' && t.title.trim() ? t.title.trim() : 'Chat';
+				const last = t.last_message;
+				const preview =
+					last && typeof last.body === 'string'
+						? last.body.trim().replace(/\s+/g, ' ').slice(0, 120)
+						: '';
+				const avatarHtml = rosterMod.buildChatThreadRowAvatarHtml(t, deps);
+				let presenceClass = '';
+				if (t.type === 'dm') {
+					const oid = rosterMod.getDmOtherUserId(t);
+					const online = isDmConsideredOnlineWithGrace(oid, onlineIds);
+					presenceClass = online ? 'is-online' : 'is-offline';
+				}
+				const activeClass = active ? ' is-active' : '';
+				const pc = presenceClass ? ` ${presenceClass}` : '';
+				const unc = Number(t.unread_count);
+				const showUnread =
+					!active && Number.isFinite(unc) && unc > 0;
+				const unreadLabel = unc > 99 ? '99+' : String(unc);
+				const unreadHtml = showUnread
+					? `<span class="chat-page-sidebar-unread" aria-label="${unc} unread">${escapeHtml(unreadLabel)}</span>`
 					: '';
-			const avatarHtml = rosterMod.buildChatThreadRowAvatarHtml(t, deps);
-			let presenceClass = '';
-			if (t.type === 'dm') {
-				const oid = rosterMod.getDmOtherUserId(t);
-				const online = oid != null && onlineIds.has(oid);
-				presenceClass = online ? 'is-online' : 'is-offline';
-			}
-			const activeClass = active ? ' is-active' : '';
-			const pc = presenceClass ? ` ${presenceClass}` : '';
-			const unc = Number(t.unread_count);
-			const showUnread =
-				!active && Number.isFinite(unc) && unc > 0;
-			const unreadLabel = unc > 99 ? '99+' : String(unc);
-			const unreadHtml = showUnread
-				? `<span class="chat-page-sidebar-unread" aria-label="${unc} unread">${escapeHtml(unreadLabel)}</span>`
-				: '';
-			return `<a class="chat-page-sidebar-row${activeClass}${pc}" href="${escapeHtml(href)}">
-				${avatarHtml}
-				<div class="chat-page-sidebar-row-body">
-					<div class="chat-page-sidebar-row-title-line">
-						<span class="chat-page-sidebar-row-title">${escapeHtml(title)}</span>
-						${unreadHtml}
+				return `<a class="chat-page-sidebar-row${activeClass}${pc}" href="${escapeHtml(href)}">
+					${avatarHtml}
+					<div class="chat-page-sidebar-row-body">
+						<div class="chat-page-sidebar-row-title-line">
+							<span class="chat-page-sidebar-row-title">${escapeHtml(title)}</span>
+							${unreadHtml}
+						</div>
+						${preview ? `<span class="chat-page-sidebar-row-preview">${escapeHtml(preview)}</span>` : ''}
 					</div>
-					${preview ? `<span class="chat-page-sidebar-row-preview">${escapeHtml(preview)}</span>` : ''}
-				</div>
-			</a>`;
+				</a>`;
+			}
+
+			chEl.innerHTML = channels.length
+				? channels.map(rowHtml).join('')
+				: '<p class="chat-page-sidebar-empty">No channels yet.</p>';
+			dmEl.innerHTML = dms.length
+				? dms.map(rowHtml).join('')
+				: '<p class="chat-page-sidebar-empty">No direct messages yet.</p>';
+		};
+
+		// Fast paint (no presence/joined yet) using whatever we have.
+		render(chatThreads || [], [], new Set());
+
+		// Phase 2: hydrate with network data in parallel (threads, joined servers, presence).
+		if (skipThreads) {
+			const [joined, onlineIds] = await Promise.all([
+				fetchJoinedServersForChat(),
+				fetchPresenceOnlineIds()
+			]);
+			render(chatThreads || [], joined, onlineIds);
+			return;
 		}
 
-		chEl.innerHTML = channels.length
-			? channels.map(rowHtml).join('')
-			: '<p class="chat-page-sidebar-empty">No channels yet.</p>';
-		dmEl.innerHTML = dms.length
-			? dms.map(rowHtml).join('')
-			: '<p class="chat-page-sidebar-empty">No direct messages yet.</p>';
-		if (!skipThreads) {
+		try {
+			const [_, joined, onlineIds] = await Promise.all([
+				loadChatThreads({ allowCache: true, forceNetwork: true }),
+				fetchJoinedServersForChat(),
+				fetchPresenceOnlineIds()
+			]);
+			render(chatThreads || [], joined, onlineIds);
 			dispatchChatUnreadRefresh();
+		} catch {
+			// If network fails, keep cached render.
 		}
 	}
 
@@ -934,6 +1013,13 @@ export async function initChatPage(root) {
 				last_read_message_id: null
 			});
 		}
+		try {
+			if (chatViewerId != null && Number.isFinite(Number(chatViewerId))) {
+				writeCachedChatThreads?.(Number(chatViewerId), chatThreads);
+			}
+		} catch {
+			// ignore
+		}
 	}
 
 	async function loadMessages() {
@@ -966,11 +1052,45 @@ export async function initChatPage(root) {
 				threadMeta?.last_read_message_id != null
 					? Number(threadMeta.last_read_message_id)
 					: null;
-			const unreadCountRaw = Number(threadMeta?.unread_count);
-			const hasServerUnread =
-				Number.isFinite(unreadCountRaw) && unreadCountRaw > 0;
-			let insertedNewMessagesRule = false;
-			let sawOtherMessageInList = false;
+
+			// Compute the full visual "new" range so we can include the sender meta row even if the
+			// first unread message is a group-continue (meta shown on the previous row).
+			const unreadLogical = messages.map((m) => {
+				const mid = m?.id != null ? Number(m.id) : null;
+				const sid = m?.sender_id != null ? Number(m.sender_id) : null;
+				const isSelf =
+					Number.isFinite(viewerId) && Number.isFinite(sid) && sid === viewerId;
+				return (
+					!isSelf &&
+					Number.isFinite(mid) &&
+					mid > 0 &&
+					(lastReadBoundary == null || mid > lastReadBoundary)
+				);
+			});
+			let visualStart = unreadLogical.findIndex(Boolean);
+			let visualEnd = -1;
+			for (let i = unreadLogical.length - 1; i >= 0; i--) {
+				if (unreadLogical[i]) {
+					visualEnd = i;
+					break;
+				}
+			}
+			if (visualStart > 0) {
+				const first = messages[visualStart];
+				const prev = messages[visualStart - 1];
+				const firstSender = first?.sender_id != null ? Number(first.sender_id) : null;
+				const prevSender = prev?.sender_id != null ? Number(prev.sender_id) : null;
+				const prevIsSelf = Number.isFinite(viewerId) && Number.isFinite(prevSender) && prevSender === viewerId;
+				const sameSender =
+					Number.isFinite(firstSender) &&
+					Number.isFinite(prevSender) &&
+					firstSender === prevSender;
+				if (sameSender && !prevIsSelf) {
+					// Include the meta-bearing row (the previous message in the run).
+					visualStart = visualStart - 1;
+				}
+			}
+			const hasVisualUnreadRange = visualStart >= 0 && visualEnd >= visualStart;
 
 			if (messages.length === 0) {
 				const empty = document.createElement('div');
@@ -985,50 +1105,6 @@ export async function initChatPage(root) {
 				const midNum = Number(m.id);
 				const senderIdPre = Number(m.sender_id);
 				const isSelfPre = Number.isFinite(viewerId) && senderIdPre === viewerId;
-				let placeNewMessagesRule = false;
-				if (!insertedNewMessagesRule) {
-					if (
-						lastReadBoundary != null &&
-						Number.isFinite(midNum) &&
-						midNum > lastReadBoundary
-					) {
-						placeNewMessagesRule = true;
-					} else if (
-						lastReadBoundary == null &&
-						hasServerUnread &&
-						!isSelfPre &&
-						!sawOtherMessageInList
-					) {
-						/* No read pointer yet, but server counts unread from others — show before first other-authored row. */
-						placeNewMessagesRule = true;
-					}
-				}
-				if (placeNewMessagesRule) {
-					insertedNewMessagesRule = true;
-					const rule = document.createElement('div');
-					rule.className = 'chat-page-new-messages-rule';
-					rule.setAttribute('role', 'separator');
-					rule.setAttribute(
-						'aria-label',
-						'New messages below. Scroll down to read the latest messages.'
-					);
-					const chip = document.createElement('div');
-					chip.className = 'chat-page-new-messages-rule-chip';
-					const lbl = document.createElement('span');
-					lbl.className = 'chat-page-new-messages-rule-label';
-					lbl.textContent = 'New messages';
-					chip.appendChild(lbl);
-					const hint = document.createElement('span');
-					hint.className = 'chat-page-new-messages-rule-hint';
-					hint.setAttribute('aria-hidden', 'true');
-					hint.textContent = 'Scroll down to catch up';
-					chip.appendChild(hint);
-					rule.appendChild(chip);
-					messagesEl.appendChild(rule);
-				}
-				if (!isSelfPre) {
-					sawOtherMessageInList = true;
-				}
 				const senderId = Number(m.sender_id);
 				const isSelf = Number.isFinite(viewerId) && senderId === viewerId;
 				const prev = i > 0 ? messages[i - 1] : null;
@@ -1037,12 +1113,43 @@ export async function initChatPage(root) {
 				const row = document.createElement('div');
 				row.className = `connect-chat-msg${isSelf ? ' is-self' : ''}${sameSenderAsPrev ? ' is-group-continue' : ''}`;
 				row.setAttribute('data-chat-message-id', String(m.id));
+				const isUnread =
+					hasVisualUnreadRange &&
+					!isSelf &&
+					i >= visualStart &&
+					i <= visualEnd;
+				if (isUnread) {
+					row.classList.add('is-unread');
+					const prevMsg = i > 0 ? messages[i - 1] : null;
+					const nextMsg = i + 1 < messages.length ? messages[i + 1] : null;
+					const prevId = prevMsg?.id != null ? Number(prevMsg.id) : null;
+					const nextId = nextMsg?.id != null ? Number(nextMsg.id) : null;
+					const prevSender = prevMsg?.sender_id != null ? Number(prevMsg.sender_id) : null;
+					const nextSender = nextMsg?.sender_id != null ? Number(nextMsg.sender_id) : null;
+					const prevIsSelf = Number.isFinite(viewerId) && prevSender === viewerId;
+					const nextIsSelf = Number.isFinite(viewerId) && nextSender === viewerId;
+					const prevUnread =
+						hasVisualUnreadRange && !prevIsSelf && i - 1 >= visualStart && i - 1 <= visualEnd;
+					const nextUnread =
+						hasVisualUnreadRange && !nextIsSelf && i + 1 >= visualStart && i + 1 <= visualEnd;
+					if (!prevUnread && !nextUnread) {
+						row.classList.add('is-unread-solo');
+					} else if (!prevUnread && nextUnread) {
+						row.classList.add('is-unread-first');
+					} else if (prevUnread && nextUnread) {
+						row.classList.add('is-unread-middle');
+					} else if (prevUnread && !nextUnread) {
+						row.classList.add('is-unread-last');
+					}
+				}
 				if (i === messages.length - 1) {
 					row.setAttribute('data-chat-latest', '1');
 				}
 				if (!messageHasAnyReactions(m)) {
 					row.classList.add('connect-chat-msg--reaction-empty');
 				}
+				const inner = document.createElement('div');
+				inner.className = 'connect-chat-msg-inner';
 				const safeBody = processUserText(m.body ?? '');
 				const bubble = document.createElement('div');
 				bubble.className = 'connect-chat-msg-bubble';
@@ -1079,16 +1186,17 @@ export async function initChatPage(root) {
 					textSpan.className = 'connect-chat-msg-meta-text';
 					textSpan.textContent = lineText;
 					metaLine.appendChild(textSpan);
-					row.appendChild(metaLine);
+					inner.appendChild(metaLine);
 				}
-				row.appendChild(bubble);
+				inner.appendChild(bubble);
 				const reactionHtml = buildChatReactionMetaRowHtml(m);
 				if (reactionHtml) {
 					const footer = document.createElement('div');
 					footer.className = 'connect-chat-msg-footer';
 					footer.innerHTML = reactionHtml.trim();
-					row.appendChild(footer);
+					inner.appendChild(footer);
 				}
+				row.appendChild(inner);
 				messagesEl.appendChild(row);
 			}
 			hydrateUserTextLinks(messagesEl);
@@ -1100,9 +1208,9 @@ export async function initChatPage(root) {
 				trimChatCreationEmbedWhitespace(embed);
 			}
 			setupReactionTooltipTap(messagesEl);
-			const newRuleEl = messagesEl.querySelector('.chat-page-new-messages-rule');
-			if (newRuleEl) {
-				scrollChatMessagesToNewDivider(newRuleEl);
+			const firstUnread = messagesEl.querySelector('.connect-chat-msg.is-unread');
+			if (firstUnread) {
+				scrollChatMessagesToFirstUnread(firstUnread);
 			} else {
 				scrollChatMessagesToEnd();
 			}
@@ -1268,7 +1376,7 @@ export async function initChatPage(root) {
 				patchChatThreadRow(threadId, { last_read_message_id: newMid, unread_count: 0 });
 				lastMarkReadSentId = newMid;
 			}
-			clearNewMessagesRuleInDom();
+			fadeOutUnreadHighlightsInDom();
 			dispatchChatUnreadRefresh();
 			void refreshChatSidebar({ skipThreadsFetch: true });
 		} catch (err) {
