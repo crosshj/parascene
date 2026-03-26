@@ -469,7 +469,9 @@ class AppRouteServers extends HTMLElement {
 				type: 'channel',
 				channel_slug: slug,
 				title: `#${slug}`,
-				last_message: null
+				last_message: null,
+				unread_count: 0,
+				last_read_message_id: null
 			});
 		}
 		return [...threads, ...extras];
@@ -498,6 +500,9 @@ class AppRouteServers extends HTMLElement {
 			const preview = last && typeof last.body === 'string'
 				? last.body.trim().replace(/\s+/g, ' ').slice(0, 120)
 				: '';
+			const unc = Number(t.unread_count);
+			const showUnread = Number.isFinite(unc) && unc > 0;
+			const unreadLabel = unc > 99 ? '99+' : String(unc);
 
 			const row = document.createElement('a');
 			row.className = 'connect-chat-thread-row';
@@ -506,12 +511,20 @@ class AppRouteServers extends HTMLElement {
 			row.innerHTML = `
 				${avatarHtml}
 				<div class="connect-chat-thread-row-body">
-					<span class="connect-chat-thread-row-title">${escapeHtml(title)}</span>
+					<div class="connect-chat-thread-row-title-line">
+						<span class="connect-chat-thread-row-title">${escapeHtml(title)}</span>
+						${showUnread ? `<span class="connect-chat-thread-unread" aria-label="${unc} unread">${escapeHtml(unreadLabel)}</span>` : ''}
+					</div>
 					${preview ? `<span class="connect-chat-thread-row-preview">${escapeHtml(preview)}</span>` : ''}
 				</div>
 			`;
 			listEl.appendChild(row);
 		});
+		try {
+			document.dispatchEvent(new CustomEvent('chat-unread-refresh'));
+		} catch {
+			// ignore
+		}
 	}
 
 	async openConnectChatChannel() {

@@ -53,7 +53,9 @@ export function mergeThreadRowsWithJoinedServers(threads, joinedServers) {
 			type: 'channel',
 			channel_slug: slug,
 			title: `#${slug}`,
-			last_message: null
+			last_message: null,
+			unread_count: 0,
+			last_read_message_id: null
 		});
 	}
 	return [...list, ...extras];

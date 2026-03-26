@@ -65,6 +65,9 @@ class AppNavigation extends HTMLElement {
 		this.handleCreditsUpdated = this.handleCreditsUpdated.bind(this);
 		this.handleCreditsClaimStatus = this.handleCreditsClaimStatus.bind(this);
 		this.canClaimCredits = null; // null = unknown (no callout)
+		this.chatUnreadCount = 0;
+		this._chatUnreadPoll = null;
+		this._onChatUnreadRefresh = this._onChatUnreadRefresh.bind(this);
 		this.currentRoute = null;
 		this.routes = [];
 		this.authLinks = [];
@@ -99,6 +102,7 @@ class AppNavigation extends HTMLElement {
 		document.addEventListener('notifications-acknowledged', this.handleNotificationsUpdated);
 		document.addEventListener('credits-updated', this.handleCreditsUpdated);
 		document.addEventListener('credits-claim-status', this.handleCreditsClaimStatus);
+		document.addEventListener('chat-unread-refresh', this._onChatUnreadRefresh);
 		this.loadNotificationCount();
 		this.loadCreditsCount();
 		// Don't show credits callout until claim status is known from API.
@@ -108,6 +112,11 @@ class AppNavigation extends HTMLElement {
 		this.handleRouteChange();
 		// Defer again so route content sections (which may not be parsed yet) get display/active set and route-change is heard.
 		setTimeout(() => this.handleRouteChange(), 0);
+		this.loadChatUnreadCount();
+		if (this._chatUnreadPoll) {
+			clearInterval(this._chatUnreadPoll);
+		}
+		this._chatUnreadPoll = setInterval(() => this.loadChatUnreadCount(), 45000);
 	}
 
 	disconnectedCallback() {
@@ -117,6 +126,11 @@ class AppNavigation extends HTMLElement {
 		document.removeEventListener('notifications-acknowledged', this.handleNotificationsUpdated);
 		document.removeEventListener('credits-updated', this.handleCreditsUpdated);
 		document.removeEventListener('credits-claim-status', this.handleCreditsClaimStatus);
+		document.removeEventListener('chat-unread-refresh', this._onChatUnreadRefresh);
+		if (this._chatUnreadPoll) {
+			clearInterval(this._chatUnreadPoll);
+			this._chatUnreadPoll = null;
+		}
 	}
 
 	attributeChangedCallback(name, oldValue, newValue) {
@@ -343,6 +357,70 @@ class AppNavigation extends HTMLElement {
 				count > 0
 					? `${count} new notification${count === 1 ? '' : 's'}`
 					: 'No new notifications';
+		}
+	}
+
+	_onChatUnreadRefresh() {
+		void this.loadChatUnreadCount();
+	}
+
+	async loadChatUnreadCount() {
+		try {
+			const res = await fetch('/api/chat/unread-summary', { credentials: 'include' });
+			if (!res.ok) {
+				this.chatUnreadCount = 0;
+				this.updateChatUnreadBadgeUI();
+				return;
+			}
+			const data = await res.json().catch(() => ({}));
+			const n = Number(data?.total_unread);
+			this.chatUnreadCount = Number.isFinite(n) ? Math.max(0, n) : 0;
+			this.updateChatUnreadBadgeUI();
+		} catch {
+			this.chatUnreadCount = 0;
+			this.updateChatUnreadBadgeUI();
+		}
+	}
+
+	updateChatUnreadBadgeUI() {
+		const n = this.chatUnreadCount || 0;
+		const desk = this.querySelector('.nav-link[data-route="connect"] .nav-link-unread-badge');
+		if (desk) {
+			if (n > 0) {
+				desk.textContent = n > 99 ? '99+' : String(n);
+				desk.classList.add('has-unread');
+				desk.setAttribute('aria-label', `${n} unread chat messages`);
+			} else {
+				desk.textContent = '';
+				desk.classList.remove('has-unread');
+				desk.removeAttribute('aria-label');
+			}
+		}
+		const mob = document.querySelector(
+			'app-navigation-mobile .mobile-bottom-nav-item[data-route="connect"] .mobile-bottom-nav-unread-badge'
+		);
+		if (mob) {
+			if (n > 0) {
+				mob.textContent = n > 99 ? '99+' : String(n);
+				mob.classList.add('has-unread');
+				mob.setAttribute('aria-label', `${n} unread chat messages`);
+			} else {
+				mob.textContent = '';
+				mob.classList.remove('has-unread');
+				mob.removeAttribute('aria-label');
+			}
+		}
+		const menu = this.querySelector('.mobile-menu-nav .nav-link[data-route="connect"] .nav-link-unread-badge');
+		if (menu) {
+			if (n > 0) {
+				menu.textContent = n > 99 ? '99+' : String(n);
+				menu.classList.add('has-unread');
+				menu.setAttribute('aria-label', `${n} unread chat messages`);
+			} else {
+				menu.textContent = '';
+				menu.classList.remove('has-unread');
+				menu.removeAttribute('aria-label');
+			}
 		}
 	}
 
@@ -1132,8 +1210,12 @@ class AppNavigation extends HTMLElement {
 				${(this.routes || []).map(route => {
 				const routeId = route.id;
 				const routeLabel = route.label;
+				const chatBadge =
+					routeId === 'connect'
+						? html`<span class="nav-link-unread-badge" aria-hidden="true"></span>`
+						: '';
 				// Generate clean URL path (e.g., /feed, /explore)
-				return html`<a href="/${routeId}" class="nav-link" data-route="${routeId}">${routeLabel}</a>`;
+				return html`<a href="/${routeId}" class="nav-link" data-route="${routeId}">${routeLabel}${chatBadge}</a>`;
 				}).join('')}
 			</nav>
 			${showCreate ? html`
@@ -1224,7 +1306,11 @@ class AppNavigation extends HTMLElement {
 				${(this.routes || []).map(route => {
 				const routeId = route.id;
 				const routeLabel = route.label;
-				return html`<a href="/${routeId}" class="nav-link" data-route="${routeId}">${routeLabel}</a>`;
+				const chatBadge =
+					routeId === 'connect'
+						? html`<span class="nav-link-unread-badge" aria-hidden="true"></span>`
+						: '';
+				return html`<a href="/${routeId}" class="nav-link" data-route="${routeId}">${routeLabel}${chatBadge}</a>`;
 				}).join('')}
 				<a href="${getHelpHref("/help")}" class="mobile-menu-help">Help</a>
 			</nav>
@@ -1256,6 +1342,7 @@ class AppNavigation extends HTMLElement {
 	</aside>
 	` : ''}
     `;
+		this.updateChatUnreadBadgeUI();
 	}
 }
 

@@ -313,6 +313,28 @@ export default function createChatRoutes({ queries }) {
 		return !!data;
 	}
 
+	// GET /api/chat/unread-summary — total unread messages across threads (for nav badge)
+	router.get("/api/chat/unread-summary", async (req, res) => {
+		const userId = requireUser(req, res);
+		if (userId == null) return;
+		const sb = getSb(res);
+		if (!sb) return;
+
+		try {
+			const { data, error } = await sb.rpc("prsn_chat_unread_total", {
+				p_user_id: userId
+			});
+			if (error) throw error;
+			const raw = data;
+			const n = typeof raw === "bigint" ? Number(raw) : Number(raw);
+			const total = Number.isFinite(n) ? Math.max(0, n) : 0;
+			return res.status(200).json({ total_unread: total });
+		} catch (err) {
+			console.error("[GET /api/chat/unread-summary]", err);
+			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
+		}
+	});
+
 	// GET /api/chat/threads — threads the current user belongs to (with last message preview)
 	router.get("/api/chat/threads", async (req, res) => {
 		const userId = requireUser(req, res);
@@ -343,14 +365,20 @@ export default function createChatRoutes({ queries }) {
 			const threads = list.map((row) => {
 				const id = Number(row.thread_id);
 				const type = row.thread_type;
+				const lastMsgId = row.last_message_id != null ? Number(row.last_message_id) : null;
 				const lastMessage =
 					row.last_message_at && row.last_message_body != null
 						? {
+								id: Number.isFinite(lastMsgId) && lastMsgId > 0 ? lastMsgId : null,
 								body: String(row.last_message_body),
 								created_at: row.last_message_at,
 								sender_id: Number(row.last_sender_id)
 							}
 						: null;
+				const lastRead =
+					row.last_read_message_id != null ? Number(row.last_read_message_id) : null;
+				const uc = Number(row.unread_count);
+				const unreadCount = Number.isFinite(uc) && uc > 0 ? uc : 0;
 
 				if (type === "channel") {
 					const slug = row.channel_slug ? String(row.channel_slug) : "";
@@ -359,7 +387,9 @@ export default function createChatRoutes({ queries }) {
 						type: "channel",
 						channel_slug: slug,
 						title: slug ? `#${slug}` : "Channel",
-						last_message: lastMessage
+						last_message: lastMessage,
+						last_read_message_id: Number.isFinite(lastRead) && lastRead > 0 ? lastRead : null,
+						unread_count: unreadCount
 					};
 				}
 
@@ -381,7 +411,9 @@ export default function createChatRoutes({ queries }) {
 									avatar_url: profile?.avatar_url ?? null
 								}
 							: null,
-					last_message: lastMessage
+					last_message: lastMessage,
+					last_read_message_id: Number.isFinite(lastRead) && lastRead > 0 ? lastRead : null,
+					unread_count: unreadCount
 				};
 			});
 
@@ -581,7 +613,17 @@ export default function createChatRoutes({ queries }) {
 				return res.status(404).json({ error: "Not found", message: "Thread not found" });
 			}
 
+			const { data: memRow, error: memErr } = await sb
+				.from("prsn_chat_members")
+				.select("last_read_message_id")
+				.eq("thread_id", threadId)
+				.eq("user_id", userId)
+				.maybeSingle();
+			if (memErr) throw memErr;
+			const lr = memRow?.last_read_message_id != null ? Number(memRow.last_read_message_id) : null;
+
 			const out = { ...thread };
+			out.last_read_message_id = Number.isFinite(lr) && lr > 0 ? lr : null;
 			if (thread.type === "channel") {
 				const slug = thread.channel_slug ? String(thread.channel_slug) : "";
 				out.title = slug ? `#${slug}` : "Channel";
@@ -601,6 +643,69 @@ export default function createChatRoutes({ queries }) {
 			return res.status(200).json({ thread: out });
 		} catch (err) {
 			console.error("[GET /api/chat/threads/:threadId]", err);
+			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
+		}
+	});
+
+	// POST /api/chat/threads/:threadId/read  { last_read_message_id }
+	router.post("/api/chat/threads/:threadId/read", async (req, res) => {
+		const userId = requireUser(req, res);
+		if (userId == null) return;
+		const sb = getSb(res);
+		if (!sb) return;
+
+		const threadId = Number(req.params.threadId);
+		if (!Number.isFinite(threadId) || threadId <= 0) {
+			return res.status(400).json({ error: "Bad request", message: "Invalid thread id" });
+		}
+
+		const rawMid = req.body?.last_read_message_id ?? req.body?.lastReadMessageId;
+		const mid = Number(rawMid);
+		if (!Number.isFinite(mid) || mid <= 0) {
+			return res.status(400).json({ error: "Bad request", message: "last_read_message_id required" });
+		}
+
+		try {
+			if (!(await isMember(sb, threadId, userId))) {
+				return res.status(403).json({ error: "Forbidden", message: "Not a member of this thread" });
+			}
+
+			const { data: msg, error: msgErr } = await sb
+				.from("prsn_chat_messages")
+				.select("id")
+				.eq("id", mid)
+				.eq("thread_id", threadId)
+				.maybeSingle();
+			if (msgErr) throw msgErr;
+			if (!msg) {
+				return res.status(404).json({ error: "Not found", message: "Message not found in this thread" });
+			}
+
+			const { data: memRow, error: memSelErr } = await sb
+				.from("prsn_chat_members")
+				.select("last_read_message_id")
+				.eq("thread_id", threadId)
+				.eq("user_id", userId)
+				.maybeSingle();
+			if (memSelErr) throw memSelErr;
+			const prev = memRow?.last_read_message_id != null ? Number(memRow.last_read_message_id) : null;
+			if (prev != null && mid < prev) {
+				return res.status(200).json({
+					ok: true,
+					last_read_message_id: prev
+				});
+			}
+
+			const { error: upErr } = await sb
+				.from("prsn_chat_members")
+				.update({ last_read_message_id: mid })
+				.eq("thread_id", threadId)
+				.eq("user_id", userId);
+			if (upErr) throw upErr;
+
+			return res.status(200).json({ ok: true, last_read_message_id: mid });
+		} catch (err) {
+			console.error("[POST /api/chat/threads/:threadId/read]", err);
 			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
 		}
 	});
@@ -719,6 +824,15 @@ export default function createChatRoutes({ queries }) {
 			if (ins.error) throw ins.error;
 
 			if (ins.data?.id != null) {
+				const newId = Number(ins.data.id);
+				if (Number.isFinite(newId) && newId > 0) {
+					const { error: readErr } = await sb
+						.from("prsn_chat_members")
+						.update({ last_read_message_id: newId })
+						.eq("thread_id", threadId)
+						.eq("user_id", userId);
+					if (readErr) throw readErr;
+				}
 				void broadcastRoomDirty(threadId, ins.data.id);
 				const mem = await sb
 					.from("prsn_chat_members")

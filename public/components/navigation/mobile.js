@@ -176,7 +176,7 @@ class AppNavigationMobile extends HTMLElement {
             </svg>
             <span class="mobile-bottom-nav-text" aria-hidden="true">Creations</span>
           </button>
-          <button class="mobile-bottom-nav-item" data-route="connect" aria-label="Connect">
+          <button class="mobile-bottom-nav-item mobile-bottom-nav-item--connect" type="button" data-route="connect" aria-label="Connect">
             <svg class="mobile-bottom-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <circle cx="18" cy="5" r="3"></circle>
               <circle cx="6" cy="12" r="3"></circle>
@@ -185,6 +185,7 @@ class AppNavigationMobile extends HTMLElement {
               <line x1="8.6" y1="13.5" x2="15.5" y2="17.1"></line>
             </svg>
             <span class="mobile-bottom-nav-text" aria-hidden="true">Connect</span>
+            <span class="mobile-bottom-nav-unread-badge" aria-hidden="true"></span>
           </button>
         </div>
       </div>

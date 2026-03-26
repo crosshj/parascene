@@ -250,7 +250,118 @@ export async function initChatPage(root) {
 	/** @type {null | (() => void)} */
 	let chatSidebarVisibilityHandler = null;
 
+	let lastMarkReadSentId = null;
+	let lastReadThreadIdForMark = null;
+	/** @type {IntersectionObserver | null} */
+	let latestMessageReadObserver = null;
+
 	const CHAT_BOTTOM_THRESHOLD_PX = 56;
+
+	function dispatchChatUnreadRefresh() {
+		try {
+			document.dispatchEvent(new CustomEvent('chat-unread-refresh'));
+		} catch {
+			// ignore
+		}
+	}
+
+	function patchChatThreadRow(threadId, patch) {
+		const tid = Number(threadId);
+		if (!Number.isFinite(tid) || tid <= 0 || !patch || typeof patch !== 'object') return;
+		const row = (chatThreads || []).find((t) => Number(t.id) === tid);
+		if (row) Object.assign(row, patch);
+	}
+
+	/** Mark read only after the latest message row is visible (IntersectionObserver). */
+	async function markLatestMessageRead() {
+		const threadId = activeThreadId;
+		if (!threadId || loadingMessages) return;
+		const messages = lastChatMessagesPayload;
+		if (!Array.isArray(messages) || messages.length === 0) return;
+		const last = messages[messages.length - 1];
+		const mid = Number(last?.id);
+		if (!Number.isFinite(mid) || mid <= 0) return;
+		if (lastMarkReadSentId === mid) return;
+		lastMarkReadSentId = mid;
+		try {
+			const res = await fetch(`/api/chat/threads/${threadId}/read`, {
+				method: 'POST',
+				credentials: 'include',
+				headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+				body: JSON.stringify({ last_read_message_id: mid })
+			});
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				lastMarkReadSentId = null;
+				return;
+			}
+			const lr =
+				data?.last_read_message_id != null ? Number(data.last_read_message_id) : mid;
+			if (Number.isFinite(lr) && lr > 0) {
+				patchChatThreadRow(threadId, { last_read_message_id: lr, unread_count: 0 });
+			}
+			dispatchChatUnreadRefresh();
+			void refreshChatSidebar({ skipThreadsFetch: true });
+		} catch {
+			lastMarkReadSentId = null;
+		}
+	}
+
+	function teardownLatestMessageReadObserver() {
+		if (latestMessageReadObserver) {
+			try {
+				latestMessageReadObserver.disconnect();
+			} catch {
+				// ignore
+			}
+			latestMessageReadObserver = null;
+		}
+	}
+
+	function setupLatestMessageReadObserver() {
+		teardownLatestMessageReadObserver();
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		if (!messagesEl || typeof IntersectionObserver === 'undefined') return;
+		const lastRow = messagesEl.querySelector('.connect-chat-msg[data-chat-latest="1"]');
+		if (!lastRow) return;
+
+		latestMessageReadObserver = new IntersectionObserver(
+			(entries) => {
+				for (const e of entries) {
+					if (
+						e.target === lastRow &&
+						e.isIntersecting &&
+						e.intersectionRatio >= 0.42
+					) {
+						void markLatestMessageRead();
+					}
+				}
+			},
+			{
+				root: messagesEl,
+				rootMargin: '0px 0px -12px 0px',
+				threshold: [0, 0.1, 0.2, 0.35, 0.42, 0.5, 0.65, 0.85, 1]
+			}
+		);
+		latestMessageReadObserver.observe(lastRow);
+	}
+
+	function scrollChatMessagesToNewDivider(ruleEl) {
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		if (!messagesEl || !ruleEl) return;
+		chatStickToBottom = false;
+		const apply = () => {
+			ruleEl.scrollIntoView({ block: 'center', behavior: 'auto' });
+		};
+		apply();
+		requestAnimationFrame(() => {
+			apply();
+			requestAnimationFrame(() => {
+				apply();
+				updateChatStickToBottomFromScroll();
+			});
+		});
+	}
 
 	function updateChatStickToBottomFromScroll() {
 		const messagesEl = root.querySelector('[data-chat-messages]');
@@ -322,6 +433,7 @@ export async function initChatPage(root) {
 	}
 
 	function teardownChatMessagesScrollAssist() {
+		teardownLatestMessageReadObserver();
 		if (typeof chatMessagesScrollCleanup === 'function') {
 			chatMessagesScrollCleanup();
 			chatMessagesScrollCleanup = null;
@@ -664,10 +776,20 @@ export async function initChatPage(root) {
 			}
 			const activeClass = active ? ' is-active' : '';
 			const pc = presenceClass ? ` ${presenceClass}` : '';
+			const unc = Number(t.unread_count);
+			const showUnread =
+				!active && Number.isFinite(unc) && unc > 0;
+			const unreadLabel = unc > 99 ? '99+' : String(unc);
+			const unreadHtml = showUnread
+				? `<span class="chat-page-sidebar-unread" aria-label="${unc} unread">${escapeHtml(unreadLabel)}</span>`
+				: '';
 			return `<a class="chat-page-sidebar-row${activeClass}${pc}" href="${escapeHtml(href)}">
 				${avatarHtml}
 				<div class="chat-page-sidebar-row-body">
-					<span class="chat-page-sidebar-row-title">${escapeHtml(title)}</span>
+					<div class="chat-page-sidebar-row-title-line">
+						<span class="chat-page-sidebar-row-title">${escapeHtml(title)}</span>
+						${unreadHtml}
+					</div>
 					${preview ? `<span class="chat-page-sidebar-row-preview">${escapeHtml(preview)}</span>` : ''}
 				</div>
 			</a>`;
@@ -679,6 +801,9 @@ export async function initChatPage(root) {
 		dmEl.innerHTML = dms.length
 			? dms.map(rowHtml).join('')
 			: '<p class="chat-page-sidebar-empty">No direct messages yet.</p>';
+		if (!skipThreads) {
+			dispatchChatUnreadRefresh();
+		}
 	}
 
 	function setupChatSidebarClientNav() {
@@ -737,7 +862,9 @@ export async function initChatPage(root) {
 				id: tid,
 				type: 'channel',
 				channel_slug: slug,
-				title: typeof t.title === 'string' && t.title.trim() ? t.title.trim() : `#${slug}`
+				title: typeof t.title === 'string' && t.title.trim() ? t.title.trim() : `#${slug}`,
+				unread_count: 0,
+				last_read_message_id: null
 			});
 		} else if (t.type === 'dm' && t.dm_pair_key) {
 			const otherId = otherUserIdFromDmPair(t.dm_pair_key, viewerId);
@@ -751,10 +878,18 @@ export async function initChatPage(root) {
 						? t.title.trim()
 						: otherId != null
 							? `User ${otherId}`
-							: 'Chat'
+							: 'Chat',
+				unread_count: 0,
+				last_read_message_id: null
 			});
 		} else {
-			chatThreads.push({ id: tid, type: t.type || 'dm', title: 'Chat' });
+			chatThreads.push({
+				id: tid,
+				type: t.type || 'dm',
+				title: 'Chat',
+				unread_count: 0,
+				last_read_message_id: null
+			});
 		}
 	}
 
@@ -762,6 +897,10 @@ export async function initChatPage(root) {
 		const threadId = activeThreadId;
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!threadId || !messagesEl || loadingMessages) return;
+		if (threadId !== lastReadThreadIdForMark) {
+			lastReadThreadIdForMark = threadId;
+			lastMarkReadSentId = null;
+		}
 		loadingMessages = true;
 		messagesEl.setAttribute('aria-busy', 'true');
 
@@ -776,7 +915,19 @@ export async function initChatPage(root) {
 			}
 			const messages = Array.isArray(data.messages) ? data.messages : [];
 			lastChatMessagesPayload = messages;
+			teardownLatestMessageReadObserver();
 			messagesEl.innerHTML = '';
+
+			const threadMeta = (chatThreads || []).find((t) => Number(t.id) === threadId);
+			const lastReadBoundary =
+				threadMeta?.last_read_message_id != null
+					? Number(threadMeta.last_read_message_id)
+					: null;
+			const unreadCountRaw = Number(threadMeta?.unread_count);
+			const hasServerUnread =
+				Number.isFinite(unreadCountRaw) && unreadCountRaw > 0;
+			let insertedNewMessagesRule = false;
+			let sawOtherMessageInList = false;
 
 			if (messages.length === 0) {
 				const empty = document.createElement('div');
@@ -788,6 +939,53 @@ export async function initChatPage(root) {
 
 			for (let i = 0; i < messages.length; i++) {
 				const m = messages[i];
+				const midNum = Number(m.id);
+				const senderIdPre = Number(m.sender_id);
+				const isSelfPre = Number.isFinite(viewerId) && senderIdPre === viewerId;
+				let placeNewMessagesRule = false;
+				if (!insertedNewMessagesRule) {
+					if (
+						lastReadBoundary != null &&
+						Number.isFinite(midNum) &&
+						midNum > lastReadBoundary
+					) {
+						placeNewMessagesRule = true;
+					} else if (
+						lastReadBoundary == null &&
+						hasServerUnread &&
+						!isSelfPre &&
+						!sawOtherMessageInList
+					) {
+						/* No read pointer yet, but server counts unread from others — show before first other-authored row. */
+						placeNewMessagesRule = true;
+					}
+				}
+				if (placeNewMessagesRule) {
+					insertedNewMessagesRule = true;
+					const rule = document.createElement('div');
+					rule.className = 'chat-page-new-messages-rule';
+					rule.setAttribute('role', 'separator');
+					rule.setAttribute(
+						'aria-label',
+						'New messages below. Scroll down to read the latest messages.'
+					);
+					const chip = document.createElement('div');
+					chip.className = 'chat-page-new-messages-rule-chip';
+					const lbl = document.createElement('span');
+					lbl.className = 'chat-page-new-messages-rule-label';
+					lbl.textContent = 'New messages';
+					chip.appendChild(lbl);
+					const hint = document.createElement('span');
+					hint.className = 'chat-page-new-messages-rule-hint';
+					hint.setAttribute('aria-hidden', 'true');
+					hint.textContent = 'Scroll down to catch up';
+					chip.appendChild(hint);
+					rule.appendChild(chip);
+					messagesEl.appendChild(rule);
+				}
+				if (!isSelfPre) {
+					sawOtherMessageInList = true;
+				}
 				const senderId = Number(m.sender_id);
 				const isSelf = Number.isFinite(viewerId) && senderId === viewerId;
 				const prev = i > 0 ? messages[i - 1] : null;
@@ -796,6 +994,9 @@ export async function initChatPage(root) {
 				const row = document.createElement('div');
 				row.className = `connect-chat-msg${isSelf ? ' is-self' : ''}${sameSenderAsPrev ? ' is-group-continue' : ''}`;
 				row.setAttribute('data-chat-message-id', String(m.id));
+				if (i === messages.length - 1) {
+					row.setAttribute('data-chat-latest', '1');
+				}
 				if (!messageHasAnyReactions(m)) {
 					row.classList.add('connect-chat-msg--reaction-empty');
 				}
@@ -856,7 +1057,15 @@ export async function initChatPage(root) {
 				trimChatCreationEmbedWhitespace(embed);
 			}
 			setupReactionTooltipTap(messagesEl);
-			scrollChatMessagesToEnd();
+			const newRuleEl = messagesEl.querySelector('.chat-page-new-messages-rule');
+			if (newRuleEl) {
+				scrollChatMessagesToNewDivider(newRuleEl);
+			} else {
+				scrollChatMessagesToEnd();
+			}
+			window.setTimeout(() => {
+				setupLatestMessageReadObserver();
+			}, 550);
 		} catch (err) {
 			console.error('[Chat page] messages:', err);
 			messagesEl.innerHTML = renderEmptyError(err?.message || 'Could not load messages.');
@@ -1010,6 +1219,14 @@ export async function initChatPage(root) {
 			}
 			bodyInput.value = '';
 			await loadMessages();
+			const tail = lastChatMessagesPayload[lastChatMessagesPayload.length - 1];
+			const newMid = tail?.id != null ? Number(tail.id) : null;
+			if (Number.isFinite(newMid) && newMid > 0) {
+				patchChatThreadRow(threadId, { last_read_message_id: newMid, unread_count: 0 });
+				lastMarkReadSentId = newMid;
+			}
+			dispatchChatUnreadRefresh();
+			void refreshChatSidebar({ skipThreadsFetch: true });
 		} catch (err) {
 			console.error('[Chat page] send:', err);
 			if (errEl instanceof HTMLElement) {
@@ -1263,6 +1480,7 @@ export async function initChatPage(root) {
 
 	await openThreadForCurrentPath();
 	void refreshChatSidebar({ skipThreadsFetch: true });
+	dispatchChatUnreadRefresh();
 	/** Poll often enough that DM online/offline styling tracks presence without feeling stuck. */
 	chatSidebarPollTimer = setInterval(() => void refreshChatSidebar(), 15000);
 	chatSidebarServersHandler = () => void refreshChatSidebar();
