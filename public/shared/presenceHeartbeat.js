@@ -3,7 +3,8 @@
  * Server treats users as “online” if meta.presence_last_seen_at is within a short window.
  */
 
-const HEARTBEAT_INTERVAL_MS = 90 * 1000;
+/** Keep under the server “online” window (e.g. 3 min) so status stays fresh without spamming the API. */
+const HEARTBEAT_INTERVAL_MS = 60 * 1000;
 let _timer = null;
 let _started = false;
 
@@ -41,4 +42,20 @@ export function startPresenceHeartbeat() {
 			void sendPresenceHeartbeat();
 		}
 	});
+
+	/** Clear server presence when the page is discarded (best-effort; not guaranteed on crash/kill). */
+	const sendPresenceAway = () => {
+		try {
+			fetch('/api/presence/away', {
+				method: 'POST',
+				credentials: 'same-origin',
+				keepalive: true,
+				headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+				body: '{}'
+			});
+		} catch {
+			// ignore
+		}
+	};
+	window.addEventListener('pagehide', sendPresenceAway);
 }

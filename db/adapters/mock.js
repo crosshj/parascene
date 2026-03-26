@@ -461,6 +461,15 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		presenceClear: {
+			run: async (userId) => {
+				const user = users.find((u) => Number(u.id) === Number(userId));
+				if (!user) return { changes: 0 };
+				user.meta = user.meta != null && typeof user.meta === "object" ? { ...user.meta } : {};
+				delete user.meta.presence_last_seen_at;
+				return { changes: 1 };
+			}
+		},
 		setUserAppearOffline: {
 			run: async (userId, appearOffline) => {
 				const user = users.find((u) => Number(u.id) === Number(userId));

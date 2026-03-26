@@ -247,6 +247,8 @@ export async function initChatPage(root) {
 	let chatSidebarNavClickHandler = null;
 	/** @type {null | (() => void)} */
 	let chatSidebarPopstateHandler = null;
+	/** @type {null | (() => void)} */
+	let chatSidebarVisibilityHandler = null;
 
 	const CHAT_BOTTOM_THRESHOLD_PX = 56;
 
@@ -1226,6 +1228,10 @@ export async function initChatPage(root) {
 			window.removeEventListener('popstate', chatSidebarPopstateHandler);
 			chatSidebarPopstateHandler = null;
 		}
+		if (typeof chatSidebarVisibilityHandler === 'function') {
+			document.removeEventListener('visibilitychange', chatSidebarVisibilityHandler);
+			chatSidebarVisibilityHandler = null;
+		}
 		try {
 			delete document.documentElement.dataset.route;
 		} catch {
@@ -1257,8 +1263,14 @@ export async function initChatPage(root) {
 
 	await openThreadForCurrentPath();
 	void refreshChatSidebar({ skipThreadsFetch: true });
-	chatSidebarPollTimer = setInterval(() => void refreshChatSidebar(), 30000);
+	/** Poll often enough that DM online/offline styling tracks presence without feeling stuck. */
+	chatSidebarPollTimer = setInterval(() => void refreshChatSidebar(), 15000);
 	chatSidebarServersHandler = () => void refreshChatSidebar();
 	document.addEventListener('servers-updated', chatSidebarServersHandler);
+	chatSidebarVisibilityHandler = () => {
+		if (document.visibilityState !== 'visible') return;
+		void refreshChatSidebar({ skipThreadsFetch: true });
+	};
+	document.addEventListener('visibilitychange', chatSidebarVisibilityHandler);
 	setupChatSidebarClientNav();
 }

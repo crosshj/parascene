@@ -779,6 +779,25 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		presenceClear: {
+			run: async (userId) => {
+				const { data: current, error: selectError } = await serviceClient
+					.from(prefixedTable("users"))
+					.select("meta")
+					.eq("id", userId)
+					.maybeSingle();
+				if (selectError) throw selectError;
+				const existing = current?.meta ?? null;
+				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
+				delete meta.presence_last_seen_at;
+				const { error } = await serviceClient
+					.from(prefixedTable("users"))
+					.update({ meta })
+					.eq("id", userId);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
 		setUserAppearOffline: {
 			run: async (userId, appearOffline) => {
 				const { data: current, error: selectError } = await serviceClient

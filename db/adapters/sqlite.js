@@ -956,6 +956,18 @@ export async function openDb() {
 				return Promise.resolve({ changes: result.changes });
 			}
 		},
+		presenceClear: {
+			run: async (userId) => {
+				const sel = db.prepare("SELECT meta FROM users WHERE id = ?");
+				const row = sel.get(userId);
+				if (!row) return Promise.resolve({ changes: 0 });
+				const meta = parseUserMeta(row.meta);
+				delete meta.presence_last_seen_at;
+				const upd = db.prepare("UPDATE users SET meta = ? WHERE id = ?");
+				const result = upd.run(JSON.stringify(meta), userId);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
 		setUserAppearOffline: {
 			run: async (userId, appearOffline) => {
 				const sel = db.prepare("SELECT meta FROM users WHERE id = ?");

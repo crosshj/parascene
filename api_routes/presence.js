@@ -1,7 +1,7 @@
 import express from "express";
 
-/** Recent window for “online” (matches client heartbeat interval). */
-const PRESENCE_ONLINE_WINDOW_MS = 3 * 60 * 1000;
+/** How long after the last heartbeat someone still counts as online (tune vs heartbeat interval in presenceHeartbeat.js). */
+const PRESENCE_ONLINE_WINDOW_MS = 2 * 60 * 1000;
 
 export default function createPresenceRoutes({ queries }) {
 	const router = express.Router();
@@ -35,6 +35,24 @@ export default function createPresenceRoutes({ queries }) {
 			return res.json({ ok: true });
 		} catch (err) {
 			console.warn("[presence] heartbeat", err?.message || err);
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
+	/** Best-effort: clear presence when the client tab is going away (paired with pagehide + fetch keepalive). */
+	router.post("/api/presence/away", async (req, res) => {
+		const userId = req.auth?.userId;
+		if (!userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+		if (!queries.presenceClear?.run) {
+			return res.status(501).json({ error: "Not available" });
+		}
+		try {
+			await queries.presenceClear.run(userId);
+			return res.json({ ok: true });
+		} catch (err) {
+			console.warn("[presence] away", err?.message || err);
 			return res.status(500).json({ error: "Internal server error" });
 		}
 	});
