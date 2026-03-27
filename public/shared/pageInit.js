@@ -72,7 +72,7 @@ export async function runCommonAppInit() {
 	try {
 		if (typeof window !== 'undefined' && window.__PRSN_SUPABASE__) {
 			const v = getAssetVersionParam();
-			const qs = v ? `?v=${encodeURIComponent(v)}` : '';
+			const qs = getImportQuery(v);
 			const mod = await import(`./supabaseBrowser.js${qs}`);
 			await mod.ensureSupabaseSessionForApp();
 		}
@@ -99,7 +99,7 @@ export async function runCommonAppInit() {
 			void (async () => {
 				try {
 					const v = getAssetVersionParam();
-					const qs = v ? `?v=${encodeURIComponent(v)}` : '';
+					const qs = getImportQuery(v);
 					const mod = await import(`./supabaseBrowser.js${qs}`);
 					await mod.signOutSupabaseIfConfigured();
 				} catch {

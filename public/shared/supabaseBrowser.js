@@ -8,7 +8,8 @@ import { createClient } from '@supabase/supabase-js';
 /** Set to false (or remove logs) once Phase 1 / Realtime is validated. */
 const PRSN_DEBUG_SUPABASE_SESSION = true;
 
-let _client = null;
+/** Same GoTrue client across all loads of this file (bare URL vs `?v=` cache-bust are different module instances). */
+const BROWSER_CLIENT_KEY = '__PRSN_SUPABASE_BROWSER_CLIENT__';
 
 export function getSupabaseBrowserConfig() {
 	try {
@@ -25,17 +26,22 @@ export function getSupabaseBrowserConfig() {
 export function getSupabaseBrowserClient() {
 	const cfg = getSupabaseBrowserConfig();
 	if (!cfg) return null;
-	if (!_client) {
-		_client = createClient(cfg.url, cfg.anonKey, {
-			auth: {
-				autoRefreshToken: true,
-				persistSession: true,
-				detectSessionInUrl: false,
-				storage: typeof window !== 'undefined' ? window.localStorage : undefined
-			}
-		});
+	const w = typeof window !== 'undefined' ? window : null;
+	if (w && w[BROWSER_CLIENT_KEY]) {
+		return w[BROWSER_CLIENT_KEY];
 	}
-	return _client;
+	const client = createClient(cfg.url, cfg.anonKey, {
+		auth: {
+			autoRefreshToken: true,
+			persistSession: true,
+			detectSessionInUrl: false,
+			storage: w ? w.localStorage : undefined
+		}
+	});
+	if (w) {
+		w[BROWSER_CLIENT_KEY] = client;
+	}
+	return client;
 }
 
 /**
