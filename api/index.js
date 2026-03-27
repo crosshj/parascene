@@ -196,7 +196,7 @@ app.use(createTemplatesRoutes({ queries }));
 app.use(createBlogRoutes({ pagesDir, queries }));
 app.use(createBlogAdminRoutes({ queries }));
 app.use(createHelpRoutes({ pagesDir, queries }));
-app.use(createPageRoutes({ queries, pagesDir, staticDir }));
+app.use(createPageRoutes({ queries, pagesDir, staticDir, storage }));
 app.use(createTodoRoutes());
 app.use(createPolicyRoutes());
 app.use(createTryRoutes({ queries, storage }));

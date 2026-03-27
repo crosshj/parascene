@@ -16,7 +16,7 @@ function getPageForUser(user) {
 	return roleToPage[user.role] || "app.html";
 }
 
-export default function createPageRoutes({ queries, pagesDir, staticDir }) {
+export default function createPageRoutes({ queries, pagesDir, staticDir, storage }) {
 	const router = express.Router();
 
 	// Serve create page CSS so it loads when static middleware isn't used (e.g. Vercel)
@@ -107,6 +107,44 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 
 	function serializeInlineScript(value) {
 		return JSON.stringify(value).replace(/</g, "\\u003c");
+	}
+
+	function parseImageMeta(rawMeta) {
+		if (!rawMeta) return null;
+		if (typeof rawMeta === "object") return rawMeta;
+		if (typeof rawMeta !== "string") return null;
+		try {
+			return JSON.parse(rawMeta);
+		} catch {
+			return null;
+		}
+	}
+
+	function buildCreationDetailHeroMediaHtml(image) {
+		const status = typeof image?.status === "string" ? image.status : "completed";
+		const meta = parseImageMeta(image?.meta);
+		const mediaType = typeof image?.media_type === "string"
+			? image.media_type
+			: (typeof meta?.media_type === "string" ? meta.media_type : "image");
+		const imageUrl = typeof image?.url === "string" && image.url.trim()
+			? image.url.trim()
+			: (typeof image?.file_path === "string" && image.file_path.trim()
+				? image.file_path.trim()
+				: (typeof storage?.getImageUrl === "function" && typeof image?.filename === "string" && image.filename.trim()
+					? storage.getImageUrl(image.filename.trim())
+					: ""));
+		const canRenderSsrImage = status === "completed" && mediaType === "image" && imageUrl.length > 0;
+		const imageSrcAttr = canRenderSsrImage ? ` src="${escapeHtml(imageUrl)}"` : "";
+		const currentUrlAttr = canRenderSsrImage ? ` data-current-url="${escapeHtml(imageUrl)}"` : "";
+		const imagePriorityAttrs = canRenderSsrImage ? ` loading="eager" fetchpriority="high" decoding="async"` : "";
+		return `<img class="creation-detail-image" data-image alt="Creation"${imageSrcAttr}${currentUrlAttr}${imagePriorityAttrs} />
+					<video class="creation-detail-image" data-video playsinline muted style="display: none;"></video>`;
+	}
+
+	function injectCreationDetailHeroMedia(pageHtml, image) {
+		const defaultHeroMediaRe = /<img class="creation-detail-image" data-image alt="Creation"\s*\/>\s*<video class="creation-detail-image" data-video playsinline muted style="display: none;"><\/video>/;
+		const injected = String(pageHtml ?? "").replace(defaultHeroMediaRe, buildCreationDetailHeroMediaHtml(image));
+		return injected;
 	}
 
 	// External share page (unauthed, unfurl-first).
@@ -915,6 +953,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir }) {
 				"<!--APP_MOBILE_BOTTOM_NAV-->",
 				includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
 			);
+			pageHtml = injectCreationDetailHeroMedia(pageHtml, image);
 
 			pageHtml = injectCommonHead(pageHtml, getPageTokens(req));
 

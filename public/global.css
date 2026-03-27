@@ -5182,8 +5182,27 @@ body.blog-edit-page .blog-edit-route {
 	gap: 0;
 }
 
+.connect-chat-msg-bubble:has(.connect-chat-youtube-embed) {
+	border: none;
+	background: transparent;
+	padding: 0;
+	box-shadow: none;
+	align-self: stretch;
+	width: 100%;
+	max-width: min(92vw, 680px);
+	min-width: 0;
+	box-sizing: border-box;
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+}
+
 /* Pull reactions closer to the preview (default row gap + footer margin stacked too much) */
 .connect-chat-msg:has(.connect-chat-msg-bubble:has(.connect-chat-creation-embed)) {
+	gap: 2px;
+}
+
+.connect-chat-msg:has(.connect-chat-msg-bubble:has(.connect-chat-youtube-embed)) {
 	gap: 2px;
 }
 
@@ -5193,7 +5212,21 @@ body.blog-edit-page .blog-edit-route {
 	padding-bottom: 0;
 }
 
+.connect-chat-msg-bubble:has(.connect-chat-youtube-embed) + .connect-chat-msg-footer {
+	margin-top: 0;
+	padding-top: 0;
+	padding-bottom: 0;
+}
+
 .connect-chat-msg:has(.connect-chat-msg-bubble:has(.connect-chat-creation-embed))
+	.connect-chat-msg-footer
+	.comment-meta-row {
+	gap: 4px;
+	margin-bottom: 0;
+	padding-bottom: 0;
+}
+
+.connect-chat-msg:has(.connect-chat-msg-bubble:has(.connect-chat-youtube-embed))
 	.connect-chat-msg-footer
 	.comment-meta-row {
 	gap: 4px;
@@ -5215,7 +5248,24 @@ body.blog-edit-page .blog-edit-route {
 	pointer-events: none;
 }
 
+.connect-chat-msg-bubble a.creation-link[data-youtube-video-id]:has(+ .connect-chat-youtube-embed) {
+	display: block;
+	height: 0;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	border: 0;
+	line-height: 0;
+	font-size: 0;
+	opacity: 0;
+	pointer-events: none;
+}
+
 .connect-chat-msg.is-self .connect-chat-msg-bubble:has(.connect-chat-creation-embed) {
+	background: transparent;
+}
+
+.connect-chat-msg.is-self .connect-chat-msg-bubble:has(.connect-chat-youtube-embed) {
 	background: transparent;
 }
 
@@ -5229,6 +5279,25 @@ body.blog-edit-page .blog-edit-route {
 	/* Collapse stray whitespace text nodes; title/error reset font-size below */
 	font-size: 0;
 	line-height: 0;
+}
+
+.connect-chat-youtube-embed {
+	margin-top: 0;
+	padding-block: 4px;
+	width: 100%;
+	min-width: 0;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
+.connect-chat-youtube-embed-iframe {
+	display: block;
+	width: 100%;
+	max-width: 100%;
+	aspect-ratio: 16 / 9;
+	border: 0;
+	border-radius: 12px;
+	background: #000;
 }
 
 .connect-chat-creation-embed--square.connect-chat-creation-embed--loading .connect-chat-creation-embed-skeleton {

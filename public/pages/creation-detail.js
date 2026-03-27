@@ -974,21 +974,23 @@ async function loadCreation() {
 
 	if (!detailContent || !imageEl || !backgroundEl) return;
 
+	function applyLoadedImageState() {
+		const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
+		if (modIcon) modIcon.remove();
+		imageWrapper?.classList.remove('image-loading', 'image-error', 'image-error-moderated');
+		if (imageEl.dataset.currentUrl) {
+			backgroundEl.style.backgroundImage = `url('${imageEl.dataset.currentUrl}')`;
+		}
+		imageEl.style.visibility = 'visible';
+	}
+
 	detailContent.innerHTML = renderCreationDetailSkeleton();
 
 	// Attach image load/error handlers once, so broken-image icons never show
 	if (!imageEl.dataset.fallbackAttached) {
 		imageEl.dataset.fallbackAttached = '1';
 
-		imageEl.addEventListener('load', () => {
-			const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
-			if (modIcon) modIcon.remove();
-			imageWrapper?.classList.remove('image-loading', 'image-error', 'image-error-moderated');
-			if (imageEl.dataset.currentUrl) {
-				backgroundEl.style.backgroundImage = `url('${imageEl.dataset.currentUrl}')`;
-			}
-			imageEl.style.visibility = 'visible';
-		});
+		imageEl.addEventListener('load', applyLoadedImageState);
 
 		imageEl.addEventListener('error', (event) => {
 			// eslint-disable-next-line no-console
@@ -1003,6 +1005,11 @@ async function loadCreation() {
 			// Hide default browser broken-image UI
 			imageEl.style.visibility = 'hidden';
 		});
+	}
+
+	// If server-rendered image has already loaded before handlers attach, apply loaded state now.
+	if (imageEl.src && imageEl.complete && imageEl.naturalWidth > 0) {
+		applyLoadedImageState();
 	}
 
 	// Attach video load/error handlers once for video creations
