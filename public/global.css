@@ -3929,11 +3929,11 @@ app-route-feed {
 /* Connect: chat (channels + DMs) — inbox list; threads open at /chat/… */
 
 /* Standalone chat page: no app header or mobile nav */
-/* Height follows visual viewport via --chat-app-height (set in chat.js) so the layout
-   does not extend under the mobile keyboard; avoids window scroll that hides the top bar. */
+/* No JS-driven root height: pinning html/body to pixel height + max-height was clipping the
+   composer on several mobile engines. Use min-height + flex; Chrome gets interactive-widget
+   (patched in chat.html) so the layout can resize with the keyboard where supported. */
 html.chat-page {
-	height: var(--chat-app-height, 100dvh);
-	max-height: var(--chat-app-height, 100dvh);
+	height: 100%;
 	overflow: hidden;
 	background: var(--bg);
 	overflow-anchor: none;
@@ -3942,9 +3942,9 @@ html.chat-page {
 body.chat-page {
 	display: flex;
 	flex-direction: column;
-	height: var(--chat-app-height, 100dvh);
-	max-height: var(--chat-app-height, 100dvh);
-	min-height: 0;
+	height: 100%;
+	min-height: 100vh;
+	min-height: 100dvh;
 	margin: 0;
 	overflow: hidden;
 	-webkit-text-size-adjust: 100%;
@@ -4273,6 +4273,14 @@ body.chat-page .chat-route {
 	border-bottom: 1px solid var(--border);
 	background: var(--bg);
 	z-index: 2;
+}
+
+@media (max-width: 1023px) {
+	/* If the window scrolls (keyboard / iOS), keep the mobile thread bar in view when possible. */
+	body.chat-page .chat-page-topbar {
+		position: sticky;
+		top: 0;
+	}
 }
 
 .chat-page-back {

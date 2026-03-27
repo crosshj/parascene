@@ -4,6 +4,17 @@
 <head>
 	<title>Chat · parascene</title>
 	<link rel="stylesheet" href="/pages/creations.css{{V}}" />
+	<script>
+		(function () {
+			var m = document.querySelector('meta[name="viewport"]');
+			if (m) {
+				m.setAttribute(
+					'content',
+					'width=device-width, initial-scale=1, interactive-widget=resizes-content'
+				);
+			}
+		})();
+	</script>
 </head>
 
 <body data-entry="chat" class="chat-page">
