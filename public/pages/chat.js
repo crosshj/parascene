@@ -598,33 +598,59 @@ export async function initChatPage(root) {
 	}
 
 	/**
-	 * Pin the chat shell to the visual viewport height so mobile browsers do not grow
-	 * the layout past the visible area and scroll the window (which hides the header).
+	 * While the composer is focused (keyboard open), pin the shell to visualViewport height
+	 * so the window does not scroll and hide the header. When not focused, CSS uses 100dvh
+	 * only — applying pixel height on load can clip the composer off-screen on some browsers.
 	 */
 	function setupChatViewportSync() {
 		teardownChatViewportSync();
+		const inp = root.querySelector('[data-chat-body-input]');
+
 		const apply = () => {
+			const inputEl = root.querySelector('[data-chat-body-input]');
+			const focused = inputEl instanceof HTMLElement && document.activeElement === inputEl;
+			if (!focused) {
+				try {
+					document.documentElement.style.removeProperty('--chat-app-height');
+				} catch {
+					// ignore
+				}
+				return;
+			}
 			const vv = window.visualViewport;
+			const inner = typeof window.innerHeight === 'number' ? window.innerHeight : 0;
 			let h =
 				vv && typeof vv.height === 'number' && vv.height > 0
 					? Math.round(vv.height)
-					: typeof window.innerHeight === 'number'
-						? window.innerHeight
-						: 0;
+					: inner;
 			if (h <= 0) return;
+			h = Math.max(h, 120);
 			document.documentElement.style.setProperty('--chat-app-height', `${h}px`);
 			nudgeChatScrollIfStuckToBottom();
 		};
-		apply();
+
 		const onVVResize = () => apply();
 		const onVVScroll = () => apply();
 		const onWinResize = () => apply();
+		const onFocus = () => apply();
+		const onBlur = () => apply();
+
+		if (inp instanceof HTMLElement) {
+			inp.addEventListener('focus', onFocus);
+			inp.addEventListener('blur', onBlur);
+		}
 		if (window.visualViewport) {
 			window.visualViewport.addEventListener('resize', onVVResize);
 			window.visualViewport.addEventListener('scroll', onVVScroll);
 		}
 		window.addEventListener('resize', onWinResize);
+		apply();
+
 		chatViewportCleanup = () => {
+			if (inp instanceof HTMLElement) {
+				inp.removeEventListener('focus', onFocus);
+				inp.removeEventListener('blur', onBlur);
+			}
 			if (window.visualViewport) {
 				window.visualViewport.removeEventListener('resize', onVVResize);
 				window.visualViewport.removeEventListener('scroll', onVVScroll);
