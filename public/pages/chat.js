@@ -1793,15 +1793,24 @@ export async function initChatPage(root) {
 			void submitChatMessage();
 		});
 	}
-	const sendBtnKeepKeyboard = root.querySelector('[data-chat-send]');
-	if (sendBtnKeepKeyboard instanceof HTMLElement) {
-		/* Tapping submit would move focus to the button and dismiss the mobile keyboard;
-		 * defaultPrevented on pointerdown/mousedown keeps focus on the textarea. */
-		const preventSendButtonFocus = (e) => {
-			e.preventDefault();
+	const sendBtnEl = root.querySelector('[data-chat-send]');
+	if (sendBtnEl instanceof HTMLButtonElement) {
+		/* type="button" + send on pointerdown: preventDefault() stops the button taking focus
+		 * (keeps keyboard up) but also suppresses click — so we must call submit here.
+		 * click fires as fallback for keyboard activation; sendInFlight / empty body guard doubles. */
+		const activateSend = () => {
+			void submitChatMessage();
 		};
-		sendBtnKeepKeyboard.addEventListener('pointerdown', preventSendButtonFocus);
-		sendBtnKeepKeyboard.addEventListener('mousedown', preventSendButtonFocus);
+		sendBtnEl.addEventListener('pointerdown', (e) => {
+			if (sendBtnEl.disabled) return;
+			e.preventDefault();
+			activateSend();
+		});
+		sendBtnEl.addEventListener('click', (e) => {
+			if (sendBtnEl.disabled) return;
+			e.preventDefault();
+			activateSend();
+		});
 	}
 	if (bodyInput instanceof HTMLTextAreaElement) {
 		attachAutoGrowTextarea(bodyInput);
