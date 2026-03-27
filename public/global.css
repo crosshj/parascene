@@ -3929,21 +3929,27 @@ app-route-feed {
 /* Connect: chat (channels + DMs) — inbox list; threads open at /chat/… */
 
 /* Standalone chat page: no app header or mobile nav */
+/* Height follows visual viewport via --chat-app-height (set in chat.js) so the layout
+   does not extend under the mobile keyboard; avoids window scroll that hides the top bar. */
 html.chat-page {
-	height: 100%;
+	height: var(--chat-app-height, 100dvh);
+	max-height: var(--chat-app-height, 100dvh);
 	overflow: hidden;
 	background: var(--bg);
+	overflow-anchor: none;
 }
 
 body.chat-page {
 	display: flex;
 	flex-direction: column;
-	height: 100%;
-	min-height: 100vh;
-	min-height: 100dvh;
+	height: var(--chat-app-height, 100dvh);
+	max-height: var(--chat-app-height, 100dvh);
+	min-height: 0;
 	margin: 0;
 	overflow: hidden;
 	-webkit-text-size-adjust: 100%;
+	overflow-anchor: none;
+	overscroll-behavior: none;
 	padding-top: env(safe-area-inset-top);
 	padding-left: env(safe-area-inset-left);
 	padding-right: env(safe-area-inset-right);

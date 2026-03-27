@@ -257,7 +257,8 @@ export async function initChatPage(root) {
 	let activeThreadId = null;
 	let loadingMessages = false;
 	let sendInFlight = false;
-	let chatViewportHandler = null;
+	/** @type {null | (() => void)} */
+	let chatViewportCleanup = null;
 	let activeReactionPicker = null;
 	let lastChatMessagesPayload = [];
 	/** @type {null | (() => void)} */
@@ -585,14 +586,51 @@ export async function initChatPage(root) {
 	}
 
 	function teardownChatViewportSync() {
-		chatViewportHandler = null;
-		document.documentElement.style.removeProperty('height');
-		document.body.style.removeProperty('height');
+		if (typeof chatViewportCleanup === 'function') {
+			chatViewportCleanup();
+			chatViewportCleanup = null;
+		}
+		try {
+			document.documentElement.style.removeProperty('--chat-app-height');
+		} catch {
+			// ignore
+		}
 	}
 
+	/**
+	 * Pin the chat shell to the visual viewport height so mobile browsers do not grow
+	 * the layout past the visible area and scroll the window (which hides the header).
+	 */
 	function setupChatViewportSync() {
 		teardownChatViewportSync();
-		requestAnimationFrame(() => nudgeChatScrollIfStuckToBottom());
+		const apply = () => {
+			const vv = window.visualViewport;
+			let h =
+				vv && typeof vv.height === 'number' && vv.height > 0
+					? Math.round(vv.height)
+					: typeof window.innerHeight === 'number'
+						? window.innerHeight
+						: 0;
+			if (h <= 0) return;
+			document.documentElement.style.setProperty('--chat-app-height', `${h}px`);
+			nudgeChatScrollIfStuckToBottom();
+		};
+		apply();
+		const onVVResize = () => apply();
+		const onVVScroll = () => apply();
+		const onWinResize = () => apply();
+		if (window.visualViewport) {
+			window.visualViewport.addEventListener('resize', onVVResize);
+			window.visualViewport.addEventListener('scroll', onVVScroll);
+		}
+		window.addEventListener('resize', onWinResize);
+		chatViewportCleanup = () => {
+			if (window.visualViewport) {
+				window.visualViewport.removeEventListener('resize', onVVResize);
+				window.visualViewport.removeEventListener('scroll', onVVScroll);
+			}
+			window.removeEventListener('resize', onWinResize);
+		};
 	}
 
 	function updateTitleFromMeta(meta) {
