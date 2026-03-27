@@ -1626,7 +1626,11 @@ export async function initChatPage(root) {
 			sendInFlight = false;
 			setSendSending(false);
 			requestAnimationFrame(() => {
-				bodyInput.focus();
+				try {
+					bodyInput.focus({ preventScroll: true });
+				} catch {
+					bodyInput.focus();
+				}
 			});
 		}
 	}
@@ -1788,6 +1792,16 @@ export async function initChatPage(root) {
 			ev.preventDefault();
 			void submitChatMessage();
 		});
+	}
+	const sendBtnKeepKeyboard = root.querySelector('[data-chat-send]');
+	if (sendBtnKeepKeyboard instanceof HTMLElement) {
+		/* Tapping submit would move focus to the button and dismiss the mobile keyboard;
+		 * defaultPrevented on pointerdown/mousedown keeps focus on the textarea. */
+		const preventSendButtonFocus = (e) => {
+			e.preventDefault();
+		};
+		sendBtnKeepKeyboard.addEventListener('pointerdown', preventSendButtonFocus);
+		sendBtnKeepKeyboard.addEventListener('mousedown', preventSendButtonFocus);
 	}
 	if (bodyInput instanceof HTMLTextAreaElement) {
 		attachAutoGrowTextarea(bodyInput);
