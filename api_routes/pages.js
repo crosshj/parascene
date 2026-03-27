@@ -120,6 +120,12 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 		}
 	}
 
+	function isCreationImageNsfw(image) {
+		const meta = parseImageMeta(image?.meta);
+		const nsfwFlag = image?.nsfw ?? meta?.nsfw;
+		return nsfwFlag === true || nsfwFlag === 1 || nsfwFlag === "1";
+	}
+
 	function buildCreationDetailHeroMediaHtml(image) {
 		const status = typeof image?.status === "string" ? image.status : "completed";
 		const meta = parseImageMeta(image?.meta);
@@ -145,6 +151,15 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 		const defaultHeroMediaRe = /<img class="creation-detail-image" data-image alt="Creation"\s*\/>\s*<video class="creation-detail-image" data-video playsinline muted style="display: none;"><\/video>/;
 		const injected = String(pageHtml ?? "").replace(defaultHeroMediaRe, buildCreationDetailHeroMediaHtml(image));
 		return injected;
+	}
+
+	function injectCreationDetailHeroNsfwClass(pageHtml, image) {
+		const isNsfw = isCreationImageNsfw(image);
+		const wrapperClass = `creation-detail-image-wrapper image-loading${isNsfw ? " nsfw" : ""}`;
+		return String(pageHtml ?? "").replace(
+			/<div class="creation-detail-image-wrapper image-loading">/,
+			`<div class="${wrapperClass}">`
+		);
 	}
 
 	// External share page (unauthed, unfurl-first).
@@ -954,6 +969,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 				includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
 			);
 			pageHtml = injectCreationDetailHeroMedia(pageHtml, image);
+			pageHtml = injectCreationDetailHeroNsfwClass(pageHtml, image);
 
 			pageHtml = injectCommonHead(pageHtml, getPageTokens(req));
 

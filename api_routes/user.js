@@ -1758,9 +1758,12 @@ export default function createProfileRoutes({ queries }) {
 				return res.status(404).json({ error: "User not found" });
 			}
 
+			const limitRaw = Number.parseInt(String(req.query?.limit ?? "25"), 10);
+			const limit = Number.isFinite(limitRaw) ? Math.min(200, Math.max(1, limitRaw)) : 25;
 			const rows = await queries.selectNotificationsForUser.all(
 				user.id,
-				user.role
+				user.role,
+				limit
 			);
 			const resolved = await Promise.all(
 				rows.map(async (row) => {

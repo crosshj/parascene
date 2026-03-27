@@ -1184,15 +1184,17 @@ export async function openDb() {
 			all: async () => ({ ids: [], hasMore: false })
 		},
 		selectNotificationsForUser: {
-			all: async (userId, role) => {
+			all: async (userId, role, limit = 25) => {
+				const safeLimit = Math.min(Math.max(1, Number(limit) || 25), 200);
 				const stmt = db.prepare(
 					`SELECT id, title, message, link, created_at, acknowledged_at,
             actor_user_id, type, target, meta
            FROM notifications
            WHERE (user_id = ? OR role = ?)
-           ORDER BY created_at DESC`
+           ORDER BY created_at DESC
+           LIMIT ?`
 				);
-				return Promise.resolve(stmt.all(userId, role));
+				return Promise.resolve(stmt.all(userId, role, safeLimit));
 			}
 		},
 		selectNotificationById: {

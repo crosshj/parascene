@@ -648,10 +648,14 @@ export function openDb() {
 			all: async () => ({ ids: [], hasMore: false })
 		},
 		selectNotificationsForUser: {
-			all: async (userId, role) =>
-				notifications.filter(
-					(note) => note.user_id === userId || note.role === role
-				)
+			all: async (userId, role, limit = 25) => {
+				const safeLimit = Math.min(Math.max(1, Number(limit) || 25), 200);
+				return notifications
+					.filter((note) => note.user_id === userId || note.role === role)
+					.slice()
+					.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
+					.slice(0, safeLimit);
+			}
 		},
 		selectNotificationById: {
 			get: async (id, userId, role) => {

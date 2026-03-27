@@ -1307,12 +1307,14 @@ export function openDb() {
 			}
 		},
 		selectNotificationsForUser: {
-			all: async (userId, role) => {
+			all: async (userId, role, limit = 25) => {
+				const safeLimit = Math.min(Math.max(1, Number(limit) || 25), 200);
 				// Use service client to bypass RLS for backend operations
 				let query = serviceClient
 					.from(prefixedTable("notifications"))
 					.select("id, title, message, link, created_at, acknowledged_at, actor_user_id, type, target, meta")
-					.order("created_at", { ascending: false });
+					.order("created_at", { ascending: false })
+					.limit(safeLimit);
 				const { query: filteredQuery, hasFilter } = applyUserOrRoleFilter(
 					query,
 					userId,
