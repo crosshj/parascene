@@ -3476,6 +3476,31 @@ app-route-feed {
 	display: flex;
 	align-items: center;
 	gap: 10px;
+	width: 100%;
+	min-width: 0;
+}
+
+.comment-admin-delete {
+	margin-left: auto;
+	flex-shrink: 0;
+	padding: 4px 10px;
+	font-size: 0.8rem;
+	color: var(--text-muted);
+	background: transparent;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	cursor: pointer;
+}
+
+.comment-admin-delete:hover {
+	color: var(--text);
+	background: color-mix(in srgb, var(--danger, #c00) 12%, var(--surface));
+	border-color: color-mix(in srgb, var(--danger, #c00) 45%, var(--border));
+}
+
+.comment-admin-delete:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
 }
 
 .comment-top-left {
@@ -4207,9 +4232,20 @@ body.chat-page main.chat-page-outer {
 		display: flex;
 		flex-direction: column;
 		min-height: 0;
-		max-width: 720px;
-		margin: 0 auto;
+		max-width: none;
+		margin: 0;
 		width: 100%;
+	}
+
+	/* Keep scrollbar on the frame edge while restoring centered message lane width. */
+	body.chat-page .chat-page-messages {
+		padding-left: max(12px, calc((100% - 720px) / 2 + 12px));
+		padding-right: max(12px, calc((100% - 720px) / 2 + 12px));
+	}
+
+	body.chat-page .chat-page-composer {
+		padding-left: max(12px, calc((100% - 720px) / 2 + 12px));
+		padding-right: max(12px, calc((100% - 720px) / 2 + 12px));
 	}
 }
 
@@ -4484,6 +4520,34 @@ body.chat-page .chat-page-send-btn.is-sending .chat-page-send-spinner.route-load
 	body.chat-page .chat-page-input-shell {
 		flex: 1 1 auto;
 		min-width: 0;
+	}
+}
+
+@media (min-width: 1024px) {
+	/* Keep message scroller full-width so row hover can span edge-to-edge. */
+	body.chat-page .chat-page-messages {
+		padding-left: 0;
+		padding-right: 0;
+	}
+
+	/* Apply the centered content lane per message row instead of the scroller. */
+	body.chat-page .chat-page-messages .connect-chat-msg {
+		padding-left: max(12px, calc((100% - 720px) / 2 + 12px));
+		padding-right: max(12px, calc((100% - 720px) / 2 + 12px));
+	}
+
+	/* Match composer lane to message lane on desktop. */
+	body.chat-page .chat-page-composer {
+		padding-left: max(12px, calc((100% - 720px) / 2 + 12px));
+		padding-right: max(12px, calc((100% - 720px) / 2 + 12px));
+	}
+
+	/* Keep shell full-width inside the shared lane. */
+	body.chat-page .chat-page-input-shell {
+		width: 100%;
+		max-width: none;
+		margin-left: 0;
+		margin-right: 0;
 	}
 }
 
@@ -5019,16 +5083,23 @@ body.blog-edit-page .blog-edit-route {
 
 /* Chat page: spacing lives inside each row container so unread blocks connect cleanly. */
 .chat-page-messages .connect-chat-msg {
-	padding-top: 5px;
-	padding-bottom: 5px;
+	padding-top: 3px;
+	padding-bottom: 3px;
 	box-sizing: border-box;
+	transition: background-color 0.12s ease;
+}
+
+@media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+	.chat-page-messages .connect-chat-msg:hover {
+		background: color-mix(in srgb, var(--text) 5%, transparent);
+	}
 }
 
 .connect-chat-msg-inner {
 	display: flex;
 	flex-direction: column;
 	align-items: flex-start;
-	gap: 4px;
+	gap: 2px;
 	max-width: 100%;
 }
 
@@ -5047,8 +5118,9 @@ body.blog-edit-page .blog-edit-route {
 	align-items: center;
 	gap: 8px;
 	min-width: 0;
-	font-size: 0.75rem;
-	color: var(--text-muted);
+	font-size: 0.9375rem;
+	line-height: 1.45;
+	color: var(--text);
 }
 
 .connect-chat-msg-meta .comment-avatar {
@@ -5069,11 +5141,23 @@ body.blog-edit-page .blog-edit-route {
 	white-space: nowrap;
 }
 
+.connect-chat-msg-meta-user {
+	font-weight: 600;
+	color: var(--text);
+}
+
+.connect-chat-msg-meta-sep,
+.connect-chat-msg-meta-when {
+	font-weight: 400;
+	color: var(--text-muted);
+}
+
 .connect-chat-msg-bubble {
-	padding: 8px 12px;
-	border-radius: 10px;
-	background: var(--bg);
-	border: 1px solid var(--border);
+	padding: 2px 1em;
+	border-radius: 0;
+	background: transparent;
+	border: none;
+	box-shadow: none;
 	font-size: 0.9375rem;
 	line-height: 1.45;
 	white-space: pre-wrap;
@@ -5296,11 +5380,11 @@ body.blog-edit-page .blog-edit-route {
 }
 
 .connect-chat-msg.is-self .connect-chat-msg-bubble {
-	background: var(--accent-muted, rgba(99, 102, 241, 0.12));
+	background: transparent;
 }
 
 .connect-chat-msg-footer {
-	margin-top: 4px;
+	margin-top: 2px;
 	width: 100%;
 	min-width: 0;
 	max-width: 100%;

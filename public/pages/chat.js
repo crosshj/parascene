@@ -552,11 +552,6 @@ export async function initChatPage(root) {
 	}
 
 	function teardownChatViewportSync() {
-		const vv = window.visualViewport;
-		if (vv && chatViewportHandler) {
-			vv.removeEventListener('resize', chatViewportHandler);
-			vv.removeEventListener('scroll', chatViewportHandler);
-		}
 		chatViewportHandler = null;
 		document.documentElement.style.removeProperty('height');
 		document.body.style.removeProperty('height');
@@ -564,26 +559,7 @@ export async function initChatPage(root) {
 
 	function setupChatViewportSync() {
 		teardownChatViewportSync();
-		const vv = window.visualViewport;
-		if (!vv) return;
-		const touch = typeof navigator !== 'undefined' && (navigator.maxTouchPoints ?? 0) > 0;
-		const narrow =
-			typeof window !== 'undefined' &&
-			window.matchMedia &&
-			window.matchMedia('(max-width: 768px)').matches;
-		if (!touch && !narrow) return;
-
-		const apply = () => {
-			const h = vv.height;
-			document.documentElement.style.height = `${h}px`;
-			document.body.style.height = `${h}px`;
-			requestAnimationFrame(() => nudgeChatScrollIfStuckToBottom());
-		};
-
-		chatViewportHandler = apply;
-		vv.addEventListener('resize', apply);
-		vv.addEventListener('scroll', apply);
-		apply();
+		requestAnimationFrame(() => nudgeChatScrollIfStuckToBottom());
 	}
 
 	function updateTitleFromMeta(meta) {
@@ -1307,7 +1283,6 @@ export async function initChatPage(root) {
 							? 'You'
 							: `User ${senderId}`;
 					const when = m.created_at ? (formatRelativeTime(m.created_at) || '') : '';
-					const lineText = [handleLabel, when].filter(Boolean).join(' · ');
 					const displayForAvatar = handleRaw || (isSelf ? 'You' : `User ${senderId}`);
 					const profileHref = buildProfilePath({
 						userName: handleRaw || undefined,
@@ -1326,7 +1301,20 @@ export async function initChatPage(root) {
 					}
 					const textSpan = document.createElement('span');
 					textSpan.className = 'connect-chat-msg-meta-text';
-					textSpan.textContent = lineText;
+					const nameSpan = document.createElement('span');
+					nameSpan.className = 'connect-chat-msg-meta-user';
+					nameSpan.textContent = handleLabel;
+					textSpan.appendChild(nameSpan);
+					if (when) {
+						const sepSpan = document.createElement('span');
+						sepSpan.className = 'connect-chat-msg-meta-sep';
+						sepSpan.textContent = ' · ';
+						textSpan.appendChild(sepSpan);
+						const whenSpan = document.createElement('span');
+						whenSpan.className = 'connect-chat-msg-meta-when';
+						whenSpan.textContent = when;
+						textSpan.appendChild(whenSpan);
+					}
 					metaLine.appendChild(textSpan);
 					inner.appendChild(metaLine);
 				}
@@ -1531,6 +1519,9 @@ export async function initChatPage(root) {
 		} finally {
 			sendInFlight = false;
 			setSendSending(false);
+			requestAnimationFrame(() => {
+				bodyInput.focus();
+			});
 		}
 	}
 
@@ -1695,9 +1686,6 @@ export async function initChatPage(root) {
 	if (bodyInput instanceof HTMLTextAreaElement) {
 		attachAutoGrowTextarea(bodyInput);
 		attachMentionSuggest(bodyInput);
-		bodyInput.addEventListener('focus', () => {
-			requestAnimationFrame(() => scrollChatMessagesToEnd());
-		});
 		bodyInput.addEventListener('input', () => syncChatSendButton());
 		bodyInput.addEventListener('keydown', (ev) => {
 			if (ev.key !== 'Enter' || !ev.shiftKey) return;

@@ -8,6 +8,7 @@ let getAvatarColor;
 let fetchCreatedImageActivity;
 let postCreatedImageComment;
 let toggleCommentReaction;
+let deleteCreatedImageComment;
 let processUserText;
 let hydrateUserTextLinks;
 let attachAutoGrowTextarea;
@@ -72,6 +73,7 @@ async function loadDeps() {
 		fetchCreatedImageActivity = commentsMod.fetchCreatedImageActivity;
 		postCreatedImageComment = commentsMod.postCreatedImageComment;
 		toggleCommentReaction = commentsMod.toggleCommentReaction;
+		deleteCreatedImageComment = commentsMod.deleteCreatedImageComment;
 
 		const userTextMod = await import(`/shared/userText.js${qs}`);
 		processUserText = userTextMod.processUserText;
@@ -2563,6 +2565,10 @@ async function loadCreation() {
 					</div>
 				</div>`;
 
+				const adminDeleteBtn = isAdmin && commentId
+					? `<button type="button" class="comment-admin-delete" data-comment-id="${escapeHtml(commentId)}" aria-label="Delete comment">Delete</button>`
+					: '';
+
 				return `
 					<div class="comment-item" data-comment-id="${escapeHtml(commentId)}">
 						${commentAvatarHtml}
@@ -2579,6 +2585,7 @@ async function loadCreation() {
 										${handle ? `<span class="comment-author-handle${isFounder ? ' founder-name' : ''}">${escapeHtml(handle)}</span>` : ''}
 									</div>
 								`}
+								${adminDeleteBtn}
 							</div>
 							<div class="comment-text">${safeText}</div>
 							${metaRowHtml}
@@ -2720,6 +2727,28 @@ async function loadCreation() {
 
 		if (commentListEl) {
 			commentListEl.addEventListener('click', async (e) => {
+				const adminDel = e.target?.closest?.('.comment-admin-delete[data-comment-id]');
+				if (adminDel && adminDel instanceof HTMLElement && isAdmin) {
+					e.preventDefault();
+					e.stopPropagation();
+					const cid = Number(adminDel.dataset.commentId);
+					if (!Number.isFinite(cid)) return;
+					if (!window.confirm('Delete this comment? This cannot be undone.')) return;
+					adminDel.disabled = true;
+					try {
+						const res = await deleteCreatedImageComment(cid);
+						if (!res?.ok) {
+							const msg = typeof res?.data?.error === 'string' ? res.data.error : 'Failed to delete comment';
+							alert(msg);
+							return;
+						}
+						await loadComments({ scrollIfHash: false });
+					} finally {
+						adminDel.disabled = false;
+					}
+					return;
+				}
+
 				const pill = e.target?.closest?.('.comment-reaction-pill[data-emoji-key][data-comment-id]');
 				if (pill && pill instanceof HTMLElement) {
 					const commentId = Number(pill.dataset.commentId);

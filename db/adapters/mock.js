@@ -2520,6 +2520,18 @@ export function openDb() {
 			}
 		},
 		selectCommentById: { get: async () => null },
+		deleteCommentById: {
+			run: async (commentId) => {
+				const id = Number(commentId);
+				const list =
+					(typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.comments_created_image) ??
+					comments_created_image;
+				const idx = list.findIndex((c) => Number(c.id) === id);
+				if (idx === -1) return { changes: 0 };
+				list.splice(idx, 1);
+				return { changes: 1 };
+			}
+		},
 		selectCommentReactionCountsByCommentIds: { all: async () => [] },
 		selectCommentReactionReactorsByCommentIds: { all: async () => [] },
 		selectViewerReactionsByCommentIds: { all: async () => [] },

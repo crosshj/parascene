@@ -2976,6 +2976,14 @@ export async function openDb() {
 				return Promise.resolve(stmt.get(commentId));
 			}
 		},
+		/** Deletes comment row; comment_reactions CASCADE. */
+		deleteCommentById: {
+			run: async (commentId) => {
+				const stmt = db.prepare(`DELETE FROM comments_created_image WHERE id = ?`);
+				const r = stmt.run(commentId);
+				return Promise.resolve({ changes: r.changes });
+			}
+		},
 		/** Aggregated reaction counts per comment: [{ comment_id, emoji_key, count }]. */
 		selectCommentReactionCountsByCommentIds: {
 			all: async (commentIds) => {

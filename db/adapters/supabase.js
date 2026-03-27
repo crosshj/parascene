@@ -4477,6 +4477,18 @@ export function openDb() {
 				return data ?? null;
 			}
 		},
+		/** Deletes comment row; prsn_comment_reactions ON DELETE CASCADE. */
+		deleteCommentById: {
+			run: async (commentId) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("comments_created_image"))
+					.delete()
+					.eq("id", commentId)
+					.select("id");
+				if (error) throw error;
+				return { changes: (data ?? []).length };
+			}
+		},
 		selectCommentReactionCountsByCommentIds: {
 			all: async (commentIds) => {
 				if (!Array.isArray(commentIds) || commentIds.length === 0) return [];

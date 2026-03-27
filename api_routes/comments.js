@@ -391,6 +391,47 @@ export default function createCommentsRoutes({ queries }) {
 		});
 	});
 
+	router.delete("/api/comments/:commentId", async (req, res) => {
+		const user = await requireUser(req, res, queries);
+		if (!user) return;
+
+		if (String(user.role) !== "admin") {
+			return res.status(403).json({ error: "Forbidden" });
+		}
+
+		const commentId = Number.parseInt(req.params.commentId, 10);
+		if (!Number.isFinite(commentId) || commentId <= 0) {
+			return res.status(400).json({ error: "Invalid comment id" });
+		}
+
+		const comment = await queries.selectCommentById?.get(commentId);
+		if (!comment || comment.created_image_id == null) {
+			return res.status(404).json({ error: "Comment not found" });
+		}
+
+		const imageId = Number(comment.created_image_id);
+		const image = await requireCreatedImageAccess({ queries, imageId, userId: user.id, userRole: user.role });
+		if (!image) {
+			return res.status(404).json({ error: "Image not found" });
+		}
+
+		const del = await queries.deleteCommentById?.run(commentId);
+		const changes = Number(del?.changes ?? 0);
+		if (!changes) {
+			return res.status(404).json({ error: "Comment not found" });
+		}
+
+		let commentCount = null;
+		try {
+			const countRow = await queries.selectCreatedImageCommentCount?.get(imageId);
+			commentCount = Number(countRow?.comment_count ?? 0);
+		} catch {
+			// ignore count failures
+		}
+
+		return res.json({ ok: true, comment_count: commentCount });
+	});
+
 	return router;
 }
 
