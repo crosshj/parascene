@@ -424,6 +424,32 @@ export default function createChatRoutes({ queries }) {
 		}
 	});
 
+	// GET /api/chat/channel-slugs — distinct channel tags that exist (browse / open)
+	router.get("/api/chat/channel-slugs", async (req, res) => {
+		const userId = requireUser(req, res);
+		if (userId == null) return;
+		const sb = getSb(res);
+		if (!sb) return;
+
+		try {
+			const { data, error } = await sb
+				.from("prsn_chat_threads")
+				.select("channel_slug")
+				.eq("type", "channel");
+			if (error) throw error;
+			const set = new Set();
+			for (const row of data || []) {
+				const s = row?.channel_slug != null ? String(row.channel_slug).trim() : "";
+				if (s) set.add(s);
+			}
+			const slugs = [...set].sort((a, b) => a.localeCompare(b));
+			return res.status(200).json({ slugs });
+		} catch (err) {
+			console.error("[GET /api/chat/channel-slugs]", err);
+			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
+		}
+	});
+
 	// POST /api/chat/dm  { other_user_id } | { other_user_name }
 	router.post("/api/chat/dm", async (req, res) => {
 		const userId = requireUser(req, res);

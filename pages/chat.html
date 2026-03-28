@@ -30,11 +30,48 @@
 				</div>
 				<div class="chat-page-sidebar-scroll">
 					<section class="chat-page-sidebar-section" aria-labelledby="chat-sidebar-dms-heading">
-						<h2 id="chat-sidebar-dms-heading" class="chat-page-sidebar-heading">Direct messages</h2>
+						<div class="chat-page-sidebar-section-head">
+							<h2 id="chat-sidebar-dms-heading" class="chat-page-sidebar-heading">Direct messages</h2>
+							<button type="button" class="chat-page-sidebar-add" data-chat-sidebar-add="dm"
+								aria-label="New direct message">
+								<svg class="chat-page-sidebar-add-icon" xmlns="http://www.w3.org/2000/svg" width="18"
+									height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+									stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+									<line x1="12" y1="5" x2="12" y2="19" />
+									<line x1="5" y1="12" x2="19" y2="12" />
+								</svg>
+							</button>
+						</div>
 						<div class="chat-page-sidebar-list" data-chat-sidebar-users></div>
 					</section>
+					<section class="chat-page-sidebar-section" aria-labelledby="chat-sidebar-servers-heading">
+						<div class="chat-page-sidebar-section-head">
+							<h2 id="chat-sidebar-servers-heading" class="chat-page-sidebar-heading">Servers</h2>
+							<button type="button" class="chat-page-sidebar-add" data-chat-sidebar-add="servers"
+								aria-label="Add or browse servers">
+								<svg class="chat-page-sidebar-add-icon" xmlns="http://www.w3.org/2000/svg" width="18"
+									height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+									stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+									<line x1="12" y1="5" x2="12" y2="19" />
+									<line x1="5" y1="12" x2="19" y2="12" />
+								</svg>
+							</button>
+						</div>
+						<div class="chat-page-sidebar-list" data-chat-sidebar-servers></div>
+					</section>
 					<section class="chat-page-sidebar-section" aria-labelledby="chat-sidebar-channels-heading">
-						<h2 id="chat-sidebar-channels-heading" class="chat-page-sidebar-heading">Channels</h2>
+						<div class="chat-page-sidebar-section-head">
+							<h2 id="chat-sidebar-channels-heading" class="chat-page-sidebar-heading">Channels</h2>
+							<button type="button" class="chat-page-sidebar-add" data-chat-sidebar-add="channels"
+								aria-label="Open or browse channels">
+								<svg class="chat-page-sidebar-add-icon" xmlns="http://www.w3.org/2000/svg" width="18"
+									height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+									stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+									<line x1="12" y1="5" x2="12" y2="19" />
+									<line x1="5" y1="12" x2="19" y2="12" />
+								</svg>
+							</button>
+						</div>
 						<div class="chat-page-sidebar-list" data-chat-sidebar-channels></div>
 					</section>
 				</div>
@@ -74,6 +111,7 @@
 			</div>
 		</div>
 	</main>
+	<app-modal-server></app-modal-server>
 </body>
 
 </html>

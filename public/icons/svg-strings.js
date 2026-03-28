@@ -54,6 +54,15 @@ export const sendIcon = withAttributes(html`
 	</svg>
 `);
 
+/** Section “add” control (e.g. chat sidebar headers). Stroke plus, 24×24 viewBox. */
+export const plusIcon = withAttributes(html`
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+		stroke-linejoin="round" aria-hidden="true">
+		<line x1="12" y1="5" x2="12" y2="19"></line>
+		<line x1="5" y1="12" x2="19" y2="12"></line>
+	</svg>
+`);
+
 export const facebookIcon = withAttributes(html`
 	<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
 		<path d="M14 9h3V6h-3c-2.2 0-4 1.8-4 4v2H7v3h3v7h3v-7h3l1-3h-4v-2c0-.6.4-1 1-1z"></path>

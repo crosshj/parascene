@@ -248,6 +248,8 @@ export async function initChatPage(root) {
 	const qs = getImportQuery(v);
 	const { sendIcon, REACTION_ORDER, REACTION_ICONS, smileIcon } = await import(`../icons/svg-strings.js${qs}`);
 	const rosterMod = await import(`../shared/chatSidebarRoster.js${qs}`);
+	const serverChatTagMod = await import(`../shared/serverChatTag.js${qs}`);
+	const serverChannelTagFromServerName = serverChatTagMod.serverChannelTagFromServerName;
 
 	function chatReactionGetCount(val) {
 		if (typeof val === 'number' && Number.isFinite(val)) return Math.max(0, val);
@@ -298,6 +300,10 @@ export async function initChatPage(root) {
 	let chatSidebarServersHandler = null;
 	/** @type {null | ((e: Event) => void)} */
 	let chatSidebarNavClickHandler = null;
+	/** @type {null | ((e: Event) => void)} */
+	let chatSidebarSectionAddHandler = null;
+	/** @type {{ closeAll?: () => void } | null} */
+	let chatSidebarModalsApi = null;
 	/** @type {null | (() => void)} */
 	let chatSidebarPopstateHandler = null;
 	/** @type {null | (() => void)} */
@@ -1219,7 +1225,8 @@ export async function initChatPage(root) {
 		if (!sidebar) return;
 		const chEl = sidebar.querySelector('[data-chat-sidebar-channels]');
 		const dmEl = sidebar.querySelector('[data-chat-sidebar-users]');
-		if (!chEl || !dmEl) return;
+		const svEl = sidebar.querySelector('[data-chat-sidebar-servers]');
+		if (!chEl || !dmEl || !svEl) return;
 
 		// Phase 1: fast paint from cache (no extra fetches) if we have nothing rendered yet.
 		if (!skipThreads && (chatThreads || []).length === 0) {
@@ -1231,20 +1238,39 @@ export async function initChatPage(root) {
 		}
 
 		const deps = { renderCommentAvatarHtml, getAvatarColor };
+		/**
+		 * Same roster as Connect: merge threads + joined-server channel stubs, then split into
+		 * sections for layout only (DMs / server-linked channels / other channels).
+		 */
 		const render = (threads, joined, onlineIds) => {
-			const merged = rosterMod.mergeThreadRowsWithJoinedServers(threads, joined);
-			const channels = merged.filter((t) => t && t.type === 'channel');
+			const threadsArr = Array.isArray(threads) ? threads : [];
+			const joinedArr = Array.isArray(joined) ? joined : [];
+			const merged = rosterMod.mergeThreadRowsWithJoinedServers(threadsArr, joinedArr);
+			const joinedSorted = [...joinedArr].sort((a, b) => Number(a.id) - Number(b.id));
+			const joinedSlugs = new Set();
+			for (const s of joinedSorted) {
+				const tag = serverChannelTagFromServerName(
+					typeof s?.name === 'string' ? s.name : ''
+				);
+				if (tag) joinedSlugs.add(tag.toLowerCase());
+			}
 			const dms = merged.filter((t) => t && t.type === 'dm');
+			const channelRows = merged.filter((t) => t && t.type === 'channel');
+			const serverChannels = channelRows.filter((t) => {
+				const slug =
+					typeof t.channel_slug === 'string' ? t.channel_slug.trim().toLowerCase() : '';
+				return Boolean(slug && joinedSlugs.has(slug));
+			});
+			const otherChannels = channelRows.filter((t) => {
+				const slug =
+					typeof t.channel_slug === 'string' ? t.channel_slug.trim().toLowerCase() : '';
+				return !slug || !joinedSlugs.has(slug);
+			});
 
 			function rowHtml(t) {
 				const href = rosterMod.buildChatThreadUrl(t);
 				const active = isChatHrefActive(href);
 				const title = typeof t.title === 'string' && t.title.trim() ? t.title.trim() : 'Chat';
-				const last = t.last_message;
-				const preview =
-					last && typeof last.body === 'string'
-						? last.body.trim().replace(/\s+/g, ' ').slice(0, 120)
-						: '';
 				const avatarHtml = rosterMod.buildChatThreadRowAvatarHtml(t, deps);
 				let presenceClass = '';
 				if (t.type === 'dm') {
@@ -1268,29 +1294,43 @@ export async function initChatPage(root) {
 							<span class="chat-page-sidebar-row-title">${escapeHtml(title)}</span>
 							${unreadHtml}
 						</div>
-						${preview ? `<span class="chat-page-sidebar-row-preview">${escapeHtml(preview)}</span>` : ''}
 					</div>
 				</a>`;
 			}
 
-			chEl.innerHTML = channels.length
-				? channels.map(rowHtml).join('')
-				: '<p class="chat-page-sidebar-empty">No channels yet.</p>';
 			dmEl.innerHTML = dms.length
 				? dms.map(rowHtml).join('')
 				: '<p class="chat-page-sidebar-empty">No direct messages yet.</p>';
+			svEl.innerHTML = serverChannels.length
+				? serverChannels.map(rowHtml).join('')
+				: '<p class="chat-page-sidebar-empty">No servers joined yet.</p>';
+			chEl.innerHTML = otherChannels.length
+				? otherChannels.map(rowHtml).join('')
+				: '<p class="chat-page-sidebar-empty">No channels yet.</p>';
 		};
 
-		// Fast paint (no presence/joined yet) using whatever we have.
-		render(chatThreads || [], [], new Set());
+		/** Keep `.chat-page-sidebar-scroll` position stable when DMs / servers / channels lists re-render. */
+		function runRender(threads, joined, onlineIds) {
+			const scrollEl = sidebar.querySelector('.chat-page-sidebar-scroll');
+			const prevTop = scrollEl ? scrollEl.scrollTop : 0;
+			render(threads, joined, onlineIds);
+			if (!scrollEl) return;
+			requestAnimationFrame(() => {
+				scrollEl.scrollTop = prevTop;
+			});
+		}
 
-		// Phase 2: hydrate with network data in parallel (threads, joined servers, presence).
+		// Do not paint the sidebar before `joined` is loaded. A render with `joined=[]` leaves
+		// `joinedSlugs` empty, so every channel row is classified under “Channels” and “Servers”
+		// shows the empty copy — then the next paint moves rows and only the server strip looks
+		// broken. DMs don’t move because they never use `joinedSlugs`. One paint after awaits.
+
 		if (skipThreads) {
 			const [joined, onlineIds] = await Promise.all([
 				fetchJoinedServersForChat(),
 				fetchPresenceOnlineIds()
 			]);
-			render(chatThreads || [], joined, onlineIds);
+			runRender(chatThreads || [], joined, onlineIds);
 			return;
 		}
 
@@ -1300,7 +1340,7 @@ export async function initChatPage(root) {
 				fetchJoinedServersForChat(),
 				fetchPresenceOnlineIds()
 			]);
-			render(chatThreads || [], joined, onlineIds);
+			runRender(chatThreads || [], joined, onlineIds);
 			dispatchChatUnreadRefresh();
 		} catch {
 			// If network fails, keep cached render.
@@ -1345,6 +1385,45 @@ export async function initChatPage(root) {
 			});
 		};
 		window.addEventListener('popstate', chatSidebarPopstateHandler);
+	}
+
+	/** Plus buttons → section-specific modals (new DM, servers, channels). */
+	async function setupChatSidebarSectionAdds() {
+		const sidebar = document.querySelector('[data-chat-sidebar]');
+		if (!sidebar) return;
+
+		const mod = await import(`../components/modals/chatSidebarModals.js${qs}`);
+		chatSidebarModalsApi = mod.initChatSidebarModals({
+			getThreads: () => chatThreads || [],
+			getViewerId: () => chatViewerId,
+			navigateToChatPath: (pathname) => {
+				const path = pathname.startsWith('/') ? pathname : `/${pathname}`;
+				history.pushState({ prsnChat: true }, '', path);
+				void openThreadForCurrentPath().then(() => {
+					void refreshChatSidebar({ skipThreadsFetch: true });
+				});
+			},
+			refreshSidebar: () => void refreshChatSidebar({ skipThreadsFetch: true })
+		});
+
+		chatSidebarSectionAddHandler = (e) => {
+			const btn = e.target?.closest?.('[data-chat-sidebar-add]');
+			if (!(btn instanceof HTMLButtonElement)) return;
+			const kind = btn.getAttribute('data-chat-sidebar-add');
+			if (kind === 'dm') {
+				chatSidebarModalsApi?.openDmModal?.();
+				return;
+			}
+			if (kind === 'servers') {
+				chatSidebarModalsApi?.openServersModal?.();
+				return;
+			}
+			if (kind === 'channels') {
+				chatSidebarModalsApi?.openChannelsModal?.();
+				return;
+			}
+		};
+		sidebar.addEventListener('click', chatSidebarSectionAddHandler);
 	}
 
 	async function ensureThreadMetaForList(threadId) {
@@ -2039,6 +2118,16 @@ export async function initChatPage(root) {
 			sidebarNav.removeEventListener('click', chatSidebarNavClickHandler);
 			chatSidebarNavClickHandler = null;
 		}
+		if (sidebarNav && typeof chatSidebarSectionAddHandler === 'function') {
+			sidebarNav.removeEventListener('click', chatSidebarSectionAddHandler);
+			chatSidebarSectionAddHandler = null;
+		}
+		try {
+			chatSidebarModalsApi?.closeAll?.();
+		} catch {
+			// ignore
+		}
+		chatSidebarModalsApi = null;
 		if (typeof chatSidebarPopstateHandler === 'function') {
 			window.removeEventListener('popstate', chatSidebarPopstateHandler);
 			chatSidebarPopstateHandler = null;
@@ -2089,4 +2178,5 @@ export async function initChatPage(root) {
 	};
 	document.addEventListener('visibilitychange', chatSidebarVisibilityHandler);
 	setupChatSidebarClientNav();
+	await setupChatSidebarSectionAdds();
 }

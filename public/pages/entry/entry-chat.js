@@ -8,11 +8,12 @@ function getImportQuery(version) {
 
 export async function init(version) {
 	const qs = getImportQuery(version);
+	await import(`../../components/modals/server.js${qs}`);
 	const { waitForComponents } = await import(`../../shared/pageInit.js${qs}`);
 	const { initChatPage } = await import(`../chat.js${qs}`);
 	const nsfwMod = await import(`../../shared/nsfwView.js${qs}`);
 	/* Reveal shell before chat API work (global.css hides body until .loaded). */
-	await waitForComponents([]);
+	await waitForComponents(['app-modal-server']);
 	try {
 		nsfwMod.initNsfwViewPreference();
 	} catch {
