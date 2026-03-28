@@ -799,27 +799,52 @@ export async function initChatPage(root) {
 	}
 
 	/**
-	 * When the visual viewport changes (keyboard, URL bar, rotate), re-pin the message list
-	 * if the user was already stuck to the bottom. Does not set root height — that caused
-	 * clipped/off-screen composers across WebKit versions.
+	 * When the visual viewport changes (keyboard, URL bar, rotate), sync --chat-vh on
+	 * documentElement so html height matches the visible viewport (avoids layout vs visual
+	 * mismatch on mobile) and re-pin the message list if the user was already stuck to the
+	 * bottom. Pixel `style.height` on html caused worse clipping; CSS variables are fine.
 	 */
+	function applyChatRootHeightFromVisualViewport() {
+		const el = document.documentElement;
+		if (!el.classList.contains('chat-page')) return;
+		const vv = window.visualViewport;
+		if (vv && typeof vv.height === 'number' && Number.isFinite(vv.height) && vv.height > 0) {
+			el.style.setProperty('--chat-vh', `${vv.height}px`);
+		} else {
+			el.style.removeProperty('--chat-vh');
+		}
+	}
+
 	function setupChatViewportSync() {
 		teardownChatViewportSync();
 		const nudge = () => nudgeChatScrollIfStuckToBottom();
-		const onVVResize = () => nudge();
-		const onVVScroll = () => nudge();
-		const onWinResize = () => nudge();
+		const onViewport = () => {
+			applyChatRootHeightFromVisualViewport();
+			nudge();
+		};
 		if (window.visualViewport) {
-			window.visualViewport.addEventListener('resize', onVVResize);
-			window.visualViewport.addEventListener('scroll', onVVScroll);
+			window.visualViewport.addEventListener('resize', onViewport);
+			window.visualViewport.addEventListener('scroll', onViewport);
 		}
-		window.addEventListener('resize', onWinResize);
+		window.addEventListener('resize', onViewport);
+		applyChatRootHeightFromVisualViewport();
+		requestAnimationFrame(() => {
+			requestAnimationFrame(() => {
+				applyChatRootHeightFromVisualViewport();
+				nudge();
+			});
+		});
 		chatViewportCleanup = () => {
-			if (window.visualViewport) {
-				window.visualViewport.removeEventListener('resize', onVVResize);
-				window.visualViewport.removeEventListener('scroll', onVVScroll);
+			try {
+				document.documentElement.style.removeProperty('--chat-vh');
+			} catch {
+				// ignore
 			}
-			window.removeEventListener('resize', onWinResize);
+			if (window.visualViewport) {
+				window.visualViewport.removeEventListener('resize', onViewport);
+				window.visualViewport.removeEventListener('scroll', onViewport);
+			}
+			window.removeEventListener('resize', onViewport);
 		};
 	}
 

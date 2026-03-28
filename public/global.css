@@ -3929,11 +3929,17 @@ app-route-feed {
 /* Connect: chat (channels + DMs) — inbox list; threads open at /chat/… */
 
 /* Standalone chat page: no app header or mobile nav */
-/* No JS-driven root height: pinning html/body to pixel height + max-height was clipping the
-   composer on several mobile engines. Use min-height + flex; Chrome gets interactive-widget
-   (patched in chat.html) so the layout can resize with the keyboard where supported. */
+/* Root height: `html { height: 100% }` matched the large layout viewport on mobile, so the
+   thread column was taller than the visible area and the composer sat below the fold (only a
+   sliver visible). Prefer 100dvh + optional --chat-vh from visualViewport (chat.js). Do not set
+   body min-height: 100dvh while html is shorter — that forces body taller than html and clips
+   the composer. Chrome: interactive-widget (chat.html) resizes with the keyboard. */
 html.chat-page {
-	height: 100%;
+	height: 100vh;
+	height: 100dvh;
+	min-height: 100dvh;
+	height: var(--chat-vh, 100dvh);
+	min-height: var(--chat-vh, 100dvh);
 	overflow: hidden;
 	background: var(--bg);
 	overflow-anchor: none;
@@ -3943,8 +3949,7 @@ body.chat-page {
 	display: flex;
 	flex-direction: column;
 	height: 100%;
-	min-height: 100vh;
-	min-height: 100dvh;
+	min-height: 100%;
 	margin: 0;
 	overflow: hidden;
 	-webkit-text-size-adjust: 100%;
