@@ -4509,27 +4509,6 @@ body.chat-page .chat-page-send-btn .chat-page-send-icon {
 	flex-shrink: 0;
 }
 
-/* Send in flight: same spinner ring as .route-loading-spinner, no 2s delay */
-body.chat-page .chat-page-send-btn.is-sending {
-	pointer-events: none;
-}
-
-body.chat-page .chat-page-send-btn.is-sending .chat-page-send-spinner.route-loading-spinner {
-	width: 20px;
-	height: 20px;
-	border-width: 2px;
-	animation: spin 0.8s linear infinite;
-	opacity: 1;
-	animation-delay: 0s;
-}
-
-@media (prefers-reduced-motion: reduce) {
-	body.chat-page .chat-page-send-btn.is-sending .chat-page-send-spinner.route-loading-spinner {
-		animation: spin 0.8s linear infinite;
-		opacity: 1;
-	}
-}
-
 @media (max-width: 768px) {
 	body.chat-page .chat-page-input-shell {
 		flex: 1 1 auto;
@@ -5177,6 +5156,88 @@ body.blog-edit-page .blog-edit-route {
 	white-space: pre-wrap;
 	word-break: break-word;
 	max-width: 100%;
+}
+
+.connect-chat-msg.is-optimistic-pending .connect-chat-msg-bubble {
+	opacity: 0.88;
+}
+
+.chat-page-optimistic-failed-line {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	margin-bottom: 0;
+	padding-left: 1em;
+	box-sizing: border-box;
+	font-size: 0.8125rem;
+	line-height: 1.45;
+	color: var(--error-text);
+	max-width: 100%;
+}
+
+/* Error line + bubble read as one unit: match bubble horizontal padding, tight vertical pair. */
+.connect-chat-msg.is-optimistic-failed .connect-chat-msg-inner {
+	gap: 0;
+	background: color-mix(in srgb, transparent 95%, var(--error-text));
+}
+
+.connect-chat-msg.is-optimistic-failed .connect-chat-msg-meta {
+	margin-bottom: 4px;
+}
+
+.connect-chat-msg.is-optimistic-failed:not(.is-group-continue) {
+	margin-top: 6px;
+}
+
+.connect-chat-msg.is-optimistic-failed.is-group-continue .chat-page-optimistic-failed-line {
+	padding-top: 6px;
+}
+
+.chat-page-optimistic-failed-line + .connect-chat-msg-bubble {
+	margin-top: 2px;
+}
+
+.chat-page-optimistic-failed-icon {
+	flex-shrink: 0;
+	display: inline-flex;
+	margin-top: 1px;
+	color: var(--error-text);
+}
+
+.chat-page-optimistic-failed-icon-svg {
+	display: block;
+	vertical-align: top;
+}
+
+.chat-page-optimistic-failed-copy {
+	min-width: 0;
+}
+
+.chat-page-optimistic-retry {
+	display: inline;
+	margin: 0;
+	padding: 0;
+	border: none;
+	background: none;
+	font: inherit;
+	font-size: inherit;
+	line-height: inherit;
+	color: var(--error-text);
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
+	touch-action: manipulation;
+}
+
+.chat-page-optimistic-retry:hover {
+	color: color-mix(in srgb, var(--error-text) 85%, var(--accent));
+}
+
+.chat-page-optimistic-retry:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+	border-radius: 2px;
 }
 
 /* Creation share: image is the focus — drop the “second box” around the bubble + frame */

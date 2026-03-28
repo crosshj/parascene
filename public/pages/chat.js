@@ -2,6 +2,23 @@
  * Standalone /chat/* thread UI (plain JS; not a custom element).
  */
 
+const ENTER_SENDS = (() => {
+	try {
+		return window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+	} catch {
+		return typeof window.innerWidth === 'number' && window.innerWidth >= 768;
+	}
+})();
+
+/** `?chatSimulateSendFail=1` — next POST /messages returns failure so you can preview resend UI. */
+function chatSimulateSendFail() {
+	try {
+		return new URLSearchParams(window.location.search).get('chatSimulateSendFail') === '1';
+	} catch {
+		return false;
+	}
+}
+
 let formatRelativeTime;
 let fetchJsonWithStatusDeduped;
 let readCachedChatThreads;
@@ -257,6 +274,8 @@ export async function initChatPage(root) {
 	let activeThreadId = null;
 	let loadingMessages = false;
 	let sendInFlight = false;
+	/** Optimistic / failed send row (re-mounted after each loadMessages when still relevant). */
+	let optimisticSend = null;
 	/** @type {null | (() => void)} */
 	let chatViewportCleanup = null;
 	let activeReactionPicker = null;
@@ -559,29 +578,209 @@ export async function initChatPage(root) {
 		const sendBtn = root.querySelector('[data-chat-send]');
 		const inp = root.querySelector('[data-chat-body-input]');
 		if (!(sendBtn instanceof HTMLButtonElement) || !(inp instanceof HTMLTextAreaElement)) return;
-		if (sendBtn.classList.contains('is-sending')) {
-			sendBtn.hidden = false;
-			return;
-		}
 		sendBtn.hidden = String(inp.value || '').trim().length === 0;
 	}
 
-	function setSendSending(sending) {
-		const sendBtn = root.querySelector('[data-chat-send]');
-		if (!(sendBtn instanceof HTMLButtonElement)) return;
-		sendBtn.classList.toggle('is-sending', sending);
-		sendBtn.disabled = sending;
-		if (sending) {
-			sendBtn.hidden = false;
-			sendBtn.setAttribute('aria-busy', 'true');
-			sendBtn.setAttribute('aria-label', 'Sending');
-			sendBtn.innerHTML =
-				'<span class="chat-page-send-spinner route-loading-spinner" aria-hidden="true"></span>';
-		} else {
-			sendBtn.removeAttribute('aria-busy');
-			sendBtn.setAttribute('aria-label', 'Send');
-			sendBtn.innerHTML = sendIcon('chat-page-send-icon');
-			syncChatSendButton();
+	function findOptimisticRow(messagesEl, tempId) {
+		if (!messagesEl || !tempId) return null;
+		for (const el of messagesEl.querySelectorAll('[data-chat-optimistic-id]')) {
+			if (el.getAttribute('data-chat-optimistic-id') === tempId) return el;
+		}
+		return null;
+	}
+
+	function getViewerChatProfileHints() {
+		const vid = chatViewerId;
+		if (!Number.isFinite(vid)) return { handleRaw: '', avatarUrl: '' };
+		const list = Array.isArray(lastChatMessagesPayload) ? lastChatMessagesPayload : [];
+		for (let i = list.length - 1; i >= 0; i--) {
+			const m = list[i];
+			if (Number(m?.sender_id) === vid) {
+				const handleRaw = m.sender_user_name != null ? String(m.sender_user_name).trim() : '';
+				return { handleRaw, avatarUrl: String(m.sender_avatar_url || '') };
+			}
+		}
+		return { handleRaw: '', avatarUrl: '' };
+	}
+
+	function mountOptimisticRow(messagesEl, opt, sameSenderAsPrev, viewerId) {
+		const row = document.createElement('div');
+		const pending = opt.status === 'pending';
+		row.className = `connect-chat-msg is-self${sameSenderAsPrev ? ' is-group-continue' : ''}${pending ? ' is-optimistic-pending' : ' is-optimistic-failed'}`;
+		row.setAttribute('data-chat-optimistic-id', opt.tempId);
+		const inner = document.createElement('div');
+		inner.className = 'connect-chat-msg-inner';
+		const hints = getViewerChatProfileHints();
+		const handleRaw = hints.handleRaw;
+		const displayForAvatar = handleRaw || 'You';
+		const handleLabel = handleRaw ? `@${handleRaw}` : 'You';
+		const profileHref = buildProfilePath({ userName: handleRaw || undefined, userId: viewerId });
+
+		if (!sameSenderAsPrev) {
+			const metaLine = document.createElement('div');
+			metaLine.className = 'connect-chat-msg-meta';
+			const avatarWrap = document.createElement('div');
+			avatarWrap.innerHTML = renderCommentAvatarHtml({
+				avatarUrl: hints.avatarUrl,
+				displayName: displayForAvatar,
+				color: getAvatarColor(handleRaw || String(viewerId)),
+				href: profileHref || undefined,
+				flairSize: 'xs'
+			});
+			while (avatarWrap.firstChild) metaLine.appendChild(avatarWrap.firstChild);
+			const textSpan = document.createElement('span');
+			textSpan.className = 'connect-chat-msg-meta-text';
+			const nameSpan = document.createElement('span');
+			nameSpan.className = 'connect-chat-msg-meta-user';
+			nameSpan.textContent = handleLabel;
+			textSpan.appendChild(nameSpan);
+			if (pending) {
+				const sepSpan = document.createElement('span');
+				sepSpan.className = 'connect-chat-msg-meta-sep';
+				sepSpan.textContent = ' · ';
+				textSpan.appendChild(sepSpan);
+				const whenSpan = document.createElement('span');
+				whenSpan.className = 'connect-chat-msg-meta-when';
+				whenSpan.textContent = 'Sending…';
+				textSpan.appendChild(whenSpan);
+			}
+			metaLine.appendChild(textSpan);
+			inner.appendChild(metaLine);
+		}
+
+		if (!pending) {
+			const failedLine = document.createElement('div');
+			failedLine.className = 'chat-page-optimistic-failed-line';
+			const iconWrap = document.createElement('span');
+			iconWrap.className = 'chat-page-optimistic-failed-icon';
+			iconWrap.setAttribute('aria-hidden', 'true');
+			iconWrap.innerHTML =
+				'<svg class="chat-page-optimistic-failed-icon-svg" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">' +
+				'<circle cx="8" cy="8" r="8" fill="currentColor"/>' +
+				'<path fill="var(--bg)" d="M8 3.5c.41 0 .75.34.75.75v4.5a.75.75 0 01-1.5 0v-4.5c0-.41.34-.75.75-.75zm0 7a.75.75 0 110 1.5.75.75 0 010-1.5z"/>' +
+				'</svg>';
+			const textWrap = document.createElement('span');
+			textWrap.className = 'chat-page-optimistic-failed-copy';
+			textWrap.appendChild(document.createTextNode('Failed to send. '));
+			const retryBtn = document.createElement('button');
+			retryBtn.type = 'button';
+			retryBtn.className = 'chat-page-optimistic-retry';
+			retryBtn.setAttribute('data-chat-optimistic-resend', opt.tempId);
+			retryBtn.setAttribute('aria-label', 'Retry sending message');
+			retryBtn.textContent = 'Click here to retry.';
+			textWrap.appendChild(retryBtn);
+			failedLine.appendChild(iconWrap);
+			failedLine.appendChild(textWrap);
+			inner.appendChild(failedLine);
+		}
+
+		const bubble = document.createElement('div');
+		bubble.className = 'connect-chat-msg-bubble';
+		bubble.innerHTML = processUserText(opt.body ?? '');
+		inner.appendChild(bubble);
+
+		row.appendChild(inner);
+		messagesEl.appendChild(row);
+		row.setAttribute('data-chat-latest', '1');
+		hydrateUserTextLinks(row);
+		hydrateChatYoutubeEmbeds(row);
+		hydrateChatCreationEmbeds(row);
+		for (const b of row.querySelectorAll('.connect-chat-msg-bubble')) {
+			trimTrailingWhitespaceAfterChatEmbed(b);
+		}
+		for (const embed of row.querySelectorAll('.connect-chat-creation-embed')) {
+			trimChatCreationEmbedWhitespace(embed);
+		}
+	}
+
+	async function postChatMessage(threadId, body) {
+		if (chatSimulateSendFail()) {
+			await new Promise((r) => setTimeout(r, 400));
+			return {
+				ok: false,
+				error: 'Simulated failure (remove ?chatSimulateSendFail=1 from the URL to send for real)'
+			};
+		}
+		const res = await fetch(`/api/chat/threads/${threadId}/messages`, {
+			method: 'POST',
+			credentials: 'include',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ body })
+		});
+		const data = await res.json().catch(() => ({}));
+		if (!res.ok) {
+			return { ok: false, error: data.message || data.error || 'Could not send' };
+		}
+		return { ok: true };
+	}
+
+	function placeOptimisticInDom(messagesEl, opt) {
+		const vid = chatViewerId;
+		findOptimisticRow(messagesEl, opt.tempId)?.remove();
+		messagesEl.querySelector('[data-chat-latest="1"]')?.removeAttribute('data-chat-latest');
+		const last = lastChatMessagesPayload[lastChatMessagesPayload.length - 1];
+		const sameSenderAsPrev =
+			last != null && Number.isFinite(Number(vid)) && Number(last.sender_id) === Number(vid);
+		mountOptimisticRow(messagesEl, opt, sameSenderAsPrev, vid);
+		chatStickToBottom = true;
+		scrollChatMessagesToEnd();
+		setupReactionTooltipTap(messagesEl);
+	}
+
+	async function afterSendSuccess(threadId) {
+		optimisticSend = null;
+		await loadMessages();
+		const tail = lastChatMessagesPayload[lastChatMessagesPayload.length - 1];
+		const newMid = tail?.id != null ? Number(tail.id) : null;
+		if (Number.isFinite(newMid) && newMid > 0) {
+			patchChatThreadRow(threadId, { last_read_message_id: newMid, unread_count: 0 });
+			lastMarkReadSentId = newMid;
+		}
+		fadeOutUnreadHighlightsInDom();
+		dispatchChatUnreadRefresh();
+		void refreshChatSidebar({ skipThreadsFetch: true });
+	}
+
+	async function resendOptimisticFromUi(tempId) {
+		if (!optimisticSend || optimisticSend.tempId !== tempId || optimisticSend.status !== 'failed') return;
+		if (sendInFlight) return;
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		if (!messagesEl) return;
+		const { threadId, body } = optimisticSend;
+		const errEl = root.querySelector('[data-chat-error]');
+		sendInFlight = true;
+		optimisticSend = { tempId, body, threadId, status: 'pending' };
+		placeOptimisticInDom(messagesEl, optimisticSend);
+		if (errEl instanceof HTMLElement) {
+			errEl.hidden = true;
+			errEl.textContent = '';
+		}
+		try {
+			const result = await postChatMessage(threadId, body);
+			if (!result.ok) {
+				optimisticSend = {
+					tempId,
+					body,
+					threadId,
+					status: 'failed',
+					errorMessage: result.error
+				};
+				placeOptimisticInDom(messagesEl, optimisticSend);
+				return;
+			}
+			await afterSendSuccess(threadId);
+		} catch (err) {
+			console.error('[Chat page] resend:', err);
+			optimisticSend = {
+				tempId,
+				body,
+				threadId,
+				status: 'failed',
+				errorMessage: err?.message || 'Could not send message.'
+			};
+			placeOptimisticInDom(messagesEl, optimisticSend);
+		} finally {
+			sendInFlight = false;
 		}
 	}
 
@@ -1392,6 +1591,16 @@ export async function initChatPage(root) {
 				row.appendChild(inner);
 				messagesEl.appendChild(row);
 			}
+			if (optimisticSend && Number(optimisticSend.threadId) === threadId) {
+				messagesEl.querySelector('.chat-page-empty-hint')?.remove();
+				messagesEl.querySelector('[data-chat-latest="1"]')?.removeAttribute('data-chat-latest');
+				const last = messages[messages.length - 1];
+				const sameSenderAsPrev =
+					last != null &&
+					Number.isFinite(Number(viewerId)) &&
+					Number(last.sender_id) === Number(viewerId);
+				mountOptimisticRow(messagesEl, optimisticSend, sameSenderAsPrev, viewerId);
+			}
 			hydrateUserTextLinks(messagesEl);
 			hydrateChatYoutubeEmbeds(messagesEl);
 			hydrateChatCreationEmbeds(messagesEl);
@@ -1473,6 +1682,15 @@ export async function initChatPage(root) {
 	}
 
 	function onChatMessagesClick(e) {
+		const resendBtn = e.target?.closest?.('[data-chat-optimistic-resend]');
+		if (resendBtn instanceof HTMLElement) {
+			e.preventDefault();
+			e.stopPropagation();
+			const tempId = resendBtn.getAttribute('data-chat-optimistic-resend');
+			if (tempId) void resendOptimisticFromUi(tempId);
+			return;
+		}
+
 		const pill = e.target?.closest?.('.comment-reaction-pill[data-emoji-key][data-chat-message-id]');
 		if (pill && pill instanceof HTMLElement) {
 			const messageId = Number(pill.dataset.chatMessageId);
@@ -1539,50 +1757,57 @@ export async function initChatPage(root) {
 		const threadId = activeThreadId;
 		const bodyInput = root.querySelector('[data-chat-body-input]');
 		const errEl = root.querySelector('[data-chat-error]');
-		if (!threadId || !(bodyInput instanceof HTMLTextAreaElement)) return;
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		if (!threadId || !(bodyInput instanceof HTMLTextAreaElement) || !messagesEl) return;
 		if (sendInFlight) return;
 
 		const text = String(bodyInput.value || '').trim();
 		if (!text) return;
 
+		const tempId =
+			typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+				? crypto.randomUUID()
+				: `opt-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
 		sendInFlight = true;
-		setSendSending(true);
 		if (errEl instanceof HTMLElement) {
 			errEl.hidden = true;
 			errEl.textContent = '';
 		}
 
+		optimisticSend = { tempId, body: text, threadId, status: 'pending' };
+		bodyInput.value = '';
+		syncChatSendButton();
+		messagesEl.querySelector('.chat-page-empty-hint')?.remove();
+		placeOptimisticInDom(messagesEl, optimisticSend);
+
 		try {
-			const res = await fetch(`/api/chat/threads/${threadId}/messages`, {
-				method: 'POST',
-				credentials: 'include',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ body: text })
-			});
-			const data = await res.json().catch(() => ({}));
-			if (!res.ok) {
-				throw new Error(data.message || data.error || 'Could not send');
+			const result = await postChatMessage(threadId, text);
+			if (!result.ok) {
+				optimisticSend = {
+					tempId,
+					body: text,
+					threadId,
+					status: 'failed',
+					errorMessage: result.error
+				};
+				placeOptimisticInDom(messagesEl, optimisticSend);
+				return;
 			}
-			bodyInput.value = '';
-			await loadMessages();
-			const tail = lastChatMessagesPayload[lastChatMessagesPayload.length - 1];
-			const newMid = tail?.id != null ? Number(tail.id) : null;
-			if (Number.isFinite(newMid) && newMid > 0) {
-				patchChatThreadRow(threadId, { last_read_message_id: newMid, unread_count: 0 });
-				lastMarkReadSentId = newMid;
-			}
-			fadeOutUnreadHighlightsInDom();
-			dispatchChatUnreadRefresh();
-			void refreshChatSidebar({ skipThreadsFetch: true });
+			await afterSendSuccess(threadId);
 		} catch (err) {
 			console.error('[Chat page] send:', err);
-			if (errEl instanceof HTMLElement) {
-				errEl.hidden = false;
-				errEl.textContent = err?.message || 'Could not send message.';
-			}
+			optimisticSend = {
+				tempId,
+				body: text,
+				threadId,
+				status: 'failed',
+				errorMessage: err?.message || 'Could not send message.'
+			};
+			placeOptimisticInDom(messagesEl, optimisticSend);
 		} finally {
 			sendInFlight = false;
-			setSendSending(false);
+			syncChatSendButton();
 			requestAnimationFrame(() => {
 				try {
 					bodyInput.focus({ preventScroll: true });
@@ -1602,6 +1827,8 @@ export async function initChatPage(root) {
 			window.location.replace('/connect#chat');
 			return;
 		}
+
+		optimisticSend = null;
 
 		if (messagesEl) {
 			messagesEl.innerHTML = renderEmptyState({
@@ -1775,8 +2002,9 @@ export async function initChatPage(root) {
 		attachMentionSuggest(bodyInput);
 		bodyInput.addEventListener('input', () => syncChatSendButton());
 		bodyInput.addEventListener('keydown', (ev) => {
-			if (ev.key !== 'Enter' || !ev.shiftKey) return;
-			if (ev.isComposing) return;
+			if (ev.key !== 'Enter' || ev.isComposing) return;
+			if (!ENTER_SENDS) return;
+			if (ev.shiftKey) return;
 			ev.preventDefault();
 			void submitChatMessage();
 		});
