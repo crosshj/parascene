@@ -1,4 +1,5 @@
 let formatRelativeTime;
+let getAvatarColor;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -17,6 +18,8 @@ async function loadDeps() {
 	_depsPromise = (async () => {
 		const datetimeMod = await import(`../../shared/datetime.js${qs}`);
 		formatRelativeTime = datetimeMod.formatRelativeTime;
+		const avatarMod = await import(`../../shared/avatar.js${qs}`);
+		getAvatarColor = avatarMod.getAvatarColor;
 	})();
 	return _depsPromise;
 }
@@ -245,6 +248,7 @@ class AppModalServer extends HTMLElement {
 		}
 
 		if (serverId) {
+			await loadDeps();
 			await this.loadServer(serverId);
 			// loadServer may close the modal on error.
 			if (!this._isOpen || !this.serverData) return;
@@ -719,6 +723,63 @@ class AppModalServer extends HTMLElement {
 					display: block;
 					margin-bottom: 0.25rem;
 				}
+
+				.server-modal-owner-wrap {
+					margin-bottom: 1rem;
+				}
+
+				.server-modal-owner-label {
+					font-size: 0.85rem;
+					font-weight: 600;
+					color: var(--text-muted);
+					text-transform: uppercase;
+					letter-spacing: 0.5px;
+					margin-bottom: 0.5rem;
+				}
+
+				.server-modal-owner-row {
+					display: flex;
+					align-items: center;
+					gap: 8px;
+				}
+
+				.server-modal-owner-avatar {
+					width: 32px;
+					height: 32px;
+					border-radius: 50%;
+					display: flex;
+					align-items: center;
+					justify-content: center;
+					font-size: 0.75rem;
+					color: #ffffff;
+					font-weight: 600;
+					flex-shrink: 0;
+				}
+
+				.server-modal-owner-avatar-img {
+					width: 100%;
+					height: 100%;
+					border-radius: 50%;
+					object-fit: cover;
+					display: block;
+				}
+
+				.server-modal-owner-text {
+					display: flex;
+					align-items: center;
+					gap: 4px;
+					flex-wrap: wrap;
+					font-size: 0.875rem;
+				}
+
+				.server-modal-owner-name {
+					color: var(--text);
+					font-weight: 500;
+				}
+
+				.server-modal-owner-handle {
+					color: var(--text-muted);
+				}
 			</style>
 			<div class="server-modal-overlay">
 				<div class="server-modal">
@@ -790,6 +851,37 @@ class AppModalServer extends HTMLElement {
 		}
 	}
 
+	/** Owner row aligned with Connect server cards (32px avatar, name, @handle). Hidden for platform server (id 1). */
+	ownerSectionHtml() {
+		const server = this.serverData;
+		if (!server || server.id === 1 || !server.owner) return '';
+		const owner = server.owner;
+		const ownerDisplayName = owner.display_name || `User ${owner.id}`;
+		const ownerUserName = owner.user_name || owner.email_prefix || null;
+		const ownerAvatarUrl = owner.avatar_url || null;
+		const ownerInitial = ownerDisplayName.trim().charAt(0).toUpperCase() || '?';
+		const colorSeed = owner.user_name || owner.email_prefix || String(owner.id || '');
+		const ownerColor = typeof getAvatarColor === 'function' ? getAvatarColor(colorSeed) : '#6366f1';
+		const avatarInner = ownerAvatarUrl
+			? html`<img src="${this.escapeHtml(ownerAvatarUrl)}" class="server-modal-owner-avatar-img" alt="" />`
+			: this.escapeHtml(ownerInitial);
+		const handlePart = ownerUserName
+			? html`<span class="server-modal-owner-handle">@${this.escapeHtml(ownerUserName)}</span>`
+			: '';
+		return html`
+			<div class="server-modal-owner-wrap">
+				<div class="server-modal-owner-label">Owner</div>
+				<div class="server-modal-owner-row">
+					<div class="server-modal-owner-avatar" style="background: ${ownerColor};">${avatarInner}</div>
+					<div class="server-modal-owner-text">
+						<span class="server-modal-owner-name">${this.escapeHtml(ownerDisplayName)}</span>
+						${handlePart}
+					</div>
+				</div>
+			</div>
+		`;
+	}
+
 	renderEditMode() {
 		if (!this.serverData) return;
 
@@ -813,6 +905,7 @@ class AppModalServer extends HTMLElement {
 							<span>This server is suspended. It does not appear in the create dropdown or in the servers list for non-admins.</span>
 						</div>
 					` : ''}
+					${this.ownerSectionHtml()}
 					<label>
 						Name
 						<input type="text" name="name" required value="${this.escapeHtml(this.serverData.name || '')}" />
@@ -917,6 +1010,7 @@ class AppModalServer extends HTMLElement {
 							<span>This server is suspended. It does not appear in the create dropdown or in the servers list for non-admins.</span>
 						</div>
 					` : ''}
+					${this.ownerSectionHtml()}
 					<div class="server-detail-row">
 						<strong>Status</strong>
 						<span>${this.serverData.status || '—'}</span>

@@ -63,9 +63,9 @@ export function initChatSidebarModals(options) {
 	const getThreads = typeof options.getThreads === 'function' ? options.getThreads : () => [];
 	const getViewerId = typeof options.getViewerId === 'function' ? options.getViewerId : () => null;
 	const navigateToChatPath =
-		typeof options.navigateToChatPath === 'function' ? options.navigateToChatPath : () => {};
+		typeof options.navigateToChatPath === 'function' ? options.navigateToChatPath : () => { };
 	const refreshSidebar =
-		typeof options.refreshSidebar === 'function' ? options.refreshSidebar : () => {};
+		typeof options.refreshSidebar === 'function' ? options.refreshSidebar : () => { };
 
 	let fetchJsonWithStatusDeduped;
 	let getAvatarColor;
@@ -143,34 +143,38 @@ export function initChatSidebarModals(options) {
 	</div>
 </div>
 <div id="chat-modal-servers" class="modal-overlay chat-page-chat-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="chat-modal-servers-title">
-	<div class="modal modal-medium chat-page-chat-modal-panel">
+	<div class="modal modal-medium chat-page-chat-modal-panel chat-page-chat-modal-panel--servers">
 		<div class="modal-header">
 			<h3 id="chat-modal-servers-title">Servers</h3>
 			<button type="button" class="modal-close chat-page-chat-modal-close" data-chat-modal-close aria-label="Close"><span class="modal-close-icon" aria-hidden="true">×</span></button>
 		</div>
 		<div class="modal-body">
 			<p class="chat-page-chat-modal-lead">Join a server or register your own image generation server.</p>
-			<div class="chat-page-chat-modal-list" data-chat-servers-list aria-busy="true"></div>
-			<button type="button" class="btn-primary chat-page-chat-modal-fullwidth" data-chat-servers-add-custom>Register a custom server</button>
+			<div class="chat-page-chat-modal-list chat-page-chat-modal-list--scroll chat-page-chat-modal-servers-list" data-chat-servers-list aria-busy="true"></div>
+			<button type="button" class="btn-outlined chat-page-chat-modal-fullwidth chat-page-chat-modal-servers-register" data-chat-servers-add-custom>Register a custom server</button>
 		</div>
 	</div>
 </div>
 <div id="chat-modal-channels" class="modal-overlay chat-page-chat-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="chat-modal-channels-title">
-	<div class="modal modal-medium chat-page-chat-modal-panel">
+	<div class="modal modal-medium chat-page-chat-modal-panel chat-page-chat-modal-panel--channels">
 		<div class="modal-header">
 			<h3 id="chat-modal-channels-title">Channels</h3>
 			<button type="button" class="modal-close chat-page-chat-modal-close" data-chat-modal-close aria-label="Close"><span class="modal-close-icon" aria-hidden="true">×</span></button>
 		</div>
 		<div class="modal-body">
-			<p class="chat-page-chat-modal-lead">Open an existing tag channel or create a new one (same rules as Explore tags).</p>
-			<label class="chat-page-chat-modal-label" for="chat-modal-channel-tag">Open or create by tag</label>
-			<div class="chat-page-chat-modal-inline">
-				<input type="text" id="chat-modal-channel-tag" class="chat-page-chat-modal-input" placeholder="e.g. pixelart" maxlength="40" autocomplete="off" data-chat-channel-tag-input />
-				<button type="button" class="btn-primary" data-chat-channel-open>Open</button>
+			<p class="chat-page-chat-modal-lead">Open an existing tag channel or create a new one.</p>
+			<div class="chat-page-chat-modal-field">
+				<label class="chat-page-chat-modal-label" for="chat-modal-channel-tag">Open or create by tag</label>
+				<div class="chat-page-chat-modal-tag-row">
+					<input type="text" id="chat-modal-channel-tag" class="chat-page-chat-modal-input chat-page-chat-modal-input--tag" placeholder="e.g. pixelart" maxlength="40" autocomplete="off" data-chat-channel-tag-input />
+					<button type="button" class="btn-primary chat-page-chat-modal-open-btn" data-chat-channel-open>Open</button>
+				</div>
+				<p class="chat-page-chat-modal-hint chat-page-chat-modal-hint--tight">Lowercase, 2–32 characters, letters, numbers, <code>_</code> and <code>-</code>.</p>
 			</div>
-			<p class="chat-page-chat-modal-hint">Lowercase, 2–32 characters, letters, numbers, <code>_</code> and <code>-</code>.</p>
-			<h4 class="chat-page-chat-modal-subhead">Existing channels</h4>
-			<div class="chat-page-chat-modal-list chat-page-chat-modal-list--scroll" data-chat-channels-list aria-busy="true"></div>
+			<div class="chat-page-chat-modal-channels-browse">
+				<h4 class="chat-page-chat-modal-subhead">Existing channels</h4>
+				<div class="chat-page-chat-modal-list chat-page-chat-modal-list--scroll" data-chat-channels-list aria-busy="true"></div>
+			</div>
 		</div>
 	</div>
 </div>`;
@@ -335,20 +339,57 @@ export function initChatSidebarModals(options) {
 		);
 		if (joinable.length === 0) {
 			listEl.innerHTML =
-				'<p class="route-empty">No servers to join right now. You can register your own below.</p>';
+				'<p class="route-empty chat-page-chat-modal-servers-empty">No servers to join right now. You can register your own below.</p>';
 			return;
 		}
 		listEl.innerHTML = joinable
 			.map((s) => {
+				const id = Number(s.id);
 				const name = escapeHtml(s.name || 'Server');
-				const desc =
+				const rawDesc =
 					typeof s.description === 'string' && s.description.trim()
-						? escapeHtml(s.description.trim().slice(0, 160))
+						? s.description.trim()
 						: '';
-				return `<div class="chat-page-chat-modal-server card admin-card server-card" data-chat-server-join-id="${Number(s.id)}">
-					<div class="admin-title">${name}</div>
-					${desc ? `<div class="admin-detail server-card-description">${desc}</div>` : ''}
-					<button type="button" class="btn-primary btn-inline chat-page-chat-modal-join-btn" data-chat-server-join="${Number(s.id)}">Join</button>
+				const desc = rawDesc ? escapeHtml(rawDesc) : '';
+				let ownerBlock = '';
+				if (s.owner && id !== 1 && typeof getAvatarColor === 'function') {
+					const o = s.owner;
+					const displayName = escapeHtml(o.display_name || `User ${o.id}`);
+					const handleRaw = o.user_name || o.email_prefix || null;
+					const handle = handleRaw ? escapeHtml(handleRaw) : '';
+					const avatarUrl =
+						typeof o.avatar_url === 'string' && o.avatar_url.trim() ? o.avatar_url.trim() : '';
+					const initial = String(o.display_name || `U${o.id}`)
+						.trim()
+						.charAt(0)
+						.toUpperCase() || '?';
+					const bg = getAvatarColor(o.user_name || o.email_prefix || String(o.id || ''));
+					const avatarInner = avatarUrl
+						? `<img src="${escapeHtml(avatarUrl)}" class="chat-page-chat-modal-server-owner-img" alt="" />`
+						: escapeHtml(initial);
+					const handleHtml = handle
+						? `<span class="chat-page-chat-modal-server-owner-handle">@${handle}</span>`
+						: '';
+					ownerBlock = `<div class="chat-page-chat-modal-server-owner">
+						<div class="chat-page-chat-modal-server-owner-avatar" style="background:${escapeHtml(bg)}">${avatarInner}</div>
+						<div class="chat-page-chat-modal-server-owner-meta">
+							<span class="chat-page-chat-modal-server-owner-name">${displayName}</span>
+							${handleHtml}
+						</div>
+					</div>`;
+				}
+				const descBlock = desc
+					? `<p class="chat-page-chat-modal-server-desc">${desc}</p>`
+					: '';
+				return `<div class="chat-page-chat-modal-server-card" data-chat-server-join-id="${id}">
+					<div class="chat-page-chat-modal-server-row">
+						<div class="chat-page-chat-modal-server-col">
+							<div class="chat-page-chat-modal-server-title">${name}</div>
+							${ownerBlock}
+							${descBlock}
+						</div>
+						<button type="button" class="btn-outlined chat-page-chat-modal-join-btn" data-chat-server-join="${id}">Join</button>
+					</div>
 				</div>`;
 			})
 			.join('');

@@ -246,7 +246,8 @@ export async function initChatPage(root) {
 
 	const v = getAssetVersionParam();
 	const qs = getImportQuery(v);
-	const { sendIcon, REACTION_ORDER, REACTION_ICONS, smileIcon } = await import(`../icons/svg-strings.js${qs}`);
+	const { sendIcon, REACTION_ORDER, REACTION_ICONS, smileIcon, gearIcon } = await import(`../icons/svg-strings.js${qs}`);
+	const chatSidebarServerGearSvg = gearIcon('chat-page-sidebar-server-settings-icon');
 	const rosterMod = await import(`../shared/chatSidebarRoster.js${qs}`);
 	const serverChatTagMod = await import(`../shared/serverChatTag.js${qs}`);
 	const serverChannelTagFromServerName = serverChatTagMod.serverChannelTagFromServerName;
@@ -1197,7 +1198,8 @@ export async function initChatPage(root) {
 			.filter((s) => s && s.is_member)
 			.map((s) => ({
 				id: Number(s.id),
-				name: typeof s.name === 'string' ? s.name.trim() : ''
+				name: typeof s.name === 'string' ? s.name.trim() : '',
+				can_manage: Boolean(s.can_manage)
 			}))
 			.filter((s) => Number.isFinite(s.id) && s.id > 0);
 	}
@@ -1267,6 +1269,18 @@ export async function initChatPage(root) {
 				return !slug || !joinedSlugs.has(slug);
 			});
 
+			function joinedServerMetaForSlug(slug) {
+				const key = String(slug || '').trim().toLowerCase();
+				if (!key) return null;
+				for (const s of joinedSorted) {
+					const tag = serverChannelTagFromServerName(
+						typeof s?.name === 'string' ? s.name : ''
+					);
+					if (tag && tag.toLowerCase() === key) return s;
+				}
+				return null;
+			}
+
 			function rowHtml(t) {
 				const href = rosterMod.buildChatThreadUrl(t);
 				const active = isChatHrefActive(href);
@@ -1298,11 +1312,45 @@ export async function initChatPage(root) {
 				</a>`;
 			}
 
+			function serverRowHtml(t) {
+				const href = rosterMod.buildChatThreadUrl(t);
+				const active = isChatHrefActive(href);
+				const title = typeof t.title === 'string' && t.title.trim() ? t.title.trim() : 'Chat';
+				const avatarHtml = rosterMod.buildChatThreadRowAvatarHtml(t, deps);
+				const activeClass = active ? ' is-active' : '';
+				const unc = Number(t.unread_count);
+				const showUnread =
+					!active && Number.isFinite(unc) && unc > 0;
+				const unreadLabel = unc > 99 ? '99+' : String(unc);
+				const unreadHtml = showUnread
+					? `<span class="chat-page-sidebar-unread" aria-label="${unc} unread">${escapeHtml(unreadLabel)}</span>`
+					: '';
+				const slug =
+					typeof t.channel_slug === 'string' ? t.channel_slug.trim().toLowerCase() : '';
+				const meta = joinedServerMetaForSlug(slug);
+				const gearHtml =
+					meta && Number.isFinite(Number(meta.id)) && Number(meta.id) > 0
+						? `<button type="button" class="chat-page-sidebar-server-settings" data-chat-server-settings="${Number(meta.id)}" data-chat-server-can-manage="${meta.can_manage ? '1' : '0'}" aria-label="Server details">${chatSidebarServerGearSvg}</button>`
+						: '';
+				return `<div class="chat-page-sidebar-row chat-page-sidebar-row--server${activeClass}">
+					<a class="chat-page-sidebar-row-link" href="${escapeHtml(href)}">
+						${avatarHtml}
+						<div class="chat-page-sidebar-row-body">
+							<div class="chat-page-sidebar-row-title-line">
+								<span class="chat-page-sidebar-row-title">${escapeHtml(title)}</span>
+								${unreadHtml}
+							</div>
+						</div>
+					</a>
+					${gearHtml}
+				</div>`;
+			}
+
 			dmEl.innerHTML = dms.length
 				? dms.map(rowHtml).join('')
 				: '<p class="chat-page-sidebar-empty">No direct messages yet.</p>';
 			svEl.innerHTML = serverChannels.length
-				? serverChannels.map(rowHtml).join('')
+				? serverChannels.map(serverRowHtml).join('')
 				: '<p class="chat-page-sidebar-empty">No servers joined yet.</p>';
 			chEl.innerHTML = otherChannels.length
 				? otherChannels.map(rowHtml).join('')
@@ -1352,7 +1400,20 @@ export async function initChatPage(root) {
 		if (!sidebar) return;
 
 		chatSidebarNavClickHandler = (e) => {
-			const a = e.target?.closest?.('a.chat-page-sidebar-row');
+			const settingsBtn = e.target?.closest?.('[data-chat-server-settings]');
+			if (settingsBtn instanceof HTMLButtonElement) {
+				e.preventDefault();
+				e.stopPropagation();
+				const sid = Number(settingsBtn.getAttribute('data-chat-server-settings'));
+				if (!Number.isFinite(sid) || sid <= 0) return;
+				const canManage = settingsBtn.getAttribute('data-chat-server-can-manage') === '1';
+				const modal = document.querySelector('app-modal-server');
+				if (modal && typeof modal.open === 'function') {
+					modal.open({ mode: canManage ? 'edit' : 'view', serverId: sid });
+				}
+				return;
+			}
+			const a = e.target?.closest?.('a.chat-page-sidebar-row, a.chat-page-sidebar-row-link');
 			if (!(a instanceof HTMLAnchorElement)) return;
 			if (e.defaultPrevented) return;
 			if (e.button !== 0) return;
