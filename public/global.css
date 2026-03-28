@@ -5442,6 +5442,11 @@ body.blog-edit-page .blog-edit-route {
 	font-size: 0.85em;
 }
 
+.connect-chat-toolbar-error {
+	margin-top: 8px;
+	margin-bottom: 0;
+}
+
 .connect-chat-sidebar {
 	margin-bottom: 12px;
 }
@@ -5451,6 +5456,35 @@ body.blog-edit-page .blog-edit-route {
 	flex-direction: column;
 	gap: 6px;
 	padding: 2px 0;
+}
+
+.connect-chat-thread-row-wrap {
+	display: flex;
+	flex-direction: row;
+	align-items: stretch;
+	gap: 8px;
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.connect-chat-thread-row-wrap .connect-chat-thread-row {
+	flex: 1;
+	min-width: 0;
+}
+
+.connect-chat-thread-delete {
+	flex-shrink: 0;
+	align-self: center;
+}
+
+.connect-chat-admin-tools {
+	margin-top: 14px;
+	padding-top: 14px;
+	border-top: 1px solid var(--border);
+}
+
+.connect-chat-admin-thread-row .connect-chat-admin-thread-select {
+	min-width: 0;
 }
 
 .connect-chat-thread-row {
@@ -5766,16 +5800,15 @@ body.blog-edit-page .blog-edit-route {
 	border-radius: 2px;
 }
 
-/* Creation share: image is the focus — drop the “second box” around the bubble + frame */
-/* Stretch so width:100% on the embed resolves (avoid shrink-to-fit → 0 with hidden link + %) */
+/* Creation / YouTube: keep same horizontal inset as plain text (`.connect-chat-msg-bubble` = 2px 1em). */
 .connect-chat-msg-bubble:has(.connect-chat-creation-embed) {
 	border: none;
 	background: transparent;
-	padding: 0;
+	padding: 2px 1em;
 	box-shadow: none;
 	align-self: stretch;
 	width: 100%;
-	max-width: min(92vw, 680px);
+	max-width: 100%;
 	min-width: 0;
 	box-sizing: border-box;
 	display: flex;
@@ -5786,11 +5819,11 @@ body.blog-edit-page .blog-edit-route {
 .connect-chat-msg-bubble:has(.connect-chat-youtube-embed) {
 	border: none;
 	background: transparent;
-	padding: 0;
+	padding: 2px 1em;
 	box-shadow: none;
 	align-self: stretch;
 	width: 100%;
-	max-width: min(92vw, 680px);
+	max-width: 100%;
 	min-width: 0;
 	box-sizing: border-box;
 	display: flex;
@@ -5947,7 +5980,7 @@ body.blog-edit-page .blog-edit-route {
 
 .connect-chat-youtube-embed {
 	margin-top: 0;
-	padding-block: 4px;
+	padding-block: 0;
 	width: 100%;
 	min-width: 0;
 	max-width: 100%;

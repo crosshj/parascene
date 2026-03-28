@@ -9,7 +9,7 @@ export const CHAT_THREADS_CACHE_KEY = 'prsn-chat-threads-v1';
 export const CHAT_THREADS_STALE_MS = 60 * 1000;
 
 /**
- * @returns {{ viewerId: number, threads: unknown[], cachedAt: number } | null}
+ * @returns {{ viewerId: number, threads: unknown[], cachedAt: number, viewerIsAdmin?: boolean } | null}
  */
 export function readCachedChatThreads() {
 	if (typeof localStorage === 'undefined') return null;
@@ -21,23 +21,30 @@ export function readCachedChatThreads() {
 		if (!Array.isArray(o.threads)) return null;
 		const viewerId = o.viewerId != null ? Number(o.viewerId) : null;
 		if (viewerId == null || !Number.isFinite(viewerId)) return null;
-		return { viewerId, threads: o.threads, cachedAt: o.cachedAt };
+		const viewerIsAdmin = o.viewerIsAdmin === true;
+		return { viewerId, threads: o.threads, cachedAt: o.cachedAt, viewerIsAdmin };
 	} catch {
 		return null;
 	}
 }
 
-export function writeCachedChatThreads(viewerId, threads) {
+/**
+ * @param {number} viewerId
+ * @param {unknown[]} threads
+ * @param {{ viewerIsAdmin?: boolean }} [meta]
+ */
+export function writeCachedChatThreads(viewerId, threads, meta = {}) {
 	if (typeof localStorage === 'undefined') return;
 	try {
-		localStorage.setItem(
-			CHAT_THREADS_CACHE_KEY,
-			JSON.stringify({
-				viewerId: Number(viewerId),
-				threads,
-				cachedAt: Date.now()
-			})
-		);
+		const payload = {
+			viewerId: Number(viewerId),
+			threads,
+			cachedAt: Date.now()
+		};
+		if (meta.viewerIsAdmin === true) {
+			payload.viewerIsAdmin = true;
+		}
+		localStorage.setItem(CHAT_THREADS_CACHE_KEY, JSON.stringify(payload));
 	} catch {
 		// quota / private mode
 	}

@@ -12,6 +12,9 @@ import { runNotificationsCronForTests } from "../api/worker/notifications.js";
 import { buildRequestMeta } from "./utils/analytics.js";
 import { prsnCidFromMeta } from "./utils/prsnCids.js";
 import { BLOG_CAMPAIGN_INDEX, BLOG_CAMPAIGN_INTERNAL } from "../lib/blog/campaignPath.js";
+import { getSupabaseServiceClient } from "./utils/supabaseService.js";
+import { broadcastChatThreadDeleted } from "./utils/realtimeBroadcast.js";
+import { serverChannelTagFromServerName } from "../public/shared/serverChatTag.js";
 
 /** Subscription ID stored in user.meta when admin grants founder status without payment. Not a Stripe ID. */
 const GIFTED_FOUNDER_SUBSCRIPTION_ID = "gifted_founder";
@@ -411,6 +414,117 @@ export default function createAdminRoutes({ queries, storage }) {
 			deleted_user_id: targetUserId,
 			result: cleanupResult ?? null
 		});
+	});
+
+	// Admin-only: list all chat threads (for moderation UI).
+	router.get("/admin/chat/threads", async (req, res) => {
+		const admin = await requireAdmin(req, res);
+		if (!admin) return;
+
+		const sb = getSupabaseServiceClient();
+		if (!sb) {
+			return res.status(503).json({ error: "Service unavailable", message: "Database not configured" });
+		}
+
+		try {
+			const { data, error } = await sb
+				.from("prsn_chat_threads")
+				.select("id, type, dm_pair_key, channel_slug, created_at")
+				.order("id", { ascending: false });
+			if (error) throw error;
+
+			const rows = Array.isArray(data) ? data : [];
+
+			/** Slugs that map to a Connect “server” (same rule as chat sidebar). */
+			const serverSlugs = new Set();
+			try {
+				if (typeof queries?.selectServers?.all === "function") {
+					const servers = await queries.selectServers.all();
+					for (const s of servers || []) {
+						const tag = serverChannelTagFromServerName(
+							typeof s?.name === "string" ? s.name : ""
+						);
+						if (tag) serverSlugs.add(String(tag).toLowerCase());
+					}
+				}
+			} catch {
+				// ignore; fall through without server filtering
+			}
+
+			const threads = rows.filter((t) => {
+				if (t?.type === "dm") return false;
+				if (t?.type === "channel") {
+					const slug =
+						t?.channel_slug != null ? String(t.channel_slug).trim().toLowerCase() : "";
+					if (slug && serverSlugs.has(slug)) return false;
+				}
+				return true;
+			});
+
+			return res.status(200).json({ threads });
+		} catch (err) {
+			console.error("[GET /admin/chat/threads]", err);
+			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
+		}
+	});
+
+	// Admin-only: delete a chat thread and all messages / membership (DB CASCADE from prsn_chat_threads).
+	router.delete("/admin/chat/threads/:threadId", async (req, res) => {
+		const admin = await requireAdmin(req, res);
+		if (!admin) return;
+
+		const threadId = Number.parseInt(String(req.params?.threadId || ""), 10);
+		if (!Number.isFinite(threadId) || threadId <= 0) {
+			return res.status(400).json({ error: "Invalid thread id" });
+		}
+
+		const sb = getSupabaseServiceClient();
+		if (!sb) {
+			return res.status(503).json({ error: "Service unavailable", message: "Database not configured" });
+		}
+
+		try {
+			const { data: existing, error: exErr } = await sb
+				.from("prsn_chat_threads")
+				.select("id")
+				.eq("id", threadId)
+				.maybeSingle();
+			if (exErr) throw exErr;
+			if (!existing?.id) {
+				return res.status(404).json({ error: "Thread not found" });
+			}
+
+			const { data: memberRows, error: memErr } = await sb
+				.from("prsn_chat_members")
+				.select("user_id")
+				.eq("thread_id", threadId);
+			if (memErr) throw memErr;
+
+			const { count: messageCount, error: cntErr } = await sb
+				.from("prsn_chat_messages")
+				.select("id", { count: "exact", head: true })
+				.eq("thread_id", threadId);
+			if (cntErr) throw cntErr;
+
+			const memberUserIds = (Array.isArray(memberRows) ? memberRows : [])
+				.map((r) => Number(r?.user_id))
+				.filter((n) => Number.isFinite(n) && n > 0);
+
+			const { error: delErr } = await sb.from("prsn_chat_threads").delete().eq("id", threadId);
+			if (delErr) throw delErr;
+
+			void broadcastChatThreadDeleted(threadId, memberUserIds);
+
+			return res.status(200).json({
+				ok: true,
+				deleted_thread_id: threadId,
+				removed_messages: typeof messageCount === "number" ? messageCount : null,
+				member_count: memberUserIds.length
+			});
+		} catch (err) {
+			console.error("[DELETE /admin/chat/threads/:threadId]", err);
+			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
+		}
 	});
 
 	// Admin-only: override a user's username (write-once for normal users).

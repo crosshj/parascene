@@ -98,6 +98,28 @@ function escapeHtml(str) {
 		.replace(/'/g, '&#039;');
 }
 
+/** Connect “Open a channel” field: `@handle` only → same username rules as profile DM links. */
+function normalizeConnectAtUsernameOnly(raw) {
+	const t = String(raw || '').trim();
+	if (!t.startsWith('@')) return null;
+	const s = t.slice(1).trim().toLowerCase();
+	if (!/^[a-z0-9][a-z0-9_]{2,23}$/.test(s)) return null;
+	return s;
+}
+
+/** Label for admin thread `<select>` options (GET /admin/chat/threads rows). */
+function adminChatThreadSelectLabel(t) {
+	const id = t?.id != null ? Number(t.id) : null;
+	const idSuffix = Number.isFinite(id) && id > 0 ? ` · id ${id}` : '';
+	if (t?.type === 'channel' && t?.channel_slug) {
+		return `#${String(t.channel_slug).trim()}${idSuffix}`;
+	}
+	if (t?.type === 'dm' && t?.dm_pair_key) {
+		return `DM ${String(t.dm_pair_key).trim()}${idSuffix}`;
+	}
+	return `Thread${idSuffix}`;
+}
+
 const CONNECT_HASH_TAB_IDS = ['chat', 'latest-comments', 'servers', 'feature-requests'];
 const CONNECT_HASH_ALIASES = { comments: 'latest-comments' };
 
@@ -184,18 +206,32 @@ class AppRouteServers extends HTMLElement {
 						<label class="connect-chat-label" for="connect-chat-channel-input">Open a channel</label>
 						<div class="connect-chat-toolbar-row">
 							<input type="text" id="connect-chat-channel-input" class="connect-chat-input"
-								placeholder="e.g. pixelart" maxlength="40" autocomplete="off" data-connect-chat-tag-input />
+								placeholder="e.g. pixelart or @username" maxlength="40" autocomplete="off" data-connect-chat-tag-input />
 							<button type="button" class="btn-primary connect-chat-open-channel"
 								data-connect-chat-open-channel>Open</button>
 						</div>
-						<p class="connect-chat-hint">Tags match Explore: lowercase, 2–32 characters, letters, numbers,
-							<code>_</code> and <code>-</code>. Opens in full-screen chat.</p>
+						<p class="connect-chat-hint">Channel tags match Explore (lowercase, 2–32 characters, letters, numbers,
+							<code>_</code> and <code>-</code>). Use <code>@username</code> to open a direct message.</p>
+						<p class="connect-chat-error connect-chat-toolbar-error" data-connect-chat-error hidden role="alert"></p>
 					</div>
 					<div class="connect-chat-sidebar">
 						<div class="connect-chat-thread-list" data-connect-chat-thread-list aria-busy="true"
 							aria-label="Loading conversations"></div>
 					</div>
-					<p class="connect-chat-error" data-connect-chat-error hidden></p>
+					<div class="connect-chat-admin-tools" data-connect-chat-admin-tools hidden>
+						<p class="admin-detail">Admin: delete a hashtag channel thread. DMs and server-linked channels are
+							not listed. Removes all messages and membership (database cascade).</p>
+						<div class="connect-chat-toolbar-row connect-chat-admin-thread-row">
+							<select class="connect-chat-input connect-chat-admin-thread-select" data-connect-chat-admin-thread-select
+								aria-label="Chat thread to delete" disabled>
+								<option value="">Loading…</option>
+							</select>
+							<button type="button" class="btn-danger connect-chat-admin-delete"
+								data-connect-chat-admin-delete>Delete</button>
+						</div>
+						<p class="connect-chat-error" data-connect-chat-admin-status role="status" aria-live="polite"
+							hidden></p>
+					</div>
 				</div>
 			</tab>
 			<tab data-id="latest-comments" label="Comments">
@@ -229,7 +265,7 @@ class AppRouteServers extends HTMLElement {
 		this._appDocTitleBase = typeof document !== 'undefined' ? document.title : 'parascene';
 
 		this.loadLatestComments();
-		this.loadServers();
+		await this.loadServers();
 		this.setupFeatureRequestForm();
 		this.setupConnectChat();
 		this.setupConnectTabHash();
@@ -335,8 +371,11 @@ class AppRouteServers extends HTMLElement {
 		if (!root) return;
 
 		this._chatViewerId = null;
+		this._chatViewerIsAdmin = false;
 		this._chatThreads = [];
 		this._joinedServersForChat = [];
+		/** @type {Set<string> | null} — null until /api/servers loads; then lowercased slugs from every server name. */
+		this._serverDerivedChannelSlugs = null;
 		this._userBroadcastTeardown = null;
 		this._userBroadcastViewerBound = null;
 
@@ -362,11 +401,155 @@ class AppRouteServers extends HTMLElement {
 		}
 
 		this.loadChatThreads();
+		this.setupConnectChatAdminTools();
 
 		this._connectChatCleanup = () => {
 			document.removeEventListener('tab-change', this._onTabChangeForChat);
 			this._tearDownConnectChatUserBroadcast();
 		};
+	}
+
+	setupConnectChatAdminTools() {
+		const btn = this.querySelector('[data-connect-chat-admin-delete]');
+		if (!(btn instanceof HTMLButtonElement)) return;
+		btn.addEventListener('click', () => {
+			const sel = this.querySelector('[data-connect-chat-admin-thread-select]');
+			const raw = sel instanceof HTMLSelectElement ? String(sel.value || '').trim() : '';
+			const tid = Number(raw);
+			if (!Number.isFinite(tid) || tid <= 0) {
+				const st = this.querySelector('[data-connect-chat-admin-status]');
+				if (st instanceof HTMLElement) {
+					st.hidden = false;
+					st.textContent = 'Select a thread to delete.';
+				}
+				return;
+			}
+			let label = `thread ${tid}`;
+			if (sel instanceof HTMLSelectElement) {
+				const opt = sel.options[sel.selectedIndex];
+				if (opt && typeof opt.textContent === 'string' && opt.textContent.trim()) {
+					label = opt.textContent.trim();
+				}
+			}
+			void this.deleteConnectChatThread(tid, label);
+		});
+	}
+
+	async refreshAdminChatThreadSelect() {
+		if (!this._chatViewerIsAdmin) return;
+		const sel = this.querySelector('[data-connect-chat-admin-thread-select]');
+		if (!(sel instanceof HTMLSelectElement)) return;
+
+		const statusEl = this.querySelector('[data-connect-chat-admin-status]');
+		sel.innerHTML = '';
+		const loadingOpt = document.createElement('option');
+		loadingOpt.value = '';
+		loadingOpt.textContent = 'Loading…';
+		sel.appendChild(loadingOpt);
+		sel.disabled = true;
+
+		try {
+			const res = await fetch('/admin/chat/threads', { credentials: 'include' });
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				throw new Error(data.message || data.error || 'Failed to load threads');
+			}
+			const threads = Array.isArray(data.threads) ? data.threads : [];
+			sel.innerHTML = '';
+			const placeholder = document.createElement('option');
+			placeholder.value = '';
+			placeholder.textContent = threads.length === 0 ? 'No threads' : '— Select a thread —';
+			sel.appendChild(placeholder);
+			for (const t of threads) {
+				const id = t?.id != null ? Number(t.id) : null;
+				if (!Number.isFinite(id) || id <= 0) continue;
+				const opt = document.createElement('option');
+				opt.value = String(id);
+				opt.textContent = adminChatThreadSelectLabel(t);
+				sel.appendChild(opt);
+			}
+			sel.disabled = threads.length === 0;
+		} catch (err) {
+			console.error('[Connect chat] admin thread list:', err);
+			sel.innerHTML = '';
+			const failOpt = document.createElement('option');
+			failOpt.value = '';
+			failOpt.textContent = 'Could not load threads';
+			sel.appendChild(failOpt);
+			sel.disabled = true;
+			if (statusEl instanceof HTMLElement) {
+				statusEl.hidden = false;
+				statusEl.textContent = err?.message || 'Loading threads failed.';
+			}
+		}
+	}
+
+	updateConnectChatAdminToolsVisibility() {
+		const tools = this.querySelector('[data-connect-chat-admin-tools]');
+		if (tools instanceof HTMLElement) {
+			const vis = this._chatViewerIsAdmin;
+			tools.hidden = !vis;
+			if (vis) void this.refreshAdminChatThreadSelect();
+		}
+	}
+
+	/**
+	 * Admin-only: full thread delete via DELETE /admin/chat/threads/:id.
+	 * @param {number} threadId
+	 * @param {string} [titleForConfirm]
+	 */
+	async deleteConnectChatThread(threadId, titleForConfirm) {
+		const tid = Number(threadId);
+		if (!Number.isFinite(tid) || tid <= 0) return;
+
+		const statusEl = this.querySelector('[data-connect-chat-admin-status]');
+		const errEl = this.querySelector('[data-connect-chat-error]');
+		if (statusEl instanceof HTMLElement) {
+			statusEl.hidden = true;
+			statusEl.textContent = '';
+		}
+
+		const label = titleForConfirm && String(titleForConfirm).trim() ? String(titleForConfirm).trim() : `thread ${tid}`;
+		const ok = window.confirm(
+			`Delete ${label}? All messages and members will be removed. This cannot be undone.`
+		);
+		if (!ok) return;
+
+		try {
+			const res = await fetch(`/admin/chat/threads/${encodeURIComponent(String(tid))}`, {
+				method: 'DELETE',
+				credentials: 'include'
+			});
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				throw new Error(data.message || data.error || 'Could not delete thread');
+			}
+			if (statusEl instanceof HTMLElement) {
+				statusEl.hidden = false;
+				statusEl.textContent = 'Thread deleted.';
+			}
+			if (errEl instanceof HTMLElement) {
+				errEl.hidden = true;
+				errEl.textContent = '';
+			}
+			const sel = this.querySelector('[data-connect-chat-admin-thread-select]');
+			if (sel instanceof HTMLSelectElement) {
+				sel.value = '';
+			}
+			await this.loadChatThreads({ forceNetwork: true });
+			await this.refreshAdminChatThreadSelect();
+			try {
+				clearCachedChatThreads();
+			} catch {
+				// ignore
+			}
+		} catch (err) {
+			console.error('[Connect chat] delete thread:', err);
+			if (statusEl instanceof HTMLElement) {
+				statusEl.hidden = false;
+				statusEl.textContent = err?.message || 'Delete failed.';
+			}
+		}
 	}
 
 	async loadChatThreads(options = {}) {
@@ -381,6 +564,8 @@ class AppRouteServers extends HTMLElement {
 		if (cached) {
 			this._chatViewerId = cached.viewerId;
 			this._chatThreads = cached.threads;
+			this._chatViewerIsAdmin = Boolean(cached.viewerIsAdmin);
+			this.updateConnectChatAdminToolsVisibility();
 			this.renderConnectChatThreadList();
 			const errEl = this.querySelector('[data-connect-chat-error]');
 			if (errEl instanceof HTMLElement) {
@@ -419,10 +604,13 @@ class AppRouteServers extends HTMLElement {
 			}
 			const viewerId = result.data?.viewer_id != null ? Number(result.data.viewer_id) : null;
 			const threads = Array.isArray(result.data?.threads) ? result.data.threads : [];
+			const viewerIsAdmin = Boolean(result.data?.viewer_is_admin);
 			this._chatViewerId = viewerId;
 			this._chatThreads = threads;
+			this._chatViewerIsAdmin = viewerIsAdmin;
+			this.updateConnectChatAdminToolsVisibility();
 			if (viewerId != null && Number.isFinite(viewerId)) {
-				writeCachedChatThreads(viewerId, threads);
+				writeCachedChatThreads(viewerId, threads, { viewerIsAdmin });
 			}
 			this.renderConnectChatThreadList();
 			void this._bindConnectChatUserBroadcast();
@@ -504,6 +692,25 @@ class AppRouteServers extends HTMLElement {
 			const showUnread = Number.isFinite(unc) && unc > 0;
 			const unreadLabel = unc > 99 ? '99+' : String(unc);
 
+			const threadId = t.id != null ? Number(t.id) : null;
+			const slugLower =
+				typeof t.channel_slug === 'string' && t.channel_slug.trim()
+					? t.channel_slug.trim().toLowerCase()
+					: '';
+			const slugSetReady = this._serverDerivedChannelSlugs instanceof Set;
+			const isServerLinkedChannel =
+				t.type === 'channel' &&
+				Boolean(slugLower) &&
+				slugSetReady &&
+				this._serverDerivedChannelSlugs.has(slugLower);
+			const showDelete =
+				this._chatViewerIsAdmin &&
+				Number.isFinite(threadId) &&
+				threadId > 0 &&
+				t.type !== 'dm' &&
+				slugSetReady &&
+				!isServerLinkedChannel;
+
 			const row = document.createElement('a');
 			row.className = 'connect-chat-thread-row';
 			row.href = buildChatThreadUrl(t);
@@ -518,7 +725,29 @@ class AppRouteServers extends HTMLElement {
 					${preview ? `<span class="connect-chat-thread-row-preview">${escapeHtml(preview)}</span>` : ''}
 				</div>
 			`;
-			listEl.appendChild(row);
+
+			if (showDelete) {
+				const wrap = document.createElement('div');
+				wrap.className = 'connect-chat-thread-row-wrap';
+				wrap.appendChild(row);
+				const delBtn = document.createElement('button');
+				delBtn.type = 'button';
+				delBtn.className = 'btn-danger btn-inline connect-chat-thread-delete';
+				delBtn.textContent = 'Delete';
+				delBtn.setAttribute(
+					'aria-label',
+					`Delete chat thread ${threadId}`
+				);
+				delBtn.addEventListener('click', (e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					void this.deleteConnectChatThread(threadId, title);
+				});
+				wrap.appendChild(delBtn);
+				listEl.appendChild(wrap);
+			} else {
+				listEl.appendChild(row);
+			}
 		});
 		try {
 			document.dispatchEvent(new CustomEvent('chat-unread-refresh'));
@@ -543,6 +772,31 @@ class AppRouteServers extends HTMLElement {
 		if (errEl instanceof HTMLElement) {
 			errEl.hidden = true;
 			errEl.textContent = '';
+		}
+
+		const dmUser = normalizeConnectAtUsernameOnly(raw);
+		if (dmUser) {
+			try {
+				const res = await fetch('/api/chat/dm', {
+					method: 'POST',
+					credentials: 'include',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ other_user_name: dmUser })
+				});
+				const data = await res.json().catch(() => ({}));
+				if (!res.ok) {
+					throw new Error(data.message || data.error || 'Could not open DM');
+				}
+				input.value = '';
+				window.location.href = `/chat/dm/${encodeURIComponent(dmUser)}`;
+			} catch (err) {
+				console.error('[Connect chat] open DM:', err);
+				if (errEl instanceof HTMLElement) {
+					errEl.hidden = false;
+					errEl.textContent = err?.message || 'Could not open DM.';
+				}
+			}
+			return;
 		}
 
 		try {
@@ -934,6 +1188,17 @@ class AppRouteServers extends HTMLElement {
 			container.removeAttribute('aria-label');
 			const servers = Array.isArray(result.data?.servers) ? result.data.servers : [];
 			const viewerIsAdmin = Boolean(result.data?.viewer_is_admin);
+			if (typeof serverChannelTagFromServerName === 'function') {
+				this._serverDerivedChannelSlugs = new Set();
+				for (const s of servers) {
+					const tag = serverChannelTagFromServerName(
+						typeof s?.name === 'string' ? s.name : ''
+					);
+					if (tag) this._serverDerivedChannelSlugs.add(String(tag).toLowerCase());
+				}
+			} else {
+				this._serverDerivedChannelSlugs = null;
+			}
 			this._joinedServersForChat = servers
 				.filter((s) => s && s.is_member)
 				.map((s) => ({

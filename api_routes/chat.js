@@ -417,7 +417,21 @@ export default function createChatRoutes({ queries }) {
 				};
 			});
 
-			return res.status(200).json({ viewer_id: userId, threads });
+			let viewerIsAdmin = false;
+			try {
+				if (typeof queries?.selectUserById?.get === "function") {
+					const u = await queries.selectUserById.get(userId);
+					viewerIsAdmin = u?.role === "admin";
+				}
+			} catch {
+				viewerIsAdmin = false;
+			}
+
+			return res.status(200).json({
+				viewer_id: userId,
+				viewer_is_admin: viewerIsAdmin,
+				threads
+			});
 		} catch (err) {
 			console.error("[GET /api/chat/threads]", err);
 			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
@@ -487,9 +501,6 @@ export default function createChatRoutes({ queries }) {
 			}
 			otherId = uid;
 		}
-		if (otherId === userId) {
-			return res.status(400).json({ error: "Bad request", message: "Cannot open DM with yourself" });
-		}
 
 		try {
 			const otherUser = await queries.selectUserById?.get(otherId);
@@ -534,10 +545,13 @@ export default function createChatRoutes({ queries }) {
 				return res.status(500).json({ error: "Server error", message: "Could not create thread" });
 			}
 
-			const members = [
-				{ thread_id: threadId, user_id: userId },
-				{ thread_id: threadId, user_id: otherId }
-			];
+			const members =
+				otherId === userId
+					? [{ thread_id: threadId, user_id: userId }]
+					: [
+							{ thread_id: threadId, user_id: userId },
+							{ thread_id: threadId, user_id: otherId }
+						];
 			const { error: memErr } = await sb.from("prsn_chat_members").upsert(members, {
 				onConflict: "thread_id,user_id",
 				ignoreDuplicates: true

@@ -1181,7 +1181,9 @@ export async function initChatPage(root) {
 		chatThreads = Array.isArray(result.data?.threads) ? result.data.threads : [];
 		if (chatViewerId != null && Number.isFinite(chatViewerId)) {
 			try {
-				writeCachedChatThreads?.(chatViewerId, chatThreads);
+				writeCachedChatThreads?.(chatViewerId, chatThreads, {
+					viewerIsAdmin: Boolean(result.data?.viewer_is_admin)
+				});
 			} catch {
 				// ignore
 			}
@@ -1839,7 +1841,10 @@ export async function initChatPage(root) {
 				void loadMessages();
 			};
 			roomBroadcastTeardown = await mod.subscribeRoomBroadcast(tid, refetch, {
-				onReconnect: refetch
+				onReconnect: refetch,
+				onDeleted: () => {
+					window.location.href = '/connect#chat';
+				}
 			});
 		} catch (err) {
 			console.warn('[Chat page] realtime:', err);

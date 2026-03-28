@@ -104,3 +104,18 @@ export async function broadcastUserInboxDirty(threadId, memberUserIds) {
 		});
 	}
 }
+
+/**
+ * After a full thread removal: notify anyone on `room:<id>` and refresh member inboxes.
+ */
+export async function broadcastChatThreadDeleted(threadId, memberUserIds) {
+	const tid = Number(threadId);
+	if (!Number.isFinite(tid) || tid <= 0) return;
+
+	await broadcastToChannel({
+		topic: `room:${tid}`,
+		event: "deleted",
+		payload: { threadId: String(tid) }
+	});
+	await broadcastUserInboxDirty(threadId, memberUserIds);
+}

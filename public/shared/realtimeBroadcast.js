@@ -99,9 +99,10 @@ export async function subscribeBroadcast({ topic, event, onBroadcast, debounceMs
 
 /**
  * Subscribe to `dirty` on `room:<threadId>` with debounced invalidation callback (chat thread stream).
+ * Optional `extra.onDeleted` listens for `deleted` (e.g. admin removed the whole thread).
  * @param {number} threadId
  * @param {() => void} onDirty
- * @param {{ onReconnect?: () => void }} [extra]
+ * @param {{ onReconnect?: () => void; onDeleted?: () => void }} [extra]
  * @returns {Promise<() => void>}
  */
 export async function subscribeRoomBroadcast(threadId, onDirty, extra = {}) {
@@ -110,13 +111,94 @@ export async function subscribeRoomBroadcast(threadId, onDirty, extra = {}) {
 		return () => {};
 	}
 	const onReconnect = typeof extra.onReconnect === "function" ? extra.onReconnect : undefined;
-	return subscribeBroadcast({
-		topic: `room:${tid}`,
-		event: "dirty",
-		onBroadcast: () => onDirty(),
-		debounceMs: DEFAULT_ROOM_DEBOUNCE_MS,
-		onReconnect
-	});
+	const onDeleted = typeof extra.onDeleted === "function" ? extra.onDeleted : null;
+
+	if (!onDeleted) {
+		return subscribeBroadcast({
+			topic: `room:${tid}`,
+			event: "dirty",
+			onBroadcast: () => onDirty(),
+			debounceMs: DEFAULT_ROOM_DEBOUNCE_MS,
+			onReconnect
+		});
+	}
+
+	await ensureSupabaseSessionForApp();
+	const sb = getSupabaseBrowserClient();
+	if (!sb) {
+		return () => {};
+	}
+
+	const channel = sb.channel(`room:${tid}`, { config: { private: true } });
+	let debounceTimer = null;
+	let deletedDebounceTimer = null;
+	/** @type {string | null} */
+	let prevSubscribeStatus = null;
+	let droppedAfterLive = false;
+
+	const runDirty = () => {
+		try {
+			onDirty();
+		} catch {
+			// ignore
+		}
+	};
+
+	const runDeleted = () => {
+		try {
+			onDeleted();
+		} catch {
+			// ignore
+		}
+	};
+
+	const runReconnect = () => {
+		if (typeof onReconnect !== "function") return;
+		try {
+			onReconnect();
+		} catch {
+			// ignore
+		}
+	};
+
+	channel
+		.on("broadcast", { event: "dirty" }, () => {
+			if (debounceTimer != null) clearTimeout(debounceTimer);
+			debounceTimer = setTimeout(() => {
+				debounceTimer = null;
+				runDirty();
+			}, DEFAULT_ROOM_DEBOUNCE_MS);
+		})
+		.on("broadcast", { event: "deleted" }, () => {
+			if (deletedDebounceTimer != null) clearTimeout(deletedDebounceTimer);
+			deletedDebounceTimer = setTimeout(() => {
+				deletedDebounceTimer = null;
+				runDeleted();
+			}, 0);
+		})
+		.subscribe((status, err) => {
+			if (prevSubscribeStatus === RT_SUBSCRIBED && status !== RT_SUBSCRIBED) {
+				droppedAfterLive = true;
+			}
+			if (status === RT_SUBSCRIBED && droppedAfterLive) {
+				droppedAfterLive = false;
+				runReconnect();
+			}
+			prevSubscribeStatus = status;
+			if (status !== RT_SUBSCRIBED && err) {
+				console.warn("[realtime]", err);
+			}
+		});
+
+	return () => {
+		if (debounceTimer != null) clearTimeout(debounceTimer);
+		if (deletedDebounceTimer != null) clearTimeout(deletedDebounceTimer);
+		try {
+			sb.removeChannel(channel);
+		} catch {
+			// ignore
+		}
+	};
 }
 
 const DEFAULT_USER_DEBOUNCE_MS = 280;
