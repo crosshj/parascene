@@ -5356,6 +5356,69 @@ body.blog-edit-page .blog-edit-route {
 	line-height: 0;
 }
 
+/* Image/video frame only — positions the open-creation control on the preview, not the title row. */
+.connect-chat-creation-embed-media {
+	position: relative;
+	width: 100%;
+	min-width: 0;
+	box-sizing: border-box;
+}
+
+/* Open creation (sibling of .inner so NSFW overlay does not intercept taps). */
+.connect-chat-creation-embed-detail-link {
+	position: absolute;
+	bottom: 8px;
+	left: 8px;
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	height: 36px;
+	border-radius: 50%;
+	background: rgba(0, 0, 0, 0.5);
+	color: rgba(255, 255, 255, 0.95);
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+	border: 1px solid rgba(255, 255, 255, 0.22);
+	text-decoration: none;
+	opacity: 0;
+	pointer-events: none;
+	transition:
+		opacity 0.15s ease,
+		background 0.15s ease;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.connect-chat-creation-embed-detail-link svg {
+	display: block;
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
+}
+
+.connect-chat-creation-embed-detail-link:hover {
+	background: rgba(0, 0, 0, 0.65);
+}
+
+@media (hover: hover) {
+	.connect-chat-creation-embed-media:hover .connect-chat-creation-embed-detail-link {
+		opacity: 1;
+		pointer-events: auto;
+	}
+}
+
+.connect-chat-creation-embed-detail-link:focus-visible {
+	opacity: 1;
+	pointer-events: auto;
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
+
+.connect-chat-creation-embed--link-revealed .connect-chat-creation-embed-detail-link {
+	opacity: 1;
+	pointer-events: auto;
+}
+
 .connect-chat-youtube-embed {
 	margin-top: 0;
 	padding-block: 4px;

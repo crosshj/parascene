@@ -1,3 +1,5 @@
+import { linkIcon2 } from '../icons/svg-strings.js';
+
 /**
  * Escapes text for safe HTML insertion.
  * @param {string} value
@@ -720,6 +722,107 @@ function trimWhitespaceOnlyTextNodes(el) {
 	}
 }
 
+/**
+ * @param {string} creationId
+ * @returns {string}
+ */
+function chatCreationEmbedDetailLinkHtml(creationId) {
+	const detailPageHref = `/creations/${encodeURIComponent(creationId)}`;
+	return (
+		`<a class="connect-chat-creation-embed-detail-link" href="${escapeHtml(detailPageHref)}" aria-label="Open creation" title="Open creation">${linkIcon2()}</a>`
+	);
+}
+
+/**
+ * Touch: long-press reveals the “open creation” control (see global.css). Desktop uses :hover.
+ * @param {HTMLElement} wrap - `.connect-chat-creation-embed`
+ */
+function attachChatCreationEmbedDetailLinkReveal(wrap) {
+	if (!(wrap instanceof HTMLElement)) return;
+	if (wrap.dataset.chatCreationEmbedDetailReveal === '1') return;
+	if (!wrap.querySelector('.connect-chat-creation-embed-detail-link')) return;
+	if (typeof window === 'undefined' || !window.matchMedia) return;
+	/* Desktop mouse: CSS :hover only. Touch / coarse pointer: long-press to reveal. */
+	const mqHover = window.matchMedia('(hover: hover)');
+	const mqCoarse = window.matchMedia('(pointer: coarse)');
+	if (mqHover.matches && !mqCoarse.matches) return;
+
+	wrap.dataset.chatCreationEmbedDetailReveal = '1';
+
+	const LONG_MS = 500;
+	let timer = null;
+	/** @type {((e: PointerEvent) => void) | null} */
+	let docListener = null;
+
+	const clearTimer = () => {
+		if (timer) {
+			window.clearTimeout(timer);
+			timer = null;
+		}
+	};
+
+	const removeReveal = () => {
+		wrap.classList.remove('connect-chat-creation-embed--link-revealed');
+		if (docListener) {
+			document.removeEventListener('pointerdown', docListener, true);
+			docListener = null;
+		}
+	};
+
+	const addDocListener = () => {
+		if (docListener) return;
+		docListener = (e) => {
+			const link = wrap.querySelector('.connect-chat-creation-embed-detail-link');
+			if (wrap.contains(e.target)) {
+				if (link && link.contains(e.target)) return;
+				removeReveal();
+				return;
+			}
+			removeReveal();
+		};
+		document.addEventListener('pointerdown', docListener, true);
+	};
+
+	wrap.addEventListener(
+		'touchstart',
+		(e) => {
+			const link = wrap.querySelector('.connect-chat-creation-embed-detail-link');
+			if (link && link.contains(e.target)) return;
+			clearTimer();
+			timer = window.setTimeout(() => {
+				timer = null;
+				wrap.classList.add('connect-chat-creation-embed--link-revealed');
+				addDocListener();
+			}, LONG_MS);
+		},
+		{ passive: true }
+	);
+
+	wrap.addEventListener(
+		'touchmove',
+		() => {
+			clearTimer();
+		},
+		{ passive: true }
+	);
+
+	wrap.addEventListener(
+		'touchend',
+		() => {
+			clearTimer();
+		},
+		{ passive: true }
+	);
+
+	wrap.addEventListener(
+		'touchcancel',
+		() => {
+			clearTimer();
+		},
+		{ passive: true }
+	);
+}
+
 async function fetchCreationForChatEmbed(id, shareOpts) {
 	const shareVersion =
 		shareOpts && typeof shareOpts.shareVersion === 'string' ? shareOpts.shareVersion.trim() : '';
@@ -844,19 +947,23 @@ export function hydrateChatCreationEmbeds(rootEl) {
 			}
 
 			if (mediaType === 'video' && videoUrl) {
+				const detailLinkHtml = chatCreationEmbedDetailLinkHtml(creationId);
 				// Keep --square on video too so it matches image dimensions (CSS handles square video frame).
 				const poster = url ? ` poster="${escapeHtml(url)}"` : '';
 				/* No whitespace between tags — otherwise pre-wrap line-height creates stray text nodes and gaps. */
-				wrap.innerHTML = `<div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--video${nsfwClass}"${nsfwDataAttr}><video class="connect-chat-creation-embed-video" autoplay muted loop controls playsinline preload="metadata" src="${escapeHtml(videoUrl)}"${poster}></video></div>${titleHtml}`;
+				wrap.innerHTML = `<div class="connect-chat-creation-embed-media"><div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--video${nsfwClass}"${nsfwDataAttr}><video class="connect-chat-creation-embed-video" autoplay muted loop controls playsinline preload="metadata" src="${escapeHtml(videoUrl)}"${poster}></video></div>${detailLinkHtml}</div>${titleHtml}`;
 				trimWhitespaceOnlyTextNodes(wrap);
+				attachChatCreationEmbedDetailLinkReveal(wrap);
 				return;
 			}
 
 			if (url) {
+				const detailLinkHtml = chatCreationEmbedDetailLinkHtml(creationId);
 				const alt =
 					titleRaw.length > 0 ? escapeHtml(titleRaw) : 'untitled';
-				wrap.innerHTML = `<div class="connect-chat-creation-embed-inner${nsfwClass}"${nsfwDataAttr}><img class="connect-chat-creation-embed-img" src="${escapeHtml(url)}" alt="${alt}" loading="lazy" decoding="async" /></div>${titleHtml}`;
+				wrap.innerHTML = `<div class="connect-chat-creation-embed-media"><div class="connect-chat-creation-embed-inner${nsfwClass}"${nsfwDataAttr}><img class="connect-chat-creation-embed-img" src="${escapeHtml(url)}" alt="${alt}" loading="lazy" decoding="async" /></div>${detailLinkHtml}</div>${titleHtml}`;
 				trimWhitespaceOnlyTextNodes(wrap);
+				attachChatCreationEmbedDetailLinkReveal(wrap);
 				return;
 			}
 

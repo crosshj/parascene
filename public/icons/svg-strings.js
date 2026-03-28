@@ -117,6 +117,15 @@ export const linkIcon = withAttributes(html`
 	</svg>
 `);
 
+/** Alternate chain link (Heroicons-style path); e.g. chat creation embed open button. */
+export const linkIcon2 = withAttributes(html`
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"
+		stroke-linejoin="round" aria-hidden="true">
+		<path
+			d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+	</svg>
+`);
+
 /** Shield icon (e.g. for content policy / moderated state). */
 export const shieldIcon = withAttributes(html`
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
