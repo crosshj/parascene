@@ -567,7 +567,9 @@ section {
 }
 
 /* Allow sticky bulk bar to stick to viewport: avoid overflow containment when section contains creations route */
-section:has(.creations-route) {
+/* Connect roster: same — section { overflow-x: auto } otherwise pairs with overflow-y and traps vertical scroll on mobile */
+section:has(.creations-route),
+section:has(.servers-route) {
 	overflow: visible;
 }
 
@@ -5541,13 +5543,27 @@ body.blog-edit-page .blog-edit-route {
 }
 
 .servers-route .connect-chat-sidebar-roster.chat-page-sidebar-scroll {
-	overflow-y: auto;
 	overflow-x: hidden;
-	-webkit-overflow-scrolling: touch;
-	overscroll-behavior: contain;
 	padding: 8px 8px 16px;
 	max-width: 100%;
 	box-sizing: border-box;
+}
+
+/* Full-page scroll on small viewports; avoid nested scroll + overscroll traps next to mobile bottom nav */
+@media (max-width: 768px) {
+	.servers-route .connect-chat-sidebar-roster.chat-page-sidebar-scroll {
+		overflow-y: visible;
+		-webkit-overflow-scrolling: auto;
+		overscroll-behavior: auto;
+	}
+}
+
+@media (min-width: 769px) {
+	.servers-route .connect-chat-sidebar-roster.chat-page-sidebar-scroll {
+		overflow-y: auto;
+		-webkit-overflow-scrolling: touch;
+		overscroll-behavior: contain;
+	}
 }
 
 .servers-route .connect-chat-sidebar-roster .chat-page-sidebar-section {
