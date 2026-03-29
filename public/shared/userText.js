@@ -1,4 +1,4 @@
-import { linkIcon2 } from '../icons/svg-strings.js';
+import { eyeHiddenIcon, linkIcon2 } from '../icons/svg-strings.js';
 
 /**
  * Escapes text for safe HTML insertion.
@@ -734,6 +734,79 @@ function chatCreationEmbedDetailLinkHtml(creationId) {
 }
 
 /**
+ * Same title row as a successful embed (title or italic untitled).
+ * @param {object | null} data - Creation payload from GET /api/create/images/:id (or null when unavailable).
+ * @returns {string}
+ */
+function creationEmbedTitleRowHtmlFromData(data) {
+	if (!data || data._error) {
+		return '<div class="connect-chat-creation-embed-title"><em>untitled</em></div>';
+	}
+	const titleRaw = typeof data.title === 'string' ? data.title.trim() : '';
+	return titleRaw
+		? `<div class="connect-chat-creation-embed-title">${escapeHtml(titleRaw)}</div>`
+		: '<div class="connect-chat-creation-embed-title"><em>untitled</em></div>';
+}
+
+/**
+ * Same visuals as `.route-media.route-media-error` / moderated icon on feed and creation detail.
+ * Title row matches a loaded embed (API title or untitled); the tile communicates failure/moderation.
+ * @param {{ moderated?: boolean, titleHtml?: string, creationId?: string }} opts
+ * @returns {string}
+ */
+function chatCreationEmbedFailureHtml({ moderated = false, titleHtml, creationId } = {}) {
+	const modClass = moderated ? ' route-media-error-moderated' : '';
+	const iconHtml = moderated
+		? `<span class="route-media-error-moderated-icon" role="img" aria-label="Content moderated">${eyeHiddenIcon()}</span>`
+		: '';
+	const titleRow =
+		titleHtml && String(titleHtml).trim()
+			? titleHtml
+			: '<div class="connect-chat-creation-embed-title"><em>untitled</em></div>';
+	const detailLinkHtml =
+		creationId && String(creationId).trim()
+			? chatCreationEmbedDetailLinkHtml(String(creationId).trim())
+			: '';
+	return (
+		`<div class="connect-chat-creation-embed-media">` +
+		`<div class="connect-chat-creation-embed-inner">` +
+		`<div class="route-media route-media-error${modClass}" aria-hidden="true">${iconHtml}</div></div>` +
+		`${detailLinkHtml}</div>` +
+		`${titleRow}`
+	);
+}
+
+/**
+ * @param {HTMLElement} wrap
+ * @param {HTMLImageElement | HTMLVideoElement} mediaEl
+ */
+function bindChatCreationEmbedMediaLoadError(wrap, mediaEl) {
+	if (!(wrap instanceof HTMLElement) || !(mediaEl instanceof HTMLImageElement || mediaEl instanceof HTMLVideoElement)) {
+		return;
+	}
+		const onFail = () => {
+		if (!wrap.parentNode) return;
+		wrap.classList.remove('connect-chat-creation-embed--loading', 'connect-chat-creation-embed--pending');
+		wrap.classList.add('connect-chat-creation-embed--error');
+		const titleEl = wrap.querySelector('.connect-chat-creation-embed-title');
+		const preservedTitle =
+			titleEl && titleEl.outerHTML
+				? titleEl.outerHTML
+				: '<div class="connect-chat-creation-embed-title"><em>untitled</em></div>';
+		const id = String(wrap.getAttribute('data-creation-id') || '').trim();
+		wrap.innerHTML = chatCreationEmbedFailureHtml({
+			moderated: false,
+			titleHtml: preservedTitle,
+			creationId: id,
+		});
+		trimWhitespaceOnlyTextNodes(wrap);
+		attachChatCreationEmbedDetailLinkReveal(wrap);
+		wrap.setAttribute('role', 'status');
+	};
+	mediaEl.addEventListener('error', onFail, { once: true });
+}
+
+/**
  * Touch: long-press reveals the “open creation” control (see global.css). Desktop uses :hover.
  * @param {HTMLElement} wrap - `.connect-chat-creation-embed`
  */
@@ -889,6 +962,7 @@ export function hydrateChatCreationEmbeds(rootEl) {
 				? { shareVersion: share.shareVersion, shareToken: share.shareToken }
 				: null;
 		a.dataset.chatCreationEmbed = 'true';
+		a.classList.add('connect-chat-creation-embed-paired-link');
 
 		const wrap = document.createElement('div');
 		wrap.className =
@@ -905,22 +979,42 @@ export function hydrateChatCreationEmbeds(rootEl) {
 
 			if (!data || data._error) {
 				wrap.classList.add('connect-chat-creation-embed--error');
-				wrap.innerHTML =
-					'<span class="connect-chat-creation-embed-msg">Preview unavailable</span>';
+				wrap.innerHTML = chatCreationEmbedFailureHtml({
+					moderated: false,
+					titleHtml: creationEmbedTitleRowHtmlFromData(null),
+					creationId,
+				});
+				trimWhitespaceOnlyTextNodes(wrap);
+				attachChatCreationEmbedDetailLinkReveal(wrap);
 				wrap.setAttribute('role', 'status');
 				return;
 			}
+
+			const titleRowHtml = creationEmbedTitleRowHtmlFromData(data);
 
 			const moderated = !!data.is_moderated_error;
 			if (moderated) {
 				wrap.classList.add('connect-chat-creation-embed--error');
-				wrap.innerHTML =
-					'<span class="connect-chat-creation-embed-msg">Unavailable</span>';
+				wrap.innerHTML = chatCreationEmbedFailureHtml({
+					moderated: true,
+					titleHtml: titleRowHtml,
+					creationId,
+				});
+				trimWhitespaceOnlyTextNodes(wrap);
+				attachChatCreationEmbedDetailLinkReveal(wrap);
 				wrap.setAttribute('role', 'status');
 				return;
 			}
 
-			const status = data.status || 'completed';
+			const statusRaw =
+				typeof data.status === 'string' ? data.status.trim().toLowerCase() : 'completed';
+			const isPending =
+				statusRaw === 'creating' ||
+				statusRaw === 'processing' ||
+				statusRaw === 'queued' ||
+				statusRaw === 'pending';
+			const isFailed = statusRaw === 'failed' || statusRaw === 'error';
+
 			const mediaType =
 				typeof data.media_type === 'string' ? data.media_type : 'image';
 			const videoUrl =
@@ -928,9 +1022,6 @@ export function hydrateChatCreationEmbeds(rootEl) {
 			const url = typeof data.url === 'string' ? data.url.trim() : '';
 			const titleRaw =
 				typeof data.title === 'string' ? data.title.trim() : '';
-			const titleHtml = titleRaw
-				? `<div class="connect-chat-creation-embed-title">${escapeHtml(titleRaw)}</div>`
-				: '<div class="connect-chat-creation-embed-title"><em>untitled</em></div>';
 
 			const isNsfw = !!data.nsfw;
 			const nsfwClass = isNsfw ? ' nsfw' : '';
@@ -938,10 +1029,35 @@ export function hydrateChatCreationEmbeds(rootEl) {
 				? ` data-creation-id="${escapeHtml(String(creationId))}"`
 				: '';
 
-			if (status !== 'completed' || (!url && !(mediaType === 'video' && videoUrl))) {
-				wrap.classList.add('connect-chat-creation-embed--pending');
-				wrap.innerHTML =
-					'<span class="connect-chat-creation-embed-msg">Still processing…</span>';
+			if (isFailed) {
+				wrap.classList.add('connect-chat-creation-embed--error');
+				wrap.innerHTML = chatCreationEmbedFailureHtml({
+					moderated: false,
+					titleHtml: titleRowHtml,
+					creationId,
+				});
+				trimWhitespaceOnlyTextNodes(wrap);
+				attachChatCreationEmbedDetailLinkReveal(wrap);
+				wrap.setAttribute('role', 'status');
+				return;
+			}
+
+			if (statusRaw !== 'completed' || (!url && !(mediaType === 'video' && videoUrl))) {
+				if (isPending) {
+					wrap.classList.add('connect-chat-creation-embed--pending');
+					wrap.innerHTML =
+						'<div class="connect-chat-creation-embed-title">Still processing…</div>';
+					wrap.setAttribute('role', 'status');
+					return;
+				}
+				wrap.classList.add('connect-chat-creation-embed--error');
+				wrap.innerHTML = chatCreationEmbedFailureHtml({
+					moderated: false,
+					titleHtml: titleRowHtml,
+					creationId,
+				});
+				trimWhitespaceOnlyTextNodes(wrap);
+				attachChatCreationEmbedDetailLinkReveal(wrap);
 				wrap.setAttribute('role', 'status');
 				return;
 			}
@@ -951,8 +1067,12 @@ export function hydrateChatCreationEmbeds(rootEl) {
 				// Keep --square on video too so it matches image dimensions (CSS handles square video frame).
 				const poster = url ? ` poster="${escapeHtml(url)}"` : '';
 				/* No whitespace between tags — otherwise pre-wrap line-height creates stray text nodes and gaps. */
-				wrap.innerHTML = `<div class="connect-chat-creation-embed-media"><div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--video${nsfwClass}"${nsfwDataAttr}><video class="connect-chat-creation-embed-video" autoplay muted loop controls playsinline preload="metadata" src="${escapeHtml(videoUrl)}"${poster}></video></div>${detailLinkHtml}</div>${titleHtml}`;
+				wrap.innerHTML = `<div class="connect-chat-creation-embed-media"><div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--video${nsfwClass}"${nsfwDataAttr}><video class="connect-chat-creation-embed-video" autoplay muted loop controls playsinline preload="metadata" src="${escapeHtml(videoUrl)}"${poster}></video></div>${detailLinkHtml}</div>${titleRowHtml}`;
 				trimWhitespaceOnlyTextNodes(wrap);
+				const vid = wrap.querySelector('.connect-chat-creation-embed-video');
+				if (vid instanceof HTMLVideoElement) {
+					bindChatCreationEmbedMediaLoadError(wrap, vid);
+				}
 				attachChatCreationEmbedDetailLinkReveal(wrap);
 				return;
 			}
@@ -961,15 +1081,24 @@ export function hydrateChatCreationEmbeds(rootEl) {
 				const detailLinkHtml = chatCreationEmbedDetailLinkHtml(creationId);
 				const alt =
 					titleRaw.length > 0 ? escapeHtml(titleRaw) : 'untitled';
-				wrap.innerHTML = `<div class="connect-chat-creation-embed-media"><div class="connect-chat-creation-embed-inner${nsfwClass}"${nsfwDataAttr}><img class="connect-chat-creation-embed-img" src="${escapeHtml(url)}" alt="${alt}" loading="lazy" decoding="async" /></div>${detailLinkHtml}</div>${titleHtml}`;
+				wrap.innerHTML = `<div class="connect-chat-creation-embed-media"><div class="connect-chat-creation-embed-inner${nsfwClass}"${nsfwDataAttr}><img class="connect-chat-creation-embed-img" src="${escapeHtml(url)}" alt="${alt}" loading="lazy" decoding="async" /></div>${detailLinkHtml}</div>${titleRowHtml}`;
 				trimWhitespaceOnlyTextNodes(wrap);
+				const img = wrap.querySelector('.connect-chat-creation-embed-img');
+				if (img instanceof HTMLImageElement) {
+					bindChatCreationEmbedMediaLoadError(wrap, img);
+				}
 				attachChatCreationEmbedDetailLinkReveal(wrap);
 				return;
 			}
 
 			wrap.classList.add('connect-chat-creation-embed--error');
-			wrap.innerHTML =
-				'<span class="connect-chat-creation-embed-msg">Preview unavailable</span>';
+			wrap.innerHTML = chatCreationEmbedFailureHtml({
+				moderated: false,
+				titleHtml: titleRowHtml,
+				creationId,
+			});
+			trimWhitespaceOnlyTextNodes(wrap);
+			attachChatCreationEmbedDetailLinkReveal(wrap);
 			wrap.setAttribute('role', 'status');
 		});
 	}

@@ -5869,7 +5869,8 @@ body.blog-edit-page .blog-edit-route {
 }
 
 /* Original URL line is redundant once a preview exists; link stays in DOM for crawlers / copy */
-.connect-chat-msg-bubble a.creation-link:has(+ .connect-chat-creation-embed) {
+.connect-chat-msg-bubble a.creation-link:has(+ .connect-chat-creation-embed),
+.connect-chat-msg-bubble a.creation-link.connect-chat-creation-embed-paired-link {
 	display: block;
 	height: 0;
 	margin: 0;
@@ -6089,6 +6090,11 @@ body.blog-edit-page .blog-edit-route {
 	object-position: center;
 }
 
+/* Match feed/cards image-unavailable + moderated icons inside the square frame */
+.connect-chat-creation-embed-inner > .route-media.route-media-error {
+	border-radius: 12px;
+}
+
 .connect-chat-creation-embed-video {
 	display: block;
 	width: 100%;
@@ -6137,12 +6143,6 @@ body.blog-edit-page .blog-edit-route {
 
 .connect-chat-creation-embed-open:hover {
 	text-decoration: underline;
-}
-
-.connect-chat-creation-embed--error .connect-chat-creation-embed-msg,
-.connect-chat-creation-embed--pending .connect-chat-creation-embed-msg {
-	font-size: 0.8125rem;
-	color: var(--text-muted, rgba(255, 255, 255, 0.55));
 }
 
 .connect-chat-msg.is-self .connect-chat-msg-bubble {
