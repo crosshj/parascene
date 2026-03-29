@@ -4,6 +4,12 @@ import { buildRequestMeta } from "./utils/analytics.js";
 import { runAnonCreationJob } from "./utils/creationJob.js";
 import { scheduleAnonCreationJob } from "./utils/scheduleCreationJob.js";
 import { verifyQStashRequest } from "./utils/qstashVerification.js";
+import {
+	TRY_DEFAULT_METHOD,
+	TRY_DEFAULT_MODEL,
+	TRY_DEFAULT_SERVER_ID,
+	TRY_PROMPT_STYLE_SUFFIX,
+} from "../public/shared/generationDefaults.js";
 
 const COOKIE_PS_CID = "ps_cid";
 
@@ -36,29 +42,6 @@ async function ensurePngBuffer(buffer) {
 		buffer[3] === 0x47;
 	if (isPng) return buffer;
 	return await sharp(buffer, { failOn: "none" }).png().toBuffer();
-}
-
-/** Single config for try flow and avatar generation: Parascene server, Replicate, PrunaAI P-Image with turbo. */
-const TRY_DEFAULT_SERVER_ID = 1;
-const TRY_DEFAULT_METHOD = "replicate";
-const TRY_DEFAULT_MODEL = "prunaai/p-image";
-
-/** Appended to try prompts so p-image (and similar) consistently produce polished, high-quality results. */
-const TRY_PROMPT_STYLE_SUFFIX =
-	"";
-
-function getTryServerAndArgs(prompt) {
-	const trimmed = typeof prompt === "string" && prompt.trim() ? prompt.trim() : null;
-	const promptWithStyle =
-		trimmed != null ? (trimmed + TRY_PROMPT_STYLE_SUFFIX).trim() : null;
-	return {
-		server_id: TRY_DEFAULT_SERVER_ID,
-		method: TRY_DEFAULT_METHOD,
-		args:
-			promptWithStyle != null
-				? { prompt: promptWithStyle, model: TRY_DEFAULT_MODEL, prompt_upsampling: true }
-				: {},
-	};
 }
 
 /** Schedules a background generation for the prompt pool (anon_cid = __pool__). Does not block. */
@@ -142,12 +125,18 @@ export default function createTryRoutes({ queries, storage }) {
 				: (typeof req.path === "string" && req.path.trim() ? req.path : "/api/try/create");
 
 		if (server_id == null || !method) {
-			const prompt = body.prompt;
-			const defaults = getTryServerAndArgs(prompt);
-			server_id = server_id ?? defaults.server_id;
-			method = method ?? defaults.method;
-			if (Object.keys(args).length === 0 && defaults.args && Object.keys(defaults.args).length > 0) {
-				args = defaults.args;
+			const raw = body.prompt;
+			const trimmed = typeof raw === "string" && raw.trim() ? raw.trim() : null;
+			const promptWithStyle =
+				trimmed != null ? (trimmed + TRY_PROMPT_STYLE_SUFFIX).trim() : null;
+			server_id = server_id ?? TRY_DEFAULT_SERVER_ID;
+			method = method ?? TRY_DEFAULT_METHOD;
+			if (Object.keys(args).length === 0 && promptWithStyle != null) {
+				args = {
+					prompt: promptWithStyle,
+					model: TRY_DEFAULT_MODEL,
+					prompt_upsampling: true,
+				};
 			}
 		}
 

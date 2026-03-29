@@ -547,6 +547,9 @@ export async function runCreationJob({ queries, storage, payload }) {
 			let sourceImageUrl =
 				(typeof argsForProvider.image_url === "string" && argsForProvider.image_url) ||
 				(typeof argsForProvider.image === "string" && argsForProvider.image) ||
+				(Array.isArray(argsForProvider.input_images) &&
+					typeof argsForProvider.input_images[0] === "string" &&
+					argsForProvider.input_images[0]) ||
 				null;
 			sourceImageUrlForMeta = sourceImageUrl || null;
 
@@ -1043,6 +1046,9 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 			let sourceImageUrl =
 				(typeof originalArgs.image_url === "string" && originalArgs.image_url) ||
 				(typeof originalArgs.image === "string" && originalArgs.image) ||
+				(Array.isArray(originalArgs.input_images) &&
+					typeof originalArgs.input_images[0] === "string" &&
+					originalArgs.input_images[0]) ||
 				(typeof argsPayload.image_url === "string" && argsPayload.image_url) ||
 				(typeof argsPayload.image === "string" && argsPayload.image) ||
 				null;

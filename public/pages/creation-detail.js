@@ -1623,6 +1623,9 @@ async function loadCreation() {
 			if (hasHistory && Object.prototype.hasOwnProperty.call(filteredArgs, 'image_url')) {
 				delete filteredArgs.image_url;
 			}
+			if (hasHistory && Object.prototype.hasOwnProperty.call(filteredArgs, 'input_images')) {
+				delete filteredArgs.input_images;
+			}
 			if (shouldHidePrompt && Object.prototype.hasOwnProperty.call(filteredArgs, 'prompt')) {
 				delete filteredArgs.prompt;
 			}

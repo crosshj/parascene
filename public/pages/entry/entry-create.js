@@ -444,12 +444,9 @@ function runCreatePageInit(refreshAutoGrowTextareas) {
 	async function loadMutateOptions() {
 		const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
 		const qs = v ? `?v=${encodeURIComponent(v)}` : '';
-		const { loadFirstMutateOptions } = await import(`../../shared/mutateOptions.js${qs}`);
-		const first = await loadFirstMutateOptions();
-		if (first) {
-			mutateOptions.serverId = first.serverId;
-			mutateOptions.methodKey = first.methodKey;
-		}
+		const { MUTATE_DEFAULT_SERVER_ID, MUTATE_DEFAULT_METHOD_KEY } = await import(`../../shared/generationDefaults.js${qs}`);
+		mutateOptions.serverId = MUTATE_DEFAULT_SERVER_ID;
+		mutateOptions.methodKey = MUTATE_DEFAULT_METHOD_KEY;
 	}
 
 	function updateEditImageButtonState() {
@@ -489,9 +486,10 @@ function runCreatePageInit(refreshAutoGrowTextareas) {
 				alert('Please choose an image.');
 				return;
 			}
-			const args = { prompt: userPrompt, image_url: imageUrl };
 			const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
 			const qs = v ? `?v=${encodeURIComponent(v)}` : '';
+			const { MUTATE_DEFAULT_MODEL } = await import(`../../shared/generationDefaults.js${qs}`);
+			const args = { prompt: userPrompt, image_url: imageUrl, model: MUTATE_DEFAULT_MODEL };
 			const { submitCreationWithPending, formatMentionsFailureForDialog } = await import(`../../shared/createSubmit.js${qs}`);
 			const doSubmit = (hydrateMentions) => {
 				submitCreationWithPending({

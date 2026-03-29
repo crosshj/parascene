@@ -1,7 +1,5 @@
 /**
- * Shared logic for choosing server + method for image mutate (edit) flows.
- * Used by the creation edit page and the simple create page Image Edit tab so both call the same server/method.
- * Uses fetchJsonWithStatusDeduped so /api/servers is shared with create route (one request, not two).
+ * Mutate: server list from API; default server/method in ./generationDefaults.js.
  */
 
 const _qs = (() => {
@@ -52,24 +50,4 @@ export async function loadMutateServerOptions() {
 	} catch {
 		return [];
 	}
-}
-
-/**
- * First server + method that has image_mutate intent (same selection as creation edit page).
- * @returns {Promise<{ serverId: number, methodKey: string } | null>}
- */
-export async function loadFirstMutateOptions() {
-	const allServers = await loadMutateServerOptions();
-	for (const server of allServers) {
-		const methods = server?.server_config?.methods;
-		if (!methods || typeof methods !== 'object') continue;
-		for (const methodKey of Object.keys(methods)) {
-			const method = methods[methodKey];
-			const intents = getMethodIntentList(method);
-			if (intents.includes('image_mutate')) {
-				return { serverId: Number(server.id), methodKey };
-			}
-		}
-	}
-	return null;
 }

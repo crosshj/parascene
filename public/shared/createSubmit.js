@@ -105,7 +105,7 @@ export function formatMentionsFailureForDialog(data) {
  * - Adds a pending creation entry (sessionStorage)
  * - Navigates to creations immediately (optimistic)
  * - POSTs /api/create with { server_id, method, args, creation_token } (JSON).
- *   image_url in args must be a string URL (client uploads the image before submit via /api/images/generic).
+ *   Image fields follow the server method `fields` config (e.g. `image_url` or `input_images` URL array). Upload via /api/images/generic when needed.
  */
 export function submitCreationWithPending({
 	serverId,

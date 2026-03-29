@@ -142,6 +142,9 @@ class AppModalCreationDetails extends HTMLElement {
 						if (hasHistory && Object.prototype.hasOwnProperty.call(argsToDisplay, "image_url")) {
 							delete argsToDisplay.image_url;
 						}
+						if (hasHistory && Object.prototype.hasOwnProperty.call(argsToDisplay, "input_images")) {
+							delete argsToDisplay.input_images;
+						}
 						if (shouldHidePrompt && Object.prototype.hasOwnProperty.call(argsToDisplay, "prompt")) {
 							delete argsToDisplay.prompt;
 						}

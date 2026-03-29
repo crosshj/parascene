@@ -15,6 +15,11 @@ import { BLOG_CAMPAIGN_INDEX, BLOG_CAMPAIGN_INTERNAL } from "../lib/blog/campaig
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { broadcastChatThreadDeleted } from "./utils/realtimeBroadcast.js";
 import { serverChannelTagFromServerName } from "../public/shared/serverChatTag.js";
+import {
+	TRY_DEFAULT_METHOD,
+	TRY_DEFAULT_MODEL,
+	TRY_DEFAULT_SERVER_ID,
+} from "../public/shared/generationDefaults.js";
 
 /** Subscription ID stored in user.meta when admin grants founder status without payment. Not a Stripe ID. */
 const GIFTED_FOUNDER_SUBSCRIPTION_ID = "gifted_founder";
@@ -917,9 +922,6 @@ export default function createAdminRoutes({ queries, storage }) {
 			});
 		}
 
-		const TRY_DEFAULT_SERVER_ID = 1;
-		const TRY_DEFAULT_METHOD = "replicate";
-		const TRY_DEFAULT_MODEL = "prunaai/p-image";
 		const variationKey = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 		const prompt = buildAvatarPrompt(characterDescription, variationKey);
 		const server_id = TRY_DEFAULT_SERVER_ID;

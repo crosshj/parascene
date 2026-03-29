@@ -1014,13 +1014,38 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			}
 
+			// Clients may send a single `image_url` string; some providers (e.g. xai via replicate) expect `input_images` (array).
+			// When the method schema declares `input_images` as image_url_array, map here so callers stay simple.
+			if (!isAdvancedGenerate && methodConfig?.fields && typeof methodConfig.fields === "object") {
+				const fields = methodConfig.fields;
+				const wantsInputImagesArray = fields.input_images?.type === "image_url_array";
+				const hasImageUrlField = Object.prototype.hasOwnProperty.call(fields, "image_url");
+				const applyMap = (argsObj) => {
+					if (!argsObj || typeof argsObj !== "object") return;
+					const inputImagesEmpty =
+						!Array.isArray(argsObj.input_images) || argsObj.input_images.length === 0;
+					const imageUrlStr =
+						typeof argsObj.image_url === "string" ? argsObj.image_url.trim() : "";
+					if (!wantsInputImagesArray || !inputImagesEmpty || !imageUrlStr) return;
+					argsObj.input_images = [imageUrlStr];
+					if (!hasImageUrlField) {
+						delete argsObj.image_url;
+					}
+				};
+				applyMap(argsForProvider);
+				applyMap(safeArgs);
+			}
+
 			// Provider must fetch image URLs; relative paths fail. Normalize any field of type image_url or image_url_array to absolute URL(s).
 			const methodFields = methodConfig?.fields && typeof methodConfig.fields === "object" ? methodConfig.fields : {};
 			const imageUrlKeys = Object.keys(methodFields).filter((k) => methodFields[k]?.type === "image_url");
 			if (imageUrlKeys.length === 0 && typeof argsForProvider.image_url === "string") {
 				imageUrlKeys.push("image_url");
 			}
-			const imageUrlArrayKeys = Object.keys(methodFields).filter((k) => methodFields[k]?.type === "image_url_array");
+			let imageUrlArrayKeys = Object.keys(methodFields).filter((k) => methodFields[k]?.type === "image_url_array");
+			if (imageUrlArrayKeys.length === 0 && Array.isArray(argsForProvider.input_images)) {
+				imageUrlArrayKeys = ["input_images"];
+			}
 			for (const key of imageUrlKeys) {
 				if (typeof argsForProvider[key] === "string") {
 					const absolute = toParasceneImageUrl(argsForProvider[key]);
@@ -1159,7 +1184,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 
 				// Unpublished sources: provider cannot use /api/images/created/:filename (403).
-				// Use share URL so provider can fetch without auth. Replace source image: image_url key, or the single image_url-typed key.
+				// Use share URL so provider can fetch without auth. Replace string image_url fields or first URL in image_url_array fields (e.g. input_images).
 				const sourcePublished = source.published === 1 || source.published === true;
 				if (!sourcePublished && source.status === "completed" && source.filename) {
 					try {
@@ -1169,17 +1194,26 @@ export default function createCreateRoutes({ queries, storage }) {
 							sharedByUserId: user.id
 						});
 						const shareUrl = `${providerBase}/api/share/${encodeURIComponent(ACTIVE_SHARE_VERSION)}/${encodeURIComponent(token)}/image`;
-						const keyToReplace = imageUrlKeys.includes("image_url")
-							? "image_url"
-							: imageUrlKeys.length === 1
-								? imageUrlKeys[0]
-								: null;
-						if (keyToReplace) {
-							safeArgs[keyToReplace] = shareUrl;
-							meta.args[keyToReplace] = shareUrl;
+						const stringKey =
+							imageUrlKeys.includes("image_url")
+								? "image_url"
+								: imageUrlKeys.length === 1
+									? imageUrlKeys[0]
+									: null;
+						if (stringKey) {
+							safeArgs[stringKey] = shareUrl;
+							meta.args[stringKey] = shareUrl;
+						}
+						for (const arrKey of imageUrlArrayKeys) {
+							if (!Array.isArray(safeArgs[arrKey]) || safeArgs[arrKey].length === 0) continue;
+							if (typeof safeArgs[arrKey][0] !== "string") continue;
+							const next = [...safeArgs[arrKey]];
+							next[0] = shareUrl;
+							safeArgs[arrKey] = next;
+							meta.args[arrKey] = next;
 						}
 					} catch {
-						// If mint fails, keep existing image_url; provider may 403 for unpublished
+						// If mint fails, keep existing URLs; provider may 403 for unpublished
 					}
 				}
 			}
@@ -1220,17 +1254,26 @@ export default function createCreateRoutes({ queries, storage }) {
 								sharedByUserId: user.id
 							});
 							const shareUrl = `${providerBase}/api/share/${encodeURIComponent(ACTIVE_SHARE_VERSION)}/${encodeURIComponent(token)}/image`;
-							const keyToReplace = imageUrlKeys.includes("image_url")
-								? "image_url"
-								: imageUrlKeys.length === 1
-									? imageUrlKeys[0]
-									: null;
-							if (keyToReplace) {
-								safeArgs[keyToReplace] = shareUrl;
-								meta.args[keyToReplace] = shareUrl;
+							const stringKey =
+								imageUrlKeys.includes("image_url")
+									? "image_url"
+									: imageUrlKeys.length === 1
+										? imageUrlKeys[0]
+										: null;
+							if (stringKey) {
+								safeArgs[stringKey] = shareUrl;
+								meta.args[stringKey] = shareUrl;
+							}
+							for (const arrKey of imageUrlArrayKeys) {
+								if (!Array.isArray(safeArgs[arrKey]) || safeArgs[arrKey].length === 0) continue;
+								if (typeof safeArgs[arrKey][0] !== "string") continue;
+								const next = [...safeArgs[arrKey]];
+								next[0] = shareUrl;
+								safeArgs[arrKey] = next;
+								meta.args[arrKey] = next;
 							}
 						} catch {
-							// If mint fails, keep existing image_url
+							// If mint fails, keep existing URLs
 						}
 					}
 				}

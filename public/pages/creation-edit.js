@@ -2,16 +2,20 @@ let submitCreationWithPending;
 let formatMentionsFailureForDialog;
 let fetchJsonWithStatusDeduped;
 let attachAutoGrowTextarea;
+let refreshAutoGrowTextareas;
 let attachMentionSuggest;
 let addPageUsers;
 let clearPageUsers;
 let DEFAULT_APP_ORIGIN;
-let getMethodIntentList;
 let loadMutateServerOptions;
+let MUTATE_DEFAULT_SERVER_ID;
+let MUTATE_DEFAULT_METHOD_KEY;
+let MUTATE_DEFAULT_MODEL;
 let renderEmptyState;
 let renderEmptyLoading;
 let renderEmptyError;
 let addToMutateQueue;
+let clearMutateQueue;
 let loadMutateQueue;
 let removeFromMutateQueueByImageUrl;
 
@@ -39,6 +43,7 @@ async function loadDeps() {
 
 		const autogrowMod = await import(`/shared/autogrow.js${qs}`);
 		attachAutoGrowTextarea = autogrowMod.attachAutoGrowTextarea;
+		refreshAutoGrowTextareas = autogrowMod.refreshAutoGrowTextareas;
 
 		const suggestMod = await import(`/shared/triggeredSuggest.js${qs}`);
 		attachMentionSuggest = suggestMod.attachMentionSuggest;
@@ -49,9 +54,12 @@ async function loadDeps() {
 		DEFAULT_APP_ORIGIN = userTextMod.DEFAULT_APP_ORIGIN;
 
 		const mutateOptionsMod = await import(`/shared/mutateOptions.js${qs}`);
-		getMethodIntentList = mutateOptionsMod.getMethodIntentList;
 		loadMutateServerOptions = mutateOptionsMod.loadMutateServerOptions;
 
+		const generationDefaultsMod = await import(`/shared/generationDefaults.js${qs}`);
+		MUTATE_DEFAULT_SERVER_ID = generationDefaultsMod.MUTATE_DEFAULT_SERVER_ID;
+		MUTATE_DEFAULT_METHOD_KEY = generationDefaultsMod.MUTATE_DEFAULT_METHOD_KEY;
+		MUTATE_DEFAULT_MODEL = generationDefaultsMod.MUTATE_DEFAULT_MODEL;
 		const emptyStateMod = await import(`/shared/emptyState.js${qs}`);
 		renderEmptyState = emptyStateMod.renderEmptyState;
 		renderEmptyLoading = emptyStateMod.renderEmptyLoading;
@@ -59,6 +67,7 @@ async function loadDeps() {
 
 		const mutateQueueMod = await import(`/shared/mutateQueue.js${qs}`);
 		addToMutateQueue = mutateQueueMod.addToMutateQueue;
+		clearMutateQueue = mutateQueueMod.clearMutateQueue;
 		loadMutateQueue = mutateQueueMod.loadMutateQueue;
 		removeFromMutateQueueByImageUrl = mutateQueueMod.removeFromMutateQueueByImageUrl;
 	})();
@@ -80,6 +89,34 @@ function toParasceneImageUrl(raw) {
 	} catch {
 		return '';
 	}
+}
+
+/** Same keys as `entry-create.js` / Image Edit tab — keeps draft in sync with /create. */
+function persistMutateImageEditDraftToStorage(prompt) {
+	const text = typeof prompt === 'string' ? prompt : '';
+	try {
+		localStorage.setItem('create_page_prompt_image_edit', text);
+		localStorage.setItem('create_page_tab', 'image-edit');
+	} catch (_) { }
+	try {
+		const sk = 'create-page-selections';
+		const stored = sessionStorage.getItem(sk);
+		const selections = stored ? JSON.parse(stored) : {};
+		const fv = selections.fieldValues && typeof selections.fieldValues === 'object' ? selections.fieldValues : {};
+		const adv = selections.advancedOptions && typeof selections.advancedOptions === 'object' ? selections.advancedOptions : {};
+		selections.fieldValues = { ...fv, prompt: text };
+		selections.advancedOptions = { ...adv, prompt: text };
+		sessionStorage.setItem(sk, JSON.stringify(selections));
+	} catch (_) { }
+}
+
+/** Queue (single item) + same prompt/tab/session snapshot as Image Edit on /create. */
+function persistMutateForNextCreatePage({ prompt, mutateOfId, normalizedImageUrl, published }) {
+	try {
+		clearMutateQueue();
+		addToMutateQueue({ sourceId: mutateOfId, imageUrl: normalizedImageUrl, published });
+	} catch (_) { }
+	persistMutateImageEditDraftToStorage(prompt);
 }
 
 let isMutateDirty = false;
@@ -222,84 +259,40 @@ async function loadEditPage() {
 			img.src = thumbUrl;
 		});
 
-		const allServers = await loadMutateServerOptions();
-		const flattened = [];
-		allServers.forEach(server => {
-			const methods = server?.server_config?.methods;
-			if (!methods || typeof methods !== 'object') return;
-			Object.keys(methods).forEach(methodKey => {
-				const method = methods[methodKey];
-				const intents = getMethodIntentList(method);
-				if (!intents.includes('image_mutate')) return;
-				flattened.push({
-					serverId: Number(server.id),
-					serverName: String(server.name || `Server ${server.id}`),
-					server,
-					methodKey,
-					method,
-					intents
-				});
-			});
-		});
-
-		if (flattened.length === 0) {
+		const servers = await loadMutateServerOptions();
+		const server = servers.find((s) => Number(s.id) === Number(MUTATE_DEFAULT_SERVER_ID));
+		if (!server) {
 			editContent.innerHTML = renderEmptyState({
-				title: 'No mutate methods available',
-				messageHtml: 'No servers currently expose a method with intent <strong>image_mutate</strong>.',
+				title: 'Mutate unavailable',
+				message: 'You do not have access to the default mutate server.',
+			});
+			return;
+		}
+		const methods = server.server_config && typeof server.server_config === 'object' ? server.server_config.methods : null;
+		const methodDef = methods && typeof methods === 'object' ? methods[MUTATE_DEFAULT_METHOD_KEY] : null;
+
+		if (!methodDef) {
+			editContent.innerHTML = renderEmptyState({
+				title: 'Mutate unavailable',
+				message: 'The configured mutate method is not available on this server.',
+			});
+			return;
+		}
+		let mutateCreditCost = null;
+		if (typeof methodDef.credits === 'number' && Number.isFinite(methodDef.credits)) {
+			mutateCreditCost = methodDef.credits;
+		} else if (methodDef.credits != null && methodDef.credits !== '') {
+			const p = parseFloat(methodDef.credits);
+			if (Number.isFinite(p)) mutateCreditCost = p;
+		}
+		if (mutateCreditCost == null || !Number.isFinite(mutateCreditCost) || mutateCreditCost < 0) {
+			editContent.innerHTML = renderEmptyState({
+				title: 'Mutate unavailable',
+				message: 'This method has no valid credit cost in server configuration. An admin must set credits for this method.',
 			});
 			return;
 		}
 
-		// Unique servers in stable order
-		const serverOrder = [];
-		const serverById = new Map();
-		flattened.forEach(item => {
-			if (!serverById.has(item.serverId)) {
-				serverById.set(item.serverId, { id: item.serverId, name: item.serverName, server: item.server });
-				serverOrder.push(item.serverId);
-			}
-		});
-		const availableServers = serverOrder.map(id => serverById.get(id)).filter(Boolean);
-
-		function methodsForServer(serverId) {
-			return flattened
-				.filter(item => item.serverId === Number(serverId))
-				.map(item => ({ methodKey: item.methodKey, method: item.method }))
-				.sort((a, b) => String(a.method?.name || a.methodKey).localeCompare(String(b.method?.name || b.methodKey)));
-		}
-
-		const selectionState = {
-			serverId: availableServers[0]?.id ?? null,
-			methodKey: null
-		};
-
-		function renderServerOptions() {
-			if (!(serverSelect instanceof HTMLSelectElement)) return;
-			// Clear except placeholder
-			while (serverSelect.children.length > 1) serverSelect.removeChild(serverSelect.lastChild);
-			availableServers.forEach(s => {
-				const opt = document.createElement('option');
-				opt.value = String(s.id);
-				opt.textContent = s.name;
-				serverSelect.appendChild(opt);
-			});
-		}
-
-		function renderMethodOptions() {
-			if (!(methodSelect instanceof HTMLSelectElement)) return;
-			// Clear except placeholder
-			while (methodSelect.children.length > 1) methodSelect.removeChild(methodSelect.lastChild);
-			if (!selectionState.serverId) return;
-			const methods = methodsForServer(selectionState.serverId);
-			methods.forEach(m => {
-				const opt = document.createElement('option');
-				opt.value = m.methodKey;
-				opt.textContent = m.method?.name || m.methodKey;
-				methodSelect.appendChild(opt);
-			});
-		}
-
-		// Now that we have the server+method universe, render the full form in one shot.
 		editContent.innerHTML = html`
 			<form class="create-form" data-edit-form>
 				<div class="form-group">
@@ -313,23 +306,6 @@ async function loadEditPage() {
 							<div class="image-meta-subtitle">Creation #${creationId}</div>
 						</div>
 					</div>
-				</div>
-			
-				<div class="form-group" data-server-group style="display: none;">
-					<label class="form-label" for="mutate-server">Server</label>
-					<select class="form-select" id="mutate-server" data-server-select>
-						<option value="">Select a server...</option>
-					</select>
-				</div>
-			
-				<div class="form-group" data-method-group style="display: none;">
-					<div class="method-context" data-method-context style="display: none;">
-						Server: <span data-method-server-name></span>
-					</div>
-					<label class="form-label" for="mutate-method">Method</label>
-					<select class="form-select" id="mutate-method" data-method-select>
-						<option value="">Select a method...</option>
-					</select>
 				</div>
 			
 				<div class="form-group">
@@ -393,52 +369,12 @@ async function loadEditPage() {
 		const queueBtn = editContent.querySelector('[data-queue-mutate-btn]');
 		const costEl = editContent.querySelector('[data-mutate-cost]');
 
-		// Server/method selection elements
-		const serverGroup = editContent.querySelector('[data-server-group]');
-		const serverSelect = editContent.querySelector('[data-server-select]');
-		const methodGroup = editContent.querySelector('[data-method-group]');
-		const methodSelect = editContent.querySelector('[data-method-select]');
-		const methodContext = editContent.querySelector('[data-method-context]');
-		const methodServerName = editContent.querySelector('[data-method-server-name]');
+		let creditsCount = null;
 
-		const showServerList = availableServers.length > 1;
-		const initialMethods = selectionState.serverId ? methodsForServer(selectionState.serverId) : [];
-		const showMethodList = initialMethods.length > 1;
-
-		if (serverGroup instanceof HTMLElement) {
-			serverGroup.style.display = showServerList ? '' : 'none';
-		}
-		if (showServerList) renderServerOptions();
-		if (serverSelect instanceof HTMLSelectElement && selectionState.serverId) {
-			serverSelect.value = String(selectionState.serverId);
-		}
-
-		// Choose first method by default (always), even if we hide the dropdown.
-		selectionState.methodKey = initialMethods[0]?.methodKey ?? null;
-		let creditsCount = null; // number | null (loading)
-
-		if (methodGroup instanceof HTMLElement) {
-			methodGroup.style.display = showMethodList ? '' : 'none';
-		}
-		if (methodContext instanceof HTMLElement) {
-			methodContext.style.display = showMethodList ? '' : 'none';
-		}
-		if (methodServerName instanceof HTMLElement) {
-			const serverName = availableServers.find(s => s.id === selectionState.serverId)?.name || '';
-			methodServerName.textContent = serverName;
-		}
-		if (showMethodList) {
-			renderMethodOptions();
-			if (methodSelect instanceof HTMLSelectElement && selectionState.methodKey) {
-				methodSelect.value = selectionState.methodKey;
-			}
-		}
-
-		// Persist selection for the upcoming integration step.
 		editContent.dataset.mutateSourceId = String(creationId);
-		editContent.dataset.mutateServerId = selectionState.serverId ? String(selectionState.serverId) : '';
-		editContent.dataset.mutateMethodKey = selectionState.methodKey ? String(selectionState.methodKey) : '';
 		editContent.dataset.mutateImageUrl = sourceImageUrl;
+		editContent.dataset.mutatePublished =
+			creation.published === true || creation.published === 1 ? '1' : '0';
 
 		const normalizedImageUrlForQueue = toParasceneImageUrl(sourceImageUrl);
 		let isImageQueued = false;
@@ -458,34 +394,14 @@ async function loadEditPage() {
 			}
 		}
 
-		function getSelectedMethodCost() {
-			if (!selectionState.serverId || !selectionState.methodKey) return null;
-			const methods = methodsForServer(selectionState.serverId);
-			const selected = methods.find(m => m.methodKey === selectionState.methodKey);
-			const method = selected?.method || null;
-			if (!method) return null;
-			let cost = 0.5;
-			if (typeof method.credits === 'number') {
-				cost = method.credits;
-			} else if (method.credits !== undefined && method.credits !== null) {
-				const parsed = parseFloat(method.credits);
-				if (!Number.isNaN(parsed)) cost = parsed;
-			}
-			return cost;
-		}
-
 		function updateCostAndButtonState() {
 			const hasPrompt = promptEl instanceof HTMLTextAreaElement && promptEl.value.trim().length > 0;
 			isMutateDirty = Boolean(hasPrompt);
-			const hasSelection = Boolean(selectionState.serverId) && Boolean(selectionState.methodKey);
-			const cost = getSelectedMethodCost();
+			const cost = mutateCreditCost;
 
 			if (costEl instanceof HTMLElement) {
 				costEl.classList.remove('insufficient');
-
-				if (!hasSelection || cost == null) {
-					costEl.textContent = 'Select a server and method to see cost';
-				} else if (creditsCount == null) {
+				if (creditsCount == null) {
 					costEl.textContent = 'Loading credits…';
 				} else if (creditsCount >= cost) {
 					costEl.textContent = `Costs ${cost} credits`;
@@ -495,16 +411,25 @@ async function loadEditPage() {
 				}
 			}
 
-			const hasEnoughCredits = creditsCount != null && cost != null && creditsCount >= cost;
+			const hasEnoughCredits = creditsCount != null && creditsCount >= cost;
 			if (generateBtn instanceof HTMLButtonElement) {
-				generateBtn.disabled = !(hasPrompt && hasSelection && hasEnoughCredits);
+				generateBtn.disabled = !(hasPrompt && hasEnoughCredits);
 			}
 		}
 
-		// Auto-grow prompt like comments, min 3 rows.
+		// Image Edit prompt: same localStorage/sessionStorage as /create (see entry-create.js savePrompts).
 		if (promptEl instanceof HTMLTextAreaElement) {
+			try {
+				const saved = localStorage.getItem('create_page_prompt_image_edit');
+				if (typeof saved === 'string') promptEl.value = saved;
+			} catch (_) {}
 			attachAutoGrowTextarea(promptEl);
 			attachMentionSuggest(promptEl);
+			try {
+				if (typeof refreshAutoGrowTextareas === 'function') {
+					refreshAutoGrowTextareas(editContent);
+				}
+			} catch (_) {}
 		}
 
 		// Load credits (match create)
@@ -539,53 +464,22 @@ async function loadEditPage() {
 		void loadCredits();
 
 		updateCostAndButtonState();
-		if (promptEl instanceof HTMLTextAreaElement) {
-			promptEl.addEventListener('input', updateCostAndButtonState);
-		}
 
-		function handleServerChange(nextServerIdRaw) {
-			const nextServerId = Number(nextServerIdRaw);
-			if (!Number.isFinite(nextServerId)) return;
-			selectionState.serverId = nextServerId;
-			selectionState.methodKey = null;
-
-			const methods = methodsForServer(selectionState.serverId);
-			const showMethods = methods.length > 1;
-			selectionState.methodKey = methods[0]?.methodKey ?? null;
-
-			// Re-render method UI for this server
-			if (methodGroup instanceof HTMLElement) {
-				methodGroup.style.display = showMethods ? '' : 'none';
-			}
-			if (methodContext instanceof HTMLElement) {
-				methodContext.style.display = showMethods ? '' : 'none';
-			}
-			if (methodServerName instanceof HTMLElement) {
-				const serverName = availableServers.find(s => s.id === selectionState.serverId)?.name || '';
-				methodServerName.textContent = serverName;
-			}
-			if (showMethods) {
-				renderMethodOptions();
-				if (methodSelect instanceof HTMLSelectElement && selectionState.methodKey) {
-					methodSelect.value = selectionState.methodKey;
+		let promptSaveTimer;
+		function scheduleMutatePromptPersist() {
+			clearTimeout(promptSaveTimer);
+			promptSaveTimer = setTimeout(() => {
+				if (promptEl instanceof HTMLTextAreaElement) {
+					persistMutateImageEditDraftToStorage(promptEl.value || '');
 				}
-			}
-
-			editContent.dataset.mutateServerId = selectionState.serverId ? String(selectionState.serverId) : '';
-			editContent.dataset.mutateMethodKey = selectionState.methodKey ? String(selectionState.methodKey) : '';
-			updateCostAndButtonState();
+			}, 300);
 		}
-
-		if (serverSelect instanceof HTMLSelectElement) {
-			serverSelect.addEventListener('change', () => handleServerChange(serverSelect.value));
-		}
-
-		if (methodSelect instanceof HTMLSelectElement) {
-			methodSelect.addEventListener('change', () => {
-				selectionState.methodKey = methodSelect.value || null;
-				editContent.dataset.mutateMethodKey = selectionState.methodKey ? String(selectionState.methodKey) : '';
+		if (promptEl instanceof HTMLTextAreaElement) {
+			promptEl.addEventListener('input', () => {
 				updateCostAndButtonState();
+				scheduleMutatePromptPersist();
 			});
+			promptEl.addEventListener('change', scheduleMutatePromptPersist);
 		}
 
 		if (queueBtn instanceof HTMLButtonElement) {
@@ -647,6 +541,10 @@ async function loadEditPage() {
 				} catch {
 					// ignore storage errors
 				}
+				try {
+					const promptText = promptEl instanceof HTMLTextAreaElement ? (promptEl.value || '') : '';
+					persistMutateImageEditDraftToStorage(promptText);
+				} catch (_) {}
 				const elapsed = performance.now() - start;
 				const remaining = Math.max(0, MIN_SPINNER_MS - elapsed);
 				setTimeout(() => {
@@ -677,18 +575,15 @@ document.addEventListener('click', (e) => {
 	const promptEl = document.querySelector('[data-edit-prompt]');
 	const prompt = promptEl instanceof HTMLTextAreaElement ? promptEl.value.trim() : '';
 
-	const serverIdRaw = container?.dataset?.mutateServerId || '';
-	const methodKey = container?.dataset?.mutateMethodKey || '';
 	const imageUrl = container?.dataset?.mutateImageUrl || '';
 	const sourceIdRaw = container?.dataset?.mutateSourceId || '';
 
-	const serverId = Number(serverIdRaw);
+	const serverId = MUTATE_DEFAULT_SERVER_ID;
 	const mutateOfId = Number(sourceIdRaw);
 
 	// Safety checks (button should already be disabled if these are missing).
 	if (!prompt) return;
 	if (!Number.isFinite(serverId) || serverId <= 0) return;
-	if (!methodKey) return;
 	const normalizedImageUrl = toParasceneImageUrl(imageUrl);
 	if (!normalizedImageUrl) return;
 	if (!Number.isFinite(mutateOfId) || mutateOfId <= 0) return;
@@ -711,13 +606,20 @@ document.addEventListener('click', (e) => {
 		// Clear dirty state so navigation isn't blocked by our leave-confirm.
 		isMutateDirty = false;
 		btn.disabled = true;
+		persistMutateForNextCreatePage({
+			prompt,
+			mutateOfId,
+			normalizedImageUrl,
+			published: container?.dataset?.mutatePublished === '1',
+		});
 		submitCreationWithPending({
 			serverId,
-			methodKey,
+			methodKey: MUTATE_DEFAULT_METHOD_KEY,
 			mutateOfId,
 			args: {
+				prompt,
 				image_url: normalizedImageUrl,
-				prompt
+				model: MUTATE_DEFAULT_MODEL,
 			},
 			hydrateMentions,
 			navigate: 'full'
