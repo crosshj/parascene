@@ -4,21 +4,20 @@ let readCachedChatThreads;
 let writeCachedChatThreads;
 let clearCachedChatThreads;
 let isChatThreadsCacheStale;
+let readConnectServersCache;
+let writeConnectServersCache;
+let clearConnectServersCache;
+let isConnectServersCacheStale;
 let getAvatarColor;
-let fetchLatestComments;
-let processUserText;
-let hydrateUserTextLinks;
 let renderEmptyState;
 let renderEmptyError;
-let renderCommentRowsSkeleton;
-let renderServerCardsSkeleton;
-let attachAutoGrowTextarea;
-let buildProfilePath;
 let renderCommentAvatarHtml;
-let REACTION_ORDER;
-let REACTION_ICONS;
-let setupReactionTooltipTap;
 let serverChannelTagFromServerName;
+let appendReservedPseudoChannels;
+let mergeThreadRowsWithJoinedServers;
+let buildChatThreadUrl;
+let buildChatThreadRowAvatarHtml;
+let getDmOtherUserId;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -47,42 +46,31 @@ async function loadDeps() {
 		clearCachedChatThreads = chatThreadsCacheMod.clearCachedChatThreads;
 		isChatThreadsCacheStale = chatThreadsCacheMod.isChatThreadsCacheStale;
 
+		const connectServersCacheMod = await import(`../../shared/connectServersCache.js${qs}`);
+		readConnectServersCache = connectServersCacheMod.readConnectServersCache;
+		writeConnectServersCache = connectServersCacheMod.writeConnectServersCache;
+		clearConnectServersCache = connectServersCacheMod.clearConnectServersCache;
+		isConnectServersCacheStale = connectServersCacheMod.isConnectServersCacheStale;
+
 		const avatarMod = await import(`../../shared/avatar.js${qs}`);
 		getAvatarColor = avatarMod.getAvatarColor;
-
-		const commentsMod = await import(`../../shared/comments.js${qs}`);
-		fetchLatestComments = commentsMod.fetchLatestComments;
-
-		const userTextMod = await import(`../../shared/userText.js${qs}`);
-		processUserText = userTextMod.processUserText;
-		hydrateUserTextLinks = userTextMod.hydrateUserTextLinks;
 
 		const emptyStateMod = await import(`../../shared/emptyState.js${qs}`);
 		renderEmptyState = emptyStateMod.renderEmptyState;
 		renderEmptyError = emptyStateMod.renderEmptyError;
 
-		const skeletonMod = await import(`../../shared/skeleton.js${qs}`);
-		renderCommentRowsSkeleton = skeletonMod.renderCommentRowsSkeleton;
-		renderServerCardsSkeleton = skeletonMod.renderServerCardsSkeleton;
-
-		const autogrowMod = await import(`../../shared/autogrow.js${qs}`);
-		attachAutoGrowTextarea = autogrowMod.attachAutoGrowTextarea;
-
-		const profileLinksMod = await import(`../../shared/profileLinks.js${qs}`);
-		buildProfilePath = profileLinksMod.buildProfilePath;
-
 		const commentItemMod = await import(`../../shared/commentItem.js${qs}`);
 		renderCommentAvatarHtml = commentItemMod.renderCommentAvatarHtml;
-
-		const tooltipTapMod = await import(`../../shared/reactionTooltipTap.js${qs}`);
-		setupReactionTooltipTap = tooltipTapMod.setupReactionTooltipTap;
 
 		const serverChatTagMod = await import(`../../shared/serverChatTag.js${qs}`);
 		serverChannelTagFromServerName = serverChatTagMod.serverChannelTagFromServerName;
 
-		const iconsMod = await import(`../../icons/svg-strings.js${qs}`);
-		REACTION_ORDER = iconsMod.REACTION_ORDER;
-		REACTION_ICONS = iconsMod.REACTION_ICONS;
+		const chatSidebarRosterMod = await import(`../../shared/chatSidebarRoster.js${qs}`);
+		appendReservedPseudoChannels = chatSidebarRosterMod.appendReservedPseudoChannels;
+		mergeThreadRowsWithJoinedServers = chatSidebarRosterMod.mergeThreadRowsWithJoinedServers;
+		buildChatThreadUrl = chatSidebarRosterMod.buildChatThreadUrl;
+		buildChatThreadRowAvatarHtml = chatSidebarRosterMod.buildChatThreadRowAvatarHtml;
+		getDmOtherUserId = chatSidebarRosterMod.getDmOtherUserId;
 	})();
 	return _depsPromise;
 }
@@ -98,15 +86,6 @@ function escapeHtml(str) {
 		.replace(/'/g, '&#039;');
 }
 
-/** Connect “Open a channel” field: `@handle` only → same username rules as profile DM links. */
-function normalizeConnectAtUsernameOnly(raw) {
-	const t = String(raw || '').trim();
-	if (!t.startsWith('@')) return null;
-	const s = t.slice(1).trim().toLowerCase();
-	if (!/^[a-z0-9][a-z0-9_]{2,23}$/.test(s)) return null;
-	return s;
-}
-
 /** Label for admin thread `<select>` options (GET /admin/chat/threads rows). */
 function adminChatThreadSelectLabel(t) {
 	const id = t?.id != null ? Number(t.id) : null;
@@ -120,73 +99,23 @@ function adminChatThreadSelectLabel(t) {
 	return `Thread${idSuffix}`;
 }
 
-const CONNECT_HASH_TAB_IDS = ['chat', 'latest-comments', 'servers', 'feature-requests'];
-const CONNECT_HASH_ALIASES = { comments: 'latest-comments' };
+const CONNECT_LEGACY_HASH_PREFIXES = new Set(['latest-comments', 'servers', 'feature-requests', 'comments']);
 
-/** Parse `/connect` location hash: #chat, #latest-comments, #servers, … (tab id only). */
-function parseConnectLocationHash(hash) {
-	const raw = (hash || '').replace(/^#/, '');
-	if (!raw) return { tab: null };
-	const first = raw.split('/')[0].trim().toLowerCase();
-	const head = (CONNECT_HASH_ALIASES[first] || first).toLowerCase();
-	if (CONNECT_HASH_TAB_IDS.includes(head)) return { tab: head };
-	return { tab: null };
-}
+const DM_OFFLINE_GRACE_MS = 45 * 1000;
 
-function buildChatThreadUrl(meta) {
-	if (!meta) return '/connect#chat';
-	if (meta.type === 'channel' && meta.channel_slug) {
-		return `/chat/c/${encodeURIComponent(String(meta.channel_slug))}`;
+function isDmConsideredOnlineWithGrace(otherUserId, onlineIds, lastSeenMap) {
+	const oid = Number(otherUserId);
+	if (!Number.isFinite(oid) || oid <= 0) return false;
+	const now = Date.now();
+	if (onlineIds && onlineIds.has(oid)) {
+		if (lastSeenMap instanceof Map) lastSeenMap.set(oid, now);
+		return true;
 	}
-	if (meta.type === 'dm') {
-		const un = typeof meta.other_user?.user_name === 'string' ? meta.other_user.user_name.trim() : '';
-		if (un) {
-			return `/chat/dm/${encodeURIComponent(un.toLowerCase())}`;
-		}
-		if (Number.isFinite(Number(meta.other_user_id))) {
-			return `/chat/dm/${encodeURIComponent(String(meta.other_user_id))}`;
-		}
+	const last = lastSeenMap instanceof Map ? lastSeenMap.get(oid) : null;
+	if (last != null && now - last < DM_OFFLINE_GRACE_MS) {
+		return true;
 	}
-	const id = Number(meta.id);
-	if (Number.isFinite(id) && id > 0) {
-		return `/chat/t/${encodeURIComponent(String(id))}`;
-	}
-	return '/connect#chat';
-}
-
-/** Avatar for Connect chat thread rows: DM uses profile image or initial; channel uses # on getAvatarColor(slug). */
-function buildConnectChatThreadAvatarHtml(t) {
-	if (t?.type === 'dm') {
-		const ou = t.other_user;
-		const displayName =
-			(typeof ou?.display_name === 'string' && ou.display_name.trim()) ||
-			(typeof ou?.user_name === 'string' && ou.user_name.trim()) ||
-			(typeof t.title === 'string' && t.title.trim().startsWith('@')
-				? t.title.trim().slice(1)
-				: String(t.title || '').trim()) ||
-			'User';
-		const seed =
-			(typeof ou?.user_name === 'string' && ou.user_name.trim()) ||
-			(ou?.id != null ? String(ou.id) : '') ||
-			displayName;
-		const avatarUrl = ou && typeof ou.avatar_url === 'string' ? ou.avatar_url.trim() : '';
-		return renderCommentAvatarHtml({
-			avatarUrl,
-			displayName,
-			color: getAvatarColor(seed),
-			href: '',
-			isFounder: false,
-			flairSize: 'xs'
-		});
-	}
-	const slugRaw =
-		(typeof t?.channel_slug === 'string' && t.channel_slug.trim()) ||
-		(typeof t?.title === 'string' && t.title.trim().startsWith('#')
-			? t.title.trim().slice(1)
-			: '') ||
-		'';
-	const color = getAvatarColor(slugRaw.toLowerCase() || 'channel');
-	return `<div class="comment-avatar connect-chat-thread-row-channel-avatar" style="background: ${color};" aria-hidden="true">#</div>`;
+	return false;
 }
 
 class AppRouteServers extends HTMLElement {
@@ -196,121 +125,131 @@ class AppRouteServers extends HTMLElement {
 	<div class="servers-route">
 		<div class="route-header">
 			<h3>Connect</h3>
-			<p>See what the community is talking about, manage your image generation servers, and send feature requests
-				directly to the team.</p>
+			<p>Your conversations in one place — direct messages, servers you've joined, and hashtag channels. Open one to continue in full chat.</p>
 		</div>
-		<app-tabs>
-			<tab data-id="chat" label="Chat" default>
-				<div class="connect-chat" data-connect-chat>
-					<div class="connect-chat-toolbar">
-						<label class="connect-chat-label" for="connect-chat-channel-input">Open a channel</label>
-						<div class="connect-chat-toolbar-row">
-							<input type="text" id="connect-chat-channel-input" class="connect-chat-input"
-								placeholder="e.g. pixelart or @username" maxlength="40" autocomplete="off" data-connect-chat-tag-input />
-							<button type="button" class="btn-primary connect-chat-open-channel"
-								data-connect-chat-open-channel>Open</button>
-						</div>
-						<p class="connect-chat-hint">Channel tags match Explore (lowercase, 2–32 characters, letters, numbers,
-							<code>_</code> and <code>-</code>). Use <code>@username</code> to open a direct message.</p>
-						<p class="connect-chat-error connect-chat-toolbar-error" data-connect-chat-error hidden role="alert"></p>
+		<div class="connect-chat" data-connect-chat>
+			<div class="connect-chat-sidebar">
+				<div class="connect-chat-unauth" data-connect-chat-unauth hidden></div>
+				<div class="connect-chat-lists" data-connect-chat-lists>
+					<div class="chat-page-sidebar-scroll connect-chat-sidebar-roster" data-connect-chat-scroll
+						aria-busy="true" aria-label="Loading conversations">
+						<section class="chat-page-sidebar-section" aria-labelledby="connect-sidebar-dms-heading">
+							<div class="chat-page-sidebar-section-head">
+								<h2 id="connect-sidebar-dms-heading" class="chat-page-sidebar-heading">Direct messages</h2>
+								<button type="button" class="chat-page-sidebar-add" data-chat-sidebar-add="dm"
+									aria-label="New direct message">
+									<svg class="chat-page-sidebar-add-icon" xmlns="http://www.w3.org/2000/svg" width="18"
+										height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+										stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+										<line x1="12" y1="5" x2="12" y2="19" />
+										<line x1="5" y1="12" x2="19" y2="12" />
+									</svg>
+								</button>
+							</div>
+							<div class="chat-page-sidebar-list" data-chat-sidebar-users></div>
+						</section>
+						<section class="chat-page-sidebar-section" aria-labelledby="connect-sidebar-servers-heading">
+							<div class="chat-page-sidebar-section-head">
+								<h2 id="connect-sidebar-servers-heading" class="chat-page-sidebar-heading">Servers</h2>
+								<button type="button" class="chat-page-sidebar-add" data-chat-sidebar-add="servers"
+									aria-label="Add or browse servers">
+									<svg class="chat-page-sidebar-add-icon" xmlns="http://www.w3.org/2000/svg" width="18"
+										height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+										stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+										<line x1="12" y1="5" x2="12" y2="19" />
+										<line x1="5" y1="12" x2="19" y2="12" />
+									</svg>
+								</button>
+							</div>
+							<div class="chat-page-sidebar-list" data-chat-sidebar-servers></div>
+						</section>
+						<section class="chat-page-sidebar-section" aria-labelledby="connect-sidebar-channels-heading">
+							<div class="chat-page-sidebar-section-head">
+								<h2 id="connect-sidebar-channels-heading" class="chat-page-sidebar-heading">Channels</h2>
+								<button type="button" class="chat-page-sidebar-add" data-chat-sidebar-add="channels"
+									aria-label="Open or browse channels">
+									<svg class="chat-page-sidebar-add-icon" xmlns="http://www.w3.org/2000/svg" width="18"
+										height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+										stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+										<line x1="12" y1="5" x2="12" y2="19" />
+										<line x1="5" y1="12" x2="19" y2="12" />
+									</svg>
+								</button>
+							</div>
+							<div class="chat-page-sidebar-list" data-chat-sidebar-channels></div>
+						</section>
 					</div>
-					<div class="connect-chat-sidebar">
-						<div class="connect-chat-thread-list" data-connect-chat-thread-list aria-busy="true"
-							aria-label="Loading conversations"></div>
-					</div>
-					<div class="connect-chat-admin-tools" data-connect-chat-admin-tools hidden>
-						<p class="admin-detail">Admin: delete a hashtag channel thread. DMs and server-linked channels are
-							not listed. Removes all messages and membership (database cascade).</p>
-						<div class="connect-chat-toolbar-row connect-chat-admin-thread-row">
-							<select class="connect-chat-input connect-chat-admin-thread-select" data-connect-chat-admin-thread-select
-								aria-label="Chat thread to delete" disabled>
-								<option value="">Loading…</option>
-							</select>
-							<button type="button" class="btn-danger connect-chat-admin-delete"
-								data-connect-chat-admin-delete>Delete</button>
-						</div>
-						<p class="connect-chat-error" data-connect-chat-admin-status role="status" aria-live="polite"
-							hidden></p>
-					</div>
 				</div>
-			</tab>
-			<tab data-id="latest-comments" label="Comments">
-				<div class="comment-list" data-comments-container aria-busy="true" aria-label="Loading">
-					${renderCommentRowsSkeleton(10)}
+			</div>
+			<div class="connect-chat-admin-tools" data-connect-chat-admin-tools hidden>
+				<p class="admin-detail">Admin: delete a hashtag channel thread. DMs and server-linked channels are
+					not listed. Removes all messages and membership (database cascade).</p>
+				<div class="connect-chat-toolbar-row connect-chat-admin-thread-row">
+					<select class="connect-chat-input connect-chat-admin-thread-select" data-connect-chat-admin-thread-select
+						aria-label="Chat thread to delete" disabled>
+						<option value="">Loading…</option>
+					</select>
+					<button type="button" class="btn-danger connect-chat-admin-delete"
+						data-connect-chat-admin-delete>Delete</button>
 				</div>
-			</tab>
-	
-			<tab data-id="servers" label="Servers">
-				<div class="route-cards admin-cards" data-servers-container aria-busy="true" aria-label="Loading">
-					${renderServerCardsSkeleton(4)}
-				</div>
-			</tab>
-	
-			<tab data-id="feature-requests" label="Feedback">
-				<div class="route-header">
-					<p>Tell us what you want to see next. We read every submission.</p>
-				</div>
-				<div class="alert" data-feature-request-status hidden></div>
-				<form data-feature-request-form>
-					<textarea name="message" rows="10" maxlength="5000"
-						placeholder="What should we build? What problem does it solve?" aria-label="Feature request details"
-						data-feature-request-message required></textarea>
-					<button type="submit" class="btn-primary btn-inline" data-feature-request-submit>Send</button>
-				</form>
-			</tab>
-		</app-tabs>
+				<p class="connect-chat-error" data-connect-chat-admin-status role="status" aria-live="polite"
+					hidden></p>
+			</div>
+		</div>
 	</div>
     `;
 
 		this._appDocTitleBase = typeof document !== 'undefined' ? document.title : 'parascene';
 
-		this.loadLatestComments();
-		await this.loadServers();
-		this.setupFeatureRequestForm();
-		this.setupConnectChat();
+		this._hydrateConnectCachesFromStorage();
+		await this.setupConnectChat();
 		this.setupConnectTabHash();
-		this._onServersUpdated = () => this.loadServers();
+		this._onServersUpdated = () => this.loadServers({ forceNetwork: true });
 		document.addEventListener('servers-updated', this._onServersUpdated);
+		void this.loadServers();
 	}
 
-	/** Sync Connect tab from URL hash (#chat, #servers, …). */
+	/** Apply persisted server roster for merge (must match chat viewer). */
+	_hydrateConnectCachesFromStorage() {
+		const chat = readCachedChatThreads();
+		const sv = readConnectServersCache();
+		const vidFromChat = chat?.viewerId != null ? Number(chat.viewerId) : null;
+		const vidFromSv = sv?.viewerId != null ? Number(sv.viewerId) : null;
+		const vid =
+			vidFromChat != null && Number.isFinite(vidFromChat) ? vidFromChat : vidFromSv;
+		if (!sv || !Array.isArray(sv.joinedServers)) return;
+		if (vid == null || !Number.isFinite(vid) || sv.viewerId !== vid) return;
+		this._joinedServersForChat = sv.joinedServers;
+		this._serverDerivedChannelSlugs = new Set(
+			(sv.derivedSlugs || []).map((s) => String(s).toLowerCase())
+		);
+	}
+
+	/** Old bookmarks (#latest-comments, #servers, #feature-requests) → #chat. */
 	setupConnectTabHash() {
-		const syncTabFromHash = () => {
+		const normalizeLegacyHash = () => {
 			const path = window.location.pathname || '';
 			if (path !== '/connect' && !path.startsWith('/connect/')) return;
-			const parsed = parseConnectLocationHash(window.location.hash);
-			if (!parsed.tab) return;
-			const tabs = this.querySelector('app-tabs');
-			if (!tabs || typeof tabs.setActiveTab !== 'function') return;
-			tabs.setActiveTab(parsed.tab, { focus: false });
+			const raw = (window.location.hash || '').replace(/^#/, '');
+			const first = raw.split('/')[0].trim().toLowerCase();
+			if (!first || first === 'chat') return;
+			if (CONNECT_LEGACY_HASH_PREFIXES.has(first)) {
+				window.history.replaceState(null, '', '/connect#chat');
+			}
 		};
 
 		const onRouteChange = (e) => {
-			if (e.detail?.route === 'connect') syncTabFromHash();
+			if (e.detail?.route === 'connect') normalizeLegacyHash();
 		};
 
-		const onHashChange = () => syncTabFromHash();
+		const onHashChange = () => normalizeLegacyHash();
 
 		setTimeout(() => {
-			if (document.documentElement?.dataset?.route === 'connect') syncTabFromHash();
+			if (document.documentElement?.dataset?.route === 'connect') normalizeLegacyHash();
 		}, 0);
 
 		document.addEventListener('route-change', onRouteChange);
 		window.addEventListener('hashchange', onHashChange);
-
-		const tabs = this.querySelector('app-tabs');
-		if (tabs) {
-			tabs.addEventListener('tab-change', (e) => {
-				const id = e.detail?.id;
-				if (!id) return;
-				const path = window.location.pathname || '';
-				if (path !== '/connect' && !path.startsWith('/connect/')) return;
-				const newHash = `#${id}`;
-				if (window.location.hash !== newHash) {
-					window.history.replaceState(null, '', `/connect${newHash}`);
-				}
-			});
-		}
 
 		this._connectTabHashCleanup = () => {
 			document.removeEventListener('route-change', onRouteChange);
@@ -366,45 +305,94 @@ class AppRouteServers extends HTMLElement {
 		}
 	}
 
-	setupConnectChat() {
+	async setupConnectChat() {
 		const root = this.querySelector('[data-connect-chat]');
 		if (!root) return;
 
 		this._chatViewerId = null;
 		this._chatViewerIsAdmin = false;
 		this._chatThreads = [];
-		this._joinedServersForChat = [];
-		/** @type {Set<string> | null} — null until /api/servers loads; then lowercased slugs from every server name. */
-		this._serverDerivedChannelSlugs = null;
+		/** `_joinedServersForChat` / `_serverDerivedChannelSlugs` come from `loadServers()` + `_hydrateConnectCachesFromStorage()`. Do not clear them here or the Servers section mis-classifies every row (same pitfall as chat sidebar). */
 		this._userBroadcastTeardown = null;
 		this._userBroadcastViewerBound = null;
+		this._presenceOnlineIds = new Set();
+		this._dmPresenceGraceMap = new Map();
 
-		this._onTabChangeForChat = (e) => {
-			if (e.detail?.id !== 'chat') return;
-			const ourTabs = this.querySelector('app-tabs');
-			if (e.target !== ourTabs) return;
-			this.loadChatThreads();
-		};
-		document.addEventListener('tab-change', this._onTabChangeForChat);
+		const v = getAssetVersionParam();
+		const qs = getImportQuery(v);
+		const { gearIcon } = await import(`../../icons/svg-strings.js${qs}`);
+		this._serverGearSvg = gearIcon('chat-page-sidebar-server-settings-icon');
 
-		const openChannelBtn = root.querySelector('[data-connect-chat-open-channel]');
-		const tagInput = root.querySelector('[data-connect-chat-tag-input]');
+		const modalsMod = await import(`../modals/chatSidebarModals.js${qs}`);
+		this._connectSidebarModals = modalsMod.initChatSidebarModals({
+			getThreads: () => this._chatThreads || [],
+			getViewerId: () => this._chatViewerId,
+			navigateToChatPath: (pathname) => {
+				const path = pathname.startsWith('/') ? pathname : `/${pathname}`;
+				window.location.assign(path);
+			},
+			refreshSidebar: () => {
+				void this.loadServers({ forceNetwork: true });
+				void this.loadChatThreads({ forceNetwork: true });
+			}
+		});
 
-		if (openChannelBtn instanceof HTMLButtonElement && tagInput instanceof HTMLInputElement) {
-			openChannelBtn.addEventListener('click', () => this.openConnectChatChannel());
-			tagInput.addEventListener('keydown', (ev) => {
-				if (ev.key === 'Enter') {
-					ev.preventDefault();
-					this.openConnectChatChannel();
+		this._onConnectSidebarClick = (e) => {
+			const settingsBtn = e.target?.closest?.('[data-chat-server-settings]');
+			if (settingsBtn instanceof HTMLButtonElement) {
+				e.preventDefault();
+				e.stopPropagation();
+				const sid = Number(settingsBtn.getAttribute('data-chat-server-settings'));
+				if (!Number.isFinite(sid) || sid <= 0) return;
+				const canManage = settingsBtn.getAttribute('data-chat-server-can-manage') === '1';
+				const modal = document.querySelector('app-modal-server');
+				if (modal && typeof modal.open === 'function') {
+					modal.open({ mode: canManage ? 'edit' : 'view', serverId: sid });
 				}
-			});
-		}
+				return;
+			}
 
-		this.loadChatThreads();
+			const addBtn = e.target?.closest?.('[data-chat-sidebar-add]');
+			if (addBtn instanceof HTMLButtonElement) {
+				const kind = addBtn.getAttribute('data-chat-sidebar-add');
+				if (kind === 'dm') {
+					this._connectSidebarModals?.openDmModal?.();
+					return;
+				}
+				if (kind === 'servers') {
+					this._connectSidebarModals?.openServersModal?.();
+					return;
+				}
+				if (kind === 'channels') {
+					this._connectSidebarModals?.openChannelsModal?.();
+					return;
+				}
+			}
+
+			const delBtn = e.target?.closest?.('[data-connect-admin-delete]');
+			if (delBtn instanceof HTMLButtonElement) {
+				e.preventDefault();
+				e.stopPropagation();
+				const tid = Number(delBtn.getAttribute('data-connect-admin-delete'));
+				const rawLabel = delBtn.getAttribute('data-connect-admin-delete-label') || '';
+				let label = '';
+				try {
+					label = decodeURIComponent(rawLabel).trim();
+				} catch {
+					label = String(rawLabel).trim();
+				}
+				if (!Number.isFinite(tid) || tid <= 0) return;
+				void this.deleteConnectChatThread(tid, label || `thread ${tid}`);
+			}
+		};
+		root.addEventListener('click', this._onConnectSidebarClick);
+
 		this.setupConnectChatAdminTools();
 
+		await this.loadChatThreads();
+
 		this._connectChatCleanup = () => {
-			document.removeEventListener('tab-change', this._onTabChangeForChat);
+			root.removeEventListener('click', this._onConnectSidebarClick);
 			this._tearDownConnectChatUserBroadcast();
 		};
 	}
@@ -503,7 +491,6 @@ class AppRouteServers extends HTMLElement {
 		if (!Number.isFinite(tid) || tid <= 0) return;
 
 		const statusEl = this.querySelector('[data-connect-chat-admin-status]');
-		const errEl = this.querySelector('[data-connect-chat-error]');
 		if (statusEl instanceof HTMLElement) {
 			statusEl.hidden = true;
 			statusEl.textContent = '';
@@ -528,10 +515,6 @@ class AppRouteServers extends HTMLElement {
 				statusEl.hidden = false;
 				statusEl.textContent = 'Thread deleted.';
 			}
-			if (errEl instanceof HTMLElement) {
-				errEl.hidden = true;
-				errEl.textContent = '';
-			}
 			const sel = this.querySelector('[data-connect-chat-admin-thread-select]');
 			if (sel instanceof HTMLSelectElement) {
 				sel.value = '';
@@ -552,10 +535,39 @@ class AppRouteServers extends HTMLElement {
 		}
 	}
 
+	async _fetchPresenceOnlineIds() {
+		try {
+			const res = await fetch('/api/presence/online', { credentials: 'include' });
+			if (!res.ok) return new Set();
+			const data = await res.json().catch(() => ({}));
+			const users = Array.isArray(data.users) ? data.users : [];
+			const set = new Set();
+			for (const u of users) {
+				const id = Number(u.user_id);
+				if (Number.isFinite(id) && id > 0) set.add(id);
+			}
+			return set;
+		} catch {
+			return new Set();
+		}
+	}
+
+	/** Presence is non-blocking: paint roster first, then refresh DM online dots. */
+	async _refreshPresenceAndRender() {
+		try {
+			this._presenceOnlineIds = await this._fetchPresenceOnlineIds();
+		} catch {
+			this._presenceOnlineIds = new Set();
+		}
+		this.renderConnectChatThreadList();
+	}
+
 	async loadChatThreads(options = {}) {
 		const forceNetwork = options.forceNetwork === true;
-		const listEl = this.querySelector('[data-connect-chat-thread-list]');
-		if (!listEl) return;
+		const scrollRoot = this.querySelector('[data-connect-chat-scroll]');
+		const listsRoot = this.querySelector('[data-connect-chat-lists]');
+		const unauthEl = this.querySelector('[data-connect-chat-unauth]');
+		if (!scrollRoot) return;
 
 		const cached = readCachedChatThreads();
 		const needNetwork =
@@ -567,11 +579,7 @@ class AppRouteServers extends HTMLElement {
 			this._chatViewerIsAdmin = Boolean(cached.viewerIsAdmin);
 			this.updateConnectChatAdminToolsVisibility();
 			this.renderConnectChatThreadList();
-			const errEl = this.querySelector('[data-connect-chat-error]');
-			if (errEl instanceof HTMLElement) {
-				errEl.hidden = true;
-				errEl.textContent = '';
-			}
+			void this._refreshPresenceAndRender();
 		}
 
 		if (!needNetwork) {
@@ -589,12 +597,21 @@ class AppRouteServers extends HTMLElement {
 				if (result.status === 401) {
 					this._tearDownConnectChatUserBroadcast();
 					clearCachedChatThreads();
-					listEl.removeAttribute('aria-busy');
-					listEl.removeAttribute('aria-label');
-					listEl.innerHTML = renderEmptyState({
-						title: 'Sign in to use chat.',
-						message: 'You need an account to open channels and DMs.'
-					});
+					try {
+						clearConnectServersCache();
+					} catch {
+						// ignore
+					}
+					scrollRoot.removeAttribute('aria-busy');
+					scrollRoot.removeAttribute('aria-label');
+					if (listsRoot instanceof HTMLElement) listsRoot.hidden = true;
+					if (unauthEl instanceof HTMLElement) {
+						unauthEl.hidden = false;
+						unauthEl.innerHTML = renderEmptyState({
+							title: 'Sign in to use chat.',
+							message: 'You need an account to see conversations and messages.'
+						});
+					}
 					return;
 				}
 				if (cached) {
@@ -612,91 +629,155 @@ class AppRouteServers extends HTMLElement {
 			if (viewerId != null && Number.isFinite(viewerId)) {
 				writeCachedChatThreads(viewerId, threads, { viewerIsAdmin });
 			}
-			this.renderConnectChatThreadList();
-			void this._bindConnectChatUserBroadcast();
-			const errEl = this.querySelector('[data-connect-chat-error]');
-			if (errEl instanceof HTMLElement) {
-				errEl.hidden = true;
-				errEl.textContent = '';
+			if (listsRoot instanceof HTMLElement) listsRoot.hidden = false;
+			if (unauthEl instanceof HTMLElement) {
+				unauthEl.hidden = true;
+				unauthEl.innerHTML = '';
 			}
+			this.renderConnectChatThreadList();
+			void this._refreshPresenceAndRender();
+			void this._bindConnectChatUserBroadcast();
 		} catch (err) {
 			console.error('[Connect chat] load threads:', err);
 			if (cached) {
 				return;
 			}
-			listEl.removeAttribute('aria-busy');
-			listEl.removeAttribute('aria-label');
-			listEl.innerHTML = renderEmptyError(err?.message || 'Chat unavailable.');
+			scrollRoot.removeAttribute('aria-busy');
+			scrollRoot.removeAttribute('aria-label');
+			if (listsRoot instanceof HTMLElement) listsRoot.hidden = true;
+			if (unauthEl instanceof HTMLElement) {
+				unauthEl.hidden = false;
+				unauthEl.innerHTML = renderEmptyError(err?.message || 'Chat unavailable.');
+			}
 		}
 	}
 
-	/** Merge GET /api/chat/threads with joined servers (slug from server name only; deduped vs threads and duplicate names). */
+	/** Merge GET /api/chat/threads with joined servers (same as chat sidebar roster). */
 	_getMergedChatThreadRows() {
 		const threads = Array.isArray(this._chatThreads) ? this._chatThreads : [];
-		const existingSlugs = new Set();
-		for (const t of threads) {
-			if (t && t.type === 'channel' && t.channel_slug) {
-				existingSlugs.add(String(t.channel_slug).toLowerCase());
-			}
-		}
-		const tagFn =
-			typeof serverChannelTagFromServerName === 'function'
-				? serverChannelTagFromServerName
-				: null;
 		const joined = Array.isArray(this._joinedServersForChat) ? this._joinedServersForChat : [];
-		const joinedSorted = [...joined].sort((a, b) => Number(a.id) - Number(b.id));
-		const extras = [];
-		const usedExtraSlugs = new Set();
-		for (const s of joinedSorted) {
-			const nameRaw = typeof s?.name === 'string' ? s.name : '';
-			const slug = tagFn ? tagFn(nameRaw) : null;
-			const key = slug ? slug.toLowerCase() : '';
-			if (!slug || existingSlugs.has(key) || usedExtraSlugs.has(key)) continue;
-			usedExtraSlugs.add(key);
-			extras.push({
-				type: 'channel',
-				channel_slug: slug,
-				title: `#${slug}`,
-				last_message: null,
-				unread_count: 0,
-				last_read_message_id: null
-			});
-		}
-		return [...threads, ...extras];
+		const merged =
+			typeof mergeThreadRowsWithJoinedServers === 'function'
+				? mergeThreadRowsWithJoinedServers(threads, joined)
+				: [];
+		return appendReservedPseudoChannels ? appendReservedPseudoChannels(merged) : merged;
 	}
 
 	renderConnectChatThreadList() {
-		const listEl = this.querySelector('[data-connect-chat-thread-list]');
-		if (!listEl) return;
+		const listRoot = this.querySelector('[data-connect-chat-scroll]');
+		const listsRoot = this.querySelector('[data-connect-chat-lists]');
+		const unauthEl = this.querySelector('[data-connect-chat-unauth]');
+		const dmEl = this.querySelector('[data-chat-sidebar-users]');
+		const svEl = this.querySelector('[data-chat-sidebar-servers]');
+		const chEl = this.querySelector('[data-chat-sidebar-channels]');
+		if (!listRoot || !dmEl || !svEl || !chEl) return;
 
-		listEl.removeAttribute('aria-busy');
-		listEl.removeAttribute('aria-label');
-		listEl.innerHTML = '';
-
-		const rows = this._getMergedChatThreadRows();
-		if (rows.length === 0) {
-			listEl.innerHTML = renderEmptyState({
-				title: 'No conversations yet.',
-				message: 'Open a channel above to get started.'
-			});
-			return;
+		if (listsRoot instanceof HTMLElement) listsRoot.hidden = false;
+		if (unauthEl instanceof HTMLElement) {
+			unauthEl.hidden = true;
+			unauthEl.innerHTML = '';
 		}
 
-		rows.forEach((t) => {
+		listRoot.removeAttribute('aria-busy');
+		listRoot.removeAttribute('aria-label');
+
+		const merged = this._getMergedChatThreadRows();
+		const joinedArr = Array.isArray(this._joinedServersForChat) ? this._joinedServersForChat : [];
+		const joinedSorted = [...joinedArr].sort((a, b) => Number(a.id) - Number(b.id));
+		const joinedSlugs = new Set();
+		for (const s of joinedSorted) {
+			const tag = serverChannelTagFromServerName(typeof s?.name === 'string' ? s.name : '');
+			if (tag) joinedSlugs.add(tag.toLowerCase());
+		}
+		const dms = merged.filter((t) => t && t.type === 'dm');
+		const channelRows = merged.filter((t) => t && t.type === 'channel');
+		const serverChannels = channelRows.filter((t) => {
+			const slug = typeof t.channel_slug === 'string' ? t.channel_slug.trim().toLowerCase() : '';
+			return Boolean(slug && joinedSlugs.has(slug));
+		});
+		const otherChannels = channelRows.filter((t) => {
+			const slug = typeof t.channel_slug === 'string' ? t.channel_slug.trim().toLowerCase() : '';
+			return !slug || !joinedSlugs.has(slug);
+		});
+
+		const deps = { renderCommentAvatarHtml, getAvatarColor };
+		const onlineIds = this._presenceOnlineIds instanceof Set ? this._presenceOnlineIds : new Set();
+		const gearSvg = typeof this._serverGearSvg === 'string' ? this._serverGearSvg : '';
+
+		const joinedServerMetaForSlug = (slug) => {
+			const key = String(slug || '').trim().toLowerCase();
+			if (!key) return null;
+			for (const s of joinedSorted) {
+				const tag = serverChannelTagFromServerName(typeof s?.name === 'string' ? s.name : '');
+				if (tag && tag.toLowerCase() === key) return s;
+			}
+			return null;
+		};
+
+		const rowHtml = (t) => {
+			const href = buildChatThreadUrl(t);
 			const title = typeof t.title === 'string' && t.title.trim() ? t.title.trim() : 'Chat';
-			const last = t.last_message;
-			const preview = last && typeof last.body === 'string'
-				? last.body.trim().replace(/\s+/g, ' ').slice(0, 120)
-				: '';
+			const avatarHtml = buildChatThreadRowAvatarHtml(t, deps);
+			let presenceClass = '';
+			if (t.type === 'dm') {
+				const oid = typeof getDmOtherUserId === 'function' ? getDmOtherUserId(t) : null;
+				const online = isDmConsideredOnlineWithGrace(oid, onlineIds, this._dmPresenceGraceMap);
+				presenceClass = online ? 'is-online' : 'is-offline';
+			}
+			const pc = presenceClass ? ` ${presenceClass}` : '';
 			const unc = Number(t.unread_count);
 			const showUnread = Number.isFinite(unc) && unc > 0;
 			const unreadLabel = unc > 99 ? '99+' : String(unc);
+			const unreadHtml = showUnread
+				? `<span class="chat-page-sidebar-unread" aria-label="${unc} unread">${escapeHtml(unreadLabel)}</span>`
+				: '';
+			return `<a class="chat-page-sidebar-row${pc}" href="${escapeHtml(href)}">
+				${avatarHtml}
+				<div class="chat-page-sidebar-row-body">
+					<div class="chat-page-sidebar-row-title-line">
+						<span class="chat-page-sidebar-row-title">${escapeHtml(title)}</span>
+						${unreadHtml}
+					</div>
+				</div>
+			</a>`;
+		};
 
-			const threadId = t.id != null ? Number(t.id) : null;
+		const serverRowHtml = (t) => {
+			const href = buildChatThreadUrl(t);
+			const title = typeof t.title === 'string' && t.title.trim() ? t.title.trim() : 'Chat';
+			const avatarHtml = buildChatThreadRowAvatarHtml(t, deps);
+			const unc = Number(t.unread_count);
+			const showUnread = Number.isFinite(unc) && unc > 0;
+			const unreadLabel = unc > 99 ? '99+' : String(unc);
+			const unreadHtml = showUnread
+				? `<span class="chat-page-sidebar-unread" aria-label="${unc} unread">${escapeHtml(unreadLabel)}</span>`
+				: '';
+			const slug = typeof t.channel_slug === 'string' ? t.channel_slug.trim().toLowerCase() : '';
+			const meta = joinedServerMetaForSlug(slug);
+			const gearHtml =
+				meta && Number.isFinite(Number(meta.id)) && Number(meta.id) > 0
+					? `<button type="button" class="chat-page-sidebar-server-settings" data-chat-server-settings="${Number(meta.id)}" data-chat-server-can-manage="${meta.can_manage ? '1' : '0'}" aria-label="Server details">${gearSvg}</button>`
+					: '';
+			return `<div class="chat-page-sidebar-row chat-page-sidebar-row--server">
+				<a class="chat-page-sidebar-row-link" href="${escapeHtml(href)}">
+					${avatarHtml}
+					<div class="chat-page-sidebar-row-body">
+						<div class="chat-page-sidebar-row-title-line">
+							<span class="chat-page-sidebar-row-title">${escapeHtml(title)}</span>
+							${unreadHtml}
+						</div>
+					</div>
+				</a>
+				${gearHtml}
+			</div>`;
+		};
+
+		const channelRowOrAdminWrap = (t) => {
 			const slugLower =
 				typeof t.channel_slug === 'string' && t.channel_slug.trim()
 					? t.channel_slug.trim().toLowerCase()
 					: '';
+			const threadId = t.id != null ? Number(t.id) : null;
 			const slugSetReady = this._serverDerivedChannelSlugs instanceof Set;
 			const isServerLinkedChannel =
 				t.type === 'channel' &&
@@ -710,45 +791,26 @@ class AppRouteServers extends HTMLElement {
 				t.type !== 'dm' &&
 				slugSetReady &&
 				!isServerLinkedChannel;
+			const title = typeof t.title === 'string' && t.title.trim() ? t.title.trim() : 'Chat';
+			const inner = rowHtml(t);
+			if (!showDelete) return inner;
+			const encLabel = encodeURIComponent(title);
+			return `<div class="connect-chat-thread-row-wrap connect-chat-sidebar-admin-row">
+				${inner}
+				<button type="button" class="btn-danger btn-inline connect-chat-thread-delete" data-connect-admin-delete="${threadId}" data-connect-admin-delete-label="${encLabel}" aria-label="Delete chat thread ${threadId}">Delete</button>
+			</div>`;
+		};
 
-			const row = document.createElement('a');
-			row.className = 'connect-chat-thread-row';
-			row.href = buildChatThreadUrl(t);
-			const avatarHtml = buildConnectChatThreadAvatarHtml(t);
-			row.innerHTML = `
-				${avatarHtml}
-				<div class="connect-chat-thread-row-body">
-					<div class="connect-chat-thread-row-title-line">
-						<span class="connect-chat-thread-row-title">${escapeHtml(title)}</span>
-						${showUnread ? `<span class="connect-chat-thread-unread" aria-label="${unc} unread">${escapeHtml(unreadLabel)}</span>` : ''}
-					</div>
-					${preview ? `<span class="connect-chat-thread-row-preview">${escapeHtml(preview)}</span>` : ''}
-				</div>
-			`;
+		dmEl.innerHTML = dms.length
+			? dms.map(rowHtml).join('')
+			: '<p class="chat-page-sidebar-empty">No direct messages yet.</p>';
+		svEl.innerHTML = serverChannels.length
+			? serverChannels.map(serverRowHtml).join('')
+			: '<p class="chat-page-sidebar-empty">No servers joined yet.</p>';
+		chEl.innerHTML = otherChannels.length
+			? otherChannels.map(channelRowOrAdminWrap).join('')
+			: '<p class="chat-page-sidebar-empty">No channels yet.</p>';
 
-			if (showDelete) {
-				const wrap = document.createElement('div');
-				wrap.className = 'connect-chat-thread-row-wrap';
-				wrap.appendChild(row);
-				const delBtn = document.createElement('button');
-				delBtn.type = 'button';
-				delBtn.className = 'btn-danger btn-inline connect-chat-thread-delete';
-				delBtn.textContent = 'Delete';
-				delBtn.setAttribute(
-					'aria-label',
-					`Delete chat thread ${threadId}`
-				);
-				delBtn.addEventListener('click', (e) => {
-					e.preventDefault();
-					e.stopPropagation();
-					void this.deleteConnectChatThread(threadId, title);
-				});
-				wrap.appendChild(delBtn);
-				listEl.appendChild(wrap);
-			} else {
-				listEl.appendChild(row);
-			}
-		});
 		try {
 			document.dispatchEvent(new CustomEvent('chat-unread-refresh'));
 		} catch {
@@ -756,427 +818,76 @@ class AppRouteServers extends HTMLElement {
 		}
 	}
 
-	async openConnectChatChannel() {
-		const input = this.querySelector('[data-connect-chat-tag-input]');
-		const errEl = this.querySelector('[data-connect-chat-error]');
-		if (!(input instanceof HTMLInputElement)) return;
-
-		const raw = String(input.value || '').trim();
-		if (!raw) {
-			if (errEl instanceof HTMLElement) {
-				errEl.hidden = false;
-				errEl.textContent = 'Enter a channel tag.';
+	_applyServersNetworkResult(servers) {
+		const list = Array.isArray(servers) ? servers : [];
+		if (typeof serverChannelTagFromServerName === 'function') {
+			this._serverDerivedChannelSlugs = new Set();
+			for (const s of list) {
+				const tag = serverChannelTagFromServerName(typeof s?.name === 'string' ? s.name : '');
+				if (tag) this._serverDerivedChannelSlugs.add(String(tag).toLowerCase());
 			}
-			return;
+		} else {
+			this._serverDerivedChannelSlugs = null;
 		}
-		if (errEl instanceof HTMLElement) {
-			errEl.hidden = true;
-			errEl.textContent = '';
-		}
-
-		const dmUser = normalizeConnectAtUsernameOnly(raw);
-		if (dmUser) {
-			try {
-				const res = await fetch('/api/chat/dm', {
-					method: 'POST',
-					credentials: 'include',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ other_user_name: dmUser })
-				});
-				const data = await res.json().catch(() => ({}));
-				if (!res.ok) {
-					throw new Error(data.message || data.error || 'Could not open DM');
-				}
-				input.value = '';
-				window.location.href = `/chat/dm/${encodeURIComponent(dmUser)}`;
-			} catch (err) {
-				console.error('[Connect chat] open DM:', err);
-				if (errEl instanceof HTMLElement) {
-					errEl.hidden = false;
-					errEl.textContent = err?.message || 'Could not open DM.';
-				}
-			}
-			return;
-		}
-
-		try {
-			const res = await fetch('/api/chat/channels', {
-				method: 'POST',
-				credentials: 'include',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ tag: raw })
-			});
-			const data = await res.json().catch(() => ({}));
-			if (!res.ok) {
-				throw new Error(data.message || data.error || 'Could not open channel');
-			}
-			const slug = (data?.thread?.channel_slug && String(data.thread.channel_slug).trim())
-				? String(data.thread.channel_slug).trim()
-				: raw.toLowerCase().trim();
-			input.value = '';
-			window.location.href = `/chat/c/${encodeURIComponent(slug)}`;
-		} catch (err) {
-			console.error('[Connect chat] open channel:', err);
-			if (errEl instanceof HTMLElement) {
-				errEl.hidden = false;
-				errEl.textContent = err?.message || 'Could not open channel.';
-			}
-		}
+		this._joinedServersForChat = list
+			.filter((s) => s && s.is_member)
+			.map((s) => ({
+				id: Number(s.id),
+				name: typeof s.name === 'string' ? s.name.trim() : '',
+				can_manage: Boolean(s.can_manage)
+			}))
+			.filter((s) => Number.isFinite(s.id) && s.id > 0);
 	}
 
-	async loadLatestComments() {
-		const container = this.querySelector('[data-comments-container]');
-		if (!container) return;
-
-		try {
-			const result = await fetchLatestComments({ limit: 10 });
-			if (!result.ok) {
-				throw new Error('Failed to load comments');
-			}
-			container.removeAttribute('aria-busy');
-			container.removeAttribute('aria-label');
-			const comments = Array.isArray(result.data?.comments) ? result.data.comments : [];
-			this.renderLatestComments(comments, container);
-		} catch (err) {
-			container.removeAttribute('aria-busy');
-			container.removeAttribute('aria-label');
-			console.error('[Connect] Error loading comments:', err);
-			container.innerHTML = renderEmptyError('Error loading comments.');
+	_derivedSlugListFromServers(servers) {
+		const list = Array.isArray(servers) ? servers : [];
+		const out = [];
+		if (typeof serverChannelTagFromServerName !== 'function') return out;
+		for (const s of list) {
+			const tag = serverChannelTagFromServerName(typeof s?.name === 'string' ? s.name : '');
+			if (tag) out.push(String(tag).toLowerCase());
 		}
+		return out;
 	}
 
-	renderLatestComments(comments, container) {
-		container.innerHTML = '';
-
-		if (!Array.isArray(comments) || comments.length === 0) {
-			container.innerHTML = renderEmptyState({ title: 'No recent comments yet.' });
-			return;
-		}
-
-		container.classList.add('connect-comment-list');
-
-		comments.forEach((comment) => {
-			const createdImageId = Number(comment?.created_image_id);
-			const href = (Number.isFinite(createdImageId) && createdImageId > 0) ? `/creations/${createdImageId}` : null;
-
-			const displayName = (typeof comment?.display_name === 'string' && comment.display_name.trim())
-				? comment.display_name.trim()
-				: '';
-			const userName = (typeof comment?.user_name === 'string' && comment.user_name.trim())
-				? comment.user_name.trim()
-				: '';
-			const fallbackName = userName ? userName : 'User';
-			const commenterName = displayName || fallbackName;
-			const commenterHandle = userName ? `@${userName}` : '';
-
-			const createdImageTitle = (typeof comment?.created_image_title === 'string' && comment.created_image_title.trim())
-				? comment.created_image_title.trim()
-				: (Number.isFinite(createdImageId) && createdImageId > 0 ? `Creation ${createdImageId}` : 'Creation');
-
-			const creatorDisplayName = (typeof comment?.created_image_display_name === 'string' && comment.created_image_display_name.trim())
-				? comment.created_image_display_name.trim()
-				: '';
-			const creatorUserName = (typeof comment?.created_image_user_name === 'string' && comment.created_image_user_name.trim())
-				? comment.created_image_user_name.trim()
-				: '';
-			const creator = creatorDisplayName || (creatorUserName ? `@${creatorUserName}` : '');
-
-			const row = document.createElement('div');
-			row.className = `connect-comment${href ? '' : ' is-disabled'}`;
-			if (href) {
-				row.setAttribute('role', 'link');
-				row.tabIndex = 0;
-				row.dataset.href = href;
-				row.setAttribute('aria-label', `Open creation ${createdImageTitle}`);
-				row.addEventListener('click', (e) => {
-					const target = e.target;
-					if (target instanceof HTMLElement && target.closest('a')) return;
-					window.location.href = href;
-				});
-				row.addEventListener('keydown', (e) => {
-					if (e.key === 'Enter' || e.key === ' ') {
-						e.preventDefault();
-						window.location.href = href;
-					}
-				});
-			}
-
-			const thumbWrap = document.createElement('div');
-			thumbWrap.className = `connect-comment-thumb${comment.nsfw ? ' nsfw' : ''}`;
-			if (comment.created_image_media_type === 'video') {
-				thumbWrap.setAttribute('data-media-type', 'video');
-			}
-			thumbWrap.setAttribute('aria-hidden', 'true');
-			const thumbUrl = typeof comment?.created_image_thumbnail_url === 'string' ? comment.created_image_thumbnail_url.trim() : '';
-			const imageUrl = typeof comment?.created_image_url === 'string' ? comment.created_image_url.trim() : '';
-			const resolvedThumb = thumbUrl || imageUrl || '';
-			if (resolvedThumb) {
-				const img = document.createElement('img');
-				img.src = resolvedThumb;
-				img.alt = '';
-				img.loading = 'lazy';
-				img.decoding = 'async';
-				img.className = 'connect-comment-thumb-img';
-				thumbWrap.appendChild(img);
-			}
-
-			const creationTitle = document.createElement('div');
-			creationTitle.className = 'connect-comment-creation-title';
-			creationTitle.textContent = createdImageTitle;
-
-			const creatorRow = document.createElement('div');
-			creatorRow.className = 'connect-comment-creator';
-
-			const creatorId = Number(comment?.created_image_user_id ?? 0);
-			const creatorProfileHref = buildProfilePath({ userName: creatorUserName, userId: creatorId });
-			const creatorName = creatorDisplayName || (creatorUserName ? creatorUserName : 'User');
-			const creatorHandle = creatorUserName ? `@${creatorUserName}` : '';
-			const creatorSeed = creatorUserName || String(creatorId || '') || creatorName;
-			const creatorColor = getAvatarColor(creatorSeed);
-			const creatorInitial = creatorName.charAt(0).toUpperCase() || '?';
-			const creatorAvatarUrl = typeof comment?.created_image_avatar_url === 'string' ? comment.created_image_avatar_url.trim() : '';
-			const creatorPlan = comment?.created_image_owner_plan === 'founder';
-			const creatorAvatarHtml = renderCommentAvatarHtml({
-				avatarUrl: creatorAvatarUrl,
-				displayName: creatorName,
-				color: creatorColor,
-				href: creatorProfileHref,
-				isFounder: creatorPlan,
-				flairSize: 'xs',
-			});
-
-			// Note: on Connect, we intentionally hide the creation timestamp to reduce clutter.
-			creatorRow.innerHTML = `
-				<div class="connect-comment-creator-left">
-					${creatorAvatarHtml}
-					<div class="connect-comment-creator-who">
-						<span class="comment-author-name${creatorPlan ? ' founder-name' : ''}">${escapeHtml(creatorName)}</span>
-						${creatorHandle ? `<span class="comment-author-handle${creatorPlan ? ' founder-name' : ''}">${escapeHtml(creatorHandle)}</span>` : ''}
-					</div>
-				</div>
-			`;
-
-			const commenterId = Number(comment?.user_id ?? 0);
-			const profileHref = buildProfilePath({ userName, userId: commenterId });
-			const seed = userName || String(comment?.user_id ?? '') || commenterName;
-			const color = getAvatarColor(seed);
-			const avatarUrl = typeof comment?.avatar_url === 'string' ? comment.avatar_url.trim() : '';
-			const commenterPlan = comment?.plan === 'founder';
-			const avatarHtml = renderCommentAvatarHtml({
-				avatarUrl,
-				displayName: commenterName,
-				color,
-				href: profileHref,
-				isFounder: commenterPlan,
-				flairSize: 'xs',
-			});
-
-			const timeAgo = comment?.created_at ? (formatRelativeTime(comment.created_at) || '') : '';
-			const safeText = processUserText(comment?.text ?? '');
-
-			const commentText = document.createElement('div');
-			commentText.className = 'comment-text';
-			commentText.innerHTML = safeText;
-
-			const reactions = comment?.reactions && typeof comment.reactions === 'object' ? comment.reactions : {};
-			let chipsWithCount = [];
-			let reactionsEl = null;
-			try {
-				chipsWithCount = Array.isArray(REACTION_ORDER) ? REACTION_ORDER.filter((key) => {
-					const arr = Array.isArray(reactions[key]) ? reactions[key] : [];
-					const last = arr[arr.length - 1];
-					const others = typeof last === 'number' ? last : 0;
-					const strings = typeof last === 'number' ? arr.slice(0, -1) : arr;
-					return strings.length + others > 0;
-				}) : [];
-			} catch (e) {
-				console.error('[Connect] Error filtering reaction chips:', e);
-			}
-			if (chipsWithCount.length > 0) {
-				reactionsEl = document.createElement('div');
-				reactionsEl.className = 'comment-reactions comment-reactions-readonly';
-				try {
-					const pillsHtml = chipsWithCount.map((key) => {
-						const arr = Array.isArray(reactions[key]) ? reactions[key] : [];
-						const last = arr[arr.length - 1];
-						const others = typeof last === 'number' ? last : 0;
-						const strings = (typeof last === 'number' ? arr.slice(0, -1) : arr).filter((s) => typeof s === 'string');
-						const count = strings.length + others;
-						const countLabel = count > 99 ? '99+' : String(count);
-						const tooltip = strings.length > 0 || others > 0
-							? [...strings, others > 0 ? `and ${others} ${others === 1 ? 'other' : 'others'}` : ''].filter(Boolean).join(', ')
-							: '';
-						const iconFn = REACTION_ICONS?.[key];
-						const iconHtml = (typeof iconFn === 'function' ? iconFn('comment-reaction-icon') : '') || '';
-						const tooltipAttr = tooltip ? ` data-tooltip="${escapeHtml(tooltip)}"` : '';
-						return `<span class="comment-reaction-pill" aria-label="${escapeHtml(key)}: ${escapeHtml(countLabel)}"${tooltipAttr}><span class="comment-reaction-icon-wrap" aria-hidden="true">${iconHtml}</span><span class="comment-reaction-count">${escapeHtml(countLabel)}</span></span>`;
-					}).join('');
-					reactionsEl.innerHTML = `<div class="comment-reaction-pills"><div class="comment-reaction-pills-inner">${pillsHtml}</div></div>`;
-				} catch (e) {
-					console.error('[Connect] Error rendering reaction chips for comment:', comment?.id, e);
-				}
-			}
-
-			const footer = document.createElement('div');
-			footer.className = 'connect-comment-footer';
-			footer.innerHTML = `
-				<div class="connect-comment-footer-left">
-					${avatarHtml}
-					<div class="connect-comment-footer-who">
-						<span class="connect-comment-footer-name-handle-time">
-							<span class="comment-author-name${commenterPlan ? ' founder-name' : ''}">${escapeHtml(commenterName)}</span>
-							${commenterHandle ? `<span class="comment-author-handle${commenterPlan ? ' founder-name' : ''}">${escapeHtml(commenterHandle)}</span>` : ''}
-							${timeAgo ? `<span class="comment-time">&nbsp;·&nbsp;${escapeHtml(timeAgo)}</span>` : ''}
-						</span>
-					</div>
-				</div>
-			`;
-
-			row.appendChild(thumbWrap);
-			row.appendChild(creationTitle);
-			row.appendChild(creatorRow);
-			row.appendChild(commentText);
-			row.appendChild(footer);
-			if (reactionsEl?.innerHTML) {
-				row.classList.add('has-reactions');
-				row.appendChild(reactionsEl);
-			}
-			container.appendChild(row);
-		});
-
-		// Comments were rendered; hydrate any special link labels within them.
-		hydrateUserTextLinks(container);
-
-		// Tap-to-show tooltip for mobile (readonly pills; interactive pills elsewhere have their own tap action).
-		if (typeof setupReactionTooltipTap === 'function') {
-			setupReactionTooltipTap(container);
-		}
-	}
-
-	// Listen for server updates from modal
-	setupEventListeners() {
-		document.addEventListener('server-updated', () => {
-			this.loadServers({ force: true });
-		});
-	}
-
-	setupFeatureRequestForm() {
-		const form = this.querySelector('[data-feature-request-form]');
-		if (!(form instanceof HTMLFormElement)) return;
-
-		const status = this.querySelector('[data-feature-request-status]');
-		const submit = this.querySelector('[data-feature-request-submit]');
-		const messageEl = this.querySelector('[data-feature-request-message]');
-		const refreshMessage = messageEl instanceof HTMLTextAreaElement
-			? attachAutoGrowTextarea(messageEl)
-			: () => { };
-
-		let statusTimer = null;
-
-		const setStatus = ({ type, text } = {}) => {
-			if (!(status instanceof HTMLElement)) return;
-			if (statusTimer) {
-				clearTimeout(statusTimer);
-				statusTimer = null;
-			}
-			status.hidden = !text;
-			status.classList.toggle('error', type === 'error');
-			if (!text) {
-				status.textContent = '';
-				return;
-			}
-
-			// Render a dismissible alert.
-			status.innerHTML = `
-				<span>${escapeHtml(text)}</span>
-				<button type="button" class="alert-close" data-alert-close aria-label="Dismiss">✕</button>
-			`;
-
-			const close = status.querySelector('[data-alert-close]');
-			if (close instanceof HTMLButtonElement) {
-				close.addEventListener('click', () => {
-					setStatus({ type: 'info', text: '' });
-				});
-			}
-
-			// Auto-dismiss non-error notices.
-			if (type !== 'error') {
-				statusTimer = setTimeout(() => {
-					setStatus({ type: 'info', text: '' });
-				}, 4000);
-			}
-		};
-
-		form.addEventListener('submit', async (e) => {
-			e.preventDefault();
-			setStatus({ type: 'info', text: '' });
-
-			const message = String(form.elements.message.value || '').trim();
-			const context = {
-				route: (document.documentElement?.dataset?.route || window.__CURRENT_ROUTE__ || '').toString(),
-				referrer: (document.referrer || '').toString(),
-				timezone: (() => {
-					try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; }
-				})(),
-				locale: (navigator.language || '').toString(),
-				platform: (navigator.platform || '').toString(),
-				colorScheme: (() => {
-					try { return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; } catch { return ''; }
-				})(),
-				reducedMotion: (() => {
-					try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'reduce' : 'no-preference'; } catch { return ''; }
-				})(),
-				network: (() => {
-					const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-					const effectiveType = conn?.effectiveType ? String(conn.effectiveType) : '';
-					const saveData = typeof conn?.saveData === 'boolean' ? (conn.saveData ? 'save-data' : '') : '';
-					return [effectiveType, saveData].filter(Boolean).join(' ');
-				})(),
-				viewportWidth: window.innerWidth || 0,
-				viewportHeight: window.innerHeight || 0,
-				screenWidth: window.screen?.width || 0,
-				screenHeight: window.screen?.height || 0,
-				devicePixelRatio: window.devicePixelRatio || 1
-			};
-
-			if (!message) {
-				setStatus({ type: 'error', text: 'Please share your idea.' });
-				return;
-			}
-
-			if (submit instanceof HTMLButtonElement) {
-				submit.disabled = true;
-				submit.textContent = 'Sending…';
-			}
-
-			try {
-				const response = await fetch('/api/feature-requests', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					credentials: 'include',
-					body: JSON.stringify({ message, context })
-				});
-				const data = await response.json().catch(() => ({}));
-				if (!response.ok) {
-					throw new Error(data.error || 'Failed to send feature request.');
-				}
-				form.reset();
-				refreshMessage();
-				setStatus({ type: 'info', text: 'Sent. Thanks — we’ll review it soon.' });
-			} catch (err) {
-				setStatus({ type: 'error', text: err?.message || 'Failed to send feature request.' });
-			} finally {
-				if (submit instanceof HTMLButtonElement) {
-					submit.disabled = false;
-					submit.textContent = 'Send';
-				}
-			}
-		});
-	}
-
-	async loadServers({ force = false } = {}) {
+	/**
+	 * Cache-first: paint from localStorage when fresh; refetch when stale, viewer mismatch, or forceNetwork.
+	 */
+	async loadServers({ forceNetwork = false } = {}) {
 		const container = this.querySelector('[data-servers-container]');
-		if (!container) return;
+		const viewerId =
+			this._chatViewerId != null && Number.isFinite(Number(this._chatViewerId))
+				? Number(this._chatViewerId)
+				: null;
+
+		const cached = readConnectServersCache();
+		const cacheMatchesViewer =
+			cached &&
+			viewerId != null &&
+			cached.viewerId === viewerId &&
+			Array.isArray(cached.joinedServers) &&
+			Array.isArray(cached.derivedSlugs);
+
+		const networkNeeded =
+			forceNetwork ||
+			!cacheMatchesViewer ||
+			(cached && isConnectServersCacheStale(cached.cachedAt));
+
+		if (cacheMatchesViewer) {
+			this._joinedServersForChat = cached.joinedServers;
+			this._serverDerivedChannelSlugs = new Set(
+				(cached.derivedSlugs || []).map((s) => String(s).toLowerCase())
+			);
+			if (container) {
+				container.removeAttribute('aria-busy');
+				container.removeAttribute('aria-label');
+			}
+			this.renderConnectChatThreadList();
+		}
+
+		if (!networkNeeded) {
+			return;
+		}
 
 		try {
 			const result = await fetchJsonWithStatusDeduped('/api/servers', { credentials: 'include' }, { windowMs: 2000 });
@@ -1184,35 +895,31 @@ class AppRouteServers extends HTMLElement {
 				throw new Error('Failed to load servers');
 			}
 
-			container.removeAttribute('aria-busy');
-			container.removeAttribute('aria-label');
+			if (container) {
+				container.removeAttribute('aria-busy');
+				container.removeAttribute('aria-label');
+			}
 			const servers = Array.isArray(result.data?.servers) ? result.data.servers : [];
 			const viewerIsAdmin = Boolean(result.data?.viewer_is_admin);
-			if (typeof serverChannelTagFromServerName === 'function') {
-				this._serverDerivedChannelSlugs = new Set();
-				for (const s of servers) {
-					const tag = serverChannelTagFromServerName(
-						typeof s?.name === 'string' ? s.name : ''
-					);
-					if (tag) this._serverDerivedChannelSlugs.add(String(tag).toLowerCase());
-				}
-			} else {
-				this._serverDerivedChannelSlugs = null;
+			this._applyServersNetworkResult(servers);
+
+			const vid = this._chatViewerId != null && Number.isFinite(Number(this._chatViewerId))
+				? Number(this._chatViewerId)
+				: null;
+			if (vid != null && Number.isFinite(vid)) {
+				writeConnectServersCache(vid, this._joinedServersForChat, this._derivedSlugListFromServers(servers));
 			}
-			this._joinedServersForChat = servers
-				.filter((s) => s && s.is_member)
-				.map((s) => ({
-					id: Number(s.id),
-					name: typeof s.name === 'string' ? s.name.trim() : ''
-				}))
-				.filter((s) => Number.isFinite(s.id) && s.id > 0);
-			this.renderServers(servers, container, viewerIsAdmin);
+
+			if (container) {
+				this.renderServers(servers, container, viewerIsAdmin);
+			}
 			this.renderConnectChatThreadList();
 		} catch (error) {
-			// console.error('Error loading servers:', error);
-			container.removeAttribute('aria-busy');
-			container.removeAttribute('aria-label');
-			container.innerHTML = renderEmptyError('Error loading servers.');
+			if (container) {
+				container.removeAttribute('aria-busy');
+				container.removeAttribute('aria-label');
+				container.innerHTML = renderEmptyError('Error loading servers.');
+			}
 		}
 	}
 
@@ -1355,52 +1062,6 @@ class AppRouteServers extends HTMLElement {
 		});
 
 		container.appendChild(ghostCard);
-	}
-
-	async handleJoin(serverId) {
-		try {
-			const response = await fetch(`/api/servers/${serverId}/join`, {
-				method: 'POST',
-				credentials: 'include'
-			});
-
-			const data = await response.json();
-			if (!response.ok) {
-				alert(data.error || 'Failed to join server');
-				return;
-			}
-
-			// Refresh the page to show updated state
-			window.location.reload();
-		} catch (error) {
-			// console.error('Error joining server:', error);
-			alert('Failed to join server');
-		}
-	}
-
-	async handleLeave(serverId) {
-		if (!confirm('Are you sure you want to leave this server?')) {
-			return;
-		}
-
-		try {
-			const response = await fetch(`/api/servers/${serverId}/leave`, {
-				method: 'POST',
-				credentials: 'include'
-			});
-
-			const data = await response.json();
-			if (!response.ok) {
-				alert(data.error || 'Failed to leave server');
-				return;
-			}
-
-			// Refresh the page to show updated state
-			window.location.reload();
-		} catch (error) {
-			// console.error('Error leaving server:', error);
-			alert('Failed to leave server');
-		}
 	}
 }
 

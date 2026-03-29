@@ -579,6 +579,15 @@ export default function createChatRoutes({ queries }) {
 			return res.status(400).json({ error: "Bad request", message: "Invalid or missing tag" });
 		}
 
+		/** Client-side pseudo-channels (e.g. latest creation comments); not real hashtag threads. */
+		const RESERVED_CHANNEL_SLUGS = new Set(["comments"]);
+		if (RESERVED_CHANNEL_SLUGS.has(slug)) {
+			return res.status(400).json({
+				error: "Bad request",
+				message: "This channel name is reserved.",
+			});
+		}
+
 		try {
 			const { data: existing } = await sb
 				.from("prsn_chat_threads")

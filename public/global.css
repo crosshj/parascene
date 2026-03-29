@@ -2398,6 +2398,14 @@ header .hamburger-button.active span:nth-child(3) {
 	align-self: flex-start;
 }
 
+@media (min-width: 769px) {
+	.servers-route .route-header {
+		padding-bottom: 12px;
+		margin-bottom: 16px;
+		border-bottom: 1px solid var(--border);
+	}
+}
+
 .route-section {
 	margin-top: 28px;
 }
@@ -4915,6 +4923,8 @@ body.chat-page .chat-route {
 	flex-direction: column;
 	gap: 0;
 	position: relative;
+	/* Avoid browser scroll anchoring fighting manual scrollTop when prepending older messages. */
+	overflow-anchor: none;
 }
 
 /* Thread open: same delayed .route-loading-spinner as elsewhere (global .route-loading-spinner) */
@@ -4933,6 +4943,52 @@ body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading {
 	color: var(--text-muted);
 	line-height: 1.45;
 	max-width: 28rem;
+}
+
+/* #comments pseudo-channel: `.connect-comment` grid + `comments-channel-plain-msg` for desktop lane.
+   See `body.chat-page .chat-page-messages .comments-channel-plain-msg` next to `.connect-chat-msg`. */
+.chat-page-messages .comments-channel-plain-msg.connect-comment {
+	flex-shrink: 0;
+	width: 100%;
+	max-width: 100%;
+	box-sizing: border-box;
+	transition: background-color 0.12s ease;
+}
+
+@media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+	.chat-page-messages .comments-channel-plain-msg.connect-comment:hover {
+		background: color-mix(in srgb, var(--text) 5%, transparent);
+	}
+}
+
+/* Fallback if card row cannot be built (missing API row). */
+.chat-page-messages .comments-channel-plain-msg:not(.connect-comment) {
+	flex-shrink: 0;
+	display: block;
+	width: 100%;
+	max-width: 100%;
+	padding-top: 3px;
+	padding-bottom: 3px;
+	box-sizing: border-box;
+	transition: background-color 0.12s ease;
+}
+
+@media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+	.chat-page-messages .comments-channel-plain-msg:not(.connect-comment):hover {
+		background: color-mix(in srgb, var(--text) 5%, transparent);
+	}
+}
+
+.chat-page-messages .comments-channel-plain-msg-body {
+	padding: 2px 1em;
+	border-radius: 0;
+	box-sizing: border-box;
+	font-size: 0.9375rem;
+	line-height: 1.45;
+	color: var(--text);
+	white-space: pre-wrap;
+	word-break: break-word;
+	max-width: 100%;
 }
 
 body.chat-page .chat-page-error {
@@ -4956,6 +5012,24 @@ body.chat-page .chat-page-composer {
 	padding-bottom: calc(8px + env(safe-area-inset-bottom));
 	border-top: none;
 	background: var(--bg);
+}
+
+/* #comments / #feedback pseudo-channels: same outer size as `.chat-page-input-shell` + textarea min-height */
+body.chat-page .chat-page-pseudo-composer-hint {
+	margin: 0;
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+	min-height: 54px;
+	padding: 4px 12px;
+	border-radius: 10px;
+	font-size: 0.9375rem;
+	line-height: 1.45;
+	color: var(--text-muted);
+	background: var(--border);
+	border: 1px solid var(--border);
+	width: 100%;
+	flex-shrink: 0;
 }
 
 /* Top edge only: rounded upper corners, square lower corners (bottom bar) */
@@ -5050,7 +5124,8 @@ body.chat-page .chat-page-send-btn .chat-page-send-icon {
 	}
 
 	/* Apply the centered content lane per message row instead of the scroller. */
-	body.chat-page .chat-page-messages .connect-chat-msg {
+	body.chat-page .chat-page-messages .connect-chat-msg,
+	body.chat-page .chat-page-messages .comments-channel-plain-msg {
 		padding-left: max(12px, calc((100% - 720px) / 2 + 12px));
 		padding-right: max(12px, calc((100% - 720px) / 2 + 12px));
 	}
@@ -5449,6 +5524,317 @@ body.blog-edit-page .blog-edit-route {
 
 .connect-chat-sidebar {
 	margin-bottom: 12px;
+}
+
+/* Connect (/connect): same roster markup as chat.html sidebar — styles apply at all widths (not only body.chat-page ≥1024). */
+.servers-route .connect-chat-sidebar {
+	width: 100%;
+	max-width: 100%;
+}
+
+.servers-route .connect-chat-unauth {
+	padding: 8px 4px 4px;
+}
+
+.servers-route .connect-chat-lists {
+	width: 100%;
+}
+
+.servers-route .connect-chat-sidebar-roster.chat-page-sidebar-scroll {
+	overflow-y: auto;
+	overflow-x: hidden;
+	-webkit-overflow-scrolling: touch;
+	overscroll-behavior: contain;
+	padding: 8px 8px 16px;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-section {
+	margin-bottom: 4px;
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-section-head {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 6px 12px 4px;
+	box-sizing: border-box;
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-section-head .chat-page-sidebar-heading {
+	flex: 1;
+	min-width: 0;
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-heading {
+	margin: 0;
+	padding: 0;
+	font-size: 0.6875rem;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text-muted);
+	line-height: 1.2;
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-add {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 28px;
+	height: 28px;
+	margin: 0;
+	padding: 0;
+	border: none;
+	border-radius: 4px;
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
+	transition:
+		background-color 0.12s ease,
+		color 0.12s ease;
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-add:hover {
+	background: color-mix(in srgb, var(--text) 6%, transparent);
+	color: var(--text);
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-add:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: -2px;
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-add-icon {
+	display: block;
+	width: 18px;
+	height: 18px;
+	flex-shrink: 0;
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+	padding: 0 4px;
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	box-sizing: border-box;
+	text-align: left;
+	padding: 4px 8px;
+	min-height: 32px;
+	border-radius: 6px;
+	border: 1px solid transparent;
+	background: transparent;
+	color: var(--text);
+	font-size: 0.8125rem;
+	text-decoration: none;
+	cursor: pointer;
+	transition:
+		background-color 0.12s ease,
+		border-color 0.12s ease,
+		opacity 0.12s ease,
+		color 0.12s ease;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row:hover {
+	background: color-mix(in srgb, var(--text) 5%, transparent);
+	border-color: color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: -2px;
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row .comment-avatar,
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row .chat-page-sidebar-channel-avatar {
+	width: 24px;
+	height: 24px;
+	min-width: 24px;
+	font-size: 0.7rem;
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row-body {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 0;
+	min-width: 0;
+	flex: 1;
+	justify-content: center;
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row-title-line {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	width: 100%;
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row-title-line .chat-page-sidebar-row-title {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	width: auto;
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-unread {
+	flex-shrink: 0;
+	min-width: 16px;
+	height: 16px;
+	padding: 0 5px;
+	border-radius: 999px;
+	background: var(--accent);
+	color: var(--accent-text);
+	font-size: 0.6rem;
+	font-weight: 700;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row-title {
+	font-weight: 500;
+	font-size: 0.8125rem;
+	line-height: 1.2;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	width: 100%;
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row.is-offline {
+	opacity: 0.62;
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row.is-offline .chat-page-sidebar-row-title {
+	font-weight: 500;
+	color: color-mix(in srgb, var(--text) 72%, var(--text-muted));
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row.is-online .chat-page-sidebar-row-title {
+	font-weight: 600;
+	color: var(--text);
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row--server {
+	align-items: stretch;
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row--server:focus-within {
+	outline: 2px solid var(--focus);
+	outline-offset: -2px;
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row--server .chat-page-sidebar-row-link {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	flex: 1;
+	min-width: 0;
+	text-decoration: none;
+	color: inherit;
+	cursor: pointer;
+	border-radius: 4px;
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row--server .chat-page-sidebar-row-link:focus-visible {
+	outline: none;
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-server-settings {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	align-self: center;
+	flex-shrink: 0;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	margin: 0;
+	border: none;
+	background: transparent;
+	color: var(--text-muted);
+	border-radius: 4px;
+	cursor: pointer;
+	opacity: 0;
+	transition:
+		opacity 0.12s ease,
+		color 0.12s ease,
+		background-color 0.12s ease;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-server-settings-icon {
+	display: block;
+	width: 16px;
+	height: 16px;
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row--server:hover .chat-page-sidebar-server-settings,
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row--server:focus-within .chat-page-sidebar-server-settings,
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-server-settings:focus-visible {
+	opacity: 1;
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-server-settings:hover {
+	color: var(--text);
+	background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-server-settings:focus-visible {
+	outline: none;
+}
+
+@media (hover: none), (pointer: coarse) {
+
+	.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-server-settings {
+		opacity: 1;
+	}
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-empty {
+	padding: 8px 14px 12px;
+	font-size: 0.8125rem;
+	color: var(--text-muted);
+	line-height: 1.4;
+}
+
+.servers-route .connect-chat-sidebar-roster .connect-chat-sidebar-admin-row {
+	align-items: stretch;
+}
+
+.servers-route .connect-chat-sidebar-admin-row.connect-chat-thread-row-wrap {
+	display: flex;
+	flex-direction: row;
+	align-items: stretch;
+	gap: 8px;
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.servers-route .connect-chat-sidebar-admin-row .chat-page-sidebar-row {
+	flex: 1;
+	min-width: 0;
 }
 
 .connect-chat-thread-list {
@@ -6224,7 +6610,7 @@ body.blog-edit-page .blog-edit-route {
 	display: grid;
 	grid-template-columns: 128px 1fr;
 	column-gap: 12px;
-	row-gap: 6px;
+	row-gap: 0;
 	grid-template-areas:
 		'thumb title'
 		'thumb creator'
@@ -6340,6 +6726,7 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 .connect-comment-creation-title {
 	grid-area: title;
 	font-weight: 600;
+	line-height: 1.25;
 	display: -webkit-box;
 	-webkit-box-orient: vertical;
 	-webkit-line-clamp: 2;
@@ -6392,11 +6779,13 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 
 .connect-comment .comment-text {
 	grid-area: text;
-	margin-top: 0;
+	margin-top: 8px;
+	margin-bottom: 0;
 }
 
 .connect-comment .comment-reactions {
 	grid-area: reactions;
+	margin-top: 8px;
 }
 
 .connect-comment-footer {
@@ -6405,7 +6794,6 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 	align-items: center;
 	justify-content: space-between;
 	gap: 12px;
-	margin-top: 2px;
 }
 
 .connect-comment-footer-left {
@@ -6446,7 +6834,8 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 @media (max-width: 768px) {
 	.connect-comment {
 		grid-template-columns: 64px 1fr;
-		gap: 10px;
+		column-gap: 10px;
+		row-gap: 0;
 		padding: 10px 0;
 		grid-template-areas:
 			'thumb title'
@@ -6482,7 +6871,7 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 	}
 
 	.connect-comment .comment-text {
-		margin-top: 0;
+		margin-top: 10px;
 	}
 
 	/* Optional: reduce visual noise on small screens */

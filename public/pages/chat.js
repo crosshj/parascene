@@ -37,6 +37,7 @@ let attachAutoGrowTextarea;
 let attachMentionSuggest;
 let toggleChatMessageReaction;
 let setupReactionTooltipTap;
+let createConnectCommentRowElement;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -94,6 +95,9 @@ async function loadDeps() {
 
 		const tooltipTapMod = await import(`../shared/reactionTooltipTap.js${qs}`);
 		setupReactionTooltipTap = tooltipTapMod.setupReactionTooltipTap;
+
+		const connectCardMod = await import(`../shared/connectCommentCard.js${qs}`);
+		createConnectCommentRowElement = connectCardMod.createConnectCommentRowElement;
 	})();
 	return _depsPromise;
 }
@@ -275,6 +279,13 @@ export async function initChatPage(root) {
 	let chatViewerId = null;
 	let chatThreads = [];
 	let activeThreadId = null;
+	/** @type {string | null} — e.g. reserved `comments`; not a real chat thread id. */
+	let activePseudoChannelSlug = null;
+	let commentsChannelHasMore = false;
+	let commentsChannelLoadingMore = false;
+	/** @type {IntersectionObserver | null} */
+	let commentsChannelLoadMoreObserver = null;
+	const COMMENTS_CHANNEL_PAGE_SIZE = 50;
 	let loadingMessages = false;
 	let sendInFlight = false;
 	/** Optimistic / failed send row (re-mounted after each loadMessages when still relevant). */
@@ -585,7 +596,51 @@ export async function initChatPage(root) {
 		const sendBtn = root.querySelector('[data-chat-send]');
 		const inp = root.querySelector('[data-chat-body-input]');
 		if (!(sendBtn instanceof HTMLButtonElement) || !(inp instanceof HTMLTextAreaElement)) return;
+		if (activePseudoChannelSlug) {
+			sendBtn.hidden = true;
+			return;
+		}
 		sendBtn.hidden = String(inp.value || '').trim().length === 0;
+	}
+
+	function applyComposerState() {
+		const bodyInput = root.querySelector('[data-chat-body-input]');
+		const hint = root.querySelector('[data-chat-pseudo-composer-hint]');
+		const shell = root.querySelector('[data-chat-composer] .chat-page-input-shell');
+		const composerForm = root.querySelector('[data-chat-composer]');
+		if (!(bodyInput instanceof HTMLTextAreaElement)) return;
+
+		if (activePseudoChannelSlug === 'comments') {
+			bodyInput.disabled = true;
+			bodyInput.value = '';
+			bodyInput.placeholder = '';
+			bodyInput.hidden = true;
+			if (shell instanceof HTMLElement) shell.hidden = true;
+			if (hint instanceof HTMLElement) {
+				hint.hidden = false;
+				hint.textContent =
+					'Click a comment above to open its creation — you can comment and react there.';
+			}
+			if (composerForm instanceof HTMLFormElement) {
+				composerForm.setAttribute('aria-label', 'Comments channel');
+			}
+		} else {
+			bodyInput.hidden = false;
+			if (shell instanceof HTMLElement) shell.hidden = false;
+			if (hint instanceof HTMLElement) hint.hidden = true;
+			if (activePseudoChannelSlug) {
+				bodyInput.disabled = true;
+				bodyInput.placeholder = 'Replies are on each creation page.';
+				bodyInput.value = '';
+			} else {
+				bodyInput.disabled = false;
+				bodyInput.placeholder = 'Message…';
+			}
+			if (composerForm instanceof HTMLFormElement) {
+				composerForm.setAttribute('aria-label', 'Send a message');
+			}
+		}
+		syncChatSendButton();
 	}
 
 	function findOptimisticRow(messagesEl, tempId) {
@@ -1274,7 +1329,9 @@ export async function initChatPage(root) {
 		const render = (threads, joined, onlineIds) => {
 			const threadsArr = Array.isArray(threads) ? threads : [];
 			const joinedArr = Array.isArray(joined) ? joined : [];
-			const merged = rosterMod.mergeThreadRowsWithJoinedServers(threadsArr, joinedArr);
+			const merged = rosterMod.appendReservedPseudoChannels(
+				rosterMod.mergeThreadRowsWithJoinedServers(threadsArr, joinedArr)
+			);
 			const joinedSorted = [...joinedArr].sort((a, b) => Number(a.id) - Number(b.id));
 			const joinedSlugs = new Set();
 			for (const s of joinedSorted) {
@@ -1568,6 +1625,466 @@ export async function initChatPage(root) {
 		}
 	}
 
+	function mapCommentRowToChatMessageShape(c) {
+		const uid = Number(c.user_id);
+		return {
+			id: Number(c.id),
+			body: typeof c.text === 'string' ? c.text : '',
+			sender_id: Number.isFinite(uid) ? uid : 0,
+			sender_user_name: typeof c.user_name === 'string' ? c.user_name : '',
+			sender_avatar_url: typeof c.avatar_url === 'string' ? c.avatar_url : '',
+			created_at: c.created_at ?? null,
+			reactions: c.reactions && typeof c.reactions === 'object' ? c.reactions : {},
+			viewer_reactions: Array.isArray(c.viewer_reactions) ? c.viewer_reactions : [],
+			comment: c,
+		};
+	}
+
+	function updateChatLatestRowMarker(messagesEl) {
+		if (!messagesEl) return;
+		for (const el of messagesEl.querySelectorAll('.connect-chat-msg[data-chat-latest]')) {
+			el.removeAttribute('data-chat-latest');
+		}
+		const rows = messagesEl.querySelectorAll('.connect-chat-msg');
+		const last = rows[rows.length - 1];
+		if (last) {
+			last.setAttribute('data-chat-latest', '1');
+		}
+	}
+
+	/** #comments channel: same Connect "latest comments" card (thumb, title, creators, text, reactions). */
+	function createCommentsChannelPlainRow(m) {
+		const raw = m?.comment;
+		if (raw && typeof raw === 'object' && typeof createConnectCommentRowElement === 'function') {
+			const row = createConnectCommentRowElement(raw, { extraRootClass: 'comments-channel-plain-msg' });
+			row.setAttribute('data-comments-channel-row', '1');
+			row.setAttribute('data-comment-id', String(m.id ?? ''));
+			return row;
+		}
+		const row = document.createElement('div');
+		row.className = 'comments-channel-plain-msg';
+		row.setAttribute('data-comments-channel-row', '1');
+		row.setAttribute('data-comment-id', String(m.id ?? ''));
+		const body = document.createElement('div');
+		body.className = 'comments-channel-plain-msg-body';
+		body.textContent = typeof m.body === 'string' ? m.body : '';
+		row.appendChild(body);
+		return row;
+	}
+
+	function updateCommentsChannelLatestMarker(messagesEl) {
+		if (!messagesEl) return;
+		for (const el of messagesEl.querySelectorAll('[data-comments-channel-latest]')) {
+			el.removeAttribute('data-comments-channel-latest');
+		}
+		const rows = messagesEl.querySelectorAll('[data-comments-channel-row]');
+		const last = rows[rows.length - 1];
+		if (last) {
+			last.setAttribute('data-comments-channel-latest', '1');
+		}
+	}
+
+	/**
+	 * @param {HTMLElement | null} appendAfter
+	 */
+	function paintCommentsChannelPlainRows(messagesEl, messages, appendAfter = null) {
+		if (!appendAfter) {
+			messagesEl.innerHTML = '';
+		}
+		if (!Array.isArray(messages) || messages.length === 0) {
+			const empty = document.createElement('div');
+			empty.className = 'chat-page-empty-hint';
+			empty.setAttribute('role', 'status');
+			empty.textContent = 'No comments yet.';
+			if (appendAfter) {
+				messagesEl.insertBefore(empty, appendAfter.nextSibling);
+			} else {
+				messagesEl.appendChild(empty);
+			}
+			return;
+		}
+		let ref = appendAfter;
+		for (let i = 0; i < messages.length; i++) {
+			const row = createCommentsChannelPlainRow(messages[i]);
+			if (ref) {
+				messagesEl.insertBefore(row, ref.nextSibling);
+				ref = row;
+			} else {
+				messagesEl.appendChild(row);
+			}
+		}
+		hydrateUserTextLinks(messagesEl);
+		if (typeof setupReactionTooltipTap === 'function') {
+			setupReactionTooltipTap(messagesEl);
+		}
+		updateCommentsChannelLatestMarker(messagesEl);
+	}
+
+	/**
+	 * @param {object} m
+	 * @param {number} i
+	 * @param {object[]} messages
+	 * @param {number | null} viewerId
+	 * @param {{ effectiveUnread: boolean, vStart: number, vEnd: number }} rowOpts
+	 */
+	function createChatMessageRowElement(m, i, messages, viewerId, rowOpts) {
+		const senderId = Number(m.sender_id);
+		const isSelf = Number.isFinite(viewerId) && senderId === viewerId;
+		const prev = i > 0 ? messages[i - 1] : null;
+		const sameSenderAsPrev = prev != null && Number(prev.sender_id) === senderId;
+		const row = document.createElement('div');
+		row.className = `connect-chat-msg${isSelf ? ' is-self' : ''}${sameSenderAsPrev ? ' is-group-continue' : ''}`;
+		row.setAttribute('data-chat-message-id', String(m.id));
+		const effectiveUnread = rowOpts.effectiveUnread;
+		const vStart = rowOpts.vStart;
+		const vEnd = rowOpts.vEnd;
+		const isUnread =
+			effectiveUnread &&
+			!isSelf &&
+			i >= vStart &&
+			i <= vEnd;
+		if (isUnread) {
+			row.classList.add('is-unread');
+			const prevMsg = i > 0 ? messages[i - 1] : null;
+			const nextMsg = i + 1 < messages.length ? messages[i + 1] : null;
+			const prevSender = prevMsg?.sender_id != null ? Number(prevMsg.sender_id) : null;
+			const nextSender = nextMsg?.sender_id != null ? Number(nextMsg.sender_id) : null;
+			const prevIsSelf = Number.isFinite(viewerId) && prevSender === viewerId;
+			const nextIsSelf = Number.isFinite(viewerId) && nextSender === viewerId;
+			const prevUnread =
+				effectiveUnread && !prevIsSelf && i - 1 >= vStart && i - 1 <= vEnd;
+			const nextUnread =
+				effectiveUnread && !nextIsSelf && i + 1 >= vStart && i + 1 <= vEnd;
+			if (!prevUnread && !nextUnread) {
+				row.classList.add('is-unread-solo');
+			} else if (!prevUnread && nextUnread) {
+				row.classList.add('is-unread-first');
+			} else if (prevUnread && nextUnread) {
+				row.classList.add('is-unread-middle');
+			} else if (prevUnread && !nextUnread) {
+				row.classList.add('is-unread-last');
+			}
+		}
+		if (!messageHasAnyReactions(m)) {
+			row.classList.add('connect-chat-msg--reaction-empty');
+		}
+		const inner = document.createElement('div');
+		inner.className = 'connect-chat-msg-inner';
+		const safeBody = processUserText(m.body ?? '');
+		const bubble = document.createElement('div');
+		bubble.className = 'connect-chat-msg-bubble';
+		bubble.innerHTML = safeBody;
+		if (!sameSenderAsPrev) {
+			const metaLine = document.createElement('div');
+			metaLine.className = 'connect-chat-msg-meta';
+			const handleRaw = m.sender_user_name != null ? String(m.sender_user_name).trim() : '';
+			const handleLabel = handleRaw
+				? `@${handleRaw}`
+				: isSelf
+					? 'You'
+					: `User ${senderId}`;
+			const when = m.created_at ? (formatRelativeTime(m.created_at) || '') : '';
+			const displayForAvatar = handleRaw || (isSelf ? 'You' : `User ${senderId}`);
+			const profileHref = buildProfilePath({
+				userName: handleRaw || undefined,
+				userId: senderId
+			});
+			const avatarWrap = document.createElement('div');
+			avatarWrap.innerHTML = renderCommentAvatarHtml({
+				avatarUrl: m.sender_avatar_url || '',
+				displayName: displayForAvatar,
+				color: getAvatarColor(handleRaw || String(senderId)),
+				href: profileHref || undefined,
+				flairSize: 'xs'
+			});
+			while (avatarWrap.firstChild) {
+				metaLine.appendChild(avatarWrap.firstChild);
+			}
+			const textSpan = document.createElement('span');
+			textSpan.className = 'connect-chat-msg-meta-text';
+			const nameSpan = document.createElement('span');
+			nameSpan.className = 'connect-chat-msg-meta-user';
+			nameSpan.textContent = handleLabel;
+			textSpan.appendChild(nameSpan);
+			if (when) {
+				const sepSpan = document.createElement('span');
+				sepSpan.className = 'connect-chat-msg-meta-sep';
+				sepSpan.textContent = ' · ';
+				textSpan.appendChild(sepSpan);
+				const whenSpan = document.createElement('span');
+				whenSpan.className = 'connect-chat-msg-meta-when';
+				whenSpan.textContent = when;
+				textSpan.appendChild(whenSpan);
+			}
+			metaLine.appendChild(textSpan);
+			inner.appendChild(metaLine);
+		}
+		inner.appendChild(bubble);
+		const reactionHtml = buildChatReactionMetaRowHtml(m);
+		if (reactionHtml) {
+			const footer = document.createElement('div');
+			footer.className = 'connect-chat-msg-footer';
+			footer.innerHTML = reactionHtml.trim();
+			inner.appendChild(footer);
+		}
+		row.appendChild(inner);
+		return row;
+	}
+
+	/**
+	 * Shared message list painting for real threads and reserved pseudo-channels (e.g. `comments`).
+	 * @param {HTMLElement} messagesEl
+	 * @param {object[]} messages
+	 * @param {number | null} viewerId
+	 * @param {number | null} threadId — for optimistic send row only
+	 * @param {{ skipUnread?: boolean, visualStart?: number, visualEnd?: number, hasVisualUnreadRange?: boolean, emptyHintText?: string }} paintOpts
+	 * @param {HTMLElement | null} appendAfter — if set, `messagesEl` is not cleared; rows are inserted after this node (e.g. load-more sentinel).
+	 */
+	function paintMessageRowsForChat(messagesEl, messages, viewerId, threadId, paintOpts = {}, appendAfter = null) {
+		const skipUnread = paintOpts.skipUnread === true;
+		const visualStart = typeof paintOpts.visualStart === 'number' ? paintOpts.visualStart : -1;
+		const visualEnd = typeof paintOpts.visualEnd === 'number' ? paintOpts.visualEnd : -1;
+		const hasVisualUnreadRange = Boolean(paintOpts.hasVisualUnreadRange);
+		const emptyHintText =
+			typeof paintOpts.emptyHintText === 'string'
+				? paintOpts.emptyHintText
+				: 'No messages yet. Send one below.';
+		const effectiveUnread = !skipUnread && hasVisualUnreadRange;
+		const vStart = skipUnread ? -1 : visualStart;
+		const vEnd = skipUnread ? -1 : visualEnd;
+
+		if (!appendAfter) {
+			messagesEl.innerHTML = '';
+		}
+
+		if (messages.length === 0) {
+			const empty = document.createElement('div');
+			empty.className = 'chat-page-empty-hint';
+			empty.setAttribute('role', 'status');
+			empty.textContent = emptyHintText;
+			if (appendAfter) {
+				messagesEl.insertBefore(empty, appendAfter.nextSibling);
+			} else {
+				messagesEl.appendChild(empty);
+			}
+			return;
+		}
+
+		const rowFlags = {
+			effectiveUnread,
+			vStart,
+			vEnd,
+		};
+		let ref = appendAfter;
+		for (let i = 0; i < messages.length; i++) {
+			const row = createChatMessageRowElement(messages[i], i, messages, viewerId, rowFlags);
+			if (ref) {
+				messagesEl.insertBefore(row, ref.nextSibling);
+				ref = row;
+			} else {
+				messagesEl.appendChild(row);
+			}
+		}
+		updateChatLatestRowMarker(messagesEl);
+
+		if (
+			threadId != null &&
+			optimisticSend &&
+			Number(optimisticSend.threadId) === threadId
+		) {
+			messagesEl.querySelector('.chat-page-empty-hint')?.remove();
+			messagesEl.querySelector('[data-chat-latest="1"]')?.removeAttribute('data-chat-latest');
+			const last = messages[messages.length - 1];
+			const sameSenderAsPrev =
+				last != null &&
+				Number.isFinite(Number(viewerId)) &&
+				Number(last.sender_id) === Number(viewerId);
+			mountOptimisticRow(messagesEl, optimisticSend, sameSenderAsPrev, viewerId);
+		}
+	}
+
+	function disconnectCommentsChannelLoadObserver() {
+		if (commentsChannelLoadMoreObserver) {
+			try {
+				commentsChannelLoadMoreObserver.disconnect();
+			} catch {
+				// ignore
+			}
+			commentsChannelLoadMoreObserver = null;
+		}
+	}
+
+	function teardownCommentsChannelLoadMore() {
+		commentsChannelHasMore = false;
+		disconnectCommentsChannelLoadObserver();
+	}
+
+	function setupCommentsChannelLoadMoreObserver(messagesEl) {
+		disconnectCommentsChannelLoadObserver();
+		const sentinel = messagesEl.querySelector('[data-chat-comments-load-sentinel]');
+		if (!sentinel) return;
+		commentsChannelLoadMoreObserver = new IntersectionObserver(
+			(entries) => {
+				for (const e of entries) {
+					if (
+						e.target === sentinel &&
+						e.isIntersecting &&
+						commentsChannelHasMore &&
+						!commentsChannelLoadingMore &&
+						!loadingMessages &&
+						activePseudoChannelSlug === 'comments'
+					) {
+						void loadMoreCommentsChannelMessages();
+					}
+				}
+			},
+			/* Large top margin so the next page starts loading while the user is still well below the oldest row. */
+			{ root: messagesEl, rootMargin: '1400px 0px 0px 0px', threshold: 0 }
+		);
+		commentsChannelLoadMoreObserver.observe(sentinel);
+	}
+
+	async function loadMoreCommentsChannelMessages() {
+		if (
+			activePseudoChannelSlug !== 'comments' ||
+			commentsChannelLoadingMore ||
+			!commentsChannelHasMore
+		) {
+			return;
+		}
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		if (!messagesEl || !Array.isArray(lastChatMessagesPayload) || lastChatMessagesPayload.length === 0) {
+			return;
+		}
+		const oldest = lastChatMessagesPayload[0];
+		const beforeRaw = oldest?.created_at;
+		const before =
+			typeof beforeRaw === 'string' && beforeRaw.trim()
+				? beforeRaw.trim()
+				: beforeRaw != null
+					? String(beforeRaw)
+					: '';
+		if (!before) {
+			return;
+		}
+
+		commentsChannelLoadingMore = true;
+		const firstMsg = messagesEl.querySelector('[data-comments-channel-row]');
+
+		function preserveScrollAfterPrepend(anchorTopBefore) {
+			if (!firstMsg || !firstMsg.isConnected) return;
+			const anchorTopAfter =
+				firstMsg.getBoundingClientRect().top - messagesEl.getBoundingClientRect().top;
+			const d = anchorTopAfter - anchorTopBefore;
+			if (Number.isFinite(d) && Math.abs(d) > 0.25) {
+				messagesEl.scrollTop += d;
+			}
+		}
+
+		try {
+			const commentsMod = await import(`../shared/comments.js${qs}`);
+			const result = await commentsMod.fetchLatestComments({
+				limit: COMMENTS_CHANNEL_PAGE_SIZE,
+				before,
+			});
+			if (!result.ok) {
+				return;
+			}
+			commentsChannelHasMore = result.data?.has_more === true;
+			const raw = Array.isArray(result.data?.comments) ? result.data.comments : [];
+			const batch = raw.map(mapCommentRowToChatMessageShape).reverse();
+			const existingIds = new Set(lastChatMessagesPayload.map((m) => Number(m.id)));
+			const mergedFiltered = batch.filter((m) => Number.isFinite(Number(m.id)) && !existingIds.has(Number(m.id)));
+			if (mergedFiltered.length === 0) {
+				return;
+			}
+
+			const full = [...mergedFiltered, ...lastChatMessagesPayload];
+			lastChatMessagesPayload = full;
+
+			/** Snapshot immediately before mutating the list (not before the network round-trip). */
+			let anchorTopBefore = 0;
+			if (firstMsg) {
+				anchorTopBefore =
+					firstMsg.getBoundingClientRect().top - messagesEl.getBoundingClientRect().top;
+			}
+
+			if (!firstMsg) {
+				for (let i = 0; i < mergedFiltered.length; i++) {
+					const row = createCommentsChannelPlainRow(full[i]);
+					messagesEl.appendChild(row);
+				}
+			} else {
+				for (let i = 0; i < mergedFiltered.length; i++) {
+					const row = createCommentsChannelPlainRow(full[i]);
+					messagesEl.insertBefore(row, firstMsg);
+				}
+			}
+
+			hydrateUserTextLinks(messagesEl);
+			if (typeof setupReactionTooltipTap === 'function') {
+				setupReactionTooltipTap(messagesEl);
+			}
+			updateCommentsChannelLatestMarker(messagesEl);
+
+			void messagesEl.offsetHeight;
+			preserveScrollAfterPrepend(anchorTopBefore);
+			requestAnimationFrame(() => {
+				preserveScrollAfterPrepend(anchorTopBefore);
+				requestAnimationFrame(() => {
+					preserveScrollAfterPrepend(anchorTopBefore);
+				});
+			});
+		} catch (err) {
+			console.error('[Chat page] comments channel load more:', err);
+		} finally {
+			commentsChannelLoadingMore = false;
+		}
+	}
+
+	async function loadCommentsChannelMessages() {
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		if (!messagesEl || loadingMessages) return;
+		loadingMessages = true;
+		teardownCommentsChannelLoadMore();
+		messagesEl.setAttribute('aria-busy', 'true');
+		try {
+			const commentsMod = await import(`../shared/comments.js${qs}`);
+			const result = await commentsMod.fetchLatestComments({ limit: COMMENTS_CHANNEL_PAGE_SIZE });
+			if (!result.ok) {
+				const msg =
+					result.data?.message ||
+					result.data?.error ||
+					'Failed to load comments';
+				throw new Error(typeof msg === 'string' ? msg : 'Failed to load comments');
+			}
+			commentsChannelHasMore = result.data?.has_more === true;
+			const raw = Array.isArray(result.data?.comments) ? result.data.comments : [];
+			// Latest-comments API is newest-first; chat threads show oldest at the top.
+			const messages = raw.map(mapCommentRowToChatMessageShape).reverse();
+			lastChatMessagesPayload = messages;
+			teardownLatestMessageReadObserver();
+			messagesEl.innerHTML = '';
+			const sentinel = document.createElement('div');
+			sentinel.dataset.chatCommentsLoadSentinel = '1';
+			sentinel.className = 'chat-page-comments-load-sentinel';
+			sentinel.setAttribute('aria-hidden', 'true');
+			sentinel.style.cssText = 'height:1px;margin:0;padding:0;flex-shrink:0;pointer-events:none';
+			messagesEl.appendChild(sentinel);
+			paintCommentsChannelPlainRows(messagesEl, messages, sentinel);
+			if (commentsChannelHasMore) {
+				setupCommentsChannelLoadMoreObserver(messagesEl);
+			}
+			scrollChatMessagesToEnd();
+		} catch (err) {
+			console.error('[Chat page] comments channel:', err);
+			messagesEl.innerHTML = renderEmptyError(err?.message || 'Could not load comments.');
+		} finally {
+			messagesEl.removeAttribute('aria-busy');
+			loadingMessages = false;
+		}
+	}
+
 	async function loadMessages() {
 		const threadId = activeThreadId;
 		const messagesEl = root.querySelector('[data-chat-messages]');
@@ -1639,135 +2156,12 @@ export async function initChatPage(root) {
 			}
 			const hasVisualUnreadRange = visualStart >= 0 && visualEnd >= visualStart;
 
-			if (messages.length === 0) {
-				const empty = document.createElement('div');
-				empty.className = 'chat-page-empty-hint';
-				empty.setAttribute('role', 'status');
-				empty.textContent = 'No messages yet. Send one below.';
-				messagesEl.appendChild(empty);
-			}
-
-			for (let i = 0; i < messages.length; i++) {
-				const m = messages[i];
-				const midNum = Number(m.id);
-				const senderIdPre = Number(m.sender_id);
-				const isSelfPre = Number.isFinite(viewerId) && senderIdPre === viewerId;
-				const senderId = Number(m.sender_id);
-				const isSelf = Number.isFinite(viewerId) && senderId === viewerId;
-				const prev = i > 0 ? messages[i - 1] : null;
-				const sameSenderAsPrev =
-					prev != null && Number(prev.sender_id) === senderId;
-				const row = document.createElement('div');
-				row.className = `connect-chat-msg${isSelf ? ' is-self' : ''}${sameSenderAsPrev ? ' is-group-continue' : ''}`;
-				row.setAttribute('data-chat-message-id', String(m.id));
-				const isUnread =
-					hasVisualUnreadRange &&
-					!isSelf &&
-					i >= visualStart &&
-					i <= visualEnd;
-				if (isUnread) {
-					row.classList.add('is-unread');
-					const prevMsg = i > 0 ? messages[i - 1] : null;
-					const nextMsg = i + 1 < messages.length ? messages[i + 1] : null;
-					const prevId = prevMsg?.id != null ? Number(prevMsg.id) : null;
-					const nextId = nextMsg?.id != null ? Number(nextMsg.id) : null;
-					const prevSender = prevMsg?.sender_id != null ? Number(prevMsg.sender_id) : null;
-					const nextSender = nextMsg?.sender_id != null ? Number(nextMsg.sender_id) : null;
-					const prevIsSelf = Number.isFinite(viewerId) && prevSender === viewerId;
-					const nextIsSelf = Number.isFinite(viewerId) && nextSender === viewerId;
-					const prevUnread =
-						hasVisualUnreadRange && !prevIsSelf && i - 1 >= visualStart && i - 1 <= visualEnd;
-					const nextUnread =
-						hasVisualUnreadRange && !nextIsSelf && i + 1 >= visualStart && i + 1 <= visualEnd;
-					if (!prevUnread && !nextUnread) {
-						row.classList.add('is-unread-solo');
-					} else if (!prevUnread && nextUnread) {
-						row.classList.add('is-unread-first');
-					} else if (prevUnread && nextUnread) {
-						row.classList.add('is-unread-middle');
-					} else if (prevUnread && !nextUnread) {
-						row.classList.add('is-unread-last');
-					}
-				}
-				if (i === messages.length - 1) {
-					row.setAttribute('data-chat-latest', '1');
-				}
-				if (!messageHasAnyReactions(m)) {
-					row.classList.add('connect-chat-msg--reaction-empty');
-				}
-				const inner = document.createElement('div');
-				inner.className = 'connect-chat-msg-inner';
-				const safeBody = processUserText(m.body ?? '');
-				const bubble = document.createElement('div');
-				bubble.className = 'connect-chat-msg-bubble';
-				bubble.innerHTML = safeBody;
-				if (!sameSenderAsPrev) {
-					const metaLine = document.createElement('div');
-					metaLine.className = 'connect-chat-msg-meta';
-					const handleRaw =
-						m.sender_user_name != null ? String(m.sender_user_name).trim() : '';
-					const handleLabel = handleRaw
-						? `@${handleRaw}`
-						: isSelf
-							? 'You'
-							: `User ${senderId}`;
-					const when = m.created_at ? (formatRelativeTime(m.created_at) || '') : '';
-					const displayForAvatar = handleRaw || (isSelf ? 'You' : `User ${senderId}`);
-					const profileHref = buildProfilePath({
-						userName: handleRaw || undefined,
-						userId: senderId
-					});
-					const avatarWrap = document.createElement('div');
-					avatarWrap.innerHTML = renderCommentAvatarHtml({
-						avatarUrl: m.sender_avatar_url || '',
-						displayName: displayForAvatar,
-						color: getAvatarColor(handleRaw || String(senderId)),
-						href: profileHref || undefined,
-						flairSize: 'xs'
-					});
-					while (avatarWrap.firstChild) {
-						metaLine.appendChild(avatarWrap.firstChild);
-					}
-					const textSpan = document.createElement('span');
-					textSpan.className = 'connect-chat-msg-meta-text';
-					const nameSpan = document.createElement('span');
-					nameSpan.className = 'connect-chat-msg-meta-user';
-					nameSpan.textContent = handleLabel;
-					textSpan.appendChild(nameSpan);
-					if (when) {
-						const sepSpan = document.createElement('span');
-						sepSpan.className = 'connect-chat-msg-meta-sep';
-						sepSpan.textContent = ' · ';
-						textSpan.appendChild(sepSpan);
-						const whenSpan = document.createElement('span');
-						whenSpan.className = 'connect-chat-msg-meta-when';
-						whenSpan.textContent = when;
-						textSpan.appendChild(whenSpan);
-					}
-					metaLine.appendChild(textSpan);
-					inner.appendChild(metaLine);
-				}
-				inner.appendChild(bubble);
-				const reactionHtml = buildChatReactionMetaRowHtml(m);
-				if (reactionHtml) {
-					const footer = document.createElement('div');
-					footer.className = 'connect-chat-msg-footer';
-					footer.innerHTML = reactionHtml.trim();
-					inner.appendChild(footer);
-				}
-				row.appendChild(inner);
-				messagesEl.appendChild(row);
-			}
-			if (optimisticSend && Number(optimisticSend.threadId) === threadId) {
-				messagesEl.querySelector('.chat-page-empty-hint')?.remove();
-				messagesEl.querySelector('[data-chat-latest="1"]')?.removeAttribute('data-chat-latest');
-				const last = messages[messages.length - 1];
-				const sameSenderAsPrev =
-					last != null &&
-					Number.isFinite(Number(viewerId)) &&
-					Number(last.sender_id) === Number(viewerId);
-				mountOptimisticRow(messagesEl, optimisticSend, sameSenderAsPrev, viewerId);
-			}
+			paintMessageRowsForChat(messagesEl, messages, viewerId, threadId, {
+				skipUnread: false,
+				visualStart,
+				visualEnd,
+				hasVisualUnreadRange,
+			});
 			hydrateUserTextLinks(messagesEl);
 			hydrateChatYoutubeEmbeds(messagesEl);
 			hydrateChatCreationEmbeds(messagesEl);
@@ -1863,6 +2257,10 @@ export async function initChatPage(root) {
 
 		const pill = e.target?.closest?.('.comment-reaction-pill[data-emoji-key][data-chat-message-id]');
 		if (pill && pill instanceof HTMLElement) {
+			if (activePseudoChannelSlug) {
+				e.preventDefault();
+				return;
+			}
 			const messageId = Number(pill.dataset.chatMessageId);
 			const emojiKey = pill.dataset.emojiKey;
 			if (!Number.isFinite(messageId) || !emojiKey) return;
@@ -1874,6 +2272,10 @@ export async function initChatPage(root) {
 
 		const addBtn = e.target?.closest?.('.comment-reaction-add[data-chat-message-id]');
 		if (addBtn && addBtn instanceof HTMLElement) {
+			if (activePseudoChannelSlug) {
+				e.preventDefault();
+				return;
+			}
 			e.preventDefault();
 			e.stopPropagation();
 			const messageId = Number(addBtn.dataset.chatMessageId);
@@ -1901,6 +2303,9 @@ export async function initChatPage(root) {
 		const msgRow = e.target?.closest?.('.connect-chat-msg[data-chat-message-id]');
 		if (msgRow && msgRow instanceof HTMLElement) {
 			if (e.target.closest('a[href], button')) {
+				return;
+			}
+			if (activePseudoChannelSlug) {
 				return;
 			}
 			const messageId = Number(msgRow.dataset.chatMessageId);
@@ -1999,6 +2404,8 @@ export async function initChatPage(root) {
 		}
 
 		optimisticSend = null;
+		activePseudoChannelSlug = null;
+		teardownCommentsChannelLoadMore();
 
 		if (messagesEl) {
 			messagesEl.innerHTML = renderEmptyState({
@@ -2030,6 +2437,20 @@ export async function initChatPage(root) {
 
 			if (parsed.kind === 'channel') {
 				const slug = String(parsed.slug).toLowerCase().trim();
+				if (slug === 'comments') {
+					activePseudoChannelSlug = 'comments';
+					activeThreadId = null;
+					updateTitleFromMeta({
+						type: 'channel',
+						channel_slug: 'comments',
+						title: '#comments',
+					});
+					if (messagesEl) {
+						messagesEl.removeAttribute('aria-busy');
+					}
+					await loadCommentsChannelMessages();
+					return;
+				}
 				const match = (chatThreads || []).find(
 					(t) => t.type === 'channel' && String(t.channel_slug || '').toLowerCase() === slug
 				);
@@ -2137,6 +2558,8 @@ export async function initChatPage(root) {
 				errEl.hidden = false;
 				errEl.textContent = err?.message || 'Could not open this conversation.';
 			}
+		} finally {
+			applyComposerState();
 		}
 	}
 
@@ -2191,6 +2614,7 @@ export async function initChatPage(root) {
 	}
 
 	const onPageHide = () => {
+		teardownCommentsChannelLoadMore();
 		tearDownVisibilityResync();
 		tearDownRoomBroadcast();
 		closeReactionPicker();

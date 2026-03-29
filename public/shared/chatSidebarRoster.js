@@ -4,6 +4,67 @@
 
 import { serverChannelTagFromServerName } from './serverChatTag.js';
 
+/**
+ * Pseudo-channels (UI-only roster rows; not backed by prsn_chat_threads).
+ * Slugs must match client + API reserved list in api_routes/chat.js.
+ */
+export const RESERVED_PSEUDO_CHANNEL_SLUGS = ['comments'];
+
+/**
+ * Channel slugs that always sort to the top of the sidebar (order matters).
+ * `#comments` is the reserved pseudo row; `#feedback` is an ordinary channel when present.
+ */
+export const SIDEBAR_CHANNEL_PRIORITY_FIRST = ['comments', 'feedback'];
+
+/**
+ * Put priority channel rows first (#comments, then #feedback, then the rest), stable order within each tier.
+ * @param {object[]} threads
+ */
+export function sortChatSidebarRowsPriority(threads) {
+	const list = Array.isArray(threads) ? [...threads] : [];
+	const rank = (t) => {
+		if (t?.type === 'channel' && t.channel_slug) {
+			const s = String(t.channel_slug).toLowerCase();
+			const i = SIDEBAR_CHANNEL_PRIORITY_FIRST.indexOf(s);
+			if (i >= 0) return i;
+		}
+		return SIDEBAR_CHANNEL_PRIORITY_FIRST.length;
+	};
+	list.sort((a, b) => {
+		const ra = rank(a);
+		const rb = rank(b);
+		if (ra !== rb) return ra - rb;
+		return 0;
+	});
+	return list;
+}
+
+/**
+ * Append fixed pseudo-channel rows so they always appear in the sidebar list.
+ * @param {object[]} threads
+ */
+export function appendReservedPseudoChannels(threads) {
+	const list = Array.isArray(threads) ? [...threads] : [];
+	const slugs = new Set();
+	for (const t of list) {
+		if (t && t.type === 'channel' && t.channel_slug) {
+			slugs.add(String(t.channel_slug).toLowerCase());
+		}
+	}
+	for (const slug of RESERVED_PSEUDO_CHANNEL_SLUGS) {
+		if (!slugs.has(slug)) {
+			list.push({
+				type: 'channel',
+				channel_slug: slug,
+				title: `#${slug}`,
+				unread_count: 0,
+				last_read_message_id: null,
+			});
+		}
+	}
+	return sortChatSidebarRowsPriority(list);
+}
+
 /** @param {object} meta */
 export function buildChatThreadUrl(meta) {
 	if (!meta) return '/connect#chat';

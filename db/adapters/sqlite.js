@@ -2925,8 +2925,12 @@ export async function openDb() {
 				const limitRaw = Number.parseInt(String(options?.limit ?? "10"), 10);
 				const limit = Number.isFinite(limitRaw) ? Math.min(200, Math.max(1, limitRaw)) : 10;
 
-				const stmt = db.prepare(
-					`SELECT c.id, c.user_id, c.created_image_id, c.text, c.created_at, c.updated_at,
+				const before =
+					typeof options?.before === "string" && options.before.trim()
+						? options.before.trim()
+						: null;
+
+				const sql = `SELECT c.id, c.user_id, c.created_image_id, c.text, c.created_at, c.updated_at,
                   up.user_name, up.display_name, up.avatar_url,
                   json_extract(u.meta,'$.plan') AS plan,
                   ci.title AS created_image_title,
@@ -2945,11 +2949,11 @@ export async function openDb() {
            LEFT JOIN users u ON u.id = c.user_id
            LEFT JOIN user_profiles cup ON cup.user_id = ci.user_id
            LEFT JOIN users cu ON cu.id = ci.user_id
-           WHERE ci.published = 1
+           WHERE ci.published = 1${before ? " AND c.created_at < ?" : ""}
            ORDER BY c.created_at DESC
-           LIMIT ?`
-				);
-				const rows = stmt.all(limit);
+           LIMIT ?`;
+				const stmt = db.prepare(sql);
+				const rows = before ? stmt.all(before, limit) : stmt.all(limit);
 				return Promise.resolve(rows.map((r) => ({
 					...r,
 					plan: r.plan === 'founder' ? 'founder' : 'free',

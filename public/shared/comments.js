@@ -23,12 +23,16 @@ export async function fetchCreatedImageActivity(createdImageId, { order = 'asc',
 	return fetchJsonWithStatusDeduped(url, { credentials: 'include' }, { windowMs: 500 });
 }
 
-export function buildLatestCommentsUrl({ limit } = {}) {
-	return `/api/comments/latest${toQuery({ limit })}`;
+export function buildLatestCommentsUrl({ limit, before } = {}) {
+	return `/api/comments/latest${toQuery({ limit, before })}`;
 }
 
-export async function fetchLatestComments({ limit = 10 } = {}) {
-	const url = buildLatestCommentsUrl({ limit });
+/**
+ * @param {{ limit?: number, before?: string }} [opts]
+ * `before` — ISO `created_at` of the oldest comment already shown (loads strictly older).
+ */
+export async function fetchLatestComments({ limit = 10, before } = {}) {
+	const url = buildLatestCommentsUrl({ limit, before });
 	return fetchJsonWithStatusDeduped(url, { credentials: 'include' }, { windowMs: 2000 });
 }
 

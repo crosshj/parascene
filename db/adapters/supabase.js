@@ -4318,11 +4318,19 @@ export function openDb() {
 				// Over-fetch a bit so filtering unpublished creations still returns enough rows.
 				const fetchLimit = Math.min(200, Math.max(10, limit * 5));
 
-				const { data: rawComments, error: commentsError } = await serviceClient
+				const before =
+					typeof options?.before === "string" && options.before.trim()
+						? options.before.trim()
+						: null;
+
+				let commentsQuery = serviceClient
 					.from(prefixedTable("comments_created_image"))
 					.select("id, user_id, created_image_id, text, created_at, updated_at")
-					.order("created_at", { ascending: false })
-					.limit(fetchLimit);
+					.order("created_at", { ascending: false });
+				if (before) {
+					commentsQuery = commentsQuery.lt("created_at", before);
+				}
+				const { data: rawComments, error: commentsError } = await commentsQuery.limit(fetchLimit);
 				if (commentsError) throw commentsError;
 
 				const comments = rawComments ?? [];

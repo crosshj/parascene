@@ -146,8 +146,12 @@ export default function createCommentsRoutes({ queries }) {
 		if (!user) return;
 
 		const limit = normalizeLimit(req.query?.limit, 10);
+		const before =
+			typeof req.query?.before === "string" && req.query.before.trim()
+				? req.query.before.trim()
+				: null;
 
-		const commentsRaw = await queries.selectLatestCreatedImageComments?.all({ limit })
+		const commentsRaw = await queries.selectLatestCreatedImageComments?.all({ limit, before })
 			?? [];
 
 		let comments = (commentsRaw || []).map((row) => {
@@ -178,7 +182,9 @@ export default function createCommentsRoutes({ queries }) {
 			}
 		}
 
-		return res.json({ comments });
+		const hasMore = comments.length >= limit;
+
+		return res.json({ comments, has_more: hasMore });
 	});
 
 	router.get("/api/created-images/:id/activity", async (req, res) => {
