@@ -3951,6 +3951,7 @@ html.chat-page {
 	height: var(--chat-vh, 100dvh);
 	min-height: var(--chat-vh, 100dvh);
 	overflow: hidden;
+	max-width: 100%;
 	background: var(--bg);
 	overflow-anchor: none;
 }
@@ -3960,6 +3961,9 @@ body.chat-page {
 	flex-direction: column;
 	height: 100%;
 	min-height: 100%;
+	width: 100%;
+	max-width: 100%;
+	min-width: 0;
 	margin: 0;
 	overflow: hidden;
 	-webkit-text-size-adjust: 100%;
@@ -3974,6 +3978,7 @@ body.chat-page {
 body.chat-page main.chat-page-outer {
 	flex: 1 1 auto;
 	min-height: 0;
+	min-width: 0;
 	width: 100%;
 	max-width: 720px;
 	margin: 0 auto;
@@ -3988,6 +3993,7 @@ body.chat-page main.chat-page-outer {
 	display: flex;
 	flex-direction: column;
 	min-height: 0;
+	min-width: 0;
 	flex: 1 1 auto;
 	width: 100%;
 }
@@ -3995,6 +4001,7 @@ body.chat-page main.chat-page-outer {
 .chat-page-main-column {
 	width: 100%;
 	min-height: 0;
+	min-width: 0;
 	flex: 1 1 auto;
 	display: flex;
 	flex-direction: column;
@@ -4794,9 +4801,11 @@ body.chat-page main.chat-page-outer {
 body.chat-page .chat-route {
 	flex: 1 1 auto;
 	min-height: 0;
+	min-width: 0;
 	display: flex;
 	flex-direction: column;
 	width: 100%;
+	max-width: 100%;
 	box-sizing: border-box;
 }
 
@@ -4805,6 +4814,8 @@ body.chat-page .chat-route {
 	display: flex;
 	align-items: center;
 	gap: 8px;
+	min-width: 0;
+	max-width: 100%;
 	padding: 10px 12px;
 	border-bottom: 1px solid var(--border);
 	background: var(--bg);
@@ -4907,9 +4918,11 @@ body.chat-page .chat-route {
 .chat-page-messages {
 	flex: 1 1 auto;
 	min-height: 0;
+	min-width: 0;
 	overflow-y: auto;
 	overflow-x: hidden;
 	-webkit-overflow-scrolling: touch;
+	overscroll-behavior-x: none;
 	overscroll-behavior-y: contain;
 	scrollbar-gutter: stable;
 	padding: 8px 12px;
@@ -4919,6 +4932,30 @@ body.chat-page .chat-route {
 	position: relative;
 	/* Avoid browser scroll anchoring fighting manual scrollTop when prepending older messages. */
 	overflow-anchor: none;
+}
+
+/* iOS: stable gutter + flex occasionally contributed to stray horizontal pan; auto avoids that. */
+@media (max-width: 768px) {
+	.chat-page-messages {
+		scrollbar-gutter: auto;
+	}
+}
+
+/* Defensive: media and long tokens cannot extend past the message column (page scroll stays vertical-only). */
+body.chat-page .chat-page-messages img,
+body.chat-page .chat-page-messages video {
+	max-width: 100%;
+	height: auto;
+}
+
+body.chat-page .chat-page-messages iframe {
+	max-width: 100%;
+}
+
+body.chat-page .chat-page-messages pre {
+	max-width: 100%;
+	overflow-x: auto;
+	overflow-wrap: break-word;
 }
 
 /* Thread open: same delayed .route-loading-spinner as elsewhere (global .route-loading-spinner) */
@@ -4994,6 +5031,9 @@ body.chat-page .chat-page-error {
 	background: var(--error-bg);
 	color: var(--error-text);
 	font-size: 0.875rem;
+	min-width: 0;
+	max-width: 100%;
+	overflow-wrap: break-word;
 }
 
 body.chat-page .chat-page-composer {
@@ -5002,6 +5042,9 @@ body.chat-page .chat-page-composer {
 	flex-direction: column;
 	gap: 0;
 	align-items: stretch;
+	min-width: 0;
+	width: 100%;
+	max-width: 100%;
 	padding: 8px 12px;
 	padding-bottom: calc(8px + env(safe-area-inset-bottom));
 	border-top: none;
