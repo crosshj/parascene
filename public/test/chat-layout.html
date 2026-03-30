@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="en" class="chat-page">
+
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
+	<title>chat layout shell (debug)</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
+	<style>
+		*,
+		*::before,
+		*::after {
+			box-sizing: border-box;
+		}
+
+		/* Mirrors standalone chat shell: global.css html/body/main + flex chain + messages scroller + composer. */
+		html.chat-page {
+			height: 100vh;
+			height: 100dvh;
+			min-height: 100dvh;
+			height: var(--chat-vh, 100dvh);
+			min-height: var(--chat-vh, 100dvh);
+			overflow: hidden;
+			max-width: 100%;
+			background: #1a0a2e;
+			overflow-anchor: none;
+		}
+
+		body.chat-page {
+			display: flex;
+			flex-direction: column;
+			height: 100%;
+			min-height: 100%;
+			width: 100%;
+			max-width: 100%;
+			min-width: 0;
+			margin: 0;
+			overflow: hidden;
+			-webkit-text-size-adjust: 100%;
+			overflow-anchor: none;
+			overscroll-behavior: none;
+			padding-top: env(safe-area-inset-top);
+			padding-left: env(safe-area-inset-left);
+			padding-right: env(safe-area-inset-right);
+			padding-bottom: 0;
+			font-family: "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+			font-weight: 400;
+			line-height: 1.5;
+		}
+
+		body.chat-page main.chat-page-outer {
+			flex: 1 1 auto;
+			min-height: 0;
+			min-width: 0;
+			width: 100%;
+			max-width: 720px;
+			margin: 0 auto;
+			padding: 0;
+			display: flex;
+			flex-direction: column;
+			background: #2d1b4e;
+		}
+
+		.chat-page-layout {
+			display: flex;
+			flex-direction: column;
+			min-height: 0;
+			min-width: 0;
+			flex: 1 1 auto;
+			width: 100%;
+		}
+
+		.chat-page-main-column {
+			width: 100%;
+			min-height: 0;
+			min-width: 0;
+			flex: 1 1 auto;
+			display: flex;
+			flex-direction: column;
+			background: #3d2a5c;
+		}
+
+		.chat-page-sidebar {
+			display: none;
+		}
+
+		body.chat-page .chat-route {
+			flex: 1 1 auto;
+			min-height: 0;
+			min-width: 0;
+			display: flex;
+			flex-direction: column;
+			width: 100%;
+			max-width: 100%;
+			box-sizing: border-box;
+		}
+
+		.chat-page-topbar {
+			flex-shrink: 0;
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			min-width: 0;
+			max-width: 100%;
+			padding: 10px 12px;
+			background: #e94560;
+			color: #fff;
+			font-size: 14px;
+			font-weight: 600;
+			line-height: 1.45;
+		}
+
+		.chat-page-back {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			width: 44px;
+			height: 44px;
+			margin: -6px 0 -6px -6px;
+			border-radius: 50%;
+			color: inherit;
+			text-decoration: none;
+			flex-shrink: 0;
+		}
+
+		.chat-page-title {
+			margin: 0;
+			font-size: 1.0625rem;
+			font-weight: 600;
+			flex: 1;
+			min-width: 0;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		.chat-page-messages {
+			flex: 1 1 auto;
+			min-height: 0;
+			min-width: 0;
+			overflow-y: auto;
+			overflow-x: hidden;
+			-webkit-overflow-scrolling: touch;
+			overscroll-behavior-x: none;
+			overscroll-behavior-y: contain;
+			scrollbar-gutter: stable;
+			padding: 8px 12px;
+			display: flex;
+			flex-direction: column;
+			gap: 8px;
+			position: relative;
+			overflow-anchor: none;
+			background: #0f3460;
+		}
+
+		@media (max-width: 768px) {
+			.chat-page-messages {
+				scrollbar-gutter: auto;
+			}
+		}
+
+		body.chat-page .chat-page-messages img,
+		body.chat-page .chat-page-messages video {
+			max-width: 100%;
+			height: auto;
+		}
+
+		body.chat-page .chat-page-messages iframe {
+			max-width: 100%;
+		}
+
+		body.chat-page .chat-page-messages pre {
+			max-width: 100%;
+			overflow-x: auto;
+			overflow-wrap: break-word;
+		}
+
+		/* normal: do not use pre-wrap — editor indentation/tabs in the HTML would show in the UI */
+		.debug-msg {
+			flex-shrink: 0;
+			padding: 8px;
+			border-radius: 8px;
+			background: #4ecdc4;
+			color: #0a0a0a;
+			font-size: 14px;
+			line-height: 1.4;
+			white-space: normal;
+			word-break: break-word;
+			max-width: 100%;
+		}
+
+		.debug-msg--wide-token {
+			word-break: break-all;
+		}
+
+		body.chat-page .chat-page-composer {
+			flex-shrink: 0;
+			display: flex;
+			flex-direction: column;
+			gap: 0;
+			align-items: stretch;
+			min-width: 0;
+			width: 100%;
+			max-width: 100%;
+			padding: 8px 12px;
+			padding-bottom: calc(8px + env(safe-area-inset-bottom));
+			background: #f9ed69;
+		}
+
+		body.chat-page .chat-page-input-shell {
+			display: flex;
+			flex-direction: row;
+			align-items: flex-end;
+			flex: 1 1 auto;
+			min-width: 0;
+			gap: 2px;
+			padding: 4px 4px 4px 12px;
+			border: 2px solid #333;
+			border-radius: 10px;
+			background: #fff;
+			overflow: hidden;
+		}
+
+		body.chat-page .chat-page-composer-input {
+			flex: 1 1 auto;
+			min-width: 0;
+			margin: 0;
+			border: none;
+			border-radius: 0;
+			background: transparent;
+			resize: none;
+			min-height: 44px;
+			max-height: 160px;
+			padding: 10px 6px 10px 0;
+			line-height: 1.45;
+			font-size: 15px;
+			font-family: inherit;
+			color: #111;
+		}
+
+		body.chat-page .chat-page-composer-input:focus {
+			outline: none;
+		}
+
+		@media (min-width: 1024px) {
+			body.chat-page main.chat-page-outer {
+				max-width: none;
+				width: 100%;
+				margin: 0;
+				padding: 0;
+			}
+
+			.chat-page-layout {
+				flex-direction: row;
+				align-items: stretch;
+			}
+
+			.chat-page-sidebar {
+				display: flex;
+				flex-direction: column;
+				width: 272px;
+				flex-shrink: 0;
+				min-height: 0;
+				background: #533483;
+				border-right: 3px solid #f9ed69;
+			}
+
+			.chat-page-sidebar-head {
+				flex-shrink: 0;
+				padding: 10px 12px;
+				background: #7b2cbf;
+				color: #fff;
+				font-size: 13px;
+				font-weight: 600;
+				line-height: 1.45;
+			}
+
+			.chat-page-sidebar-scroll {
+				flex: 1 1 auto;
+				min-height: 0;
+				overflow-y: auto;
+				overflow-x: hidden;
+				-webkit-overflow-scrolling: touch;
+				padding: 8px;
+			}
+
+			.chat-page-sidebar-block {
+				height: 48px;
+				margin-bottom: 6px;
+				border-radius: 6px;
+				background: #c77dff;
+			}
+
+			body.chat-page .chat-page-topbar {
+				display: none;
+			}
+
+			.chat-page-main-column {
+				flex: 1 1 auto;
+				min-width: 0;
+				min-height: 0;
+				max-width: none;
+				margin: 0;
+				width: 100%;
+			}
+
+			body.chat-page .chat-page-messages {
+				padding-left: max(12px, calc((100% - 720px) / 2 + 12px));
+				padding-right: max(12px, calc((100% - 720px) / 2 + 12px));
+			}
+
+			body.chat-page .chat-page-composer {
+				padding-left: max(12px, calc((100% - 720px) / 2 + 12px));
+				padding-right: max(12px, calc((100% - 720px) / 2 + 12px));
+			}
+		}
+	</style>
+</head>
+
+<body class="chat-page">
+	<main class="chat-page-outer" id="chat-page-main">
+		<div class="chat-page-layout">
+			<aside class="chat-page-sidebar" aria-hidden="true">
+				<div class="chat-page-sidebar-head">sidebar</div>
+				<div class="chat-page-sidebar-scroll">
+					<div class="chat-page-sidebar-block"></div>
+					<div class="chat-page-sidebar-block"></div>
+					<div class="chat-page-sidebar-block"></div>
+				</div>
+			</aside>
+			<div class="chat-page-main-column">
+				<div class="chat-route" data-chat-page>
+					<header class="chat-page-topbar">
+						<a href="." class="chat-page-back" aria-label="Back">
+							<span class="chat-page-back-icon" aria-hidden="true">&lt;-</span>
+						</a>
+						<h1 class="chat-page-title">Chat</h1>
+					</header>
+					<div class="chat-page-messages" data-chat-messages role="log">
+						<div class="debug-msg">
+							<strong>01</strong> — Short ping to open the thread. Scroll the list below to exercise the
+							message pane; top bar and composer should stay fixed in this layout.
+						</div>
+						<div class="debug-msg">
+							<strong>02</strong> — Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do
+							eiusmod
+							tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud
+							exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+						</div>
+						<div class="debug-msg">
+							<strong>03</strong> — Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
+							dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in
+							culpa qui officia deserunt mollit anim id est laborum. Repeat for scroll: line four.
+							Line five. Line six. Line seven. Line eight.
+						</div>
+						<div class="debug-msg">
+							<strong>04</strong> — Integer posuere erat a ante venenatis dapibus posuere velit aliquet.
+							Cras mattis consectetur purus sit amet fermentum. Aenean lacinia bibendum nulla sed
+							consectetur. Maecenas faucibus mollis interdum. Vestibulum id ligula porta felis euismod
+							semper.
+						</div>
+						<div class="debug-msg">
+							<strong>05</strong> — Morbi leo risus, porta ac consectetur ac, vestibulum at eros. Vivamus
+							sagittis lacus vel augue laoreet rutrum faucibus dolor auctor. Curabitur blandit tempus
+							porttitor. Nullam quis risus eget urna mollis ornare vel eu leo. Fusce dapibus, tellus ac
+							cursus commodo, tortor mauris condimentum nibh.
+						</div>
+						<div class="debug-msg">
+							<strong>06</strong> — Donec ullamcorper nulla non metus auctor fringilla. Praesent commodo
+							cursus magna, vel scelerisque nisl consectetur et. Etiam porta sem malesuada magna mollis
+							euismod. Cras justo odio, dapibus ac facilisis in, egestas eget quam.
+						</div>
+						<div class="debug-msg">
+							<strong>07</strong> — A longer block: the quick brown fox jumps over the lazy dog. Pack my
+							box with five dozen liquor jugs. How vexingly quick daft zebras jump! Sphinx of black
+							quartz,
+							judge my vow. The five boxing wizards jump quickly. Waltz, bad nymph, for quick jigs vex.
+							Those pangrams pad out vertical space without relying on a single absurdly long token.
+						</div>
+						<div class="debug-msg">
+							<strong>08</strong> — Keyboard / viewport tests: focus the textarea, open the software
+							keyboard on a phone, and confirm the message list still scrolls and does not leave a huge
+							blank band. This filler sentence adds a bit more height on desktop too.
+						</div>
+						<div class="debug-msg">
+							<strong>09</strong> — One more paragraph. Nulla vitae elit libero, a pharetra augue. Sed
+							posuere consectetur est at lobortis. Donec id elit non mi porta gravida at eget metus.
+							Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum.
+						</div>
+						<div class="debug-msg">
+							<strong>10</strong> — Near the bottom: confirm you can scroll all the way down past this
+							line
+							and still see the composer. If sticky/fixed behavior breaks, the last lines will hide behind
+							the input.
+						</div>
+						<div class="debug-msg">
+							<strong>11</strong> — Final stretch. Etiam porta sem malesuada magna mollis euismod. Integer
+							posuere erat a ante venenatis dapibus posuere velit aliquet. Cum sociis natoque penatibus et
+							magnis dis parturient montes, nascetur ridiculus mus. End of long fixture list.
+						</div>
+						<div class="debug-msg debug-msg--wide-token">
+							<strong>12 wide</strong> —
+							xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+						</div>
+					</div>
+					<form class="chat-page-composer connect-chat-composer" data-chat-composer aria-label="composer">
+						<div class="chat-page-input-shell">
+							<textarea class="connect-chat-composer-input chat-page-composer-input" name="body" rows="1"
+								data-chat-body-input aria-label="input"></textarea>
+						</div>
+					</form>
+				</div>
+			</div>
+		</div>
+	</main>
+	<script>
+		(function () {
+			const root = document.querySelector('[data-chat-page]');
+			if (!root) return;
+
+			let chatViewportCleanup = null;
+			let chatViewportRetryTimeouts = [];
+
+			function nudgeChatScrollIfStuckToBottom() {
+				const messagesEl = root.querySelector('[data-chat-messages]');
+				if (!messagesEl) return;
+				const apply = function () {
+					messagesEl.scrollTop = messagesEl.scrollHeight;
+				};
+				apply();
+				requestAnimationFrame(apply);
+			}
+
+			function applyChatRootHeightFromVisualViewport() {
+				const el = document.documentElement;
+				if (!el.classList.contains('chat-page')) return;
+				const vv = window.visualViewport;
+				const ih =
+					typeof window.innerHeight === 'number' && Number.isFinite(window.innerHeight)
+						? window.innerHeight
+						: 0;
+				let h = 0;
+				if (vv && typeof vv.height === 'number' && Number.isFinite(vv.height) && vv.height > 0) {
+					h = ih > 0 ? Math.min(vv.height, ih) : vv.height;
+				} else if (ih > 0) {
+					h = ih;
+				}
+				if (h > 0) {
+					el.style.setProperty('--chat-vh', h + 'px');
+				} else {
+					el.style.removeProperty('--chat-vh');
+				}
+			}
+
+			function clearChatViewportRetryTimeouts() {
+				for (let i = 0; i < chatViewportRetryTimeouts.length; i++) {
+					clearTimeout(chatViewportRetryTimeouts[i]);
+				}
+				chatViewportRetryTimeouts = [];
+			}
+
+			function scheduleChatViewportHeightRetries() {
+				clearChatViewportRetryTimeouts();
+				const delays = [0, 50, 120, 220, 400];
+				for (let d = 0; d < delays.length; d++) {
+					const ms = delays[d];
+					const id = setTimeout(function () {
+						applyChatRootHeightFromVisualViewport();
+						nudgeChatScrollIfStuckToBottom();
+					}, ms);
+					chatViewportRetryTimeouts.push(id);
+				}
+			}
+
+			function setupChatViewportSync() {
+				if (typeof chatViewportCleanup === 'function') {
+					chatViewportCleanup();
+					chatViewportCleanup = null;
+				}
+				const nudge = nudgeChatScrollIfStuckToBottom;
+				const onViewport = function () {
+					applyChatRootHeightFromVisualViewport();
+					nudge();
+				};
+				const onComposerFocusViewport = function (ev) {
+					const inp = root.querySelector('[data-chat-body-input]');
+					if (!(inp instanceof HTMLElement) || ev.target !== inp) return;
+					scheduleChatViewportHeightRetries();
+				};
+				if (window.visualViewport) {
+					window.visualViewport.addEventListener('resize', onViewport);
+					window.visualViewport.addEventListener('scroll', onViewport);
+				}
+				window.addEventListener('resize', onViewport);
+				window.addEventListener('orientationchange', onViewport);
+				root.addEventListener('focusin', onComposerFocusViewport);
+				root.addEventListener('focusout', onComposerFocusViewport);
+				applyChatRootHeightFromVisualViewport();
+				requestAnimationFrame(function () {
+					requestAnimationFrame(function () {
+						applyChatRootHeightFromVisualViewport();
+						nudge();
+					});
+				});
+				chatViewportCleanup = function () {
+					clearChatViewportRetryTimeouts();
+					try {
+						document.documentElement.style.removeProperty('--chat-vh');
+					} catch (e) {
+						/* ignore */
+					}
+					if (window.visualViewport) {
+						window.visualViewport.removeEventListener('resize', onViewport);
+						window.visualViewport.removeEventListener('scroll', onViewport);
+					}
+					window.removeEventListener('resize', onViewport);
+					window.removeEventListener('orientationchange', onViewport);
+					root.removeEventListener('focusin', onComposerFocusViewport);
+					root.removeEventListener('focusout', onComposerFocusViewport);
+				};
+			}
+
+			setupChatViewportSync();
+		})();
+	</script>
+</body>
+
+</html>
