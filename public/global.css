@@ -4811,14 +4811,6 @@ body.chat-page .chat-route {
 	z-index: 2;
 }
 
-@media (max-width: 1023px) {
-	/* If the window scrolls (keyboard / iOS), keep the mobile thread bar in view when possible. */
-	body.chat-page .chat-page-topbar {
-		position: sticky;
-		top: 0;
-	}
-}
-
 .chat-page-back {
 	display: inline-flex;
 	align-items: center;

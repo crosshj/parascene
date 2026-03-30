@@ -292,6 +292,8 @@ export async function initChatPage(root) {
 	let optimisticSend = null;
 	/** @type {null | (() => void)} */
 	let chatViewportCleanup = null;
+	/** Debounced retries after focus (iOS keyboard animates; vv.height can lag). */
+	let chatViewportRetryTimeouts = [];
 	let activeReactionPicker = null;
 	let lastChatMessagesPayload = [];
 	/** @type {null | (() => void)} */
@@ -863,10 +865,43 @@ export async function initChatPage(root) {
 		const el = document.documentElement;
 		if (!el.classList.contains('chat-page')) return;
 		const vv = window.visualViewport;
+		const ih =
+			typeof window.innerHeight === 'number' && Number.isFinite(window.innerHeight)
+				? window.innerHeight
+				: 0;
+		let h = 0;
 		if (vv && typeof vv.height === 'number' && Number.isFinite(vv.height) && vv.height > 0) {
-			el.style.setProperty('--chat-vh', `${vv.height}px`);
+			/* iOS: innerHeight and visualViewport.height can disagree across keyboard frames; the
+			 * smaller value matches the area above the keyboard and avoids a tall layout with a
+			 * blank band between the thread and the composer. */
+			h = ih > 0 ? Math.min(vv.height, ih) : vv.height;
+		} else if (ih > 0) {
+			h = ih;
+		}
+		if (h > 0) {
+			el.style.setProperty('--chat-vh', `${h}px`);
 		} else {
 			el.style.removeProperty('--chat-vh');
+		}
+	}
+
+	function clearChatViewportRetryTimeouts() {
+		for (const id of chatViewportRetryTimeouts) {
+			clearTimeout(id);
+		}
+		chatViewportRetryTimeouts = [];
+	}
+
+	function scheduleChatViewportHeightRetries() {
+		clearChatViewportRetryTimeouts();
+		const nudge = () => nudgeChatScrollIfStuckToBottom();
+		const delays = [0, 50, 120, 220, 400];
+		for (const ms of delays) {
+			const id = setTimeout(() => {
+				applyChatRootHeightFromVisualViewport();
+				nudge();
+			}, ms);
+			chatViewportRetryTimeouts.push(id);
 		}
 	}
 
@@ -877,11 +912,19 @@ export async function initChatPage(root) {
 			applyChatRootHeightFromVisualViewport();
 			nudge();
 		};
+		const onComposerFocusViewport = (ev) => {
+			const inp = root.querySelector('[data-chat-body-input]');
+			if (!(inp instanceof HTMLElement) || ev.target !== inp) return;
+			scheduleChatViewportHeightRetries();
+		};
 		if (window.visualViewport) {
 			window.visualViewport.addEventListener('resize', onViewport);
 			window.visualViewport.addEventListener('scroll', onViewport);
 		}
 		window.addEventListener('resize', onViewport);
+		window.addEventListener('orientationchange', onViewport);
+		root.addEventListener('focusin', onComposerFocusViewport);
+		root.addEventListener('focusout', onComposerFocusViewport);
 		applyChatRootHeightFromVisualViewport();
 		requestAnimationFrame(() => {
 			requestAnimationFrame(() => {
@@ -890,6 +933,7 @@ export async function initChatPage(root) {
 			});
 		});
 		chatViewportCleanup = () => {
+			clearChatViewportRetryTimeouts();
 			try {
 				document.documentElement.style.removeProperty('--chat-vh');
 			} catch {
@@ -900,6 +944,9 @@ export async function initChatPage(root) {
 				window.visualViewport.removeEventListener('scroll', onViewport);
 			}
 			window.removeEventListener('resize', onViewport);
+			window.removeEventListener('orientationchange', onViewport);
+			root.removeEventListener('focusin', onComposerFocusViewport);
+			root.removeEventListener('focusout', onComposerFocusViewport);
 		};
 	}
 
