@@ -1,9 +1,12 @@
 <!doctype html>
+<!-- Bump meta chat-test-deploy + span.chat-deploy-stamp when you publish (cache bust id for clients). -->
 <html lang="en" class="chat-page">
 
 <head>
 	<meta charset="utf-8" />
-	<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
+	<meta name="viewport"
+		content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+	<meta name="chat-test-deploy" content="23-03-30 14:46" />
 	<title>chat layout shell (debug)</title>
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -15,13 +18,9 @@
 			box-sizing: border-box;
 		}
 
-		/* Mirrors standalone chat shell: global.css html/body/main + flex chain + messages scroller + composer. */
+		/* Shell: fixed + JS sync to visualViewport (see chat-layout-fixed.html). html/body stay simple. */
 		html.chat-page {
-			height: 100vh;
-			height: 100dvh;
-			min-height: 100dvh;
-			height: var(--chat-vh, 100dvh);
-			min-height: var(--chat-vh, 100dvh);
+			height: 100%;
 			overflow: hidden;
 			max-width: 100%;
 			background: #1a0a2e;
@@ -29,25 +28,31 @@
 		}
 
 		body.chat-page {
-			display: flex;
-			flex-direction: column;
-			height: 100%;
-			min-height: 100%;
+			margin: 0;
 			width: 100%;
+			height: 100%;
 			max-width: 100%;
 			min-width: 0;
-			margin: 0;
 			overflow: hidden;
 			-webkit-text-size-adjust: 100%;
 			overflow-anchor: none;
 			overscroll-behavior: none;
-			padding-top: env(safe-area-inset-top);
-			padding-left: env(safe-area-inset-left);
-			padding-right: env(safe-area-inset-right);
-			padding-bottom: 0;
 			font-family: "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 			font-weight: 400;
 			line-height: 1.5;
+		}
+
+		.chat-shell {
+			position: fixed;
+			left: 0;
+			top: 0;
+			width: 100%;
+			height: 100dvh;
+			display: flex;
+			flex-direction: column;
+			overflow: hidden;
+			min-width: 0;
+			z-index: 0;
 		}
 
 		body.chat-page main.chat-page-outer {
@@ -104,7 +109,7 @@
 			gap: 8px;
 			min-width: 0;
 			max-width: 100%;
-			padding: 10px 12px;
+			padding: calc(10px + env(safe-area-inset-top)) 12px 10px;
 			background: #e94560;
 			color: #fff;
 			font-size: 14px;
@@ -134,6 +139,13 @@
 			overflow: hidden;
 			text-overflow: ellipsis;
 			white-space: nowrap;
+		}
+
+		.chat-page-title .chat-deploy-stamp {
+			font-weight: 400;
+			font-size: 0.85em;
+			opacity: 0.9;
+			font-variant-numeric: tabular-nums;
 		}
 
 		.chat-page-messages {
@@ -235,7 +247,7 @@
 			max-height: 160px;
 			padding: 10px 6px 10px 0;
 			line-height: 1.45;
-			font-size: 15px;
+			font-size: 16px;
 			font-family: inherit;
 			color: #111;
 		}
@@ -320,6 +332,7 @@
 </head>
 
 <body class="chat-page">
+	<div id="chatShell" class="chat-shell">
 	<main class="chat-page-outer" id="chat-page-main">
 		<div class="chat-page-layout">
 			<aside class="chat-page-sidebar" aria-hidden="true">
@@ -336,7 +349,7 @@
 						<a href="." class="chat-page-back" aria-label="Back">
 							<span class="chat-page-back-icon" aria-hidden="true">&lt;-</span>
 						</a>
-						<h1 class="chat-page-title">Chat</h1>
+						<h1 class="chat-page-title">Chat <span class="chat-deploy-stamp" title="Bump with meta chat-test-deploy when you publish">23-03-30 14:46</span></h1>
 					</header>
 					<div class="chat-page-messages" data-chat-messages role="log">
 						<div class="debug-msg">
@@ -415,42 +428,46 @@
 			</div>
 		</div>
 	</main>
+	</div>
 	<script>
 		(function () {
+			const shell = document.getElementById('chatShell');
 			const root = document.querySelector('[data-chat-page]');
-			if (!root) return;
+			if (!shell || !root) return;
+
+			const messagesEl = root.querySelector('[data-chat-messages]');
+			const inputEl = root.querySelector('[data-chat-body-input]');
 
 			let chatViewportCleanup = null;
 			let chatViewportRetryTimeouts = [];
 
-			function nudgeChatScrollIfStuckToBottom() {
-				const messagesEl = root.querySelector('[data-chat-messages]');
-				if (!messagesEl) return;
-				const apply = function () {
-					messagesEl.scrollTop = messagesEl.scrollHeight;
-				};
-				apply();
-				requestAnimationFrame(apply);
+			function isNearBottom(el, threshold) {
+				const t = threshold != null ? threshold : 24;
+				return el.scrollHeight - el.scrollTop - el.clientHeight <= t;
 			}
 
-			function applyChatRootHeightFromVisualViewport() {
-				const el = document.documentElement;
-				if (!el.classList.contains('chat-page')) return;
+			function syncToVisualViewport() {
 				const vv = window.visualViewport;
-				const ih =
-					typeof window.innerHeight === 'number' && Number.isFinite(window.innerHeight)
-						? window.innerHeight
-						: 0;
-				let h = 0;
-				if (vv && typeof vv.height === 'number' && Number.isFinite(vv.height) && vv.height > 0) {
-					h = ih > 0 ? Math.min(vv.height, ih) : vv.height;
-				} else if (ih > 0) {
-					h = ih;
+				if (!vv) {
+					shell.style.top = '0px';
+					shell.style.left = '0px';
+					shell.style.width = '100%';
+					shell.style.height = window.innerHeight + 'px';
+					return;
 				}
-				if (h > 0) {
-					el.style.setProperty('--chat-vh', h + 'px');
-				} else {
-					el.style.removeProperty('--chat-vh');
+				shell.style.top = vv.offsetTop + 'px';
+				shell.style.left = vv.offsetLeft + 'px';
+				shell.style.width = vv.width + 'px';
+				shell.style.height = vv.height + 'px';
+			}
+
+			function onViewportChange() {
+				const shouldStick = messagesEl && isNearBottom(messagesEl, 64);
+				syncToVisualViewport();
+				if (shouldStick && messagesEl) {
+					requestAnimationFrame(function () {
+						messagesEl.scrollTop = messagesEl.scrollHeight;
+					});
 				}
 			}
 
@@ -467,8 +484,7 @@
 				for (let d = 0; d < delays.length; d++) {
 					const ms = delays[d];
 					const id = setTimeout(function () {
-						applyChatRootHeightFromVisualViewport();
-						nudgeChatScrollIfStuckToBottom();
+						onViewportChange();
 					}, ms);
 					chatViewportRetryTimeouts.push(id);
 				}
@@ -479,46 +495,53 @@
 					chatViewportCleanup();
 					chatViewportCleanup = null;
 				}
-				const nudge = nudgeChatScrollIfStuckToBottom;
-				const onViewport = function () {
-					applyChatRootHeightFromVisualViewport();
-					nudge();
-				};
 				const onComposerFocusViewport = function (ev) {
-					const inp = root.querySelector('[data-chat-body-input]');
-					if (!(inp instanceof HTMLElement) || ev.target !== inp) return;
+					if (!(inputEl instanceof HTMLElement) || ev.target !== inputEl) return;
 					scheduleChatViewportHeightRetries();
 				};
 				if (window.visualViewport) {
-					window.visualViewport.addEventListener('resize', onViewport);
-					window.visualViewport.addEventListener('scroll', onViewport);
+					window.visualViewport.addEventListener('resize', onViewportChange);
+					window.visualViewport.addEventListener('scroll', onViewportChange);
 				}
-				window.addEventListener('resize', onViewport);
-				window.addEventListener('orientationchange', onViewport);
+				window.addEventListener('resize', onViewportChange);
+				window.addEventListener('orientationchange', onViewportChange);
 				root.addEventListener('focusin', onComposerFocusViewport);
 				root.addEventListener('focusout', onComposerFocusViewport);
-				applyChatRootHeightFromVisualViewport();
+				if (inputEl instanceof HTMLElement) {
+					inputEl.addEventListener('focus', onViewportChange);
+					inputEl.addEventListener('blur', onViewportChange);
+				}
+				onViewportChange();
 				requestAnimationFrame(function () {
 					requestAnimationFrame(function () {
-						applyChatRootHeightFromVisualViewport();
-						nudge();
+						onViewportChange();
 					});
 				});
+				if (messagesEl) {
+					messagesEl.scrollTop = messagesEl.scrollHeight;
+				}
 				chatViewportCleanup = function () {
 					clearChatViewportRetryTimeouts();
 					try {
-						document.documentElement.style.removeProperty('--chat-vh');
+						shell.style.removeProperty('top');
+						shell.style.removeProperty('left');
+						shell.style.removeProperty('width');
+						shell.style.removeProperty('height');
 					} catch (e) {
 						/* ignore */
 					}
 					if (window.visualViewport) {
-						window.visualViewport.removeEventListener('resize', onViewport);
-						window.visualViewport.removeEventListener('scroll', onViewport);
+						window.visualViewport.removeEventListener('resize', onViewportChange);
+						window.visualViewport.removeEventListener('scroll', onViewportChange);
 					}
-					window.removeEventListener('resize', onViewport);
-					window.removeEventListener('orientationchange', onViewport);
+					window.removeEventListener('resize', onViewportChange);
+					window.removeEventListener('orientationchange', onViewportChange);
 					root.removeEventListener('focusin', onComposerFocusViewport);
 					root.removeEventListener('focusout', onComposerFocusViewport);
+					if (inputEl instanceof HTMLElement) {
+						inputEl.removeEventListener('focus', onViewportChange);
+						inputEl.removeEventListener('blur', onViewportChange);
+					}
 				};
 			}
 
