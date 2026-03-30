@@ -100,6 +100,18 @@ function suggestUsernameFromEmail(email) {
 	return normalizeUsername(candidate);
 }
 
+function normalizeGeneratedCharacterDescription(input) {
+	const raw = typeof input === 'string' ? input.trim() : '';
+	if (!raw) return 'Curious creative character';
+	if (raw.length >= 12) return raw;
+	// Keep generated text valid for welcome step 3 while preserving original intent.
+	return `${raw} character`;
+}
+
+function isCharacterDescriptionLongEnough(input) {
+	return String(input || '').trim().length >= 12;
+}
+
 async function loadProfile() {
 	return await fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 0 });
 }
@@ -248,6 +260,31 @@ async function pollTryImageById(id) {
 	return { ok: false, error: 'Portrait generation timed out. Try again.' };
 }
 
+function extractPortraitSubjectFromPrompt(prompt) {
+	const raw = typeof prompt === 'string' ? prompt.trim() : '';
+	if (!raw) return '';
+	const firstLine = raw.split('\n')[0] || '';
+	const m = /^portrait of\s+(.+?)\.\s*avoid showing body/i.exec(firstLine.trim());
+	return m ? m[1].trim() : '';
+}
+
+async function fetchLatestCompletedTryAvatar() {
+	const res = await fetch('/api/try/list', { credentials: 'include' }).catch(() => null);
+	if (!res || !res.ok) return null;
+	const rows = await res.json().catch(() => []);
+	if (!Array.isArray(rows) || rows.length === 0) return null;
+	for (const row of rows) {
+		if (row?.status !== 'completed') continue;
+		const url = typeof row?.url === 'string' ? row.url.trim() : '';
+		if (!url) continue;
+		return {
+			url,
+			prompt: typeof row?.prompt === 'string' ? row.prompt.trim() : ''
+		};
+	}
+	return null;
+}
+
 async function init() {
 	await loadDeps();
 	const setup = $('[data-welcome-setup]');
@@ -367,7 +404,7 @@ async function init() {
 			generateAvatarButton.disabled = true;
 			return;
 		}
-		generateAvatarButton.disabled = !characterDescriptionInput.value.trim();
+		generateAvatarButton.disabled = !isCharacterDescriptionLongEnough(characterDescriptionInput.value);
 	}
 
 	function setAvatarGenerateButtonState(loading) {
@@ -515,6 +552,10 @@ async function init() {
 			showError('Add a character description before generating your portrait.');
 			return;
 		}
+		if (!isCharacterDescriptionLongEnough(characterDescription)) {
+			showError('Describe your character in a bit more detail (at least 12 characters) before generating your portrait.');
+			return;
+		}
 		hideError();
 		isGeneratingAvatar = true;
 		setAvatarPreview(null);
@@ -573,7 +614,7 @@ async function init() {
 		? user.profile.character_description.trim()
 		: '';
 	if (existingDescription && !characterDescriptionInput.value.trim()) {
-		characterDescriptionInput.value = existingDescription;
+		characterDescriptionInput.value = normalizeGeneratedCharacterDescription(existingDescription);
 	}
 
 	const existingAvatar = typeof user?.profile?.avatar_url === 'string' ? user.profile.avatar_url.trim() : '';
@@ -582,6 +623,20 @@ async function init() {
 		generatedAvatarForDescription = characterDescriptionInput.value.trim();
 		setAvatarPreview(existingAvatar);
 		setAvatarGenerateButtonState(false);
+	} else {
+		// Recovery path: if the user generated avatar(s) earlier but did not finish
+		// welcome in one session, restore the latest completed try avatar.
+		const recovered = await fetchLatestCompletedTryAvatar().catch(() => null);
+		if (recovered?.url) {
+			generatedAvatarUrl = recovered.url;
+			const promptSubject = extractPortraitSubjectFromPrompt(recovered.prompt);
+			const currentDescription = characterDescriptionInput.value.trim();
+			// Keep step validation practical: bind to current description by default.
+			generatedAvatarForDescription = currentDescription || promptSubject || '';
+			generatedAvatarPrompt = recovered.prompt || '';
+			setAvatarPreview(recovered.url);
+			setAvatarGenerateButtonState(false);
+		}
 	}
 	updateGenerateButtonDisabled();
 	updateStepCTADisabled();
@@ -668,7 +723,7 @@ async function init() {
 		shuffleCharacterBtn.addEventListener('click', () => {
 			const seed = Math.random().toString(36) + Date.now().toString(36);
 			const p = genProfile(seed, 0);
-			characterDescriptionInput.value = toMentionText(p);
+			characterDescriptionInput.value = normalizeGeneratedCharacterDescription(toMentionText(p));
 			clearGeneratedAvatar();
 			updateStepCTADisabled();
 			updateGenerateButtonDisabled();
