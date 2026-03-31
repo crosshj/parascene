@@ -465,11 +465,13 @@ class AppModalProfile extends HTMLElement {
           z-index: 99999;
           opacity: 0;
           visibility: hidden;
+          pointer-events: none;
           transition: opacity 0.2s, visibility 0.2s;
         }
         .profile-overlay.open {
           opacity: 1;
           visibility: visible;
+          pointer-events: auto;
         }
         .profile-modal {
           background: var(--surface);

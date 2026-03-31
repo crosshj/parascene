@@ -443,11 +443,13 @@ class AppModalCredits extends HTMLElement {
           z-index: 99999;
           opacity: 0;
           visibility: hidden;
+          pointer-events: none;
           transition: opacity 0.2s, visibility 0.2s;
         }
         .credits-overlay.open {
           opacity: 1;
           visibility: visible;
+          pointer-events: auto;
         }
         .credits-modal {
           background: var(--surface);

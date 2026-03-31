@@ -7159,12 +7159,14 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 	z-index: 10000;
 	opacity: 0;
 	visibility: hidden;
+	pointer-events: none;
 	transition: opacity 0.2s, visibility 0.2s;
 }
 
 .creations-bulk-delete-modal-overlay.open {
 	opacity: 1;
 	visibility: visible;
+	pointer-events: auto;
 }
 
 .creations-bulk-delete-modal {
@@ -7305,12 +7307,14 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 	z-index: 10000;
 	opacity: 0;
 	visibility: hidden;
+	pointer-events: none;
 	transition: opacity 0.2s, visibility 0.2s;
 }
 
 .creation-detail-set-avatar-modal-overlay.open {
 	opacity: 1;
 	visibility: visible;
+	pointer-events: auto;
 }
 
 .creation-detail-set-avatar-modal {
@@ -9413,12 +9417,14 @@ app-modal-creation-details .creation-details-args {
 	z-index: 100000;
 	opacity: 0;
 	visibility: hidden;
+	pointer-events: none;
 	transition: opacity 0.2s ease, visibility 0.2s ease;
 }
 
 .qr-modal-overlay.open {
 	opacity: 1;
 	visibility: visible;
+	pointer-events: auto;
 }
 
 .qr-modal {

@@ -423,12 +423,14 @@ class AppModalNotifications extends HTMLElement {
           z-index: 99999;
           opacity: 0;
           visibility: hidden;
+          pointer-events: none;
           transition: opacity 0.2s, visibility 0.2s;
         }
         .notifications-overlay.open,
         .notification-detail-overlay.open {
           opacity: 1;
           visibility: visible;
+          pointer-events: auto;
         }
         .notifications-modal,
         .notification-detail-modal {
