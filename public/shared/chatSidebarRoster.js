@@ -7,8 +7,9 @@ import { serverChannelTagFromServerName } from './serverChatTag.js';
 /**
  * Pseudo-channels (UI-only roster rows; not backed by prsn_chat_threads).
  * Slugs must match client + API reserved list in api_routes/chat.js.
+ * Always show both #comments and #feedback in the sidebar.
  */
-export const RESERVED_PSEUDO_CHANNEL_SLUGS = ['comments'];
+export const RESERVED_PSEUDO_CHANNEL_SLUGS = ['comments', 'feedback'];
 
 /**
  * Channel slugs that always sort to the top of the sidebar (order matters).
