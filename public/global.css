@@ -3944,18 +3944,6 @@ app-route-feed {
    sliver visible). Prefer 100dvh + optional --chat-vh from visualViewport (chat.js). Do not set
    body min-height: 100dvh while html is shorter — that forces body taller than html and clips
    the composer. Chrome: interactive-widget (chat.html) resizes with the keyboard. */
-html.chat-page {
-	height: 100vh;
-	height: 100dvh;
-	min-height: 100dvh;
-	height: var(--chat-vh, 100dvh);
-	min-height: var(--chat-vh, 100dvh);
-	overflow: hidden;
-	max-width: 100%;
-	background: var(--bg);
-	overflow-anchor: none;
-}
-
 body.chat-page {
 	display: flex;
 	flex-direction: column;

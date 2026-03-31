@@ -81,7 +81,7 @@ Examples:
 - `.feed-card`, `.route-empty` - reusable patterns
 - `app-navigation`, `app-navigation-mobile`, `app-modal-profile`, `app-modal-credits`, `app-modal-notifications` - web component styles
 
-### Page-specific CSS (e.g., index.css, creator.css, consumer.css)
+### Page-specific CSS (e.g., index.css, creator.css, consumer.css, chat.css)
 Use for styles that are:
 - **Unique to a single page** and not reusable elsewhere
 - **Page-specific layout overrides** (e.g., landing page header behavior)
@@ -105,7 +105,7 @@ Examples:
 2. **If it's a web component** → global.css
 3. **If it's a reusable pattern** → global.css
 4. **If it's truly page-specific and won't be reused** → page CSS file
-5. **When in doubt, prefer global.css** - it's easier to move styles later than to duplicate them
+5. **If you're unsure about a global.css change, ask before changing it**, especially for layout or other high-impact selectors
 
 ## Example Structure
 ```css

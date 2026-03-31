@@ -2,118 +2,237 @@
 <html lang="en" class="chat-page">
 
 <head>
+	<meta charset="utf-8" />
 	<title>Chat · parascene</title>
-	<link rel="stylesheet" href="/pages/creations.css{{V}}" />
-	<script>
-		(function () {
-			var m = document.querySelector('meta[name="viewport"]');
-			if (m) {
-				m.setAttribute(
-					'content',
-					'width=device-width, initial-scale=1, interactive-widget=resizes-content'
-				);
-			}
-		})();
-	</script>
+	<meta name="viewport"
+		content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+	<meta name="theme-color" content="#242131" />
+	<meta name="description" content="Chat in Parascene Connect: direct messages, servers, and channels." />
+	<link rel="stylesheet" href="/pages/chat.css{{V}}" />
 </head>
 
 <body data-entry="chat" class="chat-page">
-	<main class="chat-page-outer" id="chat-page-main">
-		<div class="chat-page-layout">
-			<aside class="chat-page-sidebar" data-chat-sidebar aria-label="Conversations">
-				<div class="chat-page-sidebar-head">
-					<a href="/connect" class="chat-page-back chat-page-sidebar-back" aria-label="Back to Connect">
-						<!-- do not change this to ←, it's not a real arrow -->
-						<span class="chat-page-back-icon" aria-hidden="true">&lt;-</span>
-					</a>
-					<div>Connect</div>
-				</div>
-				<div class="chat-page-sidebar-scroll">
-					<section class="chat-page-sidebar-section" aria-labelledby="chat-sidebar-dms-heading">
-						<div class="chat-page-sidebar-section-head">
-							<h2 id="chat-sidebar-dms-heading" class="chat-page-sidebar-heading">Direct messages</h2>
-							<button type="button" class="chat-page-sidebar-add" data-chat-sidebar-add="dm"
-								aria-label="New direct message">
-								<svg class="chat-page-sidebar-add-icon" xmlns="http://www.w3.org/2000/svg" width="18"
-									height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-									stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-									<line x1="12" y1="5" x2="12" y2="19" />
-									<line x1="5" y1="12" x2="19" y2="12" />
-								</svg>
-							</button>
-						</div>
-						<div class="chat-page-sidebar-list" data-chat-sidebar-users></div>
-					</section>
-					<section class="chat-page-sidebar-section" aria-labelledby="chat-sidebar-servers-heading">
-						<div class="chat-page-sidebar-section-head">
-							<h2 id="chat-sidebar-servers-heading" class="chat-page-sidebar-heading">Servers</h2>
-							<button type="button" class="chat-page-sidebar-add" data-chat-sidebar-add="servers"
-								aria-label="Add or browse servers">
-								<svg class="chat-page-sidebar-add-icon" xmlns="http://www.w3.org/2000/svg" width="18"
-									height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-									stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-									<line x1="12" y1="5" x2="12" y2="19" />
-									<line x1="5" y1="12" x2="19" y2="12" />
-								</svg>
-							</button>
-						</div>
-						<div class="chat-page-sidebar-list" data-chat-sidebar-servers></div>
-					</section>
-					<section class="chat-page-sidebar-section" aria-labelledby="chat-sidebar-channels-heading">
-						<div class="chat-page-sidebar-section-head">
-							<h2 id="chat-sidebar-channels-heading" class="chat-page-sidebar-heading">Channels</h2>
-							<button type="button" class="chat-page-sidebar-add" data-chat-sidebar-add="channels"
-								aria-label="Open or browse channels">
-								<svg class="chat-page-sidebar-add-icon" xmlns="http://www.w3.org/2000/svg" width="18"
-									height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-									stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-									<line x1="12" y1="5" x2="12" y2="19" />
-									<line x1="5" y1="12" x2="19" y2="12" />
-								</svg>
-							</button>
-						</div>
-						<div class="chat-page-sidebar-list" data-chat-sidebar-channels></div>
-					</section>
-				</div>
-			</aside>
-			<div class="chat-page-main-column">
-				<div class="chat-route" data-chat-page>
-					<header class="chat-page-topbar">
-						<a href="/connect" class="chat-page-back" aria-label="Back to Connect">
+	<div id="chatShell" class="chat-shell">
+		<main class="chat-page-outer" id="chat-page-main">
+			<div class="chat-page-layout">
+				<aside class="chat-page-sidebar" data-chat-sidebar aria-label="Conversations">
+					<div class="chat-page-sidebar-head">
+						<a href="/connect" class="chat-page-back chat-page-sidebar-back" aria-label="Back to Connect">
 							<!-- do not change this to ←, it's not a real arrow -->
 							<span class="chat-page-back-icon" aria-hidden="true">&lt;-</span>
 						</a>
-						<h1 class="chat-page-title" data-chat-title>Chat</h1>
-						<button type="button" class="chat-page-refresh" data-chat-refresh aria-label="Refresh messages">
-							<svg class="chat-page-refresh-icon" xmlns="http://www.w3.org/2000/svg" width="18"
-								height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-								stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-								<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-								<path d="M21 3v5h-5" />
-								<path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-								<path d="M3 21v-5h5" />
-							</svg>
-						</button>
-					</header>
-					<div class="chat-page-messages" data-chat-messages role="log" aria-label="Messages"></div>
-					<p class="chat-page-error connect-chat-error" data-chat-error hidden role="alert"></p>
-					<form class="chat-page-composer connect-chat-composer" data-chat-composer
-						aria-label="Send a message">
-						<p class="chat-page-pseudo-composer-hint" data-chat-pseudo-composer-hint hidden role="status">
-						</p>
-						<div class="chat-page-input-shell">
-							<textarea class="connect-chat-composer-input chat-page-composer-input" name="body" rows="1"
-								maxlength="4000" placeholder="Message…" data-chat-body-input
-								aria-label="Message text"></textarea>
-							<button type="button" class="chat-page-send-btn" data-chat-send hidden
-								aria-label="Send"></button>
-						</div>
-					</form>
+						<div>Connect</div>
+					</div>
+					<div class="chat-page-sidebar-scroll">
+						<section class="chat-page-sidebar-section" aria-labelledby="chat-sidebar-dms-heading">
+							<div class="chat-page-sidebar-section-head">
+								<h2 id="chat-sidebar-dms-heading" class="chat-page-sidebar-heading">Direct messages</h2>
+								<button type="button" class="chat-page-sidebar-add" data-chat-sidebar-add="dm"
+									aria-label="New direct message">
+									<svg class="chat-page-sidebar-add-icon" xmlns="http://www.w3.org/2000/svg" width="18"
+										height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+										stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+										aria-hidden="true">
+										<line x1="12" y1="5" x2="12" y2="19" />
+										<line x1="5" y1="12" x2="19" y2="12" />
+									</svg>
+								</button>
+							</div>
+							<div class="chat-page-sidebar-list" data-chat-sidebar-users></div>
+						</section>
+						<section class="chat-page-sidebar-section" aria-labelledby="chat-sidebar-servers-heading">
+							<div class="chat-page-sidebar-section-head">
+								<h2 id="chat-sidebar-servers-heading" class="chat-page-sidebar-heading">Servers</h2>
+								<button type="button" class="chat-page-sidebar-add" data-chat-sidebar-add="servers"
+									aria-label="Add or browse servers">
+									<svg class="chat-page-sidebar-add-icon" xmlns="http://www.w3.org/2000/svg" width="18"
+										height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+										stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+										aria-hidden="true">
+										<line x1="12" y1="5" x2="12" y2="19" />
+										<line x1="5" y1="12" x2="19" y2="12" />
+									</svg>
+								</button>
+							</div>
+							<div class="chat-page-sidebar-list" data-chat-sidebar-servers></div>
+						</section>
+						<section class="chat-page-sidebar-section" aria-labelledby="chat-sidebar-channels-heading">
+							<div class="chat-page-sidebar-section-head">
+								<h2 id="chat-sidebar-channels-heading" class="chat-page-sidebar-heading">Channels</h2>
+								<button type="button" class="chat-page-sidebar-add" data-chat-sidebar-add="channels"
+									aria-label="Open or browse channels">
+									<svg class="chat-page-sidebar-add-icon" xmlns="http://www.w3.org/2000/svg" width="18"
+										height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+										stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+										aria-hidden="true">
+										<line x1="12" y1="5" x2="12" y2="19" />
+										<line x1="5" y1="12" x2="19" y2="12" />
+									</svg>
+								</button>
+							</div>
+							<div class="chat-page-sidebar-list" data-chat-sidebar-channels></div>
+						</section>
+					</div>
+				</aside>
+				<div class="chat-page-main-column">
+					<div class="chat-route" data-chat-page>
+						<header class="chat-page-topbar">
+							<a href="/connect" class="chat-page-back" aria-label="Back to Connect">
+								<!-- do not change this to ←, it's not a real arrow -->
+								<span class="chat-page-back-icon" aria-hidden="true">&lt;-</span>
+							</a>
+							<h1 class="chat-page-title" data-chat-title>Chat</h1>
+							<button type="button" class="chat-page-refresh" data-chat-refresh
+								aria-label="Refresh messages">
+								<svg class="chat-page-refresh-icon" xmlns="http://www.w3.org/2000/svg" width="18"
+									height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+									stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+									<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+									<path d="M21 3v5h-5" />
+									<path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+									<path d="M3 21v-5h5" />
+								</svg>
+							</button>
+						</header>
+						<div class="chat-page-messages" data-chat-messages role="log" aria-label="Messages"></div>
+						<p class="chat-page-error connect-chat-error" data-chat-error hidden role="alert"></p>
+						<form class="chat-page-composer connect-chat-composer" data-chat-composer
+							aria-label="Send a message">
+							<p class="chat-page-pseudo-composer-hint" data-chat-pseudo-composer-hint hidden
+								role="status">
+							</p>
+							<div class="chat-page-input-shell">
+								<textarea class="connect-chat-composer-input chat-page-composer-input" name="body"
+									rows="1" maxlength="4000" placeholder="Message…" data-chat-body-input
+									aria-label="Message text"></textarea>
+								<button type="button" class="chat-page-send-btn" data-chat-send hidden
+									aria-label="Send"></button>
+							</div>
+						</form>
+					</div>
 				</div>
 			</div>
-		</div>
-	</main>
-	<app-modal-server></app-modal-server>
+		</main>
+		<app-modal-server></app-modal-server>
+	</div>
+	<script>
+		(function () {
+			var shell = document.getElementById('chatShell');
+			var root = document.querySelector('[data-chat-page]');
+			if (!shell || !root) return;
+
+			var messagesEl = root.querySelector('[data-chat-messages]');
+			var inputEl = root.querySelector('[data-chat-body-input]');
+
+			var chatViewportCleanup = null;
+			var chatViewportRetryTimeouts = [];
+
+			function isNearBottom(el, threshold) {
+				var t = threshold != null ? threshold : 24;
+				return el.scrollHeight - el.scrollTop - el.clientHeight <= t;
+			}
+
+			function syncToVisualViewport() {
+				var vv = window.visualViewport;
+				if (!vv) {
+					shell.style.top = '0px';
+					shell.style.left = '0px';
+					shell.style.width = '100%';
+					shell.style.height = window.innerHeight + 'px';
+					return;
+				}
+				shell.style.top = vv.offsetTop + 'px';
+				shell.style.left = vv.offsetLeft + 'px';
+				shell.style.width = vv.width + 'px';
+				shell.style.height = vv.height + 'px';
+			}
+
+			function onViewportChange() {
+				var shouldStick = messagesEl && isNearBottom(messagesEl, 64);
+				syncToVisualViewport();
+				if (shouldStick && messagesEl) {
+					requestAnimationFrame(function () {
+						messagesEl.scrollTop = messagesEl.scrollHeight;
+					});
+				}
+			}
+
+			function clearChatViewportRetryTimeouts() {
+				for (var i = 0; i < chatViewportRetryTimeouts.length; i++) {
+					clearTimeout(chatViewportRetryTimeouts[i]);
+				}
+				chatViewportRetryTimeouts = [];
+			}
+
+			function scheduleChatViewportHeightRetries() {
+				clearChatViewportRetryTimeouts();
+				var delays = [0, 50, 120, 220, 400];
+				for (var d = 0; d < delays.length; d++) {
+					(function (ms) {
+						var id = setTimeout(function () {
+							onViewportChange();
+						}, ms);
+						chatViewportRetryTimeouts.push(id);
+					})(delays[d]);
+				}
+			}
+
+			function setupChatViewportSync() {
+				if (typeof chatViewportCleanup === 'function') {
+					chatViewportCleanup();
+					chatViewportCleanup = null;
+				}
+				var onComposerFocusViewport = function (ev) {
+					if (!(inputEl instanceof HTMLElement) || ev.target !== inputEl) return;
+					scheduleChatViewportHeightRetries();
+				};
+				if (window.visualViewport) {
+					window.visualViewport.addEventListener('resize', onViewportChange);
+					window.visualViewport.addEventListener('scroll', onViewportChange);
+				}
+				window.addEventListener('resize', onViewportChange);
+				window.addEventListener('orientationchange', onViewportChange);
+				root.addEventListener('focusin', onComposerFocusViewport);
+				root.addEventListener('focusout', onComposerFocusViewport);
+				if (inputEl instanceof HTMLElement) {
+					inputEl.addEventListener('focus', onViewportChange);
+					inputEl.addEventListener('blur', onViewportChange);
+				}
+				onViewportChange();
+				requestAnimationFrame(function () {
+					requestAnimationFrame(function () {
+						onViewportChange();
+					});
+				});
+				if (messagesEl) {
+					messagesEl.scrollTop = messagesEl.scrollHeight;
+				}
+				chatViewportCleanup = function () {
+					clearChatViewportRetryTimeouts();
+					try {
+						shell.style.removeProperty('top');
+						shell.style.removeProperty('left');
+						shell.style.removeProperty('width');
+						shell.style.removeProperty('height');
+					} catch (e) {}
+					if (window.visualViewport) {
+						window.visualViewport.removeEventListener('resize', onViewportChange);
+						window.visualViewport.removeEventListener('scroll', onViewportChange);
+					}
+					window.removeEventListener('resize', onViewportChange);
+					window.removeEventListener('orientationchange', onViewportChange);
+					root.removeEventListener('focusin', onComposerFocusViewport);
+					root.removeEventListener('focusout', onComposerFocusViewport);
+					if (inputEl instanceof HTMLElement) {
+						inputEl.removeEventListener('focus', onViewportChange);
+						inputEl.removeEventListener('blur', onViewportChange);
+					}
+				};
+			}
+
+			setupChatViewportSync();
+		})();
+	</script>
 </body>
 
 </html>
