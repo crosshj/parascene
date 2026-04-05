@@ -68,10 +68,10 @@ function renderPlainUserTextSegment(text) {
 	const transformed = applyEmojiTextTransforms(String(text ?? ''));
 	if (!transformed) return '';
 
-	// Conservative personality/tag token pattern:
-	// - Starts with @ (personality) or # (tag)
+	// Conservative personality / tag / style token pattern:
+	// - @ user, # tag channel, $ style (detail URL placeholder until route is finalized)
 	// - Bounded so we don't transform emails/embedded tokens.
-	const tokenRe = /(^|[^a-zA-Z0-9_-])([@#])([a-zA-Z0-9][a-zA-Z0-9_-]{1,31})(?=$|[^a-zA-Z0-9_-])/g;
+	const tokenRe = /(^|[^a-zA-Z0-9_-])([@#$])([a-zA-Z0-9][a-zA-Z0-9_-]{0,63})(?=$|[^a-zA-Z0-9_-])/g;
 	let out = '';
 	let lastIndex = 0;
 	let match;
@@ -89,6 +89,8 @@ function renderPlainUserTextSegment(text) {
 			out += `<a href="/p/${escapeHtml(normalized)}" class="user-link mention-link">@${escapeHtml(rawToken)}</a>`;
 		} else if (sigil === '#' && /^[a-z0-9][a-z0-9_-]{1,31}$/.test(normalized)) {
 			out += `<a href="/t/${escapeHtml(normalized)}" class="user-link mention-link">#${escapeHtml(rawToken)}</a>`;
+		} else if (sigil === '$' && /^[a-z][a-z0-9_-]{0,63}$/.test(normalized)) {
+			out += `<a href="/styles/${escapeHtml(normalized)}" class="user-link mention-link mention-link--style">$${escapeHtml(rawToken)}</a>`;
 		} else {
 			out += escapeHtml(`${sigil}${rawToken}`);
 		}

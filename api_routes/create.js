@@ -14,6 +14,7 @@ import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { verifyQStashRequest } from "./utils/qstashVerification.js";
 import { ACTIVE_SHARE_VERSION, mintShareToken, verifyShareToken } from "./utils/shareLink.js";
 import { getStyleInfo } from "./utils/createStyles.js";
+import { expandStyleSigilsForProvider } from "./utils/styleSigils.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -533,6 +534,16 @@ export default function createCreateRoutes({ queries, storage }) {
 		try {
 			const items = await buildAdvancedItems(user.id, safeArgs);
 			const extraArgs = getAdvancedExtraArgs(safeArgs);
+			if (typeof extraArgs.prompt === "string") {
+				const expanded = await expandStyleSigilsForProvider(queries, user.id, extraArgs.prompt);
+				if (!expanded.ok) {
+					return res.status(400).json({
+						error: "Invalid style references",
+						failed_styles: expanded.failed_styles
+					});
+				}
+				extraArgs.prompt = expanded.providerPrompt;
+			}
 			const providerArgs = { items, ...extraArgs };
 			const payload = { method: "advanced_query", args: providerArgs };
 			return res.json({ payload });
@@ -564,6 +575,16 @@ export default function createCreateRoutes({ queries, storage }) {
 			// Backend builds items from boolean args and sends that to the provider; include extra args (e.g. prompt)
 			const items = await buildAdvancedItems(user.id, safeArgs);
 			const extraArgs = getAdvancedExtraArgs(safeArgs);
+			if (typeof extraArgs.prompt === "string") {
+				const expanded = await expandStyleSigilsForProvider(queries, user.id, extraArgs.prompt);
+				if (!expanded.ok) {
+					return res.status(400).json({
+						error: "Invalid style references",
+						failed_styles: expanded.failed_styles
+					});
+				}
+				extraArgs.prompt = expanded.providerPrompt;
+			}
 			const providerArgs = { items, ...extraArgs };
 
 			const providerResponse = await fetch(server.server_url, {
@@ -988,8 +1009,23 @@ export default function createCreateRoutes({ queries, storage }) {
 				CREATION_CREDIT_COST = methodConfig.credits ?? 0.5;
 			}
 
-			// Keep a stable copy of args for storage (meta.args) separate from any provider-only transformations.
+			// argsForProvider is copied into meta.args below; after hydrate / job args, meta.args is synced to argsForJob so DB matches the provider payload.
 			argsForProvider = argsForProvider && typeof argsForProvider === "object" ? { ...argsForProvider } : {};
+
+			// $style tokens in prompt: strip sigils and append "style:" section (all methods — not only advanced_generate).
+			if (typeof argsForProvider.prompt === "string") {
+				const expanded = await expandStyleSigilsForProvider(queries, user.id, argsForProvider.prompt);
+				if (!expanded.ok) {
+					return res.status(400).json({
+						error: "Invalid style references",
+						message: (expanded.failed_styles || [])
+							.map((f) => `${f.token} (${f.reason})`)
+							.join(", "),
+						failed_styles: expanded.failed_styles
+					});
+				}
+				argsForProvider.prompt = expanded.providerPrompt;
+			}
 
 			// Async hint: only for methods that explicitly support async.
 			// Cloud uses QStash-based polling; local mirrors the same behavior with in-process polling.
@@ -1479,6 +1515,7 @@ export default function createCreateRoutes({ queries, storage }) {
 						argsForJob = { ...meta.args, prompt: JSON.stringify({ cast, prompt: promptText }, null, 2) };
 					}
 				}
+				meta.args = argsForJob;
 
 				// Refund previous attempt if it was never refunded (so we don't double-charge)
 				if (existingMeta.credits_refunded !== true && Number(existingMeta.credit_cost) > 0) {
@@ -1550,6 +1587,7 @@ export default function createCreateRoutes({ queries, storage }) {
 					argsForJob = { ...meta.args, prompt: JSON.stringify({ cast, prompt: promptText }, null, 2) };
 				}
 			}
+			meta.args = argsForJob;
 
 			await queries.updateUserCreditsBalance.run(user.id, -CREATION_CREDIT_COST);
 

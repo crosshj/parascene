@@ -1511,8 +1511,6 @@ async function loadCreation() {
 		// Meta-derived values for description section (Server, Method, Duration, Prompt)
 		const args = meta?.args ?? null;
 		const isPlainObject = args && typeof args === 'object' && !Array.isArray(args);
-		const argKeys = isPlainObject ? Object.keys(args) : [];
-		const isPromptOnly = isPlainObject && argKeys.length === 1 && Object.prototype.hasOwnProperty.call(args, 'prompt');
 		// Show raw user prompt when stored (style flow); otherwise show args.prompt
 		const storedUserPrompt = typeof meta?.user_prompt === 'string' ? meta.user_prompt.trim() : '';
 		const promptText = storedUserPrompt !== ''
@@ -1609,33 +1607,11 @@ async function loadCreation() {
 			`;
 		}
 
-		// More Info: show only when the details modal would have content (filtered args or provider error).
+		// More Info: full provider payload (meta.args) and/or provider error.
 		const providerError = meta?.provider_error ?? null;
 		let hasDetailsModalContent = false;
-
-		if (args && !isPromptOnly && isPlainObject) {
-			const hasHistory = historyIds.length > 0;
-			const promptTextInArgs = Object.prototype.hasOwnProperty.call(args, 'prompt') && typeof args.prompt === 'string' ? args.prompt.trim() : '';
-			const hasPromptInArgs = promptTextInArgs.length > 0;
-			const shouldHidePrompt = hasPromptInArgs;
-
-			const filteredArgs = { ...args };
-			if (hasHistory && Object.prototype.hasOwnProperty.call(filteredArgs, 'image_url')) {
-				delete filteredArgs.image_url;
-			}
-			if (hasHistory && Object.prototype.hasOwnProperty.call(filteredArgs, 'input_images')) {
-				delete filteredArgs.input_images;
-			}
-			if (shouldHidePrompt && Object.prototype.hasOwnProperty.call(filteredArgs, 'prompt')) {
-				delete filteredArgs.prompt;
-			}
-			if (Object.prototype.hasOwnProperty.call(filteredArgs, 'model')) {
-				const mv = filteredArgs.model;
-				if (mv != null && String(mv).trim() !== '') {
-					delete filteredArgs.model;
-				}
-			}
-			hasDetailsModalContent = Object.keys(filteredArgs).length > 0;
+		if (isPlainObject && args && Object.keys(args).length > 0) {
+			hasDetailsModalContent = true;
 		}
 		if (!hasDetailsModalContent && providerError && typeof providerError === 'object') {
 			hasDetailsModalContent = true;
