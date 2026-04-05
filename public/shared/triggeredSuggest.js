@@ -14,6 +14,7 @@ const _qs = (() => {
 	return v ? `?v=${encodeURIComponent(v)}` : '';
 })();
 const { getAvatarColor } = await import(`./avatar.js${_qs}`);
+const { getStyleThumbUrl } = await import(`../pages/create-styles.js${_qs}`);
 
 const DEBOUNCE_MS = 130;
 const POPUP_ID = "triggered-suggest-listbox";
@@ -513,16 +514,35 @@ function renderPopup(textarea, mode) {
 			icon.className = isSquare
 				? "triggered-suggest-item-icon triggered-suggest-item-icon--square"
 				: "triggered-suggest-item-icon";
+			const seed =
+				(item?.sublabel || "").replace(/^@/, "").trim() || item?.id || item?.label || "";
+			const setIconLetterFallback = () => {
+				icon.replaceChildren();
+				icon.style.background = getAvatarColor(seed);
+				icon.textContent = String(item?.label || "?").charAt(0).toUpperCase();
+			};
 			if (item?.icon_url) {
 				const img = document.createElement("img");
 				img.src = item.icon_url;
 				img.alt = "";
 				img.className = "triggered-suggest-item-avatar";
 				icon.appendChild(img);
+			} else if (item?.type === "style" && item?.tag) {
+				const thumb = getStyleThumbUrl(String(item.tag).trim());
+				if (thumb) {
+					const img = document.createElement("img");
+					img.src = thumb;
+					img.alt = "";
+					img.className = "triggered-suggest-item-avatar";
+					img.addEventListener("error", () => {
+						setIconLetterFallback();
+					});
+					icon.appendChild(img);
+				} else {
+					setIconLetterFallback();
+				}
 			} else {
-				const seed = (item?.sublabel || "").replace(/^@/, "").trim() || item?.id || item?.label || "";
-				icon.style.background = getAvatarColor(seed);
-				icon.textContent = String(item?.label || "?").charAt(0).toUpperCase();
+				setIconLetterFallback();
 			}
 
 			const text = document.createElement("div");

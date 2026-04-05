@@ -1,6 +1,21 @@
 /**
  * Prompt library — one GET /api/prompt-injections payload; tabs filter by tag_type (client-side).
+ * URL hash: #styles | #personas switches tabs (e.g. /prompt-library#styles).
  */
+
+function applyPromptLibraryTabFromHash() {
+	const raw = (window.location.hash || "").replace(/^#/, "").trim().toLowerCase();
+	if (raw !== "styles" && raw !== "personas") return;
+	const tabsEl = document.querySelector("app-tabs");
+	if (!tabsEl || typeof tabsEl.setActiveTab !== "function") return;
+	tabsEl.setActiveTab(raw, { focus: false });
+}
+
+function scheduleApplyPromptLibraryHash() {
+	queueMicrotask(() => {
+		requestAnimationFrame(() => applyPromptLibraryTabFromHash());
+	});
+}
 
 function escapeHtml(text) {
 	return String(text ?? "")
@@ -29,7 +44,7 @@ function renderRows(tbody, rows, { formatRelativeTime }) {
 			const title = escapeHtml(row.title ?? row.tag ?? "");
 			const vis = escapeHtml(row.visibility ?? "—");
 			const updated = escapeHtml(formatUpdated(row.updated_at, formatRelativeTime));
-			return `<tr class="prompt-library-row" data-prompt-injection-id="${escapeHtml(id)}" tabindex="0">
+			return `<tr class="prompt-library-row" data-prompt-injection-id="${escapeHtml(id)}" data-tag="${tag}" tabindex="0">
 				<td><code class="prompt-library-tag">${tag}</code></td>
 				<td>${title}</td>
 				<td>${vis}</td>
@@ -82,7 +97,7 @@ async function loadPromptLibrary() {
 
 		if (intro) {
 			intro.textContent =
-				"Saved styles and personas you can use in prompts. Choose a row for details (coming soon).";
+				"Saved styles and personas you can use in prompts. Open a style row for its detail page; personas stay in this list for now.";
 		}
 		renderRows(stylesBody, styles, { formatRelativeTime });
 		renderRows(personasBody, personas, { formatRelativeTime });
@@ -92,10 +107,17 @@ async function loadPromptLibrary() {
 		renderRows(stylesBody, [], { formatRelativeTime });
 		renderRows(personasBody, [], { formatRelativeTime });
 	}
+	applyPromptLibraryTabFromHash();
 }
 
+window.addEventListener("hashchange", applyPromptLibraryTabFromHash);
+
 if (document.readyState === "loading") {
-	document.addEventListener("DOMContentLoaded", loadPromptLibrary);
+	document.addEventListener("DOMContentLoaded", () => {
+		scheduleApplyPromptLibraryHash();
+		void loadPromptLibrary();
+	});
 } else {
+	scheduleApplyPromptLibraryHash();
 	void loadPromptLibrary();
 }

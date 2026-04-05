@@ -13,6 +13,7 @@ const ENTRY_FROM_BODY_CLASS = {
 	'pricing-page': 'pricing',
 	'creation-detail-page': 'creation-detail',
 	'creation-edit-page': 'creation-edit',
+	'style-detail-page': 'style-detail',
 	'welcome-page': 'welcome',
 	'help-page': 'help',
 	'static-page': 'landing', // ToS, privacy: nav only

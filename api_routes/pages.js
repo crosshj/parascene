@@ -721,6 +721,56 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 		}
 	});
 
+	// Style detail — /styles/:slug (matches $style links in rendered user text)
+	router.get("/styles/:slug", async (req, res) => {
+		const user = await requireLoggedInUser(req, res);
+		if (!user) return;
+
+		const normalized = String(req.params?.slug ?? "")
+			.trim()
+			.toLowerCase();
+		if (!/^[a-z][a-z0-9_-]{0,63}$/.test(normalized)) {
+			return serveNotFoundPage(req, res, user);
+		}
+
+		try {
+			const fs = await import("fs/promises");
+			const rolePageName = getPageForUser(user);
+			const rolePagePath = path.join(pagesDir, rolePageName);
+			const htmlPath = path.join(pagesDir, "style-detail.html");
+			let pageHtml = await fs.readFile(htmlPath, "utf-8");
+
+			let headerHtml = "";
+			let includeMobileBottomNav = false;
+			try {
+				const roleHtml = await fs.readFile(rolePagePath, "utf-8");
+				const headerMatch = roleHtml.match(/<app-navigation[\s\S]*?<\/app-navigation>/i);
+				if (headerMatch) {
+					headerHtml = headerMatch[0];
+				}
+				includeMobileBottomNav = /<app-navigation-mobile\b/i.test(roleHtml);
+			} catch (error) {
+				// ignore
+			}
+
+			if (headerHtml) {
+				pageHtml = pageHtml.replace("<!--APP_HEADER-->", headerHtml);
+			}
+			pageHtml = pageHtml.replace(
+				"<!--APP_MOBILE_BOTTOM_NAV-->",
+				includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
+			);
+
+			pageHtml = injectCommonHead(pageHtml, getPageTokens(req));
+
+			res.setHeader("Content-Type", "text/html");
+			res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+			return res.send(pageHtml);
+		} catch (error) {
+			return res.status(500).send("Internal server error");
+		}
+	});
+
 	// Create page - single /create route; cookie create_editor=simple → create.html, else → createAdvanced.html
 	const CREATE_EDITOR_COOKIE = "create_editor";
 	router.get("/create", async (req, res) => {

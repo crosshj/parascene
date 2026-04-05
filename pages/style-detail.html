@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+	<title>parascene - style</title>
+	<link rel="stylesheet" href="/pages/style-detail.css{{V}}" />
+</head>
+
+<body data-entry="style-detail" class="style-detail-page">
+	<!--APP_HEADER-->
+
+	<app-modal-profile></app-modal-profile>
+	<app-modal-credits></app-modal-credits>
+	<app-modal-notifications></app-modal-notifications>
+
+	<!--APP_MOBILE_BOTTOM_NAV-->
+
+	<main>
+		<section class="style-detail-route">
+			<div class="style-detail-loading route-loading" data-style-detail-loading>
+				<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
+			</div>
+			<div class="style-detail-panel" data-style-detail-root hidden></div>
+			<div class="style-detail-error route-empty" data-style-detail-error hidden></div>
+		</section>
+	</main>
+
+	<script type="module" src="/pages/style-detail.js{{V}}"></script>
+</body>
+
+</html>

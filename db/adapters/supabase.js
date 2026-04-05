@@ -3227,7 +3227,7 @@ export function openDb() {
 				if (!Number.isFinite(uid) || uid <= 0 || !raw) return null;
 				const { data, error } = await serviceClient
 					.from(prefixedTable("prompt_injections"))
-					.select("id, tag, injection_text, title, owner_user_id, visibility")
+					.select("id, tag, injection_text, title, description, owner_user_id, visibility")
 					.eq("tag_type", "style")
 					.eq("is_active", true)
 					.is("deleted_at", null)

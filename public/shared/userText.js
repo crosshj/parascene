@@ -69,7 +69,7 @@ function renderPlainUserTextSegment(text) {
 	if (!transformed) return '';
 
 	// Conservative personality / tag / style token pattern:
-	// - @ user, # tag channel, $ style (detail URL placeholder until route is finalized)
+	// - @ user, # tag channel, $ style → /styles/:slug
 	// - Bounded so we don't transform emails/embedded tokens.
 	const tokenRe = /(^|[^a-zA-Z0-9_-])([@#$])([a-zA-Z0-9][a-zA-Z0-9_-]{0,63})(?=$|[^a-zA-Z0-9_-])/g;
 	let out = '';

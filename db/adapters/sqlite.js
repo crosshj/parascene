@@ -2328,7 +2328,7 @@ export async function openDb() {
 				const raw = String(slug ?? "").trim();
 				if (!Number.isFinite(uid) || uid <= 0 || !raw) return Promise.resolve(null);
 				const stmt = db.prepare(
-					`SELECT id, tag, injection_text, title, owner_user_id, visibility
+					`SELECT id, tag, injection_text, title, description, owner_user_id, visibility
 					 FROM prompt_injections
 					 WHERE tag_type = 'style'
 					   AND is_active = 1
