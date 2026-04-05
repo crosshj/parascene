@@ -323,7 +323,11 @@ class AppRouteCreate extends HTMLElement {
         </div>
         </div>
         <footer class="create-page-footer">
-          <a href="/create" class="create-switch-to-basic" data-create-switch-to-basic>basic mode</a>
+          <nav class="create-page-footer-nav" aria-label="More create options">
+            <a href="/prompt-library" class="create-page-footer-link create-page-footer-link--secondary">Prompt Library</a>
+            <span class="create-page-footer-sep" aria-hidden="true">·</span>
+            <a href="/create" class="create-page-footer-link create-switch-to-basic" data-create-switch-to-basic>Basic mode</a>
+          </nav>
         </footer>
         </div>
       </div>

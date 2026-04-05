@@ -70,6 +70,7 @@ class AppNavigationMobile extends HTMLElement {
 		}
 
 		const isServerSentPage = window.location.pathname === '/pricing' ||
+			window.location.pathname === '/prompt-library' ||
 			window.location.pathname.startsWith('/chat/') ||
 			/^\/creations\/\d+(\/(edit|mutat|mutate))?$/.test(window.location.pathname) ||
 			window.location.pathname.startsWith('/s/') ||
@@ -128,6 +129,9 @@ class AppNavigationMobile extends HTMLElement {
 			currentRoute = null;
 		}
 		if (pathname === '/pricing') {
+			currentRoute = null;
+		}
+		if (pathname === '/prompt-library') {
 			currentRoute = null;
 		}
 		// Create is a standalone page at /create

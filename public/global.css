@@ -569,7 +569,8 @@ section {
 /* Allow sticky bulk bar to stick to viewport: avoid overflow containment when section contains creations route */
 /* Connect roster: same — section { overflow-x: auto } otherwise pairs with overflow-y and traps vertical scroll on mobile */
 section:has(.creations-route),
-section:has(.servers-route) {
+section:has(.servers-route),
+section:has(.prompt-library-route) {
 	overflow: visible;
 }
 

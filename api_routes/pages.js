@@ -766,6 +766,47 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 		}
 	});
 
+	router.get("/prompt-library", async (req, res) => {
+		const user = await requireLoggedInUser(req, res);
+		if (!user) return;
+
+		try {
+			const fs = await import("fs/promises");
+			const rolePageName = getPageForUser(user);
+			const rolePagePath = path.join(pagesDir, rolePageName);
+			const htmlPath = path.join(pagesDir, "prompt-library.html");
+			let pageHtml = await fs.readFile(htmlPath, "utf-8");
+
+			let headerHtml = "";
+			let includeMobileBottomNav = false;
+			try {
+				const roleHtml = await fs.readFile(rolePagePath, "utf-8");
+				const headerMatch = roleHtml.match(/<app-navigation[\s\S]*?<\/app-navigation>/i);
+				if (headerMatch) {
+					headerHtml = headerMatch[0];
+				}
+				includeMobileBottomNav = /<app-navigation-mobile\b/i.test(roleHtml);
+			} catch (error) {
+				// ignore
+			}
+
+			if (headerHtml) {
+				pageHtml = pageHtml.replace("<!--APP_HEADER-->", headerHtml);
+			}
+			pageHtml = pageHtml.replace(
+				"<!--APP_MOBILE_BOTTOM_NAV-->",
+				includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
+			);
+
+			pageHtml = injectCommonHead(pageHtml, getPageTokens(req));
+
+			res.setHeader("Content-Type", "text/html");
+			return res.send(pageHtml);
+		} catch (error) {
+			return res.status(500).send("Internal server error");
+		}
+	});
+
 	router.get("/create/blog/:id", async (req, res) => {
 		const user = await requireLoggedInUser(req, res);
 		if (!user) return;
@@ -1072,6 +1113,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			req.path.startsWith("/creations/") ||
 			req.path.startsWith("/help") ||
 			req.path === "/welcome" ||
+			req.path === "/prompt-library" ||
 			req.path === "/user" ||
 			req.path.startsWith("/user/") ||
 			req.path === "/me" ||

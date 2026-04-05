@@ -1676,6 +1676,9 @@ export function openDb() {
 		selectTemplates: {
 			all: async () => [...templates]
 		},
+		selectPromptInjectionsForLibrary: {
+			all: async (_userId) => []
+		},
 		insertCreatedImage: {
 			run: async (userId, filename, filePath, width, height, color, status = 'creating') => {
 				const image = {

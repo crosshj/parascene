@@ -2276,6 +2276,25 @@ export async function openDb() {
 				return Promise.resolve(stmt.all());
 			}
 		},
+		selectPromptInjectionsForLibrary: {
+			all: async (userId) => {
+				const uid = Number(userId);
+				if (!Number.isFinite(uid) || uid <= 0) return Promise.resolve([]);
+				const stmt = db.prepare(
+					`SELECT id, tag, tag_type, title, visibility, owner_user_id, updated_at, is_active, deleted_at
+					 FROM prompt_injections
+					 WHERE is_active = 1
+					   AND deleted_at IS NULL
+					   AND (
+						 owner_user_id IS NULL
+						 OR owner_user_id = ?
+						 OR visibility IN ('public', 'unlisted')
+					   )
+					 ORDER BY tag_type ASC, tag ASC`
+				);
+				return Promise.resolve(stmt.all(uid));
+			}
+		},
 		insertCreatedImage: {
 			run: async (userId, filename, filePath, width, height, color, status = 'creating', meta = null) => {
 				const toJsonText = (value) => {

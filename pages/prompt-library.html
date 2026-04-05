@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+	<title>parascene - prompt library</title>
+	<link rel="stylesheet" href="/pages/creations.css{{V}}" />
+	<link rel="stylesheet" href="/pages/prompt-library.css{{V}}" />
+</head>
+
+<body class="prompt-library-page" data-entry="prompt-library">
+	<!--APP_HEADER-->
+
+	<app-modal-profile></app-modal-profile>
+	<app-modal-credits></app-modal-credits>
+	<app-modal-notifications></app-modal-notifications>
+
+	<!--APP_MOBILE_BOTTOM_NAV-->
+
+	<main>
+		<section class="prompt-library-section">
+			<div class="prompt-library-route" data-prompt-library-root>
+				<div class="route-header">
+					<h3>Prompt Library</h3>
+					<p class="prompt-library-intro" data-prompt-library-intro>Saved styles and personas you can use in prompts. Loading…</p>
+				</div>
+
+				<app-tabs active="styles">
+					<tab data-id="styles" label="Styles" default>
+						<div class="prompt-library-table-wrap">
+							<table class="prompt-library-table" aria-label="Styles">
+								<thead>
+									<tr>
+										<th scope="col">Tag</th>
+										<th scope="col">Title</th>
+										<th scope="col">Visibility</th>
+										<th scope="col">Updated</th>
+									</tr>
+								</thead>
+								<tbody data-prompt-library-styles-tbody></tbody>
+							</table>
+						</div>
+					</tab>
+					<tab data-id="personas" label="Personas">
+						<div class="prompt-library-table-wrap">
+							<table class="prompt-library-table" aria-label="Personas">
+								<thead>
+									<tr>
+										<th scope="col">Tag</th>
+										<th scope="col">Title</th>
+										<th scope="col">Visibility</th>
+										<th scope="col">Updated</th>
+									</tr>
+								</thead>
+								<tbody data-prompt-library-personas-tbody></tbody>
+							</table>
+						</div>
+					</tab>
+				</app-tabs>
+			</div>
+		</section>
+	</main>
+
+	<script type="module" src="/pages/prompt-library.js{{V}}"></script>
+</body>
+
+</html>

@@ -70,6 +70,7 @@ class AppNavigation extends HTMLElement {
 		this._onChatUnreadRefresh = this._onChatUnreadRefresh.bind(this);
 		this.currentRoute = null;
 		this.routes = [];
+		this.externalNavLinks = [];
 		this.authLinks = [];
 		this.defaultRoute = null;
 		this.hasParsedRoutes = false;
@@ -252,6 +253,18 @@ class AppNavigation extends HTMLElement {
 			this.routes = [];
 		}
 
+		// Full-page links (e.g. /prompt-library from admin shell — not an SPA data-route section)
+		const externalNavChildren = children.filter(
+			(child) => child.tagName === 'A' && child.classList.contains('nav-external-link')
+		);
+		this.externalNavLinks = externalNavChildren.map((link) => ({
+			href: link.getAttribute('href') || '#',
+			label: link.textContent.trim()
+		}));
+		if (!Array.isArray(this.externalNavLinks)) {
+			this.externalNavLinks = [];
+		}
+
 		// Parse auth links (links with class header-auth-link)
 		const authLinks = children.filter(child =>
 			child.tagName === 'A' && child.classList.contains('header-auth-link')
@@ -276,13 +289,12 @@ class AppNavigation extends HTMLElement {
 		const navLinks = this.querySelectorAll('.header-nav .nav-link, .mobile-menu .nav-link');
 		navLinks.forEach(link => {
 			link.addEventListener('click', (e) => {
-				e.preventDefault();
 				const route = link.getAttribute('data-route');
-				if (route) {
-					this.navigateToRoute(route);
-					if (link.closest('.mobile-menu')) {
-						this.closeMobileMenu();
-					}
+				if (!route) return;
+				e.preventDefault();
+				this.navigateToRoute(route);
+				if (link.closest('.mobile-menu')) {
+					this.closeMobileMenu();
 				}
 			});
 		});
@@ -293,6 +305,7 @@ class AppNavigation extends HTMLElement {
 		// If so, use full page navigation for ANY route change
 		const isServerSentPage = window.location.pathname === '/create' ||
 			window.location.pathname === '/pricing' ||
+			window.location.pathname === '/prompt-library' ||
 			window.location.pathname.startsWith('/chat/') ||
 			/^\/creations\/\d+(\/(edit|mutat|mutate))?$/.test(window.location.pathname) ||
 			window.location.pathname.startsWith('/s/') ||
@@ -841,7 +854,8 @@ class AppNavigation extends HTMLElement {
 
 		// If we're on a server-sent page (like creation detail, pricing), don't handle route changes
 		// Any navigation should result in a full page load
-		const isServerSentPage = pathname === '/pricing' ||
+		const isServerSentPage = 			pathname === '/pricing' ||
+			pathname === '/prompt-library' ||
 			pathname.startsWith('/chat/') ||
 			/^\/creations\/\d+(\/(edit|mutat|mutate))?$/.test(pathname) ||
 			pathname.startsWith('/s/') ||
@@ -1217,6 +1231,9 @@ class AppNavigation extends HTMLElement {
 				// Generate clean URL path (e.g., /feed, /explore)
 				return html`<a href="/${routeId}" class="nav-link" data-route="${routeId}">${routeLabel}${chatBadge}</a>`;
 				}).join('')}
+				${(this.externalNavLinks || []).map((ext) =>
+				html`<a href="${ext.href}" class="nav-link nav-external-link">${ext.label}</a>`
+				).join('')}
 			</nav>
 			${showCreate ? html`
 			<a href="/create" class="action-item create-button btn-primary">
@@ -1312,6 +1329,9 @@ class AppNavigation extends HTMLElement {
 						: '';
 				return html`<a href="/${routeId}" class="nav-link" data-route="${routeId}">${routeLabel}${chatBadge}</a>`;
 				}).join('')}
+				${(this.externalNavLinks || []).map((ext) =>
+				html`<a href="${ext.href}" class="nav-link nav-external-link">${ext.label}</a>`
+				).join('')}
 				<a href="${getHelpHref("/help")}" class="mobile-menu-help">Help</a>
 			</nav>
 			${hasMobileActions ? html`

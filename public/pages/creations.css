@@ -12,18 +12,50 @@ body.create-page main {
 	max-width: 600px;
 	margin-inline: auto;
 	margin-top: 7rem;
-	padding-top: 1rem;
+	padding-top: 1.25rem;
 	border-top: 1px solid var(--border, rgba(255, 255, 255, 0.1));
 	text-align: center;
 }
 
-.create-page-footer a {
-	color: var(--text-muted, rgba(255, 255, 255, 0.6));
-	font-size: 0.875rem;
+.create-page-footer-nav {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: center;
+	gap: 0.35rem 0.65rem;
+	font-size: 0.8125rem;
+	letter-spacing: 0.01em;
 }
 
-.create-page-footer a:hover {
+.create-page-footer-link {
+	color: var(--text-muted);
+	text-decoration: none;
+	font-weight: 500;
+	transition: color 0.15s ease;
+}
+
+.create-page-footer-link:hover {
 	color: var(--text);
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+
+/* Secondary footer link (e.g. prompt library) — mode switch stays primary */
+.create-page-footer-link--secondary {
+	font-weight: 400;
+	opacity: 0.92;
+}
+
+.create-page-footer-link--secondary:hover {
+	opacity: 1;
+}
+
+.create-page-footer-sep {
+	color: color-mix(in srgb, var(--text-muted) 45%, transparent);
+	user-select: none;
+	pointer-events: none;
+	padding: 0 0.35rem;
+	font-weight: 300;
 }
 
 .create-content {

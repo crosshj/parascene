@@ -3172,6 +3172,29 @@ export function openDb() {
 				return data ?? [];
 			}
 		},
+		/** Prompt injections visible in the prompt library: global, user's own, or public/unlisted. */
+		selectPromptInjectionsForLibrary: {
+			all: async (userId) => {
+				const uid = Number(userId);
+				if (!Number.isFinite(uid) || uid <= 0) return [];
+				const { data, error } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.select(
+						"id, tag, tag_type, title, visibility, owner_user_id, updated_at, is_active, deleted_at"
+					)
+					.eq("is_active", true)
+					.is("deleted_at", null)
+					.or(`owner_user_id.is.null,owner_user_id.eq.${uid},visibility.eq.public,visibility.eq.unlisted`);
+				if (error) throw error;
+				const rows = data ?? [];
+				rows.sort((a, b) => {
+					const t = String(a.tag_type ?? "").localeCompare(String(b.tag_type ?? ""));
+					if (t !== 0) return t;
+					return String(a.tag ?? "").localeCompare(String(b.tag ?? ""));
+				});
+				return rows;
+			}
+		},
 		insertCreatedImage: {
 			run: async (userId, filename, filePath, width, height, color, status = "creating", meta = null) => {
 				// Use serviceClient to bypass RLS for backend operations
