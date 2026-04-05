@@ -365,7 +365,7 @@ export function textWithCreationLinks(text) {
 		const { url, trailing } = splitUrlTrailingPunctuation(rawUrl);
 		const relativePath = getParasceneRelativePath(url);
 		if (relativePath) {
-			out += `<a href="${escapeHtml(relativePath)}" class="user-link creation-link">${escapeHtml(relativePath)}</a>`;
+			out += `<a href="${escapeHtml(relativePath)}" class="user-link creation-link" data-creation-link-original="${escapeHtml(url)}">${escapeHtml(relativePath)}</a>`;
 			out += escapeHtml(trailing);
 			lastIndex = start + rawUrl.length;
 			continue;
@@ -404,7 +404,7 @@ export function textWithCreationLinks(text) {
 
 		// Generic http(s) URL: turn into a clickable link (same styling as other user links).
 		const safeUrl = escapeHtml(url);
-		out += `<a href="${safeUrl}" class="user-link creation-link" target="_blank" rel="noopener noreferrer">${safeUrl}</a>`;
+		out += `<a href="${safeUrl}" class="user-link creation-link" target="_blank" rel="noopener noreferrer" data-creation-link-original="${escapeHtml(url)}">${safeUrl}</a>`;
 		out += escapeHtml(trailing);
 		lastIndex = start + rawUrl.length;
 	}
@@ -723,56 +723,93 @@ function trimWhitespaceOnlyTextNodes(el) {
 }
 
 /**
- * @param {string} creationId
+ * Plain title for display in the embed hover bar (empty if no title).
+ * @param {object | null} data - Creation payload from GET /api/create/images/:id (or null when unavailable).
  * @returns {string}
  */
-function chatCreationEmbedDetailLinkHtml(creationId) {
-	const detailPageHref = `/creations/${encodeURIComponent(creationId)}`;
+function creationEmbedTitleDisplayText(data) {
+	if (!data || data._error) {
+		return '';
+	}
+	const titleRaw = typeof data.title === 'string' ? data.title.trim() : '';
+	return titleRaw;
+}
+
+/**
+ * Top bar: title, optional source URL line, open-creation control (image + video embeds).
+ * @param {{ creationId: string, titleText: string, sourceLabel: string, barStatic?: boolean }} opts
+ * @returns {string}
+ */
+function chatCreationEmbedMediaHoverBarHtml({
+	creationId,
+	titleText,
+	sourceLabel,
+	barStatic = false,
+}) {
+	const staticClass = barStatic ? ' connect-chat-creation-embed-media-hover-bar--static' : '';
+	const titleRaw = typeof titleText === 'string' ? titleText.trim() : '';
+	const source = (sourceLabel || '').trim();
+	let titleLine;
+	if (titleRaw === 'Still processing…') {
+		titleLine = `<span class="connect-chat-creation-embed-hover-bar-title connect-chat-creation-embed-hover-bar-title--pending">${escapeHtml(titleRaw)}</span>`;
+	} else if (titleRaw) {
+		titleLine = `<span class="connect-chat-creation-embed-hover-bar-title">${escapeHtml(titleRaw)}</span>`;
+	} else {
+		titleLine =
+			'<span class="connect-chat-creation-embed-hover-bar-title connect-chat-creation-embed-hover-bar-title--untitled"><em>untitled</em></span>';
+	}
+	const sourceLine = source
+		? `<span class="connect-chat-creation-embed-hover-bar-source" title="${escapeHtml(source)}">${escapeHtml(source)}</span>`
+		: '';
 	return (
-		`<a class="connect-chat-creation-embed-detail-link" href="${escapeHtml(detailPageHref)}" aria-label="Open creation" title="Open creation">${linkIcon2()}</a>`
+		`<div class="connect-chat-creation-embed-media-hover-bar${staticClass}">` +
+		`<div class="connect-chat-creation-embed-hover-bar-main">` +
+		titleLine +
+		sourceLine +
+		`</div>` +
+		`${chatCreationEmbedDetailLinkHtml(creationId, { variant: 'hover-bar' })}` +
+		`</div>`
 	);
 }
 
 /**
- * Same title row as a successful embed (title or italic untitled).
- * @param {object | null} data - Creation payload from GET /api/create/images/:id (or null when unavailable).
- * @returns {string}
+ * @param {string} creationId
+ * @param {{ variant?: 'hover-bar' }} [opts]
  */
-function creationEmbedTitleRowHtmlFromData(data) {
-	if (!data || data._error) {
-		return '<div class="connect-chat-creation-embed-title"><em>untitled</em></div>';
-	}
-	const titleRaw = typeof data.title === 'string' ? data.title.trim() : '';
-	return titleRaw
-		? `<div class="connect-chat-creation-embed-title">${escapeHtml(titleRaw)}</div>`
-		: '<div class="connect-chat-creation-embed-title"><em>untitled</em></div>';
+function chatCreationEmbedDetailLinkHtml(creationId, opts = {}) {
+	const detailPageHref = `/creations/${encodeURIComponent(creationId)}`;
+	const variantClass =
+		opts.variant === 'hover-bar' ? ' connect-chat-creation-embed-detail-link--hover-bar' : '';
+	return (
+		`<a class="connect-chat-creation-embed-detail-link${variantClass}" href="${escapeHtml(detailPageHref)}" aria-label="Open creation" title="Open creation">${linkIcon2()}</a>`
+	);
 }
 
 /**
  * Same visuals as `.route-media.route-media-error` / moderated icon on feed and creation detail.
- * Title row matches a loaded embed (API title or untitled); the tile communicates failure/moderation.
- * @param {{ moderated?: boolean, titleHtml?: string, creationId?: string }} opts
+ * Title appears in the top bar (static); the tile communicates failure/moderation.
+ * @param {{ moderated?: boolean, titleText?: string, creationId?: string }} opts
  * @returns {string}
  */
-function chatCreationEmbedFailureHtml({ moderated = false, titleHtml, creationId } = {}) {
+function chatCreationEmbedFailureHtml({ moderated = false, titleText = '', creationId } = {}) {
 	const modClass = moderated ? ' route-media-error-moderated' : '';
 	const iconHtml = moderated
 		? `<span class="route-media-error-moderated-icon" role="img" aria-label="Content moderated">${eyeHiddenIcon()}</span>`
 		: '';
-	const titleRow =
-		titleHtml && String(titleHtml).trim()
-			? titleHtml
-			: '<div class="connect-chat-creation-embed-title"><em>untitled</em></div>';
-	const detailLinkHtml =
-		creationId && String(creationId).trim()
-			? chatCreationEmbedDetailLinkHtml(String(creationId).trim())
-			: '';
+	const id = creationId && String(creationId).trim() ? String(creationId).trim() : '';
+	const barHtml = id
+		? chatCreationEmbedMediaHoverBarHtml({
+				creationId: id,
+				titleText: typeof titleText === 'string' ? titleText : '',
+				sourceLabel: '',
+				barStatic: true,
+			})
+		: '';
 	return (
-		`<div class="connect-chat-creation-embed-media">` +
-		`<div class="connect-chat-creation-embed-inner">` +
-		`<div class="route-media route-media-error${modClass}" aria-hidden="true">${iconHtml}</div></div>` +
-		`${detailLinkHtml}</div>` +
-		`${titleRow}`
+		`<div class="connect-chat-creation-embed-media connect-chat-creation-embed-media--has-hover-bar">` +
+		`<div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--error-layout">` +
+		barHtml +
+		`<div class="route-media route-media-error connect-chat-creation-embed-route-error${modClass}" aria-hidden="true">${iconHtml}</div></div></div>`
 	);
 }
 
@@ -788,15 +825,12 @@ function bindChatCreationEmbedMediaLoadError(wrap, mediaEl) {
 		if (!wrap.parentNode) return;
 		wrap.classList.remove('connect-chat-creation-embed--loading', 'connect-chat-creation-embed--pending');
 		wrap.classList.add('connect-chat-creation-embed--error');
-		const titleEl = wrap.querySelector('.connect-chat-creation-embed-title');
-		const preservedTitle =
-			titleEl && titleEl.outerHTML
-				? titleEl.outerHTML
-				: '<div class="connect-chat-creation-embed-title"><em>untitled</em></div>';
+		const titleEl = wrap.querySelector('.connect-chat-creation-embed-hover-bar-title');
+		const titlePlain = titleEl && titleEl.textContent ? titleEl.textContent.trim() : '';
 		const id = String(wrap.getAttribute('data-creation-id') || '').trim();
 		wrap.innerHTML = chatCreationEmbedFailureHtml({
 			moderated: false,
-			titleHtml: preservedTitle,
+			titleText: titlePlain,
 			creationId: id,
 		});
 		trimWhitespaceOnlyTextNodes(wrap);
@@ -807,7 +841,8 @@ function bindChatCreationEmbedMediaLoadError(wrap, mediaEl) {
 }
 
 /**
- * Touch: long-press reveals the “open creation” control (see global.css). Desktop uses :hover.
+ * Long-press reveals the top bar (title / URL / open-creation). Desktop with a mouse uses CSS :hover only.
+ * Uses Pointer Events + movement threshold so tiny touchmove jitter on iOS does not cancel the timer.
  * @param {HTMLElement} wrap - `.connect-chat-creation-embed`
  */
 function attachChatCreationEmbedDetailLinkReveal(wrap) {
@@ -815,15 +850,21 @@ function attachChatCreationEmbedDetailLinkReveal(wrap) {
 	if (wrap.dataset.chatCreationEmbedDetailReveal === '1') return;
 	if (!wrap.querySelector('.connect-chat-creation-embed-detail-link')) return;
 	if (typeof window === 'undefined' || !window.matchMedia) return;
-	/* Desktop mouse: CSS :hover only. Touch / coarse pointer: long-press to reveal. */
-	const mqHover = window.matchMedia('(hover: hover)');
-	const mqCoarse = window.matchMedia('(pointer: coarse)');
-	if (mqHover.matches && !mqCoarse.matches) return;
+	/* Primary input is a fine pointer + hover (real mouse): rely on CSS :hover only. */
+	const desktopMouse = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+	if (desktopMouse) return;
 
 	wrap.dataset.chatCreationEmbedDetailReveal = '1';
 
 	const LONG_MS = 500;
+	/* Cancel long-press only if finger moves past this (avoids iOS touchmove noise while holding). */
+	const MOVE_THRESHOLD_PX = 20;
+	const MOVE_THRESHOLD_SQ = MOVE_THRESHOLD_PX * MOVE_THRESHOLD_PX;
+
 	let timer = null;
+	let activePointerId = null;
+	let startX = 0;
+	let startY = 0;
 	/** @type {((e: PointerEvent) => void) | null} */
 	let docListener = null;
 
@@ -856,43 +897,69 @@ function attachChatCreationEmbedDetailLinkReveal(wrap) {
 		document.addEventListener('pointerdown', docListener, true);
 	};
 
+	const linkContains = (target) => {
+		const link = wrap.querySelector('.connect-chat-creation-embed-detail-link');
+		return !!(link && target && link.contains(target));
+	};
+
+	const onPointerDown = (e) => {
+		if (e.pointerType === 'mouse' || e.button !== 0) return;
+		if (linkContains(/** @type {Node} */ (e.target))) return;
+		clearTimer();
+		activePointerId = e.pointerId;
+		startX = e.clientX;
+		startY = e.clientY;
+		try {
+			wrap.setPointerCapture(e.pointerId);
+		} catch {
+			// ignore
+		}
+		timer = window.setTimeout(() => {
+			timer = null;
+			wrap.classList.add('connect-chat-creation-embed--link-revealed');
+			addDocListener();
+		}, LONG_MS);
+	};
+
+	const onPointerMove = (e) => {
+		if (activePointerId === null || e.pointerId !== activePointerId) return;
+		const dx = e.clientX - startX;
+		const dy = e.clientY - startY;
+		if (dx * dx + dy * dy > MOVE_THRESHOLD_SQ) {
+			clearTimer();
+		}
+	};
+
+	const endPointer = (e) => {
+		if (activePointerId === null || e.pointerId !== activePointerId) return;
+		activePointerId = null;
+		clearTimer();
+		try {
+			if (typeof wrap.hasPointerCapture === 'function' && wrap.hasPointerCapture(e.pointerId)) {
+				wrap.releasePointerCapture(e.pointerId);
+			}
+		} catch {
+			// ignore
+		}
+	};
+
+	wrap.addEventListener('pointerdown', onPointerDown, { passive: true });
+	wrap.addEventListener('pointermove', onPointerMove, { passive: true });
+	wrap.addEventListener('pointerup', endPointer, { passive: true });
+	wrap.addEventListener('pointercancel', endPointer, { passive: true });
+	wrap.addEventListener('lostpointercapture', endPointer, { passive: true });
+
+	/* Android Chrome: long-press on <video> opens “Download / Open in browser”. Suppress on media only;
+	   allow the top bar (title, URL, open link) to keep text/link menus. */
 	wrap.addEventListener(
-		'touchstart',
+		'contextmenu',
 		(e) => {
-			const link = wrap.querySelector('.connect-chat-creation-embed-detail-link');
-			if (link && link.contains(e.target)) return;
-			clearTimer();
-			timer = window.setTimeout(() => {
-				timer = null;
-				wrap.classList.add('connect-chat-creation-embed--link-revealed');
-				addDocListener();
-			}, LONG_MS);
+			const t = e.target;
+			if (!(t instanceof Element)) return;
+			if (t.closest('.connect-chat-creation-embed-media-hover-bar')) return;
+			e.preventDefault();
 		},
-		{ passive: true }
-	);
-
-	wrap.addEventListener(
-		'touchmove',
-		() => {
-			clearTimer();
-		},
-		{ passive: true }
-	);
-
-	wrap.addEventListener(
-		'touchend',
-		() => {
-			clearTimer();
-		},
-		{ passive: true }
-	);
-
-	wrap.addEventListener(
-		'touchcancel',
-		() => {
-			clearTimer();
-		},
-		{ passive: true }
+		true
 	);
 }
 
@@ -968,9 +1035,7 @@ export function hydrateChatCreationEmbeds(rootEl) {
 		wrap.className =
 			'connect-chat-creation-embed connect-chat-creation-embed--loading connect-chat-creation-embed--square';
 		wrap.setAttribute('data-creation-id', creationId);
-		wrap.innerHTML =
-			'<div class="connect-chat-creation-embed-skeleton" aria-hidden="true"></div>' +
-			'<div class="connect-chat-creation-embed-title connect-chat-creation-embed-title--placeholder" aria-hidden="true"></div>';
+		wrap.innerHTML = '<div class="connect-chat-creation-embed-skeleton" aria-hidden="true"></div>';
 		a.insertAdjacentElement('afterend', wrap);
 
 		void fetchCreationForChatEmbed(creationId, shareOpts).then((data) => {
@@ -981,7 +1046,7 @@ export function hydrateChatCreationEmbeds(rootEl) {
 				wrap.classList.add('connect-chat-creation-embed--error');
 				wrap.innerHTML = chatCreationEmbedFailureHtml({
 					moderated: false,
-					titleHtml: creationEmbedTitleRowHtmlFromData(null),
+					titleText: '',
 					creationId,
 				});
 				trimWhitespaceOnlyTextNodes(wrap);
@@ -990,14 +1055,14 @@ export function hydrateChatCreationEmbeds(rootEl) {
 				return;
 			}
 
-			const titleRowHtml = creationEmbedTitleRowHtmlFromData(data);
+			const titleDisplay = creationEmbedTitleDisplayText(data);
 
 			const moderated = !!data.is_moderated_error;
 			if (moderated) {
 				wrap.classList.add('connect-chat-creation-embed--error');
 				wrap.innerHTML = chatCreationEmbedFailureHtml({
 					moderated: true,
-					titleHtml: titleRowHtml,
+					titleText: titleDisplay,
 					creationId,
 				});
 				trimWhitespaceOnlyTextNodes(wrap);
@@ -1033,7 +1098,7 @@ export function hydrateChatCreationEmbeds(rootEl) {
 				wrap.classList.add('connect-chat-creation-embed--error');
 				wrap.innerHTML = chatCreationEmbedFailureHtml({
 					moderated: false,
-					titleHtml: titleRowHtml,
+					titleText: titleDisplay,
 					creationId,
 				});
 				trimWhitespaceOnlyTextNodes(wrap);
@@ -1046,14 +1111,25 @@ export function hydrateChatCreationEmbeds(rootEl) {
 				if (isPending) {
 					wrap.classList.add('connect-chat-creation-embed--pending');
 					wrap.innerHTML =
-						'<div class="connect-chat-creation-embed-title">Still processing…</div>';
+						'<div class="connect-chat-creation-embed-media connect-chat-creation-embed-media--has-hover-bar">' +
+						'<div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--pending">' +
+						chatCreationEmbedMediaHoverBarHtml({
+							creationId,
+							titleText: 'Still processing…',
+							sourceLabel: '',
+							barStatic: true,
+						}) +
+						'<div class="connect-chat-creation-embed-skeleton connect-chat-creation-embed-skeleton--pending-fill" aria-hidden="true"></div>' +
+						'</div></div>';
+					trimWhitespaceOnlyTextNodes(wrap);
+					attachChatCreationEmbedDetailLinkReveal(wrap);
 					wrap.setAttribute('role', 'status');
 					return;
 				}
 				wrap.classList.add('connect-chat-creation-embed--error');
 				wrap.innerHTML = chatCreationEmbedFailureHtml({
 					moderated: false,
-					titleHtml: titleRowHtml,
+					titleText: titleDisplay,
 					creationId,
 				});
 				trimWhitespaceOnlyTextNodes(wrap);
@@ -1063,11 +1139,19 @@ export function hydrateChatCreationEmbeds(rootEl) {
 			}
 
 			if (mediaType === 'video' && videoUrl) {
-				const detailLinkHtml = chatCreationEmbedDetailLinkHtml(creationId);
+				const sourceLabelRaw =
+					(a.getAttribute('data-creation-link-original') || '').trim() ||
+					(a.getAttribute('href') || '').trim() ||
+					'';
+				const hoverBarHtml = chatCreationEmbedMediaHoverBarHtml({
+					creationId,
+					titleText: titleDisplay,
+					sourceLabel: sourceLabelRaw,
+				});
 				// Keep --square on video too so it matches image dimensions (CSS handles square video frame).
 				const poster = url ? ` poster="${escapeHtml(url)}"` : '';
 				/* No whitespace between tags — otherwise pre-wrap line-height creates stray text nodes and gaps. */
-				wrap.innerHTML = `<div class="connect-chat-creation-embed-media"><div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--video${nsfwClass}"${nsfwDataAttr}><video class="connect-chat-creation-embed-video" autoplay muted loop controls playsinline preload="metadata" src="${escapeHtml(videoUrl)}"${poster}></video></div>${detailLinkHtml}</div>${titleRowHtml}`;
+				wrap.innerHTML = `<div class="connect-chat-creation-embed-media connect-chat-creation-embed-media--has-hover-bar"><div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--video${nsfwClass}"${nsfwDataAttr}>${hoverBarHtml}<video class="connect-chat-creation-embed-video" autoplay muted loop controls playsinline controlslist="nodownload" preload="metadata" src="${escapeHtml(videoUrl)}"${poster}></video></div></div>`;
 				trimWhitespaceOnlyTextNodes(wrap);
 				const vid = wrap.querySelector('.connect-chat-creation-embed-video');
 				if (vid instanceof HTMLVideoElement) {
@@ -1078,10 +1162,18 @@ export function hydrateChatCreationEmbeds(rootEl) {
 			}
 
 			if (url) {
-				const detailLinkHtml = chatCreationEmbedDetailLinkHtml(creationId);
+				const sourceLabelRaw =
+					(a.getAttribute('data-creation-link-original') || '').trim() ||
+					(a.getAttribute('href') || '').trim() ||
+					'';
+				const hoverBarHtml = chatCreationEmbedMediaHoverBarHtml({
+					creationId,
+					titleText: titleDisplay,
+					sourceLabel: sourceLabelRaw,
+				});
 				const alt =
 					titleRaw.length > 0 ? escapeHtml(titleRaw) : 'untitled';
-				wrap.innerHTML = `<div class="connect-chat-creation-embed-media"><div class="connect-chat-creation-embed-inner${nsfwClass}"${nsfwDataAttr}><img class="connect-chat-creation-embed-img" src="${escapeHtml(url)}" alt="${alt}" loading="lazy" decoding="async" /></div>${detailLinkHtml}</div>${titleRowHtml}`;
+				wrap.innerHTML = `<div class="connect-chat-creation-embed-media connect-chat-creation-embed-media--has-hover-bar"><div class="connect-chat-creation-embed-inner${nsfwClass}"${nsfwDataAttr}>${hoverBarHtml}<img class="connect-chat-creation-embed-img" src="${escapeHtml(url)}" alt="${alt}" loading="lazy" decoding="async" /></div></div>`;
 				trimWhitespaceOnlyTextNodes(wrap);
 				const img = wrap.querySelector('.connect-chat-creation-embed-img');
 				if (img instanceof HTMLImageElement) {
@@ -1094,7 +1186,7 @@ export function hydrateChatCreationEmbeds(rootEl) {
 			wrap.classList.add('connect-chat-creation-embed--error');
 			wrap.innerHTML = chatCreationEmbedFailureHtml({
 				moderated: false,
-				titleHtml: titleRowHtml,
+				titleText: titleDisplay,
 				creationId,
 			});
 			trimWhitespaceOnlyTextNodes(wrap);

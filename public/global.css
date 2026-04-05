@@ -6342,7 +6342,7 @@ body.blog-edit-page .blog-edit-route {
 	line-height: 0;
 }
 
-/* Image/video frame only — positions the open-creation control on the preview, not the title row. */
+/* Image/video frame — top hover bar holds title, source URL, open-creation control. */
 .connect-chat-creation-embed-media {
 	position: relative;
 	width: 100%;
@@ -6350,7 +6350,7 @@ body.blog-edit-page .blog-edit-route {
 	box-sizing: border-box;
 }
 
-/* Open creation (sibling of .inner so NSFW overlay does not intercept taps). */
+/* Open creation: default = corner (unused for loaded image/video; kept for any legacy markup). */
 .connect-chat-creation-embed-detail-link {
 	position: absolute;
 	bottom: 8px;
@@ -6386,13 +6386,6 @@ body.blog-edit-page .blog-edit-route {
 	background: rgba(0, 0, 0, 0.65);
 }
 
-@media (hover: hover) {
-	.connect-chat-creation-embed-media:hover .connect-chat-creation-embed-detail-link {
-		opacity: 1;
-		pointer-events: auto;
-	}
-}
-
 .connect-chat-creation-embed-detail-link:focus-visible {
 	opacity: 1;
 	pointer-events: auto;
@@ -6403,6 +6396,102 @@ body.blog-edit-page .blog-edit-route {
 .connect-chat-creation-embed--link-revealed .connect-chat-creation-embed-detail-link {
 	opacity: 1;
 	pointer-events: auto;
+}
+
+/* Top bar: title, optional source line, open-creation (shown on hover / focus / long-press reveal). */
+.connect-chat-creation-embed-media-hover-bar {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	z-index: 5;
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	min-height: 36px;
+	padding: 6px 8px;
+	box-sizing: border-box;
+	background: rgba(0, 0, 0, 0.55);
+	border-radius: 12px 12px 0 0;
+	opacity: 0;
+	pointer-events: none;
+	transition:
+		opacity 0.15s ease,
+		background 0.15s ease;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.connect-chat-creation-embed-media-hover-bar--static {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+.connect-chat-creation-embed-hover-bar-main {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	justify-content: center;
+}
+
+.connect-chat-creation-embed-hover-bar-title {
+	font-size: 0.75rem;
+	font-weight: 600;
+	line-height: 1.25;
+	color: rgba(255, 255, 255, 0.95);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.connect-chat-creation-embed-hover-bar-title--untitled em {
+	font-style: italic;
+	font-weight: 500;
+	opacity: 0.9;
+}
+
+.connect-chat-creation-embed-hover-bar-title--pending {
+	font-weight: 500;
+	opacity: 0.95;
+}
+
+.connect-chat-creation-embed-hover-bar-source {
+	font-size: 0.625rem;
+	line-height: 1.25;
+	color: rgba(255, 255, 255, 0.78);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+@media (hover: hover) {
+	.connect-chat-creation-embed-media--has-hover-bar:hover .connect-chat-creation-embed-media-hover-bar:not(.connect-chat-creation-embed-media-hover-bar--static) {
+		opacity: 1;
+		pointer-events: auto;
+	}
+}
+
+.connect-chat-creation-embed-media--has-hover-bar:focus-within .connect-chat-creation-embed-media-hover-bar:not(.connect-chat-creation-embed-media-hover-bar--static) {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+.connect-chat-creation-embed--link-revealed .connect-chat-creation-embed-media--has-hover-bar .connect-chat-creation-embed-media-hover-bar:not(.connect-chat-creation-embed-media-hover-bar--static) {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+.connect-chat-creation-embed-detail-link--hover-bar {
+	position: static;
+	bottom: auto;
+	left: auto;
+	opacity: 1;
+	pointer-events: auto;
+	width: 30px;
+	height: 30px;
+	flex-shrink: 0;
+	margin-top: 1px;
 }
 
 .connect-chat-youtube-embed {
@@ -6528,35 +6617,49 @@ body.blog-edit-page .blog-edit-route {
 	height: auto;
 	vertical-align: middle;
 	background: #000;
+	-webkit-touch-callout: none;
+	-webkit-user-select: none;
+	user-select: none;
 }
 
-.connect-chat-creation-embed-title {
-	margin-top: 4px;
-	font-size: 0.8125rem;
-	line-height: 1.35;
-	color: var(--text-muted, rgba(255, 255, 255, 0.65));
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+.connect-chat-creation-embed-img {
+	-webkit-touch-callout: none;
+	-webkit-user-drag: none;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+.connect-chat-creation-embed-inner--pending {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
 	min-width: 0;
-	max-width: 100%;
+	aspect-ratio: 1 / 1;
+	border-radius: 12px;
+	overflow: hidden;
 }
 
-/* Single line — same height as loaded title (see `.connect-chat-creation-embed-title`). */
-.connect-chat-creation-embed-title.connect-chat-creation-embed-title--placeholder {
-	display: block;
-	overflow: hidden;
-	box-sizing: border-box;
-	max-width: min(100%, 11rem);
-	min-height: calc(0.8125rem * 1.35);
-	min-height: 1lh;
-	line-height: 1.35;
-	font-size: 0.8125rem;
-	color: transparent;
-	border-radius: 4px;
+.connect-chat-creation-embed-skeleton--pending-fill {
+	flex: 1;
+	min-height: 0;
+	width: 100%;
+	border-radius: 0;
 	background: var(--border, rgba(255, 255, 255, 0.08));
 	animation: connect-chat-creation-embed-pulse 1.2s ease-in-out infinite;
-	pointer-events: none;
+}
+
+.connect-chat-creation-embed-inner--error-layout {
+	display: flex;
+	flex-direction: column;
+	position: relative;
+	width: 100%;
+	min-width: 0;
+	border-radius: 12px;
+	overflow: hidden;
+}
+
+.connect-chat-creation-embed--square .connect-chat-creation-embed-inner--error-layout {
+	aspect-ratio: 1 / 1;
 }
 
 .connect-chat-creation-embed-open {
@@ -7550,6 +7653,16 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 	background-size: cover;
 	background-position: center;
 	border: none;
+}
+
+/* Chat embed error tile: stacks under static title bar; overrides absolute .route-media fill. */
+.connect-chat-creation-embed-inner--error-layout .route-media.connect-chat-creation-embed-route-error {
+	position: relative;
+	inset: auto;
+	width: 100%;
+	height: auto;
+	flex: 1;
+	min-height: 0;
 }
 
 .route-media.loading {

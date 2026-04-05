@@ -1804,10 +1804,14 @@ export default function createCreateRoutes({ queries, storage }) {
 
 			const mediaType = typeof meta?.media_type === "string" ? meta.media_type : "image";
 			const videoMeta = meta && typeof meta === "object" ? meta.video : null;
-			const videoUrl =
+			const videoUrlRaw =
 				videoMeta && typeof videoMeta.file_path === "string" && videoMeta.file_path
 					? videoMeta.file_path
 					: null;
+			const videoUrl =
+				shareAccess && mediaType === "video" && videoUrlRaw
+					? `/api/share/${encodeURIComponent(shareAccess.version)}/${encodeURIComponent(shareAccess.token)}/video`
+					: videoUrlRaw;
 			const sourceImageUrl =
 				typeof meta?.source_image_url === "string" && meta.source_image_url
 					? meta.source_image_url
