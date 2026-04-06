@@ -2660,7 +2660,8 @@ export async function openDb() {
 			all: async (personality, options = {}) => {
 				const normalized = String(personality || "").trim().toLowerCase();
 				if (!/^[a-z0-9][a-z0-9_-]{2,23}$/.test(normalized)) return [];
-				const needle = `@${normalized}`;
+				const mentionNeedle = `@${normalized}`;
+				const tagNeedle = normalized;
 				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
 				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
 				const stmt = db.prepare(
@@ -2671,18 +2672,42 @@ export async function openDb() {
              AND (ci.unavailable_at IS NULL OR ci.unavailable_at = '')
              AND (
                lower(coalesce(ci.description, '')) LIKE '%' || ? || '%'
+               OR lower(coalesce(ci.description, '')) LIKE '%' || ? || '%'
                OR lower(coalesce(ci.title, '')) LIKE '%' || ? || '%'
+               OR lower(coalesce(ci.title, '')) LIKE '%' || ? || '%'
+               OR lower(coalesce(json_extract(ci.meta, '$.user_prompt'), '')) LIKE '%' || ? || '%'
+               OR lower(coalesce(json_extract(ci.meta, '$.user_prompt'), '')) LIKE '%' || ? || '%'
+               OR lower(coalesce(json_extract(ci.meta, '$.args.prompt'), '')) LIKE '%' || ? || '%'
+               OR lower(coalesce(json_extract(ci.meta, '$.args.prompt'), '')) LIKE '%' || ? || '%'
                OR EXISTS (
                  SELECT 1
                  FROM comments_created_image c
                  WHERE c.created_image_id = ci.id
-                   AND lower(coalesce(c.text, '')) LIKE '%' || ? || '%'
+                   AND (
+                     lower(coalesce(c.text, '')) LIKE '%' || ? || '%'
+                     OR lower(coalesce(c.text, '')) LIKE '%' || ? || '%'
+                   )
                )
              )
            ORDER BY ci.created_at DESC
            LIMIT ? OFFSET ?`
 				);
-				return Promise.resolve(stmt.all(needle, needle, needle, limit, offset));
+				return Promise.resolve(
+					stmt.all(
+						mentionNeedle,
+						tagNeedle,
+						mentionNeedle,
+						tagNeedle,
+						mentionNeedle,
+						tagNeedle,
+						mentionNeedle,
+						tagNeedle,
+						mentionNeedle,
+						tagNeedle,
+						limit,
+						offset
+					)
+				);
 			}
 		},
 		selectPublishedCreationsByTagMention: {

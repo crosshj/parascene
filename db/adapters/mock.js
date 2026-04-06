@@ -1803,16 +1803,37 @@ export function openDb() {
 			all: async (personality, options = {}) => {
 				const normalized = String(personality || "").trim().toLowerCase();
 				if (!/^[a-z0-9][a-z0-9_-]{2,23}$/.test(normalized)) return [];
-				const needle = `@${normalized}`;
+				const mentionNeedle = `@${normalized}`;
+				const tagNeedle = normalized;
 				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
 				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
 
 				const creationList = (typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.created_images) ?? created_images ?? [];
 				const commentList = (typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.comments_created_image) ?? comments_created_image ?? [];
 
+				const haystackIncludesPersona = (s) => {
+					const t = String(s || "").toLowerCase();
+					return t.includes(mentionNeedle) || t.includes(tagNeedle);
+				};
+
+				const metaPromptHaystacks = (img) => {
+					let meta = img?.meta;
+					if (typeof meta === "string") {
+						try {
+							meta = JSON.parse(meta);
+						} catch {
+							meta = null;
+						}
+					}
+					const out = [];
+					if (meta && typeof meta.user_prompt === "string") out.push(meta.user_prompt);
+					if (meta?.args && typeof meta.args.prompt === "string") out.push(meta.args.prompt);
+					return out;
+				};
+
 				const idsFromComments = new Set(
 					(commentList ?? [])
-						.filter((c) => String(c?.text || "").toLowerCase().includes(needle))
+						.filter((c) => haystackIncludesPersona(c?.text))
 						.map((c) => Number(c?.created_image_id))
 						.filter((id) => Number.isFinite(id) && id > 0)
 				);
@@ -1822,10 +1843,11 @@ export function openDb() {
 						const isPublished = img?.published === true || img?.published === 1;
 						if (!isPublished) return false;
 						if (!(img?.unavailable_at == null || img?.unavailable_at === "")) return false;
-						const descMatch = String(img?.description || "").toLowerCase().includes(needle);
-						const titleMatch = String(img?.title || "").toLowerCase().includes(needle);
+						const descMatch = haystackIncludesPersona(img?.description);
+						const titleMatch = haystackIncludesPersona(img?.title);
+						const promptMatch = metaPromptHaystacks(img).some((p) => haystackIncludesPersona(p));
 						const commentMatch = idsFromComments.has(Number(img?.id));
-						return descMatch || titleMatch || commentMatch;
+						return descMatch || titleMatch || promptMatch || commentMatch;
 					})
 					.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
 

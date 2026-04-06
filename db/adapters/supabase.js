@@ -3570,30 +3570,68 @@ export function openDb() {
 				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
 				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
 
-				const [descriptionRes, titleRes, commentsRes] = await Promise.all([
-					serviceClient
-						.from(prefixedTable("created_images"))
-						.select("id")
-						.eq("published", true)
-						.is("unavailable_at", null)
-						.ilike("description", `%${mentionNeedle}%`)
-						.limit(5000),
-					serviceClient
-						.from(prefixedTable("created_images"))
-						.select("id")
-						.eq("published", true)
-						.is("unavailable_at", null)
-						.ilike("title", `%${mentionNeedle}%`)
-						.limit(5000),
-					serviceClient
-						.from(prefixedTable("comments_created_image"))
-						.select("created_image_id")
-						.ilike("text", `%${mentionNeedle}%`)
-						.limit(5000)
-				]);
+				const tagNeedle = normalized;
+				const [descriptionRes, titleRes, commentsRes, descTagRes, titleTagRes, metaUserPromptRes, metaArgsPromptRes] =
+					await Promise.all([
+						serviceClient
+							.from(prefixedTable("created_images"))
+							.select("id")
+							.eq("published", true)
+							.is("unavailable_at", null)
+							.ilike("description", `%${mentionNeedle}%`)
+							.limit(5000),
+						serviceClient
+							.from(prefixedTable("created_images"))
+							.select("id")
+							.eq("published", true)
+							.is("unavailable_at", null)
+							.ilike("title", `%${mentionNeedle}%`)
+							.limit(5000),
+						serviceClient
+							.from(prefixedTable("comments_created_image"))
+							.select("created_image_id")
+							.or(`text.ilike.%${mentionNeedle}%,text.ilike.%${tagNeedle}%`)
+							.limit(5000),
+						serviceClient
+							.from(prefixedTable("created_images"))
+							.select("id")
+							.eq("published", true)
+							.is("unavailable_at", null)
+							.ilike("description", `%${tagNeedle}%`)
+							.limit(5000),
+						serviceClient
+							.from(prefixedTable("created_images"))
+							.select("id")
+							.eq("published", true)
+							.is("unavailable_at", null)
+							.ilike("title", `%${tagNeedle}%`)
+							.limit(5000),
+						serviceClient
+							.from(prefixedTable("created_images"))
+							.select("id")
+							.eq("published", true)
+							.is("unavailable_at", null)
+							.or(
+								`meta->>user_prompt.ilike.%${mentionNeedle}%,meta->>user_prompt.ilike.%${tagNeedle}%`
+							)
+							.limit(5000),
+						serviceClient
+							.from(prefixedTable("created_images"))
+							.select("id")
+							.eq("published", true)
+							.is("unavailable_at", null)
+							.or(
+								`meta->args->>prompt.ilike.%${mentionNeedle}%,meta->args->>prompt.ilike.%${tagNeedle}%`
+							)
+							.limit(5000)
+					]);
 				if (descriptionRes.error) throw descriptionRes.error;
 				if (titleRes.error) throw titleRes.error;
 				if (commentsRes.error) throw commentsRes.error;
+				if (descTagRes.error) throw descTagRes.error;
+				if (titleTagRes.error) throw titleTagRes.error;
+				if (metaUserPromptRes.error) throw metaUserPromptRes.error;
+				if (metaArgsPromptRes.error) throw metaArgsPromptRes.error;
 
 				const idSet = new Set();
 				for (const row of descriptionRes.data ?? []) {
@@ -3606,6 +3644,22 @@ export function openDb() {
 				}
 				for (const row of commentsRes.data ?? []) {
 					const id = Number(row?.created_image_id);
+					if (Number.isFinite(id) && id > 0) idSet.add(id);
+				}
+				for (const row of descTagRes.data ?? []) {
+					const id = Number(row?.id);
+					if (Number.isFinite(id) && id > 0) idSet.add(id);
+				}
+				for (const row of titleTagRes.data ?? []) {
+					const id = Number(row?.id);
+					if (Number.isFinite(id) && id > 0) idSet.add(id);
+				}
+				for (const row of metaUserPromptRes.data ?? []) {
+					const id = Number(row?.id);
+					if (Number.isFinite(id) && id > 0) idSet.add(id);
+				}
+				for (const row of metaArgsPromptRes.data ?? []) {
+					const id = Number(row?.id);
 					if (Number.isFinite(id) && id > 0) idSet.add(id);
 				}
 				const ids = Array.from(idSet);

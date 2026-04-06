@@ -1367,7 +1367,7 @@ function renderPersonalityDiscoveryPage(
 			<div class="user-profile-content user-profile-persona-discovery-content">
 				<section class="persona-discovery-mentions-section" aria-labelledby="persona-mentions-heading">
 					<h2 class="persona-discovery-section-title" id="persona-mentions-heading">Mentions on parascene</h2>
-					<p class="persona-discovery-section-lede">Published creations that reference <code class="persona-discovery-handle-code">${escapeHtml(handleStr)}</code> in the description or comments.</p>
+					<p class="persona-discovery-section-lede">Published creations that reference <code class="persona-discovery-handle-code">${escapeHtml(handleStr)}</code> or <code class="persona-discovery-handle-code">${escapeHtml(safePersonality)}</code> in the title, prompt, description, or comments.</p>
 					<div class="route-cards content-cards-image-grid" data-personality-grid>
 						<div class="route-empty route-empty-image-grid route-loading">
 							<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
