@@ -3,12 +3,10 @@
  * URL hash: #styles | #personas switches tabs (e.g. /prompt-library#styles).
  * Seeds <app-tabs active> from the hash before the element upgrades (race with entry.js); then
  * applies again after customElements.whenDefined so the correct tab always wins over the HTML default.
+ *
+ * Icons come from svg-strings.js via dynamic import with ?v= (same as avatar / create-styles) so the
+ * dependency is cache-busted with the page and stays in sync with named exports.
  */
-
-import { copyIcon, eyeIcon } from "../icons/svg-strings.js";
-
-const COPY_KEY_SVG = copyIcon("prompt-library-copy-icon");
-const VIEW_DETAIL_SVG = eyeIcon("prompt-library-copy-icon");
 
 /** Aligned with GET /api/styles/:slug — digit-leading OK if slug contains a letter (not $100). */
 const STYLE_TAG_RE = /^(?=.*[a-z])[a-z0-9][a-z0-9_-]{0,63}$/;
@@ -75,8 +73,10 @@ function parseInjectionMeta(raw) {
 	}
 }
 
-function renderPersonaRows(tbody, rows, getAvatarColor) {
+function renderPersonaRows(tbody, rows, getAvatarColor, copyKeySvg, viewDetailSvg) {
 	if (!tbody) return;
+	const copySvg = typeof copyKeySvg === "string" ? copyKeySvg : "";
+	const eyeSvg = typeof viewDetailSvg === "string" ? viewDetailSvg : "";
 	if (!rows.length) {
 		tbody.innerHTML = `<tr><td colspan="3" class="prompt-library-table-empty">No items yet.</td></tr>`;
 		return;
@@ -102,7 +102,7 @@ function renderPersonaRows(tbody, rows, getAvatarColor) {
 				PERSONA_TAG_RE.test(canonicalTag) ? `/p/${encodeURIComponent(canonicalTag)}` : "";
 			const openPersona =
 				personaHref !== ""
-					? `<a href="${escapeHtml(personaHref)}" class="prompt-library-view" aria-label="View persona">${VIEW_DETAIL_SVG}</a>`
+					? `<a href="${escapeHtml(personaHref)}" class="prompt-library-view" aria-label="View persona">${eyeSvg}</a>`
 					: "";
 			const thumbCell = avatarUrl
 				? `<img class="prompt-library-persona-avatar-img" src="${escapeHtml(avatarUrl)}" alt="" width="48" height="48" loading="lazy" decoding="async" />`
@@ -112,7 +112,7 @@ function renderPersonaRows(tbody, rows, getAvatarColor) {
 				<td><code class="prompt-library-tag">${tagHtml}</code></td>
 				<td class="prompt-library-cell-actions">
 					<button type="button" class="prompt-library-copy-key" data-copy-persona-handle="${handleAttr}" aria-label="Copy persona handle">
-						${COPY_KEY_SVG}
+						${copySvg}
 					</button>
 					${openPersona}
 				</td>
@@ -138,10 +138,12 @@ function renderPersonaRows(tbody, rows, getAvatarColor) {
 	}
 }
 
-function renderStyleRows(tbody, rows, getAvatarColor, getStyleThumbUrl) {
+function renderStyleRows(tbody, rows, getAvatarColor, getStyleThumbUrl, copyKeySvg, viewDetailSvg) {
 	if (!tbody) return;
 	const colorFn = typeof getAvatarColor === "function" ? getAvatarColor : () => "#6b7280";
 	const thumbFn = typeof getStyleThumbUrl === "function" ? getStyleThumbUrl : () => "";
+	const copySvg = typeof copyKeySvg === "string" ? copyKeySvg : "";
+	const eyeSvg = typeof viewDetailSvg === "string" ? viewDetailSvg : "";
 	if (!rows.length) {
 		tbody.innerHTML = `<tr><td colspan="3" class="prompt-library-table-empty">No items yet.</td></tr>`;
 		return;
@@ -169,14 +171,14 @@ function renderStyleRows(tbody, rows, getAvatarColor, getStyleThumbUrl) {
 			const styleHref = STYLE_TAG_RE.test(canonicalTag) ? `/styles/${encodeURIComponent(canonicalTag)}` : "";
 			const openStyle =
 				styleHref !== ""
-					? `<a href="${escapeHtml(styleHref)}" class="prompt-library-view" aria-label="View style">${VIEW_DETAIL_SVG}</a>`
+					? `<a href="${escapeHtml(styleHref)}" class="prompt-library-view" aria-label="View style">${eyeSvg}</a>`
 					: "";
 			return `<tr class="prompt-library-row prompt-library-row--style" data-prompt-injection-id="${escapeHtml(id)}" data-tag="${tagAttr}" data-style-thumb-initial="${initialAttr}">
 				<td class="prompt-library-cell-thumb">${thumbCell}</td>
 				<td><code class="prompt-library-tag">${tagHtml}</code></td>
 				<td class="prompt-library-cell-actions">
 					<button type="button" class="prompt-library-copy-key" data-copy-style-key="${tagAttr}" aria-label="Copy style key">
-						${COPY_KEY_SVG}
+						${copySvg}
 					</button>
 					${openStyle}
 				</td>
@@ -269,10 +271,13 @@ async function loadPromptLibrary() {
 
 	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute("content")?.trim() || "";
 	const qs = v ? `?v=${encodeURIComponent(v)}` : "";
-	const [{ getAvatarColor }, { getStyleThumbUrl }] = await Promise.all([
+	const [{ getAvatarColor }, { getStyleThumbUrl }, { copyIcon, eyeIcon }] = await Promise.all([
 		import(`../shared/avatar.js${qs}`),
-		import(`./create-styles.js${qs}`)
+		import(`./create-styles.js${qs}`),
+		import(`../icons/svg-strings.js${qs}`)
 	]);
+	const copyKeySvg = typeof copyIcon === "function" ? copyIcon("prompt-library-copy-icon") : "";
+	const viewDetailSvg = typeof eyeIcon === "function" ? eyeIcon("prompt-library-copy-icon") : "";
 
 	try {
 		const res = await fetch("/api/prompt-injections", { credentials: "include" });
@@ -280,8 +285,8 @@ async function loadPromptLibrary() {
 		if (!res.ok) {
 			const msg = typeof data?.error === "string" ? data.error : "Could not load prompt library.";
 			if (intro) intro.textContent = msg;
-			renderStyleRows(stylesBody, [], getAvatarColor, getStyleThumbUrl);
-			renderPersonaRows(personasBody, [], getAvatarColor);
+			renderStyleRows(stylesBody, [], getAvatarColor, getStyleThumbUrl, copyKeySvg, viewDetailSvg);
+			renderPersonaRows(personasBody, [], getAvatarColor, copyKeySvg, viewDetailSvg);
 			syncPromptLibraryAddStyleButton(false);
 			queueApplyPromptLibraryTabFromHash();
 			return;
@@ -294,14 +299,14 @@ async function loadPromptLibrary() {
 			intro.textContent =
 				"Saved styles and personas you can use in prompts. Use the eye icon to view a style or persona; use the copy icon for the tag or @handle.";
 		}
-		renderStyleRows(stylesBody, styles, getAvatarColor, getStyleThumbUrl);
-		renderPersonaRows(personasBody, personas, getAvatarColor);
+		renderStyleRows(stylesBody, styles, getAvatarColor, getStyleThumbUrl, copyKeySvg, viewDetailSvg);
+		renderPersonaRows(personasBody, personas, getAvatarColor, copyKeySvg, viewDetailSvg);
 		setupPromptLibraryCopyButtons(root);
 		syncPromptLibraryAddStyleButton(Boolean(data?.canAddStyle));
 	} catch {
 		if (intro) intro.textContent = "Could not load prompt library.";
-		renderStyleRows(stylesBody, [], getAvatarColor, getStyleThumbUrl);
-		renderPersonaRows(personasBody, [], getAvatarColor);
+		renderStyleRows(stylesBody, [], getAvatarColor, getStyleThumbUrl, copyKeySvg, viewDetailSvg);
+		renderPersonaRows(personasBody, [], getAvatarColor, copyKeySvg, viewDetailSvg);
 		syncPromptLibraryAddStyleButton(false);
 	}
 	queueApplyPromptLibraryTabFromHash();
