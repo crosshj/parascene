@@ -721,6 +721,52 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 		}
 	});
 
+	async function sendStyleDetailPageHtml(req, res, user) {
+		const fs = await import("fs/promises");
+		const rolePageName = getPageForUser(user);
+		const rolePagePath = path.join(pagesDir, rolePageName);
+		const htmlPath = path.join(pagesDir, "style-detail.html");
+		let pageHtml = await fs.readFile(htmlPath, "utf-8");
+
+		let headerHtml = "";
+		let includeMobileBottomNav = false;
+		try {
+			const roleHtml = await fs.readFile(rolePagePath, "utf-8");
+			const headerMatch = roleHtml.match(/<app-navigation[\s\S]*?<\/app-navigation>/i);
+			if (headerMatch) {
+				headerHtml = headerMatch[0];
+			}
+			includeMobileBottomNav = /<app-navigation-mobile\b/i.test(roleHtml);
+		} catch (error) {
+			// ignore
+		}
+
+		if (headerHtml) {
+			pageHtml = pageHtml.replace("<!--APP_HEADER-->", headerHtml);
+		}
+		pageHtml = pageHtml.replace(
+			"<!--APP_MOBILE_BOTTOM_NAV-->",
+			includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
+		);
+
+		pageHtml = injectCommonHead(pageHtml, getPageTokens(req));
+
+		res.setHeader("Content-Type", "text/html");
+		res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+		return res.send(pageHtml);
+	}
+
+	// New global style (form) — must be before /styles/:slug so "new" is not treated as a slug
+	router.get("/styles/new", async (req, res) => {
+		const user = await requireLoggedInUser(req, res);
+		if (!user) return;
+		try {
+			return await sendStyleDetailPageHtml(req, res, user);
+		} catch (error) {
+			return res.status(500).send("Internal server error");
+		}
+	});
+
 	// Style detail — /styles/:slug (matches $style links in rendered user text)
 	router.get("/styles/:slug", async (req, res) => {
 		const user = await requireLoggedInUser(req, res);
@@ -729,43 +775,12 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 		const normalized = String(req.params?.slug ?? "")
 			.trim()
 			.toLowerCase();
-		if (!/^[a-z][a-z0-9_-]{0,63}$/.test(normalized)) {
+		if (!/^(?=.*[a-z])[a-z0-9][a-z0-9_-]{0,63}$/.test(normalized)) {
 			return serveNotFoundPage(req, res, user);
 		}
 
 		try {
-			const fs = await import("fs/promises");
-			const rolePageName = getPageForUser(user);
-			const rolePagePath = path.join(pagesDir, rolePageName);
-			const htmlPath = path.join(pagesDir, "style-detail.html");
-			let pageHtml = await fs.readFile(htmlPath, "utf-8");
-
-			let headerHtml = "";
-			let includeMobileBottomNav = false;
-			try {
-				const roleHtml = await fs.readFile(rolePagePath, "utf-8");
-				const headerMatch = roleHtml.match(/<app-navigation[\s\S]*?<\/app-navigation>/i);
-				if (headerMatch) {
-					headerHtml = headerMatch[0];
-				}
-				includeMobileBottomNav = /<app-navigation-mobile\b/i.test(roleHtml);
-			} catch (error) {
-				// ignore
-			}
-
-			if (headerHtml) {
-				pageHtml = pageHtml.replace("<!--APP_HEADER-->", headerHtml);
-			}
-			pageHtml = pageHtml.replace(
-				"<!--APP_MOBILE_BOTTOM_NAV-->",
-				includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
-			);
-
-			pageHtml = injectCommonHead(pageHtml, getPageTokens(req));
-
-			res.setHeader("Content-Type", "text/html");
-			res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-			return res.send(pageHtml);
+			return await sendStyleDetailPageHtml(req, res, user);
 		} catch (error) {
 			return res.status(500).send("Internal server error");
 		}

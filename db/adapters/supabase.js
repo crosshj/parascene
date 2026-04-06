@@ -3272,7 +3272,7 @@ export function openDb() {
 				if (!Number.isFinite(uid) || uid <= 0 || !raw) return null;
 				const { data, error } = await serviceClient
 					.from(prefixedTable("prompt_injections"))
-					.select("id, tag, injection_text, title, description, owner_user_id, visibility")
+					.select("id, tag, injection_text, title, description, owner_user_id, visibility, meta")
 					.eq("tag_type", "style")
 					.eq("is_active", true)
 					.is("deleted_at", null)
@@ -3291,6 +3291,129 @@ export function openDb() {
 					return 0;
 				});
 				return matches[0];
+			}
+		},
+		selectGlobalStylePromptInjectionByTag: {
+			get: async (tag) => {
+				const raw = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				if (!raw) return null;
+				const { data, error } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.select("id, tag, meta")
+					.eq("tag_type", "style")
+					.is("owner_user_id", null)
+					.eq("is_active", true)
+					.is("deleted_at", null)
+					.eq("tag", raw)
+					.maybeSingle();
+				if (error) throw error;
+				return data ?? null;
+			}
+		},
+		updateGlobalStyleCatalogMetaByTag: {
+			run: async (tag, patch) => {
+				const t = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				if (!t || !patch || typeof patch !== "object") return { changes: 0 };
+				const { data: row, error: selErr } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.select("id, meta")
+					.eq("tag_type", "style")
+					.is("owner_user_id", null)
+					.eq("is_active", true)
+					.is("deleted_at", null)
+					.eq("tag", t)
+					.maybeSingle();
+				if (selErr) throw selErr;
+				if (!row?.id) return { changes: 0 };
+				let meta = {};
+				const rawMeta = row.meta;
+				if (rawMeta != null && typeof rawMeta === "object" && !Array.isArray(rawMeta)) {
+					meta = { ...rawMeta };
+				} else if (typeof rawMeta === "string" && rawMeta.trim()) {
+					try {
+						const o = JSON.parse(rawMeta);
+						if (o && typeof o === "object" && !Array.isArray(o)) meta = o;
+					} catch {
+						meta = {};
+					}
+				}
+				for (const [k, v] of Object.entries(patch)) {
+					if (v === null || v === undefined) delete meta[k];
+					else meta[k] = v;
+				}
+				const now = new Date().toISOString();
+				const { data: updated, error: updErr } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.update({ meta, updated_at: now })
+					.eq("id", row.id)
+					.select("id");
+				if (updErr) throw updErr;
+				const n = Array.isArray(updated) ? updated.length : 0;
+				return { changes: n };
+			}
+		},
+		/** Soft-delete every active style row for this tag (admin catalog cleanup). */
+		deletePromptInjectionStylesByTagAdmin: {
+			run: async (slug) => {
+				const raw = String(slug ?? "")
+					.trim()
+					.toLowerCase();
+				if (!raw) return { changes: 0 };
+				const { data: rows, error: selErr } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.select("id")
+					.eq("tag_type", "style")
+					.is("deleted_at", null)
+					.eq("tag", raw);
+				if (selErr) throw selErr;
+				const list = Array.isArray(rows) ? rows : [];
+				const ids = list.map((r) => r.id).filter((id) => id != null);
+				if (ids.length === 0) return { changes: 0 };
+				const now = new Date().toISOString();
+				const { data: updated, error: updErr } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.update({ deleted_at: now, is_active: false, updated_at: now })
+					.in("id", ids)
+					.select("id");
+				if (updErr) throw updErr;
+				const n = Array.isArray(updated) ? updated.length : 0;
+				return { changes: n };
+			}
+		},
+		insertGlobalStylePromptInjection: {
+			run: async (tag, injectionText, title, description, visibility) => {
+				const normalizedTag = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				const inj = String(injectionText ?? "").trim();
+				if (!normalizedTag || !inj) {
+					return { changes: 0 };
+				}
+				const vis = visibility === "unlisted" ? "unlisted" : "public";
+				const { data, error } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.insert({
+						tag: normalizedTag,
+						tag_type: "style",
+						injection_text: inj,
+						title: title ?? null,
+						description: description ?? null,
+						owner_user_id: null,
+						visibility: vis,
+						is_active: true
+					})
+					.select("id")
+					.single();
+				if (error) throw error;
+				return {
+					changes: data?.id != null ? 1 : 0,
+					lastInsertRowid: data?.id,
+					insertId: data?.id
+				};
 			}
 		},
 		selectGlobalPersonaPromptInjectionByTag: {

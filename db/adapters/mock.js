@@ -1688,6 +1688,22 @@ export function openDb() {
 		selectPromptInjectionStyleBySlugForUser: {
 			get: async (_userId, _slug) => null
 		},
+		selectGlobalStylePromptInjectionByTag: {
+			get: async (_tag) => null
+		},
+		updateGlobalStyleCatalogMetaByTag: {
+			run: async () => ({ changes: 0 })
+		},
+		deletePromptInjectionStylesByTagAdmin: {
+			run: async () => ({ changes: 0 })
+		},
+		insertGlobalStylePromptInjection: {
+			run: async () => ({
+				changes: 1,
+				lastInsertRowid: 0,
+				insertId: 0
+			})
+		},
 		selectGlobalPersonaPromptInjectionByTag: {
 			get: async (_tag) => null
 		},

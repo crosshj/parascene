@@ -743,7 +743,14 @@ function setModalOpen(overlay, open) {
 	}
 }
 
-function renderImageGrid(grid, images, showBadge = false, emptyTitle = 'No published creations yet', emptyMessage = "When this user publishes creations, they'll show up here.") {
+function renderImageGrid(
+	grid,
+	images,
+	showBadge = false,
+	emptyTitle = 'No published creations yet',
+	emptyMessage = "When this user publishes creations, they'll show up here.",
+	options = {}
+) {
 	if (!grid) return;
 
 	grid.removeAttribute('aria-busy');
@@ -761,6 +768,9 @@ function renderImageGrid(grid, images, showBadge = false, emptyTitle = 'No publi
 
 	grid.innerHTML = '';
 
+	const personaPromote = options?.personaAvatarPromote;
+	const showPersonaAvatarBtn = Boolean(personaPromote?.tag);
+
 	// Lazy load images into route-media tiles.
 	const observer = new IntersectionObserver((entries) => {
 		entries.forEach((entry) => {
@@ -775,7 +785,8 @@ function renderImageGrid(grid, images, showBadge = false, emptyTitle = 'No publi
 
 	list.forEach((item) => {
 		const card = document.createElement('div');
-		card.className = 'route-card route-card-image';
+		card.className = 'route-card route-card-image'
+			+ (showPersonaAvatarBtn ? ' route-card-image--persona-mentions-avatar' : '');
 		card.style.cursor = 'pointer';
 		card.addEventListener('click', () => {
 			window.location.href = `/creations/${item.id}`;
@@ -803,8 +814,21 @@ function renderImageGrid(grid, images, showBadge = false, emptyTitle = 'No publi
 
 		const isVideo = item.media_type === 'video' || (item.meta && item.meta.media_type === 'video');
 		const mediaAttrs = isVideo ? ' data-media-type="video"' : '';
+		const creationId = Number(item.id);
+		const personaAvatarBtn =
+			showPersonaAvatarBtn && !isVideo && Number.isFinite(creationId) && creationId > 0
+				? html`<button type="button" class="persona-mentions-set-avatar-btn" aria-label="Use this image as the persona avatar" data-persona-set-avatar-from-creation="${creationId}">
+					<svg class="persona-mentions-set-avatar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+						<circle cx="8.5" cy="8.5" r="1.5"/>
+						<polyline points="21 15 16 10 5 21"/>
+					</svg>
+				</button>`
+				: '';
 		card.innerHTML = html`
-			<div class="route-media${item.nsfw ? ' nsfw' : ''}" aria-hidden="true"${mediaAttrs}></div>
+			<div class="route-media${item.nsfw ? ' nsfw' : ''}" aria-hidden="true"${mediaAttrs}>
+				${personaAvatarBtn}
+			</div>
 			${userDeletedBadge}
 			${publishedBadge}
 			<div class="route-details">
@@ -815,6 +839,19 @@ function renderImageGrid(grid, images, showBadge = false, emptyTitle = 'No publi
 				</div>
 			</div>
 		`;
+
+		const avatarBtnEl = card.querySelector('.persona-mentions-set-avatar-btn');
+		if (avatarBtnEl && personaPromote?.tag) {
+			const personaTag = String(personaPromote.tag).trim().toLowerCase();
+			const cid = creationId;
+			avatarBtnEl.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				const page = grid.closest('.user-profile-page');
+				if (!page || !personaTag) return;
+				void runPersonaSetAvatarFromCreation(page, personaTag, cid, avatarBtnEl);
+			});
+		}
 
 		const mediaEl = card.querySelector('.route-media');
 		const url = item.thumbnail_url || item.url;
@@ -1130,18 +1167,26 @@ async function loadTagCreations(tag, { limit = 100, offset = 0 } = {}) {
 	return { items, hasMore: Boolean(result.data?.has_more) };
 }
 
-function renderPersonaLibraryEditModalHtml(personaCatalog, slugDisplayFallback) {
+function renderPersonaLibraryEditModalHtml(personaCatalog, slugDisplayFallback, modalOpts = {}) {
+	const variant = modalOpts?.variant === 'promote' ? 'promote' : 'edit';
 	const cat = personaCatalog && typeof personaCatalog === 'object' ? personaCatalog : {};
 	const titleRaw = typeof cat.title === 'string' ? cat.title.trim() : '';
 	const descRaw = typeof cat.description === 'string' ? cat.description.trim() : '';
 	const charRaw = typeof cat.character_description === 'string' ? cat.character_description.trim() : '';
 	const avatarUrl = typeof cat.avatar_url === 'string' ? cat.avatar_url.trim() : '';
 	const titleValue = titleRaw || (typeof slugDisplayFallback === 'string' ? slugDisplayFallback.trim() : '');
+	const modalHeading = variant === 'promote' ? 'Add to Prompt Library' : 'Edit persona';
+	const primaryLabel = variant === 'promote' ? 'Add to library' : 'Save';
+	const promoteAttrs = variant === 'promote' ? ' data-persona-promote-setup="1"' : '';
+	const promoteLede =
+		variant === 'promote'
+			? html`<p class="user-profile-help user-profile-persona-promote-lede">Set a display name, optional about text, and a <strong>character description</strong> (required for @mentions and for generating an avatar). You can change these anytime from Edit persona.</p>`
+			: '';
 	return html`
-		<div class="modal-overlay" data-persona-library-edit-overlay>
+		<div class="modal-overlay" data-persona-library-edit-overlay${promoteAttrs}>
 			<div class="modal modal-large">
 				<div class="modal-header">
-					<h2>Edit persona</h2>
+					<h2>${modalHeading}</h2>
 					<button class="modal-close" type="button" aria-label="Close" data-persona-library-edit-close>
 						<svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
 							stroke-linecap="round" stroke-linejoin="round">
@@ -1151,6 +1196,7 @@ function renderPersonaLibraryEditModalHtml(personaCatalog, slugDisplayFallback) 
 					</button>
 				</div>
 				<div class="modal-body">
+					${promoteLede}
 					<form class="user-profile-edit-form" data-persona-library-edit-form>
 						<div class="user-profile-form-section">
 							<div class="field">
@@ -1212,7 +1258,7 @@ function renderPersonaLibraryEditModalHtml(personaCatalog, slugDisplayFallback) 
 				</div>
 				<div class="modal-footer">
 					<button class="btn-secondary" type="button" data-persona-library-edit-cancel>Cancel</button>
-					<button class="btn-primary" type="button" data-persona-library-edit-save>Save</button>
+					<button class="btn-primary" type="button" data-persona-library-edit-save>${primaryLabel}</button>
 				</div>
 			</div>
 			<div class="user-profile-generate-confirm-overlay" data-persona-library-generate-confirm-overlay hidden>
@@ -1281,6 +1327,13 @@ function renderPersonalityDiscoveryPage(
 				${editPersonaButtonHtml}
 				${promoteButtonHtml}
 			</div>`
+			: '';
+
+	const promoteSetupModalHtml =
+		!useLibraryShell && canEditPersonaCatalog && promoteButtonHtml
+			? renderPersonaLibraryEditModalHtml({}, personalitySlugToDisplayTitle(safePersonality), {
+					variant: 'promote'
+				})
 			: '';
 
 	if (useLibraryShell) {
@@ -1401,16 +1454,20 @@ function renderPersonalityDiscoveryPage(
 		${hasMore ? html`<div class="route-empty">
 			<div class="route-empty-message">Showing top results. Refine the personality name to narrow matches.</div>
 		</div>` : ''}
+		${promoteSetupModalHtml}
 	`;
 	}
 
 	const grid = container.querySelector('[data-personality-grid]');
+	const personaGridOpts =
+		useLibraryShell && canEditPersonaCatalog ? { personaAvatarPromote: { tag: safePersonality } } : {};
 	renderImageGrid(
 		grid,
 		items,
 		false,
 		'No results found',
-		`No creations currently match ${token}.`
+		`No creations currently match ${token}.`,
+		personaGridOpts
 	);
 	if (useLibraryShell) {
 		hydrateUserTextLinks(container);
@@ -1420,6 +1477,7 @@ function renderPersonalityDiscoveryPage(
 function wirePersonaLibraryEditModal(container, personality) {
 	const overlay = container.querySelector('[data-persona-library-edit-overlay]');
 	if (!overlay) return;
+	const isPromoteSetup = overlay.getAttribute('data-persona-promote-setup') === '1';
 	const tag = String(personality || '').trim().toLowerCase();
 	const openBtn = container.querySelector('[data-persona-library-edit-open]');
 	const form = container.querySelector('[data-persona-library-edit-form]');
@@ -1689,6 +1747,26 @@ function wirePersonaLibraryEditModal(container, personality) {
 			setModalOpen(overlay, true);
 		});
 	}
+
+	const promoteDiscoveryBtn = container.querySelector('[data-promote-persona]');
+	if (isPromoteSetup && promoteDiscoveryBtn) {
+		promoteDiscoveryBtn.addEventListener('click', () => {
+			if (titleInput) titleInput.value = personalitySlugToDisplayTitle(tag);
+			if (descTa) descTa.value = '';
+			if (charTa) charTa.value = '';
+			if (avatarTryUrlInput) avatarTryUrlInput.value = '';
+			if (avatarInput) {
+				try { avatarInput.value = ''; } catch { /* ignore */ }
+			}
+			if (avatarRemoveField) avatarRemoveField.value = '';
+			revoke('avatar');
+			hydrateExistingAvatarFromDataset();
+			hideError();
+			closePersonaGenerateConfirm();
+			setModalOpen(overlay, true);
+		});
+	}
+
 	if (closeBtn) closeBtn.addEventListener('click', closeModal);
 	if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
 
@@ -1701,6 +1779,30 @@ function wirePersonaLibraryEditModal(container, personality) {
 		closeModal();
 	});
 
+	async function buildPersonaCatalogFormData() {
+		const fd = new FormData();
+		for (const [name, value] of new FormData(form)) {
+			if (name === 'avatar_file' && value instanceof File && value.size > 0) {
+				try {
+					const blob = await resizeImageFile(value, {
+						maxWidth: 128,
+						maxHeight: 128,
+						quality: 0.9,
+						mimeType: 'image/jpeg'
+					});
+					fd.append(name, blob, 'avatar.jpg');
+				} catch {
+					fd.append(name, value);
+				}
+			} else if (name === 'avatar_file' && value instanceof File && value.size === 0) {
+				continue;
+			} else {
+				fd.append(name, value);
+			}
+		}
+		return fd;
+	}
+
 	if (saveBtn && form) {
 		saveBtn.addEventListener('click', async () => {
 			const character = (charTa?.value || '').trim();
@@ -1711,26 +1813,50 @@ function wirePersonaLibraryEditModal(container, personality) {
 			hideError();
 			saveBtn.disabled = true;
 			try {
-				const fd = new FormData();
-				for (const [name, value] of new FormData(form)) {
-					if (name === 'avatar_file' && value instanceof File && value.size > 0) {
-						try {
-							const blob = await resizeImageFile(value, {
-								maxWidth: 128,
-								maxHeight: 128,
-								quality: 0.9,
-								mimeType: 'image/jpeg'
-							});
-							fd.append(name, blob, 'avatar.jpg');
-						} catch {
-							fd.append(name, value);
-						}
-					} else if (name === 'avatar_file' && value instanceof File && value.size === 0) {
-						continue;
-					} else {
-						fd.append(name, value);
+				if (isPromoteSetup) {
+					const promoteRes = await fetch('/api/prompt-injections/personas/promote', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						credentials: 'include',
+						body: JSON.stringify({ tag })
+					});
+					const promoteData = await promoteRes.json().catch(() => ({}));
+					if (!promoteRes.ok && promoteRes.status !== 409) {
+						const msg =
+							typeof promoteData?.message === 'string' && promoteData.message.trim()
+								? promoteData.message.trim()
+								: typeof promoteData?.error === 'string'
+									? promoteData.error
+									: 'Could not add to library.';
+						showError(msg);
+						return;
 					}
+					const fd = await buildPersonaCatalogFormData();
+					const result = await fetchJsonWithStatusDeduped(
+						`/api/prompt-injections/personas/${encodeURIComponent(tag)}/catalog`,
+						{
+							method: 'POST',
+							credentials: 'include',
+							body: fd
+						},
+						{ windowMs: 0 }
+					);
+					if (!result.ok) {
+						const data = result.data || {};
+						const msg =
+							typeof data?.message === 'string' && data.message.trim()
+								? data.message.trim()
+								: typeof data?.error === 'string'
+									? data.error
+									: 'Persona was added but details could not be saved. Try Edit persona.';
+						showError(msg);
+						return;
+					}
+					window.location.reload();
+					return;
 				}
+
+				const fd = await buildPersonaCatalogFormData();
 				const result = await fetchJsonWithStatusDeduped(
 					`/api/prompt-injections/personas/${encodeURIComponent(tag)}/catalog`,
 					{
@@ -1789,17 +1915,8 @@ function wirePersonaLibraryEditModal(container, personality) {
 				if (nameEl && typeof result.data?.persona?.title === 'string') {
 					nameEl.textContent = result.data.persona.title.trim();
 				}
-				const avSlot = container.querySelector('.user-profile-hero .user-profile-avatar');
-				if (avSlot && result.data?.persona) {
-					const au = typeof result.data.persona.avatar_url === 'string' ? result.data.persona.avatar_url.trim() : '';
-					const disp = (nameEl?.textContent || container.dataset.personaLibraryTitle || '').trim() || '?';
-					if (au) {
-						avSlot.innerHTML = `<img class="user-profile-avatar-img" src="${escapeHtml(au)}" alt="${escapeHtml(disp)}">`;
-					} else {
-						const initial = disp.charAt(0).toUpperCase() || '?';
-						const avatarColor = getAvatarColor(tag);
-						avSlot.innerHTML = `<div class="user-profile-avatar-fallback" style="--user-profile-avatar-bg: ${avatarColor};" aria-hidden="true">${escapeHtml(initial)}</div>`;
-					}
+				if (result.data?.persona) {
+					applyPersonaHeroAvatarFromResponse(container, tag, result.data.persona);
 				}
 				closeModal();
 			} catch {
@@ -1811,47 +1928,73 @@ function wirePersonaLibraryEditModal(container, personality) {
 	}
 }
 
-function wirePersonalityPromoteButton(container, personality) {
-	const btn = container.querySelector('[data-promote-persona]');
-	if (!btn || btn.disabled) return;
-	const tag = String(personality || '').trim().toLowerCase();
-	btn.addEventListener('click', async () => {
-		btn.disabled = true;
-		const prevLabel = btn.textContent;
-		btn.textContent = 'Adding…';
-		try {
-			const res = await fetch('/api/prompt-injections/personas/promote', {
+function applyPersonaHeroAvatarFromResponse(container, tag, persona) {
+	const au = persona && typeof persona.avatar_url === 'string' ? persona.avatar_url.trim() : '';
+	container.dataset.personaLibraryAvatarUrl = au;
+	const nameEl = container.querySelector('.user-profile-name');
+	const avSlot = container.querySelector('.user-profile-hero .user-profile-avatar');
+	if (!avSlot) return;
+	const disp = (nameEl?.textContent || container.dataset.personaLibraryTitle || '').trim() || '?';
+	if (au) {
+		avSlot.innerHTML = `<img class="user-profile-avatar-img" src="${escapeHtml(au)}" alt="${escapeHtml(disp)}">`;
+	} else {
+		const initial = disp.charAt(0).toUpperCase() || '?';
+		const avatarColor = getAvatarColor(tag);
+		avSlot.innerHTML = `<div class="user-profile-avatar-fallback" style="--user-profile-avatar-bg: ${avatarColor};" aria-hidden="true">${escapeHtml(initial)}</div>`;
+	}
+}
+
+async function runPersonaSetAvatarFromCreation(container, tag, creationId, btn) {
+	if (!Number.isFinite(creationId) || creationId <= 0) return;
+
+	const character = (container.dataset.personaLibraryCharacter || '').trim();
+	if (!character) {
+		window.alert('Add a character description for this persona (Edit persona) before setting an avatar.');
+		return;
+	}
+	let title = (container.dataset.personaLibraryTitle || '').trim();
+	if (!title) title = personalitySlugToDisplayTitle(tag);
+	const description = (container.dataset.personaLibraryDescription || '').trim();
+
+	btn.disabled = true;
+	btn.setAttribute('aria-busy', 'true');
+	try {
+		const fd = new FormData();
+		fd.append('title', title);
+		fd.append('description', description);
+		fd.append('character_description', character);
+		fd.append('avatar_creation_id', String(creationId));
+
+		const result = await fetchJsonWithStatusDeduped(
+			`/api/prompt-injections/personas/${encodeURIComponent(tag)}/catalog`,
+			{
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
 				credentials: 'include',
-				body: JSON.stringify({ tag })
-			});
-			const data = await res.json().catch(() => ({}));
-			if (res.ok) {
-				btn.textContent = 'In Prompt Library';
-				btn.removeAttribute('data-promote-persona');
-				window.location.reload();
-				return;
-			}
-			if (res.status === 409) {
-				btn.textContent = 'In Prompt Library';
-				btn.removeAttribute('data-promote-persona');
-				window.location.reload();
-				return;
-			}
-			btn.disabled = false;
-			btn.textContent = prevLabel;
+				body: fd
+			},
+			{ windowMs: 0 }
+		);
+		if (!result.ok) {
+			const data = result.data || {};
 			const msg =
 				typeof data?.message === 'string' && data.message.trim()
-					? data.message
-					: 'Could not add persona.';
+					? data.message.trim()
+					: typeof data?.error === 'string'
+						? data.error
+						: 'Could not update avatar.';
 			window.alert(msg);
-		} catch {
-			btn.disabled = false;
-			btn.textContent = prevLabel;
-			window.alert('Could not add persona.');
+			return;
 		}
-	});
+		const p = result.data?.persona;
+		if (p && typeof p === 'object') {
+			applyPersonaHeroAvatarFromResponse(container, tag, p);
+		}
+	} catch {
+		window.alert('Could not update avatar.');
+	} finally {
+		btn.disabled = false;
+		btn.removeAttribute('aria-busy');
+	}
 }
 
 async function init() {
@@ -1953,7 +2096,6 @@ async function init() {
 				personaCatalog,
 				canEditPersonaCatalog
 			});
-			wirePersonalityPromoteButton(container, personality);
 			wirePersonaLibraryEditModal(container, personality);
 		} catch {
 			renderProfileUnavailableState(container, {

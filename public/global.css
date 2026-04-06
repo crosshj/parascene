@@ -903,6 +903,7 @@ button:active {
 /* Primary button style */
 .btn-primary,
 button.btn-primary,
+a.btn-primary,
 header .action-item.btn-primary,
 header .create-button.btn-primary {
 	background: var(--accent);
@@ -912,8 +913,27 @@ header .create-button.btn-primary {
 	transition: background 0.2s ease, transform 0.1s ease;
 }
 
+/* Anchor primaries: same box model as a.btn-outlined / a.btn-secondary (bare <a class="btn-primary"> had no padding). */
+a.btn-primary {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	padding: 8px 12px;
+	border-style: solid;
+	border-width: 1px;
+	text-decoration: none;
+	font-size: 0.95rem;
+	white-space: nowrap;
+	flex-shrink: 0;
+	cursor: pointer;
+	font: inherit;
+	box-sizing: border-box;
+}
+
 .btn-primary:hover:not(:disabled),
 button.btn-primary:hover:not(:disabled),
+a.btn-primary:hover,
 header .action-item.btn-primary:hover:not(:disabled),
 header .create-button.btn-primary:hover:not(:disabled) {
 	background: var(--focus);
@@ -923,9 +943,15 @@ header .create-button.btn-primary:hover:not(:disabled) {
 
 .btn-primary:active:not(:disabled),
 button.btn-primary:active:not(:disabled),
+a.btn-primary:active,
 header .action-item.btn-primary:active:not(:disabled),
 header .create-button.btn-primary:active:not(:disabled) {
 	transform: translateY(0);
+}
+
+a.btn-primary:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
 }
 
 .btn-primary:disabled,
@@ -1163,6 +1189,7 @@ button.btn-corners-squircle,
 a.btn-corners-squircle,
 .btn-primary,
 button.btn-primary,
+a.btn-primary,
 header .action-item.btn-primary,
 header .create-button.btn-primary,
 .btn-secondary,
@@ -1182,6 +1209,7 @@ button.btn-danger {
 	a.btn-corners-squircle,
 	.btn-primary,
 	button.btn-primary,
+	a.btn-primary,
 	header .action-item.btn-primary,
 	header .create-button.btn-primary,
 	.btn-secondary,

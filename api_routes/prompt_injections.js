@@ -16,6 +16,12 @@ function canPromotePersona(user) {
 	return plan === "founder";
 }
 
+function isAdminUser(user) {
+	return Boolean(user && user.role === "admin");
+}
+
+const STYLE_SLUG_RE = /^(?=.*[a-z])[a-z0-9][a-z0-9_-]{0,63}$/;
+
 function slugToDisplayTitle(slug) {
 	const s = String(slug ?? "").trim();
 	if (!s) return "";
@@ -61,6 +67,33 @@ function extractGenericKey(url) {
 		}
 	});
 	return segments.join("/");
+}
+
+/** Parse numeric creation id from pasted link, path, or plain digits. */
+function parseCreationIdFromLink(raw) {
+	const s = String(raw ?? "").trim();
+	if (!s) return null;
+	const onlyDigits = /^\d+$/.exec(s);
+	if (onlyDigits) {
+		const n = parseInt(onlyDigits[0], 10);
+		return Number.isFinite(n) && n > 0 ? n : null;
+	}
+	try {
+		const u = new URL(s, "https://www.parascene.com");
+		const m = u.pathname.match(/\/creations\/(\d+)/);
+		if (m) {
+			const n = parseInt(m[1], 10);
+			return Number.isFinite(n) && n > 0 ? n : null;
+		}
+	} catch {
+		// ignore
+	}
+	const m2 = s.match(/\/creations\/(\d+)/);
+	if (m2) {
+		const n = parseInt(m2[1], 10);
+		return Number.isFinite(n) && n > 0 ? n : null;
+	}
+	return null;
 }
 
 function parseInjectionMeta(raw) {
@@ -134,11 +167,87 @@ export default function createPromptInjectionsRoutes({ queries, storage }) {
 				return res.status(501).json({ error: "Prompt library is not available" });
 			}
 			const items = await fn(req.auth.userId);
+			const user = await queries.selectUserById.get(req.auth.userId);
+			const canAddStyle = canPromotePersona(user);
 			res.set("Cache-Control", "private, max-age=30");
-			return res.json({ items: Array.isArray(items) ? items : [] });
+			return res.json({
+				items: Array.isArray(items) ? items : [],
+				canAddStyle
+			});
 		} catch (err) {
 			console.error("[prompt-injections]", err);
 			return res.status(500).json({ error: "Failed to load prompt library" });
+		}
+	});
+
+	/**
+	 * GET /api/styles/new — whether the user may create a global catalog style (admin or founder).
+	 * Registered before GET /api/styles/:slug so "new" is not captured as :slug.
+	 */
+	router.get("/api/styles/new", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+			const user = await queries.selectUserById.get(req.auth.userId);
+			res.set("Cache-Control", "private, no-store");
+			return res.json({ canCreate: Boolean(user && canPromotePersona(user)) });
+		} catch (err) {
+			console.error("[styles new]", err);
+			return res.status(500).json({ error: "Failed to load" });
+		}
+	});
+
+	/**
+	 * POST /api/styles — create global catalog style (admin or founder). Body: tag, injection_text, title?, description?, visibility? public|unlisted
+	 */
+	router.post("/api/styles", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+			const user = await queries.selectUserById.get(req.auth.userId);
+			if (!canPromotePersona(user)) {
+				return res.status(403).json({ error: "Forbidden" });
+			}
+			const body = req.body && typeof req.body === "object" ? req.body : {};
+			const tag = String(body.tag ?? "").trim().toLowerCase();
+			if (tag === "new") {
+				return res.status(400).json({ error: 'The tag "new" is reserved' });
+			}
+			if (!STYLE_SLUG_RE.test(tag)) {
+				return res.status(400).json({ error: "Invalid style tag" });
+			}
+			const injectionText = String(body.injection_text ?? "").trim();
+			if (!injectionText) {
+				return res.status(400).json({ error: "Prompt modifiers are required" });
+			}
+			const titleRaw = body.title != null ? String(body.title).trim() : "";
+			const descRaw = body.description != null ? String(body.description).trim() : "";
+			const vis = String(body.visibility ?? "public").trim().toLowerCase();
+			if (vis !== "public" && vis !== "unlisted") {
+				return res.status(400).json({ error: "Visibility must be public or unlisted" });
+			}
+			const fn = queries.insertGlobalStylePromptInjection?.run;
+			if (typeof fn !== "function") {
+				return res.status(501).json({ error: "Styles are not available" });
+			}
+			try {
+				const result = await fn(tag, injectionText, titleRaw || null, descRaw || null, vis);
+				const n = Number(result?.changes ?? 0);
+				if (!Number.isFinite(n) || n < 1) {
+					return res.status(500).json({ error: "Could not save style" });
+				}
+			} catch (e) {
+				if (isUniqueViolation(e)) {
+					return res.status(409).json({ error: "A style with this tag already exists" });
+				}
+				throw e;
+			}
+			return res.status(201).json({ ok: true, tag });
+		} catch (err) {
+			console.error("[styles create]", err);
+			return res.status(500).json({ error: "Failed to create style" });
 		}
 	});
 
@@ -153,7 +262,7 @@ export default function createPromptInjectionsRoutes({ queries, storage }) {
 			}
 			const raw = String(req.params?.slug ?? "").trim();
 			const slug = raw.toLowerCase();
-			if (!/^[a-z][a-z0-9_-]{0,63}$/.test(slug)) {
+			if (!STYLE_SLUG_RE.test(slug)) {
 				return res.status(400).json({ error: "Invalid style slug" });
 			}
 			const fn = queries.selectPromptInjectionStyleBySlugForUser?.get;
@@ -164,6 +273,19 @@ export default function createPromptInjectionsRoutes({ queries, storage }) {
 			if (!row) {
 				return res.status(404).json({ error: "Style not found" });
 			}
+			const user = await queries.selectUserById.get(req.auth.userId);
+			const rowMeta = parseInjectionMeta(row.meta);
+			let styleThumbUrl =
+				typeof rowMeta.style_thumb_url === "string" ? rowMeta.style_thumb_url.trim() : "";
+			if (!styleThumbUrl) {
+				const gFn = queries.selectGlobalStylePromptInjectionByTag?.get;
+				if (typeof gFn === "function") {
+					const globalRow = await gFn(slug);
+					const gm = parseInjectionMeta(globalRow?.meta);
+					styleThumbUrl =
+						typeof gm.style_thumb_url === "string" ? gm.style_thumb_url.trim() : "";
+				}
+			}
 			res.set("Cache-Control", "private, max-age=60");
 			return res.json({
 				style: {
@@ -171,12 +293,192 @@ export default function createPromptInjectionsRoutes({ queries, storage }) {
 					title: row.title ?? null,
 					description: row.description ?? null,
 					visibility: row.visibility ?? null,
-					injection_text: typeof row.injection_text === "string" ? row.injection_text : null
-				}
+					injection_text: typeof row.injection_text === "string" ? row.injection_text : null,
+					style_thumb_url: styleThumbUrl || null
+				},
+				adminCanDelete: isAdminUser(user),
+				canSetStyleThumb: canPromotePersona(user)
 			});
 		} catch (err) {
 			console.error("[styles]", err);
 			return res.status(500).json({ error: "Failed to load style" });
+		}
+	});
+
+	/**
+	 * PATCH /api/styles/:slug — admin/founder: set catalog style image from a published creation link, or clear.
+	 * Body: { creation_link?: string, clear_thumb?: boolean }
+	 */
+	router.patch("/api/styles/:slug", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+			const user = await queries.selectUserById.get(req.auth.userId);
+			if (!canPromotePersona(user)) {
+				return res.status(403).json({ error: "Forbidden" });
+			}
+			if (!storage?.uploadGenericImage || typeof storage.getImageBuffer !== "function") {
+				return res.status(501).json({ error: "Style images are not available" });
+			}
+			const raw = String(req.params?.slug ?? "").trim();
+			const slug = raw.toLowerCase();
+			if (!STYLE_SLUG_RE.test(slug)) {
+				return res.status(400).json({ error: "Invalid style slug" });
+			}
+			const fnGetGlobal = queries.selectGlobalStylePromptInjectionByTag?.get;
+			const fnUpdateMeta = queries.updateGlobalStyleCatalogMetaByTag?.run;
+			if (typeof fnGetGlobal !== "function" || typeof fnUpdateMeta !== "function") {
+				return res.status(501).json({ error: "Styles are not available" });
+			}
+			const globalRow = await fnGetGlobal(slug);
+			if (!globalRow) {
+				return res.status(404).json({ error: "Catalog style not found" });
+			}
+
+			const body = req.body && typeof req.body === "object" ? req.body : {};
+			const clearThumb = body.clear_thumb === true;
+			const linkRaw = typeof body.creation_link === "string" ? body.creation_link.trim() : "";
+
+			const meta = parseInjectionMeta(globalRow.meta);
+			const oldThumbUrl = typeof meta.style_thumb_url === "string" ? meta.style_thumb_url.trim() : "";
+			const oldKey = extractGenericKey(oldThumbUrl);
+			const pendingDeletes = [];
+
+			if (clearThumb) {
+				await fnUpdateMeta(slug, { style_thumb_url: null });
+				if (oldKey && storage.deleteGenericImage) {
+					pendingDeletes.push(oldKey);
+				}
+				if (storage.deleteGenericImage && pendingDeletes.length > 0) {
+					for (const key of pendingDeletes) {
+						try {
+							await storage.deleteGenericImage(key);
+						} catch {
+							// ignore
+						}
+					}
+				}
+				return res.json({ ok: true, style_thumb_url: null });
+			}
+
+			const creationId = parseCreationIdFromLink(linkRaw);
+			if (!creationId) {
+				return res.status(400).json({
+					error: "Invalid link",
+					message: "Paste a creation URL such as /creations/123 or a numeric id."
+				});
+			}
+
+			const fnAny = queries.selectCreatedImageByIdAnyUser?.get;
+			if (typeof fnAny !== "function") {
+				return res.status(501).json({ error: "Not available" });
+			}
+			const creation = await fnAny(creationId);
+			if (!creation) {
+				return res.status(404).json({ error: "Creation not found" });
+			}
+			const pub = creation.published === 1 || creation.published === true;
+			if (!pub) {
+				return res.status(403).json({
+					error: "Forbidden",
+					message: "Only published creations can be used as a style image."
+				});
+			}
+			if (creation.unavailable_at != null && String(creation.unavailable_at).trim() !== "") {
+				return res.status(403).json({ error: "Forbidden", message: "This creation is unavailable." });
+			}
+			const cMeta = parseInjectionMeta(creation.meta);
+			if (cMeta?.media_type === "video") {
+				return res.status(400).json({ error: "Video creations cannot be used as a style image." });
+			}
+			const status = creation.status != null ? String(creation.status).trim().toLowerCase() : "";
+			if (status && status !== "completed") {
+				return res.status(400).json({ error: "Creation is not ready to use as an image." });
+			}
+			const filename = creation.filename != null ? String(creation.filename).trim() : "";
+			if (!filename || filename.includes("..") || filename.includes("/")) {
+				return res.status(400).json({ error: "Invalid creation image" });
+			}
+
+			const now = Date.now();
+			const rand = Math.random().toString(36).slice(2, 9);
+			let buffer;
+			try {
+				buffer = await storage.getImageBuffer(filename);
+			} catch {
+				return res.status(400).json({ error: "Could not read creation image" });
+			}
+			let resized;
+			try {
+				resized = await sharp(buffer)
+					.rotate()
+					.resize(280, 320, { fit: "cover" })
+					.png()
+					.toBuffer();
+			} catch {
+				return res.status(400).json({ error: "Could not process creation image" });
+			}
+			const key = `prompt-styles/${slug}/thumb_${now}_${rand}.png`;
+			let stored;
+			try {
+				stored = await storage.uploadGenericImage(resized, key, {
+					contentType: "image/png"
+				});
+			} catch {
+				return res.status(500).json({ error: "Could not store style image" });
+			}
+			const newUrl = buildGenericUrl(stored);
+			await fnUpdateMeta(slug, { style_thumb_url: newUrl });
+			if (oldKey && oldThumbUrl !== newUrl && storage.deleteGenericImage) {
+				pendingDeletes.push(oldKey);
+			}
+			if (storage.deleteGenericImage && pendingDeletes.length > 0) {
+				for (const k of pendingDeletes) {
+					try {
+						await storage.deleteGenericImage(k);
+					} catch {
+						// ignore
+					}
+				}
+			}
+			return res.json({ ok: true, style_thumb_url: newUrl });
+		} catch (err) {
+			console.error("[styles patch]", err);
+			return res.status(500).json({ error: "Failed to update style image" });
+		}
+	});
+
+	/**
+	 * DELETE /api/styles/:slug — admin only; soft-deletes all catalog rows for this style tag.
+	 */
+	router.delete("/api/styles/:slug", async (req, res) => {
+		try {
+			if (!req.auth?.userId) {
+				return res.status(401).json({ error: "Unauthorized" });
+			}
+			const user = await queries.selectUserById.get(req.auth.userId);
+			if (!isAdminUser(user)) {
+				return res.status(403).json({ error: "Forbidden" });
+			}
+			const raw = String(req.params?.slug ?? "").trim();
+			const slug = raw.toLowerCase();
+			if (!STYLE_SLUG_RE.test(slug)) {
+				return res.status(400).json({ error: "Invalid style slug" });
+			}
+			const fn = queries.deletePromptInjectionStylesByTagAdmin?.run;
+			if (typeof fn !== "function") {
+				return res.status(501).json({ error: "Styles are not available" });
+			}
+			const result = await fn(slug);
+			const n = Number(result?.changes ?? 0);
+			if (!Number.isFinite(n) || n <= 0) {
+				return res.status(404).json({ error: "Style not found or already removed" });
+			}
+			return res.json({ ok: true, deleted: n });
+		} catch (err) {
+			console.error("[styles delete]", err);
+			return res.status(500).json({ error: "Failed to delete style" });
 		}
 	});
 
@@ -424,6 +726,8 @@ export default function createPromptInjectionsRoutes({ queries, storage }) {
 			const avatarRemove = Boolean(fields?.avatar_remove);
 			const avatarFile = files?.avatar_file || null;
 			const tryUrl = typeof fields?.avatar_try_url === "string" ? fields.avatar_try_url.trim() : "";
+			const avatarCreationIdRaw = typeof fields?.avatar_creation_id === "string" ? fields.avatar_creation_id.trim() : "";
+			const avatarCreationId = avatarCreationIdRaw ? parseInt(avatarCreationIdRaw, 10) : NaN;
 
 			const oldAvatarUrl = typeof meta.persona_avatar_url === "string" ? meta.persona_avatar_url.trim() : "";
 			const oldAvatarKey = extractGenericKey(oldAvatarUrl);
@@ -486,6 +790,52 @@ export default function createPromptInjectionsRoutes({ queries, storage }) {
 					}
 				} catch {
 					return res.status(400).json({ error: "Could not promote generated avatar" });
+				}
+			} else if (Number.isFinite(avatarCreationId) && avatarCreationId > 0) {
+				const fnAny = queries.selectCreatedImageByIdAnyUser?.get;
+				if (typeof fnAny !== "function" || typeof storage.getImageBuffer !== "function") {
+					return res.status(501).json({ error: "Not available" });
+				}
+				const creation = await fnAny(avatarCreationId);
+				if (!creation) {
+					return res.status(404).json({ error: "Creation not found" });
+				}
+				const pub = creation.published === 1 || creation.published === true;
+				if (!pub) {
+					return res.status(403).json({
+						error: "Forbidden",
+						message: "Only published creations can be used as a persona avatar."
+					});
+				}
+				if (creation.unavailable_at != null && String(creation.unavailable_at).trim() !== "") {
+					return res.status(403).json({ error: "Forbidden", message: "This creation is unavailable." });
+				}
+				const cMeta = parseInjectionMeta(creation.meta);
+				if (cMeta?.media_type === "video") {
+					return res.status(400).json({ error: "Video creations cannot be used as a persona avatar." });
+				}
+				const filename = creation.filename != null ? String(creation.filename).trim() : "";
+				if (!filename || filename.includes("..") || filename.includes("/")) {
+					return res.status(400).json({ error: "Invalid creation image" });
+				}
+				try {
+					const buffer = await storage.getImageBuffer(filename);
+					const resized = await sharp(buffer)
+						.rotate()
+						.resize(128, 128, { fit: "cover" })
+						.png()
+						.toBuffer();
+					const key = `prompt-personas/${tag}/avatar_${now}_${rand}.png`;
+					const stored = await storage.uploadGenericImage(resized, key, {
+						contentType: "image/png"
+					});
+					const newUrl = buildGenericUrl(stored);
+					meta.persona_avatar_url = newUrl;
+					if (oldAvatarKey && oldAvatarUrl !== newUrl && storage.deleteGenericImage) {
+						pendingDeletes.push(oldAvatarKey);
+					}
+				} catch {
+					return res.status(400).json({ error: "Could not read creation image" });
 				}
 			}
 

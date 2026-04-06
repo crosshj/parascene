@@ -69,7 +69,7 @@ function renderPlainUserTextSegment(text) {
 	if (!transformed) return '';
 
 	// Conservative personality / tag / style token pattern:
-	// - @ user, # tag channel, $ style → /styles/:slug
+	// - @ user, # tag channel, $ style → /styles/:slug (slug may start with a digit)
 	// - Bounded so we don't transform emails/embedded tokens.
 	const tokenRe = /(^|[^a-zA-Z0-9_-])([@#$])([a-zA-Z0-9][a-zA-Z0-9_-]{0,63})(?=$|[^a-zA-Z0-9_-])/g;
 	let out = '';
@@ -89,7 +89,7 @@ function renderPlainUserTextSegment(text) {
 			out += `<a href="/p/${escapeHtml(normalized)}" class="user-link mention-link">@${escapeHtml(rawToken)}</a>`;
 		} else if (sigil === '#' && /^[a-z0-9][a-z0-9_-]{1,31}$/.test(normalized)) {
 			out += `<a href="/t/${escapeHtml(normalized)}" class="user-link mention-link">#${escapeHtml(rawToken)}</a>`;
-		} else if (sigil === '$' && /^[a-z][a-z0-9_-]{0,63}$/.test(normalized)) {
+		} else if (sigil === '$' && /^(?=.*[a-z])[a-z0-9][a-z0-9_-]{0,63}$/.test(normalized)) {
 			out += `<a href="/styles/${escapeHtml(normalized)}" class="user-link mention-link mention-link--style">$${escapeHtml(rawToken)}</a>`;
 		} else {
 			out += escapeHtml(`${sigil}${rawToken}`);

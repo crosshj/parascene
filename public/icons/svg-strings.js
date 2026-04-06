@@ -135,6 +135,33 @@ export const linkIcon2 = withAttributes(html`
 	</svg>
 `);
 
+/** Overlapping rectangles — copy tag / duplicate (e.g. prompt library). */
+export const copyIcon = withAttributes(html`
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"
+		stroke-linejoin="round" aria-hidden="true">
+		<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+		<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+	</svg>
+`);
+
+/** Pencil — open or edit. */
+export const pencilIcon = withAttributes(html`
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"
+		stroke-linejoin="round" aria-hidden="true">
+		<path d="M12 20h9"></path>
+		<path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+	</svg>
+`);
+
+/** Open eye — view / show (e.g. prompt library row). */
+export const eyeIcon = withAttributes(html`
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"
+		stroke-linejoin="round" aria-hidden="true">
+		<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"></path>
+		<circle cx="12" cy="12" r="3"></circle>
+	</svg>
+`);
+
 /** Shield icon (e.g. for content policy / moderated state). */
 export const shieldIcon = withAttributes(html`
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"

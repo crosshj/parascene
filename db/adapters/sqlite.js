@@ -2359,7 +2359,7 @@ export async function openDb() {
 				const raw = String(slug ?? "").trim();
 				if (!Number.isFinite(uid) || uid <= 0 || !raw) return Promise.resolve(null);
 				const stmt = db.prepare(
-					`SELECT id, tag, injection_text, title, description, owner_user_id, visibility
+					`SELECT id, tag, injection_text, title, description, owner_user_id, visibility, meta
 					 FROM prompt_injections
 					 WHERE tag_type = 'style'
 					   AND is_active = 1
@@ -2375,6 +2375,101 @@ export async function openDb() {
 				);
 				const row = stmt.get(raw, uid, uid);
 				return Promise.resolve(row || null);
+			}
+		},
+		/** Global catalog style row (owner_user_id IS NULL) by tag — for style_thumb_url fallback and updates. */
+		selectGlobalStylePromptInjectionByTag: {
+			get: async (tag) => {
+				const raw = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				if (!raw) return Promise.resolve(null);
+				const stmt = db.prepare(
+					`SELECT id, tag, meta
+					 FROM prompt_injections
+					 WHERE tag_type = 'style'
+					   AND owner_user_id IS NULL
+					   AND is_active = 1
+					   AND deleted_at IS NULL
+					   AND lower(tag) = lower(?)`
+				);
+				const row = stmt.get(raw);
+				return Promise.resolve(row || null);
+			}
+		},
+		/** Merge keys into meta JSON for the global catalog style row with this tag. */
+		updateGlobalStyleCatalogMetaByTag: {
+			run: async (tag, patch) => {
+				const t = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				if (!t || !patch || typeof patch !== "object") return Promise.resolve({ changes: 0 });
+				const getRow = db.prepare(
+					`SELECT id, meta FROM prompt_injections
+					 WHERE tag_type = 'style'
+					   AND owner_user_id IS NULL
+					   AND is_active = 1
+					   AND deleted_at IS NULL
+					   AND lower(tag) = lower(?)`
+				);
+				const row = getRow.get(t);
+				if (!row) return Promise.resolve({ changes: 0 });
+				let meta = {};
+				try {
+					meta = row.meta ? JSON.parse(row.meta) : {};
+					if (!meta || typeof meta !== "object" || Array.isArray(meta)) meta = {};
+				} catch {
+					meta = {};
+				}
+				for (const [k, v] of Object.entries(patch)) {
+					if (v === null || v === undefined) delete meta[k];
+					else meta[k] = v;
+				}
+				const stmt = db.prepare(
+					`UPDATE prompt_injections SET meta = ?, updated_at = datetime('now') WHERE id = ?`
+				);
+				const result = stmt.run(JSON.stringify(meta), row.id);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		/** Soft-delete every active style row for this tag (admin catalog cleanup). */
+		deletePromptInjectionStylesByTagAdmin: {
+			run: async (slug) => {
+				const raw = String(slug ?? "")
+					.trim()
+					.toLowerCase();
+				if (!raw) return Promise.resolve({ changes: 0 });
+				const stmt = db.prepare(
+					`UPDATE prompt_injections
+					 SET deleted_at = datetime('now'), is_active = 0, updated_at = datetime('now')
+					 WHERE tag_type = 'style'
+					   AND deleted_at IS NULL
+					   AND lower(tag) = lower(?)`
+				);
+				const result = stmt.run(raw);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		/** Global catalog style row (owner_user_id IS NULL). */
+		insertGlobalStylePromptInjection: {
+			run: async (tag, injectionText, title, description, visibility) => {
+				const t = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				const inj = String(injectionText ?? "").trim();
+				if (!t || !inj) return Promise.resolve({ changes: 0 });
+				const vis = visibility === "unlisted" ? "unlisted" : "public";
+				const stmt = db.prepare(
+					`INSERT INTO prompt_injections (
+						tag, tag_type, injection_text, title, description,
+						owner_user_id, visibility, is_active, created_at, updated_at
+					) VALUES (?, 'style', ?, ?, ?, NULL, ?, 1, datetime('now'), datetime('now'))`
+				);
+				const result = stmt.run(t, inj, title ?? null, description ?? null, vis);
+				return Promise.resolve({
+					changes: result.changes,
+					lastInsertRowid: result.lastInsertRowid
+				});
 			}
 		},
 		/** Global catalog persona row (owner_user_id IS NULL) by tag slug. */

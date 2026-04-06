@@ -6,11 +6,14 @@
  */
 
 import { getStyleThumbUrl } from "./create-styles.js";
+import { copyIcon, eyeIcon } from "../icons/svg-strings.js";
 
-const COPY_KEY_ICON = `<svg class="prompt-library-copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-	<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-	<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-</svg>`;
+const COPY_KEY_SVG = copyIcon("prompt-library-copy-icon");
+const VIEW_DETAIL_SVG = eyeIcon("prompt-library-copy-icon");
+
+/** Aligned with GET /api/styles/:slug — digit-leading OK if slug contains a letter (not $100). */
+const STYLE_TAG_RE = /^(?=.*[a-z])[a-z0-9][a-z0-9_-]{0,63}$/;
+const PERSONA_TAG_RE = /^[a-z0-9][a-z0-9_-]{2,23}$/;
 
 function hashTabIdFromLocation() {
 	return (window.location.hash || "").replace(/^#/, "").trim().toLowerCase();
@@ -96,16 +99,23 @@ function renderPersonaRows(tbody, rows, getAvatarColor) {
 			const avatarBg = colorFn(seed);
 			const handleToCopy = `@${canonicalTag}`;
 			const handleAttr = escapeHtml(handleToCopy);
+			const personaHref =
+				PERSONA_TAG_RE.test(canonicalTag) ? `/p/${encodeURIComponent(canonicalTag)}` : "";
+			const openPersona =
+				personaHref !== ""
+					? `<a href="${escapeHtml(personaHref)}" class="prompt-library-view" aria-label="View persona">${VIEW_DETAIL_SVG}</a>`
+					: "";
 			const thumbCell = avatarUrl
 				? `<img class="prompt-library-persona-avatar-img" src="${escapeHtml(avatarUrl)}" alt="" width="48" height="48" loading="lazy" decoding="async" />`
 				: `<span class="prompt-library-persona-avatar-fallback" style="--prompt-library-persona-avatar-bg: ${avatarBg};" aria-hidden="true">${escapeHtml(initial)}</span>`;
-			return `<tr class="prompt-library-row prompt-library-row--persona" data-prompt-injection-id="${escapeHtml(id)}" data-tag="${tagAttr}" tabindex="0">
+			return `<tr class="prompt-library-row prompt-library-row--persona" data-prompt-injection-id="${escapeHtml(id)}" data-tag="${tagAttr}">
 				<td class="prompt-library-cell-thumb">${thumbCell}</td>
 				<td><code class="prompt-library-tag">${tagHtml}</code></td>
 				<td class="prompt-library-cell-actions">
 					<button type="button" class="prompt-library-copy-key" data-copy-persona-handle="${handleAttr}" aria-label="Copy persona handle">
-						${COPY_KEY_ICON}
+						${COPY_KEY_SVG}
 					</button>
+					${openPersona}
 				</td>
 			</tr>`;
 		})
@@ -129,8 +139,9 @@ function renderPersonaRows(tbody, rows, getAvatarColor) {
 	}
 }
 
-function renderStyleRows(tbody, rows) {
+function renderStyleRows(tbody, rows, getAvatarColor) {
 	if (!tbody) return;
+	const colorFn = typeof getAvatarColor === "function" ? getAvatarColor : () => "#6b7280";
 	if (!rows.length) {
 		tbody.innerHTML = `<tr><td colspan="3" class="prompt-library-table-empty">No items yet.</td></tr>`;
 		return;
@@ -142,17 +153,32 @@ function renderStyleRows(tbody, rows) {
 			const canonicalTag = rawTag.toLowerCase();
 			const tagAttr = escapeHtml(canonicalTag);
 			const tagHtml = escapeHtml(rawTag || canonicalTag);
-			const thumbUrl = getStyleThumbUrl(canonicalTag);
+			const title = String(row.title ?? "").trim();
+			const displayLabel = title || rawTag || canonicalTag;
+			const initial = (displayLabel.charAt(0) || "?").toUpperCase();
+			const initialAttr = escapeHtml(initial);
+			const thumbBg = colorFn(canonicalTag || displayLabel);
+			const meta = parseInjectionMeta(row.meta);
+			const catalogThumb =
+				typeof meta.style_thumb_url === "string" ? meta.style_thumb_url.trim() : "";
+			const thumbUrl = catalogThumb || getStyleThumbUrl(canonicalTag);
+			const fallbackSpan = `<span class="prompt-library-thumb-fallback" style="--prompt-library-style-thumb-bg: ${thumbBg};" aria-hidden="true">${initialAttr}</span>`;
 			const thumbCell = thumbUrl
 				? `<img class="prompt-library-thumb-img" src="${escapeHtml(thumbUrl)}" alt="" width="48" height="56" loading="lazy" decoding="async" />`
-				: `<span class="prompt-library-thumb-fallback" aria-hidden="true"></span>`;
-			return `<tr class="prompt-library-row prompt-library-row--style" data-prompt-injection-id="${escapeHtml(id)}" data-tag="${tagAttr}" tabindex="0">
+				: fallbackSpan;
+			const styleHref = STYLE_TAG_RE.test(canonicalTag) ? `/styles/${encodeURIComponent(canonicalTag)}` : "";
+			const openStyle =
+				styleHref !== ""
+					? `<a href="${escapeHtml(styleHref)}" class="prompt-library-view" aria-label="View style">${VIEW_DETAIL_SVG}</a>`
+					: "";
+			return `<tr class="prompt-library-row prompt-library-row--style" data-prompt-injection-id="${escapeHtml(id)}" data-tag="${tagAttr}" data-style-thumb-initial="${initialAttr}">
 				<td class="prompt-library-cell-thumb">${thumbCell}</td>
 				<td><code class="prompt-library-tag">${tagHtml}</code></td>
 				<td class="prompt-library-cell-actions">
 					<button type="button" class="prompt-library-copy-key" data-copy-style-key="${tagAttr}" aria-label="Copy style key">
-						${COPY_KEY_ICON}
+						${COPY_KEY_SVG}
 					</button>
+					${openStyle}
 				</td>
 			</tr>`;
 		})
@@ -160,24 +186,43 @@ function renderStyleRows(tbody, rows) {
 
 	for (const img of tbody.querySelectorAll(".prompt-library-thumb-img")) {
 		img.addEventListener("error", () => {
-			img.style.display = "none";
 			const td = img.closest(".prompt-library-cell-thumb");
-			if (td && !td.querySelector(".prompt-library-thumb-fallback")) {
-				const fb = document.createElement("span");
+			const tr = img.closest("tr");
+			img.remove();
+			if (!td || !tr) return;
+			let fb = td.querySelector(".prompt-library-thumb-fallback");
+			if (!fb) {
+				fb = document.createElement("span");
 				fb.className = "prompt-library-thumb-fallback";
 				fb.setAttribute("aria-hidden", "true");
 				td.appendChild(fb);
 			}
+			const rawTag = String(tr.getAttribute("data-tag") || "").trim();
+			const seed = rawTag.toLowerCase() || rawTag;
+			fb.style.setProperty("--prompt-library-style-thumb-bg", colorFn(seed));
+			const fromAttr = String(tr.getAttribute("data-style-thumb-initial") || "").trim();
+			fb.textContent = fromAttr || (rawTag.charAt(0) || "?").toUpperCase();
 		});
 	}
 }
 
-function setupPromptLibraryRowActivation(root) {
-	if (!root || root.dataset.promptLibraryActivation === "1") return;
-	root.dataset.promptLibraryActivation = "1";
+/** Clicks on text inside a button can use a Text node as `event.target`, which has no `closest`. */
+function clickTargetElement(e) {
+	const n = e?.target;
+	if (n instanceof Element) return n;
+	if (n && n.nodeType === Node.TEXT_NODE && n.parentElement) return n.parentElement;
+	return null;
+}
+
+function setupPromptLibraryCopyButtons(root) {
+	if (!root || root.dataset.promptLibraryCopyDelegation === "1") return;
+	root.dataset.promptLibraryCopyDelegation = "1";
 
 	root.addEventListener("click", async (e) => {
-		const copyBtn = e.target.closest("[data-copy-style-key]");
+		const fromEl = clickTargetElement(e);
+		if (!fromEl) return;
+
+		const copyBtn = fromEl.closest("[data-copy-style-key]");
 		if (copyBtn && root.contains(copyBtn)) {
 			e.preventDefault();
 			e.stopPropagation();
@@ -193,7 +238,7 @@ function setupPromptLibraryRowActivation(root) {
 			return;
 		}
 
-		const copyPersonaBtn = e.target.closest("[data-copy-persona-handle]");
+		const copyPersonaBtn = fromEl.closest("[data-copy-persona-handle]");
 		if (copyPersonaBtn && root.contains(copyPersonaBtn)) {
 			e.preventDefault();
 			e.stopPropagation();
@@ -206,32 +251,14 @@ function setupPromptLibraryRowActivation(root) {
 			} catch {
 				// ignore
 			}
-			return;
 		}
+	});
+}
 
-		const tr = e.target.closest(".prompt-library-row");
-		if (!tr || !root.contains(tr)) return;
-		const tbody = tr.closest("tbody");
-		const isStyles = tbody?.hasAttribute("data-prompt-library-styles-tbody");
-		const isPersonas = tbody?.hasAttribute("data-prompt-library-personas-tbody");
-		const rawTag = tr.getAttribute("data-tag") || "";
-		const tag = String(rawTag).trim().toLowerCase();
-		if (isStyles && /^[a-z][a-z0-9_-]{0,63}$/.test(tag)) {
-			window.location.href = `/styles/${encodeURIComponent(tag)}`;
-			return;
-		}
-		if (isPersonas && /^[a-z0-9][a-z0-9_-]{2,23}$/.test(tag)) {
-			window.location.href = `/p/${encodeURIComponent(tag)}`;
-		}
-	});
-	root.addEventListener("keydown", (e) => {
-		if (e.key !== "Enter" && e.key !== " ") return;
-		const tr = e.target.closest(".prompt-library-row");
-		if (!tr || !root.contains(tr)) return;
-		if (e.target.closest("[data-copy-style-key]") || e.target.closest("[data-copy-persona-handle]")) return;
-		e.preventDefault();
-		tr.click();
-	});
+function syncPromptLibraryAddStyleButton(canAdd) {
+	const btn = document.querySelector(".prompt-library-add-style");
+	if (!(btn instanceof HTMLAnchorElement)) return;
+	btn.classList.toggle("is-allowed", Boolean(canAdd));
 }
 
 async function loadPromptLibrary() {
@@ -250,8 +277,9 @@ async function loadPromptLibrary() {
 		if (!res.ok) {
 			const msg = typeof data?.error === "string" ? data.error : "Could not load prompt library.";
 			if (intro) intro.textContent = msg;
-			renderStyleRows(stylesBody, []);
+			renderStyleRows(stylesBody, [], getAvatarColor);
 			renderPersonaRows(personasBody, [], getAvatarColor);
+			syncPromptLibraryAddStyleButton(false);
 			queueApplyPromptLibraryTabFromHash();
 			return;
 		}
@@ -261,15 +289,17 @@ async function loadPromptLibrary() {
 
 		if (intro) {
 			intro.textContent =
-				"Saved styles and personas you can use in prompts. Open a row to view that style or persona; use the copy icon for the tag or @handle.";
+				"Saved styles and personas you can use in prompts. Use the eye icon to view a style or persona; use the copy icon for the tag or @handle.";
 		}
-		renderStyleRows(stylesBody, styles);
+		renderStyleRows(stylesBody, styles, getAvatarColor);
 		renderPersonaRows(personasBody, personas, getAvatarColor);
-		setupPromptLibraryRowActivation(root);
+		setupPromptLibraryCopyButtons(root);
+		syncPromptLibraryAddStyleButton(Boolean(data?.canAddStyle));
 	} catch {
 		if (intro) intro.textContent = "Could not load prompt library.";
-		renderStyleRows(stylesBody, []);
+		renderStyleRows(stylesBody, [], getAvatarColor);
 		renderPersonaRows(personasBody, [], getAvatarColor);
+		syncPromptLibraryAddStyleButton(false);
 	}
 	queueApplyPromptLibraryTabFromHash();
 }
