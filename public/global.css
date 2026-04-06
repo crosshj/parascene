@@ -3391,6 +3391,17 @@ app-route-feed {
 	flex-direction: column-reverse;
 }
 
+.triggered-suggest-section {
+	padding: 4px 12px 2px;
+	font-size: 0.65rem;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--text-muted);
+	pointer-events: none;
+	user-select: none;
+}
+
 .triggered-suggest-item {
 	display: flex;
 	align-items: center;

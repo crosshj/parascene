@@ -2281,7 +2281,7 @@ export async function openDb() {
 				const uid = Number(userId);
 				if (!Number.isFinite(uid) || uid <= 0) return Promise.resolve([]);
 				const stmt = db.prepare(
-					`SELECT id, tag, tag_type, title, visibility, owner_user_id, updated_at, is_active, deleted_at
+					`SELECT id, tag, tag_type, title, visibility, owner_user_id, updated_at, is_active, deleted_at, meta
 					 FROM prompt_injections
 					 WHERE is_active = 1
 					   AND deleted_at IS NULL
@@ -2322,6 +2322,37 @@ export async function openDb() {
 				return Promise.resolve(stmt.all(`${p}%`, uid, lim));
 			}
 		},
+		searchPersonaPromptInjectionsByPrefix: {
+			all: async (userId, prefix, limit) => {
+				const uid = Number(userId);
+				const p = String(prefix ?? "")
+					.trim()
+					.toLowerCase()
+					.replace(/[^a-z0-9_-]/g, "");
+				if (!Number.isFinite(uid) || uid <= 0 || !p) return Promise.resolve([]);
+				const lim = Math.min(Math.max(1, Number(limit) || 10), 20);
+				const prefixPattern = `${p}%`;
+				const substrPattern = `%${p}%`;
+				const stmt = db.prepare(
+					`SELECT id, tag, title, meta
+					 FROM prompt_injections
+					 WHERE tag_type = 'persona'
+					   AND is_active = 1
+					   AND deleted_at IS NULL
+					   AND (lower(tag) LIKE ? OR lower(tag) LIKE ?)
+					   AND (
+						 owner_user_id IS NULL
+						 OR owner_user_id = ?
+						 OR visibility IN ('public', 'unlisted')
+					   )
+					 ORDER BY (lower(tag) LIKE ?) DESC, tag ASC
+					 LIMIT ?`
+				);
+				return Promise.resolve(
+					stmt.all(prefixPattern, substrPattern, uid, prefixPattern, lim)
+				);
+			}
+		},
 		selectPromptInjectionStyleBySlugForUser: {
 			get: async (userId, slug) => {
 				const uid = Number(userId);
@@ -2344,6 +2375,116 @@ export async function openDb() {
 				);
 				const row = stmt.get(raw, uid, uid);
 				return Promise.resolve(row || null);
+			}
+		},
+		/** Global catalog persona row (owner_user_id IS NULL) by tag slug. */
+		selectGlobalPersonaPromptInjectionByTag: {
+			get: async (tag) => {
+				const raw = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				if (!raw) return Promise.resolve(null);
+				const stmt = db.prepare(
+					`SELECT id, tag, tag_type, injection_text, title, description, visibility, meta
+					 FROM prompt_injections
+					 WHERE tag_type = 'persona'
+					   AND owner_user_id IS NULL
+					   AND is_active = 1
+					   AND deleted_at IS NULL
+					   AND lower(tag) = lower(?)`
+				);
+				const row = stmt.get(raw);
+				return Promise.resolve(row || null);
+			}
+		},
+		insertGlobalPersonaPromptInjection: {
+			run: async (tag, injectionText, title, description, meta) => {
+				const toJsonText = (value) => {
+					if (value == null) return null;
+					if (typeof value === "string") return value;
+					try {
+						return JSON.stringify(value);
+					} catch {
+						return null;
+					}
+				};
+				const stmt = db.prepare(
+					`INSERT INTO prompt_injections (
+						tag, tag_type, injection_text, title, description, meta,
+						owner_user_id, visibility, is_active, created_at, updated_at
+					) VALUES (?, 'persona', ?, ?, ?, ?, NULL, 'public', 1, datetime('now'), datetime('now'))`
+				);
+				const result = stmt.run(tag, injectionText, title ?? null, description ?? null, toJsonText(meta));
+				return Promise.resolve({
+					insertId: result.lastInsertRowid,
+					lastInsertRowid: result.lastInsertRowid,
+					changes: result.changes
+				});
+			}
+		},
+		/** Whether this slug appears as a persona row visible to the user (same rules as prompt library). */
+		selectPersonaPromptInjectionInLibraryForUserByTag: {
+			get: async (userId, tag) => {
+				const uid = Number(userId);
+				const raw = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				if (!Number.isFinite(uid) || uid <= 0 || !raw) return Promise.resolve(null);
+				const stmt = db.prepare(
+					`SELECT id, tag, title, description, injection_text, meta
+					 FROM prompt_injections
+					 WHERE tag_type = 'persona'
+					   AND is_active = 1
+					   AND deleted_at IS NULL
+					   AND lower(tag) = lower(?)
+					   AND (
+						 owner_user_id IS NULL
+						 OR owner_user_id = ?
+						 OR visibility IN ('public', 'unlisted')
+					   )
+					 ORDER BY
+					   CASE WHEN owner_user_id IS NULL THEN 0 ELSE 1 END,
+					   CASE WHEN owner_user_id = ? THEN 0 ELSE 1 END
+					 LIMIT 1`
+				);
+				const row = stmt.get(raw, uid, uid);
+				return Promise.resolve(row || null);
+			}
+		},
+		updateGlobalPersonaCatalogByTag: {
+			run: async (tag, { title, description, injectionText, meta }) => {
+				const raw = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				if (!raw) return Promise.resolve({ changes: 0 });
+				const inj = String(injectionText ?? "").trim();
+				if (!inj) return Promise.resolve({ changes: 0 });
+				const toJsonText = (value) => {
+					if (value == null) return null;
+					if (typeof value === "string") return value;
+					try {
+						return JSON.stringify(value);
+					} catch {
+						return null;
+					}
+				};
+				const stmt = db.prepare(
+					`UPDATE prompt_injections
+					 SET title = ?, description = ?, injection_text = ?, meta = ?, updated_at = datetime('now')
+					 WHERE tag_type = 'persona'
+					   AND owner_user_id IS NULL
+					   AND deleted_at IS NULL
+					   AND is_active = 1
+					   AND lower(tag) = lower(?)`
+				);
+				const result = stmt.run(
+					title == null ? null : String(title),
+					description == null ? null : String(description),
+					inj,
+					toJsonText(meta),
+					raw
+				);
+				return Promise.resolve({ changes: result.changes });
 			}
 		},
 		insertCreatedImage: {

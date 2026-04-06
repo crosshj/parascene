@@ -1682,8 +1682,27 @@ export function openDb() {
 		searchPromptInjectionStylesByPrefix: {
 			all: async (_userId, _prefix, _limit) => []
 		},
+		searchPersonaPromptInjectionsByPrefix: {
+			all: async (_userId, _prefix, _limit) => []
+		},
 		selectPromptInjectionStyleBySlugForUser: {
 			get: async (_userId, _slug) => null
+		},
+		selectGlobalPersonaPromptInjectionByTag: {
+			get: async (_tag) => null
+		},
+		insertGlobalPersonaPromptInjection: {
+			run: async () => ({
+				insertId: 0,
+				lastInsertRowid: 0,
+				changes: 0
+			})
+		},
+		selectPersonaPromptInjectionInLibraryForUserByTag: {
+			get: async (_userId, _tag) => null
+		},
+		updateGlobalPersonaCatalogByTag: {
+			run: async () => ({ changes: 0 })
 		},
 		insertCreatedImage: {
 			run: async (userId, filename, filePath, width, height, color, status = 'creating') => {

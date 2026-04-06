@@ -80,6 +80,18 @@
 	flex-wrap: wrap;
 }
 
+/* /p/:personality discovery — promote + edit (admin/founder) */
+.user-profile-page .personality-discovery-actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.user-profile-page .route-header-title-row .user-profile-persona-promote-btn {
+	flex-shrink: 0;
+}
+
 .user-profile-name {
 	font-size: 1.5rem;
 	font-weight: 700;
@@ -99,6 +111,62 @@
 .user-profile-handle {
 	color: var(--text-muted);
 	margin-top: 2px;
+}
+
+.user-profile-persona-details {
+	margin-top: 12px;
+	display: grid;
+	gap: 14px;
+	min-width: 0;
+}
+
+.user-profile-persona-detail {
+	min-width: 0;
+}
+
+.user-profile-persona-detail-label {
+	color: var(--text-muted);
+	font-size: 0.85rem;
+	font-weight: 700;
+	margin-bottom: 4px;
+}
+
+.user-profile-persona-detail-body {
+	min-width: 0;
+}
+
+.user-profile-persona-bio,
+.user-profile-persona-character {
+	color: var(--text);
+	font-size: 0.9375rem;
+	line-height: 1.45;
+	overflow-wrap: anywhere;
+	word-break: break-word;
+	white-space: pre-wrap;
+}
+
+.user-profile-persona-bio--empty {
+	color: var(--text-muted);
+	font-size: 0.875rem;
+}
+
+.user-profile-hero-footer {
+	padding: 10px 16px;
+	border-top: 1px solid var(--border);
+	background: var(--surface-muted);
+	color: var(--text-muted);
+	font-size: 0.8125rem;
+	line-height: 1.45;
+}
+
+.user-profile-hero-footer a {
+	color: inherit;
+	font-weight: 600;
+	text-decoration: underline;
+}
+
+.user-profile-hero-footer a:hover {
+	color: var(--text);
 }
 
 .user-profile-stats {
@@ -166,6 +234,43 @@
 
 .user-profile-content {
 	margin-top: 16px;
+}
+
+.user-profile-persona-discovery-content {
+	margin-top: 20px;
+}
+
+.persona-discovery-mentions-section {
+	margin-top: 4px;
+}
+
+.persona-discovery-section-title {
+	font-size: 1.125rem;
+	font-weight: 600;
+	margin: 0 0 8px 0;
+	letter-spacing: -0.02em;
+}
+
+.persona-discovery-section-lede {
+	margin: 0 0 16px 0;
+	font-size: 0.875rem;
+	color: var(--text-muted);
+	line-height: 1.5;
+	max-width: 42rem;
+}
+
+.persona-discovery-handle-code {
+	font-family: ui-monospace, monospace;
+	font-size: 0.8125rem;
+	padding: 2px 6px;
+	border-radius: 6px;
+	background: color-mix(in srgb, var(--text) 6%, transparent);
+	color: var(--text);
+}
+
+.persona-library-notes-empty {
+	color: var(--text-muted);
+	font-style: italic;
 }
 
 .user-profile-tab-content {

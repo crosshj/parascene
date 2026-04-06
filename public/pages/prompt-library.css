@@ -73,8 +73,33 @@ tbody tr.prompt-library-row:nth-child(even) {
 	background: var(--surface-muted);
 }
 
-.prompt-library-table--styles .prompt-library-col-thumb {
+.prompt-library-table--styles .prompt-library-col-thumb,
+.prompt-library-table--personas .prompt-library-col-thumb {
 	width: 72px;
+}
+
+.prompt-library-persona-avatar-img {
+	display: block;
+	width: 48px;
+	height: 48px;
+	border-radius: 50%;
+	object-fit: cover;
+	border: 1px solid var(--border);
+	background: var(--surface-muted);
+}
+
+.prompt-library-persona-avatar-fallback {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 48px;
+	height: 48px;
+	border-radius: 50%;
+	border: 1px solid var(--border);
+	background: var(--prompt-library-persona-avatar-bg, #6b7280);
+	color: #ffffff;
+	font-weight: 700;
+	font-size: 1.05rem;
 }
 
 .prompt-library-cell-thumb {

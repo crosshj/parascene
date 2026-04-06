@@ -110,6 +110,113 @@ function safeJsonParse(text, fallback) {
 	}
 }
 
+const AVATAR_TRY_POLL_MS = 2000;
+const AVATAR_TRY_MAX_POLLS = 120;
+const PROFILE_AVATAR_TRY_CONTEXT = { source: 'profile_avatar', feature: 'profile_avatar_try' };
+const PERSONA_LIBRARY_AVATAR_TRY_CONTEXT = { source: 'persona_library_avatar', feature: 'persona_library_avatar_try' };
+
+function buildAvatarPrompt(description, variationKey) {
+	const core = typeof description === 'string' ? description.trim() : '';
+	return [
+		`Portrait of ${core}. Avoid showing body, focus on face and head.`,
+		'Head-and-shoulders framing, square composition.',
+		'Clean, plain and simple background colorful and contrasting with subject.',
+		'Expressive eyes, clear facial details, emotive head position.',
+		'Stylized digital portrait suitable for a social profile photo.',
+		`No text, no logo, no watermark, no frame. Variation hint: ${variationKey}.`
+	].join('\n');
+}
+
+async function ensureTryIdentityCookie() {
+	const tz = typeof Intl !== 'undefined' && Intl.DateTimeFormat
+		? (Intl.DateTimeFormat().resolvedOptions()?.timeZone || '')
+		: '';
+	const screenHint = typeof window.screen !== 'undefined'
+		? `${window.screen.width}x${window.screen.height}`
+		: '';
+	await fetch('/api/policy/seen', {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		credentials: 'include',
+		body: JSON.stringify({ tz, screen: screenHint })
+	}).catch(() => null);
+}
+
+async function createTryImage(prompt, options = {}) {
+	const { chargeCredits = 0, context = PROFILE_AVATAR_TRY_CONTEXT } = options;
+	const response = await fetch('/api/try/create', {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		credentials: 'include',
+		body: JSON.stringify({
+			prompt,
+			...(chargeCredits > 0 ? { charge_credits: chargeCredits } : {}),
+			context
+		})
+	});
+	const data = await response.json().catch(() => ({}));
+	return { ok: response.ok, status: response.status, data };
+}
+
+async function pollTryImageById(id) {
+	for (let i = 0; i < AVATAR_TRY_MAX_POLLS; i++) {
+		await new Promise((r) => setTimeout(r, AVATAR_TRY_POLL_MS));
+		const listRes = await fetch('/api/try/list', { credentials: 'include' }).catch(() => null);
+		if (!listRes?.ok) continue;
+		const list = await listRes.json().catch(() => []);
+		const item = Array.isArray(list) ? list.find((entry) => Number(entry?.id) === Number(id)) : null;
+		if (!item) continue;
+		if (item.status === 'completed' && typeof item.url === 'string' && item.url.trim()) {
+			return { ok: true, url: item.url.trim() };
+		}
+		if (item.status === 'failed') {
+			return { ok: false, error: String(item.meta?.error || '').trim() || 'Generation failed.' };
+		}
+	}
+	return { ok: false, error: 'Timed out. Try again.' };
+}
+
+function resizeImageFile(file, { maxWidth, maxHeight, quality = 0.9, mimeType = 'image/jpeg' } = {}) {
+	if (!(file instanceof File) || !file.type.startsWith('image/')) {
+		return Promise.reject(new Error('Not an image file'));
+	}
+	return new Promise((resolve, reject) => {
+		const img = new Image();
+		const url = URL.createObjectURL(file);
+		img.onload = () => {
+			URL.revokeObjectURL(url);
+			const w = img.naturalWidth;
+			const h = img.naturalHeight;
+			let targetW = w;
+			let targetH = h;
+			if (maxWidth > 0 && maxHeight > 0 && (w > maxWidth || h > maxHeight)) {
+				const r = Math.min(maxWidth / w, maxHeight / h);
+				targetW = Math.round(w * r);
+				targetH = Math.round(h * r);
+			}
+			const canvas = document.createElement('canvas');
+			canvas.width = targetW;
+			canvas.height = targetH;
+			const ctx = canvas.getContext('2d');
+			if (!ctx) {
+				reject(new Error('Canvas not supported'));
+				return;
+			}
+			ctx.drawImage(img, 0, 0, targetW, targetH);
+			canvas.toBlob(
+				(blob) => (blob ? resolve(blob) : reject(new Error('Resize failed'))),
+				mimeType,
+				quality
+			);
+		};
+		img.onerror = () => {
+			URL.revokeObjectURL(url);
+			reject(new Error('Failed to load image'));
+		};
+		img.src = url;
+	});
+}
+
 function getPathUserTarget() {
 	const pathname = window.location.pathname || '';
 	if (pathname === '/user') return { kind: 'me', mode: 'id', userId: null, userName: null };
@@ -217,6 +324,55 @@ function buildBannerStyle(coverImageUrl) {
 	return `background-image: url('${safeUrl}');`;
 }
 
+/**
+ * Shared top-of-page hero: banner, avatar, identity (name + actions, handle, optional stats + meta).
+ * Used for user profiles and Prompt Library–linked personality pages so layout stays one visual system.
+ */
+function renderSharedProfileHeroHtml({
+	bannerStyle = '',
+	avatarBlockHtml,
+	displayName,
+	nameExtraClass = '',
+	handle,
+	handleExtraClass = '',
+	actionsInnerHtml = '',
+	actionsHostAttrs = '',
+	statsBlockHtml = '',
+	metaBlockHtml = '',
+	identityExtraHtml = '',
+	heroFooterHtml = ''
+}) {
+	const dn = String(displayName ?? '').trim() || '—';
+	const h = String(handle ?? '').trim() || '';
+	return html`
+		<div class="user-profile-hero">
+			<div class="user-profile-banner" style="${bannerStyle}"></div>
+			<div class="user-profile-hero-inner">
+				<div class="user-profile-avatar">${avatarBlockHtml}</div>
+				<div class="user-profile-identity">
+					<div class="user-profile-title-row">
+						<div class="user-profile-name${nameExtraClass}">${escapeHtml(dn)}</div>
+						<div class="user-profile-actions"${actionsHostAttrs}>${actionsInnerHtml}</div>
+					</div>
+					<div class="user-profile-handle${handleExtraClass}">${escapeHtml(h)}</div>
+					${identityExtraHtml}
+					${statsBlockHtml}
+					${metaBlockHtml}
+				</div>
+			</div>
+			${heroFooterHtml}
+		</div>
+	`;
+}
+
+function personalitySlugToDisplayTitle(slug) {
+	const s = String(slug ?? '').trim();
+	if (!s) return '';
+	const parts = s.split(/[_-]+/).filter(Boolean);
+	if (parts.length === 0) return s;
+	return parts.map((p) => (p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())).join(' ');
+}
+
 function normalizeWebsite(raw) {
 	const value = typeof raw === 'string' ? raw.trim() : '';
 	if (!value) return null;
@@ -267,13 +423,8 @@ function renderProfilePage(
 		? html`<img class="user-profile-avatar-img" src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(displayName)}">`
 : html`<div class="user-profile-avatar-fallback" style="--user-profile-avatar-bg: ${avatarColor};" aria-hidden="true">${escapeHtml(avatarInitial)}</div>`;
 
-	const usernameHint = '3–24 characters. Lowercase letters, numbers, and underscores only. This cannot be changed later.'
-	container.innerHTML = html`
-		<div class="user-profile-hero">
-			<div class="user-profile-banner" style="${buildBannerStyle(coverUrl)}"></div>
-			<div class="user-profile-hero-inner">
-				<div class="user-profile-avatar">
-					${isFounder ? html`
+	const avatarBlockHtml = isFounder
+		? html`
 					<div class="avatar-with-founder-flair avatar-with-founder-flair--xl">
 						<div class="founder-flair-avatar-ring">
 							<div class="founder-flair-avatar-inner">
@@ -281,13 +432,10 @@ function renderProfilePage(
 							</div>
 						</div>
 					</div>
-					` : avatarContent}
-				</div>
-		
-				<div class="user-profile-identity">
-					<div class="user-profile-title-row">
-						<div class="user-profile-name${isFounder ? ' founder-name' : ''}">${escapeHtml(displayName)}</div>
-						<div class="user-profile-actions">
+					`
+		: avatarContent;
+
+	const actionsInnerHtml = html`
 							${(isSelf || isAdmin) ? html`<button class="btn-primary user-profile-edit" type="button">Edit Profile</button>` :
 							''}
 							${!isSelf && viewerUserId != null && Number(user?.id) > 0 ? html`
@@ -302,10 +450,9 @@ function renderProfilePage(
 							<!--
 																	<button class="btn-secondary user-profile-share" type="button">Share</button>
 																	-->
-						</div>
-					</div>
-					<div class="user-profile-handle${isFounder ? ' founder-name' : ''}">${escapeHtml(handle)}</div>
-		
+						`;
+
+	const statsBlockHtml = html`
 					<div class="user-profile-stats">
 						<div class="user-profile-stat">
 							<div class="user-profile-stat-value">${creationsPublished}</div>
@@ -320,8 +467,10 @@ function renderProfilePage(
 							<div class="user-profile-stat-label">Member Since</div>
 						</div>
 					</div>
-		
-					${(about || characterDescription || website) ? html`
+					`;
+
+	const metaBlockHtml = (about || characterDescription || website)
+		? html`
 					<div class="user-profile-meta">
 						${about ? html`
 						<div class="user-profile-meta-row">
@@ -343,10 +492,24 @@ function renderProfilePage(
 						</div>
 						` : ''}
 					</div>
-					` : ''}
-				</div>
-			</div>
-		</div>
+					`
+		: '';
+
+	const profileHeroHtml = renderSharedProfileHeroHtml({
+		bannerStyle: buildBannerStyle(coverUrl),
+		avatarBlockHtml,
+		displayName,
+		nameExtraClass: isFounder ? ' founder-name' : '',
+		handle,
+		handleExtraClass: isFounder ? ' founder-name' : '',
+		actionsInnerHtml,
+		statsBlockHtml,
+		metaBlockHtml
+	});
+
+	const usernameHint = '3–24 characters. Lowercase letters, numbers, and underscores only. This cannot be changed later.'
+	container.innerHTML = html`
+		${profileHeroHtml}
 		
 		<div class="user-profile-content">
 			<app-tabs class="user-profile-tabs-pending" data-profile-tabs>
@@ -967,12 +1130,268 @@ async function loadTagCreations(tag, { limit = 100, offset = 0 } = {}) {
 	return { items, hasMore: Boolean(result.data?.has_more) };
 }
 
-function renderPersonalityDiscoveryPage(container, personality, items, { hasMore = false, prefix = '@' } = {}) {
+function renderPersonaLibraryEditModalHtml(personaCatalog, slugDisplayFallback) {
+	const cat = personaCatalog && typeof personaCatalog === 'object' ? personaCatalog : {};
+	const titleRaw = typeof cat.title === 'string' ? cat.title.trim() : '';
+	const descRaw = typeof cat.description === 'string' ? cat.description.trim() : '';
+	const charRaw = typeof cat.character_description === 'string' ? cat.character_description.trim() : '';
+	const avatarUrl = typeof cat.avatar_url === 'string' ? cat.avatar_url.trim() : '';
+	const titleValue = titleRaw || (typeof slugDisplayFallback === 'string' ? slugDisplayFallback.trim() : '');
+	return html`
+		<div class="modal-overlay" data-persona-library-edit-overlay>
+			<div class="modal modal-large">
+				<div class="modal-header">
+					<h2>Edit persona</h2>
+					<button class="modal-close" type="button" aria-label="Close" data-persona-library-edit-close>
+						<svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+							stroke-linecap="round" stroke-linejoin="round">
+							<line x1="18" y1="6" x2="6" y2="18"></line>
+							<line x1="6" y1="6" x2="18" y2="18"></line>
+						</svg>
+					</button>
+				</div>
+				<div class="modal-body">
+					<form class="user-profile-edit-form" data-persona-library-edit-form>
+						<div class="user-profile-form-section">
+							<div class="field">
+								<label for="persona-library-title">Display name</label>
+								<input id="persona-library-title" name="title" type="text" maxlength="200"
+									placeholder="Name shown on this page"
+									value="${escapeHtml(titleValue)}">
+								<div class="user-profile-help">Title for this Prompt Library persona (not the @handle).</div>
+							</div>
+						</div>
+						<div class="user-profile-form-section">
+							<div class="field">
+								<label for="persona-library-description">About</label>
+								<textarea id="persona-library-description" name="description" rows="4"
+									placeholder="Who is this persona for visitors…">${escapeHtml(descRaw)}</textarea>
+								<div class="user-profile-help">Shown on this page under About. Mentions and links expand after save, like a profile bio.</div>
+							</div>
+						</div>
+						<div class="user-profile-form-section">
+							<div class="field">
+								<label for="persona-library-character">Character</label>
+								<textarea id="persona-library-character" name="character_description" rows="4"
+									placeholder="e.g. short, middle-aged Asian female with medium-length black hair">${escapeHtml(charRaw)}</textarea>
+								<div class="user-profile-help">Used when people @mention this persona in prompts — same idea as a user's character field. Required.</div>
+							</div>
+						</div>
+						<div class="user-profile-form-section">
+							<div class="field">
+								<label>Avatar</label>
+								<div class="user-profile-upload" data-upload="avatar">
+									<input class="user-profile-file-input" type="file" name="avatar_file" accept="image/*"
+										data-upload-input="avatar">
+									<input type="hidden" name="avatar_remove" value="" data-upload-remove="avatar">
+									<input type="hidden" name="avatar_try_url" value="" data-persona-library-avatar-try-url>
+									<div class="user-profile-avatar-actions">
+										<button class="user-profile-upload-button btn-secondary" type="button"
+											data-upload-trigger="avatar">Upload avatar</button>
+										<button class="user-profile-upload-button btn-secondary user-profile-generate-avatar-btn" type="button"
+											data-persona-library-avatar-generate>
+											<span class="user-profile-generate-avatar-spinner" aria-hidden="true" hidden></span>
+											<span class="user-profile-generate-avatar-btn-text">Generate</span>
+										</button>
+									</div>
+									<div class="user-profile-upload-preview" data-upload-preview="avatar" hidden>
+										<img class="user-profile-upload-img" alt="Avatar preview" data-upload-img="avatar">
+										<button class="user-profile-upload-remove" type="button" aria-label="Remove avatar"
+											data-upload-clear="avatar">✕</button>
+									</div>
+								</div>
+								${avatarUrl ? html`
+								<div class="user-profile-upload-hydrate" data-upload-existing="avatar"
+									data-url="${escapeHtml(avatarUrl)}">
+								</div>
+								` : ''}
+							</div>
+						</div>
+						<div class="alert error" data-persona-library-edit-error style="display: none;"></div>
+					</form>
+				</div>
+				<div class="modal-footer">
+					<button class="btn-secondary" type="button" data-persona-library-edit-cancel>Cancel</button>
+					<button class="btn-primary" type="button" data-persona-library-edit-save>Save</button>
+				</div>
+			</div>
+			<div class="user-profile-generate-confirm-overlay" data-persona-library-generate-confirm-overlay hidden>
+				<div class="modal user-profile-generate-confirm-modal">
+					<div class="modal-header">
+						<h3>Generate avatar</h3>
+						<button class="modal-close" type="button" aria-label="Close" data-persona-library-generate-confirm-close>
+							<svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+								<line x1="18" y1="6" x2="6" y2="18"></line>
+								<line x1="6" y1="6" x2="18" y2="18"></line>
+							</svg>
+						</button>
+					</div>
+					<div class="modal-body" data-persona-library-generate-confirm-body>
+						<p>This costs <strong>3 credits</strong> and uses the <strong>Character</strong> field in this form (at least 12 characters).</p>
+						<div class="alert error" data-persona-library-generate-confirm-error style="display: none;"></div>
+					</div>
+					<div class="modal-footer">
+						<button class="btn-secondary" type="button" data-persona-library-generate-confirm-cancel>Cancel</button>
+						<button class="btn-primary user-profile-generate-confirm-cta" type="button" data-persona-library-generate-confirm-cta>
+							<span class="user-profile-generate-confirm-cta-text">Generate avatar</span>
+							<span class="user-profile-generate-confirm-cta-spinner" aria-hidden="true" hidden role="status"></span>
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	`;
+}
+
+function renderPersonalityDiscoveryPage(
+	container,
+	personality,
+	items,
+	{
+		hasMore = false,
+		prefix = '@',
+		promoteEligibility = null,
+		personaInLibrary = false,
+		personaCatalog = null,
+		canEditPersonaCatalog = false
+	} = {}
+) {
 	const safePersonality = String(personality || '').trim().toLowerCase();
 	const token = `${prefix}${safePersonality}`;
-	container.innerHTML = html`
+	const handleStr = `@${safePersonality}`;
+	const useLibraryShell = prefix === '@' && personaInLibrary === true;
+
+	let promoteButtonHtml = '';
+	if (
+		promoteEligibility
+		&& promoteEligibility.already_in_library !== true
+		&& promoteEligibility.can_promote === true
+	) {
+		promoteButtonHtml = html`<button type="button" class="btn-secondary user-profile-persona-promote-btn" data-promote-persona="${escapeHtml(safePersonality)}">Add to Prompt Library</button>`;
+	}
+
+	const editPersonaButtonHtml =
+		useLibraryShell && canEditPersonaCatalog
+			? html`<button type="button" class="btn-secondary user-profile-edit" data-persona-library-edit-open>Edit persona</button>`
+			: '';
+
+	const actionsInnerHtml =
+		promoteButtonHtml || editPersonaButtonHtml
+			? html`<div class="personality-discovery-actions">
+				${editPersonaButtonHtml}
+				${promoteButtonHtml}
+			</div>`
+			: '';
+
+	if (useLibraryShell) {
+		const catalogTitle =
+			personaCatalog && typeof personaCatalog.title === 'string' ? personaCatalog.title.trim() : '';
+		const displayTitle = catalogTitle || personalitySlugToDisplayTitle(safePersonality);
+		const descRaw = personaCatalog?.description;
+		const desc =
+			descRaw != null && String(descRaw).trim() ? String(descRaw).trim() : '';
+		const charRaw = personaCatalog?.character_description;
+		const char =
+			charRaw != null && String(charRaw).trim() ? String(charRaw).trim() : '';
+		const avatarUrl =
+			personaCatalog && typeof personaCatalog.avatar_url === 'string' ? personaCatalog.avatar_url.trim() : '';
+		const avatarInitial = displayTitle.trim().charAt(0).toUpperCase() || '?';
+		const avatarColor = getAvatarColor(safePersonality);
+		const avatarBlockHtml = avatarUrl
+			? html`<img class="user-profile-avatar-img" src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(displayTitle)}">`
+			: html`<div class="user-profile-avatar-fallback" style="--user-profile-avatar-bg: ${avatarColor};" aria-hidden="true">${escapeHtml(avatarInitial)}</div>`;
+
+		const aboutInner =
+			desc
+				? processUserText(desc)
+				: canEditPersonaCatalog
+					? '<span class="persona-library-notes-empty">No about text yet.</span>'
+					: '';
+		const aboutBlockHtml =
+			desc || canEditPersonaCatalog
+				? html`
+					<div class="user-profile-persona-detail">
+						<div class="user-profile-persona-detail-label">About</div>
+						<div class="user-profile-persona-detail-body user-profile-persona-bio${desc ? '' : ' user-profile-persona-bio--empty'}" data-persona-library-description>${aboutInner}</div>
+					</div>
+					`
+				: '';
+
+		const characterInner =
+			char
+				? processUserText(char)
+				: canEditPersonaCatalog
+					? '<span class="persona-library-notes-empty">Add character details in Edit persona.</span>'
+					: '';
+		const characterBlockHtml =
+			char || canEditPersonaCatalog
+				? html`
+					<div class="user-profile-persona-detail">
+						<div class="user-profile-persona-detail-label">Character</div>
+						<div class="user-profile-persona-detail-body user-profile-persona-character${char ? '' : ' user-profile-persona-bio--empty'}" data-persona-library-character>${characterInner}</div>
+					</div>
+					`
+				: '';
+
+		const identityExtraHtml =
+			aboutBlockHtml || characterBlockHtml
+				? html`<div class="user-profile-persona-details">${aboutBlockHtml}${characterBlockHtml}</div>`
+				: '';
+
+		const heroFooterHtml = html`
+			<div class="user-profile-hero-footer">
+				This is a Prompt Library persona, not a member account.
+				<a href="/prompt-library#personas">Browse all personas</a>.
+			</div>
+			`;
+
+		const heroHtml = renderSharedProfileHeroHtml({
+			bannerStyle: '',
+			avatarBlockHtml,
+			displayName: displayTitle,
+			handle: handleStr,
+			actionsInnerHtml,
+			actionsHostAttrs: ' data-persona-discovery-actions=""',
+			statsBlockHtml: '',
+			metaBlockHtml: '',
+			identityExtraHtml,
+			heroFooterHtml
+		});
+
+		const personaEditModalHtml = canEditPersonaCatalog
+			? renderPersonaLibraryEditModalHtml(personaCatalog, displayTitle)
+			: '';
+
+		container.innerHTML = html`
+			${heroHtml}
+			<div class="user-profile-content user-profile-persona-discovery-content">
+				<section class="persona-discovery-mentions-section" aria-labelledby="persona-mentions-heading">
+					<h2 class="persona-discovery-section-title" id="persona-mentions-heading">Mentions on parascene</h2>
+					<p class="persona-discovery-section-lede">Published creations that reference <code class="persona-discovery-handle-code">${escapeHtml(handleStr)}</code> in the description or comments.</p>
+					<div class="route-cards content-cards-image-grid" data-personality-grid>
+						<div class="route-empty route-empty-image-grid route-loading">
+							<div class="route-loading-spinner" aria-label="Loading" role="status"></div>
+						</div>
+					</div>
+					${hasMore ? html`<div class="route-empty">
+						<div class="route-empty-message">Showing top results. Refine the personality name to narrow matches.</div>
+					</div>` : ''}
+				</section>
+			</div>
+			${personaEditModalHtml}
+		`;
+
+		container.dataset.personaLibraryTitle = displayTitle;
+		container.dataset.personaLibraryDescription = desc;
+		container.dataset.personaLibraryCharacter = char;
+		container.dataset.personaLibraryAvatarUrl = avatarUrl;
+	} else {
+		container.innerHTML = html`
 		<div class="route-header">
-			<h3>${escapeHtml(token)}</h3>
+			<div class="route-header-title-row">
+				<h3>${escapeHtml(token)}</h3>
+				${actionsInnerHtml}
+			</div>
 		</div>
 		<div class="route-cards content-cards-image-grid" data-personality-grid>
 			<div class="route-empty route-empty-image-grid route-loading">
@@ -983,6 +1402,8 @@ function renderPersonalityDiscoveryPage(container, personality, items, { hasMore
 			<div class="route-empty-message">Showing top results. Refine the personality name to narrow matches.</div>
 		</div>` : ''}
 	`;
+	}
+
 	const grid = container.querySelector('[data-personality-grid]');
 	renderImageGrid(
 		grid,
@@ -991,6 +1412,446 @@ function renderPersonalityDiscoveryPage(container, personality, items, { hasMore
 		'No results found',
 		`No creations currently match ${token}.`
 	);
+	if (useLibraryShell) {
+		hydrateUserTextLinks(container);
+	}
+}
+
+function wirePersonaLibraryEditModal(container, personality) {
+	const overlay = container.querySelector('[data-persona-library-edit-overlay]');
+	if (!overlay) return;
+	const tag = String(personality || '').trim().toLowerCase();
+	const openBtn = container.querySelector('[data-persona-library-edit-open]');
+	const form = container.querySelector('[data-persona-library-edit-form]');
+	const titleInput = form?.querySelector('input[name="title"]');
+	const descTa = form?.querySelector('textarea[name="description"]');
+	const charTa = form?.querySelector('textarea[name="character_description"]');
+	const errorBox = container.querySelector('[data-persona-library-edit-error]');
+	const closeBtn = overlay.querySelector('[data-persona-library-edit-close]');
+	const cancelBtn = overlay.querySelector('[data-persona-library-edit-cancel]');
+	const saveBtn = overlay.querySelector('[data-persona-library-edit-save]');
+	const descEl = container.querySelector('[data-persona-library-description]');
+	const charEl = container.querySelector('[data-persona-library-character]');
+	const avatarTryUrlInput = form?.querySelector('[data-persona-library-avatar-try-url]');
+	const generateConfirmOverlay = overlay.querySelector('[data-persona-library-generate-confirm-overlay]');
+	const generateConfirmClose = overlay.querySelector('[data-persona-library-generate-confirm-close]');
+	const generateConfirmCancel = overlay.querySelector('[data-persona-library-generate-confirm-cancel]');
+	const generateConfirmCta = overlay.querySelector('[data-persona-library-generate-confirm-cta]');
+	const generateConfirmBody = overlay.querySelector('[data-persona-library-generate-confirm-body]');
+	const avatarInput = form?.querySelector('[data-upload-input="avatar"]');
+	const avatarRemoveField = form?.querySelector('[data-upload-remove="avatar"]');
+	const avatarClearBtn = form?.querySelector('[data-upload-clear="avatar"]');
+
+	function hideError() {
+		if (!errorBox) return;
+		errorBox.style.display = 'none';
+		errorBox.textContent = '';
+	}
+
+	function showError(msg) {
+		if (!errorBox) return;
+		errorBox.textContent = msg;
+		errorBox.style.display = '';
+	}
+
+	function closePersonaGenerateConfirm() {
+		if (generateConfirmOverlay) generateConfirmOverlay.hidden = true;
+		const confirmError = overlay.querySelector('[data-persona-library-generate-confirm-error]');
+		if (confirmError) {
+			confirmError.style.display = 'none';
+			confirmError.textContent = '';
+		}
+	}
+
+	function closeModal() {
+		closePersonaGenerateConfirm();
+		setModalOpen(overlay, false);
+		hideError();
+	}
+
+	const objectUrls = { avatar: null };
+	function revoke(kind) {
+		const current = objectUrls[kind];
+		if (current) {
+			try { URL.revokeObjectURL(current); } catch { /* ignore */ }
+			objectUrls[kind] = null;
+		}
+	}
+
+	function setUploadState(kind, { showPreview, src, removed }) {
+		const preview = container.querySelector(`[data-upload-preview="${kind}"]`);
+		const img = container.querySelector(`[data-upload-img="${kind}"]`);
+		const trigger = container.querySelector(`[data-upload-trigger="${kind}"]`);
+		const removeField = container.querySelector(`[data-upload-remove="${kind}"]`);
+		if (removeField) removeField.value = removed ? '1' : '';
+
+		if (img && typeof src === 'string') {
+			img.src = src;
+		}
+		if (preview) {
+			preview.hidden = !showPreview;
+		}
+		if (trigger) {
+			trigger.hidden = showPreview;
+		}
+		if (kind === 'avatar') {
+			const actions = form?.querySelector('[data-upload="avatar"] .user-profile-avatar-actions');
+			if (actions) {
+				actions.querySelectorAll('.user-profile-upload-button').forEach((btn) => { btn.hidden = showPreview; });
+			}
+		}
+	}
+
+	function hydrateExistingAvatarFromDataset() {
+		const url = container.dataset.personaLibraryAvatarUrl || '';
+		const existing = form?.querySelector('[data-upload-existing="avatar"]');
+		if (existing) {
+			if (url) existing.setAttribute('data-url', url);
+			else existing.removeAttribute('data-url');
+		}
+		if (url) {
+			setUploadState('avatar', { showPreview: true, src: url, removed: false });
+		} else {
+			setUploadState('avatar', { showPreview: false, src: '', removed: false });
+		}
+	}
+
+	function setupUpload(kind) {
+		const input = container.querySelector(`[data-upload-input="${kind}"]`);
+		const trigger = container.querySelector(`[data-upload-trigger="${kind}"]`);
+		const clear = container.querySelector(`[data-upload-clear="${kind}"]`);
+
+		if (trigger && input) {
+			trigger.addEventListener('click', () => input.click());
+		}
+
+		if (input) {
+			input.addEventListener('change', () => {
+				const file = input.files && input.files[0] ? input.files[0] : null;
+				revoke(kind);
+				if (!file) {
+					hydrateExistingAvatarFromDataset();
+					return;
+				}
+				const url = URL.createObjectURL(file);
+				objectUrls[kind] = url;
+				setUploadState(kind, { showPreview: true, src: url, removed: false });
+				if (avatarTryUrlInput) avatarTryUrlInput.value = '';
+			});
+		}
+
+		if (clear && input) {
+			clear.addEventListener('click', () => {
+				revoke(kind);
+				try { input.value = ''; } catch { /* ignore */ }
+				setUploadState(kind, { showPreview: false, src: '', removed: true });
+				if (avatarTryUrlInput) avatarTryUrlInput.value = '';
+			});
+		}
+
+		hydrateExistingAvatarFromDataset();
+	}
+
+	setupUpload('avatar');
+
+	if (avatarInput) {
+		avatarInput.addEventListener('change', () => {
+			if (avatarTryUrlInput) avatarTryUrlInput.value = '';
+		});
+	}
+	if (avatarClearBtn) {
+		avatarClearBtn.addEventListener('click', () => {
+			if (avatarTryUrlInput) avatarTryUrlInput.value = '';
+		});
+	}
+
+	let isGeneratingPersonaAvatar = false;
+
+	function openPersonaGenerateConfirm() {
+		if (generateConfirmOverlay) generateConfirmOverlay.hidden = false;
+	}
+
+	function setPersonaGenerateConfirmLoading(loading) {
+		if (!generateConfirmCta) return;
+		const textEl = generateConfirmCta.querySelector('.user-profile-generate-confirm-cta-text');
+		const spinnerEl = generateConfirmCta.querySelector('.user-profile-generate-confirm-cta-spinner');
+		generateConfirmCta.disabled = loading;
+		if (textEl) textEl.hidden = loading;
+		if (spinnerEl) spinnerEl.hidden = !loading;
+		if (generateConfirmBody) generateConfirmBody.style.pointerEvents = loading ? 'none' : '';
+		if (generateConfirmBody) generateConfirmBody.style.opacity = loading ? '0.6' : '';
+		if (generateConfirmCancel) generateConfirmCancel.disabled = loading;
+		if (generateConfirmClose) {
+			generateConfirmClose.disabled = loading;
+			generateConfirmClose.setAttribute('aria-disabled', loading ? 'true' : 'false');
+		}
+		if (generateConfirmOverlay) {
+			if (loading) generateConfirmOverlay.classList.add('user-profile-generate-confirm-loading');
+			else generateConfirmOverlay.classList.remove('user-profile-generate-confirm-loading');
+		}
+	}
+
+	if (form) {
+		form.addEventListener('click', (e) => {
+			const genBtn = e.target.closest('[data-persona-library-avatar-generate]');
+			if (!genBtn || !form.contains(genBtn)) return;
+			e.preventDefault();
+			const characterField = form.querySelector('textarea[name="character_description"]');
+			const description = (characterField?.value || '').trim();
+			if (description.length < 12) {
+				showError('Add a character description (at least 12 characters) to generate an avatar.');
+				return;
+			}
+			hideError();
+			openPersonaGenerateConfirm();
+		});
+	}
+
+	if (generateConfirmClose) {
+		generateConfirmClose.addEventListener('click', () => closePersonaGenerateConfirm());
+	}
+	if (generateConfirmCancel) {
+		generateConfirmCancel.addEventListener('click', () => closePersonaGenerateConfirm());
+	}
+
+	if (generateConfirmCta) {
+		generateConfirmCta.addEventListener('click', async () => {
+			if (isGeneratingPersonaAvatar) return;
+			const characterField = form?.querySelector('textarea[name="character_description"]');
+			const description = (characterField?.value || '').trim();
+			const confirmErrorEl = overlay.querySelector('[data-persona-library-generate-confirm-error]');
+			if (description.length < 12) {
+				if (confirmErrorEl) {
+					confirmErrorEl.style.display = 'block';
+					confirmErrorEl.textContent = 'Character description must be at least 12 characters.';
+				}
+				return;
+			}
+			if (confirmErrorEl) {
+				confirmErrorEl.style.display = 'none';
+				confirmErrorEl.textContent = '';
+			}
+			isGeneratingPersonaAvatar = true;
+			setPersonaGenerateConfirmLoading(true);
+			try {
+				await ensureTryIdentityCookie();
+				const variationKey = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+				const prompt = buildAvatarPrompt(description, variationKey);
+				const created = await createTryImage(prompt, {
+					chargeCredits: 3,
+					context: PERSONA_LIBRARY_AVATAR_TRY_CONTEXT
+				});
+				if (!created.ok) {
+					const msg = created.data?.message || created.data?.error || 'Could not start generation.';
+					throw new Error(msg);
+				}
+				let url = null;
+				if (created.data?.status === 'completed' && typeof created.data?.url === 'string' && created.data.url.trim()) {
+					url = created.data.url.trim();
+				} else if (created.data?.id) {
+					const polled = await pollTryImageById(created.data.id);
+					if (polled.ok && polled.url) url = polled.url;
+					else throw new Error(polled.error || 'Generation failed.');
+				} else {
+					throw new Error('No image returned.');
+				}
+				if (avatarTryUrlInput) avatarTryUrlInput.value = url;
+				revoke('avatar');
+				if (avatarRemoveField) avatarRemoveField.value = '';
+				setUploadState('avatar', { showPreview: true, src: url, removed: false });
+				closePersonaGenerateConfirm();
+			} catch (err) {
+				const msg = String(err?.message || '').trim() || 'Generation failed.';
+				if (confirmErrorEl) {
+					confirmErrorEl.style.display = 'block';
+					confirmErrorEl.textContent = msg;
+				}
+			} finally {
+				isGeneratingPersonaAvatar = false;
+				setPersonaGenerateConfirmLoading(false);
+			}
+		});
+	}
+
+	if (openBtn) {
+		openBtn.addEventListener('click', () => {
+			if (titleInput) titleInput.value = container.dataset.personaLibraryTitle || '';
+			if (descTa) descTa.value = container.dataset.personaLibraryDescription || '';
+			if (charTa) charTa.value = container.dataset.personaLibraryCharacter || '';
+			if (avatarTryUrlInput) avatarTryUrlInput.value = '';
+			if (avatarInput) {
+				try { avatarInput.value = ''; } catch { /* ignore */ }
+			}
+			revoke('avatar');
+			hydrateExistingAvatarFromDataset();
+			hideError();
+			closePersonaGenerateConfirm();
+			setModalOpen(overlay, true);
+		});
+	}
+	if (closeBtn) closeBtn.addEventListener('click', closeModal);
+	if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+
+	overlay.addEventListener('click', (e) => {
+		if (e.target !== overlay) return;
+		if (generateConfirmOverlay && !generateConfirmOverlay.hidden) {
+			closePersonaGenerateConfirm();
+			return;
+		}
+		closeModal();
+	});
+
+	if (saveBtn && form) {
+		saveBtn.addEventListener('click', async () => {
+			const character = (charTa?.value || '').trim();
+			if (!character) {
+				showError('Character description is required — it is used when this persona appears in prompts.');
+				return;
+			}
+			hideError();
+			saveBtn.disabled = true;
+			try {
+				const fd = new FormData();
+				for (const [name, value] of new FormData(form)) {
+					if (name === 'avatar_file' && value instanceof File && value.size > 0) {
+						try {
+							const blob = await resizeImageFile(value, {
+								maxWidth: 128,
+								maxHeight: 128,
+								quality: 0.9,
+								mimeType: 'image/jpeg'
+							});
+							fd.append(name, blob, 'avatar.jpg');
+						} catch {
+							fd.append(name, value);
+						}
+					} else if (name === 'avatar_file' && value instanceof File && value.size === 0) {
+						continue;
+					} else {
+						fd.append(name, value);
+					}
+				}
+				const result = await fetchJsonWithStatusDeduped(
+					`/api/prompt-injections/personas/${encodeURIComponent(tag)}/catalog`,
+					{
+						method: 'POST',
+						credentials: 'include',
+						body: fd
+					},
+					{ windowMs: 0 }
+				);
+				if (!result.ok) {
+					const data = result.data || {};
+					const msg =
+						typeof data?.message === 'string' && data.message.trim()
+							? data.message
+							: typeof data?.error === 'string'
+								? data.error
+								: 'Could not save.';
+					showError(msg);
+					return;
+				}
+				const p = result.data?.persona;
+				if (p && typeof p === 'object') {
+					if (typeof p.title === 'string') container.dataset.personaLibraryTitle = p.title.trim();
+					const d = p.description;
+					container.dataset.personaLibraryDescription =
+						d != null && String(d).trim() ? String(d).trim() : '';
+					const ch = p.character_description;
+					container.dataset.personaLibraryCharacter =
+						ch != null && String(ch).trim() ? String(ch).trim() : '';
+					const av = typeof p.avatar_url === 'string' ? p.avatar_url.trim() : '';
+					container.dataset.personaLibraryAvatarUrl = av;
+				}
+				if (descEl) {
+					const about = container.dataset.personaLibraryDescription || '';
+					if (about) {
+						descEl.innerHTML = processUserText(about);
+						descEl.classList.remove('user-profile-persona-bio--empty');
+						hydrateUserTextLinks(descEl);
+					} else {
+						descEl.innerHTML = '<span class="persona-library-notes-empty">No about text yet.</span>';
+						descEl.classList.add('user-profile-persona-bio--empty');
+					}
+				}
+				if (charEl) {
+					const ch = container.dataset.personaLibraryCharacter || '';
+					if (ch) {
+						charEl.innerHTML = processUserText(ch);
+						charEl.classList.remove('user-profile-persona-bio--empty');
+						hydrateUserTextLinks(charEl);
+					} else {
+						charEl.innerHTML = '<span class="persona-library-notes-empty">Add character details in Edit persona.</span>';
+						charEl.classList.add('user-profile-persona-bio--empty');
+					}
+				}
+				const nameEl = container.querySelector('.user-profile-name');
+				if (nameEl && typeof result.data?.persona?.title === 'string') {
+					nameEl.textContent = result.data.persona.title.trim();
+				}
+				const avSlot = container.querySelector('.user-profile-hero .user-profile-avatar');
+				if (avSlot && result.data?.persona) {
+					const au = typeof result.data.persona.avatar_url === 'string' ? result.data.persona.avatar_url.trim() : '';
+					const disp = (nameEl?.textContent || container.dataset.personaLibraryTitle || '').trim() || '?';
+					if (au) {
+						avSlot.innerHTML = `<img class="user-profile-avatar-img" src="${escapeHtml(au)}" alt="${escapeHtml(disp)}">`;
+					} else {
+						const initial = disp.charAt(0).toUpperCase() || '?';
+						const avatarColor = getAvatarColor(tag);
+						avSlot.innerHTML = `<div class="user-profile-avatar-fallback" style="--user-profile-avatar-bg: ${avatarColor};" aria-hidden="true">${escapeHtml(initial)}</div>`;
+					}
+				}
+				closeModal();
+			} catch {
+				showError('Could not save.');
+			} finally {
+				saveBtn.disabled = false;
+			}
+		});
+	}
+}
+
+function wirePersonalityPromoteButton(container, personality) {
+	const btn = container.querySelector('[data-promote-persona]');
+	if (!btn || btn.disabled) return;
+	const tag = String(personality || '').trim().toLowerCase();
+	btn.addEventListener('click', async () => {
+		btn.disabled = true;
+		const prevLabel = btn.textContent;
+		btn.textContent = 'Adding…';
+		try {
+			const res = await fetch('/api/prompt-injections/personas/promote', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify({ tag })
+			});
+			const data = await res.json().catch(() => ({}));
+			if (res.ok) {
+				btn.textContent = 'In Prompt Library';
+				btn.removeAttribute('data-promote-persona');
+				window.location.reload();
+				return;
+			}
+			if (res.status === 409) {
+				btn.textContent = 'In Prompt Library';
+				btn.removeAttribute('data-promote-persona');
+				window.location.reload();
+				return;
+			}
+			btn.disabled = false;
+			btn.textContent = prevLabel;
+			const msg =
+				typeof data?.message === 'string' && data.message.trim()
+					? data.message
+					: 'Could not add persona.';
+			window.alert(msg);
+		} catch {
+			btn.disabled = false;
+			btn.textContent = prevLabel;
+			window.alert('Could not add persona.');
+		}
+	});
 }
 
 async function init() {
@@ -1051,7 +1912,49 @@ async function init() {
 				});
 				return;
 			}
-			renderPersonalityDiscoveryPage(container, personality, result.items, { hasMore: result.hasMore });
+			let promoteEligibility = null;
+			let personaInLibrary = false;
+			let personaCatalog = null;
+			let canEditPersonaCatalog = false;
+			try {
+				const [inLibRes, me] = await Promise.all([
+					fetch(
+						`/api/prompt-injections/personas/in-library?tag=${encodeURIComponent(personality)}`,
+						{ credentials: 'include' }
+					),
+					fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 500 })
+				]);
+				if (inLibRes.ok) {
+					const body = await inLibRes.json().catch(() => ({}));
+					personaInLibrary = body.in_library === true;
+					if (body.persona && typeof body.persona === 'object') {
+						personaCatalog = body.persona;
+					}
+				}
+				if (me.ok && me.data) {
+					canEditPersonaCatalog = me.data.role === 'admin' || me.data.plan === 'founder';
+				}
+				if (canEditPersonaCatalog) {
+					const el = await fetch(
+						`/api/prompt-injections/personas/promote-eligibility?tag=${encodeURIComponent(personality)}`,
+						{ credentials: 'include' }
+					);
+					if (el.ok) {
+						promoteEligibility = await el.json();
+					}
+				}
+			} catch {
+				// ignore
+			}
+			renderPersonalityDiscoveryPage(container, personality, result.items, {
+				hasMore: result.hasMore,
+				promoteEligibility,
+				personaInLibrary,
+				personaCatalog,
+				canEditPersonaCatalog
+			});
+			wirePersonalityPromoteButton(container, personality);
+			wirePersonaLibraryEditModal(container, personality);
 		} catch {
 			renderProfileUnavailableState(container, {
 				title: 'Unable to load personality results',
@@ -1542,48 +2445,6 @@ async function init() {
 	const BANNER_MAX_WIDTH = 1260;
 	const BANNER_MAX_HEIGHT = 180;
 
-	// Resize image file for smaller uploads (canvas + toBlob). Returns a Promise<Blob>.
-	function resizeImageFile(file, { maxWidth, maxHeight, quality = 0.9, mimeType = 'image/jpeg' } = {}) {
-		if (!(file instanceof File) || !file.type.startsWith('image/')) {
-			return Promise.reject(new Error('Not an image file'));
-		}
-		return new Promise((resolve, reject) => {
-			const img = new Image();
-			const url = URL.createObjectURL(file);
-			img.onload = () => {
-				URL.revokeObjectURL(url);
-				const w = img.naturalWidth;
-				const h = img.naturalHeight;
-				let targetW = w;
-				let targetH = h;
-				if (maxWidth > 0 && maxHeight > 0 && (w > maxWidth || h > maxHeight)) {
-					const r = Math.min(maxWidth / w, maxHeight / h);
-					targetW = Math.round(w * r);
-					targetH = Math.round(h * r);
-				}
-				const canvas = document.createElement('canvas');
-				canvas.width = targetW;
-				canvas.height = targetH;
-				const ctx = canvas.getContext('2d');
-				if (!ctx) {
-					reject(new Error('Canvas not supported'));
-					return;
-				}
-				ctx.drawImage(img, 0, 0, targetW, targetH);
-				canvas.toBlob(
-					(blob) => (blob ? resolve(blob) : reject(new Error('Resize failed'))),
-					mimeType,
-					quality
-				);
-			};
-			img.onerror = () => {
-				URL.revokeObjectURL(url);
-				reject(new Error('Failed to load image'));
-			};
-			img.src = url;
-		});
-	}
-
 	// Crop image to the top strip (banner aspect) then resize. Only the strip is uploaded.
 	function resizeCoverToBannerStrip(file, { quality = 0.85, mimeType = 'image/jpeg' } = {}) {
 		if (!(file instanceof File) || !file.type.startsWith('image/')) {
@@ -1630,84 +2491,6 @@ async function init() {
 			};
 			img.src = url;
 		});
-	}
-
-	// Generate avatar from character (try endpoint); state and helpers
-	const TRY_POLL_MS = 2000;
-	const TRY_MAX_POLLS = 120;
-
-	function buildAvatarPrompt(description, variationKey) {
-		const core = typeof description === 'string' ? description.trim() : '';
-		return [
-			`Portrait of ${core}. Avoid showing body, focus on face and head.`,
-			'Head-and-shoulders framing, square composition.',
-			'Clean, plain and simple background colorful and contrasting with subject.',
-			'Expressive eyes, clear facial details, emotive head position.',
-			'Stylized digital portrait suitable for a social profile photo.',
-			`No text, no logo, no watermark, no frame. Variation hint: ${variationKey}.`
-		].join('\n');
-	}
-
-	async function ensureTryIdentityCookie() {
-		const tz = typeof Intl !== 'undefined' && Intl.DateTimeFormat
-			? (Intl.DateTimeFormat().resolvedOptions()?.timeZone || '')
-			: '';
-		const screenHint = typeof window.screen !== 'undefined'
-			? `${window.screen.width}x${window.screen.height}`
-			: '';
-		await fetch('/api/policy/seen', {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			credentials: 'include',
-			body: JSON.stringify({ tz, screen: screenHint })
-		}).catch(() => null);
-	}
-
-	async function createTryImage(prompt, options = {}) {
-		const { chargeCredits = 0 } = options;
-		const response = await fetch('/api/try/create', {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			credentials: 'include',
-			body: JSON.stringify({
-				prompt,
-				...(chargeCredits > 0 ? { charge_credits: chargeCredits } : {}),
-				context: {
-					source: 'profile_avatar',
-					feature: 'profile_avatar_try'
-				}
-			})
-		});
-		const data = await response.json().catch(() => ({}));
-		return { ok: response.ok, status: response.status, data };
-	}
-
-	async function pollTryImageById(id) {
-		for (let i = 0; i < TRY_MAX_POLLS; i++) {
-			await new Promise((r) => setTimeout(r, TRY_POLL_MS));
-			const listRes = await fetch('/api/try/list', { credentials: 'include' }).catch(() => null);
-			if (!listRes?.ok) continue;
-			const list = await listRes.json().catch(() => []);
-			const item = Array.isArray(list) ? list.find((entry) => Number(entry?.id) === Number(id)) : null;
-			if (!item) continue;
-			if (item.status === 'completed' && typeof item.url === 'string' && item.url.trim()) {
-				return { ok: true, url: item.url.trim() };
-			}
-			if (item.status === 'failed') {
-				return { ok: false, error: String(item.meta?.error || '').trim() || 'Generation failed.' };
-			}
-		}
-		return { ok: false, error: 'Timed out. Try again.' };
-	}
-
-	async function discardTryImage(url) {
-		if (!url || typeof url !== 'string' || !url.trim()) return;
-		await fetch('/api/try/discard', {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			credentials: 'include',
-			body: JSON.stringify({ url: url.trim() })
-		}).catch(() => null);
 	}
 
 	let generatedAvatarBlob = null;

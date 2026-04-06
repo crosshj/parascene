@@ -3180,7 +3180,7 @@ export function openDb() {
 				const { data, error } = await serviceClient
 					.from(prefixedTable("prompt_injections"))
 					.select(
-						"id, tag, tag_type, title, visibility, owner_user_id, updated_at, is_active, deleted_at"
+						"id, tag, tag_type, title, visibility, owner_user_id, updated_at, is_active, deleted_at, meta"
 					)
 					.eq("is_active", true)
 					.is("deleted_at", null)
@@ -3219,6 +3219,51 @@ export function openDb() {
 				return data ?? [];
 			}
 		},
+		/** Prefix / substring search for persona tags (library visibility). */
+		searchPersonaPromptInjectionsByPrefix: {
+			all: async (userId, prefix, limit) => {
+				const uid = Number(userId);
+				const p = String(prefix ?? "")
+					.trim()
+					.toLowerCase()
+					.replace(/[^a-z0-9_-]/g, "");
+				if (!Number.isFinite(uid) || uid <= 0 || !p) return [];
+				const lim = Math.min(Math.max(1, Number(limit) || 10), 20);
+				const { data, error } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.select("id, tag, title, meta")
+					.eq("tag_type", "persona")
+					.eq("is_active", true)
+					.is("deleted_at", null)
+					.or(`owner_user_id.is.null,owner_user_id.eq.${uid},visibility.eq.public,visibility.eq.unlisted`)
+					.ilike("tag", `%${p}%`)
+					.limit(Math.min(lim * 4, 80));
+				if (error) throw error;
+				const rows = Array.isArray(data) ? data : [];
+				const norm = (t) => String(t ?? "").toLowerCase();
+				const scored = rows
+					.filter((r) => norm(r.tag).includes(p))
+					.map((r) => {
+						const t = norm(r.tag);
+						const prefixHit = t.startsWith(p) ? 0 : 1;
+						return { row: r, prefixHit, tag: t };
+					})
+					.sort((a, b) => {
+						if (a.prefixHit !== b.prefixHit) return a.prefixHit - b.prefixHit;
+						return a.tag.localeCompare(b.tag);
+					});
+				const seen = new Set();
+				const out = [];
+				for (const { row } of scored) {
+					const t = norm(row.tag);
+					if (!t || seen.has(t)) continue;
+					seen.add(t);
+					out.push(row);
+					if (out.length >= lim) break;
+				}
+				return out;
+			}
+		},
 		/** Exact style row for user (prefers user-owned over global). Case-insensitive tag match. */
 		selectPromptInjectionStyleBySlugForUser: {
 			get: async (userId, slug) => {
@@ -3246,6 +3291,117 @@ export function openDb() {
 					return 0;
 				});
 				return matches[0];
+			}
+		},
+		selectGlobalPersonaPromptInjectionByTag: {
+			get: async (tag) => {
+				const raw = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				if (!raw) return null;
+				const { data, error } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.select("id, tag, tag_type, injection_text, title, description, visibility, meta")
+					.eq("tag_type", "persona")
+					.is("owner_user_id", null)
+					.eq("is_active", true)
+					.is("deleted_at", null)
+					.eq("tag", raw)
+					.maybeSingle();
+				if (error) throw error;
+				return data ?? null;
+			}
+		},
+		insertGlobalPersonaPromptInjection: {
+			run: async (tag, injectionText, title, description, meta) => {
+				const normalizedTag = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				if (!normalizedTag) {
+					throw new Error("insertGlobalPersonaPromptInjection: missing tag");
+				}
+				const { data, error } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.insert({
+						tag: normalizedTag,
+						tag_type: "persona",
+						injection_text: injectionText,
+						title: title ?? null,
+						description: description ?? null,
+						meta: meta && typeof meta === "object" ? meta : null,
+						owner_user_id: null,
+						visibility: "public",
+						is_active: true
+					})
+					.select("id")
+					.single();
+				if (error) throw error;
+				return {
+					insertId: data.id,
+					lastInsertRowid: data.id,
+					changes: 1
+				};
+			}
+		},
+		selectPersonaPromptInjectionInLibraryForUserByTag: {
+			get: async (userId, tag) => {
+				const uid = Number(userId);
+				const raw = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				if (!Number.isFinite(uid) || uid <= 0 || !raw) return null;
+				const { data, error } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.select("id, tag, title, description, injection_text, meta, owner_user_id")
+					.eq("tag_type", "persona")
+					.eq("is_active", true)
+					.is("deleted_at", null)
+					.eq("tag", raw)
+					.or(`owner_user_id.is.null,owner_user_id.eq.${uid},visibility.eq.public,visibility.eq.unlisted`);
+				if (error) throw error;
+				const rows = Array.isArray(data) ? data : [];
+				const norm = raw.toLowerCase();
+				const sameTag = rows.filter((r) => String(r.tag || "").toLowerCase() === norm);
+				sameTag.sort((a, b) => {
+					const aGlobal = a.owner_user_id == null;
+					const bGlobal = b.owner_user_id == null;
+					if (aGlobal && !bGlobal) return -1;
+					if (!aGlobal && bGlobal) return 1;
+					const ao = a.owner_user_id != null ? Number(a.owner_user_id) : NaN;
+					const bo = b.owner_user_id != null ? Number(b.owner_user_id) : NaN;
+					if (ao === uid && bo !== uid) return -1;
+					if (bo === uid && ao !== uid) return 1;
+					return 0;
+				});
+				return sameTag[0] ?? null;
+			}
+		},
+		updateGlobalPersonaCatalogByTag: {
+			run: async (tag, { title, description, injectionText, meta }) => {
+				const raw = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				if (!raw) return { changes: 0 };
+				const inj = String(injectionText ?? "").trim();
+				if (!inj) return { changes: 0 };
+				const { data, error } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.update({
+						title: title == null ? null : String(title),
+						description: description == null ? null : String(description),
+						injection_text: inj,
+						meta: meta && typeof meta === "object" ? meta : null,
+						updated_at: new Date().toISOString()
+					})
+					.eq("tag_type", "persona")
+					.is("owner_user_id", null)
+					.eq("is_active", true)
+					.is("deleted_at", null)
+					.eq("tag", raw)
+					.select("id");
+				if (error) throw error;
+				const n = Array.isArray(data) ? data.length : 0;
+				return { changes: n };
 			}
 		},
 		insertCreatedImage: {
