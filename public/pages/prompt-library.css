@@ -73,4 +73,67 @@ tbody tr.prompt-library-row:nth-child(even) {
 	background: var(--surface-muted);
 }
 
+.prompt-library-table--styles .prompt-library-col-thumb {
+	width: 72px;
+}
+
+.prompt-library-cell-thumb {
+	width: 72px;
+	padding: 8px 8px 8px 12px;
+	vertical-align: middle;
+}
+
+.prompt-library-thumb-img {
+	display: block;
+	width: 48px;
+	height: 56px;
+	border-radius: 8px;
+	object-fit: cover;
+	border: 1px solid var(--border);
+	background: var(--surface-muted);
+}
+
+.prompt-library-thumb-fallback {
+	display: block;
+	width: 48px;
+	height: 56px;
+	border-radius: 8px;
+	border: 1px solid var(--border);
+	background: var(--surface-muted);
+}
+
+.prompt-library-col-actions {
+	width: 48px;
+}
+
+.prompt-library-cell-actions {
+	text-align: right;
+	padding-right: 12px;
+	vertical-align: middle;
+}
+
+.prompt-library-copy-key {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	height: 36px;
+	padding: 0;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.prompt-library-copy-key:hover {
+	background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+	color: var(--text);
+}
+
+.prompt-library-copy-icon {
+	width: 18px;
+	height: 18px;
+}
+
 /* Route intro (.route-header p) stays hidden on mobile — see global.css */

@@ -27,13 +27,12 @@
 				<app-tabs active="styles">
 					<tab data-id="styles" label="Styles" default>
 						<div class="prompt-library-table-wrap">
-							<table class="prompt-library-table" aria-label="Styles">
+							<table class="prompt-library-table prompt-library-table--styles" aria-label="Styles">
 								<thead>
 									<tr>
+										<th scope="col" class="prompt-library-col-thumb" aria-label="Preview"></th>
 										<th scope="col">Tag</th>
-										<th scope="col">Title</th>
-										<th scope="col">Visibility</th>
-										<th scope="col">Updated</th>
+										<th scope="col" class="prompt-library-col-actions" aria-hidden="true"></th>
 									</tr>
 								</thead>
 								<tbody data-prompt-library-styles-tbody></tbody>

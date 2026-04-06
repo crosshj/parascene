@@ -1012,6 +1012,11 @@ export default function createCreateRoutes({ queries, storage }) {
 			// argsForProvider is copied into meta.args below; after hydrate / job args, meta.args is synced to argsForJob so DB matches the provider payload.
 			argsForProvider = argsForProvider && typeof argsForProvider === "object" ? { ...argsForProvider } : {};
 
+			// Exact text the user entered (before $style expansion, hydrate JSON, create.html style wrapper, etc.).
+			// Shown on creation detail; meta.args.prompt is the provider payload (see More Info).
+			const originalPromptForMeta =
+				typeof argsForProvider.prompt === "string" ? argsForProvider.prompt.trim() : "";
+
 			// $style tokens in prompt: strip sigils and append "style:" section (all methods — not only advanced_generate).
 			if (typeof argsForProvider.prompt === "string") {
 				const expanded = await expandStyleSigilsForProvider(queries, user.id, argsForProvider.prompt);
@@ -1033,9 +1038,8 @@ export default function createCreateRoutes({ queries, storage }) {
 				methodConfig && (methodConfig.async === true || methodConfig.async === "true");
 			const asyncRequestedForMethod = Boolean(asyncSupportedForMethod);
 
-			// Apply style transformation when style_key is provided (create.html flow). Store style + raw user prompt in meta.
+			// Apply style transformation when style_key is provided (create.html flow). Store style in meta; user_prompt is originalPromptForMeta (captured above).
 			let styleForMeta = null;
-			let userPromptForMeta = null;
 			if (style_key && typeof style_key === "string" && !isAdvancedGenerate) {
 				const styleInfo = getStyleInfo(style_key.trim());
 				if (styleInfo) {
@@ -1043,7 +1047,6 @@ export default function createCreateRoutes({ queries, storage }) {
 					if (styleInfo.modifiers && typeof argsForProvider.prompt === "string") {
 						const userPrompt = argsForProvider.prompt.trim();
 						if (userPrompt) {
-							userPromptForMeta = userPrompt;
 							argsForProvider.prompt = `# style\n${styleInfo.modifiers}\n\n# prompt\n${userPrompt}`;
 						}
 					}
@@ -1165,7 +1168,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				timeout_at,
 				credit_cost: CREATION_CREDIT_COST,
 				...(styleForMeta ? { style: styleForMeta } : {}),
-				...(userPromptForMeta != null ? { user_prompt: userPromptForMeta } : {}),
+				...(originalPromptForMeta !== "" ? { user_prompt: originalPromptForMeta } : {}),
 			};
 
 			// Mutate lineage: create/extend meta.history

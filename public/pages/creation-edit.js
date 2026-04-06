@@ -119,55 +119,6 @@ function persistMutateForNextCreatePage({ prompt, mutateOfId, normalizedImageUrl
 	persistMutateImageEditDraftToStorage(prompt);
 }
 
-let isMutateDirty = false;
-let hasInstalledNavigationGuard = false;
-
-function confirmDiscardChanges() {
-	if (!isMutateDirty) return true;
-	return window.confirm('You have unsaved changes. If you leave this page, you will lose them. Continue?');
-}
-
-function installNavigationGuardOnce() {
-	if (hasInstalledNavigationGuard) return;
-	hasInstalledNavigationGuard = true;
-
-	// Browser-level fallback: refresh, back/forward, closing tab, etc.
-	window.addEventListener('beforeunload', (e) => {
-		if (!isMutateDirty) return;
-		e.preventDefault();
-		e.returnValue = '';
-	});
-
-	// Intercept user-initiated navigation clicks (header links, mobile nav, anchors).
-	document.addEventListener('click', (e) => {
-		if (!isMutateDirty) return;
-
-		// Header/mobile nav route clicks (often <a data-route> or <button data-route>).
-		const routeEl = e.target?.closest?.('[data-route]');
-		if (routeEl) {
-			if (!confirmDiscardChanges()) {
-				e.preventDefault();
-				e.stopImmediatePropagation();
-			}
-			return;
-		}
-
-		// Normal links.
-		const a = e.target?.closest?.('a[href]');
-		if (!a) return;
-		const href = a.getAttribute('href') || '';
-		if (!href) return;
-		if (href.startsWith('#')) return;
-		if (href.toLowerCase().startsWith('javascript:')) return;
-		if (a.target && a.target !== '_self') return;
-
-		if (!confirmDiscardChanges()) {
-			e.preventDefault();
-			e.stopImmediatePropagation();
-		}
-	}, true);
-}
-
 function getCreationId() {
 	const pathname = window.location.pathname;
 	const match = pathname.match(/^\/creations\/(\d+)\/(edit|mutat|mutate)$/);
@@ -193,8 +144,6 @@ async function loadEditPage() {
 	await loadDeps();
 	const editContent = document.querySelector('[data-edit-content]');
 	if (!editContent) return;
-
-	installNavigationGuardOnce();
 
 	const creationId = getCreationId();
 	clearPageUsers();
@@ -356,7 +305,6 @@ async function loadEditPage() {
 			thumbWrap.addEventListener('click', (e) => {
 				e.preventDefault();
 				e.stopPropagation();
-				if (!confirmDiscardChanges()) return;
 				window.location.href = creationDetailHref;
 			});
 		}
@@ -396,7 +344,6 @@ async function loadEditPage() {
 
 		function updateCostAndButtonState() {
 			const hasPrompt = promptEl instanceof HTMLTextAreaElement && promptEl.value.trim().length > 0;
-			isMutateDirty = Boolean(hasPrompt);
 			const cost = mutateCreditCost;
 
 			if (costEl instanceof HTMLElement) {
@@ -603,8 +550,6 @@ document.addEventListener('click', (e) => {
 	};
 
 	const doSubmit = (hydrateMentions) => {
-		// Clear dirty state so navigation isn't blocked by our leave-confirm.
-		isMutateDirty = false;
 		btn.disabled = true;
 		persistMutateForNextCreatePage({
 			prompt,
