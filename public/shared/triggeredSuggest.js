@@ -578,6 +578,22 @@ function renderPopup(textarea, mode) {
 				img.src = item.icon_url;
 				img.alt = "";
 				img.className = "triggered-suggest-item-avatar";
+				let triedAssetThumb = false;
+				img.addEventListener("error", () => {
+					if (
+						!triedAssetThumb &&
+						item?.type === "style" &&
+						item?.tag
+					) {
+						const assetThumb = getStyleThumbUrl(String(item.tag).trim());
+						if (assetThumb) {
+							triedAssetThumb = true;
+							img.src = assetThumb;
+							return;
+						}
+					}
+					setIconLetterFallback();
+				});
 				icon.appendChild(img);
 			} else if (item?.type === "style" && item?.tag) {
 				const thumb = getStyleThumbUrl(String(item.tag).trim());

@@ -3207,7 +3207,7 @@ export function openDb() {
 				const lim = Math.min(Math.max(1, Number(limit) || 10), 20);
 				const { data, error } = await serviceClient
 					.from(prefixedTable("prompt_injections"))
-					.select("id, tag, title, tag_type")
+					.select("id, tag, title, tag_type, meta")
 					.eq("tag_type", "style")
 					.eq("is_active", true)
 					.is("deleted_at", null)

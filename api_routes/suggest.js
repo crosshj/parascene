@@ -208,7 +208,10 @@ export default function createSuggestRoutes({ queries }) {
 						used.add(tl);
 						const title = row?.title != null ? String(row.title).trim() : "";
 						const label = title || tag;
-						items.push({
+						const meta = parsePromptInjectionMeta(row.meta);
+						const thumb =
+							typeof meta.style_thumb_url === "string" ? meta.style_thumb_url.trim() : "";
+						const entry = {
 							type: "style",
 							id: row?.id != null ? String(row.id) : `tag:${tag}`,
 							tag,
@@ -216,7 +219,11 @@ export default function createSuggestRoutes({ queries }) {
 							sublabel: `$${tag}`,
 							insert_text: `$${tag} `,
 							icon_shape: "square"
-						});
+						};
+						if (thumb) {
+							entry.icon_url = thumb;
+						}
+						items.push(entry);
 						if (items.length >= limitParam) break;
 					}
 				}

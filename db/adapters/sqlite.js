@@ -2305,7 +2305,7 @@ export async function openDb() {
 				if (!Number.isFinite(uid) || uid <= 0 || !p) return Promise.resolve([]);
 				const lim = Math.min(Math.max(1, Number(limit) || 10), 20);
 				const stmt = db.prepare(
-					`SELECT id, tag, title, tag_type
+					`SELECT id, tag, title, tag_type, meta
 					 FROM prompt_injections
 					 WHERE tag_type = 'style'
 					   AND is_active = 1
