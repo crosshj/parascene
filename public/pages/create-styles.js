@@ -60,6 +60,23 @@ export const CREATE_STYLE_KEYS = Object.keys(CREATE_STYLES);
 export const STYLE_THUMB_BASE = '/assets/style-thumbs';
 
 /**
+ * Canonical CREATE_STYLES object key for a slug (case-insensitive). On Linux, asset filenames follow
+ * these keys (e.g. isometricVoxel.webp); callers often pass lowercase (isometricvoxel).
+ * @param {string} raw
+ * @returns {string} Matching key if found, else trimmed raw
+ */
+export function resolveCreateStyleKey(raw) {
+	const k = String(raw ?? '').trim();
+	if (!k) return '';
+	if (Object.prototype.hasOwnProperty.call(CREATE_STYLES, k)) return k;
+	const lower = k.toLowerCase();
+	for (const objKey of Object.keys(CREATE_STYLES)) {
+		if (objKey.toLowerCase() === lower) return objKey;
+	}
+	return k;
+}
+
+/**
  * Get thumbnail URL for a style key. Returns empty string if the style has no thumbnail (e.g. 'none').
  * Use with loading="lazy" (or eager + fetchpriority="high" for first few cards) and decoding="async".
  * @param {string} key - data-key of the style
@@ -67,8 +84,12 @@ export const STYLE_THUMB_BASE = '/assets/style-thumbs';
  */
 export function getStyleThumbUrl(key) {
 	if (!key || key === 'none') return '';
-	const style = CREATE_STYLES[key];
+	const resolved = resolveCreateStyleKey(key);
+	const style = CREATE_STYLES[resolved];
 	const file = style?.imageFile;
-	if (!file) return `${STYLE_THUMB_BASE}/${key}.webp`;
+	if (!file) {
+		const filenameKey = style ? resolved : key;
+		return `${STYLE_THUMB_BASE}/${filenameKey}.webp`;
+	}
 	return `${STYLE_THUMB_BASE}/${file}`;
 }
