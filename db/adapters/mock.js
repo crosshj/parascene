@@ -1679,6 +1679,12 @@ export function openDb() {
 		selectPromptInjectionsForLibrary: {
 			all: async (_userId) => []
 		},
+		searchPromptInjectionStylesByPrefix: {
+			all: async (_userId, _prefix, _limit) => []
+		},
+		selectPromptInjectionStyleBySlugForUser: {
+			get: async (_userId, _slug) => null
+		},
 		insertCreatedImage: {
 			run: async (userId, filename, filePath, width, height, color, status = 'creating') => {
 				const image = {

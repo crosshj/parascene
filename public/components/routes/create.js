@@ -10,7 +10,7 @@ let isImageUrlField;
 let isImageUrlArrayField;
 let loadMutateQueue;
 let attachAutoGrowTextarea;
-let attachMentionSuggest;
+let attachPromptInlineSuggest;
 let renderCreateFormSkeleton;
 
 function getAssetVersionParam() {
@@ -49,7 +49,7 @@ async function loadDeps() {
 		attachAutoGrowTextarea = autogrowMod.attachAutoGrowTextarea;
 
 		const suggestMod = await import(`../../shared/triggeredSuggest.js${qs}`);
-		attachMentionSuggest = suggestMod.attachMentionSuggest;
+		attachPromptInlineSuggest = suggestMod.attachPromptInlineSuggest;
 
 		const skeletonMod = await import(`../../shared/skeleton.js${qs}`);
 		renderCreateFormSkeleton = skeletonMod.renderCreateFormSkeleton;
@@ -347,7 +347,7 @@ class AppRouteCreate extends HTMLElement {
 		const promptTextarea = this.querySelector('[data-advanced-prompt]');
 		if (promptTextarea) {
 			attachAutoGrowTextarea(promptTextarea);
-			attachMentionSuggest(promptTextarea);
+			attachPromptInlineSuggest(promptTextarea);
 		}
 	}
 
@@ -1245,7 +1245,7 @@ class AppRouteCreate extends HTMLElement {
 
 		fieldsGroup.style.display = 'flex';
 		this.applyUrlPromptToBasicFields();
-		fieldsContainer.querySelectorAll('.prompt-editor').forEach((el) => attachMentionSuggest(el));
+		fieldsContainer.querySelectorAll('.prompt-editor').forEach((el) => attachPromptInlineSuggest(el));
 	}
 
 	hideMethodGroup() {

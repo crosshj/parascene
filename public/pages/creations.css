@@ -2011,6 +2011,13 @@ body.creation-detail-page main>section:first-of-type {
 	color: var(--text);
 }
 
+.creation-detail-prompt-label-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 4px;
+}
+
 .creation-detail-prompt-label {
 	font-size: 0.75rem;
 	font-weight: 600;
@@ -2020,11 +2027,47 @@ body.creation-detail-page main>section:first-of-type {
 	margin-bottom: 4px;
 }
 
+.creation-detail-prompt-label-row .creation-detail-prompt-label {
+	margin-bottom: 0;
+}
+
+.creation-detail-copy-prompt {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+	flex-shrink: 0;
+}
+
+.creation-detail-copy-prompt:hover {
+	background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+	color: var(--text);
+}
+
+.creation-detail-copy-prompt-icon {
+	width: 15px;
+	height: 15px;
+}
+
 .creation-detail-style-modifiers {
 	margin-top: 4px;
 	font-size: 0.9rem;
 	color: var(--text-muted);
 	line-height: 1.4;
+}
+
+.creation-detail-prompt-legacy {
+	margin: 0;
+	font-size: 0.95rem;
+	line-height: 1.45;
+	color: var(--text-muted);
 }
 
 .creation-detail-description-meta-line {

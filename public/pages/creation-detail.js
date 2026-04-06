@@ -1305,6 +1305,32 @@ async function loadCreation() {
 				.replace(/'/g, '&#39;');
 		}
 
+		function isHydratedProviderPromptJson(argsPrompt) {
+			if (typeof argsPrompt !== 'string' || !argsPrompt.trim().startsWith('{')) return false;
+			try {
+				const o = JSON.parse(argsPrompt);
+				return Boolean(
+					o &&
+						typeof o === 'object' &&
+						!Array.isArray(o) &&
+						(o.cast != null || typeof o.prompt === 'string')
+				);
+			} catch {
+				return false;
+			}
+		}
+
+		/** Main UI: exact prompt as entered. Never the provider JSON (cast + expanded prompt); that stays in More Info. */
+		function promptTextForMainUi(storedUserPrompt, argsPrompt) {
+			const stored = typeof storedUserPrompt === 'string' ? storedUserPrompt.trim() : '';
+			if (stored) return stored;
+			if (typeof argsPrompt !== 'string') return '';
+			const t = argsPrompt.trim();
+			if (!t) return '';
+			if (isHydratedProviderPromptJson(t)) return '';
+			return t;
+		}
+
 		async function fetchCreationThumbUrl(id) {
 			try {
 				const res = await fetch(`/api/create/images/${id}`, { credentials: 'include' });
@@ -1511,13 +1537,15 @@ async function loadCreation() {
 		// Meta-derived values for description section (Server, Method, Duration, Prompt)
 		const args = meta?.args ?? null;
 		const isPlainObject = args && typeof args === 'object' && !Array.isArray(args);
-		const argKeys = isPlainObject ? Object.keys(args) : [];
-		const isPromptOnly = isPlainObject && argKeys.length === 1 && Object.prototype.hasOwnProperty.call(args, 'prompt');
-		// Show raw user prompt when stored (style flow); otherwise show args.prompt
 		const storedUserPrompt = typeof meta?.user_prompt === 'string' ? meta.user_prompt.trim() : '';
-		const promptText = storedUserPrompt !== ''
-			? storedUserPrompt
-			: (isPlainObject && Object.prototype.hasOwnProperty.call(args, 'prompt') && typeof args.prompt === 'string' ? args.prompt.trim() : '');
+		const rawArgsPrompt =
+			isPlainObject && Object.prototype.hasOwnProperty.call(args, 'prompt') && typeof args.prompt === 'string'
+				? args.prompt.trim()
+				: '';
+		const promptText = promptTextForMainUi(storedUserPrompt, rawArgsPrompt);
+		const hasPrompt = promptText.length > 0;
+		const legacyHydratedPromptOnly = !hasPrompt && isHydratedProviderPromptJson(rawArgsPrompt);
+		const hasPromptSection = hasPrompt || legacyHydratedPromptOnly;
 		const serverName = typeof meta?.server_name === 'string' && meta.server_name.trim()
 			? meta.server_name.trim()
 			: (meta?.server_id != null ? String(meta.server_id) : '');
@@ -1544,9 +1572,9 @@ async function loadCreation() {
 		let descriptionHtml = '';
 		const descriptionText = typeof creation.description === 'string' ? creation.description.trim() : '';
 		const hasDescription = descriptionText.length > 0;
-		const hasPrompt = promptText.length > 0;
 		const hasMetaInDescription = !!(serverName || methodName || displayModel || durationStr);
-		const showDescriptionBlock = descriptionText || promptText || hasStyle || lineageSectionHtml || hasMetaInDescription;
+		const showDescriptionBlock =
+			descriptionText || hasPromptSection || hasStyle || lineageSectionHtml || hasMetaInDescription;
 
 		if (showDescriptionBlock) {
 			const descriptionParts = [];
@@ -1562,8 +1590,24 @@ async function loadCreation() {
 				if (hasDescription && !sameAsPrompt) {
 					descriptionParts.push('<br><br>');
 				}
+				descriptionParts.push(html`<div class="creation-detail-prompt-label-row">
+					<span class="creation-detail-prompt-label">Prompt</span>
+					<button type="button" class="creation-detail-copy-prompt" data-copy-prompt-btn aria-label="Copy prompt" title="Copy prompt">
+						<svg class="creation-detail-copy-prompt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+							<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+						</svg>
+					</button>
+				</div>`);
+				descriptionParts.push(processUserText(promptText));
+			} else if (legacyHydratedPromptOnly) {
+				if (hasDescription && !sameAsPrompt) {
+					descriptionParts.push('<br><br>');
+				}
 				descriptionParts.push(html`<div class="creation-detail-prompt-label">Prompt</div>`);
-				descriptionParts.push(escapeHtml(promptText));
+				descriptionParts.push(
+					`<p class="creation-detail-prompt-legacy">The original prompt was not stored for this creation. Open <strong>More Info</strong> for the full provider payload (hydrated mentions and style).</p>`
+				);
 			}
 
 			if (hasStyle) {
@@ -1609,33 +1653,11 @@ async function loadCreation() {
 			`;
 		}
 
-		// More Info: show only when the details modal would have content (filtered args or provider error).
+		// More Info: full provider payload (meta.args) and/or provider error.
 		const providerError = meta?.provider_error ?? null;
 		let hasDetailsModalContent = false;
-
-		if (args && !isPromptOnly && isPlainObject) {
-			const hasHistory = historyIds.length > 0;
-			const promptTextInArgs = Object.prototype.hasOwnProperty.call(args, 'prompt') && typeof args.prompt === 'string' ? args.prompt.trim() : '';
-			const hasPromptInArgs = promptTextInArgs.length > 0;
-			const shouldHidePrompt = hasPromptInArgs;
-
-			const filteredArgs = { ...args };
-			if (hasHistory && Object.prototype.hasOwnProperty.call(filteredArgs, 'image_url')) {
-				delete filteredArgs.image_url;
-			}
-			if (hasHistory && Object.prototype.hasOwnProperty.call(filteredArgs, 'input_images')) {
-				delete filteredArgs.input_images;
-			}
-			if (shouldHidePrompt && Object.prototype.hasOwnProperty.call(filteredArgs, 'prompt')) {
-				delete filteredArgs.prompt;
-			}
-			if (Object.prototype.hasOwnProperty.call(filteredArgs, 'model')) {
-				const mv = filteredArgs.model;
-				if (mv != null && String(mv).trim() !== '') {
-					delete filteredArgs.model;
-				}
-			}
-			hasDetailsModalContent = Object.keys(filteredArgs).length > 0;
+		if (isPlainObject && args && Object.keys(args).length > 0) {
+			hasDetailsModalContent = true;
 		}
 		if (!hasDetailsModalContent && providerError && typeof providerError === 'object') {
 			hasDetailsModalContent = true;
@@ -1897,6 +1919,15 @@ async function loadCreation() {
 		// After rendering description (and initial scaffold), hydrate any special link labels.
 		hydrateUserTextLinks(detailContent);
 		setupCollapsibleDescription(detailContent);
+
+		const copyPromptBtn = detailContent.querySelector('[data-copy-prompt-btn]');
+		if (copyPromptBtn instanceof HTMLButtonElement) {
+			copyPromptBtn.addEventListener('click', async (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				await copyTextToClipboard(promptText);
+			});
+		}
 
 		// Hydrate history thumbnails (best-effort). Skip fetching thumbs for NSFW ancestors when user has not enabled NSFW (they are blank spans).
 		if (historyIds.length > 0) {

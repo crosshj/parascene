@@ -3195,6 +3195,59 @@ export function openDb() {
 				return rows;
 			}
 		},
+		/** Prefix search for style tag autocomplete (library visibility). */
+		searchPromptInjectionStylesByPrefix: {
+			all: async (userId, prefix, limit) => {
+				const uid = Number(userId);
+				const p = String(prefix ?? "")
+					.trim()
+					.toLowerCase()
+					.replace(/[^a-z0-9_-]/g, "");
+				if (!Number.isFinite(uid) || uid <= 0 || !p) return [];
+				const lim = Math.min(Math.max(1, Number(limit) || 10), 20);
+				const { data, error } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.select("id, tag, title, tag_type")
+					.eq("tag_type", "style")
+					.eq("is_active", true)
+					.is("deleted_at", null)
+					.or(`owner_user_id.is.null,owner_user_id.eq.${uid},visibility.eq.public,visibility.eq.unlisted`)
+					.ilike("tag", `${p}%`)
+					.order("tag", { ascending: true })
+					.limit(lim);
+				if (error) throw error;
+				return data ?? [];
+			}
+		},
+		/** Exact style row for user (prefers user-owned over global). Case-insensitive tag match. */
+		selectPromptInjectionStyleBySlugForUser: {
+			get: async (userId, slug) => {
+				const uid = Number(userId);
+				const raw = String(slug ?? "").trim();
+				if (!Number.isFinite(uid) || uid <= 0 || !raw) return null;
+				const { data, error } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.select("id, tag, injection_text, title, description, owner_user_id, visibility")
+					.eq("tag_type", "style")
+					.eq("is_active", true)
+					.is("deleted_at", null)
+					.or(`owner_user_id.is.null,owner_user_id.eq.${uid},visibility.eq.public,visibility.eq.unlisted`)
+					.ilike("tag", raw);
+				if (error) throw error;
+				const rows = Array.isArray(data) ? data : [];
+				const norm = raw.toLowerCase();
+				const matches = rows.filter((r) => String(r.tag || "").toLowerCase() === norm);
+				if (matches.length === 0) return null;
+				matches.sort((a, b) => {
+					const ao = a.owner_user_id != null ? Number(a.owner_user_id) : null;
+					const bo = b.owner_user_id != null ? Number(b.owner_user_id) : null;
+					if (ao === uid && bo !== uid) return -1;
+					if (bo === uid && ao !== uid) return 1;
+					return 0;
+				});
+				return matches[0];
+			}
+		},
 		insertCreatedImage: {
 			run: async (userId, filename, filePath, width, height, color, status = "creating", meta = null) => {
 				// Use serviceClient to bypass RLS for backend operations

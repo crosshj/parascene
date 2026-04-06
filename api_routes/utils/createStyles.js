@@ -65,3 +65,25 @@ export function getStyleInfo(key) {
 	const label = (style.title || key).trim();
 	return { key, label, modifiers };
 }
+
+/**
+ * Resolve modifiers for a slug against legacy CREATE_STYLES keys (case-insensitive).
+ * @param {string} slug
+ * @returns {string | null}
+ */
+export function getLegacyStyleModifiersForSlug(slug) {
+	if (!slug || typeof slug !== 'string') return null;
+	const trimmed = slug.trim();
+	if (!trimmed) return null;
+	const direct = getStyleInfo(trimmed);
+	if (direct?.modifiers && String(direct.modifiers).trim()) return String(direct.modifiers).trim();
+	const lower = trimmed.toLowerCase();
+	for (const key of Object.keys(CREATE_STYLES)) {
+		if (key.toLowerCase() === lower) {
+			const info = getStyleInfo(key);
+			const m = info?.modifiers != null ? String(info.modifiers).trim() : '';
+			return m || null;
+		}
+	}
+	return null;
+}

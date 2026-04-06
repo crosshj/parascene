@@ -40,7 +40,8 @@ class AppModalCreationDetails extends HTMLElement {
 					</div>
 					<div class="modal-body">
 						<div class="field" data-args-field>
-							<div class="label">Arguments</div>
+							<div class="label">Sent to provider</div>
+							<p class="creation-details-args-hint" data-args-hint>Exact <code>method</code> and <code>args</code> payload used for the generation job.</p>
 							<pre class="creation-details-args" data-args></pre>
 						</div>
 						<div class="field" data-provider-error-field style="display: none;">
@@ -106,60 +107,32 @@ class AppModalCreationDetails extends HTMLElement {
 		const meta = this._meta || {};
 		const argsEl = this.querySelector("[data-args]");
 		const argsField = this.querySelector("[data-args-field]");
+		const argsHint = this.querySelector("[data-args-hint]");
 		const providerErrorField = this.querySelector("[data-provider-error-field]");
 		const providerErrorEl = this.querySelector("[data-provider-error]");
 
 		const args = meta.args ?? null;
 		const isPlainObject = args && typeof args === "object" && !Array.isArray(args);
-		const argKeys = isPlainObject ? Object.keys(args) : [];
-		const isPromptOnly = isPlainObject && argKeys.length === 1 && Object.prototype.hasOwnProperty.call(args, "prompt");
 
-		// Check if there's history/lineage
-		const historyRaw = meta.history;
-		const hasHistory = Array.isArray(historyRaw) && historyRaw.length > 0;
-
-		// Check if prompt matches description or would be shown in description
-		const description = typeof this._description === 'string' ? this._description.trim() : '';
-		const promptText = isPlainObject && Object.prototype.hasOwnProperty.call(args, "prompt") && typeof args.prompt === 'string' ? args.prompt.trim() : '';
-		const hasPrompt = promptText.length > 0;
-		// Hide prompt if: it's prompt-only, OR prompt exists (always shown in description section)
-		const shouldHidePrompt = isPromptOnly || hasPrompt;
-
-		if (isPromptOnly) {
-			if (argsField) {
-				argsField.style.display = "none";
+		if (argsField) {
+			argsField.style.display = isPlainObject ? "" : "none";
+		}
+		if (argsHint) {
+			argsHint.style.display = isPlainObject ? "" : "none";
+		}
+		if (argsEl && isPlainObject) {
+			try {
+				const payload = {
+					method: typeof meta.method === "string" ? meta.method : null,
+					server_id: meta.server_id != null ? meta.server_id : null,
+					args
+				};
+				argsEl.textContent = JSON.stringify(payload, null, 2);
+			} catch {
+				argsEl.textContent = String(args ?? "");
 			}
-		} else {
-			if (argsField) {
-				argsField.style.display = "";
-			}
-			if (argsEl) {
-				try {
-					// Filter out image_url if there's history, and prompt if it matches description or would be shown in description
-					let argsToDisplay = args;
-					if (isPlainObject) {
-						argsToDisplay = { ...args };
-						if (hasHistory && Object.prototype.hasOwnProperty.call(argsToDisplay, "image_url")) {
-							delete argsToDisplay.image_url;
-						}
-						if (hasHistory && Object.prototype.hasOwnProperty.call(argsToDisplay, "input_images")) {
-							delete argsToDisplay.input_images;
-						}
-						if (shouldHidePrompt && Object.prototype.hasOwnProperty.call(argsToDisplay, "prompt")) {
-							delete argsToDisplay.prompt;
-						}
-						// Don't show model in modal; it's shown in the creation meta bar instead
-						const modelVal = argsToDisplay.model;
-						if (modelVal != null && String(modelVal).trim() !== "") {
-							delete argsToDisplay.model;
-						}
-					}
-					const pretty = JSON.stringify(argsToDisplay ?? {}, null, 2);
-					argsEl.textContent = pretty;
-				} catch {
-					argsEl.textContent = String(args ?? "");
-				}
-			}
+		} else if (argsEl) {
+			argsEl.textContent = "";
 		}
 
 		// Provider error details (non-2xx payloads captured from provider)

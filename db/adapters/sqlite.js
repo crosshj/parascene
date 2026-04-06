@@ -2295,6 +2295,57 @@ export async function openDb() {
 				return Promise.resolve(stmt.all(uid));
 			}
 		},
+		searchPromptInjectionStylesByPrefix: {
+			all: async (userId, prefix, limit) => {
+				const uid = Number(userId);
+				const p = String(prefix ?? "")
+					.trim()
+					.toLowerCase()
+					.replace(/[^a-z0-9_-]/g, "");
+				if (!Number.isFinite(uid) || uid <= 0 || !p) return Promise.resolve([]);
+				const lim = Math.min(Math.max(1, Number(limit) || 10), 20);
+				const stmt = db.prepare(
+					`SELECT id, tag, title, tag_type
+					 FROM prompt_injections
+					 WHERE tag_type = 'style'
+					   AND is_active = 1
+					   AND deleted_at IS NULL
+					   AND lower(tag) LIKE ?
+					   AND (
+						 owner_user_id IS NULL
+						 OR owner_user_id = ?
+						 OR visibility IN ('public', 'unlisted')
+					   )
+					 ORDER BY tag ASC
+					 LIMIT ?`
+				);
+				return Promise.resolve(stmt.all(`${p}%`, uid, lim));
+			}
+		},
+		selectPromptInjectionStyleBySlugForUser: {
+			get: async (userId, slug) => {
+				const uid = Number(userId);
+				const raw = String(slug ?? "").trim();
+				if (!Number.isFinite(uid) || uid <= 0 || !raw) return Promise.resolve(null);
+				const stmt = db.prepare(
+					`SELECT id, tag, injection_text, title, description, owner_user_id, visibility
+					 FROM prompt_injections
+					 WHERE tag_type = 'style'
+					   AND is_active = 1
+					   AND deleted_at IS NULL
+					   AND lower(tag) = lower(?)
+					   AND (
+						 owner_user_id IS NULL
+						 OR owner_user_id = ?
+						 OR visibility IN ('public', 'unlisted')
+					   )
+					 ORDER BY CASE WHEN owner_user_id = ? THEN 0 ELSE 1 END
+					 LIMIT 1`
+				);
+				const row = stmt.get(raw, uid, uid);
+				return Promise.resolve(row || null);
+			}
+		},
 		insertCreatedImage: {
 			run: async (userId, filename, filePath, width, height, color, status = 'creating', meta = null) => {
 				const toJsonText = (value) => {

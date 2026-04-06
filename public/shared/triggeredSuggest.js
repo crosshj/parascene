@@ -5,7 +5,8 @@
  * - addPageUsers(items)
  * - clearPageUsers()
  * - attachTriggeredSuggest(field, options)  — field: HTMLTextAreaElement or HTMLInputElement (type text)
- * - attachMentionSuggest(field)
+ * - attachMentionSuggest(field) — @ only
+ * - attachPromptInlineSuggest(field) — @ and $ (styles)
  */
 
 const _qs = (() => {
@@ -13,6 +14,7 @@ const _qs = (() => {
 	return v ? `?v=${encodeURIComponent(v)}` : '';
 })();
 const { getAvatarColor } = await import(`./avatar.js${_qs}`);
+const { getStyleThumbUrl } = await import(`../pages/create-styles.js${_qs}`);
 
 const DEBOUNCE_MS = 130;
 const POPUP_ID = "triggered-suggest-listbox";
@@ -178,6 +180,10 @@ function defaultGetSuggestions({ source, q, limit }, signal) {
 function defaultGetInsertText(item, trigger) {
 	if (item?.insert_text) return item.insert_text;
 	const t = trigger?.char ?? "@";
+	if (item?.type === "style") {
+		const slug = (item?.tag ?? item?.label ?? "").toString().trim();
+		return slug ? `${t}${slug} ` : "";
+	}
 	if (item?.type === "user" && item?.sublabel) {
 		const handle = String(item.sublabel).replace(/^@/, "").trim();
 		return handle ? `${t}${handle} ` : "";
@@ -187,6 +193,10 @@ function defaultGetInsertText(item, trigger) {
 }
 
 function itemHandle(item) {
+	if (item?.type === "style") {
+		const t = (item?.tag ?? item?.label ?? "").toString().trim();
+		return t.toLowerCase();
+	}
 	const raw = (item?.sublabel || item?.insert_text || item?.label || "").replace(/^@/, "").trim();
 	return raw.toLowerCase();
 }
@@ -272,7 +282,10 @@ function mergeUniqueItems(items) {
 		if (!item) continue;
 		const id = item?.id != null ? `id:${String(item.id)}` : "";
 		const handle = itemHandle(item);
-		const key = id || `handle:${handle}`;
+		const key =
+			item?.type === "style"
+				? `style:${handle}`
+				: id || `handle:${handle}`;
 		if (!key || seen.has(key)) continue;
 		seen.add(key);
 		out.push(item);
@@ -350,6 +363,16 @@ function getMentionSuggestions({ source, q, limit }, signal) {
 	}
 
 	return doFetchMention();
+}
+
+function getStyleSuggestions({ source, q, limit }, signal) {
+	return defaultGetSuggestions({ source: "styles", q, limit }, signal);
+}
+
+function getCombinedInlineSuggestions({ source, q, limit }, signal) {
+	if (source === "users") return getMentionSuggestions({ source, q, limit }, signal);
+	if (source === "styles") return getStyleSuggestions({ source, q, limit }, signal);
+	return defaultGetSuggestions({ source, q, limit }, signal);
 }
 
 function attachWindowListeners() {
@@ -487,17 +510,39 @@ function renderPopup(textarea, mode) {
 			option.setAttribute("data-index", String(i));
 
 			const icon = document.createElement("div");
-			icon.className = "triggered-suggest-item-icon";
+			const isSquare = item?.type === "style" || item?.icon_shape === "square";
+			icon.className = isSquare
+				? "triggered-suggest-item-icon triggered-suggest-item-icon--square"
+				: "triggered-suggest-item-icon";
+			const seed =
+				(item?.sublabel || "").replace(/^@/, "").trim() || item?.id || item?.label || "";
+			const setIconLetterFallback = () => {
+				icon.replaceChildren();
+				icon.style.background = getAvatarColor(seed);
+				icon.textContent = String(item?.label || "?").charAt(0).toUpperCase();
+			};
 			if (item?.icon_url) {
 				const img = document.createElement("img");
 				img.src = item.icon_url;
 				img.alt = "";
 				img.className = "triggered-suggest-item-avatar";
 				icon.appendChild(img);
+			} else if (item?.type === "style" && item?.tag) {
+				const thumb = getStyleThumbUrl(String(item.tag).trim());
+				if (thumb) {
+					const img = document.createElement("img");
+					img.src = thumb;
+					img.alt = "";
+					img.className = "triggered-suggest-item-avatar";
+					img.addEventListener("error", () => {
+						setIconLetterFallback();
+					});
+					icon.appendChild(img);
+				} else {
+					setIconLetterFallback();
+				}
 			} else {
-				const seed = (item?.sublabel || "").replace(/^@/, "").trim() || item?.id || item?.label || "";
-				icon.style.background = getAvatarColor(seed);
-				icon.textContent = String(item?.label || "?").charAt(0).toUpperCase();
+				setIconLetterFallback();
 			}
 
 			const text = document.createElement("div");
@@ -629,8 +674,25 @@ function getTriggerContext(textarea, triggers) {
 	return best;
 }
 
+function filterAndSortStyleItems(items, qLower) {
+	if (!qLower) return items.slice();
+	const rows = items
+		.map((item) => ({ item, handle: itemHandle(item) }))
+		.filter(({ handle }) => handle.includes(qLower));
+
+	rows.sort((a, b) => {
+		const aPrefix = a.handle.startsWith(qLower) ? 0 : 1;
+		const bPrefix = b.handle.startsWith(qLower) ? 0 : 1;
+		if (aPrefix !== bPrefix) return aPrefix - bPrefix;
+		return a.handle.localeCompare(b.handle);
+	});
+
+	return rows.map(({ item }) => item);
+}
+
 function applyLocalFilter(source, items, qLower) {
 	if (source === "users") return filterAndSortMentionItems(items, qLower);
+	if (source === "styles") return filterAndSortStyleItems(items, qLower);
 	return items.filter((item) => itemHandle(item).startsWith(qLower));
 }
 
@@ -901,5 +963,16 @@ export function attachMentionSuggest(textarea) {
 	attachTriggeredSuggest(textarea, {
 		triggers: [{ char: "@", minChars: 1, source: "users" }],
 		getSuggestions: getMentionSuggestions
+	});
+}
+
+/** @ and $ (styles) — use on advanced create prompt; keep {@link attachMentionSuggest} for comment fields. */
+export function attachPromptInlineSuggest(textarea) {
+	attachTriggeredSuggest(textarea, {
+		triggers: [
+			{ char: "@", minChars: 1, source: "users" },
+			{ char: "$", minChars: 1, source: "styles" }
+		],
+		getSuggestions: getCombinedInlineSuggestions
 	});
 }

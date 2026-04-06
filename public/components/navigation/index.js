@@ -313,7 +313,8 @@ class AppNavigation extends HTMLElement {
 			window.location.pathname === '/user' ||
 			/^\/user\/\d+$/.test(window.location.pathname) ||
 			/^\/p\/[a-z0-9][a-z0-9_-]{2,23}$/i.test(window.location.pathname) ||
-			/^\/t\/[a-z0-9][a-z0-9_-]{1,31}$/i.test(window.location.pathname);
+			/^\/t\/[a-z0-9][a-z0-9_-]{1,31}$/i.test(window.location.pathname) ||
+			window.location.pathname.startsWith('/styles/');
 		if (isServerSentPage) {
 			// Use full page navigation for server-sent pages
 			window.location.href = `/${route}`;
@@ -863,7 +864,8 @@ class AppNavigation extends HTMLElement {
 			pathname === '/user' ||
 			/^\/user\/\d+$/.test(pathname) ||
 			/^\/p\/[a-z0-9][a-z0-9_-]{2,23}$/i.test(pathname) ||
-			/^\/t\/[a-z0-9][a-z0-9_-]{1,31}$/i.test(pathname);
+			/^\/t\/[a-z0-9][a-z0-9_-]{1,31}$/i.test(pathname) ||
+			pathname.startsWith('/styles/');
 		if (isServerSentPage) {
 			return;
 		}

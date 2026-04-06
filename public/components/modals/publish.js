@@ -26,11 +26,11 @@ async function loadDeps() {
 }
 
 let _suggestPromise;
-async function loadMentionSuggest() {
+async function loadPublishInlineSuggest() {
 	if (_suggestPromise) return _suggestPromise;
 	const v = getAssetVersionParam();
 	const qs = getImportQuery(v);
-	_suggestPromise = import(`../../shared/triggeredSuggest.js${qs}`).then((m) => m.attachMentionSuggest);
+	_suggestPromise = import(`../../shared/triggeredSuggest.js${qs}`).then((m) => m.attachPromptInlineSuggest);
 	return _suggestPromise;
 }
 
@@ -218,14 +218,14 @@ class AppModalPublish extends HTMLElement {
 			titleInput.addEventListener('change', updateSubmitButton);
 		}
 
-		// Attach @mention autocomplete to title and description (same as creation-detail comment)
+		// @ user and $ style autocomplete on title and description (same triggers as advanced create prompt)
 		const descriptionTextarea = this.querySelector('#publish-description');
-		loadMentionSuggest().then((attachMentionSuggest) => {
-			if (titleInput && typeof attachMentionSuggest === 'function') {
-				attachMentionSuggest(titleInput);
+		loadPublishInlineSuggest().then((attachPromptInlineSuggest) => {
+			if (titleInput && typeof attachPromptInlineSuggest === 'function') {
+				attachPromptInlineSuggest(titleInput);
 			}
-			if (descriptionTextarea && typeof attachMentionSuggest === 'function') {
-				attachMentionSuggest(descriptionTextarea);
+			if (descriptionTextarea && typeof attachPromptInlineSuggest === 'function') {
+				attachPromptInlineSuggest(descriptionTextarea);
 			}
 		});
 	}
