@@ -5,7 +5,6 @@
  * applies again after customElements.whenDefined so the correct tab always wins over the HTML default.
  */
 
-import { getStyleThumbUrl } from "./create-styles.js";
 import { copyIcon, eyeIcon } from "../icons/svg-strings.js";
 
 const COPY_KEY_SVG = copyIcon("prompt-library-copy-icon");
@@ -139,9 +138,10 @@ function renderPersonaRows(tbody, rows, getAvatarColor) {
 	}
 }
 
-function renderStyleRows(tbody, rows, getAvatarColor) {
+function renderStyleRows(tbody, rows, getAvatarColor, getStyleThumbUrl) {
 	if (!tbody) return;
 	const colorFn = typeof getAvatarColor === "function" ? getAvatarColor : () => "#6b7280";
+	const thumbFn = typeof getStyleThumbUrl === "function" ? getStyleThumbUrl : () => "";
 	if (!rows.length) {
 		tbody.innerHTML = `<tr><td colspan="3" class="prompt-library-table-empty">No items yet.</td></tr>`;
 		return;
@@ -161,7 +161,7 @@ function renderStyleRows(tbody, rows, getAvatarColor) {
 			const meta = parseInjectionMeta(row.meta);
 			const catalogThumb =
 				typeof meta.style_thumb_url === "string" ? meta.style_thumb_url.trim() : "";
-			const thumbUrl = catalogThumb || getStyleThumbUrl(canonicalTag);
+			const thumbUrl = catalogThumb || thumbFn(canonicalTag);
 			const fallbackSpan = `<span class="prompt-library-thumb-fallback" style="--prompt-library-style-thumb-bg: ${thumbBg};" aria-hidden="true">${initialAttr}</span>`;
 			const thumbCell = thumbUrl
 				? `<img class="prompt-library-thumb-img" src="${escapeHtml(thumbUrl)}" alt="" width="48" height="56" loading="lazy" decoding="async" />`
@@ -269,7 +269,10 @@ async function loadPromptLibrary() {
 
 	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute("content")?.trim() || "";
 	const qs = v ? `?v=${encodeURIComponent(v)}` : "";
-	const { getAvatarColor } = await import(`../shared/avatar.js${qs}`);
+	const [{ getAvatarColor }, { getStyleThumbUrl }] = await Promise.all([
+		import(`../shared/avatar.js${qs}`),
+		import(`./create-styles.js${qs}`)
+	]);
 
 	try {
 		const res = await fetch("/api/prompt-injections", { credentials: "include" });
@@ -277,7 +280,7 @@ async function loadPromptLibrary() {
 		if (!res.ok) {
 			const msg = typeof data?.error === "string" ? data.error : "Could not load prompt library.";
 			if (intro) intro.textContent = msg;
-			renderStyleRows(stylesBody, [], getAvatarColor);
+			renderStyleRows(stylesBody, [], getAvatarColor, getStyleThumbUrl);
 			renderPersonaRows(personasBody, [], getAvatarColor);
 			syncPromptLibraryAddStyleButton(false);
 			queueApplyPromptLibraryTabFromHash();
@@ -291,13 +294,13 @@ async function loadPromptLibrary() {
 			intro.textContent =
 				"Saved styles and personas you can use in prompts. Use the eye icon to view a style or persona; use the copy icon for the tag or @handle.";
 		}
-		renderStyleRows(stylesBody, styles, getAvatarColor);
+		renderStyleRows(stylesBody, styles, getAvatarColor, getStyleThumbUrl);
 		renderPersonaRows(personasBody, personas, getAvatarColor);
 		setupPromptLibraryCopyButtons(root);
 		syncPromptLibraryAddStyleButton(Boolean(data?.canAddStyle));
 	} catch {
 		if (intro) intro.textContent = "Could not load prompt library.";
-		renderStyleRows(stylesBody, [], getAvatarColor);
+		renderStyleRows(stylesBody, [], getAvatarColor, getStyleThumbUrl);
 		renderPersonaRows(personasBody, [], getAvatarColor);
 		syncPromptLibraryAddStyleButton(false);
 	}

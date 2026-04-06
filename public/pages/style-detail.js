@@ -1,12 +1,33 @@
 /**
  * /styles/:slug — load style from API and show title, slug, description, modifiers.
  * /styles/new — form to add a global catalog style (admin / founder).
+ *
+ * create-styles + avatar load via dynamic import with ?v= so they cache-bust with the page (static
+ * sibling imports from a versioned entry URL do not inherit ?v= in browsers).
  */
 
-import { getStyleThumbUrl } from "./create-styles.js";
-import { getAvatarColor } from "../shared/avatar.js";
-
 const STYLE_TAG_RE = /^(?=.*[a-z])[a-z0-9][a-z0-9_-]{0,63}$/;
+
+function getAssetVersionQs() {
+	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute("content")?.trim() || "";
+	return v ? `?v=${encodeURIComponent(v)}` : "";
+}
+
+let styleDetailDepsPromise = null;
+
+async function ensureStyleDetailDeps() {
+	if (!styleDetailDepsPromise) {
+		const qs = getAssetVersionQs();
+		styleDetailDepsPromise = Promise.all([
+			import(`./create-styles.js${qs}`),
+			import(`../shared/avatar.js${qs}`)
+		]).then(([cs, av]) => ({
+			getStyleThumbUrl: cs.getStyleThumbUrl,
+			getAvatarColor: av.getAvatarColor
+		}));
+	}
+	return styleDetailDepsPromise;
+}
 
 function escapeHtml(text) {
 	return String(text ?? "")
@@ -188,22 +209,28 @@ function wireStyleThumbModal(root, tag) {
 	});
 }
 
-function renderStyle(root, loading, errRoot, style, adminCanDelete, canSetStyleThumb) {
+function renderStyle(root, loading, errRoot, style, adminCanDelete, canSetStyleThumb, deps) {
 	if (loading) loading.hidden = true;
 	if (errRoot) errRoot.hidden = true;
 	if (!root) return;
 	root.hidden = false;
 
+	const getStyleThumbUrl = deps?.getStyleThumbUrl;
+	const getAvatarColor = deps?.getAvatarColor;
+	const thumbFromPreset =
+		typeof getStyleThumbUrl === "function" ? getStyleThumbUrl : () => "";
+	const colorFromSeed = typeof getAvatarColor === "function" ? getAvatarColor : () => "#6b7280";
+
 	const tag = String(style.tag ?? "");
 	const displayTitle = (style.title && String(style.title).trim()) || tag;
 	const catalogThumb =
 		typeof style.style_thumb_url === "string" ? style.style_thumb_url.trim() : "";
-	const thumbUrl = catalogThumb || getStyleThumbUrl(tag);
+	const thumbUrl = catalogThumb || thumbFromPreset(tag);
 	const vis = style.visibility ? String(style.visibility) : "";
 	const desc = style.description && String(style.description).trim();
 	const mods = style.injection_text && String(style.injection_text).trim();
 	const thumbInitial = (String(displayTitle || tag).trim().charAt(0) || "?").toUpperCase();
-	const thumbPlaceholderBg = getAvatarColor(tag);
+	const thumbPlaceholderBg = colorFromSeed(tag);
 
 	document.title = `${displayTitle} — parascene`;
 
@@ -274,7 +301,7 @@ function renderStyle(root, loading, errRoot, style, adminCanDelete, canSetStyleT
 		thumbEl.addEventListener("error", () => {
 			const ph = document.createElement("span");
 			ph.className = "style-detail-thumb style-detail-thumb--placeholder";
-			ph.style.setProperty("--style-detail-thumb-placeholder-bg", getAvatarColor(tag));
+			ph.style.setProperty("--style-detail-thumb-placeholder-bg", colorFromSeed(tag));
 			ph.setAttribute("aria-hidden", "true");
 			ph.textContent = thumbInitial;
 			thumbEl.replaceWith(ph);
@@ -485,7 +512,7 @@ async function loadNewStylePage() {
 	}
 }
 
-async function loadExistingStyle() {
+async function loadExistingStyle(deps) {
 	const loading = document.querySelector("[data-style-detail-loading]");
 	const root = document.querySelector("[data-style-detail-root]");
 	const errRoot = document.querySelector("[data-style-detail-error]");
@@ -522,7 +549,7 @@ async function loadExistingStyle() {
 
 		const adminCanDelete = Boolean(data?.adminCanDelete);
 		const canSetStyleThumb = Boolean(data?.canSetStyleThumb);
-		renderStyle(root, loading, errRoot, style, adminCanDelete, canSetStyleThumb);
+		renderStyle(root, loading, errRoot, style, adminCanDelete, canSetStyleThumb, deps);
 	} catch {
 		renderError(root, loading, errRoot, "Could not load style.");
 	}
@@ -533,7 +560,8 @@ async function load() {
 		await loadNewStylePage();
 		return;
 	}
-	await loadExistingStyle();
+	const deps = await ensureStyleDetailDeps();
+	await loadExistingStyle(deps);
 }
 
 if (document.readyState === "loading") {
