@@ -77,8 +77,20 @@
 	line-height: 1.2;
 }
 
+.blog-post-date {
+	margin: 0 0 10px;
+	font-size: 0.875rem;
+	line-height: 1.35;
+	font-weight: 400;
+	color: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+}
+
 .blog-byline {
-	margin: 0 0 24px;
+	margin: 28px 0 32px;
+	padding: 20px 0;
+	border-top: 1px solid var(--border);
+	border-bottom: 1px solid var(--border);
 	font-size: 0.9rem;
 	line-height: 1.45;
 	color: var(--text-muted);
@@ -117,6 +129,15 @@
 	font-weight: 400;
 	line-height: 1.35;
 	opacity: 0.92;
+}
+
+.blog-byline-meta .blog-byline-about {
+	font-size: 0.82em;
+	font-weight: 400;
+	line-height: 1.35;
+	opacity: 0.92;
+	white-space: pre-line;
+	max-width: 100%;
 }
 
 .blog-byline-profile:hover {

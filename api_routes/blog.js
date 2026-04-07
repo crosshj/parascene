@@ -65,6 +65,24 @@ function formatBlogDateParts(post) {
 	return { label: "", datetimeAttr: "" };
 }
 
+function buildBlogPostDateHtml(post) {
+	if (!post) return "";
+	const { label: dateLabel, datetimeAttr } = formatBlogDateParts(post);
+	if (!dateLabel || !datetimeAttr) return "";
+	return `<p class="blog-post-date"><time datetime="${escapeHtml(datetimeAttr)}">${escapeHtml(dateLabel)}</time></p>`;
+}
+
+function blogBylineAboutHtml(post) {
+	if (post?._source === "file") {
+		const raw = post.about;
+		const s = typeof raw === "string" ? raw.trim() : "";
+		return s ? `<span class="blog-byline-about">${escapeHtml(s)}</span>` : "";
+	}
+	const prof = post?._profile;
+	const s = prof && typeof prof.about === "string" ? prof.about.trim() : "";
+	return s ? `<span class="blog-byline-about">${escapeHtml(s)}</span>` : "";
+}
+
 function emailLocalPart(email) {
 	if (typeof email !== "string" || !email.includes("@")) return "";
 	return email.split("@")[0].trim();
@@ -83,11 +101,7 @@ function blogBylineAvatarHtml({ avatarUrl, initial, colorSeed }) {
 
 function buildBlogBylineHtml(post) {
 	if (!post) return "";
-	const { label: dateLabel, datetimeAttr } = formatBlogDateParts(post);
-	const dateHtml =
-		dateLabel && datetimeAttr
-			? `<time class="blog-byline-date" datetime="${escapeHtml(datetimeAttr)}">${escapeHtml(dateLabel)}</time>`
-			: "";
+	const aboutHtml = blogBylineAboutHtml(post);
 	const chunks = [];
 
 	if (post._source === "file") {
@@ -99,7 +113,8 @@ function buildBlogBylineHtml(post) {
 				colorSeed: a
 			});
 			const namesHtml = `<span class="blog-byline-names">${escapeHtml(a)}</span>`;
-			const metaHtml = dateHtml ? `<span class="blog-byline-meta">${namesHtml}${dateHtml}</span>` : namesHtml;
+			const metaHtml =
+				aboutHtml ? `<span class="blog-byline-meta">${namesHtml}${aboutHtml}</span>` : namesHtml;
 			chunks.push(
 				`<span class="blog-byline-file-author"><span class="blog-byline-profile blog-byline-profile--static">${av}${metaHtml}</span></span>`
 			);
@@ -127,15 +142,13 @@ function buildBlogBylineHtml(post) {
 			? `<span class="founder-name">${escapeHtml(handleLabel)}</span>`
 			: escapeHtml(handleLabel);
 		const namesHtml = `<span class="blog-byline-names">${namesInner}</span>`;
-		const metaHtml = dateHtml ? `<span class="blog-byline-meta">${namesHtml}${dateHtml}</span>` : namesHtml;
+		const metaHtml =
+			aboutHtml ? `<span class="blog-byline-meta">${namesHtml}${aboutHtml}</span>` : namesHtml;
 		chunks.push(`<span class="blog-byline-profile blog-byline-profile--static">${av}${metaHtml}</span>`);
 	}
 
-	if (chunks.length === 0 && !dateHtml) {
+	if (chunks.length === 0) {
 		return "";
-	}
-	if (chunks.length === 0 && dateHtml) {
-		return `<p class="blog-byline">${dateHtml}</p>`;
 	}
 	return `<p class="blog-byline"><span class="blog-byline-who">${chunks.join(" ")}</span></p>`;
 }
@@ -179,7 +192,8 @@ function generateBlogPageHtml({
 	html,
 	notFound = false,
 	bylineHtml = "",
-	previewBannerHtml = ""
+	previewBannerHtml = "",
+	postDateHtml = ""
 }) {
 	const hasTitle = Boolean(title && String(title).trim());
 	const safeTitle = hasTitle ? escapeHtml(title) : "";
@@ -197,12 +211,13 @@ function generateBlogPageHtml({
 		mainContent = `
 			<div class="blog-content">
 				${previewBannerHtml || ""}
+				${postDateHtml || ""}
 				${hasTitle ? `<h1>${safeTitle}</h1>` : ""}
 				${description ? `<p class="blog-description">${safeDescription}</p>` : ""}
-				${bylineHtml || ""}
 				<div class="blog-body">
 					${html}
 				</div>
+				${bylineHtml || ""}
 			</div>
 		`;
 	}
@@ -372,6 +387,7 @@ export default function createBlogRoutes({ pagesDir, queries }) {
 			description: fp.description,
 			date: fp.date,
 			author: fp.author || "",
+			about: typeof fp.about === "string" ? fp.about : "",
 			published_at: null,
 			author_user_id: null,
 			content: fp.content,
@@ -634,6 +650,7 @@ export default function createBlogRoutes({ pagesDir, queries }) {
 
 			const pageDescription = post?.description || (post ? `${post.title} — parascene blog post.` : "");
 
+			const postDateHtml = post ? buildBlogPostDateHtml(post) : "";
 			const bylineHtml = post ? buildBlogBylineHtml(post) : "";
 			const layoutHtml = generateBlogPageHtml({
 				title: post ? post.title : "Post Not Found",
@@ -641,7 +658,8 @@ export default function createBlogRoutes({ pagesDir, queries }) {
 				html: post ? post.html : "",
 				notFound: !post,
 				bylineHtml,
-				previewBannerHtml
+				previewBannerHtml,
+				postDateHtml
 			});
 
 			const templatePath = path.join(pagesDir, "blog.html");
