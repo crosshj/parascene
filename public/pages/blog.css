@@ -3,6 +3,20 @@
 	min-height: 100vh;
 	display: flex;
 	flex-direction: column;
+	/* ChatGPT-style inline citation chips (light / dark) */
+	--blog-citation-pill-bg: #ececf1;
+	--blog-citation-pill-fg: #353740;
+	--blog-citation-pill-border: rgba(0, 0, 0, 0.08);
+	--blog-citation-pill-hover: #e3e5e8;
+}
+
+@media (prefers-color-scheme: dark) {
+	.blog-page {
+		--blog-citation-pill-bg: #444654;
+		--blog-citation-pill-fg: #ececf1;
+		--blog-citation-pill-border: rgba(255, 255, 255, 0.08);
+		--blog-citation-pill-hover: #565869;
+	}
 }
 
 .blog-header {
@@ -58,19 +72,16 @@
 
 .blog-content h1 {
 	margin-top: 0;
-	/* margin-bottom: 0; */
+	margin-bottom: 0.2em;
 	font-size: 1.3em;
+	line-height: 1.2;
 }
 
 .blog-byline {
-	margin: 0 0 16px;
+	margin: 0 0 24px;
 	font-size: 0.9rem;
 	line-height: 1.45;
 	color: var(--text-muted);
-}
-
-.blog-byline-sep {
-	user-select: none;
 }
 
 .blog-byline-link {
@@ -91,6 +102,21 @@
 	color: var(--text-muted);
 	text-decoration: none;
 	vertical-align: middle;
+}
+
+.blog-byline-meta {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 3px;
+	min-width: 0;
+}
+
+.blog-byline-meta .blog-byline-date {
+	font-size: 0.82em;
+	font-weight: 400;
+	line-height: 1.35;
+	opacity: 0.92;
 }
 
 .blog-byline-profile:hover {
@@ -154,11 +180,17 @@
 	font-variant-numeric: tabular-nums;
 }
 
+.blog-byline > .blog-byline-date {
+	font-size: 0.9em;
+}
+
 .blog-description {
 	margin-top: 0;
-	margin-bottom: 24px;
+	margin-bottom: 14px;
 	font-size: 15px;
-	opacity: 0.85;
+	line-height: 1.45;
+	font-style: italic;
+	color: color-mix(in srgb, var(--text) 88%, var(--text-muted));
 }
 
 .blog-body {
@@ -176,6 +208,50 @@
 	margin: 0 0 12px;
 }
 
+.blog-body blockquote {
+	margin: 28px 0;
+	padding: 18px 20px 20px 22px;
+	border-left: 4px solid color-mix(in srgb, var(--accent, #6b5cff) 65%, var(--border));
+	border-radius: 0 10px 10px 0;
+	background: color-mix(in srgb, var(--text) 5%, var(--bg));
+	font-size: 1.2rem;
+	line-height: 1.55;
+	font-weight: 500;
+	color: var(--text);
+	letter-spacing: -0.01em;
+}
+
+.blog-body blockquote p {
+	margin: 0 0 12px;
+	font-size: inherit;
+	line-height: inherit;
+	font-weight: inherit;
+}
+
+.blog-body blockquote p:last-child {
+	margin-bottom: 0;
+}
+
+.blog-body blockquote cite {
+	display: block;
+	margin-top: 14px;
+	font-size: 0.75em;
+	font-weight: 400;
+	font-style: normal;
+	line-height: 1.45;
+	color: var(--text-muted);
+	letter-spacing: 0;
+}
+
+@media (max-width: 768px) {
+	.blog-body blockquote {
+		margin: 22px -4px;
+		padding: 16px 14px 18px 18px;
+		font-size: 1.1rem;
+		border-radius: 0 8px 8px 0;
+	}
+}
+
 .blog-body ul,
 .blog-body ol {
 	margin: 0 0 16px 20px;
@@ -183,6 +259,151 @@
 
 .blog-body li+li {
 	margin-top: 4px;
+}
+
+.blog-body hr[data-footnotes] {
+	margin: 28px 0 18px;
+	border: 0;
+	border-top: 1px solid var(--border);
+}
+
+/* Thematic break before footnotes when authors use `---` in markdown */
+.blog-body > hr {
+	margin: 28px 0 18px;
+	border: 0;
+	border-top: 1px solid var(--border);
+	opacity: 0.9;
+}
+
+.blog-footnotes-heading {
+	margin: 0 0 12px;
+	font-size: 1.125rem;
+	font-weight: 600;
+	color: var(--text);
+}
+
+.blog-body .footnotes {
+	margin-top: 32px;
+	padding-top: 20px;
+	padding-bottom: 8px;
+	border-top: 1px solid var(--border);
+}
+
+.blog-body hr + .footnotes {
+	margin-top: 0;
+	padding-top: 16px;
+	border-top: none;
+}
+
+.blog-body .footnotes ol {
+	margin: 0 0 16px;
+	padding-left: 0;
+	list-style: none;
+	counter-reset: blog-footnote;
+}
+
+.blog-body .footnotes li {
+	counter-increment: blog-footnote;
+	margin-top: 10px;
+	padding: 10px 12px 10px 40px;
+	border-radius: 10px;
+	border: 1px solid var(--border);
+	background: color-mix(in srgb, var(--bg) 94%, var(--text-muted));
+	font-size: 0.875rem;
+	line-height: 1.55;
+	color: var(--text-muted);
+	position: relative;
+	scroll-margin-top: 1.25rem;
+	transition:
+		background 0.2s ease,
+		border-color 0.2s ease;
+}
+
+.blog-body .footnotes li:target {
+	background: color-mix(in srgb, var(--accent, #6b5cff) 6%, var(--bg));
+	border-color: color-mix(in srgb, var(--accent, #6b5cff) 28%, var(--border));
+}
+
+.blog-body .footnotes li::before {
+	content: counter(blog-footnote);
+	position: absolute;
+	left: 10px;
+	top: 11px;
+	min-width: 22px;
+	height: 22px;
+	padding: 0 6px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 999px;
+	font-size: 0.7rem;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+	color: var(--text);
+	background: color-mix(in srgb, var(--accent, #6b5cff) 18%, transparent);
+	border: 1px solid color-mix(in srgb, var(--accent, #6b5cff) 28%, var(--border));
+}
+
+.blog-body .footnotes li p {
+	margin: 0;
+}
+
+.blog-body .footnotes li a:not([data-footnote-backref]) {
+	font-weight: 500;
+	color: color-mix(in srgb, var(--accent, #6b5cff) 75%, var(--text));
+}
+
+/* Inline citation chips — match ChatGPT: ~78% type, #444654 pill, 2×8px padding, 12px radius, middle align */
+.blog-body sup:has(a[data-footnote-ref]) {
+	display: inline;
+	font-size: inherit;
+	font-weight: inherit;
+	line-height: 1;
+	vertical-align: middle;
+}
+
+.blog-body sup a[data-footnote-ref] {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	max-width: min(16em, 72vw);
+	padding: 2px 8px;
+	margin: 0 0 0 5px;
+	border-radius: 12px;
+	box-sizing: border-box;
+	font-size: 0.78em;
+	font-weight: 400;
+	line-height: 1.25;
+	letter-spacing: 0.01em;
+	text-decoration: none;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	color: var(--blog-citation-pill-fg);
+	background: var(--blog-citation-pill-bg);
+	border: 1px solid var(--blog-citation-pill-border);
+}
+
+.blog-body sup a[data-footnote-ref]:hover {
+	background: var(--blog-citation-pill-hover);
+	text-decoration: none;
+}
+
+.blog-body sup a[data-footnote-ref]:target {
+	background: color-mix(in srgb, var(--accent, #6b5cff) 10%, var(--blog-citation-pill-bg));
+	border-color: color-mix(in srgb, var(--accent, #6b5cff) 35%, var(--blog-citation-pill-border));
+	scroll-margin-top: 5rem;
+}
+
+.blog-body .footnotes a[data-footnote-backref] {
+	margin-left: 0.15em;
+	text-decoration: none;
+	color: var(--text-muted);
+	font-size: 0.9em;
+}
+
+.blog-body .footnotes a[data-footnote-backref]:hover {
+	color: var(--text);
 }
 
 .blog-index-list {

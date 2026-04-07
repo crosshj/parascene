@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import { marked } from "marked";
+import markedFootnote from "marked-footnote";
 import { getAvatarColor } from "../public/shared/avatar.js";
 import { injectCommonHead, getPageTokens, getCanonicalLinkHtml } from "./utils/head.js";
 import { buildRequestMeta } from "./utils/analytics.js";
@@ -14,6 +15,15 @@ marked.setOptions({
 	headerIds: true,
 	mangle: false
 });
+marked.use(
+	markedFootnote({
+		/* Use a `---` rule in markdown before [^label]: defs to delimit; avoids double HR. */
+		footnoteDivider: false,
+		headingClass: "blog-footnotes-heading",
+		description: "Footnotes",
+		keepLabels: true
+	})
+);
 
 function escapeHtml(text) {
 	return String(text || "")
@@ -24,23 +34,11 @@ function escapeHtml(text) {
 		.replace(/'/g, "&#039;");
 }
 
-function normalizeUserNameForProfile(userName) {
-	const value = typeof userName === "string" ? userName.trim().toLowerCase() : "";
-	if (!value) return null;
-	if (!/^[a-z0-9][a-z0-9_]{2,23}$/.test(value)) return null;
-	return value;
-}
-
-function buildPublicProfilePath({ userName, userId } = {}) {
-	const normalizedUserName = normalizeUserNameForProfile(userName);
-	if (normalizedUserName) {
-		return `/p/${encodeURIComponent(normalizedUserName)}`;
-	}
-	const id = Number.parseInt(String(userId ?? ""), 10);
-	if (Number.isFinite(id) && id > 0) {
-		return `/user/${id}`;
-	}
-	return null;
+/** `<title>` / `og:title`: "{headline} - parascene". Empty headline → blog index default. */
+function formatBlogDocumentTitle(headline) {
+	const h = String(headline ?? "").trim();
+	if (!h) return "Blog - parascene";
+	return `${h} - parascene`;
 }
 
 function formatBlogDateParts(post) {
@@ -86,6 +84,10 @@ function blogBylineAvatarHtml({ avatarUrl, initial, colorSeed }) {
 function buildBlogBylineHtml(post) {
 	if (!post) return "";
 	const { label: dateLabel, datetimeAttr } = formatBlogDateParts(post);
+	const dateHtml =
+		dateLabel && datetimeAttr
+			? `<time class="blog-byline-date" datetime="${escapeHtml(datetimeAttr)}">${escapeHtml(dateLabel)}</time>`
+			: "";
 	const chunks = [];
 
 	if (post._source === "file") {
@@ -96,8 +98,10 @@ function buildBlogBylineHtml(post) {
 				initial: a,
 				colorSeed: a
 			});
+			const namesHtml = `<span class="blog-byline-names">${escapeHtml(a)}</span>`;
+			const metaHtml = dateHtml ? `<span class="blog-byline-meta">${namesHtml}${dateHtml}</span>` : namesHtml;
 			chunks.push(
-				`<span class="blog-byline-file-author"><span class="blog-byline-profile blog-byline-profile--static">${av}<span class="blog-byline-names">${escapeHtml(a)}</span></span></span>`
+				`<span class="blog-byline-file-author"><span class="blog-byline-profile blog-byline-profile--static">${av}${metaHtml}</span></span>`
 			);
 		}
 	} else if (post.author_user_id != null) {
@@ -113,37 +117,27 @@ function buildBlogBylineHtml(post) {
 				? `@${emailPrefix}`
 				: `user_${post.author_user_id}`;
 		const initialSource = userName || emailPrefix || String(post.author_user_id);
-		const href = buildPublicProfilePath({ userName, userId: post.author_user_id });
-		if (href) {
-			const colorSeed = userName || emailPrefix || String(post.author_user_id);
-			const av = blogBylineAvatarHtml({
-				avatarUrl,
-				initial: initialSource,
-				colorSeed
-			});
-			const namesInner = isFounder
-				? `<span class="founder-name">${escapeHtml(handleLabel)}</span>`
-				: escapeHtml(handleLabel);
-			chunks.push(
-				`<a class="blog-byline-profile" href="${escapeHtml(href)}">${av}<span class="blog-byline-names">${namesInner}</span></a>`
-			);
-		}
+		const colorSeed = userName || emailPrefix || String(post.author_user_id);
+		const av = blogBylineAvatarHtml({
+			avatarUrl,
+			initial: initialSource,
+			colorSeed
+		});
+		const namesInner = isFounder
+			? `<span class="founder-name">${escapeHtml(handleLabel)}</span>`
+			: escapeHtml(handleLabel);
+		const namesHtml = `<span class="blog-byline-names">${namesInner}</span>`;
+		const metaHtml = dateHtml ? `<span class="blog-byline-meta">${namesHtml}${dateHtml}</span>` : namesHtml;
+		chunks.push(`<span class="blog-byline-profile blog-byline-profile--static">${av}${metaHtml}</span>`);
 	}
 
-	if (chunks.length === 0 && !dateLabel) {
+	if (chunks.length === 0 && !dateHtml) {
 		return "";
 	}
-
-	const authorHtml = chunks.length ? `<span class="blog-byline-who">${chunks.join(" ")}</span>` : "";
-	const parts = [];
-	if (authorHtml) parts.push(authorHtml);
-	if (dateLabel) {
-		parts.push(
-			`<time class="blog-byline-date" datetime="${escapeHtml(datetimeAttr)}">${escapeHtml(dateLabel)}</time>`
-		);
+	if (chunks.length === 0 && dateHtml) {
+		return `<p class="blog-byline">${dateHtml}</p>`;
 	}
-	if (parts.length === 0) return "";
-	return `<p class="blog-byline">${parts.join('<span class="blog-byline-sep" aria-hidden="true"> · </span>')}</p>`;
+	return `<p class="blog-byline"><span class="blog-byline-who">${chunks.join(" ")}</span></p>`;
 }
 
 function previewBannerHtmlForDbRow(row) {
@@ -204,8 +198,8 @@ function generateBlogPageHtml({
 			<div class="blog-content">
 				${previewBannerHtml || ""}
 				${hasTitle ? `<h1>${safeTitle}</h1>` : ""}
-				${bylineHtml || ""}
 				${description ? `<p class="blog-description">${safeDescription}</p>` : ""}
+				${bylineHtml || ""}
 				<div class="blog-body">
 					${html}
 				</div>
@@ -522,6 +516,7 @@ export default function createBlogRoutes({ pagesDir, queries }) {
 
 				const tokens = getPageTokens(req);
 				tokens.PAGE_META_DESCRIPTION = "Blog page not found.";
+				tokens.PAGE_TITLE = escapeHtml(formatBlogDocumentTitle("Page not found"));
 				let htmlWithHead = injectCommonHead(pageHtml, tokens);
 
 				const publicHeader = await getPublicHeaderHtml();
@@ -548,6 +543,7 @@ export default function createBlogRoutes({ pagesDir, queries }) {
 			if (indexDescription) {
 				tokens.PAGE_META_DESCRIPTION = indexDescription;
 			}
+			tokens.PAGE_TITLE = escapeHtml(formatBlogDocumentTitle(indexTitle));
 			let htmlWithHead = injectCommonHead(pageHtml, tokens);
 
 			const userId = req.auth?.userId;
@@ -656,6 +652,7 @@ export default function createBlogRoutes({ pagesDir, queries }) {
 			if (pageDescription) {
 				tokens.PAGE_META_DESCRIPTION = pageDescription;
 			}
+			tokens.PAGE_TITLE = escapeHtml(formatBlogDocumentTitle(post ? post.title : "Post Not Found"));
 			let htmlWithHead = injectCommonHead(pageHtml, tokens);
 
 			if (postIsPreview) {
