@@ -20,7 +20,10 @@
 		<section class="prompt-library-section">
 			<div class="prompt-library-route" data-prompt-library-root>
 				<div class="route-header">
-					<h3>Prompt Library</h3>
+					<div class="route-header-title-row">
+						<h3>Prompt Library</h3>
+						<a href="/styles/new" class="btn-primary prompt-library-add-style">Add style</a>
+					</div>
 					<p class="prompt-library-intro" data-prompt-library-intro>Saved styles and personas you can use in prompts. Loading…</p>
 				</div>
 
@@ -41,13 +44,12 @@
 					</tab>
 					<tab data-id="personas" label="Personas">
 						<div class="prompt-library-table-wrap">
-							<table class="prompt-library-table" aria-label="Personas">
+							<table class="prompt-library-table prompt-library-table--personas" aria-label="Personas">
 								<thead>
 									<tr>
+										<th scope="col" class="prompt-library-col-thumb" aria-label="Avatar"></th>
 										<th scope="col">Tag</th>
-										<th scope="col">Title</th>
-										<th scope="col">Visibility</th>
-										<th scope="col">Updated</th>
+										<th scope="col" class="prompt-library-col-actions" aria-hidden="true"></th>
 									</tr>
 								</thead>
 								<tbody data-prompt-library-personas-tbody></tbody>

@@ -78,8 +78,10 @@ export async function uploadImageFile(file) {
 
 const MENTION_FAILURE_LABELS = {
 	user_not_found: 'User not found',
+	mention_not_found: 'User or persona not found',
 	no_character_description: 'No character description set',
-	invalid_username: 'Invalid username'
+	invalid_username: 'Invalid username',
+	profiles_unavailable: 'Profiles unavailable'
 };
 
 /**

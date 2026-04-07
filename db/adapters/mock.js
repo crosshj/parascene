@@ -1682,8 +1682,43 @@ export function openDb() {
 		searchPromptInjectionStylesByPrefix: {
 			all: async (_userId, _prefix, _limit) => []
 		},
+		searchPersonaPromptInjectionsByPrefix: {
+			all: async (_userId, _prefix, _limit) => []
+		},
 		selectPromptInjectionStyleBySlugForUser: {
 			get: async (_userId, _slug) => null
+		},
+		selectGlobalStylePromptInjectionByTag: {
+			get: async (_tag) => null
+		},
+		updateGlobalStyleCatalogMetaByTag: {
+			run: async () => ({ changes: 0 })
+		},
+		deletePromptInjectionStylesByTagAdmin: {
+			run: async () => ({ changes: 0 })
+		},
+		insertGlobalStylePromptInjection: {
+			run: async () => ({
+				changes: 1,
+				lastInsertRowid: 0,
+				insertId: 0
+			})
+		},
+		selectGlobalPersonaPromptInjectionByTag: {
+			get: async (_tag) => null
+		},
+		insertGlobalPersonaPromptInjection: {
+			run: async () => ({
+				insertId: 0,
+				lastInsertRowid: 0,
+				changes: 0
+			})
+		},
+		selectPersonaPromptInjectionInLibraryForUserByTag: {
+			get: async (_userId, _tag) => null
+		},
+		updateGlobalPersonaCatalogByTag: {
+			run: async () => ({ changes: 0 })
 		},
 		insertCreatedImage: {
 			run: async (userId, filename, filePath, width, height, color, status = 'creating') => {
@@ -1784,16 +1819,37 @@ export function openDb() {
 			all: async (personality, options = {}) => {
 				const normalized = String(personality || "").trim().toLowerCase();
 				if (!/^[a-z0-9][a-z0-9_-]{2,23}$/.test(normalized)) return [];
-				const needle = `@${normalized}`;
+				const mentionNeedle = `@${normalized}`;
+				const tagNeedle = normalized;
 				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
 				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
 
 				const creationList = (typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.created_images) ?? created_images ?? [];
 				const commentList = (typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.comments_created_image) ?? comments_created_image ?? [];
 
+				const haystackIncludesPersona = (s) => {
+					const t = String(s || "").toLowerCase();
+					return t.includes(mentionNeedle) || t.includes(tagNeedle);
+				};
+
+				const metaPromptHaystacks = (img) => {
+					let meta = img?.meta;
+					if (typeof meta === "string") {
+						try {
+							meta = JSON.parse(meta);
+						} catch {
+							meta = null;
+						}
+					}
+					const out = [];
+					if (meta && typeof meta.user_prompt === "string") out.push(meta.user_prompt);
+					if (meta?.args && typeof meta.args.prompt === "string") out.push(meta.args.prompt);
+					return out;
+				};
+
 				const idsFromComments = new Set(
 					(commentList ?? [])
-						.filter((c) => String(c?.text || "").toLowerCase().includes(needle))
+						.filter((c) => haystackIncludesPersona(c?.text))
 						.map((c) => Number(c?.created_image_id))
 						.filter((id) => Number.isFinite(id) && id > 0)
 				);
@@ -1803,10 +1859,11 @@ export function openDb() {
 						const isPublished = img?.published === true || img?.published === 1;
 						if (!isPublished) return false;
 						if (!(img?.unavailable_at == null || img?.unavailable_at === "")) return false;
-						const descMatch = String(img?.description || "").toLowerCase().includes(needle);
-						const titleMatch = String(img?.title || "").toLowerCase().includes(needle);
+						const descMatch = haystackIncludesPersona(img?.description);
+						const titleMatch = haystackIncludesPersona(img?.title);
+						const promptMatch = metaPromptHaystacks(img).some((p) => haystackIncludesPersona(p));
 						const commentMatch = idsFromComments.has(Number(img?.id));
-						return descMatch || titleMatch || commentMatch;
+						return descMatch || titleMatch || promptMatch || commentMatch;
 					})
 					.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
 

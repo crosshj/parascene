@@ -248,6 +248,44 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	}
 
+	/** Character text for cast hydration: Prompt Library personas store it in injection_text (and sometimes meta). */
+	function characterFromPersonaRow(row) {
+		if (!row) return "";
+		const pMeta = parseMeta(row.meta) || {};
+		const fromInj = typeof row.injection_text === "string" ? row.injection_text.trim() : "";
+		const fromMeta =
+			typeof pMeta.character_description === "string" ? pMeta.character_description.trim() : "";
+		return fromInj || fromMeta;
+	}
+
+	/**
+	 * Resolve @handle to character description for image cast (user profile or Prompt Library persona).
+	 * Personas use the same visibility rules as the library / suggest autocomplete.
+	 */
+	async function resolveCastTextForMentionTag(userId, normalized) {
+		if (!queries.selectUserProfileByUsername?.get) {
+			return { ok: false, reason: "profiles_unavailable" };
+		}
+		const profile = await queries.selectUserProfileByUsername.get(normalized);
+		if (profile) {
+			const uMeta = parseMeta(profile.meta) || {};
+			const cd =
+				typeof uMeta.character_description === "string" ? uMeta.character_description.trim() : "";
+			if (!cd) return { ok: false, reason: "no_character_description" };
+			return { ok: true, text: cd };
+		}
+		const personaGet = queries.selectPersonaPromptInjectionInLibraryForUserByTag?.get;
+		if (typeof personaGet === "function") {
+			const personaRow = await personaGet(userId, normalized);
+			if (personaRow) {
+				const cd = characterFromPersonaRow(personaRow);
+				if (!cd) return { ok: false, reason: "no_character_description" };
+				return { ok: true, text: cd };
+			}
+		}
+		return { ok: false, reason: "mention_not_found" };
+	}
+
 	/** Only true when the provider/error message text explicitly indicates moderation. */
 	function isModeratedError(status, meta) {
 		if (status !== "failed" || meta == null) return false;
@@ -848,19 +886,9 @@ export default function createCreateRoutes({ queries, storage }) {
 					failed_mentions.push({ mention: m.originalMention, reason: "invalid_username" });
 					continue;
 				}
-				if (!queries.selectUserProfileByUsername?.get) {
-					failed_mentions.push({ mention: `@${m.normalized}`, reason: "profiles_unavailable" });
-					continue;
-				}
-				const profile = await queries.selectUserProfileByUsername.get(m.normalized);
-				if (!profile) {
-					failed_mentions.push({ mention: `@${m.normalized}`, reason: "user_not_found" });
-					continue;
-				}
-				const meta = parseMeta(profile.meta) || {};
-				const cd = typeof meta.character_description === "string" ? meta.character_description.trim() : "";
-				if (!cd) {
-					failed_mentions.push({ mention: `@${m.normalized}`, reason: "no_character_description" });
+				const resolved = await resolveCastTextForMentionTag(user.id, m.normalized);
+				if (!resolved.ok) {
+					failed_mentions.push({ mention: `@${m.normalized}`, reason: resolved.reason });
 				}
 			}
 
@@ -1439,22 +1467,12 @@ export default function createCreateRoutes({ queries, storage }) {
 						failed_mentions.push({ mention: m.originalMention, reason: "invalid_username" });
 						continue;
 					}
-					if (!queries.selectUserProfileByUsername?.get) {
-						failed_mentions.push({ mention: `@${m.normalized}`, reason: "profiles_unavailable" });
+					const resolved = await resolveCastTextForMentionTag(user.id, m.normalized);
+					if (!resolved.ok) {
+						failed_mentions.push({ mention: `@${m.normalized}`, reason: resolved.reason });
 						continue;
 					}
-					const profile = await queries.selectUserProfileByUsername.get(m.normalized);
-					if (!profile) {
-						failed_mentions.push({ mention: `@${m.normalized}`, reason: "user_not_found" });
-						continue;
-					}
-					const meta = parseMeta(profile.meta) || {};
-					const cd = typeof meta.character_description === "string" ? meta.character_description.trim() : "";
-					if (!cd) {
-						failed_mentions.push({ mention: `@${m.normalized}`, reason: "no_character_description" });
-						continue;
-					}
-					cast[`@${m.normalized}`] = cd;
+					cast[`@${m.normalized}`] = resolved.text;
 				}
 
 				return { cast, failed_mentions, mentions };
@@ -1500,7 +1518,7 @@ export default function createCreateRoutes({ queries, storage }) {
 							...meta,
 							failed_at: failedAt,
 							error_code: "hydrate_mentions_failed",
-							error: "Unable to hydrate one or more mentioned users.",
+							error: "Unable to hydrate one or more @mentions (users or personas).",
 							failed_mentions,
 							hydrate_mentions: true
 						};
@@ -1563,7 +1581,7 @@ export default function createCreateRoutes({ queries, storage }) {
 						...meta,
 						failed_at: failedAt,
 						error_code: "hydrate_mentions_failed",
-						error: "Unable to hydrate one or more mentioned users.",
+						error: "Unable to hydrate one or more @mentions (users or personas).",
 						failed_mentions,
 						hydrate_mentions: true
 					};

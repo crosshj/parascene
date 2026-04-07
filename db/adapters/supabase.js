@@ -3180,7 +3180,7 @@ export function openDb() {
 				const { data, error } = await serviceClient
 					.from(prefixedTable("prompt_injections"))
 					.select(
-						"id, tag, tag_type, title, visibility, owner_user_id, updated_at, is_active, deleted_at"
+						"id, tag, tag_type, title, visibility, owner_user_id, updated_at, is_active, deleted_at, meta"
 					)
 					.eq("is_active", true)
 					.is("deleted_at", null)
@@ -3207,7 +3207,7 @@ export function openDb() {
 				const lim = Math.min(Math.max(1, Number(limit) || 10), 20);
 				const { data, error } = await serviceClient
 					.from(prefixedTable("prompt_injections"))
-					.select("id, tag, title, tag_type")
+					.select("id, tag, title, tag_type, meta")
 					.eq("tag_type", "style")
 					.eq("is_active", true)
 					.is("deleted_at", null)
@@ -3219,6 +3219,51 @@ export function openDb() {
 				return data ?? [];
 			}
 		},
+		/** Prefix / substring search for persona tags (library visibility). */
+		searchPersonaPromptInjectionsByPrefix: {
+			all: async (userId, prefix, limit) => {
+				const uid = Number(userId);
+				const p = String(prefix ?? "")
+					.trim()
+					.toLowerCase()
+					.replace(/[^a-z0-9_-]/g, "");
+				if (!Number.isFinite(uid) || uid <= 0 || !p) return [];
+				const lim = Math.min(Math.max(1, Number(limit) || 10), 20);
+				const { data, error } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.select("id, tag, title, meta")
+					.eq("tag_type", "persona")
+					.eq("is_active", true)
+					.is("deleted_at", null)
+					.or(`owner_user_id.is.null,owner_user_id.eq.${uid},visibility.eq.public,visibility.eq.unlisted`)
+					.ilike("tag", `%${p}%`)
+					.limit(Math.min(lim * 4, 80));
+				if (error) throw error;
+				const rows = Array.isArray(data) ? data : [];
+				const norm = (t) => String(t ?? "").toLowerCase();
+				const scored = rows
+					.filter((r) => norm(r.tag).includes(p))
+					.map((r) => {
+						const t = norm(r.tag);
+						const prefixHit = t.startsWith(p) ? 0 : 1;
+						return { row: r, prefixHit, tag: t };
+					})
+					.sort((a, b) => {
+						if (a.prefixHit !== b.prefixHit) return a.prefixHit - b.prefixHit;
+						return a.tag.localeCompare(b.tag);
+					});
+				const seen = new Set();
+				const out = [];
+				for (const { row } of scored) {
+					const t = norm(row.tag);
+					if (!t || seen.has(t)) continue;
+					seen.add(t);
+					out.push(row);
+					if (out.length >= lim) break;
+				}
+				return out;
+			}
+		},
 		/** Exact style row for user (prefers user-owned over global). Case-insensitive tag match. */
 		selectPromptInjectionStyleBySlugForUser: {
 			get: async (userId, slug) => {
@@ -3227,7 +3272,7 @@ export function openDb() {
 				if (!Number.isFinite(uid) || uid <= 0 || !raw) return null;
 				const { data, error } = await serviceClient
 					.from(prefixedTable("prompt_injections"))
-					.select("id, tag, injection_text, title, description, owner_user_id, visibility")
+					.select("id, tag, injection_text, title, description, owner_user_id, visibility, meta")
 					.eq("tag_type", "style")
 					.eq("is_active", true)
 					.is("deleted_at", null)
@@ -3246,6 +3291,240 @@ export function openDb() {
 					return 0;
 				});
 				return matches[0];
+			}
+		},
+		selectGlobalStylePromptInjectionByTag: {
+			get: async (tag) => {
+				const raw = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				if (!raw) return null;
+				const { data, error } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.select("id, tag, meta")
+					.eq("tag_type", "style")
+					.is("owner_user_id", null)
+					.eq("is_active", true)
+					.is("deleted_at", null)
+					.eq("tag", raw)
+					.maybeSingle();
+				if (error) throw error;
+				return data ?? null;
+			}
+		},
+		updateGlobalStyleCatalogMetaByTag: {
+			run: async (tag, patch) => {
+				const t = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				if (!t || !patch || typeof patch !== "object") return { changes: 0 };
+				const { data: row, error: selErr } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.select("id, meta")
+					.eq("tag_type", "style")
+					.is("owner_user_id", null)
+					.eq("is_active", true)
+					.is("deleted_at", null)
+					.eq("tag", t)
+					.maybeSingle();
+				if (selErr) throw selErr;
+				if (!row?.id) return { changes: 0 };
+				let meta = {};
+				const rawMeta = row.meta;
+				if (rawMeta != null && typeof rawMeta === "object" && !Array.isArray(rawMeta)) {
+					meta = { ...rawMeta };
+				} else if (typeof rawMeta === "string" && rawMeta.trim()) {
+					try {
+						const o = JSON.parse(rawMeta);
+						if (o && typeof o === "object" && !Array.isArray(o)) meta = o;
+					} catch {
+						meta = {};
+					}
+				}
+				for (const [k, v] of Object.entries(patch)) {
+					if (v === null || v === undefined) delete meta[k];
+					else meta[k] = v;
+				}
+				const now = new Date().toISOString();
+				const { data: updated, error: updErr } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.update({ meta, updated_at: now })
+					.eq("id", row.id)
+					.select("id");
+				if (updErr) throw updErr;
+				const n = Array.isArray(updated) ? updated.length : 0;
+				return { changes: n };
+			}
+		},
+		/** Soft-delete every active style row for this tag (admin catalog cleanup). */
+		deletePromptInjectionStylesByTagAdmin: {
+			run: async (slug) => {
+				const raw = String(slug ?? "")
+					.trim()
+					.toLowerCase();
+				if (!raw) return { changes: 0 };
+				const { data: rows, error: selErr } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.select("id")
+					.eq("tag_type", "style")
+					.is("deleted_at", null)
+					.eq("tag", raw);
+				if (selErr) throw selErr;
+				const list = Array.isArray(rows) ? rows : [];
+				const ids = list.map((r) => r.id).filter((id) => id != null);
+				if (ids.length === 0) return { changes: 0 };
+				const now = new Date().toISOString();
+				const { data: updated, error: updErr } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.update({ deleted_at: now, is_active: false, updated_at: now })
+					.in("id", ids)
+					.select("id");
+				if (updErr) throw updErr;
+				const n = Array.isArray(updated) ? updated.length : 0;
+				return { changes: n };
+			}
+		},
+		insertGlobalStylePromptInjection: {
+			run: async (tag, injectionText, title, description, visibility) => {
+				const normalizedTag = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				const inj = String(injectionText ?? "").trim();
+				if (!normalizedTag || !inj) {
+					return { changes: 0 };
+				}
+				const vis = visibility === "unlisted" ? "unlisted" : "public";
+				const { data, error } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.insert({
+						tag: normalizedTag,
+						tag_type: "style",
+						injection_text: inj,
+						title: title ?? null,
+						description: description ?? null,
+						owner_user_id: null,
+						visibility: vis,
+						is_active: true
+					})
+					.select("id")
+					.single();
+				if (error) throw error;
+				return {
+					changes: data?.id != null ? 1 : 0,
+					lastInsertRowid: data?.id,
+					insertId: data?.id
+				};
+			}
+		},
+		selectGlobalPersonaPromptInjectionByTag: {
+			get: async (tag) => {
+				const raw = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				if (!raw) return null;
+				const { data, error } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.select("id, tag, tag_type, injection_text, title, description, visibility, meta")
+					.eq("tag_type", "persona")
+					.is("owner_user_id", null)
+					.eq("is_active", true)
+					.is("deleted_at", null)
+					.eq("tag", raw)
+					.maybeSingle();
+				if (error) throw error;
+				return data ?? null;
+			}
+		},
+		insertGlobalPersonaPromptInjection: {
+			run: async (tag, injectionText, title, description, meta) => {
+				const normalizedTag = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				if (!normalizedTag) {
+					throw new Error("insertGlobalPersonaPromptInjection: missing tag");
+				}
+				const { data, error } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.insert({
+						tag: normalizedTag,
+						tag_type: "persona",
+						injection_text: injectionText,
+						title: title ?? null,
+						description: description ?? null,
+						meta: meta && typeof meta === "object" ? meta : null,
+						owner_user_id: null,
+						visibility: "public",
+						is_active: true
+					})
+					.select("id")
+					.single();
+				if (error) throw error;
+				return {
+					insertId: data.id,
+					lastInsertRowid: data.id,
+					changes: 1
+				};
+			}
+		},
+		selectPersonaPromptInjectionInLibraryForUserByTag: {
+			get: async (userId, tag) => {
+				const uid = Number(userId);
+				const raw = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				if (!Number.isFinite(uid) || uid <= 0 || !raw) return null;
+				const { data, error } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.select("id, tag, title, description, injection_text, meta, owner_user_id")
+					.eq("tag_type", "persona")
+					.eq("is_active", true)
+					.is("deleted_at", null)
+					.eq("tag", raw)
+					.or(`owner_user_id.is.null,owner_user_id.eq.${uid},visibility.eq.public,visibility.eq.unlisted`);
+				if (error) throw error;
+				const rows = Array.isArray(data) ? data : [];
+				const norm = raw.toLowerCase();
+				const sameTag = rows.filter((r) => String(r.tag || "").toLowerCase() === norm);
+				sameTag.sort((a, b) => {
+					const aGlobal = a.owner_user_id == null;
+					const bGlobal = b.owner_user_id == null;
+					if (aGlobal && !bGlobal) return -1;
+					if (!aGlobal && bGlobal) return 1;
+					const ao = a.owner_user_id != null ? Number(a.owner_user_id) : NaN;
+					const bo = b.owner_user_id != null ? Number(b.owner_user_id) : NaN;
+					if (ao === uid && bo !== uid) return -1;
+					if (bo === uid && ao !== uid) return 1;
+					return 0;
+				});
+				return sameTag[0] ?? null;
+			}
+		},
+		updateGlobalPersonaCatalogByTag: {
+			run: async (tag, { title, description, injectionText, meta }) => {
+				const raw = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				if (!raw) return { changes: 0 };
+				const inj = String(injectionText ?? "").trim();
+				if (!inj) return { changes: 0 };
+				const { data, error } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.update({
+						title: title == null ? null : String(title),
+						description: description == null ? null : String(description),
+						injection_text: inj,
+						meta: meta && typeof meta === "object" ? meta : null,
+						updated_at: new Date().toISOString()
+					})
+					.eq("tag_type", "persona")
+					.is("owner_user_id", null)
+					.eq("is_active", true)
+					.is("deleted_at", null)
+					.eq("tag", raw)
+					.select("id");
+				if (error) throw error;
+				const n = Array.isArray(data) ? data.length : 0;
+				return { changes: n };
 			}
 		},
 		insertCreatedImage: {
@@ -3414,30 +3693,68 @@ export function openDb() {
 				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
 				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
 
-				const [descriptionRes, titleRes, commentsRes] = await Promise.all([
-					serviceClient
-						.from(prefixedTable("created_images"))
-						.select("id")
-						.eq("published", true)
-						.is("unavailable_at", null)
-						.ilike("description", `%${mentionNeedle}%`)
-						.limit(5000),
-					serviceClient
-						.from(prefixedTable("created_images"))
-						.select("id")
-						.eq("published", true)
-						.is("unavailable_at", null)
-						.ilike("title", `%${mentionNeedle}%`)
-						.limit(5000),
-					serviceClient
-						.from(prefixedTable("comments_created_image"))
-						.select("created_image_id")
-						.ilike("text", `%${mentionNeedle}%`)
-						.limit(5000)
-				]);
+				const tagNeedle = normalized;
+				const [descriptionRes, titleRes, commentsRes, descTagRes, titleTagRes, metaUserPromptRes, metaArgsPromptRes] =
+					await Promise.all([
+						serviceClient
+							.from(prefixedTable("created_images"))
+							.select("id")
+							.eq("published", true)
+							.is("unavailable_at", null)
+							.ilike("description", `%${mentionNeedle}%`)
+							.limit(5000),
+						serviceClient
+							.from(prefixedTable("created_images"))
+							.select("id")
+							.eq("published", true)
+							.is("unavailable_at", null)
+							.ilike("title", `%${mentionNeedle}%`)
+							.limit(5000),
+						serviceClient
+							.from(prefixedTable("comments_created_image"))
+							.select("created_image_id")
+							.or(`text.ilike.%${mentionNeedle}%,text.ilike.%${tagNeedle}%`)
+							.limit(5000),
+						serviceClient
+							.from(prefixedTable("created_images"))
+							.select("id")
+							.eq("published", true)
+							.is("unavailable_at", null)
+							.ilike("description", `%${tagNeedle}%`)
+							.limit(5000),
+						serviceClient
+							.from(prefixedTable("created_images"))
+							.select("id")
+							.eq("published", true)
+							.is("unavailable_at", null)
+							.ilike("title", `%${tagNeedle}%`)
+							.limit(5000),
+						serviceClient
+							.from(prefixedTable("created_images"))
+							.select("id")
+							.eq("published", true)
+							.is("unavailable_at", null)
+							.or(
+								`meta->>user_prompt.ilike.%${mentionNeedle}%,meta->>user_prompt.ilike.%${tagNeedle}%`
+							)
+							.limit(5000),
+						serviceClient
+							.from(prefixedTable("created_images"))
+							.select("id")
+							.eq("published", true)
+							.is("unavailable_at", null)
+							.or(
+								`meta->args->>prompt.ilike.%${mentionNeedle}%,meta->args->>prompt.ilike.%${tagNeedle}%`
+							)
+							.limit(5000)
+					]);
 				if (descriptionRes.error) throw descriptionRes.error;
 				if (titleRes.error) throw titleRes.error;
 				if (commentsRes.error) throw commentsRes.error;
+				if (descTagRes.error) throw descTagRes.error;
+				if (titleTagRes.error) throw titleTagRes.error;
+				if (metaUserPromptRes.error) throw metaUserPromptRes.error;
+				if (metaArgsPromptRes.error) throw metaArgsPromptRes.error;
 
 				const idSet = new Set();
 				for (const row of descriptionRes.data ?? []) {
@@ -3450,6 +3767,22 @@ export function openDb() {
 				}
 				for (const row of commentsRes.data ?? []) {
 					const id = Number(row?.created_image_id);
+					if (Number.isFinite(id) && id > 0) idSet.add(id);
+				}
+				for (const row of descTagRes.data ?? []) {
+					const id = Number(row?.id);
+					if (Number.isFinite(id) && id > 0) idSet.add(id);
+				}
+				for (const row of titleTagRes.data ?? []) {
+					const id = Number(row?.id);
+					if (Number.isFinite(id) && id > 0) idSet.add(id);
+				}
+				for (const row of metaUserPromptRes.data ?? []) {
+					const id = Number(row?.id);
+					if (Number.isFinite(id) && id > 0) idSet.add(id);
+				}
+				for (const row of metaArgsPromptRes.data ?? []) {
+					const id = Number(row?.id);
 					if (Number.isFinite(id) && id > 0) idSet.add(id);
 				}
 				const ids = Array.from(idSet);

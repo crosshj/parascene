@@ -406,8 +406,8 @@ export default function createExploreRoutes({ queries }) {
 		}
 	});
 
-	// Personality discovery: published creations that mention @personality
-	// in either creation description or any comment text.
+	// Personality discovery: published creations that reference @personality or the bare tag
+	// in title, stored prompt (meta), description, or comments.
 	router.get("/api/personalities/:personality/creations", async (req, res) => {
 		try {
 			if (!req.auth?.userId) {

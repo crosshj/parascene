@@ -4,6 +4,19 @@
 	width: 100%;
 }
 
+/* Add style: admin / founder only (JS adds .is-allowed); hide on Personas tab. */
+.prompt-library-add-style {
+	display: none;
+}
+
+.prompt-library-add-style.is-allowed {
+	display: inline-flex;
+}
+
+.prompt-library-route:has(app-tabs[active="personas"]) .prompt-library-add-style.is-allowed {
+	display: none !important;
+}
+
 .prompt-library-route app-tabs {
 	display: block;
 	width: 100%;
@@ -37,8 +50,17 @@
 	white-space: nowrap;
 }
 
+/* Global `table th, td { border: 1px solid }` boxes every cell; empty actions header looks like a stray rule. */
+.prompt-library-table th,
 .prompt-library-table td {
 	vertical-align: middle;
+	border-width: 0 0 1px 0;
+	border-style: solid;
+	border-color: var(--border);
+}
+
+.prompt-library-table tbody tr:last-child td {
+	border-bottom-width: 0;
 }
 
 .prompt-library-tag {
@@ -47,20 +69,6 @@
 	border-radius: 6px;
 	background: color-mix(in srgb, var(--text) 6%, transparent);
 	color: var(--text);
-}
-
-.prompt-library-row {
-	cursor: pointer;
-	transition: background 0.12s ease;
-}
-
-.prompt-library-row:hover {
-	background: color-mix(in srgb, var(--accent) 8%, var(--surface)) !important;
-}
-
-.prompt-library-row:focus-visible {
-	outline: 2px solid var(--accent);
-	outline-offset: -2px;
 }
 
 .prompt-library-table-empty {
@@ -73,8 +81,33 @@ tbody tr.prompt-library-row:nth-child(even) {
 	background: var(--surface-muted);
 }
 
-.prompt-library-table--styles .prompt-library-col-thumb {
+.prompt-library-table--styles .prompt-library-col-thumb,
+.prompt-library-table--personas .prompt-library-col-thumb {
 	width: 72px;
+}
+
+.prompt-library-persona-avatar-img {
+	display: block;
+	width: 48px;
+	height: 48px;
+	border-radius: 50%;
+	object-fit: cover;
+	border: 1px solid var(--border);
+	background: var(--surface-muted);
+}
+
+.prompt-library-persona-avatar-fallback {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 48px;
+	height: 48px;
+	border-radius: 50%;
+	border: 1px solid var(--border);
+	background: var(--prompt-library-persona-avatar-bg, #6b7280);
+	color: #ffffff;
+	font-weight: 700;
+	font-size: 1.05rem;
 }
 
 .prompt-library-cell-thumb {
@@ -94,25 +127,38 @@ tbody tr.prompt-library-row:nth-child(even) {
 }
 
 .prompt-library-thumb-fallback {
-	display: block;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 	width: 48px;
 	height: 56px;
 	border-radius: 8px;
 	border: 1px solid var(--border);
-	background: var(--surface-muted);
+	background: var(--prompt-library-style-thumb-bg, var(--surface-muted));
+	color: #ffffff;
+	font-weight: 700;
+	font-size: 1.05rem;
+	flex-shrink: 0;
 }
 
 .prompt-library-col-actions {
-	width: 48px;
+	width: 92px;
 }
 
+/* Do not use display:flex on <td> — it breaks border-collapse so row lines skew vs other columns. */
 .prompt-library-cell-actions {
 	text-align: right;
-	padding-right: 12px;
+	white-space: nowrap;
+	padding-right: 8px;
 	vertical-align: middle;
 }
 
-.prompt-library-copy-key {
+.prompt-library-cell-actions .prompt-library-copy-key {
+	margin-right: 2px;
+}
+
+.prompt-library-copy-key,
+.prompt-library-view {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -124,11 +170,19 @@ tbody tr.prompt-library-row:nth-child(even) {
 	background: transparent;
 	color: var(--text-muted);
 	cursor: pointer;
+	text-decoration: none;
+	box-sizing: border-box;
 }
 
-.prompt-library-copy-key:hover {
+.prompt-library-copy-key:hover,
+.prompt-library-view:hover {
 	background: color-mix(in srgb, var(--accent) 10%, var(--surface));
 	color: var(--text);
+}
+
+.prompt-library-view:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
 }
 
 .prompt-library-copy-icon {

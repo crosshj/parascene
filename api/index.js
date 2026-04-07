@@ -183,7 +183,7 @@ app.use(createAdminRoutes({ queries, storage }));
 app.use(createFeedRoutes({ queries }));
 app.use(createExploreRoutes({ queries }));
 app.use(createSuggestRoutes({ queries }));
-app.use(createPromptInjectionsRoutes({ queries }));
+app.use(createPromptInjectionsRoutes({ queries, storage }));
 app.use(createCreateRoutes({ queries, storage }));
 app.use(createImagesRoutes({ storage }));
 app.use(createCreationsRoutes({ queries }));

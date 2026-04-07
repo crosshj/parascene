@@ -184,8 +184,12 @@ function defaultGetInsertText(item, trigger) {
 		const slug = (item?.tag ?? item?.label ?? "").toString().trim();
 		return slug ? `${t}${slug} ` : "";
 	}
-	if (item?.type === "user" && item?.sublabel) {
+	if ((item?.type === "user" || item?.type === "persona") && item?.sublabel) {
 		const handle = String(item.sublabel).replace(/^@/, "").trim();
+		return handle ? `${t}${handle} ` : "";
+	}
+	if (item?.type === "persona" && item?.tag) {
+		const handle = String(item.tag).trim();
 		return handle ? `${t}${handle} ` : "";
 	}
 	if (item?.label) return `${t}${String(item.label).trim()} `;
@@ -195,6 +199,10 @@ function defaultGetInsertText(item, trigger) {
 function itemHandle(item) {
 	if (item?.type === "style") {
 		const t = (item?.tag ?? item?.label ?? "").toString().trim();
+		return t.toLowerCase();
+	}
+	if (item?.type === "persona") {
+		const t = (item?.tag ?? item?.sublabel ?? "").replace(/^@/, "").trim();
 		return t.toLowerCase();
 	}
 	const raw = (item?.sublabel || item?.insert_text || item?.label || "").replace(/^@/, "").trim();
@@ -285,7 +293,9 @@ function mergeUniqueItems(items) {
 		const key =
 			item?.type === "style"
 				? `style:${handle}`
-				: id || `handle:${handle}`;
+				: item?.type === "persona"
+					? `persona:${handle}`
+					: id || `handle:${handle}`;
 		if (!key || seen.has(key)) continue;
 		seen.add(key);
 		out.push(item);
@@ -293,8 +303,27 @@ function mergeUniqueItems(items) {
 	return out;
 }
 
+/** Cache key source for @-mention remote results (users + personas). */
+const MENTION_SUGGEST_CACHE_SOURCE = "mentions";
+
+/** Group people first, then personas, for section headers in the popup. */
+function orderMentionItemsForPopup(items) {
+	const users = [];
+	const personas = [];
+	for (const it of items) {
+		if (it?.type === "persona") personas.push(it);
+		else users.push(it);
+	}
+	return [...users, ...personas];
+}
+
+function finalizeMentionPopupItems(local, remote, limitNum) {
+	const merged = mergeUniqueItems([...local, ...remote]).slice(0, limitNum);
+	return orderMentionItemsForPopup(merged);
+}
+
 function getMentionLocalCandidates(qLower) {
-	const cachedRemote = getCachedEntriesForSource("users").flat();
+	const cachedRemote = getCachedEntriesForSource(MENTION_SUGGEST_CACHE_SOURCE).flat();
 	return mergeUniqueItems([
 		...filterAndSortMentionItems(Array.from(pageUsersMap.values()), qLower),
 		...filterAndSortMentionItems(cachedRemote, qLower)
@@ -305,26 +334,26 @@ function getMentionSuggestions({ source, q, limit }, signal) {
 	const qTrimmed = String(q).trim();
 	const qLower = qTrimmed.toLowerCase();
 	const limitNum = capForLimit(limit);
-	const key = `${source}:${qLower}:${limitNum}`;
+	const key = `${MENTION_SUGGEST_CACHE_SOURCE}:${qLower}:${limitNum}`;
 	const exactCached = cacheGet(key);
 	const local = getMentionLocalCandidates(qLower).slice(0, limitNum);
 
 	if (exactCached) {
-		return Promise.resolve(mergeUniqueItems([...local, ...exactCached]).slice(0, limitNum));
+		return Promise.resolve(finalizeMentionPopupItems(local, exactCached, limitNum));
 	}
 
-	const fromParent = cacheGetByParent(source, qLower, limitNum);
+	const fromParent = cacheGetByParent(MENTION_SUGGEST_CACHE_SOURCE, qLower, limitNum);
 	if (fromParent !== null) {
 		cacheSet(key, fromParent);
-		return Promise.resolve(mergeUniqueItems([...local, ...fromParent]).slice(0, limitNum));
+		return Promise.resolve(finalizeMentionPopupItems(local, fromParent, limitNum));
 	}
 
 	const sameKeyPending = pendingByKey.get(key);
 	if (sameKeyPending) {
-		return sameKeyPending.then((items) => mergeUniqueItems([...local, ...items]).slice(0, limitNum));
+		return sameKeyPending.then((items) => finalizeMentionPopupItems(local, items, limitNum));
 	}
 
-	const parentPendingKey = getPendingParentKey(source, qLower, limitNum);
+	const parentPendingKey = getPendingParentKey(MENTION_SUGGEST_CACHE_SOURCE, qLower, limitNum);
 	if (parentPendingKey) {
 		const parentPromise = pendingByKey.get(parentPendingKey);
 		return parentPromise
@@ -332,16 +361,19 @@ function getMentionSuggestions({ source, q, limit }, signal) {
 				if (parentItems.length >= limitNum) return doFetchMention();
 				const filtered = filterItemsByQuery(parentItems, qLower);
 				cacheSet(key, filtered);
-				return mergeUniqueItems([...local, ...filtered]).slice(0, limitNum);
+				return finalizeMentionPopupItems(local, filtered, limitNum);
 			})
 			.catch(() => doFetchMention());
 	}
 
 	function doFetchMention() {
-		const remotePromise = fetch(`/api/suggest?source=users&q=${encodeURIComponent(qTrimmed)}&limit=${limitNum}`, {
-			credentials: "include",
-			signal
-		})
+		const remotePromise = fetch(
+			`/api/suggest?source=mentions&q=${encodeURIComponent(qTrimmed)}&limit=${limitNum}`,
+			{
+				credentials: "include",
+				signal
+			}
+		)
 			.then((r) => {
 				if (!r.ok) throw new Error(`Suggest failed: ${r.status}`);
 				return r.json();
@@ -359,7 +391,7 @@ function getMentionSuggestions({ source, q, limit }, signal) {
 				pendingByKey.delete(key);
 			});
 		pendingByKey.set(key, remotePromise);
-		return remotePromise.then((items) => mergeUniqueItems([...local, ...items]).slice(0, limitNum));
+		return remotePromise.then((items) => finalizeMentionPopupItems(local, items, limitNum));
 	}
 
 	return doFetchMention();
@@ -501,7 +533,27 @@ function renderPopup(textarea, mode) {
 		row.textContent = "No matches found";
 		popup.appendChild(row);
 	} else {
+		const hasPersonas = items.some((it) => it?.type === "persona");
+		const hasUsers = items.some((it) => it?.type !== "persona");
+		const firstPersonaIdx = items.findIndex((it) => it?.type === "persona");
+		const showMentionSectionLabels = hasUsers && hasPersonas;
+
 		items.forEach((item, i) => {
+			if (showMentionSectionLabels && hasUsers && i === 0) {
+				const sec = document.createElement("div");
+				sec.className = "triggered-suggest-section";
+				sec.setAttribute("role", "presentation");
+				sec.textContent = "People";
+				popup.appendChild(sec);
+			}
+			if (showMentionSectionLabels && hasPersonas && i === (hasUsers ? firstPersonaIdx : 0)) {
+				const sec = document.createElement("div");
+				sec.className = "triggered-suggest-section";
+				sec.setAttribute("role", "presentation");
+				sec.textContent = "Personas";
+				popup.appendChild(sec);
+			}
+
 			const option = document.createElement("div");
 			option.id = `triggered-suggest-option-${i}`;
 			option.className = ITEM_CLASS + (i === selectedIndex ? ` ${ITEM_SELECTED_CLASS}` : "");
@@ -526,6 +578,22 @@ function renderPopup(textarea, mode) {
 				img.src = item.icon_url;
 				img.alt = "";
 				img.className = "triggered-suggest-item-avatar";
+				let triedAssetThumb = false;
+				img.addEventListener("error", () => {
+					if (
+						!triedAssetThumb &&
+						item?.type === "style" &&
+						item?.tag
+					) {
+						const assetThumb = getStyleThumbUrl(String(item.tag).trim());
+						if (assetThumb) {
+							triedAssetThumb = true;
+							img.src = assetThumb;
+							return;
+						}
+					}
+					setIconLetterFallback();
+				});
 				icon.appendChild(img);
 			} else if (item?.type === "style" && item?.tag) {
 				const thumb = getStyleThumbUrl(String(item.tag).trim());
@@ -727,15 +795,21 @@ function requestSuggestions(textarea, ctx, reason) {
 	const localCandidates = getLocalCandidatesForTrigger(ctx.trigger, qLower);
 	const localMatches = applyLocalFilter(ctx.trigger.source, localCandidates, qLower).slice(0, DEFAULT_SUGGEST_LIMIT);
 
-	setItems(state, localMatches);
+	const mentionOrderedLocals =
+		ctx.trigger.source === "users" ? orderMentionItemsForPopup(localMatches) : localMatches;
+	setItems(state, mentionOrderedLocals);
 	state.displayedQuery = requestedQuery;
 
-	const exactCacheKey = `${ctx.trigger.source}:${qLower}:${DEFAULT_SUGGEST_LIMIT}`;
+	// @ trigger uses source "users" but remote rows are cached under mentions (users + personas API).
+	const suggestCacheSource =
+		ctx.trigger.source === "users" ? MENTION_SUGGEST_CACHE_SOURCE : ctx.trigger.source;
+	const exactCacheKey = `${suggestCacheSource}:${qLower}:${DEFAULT_SUGGEST_LIMIT}`;
 	const exactCached = cacheGet(exactCacheKey);
 	if (exactCached) {
 		const merged = mergeUniqueItems([...localMatches, ...exactCached]).slice(0, DEFAULT_SUGGEST_LIMIT);
-		setItems(state, merged);
-		renderPopup(textarea, merged.length > 0 ? undefined : "empty");
+		const ordered = orderMentionItemsForPopup(merged);
+		setItems(state, ordered);
+		renderPopup(textarea, ordered.length > 0 ? undefined : "empty");
 		return;
 	}
 
@@ -765,7 +839,11 @@ function requestSuggestions(textarea, ctx, reason) {
 			const base = getLocalCandidatesForTrigger(nowCtx.trigger, nowLower);
 			const nextLocal = applyLocalFilter(nowCtx.trigger.source, base, nowLower).slice(0, DEFAULT_SUGGEST_LIMIT);
 			const nextRemote = nowCtx.query === requestedQuery ? items : applyLocalFilter(nowCtx.trigger.source, items, nowLower);
-			const nextItems = mergeUniqueItems([...nextLocal, ...nextRemote]).slice(0, DEFAULT_SUGGEST_LIMIT);
+			const mergedNext = mergeUniqueItems([...nextLocal, ...nextRemote]).slice(0, DEFAULT_SUGGEST_LIMIT);
+			const nextItems =
+				nowCtx.trigger.source === "users"
+					? orderMentionItemsForPopup(mergedNext)
+					: mergedNext;
 
 			current.triggerStart = nowCtx.start;
 			current.currentTrigger = nowCtx.trigger;

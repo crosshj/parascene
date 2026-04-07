@@ -2281,7 +2281,7 @@ export async function openDb() {
 				const uid = Number(userId);
 				if (!Number.isFinite(uid) || uid <= 0) return Promise.resolve([]);
 				const stmt = db.prepare(
-					`SELECT id, tag, tag_type, title, visibility, owner_user_id, updated_at, is_active, deleted_at
+					`SELECT id, tag, tag_type, title, visibility, owner_user_id, updated_at, is_active, deleted_at, meta
 					 FROM prompt_injections
 					 WHERE is_active = 1
 					   AND deleted_at IS NULL
@@ -2305,7 +2305,7 @@ export async function openDb() {
 				if (!Number.isFinite(uid) || uid <= 0 || !p) return Promise.resolve([]);
 				const lim = Math.min(Math.max(1, Number(limit) || 10), 20);
 				const stmt = db.prepare(
-					`SELECT id, tag, title, tag_type
+					`SELECT id, tag, title, tag_type, meta
 					 FROM prompt_injections
 					 WHERE tag_type = 'style'
 					   AND is_active = 1
@@ -2322,13 +2322,44 @@ export async function openDb() {
 				return Promise.resolve(stmt.all(`${p}%`, uid, lim));
 			}
 		},
+		searchPersonaPromptInjectionsByPrefix: {
+			all: async (userId, prefix, limit) => {
+				const uid = Number(userId);
+				const p = String(prefix ?? "")
+					.trim()
+					.toLowerCase()
+					.replace(/[^a-z0-9_-]/g, "");
+				if (!Number.isFinite(uid) || uid <= 0 || !p) return Promise.resolve([]);
+				const lim = Math.min(Math.max(1, Number(limit) || 10), 20);
+				const prefixPattern = `${p}%`;
+				const substrPattern = `%${p}%`;
+				const stmt = db.prepare(
+					`SELECT id, tag, title, meta
+					 FROM prompt_injections
+					 WHERE tag_type = 'persona'
+					   AND is_active = 1
+					   AND deleted_at IS NULL
+					   AND (lower(tag) LIKE ? OR lower(tag) LIKE ?)
+					   AND (
+						 owner_user_id IS NULL
+						 OR owner_user_id = ?
+						 OR visibility IN ('public', 'unlisted')
+					   )
+					 ORDER BY (lower(tag) LIKE ?) DESC, tag ASC
+					 LIMIT ?`
+				);
+				return Promise.resolve(
+					stmt.all(prefixPattern, substrPattern, uid, prefixPattern, lim)
+				);
+			}
+		},
 		selectPromptInjectionStyleBySlugForUser: {
 			get: async (userId, slug) => {
 				const uid = Number(userId);
 				const raw = String(slug ?? "").trim();
 				if (!Number.isFinite(uid) || uid <= 0 || !raw) return Promise.resolve(null);
 				const stmt = db.prepare(
-					`SELECT id, tag, injection_text, title, description, owner_user_id, visibility
+					`SELECT id, tag, injection_text, title, description, owner_user_id, visibility, meta
 					 FROM prompt_injections
 					 WHERE tag_type = 'style'
 					   AND is_active = 1
@@ -2344,6 +2375,211 @@ export async function openDb() {
 				);
 				const row = stmt.get(raw, uid, uid);
 				return Promise.resolve(row || null);
+			}
+		},
+		/** Global catalog style row (owner_user_id IS NULL) by tag — for style_thumb_url fallback and updates. */
+		selectGlobalStylePromptInjectionByTag: {
+			get: async (tag) => {
+				const raw = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				if (!raw) return Promise.resolve(null);
+				const stmt = db.prepare(
+					`SELECT id, tag, meta
+					 FROM prompt_injections
+					 WHERE tag_type = 'style'
+					   AND owner_user_id IS NULL
+					   AND is_active = 1
+					   AND deleted_at IS NULL
+					   AND lower(tag) = lower(?)`
+				);
+				const row = stmt.get(raw);
+				return Promise.resolve(row || null);
+			}
+		},
+		/** Merge keys into meta JSON for the global catalog style row with this tag. */
+		updateGlobalStyleCatalogMetaByTag: {
+			run: async (tag, patch) => {
+				const t = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				if (!t || !patch || typeof patch !== "object") return Promise.resolve({ changes: 0 });
+				const getRow = db.prepare(
+					`SELECT id, meta FROM prompt_injections
+					 WHERE tag_type = 'style'
+					   AND owner_user_id IS NULL
+					   AND is_active = 1
+					   AND deleted_at IS NULL
+					   AND lower(tag) = lower(?)`
+				);
+				const row = getRow.get(t);
+				if (!row) return Promise.resolve({ changes: 0 });
+				let meta = {};
+				try {
+					meta = row.meta ? JSON.parse(row.meta) : {};
+					if (!meta || typeof meta !== "object" || Array.isArray(meta)) meta = {};
+				} catch {
+					meta = {};
+				}
+				for (const [k, v] of Object.entries(patch)) {
+					if (v === null || v === undefined) delete meta[k];
+					else meta[k] = v;
+				}
+				const stmt = db.prepare(
+					`UPDATE prompt_injections SET meta = ?, updated_at = datetime('now') WHERE id = ?`
+				);
+				const result = stmt.run(JSON.stringify(meta), row.id);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		/** Soft-delete every active style row for this tag (admin catalog cleanup). */
+		deletePromptInjectionStylesByTagAdmin: {
+			run: async (slug) => {
+				const raw = String(slug ?? "")
+					.trim()
+					.toLowerCase();
+				if (!raw) return Promise.resolve({ changes: 0 });
+				const stmt = db.prepare(
+					`UPDATE prompt_injections
+					 SET deleted_at = datetime('now'), is_active = 0, updated_at = datetime('now')
+					 WHERE tag_type = 'style'
+					   AND deleted_at IS NULL
+					   AND lower(tag) = lower(?)`
+				);
+				const result = stmt.run(raw);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		/** Global catalog style row (owner_user_id IS NULL). */
+		insertGlobalStylePromptInjection: {
+			run: async (tag, injectionText, title, description, visibility) => {
+				const t = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				const inj = String(injectionText ?? "").trim();
+				if (!t || !inj) return Promise.resolve({ changes: 0 });
+				const vis = visibility === "unlisted" ? "unlisted" : "public";
+				const stmt = db.prepare(
+					`INSERT INTO prompt_injections (
+						tag, tag_type, injection_text, title, description,
+						owner_user_id, visibility, is_active, created_at, updated_at
+					) VALUES (?, 'style', ?, ?, ?, NULL, ?, 1, datetime('now'), datetime('now'))`
+				);
+				const result = stmt.run(t, inj, title ?? null, description ?? null, vis);
+				return Promise.resolve({
+					changes: result.changes,
+					lastInsertRowid: result.lastInsertRowid
+				});
+			}
+		},
+		/** Global catalog persona row (owner_user_id IS NULL) by tag slug. */
+		selectGlobalPersonaPromptInjectionByTag: {
+			get: async (tag) => {
+				const raw = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				if (!raw) return Promise.resolve(null);
+				const stmt = db.prepare(
+					`SELECT id, tag, tag_type, injection_text, title, description, visibility, meta
+					 FROM prompt_injections
+					 WHERE tag_type = 'persona'
+					   AND owner_user_id IS NULL
+					   AND is_active = 1
+					   AND deleted_at IS NULL
+					   AND lower(tag) = lower(?)`
+				);
+				const row = stmt.get(raw);
+				return Promise.resolve(row || null);
+			}
+		},
+		insertGlobalPersonaPromptInjection: {
+			run: async (tag, injectionText, title, description, meta) => {
+				const toJsonText = (value) => {
+					if (value == null) return null;
+					if (typeof value === "string") return value;
+					try {
+						return JSON.stringify(value);
+					} catch {
+						return null;
+					}
+				};
+				const stmt = db.prepare(
+					`INSERT INTO prompt_injections (
+						tag, tag_type, injection_text, title, description, meta,
+						owner_user_id, visibility, is_active, created_at, updated_at
+					) VALUES (?, 'persona', ?, ?, ?, ?, NULL, 'public', 1, datetime('now'), datetime('now'))`
+				);
+				const result = stmt.run(tag, injectionText, title ?? null, description ?? null, toJsonText(meta));
+				return Promise.resolve({
+					insertId: result.lastInsertRowid,
+					lastInsertRowid: result.lastInsertRowid,
+					changes: result.changes
+				});
+			}
+		},
+		/** Whether this slug appears as a persona row visible to the user (same rules as prompt library). */
+		selectPersonaPromptInjectionInLibraryForUserByTag: {
+			get: async (userId, tag) => {
+				const uid = Number(userId);
+				const raw = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				if (!Number.isFinite(uid) || uid <= 0 || !raw) return Promise.resolve(null);
+				const stmt = db.prepare(
+					`SELECT id, tag, title, description, injection_text, meta
+					 FROM prompt_injections
+					 WHERE tag_type = 'persona'
+					   AND is_active = 1
+					   AND deleted_at IS NULL
+					   AND lower(tag) = lower(?)
+					   AND (
+						 owner_user_id IS NULL
+						 OR owner_user_id = ?
+						 OR visibility IN ('public', 'unlisted')
+					   )
+					 ORDER BY
+					   CASE WHEN owner_user_id IS NULL THEN 0 ELSE 1 END,
+					   CASE WHEN owner_user_id = ? THEN 0 ELSE 1 END
+					 LIMIT 1`
+				);
+				const row = stmt.get(raw, uid, uid);
+				return Promise.resolve(row || null);
+			}
+		},
+		updateGlobalPersonaCatalogByTag: {
+			run: async (tag, { title, description, injectionText, meta }) => {
+				const raw = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				if (!raw) return Promise.resolve({ changes: 0 });
+				const inj = String(injectionText ?? "").trim();
+				if (!inj) return Promise.resolve({ changes: 0 });
+				const toJsonText = (value) => {
+					if (value == null) return null;
+					if (typeof value === "string") return value;
+					try {
+						return JSON.stringify(value);
+					} catch {
+						return null;
+					}
+				};
+				const stmt = db.prepare(
+					`UPDATE prompt_injections
+					 SET title = ?, description = ?, injection_text = ?, meta = ?, updated_at = datetime('now')
+					 WHERE tag_type = 'persona'
+					   AND owner_user_id IS NULL
+					   AND deleted_at IS NULL
+					   AND is_active = 1
+					   AND lower(tag) = lower(?)`
+				);
+				const result = stmt.run(
+					title == null ? null : String(title),
+					description == null ? null : String(description),
+					inj,
+					toJsonText(meta),
+					raw
+				);
+				return Promise.resolve({ changes: result.changes });
 			}
 		},
 		insertCreatedImage: {
@@ -2519,7 +2755,8 @@ export async function openDb() {
 			all: async (personality, options = {}) => {
 				const normalized = String(personality || "").trim().toLowerCase();
 				if (!/^[a-z0-9][a-z0-9_-]{2,23}$/.test(normalized)) return [];
-				const needle = `@${normalized}`;
+				const mentionNeedle = `@${normalized}`;
+				const tagNeedle = normalized;
 				const limit = Math.min(200, Math.max(1, Number.parseInt(String(options?.limit ?? "50"), 10) || 50));
 				const offset = Math.max(0, Number.parseInt(String(options?.offset ?? "0"), 10) || 0);
 				const stmt = db.prepare(
@@ -2530,18 +2767,42 @@ export async function openDb() {
              AND (ci.unavailable_at IS NULL OR ci.unavailable_at = '')
              AND (
                lower(coalesce(ci.description, '')) LIKE '%' || ? || '%'
+               OR lower(coalesce(ci.description, '')) LIKE '%' || ? || '%'
                OR lower(coalesce(ci.title, '')) LIKE '%' || ? || '%'
+               OR lower(coalesce(ci.title, '')) LIKE '%' || ? || '%'
+               OR lower(coalesce(json_extract(ci.meta, '$.user_prompt'), '')) LIKE '%' || ? || '%'
+               OR lower(coalesce(json_extract(ci.meta, '$.user_prompt'), '')) LIKE '%' || ? || '%'
+               OR lower(coalesce(json_extract(ci.meta, '$.args.prompt'), '')) LIKE '%' || ? || '%'
+               OR lower(coalesce(json_extract(ci.meta, '$.args.prompt'), '')) LIKE '%' || ? || '%'
                OR EXISTS (
                  SELECT 1
                  FROM comments_created_image c
                  WHERE c.created_image_id = ci.id
-                   AND lower(coalesce(c.text, '')) LIKE '%' || ? || '%'
+                   AND (
+                     lower(coalesce(c.text, '')) LIKE '%' || ? || '%'
+                     OR lower(coalesce(c.text, '')) LIKE '%' || ? || '%'
+                   )
                )
              )
            ORDER BY ci.created_at DESC
            LIMIT ? OFFSET ?`
 				);
-				return Promise.resolve(stmt.all(needle, needle, needle, limit, offset));
+				return Promise.resolve(
+					stmt.all(
+						mentionNeedle,
+						tagNeedle,
+						mentionNeedle,
+						tagNeedle,
+						mentionNeedle,
+						tagNeedle,
+						mentionNeedle,
+						tagNeedle,
+						mentionNeedle,
+						tagNeedle,
+						limit,
+						offset
+					)
+				);
 			}
 		},
 		selectPublishedCreationsByTagMention: {

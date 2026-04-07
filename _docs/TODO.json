@@ -1,17 +1,9 @@
 [
   {
-    "name": "Styles Management",
-    "description": "Styles are not really styles. Users besides admin should be able to maintain the styles list.    Styles should have the option to be bound to different models.",
+    "name": "channels++",
+    "description": "Private/public channels where only way to get image is to be part of channel. Includes publishing to channel.",
     "cost": 50,
-    "impact": 50,
-    "dependsOn": [],
-    "starred": false
-  },
-  {
-    "name": "Personas++",
-    "description": "we should be able to @persona to include in a prompt.  Personas should interact with users.",
-    "cost": 50,
-    "impact": 50,
+    "impact": 61,
     "dependsOn": [],
     "starred": false
   },
@@ -26,14 +18,6 @@
   {
     "name": "Inline Feed Callouts",
     "description": "currently the newbie feed has callouts, but the other people's feed do not.  Imagine: upcoming events + discord + nudges, etc",
-    "cost": 50,
-    "impact": 50,
-    "dependsOn": [],
-    "starred": false
-  },
-  {
-    "name": "channels",
-    "description": "Private/public channels where only way to get image is to be part of channel",
     "cost": 50,
     "impact": 50,
     "dependsOn": [],
