@@ -19,6 +19,38 @@ function chatSimulateSendFail() {
 	}
 }
 
+/** Hide repeated sender meta when the next message is same author within this window (ms). */
+const CHAT_MESSAGE_GROUP_GAP_MS = 7 * 60 * 1000;
+
+function parseChatMessageCreatedMs(m) {
+	if (!m || m.created_at == null) return NaN;
+	const t = Date.parse(String(m.created_at));
+	return Number.isFinite(t) ? t : NaN;
+}
+
+/**
+ * Same sender as the row above and within the time window — one visual group (single meta row).
+ */
+function isChatMessageGroupContinue(prev, current) {
+	if (prev == null || current == null) return false;
+	if (Number(prev.sender_id) !== Number(current.sender_id)) return false;
+	const prevMs = parseChatMessageCreatedMs(prev);
+	const curMs = parseChatMessageCreatedMs(current);
+	if (!Number.isFinite(prevMs) || !Number.isFinite(curMs)) return false;
+	const delta = curMs - prevMs;
+	if (delta < 0) return false;
+	return delta <= CHAT_MESSAGE_GROUP_GAP_MS;
+}
+
+/** Whether an optimistic bubble can stack under the last loaded message from the viewer. */
+function isOptimisticChatGroupContinue(lastMessage, viewerId) {
+	if (lastMessage == null || !Number.isFinite(Number(viewerId))) return false;
+	if (Number(lastMessage.sender_id) !== Number(viewerId)) return false;
+	const lastMs = parseChatMessageCreatedMs(lastMessage);
+	if (!Number.isFinite(lastMs)) return false;
+	return Date.now() - lastMs <= CHAT_MESSAGE_GROUP_GAP_MS;
+}
+
 let formatRelativeTime;
 let fetchJsonWithStatusDeduped;
 let readCachedChatThreads;
@@ -783,8 +815,7 @@ export async function initChatPage(root) {
 		findOptimisticRow(messagesEl, opt.tempId)?.remove();
 		messagesEl.querySelector('[data-chat-latest="1"]')?.removeAttribute('data-chat-latest');
 		const last = lastChatMessagesPayload[lastChatMessagesPayload.length - 1];
-		const sameSenderAsPrev =
-			last != null && Number.isFinite(Number(vid)) && Number(last.sender_id) === Number(vid);
+		const sameSenderAsPrev = isOptimisticChatGroupContinue(last, vid);
 		mountOptimisticRow(messagesEl, opt, sameSenderAsPrev, vid);
 		chatStickToBottom = true;
 		scrollChatMessagesToEnd();
@@ -1778,9 +1809,9 @@ export async function initChatPage(root) {
 		const senderId = Number(m.sender_id);
 		const isSelf = Number.isFinite(viewerId) && senderId === viewerId;
 		const prev = i > 0 ? messages[i - 1] : null;
-		const sameSenderAsPrev = prev != null && Number(prev.sender_id) === senderId;
+		const isGroupContinue = isChatMessageGroupContinue(prev, m);
 		const row = document.createElement('div');
-		row.className = `connect-chat-msg${isSelf ? ' is-self' : ''}${sameSenderAsPrev ? ' is-group-continue' : ''}`;
+		row.className = `connect-chat-msg${isSelf ? ' is-self' : ''}${isGroupContinue ? ' is-group-continue' : ''}`;
 		row.setAttribute('data-chat-message-id', String(m.id));
 		const effectiveUnread = rowOpts.effectiveUnread;
 		const vStart = rowOpts.vStart;
@@ -1821,7 +1852,7 @@ export async function initChatPage(root) {
 		const bubble = document.createElement('div');
 		bubble.className = 'connect-chat-msg-bubble';
 		bubble.innerHTML = safeBody;
-		if (!sameSenderAsPrev) {
+		if (!isGroupContinue) {
 			const metaLine = document.createElement('div');
 			metaLine.className = 'connect-chat-msg-meta';
 			const handleRaw = m.sender_user_name != null ? String(m.sender_user_name).trim() : '';
@@ -1942,10 +1973,7 @@ export async function initChatPage(root) {
 			messagesEl.querySelector('.chat-page-empty-hint')?.remove();
 			messagesEl.querySelector('[data-chat-latest="1"]')?.removeAttribute('data-chat-latest');
 			const last = messages[messages.length - 1];
-			const sameSenderAsPrev =
-				last != null &&
-				Number.isFinite(Number(viewerId)) &&
-				Number(last.sender_id) === Number(viewerId);
+			const sameSenderAsPrev = isOptimisticChatGroupContinue(last, viewerId);
 			mountOptimisticRow(messagesEl, optimisticSend, sameSenderAsPrev, viewerId);
 		}
 	}
@@ -2189,14 +2217,9 @@ export async function initChatPage(root) {
 			if (visualStart > 0) {
 				const first = messages[visualStart];
 				const prev = messages[visualStart - 1];
-				const firstSender = first?.sender_id != null ? Number(first.sender_id) : null;
 				const prevSender = prev?.sender_id != null ? Number(prev.sender_id) : null;
 				const prevIsSelf = Number.isFinite(viewerId) && Number.isFinite(prevSender) && prevSender === viewerId;
-				const sameSender =
-					Number.isFinite(firstSender) &&
-					Number.isFinite(prevSender) &&
-					firstSender === prevSender;
-				if (sameSender && !prevIsSelf) {
+				if (isChatMessageGroupContinue(prev, first) && !prevIsSelf) {
 					// Include the meta-bearing row (the previous message in the run).
 					visualStart = visualStart - 1;
 				}
