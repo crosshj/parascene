@@ -5049,6 +5049,24 @@ export function openDb() {
 				return { changes: data?.length ?? 0 };
 			}
 		},
+		deleteBlogPost: {
+			run: async (id) => {
+				const nid = Number(id);
+				if (!Number.isFinite(nid) || nid <= 0) return { changes: 0 };
+				const { error: errViews } = await serviceClient
+					.from(prefixedTable("blog_post_views"))
+					.delete()
+					.eq("blog_post_id", nid);
+				if (errViews) throw errViews;
+				const { data, error } = await serviceClient
+					.from(prefixedTable("blog_posts"))
+					.delete()
+					.eq("id", nid)
+					.select("id");
+				if (error) throw error;
+				return { changes: data?.length ?? 0 };
+			}
+		},
 		insertBlogPostView: {
 			run: async ({ blog_post_id = null, post_slug, campaign_id = null, referer = null, anon_cid = null, meta = null }) => {
 				const metaVal = meta && typeof meta === "object" && meta !== null ? meta : meta == null ? null : meta;

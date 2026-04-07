@@ -68,9 +68,11 @@ function escapeHtml(text) {
 }
 
 /** Inline SVG for blog table action buttons (sized in CSS). */
-const blogIcEdit = html`<svg class="create-route-blog-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>`;
+const blogIcEdit = html`<svg class="create-route-blog-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>`;
 
-const blogIcCampaign = html`<svg class="create-route-blog-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`;
+const blogIcCampaign = html`<svg class="create-route-blog-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`;
+
+const blogIcTrash = html`<svg class="create-route-blog-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>`;
 
 /** Matches server `BLOG_CAMPAIGN_TOKEN_RE` for custom campaign ids in tracked URLs. */
 const BLOG_CAMPAIGN_ID_RE = /^[a-z0-9]{1,12}$/;
@@ -89,6 +91,24 @@ function buildParasceneBlogPublicUrls(slug, campaignId) {
 	const canonical = `${PARASCENE_BLOG_PUBLIC_ORIGIN}/blog/${enc}`;
 	const tracked = `${PARASCENE_BLOG_PUBLIC_ORIGIN}/blog/${encodeURIComponent(campaignId)}/${enc}`;
 	return { tracked, canonical };
+}
+
+/** Same path shape as blog editor preview — relative path for app routing. */
+function blogPreviewHref(slug) {
+	const s = typeof slug === "string" ? slug.trim() : String(slug ?? "").trim();
+	if (!s) return "";
+	const path = s
+		.split("/")
+		.filter(Boolean)
+		.map((seg) => encodeURIComponent(seg))
+		.join("/");
+	return `/blog/${path}?preview=1`;
+}
+
+/** Full URL for copy/share — matches tracked/canonical links in this modal. */
+function blogPreviewFullUrl(slug) {
+	const path = blogPreviewHref(slug);
+	return path ? `${PARASCENE_BLOG_PUBLIC_ORIGIN}${path}` : "";
 }
 
 /** Normalize image URL to a canonical form (origin + path) so queue and form values match regardless of relative/absolute. */
@@ -159,7 +179,7 @@ class AppRouteCreate extends HTMLElement {
                 <div class="create-route-advanced-confirm-overlay" data-blog-campaign-overlay></div>
                 <div class="create-route-advanced-confirm-panel create-route-blog-campaign-panel">
                   <div class="create-route-advanced-preview-header">
-                    <p class="create-route-advanced-preview-title" data-blog-campaign-title>Campaigns</p>
+                    <p class="create-route-advanced-preview-title" data-blog-campaign-title>Links</p>
                     <button type="button" class="modal-close" data-blog-campaign-close-x aria-label="Close">
                       <svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -1738,6 +1758,7 @@ class AppRouteCreate extends HTMLElement {
 				const t = e.target;
 				if (t?.matches?.("[data-blog-copy-tracked]")) this.copyBlogCampaignTrackedField("tracked");
 				if (t?.matches?.("[data-blog-copy-canonical]")) this.copyBlogCampaignTrackedField("canonical");
+				if (t?.matches?.("[data-blog-campaign-copy-preview]")) this.copyBlogCampaignPreview(t);
 				if (t?.matches?.("[data-blog-campaign-copy-tracked-simple]")) {
 					const id = t.getAttribute("data-blog-campaign-copy-tracked-simple");
 					this.copyBlogCampaignSimpleTracked(id, t);
@@ -1779,7 +1800,7 @@ class AppRouteCreate extends HTMLElement {
 			slug: String(post.slug || "").trim(),
 			title: String(post.title || "").trim() || "Post"
 		};
-		if (titleEl) titleEl.textContent = `Campaigns — ${this._blogCampaignPost.title}`;
+		if (titleEl) titleEl.textContent = `Links - ${this._blogCampaignPost.title}`;
 		body.innerHTML = html`<p class="create-cost">Loading…</p>`;
 		dialog.hidden = false;
 		dialog.classList.add("open");
@@ -1800,6 +1821,19 @@ class AppRouteCreate extends HTMLElement {
 		const post = this._blogCampaignPost;
 		if (!body || !post) return;
 
+		const previewLi = blogPreviewFullUrl(post.slug)
+			? html`<li class="create-route-blog-campaign-simple-row">
+					<span class="create-route-blog-campaign-simple-label">Preview</span>
+					<button
+						type="button"
+						class="btn-secondary create-route-blog-campaign-simple-copy"
+						data-blog-campaign-copy-preview
+					>
+						Copy
+					</button>
+				</li>`
+			: "";
+
 		if (!this._blogUserIsAdmin) {
 			const list = (this._blogCampaignList || []).filter((c) => c && typeof c.id === "string");
 			const campaignRows = list
@@ -1818,6 +1852,7 @@ class AppRouteCreate extends HTMLElement {
 					? html`<p class="create-cost create-route-blog-campaign-simple-note">No named campaigns in the registry yet.</p>`
 					: "";
 			body.innerHTML = html`<ul class="create-route-blog-campaign-simple-list">
+				${previewLi}
 				<li class="create-route-blog-campaign-simple-row">
 					<span class="create-route-blog-campaign-simple-label">Generic</span>
 					<button type="button" class="btn-secondary create-route-blog-campaign-simple-copy" data-blog-campaign-copy-canonical-simple>Copy</button>
@@ -1882,6 +1917,7 @@ class AppRouteCreate extends HTMLElement {
 				: html`<p class="create-cost">No campaigns in the registry yet.${this._blogUserIsAdmin ? " Add one below." : ""}</p>`;
 
 		body.innerHTML = html`
+			${previewLi ? html`<ul class="create-route-blog-campaign-simple-list">${previewLi}</ul>` : ""}
 			<div class="create-route-blog-campaign-section">
 				<p class="form-label">Tracked link</p>
 				<p class="create-cost create-route-blog-campaign-lead">Choose a campaign id to build a URL that attributes views in analytics. Custom ids must be 1–12 lowercase letters or numbers.</p>
@@ -1990,6 +2026,22 @@ class AppRouteCreate extends HTMLElement {
 		if (!post?.slug) return;
 		const { canonical } = buildParasceneBlogPublicUrls(post.slug, "x");
 		navigator.clipboard.writeText(canonical).then(() => {
+			if (btn) {
+				const prev = btn.textContent;
+				btn.textContent = "Copied";
+				setTimeout(() => {
+					btn.textContent = prev;
+				}, 1500);
+			}
+		}).catch(() => {});
+	}
+
+	copyBlogCampaignPreview(btn) {
+		const post = this._blogCampaignPost;
+		if (!post?.slug) return;
+		const url = blogPreviewFullUrl(post.slug);
+		if (!url) return;
+		navigator.clipboard.writeText(url).then(() => {
 			if (btn) {
 				const prev = btn.textContent;
 				btn.textContent = "Copied";
@@ -2120,6 +2172,31 @@ class AppRouteCreate extends HTMLElement {
 		}
 	}
 
+	async onBlogDeletePost(postId) {
+		if (!postId) return;
+		if (
+			!window.confirm(
+				"Delete this post permanently? This removes the post and its view analytics for this post."
+			)
+		) {
+			return;
+		}
+		try {
+			const res = await fetch(`/api/blog/posts/${encodeURIComponent(postId)}`, {
+				method: "DELETE",
+				credentials: "include"
+			});
+			if (res.status === 204) {
+				await this.loadBlogPosts();
+				return;
+			}
+			const data = await res.json().catch(() => ({}));
+			window.alert(data?.error || "Could not delete post.");
+		} catch (_) {
+			window.alert("Could not delete post.");
+		}
+	}
+
 	async loadBlogPosts() {
 		const container = this.querySelector("[data-blog-table-container]");
 		const statusEl = this.querySelector("[data-blog-status]");
@@ -2160,17 +2237,27 @@ class AppRouteCreate extends HTMLElement {
 					<td class="create-route-blog-date">${escapeHtml(updated)}</td>
 					<td class="create-route-blog-actions">
 						<span class="create-route-blog-actions-inner">
-							<button type="button" class="create-route-blog-campaigns" data-blog-campaign-open
+							<button
+								type="button"
+								class="create-route-blog-icon-btn"
+								data-blog-campaign-open
 								data-blog-post-id="${String(id)}"
 								data-blog-post-slug="${slugEsc}"
 								data-blog-post-title="${titleEsc}"
-								aria-label="Campaigns and tracked links">
+								aria-label="Campaigns and tracked links"
+							>
 								${blogIcCampaign}
-								<span class="create-route-blog-campaigns-label">Campaigns</span>
 							</button>
-							<button type="button" class="create-route-blog-edit" data-blog-edit="${id}" aria-label="Edit post">
+							<button type="button" class="create-route-blog-icon-btn" data-blog-edit="${id}" aria-label="Edit post">
 								${blogIcEdit}
-								<span class="create-route-blog-edit-label">Edit</span>
+							</button>
+							<button
+								type="button"
+								class="create-route-blog-icon-btn create-route-blog-icon-btn--danger"
+								data-blog-delete="${id}"
+								aria-label="Delete post"
+							>
+								${blogIcTrash}
 							</button>
 						</span>
 					</td>
@@ -2194,6 +2281,12 @@ class AppRouteCreate extends HTMLElement {
 			btn.addEventListener("click", () => {
 				const id = btn.getAttribute("data-blog-edit");
 				if (id) window.location.href = `/create/blog/${id}`;
+			});
+		});
+		container.querySelectorAll("[data-blog-delete]").forEach((btn) => {
+			btn.addEventListener("click", () => {
+				const rowId = btn.getAttribute("data-blog-delete");
+				if (rowId) this.onBlogDeletePost(rowId);
 			});
 		});
 		container.querySelectorAll("[data-blog-campaign-open]").forEach((btn) => {

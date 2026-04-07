@@ -44,6 +44,13 @@ async function savePost(id, payload) {
 	return data.post;
 }
 
+async function deletePost(id) {
+	const res = await fetch(`/api/blog/posts/${id}`, { method: "DELETE", credentials: "include" });
+	if (res.status === 204) return;
+	const data = await res.json().catch(() => ({}));
+	throw new Error(data?.error || "Delete failed");
+}
+
 async function postLifecycle(id, action) {
 	const res = await fetch(`/api/blog/posts/${id}/${action}`, { method: "POST", credentials: "include" });
 	const data = await res.json().catch(() => ({}));
@@ -70,6 +77,16 @@ function normalizeStatus(raw) {
 	const s = String(raw || "").toLowerCase();
 	if (s === "draft" || s === "published" || s === "archived") return s;
 	return "draft";
+}
+
+function encodeBlogSlugPath(slug) {
+	const s = typeof slug === "string" ? slug.trim() : String(slug ?? "").trim();
+	if (!s) return "";
+	return s
+		.split("/")
+		.filter(Boolean)
+		.map((seg) => encodeURIComponent(seg))
+		.join("/");
 }
 
 async function main() {
@@ -194,6 +211,43 @@ async function main() {
 			setMessage(msg, "Saved.");
 		} catch (e) {
 			setMessage(msg, e?.message || "Save failed.");
+		}
+	});
+
+	const previewBtn = document.querySelector("[data-blog-preview]");
+	previewBtn?.addEventListener("click", () => {
+		const slugRaw = slugEl?.value?.trim() || "";
+		if (!slugRaw) {
+			setMessage(msg, "Set a URL slug before opening preview.");
+			return;
+		}
+		const pathSeg = encodeBlogSlugPath(slugRaw);
+		if (!pathSeg) {
+			setMessage(msg, "Invalid slug.");
+			return;
+		}
+		setMessage(msg, "");
+		window.open(`/blog/${pathSeg}?preview=1`, "_blank", "noopener,noreferrer");
+	});
+
+	const deleteBtn = document.querySelector("[data-blog-delete]");
+	deleteBtn?.addEventListener("click", async () => {
+		const titleHint = (titleEl?.value || post?.title || "").trim() || "this post";
+		if (
+			!window.confirm(
+				`Delete “${titleHint}” permanently? This removes the post and its view analytics for this post.`
+			)
+		) {
+			return;
+		}
+		setMessage(msg, "Deleting…");
+		if (deleteBtn) deleteBtn.disabled = true;
+		try {
+			await deletePost(id);
+			window.location.href = "/create#blog";
+		} catch (e) {
+			setMessage(msg, e?.message || "Could not delete.");
+			if (deleteBtn) deleteBtn.disabled = false;
 		}
 	});
 }

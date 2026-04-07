@@ -146,7 +146,47 @@ function buildBlogBylineHtml(post) {
 	return `<p class="blog-byline">${parts.join('<span class="blog-byline-sep" aria-hidden="true"> · </span>')}</p>`;
 }
 
-function generateBlogPageHtml({ title, description, html, notFound = false, bylineHtml = "" }) {
+function previewBannerHtmlForDbRow(row) {
+	if (!row) return "";
+	const st = String(row.status || "").toLowerCase();
+	let msg;
+	if (st === "draft") {
+		msg =
+			"You're previewing a draft of an unpublished blog post available only to logged in users.";
+	} else if (st === "archived") {
+		msg = "You're previewing an archived post. It isn't shown on the public blog.";
+	} else {
+		msg = "You're previewing this post. It isn't what visitors see on the public blog yet.";
+	}
+	return `<p class="blog-preview-banner" role="status">${escapeHtml(msg)}</p>`;
+}
+
+function isBlogPreviewQuery(req) {
+	const p = req.query?.preview;
+	if (p === undefined || p === null) return false;
+	if (p === "") return true;
+	const s = String(p).trim().toLowerCase();
+	if (s === "0" || s === "false" || s === "no") return false;
+	return true;
+}
+
+function blogPreviewAuthErrorHtml({ title, message, req, showSignIn }) {
+	const returnUrl = encodeURIComponent(String(req.originalUrl || req.url || "/"));
+	const signInHref = `/auth?returnUrl=${returnUrl}#login`;
+	const signInBlock = showSignIn
+		? `<p><a href="${escapeHtml(signInHref)}">Sign in</a> to preview this post.</p>`
+		: "";
+	return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>${escapeHtml(title)}</title><link rel="stylesheet" href="/global.css"/></head><body class="blog-page"><main class="blog-main blog-content"><h1>${escapeHtml(title)}</h1><p>${escapeHtml(message)}</p>${signInBlock}</main></body></html>`;
+}
+
+function generateBlogPageHtml({
+	title,
+	description,
+	html,
+	notFound = false,
+	bylineHtml = "",
+	previewBannerHtml = ""
+}) {
 	const hasTitle = Boolean(title && String(title).trim());
 	const safeTitle = hasTitle ? escapeHtml(title) : "";
 	const safeDescription = escapeHtml(description || "");
@@ -162,6 +202,7 @@ function generateBlogPageHtml({ title, description, html, notFound = false, byli
 	} else {
 		mainContent = `
 			<div class="blog-content">
+				${previewBannerHtml || ""}
 				${hasTitle ? `<h1>${safeTitle}</h1>` : ""}
 				${bylineHtml || ""}
 				${description ? `<p class="blog-description">${safeDescription}</p>` : ""}
@@ -391,6 +432,49 @@ export default function createBlogRoutes({ pagesDir, queries }) {
 		return { post, campaign, slugUsed };
 	}
 
+	function canManageBlogPost(user, postRow) {
+		if (!postRow) return false;
+		if (user?.role === "admin") return true;
+		return Number(postRow.author_user_id) === Number(user.id);
+	}
+
+	async function enrichDbMergedPost(merged) {
+		if (merged.author_user_id != null && queries.selectUserProfileByUserId?.get) {
+			merged._profile = await queries.selectUserProfileByUserId.get(merged.author_user_id);
+		}
+		if (merged.author_user_id != null && queries.selectUserById?.get) {
+			merged._authorUser = await queries.selectUserById.get(merged.author_user_id);
+		}
+		return merged;
+	}
+
+	async function loadPreviewDraftIfAuthorized(segments, req) {
+		if (!isBlogPreviewQuery(req) || !queries?.selectBlogPostBySlugAny?.get) {
+			return { kind: "skip" };
+		}
+		const parsed = parseBlogPathSegments(segments);
+		let row = await queries.selectBlogPostBySlugAny.get(parsed.slug);
+		if (!row && parsed.tryCampaignFallback && segments.length > 0) {
+			row = await queries.selectBlogPostBySlugAny.get(segments.join("/"));
+		}
+		if (!row) return { kind: "none" };
+		const uid = req.auth?.userId;
+		if (!uid) return { kind: "unauthorized" };
+		const user = await queries.selectUserById?.get(uid);
+		if (!user || !canManageBlogPost(user, row)) {
+			return { kind: "forbidden" };
+		}
+		const merged = rowToMergedPost(row);
+		await enrichDbMergedPost(merged);
+		return {
+			kind: "ok",
+			row,
+			merged,
+			campaign: parsed.campaign,
+			slugUsed: row.slug || parsed.slug
+		};
+	}
+
 	/**
 	 * Replace {{BLOG_POST_LIST}} or <!-- BLOG_POST_LIST --> in index.md body with a markdown list
 	 * of published posts (same merge order as elsewhere). Uses getBlogPostsCached for TTL alignment.
@@ -511,7 +595,46 @@ export default function createBlogRoutes({ pagesDir, queries }) {
 			const fs = await import("fs/promises");
 			const raw = req.path.replace(/^\/blog\/?/, "").replace(/\/$/, "") || "";
 			const segments = raw ? raw.split("/").filter(Boolean) : [];
-			const { post, campaign, slugUsed } = await resolvePublishedPostForBlogPath(segments);
+			let { post, campaign, slugUsed } = await resolvePublishedPostForBlogPath(segments);
+			let postIsPreview = false;
+			let previewBannerHtml = "";
+
+			if (!post) {
+				const pv = await loadPreviewDraftIfAuthorized(segments, req);
+				if (pv.kind === "unauthorized") {
+					res.setHeader("Content-Type", "text/html");
+					return res
+						.status(401)
+						.send(
+							blogPreviewAuthErrorHtml({
+								title: "Sign in to preview",
+								message: "Sign in with an account that can edit this post to see it here.",
+								req,
+								showSignIn: true
+							})
+						);
+				}
+				if (pv.kind === "forbidden") {
+					res.setHeader("Content-Type", "text/html");
+					return res
+						.status(403)
+						.send(
+							blogPreviewAuthErrorHtml({
+								title: "Preview not allowed",
+								message: "You do not have permission to preview this post.",
+								req,
+								showSignIn: false
+							})
+						);
+				}
+				if (pv.kind === "ok") {
+					post = pv.merged;
+					campaign = pv.campaign;
+					slugUsed = pv.slugUsed;
+					postIsPreview = true;
+					previewBannerHtml = previewBannerHtmlForDbRow(pv.row);
+				}
+			}
 
 			const pageDescription = post?.description || (post ? `${post.title} — parascene blog post.` : "");
 
@@ -521,7 +644,8 @@ export default function createBlogRoutes({ pagesDir, queries }) {
 				description: pageDescription,
 				html: post ? post.html : "",
 				notFound: !post,
-				bylineHtml
+				bylineHtml,
+				previewBannerHtml
 			});
 
 			const templatePath = path.join(pagesDir, "blog.html");
@@ -533,6 +657,13 @@ export default function createBlogRoutes({ pagesDir, queries }) {
 				tokens.PAGE_META_DESCRIPTION = pageDescription;
 			}
 			let htmlWithHead = injectCommonHead(pageHtml, tokens);
+
+			if (postIsPreview) {
+				htmlWithHead = htmlWithHead.replace(
+					/<head>/i,
+					"<head>\n\t\t<meta name=\"robots\" content=\"noindex,nofollow\" />"
+				);
+			}
 
 			const userId = req.auth?.userId;
 			if (userId && queries) {
@@ -568,8 +699,10 @@ export default function createBlogRoutes({ pagesDir, queries }) {
 			}
 
 			if (post) {
-				tryLogBlogPostView(req, queries, { post, campaign, slugUsed });
-				if (campaign != null && post.slug) {
+				if (!postIsPreview) {
+					tryLogBlogPostView(req, queries, { post, campaign, slugUsed });
+				}
+				if (!postIsPreview && campaign != null && post.slug) {
 					const canUrl = canonicalBlogUrlForSlug(post.slug);
 					htmlWithHead = htmlWithHead.replace(/<link rel="canonical" href="[^"]*"\s*\/>/i, getCanonicalLinkHtml(canUrl));
 					const ogEsc = canUrl

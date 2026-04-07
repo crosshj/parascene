@@ -2826,8 +2826,10 @@ body.creation-detail-page main>section:first-of-type {
 	border-color: color-mix(in srgb, var(--text-muted) 20%, transparent);
 }
 
+/* Row actions — match prompt-library tables (.prompt-library-cell-actions / .prompt-library-copy-key) */
 .create-route-blog-actions {
 	text-align: right;
+	padding-right: 12px;
 	width: 1%;
 	white-space: nowrap;
 	vertical-align: middle;
@@ -2838,59 +2840,50 @@ body.creation-detail-page main>section:first-of-type {
 	align-items: center;
 	justify-content: flex-end;
 	flex-wrap: nowrap;
-	gap: 0.35rem;
+	gap: 2px;
 }
 
-.create-route-blog-edit,
-.create-route-blog-campaigns {
+.create-route-blog-icon-btn {
 	display: inline-flex;
 	align-items: center;
-	justify-content: flex-end;
-	gap: 0.35rem;
-	padding: 0.3rem 0.45rem;
+	justify-content: center;
+	width: 36px;
+	height: 36px;
+	padding: 0;
 	margin: 0;
 	border: none;
 	border-radius: 6px;
 	background: transparent;
-	color: var(--text-muted, rgba(255, 255, 255, 0.55));
-	font-size: 0.8125rem;
-	font-weight: 500;
-	font-family: inherit;
+	color: var(--text-muted);
 	cursor: pointer;
-	transition: color 0.15s ease, background 0.15s ease;
 	-webkit-tap-highlight-color: transparent;
+	transition: color 0.12s ease, background 0.12s ease;
 }
 
-.create-route-blog-edit:hover,
-.create-route-blog-campaigns:hover {
-	color: var(--accent);
-	background: color-mix(in srgb, var(--accent) 14%, transparent);
+.create-route-blog-icon-btn:hover {
+	background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+	color: var(--text);
 }
 
-.create-route-blog-edit:focus-visible,
-.create-route-blog-campaigns:focus-visible {
-	outline: none;
-	color: var(--accent);
-	box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+.create-route-blog-icon-btn:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
 }
 
-.create-route-blog-edit-label,
-.create-route-blog-campaigns-label {
-	position: relative;
-	top: 0.5px;
+.create-route-blog-icon-btn--danger:hover {
+	background: color-mix(in srgb, var(--danger, #c44) 12%, var(--surface));
+	color: var(--danger, #c44);
+}
+
+.create-route-blog-icon-btn--danger:focus-visible {
+	outline-color: var(--danger, #c44);
 }
 
 .create-route-blog-icon {
-	width: 15px;
-	height: 15px;
+	width: 18px;
+	height: 18px;
 	display: block;
 	flex-shrink: 0;
-	opacity: 0.88;
-}
-
-.create-route-blog-edit:hover .create-route-blog-icon,
-.create-route-blog-campaigns:hover .create-route-blog-icon {
-	opacity: 1;
 }
 
 app-route-create .create-route-blog-campaign-dialog .create-route-blog-campaign-panel {

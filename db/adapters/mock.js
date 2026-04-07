@@ -2396,6 +2396,19 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		deleteBlogPost: {
+			run: async (id) => {
+				const idx = blog_posts.findIndex((p) => Number(p.id) === Number(id));
+				if (idx < 0) return { changes: 0 };
+				blog_posts.splice(idx, 1);
+				for (let i = blog_post_views.length - 1; i >= 0; i--) {
+					if (Number(blog_post_views[i].blog_post_id) === Number(id)) {
+						blog_post_views.splice(i, 1);
+					}
+				}
+				return { changes: 1 };
+			}
+		},
 		insertBlogPostView: {
 			run: async ({ blog_post_id = null, post_slug, campaign_id = null, referer = null, anon_cid = null, meta = null }) => {
 				const id =

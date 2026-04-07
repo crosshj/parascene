@@ -45,6 +45,17 @@
 	min-width: 0;
 }
 
+.blog-preview-banner {
+	margin: 0 0 12px;
+	padding: 8px 10px;
+	border-radius: 6px;
+	font-size: 0.875rem;
+	line-height: 1.4;
+	color: var(--text);
+	background: color-mix(in srgb, var(--accent, #6b5cff) 14%, transparent);
+	border: 1px solid color-mix(in srgb, var(--accent, #6b5cff) 35%, var(--border));
+}
+
 .blog-content h1 {
 	margin-top: 0;
 	/* margin-bottom: 0; */

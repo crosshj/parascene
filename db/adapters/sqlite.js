@@ -3470,6 +3470,18 @@ export async function openDb() {
 				return Promise.resolve({ changes: result.changes });
 			}
 		},
+		deleteBlogPost: {
+			run: async (id) => {
+				const nid = Number(id);
+				if (!Number.isFinite(nid) || nid <= 0) return Promise.resolve({ changes: 0 });
+				const txn = db.transaction(() => {
+					db.prepare(`DELETE FROM blog_post_views WHERE blog_post_id = ?`).run(nid);
+					return db.prepare(`DELETE FROM blog_posts WHERE id = ?`).run(nid);
+				});
+				const result = txn();
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
 		insertBlogPostView: {
 			run: async ({ blog_post_id = null, post_slug, campaign_id = null, referer = null, anon_cid = null, meta = null }) => {
 				const toJsonText = (v) => (v == null ? null : typeof v === "string" ? v : JSON.stringify(v));
