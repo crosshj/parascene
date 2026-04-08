@@ -2864,6 +2864,7 @@ export async function initChatPage(root) {
 			if (!Number.isFinite(messageId)) return;
 			const msg = lastChatMessagesPayload.find((x) => Number(x.id) === messageId);
 			const text = msg?.body != null ? String(msg.body) : '';
+			closeChatMessageToolbar();
 			void (async () => {
 				try {
 					if (navigator.clipboard?.writeText) {
@@ -2896,6 +2897,7 @@ export async function initChatPage(root) {
 			e.stopPropagation();
 			const messageId = Number(delHover.dataset.chatMessageId);
 			if (!Number.isFinite(messageId)) return;
+			closeChatMessageToolbar();
 			void deleteChatMessage(messageId);
 			return;
 		}
@@ -2911,6 +2913,7 @@ export async function initChatPage(root) {
 			const messageId = Number(hoverReact.dataset.chatMessageId);
 			const emojiKey = hoverReact.dataset.emojiKey;
 			if (!Number.isFinite(messageId) || !emojiKey) return;
+			closeChatMessageToolbar();
 			void toggleChatMessageReaction(messageId, emojiKey).then((res) => {
 				if (res?.ok) applyChatReactionAfterToggle(messageId, emojiKey, res.data);
 			});
@@ -2931,6 +2934,7 @@ export async function initChatPage(root) {
 			const reactions = msg?.reactions && typeof msg.reactions === 'object' ? msg.reactions : {};
 			const unusedKeys = REACTION_ORDER.filter((key) => chatReactionGetCount(reactions[key]) === 0);
 			if (unusedKeys.length === 0) return;
+			closeChatMessageToolbar();
 			showReactionPicker(hoverAddReact, messageId, unusedKeys, (mid, ek) => {
 				void toggleChatMessageReaction(mid, ek).then((res) => {
 					if (res?.ok) applyChatReactionAfterToggle(mid, ek, res.data);
