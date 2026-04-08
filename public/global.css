@@ -6293,7 +6293,8 @@ body.blog-edit-page .blog-edit-route {
 	}
 }
 
-/* Slack-style hover toolbar: quick reactions, full picker, copy, delete (own / mod). */
+/* Slack-style hover toolbar: quick reactions, full picker, copy, delete (own / mod).
+   Hidden by default: desktop shows on hover/focus/pinned; touch shows only when tapped (see chat.js `--toolbar-open`). */
 .chat-page-messages .connect-chat-msg-hover-bar {
 	position: absolute;
 	z-index: 6;
@@ -6311,18 +6312,20 @@ body.blog-edit-page .blog-edit-route {
 	border: none;
 	box-shadow: none;
 	filter: none;
-	opacity: 1;
-	pointer-events: auto;
+	opacity: 0;
+	pointer-events: none;
 }
 
 @media (hover: hover) and (pointer: fine) {
-	.chat-page-messages .connect-chat-msg-hover-bar {
-		opacity: 0;
-		pointer-events: none;
-	}
-
 	.chat-page-messages .connect-chat-msg:hover .connect-chat-msg-hover-bar,
 	.chat-page-messages .connect-chat-msg:focus-within .connect-chat-msg-hover-bar,
+	.chat-page-messages .connect-chat-msg.connect-chat-msg--toolbar-open .connect-chat-msg-hover-bar {
+		opacity: 1;
+		pointer-events: auto;
+	}
+}
+
+@media (hover: none), (pointer: coarse) {
 	.chat-page-messages .connect-chat-msg.connect-chat-msg--toolbar-open .connect-chat-msg-hover-bar {
 		opacity: 1;
 		pointer-events: auto;
