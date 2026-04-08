@@ -7,6 +7,10 @@ import { dmChatInboxTitleFromProfile } from "./utils/dmChatInboxTitle.js";
 import { REACTION_ORDER } from "./comments.js";
 import { getShareBaseUrl } from "./utils/url.js";
 import { ACTIVE_SHARE_VERSION, mintShareToken } from "./utils/shareLink.js";
+import {
+	collectChatMiscGenericKeysFromMessageBody,
+	isChatMiscGenericKeyOwnedByUser
+} from "./utils/chatMiscGenericKeys.js";
 
 function normalizeChatReactionsBucket(raw) {
 	const out = {};
@@ -281,7 +285,22 @@ async function enrichChatMessagesWithSenderProfiles(sb, messages) {
 	});
 }
 
-export default function createChatRoutes({ queries }) {
+async function deleteChatMiscGenericFilesForMessage(storage, messageBody, senderId) {
+	if (!storage?.deleteGenericImage) return;
+	const keys = collectChatMiscGenericKeysFromMessageBody(messageBody);
+	const sid = Number(senderId);
+	if (!Number.isFinite(sid) || sid <= 0) return;
+	for (const key of keys) {
+		if (!isChatMiscGenericKeyOwnedByUser(key, sid)) continue;
+		try {
+			await storage.deleteGenericImage(key);
+		} catch (e) {
+			console.warn("[DELETE chat message] misc generic image:", e?.message || e);
+		}
+	}
+}
+
+export default function createChatRoutes({ queries, storage }) {
 	const router = express.Router();
 
 	function requireUser(req, res) {
@@ -311,6 +330,16 @@ export default function createChatRoutes({ queries }) {
 			.maybeSingle();
 		if (error) throw error;
 		return !!data;
+	}
+
+	async function viewerIsAdminRole(userId) {
+		try {
+			if (typeof queries?.selectUserById?.get !== "function") return false;
+			const u = await queries.selectUserById.get(userId);
+			return u?.role === "admin";
+		} catch {
+			return false;
+		}
 	}
 
 	// GET /api/chat/unread-summary — total unread messages across threads (for nav badge)
@@ -894,6 +923,67 @@ export default function createChatRoutes({ queries }) {
 			return res.status(201).json({ message: ins.data });
 		} catch (err) {
 			console.error("[POST .../messages]", err);
+			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
+		}
+	});
+
+	// DELETE /api/chat/messages/:messageId — sender or admin; removes row and broadcasts invalidation
+	router.delete("/api/chat/messages/:messageId", async (req, res) => {
+		const userId = requireUser(req, res);
+		if (userId == null) return;
+		const sb = getSb(res);
+		if (!sb) return;
+
+		const messageId = Number(req.params.messageId);
+		if (!Number.isFinite(messageId) || messageId <= 0) {
+			return res.status(400).json({ error: "Bad request", message: "Invalid message id" });
+		}
+
+		try {
+			const { data: msg, error: selErr } = await sb
+				.from("prsn_chat_messages")
+				.select("id, thread_id, sender_id, body")
+				.eq("id", messageId)
+				.maybeSingle();
+			if (selErr) throw selErr;
+			if (!msg) {
+				return res.status(404).json({ error: "Not found", message: "Message not found" });
+			}
+
+			const threadId = Number(msg.thread_id);
+			if (!(await isMember(sb, threadId, userId))) {
+				return res.status(403).json({ error: "Forbidden", message: "Not a member of this thread" });
+			}
+
+			const senderId = Number(msg.sender_id);
+			const isSender = Number.isFinite(senderId) && senderId === userId;
+			const isAdmin = await viewerIsAdminRole(userId);
+			if (!isSender && !isAdmin) {
+				return res.status(403).json({
+					error: "Forbidden",
+					message: "You can only delete your own messages"
+				});
+			}
+
+			const bodyForAssets = msg.body != null ? String(msg.body) : "";
+			const senderIdForAssets = Number(msg.sender_id);
+
+			const { error: delErr } = await sb.from("prsn_chat_messages").delete().eq("id", messageId);
+			if (delErr) throw delErr;
+
+			await deleteChatMiscGenericFilesForMessage(storage, bodyForAssets, senderIdForAssets);
+
+			void broadcastRoomDirty(threadId, messageId);
+			const mem = await sb
+				.from("prsn_chat_members")
+				.select("user_id")
+				.eq("thread_id", threadId);
+			const uids = Array.isArray(mem.data) ? mem.data.map((r) => r.user_id) : [];
+			void broadcastUserInboxDirty(threadId, uids);
+
+			return res.status(200).json({ ok: true, deleted_id: messageId, thread_id: threadId });
+		} catch (err) {
+			console.error("[DELETE /api/chat/messages/:messageId]", err);
 			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
 		}
 	});

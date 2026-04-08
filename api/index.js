@@ -189,7 +189,7 @@ app.use(createImagesRoutes({ storage }));
 app.use(createCreationsRoutes({ queries }));
 app.use(createLikesRoutes({ queries }));
 app.use(createCommentsRoutes({ queries }));
-app.use(createChatRoutes({ queries }));
+app.use(createChatRoutes({ queries, storage }));
 app.use(createShareRoutes({ queries, storage }));
 app.use(createQRRoutes());
 app.use(createProviderRoutes({ queries }));

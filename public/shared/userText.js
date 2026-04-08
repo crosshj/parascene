@@ -172,6 +172,38 @@ function expandBareCreationPathsToAbsoluteUrls(text) {
 	);
 }
 
+/**
+ * Chat / misc uploads: bare `/api/images/generic/...` paths in message bodies become absolute so URL
+ * linkification runs; restricted to edited inputs and `generic_*` miscellaneous keys (not avatars/covers).
+ */
+function isInlineEligibleGenericImagePath(relativePath) {
+	const p = String(relativePath || '');
+	if (!p.startsWith('/api/images/generic/') || p.includes('..')) return false;
+	if (p.startsWith('/api/images/generic/edited/')) {
+		return /^\/api\/images\/generic\/edited\/[^/]+\/[^/?#]+$/i.test(p);
+	}
+	return /^\/api\/images\/generic\/profile\/[^/]+\/generic_[^/?#]+$/i.test(p);
+}
+
+function expandBareInlineGenericImageApiPaths(text) {
+	const origin =
+		typeof window !== 'undefined' && window.location?.origin
+			? window.location.origin
+			: DEFAULT_APP_ORIGIN;
+	return String(text ?? '').replace(
+		/(^|[\s(])(\/api\/images\/generic\/[^\s"'<>]+)/g,
+		(match, prefix, path) => {
+			const q = path.indexOf('?');
+			const h = path.indexOf('#');
+			let base = path;
+			if (q >= 0) base = base.slice(0, q);
+			if (h >= 0) base = base.slice(0, h);
+			if (!isInlineEligibleGenericImagePath(base)) return match;
+			return `${prefix}${origin}${path}`;
+		}
+	);
+}
+
 const PARASCENE_HOSTS = [new URL(DEFAULT_APP_ORIGIN).hostname];
 
 /**
@@ -350,7 +382,9 @@ const CREATION_URL_RE = /https?:\/\/[^\s"'<>]+\/creations\/(\d+)\/?/g;
  * @returns {string} - HTML-safe string with parascene URLs as relative <a href="..."> links
  */
 export function textWithCreationLinks(text) {
-	const raw = expandBareCreationPathsToAbsoluteUrls(String(text ?? ''));
+	const raw = expandBareInlineGenericImageApiPaths(
+		expandBareCreationPathsToAbsoluteUrls(String(text ?? ''))
+	);
 	if (!raw) return '';
 
 	const urlRe = /https?:\/\/[^\s"'<>]+/g;
@@ -367,7 +401,12 @@ export function textWithCreationLinks(text) {
 		const { url, trailing } = splitUrlTrailingPunctuation(rawUrl);
 		const relativePath = getParasceneRelativePath(url);
 		if (relativePath) {
-			out += `<a href="${escapeHtml(relativePath)}" class="user-link creation-link" data-creation-link-original="${escapeHtml(url)}">${escapeHtml(relativePath)}</a>`;
+			if (isInlineEligibleGenericImagePath(relativePath)) {
+				const rp = escapeHtml(relativePath);
+				out += `<span class="user-text-inline-image-wrap"><a href="${rp}" class="user-link creation-link user-text-inline-image-link" aria-label="View full image" data-creation-link-original="${escapeHtml(url)}"><img class="user-text-inline-image" src="${rp}" alt="" loading="lazy" decoding="async" /></a></span>`;
+			} else {
+				out += `<a href="${escapeHtml(relativePath)}" class="user-link creation-link" data-creation-link-original="${escapeHtml(url)}">${escapeHtml(relativePath)}</a>`;
+			}
 			out += escapeHtml(trailing);
 			lastIndex = start + rawUrl.length;
 			continue;

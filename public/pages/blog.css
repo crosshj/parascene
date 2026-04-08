@@ -297,10 +297,11 @@
 }
 
 .blog-footnotes-heading {
-	margin: 0 0 12px;
+	display: none;
+	/* margin: 0 0 12px;
 	font-size: 1.125rem;
 	font-weight: 600;
-	color: var(--text);
+	color: var(--text); */
 }
 
 .blog-body .footnotes {

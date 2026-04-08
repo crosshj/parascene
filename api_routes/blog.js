@@ -20,7 +20,7 @@ marked.use(
 		/* Use a `---` rule in markdown before [^label]: defs to delimit; avoids double HR. */
 		footnoteDivider: false,
 		headingClass: "blog-footnotes-heading",
-		description: "Footnotes",
+		description: "References",
 		keepLabels: true
 	})
 );
@@ -244,12 +244,12 @@ function rowToMergedPost(row) {
 			? row.meta
 			: typeof row.meta === "string"
 				? (() => {
-						try {
-							return JSON.parse(row.meta);
-						} catch {
-							return {};
-						}
-					})()
+					try {
+						return JSON.parse(row.meta);
+					} catch {
+						return {};
+					}
+				})()
 				: {};
 	const body = row.body_md ?? "";
 	const publishedAtIso = row.published_at ? String(row.published_at) : "";
@@ -426,7 +426,7 @@ export default function createBlogRoutes({ pagesDir, queries }) {
 				anon_cid: anonCid,
 				meta
 			})
-			.catch(() => {});
+			.catch(() => { });
 	}
 
 	async function resolvePublishedPostForBlogPath(segments) {

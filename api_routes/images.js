@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import sharp from "sharp";
+import { isChatMiscGenericKeyOwnedByUser, safeDecodeGenericImageKeyTail } from "./utils/chatMiscGenericKeys.js";
 
 function guessContentType(key) {
 	const ext = path.extname(String(key || "")).toLowerCase();
@@ -45,6 +46,37 @@ function buildImageUrl(namespace, key) {
 
 export default function createImagesRoutes({ storage }) {
 	const router = express.Router();
+
+	// Delete chat misc paste image (profile/{uid}/generic_*); owner only.
+	router.delete("/api/images/:namespace/:key(*)", async (req, res, next) => {
+		const namespace = String(req.params.namespace || "").toLowerCase();
+		if (namespace !== "generic") return next();
+
+		if (!req.auth?.userId) {
+			return res.status(401).json({ error: "Unauthorized", message: "Login required" });
+		}
+
+		if (!storage?.deleteGenericImage) {
+			return res.status(500).json({ error: "Storage not available" });
+		}
+
+		const rawTail = String(req.params.key || "");
+		const key = safeDecodeGenericImageKeyTail(rawTail);
+		if (!key) {
+			return res.status(400).json({ error: "Invalid key" });
+		}
+
+		if (!isChatMiscGenericKeyOwnedByUser(key, req.auth.userId)) {
+			return res.status(403).json({ error: "Forbidden", message: "Not allowed to delete this object" });
+		}
+
+		try {
+			await storage.deleteGenericImage(key);
+			return res.status(200).json({ ok: true });
+		} catch (err) {
+			return res.status(500).json({ error: "Failed to delete", message: err?.message || "Failed" });
+		}
+	});
 
 	// Generic images namespace (Supabase private bucket: prsn_generic-images)
 	router.get("/api/images/:namespace/:key(*)", async (req, res, next) => {

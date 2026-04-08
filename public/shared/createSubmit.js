@@ -52,17 +52,20 @@ function navigateToCreations({ mode }) {
 }
 
 /**
- * Upload a file to the generic image endpoint; returns the image URL on success.
- * Used when Create is clicked and args contain a File (paste/upload) so we upload first, then submit with the URL.
+ * Upload a file to the generic image endpoint; returns the image URL path on success (e.g. `/api/images/generic/...`).
+ * @param {File} file
+ * @param {{ uploadKind?: 'edited' | 'generic' }} [options] — `generic` uses miscellaneous profile storage (`generic_*` keys); `edited` resizes to 1024² PNG (create inputs).
  */
-export async function uploadImageFile(file) {
+export async function uploadImageFile(file, options = {}) {
 	if (!file || !(file instanceof File)) throw new Error('Invalid file');
+	const uploadKind = options.uploadKind === 'generic' ? 'generic' : 'edited';
+	const defaultName = uploadKind === 'generic' ? 'paste.png' : 'image.png';
 	const res = await fetch('/api/images/generic', {
 		method: 'POST',
 		headers: {
 			'Content-Type': file.type || 'image/png',
-			'X-upload-kind': 'edited',
-			'X-upload-name': file.name || 'image.png'
+			'X-upload-kind': uploadKind,
+			'X-upload-name': file.name || defaultName
 		},
 		body: file,
 		credentials: 'include'
