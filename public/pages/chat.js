@@ -333,7 +333,8 @@ export async function initChatPage(root) {
 		smileIcon,
 		gearIcon,
 		copyIcon,
-		trashIcon
+		trashIcon,
+		helpIcon
 	} = await import(`../icons/svg-strings.js${qs}`);
 	const chatSidebarServerGearSvg = gearIcon('chat-page-sidebar-server-settings-icon');
 	const rosterMod = await import(`../shared/chatSidebarRoster.js${qs}`);
@@ -424,6 +425,8 @@ export async function initChatPage(root) {
 	let chatInlineImageLightboxKeydown = null;
 	/** @type {null | ((e: MouseEvent) => void)} */
 	let chatInlineImageLightboxClickHandler = null;
+	/** @type {null | (() => void)} */
+	let chatHashtagChoiceModalCleanup = null;
 
 	let lastMarkReadSentId = null;
 	let lastReadThreadIdForMark = null;
@@ -1834,6 +1837,64 @@ export async function initChatPage(root) {
 		}
 	}
 
+	/** Desktop sidebar footer: current user; opens same menu as header profile (open-profile). */
+	async function syncChatSidebarViewerRow() {
+		const sidebar = document.querySelector('[data-chat-sidebar]');
+		const row = sidebar?.querySelector?.('[data-chat-sidebar-user-row]');
+		const avatarEl = sidebar?.querySelector?.('[data-chat-sidebar-user-avatar]');
+		const labelEl = sidebar?.querySelector?.('[data-chat-sidebar-user-label]');
+		const btn = sidebar?.querySelector?.('[data-chat-sidebar-open-profile]');
+		if (!row || !avatarEl || !labelEl || !btn) return;
+
+		const vid = chatViewerId;
+		if (vid == null || !Number.isFinite(Number(vid))) {
+			row.hidden = true;
+			return;
+		}
+
+		try {
+			const result = await fetchJsonWithStatusDeduped(
+				'/api/profile',
+				{ credentials: 'include' },
+				{ windowMs: 2000 }
+			);
+			if (!result.ok) {
+				row.hidden = true;
+				return;
+			}
+			const user = result.data;
+			if (!user?.email) {
+				row.hidden = true;
+				return;
+			}
+			const prof = user?.profile && typeof user.profile === 'object' ? user.profile : {};
+			const displayName =
+				(typeof prof.display_name === 'string' && prof.display_name.trim()) ||
+				(typeof prof.user_name === 'string' && prof.user_name.trim()) ||
+				'Account';
+			const handle =
+				(typeof prof.user_name === 'string' && prof.user_name.trim()) || String(vid);
+			const avatarUrl =
+				typeof prof.avatar_url === 'string' && prof.avatar_url.trim()
+					? prof.avatar_url.trim()
+					: '';
+			const avatarHtml = renderCommentAvatarHtml({
+				avatarUrl,
+				displayName: displayName || handle,
+				color: getAvatarColor(handle),
+				href: '',
+				isFounder: user?.plan === 'founder',
+				flairSize: 'sm'
+			});
+			avatarEl.innerHTML = avatarHtml;
+			labelEl.textContent = displayName;
+			btn.setAttribute('aria-label', `Account: ${displayName}`);
+			row.hidden = false;
+		} catch {
+			row.hidden = true;
+		}
+	}
+
 	async function refreshChatSidebar(options = {}) {
 		const skipThreads = options.skipThreadsFetch === true;
 		const sidebar = document.querySelector('[data-chat-sidebar]');
@@ -1841,7 +1902,10 @@ export async function initChatPage(root) {
 		const chEl = sidebar.querySelector('[data-chat-sidebar-channels]');
 		const dmEl = sidebar.querySelector('[data-chat-sidebar-users]');
 		const svEl = sidebar.querySelector('[data-chat-sidebar-servers]');
-		if (!chEl || !dmEl || !svEl) return;
+		if (!chEl || !dmEl || !svEl) {
+			await syncChatSidebarViewerRow();
+			return;
+		}
 
 		// Phase 1: fast paint from cache (no extra fetches) if we have nothing rendered yet.
 		if (!skipThreads && (chatThreads || []).length === 0) {
@@ -1994,6 +2058,7 @@ export async function initChatPage(root) {
 				fetchPresenceOnlineIds()
 			]);
 			runRender(chatThreads || [], joined, onlineIds);
+			await syncChatSidebarViewerRow();
 			return;
 		}
 
@@ -2008,6 +2073,7 @@ export async function initChatPage(root) {
 		} catch {
 			// If network fails, keep cached render.
 		}
+		await syncChatSidebarViewerRow();
 	}
 
 	function setupChatSidebarClientNav() {
@@ -2015,6 +2081,13 @@ export async function initChatPage(root) {
 		if (!sidebar) return;
 
 		chatSidebarNavClickHandler = (e) => {
+			const profileBtn = e.target?.closest?.('[data-chat-sidebar-open-profile]');
+			if (profileBtn instanceof HTMLButtonElement) {
+				e.preventDefault();
+				e.stopPropagation();
+				document.dispatchEvent(new CustomEvent('open-profile'));
+				return;
+			}
 			const settingsBtn = e.target?.closest?.('[data-chat-server-settings]');
 			if (settingsBtn instanceof HTMLButtonElement) {
 				e.preventDefault();
@@ -2851,6 +2924,26 @@ export async function initChatPage(root) {
 	}
 
 	function onChatMessagesClick(e) {
+		const tagLink = e.target?.closest?.('a.mention-link[href^="/t/"]');
+		if (tagLink instanceof HTMLAnchorElement && tagLink.closest('.connect-chat-msg-bubble')) {
+			if (activePseudoChannelSlug) {
+				return;
+			}
+			if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {
+				return;
+			}
+			const href = tagLink.getAttribute('href') || '';
+			const m = href.match(/^\/t\/([^/?#]+)/i);
+			if (!m) {
+				return;
+			}
+			e.preventDefault();
+			e.stopPropagation();
+			const slug = decodeURIComponent(m[1]);
+			void openChatHashtagDestination(slug);
+			return;
+		}
+
 		const inHoverBar = e.target?.closest?.('.connect-chat-msg-hover-bar');
 		if (inHoverBar) {
 			e.stopPropagation();
@@ -3296,6 +3389,168 @@ export async function initChatPage(root) {
 		}
 	}
 
+	function closeChatHashtagChoiceModal() {
+		if (typeof chatHashtagChoiceModalCleanup === 'function') {
+			chatHashtagChoiceModalCleanup();
+			chatHashtagChoiceModalCleanup = null;
+		}
+	}
+
+	function showChatHashtagChoiceModal(slug) {
+		closeChatHashtagChoiceModal();
+		const label = `#${slug}`;
+		const overlay = document.createElement('div');
+		overlay.className = 'chat-hashtag-nav-overlay';
+		overlay.setAttribute('role', 'dialog');
+		overlay.setAttribute('aria-modal', 'true');
+		overlay.setAttribute('aria-labelledby', 'chat-hashtag-nav-title');
+		overlay.setAttribute('aria-describedby', 'chat-hashtag-nav-desc');
+
+		const panel = document.createElement('div');
+		panel.className = 'chat-hashtag-nav-dialog';
+
+		const header = document.createElement('div');
+		header.className = 'chat-hashtag-nav-header';
+
+		const title = document.createElement('h2');
+		title.id = 'chat-hashtag-nav-title';
+		title.className = 'chat-hashtag-nav-title';
+		title.textContent = label;
+
+		const closeBtn = document.createElement('button');
+		closeBtn.type = 'button';
+		closeBtn.className = 'chat-hashtag-nav-close';
+		closeBtn.setAttribute('aria-label', 'Close');
+		closeBtn.title = 'Close (Esc)';
+		closeBtn.textContent = '×';
+		closeBtn.addEventListener('click', () => closeChatHashtagChoiceModal());
+
+		header.appendChild(title);
+		header.appendChild(closeBtn);
+
+		const lead = document.createElement('div');
+		lead.className = 'chat-hashtag-nav-lead';
+
+		const illust = document.createElement('div');
+		illust.className = 'chat-hashtag-nav-illustration';
+		illust.innerHTML = helpIcon('chat-hashtag-nav-illustration-svg');
+
+		const hint = document.createElement('p');
+		hint.id = 'chat-hashtag-nav-desc';
+		hint.className = 'chat-hashtag-nav-hint';
+		hint.textContent = 'Where would you like to go?';
+
+		lead.appendChild(illust);
+		lead.appendChild(hint);
+
+		const actions = document.createElement('div');
+		actions.className = 'chat-hashtag-nav-actions';
+
+		const btnChannel = document.createElement('button');
+		btnChannel.type = 'button';
+		btnChannel.className = 'btn-primary chat-hashtag-nav-btn chat-hashtag-nav-btn--channel';
+		btnChannel.setAttribute('data-chat-hashtag-pick', 'channel');
+		btnChannel.textContent = 'Channel';
+
+		const btnTag = document.createElement('button');
+		btnTag.type = 'button';
+		btnTag.className = 'btn-secondary chat-hashtag-nav-btn chat-hashtag-nav-btn--tag';
+		btnTag.setAttribute('data-chat-hashtag-pick', 'tag');
+		btnTag.textContent = 'Tag page';
+
+		actions.appendChild(btnTag);
+		actions.appendChild(btnChannel);
+		panel.appendChild(header);
+		panel.appendChild(lead);
+		panel.appendChild(actions);
+		overlay.appendChild(panel);
+
+		const onKeydown = (ev) => {
+			if (ev.key === 'Escape') {
+				ev.preventDefault();
+				closeChatHashtagChoiceModal();
+			}
+		};
+
+		chatHashtagChoiceModalCleanup = () => {
+			document.removeEventListener('keydown', onKeydown);
+			if (overlay.parentNode) {
+				overlay.parentNode.removeChild(overlay);
+			}
+			try {
+				document.body.classList.remove('chat-hashtag-nav-open');
+			} catch {
+				// ignore
+			}
+		};
+
+		document.addEventListener('keydown', onKeydown);
+		overlay.addEventListener('click', (ev) => {
+			if (ev.target === overlay) {
+				closeChatHashtagChoiceModal();
+			}
+		});
+		btnChannel.addEventListener('click', async () => {
+			closeChatHashtagChoiceModal();
+			await navigateToChatChannelSlug(slug);
+		});
+		btnTag.addEventListener('click', () => {
+			closeChatHashtagChoiceModal();
+			window.location.href = `/t/${encodeURIComponent(slug)}`;
+		});
+
+		document.body.appendChild(overlay);
+		try {
+			document.body.classList.add('chat-hashtag-nav-open');
+		} catch {
+			// ignore
+		}
+		requestAnimationFrame(() => {
+			try {
+				btnChannel.focus({ preventScroll: true });
+			} catch {
+				btnChannel.focus();
+			}
+		});
+	}
+
+	async function navigateToChatChannelSlug(slug) {
+		const path = `/chat/c/${encodeURIComponent(slug)}`;
+		history.pushState({ prsnChat: true }, '', path);
+		await openThreadForCurrentPath();
+		void refreshChatSidebar({ skipThreadsFetch: true });
+	}
+
+	async function openChatHashtagDestination(slug) {
+		const safe = String(slug || '')
+			.trim()
+			.toLowerCase();
+		if (!safe) {
+			return;
+		}
+		try {
+			const res = await fetch(`/api/chat/hashtag-channel-exists/${encodeURIComponent(safe)}${qs}`, {
+				credentials: 'include',
+			});
+			if (res.status === 401) {
+				window.location.href = `/t/${encodeURIComponent(safe)}`;
+				return;
+			}
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				window.location.href = `/t/${encodeURIComponent(safe)}`;
+				return;
+			}
+			if (data.channelExists === true) {
+				showChatHashtagChoiceModal(safe);
+				return;
+			}
+			window.location.href = `/t/${encodeURIComponent(safe)}`;
+		} catch {
+			window.location.href = `/t/${encodeURIComponent(safe)}`;
+		}
+	}
+
 	const composer = root.querySelector('[data-chat-composer]');
 	const bodyInput = root.querySelector('[data-chat-body-input]');
 	if (composer instanceof HTMLFormElement) {
@@ -3397,6 +3652,7 @@ export async function initChatPage(root) {
 		tearDownRoomBroadcast();
 		closeReactionPicker();
 		closeChatInlineImageLightbox();
+		closeChatHashtagChoiceModal();
 		teardownChatViewportSync();
 		teardownChatMessagesScrollAssist();
 		if (chatSidebarPollTimer != null) {

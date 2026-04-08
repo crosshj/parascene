@@ -73,6 +73,13 @@
 							<div class="chat-page-sidebar-list" data-chat-sidebar-channels></div>
 						</section>
 					</div>
+					<div class="chat-page-sidebar-footer" data-chat-sidebar-user-row hidden>
+						<button type="button" class="chat-page-sidebar-user" data-chat-sidebar-open-profile
+							aria-label="Account">
+							<span class="chat-page-sidebar-user-avatar" data-chat-sidebar-user-avatar aria-hidden="true"></span>
+							<span class="chat-page-sidebar-user-label" data-chat-sidebar-user-label></span>
+						</button>
+					</div>
 				</aside>
 				<div class="chat-page-main-column">
 					<div class="chat-route" data-chat-page>
@@ -125,6 +132,7 @@
 			</div>
 		</main>
 		<app-modal-server></app-modal-server>
+		<app-modal-profile></app-modal-profile>
 	</div>
 	<script>
 		(function () {

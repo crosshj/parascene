@@ -493,6 +493,38 @@ export default function createChatRoutes({ queries, storage }) {
 		}
 	});
 
+	// GET /api/chat/hashtag-channel-exists/:rawSlug — hashtag channel thread exists (for # link chooser in chat UI)
+	router.get("/api/chat/hashtag-channel-exists/:rawSlug", async (req, res) => {
+		const userId = requireUser(req, res);
+		if (userId == null) return;
+		const slug = normalizeTag(req.params?.rawSlug ?? "");
+		if (!slug) {
+			return res.status(400).json({ error: "Bad request", message: "Invalid tag" });
+		}
+		const sb = getSb(res);
+		if (!sb) return;
+
+		/** Sidebar pseudo rows (#comments / #feedback) are always “channels” in the product sense. */
+		const PSEUDO_CHANNEL_SLUGS = new Set(["comments", "feedback"]);
+		if (PSEUDO_CHANNEL_SLUGS.has(slug)) {
+			return res.status(200).json({ slug, channelExists: true });
+		}
+
+		try {
+			const { data, error } = await sb
+				.from("prsn_chat_threads")
+				.select("id")
+				.eq("type", "channel")
+				.eq("channel_slug", slug)
+				.maybeSingle();
+			if (error) throw error;
+			return res.status(200).json({ slug, channelExists: Boolean(data?.id) });
+		} catch (err) {
+			console.error("[GET /api/chat/hashtag-channel-exists]", err);
+			return res.status(500).json({ error: "Server error", message: "Failed" });
+		}
+	});
+
 	// POST /api/chat/dm  { other_user_id } | { other_user_name }
 	router.post("/api/chat/dm", async (req, res) => {
 		const userId = requireUser(req, res);
