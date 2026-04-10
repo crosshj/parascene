@@ -7,6 +7,7 @@
  * - attachTriggeredSuggest(field, options)  — field: HTMLTextAreaElement or HTMLInputElement (type text)
  * - attachMentionSuggest(field) — @ only
  * - attachPromptInlineSuggest(field) — @ and $ (styles)
+ * - isTriggeredSuggestPopupOpen(field) — true while this field owns the open listbox (for Enter-to-send guards)
  */
 
 const _qs = (() => {
@@ -1014,6 +1015,7 @@ export function attachTriggeredSuggest(textarea, options) {
 		if (e.key === "Enter") {
 			if (!hasSelection) return;
 			e.preventDefault();
+			e.stopImmediatePropagation();
 			acceptSelection(textarea);
 			return;
 		}
@@ -1025,6 +1027,7 @@ export function attachTriggeredSuggest(textarea, options) {
 			}
 			e.preventDefault();
 			e.stopPropagation();
+			e.stopImmediatePropagation();
 			acceptSelection(textarea);
 			return;
 		}
@@ -1042,6 +1045,11 @@ export function attachMentionSuggest(textarea) {
 		triggers: [{ char: "@", minChars: 1, source: "users" }],
 		getSuggestions: getMentionSuggestions
 	});
+}
+
+/** True when the shared listbox is open for this textarea/input (loading, empty, or options). */
+export function isTriggeredSuggestPopupOpen(field) {
+	return isSupportedField(field) && isPopupOpenFor(field);
 }
 
 /** @ and $ (styles) — use on advanced create prompt; keep {@link attachMentionSuggest} for comment fields. */

@@ -67,6 +67,7 @@ let renderEmptyError;
 let renderEmptyState;
 let attachAutoGrowTextarea;
 let attachMentionSuggest;
+let isTriggeredSuggestPopupOpen;
 let toggleChatMessageReaction;
 let setupReactionTooltipTap;
 let createConnectCommentRowElement;
@@ -122,6 +123,7 @@ async function loadDeps() {
 
 		const suggestMod = await import(`../shared/triggeredSuggest.js${qs}`);
 		attachMentionSuggest = suggestMod.attachMentionSuggest;
+		isTriggeredSuggestPopupOpen = suggestMod.isTriggeredSuggestPopupOpen;
 
 		const commentsMod = await import(`../shared/comments.js${qs}`);
 		toggleChatMessageReaction = commentsMod.toggleChatMessageReaction;
@@ -3956,6 +3958,9 @@ export async function initChatPage(root) {
 			if (ev.key !== 'Enter' || ev.isComposing) return;
 			if (!ENTER_SENDS) return;
 			if (ev.shiftKey) return;
+			if (typeof isTriggeredSuggestPopupOpen === 'function' && isTriggeredSuggestPopupOpen(bodyInput)) {
+				return;
+			}
 			ev.preventDefault();
 			void submitChatMessage();
 		});
