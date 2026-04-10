@@ -1,5 +1,6 @@
 /**
- * Chat paste uploads use `profile/{userId}/generic_*` under the generic image bucket.
+ * Chat uploads use `profile/{userId}/generic_*` (image/video) and
+ * `profile/{userId}/misc_*` (other file types).
  */
 
 export function safeDecodeGenericImageKeyTail(encodedTail) {
@@ -20,13 +21,14 @@ export function safeDecodeGenericImageKeyTail(encodedTail) {
 export function isChatMiscGenericKeyOwnedByUser(key, userId) {
 	const uid = Number(userId);
 	if (!Number.isFinite(uid) || uid <= 0) return false;
-	const m = String(key || "").match(/^profile\/(\d+)\/(generic_[^/]+)$/i);
+	const m = String(key || "").match(/^profile\/(\d+)\/((?:generic|misc)_[^/]+)$/i);
 	if (!m) return false;
 	return Number(m[1]) === uid;
 }
 
 /**
- * Unique `profile/…/generic_*` keys referenced in message text (relative or absolute URLs).
+ * Unique `profile/…/(generic_*|misc_*)` keys referenced in message text
+ * (relative or absolute URLs).
  */
 export function collectChatMiscGenericKeysFromMessageBody(text) {
 	const keys = new Set();
@@ -39,7 +41,7 @@ export function collectChatMiscGenericKeysFromMessageBody(text) {
 		if (q >= 0) tail = tail.slice(0, q);
 		tail = tail.replace(/[.,!?:;")\]]+$/g, "").trim();
 		const key = safeDecodeGenericImageKeyTail(tail);
-		if (key && /^profile\/\d+\/generic_[^/]+$/i.test(key)) keys.add(key);
+		if (key && /^profile\/\d+\/(?:generic|misc)_[^/]+$/i.test(key)) keys.add(key);
 	}
 	return [...keys];
 }

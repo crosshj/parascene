@@ -4,6 +4,17 @@ export function generateCreationToken() {
 	return `crt_${ts}_${rand}`;
 }
 
+function safeUploadHeaderFilename(name, fallback = 'upload.bin') {
+	const raw = String(name || '').trim();
+	if (!raw) return fallback;
+	const cleaned = raw
+		.replace(/[^\x20-\x7e]/g, '_')
+		.replace(/[\r\n]/g, '_')
+		.slice(0, 180)
+		.trim();
+	return cleaned || fallback;
+}
+
 function addPendingCreation({ creationToken }) {
 	const pendingId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 	const pendingItem = {
@@ -60,12 +71,40 @@ export async function uploadImageFile(file, options = {}) {
 	if (!file || !(file instanceof File)) throw new Error('Invalid file');
 	const uploadKind = options.uploadKind === 'generic' ? 'generic' : 'edited';
 	const defaultName = uploadKind === 'generic' ? 'paste.png' : 'image.png';
+	const safeName = safeUploadHeaderFilename(file.name, defaultName);
 	const res = await fetch('/api/images/generic', {
 		method: 'POST',
 		headers: {
 			'Content-Type': file.type || 'image/png',
 			'X-upload-kind': uploadKind,
-			'X-upload-name': file.name || defaultName
+			'X-upload-name': safeName
+		},
+		body: file,
+		credentials: 'include'
+	});
+	if (!res.ok) {
+		const err = await res.json().catch(() => ({}));
+		throw new Error(err.message || err.error || `Upload failed (${res.status})`);
+	}
+	const data = await res.json();
+	if (!data?.url) throw new Error('No URL in response');
+	return data.url;
+}
+
+/**
+ * Upload any file to chat misc endpoint namespace (`/api/images/generic`).
+ * Server stores image/video as `generic_*` and other files as `misc_*`.
+ * @param {File} file
+ */
+export async function uploadChatFile(file) {
+	if (!file || !(file instanceof File)) throw new Error('Invalid file');
+	const safeName = safeUploadHeaderFilename(file.name, 'upload.bin');
+	const res = await fetch('/api/images/generic', {
+		method: 'POST',
+		headers: {
+			'Content-Type': file.type || 'application/octet-stream',
+			'X-upload-kind': 'generic',
+			'X-upload-name': safeName
 		},
 		body: file,
 		credentials: 'include'

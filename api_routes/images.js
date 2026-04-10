@@ -3,18 +3,29 @@ import path from "path";
 import sharp from "sharp";
 import { isChatMiscGenericKeyOwnedByUser, safeDecodeGenericImageKeyTail } from "./utils/chatMiscGenericKeys.js";
 
-function guessContentType(key) {
-	const ext = path.extname(String(key || "")).toLowerCase();
+function guessContentType(key, hintedName = "") {
+	const keyExt = path.extname(String(key || "")).toLowerCase();
+	const hintExt = path.extname(String(hintedName || "")).toLowerCase();
+	const ext = hintExt || keyExt;
+	if (ext === ".html" || ext === ".htm") return "text/html; charset=utf-8";
 	if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
 	if (ext === ".webp") return "image/webp";
 	if (ext === ".gif") return "image/gif";
 	if (ext === ".svg") return "image/svg+xml";
-	return "image/png";
+	if (ext === ".mp4") return "video/mp4";
+	if (ext === ".webm") return "video/webm";
+	if (ext === ".mov") return "video/quicktime";
+	if (ext === ".m4v") return "video/mp4";
+	if (ext === ".pdf") return "application/pdf";
+	if (ext === ".txt") return "text/plain; charset=utf-8";
+	if (ext === ".json") return "application/json; charset=utf-8";
+	if (ext === ".zip") return "application/zip";
+	return "application/octet-stream";
 }
 
 function normalizeUploadKind(value) {
 	const v = String(value || "").toLowerCase().trim();
-	if (v === "avatar" || v === "cover" || v === "edited") return v;
+	if (v === "avatar" || v === "cover" || v === "edited" || v === "generic" || v === "misc") return v;
 	return "generic";
 }
 
@@ -27,11 +38,19 @@ function safeKeySegment(segment) {
 
 function extFromContentType(contentType) {
 	const ct = String(contentType || "").toLowerCase();
+	if (ct.includes("text/html")) return ".html";
 	if (ct.includes("image/jpeg")) return ".jpg";
 	if (ct.includes("image/webp")) return ".webp";
 	if (ct.includes("image/gif")) return ".gif";
 	if (ct.includes("image/svg+xml")) return ".svg";
 	if (ct.includes("image/png")) return ".png";
+	if (ct.includes("video/mp4")) return ".mp4";
+	if (ct.includes("video/webm")) return ".webm";
+	if (ct.includes("video/quicktime")) return ".mov";
+	if (ct.includes("application/pdf")) return ".pdf";
+	if (ct.includes("text/plain")) return ".txt";
+	if (ct.includes("application/json")) return ".json";
+	if (ct.includes("application/zip")) return ".zip";
 	return "";
 }
 
@@ -44,8 +63,28 @@ function buildImageUrl(namespace, key) {
 	return `/api/images/${ns}/${segments.join("/")}`;
 }
 
-export default function createImagesRoutes({ storage }) {
+const CHAT_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+
+function isImageContentType(contentType) {
+	return String(contentType || "").toLowerCase().startsWith("image/");
+}
+
+export default function createImagesRoutes({ storage, queries }) {
 	const router = express.Router();
+
+	async function canUploadNonImageForUser(userId) {
+		const uid = Number(userId);
+		if (!Number.isFinite(uid) || uid <= 0) return false;
+		try {
+			if (typeof queries?.selectUserById?.get !== "function") return false;
+			const user = await queries.selectUserById.get(uid);
+			const role = String(user?.role || "").toLowerCase();
+			const plan = String(user?.meta?.plan || "").toLowerCase();
+			return role === "admin" || role === "founder" || plan === "founder";
+		} catch {
+			return false;
+		}
+	}
 
 	// Delete chat misc paste image (profile/{uid}/generic_*); owner only.
 	router.delete("/api/images/:namespace/:key(*)", async (req, res, next) => {
@@ -82,6 +121,7 @@ export default function createImagesRoutes({ storage }) {
 	router.get("/api/images/:namespace/:key(*)", async (req, res, next) => {
 		const namespace = String(req.params.namespace || "").toLowerCase();
 		const key = String(req.params.key || "");
+		const hintedName = typeof req.query?.name === "string" ? String(req.query.name) : "";
 
 		// Let other routes handle other namespaces (e.g. /api/images/created/:filename).
 		if (namespace !== "generic") {
@@ -107,7 +147,11 @@ export default function createImagesRoutes({ storage }) {
 			}
 
 			const buffer = await storage.getGenericImageBuffer(key);
-			res.setHeader("Content-Type", guessContentType(key));
+			const contentType = guessContentType(key, hintedName);
+			res.setHeader("Content-Type", contentType);
+			if (contentType.startsWith("text/html")) {
+				res.setHeader("Content-Disposition", "inline");
+			}
 			res.setHeader("Cache-Control", "public, max-age=3600");
 			return res.send(buffer);
 		} catch (error) {
@@ -120,15 +164,12 @@ export default function createImagesRoutes({ storage }) {
 		}
 	});
 
-	// Upload generic images (avatar/cover/etc). Body is raw bytes; Content-Type must be an image.
+	// Upload generic chat/profile assets. Body is raw bytes.
 	router.post(
 		"/api/images/:namespace",
 		express.raw({
-			type: (req) => {
-				const ct = String(req.headers["content-type"] || "").toLowerCase();
-				return ct.startsWith("image/") || ct === "application/octet-stream";
-			},
-			limit: "12mb"
+			type: () => true,
+			limit: `${CHAT_UPLOAD_MAX_BYTES}b`
 		}),
 		async (req, res, next) => {
 			const namespace = String(req.params.namespace || "").toLowerCase();
@@ -151,10 +192,24 @@ export default function createImagesRoutes({ storage }) {
 				return res.status(400).json({ error: "Empty upload" });
 			}
 
-			const kind = normalizeUploadKind(req.headers["x-upload-kind"]);
+			let kind = normalizeUploadKind(req.headers["x-upload-kind"]);
 			const originalName = String(req.headers["x-upload-name"] || "");
 			const contentType = String(req.headers["content-type"] || "application/octet-stream");
-			const ext = path.extname(originalName) || extFromContentType(contentType) || ".png";
+			const uploadIsImage = isImageContentType(contentType);
+			if (kind === "generic") {
+				kind = uploadIsImage ? "generic" : "misc";
+			}
+			if (kind === "misc") {
+				const allowed = await canUploadNonImageForUser(req.auth.userId);
+				if (!allowed) {
+					return res.status(403).json({
+						error: "Forbidden",
+						message: "Only founder-level or admin accounts can upload non-image files."
+					});
+				}
+			}
+			const extFallback = kind === "misc" ? ".bin" : ".png";
+			const ext = path.extname(originalName) || extFromContentType(contentType) || extFallback;
 
 			const now = Date.now();
 			const rand = Math.random().toString(36).slice(2, 9);
@@ -186,6 +241,8 @@ export default function createImagesRoutes({ storage }) {
 			const key =
 				kind === "edited"
 					? `edited/${userPart}/${now}_${rand}.png`
+					: kind === "misc"
+						? `profile/${userPart}/misc_${now}_${rand}${ext}`
 					: `profile/${userPart}/${kind}_${now}_${rand}${ext}`;
 
 			try {
@@ -195,11 +252,15 @@ export default function createImagesRoutes({ storage }) {
 				return res.json({
 					ok: true,
 					key: storedKey,
+					max_bytes: CHAT_UPLOAD_MAX_BYTES,
 					url: buildImageUrl("generic", storedKey)
 				});
 			} catch (error) {
-				// console.error("Error uploading generic image:", error);
-				return res.status(500).json({ error: "Failed to upload image" });
+				console.error("[POST /api/images/generic]", error);
+				return res.status(500).json({
+					error: "Failed to upload image",
+					message: error?.message || "Upload failed"
+				});
 			}
 		}
 	);

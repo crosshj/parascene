@@ -185,7 +185,7 @@ app.use(createExploreRoutes({ queries }));
 app.use(createSuggestRoutes({ queries }));
 app.use(createPromptInjectionsRoutes({ queries, storage }));
 app.use(createCreateRoutes({ queries, storage }));
-app.use(createImagesRoutes({ storage }));
+app.use(createImagesRoutes({ storage, queries }));
 app.use(createCreationsRoutes({ queries }));
 app.use(createLikesRoutes({ queries }));
 app.use(createCommentsRoutes({ queries }));

@@ -6023,6 +6023,7 @@ export function openDb() {
 	const STORAGE_BUCKET_ANON = "prsn_created-images-anon";
 	const STORAGE_THUMBNAIL_BUCKET = "prsn_created-images-thumbnails";
 	const GENERIC_BUCKET = "prsn_generic-images";
+	const MISC_BUCKET = "prsn_misc";
 
 	function getThumbnailFilename(filename) {
 		const ext = path.extname(filename);
@@ -6163,8 +6164,11 @@ export function openDb() {
 			if (!objectKey) {
 				throw new Error("Image not found");
 			}
+			const bucket = /^profile\/\d+\/misc_[^/]+$/i.test(objectKey)
+				? MISC_BUCKET
+				: GENERIC_BUCKET;
 			const { data, error } = await storageClient.storage
-				.from(GENERIC_BUCKET)
+				.from(bucket)
 				.download(objectKey);
 			if (error) {
 				throw new Error(`Image not found: ${objectKey}`);
@@ -6179,8 +6183,11 @@ export function openDb() {
 				throw new Error("Invalid key");
 			}
 			const contentType = String(options?.contentType || "application/octet-stream");
+			const bucket = /^profile\/\d+\/misc_[^/]+$/i.test(objectKey)
+				? MISC_BUCKET
+				: GENERIC_BUCKET;
 			const { error } = await storageClient.storage
-				.from(GENERIC_BUCKET)
+				.from(bucket)
 				.upload(objectKey, buffer, { contentType, upsert: true });
 			if (error) {
 				throw new Error(`Failed to upload generic image: ${error.message}`);
@@ -6191,8 +6198,11 @@ export function openDb() {
 		deleteGenericImage: async (key) => {
 			const objectKey = String(key || "");
 			if (!objectKey) return;
+			const bucket = /^profile\/\d+\/misc_[^/]+$/i.test(objectKey)
+				? MISC_BUCKET
+				: GENERIC_BUCKET;
 			const { error } = await storageClient.storage
-				.from(GENERIC_BUCKET)
+				.from(bucket)
 				.remove([objectKey]);
 			if (error && error.message && !error.message.toLowerCase().includes("not found")) {
 				throw new Error(`Failed to delete generic image: ${error.message}`);

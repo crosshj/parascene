@@ -371,6 +371,24 @@ body.chat-page .chat-page-composer-attachment-preview {
 	object-fit: cover;
 }
 
+body.chat-page .chat-page-composer-attachment-preview--file {
+	display: flex;
+	align-items: flex-end;
+	justify-content: flex-start;
+	padding: 5px;
+	background: color-mix(in srgb, var(--border) 62%, var(--bg));
+	color: var(--text-muted);
+}
+
+body.chat-page .chat-page-composer-attachment-file-name {
+	max-width: 100%;
+	font-size: 0.5rem;
+	line-height: 1.1;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
 body.chat-page .chat-page-composer-attachment-uploading {
 	position: absolute;
 	inset: 0;

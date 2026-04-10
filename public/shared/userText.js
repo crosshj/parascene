@@ -173,16 +173,170 @@ function expandBareCreationPathsToAbsoluteUrls(text) {
 }
 
 /**
- * Chat / misc uploads: bare `/api/images/generic/...` paths in message bodies become absolute so URL
- * linkification runs; restricted to edited inputs and `generic_*` miscellaneous keys (not avatars/covers).
+ * Chat uploads: bare `/api/images/generic/...` paths in message bodies become absolute so URL
+ * linkification runs. Inline rendering is decided later by `isInlineEligibleGenericImagePath`.
  */
-function isInlineEligibleGenericImagePath(relativePath) {
+function isSafeGenericApiPath(relativePath) {
 	const p = String(relativePath || '');
 	if (!p.startsWith('/api/images/generic/') || p.includes('..')) return false;
+	return /^\/api\/images\/generic\/(?:edited\/[^/]+\/[^/?#]+|profile\/[^/]+\/(?:generic|misc)_[^/?#]+)$/i.test(p);
+}
+
+function isInlineEligibleGenericImagePath(relativePath) {
+	const p = String(relativePath || '');
+	if (!isSafeGenericApiPath(p)) return false;
 	if (p.startsWith('/api/images/generic/edited/')) {
 		return /^\/api\/images\/generic\/edited\/[^/]+\/[^/?#]+$/i.test(p);
 	}
 	return /^\/api\/images\/generic\/profile\/[^/]+\/generic_[^/?#]+$/i.test(p);
+}
+
+function stripQueryAndHash(path) {
+	let out = String(path || '');
+	const q = out.indexOf('?');
+	if (q >= 0) out = out.slice(0, q);
+	const h = out.indexOf('#');
+	if (h >= 0) out = out.slice(0, h);
+	return out;
+}
+
+function extFromPathOrName(pathLike, nameLike = "") {
+	const pickExt = (s) => {
+		const raw = String(s || "");
+		const i = raw.lastIndexOf(".");
+		if (i <= 0 || i >= raw.length - 1) return "";
+		return raw.slice(i + 1).toLowerCase();
+	};
+	return pickExt(pathLike) || pickExt(nameLike);
+}
+
+function isVideoExtension(ext) {
+	return ["mp4", "mov", "m4v", "webm", "ogg", "ogv"].includes(String(ext || "").toLowerCase());
+}
+
+function isHtmlExtension(ext) {
+	return ["html", "htm"].includes(String(ext || "").toLowerCase());
+}
+
+function formatAttachmentSize(bytesRaw) {
+	const n = Number(bytesRaw);
+	if (!Number.isFinite(n) || n <= 0) return '';
+	if (n < 1024) return `${Math.floor(n)} B`;
+	if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+	return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function attachmentNameFromPath(pathWithQuery) {
+	const pathOnly = stripQueryAndHash(pathWithQuery);
+	const seg = pathOnly.split('/').filter(Boolean).pop() || '';
+	try {
+		return decodeURIComponent(seg);
+	} catch {
+		return seg;
+	}
+}
+
+function renderInlineGenericAttachmentCard(relativePath, originalUrl) {
+	const href = escapeHtml(relativePath);
+	const original = escapeHtml(originalUrl);
+	let name = '';
+	let sizeLabel = '';
+	try {
+		const u = new URL(relativePath, DEFAULT_APP_ORIGIN);
+		name = String(u.searchParams.get('name') || '').trim();
+		sizeLabel = formatAttachmentSize(u.searchParams.get('size'));
+	} catch {
+		name = '';
+		sizeLabel = '';
+	}
+	if (!name) name = attachmentNameFromPath(relativePath);
+	return `<span class="user-text-inline-file-wrap"><a href="${href}" class="user-link creation-link user-text-inline-file-link" target="_blank" rel="noopener noreferrer" data-creation-link-original="${original}"><span class="user-text-inline-file-icon" aria-hidden="true">file</span><span class="user-text-inline-file-meta"><span class="user-text-inline-file-name">${escapeHtml(name || 'attachment')}</span><span class="user-text-inline-file-size">${escapeHtml(sizeLabel || 'File')}</span></span></a></span>`;
+}
+
+function isInlineEligibleGenericVideoPath(relativePath) {
+	const basePath = stripQueryAndHash(relativePath);
+	if (!isSafeGenericApiPath(basePath)) return false;
+	let queryName = "";
+	try {
+		const u = new URL(String(relativePath || ""), DEFAULT_APP_ORIGIN);
+		queryName = String(u.searchParams.get("name") || "");
+	} catch {
+		queryName = "";
+	}
+	const ext = extFromPathOrName(basePath, queryName);
+	return isVideoExtension(ext);
+}
+
+function isInlineEligibleGenericHtmlPath(relativePath) {
+	const basePath = stripQueryAndHash(relativePath);
+	if (!isSafeGenericApiPath(basePath)) return false;
+	let queryName = "";
+	try {
+		const u = new URL(String(relativePath || ""), DEFAULT_APP_ORIGIN);
+		queryName = String(u.searchParams.get("name") || "");
+	} catch {
+		queryName = "";
+	}
+	const ext = extFromPathOrName(basePath, queryName);
+	return isHtmlExtension(ext);
+}
+
+function inlineGenericAttachmentTitle(relativePath) {
+	let name = '';
+	try {
+		const u = new URL(String(relativePath || ''), DEFAULT_APP_ORIGIN);
+		name = String(u.searchParams.get('name') || '').trim();
+	} catch {
+		name = '';
+	}
+	if (!name) name = attachmentNameFromPath(relativePath);
+	return name || 'Video';
+}
+
+function renderInlineGenericVideo(relativePath, originalUrl) {
+	const rp = escapeHtml(relativePath);
+	const original = escapeHtml(originalUrl);
+	const title = escapeHtml(inlineGenericAttachmentTitle(relativePath));
+	return (
+		`<span class="user-text-inline-video-wrap">` +
+		`<div class="connect-chat-creation-embed-media connect-chat-creation-embed-media--has-hover-bar">` +
+		`<div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--video">` +
+		`<button type="button" class="user-text-inline-video-play-overlay" aria-label="Play video">` +
+		`<span class="user-text-inline-video-play-overlay-icon" aria-hidden="true">▶</span>` +
+		`</button>` +
+		`<div class="connect-chat-creation-embed-media-hover-bar">` +
+		`<div class="connect-chat-creation-embed-hover-bar-main">` +
+		`<span class="connect-chat-creation-embed-hover-bar-title">${title}</span>` +
+		`</div>` +
+		`<a class="connect-chat-creation-embed-detail-link connect-chat-creation-embed-detail-link--hover-bar user-link creation-link" href="${rp}" target="_blank" rel="noopener noreferrer" aria-label="Open video" title="Open video" data-creation-link-original="${original}">${linkIcon2()}</a>` +
+		`</div>` +
+		`<video class="connect-chat-creation-embed-video" playsinline preload="metadata" src="${rp}" aria-label="Attached video" data-inline-click-controls="1"></video>` +
+		`</div></div></span>`
+	);
+}
+
+function renderInlineGenericHtml(relativePath, originalUrl) {
+	const rp = escapeHtml(relativePath);
+	const original = escapeHtml(originalUrl);
+	const title = escapeHtml(inlineGenericAttachmentTitle(relativePath));
+	const bootstrapSrcdoc = escapeHtml(
+		'<!doctype html><html><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><style>html,body{margin:0;height:100%;background:#000;}@media (prefers-color-scheme: light){html,body{background:#fff;}}</style></head><body></body></html>'
+	);
+	return (
+		`<span class="user-text-inline-html-wrap">` +
+		`<div class="connect-chat-creation-embed connect-chat-creation-embed--square">` +
+		`<div class="connect-chat-creation-embed-media connect-chat-creation-embed-media--has-hover-bar">` +
+		`<div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--html user-text-inline-html-frame">` +
+		`<div class="connect-chat-creation-embed-media-hover-bar">` +
+		`<div class="connect-chat-creation-embed-hover-bar-main">` +
+		`<span class="connect-chat-creation-embed-hover-bar-title">${title}</span>` +
+		`</div>` +
+		`<a class="connect-chat-creation-embed-detail-link connect-chat-creation-embed-detail-link--hover-bar user-link creation-link" href="${rp}" target="_blank" rel="noopener noreferrer" aria-label="Open file" title="Open file" data-creation-link-original="${original}">${linkIcon2()}</a>` +
+		`</div>` +
+		`<div class="user-text-inline-html-skeleton" aria-hidden="true"></div>` +
+		`<iframe class="user-text-inline-html-iframe" srcdoc="${bootstrapSrcdoc}" data-inline-html-src="${rp}" loading="lazy" referrerpolicy="no-referrer" sandbox="allow-scripts allow-downloads" title="${title || "html preview"}"></iframe>` +
+		`</div></div></div></span>`
+	);
 }
 
 function expandBareInlineGenericImageApiPaths(text) {
@@ -198,7 +352,7 @@ function expandBareInlineGenericImageApiPaths(text) {
 			let base = path;
 			if (q >= 0) base = base.slice(0, q);
 			if (h >= 0) base = base.slice(0, h);
-			if (!isInlineEligibleGenericImagePath(base)) return match;
+			if (!isSafeGenericApiPath(base)) return match;
 			return `${prefix}${origin}${path}`;
 		}
 	);
@@ -401,9 +555,12 @@ export function textWithCreationLinks(text) {
 		const { url, trailing } = splitUrlTrailingPunctuation(rawUrl);
 		const relativePath = getParasceneRelativePath(url);
 		if (relativePath) {
-			if (isInlineEligibleGenericImagePath(relativePath)) {
+			const basePath = stripQueryAndHash(relativePath);
+			if (isInlineEligibleGenericImagePath(basePath)) {
 				const rp = escapeHtml(relativePath);
 				out += `<span class="user-text-inline-image-wrap"><a href="${rp}" class="user-link creation-link user-text-inline-image-link" aria-label="View full image" data-creation-link-original="${escapeHtml(url)}"><img class="user-text-inline-image" src="${rp}" alt="" loading="lazy" decoding="async" /></a></span>`;
+			} else if (isSafeGenericApiPath(basePath)) {
+				out += renderInlineGenericAttachmentCard(relativePath, url);
 			} else {
 				out += `<a href="${escapeHtml(relativePath)}" class="user-link creation-link" data-creation-link-original="${escapeHtml(url)}">${escapeHtml(relativePath)}</a>`;
 			}

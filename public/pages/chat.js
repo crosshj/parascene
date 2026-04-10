@@ -71,6 +71,7 @@ let toggleChatMessageReaction;
 let setupReactionTooltipTap;
 let createConnectCommentRowElement;
 
+
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
 	return meta?.getAttribute('content')?.trim() || '';
@@ -198,6 +199,35 @@ function normalizeChatBubbleInlineImageSpacing(bubble) {
 			next = next.nextSibling;
 			rm.parentNode?.removeChild(rm);
 		}
+	}
+}
+
+function bindInlineVideoClickControls(rootEl) {
+	const root =
+		rootEl instanceof Element || rootEl instanceof Document ? rootEl : document;
+	if (!root || typeof root.querySelectorAll !== 'function') return;
+	for (const video of root.querySelectorAll('video[data-inline-click-controls="1"]')) {
+		if (!(video instanceof HTMLVideoElement)) continue;
+		if (video.dataset.clickControlsBound === '1') continue;
+		video.dataset.clickControlsBound = '1';
+		video.controls = false;
+		const wrap = video.closest('.connect-chat-creation-embed-inner--video');
+		const overlay = wrap?.querySelector?.('.user-text-inline-video-play-overlay');
+		const activate = () => {
+			video.controls = true;
+			if (wrap instanceof HTMLElement) wrap.classList.add('user-text-inline-video--active');
+			if (overlay instanceof HTMLButtonElement) overlay.hidden = true;
+			void video.play().catch(() => {
+				// ignore autoplay/gesture issues; controls are now visible.
+			});
+		};
+		if (overlay instanceof HTMLButtonElement) {
+			overlay.addEventListener('click', () => activate());
+		}
+		video.addEventListener('click', () => {
+			if (video.controls) return;
+			activate();
+		});
 	}
 }
 
@@ -334,7 +364,8 @@ export async function initChatPage(root) {
 		gearIcon,
 		copyIcon,
 		trashIcon,
-		helpIcon
+		helpIcon,
+		linkIcon2
 	} = await import(`../icons/svg-strings.js${qs}`);
 	const chatSidebarServerGearSvg = gearIcon('chat-page-sidebar-server-settings-icon');
 	const rosterMod = await import(`../shared/chatSidebarRoster.js${qs}`);
@@ -379,7 +410,7 @@ export async function initChatPage(root) {
 	const COMMENTS_CHANNEL_PAGE_SIZE = 50;
 	let loadingMessages = false;
 	let sendInFlight = false;
-	/** Staged images before send (ChatGPT-style composer). */
+	/** Staged attachments before send (ChatGPT-style composer). */
 	let chatPendingImages = [];
 	/** Optimistic / failed send row (re-mounted after each loadMessages when still relevant). */
 	let optimisticSend = null;
@@ -700,6 +731,34 @@ export async function initChatPage(root) {
 	}
 
 	const CHAT_MAX_BODY_CHARS = 4000;
+	const CHAT_MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+	function chatAttachmentKindFromType(fileType) {
+		const t = String(fileType || '').toLowerCase();
+		if (t.startsWith('image/')) return 'image';
+		if (t.startsWith('video/')) return 'video';
+		return 'file';
+	}
+
+	function buildAttachmentMessageUrl(item) {
+		const basePath = String(item?.urlPath || '').trim();
+		if (!basePath) return '';
+		const kind = chatAttachmentKindFromType(item?.fileType);
+		if (kind === 'image') return basePath;
+		try {
+			const u = new URL(basePath, window.location.origin);
+			// Preserve original Unicode filename for chat rendering; upload header uses a safe ASCII variant.
+			const name = String(item?.fileName || '').trim().slice(0, 240);
+			const size = Number(item?.fileSize);
+			if (name) u.searchParams.set('name', name);
+			if (Number.isFinite(size) && size >= 0) {
+				u.searchParams.set('size', String(Math.floor(size)));
+			}
+			return `${u.pathname}${u.search}`;
+		} catch {
+			return basePath;
+		}
+	}
 
 	function chatMiscGenericKeyFromApiPath(urlPath) {
 		const s = String(urlPath || '').trim();
@@ -712,7 +771,7 @@ export async function initChatPage(root) {
 				.filter(Boolean)
 				.map((seg) => decodeURIComponent(seg))
 				.join('/');
-			if (key.includes('..') || !/^profile\/\d+\/generic_[^/]+$/i.test(key)) return null;
+			if (key.includes('..') || !/^profile\/\d+\/(?:generic|misc)_[^/]+$/i.test(key)) return null;
 			return key;
 		} catch {
 			return null;
@@ -792,15 +851,28 @@ export async function initChatPage(root) {
 			}
 			card.dataset.chatAttachmentId = item.id;
 
-			const img = document.createElement('img');
-			img.className = 'chat-page-composer-attachment-preview';
-			img.alt = '';
-			if (item.status === 'ready' && item.urlPath) {
-				img.src = item.urlPath;
-			} else if (item.previewUrl) {
-				img.src = item.previewUrl;
+			const kind = chatAttachmentKindFromType(item.fileType);
+			if (kind === 'image') {
+				const img = document.createElement('img');
+				img.className = 'chat-page-composer-attachment-preview';
+				img.alt = '';
+				if (item.status === 'ready' && item.urlPath) {
+					img.src = item.urlPath;
+				} else if (item.previewUrl) {
+					img.src = item.previewUrl;
+				}
+				card.appendChild(img);
+			} else {
+				const panel = document.createElement('div');
+				panel.className = 'chat-page-composer-attachment-preview chat-page-composer-attachment-preview--file';
+				const name = String(item.fileName || '').trim();
+				const fileNameEl = document.createElement('div');
+				fileNameEl.className = 'chat-page-composer-attachment-file-name';
+				fileNameEl.textContent = name || (kind === 'video' ? 'video' : 'file');
+				if (name) panel.title = name;
+				panel.appendChild(fileNameEl);
+				card.appendChild(panel);
 			}
-			card.appendChild(img);
 
 			if (item.status === 'uploading') {
 				const ov = document.createElement('div');
@@ -820,7 +892,7 @@ export async function initChatPage(root) {
 			const rm = document.createElement('button');
 			rm.type = 'button';
 			rm.className = 'chat-page-composer-attachment-remove';
-			rm.setAttribute('aria-label', 'Remove image');
+			rm.setAttribute('aria-label', 'Remove attachment');
 			rm.textContent = '×';
 			rm.addEventListener('click', () => void removeChatAttachment(item.id));
 			card.appendChild(rm);
@@ -844,13 +916,11 @@ export async function initChatPage(root) {
 		}
 	}
 
-	async function addChatImageFiles(fileList) {
+	async function addChatFiles(fileList) {
 		if (!activeThreadId || activePseudoChannelSlug || sendInFlight) return;
 		const bodyInput = root.querySelector('[data-chat-body-input]');
 		if (bodyInput instanceof HTMLTextAreaElement && bodyInput.disabled) return;
-		const arr = Array.from(fileList || []).filter(
-			(f) => f instanceof File && typeof f.type === 'string' && f.type.startsWith('image/')
-		);
+		const arr = Array.from(fileList || []).filter((f) => f instanceof File);
 		if (arr.length === 0) return;
 
 		const errStrip = root.querySelector('[data-chat-error]');
@@ -863,24 +933,35 @@ export async function initChatPage(root) {
 		try {
 			mod = await import(`../shared/createSubmit.js${qs}`);
 		} catch (err) {
-			console.error('[Chat page] image module:', err);
+			console.error('[Chat page] upload module:', err);
 			if (errStrip instanceof HTMLElement) {
 				errStrip.hidden = false;
-				errStrip.textContent = 'Could not load image upload.';
+				errStrip.textContent = 'Could not load file upload.';
 			}
 			return;
 		}
 
 		for (const file of arr) {
+			if (file.size > CHAT_MAX_UPLOAD_BYTES) {
+				if (errStrip instanceof HTMLElement) {
+					errStrip.hidden = false;
+					errStrip.textContent = `"${file.name || 'File'}" is too large (max 10MB).`;
+				}
+				continue;
+			}
 			const id =
 				typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
 					? crypto.randomUUID()
 					: `att-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-			const previewUrl = URL.createObjectURL(file);
+			const previewUrl =
+				chatAttachmentKindFromType(file.type) === 'image' ? URL.createObjectURL(file) : '';
 			chatPendingImages.push({
 				id,
 				previewUrl,
 				status: 'uploading',
+				fileType: file.type || '',
+				fileName: file.name || '',
+				fileSize: Number.isFinite(file.size) ? file.size : 0,
 				file
 			});
 			renderChatAttachmentStrip();
@@ -888,7 +969,7 @@ export async function initChatPage(root) {
 
 			void (async () => {
 				try {
-					const urlPath = await mod.uploadImageFile(file, { uploadKind: 'generic' });
+					const urlPath = await mod.uploadChatFile(file);
 					const path = String(urlPath || '').trim();
 					if (!path) throw new Error('Upload returned no URL');
 					const ent = chatPendingImages.find((e) => e.id === id);
@@ -903,7 +984,7 @@ export async function initChatPage(root) {
 					renderChatAttachmentStrip();
 					syncChatSendButton();
 				} catch (err) {
-					console.error('[Chat page] image upload:', err);
+					console.error('[Chat page] file upload:', err);
 					const ent = chatPendingImages.find((e) => e.id === id);
 					if (!ent) return;
 					ent.status = 'error';
@@ -1080,6 +1161,7 @@ export async function initChatPage(root) {
 		hydrateUserTextLinks(row);
 		hydrateChatYoutubeEmbeds(row);
 		hydrateChatCreationEmbeds(row);
+		bindInlineVideoClickControls(row);
 		for (const b of row.querySelectorAll('.connect-chat-msg-bubble')) {
 			trimTrailingWhitespaceAfterChatEmbed(b);
 		}
@@ -1709,6 +1791,133 @@ export async function initChatPage(root) {
 		imgEl.alt = '';
 
 		frame.appendChild(imgEl);
+		overlay.appendChild(closeBtn);
+		overlay.appendChild(frame);
+
+		chatInlineImageLightboxKeydown = (e) => {
+			if (e.key !== 'Escape') return;
+			e.preventDefault();
+			closeChatInlineImageLightbox();
+		};
+		document.addEventListener('keydown', chatInlineImageLightboxKeydown);
+
+		overlay.addEventListener('click', (e) => {
+			if (e.target === overlay) closeChatInlineImageLightbox();
+		});
+		closeBtn.addEventListener('click', () => closeChatInlineImageLightbox());
+
+		document.body.appendChild(overlay);
+		chatInlineImageLightboxEl = overlay;
+		requestAnimationFrame(() => {
+			try {
+				closeBtn.focus({ preventScroll: true });
+			} catch {
+				closeBtn.focus();
+			}
+		});
+	}
+
+	function chatAttachmentPreviewKindFromHref(href) {
+		try {
+			const u = new URL(String(href || ''), window.location.origin);
+			let name = String(u.searchParams.get('name') || '').trim();
+			if (!name) {
+				const seg = (u.pathname || '').split('/').filter(Boolean).pop() || '';
+				name = decodeURIComponent(seg);
+			}
+			const idx = name.lastIndexOf('.');
+			const ext = idx > 0 ? name.slice(idx + 1).toLowerCase() : '';
+			if (['mp4', 'mov', 'm4v', 'webm', 'ogg', 'ogv'].includes(ext)) return 'video';
+			if (['html', 'htm'].includes(ext)) return 'html';
+			return null;
+		} catch {
+			return null;
+		}
+	}
+
+	function chatAttachmentPreviewNameFromHref(href) {
+		try {
+			const u = new URL(String(href || ''), window.location.origin);
+			let name = String(u.searchParams.get('name') || '').trim();
+			if (!name) {
+				const seg = (u.pathname || '').split('/').filter(Boolean).pop() || '';
+				name = decodeURIComponent(seg);
+			}
+			return name || 'video';
+		} catch {
+			return 'video';
+		}
+	}
+
+	function openChatAttachmentPreviewLightbox(src, kind) {
+		const url = String(src || '').trim();
+		if (!url) return;
+		closeReactionPicker();
+		closeChatInlineImageLightbox();
+
+		const overlay = document.createElement('div');
+		overlay.className = 'chat-inline-image-lightbox';
+		overlay.setAttribute('role', 'dialog');
+		overlay.setAttribute('aria-modal', 'true');
+		overlay.setAttribute('aria-label', kind === 'video' ? 'Video' : 'Preview');
+
+		const closeBtn = document.createElement('button');
+		closeBtn.type = 'button';
+		closeBtn.className = 'chat-inline-image-lightbox-close';
+		closeBtn.setAttribute('aria-label', 'Close');
+		closeBtn.textContent = '×';
+
+		const frame = document.createElement('div');
+		frame.className = 'chat-inline-image-lightbox-frame';
+
+		if (kind === 'video') {
+			const shell = document.createElement('div');
+			shell.className = 'chat-inline-image-lightbox-video-shell';
+			const bar = document.createElement('div');
+			bar.className = 'connect-chat-creation-embed-media-hover-bar connect-chat-creation-embed-media-hover-bar--static';
+			const main = document.createElement('div');
+			main.className = 'connect-chat-creation-embed-hover-bar-main';
+			const title = document.createElement('span');
+			title.className = 'connect-chat-creation-embed-hover-bar-title';
+			title.textContent = chatAttachmentPreviewNameFromHref(url);
+			main.appendChild(title);
+			const open = document.createElement('a');
+			open.className = 'connect-chat-creation-embed-detail-link connect-chat-creation-embed-detail-link--hover-bar user-link creation-link';
+			open.href = url;
+			open.target = '_blank';
+			open.rel = 'noopener noreferrer';
+			open.setAttribute('aria-label', 'Open video');
+			open.setAttribute('title', 'Open video');
+			open.innerHTML = linkIcon2();
+			bar.appendChild(main);
+			bar.appendChild(open);
+			const video = document.createElement('video');
+			video.className = 'chat-inline-image-lightbox-video';
+			video.controls = true;
+			video.playsInline = true;
+			video.preload = 'metadata';
+			video.src = url;
+			shell.appendChild(bar);
+			shell.appendChild(video);
+			frame.appendChild(shell);
+		} else {
+			const iframe = document.createElement('iframe');
+			iframe.className = 'chat-inline-image-lightbox-iframe';
+			iframe.setAttribute('sandbox', 'allow-scripts allow-downloads');
+			iframe.setAttribute('referrerpolicy', 'no-referrer');
+			iframe.srcdoc = '<!doctype html><html><head><meta charset="utf-8"><meta name="color-scheme" content="dark light"><style>html,body{margin:0;height:100%;background:#000;}@media (prefers-color-scheme: light){html,body{background:#fff;}}</style></head><body></body></html>';
+			frame.appendChild(iframe);
+			void (async () => {
+				try {
+					const res = await fetch(url, { credentials: 'include' });
+					const html = await res.text();
+					if (res.ok) iframe.srcdoc = html;
+				} catch {
+					// ignore
+				}
+			})();
+		}
+
 		overlay.appendChild(closeBtn);
 		overlay.appendChild(frame);
 
@@ -2770,6 +2979,7 @@ export async function initChatPage(root) {
 			hydrateUserTextLinks(messagesEl);
 			hydrateChatYoutubeEmbeds(messagesEl);
 			hydrateChatCreationEmbeds(messagesEl);
+			bindInlineVideoClickControls(messagesEl);
 			for (const bubble of messagesEl.querySelectorAll('.connect-chat-msg-bubble')) {
 				trimTrailingWhitespaceAfterChatEmbed(bubble);
 			}
@@ -2910,6 +3120,7 @@ export async function initChatPage(root) {
 				hydrateUserTextLinks(rowRestored);
 				hydrateChatYoutubeEmbeds(rowRestored);
 				hydrateChatCreationEmbeds(rowRestored);
+				bindInlineVideoClickControls(rowRestored);
 			} catch {
 				// ignore
 			}
@@ -2924,6 +3135,19 @@ export async function initChatPage(root) {
 	}
 
 	function onChatMessagesClick(e) {
+		const fileLink = e.target?.closest?.('a.user-text-inline-file-link[href]');
+		if (fileLink instanceof HTMLAnchorElement && fileLink.closest('.connect-chat-msg-bubble')) {
+			if (!(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)) {
+				const kind = chatAttachmentPreviewKindFromHref(fileLink.getAttribute('href') || fileLink.href);
+				if (kind === 'video' || kind === 'html') {
+					e.preventDefault();
+					e.stopPropagation();
+					openChatAttachmentPreviewLightbox(fileLink.href, kind);
+					return;
+				}
+			}
+		}
+
 		const tagLink = e.target?.closest?.('a.mention-link[href^="/t/"]');
 		if (tagLink instanceof HTMLAnchorElement && tagLink.closest('.connect-chat-msg-bubble')) {
 			if (activePseudoChannelSlug) {
@@ -3195,7 +3419,8 @@ export async function initChatPage(root) {
 		const text = String(bodyInput.value || '').trim();
 		const paths = chatPendingImages
 			.filter((x) => x.status === 'ready' && x.urlPath)
-			.map((x) => x.urlPath);
+			.map((x) => buildAttachmentMessageUrl(x))
+			.filter(Boolean);
 		if (!text && paths.length === 0) return;
 
 		let body = paths.join('\n');
@@ -3591,7 +3816,7 @@ export async function initChatPage(root) {
 		fileInput.addEventListener('change', () => {
 			const files = fileInput.files;
 			if (!files || files.length === 0) return;
-			void addChatImageFiles(files);
+			void addChatFiles(files);
 			fileInput.value = '';
 		});
 	}
@@ -3612,20 +3837,16 @@ export async function initChatPage(root) {
 			for (const it of cd.items || []) {
 				if (it.kind !== 'file') continue;
 				const f = it.getAsFile();
-				if (f && typeof f.type === 'string' && f.type.startsWith('image/')) {
-					imageFiles.push(f);
-				}
+				if (f) imageFiles.push(f);
 			}
 			if (imageFiles.length === 0 && cd.files && cd.files.length > 0) {
 				for (const f of cd.files) {
-					if (f && typeof f.type === 'string' && f.type.startsWith('image/')) {
-						imageFiles.push(f);
-					}
+					if (f) imageFiles.push(f);
 				}
 			}
 			if (imageFiles.length === 0) return;
 			ev.preventDefault();
-			void addChatImageFiles(imageFiles);
+			void addChatFiles(imageFiles);
 		});
 		bodyInput.addEventListener('keydown', (ev) => {
 			if (ev.key !== 'Enter' || ev.isComposing) return;
