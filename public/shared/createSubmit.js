@@ -95,6 +95,7 @@ export async function uploadImageFile(file, options = {}) {
  * Upload any file to chat misc endpoint namespace (`/api/images/generic`).
  * Server stores image/video as `generic_*` and other files as `misc_*`.
  * @param {File} file
+ * @returns {Promise<{ url: string, displayAsFile: boolean }>}
  */
 export async function uploadChatFile(file) {
 	if (!file || !(file instanceof File)) throw new Error('Invalid file');
@@ -115,7 +116,10 @@ export async function uploadChatFile(file) {
 	}
 	const data = await res.json();
 	if (!data?.url) throw new Error('No URL in response');
-	return data.url;
+	return {
+		url: data.url,
+		displayAsFile: data.display_as_file === true
+	};
 }
 
 const MENTION_FAILURE_LABELS = {

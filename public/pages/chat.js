@@ -963,7 +963,7 @@ export async function initChatPage(root) {
 
 			void (async () => {
 				try {
-					const urlPath = await mod.uploadChatFile(file);
+					const { url: urlPath, displayAsFile } = await mod.uploadChatFile(file);
 					const path = String(urlPath || '').trim();
 					if (!path) throw new Error('Upload returned no URL');
 					const ent = chatPendingImages.find((e) => e.id === id);
@@ -974,6 +974,9 @@ export async function initChatPage(root) {
 					revokeChatAttachmentPreview(ent);
 					ent.previewUrl = '';
 					ent.urlPath = path;
+					if (displayAsFile) {
+						ent.fileType = '';
+					}
 					ent.status = 'ready';
 					renderChatAttachmentStrip();
 					syncChatSendButton();

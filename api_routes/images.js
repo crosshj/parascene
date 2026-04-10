@@ -12,6 +12,11 @@ function guessContentType(key, hintedName = "") {
 	if (ext === ".webp") return "image/webp";
 	if (ext === ".gif") return "image/gif";
 	if (ext === ".svg") return "image/svg+xml";
+	if (ext === ".png") return "image/png";
+	if (ext === ".heic" || ext === ".heif") return "image/heif";
+	if (ext === ".tif" || ext === ".tiff") return "image/tiff";
+	if (ext === ".jxl") return "image/jxl";
+	if (ext === ".avif") return "image/avif";
 	if (ext === ".mp4") return "video/mp4";
 	if (ext === ".webm") return "video/webm";
 	if (ext === ".mov") return "video/quicktime";
@@ -44,6 +49,9 @@ function extFromContentType(contentType) {
 	if (ct.includes("image/gif")) return ".gif";
 	if (ct.includes("image/svg+xml")) return ".svg";
 	if (ct.includes("image/png")) return ".png";
+	if (ct.includes("image/heic") || ct.includes("image/heif")) return ".heic";
+	if (ct.includes("image/tiff") || ct === "image/tif") return ".tiff";
+	if (ct.includes("image/jxl") || ct.includes("jpeg-xl")) return ".jxl";
 	if (ct.includes("video/mp4")) return ".mp4";
 	if (ct.includes("video/webm")) return ".webm";
 	if (ct.includes("video/quicktime")) return ".mov";
@@ -65,8 +73,77 @@ function buildImageUrl(namespace, key) {
 
 const CHAT_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
 
+/** Max edge when transcoding HEIC/TIFF/JXL so huge phone photos stay bounded. */
+const GENERIC_TRANSCODE_MAX_EDGE = 4096;
+
+/**
+ * Filename extensions we treat as images when Content-Type is missing (e.g. some HEIC picks).
+ */
+const IMAGE_UPLOAD_FILENAME_EXTS = new Set([
+	".avif",
+	".bmp",
+	".gif",
+	".heic",
+	".heif",
+	".ico",
+	".jpeg",
+	".jpg",
+	".jxl",
+	".png",
+	".svg",
+	".tif",
+	".tiff",
+	".webp"
+]);
+
+/**
+ * Raster formats with poor or inconsistent <img> support in major browsers (Chrome/Firefox);
+ * transcode to WebP on generic upload only for these.
+ */
+const EXT_NEEDS_WEB_TRANSCODE = new Set([".heic", ".heif", ".jxl", ".tif", ".tiff"]);
+
 function isImageContentType(contentType) {
 	return String(contentType || "").toLowerCase().startsWith("image/");
+}
+
+function filenameExtSuggestsImageUpload(originalName) {
+	const ext = path.extname(String(originalName || "")).toLowerCase();
+	return IMAGE_UPLOAD_FILENAME_EXTS.has(ext);
+}
+
+function contentTypeNeedsBrowserSafeTranscode(contentType) {
+	const t = String(contentType || "").toLowerCase();
+	if (!t.startsWith("image/")) return false;
+	if (t.includes("heic") || t.includes("heif")) return true;
+	if (t === "image/tiff" || t === "image/tif" || t.includes("image/tiff")) return true;
+	if (t === "image/jxl" || t.includes("jpeg-xl")) return true;
+	return false;
+}
+
+function uploadNeedsBrowserSafeTranscode(originalName, contentType) {
+	const ext = path.extname(String(originalName || "")).toLowerCase();
+	if (EXT_NEEDS_WEB_TRANSCODE.has(ext)) return true;
+	return contentTypeNeedsBrowserSafeTranscode(contentType);
+}
+
+async function transcodeGenericUploadToWebp(buffer) {
+	const meta = await sharp(buffer).metadata();
+	const w = meta.width;
+	const h = meta.height;
+	let pipeline = sharp(buffer).rotate();
+	if (
+		typeof w === "number" &&
+		typeof h === "number" &&
+		(w > GENERIC_TRANSCODE_MAX_EDGE || h > GENERIC_TRANSCODE_MAX_EDGE)
+	) {
+		pipeline = pipeline.resize({
+			width: GENERIC_TRANSCODE_MAX_EDGE,
+			height: GENERIC_TRANSCODE_MAX_EDGE,
+			fit: "inside",
+			withoutEnlargement: true
+		});
+	}
+	return pipeline.webp({ quality: 85 }).toBuffer();
 }
 
 export default function createImagesRoutes({ storage, queries }) {
@@ -195,7 +272,8 @@ export default function createImagesRoutes({ storage, queries }) {
 			let kind = normalizeUploadKind(req.headers["x-upload-kind"]);
 			const originalName = String(req.headers["x-upload-name"] || "");
 			const contentType = String(req.headers["content-type"] || "application/octet-stream");
-			const uploadIsImage = isImageContentType(contentType);
+			const uploadIsImage =
+				isImageContentType(contentType) || filenameExtSuggestsImageUpload(originalName);
 			if (kind === "generic") {
 				kind = uploadIsImage ? "generic" : "misc";
 			}
@@ -209,11 +287,14 @@ export default function createImagesRoutes({ storage, queries }) {
 				}
 			}
 			const extFallback = kind === "misc" ? ".bin" : ".png";
-			const ext = path.extname(originalName) || extFromContentType(contentType) || extFallback;
+			let ext = path.extname(originalName) || extFromContentType(contentType) || extFallback;
+			let outContentType = contentType;
 
 			const now = Date.now();
 			const rand = Math.random().toString(36).slice(2, 9);
 			const userPart = safeKeySegment(String(req.auth.userId));
+
+			let displayAsFile = false;
 
 			if (kind === "edited") {
 				try {
@@ -236,6 +317,25 @@ export default function createImagesRoutes({ storage, queries }) {
 				} catch (err) {
 					return res.status(400).json({ error: "Invalid image" });
 				}
+			} else if (kind === "generic" && uploadNeedsBrowserSafeTranscode(originalName, contentType)) {
+				try {
+					buffer = await transcodeGenericUploadToWebp(buffer);
+					ext = ".webp";
+					outContentType = "image/webp";
+				} catch (err) {
+					// No HEIF/libheif etc. on host: keep original bytes as misc_* (not generic_*).
+					// Started as generic, so founder misc gate above did not run — safe for normal users.
+					console.warn("[POST /api/images/generic] browser-safe transcode failed; storing as misc", {
+						name: originalName,
+						message: String(err?.message || err)
+					});
+					kind = "misc";
+					ext = path.extname(originalName) || extFromContentType(contentType) || ".bin";
+					outContentType = isImageContentType(contentType)
+						? contentType
+						: "application/octet-stream";
+					displayAsFile = true;
+				}
 			}
 
 			const key =
@@ -247,13 +347,14 @@ export default function createImagesRoutes({ storage, queries }) {
 
 			try {
 				const storedKey = await storage.uploadGenericImage(buffer, key, {
-					contentType: kind === "edited" ? "image/png" : contentType
+					contentType: kind === "edited" ? "image/png" : outContentType
 				});
 				return res.json({
 					ok: true,
 					key: storedKey,
 					max_bytes: CHAT_UPLOAD_MAX_BYTES,
-					url: buildImageUrl("generic", storedKey)
+					url: buildImageUrl("generic", storedKey),
+					...(displayAsFile ? { display_as_file: true } : {})
 				});
 			} catch (error) {
 				console.error("[POST /api/images/generic]", error);
