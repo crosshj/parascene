@@ -727,11 +727,46 @@ export async function initChatPage(root) {
 	const CHAT_MAX_BODY_CHARS = 4000;
 	const CHAT_MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
+	/** Same extensions as server `EXT_NEEDS_WEB_TRANSCODE` — no reliable <img> preview in Chromium. */
+	const CHAT_EXT_NO_BLOB_IMG_PREVIEW = new Set(['.heic', '.heif', '.jxl', '.tif', '.tiff']);
+
+	function chatExtFromFileName(name) {
+		const s = String(name || '');
+		const i = s.lastIndexOf('.');
+		if (i <= 0 || i >= s.length - 1) return '';
+		return s.slice(i).toLowerCase();
+	}
+
+	function chatContentTypeNeedsBrowserSafeTranscode(contentType) {
+		const t = String(contentType || '').toLowerCase();
+		if (!t.startsWith('image/')) return false;
+		if (t.includes('heic') || t.includes('heif')) return true;
+		if (t === 'image/tiff' || t === 'image/tif' || t.includes('image/tiff')) return true;
+		if (t === 'image/jxl' || t.includes('jpeg-xl')) return true;
+		return false;
+	}
+
+	/** True when the file is treated as an image but a blob: URL is not useful for a thumbnail (matches server transcode list). */
+	function chatImageFileSkipBlobPreview(file) {
+		if (!(file instanceof File)) return false;
+		if (CHAT_EXT_NO_BLOB_IMG_PREVIEW.has(chatExtFromFileName(file.name))) return true;
+		return chatContentTypeNeedsBrowserSafeTranscode(file.type);
+	}
+
 	function chatAttachmentKindFromType(fileType) {
 		const t = String(fileType || '').toLowerCase();
 		if (t.startsWith('image/')) return 'image';
 		if (t.startsWith('video/')) return 'video';
 		return 'file';
+	}
+
+	/** Use <img> only when we have a URL the browser can show (blob preview or final generic_* URL). */
+	function chatComposerUsesImageThumbnail(item, kindFromType) {
+		if (kindFromType !== 'image') return false;
+		if (item.status === 'ready' && item.urlPath) {
+			return item.fileType !== '';
+		}
+		return Boolean(item.previewUrl);
 	}
 
 	function buildAttachmentMessageUrl(item) {
@@ -846,7 +881,7 @@ export async function initChatPage(root) {
 			card.dataset.chatAttachmentId = item.id;
 
 			const kind = chatAttachmentKindFromType(item.fileType);
-			if (kind === 'image') {
+			if (chatComposerUsesImageThumbnail(item, kind)) {
 				const img = document.createElement('img');
 				img.className = 'chat-page-composer-attachment-preview';
 				img.alt = '';
@@ -947,8 +982,9 @@ export async function initChatPage(root) {
 				typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
 					? crypto.randomUUID()
 					: `att-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-			const previewUrl =
-				chatAttachmentKindFromType(file.type) === 'image' ? URL.createObjectURL(file) : '';
+			const useBlobImgPreview =
+				chatAttachmentKindFromType(file.type) === 'image' && !chatImageFileSkipBlobPreview(file);
+			const previewUrl = useBlobImgPreview ? URL.createObjectURL(file) : '';
 			chatPendingImages.push({
 				id,
 				previewUrl,
