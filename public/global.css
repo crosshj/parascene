@@ -4671,6 +4671,72 @@ body.chat-page main.chat-page-outer {
 		padding: 0 4px;
 	}
 
+	.chat-page-sidebar-collapsible {
+		display: flex;
+		flex-direction: column;
+		gap: 0;
+		width: 100%;
+	}
+
+	.chat-page-sidebar-collapsible.is-expanded .chat-page-sidebar-collapsible-expander-wrap--more {
+		display: none;
+	}
+
+	.chat-page-sidebar-collapsible-visible,
+	.chat-page-sidebar-collapsible-rest {
+		display: flex;
+		flex-direction: column;
+		gap: 0;
+	}
+
+	.chat-page-sidebar-collapsible-expander-wrap {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		gap: 10px;
+		width: 100%;
+		margin: 4px 0 2px;
+		padding: 0 2px;
+		box-sizing: border-box;
+	}
+
+	.chat-page-sidebar-collapsible-expander-wrap::before,
+	.chat-page-sidebar-collapsible-expander-wrap::after {
+		content: '';
+		flex: 1 1 0;
+		min-width: 0;
+		height: 1px;
+		background: color-mix(in srgb, var(--border) 55%, transparent);
+	}
+
+	.chat-page-sidebar-collapsible-expander {
+		flex-shrink: 0;
+		margin: 0;
+		padding: 3px 6px;
+		border: none;
+		border-radius: 6px;
+		background: transparent;
+		font-size: 0.6875rem;
+		line-height: 1.25;
+		font-weight: 500;
+		color: color-mix(in srgb, var(--text-muted) 88%, var(--text));
+		cursor: pointer;
+		-webkit-tap-highlight-color: transparent;
+		transition:
+			color 0.12s ease,
+			background-color 0.12s ease;
+	}
+
+	.chat-page-sidebar-collapsible-expander:hover {
+		color: color-mix(in srgb, var(--text-muted) 65%, var(--text));
+		background: color-mix(in srgb, var(--text) 5%, transparent);
+	}
+
+	.chat-page-sidebar-collapsible-expander:focus-visible {
+		outline: 2px solid var(--focus);
+		outline-offset: 1px;
+	}
+
 	.chat-page-sidebar-row {
 		display: flex;
 		flex-direction: row;
@@ -4766,6 +4832,20 @@ body.chat-page main.chat-page-outer {
 		align-items: center;
 		justify-content: center;
 		box-sizing: border-box;
+	}
+
+	.chat-page-sidebar-you-pill {
+		flex-shrink: 0;
+		font-size: 0.65rem;
+		font-weight: 600;
+		line-height: 1.2;
+		text-transform: lowercase;
+		padding: 2px 7px;
+		border-radius: 999px;
+		color: color-mix(in srgb, var(--text) 52%, var(--text-muted));
+		background: color-mix(in srgb, var(--text) 7%, transparent);
+		border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+		letter-spacing: 0.02em;
 	}
 
 	.chat-page-sidebar-row-title {

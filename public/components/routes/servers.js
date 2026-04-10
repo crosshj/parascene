@@ -18,6 +18,12 @@ let mergeThreadRowsWithJoinedServers;
 let buildChatThreadUrl;
 let buildChatThreadRowAvatarHtml;
 let getDmOtherUserId;
+let isSelfDmThread;
+let normalizeDmListWithSelfFirst;
+let buildChatSidebarDmListHtml;
+let buildCollapsibleChatSidebarListHtml;
+let toggleChatSidebarCollapsibleList;
+let sortChannelRowsByLastActivity;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -71,6 +77,12 @@ async function loadDeps() {
 		buildChatThreadUrl = chatSidebarRosterMod.buildChatThreadUrl;
 		buildChatThreadRowAvatarHtml = chatSidebarRosterMod.buildChatThreadRowAvatarHtml;
 		getDmOtherUserId = chatSidebarRosterMod.getDmOtherUserId;
+		isSelfDmThread = chatSidebarRosterMod.isSelfDmThread;
+		normalizeDmListWithSelfFirst = chatSidebarRosterMod.normalizeDmListWithSelfFirst;
+		buildChatSidebarDmListHtml = chatSidebarRosterMod.buildChatSidebarDmListHtml;
+		buildCollapsibleChatSidebarListHtml = chatSidebarRosterMod.buildCollapsibleChatSidebarListHtml;
+		toggleChatSidebarCollapsibleList = chatSidebarRosterMod.toggleChatSidebarCollapsibleList;
+		sortChannelRowsByLastActivity = chatSidebarRosterMod.sortChannelRowsByLastActivity;
 	})();
 	return _depsPromise;
 }
@@ -317,6 +329,8 @@ class AppRouteServers extends HTMLElement {
 		this._userBroadcastViewerBound = null;
 		this._presenceOnlineIds = new Set();
 		this._dmPresenceGraceMap = new Map();
+		this._chatViewerProfileMini = null;
+		this._chatViewerProfileMiniFetched = false;
 
 		const v = getAssetVersionParam();
 		const qs = getImportQuery(v);
@@ -338,6 +352,15 @@ class AppRouteServers extends HTMLElement {
 		});
 
 		this._onConnectSidebarClick = (e) => {
+			const collapsibleBtn = e.target?.closest?.('[data-chat-collapsible]');
+			if (collapsibleBtn instanceof HTMLButtonElement) {
+				e.preventDefault();
+				e.stopPropagation();
+				if (typeof toggleChatSidebarCollapsibleList === 'function') {
+					toggleChatSidebarCollapsibleList(collapsibleBtn);
+				}
+				return;
+			}
 			const settingsBtn = e.target?.closest?.('[data-chat-server-settings]');
 			if (settingsBtn instanceof HTMLButtonElement) {
 				e.preventDefault();
@@ -552,6 +575,43 @@ class AppRouteServers extends HTMLElement {
 		}
 	}
 
+	/** Display name / handle for notes-to-self DM row before GET /api/chat/threads includes that thread. */
+	async _refreshChatViewerProfileMiniForRoster() {
+		if (this._chatViewerProfileMiniFetched) return;
+		const vid = this._chatViewerId;
+		if (vid == null || !Number.isFinite(Number(vid)) || Number(vid) <= 0) return;
+		this._chatViewerProfileMiniFetched = true;
+		try {
+			const result = await fetchJsonWithStatusDeduped(
+				'/api/profile',
+				{ credentials: 'include' },
+				{ windowMs: 2000 }
+			);
+			if (result.ok) {
+				const user = result.data;
+				if (user?.email) {
+					const prof = user?.profile && typeof user.profile === 'object' ? user.profile : {};
+					const display_name =
+						typeof prof.display_name === 'string' && prof.display_name.trim()
+							? prof.display_name.trim()
+							: null;
+					const user_name =
+						typeof prof.user_name === 'string' && prof.user_name.trim()
+							? prof.user_name.trim()
+							: null;
+					const avatar_url =
+						typeof prof.avatar_url === 'string' && prof.avatar_url.trim()
+							? prof.avatar_url.trim()
+							: null;
+					this._chatViewerProfileMini = { display_name, user_name, avatar_url };
+				}
+			}
+		} catch {
+			// ignore
+		}
+		this.renderConnectChatThreadList();
+	}
+
 	/** Presence is non-blocking: paint roster first, then refresh DM online dots. */
 	async _refreshPresenceAndRender() {
 		try {
@@ -580,6 +640,7 @@ class AppRouteServers extends HTMLElement {
 			this.updateConnectChatAdminToolsVisibility();
 			this.renderConnectChatThreadList();
 			void this._refreshPresenceAndRender();
+			void this._refreshChatViewerProfileMiniForRoster();
 		}
 
 		if (!needNetwork) {
@@ -597,6 +658,8 @@ class AppRouteServers extends HTMLElement {
 				if (result.status === 401) {
 					this._tearDownConnectChatUserBroadcast();
 					clearCachedChatThreads();
+					this._chatViewerProfileMini = null;
+					this._chatViewerProfileMiniFetched = false;
 					try {
 						clearConnectServersCache();
 					} catch {
@@ -636,6 +699,7 @@ class AppRouteServers extends HTMLElement {
 			}
 			this.renderConnectChatThreadList();
 			void this._refreshPresenceAndRender();
+			void this._refreshChatViewerProfileMiniForRoster();
 			void this._bindConnectChatUserBroadcast();
 		} catch (err) {
 			console.error('[Connect chat] load threads:', err);
@@ -689,16 +753,28 @@ class AppRouteServers extends HTMLElement {
 			const tag = serverChannelTagFromServerName(typeof s?.name === 'string' ? s.name : '');
 			if (tag) joinedSlugs.add(tag.toLowerCase());
 		}
-		const dms = merged.filter((t) => t && t.type === 'dm');
-		const channelRows = merged.filter((t) => t && t.type === 'channel');
-		const serverChannels = channelRows.filter((t) => {
+		const dmsRaw = merged.filter((t) => t && t.type === 'dm');
+		const dms =
+			typeof normalizeDmListWithSelfFirst === 'function'
+				? normalizeDmListWithSelfFirst(dmsRaw, this._chatViewerId, this._chatViewerProfileMini)
+				: dmsRaw;
+		const channelRowsRaw = merged.filter((t) => t && t.type === 'channel');
+		const serverChannelsRaw = channelRowsRaw.filter((t) => {
 			const slug = typeof t.channel_slug === 'string' ? t.channel_slug.trim().toLowerCase() : '';
 			return Boolean(slug && joinedSlugs.has(slug));
 		});
-		const otherChannels = channelRows.filter((t) => {
+		const otherChannelsRaw = channelRowsRaw.filter((t) => {
 			const slug = typeof t.channel_slug === 'string' ? t.channel_slug.trim().toLowerCase() : '';
 			return !slug || !joinedSlugs.has(slug);
 		});
+		const serverChannels =
+			typeof sortChannelRowsByLastActivity === 'function'
+				? sortChannelRowsByLastActivity(serverChannelsRaw)
+				: serverChannelsRaw;
+		const otherChannels =
+			typeof sortChannelRowsByLastActivity === 'function'
+				? sortChannelRowsByLastActivity(otherChannelsRaw)
+				: otherChannelsRaw;
 
 		const deps = { renderCommentAvatarHtml, getAvatarColor };
 		const onlineIds = this._presenceOnlineIds instanceof Set ? this._presenceOnlineIds : new Set();
@@ -718,10 +794,13 @@ class AppRouteServers extends HTMLElement {
 			const href = buildChatThreadUrl(t);
 			const title = typeof t.title === 'string' && t.title.trim() ? t.title.trim() : 'Chat';
 			const avatarHtml = buildChatThreadRowAvatarHtml(t, deps);
+			const selfDm =
+				typeof isSelfDmThread === 'function' && isSelfDmThread(t, this._chatViewerId);
 			let presenceClass = '';
 			if (t.type === 'dm') {
 				const oid = typeof getDmOtherUserId === 'function' ? getDmOtherUserId(t) : null;
-				const online = isDmConsideredOnlineWithGrace(oid, onlineIds, this._dmPresenceGraceMap);
+				const online =
+					selfDm || isDmConsideredOnlineWithGrace(oid, onlineIds, this._dmPresenceGraceMap);
 				presenceClass = online ? 'is-online' : 'is-offline';
 			}
 			const pc = presenceClass ? ` ${presenceClass}` : '';
@@ -731,11 +810,15 @@ class AppRouteServers extends HTMLElement {
 			const unreadHtml = showUnread
 				? `<span class="chat-page-sidebar-unread" aria-label="${unc} unread">${escapeHtml(unreadLabel)}</span>`
 				: '';
+			const youPill = selfDm
+				? '<span class="chat-page-sidebar-you-pill" aria-label="This is you">you</span>'
+				: '';
 			return `<a class="chat-page-sidebar-row${pc}" href="${escapeHtml(href)}">
 				${avatarHtml}
 				<div class="chat-page-sidebar-row-body">
 					<div class="chat-page-sidebar-row-title-line">
 						<span class="chat-page-sidebar-row-title">${escapeHtml(title)}</span>
+						${youPill}
 						${unreadHtml}
 					</div>
 				</div>
@@ -801,15 +884,32 @@ class AppRouteServers extends HTMLElement {
 			</div>`;
 		};
 
-		dmEl.innerHTML = dms.length
-			? dms.map(rowHtml).join('')
-			: '<p class="chat-page-sidebar-empty">No direct messages yet.</p>';
-		svEl.innerHTML = serverChannels.length
-			? serverChannels.map(serverRowHtml).join('')
-			: '<p class="chat-page-sidebar-empty">No servers joined yet.</p>';
-		chEl.innerHTML = otherChannels.length
-			? otherChannels.map(channelRowOrAdminWrap).join('')
-			: '<p class="chat-page-sidebar-empty">No channels yet.</p>';
+		dmEl.innerHTML =
+			typeof buildChatSidebarDmListHtml === 'function'
+				? buildChatSidebarDmListHtml(dms, rowHtml)
+				: dms.length
+					? dms.map(rowHtml).join('')
+					: '<p class="chat-page-sidebar-empty">No direct messages yet.</p>';
+		svEl.innerHTML =
+			typeof buildCollapsibleChatSidebarListHtml === 'function'
+				? buildCollapsibleChatSidebarListHtml(
+						serverChannels,
+						serverRowHtml,
+						'<p class="chat-page-sidebar-empty">No servers joined yet.</p>'
+					)
+				: serverChannels.length
+					? serverChannels.map(serverRowHtml).join('')
+					: '<p class="chat-page-sidebar-empty">No servers joined yet.</p>';
+		chEl.innerHTML =
+			typeof buildCollapsibleChatSidebarListHtml === 'function'
+				? buildCollapsibleChatSidebarListHtml(
+						otherChannels,
+						channelRowOrAdminWrap,
+						'<p class="chat-page-sidebar-empty">No channels yet.</p>'
+					)
+				: otherChannels.length
+					? otherChannels.map(channelRowOrAdminWrap).join('')
+					: '<p class="chat-page-sidebar-empty">No channels yet.</p>';
 
 		try {
 			document.dispatchEvent(new CustomEvent('chat-unread-refresh'));

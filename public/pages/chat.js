@@ -2092,6 +2092,36 @@ export async function initChatPage(root) {
 		}
 	}
 
+	/** For DM sidebar notes-to-self row (title + avatar when thread not created yet). */
+	async function fetchChatViewerProfileMini() {
+		try {
+			const result = await fetchJsonWithStatusDeduped(
+				'/api/profile',
+				{ credentials: 'include' },
+				{ windowMs: 2000 }
+			);
+			if (!result.ok) return null;
+			const user = result.data;
+			if (!user?.email) return null;
+			const prof = user?.profile && typeof user.profile === 'object' ? user.profile : {};
+			const display_name =
+				typeof prof.display_name === 'string' && prof.display_name.trim()
+					? prof.display_name.trim()
+					: null;
+			const user_name =
+				typeof prof.user_name === 'string' && prof.user_name.trim()
+					? prof.user_name.trim()
+					: null;
+			const avatar_url =
+				typeof prof.avatar_url === 'string' && prof.avatar_url.trim()
+					? prof.avatar_url.trim()
+					: null;
+			return { display_name, user_name, avatar_url };
+		} catch {
+			return null;
+		}
+	}
+
 	/** Desktop sidebar footer: current user; opens same menu as header profile (open-profile). */
 	async function syncChatSidebarViewerRow() {
 		const sidebar = document.querySelector('[data-chat-sidebar]');
@@ -2176,7 +2206,7 @@ export async function initChatPage(root) {
 		 * Same roster as Connect: merge threads + joined-server channel stubs, then split into
 		 * sections for layout only (DMs / server-linked channels / other channels).
 		 */
-		const render = (threads, joined, onlineIds) => {
+		const render = (threads, joined, onlineIds, viewerProfile) => {
 			const threadsArr = Array.isArray(threads) ? threads : [];
 			const joinedArr = Array.isArray(joined) ? joined : [];
 			const merged = rosterMod.appendReservedPseudoChannels(
@@ -2190,18 +2220,21 @@ export async function initChatPage(root) {
 				);
 				if (tag) joinedSlugs.add(tag.toLowerCase());
 			}
-			const dms = merged.filter((t) => t && t.type === 'dm');
-			const channelRows = merged.filter((t) => t && t.type === 'channel');
-			const serverChannels = channelRows.filter((t) => {
+			const dmsRaw = merged.filter((t) => t && t.type === 'dm');
+			const dms = rosterMod.normalizeDmListWithSelfFirst(dmsRaw, chatViewerId, viewerProfile);
+			const channelRowsRaw = merged.filter((t) => t && t.type === 'channel');
+			const serverChannelsRaw = channelRowsRaw.filter((t) => {
 				const slug =
 					typeof t.channel_slug === 'string' ? t.channel_slug.trim().toLowerCase() : '';
 				return Boolean(slug && joinedSlugs.has(slug));
 			});
-			const otherChannels = channelRows.filter((t) => {
+			const otherChannelsRaw = channelRowsRaw.filter((t) => {
 				const slug =
 					typeof t.channel_slug === 'string' ? t.channel_slug.trim().toLowerCase() : '';
 				return !slug || !joinedSlugs.has(slug);
 			});
+			const serverChannels = rosterMod.sortChannelRowsByLastActivity(serverChannelsRaw);
+			const otherChannels = rosterMod.sortChannelRowsByLastActivity(otherChannelsRaw);
 
 			function joinedServerMetaForSlug(slug) {
 				const key = String(slug || '').trim().toLowerCase();
@@ -2220,10 +2253,12 @@ export async function initChatPage(root) {
 				const active = isChatHrefActive(href);
 				const title = typeof t.title === 'string' && t.title.trim() ? t.title.trim() : 'Chat';
 				const avatarHtml = rosterMod.buildChatThreadRowAvatarHtml(t, deps);
+				const selfDm = rosterMod.isSelfDmThread(t, chatViewerId);
 				let presenceClass = '';
 				if (t.type === 'dm') {
 					const oid = rosterMod.getDmOtherUserId(t);
-					const online = isDmConsideredOnlineWithGrace(oid, onlineIds);
+					const online =
+						selfDm || isDmConsideredOnlineWithGrace(oid, onlineIds);
 					presenceClass = online ? 'is-online' : 'is-offline';
 				}
 				const activeClass = active ? ' is-active' : '';
@@ -2235,11 +2270,15 @@ export async function initChatPage(root) {
 				const unreadHtml = showUnread
 					? `<span class="chat-page-sidebar-unread" aria-label="${unc} unread">${escapeHtml(unreadLabel)}</span>`
 					: '';
+				const youPill = selfDm
+					? '<span class="chat-page-sidebar-you-pill" aria-label="This is you">you</span>'
+					: '';
 				return `<a class="chat-page-sidebar-row${activeClass}${pc}" href="${escapeHtml(href)}">
 					${avatarHtml}
 					<div class="chat-page-sidebar-row-body">
 						<div class="chat-page-sidebar-row-title-line">
 							<span class="chat-page-sidebar-row-title">${escapeHtml(title)}</span>
+							${youPill}
 							${unreadHtml}
 						</div>
 					</div>
@@ -2280,22 +2319,24 @@ export async function initChatPage(root) {
 				</div>`;
 			}
 
-			dmEl.innerHTML = dms.length
-				? dms.map(rowHtml).join('')
-				: '<p class="chat-page-sidebar-empty">No direct messages yet.</p>';
-			svEl.innerHTML = serverChannels.length
-				? serverChannels.map(serverRowHtml).join('')
-				: '<p class="chat-page-sidebar-empty">No servers joined yet.</p>';
-			chEl.innerHTML = otherChannels.length
-				? otherChannels.map(rowHtml).join('')
-				: '<p class="chat-page-sidebar-empty">No channels yet.</p>';
+			dmEl.innerHTML = rosterMod.buildChatSidebarDmListHtml(dms, rowHtml);
+			svEl.innerHTML = rosterMod.buildCollapsibleChatSidebarListHtml(
+				serverChannels,
+				serverRowHtml,
+				'<p class="chat-page-sidebar-empty">No servers joined yet.</p>'
+			);
+			chEl.innerHTML = rosterMod.buildCollapsibleChatSidebarListHtml(
+				otherChannels,
+				rowHtml,
+				'<p class="chat-page-sidebar-empty">No channels yet.</p>'
+			);
 		};
 
 		/** Keep `.chat-page-sidebar-scroll` position stable when DMs / servers / channels lists re-render. */
-		function runRender(threads, joined, onlineIds) {
+		function runRender(threads, joined, onlineIds, viewerProfile) {
 			const scrollEl = sidebar.querySelector('.chat-page-sidebar-scroll');
 			const prevTop = scrollEl ? scrollEl.scrollTop : 0;
-			render(threads, joined, onlineIds);
+			render(threads, joined, onlineIds, viewerProfile);
 			if (!scrollEl) return;
 			requestAnimationFrame(() => {
 				scrollEl.scrollTop = prevTop;
@@ -2308,22 +2349,24 @@ export async function initChatPage(root) {
 		// broken. DMs don’t move because they never use `joinedSlugs`. One paint after awaits.
 
 		if (skipThreads) {
-			const [joined, onlineIds] = await Promise.all([
+			const [joined, onlineIds, viewerProfile] = await Promise.all([
 				fetchJoinedServersForChat(),
-				fetchPresenceOnlineIds()
+				fetchPresenceOnlineIds(),
+				fetchChatViewerProfileMini()
 			]);
-			runRender(chatThreads || [], joined, onlineIds);
+			runRender(chatThreads || [], joined, onlineIds, viewerProfile);
 			await syncChatSidebarViewerRow();
 			return;
 		}
 
 		try {
-			const [_, joined, onlineIds] = await Promise.all([
+			const [_, joined, onlineIds, viewerProfile] = await Promise.all([
 				loadChatThreads({ allowCache: true, forceNetwork: true }),
 				fetchJoinedServersForChat(),
-				fetchPresenceOnlineIds()
+				fetchPresenceOnlineIds(),
+				fetchChatViewerProfileMini()
 			]);
-			runRender(chatThreads || [], joined, onlineIds);
+			runRender(chatThreads || [], joined, onlineIds, viewerProfile);
 			dispatchChatUnreadRefresh();
 		} catch {
 			// If network fails, keep cached render.
@@ -2336,6 +2379,13 @@ export async function initChatPage(root) {
 		if (!sidebar) return;
 
 		chatSidebarNavClickHandler = (e) => {
+			const collapsibleBtn = e.target?.closest?.('[data-chat-collapsible]');
+			if (collapsibleBtn instanceof HTMLButtonElement) {
+				e.preventDefault();
+				e.stopPropagation();
+				rosterMod.toggleChatSidebarCollapsibleList(collapsibleBtn);
+				return;
+			}
 			const profileBtn = e.target?.closest?.('[data-chat-sidebar-open-profile]');
 			if (profileBtn instanceof HTMLButtonElement) {
 				e.preventDefault();
