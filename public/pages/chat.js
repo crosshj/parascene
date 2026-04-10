@@ -357,7 +357,6 @@ export async function initChatPage(root) {
 	const qs = getImportQuery(v);
 	const {
 		sendIcon,
-		plusIcon,
 		REACTION_ORDER,
 		REACTION_ICONS,
 		smileIcon,
@@ -390,11 +389,6 @@ export async function initChatPage(root) {
 	if (sendBtnMount) {
 		sendBtnMount.innerHTML = sendIcon('chat-page-send-icon');
 	}
-	const attachInlineMount = root.querySelector('[data-chat-add-image-inline]');
-	if (attachInlineMount) {
-		attachInlineMount.innerHTML = plusIcon('chat-page-composer-attach-inline-icon');
-	}
-
 	const docTitleBase = typeof document !== 'undefined' ? document.title : 'parascene';
 	let chatViewerId = null;
 	/** Set from GET /api/chat/threads (`viewer_is_admin`) or threads cache. */
@@ -1013,6 +1007,17 @@ export async function initChatPage(root) {
 		sendBtn.disabled = uploading || sendInFlight;
 	}
 
+	/** No "Message…" until thread is known and messages are not loading (avoids placeholder vs attach layout churn). */
+	function syncChatMessagePlaceholder() {
+		const bodyInput = root.querySelector('[data-chat-body-input]');
+		if (!(bodyInput instanceof HTMLTextAreaElement)) return;
+		if (activePseudoChannelSlug) return;
+		if (bodyInput.hidden || bodyInput.disabled) return;
+		const tid = activeThreadId;
+		const hasThread = tid != null && Number.isFinite(Number(tid)) && Number(tid) > 0;
+		bodyInput.placeholder = hasThread && !loadingMessages ? 'Message…' : '';
+	}
+
 	function applyComposerState() {
 		const bodyInput = root.querySelector('[data-chat-body-input]');
 		const hint = root.querySelector('[data-chat-pseudo-composer-hint]');
@@ -1046,7 +1051,6 @@ export async function initChatPage(root) {
 				bodyInput.value = '';
 			} else {
 				bodyInput.disabled = false;
-				bodyInput.placeholder = 'Message…';
 			}
 			if (composerForm instanceof HTMLFormElement) {
 				composerForm.setAttribute('aria-label', 'Send a message');
@@ -1054,6 +1058,7 @@ export async function initChatPage(root) {
 		}
 		syncChatAttachmentsVisibility();
 		syncChatSendButton();
+		syncChatMessagePlaceholder();
 	}
 
 	function findOptimisticRow(messagesEl, tempId) {
@@ -1895,6 +1900,8 @@ export async function initChatPage(root) {
 			video.className = 'chat-inline-image-lightbox-video';
 			video.controls = true;
 			video.playsInline = true;
+			video.loop = true;
+			video.setAttribute('loop', '');
 			video.preload = 'metadata';
 			video.src = url;
 			shell.appendChild(bar);
@@ -2863,6 +2870,7 @@ export async function initChatPage(root) {
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!messagesEl || loadingMessages) return;
 		loadingMessages = true;
+		syncChatMessagePlaceholder();
 		teardownCommentsChannelLoadMore();
 		messagesEl.setAttribute('aria-busy', 'true');
 		try {
@@ -2899,6 +2907,7 @@ export async function initChatPage(root) {
 		} finally {
 			messagesEl.removeAttribute('aria-busy');
 			loadingMessages = false;
+			syncChatMessagePlaceholder();
 		}
 	}
 
@@ -2911,6 +2920,7 @@ export async function initChatPage(root) {
 			lastMarkReadSentId = null;
 		}
 		loadingMessages = true;
+		syncChatMessagePlaceholder();
 		messagesEl.setAttribute('aria-busy', 'true');
 		const prevVideoStates = captureChatVideoPlaybackStates(messagesEl);
 
@@ -3003,6 +3013,7 @@ export async function initChatPage(root) {
 		} finally {
 			messagesEl.removeAttribute('aria-busy');
 			loadingMessages = false;
+			syncChatMessagePlaceholder();
 		}
 	}
 
@@ -3469,6 +3480,10 @@ export async function initChatPage(root) {
 		if (errEl instanceof HTMLElement) {
 			errEl.hidden = true;
 			errEl.textContent = '';
+		}
+		const bodyInputRoute = root.querySelector('[data-chat-body-input]');
+		if (bodyInputRoute instanceof HTMLTextAreaElement) {
+			bodyInputRoute.placeholder = '';
 		}
 
 		try {

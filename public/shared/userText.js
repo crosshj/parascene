@@ -310,7 +310,7 @@ function renderInlineGenericVideo(relativePath, originalUrl) {
 		`</div>` +
 		`<a class="connect-chat-creation-embed-detail-link connect-chat-creation-embed-detail-link--hover-bar user-link creation-link" href="${rp}" target="_blank" rel="noopener noreferrer" aria-label="Open video" title="Open video" data-creation-link-original="${original}">${linkIcon2()}</a>` +
 		`</div>` +
-		`<video class="connect-chat-creation-embed-video" playsinline preload="metadata" src="${rp}" aria-label="Attached video" data-inline-click-controls="1"></video>` +
+		`<video class="connect-chat-creation-embed-video" playsinline loop preload="metadata" src="${rp}" aria-label="Attached video" data-inline-click-controls="1"></video>` +
 		`</div></div></span>`
 	);
 }

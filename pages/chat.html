@@ -117,10 +117,20 @@
 								<input type="file" multiple class="chat-page-composer-file-input"
 									data-chat-file-input hidden />
 								<div class="chat-page-composer-input-row">
-									<button type="button" class="chat-page-composer-attach-inline" data-chat-add-image-inline
-										aria-label="Add files"></button>
+									<div class="chat-page-composer-attach-slot">
+										<button type="button" class="chat-page-composer-attach-inline" data-chat-add-image-inline
+											aria-label="Add files">
+											<svg class="chat-page-composer-attach-inline-icon"
+												xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+												stroke="currentColor" stroke-width="2" stroke-linecap="round"
+												stroke-linejoin="round" aria-hidden="true">
+												<line x1="12" y1="5" x2="12" y2="19" />
+												<line x1="5" y1="12" x2="19" y2="12" />
+											</svg>
+										</button>
+									</div>
 									<textarea class="connect-chat-composer-input chat-page-composer-input" name="body"
-										rows="1" maxlength="4000" placeholder="Message…" data-chat-body-input
+										rows="1" maxlength="4000" data-chat-body-input
 										aria-label="Message text"></textarea>
 									<button type="button" class="chat-page-send-btn" data-chat-send hidden
 										aria-label="Send"></button>
