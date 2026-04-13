@@ -1,10 +1,43 @@
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import { getCanonicalUrlForRequest } from "./url.js";
 
 const html = String.raw;
 
-/** Cache-bust: BUILD_ID, ASSET_VERSION, or Vercel git SHA. Used so {{V}} in HTML becomes ?v=xxx. */
+const _projectRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+let _packageJsonVersionCache;
+
+function getPackageVersionFallback() {
+	if (_packageJsonVersionCache !== undefined) return _packageJsonVersionCache;
+	try {
+		const raw = fs.readFileSync(path.join(_projectRoot, "package.json"), "utf8");
+		_packageJsonVersionCache = JSON.parse(raw)?.version || "0";
+	} catch {
+		_packageJsonVersionCache = "0";
+	}
+	return _packageJsonVersionCache;
+}
+
+/**
+ * Cache-bust id for {{V}} / asset-version / dynamic import ?v=.
+ * Prefer CI/Vercel env; otherwise mtime of public/global.css (works for local dev);
+ * if that file is missing (some serverless layouts), fall back to package.json version.
+ */
 function getAssetVersion() {
-	return process.env.BUILD_ID || process.env.ASSET_VERSION || process.env.VERCEL_GIT_COMMIT_SHA || process.env.VERCEL_GIT_PREVIOUS_COMMIT_SHA || "";
+	const env =
+		process.env.BUILD_ID ||
+		process.env.ASSET_VERSION ||
+		process.env.VERCEL_GIT_COMMIT_SHA ||
+		process.env.VERCEL_GIT_PREVIOUS_COMMIT_SHA;
+	if (env) return env;
+	try {
+		const cssPath = path.join(_projectRoot, "public", "global.css");
+		const st = fs.statSync(cssPath);
+		return String(Math.floor(st.mtimeMs));
+	} catch {
+		return getPackageVersionFallback();
+	}
 }
 
 function escapeHtmlUrl(url) {
@@ -16,7 +49,7 @@ function escapeHtmlUrl(url) {
 }
 
 /** Tokens for replacePageTokens.
- * - V: "?v=xxx" when asset version is set, else "".
+ * - V: "?v=xxx" (version is always set after env/fs fallback in getAssetVersion).
  * - V_PARAM: raw version for JS cache-busting.
  * - PAGE_META_DESCRIPTION: meta description content for the page (defaults to site-wide description).
  * - Optional req: when provided, includes CANONICAL_LINK and OG_URL_TAG (canonical www) for the request.
