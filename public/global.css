@@ -4048,6 +4048,77 @@ body.chat-page main.chat-page-outer {
 	display: none;
 }
 
+/* Show more / Show less — must apply below 1024px too: Connect inbox uses this markup inside
+   .servers-route on mobile; desktop chat had these rules only inside the ≥1024px sidebar block. */
+.chat-page-sidebar-collapsible {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+	width: 100%;
+}
+
+.chat-page-sidebar-collapsible.is-expanded .chat-page-sidebar-collapsible-expander-wrap--more {
+	display: none;
+}
+
+.chat-page-sidebar-collapsible-visible,
+.chat-page-sidebar-collapsible-rest {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+}
+
+.chat-page-sidebar-collapsible-expander-wrap {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 10px;
+	width: 100%;
+	margin: 4px 0 2px;
+	padding: 0 2px;
+	box-sizing: border-box;
+}
+
+.chat-page-sidebar-collapsible-expander-wrap::before,
+.chat-page-sidebar-collapsible-expander-wrap::after {
+	content: '';
+	flex: 1 1 0;
+	min-width: 0;
+	height: 1px;
+	background: color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.chat-page-sidebar-collapsible-expander {
+	-webkit-appearance: none;
+	appearance: none;
+	flex-shrink: 0;
+	margin: 0;
+	padding: 3px 6px;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	font: inherit;
+	font-size: 0.6875rem;
+	line-height: 1.25;
+	font-weight: 500;
+	color: color-mix(in srgb, var(--text-muted) 88%, var(--text));
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
+	transition:
+		color 0.12s ease,
+		background-color 0.12s ease;
+}
+
+.chat-page-sidebar-collapsible-expander:hover {
+	color: color-mix(in srgb, var(--text-muted) 65%, var(--text));
+	background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+.chat-page-sidebar-collapsible-expander:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 1px;
+}
+
 @media (min-width: 1024px) {
 	/* Full-bleed row: sidebar docks to the viewport left; do not wrap both columns in a centered max-width box. */
 	body.chat-page main.chat-page-outer {
@@ -4669,72 +4740,6 @@ body.chat-page main.chat-page-outer {
 		flex-direction: column;
 		gap: 0;
 		padding: 0 4px;
-	}
-
-	.chat-page-sidebar-collapsible {
-		display: flex;
-		flex-direction: column;
-		gap: 0;
-		width: 100%;
-	}
-
-	.chat-page-sidebar-collapsible.is-expanded .chat-page-sidebar-collapsible-expander-wrap--more {
-		display: none;
-	}
-
-	.chat-page-sidebar-collapsible-visible,
-	.chat-page-sidebar-collapsible-rest {
-		display: flex;
-		flex-direction: column;
-		gap: 0;
-	}
-
-	.chat-page-sidebar-collapsible-expander-wrap {
-		display: flex;
-		flex-direction: row;
-		align-items: center;
-		gap: 10px;
-		width: 100%;
-		margin: 4px 0 2px;
-		padding: 0 2px;
-		box-sizing: border-box;
-	}
-
-	.chat-page-sidebar-collapsible-expander-wrap::before,
-	.chat-page-sidebar-collapsible-expander-wrap::after {
-		content: '';
-		flex: 1 1 0;
-		min-width: 0;
-		height: 1px;
-		background: color-mix(in srgb, var(--border) 55%, transparent);
-	}
-
-	.chat-page-sidebar-collapsible-expander {
-		flex-shrink: 0;
-		margin: 0;
-		padding: 3px 6px;
-		border: none;
-		border-radius: 6px;
-		background: transparent;
-		font-size: 0.6875rem;
-		line-height: 1.25;
-		font-weight: 500;
-		color: color-mix(in srgb, var(--text-muted) 88%, var(--text));
-		cursor: pointer;
-		-webkit-tap-highlight-color: transparent;
-		transition:
-			color 0.12s ease,
-			background-color 0.12s ease;
-	}
-
-	.chat-page-sidebar-collapsible-expander:hover {
-		color: color-mix(in srgb, var(--text-muted) 65%, var(--text));
-		background: color-mix(in srgb, var(--text) 5%, transparent);
-	}
-
-	.chat-page-sidebar-collapsible-expander:focus-visible {
-		outline: 2px solid var(--focus);
-		outline-offset: 1px;
 	}
 
 	.chat-page-sidebar-row {
