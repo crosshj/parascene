@@ -4048,8 +4048,7 @@ body.chat-page main.chat-page-outer {
 	display: none;
 }
 
-/* Show more / Show less — must apply below 1024px too: Connect inbox uses this markup inside
-   .servers-route on mobile; desktop chat had these rules only inside the ≥1024px sidebar block. */
+/* Show more / Show less — all viewports (Connect mobile was outside the ≥1024px chat-sidebar block). */
 .chat-page-sidebar-collapsible {
 	display: flex;
 	flex-direction: column;
@@ -4103,15 +4102,25 @@ body.chat-page main.chat-page-outer {
 	font-weight: 500;
 	color: color-mix(in srgb, var(--text-muted) 88%, var(--text));
 	cursor: pointer;
+	text-align: center;
+	user-select: none;
 	-webkit-tap-highlight-color: transparent;
+	touch-action: manipulation;
 	transition:
 		color 0.12s ease,
 		background-color 0.12s ease;
 }
 
-.chat-page-sidebar-collapsible-expander:hover {
+@media (hover: hover) and (pointer: fine) {
+	.chat-page-sidebar-collapsible-expander:hover {
+		color: color-mix(in srgb, var(--text-muted) 65%, var(--text));
+		background: color-mix(in srgb, var(--text) 5%, transparent);
+	}
+}
+
+.chat-page-sidebar-collapsible-expander:active {
 	color: color-mix(in srgb, var(--text-muted) 65%, var(--text));
-	background: color-mix(in srgb, var(--text) 5%, transparent);
+	background: color-mix(in srgb, var(--text) 7%, transparent);
 }
 
 .chat-page-sidebar-collapsible-expander:focus-visible {
