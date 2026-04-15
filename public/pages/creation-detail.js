@@ -184,95 +184,95 @@ Mutate`,
 			inKebabMenu: false,
 			inner: html`<span class="creation-detail-action-strip-pill-icon">${shareIcon('')}</span>
 Share`,
-		show: (c) => c?.showShare,
-		disabled: (c) => !c?.showShare
-	},
-	{
-		key: 'edit',
-		dataAttr: 'data-edit-btn',
-		btnClass: 'btn-outlined',
-		inKebabMenu: false,
-		inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 6px; vertical-align: middle;">
+			show: (c) => c?.showShare,
+			disabled: (c) => !c?.showShare
+		},
+		{
+			key: 'edit',
+			dataAttr: 'data-edit-btn',
+			btnClass: 'btn-outlined',
+			inKebabMenu: false,
+			inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 6px; vertical-align: middle;">
 	<path d="M11.5 2.5L13.5 4.5L5.5 12.5H3.5V10.5L11.5 2.5Z" stroke="currentColor" stroke-width="1.5"
 		stroke-linecap="round" stroke-linejoin="round" fill="none" />
 </svg>
 Edit`,
-		show: (c) => c?.showEdit,
-		disabled: (c) => !c?.showEdit
-	},
-	{
-		key: 'unpublish',
-		dataAttr: 'data-unpublish-btn',
-		btnClass: 'btn-outlined',
-		inKebabMenu: true,
-		inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 6px; vertical-align: middle;">
+			show: (c) => c?.showEdit,
+			disabled: (c) => !c?.showEdit
+		},
+		{
+			key: 'unpublish',
+			dataAttr: 'data-unpublish-btn',
+			btnClass: 'btn-outlined',
+			inKebabMenu: true,
+			inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 6px; vertical-align: middle;">
 	<path d="M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
 		stroke-linejoin="round" fill="none" />
 </svg>
 Un-publish`,
-		show: (c) => c?.showUnpublish,
-		disabled: (c) => !c?.showUnpublish
-	},
-	{
-		key: 'retry',
-		dataAttr: 'data-retry-btn',
-		btnClass: 'btn-outlined',
-		inKebabMenu: false,
-		inner: html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="margin-right: 6px; vertical-align: middle;">
+			show: (c) => c?.showUnpublish,
+			disabled: (c) => !c?.showUnpublish
+		},
+		{
+			key: 'retry',
+			dataAttr: 'data-retry-btn',
+			btnClass: 'btn-outlined',
+			inKebabMenu: false,
+			inner: html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="margin-right: 6px; vertical-align: middle;">
 	<path d="M3 12a9 9 0 1 0 3-6.708" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
 		stroke-linejoin="round" />
 	<polyline points="3 4 3 10 9 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
 		stroke-linejoin="round" />
 </svg>
 Retry`,
-		show: (c) => c?.showRetry,
-		disabled: (c) => !c?.showRetry
-	},
-	{
-		key: 'more-info',
-		dataAttr: 'data-more-info-btn',
-		btnClass: 'btn-outlined',
-		inKebabMenu: false,
-		inner: html`<span class="creation-detail-action-strip-pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+			show: (c) => c?.showRetry,
+			disabled: (c) => !c?.showRetry
+		},
+		{
+			key: 'more-info',
+			dataAttr: 'data-more-info-btn',
+			btnClass: 'btn-outlined',
+			inKebabMenu: false,
+			inner: html`<span class="creation-detail-action-strip-pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 		stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 		<circle cx="12" cy="12" r="10"></circle>
 		<path d="M12 8v8"></path>
 		<path d="M12 6h.01"></path>
 	</svg></span>
 More Info`,
-		show: (c) => c?.showMoreInfoPill,
-		disabled: () => false
-	},
-	{
-		key: 'delete',
-		dataAttr: 'data-delete-btn',
-		btnClass: 'btn-outlined btn-danger-outlined',
-		inKebabMenu: true,
-		inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 6px; vertical-align: middle;">
+			show: (c) => c?.showMoreInfoPill,
+			disabled: () => false
+		},
+		{
+			key: 'delete',
+			dataAttr: 'data-delete-btn',
+			btnClass: 'btn-outlined btn-danger-outlined',
+			inKebabMenu: true,
+			inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 6px; vertical-align: middle;">
 	<path
 		d="M2 4H14M12.5 4V13.5C12.5 14.3284 11.8284 15 11 15H5C4.17157 15 3.5 14.3284 3.5 13.5V4M5.5 4V2.5C5.5 1.67157 6.17157 1 7 1H9C9.82843 1 10.5 1.67157 10.5 2.5V4M6.5 7.5V11.5M9.5 7.5V11.5"
 		stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
 </svg>`,
-		show: (c) => c?.showDelete,
-		disabled: (c) => c?.deleteDisabled !== false,
-		extraAttrs: (c) => c?.deletePermanent ? ' data-permanent-delete="1"' : '',
-		label: (c) => (c?.deleteLabel ?? ' Delete')
-	},
-	{
-		key: 'permanent-delete',
-		dataAttr: 'data-delete-btn',
-		btnClass: 'btn-outlined btn-danger-outlined',
-		inKebabMenu: false,
-		inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 6px; vertical-align: middle;">
+			show: (c) => c?.showDelete,
+			disabled: (c) => c?.deleteDisabled !== false,
+			extraAttrs: (c) => c?.deletePermanent ? ' data-permanent-delete="1"' : '',
+			label: (c) => (c?.deleteLabel ?? ' Delete')
+		},
+		{
+			key: 'permanent-delete',
+			dataAttr: 'data-delete-btn',
+			btnClass: 'btn-outlined btn-danger-outlined',
+			inKebabMenu: false,
+			inner: html`<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 6px; vertical-align: middle;">
 	<path
 		d="M2 4H14M12.5 4V13.5C12.5 14.3284 11.8284 15 11 15H5C4.17157 15 3.5 14.3284 3.5 13.5V4M5.5 4V2.5C5.5 1.67157 6.17157 1 7 1H9C9.82843 1 10.5 1.67157 10.5 2.5V4M6.5 7.5V11.5M9.5 7.5V11.5"
 		stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
 </svg>`,
-		show: (c) => c?.deletePermanent,
-		disabled: () => false,
-		extraAttrs: () => ' data-permanent-delete="1"',
-		label: () => ' Permanently delete'
-	}
+			show: (c) => c?.deletePermanent,
+			disabled: () => false,
+			extraAttrs: () => ' data-permanent-delete="1"',
+			label: () => ' Permanently delete'
+		}
 	];
 }
 
@@ -285,7 +285,7 @@ const STRIP_SEGMENT_DEFS = [
 		show: () => true,
 		render: (d, escapeFn) => d.creatorProfileHref
 			? html`<a class="creation-detail-action-strip-avatar" href="${d.creatorProfileHref}"
-				aria-label="View ${escapeFn(d.creatorName)} profile">${d.authorAvatar}</a>`
+	aria-label="View ${escapeFn(d.creatorName)} profile">${d.authorAvatar}</a>`
 			: html`<div class="creation-detail-action-strip-avatar" aria-hidden="true">${d.authorAvatar}</div>`
 	},
 	{
@@ -308,7 +308,8 @@ const STRIP_SEGMENT_DEFS = [
 		key: 'like',
 		show: (d) => d.hasEngagementActions && !d.shareMountedPrivate && !d.isAdmin,
 		render: (d) => html`
-					<button type="button" class="creation-detail-action-strip-pill${d.creationWithLikes?.viewer_liked ? ' is-liked' : ''}" aria-label="Like" aria-pressed="${d.creationWithLikes?.viewer_liked ? 'true' : 'false'}" data-like-button>
+					<button type="button" class="creation-detail-action-strip-pill${d.creationWithLikes?.viewer_liked ? ' is-liked' : ''}"
+						aria-label="Like" aria-pressed="${d.creationWithLikes?.viewer_liked ? 'true' : 'false'}" data-like-button>
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
 							stroke-linejoin="round" aria-hidden="true">
 							<path
@@ -327,8 +328,7 @@ const STRIP_SEGMENT_DEFS = [
 		key: 'tip',
 		show: (d) => !d.isOwner && !d.isAdmin,
 		render: () => html`
-					<button type="button" class="creation-detail-action-strip-pill" data-tip-creator-button
-						aria-label="Tip">
+					<button type="button" class="creation-detail-action-strip-pill" data-tip-creator-button aria-label="Tip">
 						<span class="creation-detail-action-strip-pill-icon">${creditIcon('')}</span>
 						<span>Tip</span>
 					</button>`
@@ -366,71 +366,71 @@ const MORE_MENU_ITEM_DEFS = [
 		action: 'copy-link',
 		show: () => true,
 		icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
-						stroke-linejoin="round" aria-hidden="true">
-						<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-						<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-					</svg>`,
+	stroke-linejoin="round" aria-hidden="true">
+	<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+	<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+</svg>`,
 		label: 'Copy link'
 	},
 	{
 		action: 'queue-for-later',
 		show: (d) => d.actionsContext?.showQueueForLater,
 		icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
-						stroke-linejoin="round" aria-hidden="true">
-						<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-						<line x1="16" y1="2" x2="16" y2="6"></line>
-						<line x1="8" y1="2" x2="8" y2="6"></line>
-						<line x1="3" y1="10" x2="21" y2="10"></line>
-					</svg>`,
+	stroke-linejoin="round" aria-hidden="true">
+	<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+	<line x1="16" y1="2" x2="16" y2="6"></line>
+	<line x1="8" y1="2" x2="8" y2="6"></line>
+	<line x1="3" y1="10" x2="21" y2="10"></line>
+</svg>`,
 		label: (d) => (d.actionsContext?.queueForLaterLabel ?? 'Queue for later')
 	},
 	{
 		action: 'set-avatar',
 		show: (d) => d.isOwner,
 		icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
-						stroke-linejoin="round" aria-hidden="true">
-						<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-						<circle cx="12" cy="7" r="4"></circle>
-					</svg>`,
+	stroke-linejoin="round" aria-hidden="true">
+	<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+	<circle cx="12" cy="7" r="4"></circle>
+</svg>`,
 		label: 'Set as profile picture'
 	},
 	{
 		action: 'landscape',
 		show: (d) => d.isOwner && !d.isAdmin,
 		icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
-						stroke-linejoin="round" aria-hidden="true">
-						<rect x="2" y="6" width="20" height="12" rx="1.5" /></svg>`,
+	stroke-linejoin="round" aria-hidden="true">
+	<rect x="2" y="6" width="20" height="12" rx="1.5" /></svg>`,
 		label: 'Landscape'
 	},
 	{
 		action: 'more-info',
 		show: (d) => d.hasDetailsModalContent,
 		icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
-						stroke-linejoin="round" aria-hidden="true">
-						<circle cx="12" cy="12" r="10"></circle>
-						<path d="M12 8v8"></path>
-						<path d="M12 6h.01"></path>
-					</svg>`,
+	stroke-linejoin="round" aria-hidden="true">
+	<circle cx="12" cy="12" r="10"></circle>
+	<path d="M12 8v8"></path>
+	<path d="M12 6h.01"></path>
+</svg>`,
 		label: 'More Info'
 	},
 	{
 		action: 'unpublish',
 		show: (d) => d.actionsContext?.showUnpublish,
 		icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
-						stroke-linejoin="round" aria-hidden="true">
-						<path d="M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z"></path>
-					</svg>`,
+	stroke-linejoin="round" aria-hidden="true">
+	<path d="M1.5 8L14.5 1.5L10.5 14.5L8 9L1.5 8Z"></path>
+</svg>`,
 		label: 'Un-publish'
 	},
 	{
 		action: 'delete',
 		show: (d) => d.actionsContext?.showDelete && !d.actionsContext?.deletePermanent,
 		icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
-						stroke-linejoin="round" aria-hidden="true">
-						<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-						<line x1="10" y1="11" x2="10" y2="17"></line>
-						<line x1="14" y1="11" x2="14" y2="17"></line>
-					</svg>`,
+	stroke-linejoin="round" aria-hidden="true">
+	<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+	<line x1="10" y1="11" x2="10" y2="17"></line>
+	<line x1="14" y1="11" x2="14" y2="17"></line>
+</svg>`,
 		label: (d) => (typeof d.actionsContext?.deleteLabel === 'string' ? d.actionsContext.deleteLabel.trim() : 'Delete'),
 		danger: true
 	}
@@ -450,9 +450,9 @@ function renderCreationDetailMoreMenu(menuData, escapeFn) {
 			? html`<span data-queue-for-later-label>${escapeFn(label)}</span>`
 			: html`<span>${escapeFn(label)}</span>`;
 		return html`<button type="button" class="${itemClass}" role="menuitem" data-creation-more-action="${def.action}">
-					${def.icon}
-					${labelHtml}
-				</button>`;
+	${def.icon}
+	${labelHtml}
+</button>`;
 	});
 	return html`
 <div class="creation-detail-more-menu" data-creation-more-menu aria-hidden="true" role="menu">
@@ -1095,6 +1095,8 @@ async function loadCreation() {
 			}
 		}
 
+		const lineageFetchInit = { credentials: 'include', headers: { ...headers } };
+
 		const response = await fetch(`/api/create/images/${creationId}`, {
 			credentials: 'include',
 			headers
@@ -1126,6 +1128,8 @@ async function loadCreation() {
 		const childrenPromise = fetch(`/api/create/images/${creationId}/children`, { credentials: 'include' })
 			.then((r) => (r.ok ? r.json() : []))
 			.catch(() => []);
+
+		const lineageOfQuerySuffix = `?lineage_of=${encodeURIComponent(String(creationId))}`;
 
 		const status = creation.status || 'completed';
 		const meta = creation.meta || null;
@@ -1311,9 +1315,9 @@ async function loadCreation() {
 				const o = JSON.parse(argsPrompt);
 				return Boolean(
 					o &&
-						typeof o === 'object' &&
-						!Array.isArray(o) &&
-						(o.cast != null || typeof o.prompt === 'string')
+					typeof o === 'object' &&
+					!Array.isArray(o) &&
+					(o.cast != null || typeof o.prompt === 'string')
 				);
 			} catch {
 				return false;
@@ -1329,18 +1333,6 @@ async function loadCreation() {
 			if (!t) return '';
 			if (isHydratedProviderPromptJson(t)) return '';
 			return t;
-		}
-
-		async function fetchCreationThumbUrl(id) {
-			try {
-				const res = await fetch(`/api/create/images/${id}`, { credentials: 'include' });
-				if (!res.ok) return null;
-				const c = await res.json().catch(() => null);
-				const thumb = c?.thumbnail_url || c?.url || null;
-				return (typeof thumb === 'string' && thumb.trim()) ? thumb.trim() : null;
-			} catch {
-				return null;
-			}
 		}
 
 		// Action buttons: visibility and disabled state (matches original DOM-update logic for all roles and creation states).
@@ -1435,9 +1427,10 @@ async function loadCreation() {
 		}
 
 		const currentIndicatorHtml = `
-			<span class="creation-detail-history-current" aria-label="Current creation">
+			<button type="button" class="creation-detail-history-current creation-detail-history-lineage-btn" data-lineage-ancestor-open="${creationId}"
+				aria-label="Current creation — open in lineage">
 				<span class="creation-detail-history-current-text">current</span>
-			</span>
+			</button>
 		`;
 
 		// Ancestors: lineage chain (current "lineage" content). NSFW ancestors: blank + no link when !enableNsfw; blurred/unobscured when enableNsfw.
@@ -1462,27 +1455,67 @@ async function loadCreation() {
 			const directParentSet = new Set(directParentIds);
 			const usePlusBetween = directParentSet.size >= 2;
 
+			async function fetchAncestorLineageSlot(id) {
+				if (!enableNsfw && nsfwById.get(String(id)) === true) {
+					return { id, mode: 'nsfw-hidden' };
+				}
+				try {
+					const res = await fetch(`/api/create/images/${id}${lineageOfQuerySuffix}`, lineageFetchInit);
+					if (!res.ok) return { id, mode: 'inaccessible' };
+					const c = await res.json().catch(() => null);
+					if (!c) return { id, mode: 'inaccessible' };
+					const pub = c.published === true || c.published === 1;
+					const thumb =
+						(c.thumbnail_url && String(c.thumbnail_url).trim()) ||
+						(c.url && String(c.url).trim()) ||
+						null;
+					return {
+						id,
+						mode: 'lineage-open',
+						thumb,
+						published: pub
+					};
+				} catch {
+					return { id, mode: 'inaccessible' };
+				}
+			}
+
+			const ancestorSlots = await Promise.all(nonCurrentIds.map((id) => fetchAncestorLineageSlot(id)));
+			const slotById = new Map(ancestorSlots.map((s) => [s.id, s]));
+
 			const parts = nonCurrentIds.map((id, index) => {
+				const slot = slotById.get(id) || { id, mode: 'inaccessible' };
 				const isLastAncestor = index === nonCurrentIds.length - 1;
 				const nextId = nonCurrentIds[index + 1];
 				const bothDirect = usePlusBetween && !isLastAncestor && directParentSet.has(id) && directParentSet.has(nextId);
 				const separator = bothDirect ? '+' : '→';
 				const nsfw = nsfwById.get(String(id)) === true;
-				if (!enableNsfw && nsfw) {
-					return `<span class="creation-detail-history-thumb-link creation-detail-history-nsfw-blank" data-history-id="${id}" aria-label="${escapeHtml(`Creation #${id} (hidden)`)}">#${id}</span><span class="creation-detail-history-arrow" aria-hidden="true">${separator}</span>`;
+				if (slot.mode === 'nsfw-hidden') {
+					return `<button type="button" class="creation-detail-history-thumb-link creation-detail-history-nsfw-blank creation-detail-history-lineage-btn" data-lineage-ancestor-open="${id}"
+						aria-label="${escapeHtml(`Lineage #${id}: hidden (NSFW)`)}">#${id}</button><span class="creation-detail-history-arrow" aria-hidden="true">${separator}</span>`;
 				}
 				const nsfwClass = enableNsfw && nsfw ? (showUnobscured ? ' nsfw nsfw-revealed' : ' nsfw') : '';
 				const dataCreationId = enableNsfw && nsfw ? ` data-creation-id="${id}"` : '';
+
+				if (slot.mode === 'lineage-open') {
+					const t = (slot.thumb || '').trim();
+					const inner = t
+						? `<span class="creation-detail-history-fallback" data-history-fallback style="display: none;">#${id}</span><img class="creation-detail-history-thumb" src="${escapeHtml(t)}" alt="" loading="lazy" />`
+						: `<span class="creation-detail-history-fallback" data-history-fallback>#${id}</span><img class="creation-detail-history-thumb" data-history-img alt="" loading="lazy" style="display: none;" />`;
+					const pubHint = slot.published ? 'Published — open for details or full page' : 'Open for details';
+					return `
+				<button
+					type="button"
+					class="creation-detail-history-thumb-link creation-detail-history-lineage-btn${nsfwClass}"
+					data-lineage-ancestor-open="${id}"
+					aria-label="${escapeHtml(`Lineage #${id}: ${pubHint}`)}"${dataCreationId}
+				>${inner}</button>
+				<span class="creation-detail-history-arrow" aria-hidden="true">${separator}</span>
+			`;
+				}
 				return `
-				<a
-					class="creation-detail-history-thumb-link${nsfwClass}"
-					href="/creations/${id}"
-					aria-label="${escapeHtml(`Go to creation #${id}`)}"
-					data-history-id="${id}"${dataCreationId}
-				>
-					<span class="creation-detail-history-fallback" data-history-fallback>#${id}</span>
-					<img class="creation-detail-history-thumb" data-history-img alt="" loading="lazy" style="display: none;" />
-				</a>
+				<button type="button" class="creation-detail-history-thumb-link creation-detail-history-unavailable creation-detail-history-lineage-btn" data-lineage-ancestor-open="${id}"
+					aria-label="${escapeHtml(`Lineage #${id}: not available in preview — open for details`)}" title="Not available in preview">#${id}</button>
 				<span class="creation-detail-history-arrow" aria-hidden="true">${separator}</span>
 			`;
 			}).join('');
@@ -1496,6 +1529,10 @@ async function loadCreation() {
 				</div>
 			`;
 		}
+
+		// Full chain for lineage modal prev/next (ancestors then current), same order as history strip + current.
+		const lineageModalChainIdsOrdered =
+			historyIds.length > 0 && historyChainIds.length >= 2 ? [...historyChainIds] : [];
 
 		// Children: direct derivatives (mutate_of_id = this creation). NSFW children: blank + no link when !enableNsfw; blurred/unobscured when enableNsfw.
 		const childrenList = await childrenPromise;
@@ -1591,14 +1628,16 @@ async function loadCreation() {
 					descriptionParts.push('<br><br>');
 				}
 				descriptionParts.push(html`<div class="creation-detail-prompt-label-row">
-					<span class="creation-detail-prompt-label">Prompt</span>
-					<button type="button" class="creation-detail-copy-prompt" data-copy-prompt-btn aria-label="Copy prompt" title="Copy prompt">
-						<svg class="creation-detail-copy-prompt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-							<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-							<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-						</svg>
-					</button>
-				</div>`);
+	<span class="creation-detail-prompt-label">Prompt</span>
+	<button type="button" class="creation-detail-copy-prompt" data-copy-prompt-btn aria-label="Copy prompt"
+		title="Copy prompt">
+		<svg class="creation-detail-copy-prompt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+			stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+			<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+			<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+		</svg>
+	</button>
+</div>`);
 				descriptionParts.push(processUserText(promptText));
 			} else if (legacyHydratedPromptOnly) {
 				if (hasDescription && !sameAsPrompt) {
@@ -1797,8 +1836,10 @@ async function loadCreation() {
 			<div class="creation-detail-admin-video" data-admin-video-section>
 				<p class="creation-detail-admin-video-label">${creation.video_url ? 'Replace video' : 'Add video'}</p>
 				<form class="creation-detail-admin-video-form" data-admin-video-form>
-					<input type="file" name="video" accept="video/*" class="creation-detail-admin-video-input" data-admin-video-input />
-					<button type="submit" class="btn-primary creation-detail-admin-video-submit" data-admin-video-submit>${creation.video_url ? 'Replace' : 'Upload'}</button>
+					<input type="file" name="video" accept="video/*" class="creation-detail-admin-video-input"
+						data-admin-video-input />
+					<button type="submit" class="btn-primary creation-detail-admin-video-submit"
+						data-admin-video-submit>${creation.video_url ? 'Replace' : 'Upload'}</button>
 				</form>
 				<p class="creation-detail-admin-video-error" data-admin-video-error role="alert" style="display: none;"></p>
 			</div>
@@ -1858,7 +1899,7 @@ async function loadCreation() {
 					<h3 class="comments-heading"><span data-comment-count>0 Comments</span></h3>
 					<div class="comments-sort">
 						<label class="comments-sort-label" for="comments-sort">Sort by</label>
-				
+			
 						<select class="comments-sort-select" id="comments-sort" data-comments-sort>
 							<option value="asc">Oldest</option>
 							<option value="desc">Most recent</option>
@@ -1885,10 +1926,56 @@ async function loadCreation() {
 					<p class="creation-detail-set-avatar-modal-error" data-set-avatar-modal-error role="alert"></p>
 					<div class="creation-detail-set-avatar-modal-footer">
 						<button type="button" class="btn-secondary" data-set-avatar-modal-cancel>Cancel</button>
-						<button type="button" class="btn-primary creation-detail-set-avatar-confirm-btn" data-set-avatar-modal-confirm>
+						<button type="button" class="btn-primary creation-detail-set-avatar-confirm-btn"
+							data-set-avatar-modal-confirm>
 							<span class="creation-detail-set-avatar-confirm-label">Set as profile picture</span>
 							<span class="creation-detail-set-avatar-confirm-spinner" aria-hidden="true"></span>
 						</button>
+					</div>
+				</div>
+			</div>
+			<div class="creation-detail-lineage-modal-overlay" data-lineage-modal aria-hidden="true">
+				<div class="creation-detail-lineage-modal" role="dialog" aria-modal="true" aria-labelledby="lineage-modal-title">
+					<div class="creation-detail-lineage-modal-desktop-chrome">
+						<button type="button" class="creation-detail-lineage-modal-close" data-lineage-modal-dismiss
+							aria-label="Close">×</button>
+						<h3 id="lineage-modal-title" class="creation-detail-lineage-modal-heading">Lineage</h3>
+					</div>
+					<header class="creation-detail-lineage-modal-mobile-chrome chat-page-topbar">
+						<button type="button" class="chat-page-back" data-lineage-modal-dismiss aria-label="Back">
+							<span class="chat-page-back-icon" aria-hidden="true">&lt;-</span>
+						</button>
+						<h3 class="chat-page-title">Lineage</h3>
+					</header>
+					<div class="creation-detail-lineage-modal-scroll">
+						<div class="creation-detail-lineage-modal-columns">
+							<div class="creation-detail-lineage-modal-media-wrap">
+								<div class="creation-detail-lineage-modal-media-stage" data-lineage-modal-media-stage>
+									<div class="creation-detail-lineage-modal-media-aspect">
+										<div class="creation-detail-lineage-modal-media-placeholder" data-lineage-media-placeholder
+											aria-hidden="true"></div>
+										<div class="creation-detail-lineage-modal-media-active" data-lineage-modal-active-media>
+										</div>
+									</div>
+								</div>
+								<div class="creation-detail-lineage-modal-nav" data-lineage-modal-nav hidden>
+									<button type="button" class="creation-detail-lineage-modal-nav-btn" data-lineage-modal-prev
+										aria-label="Previous in lineage">
+										<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+											stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+											<path d="M15 18l-6-6 6-6" /></svg>
+									</button>
+									<span class="creation-detail-lineage-modal-nav-counter" data-lineage-modal-counter></span>
+									<button type="button" class="creation-detail-lineage-modal-nav-btn" data-lineage-modal-next
+										aria-label="Next in lineage">
+										<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+											stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+											<path d="M9 18l6-6-6-6" /></svg>
+									</button>
+								</div>
+							</div>
+							<div class="creation-detail-lineage-modal-body" data-lineage-modal-body></div>
+						</div>
 					</div>
 				</div>
 			</div>
@@ -1929,37 +2016,492 @@ async function loadCreation() {
 			});
 		}
 
-		// Hydrate history thumbnails (best-effort). Skip fetching thumbs for NSFW ancestors when user has not enabled NSFW (they are blank spans).
+		const lineageModalOverlay = detailContent.querySelector('[data-lineage-modal]');
+		const lineageModalDismissers = detailContent.querySelectorAll('[data-lineage-modal-dismiss]');
+		const lineageModalActiveMedia = detailContent.querySelector('[data-lineage-modal-active-media]');
+		const lineageModalMediaPlaceholder = detailContent.querySelector('[data-lineage-media-placeholder]');
+		const lineageModalMediaStage = detailContent.querySelector('[data-lineage-modal-media-stage]');
+		const lineageModalBody = detailContent.querySelector('[data-lineage-modal-body]');
+		const lineageModalNav = detailContent.querySelector('[data-lineage-modal-nav]');
+		let lineageModalEscHandler = null;
+		let lineageNavIds = [];
+		let lineageNavIndex = 0;
+		const lineageModalCreationById = new Map();
+
+		function preloadLineageImageUrl(url) {
+			if (!url || typeof url !== 'string') return Promise.resolve();
+			return new Promise((resolve) => {
+				const im = new Image();
+				const done = () => resolve();
+				im.onload = done;
+				im.onerror = done;
+				im.decoding = 'async';
+				im.src = url;
+				if (im.complete) done();
+			});
+		}
+
+		function preloadLineageVideoUrl(url) {
+			if (!url || typeof url !== 'string') return Promise.resolve();
+			return new Promise((resolve) => {
+				const v = document.createElement('video');
+				const done = () => resolve();
+				v.addEventListener('loadeddata', done, { once: true });
+				v.addEventListener('error', done, { once: true });
+				v.preload = 'auto';
+				v.muted = true;
+				v.playsInline = true;
+				v.src = url;
+				try {
+					v.load();
+				} catch {
+					done();
+				}
+			});
+		}
+
+		function preloadLineageCreationMediaFromJson(c) {
+			if (!c || typeof c !== 'object') return Promise.resolve();
+			const m = c.meta && typeof c.meta === 'object' ? c.meta : {};
+			const st = c.status || 'completed';
+			if (st !== 'completed') return Promise.resolve();
+			const mt = typeof m.media_type === 'string' ? m.media_type : 'image';
+			if (mt === 'video' && c.video_url) return preloadLineageVideoUrl(String(c.video_url));
+			if (c.url) return preloadLineageImageUrl(String(c.url));
+			return Promise.resolve();
+		}
+
+		async function prefetchLineageModalCreationsAndMedia(ids) {
+			const unique = [
+				...new Set(
+					(ids || [])
+						.map((x) => Number(x))
+						.filter((n) => Number.isFinite(n) && n > 0)
+				),
+			];
+			if (unique.length === 0) return;
+			await Promise.allSettled(
+				unique.map(async (id) => {
+					const res = await fetch(`/api/create/images/${id}${lineageOfQuerySuffix}`, lineageFetchInit);
+					if (!res.ok) return null;
+					const c = await res.json().catch(() => null);
+					if (!c) return null;
+					lineageModalCreationById.set(id, c);
+					await preloadLineageCreationMediaFromJson(c);
+					return c;
+				})
+			);
+		}
+
+		function showLineageMediaPlaceholder() {
+			if (lineageModalMediaPlaceholder) lineageModalMediaPlaceholder.classList.remove('is-hidden');
+			if (lineageModalMediaStage) lineageModalMediaStage.classList.remove('is-media-ready');
+			if (lineageModalActiveMedia) lineageModalActiveMedia.innerHTML = '';
+		}
+
+		function showLineageModalMediaUnavailable() {
+			if (lineageModalMediaPlaceholder) lineageModalMediaPlaceholder.classList.add('is-hidden');
+			if (lineageModalMediaStage) lineageModalMediaStage.classList.add('is-media-ready');
+			if (lineageModalActiveMedia) {
+				lineageModalActiveMedia.innerHTML =
+					'<div class="creation-detail-lineage-modal-media-unavailable" role="img" aria-label="Image unavailable"></div>';
+			}
+		}
+
+		function showLineageModalStepLoadFailed(reason) {
+			const r = reason === 'not_found' ? 'not_found' : reason === 'json' ? 'json' : reason === 'network' ? 'network' : 'http';
+			const lines = {
+				not_found: 'This step was not found or is not available with your account.',
+				json: 'This step could not be loaded (invalid response from the server).',
+				network: 'This step could not be loaded (network error).',
+				http: 'This step could not be loaded (server error).',
+			};
+			const msg = lines[r] || lines.http;
+			if (lineageModalBody) {
+				lineageModalBody.innerHTML = `<p class="creation-detail-lineage-modal-load-fail" role="alert">${escapeHtml(msg)}</p>`;
+			}
+			showLineageModalMediaUnavailable();
+			updateLineageNavControls();
+		}
+
+		function closeLineageModal() {
+			if (!lineageModalOverlay) return;
+			lineageModalOverlay.classList.remove('open');
+			lineageModalOverlay.setAttribute('aria-hidden', 'true');
+			document.body.classList.remove('modal-open');
+			if (lineageModalEscHandler) {
+				document.removeEventListener('keydown', lineageModalEscHandler);
+				lineageModalEscHandler = null;
+			}
+			lineageNavIds = [];
+			lineageNavIndex = 0;
+			lineageModalCreationById.clear();
+			if (lineageModalActiveMedia) lineageModalActiveMedia.innerHTML = '';
+			if (lineageModalBody) lineageModalBody.innerHTML = '';
+			if (lineageModalNav) lineageModalNav.hidden = true;
+			showLineageMediaPlaceholder();
+		}
+
+		function updateLineageNavControls() {
+			if (!lineageModalNav || !lineageModalOverlay) return;
+			const prev = lineageModalOverlay.querySelector('[data-lineage-modal-prev]');
+			const next = lineageModalOverlay.querySelector('[data-lineage-modal-next]');
+			const counter = lineageModalOverlay.querySelector('[data-lineage-modal-counter]');
+			if (lineageNavIds.length <= 1) {
+				lineageModalNav.hidden = true;
+				return;
+			}
+			lineageModalNav.hidden = false;
+			if (prev) prev.disabled = lineageNavIndex <= 0;
+			if (next) next.disabled = lineageNavIndex >= lineageNavIds.length - 1;
+			if (counter) counter.textContent = `${lineageNavIndex + 1} / ${lineageNavIds.length}`;
+		}
+
+		function fillLineageModalFromCreation(c, opts = {}) {
+			if (!lineageModalActiveMedia || !lineageModalBody) return;
+			const skipMediaPlaceholder = opts.skipMediaPlaceholder === true;
+			const m = c?.meta && typeof c.meta === 'object' ? c.meta : {};
+			const args = m.args ?? null;
+			const isPo = args && typeof args === 'object' && !Array.isArray(args);
+			const storedPr = typeof m.user_prompt === 'string' ? m.user_prompt.trim() : '';
+			const rawPr = isPo && typeof args.prompt === 'string' ? args.prompt.trim() : '';
+			const pText = promptTextForMainUi(storedPr, rawPr);
+			const pub = c.published === true || c.published === 1;
+			const st = c.status || 'completed';
+			const mt = typeof m.media_type === 'string' ? m.media_type : 'image';
+			const revealMedia = () => {
+				if (lineageModalMediaPlaceholder) lineageModalMediaPlaceholder.classList.add('is-hidden');
+				if (lineageModalMediaStage) lineageModalMediaStage.classList.add('is-media-ready');
+			};
+			const w = Number(c.width);
+			const h = Number(c.height);
+			const dimAttr =
+				Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0
+					? ` width="${Math.round(w)}" height="${Math.round(h)}"`
+					: '';
+
+			if (!skipMediaPlaceholder) showLineageMediaPlaceholder();
+
+			if (st !== 'completed') {
+				lineageModalActiveMedia.innerHTML = `<p class="creation-detail-lineage-modal-status">Status: ${escapeHtml(st)}</p>`;
+				revealMedia();
+			} else if (mt === 'video' && c.video_url) {
+				lineageModalActiveMedia.innerHTML = `<video class="creation-detail-lineage-modal-img creation-detail-lineage-modal-img--contain" controls playsinline src="${escapeHtml(String(c.video_url))}"></video>`;
+				const v = lineageModalActiveMedia.querySelector('video');
+				if (v) {
+					const done = () => revealMedia();
+					v.addEventListener('loadeddata', done, { once: true });
+					v.addEventListener('error', done, { once: true });
+				} else {
+					revealMedia();
+				}
+			} else if (c.url) {
+				lineageModalActiveMedia.innerHTML = `<img class="creation-detail-lineage-modal-img creation-detail-lineage-modal-img--contain" src="${escapeHtml(String(c.url))}" alt="" decoding="async"${dimAttr} />`;
+				const img = lineageModalActiveMedia.querySelector('img');
+				if (img) {
+					if (img.complete) revealMedia();
+					else {
+						img.addEventListener('load', () => revealMedia(), { once: true });
+						img.addEventListener('error', () => revealMedia(), { once: true });
+					}
+				} else {
+					revealMedia();
+				}
+			} else {
+				lineageModalActiveMedia.innerHTML = '<p class="creation-detail-lineage-modal-status">No media available for this step.</p>';
+				revealMedia();
+			}
+
+			const cr = c.creator && typeof c.creator === 'object' ? c.creator : null;
+			const creatorUserName = typeof cr?.user_name === 'string' ? cr.user_name.trim() : '';
+			const creatorDisplayName = typeof cr?.display_name === 'string' ? cr.display_name.trim() : '';
+			const creatorEmailPrefix = cr?.email ? String(cr.email).split('@')[0] : '';
+			const creatorName = creatorDisplayName || creatorUserName || creatorEmailPrefix || 'User';
+			const creatorHandle = creatorUserName
+				? `@${creatorUserName}`
+				: (cr?.email ? `@${creatorEmailPrefix}` : '');
+			const creatorInitial = creatorName.charAt(0).toUpperCase();
+			const creatorAvatarUrl = typeof cr?.avatar_url === 'string' ? cr.avatar_url.trim() : '';
+			const creatorId = Number(cr?.id ?? c.user_id ?? 0);
+			const creatorColor = getAvatarColor(creatorUserName || creatorEmailPrefix || String(creatorId || '') || creatorName);
+			const creatorProfileHref = buildProfilePath({ userName: creatorUserName, userId: creatorId });
+			const creatorPlan = cr?.plan === 'founder';
+			const avatarInner = creatorAvatarUrl
+				? `<img class="creation-detail-author-avatar" src="${escapeHtml(creatorAvatarUrl)}" alt="">`
+				: escapeHtml(creatorInitial);
+			const avatarSlot = creatorPlan
+				? `<div class="avatar-with-founder-flair avatar-with-founder-flair--sm"><div class="founder-flair-avatar-ring"><div class="founder-flair-avatar-inner" style="background: ${escapeHtml(creatorColor)};" aria-hidden="true">${avatarInner}</div></div></div>`
+				: `<span class="creation-detail-author-icon" style="background: ${escapeHtml(creatorColor)};">${avatarInner}</span>`;
+			const nameClass = creatorPlan ? 'creation-detail-author-name founder-name' : 'creation-detail-author-name';
+			const handleClass = creatorPlan ? 'creation-detail-author-handle founder-name' : 'creation-detail-author-handle';
+			const nameHandleInner = `<span class="${nameClass}">${escapeHtml(creatorName)}</span>${creatorHandle ? `<span class="${handleClass}">${escapeHtml(creatorHandle)}</span>` : ''}`;
+			const idLine = creatorProfileHref
+				? `<div class="creation-detail-author-id"><a class="creation-detail-author-id-link" href="${escapeHtml(creatorProfileHref)}">${nameHandleInner}</a></div>`
+				: `<div class="creation-detail-author-id"><span class="creation-detail-author-id-link">${nameHandleInner}</span></div>`;
+			const creatorBlock = `
+				<div class="creation-detail-author creation-detail-lineage-modal-creator">
+					<div class="creation-detail-author-avatar-slot">${avatarSlot}</div>
+					${idLine}
+				</div>`;
+			const rawTitle = c.title == null ? '' : String(c.title).trim();
+			const descRaw = c.description == null ? '' : String(c.description).trim();
+			const titleBlock = rawTitle
+				? `<div class="creation-detail-lineage-modal-meta"><div class="creation-detail-lineage-modal-meta-label">Title</div><div>${escapeHtml(rawTitle)}</div></div>`
+				: '';
+			const descBlock = descRaw
+				? `<div class="creation-detail-lineage-modal-meta"><div class="creation-detail-lineage-modal-meta-label">Description</div><div class="creation-detail-lineage-modal-desc">${processUserText(descRaw)}</div></div>`
+				: '';
+			const promptBlock = pText
+				? `<div class="creation-detail-lineage-modal-meta"><div class="creation-detail-lineage-modal-meta-label">Prompt</div><div class="creation-detail-lineage-modal-prompt">${processUserText(pText)}</div></div>`
+				: '';
+			const serverName =
+				typeof m.server_name === 'string' && m.server_name.trim()
+					? m.server_name.trim()
+					: (m.server_id != null ? String(m.server_id) : '');
+			const methodName =
+				typeof m.method_name === 'string' && m.method_name.trim()
+					? m.method_name.trim()
+					: typeof m.method === 'string'
+						? m.method
+						: '';
+			const rawModel =
+				isPo && Object.prototype.hasOwnProperty.call(args, 'model')
+					? typeof args.model === 'string'
+						? args.model.trim()
+						: String(args.model ?? '').trim()
+					: '';
+			const displayModel =
+				rawModel === '' ? '' : rawModel.includes(':') ? rawModel.split(':')[0] : rawModel;
+			const durationStr = formatDuration(m || {});
+			let serverMethodMetaLine = '';
+			if (serverName || methodName || displayModel || durationStr) {
+				const metaItems = [];
+				if (serverName && serverName !== 'Parascene') {
+					metaItems.push(
+						`<span class="creation-detail-description-meta-label">Server</span> <span class="creation-detail-description-meta-value">${escapeHtml(serverName)}</span>`
+					);
+				}
+				if (methodName && methodName !== 'Replicate') {
+					metaItems.push(
+						`<span class="creation-detail-description-meta-label">Method</span> <span class="creation-detail-description-meta-value">${escapeHtml(methodName)}</span>`
+					);
+				}
+				if (displayModel) {
+					metaItems.push(
+						`<span class="creation-detail-description-meta-label">Model</span> <span class="creation-detail-description-meta-value">${escapeHtml(displayModel)}</span>`
+					);
+				}
+				if (durationStr) {
+					metaItems.push(
+						`<span class="creation-detail-description-meta-label">Duration</span> <span class="creation-detail-description-meta-value">${escapeHtml(durationStr)}</span>`
+					);
+				}
+				if (metaItems.length > 0) {
+					serverMethodMetaLine = `<div class="creation-detail-description-meta-line creation-detail-lineage-modal-server-meta">${metaItems.join(' • ')}</div>`;
+				}
+			}
+			const styleMeta = m.style && typeof m.style === 'object' ? m.style : null;
+			const styleLabel = styleMeta && typeof styleMeta.label === 'string' ? styleMeta.label.trim() : '';
+			const styleModifiers = styleMeta && typeof styleMeta.modifiers === 'string' ? styleMeta.modifiers.trim() : '';
+			const styleBlock =
+				styleLabel.length > 0
+					? `<div class="creation-detail-lineage-modal-meta"><div class="creation-detail-lineage-modal-meta-label">Style</div><div>${escapeHtml(styleLabel)}</div>${styleModifiers ? `<div class="creation-detail-style-modifiers">${escapeHtml(styleModifiers)}</div>` : ''}</div>`
+					: '';
+			const createdRaw = c.created_at ? new Date(c.created_at) : null;
+			const createdOk = createdRaw instanceof Date && Number.isFinite(createdRaw.valueOf());
+			const createdBlock = createdOk ? `<p class="creation-detail-lineage-modal-date">${escapeHtml(formatDateTime(createdRaw))}</p>` : '';
+			const creationHref = `/creations/${escapeHtml(String(c.id))}`;
+			const stepIdNum = Number(c.id);
+			const pageCreationIdNum = Number(creationId);
+			const isCurrentCreation =
+				Number.isFinite(stepIdNum) &&
+				stepIdNum > 0 &&
+				Number.isFinite(pageCreationIdNum) &&
+				pageCreationIdNum > 0 &&
+				stepIdNum === pageCreationIdNum;
+			let pubBlock = '';
+			if (isCurrentCreation) {
+				pubBlock = '<p class="creation-detail-lineage-modal-current">CURRENT</p>';
+			} else if (pub) {
+				pubBlock = `<p class="creation-detail-lineage-modal-published"><span class="creation-detail-lineage-modal-published-label">Published</span><a class="creation-detail-lineage-modal-creation-link" href="${creationHref}" aria-label="View full creation"><svg class="creation-detail-lineage-modal-creation-link-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg></a></p>`;
+			} else {
+				pubBlock = '<p class="creation-detail-lineage-modal-unpublished">Unpublished</p>';
+			}
+			lineageModalBody.innerHTML = `
+				${creatorBlock}
+				<div class="creation-detail-lineage-modal-title">#${escapeHtml(String(c.id))}</div>
+				${titleBlock}
+				${pubBlock}
+				${descBlock}
+				${createdBlock}
+				${serverMethodMetaLine}
+				${styleBlock}
+				${promptBlock}
+			`;
+			try {
+				if (lineageModalOverlay) hydrateUserTextLinks(lineageModalOverlay);
+			} catch {
+				// ignore
+			}
+			updateLineageNavControls();
+		}
+
+		async function loadLineageModalAtCurrentIndex() {
+			const id = Number(lineageNavIds[lineageNavIndex]);
+			if (!lineageModalOverlay || !lineageModalActiveMedia || !lineageModalBody) return;
+			if (!Number.isFinite(id) || id <= 0) return;
+			updateLineageNavControls();
+			const cached = lineageModalCreationById.get(id);
+			if (cached) {
+				fillLineageModalFromCreation(cached, { skipMediaPlaceholder: true });
+				return;
+			}
+			showLineageMediaPlaceholder();
+			lineageModalBody.innerHTML = '<p class="creation-detail-lineage-modal-loading">Loading…</p>';
+			try {
+				const res = await fetch(`/api/create/images/${id}${lineageOfQuerySuffix}`, lineageFetchInit);
+				if (!res.ok) {
+					showLineageModalStepLoadFailed(res.status === 404 ? 'not_found' : 'http');
+					return;
+				}
+				const c = await res.json().catch(() => null);
+				if (!c) {
+					showLineageModalStepLoadFailed('json');
+					return;
+				}
+				lineageModalCreationById.set(id, c);
+				await preloadLineageCreationMediaFromJson(c);
+				fillLineageModalFromCreation(c, { skipMediaPlaceholder: true });
+			} catch {
+				showLineageModalStepLoadFailed('network');
+			}
+		}
+
+		async function openLineageModal(ancestorId) {
+			if (!lineageModalOverlay || !lineageModalActiveMedia || !lineageModalBody) return;
+			const idNum = Number(ancestorId);
+			lineageModalCreationById.clear();
+			lineageNavIds =
+				lineageModalChainIdsOrdered.length > 0
+					? [...lineageModalChainIdsOrdered]
+					: (Number.isFinite(idNum) && idNum > 0 ? [idNum] : []);
+			let idx = lineageNavIds.indexOf(idNum);
+			if (idx < 0 && Number.isFinite(idNum) && idNum > 0) {
+				lineageNavIds = [idNum];
+				idx = 0;
+			}
+			lineageNavIndex = idx >= 0 ? idx : 0;
+			showLineageMediaPlaceholder();
+			lineageModalBody.innerHTML = '<p class="creation-detail-lineage-modal-loading">Loading…</p>';
+			lineageModalOverlay.classList.add('open');
+			lineageModalOverlay.removeAttribute('aria-hidden');
+			document.body.classList.add('modal-open');
+			lineageModalEscHandler = (e) => {
+				if (e.key === 'Escape') {
+					closeLineageModal();
+					return;
+				}
+				if (e.key === 'ArrowLeft' && lineageNavIndex > 0) {
+					e.preventDefault();
+					lineageNavIndex -= 1;
+					void loadLineageModalAtCurrentIndex();
+					return;
+				}
+				if (e.key === 'ArrowRight' && lineageNavIndex < lineageNavIds.length - 1) {
+					e.preventDefault();
+					lineageNavIndex += 1;
+					void loadLineageModalAtCurrentIndex();
+				}
+			};
+			document.addEventListener('keydown', lineageModalEscHandler);
+			try {
+				await prefetchLineageModalCreationsAndMedia(lineageNavIds);
+			} catch {
+				// still try to show current step from network
+			}
+			await loadLineageModalAtCurrentIndex();
+		}
+
+		const historyRootForLineage = detailContent.querySelector('[data-creation-history]');
+		if (historyRootForLineage) {
+			historyRootForLineage.addEventListener('click', (e) => {
+				const btn = e.target.closest('[data-lineage-ancestor-open]');
+				if (!btn || !historyRootForLineage.contains(btn)) return;
+				e.preventDefault();
+				const raw = btn.getAttribute('data-lineage-ancestor-open');
+				const id = Number(raw);
+				if (!Number.isFinite(id) || id <= 0) return;
+				void openLineageModal(id);
+			});
+			historyRootForLineage.addEventListener(
+				'error',
+				(e) => {
+					const t = e.target;
+					if (!(t instanceof HTMLImageElement) || !t.classList.contains('creation-detail-history-thumb')) return;
+					if (!historyRootForLineage.contains(t)) return;
+					t.style.display = 'none';
+					const fb = t.closest('button')?.querySelector('[data-history-fallback]');
+					if (fb instanceof HTMLElement) fb.style.removeProperty('display');
+				},
+				true
+			);
+		}
+
+		lineageModalDismissers.forEach((el) => {
+			if (el instanceof HTMLElement) el.addEventListener('click', () => closeLineageModal());
+		});
+		if (lineageModalOverlay) {
+			lineageModalOverlay.addEventListener('click', (e) => {
+				if (e.target === lineageModalOverlay) {
+					closeLineageModal();
+					return;
+				}
+				if (e.target.closest('[data-lineage-modal-prev]')) {
+					e.preventDefault();
+					if (lineageNavIndex > 0) {
+						lineageNavIndex -= 1;
+						void loadLineageModalAtCurrentIndex();
+					}
+					return;
+				}
+				if (e.target.closest('[data-lineage-modal-next]')) {
+					e.preventDefault();
+					if (lineageNavIndex < lineageNavIds.length - 1) {
+						lineageNavIndex += 1;
+						void loadLineageModalAtCurrentIndex();
+					}
+				}
+			});
+		}
+
+		// Hydrate ancestor thumbnails when the slot had no thumb URL (rare): fill img[data-history-img] inside lineage buttons.
 		if (historyIds.length > 0) {
 			const historyRoot = detailContent.querySelector('[data-creation-history]');
 			if (historyRoot) {
-				const thumbMap = new Map();
-				const nonCurrentIds = historyChainIds.filter((id) => id !== creationId);
-				const idsToFetch = nonCurrentIds.filter((id) => enableNsfw || nsfwById.get(String(id)) !== true);
-				const results = await Promise.allSettled(idsToFetch.map((id) => fetchCreationThumbUrl(id)));
-				for (let i = 0; i < idsToFetch.length; i++) {
-					const id = idsToFetch[i];
-					const r = results[i];
-					const url = r.status === 'fulfilled' ? r.value : null;
-					if (url) thumbMap.set(id, url);
-				}
-
-				const links = Array.from(historyRoot.querySelectorAll('a[data-history-id]'));
-				for (const a of links) {
-					if (!(a instanceof HTMLAnchorElement)) continue;
-					const id = Number(a.dataset.historyId);
-					if (!Number.isFinite(id) || id <= 0) continue;
-					const url = thumbMap.get(id) || null;
-					if (!url) continue;
-
-					const img = a.querySelector('img[data-history-img]');
-					const fallback = a.querySelector('[data-history-fallback]');
-					if (img instanceof HTMLImageElement) {
+				const needThumb = Array.from(
+					historyRoot.querySelectorAll('button[data-lineage-ancestor-open] img[data-history-img]')
+				).filter((img) => img instanceof HTMLImageElement && !(img.getAttribute('src') || '').trim());
+				if (needThumb.length > 0) {
+					const results = await Promise.allSettled(
+						needThumb.map((img) => {
+							const btn = img.closest('button[data-lineage-ancestor-open]');
+							const raw = btn && btn.getAttribute('data-lineage-ancestor-open');
+							const id = raw != null ? Number(raw) : NaN;
+							if (!Number.isFinite(id) || id <= 0) return Promise.resolve(null);
+							return fetch(`/api/create/images/${id}${lineageOfQuerySuffix}`, lineageFetchInit)
+								.then((r) => (r.ok ? r.json() : null))
+								.then((c) => (c?.thumbnail_url || c?.url || '').trim() || null);
+						})
+					);
+					for (let i = 0; i < needThumb.length; i++) {
+						const img = needThumb[i];
+						const r = results[i];
+						const url = r.status === 'fulfilled' ? r.value : null;
+						if (!url || !(img instanceof HTMLImageElement)) continue;
 						img.src = url;
 						img.style.display = '';
-					}
-					if (fallback instanceof HTMLElement) {
-						fallback.style.display = 'none';
+						const fallback = img.closest('button')?.querySelector('[data-history-fallback]');
+						if (fallback instanceof HTMLElement) fallback.style.display = 'none';
 					}
 				}
 			}

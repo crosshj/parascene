@@ -117,23 +117,43 @@ export default function createCreateRoutes({ queries, storage }) {
 				return res.status(404).json({ error: "Image not found" });
 			}
 
-			// Check access: user owns the image OR image is published OR user is admin
+			// Check access: user owns the image OR image is published OR user is admin OR lineage delegation
 			const userId = req.auth?.userId;
 			const isOwner = userId && image.user_id === userId;
 			const isPublished = image.published === 1 || image.published === true;
 
 			// Get user to check admin role
 			let isAdmin = false;
+			let viewerRole = "";
 			if (userId && !isOwner && !isPublished) {
 				try {
 					const user = await queries.selectUserById.get(userId);
-					isAdmin = user?.role === 'admin';
+					isAdmin = user?.role === "admin";
+					viewerRole = user?.role || "";
 				} catch {
 					// ignore errors checking user
 				}
 			}
 
-			if (!isOwner && !isPublished && !isAdmin) {
+			let lineageOk = false;
+			const lineageRaw = req.query?.lineage_of;
+			const lineageParentId = typeof lineageRaw === "string" ? parseInt(lineageRaw, 10) : Number(lineageRaw);
+			if (!isOwner && !isPublished && !isAdmin && userId && Number.isFinite(lineageParentId) && lineageParentId > 0) {
+				try {
+					const u = await queries.selectUserById.get(userId);
+					viewerRole = u?.role || viewerRole;
+					lineageOk = await canViewUnpublishedCreationViaLineageDelegation({
+						ancestorRow: image,
+						lineageParentId,
+						viewerUserId: userId,
+						viewerRole: u?.role || ""
+					});
+				} catch {
+					lineageOk = false;
+				}
+			}
+
+			if (!isOwner && !isPublished && !isAdmin && !lineageOk) {
 				return res.status(403).json({ error: "Access denied" });
 			}
 
@@ -199,7 +219,24 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			}
 
-			if (!isOwner && !isPublished && !isAdmin) {
+			let lineageOkVideo = false;
+			const lineageRawV = req.query?.lineage_of;
+			const lineageParentIdV = typeof lineageRawV === "string" ? parseInt(lineageRawV, 10) : Number(lineageRawV);
+			if (!isOwner && !isPublished && !isAdmin && userId && Number.isFinite(lineageParentIdV) && lineageParentIdV > 0) {
+				try {
+					const u = await queries.selectUserById.get(userId);
+					lineageOkVideo = await canViewUnpublishedCreationViaLineageDelegation({
+						ancestorRow: image,
+						lineageParentId: lineageParentIdV,
+						viewerUserId: userId,
+						viewerRole: u?.role || ""
+					});
+				} catch {
+					lineageOkVideo = false;
+				}
+			}
+
+			if (!isOwner && !isPublished && !isAdmin && !lineageOkVideo) {
 				return res.status(403).json({ error: "Access denied" });
 			}
 
@@ -284,6 +321,66 @@ export default function createCreateRoutes({ queries, storage }) {
 			}
 		}
 		return { ok: false, reason: "mention_not_found" };
+	}
+
+	/** Ids listed on a creation as lineage inputs (history chain, mutate parent, multi-parent). */
+	function collectLineageAncestorIdsFromParentMeta(parentMeta) {
+		const m = parentMeta && typeof parentMeta === "object" ? parentMeta : {};
+		const s = new Set();
+		const add = (v) => {
+			const n = Number(v);
+			if (Number.isFinite(n) && n > 0) s.add(n);
+		};
+		if (Array.isArray(m.history)) {
+			for (const v of m.history) add(v);
+		}
+		if (m.mutate_of_id != null) add(m.mutate_of_id);
+		if (Array.isArray(m.direct_parent_ids)) {
+			for (const v of m.direct_parent_ids) add(v);
+		}
+		return s;
+	}
+
+	/**
+	 * Unpublished ancestor is readable when a viewable parent lists it in lineage meta.
+	 * Parent must be published (or viewer owns parent, or admin).
+	 * Cross-user unpublished inputs are allowed only when the parent is published (or viewer is admin),
+	 * so an unpublished draft cannot be used to load another user's private creations by id stuffing.
+	 */
+	async function canViewUnpublishedCreationViaLineageDelegation({ ancestorRow, lineageParentId, viewerUserId, viewerRole }) {
+		const parentId = Number(lineageParentId);
+		if (!Number.isFinite(parentId) || parentId <= 0) return false;
+		if (parentId === Number(ancestorRow.id)) return false;
+		const parentRow = await queries.selectCreatedImageByIdAnyUser?.get(parentId);
+		if (!parentRow) return false;
+		if (parentRow.unavailable_at != null && String(parentRow.unavailable_at) !== "") return false;
+		const parentMeta = parseMeta(parentRow.meta);
+		const allowed = collectLineageAncestorIdsFromParentMeta(parentMeta);
+		if (!allowed.has(Number(ancestorRow.id))) return false;
+
+		const parentPublished = parentRow.published === 1 || parentRow.published === true;
+		const viewerOwnsParent = viewerUserId != null && Number(parentRow.user_id) === Number(viewerUserId);
+		const isAdmin = viewerRole === "admin";
+		if (!parentPublished && !viewerOwnsParent && !isAdmin) return false;
+
+		const crossUser = Number(parentRow.user_id) !== Number(ancestorRow.user_id);
+		if (crossUser && !parentPublished && viewerRole !== "admin") return false;
+		return true;
+	}
+
+	/** Append lineage_of so /api/images/created and /api/videos/created accept delegated reads. */
+	function appendLineageOfToMediaUrl(url, lineageParentId) {
+		if (!url || !lineageParentId) return url;
+		const s = String(url);
+		if (!s.includes("/api/images/created/") && !s.includes("/api/videos/created/")) return url;
+		try {
+			const parsed = new URL(url, "http://localhost");
+			parsed.searchParams.set("lineage_of", String(lineageParentId));
+			return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+		} catch {
+			const sep = s.includes("?") ? "&" : "?";
+			return `${s}${sep}lineage_of=${encodeURIComponent(String(lineageParentId))}`;
+		}
 	}
 
 	/** Only true when the provider/error message text explicitly indicates moderation. */
@@ -1788,6 +1885,7 @@ export default function createCreateRoutes({ queries, storage }) {
 			);
 
 			let shareAccess = null;
+			let lineageMediaParentId = null;
 
 			// If not found as owner, check if it exists and is either published or user is admin
 			if (!image) {
@@ -1812,6 +1910,24 @@ export default function createCreateRoutes({ queries, storage }) {
 						}
 					}
 
+					// Unpublished ancestor visible when listed in lineage of a viewable parent (see canViewUnpublishedCreationViaLineageDelegation).
+					if (!image) {
+						const lo = req.query?.lineage_of;
+						const lineagePid = typeof lo === "string" ? parseInt(lo, 10) : Number(lo);
+						if (Number.isFinite(lineagePid) && lineagePid > 0) {
+							const ok = await canViewUnpublishedCreationViaLineageDelegation({
+								ancestorRow: anyImage,
+								lineageParentId: lineagePid,
+								viewerUserId: user.id,
+								viewerRole: user.role
+							});
+							if (ok) {
+								image = anyImage;
+								lineageMediaParentId = lineagePid;
+							}
+						}
+					}
+
 					if (!image && (isPublished || isAdmin) && !isUnavailable) {
 						image = anyImage;
 					} else if (!image && isAdmin && isUnavailable) {
@@ -1826,11 +1942,27 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			}
 
-			// Owner viewing their own image that they deleted: treat as not found
+			// Owner viewing their own image that they deleted: treat as not found (unless lineage context from another own creation).
 			const isOwner = image.user_id === user.id;
 			const isAdmin = user.role === "admin";
 			const isUnavailable = image.unavailable_at != null && image.unavailable_at !== "";
+			let lineageOwnerBypassDeleted = false;
 			if (isOwner && !isAdmin && isUnavailable) {
+				const lo = req.query?.lineage_of;
+				const lineagePid = typeof lo === "string" ? parseInt(lo, 10) : Number(lo);
+				if (Number.isFinite(lineagePid) && lineagePid > 0) {
+					const parentRow = await queries.selectCreatedImageById.get(lineagePid, user.id);
+					if (parentRow) {
+						const pm = parseMeta(parentRow.meta);
+						const allowed = collectLineageAncestorIdsFromParentMeta(pm);
+						if (allowed.has(Number(image.id)) && Number(parentRow.user_id) === Number(image.user_id)) {
+							lineageOwnerBypassDeleted = true;
+							lineageMediaParentId = lineagePid;
+						}
+					}
+				}
+			}
+			if (isOwner && !isAdmin && isUnavailable && !lineageOwnerBypassDeleted) {
 				return res.status(404).json({ error: "Image not found" });
 			}
 
@@ -1855,11 +1987,22 @@ export default function createCreateRoutes({ queries, storage }) {
 			const meta = parseMeta(image.meta);
 
 			const status = image.status || 'completed';
-			const url = status === "completed"
+			let url = status === "completed"
 				? (shareAccess
 					? `/api/share/${encodeURIComponent(shareAccess.version)}/${encodeURIComponent(shareAccess.token)}/image`
 					: (image.file_path || storage.getImageUrl(image.filename)))
 				: null;
+
+			const appendLineageToMediaUrls =
+				lineageMediaParentId != null &&
+				!isPublished &&
+				!isOwner &&
+				!shareAccess &&
+				status === "completed";
+
+			if (url && appendLineageToMediaUrls) {
+				url = appendLineageOfToMediaUrl(url, lineageMediaParentId);
+			}
 
 			const mediaType = typeof meta?.media_type === "string" ? meta.media_type : "image";
 			const videoMeta = meta && typeof meta === "object" ? meta.video : null;
@@ -1867,10 +2010,13 @@ export default function createCreateRoutes({ queries, storage }) {
 				videoMeta && typeof videoMeta.file_path === "string" && videoMeta.file_path
 					? videoMeta.file_path
 					: null;
-			const videoUrl =
+			let videoUrl =
 				shareAccess && mediaType === "video" && videoUrlRaw
 					? `/api/share/${encodeURIComponent(shareAccess.version)}/${encodeURIComponent(shareAccess.token)}/video`
 					: videoUrlRaw;
+			if (videoUrl && appendLineageToMediaUrls) {
+				videoUrl = appendLineageOfToMediaUrl(videoUrl, lineageMediaParentId);
+			}
 			const sourceImageUrl =
 				typeof meta?.source_image_url === "string" && meta.source_image_url
 					? meta.source_image_url
@@ -1902,6 +2048,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				id: image.id,
 				filename: image.filename,
 				url, // Use stored URL or generate one
+				thumbnail_url: url ? getThumbnailUrl(url) : null,
 				width: image.width,
 				height: image.height,
 				color: image.color,
