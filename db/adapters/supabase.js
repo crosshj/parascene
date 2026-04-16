@@ -4420,7 +4420,7 @@ export function openDb() {
 				if (authorIds.length > 0) {
 					const { data: profileRows, error: profileError } = await serviceClient
 						.from(prefixedTable("user_profiles"))
-						.select("user_id, user_name, display_name")
+						.select("user_id, user_name, display_name, avatar_url")
 						.in("user_id", authorIds);
 					if (!profileError && profileRows) {
 						profileByUserId = new Map(profileRows.map((r) => [String(r.user_id), r]));

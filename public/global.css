@@ -1624,6 +1624,17 @@ header .create-button.btn-primary {
 	border-color: var(--accent);
 }
 
+@media (max-width: 768px) {
+	body[data-entry="app"] .chat-page-sidebar-pseudo .chat-page-sidebar-row--also-in-app-primary-nav {
+		display: none;
+	}
+}
+
+/* Consumer app Connect tab: strip entries that duplicate `pages/app.html` header nav — hide at every width. */
+body[data-entry="app"] .servers-route .connect-chat-sidebar-roster .chat-page-sidebar-pseudo .chat-page-sidebar-row--also-in-app-primary-nav {
+	display: none;
+}
+
 /* Notifications button and badge */
 header .notifications-wrapper {
 	display: inline-flex;
@@ -4208,6 +4219,10 @@ body.chat-page main.chat-page-outer {
 		padding: 8px 8px 16px;
 	}
 
+	.chat-page-sidebar-pseudo {
+		margin-bottom: 4px;
+	}
+
 	.chat-page-sidebar-footer {
 		flex-shrink: 0;
 		border-top: 1px solid var(--border);
@@ -5217,6 +5232,14 @@ body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading {
 	max-width: 100%;
 }
 
+/* #feed pseudo-channel: reuse `.feed-route` / `.feed-card` styles inside the chat scroller. */
+.chat-page-messages .chat-feed-channel-route {
+	flex-shrink: 0;
+	width: 100%;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
 body.chat-page .chat-page-error {
 	flex-shrink: 0;
 	margin: 0;
@@ -5246,7 +5269,7 @@ body.chat-page .chat-page-composer {
 	background: var(--bg);
 }
 
-/* #comments / #feedback pseudo-channels: same outer size as `.chat-page-input-shell` + textarea min-height */
+/* #comments / #feed / #feedback pseudo-channels: same outer size as `.chat-page-input-shell` + textarea min-height */
 body.chat-page .chat-page-pseudo-composer-hint {
 	margin: 0;
 	box-sizing: border-box;
@@ -5477,6 +5500,127 @@ body.chat-page .chat-page-composer-input:focus {
 	outline: none;
 }
 
+/* #explore: same input-row metrics as thread/feed (padding, gap, flex-end) so bar height matches; shell keeps outer border. */
+body.chat-page form[data-chat-composer-mode="explore"] .chat-page-pseudo-composer-hint {
+	display: none;
+}
+
+body.chat-page form[data-chat-composer-mode="explore"] .chat-page-composer-input-row {
+	align-items: flex-end;
+	gap: 8px;
+	padding: 4px 4px 4px 8px;
+	margin: 0;
+	border: none;
+	border-radius: 0;
+	overflow: visible;
+	background: transparent;
+	box-sizing: border-box;
+}
+
+body.chat-page form[data-chat-composer-mode="explore"] .chat-page-composer-attach-slot {
+	display: none;
+}
+
+body.chat-page form[data-chat-composer-mode="explore"] .chat-page-composer-input {
+	padding: 10px 6px 10px 2px;
+	min-height: 44px;
+	box-sizing: border-box;
+}
+
+body.chat-page .chat-page-explore-clear-search {
+	flex-shrink: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 44px;
+	height: 44px;
+	min-width: 44px;
+	min-height: 44px;
+	align-self: flex-end;
+	margin: 0;
+	padding: 0;
+	border: none;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
+	box-sizing: border-box;
+}
+
+body.chat-page .chat-page-explore-clear-search:hover:not(:disabled) {
+	color: var(--text);
+	background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+body.chat-page .chat-page-explore-clear-search:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: -2px;
+}
+
+body.chat-page .chat-page-explore-clear-search:disabled {
+	cursor: wait;
+	pointer-events: none;
+}
+
+body.chat-page .chat-page-explore-clear-search-slot {
+	position: relative;
+	flex-shrink: 0;
+	width: 18px;
+	height: 18px;
+}
+
+body.chat-page .chat-page-explore-trailing-icon-layer {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	transform: translate(-50%, -50%);
+}
+
+body.chat-page .chat-page-explore-trailing-icon-layer[hidden] {
+	display: none !important;
+}
+
+body.chat-page .chat-page-explore-search-magnifier-icon {
+	display: block;
+	width: 18px;
+	height: 18px;
+}
+
+body.chat-page .chat-page-explore-clear-search-icon {
+	display: block;
+	width: 18px;
+	height: 18px;
+}
+
+body.chat-page .chat-page-explore-clear-search-spinner {
+	display: block;
+	width: 18px;
+	height: 18px;
+	margin: 0;
+}
+
+body.chat-page .chat-page-explore-clear-search-spinner-disk {
+	display: block;
+	width: 18px;
+	height: 18px;
+	box-sizing: border-box;
+	border: 2px solid color-mix(in srgb, var(--text-muted) 35%, transparent);
+	border-top-color: var(--focus);
+	border-radius: 50%;
+	animation: spin 0.75s linear infinite;
+}
+
+body.chat-page form[data-chat-composer-mode="explore"][data-chat-explore-search-loading="1"] .chat-page-composer-input {
+	cursor: wait;
+	pointer-events: none;
+}
+
 body.chat-page .chat-page-send-btn {
 	display: inline-flex;
 	align-items: center;
@@ -5527,7 +5671,8 @@ body.chat-page .chat-page-send-btn .chat-page-send-icon {
 
 	/* Apply the centered content lane per message row instead of the scroller. */
 	body.chat-page .chat-page-messages .connect-chat-msg,
-	body.chat-page .chat-page-messages .comments-channel-plain-msg {
+	body.chat-page .chat-page-messages .comments-channel-plain-msg,
+	body.chat-page .chat-page-messages .chat-feed-channel-route {
 		padding-left: max(12px, calc((100% - 720px) / 2 + 12px));
 		padding-right: max(12px, calc((100% - 720px) / 2 + 12px));
 	}
@@ -5958,6 +6103,10 @@ body.blog-edit-page .blog-edit-route {
 	padding: 8px 8px 16px;
 	max-width: 100%;
 	box-sizing: border-box;
+}
+
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-pseudo {
+	margin-bottom: 4px;
 }
 
 /* Full-page scroll on small viewports; avoid nested scroll + overscroll traps next to mobile bottom nav */

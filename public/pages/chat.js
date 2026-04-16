@@ -68,6 +68,10 @@ let renderEmptyState;
 let attachAutoGrowTextarea;
 let attachMentionSuggest;
 let isTriggeredSuggestPopupOpen;
+let addPageUsers;
+let clearPageUsers;
+let enableLikeButtons;
+let createPseudoColumnPager;
 let toggleChatMessageReaction;
 let setupReactionTooltipTap;
 let createConnectCommentRowElement;
@@ -124,6 +128,11 @@ async function loadDeps() {
 		const suggestMod = await import(`../shared/triggeredSuggest.js${qs}`);
 		attachMentionSuggest = suggestMod.attachMentionSuggest;
 		isTriggeredSuggestPopupOpen = suggestMod.isTriggeredSuggestPopupOpen;
+		addPageUsers = suggestMod.addPageUsers;
+		clearPageUsers = suggestMod.clearPageUsers;
+
+		const likesMod = await import(`../shared/likes.js${qs}`);
+		enableLikeButtons = likesMod.enableLikeButtons;
 
 		const commentsMod = await import(`../shared/comments.js${qs}`);
 		toggleChatMessageReaction = commentsMod.toggleChatMessageReaction;
@@ -133,6 +142,9 @@ async function loadDeps() {
 
 		const connectCardMod = await import(`../shared/connectCommentCard.js${qs}`);
 		createConnectCommentRowElement = connectCardMod.createConnectCommentRowElement;
+
+		const columnPagerMod = await import(`../shared/pseudoChannelColumnPager.js${qs}`);
+		createPseudoColumnPager = columnPagerMod.createPseudoColumnPager;
 	})();
 	return _depsPromise;
 }
@@ -399,12 +411,31 @@ export async function initChatPage(root) {
 	let activeThreadId = null;
 	/** @type {string | null} — e.g. reserved `comments`; not a real chat thread id. */
 	let activePseudoChannelSlug = null;
-	let commentsChannelHasMore = false;
-	let commentsChannelLoadingMore = false;
+	/** Shared pager for pseudo-column data (#comments / #feed / #explore / #creations); view layer owns DOM + sentinels. */
+	let pseudoColumnPager = null;
 	/** @type {IntersectionObserver | null} */
 	let commentsChannelLoadMoreObserver = null;
 	const COMMENTS_CHANNEL_PAGE_SIZE = 50;
+	/** @type {IntersectionObserver | null} */
+	let feedChannelLoadMoreObserver = null;
+	/** @type {IntersectionObserver | null} */
+	let feedChannelVideoObserver = null;
+	const FEED_CHANNEL_PAGE_SIZE = 20;
+	const CREATIONS_CHANNEL_PAGE_SIZE = 24;
+	const EXPLORE_CHANNEL_PAGE_SIZE = 24;
+	/** Keyword + semantic search batch size (aligned with `app-route-explore`). */
+	const EXPLORE_SEARCH_FETCH_LIMIT = 100;
+	/** Current trimmed search string for `#explore` (empty = browse `/api/explore`). */
+	const exploreQueryRef = { q: '' };
+	/** True while `#explore` merged keyword+semantic search fetch is in flight (composer trailing control shows a spinner). */
+	let exploreChannelSearchLoading = false;
+	/** True while `loadExploreChannelMessages` is running (browse or search path) so the composer can show the same trailing spinner. */
+	let exploreBrowseMessagesLoading = false;
 	let loadingMessages = false;
+
+	function isExploreComposerLoadLocked() {
+		return exploreChannelSearchLoading || exploreBrowseMessagesLoading;
+	}
 	let sendInFlight = false;
 	/** Staged attachments before send (ChatGPT-style composer). */
 	let chatPendingImages = [];
@@ -1048,15 +1079,129 @@ export async function initChatPage(root) {
 		sendBtn.disabled = uploading || sendInFlight;
 	}
 
-	/** No "Message…" until thread is known and messages are not loading (avoids placeholder vs attach layout churn). */
+	/** No "Message…" until thread is known and messages are not loading (avoids placeholder vs attach layout churn). Explore keeps a stable placeholder; load state is shown in the trailing control. */
 	function syncChatMessagePlaceholder() {
 		const bodyInput = root.querySelector('[data-chat-body-input]');
 		if (!(bodyInput instanceof HTMLTextAreaElement)) return;
-		if (activePseudoChannelSlug) return;
+		if (activePseudoChannelSlug && activePseudoChannelSlug !== 'explore') return;
 		if (bodyInput.hidden || bodyInput.disabled) return;
+		if (activePseudoChannelSlug === 'explore') {
+			bodyInput.placeholder = 'Search creations…';
+			return;
+		}
 		const tid = activeThreadId;
 		const hasThread = tid != null && Number.isFinite(Number(tid)) && Number(tid) > 0;
 		bodyInput.placeholder = hasThread && !loadingMessages ? 'Message…' : '';
+	}
+
+	function syncExploreChannelBrowseUrl() {
+		if (activePseudoChannelSlug !== 'explore') return;
+		try {
+			const url = new URL(window.location.href);
+			const path = url.pathname.replace(/\/+$/, '') || '/';
+			if (path !== '/chat/c/explore') return;
+			url.searchParams.delete('s');
+			const next = url.pathname + (url.search || '') + url.hash;
+			const cur = window.location.pathname + window.location.search + window.location.hash;
+			if (next !== cur) {
+				history.replaceState({ prsnChat: true }, '', next);
+			}
+		} catch {
+			// ignore
+		}
+	}
+
+	function pushExploreChannelSearchToHistory(trimmed) {
+		if (activePseudoChannelSlug !== 'explore') return;
+		const t = String(trimmed || '').trim();
+		if (!t) return;
+		try {
+			const url = new URL(window.location.href);
+			const path = url.pathname.replace(/\/+$/, '') || '/';
+			if (path !== '/chat/c/explore') return;
+			url.searchParams.set('s', t);
+			const next = url.pathname + (url.search || '') + url.hash;
+			const cur = window.location.pathname + window.location.search + window.location.hash;
+			if (next !== cur) {
+				history.pushState({ prsnChat: true }, '', next);
+			}
+		} catch {
+			// ignore
+		}
+	}
+
+	function syncChatExploreComposerChrome() {
+		const composerForm = root.querySelector('[data-chat-composer]');
+		const clearBtn = root.querySelector('[data-chat-explore-clear-search]');
+		const searchIconWrap = root.querySelector('[data-chat-explore-search-icon-wrap]');
+		const spinner = root.querySelector('[data-chat-explore-clear-spinner]');
+		const xIconWrap = root.querySelector('[data-chat-explore-x-icon-wrap]');
+		const bodyInput = root.querySelector('[data-chat-body-input]');
+		if (!(composerForm instanceof HTMLFormElement)) return;
+		if (activePseudoChannelSlug === 'explore') {
+			composerForm.dataset.chatComposerMode = 'explore';
+			const trailingBusy = isExploreComposerLoadLocked();
+			if (bodyInput instanceof HTMLTextAreaElement) {
+				bodyInput.readOnly = trailingBusy;
+				if (trailingBusy) {
+					bodyInput.setAttribute('aria-busy', 'true');
+				} else {
+					bodyInput.removeAttribute('aria-busy');
+				}
+			}
+			if (trailingBusy) {
+				composerForm.dataset.chatExploreSearchLoading = '1';
+			} else {
+				delete composerForm.dataset.chatExploreSearchLoading;
+			}
+			if (clearBtn instanceof HTMLButtonElement && bodyInput instanceof HTMLTextAreaElement) {
+				clearBtn.hidden = false;
+				const trimmed = String(bodyInput.value || '').trim();
+				const committed = String(exploreQueryRef.q || '').trim();
+				if (trailingBusy) {
+					clearBtn.disabled = true;
+					clearBtn.setAttribute('aria-busy', 'true');
+					clearBtn.setAttribute(
+						'aria-label',
+						exploreChannelSearchLoading ? 'Searching…' : 'Loading explore feed…'
+					);
+					if (searchIconWrap instanceof HTMLElement) searchIconWrap.hidden = true;
+					if (spinner instanceof HTMLElement) spinner.hidden = false;
+					if (xIconWrap instanceof HTMLElement) xIconWrap.hidden = true;
+					return;
+				}
+				clearBtn.disabled = false;
+				clearBtn.removeAttribute('aria-busy');
+				if (spinner instanceof HTMLElement) spinner.hidden = true;
+				const syncedWithResults = committed.length > 0 && trimmed === committed;
+				if (syncedWithResults) {
+					clearBtn.setAttribute('aria-label', 'Clear search and show explore feed');
+					if (searchIconWrap instanceof HTMLElement) searchIconWrap.hidden = true;
+					if (xIconWrap instanceof HTMLElement) xIconWrap.hidden = false;
+				} else {
+					const canSubmit = trimmed.length > 0 || committed.length > 0;
+					clearBtn.setAttribute('aria-label', canSubmit ? 'Run search' : 'Search creations');
+					if (searchIconWrap instanceof HTMLElement) searchIconWrap.hidden = false;
+					if (xIconWrap instanceof HTMLElement) xIconWrap.hidden = true;
+				}
+			}
+		} else {
+			delete composerForm.dataset.chatComposerMode;
+			delete composerForm.dataset.chatExploreSearchLoading;
+			if (bodyInput instanceof HTMLTextAreaElement) {
+				bodyInput.readOnly = false;
+				bodyInput.removeAttribute('aria-busy');
+			}
+			if (clearBtn instanceof HTMLButtonElement) {
+				clearBtn.hidden = true;
+				clearBtn.disabled = false;
+				clearBtn.removeAttribute('aria-busy');
+				clearBtn.setAttribute('aria-label', 'Search creations');
+			}
+			if (searchIconWrap instanceof HTMLElement) searchIconWrap.hidden = false;
+			if (spinner instanceof HTMLElement) spinner.hidden = true;
+			if (xIconWrap instanceof HTMLElement) xIconWrap.hidden = true;
+		}
 	}
 
 	function applyComposerState() {
@@ -1067,6 +1212,9 @@ export async function initChatPage(root) {
 		if (!(bodyInput instanceof HTMLTextAreaElement)) return;
 
 		if (activePseudoChannelSlug === 'comments') {
+			if (composerForm instanceof HTMLFormElement) {
+				delete composerForm.dataset.chatComposerMode;
+			}
 			clearChatPendingAttachments();
 			bodyInput.disabled = true;
 			bodyInput.value = '';
@@ -1081,7 +1229,61 @@ export async function initChatPage(root) {
 			if (composerForm instanceof HTMLFormElement) {
 				composerForm.setAttribute('aria-label', 'Comments channel');
 			}
+		} else if (activePseudoChannelSlug === 'feed') {
+			if (composerForm instanceof HTMLFormElement) {
+				delete composerForm.dataset.chatComposerMode;
+			}
+			clearChatPendingAttachments();
+			bodyInput.disabled = true;
+			bodyInput.value = '';
+			bodyInput.placeholder = '';
+			bodyInput.hidden = true;
+			if (shell instanceof HTMLElement) shell.hidden = true;
+			if (hint instanceof HTMLElement) {
+				hint.hidden = false;
+				hint.textContent =
+					'Your home feed — open a card to view a creation, like, or comment there.';
+			}
+			if (composerForm instanceof HTMLFormElement) {
+				composerForm.setAttribute('aria-label', 'Feed channel');
+			}
+		} else if (activePseudoChannelSlug === 'creations') {
+			if (composerForm instanceof HTMLFormElement) {
+				delete composerForm.dataset.chatComposerMode;
+			}
+			clearChatPendingAttachments();
+			bodyInput.disabled = true;
+			bodyInput.value = '';
+			bodyInput.placeholder = '';
+			bodyInput.hidden = true;
+			if (shell instanceof HTMLElement) shell.hidden = true;
+			if (hint instanceof HTMLElement) {
+				hint.hidden = false;
+				hint.textContent =
+					'Your published creations — open a card to view or edit.';
+			}
+			if (composerForm instanceof HTMLFormElement) {
+				composerForm.setAttribute('aria-label', 'Creations channel');
+			}
+		} else if (activePseudoChannelSlug === 'explore') {
+			clearChatPendingAttachments();
+			bodyInput.disabled = false;
+			bodyInput.hidden = false;
+			bodyInput.placeholder = 'Search creations…';
+			if (shell instanceof HTMLElement) shell.hidden = false;
+			if (hint instanceof HTMLElement) {
+				hint.hidden = true;
+				hint.textContent = '';
+			}
+			if (composerForm instanceof HTMLFormElement) {
+				composerForm.setAttribute('aria-label', 'Explore search');
+			}
+			bodyInput.setAttribute('aria-label', 'Search creations');
 		} else {
+			if (composerForm instanceof HTMLFormElement) {
+				delete composerForm.dataset.chatComposerMode;
+			}
+			bodyInput.setAttribute('aria-label', 'Message text');
 			bodyInput.hidden = false;
 			if (shell instanceof HTMLElement) shell.hidden = false;
 			if (hint instanceof HTMLElement) hint.hidden = true;
@@ -1100,6 +1302,7 @@ export async function initChatPage(root) {
 		syncChatAttachmentsVisibility();
 		syncChatSendButton();
 		syncChatMessagePlaceholder();
+		syncChatExploreComposerChrome();
 	}
 
 	function findOptimisticRow(messagesEl, tempId) {
@@ -1122,6 +1325,66 @@ export async function initChatPage(root) {
 			}
 		}
 		return { handleRaw: '', avatarUrl: '' };
+	}
+
+	/** #creations has no chat messages; load handle + avatar from GET /api/profile for feed cards. */
+	async function resolveCreationsChannelAuthorHints() {
+		const fallback = { ...getViewerChatProfileHints(), displayName: '' };
+		try {
+			const profileRes = await fetchJsonWithStatusDeduped(
+				'/api/profile',
+				{ credentials: 'include' },
+				{ windowMs: 30000 }
+			);
+			if (!profileRes.ok || !profileRes.data?.profile) return fallback;
+			const p = profileRes.data.profile;
+			return {
+				handleRaw:
+					typeof p.user_name === 'string' && p.user_name.trim()
+						? p.user_name.trim()
+						: fallback.handleRaw,
+				displayName:
+					typeof p.display_name === 'string' && p.display_name.trim() ? p.display_name.trim() : '',
+				avatarUrl:
+					typeof p.avatar_url === 'string' && p.avatar_url.trim()
+						? p.avatar_url.trim()
+						: fallback.avatarUrl,
+			};
+		} catch {
+			return fallback;
+		}
+	}
+
+	function mapUserCreatedImageApiRowToFeedItem(img, viewerId, authorHints) {
+		const id = img?.id != null ? Number(img.id) : NaN;
+		const uid = viewerId != null ? Number(viewerId) : NaN;
+		const title =
+			typeof img?.title === 'string' && img.title.trim() ? img.title.trim() : 'Untitled';
+		const summary = typeof img?.description === 'string' ? img.description : '';
+		const url = typeof img?.url === 'string' ? img.url : null;
+		const thumb = typeof img?.thumbnail_url === 'string' ? img.thumbnail_url : null;
+		const handleRaw = authorHints?.handleRaw != null ? String(authorHints.handleRaw).trim() : '';
+		const displayName = authorHints?.displayName != null ? String(authorHints.displayName).trim() : '';
+		const avatarUrl = authorHints?.avatarUrl != null ? String(authorHints.avatarUrl).trim() : '';
+		return {
+			created_image_id: Number.isFinite(id) ? id : null,
+			id: Number.isFinite(id) ? id : null,
+			title,
+			summary,
+			image_url: url,
+			thumbnail_url: thumb,
+			user_id: Number.isFinite(uid) ? uid : null,
+			author_user_name: handleRaw,
+			author_display_name: displayName,
+			author_avatar_url: avatarUrl,
+			created_at: img?.created_at ?? null,
+			like_count: 0,
+			comment_count: 0,
+			viewer_liked: false,
+			nsfw: !!img?.nsfw,
+			media_type: typeof img?.media_type === 'string' ? img.media_type : 'image',
+			video_url: typeof img?.video_url === 'string' ? img.video_url : null,
+		};
 	}
 
 	function mountOptimisticRow(messagesEl, opt, sameSenderAsPrev, viewerId) {
@@ -2228,11 +2491,13 @@ export async function initChatPage(root) {
 			const serverChannelsRaw = channelRowsRaw.filter((t) => {
 				const slug =
 					typeof t.channel_slug === 'string' ? t.channel_slug.trim().toLowerCase() : '';
+				if (slug && rosterMod.SIDEBAR_TOP_STRIP_CHANNEL_SLUGS.has(slug)) return false;
 				return Boolean(slug && joinedSlugs.has(slug));
 			});
 			const otherChannelsRaw = channelRowsRaw.filter((t) => {
 				const slug =
 					typeof t.channel_slug === 'string' ? t.channel_slug.trim().toLowerCase() : '';
+				if (slug && rosterMod.SIDEBAR_TOP_STRIP_CHANNEL_SLUGS.has(slug)) return false;
 				return !slug || !joinedSlugs.has(slug);
 			});
 			const serverChannels = rosterMod.sortChannelRowsByLastActivity(serverChannelsRaw);
@@ -2250,7 +2515,7 @@ export async function initChatPage(root) {
 				return null;
 			}
 
-			function rowHtml(t) {
+			function rowHtml(t, rowOpts) {
 				const href = rosterMod.buildChatThreadUrl(t);
 				const active = isChatHrefActive(href);
 				const title = typeof t.title === 'string' && t.title.trim() ? t.title.trim() : 'Chat';
@@ -2265,6 +2530,12 @@ export async function initChatPage(root) {
 				}
 				const activeClass = active ? ' is-active' : '';
 				const pc = presenceClass ? ` ${presenceClass}` : '';
+				const extraRow =
+					rowOpts &&
+					typeof rowOpts.extraAnchorClasses === 'string' &&
+					rowOpts.extraAnchorClasses.trim()
+						? ` ${rowOpts.extraAnchorClasses.trim()}`
+						: '';
 				const unc = Number(t.unread_count);
 				const showUnread =
 					!active && Number.isFinite(unc) && unc > 0;
@@ -2275,7 +2546,7 @@ export async function initChatPage(root) {
 				const youPill = selfDm
 					? '<span class="chat-page-sidebar-you-pill" aria-label="This is you">you</span>'
 					: '';
-				return `<a class="chat-page-sidebar-row${activeClass}${pc}" href="${escapeHtml(href)}">
+				return `<a class="chat-page-sidebar-row${activeClass}${pc}${extraRow}" href="${escapeHtml(href)}">
 					${avatarHtml}
 					<div class="chat-page-sidebar-row-body">
 						<div class="chat-page-sidebar-row-title-line">
@@ -2319,6 +2590,24 @@ export async function initChatPage(root) {
 					</a>
 					${gearHtml}
 				</div>`;
+			}
+
+			const pseudoListEl = sidebar.querySelector('[data-chat-sidebar-pseudo-list]');
+			if (pseudoListEl) {
+				const stripRows = rosterMod.getSidebarPseudoStripRowsMerged(channelRowsRaw);
+				const navDupSlugs = rosterMod.SIDEBAR_STRIP_SLUGS_ALSO_IN_APP_PRIMARY_NAV;
+				pseudoListEl.innerHTML = stripRows
+					.map((t) => {
+						const slug =
+							t?.type === 'channel' && typeof t.channel_slug === 'string'
+								? t.channel_slug.trim().toLowerCase()
+								: '';
+						const alsoNav = Boolean(slug && navDupSlugs.has(slug));
+						return rowHtml(t, {
+							extraAnchorClasses: alsoNav ? 'chat-page-sidebar-row--also-in-app-primary-nav' : ''
+						});
+					})
+					.join('');
 			}
 
 			dmEl.innerHTML = rosterMod.buildChatSidebarDmListHtml(dms, rowHtml);
@@ -2830,8 +3119,36 @@ export async function initChatPage(root) {
 	}
 
 	function teardownCommentsChannelLoadMore() {
-		commentsChannelHasMore = false;
+		pseudoColumnPager = null;
 		disconnectCommentsChannelLoadObserver();
+	}
+
+	function disconnectFeedChannelLoadObserver() {
+		if (feedChannelLoadMoreObserver) {
+			try {
+				feedChannelLoadMoreObserver.disconnect();
+			} catch {
+				// ignore
+			}
+			feedChannelLoadMoreObserver = null;
+		}
+	}
+
+	function teardownFeedChannelLoadMore() {
+		pseudoColumnPager = null;
+		disconnectFeedChannelLoadObserver();
+		if (feedChannelVideoObserver) {
+			try {
+				feedChannelVideoObserver.disconnect();
+			} catch {
+				// ignore
+			}
+			feedChannelVideoObserver = null;
+		}
+	}
+
+	function teardownExploreChannelLoadMore() {
+		pseudoColumnPager = null;
 	}
 
 	function setupCommentsChannelLoadMoreObserver(messagesEl) {
@@ -2844,8 +3161,9 @@ export async function initChatPage(root) {
 					if (
 						e.target === sentinel &&
 						e.isIntersecting &&
-						commentsChannelHasMore &&
-						!commentsChannelLoadingMore &&
+						pseudoColumnPager &&
+						pseudoColumnPager.getHasMore() &&
+						!pseudoColumnPager.isOlderBusy() &&
 						!loadingMessages &&
 						activePseudoChannelSlug === 'comments'
 					) {
@@ -2862,28 +3180,19 @@ export async function initChatPage(root) {
 	async function loadMoreCommentsChannelMessages() {
 		if (
 			activePseudoChannelSlug !== 'comments' ||
-			commentsChannelLoadingMore ||
-			!commentsChannelHasMore
+			!pseudoColumnPager ||
+			pseudoColumnPager.isOlderBusy() ||
+			!pseudoColumnPager.getHasMore() ||
+			loadingMessages
 		) {
 			return;
 		}
 		const messagesEl = root.querySelector('[data-chat-messages]');
-		if (!messagesEl || !Array.isArray(lastChatMessagesPayload) || lastChatMessagesPayload.length === 0) {
-			return;
-		}
-		const oldest = lastChatMessagesPayload[0];
-		const beforeRaw = oldest?.created_at;
-		const before =
-			typeof beforeRaw === 'string' && beforeRaw.trim()
-				? beforeRaw.trim()
-				: beforeRaw != null
-					? String(beforeRaw)
-					: '';
-		if (!before) {
+		const col = pseudoColumnPager.getItems();
+		if (!messagesEl || !Array.isArray(col) || col.length === 0) {
 			return;
 		}
 
-		commentsChannelLoadingMore = true;
 		const firstMsg = messagesEl.querySelector('[data-comments-channel-row]');
 
 		function preserveScrollAfterPrepend(anchorTopBefore) {
@@ -2896,42 +3205,34 @@ export async function initChatPage(root) {
 			}
 		}
 
+		let anchorTopBefore = 0;
+		if (firstMsg) {
+			anchorTopBefore =
+				firstMsg.getBoundingClientRect().top - messagesEl.getBoundingClientRect().top;
+		}
+
 		try {
-			const commentsMod = await import(`../shared/comments.js${qs}`);
-			const result = await commentsMod.fetchLatestComments({
-				limit: COMMENTS_CHANNEL_PAGE_SIZE,
-				before,
-			});
-			if (!result.ok) {
+			const r = await pseudoColumnPager.loadOlder();
+			if (!r.ok) {
 				return;
 			}
-			commentsChannelHasMore = result.data?.has_more === true;
-			const raw = Array.isArray(result.data?.comments) ? result.data.comments : [];
-			const batch = raw.map(mapCommentRowToChatMessageShape).reverse();
-			const existingIds = new Set(lastChatMessagesPayload.map((m) => Number(m.id)));
-			const mergedFiltered = batch.filter((m) => Number.isFinite(Number(m.id)) && !existingIds.has(Number(m.id)));
+			const mergedFiltered = Array.isArray(r.prepended) ? r.prepended : [];
+			lastChatMessagesPayload = pseudoColumnPager.getItems();
 			if (mergedFiltered.length === 0) {
+				if (!pseudoColumnPager.getHasMore()) {
+					disconnectCommentsChannelLoadObserver();
+				}
 				return;
-			}
-
-			const full = [...mergedFiltered, ...lastChatMessagesPayload];
-			lastChatMessagesPayload = full;
-
-			/** Snapshot immediately before mutating the list (not before the network round-trip). */
-			let anchorTopBefore = 0;
-			if (firstMsg) {
-				anchorTopBefore =
-					firstMsg.getBoundingClientRect().top - messagesEl.getBoundingClientRect().top;
 			}
 
 			if (!firstMsg) {
 				for (let i = 0; i < mergedFiltered.length; i++) {
-					const row = createCommentsChannelPlainRow(full[i]);
+					const row = createCommentsChannelPlainRow(mergedFiltered[i]);
 					messagesEl.appendChild(row);
 				}
 			} else {
 				for (let i = 0; i < mergedFiltered.length; i++) {
-					const row = createCommentsChannelPlainRow(full[i]);
+					const row = createCommentsChannelPlainRow(mergedFiltered[i]);
 					messagesEl.insertBefore(row, firstMsg);
 				}
 			}
@@ -2941,6 +3242,10 @@ export async function initChatPage(root) {
 				setupReactionTooltipTap(messagesEl);
 			}
 			updateCommentsChannelLatestMarker(messagesEl);
+
+			if (!pseudoColumnPager.getHasMore()) {
+				disconnectCommentsChannelLoadObserver();
+			}
 
 			void messagesEl.offsetHeight;
 			preserveScrollAfterPrepend(anchorTopBefore);
@@ -2952,8 +3257,6 @@ export async function initChatPage(root) {
 			});
 		} catch (err) {
 			console.error('[Chat page] comments channel load more:', err);
-		} finally {
-			commentsChannelLoadingMore = false;
 		}
 	}
 
@@ -2963,21 +3266,62 @@ export async function initChatPage(root) {
 		loadingMessages = true;
 		syncChatMessagePlaceholder();
 		teardownCommentsChannelLoadMore();
+		teardownFeedChannelLoadMore();
+		teardownExploreChannelLoadMore();
 		messagesEl.setAttribute('aria-busy', 'true');
 		try {
-			const commentsMod = await import(`../shared/comments.js${qs}`);
-			const result = await commentsMod.fetchLatestComments({ limit: COMMENTS_CHANNEL_PAGE_SIZE });
-			if (!result.ok) {
-				const msg =
-					result.data?.message ||
-					result.data?.error ||
-					'Failed to load comments';
-				throw new Error(typeof msg === 'string' ? msg : 'Failed to load comments');
+			pseudoColumnPager = createPseudoColumnPager({
+				getItemKey: (m) => (Number.isFinite(Number(m?.id)) ? String(m.id) : ''),
+				fetchPage: async ({ initial, items }) => {
+					const commentsMod = await import(`../shared/comments.js${qs}`);
+					if (initial) {
+						const result = await commentsMod.fetchLatestComments({ limit: COMMENTS_CHANNEL_PAGE_SIZE });
+						if (!result.ok) {
+							const msg =
+								result.data?.message ||
+								result.data?.error ||
+								'Failed to load comments';
+							throw new Error(typeof msg === 'string' ? msg : 'Failed to load comments');
+						}
+						const raw = Array.isArray(result.data?.comments) ? result.data.comments : [];
+						return {
+							pageItems: raw.map(mapCommentRowToChatMessageShape),
+							hasMore: result.data?.has_more === true,
+						};
+					}
+					const oldest = items[0];
+					const beforeRaw = oldest?.created_at;
+					const before =
+						typeof beforeRaw === 'string' && beforeRaw.trim()
+							? beforeRaw.trim()
+							: beforeRaw != null
+								? String(beforeRaw)
+								: '';
+					if (!before) {
+						return { pageItems: [], hasMore: false };
+					}
+					const result = await commentsMod.fetchLatestComments({
+						limit: COMMENTS_CHANNEL_PAGE_SIZE,
+						before,
+					});
+					if (!result.ok) {
+						return { pageItems: [], hasMore: false };
+					}
+					const raw = Array.isArray(result.data?.comments) ? result.data.comments : [];
+					return {
+						pageItems: raw.map(mapCommentRowToChatMessageShape),
+						hasMore: result.data?.has_more === true,
+					};
+				},
+			});
+			const r = await pseudoColumnPager.loadInitial();
+			if (!r.ok) {
+				if (r.error instanceof Error) {
+					throw r.error;
+				}
+				throw new Error(typeof r.reason === 'string' ? r.reason : 'Failed to load comments');
 			}
-			commentsChannelHasMore = result.data?.has_more === true;
-			const raw = Array.isArray(result.data?.comments) ? result.data.comments : [];
-			// Latest-comments API is newest-first; chat threads show oldest at the top.
-			const messages = raw.map(mapCommentRowToChatMessageShape).reverse();
+			const messages = pseudoColumnPager.getItems();
 			lastChatMessagesPayload = messages;
 			teardownLatestMessageReadObserver();
 			messagesEl.innerHTML = '';
@@ -2988,7 +3332,7 @@ export async function initChatPage(root) {
 			sentinel.style.cssText = 'height:1px;margin:0;padding:0;flex-shrink:0;pointer-events:none';
 			messagesEl.appendChild(sentinel);
 			paintCommentsChannelPlainRows(messagesEl, messages, sentinel);
-			if (commentsChannelHasMore) {
+			if (pseudoColumnPager.getHasMore()) {
 				setupCommentsChannelLoadMoreObserver(messagesEl);
 			}
 			scrollChatMessagesToEnd();
@@ -2999,6 +3343,625 @@ export async function initChatPage(root) {
 			messagesEl.removeAttribute('aria-busy');
 			loadingMessages = false;
 			syncChatMessagePlaceholder();
+		}
+	}
+
+	function setupFeedChannelVideoAutoplay(messagesEl, videoEl) {
+		if (!(messagesEl instanceof HTMLElement) || !(videoEl instanceof HTMLVideoElement)) return;
+		if (!('IntersectionObserver' in window)) {
+			const src = videoEl.dataset.feedVideoSrc;
+			if (src) {
+				videoEl.src = src;
+				try {
+					videoEl.play();
+				} catch {
+					// ignore
+				}
+			}
+			return;
+		}
+		if (!feedChannelVideoObserver) {
+			feedChannelVideoObserver = new IntersectionObserver(
+				(entries) => {
+					for (const entry of entries) {
+						const el = entry.target;
+						if (!(el instanceof HTMLVideoElement)) continue;
+						const src = el.dataset.feedVideoSrc || '';
+						if (entry.isIntersecting) {
+							if (!el.src && src) {
+								el.src = src;
+							}
+							try {
+								el.play();
+								el.classList.add('is-active');
+							} catch {
+								// ignore autoplay errors
+							}
+						} else {
+							try {
+								el.pause();
+							} catch {
+								// ignore
+							}
+							el.classList.remove('is-active');
+						}
+					}
+				},
+				{ root: messagesEl, threshold: 0.5, rootMargin: '0px 0px 0px 0px' }
+			);
+		}
+		feedChannelVideoObserver.observe(videoEl);
+	}
+
+	function setupFeedChannelLoadMoreObserver(messagesEl) {
+		disconnectFeedChannelLoadObserver();
+		const sentinel = messagesEl.querySelector('[data-chat-feed-load-sentinel]');
+		if (!sentinel) return;
+		feedChannelLoadMoreObserver = new IntersectionObserver(
+			(entries) => {
+				for (const e of entries) {
+					if (
+						e.target === sentinel &&
+						e.isIntersecting &&
+						pseudoColumnPager &&
+						pseudoColumnPager.getHasMore() &&
+						!pseudoColumnPager.isOlderBusy() &&
+						!loadingMessages &&
+						(activePseudoChannelSlug === 'feed' ||
+							activePseudoChannelSlug === 'explore' ||
+							activePseudoChannelSlug === 'creations')
+					) {
+						if (activePseudoChannelSlug === 'feed') {
+							void loadMoreFeedChannelMessages();
+						} else if (activePseudoChannelSlug === 'explore') {
+							void loadMoreExploreChannelMessages();
+						} else if (activePseudoChannelSlug === 'creations') {
+							void loadMoreCreationsChannelMessages();
+						}
+					}
+				}
+			},
+			/* Same pattern as #comments: sentinel at top; generous top margin preloads older rows while user is below. */
+			{ root: messagesEl, rootMargin: '1400px 0px 0px 0px', threshold: 0 }
+		);
+		feedChannelLoadMoreObserver.observe(sentinel);
+	}
+
+	/**
+	 * @param {'feed' | 'explore' | 'creations'} laneSlug
+	 */
+	async function loadMoreFeedLanePseudoChannelMessages(laneSlug) {
+		if (
+			activePseudoChannelSlug !== laneSlug ||
+			!pseudoColumnPager ||
+			pseudoColumnPager.isOlderBusy() ||
+			!pseudoColumnPager.getHasMore() ||
+			loadingMessages
+		) {
+			return;
+		}
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		const cards = messagesEl?.querySelector('[data-feed-channel-cards]');
+		if (!(messagesEl instanceof HTMLElement) || !(cards instanceof HTMLElement)) {
+			return;
+		}
+		const col = pseudoColumnPager.getItems();
+		if (!Array.isArray(col) || col.length === 0) {
+			return;
+		}
+
+		const anchor = cards.firstElementChild;
+		function preserveScrollAfterPrepend(anchorTopBefore) {
+			if (!(anchor instanceof Element) || !anchor.isConnected) return;
+			const anchorTopAfter =
+				anchor.getBoundingClientRect().top - messagesEl.getBoundingClientRect().top;
+			const d = anchorTopAfter - anchorTopBefore;
+			if (Number.isFinite(d) && Math.abs(d) > 0.25) {
+				messagesEl.scrollTop += d;
+			}
+		}
+
+		let anchorTopBefore = 0;
+		if (anchor) {
+			anchorTopBefore = anchor.getBoundingClientRect().top - messagesEl.getBoundingClientRect().top;
+		}
+
+		try {
+			const feedCardMod = await import(`../shared/feedCardBuild.js${qs}`);
+			const { createFeedItemCard, feedItemToUser } = feedCardMod;
+			const r = await pseudoColumnPager.loadOlder();
+			if (!r.ok) {
+				return;
+			}
+			const mergedFiltered = Array.isArray(r.prepended) ? r.prepended : [];
+			if (mergedFiltered.length === 0) {
+				if (!pseudoColumnPager.getHasMore()) {
+					disconnectFeedChannelLoadObserver();
+				}
+				return;
+			}
+			addPageUsers(mergedFiltered.map(feedItemToUser));
+
+			if (anchor) {
+				for (let i = 0; i < mergedFiltered.length; i++) {
+					const row = createFeedItemCard(mergedFiltered[i], i, {
+						setupFeedVideo: (el) => setupFeedChannelVideoAutoplay(messagesEl, el),
+					});
+					cards.insertBefore(row, anchor);
+				}
+			} else {
+				for (let i = 0; i < mergedFiltered.length; i++) {
+					cards.appendChild(
+						createFeedItemCard(mergedFiltered[i], i, {
+							setupFeedVideo: (el) => setupFeedChannelVideoAutoplay(messagesEl, el),
+						})
+					);
+				}
+			}
+
+			if (!pseudoColumnPager.getHasMore()) {
+				disconnectFeedChannelLoadObserver();
+			}
+
+			void messagesEl.offsetHeight;
+			preserveScrollAfterPrepend(anchorTopBefore);
+			requestAnimationFrame(() => {
+				preserveScrollAfterPrepend(anchorTopBefore);
+				requestAnimationFrame(() => {
+					preserveScrollAfterPrepend(anchorTopBefore);
+				});
+			});
+		} catch (err) {
+			const label =
+				laneSlug === 'explore'
+					? 'explore channel'
+					: laneSlug === 'creations'
+						? 'creations channel'
+						: 'feed channel';
+			console.error(`[Chat page] ${label} load more:`, err);
+		}
+	}
+
+	async function loadMoreFeedChannelMessages() {
+		await loadMoreFeedLanePseudoChannelMessages('feed');
+	}
+
+	async function loadMoreCreationsChannelMessages() {
+		await loadMoreFeedLanePseudoChannelMessages('creations');
+	}
+
+	async function loadFeedChannelMessages() {
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		if (!messagesEl || loadingMessages) return;
+		loadingMessages = true;
+		syncChatMessagePlaceholder();
+		teardownCommentsChannelLoadMore();
+		teardownFeedChannelLoadMore();
+		teardownExploreChannelLoadMore();
+		messagesEl.setAttribute('aria-busy', 'true');
+		try {
+			const feedCardMod = await import(`../shared/feedCardBuild.js${qs}`);
+			const { createFeedItemCard, feedItemToUser, getHiddenFeedItems } = feedCardMod;
+
+			pseudoColumnPager = createPseudoColumnPager({
+				getItemKey: (it) => {
+					if (it.type === 'tip' || it.type === 'blog_post') {
+						return `${it.type}:${it.id ?? it.slug ?? it.title ?? ''}`;
+					}
+					return String(it.created_image_id || it.id || '');
+				},
+				fetchPage: async ({ initial, items }) => {
+					const offset = initial ? 0 : items.length;
+					const feed = await fetchJsonWithStatusDeduped(
+						`/api/feed?limit=${FEED_CHANNEL_PAGE_SIZE}&offset=${offset}`,
+						{ credentials: 'include' },
+						{ windowMs: 30000 }
+					);
+					if (!feed.ok) {
+						if (initial) {
+							const msg = feed.data?.message || feed.data?.error || 'Failed to load feed';
+							throw new Error(typeof msg === 'string' ? msg : 'Failed to load feed');
+						}
+						return { pageItems: [], hasMore: false };
+					}
+					let pageItems = Array.isArray(feed.data?.items) ? feed.data.items : [];
+					const hiddenIds = getHiddenFeedItems();
+					pageItems = pageItems.filter((item) => {
+						if (item.type === 'tip' || item.type === 'blog_post') return true;
+						const itemId = String(item.created_image_id || item.id);
+						return !hiddenIds.includes(itemId);
+					});
+					return { pageItems, hasMore: Boolean(feed.data?.hasMore) };
+				},
+			});
+			const r = await pseudoColumnPager.loadInitial();
+			if (!r.ok) {
+				if (r.error instanceof Error) {
+					throw r.error;
+				}
+				throw new Error(typeof r.reason === 'string' ? r.reason : 'Failed to load feed');
+			}
+			const ordered = pseudoColumnPager.getItems();
+			lastChatMessagesPayload = [];
+			clearPageUsers();
+			addPageUsers(ordered.map(feedItemToUser));
+			teardownLatestMessageReadObserver();
+			messagesEl.innerHTML = '';
+			if (ordered.length === 0) {
+				messagesEl.innerHTML = renderEmptyState({
+					className: 'route-empty-image-grid',
+					icon: '<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>',
+					title: 'Your feed is empty',
+					message:
+						'Your feed shows creations from people you follow. Explore the community, follow a few creators, and your feed will start filling up.',
+					buttonText: 'Explore creators',
+					buttonHref: '/explore',
+					buttonRoute: 'explore',
+				});
+				const button = messagesEl.querySelector('.route-empty-button[data-route="explore"]');
+				if (button) {
+					button.addEventListener('click', (e) => {
+						e.preventDefault();
+						const header = document.querySelector('app-navigation');
+						if (header && typeof header.navigateToRoute === 'function') {
+							header.navigateToRoute('explore');
+							return;
+						}
+						window.location.href = '/explore';
+					});
+				}
+				scrollChatMessagesToEnd();
+				return;
+			}
+
+			const sentinel = document.createElement('div');
+			sentinel.dataset.chatFeedLoadSentinel = '1';
+			sentinel.className = 'chat-page-feed-load-sentinel';
+			sentinel.setAttribute('aria-hidden', 'true');
+			sentinel.style.cssText = 'height:1px;margin:0;padding:0;flex-shrink:0;pointer-events:none';
+			messagesEl.appendChild(sentinel);
+
+			const routeWrap = document.createElement('div');
+			routeWrap.className = 'feed-route chat-feed-channel-route';
+			const cards = document.createElement('div');
+			cards.className = 'route-cards feed-cards';
+			cards.setAttribute('data-feed-channel-cards', '1');
+			for (let i = 0; i < ordered.length; i++) {
+				cards.appendChild(
+					createFeedItemCard(ordered[i], i, {
+						setupFeedVideo: (el) => setupFeedChannelVideoAutoplay(messagesEl, el),
+					})
+				);
+			}
+			routeWrap.appendChild(cards);
+			messagesEl.appendChild(routeWrap);
+			if (pseudoColumnPager.getHasMore()) {
+				setupFeedChannelLoadMoreObserver(messagesEl);
+			}
+			scrollChatMessagesToEnd();
+		} catch (err) {
+			console.error('[Chat page] feed channel:', err);
+			messagesEl.innerHTML = renderEmptyError(err?.message || 'Could not load feed.');
+		} finally {
+			messagesEl.removeAttribute('aria-busy');
+			loadingMessages = false;
+			syncChatMessagePlaceholder();
+		}
+	}
+
+	async function loadCreationsChannelMessages() {
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		if (!messagesEl || loadingMessages) return;
+		const viewerId = chatViewerId;
+		if (!Number.isFinite(Number(viewerId)) || Number(viewerId) <= 0) {
+			messagesEl.innerHTML = renderEmptyError('Sign in to see your creations.');
+			return;
+		}
+		loadingMessages = true;
+		syncChatMessagePlaceholder();
+		teardownCommentsChannelLoadMore();
+		teardownFeedChannelLoadMore();
+		teardownExploreChannelLoadMore();
+		messagesEl.setAttribute('aria-busy', 'true');
+		try {
+			const feedCardMod = await import(`../shared/feedCardBuild.js${qs}`);
+			const { createFeedItemCard, feedItemToUser } = feedCardMod;
+
+			const creationsAuthorHints = await resolveCreationsChannelAuthorHints();
+
+			pseudoColumnPager = createPseudoColumnPager({
+				getItemKey: (it) => String(it.created_image_id || it.id || ''),
+				fetchPage: async ({ initial, items }) => {
+					const offset = initial ? 0 : items.length;
+					const res = await fetchJsonWithStatusDeduped(
+						`/api/users/${encodeURIComponent(String(viewerId))}/created-images?limit=${CREATIONS_CHANNEL_PAGE_SIZE}&offset=${offset}`,
+						{ credentials: 'include' },
+						{ windowMs: 30000 }
+					);
+					if (!res.ok) {
+						if (initial) {
+							const msg = res.data?.message || res.data?.error || 'Failed to load creations';
+							throw new Error(typeof msg === 'string' ? msg : 'Failed to load creations');
+						}
+						return { pageItems: [], hasMore: false };
+					}
+					const raw = Array.isArray(res.data?.images) ? res.data.images : [];
+					const pageItems = raw.map((img) =>
+						mapUserCreatedImageApiRowToFeedItem(img, viewerId, creationsAuthorHints)
+					);
+					return { pageItems, hasMore: Boolean(res.data?.has_more) };
+				},
+			});
+			const r = await pseudoColumnPager.loadInitial();
+			if (!r.ok) {
+				if (r.error instanceof Error) {
+					throw r.error;
+				}
+				throw new Error(typeof r.reason === 'string' ? r.reason : 'Failed to load creations');
+			}
+			const ordered = pseudoColumnPager.getItems();
+			lastChatMessagesPayload = [];
+			clearPageUsers();
+			addPageUsers(ordered.map(feedItemToUser));
+			teardownLatestMessageReadObserver();
+			messagesEl.innerHTML = '';
+			if (ordered.length === 0) {
+				messagesEl.innerHTML = renderEmptyState({
+					className: 'route-empty-image-grid',
+					title: 'No creations yet',
+					message: 'When you publish a creation, it appears here.',
+					buttonText: 'Create',
+					buttonHref: '/create',
+				});
+				scrollChatMessagesToEnd();
+				return;
+			}
+
+			const sentinel = document.createElement('div');
+			sentinel.dataset.chatFeedLoadSentinel = '1';
+			sentinel.className = 'chat-page-feed-load-sentinel';
+			sentinel.setAttribute('aria-hidden', 'true');
+			sentinel.style.cssText = 'height:1px;margin:0;padding:0;flex-shrink:0;pointer-events:none';
+			messagesEl.appendChild(sentinel);
+
+			const routeWrap = document.createElement('div');
+			routeWrap.className = 'feed-route chat-feed-channel-route';
+			const cards = document.createElement('div');
+			cards.className = 'route-cards feed-cards';
+			cards.setAttribute('data-feed-channel-cards', '1');
+			for (let i = 0; i < ordered.length; i++) {
+				cards.appendChild(
+					createFeedItemCard(ordered[i], i, {
+						setupFeedVideo: (el) => setupFeedChannelVideoAutoplay(messagesEl, el),
+					})
+				);
+			}
+			routeWrap.appendChild(cards);
+			messagesEl.appendChild(routeWrap);
+			if (pseudoColumnPager.getHasMore()) {
+				setupFeedChannelLoadMoreObserver(messagesEl);
+			}
+			scrollChatMessagesToEnd();
+		} catch (err) {
+			console.error('[Chat page] creations channel:', err);
+			messagesEl.innerHTML = renderEmptyError(err?.message || 'Could not load creations.');
+		} finally {
+			messagesEl.removeAttribute('aria-busy');
+			loadingMessages = false;
+			syncChatMessagePlaceholder();
+		}
+	}
+
+	async function loadMoreExploreChannelMessages() {
+		await loadMoreFeedLanePseudoChannelMessages('explore');
+	}
+
+	function mergeExploreSearchKeywordSemantic(keyword, semantic, preferSemanticFirst) {
+		const k = 60;
+		const keywordItems = Array.isArray(keyword) ? keyword : [];
+		const semanticItems = Array.isArray(semantic) ? semantic : [];
+		const keywordRank = new Map();
+		keywordItems.forEach((item, i) => {
+			const id = item?.created_image_id ?? item?.id;
+			if (id != null) keywordRank.set(Number(id), i + 1);
+		});
+		const semanticRank = new Map();
+		semanticItems.forEach((item, i) => {
+			const id = item?.created_image_id ?? item?.id;
+			if (id != null) semanticRank.set(Number(id), i + 1);
+		});
+		function scoreForItem(item) {
+			const id = item?.created_image_id ?? item?.id;
+			if (id == null) return null;
+			const n = Number(id);
+			const sk = keywordRank.has(n) ? 1 / (k + keywordRank.get(n)) : 0;
+			const ss = semanticRank.has(n) ? 1 / (k + semanticRank.get(n)) : 0;
+			return sk + ss;
+		}
+		if (keywordItems.length > 0 && semanticItems.length > 0) {
+			const firstList = preferSemanticFirst ? semanticItems : keywordItems;
+			const secondList = preferSemanticFirst ? keywordItems : semanticItems;
+			const firstIds = new Set(firstList.map((i) => i?.created_image_id ?? i?.id).filter(Boolean));
+			const appended = secondList.filter((i) => !firstIds.has(i?.created_image_id ?? i?.id));
+			return [...firstList, ...appended].map((item) => {
+				const s = scoreForItem(item);
+				return s != null ? { ...item, searchScore: s } : item;
+			});
+		}
+		if (keywordItems.length > 0) {
+			return keywordItems.map((item, i) => ({ ...item, searchScore: 1 / (k + i + 1) }));
+		}
+		if (semanticItems.length > 0) {
+			return semanticItems.map((item, i) => ({ ...item, searchScore: 1 / (k + i + 1) }));
+		}
+		return [];
+	}
+
+	async function fetchExploreSearchMergedForChat(trimmed) {
+		const q = encodeURIComponent(trimmed);
+		const keywordUrl = `/api/explore/search?q=${q}&limit=${EXPLORE_SEARCH_FETCH_LIMIT}`;
+		const semanticUrl = `/api/explore/search/semantic?q=${q}&limit=${EXPLORE_SEARCH_FETCH_LIMIT}`;
+		const opts = { credentials: 'include' };
+		const [kwRes, semRes] = await Promise.all([
+			fetch(keywordUrl, opts)
+				.then((r) => r.json().then((data) => ({ ok: r.ok, data })).catch(() => ({ ok: false, data: null })))
+				.catch(() => ({ ok: false, data: null })),
+			fetch(semanticUrl, opts)
+				.then((r) => r.json().then((data) => ({ ok: r.ok, data })).catch(() => ({ ok: false, data: null })))
+				.catch(() => ({ ok: false, data: null })),
+		]);
+		const keywordItems = kwRes?.ok && Array.isArray(kwRes.data?.items) ? kwRes.data.items : [];
+		const semanticItems = semRes?.ok && Array.isArray(semRes.data?.items) ? semRes.data.items : [];
+		const preferSemanticFirst = semanticItems.length > 0 && keywordItems.length === 0;
+		const merged = mergeExploreSearchKeywordSemantic(keywordItems, semanticItems, preferSemanticFirst);
+		merged.sort((a, b) => {
+			const ta = a?.created_at ? new Date(a.created_at).getTime() : 0;
+			const tb = b?.created_at ? new Date(b.created_at).getTime() : 0;
+			return ta - tb;
+		});
+		return merged;
+	}
+
+	async function loadExploreChannelMessages() {
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		if (!messagesEl || loadingMessages) return;
+		loadingMessages = true;
+		exploreBrowseMessagesLoading = true;
+		syncChatMessagePlaceholder();
+		syncChatExploreComposerChrome();
+		teardownCommentsChannelLoadMore();
+		teardownFeedChannelLoadMore();
+		teardownExploreChannelLoadMore();
+		messagesEl.setAttribute('aria-busy', 'true');
+		const qActive = String(exploreQueryRef.q || '').trim();
+		try {
+			const feedCardMod = await import(`../shared/feedCardBuild.js${qs}`);
+			const { createFeedItemCard, feedItemToUser } = feedCardMod;
+
+			if (qActive) {
+				pseudoColumnPager = null;
+				disconnectFeedChannelLoadObserver();
+				exploreChannelSearchLoading = true;
+				syncChatExploreComposerChrome();
+				try {
+					const merged = await fetchExploreSearchMergedForChat(qActive);
+					pushExploreChannelSearchToHistory(qActive);
+					lastChatMessagesPayload = [];
+					clearPageUsers();
+					addPageUsers(merged.map(feedItemToUser));
+					teardownLatestMessageReadObserver();
+					messagesEl.innerHTML = '';
+					if (merged.length === 0) {
+						messagesEl.innerHTML = renderEmptyState({
+							className: 'route-empty-image-grid',
+							title: 'No creations found',
+						});
+						scrollChatMessagesToEnd();
+						return;
+					}
+					const routeWrap = document.createElement('div');
+					routeWrap.className = 'feed-route chat-feed-channel-route';
+					const cards = document.createElement('div');
+					cards.className = 'route-cards feed-cards';
+					cards.setAttribute('data-feed-channel-cards', '1');
+					for (let i = 0; i < merged.length; i++) {
+						cards.appendChild(
+							createFeedItemCard(merged[i], i, {
+								setupFeedVideo: (el) => setupFeedChannelVideoAutoplay(messagesEl, el),
+							})
+						);
+					}
+					routeWrap.appendChild(cards);
+					messagesEl.appendChild(routeWrap);
+					scrollChatMessagesToEnd();
+					return;
+				} finally {
+					exploreChannelSearchLoading = false;
+					syncChatExploreComposerChrome();
+				}
+			}
+
+			pseudoColumnPager = createPseudoColumnPager({
+				getItemKey: (it) => String(it.created_image_id || it.id || ''),
+				fetchPage: async ({ initial, items }) => {
+					const offset = initial ? 0 : items.length;
+					const res = await fetchJsonWithStatusDeduped(
+						`/api/explore?limit=${EXPLORE_CHANNEL_PAGE_SIZE}&offset=${offset}`,
+						{ credentials: 'include' },
+						{ windowMs: 30000 }
+					);
+					if (!res.ok) {
+						if (initial) {
+							const msg = res.data?.message || res.data?.error || 'Failed to load explore';
+							throw new Error(typeof msg === 'string' ? msg : 'Failed to load explore');
+						}
+						return { pageItems: [], hasMore: false };
+					}
+					const pageItems = Array.isArray(res.data?.items) ? res.data.items : [];
+					return { pageItems, hasMore: Boolean(res.data?.hasMore) };
+				},
+			});
+			const r = await pseudoColumnPager.loadInitial();
+			if (!r.ok) {
+				if (r.error instanceof Error) {
+					throw r.error;
+				}
+				throw new Error(typeof r.reason === 'string' ? r.reason : 'Failed to load explore');
+			}
+			const ordered = pseudoColumnPager.getItems();
+			lastChatMessagesPayload = [];
+			clearPageUsers();
+			addPageUsers(ordered.map(feedItemToUser));
+			teardownLatestMessageReadObserver();
+			messagesEl.innerHTML = '';
+
+			if (ordered.length === 0) {
+				messagesEl.innerHTML = renderEmptyState({
+					className: 'route-empty-image-grid',
+					title: 'Nothing to explore yet',
+					message: 'Published creations from the community will appear here.',
+				});
+				scrollChatMessagesToEnd();
+				return;
+			}
+
+			const sentinel = document.createElement('div');
+			sentinel.dataset.chatFeedLoadSentinel = '1';
+			sentinel.className = 'chat-page-feed-load-sentinel';
+			sentinel.setAttribute('aria-hidden', 'true');
+			sentinel.style.cssText = 'height:1px;margin:0;padding:0;flex-shrink:0;pointer-events:none';
+			messagesEl.appendChild(sentinel);
+
+			const routeWrap = document.createElement('div');
+			routeWrap.className = 'feed-route chat-feed-channel-route';
+			const cards = document.createElement('div');
+			cards.className = 'route-cards feed-cards';
+			cards.setAttribute('data-feed-channel-cards', '1');
+			for (let i = 0; i < ordered.length; i++) {
+				cards.appendChild(
+					createFeedItemCard(ordered[i], i, {
+						setupFeedVideo: (el) => setupFeedChannelVideoAutoplay(messagesEl, el),
+					})
+				);
+			}
+			routeWrap.appendChild(cards);
+			messagesEl.appendChild(routeWrap);
+			if (pseudoColumnPager.getHasMore()) {
+				setupFeedChannelLoadMoreObserver(messagesEl);
+			}
+			scrollChatMessagesToEnd();
+		} catch (err) {
+			console.error('[Chat page] explore channel:', err);
+			messagesEl.innerHTML = renderEmptyError(err?.message || 'Could not load explore.');
+		} finally {
+			messagesEl.removeAttribute('aria-busy');
+			exploreBrowseMessagesLoading = false;
+			loadingMessages = false;
+			syncChatMessagePlaceholder();
+			syncChatExploreComposerChrome();
+			if (activePseudoChannelSlug === 'explore' && !String(exploreQueryRef.q || '').trim()) {
+				syncExploreChannelBrowseUrl();
+			}
 		}
 	}
 
@@ -3513,10 +4476,23 @@ export async function initChatPage(root) {
 		}
 	}
 
+	async function commitExploreSearchImmediateFromComposer() {
+		if (activePseudoChannelSlug !== 'explore') return;
+		if (isExploreComposerLoadLocked()) return;
+		const bodyInput = root.querySelector('[data-chat-body-input]');
+		if (!(bodyInput instanceof HTMLTextAreaElement)) return;
+		exploreQueryRef.q = String(bodyInput.value || '').trim();
+		await loadExploreChannelMessages();
+	}
+
 	async function submitChatMessage() {
 		const bodyInput = root.querySelector('[data-chat-body-input]');
 		const errEl = root.querySelector('[data-chat-error]');
 		if (!(bodyInput instanceof HTMLTextAreaElement)) return;
+		if (activePseudoChannelSlug === 'explore') {
+			await commitExploreSearchImmediateFromComposer();
+			return;
+		}
 		if (chatPendingImages.some((x) => x.status === 'uploading')) return;
 		const text = String(bodyInput.value || '').trim();
 		const paths = chatPendingImages
@@ -3559,6 +4535,8 @@ export async function initChatPage(root) {
 		clearChatPendingAttachments();
 		activePseudoChannelSlug = null;
 		teardownCommentsChannelLoadMore();
+		teardownFeedChannelLoadMore();
+		teardownExploreChannelLoadMore();
 
 		if (messagesEl) {
 			messagesEl.innerHTML = renderEmptyState({
@@ -3606,6 +4584,61 @@ export async function initChatPage(root) {
 						messagesEl.removeAttribute('aria-busy');
 					}
 					await loadCommentsChannelMessages();
+					return;
+				}
+				if (slug === 'feed') {
+					activePseudoChannelSlug = 'feed';
+					activeThreadId = null;
+					updateTitleFromMeta({
+						type: 'channel',
+						channel_slug: 'feed',
+						title: '#feed',
+					});
+					if (messagesEl) {
+						messagesEl.removeAttribute('aria-busy');
+					}
+					await loadFeedChannelMessages();
+					return;
+				}
+				if (slug === 'creations') {
+					activePseudoChannelSlug = 'creations';
+					activeThreadId = null;
+					updateTitleFromMeta({
+						type: 'channel',
+						channel_slug: 'creations',
+						title: '#creations',
+					});
+					if (messagesEl) {
+						messagesEl.removeAttribute('aria-busy');
+					}
+					await loadCreationsChannelMessages();
+					return;
+				}
+				if (slug === 'explore') {
+					activePseudoChannelSlug = 'explore';
+					activeThreadId = null;
+					let exploreSearchFromUrl = '';
+					try {
+						exploreSearchFromUrl = String(
+							new URLSearchParams(window.location.search).get('s') || ''
+						).trim();
+					} catch {
+						exploreSearchFromUrl = '';
+					}
+					exploreQueryRef.q = exploreSearchFromUrl;
+					const biExplore = root.querySelector('[data-chat-body-input]');
+					if (biExplore instanceof HTMLTextAreaElement) {
+						biExplore.value = exploreSearchFromUrl;
+					}
+					updateTitleFromMeta({
+						type: 'channel',
+						channel_slug: 'explore',
+						title: '#explore',
+					});
+					if (messagesEl) {
+						messagesEl.removeAttribute('aria-busy');
+					}
+					await loadExploreChannelMessages();
 					return;
 				}
 				const match = (chatThreads || []).find(
@@ -3930,10 +4963,41 @@ export async function initChatPage(root) {
 		addImageInlineBtn.addEventListener('click', triggerChatImageFilePicker);
 	}
 
+	const exploreClearBtn = root.querySelector('[data-chat-explore-clear-search]');
+	if (exploreClearBtn instanceof HTMLButtonElement) {
+		exploreClearBtn.addEventListener('click', () => {
+			if (activePseudoChannelSlug !== 'explore') return;
+			if (isExploreComposerLoadLocked()) return;
+			if (!(bodyInput instanceof HTMLTextAreaElement)) return;
+			const trimmed = String(bodyInput.value || '').trim();
+			const committed = String(exploreQueryRef.q || '').trim();
+			const syncedWithResults = committed.length > 0 && trimmed === committed;
+			if (syncedWithResults) {
+				bodyInput.value = '';
+				exploreQueryRef.q = '';
+				syncChatExploreComposerChrome();
+				void loadExploreChannelMessages();
+				return;
+			}
+			if (trimmed.length > 0 || committed.length > 0) {
+				void commitExploreSearchImmediateFromComposer();
+				return;
+			}
+			try {
+				bodyInput.focus({ preventScroll: true });
+			} catch {
+				bodyInput.focus();
+			}
+		});
+	}
+
 	if (bodyInput instanceof HTMLTextAreaElement) {
 		attachAutoGrowTextarea(bodyInput);
 		attachMentionSuggest(bodyInput);
-		bodyInput.addEventListener('input', () => syncChatSendButton());
+		bodyInput.addEventListener('input', () => {
+			syncChatSendButton();
+			syncChatExploreComposerChrome();
+		});
 		bodyInput.addEventListener('paste', (ev) => {
 			if (activePseudoChannelSlug || !activeThreadId || bodyInput.disabled) return;
 			if (sendInFlight) return;
@@ -3956,6 +5020,19 @@ export async function initChatPage(root) {
 		});
 		bodyInput.addEventListener('keydown', (ev) => {
 			if (ev.key !== 'Enter' || ev.isComposing) return;
+			if (activePseudoChannelSlug === 'explore') {
+				if (ev.shiftKey) return;
+				if (isExploreComposerLoadLocked()) {
+					ev.preventDefault();
+					return;
+				}
+				if (typeof isTriggeredSuggestPopupOpen === 'function' && isTriggeredSuggestPopupOpen(bodyInput)) {
+					return;
+				}
+				ev.preventDefault();
+				void commitExploreSearchImmediateFromComposer();
+				return;
+			}
 			if (!ENTER_SENDS) return;
 			if (ev.shiftKey) return;
 			if (typeof isTriggeredSuggestPopupOpen === 'function' && isTriggeredSuggestPopupOpen(bodyInput)) {
@@ -3978,6 +5055,8 @@ export async function initChatPage(root) {
 
 	const onPageHide = () => {
 		teardownCommentsChannelLoadMore();
+		teardownFeedChannelLoadMore();
+		teardownExploreChannelLoadMore();
 		tearDownVisibilityResync();
 		tearDownRoomBroadcast();
 		closeReactionPicker();
@@ -4109,6 +5188,7 @@ export async function initChatPage(root) {
 		});
 	}
 
+	enableLikeButtons(root);
 	await openThreadForCurrentPath();
 	void refreshChatSidebar({ skipThreadsFetch: true });
 	dispatchChatUnreadRefresh();

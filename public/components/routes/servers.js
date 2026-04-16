@@ -15,6 +15,10 @@ let renderCommentAvatarHtml;
 let serverChannelTagFromServerName;
 let appendReservedPseudoChannels;
 let mergeThreadRowsWithJoinedServers;
+let getSidebarPseudoStripRowsMerged;
+let buildSidebarPseudoStripListStaticHtml;
+let SIDEBAR_TOP_STRIP_CHANNEL_SLUGS;
+let SIDEBAR_STRIP_SLUGS_ALSO_IN_APP_PRIMARY_NAV;
 let buildChatThreadUrl;
 let buildChatThreadRowAvatarHtml;
 let getDmOtherUserId;
@@ -74,6 +78,11 @@ async function loadDeps() {
 		const chatSidebarRosterMod = await import(`../../shared/chatSidebarRoster.js${qs}`);
 		appendReservedPseudoChannels = chatSidebarRosterMod.appendReservedPseudoChannels;
 		mergeThreadRowsWithJoinedServers = chatSidebarRosterMod.mergeThreadRowsWithJoinedServers;
+		getSidebarPseudoStripRowsMerged = chatSidebarRosterMod.getSidebarPseudoStripRowsMerged;
+		buildSidebarPseudoStripListStaticHtml = chatSidebarRosterMod.buildSidebarPseudoStripListStaticHtml;
+		SIDEBAR_TOP_STRIP_CHANNEL_SLUGS = chatSidebarRosterMod.SIDEBAR_TOP_STRIP_CHANNEL_SLUGS;
+		SIDEBAR_STRIP_SLUGS_ALSO_IN_APP_PRIMARY_NAV =
+			chatSidebarRosterMod.SIDEBAR_STRIP_SLUGS_ALSO_IN_APP_PRIMARY_NAV;
 		buildChatThreadUrl = chatSidebarRosterMod.buildChatThreadUrl;
 		buildChatThreadRowAvatarHtml = chatSidebarRosterMod.buildChatThreadRowAvatarHtml;
 		getDmOtherUserId = chatSidebarRosterMod.getDmOtherUserId;
@@ -133,6 +142,10 @@ function isDmConsideredOnlineWithGrace(otherUserId, onlineIds, lastSeenMap) {
 class AppRouteServers extends HTMLElement {
 	async connectedCallback() {
 		await loadDeps();
+		const pseudoStripStaticHtml =
+			typeof buildSidebarPseudoStripListStaticHtml === 'function'
+				? buildSidebarPseudoStripListStaticHtml()
+				: '';
 		this.innerHTML = html`
 	<div class="servers-route">
 		<div class="route-header">
@@ -145,6 +158,9 @@ class AppRouteServers extends HTMLElement {
 				<div class="connect-chat-lists" data-connect-chat-lists>
 					<div class="chat-page-sidebar-scroll connect-chat-sidebar-roster" data-connect-chat-scroll
 						aria-busy="true" aria-label="Loading conversations">
+						<div class="chat-page-sidebar-pseudo" data-chat-sidebar-pseudo>
+							<div class="chat-page-sidebar-list" data-chat-sidebar-pseudo-list">${pseudoStripStaticHtml}</div>
+						</div>
 						<section class="chat-page-sidebar-section" aria-labelledby="connect-sidebar-dms-heading">
 							<div class="chat-page-sidebar-section-head">
 								<h2 id="connect-sidebar-dms-heading" class="chat-page-sidebar-heading">Direct messages</h2>
@@ -761,10 +777,14 @@ class AppRouteServers extends HTMLElement {
 		const channelRowsRaw = merged.filter((t) => t && t.type === 'channel');
 		const serverChannelsRaw = channelRowsRaw.filter((t) => {
 			const slug = typeof t.channel_slug === 'string' ? t.channel_slug.trim().toLowerCase() : '';
+			if (slug && SIDEBAR_TOP_STRIP_CHANNEL_SLUGS && SIDEBAR_TOP_STRIP_CHANNEL_SLUGS.has(slug))
+				return false;
 			return Boolean(slug && joinedSlugs.has(slug));
 		});
 		const otherChannelsRaw = channelRowsRaw.filter((t) => {
 			const slug = typeof t.channel_slug === 'string' ? t.channel_slug.trim().toLowerCase() : '';
+			if (slug && SIDEBAR_TOP_STRIP_CHANNEL_SLUGS && SIDEBAR_TOP_STRIP_CHANNEL_SLUGS.has(slug))
+				return false;
 			return !slug || !joinedSlugs.has(slug);
 		});
 		const serverChannels =
@@ -790,7 +810,7 @@ class AppRouteServers extends HTMLElement {
 			return null;
 		};
 
-		const rowHtml = (t) => {
+		const rowHtml = (t, rowOpts) => {
 			const href = buildChatThreadUrl(t);
 			const title = typeof t.title === 'string' && t.title.trim() ? t.title.trim() : 'Chat';
 			const avatarHtml = buildChatThreadRowAvatarHtml(t, deps);
@@ -804,6 +824,12 @@ class AppRouteServers extends HTMLElement {
 				presenceClass = online ? 'is-online' : 'is-offline';
 			}
 			const pc = presenceClass ? ` ${presenceClass}` : '';
+			const extraRow =
+				rowOpts &&
+				typeof rowOpts.extraAnchorClasses === 'string' &&
+				rowOpts.extraAnchorClasses.trim()
+					? ` ${rowOpts.extraAnchorClasses.trim()}`
+					: '';
 			const unc = Number(t.unread_count);
 			const showUnread = Number.isFinite(unc) && unc > 0;
 			const unreadLabel = unc > 99 ? '99+' : String(unc);
@@ -813,7 +839,7 @@ class AppRouteServers extends HTMLElement {
 			const youPill = selfDm
 				? '<span class="chat-page-sidebar-you-pill" aria-label="This is you">you</span>'
 				: '';
-			return `<a class="chat-page-sidebar-row${pc}" href="${escapeHtml(href)}">
+			return `<a class="chat-page-sidebar-row${pc}${extraRow}" href="${escapeHtml(href)}">
 				${avatarHtml}
 				<div class="chat-page-sidebar-row-body">
 					<div class="chat-page-sidebar-row-title-line">
@@ -883,6 +909,27 @@ class AppRouteServers extends HTMLElement {
 				<button type="button" class="btn-danger btn-inline connect-chat-thread-delete" data-connect-admin-delete="${threadId}" data-connect-admin-delete-label="${encLabel}" aria-label="Delete chat thread ${threadId}">Delete</button>
 			</div>`;
 		};
+
+		const pseudoListEl = this.querySelector('[data-chat-sidebar-pseudo-list]');
+		if (pseudoListEl && typeof getSidebarPseudoStripRowsMerged === 'function') {
+			const stripRows = getSidebarPseudoStripRowsMerged(channelRowsRaw);
+			const navDupSlugs =
+				SIDEBAR_STRIP_SLUGS_ALSO_IN_APP_PRIMARY_NAV instanceof Set
+					? SIDEBAR_STRIP_SLUGS_ALSO_IN_APP_PRIMARY_NAV
+					: new Set();
+			pseudoListEl.innerHTML = stripRows
+				.map((t) => {
+					const slug =
+						t?.type === 'channel' && typeof t.channel_slug === 'string'
+							? t.channel_slug.trim().toLowerCase()
+							: '';
+					const alsoNav = Boolean(slug && navDupSlugs.has(slug));
+					return rowHtml(t, {
+						extraAnchorClasses: alsoNav ? 'chat-page-sidebar-row--also-in-app-primary-nav' : ''
+					});
+				})
+				.join('');
+		}
 
 		dmEl.innerHTML =
 			typeof buildChatSidebarDmListHtml === 'function'

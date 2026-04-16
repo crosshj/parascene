@@ -63,6 +63,19 @@ const MAX_PAGE_LIMIT = 100;
 const SEND_RATE_WINDOW_SEC = 60;
 const SEND_RATE_MAX = 60;
 
+/**
+ * Slugs reserved for product UX (pseudo / system channels). The client may treat them as channels
+ * without a DB row; POST /api/chat/channels must not create user hashtag threads for these names.
+ * Keep in sync with `public/shared/chatSidebarRoster.js` (strip + feedback).
+ */
+const SYSTEM_RESERVED_CHANNEL_SLUGS = new Set([
+	"comments",
+	"feed",
+	"explore",
+	"creations",
+	"feedback"
+]);
+
 /** Match trailing punctuation on pasted URLs (aligned with client `splitUrlTrailingPunctuation`). */
 function splitUrlTrailingPunctuationForChat(rawUrl) {
 	let url = String(rawUrl || "");
@@ -504,9 +517,7 @@ export default function createChatRoutes({ queries, storage }) {
 		const sb = getSb(res);
 		if (!sb) return;
 
-		/** Sidebar pseudo rows (#comments / #feedback) are always “channels” in the product sense. */
-		const PSEUDO_CHANNEL_SLUGS = new Set(["comments", "feedback"]);
-		if (PSEUDO_CHANNEL_SLUGS.has(slug)) {
+		if (SYSTEM_RESERVED_CHANNEL_SLUGS.has(slug)) {
 			return res.status(200).json({ slug, channelExists: true });
 		}
 
@@ -640,9 +651,7 @@ export default function createChatRoutes({ queries, storage }) {
 			return res.status(400).json({ error: "Bad request", message: "Invalid or missing tag" });
 		}
 
-		/** Client-side pseudo-channels (e.g. latest creation comments); not real hashtag threads. */
-		const RESERVED_CHANNEL_SLUGS = new Set(["comments"]);
-		if (RESERVED_CHANNEL_SLUGS.has(slug)) {
+		if (SYSTEM_RESERVED_CHANNEL_SLUGS.has(slug)) {
 			return res.status(400).json({
 				error: "Bad request",
 				message: "This channel name is reserved.",

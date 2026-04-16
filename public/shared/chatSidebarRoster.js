@@ -2,23 +2,56 @@
  * Shared roster logic for Connect chat list and full-page chat sidebar (channels + DMs).
  */
 
+import { getAvatarColor } from './avatar.js';
 import { serverChannelTagFromServerName } from './serverChatTag.js';
 
-/**
- * Pseudo-channels (UI-only roster rows; not backed by prsn_chat_threads).
- * Slugs must match client + API reserved list in api_routes/chat.js.
- * Always show both #comments and #feedback in the sidebar.
- */
-export const RESERVED_PSEUDO_CHANNEL_SLUGS = ['comments', 'feedback'];
+function escapeHtmlPseudoStrip(str) {
+	return String(str ?? '')
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;');
+}
 
 /**
- * Channel slugs that always sort to the top of the sidebar (order matters).
- * `#comments` is the reserved pseudo row; `#feedback` is an ordinary channel when present.
+ * Slugs for the fixed top strip (no section label) above DMs on chat + Connect sidebars.
+ * Order: Feed, Explore, Creations, Comments, Feedback.
  */
-export const SIDEBAR_CHANNEL_PRIORITY_FIRST = ['comments', 'feedback'];
+export const SIDEBAR_PSEUDO_STRIP_ORDER = ['feed', 'explore', 'creations', 'comments', 'feedback'];
+
+/** @type {Record<string, string>} */
+const SIDEBAR_PSEUDO_STRIP_TITLES = {
+	feed: 'Feed',
+	explore: 'Explore',
+	creations: 'Creations',
+	comments: 'Comments',
+	feedback: 'Feedback',
+};
+
+/** Exclude these from the collapsible “Channels” list — they render only in the top strip. */
+export const SIDEBAR_TOP_STRIP_CHANNEL_SLUGS = new Set(
+	SIDEBAR_PSEUDO_STRIP_ORDER.map((s) => s.toLowerCase())
+);
 
 /**
- * Put priority channel rows first (#comments, then #feedback, then the rest), stable order within each tier.
+ * Strip slugs that mirror primary app chrome: `app-navigation` links in `pages/app.html` (feed, explore, creations)
+ * and the same `data-route` values on `app-navigation-mobile` (`public/components/navigation/mobile.js`).
+ * Rows get class `chat-page-sidebar-row--also-in-app-primary-nav` where layout/CSS hides dupes of header / mobile nav.
+ */
+export const SIDEBAR_STRIP_SLUGS_ALSO_IN_APP_PRIMARY_NAV = new Set(['feed', 'explore', 'creations']);
+
+/**
+ * Synthetic channel rows appended for the **Channels** section (none today — strip covers reserved slugs).
+ */
+export const RESERVED_PSEUDO_CHANNEL_SLUGS = [];
+
+/**
+ * Sort priority within the Channels section only (empty: order by activity only).
+ */
+export const SIDEBAR_CHANNEL_PRIORITY_FIRST = [];
+
+/**
+ * Put priority channel rows first (see SIDEBAR_CHANNEL_PRIORITY_FIRST), then the rest), stable order within each tier.
  * @param {object[]} threads
  */
 export function sortChatSidebarRowsPriority(threads) {
@@ -49,7 +82,7 @@ function channelLastActivityMs(t) {
 }
 
 /**
- * Order channel rows: #comments and #feedback first (see SIDEBAR_CHANNEL_PRIORITY_FIRST), then
+ * Order channel rows: priority slugs first (see SIDEBAR_CHANNEL_PRIORITY_FIRST), then
  * newest `last_message` first. Rows with no last message sort after, by slug for stability.
  * @param {object[]} channelRows
  */
@@ -78,7 +111,8 @@ export function sortChannelRowsByLastActivity(channelRows) {
 }
 
 /**
- * Append fixed pseudo-channel rows so they always appear in the sidebar list.
+ * Append synthetic channel rows for the **Channels** section only.
+ * Feed / explore / creations / comments / feedback render in the top strip, not here.
  * @param {object[]} threads
  */
 export function appendReservedPseudoChannels(threads) {
@@ -101,6 +135,65 @@ export function appendReservedPseudoChannels(threads) {
 		}
 	}
 	return sortChatSidebarRowsPriority(list);
+}
+
+/**
+ * Thread-shaped rows for the sidebar top strip (plain titles, same URLs as /chat/c/:slug).
+ * @returns {object[]}
+ */
+export function buildSidebarPseudoStripRows() {
+	return SIDEBAR_PSEUDO_STRIP_ORDER.map((slug) => ({
+		type: 'channel',
+		channel_slug: slug,
+		title: SIDEBAR_PSEUDO_STRIP_TITLES[slug] || `#${slug}`,
+		unread_count: 0,
+		last_read_message_id: null,
+	}));
+}
+
+/**
+ * Initial HTML for the pseudo strip (same row shape as `rowHtml` in chat / Connect).
+ * Server injects into `pages/chat.html` via `{{CHAT_SIDEBAR_PSEUDO_STRIP_LIST}}`; Connect uses this after `loadDeps`.
+ * @returns {string}
+ */
+export function buildSidebarPseudoStripListStaticHtml() {
+	return SIDEBAR_PSEUDO_STRIP_ORDER.map((slug) => {
+		const title = SIDEBAR_PSEUDO_STRIP_TITLES[slug] || `#${slug}`;
+		const href = `/chat/c/${encodeURIComponent(slug)}`;
+		const bg = getAvatarColor(slug);
+		const navDup = SIDEBAR_STRIP_SLUGS_ALSO_IN_APP_PRIMARY_NAV.has(slug);
+		const navCls = navDup ? ' chat-page-sidebar-row--also-in-app-primary-nav' : '';
+		return `<a class="chat-page-sidebar-row${navCls}" href="${escapeHtmlPseudoStrip(href)}">
+				<div class="comment-avatar connect-chat-thread-row-channel-avatar chat-page-sidebar-channel-avatar" style="background: ${escapeHtmlPseudoStrip(bg)};" aria-hidden="true">#</div>
+				<div class="chat-page-sidebar-row-body">
+					<div class="chat-page-sidebar-row-title-line">
+						<span class="chat-page-sidebar-row-title">${escapeHtmlPseudoStrip(title)}</span>
+					</div>
+				</div>
+			</a>`;
+	}).join('');
+}
+
+/**
+ * Strip rows with API thread data merged in (unread, ids) when GET /api/chat/threads returned those channels.
+ * @param {object[]} channelRowsRaw from merged roster (`type === 'channel'` slice is fine).
+ * @returns {object[]}
+ */
+export function getSidebarPseudoStripRowsMerged(channelRowsRaw) {
+	const stubs = buildSidebarPseudoStripRows();
+	const list = Array.isArray(channelRowsRaw) ? channelRowsRaw : [];
+	const bySlug = new Map();
+	for (const t of list) {
+		if (!t || t.type !== 'channel') continue;
+		const slug = typeof t.channel_slug === 'string' ? t.channel_slug.trim().toLowerCase() : '';
+		if (slug && SIDEBAR_TOP_STRIP_CHANNEL_SLUGS.has(slug)) bySlug.set(slug, t);
+	}
+	return stubs.map((stub) => {
+		const key = String(stub.channel_slug || '').toLowerCase();
+		const api = bySlug.get(key);
+		if (!api) return stub;
+		return { ...api, title: stub.title };
+	});
 }
 
 /** @param {object} meta */

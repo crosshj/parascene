@@ -24,6 +24,9 @@
 						<div>Connect</div>
 					</div>
 					<div class="chat-page-sidebar-scroll">
+						<div class="chat-page-sidebar-pseudo" data-chat-sidebar-pseudo>
+							<div class="chat-page-sidebar-list" data-chat-sidebar-pseudo-list>{{CHAT_SIDEBAR_PSEUDO_STRIP_LIST}}</div>
+						</div>
 						<section class="chat-page-sidebar-section" aria-labelledby="chat-sidebar-dms-heading">
 							<div class="chat-page-sidebar-section-head">
 								<h2 id="chat-sidebar-dms-heading" class="chat-page-sidebar-heading">Direct messages</h2>
@@ -132,6 +135,32 @@
 									<textarea class="connect-chat-composer-input chat-page-composer-input" name="body"
 										rows="1" maxlength="4000" data-chat-body-input
 										aria-label="Message text"></textarea>
+									<button type="button" class="chat-page-explore-clear-search" data-chat-explore-clear-search
+										hidden aria-label="Search creations">
+										<span class="chat-page-explore-clear-search-slot" aria-hidden="true">
+											<span class="chat-page-explore-trailing-icon-layer" data-chat-explore-search-icon-wrap>
+												<svg class="chat-page-explore-search-magnifier-icon"
+													xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+													stroke="currentColor" stroke-width="2" stroke-linecap="round"
+													stroke-linejoin="round">
+													<circle cx="11" cy="11" r="8" />
+													<path d="m21 21-4.3-4.3" />
+												</svg>
+											</span>
+											<span class="chat-page-explore-trailing-icon-layer" data-chat-explore-clear-spinner
+												hidden><span class="chat-page-explore-clear-search-spinner-disk"
+													aria-hidden="true"></span></span>
+											<span class="chat-page-explore-trailing-icon-layer" data-chat-explore-x-icon-wrap
+												hidden>
+												<svg class="chat-page-explore-clear-search-icon" data-chat-explore-clear-x-icon
+													xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+													stroke="currentColor" stroke-width="2" stroke-linecap="round"
+													stroke-linejoin="round">
+													<path d="M18 6L6 18M6 6l12 12" />
+												</svg>
+											</span>
+										</span>
+									</button>
 									<button type="button" class="chat-page-send-btn" data-chat-send hidden
 										aria-label="Send"></button>
 								</div>

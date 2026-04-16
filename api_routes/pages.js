@@ -5,6 +5,7 @@ import { injectCommonHead, getPageTokens } from "./utils/head.js";
 import { getBaseAppUrl, getShareBaseUrl } from "./utils/url.js";
 import { verifyShareToken } from "./utils/shareLink.js";
 import { buildRequestMeta } from "./utils/analytics.js";
+import { buildSidebarPseudoStripListStaticHtml } from "../public/shared/chatSidebarRoster.js";
 
 function getPageForUser(user) {
 	const roleToPage = {
@@ -1227,7 +1228,9 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 		if (req.path.startsWith("/chat/")) {
 			const fs = await import("fs/promises");
 			let htmlContent = await fs.readFile(path.join(pagesDir, "chat.html"), "utf-8");
-			htmlContent = injectCommonHead(htmlContent, getPageTokens(req));
+			const chatPageTokens = getPageTokens(req);
+			chatPageTokens.CHAT_SIDEBAR_PSEUDO_STRIP_LIST = buildSidebarPseudoStripListStaticHtml();
+			htmlContent = injectCommonHead(htmlContent, chatPageTokens);
 			res.setHeader("Content-Type", "text/html");
 			return res.send(htmlContent);
 		}
