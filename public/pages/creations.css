@@ -2639,6 +2639,8 @@ button.creation-detail-history-thumb-link.creation-detail-history-unavailable.cr
 
 	.creation-detail-lineage-modal .creation-detail-lineage-modal-mobile-chrome.chat-page-topbar {
 		display: flex;
+		min-height: unset;
+		height: auto;
 		padding-top: calc(10px + env(safe-area-inset-top, 0px));
 		padding-left: max(4px, env(safe-area-inset-left, 0px));
 		padding-right: max(12px, env(safe-area-inset-right, 0px));

@@ -4170,13 +4170,28 @@ body.chat-page main.chat-page-outer {
 		flex-direction: row;
 		align-items: center;
 		gap: 6px;
-		padding: 10px 12px 10px 8px;
+		height: 48px;
+		padding: 0 12px 0 8px;
 		border-bottom: 1px solid var(--border);
 		background: color-mix(in srgb, var(--bg) 40%, transparent);
+		box-sizing: border-box;
 	}
 
 	body.chat-page .chat-page-topbar {
+		display: flex;
+		justify-content: space-between;
+	}
+
+	body.chat-page .chat-page-topbar .chat-page-back {
 		display: none;
+	}
+
+	body.chat-page .chat-page-topbar .chat-page-title {
+		flex: 0 1 auto;
+	}
+
+	body.chat-page .chat-page-topbar .chat-page-topbar-actions {
+		margin-left: auto;
 	}
 
 	.chat-page-sidebar-back.chat-page-back {
@@ -5026,7 +5041,10 @@ body.chat-page .chat-route {
 	gap: 8px;
 	min-width: 0;
 	max-width: 100%;
-	padding: 10px 12px;
+	min-height: 48px;
+	height: 48px;
+	padding: 0 12px;
+	box-sizing: border-box;
 	border-bottom: 1px solid var(--border);
 	background: var(--bg);
 	z-index: 2;
@@ -5074,55 +5092,58 @@ body.chat-page .chat-route {
 	white-space: nowrap;
 }
 
-.chat-page-refresh {
+.chat-page-topbar-actions {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	flex-shrink: 0;
+}
+
+/* Ghost ⋮ — match chat canvas header (chat.css `.chat-page-canvas-more-btn`). */
+.chat-page-topbar-actions .feed-card-action-more {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	flex-shrink: 0;
-	width: 36px;
-	height: 36px;
-	margin: -4px -4px -4px 0;
-	padding: 0;
-	border: 1px solid color-mix(in srgb, var(--text-muted) 42%, var(--border));
-	border-radius: 6px;
+	width: auto;
+	height: auto;
+	min-width: 40px;
+	min-height: 40px;
+	margin: 0;
+	padding: 8px;
+	border: none;
+	border-radius: 50%;
 	background: transparent;
 	color: var(--text-muted);
 	cursor: pointer;
 	-webkit-tap-highlight-color: transparent;
 	touch-action: manipulation;
-	transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+	transition: background-color 0.12s ease, color 0.12s ease;
 	font: inherit;
 }
 
-.chat-page-refresh:hover:not(:disabled) {
-	background: color-mix(in srgb, var(--text-muted) 8%, transparent);
-	border-color: color-mix(in srgb, var(--text-muted) 55%, var(--border));
-	color: var(--text);
+.chat-page-topbar-actions .feed-card-action-more svg {
+	width: 18px;
+	height: 18px;
 }
 
-.chat-page-refresh:focus-visible {
+.chat-page-topbar-actions .feed-card-action-more:hover:not(:disabled) {
+	color: var(--text);
+	background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.chat-page-topbar-actions .feed-card-action-more:focus-visible {
 	outline: 2px solid var(--focus);
 	outline-offset: 2px;
 }
 
-.chat-page-refresh:disabled {
+.chat-page-topbar-actions .feed-card-action-more:disabled {
 	opacity: 0.55;
 	cursor: not-allowed;
 }
 
-.chat-page-refresh-icon {
-	display: block;
-	flex-shrink: 0;
-}
-
-.chat-page-refresh[aria-busy='true'] .chat-page-refresh-icon {
-	animation: chat-page-refresh-spin 0.75s linear infinite;
-}
-
-@keyframes chat-page-refresh-spin {
-	to {
-		transform: rotate(360deg);
-	}
+.chat-page-topbar-menu {
+	right: 0;
+	top: calc(100% + 4px);
 }
 
 .chat-page-messages {

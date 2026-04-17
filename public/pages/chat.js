@@ -10,6 +10,15 @@ const ENTER_SENDS = (() => {
 	}
 })();
 
+/** Align with `public/pages/chat.css` mobile chrome / canvas rules (`max-width: 768px`). */
+function isChatPageMobileLayout() {
+	try {
+		return window.matchMedia('(max-width: 768px)').matches;
+	} catch {
+		return typeof window.innerWidth === 'number' && window.innerWidth <= 768;
+	}
+}
+
 /** `?chatSimulateSendFail=1` — next POST /messages returns failure so you can preview resend UI. */
 function chatSimulateSendFail() {
 	try {
@@ -358,12 +367,43 @@ function parseChatPathname(pathname) {
 	return { kind: 'invalid' };
 }
 
+/** Slugs where canvases are disabled in the client (pseudo-column channels). `#feedback` is allowed; keep aligned with `CANVAS_DISALLOWED_CHANNEL_SLUGS` in api_routes/chat.js */
+const CHAT_CANVAS_DISALLOWED_SLUGS = new Set(['comments', 'feed', 'explore', 'creations']);
+
+/**
+ * @param {object | null | undefined} m
+ * @returns {{ title: string } | null}
+ */
+function getChatCanvasMetaFromMessage(m) {
+	const meta = m?.meta;
+	if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return null;
+	const canvas = meta.canvas;
+	if (!canvas || typeof canvas !== 'object') return null;
+	const title = typeof canvas.title === 'string' ? canvas.title.trim() : '';
+	if (!title) return null;
+	return { title };
+}
+
 /**
  * Mount chat UI and load the thread for the current URL.
  * @param {HTMLElement} root — container with [data-chat] markup (see pages/chat.html)
  */
 export async function initChatPage(root) {
 	if (!(root instanceof HTMLElement)) return;
+
+	/** Canvas panel lives outside `[data-chat-page]` (sibling under `.chat-page-main-split`). */
+	const chatLayoutRoot = root.closest('.chat-page-main-split');
+	const chatCanvasScope = chatLayoutRoot instanceof HTMLElement ? chatLayoutRoot : root;
+	const mainColumn =
+		chatLayoutRoot instanceof HTMLElement &&
+		chatLayoutRoot.parentElement instanceof HTMLElement &&
+		chatLayoutRoot.parentElement.classList.contains('chat-page-main-column')
+			? chatLayoutRoot.parentElement
+			: root.closest('.chat-page-main-column');
+	const canvasActionRoot = mainColumn instanceof HTMLElement ? mainColumn : chatCanvasScope;
+
+	/** @type {null | ((e: KeyboardEvent) => void)} */
+	let mobileChromeEscapeKeyHandler = null;
 
 	await loadDeps();
 
@@ -407,6 +447,25 @@ export async function initChatPage(root) {
 	let chatViewerId = null;
 	/** Set from GET /api/chat/threads (`viewer_is_admin`) or threads cache. */
 	let chatViewerIsAdmin = false;
+	/** Set from GET /api/chat/threads (`viewer_is_founder`) or threads cache. */
+	let chatViewerIsFounder = false;
+	/** Canvas list for current channel thread (GET .../canvases). */
+	let chatCanvasesList = [];
+	/** Message id pinned for the active channel thread (from GET .../canvases). */
+	let activeThreadPinnedCanvasId = null;
+	/** After auto-opening the channel pin once per visit, equals `activeThreadId` until navigation. */
+	let pinnedCanvasAutoOpenedForThreadId = null;
+	let closeChatCanvasPanel = () => {};
+	let rebuildTopbarMenuDynamic = () => {};
+	let refreshChatCanvasesList = async () => {};
+	/** @type {{ id: number, title: string, body: string, sender_id: number } | null} */
+	let activeCanvasRow = null;
+	let chatCanvasEditSnapshot = { title: '', body: '' };
+	/** @type {null | ((e: MouseEvent) => void)} */
+	let chatCanvasOwnerMenuOutside = null;
+	/** @type {null | (() => void)} */
+	let chatCanvasCreateCleanup = null;
+	let tearDownChatCanvasUi = () => {};
 	let chatThreads = [];
 	let activeThreadId = null;
 	/** @type {string | null} — e.g. reserved `comments`; not a real chat thread id. */
@@ -1671,6 +1730,28 @@ export async function initChatPage(root) {
 		};
 	}
 
+	function paintMobileChromeTitle() {
+		const h1 =
+			mainColumn instanceof HTMLElement ? mainColumn.querySelector('[data-chat-mobile-chrome-title]') : null;
+		const chEl = h1?.querySelector?.('[data-chat-mobile-chrome-channel]');
+		const wrap = h1?.querySelector?.('[data-chat-mobile-chrome-canvas-wrap]');
+		const cvEl = h1?.querySelector?.('[data-chat-mobile-chrome-canvas]');
+		if (!(h1 instanceof HTMLElement) || !(chEl instanceof HTMLElement)) return;
+		const titleEl = root.querySelector('[data-chat-title]');
+		const channelPart = titleEl?.textContent?.trim() || 'Chat';
+		chEl.textContent = channelPart;
+		if (activeCanvasRow && wrap instanceof HTMLElement && cvEl instanceof HTMLElement) {
+			const canvasPart = String(activeCanvasRow.title || '').trim() || 'Canvas';
+			cvEl.textContent = canvasPart;
+			wrap.hidden = false;
+			h1.setAttribute('aria-label', `${channelPart}, canvas ${canvasPart}`);
+		} else if (wrap instanceof HTMLElement) {
+			wrap.hidden = true;
+			if (cvEl instanceof HTMLElement) cvEl.textContent = '';
+			h1.setAttribute('aria-label', channelPart);
+		}
+	}
+
 	function updateTitleFromMeta(meta) {
 		const base = docTitleBase || 'parascene';
 		const label = (meta?.title && String(meta.title).trim())
@@ -1681,6 +1762,7 @@ export async function initChatPage(root) {
 		document.title = `${label} · ${base}`;
 		const titleEl = root.querySelector('[data-chat-title]');
 		if (titleEl) titleEl.textContent = label;
+		paintMobileChromeTitle();
 	}
 
 	function buildChatReactionMetaRowHtml(m) {
@@ -2270,6 +2352,7 @@ export async function initChatPage(root) {
 			chatViewerId = cached.viewerId;
 			chatThreads = cached.threads;
 			chatViewerIsAdmin = cached.viewerIsAdmin === true;
+			chatViewerIsFounder = cached.viewerIsFounder === true;
 		}
 
 		if (!needNetwork) {
@@ -2288,10 +2371,12 @@ export async function initChatPage(root) {
 		chatViewerId = result.data?.viewer_id != null ? Number(result.data.viewer_id) : null;
 		chatThreads = Array.isArray(result.data?.threads) ? result.data.threads : [];
 		chatViewerIsAdmin = Boolean(result.data?.viewer_is_admin);
+		chatViewerIsFounder = Boolean(result.data?.viewer_is_founder);
 		if (chatViewerId != null && Number.isFinite(chatViewerId)) {
 			try {
 				writeCachedChatThreads?.(chatViewerId, chatThreads, {
-					viewerIsAdmin: chatViewerIsAdmin
+					viewerIsAdmin: chatViewerIsAdmin,
+					viewerIsFounder: chatViewerIsFounder
 				});
 			} catch {
 				// ignore
@@ -2443,6 +2528,22 @@ export async function initChatPage(root) {
 		} catch {
 			row.hidden = true;
 		}
+	}
+
+	/** Joined servers + presence + profile for roster; start early so it can overlap `loadChatThreads` / messages. */
+	let sidebarRosterPrefetchPack = null;
+	function resetSidebarRosterPrefetch() {
+		sidebarRosterPrefetchPack = null;
+	}
+	function ensureSidebarRosterPrefetchStarted() {
+		if (!sidebarRosterPrefetchPack) {
+			sidebarRosterPrefetchPack = {
+				joined: fetchJoinedServersForChat(),
+				presence: fetchPresenceOnlineIds(),
+				profileMini: fetchChatViewerProfileMini()
+			};
+		}
+		return sidebarRosterPrefetchPack;
 	}
 
 	async function refreshChatSidebar(options = {}) {
@@ -2640,10 +2741,11 @@ export async function initChatPage(root) {
 		// broken. DMs don’t move because they never use `joinedSlugs`. One paint after awaits.
 
 		if (skipThreads) {
+			const pack = ensureSidebarRosterPrefetchStarted();
 			const [joined, onlineIds, viewerProfile] = await Promise.all([
-				fetchJoinedServersForChat(),
-				fetchPresenceOnlineIds(),
-				fetchChatViewerProfileMini()
+				pack.joined,
+				pack.presence,
+				pack.profileMini
 			]);
 			runRender(chatThreads || [], joined, onlineIds, viewerProfile);
 			await syncChatSidebarViewerRow();
@@ -2651,6 +2753,7 @@ export async function initChatPage(root) {
 		}
 
 		try {
+			resetSidebarRosterPrefetch();
 			const [_, joined, onlineIds, viewerProfile] = await Promise.all([
 				loadChatThreads({ allowCache: true, forceNetwork: true }),
 				fetchJoinedServersForChat(),
@@ -2970,10 +3073,17 @@ export async function initChatPage(root) {
 		}
 		const inner = document.createElement('div');
 		inner.className = 'connect-chat-msg-inner';
+		const canvasMeta = getChatCanvasMetaFromMessage(m);
 		const safeBody = processUserText(m.body ?? '');
 		const bubble = document.createElement('div');
 		bubble.className = 'connect-chat-msg-bubble';
-		bubble.innerHTML = safeBody;
+		if (canvasMeta) {
+			bubble.classList.add('connect-chat-msg-bubble--canvas');
+			const preview = processUserText(m.body ?? '');
+			bubble.innerHTML = `<div class="connect-chat-canvas-inline"><div class="connect-chat-canvas-inline-title">${escapeHtml(canvasMeta.title)}</div><div class="connect-chat-canvas-inline-preview">${preview}</div></div>`;
+		} else {
+			bubble.innerHTML = safeBody;
+		}
 		normalizeChatBubbleInlineImageSpacing(bubble);
 		if (!isGroupContinue) {
 			const metaLine = document.createElement('div');
@@ -3980,6 +4090,7 @@ export async function initChatPage(root) {
 
 		const viewerId = chatViewerId;
 		try {
+			await refreshChatCanvasesList();
 			const res = await fetch(`/api/chat/threads/${threadId}/messages?limit=50`, {
 				credentials: 'include'
 			});
@@ -3988,7 +4099,8 @@ export async function initChatPage(root) {
 				throw new Error(data.message || data.error || 'Failed to load messages');
 			}
 			const messages = Array.isArray(data.messages) ? data.messages : [];
-			lastChatMessagesPayload = messages;
+			const messagesForUi = messages.filter((m) => !getChatCanvasMetaFromMessage(m));
+			lastChatMessagesPayload = messagesForUi;
 			teardownLatestMessageReadObserver();
 			messagesEl.innerHTML = '';
 
@@ -4000,7 +4112,7 @@ export async function initChatPage(root) {
 
 			// Compute the full visual "new" range so we can include the sender meta row even if the
 			// first unread message is a group-continue (meta shown on the previous row).
-			const unreadLogical = messages.map((m) => {
+			const unreadLogical = messagesForUi.map((m) => {
 				const mid = m?.id != null ? Number(m.id) : null;
 				const sid = m?.sender_id != null ? Number(m.sender_id) : null;
 				const isSelf =
@@ -4021,8 +4133,8 @@ export async function initChatPage(root) {
 				}
 			}
 			if (visualStart > 0) {
-				const first = messages[visualStart];
-				const prev = messages[visualStart - 1];
+				const first = messagesForUi[visualStart];
+				const prev = messagesForUi[visualStart - 1];
 				const prevSender = prev?.sender_id != null ? Number(prev.sender_id) : null;
 				const prevIsSelf = Number.isFinite(viewerId) && Number.isFinite(prevSender) && prevSender === viewerId;
 				if (isChatMessageGroupContinue(prev, first) && !prevIsSelf) {
@@ -4032,7 +4144,7 @@ export async function initChatPage(root) {
 			}
 			const hasVisualUnreadRange = visualStart >= 0 && visualEnd >= visualStart;
 
-			paintMessageRowsForChat(messagesEl, messages, viewerId, threadId, {
+			paintMessageRowsForChat(messagesEl, messagesForUi, viewerId, threadId, {
 				skipUnread: false,
 				visualStart,
 				visualEnd,
@@ -4061,9 +4173,13 @@ export async function initChatPage(root) {
 			window.setTimeout(() => {
 				setupLatestMessageReadObserver();
 			}, 550);
+			maybeOpenPinnedChatCanvas();
 		} catch (err) {
 			console.error('[Chat page] messages:', err);
 			messagesEl.innerHTML = renderEmptyError(err?.message || 'Could not load messages.');
+			chatCanvasesList = [];
+			activeThreadPinnedCanvasId = null;
+			rebuildTopbarMenuDynamic();
 		} finally {
 			messagesEl.removeAttribute('aria-busy');
 			loadingMessages = false;
@@ -4532,6 +4648,8 @@ export async function initChatPage(root) {
 		}
 
 		optimisticSend = null;
+		tearDownChatCanvasUi();
+		pinnedCanvasAutoOpenedForThreadId = null;
 		clearChatPendingAttachments();
 		activePseudoChannelSlug = null;
 		teardownCommentsChannelLoadMore();
@@ -4558,10 +4676,13 @@ export async function initChatPage(root) {
 		try {
 			tearDownVisibilityResync();
 			tearDownRoomBroadcast();
+			resetSidebarRosterPrefetch();
+			ensureSidebarRosterPrefetchStarted();
 			await loadChatThreads();
 
 			if (parsed.kind === 'thread') {
 				await ensureThreadMetaForList(parsed.threadId);
+				await refreshChatSidebar({ skipThreadsFetch: true });
 				activeThreadId = parsed.threadId;
 				const meta = (chatThreads || []).find((t) => Number(t.id) === parsed.threadId);
 				updateTitleFromMeta(meta);
@@ -4569,6 +4690,8 @@ export async function initChatPage(root) {
 				await bindRoomBroadcast(activeThreadId);
 				return;
 			}
+
+			await refreshChatSidebar({ skipThreadsFetch: true });
 
 			if (parsed.kind === 'channel') {
 				const slug = String(parsed.slug).toLowerCase().trim();
@@ -4664,6 +4787,7 @@ export async function initChatPage(root) {
 				}
 				const tid = Number(data?.thread?.id);
 				await loadChatThreads({ forceNetwork: true });
+				await refreshChatSidebar({ skipThreadsFetch: true });
 				if (Number.isFinite(tid) && tid > 0) {
 					activeThreadId = tid;
 					const meta = (chatThreads || []).find((t) => Number(t.id) === tid);
@@ -4721,6 +4845,7 @@ export async function initChatPage(root) {
 				}
 				const tid = Number(data?.thread?.id);
 				await loadChatThreads({ forceNetwork: true });
+				await refreshChatSidebar({ skipThreadsFetch: true });
 				if (Number.isFinite(tid) && tid > 0) {
 					activeThreadId = tid;
 					const meta = (chatThreads || []).find((t) => Number(t.id) === tid);
@@ -5175,17 +5300,912 @@ export async function initChatPage(root) {
 	document.addEventListener('pointerdown', chatToolbarOutsidePointerHandler, true);
 
 	const refreshBtn = root.querySelector('[data-chat-refresh]');
-	if (refreshBtn instanceof HTMLButtonElement) {
-		refreshBtn.addEventListener('click', () => {
-			if (refreshBtn.disabled) return;
+	const topbarMoreBtn = root.querySelector('[data-chat-more-button]');
+	const topbarMenu = root.querySelector('[data-chat-topbar-menu]');
+	let refreshInFlight = false;
+	/** @type {null | ((e: MouseEvent) => void)} */
+	let closeTopbarMenuOnOutsideClick = null;
+
+	const closeTopbarMenu = () => {
+		closeMobileChromeSheet();
+		if (topbarMenu instanceof HTMLElement) {
+			topbarMenu.style.display = 'none';
+		}
+		if (topbarMoreBtn instanceof HTMLButtonElement) {
+			topbarMoreBtn.setAttribute('aria-expanded', 'false');
+		}
+		if (closeTopbarMenuOnOutsideClick) {
+			document.removeEventListener('click', closeTopbarMenuOnOutsideClick);
+			closeTopbarMenuOnOutsideClick = null;
+		}
+	};
+
+	const runChatRefresh = () => {
+		if (refreshInFlight) return;
+		refreshInFlight = true;
+		if (refreshBtn instanceof HTMLButtonElement) {
 			refreshBtn.disabled = true;
-			refreshBtn.setAttribute('aria-busy', 'true');
-			void openThreadForCurrentPath().finally(() => {
+		}
+		void openThreadForCurrentPath().finally(() => {
+			refreshInFlight = false;
+			if (refreshBtn instanceof HTMLButtonElement) {
 				refreshBtn.disabled = false;
-				refreshBtn.removeAttribute('aria-busy');
-				void refreshChatSidebar({ skipThreadsFetch: true });
+			}
+			void refreshChatSidebar({ skipThreadsFetch: true });
+		});
+	};
+
+	if (topbarMoreBtn instanceof HTMLButtonElement && topbarMenu instanceof HTMLElement) {
+		topbarMoreBtn.addEventListener('click', (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			closeMobileChromeSheet();
+			const isOpen = topbarMenu.style.display !== 'none';
+			if (isOpen) {
+				closeTopbarMenu();
+				return;
+			}
+			document.querySelectorAll('[data-feed-menu]').forEach((menuEl) => {
+				if (menuEl instanceof HTMLElement && menuEl !== topbarMenu) {
+					menuEl.style.display = 'none';
+				}
+			});
+			topbarMenu.style.display = 'block';
+			topbarMoreBtn.setAttribute('aria-expanded', 'true');
+			void refreshChatCanvasesList();
+			closeTopbarMenuOnOutsideClick = (outsideEvent) => {
+				if (!(outsideEvent.target instanceof Node)) return;
+				if (topbarMenu.contains(outsideEvent.target)) return;
+				if (topbarMoreBtn.contains(outsideEvent.target)) return;
+				closeTopbarMenu();
+			};
+			requestAnimationFrame(() => {
+				if (closeTopbarMenuOnOutsideClick) {
+					document.addEventListener('click', closeTopbarMenuOnOutsideClick);
+				}
 			});
 		});
+	}
+
+	if (refreshBtn instanceof HTMLButtonElement) {
+		refreshBtn.addEventListener('click', (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			closeTopbarMenu();
+			closeMobileChromeSheet();
+			runChatRefresh();
+		});
+	}
+
+	function maybeOpenPinnedChatCanvas() {
+		if (isChatPageMobileLayout()) return;
+		if (!isActiveThreadCanvasEligible()) return;
+		const tid = activeThreadId;
+		const pinId = activeThreadPinnedCanvasId;
+		if (tid == null || !Number.isFinite(Number(tid))) return;
+		if (!Number.isFinite(pinId) || pinId <= 0) return;
+		if (pinnedCanvasAutoOpenedForThreadId === tid) return;
+		const row = chatCanvasesList.find((c) => Number(c.id) === pinId);
+		if (!row) return;
+		openChatCanvasPanel(row);
+		pinnedCanvasAutoOpenedForThreadId = tid;
+	}
+
+	function isActiveThreadCanvasEligible() {
+		if (activePseudoChannelSlug) return false;
+		const tid = activeThreadId;
+		if (tid == null || !Number.isFinite(Number(tid))) return false;
+		const t = (chatThreads || []).find((x) => Number(x.id) === Number(tid));
+		if (!t || t.type !== 'channel') return false;
+		const slug = String(t.channel_slug || '').toLowerCase().trim();
+		if (!slug || CHAT_CANVAS_DISALLOWED_SLUGS.has(slug)) return false;
+		return true;
+	}
+
+	function rebuildMobileChromeSheet() {
+		const body =
+			mainColumn instanceof HTMLElement ? mainColumn.querySelector('[data-chat-mobile-chrome-sheet-body]') : null;
+		if (!(body instanceof HTMLElement)) return;
+		body.replaceChildren();
+		const channelLabel = root.querySelector('[data-chat-title]')?.textContent?.trim() || 'Chat';
+		const ch = document.createElement('button');
+		ch.type = 'button';
+		ch.className = 'feed-card-menu-item';
+		ch.dataset.chatMobileChromeOpenChannel = '';
+		ch.setAttribute('role', 'menuitem');
+		ch.textContent = channelLabel;
+		if (!activeCanvasRow) ch.classList.add('chat-page-mobile-chrome-sheet-item--current');
+		body.appendChild(ch);
+		for (const c of chatCanvasesList) {
+			const b = document.createElement('button');
+			b.type = 'button';
+			b.className = 'feed-card-menu-item';
+			b.dataset.chatCanvasOpen = String(c.id);
+			b.setAttribute('role', 'menuitem');
+			b.textContent = c.title;
+			if (activeCanvasRow && Number(activeCanvasRow.id) === Number(c.id)) {
+				b.classList.add('chat-page-mobile-chrome-sheet-item--current');
+			}
+			body.appendChild(b);
+		}
+		const divider = document.createElement('div');
+		divider.className = 'chat-page-mobile-chrome-sheet-divider';
+		divider.setAttribute('aria-hidden', 'true');
+		body.appendChild(divider);
+		const refresh = document.createElement('button');
+		refresh.type = 'button';
+		refresh.className = 'feed-card-menu-item';
+		refresh.dataset.chatMobileChromeRefresh = '';
+		refresh.setAttribute('role', 'menuitem');
+		refresh.textContent = 'Refresh chat';
+		body.appendChild(refresh);
+		if (isActiveThreadCanvasEligible() && chatViewerIsFounder) {
+			const createBtn = document.createElement('button');
+			createBtn.type = 'button';
+			createBtn.className = 'feed-card-menu-item';
+			createBtn.dataset.chatCanvasCreate = '';
+			createBtn.setAttribute('role', 'menuitem');
+			createBtn.textContent = 'Create canvas…';
+			body.appendChild(createBtn);
+		}
+		if (activeCanvasRow && isActiveThreadCanvasEligible()) {
+			const isOwner = Number(activeCanvasRow.sender_id) === Number(chatViewerId);
+			if (isOwner) {
+				const edit = document.createElement('button');
+				edit.type = 'button';
+				edit.className = 'feed-card-menu-item';
+				edit.dataset.chatCanvasEdit = '';
+				edit.setAttribute('role', 'menuitem');
+				edit.textContent = 'Edit canvas';
+				body.appendChild(edit);
+			}
+			if (!isChatPageMobileLayout()) {
+				const pinId = activeThreadPinnedCanvasId;
+				const isPinnedRow = Number.isFinite(pinId) && pinId === Number(activeCanvasRow.id);
+				if (isOwner) {
+					const pin = document.createElement('button');
+					pin.type = 'button';
+					pin.className = 'feed-card-menu-item';
+					pin.dataset.chatCanvasPin = '';
+					pin.setAttribute('role', 'menuitem');
+					pin.textContent = 'Pin to channel';
+					if (isPinnedRow) pin.hidden = true;
+					body.appendChild(pin);
+				}
+				if (isPinnedRow && (isOwner || chatViewerIsAdmin)) {
+					const unp = document.createElement('button');
+					unp.type = 'button';
+					unp.className = 'feed-card-menu-item';
+					unp.dataset.chatCanvasUnpin = '';
+					unp.setAttribute('role', 'menuitem');
+					unp.textContent = 'Remove channel pin';
+					body.appendChild(unp);
+				}
+			}
+		}
+	}
+
+	function closeMobileChromeSheet() {
+		const col = mainColumn instanceof HTMLElement ? mainColumn : null;
+		const sheet = col?.querySelector('[data-chat-mobile-chrome-sheet]');
+		const trig = col?.querySelector('[data-chat-mobile-chrome-sheet-trigger]');
+		if (sheet instanceof HTMLElement) {
+			sheet.hidden = true;
+			sheet.setAttribute('aria-hidden', 'true');
+		}
+		if (trig instanceof HTMLButtonElement) {
+			trig.setAttribute('aria-expanded', 'false');
+		}
+		if (typeof document !== 'undefined' && document.body) {
+			document.body.classList.remove('chat-page--mobile-chrome-sheet-open');
+		}
+		if (mobileChromeEscapeKeyHandler) {
+			document.removeEventListener('keydown', mobileChromeEscapeKeyHandler);
+			mobileChromeEscapeKeyHandler = null;
+		}
+	}
+
+	function openMobileChromeSheet() {
+		void refreshChatCanvasesList();
+		rebuildMobileChromeSheet();
+		const col = mainColumn instanceof HTMLElement ? mainColumn : null;
+		const sheet = col?.querySelector('[data-chat-mobile-chrome-sheet]');
+		const trig = col?.querySelector('[data-chat-mobile-chrome-sheet-trigger]');
+		if (sheet instanceof HTMLElement) {
+			sheet.hidden = false;
+			sheet.setAttribute('aria-hidden', 'false');
+		}
+		if (trig instanceof HTMLButtonElement) {
+			trig.setAttribute('aria-expanded', 'true');
+		}
+		if (typeof document !== 'undefined' && document.body) {
+			document.body.classList.add('chat-page--mobile-chrome-sheet-open');
+		}
+		if (mobileChromeEscapeKeyHandler) {
+			document.removeEventListener('keydown', mobileChromeEscapeKeyHandler);
+			mobileChromeEscapeKeyHandler = null;
+		}
+		mobileChromeEscapeKeyHandler = (ev) => {
+			if (ev.key === 'Escape') closeMobileChromeSheet();
+		};
+		document.addEventListener('keydown', mobileChromeEscapeKeyHandler);
+	}
+
+	function getChatCanvasPanelEls() {
+		return {
+			panel: chatCanvasScope.querySelector('[data-chat-canvas-panel]'),
+			titleView: chatCanvasScope.querySelector('[data-chat-canvas-title-view]'),
+			titleInput: chatCanvasScope.querySelector('[data-chat-canvas-title-input]'),
+			bodyView: chatCanvasScope.querySelector('[data-chat-canvas-body-view]'),
+			bodyInput: chatCanvasScope.querySelector('[data-chat-canvas-body-input]'),
+			editFooter: chatCanvasScope.querySelector('[data-chat-canvas-edit-footer]'),
+			moreWrap: chatCanvasScope.querySelector('[data-chat-canvas-more-wrap]'),
+			moreBtn: chatCanvasScope.querySelector('[data-chat-canvas-more]'),
+			ownerMenu: chatCanvasScope.querySelector('[data-chat-canvas-owner-menu]')
+		};
+	}
+
+	function setChatCanvasOpenBodyClass(on) {
+		if (typeof document !== 'undefined' && document.body) {
+			document.body.classList.toggle('chat-page--canvas-open', Boolean(on));
+		}
+		paintMobileChromeTitle();
+	}
+
+	function closeCanvasOwnerDropdown() {
+		const { ownerMenu, moreBtn } = getChatCanvasPanelEls();
+		if (ownerMenu instanceof HTMLElement) ownerMenu.style.display = 'none';
+		if (moreBtn instanceof HTMLButtonElement) moreBtn.setAttribute('aria-expanded', 'false');
+		if (chatCanvasOwnerMenuOutside) {
+			document.removeEventListener('click', chatCanvasOwnerMenuOutside);
+			chatCanvasOwnerMenuOutside = null;
+		}
+	}
+
+	function exitCanvasEditUi({ revert } = {}) {
+		const el = getChatCanvasPanelEls();
+		const rev = revert === true;
+		if (rev && activeCanvasRow) {
+			if (el.titleInput instanceof HTMLInputElement) el.titleInput.value = chatCanvasEditSnapshot.title;
+			if (el.bodyInput instanceof HTMLTextAreaElement) el.bodyInput.value = chatCanvasEditSnapshot.body;
+		}
+		if (el.titleView instanceof HTMLElement) el.titleView.hidden = false;
+		if (el.titleInput instanceof HTMLElement) el.titleInput.hidden = true;
+		if (el.bodyView instanceof HTMLElement) el.bodyView.hidden = false;
+		if (el.bodyInput instanceof HTMLElement) el.bodyInput.hidden = true;
+		if (el.editFooter instanceof HTMLElement) el.editFooter.hidden = true;
+		if (activeCanvasRow && Number(activeCanvasRow.sender_id) === Number(chatViewerId)) {
+			if (el.moreWrap instanceof HTMLElement) el.moreWrap.hidden = false;
+		}
+		if (activeCanvasRow) paintCanvasPanelReadOnly();
+	}
+
+	function paintCanvasPanelReadOnly() {
+		const el = getChatCanvasPanelEls();
+		if (!activeCanvasRow) return;
+		if (el.titleView instanceof HTMLElement) el.titleView.textContent = activeCanvasRow.title;
+		if (el.bodyView instanceof HTMLElement) {
+			el.bodyView.innerHTML = processUserText(activeCanvasRow.body || '');
+			hydrateUserTextLinks(el.bodyView);
+			hydrateChatCreationEmbeds(el.bodyView);
+			hydrateChatYoutubeEmbeds(el.bodyView);
+		}
+		const isOwner = Number(activeCanvasRow.sender_id) === Number(chatViewerId);
+		if (el.moreWrap instanceof HTMLElement) el.moreWrap.hidden = !isOwner;
+		const pinBtn = chatCanvasScope.querySelector('[data-chat-canvas-pin]');
+		const unpBtn = chatCanvasScope.querySelector('[data-chat-canvas-unpin]');
+		const pinId = activeThreadPinnedCanvasId;
+		const isPinnedRow = Number.isFinite(pinId) && pinId === Number(activeCanvasRow.id);
+		if (pinBtn instanceof HTMLElement) {
+			pinBtn.hidden = !isOwner || isPinnedRow;
+		}
+		if (unpBtn instanceof HTMLElement) {
+			unpBtn.hidden = !isPinnedRow || (!isOwner && !chatViewerIsAdmin);
+		}
+		rebuildMobileChromeSheet();
+		paintMobileChromeTitle();
+	}
+
+	function enterCanvasEditUi() {
+		if (!activeCanvasRow) return;
+		const el = getChatCanvasPanelEls();
+		chatCanvasEditSnapshot = { title: activeCanvasRow.title, body: activeCanvasRow.body };
+		closeCanvasOwnerDropdown();
+		if (el.titleView instanceof HTMLElement) el.titleView.hidden = true;
+		if (el.titleInput instanceof HTMLInputElement) {
+			el.titleInput.hidden = false;
+			el.titleInput.value = activeCanvasRow.title;
+			el.titleInput.focus();
+		}
+		if (el.bodyView instanceof HTMLElement) el.bodyView.hidden = true;
+		if (el.bodyInput instanceof HTMLTextAreaElement) {
+			el.bodyInput.hidden = false;
+			el.bodyInput.value = activeCanvasRow.body;
+		}
+		if (el.editFooter instanceof HTMLElement) el.editFooter.hidden = false;
+		if (el.moreWrap instanceof HTMLElement) el.moreWrap.hidden = true;
+	}
+
+	function openChatCanvasPanel(row) {
+		closeMobileChromeSheet();
+		closeCanvasOwnerDropdown();
+		activeCanvasRow = {
+			id: Number(row.id),
+			title: String(row.title || '').trim(),
+			body: row.body != null ? String(row.body) : '',
+			sender_id: Number(row.sender_id)
+		};
+		const el = getChatCanvasPanelEls();
+		if (el.editFooter instanceof HTMLElement) el.editFooter.hidden = true;
+		if (el.titleInput instanceof HTMLElement) el.titleInput.hidden = true;
+		if (el.bodyInput instanceof HTMLElement) el.bodyInput.hidden = true;
+		if (el.titleView instanceof HTMLElement) el.titleView.hidden = false;
+		if (el.bodyView instanceof HTMLElement) el.bodyView.hidden = false;
+		if (el.panel instanceof HTMLElement) el.panel.hidden = false;
+		setChatCanvasOpenBodyClass(true);
+		paintCanvasPanelReadOnly();
+	}
+
+	closeChatCanvasPanel = () => {
+		closeMobileChromeSheet();
+		closeCanvasOwnerDropdown();
+		activeCanvasRow = null;
+		const el = getChatCanvasPanelEls();
+		if (el.editFooter instanceof HTMLElement) el.editFooter.hidden = true;
+		if (el.titleInput instanceof HTMLElement) el.titleInput.hidden = true;
+		if (el.bodyInput instanceof HTMLElement) el.bodyInput.hidden = true;
+		if (el.titleView instanceof HTMLElement) {
+			el.titleView.hidden = false;
+			el.titleView.textContent = '';
+		}
+		if (el.bodyView instanceof HTMLElement) {
+			el.bodyView.hidden = false;
+			el.bodyView.innerHTML = '';
+		}
+		if (el.moreWrap instanceof HTMLElement) el.moreWrap.hidden = true;
+		if (el.panel instanceof HTMLElement) el.panel.hidden = true;
+		setChatCanvasOpenBodyClass(false);
+	};
+
+	rebuildTopbarMenuDynamic = () => {
+		const dyn = root.querySelector('[data-chat-topbar-menu-dynamic]');
+		if (!(dyn instanceof HTMLElement)) {
+			rebuildMobileChromeSheet();
+			return;
+		}
+		dyn.replaceChildren();
+		if (isActiveThreadCanvasEligible() && chatViewerIsFounder) {
+			const createBtn = document.createElement('button');
+			createBtn.type = 'button';
+			createBtn.className = 'feed-card-menu-item';
+			createBtn.dataset.chatCanvasCreate = '';
+			createBtn.textContent = 'Create canvas…';
+			dyn.appendChild(createBtn);
+		}
+		for (const c of chatCanvasesList) {
+			const b = document.createElement('button');
+			b.type = 'button';
+			b.className = 'feed-card-menu-item';
+			b.dataset.chatCanvasOpen = String(c.id);
+			b.textContent = c.title;
+			dyn.appendChild(b);
+		}
+		rebuildMobileChromeSheet();
+	};
+
+	refreshChatCanvasesList = async () => {
+		if (!isActiveThreadCanvasEligible()) {
+			chatCanvasesList = [];
+			activeThreadPinnedCanvasId = null;
+			rebuildTopbarMenuDynamic();
+			return;
+		}
+		const tid = activeThreadId;
+		try {
+			const res = await fetch(`/api/chat/threads/${tid}/canvases`, { credentials: 'include' });
+			const data = await res.json().catch(() => ({}));
+			chatCanvasesList = res.ok && Array.isArray(data.canvases) ? data.canvases : [];
+			const pinRaw = data?.pinned_message_id ?? data?.pinnedMessageId;
+			const pinNum = pinRaw != null ? Number(pinRaw) : null;
+			activeThreadPinnedCanvasId =
+				Number.isFinite(pinNum) && pinNum > 0 ? pinNum : null;
+		} catch {
+			chatCanvasesList = [];
+			activeThreadPinnedCanvasId = null;
+		}
+		rebuildTopbarMenuDynamic();
+		if (activeCanvasRow) {
+			const up = chatCanvasesList.find((x) => Number(x.id) === Number(activeCanvasRow.id));
+			if (up) {
+				activeCanvasRow = {
+					id: Number(up.id),
+					title: String(up.title || '').trim(),
+					body: up.body != null ? String(up.body) : '',
+					sender_id: Number(up.sender_id)
+				};
+				const el = getChatCanvasPanelEls();
+				const editing = el.editFooter instanceof HTMLElement && !el.editFooter.hidden;
+				if (!editing) paintCanvasPanelReadOnly();
+			} else {
+				closeChatCanvasPanel();
+			}
+		}
+	};
+
+	function closeChatCanvasCreateOverlay() {
+		if (typeof chatCanvasCreateCleanup === 'function') {
+			try {
+				chatCanvasCreateCleanup();
+			} catch {
+				// ignore
+			}
+			chatCanvasCreateCleanup = null;
+		}
+	}
+
+	function showChatCanvasCreateOverlay() {
+		closeChatCanvasCreateOverlay();
+		if (!isActiveThreadCanvasEligible() || !chatViewerIsFounder) return;
+		const overlay = document.createElement('div');
+		overlay.className = 'chat-canvas-create-overlay';
+		overlay.setAttribute('role', 'dialog');
+		overlay.setAttribute('aria-modal', 'true');
+		overlay.setAttribute('aria-label', 'Create canvas');
+
+		const panel = document.createElement('div');
+		panel.className = 'chat-canvas-create-dialog';
+
+		const titleIn = document.createElement('input');
+		titleIn.type = 'text';
+		titleIn.className = 'chat-canvas-create-title';
+		titleIn.maxLength = 200;
+		titleIn.placeholder = 'Canvas title';
+
+		const bodyTa = document.createElement('textarea');
+		bodyTa.className = 'chat-canvas-create-body';
+		bodyTa.rows = 10;
+		bodyTa.maxLength = 4000;
+		bodyTa.placeholder = 'Canvas body';
+
+		const actions = document.createElement('div');
+		actions.className = 'chat-canvas-create-actions';
+		const cancel = document.createElement('button');
+		cancel.type = 'button';
+		cancel.className = 'btn-secondary';
+		cancel.textContent = 'Cancel';
+		const create = document.createElement('button');
+		create.type = 'button';
+		create.className = 'btn-primary';
+		create.textContent = 'Create';
+		actions.appendChild(cancel);
+		actions.appendChild(create);
+
+		panel.appendChild(titleIn);
+		panel.appendChild(bodyTa);
+		panel.appendChild(actions);
+		overlay.appendChild(panel);
+		document.body.appendChild(overlay);
+
+		const onKey = (ev) => {
+			if (ev.key === 'Escape') closeChatCanvasCreateOverlay();
+		};
+		const tid = activeThreadId;
+		const onCreate = async () => {
+			const title = String(titleIn.value || '').trim();
+			const body = String(bodyTa.value || '').trim();
+			if (!title || !body) return;
+			create.disabled = true;
+			try {
+				const res = await fetch(`/api/chat/threads/${tid}/canvases`, {
+					method: 'POST',
+					credentials: 'include',
+					headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+					body: JSON.stringify({ title, body })
+				});
+				const data = await res.json().catch(() => ({}));
+				if (!res.ok) {
+					const msg = data.message || data.error || 'Could not create canvas';
+					window.alert(msg);
+					create.disabled = false;
+					return;
+				}
+				closeChatCanvasCreateOverlay();
+				const msgRow = data.message;
+				const id = msgRow?.id != null ? Number(msgRow.id) : null;
+				await refreshChatCanvasesList();
+				await loadMessages();
+				if (Number.isFinite(id) && id > 0) {
+					const row = chatCanvasesList.find((c) => Number(c.id) === id) || {
+						id,
+						title,
+						body,
+						sender_id: chatViewerId
+					};
+					openChatCanvasPanel(row);
+				}
+			} catch (err) {
+				window.alert(err?.message || 'Could not create canvas');
+				create.disabled = false;
+			}
+		};
+		cancel.addEventListener('click', () => closeChatCanvasCreateOverlay());
+		create.addEventListener('click', () => void onCreate());
+		overlay.addEventListener('click', (ev) => {
+			if (ev.target === overlay) closeChatCanvasCreateOverlay();
+		});
+		document.addEventListener('keydown', onKey);
+		chatCanvasCreateCleanup = () => {
+			document.removeEventListener('keydown', onKey);
+			overlay.remove();
+		};
+		titleIn.focus();
+	}
+
+	tearDownChatCanvasUi = () => {
+		closeChatCanvasCreateOverlay();
+		closeMobileChromeSheet();
+		closeChatCanvasPanel();
+		chatCanvasesList = [];
+		activeThreadPinnedCanvasId = null;
+		rebuildTopbarMenuDynamic();
+	};
+
+	canvasActionRoot.addEventListener('click', (e) => {
+		const t = e.target;
+		if (!(t instanceof Element)) return;
+		const back = t.closest('[data-chat-mobile-chrome-back]');
+		if (
+			(back instanceof HTMLButtonElement || back instanceof HTMLAnchorElement) &&
+			mainColumn instanceof HTMLElement &&
+			mainColumn.contains(back)
+		) {
+			e.preventDefault();
+			e.stopPropagation();
+			closeMobileChromeSheet();
+			closeChatCanvasPanel();
+			window.location.assign('/connect#chat');
+			return;
+		}
+		const sheetTrig = t.closest('[data-chat-mobile-chrome-sheet-trigger]');
+		if (
+			sheetTrig instanceof HTMLButtonElement &&
+			mainColumn instanceof HTMLElement &&
+			mainColumn.contains(sheetTrig)
+		) {
+			e.preventDefault();
+			e.stopPropagation();
+			const sheet = mainColumn.querySelector('[data-chat-mobile-chrome-sheet]');
+			if (!(sheet instanceof HTMLElement)) return;
+			const isHidden = sheet.hasAttribute('hidden');
+			if (isHidden) {
+				closeTopbarMenu();
+				openMobileChromeSheet();
+			} else {
+				closeMobileChromeSheet();
+			}
+			return;
+		}
+		if (t.closest('[data-chat-mobile-chrome-sheet-dismiss]')) {
+			e.preventDefault();
+			closeMobileChromeSheet();
+			return;
+		}
+		if (t.closest('[data-chat-mobile-chrome-open-channel]')) {
+			e.preventDefault();
+			closeMobileChromeSheet();
+			closeTopbarMenu();
+			closeChatCanvasPanel();
+			return;
+		}
+		if (t.closest('[data-chat-mobile-chrome-refresh]')) {
+			e.preventDefault();
+			closeMobileChromeSheet();
+			closeTopbarMenu();
+			runChatRefresh();
+			return;
+		}
+		if (t.closest('[data-chat-canvas-create]')) {
+			e.preventDefault();
+			closeTopbarMenu();
+			closeMobileChromeSheet();
+			showChatCanvasCreateOverlay();
+			return;
+		}
+		const openEl = t.closest('[data-chat-canvas-open]');
+		if (openEl instanceof HTMLElement) {
+			e.preventDefault();
+			closeTopbarMenu();
+			closeMobileChromeSheet();
+			const id = Number(openEl.getAttribute('data-chat-canvas-open'));
+			const row = chatCanvasesList.find((c) => Number(c.id) === id);
+			if (row) openChatCanvasPanel(row);
+			return;
+		}
+		if (t.closest('[data-chat-canvas-close]')) {
+			e.preventDefault();
+			closeChatCanvasPanel();
+			return;
+		}
+		if (t.closest('[data-chat-canvas-edit]')) {
+			e.preventDefault();
+			closeMobileChromeSheet();
+			closeCanvasOwnerDropdown();
+			enterCanvasEditUi();
+			return;
+		}
+		if (t.closest('[data-chat-canvas-cancel]')) {
+			e.preventDefault();
+			exitCanvasEditUi({ revert: true });
+			paintCanvasPanelReadOnly();
+			return;
+		}
+		if (t.closest('[data-chat-canvas-delete]')) {
+			e.preventDefault();
+			if (!activeCanvasRow) return;
+			if (!window.confirm('Delete this canvas?')) return;
+			const mid = Number(activeCanvasRow.id);
+			void (async () => {
+				try {
+					const res = await fetch(`/api/chat/messages/${mid}`, {
+						method: 'DELETE',
+						credentials: 'include'
+					});
+					const data = await res.json().catch(() => ({}));
+					if (!res.ok) {
+						window.alert(data.message || data.error || 'Could not delete');
+						return;
+					}
+					closeChatCanvasPanel();
+					await refreshChatCanvasesList();
+					await loadMessages();
+				} catch (err) {
+					window.alert(err?.message || 'Could not delete');
+				}
+			})();
+			return;
+		}
+		if (t.closest('[data-chat-canvas-pin]')) {
+			e.preventDefault();
+			closeMobileChromeSheet();
+			closeCanvasOwnerDropdown();
+			if (!activeCanvasRow || activeThreadId == null) return;
+			const mid = Number(activeCanvasRow.id);
+			if (!Number.isFinite(mid) || mid <= 0) return;
+			void (async () => {
+				try {
+					const res = await fetch(`/api/chat/threads/${activeThreadId}/pinned-canvas`, {
+						method: 'POST',
+						credentials: 'include',
+						headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+						body: JSON.stringify({ message_id: mid })
+					});
+					const data = await res.json().catch(() => ({}));
+					if (!res.ok) {
+						window.alert(data.message || data.error || 'Could not pin canvas');
+						return;
+					}
+					const p = data?.pinned_message_id ?? data?.pinnedMessageId;
+					const pn = p != null ? Number(p) : mid;
+					activeThreadPinnedCanvasId = Number.isFinite(pn) && pn > 0 ? pn : mid;
+					paintCanvasPanelReadOnly();
+					await refreshChatCanvasesList();
+				} catch (err) {
+					window.alert(err?.message || 'Could not pin canvas');
+				}
+			})();
+			return;
+		}
+		if (t.closest('[data-chat-canvas-unpin]')) {
+			e.preventDefault();
+			closeMobileChromeSheet();
+			closeCanvasOwnerDropdown();
+			if (activeThreadId == null) return;
+			void (async () => {
+				try {
+					const res = await fetch(`/api/chat/threads/${activeThreadId}/pinned-canvas`, {
+						method: 'POST',
+						credentials: 'include',
+						headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+						body: JSON.stringify({ message_id: null })
+					});
+					const data = await res.json().catch(() => ({}));
+					if (!res.ok) {
+						window.alert(data.message || data.error || 'Could not remove pin');
+						return;
+					}
+					activeThreadPinnedCanvasId = null;
+					paintCanvasPanelReadOnly();
+					await refreshChatCanvasesList();
+				} catch (err) {
+					window.alert(err?.message || 'Could not remove pin');
+				}
+			})();
+			return;
+		}
+		if (t.closest('[data-chat-canvas-save]')) {
+			e.preventDefault();
+			if (!activeCanvasRow) return;
+			const el = getChatCanvasPanelEls();
+			if (!(el.titleInput instanceof HTMLInputElement) || !(el.bodyInput instanceof HTMLTextAreaElement)) return;
+			const title = String(el.titleInput.value || '').trim();
+			const body = String(el.bodyInput.value || '').trim();
+			if (!title || !body) return;
+			const mid = Number(activeCanvasRow.id);
+			void (async () => {
+				try {
+					const res = await fetch(`/api/chat/messages/${mid}`, {
+						method: 'PATCH',
+						credentials: 'include',
+						headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+						body: JSON.stringify({ title, body })
+					});
+					const data = await res.json().catch(() => ({}));
+					if (!res.ok) {
+						window.alert(data.message || data.error || 'Could not save');
+						return;
+					}
+					const msgRow = data.message;
+					if (msgRow) {
+						const cm = getChatCanvasMetaFromMessage(msgRow);
+						activeCanvasRow = {
+							id: Number(msgRow.id),
+							title: cm?.title || title,
+							body: msgRow.body != null ? String(msgRow.body) : body,
+							sender_id: Number(msgRow.sender_id)
+						};
+					}
+					exitCanvasEditUi({ revert: false });
+					paintCanvasPanelReadOnly();
+					await refreshChatCanvasesList();
+					await loadMessages();
+				} catch (err) {
+					window.alert(err?.message || 'Could not save');
+				}
+			})();
+			return;
+		}
+	});
+
+	const canvasMoreBtn = chatCanvasScope.querySelector('[data-chat-canvas-more]');
+	const canvasOwnerMenu = chatCanvasScope.querySelector('[data-chat-canvas-owner-menu]');
+	if (canvasMoreBtn instanceof HTMLButtonElement && canvasOwnerMenu instanceof HTMLElement) {
+		canvasMoreBtn.addEventListener('click', (ev) => {
+			ev.preventDefault();
+			ev.stopPropagation();
+			const isOpen = canvasOwnerMenu.style.display !== 'none';
+			if (isOpen) {
+				closeCanvasOwnerDropdown();
+				return;
+			}
+			canvasOwnerMenu.style.display = 'block';
+			canvasMoreBtn.setAttribute('aria-expanded', 'true');
+			chatCanvasOwnerMenuOutside = (outsideEvent) => {
+				if (!(outsideEvent.target instanceof Node)) return;
+				if (canvasOwnerMenu.contains(outsideEvent.target)) return;
+				if (canvasMoreBtn.contains(outsideEvent.target)) return;
+				closeCanvasOwnerDropdown();
+			};
+			requestAnimationFrame(() => {
+				if (chatCanvasOwnerMenuOutside) {
+					document.addEventListener('click', chatCanvasOwnerMenuOutside);
+				}
+			});
+		});
+	}
+
+	const CHAT_CANVAS_WIDTH_LS = 'prsn-chat-canvas-width-px';
+	const CHAT_CANVAS_WIDTH_MIN = 260;
+	const CHAT_CANVAS_WIDTH_MAX = 720;
+
+	function clampChatCanvasWidthPx(n) {
+		const x = Number(n);
+		if (!Number.isFinite(x)) return null;
+		return Math.min(CHAT_CANVAS_WIDTH_MAX, Math.max(CHAT_CANVAS_WIDTH_MIN, Math.round(x)));
+	}
+
+	function readStoredChatCanvasWidthPx() {
+		try {
+			const raw = window.localStorage.getItem(CHAT_CANVAS_WIDTH_LS);
+			if (raw == null || raw === '') return null;
+			return clampChatCanvasWidthPx(Number(raw));
+		} catch {
+			return null;
+		}
+	}
+
+	function applyChatCanvasPanelWidthPx(px) {
+		if (!(chatLayoutRoot instanceof HTMLElement)) return;
+		const v = clampChatCanvasWidthPx(px);
+		if (v == null) {
+			chatLayoutRoot.style.removeProperty('--chat-canvas-panel-width');
+			return;
+		}
+		chatLayoutRoot.style.setProperty('--chat-canvas-panel-width', `${v}px`);
+	}
+
+	if (chatLayoutRoot instanceof HTMLElement) {
+		const stored = readStoredChatCanvasWidthPx();
+		if (stored != null) applyChatCanvasPanelWidthPx(stored);
+		const resizeHandle = chatLayoutRoot.querySelector('[data-chat-canvas-resize-handle]');
+		if (resizeHandle instanceof HTMLElement) {
+			let dragPointerId = null;
+			let dragStartX = 0;
+			let dragStartW = 0;
+			const onMove = (ev) => {
+				if (dragPointerId != null && ev.pointerId !== dragPointerId) return;
+				const next = dragStartW - (ev.clientX - dragStartX);
+				applyChatCanvasPanelWidthPx(next);
+			};
+			const onUp = (ev) => {
+				if (dragPointerId != null && ev.pointerId !== dragPointerId) return;
+				document.removeEventListener('pointermove', onMove);
+				document.removeEventListener('pointerup', onUp);
+				document.removeEventListener('pointercancel', onUp);
+				try {
+					if (
+						dragPointerId != null &&
+						typeof resizeHandle.hasPointerCapture === 'function' &&
+						resizeHandle.hasPointerCapture(dragPointerId)
+					) {
+						resizeHandle.releaseCapture(dragPointerId);
+					}
+				} catch {
+					// ignore
+				}
+				dragPointerId = null;
+				const panel = chatLayoutRoot.querySelector('[data-chat-canvas-panel]');
+				if (panel instanceof HTMLElement && !panel.hidden) {
+					const w = panel.getBoundingClientRect().width;
+					const clamped = clampChatCanvasWidthPx(w);
+					if (clamped != null) {
+						try {
+							window.localStorage.setItem(CHAT_CANVAS_WIDTH_LS, String(clamped));
+						} catch {
+							// ignore
+						}
+						applyChatCanvasPanelWidthPx(clamped);
+					}
+				}
+			};
+			resizeHandle.addEventListener('pointerdown', (ev) => {
+				const panel = chatLayoutRoot.querySelector('[data-chat-canvas-panel]');
+				if (!(panel instanceof HTMLElement) || panel.hidden) return;
+				ev.preventDefault();
+				dragPointerId = ev.pointerId;
+				dragStartX = ev.clientX;
+				dragStartW = panel.getBoundingClientRect().width;
+				try {
+					if (typeof resizeHandle.setPointerCapture === 'function') {
+						resizeHandle.setPointerCapture(ev.pointerId);
+					}
+				} catch {
+					// ignore
+				}
+				document.addEventListener('pointermove', onMove);
+				document.addEventListener('pointerup', onUp);
+				document.addEventListener('pointercancel', onUp);
+			});
+			resizeHandle.addEventListener('keydown', (ev) => {
+				const panel = chatLayoutRoot.querySelector('[data-chat-canvas-panel]');
+				if (!(panel instanceof HTMLElement) || panel.hidden) return;
+				if (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight') return;
+				ev.preventDefault();
+				const w0 = panel.getBoundingClientRect().width;
+				const cur = clampChatCanvasWidthPx(w0) ?? CHAT_CANVAS_WIDTH_MIN;
+				const step = ev.shiftKey ? 24 : 8;
+				const next = ev.key === 'ArrowLeft' ? cur + step : cur - step;
+				applyChatCanvasPanelWidthPx(next);
+				const w1 = panel.getBoundingClientRect().width;
+				const clamped = clampChatCanvasWidthPx(w1);
+				if (clamped != null) {
+					try {
+						window.localStorage.setItem(CHAT_CANVAS_WIDTH_LS, String(clamped));
+					} catch {
+						// ignore
+					}
+				}
+			});
+		}
 	}
 
 	enableLikeButtons(root);

@@ -58,6 +58,7 @@ function otherUserIdFromDmPair(dmPairKey, userId) {
 }
 
 const MAX_MESSAGE_CHARS = 4000;
+const MAX_CANVAS_TITLE_CHARS = 200;
 const DEFAULT_PAGE_LIMIT = 50;
 const MAX_PAGE_LIMIT = 100;
 const SEND_RATE_WINDOW_SEC = 60;
@@ -75,6 +76,9 @@ const SYSTEM_RESERVED_CHANNEL_SLUGS = new Set([
 	"creations",
 	"feedback"
 ]);
+
+/** Slugs where founder canvases are blocked (pseudo-column channels). `#feedback` behaves like a normal channel for canvases. */
+const CANVAS_DISALLOWED_CHANNEL_SLUGS = new Set(["comments", "feed", "explore", "creations"]);
 
 /** Match trailing punctuation on pasted URLs (aligned with client `splitUrlTrailingPunctuation`). */
 function splitUrlTrailingPunctuationForChat(rawUrl) {
@@ -355,6 +359,61 @@ export default function createChatRoutes({ queries, storage }) {
 		}
 	}
 
+	async function viewerIsFounderPlan(userId) {
+		try {
+			if (typeof queries?.selectUserById?.get !== "function") return false;
+			const u = await queries.selectUserById.get(userId);
+			const plan = u?.meta && typeof u.meta === "object" ? u.meta.plan : null;
+			return plan === "founder";
+		} catch {
+			return false;
+		}
+	}
+
+	function isCanvasMessageRow(msg) {
+		const meta = msg?.meta;
+		if (!meta || typeof meta !== "object" || Array.isArray(meta)) return false;
+		const canvas = meta.canvas;
+		if (!canvas || typeof canvas !== "object") return false;
+		const title = typeof canvas.title === "string" ? canvas.title.trim() : "";
+		return title.length > 0;
+	}
+
+	/** Channel default canvas: `prsn_chat_threads.meta.canvas.pinned_message_id` (message id). */
+	function getPinnedCanvasMessageIdFromThreadRow(threadRow) {
+		if (!threadRow || typeof threadRow !== "object") return null;
+		const m = threadRow.meta;
+		if (!m || typeof m !== "object" || Array.isArray(m)) return null;
+		const canvas = m.canvas;
+		if (!canvas || typeof canvas !== "object" || Array.isArray(canvas)) return null;
+		const id = canvas.pinned_message_id ?? canvas.pinnedMessageId;
+		const n = id != null ? Number(id) : null;
+		return Number.isFinite(n) && n > 0 ? n : null;
+	}
+
+	function buildThreadMetaWithPinnedCanvasId(prevMeta, pinnedMessageIdOrNull) {
+		const prev =
+			prevMeta && typeof prevMeta === "object" && !Array.isArray(prevMeta) ? { ...prevMeta } : {};
+		const prevCanvas =
+			prev.canvas && typeof prev.canvas === "object" && !Array.isArray(prev.canvas)
+				? { ...prev.canvas }
+				: {};
+		if (pinnedMessageIdOrNull == null) {
+			delete prevCanvas.pinned_message_id;
+			delete prevCanvas.pinnedMessageId;
+			if (Object.keys(prevCanvas).length === 0) {
+				delete prev.canvas;
+			} else {
+				prev.canvas = prevCanvas;
+			}
+		} else {
+			prevCanvas.pinned_message_id = pinnedMessageIdOrNull;
+			delete prevCanvas.pinnedMessageId;
+			prev.canvas = prevCanvas;
+		}
+		return prev;
+	}
+
 	// GET /api/chat/unread-summary — total unread messages across threads (for nav badge)
 	router.get("/api/chat/unread-summary", async (req, res) => {
 		const userId = requireUser(req, res);
@@ -460,18 +519,23 @@ export default function createChatRoutes({ queries, storage }) {
 			});
 
 			let viewerIsAdmin = false;
+			let viewerIsFounder = false;
 			try {
 				if (typeof queries?.selectUserById?.get === "function") {
 					const u = await queries.selectUserById.get(userId);
 					viewerIsAdmin = u?.role === "admin";
+					const plan = u?.meta && typeof u.meta === "object" ? u.meta.plan : null;
+					viewerIsFounder = plan === "founder";
 				}
 			} catch {
 				viewerIsAdmin = false;
+				viewerIsFounder = false;
 			}
 
 			return res.status(200).json({
 				viewer_id: userId,
 				viewer_is_admin: viewerIsAdmin,
+				viewer_is_founder: viewerIsFounder,
 				threads
 			});
 		} catch (err) {
@@ -725,7 +789,7 @@ export default function createChatRoutes({ queries, storage }) {
 
 			const { data: thread, error } = await sb
 				.from("prsn_chat_threads")
-				.select("id, type, dm_pair_key, channel_slug, created_at")
+				.select("id, type, dm_pair_key, channel_slug, created_at, meta")
 				.eq("id", threadId)
 				.single();
 			if (error || !thread) {
@@ -743,6 +807,8 @@ export default function createChatRoutes({ queries, storage }) {
 
 			const out = { ...thread };
 			out.last_read_message_id = Number.isFinite(lr) && lr > 0 ? lr : null;
+			const pcm = getPinnedCanvasMessageIdFromThreadRow(thread);
+			out.pinned_canvas_message_id = pcm;
 			if (thread.type === "channel") {
 				const slug = thread.channel_slug ? String(thread.channel_slug) : "";
 				out.title = slug ? `#${slug}` : "Channel";
@@ -964,6 +1030,391 @@ export default function createChatRoutes({ queries, storage }) {
 			return res.status(201).json({ message: ins.data });
 		} catch (err) {
 			console.error("[POST .../messages]", err);
+			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
+		}
+	});
+
+	// GET /api/chat/threads/:threadId/canvases — channel threads: messages with meta.canvas (pinned canvas list)
+	router.get("/api/chat/threads/:threadId/canvases", async (req, res) => {
+		const userId = requireUser(req, res);
+		if (userId == null) return;
+		const sb = getSb(res);
+		if (!sb) return;
+
+		const threadId = Number(req.params.threadId);
+		if (!Number.isFinite(threadId) || threadId <= 0) {
+			return res.status(400).json({ error: "Bad request", message: "Invalid thread id" });
+		}
+
+		try {
+			if (!(await isMember(sb, threadId, userId))) {
+				return res.status(403).json({ error: "Forbidden", message: "Not a member of this thread" });
+			}
+
+			const { data: thread, error: thErr } = await sb
+				.from("prsn_chat_threads")
+				.select("type, meta")
+				.eq("id", threadId)
+				.maybeSingle();
+			if (thErr) throw thErr;
+			if (!thread || thread.type !== "channel") {
+				return res.status(200).json({ canvases: [], pinned_message_id: null });
+			}
+
+			const { data: rows, error } = await sb
+				.from("prsn_chat_messages")
+				.select("id, sender_id, body, created_at, meta")
+				.eq("thread_id", threadId)
+				.contains("meta", { canvas: {} })
+				.order("id", { ascending: true })
+				.limit(200);
+			if (error) throw error;
+
+			const canvases = (Array.isArray(rows) ? rows : [])
+				.filter((row) => isCanvasMessageRow(row))
+				.map((row) => {
+					const title = String(row.meta?.canvas?.title || "").trim();
+					return {
+						id: Number(row.id),
+						sender_id: Number(row.sender_id),
+						title,
+						body: row.body != null ? String(row.body) : "",
+						created_at: row.created_at
+					};
+				});
+			const pinned_message_id = getPinnedCanvasMessageIdFromThreadRow(thread);
+			return res.status(200).json({ canvases, pinned_message_id });
+		} catch (err) {
+			console.error("[GET .../canvases]", err);
+			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
+		}
+	});
+
+	// POST /api/chat/threads/:threadId/pinned-canvas  { message_id } | { message_id: null } — channel only; pin only canvas author; unpin author of pinned or admin
+	router.post("/api/chat/threads/:threadId/pinned-canvas", async (req, res) => {
+		const userId = requireUser(req, res);
+		if (userId == null) return;
+		const sb = getSb(res);
+		if (!sb) return;
+
+		const threadId = Number(req.params.threadId);
+		if (!Number.isFinite(threadId) || threadId <= 0) {
+			return res.status(400).json({ error: "Bad request", message: "Invalid thread id" });
+		}
+
+		const rawMid = req.body?.message_id ?? req.body?.messageId;
+		const clearPin = rawMid == null || rawMid === "" || rawMid === false;
+		const messageId = clearPin ? null : Number(rawMid);
+
+		try {
+			if (!(await isMember(sb, threadId, userId))) {
+				return res.status(403).json({ error: "Forbidden", message: "Not a member of this thread" });
+			}
+
+			const { data: thread, error: thErr } = await sb
+				.from("prsn_chat_threads")
+				.select("type, meta")
+				.eq("id", threadId)
+				.maybeSingle();
+			if (thErr) throw thErr;
+			if (!thread || thread.type !== "channel") {
+				return res.status(400).json({ error: "Bad request", message: "Pinned canvas is only for channels" });
+			}
+
+			if (clearPin || !Number.isFinite(messageId) || messageId <= 0) {
+				const cur = getPinnedCanvasMessageIdFromThreadRow(thread);
+				if (cur == null || !Number.isFinite(cur) || cur <= 0) {
+					return res.status(200).json({ ok: true, pinned_message_id: null });
+				}
+				const { data: pinnedMsg, error: pmErr } = await sb
+					.from("prsn_chat_messages")
+					.select("sender_id")
+					.eq("id", cur)
+					.maybeSingle();
+				if (pmErr) throw pmErr;
+				const sender = pinnedMsg?.sender_id != null ? Number(pinnedMsg.sender_id) : null;
+				const isAdmin = await viewerIsAdminRole(userId);
+				if (!isAdmin && (!Number.isFinite(sender) || sender !== Number(userId))) {
+					return res.status(403).json({
+						error: "Forbidden",
+						message: "Only the pinned canvas author (or admin) can remove the channel pin"
+					});
+				}
+				const nextMeta = buildThreadMetaWithPinnedCanvasId(thread.meta, null);
+				const { error: upErr } = await sb
+					.from("prsn_chat_threads")
+					.update({ meta: nextMeta })
+					.eq("id", threadId);
+				if (upErr) throw upErr;
+				void broadcastRoomDirty(threadId, 0);
+				return res.status(200).json({ ok: true, pinned_message_id: null });
+			}
+
+			const { data: msg, error: msgErr } = await sb
+				.from("prsn_chat_messages")
+				.select("id, thread_id, sender_id, body, meta")
+				.eq("id", messageId)
+				.maybeSingle();
+			if (msgErr) throw msgErr;
+			if (!msg) {
+				return res.status(404).json({ error: "Not found", message: "Message not found" });
+			}
+			if (Number(msg.thread_id) !== threadId) {
+				return res.status(400).json({ error: "Bad request", message: "Message is not in this thread" });
+			}
+			if (!isCanvasMessageRow(msg)) {
+				return res.status(400).json({ error: "Bad request", message: "Only a canvas can be pinned" });
+			}
+			if (Number(msg.sender_id) !== Number(userId)) {
+				return res.status(403).json({ error: "Forbidden", message: "You can only pin your own canvas" });
+			}
+
+			const nextMeta = buildThreadMetaWithPinnedCanvasId(thread.meta, messageId);
+			const { error: upErr } = await sb.from("prsn_chat_threads").update({ meta: nextMeta }).eq("id", threadId);
+			if (upErr) throw upErr;
+			void broadcastRoomDirty(threadId, messageId);
+			return res.status(200).json({ ok: true, pinned_message_id: messageId });
+		} catch (err) {
+			console.error("[POST .../pinned-canvas]", err);
+			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
+		}
+	});
+
+	// POST /api/chat/threads/:threadId/canvases — founder plan only; real hashtag channel threads only
+	router.post("/api/chat/threads/:threadId/canvases", async (req, res) => {
+		const userId = requireUser(req, res);
+		if (userId == null) return;
+		const sb = getSb(res);
+		if (!sb) return;
+
+		const threadId = Number(req.params.threadId);
+		if (!Number.isFinite(threadId) || threadId <= 0) {
+			return res.status(400).json({ error: "Bad request", message: "Invalid thread id" });
+		}
+
+		const titleRaw = req.body?.title;
+		const bodyRaw = req.body?.body;
+		let title = typeof titleRaw === "string" ? titleRaw.replace(/\u0000/g, "").trim() : "";
+		let body =
+			typeof bodyRaw === "string" ? bodyRaw.replace(/\u0000/g, "").trim() : "";
+		if (!title || !body) {
+			return res.status(400).json({ error: "Bad request", message: "title and body required" });
+		}
+		if (title.length > MAX_CANVAS_TITLE_CHARS) {
+			return res.status(400).json({
+				error: "Bad request",
+				message: `title must be at most ${MAX_CANVAS_TITLE_CHARS} characters`
+			});
+		}
+		if (body.length > MAX_MESSAGE_CHARS) {
+			return res.status(400).json({
+				error: "Bad request",
+				message: `body must be at most ${MAX_MESSAGE_CHARS} characters`
+			});
+		}
+
+		try {
+			if (!(await viewerIsFounderPlan(userId))) {
+				return res.status(403).json({ error: "Forbidden", message: "Founder plan required" });
+			}
+
+			const { data: thread, error: thErr } = await sb
+				.from("prsn_chat_threads")
+				.select("type, channel_slug")
+				.eq("id", threadId)
+				.maybeSingle();
+			if (thErr) throw thErr;
+			if (!thread || thread.type !== "channel") {
+				return res.status(403).json({ error: "Forbidden", message: "Canvases are only for channel threads" });
+			}
+			const slug = thread.channel_slug != null ? String(thread.channel_slug).trim().toLowerCase() : "";
+			if (!slug || CANVAS_DISALLOWED_CHANNEL_SLUGS.has(slug)) {
+				return res.status(403).json({ error: "Forbidden", message: "Canvases cannot be created in this channel" });
+			}
+
+			if (!(await isMember(sb, threadId, userId))) {
+				return res.status(403).json({ error: "Forbidden", message: "Not a member of this thread" });
+			}
+
+			if (!(await rateLimitSend(userId))) {
+				return res.status(429).json({ error: "Too many requests", message: "Rate limit exceeded" });
+			}
+
+			body = await normalizeUnpublishedCreationUrlsInChatBody(body, userId, queries);
+			if (body.length > MAX_MESSAGE_CHARS) {
+				return res.status(400).json({
+					error: "Bad request",
+					message: `body must be at most ${MAX_MESSAGE_CHARS} characters`
+				});
+			}
+
+			const ins = await sb
+				.from("prsn_chat_messages")
+				.insert({
+					thread_id: threadId,
+					sender_id: userId,
+					body,
+					meta: { canvas: { title } },
+					reactions: {}
+				})
+				.select("id, thread_id, sender_id, body, created_at, meta, reactions")
+				.single();
+
+			if (ins.error) throw ins.error;
+
+			if (ins.data?.id != null) {
+				const newId = Number(ins.data.id);
+				if (Number.isFinite(newId) && newId > 0) {
+					const { error: readErr } = await sb
+						.from("prsn_chat_members")
+						.update({ last_read_message_id: newId })
+						.eq("thread_id", threadId)
+						.eq("user_id", userId);
+					if (readErr) throw readErr;
+				}
+				void broadcastRoomDirty(threadId, ins.data.id);
+				const mem = await sb
+					.from("prsn_chat_members")
+					.select("user_id")
+					.eq("thread_id", threadId);
+				const uids = Array.isArray(mem.data) ? mem.data.map((r) => r.user_id) : [];
+				void broadcastUserInboxDirty(threadId, uids);
+			}
+
+			let messageOut = ins.data;
+			const enriched = await enrichChatMessagesWithSenderProfiles(sb, [messageOut]);
+			messageOut = enriched[0] || messageOut;
+			messageOut = enrichChatReactionsFromMessageColumn([messageOut], userId)[0];
+
+			return res.status(201).json({ message: messageOut });
+		} catch (err) {
+			console.error("[POST .../canvases]", err);
+			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
+		}
+	});
+
+	// PATCH /api/chat/messages/:messageId — update canvas title/body (sender only; canvas messages only)
+	router.patch("/api/chat/messages/:messageId", async (req, res) => {
+		const userId = requireUser(req, res);
+		if (userId == null) return;
+		const sb = getSb(res);
+		if (!sb) return;
+
+		const messageId = Number(req.params.messageId);
+		if (!Number.isFinite(messageId) || messageId <= 0) {
+			return res.status(400).json({ error: "Bad request", message: "Invalid message id" });
+		}
+
+		const titleIn = req.body?.title;
+		const bodyIn = req.body?.body;
+		const hasTitle = titleIn !== undefined && titleIn !== null;
+		const hasBody = bodyIn !== undefined && bodyIn !== null;
+		if (!hasTitle && !hasBody) {
+			return res.status(400).json({ error: "Bad request", message: "title or body required" });
+		}
+
+		try {
+			const { data: msg, error: selErr } = await sb
+				.from("prsn_chat_messages")
+				.select("id, thread_id, sender_id, body, meta, reactions")
+				.eq("id", messageId)
+				.maybeSingle();
+			if (selErr) throw selErr;
+			if (!msg) {
+				return res.status(404).json({ error: "Not found", message: "Message not found" });
+			}
+			if (!isCanvasMessageRow(msg)) {
+				return res.status(400).json({ error: "Bad request", message: "Not a canvas message" });
+			}
+
+			const senderId = Number(msg.sender_id);
+			if (!Number.isFinite(senderId) || senderId !== Number(userId)) {
+				return res.status(403).json({ error: "Forbidden", message: "You can only edit your own canvas" });
+			}
+
+			const threadId = Number(msg.thread_id);
+			if (!(await isMember(sb, threadId, userId))) {
+				return res.status(403).json({ error: "Forbidden", message: "Not a member of this thread" });
+			}
+
+			const prevMeta =
+				msg.meta && typeof msg.meta === "object" && !Array.isArray(msg.meta) ? { ...msg.meta } : {};
+			const prevCanvas =
+				prevMeta.canvas && typeof prevMeta.canvas === "object" && !Array.isArray(prevMeta.canvas)
+					? { ...prevMeta.canvas }
+					: {};
+			let newTitle = typeof prevCanvas.title === "string" ? prevCanvas.title.trim() : "";
+			let newBody = msg.body != null ? String(msg.body) : "";
+
+			if (hasTitle) {
+				const t = typeof titleIn === "string" ? titleIn.replace(/\u0000/g, "").trim() : "";
+				if (!t) {
+					return res.status(400).json({ error: "Bad request", message: "title must be non-empty" });
+				}
+				if (t.length > MAX_CANVAS_TITLE_CHARS) {
+					return res.status(400).json({
+						error: "Bad request",
+						message: `title must be at most ${MAX_CANVAS_TITLE_CHARS} characters`
+					});
+				}
+				newTitle = t;
+			}
+			if (hasBody) {
+				const b = typeof bodyIn === "string" ? bodyIn.replace(/\u0000/g, "").trim() : "";
+				if (!b) {
+					return res.status(400).json({ error: "Bad request", message: "body must be non-empty" });
+				}
+				if (b.length > MAX_MESSAGE_CHARS) {
+					return res.status(400).json({
+						error: "Bad request",
+						message: `body must be at most ${MAX_MESSAGE_CHARS} characters`
+					});
+				}
+				newBody = await normalizeUnpublishedCreationUrlsInChatBody(b, userId, queries);
+				if (newBody.length > MAX_MESSAGE_CHARS) {
+					return res.status(400).json({
+						error: "Bad request",
+						message: `body must be at most ${MAX_MESSAGE_CHARS} characters`
+					});
+				}
+			}
+
+			const meta = {
+				...prevMeta,
+				canvas: {
+					...prevCanvas,
+					title: newTitle
+				}
+			};
+
+			const { error: upErr } = await sb
+				.from("prsn_chat_messages")
+				.update({ body: newBody, meta })
+				.eq("id", messageId);
+			if (upErr) throw upErr;
+
+			void broadcastRoomDirty(threadId, messageId);
+			const mem = await sb
+				.from("prsn_chat_members")
+				.select("user_id")
+				.eq("thread_id", threadId);
+			const uids = Array.isArray(mem.data) ? mem.data.map((r) => r.user_id) : [];
+			void broadcastUserInboxDirty(threadId, uids);
+
+			const { data: fresh, error: frErr } = await sb
+				.from("prsn_chat_messages")
+				.select("id, thread_id, sender_id, body, created_at, meta, reactions")
+				.eq("id", messageId)
+				.maybeSingle();
+			if (frErr) throw frErr;
+			let out = fresh;
+			const enriched = await enrichChatMessagesWithSenderProfiles(sb, [out]);
+			out = enriched[0] || out;
+			out = enrichChatReactionsFromMessageColumn([out], userId)[0];
+
+			return res.status(200).json({ message: out });
+		} catch (err) {
+			console.error("[PATCH /api/chat/messages/:messageId]", err);
 			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
 		}
 	});

@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS prsn_chat_threads (
 	dm_pair_key text,
 	channel_slug text,
 	created_at timestamptz NOT NULL DEFAULT now(),
+	meta jsonb NOT NULL DEFAULT '{}'::jsonb,
 	CHECK (
 		(type = 'dm' AND dm_pair_key IS NOT NULL AND channel_slug IS NULL)
 		OR (type = 'channel' AND channel_slug IS NOT NULL AND dm_pair_key IS NULL)
@@ -36,7 +37,8 @@ CREATE TABLE IF NOT EXISTS prsn_chat_messages (
 	sender_id bigint NOT NULL REFERENCES prsn_users(id) ON DELETE CASCADE,
 	body text NOT NULL,
 	created_at timestamptz NOT NULL DEFAULT now(),
-	reactions jsonb NOT NULL DEFAULT '{}'::jsonb
+	reactions jsonb NOT NULL DEFAULT '{}'::jsonb,
+	meta jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 
 CREATE INDEX IF NOT EXISTS idx_prsn_chat_messages_thread_created
@@ -47,6 +49,7 @@ ALTER TABLE prsn_chat_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE prsn_chat_messages ENABLE ROW LEVEL SECURITY;
 
 COMMENT ON TABLE prsn_chat_threads IS 'Parascene: chat threads (DM or hashtag channel). API + service role only.';
+COMMENT ON COLUMN prsn_chat_threads.meta IS 'Parascene chat: thread-level JSON (e.g. meta.canvas.pinned_message_id for default channel canvas).';
 COMMENT ON TABLE prsn_chat_members IS 'Parascene: thread membership. API + service role only.';
 COMMENT ON TABLE prsn_chat_messages IS 'Parascene: chat messages. API + service role only.';
 
@@ -114,6 +117,9 @@ $$;
 -- If you previously created prsn_chat_message_reactions, migrate then: DROP TABLE IF EXISTS prsn_chat_message_reactions;
 ALTER TABLE prsn_chat_messages ADD COLUMN IF NOT EXISTS reactions jsonb NOT NULL DEFAULT '{}'::jsonb;
 COMMENT ON COLUMN prsn_chat_messages.reactions IS 'Parascene chat: emoji_key -> user id list (API validates keys against REACTION_ORDER).';
+
+ALTER TABLE prsn_chat_threads
+	ADD COLUMN IF NOT EXISTS meta jsonb NOT NULL DEFAULT '{}'::jsonb;
 
 -- ---------------------------------------------------------------------------
 -- Realtime Broadcast (invalidation bus): policies on realtime.messages
