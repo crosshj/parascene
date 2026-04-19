@@ -5861,8 +5861,8 @@ export async function initChatPage(root) {
 		) {
 			e.preventDefault();
 			e.stopPropagation();
-			closeMobileChromeSheet();
-			closeChatCanvasPanel();
+			// Navigate without closing canvas/sheet first — closing repaints the thread
+			// (canvas → channel) before the next document loads, which feels like two steps.
 			window.location.assign('/connect#chat');
 			return;
 		}
