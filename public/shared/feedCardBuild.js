@@ -7,6 +7,7 @@ import { initLikeButton } from './likes.js';
 import { getAvatarColor } from './avatar.js';
 import { buildProfilePath } from './profileLinks.js';
 import { getHelpHref } from './helpUrl.js';
+import { publishedBadgeHtml } from './creationBadges.js';
 
 const html = String.raw;
 
@@ -38,6 +39,17 @@ export function feedItemToUser(item) {
 		display_name: item?.author_display_name ?? item?.display_name,
 		avatar_url: item?.author_avatar_url ?? item?.avatar_url
 	};
+}
+
+/**
+ * @param {boolean} [preferThumbnail] — When true, prefer CDN `thumbnail_url` (Explore / Creations browse grids). When false, full `image_url` first (home feed, chat #feed).
+ */
+export function feedItemCardImageUrl(item, preferThumbnail = false) {
+	if (!item) return '';
+	if (preferThumbnail) {
+		return item.thumbnail_url || item.image_url || '';
+	}
+	return item.image_url || item.thumbnail_url || '';
 }
 
 function buildFeedTipCard(item) {
@@ -182,8 +194,30 @@ function buildFeedBlogPostCard(item) {
 	return card;
 }
 
-function buildFeedCreationCard(item, itemIndex, setupFeedVideo) {
+function buildFeedCreationCard(item, itemIndex, setupFeedVideo, hideFeedCardMetadata = false, preferThumbnail = false) {
 	const card = document.createElement("div");
+	const mediaType = typeof item.media_type === "string" ? item.media_type : "image";
+	const isVideo = mediaType === "video" && typeof item.video_url === "string" && item.video_url;
+
+	if (item.created_image_id) {
+		card.setAttribute('data-creation-id', String(item.created_image_id));
+	}
+
+	if (hideFeedCardMetadata) {
+		card.className = "feed-card feed-card--image-only";
+		const isPublished = item.published === true || item.published === 1;
+		const publishedOverlay = isPublished ? publishedBadgeHtml() : '';
+		card.innerHTML = html`
+      <div class="feed-card-image${item.nsfw ? ' nsfw' : ''}${isVideo ? ' feed-card-image-video' : ''}">
+        <img class="feed-card-img" alt="${item.title || 'Creation'}" loading="lazy" decoding="async">
+        ${publishedOverlay}
+        ${isVideo ? html`<video class="feed-card-video" playsinline muted></video>` : ''}
+      </div>
+    `;
+		finishFeedCreationCardMediaAndClick(card, item, itemIndex, setupFeedVideo, isVideo, preferThumbnail);
+		return card;
+	}
+
 	card.className = "feed-card";
 
 	const author = item.author || "Anonymous";
@@ -222,12 +256,6 @@ function buildFeedCreationCard(item, itemIndex, setupFeedVideo) {
           </div>
         `;
 
-	const mediaType = typeof item.media_type === "string" ? item.media_type : "image";
-	const isVideo = mediaType === "video" && typeof item.video_url === "string" && item.video_url;
-
-	if (item.created_image_id) {
-		card.setAttribute('data-creation-id', String(item.created_image_id));
-	}
 	card.innerHTML = html`
       <div class="feed-card-image${item.nsfw ? ' nsfw' : ''}${isVideo ? ' feed-card-image-video' : ''}">
         <img class="feed-card-img" alt="${item.title || 'Feed image'}" loading="lazy" decoding="async">
@@ -395,21 +423,31 @@ function buildFeedCreationCard(item, itemIndex, setupFeedVideo) {
 		});
 	}
 
+	finishFeedCreationCardMediaAndClick(card, item, itemIndex, setupFeedVideo, isVideo, preferThumbnail);
+	return card;
+}
+
+/**
+ * @param {boolean} isVideo
+ * @param {boolean} preferThumbnail
+ */
+function finishFeedCreationCardMediaAndClick(card, item, itemIndex, setupFeedVideo, isVideo, preferThumbnail = false) {
 	const imageEl = card.querySelector('.feed-card-img');
 	const imageContainer = card.querySelector('.feed-card-image');
+	const displayUrl = feedItemCardImageUrl(item, preferThumbnail);
 
-	if (imageEl && item.image_url) {
+	if (imageEl && imageContainer && displayUrl) {
 		// Skip loading if this element already has this URL (avoids duplicate requests)
-		const alreadyLoaded = imageEl.dataset.feedImageUrl === item.image_url ||
-			(imageEl.src && imageEl.src === item.image_url) ||
-			(imageEl.currentSrc && imageEl.currentSrc === item.image_url);
+		const alreadyLoaded = imageEl.dataset.feedImageUrl === displayUrl ||
+			(imageEl.src && imageEl.src === displayUrl) ||
+			(imageEl.currentSrc && imageEl.currentSrc === displayUrl);
 		if (alreadyLoaded) {
 			if (imageEl.complete && imageEl.naturalHeight !== 0) {
 				imageContainer.classList.remove('loading');
 				imageContainer.classList.add('loaded');
 			}
 		} else {
-			imageEl.dataset.feedImageUrl = item.image_url;
+			imageEl.dataset.feedImageUrl = displayUrl;
 			const isHighPriority = typeof itemIndex === 'number' && itemIndex >= 0 && itemIndex < 2;
 			imageEl.loading = isHighPriority ? 'eager' : 'lazy';
 			if ('fetchPriority' in imageEl) {
@@ -428,7 +466,7 @@ function buildFeedCreationCard(item, itemIndex, setupFeedVideo) {
 				imageContainer.classList.add('error');
 			};
 
-			imageEl.src = item.image_url;
+			imageEl.src = displayUrl;
 
 			if (imageEl.complete && imageEl.naturalHeight !== 0) {
 				imageContainer.classList.remove('loading');
@@ -441,7 +479,7 @@ function buildFeedCreationCard(item, itemIndex, setupFeedVideo) {
 	if (isVideo) {
 		const videoEl = card.querySelector('.feed-card-video');
 		if (videoEl) {
-			const posterUrl = item.thumbnail_url || item.image_url || "";
+			const posterUrl = displayUrl || "";
 			if (posterUrl) {
 				videoEl.poster = posterUrl;
 			}
@@ -456,7 +494,7 @@ function buildFeedCreationCard(item, itemIndex, setupFeedVideo) {
 		}
 	}
 
-	if (item.image_url && item.created_image_id) {
+	if (displayUrl && item.created_image_id) {
 		// Make the entire card clickable except the actions row
 		card.style.cursor = 'pointer';
 
@@ -483,22 +521,26 @@ function buildFeedCreationCard(item, itemIndex, setupFeedVideo) {
 			});
 		}
 	}
-
-	return card;
 }
 
 /**
  * @param {object} item
  * @param {number} itemIndex
- * @param {{ setupFeedVideo?: (videoEl: HTMLVideoElement) => void }} [options]
+ * @param {{
+ *   setupFeedVideo?: (videoEl: HTMLVideoElement) => void,
+ *   hideFeedCardMetadata?: boolean,
+ *   preferThumbnail?: boolean,
+ * }} [options]
  */
 export function createFeedItemCard(item, itemIndex, options = {}) {
 	const setupFeedVideo = options.setupFeedVideo;
+	const hideFeedCardMetadata = options.hideFeedCardMetadata === true;
+	const preferThumbnail = options.preferThumbnail === true;
 	if (item.type === "tip") {
 		return buildFeedTipCard(item);
 	}
 	if (item.type === "blog_post") {
 		return buildFeedBlogPostCard(item);
 	}
-	return buildFeedCreationCard(item, itemIndex, setupFeedVideo);
+	return buildFeedCreationCard(item, itemIndex, setupFeedVideo, hideFeedCardMetadata, preferThumbnail);
 }

@@ -85,6 +85,101 @@ let toggleChatMessageReaction;
 let setupReactionTooltipTap;
 let createConnectCommentRowElement;
 
+/**
+ * How pseudo feed lanes (#feed / explore browse / creations in chat) order items and infinite scroll.
+ * - `newest_first`: match main home feed — newest at top, load older by scrolling down.
+ * - `oldest_first`: chat-style column — newer toward the bottom, load older by scrolling up.
+ * @typedef {'newest_first' | 'oldest_first'} ChatFeedLaneScrollMode
+ */
+
+/** @type {ChatFeedLaneScrollMode} */
+let chatFeedLaneScrollMode = 'newest_first';
+
+function normalizeChatFeedLaneScrollMode(mode) {
+	if (mode === 'oldest_first' || mode === 'newest_first') return mode;
+	return 'newest_first';
+}
+
+export function getChatFeedLaneScrollMode() {
+	return chatFeedLaneScrollMode;
+}
+
+/**
+ * @param {unknown} mode
+ */
+export function setChatFeedLaneScrollMode(mode) {
+	chatFeedLaneScrollMode = normalizeChatFeedLaneScrollMode(mode);
+}
+
+function feedLanePagerColumnOrder() {
+	return chatFeedLaneScrollMode === 'newest_first' ? 'feed' : 'chat';
+}
+
+/** When false, `[data-chat-composer]` is hidden for every channel mode until toggled. Default true. */
+let chatComposerVisible = true;
+
+/** @type {null | (() => void)} */
+let chatApplyComposerStateRef = null;
+
+export function getChatComposerVisible() {
+	return chatComposerVisible;
+}
+
+/**
+ * @param {unknown} visible
+ */
+export function setChatComposerVisible(visible) {
+	chatComposerVisible = Boolean(visible);
+	chatApplyComposerStateRef?.();
+}
+
+/**
+ * Shared browse presentation for `#explore` and `#creations`: wide column (matches main app), image grid, square thumbnails, image-only tiles (no list-style feed footer). `#feed` is unchanged.
+ */
+let chatExploreCreationsBrowseView = true;
+
+/** @type {null | (() => void)} */
+let syncChatBrowseViewBodyClassRef = null;
+
+export function getChatExploreCreationsBrowseView() {
+	return chatExploreCreationsBrowseView;
+}
+
+/**
+ * @param {unknown} enabled
+ */
+export function setChatExploreCreationsBrowseView(enabled) {
+	chatExploreCreationsBrowseView = Boolean(enabled);
+	try {
+		document.querySelectorAll('[data-chat-explore-creations-lane="1"]').forEach((el) => {
+			if (!(el instanceof HTMLElement)) return;
+			el.classList.toggle('chat-feed-channel-route--browse-view', chatExploreCreationsBrowseView);
+		});
+	} catch {
+		// ignore
+	}
+	syncChatBrowseViewBodyClassRef?.();
+}
+
+/** @deprecated use getChatExploreCreationsBrowseView */
+export function getChatPseudoChannelImageGrid() {
+	return chatExploreCreationsBrowseView;
+}
+
+/** @deprecated use setChatExploreCreationsBrowseView */
+export function setChatPseudoChannelImageGrid(enabled) {
+	setChatExploreCreationsBrowseView(enabled);
+}
+
+/** @deprecated use getChatExploreCreationsBrowseView */
+export function getChatExploreCreationsHideFeedCardMetadata() {
+	return chatExploreCreationsBrowseView;
+}
+
+/** @deprecated use setChatExploreCreationsBrowseView */
+export function setChatExploreCreationsHideFeedCardMetadata(hide) {
+	setChatExploreCreationsBrowseView(hide);
+}
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -387,9 +482,56 @@ function getChatCanvasMetaFromMessage(m) {
 /**
  * Mount chat UI and load the thread for the current URL.
  * @param {HTMLElement} root — container with [data-chat] markup (see pages/chat.html)
+ * @param {{
+ *   feedLaneScrollMode?: ChatFeedLaneScrollMode,
+ *   showComposer?: boolean,
+ *   exploreCreationsBrowseView?: boolean,
+ *   pseudoChannelImageGrid?: boolean,
+ *   exploreCreationsHideFeedCardMetadata?: boolean,
+ * }} [options] — `data-chat-explore-creations-browse-view` on `root` (or legacy `data-chat-pseudo-channel-image-grid` / `data-chat-explore-creations-hide-feed-card-metadata`) when omitted
  */
-export async function initChatPage(root) {
+export async function initChatPage(root, options = {}) {
 	if (!(root instanceof HTMLElement)) return;
+	if (options.feedLaneScrollMode != null) {
+		setChatFeedLaneScrollMode(options.feedLaneScrollMode);
+	} else {
+		const d = root.dataset.chatFeedLaneScroll;
+		if (d === 'oldest_first' || d === 'newest_first') {
+			setChatFeedLaneScrollMode(d);
+		}
+	}
+	if (options.showComposer !== undefined) {
+		chatComposerVisible = Boolean(options.showComposer);
+	} else {
+		const sc = root.dataset.chatShowComposer;
+		if (sc === 'false' || sc === '0') {
+			chatComposerVisible = false;
+		} else if (sc === 'true' || sc === '1') {
+			chatComposerVisible = true;
+		}
+	}
+	if (options.exploreCreationsBrowseView !== undefined) {
+		chatExploreCreationsBrowseView = Boolean(options.exploreCreationsBrowseView);
+	} else if (options.pseudoChannelImageGrid === false || options.exploreCreationsHideFeedCardMetadata === false) {
+		chatExploreCreationsBrowseView = false;
+	} else if (options.pseudoChannelImageGrid === true || options.exploreCreationsHideFeedCardMetadata === true) {
+		chatExploreCreationsBrowseView = true;
+	} else {
+		const bv = root.dataset.chatExploreCreationsBrowseView;
+		if (bv === 'false' || bv === '0') {
+			chatExploreCreationsBrowseView = false;
+		} else if (bv === 'true' || bv === '1') {
+			chatExploreCreationsBrowseView = true;
+		} else {
+			const ig = root.dataset.chatPseudoChannelImageGrid;
+			const hm = root.dataset.chatExploreCreationsHideFeedCardMetadata;
+			if (ig === 'false' || ig === '0' || hm === 'false' || hm === '0') {
+				chatExploreCreationsBrowseView = false;
+			} else if (ig === 'true' || ig === '1' || hm === 'true' || hm === '1') {
+				chatExploreCreationsBrowseView = true;
+			}
+		}
+	}
 
 	/** Canvas panel lives outside `[data-chat-page]` (sibling under `.chat-page-main-split`). */
 	const chatLayoutRoot = root.closest('.chat-page-main-split');
@@ -453,8 +595,6 @@ export async function initChatPage(root) {
 	let chatCanvasesList = [];
 	/** Message id pinned for the active channel thread (from GET .../canvases). */
 	let activeThreadPinnedCanvasId = null;
-	/** After auto-opening the channel pin once per visit, equals `activeThreadId` until navigation. */
-	let pinnedCanvasAutoOpenedForThreadId = null;
 	let closeChatCanvasPanel = () => {};
 	let rebuildTopbarMenuDynamic = () => {};
 	let refreshChatCanvasesList = async () => {};
@@ -480,7 +620,8 @@ export async function initChatPage(root) {
 	/** @type {IntersectionObserver | null} */
 	let feedChannelVideoObserver = null;
 	const FEED_CHANNEL_PAGE_SIZE = 20;
-	const CREATIONS_CHANNEL_PAGE_SIZE = 24;
+	/** Aligned with `CREATIONS_PAGE_SIZE` in `components/routes/creations.js` + `/api/create/images`. */
+	const CREATIONS_CHANNEL_PAGE_SIZE = 50;
 	const EXPLORE_CHANNEL_PAGE_SIZE = 24;
 	/** Keyword + semantic search batch size (aligned with `app-route-explore`). */
 	const EXPLORE_SEARCH_FETCH_LIMIT = 100;
@@ -748,6 +889,22 @@ export async function initChatPage(root) {
 		teardownBottomDwellTimer();
 		const apply = () => {
 			messagesEl.scrollTop = messagesEl.scrollHeight;
+		};
+		apply();
+		requestAnimationFrame(() => {
+			apply();
+			requestAnimationFrame(apply);
+		});
+	}
+
+	/** Feed / explore / creations pseudo-channels: match main feed — newest at top, scroll down for more. */
+	function scrollChatFeedPseudoChannelToTop() {
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		if (!messagesEl) return;
+		chatStickToBottom = false;
+		teardownBottomDwellTimer();
+		const apply = () => {
+			messagesEl.scrollTop = 0;
 		};
 		apply();
 		requestAnimationFrame(() => {
@@ -1264,105 +1421,80 @@ export async function initChatPage(root) {
 	}
 
 	function applyComposerState() {
+		const composerForm = root.querySelector('[data-chat-composer]');
 		const bodyInput = root.querySelector('[data-chat-body-input]');
 		const hint = root.querySelector('[data-chat-pseudo-composer-hint]');
 		const shell = root.querySelector('[data-chat-composer] .chat-page-input-shell');
-		const composerForm = root.querySelector('[data-chat-composer]');
-		if (!(bodyInput instanceof HTMLTextAreaElement)) return;
 
-		if (activePseudoChannelSlug === 'comments') {
+		if (!chatComposerVisible) {
+			if (composerForm instanceof HTMLElement) {
+				composerForm.hidden = true;
+			}
+			return;
+		}
+		if (
+			activePseudoChannelSlug === 'feed' ||
+			activePseudoChannelSlug === 'explore' ||
+			activePseudoChannelSlug === 'creations' ||
+			activePseudoChannelSlug === 'comments'
+		) {
 			if (composerForm instanceof HTMLFormElement) {
 				delete composerForm.dataset.chatComposerMode;
 			}
 			clearChatPendingAttachments();
-			bodyInput.disabled = true;
-			bodyInput.value = '';
-			bodyInput.placeholder = '';
-			bodyInput.hidden = true;
-			if (shell instanceof HTMLElement) shell.hidden = true;
-			if (hint instanceof HTMLElement) {
-				hint.hidden = false;
-				hint.textContent =
-					'Click a comment above to open its creation — you can comment and react there.';
-			}
-			if (composerForm instanceof HTMLFormElement) {
-				composerForm.setAttribute('aria-label', 'Comments channel');
-			}
-		} else if (activePseudoChannelSlug === 'feed') {
-			if (composerForm instanceof HTMLFormElement) {
-				delete composerForm.dataset.chatComposerMode;
-			}
-			clearChatPendingAttachments();
-			bodyInput.disabled = true;
-			bodyInput.value = '';
-			bodyInput.placeholder = '';
-			bodyInput.hidden = true;
-			if (shell instanceof HTMLElement) shell.hidden = true;
-			if (hint instanceof HTMLElement) {
-				hint.hidden = false;
-				hint.textContent =
-					'Your home feed — open a card to view a creation, like, or comment there.';
-			}
-			if (composerForm instanceof HTMLFormElement) {
-				composerForm.setAttribute('aria-label', 'Feed channel');
-			}
-		} else if (activePseudoChannelSlug === 'creations') {
-			if (composerForm instanceof HTMLFormElement) {
-				delete composerForm.dataset.chatComposerMode;
-			}
-			clearChatPendingAttachments();
-			bodyInput.disabled = true;
-			bodyInput.value = '';
-			bodyInput.placeholder = '';
-			bodyInput.hidden = true;
-			if (shell instanceof HTMLElement) shell.hidden = true;
-			if (hint instanceof HTMLElement) {
-				hint.hidden = false;
-				hint.textContent =
-					'Your published creations — open a card to view or edit.';
-			}
-			if (composerForm instanceof HTMLFormElement) {
-				composerForm.setAttribute('aria-label', 'Creations channel');
-			}
-		} else if (activePseudoChannelSlug === 'explore') {
-			clearChatPendingAttachments();
-			bodyInput.disabled = false;
-			bodyInput.hidden = false;
-			bodyInput.placeholder = 'Search creations…';
-			if (shell instanceof HTMLElement) shell.hidden = false;
 			if (hint instanceof HTMLElement) {
 				hint.hidden = true;
-				hint.textContent = '';
 			}
-			if (composerForm instanceof HTMLFormElement) {
-				composerForm.setAttribute('aria-label', 'Explore search');
+			if (composerForm instanceof HTMLElement) {
+				composerForm.hidden = true;
 			}
-			bodyInput.setAttribute('aria-label', 'Search creations');
+			syncChatAttachmentsVisibility();
+			syncChatSendButton();
+			syncChatMessagePlaceholder();
+			syncChatExploreComposerChrome();
+			return;
+		}
+		if (composerForm instanceof HTMLElement) {
+			composerForm.hidden = false;
+		}
+
+		if (!(bodyInput instanceof HTMLTextAreaElement)) return;
+
+		if (composerForm instanceof HTMLFormElement) {
+			delete composerForm.dataset.chatComposerMode;
+		}
+		bodyInput.setAttribute('aria-label', 'Message text');
+		bodyInput.hidden = false;
+		if (shell instanceof HTMLElement) shell.hidden = false;
+		if (hint instanceof HTMLElement) hint.hidden = true;
+		if (activePseudoChannelSlug) {
+			clearChatPendingAttachments();
+			bodyInput.disabled = true;
+			bodyInput.placeholder = 'Replies are on each creation page.';
+			bodyInput.value = '';
 		} else {
-			if (composerForm instanceof HTMLFormElement) {
-				delete composerForm.dataset.chatComposerMode;
-			}
-			bodyInput.setAttribute('aria-label', 'Message text');
-			bodyInput.hidden = false;
-			if (shell instanceof HTMLElement) shell.hidden = false;
-			if (hint instanceof HTMLElement) hint.hidden = true;
-			if (activePseudoChannelSlug) {
-				clearChatPendingAttachments();
-				bodyInput.disabled = true;
-				bodyInput.placeholder = 'Replies are on each creation page.';
-				bodyInput.value = '';
-			} else {
-				bodyInput.disabled = false;
-			}
-			if (composerForm instanceof HTMLFormElement) {
-				composerForm.setAttribute('aria-label', 'Send a message');
-			}
+			bodyInput.disabled = false;
+		}
+		if (composerForm instanceof HTMLFormElement) {
+			composerForm.setAttribute('aria-label', 'Send a message');
 		}
 		syncChatAttachmentsVisibility();
 		syncChatSendButton();
 		syncChatMessagePlaceholder();
 		syncChatExploreComposerChrome();
 	}
+
+	chatApplyComposerStateRef = applyComposerState;
+
+	function syncChatBrowseViewBodyClass() {
+		if (!document.body) return;
+		const on =
+			chatExploreCreationsBrowseView &&
+			(activePseudoChannelSlug === 'explore' || activePseudoChannelSlug === 'creations');
+		document.body.classList.toggle('chat-page--pseudo-browse-view', on);
+	}
+
+	syncChatBrowseViewBodyClassRef = syncChatBrowseViewBodyClass;
 
 	function findOptimisticRow(messagesEl, tempId) {
 		if (!messagesEl || !tempId) return null;
@@ -1437,6 +1569,8 @@ export async function initChatPage(root) {
 			author_display_name: displayName,
 			author_avatar_url: avatarUrl,
 			created_at: img?.created_at ?? null,
+			published: img?.published === true || img?.published === 1,
+			published_at: img?.published_at ?? null,
 			like_count: 0,
 			comment_count: 0,
 			viewer_liked: false,
@@ -1468,13 +1602,14 @@ export async function initChatPage(root) {
 				displayName: displayForAvatar,
 				color: getAvatarColor(handleRaw || String(viewerId)),
 				href: profileHref || undefined,
-				flairSize: 'xs'
+				isFounder: chatViewerIsFounder,
+				flairSize: 'sm'
 			});
 			while (avatarWrap.firstChild) metaLine.appendChild(avatarWrap.firstChild);
 			const textSpan = document.createElement('span');
 			textSpan.className = 'connect-chat-msg-meta-text';
 			const nameSpan = document.createElement('span');
-			nameSpan.className = 'connect-chat-msg-meta-user';
+			nameSpan.className = `comment-author-name${chatViewerIsFounder ? ' founder-name' : ''}`;
 			nameSpan.textContent = handleLabel;
 			textSpan.appendChild(nameSpan);
 			if (pending) {
@@ -1738,30 +1873,52 @@ export async function initChatPage(root) {
 		const cvEl = h1?.querySelector?.('[data-chat-mobile-chrome-canvas]');
 		if (!(h1 instanceof HTMLElement) || !(chEl instanceof HTMLElement)) return;
 		const titleEl = root.querySelector('[data-chat-title]');
-		const channelPart = titleEl?.textContent?.trim() || 'Chat';
+		const awaiting = titleEl?.getAttribute('data-chat-title-awaiting') === '1';
+		const channelPart = awaiting ? '' : (titleEl?.textContent?.trim() || '');
 		chEl.textContent = channelPart;
 		if (activeCanvasRow && wrap instanceof HTMLElement && cvEl instanceof HTMLElement) {
 			const canvasPart = String(activeCanvasRow.title || '').trim() || 'Canvas';
 			cvEl.textContent = canvasPart;
 			wrap.hidden = false;
-			h1.setAttribute('aria-label', `${channelPart}, canvas ${canvasPart}`);
+			const al =
+				channelPart ? `${channelPart}, canvas ${canvasPart}` : `canvas ${canvasPart}`;
+			h1.setAttribute('aria-label', al);
 		} else if (wrap instanceof HTMLElement) {
 			wrap.hidden = true;
 			if (cvEl instanceof HTMLElement) cvEl.textContent = '';
-			h1.setAttribute('aria-label', channelPart);
+			if (channelPart) {
+				h1.setAttribute('aria-label', channelPart);
+			} else {
+				h1.removeAttribute('aria-label');
+			}
 		}
 	}
 
 	function updateTitleFromMeta(meta) {
 		const base = docTitleBase || 'parascene';
-		const label = (meta?.title && String(meta.title).trim())
-			? String(meta.title).trim()
-			: (meta?.type === 'channel' && meta?.channel_slug
-				? `#${meta.channel_slug}`
-				: 'Chat');
+		const cs =
+			meta?.type === 'channel' && meta?.channel_slug
+				? String(meta.channel_slug).toLowerCase().trim()
+				: '';
+		const pseudoLabel = cs ? rosterMod.getSidebarPseudoChannelTitle(cs) : null;
+		let label =
+			pseudoLabel && String(pseudoLabel).trim()
+				? String(pseudoLabel).trim()
+				: '';
+		if (!label) {
+			label = (meta?.title && String(meta.title).trim())
+				? String(meta.title).trim()
+				: (cs ? `#${cs}` : 'Chat');
+		}
 		document.title = `${label} · ${base}`;
 		const titleEl = root.querySelector('[data-chat-title]');
-		if (titleEl) titleEl.textContent = label;
+		if (titleEl) {
+			titleEl.textContent = label;
+			if (String(label).trim()) {
+				titleEl.removeAttribute('data-chat-title-awaiting');
+				titleEl.removeAttribute('aria-hidden');
+			}
+		}
 		paintMobileChromeTitle();
 	}
 
@@ -2647,7 +2804,13 @@ export async function initChatPage(root) {
 				const youPill = selfDm
 					? '<span class="chat-page-sidebar-you-pill" aria-label="This is you">you</span>'
 					: '';
-				return `<a class="chat-page-sidebar-row${activeClass}${pc}${extraRow}" href="${escapeHtml(href)}">
+				const dataPseudoSlugAttr =
+					rowOpts &&
+					typeof rowOpts.pseudoSlug === 'string' &&
+					rowOpts.pseudoSlug.trim()
+						? ` data-chat-pseudo-slug="${escapeHtml(rowOpts.pseudoSlug.trim().toLowerCase())}"`
+						: '';
+				return `<a class="chat-page-sidebar-row${activeClass}${pc}${extraRow}" href="${escapeHtml(href)}"${dataPseudoSlugAttr}>
 					${avatarHtml}
 					<div class="chat-page-sidebar-row-body">
 						<div class="chat-page-sidebar-row-title-line">
@@ -2693,22 +2856,98 @@ export async function initChatPage(root) {
 				</div>`;
 			}
 
+			/**
+			 * When SSR already rendered the pseudo strip (same rows/hrefs), update active/unread in place
+			 * instead of replacing innerHTML — avoids a visible layout jump on first hydrate.
+			 */
+			function tryPatchPseudoStripInPlace(listEl, stripRows) {
+				const navDupSlugs = rosterMod.SIDEBAR_STRIP_SLUGS_ALSO_IN_APP_PRIMARY_NAV;
+				const anchors = [...listEl.querySelectorAll(':scope > a.chat-page-sidebar-row')];
+				if (anchors.length !== stripRows.length) return false;
+				for (let i = 0; i < stripRows.length; i++) {
+					const t = stripRows[i];
+					const wantSlug =
+						t?.type === 'channel' && typeof t.channel_slug === 'string'
+							? t.channel_slug.trim().toLowerCase()
+							: '';
+					if (!wantSlug) return false;
+					const a = anchors[i];
+					const fromDom = a.getAttribute('data-chat-pseudo-slug');
+					if (fromDom) {
+						if (fromDom.toLowerCase() !== wantSlug) return false;
+					} else {
+						let wantPath;
+						let curPath;
+						try {
+							wantPath = normalizePathForCompare(
+								new URL(rosterMod.buildChatThreadUrl(t), window.location.href).pathname
+							);
+							curPath = normalizePathForCompare(
+								new URL(a.getAttribute('href') || '', window.location.href).pathname
+							);
+						} catch {
+							return false;
+						}
+						if (curPath !== wantPath) return false;
+					}
+					const titleLine = a.querySelector(
+						':scope > .chat-page-sidebar-row-body .chat-page-sidebar-row-title-line'
+					);
+					if (!titleLine) return false;
+				}
+				for (let i = 0; i < stripRows.length; i++) {
+					const t = stripRows[i];
+					const a = anchors[i];
+					const href = rosterMod.buildChatThreadUrl(t);
+					const active = isChatHrefActive(href);
+					const slug =
+						t?.type === 'channel' && typeof t.channel_slug === 'string'
+							? t.channel_slug.trim().toLowerCase()
+							: '';
+					a.setAttribute('href', href);
+					if (slug) a.setAttribute('data-chat-pseudo-slug', slug);
+					a.classList.toggle('is-active', active);
+					a.classList.toggle(
+						'chat-page-sidebar-row--also-in-app-primary-nav',
+						Boolean(slug && navDupSlugs.has(slug))
+					);
+					const titleLine = a.querySelector(
+						':scope > .chat-page-sidebar-row-body .chat-page-sidebar-row-title-line'
+					);
+					titleLine.querySelectorAll('.chat-page-sidebar-unread').forEach((el) => el.remove());
+					const unc = Number(t.unread_count);
+					const showUnread = !active && Number.isFinite(unc) && unc > 0;
+					if (showUnread) {
+						const unreadLabel = unc > 99 ? '99+' : String(unc);
+						const span = document.createElement('span');
+						span.className = 'chat-page-sidebar-unread';
+						span.setAttribute('aria-label', `${unc} unread`);
+						span.textContent = unreadLabel;
+						titleLine.appendChild(span);
+					}
+				}
+				return true;
+			}
+
 			const pseudoListEl = sidebar.querySelector('[data-chat-sidebar-pseudo-list]');
 			if (pseudoListEl) {
 				const stripRows = rosterMod.getSidebarPseudoStripRowsMerged(channelRowsRaw);
 				const navDupSlugs = rosterMod.SIDEBAR_STRIP_SLUGS_ALSO_IN_APP_PRIMARY_NAV;
-				pseudoListEl.innerHTML = stripRows
-					.map((t) => {
-						const slug =
-							t?.type === 'channel' && typeof t.channel_slug === 'string'
-								? t.channel_slug.trim().toLowerCase()
-								: '';
-						const alsoNav = Boolean(slug && navDupSlugs.has(slug));
-						return rowHtml(t, {
-							extraAnchorClasses: alsoNav ? 'chat-page-sidebar-row--also-in-app-primary-nav' : ''
-						});
-					})
-					.join('');
+				if (!tryPatchPseudoStripInPlace(pseudoListEl, stripRows)) {
+					pseudoListEl.innerHTML = stripRows
+						.map((t) => {
+							const slug =
+								t?.type === 'channel' && typeof t.channel_slug === 'string'
+									? t.channel_slug.trim().toLowerCase()
+									: '';
+							const alsoNav = Boolean(slug && navDupSlugs.has(slug));
+							return rowHtml(t, {
+								extraAnchorClasses: alsoNav ? 'chat-page-sidebar-row--also-in-app-primary-nav' : '',
+								pseudoSlug: slug || undefined
+							});
+						})
+						.join('');
+				}
 			}
 
 			dmEl.innerHTML = rosterMod.buildChatSidebarDmListHtml(dms, rowHtml);
@@ -2821,16 +3060,12 @@ export async function initChatPage(root) {
 			}
 			e.preventDefault();
 			history.pushState({ prsnChat: true }, '', nextUrl.pathname + nextUrl.search + nextUrl.hash);
-			void openThreadForCurrentPath().then(() => {
-				void refreshChatSidebar({ skipThreadsFetch: true });
-			});
+			void openThreadForCurrentPath();
 		};
 		sidebar.addEventListener('click', chatSidebarNavClickHandler);
 
 		chatSidebarPopstateHandler = () => {
-			void openThreadForCurrentPath().then(() => {
-				void refreshChatSidebar({ skipThreadsFetch: true });
-			});
+			void openThreadForCurrentPath();
 		};
 		window.addEventListener('popstate', chatSidebarPopstateHandler);
 	}
@@ -2847,9 +3082,7 @@ export async function initChatPage(root) {
 			navigateToChatPath: (pathname) => {
 				const path = pathname.startsWith('/') ? pathname : `/${pathname}`;
 				history.pushState({ prsnChat: true }, '', path);
-				void openThreadForCurrentPath().then(() => {
-					void refreshChatSidebar({ skipThreadsFetch: true });
-				});
+				void openThreadForCurrentPath();
 			},
 			refreshSidebar: () => void refreshChatSidebar({ skipThreadsFetch: true })
 		});
@@ -2981,9 +3214,9 @@ export async function initChatPage(root) {
 			el.removeAttribute('data-comments-channel-latest');
 		}
 		const rows = messagesEl.querySelectorAll('[data-comments-channel-row]');
-		const last = rows[rows.length - 1];
-		if (last) {
-			last.setAttribute('data-comments-channel-latest', '1');
+		const latest = rows[0];
+		if (latest) {
+			latest.setAttribute('data-comments-channel-latest', '1');
 		}
 	}
 
@@ -3100,13 +3333,15 @@ export async function initChatPage(root) {
 				userName: handleRaw || undefined,
 				userId: senderId
 			});
+			const senderIsFounder = m.sender_plan === 'founder';
 			const avatarWrap = document.createElement('div');
 			avatarWrap.innerHTML = renderCommentAvatarHtml({
 				avatarUrl: m.sender_avatar_url || '',
 				displayName: displayForAvatar,
 				color: getAvatarColor(handleRaw || String(senderId)),
 				href: profileHref || undefined,
-				flairSize: 'xs'
+				isFounder: senderIsFounder,
+				flairSize: 'sm'
 			});
 			while (avatarWrap.firstChild) {
 				metaLine.appendChild(avatarWrap.firstChild);
@@ -3114,7 +3349,7 @@ export async function initChatPage(root) {
 			const textSpan = document.createElement('span');
 			textSpan.className = 'connect-chat-msg-meta-text';
 			const nameSpan = document.createElement('span');
-			nameSpan.className = 'connect-chat-msg-meta-user';
+			nameSpan.className = `comment-author-name${senderIsFounder ? ' founder-name' : ''}`;
 			nameSpan.textContent = handleLabel;
 			textSpan.appendChild(nameSpan);
 			if (when) {
@@ -3281,8 +3516,8 @@ export async function initChatPage(root) {
 					}
 				}
 			},
-			/* Large top margin so the next page starts loading while the user is still well below the oldest row. */
-			{ root: messagesEl, rootMargin: '1400px 0px 0px 0px', threshold: 0 }
+			/* Newest at top — sentinel at bottom; preload older rows before the user reaches the end. */
+			{ root: messagesEl, rootMargin: '0px 0px 1400px 0px', threshold: 0 }
 		);
 		commentsChannelLoadMoreObserver.observe(sentinel);
 	}
@@ -3303,47 +3538,29 @@ export async function initChatPage(root) {
 			return;
 		}
 
-		const firstMsg = messagesEl.querySelector('[data-comments-channel-row]');
-
-		function preserveScrollAfterPrepend(anchorTopBefore) {
-			if (!firstMsg || !firstMsg.isConnected) return;
-			const anchorTopAfter =
-				firstMsg.getBoundingClientRect().top - messagesEl.getBoundingClientRect().top;
-			const d = anchorTopAfter - anchorTopBefore;
-			if (Number.isFinite(d) && Math.abs(d) > 0.25) {
-				messagesEl.scrollTop += d;
-			}
-		}
-
-		let anchorTopBefore = 0;
-		if (firstMsg) {
-			anchorTopBefore =
-				firstMsg.getBoundingClientRect().top - messagesEl.getBoundingClientRect().top;
-		}
+		const sentinel = messagesEl.querySelector('[data-chat-comments-load-sentinel]');
 
 		try {
 			const r = await pseudoColumnPager.loadOlder();
 			if (!r.ok) {
 				return;
 			}
-			const mergedFiltered = Array.isArray(r.prepended) ? r.prepended : [];
+			const mergedFiltered = Array.isArray(r.appended) ? r.appended : [];
 			lastChatMessagesPayload = pseudoColumnPager.getItems();
 			if (mergedFiltered.length === 0) {
 				if (!pseudoColumnPager.getHasMore()) {
 					disconnectCommentsChannelLoadObserver();
+					sentinel?.remove();
 				}
 				return;
 			}
 
-			if (!firstMsg) {
-				for (let i = 0; i < mergedFiltered.length; i++) {
-					const row = createCommentsChannelPlainRow(mergedFiltered[i]);
+			for (let i = 0; i < mergedFiltered.length; i++) {
+				const row = createCommentsChannelPlainRow(mergedFiltered[i]);
+				if (sentinel && sentinel.parentNode === messagesEl) {
+					messagesEl.insertBefore(row, sentinel);
+				} else {
 					messagesEl.appendChild(row);
-				}
-			} else {
-				for (let i = 0; i < mergedFiltered.length; i++) {
-					const row = createCommentsChannelPlainRow(mergedFiltered[i]);
-					messagesEl.insertBefore(row, firstMsg);
 				}
 			}
 
@@ -3355,16 +3572,8 @@ export async function initChatPage(root) {
 
 			if (!pseudoColumnPager.getHasMore()) {
 				disconnectCommentsChannelLoadObserver();
+				sentinel?.remove();
 			}
-
-			void messagesEl.offsetHeight;
-			preserveScrollAfterPrepend(anchorTopBefore);
-			requestAnimationFrame(() => {
-				preserveScrollAfterPrepend(anchorTopBefore);
-				requestAnimationFrame(() => {
-					preserveScrollAfterPrepend(anchorTopBefore);
-				});
-			});
 		} catch (err) {
 			console.error('[Chat page] comments channel load more:', err);
 		}
@@ -3381,6 +3590,7 @@ export async function initChatPage(root) {
 		messagesEl.setAttribute('aria-busy', 'true');
 		try {
 			pseudoColumnPager = createPseudoColumnPager({
+				columnOrder: 'feed',
 				getItemKey: (m) => (Number.isFinite(Number(m?.id)) ? String(m.id) : ''),
 				fetchPage: async ({ initial, items }) => {
 					const commentsMod = await import(`../shared/comments.js${qs}`);
@@ -3399,7 +3609,7 @@ export async function initChatPage(root) {
 							hasMore: result.data?.has_more === true,
 						};
 					}
-					const oldest = items[0];
+					const oldest = Array.isArray(items) && items.length > 0 ? items[items.length - 1] : null;
 					const beforeRaw = oldest?.created_at;
 					const before =
 						typeof beforeRaw === 'string' && beforeRaw.trim()
@@ -3435,17 +3645,17 @@ export async function initChatPage(root) {
 			lastChatMessagesPayload = messages;
 			teardownLatestMessageReadObserver();
 			messagesEl.innerHTML = '';
-			const sentinel = document.createElement('div');
-			sentinel.dataset.chatCommentsLoadSentinel = '1';
-			sentinel.className = 'chat-page-comments-load-sentinel';
-			sentinel.setAttribute('aria-hidden', 'true');
-			sentinel.style.cssText = 'height:1px;margin:0;padding:0;flex-shrink:0;pointer-events:none';
-			messagesEl.appendChild(sentinel);
-			paintCommentsChannelPlainRows(messagesEl, messages, sentinel);
-			if (pseudoColumnPager.getHasMore()) {
+			paintCommentsChannelPlainRows(messagesEl, messages, null);
+			if (messages.length > 0 && pseudoColumnPager.getHasMore()) {
+				const sentinel = document.createElement('div');
+				sentinel.dataset.chatCommentsLoadSentinel = '1';
+				sentinel.className = 'chat-page-comments-load-sentinel';
+				sentinel.setAttribute('aria-hidden', 'true');
+				sentinel.style.cssText = 'height:1px;margin:0;padding:0;flex-shrink:0;pointer-events:none';
+				messagesEl.appendChild(sentinel);
 				setupCommentsChannelLoadMoreObserver(messagesEl);
 			}
-			scrollChatMessagesToEnd();
+			scrollChatFeedPseudoChannelToTop();
 		} catch (err) {
 			console.error('[Chat page] comments channel:', err);
 			messagesEl.innerHTML = renderEmptyError(err?.message || 'Could not load comments.');
@@ -3531,8 +3741,11 @@ export async function initChatPage(root) {
 					}
 				}
 			},
-			/* Same pattern as #comments: sentinel at top; generous top margin preloads older rows while user is below. */
-			{ root: messagesEl, rootMargin: '1400px 0px 0px 0px', threshold: 0 }
+			chatFeedLaneScrollMode === 'newest_first'
+				? /* Match main feed: sentinel after cards; bottom margin preloads before the user reaches the end. */
+					{ root: messagesEl, rootMargin: '0px 0px 1400px 0px', threshold: 0 }
+				: /* Chat-style: sentinel above cards; top margin preloads while user is below older rows. */
+					{ root: messagesEl, rootMargin: '1400px 0px 0px 0px', threshold: 0 }
 		);
 		feedChannelLoadMoreObserver.observe(sentinel);
 	}
@@ -3572,8 +3785,9 @@ export async function initChatPage(root) {
 		}
 
 		let anchorTopBefore = 0;
-		if (anchor) {
-			anchorTopBefore = anchor.getBoundingClientRect().top - messagesEl.getBoundingClientRect().top;
+		if (chatFeedLaneScrollMode === 'oldest_first' && anchor) {
+			anchorTopBefore =
+				anchor.getBoundingClientRect().top - messagesEl.getBoundingClientRect().top;
 		}
 
 		try {
@@ -3583,7 +3797,10 @@ export async function initChatPage(root) {
 			if (!r.ok) {
 				return;
 			}
-			const mergedFiltered = Array.isArray(r.prepended) ? r.prepended : [];
+			const mergedFiltered =
+				chatFeedLaneScrollMode === 'newest_first'
+					? Array.isArray(r.appended) ? r.appended : []
+					: Array.isArray(r.prepended) ? r.prepended : [];
 			if (mergedFiltered.length === 0) {
 				if (!pseudoColumnPager.getHasMore()) {
 					disconnectFeedChannelLoadObserver();
@@ -3592,19 +3809,43 @@ export async function initChatPage(root) {
 			}
 			addPageUsers(mergedFiltered.map(feedItemToUser));
 
-			if (anchor) {
+			if (chatFeedLaneScrollMode === 'newest_first') {
+				const idxBase = cards.children.length;
 				for (let i = 0; i < mergedFiltered.length; i++) {
-					const row = createFeedItemCard(mergedFiltered[i], i, {
-						setupFeedVideo: (el) => setupFeedChannelVideoAutoplay(messagesEl, el),
-					});
+					cards.appendChild(
+						createFeedItemCard(
+							mergedFiltered[i],
+							idxBase + i,
+							feedCardOptionsForPseudoLane(
+								(el) => setupFeedChannelVideoAutoplay(messagesEl, el),
+								laneSlug
+							)
+						)
+					);
+				}
+			} else if (anchor) {
+				for (let i = 0; i < mergedFiltered.length; i++) {
+					const row = createFeedItemCard(
+						mergedFiltered[i],
+						i,
+						feedCardOptionsForPseudoLane(
+							(el) => setupFeedChannelVideoAutoplay(messagesEl, el),
+							laneSlug
+						)
+					);
 					cards.insertBefore(row, anchor);
 				}
 			} else {
 				for (let i = 0; i < mergedFiltered.length; i++) {
 					cards.appendChild(
-						createFeedItemCard(mergedFiltered[i], i, {
-							setupFeedVideo: (el) => setupFeedChannelVideoAutoplay(messagesEl, el),
-						})
+						createFeedItemCard(
+							mergedFiltered[i],
+							i,
+							feedCardOptionsForPseudoLane(
+								(el) => setupFeedChannelVideoAutoplay(messagesEl, el),
+								laneSlug
+							)
+						)
 					);
 				}
 			}
@@ -3613,14 +3854,16 @@ export async function initChatPage(root) {
 				disconnectFeedChannelLoadObserver();
 			}
 
-			void messagesEl.offsetHeight;
-			preserveScrollAfterPrepend(anchorTopBefore);
-			requestAnimationFrame(() => {
+			if (chatFeedLaneScrollMode === 'oldest_first') {
+				void messagesEl.offsetHeight;
 				preserveScrollAfterPrepend(anchorTopBefore);
 				requestAnimationFrame(() => {
 					preserveScrollAfterPrepend(anchorTopBefore);
+					requestAnimationFrame(() => {
+						preserveScrollAfterPrepend(anchorTopBefore);
+					});
 				});
-			});
+			}
 		} catch (err) {
 			const label =
 				laneSlug === 'explore'
@@ -3654,6 +3897,7 @@ export async function initChatPage(root) {
 			const { createFeedItemCard, feedItemToUser, getHiddenFeedItems } = feedCardMod;
 
 			pseudoColumnPager = createPseudoColumnPager({
+				columnOrder: feedLanePagerColumnOrder(),
 				getItemKey: (it) => {
 					if (it.type === 'tip' || it.type === 'blog_post') {
 						return `${it.type}:${it.id ?? it.slug ?? it.title ?? ''}`;
@@ -3720,16 +3964,13 @@ export async function initChatPage(root) {
 						window.location.href = '/explore';
 					});
 				}
-				scrollChatMessagesToEnd();
+				if (chatFeedLaneScrollMode === 'newest_first') {
+					scrollChatFeedPseudoChannelToTop();
+				} else {
+					scrollChatMessagesToEnd();
+				}
 				return;
 			}
-
-			const sentinel = document.createElement('div');
-			sentinel.dataset.chatFeedLoadSentinel = '1';
-			sentinel.className = 'chat-page-feed-load-sentinel';
-			sentinel.setAttribute('aria-hidden', 'true');
-			sentinel.style.cssText = 'height:1px;margin:0;padding:0;flex-shrink:0;pointer-events:none';
-			messagesEl.appendChild(sentinel);
 
 			const routeWrap = document.createElement('div');
 			routeWrap.className = 'feed-route chat-feed-channel-route';
@@ -3738,17 +3979,38 @@ export async function initChatPage(root) {
 			cards.setAttribute('data-feed-channel-cards', '1');
 			for (let i = 0; i < ordered.length; i++) {
 				cards.appendChild(
-					createFeedItemCard(ordered[i], i, {
-						setupFeedVideo: (el) => setupFeedChannelVideoAutoplay(messagesEl, el),
-					})
+					createFeedItemCard(
+						ordered[i],
+						i,
+						feedCardOptionsForPseudoLane(
+							(el) => setupFeedChannelVideoAutoplay(messagesEl, el),
+							'feed'
+						)
+					)
 				);
 			}
 			routeWrap.appendChild(cards);
-			messagesEl.appendChild(routeWrap);
-			if (pseudoColumnPager.getHasMore()) {
-				setupFeedChannelLoadMoreObserver(messagesEl);
+
+			const sentinel = document.createElement('div');
+			sentinel.dataset.chatFeedLoadSentinel = '1';
+			sentinel.className = 'chat-page-feed-load-sentinel';
+			sentinel.setAttribute('aria-hidden', 'true');
+			sentinel.style.cssText = 'height:1px;margin:0;padding:0;flex-shrink:0;pointer-events:none';
+			if (chatFeedLaneScrollMode === 'newest_first') {
+				messagesEl.appendChild(routeWrap);
+				messagesEl.appendChild(sentinel);
+				if (pseudoColumnPager.getHasMore()) {
+					setupFeedChannelLoadMoreObserver(messagesEl);
+				}
+				scrollChatFeedPseudoChannelToTop();
+			} else {
+				messagesEl.appendChild(sentinel);
+				messagesEl.appendChild(routeWrap);
+				if (pseudoColumnPager.getHasMore()) {
+					setupFeedChannelLoadMoreObserver(messagesEl);
+				}
+				scrollChatMessagesToEnd();
 			}
-			scrollChatMessagesToEnd();
 		} catch (err) {
 			console.error('[Chat page] feed channel:', err);
 			messagesEl.innerHTML = renderEmptyError(err?.message || 'Could not load feed.');
@@ -3757,6 +4019,26 @@ export async function initChatPage(root) {
 			loadingMessages = false;
 			syncChatMessagePlaceholder();
 		}
+	}
+
+	function applyExploreCreationsBrowseViewClass(routeWrap) {
+		if (!(routeWrap instanceof HTMLElement)) return;
+		routeWrap.dataset.chatExploreCreationsLane = '1';
+		routeWrap.classList.toggle('chat-feed-channel-route--browse-view', chatExploreCreationsBrowseView);
+	}
+
+	/**
+	 * @param {(el: HTMLVideoElement) => void} setupFeedVideo
+	 * @param {'feed' | 'explore' | 'creations'} laneSlug
+	 */
+	function feedCardOptionsForPseudoLane(setupFeedVideo, laneSlug) {
+		const hide =
+			chatExploreCreationsBrowseView && (laneSlug === 'explore' || laneSlug === 'creations');
+		return {
+			setupFeedVideo,
+			hideFeedCardMetadata: hide,
+			preferThumbnail: laneSlug === 'explore' || laneSlug === 'creations',
+		};
 	}
 
 	async function loadCreationsChannelMessages() {
@@ -3780,11 +4062,12 @@ export async function initChatPage(root) {
 			const creationsAuthorHints = await resolveCreationsChannelAuthorHints();
 
 			pseudoColumnPager = createPseudoColumnPager({
+				columnOrder: feedLanePagerColumnOrder(),
 				getItemKey: (it) => String(it.created_image_id || it.id || ''),
 				fetchPage: async ({ initial, items }) => {
 					const offset = initial ? 0 : items.length;
 					const res = await fetchJsonWithStatusDeduped(
-						`/api/users/${encodeURIComponent(String(viewerId))}/created-images?limit=${CREATIONS_CHANNEL_PAGE_SIZE}&offset=${offset}`,
+						`/api/create/images?limit=${CREATIONS_CHANNEL_PAGE_SIZE}&offset=${offset}`,
 						{ credentials: 'include' },
 						{ windowMs: 30000 }
 					);
@@ -3819,39 +4102,58 @@ export async function initChatPage(root) {
 				messagesEl.innerHTML = renderEmptyState({
 					className: 'route-empty-image-grid',
 					title: 'No creations yet',
-					message: 'When you publish a creation, it appears here.',
-					buttonText: 'Create',
+					message: 'Start creating to see your work here.',
+					buttonText: 'Get Started',
 					buttonHref: '/create',
 				});
-				scrollChatMessagesToEnd();
+				if (chatFeedLaneScrollMode === 'newest_first') {
+					scrollChatFeedPseudoChannelToTop();
+				} else {
+					scrollChatMessagesToEnd();
+				}
 				return;
 			}
+
+			const routeWrap = document.createElement('div');
+			routeWrap.className = 'feed-route chat-feed-channel-route';
+			applyExploreCreationsBrowseViewClass(routeWrap);
+			const cards = document.createElement('div');
+			cards.className = 'route-cards feed-cards';
+			cards.setAttribute('data-feed-channel-cards', '1');
+			for (let i = 0; i < ordered.length; i++) {
+				cards.appendChild(
+					createFeedItemCard(
+						ordered[i],
+						i,
+						feedCardOptionsForPseudoLane(
+							(el) => setupFeedChannelVideoAutoplay(messagesEl, el),
+							'creations'
+						)
+					)
+				);
+			}
+			routeWrap.appendChild(cards);
 
 			const sentinel = document.createElement('div');
 			sentinel.dataset.chatFeedLoadSentinel = '1';
 			sentinel.className = 'chat-page-feed-load-sentinel';
 			sentinel.setAttribute('aria-hidden', 'true');
 			sentinel.style.cssText = 'height:1px;margin:0;padding:0;flex-shrink:0;pointer-events:none';
-			messagesEl.appendChild(sentinel);
-
-			const routeWrap = document.createElement('div');
-			routeWrap.className = 'feed-route chat-feed-channel-route';
-			const cards = document.createElement('div');
-			cards.className = 'route-cards feed-cards';
-			cards.setAttribute('data-feed-channel-cards', '1');
-			for (let i = 0; i < ordered.length; i++) {
-				cards.appendChild(
-					createFeedItemCard(ordered[i], i, {
-						setupFeedVideo: (el) => setupFeedChannelVideoAutoplay(messagesEl, el),
-					})
-				);
+			if (chatFeedLaneScrollMode === 'newest_first') {
+				messagesEl.appendChild(routeWrap);
+				messagesEl.appendChild(sentinel);
+				if (pseudoColumnPager.getHasMore()) {
+					setupFeedChannelLoadMoreObserver(messagesEl);
+				}
+				scrollChatFeedPseudoChannelToTop();
+			} else {
+				messagesEl.appendChild(sentinel);
+				messagesEl.appendChild(routeWrap);
+				if (pseudoColumnPager.getHasMore()) {
+					setupFeedChannelLoadMoreObserver(messagesEl);
+				}
+				scrollChatMessagesToEnd();
 			}
-			routeWrap.appendChild(cards);
-			messagesEl.appendChild(routeWrap);
-			if (pseudoColumnPager.getHasMore()) {
-				setupFeedChannelLoadMoreObserver(messagesEl);
-			}
-			scrollChatMessagesToEnd();
 		} catch (err) {
 			console.error('[Chat page] creations channel:', err);
 			messagesEl.innerHTML = renderEmptyError(err?.message || 'Could not load creations.');
@@ -3966,24 +4268,38 @@ export async function initChatPage(root) {
 							className: 'route-empty-image-grid',
 							title: 'No creations found',
 						});
-						scrollChatMessagesToEnd();
+						if (chatFeedLaneScrollMode === 'newest_first') {
+							scrollChatFeedPseudoChannelToTop();
+						} else {
+							scrollChatMessagesToEnd();
+						}
 						return;
 					}
 					const routeWrap = document.createElement('div');
 					routeWrap.className = 'feed-route chat-feed-channel-route';
+					applyExploreCreationsBrowseViewClass(routeWrap);
 					const cards = document.createElement('div');
 					cards.className = 'route-cards feed-cards';
 					cards.setAttribute('data-feed-channel-cards', '1');
 					for (let i = 0; i < merged.length; i++) {
 						cards.appendChild(
-							createFeedItemCard(merged[i], i, {
-								setupFeedVideo: (el) => setupFeedChannelVideoAutoplay(messagesEl, el),
-							})
+							createFeedItemCard(
+								merged[i],
+								i,
+								feedCardOptionsForPseudoLane(
+									(el) => setupFeedChannelVideoAutoplay(messagesEl, el),
+									'explore'
+								)
+							)
 						);
 					}
 					routeWrap.appendChild(cards);
 					messagesEl.appendChild(routeWrap);
-					scrollChatMessagesToEnd();
+					if (chatFeedLaneScrollMode === 'newest_first') {
+						scrollChatFeedPseudoChannelToTop();
+					} else {
+						scrollChatMessagesToEnd();
+					}
 					return;
 				} finally {
 					exploreChannelSearchLoading = false;
@@ -3992,6 +4308,7 @@ export async function initChatPage(root) {
 			}
 
 			pseudoColumnPager = createPseudoColumnPager({
+				columnOrder: feedLanePagerColumnOrder(),
 				getItemKey: (it) => String(it.created_image_id || it.id || ''),
 				fetchPage: async ({ initial, items }) => {
 					const offset = initial ? 0 : items.length;
@@ -4031,35 +4348,54 @@ export async function initChatPage(root) {
 					title: 'Nothing to explore yet',
 					message: 'Published creations from the community will appear here.',
 				});
-				scrollChatMessagesToEnd();
+				if (chatFeedLaneScrollMode === 'newest_first') {
+					scrollChatFeedPseudoChannelToTop();
+				} else {
+					scrollChatMessagesToEnd();
+				}
 				return;
 			}
+
+			const routeWrap = document.createElement('div');
+			routeWrap.className = 'feed-route chat-feed-channel-route';
+			applyExploreCreationsBrowseViewClass(routeWrap);
+			const cards = document.createElement('div');
+			cards.className = 'route-cards feed-cards';
+			cards.setAttribute('data-feed-channel-cards', '1');
+			for (let i = 0; i < ordered.length; i++) {
+				cards.appendChild(
+					createFeedItemCard(
+						ordered[i],
+						i,
+						feedCardOptionsForPseudoLane(
+							(el) => setupFeedChannelVideoAutoplay(messagesEl, el),
+							'explore'
+						)
+					)
+				);
+			}
+			routeWrap.appendChild(cards);
 
 			const sentinel = document.createElement('div');
 			sentinel.dataset.chatFeedLoadSentinel = '1';
 			sentinel.className = 'chat-page-feed-load-sentinel';
 			sentinel.setAttribute('aria-hidden', 'true');
 			sentinel.style.cssText = 'height:1px;margin:0;padding:0;flex-shrink:0;pointer-events:none';
-			messagesEl.appendChild(sentinel);
-
-			const routeWrap = document.createElement('div');
-			routeWrap.className = 'feed-route chat-feed-channel-route';
-			const cards = document.createElement('div');
-			cards.className = 'route-cards feed-cards';
-			cards.setAttribute('data-feed-channel-cards', '1');
-			for (let i = 0; i < ordered.length; i++) {
-				cards.appendChild(
-					createFeedItemCard(ordered[i], i, {
-						setupFeedVideo: (el) => setupFeedChannelVideoAutoplay(messagesEl, el),
-					})
-				);
+			if (chatFeedLaneScrollMode === 'newest_first') {
+				messagesEl.appendChild(routeWrap);
+				messagesEl.appendChild(sentinel);
+				if (pseudoColumnPager.getHasMore()) {
+					setupFeedChannelLoadMoreObserver(messagesEl);
+				}
+				scrollChatFeedPseudoChannelToTop();
+			} else {
+				messagesEl.appendChild(sentinel);
+				messagesEl.appendChild(routeWrap);
+				if (pseudoColumnPager.getHasMore()) {
+					setupFeedChannelLoadMoreObserver(messagesEl);
+				}
+				scrollChatMessagesToEnd();
 			}
-			routeWrap.appendChild(cards);
-			messagesEl.appendChild(routeWrap);
-			if (pseudoColumnPager.getHasMore()) {
-				setupFeedChannelLoadMoreObserver(messagesEl);
-			}
-			scrollChatMessagesToEnd();
 		} catch (err) {
 			console.error('[Chat page] explore channel:', err);
 			messagesEl.innerHTML = renderEmptyError(err?.message || 'Could not load explore.');
@@ -4173,7 +4509,6 @@ export async function initChatPage(root) {
 			window.setTimeout(() => {
 				setupLatestMessageReadObserver();
 			}, 550);
-			maybeOpenPinnedChatCanvas();
 		} catch (err) {
 			console.error('[Chat page] messages:', err);
 			messagesEl.innerHTML = renderEmptyError(err?.message || 'Could not load messages.');
@@ -4649,9 +4984,9 @@ export async function initChatPage(root) {
 
 		optimisticSend = null;
 		tearDownChatCanvasUi();
-		pinnedCanvasAutoOpenedForThreadId = null;
 		clearChatPendingAttachments();
 		activePseudoChannelSlug = null;
+		syncChatBrowseViewBodyClass();
 		teardownCommentsChannelLoadMore();
 		teardownFeedChannelLoadMore();
 		teardownExploreChannelLoadMore();
@@ -4701,7 +5036,6 @@ export async function initChatPage(root) {
 					updateTitleFromMeta({
 						type: 'channel',
 						channel_slug: 'comments',
-						title: '#comments',
 					});
 					if (messagesEl) {
 						messagesEl.removeAttribute('aria-busy');
@@ -4715,7 +5049,6 @@ export async function initChatPage(root) {
 					updateTitleFromMeta({
 						type: 'channel',
 						channel_slug: 'feed',
-						title: '#feed',
 					});
 					if (messagesEl) {
 						messagesEl.removeAttribute('aria-busy');
@@ -4729,7 +5062,6 @@ export async function initChatPage(root) {
 					updateTitleFromMeta({
 						type: 'channel',
 						channel_slug: 'creations',
-						title: '#creations',
 					});
 					if (messagesEl) {
 						messagesEl.removeAttribute('aria-busy');
@@ -4756,7 +5088,6 @@ export async function initChatPage(root) {
 					updateTitleFromMeta({
 						type: 'channel',
 						channel_slug: 'explore',
-						title: '#explore',
 					});
 					if (messagesEl) {
 						messagesEl.removeAttribute('aria-busy');
@@ -4865,6 +5196,7 @@ export async function initChatPage(root) {
 			tearDownVisibilityResync();
 			tearDownRoomBroadcast();
 			console.error('[Chat page]', err);
+			void refreshChatSidebar({ skipThreadsFetch: true });
 			if (messagesEl) {
 				messagesEl.innerHTML = '';
 				messagesEl.removeAttribute('aria-busy');
@@ -4874,6 +5206,7 @@ export async function initChatPage(root) {
 				errEl.textContent = err?.message || 'Could not open this conversation.';
 			}
 		} finally {
+			syncChatBrowseViewBodyClass();
 			applyComposerState();
 		}
 	}
@@ -5007,7 +5340,6 @@ export async function initChatPage(root) {
 		const path = `/chat/c/${encodeURIComponent(slug)}`;
 		history.pushState({ prsnChat: true }, '', path);
 		await openThreadForCurrentPath();
-		void refreshChatSidebar({ skipThreadsFetch: true });
 	}
 
 	async function openChatHashtagDestination(slug) {
@@ -5331,7 +5663,6 @@ export async function initChatPage(root) {
 			if (refreshBtn instanceof HTMLButtonElement) {
 				refreshBtn.disabled = false;
 			}
-			void refreshChatSidebar({ skipThreadsFetch: true });
 		});
 	};
 
@@ -5377,20 +5708,6 @@ export async function initChatPage(root) {
 		});
 	}
 
-	function maybeOpenPinnedChatCanvas() {
-		if (isChatPageMobileLayout()) return;
-		if (!isActiveThreadCanvasEligible()) return;
-		const tid = activeThreadId;
-		const pinId = activeThreadPinnedCanvasId;
-		if (tid == null || !Number.isFinite(Number(tid))) return;
-		if (!Number.isFinite(pinId) || pinId <= 0) return;
-		if (pinnedCanvasAutoOpenedForThreadId === tid) return;
-		const row = chatCanvasesList.find((c) => Number(c.id) === pinId);
-		if (!row) return;
-		openChatCanvasPanel(row);
-		pinnedCanvasAutoOpenedForThreadId = tid;
-	}
-
 	function isActiveThreadCanvasEligible() {
 		if (activePseudoChannelSlug) return false;
 		const tid = activeThreadId;
@@ -5407,7 +5724,7 @@ export async function initChatPage(root) {
 			mainColumn instanceof HTMLElement ? mainColumn.querySelector('[data-chat-mobile-chrome-sheet-body]') : null;
 		if (!(body instanceof HTMLElement)) return;
 		body.replaceChildren();
-		const channelLabel = root.querySelector('[data-chat-title]')?.textContent?.trim() || 'Chat';
+		const channelLabel = root.querySelector('[data-chat-title]')?.textContent?.trim() || '';
 		const ch = document.createElement('button');
 		ch.type = 'button';
 		ch.className = 'feed-card-menu-item';
@@ -5585,7 +5902,16 @@ export async function initChatPage(root) {
 		if (!activeCanvasRow) return;
 		if (el.titleView instanceof HTMLElement) el.titleView.textContent = activeCanvasRow.title;
 		if (el.bodyView instanceof HTMLElement) {
-			el.bodyView.innerHTML = processUserText(activeCanvasRow.body || '');
+			/** Prefer server-rendered markdown HTML from GET …/canvases (`body_html`); else linkify plain text. */
+			const serverHtml =
+				typeof activeCanvasRow.body_html === 'string' ? activeCanvasRow.body_html.trim() : '';
+			if (serverHtml) {
+				el.bodyView.innerHTML = serverHtml;
+				el.bodyView.classList.add('chat-page-canvas-body--markdown');
+			} else {
+				el.bodyView.innerHTML = processUserText(activeCanvasRow.body || '');
+				el.bodyView.classList.remove('chat-page-canvas-body--markdown');
+			}
 			hydrateUserTextLinks(el.bodyView);
 			hydrateChatCreationEmbeds(el.bodyView);
 			hydrateChatYoutubeEmbeds(el.bodyView);
@@ -5626,6 +5952,54 @@ export async function initChatPage(root) {
 		if (el.moreWrap instanceof HTMLElement) el.moreWrap.hidden = true;
 	}
 
+	const CHAT_OPEN_CANVAS_BY_THREAD_LS = 'prsn-chat-open-canvas-by-thread-v1';
+
+	function readOpenCanvasByThreadMap() {
+		try {
+			const raw = window.localStorage?.getItem(CHAT_OPEN_CANVAS_BY_THREAD_LS);
+			if (!raw) return {};
+			const o = JSON.parse(raw);
+			return o && typeof o === 'object' && !Array.isArray(o) ? o : {};
+		} catch {
+			return {};
+		}
+	}
+
+	function writeOpenCanvasByThreadMap(map) {
+		try {
+			window.localStorage.setItem(CHAT_OPEN_CANVAS_BY_THREAD_LS, JSON.stringify(map));
+		} catch {
+			// ignore quota / private mode
+		}
+	}
+
+	function rememberOpenCanvasForActiveThread(canvasMessageId) {
+		const tid = activeThreadId;
+		if (tid == null || !Number.isFinite(Number(tid)) || Number(tid) <= 0) return;
+		const mid = Number(canvasMessageId);
+		if (!Number.isFinite(mid) || mid <= 0) return;
+		const map = readOpenCanvasByThreadMap();
+		map[String(tid)] = mid;
+		writeOpenCanvasByThreadMap(map);
+	}
+
+	function forgetOpenCanvasForThread(threadId) {
+		const tid = Number(threadId);
+		if (!Number.isFinite(tid) || tid <= 0) return;
+		const map = readOpenCanvasByThreadMap();
+		if (map[String(tid)] == null) return;
+		delete map[String(tid)];
+		writeOpenCanvasByThreadMap(map);
+	}
+
+	function getStoredOpenCanvasIdForThread(threadId) {
+		const tid = Number(threadId);
+		if (!Number.isFinite(tid) || tid <= 0) return null;
+		const v = readOpenCanvasByThreadMap()[String(tid)];
+		const n = Number(v);
+		return Number.isFinite(n) && n > 0 ? n : null;
+	}
+
 	function openChatCanvasPanel(row) {
 		closeMobileChromeSheet();
 		closeCanvasOwnerDropdown();
@@ -5633,6 +6007,7 @@ export async function initChatPage(root) {
 			id: Number(row.id),
 			title: String(row.title || '').trim(),
 			body: row.body != null ? String(row.body) : '',
+			body_html: typeof row.body_html === 'string' ? row.body_html : null,
 			sender_id: Number(row.sender_id)
 		};
 		const el = getChatCanvasPanelEls();
@@ -5644,9 +6019,14 @@ export async function initChatPage(root) {
 		if (el.panel instanceof HTMLElement) el.panel.hidden = false;
 		setChatCanvasOpenBodyClass(true);
 		paintCanvasPanelReadOnly();
+		syncTopbarPinnedCanvasButton();
+		rememberOpenCanvasForActiveThread(activeCanvasRow.id);
 	}
 
-	closeChatCanvasPanel = () => {
+	closeChatCanvasPanel = ({ forgetOpenPreference = false } = {}) => {
+		if (forgetOpenPreference && activeThreadId != null) {
+			forgetOpenCanvasForThread(activeThreadId);
+		}
 		closeMobileChromeSheet();
 		closeCanvasOwnerDropdown();
 		activeCanvasRow = null;
@@ -5661,16 +6041,69 @@ export async function initChatPage(root) {
 		if (el.bodyView instanceof HTMLElement) {
 			el.bodyView.hidden = false;
 			el.bodyView.innerHTML = '';
+			el.bodyView.classList.remove('chat-page-canvas-body--markdown');
 		}
 		if (el.moreWrap instanceof HTMLElement) el.moreWrap.hidden = true;
 		if (el.panel instanceof HTMLElement) el.panel.hidden = true;
 		setChatCanvasOpenBodyClass(false);
+		syncTopbarPinnedCanvasButton();
 	};
+
+	/** Desktop: show pinned canvas name in the top bar; click opens the canvas panel (no auto-open). */
+	function syncTopbarPinnedCanvasButton() {
+		const btn = root.querySelector('[data-chat-topbar-pinned-canvas]');
+		if (!(btn instanceof HTMLButtonElement)) return;
+		btn.removeAttribute('data-chat-canvas-open');
+		if (isChatPageMobileLayout()) {
+			btn.hidden = true;
+			btn.textContent = '';
+			btn.removeAttribute('aria-label');
+			return;
+		}
+		if (!isActiveThreadCanvasEligible()) {
+			btn.hidden = true;
+			btn.textContent = '';
+			btn.removeAttribute('aria-label');
+			return;
+		}
+		const pinId = activeThreadPinnedCanvasId;
+		if (!Number.isFinite(pinId) || pinId <= 0) {
+			btn.hidden = true;
+			btn.textContent = '';
+			btn.removeAttribute('aria-label');
+			return;
+		}
+		const row = chatCanvasesList.find((c) => Number(c.id) === pinId);
+		if (!row) {
+			btn.hidden = true;
+			btn.textContent = '';
+			btn.removeAttribute('aria-label');
+			return;
+		}
+		const panelEl = getChatCanvasPanelEls().panel;
+		const panelOpen = panelEl instanceof HTMLElement && !panelEl.hidden;
+		const viewingPinnedInPanel =
+			panelOpen &&
+			activeCanvasRow != null &&
+			Number(activeCanvasRow.id) === Number(pinId);
+		if (viewingPinnedInPanel) {
+			btn.hidden = true;
+			btn.textContent = '';
+			btn.removeAttribute('aria-label');
+			return;
+		}
+		const title = String(row.title || '').trim() || 'Canvas';
+		btn.hidden = false;
+		btn.textContent = title;
+		btn.setAttribute('data-chat-canvas-open', String(row.id));
+		btn.setAttribute('aria-label', `Open pinned canvas: ${title}`);
+	}
 
 	rebuildTopbarMenuDynamic = () => {
 		const dyn = root.querySelector('[data-chat-topbar-menu-dynamic]');
 		if (!(dyn instanceof HTMLElement)) {
 			rebuildMobileChromeSheet();
+			syncTopbarPinnedCanvasButton();
 			return;
 		}
 		dyn.replaceChildren();
@@ -5691,7 +6124,18 @@ export async function initChatPage(root) {
 			dyn.appendChild(b);
 		}
 		rebuildMobileChromeSheet();
+		syncTopbarPinnedCanvasButton();
 	};
+
+	if (typeof window !== 'undefined') {
+		const onPinnedCanvasBtnLayout = () => syncTopbarPinnedCanvasButton();
+		window.addEventListener('resize', onPinnedCanvasBtnLayout, { passive: true });
+		try {
+			window.matchMedia('(max-width: 768px)').addEventListener('change', onPinnedCanvasBtnLayout);
+		} catch {
+			// ignore
+		}
+	}
 
 	refreshChatCanvasesList = async () => {
 		if (!isActiveThreadCanvasEligible()) {
@@ -5721,13 +6165,24 @@ export async function initChatPage(root) {
 					id: Number(up.id),
 					title: String(up.title || '').trim(),
 					body: up.body != null ? String(up.body) : '',
+					body_html: typeof up.body_html === 'string' ? up.body_html : null,
 					sender_id: Number(up.sender_id)
 				};
 				const el = getChatCanvasPanelEls();
 				const editing = el.editFooter instanceof HTMLElement && !el.editFooter.hidden;
 				if (!editing) paintCanvasPanelReadOnly();
 			} else {
-				closeChatCanvasPanel();
+				closeChatCanvasPanel({ forgetOpenPreference: true });
+			}
+		} else if (tid != null && Number.isFinite(Number(tid)) && Number(tid) > 0) {
+			const savedId = getStoredOpenCanvasIdForThread(tid);
+			if (savedId != null) {
+				const row = chatCanvasesList.find((c) => Number(c.id) === savedId);
+				if (row) {
+					openChatCanvasPanel(row);
+				} else {
+					forgetOpenCanvasForThread(tid);
+				}
 			}
 		}
 	};
@@ -5923,7 +6378,7 @@ export async function initChatPage(root) {
 		}
 		if (t.closest('[data-chat-canvas-close]')) {
 			e.preventDefault();
-			closeChatCanvasPanel();
+			closeChatCanvasPanel({ forgetOpenPreference: true });
 			return;
 		}
 		if (t.closest('[data-chat-canvas-edit]')) {
@@ -5955,7 +6410,7 @@ export async function initChatPage(root) {
 						window.alert(data.message || data.error || 'Could not delete');
 						return;
 					}
-					closeChatCanvasPanel();
+					closeChatCanvasPanel({ forgetOpenPreference: true });
 					await refreshChatCanvasesList();
 					await loadMessages();
 				} catch (err) {
@@ -6051,6 +6506,7 @@ export async function initChatPage(root) {
 							id: Number(msgRow.id),
 							title: cm?.title || title,
 							body: msgRow.body != null ? String(msgRow.body) : body,
+							body_html: null,
 							sender_id: Number(msgRow.sender_id)
 						};
 					}
@@ -6210,7 +6666,6 @@ export async function initChatPage(root) {
 
 	enableLikeButtons(root);
 	await openThreadForCurrentPath();
-	void refreshChatSidebar({ skipThreadsFetch: true });
 	dispatchChatUnreadRefresh();
 	/** Poll often enough that DM online/offline styling tracks presence without feeling stuck. */
 	chatSidebarPollTimer = setInterval(() => void refreshChatSidebar(), 15000);

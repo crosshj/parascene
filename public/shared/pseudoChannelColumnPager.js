@@ -1,17 +1,22 @@
 /**
  * Shared “#2” layer for pseudo-channels: paged API → ordered column items + merge/dedupe + busy flags.
  * Callers own fetch shape (cursor vs offset); each page must arrive in API order (newest first).
- * Stored `items` are always oldest → newest for the chat column (newest at bottom).
+ *
+ * `columnOrder`:
+ * - `chat` (default): stored `items` are oldest → newest (newest at bottom). `loadOlder` prepends older pages.
+ * - `feed`: stored `items` match the API (newest first). `loadOlder` appends the next page (older items), same idea as `app-route-feed`.
  *
  * @template T
  * @param {{
  *   getItemKey: (item: T) => string,
  *   fetchPage: (ctx: { initial: boolean, items: T[] }) => Promise<{ pageItems: T[]; hasMore: boolean }>,
+ *   columnOrder?: 'chat' | 'feed',
  * }} opts
  */
 export function createPseudoColumnPager(opts) {
 	const getItemKey = opts.getItemKey;
 	const fetchPage = opts.fetchPage;
+	const columnOrder = opts.columnOrder === 'feed' ? 'feed' : 'chat';
 
 	/** @type {T[]} */
 	let items = [];
@@ -53,6 +58,42 @@ export function createPseudoColumnPager(opts) {
 		return filtered;
 	}
 
+	function applyFeedInitialPage(pageItems) {
+		const raw = Array.isArray(pageItems) ? pageItems : [];
+		const keySet = new Set();
+		const filtered = [];
+		for (const it of raw) {
+			const k = getItemKey(it);
+			if (k) {
+				if (keySet.has(k)) continue;
+				keySet.add(k);
+			}
+			filtered.push(it);
+		}
+		items = filtered;
+		return filtered;
+	}
+
+	function applyFeedAppendPage(pageItems) {
+		const raw = Array.isArray(pageItems) ? pageItems : [];
+		const keySet = new Set();
+		for (const x of items) {
+			const k = getItemKey(x);
+			if (k) keySet.add(k);
+		}
+		const filtered = [];
+		for (const it of raw) {
+			const k = getItemKey(it);
+			if (k) {
+				if (keySet.has(k)) continue;
+				keySet.add(k);
+			}
+			filtered.push(it);
+		}
+		items = [...items, ...filtered];
+		return filtered;
+	}
+
 	async function loadInitial() {
 		if (initialBusy) {
 			return { ok: false, reason: 'busy' };
@@ -62,6 +103,10 @@ export function createPseudoColumnPager(opts) {
 			items = [];
 			const { pageItems, hasMore: hm } = await fetchPage({ initial: true, items: [] });
 			hasMore = Boolean(hm);
+			if (columnOrder === 'feed') {
+				const prepended = applyFeedInitialPage(pageItems);
+				return { ok: true, items: [...items], hasMore, prepended };
+			}
 			const prepended = applyApiPage(pageItems, false);
 			return { ok: true, items: [...items], hasMore, prepended };
 		} catch (error) {
@@ -79,8 +124,12 @@ export function createPseudoColumnPager(opts) {
 		try {
 			const { pageItems, hasMore: hm } = await fetchPage({ initial: false, items: [...items] });
 			hasMore = Boolean(hm);
+			if (columnOrder === 'feed') {
+				const appended = applyFeedAppendPage(pageItems);
+				return { ok: true, prepended: [], appended, items: [...items], hasMore };
+			}
 			const prepended = applyApiPage(pageItems, true);
-			return { ok: true, prepended, items: [...items], hasMore };
+			return { ok: true, prepended, appended: [], items: [...items], hasMore };
 		} catch (error) {
 			return { ok: false, error };
 		} finally {

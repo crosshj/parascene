@@ -3,7 +3,7 @@
 
 <head>
 	<meta charset="utf-8" />
-	<title>Chat · parascene</title>
+	<title>parascene</title>
 	<meta name="viewport"
 		content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
 	<meta name="theme-color" content="#242131" />
@@ -90,7 +90,7 @@
 							<span class="chat-page-back-icon" aria-hidden="true">&lt;-</span>
 						</button>
 						<h1 class="chat-page-mobile-chrome-title" data-chat-mobile-chrome-title aria-live="polite">
-							<span class="chat-page-mobile-chrome-channel-part" data-chat-mobile-chrome-channel>Chat</span><span
+							<span class="chat-page-mobile-chrome-channel-part" data-chat-mobile-chrome-channel></span><span
 								class="chat-page-mobile-chrome-title-canvas-wrap" data-chat-mobile-chrome-canvas-wrap hidden><span
 									class="chat-page-mobile-chrome-title-sep" aria-hidden="true">|</span><span
 									class="chat-page-mobile-chrome-canvas-part" data-chat-mobile-chrome-canvas></span></span>
@@ -114,13 +114,16 @@
 					<div class="chat-page-main-split" data-chat-main-split>
 						<div class="chat-page-thread-pane" data-chat-thread-pane>
 							<div class="chat-route" data-chat-page>
+							<div class="chat-page-thread-body">
 						<header class="chat-page-topbar">
 							<a href="/connect" class="chat-page-back" aria-label="Back to Connect">
 								<!-- do not change this to ←, it's not a real arrow -->
 								<span class="chat-page-back-icon" aria-hidden="true">&lt;-</span>
 							</a>
-							<h1 class="chat-page-title" data-chat-title>Chat</h1>
+							<h1 class="chat-page-title" data-chat-title data-chat-title-awaiting="1" aria-hidden="true"></h1>
 							<div class="chat-page-topbar-actions">
+								<button type="button" class="chat-page-topbar-pinned-canvas-btn" data-chat-topbar-pinned-canvas
+									hidden></button>
 								<button type="button" class="feed-card-action feed-card-action-more" data-chat-more-button
 									aria-label="More chat actions" aria-haspopup="menu" aria-expanded="false">
 									<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -139,6 +142,7 @@
 						</header>
 						<div class="chat-page-messages" data-chat-messages role="log" aria-label="Messages"></div>
 						<p class="chat-page-error connect-chat-error" data-chat-error hidden role="alert"></p>
+							</div>
 						<form class="chat-page-composer connect-chat-composer" data-chat-composer
 							aria-label="Send a message">
 							<p class="chat-page-pseudo-composer-hint" data-chat-pseudo-composer-hint hidden
@@ -204,6 +208,7 @@
 						<div class="chat-page-canvas-resize-handle" data-chat-canvas-resize-handle role="separator"
 							aria-orientation="vertical" aria-label="Resize canvas panel" tabindex="0"></div>
 						<aside class="chat-page-canvas-panel" data-chat-canvas-panel hidden aria-label="Canvas">
+							<div class="chat-page-canvas-panel-body">
 							<div class="chat-page-canvas-panel-head">
 								<div class="chat-page-canvas-panel-title-row">
 									<h2 class="chat-page-canvas-panel-title" data-chat-canvas-title-view></h2>
@@ -237,6 +242,7 @@
 								<div class="chat-page-canvas-body user-text" data-chat-canvas-body-view></div>
 								<textarea class="chat-page-canvas-body-input" data-chat-canvas-body-input hidden maxlength="4000"
 									aria-label="Canvas body" rows="3"></textarea>
+							</div>
 							</div>
 							<div class="chat-page-canvas-edit-footer" data-chat-canvas-edit-footer hidden>
 								<button type="button" class="btn-outlined chat-page-canvas-delete-btn" data-chat-canvas-delete>Delete</button>

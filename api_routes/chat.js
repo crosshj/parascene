@@ -11,6 +11,7 @@ import {
 	collectChatMiscGenericKeysFromMessageBody,
 	isChatMiscGenericKeyOwnedByUser
 } from "./utils/chatMiscGenericKeys.js";
+import { canvasBodyMarkdownToSafeHtml } from "./utils/canvasBodyHtml.js";
 
 function normalizeChatReactionsBucket(raw) {
 	const out = {};
@@ -262,7 +263,7 @@ async function rateLimitSend(userId) {
 	}
 }
 
-/** Attach `sender_user_name` and `sender_avatar_url` from `prsn_user_profiles` for each message row. */
+/** Attach `sender_user_name`, `sender_avatar_url`, and `sender_plan` (from `prsn_users.meta.plan`) for each message row. */
 async function enrichChatMessagesWithSenderProfiles(sb, messages) {
 	if (!Array.isArray(messages) || messages.length === 0) return [];
 	const ids = [
@@ -276,7 +277,8 @@ async function enrichChatMessagesWithSenderProfiles(sb, messages) {
 		return messages.map((m) => ({
 			...m,
 			sender_user_name: null,
-			sender_avatar_url: null
+			sender_avatar_url: null,
+			sender_plan: "free"
 		}));
 	}
 	const { data: rows, error } = await sb
@@ -291,13 +293,23 @@ async function enrichChatMessagesWithSenderProfiles(sb, messages) {
 			avatar_url: row.avatar_url != null ? String(row.avatar_url) : null
 		});
 	}
+	const { data: userRows, error: userErr } = await sb.from("prsn_users").select("id, meta").in("id", ids);
+	if (userErr) throw userErr;
+	const planMap = new Map();
+	for (const u of userRows || []) {
+		const id = Number(u.id);
+		const founder = u?.meta && typeof u.meta === "object" && u.meta.plan === "founder";
+		planMap.set(id, founder ? "founder" : "free");
+	}
 	return messages.map((m) => {
 		const sid = Number(m.sender_id);
 		const p = map.get(sid);
+		const sender_plan = planMap.get(sid) === "founder" ? "founder" : "free";
 		return {
 			...m,
 			sender_user_name: p?.user_name ?? null,
-			sender_avatar_url: p?.avatar_url ?? null
+			sender_avatar_url: p?.avatar_url ?? null,
+			sender_plan
 		};
 	});
 }
@@ -1074,13 +1086,17 @@ export default function createChatRoutes({ queries, storage }) {
 				.filter((row) => isCanvasMessageRow(row))
 				.map((row) => {
 					const title = String(row.meta?.canvas?.title || "").trim();
-					return {
+					const body = row.body != null ? String(row.body) : "";
+					const entry = {
 						id: Number(row.id),
 						sender_id: Number(row.sender_id),
 						title,
-						body: row.body != null ? String(row.body) : "",
+						body,
 						created_at: row.created_at
 					};
+					const body_html = canvasBodyMarkdownToSafeHtml(body);
+					if (body_html) entry.body_html = body_html;
+					return entry;
 				});
 			const pinned_message_id = getPinnedCanvasMessageIdFromThreadRow(thread);
 			return res.status(200).json({ canvases, pinned_message_id });

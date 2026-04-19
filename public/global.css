@@ -272,7 +272,8 @@ header .logo,
 	-ms-user-select: none;
 }
 
-header {
+/* App shell nav only — chat uses `<header class="chat-page-topbar">` / `<header class="chat-page-mobile-chrome">`, not this block. */
+header:not(.chat-page-topbar):not(.chat-page-mobile-chrome) {
 	position: sticky;
 	top: 0;
 	z-index: 1000;
@@ -305,7 +306,7 @@ header {
 
 /* Subtle royal purple dark theme header */
 @media (prefers-color-scheme: dark) {
-	header {
+	header:not(.chat-page-topbar):not(.chat-page-mobile-chrome) {
 		background: linear-gradient(to bottom,
 				rgba(26, 22, 40, 1) 0%,
 				rgba(26, 22, 40, 0.95) 20%,
@@ -316,7 +317,7 @@ header {
 }
 
 /* Subtle gradient overlay for additional depth */
-header::before {
+header:not(.chat-page-topbar):not(.chat-page-mobile-chrome)::before {
 	content: '';
 	position: absolute;
 	top: 0;
@@ -332,7 +333,7 @@ header::before {
 }
 
 @media (prefers-color-scheme: dark) {
-	header::before {
+	header:not(.chat-page-topbar):not(.chat-page-mobile-chrome)::before {
 		background: linear-gradient(to bottom,
 				rgba(255, 255, 255, 0.05) 0%,
 				rgba(255, 255, 255, 0.02) 30%,
@@ -374,7 +375,7 @@ app-navigation {
 		z-index: 1000;
 	}
 
-	header {
+	header:not(.chat-page-topbar):not(.chat-page-mobile-chrome) {
 		padding: 4px 0px;
 		position: sticky;
 		top: 0;
@@ -507,18 +508,18 @@ header .header-actions {
 	flex-shrink: 0;
 }
 
-header h1,
-header p {
+header:not(.chat-page-topbar):not(.chat-page-mobile-chrome) h1,
+header:not(.chat-page-topbar):not(.chat-page-mobile-chrome) p {
 	max-width: 960px;
 	margin: 0 auto;
 }
 
-header h1 {
+header:not(.chat-page-topbar):not(.chat-page-mobile-chrome) h1 {
 	font-size: 1.75rem;
 	letter-spacing: -0.02em;
 }
 
-header p {
+header:not(.chat-page-topbar):not(.chat-page-mobile-chrome) p {
 	margin-top: 6px;
 	color: var(--text-muted);
 }
@@ -4005,6 +4006,7 @@ app-route-feed {
    body min-height: 100dvh while html is shorter — that forces body taller than html and clips
    the composer. Chrome: interactive-widget (chat.html) resizes with the keyboard. */
 body.chat-page {
+	--chat-chrome-header-height: 48px;
 	display: flex;
 	flex-direction: column;
 	height: 100%;
@@ -4160,8 +4162,13 @@ body.chat-page main.chat-page-outer {
 		flex-shrink: 0;
 		min-height: 0;
 		background: color-mix(in srgb, var(--surface-strong) 88%, var(--bg));
-		border-right: 1px solid var(--border);
-		box-shadow: inset -1px 0 0 color-mix(in srgb, var(--border) 65%, transparent);
+		border-right: 1px solid rgba(226, 232, 240, 0.3);
+	}
+
+	@media (prefers-color-scheme: dark) {
+		.chat-page-sidebar {
+			border-right: 1px solid rgba(61, 53, 82, 0.3);
+		}
 	}
 
 	.chat-page-sidebar-head {
@@ -4170,11 +4177,27 @@ body.chat-page main.chat-page-outer {
 		flex-direction: row;
 		align-items: center;
 		gap: 6px;
+		min-height: 48px;
 		height: 48px;
 		padding: 0 12px 0 8px;
-		border-bottom: 1px solid var(--border);
-		background: color-mix(in srgb, var(--bg) 40%, transparent);
 		box-sizing: border-box;
+	}
+
+	body.chat-page .chat-page-sidebar {
+		position: relative;
+	}
+
+	body.chat-page .chat-page-sidebar-head {
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		width: 100%;
+		z-index: 3;
+	}
+
+	body.chat-page .chat-page-sidebar-scroll {
+		padding-top: calc(var(--chat-chrome-header-height, 48px) + 8px);
 	}
 
 	body.chat-page .chat-page-topbar {
@@ -4232,6 +4255,14 @@ body.chat-page main.chat-page-outer {
 		-webkit-overflow-scrolling: touch;
 		overscroll-behavior: contain;
 		padding: 8px 8px 16px;
+		scrollbar-width: none;
+		-ms-overflow-style: none;
+	}
+
+	.chat-page-sidebar-scroll::-webkit-scrollbar {
+		width: 0;
+		height: 0;
+		display: none;
 	}
 
 	.chat-page-sidebar-pseudo {
@@ -5034,6 +5065,47 @@ body.chat-page .chat-route {
 	box-sizing: border-box;
 }
 
+body.chat-page .chat-page-thread-body {
+	flex: 1 1 auto;
+	min-height: 0;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	position: relative;
+	width: 100%;
+	box-sizing: border-box;
+}
+
+/* In-thread topbar is hidden ≤768px (mobile chrome replaces it). When visible, overlay the scroll
+   area so backdrop-filter blurs message/content scrolling underneath. */
+@media (min-width: 769px) {
+	body.chat-page .chat-page-topbar {
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		width: 100%;
+		z-index: 3;
+	}
+
+	body.chat-page .chat-page-messages {
+		padding: calc(var(--chat-chrome-header-height, 48px) + 8px) 12px 8px 12px;
+	}
+}
+
+/* Connect chat thread topbar + Connect sidebar head — same glass stack as main app header. */
+.chat-page-topbar,
+.chat-page-sidebar-head {
+	background: linear-gradient(to bottom,
+			rgba(246, 247, 251, 1) 0%,
+			rgba(246, 247, 251, 0.95) 20%,
+			rgba(246, 247, 251, 0.8) 50%,
+			rgba(246, 247, 251, 0.4) 100%);
+	backdrop-filter: blur(20px) saturate(180%);
+	-webkit-backdrop-filter: blur(20px) saturate(180%);
+	border-bottom: 1px solid rgba(226, 232, 240, 0.3);
+}
+
 .chat-page-topbar {
 	flex-shrink: 0;
 	display: flex;
@@ -5045,9 +5117,178 @@ body.chat-page .chat-route {
 	height: 48px;
 	padding: 0 12px;
 	box-sizing: border-box;
-	border-bottom: 1px solid var(--border);
-	background: var(--bg);
+	position: relative;
+	top: auto;
+	width: 100%;
+	align-self: stretch;
 	z-index: 2;
+	overflow: visible;
+}
+
+@media (prefers-color-scheme: dark) {
+	.chat-page-topbar,
+	.chat-page-sidebar-head {
+		background: linear-gradient(to bottom,
+				rgba(26, 22, 40, 1) 0%,
+				rgba(26, 22, 40, 0.95) 20%,
+				rgba(26, 22, 40, 0.8) 50%,
+				rgba(26, 22, 40, 0.4) 100%);
+		border-bottom: 1px solid rgba(61, 53, 82, 0.3);
+	}
+}
+
+header.chat-page-topbar::before,
+.chat-page-sidebar-head::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	z-index: 0;
+	background: linear-gradient(to bottom,
+			rgba(255, 255, 255, 0.1) 0%,
+			rgba(255, 255, 255, 0.05) 30%,
+			transparent 100%);
+}
+
+@media (prefers-color-scheme: dark) {
+	header.chat-page-topbar::before,
+	.chat-page-sidebar-head::before {
+		background: linear-gradient(to bottom,
+				rgba(255, 255, 255, 0.05) 0%,
+				rgba(255, 255, 255, 0.02) 30%,
+				transparent 100%);
+	}
+}
+
+header.chat-page-topbar::after {
+	content: none;
+	display: none;
+}
+
+.chat-page-topbar > *,
+.chat-page-sidebar-head > * {
+	position: relative;
+	z-index: 1;
+}
+
+.chat-page-canvas-panel-head {
+	position: relative;
+	overflow: visible;
+	background: linear-gradient(to bottom,
+			rgba(246, 247, 251, 1) 0%,
+			rgba(246, 247, 251, 0.95) 20%,
+			rgba(246, 247, 251, 0.8) 50%,
+			rgba(246, 247, 251, 0.4) 100%);
+	backdrop-filter: blur(20px) saturate(180%);
+	-webkit-backdrop-filter: blur(20px) saturate(180%);
+	border-bottom: 1px solid rgba(226, 232, 240, 0.3);
+}
+
+@media (prefers-color-scheme: dark) {
+	.chat-page-canvas-panel-head {
+		background: linear-gradient(to bottom,
+				rgba(26, 22, 40, 1) 0%,
+				rgba(26, 22, 40, 0.95) 20%,
+				rgba(26, 22, 40, 0.8) 50%,
+				rgba(26, 22, 40, 0.4) 100%);
+		border-bottom: 1px solid rgba(61, 53, 82, 0.3);
+	}
+}
+
+.chat-page-canvas-panel-head::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	z-index: 0;
+	background: linear-gradient(to bottom,
+			rgba(255, 255, 255, 0.1) 0%,
+			rgba(255, 255, 255, 0.05) 30%,
+			transparent 100%);
+}
+
+@media (prefers-color-scheme: dark) {
+	.chat-page-canvas-panel-head::before {
+		background: linear-gradient(to bottom,
+				rgba(255, 255, 255, 0.05) 0%,
+				rgba(255, 255, 255, 0.02) 30%,
+				transparent 100%);
+	}
+}
+
+.chat-page-canvas-panel-head > * {
+	position: relative;
+	z-index: 1;
+}
+
+/* Canvas: header over scroll so glass blurs canvas body moving underneath (split + full-screen canvas). */
+body.chat-page .chat-page-canvas-panel-body {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	box-sizing: border-box;
+}
+
+@media (min-width: 769px) {
+	body.chat-page .chat-page-canvas-panel .chat-page-canvas-panel-head {
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		width: 100%;
+		z-index: 3;
+	}
+}
+
+@media (max-width: 768px) {
+	.chat-page-mobile-chrome {
+		background: linear-gradient(to bottom,
+				rgba(246, 247, 251, 1) 0%,
+				rgba(246, 247, 251, 0.95) 20%,
+				rgba(246, 247, 251, 0.8) 50%,
+				rgba(246, 247, 251, 0.4) 100%);
+		backdrop-filter: blur(20px) saturate(180%);
+		-webkit-backdrop-filter: blur(20px) saturate(180%);
+		border-bottom: 1px solid rgba(226, 232, 240, 0.3);
+	}
+
+	.chat-page-mobile-chrome::before {
+		content: '';
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+		z-index: 0;
+		background: linear-gradient(to bottom,
+				rgba(255, 255, 255, 0.1) 0%,
+				rgba(255, 255, 255, 0.05) 30%,
+				transparent 100%);
+	}
+
+	.chat-page-mobile-chrome > * {
+		position: relative;
+		z-index: 1;
+	}
+}
+
+@media (max-width: 768px) and (prefers-color-scheme: dark) {
+	.chat-page-mobile-chrome {
+		background: linear-gradient(to bottom,
+				rgba(26, 22, 40, 1) 0%,
+				rgba(26, 22, 40, 0.95) 20%,
+				rgba(26, 22, 40, 0.8) 50%,
+				rgba(26, 22, 40, 0.4) 100%);
+		border-bottom: 1px solid rgba(61, 53, 82, 0.3);
+	}
+
+	.chat-page-mobile-chrome::before {
+		background: linear-gradient(to bottom,
+				rgba(255, 255, 255, 0.05) 0%,
+				rgba(255, 255, 255, 0.02) 30%,
+				transparent 100%);
+	}
 }
 
 .chat-page-back {
@@ -5083,6 +5324,7 @@ body.chat-page .chat-route {
 
 .chat-page-title {
 	margin: 0;
+	max-width: none;
 	font-size: 1.0625rem;
 	font-weight: 600;
 	flex: 1;
@@ -5092,11 +5334,60 @@ body.chat-page .chat-route {
 	white-space: nowrap;
 }
 
+/* Hide until client applies route title (avoids “Chat” → channel flash). */
+.chat-page-title[data-chat-title-awaiting='1'] {
+	opacity: 0;
+	min-height: 1.35em;
+	pointer-events: none;
+}
+
 .chat-page-topbar-actions {
 	position: relative;
 	display: inline-flex;
 	align-items: center;
 	flex-shrink: 0;
+	gap: 6px;
+}
+
+/* Desktop: open pinned canvas — same 40px row height and ghost weight as ⋮ (`.feed-card-action-more`). */
+.chat-page-topbar-pinned-canvas-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: flex-start;
+	box-sizing: border-box;
+	max-width: min(240px, 30vw);
+	min-width: 0;
+	min-height: 40px;
+	margin: 0;
+	padding: 0 8px;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--text-muted);
+	font: inherit;
+	font-size: 0.9375rem;
+	font-weight: 400;
+	line-height: 1.2;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	cursor: pointer;
+	flex-shrink: 1;
+	-webkit-tap-highlight-color: transparent;
+	touch-action: manipulation;
+	transition:
+		background-color 0.12s ease,
+		color 0.12s ease;
+}
+
+.chat-page-topbar-pinned-canvas-btn:hover {
+	color: var(--text);
+	background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.chat-page-topbar-pinned-canvas-btn:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
 }
 
 /* Ghost ⋮ — match chat canvas header (chat.css `.chat-page-canvas-more-btn`). */
@@ -5259,6 +5550,100 @@ body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading {
 	width: 100%;
 	max-width: 100%;
 	box-sizing: border-box;
+}
+
+/* #explore / #creations browse: same “center lane” idea as chat (720px) but a wider cap so thumbs grow; still not full-bleed. */
+body.chat-page.chat-page--pseudo-browse-view {
+	--chat-browse-lane-max: 960px;
+	--chat-browse-tile-min: 220px;
+	--chat-browse-grid-gap: 10px;
+}
+
+/* Side gutters sit on the grid (not the 720px lane rule) so they stay visible. Lane route has no horizontal padding. */
+body.chat-page.chat-page--pseudo-browse-view .chat-page-messages .feed-route.chat-feed-channel-route.chat-feed-channel-route--browse-view {
+	padding-left: 0;
+	padding-right: 0;
+	box-sizing: border-box;
+}
+
+.chat-page-messages .feed-route.chat-feed-channel-route.chat-feed-channel-route--browse-view .route-cards.feed-cards {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(min(var(--chat-browse-tile-min, 220px), 100%), 1fr));
+	gap: var(--chat-browse-grid-gap, 10px);
+	width: 100%;
+	min-width: 0;
+	box-sizing: border-box;
+}
+
+/* Lane ~960px: tile-min above ~232px yields 3 cols; keep ≤218px for 4 cols at 900px+ thread. */
+@container chat-thread (max-width: 520px) {
+	.chat-page-messages .feed-route.chat-feed-channel-route.chat-feed-channel-route--browse-view .route-cards.feed-cards {
+		--chat-browse-tile-min: 160px;
+	}
+}
+
+@container chat-thread (min-width: 900px) {
+	.chat-page-messages .feed-route.chat-feed-channel-route.chat-feed-channel-route--browse-view .route-cards.feed-cards {
+		--chat-browse-tile-min: 218px;
+	}
+}
+
+.chat-page-messages .feed-route.chat-feed-channel-route.chat-feed-channel-route--browse-view .feed-card {
+	padding: 0 0 8px;
+	border-radius: 0;
+}
+
+.chat-page-messages .feed-route.chat-feed-channel-route.chat-feed-channel-route--browse-view .feed-card + .feed-card {
+	padding-top: 0;
+	margin-top: 0;
+	border-top: none;
+}
+
+.chat-page-messages .feed-route.chat-feed-channel-route.chat-feed-channel-route--browse-view .feed-card-image {
+	border-radius: 0;
+}
+
+/* Image-only tiles (no footer/actions) */
+.chat-page-messages .feed-route.chat-feed-channel-route.chat-feed-channel-route--browse-view .feed-card.feed-card--image-only {
+	padding: 0;
+	margin: 0;
+}
+
+.chat-page-messages .feed-route.chat-feed-channel-route.chat-feed-channel-route--browse-view .feed-card.feed-card--image-only + .feed-card.feed-card--image-only {
+	padding-top: 0;
+	border-top: none;
+}
+
+/* Main feed list uses `.feed-route` + 600px cap; Explore route does not — undo cap for chat #explore / #creations browse. */
+@media (min-width: 769px) {
+	.chat-page-messages .feed-route.chat-feed-channel-route.chat-feed-channel-route--browse-view .route-cards.feed-cards {
+		max-width: none;
+		margin-left: 0;
+		margin-right: 0;
+	}
+}
+
+/* #explore / #creations browse: topbar full width; scroll column uses centered lane like DMs but `--chat-browse-lane-max` (960) > 720 so less margin, larger grid. */
+@supports (container-type: inline-size) {
+	body.chat-page.chat-page--pseudo-browse-view .chat-page-thread-pane {
+		container-type: inline-size;
+		container-name: chat-thread;
+	}
+}
+
+body.chat-page.chat-page--pseudo-browse-view .chat-page-thread-body .chat-page-messages {
+	width: 100%;
+	align-self: center;
+	box-sizing: border-box;
+	padding-left: max(16px, calc((100% - min(var(--chat-browse-lane-max, 960px), 100%)) / 2 + 16px));
+	padding-right: max(16px, calc((100% - min(var(--chat-browse-lane-max, 960px), 100%)) / 2 + 16px));
+}
+
+@supports (width: 1cqi) {
+	body.chat-page.chat-page--pseudo-browse-view .chat-page-thread-body .chat-page-messages {
+		padding-left: max(16px, calc((100cqi - min(var(--chat-browse-lane-max, 960px), 100cqi)) / 2 + 16px));
+		padding-right: max(16px, calc((100cqi - min(var(--chat-browse-lane-max, 960px), 100cqi)) / 2 + 16px));
+	}
 }
 
 body.chat-page .chat-page-error {
@@ -5693,7 +6078,7 @@ body.chat-page .chat-page-send-btn .chat-page-send-icon {
 	/* Apply the centered content lane per message row instead of the scroller. */
 	body.chat-page .chat-page-messages .connect-chat-msg,
 	body.chat-page .chat-page-messages .comments-channel-plain-msg,
-	body.chat-page .chat-page-messages .chat-feed-channel-route {
+	body.chat-page .chat-page-messages .chat-feed-channel-route:not(.chat-feed-channel-route--browse-view) {
 		padding-left: max(12px, calc((100% - 720px) / 2 + 12px));
 		padding-right: max(12px, calc((100% - 720px) / 2 + 12px));
 	}
@@ -6785,6 +7170,26 @@ body.blog-edit-page .blog-edit-route {
 	height: 28px;
 	margin-top: 0;
 	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+}
+
+/* Undo comment-thread rules on `.comment-avatar:has(.avatar-with-founder-flair)` (min-height, padding-top)
+   so the meta row stays one line and vertically centers with the handle + time. */
+.chat-page-messages .connect-chat-msg-meta .comment-avatar:has(.avatar-with-founder-flair) {
+	width: auto;
+	height: auto;
+	min-height: 0;
+	padding-top: 0;
+	align-items: center;
+	justify-content: center;
+	display: inline-flex;
+	overflow: visible;
+}
+
+/* Match non-founder slot (~28px circle); ring extends slightly — keep label off like Connect xs. */
+.chat-page-messages .connect-chat-msg-meta .avatar-with-founder-flair::after {
+	display: none;
 }
 
 .connect-chat-msg-meta .comment-avatar-img {
@@ -6796,11 +7201,6 @@ body.blog-edit-page .blog-edit-route {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-}
-
-.connect-chat-msg-meta-user {
-	font-weight: 600;
-	color: var(--text);
 }
 
 .connect-chat-msg-meta-sep,

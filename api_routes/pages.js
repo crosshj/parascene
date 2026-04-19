@@ -1229,7 +1229,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			const fs = await import("fs/promises");
 			let htmlContent = await fs.readFile(path.join(pagesDir, "chat.html"), "utf-8");
 			const chatPageTokens = getPageTokens(req);
-			chatPageTokens.CHAT_SIDEBAR_PSEUDO_STRIP_LIST = buildSidebarPseudoStripListStaticHtml();
+			chatPageTokens.CHAT_SIDEBAR_PSEUDO_STRIP_LIST = buildSidebarPseudoStripListStaticHtml(req.path);
 			htmlContent = injectCommonHead(htmlContent, chatPageTokens);
 			res.setHeader("Content-Type", "text/html");
 			return res.send(htmlContent);

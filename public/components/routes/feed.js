@@ -1,4 +1,5 @@
 import { buildBlogPostPublicPath, BLOG_CAMPAIGN_INTERNAL } from '../../shared/blogCampaignPath.js';
+import { feedItemCardImageUrl } from '../../shared/feedCardBuild.js';
 
 let formatDateTime;
 let formatRelativeTime;
@@ -464,19 +465,20 @@ class AppRouteFeed extends HTMLElement {
 
 		const imageEl = card.querySelector('.feed-card-img');
 		const imageContainer = card.querySelector('.feed-card-image');
+		const displayUrl = feedItemCardImageUrl(item, false);
 
-		if (imageEl && item.image_url) {
+		if (imageEl && imageContainer && displayUrl) {
 			// Skip loading if this element already has this URL (avoids duplicate requests)
-			const alreadyLoaded = imageEl.dataset.feedImageUrl === item.image_url ||
-				(imageEl.src && imageEl.src === item.image_url) ||
-				(imageEl.currentSrc && imageEl.currentSrc === item.image_url);
+			const alreadyLoaded = imageEl.dataset.feedImageUrl === displayUrl ||
+				(imageEl.src && imageEl.src === displayUrl) ||
+				(imageEl.currentSrc && imageEl.currentSrc === displayUrl);
 			if (alreadyLoaded) {
 				if (imageEl.complete && imageEl.naturalHeight !== 0) {
 					imageContainer.classList.remove('loading');
 					imageContainer.classList.add('loaded');
 				}
 			} else {
-				imageEl.dataset.feedImageUrl = item.image_url;
+				imageEl.dataset.feedImageUrl = displayUrl;
 				const isHighPriority = typeof itemIndex === 'number' && itemIndex >= 0 && itemIndex < 2;
 				imageEl.loading = isHighPriority ? 'eager' : 'lazy';
 				if ('fetchPriority' in imageEl) {
@@ -495,7 +497,7 @@ class AppRouteFeed extends HTMLElement {
 					imageContainer.classList.add('error');
 				};
 
-				imageEl.src = item.image_url;
+				imageEl.src = displayUrl;
 
 				if (imageEl.complete && imageEl.naturalHeight !== 0) {
 					imageContainer.classList.remove('loading');
@@ -508,7 +510,7 @@ class AppRouteFeed extends HTMLElement {
 		if (isVideo) {
 			const videoEl = card.querySelector('.feed-card-video');
 			if (videoEl) {
-				const posterUrl = item.thumbnail_url || item.image_url || "";
+				const posterUrl = displayUrl || "";
 				if (posterUrl) {
 					videoEl.poster = posterUrl;
 				}
@@ -523,7 +525,7 @@ class AppRouteFeed extends HTMLElement {
 			}
 		}
 
-		if (item.image_url && item.created_image_id) {
+		if (displayUrl && item.created_image_id) {
 			// Make the entire card clickable except the actions row
 			card.style.cursor = 'pointer';
 

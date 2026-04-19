@@ -15,18 +15,27 @@ function escapeHtmlPseudoStrip(str) {
 
 /**
  * Slugs for the fixed top strip (no section label) above DMs on chat + Connect sidebars.
- * Order: Feed, Explore, Creations, Comments, Feedback.
+ * Order: Feed, My Creations, Comments, Explore (above Feedback), Feedback.
  */
-export const SIDEBAR_PSEUDO_STRIP_ORDER = ['feed', 'explore', 'creations', 'comments', 'feedback'];
+export const SIDEBAR_PSEUDO_STRIP_ORDER = ['feed', 'creations', 'comments', 'explore', 'feedback'];
 
 /** @type {Record<string, string>} */
 const SIDEBAR_PSEUDO_STRIP_TITLES = {
 	feed: 'Feed',
 	explore: 'Explore',
-	creations: 'Creations',
+	creations: 'My Creations',
 	comments: 'Comments',
 	feedback: 'Feedback',
 };
+
+/** Display label for a pseudo strip channel — same string as the sidebar row (use for chat header / tab title). */
+export function getSidebarPseudoChannelTitle(channelSlug) {
+	const s = String(channelSlug ?? '')
+		.toLowerCase()
+		.trim();
+	if (!s) return null;
+	return SIDEBAR_PSEUDO_STRIP_TITLES[s] ?? null;
+}
 
 /** Exclude these from the collapsible “Channels” list — they render only in the top strip. */
 export const SIDEBAR_TOP_STRIP_CHANNEL_SLUGS = new Set(
@@ -152,18 +161,40 @@ export function buildSidebarPseudoStripRows() {
 }
 
 /**
+ * Top-strip slug when the request path is a pseudo channel URL (`/chat/c/:slug`), else null.
+ * @param {string} [requestPath]
+ * @returns {string | null}
+ */
+export function pseudoStripActiveSlugFromRequestPath(requestPath) {
+	const raw = String(requestPath || '').trim();
+	if (!raw) return null;
+	const match = raw.match(/\/chat\/c\/([^/?#]+)/);
+	if (!match) return null;
+	try {
+		const slug = decodeURIComponent(match[1]).trim().toLowerCase();
+		if (SIDEBAR_TOP_STRIP_CHANNEL_SLUGS.has(slug)) return slug;
+	} catch {
+		return null;
+	}
+	return null;
+}
+
+/**
  * Initial HTML for the pseudo strip (same row shape as `rowHtml` in chat / Connect).
  * Server injects into `pages/chat.html` via `{{CHAT_SIDEBAR_PSEUDO_STRIP_LIST}}`; Connect uses this after `loadDeps`.
+ * @param {string} [requestPath] — e.g. Express `req.path` so the current pseudo channel can show `is-active` on first paint.
  * @returns {string}
  */
-export function buildSidebarPseudoStripListStaticHtml() {
+export function buildSidebarPseudoStripListStaticHtml(requestPath = '') {
+	const activeSlug = pseudoStripActiveSlugFromRequestPath(requestPath);
 	return SIDEBAR_PSEUDO_STRIP_ORDER.map((slug) => {
 		const title = SIDEBAR_PSEUDO_STRIP_TITLES[slug] || `#${slug}`;
 		const href = `/chat/c/${encodeURIComponent(slug)}`;
 		const bg = getAvatarColor(slug);
 		const navDup = SIDEBAR_STRIP_SLUGS_ALSO_IN_APP_PRIMARY_NAV.has(slug);
 		const navCls = navDup ? ' chat-page-sidebar-row--also-in-app-primary-nav' : '';
-		return `<a class="chat-page-sidebar-row${navCls}" href="${escapeHtmlPseudoStrip(href)}">
+		const activeCls = activeSlug === slug ? ' is-active' : '';
+		return `<a class="chat-page-sidebar-row${navCls}${activeCls}" href="${escapeHtmlPseudoStrip(href)}" data-chat-pseudo-slug="${escapeHtmlPseudoStrip(slug)}">
 				<div class="comment-avatar connect-chat-thread-row-channel-avatar chat-page-sidebar-channel-avatar" style="background: ${escapeHtmlPseudoStrip(bg)};" aria-hidden="true">#</div>
 				<div class="chat-page-sidebar-row-body">
 					<div class="chat-page-sidebar-row-title-line">
