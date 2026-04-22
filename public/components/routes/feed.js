@@ -1,11 +1,4 @@
 import { buildBlogPostPublicPath, BLOG_CAMPAIGN_INTERNAL } from '../../shared/blogCampaignPath.js';
-import {
-	applyFeedCardCreationProcessingState,
-	attachFeedCardImage,
-	feedItemCardImageUrl,
-	isFeedCreationImageProcessing,
-	markFeedCardImageUnavailable
-} from '../../shared/feedCardBuild.js';
 
 let formatDateTime;
 let formatRelativeTime;
@@ -21,6 +14,11 @@ let renderFeedCardsSkeleton;
 let addPageUsers;
 let clearPageUsers;
 let getHelpHref;
+let applyFeedCardCreationProcessingState;
+let attachFeedCardImage;
+let feedItemCardImageUrl;
+let isFeedCreationImageProcessing;
+let markFeedCardImageUnavailable;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -70,6 +68,13 @@ async function loadDeps() {
 
 		const helpUrlMod = await import(`../../shared/helpUrl.js${qs}`);
 		getHelpHref = helpUrlMod.getHelpHref;
+
+		const feedCardBuildMod = await import(`../../shared/feedCardBuild.js${qs}`);
+		applyFeedCardCreationProcessingState = feedCardBuildMod.applyFeedCardCreationProcessingState;
+		attachFeedCardImage = feedCardBuildMod.attachFeedCardImage;
+		feedItemCardImageUrl = feedCardBuildMod.feedItemCardImageUrl;
+		isFeedCreationImageProcessing = feedCardBuildMod.isFeedCreationImageProcessing;
+		markFeedCardImageUnavailable = feedCardBuildMod.markFeedCardImageUnavailable;
 	})();
 	return _depsPromise;
 }
