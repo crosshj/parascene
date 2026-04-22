@@ -65,9 +65,51 @@
 	</script>
 	<script type="module">
 		(function () {
+			var TRY_FREE_STORAGE_KEY = 'parascene_try_free_v1';
+
+			function normalizeTryPrompt(raw) {
+				return String(raw == null ? '' : raw).trim();
+			}
+
+			function readTryFreeGate() {
+				try {
+					var raw = localStorage.getItem(TRY_FREE_STORAGE_KEY);
+					if (!raw) return null;
+					var o = JSON.parse(raw);
+					if (!o || typeof o !== 'object' || o.v !== 1) return null;
+					return {
+						used: o.used === true,
+						prompt: typeof o.prompt === 'string' ? o.prompt : ''
+					};
+				} catch (_) {
+					return null;
+				}
+			}
+
+			function markTryFreeConsumed(promptNorm) {
+				try {
+					localStorage.setItem(
+						TRY_FREE_STORAGE_KEY,
+						JSON.stringify({ v: 1, used: true, prompt: promptNorm })
+					);
+				} catch (_) { /* quota / private mode */ }
+			}
+
+			function redirectTryToSignupForCreate(promptNorm) {
+				var returnPath = '/create?prompt=' + encodeURIComponent(promptNorm);
+				window.location.replace('/auth.html?returnUrl=' + encodeURIComponent(returnPath) + '#signup');
+			}
+
 			var params = new URLSearchParams(window.location.search);
 			var prompt = params.get('prompt');
-			if (prompt == null || String(prompt).trim() === '') return;
+			var promptNorm = normalizeTryPrompt(prompt);
+			if (promptNorm === '') return;
+
+			var gate = readTryFreeGate();
+			if (gate && gate.used && gate.prompt && promptNorm !== gate.prompt) {
+				redirectTryToSignupForCreate(promptNorm);
+				return;
+			}
 
 			var media = document.querySelector('.try-main .share-hero-media');
 			if (!media) return;
@@ -120,7 +162,7 @@
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					credentials: 'include',
-					body: JSON.stringify({ prompt: prompt.trim() })
+					body: JSON.stringify({ prompt: promptNorm })
 				});
 				if (!createRes.ok) {
 					await ensureMinLoadingTime();
@@ -147,6 +189,7 @@
 					if (data.from_cache) await ensureMinLoadingTime();
 					logElapsed('Completed');
 					showImage(data.url);
+					markTryFreeConsumed(promptNorm);
 					return;
 				}
 				var id = data.id;
@@ -173,6 +216,7 @@
 						// Not from cache (job just finished); show immediately
 						logElapsed('Completed');
 						showImage(item.url);
+						markTryFreeConsumed(promptNorm);
 						return;
 					}
 					if (item.status === 'failed') {
