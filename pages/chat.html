@@ -25,15 +25,16 @@
 					</div>
 					<div class="chat-page-sidebar-scroll">
 						<div class="chat-page-sidebar-pseudo" data-chat-sidebar-pseudo>
-							<div class="chat-page-sidebar-list" data-chat-sidebar-pseudo-list>{{CHAT_SIDEBAR_PSEUDO_STRIP_LIST}}</div>
+							<div class="chat-page-sidebar-list" data-chat-sidebar-pseudo-list>
+								{{CHAT_SIDEBAR_PSEUDO_STRIP_LIST}}</div>
 						</div>
 						<section class="chat-page-sidebar-section" aria-labelledby="chat-sidebar-dms-heading">
 							<div class="chat-page-sidebar-section-head">
 								<h2 id="chat-sidebar-dms-heading" class="chat-page-sidebar-heading">Direct messages</h2>
 								<button type="button" class="chat-page-sidebar-add" data-chat-sidebar-add="dm"
 									aria-label="New direct message">
-									<svg class="chat-page-sidebar-add-icon" xmlns="http://www.w3.org/2000/svg" width="18"
-										height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+									<svg class="chat-page-sidebar-add-icon" xmlns="http://www.w3.org/2000/svg"
+										width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
 										stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
 										aria-hidden="true">
 										<line x1="12" y1="5" x2="12" y2="19" />
@@ -48,8 +49,8 @@
 								<h2 id="chat-sidebar-servers-heading" class="chat-page-sidebar-heading">Servers</h2>
 								<button type="button" class="chat-page-sidebar-add" data-chat-sidebar-add="servers"
 									aria-label="Add or browse servers">
-									<svg class="chat-page-sidebar-add-icon" xmlns="http://www.w3.org/2000/svg" width="18"
-										height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+									<svg class="chat-page-sidebar-add-icon" xmlns="http://www.w3.org/2000/svg"
+										width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
 										stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
 										aria-hidden="true">
 										<line x1="12" y1="5" x2="12" y2="19" />
@@ -64,8 +65,8 @@
 								<h2 id="chat-sidebar-channels-heading" class="chat-page-sidebar-heading">Channels</h2>
 								<button type="button" class="chat-page-sidebar-add" data-chat-sidebar-add="channels"
 									aria-label="Open or browse channels">
-									<svg class="chat-page-sidebar-add-icon" xmlns="http://www.w3.org/2000/svg" width="18"
-										height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+									<svg class="chat-page-sidebar-add-icon" xmlns="http://www.w3.org/2000/svg"
+										width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
 										stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
 										aria-hidden="true">
 										<line x1="12" y1="5" x2="12" y2="19" />
@@ -79,34 +80,39 @@
 					<div class="chat-page-sidebar-footer" data-chat-sidebar-user-row hidden>
 						<button type="button" class="chat-page-sidebar-user" data-chat-sidebar-open-profile
 							aria-label="Account">
-							<span class="chat-page-sidebar-user-avatar" data-chat-sidebar-user-avatar aria-hidden="true"></span>
+							<span class="chat-page-sidebar-user-avatar" data-chat-sidebar-user-avatar
+								aria-hidden="true"></span>
 							<span class="chat-page-sidebar-user-label" data-chat-sidebar-user-label></span>
 						</button>
 					</div>
 				</aside>
 				<div class="chat-page-main-column">
 					<header class="chat-page-mobile-chrome" data-chat-mobile-chrome aria-label="Chat navigation">
-						<button type="button" class="chat-page-mobile-chrome-back" data-chat-mobile-chrome-back aria-label="Back to channels">
+						<button type="button" class="chat-page-mobile-chrome-back" data-chat-mobile-chrome-back
+							aria-label="Back to channels">
 							<span class="chat-page-back-icon" aria-hidden="true">&lt;-</span>
 						</button>
 						<h1 class="chat-page-mobile-chrome-title" data-chat-mobile-chrome-title aria-live="polite">
-							<span class="chat-page-mobile-chrome-channel-part" data-chat-mobile-chrome-channel></span><span
-								class="chat-page-mobile-chrome-title-canvas-wrap" data-chat-mobile-chrome-canvas-wrap hidden><span
-									class="chat-page-mobile-chrome-title-sep" aria-hidden="true">|</span><span
-									class="chat-page-mobile-chrome-canvas-part" data-chat-mobile-chrome-canvas></span></span>
+							<span class="chat-page-mobile-chrome-channel-part"
+								data-chat-mobile-chrome-channel></span><span
+								class="chat-page-mobile-chrome-title-canvas-wrap" data-chat-mobile-chrome-canvas-wrap
+								hidden><span class="chat-page-mobile-chrome-title-sep" aria-hidden="true">|</span><span
+									class="chat-page-mobile-chrome-canvas-part"
+									data-chat-mobile-chrome-canvas></span></span>
 						</h1>
-						<button type="button" class="chat-page-mobile-chrome-caret" data-chat-mobile-chrome-sheet-trigger
-							aria-label="Channel and canvases" aria-expanded="false" aria-haspopup="menu">
-							<svg class="chat-page-mobile-chrome-caret-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-								fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-								aria-hidden="true">
+						<button type="button" class="chat-page-mobile-chrome-caret"
+							data-chat-mobile-chrome-sheet-trigger aria-label="Channel and canvases"
+							aria-expanded="false" aria-haspopup="menu">
+							<svg class="chat-page-mobile-chrome-caret-icon" xmlns="http://www.w3.org/2000/svg"
+								viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+								stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 								<path d="m6 9 6 6 6-6" />
 							</svg>
 						</button>
 					</header>
 					<div class="chat-page-mobile-chrome-sheet" data-chat-mobile-chrome-sheet hidden aria-hidden="true">
-						<button type="button" class="chat-page-mobile-chrome-sheet-scrim" data-chat-mobile-chrome-sheet-dismiss
-							tabindex="-1" aria-label="Dismiss menu"></button>
+						<button type="button" class="chat-page-mobile-chrome-sheet-scrim"
+							data-chat-mobile-chrome-sheet-dismiss tabindex="-1" aria-label="Dismiss menu"></button>
 						<div class="chat-page-mobile-chrome-sheet-panel" role="presentation">
 							<div class="chat-page-mobile-chrome-sheet-scroll" data-chat-mobile-chrome-sheet-body></div>
 						</div>
@@ -114,141 +120,159 @@
 					<div class="chat-page-main-split" data-chat-main-split>
 						<div class="chat-page-thread-pane" data-chat-thread-pane>
 							<div class="chat-route" data-chat-page>
-							<div class="chat-page-thread-body">
-						<header class="chat-page-topbar">
-							<a href="/connect" class="chat-page-back" aria-label="Back to Connect">
-								<!-- do not change this to ←, it's not a real arrow -->
-								<span class="chat-page-back-icon" aria-hidden="true">&lt;-</span>
-							</a>
-							<h1 class="chat-page-title" data-chat-title data-chat-title-awaiting="1" aria-hidden="true"></h1>
-							<div class="chat-page-topbar-actions">
-								<button type="button" class="chat-page-topbar-pinned-canvas-btn" data-chat-topbar-pinned-canvas
-									hidden></button>
-								<button type="button" class="feed-card-action feed-card-action-more" data-chat-more-button
-									aria-label="More chat actions" aria-haspopup="menu" aria-expanded="false">
-									<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-										<circle cx="12" cy="5" r="1.6"></circle>
-										<circle cx="12" cy="12" r="1.6"></circle>
-										<circle cx="12" cy="19" r="1.6"></circle>
-									</svg>
-								</button>
-								<div class="feed-card-menu chat-page-topbar-menu" data-chat-topbar-menu style="display: none;"
-									role="menu">
-									<button class="feed-card-menu-item" type="button" data-chat-refresh role="menuitem">Refresh
-										Chat</button>
-									<div data-chat-topbar-menu-dynamic></div>
-								</div>
-							</div>
-						</header>
-						<div class="chat-page-messages" data-chat-messages role="log" aria-label="Messages"></div>
-						<p class="chat-page-error connect-chat-error" data-chat-error hidden role="alert"></p>
-							</div>
-						<form class="chat-page-composer connect-chat-composer" data-chat-composer
-							aria-label="Send a message">
-							<p class="chat-page-pseudo-composer-hint" data-chat-pseudo-composer-hint hidden
-								role="status">
-							</p>
-							<div class="chat-page-input-shell">
-								<div class="chat-page-composer-attachments" data-chat-attachments hidden>
-									<div class="chat-page-composer-attachments-row">
-										<div class="chat-page-composer-attachments-list" data-chat-attachments-list></div>
-									</div>
-								</div>
-								<input type="file" multiple class="chat-page-composer-file-input"
-									data-chat-file-input hidden />
-								<div class="chat-page-composer-input-row">
-									<div class="chat-page-composer-attach-slot">
-										<button type="button" class="chat-page-composer-attach-inline" data-chat-add-image-inline
-											aria-label="Add files">
-											<svg class="chat-page-composer-attach-inline-icon"
-												xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-												stroke="currentColor" stroke-width="2" stroke-linecap="round"
-												stroke-linejoin="round" aria-hidden="true">
-												<line x1="12" y1="5" x2="12" y2="19" />
-												<line x1="5" y1="12" x2="19" y2="12" />
-											</svg>
-										</button>
-									</div>
-									<textarea class="connect-chat-composer-input chat-page-composer-input" name="body"
-										rows="1" maxlength="4000" data-chat-body-input
-										aria-label="Message text"></textarea>
-									<button type="button" class="chat-page-explore-clear-search" data-chat-explore-clear-search
-										hidden aria-label="Search creations">
-										<span class="chat-page-explore-clear-search-slot" aria-hidden="true">
-											<span class="chat-page-explore-trailing-icon-layer" data-chat-explore-search-icon-wrap>
-												<svg class="chat-page-explore-search-magnifier-icon"
-													xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-													stroke="currentColor" stroke-width="2" stroke-linecap="round"
-													stroke-linejoin="round">
-													<circle cx="11" cy="11" r="8" />
-													<path d="m21 21-4.3-4.3" />
-												</svg>
-											</span>
-											<span class="chat-page-explore-trailing-icon-layer" data-chat-explore-clear-spinner
-												hidden><span class="chat-page-explore-clear-search-spinner-disk"
-													aria-hidden="true"></span></span>
-											<span class="chat-page-explore-trailing-icon-layer" data-chat-explore-x-icon-wrap
-												hidden>
-												<svg class="chat-page-explore-clear-search-icon" data-chat-explore-clear-x-icon
-													xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-													stroke="currentColor" stroke-width="2" stroke-linecap="round"
-													stroke-linejoin="round">
-													<path d="M18 6L6 18M6 6l12 12" />
-												</svg>
-											</span>
-										</span>
-									</button>
-									<button type="button" class="chat-page-send-btn" data-chat-send hidden
-										aria-label="Send"></button>
-								</div>
-							</div>
-						</form>
-							</div>
-						</div>
-						<div class="chat-page-canvas-resize-handle" data-chat-canvas-resize-handle role="separator"
-							aria-orientation="vertical" aria-label="Resize canvas panel" tabindex="0"></div>
-						<aside class="chat-page-canvas-panel" data-chat-canvas-panel hidden aria-label="Canvas">
-							<div class="chat-page-canvas-panel-body">
-							<div class="chat-page-canvas-panel-head">
-								<div class="chat-page-canvas-panel-title-row">
-									<h2 class="chat-page-canvas-panel-title" data-chat-canvas-title-view></h2>
-									<input type="text" class="chat-page-canvas-panel-title-input" data-chat-canvas-title-input
-										hidden maxlength="200" aria-label="Canvas title" />
-									<div class="chat-page-canvas-panel-head-actions">
-										<div class="chat-page-canvas-more-wrap" data-chat-canvas-more-wrap hidden>
-											<button type="button" class="feed-card-action feed-card-action-more chat-page-canvas-more-btn"
-												data-chat-canvas-more aria-label="Canvas options" aria-expanded="false">
+								<div class="chat-page-thread-body">
+									<header class="chat-page-topbar">
+										<a href="/connect" class="chat-page-back" aria-label="Back to Connect">
+											<!-- do not change this to ←, it's not a real arrow -->
+											<span class="chat-page-back-icon" aria-hidden="true">&lt;-</span>
+										</a>
+										<h1 class="chat-page-title" data-chat-title data-chat-title-awaiting="1"
+											aria-hidden="true"></h1>
+										<div class="chat-page-topbar-actions">
+											<button type="button" class="chat-page-topbar-pinned-canvas-btn"
+												data-chat-topbar-pinned-canvas hidden></button>
+											<button type="button" class="feed-card-action feed-card-action-more"
+												data-chat-more-button aria-label="More chat actions"
+												aria-haspopup="menu" aria-expanded="false">
 												<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
 													<circle cx="12" cy="5" r="1.6"></circle>
 													<circle cx="12" cy="12" r="1.6"></circle>
 													<circle cx="12" cy="19" r="1.6"></circle>
 												</svg>
 											</button>
-											<div class="feed-card-menu chat-page-canvas-owner-menu" data-chat-canvas-owner-menu
+											<div class="feed-card-menu chat-page-topbar-menu" data-chat-topbar-menu
 												style="display: none;" role="menu">
-												<button type="button" class="feed-card-menu-item" data-chat-canvas-edit role="menuitem">Edit</button>
-												<button type="button" class="feed-card-menu-item" data-chat-canvas-pin role="menuitem" hidden>Pin
-													to channel</button>
-												<button type="button" class="feed-card-menu-item" data-chat-canvas-unpin role="menuitem" hidden>Remove
-													channel pin</button>
+												<button class="feed-card-menu-item" type="button" data-chat-refresh
+													role="menuitem">Refresh</button>
+												<div data-chat-topbar-menu-dynamic></div>
 											</div>
 										</div>
-										<button type="button" class="chat-page-canvas-close" data-chat-canvas-close
-											aria-label="Close canvas">×</button>
+									</header>
+									<div class="chat-page-messages" data-chat-messages role="log" aria-label="Messages">
+									</div>
+									<p class="chat-page-error connect-chat-error" data-chat-error hidden role="alert">
+									</p>
+								</div>
+								<form class="chat-page-composer connect-chat-composer" data-chat-composer
+									aria-label="Send a message">
+									<p class="chat-page-pseudo-composer-hint" data-chat-pseudo-composer-hint hidden
+										role="status">
+									</p>
+									<div class="chat-page-input-shell">
+										<div class="chat-page-composer-attachments" data-chat-attachments hidden>
+											<div class="chat-page-composer-attachments-row">
+												<div class="chat-page-composer-attachments-list"
+													data-chat-attachments-list></div>
+											</div>
+										</div>
+										<input type="file" multiple class="chat-page-composer-file-input"
+											data-chat-file-input hidden />
+										<div class="chat-page-composer-input-row">
+											<div class="chat-page-composer-attach-slot">
+												<button type="button" class="chat-page-composer-attach-inline"
+													data-chat-add-image-inline aria-label="Add files">
+													<svg class="chat-page-composer-attach-inline-icon"
+														xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+														fill="none" stroke="currentColor" stroke-width="2"
+														stroke-linecap="round" stroke-linejoin="round"
+														aria-hidden="true">
+														<line x1="12" y1="5" x2="12" y2="19" />
+														<line x1="5" y1="12" x2="19" y2="12" />
+													</svg>
+												</button>
+											</div>
+											<textarea class="connect-chat-composer-input chat-page-composer-input"
+												name="body" rows="1" maxlength="4000" data-chat-body-input
+												aria-label="Message text"></textarea>
+											<button type="button" class="chat-page-explore-clear-search"
+												data-chat-explore-clear-search hidden aria-label="Search creations">
+												<span class="chat-page-explore-clear-search-slot" aria-hidden="true">
+													<span class="chat-page-explore-trailing-icon-layer"
+														data-chat-explore-search-icon-wrap>
+														<svg class="chat-page-explore-search-magnifier-icon"
+															xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+															fill="none" stroke="currentColor" stroke-width="2"
+															stroke-linecap="round" stroke-linejoin="round">
+															<circle cx="11" cy="11" r="8" />
+															<path d="m21 21-4.3-4.3" />
+														</svg>
+													</span>
+													<span class="chat-page-explore-trailing-icon-layer"
+														data-chat-explore-clear-spinner hidden><span
+															class="chat-page-explore-clear-search-spinner-disk"
+															aria-hidden="true"></span></span>
+													<span class="chat-page-explore-trailing-icon-layer"
+														data-chat-explore-x-icon-wrap hidden>
+														<svg class="chat-page-explore-clear-search-icon"
+															data-chat-explore-clear-x-icon
+															xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+															fill="none" stroke="currentColor" stroke-width="2"
+															stroke-linecap="round" stroke-linejoin="round">
+															<path d="M18 6L6 18M6 6l12 12" />
+														</svg>
+													</span>
+												</span>
+											</button>
+											<button type="button" class="chat-page-send-btn" data-chat-send hidden
+												aria-label="Send"></button>
+										</div>
+									</div>
+								</form>
+							</div>
+						</div>
+						<div class="chat-page-canvas-resize-handle" data-chat-canvas-resize-handle role="separator"
+							aria-orientation="vertical" aria-label="Resize canvas panel" tabindex="0"></div>
+						<aside class="chat-page-canvas-panel" data-chat-canvas-panel hidden aria-label="Canvas">
+							<div class="chat-page-canvas-panel-body">
+								<div class="chat-page-canvas-panel-head">
+									<div class="chat-page-canvas-panel-title-row">
+										<h2 class="chat-page-canvas-panel-title" data-chat-canvas-title-view></h2>
+										<input type="text" class="chat-page-canvas-panel-title-input"
+											data-chat-canvas-title-input hidden maxlength="200"
+											aria-label="Canvas title" />
+										<div class="chat-page-canvas-panel-head-actions">
+											<div class="chat-page-canvas-more-wrap" data-chat-canvas-more-wrap hidden>
+												<button type="button"
+													class="feed-card-action feed-card-action-more chat-page-canvas-more-btn"
+													data-chat-canvas-more aria-label="Canvas options"
+													aria-expanded="false">
+													<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+														<circle cx="12" cy="5" r="1.6"></circle>
+														<circle cx="12" cy="12" r="1.6"></circle>
+														<circle cx="12" cy="19" r="1.6"></circle>
+													</svg>
+												</button>
+												<div class="feed-card-menu chat-page-canvas-owner-menu"
+													data-chat-canvas-owner-menu style="display: none;" role="menu">
+													<button type="button" class="feed-card-menu-item"
+														data-chat-canvas-edit role="menuitem">Edit</button>
+													<button type="button" class="feed-card-menu-item"
+														data-chat-canvas-pin role="menuitem" hidden>Pin
+														to channel</button>
+													<button type="button" class="feed-card-menu-item"
+														data-chat-canvas-unpin role="menuitem" hidden>Remove
+														channel pin</button>
+												</div>
+											</div>
+											<button type="button" class="chat-page-canvas-close" data-chat-canvas-close
+												aria-label="Close canvas">×</button>
+										</div>
 									</div>
 								</div>
-							</div>
-							<div class="chat-page-canvas-panel-scroll">
-								<div class="chat-page-canvas-body user-text" data-chat-canvas-body-view></div>
-								<textarea class="chat-page-canvas-body-input" data-chat-canvas-body-input hidden maxlength="4000"
-									aria-label="Canvas body" rows="3"></textarea>
-							</div>
+								<div class="chat-page-canvas-panel-scroll">
+									<div class="chat-page-canvas-body user-text" data-chat-canvas-body-view></div>
+									<textarea class="chat-page-canvas-body-input" data-chat-canvas-body-input hidden
+										maxlength="4000" aria-label="Canvas body" rows="3"></textarea>
+								</div>
 							</div>
 							<div class="chat-page-canvas-edit-footer" data-chat-canvas-edit-footer hidden>
-								<button type="button" class="btn-outlined chat-page-canvas-delete-btn" data-chat-canvas-delete>Delete</button>
+								<button type="button" class="btn-outlined chat-page-canvas-delete-btn"
+									data-chat-canvas-delete>Delete</button>
 								<div class="chat-page-canvas-edit-footer-right">
-									<button type="button" class="chat-page-canvas-cancel-btn" data-chat-canvas-cancel>Cancel</button>
-									<button type="button" class="btn-secondary chat-page-canvas-save-btn" data-chat-canvas-save>Save</button>
+									<button type="button" class="chat-page-canvas-cancel-btn"
+										data-chat-canvas-cancel>Cancel</button>
+									<button type="button" class="btn-secondary chat-page-canvas-save-btn"
+										data-chat-canvas-save>Save</button>
 								</div>
 							</div>
 						</aside>
@@ -358,7 +382,7 @@
 						shell.style.removeProperty('left');
 						shell.style.removeProperty('width');
 						shell.style.removeProperty('height');
-					} catch (e) {}
+					} catch (e) { }
 					if (window.visualViewport) {
 						window.visualViewport.removeEventListener('resize', onViewportChange);
 						window.visualViewport.removeEventListener('scroll', onViewportChange);

@@ -3051,7 +3051,57 @@ app-route-feed {
 	animation: loading 4s linear infinite;
 }
 
+/* Matches `.route-media.loading` on the Creations page: shimmer + centered label (not used for generic img fetch `.loading`). */
+.feed-card-image--creation-processing {
+	background: linear-gradient(90deg, var(--surface-muted), var(--surface-strong), var(--surface-muted));
+	background-size: 200% 100%;
+	animation: loading 4s linear infinite;
+}
+
+/* Pull the empty <img> out of normal flow so a row flex layout cannot shove the label sideways. */
+.feed-card-image--creation-processing .feed-card-img {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	z-index: 0;
+	pointer-events: none;
+}
+
+.feed-card-image--creation-processing .feed-card-video {
+	opacity: 0;
+	visibility: hidden;
+	pointer-events: none;
+}
+
+/* Real node (not ::after) so it does not clash with `.nsfw::after` blur on the same tile. */
+.feed-card-image--creation-processing .feed-card-creation-processing-label {
+	position: absolute;
+	inset: 0;
+	z-index: 5;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+	color: var(--text-muted);
+	font-size: 0.9rem;
+	pointer-events: none;
+}
+
 @media (prefers-color-scheme: light) {
+	.feed-card-image--creation-processing {
+		background: linear-gradient(90deg,
+				rgba(124, 58, 237, 0.2),
+				rgba(124, 58, 237, 0.4),
+				rgba(124, 58, 237, 0.2));
+		background-size: 200% 100%;
+	}
+
+	.feed-card-image--creation-processing .feed-card-creation-processing-label {
+		color: rgba(255, 255, 255, 0.9);
+		font-weight: 500;
+	}
+
 	.feed-card-image.loading {
 		background: linear-gradient(90deg,
 				rgba(124, 58, 237, 0.2),
@@ -8778,6 +8828,12 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 	outline: 2px solid var(--accent);
 	outline-offset: 2px;
 	border-radius: 6px;
+}
+
+.creations-route .feed-card[data-image-id]:has(.creations-card-bulk-checkbox:checked) {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+	border-radius: 10px;
 }
 
 /* Toast: center-bottom confirmation messages */

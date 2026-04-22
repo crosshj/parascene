@@ -1,7 +1,9 @@
 import { buildBlogPostPublicPath, BLOG_CAMPAIGN_INTERNAL } from '../../shared/blogCampaignPath.js';
 import {
+	applyFeedCardCreationProcessingState,
 	attachFeedCardImage,
 	feedItemCardImageUrl,
+	isFeedCreationImageProcessing,
 	markFeedCardImageUnavailable
 } from '../../shared/feedCardBuild.js';
 
@@ -471,18 +473,23 @@ class AppRouteFeed extends HTMLElement {
 		const imageContainer = card.querySelector('.feed-card-image');
 		const displayUrl = feedItemCardImageUrl(item, false);
 		const videoUrl = typeof item.video_url === 'string' ? item.video_url.trim() : '';
+		const processing = isFeedCreationImageProcessing(item);
 
 		if (imageEl && imageContainer) {
-			const canShowVideo = isVideo && Boolean(videoUrl);
-			if (!displayUrl && !canShowVideo) {
-				markFeedCardImageUnavailable(imageContainer, imageEl, { state: 'missing' });
-			} else if (displayUrl) {
-				attachFeedCardImage(imageEl, imageContainer, item, itemIndex, false);
+			if (processing) {
+				applyFeedCardCreationProcessingState(imageContainer, imageEl);
+			} else {
+				const canShowVideo = isVideo && Boolean(videoUrl);
+				if (!displayUrl && !canShowVideo) {
+					markFeedCardImageUnavailable(imageContainer, imageEl, { state: 'missing' });
+				} else if (displayUrl) {
+					attachFeedCardImage(imageEl, imageContainer, item, itemIndex, false);
+				}
 			}
 		}
 
 		// Auto-play looping preview for video feed items when in view.
-		if (isVideo) {
+		if (isVideo && !processing) {
 			const videoEl = card.querySelector('.feed-card-video');
 			if (videoEl) {
 				const posterUrl = displayUrl || "";
@@ -497,6 +504,13 @@ class AppRouteFeed extends HTMLElement {
 				videoEl.setAttribute('loop', '');
 				videoEl.dataset.feedVideoSrc = item.video_url;
 				this.setupFeedVideoAutoplay(videoEl);
+			}
+		} else if (isVideo && processing) {
+			const videoEl = card.querySelector('.feed-card-video');
+			if (videoEl instanceof HTMLVideoElement) {
+				videoEl.removeAttribute('poster');
+				videoEl.removeAttribute('src');
+				delete videoEl.dataset.feedVideoSrc;
 			}
 		}
 

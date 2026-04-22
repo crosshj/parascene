@@ -44,6 +44,68 @@ export function feedItemToUser(item) {
 /**
  * @param {boolean} [preferThumbnail] — When true, prefer CDN `thumbnail_url` (Explore / Creations browse grids). When false, full `image_url` first (home feed, chat #feed).
  */
+/**
+ * Creation rows still being generated (no stable preview URL yet).
+ * @param {object|null|undefined} item
+ */
+export function isFeedCreationImageProcessing(item) {
+	const raw = item?.status ?? item?.creation_status;
+	if (raw == null || raw === '') return false;
+	const st = String(raw).trim().toLowerCase();
+	return st === 'creating' || st === 'pending';
+}
+
+/**
+ * Clears Creations-style in-progress tile chrome (class + label node).
+ * @param {HTMLElement|null} imageContainer - `.feed-card-image`
+ */
+export function teardownFeedCardCreationProcessingUi(imageContainer) {
+	if (!imageContainer) return;
+	imageContainer.classList.remove('feed-card-image--creation-processing');
+	imageContainer.removeAttribute('aria-hidden');
+	const label = imageContainer.querySelector('.feed-card-creation-processing-label');
+	if (label) label.remove();
+	const videoEl = imageContainer.querySelector('.feed-card-video');
+	if (videoEl instanceof HTMLVideoElement) {
+		videoEl.style.removeProperty('opacity');
+		videoEl.style.removeProperty('visibility');
+	}
+}
+
+/**
+ * Same visual language as `.route-media.loading` on the Creations page (shimmer + centered “Creating…”).
+ * @param {HTMLElement|null} imageContainer - `.feed-card-image`
+ * @param {HTMLImageElement|null} imageEl
+ */
+export function applyFeedCardCreationProcessingState(imageContainer, imageEl) {
+	if (!imageContainer) return;
+	teardownFeedCardCreationProcessingUi(imageContainer);
+	imageContainer.classList.remove('loaded', 'error', 'loading');
+	imageContainer.classList.add('feed-card-image--creation-processing');
+	imageContainer.removeAttribute('data-feed-img-state');
+	imageContainer.removeAttribute('role');
+	imageContainer.removeAttribute('aria-label');
+	imageContainer.setAttribute('aria-hidden', 'true');
+	if (imageEl instanceof HTMLImageElement) {
+		imageEl.removeAttribute('src');
+		imageEl.removeAttribute('data-feed-image-url');
+		imageEl.style.opacity = '0';
+	}
+	const videoEl = imageContainer.querySelector('.feed-card-video');
+	if (videoEl instanceof HTMLVideoElement) {
+		videoEl.removeAttribute('poster');
+		videoEl.removeAttribute('src');
+		delete videoEl.dataset.feedVideoSrc;
+		videoEl.style.opacity = '0';
+		videoEl.style.visibility = 'hidden';
+	}
+	const label = document.createElement('span');
+	label.className = 'feed-card-creation-processing-label';
+	label.setAttribute('aria-hidden', 'true');
+	label.textContent = 'Creating...';
+	imageContainer.appendChild(label);
+}
+
 export function feedItemCardImageUrl(item, preferThumbnail = false) {
 	if (!item) return '';
 	if (preferThumbnail) {
@@ -79,6 +141,7 @@ export function feedItemCardImageUrlCandidates(item, preferThumbnail = false) {
  */
 export function markFeedCardImageUnavailable(imageContainer, imageEl, attrs = {}) {
 	if (!imageContainer) return;
+	teardownFeedCardCreationProcessingUi(imageContainer);
 	const state = typeof attrs.state === 'string' && attrs.state.trim() ? attrs.state.trim() : 'unavailable';
 	const label =
 		typeof attrs.label === 'string' && attrs.label.trim()
@@ -108,6 +171,10 @@ export function markFeedCardImageUnavailable(imageContainer, imageEl, attrs = {}
 export function attachFeedCardImage(imageEl, imageContainer, item, itemIndex, preferThumbnail = false) {
 	const urls = feedItemCardImageUrlCandidates(item, preferThumbnail);
 	if (!imageEl || !imageContainer) return;
+	if (isFeedCreationImageProcessing(item)) {
+		applyFeedCardCreationProcessingState(imageContainer, imageEl);
+		return;
+	}
 	if (urls.length === 0) {
 		markFeedCardImageUnavailable(imageContainer, imageEl, { state: 'missing' });
 		return;
@@ -128,6 +195,7 @@ export function attachFeedCardImage(imageEl, imageContainer, item, itemIndex, pr
 
 		const finishOk = () => {
 			imageContainer.classList.remove('loading');
+			teardownFeedCardCreationProcessingUi(imageContainer);
 			imageContainer.classList.add('loaded');
 			imageContainer.classList.remove('error');
 			imageContainer.removeAttribute('data-feed-img-state');
@@ -155,6 +223,7 @@ export function attachFeedCardImage(imageEl, imageContainer, item, itemIndex, pr
 			failOrChain();
 		};
 
+		teardownFeedCardCreationProcessingUi(imageContainer);
 		imageContainer.classList.add('loading');
 		imageContainer.classList.remove('loaded', 'error');
 		imageContainer.removeAttribute('data-feed-img-state');
@@ -311,27 +380,91 @@ function buildFeedBlogPostCard(item) {
 	return card;
 }
 
-function buildFeedCreationCard(item, itemIndex, setupFeedVideo, hideFeedCardMetadata = false, preferThumbnail = false) {
+/**
+ * @param {HTMLElement} imageWrap - `.feed-card-image`
+ */
+function appendCreationsBulkOverlayToFeedCardImage(imageWrap) {
+	if (!(imageWrap instanceof HTMLElement) || imageWrap.querySelector('[data-creations-bulk-overlay]')) return;
+	const overlay = document.createElement('div');
+	overlay.className = 'creations-card-bulk-overlay';
+	overlay.setAttribute('data-creations-bulk-overlay', '');
+	overlay.setAttribute('aria-hidden', 'true');
+	const cb = document.createElement('input');
+	cb.type = 'checkbox';
+	cb.className = 'creations-card-bulk-checkbox';
+	cb.setAttribute('data-creations-bulk-checkbox', '');
+	cb.setAttribute('aria-label', 'Select creation');
+	overlay.appendChild(cb);
+	imageWrap.appendChild(overlay);
+}
+
+/**
+ * @param {HTMLElement} card
+ * @param {object} item
+ * @param {boolean} preferThumbnail
+ */
+function stampChatCreationsBulkDatasetOnFeedCard(card, item, preferThumbnail) {
+	const rawId = item?.created_image_id ?? item?.id;
+	const idNum = rawId != null ? Number(rawId) : NaN;
+	if (!(card instanceof HTMLElement) || !Number.isFinite(idNum) || idNum <= 0) return;
+	card.dataset.imageId = String(idNum);
+	const isPublished = item.published === true || item.published === 1;
+	card.dataset.published = isPublished ? '1' : '0';
+	const imageUrlRaw = feedItemCardImageUrl(item, preferThumbnail);
+	card.dataset.imageUrl = typeof imageUrlRaw === 'string' ? imageUrlRaw.trim() : '';
+}
+
+function buildFeedCreationCard(
+	item,
+	itemIndex,
+	setupFeedVideo,
+	hideFeedCardMetadata = false,
+	preferThumbnail = false,
+	creationsBulkChrome = false
+) {
 	const card = document.createElement("div");
 	const mediaType = typeof item.media_type === "string" ? item.media_type : "image";
 	const isVideo = mediaType === "video" && typeof item.video_url === "string" && item.video_url;
 
 	if (item.created_image_id) {
 		card.setAttribute('data-creation-id', String(item.created_image_id));
+		const stRaw = item?.status;
+		const st =
+			stRaw == null || stRaw === ''
+				? ''
+				: typeof stRaw === 'string'
+					? stRaw.trim().toLowerCase()
+					: String(stRaw).trim().toLowerCase();
+		if (st === 'creating' || st === 'pending') {
+			card.setAttribute('data-creation-status', st);
+		} else {
+			card.removeAttribute('data-creation-status');
+		}
 	}
 
 	if (hideFeedCardMetadata) {
 		card.className = "feed-card feed-card--image-only";
 		const isPublished = item.published === true || item.published === 1;
 		const publishedOverlay = isPublished ? publishedBadgeHtml() : '';
+		const bulkOverlayBlock =
+			creationsBulkChrome
+				? html`
+			<div class="creations-card-bulk-overlay" data-creations-bulk-overlay aria-hidden="true">
+				<input type="checkbox" class="creations-card-bulk-checkbox" data-creations-bulk-checkbox aria-label="Select creation" />
+			</div>`
+				: '';
 		card.innerHTML = html`
       <div class="feed-card-image${item.nsfw ? ' nsfw' : ''}${isVideo ? ' feed-card-image-video' : ''}">
         <img class="feed-card-img" alt="${item.title || 'Creation'}" loading="lazy" decoding="async">
         ${publishedOverlay}
         ${isVideo ? html`<video class="feed-card-video" playsinline muted></video>` : ''}
+        ${bulkOverlayBlock}
       </div>
     `;
-		finishFeedCreationCardMediaAndClick(card, item, itemIndex, setupFeedVideo, isVideo, preferThumbnail);
+		if (creationsBulkChrome) {
+			stampChatCreationsBulkDatasetOnFeedCard(card, item, preferThumbnail);
+		}
+		finishFeedCreationCardMediaAndClick(card, item, itemIndex, setupFeedVideo, isVideo, preferThumbnail, creationsBulkChrome);
 		return card;
 	}
 
@@ -540,31 +673,51 @@ function buildFeedCreationCard(item, itemIndex, setupFeedVideo, hideFeedCardMeta
 		});
 	}
 
-	finishFeedCreationCardMediaAndClick(card, item, itemIndex, setupFeedVideo, isVideo, preferThumbnail);
+	if (creationsBulkChrome) {
+		const imageWrap = card.querySelector('.feed-card-image');
+		appendCreationsBulkOverlayToFeedCardImage(imageWrap);
+		stampChatCreationsBulkDatasetOnFeedCard(card, item, preferThumbnail);
+	}
+
+	finishFeedCreationCardMediaAndClick(card, item, itemIndex, setupFeedVideo, isVideo, preferThumbnail, creationsBulkChrome);
 	return card;
 }
 
 /**
  * @param {boolean} isVideo
  * @param {boolean} preferThumbnail
+ * @param {boolean} creationsBulkChrome
  */
-function finishFeedCreationCardMediaAndClick(card, item, itemIndex, setupFeedVideo, isVideo, preferThumbnail = false) {
+function finishFeedCreationCardMediaAndClick(
+	card,
+	item,
+	itemIndex,
+	setupFeedVideo,
+	isVideo,
+	preferThumbnail = false,
+	creationsBulkChrome = false
+) {
 	const imageEl = card.querySelector('.feed-card-img');
 	const imageContainer = card.querySelector('.feed-card-image');
 	const displayUrl = feedItemCardImageUrl(item, preferThumbnail);
 	const videoUrl = typeof item.video_url === 'string' ? item.video_url.trim() : '';
+	const processing = isFeedCreationImageProcessing(item);
 
 	if (imageEl && imageContainer) {
-		const canShowVideo = isVideo && Boolean(videoUrl);
-		if (!displayUrl && !canShowVideo) {
-			markFeedCardImageUnavailable(imageContainer, imageEl, { state: 'missing' });
-		} else if (displayUrl) {
-			attachFeedCardImage(imageEl, imageContainer, item, itemIndex, preferThumbnail);
+		if (processing) {
+			applyFeedCardCreationProcessingState(imageContainer, imageEl);
+		} else {
+			const canShowVideo = isVideo && Boolean(videoUrl);
+			if (!displayUrl && !canShowVideo) {
+				markFeedCardImageUnavailable(imageContainer, imageEl, { state: 'missing' });
+			} else if (displayUrl) {
+				attachFeedCardImage(imageEl, imageContainer, item, itemIndex, preferThumbnail);
+			}
 		}
 	}
 
 	// Auto-play looping preview for video feed items when in view.
-	if (isVideo) {
+	if (isVideo && !processing) {
 		const videoEl = card.querySelector('.feed-card-video');
 		if (videoEl) {
 			const posterUrl = displayUrl || "";
@@ -580,6 +733,13 @@ function finishFeedCreationCardMediaAndClick(card, item, itemIndex, setupFeedVid
 			videoEl.dataset.feedVideoSrc = item.video_url;
 				if (typeof setupFeedVideo === "function") setupFeedVideo(videoEl);
 		}
+	} else if (isVideo && processing) {
+		const videoEl = card.querySelector('.feed-card-video');
+		if (videoEl instanceof HTMLVideoElement) {
+			videoEl.removeAttribute('poster');
+			videoEl.removeAttribute('src');
+			delete videoEl.dataset.feedVideoSrc;
+		}
 	}
 
 	if (item.created_image_id) {
@@ -588,6 +748,9 @@ function finishFeedCreationCardMediaAndClick(card, item, itemIndex, setupFeedVid
 
 		// Add click handler to the card
 		card.addEventListener('click', (e) => {
+			if (creationsBulkChrome && e.target?.closest?.('[data-creations-bulk-overlay]')) {
+				return;
+			}
 			// Allow profile links to navigate without triggering card click
 			const profileLink = e.target?.closest?.('[data-profile-link]');
 			if (profileLink) return;
@@ -618,17 +781,19 @@ function finishFeedCreationCardMediaAndClick(card, item, itemIndex, setupFeedVid
  *   setupFeedVideo?: (videoEl: HTMLVideoElement) => void,
  *   hideFeedCardMetadata?: boolean,
  *   preferThumbnail?: boolean,
+ *   creationsBulkChrome?: boolean,
  * }} [options]
  */
 export function createFeedItemCard(item, itemIndex, options = {}) {
 	const setupFeedVideo = options.setupFeedVideo;
 	const hideFeedCardMetadata = options.hideFeedCardMetadata === true;
 	const preferThumbnail = options.preferThumbnail === true;
+	const creationsBulkChrome = options.creationsBulkChrome === true;
 	if (item.type === "tip") {
 		return buildFeedTipCard(item);
 	}
 	if (item.type === "blog_post") {
 		return buildFeedBlogPostCard(item);
 	}
-	return buildFeedCreationCard(item, itemIndex, setupFeedVideo, hideFeedCardMetadata, preferThumbnail);
+	return buildFeedCreationCard(item, itemIndex, setupFeedVideo, hideFeedCardMetadata, preferThumbnail, creationsBulkChrome);
 }

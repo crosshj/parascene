@@ -1,3 +1,10 @@
+import {
+	getPendingCreationsFromSession,
+	shouldContinueCreationsPoll,
+	hasPendingCreationsReloadHint,
+	computeCreationsPollHasListUpdates,
+} from '../../shared/creationsInFlightPoller.js';
+
 let formatDateTime;
 let formatRelativeTime;
 let fetchJsonWithStatusDeduped;
@@ -669,8 +676,7 @@ class AppRouteCreations extends HTMLElement {
 	}
 
 	getPendingCreations() {
-		const pending = JSON.parse(sessionStorage.getItem("pendingCreations") || "[]");
-		return Array.isArray(pending) ? pending : [];
+		return getPendingCreationsFromSession();
 	}
 
 	startPolling() {
@@ -691,13 +697,7 @@ class AppRouteCreations extends HTMLElement {
 		const container = this.querySelector("[data-creations-container]");
 		if (!container) return;
 
-		// Check if there are any loading creations (DB rows) or pending placeholders (sessionStorage)
-		const loadingCreations = container.querySelectorAll('.route-media[data-image-id][data-status="creating"]');
-		const pendingCreations = container.querySelectorAll('.route-media[data-image-id][data-status="pending"]');
-		const hasPending = pendingCreations.length > 0 || this.getPendingCreations().length > 0;
-
-		if (loadingCreations.length === 0 && !hasPending) {
-			// Nothing to wait for, stop polling
+		if (!shouldContinueCreationsPoll(container)) {
 			this.stopPolling();
 			return;
 		}
@@ -709,20 +709,9 @@ class AppRouteCreations extends HTMLElement {
 			if (!result.ok) return;
 
 			const creations = Array.isArray(result.data?.images) ? result.data.images : [];
+			const hasUpdates = computeCreationsPollHasListUpdates(creations, container);
+			const hasPending = hasPendingCreationsReloadHint(container);
 
-			// Update any creations that have changed out of "creating"
-			let hasUpdates = false;
-			loadingCreations.forEach(loadingElement => {
-				const creationId = loadingElement.getAttribute('data-image-id');
-				const updatedCreation = creations.find(c => c.id.toString() === creationId);
-				if (updatedCreation && updatedCreation.status && updatedCreation.status !== 'creating') {
-					hasUpdates = true;
-				}
-			});
-
-			// If we have pending placeholders, keep refreshing so they can reconcile into DB rows
-			// (or expire via TTL) even before we have a visible "creating" row.
-			// Throttle: when only hasPending (no hasUpdates), don't reload more than once per 5s to avoid storms.
 			const now = Date.now();
 			const throttleMs = 5000;
 			const wouldReload = hasUpdates || hasPending;

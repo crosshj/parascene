@@ -538,8 +538,8 @@ export async function initChatPage(root, options = {}) {
 	const chatCanvasScope = chatLayoutRoot instanceof HTMLElement ? chatLayoutRoot : root;
 	const mainColumn =
 		chatLayoutRoot instanceof HTMLElement &&
-		chatLayoutRoot.parentElement instanceof HTMLElement &&
-		chatLayoutRoot.parentElement.classList.contains('chat-page-main-column')
+			chatLayoutRoot.parentElement instanceof HTMLElement &&
+			chatLayoutRoot.parentElement.classList.contains('chat-page-main-column')
 			? chatLayoutRoot.parentElement
 			: root.closest('.chat-page-main-column');
 	const canvasActionRoot = mainColumn instanceof HTMLElement ? mainColumn : chatCanvasScope;
@@ -566,6 +566,7 @@ export async function initChatPage(root, options = {}) {
 	const rosterMod = await import(`../shared/chatSidebarRoster.js${qs}`);
 	const serverChatTagMod = await import(`../shared/serverChatTag.js${qs}`);
 	const serverChannelTagFromServerName = serverChatTagMod.serverChannelTagFromServerName;
+	const creationsPollMod = await import(`../shared/creationsInFlightPoller.js${qs}`);
 
 	function chatReactionGetCount(val) {
 		if (typeof val === 'number' && Number.isFinite(val)) return Math.max(0, val);
@@ -595,9 +596,9 @@ export async function initChatPage(root, options = {}) {
 	let chatCanvasesList = [];
 	/** Message id pinned for the active channel thread (from GET .../canvases). */
 	let activeThreadPinnedCanvasId = null;
-	let closeChatCanvasPanel = () => {};
-	let rebuildTopbarMenuDynamic = () => {};
-	let refreshChatCanvasesList = async () => {};
+	let closeChatCanvasPanel = () => { };
+	let rebuildTopbarMenuDynamic = () => { };
+	let refreshChatCanvasesList = async () => { };
 	/** @type {{ id: number, title: string, body: string, sender_id: number } | null} */
 	let activeCanvasRow = null;
 	let chatCanvasEditSnapshot = { title: '', body: '' };
@@ -605,7 +606,7 @@ export async function initChatPage(root, options = {}) {
 	let chatCanvasOwnerMenuOutside = null;
 	/** @type {null | (() => void)} */
 	let chatCanvasCreateCleanup = null;
-	let tearDownChatCanvasUi = () => {};
+	let tearDownChatCanvasUi = () => { };
 	let chatThreads = [];
 	let activeThreadId = null;
 	/** @type {string | null} — e.g. reserved `comments`; not a real chat thread id. */
@@ -632,6 +633,8 @@ export async function initChatPage(root, options = {}) {
 	/** True while `loadExploreChannelMessages` is running (browse or search path) so the composer can show the same trailing spinner. */
 	let exploreBrowseMessagesLoading = false;
 	let loadingMessages = false;
+	let chatCreationsPollInterval = null;
+	let chatCreationsPollLastReloadAt = 0;
 
 	function isExploreComposerLoadLocked() {
 		return exploreChannelSearchLoading || exploreBrowseMessagesLoading;
@@ -1102,8 +1105,8 @@ export async function initChatPage(root, options = {}) {
 		const urlsToDelete = skipServer
 			? []
 			: chatPendingImages
-					.filter((e) => e.status === 'ready' && e.urlPath)
-					.map((e) => e.urlPath);
+				.filter((e) => e.status === 'ready' && e.urlPath)
+				.map((e) => e.urlPath);
 		for (const e of chatPendingImages) {
 			revokeChatAttachmentPreview(e);
 		}
@@ -1557,11 +1560,19 @@ export async function initChatPage(root, options = {}) {
 		const handleRaw = authorHints?.handleRaw != null ? String(authorHints.handleRaw).trim() : '';
 		const displayName = authorHints?.displayName != null ? String(authorHints.displayName).trim() : '';
 		const avatarUrl = authorHints?.avatarUrl != null ? String(authorHints.avatarUrl).trim() : '';
+		const statusRaw = img?.status;
+		const status =
+			statusRaw == null || statusRaw === ''
+				? null
+				: typeof statusRaw === 'string'
+					? statusRaw.trim()
+					: String(statusRaw).trim();
 		return {
 			created_image_id: Number.isFinite(id) ? id : null,
 			id: Number.isFinite(id) ? id : null,
 			title,
 			summary,
+			status,
 			image_url: url,
 			thumbnail_url: thumb,
 			user_id: Number.isFinite(uid) ? uid : null,
@@ -1934,29 +1945,29 @@ export async function initChatPage(root, options = {}) {
 		}
 		const hasUnusedReactions = REACTION_ORDER.some((key) => chatReactionGetCount(reactions[key]) === 0);
 		const reactionPills = keysWithReactions
-					.map((key) => {
-						const raw = reactions[key];
-						const count = chatReactionGetCount(raw);
-						const countLabel = count > 99 ? '99+' : String(count);
-						const hasViewer = viewerReactions.includes(key);
-						const iconFn = REACTION_ICONS[key];
-						const iconHtml = iconFn ? iconFn('comment-reaction-icon') : '';
-						const actionLabel = hasViewer ? `Remove ${key}` : `Add ${key}`;
-						let tooltipAttr = '';
-						if (typeof raw !== 'number' && Array.isArray(raw) && raw.length > 0) {
-							const last = raw[raw.length - 1];
-							const others = typeof last === 'number' ? last : 0;
-							const strings = (typeof last === 'number' ? raw.slice(0, -1) : raw).filter(
-								(s) => typeof s === 'string'
-							);
-							const tooltip = [...strings, others > 0 ? `and ${others} ${others === 1 ? 'other' : 'others'}` : '']
-								.filter(Boolean)
-								.join(', ');
-							if (tooltip) tooltipAttr = ` data-tooltip="${escapeHtml(tooltip)}"`;
-						}
-						return `<button type="button" class="comment-reaction-pill${hasViewer ? ' is-viewer' : ''}" data-emoji-key="${escapeHtml(key)}" data-chat-message-id="${escapeHtml(messageId)}" aria-label="${escapeHtml(actionLabel)}" title="${escapeHtml(actionLabel)}"${tooltipAttr}><span class="comment-reaction-icon-wrap" aria-hidden="true">${iconHtml}</span><span class="comment-reaction-count">${escapeHtml(countLabel)}</span></button>`;
-					})
-					.join('');
+			.map((key) => {
+				const raw = reactions[key];
+				const count = chatReactionGetCount(raw);
+				const countLabel = count > 99 ? '99+' : String(count);
+				const hasViewer = viewerReactions.includes(key);
+				const iconFn = REACTION_ICONS[key];
+				const iconHtml = iconFn ? iconFn('comment-reaction-icon') : '';
+				const actionLabel = hasViewer ? `Remove ${key}` : `Add ${key}`;
+				let tooltipAttr = '';
+				if (typeof raw !== 'number' && Array.isArray(raw) && raw.length > 0) {
+					const last = raw[raw.length - 1];
+					const others = typeof last === 'number' ? last : 0;
+					const strings = (typeof last === 'number' ? raw.slice(0, -1) : raw).filter(
+						(s) => typeof s === 'string'
+					);
+					const tooltip = [...strings, others > 0 ? `and ${others} ${others === 1 ? 'other' : 'others'}` : '']
+						.filter(Boolean)
+						.join(', ');
+					if (tooltip) tooltipAttr = ` data-tooltip="${escapeHtml(tooltip)}"`;
+				}
+				return `<button type="button" class="comment-reaction-pill${hasViewer ? ' is-viewer' : ''}" data-emoji-key="${escapeHtml(key)}" data-chat-message-id="${escapeHtml(messageId)}" aria-label="${escapeHtml(actionLabel)}" title="${escapeHtml(actionLabel)}"${tooltipAttr}><span class="comment-reaction-icon-wrap" aria-hidden="true">${iconHtml}</span><span class="comment-reaction-count">${escapeHtml(countLabel)}</span></button>`;
+			})
+			.join('');
 		const addReactionBtn = hasUnusedReactions
 			? `<button type="button" class="comment-reaction-add" data-chat-message-id="${escapeHtml(messageId)}" aria-label="Add reaction" title="Add reaction"><span class="comment-reaction-icon-wrap" aria-hidden="true">${smileIcon('comment-reaction-add-icon')}</span></button>`
 			: '';
@@ -2184,7 +2195,7 @@ export async function initChatPage(root, options = {}) {
 					v.currentTime = t;
 					if (!wasPaused) {
 						const p = v.play();
-						if (p && typeof p.catch === 'function') p.catch(() => {});
+						if (p && typeof p.catch === 'function') p.catch(() => { });
 					}
 				} catch {
 					// ignore
@@ -2790,8 +2801,8 @@ export async function initChatPage(root, options = {}) {
 				const pc = presenceClass ? ` ${presenceClass}` : '';
 				const extraRow =
 					rowOpts &&
-					typeof rowOpts.extraAnchorClasses === 'string' &&
-					rowOpts.extraAnchorClasses.trim()
+						typeof rowOpts.extraAnchorClasses === 'string' &&
+						rowOpts.extraAnchorClasses.trim()
 						? ` ${rowOpts.extraAnchorClasses.trim()}`
 						: '';
 				const unc = Number(t.unread_count);
@@ -2806,8 +2817,8 @@ export async function initChatPage(root, options = {}) {
 					: '';
 				const dataPseudoSlugAttr =
 					rowOpts &&
-					typeof rowOpts.pseudoSlug === 'string' &&
-					rowOpts.pseudoSlug.trim()
+						typeof rowOpts.pseudoSlug === 'string' &&
+						rowOpts.pseudoSlug.trim()
 						? ` data-chat-pseudo-slug="${escapeHtml(rowOpts.pseudoSlug.trim().toLowerCase())}"`
 						: '';
 				return `<a class="chat-page-sidebar-row${activeClass}${pc}${extraRow}" href="${escapeHtml(href)}"${dataPseudoSlugAttr}>
@@ -3643,6 +3654,7 @@ export async function initChatPage(root, options = {}) {
 			}
 			const messages = pseudoColumnPager.getItems();
 			lastChatMessagesPayload = messages;
+			teardownChatCreationsPseudoBulkHostIfPresent(messagesEl);
 			teardownLatestMessageReadObserver();
 			messagesEl.innerHTML = '';
 			paintCommentsChannelPlainRows(messagesEl, messages, null);
@@ -3663,6 +3675,7 @@ export async function initChatPage(root, options = {}) {
 			messagesEl.removeAttribute('aria-busy');
 			loadingMessages = false;
 			syncChatMessagePlaceholder();
+			rebuildTopbarMenuDynamic();
 		}
 	}
 
@@ -3743,11 +3756,67 @@ export async function initChatPage(root, options = {}) {
 			},
 			chatFeedLaneScrollMode === 'newest_first'
 				? /* Match main feed: sentinel after cards; bottom margin preloads before the user reaches the end. */
-					{ root: messagesEl, rootMargin: '0px 0px 1400px 0px', threshold: 0 }
+				{ root: messagesEl, rootMargin: '0px 0px 1400px 0px', threshold: 0 }
 				: /* Chat-style: sentinel above cards; top margin preloads while user is below older rows. */
-					{ root: messagesEl, rootMargin: '1400px 0px 0px 0px', threshold: 0 }
+				{ root: messagesEl, rootMargin: '1400px 0px 0px 0px', threshold: 0 }
 		);
 		feedChannelLoadMoreObserver.observe(sentinel);
+	}
+
+	function stopChatCreationsPseudoChannelPoll() {
+		if (chatCreationsPollInterval != null) {
+			clearInterval(chatCreationsPollInterval);
+			chatCreationsPollInterval = null;
+		}
+	}
+
+	async function chatCreationsPseudoChannelPollTick() {
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		if (!(messagesEl instanceof HTMLElement) || activePseudoChannelSlug !== 'creations') {
+			stopChatCreationsPseudoChannelPoll();
+			return;
+		}
+		if (!creationsPollMod.shouldContinueCreationsPoll(messagesEl)) {
+			stopChatCreationsPseudoChannelPoll();
+			return;
+		}
+		if (loadingMessages) return;
+		try {
+			const result = await fetchJsonWithStatusDeduped(
+				'/api/create/images',
+				{ credentials: 'include' },
+				{ windowMs: 300 }
+			);
+			if (!result.ok) return;
+			const creations = Array.isArray(result.data?.images) ? result.data.images : [];
+			const hasUpdates = creationsPollMod.computeCreationsPollHasListUpdates(creations, messagesEl);
+			const hasPending = creationsPollMod.hasPendingCreationsReloadHint(messagesEl);
+			const now = Date.now();
+			const wouldReload = hasUpdates || hasPending;
+			const throttleOk = hasUpdates || now - chatCreationsPollLastReloadAt >= 5000;
+			if (wouldReload && throttleOk) {
+				chatCreationsPollLastReloadAt = now;
+				await loadCreationsChannelMessages({ forceFreshFirstPage: true });
+			}
+		} catch {
+			// ignore
+		}
+	}
+
+	function maybeStartChatCreationsPseudoChannelPoll() {
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		if (!(messagesEl instanceof HTMLElement) || activePseudoChannelSlug !== 'creations') {
+			stopChatCreationsPseudoChannelPoll();
+			return;
+		}
+		if (!creationsPollMod.shouldContinueCreationsPoll(messagesEl)) {
+			stopChatCreationsPseudoChannelPoll();
+			return;
+		}
+		if (chatCreationsPollInterval != null) return;
+		chatCreationsPollInterval = window.setInterval(() => {
+			void chatCreationsPseudoChannelPollTick();
+		}, 2000);
 	}
 
 	/**
@@ -3864,6 +3933,9 @@ export async function initChatPage(root, options = {}) {
 					});
 				});
 			}
+			if (laneSlug === 'creations') {
+				maybeStartChatCreationsPseudoChannelPoll();
+			}
 		} catch (err) {
 			const label =
 				laneSlug === 'explore'
@@ -3939,6 +4011,7 @@ export async function initChatPage(root, options = {}) {
 			lastChatMessagesPayload = [];
 			clearPageUsers();
 			addPageUsers(ordered.map(feedItemToUser));
+			teardownChatCreationsPseudoBulkHostIfPresent(messagesEl);
 			teardownLatestMessageReadObserver();
 			messagesEl.innerHTML = '';
 			if (ordered.length === 0) {
@@ -4018,6 +4091,7 @@ export async function initChatPage(root, options = {}) {
 			messagesEl.removeAttribute('aria-busy');
 			loadingMessages = false;
 			syncChatMessagePlaceholder();
+			rebuildTopbarMenuDynamic();
 		}
 	}
 
@@ -4038,15 +4112,344 @@ export async function initChatPage(root, options = {}) {
 			setupFeedVideo,
 			hideFeedCardMetadata: hide,
 			preferThumbnail: laneSlug === 'explore' || laneSlug === 'creations',
+			creationsBulkChrome: laneSlug === 'creations',
 		};
 	}
 
-	async function loadCreationsChannelMessages() {
+	function insertChatCreationsPseudoBulkChrome(routeWrap, cardsEl) {
+		if (!(routeWrap instanceof HTMLElement) || !(cardsEl instanceof HTMLElement)) return;
+		const shell = document.createElement('div');
+		shell.innerHTML = `
+		<div class="creations-bulk-bar" data-creations-bulk-bar aria-hidden="true">
+			<div class="creations-bulk-bar-inner">
+				<span class="creations-bulk-bar-label">Bulk Actions</span>
+				<div class="creations-bulk-actions">
+					<button type="button" class="btn-secondary creations-bulk-queue-btn" data-creations-bulk-queue disabled>Queue for later</button>
+					<button type="button" class="btn-secondary creations-bulk-delete-btn" data-creations-bulk-delete disabled>Delete</button>
+				</div>
+				<button type="button" class="creations-bulk-bar-close" data-creations-bulk-close aria-label="Close bulk actions">×</button>
+			</div>
+		</div>
+		<div class="creations-bulk-delete-modal-overlay" data-creations-bulk-delete-modal aria-hidden="true">
+			<div class="creations-bulk-delete-modal">
+				<h3>Delete selected creations?</h3>
+				<p class="creations-bulk-delete-modal-message" data-creations-bulk-delete-message></p>
+				<p class="creations-bulk-delete-modal-error" data-creations-bulk-delete-error role="alert"></p>
+				<div class="creations-bulk-delete-modal-footer">
+					<button type="button" class="btn-secondary" data-creations-bulk-delete-cancel>Cancel</button>
+					<button type="button" class="btn-danger creations-bulk-delete-confirm-btn" data-creations-bulk-delete-confirm>
+						<span class="creations-bulk-delete-confirm-label">Delete</span>
+						<span class="creations-bulk-delete-confirm-spinner" aria-hidden="true"></span>
+					</button>
+				</div>
+			</div>
+		</div>`;
+		const bar = shell.querySelector('[data-creations-bulk-bar]');
+		const modal = shell.querySelector('[data-creations-bulk-delete-modal]');
+		if (bar instanceof HTMLElement) {
+			routeWrap.insertBefore(bar, cardsEl);
+		}
+		if (modal instanceof HTMLElement) {
+			routeWrap.appendChild(modal);
+		}
+	}
+
+	function teardownChatCreationsPseudoBulkHostIfPresent(messagesEl) {
+		if (!(messagesEl instanceof HTMLElement)) return;
+		const h = messagesEl.querySelector('[data-chat-creations-bulk-host]');
+		if (h instanceof HTMLElement) {
+			h._chatBulkEsc?.abort();
+			h._chatBulkCap?.abort();
+		}
+	}
+
+	async function setupChatCreationsPseudoBulkRoute(routeWrap) {
+		if (!(routeWrap instanceof HTMLElement)) return;
+		routeWrap._chatBulkEsc?.abort();
+		routeWrap._chatBulkCap?.abort();
+		const cards = routeWrap.querySelector('[data-feed-channel-cards]');
+		if (!(cards instanceof HTMLElement)) return;
+		const mutateQueueMod = await import(`../shared/mutateQueue.js${qs}`);
+		const { addToMutateQueue } = mutateQueueMod;
+
+		const bar = routeWrap.querySelector('[data-creations-bulk-bar]');
+		const bulkClose = routeWrap.querySelector('[data-creations-bulk-close]');
+		const bulkDelete = routeWrap.querySelector('[data-creations-bulk-delete]');
+		const bulkQueue = routeWrap.querySelector('[data-creations-bulk-queue]');
+		const modalOverlay = routeWrap.querySelector('[data-creations-bulk-delete-modal]');
+		const modalCancel = routeWrap.querySelector('[data-creations-bulk-delete-cancel]');
+		const modalConfirm = routeWrap.querySelector('[data-creations-bulk-delete-confirm]');
+
+		function queryBulkCards() {
+			return Array.from(routeWrap.querySelectorAll('.feed-card[data-image-id]'));
+		}
+
+		function updateBulkBarSelection() {
+			const deleteBtn = routeWrap.querySelector('[data-creations-bulk-delete]');
+			const queueBtn = routeWrap.querySelector('[data-creations-bulk-queue]');
+			if (!bar || !deleteBtn) return;
+			const checked = routeWrap.querySelectorAll('[data-creations-bulk-checkbox]:checked').length;
+			const hasSelection = checked > 0;
+			const queueableCards = hasSelection
+				? queryBulkCards().filter((card) => {
+						const cb = card.querySelector('[data-creations-bulk-checkbox]:checked');
+						const url = (card.dataset.imageUrl || '').trim();
+						return cb && url;
+					})
+				: [];
+			bar.classList.toggle('has-selection', hasSelection);
+			deleteBtn.disabled = !hasSelection;
+			if (queueBtn) queueBtn.disabled = queueableCards.length === 0;
+		}
+
+		function exitBulkMode() {
+			routeWrap.classList.remove('is-bulk-mode');
+			if (bar) bar.setAttribute('aria-hidden', 'true');
+			for (const c of queryBulkCards()) {
+				const cb = c.querySelector('[data-creations-bulk-checkbox]');
+				if (cb instanceof HTMLInputElement) cb.checked = false;
+			}
+			updateBulkBarSelection();
+		}
+
+		function enterBulkMode() {
+			routeWrap.classList.add('is-bulk-mode');
+			if (bar) bar.removeAttribute('aria-hidden');
+			for (const c of queryBulkCards()) {
+				const cb = c.querySelector('[data-creations-bulk-checkbox]');
+				if (cb instanceof HTMLInputElement) cb.checked = false;
+			}
+			updateBulkBarSelection();
+		}
+
+		routeWrap._enterChatCreationsBulk = enterBulkMode;
+		routeWrap._exitChatCreationsBulk = exitBulkMode;
+
+		const escAc = new AbortController();
+		routeWrap._chatBulkEsc = escAc;
+		document.addEventListener(
+			'keydown',
+			(e) => {
+				if (e.key !== 'Escape') return;
+				if (!routeWrap.classList.contains('is-bulk-mode')) return;
+				if (!routeWrap.isConnected) return;
+				e.preventDefault();
+				exitBulkMode();
+			},
+			{ signal: escAc.signal }
+		);
+
+		const capAc = new AbortController();
+		routeWrap._chatBulkCap = capAc;
+		cards.addEventListener(
+			'click',
+			(e) => {
+				const overlay = e.target.closest('[data-creations-bulk-overlay]');
+				if (!overlay) return;
+				e.stopPropagation();
+				if (e.target.matches('[data-creations-bulk-checkbox]')) return;
+				e.preventDefault();
+				const cb = overlay.querySelector('[data-creations-bulk-checkbox]');
+				if (cb instanceof HTMLInputElement) {
+					cb.checked = !cb.checked;
+					updateBulkBarSelection();
+				}
+			},
+			{ capture: true, signal: capAc.signal }
+		);
+		cards.addEventListener(
+			'change',
+			(e) => {
+				if (e.target.matches('[data-creations-bulk-checkbox]')) updateBulkBarSelection();
+			},
+			{ signal: capAc.signal }
+		);
+
+		if (bulkClose) bulkClose.addEventListener('click', () => exitBulkMode(), { signal: capAc.signal });
+		if (bulkDelete) {
+			bulkDelete.addEventListener(
+				'click',
+				(e) => {
+					e.preventDefault();
+					openBulkDeleteModal();
+				},
+				{ signal: capAc.signal }
+			);
+		}
+		if (bulkQueue) {
+			bulkQueue.addEventListener(
+				'click',
+				(e) => {
+					e.preventDefault();
+					bulkQueueSelected();
+				},
+				{ signal: capAc.signal }
+			);
+		}
+
+		function getBulkDeleteCounts() {
+			let toDelete = 0;
+			let published = 0;
+			for (const card of queryBulkCards()) {
+				const cb = card.querySelector('[data-creations-bulk-checkbox]:checked');
+				if (!cb) continue;
+				if (card.dataset.published === '1') published += 1;
+				else toDelete += 1;
+			}
+			return { toDelete, published };
+		}
+
+		function openBulkDeleteModal() {
+			const modal = routeWrap.querySelector('[data-creations-bulk-delete-modal]');
+			const messageEl = routeWrap.querySelector('[data-creations-bulk-delete-message]');
+			const errorEl = routeWrap.querySelector('[data-creations-bulk-delete-error]');
+			const confirmBtn = routeWrap.querySelector('[data-creations-bulk-delete-confirm]');
+			const { toDelete, published } = getBulkDeleteCounts();
+			if (messageEl) {
+				const parts = [];
+				if (toDelete > 0) {
+					parts.push(`${toDelete} item${toDelete === 1 ? '' : 's'} will be deleted.`);
+				} else {
+					parts.push('No items will be deleted.');
+				}
+				if (published > 0) {
+					parts.push(
+						`${published} published item${published === 1 ? '' : 's'} selected will not be deleted.`
+					);
+				}
+				messageEl.textContent = parts.join(' ');
+			}
+			if (confirmBtn instanceof HTMLButtonElement) {
+				confirmBtn.disabled = toDelete === 0;
+				confirmBtn.classList.remove('is-loading');
+			}
+			if (errorEl) {
+				errorEl.classList.remove('visible');
+				errorEl.textContent = '';
+			}
+			if (modal) {
+				modal.classList.add('open');
+				modal.removeAttribute('aria-hidden');
+				document.body.classList.add('modal-open');
+			}
+		}
+
+		function closeBulkDeleteModal() {
+			const modal = routeWrap.querySelector('[data-creations-bulk-delete-modal]');
+			if (modal) {
+				modal.classList.remove('open');
+				modal.setAttribute('aria-hidden', 'true');
+				document.body.classList.remove('modal-open');
+			}
+		}
+
+		if (modalOverlay) {
+			modalOverlay.addEventListener(
+				'click',
+				(e) => {
+					if (e.target === modalOverlay) closeBulkDeleteModal();
+				},
+				{ signal: capAc.signal }
+			);
+		}
+		if (modalCancel) modalCancel.addEventListener('click', () => closeBulkDeleteModal(), { signal: capAc.signal });
+		if (modalConfirm) {
+			modalConfirm.addEventListener('click', () => void confirmBulkDelete(), { signal: capAc.signal });
+		}
+
+		function bulkQueueSelected() {
+			const selected = queryBulkCards().filter((card) => {
+				const cb = card.querySelector('[data-creations-bulk-checkbox]:checked');
+				const url = (card.dataset.imageUrl || '').trim();
+				return cb && url;
+			});
+			if (selected.length === 0) return;
+			const origin =
+				typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '';
+			for (const card of selected) {
+				const id = card.dataset.imageId;
+				let url = (card.dataset.imageUrl || '').trim();
+				if (!url || !id) continue;
+				if (!url.startsWith('http://') && !url.startsWith('https://') && origin) {
+					url = origin + (url.startsWith('/') ? url : `/${url}`);
+				}
+				const published = card.dataset.published === '1';
+				try {
+					addToMutateQueue({ sourceId: Number(id), imageUrl: url, published });
+				} catch {
+					// ignore storage errors
+				}
+			}
+			exitBulkMode();
+		}
+
+		async function confirmBulkDelete() {
+			const confirmBtn = routeWrap.querySelector('[data-creations-bulk-delete-confirm]');
+			const errorEl = routeWrap.querySelector('[data-creations-bulk-delete-error]');
+			const selected = queryBulkCards().filter((card) => {
+				const cb = card.querySelector('[data-creations-bulk-checkbox]:checked');
+				return cb && card.dataset.published !== '1';
+			});
+			const idsToDelete = selected.map((c) => c.dataset.imageId).filter(Boolean);
+			if (idsToDelete.length === 0) {
+				closeBulkDeleteModal();
+				return;
+			}
+			if (!(confirmBtn instanceof HTMLButtonElement)) return;
+			confirmBtn.disabled = true;
+			confirmBtn.classList.add('is-loading');
+			if (errorEl) {
+				errorEl.classList.remove('visible');
+				errorEl.textContent = '';
+			}
+			let lastError = null;
+			for (const id of idsToDelete) {
+				try {
+					const res = await fetch(`/api/create/images/${id}`, { method: 'DELETE', credentials: 'include' });
+					if (!res.ok) {
+						const data = await res.json().catch(() => ({}));
+						lastError = data?.error || res.statusText || 'Delete failed';
+						break;
+					}
+				} catch (err) {
+					lastError = err?.message || 'Network error';
+					break;
+				}
+			}
+			if (lastError) {
+				if (errorEl) {
+					errorEl.textContent = lastError;
+					errorEl.classList.add('visible');
+				}
+				confirmBtn.disabled = false;
+				confirmBtn.classList.remove('is-loading');
+				return;
+			}
+			try {
+				await loadCreationsChannelMessages({ forceFreshFirstPage: true });
+			} finally {
+				closeBulkDeleteModal();
+				exitBulkMode();
+				const btn = routeWrap.querySelector('[data-creations-bulk-delete-confirm]');
+				if (btn instanceof HTMLButtonElement && btn.isConnected) {
+					btn.disabled = false;
+					btn.classList.remove('is-loading');
+				}
+			}
+		}
+	}
+
+	async function loadCreationsChannelMessages(options = {}) {
+		const forceFreshFirstPage = options.forceFreshFirstPage === true;
 		const messagesEl = root.querySelector('[data-chat-messages]');
-		if (!messagesEl || loadingMessages) return;
+		if (!messagesEl) return;
+		if (loadingMessages) return;
+		stopChatCreationsPseudoChannelPoll();
 		const viewerId = chatViewerId;
 		if (!Number.isFinite(Number(viewerId)) || Number(viewerId) <= 0) {
 			messagesEl.innerHTML = renderEmptyError('Sign in to see your creations.');
+			stopChatCreationsPseudoChannelPoll();
+			rebuildTopbarMenuDynamic();
 			return;
 		}
 		loadingMessages = true;
@@ -4066,10 +4469,14 @@ export async function initChatPage(root, options = {}) {
 				getItemKey: (it) => String(it.created_image_id || it.id || ''),
 				fetchPage: async ({ initial, items }) => {
 					const offset = initial ? 0 : items.length;
+					const listDedupeOpts =
+						forceFreshFirstPage && offset === 0
+							? { windowMs: 0, dedupeKey: `chat-creations-list-p0-${Date.now()}` }
+							: { windowMs: 30000 };
 					const res = await fetchJsonWithStatusDeduped(
 						`/api/create/images?limit=${CREATIONS_CHANNEL_PAGE_SIZE}&offset=${offset}`,
 						{ credentials: 'include' },
-						{ windowMs: 30000 }
+						listDedupeOpts
 					);
 					if (!res.ok) {
 						if (initial) {
@@ -4096,6 +4503,7 @@ export async function initChatPage(root, options = {}) {
 			lastChatMessagesPayload = [];
 			clearPageUsers();
 			addPageUsers(ordered.map(feedItemToUser));
+			teardownChatCreationsPseudoBulkHostIfPresent(messagesEl);
 			teardownLatestMessageReadObserver();
 			messagesEl.innerHTML = '';
 			if (ordered.length === 0) {
@@ -4115,7 +4523,8 @@ export async function initChatPage(root, options = {}) {
 			}
 
 			const routeWrap = document.createElement('div');
-			routeWrap.className = 'feed-route chat-feed-channel-route';
+			routeWrap.className = 'feed-route chat-feed-channel-route creations-route';
+			routeWrap.dataset.chatCreationsBulkHost = '1';
 			applyExploreCreationsBrowseViewClass(routeWrap);
 			const cards = document.createElement('div');
 			cards.className = 'route-cards feed-cards';
@@ -4133,6 +4542,8 @@ export async function initChatPage(root, options = {}) {
 				);
 			}
 			routeWrap.appendChild(cards);
+			insertChatCreationsPseudoBulkChrome(routeWrap, cards);
+			await setupChatCreationsPseudoBulkRoute(routeWrap);
 
 			const sentinel = document.createElement('div');
 			sentinel.dataset.chatFeedLoadSentinel = '1';
@@ -4161,6 +4572,8 @@ export async function initChatPage(root, options = {}) {
 			messagesEl.removeAttribute('aria-busy');
 			loadingMessages = false;
 			syncChatMessagePlaceholder();
+			rebuildTopbarMenuDynamic();
+			maybeStartChatCreationsPseudoChannelPoll();
 		}
 	}
 
@@ -4261,6 +4674,7 @@ export async function initChatPage(root, options = {}) {
 					lastChatMessagesPayload = [];
 					clearPageUsers();
 					addPageUsers(merged.map(feedItemToUser));
+					teardownChatCreationsPseudoBulkHostIfPresent(messagesEl);
 					teardownLatestMessageReadObserver();
 					messagesEl.innerHTML = '';
 					if (merged.length === 0) {
@@ -4339,6 +4753,7 @@ export async function initChatPage(root, options = {}) {
 			lastChatMessagesPayload = [];
 			clearPageUsers();
 			addPageUsers(ordered.map(feedItemToUser));
+			teardownChatCreationsPseudoBulkHostIfPresent(messagesEl);
 			teardownLatestMessageReadObserver();
 			messagesEl.innerHTML = '';
 
@@ -4408,6 +4823,7 @@ export async function initChatPage(root, options = {}) {
 			if (activePseudoChannelSlug === 'explore' && !String(exploreQueryRef.q || '').trim()) {
 				syncExploreChannelBrowseUrl();
 			}
+			rebuildTopbarMenuDynamic();
 		}
 	}
 
@@ -4437,6 +4853,7 @@ export async function initChatPage(root, options = {}) {
 			const messages = Array.isArray(data.messages) ? data.messages : [];
 			const messagesForUi = messages.filter((m) => !getChatCanvasMetaFromMessage(m));
 			lastChatMessagesPayload = messagesForUi;
+			teardownChatCreationsPseudoBulkHostIfPresent(messagesEl);
 			teardownLatestMessageReadObserver();
 			messagesEl.innerHTML = '';
 
@@ -4519,6 +4936,7 @@ export async function initChatPage(root, options = {}) {
 			messagesEl.removeAttribute('aria-busy');
 			loadingMessages = false;
 			syncChatMessagePlaceholder();
+			rebuildTopbarMenuDynamic();
 		}
 	}
 
@@ -4992,6 +5410,8 @@ export async function initChatPage(root, options = {}) {
 		teardownExploreChannelLoadMore();
 
 		if (messagesEl) {
+			stopChatCreationsPseudoChannelPoll();
+			teardownChatCreationsPseudoBulkHostIfPresent(messagesEl);
 			messagesEl.innerHTML = renderEmptyState({
 				loading: true,
 				loadingAriaLabel: 'Loading',
@@ -5724,6 +6144,19 @@ export async function initChatPage(root, options = {}) {
 			mainColumn instanceof HTMLElement ? mainColumn.querySelector('[data-chat-mobile-chrome-sheet-body]') : null;
 		if (!(body instanceof HTMLElement)) return;
 		body.replaceChildren();
+		if (activePseudoChannelSlug === 'creations') {
+			const bulkMb = document.createElement('button');
+			bulkMb.type = 'button';
+			bulkMb.className = 'feed-card-menu-item';
+			bulkMb.dataset.chatCreationsBulkActions = '';
+			bulkMb.setAttribute('role', 'menuitem');
+			bulkMb.textContent = 'Bulk actions';
+			body.appendChild(bulkMb);
+			const divTop = document.createElement('div');
+			divTop.className = 'chat-page-mobile-chrome-sheet-divider';
+			divTop.setAttribute('aria-hidden', 'true');
+			body.appendChild(divTop);
+		}
 		const channelLabel = root.querySelector('[data-chat-title]')?.textContent?.trim() || '';
 		const ch = document.createElement('button');
 		ch.type = 'button';
@@ -5754,7 +6187,7 @@ export async function initChatPage(root, options = {}) {
 		refresh.className = 'feed-card-menu-item';
 		refresh.dataset.chatMobileChromeRefresh = '';
 		refresh.setAttribute('role', 'menuitem');
-		refresh.textContent = 'Refresh chat';
+		refresh.textContent = 'Refresh';
 		body.appendChild(refresh);
 		if (isActiveThreadCanvasEligible() && chatViewerIsFounder) {
 			const createBtn = document.createElement('button');
@@ -6107,6 +6540,15 @@ export async function initChatPage(root, options = {}) {
 			return;
 		}
 		dyn.replaceChildren();
+		if (activePseudoChannelSlug === 'creations') {
+			const bulkBtn = document.createElement('button');
+			bulkBtn.type = 'button';
+			bulkBtn.className = 'feed-card-menu-item';
+			bulkBtn.dataset.chatCreationsBulkActions = '';
+			bulkBtn.setAttribute('role', 'menuitem');
+			bulkBtn.textContent = 'Bulk actions';
+			dyn.appendChild(bulkBtn);
+		}
 		if (isActiveThreadCanvasEligible() && chatViewerIsFounder) {
 			const createBtn = document.createElement('button');
 			createBtn.type = 'button';
@@ -6343,6 +6785,17 @@ export async function initChatPage(root, options = {}) {
 		if (t.closest('[data-chat-mobile-chrome-sheet-dismiss]')) {
 			e.preventDefault();
 			closeMobileChromeSheet();
+			return;
+		}
+		const creationsBulkTrig = t.closest('[data-chat-creations-bulk-actions]');
+		if (creationsBulkTrig instanceof HTMLElement && mainColumn?.contains(creationsBulkTrig)) {
+			e.preventDefault();
+			closeTopbarMenu();
+			closeMobileChromeSheet();
+			const host = root.querySelector('[data-chat-creations-bulk-host]');
+			if (host instanceof HTMLElement && typeof host._enterChatCreationsBulk === 'function') {
+				host._enterChatCreationsBulk();
+			}
 			return;
 		}
 		if (t.closest('[data-chat-mobile-chrome-open-channel]')) {
@@ -6676,6 +7129,9 @@ export async function initChatPage(root, options = {}) {
 		void refreshChatSidebar({ skipThreadsFetch: true });
 	};
 	document.addEventListener('visibilitychange', chatSidebarVisibilityHandler);
+	document.addEventListener('creations-pending-updated', () => {
+		if (activePseudoChannelSlug === 'creations') maybeStartChatCreationsPseudoChannelPoll();
+	});
 	setupChatSidebarClientNav();
 	await setupChatSidebarSectionAdds();
 }
