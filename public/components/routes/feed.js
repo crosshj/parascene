@@ -1,5 +1,9 @@
 import { buildBlogPostPublicPath, BLOG_CAMPAIGN_INTERNAL } from '../../shared/blogCampaignPath.js';
-import { feedItemCardImageUrl } from '../../shared/feedCardBuild.js';
+import {
+	attachFeedCardImage,
+	feedItemCardImageUrl,
+	markFeedCardImageUnavailable
+} from '../../shared/feedCardBuild.js';
 
 let formatDateTime;
 let formatRelativeTime;
@@ -466,43 +470,14 @@ class AppRouteFeed extends HTMLElement {
 		const imageEl = card.querySelector('.feed-card-img');
 		const imageContainer = card.querySelector('.feed-card-image');
 		const displayUrl = feedItemCardImageUrl(item, false);
+		const videoUrl = typeof item.video_url === 'string' ? item.video_url.trim() : '';
 
-		if (imageEl && imageContainer && displayUrl) {
-			// Skip loading if this element already has this URL (avoids duplicate requests)
-			const alreadyLoaded = imageEl.dataset.feedImageUrl === displayUrl ||
-				(imageEl.src && imageEl.src === displayUrl) ||
-				(imageEl.currentSrc && imageEl.currentSrc === displayUrl);
-			if (alreadyLoaded) {
-				if (imageEl.complete && imageEl.naturalHeight !== 0) {
-					imageContainer.classList.remove('loading');
-					imageContainer.classList.add('loaded');
-				}
-			} else {
-				imageEl.dataset.feedImageUrl = displayUrl;
-				const isHighPriority = typeof itemIndex === 'number' && itemIndex >= 0 && itemIndex < 2;
-				imageEl.loading = isHighPriority ? 'eager' : 'lazy';
-				if ('fetchPriority' in imageEl) {
-					imageEl.fetchPriority = isHighPriority ? 'high' : 'auto';
-				}
-
-				imageContainer.classList.add('loading');
-
-				imageEl.onload = () => {
-					imageContainer.classList.remove('loading');
-					imageContainer.classList.add('loaded');
-				};
-
-				imageEl.onerror = () => {
-					imageContainer.classList.remove('loading');
-					imageContainer.classList.add('error');
-				};
-
-				imageEl.src = displayUrl;
-
-				if (imageEl.complete && imageEl.naturalHeight !== 0) {
-					imageContainer.classList.remove('loading');
-					imageContainer.classList.add('loaded');
-				}
+		if (imageEl && imageContainer) {
+			const canShowVideo = isVideo && Boolean(videoUrl);
+			if (!displayUrl && !canShowVideo) {
+				markFeedCardImageUnavailable(imageContainer, imageEl, { state: 'missing' });
+			} else if (displayUrl) {
+				attachFeedCardImage(imageEl, imageContainer, item, itemIndex, false);
 			}
 		}
 
@@ -525,8 +500,8 @@ class AppRouteFeed extends HTMLElement {
 			}
 		}
 
-		if (displayUrl && item.created_image_id) {
-			// Make the entire card clickable except the actions row
+		if (item.created_image_id) {
+			// Make the entire card clickable except the actions row (including when preview URL is missing)
 			card.style.cursor = 'pointer';
 
 			// Add click handler to the card

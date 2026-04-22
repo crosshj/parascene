@@ -1459,6 +1459,15 @@ class AppRouteCreate extends HTMLElement {
 						}
 					}
 					collectedArgs[fieldKey] = arr;
+				} else if (isImageUrlField(field)) {
+					const fv = this.fieldValues[fieldKey];
+					if (fv instanceof File) {
+						collectedArgs[fieldKey] = fv;
+					} else {
+						const fromFv = typeof fv === 'string' ? fv.trim() : '';
+						const fromInput = typeof input.value === 'string' ? input.value.trim() : '';
+						collectedArgs[fieldKey] = fromFv || fromInput || '';
+					}
 				} else {
 					collectedArgs[fieldKey] = input.value || this.fieldValues[fieldKey] || '';
 				}
@@ -1637,10 +1646,18 @@ class AppRouteCreate extends HTMLElement {
 
 	saveSelections() {
 		try {
+			// Files cannot round-trip through JSON.stringify (they become `{}`); restoring that
+			// object into <input>.value yields "[object Object]" and breaks provider image_url.
+			const fieldValuesForStorage = { ...this.fieldValues };
+			for (const k of Object.keys(fieldValuesForStorage)) {
+				if (fieldValuesForStorage[k] instanceof File) {
+					delete fieldValuesForStorage[k];
+				}
+			}
 			const selections = {
 				serverId: this.selectedServer?.id || null,
 				methodKey: this.getMethodKey() || null,
-				fieldValues: { ...this.fieldValues }
+				fieldValues: fieldValuesForStorage
 			};
 			const tabsEl = this.querySelector('app-tabs');
 			const activeTab = tabsEl?.getAttribute?.('active');
@@ -2313,9 +2330,10 @@ class AppRouteCreate extends HTMLElement {
 				if (savedValue !== undefined && savedValue !== null && savedValue !== '') {
 					if (el.type === 'checkbox') {
 						el.checked = savedValue === true || savedValue === 'true';
-					} else {
-						el.value = savedValue;
+					} else if (typeof savedValue === 'string' || typeof savedValue === 'number') {
+						el.value = String(savedValue);
 					}
+					// Skip objects/arrays (e.g. `{}` from corrupted JSON of a File) — never assign to .value
 					// Trigger change event to update fieldValues and button state
 					el.dispatchEvent(new Event('input', { bubbles: true }));
 					el.dispatchEvent(new Event('change', { bubbles: true }));

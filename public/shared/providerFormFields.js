@@ -394,7 +394,7 @@ function createImageField(fieldKey, field, context) {
 	hiddenInput.type = 'hidden';
 	hiddenInput.id = `${fieldIdPrefix}${fieldKey}`;
 	hiddenInput.name = fieldKey;
-	hiddenInput.value = initialValue;
+	hiddenInput.value = typeof initialValue === 'string' ? initialValue : '';
 	if (field.required) hiddenInput.required = true;
 	wrapper.appendChild(hiddenInput);
 
@@ -636,7 +636,13 @@ function createImageField(fieldKey, field, context) {
 	urlInput.value = typeof initialValue === 'string' ? initialValue : '';
 	thumbPlaceholder.hidden = !!hasInitial;
 	thumbContainer.hidden = !hasInitial;
-	onValueChange(fieldKey, initialValue != null ? initialValue : (hiddenInput.value || '').trim());
+	const initialNotify =
+		typeof initialValue === 'string'
+			? initialValue
+			: initialValue instanceof File
+				? initialValue
+				: (hiddenInput.value || '').trim();
+	onValueChange(fieldKey, initialNotify);
 
 	if (initialValue && typeof initialValue === 'string') {
 		setThumbSrc(initialValue);

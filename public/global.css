@@ -3079,6 +3079,33 @@ app-route-feed {
 	opacity: 1;
 }
 
+/* Same language as route tiles: hide broken <img> glyph, show neutral “unavailable” mark */
+.feed-card-image.error {
+	background:
+		linear-gradient(135deg,
+			color-mix(in srgb, var(--text) 10%, transparent),
+			color-mix(in srgb, var(--text) 4%, transparent));
+}
+
+.feed-card-image.error .feed-card-img {
+	opacity: 0;
+	pointer-events: none;
+}
+
+.feed-card-image.error::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	margin: auto;
+	width: 36px;
+	height: 36px;
+	background-color: color-mix(in srgb, var(--text) 42%, transparent);
+	-webkit-mask: var(--icon-image-unavailable) center / contain no-repeat;
+	mask: var(--icon-image-unavailable) center / contain no-repeat;
+	opacity: 0.85;
+	pointer-events: none;
+}
+
 .feed-card-image.feed-card-image-video {
 	position: relative;
 }
@@ -10215,9 +10242,44 @@ body.modal-open {
 	}
 }
 
+/* NSFW blur uses ::after with later source order than .feed-card-image.error::after; when both apply, restore unavailable icon. */
+.feed-card-image.nsfw.error::after {
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+	background-color: color-mix(in srgb, var(--text) 42%, transparent);
+	inset: 0;
+	margin: auto;
+	width: 36px;
+	height: 36px;
+	max-width: 45%;
+	max-height: 45%;
+	border-radius: 0;
+	-webkit-mask: var(--icon-image-unavailable) center / contain no-repeat;
+	mask: var(--icon-image-unavailable) center / contain no-repeat;
+	opacity: 0.85;
+}
+
 body.view-nsfw .nsfw::before,
 body.view-nsfw .nsfw::after {
 	display: none;
+}
+
+/* Failed preview while “view NSFW” is on: keep generic hide above from removing the error mark. */
+body.view-nsfw .feed-card-image.nsfw.error::after {
+	display: block;
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+	background-color: color-mix(in srgb, var(--text) 42%, transparent);
+	inset: 0;
+	margin: auto;
+	width: 36px;
+	height: 36px;
+	max-width: 45%;
+	max-height: 45%;
+	border-radius: 0;
+	-webkit-mask: var(--icon-image-unavailable) center / contain no-repeat;
+	mask: var(--icon-image-unavailable) center / contain no-repeat;
+	opacity: 0.85;
 }
 
 /* One-off reveal (creation detail hero, chat embed, etc.) */

@@ -52,6 +52,123 @@ export function feedItemCardImageUrl(item, preferThumbnail = false) {
 	return item.image_url || item.thumbnail_url || '';
 }
 
+/**
+ * Distinct URLs to try for a feed image (full resolution vs thumbnail variant).
+ * Browsers only fire img error once per final URL; trying the alternate often fixes CDN/transform edge cases.
+ */
+export function feedItemCardImageUrlCandidates(item, preferThumbnail = false) {
+	if (!item) return [];
+	const full = typeof item.image_url === 'string' ? item.image_url.trim() : '';
+	const thumb = typeof item.thumbnail_url === 'string' ? item.thumbnail_url.trim() : '';
+	const ordered = preferThumbnail ? [thumb, full] : [full, thumb];
+	const out = [];
+	const seen = new Set();
+	for (const u of ordered) {
+		if (!u || seen.has(u)) continue;
+		seen.add(u);
+		out.push(u);
+	}
+	return out;
+}
+
+/**
+ * Show the same unavailable treatment as a failed <img> (chat browse + main feed).
+ * @param {HTMLElement|null} imageContainer - .feed-card-image
+ * @param {HTMLImageElement|null} imageEl
+ * @param {{ state?: string, label?: string }} [attrs]
+ */
+export function markFeedCardImageUnavailable(imageContainer, imageEl, attrs = {}) {
+	if (!imageContainer) return;
+	const state = typeof attrs.state === 'string' && attrs.state.trim() ? attrs.state.trim() : 'unavailable';
+	const label =
+		typeof attrs.label === 'string' && attrs.label.trim()
+			? attrs.label.trim()
+			: state === 'missing'
+				? 'No preview available'
+				: 'Image could not be loaded';
+	imageContainer.classList.remove('loading', 'loaded');
+	imageContainer.classList.add('error');
+	imageContainer.setAttribute('data-feed-img-state', state);
+	imageContainer.setAttribute('role', 'img');
+	imageContainer.setAttribute('aria-label', label);
+	if (imageEl instanceof HTMLImageElement) {
+		imageEl.style.opacity = '0';
+		imageEl.removeAttribute('src');
+		imageEl.removeAttribute('data-feed-image-url');
+	}
+}
+
+/**
+ * @param {HTMLImageElement|null} imageEl
+ * @param {HTMLElement|null} imageContainer - .feed-card-image
+ * @param {object} item - feed row
+ * @param {number} itemIndex
+ * @param {boolean} preferThumbnail
+ */
+export function attachFeedCardImage(imageEl, imageContainer, item, itemIndex, preferThumbnail = false) {
+	const urls = feedItemCardImageUrlCandidates(item, preferThumbnail);
+	if (!imageEl || !imageContainer) return;
+	if (urls.length === 0) {
+		markFeedCardImageUnavailable(imageContainer, imageEl, { state: 'missing' });
+		return;
+	}
+
+	const isHighPriority = typeof itemIndex === 'number' && itemIndex >= 0 && itemIndex < 2;
+	imageEl.loading = isHighPriority ? 'eager' : 'lazy';
+	if ('fetchPriority' in imageEl) {
+		imageEl.fetchPriority = isHighPriority ? 'high' : 'auto';
+	}
+
+	const tryLoad = (idx) => {
+		const url = urls[idx];
+		if (!url) {
+			markFeedCardImageUnavailable(imageContainer, imageEl, { state: 'unavailable' });
+			return;
+		}
+
+		const finishOk = () => {
+			imageContainer.classList.remove('loading');
+			imageContainer.classList.add('loaded');
+			imageContainer.classList.remove('error');
+			imageContainer.removeAttribute('data-feed-img-state');
+			imageContainer.removeAttribute('aria-label');
+			imageContainer.removeAttribute('role');
+			if (imageEl instanceof HTMLImageElement) {
+				imageEl.style.removeProperty('opacity');
+			}
+		};
+
+		const failOrChain = () => {
+			if (idx < urls.length - 1) {
+				imageEl.removeAttribute('src');
+				queueMicrotask(() => tryLoad(idx + 1));
+			} else {
+				markFeedCardImageUnavailable(imageContainer, imageEl, { state: 'unavailable' });
+			}
+		};
+
+		imageEl.dataset.feedImageUrl = url;
+		imageEl.onload = () => {
+			finishOk();
+		};
+		imageEl.onerror = () => {
+			failOrChain();
+		};
+
+		imageContainer.classList.add('loading');
+		imageContainer.classList.remove('loaded', 'error');
+		imageContainer.removeAttribute('data-feed-img-state');
+
+		imageEl.src = url;
+
+		if (imageEl.complete && imageEl.naturalHeight !== 0) {
+			finishOk();
+		}
+	};
+
+	tryLoad(0);
+}
+
 function buildFeedTipCard(item) {
 	const card = document.createElement("div");
 	card.className = "feed-card feed-card-tip";
@@ -435,43 +552,14 @@ function finishFeedCreationCardMediaAndClick(card, item, itemIndex, setupFeedVid
 	const imageEl = card.querySelector('.feed-card-img');
 	const imageContainer = card.querySelector('.feed-card-image');
 	const displayUrl = feedItemCardImageUrl(item, preferThumbnail);
+	const videoUrl = typeof item.video_url === 'string' ? item.video_url.trim() : '';
 
-	if (imageEl && imageContainer && displayUrl) {
-		// Skip loading if this element already has this URL (avoids duplicate requests)
-		const alreadyLoaded = imageEl.dataset.feedImageUrl === displayUrl ||
-			(imageEl.src && imageEl.src === displayUrl) ||
-			(imageEl.currentSrc && imageEl.currentSrc === displayUrl);
-		if (alreadyLoaded) {
-			if (imageEl.complete && imageEl.naturalHeight !== 0) {
-				imageContainer.classList.remove('loading');
-				imageContainer.classList.add('loaded');
-			}
-		} else {
-			imageEl.dataset.feedImageUrl = displayUrl;
-			const isHighPriority = typeof itemIndex === 'number' && itemIndex >= 0 && itemIndex < 2;
-			imageEl.loading = isHighPriority ? 'eager' : 'lazy';
-			if ('fetchPriority' in imageEl) {
-				imageEl.fetchPriority = isHighPriority ? 'high' : 'auto';
-			}
-
-			imageContainer.classList.add('loading');
-
-			imageEl.onload = () => {
-				imageContainer.classList.remove('loading');
-				imageContainer.classList.add('loaded');
-			};
-
-			imageEl.onerror = () => {
-				imageContainer.classList.remove('loading');
-				imageContainer.classList.add('error');
-			};
-
-			imageEl.src = displayUrl;
-
-			if (imageEl.complete && imageEl.naturalHeight !== 0) {
-				imageContainer.classList.remove('loading');
-				imageContainer.classList.add('loaded');
-			}
+	if (imageEl && imageContainer) {
+		const canShowVideo = isVideo && Boolean(videoUrl);
+		if (!displayUrl && !canShowVideo) {
+			markFeedCardImageUnavailable(imageContainer, imageEl, { state: 'missing' });
+		} else if (displayUrl) {
+			attachFeedCardImage(imageEl, imageContainer, item, itemIndex, preferThumbnail);
 		}
 	}
 
@@ -494,8 +582,8 @@ function finishFeedCreationCardMediaAndClick(card, item, itemIndex, setupFeedVid
 		}
 	}
 
-	if (displayUrl && item.created_image_id) {
-		// Make the entire card clickable except the actions row
+	if (item.created_image_id) {
+		// Make the entire card clickable except the actions row (including when preview URL is missing)
 		card.style.cursor = 'pointer';
 
 		// Add click handler to the card
