@@ -529,6 +529,29 @@ export function renderFeatureRequestFeedback({
 	return { subject, html: emailHtml, text };
 }
 
+function renderChatThreadList(items, sectionTitle) {
+	const list = Array.isArray(items) ? items : [];
+	if (list.length === 0) return "";
+	return html`
+	<div
+		style="margin:16px 0 0; padding:14px 16px; border:1px solid #e2e8f0; border-radius:12px; background:#f5f3ff; font-family:Arial, Helvetica, sans-serif;">
+		<div
+			style="color:#5b21b6; font-size:13px; margin:0 0 10px; font-weight:600; font-family:Arial, Helvetica, sans-serif;">
+			${escapeHtml(sectionTitle)}</div>
+		<ul
+			style="margin:0; padding-left:20px; color:#0f172a; font-size:15px; line-height:1.8; font-family:Arial, Helvetica, sans-serif;">
+			${list.map((item) => {
+		const title = item?.title && String(item.title).trim() ? escapeHtml(String(item.title).trim()) : "Chat";
+		const count = Number(item?.unread_count ?? 0);
+		const unreadLabel = count === 1 ? "1 unread message" : `${count} unread messages`;
+		const href = item?.thread_url && String(item.thread_url).trim() ? escapeHtml(String(item.thread_url).trim()) : escapeHtml(getBaseAppUrlForEmail());
+		return `<li style="margin:0 0 4px;"><a href="${href}" style="color:${ACCENT_COLOR}; font-weight:600; text-decoration:none;">${title}</a><span style="color:#64748b;"> — ${escapeHtml(unreadLabel)}</span></li>`;
+	}).join("")}
+		</ul>
+	</div>
+  `;
+}
+
 function renderActivityList(items, sectionTitle) {
 	const list = Array.isArray(items) ? items : [];
 	if (list.length === 0) return "";
@@ -556,23 +579,34 @@ export function renderDigestActivity({
 	activitySummary = "You have new activity.",
 	feedUrl = getBaseAppUrlForEmail(),
 	activityItems = [],
-	otherCreationsActivityItems = []
+	otherCreationsActivityItems = [],
+	chatThreadItems = []
 } = {}) {
 	const safeName = escapeHtml(recipientName);
 	const safeSummary = escapeHtml(activitySummary);
 	const items = Array.isArray(activityItems) ? activityItems : [];
 	const otherItems = Array.isArray(otherCreationsActivityItems) ? otherCreationsActivityItems : [];
+	const chatItems = Array.isArray(chatThreadItems) ? chatThreadItems : [];
 	const totalCount = items.length + otherItems.length;
-	const subject = "You have new activity on parascene!";
-	const preheader = totalCount > 0
-		? `${totalCount} creation${totalCount === 1 ? "" : "s"} with new comments`
-		: (activitySummary || "You have new activity on parascene.");
+	const chatCount = chatItems.length;
+	const subject =
+		chatCount > 0 && totalCount === 0
+			? "You have unread chat on parascene"
+			: "You have new activity on parascene!";
+	const preheader =
+		chatCount > 0 && totalCount === 0
+			? `${chatCount} conversation${chatCount === 1 ? "" : "s"} waiting for you`
+			: totalCount > 0
+				? `${totalCount} creation${totalCount === 1 ? "" : "s"} with new comments${chatCount > 0 ? ` · ${chatCount} in chat` : ""}`
+				: (activitySummary || "You have new activity on parascene.");
 
 	const yourCreationsHtml = renderActivityList(items, "Your creations");
 	const otherCreationsHtml = renderActivityList(otherItems, "Creations you've commented on");
-	const activityListHtml = yourCreationsHtml || otherCreationsHtml ? html`
+	const chatHtml = renderChatThreadList(chatItems, "Chat");
+	const activityListHtml = yourCreationsHtml || otherCreationsHtml || chatHtml ? html`
 	${yourCreationsHtml}
 	${otherCreationsHtml}
+	${chatHtml}
   ` : "";
 
 	const bodyHtml = html`
@@ -584,7 +618,7 @@ export function renderDigestActivity({
 		preheader,
 		title: "Your activity",
 		bodyHtml,
-		ctaText: "View activity",
+		ctaText: chatCount > 0 && totalCount === 0 ? "Open chat" : "View activity",
 		ctaUrl: feedUrl,
 		footerText: "You're receiving this because you have notifications on parascene."
 	});
@@ -602,6 +636,14 @@ export function renderDigestActivity({
 			const title = (item?.title && String(item.title).trim()) || "Untitled";
 			const count = Number(item?.comment_count ?? 0);
 			return `  • ${title} — ${count} new comment${count === 1 ? "" : "s"}`;
+		}));
+	}
+	if (chatItems.length > 0) {
+		textSections.push("Chat:", ...chatItems.map((item) => {
+			const title = (item?.title && String(item.title).trim()) || "Chat";
+			const count = Number(item?.unread_count ?? 0);
+			const u = (item?.thread_url && String(item.thread_url).trim()) || feedUrl;
+			return `  • ${title} — ${count} unread — ${u}`;
 		}));
 	}
 	const textLines = [

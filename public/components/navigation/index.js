@@ -68,6 +68,11 @@ class AppNavigation extends HTMLElement {
 		this.chatUnreadCount = 0;
 		this._chatUnreadPoll = null;
 		this._onChatUnreadRefresh = this._onChatUnreadRefresh.bind(this);
+		this._chatUserBroadcastTeardown = null;
+		this._chatUserBroadcastBoundId = null;
+		this._chatUnreadCountInitialized = false;
+		this._documentTitleBase = null;
+		this._onDocumentVisibilityChatTitle = this._onDocumentVisibilityChatTitle.bind(this);
 		this.currentRoute = null;
 		this.routes = [];
 		this.externalNavLinks = [];
@@ -104,6 +109,7 @@ class AppNavigation extends HTMLElement {
 		document.addEventListener('credits-updated', this.handleCreditsUpdated);
 		document.addEventListener('credits-claim-status', this.handleCreditsClaimStatus);
 		document.addEventListener('chat-unread-refresh', this._onChatUnreadRefresh);
+		document.addEventListener('visibilitychange', this._onDocumentVisibilityChatTitle);
 		this.loadNotificationCount();
 		this.loadCreditsCount();
 		// Don't show credits callout until claim status is known from API.
@@ -128,6 +134,8 @@ class AppNavigation extends HTMLElement {
 		document.removeEventListener('credits-updated', this.handleCreditsUpdated);
 		document.removeEventListener('credits-claim-status', this.handleCreditsClaimStatus);
 		document.removeEventListener('chat-unread-refresh', this._onChatUnreadRefresh);
+		document.removeEventListener('visibilitychange', this._onDocumentVisibilityChatTitle);
+		this._tearDownChatUserBroadcast();
 		if (this._chatUnreadPoll) {
 			clearInterval(this._chatUnreadPoll);
 			this._chatUnreadPoll = null;
@@ -378,21 +386,125 @@ class AppNavigation extends HTMLElement {
 		void this.loadChatUnreadCount();
 	}
 
+	_onDocumentVisibilityChatTitle() {
+		this._applyChatUnreadDocumentTitle();
+	}
+
+	_getDocumentTitleBase() {
+		if (this._documentTitleBase) return this._documentTitleBase;
+		const raw = typeof document !== 'undefined' ? String(document.title || '').trim() : '';
+		this._documentTitleBase = raw.replace(/^\([^)]+\)\s+/, '').trim() || 'parascene';
+		return this._documentTitleBase;
+	}
+
+	_applyChatUnreadDocumentTitle() {
+		if (typeof document === 'undefined') return;
+		const n = this.chatUnreadCount || 0;
+		const base = this._getDocumentTitleBase();
+		if (document.visibilityState === 'hidden' && n > 0) {
+			const label = n > 99 ? '99+' : String(n);
+			document.title = `(${label}) ${base}`;
+		} else {
+			document.title = base;
+		}
+	}
+
+	_tearDownChatUserBroadcast() {
+		if (typeof this._chatUserBroadcastTeardown === 'function') {
+			try {
+				this._chatUserBroadcastTeardown();
+			} catch {
+				// ignore
+			}
+		}
+		this._chatUserBroadcastTeardown = null;
+		this._chatUserBroadcastBoundId = null;
+	}
+
+	async _maybeBindChatUserBroadcast(viewerId) {
+		const id = Number(viewerId);
+		if (!Number.isFinite(id) || id <= 0) {
+			this._tearDownChatUserBroadcast();
+			return;
+		}
+		if (this._chatUserBroadcastBoundId === id && typeof this._chatUserBroadcastTeardown === 'function') {
+			return;
+		}
+		this._tearDownChatUserBroadcast();
+		const v = getAssetVersionParam();
+		const qs = getImportQuery(v);
+		try {
+			const mod = await import(`../../shared/realtimeBroadcast.js${qs}`);
+			this._chatUserBroadcastTeardown = await mod.subscribeUserBroadcast(id, () => {
+				void this.loadChatUnreadCount();
+			});
+			this._chatUserBroadcastBoundId = id;
+		} catch (err) {
+			console.warn('[nav] chat user realtime:', err);
+		}
+	}
+
+	_maybePlayChatUnreadPing(prev, next) {
+		if (!Number.isFinite(prev) || !Number.isFinite(next) || next <= prev) return;
+		if (document.visibilityState !== 'hidden') return;
+		try {
+			const AC = window.AudioContext || window.webkitAudioContext;
+			if (!AC) return;
+			const ctx = new AC();
+			const o = ctx.createOscillator();
+			const g = ctx.createGain();
+			o.type = 'sine';
+			o.frequency.value = 880;
+			g.gain.value = 0.04;
+			o.connect(g);
+			g.connect(ctx.destination);
+			o.start();
+			o.stop(ctx.currentTime + 0.12);
+			o.onended = () => {
+				try {
+					ctx.close();
+				} catch {
+					// ignore
+				}
+			};
+		} catch {
+			// autoplay or AudioContext may be blocked
+		}
+	}
+
 	async loadChatUnreadCount() {
+		const wasInitialized = this._chatUnreadCountInitialized;
+		const prevUnread = Number.isFinite(this.chatUnreadCount) ? this.chatUnreadCount : null;
 		try {
 			const res = await fetch('/api/chat/unread-summary', { credentials: 'include' });
 			if (!res.ok) {
 				this.chatUnreadCount = 0;
+				this._chatUnreadCountInitialized = true;
+				this._tearDownChatUserBroadcast();
 				this.updateChatUnreadBadgeUI();
+				this._applyChatUnreadDocumentTitle();
 				return;
 			}
 			const data = await res.json().catch(() => ({}));
 			const n = Number(data?.total_unread);
-			this.chatUnreadCount = Number.isFinite(n) ? Math.max(0, n) : 0;
+			const nextUnread = Number.isFinite(n) ? Math.max(0, n) : 0;
+			const vid = data?.viewer_id != null && Number.isFinite(Number(data.viewer_id)) ? Number(data.viewer_id) : null;
+			this.chatUnreadCount = nextUnread;
+			this._chatUnreadCountInitialized = true;
+			if (vid != null) {
+				void this._maybeBindChatUserBroadcast(vid);
+			}
+			if (wasInitialized) {
+				this._maybePlayChatUnreadPing(prevUnread, nextUnread);
+			}
 			this.updateChatUnreadBadgeUI();
+			this._applyChatUnreadDocumentTitle();
 		} catch {
 			this.chatUnreadCount = 0;
+			this._chatUnreadCountInitialized = true;
+			this._tearDownChatUserBroadcast();
 			this.updateChatUnreadBadgeUI();
+			this._applyChatUnreadDocumentTitle();
 		}
 	}
 
@@ -676,9 +788,19 @@ class AppNavigation extends HTMLElement {
 				return null;
 			};
 
+			const notificationChatHref = (n) => {
+				if (!n) return null;
+				const link = typeof n.link === 'string' ? n.link.trim() : '';
+				if (/^\/chat\//.test(link)) return link;
+				return null;
+			};
+
+			const notificationPrimaryHref = (n) => notificationChatHref(n) || notificationCreationHref(n);
+
 			const hasClickTarget = (n) => {
 				if (!n) return false;
 				if (n.type === 'tip') return true;
+				if (n.type === 'chat_mention' && notificationChatHref(n)) return true;
 				const href = notificationCreationHref(n);
 				if (!href) return false;
 				return n.type === 'comment' || n.type === 'comment_thread' || n.type === 'creation_activity';
@@ -718,7 +840,7 @@ class AppNavigation extends HTMLElement {
 							}
 							this.closeNotificationsMenu();
 							document.dispatchEvent(new CustomEvent('close-all-modals'));
-							const href = notificationCreationHref(notification);
+							const href = notificationPrimaryHref(notification);
 							if (href) {
 								window.location.href = href;
 							} else if (notification.type === 'tip') {
@@ -899,6 +1021,12 @@ class AppNavigation extends HTMLElement {
 		let currentRoute = pathname === '/' || pathname === '' ? this.defaultRoute : pathname.slice(1).split('/')[0];
 		if (pathname.startsWith('/connect')) {
 			currentRoute = 'connect';
+		}
+		// Admin: common typo /email → Emails tab (canonical /emails)
+		if (document.body?.dataset?.entry === 'app-admin' && currentRoute === 'email') {
+			currentRoute = 'emails';
+			const tail = `${window.location.search || ''}${window.location.hash || ''}`;
+			window.history.replaceState(window.history.state || {}, '', `/emails${tail}`);
 		}
 
 		const previousRoute = this.currentRoute;

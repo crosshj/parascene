@@ -82,6 +82,77 @@ describe("notifications worker cron", () => {
 		expect(queries.upsertUserEmailCampaignStateWelcome.run).toHaveBeenCalledTimes(1);
 	});
 
+	it("merges chat-unread recipients and passes chatThreadItems to the digest template", async () => {
+		sendTemplatedEmailMock.mockClear();
+		const prevKey = process.env.RESEND_API_KEY;
+		const prevFrom = process.env.RESEND_SYSTEM_EMAIL;
+		process.env.RESEND_API_KEY = "test-key";
+		process.env.RESEND_SYSTEM_EMAIL = "notify@example.com";
+		try {
+			const queries = createNotificationsCronQueries({
+				selectDistinctUserIdsWithUnreadNotificationsSince: {
+					all: jest.fn(async () => [])
+				},
+				selectUserIdsWithChatDigestibleUnreadSince: {
+					all: jest.fn(async () => [{ user_id: 9 }])
+				},
+				selectUserById: {
+					get: jest.fn(async (userId) => ({
+						id: userId,
+						email: "chatter@example.com",
+						display_name: "Chatter",
+						user_name: "chatter",
+						role: "consumer"
+					}))
+				},
+				selectNotificationsForUser: {
+					all: jest.fn(async () => [])
+				},
+				selectDigestActivityByOwnerSince: {
+					all: jest.fn(async () => [])
+				},
+				selectDigestActivityByCommenterSince: {
+					all: jest.fn(async () => [])
+				},
+				selectDigestChatUnreadThreadsSince: {
+					all: jest.fn(async () => [
+						{
+							thread_id: 22,
+							thread_type: "channel",
+							channel_slug: "feedback",
+							dm_pair_key: null,
+							unread_count: 2
+						}
+					])
+				},
+				selectUserProfilesByUserIds: jest.fn(async () => new Map())
+			});
+
+			const result = await runNotificationsCronForTests({ queries });
+
+			expect(result.ok).toBe(true);
+			expect(result.sent).toBe(1);
+			expect(sendTemplatedEmailMock).toHaveBeenCalledWith(
+				expect.objectContaining({
+					template: "digestActivity",
+					data: expect.objectContaining({
+						chatThreadItems: expect.arrayContaining([
+							expect.objectContaining({
+								title: "#feedback",
+								unread_count: 2
+							})
+						])
+					})
+				})
+			);
+		} finally {
+			if (prevKey === undefined) delete process.env.RESEND_API_KEY;
+			else process.env.RESEND_API_KEY = prevKey;
+			if (prevFrom === undefined) delete process.env.RESEND_SYSTEM_EMAIL;
+			else process.env.RESEND_SYSTEM_EMAIL = prevFrom;
+		}
+	});
+
 	it("returns not_in_window and sends nothing when current hour is outside digest window", async () => {
 		sendTemplatedEmailMock.mockClear();
 

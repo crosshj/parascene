@@ -44,10 +44,22 @@ function notificationCreationHref(n) {
 	return null;
 }
 
+function notificationChatHref(n) {
+	if (!n) return null;
+	const link = typeof n.link === 'string' ? n.link.trim() : '';
+	if (/^\/chat\//.test(link)) return link;
+	return null;
+}
+
+function notificationPrimaryHref(n) {
+	return notificationChatHref(n) || notificationCreationHref(n);
+}
+
 /** Row is actionable on primary click: tips always (incl. admin tips with link "/"), plus comments/activity with a creation URL. */
 function notificationPrimaryClickable(n) {
 	if (!n) return false;
 	if (n.type === 'tip') return true;
+	if (n.type === 'chat_mention' && notificationChatHref(n)) return true;
 	const href = notificationCreationHref(n);
 	return !!href && (n.type === 'comment' || n.type === 'comment_thread' || n.type === 'creation_activity');
 }
@@ -351,7 +363,7 @@ class AppModalNotifications extends HTMLElement {
 					} catch {
 						// ignore
 					}
-					const href = notificationCreationHref(notification);
+					const href = notificationPrimaryHref(notification);
 					if (href) {
 						closeModalsAndNavigate(href);
 					} else if (notification?.type === 'tip') {
@@ -399,7 +411,7 @@ class AppModalNotifications extends HTMLElement {
 
 		const time = formatRelativeTime(notification.created_at);
 		const timeTitle = formatDateTime(notification.created_at);
-		const openRelatedHref = notificationCreationHref(notification);
+		const openRelatedHref = notificationPrimaryHref(notification);
 		const isTipWithoutCreation =
 			notification.type === 'tip' && !openRelatedHref;
 

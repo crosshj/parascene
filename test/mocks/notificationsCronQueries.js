@@ -10,6 +10,12 @@ export function createNotificationsCronQueries(overrides = {}) {
 		selectDistinctUserIdsWithUnreadNotificationsSince: {
 			all: jest.fn(async () => [{ user_id: 1 }])
 		},
+		selectUserIdsWithChatDigestibleUnreadSince: {
+			all: jest.fn(async () => [])
+		},
+		selectDigestChatUnreadThreadsSince: {
+			all: jest.fn(async () => [])
+		},
 		selectUserById: {
 			get: jest.fn(async (userId) => ({
 				id: userId,
@@ -23,10 +29,12 @@ export function createNotificationsCronQueries(overrides = {}) {
 			get: jest.fn(async () => ({ count: 0 }))
 		},
 		selectNotificationsForUser: {
-			all: jest.fn(async () => [])
+			all: jest.fn(async () => [{ acknowledged_at: null, link: "/creations/1" }])
 		},
 		selectDigestActivityByOwnerSince: {
-			all: jest.fn(async () => [])
+			all: jest.fn(async () => [
+				{ created_image_id: 1, title: "Test creation", comment_count: 1 }
+			])
 		},
 		selectDigestActivityByCommenterSince: {
 			all: jest.fn(async () => [])

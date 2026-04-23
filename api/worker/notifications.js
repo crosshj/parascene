@@ -5,6 +5,7 @@ import { sendTemplatedEmail } from "../../email/index.js";
 import { getBaseAppUrlForEmail } from "../../api_routes/utils/url.js";
 import { getEmailSettings, getEffectiveRecipient } from "../../api_routes/utils/emailSettings.js";
 import { markPreviousStepsCompleted } from "../../api_routes/utils/emailCampaignState.js";
+import { buildChatDigestEmailSection } from "./chatDigestEmail.js";
 
 const CRON_SECRET_ENV = "CRON_SECRET";
 
@@ -50,8 +51,14 @@ async function runNotificationsCron({ queries }) {
 	let reengagementSent = 0;
 	let creationHighlightSent = 0;
 
-	const candidateRows = await (queries.selectDistinctUserIdsWithUnreadNotificationsSince?.all(sinceIso) ?? []);
-	const userIds = candidateRows.map((r) => r?.user_id).filter((id) => id != null && Number.isFinite(Number(id)));
+	const notifCandidateRows = await (queries.selectDistinctUserIdsWithUnreadNotificationsSince?.all(sinceIso) ?? []);
+	const chatCandidateRows = await (queries.selectUserIdsWithChatDigestibleUnreadSince?.all(sinceIso) ?? []);
+	const digestUserIdSet = new Set();
+	for (const r of [...notifCandidateRows, ...chatCandidateRows]) {
+		const id = r?.user_id;
+		if (id != null && Number.isFinite(Number(id))) digestUserIdSet.add(Number(id));
+	}
+	const userIds = [...digestUserIdSet];
 
 	const { reengagementInactiveDays, reengagementCooldownDays, creationHighlightLookbackHours, creationHighlightCooldownDays, creationHighlightMinComments, welcomeEmailDelayHours } = settings;
 	const inactiveCutoff = new Date();
@@ -94,6 +101,50 @@ async function runNotificationsCron({ queries }) {
 			continue;
 		}
 
+		const unreadNotifications = await (queries.selectNotificationsForUser?.all(userId, user?.role) ?? []);
+		const unreadCreationIds = new Set();
+		for (const notif of unreadNotifications) {
+			if (!notif.acknowledged_at && notif.link) {
+				const match = String(notif.link).match(/\/creations\/(\d+)/);
+				if (match && match[1]) {
+					const creationId = Number(match[1]);
+					if (Number.isFinite(creationId) && creationId > 0) {
+						unreadCreationIds.add(creationId);
+					}
+				}
+			}
+		}
+
+		const ownerRows = await (queries.selectDigestActivityByOwnerSince?.all(userId, sinceIso) ?? []);
+		const commenterRows = await (queries.selectDigestActivityByCommenterSince?.all(userId, sinceIso) ?? []);
+
+		const filteredOwnerRows = ownerRows.filter((r) => {
+			const creationId = Number(r?.created_image_id);
+			return Number.isFinite(creationId) && unreadCreationIds.has(creationId);
+		});
+		const filteredCommenterRows = commenterRows.filter((r) => {
+			const creationId = Number(r?.created_image_id);
+			return Number.isFinite(creationId) && unreadCreationIds.has(creationId);
+		});
+
+		const activityItems = filteredOwnerRows.map((r) => ({
+			title: r?.title && String(r.title).trim() ? String(r.title).trim() : "Untitled",
+			comment_count: Number(r?.comment_count ?? 0)
+		}));
+		const otherCreationsActivityItems = filteredCommenterRows.map((r) => ({
+			title: r?.title && String(r.title).trim() ? String(r.title).trim() : "Untitled",
+			comment_count: Number(r?.comment_count ?? 0)
+		}));
+
+		const { chatThreadItems } = await buildChatDigestEmailSection({ queries, userId, sinceIso, maxThreads: 8 });
+
+		const hasDigestBody =
+			activityItems.length > 0 || otherCreationsActivityItems.length > 0 || chatThreadItems.length > 0;
+		if (!hasDigestBody) {
+			skipped++;
+			continue;
+		}
+
 		await queries.insertEmailSend?.run(userId, "digest", null);
 		const sentAt = new Date().toISOString();
 
@@ -101,54 +152,36 @@ async function runNotificationsCron({ queries }) {
 			const to = getEffectiveRecipient(settings, email);
 			const recipientName = user?.display_name || user?.user_name || email.split("@")[0] || "there";
 			const feedUrl = getBaseAppUrlForEmail();
-
-			// Get unread notifications to filter digest to only show creations with unread notifications
-			const unreadNotifications = await (queries.selectNotificationsForUser?.all(userId, user?.role) ?? []);
-			const unreadCreationIds = new Set();
-			for (const notif of unreadNotifications) {
-				if (!notif.acknowledged_at && notif.link) {
-					// Extract creation ID from link like "/creations/123"
-					const match = String(notif.link).match(/\/creations\/(\d+)/);
-					if (match && match[1]) {
-						const creationId = Number(match[1]);
-						if (Number.isFinite(creationId) && creationId > 0) {
-							unreadCreationIds.add(creationId);
-						}
-					}
-				}
+			let digestPrimaryUrl = feedUrl;
+			if (
+				activityItems.length === 0 &&
+				otherCreationsActivityItems.length === 0 &&
+				chatThreadItems.length > 0
+			) {
+				const first = chatThreadItems[0]?.thread_url;
+				digestPrimaryUrl =
+					chatThreadItems.length === 1 && typeof first === "string" && first.trim()
+						? first.trim()
+						: `${String(feedUrl).replace(/\/+$/, "")}/connect#chat`;
 			}
+			const activitySummary =
+				chatThreadItems.length > 0 && activityItems.length === 0 && otherCreationsActivityItems.length === 0
+					? "You have unread messages in chat."
+					: chatThreadItems.length > 0
+						? "You have new activity on parascene — including chat."
+						: "You have new activity.";
 
-			const ownerRows = await (queries.selectDigestActivityByOwnerSince?.all(userId, sinceIso) ?? []);
-			const commenterRows = await (queries.selectDigestActivityByCommenterSince?.all(userId, sinceIso) ?? []);
-
-			// Filter to only include creations with unread notifications
-			const filteredOwnerRows = ownerRows.filter((r) => {
-				const creationId = Number(r?.created_image_id);
-				return Number.isFinite(creationId) && unreadCreationIds.has(creationId);
-			});
-			const filteredCommenterRows = commenterRows.filter((r) => {
-				const creationId = Number(r?.created_image_id);
-				return Number.isFinite(creationId) && unreadCreationIds.has(creationId);
-			});
-
-			const activityItems = filteredOwnerRows.map((r) => ({
-				title: r?.title && String(r.title).trim() ? String(r.title).trim() : "Untitled",
-				comment_count: Number(r?.comment_count ?? 0)
-			}));
-			const otherCreationsActivityItems = filteredCommenterRows.map((r) => ({
-				title: r?.title && String(r.title).trim() ? String(r.title).trim() : "Untitled",
-				comment_count: Number(r?.comment_count ?? 0)
-			}));
 			try {
 				await sendTemplatedEmail({
 					to,
 					template: "digestActivity",
 					data: {
 						recipientName,
-						activitySummary: "You have new activity.",
-						feedUrl,
+						activitySummary,
+						feedUrl: digestPrimaryUrl,
 						activityItems,
-						otherCreationsActivityItems
+						otherCreationsActivityItems,
+						chatThreadItems
 					}
 				});
 				if (queries.upsertUserEmailCampaignStateLastDigest?.run) {
@@ -296,6 +329,8 @@ async function runNotificationsCron({ queries }) {
 		dryRun,
 		inWindow: true,
 		candidates: userIds.length,
+		digestNotifCandidates: notifCandidateRows.length,
+		digestChatCandidates: chatCandidateRows.length,
 		sent,
 		skipped,
 		welcomeSent,

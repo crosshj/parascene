@@ -516,6 +516,12 @@ async function loadEmailSends() {
 	}
 }
 
+function parseEmailsTabFromHash() {
+	const raw = (window.location.hash || "").replace(/^#/, "").trim().toLowerCase();
+	const validTabIds = ["sends", "templates", "send", "settings"];
+	return raw && validTabIds.includes(raw) ? raw : null;
+}
+
 function setupEmailsTabPersistence() {
 	const emailsPage = document.querySelector("#emails-page");
 	if (!emailsPage) return;
@@ -526,7 +532,7 @@ function setupEmailsTabPersistence() {
 	const storageKey = "admin-emails-tab";
 	const validTabIds = ["sends", "templates", "send", "settings"];
 
-	// Restore saved tab on load
+	const hashTab = parseEmailsTabFromHash();
 	const savedTab = (() => {
 		try {
 			const saved = sessionStorage.getItem(storageKey);
@@ -535,17 +541,16 @@ function setupEmailsTabPersistence() {
 			return null;
 		}
 	})();
+	const initialTab = hashTab || savedTab;
 
-	if (savedTab) {
-		// Wait for tabs to be hydrated before setting active tab
+	if (initialTab) {
 		setTimeout(() => {
 			if (typeof tabsEl.setActiveTab === "function") {
-				tabsEl.setActiveTab(savedTab, { focus: false });
+				tabsEl.setActiveTab(initialTab, { focus: false });
 			}
 		}, 0);
 	}
 
-	// Save tab on change
 	tabsEl.addEventListener("tab-change", (e) => {
 		const id = e.detail?.id;
 		if (!id || !validTabIds.includes(id)) return;
@@ -553,6 +558,12 @@ function setupEmailsTabPersistence() {
 			sessionStorage.setItem(storageKey, id);
 		} catch {
 			// Ignore storage errors
+		}
+		try {
+			const base = `${window.location.pathname || "/"}${window.location.search || ""}`;
+			window.history.replaceState(window.history.state || {}, "", `${base}#${id}`);
+		} catch {
+			// ignore
 		}
 	});
 }
@@ -2169,10 +2180,14 @@ if (adminHeader) {
 	});
 }
 
-const initialRoute =
-	window.location.pathname === "/" || window.location.pathname === ""
+const adminPath = window.location.pathname || "/";
+let initialRoute =
+	adminPath === "/" || adminPath === ""
 		? "users"
-		: window.location.pathname.slice(1);
+		: adminPath.slice(1).split("/")[0];
+if (initialRoute === "email") {
+	initialRoute = "emails";
+}
 handleAdminRouteChange(initialRoute);
 
 const todoModal = document.querySelector("#todo-modal");

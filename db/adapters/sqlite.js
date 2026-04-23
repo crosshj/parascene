@@ -1250,7 +1250,7 @@ export async function openDb() {
 			all: async (userId, role, limit = 25) => {
 				const safeLimit = Math.min(Math.max(1, Number(limit) || 25), 200);
 				const stmt = db.prepare(
-					`SELECT id, title, message, link, created_at, acknowledged_at,
+					`SELECT id, user_id, title, message, link, created_at, acknowledged_at,
             actor_user_id, type, target, meta
            FROM notifications
            WHERE (user_id = ? OR role = ?)
@@ -1263,7 +1263,7 @@ export async function openDb() {
 		selectNotificationById: {
 			get: async (id, userId, role) => {
 				const stmt = db.prepare(
-					`SELECT id, title, message, link, created_at, acknowledged_at,
+					`SELECT id, user_id, title, message, link, created_at, acknowledged_at,
             actor_user_id, type, target, meta
            FROM notifications
            WHERE id = ? AND (user_id = ? OR role = ?)`
@@ -1366,6 +1366,12 @@ export async function openDb() {
 				const rows = stmt.all(sinceIso);
 				return Promise.resolve(rows ?? []);
 			}
+		},
+		selectUserIdsWithChatDigestibleUnreadSince: {
+			all: async () => Promise.resolve([])
+		},
+		selectDigestChatUnreadThreadsSince: {
+			all: async () => Promise.resolve([])
 		},
 		insertEmailSend: {
 			run: async (userId, campaign, meta) => {

@@ -1312,7 +1312,7 @@ export function openDb() {
 				// Use service client to bypass RLS for backend operations
 				let query = serviceClient
 					.from(prefixedTable("notifications"))
-					.select("id, title, message, link, created_at, acknowledged_at, actor_user_id, type, target, meta")
+					.select("id, user_id, title, message, link, created_at, acknowledged_at, actor_user_id, type, target, meta")
 					.order("created_at", { ascending: false })
 					.limit(safeLimit);
 				const { query: filteredQuery, hasFilter } = applyUserOrRoleFilter(
@@ -1341,7 +1341,7 @@ export function openDb() {
 			get: async (id, userId, role) => {
 				let query = serviceClient
 					.from(prefixedTable("notifications"))
-					.select("id, title, message, link, created_at, acknowledged_at, actor_user_id, type, target, meta")
+					.select("id, user_id, title, message, link, created_at, acknowledged_at, actor_user_id, type, target, meta")
 					.eq("id", id);
 				const { query: filteredQuery, hasFilter } = applyUserOrRoleFilter(query, userId, role);
 				if (!hasFilter) return undefined;
@@ -1552,6 +1552,32 @@ export function openDb() {
 					.map((r) => r?.user_id)
 					.filter((id) => id != null && !seen.has(String(id)) && (seen.add(String(id)), true));
 				return userIds.map((id) => ({ user_id: id }));
+			}
+		},
+		selectUserIdsWithChatDigestibleUnreadSince: {
+			all: async (sinceIso) => {
+				const { data, error } = await serviceClient.rpc("prsn_chat_user_ids_with_digestible_unread", {
+					p_since: sinceIso
+				});
+				if (error) throw error;
+				const rows = Array.isArray(data) ? data : [];
+				const seen = new Set();
+				return rows
+					.map((r) => r?.user_id)
+					.filter((id) => id != null && !seen.has(String(id)) && (seen.add(String(id)), true))
+					.map((user_id) => ({ user_id }));
+			}
+		},
+		selectDigestChatUnreadThreadsSince: {
+			all: async (userId, sinceIso, limit) => {
+				const lim = Math.min(Math.max(1, Number(limit) || 8), 24);
+				const { data, error } = await serviceClient.rpc("prsn_chat_digest_unread_threads", {
+					p_user_id: userId,
+					p_since: sinceIso,
+					p_limit: lim
+				});
+				if (error) throw error;
+				return Array.isArray(data) ? data : [];
 			}
 		},
 		insertEmailSend: {

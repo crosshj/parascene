@@ -1,4 +1,6 @@
 import { getNotificationDisplayName } from "./displayName.js";
+import { pathnameChatOpenForViewer } from "./chatDeepLinks.js";
+import { otherUserIdFromDmPairKey } from "./dmChatInboxTitle.js";
 
 function parseJson(value) {
 	if (value == null) return null;
@@ -14,7 +16,7 @@ function parseJson(value) {
 /**
  * Resolve title, message, and link for a notification that has type/actor/target/meta.
  * Uses current DB state (actor display name, creation title) so copy can change over time.
- * @param {{ type?: string | null, actor_user_id?: number | null, target?: string | object | null, meta?: string | object | null }} row
+ * @param {{ type?: string | null, actor_user_id?: number | null, user_id?: number | null, target?: string | object | null, meta?: string | object | null }} row
  * @param {{ selectUserById?: { get: (id: number) => Promise<object> }, selectUserProfileByUserId?: { get: (id: number) => Promise<object> }, selectCreatedImageByIdAnyUser?: { get: (id: number) => Promise<object> } }} queries
  * @returns {{ title: string, message: string, link: string, creation_title?: string | null } | null} resolved payload or null to use stored title/message/link
  */
@@ -63,6 +65,42 @@ export async function resolveNotificationDisplay(row, queries) {
 				: "Comment on a creation you commented on";
 			const message = `${actorName} commented`;
 			return { title, message, link: baseLink, creation_title: creationTitle || null };
+		}
+		case "chat_mention": {
+			const threadId =
+				target?.thread_id != null && Number.isFinite(Number(target.thread_id)) ? Number(target.thread_id) : null;
+			if (threadId == null) return null;
+			const slug = typeof meta?.channel_slug === "string" && meta.channel_slug.trim() ? meta.channel_slug.trim() : null;
+			const ttype = typeof meta?.thread_type === "string" ? meta.thread_type.trim() : "";
+			const place =
+				ttype === "channel" && slug
+					? `#${slug}`
+					: ttype === "dm"
+						? "a direct message"
+						: "chat";
+			const title = `Mentioned you in ${place}`;
+			const message = `${actorName} mentioned you`;
+			const viewerId = row?.user_id != null && Number.isFinite(Number(row.user_id)) ? Number(row.user_id) : null;
+			let otherUserProfile = null;
+			if (ttype === "dm" && viewerId != null && queries.selectUserProfileByUserId?.get) {
+				const oid = otherUserIdFromDmPairKey(meta?.dm_pair_key, viewerId);
+				if (oid != null && Number.isFinite(oid) && oid > 0) {
+					try {
+						otherUserProfile = await queries.selectUserProfileByUserId.get(oid) ?? null;
+					} catch {
+						otherUserProfile = null;
+					}
+				}
+			}
+			const link = pathnameChatOpenForViewer({
+				threadId,
+				threadType: ttype || null,
+				channelSlug: slug,
+				dmPairKey: typeof meta?.dm_pair_key === "string" ? meta.dm_pair_key : null,
+				viewerUserId: viewerId,
+				otherUserProfile
+			});
+			return { title, message, link, creation_title: null };
 		}
 		case "tip": {
 			const amount = meta?.amount != null && Number.isFinite(Number(meta.amount)) ? Number(meta.amount) : null;

@@ -766,6 +766,12 @@ export function openDb() {
 					.map((user_id) => ({ user_id }));
 			}
 		},
+		selectUserIdsWithChatDigestibleUnreadSince: {
+			all: async () => []
+		},
+		selectDigestChatUnreadThreadsSince: {
+			all: async () => []
+		},
 		insertEmailSend: {
 			run: async (userId, campaign, meta) => {
 				const id = email_sends.length + 1;

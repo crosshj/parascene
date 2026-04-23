@@ -3,7 +3,8 @@ import { Redis } from "@upstash/redis";
 import { broadcastRoomDirty, broadcastUserInboxDirty } from "./utils/realtimeBroadcast.js";
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { normalizeTag } from "./utils/tag.js";
-import { dmChatInboxTitleFromProfile } from "./utils/dmChatInboxTitle.js";
+import { dmChatInboxTitleFromProfile, otherUserIdFromDmPairKey } from "./utils/dmChatInboxTitle.js";
+import { insertNotificationsForChatMentions } from "./utils/chatMentionNotifications.js";
 import { REACTION_ORDER } from "./comments.js";
 import { getShareBaseUrl } from "./utils/url.js";
 import { ACTIVE_SHARE_VERSION, mintShareToken } from "./utils/shareLink.js";
@@ -44,18 +45,6 @@ function enrichChatReactionsFromMessageColumn(messages, viewerId) {
 		}
 		return { ...m, reactions, viewer_reactions };
 	});
-}
-
-function otherUserIdFromDmPair(dmPairKey, userId) {
-	if (!dmPairKey || typeof dmPairKey !== "string") return null;
-	const parts = dmPairKey.split(":");
-	if (parts.length !== 2) return null;
-	const a = Number(parts[0]);
-	const b = Number(parts[1]);
-	if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
-	if (a === userId) return b;
-	if (b === userId) return a;
-	return null;
 }
 
 const MAX_MESSAGE_CHARS = 4000;
@@ -441,7 +430,7 @@ export default function createChatRoutes({ queries, storage }) {
 			const raw = data;
 			const n = typeof raw === "bigint" ? Number(raw) : Number(raw);
 			const total = Number.isFinite(n) ? Math.max(0, n) : 0;
-			return res.status(200).json({ total_unread: total });
+			return res.status(200).json({ total_unread: total, viewer_id: userId });
 		} catch (err) {
 			console.error("[GET /api/chat/unread-summary]", err);
 			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
@@ -465,7 +454,7 @@ export default function createChatRoutes({ queries, storage }) {
 			const otherIds = new Set();
 			for (const row of list) {
 				if (row?.thread_type === "dm" && row?.dm_pair_key) {
-					const oid = otherUserIdFromDmPair(row.dm_pair_key, userId);
+					const oid = otherUserIdFromDmPairKey(row.dm_pair_key, userId);
 					if (oid != null) otherIds.add(oid);
 				}
 			}
@@ -506,7 +495,7 @@ export default function createChatRoutes({ queries, storage }) {
 					};
 				}
 
-				const otherId = otherUserIdFromDmPair(row.dm_pair_key, userId);
+				const otherId = otherUserIdFromDmPairKey(row.dm_pair_key, userId);
 				const profile = otherId != null ? profileMap.get(otherId) : null;
 				const title = dmChatInboxTitleFromProfile(profile, otherId);
 				return {
@@ -825,7 +814,7 @@ export default function createChatRoutes({ queries, storage }) {
 				const slug = thread.channel_slug ? String(thread.channel_slug) : "";
 				out.title = slug ? `#${slug}` : "Channel";
 			} else if (thread.type === "dm" && thread.dm_pair_key) {
-				const otherId = otherUserIdFromDmPair(thread.dm_pair_key, userId);
+				const otherId = otherUserIdFromDmPairKey(thread.dm_pair_key, userId);
 				let profile = null;
 				if (otherId != null && typeof queries.selectUserProfileByUserId?.get === "function") {
 					try {
@@ -1031,12 +1020,22 @@ export default function createChatRoutes({ queries, storage }) {
 					if (readErr) throw readErr;
 				}
 				void broadcastRoomDirty(threadId, ins.data.id);
-				const mem = await sb
-					.from("prsn_chat_members")
-					.select("user_id")
-					.eq("thread_id", threadId);
-				const uids = Array.isArray(mem.data) ? mem.data.map((r) => r.user_id) : [];
+				const [memRes, threadRes] = await Promise.all([
+					sb.from("prsn_chat_members").select("user_id").eq("thread_id", threadId),
+					sb.from("prsn_chat_threads").select("type, channel_slug, dm_pair_key").eq("id", threadId).maybeSingle()
+				]);
+				const uids = Array.isArray(memRes.data) ? memRes.data.map((r) => r.user_id) : [];
 				void broadcastUserInboxDirty(threadId, uids);
+				void insertNotificationsForChatMentions({
+					queries,
+					memberUserIds: uids,
+					threadId,
+					threadType: threadRes.data?.type,
+					channelSlug: threadRes.data?.channel_slug,
+					dmPairKey: threadRes.data?.dm_pair_key,
+					senderId: userId,
+					body
+				});
 			}
 
 			return res.status(201).json({ message: ins.data });
@@ -1289,12 +1288,22 @@ export default function createChatRoutes({ queries, storage }) {
 					if (readErr) throw readErr;
 				}
 				void broadcastRoomDirty(threadId, ins.data.id);
-				const mem = await sb
-					.from("prsn_chat_members")
-					.select("user_id")
-					.eq("thread_id", threadId);
-				const uids = Array.isArray(mem.data) ? mem.data.map((r) => r.user_id) : [];
+				const [memRes, threadRes] = await Promise.all([
+					sb.from("prsn_chat_members").select("user_id").eq("thread_id", threadId),
+					sb.from("prsn_chat_threads").select("type, channel_slug, dm_pair_key").eq("id", threadId).maybeSingle()
+				]);
+				const uids = Array.isArray(memRes.data) ? memRes.data.map((r) => r.user_id) : [];
 				void broadcastUserInboxDirty(threadId, uids);
+				void insertNotificationsForChatMentions({
+					queries,
+					memberUserIds: uids,
+					threadId,
+					threadType: threadRes.data?.type,
+					channelSlug: threadRes.data?.channel_slug,
+					dmPairKey: threadRes.data?.dm_pair_key,
+					senderId: userId,
+					body
+				});
 			}
 
 			let messageOut = ins.data;

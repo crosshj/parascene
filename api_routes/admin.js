@@ -1545,7 +1545,7 @@ export default function createAdminRoutes({ queries, storage }) {
 			},
 			digestActivity: {
 				recipientName: "Alex",
-				activitySummary: "You have 3 creations with new comments.",
+				activitySummary: "You have new activity on parascene — including chat.",
 				feedUrl: `${baseUrl}/feed`,
 				activityItems: [
 					{ title: "Sunset Over Mountains", comment_count: 5 },
@@ -1553,6 +1553,18 @@ export default function createAdminRoutes({ queries, storage }) {
 				],
 				otherCreationsActivityItems: [
 					{ title: "Ocean Waves", comment_count: 3 }
+				],
+				chatThreadItems: [
+					{
+						title: "#feedback",
+						unread_count: 2,
+						thread_url: `${baseUrl.replace(/\/+$/, "")}/chat/c/feedback`
+					},
+					{
+						title: "DM · @jordan",
+						unread_count: 1,
+						thread_url: `${baseUrl.replace(/\/+$/, "")}/chat/dm/jordan`
+					}
 				]
 			},
 			welcome: {
