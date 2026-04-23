@@ -567,6 +567,24 @@ export async function initChatPage(root, options = {}) {
 	const serverChatTagMod = await import(`../shared/serverChatTag.js${qs}`);
 	const serverChannelTagFromServerName = serverChatTagMod.serverChannelTagFromServerName;
 	const creationsPollMod = await import(`../shared/creationsInFlightPoller.js${qs}`);
+	const chatGlobalUnreadChromeMod = await import(`../shared/chatGlobalUnreadChrome.js${qs}`);
+	const applyChatGlobalUnreadChrome = chatGlobalUnreadChromeMod.applyChatGlobalUnreadChrome;
+	const restoreChatGlobalUnreadFavicon = chatGlobalUnreadChromeMod.restoreChatGlobalUnreadFavicon;
+	const chatUnreadAudioMod = await import(`../shared/chatUnreadAudio.js${qs}`);
+	const playChatUnreadPing = chatUnreadAudioMod.playChatUnreadPing;
+	const chatAudiblePrefMod = await import(`../shared/chatAudibleNotificationsPref.js${qs}`);
+	const hydrateChatAudibleNotificationsFromServer = chatAudiblePrefMod.hydrateChatAudibleNotificationsFromServer;
+
+	async function hydrateAudibleNotificationsFromProfileOnce() {
+		try {
+			const r = await fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 2000 });
+			if (r.ok && r.data) {
+				hydrateChatAudibleNotificationsFromServer(r.data.audibleNotifications);
+			}
+		} catch {
+			// ignore
+		}
+	}
 
 	function chatReactionGetCount(val) {
 		if (typeof val === 'number' && Number.isFinite(val)) return Math.max(0, val);
@@ -587,6 +605,11 @@ export async function initChatPage(root, options = {}) {
 		sendBtnMount.innerHTML = sendIcon('chat-page-send-icon');
 	}
 	const docTitleBase = typeof document !== 'undefined' ? document.title : 'parascene';
+	let chatGlobalUnreadTotal = 0;
+	let chatGlobalUnreadInitialized = false;
+	let chatGlobalUnreadPoll = null;
+	let chatGlobalUnreadBroadcastTeardown = null;
+	let chatGlobalUnreadBroadcastBoundId = null;
 	let chatViewerId = null;
 	/** Set from GET /api/chat/threads (`viewer_is_admin`) or threads cache. */
 	let chatViewerIsAdmin = false;
@@ -1905,6 +1928,75 @@ export async function initChatPage(root, options = {}) {
 		}
 	}
 
+	function tearDownChatGlobalUnreadBroadcast() {
+		if (typeof chatGlobalUnreadBroadcastTeardown === 'function') {
+			try {
+				chatGlobalUnreadBroadcastTeardown();
+			} catch {
+				// ignore
+			}
+		}
+		chatGlobalUnreadBroadcastTeardown = null;
+		chatGlobalUnreadBroadcastBoundId = null;
+	}
+
+	async function maybeBindChatGlobalUnreadBroadcast(viewerId) {
+		const id = Number(viewerId);
+		if (!Number.isFinite(id) || id <= 0) {
+			tearDownChatGlobalUnreadBroadcast();
+			return;
+		}
+		if (chatGlobalUnreadBroadcastBoundId === id && typeof chatGlobalUnreadBroadcastTeardown === 'function') {
+			return;
+		}
+		tearDownChatGlobalUnreadBroadcast();
+		try {
+			const mod = await import(`../shared/realtimeBroadcast.js${qs}`);
+			chatGlobalUnreadBroadcastTeardown = await mod.subscribeUserBroadcast(id, () => {
+				void loadChatGlobalUnreadSummary();
+			});
+			chatGlobalUnreadBroadcastBoundId = id;
+		} catch (err) {
+			console.warn('[chat] user realtime:', err);
+		}
+	}
+
+	async function loadChatGlobalUnreadSummary() {
+		const wasInitialized = chatGlobalUnreadInitialized;
+		const prevUnread = Number.isFinite(chatGlobalUnreadTotal) ? chatGlobalUnreadTotal : 0;
+		try {
+			const res = await fetch('/api/chat/unread-summary', { credentials: 'include' });
+			if (!res.ok) {
+				chatGlobalUnreadTotal = 0;
+				chatGlobalUnreadInitialized = true;
+				tearDownChatGlobalUnreadBroadcast();
+				applyChatGlobalUnreadChrome(0);
+				return;
+			}
+			const data = await res.json().catch(() => ({}));
+			const n = Number(data?.total_unread);
+			chatGlobalUnreadTotal = Number.isFinite(n) ? Math.max(0, n) : 0;
+			chatGlobalUnreadInitialized = true;
+			const vid = data?.viewer_id != null && Number.isFinite(Number(data.viewer_id)) ? Number(data.viewer_id) : null;
+			if (vid != null) {
+				void maybeBindChatGlobalUnreadBroadcast(vid);
+			}
+			if (wasInitialized && chatGlobalUnreadTotal > prevUnread) {
+				void playChatUnreadPing();
+			}
+			applyChatGlobalUnreadChrome(chatGlobalUnreadTotal);
+		} catch {
+			chatGlobalUnreadTotal = 0;
+			chatGlobalUnreadInitialized = true;
+			tearDownChatGlobalUnreadBroadcast();
+			applyChatGlobalUnreadChrome(0);
+		}
+	}
+
+	function onChatGlobalUnreadRefreshDoc() {
+		void loadChatGlobalUnreadSummary();
+	}
+
 	function updateTitleFromMeta(meta) {
 		const base = docTitleBase || 'parascene';
 		const cs =
@@ -1922,6 +2014,7 @@ export async function initChatPage(root, options = {}) {
 				: (cs ? `#${cs}` : 'Chat');
 		}
 		document.title = `${label} · ${base}`;
+		applyChatGlobalUnreadChrome(chatGlobalUnreadTotal);
 		const titleEl = root.querySelector('[data-chat-title]');
 		if (titleEl) {
 			titleEl.textContent = label;
@@ -5993,6 +6086,17 @@ export async function initChatPage(root, options = {}) {
 		} catch {
 			// ignore
 		}
+		if (chatGlobalUnreadPoll != null) {
+			clearInterval(chatGlobalUnreadPoll);
+			chatGlobalUnreadPoll = null;
+		}
+		document.removeEventListener('chat-unread-refresh', onChatGlobalUnreadRefreshDoc);
+		tearDownChatGlobalUnreadBroadcast();
+		try {
+			restoreChatGlobalUnreadFavicon();
+		} catch {
+			// ignore
+		}
 		document.title = docTitleBase;
 	};
 	window.addEventListener('pagehide', onPageHide, { once: true });
@@ -7117,6 +7221,10 @@ export async function initChatPage(root, options = {}) {
 		}
 	}
 
+	document.addEventListener('chat-unread-refresh', onChatGlobalUnreadRefreshDoc);
+	chatGlobalUnreadPoll = setInterval(() => void loadChatGlobalUnreadSummary(), 45000);
+	void loadChatGlobalUnreadSummary();
+	void hydrateAudibleNotificationsFromProfileOnce();
 	enableLikeButtons(root);
 	await openThreadForCurrentPath();
 	dispatchChatUnreadRefresh();

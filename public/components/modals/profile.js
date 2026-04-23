@@ -9,6 +9,9 @@ let getNsfwObscure;
 let setNsfwObscure;
 let applyNsfwPreference;
 let NSFW_VIEW_BODY_CLASS;
+let hydrateChatAudibleNotificationsFromServer;
+let setChatAudibleNotificationsEnabled;
+let clearChatAudibleNotificationsStorage;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -47,6 +50,11 @@ async function loadDeps() {
 
 		const helpUrlMod = await import(`../../shared/helpUrl.js${qs}`);
 		getHelpHref = helpUrlMod.getHelpHref;
+
+		const chatAudiblePrefMod = await import(`../../shared/chatAudibleNotificationsPref.js${qs}`);
+		hydrateChatAudibleNotificationsFromServer = chatAudiblePrefMod.hydrateChatAudibleNotificationsFromServer;
+		setChatAudibleNotificationsEnabled = chatAudiblePrefMod.setChatAudibleNotificationsEnabled;
+		clearChatAudibleNotificationsStorage = chatAudiblePrefMod.clearChatAudibleNotificationsStorage;
 	})();
 	return _depsPromise;
 }
@@ -116,6 +124,7 @@ class AppModalProfile extends HTMLElement {
 
 		this.setupNsfwToggles();
 		this.setupAppearOfflineToggle();
+		this.setupAudibleNotificationsToggle();
 		this.setupApiKeyActions();
 	}
 
@@ -207,6 +216,40 @@ class AppModalProfile extends HTMLElement {
 		});
 	}
 
+	setupAudibleNotificationsToggle() {
+		const checkbox = this.shadowRoot.querySelector('[data-audible-notifications]');
+		if (!checkbox) return;
+
+		const syncFromProfile = () => {
+			checkbox.checked = this.profileData?.audibleNotifications !== false;
+		};
+		syncFromProfile();
+
+		checkbox.addEventListener('change', async () => {
+			const on = checkbox.checked === true;
+			try {
+				const res = await fetchJsonWithStatusDeduped(
+					'/api/profile',
+					{
+						method: 'PATCH',
+						credentials: 'include',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ audibleNotifications: on })
+					},
+					{ windowMs: 0 }
+				);
+				if (res?.ok) {
+					if (this.profileData) this.profileData.audibleNotifications = on;
+					setChatAudibleNotificationsEnabled(on);
+				} else {
+					checkbox.checked = !on;
+				}
+			} catch {
+				checkbox.checked = !on;
+			}
+		});
+	}
+
 	/** Sync NSFW checkbox state from profile (API) and localStorage when modal opens or profile loads. */
 	syncNsfwTogglesFromStorage() {
 		const enableCheckbox = this.shadowRoot.querySelector('[data-nsfw-enable]');
@@ -224,6 +267,10 @@ class AppModalProfile extends HTMLElement {
 		const appearOfflineBox = this.shadowRoot.querySelector('[data-appear-offline]');
 		if (appearOfflineBox) {
 			appearOfflineBox.checked = this.profileData?.appear_offline === true;
+		}
+		const audibleBox = this.shadowRoot.querySelector('[data-audible-notifications]');
+		if (audibleBox) {
+			audibleBox.checked = this.profileData?.audibleNotifications !== false;
 		}
 	}
 
@@ -312,6 +359,9 @@ class AppModalProfile extends HTMLElement {
 			this.profileLoadedAt = Date.now();
 			// Keep localStorage in sync with server so publish modal and others get correct default
 			if (user) setNsfwContentEnabled(user.enableNsfw === true);
+			if (user && typeof hydrateChatAudibleNotificationsFromServer === 'function') {
+				hydrateChatAudibleNotificationsFromServer(user.audibleNotifications);
+			}
 			this.syncNsfwTogglesFromStorage();
 		} catch (error) {
 			// console.error('Error loading profile:', error);
@@ -730,6 +780,11 @@ class AppModalProfile extends HTMLElement {
                 <input type="checkbox" id="profile-appear-offline" data-appear-offline aria-describedby="profile-appear-offline-desc" />
               </div>
               <p id="profile-appear-offline-desc" class="profile-presence-hint">When checked, you are hidden from the public online list.</p>
+              <div class="profile-presence-row">
+                <label for="profile-audible-notifications">Audible notifications</label>
+                <input type="checkbox" id="profile-audible-notifications" data-audible-notifications aria-describedby="profile-audible-notifications-desc" />
+              </div>
+              <p id="profile-audible-notifications-desc" class="profile-presence-hint">Play a sound for new chat activity when this tab is in the background.</p>
             </div>
             <div class="profile-nsfw-toggles">
               <div class="profile-nsfw-row">
@@ -771,6 +826,9 @@ class AppModalProfile extends HTMLElement {
 			window.localStorage?.removeItem('profile-avatar-url');
 			// Match CHAT_THREADS_CACHE_KEY in shared/chatThreadsCache.js
 			window.localStorage?.removeItem('prsn-chat-threads-v1');
+			if (typeof clearChatAudibleNotificationsStorage === 'function') {
+				clearChatAudibleNotificationsStorage();
+			}
 		} catch {
 			// ignore storage errors
 		}

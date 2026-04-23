@@ -1,3 +1,7 @@
+import { applyChatGlobalUnreadChrome, restoreChatGlobalUnreadFavicon } from '../../shared/chatGlobalUnreadChrome.js';
+import { playChatUnreadPing } from '../../shared/chatUnreadAudio.js';
+
+let hydrateChatAudibleNotificationsFromServer;
 let formatDateTime;
 let formatRelativeTime;
 let fetchJsonWithStatusDeduped;
@@ -37,6 +41,9 @@ async function loadDeps() {
 
 		const helpUrlMod = await import(`../../shared/helpUrl.js${qs}`);
 		getHelpHref = helpUrlMod.getHelpHref;
+
+		const chatAudiblePrefMod = await import(`../../shared/chatAudibleNotificationsPref.js${qs}`);
+		hydrateChatAudibleNotificationsFromServer = chatAudiblePrefMod.hydrateChatAudibleNotificationsFromServer;
 	})();
 	return _depsPromise;
 }
@@ -71,7 +78,6 @@ class AppNavigation extends HTMLElement {
 		this._chatUserBroadcastTeardown = null;
 		this._chatUserBroadcastBoundId = null;
 		this._chatUnreadCountInitialized = false;
-		this._documentTitleBase = null;
 		this._onDocumentVisibilityChatTitle = this._onDocumentVisibilityChatTitle.bind(this);
 		this.currentRoute = null;
 		this.routes = [];
@@ -135,6 +141,11 @@ class AppNavigation extends HTMLElement {
 		document.removeEventListener('credits-claim-status', this.handleCreditsClaimStatus);
 		document.removeEventListener('chat-unread-refresh', this._onChatUnreadRefresh);
 		document.removeEventListener('visibilitychange', this._onDocumentVisibilityChatTitle);
+		try {
+			restoreChatGlobalUnreadFavicon();
+		} catch {
+			// ignore
+		}
 		this._tearDownChatUserBroadcast();
 		if (this._chatUnreadPoll) {
 			clearInterval(this._chatUnreadPoll);
@@ -387,26 +398,11 @@ class AppNavigation extends HTMLElement {
 	}
 
 	_onDocumentVisibilityChatTitle() {
-		this._applyChatUnreadDocumentTitle();
+		this._syncChatTabAttention();
 	}
 
-	_getDocumentTitleBase() {
-		if (this._documentTitleBase) return this._documentTitleBase;
-		const raw = typeof document !== 'undefined' ? String(document.title || '').trim() : '';
-		this._documentTitleBase = raw.replace(/^\([^)]+\)\s+/, '').trim() || 'parascene';
-		return this._documentTitleBase;
-	}
-
-	_applyChatUnreadDocumentTitle() {
-		if (typeof document === 'undefined') return;
-		const n = this.chatUnreadCount || 0;
-		const base = this._getDocumentTitleBase();
-		if (document.visibilityState === 'hidden' && n > 0) {
-			const label = n > 99 ? '99+' : String(n);
-			document.title = `(${label}) ${base}`;
-		} else {
-			document.title = base;
-		}
+	_syncChatTabAttention() {
+		applyChatGlobalUnreadChrome(this.chatUnreadCount || 0);
 	}
 
 	_tearDownChatUserBroadcast() {
@@ -446,30 +442,7 @@ class AppNavigation extends HTMLElement {
 
 	_maybePlayChatUnreadPing(prev, next) {
 		if (!Number.isFinite(prev) || !Number.isFinite(next) || next <= prev) return;
-		if (document.visibilityState !== 'hidden') return;
-		try {
-			const AC = window.AudioContext || window.webkitAudioContext;
-			if (!AC) return;
-			const ctx = new AC();
-			const o = ctx.createOscillator();
-			const g = ctx.createGain();
-			o.type = 'sine';
-			o.frequency.value = 880;
-			g.gain.value = 0.04;
-			o.connect(g);
-			g.connect(ctx.destination);
-			o.start();
-			o.stop(ctx.currentTime + 0.12);
-			o.onended = () => {
-				try {
-					ctx.close();
-				} catch {
-					// ignore
-				}
-			};
-		} catch {
-			// autoplay or AudioContext may be blocked
-		}
+		void playChatUnreadPing();
 	}
 
 	async loadChatUnreadCount() {
@@ -482,7 +455,7 @@ class AppNavigation extends HTMLElement {
 				this._chatUnreadCountInitialized = true;
 				this._tearDownChatUserBroadcast();
 				this.updateChatUnreadBadgeUI();
-				this._applyChatUnreadDocumentTitle();
+				this._syncChatTabAttention();
 				return;
 			}
 			const data = await res.json().catch(() => ({}));
@@ -498,13 +471,13 @@ class AppNavigation extends HTMLElement {
 				this._maybePlayChatUnreadPing(prevUnread, nextUnread);
 			}
 			this.updateChatUnreadBadgeUI();
-			this._applyChatUnreadDocumentTitle();
+			this._syncChatTabAttention();
 		} catch {
 			this.chatUnreadCount = 0;
 			this._chatUnreadCountInitialized = true;
 			this._tearDownChatUserBroadcast();
 			this.updateChatUnreadBadgeUI();
-			this._applyChatUnreadDocumentTitle();
+			this._syncChatTabAttention();
 		}
 	}
 
@@ -580,6 +553,9 @@ class AppNavigation extends HTMLElement {
 			const nextAvatarUrl = typeof user?.profile?.avatar_url === 'string' ? user.profile.avatar_url.trim() : '';
 			// Sync NSFW preference so publish modal and other code get correct default
 			setNsfwContentEnabled(user?.enableNsfw === true);
+			if (typeof hydrateChatAudibleNotificationsFromServer === 'function') {
+				hydrateChatAudibleNotificationsFromServer(user?.audibleNotifications);
+			}
 
 			// If no signed-in user, clear cache
 			if (!currentUserEmail) {

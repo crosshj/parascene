@@ -583,6 +583,7 @@ export default function createProfileRoutes({ queries }) {
 		const plan = user.meta?.plan ?? "free";
 		const pendingPlanActivation = Boolean(user.meta?.pendingCheckoutSessionId);
 		const enableNsfw = user.meta?.enableNsfw === true;
+		const audibleNotifications = user.meta?.audibleNotifications !== false;
 		const hasApiKey = Boolean(user.meta?.apiKeyHash);
 		const apiKeyPrefix = typeof user.meta?.apiKeyPrefix === "string" ? user.meta.apiKeyPrefix : null;
 		const appearOffline = user.appear_offline === true;
@@ -596,6 +597,7 @@ export default function createProfileRoutes({ queries }) {
 			profile,
 			welcome,
 			enableNsfw,
+			audibleNotifications,
 			hasApiKey,
 			apiKeyPrefix,
 			appear_offline: appearOffline
@@ -651,21 +653,46 @@ export default function createProfileRoutes({ queries }) {
 		}
 	});
 
-	// Update current user's Enable NSFW setting (user meta).
+	// Update current user profile fields stored in `users.meta` (partial PATCH).
 	router.patch("/api/profile", async (req, res) => {
 		if (!req.auth?.userId) {
 			return res.status(401).json({ error: "Unauthorized" });
 		}
-		const enableNsfw = req.body?.enableNsfw;
-		if (typeof enableNsfw !== "boolean") {
-			return res.status(400).json({ error: "Invalid request", message: "enableNsfw must be a boolean." });
+		const body = req.body && typeof req.body === "object" ? req.body : {};
+		const wantsNsfw = Object.prototype.hasOwnProperty.call(body, "enableNsfw");
+		const wantsAudible = Object.prototype.hasOwnProperty.call(body, "audibleNotifications");
+		if (!wantsNsfw && !wantsAudible) {
+			return res.status(400).json({
+				error: "Invalid request",
+				message: "Provide enableNsfw and/or audibleNotifications."
+			});
 		}
-		if (!queries.updateUserEnableNsfw?.run) {
-			return res.status(500).json({ error: "Not available", message: "Profile update is not available." });
+		if (wantsNsfw && typeof body.enableNsfw !== "boolean") {
+			return res.status(400).json({ error: "Invalid request", message: "enableNsfw must be a boolean when provided." });
+		}
+		if (wantsAudible && typeof body.audibleNotifications !== "boolean") {
+			return res.status(400).json({
+				error: "Invalid request",
+				message: "audibleNotifications must be a boolean when provided."
+			});
 		}
 		try {
-			await queries.updateUserEnableNsfw.run(req.auth.userId, enableNsfw);
-			return res.json({ ok: true, enableNsfw });
+			if (wantsNsfw) {
+				if (!queries.updateUserEnableNsfw?.run) {
+					return res.status(500).json({ error: "Not available", message: "Profile update is not available." });
+				}
+				await queries.updateUserEnableNsfw.run(req.auth.userId, body.enableNsfw);
+			}
+			if (wantsAudible) {
+				if (!queries.updateUserAudibleNotifications?.run) {
+					return res.status(500).json({ error: "Not available", message: "Profile update is not available." });
+				}
+				await queries.updateUserAudibleNotifications.run(req.auth.userId, body.audibleNotifications);
+			}
+			const out = { ok: true };
+			if (wantsNsfw) out.enableNsfw = body.enableNsfw;
+			if (wantsAudible) out.audibleNotifications = body.audibleNotifications;
+			return res.json(out);
 		} catch (err) {
 			console.error("[PATCH /api/profile]", err);
 			return res.status(500).json({ error: "Failed to update", message: err?.message || "Could not update profile." });

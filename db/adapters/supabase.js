@@ -664,6 +664,25 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		updateUserAudibleNotifications: {
+			run: async (userId, on) => {
+				const { data: current, error: selectError } = await serviceClient
+					.from(prefixedTable("users"))
+					.select("meta")
+					.eq("id", userId)
+					.maybeSingle();
+				if (selectError) throw selectError;
+				const existing = current?.meta ?? null;
+				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
+				meta.audibleNotifications = Boolean(on);
+				const { error } = await serviceClient
+					.from(prefixedTable("users"))
+					.update({ meta })
+					.eq("id", userId);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
 		updateUserApiKey: {
 			run: async (userId, { apiKeyHash, apiKeyPrefix } = {}) => {
 				const { data: current, error: selectError } = await serviceClient
