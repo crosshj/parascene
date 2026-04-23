@@ -564,6 +564,8 @@ export async function initChatPage(root, options = {}) {
 	} = await import(`../icons/svg-strings.js${qs}`);
 	const chatSidebarServerGearSvg = gearIcon('chat-page-sidebar-server-settings-icon');
 	const rosterMod = await import(`../shared/chatSidebarRoster.js${qs}`);
+	const chatDmSidebarGearMenuMod = await import(`../shared/chatDmSidebarGearMenu.js${qs}`);
+	const openDmSidebarGearMenu = chatDmSidebarGearMenuMod.openDmSidebarGearMenu;
 	const serverChatTagMod = await import(`../shared/serverChatTag.js${qs}`);
 	const serverChannelTagFromServerName = serverChatTagMod.serverChannelTagFromServerName;
 	const creationsPollMod = await import(`../shared/creationsInFlightPoller.js${qs}`);
@@ -2848,7 +2850,8 @@ export async function initChatPage(root, options = {}) {
 				if (tag) joinedSlugs.add(tag.toLowerCase());
 			}
 			const dmsRaw = merged.filter((t) => t && t.type === 'dm');
-			const dms = rosterMod.normalizeDmListWithSelfFirst(dmsRaw, chatViewerId, viewerProfile);
+			const dmsNorm = rosterMod.normalizeDmListWithSelfFirst(dmsRaw, chatViewerId, viewerProfile);
+			const dms = rosterMod.sortDmsWithPinnedOrder(dmsNorm, chatViewerId);
 			const channelRowsRaw = merged.filter((t) => t && t.type === 'channel');
 			const serverChannelsRaw = channelRowsRaw.filter((t) => {
 				const slug =
@@ -2914,6 +2917,34 @@ export async function initChatPage(root, options = {}) {
 						rowOpts.pseudoSlug.trim()
 						? ` data-chat-pseudo-slug="${escapeHtml(rowOpts.pseudoSlug.trim().toLowerCase())}"`
 						: '';
+				const pinKey =
+					t.type === 'dm' && !selfDm ? rosterMod.dmStablePinStorageKey(t) : null;
+				if (pinKey) {
+					const ou = t.other_user;
+					const oid =
+						ou?.id != null ? Number(ou.id) : Number(rosterMod.getDmOtherUserId(t));
+					const otherUserIdAttr =
+						Number.isFinite(oid) && oid > 0 ? String(oid) : '';
+					const profileHref =
+						buildProfilePath({
+							userName: typeof ou?.user_name === 'string' ? ou.user_name : undefined,
+							userId: Number.isFinite(oid) && oid > 0 ? oid : undefined
+						}) || (otherUserIdAttr ? `/user/${otherUserIdAttr}` : '/user');
+					const profileHrefAttr = escapeHtml(profileHref);
+					return `<div class="chat-page-sidebar-row chat-page-sidebar-row--dm-with-menu${activeClass}${pc}${extraRow}"${dataPseudoSlugAttr}>
+					<a class="chat-page-sidebar-row-link" href="${escapeHtml(href)}">
+					${avatarHtml}
+					<div class="chat-page-sidebar-row-body">
+						<div class="chat-page-sidebar-row-title-line">
+							<span class="chat-page-sidebar-row-title">${escapeHtml(title)}</span>
+							${youPill}
+							${unreadHtml}
+						</div>
+					</div>
+					</a>
+					<button type="button" class="chat-page-sidebar-server-settings chat-page-sidebar-dm-menu-btn" data-chat-dm-menu="${escapeHtml(pinKey)}" data-chat-dm-profile-href="${profileHrefAttr}" data-chat-dm-other-user-id="${escapeHtml(otherUserIdAttr)}" aria-label="Direct message options" aria-haspopup="menu" aria-expanded="false">${chatSidebarServerGearSvg}</button>
+				</div>`;
+				}
 				return `<a class="chat-page-sidebar-row${activeClass}${pc}${extraRow}" href="${escapeHtml(href)}"${dataPseudoSlugAttr}>
 					${avatarHtml}
 					<div class="chat-page-sidebar-row-body">
@@ -3128,6 +3159,15 @@ export async function initChatPage(root, options = {}) {
 				e.preventDefault();
 				e.stopPropagation();
 				document.dispatchEvent(new CustomEvent('open-profile'));
+				return;
+			}
+			const dmGearBtn = e.target?.closest?.('.chat-page-sidebar-dm-menu-btn[data-chat-dm-menu]');
+			if (dmGearBtn instanceof HTMLButtonElement) {
+				e.preventDefault();
+				e.stopPropagation();
+				openDmSidebarGearMenu(dmGearBtn, {
+					onAfterPinChange: () => void refreshChatSidebar({ skipThreadsFetch: true })
+				});
 				return;
 			}
 			const settingsBtn = e.target?.closest?.('[data-chat-server-settings]');

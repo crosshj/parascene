@@ -4,6 +4,7 @@
 
 import { getAvatarColor } from './avatar.js';
 import { serverChannelTagFromServerName } from './serverChatTag.js';
+import { readDmPinKeysOrdered } from './chatDmPins.js';
 
 function escapeHtmlPseudoStrip(str) {
 	return String(str ?? '')
@@ -415,6 +416,47 @@ export function normalizeDmListWithSelfFirst(dms, viewerId, profile) {
 		list.unshift(row);
 	}
 	return list;
+}
+
+/**
+ * Stable storage key for pinning a DM row (pair key preferred; else numeric thread id).
+ * @param {object | null | undefined} t
+ * @returns {string | null}
+ */
+export function dmStablePinStorageKey(t) {
+	if (!t || t.type !== 'dm') return null;
+	const pk = typeof t.dm_pair_key === 'string' ? t.dm_pair_key.trim() : '';
+	if (pk) return `pair:${pk}`;
+	const id = Number(t.id);
+	if (Number.isFinite(id) && id > 0) return `thread:${id}`;
+	return null;
+}
+
+/**
+ * Keep notes-to-self first; then pinned DMs in saved order; then the rest (stable original order).
+ * @param {object[]} dms — output of {@link normalizeDmListWithSelfFirst}
+ * @param {number | null | undefined} viewerId
+ * @param {string[] | null | undefined} pinKeysOrdered — omit to read from localStorage
+ */
+export function sortDmsWithPinnedOrder(dms, viewerId, pinKeysOrdered) {
+	const raw = Array.isArray(dms) ? dms : [];
+	const vid = Number(viewerId);
+	const keys = Array.isArray(pinKeysOrdered) ? pinKeysOrdered : readDmPinKeysOrdered();
+	const rank = new Map(keys.map((k, i) => [k, i]));
+
+	const selfI = Number.isFinite(vid) && vid > 0 ? raw.findIndex((t) => isSelfDmThread(t, vid)) : -1;
+	const self = selfI >= 0 ? raw[selfI] : null;
+	const rest = raw.filter((_, i) => i !== selfI);
+
+	const keyed = rest.map((t, i) => ({ t, i, k: dmStablePinStorageKey(t) }));
+	keyed.sort((a, b) => {
+		const ra = a.k != null && rank.has(a.k) ? rank.get(a.k) : Infinity;
+		const rb = b.k != null && rank.has(b.k) ? rank.get(b.k) : Infinity;
+		if (ra !== rb) return ra - rb;
+		return a.i - b.i;
+	});
+	const out = keyed.map((x) => x.t);
+	return self ? [self, ...out] : out;
 }
 
 /** Max rows per sidebar list before Show more / Show less (DMs, server channels, channels). */

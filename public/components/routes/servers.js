@@ -28,6 +28,9 @@ let buildChatSidebarDmListHtml;
 let buildCollapsibleChatSidebarListHtml;
 let toggleChatSidebarCollapsibleList;
 let sortChannelRowsByLastActivity;
+let sortDmsWithPinnedOrder;
+let dmStablePinStorageKey;
+let buildProfilePath;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -92,6 +95,11 @@ async function loadDeps() {
 		buildCollapsibleChatSidebarListHtml = chatSidebarRosterMod.buildCollapsibleChatSidebarListHtml;
 		toggleChatSidebarCollapsibleList = chatSidebarRosterMod.toggleChatSidebarCollapsibleList;
 		sortChannelRowsByLastActivity = chatSidebarRosterMod.sortChannelRowsByLastActivity;
+		sortDmsWithPinnedOrder = chatSidebarRosterMod.sortDmsWithPinnedOrder;
+		dmStablePinStorageKey = chatSidebarRosterMod.dmStablePinStorageKey;
+
+		const profileLinksMod = await import(`../../shared/profileLinks.js${qs}`);
+		buildProfilePath = profileLinksMod.buildProfilePath;
 	})();
 	return _depsPromise;
 }
@@ -353,6 +361,9 @@ class AppRouteServers extends HTMLElement {
 		const { gearIcon } = await import(`../../icons/svg-strings.js${qs}`);
 		this._serverGearSvg = gearIcon('chat-page-sidebar-server-settings-icon');
 
+		const dmMenuMod = await import(`../../shared/chatDmSidebarGearMenu.js${qs}`);
+		this._openDmSidebarGearMenu = dmMenuMod.openDmSidebarGearMenu;
+
 		const modalsMod = await import(`../modals/chatSidebarModals.js${qs}`);
 		this._connectSidebarModals = modalsMod.initChatSidebarModals({
 			getThreads: () => this._chatThreads || [],
@@ -374,6 +385,19 @@ class AppRouteServers extends HTMLElement {
 				e.stopPropagation();
 				if (typeof toggleChatSidebarCollapsibleList === 'function') {
 					toggleChatSidebarCollapsibleList(collapsibleBtn);
+				}
+				return;
+			}
+			const dmGearBtn = e.target?.closest?.('.chat-page-sidebar-dm-menu-btn[data-chat-dm-menu]');
+			if (dmGearBtn instanceof HTMLButtonElement) {
+				e.preventDefault();
+				e.stopPropagation();
+				if (typeof this._openDmSidebarGearMenu === 'function') {
+					this._openDmSidebarGearMenu(dmGearBtn, {
+						onAfterPinChange: () => {
+							this.renderConnectChatThreadList();
+						}
+					});
 				}
 				return;
 			}
@@ -770,10 +794,14 @@ class AppRouteServers extends HTMLElement {
 			if (tag) joinedSlugs.add(tag.toLowerCase());
 		}
 		const dmsRaw = merged.filter((t) => t && t.type === 'dm');
-		const dms =
+		const dmsNorm =
 			typeof normalizeDmListWithSelfFirst === 'function'
 				? normalizeDmListWithSelfFirst(dmsRaw, this._chatViewerId, this._chatViewerProfileMini)
 				: dmsRaw;
+		const dms =
+			typeof sortDmsWithPinnedOrder === 'function'
+				? sortDmsWithPinnedOrder(dmsNorm, this._chatViewerId)
+				: dmsNorm;
 		const channelRowsRaw = merged.filter((t) => t && t.type === 'channel');
 		const serverChannelsRaw = channelRowsRaw.filter((t) => {
 			const slug = typeof t.channel_slug === 'string' ? t.channel_slug.trim().toLowerCase() : '';
@@ -839,6 +867,37 @@ class AppRouteServers extends HTMLElement {
 			const youPill = selfDm
 				? '<span class="chat-page-sidebar-you-pill" aria-label="This is you">you</span>'
 				: '';
+			const pinKey =
+				t.type === 'dm' && !selfDm && typeof dmStablePinStorageKey === 'function'
+					? dmStablePinStorageKey(t)
+					: null;
+			if (pinKey && typeof buildProfilePath === 'function') {
+				const ou = t.other_user;
+				const oid =
+					ou?.id != null ? Number(ou.id) : typeof getDmOtherUserId === 'function'
+						? Number(getDmOtherUserId(t))
+						: NaN;
+				const otherUserIdAttr = Number.isFinite(oid) && oid > 0 ? String(oid) : '';
+				const profileHref =
+					buildProfilePath({
+						userName: typeof ou?.user_name === 'string' ? ou.user_name : undefined,
+						userId: Number.isFinite(oid) && oid > 0 ? oid : undefined
+					}) || (otherUserIdAttr ? `/user/${otherUserIdAttr}` : '/user');
+				const profileHrefAttr = escapeHtml(profileHref);
+				return `<div class="chat-page-sidebar-row chat-page-sidebar-row--dm-with-menu${pc}${extraRow}">
+				<a class="chat-page-sidebar-row-link" href="${escapeHtml(href)}">
+				${avatarHtml}
+				<div class="chat-page-sidebar-row-body">
+					<div class="chat-page-sidebar-row-title-line">
+						<span class="chat-page-sidebar-row-title">${escapeHtml(title)}</span>
+						${youPill}
+						${unreadHtml}
+					</div>
+				</div>
+				</a>
+				<button type="button" class="chat-page-sidebar-server-settings chat-page-sidebar-dm-menu-btn" data-chat-dm-menu="${escapeHtml(pinKey)}" data-chat-dm-profile-href="${profileHrefAttr}" data-chat-dm-other-user-id="${escapeHtml(otherUserIdAttr)}" aria-label="Direct message options" aria-haspopup="menu" aria-expanded="false">${gearSvg}</button>
+			</div>`;
+			}
 			return `<a class="chat-page-sidebar-row${pc}${extraRow}" href="${escapeHtml(href)}">
 				${avatarHtml}
 				<div class="chat-page-sidebar-row-body">

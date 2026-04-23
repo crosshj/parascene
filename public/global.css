@@ -5024,16 +5024,19 @@ body.chat-page main.chat-page-outer {
 		color: var(--text);
 	}
 
-	.chat-page-sidebar-row--server {
+	.chat-page-sidebar-row--server,
+	.chat-page-sidebar-row--dm-with-menu {
 		align-items: stretch;
 	}
 
-	.chat-page-sidebar-row--server:focus-within {
+	.chat-page-sidebar-row--server:focus-within,
+	.chat-page-sidebar-row--dm-with-menu:focus-within {
 		outline: 2px solid var(--focus);
 		outline-offset: -2px;
 	}
 
-	.chat-page-sidebar-row--server .chat-page-sidebar-row-link {
+	.chat-page-sidebar-row--server .chat-page-sidebar-row-link,
+	.chat-page-sidebar-row--dm-with-menu .chat-page-sidebar-row-link {
 		display: flex;
 		flex-direction: row;
 		align-items: center;
@@ -5046,7 +5049,8 @@ body.chat-page main.chat-page-outer {
 		border-radius: 4px;
 	}
 
-	.chat-page-sidebar-row--server .chat-page-sidebar-row-link:focus-visible {
+	.chat-page-sidebar-row--server .chat-page-sidebar-row-link:focus-visible,
+	.chat-page-sidebar-row--dm-with-menu .chat-page-sidebar-row-link:focus-visible {
 		outline: none;
 	}
 
@@ -5081,6 +5085,8 @@ body.chat-page main.chat-page-outer {
 
 	.chat-page-sidebar-row--server:hover .chat-page-sidebar-server-settings,
 	.chat-page-sidebar-row--server:focus-within .chat-page-sidebar-server-settings,
+	.chat-page-sidebar-row--dm-with-menu:hover .chat-page-sidebar-server-settings,
+	.chat-page-sidebar-row--dm-with-menu:focus-within .chat-page-sidebar-server-settings,
 	.chat-page-sidebar-server-settings:focus-visible {
 		opacity: 1;
 	}
@@ -6794,16 +6800,19 @@ body.blog-edit-page .blog-edit-route {
 	color: var(--text);
 }
 
-.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row--server {
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row--server,
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row--dm-with-menu {
 	align-items: stretch;
 }
 
-.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row--server:focus-within {
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row--server:focus-within,
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row--dm-with-menu:focus-within {
 	outline: 2px solid var(--focus);
 	outline-offset: -2px;
 }
 
-.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row--server .chat-page-sidebar-row-link {
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row--server .chat-page-sidebar-row-link,
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row--dm-with-menu .chat-page-sidebar-row-link {
 	display: flex;
 	flex-direction: row;
 	align-items: center;
@@ -6816,7 +6825,8 @@ body.blog-edit-page .blog-edit-route {
 	border-radius: 4px;
 }
 
-.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row--server .chat-page-sidebar-row-link:focus-visible {
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row--server .chat-page-sidebar-row-link:focus-visible,
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row--dm-with-menu .chat-page-sidebar-row-link:focus-visible {
 	outline: none;
 }
 
@@ -6851,6 +6861,8 @@ body.blog-edit-page .blog-edit-route {
 
 .servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row--server:hover .chat-page-sidebar-server-settings,
 .servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row--server:focus-within .chat-page-sidebar-server-settings,
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row--dm-with-menu:hover .chat-page-sidebar-server-settings,
+.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row--dm-with-menu:focus-within .chat-page-sidebar-server-settings,
 .servers-route .connect-chat-sidebar-roster .chat-page-sidebar-server-settings:focus-visible {
 	opacity: 1;
 }
