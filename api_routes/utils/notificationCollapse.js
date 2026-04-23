@@ -32,6 +32,10 @@ function getRecentCutoffIso(hoursAgo = RECENT_WITHIN_HOURS) {
 }
 
 function stripForResponse(n) {
+	const creationId =
+		n.creation_id != null && Number.isFinite(Number(n.creation_id))
+			? Number(n.creation_id)
+			: getCreationIdFromRow(n);
 	return {
 		id: n.id,
 		title: n.title,
@@ -39,7 +43,8 @@ function stripForResponse(n) {
 		link: n.link,
 		type: n.type ?? null,
 		created_at: n.created_at,
-		acknowledged_at: n.acknowledged_at
+		acknowledged_at: n.acknowledged_at,
+		...(creationId != null ? { creation_id: creationId } : {})
 	};
 }
 
@@ -105,6 +110,10 @@ export function collapseNotificationsByCreation(notifications) {
 		const message = activityText;
 		const title = creationTitle ? `Activity on "${creationTitle}"` : "Activity on your creation";
 
+		const collapsedCreationId =
+			latest.creation_id != null && Number.isFinite(Number(latest.creation_id))
+				? Number(latest.creation_id)
+				: getCreationIdFromRow(latest);
 		collapsed.push({
 			id: latest.id,
 			title,
@@ -114,7 +123,8 @@ export function collapseNotificationsByCreation(notifications) {
 			created_at: latest.created_at,
 			acknowledged_at: allRead ? latest.acknowledged_at : null,
 			count: group.length,
-			unread_count: unreadCount
+			unread_count: unreadCount,
+			...(collapsedCreationId != null ? { creation_id: collapsedCreationId } : {})
 		});
 	}
 

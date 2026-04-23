@@ -67,8 +67,17 @@ export async function resolveNotificationDisplay(row, queries) {
 		case "tip": {
 			const amount = meta?.amount != null && Number.isFinite(Number(meta.amount)) ? Number(meta.amount) : null;
 			const amountStr = amount != null ? `${amount.toFixed(1)}` : "some";
-			const title = "You received a tip";
-			const message = `${actorName} tipped you ${amountStr} credits.`;
+			const tipNote =
+				typeof meta?.tip_note === "string" && meta.tip_note.trim() ? meta.tip_note.trim() : "";
+			const isAdmin = actorUser?.role === "admin";
+			const teamAckTip = isAdmin && creationId == null;
+			const title = teamAckTip ? "You received a tip from the team" : "You received a tip";
+			let message = teamAckTip
+				? `You received ${amountStr} credits.`
+				: `${actorName} tipped you ${amountStr} credits.`;
+			if (tipNote) {
+				message = `${message}\n\n${tipNote}`;
+			}
 			return { title, message, link: baseLink, creation_title: creationTitle || null };
 		}
 		default:

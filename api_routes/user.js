@@ -2132,7 +2132,10 @@ export default function createProfileRoutes({ queries }) {
 							? `/creations/${encodeURIComponent(String(createdImageId))}`
 							: "/";
 					const target = createdImageId != null ? { creation_id: createdImageId } : {};
-					const meta = { amount };
+					const meta = {
+						amount,
+						...(message ? { tip_note: message } : {})
+					};
 					await queries.insertNotification.run(toUserId, null, title, notifMessage, link, sender.id, "tip", target, meta);
 				}
 			} catch (error) {

@@ -33,6 +33,25 @@ async function loadDeps() {
 
 const html = String.raw;
 
+/** Same rules as nav preview: API may omit creation_id; link can still be /creations/:id. */
+function notificationCreationHref(n) {
+	if (!n) return null;
+	const link = typeof n.link === 'string' ? n.link.trim() : '';
+	if (/^\/creations\/\d+/.test(link)) return link;
+	if (n.creation_id != null && Number.isFinite(Number(n.creation_id))) {
+		return `/creations/${Number(n.creation_id)}`;
+	}
+	return null;
+}
+
+/** Row is actionable on primary click: tips always (incl. admin tips with link "/"), plus comments/activity with a creation URL. */
+function notificationPrimaryClickable(n) {
+	if (!n) return false;
+	if (n.type === 'tip') return true;
+	const href = notificationCreationHref(n);
+	return !!href && (n.type === 'comment' || n.type === 'comment_thread' || n.type === 'creation_activity');
+}
+
 class AppModalNotifications extends HTMLElement {
 	constructor() {
 		super();
@@ -297,12 +316,7 @@ class AppModalNotifications extends HTMLElement {
 			return div.innerHTML;
 		};
 
-		const hasClickTarget = (n) => {
-			if (!n) return false;
-			const hasLink = typeof n.link === 'string' && n.link.trim();
-			if (n.type === 'tip') return hasLink && n.creation_id != null;
-			return (n.type === 'comment' || n.type === 'comment_thread' || n.type === 'creation_activity') && hasLink;
-		};
+		const hasClickTarget = (n) => notificationPrimaryClickable(n);
 
 		content.innerHTML = this.notifications.map((notification) => {
 			const time = formatRelativeTime(notification.created_at);
@@ -337,7 +351,15 @@ class AppModalNotifications extends HTMLElement {
 					} catch {
 						// ignore
 					}
-					closeModalsAndNavigate(notification.link.trim());
+					const href = notificationCreationHref(notification);
+					if (href) {
+						closeModalsAndNavigate(href);
+					} else if (notification?.type === 'tip') {
+						this.openDetail(notification.id);
+						item.classList.remove('is-loading');
+						item.removeAttribute('aria-busy');
+						document.dispatchEvent(new CustomEvent('notifications-acknowledged'));
+					}
 				} else if (id) {
 					this.openDetail(id);
 				}
@@ -377,6 +399,9 @@ class AppModalNotifications extends HTMLElement {
 
 		const time = formatRelativeTime(notification.created_at);
 		const timeTitle = formatDateTime(notification.created_at);
+		const openRelatedHref = notificationCreationHref(notification);
+		const isTipWithoutCreation =
+			notification.type === 'tip' && !openRelatedHref;
 
 		content.innerHTML = html`
 	<div class="notification-detail">
@@ -387,18 +412,29 @@ class AppModalNotifications extends HTMLElement {
 		<div class="notification-time" title="${escapeHtml(timeTitle)}">${escapeHtml(time)}</div>
 		<div class="notification-actions">
 			<button class="notification-action" type="button">View all notifications</button>
-			${notification.link && (notification.type !== 'tip' || notification.creation_id != null) ? html`
-			<a class="notification-action is-primary" href="${escapeHtml(notification.link)}">Open related page</a>
+			${openRelatedHref ? html`
+			<a class="notification-action is-primary" href="${escapeHtml(openRelatedHref)}">Open related page</a>
+			` : ''}
+			${isTipWithoutCreation ? html`
+			<button class="notification-action is-primary" type="button" data-action="view-credits">View credit balance</button>
 			` : ''}
 		</div>
 	</div>
     `;
 
-		const viewAllButton = this.shadowRoot.querySelector('.notification-actions .notification-action:not(.is-primary)');
+		const viewAllButton = this.shadowRoot.querySelector('.notification-actions .notification-action:not(.is-primary):not([data-action="view-credits"])');
 		if (viewAllButton) {
 			viewAllButton.addEventListener('click', () => {
 				this.close();
 				this.openList();
+			});
+		}
+
+		const viewCreditsBtn = this.shadowRoot.querySelector('[data-action="view-credits"]');
+		if (viewCreditsBtn) {
+			viewCreditsBtn.addEventListener('click', () => {
+				this.close();
+				document.dispatchEvent(new CustomEvent('open-credits'));
 			});
 		}
 	}
@@ -537,6 +573,7 @@ class AppModalNotifications extends HTMLElement {
           margin-bottom: 0;
           overflow-wrap: anywhere;
           word-break: break-word;
+          white-space: pre-wrap;
         }
         .notification-time {
           font-size: 0.9rem;

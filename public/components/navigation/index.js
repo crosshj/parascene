@@ -666,10 +666,22 @@ class AppNavigation extends HTMLElement {
 				return;
 			}
 
+			const notificationCreationHref = (n) => {
+				if (!n) return null;
+				const link = typeof n.link === 'string' ? n.link.trim() : '';
+				if (/^\/creations\/\d+/.test(link)) return link;
+				if (n.creation_id != null && Number.isFinite(Number(n.creation_id))) {
+					return `/creations/${Number(n.creation_id)}`;
+				}
+				return null;
+			};
+
 			const hasClickTarget = (n) => {
-				const hasLink = typeof n.link === 'string' && n.link.trim();
-				if (n.type === 'tip') return hasLink && n.creation_id != null;
-				return (n.type === 'comment' || n.type === 'comment_thread' || n.type === 'tip' || n.type === 'creation_activity') && hasLink;
+				if (!n) return false;
+				if (n.type === 'tip') return true;
+				const href = notificationCreationHref(n);
+				if (!href) return false;
+				return n.type === 'comment' || n.type === 'comment_thread' || n.type === 'creation_activity';
 			};
 
 			const fragment = document.createDocumentFragment();
@@ -706,7 +718,18 @@ class AppNavigation extends HTMLElement {
 							}
 							this.closeNotificationsMenu();
 							document.dispatchEvent(new CustomEvent('close-all-modals'));
-							window.location.href = notification.link.trim();
+							const href = notificationCreationHref(notification);
+							if (href) {
+								window.location.href = href;
+							} else if (notification.type === 'tip') {
+								document.dispatchEvent(new CustomEvent('open-notifications', {
+									detail: { notificationId: notification.id }
+								}));
+								item.classList.remove('is-loading');
+								item.removeAttribute('aria-busy');
+								item.querySelector('.notification-preview-item-spinner')?.remove();
+								document.dispatchEvent(new CustomEvent('notifications-acknowledged'));
+							}
 						} else {
 							document.dispatchEvent(new CustomEvent('open-notifications', {
 								detail: { notificationId: notification.id }
