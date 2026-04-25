@@ -19,6 +19,20 @@ function isChatPageMobileLayout() {
 	}
 }
 
+function shouldUseAppMobileHeaderForChatPath(pathname) {
+	const p = String(pathname || '').replace(/\/+$/, '') || '/';
+	if (p === '/' || p === '/index.html' || p === '/feed' || p === '/explore' || p === '/creations') return true;
+	if (!p.startsWith('/chat/c/')) return false;
+	const slug = p.slice('/chat/c/'.length).split('/')[0].trim().toLowerCase();
+	if (!slug || slug === 'feedback') return false;
+	return slug === 'feed' || slug === 'explore' || slug === 'creations';
+}
+
+function shouldShowMobileSidebarFromLocation() {
+	const path = String(window.location.pathname || '').replace(/\/+$/, '') || '/';
+	return isChatPageMobileLayout() && path === '/chat' && window.location.hash === '#channels';
+}
+
 /** `?chatSimulateSendFail=1` — next POST /messages returns failure so you can preview resend UI. */
 function chatSimulateSendFail() {
 	try {
@@ -423,6 +437,18 @@ function normalizeDmPathUsername(raw) {
  */
 function parseChatPathname(pathname) {
 	const p = String(pathname || '').replace(/\/+$/, '') || '/';
+	if (p === '/' || p === '/index.html' || p === '/feed') {
+		return { kind: 'channel', slug: 'feed' };
+	}
+		if (p === '/chat') {
+			return { kind: 'channel', slug: 'feed' };
+		}
+	if (p === '/explore') {
+		return { kind: 'channel', slug: 'explore' };
+	}
+	if (p === '/creations') {
+		return { kind: 'channel', slug: 'creations' };
+	}
 	const parts = p.split('/').filter(Boolean);
 	if (parts[0] !== 'chat') return { kind: 'invalid' };
 	if (parts.length === 1) return { kind: 'empty' };
@@ -553,6 +579,8 @@ export async function initChatPage(root, options = {}) {
 	const qs = getImportQuery(v);
 	const {
 		sendIcon,
+		notifyIcon,
+		creditIcon,
 		REACTION_ORDER,
 		REACTION_ICONS,
 		smileIcon,
@@ -1335,7 +1363,29 @@ export async function initChatPage(root, options = {}) {
 		}
 		const tid = activeThreadId;
 		const hasThread = tid != null && Number.isFinite(Number(tid)) && Number(tid) > 0;
-		bodyInput.placeholder = hasThread && !loadingMessages ? 'Message…' : '';
+		if (!hasThread || loadingMessages) {
+			bodyInput.placeholder = '';
+			return;
+		}
+		const meta = (chatThreads || []).find((t) => Number(t.id) === Number(tid));
+		const titleEl = root.querySelector('[data-chat-title]');
+		const uiLabel = titleEl instanceof HTMLElement ? String(titleEl.textContent || '').trim() : '';
+		const metaTitle = meta?.title && String(meta.title).trim() ? String(meta.title).trim() : '';
+		const isChannel = meta?.type === 'channel';
+		const channelSlug = isChannel ? String(meta?.channel_slug || '').trim().toLowerCase() : '';
+		const pseudoLabel = channelSlug ? String(rosterMod.getSidebarPseudoChannelTitle(channelSlug) || '').trim() : '';
+		let label = uiLabel || metaTitle || pseudoLabel;
+		if (!label && isChannel && channelSlug) {
+			label = `#${channelSlug}`;
+		}
+		if (!label || label.toLowerCase() === 'chat') {
+			bodyInput.placeholder = 'Message…';
+			return;
+		}
+		if (isChannel && !label.startsWith('#') && !pseudoLabel) {
+			label = `#${label}`;
+		}
+		bodyInput.placeholder = `Message ${label}…`;
 	}
 
 	function syncExploreChannelBrowseUrl() {
@@ -1453,11 +1503,51 @@ export async function initChatPage(root, options = {}) {
 		const bodyInput = root.querySelector('[data-chat-body-input]');
 		const hint = root.querySelector('[data-chat-pseudo-composer-hint]');
 		const shell = root.querySelector('[data-chat-composer] .chat-page-input-shell');
+		const appHeader = document.querySelector('app-navigation');
+		const appMobileNav = document.querySelector('app-navigation-mobile');
+		const mobileChrome = mainColumn instanceof HTMLElement
+			? mainColumn.querySelector('[data-chat-mobile-chrome]')
+			: null;
+		const shouldShowAppMobileHeader =
+			isChatPageMobileLayout() &&
+			(
+				shouldUseAppMobileHeaderForChatPath(window.location.pathname) ||
+				shouldShowMobileSidebarFromLocation()
+			);
+		const shouldShowAppMobileFooter =
+			isChatPageMobileLayout() &&
+			Boolean(activePseudoChannelSlug) &&
+			activePseudoChannelSlug !== 'feedback' &&
+			activePseudoChannelSlug !== 'comments';
+		const setMobileComposerOverlayClass = (on) => {
+			if (!document.body) return;
+			const shouldUseOverlay =
+				Boolean(on) &&
+				isChatPageMobileLayout() &&
+				!shouldShowAppMobileHeader &&
+				!shouldShowMobileSidebarFromLocation();
+			document.body.classList.toggle('chat-page--mobile-composer-overlay', shouldUseOverlay);
+		};
+		try {
+			document.documentElement.classList.toggle('chat-page--use-app-mobile-header', shouldShowAppMobileHeader);
+		} catch {
+			// ignore
+		}
+		if (appHeader instanceof HTMLElement) {
+			appHeader.hidden = !shouldShowAppMobileHeader;
+		}
+		if (appMobileNav instanceof HTMLElement) {
+			appMobileNav.hidden = !shouldShowAppMobileFooter;
+		}
+		if (mobileChrome instanceof HTMLElement) {
+			mobileChrome.hidden = shouldShowAppMobileHeader;
+		}
 
 		if (!chatComposerVisible) {
 			if (composerForm instanceof HTMLElement) {
 				composerForm.hidden = true;
 			}
+			setMobileComposerOverlayClass(false);
 			return;
 		}
 		if (
@@ -1476,6 +1566,7 @@ export async function initChatPage(root, options = {}) {
 			if (composerForm instanceof HTMLElement) {
 				composerForm.hidden = true;
 			}
+			setMobileComposerOverlayClass(false);
 			syncChatAttachmentsVisibility();
 			syncChatSendButton();
 			syncChatMessagePlaceholder();
@@ -1485,6 +1576,7 @@ export async function initChatPage(root, options = {}) {
 		if (composerForm instanceof HTMLElement) {
 			composerForm.hidden = false;
 		}
+		setMobileComposerOverlayClass(true);
 
 		if (!(bodyInput instanceof HTMLTextAreaElement)) return;
 
@@ -1514,6 +1606,25 @@ export async function initChatPage(root, options = {}) {
 
 	chatApplyComposerStateRef = applyComposerState;
 
+	function markThreadUiPending() {
+		const titleEl = root.querySelector('[data-chat-title]');
+		if (titleEl instanceof HTMLElement) {
+			titleEl.textContent = '';
+			titleEl.setAttribute('data-chat-title-awaiting', '1');
+			titleEl.setAttribute('aria-hidden', 'true');
+		}
+		if (mainColumn instanceof HTMLElement) {
+			const mobileTitle = mainColumn.querySelector('[data-chat-mobile-chrome-title]');
+			const mobileChannel = mobileTitle?.querySelector?.('[data-chat-mobile-chrome-channel]');
+			const mobileCanvasWrap = mobileTitle?.querySelector?.('[data-chat-mobile-chrome-canvas-wrap]');
+			const mobileCanvas = mobileTitle?.querySelector?.('[data-chat-mobile-chrome-canvas]');
+			if (mobileChannel instanceof HTMLElement) mobileChannel.textContent = '';
+			if (mobileCanvas instanceof HTMLElement) mobileCanvas.textContent = '';
+			if (mobileCanvasWrap instanceof HTMLElement) mobileCanvasWrap.hidden = true;
+			if (mobileTitle instanceof HTMLElement) mobileTitle.removeAttribute('aria-label');
+		}
+	}
+
 	function syncChatBrowseViewBodyClass() {
 		if (!document.body) return;
 		const on =
@@ -1523,6 +1634,38 @@ export async function initChatPage(root, options = {}) {
 	}
 
 	syncChatBrowseViewBodyClassRef = syncChatBrowseViewBodyClass;
+
+	function setMobileSidebarMode(open) {
+		if (!document.body) return;
+		const on = Boolean(open) && shouldShowMobileSidebarFromLocation();
+		document.body.classList.toggle('chat-page--mobile-sidebar-open', on);
+		try {
+			if (on) {
+				document.documentElement.classList.add('chat-page--use-app-mobile-header');
+			} else {
+				const shouldShowAppMobileHeader =
+					isChatPageMobileLayout() &&
+					shouldUseAppMobileHeaderForChatPath(window.location.pathname);
+				document.documentElement.classList.toggle('chat-page--use-app-mobile-header', shouldShowAppMobileHeader);
+			}
+		} catch {
+			// ignore
+		}
+		const appHeader = document.querySelector('app-navigation');
+		const appMobileNav = document.querySelector('app-navigation-mobile');
+		const mobileChrome = mainColumn instanceof HTMLElement
+			? mainColumn.querySelector('[data-chat-mobile-chrome]')
+			: null;
+		if (appHeader instanceof HTMLElement) {
+			appHeader.hidden = !on;
+		}
+		if (appMobileNav instanceof HTMLElement) {
+			appMobileNav.hidden = !on;
+		}
+		if (mobileChrome instanceof HTMLElement) {
+			mobileChrome.hidden = on;
+		}
+	}
 
 	function findOptimisticRow(messagesEl, tempId) {
 		if (!messagesEl || !tempId) return null;
@@ -1912,21 +2055,16 @@ export async function initChatPage(root, options = {}) {
 		const awaiting = titleEl?.getAttribute('data-chat-title-awaiting') === '1';
 		const channelPart = awaiting ? '' : (titleEl?.textContent?.trim() || '');
 		chEl.textContent = channelPart;
-		if (activeCanvasRow && wrap instanceof HTMLElement && cvEl instanceof HTMLElement) {
-			const canvasPart = String(activeCanvasRow.title || '').trim() || 'Canvas';
-			cvEl.textContent = canvasPart;
-			wrap.hidden = false;
-			const al =
-				channelPart ? `${channelPart}, canvas ${canvasPart}` : `canvas ${canvasPart}`;
-			h1.setAttribute('aria-label', al);
-		} else if (wrap instanceof HTMLElement) {
+		if (wrap instanceof HTMLElement) {
+			// Keep mobile header title stable to the channel name; pinned canvas is indicated
+			// by the toggle button next to the caret.
 			wrap.hidden = true;
 			if (cvEl instanceof HTMLElement) cvEl.textContent = '';
-			if (channelPart) {
-				h1.setAttribute('aria-label', channelPart);
-			} else {
-				h1.removeAttribute('aria-label');
-			}
+		}
+		if (channelPart) {
+			h1.setAttribute('aria-label', channelPart);
+		} else {
+			h1.removeAttribute('aria-label');
 		}
 	}
 
@@ -2652,7 +2790,10 @@ export async function initChatPage(root, options = {}) {
 		const s = String(p || '')
 			.replace(/\/+$/, '')
 			.trim();
-		return s || '/';
+		if (!s || s === '/index.html' || s === '/feed') return '/chat/c/feed';
+		if (s === '/explore') return '/chat/c/explore';
+		if (s === '/creations') return '/chat/c/creations';
+		return s;
 	}
 
 	function isChatHrefActive(href) {
@@ -2742,7 +2883,71 @@ export async function initChatPage(root, options = {}) {
 		const avatarEl = sidebar?.querySelector?.('[data-chat-sidebar-user-avatar]');
 		const labelEl = sidebar?.querySelector?.('[data-chat-sidebar-user-label]');
 		const btn = sidebar?.querySelector?.('[data-chat-sidebar-open-profile]');
+		const notifyBtn = sidebar?.querySelector?.('[data-chat-sidebar-open-notifications]');
+		const notifyIconEl = sidebar?.querySelector?.('[data-chat-sidebar-notify-icon]');
+		const notifyBadgeEl = sidebar?.querySelector?.('[data-chat-sidebar-notify-badge]');
+		const creditBtn = sidebar?.querySelector?.('[data-chat-sidebar-open-credits]');
+		const creditIconEl = sidebar?.querySelector?.('[data-chat-sidebar-credit-icon]');
+		const creditCountEl = sidebar?.querySelector?.('[data-chat-sidebar-credit-count]');
 		if (!row || !avatarEl || !labelEl || !btn) return;
+		if (notifyIconEl instanceof HTMLElement && !notifyIconEl.innerHTML.trim()) {
+			notifyIconEl.innerHTML = notifyIcon('icon');
+		}
+		if (creditIconEl instanceof HTMLElement && !creditIconEl.innerHTML.trim()) {
+			creditIconEl.innerHTML = creditIcon('icon');
+		}
+
+		function parseCreditsCount(value) {
+			const count = Number(value);
+			if (!Number.isFinite(count)) return 0;
+			return Math.max(0, Math.round(count * 10) / 10);
+		}
+
+		function updateSidebarCreditsUI(value) {
+			if (!(creditCountEl instanceof HTMLElement)) return;
+			const normalized = parseCreditsCount(value);
+			const wholePart = Math.floor(normalized);
+			const decimalPart = normalized - wholePart;
+			creditCountEl.textContent = decimalPart > 0 ? `${wholePart}+` : String(wholePart);
+			if (creditBtn instanceof HTMLButtonElement) {
+				creditBtn.setAttribute('aria-label', `Open credits (${creditCountEl.textContent})`);
+			}
+		}
+
+		function updateSidebarNotificationsUI(count) {
+			if (!(notifyBadgeEl instanceof HTMLElement)) return;
+			const n = Number.isFinite(Number(count)) ? Math.max(0, Number(count)) : 0;
+			if (n > 0) {
+				notifyBadgeEl.textContent = n > 99 ? '99+' : String(n);
+				notifyBadgeEl.classList.add('has-unread');
+				if (notifyBtn instanceof HTMLButtonElement) {
+					notifyBtn.setAttribute('aria-label', `${n} unread notifications`);
+				}
+				return;
+			}
+			notifyBadgeEl.textContent = '';
+			notifyBadgeEl.classList.remove('has-unread');
+			if (notifyBtn instanceof HTMLButtonElement) {
+				notifyBtn.setAttribute('aria-label', 'Open notifications');
+			}
+		}
+
+		async function loadSidebarNotificationsCount({ force = false } = {}) {
+			try {
+				const result = await fetchJsonWithStatusDeduped(
+					'/api/notifications/unread-count',
+					{ credentials: 'include' },
+					{ windowMs: force ? 0 : 2000 }
+				);
+				if (!result.ok) {
+					updateSidebarNotificationsUI(0);
+					return;
+				}
+				updateSidebarNotificationsUI(result.data?.count || 0);
+			} catch {
+				updateSidebarNotificationsUI(0);
+			}
+		}
 
 		const vid = chatViewerId;
 		if (vid == null || !Number.isFinite(Number(vid))) {
@@ -2787,7 +2992,19 @@ export async function initChatPage(root, options = {}) {
 			avatarEl.innerHTML = avatarHtml;
 			labelEl.textContent = displayName;
 			btn.setAttribute('aria-label', `Account: ${displayName}`);
+			updateSidebarCreditsUI(user?.credits);
+			void loadSidebarNotificationsCount();
 			row.hidden = false;
+			const notificationsUpdatedHandler = () => {
+				void loadSidebarNotificationsCount({ force: true });
+			};
+			if (sidebar && !sidebar.dataset.notificationsBound) {
+				sidebar.dataset.notificationsBound = '1';
+				document.addEventListener('notifications-acknowledged', notificationsUpdatedHandler);
+				document.addEventListener('credits-updated', (event) => {
+					updateSidebarCreditsUI(event?.detail?.count);
+				});
+			}
 		} catch {
 			row.hidden = true;
 		}
@@ -3161,6 +3378,20 @@ export async function initChatPage(root, options = {}) {
 				document.dispatchEvent(new CustomEvent('open-profile'));
 				return;
 			}
+			const notificationsBtn = e.target?.closest?.('[data-chat-sidebar-open-notifications]');
+			if (notificationsBtn instanceof HTMLButtonElement) {
+				e.preventDefault();
+				e.stopPropagation();
+				document.dispatchEvent(new CustomEvent('open-notifications'));
+				return;
+			}
+			const creditsBtn = e.target?.closest?.('[data-chat-sidebar-open-credits]');
+			if (creditsBtn instanceof HTMLButtonElement) {
+				e.preventDefault();
+				e.stopPropagation();
+				document.dispatchEvent(new CustomEvent('open-credits'));
+				return;
+			}
 			const dmGearBtn = e.target?.closest?.('.chat-page-sidebar-dm-menu-btn[data-chat-dm-menu]');
 			if (dmGearBtn instanceof HTMLButtonElement) {
 				e.preventDefault();
@@ -3203,6 +3434,8 @@ export async function initChatPage(root, options = {}) {
 				return;
 			}
 			e.preventDefault();
+			setMobileSidebarMode(false);
+			markThreadUiPending();
 			history.pushState({ prsnChat: true }, '', nextUrl.pathname + nextUrl.search + nextUrl.hash);
 			void openThreadForCurrentPath();
 		};
@@ -3225,6 +3458,7 @@ export async function initChatPage(root, options = {}) {
 			getViewerId: () => chatViewerId,
 			navigateToChatPath: (pathname) => {
 				const path = pathname.startsWith('/') ? pathname : `/${pathname}`;
+				markThreadUiPending();
 				history.pushState({ prsnChat: true }, '', path);
 				void openThreadForCurrentPath();
 			},
@@ -4374,9 +4608,87 @@ export async function initChatPage(root, options = {}) {
 
 		const capAc = new AbortController();
 		routeWrap._chatBulkCap = capAc;
+		let longPressTimer = null;
+		let longPressPointerId = null;
+		let longPressCard = null;
+		let longPressStartX = 0;
+		let longPressStartY = 0;
+		let suppressCardClickUntil = 0;
+
+		function clearLongPressState() {
+			if (longPressTimer) {
+				clearTimeout(longPressTimer);
+				longPressTimer = null;
+			}
+			longPressPointerId = null;
+			longPressCard = null;
+			longPressStartX = 0;
+			longPressStartY = 0;
+		}
+
+		cards.addEventListener(
+			'pointerdown',
+			(e) => {
+				if (!isChatPageMobileLayout()) return;
+				if (routeWrap.classList.contains('is-bulk-mode')) return;
+				if (e.pointerType === 'mouse') return;
+				const card = e.target?.closest?.('.feed-card[data-image-id]');
+				if (!(card instanceof HTMLElement)) return;
+				if (e.target?.closest?.('a,button,input,textarea,select,label,[role="button"]')) return;
+				clearLongPressState();
+				longPressPointerId = e.pointerId;
+				longPressCard = card;
+				longPressStartX = Number(e.clientX) || 0;
+				longPressStartY = Number(e.clientY) || 0;
+				longPressTimer = setTimeout(() => {
+					if (!(longPressCard instanceof HTMLElement)) return;
+					enterBulkMode();
+					const cb = longPressCard.querySelector('[data-creations-bulk-checkbox]');
+					if (cb instanceof HTMLInputElement) cb.checked = true;
+					updateBulkBarSelection();
+					suppressCardClickUntil = Date.now() + 700;
+					clearLongPressState();
+				}, 420);
+			},
+			{ signal: capAc.signal }
+		);
+		cards.addEventListener(
+			'pointermove',
+			(e) => {
+				if (longPressPointerId == null || e.pointerId !== longPressPointerId) return;
+				const dx = Math.abs((Number(e.clientX) || 0) - longPressStartX);
+				const dy = Math.abs((Number(e.clientY) || 0) - longPressStartY);
+				if (dx > 10 || dy > 10) clearLongPressState();
+			},
+			{ signal: capAc.signal }
+		);
+		cards.addEventListener(
+			'pointerup',
+			(e) => {
+				if (longPressPointerId == null || e.pointerId !== longPressPointerId) return;
+				clearLongPressState();
+			},
+			{ signal: capAc.signal }
+		);
+		cards.addEventListener(
+			'pointercancel',
+			(e) => {
+				if (longPressPointerId == null || e.pointerId !== longPressPointerId) return;
+				clearLongPressState();
+			},
+			{ signal: capAc.signal }
+		);
 		cards.addEventListener(
 			'click',
 			(e) => {
+				if (
+					Date.now() < suppressCardClickUntil &&
+					e.target?.closest?.('.feed-card[data-image-id]')
+				) {
+					e.preventDefault();
+					e.stopPropagation();
+					return;
+				}
 				const overlay = e.target.closest('[data-creations-bulk-overlay]');
 				if (!overlay) return;
 				e.stopPropagation();
@@ -5119,7 +5431,7 @@ export async function initChatPage(root, options = {}) {
 			roomBroadcastTeardown = await mod.subscribeRoomBroadcast(tid, refetch, {
 				onReconnect: refetch,
 				onDeleted: () => {
-					window.location.href = '/connect#chat';
+					window.location.href = '/chat#channels';
 				}
 			});
 		} catch (err) {
@@ -5527,9 +5839,10 @@ export async function initChatPage(root, options = {}) {
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		const errEl = root.querySelector('[data-chat-error]');
 		const parsed = parseChatPathname(window.location.pathname);
+		markThreadUiPending();
 
 		if (parsed.kind === 'empty' || parsed.kind === 'invalid') {
-			window.location.replace('/connect#chat');
+			window.location.replace('/chat#channels');
 			return;
 		}
 
@@ -5537,7 +5850,14 @@ export async function initChatPage(root, options = {}) {
 		tearDownChatCanvasUi();
 		clearChatPendingAttachments();
 		activePseudoChannelSlug = null;
+		if (parsed.kind === 'channel') {
+			const slug = String(parsed.slug || '').trim().toLowerCase();
+			if (slug === 'feed' || slug === 'explore' || slug === 'creations' || slug === 'comments') {
+				activePseudoChannelSlug = slug;
+			}
+		}
 		syncChatBrowseViewBodyClass();
+		applyComposerState();
 		teardownCommentsChannelLoadMore();
 		teardownFeedChannelLoadMore();
 		teardownExploreChannelLoadMore();
@@ -6628,52 +6948,66 @@ export async function initChatPage(root, options = {}) {
 
 	/** Desktop: show pinned canvas name in the top bar; click opens the canvas panel (no auto-open). */
 	function syncTopbarPinnedCanvasButton() {
-		const btn = root.querySelector('[data-chat-topbar-pinned-canvas]');
-		if (!(btn instanceof HTMLButtonElement)) return;
-		btn.removeAttribute('data-chat-canvas-open');
-		if (isChatPageMobileLayout()) {
-			btn.hidden = true;
-			btn.textContent = '';
-			btn.removeAttribute('aria-label');
-			return;
-		}
-		if (!isActiveThreadCanvasEligible()) {
-			btn.hidden = true;
-			btn.textContent = '';
-			btn.removeAttribute('aria-label');
-			return;
-		}
-		const pinId = activeThreadPinnedCanvasId;
-		if (!Number.isFinite(pinId) || pinId <= 0) {
-			btn.hidden = true;
-			btn.textContent = '';
-			btn.removeAttribute('aria-label');
-			return;
-		}
-		const row = chatCanvasesList.find((c) => Number(c.id) === pinId);
-		if (!row) {
-			btn.hidden = true;
-			btn.textContent = '';
-			btn.removeAttribute('aria-label');
-			return;
-		}
-		const panelEl = getChatCanvasPanelEls().panel;
-		const panelOpen = panelEl instanceof HTMLElement && !panelEl.hidden;
-		const viewingPinnedInPanel =
-			panelOpen &&
-			activeCanvasRow != null &&
-			Number(activeCanvasRow.id) === Number(pinId);
-		if (viewingPinnedInPanel) {
-			btn.hidden = true;
-			btn.textContent = '';
-			btn.removeAttribute('aria-label');
-			return;
-		}
-		const title = String(row.title || '').trim() || 'Canvas';
-		btn.hidden = false;
-		btn.textContent = title;
-		btn.setAttribute('data-chat-canvas-open', String(row.id));
-		btn.setAttribute('aria-label', `Open pinned canvas: ${title}`);
+		const desktopBtn = root.querySelector('[data-chat-topbar-pinned-canvas]');
+		const mobileBtn = mainColumn instanceof HTMLElement
+			? mainColumn.querySelector('[data-chat-mobile-pinned-canvas]')
+			: null;
+		const isMobile = isChatPageMobileLayout();
+
+		const applyButtonState = (btn, { mobile = false } = {}) => {
+			if (!(btn instanceof HTMLButtonElement)) return;
+			btn.removeAttribute('data-chat-canvas-open');
+			if ((mobile && !isMobile) || (!mobile && isMobile)) {
+				btn.hidden = true;
+				btn.textContent = '';
+				btn.removeAttribute('aria-label');
+				return;
+			}
+			if (!isActiveThreadCanvasEligible()) {
+				btn.hidden = true;
+				btn.textContent = '';
+				btn.removeAttribute('aria-label');
+				return;
+			}
+			const pinId = activeThreadPinnedCanvasId;
+			if (!Number.isFinite(pinId) || pinId <= 0) {
+				btn.hidden = true;
+				btn.textContent = '';
+				btn.removeAttribute('aria-label');
+				return;
+			}
+			const row = chatCanvasesList.find((c) => Number(c.id) === pinId);
+			if (!row) {
+				btn.hidden = true;
+				btn.textContent = '';
+				btn.removeAttribute('aria-label');
+				return;
+			}
+			const panelEl = getChatCanvasPanelEls().panel;
+			const panelOpen = panelEl instanceof HTMLElement && !panelEl.hidden;
+			const viewingPinnedInPanel =
+				panelOpen &&
+				activeCanvasRow != null &&
+				Number(activeCanvasRow.id) === Number(pinId);
+			if (viewingPinnedInPanel && !mobile) {
+				btn.hidden = true;
+				btn.textContent = '';
+				btn.removeAttribute('aria-label');
+				return;
+			}
+			const title = String(row.title || '').trim() || 'Canvas';
+			btn.hidden = false;
+			btn.textContent = title;
+			btn.setAttribute('data-chat-canvas-open', String(row.id));
+			btn.classList.toggle('is-active', viewingPinnedInPanel);
+			btn.setAttribute(
+				'aria-label',
+				viewingPinnedInPanel ? `Return to channel from pinned canvas: ${title}` : `Open pinned canvas: ${title}`
+			);
+		};
+
+		applyButtonState(desktopBtn, { mobile: false });
+		applyButtonState(mobileBtn, { mobile: true });
 	}
 
 	rebuildTopbarMenuDynamic = () => {
@@ -6761,6 +7095,12 @@ export async function initChatPage(root, options = {}) {
 				closeChatCanvasPanel({ forgetOpenPreference: true });
 			}
 		} else if (tid != null && Number.isFinite(Number(tid)) && Number(tid) > 0) {
+			// Mobile should load the channel first; canvases are opened explicitly
+			// via chevron menu (or desktop pinned-canvas button).
+			if (isChatPageMobileLayout()) {
+				syncTopbarPinnedCanvasButton();
+				return;
+			}
 			const savedId = getStoredOpenCanvasIdForThread(tid);
 			if (savedId != null) {
 				const row = chatCanvasesList.find((c) => Number(c.id) === savedId);
@@ -6902,9 +7242,39 @@ export async function initChatPage(root, options = {}) {
 		) {
 			e.preventDefault();
 			e.stopPropagation();
-			// Navigate without closing canvas/sheet first — closing repaints the thread
-			// (canvas → channel) before the next document loads, which feels like two steps.
-			window.location.assign('/connect#chat');
+			const next = `/chat${window.location.search || ''}#channels`;
+			const cur = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
+			if (next !== cur) {
+				history.pushState({ prsnChat: true }, '', next);
+				try {
+					window.dispatchEvent(new HashChangeEvent('hashchange'));
+				} catch {
+					window.dispatchEvent(new Event('hashchange'));
+				}
+			}
+			setMobileSidebarMode(true);
+			return;
+		}
+		const topbarBack = t.closest('.chat-page-topbar .chat-page-back');
+		if (
+			topbarBack instanceof HTMLAnchorElement &&
+			mainColumn instanceof HTMLElement &&
+			mainColumn.contains(topbarBack) &&
+			isChatPageMobileLayout()
+		) {
+			e.preventDefault();
+			e.stopPropagation();
+			const next = `/chat${window.location.search || ''}#channels`;
+			const cur = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
+			if (next !== cur) {
+				history.pushState({ prsnChat: true }, '', next);
+				try {
+					window.dispatchEvent(new HashChangeEvent('hashchange'));
+				} catch {
+					window.dispatchEvent(new Event('hashchange'));
+				}
+			}
+			setMobileSidebarMode(true);
 			return;
 		}
 		const sheetTrig = t.closest('[data-chat-mobile-chrome-sheet-trigger]');
@@ -6923,6 +7293,27 @@ export async function initChatPage(root, options = {}) {
 				openMobileChromeSheet();
 			} else {
 				closeMobileChromeSheet();
+			}
+			return;
+		}
+		const mobilePinnedCanvasBtn = t.closest('[data-chat-mobile-pinned-canvas][data-chat-canvas-open]');
+		if (mobilePinnedCanvasBtn instanceof HTMLButtonElement) {
+			e.preventDefault();
+			e.stopPropagation();
+			const mid = Number(mobilePinnedCanvasBtn.getAttribute('data-chat-canvas-open'));
+			if (Number.isFinite(mid) && mid > 0) {
+				const panelEl = getChatCanvasPanelEls().panel;
+				const panelOpen = panelEl instanceof HTMLElement && !panelEl.hidden;
+				const isViewingThisPinned =
+					panelOpen &&
+					activeCanvasRow != null &&
+					Number(activeCanvasRow.id) === mid;
+				if (isViewingThisPinned) {
+					closeChatCanvasPanel();
+					return;
+				}
+				const row = chatCanvasesList.find((c) => Number(c.id) === mid);
+				if (row) openChatCanvasPanel(row);
 			}
 			return;
 		}
@@ -7149,11 +7540,64 @@ export async function initChatPage(root, options = {}) {
 	const CHAT_CANVAS_WIDTH_LS = 'prsn-chat-canvas-width-px';
 	const CHAT_CANVAS_WIDTH_MIN = 260;
 	const CHAT_CANVAS_WIDTH_MAX = 720;
+	const CHAT_SIDEBAR_WIDTH_LS = 'prsn-chat-sidebar-width-px';
+	const CHAT_SIDEBAR_WIDTH_MIN = 220;
+	const CHAT_SIDEBAR_WIDTH_MAX = 460;
+	const CHAT_THREAD_PANE_MIN = 420;
+
+	const chatLayoutOuter = root.closest('.chat-page-layout');
+
+	function readCssPxVar(varName) {
+		try {
+			const fromLayout =
+				chatLayoutOuter instanceof HTMLElement
+					? getComputedStyle(chatLayoutOuter).getPropertyValue(varName)
+					: '';
+			const fromRoot = getComputedStyle(document.documentElement).getPropertyValue(varName);
+			const raw = String(fromLayout || fromRoot || '').trim();
+			if (!raw) return null;
+			const n = Number(raw.replace(/px$/i, '').trim());
+			return Number.isFinite(n) ? n : null;
+		} catch {
+			return null;
+		}
+	}
+
+	function getChatCanvasWidthBounds() {
+		const viewport = Math.max(0, window.innerWidth || 0);
+		const sidebarWidth =
+			readCssPxVar('--chat-sidebar-width') ?? CHAT_SIDEBAR_WIDTH_MIN;
+		const maxByViewport = viewport - sidebarWidth - CHAT_THREAD_PANE_MIN;
+		const dynamicMax = Math.min(CHAT_CANVAS_WIDTH_MAX, Math.floor(maxByViewport));
+		const max = Math.max(CHAT_CANVAS_WIDTH_MIN, dynamicMax);
+		return { min: CHAT_CANVAS_WIDTH_MIN, max };
+	}
+
+	function getChatSidebarWidthBounds() {
+		const viewport = Math.max(0, window.innerWidth || 0);
+		const canvasPanel = chatLayoutRoot?.querySelector?.('[data-chat-canvas-panel]');
+		const canvasVisible = canvasPanel instanceof HTMLElement && !canvasPanel.hidden;
+		const canvasWidth = canvasVisible
+			? canvasPanel.getBoundingClientRect().width || (readCssPxVar('--chat-canvas-panel-width') ?? CHAT_CANVAS_WIDTH_MIN)
+			: 0;
+		const maxByViewport = viewport - canvasWidth - CHAT_THREAD_PANE_MIN;
+		const dynamicMax = Math.min(CHAT_SIDEBAR_WIDTH_MAX, Math.floor(maxByViewport));
+		const max = Math.max(CHAT_SIDEBAR_WIDTH_MIN, dynamicMax);
+		return { min: CHAT_SIDEBAR_WIDTH_MIN, max };
+	}
 
 	function clampChatCanvasWidthPx(n) {
 		const x = Number(n);
 		if (!Number.isFinite(x)) return null;
-		return Math.min(CHAT_CANVAS_WIDTH_MAX, Math.max(CHAT_CANVAS_WIDTH_MIN, Math.round(x)));
+		const bounds = getChatCanvasWidthBounds();
+		return Math.min(bounds.max, Math.max(bounds.min, Math.round(x)));
+	}
+
+	function clampChatSidebarWidthPx(n) {
+		const x = Number(n);
+		if (!Number.isFinite(x)) return null;
+		const bounds = getChatSidebarWidthBounds();
+		return Math.min(bounds.max, Math.max(bounds.min, Math.round(x)));
 	}
 
 	function readStoredChatCanvasWidthPx() {
@@ -7166,14 +7610,120 @@ export async function initChatPage(root, options = {}) {
 		}
 	}
 
+	function readStoredChatSidebarWidthPx() {
+		try {
+			const raw = window.localStorage.getItem(CHAT_SIDEBAR_WIDTH_LS);
+			if (raw == null || raw === '') return null;
+			return clampChatSidebarWidthPx(Number(raw));
+		} catch {
+			return null;
+		}
+	}
+
 	function applyChatCanvasPanelWidthPx(px) {
 		if (!(chatLayoutRoot instanceof HTMLElement)) return;
 		const v = clampChatCanvasWidthPx(px);
 		if (v == null) {
 			chatLayoutRoot.style.removeProperty('--chat-canvas-panel-width');
+			document.documentElement.style.removeProperty('--chat-canvas-panel-width');
 			return;
 		}
 		chatLayoutRoot.style.setProperty('--chat-canvas-panel-width', `${v}px`);
+		document.documentElement.style.setProperty('--chat-canvas-panel-width', `${v}px`);
+	}
+
+	function applyChatSidebarWidthPx(px) {
+		const host = chatLayoutOuter instanceof HTMLElement ? chatLayoutOuter : null;
+		if (!host) return;
+		const v = clampChatSidebarWidthPx(px);
+		if (v == null) {
+			host.style.removeProperty('--chat-sidebar-width');
+			document.documentElement.style.removeProperty('--chat-sidebar-width');
+			return;
+		}
+		host.style.setProperty('--chat-sidebar-width', `${v}px`);
+		document.documentElement.style.setProperty('--chat-sidebar-width', `${v}px`);
+	}
+
+	if (chatLayoutOuter instanceof HTMLElement) {
+		const storedSidebar = readStoredChatSidebarWidthPx();
+		if (storedSidebar != null) applyChatSidebarWidthPx(storedSidebar);
+		const sidebarResizeHandle = chatLayoutOuter.querySelector('[data-chat-sidebar-resize-handle]');
+		const sidebarEl = chatLayoutOuter.querySelector('[data-chat-sidebar]');
+		if (sidebarResizeHandle instanceof HTMLElement && sidebarEl instanceof HTMLElement) {
+			let dragPointerId = null;
+			let dragStartX = 0;
+			let dragStartW = 0;
+			const onMove = (ev) => {
+				if (dragPointerId != null && ev.pointerId !== dragPointerId) return;
+				const next = dragStartW + (ev.clientX - dragStartX);
+				applyChatSidebarWidthPx(next);
+				const canvasPanel = chatLayoutRoot?.querySelector?.('[data-chat-canvas-panel]');
+				if (canvasPanel instanceof HTMLElement && !canvasPanel.hidden) {
+					applyChatCanvasPanelWidthPx(canvasPanel.getBoundingClientRect().width);
+				}
+			};
+			const onUp = (ev) => {
+				if (dragPointerId != null && ev.pointerId !== dragPointerId) return;
+				document.removeEventListener('pointermove', onMove);
+				document.removeEventListener('pointerup', onUp);
+				document.removeEventListener('pointercancel', onUp);
+				try {
+					if (
+						dragPointerId != null &&
+						typeof sidebarResizeHandle.hasPointerCapture === 'function' &&
+						sidebarResizeHandle.hasPointerCapture(dragPointerId)
+					) {
+						sidebarResizeHandle.releasePointerCapture(dragPointerId);
+					}
+				} catch {
+					// ignore
+				}
+				dragPointerId = null;
+				const w = sidebarEl.getBoundingClientRect().width;
+				const clamped = clampChatSidebarWidthPx(w);
+				if (clamped != null) {
+					try {
+						window.localStorage.setItem(CHAT_SIDEBAR_WIDTH_LS, String(clamped));
+					} catch {
+						// ignore
+					}
+					applyChatSidebarWidthPx(clamped);
+				}
+			};
+			sidebarResizeHandle.addEventListener('pointerdown', (ev) => {
+				ev.preventDefault();
+				dragPointerId = ev.pointerId;
+				dragStartX = ev.clientX;
+				dragStartW = sidebarEl.getBoundingClientRect().width;
+				try {
+					if (typeof sidebarResizeHandle.setPointerCapture === 'function') {
+						sidebarResizeHandle.setPointerCapture(ev.pointerId);
+					}
+				} catch {
+					// ignore
+				}
+				document.addEventListener('pointermove', onMove);
+				document.addEventListener('pointerup', onUp);
+				document.addEventListener('pointercancel', onUp);
+			});
+			sidebarResizeHandle.addEventListener('keydown', (ev) => {
+				if (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight') return;
+				ev.preventDefault();
+				const cur = clampChatSidebarWidthPx(sidebarEl.getBoundingClientRect().width) ?? CHAT_SIDEBAR_WIDTH_MIN;
+				const step = ev.shiftKey ? 24 : 8;
+				const next = ev.key === 'ArrowLeft' ? cur - step : cur + step;
+				applyChatSidebarWidthPx(next);
+				const clamped = clampChatSidebarWidthPx(sidebarEl.getBoundingClientRect().width);
+				if (clamped != null) {
+					try {
+						window.localStorage.setItem(CHAT_SIDEBAR_WIDTH_LS, String(clamped));
+					} catch {
+						// ignore
+					}
+				}
+			});
+		}
 	}
 
 	if (chatLayoutRoot instanceof HTMLElement) {
@@ -7261,12 +7811,35 @@ export async function initChatPage(root, options = {}) {
 		}
 	}
 
+	window.addEventListener('resize', () => {
+		setMobileSidebarMode(shouldShowMobileSidebarFromLocation());
+		if (chatLayoutOuter instanceof HTMLElement) {
+			const sidebar = chatLayoutOuter.querySelector('[data-chat-sidebar]');
+			if (sidebar instanceof HTMLElement) {
+				applyChatSidebarWidthPx(sidebar.getBoundingClientRect().width);
+			}
+		}
+		if (chatLayoutRoot instanceof HTMLElement) {
+			const panel = chatLayoutRoot.querySelector('[data-chat-canvas-panel]');
+			if (panel instanceof HTMLElement && !panel.hidden) {
+				applyChatCanvasPanelWidthPx(panel.getBoundingClientRect().width);
+			}
+		}
+	});
+
 	document.addEventListener('chat-unread-refresh', onChatGlobalUnreadRefreshDoc);
+	window.addEventListener('hashchange', () => {
+		setMobileSidebarMode(shouldShowMobileSidebarFromLocation());
+	});
+	window.addEventListener('popstate', () => {
+		setMobileSidebarMode(shouldShowMobileSidebarFromLocation());
+	});
 	chatGlobalUnreadPoll = setInterval(() => void loadChatGlobalUnreadSummary(), 45000);
 	void loadChatGlobalUnreadSummary();
 	void hydrateAudibleNotificationsFromProfileOnce();
 	enableLikeButtons(root);
 	await openThreadForCurrentPath();
+	setMobileSidebarMode(shouldShowMobileSidebarFromLocation());
 	dispatchChatUnreadRefresh();
 	/** Poll often enough that DM online/offline styling tracks presence without feeling stuck. */
 	chatSidebarPollTimer = setInterval(() => void refreshChatSidebar(), 15000);

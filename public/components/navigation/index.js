@@ -1020,8 +1020,14 @@ class AppNavigation extends HTMLElement {
 			// ignore
 		}
 
-		// If at root and we have a default route, update URL to reflect it
-		if ((pathname === '/' || pathname === '') && this.defaultRoute && currentRoute) {
+		// If at root and we have a default route, update URL to reflect it.
+		// Chat page intentionally keeps "/" so chat.js can treat it as feed internally.
+		if (
+			(pathname === '/' || pathname === '') &&
+			this.defaultRoute &&
+			currentRoute &&
+			document.body?.dataset?.entry !== 'chat'
+		) {
 			window.history.replaceState({ route: currentRoute }, '', `/${currentRoute}`);
 		}
 

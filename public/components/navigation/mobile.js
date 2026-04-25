@@ -22,6 +22,18 @@ async function loadDeps() {
 }
 
 const html = String.raw;
+const CHAT_FIRST_ROUTE_PATHS = {
+	feed: '/chat/c/feed',
+	explore: '/chat/c/explore',
+	creations: '/chat/c/creations',
+	connect: '/chat#channels'
+};
+
+function getMobileNavTargetPath(route) {
+	const key = typeof route === 'string' ? route.trim().toLowerCase() : '';
+	if (!key) return null;
+	return CHAT_FIRST_ROUTE_PATHS[key] || `/${key}`;
+}
 
 class AppNavigationMobile extends HTMLElement {
 	constructor() {
@@ -58,14 +70,68 @@ class AppNavigationMobile extends HTMLElement {
 		if (button?.disabled) return;
 		const route = button?.getAttribute('data-route');
 		if (!route) return;
+		const targetPath = getMobileNavTargetPath(route);
+		if (!targetPath) return;
+		const isChatFirstTarget = targetPath.startsWith('/chat/');
+		const isOnChatPage = window.location.pathname === '/chat' || window.location.pathname.startsWith('/chat/');
 
 		// Create is a standalone page; full navigation to/from it
 		if (route === 'create') {
 			window.location.href = '/create';
 			return;
 		}
+		if (route === 'connect' && isOnChatPage) {
+			const next = `/chat${window.location.search || ''}#channels`;
+			const cur = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
+			if (next !== cur) {
+				window.history.pushState({ prsnChat: true }, '', next);
+				try {
+					window.dispatchEvent(new PopStateEvent('popstate'));
+				} catch {
+					window.dispatchEvent(new Event('popstate'));
+				}
+				try {
+					window.dispatchEvent(new HashChangeEvent('hashchange'));
+				} catch {
+					window.dispatchEvent(new Event('hashchange'));
+				}
+			}
+			this.handleRouteChange();
+			return;
+		}
+		if (isChatFirstTarget) {
+			// Entering chat from non-chat pages should hard-navigate, but switching
+			// between chat channels should be in-page.
+			if (!isOnChatPage) {
+				window.location.href = targetPath;
+				return;
+			}
+			// If we're currently in /chat#channels mobile sidebar mode, hide that chrome
+			// immediately before route change so transition feels instant.
+			if (document.body?.classList?.contains('chat-page--mobile-sidebar-open')) {
+				document.body.classList.remove('chat-page--mobile-sidebar-open');
+				const appHeader = document.querySelector('app-navigation');
+				const appMobileNav = document.querySelector('app-navigation-mobile');
+				const mobileChrome = document.querySelector('[data-chat-mobile-chrome]');
+				if (appHeader instanceof HTMLElement) appHeader.hidden = true;
+				if (appMobileNav instanceof HTMLElement) appMobileNav.hidden = true;
+				if (mobileChrome instanceof HTMLElement) mobileChrome.hidden = false;
+			}
+			const next = `${targetPath}${window.location.search || ''}`;
+			const cur = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
+			if (next !== cur) {
+				window.history.pushState({ prsnChat: true }, '', next);
+				try {
+					window.dispatchEvent(new PopStateEvent('popstate'));
+				} catch {
+					window.dispatchEvent(new Event('popstate'));
+				}
+			}
+			this.handleRouteChange();
+			return;
+		}
 		if (window.location.pathname === '/create') {
-			window.location.href = `/${route}`;
+			window.location.href = targetPath;
 			return;
 		}
 
@@ -81,11 +147,11 @@ class AppNavigationMobile extends HTMLElement {
 			window.location.pathname.startsWith('/t/') ||
 			window.location.pathname.startsWith('/styles/');
 		if (isServerSentPage) {
-			window.location.href = `/${route}`;
+			window.location.href = targetPath;
 			return;
 		}
 
-		window.history.pushState({ route }, '', `/${route}`);
+		window.history.pushState({ route }, '', targetPath);
 		const header = document.querySelector('app-navigation');
 		if (header && typeof header.handleRouteChange === 'function') {
 			header.handleRouteChange();
@@ -120,6 +186,21 @@ class AppNavigationMobile extends HTMLElement {
 		const header = document.querySelector('app-navigation');
 		const defaultRoute = header?.getAttribute('default-route') || 'feed';
 		let currentRoute = pathname === '/' || pathname === '' ? defaultRoute : pathname.slice(1);
+		if (pathname.startsWith('/chat/c/')) {
+			const slug = pathname.slice('/chat/c/'.length).split('/')[0].trim().toLowerCase();
+			if (slug === 'feed' || slug === 'explore' || slug === 'creations') {
+				currentRoute = slug;
+			}
+		}
+		if ((pathname === '/chat' || pathname.startsWith('/chat/')) && window.location.hash === '#channels') {
+			currentRoute = 'connect';
+		}
+		if (
+			(pathname === '/chat' || pathname.startsWith('/chat/')) &&
+			document.body?.classList?.contains('chat-page--mobile-sidebar-open')
+		) {
+			currentRoute = 'connect';
+		}
 		if (pathname.startsWith('/creations/')) {
 			currentRoute = null;
 		}
@@ -181,15 +262,11 @@ class AppNavigationMobile extends HTMLElement {
             </svg>
             <span class="mobile-bottom-nav-text" aria-hidden="true">Creations</span>
           </button>
-          <button class="mobile-bottom-nav-item mobile-bottom-nav-item--connect" type="button" data-route="connect" aria-label="Connect">
+          <button class="mobile-bottom-nav-item mobile-bottom-nav-item--connect" type="button" data-route="connect" aria-label="Chat">
             <svg class="mobile-bottom-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="18" cy="5" r="3"></circle>
-              <circle cx="6" cy="12" r="3"></circle>
-              <circle cx="18" cy="19" r="3"></circle>
-              <line x1="8.6" y1="10.5" x2="15.5" y2="6.9"></line>
-              <line x1="8.6" y1="13.5" x2="15.5" y2="17.1"></line>
+              <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
             </svg>
-            <span class="mobile-bottom-nav-text" aria-hidden="true">Connect</span>
+            <span class="mobile-bottom-nav-text" aria-hidden="true">Chat</span>
             <span class="mobile-bottom-nav-unread-badge" aria-hidden="true"></span>
           </button>
         </div>

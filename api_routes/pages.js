@@ -562,7 +562,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			return res.send(htmlContent);
 		}
 
-		// Logged in → get role and serve role page
+		// Logged in → serve chat shell at root
 		const user = await queries.selectUserById.get(userId);
 		if (!user) {
 			// Only clear cookie if it was actually sent
@@ -576,10 +576,11 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			return res.send(htmlContent);
 		}
 
-		// Serve role-based page
-		const page = getPageForUser(user);
 		const fs = await import("fs/promises");
-		let htmlContent = await fs.readFile(path.join(pagesDir, page), "utf-8");
+		let htmlContent = await fs.readFile(path.join(pagesDir, "chat.html"), "utf-8");
+		const chatPageTokens = getPageTokens(req);
+		chatPageTokens.CHAT_SIDEBAR_PSEUDO_STRIP_LIST = buildSidebarPseudoStripListStaticHtml(req.path);
+		htmlContent = replaceTemplateTokens(htmlContent, chatPageTokens);
 		htmlContent = injectCommonHead(htmlContent, getPageTokens(req));
 		res.setHeader("Content-Type", "text/html");
 		return res.send(htmlContent);
@@ -1221,15 +1222,25 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			return res.redirect(returnUrl);
 		}
 
-		// Standalone chat UI (no app chrome). List/inbox stays on /connect#chat.
-		if (req.path === "/chat" || req.path === "/chat/") {
-			return res.redirect(302, "/connect#chat");
-		}
-		if (req.path.startsWith("/chat/")) {
+		if (
+			req.path === "/feed" ||
+			req.path === "/feed/" ||
+			req.path === "/explore" ||
+			req.path === "/explore/" ||
+			req.path === "/creations" ||
+			req.path === "/creations/" ||
+			req.path === "/chat" ||
+			req.path === "/chat/" ||
+			req.path.startsWith("/chat/")
+		) {
 			const fs = await import("fs/promises");
 			let htmlContent = await fs.readFile(path.join(pagesDir, "chat.html"), "utf-8");
 			const chatPageTokens = getPageTokens(req);
-			chatPageTokens.CHAT_SIDEBAR_PSEUDO_STRIP_LIST = buildSidebarPseudoStripListStaticHtml(req.path);
+			let sidebarPath = req.path;
+			if (req.path === "/feed" || req.path === "/feed/") sidebarPath = "/chat/c/feed";
+			if (req.path === "/explore" || req.path === "/explore/") sidebarPath = "/chat/c/explore";
+			if (req.path === "/creations" || req.path === "/creations/") sidebarPath = "/chat/c/creations";
+			chatPageTokens.CHAT_SIDEBAR_PSEUDO_STRIP_LIST = buildSidebarPseudoStripListStaticHtml(sidebarPath);
 			htmlContent = injectCommonHead(htmlContent, chatPageTokens);
 			res.setHeader("Content-Type", "text/html");
 			return res.send(htmlContent);
