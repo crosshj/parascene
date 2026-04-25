@@ -761,6 +761,8 @@ export async function initChatPage(root, options = {}) {
 	let bottomDwellThreadId = null;
 
 	const CHAT_BOTTOM_THRESHOLD_PX = 56;
+	// TEMP: disable runtime auto-scroll behavior while keeping initial load at bottom.
+	const CHAT_TEMP_DISABLE_AUTO_SCROLL = true;
 	const DM_OFFLINE_GRACE_MS = 45 * 1000;
 	const DM_PROMOTION_RECENT_ACTIVE_WINDOW_MS = 15 * 60 * 1000;
 	const DM_ORDER_WEIGHT_LAST_SEEN = 0.9;
@@ -1177,6 +1179,11 @@ export async function initChatPage(root, options = {}) {
 	function scrollChatMessagesToFirstUnread(unreadEl) {
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!messagesEl || !unreadEl) return;
+		if (CHAT_TEMP_DISABLE_AUTO_SCROLL) {
+			// TEMP: keep first paint pinned to latest instead of jumping to first unread.
+			scrollChatMessagesToEnd('initial_load');
+			return;
+		}
 		chatStickToBottom = false;
 		const apply = () => {
 			unreadEl.scrollIntoView({ block: 'center', behavior: 'auto' });
@@ -1223,9 +1230,13 @@ export async function initChatPage(root, options = {}) {
 	 * animation frames so mobile WebKit finishes layout before we read scrollHeight.
 	 * Async creation embeds and images still grow the list after this — ResizeObserver keeps the bottom pinned.
 	 */
-	function scrollChatMessagesToEnd() {
+	function scrollChatMessagesToEnd(reason = 'runtime') {
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!messagesEl) return;
+		if (CHAT_TEMP_DISABLE_AUTO_SCROLL && reason !== 'initial_load') {
+			// TEMP: disable non-initial auto-scroll jumps.
+			return;
+		}
 		chatStickToBottom = true;
 		teardownBottomDwellTimer();
 		const apply = () => {
@@ -1236,6 +1247,15 @@ export async function initChatPage(root, options = {}) {
 			apply();
 			requestAnimationFrame(apply);
 		});
+		if (reason === 'initial_load') {
+			// TEMP: one-time settle snaps for late row growth (images/embeds/layout), without enabling auto-follow.
+			const settleDelays = [120, 320];
+			for (const ms of settleDelays) {
+				window.setTimeout(() => {
+					apply();
+				}, ms);
+			}
+		}
 	}
 
 	/** Feed / explore / creations pseudo-channels: match main feed — newest at top, scroll down for more. */
@@ -1256,6 +1276,10 @@ export async function initChatPage(root, options = {}) {
 
 	/** Re-scroll after visual viewport changes only if the user was already following the thread. */
 	function nudgeChatScrollIfStuckToBottom() {
+		if (CHAT_TEMP_DISABLE_AUTO_SCROLL) {
+			// TEMP: disable viewport-driven re-pinning.
+			return;
+		}
 		if (!chatStickToBottom) return;
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!messagesEl) return;
@@ -1268,6 +1292,10 @@ export async function initChatPage(root, options = {}) {
 
 	function setupChatMessagesScrollAssist() {
 		teardownChatMessagesScrollAssist();
+		if (CHAT_TEMP_DISABLE_AUTO_SCROLL) {
+			// TEMP: keep scroll listeners/observers off so chat does not auto-follow updates.
+			return;
+		}
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!messagesEl) return;
 
@@ -5891,12 +5919,8 @@ export async function initChatPage(root, options = {}) {
 			}
 			restoreChatVideoPlaybackStates(messagesEl, prevVideoStates);
 			setupReactionTooltipTap(messagesEl);
-			const firstUnread = messagesEl.querySelector('.connect-chat-msg.is-unread');
-			if (firstUnread) {
-				scrollChatMessagesToFirstUnread(firstUnread);
-			} else {
-				scrollChatMessagesToEnd();
-			}
+			// TEMP: always land at latest message on load; disable unread jump behavior for now.
+			scrollChatMessagesToEnd('initial_load');
 			window.setTimeout(() => {
 				setupLatestMessageReadObserver();
 			}, 550);
