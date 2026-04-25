@@ -110,12 +110,7 @@ class AppNavigationMobile extends HTMLElement {
 			// immediately before route change so transition feels instant.
 			if (document.body?.classList?.contains('chat-page--mobile-sidebar-open')) {
 				document.body.classList.remove('chat-page--mobile-sidebar-open');
-				const appHeader = document.querySelector('app-navigation');
-				const appMobileNav = document.querySelector('app-navigation-mobile');
-				const mobileChrome = document.querySelector('[data-chat-mobile-chrome]');
-				if (appHeader instanceof HTMLElement) appHeader.hidden = false;
-				if (appMobileNav instanceof HTMLElement) appMobileNav.hidden = false;
-				if (mobileChrome instanceof HTMLElement) mobileChrome.hidden = true;
+				// Let chat page state logic decide header/footer visibility per route/view.
 			}
 			const next = `${targetPath}${window.location.search || ''}`;
 			const cur = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;

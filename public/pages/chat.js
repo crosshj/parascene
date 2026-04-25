@@ -12,10 +12,37 @@ const ENTER_SENDS = (() => {
 
 /** Align with `public/pages/chat.css` mobile chrome / canvas rules (`max-width: 768px`). */
 function isChatPageMobileLayout() {
+	const isLikelyMobileUa = (() => {
+		try {
+			const ua = String(window.navigator?.userAgent || '').toLowerCase();
+			return /android|iphone|ipod|ipad|mobile/.test(ua);
+		} catch {
+			return false;
+		}
+	})();
+	const coarsePointer = (() => {
+		try {
+			return window.matchMedia('(pointer: coarse)').matches;
+		} catch {
+			return false;
+		}
+	})();
 	try {
-		return window.matchMedia('(max-width: 768px)').matches;
+		if (window.matchMedia('(max-width: 768px)').matches) return true;
+		// Real devices can report wider CSS widths than desktop emulation suggests.
+		const vv = window.visualViewport;
+		const vvWidth =
+			vv && typeof vv.width === 'number' && Number.isFinite(vv.width) ? vv.width : NaN;
+		const iw =
+			typeof window.innerWidth === 'number' && Number.isFinite(window.innerWidth)
+				? window.innerWidth
+				: NaN;
+		const width = Number.isFinite(vvWidth) ? vvWidth : iw;
+		if (isLikelyMobileUa && coarsePointer && Number.isFinite(width) && width <= 900) return true;
+		return false;
 	} catch {
-		return typeof window.innerWidth === 'number' && window.innerWidth <= 768;
+		const iw = typeof window.innerWidth === 'number' ? window.innerWidth : NaN;
+		return Boolean(isLikelyMobileUa && coarsePointer && Number.isFinite(iw) && iw <= 900);
 	}
 }
 
@@ -31,6 +58,14 @@ function shouldUseAppMobileHeaderForChatPath(pathname) {
 function shouldShowMobileSidebarFromLocation() {
 	const path = String(window.location.pathname || '').replace(/\/+$/, '') || '/';
 	return isChatPageMobileLayout() && path === '/chat' && window.location.hash === '#channels';
+}
+
+function shouldShowAppMobileChromeForCurrentChatView(activePseudoSlug) {
+	if (!isChatPageMobileLayout()) return false;
+	if (shouldShowMobileSidebarFromLocation()) return true;
+	const slug = String(activePseudoSlug || '').trim().toLowerCase();
+	if (slug) return slug === 'feed' || slug === 'explore' || slug === 'creations';
+	return shouldUseAppMobileHeaderForChatPath(window.location.pathname);
 }
 
 /** `?chatSimulateSendFail=1` — next POST /messages returns failure so you can preview resend UI. */
@@ -1821,9 +1856,9 @@ export async function initChatPage(root, options = {}) {
 		const mobileChrome = mainColumn instanceof HTMLElement
 			? mainColumn.querySelector('[data-chat-mobile-chrome]')
 			: null;
-		// Keep app mobile chrome visible across chat routes so header/footer do not disappear.
-		const shouldShowAppMobileHeader = isChatPageMobileLayout();
-		const shouldShowAppMobileFooter = isChatPageMobileLayout();
+		const shouldShowAppMobileChrome = shouldShowAppMobileChromeForCurrentChatView(activePseudoChannelSlug);
+		const shouldShowAppMobileHeader = shouldShowAppMobileChrome;
+		const shouldShowAppMobileFooter = shouldShowAppMobileChrome;
 		const setMobileComposerOverlayClass = (on) => {
 			if (!document.body) return;
 			const shouldUseOverlay =
@@ -1945,18 +1980,13 @@ export async function initChatPage(root, options = {}) {
 	function setMobileSidebarMode(open) {
 		if (!document.body) return;
 		const on = Boolean(open) && shouldShowMobileSidebarFromLocation();
-		const isMobile = isChatPageMobileLayout();
+		const shouldShowAppMobileChrome = shouldShowAppMobileChromeForCurrentChatView(activePseudoChannelSlug);
 		document.body.classList.toggle('chat-page--mobile-sidebar-open', on);
 		try {
-			if (isMobile) {
-				document.documentElement.classList.add('chat-page--use-app-mobile-header');
-			} else if (on) {
+			if (shouldShowAppMobileChrome) {
 				document.documentElement.classList.add('chat-page--use-app-mobile-header');
 			} else {
-				const shouldShowAppMobileHeader =
-					isChatPageMobileLayout() &&
-					shouldUseAppMobileHeaderForChatPath(window.location.pathname);
-				document.documentElement.classList.toggle('chat-page--use-app-mobile-header', shouldShowAppMobileHeader);
+				document.documentElement.classList.remove('chat-page--use-app-mobile-header');
 			}
 		} catch {
 			// ignore
@@ -1967,13 +1997,13 @@ export async function initChatPage(root, options = {}) {
 			? mainColumn.querySelector('[data-chat-mobile-chrome]')
 			: null;
 		if (appHeader instanceof HTMLElement) {
-			appHeader.hidden = isMobile ? false : !on;
+			appHeader.hidden = !shouldShowAppMobileChrome;
 		}
 		if (appMobileNav instanceof HTMLElement) {
-			appMobileNav.hidden = isMobile ? false : !on;
+			appMobileNav.hidden = !shouldShowAppMobileChrome;
 		}
 		if (mobileChrome instanceof HTMLElement) {
-			mobileChrome.hidden = isMobile ? true : on;
+			mobileChrome.hidden = shouldShowAppMobileChrome;
 		}
 	}
 
