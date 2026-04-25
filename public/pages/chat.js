@@ -1821,17 +1821,9 @@ export async function initChatPage(root, options = {}) {
 		const mobileChrome = mainColumn instanceof HTMLElement
 			? mainColumn.querySelector('[data-chat-mobile-chrome]')
 			: null;
-		const shouldShowAppMobileHeader =
-			isChatPageMobileLayout() &&
-			(
-				shouldUseAppMobileHeaderForChatPath(window.location.pathname) ||
-				shouldShowMobileSidebarFromLocation()
-			);
-		const shouldShowAppMobileFooter =
-			isChatPageMobileLayout() &&
-			Boolean(activePseudoChannelSlug) &&
-			activePseudoChannelSlug !== 'feedback' &&
-			activePseudoChannelSlug !== 'comments';
+		// Keep app mobile chrome visible across chat routes so header/footer do not disappear.
+		const shouldShowAppMobileHeader = isChatPageMobileLayout();
+		const shouldShowAppMobileFooter = isChatPageMobileLayout();
 		const setMobileComposerOverlayClass = (on) => {
 			if (!document.body) return;
 			const shouldUseOverlay =
