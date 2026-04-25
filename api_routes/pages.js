@@ -565,7 +565,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			return res.send(htmlContent);
 		}
 
-		// Logged in → serve chat shell at root
+		// Logged in → serve chat shell at root (except admin roles).
 		const user = await queries.selectUserById.get(userId);
 		if (!user) {
 			// Only clear cookie if it was actually sent
@@ -580,11 +580,18 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 		}
 
 		const fs = await import("fs/promises");
-		let htmlContent = await fs.readFile(path.join(pagesDir, "chat.html"), "utf-8");
-		const chatPageTokens = getPageTokens(req);
-		chatPageTokens.CHAT_SIDEBAR_PSEUDO_STRIP_LIST = buildSidebarPseudoStripListStaticHtml(req.path);
-		htmlContent = replaceTemplateTokens(htmlContent, chatPageTokens);
-		htmlContent = injectCommonHead(htmlContent, getPageTokens(req));
+		let htmlContent;
+		if (String(user.role || "").toLowerCase() === "admin") {
+			const rolePage = getPageForUser(user);
+			htmlContent = await fs.readFile(path.join(pagesDir, rolePage), "utf-8");
+			htmlContent = injectCommonHead(htmlContent, getPageTokens(req));
+		} else {
+			htmlContent = await fs.readFile(path.join(pagesDir, "chat.html"), "utf-8");
+			const chatPageTokens = getPageTokens(req);
+			chatPageTokens.CHAT_SIDEBAR_PSEUDO_STRIP_LIST = buildSidebarPseudoStripListStaticHtml(req.path);
+			htmlContent = replaceTemplateTokens(htmlContent, chatPageTokens);
+			htmlContent = injectCommonHead(htmlContent, getPageTokens(req));
+		}
 		res.setHeader("Content-Type", "text/html");
 		return res.send(htmlContent);
 	});
@@ -1236,6 +1243,14 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			req.path === "/chat/" ||
 			req.path.startsWith("/chat/")
 		) {
+			if (String(user.role || "").toLowerCase() === "admin") {
+				const page = getPageForUser(user);
+				const fs = await import("fs/promises");
+				let htmlContent = await fs.readFile(path.join(pagesDir, page), "utf-8");
+				htmlContent = injectCommonHead(htmlContent, getPageTokens(req));
+				res.setHeader("Content-Type", "text/html");
+				return res.send(htmlContent);
+			}
 			const fs = await import("fs/promises");
 			let htmlContent = await fs.readFile(path.join(pagesDir, "chat.html"), "utf-8");
 			const chatPageTokens = getPageTokens(req);

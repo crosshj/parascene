@@ -451,7 +451,7 @@ export async function openDb() {
 		selectUserById: {
 			get: async (id) => {
 				const stmt = db.prepare(
-					"SELECT id, email, role, created_at, meta FROM users WHERE id = ?"
+					"SELECT id, email, role, created_at, last_active_at, meta FROM users WHERE id = ?"
 				);
 				const row = stmt.get(id);
 				if (!row) return undefined;
@@ -502,7 +502,7 @@ export async function openDb() {
 			if (idList.length === 0) return new Map();
 			const placeholders = idList.map(() => "?").join(",");
 			const stmt = db.prepare(
-				`SELECT id, email, role, created_at, meta FROM users WHERE id IN (${placeholders})`
+				`SELECT id, email, role, created_at, last_active_at, meta FROM users WHERE id IN (${placeholders})`
 			);
 			const rows = stmt.all(...idList);
 			const map = new Map();
@@ -1058,7 +1058,12 @@ export async function openDb() {
 			all: async (sinceIso, limit = 200) => {
 				const cap = Math.min(Math.max(1, Number(limit) || 200), 500);
 				const stmt = db.prepare(
-					`SELECT u.id AS user_id, p.user_name, p.display_name, p.avatar_url
+					`SELECT
+						u.id AS user_id,
+						p.user_name,
+						p.display_name,
+						p.avatar_url,
+						json_extract(u.meta, '$.presence_last_seen_at') AS presence_last_seen_at
 					 FROM users u
 					 INNER JOIN user_profiles p ON p.user_id = u.id
 					 WHERE u.role = 'consumer'

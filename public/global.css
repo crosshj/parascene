@@ -579,6 +579,11 @@ section+section {
 	margin-top: 16px;
 }
 
+/* Roster uses <section> for DM / Servers / Channels; skip main-content section+section gap */
+.chat-page-sidebar-scroll > section.chat-page-sidebar-section + section.chat-page-sidebar-section {
+	margin-top: 0;
+}
+
 h2,
 h3 {
 	margin: 0 0 8px;
@@ -4176,9 +4181,15 @@ body.chat-page main.chat-page-outer {
 	align-items: center;
 	gap: 10px;
 	width: 100%;
-	margin: 4px 0 2px;
+	margin: 2px 0 2px;
 	padding: 0 2px;
 	box-sizing: border-box;
+}
+
+/* Tuck list sections together after “Show more” (keep “Show less” bar balanced). */
+.chat-page-sidebar-collapsible-expander-wrap--more {
+	margin-top: 1px;
+	margin-bottom: 0;
 }
 
 .chat-page-sidebar-collapsible-expander-wrap::before,
@@ -4461,7 +4472,7 @@ body.chat-page main.chat-page-outer {
 		overflow-x: hidden;
 		-webkit-overflow-scrolling: touch;
 		overscroll-behavior: contain;
-		padding: 8px 8px 16px;
+		padding: 6px 6px 12px;
 		scrollbar-width: none;
 		-ms-overflow-style: none;
 	}
@@ -4473,7 +4484,7 @@ body.chat-page main.chat-page-outer {
 	}
 
 	.chat-page-sidebar-pseudo {
-		margin-bottom: 4px;
+		margin-bottom: 2px;
 	}
 
 	.chat-page-sidebar-footer {
@@ -4637,7 +4648,7 @@ body.chat-page main.chat-page-outer {
 	}
 
 	.chat-page-sidebar-section {
-		margin-bottom: 4px;
+		margin-bottom: 2px;
 	}
 
 	.chat-page-sidebar-section-head {
@@ -4646,8 +4657,12 @@ body.chat-page main.chat-page-outer {
 		align-items: center;
 		justify-content: space-between;
 		gap: 8px;
-		padding: 6px 12px 4px;
+		padding: 4px 10px 2px;
 		box-sizing: border-box;
+	}
+
+	.chat-page-sidebar-section + .chat-page-sidebar-section .chat-page-sidebar-section-head {
+		padding-top: 2px;
 	}
 
 	.chat-page-sidebar-section-head .chat-page-sidebar-heading {
@@ -5112,19 +5127,19 @@ body.chat-page main.chat-page-outer {
 		display: flex;
 		flex-direction: column;
 		gap: 0;
-		padding: 0 4px;
+		padding: 0 3px;
 	}
 
 	.chat-page-sidebar-row {
 		display: flex;
 		flex-direction: row;
 		align-items: center;
-		gap: 8px;
+		gap: 6px;
 		width: 100%;
 		box-sizing: border-box;
 		text-align: left;
-		padding: 4px 8px;
-		min-height: 32px;
+		padding: 2px 6px;
+		min-height: 28px;
 		border-radius: 6px;
 		border: 1px solid transparent;
 		background: transparent;
@@ -5168,6 +5183,23 @@ body.chat-page main.chat-page-outer {
 		font-size: 0.7rem;
 	}
 
+.chat-page-sidebar-channel-avatar--icon-only {
+	background: transparent !important;
+	color: var(--text-muted);
+	font-weight: 400;
+}
+
+.chat-page-sidebar-row.is-active .chat-page-sidebar-channel-avatar--icon-only {
+	color: var(--text);
+}
+
+/* Cache-bust marker: sidebar pseudo-strip icon mapping update (feedback/help swap). */
+.chat-page-sidebar-channel-route-icon {
+	display: block;
+	width: 17px;
+	height: 17px;
+}
+
 	.chat-page-sidebar-row-body {
 		display: flex;
 		flex-direction: column;
@@ -5182,7 +5214,7 @@ body.chat-page main.chat-page-outer {
 		display: flex;
 		flex-direction: row;
 		align-items: center;
-		gap: 6px;
+		gap: 5px;
 		min-width: 0;
 		width: 100%;
 	}
@@ -5266,7 +5298,7 @@ body.chat-page main.chat-page-outer {
 		display: flex;
 		flex-direction: row;
 		align-items: center;
-		gap: 8px;
+		gap: 6px;
 		flex: 1;
 		min-width: 0;
 		text-decoration: none;
@@ -6855,13 +6887,13 @@ body.blog-edit-page .blog-edit-route {
 
 .servers-route .connect-chat-sidebar-roster.chat-page-sidebar-scroll {
 	overflow-x: hidden;
-	padding: 8px 8px 16px;
+	padding: 6px 6px 12px;
 	max-width: 100%;
 	box-sizing: border-box;
 }
 
 .servers-route .connect-chat-sidebar-roster .chat-page-sidebar-pseudo {
-	margin-bottom: 4px;
+	margin-bottom: 2px;
 }
 
 /* Full-page scroll on small viewports; avoid nested scroll + overscroll traps next to mobile bottom nav */
@@ -6882,7 +6914,7 @@ body.blog-edit-page .blog-edit-route {
 }
 
 .servers-route .connect-chat-sidebar-roster .chat-page-sidebar-section {
-	margin-bottom: 4px;
+	margin-bottom: 2px;
 }
 
 .servers-route .connect-chat-sidebar-roster .chat-page-sidebar-section-head {
@@ -6891,8 +6923,16 @@ body.blog-edit-page .blog-edit-route {
 	align-items: center;
 	justify-content: space-between;
 	gap: 8px;
-	padding: 6px 12px 4px;
+	padding: 4px 10px 2px;
 	box-sizing: border-box;
+}
+
+.servers-route
+	.connect-chat-sidebar-roster
+	.chat-page-sidebar-section
+	+ .chat-page-sidebar-section
+	.chat-page-sidebar-section-head {
+	padding-top: 2px;
 }
 
 .servers-route .connect-chat-sidebar-roster .chat-page-sidebar-section-head .chat-page-sidebar-heading {
@@ -6952,19 +6992,19 @@ body.blog-edit-page .blog-edit-route {
 	display: flex;
 	flex-direction: column;
 	gap: 0;
-	padding: 0 4px;
+	padding: 0 3px;
 }
 
 .servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row {
 	display: flex;
 	flex-direction: row;
 	align-items: center;
-	gap: 8px;
+	gap: 6px;
 	width: 100%;
 	box-sizing: border-box;
 	text-align: left;
-	padding: 4px 8px;
-	min-height: 32px;
+	padding: 2px 6px;
+	min-height: 28px;
 	border-radius: 6px;
 	border: 1px solid transparent;
 	background: transparent;
@@ -7012,7 +7052,7 @@ body.blog-edit-page .blog-edit-route {
 	display: flex;
 	flex-direction: row;
 	align-items: center;
-	gap: 6px;
+	gap: 5px;
 	min-width: 0;
 	width: 100%;
 }
@@ -7082,7 +7122,7 @@ body.blog-edit-page .blog-edit-route {
 	display: flex;
 	flex-direction: row;
 	align-items: center;
-	gap: 8px;
+	gap: 6px;
 	flex: 1;
 	min-width: 0;
 	text-decoration: none;

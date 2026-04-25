@@ -67,7 +67,7 @@ export function openDb() {
 				// Use serviceClient to bypass RLS for authentication
 				const { data, error } = await serviceClient
 					.from(prefixedTable("users"))
-					.select("id, email, role, created_at, meta")
+					.select("id, email, role, created_at, last_active_at, meta")
 					.eq("id", id)
 					.maybeSingle();
 				if (error) throw error;
@@ -125,7 +125,7 @@ export function openDb() {
 			if (idList.length === 0) return new Map();
 			const { data, error } = await serviceClient
 				.from(prefixedTable("users"))
-				.select("id, email, role, created_at, meta")
+				.select("id, email, role, created_at, last_active_at, meta")
 				.in("id", idList);
 			if (error) throw error;
 			const map = new Map();
@@ -858,10 +858,18 @@ export function openDb() {
 							user_id: Number(row.id),
 							user_name: p.user_name ?? null,
 							display_name: p.display_name ?? null,
-							avatar_url: p.avatar_url ?? null
+							avatar_url: p.avatar_url ?? null,
+							presence_last_seen_at: ts
 						});
 						if (out.length >= cap) break;
 					}
+					out.sort((a, b) => {
+						const ams = Date.parse(String(a?.presence_last_seen_at || ''));
+						const bms = Date.parse(String(b?.presence_last_seen_at || ''));
+						const av = Number.isFinite(ams) ? ams : 0;
+						const bv = Number.isFinite(bms) ? bms : 0;
+						return bv - av;
+					});
 					return out;
 				};
 				const primary = await serviceClient

@@ -5,6 +5,7 @@
 import { getAvatarColor } from './avatar.js';
 import { serverChannelTagFromServerName } from './serverChatTag.js';
 import { readDmPinKeysOrdered } from './chatDmPins.js';
+import { homeIcon, globeIcon, smsIcon, helpIcon } from '../icons/svg-strings.js';
 
 function escapeHtmlPseudoStrip(str) {
 	return String(str ?? '')
@@ -17,8 +18,12 @@ function escapeHtmlPseudoStrip(str) {
 /**
  * Slugs for the fixed top strip (no section label) above DMs on chat + Connect sidebars.
  * Order: Feed, My Creations, Comments, Explore (above Feedback), Feedback.
+ * A separate “Help” row (not a channel) links to `/help` and is appended after Feedback.
  */
 export const SIDEBAR_PSEUDO_STRIP_ORDER = ['feed', 'creations', 'comments', 'explore', 'feedback'];
+
+/** App help docs — sidebar strip row under Feedback; not a chat channel. */
+export const SIDEBAR_HELP_STRIP_HREF = '/help';
 
 /** @type {Record<string, string>} */
 const SIDEBAR_PSEUDO_STRIP_TITLES = {
@@ -28,6 +33,39 @@ const SIDEBAR_PSEUDO_STRIP_TITLES = {
 	comments: 'Comments',
 	feedback: 'Feedback',
 };
+
+function creationsRouteIcon(className = '') {
+	const cls = className ? ` class="${escapeHtmlPseudoStrip(className)}"` : '';
+	return `<svg${cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><circle cx="8" cy="10" r="2"></circle><path d="M21 17l-5-5L5 19"></path></svg>`;
+}
+
+function feedbackMegaphoneIcon(className = '') {
+	const cls = className ? ` class="${escapeHtmlPseudoStrip(className)}"` : '';
+	return `<svg${cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11v2"></path><path d="M6 10.5v3"></path><path d="M8.5 9.5L18 6v12l-9.5-3.5z"></path><path d="M8.5 14.5l1.4 4.2c.1.3.4.5.7.5h1.6"></path></svg>`;
+}
+
+function pseudoStripRouteIconSvg(slug, routeIconClass = 'chat-page-sidebar-channel-route-icon') {
+	const key = String(slug || '').trim().toLowerCase();
+	if (!key) return '';
+	const cls = String(routeIconClass || '').trim() || 'chat-page-sidebar-channel-route-icon';
+	if (key === 'feed') return homeIcon(cls);
+	if (key === 'explore') return globeIcon(cls);
+	if (key === 'creations') return creationsRouteIcon(cls);
+	if (key === 'comments') return smsIcon(cls);
+	if (key === 'feedback') return feedbackMegaphoneIcon(cls);
+	return '';
+}
+
+/** SVG markup for pseudo-strip slugs (feed, creations, …); same icons as mobile nav / sidebar strip. */
+export function getPseudoStripRouteIconHtml(slug, routeIconClass) {
+	return pseudoStripRouteIconSvg(slug, routeIconClass);
+}
+
+function pseudoStripRouteIconAvatarHtml(slug) {
+	const icon = pseudoStripRouteIconSvg(slug);
+	if (!icon) return null;
+	return `<div class="comment-avatar connect-chat-thread-row-channel-avatar chat-page-sidebar-channel-avatar chat-page-sidebar-channel-avatar--icon-only" aria-hidden="true">${icon}</div>`;
+}
 
 /** Display label for a pseudo strip channel — same string as the sidebar row (use for chat header / tab title). */
 export function getSidebarPseudoChannelTitle(channelSlug) {
@@ -180,6 +218,53 @@ export function pseudoStripActiveSlugFromRequestPath(requestPath) {
 	return null;
 }
 
+function stripRequestPathname(requestPath) {
+	const s = String(requestPath || '').trim();
+	if (!s) return '';
+	try {
+		if (s.startsWith('http://') || s.startsWith('https://')) return new URL(s).pathname;
+	} catch {
+		return '';
+	}
+	const noQuery = s.split('?')[0].split('#')[0];
+	if (!noQuery) return '';
+	return noQuery.startsWith('/') ? noQuery : `/${noQuery}`;
+}
+
+/** True when `requestPath` is the help page (SSR first paint). */
+export function isSidebarHelpPathActive(requestPath) {
+	const path = stripRequestPathname(requestPath);
+	return path === '/help' || path.startsWith('/help/');
+}
+
+/** Strip row object merged with channel stubs for client render. */
+export function buildSidebarHelpStripRow() {
+	return { type: 'sidebar_help', title: 'Help', href: SIDEBAR_HELP_STRIP_HREF };
+}
+
+function sidebarHelpStripIconSvg(routeIconClass = 'chat-page-sidebar-channel-route-icon') {
+	const cls = String(routeIconClass || '').trim() || 'chat-page-sidebar-channel-route-icon';
+	return helpIcon(cls);
+}
+
+function sidebarHelpStripAvatarHtml() {
+	const icon = sidebarHelpStripIconSvg();
+	return `<div class="comment-avatar connect-chat-thread-row-channel-avatar chat-page-sidebar-channel-avatar chat-page-sidebar-channel-avatar--icon-only" aria-hidden="true">${icon}</div>`;
+}
+
+export function buildSidebarHelpStripAnchorHtml(requestPath = '') {
+	const activeCls = isSidebarHelpPathActive(requestPath) ? ' is-active' : '';
+	const avatarHtml = sidebarHelpStripAvatarHtml();
+	return `<a class="chat-page-sidebar-row chat-page-sidebar-row--sidebar-help${activeCls}" href="${escapeHtmlPseudoStrip(SIDEBAR_HELP_STRIP_HREF)}" data-chat-sidebar-help="1">
+				${avatarHtml}
+				<div class="chat-page-sidebar-row-body">
+					<div class="chat-page-sidebar-row-title-line">
+						<span class="chat-page-sidebar-row-title">Help</span>
+					</div>
+				</div>
+			</a>`;
+}
+
 /**
  * Initial HTML for the pseudo strip (same row shape as `rowHtml` in chat / Connect).
  * Server injects into `pages/chat.html` via `{{CHAT_SIDEBAR_PSEUDO_STRIP_LIST}}`; Connect uses this after `loadDeps`.
@@ -188,15 +273,17 @@ export function pseudoStripActiveSlugFromRequestPath(requestPath) {
  */
 export function buildSidebarPseudoStripListStaticHtml(requestPath = '') {
 	const activeSlug = pseudoStripActiveSlugFromRequestPath(requestPath);
-	return SIDEBAR_PSEUDO_STRIP_ORDER.map((slug) => {
+	const channelHtml = SIDEBAR_PSEUDO_STRIP_ORDER.map((slug) => {
 		const title = SIDEBAR_PSEUDO_STRIP_TITLES[slug] || `#${slug}`;
 		const href = `/chat/c/${encodeURIComponent(slug)}`;
 		const bg = getAvatarColor(slug);
+		const iconAvatarHtml = pseudoStripRouteIconAvatarHtml(slug);
+		const avatarHtml = iconAvatarHtml || `<div class="comment-avatar connect-chat-thread-row-channel-avatar chat-page-sidebar-channel-avatar" style="background: ${escapeHtmlPseudoStrip(bg)};" aria-hidden="true">#</div>`;
 		const navDup = SIDEBAR_STRIP_SLUGS_ALSO_IN_APP_PRIMARY_NAV.has(slug);
 		const navCls = navDup ? ' chat-page-sidebar-row--also-in-app-primary-nav' : '';
 		const activeCls = activeSlug === slug ? ' is-active' : '';
 		return `<a class="chat-page-sidebar-row${navCls}${activeCls}" href="${escapeHtmlPseudoStrip(href)}" data-chat-pseudo-slug="${escapeHtmlPseudoStrip(slug)}">
-				<div class="comment-avatar connect-chat-thread-row-channel-avatar chat-page-sidebar-channel-avatar" style="background: ${escapeHtmlPseudoStrip(bg)};" aria-hidden="true">#</div>
+				${avatarHtml}
 				<div class="chat-page-sidebar-row-body">
 					<div class="chat-page-sidebar-row-title-line">
 						<span class="chat-page-sidebar-row-title">${escapeHtmlPseudoStrip(title)}</span>
@@ -204,6 +291,7 @@ export function buildSidebarPseudoStripListStaticHtml(requestPath = '') {
 				</div>
 			</a>`;
 	}).join('');
+	return channelHtml + buildSidebarHelpStripAnchorHtml(requestPath);
 }
 
 /**
@@ -220,17 +308,22 @@ export function getSidebarPseudoStripRowsMerged(channelRowsRaw) {
 		const slug = typeof t.channel_slug === 'string' ? t.channel_slug.trim().toLowerCase() : '';
 		if (slug && SIDEBAR_TOP_STRIP_CHANNEL_SLUGS.has(slug)) bySlug.set(slug, t);
 	}
-	return stubs.map((stub) => {
+	const mergedChannels = stubs.map((stub) => {
 		const key = String(stub.channel_slug || '').toLowerCase();
 		const api = bySlug.get(key);
 		if (!api) return stub;
 		return { ...api, title: stub.title };
 	});
+	return [...mergedChannels, buildSidebarHelpStripRow()];
 }
 
 /** @param {object} meta */
 export function buildChatThreadUrl(meta) {
 	if (!meta) return '/connect#chat';
+	if (meta.type === 'sidebar_help') {
+		const h = typeof meta.href === 'string' && meta.href.trim() ? meta.href.trim() : SIDEBAR_HELP_STRIP_HREF;
+		return h.startsWith('/') ? h : SIDEBAR_HELP_STRIP_HREF;
+	}
 	if (meta.type === 'channel' && meta.channel_slug) {
 		return `/chat/c/${encodeURIComponent(String(meta.channel_slug))}`;
 	}
@@ -248,6 +341,129 @@ export function buildChatThreadUrl(meta) {
 		return `/chat/t/${encodeURIComponent(String(id))}`;
 	}
 	return '/connect#chat';
+}
+
+/** Same rules as chat sidebar `normalizePathForCompare` — keep pseudo-strip active state aligned. */
+export function normalizeChatNavPathForCompare(p) {
+	const s = String(p || '')
+		.replace(/\/+$/, '')
+		.trim();
+	if (!s || s === '/index.html' || s === '/feed') return '/chat/c/feed';
+	if (s === '/explore') return '/chat/c/explore';
+	if (s === '/creations') return '/chat/c/creations';
+	return s;
+}
+
+/** Whether `href` is the current chat pseudo thread (standalone or in-app). */
+export function isChatPseudoStripHrefActive(href) {
+	if (typeof window === 'undefined') return false;
+	const cur = normalizeChatNavPathForCompare(window.location.pathname);
+	let pathOnly = href;
+	if (typeof href === 'string' && href.startsWith('/')) {
+		pathOnly = href.split('?')[0].split('#')[0];
+	} else {
+		try {
+			pathOnly = new URL(href, window.location.origin).pathname;
+		} catch {
+			return false;
+		}
+	}
+	return normalizeChatNavPathForCompare(pathOnly) === cur;
+}
+
+/**
+ * When the pseudo list was SSR’d or pre-filled with the same strip rows, update href / active /
+ * unread in place. Does not replace avatars (avoids hydrate flash); does not set innerHTML.
+ * @param {HTMLElement} listEl
+ * @param {object[]} stripRows from {@link getSidebarPseudoStripRowsMerged}
+ * @param {{ normalizePathForCompare: (p: string) => string, isChatHrefActive: (href: string) => boolean }} nav
+ * @returns {boolean}
+ */
+export function tryPatchPseudoStripDomInPlace(listEl, stripRows, nav) {
+	const { normalizePathForCompare, isChatHrefActive } = nav;
+	if (
+		!(listEl instanceof HTMLElement) ||
+		!nav ||
+		typeof nav.normalizePathForCompare !== 'function' ||
+		typeof nav.isChatHrefActive !== 'function'
+	) {
+		return false;
+	}
+	const rows = Array.isArray(stripRows) ? stripRows : [];
+	const anchors = [...listEl.querySelectorAll(':scope > a.chat-page-sidebar-row')];
+	if (anchors.length !== rows.length) return false;
+	const hrefBase =
+		typeof window !== 'undefined' && window.location?.href ? window.location.href : 'http://localhost/';
+	const navDupSlugs = SIDEBAR_STRIP_SLUGS_ALSO_IN_APP_PRIMARY_NAV;
+	for (let i = 0; i < rows.length; i++) {
+		const t = rows[i];
+		const a = anchors[i];
+		if (t?.type === 'sidebar_help') {
+			if (a.getAttribute('data-chat-sidebar-help') !== '1') return false;
+			let wantPath;
+			let curPath;
+			try {
+				wantPath = normalizePathForCompare(new URL(buildChatThreadUrl(t), hrefBase).pathname);
+				curPath = normalizePathForCompare(new URL(a.getAttribute('href') || '', hrefBase).pathname);
+			} catch {
+				return false;
+			}
+			if (curPath !== wantPath) return false;
+		} else {
+			const wantSlug =
+				t?.type === 'channel' && typeof t.channel_slug === 'string' ? t.channel_slug.trim().toLowerCase() : '';
+			if (!wantSlug) return false;
+			const fromDom = a.getAttribute('data-chat-pseudo-slug');
+			if (fromDom) {
+				if (fromDom.toLowerCase() !== wantSlug) return false;
+			} else {
+				let wantPath;
+				let curPath;
+				try {
+					wantPath = normalizePathForCompare(new URL(buildChatThreadUrl(t), hrefBase).pathname);
+					curPath = normalizePathForCompare(new URL(a.getAttribute('href') || '', hrefBase).pathname);
+				} catch {
+					return false;
+				}
+				if (curPath !== wantPath) return false;
+			}
+		}
+		const titleLine = a.querySelector(':scope > .chat-page-sidebar-row-body .chat-page-sidebar-row-title-line');
+		if (!titleLine) return false;
+	}
+	for (let i = 0; i < rows.length; i++) {
+		const t = rows[i];
+		const a = anchors[i];
+		const href = buildChatThreadUrl(t);
+		const active = typeof isChatHrefActive === 'function' ? isChatHrefActive(href) : false;
+		const slug =
+			t?.type === 'channel' && typeof t.channel_slug === 'string' ? t.channel_slug.trim().toLowerCase() : '';
+		a.setAttribute('href', href);
+		if (t?.type === 'sidebar_help') {
+			a.setAttribute('data-chat-sidebar-help', '1');
+			a.removeAttribute('data-chat-pseudo-slug');
+		} else if (slug) {
+			a.setAttribute('data-chat-pseudo-slug', slug);
+		}
+		a.classList.toggle('is-active', active);
+		a.classList.toggle('chat-page-sidebar-row--also-in-app-primary-nav', Boolean(slug && navDupSlugs.has(slug)));
+		const titleLine = a.querySelector(':scope > .chat-page-sidebar-row-body .chat-page-sidebar-row-title-line');
+		if (!titleLine) return false;
+		titleLine.querySelectorAll('.chat-page-sidebar-unread').forEach((el) => el.remove());
+		const unc = Number(t.unread_count);
+		const showUnread = t?.type !== 'sidebar_help' && !active && Number.isFinite(unc) && unc > 0;
+		if (showUnread) {
+			const unreadLabel = unc > 99 ? '99+' : String(unc);
+			const span = typeof document !== 'undefined' ? document.createElement('span') : null;
+			if (span) {
+				span.className = 'chat-page-sidebar-unread';
+				span.setAttribute('aria-label', `${unc} unread`);
+				span.textContent = unreadLabel;
+				titleLine.appendChild(span);
+			}
+		}
+	}
+	return true;
 }
 
 /**
@@ -292,6 +508,9 @@ export function mergeThreadRowsWithJoinedServers(threads, joinedServers) {
  */
 export function buildChatThreadRowAvatarHtml(t, deps) {
 	const { renderCommentAvatarHtml, getAvatarColor } = deps;
+	if (t?.type === 'sidebar_help') {
+		return sidebarHelpStripAvatarHtml();
+	}
 	if (t?.type === 'dm') {
 		const ou = t.other_user;
 		const displayName =
@@ -321,6 +540,11 @@ export function buildChatThreadRowAvatarHtml(t, deps) {
 			? t.title.trim().slice(1)
 			: '') ||
 		'';
+	const slugKey = slugRaw.toLowerCase();
+	if (SIDEBAR_TOP_STRIP_CHANNEL_SLUGS.has(slugKey)) {
+		const iconAvatarHtml = pseudoStripRouteIconAvatarHtml(slugKey);
+		if (iconAvatarHtml) return iconAvatarHtml;
+	}
 	const color = getAvatarColor(slugRaw.toLowerCase() || 'channel');
 	return `<div class="comment-avatar connect-chat-thread-row-channel-avatar chat-page-sidebar-channel-avatar" style="background: ${color};" aria-hidden="true">#</div>`;
 }
