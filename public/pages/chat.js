@@ -1945,9 +1945,12 @@ export async function initChatPage(root, options = {}) {
 	function setMobileSidebarMode(open) {
 		if (!document.body) return;
 		const on = Boolean(open) && shouldShowMobileSidebarFromLocation();
+		const isMobile = isChatPageMobileLayout();
 		document.body.classList.toggle('chat-page--mobile-sidebar-open', on);
 		try {
-			if (on) {
+			if (isMobile) {
+				document.documentElement.classList.add('chat-page--use-app-mobile-header');
+			} else if (on) {
 				document.documentElement.classList.add('chat-page--use-app-mobile-header');
 			} else {
 				const shouldShowAppMobileHeader =
@@ -1964,13 +1967,13 @@ export async function initChatPage(root, options = {}) {
 			? mainColumn.querySelector('[data-chat-mobile-chrome]')
 			: null;
 		if (appHeader instanceof HTMLElement) {
-			appHeader.hidden = !on;
+			appHeader.hidden = isMobile ? false : !on;
 		}
 		if (appMobileNav instanceof HTMLElement) {
-			appMobileNav.hidden = !on;
+			appMobileNav.hidden = isMobile ? false : !on;
 		}
 		if (mobileChrome instanceof HTMLElement) {
-			mobileChrome.hidden = on;
+			mobileChrome.hidden = isMobile ? true : on;
 		}
 	}
 

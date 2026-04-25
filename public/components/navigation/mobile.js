@@ -113,9 +113,9 @@ class AppNavigationMobile extends HTMLElement {
 				const appHeader = document.querySelector('app-navigation');
 				const appMobileNav = document.querySelector('app-navigation-mobile');
 				const mobileChrome = document.querySelector('[data-chat-mobile-chrome]');
-				if (appHeader instanceof HTMLElement) appHeader.hidden = true;
-				if (appMobileNav instanceof HTMLElement) appMobileNav.hidden = true;
-				if (mobileChrome instanceof HTMLElement) mobileChrome.hidden = false;
+				if (appHeader instanceof HTMLElement) appHeader.hidden = false;
+				if (appMobileNav instanceof HTMLElement) appMobileNav.hidden = false;
+				if (mobileChrome instanceof HTMLElement) mobileChrome.hidden = true;
 			}
 			const next = `${targetPath}${window.location.search || ''}`;
 			const cur = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
