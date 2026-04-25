@@ -1797,6 +1797,12 @@ body.chat-page .chat-page-send-btn .chat-page-send-icon {
 	body.chat-page.chat-page--mobile-composer-overlay .chat-page-thread-body .chat-page-messages {
 		padding-bottom: calc(88px + env(safe-area-inset-bottom));
 	}
+
+	body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading {
+		align-items: flex-start;
+		padding-top: calc(48px + 12px);
+		box-sizing: border-box;
+	}
 }
 
 @media (min-width: 1024px) {
