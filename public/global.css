@@ -2953,6 +2953,19 @@ app-route-feed {
 	text-decoration-color: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
+/* Chat reserved @-tokens (@here, @channel, …): highlighted, not links */
+.mention-broadcast {
+	display: inline;
+	font-weight: 600;
+	color: color-mix(in srgb, var(--accent) 58%, var(--text-muted));
+	background: color-mix(in srgb, var(--accent) 14%, transparent);
+	border-radius: 4px;
+	padding: 0 3px;
+	cursor: default;
+	text-decoration: none;
+	user-select: text;
+}
+
 .user-avatar-link:hover {
 	text-decoration: none;
 }

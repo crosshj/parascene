@@ -1,3 +1,5 @@
+import { isChatBroadcastMentionSlug } from "../../public/shared/chatBroadcastMentions.js";
+
 /**
  * Extract @username tokens from chat message body for mention notifications.
  * Usernames are normalized to lowercase for profile lookup (aligned with DM path rules).
@@ -14,6 +16,7 @@ export function extractUniqueChatMentionUsernames(text) {
 		const token = (match[1] || "").trim();
 		if (!token) continue;
 		const normalized = token.toLowerCase();
+		if (isChatBroadcastMentionSlug(normalized)) continue;
 		if (!/^[a-z0-9][a-z0-9_]{2,23}$/.test(normalized)) continue;
 		if (seen.has(normalized)) continue;
 		seen.add(normalized);

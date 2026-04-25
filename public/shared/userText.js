@@ -1,4 +1,5 @@
 import { eyeHiddenIcon, linkIcon2 } from '../icons/svg-strings.js';
+import { isChatBroadcastMentionSlug } from './chatBroadcastMentions.js';
 
 /**
  * Escapes text for safe HTML insertion.
@@ -85,7 +86,9 @@ function renderPlainUserTextSegment(text) {
 		out += escapeHtml(transformed.slice(lastIndex, mentionStart));
 
 		const normalized = rawToken.toLowerCase();
-		if (sigil === '@' && /^[a-z0-9][a-z0-9_-]{2,23}$/.test(normalized)) {
+		if (sigil === '@' && isChatBroadcastMentionSlug(normalized)) {
+			out += `<span class="mention-broadcast" data-broadcast="${escapeHtml(normalized)}">@${escapeHtml(rawToken)}</span>`;
+		} else if (sigil === '@' && /^[a-z0-9][a-z0-9_-]{2,23}$/.test(normalized)) {
 			out += `<a href="/p/${escapeHtml(normalized)}" class="user-link mention-link">@${escapeHtml(rawToken)}</a>`;
 		} else if (sigil === '#' && /^[a-z0-9][a-z0-9_-]{1,31}$/.test(normalized)) {
 			out += `<a href="/t/${escapeHtml(normalized)}" class="user-link mention-link">#${escapeHtml(rawToken)}</a>`;

@@ -6,6 +6,7 @@ import { getBaseAppUrl, getShareBaseUrl } from "./utils/url.js";
 import { verifyShareToken } from "./utils/shareLink.js";
 import { buildRequestMeta } from "./utils/analytics.js";
 import { buildSidebarPseudoStripListStaticHtml } from "../public/shared/chatSidebarRoster.js";
+import { isChatBroadcastMentionSlug } from "../public/shared/chatBroadcastMentions.js";
 
 function getPageForUser(user) {
 	const roleToPage = {
@@ -83,7 +84,9 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			const mentionEnd = mentionStart + 1 + rawToken.length;
 			out += escapeHtml(raw.slice(lastIndex, mentionStart));
 			const normalized = rawToken.toLowerCase();
-			if (sigil === "@" && /^[a-z0-9][a-z0-9_-]{2,23}$/.test(normalized)) {
+			if (sigil === "@" && isChatBroadcastMentionSlug(normalized)) {
+				out += `<span class="mention-broadcast" data-broadcast="${escapeHtml(normalized)}">@${escapeHtml(rawToken)}</span>`;
+			} else if (sigil === "@" && /^[a-z0-9][a-z0-9_-]{2,23}$/.test(normalized)) {
 				out += `<a href="/p/${escapeHtml(normalized)}" class="user-link mention-link">@${escapeHtml(rawToken)}</a>`;
 			} else if (sigil === "#" && /^[a-z0-9][a-z0-9_-]{1,31}$/.test(normalized)) {
 				out += `<a href="/t/${escapeHtml(normalized)}" class="user-link mention-link">#${escapeHtml(rawToken)}</a>`;
