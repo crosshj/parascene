@@ -1136,8 +1136,11 @@ class AppNavigation extends HTMLElement {
 		const profileButtons = this.querySelectorAll('.profile-button');
 		profileButtons.forEach(profileButton => {
 			profileButton.addEventListener('click', (e) => {
+				e.preventDefault();
 				e.stopPropagation();
-				document.dispatchEvent(new CustomEvent('open-profile'));
+				document.dispatchEvent(
+					new CustomEvent('open-account-menu', { bubbles: true, detail: { anchor: profileButton } })
+				);
 			});
 
 			// Fallback to icon if avatar image fails to load.
@@ -1222,7 +1225,9 @@ class AppNavigation extends HTMLElement {
 				} else if (action === 'credits') {
 					document.dispatchEvent(new CustomEvent('open-credits'));
 				} else if (action === 'profile') {
-					document.dispatchEvent(new CustomEvent('open-profile'));
+					document.dispatchEvent(
+						new CustomEvent('open-account-menu', { bubbles: true, detail: { anchor: button } })
+					);
 				} else if (action === 'create') {
 					window.location.href = '/create';
 				}
@@ -1403,7 +1408,8 @@ class AppNavigation extends HTMLElement {
 				${showProfile ? html`
 				<button
 					class="action-item profile-button ${this.avatarUrl ? 'has-avatar' : ''} ${this.avatarLoading && !this.avatarUrl ? 'is-avatar-loading' : ''}"
-					aria-label="Open profile">
+					aria-label="Account menu"
+					type="button">
 					<img class="profile-avatar" ${this.avatarUrl ? `src="${this.avatarUrl}" ` : '' } alt=""
 						aria-hidden="true" />
 					<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -1487,8 +1493,8 @@ class AppNavigation extends HTMLElement {
 				</button>
 				` : ''}
 				${showProfile ? html`
-				<button class="action-item" data-mobile-menu-action="profile">
-					Profile
+				<button type="button" class="action-item" data-mobile-menu-action="profile">
+					Account
 				</button>
 				` : ''}
 			</div>

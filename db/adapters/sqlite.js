@@ -963,6 +963,24 @@ export async function openDb() {
 				return Promise.resolve({ changes: result.changes });
 			}
 		},
+		updateUserVynlyBearerToken: {
+			run: async (userId, { bearerToken, tokenPrefix } = {}) => {
+				const stmt = db.prepare("SELECT meta FROM users WHERE id = ?");
+				const row = stmt.get(userId);
+				const existing = parseUserMeta(row?.meta);
+				const meta = { ...existing };
+				if (bearerToken == null || bearerToken === "") {
+					delete meta.vynlyBearerToken;
+					delete meta.vynlyTokenPrefix;
+				} else {
+					meta.vynlyBearerToken = String(bearerToken).trim();
+					meta.vynlyTokenPrefix = typeof tokenPrefix === "string" ? tokenPrefix : "";
+				}
+				const updateStmt = db.prepare("UPDATE users SET meta = ? WHERE id = ?");
+				const result = updateStmt.run(JSON.stringify(meta), userId);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
 		selectUserIdByApiKeyHash: {
 			get: async (hash) => {
 				if (hash == null || typeof hash !== "string" || !hash.trim()) return undefined;

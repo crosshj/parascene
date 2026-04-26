@@ -31,6 +31,25 @@ export const helpIcon = withAttributes(html`
 	</svg>
 `);
 
+/** User / profile (stroke, matches header avatar glyph). */
+export const userProfileIcon = withAttributes(html`
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+		stroke-linejoin="round" aria-hidden="true">
+		<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+		<circle cx="12" cy="7" r="4"></circle>
+	</svg>
+`);
+
+/** Sign out / log out (stroke). */
+export const logOutIcon = withAttributes(html`
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+		stroke-linejoin="round" aria-hidden="true">
+		<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+		<polyline points="16 17 21 12 16 7"></polyline>
+		<line x1="21" y1="12" x2="9" y2="12"></line>
+	</svg>
+`);
+
 export const closeIcon = withAttributes(html`
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
 		stroke-linejoin="round" aria-hidden="true">

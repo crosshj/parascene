@@ -36,6 +36,8 @@
 	--share-facebook: #1877f2;
 	--share-reddit: #ff4500;
 	--share-linkedin: #0a66c2;
+	/* Vynly brand accent (from product UI — teal “New post” / links) */
+	--share-vynly: #16aca6;
 
 	/* Founder flair – name/handle text color (matches flair ring/label) */
 	--founder-flair-name: #9657c2;
@@ -11476,6 +11478,10 @@ app-modal-creation-details .creation-details-args-hint code {
 	background: var(--share-linkedin);
 }
 
+.share-option-icon-vynly {
+	background: var(--share-vynly);
+}
+
 .share-action-cta {
 	flex: 0 0 auto;
 	padding: 8px 12px;
@@ -11533,6 +11539,12 @@ app-modal-creation-details .creation-details-args-hint code {
 .share-action-cta-linkedin {
 	background: var(--share-linkedin);
 	border-color: var(--share-linkedin);
+	color: var(--share-brand-text);
+}
+
+.share-action-cta-vynly {
+	background: var(--share-vynly);
+	border-color: var(--share-vynly);
 	color: var(--share-brand-text);
 }
 

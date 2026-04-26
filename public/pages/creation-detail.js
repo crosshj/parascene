@@ -3728,6 +3728,33 @@ async function loadCreation() {
 let currentCreationId = null;
 let lastCreationMeta = null;
 
+/**
+ * Video creations cannot use Vynly share (server + client). Mirrors api_routes/utils/vynlyShareFromCreation.js.
+ * @returns {boolean}
+ */
+function isCurrentCreationVideoForVynly() {
+	const c = lastCreationMeta;
+	if (!c || typeof c !== 'object') return false;
+	let meta = c.meta;
+	if (typeof meta === 'string') {
+		try {
+			meta = JSON.parse(meta);
+		} catch {
+			meta = null;
+		}
+	}
+	if (meta && typeof meta === 'object') {
+		if (meta.video && typeof meta.video === 'object') return true;
+		const fp = typeof meta.file_path === 'string' ? meta.file_path.trim() : '';
+		if (fp.startsWith('/api/videos/created/')) return true;
+		const vf = typeof meta.video_filename === 'string' ? meta.video_filename : '';
+		if (vf.startsWith('video/')) return true;
+		if (typeof meta.media_type === 'string' && meta.media_type === 'video') return true;
+	}
+	const mediaType = typeof c.media_type === 'string' ? c.media_type : 'image';
+	return mediaType === 'video';
+}
+
 async function checkAndLoadCreation() {
 	await loadDeps();
 	const creationId = getCreationId();
@@ -3813,15 +3840,32 @@ document.addEventListener('click', (e) => {
 	}
 });
 
-// Share button handler
-document.addEventListener('click', (e) => {
+// Share button handler — prefetch Vynly status so the share modal can show the Vynly row before it opens.
+document.addEventListener('click', async (e) => {
 	const shareBtn = e.target.closest('[data-share-btn]');
 	if (shareBtn && !shareBtn.disabled) {
 		e.preventDefault();
 		const creationId = getCreationId();
 		if (!creationId) return;
+		const vynlyShareEligible = !isCurrentCreationVideoForVynly();
+		let vynlyConfigured = false;
+		if (vynlyShareEligible) {
+			try {
+				const res = await fetch('/api/vynly/status', { credentials: 'include' });
+				if (res.ok) {
+					const data = await res.json().catch(() => null);
+					vynlyConfigured = Boolean(data?.configured);
+				}
+			} catch {
+				// leave false
+			}
+		}
 		document.dispatchEvent(new CustomEvent('open-share-modal', {
-			detail: { creationId }
+			detail: {
+				creationId,
+				vynlyShareEligible,
+				vynlyConfigured
+			}
 		}));
 	}
 });

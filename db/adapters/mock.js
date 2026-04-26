@@ -415,6 +415,21 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		updateUserVynlyBearerToken: {
+			run: async (userId, { bearerToken, tokenPrefix } = {}) => {
+				const user = users.find((u) => Number(u.id) === Number(userId));
+				if (!user) return { changes: 0 };
+				user.meta = user.meta != null && typeof user.meta === "object" ? { ...user.meta } : {};
+				if (bearerToken == null || bearerToken === "") {
+					delete user.meta.vynlyBearerToken;
+					delete user.meta.vynlyTokenPrefix;
+				} else {
+					user.meta.vynlyBearerToken = String(bearerToken).trim();
+					user.meta.vynlyTokenPrefix = typeof tokenPrefix === "string" ? tokenPrefix : "";
+				}
+				return { changes: 1 };
+			}
+		},
 		selectUserIdByApiKeyHash: {
 			get: async (hash) => {
 				if (hash == null || typeof hash !== "string" || !hash.trim()) return undefined;

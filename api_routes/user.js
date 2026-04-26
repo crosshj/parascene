@@ -30,7 +30,7 @@ export default function createProfileRoutes({ queries }) {
 
 	function sanitizeUserMetaForClient(meta) {
 		if (!meta || typeof meta !== "object") return meta;
-		const { apiKeyHash: _h, presence_last_seen_at: _p, appear_offline: _a, ...rest } = meta;
+		const { apiKeyHash: _h, vynlyBearerToken: _v, presence_last_seen_at: _p, appear_offline: _a, ...rest } = meta;
 		return rest;
 	}
 
@@ -586,6 +586,13 @@ export default function createProfileRoutes({ queries }) {
 		const audibleNotifications = user.meta?.audibleNotifications !== false;
 		const hasApiKey = Boolean(user.meta?.apiKeyHash);
 		const apiKeyPrefix = typeof user.meta?.apiKeyPrefix === "string" ? user.meta.apiKeyPrefix : null;
+		const hasVynlyToken = Boolean(
+			user.meta && typeof user.meta.vynlyBearerToken === "string" && user.meta.vynlyBearerToken.trim()
+		);
+		const vynlyTokenPrefix =
+			typeof user.meta?.vynlyTokenPrefix === "string" && user.meta.vynlyTokenPrefix.trim()
+				? user.meta.vynlyTokenPrefix.trim()
+				: null;
 		const appearOffline = user.appear_offline === true;
 		const metaPublic = sanitizeUserMetaForClient(user.meta);
 		return res.json({
@@ -600,8 +607,51 @@ export default function createProfileRoutes({ queries }) {
 			audibleNotifications,
 			hasApiKey,
 			apiKeyPrefix,
+			hasVynlyToken,
+			vynlyTokenPrefix,
 			appear_offline: appearOffline
 		});
+	});
+
+	// Save or clear Vynly agent token (Bearer for vynly.co API). Stored in users.meta; never returned in full after save.
+	router.put("/api/profile/vynly-token", async (req, res) => {
+		if (!req.auth?.userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+		if (req.auth?.apiKeyAuth) {
+			return res.status(403).json({
+				error: "Forbidden",
+				message: "Manage your Vynly token while signed in on the website."
+			});
+		}
+		if (!queries.updateUserVynlyBearerToken?.run) {
+			return res.status(500).json({ error: "Not available", message: "Profile storage is not available." });
+		}
+		const body = req.body && typeof req.body === "object" ? req.body : {};
+		const raw = typeof body.token === "string" ? body.token.trim() : "";
+		if (raw === "") {
+			try {
+				await queries.updateUserVynlyBearerToken.run(req.auth.userId, { bearerToken: "", tokenPrefix: "" });
+				return res.json({ ok: true, hasVynlyToken: false, vynlyTokenPrefix: null });
+			} catch (err) {
+				console.error("[PUT /api/profile/vynly-token]", err);
+				return res.status(500).json({ error: "Failed to clear token", message: err?.message || "Could not update." });
+			}
+		}
+		if (!/^vln_[A-Za-z0-9_.-]+$/.test(raw)) {
+			return res.status(400).json({
+				error: "Invalid token",
+				message: "Use your Vynly token from Settings or https://vynly.co/agents — it should start with vln_."
+			});
+		}
+		const tokenPrefix = raw.length <= 12 ? `${raw}…` : `${raw.slice(0, 10)}…`;
+		try {
+			await queries.updateUserVynlyBearerToken.run(req.auth.userId, { bearerToken: raw, tokenPrefix });
+			return res.json({ ok: true, hasVynlyToken: true, vynlyTokenPrefix: tokenPrefix });
+		} catch (err) {
+			console.error("[PUT /api/profile/vynly-token]", err);
+			return res.status(500).json({ error: "Failed to save token", message: err?.message || "Could not update." });
+		}
 	});
 
 	// Create or rotate API key (website session only; full key returned once).

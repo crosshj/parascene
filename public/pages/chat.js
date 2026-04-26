@@ -3376,7 +3376,7 @@ export async function initChatPage(root, options = {}) {
 		}
 	}
 
-	/** Desktop sidebar footer: current user; opens same menu as header profile (open-profile). */
+	/** Desktop sidebar footer: current user; opens account menu (open-account-menu), same as header avatar. */
 	async function syncChatSidebarViewerRow() {
 		const sidebar = document.querySelector('[data-chat-sidebar]');
 		const row = sidebar?.querySelector?.('[data-chat-sidebar-user-row]');
@@ -3992,7 +3992,9 @@ export async function initChatPage(root, options = {}) {
 			if (profileBtn instanceof HTMLButtonElement) {
 				e.preventDefault();
 				e.stopPropagation();
-				document.dispatchEvent(new CustomEvent('open-profile'));
+				document.dispatchEvent(
+					new CustomEvent('open-account-menu', { bubbles: true, detail: { anchor: profileBtn } })
+				);
 				return;
 			}
 			const notificationsBtn = e.target?.closest?.('[data-chat-sidebar-open-notifications]');
