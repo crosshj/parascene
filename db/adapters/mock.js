@@ -2302,6 +2302,23 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		updateCreatedImageGroupCover: {
+			run: async (id, userId, { created_at, file_path, width, height, color, meta }) => {
+				const image = created_images.find(
+					(img) => img.id === Number(id) && img.user_id === Number(userId)
+				);
+				if (!image) {
+					return { changes: 0 };
+				}
+				image.created_at = created_at;
+				image.file_path = file_path;
+				image.width = width;
+				image.height = height;
+				image.color = color ?? null;
+				image.meta = meta;
+				return { changes: 1 };
+			}
+		},
 		unpublishCreatedImage: {
 			run: async (id, userId, isAdmin = false) => {
 				const image = created_images.find(

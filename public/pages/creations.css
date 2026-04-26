@@ -2233,6 +2233,7 @@ button.creation-detail-group-item {
 .creation-detail-group-actions {
 	display: flex;
 	align-items: center;
+	gap: 8px;
 }
 
 .creation-detail-ungroup-btn {

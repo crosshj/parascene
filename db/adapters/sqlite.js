@@ -3964,6 +3964,35 @@ export async function openDb() {
 				return Promise.resolve({ changes: result.changes });
 			}
 		},
+		updateCreatedImageGroupCover: {
+			run: async (id, userId, { created_at, file_path, width, height, color, meta }) => {
+				const toJsonText = (value) => {
+					if (value == null) return null;
+					if (typeof value === "string") return value;
+					try {
+						return JSON.stringify(value);
+					} catch {
+						return null;
+					}
+				};
+				const stmt = db.prepare(
+					`UPDATE created_images
+           SET created_at = ?, file_path = ?, width = ?, height = ?, color = ?, meta = ?
+           WHERE id = ? AND user_id = ?`
+				);
+				const result = stmt.run(
+					created_at,
+					file_path,
+					width,
+					height,
+					color ?? null,
+					toJsonText(meta),
+					id,
+					userId
+				);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
 		unpublishCreatedImage: {
 			run: async (id, userId, isAdmin = false) => {
 				// Admin can unpublish any image, owner can only unpublish their own

@@ -5245,6 +5245,25 @@ export function openDb() {
 				return { changes: data?.length ?? 0 };
 			}
 		},
+		updateCreatedImageGroupCover: {
+			run: async (id, userId, { created_at, file_path, width, height, color, meta }) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.update({
+						created_at,
+						file_path,
+						width,
+						height,
+						color: color ?? null,
+						meta
+					})
+					.eq("id", id)
+					.eq("user_id", userId)
+					.select("id");
+				if (error) throw error;
+				return { changes: data?.length ?? 0 };
+			}
+		},
 		unpublishCreatedImage: {
 			run: async (id, userId, isAdmin = false) => {
 				// Use serviceClient to bypass RLS for backend operations

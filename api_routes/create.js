@@ -285,6 +285,20 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	}
 
+	function syncGroupLineageFromCoverMeta(groupMeta, coverMeta) {
+		const next = groupMeta && typeof groupMeta === "object" ? { ...groupMeta } : {};
+		const source = coverMeta && typeof coverMeta === "object" ? coverMeta : {};
+		const lineageKeys = ["history", "mutate_of_id", "direct_parent_ids"];
+		for (const key of lineageKeys) {
+			if (Object.prototype.hasOwnProperty.call(source, key)) {
+				next[key] = source[key];
+			} else {
+				delete next[key];
+			}
+		}
+		return next;
+	}
+
 	/** Character text for cast hydration: Prompt Library personas store it in injection_text (and sometimes meta). */
 	function characterFromPersonaRow(row) {
 		if (!row) return "";
@@ -2345,6 +2359,9 @@ export default function createCreateRoutes({ queries, storage }) {
 							: nowIso(),
 						updated_at: nowIso(),
 						ungroup_supported: true,
+						cover_source_id: Number(targetGroupMeta?.group?.cover_source_id) > 0
+							? Number(targetGroupMeta.group.cover_source_id)
+							: Number(existingSources[0]?.id ?? appendedSources[0]?.id ?? 0),
 						source_creation_ids: mergedSources
 							.map((item) => Number(item.id))
 							.filter((n, idx, arr) => Number.isFinite(n) && n > 0 && arr.indexOf(n) === idx),
@@ -2410,7 +2427,7 @@ export default function createCreateRoutes({ queries, storage }) {
 					meta: rowMeta && typeof rowMeta === "object" ? rowMeta : null
 				};
 			});
-			const groupedMeta = {
+			const groupedMetaBase = {
 				...(parseMeta(first.meta) || {}),
 				media_type: "image",
 				group: {
@@ -2418,10 +2435,12 @@ export default function createCreateRoutes({ queries, storage }) {
 					version: 1,
 					grouped_at: groupedAt,
 					ungroup_supported: true,
+					cover_source_id: Number(first.id),
 					source_creation_ids: sourceRows.map((row) => Number(row.id)),
 					source_creations: sourceCreations
 				}
 			};
+			const groupedMeta = syncGroupLineageFromCoverMeta(groupedMetaBase, parseMeta(first.meta) || {});
 
 			const insertResult = await queries.insertCreatedImage.run(
 				user.id,
@@ -2436,6 +2455,17 @@ export default function createCreateRoutes({ queries, storage }) {
 			const groupedId = Number(insertResult?.insertId ?? insertResult?.lastInsertRowid);
 			if (!Number.isFinite(groupedId) || groupedId <= 0) {
 				return res.status(500).json({ error: "Failed to create grouped creation" });
+			}
+			const setCoverCreatedAt = await queries.updateCreatedImageGroupCover?.run(groupedId, user.id, {
+				created_at: first.created_at,
+				file_path: groupedFilePath,
+				width: first.width,
+				height: first.height,
+				color: first.color ?? null,
+				meta: groupedMeta
+			});
+			if (!setCoverCreatedAt || setCoverCreatedAt.changes === 0) {
+				return res.status(500).json({ error: "Failed to set grouped creation cover timestamp" });
 			}
 
 			for (const row of sourceRows) {
@@ -2462,6 +2492,82 @@ export default function createCreateRoutes({ queries, storage }) {
 			});
 		} catch (error) {
 			return res.status(500).json({ error: "Failed to group creations" });
+		}
+	});
+
+	// POST /api/create/images/:id/group-cover - Set grouped creation cover source.
+	router.post("/api/create/images/:id/group-cover", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		try {
+			const groupId = Number(req.params.id);
+			const sourceId = Number(req.body?.source_id);
+			if (!Number.isFinite(groupId) || groupId <= 0 || !Number.isFinite(sourceId) || sourceId <= 0) {
+				return res.status(400).json({ error: "Invalid ids" });
+			}
+			const groupRow = await queries.selectCreatedImageById.get(groupId, user.id);
+			if (!groupRow) {
+				return res.status(404).json({ error: "Creation not found" });
+			}
+			const groupMeta = parseMeta(groupRow.meta) || {};
+			const groupPayload = groupMeta?.group && typeof groupMeta.group === "object" ? groupMeta.group : null;
+			if (!groupPayload || groupPayload.kind !== "group_creations") {
+				return res.status(400).json({ error: "Creation is not a group creation" });
+			}
+			const sourceCreationsRaw = Array.isArray(groupPayload.source_creations) ? groupPayload.source_creations : [];
+			const sourceCreations = sourceCreationsRaw.filter((item) => item && typeof item === "object");
+			const targetSource = sourceCreations.find((item) => Number(item.id) === sourceId);
+			if (!targetSource) {
+				return res.status(400).json({ error: "Selected source is not part of this group" });
+			}
+
+			const reorderedSources = [
+				targetSource,
+				...sourceCreations.filter((item) => Number(item.id) !== sourceId)
+			].map((item, index) => ({ ...item, order: index }));
+
+			const nextMetaBase = {
+				...groupMeta,
+				group: {
+					...groupPayload,
+					updated_at: nowIso(),
+					cover_source_id: sourceId,
+					source_creation_ids: reorderedSources
+						.map((item) => Number(item.id))
+						.filter((n, idx, arr) => Number.isFinite(n) && n > 0 && arr.indexOf(n) === idx),
+					source_creations: reorderedSources
+				}
+			};
+			const nextMeta = syncGroupLineageFromCoverMeta(nextMetaBase, targetSource.meta);
+			const coverFilePath =
+				typeof targetSource.file_path === "string" && targetSource.file_path
+					? targetSource.file_path
+					: (typeof targetSource.filename === "string" && targetSource.filename
+						? storage.getImageUrl(targetSource.filename)
+						: "");
+			const updateResult = await queries.updateCreatedImageGroupCover?.run(groupId, user.id, {
+				created_at: targetSource.created_at,
+				file_path: coverFilePath || groupRow.file_path,
+				width: Number.isFinite(Number(targetSource.width)) ? Number(targetSource.width) : groupRow.width,
+				height: Number.isFinite(Number(targetSource.height)) ? Number(targetSource.height) : groupRow.height,
+				color: targetSource.color ?? groupRow.color ?? null,
+				meta: nextMeta
+			});
+			if (!updateResult || updateResult.changes === 0) {
+				return res.status(500).json({ error: "Failed to set group cover" });
+			}
+			const updatedGroup = await queries.selectCreatedImageById.get(groupId, user.id);
+			return res.json({
+				ok: true,
+				grouped_creation: {
+					id: updatedGroup?.id ?? groupId,
+					created_at: updatedGroup?.created_at ?? targetSource.created_at,
+					meta: parseMeta(updatedGroup?.meta) || nextMeta
+				}
+			});
+		} catch (error) {
+			return res.status(500).json({ error: "Failed to set group cover" });
 		}
 	});
 

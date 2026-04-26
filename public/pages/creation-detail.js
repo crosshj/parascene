@@ -1390,7 +1390,7 @@ async function loadCreation() {
 			actionsContext.showMoreInfoPill = false;
 		}
 		const groupSourcesRaw = Array.isArray(groupMeta?.source_creations) ? groupMeta.source_creations : [];
-		const groupSources = groupSourcesRaw
+		const groupSourcesMapped = groupSourcesRaw
 			.map((source, index) => {
 				const sourceObj = source && typeof source === 'object' ? source : null;
 				if (!sourceObj) return null;
@@ -1440,6 +1440,15 @@ async function loadCreation() {
 				};
 			})
 			.filter(Boolean);
+		const coverSourceIdFromMeta = Number(groupMeta?.cover_source_id);
+		const groupSources = [...groupSourcesMapped];
+		if (Number.isFinite(coverSourceIdFromMeta) && coverSourceIdFromMeta > 0) {
+			const coverIndex = groupSources.findIndex((source) => Number(source.id) === coverSourceIdFromMeta);
+			if (coverIndex > 0) {
+				const [coverSource] = groupSources.splice(coverIndex, 1);
+				groupSources.unshift(coverSource);
+			}
+		}
 		const groupSectionHtml = isGroupCreation && groupSources.length > 0
 			? html`
 				<section class="creation-detail-group-section" data-group-creation-section>
@@ -1458,6 +1467,7 @@ async function loadCreation() {
 					</div>
 					${isOwner && !isPublished ? html`
 					<div class="creation-detail-group-actions">
+						<button type="button" class="btn-secondary creation-detail-group-set-cover-btn" data-group-set-cover-btn disabled>Set as cover</button>
 						<button type="button" class="btn-secondary creation-detail-ungroup-btn" data-ungroup-btn>Ungroup Creations</button>
 					</div>
 					` : ''}
@@ -3057,17 +3067,31 @@ async function loadCreation() {
 		if (isGroupCreation && groupSources.length > 0) {
 			const sourceById = new Map(groupSources.map((source) => [Number(source.id), source]));
 			const groupThumbButtons = Array.from(detailContent.querySelectorAll('[data-group-source-thumb]'));
+			const setCoverBtn = detailContent.querySelector('[data-group-set-cover-btn]');
 			const titleEl = detailContent.querySelector('.creation-detail-title');
 			const mainDescriptionEl = detailContent.querySelector('[data-description]');
 			const mainMetaLineEl = detailContent.querySelector('.creation-detail-description-meta-line');
+			let selectedGroupSourceId = Number(groupSources[0]?.id);
+			const currentCoverId = Number(groupSources[0]?.id);
+
+			function syncSetCoverButton() {
+				if (!(setCoverBtn instanceof HTMLButtonElement)) return;
+				const canSetCover =
+					Number.isFinite(selectedGroupSourceId) &&
+					selectedGroupSourceId > 0 &&
+					selectedGroupSourceId !== currentCoverId;
+				setCoverBtn.disabled = !canSetCover;
+			}
 
 			function setActiveGroupSource(sourceId) {
 				const source = sourceById.get(Number(sourceId));
 				if (!source) return;
+				selectedGroupSourceId = Number(source.id);
 				for (const btn of groupThumbButtons) {
 					const isActive = Number(btn.getAttribute('data-group-source-thumb')) === Number(source.id);
 					btn.classList.toggle('is-active', isActive);
 				}
+				syncSetCoverButton();
 				if (titleEl) {
 					titleEl.textContent = source.title || 'Untitled';
 				}
@@ -3108,6 +3132,30 @@ async function loadCreation() {
 					const sourceId = Number(btn.getAttribute('data-group-source-thumb'));
 					if (!Number.isFinite(sourceId)) return;
 					setActiveGroupSource(sourceId);
+				});
+			}
+			if (setCoverBtn instanceof HTMLButtonElement) {
+				setCoverBtn.addEventListener('click', async () => {
+					if (!Number.isFinite(selectedGroupSourceId) || selectedGroupSourceId <= 0) return;
+					setCoverBtn.disabled = true;
+					try {
+						const res = await fetch(`/api/create/images/${creationId}/group-cover`, {
+							method: 'POST',
+							credentials: 'include',
+							headers: { 'content-type': 'application/json' },
+							body: JSON.stringify({ source_id: selectedGroupSourceId })
+						});
+						const data = await res.json().catch(() => ({}));
+						if (!res.ok) {
+							alert(data?.error || 'Failed to set cover');
+							syncSetCoverButton();
+							return;
+						}
+						await loadCreation();
+					} catch (err) {
+						alert(err?.message || 'Failed to set cover');
+						syncSetCoverButton();
+					}
 				});
 			}
 			setActiveGroupSource(groupSources[0].id);
