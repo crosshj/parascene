@@ -9056,6 +9056,21 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 	min-width: 120px;
 }
 
+/* Keep card overlays below creations header and kebab menus. */
+.creations-route .route-header {
+	position: relative;
+	z-index: 5;
+}
+
+.creations-route .creation-detail-more {
+	position: relative;
+	z-index: 6;
+}
+
+.creations-route .creation-detail-more .feed-card-menu {
+	z-index: 7;
+}
+
 /* Creations list – bulk actions bar and card overlays */
 .creations-bulk-bar {
 	display: none;
@@ -9601,6 +9616,7 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 	border-radius: 0;
 	box-shadow: none;
 	position: relative;
+	isolation: isolate;
 	overflow: hidden;
 	aspect-ratio: 1 / 1;
 	width: 100%;
@@ -9935,7 +9951,7 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	z-index: 3;
+	z-index: 1;
 	backdrop-filter: blur(4px);
 	pointer-events: none;
 }
@@ -9957,7 +9973,7 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	z-index: 10;
+	z-index: 1;
 	backdrop-filter: blur(4px);
 	pointer-events: none;
 }

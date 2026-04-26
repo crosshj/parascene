@@ -35,6 +35,12 @@ function getMobileNavTargetPath(route) {
 	return CHAT_FIRST_ROUTE_PATHS[key] || `/${key}`;
 }
 
+function isChatNavTargetPath(targetPath) {
+	if (typeof targetPath !== 'string') return false;
+	const normalized = targetPath.trim().toLowerCase();
+	return normalized === '/chat' || normalized.startsWith('/chat/') || normalized.startsWith('/chat#');
+}
+
 class AppNavigationMobile extends HTMLElement {
 	constructor() {
 		super();
@@ -72,7 +78,7 @@ class AppNavigationMobile extends HTMLElement {
 		if (!route) return;
 		const targetPath = getMobileNavTargetPath(route);
 		if (!targetPath) return;
-		const isChatFirstTarget = targetPath.startsWith('/chat/');
+		const isChatFirstTarget = isChatNavTargetPath(targetPath);
 		const isOnChatPage = window.location.pathname === '/chat' || window.location.pathname.startsWith('/chat/');
 
 		// Create is a standalone page; full navigation to/from it
