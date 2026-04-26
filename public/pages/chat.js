@@ -2171,6 +2171,7 @@ export async function initChatPage(root, options = {}) {
 			nsfw: !!img?.nsfw,
 			media_type: typeof img?.media_type === 'string' ? img.media_type : 'image',
 			video_url: typeof img?.video_url === 'string' ? img.video_url : null,
+			meta: img?.meta && typeof img.meta === 'object' ? img.meta : null,
 		};
 	}
 
@@ -5199,6 +5200,7 @@ export async function initChatPage(root, options = {}) {
 				<span class="creations-bulk-bar-label">Bulk Actions</span>
 				<div class="creations-bulk-actions">
 					<button type="button" class="btn-secondary creations-bulk-queue-btn" data-creations-bulk-queue disabled>Queue for later</button>
+					<button type="button" class="btn-secondary creations-bulk-group-btn" data-creations-bulk-group disabled>Group Creations</button>
 					<button type="button" class="btn-secondary creations-bulk-delete-btn" data-creations-bulk-delete disabled>Delete</button>
 				</div>
 				<button type="button" class="creations-bulk-bar-close" data-creations-bulk-close aria-label="Close bulk actions">×</button>
@@ -5250,6 +5252,7 @@ export async function initChatPage(root, options = {}) {
 		const bulkClose = routeWrap.querySelector('[data-creations-bulk-close]');
 		const bulkDelete = routeWrap.querySelector('[data-creations-bulk-delete]');
 		const bulkQueue = routeWrap.querySelector('[data-creations-bulk-queue]');
+		const bulkGroup = routeWrap.querySelector('[data-creations-bulk-group]');
 		const modalOverlay = routeWrap.querySelector('[data-creations-bulk-delete-modal]');
 		const modalCancel = routeWrap.querySelector('[data-creations-bulk-delete-cancel]');
 		const modalConfirm = routeWrap.querySelector('[data-creations-bulk-delete-confirm]');
@@ -5261,19 +5264,38 @@ export async function initChatPage(root, options = {}) {
 		function updateBulkBarSelection() {
 			const deleteBtn = routeWrap.querySelector('[data-creations-bulk-delete]');
 			const queueBtn = routeWrap.querySelector('[data-creations-bulk-queue]');
+			const groupBtn = routeWrap.querySelector('[data-creations-bulk-group]');
 			if (!bar || !deleteBtn) return;
-			const checked = routeWrap.querySelectorAll('[data-creations-bulk-checkbox]:checked').length;
+			const selectedCards = queryBulkCards().filter((card) =>
+				card.querySelector('[data-creations-bulk-checkbox]:checked')
+			);
+			const checked = selectedCards.length;
 			const hasSelection = checked > 0;
 			const queueableCards = hasSelection
-				? queryBulkCards().filter((card) => {
-						const cb = card.querySelector('[data-creations-bulk-checkbox]:checked');
-						const url = (card.dataset.imageUrl || '').trim();
-						return cb && url;
-					})
+				? selectedCards.filter((card) => {
+					const url = (card.dataset.imageUrl || '').trim();
+					return url;
+				})
 				: [];
+			const eligibleCards = selectedCards.filter((card) => {
+				const isPublished = card.dataset.published === '1';
+				const mediaType = (card.dataset.mediaType || 'image').toLowerCase();
+				const creationStatus = (card.dataset.creationStatus || '').toLowerCase();
+				return !isPublished && mediaType === 'image' && creationStatus === 'completed';
+			});
+			const selectedGroups = selectedCards.filter((card) => card.dataset.groupCreation === '1');
+			let canGroup = false;
+			if (selectedCards.length > 0 && eligibleCards.length === selectedCards.length && selectedGroups.length <= 1) {
+				if (selectedGroups.length === 0) {
+					canGroup = selectedCards.length >= 2;
+				} else {
+					canGroup = selectedCards.length >= 2;
+				}
+			}
 			bar.classList.toggle('has-selection', hasSelection);
 			deleteBtn.disabled = !hasSelection;
 			if (queueBtn) queueBtn.disabled = queueableCards.length === 0;
+			if (groupBtn) groupBtn.disabled = !canGroup;
 		}
 
 		function exitBulkMode() {
@@ -5438,6 +5460,16 @@ export async function initChatPage(root, options = {}) {
 				{ signal: capAc.signal }
 			);
 		}
+		if (bulkGroup) {
+			bulkGroup.addEventListener(
+				'click',
+				(e) => {
+					e.preventDefault();
+					void bulkGroupSelected();
+				},
+				{ signal: capAc.signal }
+			);
+		}
 
 		function getBulkDeleteCounts() {
 			let toDelete = 0;
@@ -5586,6 +5618,62 @@ export async function initChatPage(root, options = {}) {
 				if (btn instanceof HTMLButtonElement && btn.isConnected) {
 					btn.disabled = false;
 					btn.classList.remove('is-loading');
+				}
+			}
+		}
+
+		async function bulkGroupSelected() {
+			const selected = queryBulkCards().filter((card) =>
+				card.querySelector('[data-creations-bulk-checkbox]:checked')
+			);
+			if (selected.length < 2) return;
+			const invalidCount = selected.filter((card) => {
+				const isPublished = card.dataset.published === '1';
+				const mediaType = (card.dataset.mediaType || 'image').toLowerCase();
+				const creationStatus = (card.dataset.creationStatus || '').toLowerCase();
+				return isPublished || mediaType !== 'image' || creationStatus !== 'completed';
+			}).length;
+			if (invalidCount > 0) {
+				alert('Group Creations supports only completed, unpublished image creations.');
+				return;
+			}
+			const selectedGroups = selected.filter((card) => card.dataset.groupCreation === '1');
+			if (selectedGroups.length > 1) {
+				alert('Select at most one existing group when grouping creations.');
+				return;
+			}
+			const ids = selected
+				.map((card) => Number(card.dataset.imageId))
+				.filter((id) => Number.isFinite(id) && id > 0);
+			if (ids.length < 2) return;
+			const confirmMsg = selectedGroups.length === 1
+				? `Add ${ids.length - 1} image${ids.length - 1 === 1 ? '' : 's'} to the selected group?`
+				: `Group ${ids.length} creations into a single creation?`;
+			if (!window.confirm(confirmMsg)) return;
+			if (!(bulkGroup instanceof HTMLButtonElement)) return;
+			bulkGroup.disabled = true;
+			let errMsg = '';
+			try {
+				const res = await fetch('/api/create/images/group', {
+					method: 'POST',
+					credentials: 'include',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({ ids })
+				});
+				const data = await res.json().catch(() => ({}));
+				if (!res.ok) {
+					errMsg = data?.error || 'Failed to group creations';
+					alert(errMsg);
+					return;
+				}
+				await loadCreationsChannelMessages({ forceFreshFirstPage: true });
+				exitBulkMode();
+			} catch (err) {
+				errMsg = err?.message || 'Failed to group creations';
+				alert(errMsg);
+			} finally {
+				if (bulkGroup.isConnected) {
+					updateBulkBarSelection();
 				}
 			}
 		}

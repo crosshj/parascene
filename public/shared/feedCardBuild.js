@@ -410,6 +410,14 @@ function stampChatCreationsBulkDatasetOnFeedCard(card, item, preferThumbnail) {
 	card.dataset.imageId = String(idNum);
 	const isPublished = item.published === true || item.published === 1;
 	card.dataset.published = isPublished ? '1' : '0';
+	const statusRaw = item?.status;
+	const status = typeof statusRaw === 'string' ? statusRaw.trim().toLowerCase() : '';
+	card.dataset.creationStatus = status;
+	const mediaTypeRaw = item?.media_type;
+	const mediaType = typeof mediaTypeRaw === 'string' ? mediaTypeRaw.trim().toLowerCase() : 'image';
+	card.dataset.mediaType = mediaType || 'image';
+	const isGroupCreation = item?.meta?.group?.kind === 'group_creations';
+	card.dataset.groupCreation = isGroupCreation ? '1' : '0';
 	const imageUrlRaw = feedItemCardImageUrl(item, preferThumbnail);
 	card.dataset.imageUrl = typeof imageUrlRaw === 'string' ? imageUrlRaw.trim() : '';
 }
@@ -446,6 +454,16 @@ function buildFeedCreationCard(
 		card.className = "feed-card feed-card--image-only";
 		const isPublished = item.published === true || item.published === 1;
 		const publishedOverlay = isPublished ? publishedBadgeHtml() : '';
+		const isGroupCreation = item?.meta?.group?.kind === 'group_creations';
+		const groupOverlay = isGroupCreation
+			? html`<span class="creation-group-badge" aria-label="Group creation" title="Group creation">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"
+					stroke-linejoin="round" aria-hidden="true">
+					<rect x="3.5" y="6.5" width="9.5" height="9.5" rx="2"></rect>
+					<rect x="10.5" y="10.5" width="10" height="10" rx="2"></rect>
+				</svg>
+			</span>`
+			: '';
 		const bulkOverlayBlock =
 			creationsBulkChrome
 				? html`
@@ -457,6 +475,7 @@ function buildFeedCreationCard(
       <div class="feed-card-image${item.nsfw ? ' nsfw' : ''}${isVideo ? ' feed-card-image-video' : ''}">
         <img class="feed-card-img" alt="${item.title || 'Creation'}" loading="lazy" decoding="async">
         ${publishedOverlay}
+        ${groupOverlay}
         ${isVideo ? html`<video class="feed-card-video" playsinline muted></video>` : ''}
         ${bulkOverlayBlock}
       </div>

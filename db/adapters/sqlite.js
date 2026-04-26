@@ -3512,6 +3512,17 @@ export async function openDb() {
 				return Promise.resolve({ changes: result.changes });
 			}
 		},
+		unmarkCreatedImageUnavailable: {
+			run: async (id, userId) => {
+				const stmt = db.prepare(
+					`UPDATE created_images
+           SET unavailable_at = NULL
+           WHERE id = ? AND user_id = ?`
+				);
+				const result = stmt.run(id, userId);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
 		deleteCreatedImageById: {
 			run: async (id, userId) => {
 				const stmt = db.prepare(

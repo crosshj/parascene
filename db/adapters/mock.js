@@ -1736,7 +1736,7 @@ export function openDb() {
 			run: async () => ({ changes: 0 })
 		},
 		insertCreatedImage: {
-			run: async (userId, filename, filePath, width, height, color, status = 'creating') => {
+			run: async (userId, filename, filePath, width, height, color, status = 'creating', meta = null) => {
 				const image = {
 					id: created_images.length > 0
 						? Math.max(...created_images.map(i => i.id || 0)) + 1
@@ -1748,6 +1748,7 @@ export function openDb() {
 					height,
 					color,
 					status,
+					meta,
 					created_at: new Date().toISOString()
 				};
 				created_images.push(image);
@@ -2263,6 +2264,16 @@ export function openDb() {
 				);
 				if (!image) return { changes: 0 };
 				image.unavailable_at = new Date().toISOString();
+				return { changes: 1 };
+			}
+		},
+		unmarkCreatedImageUnavailable: {
+			run: async (id, userId) => {
+				const image = created_images.find(
+					(img) => img.id === Number(id) && img.user_id === Number(userId)
+				);
+				if (!image) return { changes: 0 };
+				image.unavailable_at = null;
 				return { changes: 1 };
 			}
 		},

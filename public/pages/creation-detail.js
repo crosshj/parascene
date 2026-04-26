@@ -299,14 +299,14 @@ const STRIP_SEGMENT_DEFS = [
 	},
 	{
 		key: 'follow',
-		show: (d) => !d.isAdmin && d.canShowFollowButton && !d.viewerFollowsCreator,
+		show: (d) => !d.hideActions && !d.isAdmin && d.canShowFollowButton && !d.viewerFollowsCreator,
 		render: (d, escapeFn) => html`
 					<button type="button" class="creation-detail-action-strip-follow" data-follow-button
 						data-follow-user-id="${escapeFn(d.creatorId)}">Follow</button>`
 	},
 	{
 		key: 'like',
-		show: (d) => d.hasEngagementActions && !d.shareMountedPrivate && !d.isAdmin,
+		show: (d) => !d.hideActions && d.hasEngagementActions && !d.shareMountedPrivate && !d.isAdmin,
 		render: (d) => html`
 					<button type="button" class="creation-detail-action-strip-pill${d.creationWithLikes?.viewer_liked ? ' is-liked' : ''}"
 						aria-label="Like" aria-pressed="${d.creationWithLikes?.viewer_liked ? 'true' : 'false'}" data-like-button>
@@ -321,12 +321,12 @@ const STRIP_SEGMENT_DEFS = [
 	},
 	{
 		key: 'pills',
-		show: () => true,
+		show: (d) => !d.hideActions,
 		render: (d) => renderCreationDetailActionStripPills(d.actionsContext)
 	},
 	{
 		key: 'tip',
-		show: (d) => !d.isOwner && !d.isAdmin,
+		show: (d) => !d.hideActions && !d.isOwner && !d.isAdmin,
 		render: () => html`
 					<button type="button" class="creation-detail-action-strip-pill" data-tip-creator-button aria-label="Tip">
 						<span class="creation-detail-action-strip-pill-icon">${creditIcon('')}</span>
@@ -335,7 +335,7 @@ const STRIP_SEGMENT_DEFS = [
 	},
 	{
 		key: 'more',
-		show: (d) => !d.isFailed || (d.isFailed && d.actionsContext?.showDelete),
+		show: (d) => !d.hideActions && (!d.isFailed || (d.isFailed && d.actionsContext?.showDelete)),
 		render: () => html`
 					<button type="button" class="creation-detail-more-btn" aria-label="More options" data-creation-more-btn>
 						<span class="creation-detail-more-dots" aria-hidden="true"></span>
@@ -1376,6 +1376,94 @@ async function loadCreation() {
 			deletePermanent: false,
 			deleteLabel: userDeleted && isAdmin ? ' Permanently delete' : ' Delete'
 		};
+		const groupMeta = meta?.group && typeof meta.group === 'object' ? meta.group : null;
+		const isGroupCreation = groupMeta?.kind === 'group_creations';
+		if (isGroupCreation) {
+			actionsContext.showPublish = false;
+			actionsContext.showEdit = false;
+			actionsContext.showUnpublish = false;
+			actionsContext.showMutate = false;
+			actionsContext.showShare = false;
+			actionsContext.showRetry = false;
+			actionsContext.showDelete = false;
+			actionsContext.showQueueForLater = false;
+			actionsContext.showMoreInfoPill = false;
+		}
+		const groupSourcesRaw = Array.isArray(groupMeta?.source_creations) ? groupMeta.source_creations : [];
+		const groupSources = groupSourcesRaw
+			.map((source, index) => {
+				const sourceObj = source && typeof source === 'object' ? source : null;
+				if (!sourceObj) return null;
+				const sourceId = Number(sourceObj.id);
+				if (!Number.isFinite(sourceId) || sourceId <= 0) return null;
+				const sourceFilePath = typeof sourceObj.file_path === 'string' ? sourceObj.file_path.trim() : '';
+				const sourceRawTitle = typeof sourceObj.title === 'string' ? sourceObj.title.trim() : '';
+				const sourceTitle = sourceRawTitle
+					? `${sourceRawTitle} (${sourceId})`
+					: `Creation ${sourceId}`;
+				const sourceDescription = typeof sourceObj.description === 'string' ? sourceObj.description.trim() : '';
+				const sourceCreatedAt = typeof sourceObj.created_at === 'string' ? sourceObj.created_at : '';
+				const sourceMeta = sourceObj.meta && typeof sourceObj.meta === 'object' ? sourceObj.meta : null;
+				const sourceArgs = sourceMeta?.args && typeof sourceMeta.args === 'object' && !Array.isArray(sourceMeta.args)
+					? sourceMeta.args
+					: null;
+				const sourceStoredPrompt = typeof sourceMeta?.user_prompt === 'string' ? sourceMeta.user_prompt.trim() : '';
+				const sourceArgsPrompt = typeof sourceArgs?.prompt === 'string' ? sourceArgs.prompt.trim() : '';
+				const sourcePrompt = promptTextForMainUi(sourceStoredPrompt, sourceArgsPrompt);
+				const sourceServerName = typeof sourceMeta?.server_name === 'string' && sourceMeta.server_name.trim()
+					? sourceMeta.server_name.trim()
+					: (sourceMeta?.server_id != null ? String(sourceMeta.server_id) : '');
+				const sourceMethodName = typeof sourceMeta?.method_name === 'string' && sourceMeta.method_name.trim()
+					? sourceMeta.method_name.trim()
+					: (typeof sourceMeta?.method === 'string' ? sourceMeta.method : '');
+				const sourceDuration = formatDuration(sourceMeta || {});
+				const sourceModelRaw = typeof sourceArgs?.model === 'string'
+					? sourceArgs.model.trim()
+					: String(sourceArgs?.model ?? '').trim();
+				const sourceModel = sourceModelRaw
+					? (sourceModelRaw.includes(':') ? sourceModelRaw.split(':')[0] : sourceModelRaw)
+					: '';
+				const sourceMetaItems = [];
+				if (sourceServerName && sourceServerName !== 'Parascene') sourceMetaItems.push(`Server ${sourceServerName}`);
+				if (sourceMethodName && sourceMethodName !== 'Replicate') sourceMetaItems.push(`Method ${sourceMethodName}`);
+				if (sourceModel) sourceMetaItems.push(`Model ${sourceModel}`);
+				if (sourceDuration) sourceMetaItems.push(`Duration ${sourceDuration}`);
+				const sourceGenerationInfo = sourceMetaItems.join(' • ');
+				return {
+					id: sourceId,
+					title: sourceTitle,
+					filePath: sourceFilePath,
+					description: sourceDescription,
+					createdAt: sourceCreatedAt,
+					prompt: sourcePrompt,
+					generationInfo: sourceGenerationInfo
+				};
+			})
+			.filter(Boolean);
+		const groupSectionHtml = isGroupCreation && groupSources.length > 0
+			? html`
+				<section class="creation-detail-group-section" data-group-creation-section>
+					<div class="creation-detail-group-header">
+						<h3 class="creation-detail-group-title">Grouped Creations</h3>
+						<div class="creation-detail-group-subtitle">${groupSources.length} image${groupSources.length === 1 ? '' : 's'}</div>
+					</div>
+					<div class="creation-detail-group-grid">
+						${groupSources.map((source, index) => source.filePath
+					? html`<button type="button" class="creation-detail-group-item creation-detail-group-thumb${index === 0 ? ' is-active' : ''}"
+									data-group-source-thumb="${source.id}" aria-label="View ${escapeHtml(source.title)}">
+									<img src="${escapeHtml(source.filePath)}" alt="${escapeHtml(source.title)}" loading="lazy" />
+								</button>`
+					: html`<button type="button" class="creation-detail-group-item creation-detail-group-item-fallback creation-detail-group-thumb${index === 0 ? ' is-active' : ''}"
+									data-group-source-thumb="${source.id}" aria-label="View source #${source.id}">#${source.id}</button>`).join('')}
+					</div>
+					${isOwner && !isPublished ? html`
+					<div class="creation-detail-group-actions">
+						<button type="button" class="btn-secondary creation-detail-ungroup-btn" data-ungroup-btn>Ungroup Creations</button>
+					</div>
+					` : ''}
+				</section>
+			`
+			: '';
 
 		// User-deleted notice (admin only; owner gets 404)
 		let userDeletedNotice = '';
@@ -1817,7 +1905,8 @@ async function loadCreation() {
 			likeCount,
 			actionsContext,
 			isOwner,
-			isFailed
+			isFailed,
+			hideActions: isGroupCreation
 		};
 		const menuData = { isFailed, hasDetailsModalContent, isOwner, isAdmin, actionsContext };
 
@@ -1830,7 +1919,7 @@ async function loadCreation() {
 			<div class="creation-detail-title-byline creation-detail-title-byline-mobile">${escapeHtml(creatorHandle)}
 				${escapeHtml(mobileBylineText)}</div>
 			${renderCreationDetailActionStrip(stripData, escapeHtml)}
-			${renderCreationDetailMoreMenu(menuData, escapeHtml)}
+			${isGroupCreation ? '' : renderCreationDetailMoreMenu(menuData, escapeHtml)}
 			${userDeletedNotice}
 			${isAdmin && status === 'completed' && !isFailed ? html`
 			<div class="creation-detail-admin-video" data-admin-video-section>
@@ -1846,6 +1935,7 @@ async function loadCreation() {
 			` : ''}
 			
 			${descriptionHtml}
+			${groupSectionHtml}
 			<div class="creation-detail-meta-hidden" aria-hidden="true">
 				${hasDetailsModalContent ? `
 				<button class="feed-card-action" type="button" data-creation-details-link>
@@ -2962,6 +3052,90 @@ async function loadCreation() {
 
 		if (!shareMountedPrivate) {
 			enableLikeButtons(detailContent);
+		}
+
+		if (isGroupCreation && groupSources.length > 0) {
+			const sourceById = new Map(groupSources.map((source) => [Number(source.id), source]));
+			const groupThumbButtons = Array.from(detailContent.querySelectorAll('[data-group-source-thumb]'));
+			const titleEl = detailContent.querySelector('.creation-detail-title');
+			const mainDescriptionEl = detailContent.querySelector('[data-description]');
+			const mainMetaLineEl = detailContent.querySelector('.creation-detail-description-meta-line');
+
+			function setActiveGroupSource(sourceId) {
+				const source = sourceById.get(Number(sourceId));
+				if (!source) return;
+				for (const btn of groupThumbButtons) {
+					const isActive = Number(btn.getAttribute('data-group-source-thumb')) === Number(source.id);
+					btn.classList.toggle('is-active', isActive);
+				}
+				if (titleEl) {
+					titleEl.textContent = source.title || 'Untitled';
+				}
+				if (mainDescriptionEl) {
+					const descriptionParts = [];
+					if (source.description) {
+						descriptionParts.push(processUserText(source.description));
+					}
+					if (source.prompt) {
+						if (descriptionParts.length > 0) descriptionParts.push('<br><br>');
+						descriptionParts.push('<div class="creation-detail-prompt-label">Prompt</div>');
+						descriptionParts.push(processUserText(source.prompt));
+					}
+					mainDescriptionEl.innerHTML = descriptionParts.join('');
+				}
+				if (mainMetaLineEl) {
+					mainMetaLineEl.textContent = source.generationInfo || '';
+				}
+
+				if (videoEl) {
+					videoEl.style.display = 'none';
+					videoEl.pause?.();
+					videoEl.removeAttribute('src');
+				}
+				if (source.filePath) {
+					imageWrapper?.classList.remove('image-error', 'image-error-moderated');
+					imageWrapper?.classList.add('image-loading');
+					backgroundEl.style.backgroundImage = '';
+					imageEl.style.visibility = 'hidden';
+					imageEl.dataset.currentUrl = source.filePath;
+					imageEl.src = source.filePath;
+				}
+			}
+
+			for (const btn of groupThumbButtons) {
+				btn.addEventListener('click', (e) => {
+					e.preventDefault();
+					const sourceId = Number(btn.getAttribute('data-group-source-thumb'));
+					if (!Number.isFinite(sourceId)) return;
+					setActiveGroupSource(sourceId);
+				});
+			}
+			setActiveGroupSource(groupSources[0].id);
+		}
+
+		const ungroupBtn = detailContent.querySelector('[data-ungroup-btn]');
+		if (ungroupBtn instanceof HTMLButtonElement) {
+			ungroupBtn.addEventListener('click', async () => {
+				if (!window.confirm('Ungroup this creation and restore the original creations?')) return;
+				ungroupBtn.disabled = true;
+				try {
+					const res = await fetch(`/api/create/images/${creationId}/ungroup`, {
+						method: 'POST',
+						credentials: 'include'
+					});
+					const data = await res.json().catch(() => ({}));
+					if (!res.ok) {
+						const msg = typeof data?.error === 'string' ? data.error : 'Failed to ungroup creation';
+						alert(msg);
+						ungroupBtn.disabled = false;
+						return;
+					}
+					window.location.href = '/chat/c/creations';
+				} catch (err) {
+					alert(err?.message || 'Failed to ungroup creation');
+					ungroupBtn.disabled = false;
+				}
+			});
 		}
 
 		function scrollToComments() {

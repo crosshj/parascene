@@ -9962,6 +9962,28 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 	color: white;
 }
 
+.creation-group-badge {
+	position: absolute;
+	top: 8px;
+	left: 8px;
+	width: 32px;
+	height: 32px;
+	background: rgba(0, 0, 0, 0.7);
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 1;
+	backdrop-filter: blur(4px);
+	pointer-events: none;
+}
+
+.creation-group-badge svg {
+	width: 16px;
+	height: 16px;
+	color: white;
+}
+
 .creation-user-deleted-badge {
 	position: absolute;
 	top: 8px;
@@ -9990,6 +10012,14 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 	}
 
 	.creation-published-badge svg {
+		color: var(--accent);
+	}
+
+	.creation-group-badge {
+		background: rgba(255, 255, 255, 0.9);
+	}
+
+	.creation-group-badge svg {
 		color: var(--accent);
 	}
 }

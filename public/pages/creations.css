@@ -1962,12 +1962,15 @@ body.creation-detail-page main>section:first-of-type {
 	font-size: 1.5rem;
 	font-weight: 600;
 	color: var(--text);
-	line-height: 1.3;
+	line-height: 1.35;
 	margin: 0;
+	padding-top: 2px;
+	padding-bottom: 2px;
 	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	overflow: visible;
+	text-overflow: clip;
+	white-space: normal;
+	word-break: break-word;
 }
 
 .creation-detail-title-untitled {
@@ -2152,6 +2155,88 @@ body.creation-detail-page main>section:first-of-type {
 	flex-direction: column;
 	gap: 3px;
 	margin-top: 14px;
+}
+
+.creation-detail-group-section {
+	margin-top: 14px;
+	display: grid;
+	gap: 10px;
+	min-width: 0;
+}
+
+.creation-detail-group-header {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.creation-detail-group-title {
+	margin: 0;
+	font-size: 0.85rem;
+	color: var(--text);
+}
+
+.creation-detail-group-subtitle {
+	font-size: 0.75rem;
+	color: var(--text-muted);
+}
+
+.creation-detail-group-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+	gap: 8px;
+}
+
+.creation-detail-group-item {
+	aspect-ratio: 1 / 1;
+	border: 1px solid var(--border);
+	background: var(--surface-muted);
+	overflow: hidden;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+button.creation-detail-group-item {
+	cursor: pointer;
+	padding: 0;
+	position: relative;
+}
+
+.creation-detail-group-thumb.is-active {
+	border-color: var(--accent);
+}
+
+.creation-detail-group-thumb.is-active::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	border: 3px solid var(--accent);
+	border-radius: inherit;
+	pointer-events: none;
+	z-index: 2;
+}
+
+.creation-detail-group-item img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+
+.creation-detail-group-item-fallback {
+	font-size: 0.75rem;
+	color: var(--text-muted);
+}
+
+.creation-detail-group-actions {
+	display: flex;
+	align-items: center;
+}
+
+.creation-detail-ungroup-btn {
+	border-radius: 6px;
 }
 
 .creation-detail-history-label {

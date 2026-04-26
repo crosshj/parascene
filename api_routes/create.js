@@ -2226,6 +2226,305 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	});
 
+	// POST /api/create/images/group - Group multiple unpublished image creations into one creation.
+	router.post("/api/create/images/group", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		try {
+			const rawIds = Array.isArray(req.body?.ids) ? req.body.ids : [];
+			const ids = [];
+			const seen = new Set();
+			for (const raw of rawIds) {
+				const n = Number(raw);
+				if (!Number.isFinite(n) || n <= 0 || seen.has(n)) continue;
+				seen.add(n);
+				ids.push(n);
+			}
+			if (ids.length < 2) {
+				return res.status(400).json({ error: "Select at least 2 creations to group" });
+			}
+
+			const selectedRows = [];
+			for (const id of ids) {
+				const row = await queries.selectCreatedImageById.get(id, user.id);
+				if (!row) {
+					return res.status(404).json({ error: `Creation ${id} not found` });
+				}
+				const isPublished = row.published === 1 || row.published === true;
+				if (isPublished) {
+					return res.status(400).json({ error: "Published creations cannot be grouped" });
+				}
+				const unavailable = row.unavailable_at != null && row.unavailable_at !== "";
+				if (unavailable) {
+					return res.status(400).json({ error: "Cannot group deleted creations" });
+				}
+				const status = String(row.status || "completed");
+				if (status !== "completed") {
+					return res.status(400).json({ error: "Only completed creations can be grouped" });
+				}
+				const sourceMeta = parseMeta(row.meta) || {};
+				const mediaType = typeof sourceMeta.media_type === "string" ? sourceMeta.media_type : "image";
+				if (mediaType !== "image") {
+					return res.status(400).json({ error: "Only image creations can be grouped" });
+				}
+				selectedRows.push(row);
+			}
+
+			const selectedWithMeta = selectedRows.map((row) => ({
+				row,
+				meta: parseMeta(row.meta) || {},
+				isGroup: (parseMeta(row.meta) || {})?.group?.kind === "group_creations"
+			}));
+			const selectedGroups = selectedWithMeta.filter((entry) => entry.isGroup);
+			if (selectedGroups.length > 1) {
+				return res.status(400).json({ error: "Select at most one existing group" });
+			}
+
+			if (selectedGroups.length === 1) {
+				const targetGroupRow = selectedGroups[0].row;
+				const targetGroupMeta = selectedGroups[0].meta;
+				const rowsToAdd = selectedWithMeta
+					.filter((entry) => Number(entry.row.id) !== Number(targetGroupRow.id))
+					.map((entry) => entry.row);
+				if (rowsToAdd.length === 0) {
+					return res.status(400).json({ error: "Select at least one non-group creation to add" });
+				}
+				for (const row of rowsToAdd) {
+					const rowMeta = parseMeta(row.meta) || {};
+					if (rowMeta?.group?.kind === "group_creations") {
+						return res.status(400).json({ error: "Cannot add a group into another group" });
+					}
+				}
+
+				const existingSourcesRaw = Array.isArray(targetGroupMeta?.group?.source_creations)
+					? targetGroupMeta.group.source_creations
+					: [];
+				const existingSources = existingSourcesRaw.filter((item) => item && typeof item === "object");
+				const existingIdSet = new Set(
+					existingSources
+						.map((item) => Number(item.id))
+						.filter((n) => Number.isFinite(n) && n > 0)
+				);
+				const nextOrderStart = existingSources.length;
+				const appendedSources = [];
+				for (const [index, row] of rowsToAdd.entries()) {
+					if (existingIdSet.has(Number(row.id))) continue;
+					const rowMeta = parseMeta(row.meta);
+					appendedSources.push({
+						order: nextOrderStart + index,
+						id: row.id,
+						user_id: row.user_id,
+						filename: row.filename,
+						file_path: row.file_path,
+						width: row.width,
+						height: row.height,
+						color: row.color,
+						status: row.status || "completed",
+						created_at: row.created_at,
+						published: row.published === 1 || row.published === true,
+						published_at: row.published_at || null,
+						title: row.title ?? null,
+						description: row.description ?? null,
+						meta: rowMeta && typeof rowMeta === "object" ? rowMeta : null
+					});
+				}
+				if (appendedSources.length === 0) {
+					return res.status(400).json({ error: "No new creations selected to add to this group" });
+				}
+				const mergedSources = [...existingSources, ...appendedSources];
+				const mergedMeta = {
+					...targetGroupMeta,
+					media_type: "image",
+					group: {
+						...(targetGroupMeta.group || {}),
+						kind: "group_creations",
+						version: 1,
+						grouped_at: typeof targetGroupMeta?.group?.grouped_at === "string"
+							? targetGroupMeta.group.grouped_at
+							: nowIso(),
+						updated_at: nowIso(),
+						ungroup_supported: true,
+						source_creation_ids: mergedSources
+							.map((item) => Number(item.id))
+							.filter((n, idx, arr) => Number.isFinite(n) && n > 0 && arr.indexOf(n) === idx),
+						source_creations: mergedSources
+					}
+				};
+				const updateMetaResult = await queries.updateCreatedImageMeta.run(
+					targetGroupRow.id,
+					user.id,
+					mergedMeta
+				);
+				if (!updateMetaResult || updateMetaResult.changes === 0) {
+					return res.status(500).json({ error: "Failed to update grouped creation" });
+				}
+				for (const row of rowsToAdd) {
+					const markResult = await queries.markCreatedImageUnavailable?.run(row.id, user.id);
+					if (!markResult || markResult.changes === 0) {
+						return res.status(500).json({ error: "Failed to archive grouped source creations" });
+					}
+				}
+				const updatedGroup = await queries.selectCreatedImageById.get(targetGroupRow.id, user.id);
+				return res.json({
+					ok: true,
+					mode: "add_to_existing_group",
+					grouped_creation: {
+						id: updatedGroup?.id ?? targetGroupRow.id,
+						status: updatedGroup?.status || "completed",
+						published: (updatedGroup?.published === 1 || updatedGroup?.published === true) === true,
+						meta: parseMeta(updatedGroup?.meta) || mergedMeta
+					},
+					source_creation_ids: rowsToAdd.map((row) => Number(row.id))
+				});
+			}
+
+			const sourceRows = selectedRows;
+			const first = sourceRows[0];
+			const groupedAt = nowIso();
+			const firstFilenameRaw = typeof first.filename === "string" ? first.filename.trim() : "";
+			const firstExtMatch = firstFilenameRaw.match(/(\.[a-z0-9]+)$/i);
+			const firstExt = firstExtMatch ? firstExtMatch[1] : ".png";
+			const groupedFilename = `group/${user.id}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}${firstExt}`;
+			const groupedFilePath =
+				typeof first.file_path === "string" && first.file_path
+					? first.file_path
+					: storage.getImageUrl(first.filename);
+			const sourceCreations = sourceRows.map((row, index) => {
+				const rowMeta = parseMeta(row.meta);
+				return {
+					order: index,
+					id: row.id,
+					user_id: row.user_id,
+					filename: row.filename,
+					file_path: row.file_path,
+					width: row.width,
+					height: row.height,
+					color: row.color,
+					status: row.status || "completed",
+					created_at: row.created_at,
+					published: row.published === 1 || row.published === true,
+					published_at: row.published_at || null,
+					title: row.title ?? null,
+					description: row.description ?? null,
+					meta: rowMeta && typeof rowMeta === "object" ? rowMeta : null
+				};
+			});
+			const groupedMeta = {
+				...(parseMeta(first.meta) || {}),
+				media_type: "image",
+				group: {
+					kind: "group_creations",
+					version: 1,
+					grouped_at: groupedAt,
+					ungroup_supported: true,
+					source_creation_ids: sourceRows.map((row) => Number(row.id)),
+					source_creations: sourceCreations
+				}
+			};
+
+			const insertResult = await queries.insertCreatedImage.run(
+				user.id,
+				groupedFilename,
+				groupedFilePath,
+				first.width,
+				first.height,
+				first.color ?? null,
+				"completed",
+				groupedMeta
+			);
+			const groupedId = Number(insertResult?.insertId ?? insertResult?.lastInsertRowid);
+			if (!Number.isFinite(groupedId) || groupedId <= 0) {
+				return res.status(500).json({ error: "Failed to create grouped creation" });
+			}
+
+			for (const row of sourceRows) {
+				const markResult = await queries.markCreatedImageUnavailable?.run(row.id, user.id);
+				if (!markResult || markResult.changes === 0) {
+					return res.status(500).json({ error: "Failed to archive grouped source creations" });
+				}
+			}
+
+			const grouped = await queries.selectCreatedImageById.get(groupedId, user.id);
+			if (!grouped) {
+				return res.status(500).json({ error: "Failed to load grouped creation" });
+			}
+			const groupedMetaOut = parseMeta(grouped.meta);
+			return res.json({
+				ok: true,
+				grouped_creation: {
+					id: grouped.id,
+					status: grouped.status || "completed",
+					published: grouped.published === 1 || grouped.published === true,
+					meta: groupedMetaOut
+				},
+				source_creation_ids: sourceRows.map((row) => Number(row.id))
+			});
+		} catch (error) {
+			return res.status(500).json({ error: "Failed to group creations" });
+		}
+	});
+
+	// POST /api/create/images/:id/ungroup - Restore grouped source creations and archive the group creation.
+	router.post("/api/create/images/:id/ungroup", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		try {
+			const groupId = Number(req.params.id);
+			if (!Number.isFinite(groupId) || groupId <= 0) {
+				return res.status(400).json({ error: "Invalid creation id" });
+			}
+			const groupRow = await queries.selectCreatedImageById.get(groupId, user.id);
+			if (!groupRow) {
+				return res.status(404).json({ error: "Creation not found" });
+			}
+			const isPublished = groupRow.published === 1 || groupRow.published === true;
+			if (isPublished) {
+				return res.status(400).json({ error: "Published group creations cannot be ungrouped" });
+			}
+			const groupMeta = parseMeta(groupRow.meta) || {};
+			const groupPayload = groupMeta?.group && typeof groupMeta.group === "object" ? groupMeta.group : null;
+			if (!groupPayload || groupPayload.kind !== "group_creations") {
+				return res.status(400).json({ error: "Creation is not a group creation" });
+			}
+			const sourceIdsRaw = Array.isArray(groupPayload.source_creation_ids) ? groupPayload.source_creation_ids : [];
+			const sourceIds = sourceIdsRaw
+				.map((v) => Number(v))
+				.filter((n, index, arr) => Number.isFinite(n) && n > 0 && arr.indexOf(n) === index);
+			if (sourceIds.length === 0) {
+				return res.status(400).json({ error: "Group creation has no source creations to restore" });
+			}
+
+			for (const sourceId of sourceIds) {
+				const sourceRow = await queries.selectCreatedImageByIdAnyUser?.get(sourceId);
+				if (!sourceRow || Number(sourceRow.user_id) !== Number(user.id)) {
+					return res.status(400).json({ error: "Unable to restore source creations for this group" });
+				}
+				const sourcePublished = sourceRow.published === 1 || sourceRow.published === true;
+				if (sourcePublished) {
+					return res.status(400).json({ error: "Cannot ungroup because one source creation is published" });
+				}
+			}
+
+			for (const sourceId of sourceIds) {
+				const restoreResult = await queries.unmarkCreatedImageUnavailable?.run(sourceId, user.id);
+				if (!restoreResult || restoreResult.changes === 0) {
+					return res.status(500).json({ error: "Failed to restore source creations" });
+				}
+			}
+
+			const markGroupUnavailable = await queries.markCreatedImageUnavailable?.run(groupId, user.id);
+			if (!markGroupUnavailable || markGroupUnavailable.changes === 0) {
+				return res.status(500).json({ error: "Failed to archive grouped creation" });
+			}
+
+			return res.json({ ok: true, restored_creation_ids: sourceIds });
+		} catch (error) {
+			return res.status(500).json({ error: "Failed to ungroup creation" });
+		}
+	});
+
 	// POST /api/create/images/:id/publish - Publish a creation.
 	// Title is always required when publishing.
 	router.post("/api/create/images/:id/publish", async (req, res) => {
@@ -2268,6 +2567,10 @@ export default function createCreateRoutes({ queries, storage }) {
 
 			if (targetImage.published === 1 || targetImage.published === true) {
 				return res.status(400).json({ error: "Image is already published" });
+			}
+			const targetMeta = parseMeta(targetImage.meta) || {};
+			if (targetMeta?.group?.kind === "group_creations") {
+				return res.status(400).json({ error: "Group creations cannot be published yet" });
 			}
 
 			// Publish the image
