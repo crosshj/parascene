@@ -4366,54 +4366,79 @@ body.chat-page main.chat-page-outer {
 		position: sticky;
 		top: -8px;
 		z-index: 2;
-		margin: -8px -8px 0;
-		padding: 8px 8px 8px;
+		margin: 0 0 2px;
+		padding: 4px 0 6px;
+		box-sizing: border-box;
+		width: 100%;
 		background: color-mix(in srgb, var(--surface-strong) 88%, var(--bg));
 	}
 
-	.chat-page-sidebar-create.create-button {
+	/* Create uses the same row markup/classes as the pseudo strip; only gradient, border, and motion differ.
+	   Connect roster uses a longer selector for `.chat-page-sidebar-row` — include it so CTA styles win there too. */
+	.chat-page-sidebar-row.chat-page-sidebar-row--create-cta,
+	.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row.chat-page-sidebar-row--create-cta {
 		--chat-sidebar-create-btn-1: #0a6464;
 		--chat-sidebar-create-btn-2: #00b4a0;
 		--chat-sidebar-create-btn-3: #00c8b4;
 		--chat-sidebar-create-btn-accent: rgba(0, 200, 180, 0.5);
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 100%;
-		min-height: 30px;
-		padding: 7px 12px;
-		text-decoration: none;
-		border-radius: 999px;
 		background: linear-gradient(
 			155deg,
 			var(--chat-sidebar-create-btn-1) 50%,
 			var(--chat-sidebar-create-btn-2) 80%,
 			var(--chat-sidebar-create-btn-3) 100%
 		);
-		border: 0.25px solid var(--chat-sidebar-create-btn-accent);
+		border-color: var(--chat-sidebar-create-btn-accent);
 		color: #ffffff;
-		font-size: 0.9375rem;
-		font-weight: 600;
-		transition: transform 0.2s ease, filter 0.2s ease, border-color 0.2s ease;
+		corner-shape: initial;
+		transition:
+			background-color 0.12s ease,
+			border-color 0.12s ease,
+			opacity 0.12s ease,
+			color 0.12s ease,
+			transform 0.2s ease,
+			filter 0.2s ease;
 	}
 
-	.chat-page-sidebar-create.create-button:hover {
+	.chat-page-sidebar-row.chat-page-sidebar-row--create-cta .chat-page-sidebar-row-title,
+	.servers-route
+		.connect-chat-sidebar-roster
+		.chat-page-sidebar-row.chat-page-sidebar-row--create-cta
+		.chat-page-sidebar-row-title {
+		color: #ffffff;
+		font-weight: 600;
+	}
+
+	.chat-page-sidebar-row.chat-page-sidebar-row--create-cta .chat-page-sidebar-channel-avatar--icon-only,
+	.servers-route
+		.connect-chat-sidebar-roster
+		.chat-page-sidebar-row.chat-page-sidebar-row--create-cta
+		.chat-page-sidebar-channel-avatar--icon-only {
+		color: rgba(255, 255, 255, 0.92);
+	}
+
+	.chat-page-sidebar-row.chat-page-sidebar-row--create-cta:hover,
+	.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row.chat-page-sidebar-row--create-cta:hover {
+		background: linear-gradient(
+			155deg,
+			var(--chat-sidebar-create-btn-1) 50%,
+			var(--chat-sidebar-create-btn-2) 80%,
+			var(--chat-sidebar-create-btn-3) 100%
+		);
+		border-color: var(--chat-sidebar-create-btn-accent);
 		transform: translateY(-1px);
 		filter: brightness(1.06);
-		border-color: var(--chat-sidebar-create-btn-accent);
-		background: linear-gradient(
-			155deg,
-			var(--chat-sidebar-create-btn-1) 50%,
-			var(--chat-sidebar-create-btn-2) 80%,
-			var(--chat-sidebar-create-btn-3) 100%
-		);
 	}
 
-	.chat-page-sidebar-create.create-button:active {
+	.chat-page-sidebar-row.chat-page-sidebar-row--create-cta:active,
+	.servers-route .connect-chat-sidebar-roster .chat-page-sidebar-row.chat-page-sidebar-row--create-cta:active {
 		transform: translateY(0);
+		filter: brightness(1.03);
 	}
 
-	.chat-page-sidebar-create.create-button:focus-visible {
+	.chat-page-sidebar-row.chat-page-sidebar-row--create-cta:focus-visible,
+	.servers-route
+		.connect-chat-sidebar-roster
+		.chat-page-sidebar-row.chat-page-sidebar-row--create-cta:focus-visible {
 		outline: none;
 		box-shadow: 0 0 0 2px color-mix(in srgb, var(--chat-sidebar-create-btn-2) 45%, transparent);
 	}
@@ -5797,6 +5822,12 @@ body.chat-page .chat-page-canvas-panel-body {
 	overflow-anchor: none;
 }
 
+.chat-page-messages[data-chat-messages-scroll-lock='1'] {
+	overflow: hidden;
+	overscroll-behavior: none;
+	touch-action: none;
+}
+
 /* iOS: stable gutter + flex occasionally contributed to stray horizontal pan; auto avoids that. */
 @media (max-width: 768px) {
 	.chat-page-messages {
@@ -6459,6 +6490,7 @@ body.chat-page .chat-page-send-btn .chat-page-send-icon {
 	/* Apply the centered content lane per message row instead of the scroller. */
 	body.chat-page .chat-page-messages .connect-chat-msg,
 	body.chat-page .chat-page-messages .comments-channel-plain-msg,
+	body.chat-page .chat-page-messages .chat-comments-channel-loading,
 	body.chat-page .chat-page-messages .chat-feed-channel-route:not(.chat-feed-channel-route--browse-view) {
 		padding-left: max(12px, calc((100% - 720px) / 2 + 12px));
 		padding-right: max(12px, calc((100% - 720px) / 2 + 12px));
@@ -9838,6 +9870,19 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 .comments-empty.route-empty-state {
 	padding: 24px;
 	min-height: 0;
+}
+
+/* Chat message pane: failed channel / thread / pseudo load — readable, not full-page empty */
+.chat-page-messages .chat-page-pane-load-error.route-empty.route-empty-state {
+	padding: 36px 20px 48px;
+	min-height: 0;
+	max-width: 440px;
+	margin: 0 auto;
+	box-sizing: border-box;
+}
+
+.chat-page-messages .chat-page-pane-load-error.route-empty-state .route-empty-icon {
+	opacity: 0.55;
 }
 
 .route-empty-title {

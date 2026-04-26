@@ -826,6 +826,8 @@ class AppModalProfile extends HTMLElement {
 			window.localStorage?.removeItem('profile-avatar-url');
 			// Match CHAT_THREADS_CACHE_KEY in shared/chatThreadsCache.js
 			window.localStorage?.removeItem('prsn-chat-threads-v1');
+			// Match CHAT_SIDEBAR_SESSION_ROSTER_KEY in shared/chatSidebarSessionCache.js
+			window.sessionStorage?.removeItem('prsn-chat-sidebar-roster-v1');
 			if (typeof clearChatAudibleNotificationsStorage === 'function') {
 				clearChatAudibleNotificationsStorage();
 			}

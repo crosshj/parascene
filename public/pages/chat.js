@@ -115,14 +115,17 @@ let readCachedChatThreads;
 let writeCachedChatThreads;
 let clearCachedChatThreads;
 let isChatThreadsCacheStale;
+let readSidebarRosterSessionCache;
+let writeSidebarRosterSessionCache;
+let clearSidebarRosterSessionCache;
 let getAvatarColor;
 let buildProfilePath;
 let renderCommentAvatarHtml;
 let processUserText;
 let hydrateUserTextLinks;
 let hydrateChatCreationEmbeds;
-let renderEmptyError;
 let renderEmptyState;
+let renderPaneLoadError;
 let attachAutoGrowTextarea;
 let attachMentionSuggest;
 let isTriggeredSuggestPopupOpen;
@@ -130,6 +133,12 @@ let addPageUsers;
 let clearPageUsers;
 let enableLikeButtons;
 let createPseudoColumnPager;
+/** @type {((count?: number) => string) | undefined} */
+let renderFeedCardsSkeleton;
+/** @type {((count?: number) => string) | undefined} */
+let renderGridSkeleton;
+/** @type {((count?: number) => string) | undefined} */
+let renderCommentRowsSkeleton;
 let toggleChatMessageReaction;
 let setupReactionTooltipTap;
 let createConnectCommentRowElement;
@@ -257,6 +266,11 @@ async function loadDeps() {
 		clearCachedChatThreads = chatThreadsCacheMod.clearCachedChatThreads;
 		isChatThreadsCacheStale = chatThreadsCacheMod.isChatThreadsCacheStale;
 
+		const chatSidebarSessionCacheMod = await import(`../shared/chatSidebarSessionCache.js${qs}`);
+		readSidebarRosterSessionCache = chatSidebarSessionCacheMod.readSidebarRosterSessionCache;
+		writeSidebarRosterSessionCache = chatSidebarSessionCacheMod.writeSidebarRosterSessionCache;
+		clearSidebarRosterSessionCache = chatSidebarSessionCacheMod.clearSidebarRosterSessionCache;
+
 		const avatarMod = await import(`../shared/avatar.js${qs}`);
 		getAvatarColor = avatarMod.getAvatarColor;
 
@@ -272,8 +286,8 @@ async function loadDeps() {
 		hydrateChatCreationEmbeds = userTextMod.hydrateChatCreationEmbeds;
 
 		const emptyStateMod = await import(`../shared/emptyState.js${qs}`);
-		renderEmptyError = emptyStateMod.renderEmptyError;
 		renderEmptyState = emptyStateMod.renderEmptyState;
+		renderPaneLoadError = emptyStateMod.renderPaneLoadError;
 
 		const autogrowMod = await import(`../shared/autogrow.js${qs}`);
 		attachAutoGrowTextarea = autogrowMod.attachAutoGrowTextarea;
@@ -298,6 +312,11 @@ async function loadDeps() {
 
 		const columnPagerMod = await import(`../shared/pseudoChannelColumnPager.js${qs}`);
 		createPseudoColumnPager = columnPagerMod.createPseudoColumnPager;
+
+		const skeletonMod = await import(`../shared/skeleton.js${qs}`);
+		renderFeedCardsSkeleton = skeletonMod.renderFeedCardsSkeleton;
+		renderGridSkeleton = skeletonMod.renderGridSkeleton;
+		renderCommentRowsSkeleton = skeletonMod.renderCommentRowsSkeleton;
 	})();
 	return _depsPromise;
 }
@@ -722,7 +741,39 @@ export async function initChatPage(root, options = {}) {
 	let exploreChannelSearchLoading = false;
 	/** True while `loadExploreChannelMessages` is running (browse or search path) so the composer can show the same trailing spinner. */
 	let exploreBrowseMessagesLoading = false;
-	let loadingMessages = false;
+	/** Bumped whenever a new load targets `[data-chat-messages]` so in-flight async work can bail before clobbering a newer navigation. */
+	let chatMessagesPaneEpoch = 0;
+	function bumpChatMessagesPaneEpoch() {
+		return ++chatMessagesPaneEpoch;
+	}
+	function isStaleChatPane(paneEpoch) {
+		return paneEpoch !== chatMessagesPaneEpoch;
+	}
+	/** Depth: thread DM/channel message list (not pseudo channels). */
+	let threadMessagesLoadDepth = 0;
+	let loadingThreadMessages = false;
+	function enterThreadMessagesLoad() {
+		threadMessagesLoadDepth += 1;
+		loadingThreadMessages = true;
+	}
+	function exitThreadMessagesLoad() {
+		threadMessagesLoadDepth = Math.max(0, threadMessagesLoadDepth - 1);
+		loadingThreadMessages = threadMessagesLoadDepth > 0;
+		syncChatMessagePlaceholder();
+	}
+	/** Depth: pseudo-channel panes (#comments / #feed / #explore / #creations). */
+	let pseudoChannelLoadDepth = 0;
+	let loadingPseudoChannelMessages = false;
+	function enterPseudoChannelLoad() {
+		pseudoChannelLoadDepth += 1;
+		loadingPseudoChannelMessages = true;
+		syncChatMessagePlaceholder();
+	}
+	function exitPseudoChannelLoad() {
+		pseudoChannelLoadDepth = Math.max(0, pseudoChannelLoadDepth - 1);
+		loadingPseudoChannelMessages = pseudoChannelLoadDepth > 0;
+		syncChatMessagePlaceholder();
+	}
 	let chatCreationsPollInterval = null;
 	let chatCreationsPollLastReloadAt = 0;
 
@@ -1139,7 +1190,7 @@ export async function initChatPage(root, options = {}) {
 	/** Mark read only after the latest message row is visible (IntersectionObserver). */
 	async function markLatestMessageRead() {
 		const threadId = activeThreadId;
-		if (!threadId || loadingMessages) return;
+		if (!threadId || loadingThreadMessages) return;
 		const messages = lastChatMessagesPayload;
 		if (!Array.isArray(messages) || messages.length === 0) return;
 		const last = messages[messages.length - 1];
@@ -1307,6 +1358,30 @@ export async function initChatPage(root, options = {}) {
 			apply();
 			requestAnimationFrame(apply);
 		});
+	}
+
+	/** After painting a skeleton into `[data-chat-messages]`, snap scroll and prevent scroll until content loads. */
+	function resetAndLockChatMessagesScrollForSkeleton(messagesEl, channelSlug) {
+		if (!(messagesEl instanceof HTMLElement)) return;
+		const slug = String(channelSlug || '').trim().toLowerCase();
+		const feedish = slug === 'feed' || slug === 'explore' || slug === 'creations';
+		const toEnd = feedish && chatFeedLaneScrollMode === 'oldest_first';
+		const apply = () => {
+			messagesEl.scrollTop = toEnd ? messagesEl.scrollHeight : 0;
+		};
+		apply();
+		requestAnimationFrame(() => {
+			apply();
+			requestAnimationFrame(apply);
+		});
+		messagesEl.dataset.chatMessagesScrollLock = '1';
+	}
+
+	function unlockChatMessagesPaneScroll(messagesEl) {
+		if (!(messagesEl instanceof HTMLElement)) return;
+		if (messagesEl.dataset.chatMessagesScrollLock === '1') {
+			delete messagesEl.dataset.chatMessagesScrollLock;
+		}
 	}
 
 	/** Re-scroll after visual viewport changes only if the user was already following the thread. */
@@ -1711,7 +1786,7 @@ export async function initChatPage(root, options = {}) {
 		}
 		const tid = activeThreadId;
 		const hasThread = tid != null && Number.isFinite(Number(tid)) && Number(tid) > 0;
-		if (!hasThread || loadingMessages) {
+		if (!hasThread || loadingThreadMessages || loadingPseudoChannelMessages) {
 			bodyInput.placeholder = '';
 			return;
 		}
@@ -3823,6 +3898,35 @@ export async function initChatPage(root, options = {}) {
 			});
 		}
 
+		// While the full network roster loads, show the last session snapshot (same viewer) so
+		// leaving and returning to chat does not flash an empty sidebar. LS may have fresher
+		// threads — prefer in-memory `chatThreads` when present.
+		if (!skipThreads && typeof readSidebarRosterSessionCache === 'function') {
+			const snap = readSidebarRosterSessionCache(chatViewerId);
+			if (snap) {
+				const threadsPaint =
+					Array.isArray(chatThreads) && chatThreads.length > 0 ? chatThreads : snap.threads || [];
+				const joinedPaint = Array.isArray(snap.joined) ? snap.joined : [];
+				const presPaint =
+					snap.presenceSnapshot && typeof snap.presenceSnapshot === 'object'
+						? snap.presenceSnapshot
+						: { onlineIds: new Set(), lastSeenMsByUserId: new Map(), lastActiveMsByUserId: new Map() };
+				runRender(threadsPaint, joinedPaint, presPaint, snap.viewerProfile);
+			}
+		}
+
+		function persistSidebarRosterSnapshot(joined, presenceSnapshot, viewerProfile) {
+			if (typeof writeSidebarRosterSessionCache !== 'function') return;
+			const vid = chatViewerId;
+			if (vid == null || !Number.isFinite(Number(vid)) || Number(vid) <= 0) return;
+			writeSidebarRosterSessionCache(vid, {
+				threads: Array.isArray(chatThreads) ? chatThreads : [],
+				joined: Array.isArray(joined) ? joined : [],
+				presenceSnapshot,
+				viewerProfile
+			});
+		}
+
 		// Do not paint the sidebar before `joined` is loaded. A render with `joined=[]` leaves
 		// `joinedSlugs` empty, so every channel row is classified under “Channels” and “Servers”
 		// shows the empty copy — then the next paint moves rows and only the server strip looks
@@ -3842,6 +3946,7 @@ export async function initChatPage(root, options = {}) {
 				lastActiveMsByUserId
 			};
 			runRender(chatThreads || [], joined, presenceSnapshot, viewerProfile);
+			persistSidebarRosterSnapshot(joined, presenceSnapshot, viewerProfile);
 			await syncChatSidebarViewerRow();
 			return;
 		}
@@ -3861,6 +3966,7 @@ export async function initChatPage(root, options = {}) {
 				lastActiveMsByUserId
 			};
 			runRender(chatThreads || [], joined, presenceSnapshot, viewerProfile);
+			persistSidebarRosterSnapshot(joined, presenceSnapshot, viewerProfile);
 			dispatchChatUnreadRefresh();
 		} catch {
 			// If network fails, keep cached render.
@@ -4416,7 +4522,7 @@ export async function initChatPage(root, options = {}) {
 						pseudoColumnPager &&
 						pseudoColumnPager.getHasMore() &&
 						!pseudoColumnPager.isOlderBusy() &&
-						!loadingMessages &&
+						!loadingPseudoChannelMessages &&
 						activePseudoChannelSlug === 'comments'
 					) {
 						void loadMoreCommentsChannelMessages();
@@ -4435,7 +4541,7 @@ export async function initChatPage(root, options = {}) {
 			!pseudoColumnPager ||
 			pseudoColumnPager.isOlderBusy() ||
 			!pseudoColumnPager.getHasMore() ||
-			loadingMessages
+			loadingPseudoChannelMessages
 		) {
 			return;
 		}
@@ -4488,9 +4594,9 @@ export async function initChatPage(root, options = {}) {
 
 	async function loadCommentsChannelMessages() {
 		const messagesEl = root.querySelector('[data-chat-messages]');
-		if (!messagesEl || loadingMessages) return;
-		loadingMessages = true;
-		syncChatMessagePlaceholder();
+		if (!messagesEl) return;
+		const paneEpoch = bumpChatMessagesPaneEpoch();
+		enterPseudoChannelLoad();
 		teardownCommentsChannelLoadMore();
 		teardownFeedChannelLoadMore();
 		teardownExploreChannelLoadMore();
@@ -4542,6 +4648,7 @@ export async function initChatPage(root, options = {}) {
 				},
 			});
 			const r = await pseudoColumnPager.loadInitial();
+			if (isStaleChatPane(paneEpoch)) return;
 			if (!r.ok) {
 				if (r.error instanceof Error) {
 					throw r.error;
@@ -4566,11 +4673,19 @@ export async function initChatPage(root, options = {}) {
 			scrollChatFeedPseudoChannelToTop();
 		} catch (err) {
 			console.error('[Chat page] comments channel:', err);
-			messagesEl.innerHTML = renderEmptyError(err?.message || 'Could not load comments.');
+			if (!isStaleChatPane(paneEpoch)) {
+				paintChatMessagesPaneError(
+					messagesEl,
+					err?.message || 'Could not load comments.',
+					"Couldn't load comments"
+				);
+			}
 		} finally {
-			messagesEl.removeAttribute('aria-busy');
-			loadingMessages = false;
-			syncChatMessagePlaceholder();
+			exitPseudoChannelLoad();
+			unlockChatMessagesPaneScroll(messagesEl);
+			if (!isStaleChatPane(paneEpoch) && messagesEl.isConnected) {
+				messagesEl.removeAttribute('aria-busy');
+			}
 			rebuildTopbarMenuDynamic();
 		}
 	}
@@ -4635,7 +4750,7 @@ export async function initChatPage(root, options = {}) {
 						pseudoColumnPager &&
 						pseudoColumnPager.getHasMore() &&
 						!pseudoColumnPager.isOlderBusy() &&
-						!loadingMessages &&
+						!loadingPseudoChannelMessages &&
 						(activePseudoChannelSlug === 'feed' ||
 							activePseudoChannelSlug === 'explore' ||
 							activePseudoChannelSlug === 'creations')
@@ -4728,7 +4843,7 @@ export async function initChatPage(root, options = {}) {
 			stopChatCreationsPseudoChannelPoll();
 			return;
 		}
-		if (loadingMessages) return;
+		if (loadingPseudoChannelMessages) return;
 		try {
 			const result = await fetchJsonWithStatusDeduped(
 				'/api/create/images',
@@ -4777,7 +4892,7 @@ export async function initChatPage(root, options = {}) {
 			!pseudoColumnPager ||
 			pseudoColumnPager.isOlderBusy() ||
 			!pseudoColumnPager.getHasMore() ||
-			loadingMessages
+			loadingPseudoChannelMessages
 		) {
 			return;
 		}
@@ -4906,15 +5021,16 @@ export async function initChatPage(root, options = {}) {
 
 	async function loadFeedChannelMessages() {
 		const messagesEl = root.querySelector('[data-chat-messages]');
-		if (!messagesEl || loadingMessages) return;
-		loadingMessages = true;
-		syncChatMessagePlaceholder();
+		if (!messagesEl) return;
+		const paneEpoch = bumpChatMessagesPaneEpoch();
+		enterPseudoChannelLoad();
 		teardownCommentsChannelLoadMore();
 		teardownFeedChannelLoadMore();
 		teardownExploreChannelLoadMore();
 		messagesEl.setAttribute('aria-busy', 'true');
 		try {
 			const feedCardMod = await import(`../shared/feedCardBuild.js${qs}`);
+			if (isStaleChatPane(paneEpoch)) return;
 			const { createFeedItemCard, feedItemToUser, getHiddenFeedItems } = feedCardMod;
 
 			pseudoColumnPager = createPseudoColumnPager({
@@ -4950,6 +5066,7 @@ export async function initChatPage(root, options = {}) {
 				},
 			});
 			const r = await pseudoColumnPager.loadInitial();
+			if (isStaleChatPane(paneEpoch)) return;
 			if (!r.ok) {
 				if (r.error instanceof Error) {
 					throw r.error;
@@ -5035,11 +5152,19 @@ export async function initChatPage(root, options = {}) {
 			}
 		} catch (err) {
 			console.error('[Chat page] feed channel:', err);
-			messagesEl.innerHTML = renderEmptyError(err?.message || 'Could not load feed.');
+			if (!isStaleChatPane(paneEpoch)) {
+				paintChatMessagesPaneError(
+					messagesEl,
+					err?.message || 'Could not load the feed.',
+					"Couldn't load your feed"
+				);
+			}
 		} finally {
-			messagesEl.removeAttribute('aria-busy');
-			loadingMessages = false;
-			syncChatMessagePlaceholder();
+			exitPseudoChannelLoad();
+			unlockChatMessagesPaneScroll(messagesEl);
+			if (!isStaleChatPane(paneEpoch) && messagesEl.isConnected) {
+				messagesEl.removeAttribute('aria-busy');
+			}
 			rebuildTopbarMenuDynamic();
 		}
 	}
@@ -5470,26 +5595,32 @@ export async function initChatPage(root, options = {}) {
 		const forceFreshFirstPage = options.forceFreshFirstPage === true;
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!messagesEl) return;
-		if (loadingMessages) return;
 		stopChatCreationsPseudoChannelPoll();
 		const viewerId = chatViewerId;
 		if (!Number.isFinite(Number(viewerId)) || Number(viewerId) <= 0) {
-			messagesEl.innerHTML = renderEmptyError('Sign in to see your creations.');
+			paintChatMessagesPaneError(
+				messagesEl,
+				'Sign in to see your creations here.',
+				'Sign in required',
+				{ buttonText: 'Sign in', buttonHref: '/auth' }
+			);
 			stopChatCreationsPseudoChannelPoll();
 			rebuildTopbarMenuDynamic();
 			return;
 		}
-		loadingMessages = true;
-		syncChatMessagePlaceholder();
+		const paneEpoch = bumpChatMessagesPaneEpoch();
+		enterPseudoChannelLoad();
 		teardownCommentsChannelLoadMore();
 		teardownFeedChannelLoadMore();
 		teardownExploreChannelLoadMore();
 		messagesEl.setAttribute('aria-busy', 'true');
 		try {
 			const feedCardMod = await import(`../shared/feedCardBuild.js${qs}`);
+			if (isStaleChatPane(paneEpoch)) return;
 			const { createFeedItemCard, feedItemToUser } = feedCardMod;
 
 			const creationsAuthorHints = await resolveCreationsChannelAuthorHints();
+			if (isStaleChatPane(paneEpoch)) return;
 
 			pseudoColumnPager = createPseudoColumnPager({
 				columnOrder: feedLanePagerColumnOrder(),
@@ -5520,6 +5651,7 @@ export async function initChatPage(root, options = {}) {
 				},
 			});
 			const r = await pseudoColumnPager.loadInitial();
+			if (isStaleChatPane(paneEpoch)) return;
 			if (!r.ok) {
 				if (r.error instanceof Error) {
 					throw r.error;
@@ -5571,6 +5703,7 @@ export async function initChatPage(root, options = {}) {
 			routeWrap.appendChild(cards);
 			insertChatCreationsPseudoBulkChrome(routeWrap, cards);
 			await setupChatCreationsPseudoBulkRoute(routeWrap);
+			if (isStaleChatPane(paneEpoch)) return;
 
 			const sentinel = document.createElement('div');
 			sentinel.dataset.chatFeedLoadSentinel = '1';
@@ -5594,13 +5727,23 @@ export async function initChatPage(root, options = {}) {
 			}
 		} catch (err) {
 			console.error('[Chat page] creations channel:', err);
-			messagesEl.innerHTML = renderEmptyError(err?.message || 'Could not load creations.');
+			if (!isStaleChatPane(paneEpoch)) {
+				paintChatMessagesPaneError(
+					messagesEl,
+					err?.message || 'Could not load your creations.',
+					"Couldn't load creations"
+				);
+			}
 		} finally {
-			messagesEl.removeAttribute('aria-busy');
-			loadingMessages = false;
-			syncChatMessagePlaceholder();
+			exitPseudoChannelLoad();
+			unlockChatMessagesPaneScroll(messagesEl);
+			if (!isStaleChatPane(paneEpoch) && messagesEl.isConnected) {
+				messagesEl.removeAttribute('aria-busy');
+			}
 			rebuildTopbarMenuDynamic();
-			maybeStartChatCreationsPseudoChannelPoll();
+			if (!isStaleChatPane(paneEpoch) && activePseudoChannelSlug === 'creations') {
+				maybeStartChatCreationsPseudoChannelPoll();
+			}
 		}
 	}
 
@@ -5676,10 +5819,10 @@ export async function initChatPage(root, options = {}) {
 
 	async function loadExploreChannelMessages() {
 		const messagesEl = root.querySelector('[data-chat-messages]');
-		if (!messagesEl || loadingMessages) return;
-		loadingMessages = true;
+		if (!messagesEl) return;
+		const paneEpoch = bumpChatMessagesPaneEpoch();
+		enterPseudoChannelLoad();
 		exploreBrowseMessagesLoading = true;
-		syncChatMessagePlaceholder();
 		syncChatExploreComposerChrome();
 		teardownCommentsChannelLoadMore();
 		teardownFeedChannelLoadMore();
@@ -5688,6 +5831,7 @@ export async function initChatPage(root, options = {}) {
 		const qActive = String(exploreQueryRef.q || '').trim();
 		try {
 			const feedCardMod = await import(`../shared/feedCardBuild.js${qs}`);
+			if (isStaleChatPane(paneEpoch)) return;
 			const { createFeedItemCard, feedItemToUser } = feedCardMod;
 
 			if (qActive) {
@@ -5697,6 +5841,7 @@ export async function initChatPage(root, options = {}) {
 				syncChatExploreComposerChrome();
 				try {
 					const merged = await fetchExploreSearchMergedForChat(qActive);
+					if (isStaleChatPane(paneEpoch)) return;
 					pushExploreChannelSearchToHistory(qActive);
 					lastChatMessagesPayload = [];
 					clearPageUsers();
@@ -5770,6 +5915,7 @@ export async function initChatPage(root, options = {}) {
 				},
 			});
 			const r = await pseudoColumnPager.loadInitial();
+			if (isStaleChatPane(paneEpoch)) return;
 			if (!r.ok) {
 				if (r.error instanceof Error) {
 					throw r.error;
@@ -5840,12 +5986,20 @@ export async function initChatPage(root, options = {}) {
 			}
 		} catch (err) {
 			console.error('[Chat page] explore channel:', err);
-			messagesEl.innerHTML = renderEmptyError(err?.message || 'Could not load explore.');
+			if (!isStaleChatPane(paneEpoch)) {
+				paintChatMessagesPaneError(
+					messagesEl,
+					err?.message || 'Could not load explore.',
+					"Couldn't load explore"
+				);
+			}
 		} finally {
-			messagesEl.removeAttribute('aria-busy');
+			exitPseudoChannelLoad();
+			unlockChatMessagesPaneScroll(messagesEl);
 			exploreBrowseMessagesLoading = false;
-			loadingMessages = false;
-			syncChatMessagePlaceholder();
+			if (!isStaleChatPane(paneEpoch) && messagesEl.isConnected) {
+				messagesEl.removeAttribute('aria-busy');
+			}
 			syncChatExploreComposerChrome();
 			if (activePseudoChannelSlug === 'explore' && !String(exploreQueryRef.q || '').trim()) {
 				syncExploreChannelBrowseUrl();
@@ -5857,19 +6011,20 @@ export async function initChatPage(root, options = {}) {
 	async function loadMessages() {
 		const threadId = activeThreadId;
 		const messagesEl = root.querySelector('[data-chat-messages]');
-		if (!threadId || !messagesEl || loadingMessages) return;
+		if (!threadId || !messagesEl) return;
+		const paneEpoch = bumpChatMessagesPaneEpoch();
 		if (threadId !== lastReadThreadIdForMark) {
 			lastReadThreadIdForMark = threadId;
 			lastMarkReadSentId = null;
 		}
-		loadingMessages = true;
-		syncChatMessagePlaceholder();
+		enterThreadMessagesLoad();
 		messagesEl.setAttribute('aria-busy', 'true');
 		const prevVideoStates = captureChatVideoPlaybackStates(messagesEl);
 
 		const viewerId = chatViewerId;
 		try {
 			await refreshChatCanvasesList();
+			if (isStaleChatPane(paneEpoch)) return;
 			const res = await fetch(`/api/chat/threads/${threadId}/messages?limit=50`, {
 				credentials: 'include'
 			});
@@ -5877,6 +6032,7 @@ export async function initChatPage(root, options = {}) {
 			if (!res.ok) {
 				throw new Error(data.message || data.error || 'Failed to load messages');
 			}
+			if (isStaleChatPane(paneEpoch)) return;
 			const messages = Array.isArray(data.messages) ? data.messages : [];
 			const messagesForUi = messages.filter((m) => !getChatCanvasMetaFromMessage(m));
 			lastChatMessagesPayload = messagesForUi;
@@ -5946,19 +6102,30 @@ export async function initChatPage(root, options = {}) {
 			setupReactionTooltipTap(messagesEl);
 			// TEMP: always land at latest message on load; disable unread jump behavior for now.
 			scrollChatMessagesToEnd('initial_load');
-			window.setTimeout(() => {
-				setupLatestMessageReadObserver();
-			}, 550);
+			if (!isStaleChatPane(paneEpoch)) {
+				window.setTimeout(() => {
+					if (isStaleChatPane(paneEpoch)) return;
+					setupLatestMessageReadObserver();
+				}, 550);
+			}
 		} catch (err) {
 			console.error('[Chat page] messages:', err);
-			messagesEl.innerHTML = renderEmptyError(err?.message || 'Could not load messages.');
-			chatCanvasesList = [];
-			activeThreadPinnedCanvasId = null;
-			rebuildTopbarMenuDynamic();
+			if (!isStaleChatPane(paneEpoch)) {
+				paintChatMessagesPaneError(
+					messagesEl,
+					err?.message || 'Could not load messages.',
+					"Couldn't load this conversation"
+				);
+				chatCanvasesList = [];
+				activeThreadPinnedCanvasId = null;
+				rebuildTopbarMenuDynamic();
+			}
 		} finally {
-			messagesEl.removeAttribute('aria-busy');
-			loadingMessages = false;
-			syncChatMessagePlaceholder();
+			exitThreadMessagesLoad();
+			unlockChatMessagesPaneScroll(messagesEl);
+			if (!isStaleChatPane(paneEpoch) && messagesEl.isConnected) {
+				messagesEl.removeAttribute('aria-busy');
+			}
 			rebuildTopbarMenuDynamic();
 		}
 	}
@@ -5989,7 +6156,7 @@ export async function initChatPage(root, options = {}) {
 		tearDownVisibilityResync();
 		const onVis = () => {
 			if (document.visibilityState !== 'visible') return;
-			if (!activeThreadId || loadingMessages) return;
+			if (!activeThreadId || loadingThreadMessages) return;
 			void loadMessages();
 		};
 		document.addEventListener('visibilitychange', onVis);
@@ -6413,6 +6580,31 @@ export async function initChatPage(root, options = {}) {
 		await sendChatOutgoing(body, { clearInput: true });
 	}
 
+	/**
+	 * Friendly in-pane error for chat `[data-chat-messages]` (threads, real channels, pseudo lanes).
+	 * @param {HTMLElement | null} messagesEl
+	 * @param {string} [detail]
+	 * @param {string} [title]
+	 * @param {{ buttonText?: string, buttonHref?: string, buttonRoute?: string }} [cta]
+	 */
+	function paintChatMessagesPaneError(messagesEl, detail, title, cta = {}) {
+		if (!(messagesEl instanceof HTMLElement) || typeof renderPaneLoadError !== 'function') return;
+		const msg =
+			typeof detail === 'string' && detail.trim()
+				? detail.trim()
+				: 'Please try again in a moment.';
+		const ttl =
+			typeof title === 'string' && title.trim() ? title.trim() : "Couldn't load this view";
+		messagesEl.innerHTML = renderPaneLoadError(msg, {
+			title: ttl,
+			buttonText: cta.buttonText || '',
+			buttonHref: cta.buttonHref || '',
+			buttonRoute: cta.buttonRoute || '',
+		});
+		messagesEl.removeAttribute('aria-busy');
+		unlockChatMessagesPaneScroll(messagesEl);
+	}
+
 	async function openThreadForCurrentPath() {
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		const errEl = root.querySelector('[data-chat-error]');
@@ -6443,11 +6635,44 @@ export async function initChatPage(root, options = {}) {
 		if (messagesEl) {
 			stopChatCreationsPseudoChannelPoll();
 			teardownChatCreationsPseudoBulkHostIfPresent(messagesEl);
-			messagesEl.innerHTML = renderEmptyState({
-				loading: true,
-				loadingAriaLabel: 'Loading',
-				className: 'chat-page-thread-loading'
-			});
+			const channelSlugForLoading =
+				parsed.kind === 'channel' ? String(parsed.slug || '').trim().toLowerCase() : '';
+			if (channelSlugForLoading === 'feed' && typeof renderFeedCardsSkeleton === 'function') {
+				messagesEl.innerHTML = `<div class="feed-route chat-feed-channel-route">
+					<div class="route-cards feed-cards" data-feed-container aria-busy="true" aria-label="Loading">${renderFeedCardsSkeleton(4)}</div>
+				</div>`;
+				resetAndLockChatMessagesScrollForSkeleton(messagesEl, 'feed');
+			} else if (channelSlugForLoading === 'comments' && typeof renderCommentRowsSkeleton === 'function') {
+				messagesEl.innerHTML = `<div class="chat-comments-channel-loading" aria-busy="true" aria-label="Loading">${renderCommentRowsSkeleton(10)}</div>`;
+				resetAndLockChatMessagesScrollForSkeleton(messagesEl, 'comments');
+			} else if (channelSlugForLoading === 'explore' || channelSlugForLoading === 'creations') {
+				const creationsCls = channelSlugForLoading === 'creations' ? ' creations-route' : '';
+				const browseCls = chatExploreCreationsBrowseView ? ' chat-feed-channel-route--browse-view' : '';
+				const gridInner =
+					chatExploreCreationsBrowseView && typeof renderGridSkeleton === 'function'
+						? renderGridSkeleton(25)
+						: typeof renderFeedCardsSkeleton === 'function'
+							? renderFeedCardsSkeleton(4)
+							: '';
+				if (gridInner) {
+					messagesEl.innerHTML = `<div class="feed-route chat-feed-channel-route${creationsCls}${browseCls}">
+						<div class="route-cards feed-cards" aria-busy="true" aria-label="Loading">${gridInner}</div>
+					</div>`;
+					resetAndLockChatMessagesScrollForSkeleton(messagesEl, channelSlugForLoading);
+				} else {
+					messagesEl.innerHTML = renderEmptyState({
+						loading: true,
+						loadingAriaLabel: 'Loading',
+						className: 'chat-page-thread-loading'
+					});
+				}
+			} else {
+				messagesEl.innerHTML = renderEmptyState({
+					loading: true,
+					loadingAriaLabel: 'Loading',
+					className: 'chat-page-thread-loading'
+				});
+			}
 			messagesEl.setAttribute('aria-busy', 'true');
 		}
 		if (errEl instanceof HTMLElement) {
@@ -6577,11 +6802,14 @@ export async function initChatPage(root, options = {}) {
 					await loadMessages();
 					await bindRoomBroadcast(activeThreadId);
 				} else if (messagesEl) {
-					messagesEl.removeAttribute('aria-busy');
-					messagesEl.innerHTML = '';
+					paintChatMessagesPaneError(
+						messagesEl,
+						'This channel could not be opened. Try again or choose another channel from the sidebar.',
+						"Couldn't open this channel"
+					);
 					if (errEl instanceof HTMLElement) {
-						errEl.hidden = false;
-						errEl.textContent = 'Could not open this channel.';
+						errEl.hidden = true;
+						errEl.textContent = '';
 					}
 				}
 				return;
@@ -6635,11 +6863,14 @@ export async function initChatPage(root, options = {}) {
 					await loadMessages();
 					await bindRoomBroadcast(activeThreadId);
 				} else if (messagesEl) {
-					messagesEl.removeAttribute('aria-busy');
-					messagesEl.innerHTML = '';
+					paintChatMessagesPaneError(
+						messagesEl,
+						'This conversation could not be opened. Try again or start from your inbox.',
+						"Couldn't open this chat"
+					);
 					if (errEl instanceof HTMLElement) {
-						errEl.hidden = false;
-						errEl.textContent = 'Could not open this conversation.';
+						errEl.hidden = true;
+						errEl.textContent = '';
 					}
 				}
 			}
@@ -6649,12 +6880,15 @@ export async function initChatPage(root, options = {}) {
 			console.error('[Chat page]', err);
 			void refreshChatSidebar({ skipThreadsFetch: true });
 			if (messagesEl) {
-				messagesEl.innerHTML = '';
-				messagesEl.removeAttribute('aria-busy');
+				paintChatMessagesPaneError(
+					messagesEl,
+					err?.message || 'Something went wrong while opening chat.',
+					"Couldn't open this view"
+				);
 			}
 			if (errEl instanceof HTMLElement) {
-				errEl.hidden = false;
-				errEl.textContent = err?.message || 'Could not open this conversation.';
+				errEl.hidden = true;
+				errEl.textContent = '';
 			}
 		} finally {
 			syncChatBrowseViewBodyClass();

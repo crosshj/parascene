@@ -2601,16 +2601,80 @@ button.creation-detail-history-thumb-link.creation-detail-history-unavailable.cr
 	flex: 0 0 auto;
 }
 
-.creation-detail-lineage-modal-creator {
+/* Lineage step info: mirrors creation detail title + byline + feed-style author row */
+.creation-detail-lineage-modal-info {
+	min-width: 0;
+}
+
+.creation-detail-lineage-modal-info .creation-detail-title-row {
+	margin-bottom: 0;
+}
+
+.creation-detail-lineage-modal-info .creation-detail-title {
+	font-size: 1.35rem;
+	white-space: normal;
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 3;
+	line-clamp: 3;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	word-break: break-word;
+}
+
+.creation-detail-lineage-modal-info .creation-detail-title-byline.creation-detail-lineage-modal-byline {
+	margin-bottom: 8px;
+}
+
+.creation-detail-lineage-modal-footer {
+	margin-top: 2px;
 	margin-bottom: 4px;
 }
 
-.creation-detail-lineage-modal-title {
-	font-weight: 600;
-	font-size: 1.05rem;
-	margin: 8px 0 10px;
-	color: var(--text);
-	line-height: 1.35;
+.creation-detail-lineage-modal-avatar-wrap {
+	line-height: 0;
+}
+
+.creation-detail-lineage-modal-creation-meta {
+	white-space: normal;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0;
+	line-height: 1.45;
+}
+
+.creation-detail-lineage-modal-meta-sep {
+	margin: 0 5px;
+	color: var(--text-muted);
+}
+
+.creation-detail-lineage-modal-creation-link--inline {
+	gap: 4px;
+	margin-left: 0;
+}
+
+.creation-detail-lineage-modal-creation-link-text {
+	font-size: 0.85rem;
+	line-height: 1.2;
+}
+
+.creation-detail-lineage-modal-copy {
+	margin-top: 14px;
+}
+
+.creation-detail-lineage-modal-info .creation-detail-description {
+	margin-top: 0;
+	margin-bottom: 0;
+}
+
+.creation-detail-lineage-modal-prose--prompt {
+	white-space: pre-wrap;
+}
+
+.creation-detail-lineage-modal-info .creation-detail-lineage-modal-server-meta {
+	margin-top: 10px;
+	margin-bottom: 0;
 }
 
 @media (max-width: 768px) {
@@ -2709,6 +2773,10 @@ button.creation-detail-history-thumb-link.creation-detail-history-unavailable.cr
 	color: var(--text-muted);
 }
 
+.creation-detail-lineage-modal-info .creation-detail-lineage-modal-published {
+	margin-bottom: 10px;
+}
+
 .creation-detail-lineage-modal-published-label {
 	line-height: 1.3;
 }
@@ -2724,6 +2792,12 @@ button.creation-detail-history-thumb-link.creation-detail-history-unavailable.cr
 	text-decoration: none;
 	vertical-align: middle;
 	transition: color 0.15s, background 0.15s;
+}
+
+.creation-detail-lineage-modal-creation-link--cta {
+	padding: 2px 6px;
+	border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+	background: color-mix(in srgb, var(--surface) 72%, transparent);
 }
 
 .creation-detail-lineage-modal-creation-link:hover {

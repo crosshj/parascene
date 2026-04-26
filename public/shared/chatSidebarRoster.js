@@ -390,7 +390,9 @@ export function tryPatchPseudoStripDomInPlace(listEl, stripRows, nav) {
 		return false;
 	}
 	const rows = Array.isArray(stripRows) ? stripRows : [];
-	const anchors = [...listEl.querySelectorAll(':scope > a.chat-page-sidebar-row')];
+	const anchors = [
+		...listEl.querySelectorAll(':scope > a.chat-page-sidebar-row:not([data-chat-sidebar-strip-create])')
+	];
 	if (anchors.length !== rows.length) return false;
 	const hrefBase =
 		typeof window !== 'undefined' && window.location?.href ? window.location.href : 'http://localhost/';

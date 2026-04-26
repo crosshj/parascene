@@ -175,7 +175,27 @@ class AppRouteServers extends HTMLElement {
 					<div class="chat-page-sidebar-scroll connect-chat-sidebar-roster" data-connect-chat-scroll
 						aria-busy="true" aria-label="Loading conversations">
 						<div class="chat-page-sidebar-pseudo" data-chat-sidebar-pseudo>
-							<div class="chat-page-sidebar-list" data-chat-sidebar-pseudo-list">${pseudoStripStaticHtml}</div>
+							<div class="chat-page-sidebar-list" data-chat-sidebar-pseudo-list>
+								<div class="chat-page-sidebar-create-sticky">
+									<a href="/create" class="chat-page-sidebar-row chat-page-sidebar-row--create-cta"
+										data-chat-sidebar-strip-create="1">
+										<div class="comment-avatar connect-chat-thread-row-channel-avatar chat-page-sidebar-channel-avatar chat-page-sidebar-channel-avatar--icon-only"
+											aria-hidden="true">
+											<svg class="chat-page-sidebar-channel-route-icon" viewBox="0 0 24 24"
+												fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+												stroke-linejoin="round">
+												<line x1="12" y1="5" x2="12" y2="19" />
+												<line x1="5" y1="12" x2="19" y2="12" />
+											</svg>
+										</div>
+										<div class="chat-page-sidebar-row-body">
+											<div class="chat-page-sidebar-row-title-line">
+												<span class="chat-page-sidebar-row-title">Create</span>
+											</div>
+										</div>
+									</a>
+								</div>
+								${pseudoStripStaticHtml}</div>
 						</div>
 						<section class="chat-page-sidebar-section" aria-labelledby="connect-sidebar-dms-heading">
 							<div class="chat-page-sidebar-section-head">
@@ -594,6 +614,7 @@ class AppRouteServers extends HTMLElement {
 			await this.refreshAdminChatThreadSelect();
 			try {
 				clearCachedChatThreads();
+				window.sessionStorage?.removeItem('prsn-chat-sidebar-roster-v1');
 			} catch {
 				// ignore
 			}
@@ -706,6 +727,11 @@ class AppRouteServers extends HTMLElement {
 				if (result.status === 401) {
 					this._tearDownConnectChatUserBroadcast();
 					clearCachedChatThreads();
+					try {
+						window.sessionStorage?.removeItem('prsn-chat-sidebar-roster-v1');
+					} catch {
+						// ignore
+					}
 					this._chatViewerProfileMini = null;
 					this._chatViewerProfileMiniFetched = false;
 					try {

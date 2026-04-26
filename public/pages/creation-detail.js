@@ -2232,27 +2232,21 @@ async function loadCreation() {
 			const avatarSlot = creatorPlan
 				? `<div class="avatar-with-founder-flair avatar-with-founder-flair--sm"><div class="founder-flair-avatar-ring"><div class="founder-flair-avatar-inner" style="background: ${escapeHtml(creatorColor)};" aria-hidden="true">${avatarInner}</div></div></div>`
 				: `<span class="creation-detail-author-icon" style="background: ${escapeHtml(creatorColor)};">${avatarInner}</span>`;
-			const nameClass = creatorPlan ? 'creation-detail-author-name founder-name' : 'creation-detail-author-name';
-			const handleClass = creatorPlan ? 'creation-detail-author-handle founder-name' : 'creation-detail-author-handle';
-			const nameHandleInner = `<span class="${nameClass}">${escapeHtml(creatorName)}</span>${creatorHandle ? `<span class="${handleClass}">${escapeHtml(creatorHandle)}</span>` : ''}`;
-			const idLine = creatorProfileHref
-				? `<div class="creation-detail-author-id"><a class="creation-detail-author-id-link" href="${escapeHtml(creatorProfileHref)}">${nameHandleInner}</a></div>`
-				: `<div class="creation-detail-author-id"><span class="creation-detail-author-id-link">${nameHandleInner}</span></div>`;
-			const creatorBlock = `
-				<div class="creation-detail-author creation-detail-lineage-modal-creator">
-					<div class="creation-detail-author-avatar-slot">${avatarSlot}</div>
-					${idLine}
-				</div>`;
 			const rawTitle = c.title == null ? '' : String(c.title).trim();
+			const headlineTitle = rawTitle || (pub ? 'Untitled' : `#${c.id}`);
+			const isUntitledHeadline = Boolean(pub && !rawTitle);
 			const descRaw = c.description == null ? '' : String(c.description).trim();
-			const titleBlock = rawTitle
-				? `<div class="creation-detail-lineage-modal-meta"><div class="creation-detail-lineage-modal-meta-label">Title</div><div>${escapeHtml(rawTitle)}</div></div>`
+			const publishedDateRaw = c.published_at || c.created_at || null;
+			const publishedDate = publishedDateRaw ? new Date(publishedDateRaw) : null;
+			const hasPublishedDate = publishedDate instanceof Date && Number.isFinite(publishedDate.valueOf());
+			const publishedTimeAgo =
+				pub && hasPublishedDate ? formatRelativeTime(publishedDate) || '' : '';
+			const bylineHtml = `${creatorHandle ? `${escapeHtml(creatorHandle)} ` : ''}${pub ? `Published${publishedTimeAgo ? ` ${escapeHtml(publishedTimeAgo)}` : ''}` : 'Not published'}`;
+			const descSection = descRaw
+				? `<div class="creation-detail-lineage-modal-copy"><div class="creation-detail-prompt-label-row"><span class="creation-detail-prompt-label">Description</span></div><div class="creation-detail-description creation-detail-lineage-modal-prose">${processUserText(descRaw)}</div></div>`
 				: '';
-			const descBlock = descRaw
-				? `<div class="creation-detail-lineage-modal-meta"><div class="creation-detail-lineage-modal-meta-label">Description</div><div class="creation-detail-lineage-modal-desc">${processUserText(descRaw)}</div></div>`
-				: '';
-			const promptBlock = pText
-				? `<div class="creation-detail-lineage-modal-meta"><div class="creation-detail-lineage-modal-meta-label">Prompt</div><div class="creation-detail-lineage-modal-prompt">${processUserText(pText)}</div></div>`
+			const promptSection = pText
+				? `<div class="creation-detail-lineage-modal-copy"><div class="creation-detail-prompt-label-row"><span class="creation-detail-prompt-label">Prompt</span></div><div class="creation-detail-description creation-detail-lineage-modal-prose creation-detail-lineage-modal-prose--prompt">${processUserText(pText)}</div></div>`
 				: '';
 			const serverName =
 				typeof m.server_name === 'string' && m.server_name.trim()
@@ -2303,13 +2297,14 @@ async function loadCreation() {
 			const styleMeta = m.style && typeof m.style === 'object' ? m.style : null;
 			const styleLabel = styleMeta && typeof styleMeta.label === 'string' ? styleMeta.label.trim() : '';
 			const styleModifiers = styleMeta && typeof styleMeta.modifiers === 'string' ? styleMeta.modifiers.trim() : '';
-			const styleBlock =
+			const styleSection =
 				styleLabel.length > 0
-					? `<div class="creation-detail-lineage-modal-meta"><div class="creation-detail-lineage-modal-meta-label">Style</div><div>${escapeHtml(styleLabel)}</div>${styleModifiers ? `<div class="creation-detail-style-modifiers">${escapeHtml(styleModifiers)}</div>` : ''}</div>`
+					? `<div class="creation-detail-lineage-modal-copy"><div class="creation-detail-prompt-label-row"><span class="creation-detail-prompt-label">Style</span></div><div class="creation-detail-description creation-detail-lineage-modal-prose">${escapeHtml(styleLabel)}${styleModifiers ? `<div class="creation-detail-style-modifiers">${escapeHtml(styleModifiers)}</div>` : ''}</div></div>`
 					: '';
 			const createdRaw = c.created_at ? new Date(c.created_at) : null;
 			const createdOk = createdRaw instanceof Date && Number.isFinite(createdRaw.valueOf());
-			const createdBlock = createdOk ? `<p class="creation-detail-lineage-modal-date">${escapeHtml(formatDateTime(createdRaw))}</p>` : '';
+			const createdRel =
+				createdOk ? escapeHtml(formatRelativeTime(createdRaw) || formatDateTime(createdRaw)) : '';
 			const creationHref = `/creations/${escapeHtml(String(c.id))}`;
 			const stepIdNum = Number(c.id);
 			const pageCreationIdNum = Number(creationId);
@@ -2319,24 +2314,41 @@ async function loadCreation() {
 				Number.isFinite(pageCreationIdNum) &&
 				pageCreationIdNum > 0 &&
 				stepIdNum === pageCreationIdNum;
-			let pubBlock = '';
-			if (isCurrentCreation) {
-				pubBlock = '<p class="creation-detail-lineage-modal-current">CURRENT</p>';
-			} else if (pub) {
-				pubBlock = `<p class="creation-detail-lineage-modal-published"><span class="creation-detail-lineage-modal-published-label">Published</span><a class="creation-detail-lineage-modal-creation-link" href="${creationHref}" aria-label="View full creation"><svg class="creation-detail-lineage-modal-creation-link-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg></a></p>`;
-			} else {
-				pubBlock = '<p class="creation-detail-lineage-modal-unpublished">Unpublished</p>';
-			}
+			const openLinkSvg = `<svg class="creation-detail-lineage-modal-creation-link-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>`;
+			const publishedCta = pub && !isCurrentCreation
+				? `<p class="creation-detail-lineage-modal-published"><span class="creation-detail-lineage-modal-published-label">Published</span><a class="creation-detail-lineage-modal-creation-link creation-detail-lineage-modal-creation-link--inline creation-detail-lineage-modal-creation-link--cta" href="${creationHref}" aria-label="View full creation">${openLinkSvg}<span class="creation-detail-lineage-modal-creation-link-text">View creation</span></a></p>`
+				: '';
+			const metaTitleAttr =
+				createdOk ? ` title="${escapeHtml(formatDateTime(createdRaw))}"` : '';
+			const avatarInnerCell = `<div class="creation-detail-author-avatar-slot">${avatarSlot}</div>`;
+			const avatarCell = creatorProfileHref
+				? `<a class="user-link user-avatar-link" href="${escapeHtml(creatorProfileHref)}" aria-label="View ${escapeHtml(creatorName)} profile">${avatarInnerCell}</a>`
+				: `<div class="creation-detail-lineage-modal-avatar-wrap">${avatarInnerCell}</div>`;
+			const currentBadge = isCurrentCreation
+				? '<p class="creation-detail-lineage-modal-current">Current step</p>'
+				: '';
 			lineageModalBody.innerHTML = `
-				${creatorBlock}
-				<div class="creation-detail-lineage-modal-title">#${escapeHtml(String(c.id))}</div>
-				${titleBlock}
-				${pubBlock}
-				${descBlock}
-				${createdBlock}
+				<div class="creation-detail-lineage-modal-info">
+					<div class="creation-detail-title-row">
+						<div class="creation-detail-title${isUntitledHeadline ? ' creation-detail-title-untitled' : ''}">${escapeHtml(headlineTitle)}</div>
+					</div>
+					<div class="creation-detail-title-byline creation-detail-title-byline-mobile creation-detail-lineage-modal-byline">${bylineHtml}</div>
+					${publishedCta}
+					<div class="feed-card-footer-grid creation-detail-lineage-modal-footer">
+						${avatarCell}
+						<div class="feed-card-content">
+							<div class="feed-card-title creation-detail-lineage-modal-creator-name${creatorPlan ? ' founder-name' : ''}">${escapeHtml(creatorName)}</div>
+							<div class="feed-card-metadata creation-detail-lineage-modal-creation-meta"${metaTitleAttr}>
+								<span>#${escapeHtml(String(c.id))}</span>${createdOk ? `<span class="creation-detail-lineage-modal-meta-sep" aria-hidden="true">·</span><span>${createdRel}</span>` : ''}
+							</div>
+						</div>
+					</div>
+					${currentBadge}
+					${descSection}
+					${promptSection}
+				${styleSection}
 				${serverMethodMetaLine}
-				${styleBlock}
-				${promptBlock}
+				</div>
 			`;
 			try {
 				if (lineageModalOverlay) hydrateUserTextLinks(lineageModalOverlay);
