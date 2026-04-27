@@ -1363,12 +1363,19 @@ export async function initChatPage(root, options = {}) {
 		teardownBottomDwellTimer();
 		const apply = () => {
 			messagesEl.scrollTop = 0;
+			if (shouldUseViewportScrollForChatMessages()) {
+				window.scrollTo(0, 0);
+			}
 		};
 		apply();
 		requestAnimationFrame(() => {
 			apply();
 			requestAnimationFrame(apply);
 		});
+	}
+
+	function shouldUseViewportScrollForChatMessages() {
+		return isChatPageMobileLayout() && document.body.classList.contains('chat-page--viewport-scroll');
 	}
 
 	/** After painting a skeleton into `[data-chat-messages]`, snap scroll and prevent scroll until content loads. */
@@ -1379,6 +1386,9 @@ export async function initChatPage(root, options = {}) {
 		const toEnd = feedish && chatFeedLaneScrollMode === 'oldest_first';
 		const apply = () => {
 			messagesEl.scrollTop = toEnd ? messagesEl.scrollHeight : 0;
+			if (shouldUseViewportScrollForChatMessages() && feedish) {
+				window.scrollTo(0, toEnd ? document.documentElement.scrollHeight : 0);
+			}
 		};
 		apply();
 		requestAnimationFrame(() => {
@@ -1386,6 +1396,10 @@ export async function initChatPage(root, options = {}) {
 			requestAnimationFrame(apply);
 		});
 		messagesEl.dataset.chatMessagesScrollLock = '1';
+		if (shouldUseViewportScrollForChatMessages() && feedish) {
+			document.documentElement.dataset.chatViewportScrollLock = '1';
+			document.body.dataset.chatViewportScrollLock = '1';
+		}
 	}
 
 	function unlockChatMessagesPaneScroll(messagesEl) {
@@ -1393,6 +1407,8 @@ export async function initChatPage(root, options = {}) {
 		if (messagesEl.dataset.chatMessagesScrollLock === '1') {
 			delete messagesEl.dataset.chatMessagesScrollLock;
 		}
+		delete document.documentElement.dataset.chatViewportScrollLock;
+		delete document.body.dataset.chatViewportScrollLock;
 	}
 
 	/** Re-scroll after visual viewport changes only if the user was already following the thread. */
@@ -5071,6 +5087,14 @@ export async function initChatPage(root, options = {}) {
 		disconnectFeedChannelLoadObserver();
 		const sentinel = messagesEl.querySelector('[data-chat-feed-load-sentinel]');
 		if (!sentinel) return;
+		const useViewportRoot =
+			window.matchMedia('(max-width: 768px)').matches &&
+			document.body.classList.contains('chat-page--viewport-scroll');
+		const observerRoot = useViewportRoot ? null : messagesEl;
+		const observerRootMargin =
+			chatFeedLaneScrollMode === 'newest_first'
+				? '0px 0px 1400px 0px'
+				: '1400px 0px 0px 0px';
 		feedChannelLoadMoreObserver = new IntersectionObserver(
 			(entries) => {
 				for (const e of entries) {
@@ -5095,11 +5119,11 @@ export async function initChatPage(root, options = {}) {
 					}
 				}
 			},
-			chatFeedLaneScrollMode === 'newest_first'
-				? /* Match main feed: sentinel after cards; bottom margin preloads before the user reaches the end. */
-				{ root: messagesEl, rootMargin: '0px 0px 1400px 0px', threshold: 0 }
-				: /* Chat-style: sentinel above cards; top margin preloads while user is below older rows. */
-				{ root: messagesEl, rootMargin: '1400px 0px 0px 0px', threshold: 0 }
+			{
+				root: observerRoot,
+				rootMargin: observerRootMargin,
+				threshold: 0,
+			}
 		);
 		feedChannelLoadMoreObserver.observe(sentinel);
 	}
@@ -5313,7 +5337,9 @@ export async function initChatPage(root, options = {}) {
 				}
 			}
 
-			if (!pseudoColumnPager.getHasMore()) {
+			if (pseudoColumnPager.getHasMore()) {
+				setupFeedChannelLoadMoreObserver(messagesEl);
+			} else {
 				disconnectFeedChannelLoadObserver();
 			}
 

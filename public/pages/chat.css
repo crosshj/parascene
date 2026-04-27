@@ -2094,6 +2094,13 @@ body.chat-page .chat-page-send-btn .chat-page-send-icon {
 		-webkit-overflow-scrolling: auto;
 	}
 
+	html.chat-page.chat-page--viewport-scroll[data-chat-viewport-scroll-lock='1'],
+	body.chat-page.chat-page--viewport-scroll[data-chat-viewport-scroll-lock='1'] {
+		overflow: hidden;
+		overscroll-behavior: none;
+		touch-action: none;
+	}
+
 	body.chat-page.chat-page--viewport-scroll.chat-page--mobile-sidebar-open .chat-page-sidebar {
 		flex: 0 0 auto;
 		min-height: auto;
