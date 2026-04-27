@@ -41,6 +41,17 @@ function isChatNavTargetPath(targetPath) {
 	return normalized === '/chat' || normalized.startsWith('/chat/') || normalized.startsWith('/chat#');
 }
 
+function isCurrentDocumentChatShell() {
+	const pathname = window.location.pathname;
+	if (pathname === '/chat' || pathname.startsWith('/chat/')) return true;
+	if (document.body?.dataset?.entry !== 'chat') return false;
+	return pathname === '/' ||
+		pathname === '/index.html' ||
+		pathname === '/feed' ||
+		pathname === '/explore' ||
+		pathname === '/creations';
+}
+
 class AppNavigationMobile extends HTMLElement {
 	constructor() {
 		super();
@@ -79,7 +90,7 @@ class AppNavigationMobile extends HTMLElement {
 		const targetPath = getMobileNavTargetPath(route);
 		if (!targetPath) return;
 		const isChatFirstTarget = isChatNavTargetPath(targetPath);
-		const isOnChatPage = window.location.pathname === '/chat' || window.location.pathname.startsWith('/chat/');
+		const isOnChatPage = isCurrentDocumentChatShell();
 
 		// Create is a standalone page; full navigation to/from it
 		if (route === 'create') {
@@ -91,11 +102,6 @@ class AppNavigationMobile extends HTMLElement {
 			const cur = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
 			if (next !== cur) {
 				window.history.pushState({ prsnChat: true }, '', next);
-				try {
-					window.dispatchEvent(new PopStateEvent('popstate'));
-				} catch {
-					window.dispatchEvent(new Event('popstate'));
-				}
 				try {
 					window.dispatchEvent(new HashChangeEvent('hashchange'));
 				} catch {

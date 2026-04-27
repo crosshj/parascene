@@ -974,6 +974,9 @@ async function loadCreation() {
 
 	if (!detailContent || !imageEl || !backgroundEl) return;
 
+	const loadToken = ++loadCreationSequence;
+	const isCurrentLoad = () => loadToken === loadCreationSequence;
+
 	function applyLoadedImageState() {
 		const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
 		if (modIcon) modIcon.remove();
@@ -982,6 +985,98 @@ async function loadCreation() {
 			backgroundEl.style.backgroundImage = `url('${imageEl.dataset.currentUrl}')`;
 		}
 		imageEl.style.visibility = 'visible';
+	}
+
+	function urlsMatch(a, b) {
+		const left = String(a || '').trim();
+		const right = String(b || '').trim();
+		if (!left || !right) return false;
+		if (left === right) return true;
+		try {
+			return new URL(left, window.location.origin).href === new URL(right, window.location.origin).href;
+		} catch {
+			return false;
+		}
+	}
+
+	function hasLoadedHeroImage() {
+		return Boolean(imageEl.src && imageEl.complete && imageEl.naturalWidth > 0 && imageEl.style.visibility !== 'hidden');
+	}
+
+	function clearHeroImage() {
+		backgroundEl.style.backgroundImage = '';
+		imageEl.style.visibility = 'hidden';
+		imageEl.removeAttribute('src');
+		delete imageEl.dataset.currentUrl;
+		delete imageEl.dataset.pendingUrl;
+	}
+
+	function resetHeroVideo() {
+		if (!videoEl) return;
+		videoEl.style.display = 'none';
+		videoEl.pause?.();
+		videoEl.removeAttribute('src');
+		try {
+			videoEl.load();
+		} catch {
+			// ignore
+		}
+	}
+
+	function showHeroImage(nextUrl) {
+		const url = String(nextUrl || '').trim();
+		if (!url) return;
+		const currentUrl = imageEl.dataset.currentUrl || imageEl.getAttribute('src') || imageEl.currentSrc || '';
+		if (urlsMatch(currentUrl, url)) {
+			imageEl.dataset.currentUrl = url;
+			if (hasLoadedHeroImage()) {
+				applyLoadedImageState();
+			} else {
+				imageWrapper?.classList.remove('image-error', 'image-error-moderated');
+				imageWrapper?.classList.add('image-loading');
+			}
+			return;
+		}
+
+		const keepCurrentImageVisible = hasLoadedHeroImage();
+		resetHeroVideo();
+		const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
+		if (modIcon) modIcon.remove();
+		imageWrapper?.classList.remove('image-error', 'image-error-moderated');
+		imageWrapper?.classList.toggle('image-loading', !keepCurrentImageVisible);
+		if (!keepCurrentImageVisible) {
+			imageEl.style.visibility = 'hidden';
+		}
+		imageEl.dataset.pendingUrl = url;
+
+		const preload = new Image();
+		preload.onload = () => {
+			if (!isCurrentLoad() || imageEl.dataset.pendingUrl !== url) return;
+			imageEl.dataset.currentUrl = url;
+			delete imageEl.dataset.pendingUrl;
+			backgroundEl.style.backgroundImage = `url('${url}')`;
+			imageEl.src = url;
+			imageEl.style.visibility = 'visible';
+			imageWrapper?.classList.remove('image-loading', 'image-error', 'image-error-moderated');
+		};
+		preload.onerror = () => {
+			if (!isCurrentLoad() || imageEl.dataset.pendingUrl !== url) return;
+			delete imageEl.dataset.pendingUrl;
+			clearHeroImage();
+			imageWrapper?.classList.remove('image-loading');
+			imageWrapper?.classList.add('image-error');
+		};
+		preload.src = url;
+		if (preload.complete && preload.naturalWidth > 0) {
+			preload.onload();
+		}
+	}
+
+	function showHeroLoadingPlaceholder() {
+		resetHeroVideo();
+		clearHeroImage();
+		imageWrapper?.classList.remove('image-error', 'image-error-moderated');
+		imageWrapper?.classList.add('image-loading');
 	}
 
 	detailContent.innerHTML = renderCreationDetailSkeleton();
@@ -1074,15 +1169,11 @@ async function loadCreation() {
 		imageWrapper?.classList.remove('image-loading', 'nsfw', 'image-error-moderated');
 		imageWrapper?.classList.add('image-error');
 		imageWrapper?.removeAttribute('data-creation-id');
-		backgroundEl.style.backgroundImage = '';
-		imageEl.style.visibility = 'hidden';
-		imageEl.removeAttribute('src');
-		delete imageEl.dataset.currentUrl;
+		resetHeroVideo();
+		clearHeroImage();
 		detailContent.innerHTML = renderEmptyState({ title: 'Invalid creation ID' });
 		return;
 	}
-
-	detailContent.innerHTML = renderCreationDetailSkeleton();
 
 	try {
 		const headers = {};
@@ -1109,10 +1200,8 @@ async function loadCreation() {
 				imageWrapper?.classList.remove('image-loading', 'nsfw', 'image-error-moderated');
 				imageWrapper?.classList.add('image-error');
 				imageWrapper?.removeAttribute('data-creation-id');
-				backgroundEl.style.backgroundImage = '';
-				imageEl.style.visibility = 'hidden';
-				imageEl.removeAttribute('src');
-				delete imageEl.dataset.currentUrl;
+				resetHeroVideo();
+				clearHeroImage();
 				detailContent.innerHTML = renderEmptyState({
 					title: 'Creation not found',
 					message: "The creation you're looking for doesn't exist or you don't have access to it.",
@@ -1123,6 +1212,7 @@ async function loadCreation() {
 		}
 
 		const creation = await response.json();
+		if (!isCurrentLoad()) return;
 
 		// Fetch direct children (published creations with mutate_of_id = this id), order by created_at
 		const childrenPromise = fetch(`/api/create/images/${creationId}/children`, { credentials: 'include' })
@@ -1159,6 +1249,7 @@ async function loadCreation() {
 				// ignore like meta load failures
 			}
 		}
+		if (!isCurrentLoad()) return;
 
 		const creationWithLikes = { ...creation, ...likeMeta, created_image_id: creationId };
 		lastCreationMeta = creation;
@@ -1166,7 +1257,6 @@ async function loadCreation() {
 
 		// Set image and blurred background depending on status
 		imageWrapper?.classList.remove('image-error');
-		imageWrapper?.classList.remove('image-loading');
 		imageWrapper?.classList.toggle('nsfw', !!(creation.nsfw ?? creation.meta?.nsfw));
 		if (imageWrapper) {
 			if (creation.nsfw ?? creation.meta?.nsfw) {
@@ -1175,29 +1265,11 @@ async function loadCreation() {
 				imageWrapper.removeAttribute('data-creation-id');
 			}
 		}
-		backgroundEl.style.backgroundImage = '';
-		imageEl.style.visibility = 'hidden';
-		imageEl.dataset.currentUrl = '';
-		imageEl.removeAttribute('src');
-		if (videoEl) {
-			videoEl.style.display = 'none';
-			videoEl.pause?.();
-			videoEl.removeAttribute('src');
-			try {
-				videoEl.load();
-			} catch {
-				// ignore
-			}
-		}
 
 		if (status === 'completed' && mediaType === 'image' && creation.url) {
-			const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
-			if (modIcon) modIcon.remove();
-			imageWrapper?.classList.remove('image-error-moderated');
-			imageWrapper?.classList.add('image-loading');
-			imageEl.dataset.currentUrl = creation.url;
-			imageEl.src = creation.url;
+			showHeroImage(creation.url);
 		} else if (status === 'completed' && mediaType === 'video' && creation.video_url) {
+			clearHeroImage();
 			const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
 			if (modIcon) modIcon.remove();
 			imageWrapper?.classList.remove('image-error-moderated');
@@ -1234,9 +1306,10 @@ async function loadCreation() {
 		} else if (status === 'creating' && !isTimedOut) {
 			const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
 			if (modIcon) modIcon.remove();
-			imageWrapper?.classList.remove('image-error-moderated');
-			imageWrapper?.classList.add('image-loading');
+			showHeroLoadingPlaceholder();
 		} else if (isFailed) {
+			resetHeroVideo();
+			clearHeroImage();
 			// eslint-disable-next-line no-console
 			console.error('[creation-detail] creation status is failed/timed-out; showing image-error', {
 				status,
@@ -1283,6 +1356,7 @@ async function loadCreation() {
 		let currentUserProfile = null;
 		try {
 			const profile = await fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 2000 });
+			if (!isCurrentLoad()) return;
 			if (profile.ok) {
 				currentUser = profile.data ?? null;
 				currentUserProfile = currentUser?.profile ?? null;
@@ -1919,6 +1993,7 @@ async function loadCreation() {
 			hideActions: isGroupCreation
 		};
 		const menuData = { isFailed, hasDetailsModalContent, isOwner, isAdmin, actionsContext };
+		if (!isCurrentLoad()) return;
 
 		detailContent.innerHTML = html`
 			<div class="creation-detail-title-row">
@@ -3083,7 +3158,8 @@ async function loadCreation() {
 				setCoverBtn.disabled = !canSetCover;
 			}
 
-			function setActiveGroupSource(sourceId) {
+			function setActiveGroupSource(sourceId, options = {}) {
+				const shouldUpdateMedia = options.updateMedia !== false;
 				const source = sourceById.get(Number(sourceId));
 				if (!source) return;
 				selectedGroupSourceId = Number(source.id);
@@ -3111,18 +3187,10 @@ async function loadCreation() {
 					mainMetaLineEl.textContent = source.generationInfo || '';
 				}
 
-				if (videoEl) {
-					videoEl.style.display = 'none';
-					videoEl.pause?.();
-					videoEl.removeAttribute('src');
-				}
-				if (source.filePath) {
-					imageWrapper?.classList.remove('image-error', 'image-error-moderated');
-					imageWrapper?.classList.add('image-loading');
-					backgroundEl.style.backgroundImage = '';
-					imageEl.style.visibility = 'hidden';
-					imageEl.dataset.currentUrl = source.filePath;
-					imageEl.src = source.filePath;
+				if (shouldUpdateMedia) {
+					if (source.filePath) {
+						showHeroImage(source.filePath);
+					}
 				}
 			}
 
@@ -3158,7 +3226,8 @@ async function loadCreation() {
 					}
 				});
 			}
-			setActiveGroupSource(groupSources[0].id);
+			// Keep the cover media from the main load path as-is to avoid reloading and flicker.
+			setActiveGroupSource(groupSources[0].id, { updateMedia: false });
 		}
 
 		const ungroupBtn = detailContent.querySelector('[data-ungroup-btn]');
@@ -3727,6 +3796,7 @@ async function loadCreation() {
 
 let currentCreationId = null;
 let lastCreationMeta = null;
+let loadCreationSequence = 0;
 
 /**
  * Video creations cannot use Vynly share (server + client). Mirrors api_routes/utils/vynlyShareFromCreation.js.

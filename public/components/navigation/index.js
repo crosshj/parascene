@@ -483,18 +483,18 @@ class AppNavigation extends HTMLElement {
 
 	updateChatUnreadBadgeUI() {
 		const n = this.chatUnreadCount || 0;
-		const desk = this.querySelector('.nav-link[data-route="connect"] .nav-link-unread-badge');
-		if (desk) {
+		const navBadges = this.querySelectorAll('.nav-link-unread-badge');
+		navBadges.forEach((badge) => {
 			if (n > 0) {
-				desk.textContent = n > 99 ? '99+' : String(n);
-				desk.classList.add('has-unread');
-				desk.setAttribute('aria-label', `${n} unread chat messages`);
+				badge.textContent = n > 99 ? '99+' : String(n);
+				badge.classList.add('has-unread');
+				badge.setAttribute('aria-label', `${n} unread chat messages`);
 			} else {
-				desk.textContent = '';
-				desk.classList.remove('has-unread');
-				desk.removeAttribute('aria-label');
+				badge.textContent = '';
+				badge.classList.remove('has-unread');
+				badge.removeAttribute('aria-label');
 			}
-		}
+		});
 		const mob = document.querySelector(
 			'app-navigation-mobile .mobile-bottom-nav-item[data-route="connect"] .mobile-bottom-nav-unread-badge'
 		);
@@ -507,18 +507,6 @@ class AppNavigation extends HTMLElement {
 				mob.textContent = '';
 				mob.classList.remove('has-unread');
 				mob.removeAttribute('aria-label');
-			}
-		}
-		const menu = this.querySelector('.mobile-menu-nav .nav-link[data-route="connect"] .nav-link-unread-badge');
-		if (menu) {
-			if (n > 0) {
-				menu.textContent = n > 99 ? '99+' : String(n);
-				menu.classList.add('has-unread');
-				menu.setAttribute('aria-label', `${n} unread chat messages`);
-			} else {
-				menu.textContent = '';
-				menu.classList.remove('has-unread');
-				menu.removeAttribute('aria-label');
 			}
 		}
 	}
@@ -1364,12 +1352,13 @@ class AppNavigation extends HTMLElement {
 				${(this.routes || []).map(route => {
 				const routeId = route.id;
 				const routeLabel = route.label;
+				const isChatRoute = routeId === 'connect' || String(routeLabel || '').trim().toLowerCase() === 'chat';
 				const chatBadge =
-					routeId === 'connect'
+					isChatRoute
 						? html`<span class="nav-link-unread-badge" aria-hidden="true"></span>`
 						: '';
 				// Generate clean URL path (e.g., /feed, /explore)
-				return html`<a href="/${routeId}" class="nav-link" data-route="${routeId}">${routeLabel}${chatBadge}</a>`;
+				return html`<a href="/${routeId}" class="nav-link${isChatRoute ? ' nav-link--chat-unread' : ''}" data-route="${routeId}">${routeLabel}${chatBadge}</a>`;
 				}).join('')}
 				${(this.externalNavLinks || []).map((ext) =>
 				html`<a href="${ext.href}" class="nav-link nav-external-link">${ext.label}</a>`
@@ -1464,11 +1453,12 @@ class AppNavigation extends HTMLElement {
 				${(this.routes || []).map(route => {
 				const routeId = route.id;
 				const routeLabel = route.label;
+				const isChatRoute = routeId === 'connect' || String(routeLabel || '').trim().toLowerCase() === 'chat';
 				const chatBadge =
-					routeId === 'connect'
+					isChatRoute
 						? html`<span class="nav-link-unread-badge" aria-hidden="true"></span>`
 						: '';
-				return html`<a href="/${routeId}" class="nav-link" data-route="${routeId}">${routeLabel}${chatBadge}</a>`;
+				return html`<a href="/${routeId}" class="nav-link${isChatRoute ? ' nav-link--chat-unread' : ''}" data-route="${routeId}">${routeLabel}${chatBadge}</a>`;
 				}).join('')}
 				${(this.externalNavLinks || []).map((ext) =>
 				html`<a href="${ext.href}" class="nav-link nav-external-link">${ext.label}</a>`

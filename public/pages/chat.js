@@ -654,6 +654,7 @@ export async function initChatPage(root, options = {}) {
 	const chatGlobalUnreadChromeMod = await import(`../shared/chatGlobalUnreadChrome.js${qs}`);
 	const applyChatGlobalUnreadChrome = chatGlobalUnreadChromeMod.applyChatGlobalUnreadChrome;
 	const restoreChatGlobalUnreadFavicon = chatGlobalUnreadChromeMod.restoreChatGlobalUnreadFavicon;
+	const CHAT_UNREAD_TITLE_PREFIX_RE = chatGlobalUnreadChromeMod.CHAT_UNREAD_TITLE_PREFIX_RE;
 	const chatUnreadAudioMod = await import(`../shared/chatUnreadAudio.js${qs}`);
 	const playChatUnreadPing = chatUnreadAudioMod.playChatUnreadPing;
 	const chatAudiblePrefMod = await import(`../shared/chatAudibleNotificationsPref.js${qs}`);
@@ -688,7 +689,9 @@ export async function initChatPage(root, options = {}) {
 	if (sendBtnMount) {
 		sendBtnMount.innerHTML = sendIcon('chat-page-send-icon');
 	}
-	const docTitleBase = typeof document !== 'undefined' ? document.title : 'parascene';
+	const docTitleBase = typeof document !== 'undefined'
+		? String(document.title || 'parascene').replace(CHAT_UNREAD_TITLE_PREFIX_RE, '').trim()
+		: 'parascene';
 	let chatGlobalUnreadTotal = 0;
 	let chatGlobalUnreadInitialized = false;
 	let chatGlobalUnreadPoll = null;
@@ -837,6 +840,14 @@ export async function initChatPage(root, options = {}) {
 	let chatSidebarDmHoverPopoverEl = null;
 	/** @type {HTMLElement | null} */
 	let chatSidebarDmHoverActiveAnchor = null;
+	/** @type {HTMLElement | null} */
+	let chatSidebarNotificationsMenuEl = null;
+	/** @type {null | ((e: MouseEvent) => void)} */
+	let chatSidebarNotificationsOutsideClickHandler = null;
+	/** @type {Array<object>} */
+	let chatSidebarNotificationsPreviewCache = [];
+	let chatSidebarNotificationsPreviewLoadedAt = 0;
+	let chatSidebarNotificationsPreviewLoading = false;
 
 	let lastMarkReadSentId = null;
 	let lastReadThreadIdForMark = null;
@@ -3388,6 +3399,7 @@ export async function initChatPage(root, options = {}) {
 		const notifyBadgeEl = sidebar?.querySelector?.('[data-chat-sidebar-notify-badge]');
 		const creditBtn = sidebar?.querySelector?.('[data-chat-sidebar-open-credits]');
 		const creditIconEl = sidebar?.querySelector?.('[data-chat-sidebar-credit-icon]');
+		const creditBadgeEl = sidebar?.querySelector?.('[data-chat-sidebar-credit-badge]');
 		const creditCountEl = sidebar?.querySelector?.('[data-chat-sidebar-credit-count]');
 		if (!row || !avatarEl || !labelEl || !btn) return;
 		if (notifyIconEl instanceof HTMLElement && !notifyIconEl.innerHTML.trim()) {
@@ -3414,6 +3426,19 @@ export async function initChatPage(root, options = {}) {
 			}
 		}
 
+		function updateSidebarCreditsAttention(canClaim) {
+			if (!(creditBtn instanceof HTMLButtonElement)) return;
+			const show = canClaim === true;
+			creditBtn.classList.toggle('attention', show);
+			if (creditBadgeEl instanceof HTMLElement) {
+				creditBadgeEl.classList.toggle('has-unread', show);
+				creditBadgeEl.textContent = '';
+			}
+			if (show) {
+				creditBtn.setAttribute('aria-label', 'Open credits (daily claim available)');
+			}
+		}
+
 		function updateSidebarNotificationsUI(count) {
 			if (!(notifyBadgeEl instanceof HTMLElement)) return;
 			const n = Number.isFinite(Number(count)) ? Math.max(0, Number(count)) : 0;
@@ -3429,6 +3454,26 @@ export async function initChatPage(root, options = {}) {
 			notifyBadgeEl.classList.remove('has-unread');
 			if (notifyBtn instanceof HTMLButtonElement) {
 				notifyBtn.setAttribute('aria-label', 'Open notifications');
+			}
+		}
+
+		async function loadSidebarCreditsClaimStatus({ force = false } = {}) {
+			try {
+				const result = await fetchJsonWithStatusDeduped(
+					'/api/credits',
+					{ credentials: 'include' },
+					{ windowMs: force ? 0 : 2000 }
+				);
+				if (!result.ok) {
+					updateSidebarCreditsAttention(null);
+					return;
+				}
+				const canClaim = result?.data && typeof result.data.canClaim === 'boolean'
+					? result.data.canClaim
+					: null;
+				updateSidebarCreditsAttention(canClaim);
+			} catch {
+				updateSidebarCreditsAttention(null);
 			}
 		}
 
@@ -3500,16 +3545,26 @@ export async function initChatPage(root, options = {}) {
 			btn.setAttribute('aria-label', `Account: ${displayName}`);
 			updateSidebarCreditsUI(user?.credits);
 			void loadSidebarNotificationsCount();
+			void loadSidebarCreditsClaimStatus();
+			scheduleChatSidebarNotificationsPreviewPrefetch();
 			row.hidden = false;
 			const notificationsUpdatedHandler = () => {
 				void loadSidebarNotificationsCount({ force: true });
+				scheduleChatSidebarNotificationsPreviewPrefetch({ force: true });
+			};
+			const creditsUpdatedHandler = (event) => {
+				updateSidebarCreditsUI(event?.detail?.count);
+				void loadSidebarCreditsClaimStatus({ force: true });
+			};
+			const creditsClaimStatusHandler = (event) => {
+				const value = event?.detail?.canClaim;
+				updateSidebarCreditsAttention(typeof value === 'boolean' ? value : null);
 			};
 			if (sidebar && !sidebar.dataset.notificationsBound) {
 				sidebar.dataset.notificationsBound = '1';
 				document.addEventListener('notifications-acknowledged', notificationsUpdatedHandler);
-				document.addEventListener('credits-updated', (event) => {
-					updateSidebarCreditsUI(event?.detail?.count);
-				});
+				document.addEventListener('credits-updated', creditsUpdatedHandler);
+				document.addEventListener('credits-claim-status', creditsClaimStatusHandler);
 			}
 		} catch {
 			row.hidden = true;
@@ -3975,6 +4030,247 @@ export async function initChatPage(root, options = {}) {
 		await syncChatSidebarViewerRow();
 	}
 
+	function openHeaderNotificationsMenuFromSidebar() {
+		const nav = document.querySelector('app-navigation');
+		if (
+			nav &&
+			typeof nav.toggleNotificationsMenu === 'function' &&
+			window.getComputedStyle(nav).display !== 'none'
+		) {
+			nav.toggleNotificationsMenu();
+			return true;
+		}
+		const headerNotificationsButton = document.querySelector('app-navigation .notifications-button');
+		if (
+			headerNotificationsButton instanceof HTMLButtonElement &&
+			window.getComputedStyle(headerNotificationsButton).display !== 'none'
+		) {
+			headerNotificationsButton.click();
+			return true;
+		}
+		return false;
+	}
+
+	function closeChatSidebarNotificationsMenu() {
+		if (!(chatSidebarNotificationsMenuEl instanceof HTMLElement)) return;
+		chatSidebarNotificationsMenuEl.classList.remove('open');
+		chatSidebarNotificationsMenuEl.hidden = true;
+		document.dispatchEvent(new CustomEvent('modal-closed'));
+	}
+
+	function scheduleChatSidebarNotificationsPreviewPrefetch({ force = false } = {}) {
+		const run = () => {
+			void loadChatSidebarNotificationsPreviewData({ force });
+		};
+		if (window.requestIdleCallback) {
+			window.requestIdleCallback(run, { timeout: 1200 });
+			return;
+		}
+		setTimeout(run, 150);
+	}
+
+	function notificationCreationHref(n) {
+		if (!n) return null;
+		const link = typeof n.link === 'string' ? n.link.trim() : '';
+		if (/^\/creations\/\d+/.test(link)) return link;
+		if (n.creation_id != null && Number.isFinite(Number(n.creation_id))) {
+			return `/creations/${Number(n.creation_id)}`;
+		}
+		return null;
+	}
+
+	function notificationChatHref(n) {
+		if (!n) return null;
+		const link = typeof n.link === 'string' ? n.link.trim() : '';
+		if (/^\/chat\//.test(link)) return link;
+		return null;
+	}
+
+	function notificationPrimaryHref(n) {
+		return notificationChatHref(n) || notificationCreationHref(n);
+	}
+
+	function notificationPrimaryClickable(n) {
+		if (!n) return false;
+		if (n.type === 'tip') return true;
+		if (n.type === 'chat_mention' && notificationChatHref(n)) return true;
+		const href = notificationCreationHref(n);
+		return !!href && (n.type === 'comment' || n.type === 'comment_thread' || n.type === 'creation_activity');
+	}
+
+	function ensureChatSidebarNotificationsMenu(anchorBtn) {
+		if (!(anchorBtn instanceof HTMLElement)) return null;
+		const actionsWrap = anchorBtn.closest('.chat-page-sidebar-footer-actions');
+		if (!(actionsWrap instanceof HTMLElement)) return null;
+		if (chatSidebarNotificationsMenuEl instanceof HTMLElement && actionsWrap.contains(chatSidebarNotificationsMenuEl)) {
+			return chatSidebarNotificationsMenuEl;
+		}
+		const menu = document.createElement('div');
+		menu.className = 'chat-page-sidebar-notifications-menu';
+		menu.hidden = true;
+		menu.innerHTML = `
+			<div class="chat-page-sidebar-notifications-preview" data-chat-sidebar-notifications-preview></div>
+			<div class="chat-page-sidebar-notifications-divider"></div>
+			<button type="button" class="chat-page-sidebar-notifications-view-all" data-chat-sidebar-notifications-view-all>View all</button>
+		`;
+		menu.addEventListener('click', (e) => {
+			e.stopPropagation();
+		});
+		const viewAllBtn = menu.querySelector('[data-chat-sidebar-notifications-view-all]');
+		if (viewAllBtn instanceof HTMLButtonElement) {
+			viewAllBtn.addEventListener('click', () => {
+				closeChatSidebarNotificationsMenu();
+				document.dispatchEvent(new CustomEvent('open-notifications'));
+			});
+		}
+		actionsWrap.appendChild(menu);
+		chatSidebarNotificationsMenuEl = menu;
+		return menu;
+	}
+
+	async function loadChatSidebarNotificationsPreviewData({ force = false } = {}) {
+		const now = Date.now();
+		if (
+			!force &&
+			chatSidebarNotificationsPreviewCache.length > 0 &&
+			now - chatSidebarNotificationsPreviewLoadedAt < 30000
+		) {
+			return chatSidebarNotificationsPreviewCache;
+		}
+		if (chatSidebarNotificationsPreviewLoading) {
+			return chatSidebarNotificationsPreviewCache;
+		}
+		chatSidebarNotificationsPreviewLoading = true;
+		try {
+			const result = await fetchJsonWithStatusDeduped(
+				'/api/notifications',
+				{ credentials: 'include' },
+				{ windowMs: force ? 0 : 2000 }
+			);
+			if (!result.ok) return null;
+			const notifications = Array.isArray(result.data?.notifications)
+				? result.data.notifications.slice(0, 5)
+				: [];
+			chatSidebarNotificationsPreviewCache = notifications;
+			chatSidebarNotificationsPreviewLoadedAt = Date.now();
+			return notifications;
+		} catch {
+			return null;
+		} finally {
+			chatSidebarNotificationsPreviewLoading = false;
+		}
+	}
+
+	function renderChatSidebarNotificationsPreviewItems(preview, notifications) {
+		if (!(preview instanceof HTMLElement)) return;
+		if (!Array.isArray(notifications) || notifications.length === 0) {
+			preview.innerHTML =
+				'<div class="chat-page-sidebar-notifications-menu-item is-static">No notifications yet.</div>';
+			return;
+		}
+		const frag = document.createDocumentFragment();
+		for (const notification of notifications) {
+			const item = document.createElement('button');
+			item.type = 'button';
+			item.className = 'chat-page-sidebar-notifications-menu-item';
+			if (notification.acknowledged_at) item.classList.add('is-read');
+			const title = document.createElement('div');
+			title.className = 'chat-page-sidebar-notifications-title';
+			title.textContent = notification.title || 'Notification';
+			const message = document.createElement('div');
+			message.className = 'chat-page-sidebar-notifications-message';
+			message.textContent = notification.message || '';
+			const time = document.createElement('div');
+			time.className = 'chat-page-sidebar-notifications-time';
+			time.textContent = formatRelativeTime(notification.created_at) || '';
+			item.appendChild(title);
+			item.appendChild(message);
+			item.appendChild(time);
+			const clickable = notificationPrimaryClickable(notification);
+			if (!clickable) {
+				item.disabled = true;
+				item.classList.add('is-static');
+			} else {
+				item.addEventListener('click', async () => {
+					item.classList.add('is-loading');
+					item.setAttribute('aria-busy', 'true');
+					try {
+						await fetch('/api/notifications/acknowledge', {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+							body: new URLSearchParams({ id: String(notification.id) }),
+							credentials: 'include'
+						});
+					} catch {
+						// ignore
+					}
+					closeChatSidebarNotificationsMenu();
+					document.dispatchEvent(new CustomEvent('close-all-modals'));
+					const href = notificationPrimaryHref(notification);
+					if (href) {
+						window.location.href = href;
+						return;
+					}
+					if (notification.type === 'tip') {
+						document.dispatchEvent(
+							new CustomEvent('open-notifications', {
+								detail: { notificationId: notification.id }
+							})
+						);
+						document.dispatchEvent(new CustomEvent('notifications-acknowledged'));
+					}
+				});
+			}
+			frag.appendChild(item);
+		}
+		preview.innerHTML = '';
+		preview.appendChild(frag);
+	}
+
+	async function renderChatSidebarNotificationsPreview(menu) {
+		if (!(menu instanceof HTMLElement)) return;
+		const preview = menu.querySelector('[data-chat-sidebar-notifications-preview]');
+		if (!(preview instanceof HTMLElement)) return;
+		if (chatSidebarNotificationsPreviewCache.length > 0) {
+			renderChatSidebarNotificationsPreviewItems(preview, chatSidebarNotificationsPreviewCache);
+		} else {
+			preview.innerHTML = '<div class="chat-page-sidebar-notifications-menu-item is-loading">Loading...</div>';
+		}
+		try {
+			const notifications = await loadChatSidebarNotificationsPreviewData({
+				force: chatSidebarNotificationsPreviewCache.length === 0
+			});
+			if (!Array.isArray(notifications)) {
+				if (chatSidebarNotificationsPreviewCache.length > 0) return;
+				preview.innerHTML =
+					'<div class="chat-page-sidebar-notifications-menu-item is-static">Failed to load notifications.</div>';
+				return;
+			}
+			renderChatSidebarNotificationsPreviewItems(preview, notifications);
+		} catch {
+			if (chatSidebarNotificationsPreviewCache.length > 0) return;
+			preview.innerHTML =
+				'<div class="chat-page-sidebar-notifications-menu-item is-static">Failed to load notifications.</div>';
+		}
+	}
+
+	async function toggleChatSidebarNotificationsMenu(notificationsBtn) {
+		const menu = ensureChatSidebarNotificationsMenu(notificationsBtn);
+		if (!(menu instanceof HTMLElement)) {
+			document.dispatchEvent(new CustomEvent('open-notifications'));
+			return;
+		}
+		const willOpen = menu.hidden;
+		if (!willOpen) {
+			closeChatSidebarNotificationsMenu();
+			return;
+		}
+		menu.hidden = false;
+		menu.classList.add('open');
+		document.dispatchEvent(new CustomEvent('modal-opened'));
+		await renderChatSidebarNotificationsPreview(menu);
+	}
+
 	function setupChatSidebarClientNav() {
 		const sidebar = document.querySelector('[data-chat-sidebar]');
 		if (!sidebar) return;
@@ -4001,7 +4297,7 @@ export async function initChatPage(root, options = {}) {
 			if (notificationsBtn instanceof HTMLButtonElement) {
 				e.preventDefault();
 				e.stopPropagation();
-				document.dispatchEvent(new CustomEvent('open-notifications'));
+				void toggleChatSidebarNotificationsMenu(notificationsBtn);
 				return;
 			}
 			const creditsBtn = e.target?.closest?.('[data-chat-sidebar-open-credits]');
@@ -4078,8 +4374,22 @@ export async function initChatPage(root, options = {}) {
 		};
 		sidebar.addEventListener('mouseover', chatSidebarDmHoverOverHandler);
 		sidebar.addEventListener('mouseout', chatSidebarDmHoverOutHandler);
+		chatSidebarNotificationsOutsideClickHandler = (e) => {
+			if (!(chatSidebarNotificationsMenuEl instanceof HTMLElement)) return;
+			if (chatSidebarNotificationsMenuEl.hidden) return;
+			const t = e.target instanceof Element ? e.target : null;
+			if (!t) return;
+			if (chatSidebarNotificationsMenuEl.contains(t)) return;
+			if (t.closest?.('[data-chat-sidebar-open-notifications]')) return;
+			closeChatSidebarNotificationsMenu();
+		};
+		document.addEventListener('click', chatSidebarNotificationsOutsideClickHandler);
 
 		chatSidebarPopstateHandler = () => {
+			if (shouldShowMobileSidebarFromLocation()) {
+				setMobileSidebarMode(true);
+				return;
+			}
 			void openThreadForCurrentPath();
 		};
 		window.addEventListener('popstate', chatSidebarPopstateHandler);
@@ -7317,6 +7627,14 @@ export async function initChatPage(root, options = {}) {
 			sidebarNav.removeEventListener('mouseout', chatSidebarDmHoverOutHandler);
 			chatSidebarDmHoverOutHandler = null;
 		}
+		if (typeof chatSidebarNotificationsOutsideClickHandler === 'function') {
+			document.removeEventListener('click', chatSidebarNotificationsOutsideClickHandler);
+			chatSidebarNotificationsOutsideClickHandler = null;
+		}
+		if (chatSidebarNotificationsMenuEl instanceof HTMLElement) {
+			chatSidebarNotificationsMenuEl.remove();
+			chatSidebarNotificationsMenuEl = null;
+		}
 		if (sidebarNav && typeof chatSidebarSectionAddHandler === 'function') {
 			sidebarNav.removeEventListener('click', chatSidebarSectionAddHandler);
 			chatSidebarSectionAddHandler = null;
@@ -8753,8 +9071,13 @@ export async function initChatPage(root, options = {}) {
 	void loadChatGlobalUnreadSummary();
 	void hydrateAudibleNotificationsFromProfileOnce();
 	enableLikeButtons(root);
+	const shouldStartInMobileSidebar = shouldShowMobileSidebarFromLocation();
+	setMobileSidebarMode(shouldStartInMobileSidebar);
+	if (shouldStartInMobileSidebar) {
+		// Prioritize sidebar data immediately for /chat#channels first paint.
+		void refreshChatSidebar();
+	}
 	await openThreadForCurrentPath();
-	setMobileSidebarMode(shouldShowMobileSidebarFromLocation());
 	dispatchChatUnreadRefresh();
 	/** Presence/UI poll: keep roster status fresh without force-refetching all thread metadata. */
 	chatSidebarPollTimer = setInterval(() => void refreshChatSidebar({ skipThreadsFetch: true }), 15000);
