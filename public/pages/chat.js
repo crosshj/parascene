@@ -2059,6 +2059,13 @@ export async function initChatPage(root, options = {}) {
 			chatExploreCreationsBrowseView &&
 			(activePseudoChannelSlug === 'explore' || activePseudoChannelSlug === 'creations');
 		document.body.classList.toggle('chat-page--pseudo-browse-view', on);
+		const feedViewportScroll = activePseudoChannelSlug === 'feed';
+		document.body.classList.toggle('chat-page--feed-viewport-scroll', feedViewportScroll);
+		try {
+			document.documentElement.classList.toggle('chat-page--feed-viewport-scroll', feedViewportScroll);
+		} catch {
+			// ignore
+		}
 	}
 
 	syncChatBrowseViewBodyClassRef = syncChatBrowseViewBodyClass;

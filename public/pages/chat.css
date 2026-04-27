@@ -2053,6 +2053,48 @@ body.chat-page .chat-page-send-btn .chat-page-send-icon {
 	}
 }
 
+@media (max-width: 768px) {
+	html.chat-page.chat-page--feed-viewport-scroll {
+		height: auto;
+		min-height: 100%;
+		overflow-x: hidden;
+		overflow-y: auto;
+	}
+
+	body.chat-page.chat-page--feed-viewport-scroll {
+		height: auto;
+		min-height: 100%;
+		overflow-x: hidden;
+		overflow-y: visible;
+		overscroll-behavior-y: auto;
+	}
+
+	body.chat-page.chat-page--feed-viewport-scroll > .chat-shell {
+		position: relative;
+		height: auto;
+		min-height: var(--chat-vh, 100dvh);
+		overflow: visible;
+	}
+
+	body.chat-page.chat-page--feed-viewport-scroll main.chat-page-outer,
+	body.chat-page.chat-page--feed-viewport-scroll .chat-page-layout,
+	body.chat-page.chat-page--feed-viewport-scroll .chat-page-main-column,
+	body.chat-page.chat-page--feed-viewport-scroll .chat-page-main-split,
+	body.chat-page.chat-page--feed-viewport-scroll .chat-page-thread-pane,
+	body.chat-page.chat-page--feed-viewport-scroll .chat-route,
+	body.chat-page.chat-page--feed-viewport-scroll .chat-page-thread-body {
+		min-height: auto;
+	}
+
+	body.chat-page.chat-page--feed-viewport-scroll .chat-page-messages {
+		flex: 0 0 auto;
+		min-height: auto;
+		overflow: visible;
+		overscroll-behavior-y: auto;
+		-webkit-overflow-scrolling: auto;
+	}
+}
+
 @media print {
 	body.chat-page main.chat-page-outer {
 		max-width: none;
