@@ -5,7 +5,7 @@
 import { getAvatarColor } from './avatar.js';
 import { serverChannelTagFromServerName } from './serverChatTag.js';
 import { readDmPinKeysOrdered } from './chatDmPins.js';
-import { homeIcon, globeIcon, smsIcon, helpIcon, notesIcon, megaphoneIcon } from '../icons/svg-strings.js';
+import * as Icons from '../icons/svg-strings.js';
 
 function escapeHtmlPseudoStrip(str) {
 	return String(str ?? '')
@@ -43,17 +43,19 @@ function creationsRouteIcon(className = '') {
 }
 
 function feedbackMegaphoneIcon(className = '') {
-	return megaphoneIcon(className);
+	if (typeof Icons.megaphoneIcon === 'function') return Icons.megaphoneIcon(className);
+	const cls = className ? ` class="${escapeHtmlPseudoStrip(className)}"` : '';
+	return `<svg${cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 6a13 13 0 0 0 8.4-2.8A1 1 0 0 1 21 4v12a1 1 0 0 1-1.6.8A13 13 0 0 0 11 14H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"></path><path d="M6 14a12 12 0 0 0 2.4 7.2 2 2 0 0 0 3.2-2.4A8 8 0 0 1 10 14"></path><path d="M8 6v8"></path></svg>`;
 }
 
 function pseudoStripRouteIconSvg(slug, routeIconClass = 'chat-page-sidebar-channel-route-icon') {
 	const key = String(slug || '').trim().toLowerCase();
 	if (!key) return '';
 	const cls = String(routeIconClass || '').trim() || 'chat-page-sidebar-channel-route-icon';
-	if (key === 'feed') return homeIcon(cls);
-	if (key === 'explore') return globeIcon(cls);
+	if (key === 'feed') return typeof Icons.homeIcon === 'function' ? Icons.homeIcon(cls) : '';
+	if (key === 'explore') return typeof Icons.globeIcon === 'function' ? Icons.globeIcon(cls) : '';
 	if (key === 'creations') return creationsRouteIcon(cls);
-	if (key === 'comments') return smsIcon(cls);
+	if (key === 'comments') return typeof Icons.smsIcon === 'function' ? Icons.smsIcon(cls) : '';
 	if (key === 'feedback') return feedbackMegaphoneIcon(cls);
 	return '';
 }
@@ -329,12 +331,13 @@ export function buildSidebarHelpStripRow() {
 
 function sidebarHelpStripIconSvg(routeIconClass = 'chat-page-sidebar-channel-route-icon') {
 	const cls = String(routeIconClass || '').trim() || 'chat-page-sidebar-channel-route-icon';
-	return helpIcon(cls);
+	return typeof Icons.helpIcon === 'function' ? Icons.helpIcon(cls) : '';
 }
 
 function sidebarNotesStripIconSvg(routeIconClass = 'chat-page-sidebar-channel-route-icon') {
 	const cls = String(routeIconClass || '').trim() || 'chat-page-sidebar-channel-route-icon';
-	return notesIcon(cls);
+	if (typeof Icons.notesIcon === 'function') return Icons.notesIcon(cls);
+	return `<svg class="${escapeHtmlPseudoStrip(cls)}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.5m0 2.25a2.25 2.25 0 0 1 2.25 -2.25h11.5a2.25 2.25 0 0 1 2.25 2.25v14.5a2.25 2.25 0 0 1 -2.25 2.25h-11.5a2.25 2.25 0 0 1 -2.25 -2.25z"></path><path d="M8.25 7l7.5 0"></path><path d="M8.25 11.5l7.5 0"></path><path d="M8.25 16l5 0"></path></svg>`;
 }
 
 function sidebarHelpStripAvatarHtml() {
