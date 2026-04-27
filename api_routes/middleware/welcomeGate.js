@@ -6,6 +6,7 @@ const ALLOWED_PATHS = [
 	{ path: "/api/profile", methods: ["GET", "PUT", "POST", "PATCH"] },
 	{ path: "/api/profile/api-key", methods: ["POST", "DELETE"] },
 	{ path: "/api/account/email", methods: ["PUT"] },
+	{ path: "/api/users/usernames", methods: ["GET"] },
 	{ path: "/api/username-suggest", methods: ["GET"] },
 	{ path: "/api/policy/seen", methods: ["POST"] },
 	{ path: "/api/try/create", methods: ["POST"] },

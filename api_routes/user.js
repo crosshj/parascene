@@ -519,6 +519,24 @@ export default function createProfileRoutes({ queries }) {
 		res.json({ userId: req.auth?.userId || null });
 	});
 
+	router.get("/api/users/usernames", async (req, res) => {
+		try {
+			if (!queries.selectPublicUsernames?.all) {
+				return res.status(500).json({ error: "Username list unavailable" });
+			}
+
+			const rows = await queries.selectPublicUsernames.all();
+			const usernames = (Array.isArray(rows) ? rows : [])
+				.map((row) => (typeof row?.user_name === "string" ? row.user_name.trim() : ""))
+				.filter(Boolean);
+
+			res.set("Cache-Control", "public, max-age=300");
+			return res.json({ usernames });
+		} catch (error) {
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
 	// Username availability helper (used by /welcome)
 	router.get("/api/username-suggest", async (req, res) => {
 		if (!req.auth?.userId) {

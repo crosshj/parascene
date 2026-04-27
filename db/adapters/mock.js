@@ -170,6 +170,17 @@ export function openDb() {
 			get: async (userName) =>
 				user_profiles.find((row) => row.user_name === String(userName))
 		},
+		selectPublicUsernames: {
+			all: async () => {
+				const activeUserIds = new Set(
+					users.filter((u) => !u.meta?.suspended).map((u) => Number(u.id))
+				);
+				return user_profiles
+					.filter((row) => activeUserIds.has(Number(row.user_id)) && typeof row.user_name === "string" && row.user_name.trim())
+					.map((row) => ({ user_name: row.user_name.trim() }))
+					.sort((a, b) => a.user_name.localeCompare(b.user_name));
+			}
+		},
 		searchUserProfilesByPrefix: async (prefix, limit = 10) => {
 			if (typeof prefix !== "string" || !prefix.trim()) return [];
 			const normalized = String(prefix).toLowerCase().trim();

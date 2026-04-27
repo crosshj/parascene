@@ -161,6 +161,25 @@ export function openDb() {
 				return data ?? undefined;
 			}
 		},
+		selectPublicUsernames: {
+			all: async () => {
+				const profilesTable = prefixedTable("user_profiles");
+				const usersTable = prefixedTable("users");
+				const { data, error } = await serviceClient
+					.from(profilesTable)
+					.select(`user_name, ${usersTable}!inner(meta)`)
+					.not("user_name", "is", null)
+					.order("user_name", { ascending: true });
+				if (error) throw error;
+				return (data ?? [])
+					.filter((row) => {
+						const userName = typeof row?.user_name === "string" ? row.user_name.trim() : "";
+						const user = row?.[usersTable];
+						return userName && (!user?.meta || user.meta.suspended !== true);
+					})
+					.map((row) => ({ user_name: String(row.user_name).trim() }));
+			}
+		},
 		/** Single query: user_profiles joined to users (role = consumer, not suspended). Prefix + substring on user_name and display_name; prefix matches first. */
 		searchUserProfilesByPrefix: async (prefix, limit = 10) => {
 			if (typeof prefix !== "string" || !prefix.trim()) return [];

@@ -537,6 +537,20 @@ export async function openDb() {
 				return Promise.resolve(stmt.get(username));
 			}
 		},
+		selectPublicUsernames: {
+			all: async () => {
+				const stmt = db.prepare(
+					`SELECT up.user_name
+           FROM user_profiles up
+           INNER JOIN users u ON u.id = up.user_id
+           WHERE up.user_name IS NOT NULL
+             AND trim(up.user_name) != ''
+             AND (u.meta IS NULL OR json_extract(u.meta, '$.suspended') IS NULL OR json_extract(u.meta, '$.suspended') = 0 OR json_extract(u.meta, '$.suspended') = 'false')
+           ORDER BY lower(up.user_name) ASC`
+				);
+				return Promise.resolve(stmt.all());
+			}
+		},
 		/** Prefix + substring search for suggest/autocomplete on user_name and display_name; prefix matches first. Only returns users with role consumer and not suspended. */
 		searchUserProfilesByPrefix: async (prefix, limit = 10) => {
 			if (typeof prefix !== "string" || !prefix.trim()) return [];
