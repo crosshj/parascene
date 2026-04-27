@@ -1,5 +1,5 @@
 /**
- * Standalone chat thread page: no app header or mobile bottom nav.
+ * Standalone chat thread page: no app header, optional mobile bottom nav.
  */
 
 function getImportQuery(version) {
@@ -9,12 +9,23 @@ function getImportQuery(version) {
 export async function init(version) {
 	const qs = getImportQuery(version);
 	await import(`../../components/modals/server.js${qs}`);
+	await import(`../../components/navigation/index.js${qs}`);
+	await import(`../../components/navigation/mobile.js${qs}`);
 	await import(`../../components/modals/profile.js${qs}`);
+	await import(`../../components/modals/notifications.js${qs}`);
+	await import(`../../components/modals/credits.js${qs}`);
 	const { waitForComponents } = await import(`../../shared/pageInit.js${qs}`);
 	const { initChatPage } = await import(`../chat.js${qs}`);
 	const nsfwMod = await import(`../../shared/nsfwView.js${qs}`);
 	/* Reveal shell before chat API work (global.css hides body until .loaded). */
-	await waitForComponents(['app-modal-server', 'app-modal-profile']);
+	await waitForComponents([
+		'app-navigation',
+		'app-navigation-mobile',
+		'app-modal-server',
+		'app-modal-profile',
+		'app-modal-notifications',
+		'app-modal-credits'
+	]);
 	try {
 		nsfwMod.initNsfwViewPreference();
 	} catch {

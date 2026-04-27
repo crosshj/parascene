@@ -67,7 +67,7 @@ export function openDb() {
 				// Use serviceClient to bypass RLS for authentication
 				const { data, error } = await serviceClient
 					.from(prefixedTable("users"))
-					.select("id, email, role, created_at, meta")
+					.select("id, email, role, created_at, last_active_at, meta")
 					.eq("id", id)
 					.maybeSingle();
 				if (error) throw error;
@@ -125,7 +125,7 @@ export function openDb() {
 			if (idList.length === 0) return new Map();
 			const { data, error } = await serviceClient
 				.from(prefixedTable("users"))
-				.select("id, email, role, created_at, meta")
+				.select("id, email, role, created_at, last_active_at, meta")
 				.in("id", idList);
 			if (error) throw error;
 			const map = new Map();
@@ -708,6 +708,31 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		updateUserVynlyBearerToken: {
+			run: async (userId, { bearerToken, tokenPrefix } = {}) => {
+				const { data: current, error: selectError } = await serviceClient
+					.from(prefixedTable("users"))
+					.select("meta")
+					.eq("id", userId)
+					.maybeSingle();
+				if (selectError) throw selectError;
+				const existing = current?.meta ?? null;
+				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
+				if (bearerToken == null || bearerToken === "") {
+					delete meta.vynlyBearerToken;
+					delete meta.vynlyTokenPrefix;
+				} else {
+					meta.vynlyBearerToken = String(bearerToken).trim();
+					meta.vynlyTokenPrefix = typeof tokenPrefix === "string" ? tokenPrefix : "";
+				}
+				const { error } = await serviceClient
+					.from(prefixedTable("users"))
+					.update({ meta })
+					.eq("id", userId);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
 		selectUserIdByApiKeyHash: {
 			get: async (hash) => {
 				if (hash == null || typeof hash !== "string" || !hash.trim()) return undefined;
@@ -858,10 +883,18 @@ export function openDb() {
 							user_id: Number(row.id),
 							user_name: p.user_name ?? null,
 							display_name: p.display_name ?? null,
-							avatar_url: p.avatar_url ?? null
+							avatar_url: p.avatar_url ?? null,
+							presence_last_seen_at: ts
 						});
 						if (out.length >= cap) break;
 					}
+					out.sort((a, b) => {
+						const ams = Date.parse(String(a?.presence_last_seen_at || ''));
+						const bms = Date.parse(String(b?.presence_last_seen_at || ''));
+						const av = Number.isFinite(ams) ? ams : 0;
+						const bv = Number.isFinite(bms) ? bms : 0;
+						return bv - av;
+					});
 					return out;
 				};
 				const primary = await serviceClient
@@ -5094,6 +5127,18 @@ export function openDb() {
 				return { changes: data?.length ?? 0 };
 			}
 		},
+		unmarkCreatedImageUnavailable: {
+			run: async (id, userId) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.update({ unavailable_at: null })
+					.eq("id", id)
+					.eq("user_id", userId)
+					.select("id");
+				if (error) throw error;
+				return { changes: data?.length ?? 0 };
+			}
+		},
 		deleteCreatedImageById: {
 			run: async (id, userId) => {
 				const { data, error } = await serviceClient
@@ -5221,6 +5266,25 @@ export function openDb() {
 				}
 
 				const { data, error } = await query.select("id");
+				if (error) throw error;
+				return { changes: data?.length ?? 0 };
+			}
+		},
+		updateCreatedImageGroupCover: {
+			run: async (id, userId, { created_at, file_path, width, height, color, meta }) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("created_images"))
+					.update({
+						created_at,
+						file_path,
+						width,
+						height,
+						color: color ?? null,
+						meta
+					})
+					.eq("id", id)
+					.eq("user_id", userId)
+					.select("id");
 				if (error) throw error;
 				return { changes: data?.length ?? 0 };
 			}

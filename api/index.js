@@ -24,6 +24,7 @@ import createPresenceRoutes from "../api_routes/presence.js";
 import createFollowsRoutes from "../api_routes/follows.js";
 import createTodoRoutes from "../api_routes/todo.js";
 import createYoutubeRoutes from "../api_routes/youtube.js";
+import createVynlyRoutes from "../api_routes/vynly.js";
 import createXRoutes from "../api_routes/x.js";
 import createFeatureRequestRoutes from "../api_routes/feature_requests.js";
 import createChatRoutes from "../api_routes/chat.js";
@@ -203,6 +204,7 @@ app.use(createTodoRoutes());
 app.use(createPolicyRoutes());
 app.use(createTryRoutes({ queries, storage }));
 app.use(createYoutubeRoutes());
+app.use(createVynlyRoutes({ queries, storage }));
 app.use(createXRoutes());
 app.use(createFeatureRequestRoutes({ queries }));
 

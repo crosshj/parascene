@@ -12,11 +12,60 @@ const ENTER_SENDS = (() => {
 
 /** Align with `public/pages/chat.css` mobile chrome / canvas rules (`max-width: 768px`). */
 function isChatPageMobileLayout() {
+	const isLikelyMobileUa = (() => {
+		try {
+			const ua = String(window.navigator?.userAgent || '').toLowerCase();
+			return /android|iphone|ipod|ipad|mobile/.test(ua);
+		} catch {
+			return false;
+		}
+	})();
+	const coarsePointer = (() => {
+		try {
+			return window.matchMedia('(pointer: coarse)').matches;
+		} catch {
+			return false;
+		}
+	})();
 	try {
-		return window.matchMedia('(max-width: 768px)').matches;
+		if (window.matchMedia('(max-width: 768px)').matches) return true;
+		// Real devices can report wider CSS widths than desktop emulation suggests.
+		const vv = window.visualViewport;
+		const vvWidth =
+			vv && typeof vv.width === 'number' && Number.isFinite(vv.width) ? vv.width : NaN;
+		const iw =
+			typeof window.innerWidth === 'number' && Number.isFinite(window.innerWidth)
+				? window.innerWidth
+				: NaN;
+		const width = Number.isFinite(vvWidth) ? vvWidth : iw;
+		if (isLikelyMobileUa && coarsePointer && Number.isFinite(width) && width <= 900) return true;
+		return false;
 	} catch {
-		return typeof window.innerWidth === 'number' && window.innerWidth <= 768;
+		const iw = typeof window.innerWidth === 'number' ? window.innerWidth : NaN;
+		return Boolean(isLikelyMobileUa && coarsePointer && Number.isFinite(iw) && iw <= 900);
 	}
+}
+
+function shouldUseAppMobileHeaderForChatPath(pathname) {
+	const p = String(pathname || '').replace(/\/+$/, '') || '/';
+	if (p === '/' || p === '/index.html' || p === '/feed' || p === '/explore' || p === '/creations') return true;
+	if (!p.startsWith('/chat/c/')) return false;
+	const slug = p.slice('/chat/c/'.length).split('/')[0].trim().toLowerCase();
+	if (!slug || slug === 'feedback') return false;
+	return slug === 'feed' || slug === 'explore' || slug === 'creations';
+}
+
+function shouldShowMobileSidebarFromLocation() {
+	const path = String(window.location.pathname || '').replace(/\/+$/, '') || '/';
+	return isChatPageMobileLayout() && path === '/chat' && window.location.hash === '#channels';
+}
+
+function shouldShowAppMobileChromeForCurrentChatView(activePseudoSlug) {
+	if (!isChatPageMobileLayout()) return false;
+	if (shouldShowMobileSidebarFromLocation()) return true;
+	const slug = String(activePseudoSlug || '').trim().toLowerCase();
+	if (slug) return slug === 'feed' || slug === 'explore' || slug === 'creations';
+	return shouldUseAppMobileHeaderForChatPath(window.location.pathname);
 }
 
 /** `?chatSimulateSendFail=1` — next POST /messages returns failure so you can preview resend UI. */
@@ -66,14 +115,17 @@ let readCachedChatThreads;
 let writeCachedChatThreads;
 let clearCachedChatThreads;
 let isChatThreadsCacheStale;
+let readSidebarRosterSessionCache;
+let writeSidebarRosterSessionCache;
+let clearSidebarRosterSessionCache;
 let getAvatarColor;
 let buildProfilePath;
 let renderCommentAvatarHtml;
 let processUserText;
 let hydrateUserTextLinks;
 let hydrateChatCreationEmbeds;
-let renderEmptyError;
 let renderEmptyState;
+let renderPaneLoadError;
 let attachAutoGrowTextarea;
 let attachMentionSuggest;
 let isTriggeredSuggestPopupOpen;
@@ -81,6 +133,12 @@ let addPageUsers;
 let clearPageUsers;
 let enableLikeButtons;
 let createPseudoColumnPager;
+/** @type {((count?: number) => string) | undefined} */
+let renderFeedCardsSkeleton;
+/** @type {((count?: number) => string) | undefined} */
+let renderGridSkeleton;
+/** @type {((count?: number) => string) | undefined} */
+let renderCommentRowsSkeleton;
 let toggleChatMessageReaction;
 let setupReactionTooltipTap;
 let createConnectCommentRowElement;
@@ -208,6 +266,11 @@ async function loadDeps() {
 		clearCachedChatThreads = chatThreadsCacheMod.clearCachedChatThreads;
 		isChatThreadsCacheStale = chatThreadsCacheMod.isChatThreadsCacheStale;
 
+		const chatSidebarSessionCacheMod = await import(`../shared/chatSidebarSessionCache.js${qs}`);
+		readSidebarRosterSessionCache = chatSidebarSessionCacheMod.readSidebarRosterSessionCache;
+		writeSidebarRosterSessionCache = chatSidebarSessionCacheMod.writeSidebarRosterSessionCache;
+		clearSidebarRosterSessionCache = chatSidebarSessionCacheMod.clearSidebarRosterSessionCache;
+
 		const avatarMod = await import(`../shared/avatar.js${qs}`);
 		getAvatarColor = avatarMod.getAvatarColor;
 
@@ -223,8 +286,8 @@ async function loadDeps() {
 		hydrateChatCreationEmbeds = userTextMod.hydrateChatCreationEmbeds;
 
 		const emptyStateMod = await import(`../shared/emptyState.js${qs}`);
-		renderEmptyError = emptyStateMod.renderEmptyError;
 		renderEmptyState = emptyStateMod.renderEmptyState;
+		renderPaneLoadError = emptyStateMod.renderPaneLoadError;
 
 		const autogrowMod = await import(`../shared/autogrow.js${qs}`);
 		attachAutoGrowTextarea = autogrowMod.attachAutoGrowTextarea;
@@ -249,6 +312,11 @@ async function loadDeps() {
 
 		const columnPagerMod = await import(`../shared/pseudoChannelColumnPager.js${qs}`);
 		createPseudoColumnPager = columnPagerMod.createPseudoColumnPager;
+
+		const skeletonMod = await import(`../shared/skeleton.js${qs}`);
+		renderFeedCardsSkeleton = skeletonMod.renderFeedCardsSkeleton;
+		renderGridSkeleton = skeletonMod.renderGridSkeleton;
+		renderCommentRowsSkeleton = skeletonMod.renderCommentRowsSkeleton;
 	})();
 	return _depsPromise;
 }
@@ -423,6 +491,18 @@ function normalizeDmPathUsername(raw) {
  */
 function parseChatPathname(pathname) {
 	const p = String(pathname || '').replace(/\/+$/, '') || '/';
+	if (p === '/' || p === '/index.html' || p === '/feed') {
+		return { kind: 'channel', slug: 'feed' };
+	}
+		if (p === '/chat') {
+			return { kind: 'channel', slug: 'feed' };
+		}
+	if (p === '/explore') {
+		return { kind: 'channel', slug: 'explore' };
+	}
+	if (p === '/creations') {
+		return { kind: 'channel', slug: 'creations' };
+	}
 	const parts = p.split('/').filter(Boolean);
 	if (parts[0] !== 'chat') return { kind: 'invalid' };
 	if (parts.length === 1) return { kind: 'empty' };
@@ -553,6 +633,8 @@ export async function initChatPage(root, options = {}) {
 	const qs = getImportQuery(v);
 	const {
 		sendIcon,
+		notifyIcon,
+		creditIcon,
 		REACTION_ORDER,
 		REACTION_ICONS,
 		smileIcon,
@@ -572,6 +654,7 @@ export async function initChatPage(root, options = {}) {
 	const chatGlobalUnreadChromeMod = await import(`../shared/chatGlobalUnreadChrome.js${qs}`);
 	const applyChatGlobalUnreadChrome = chatGlobalUnreadChromeMod.applyChatGlobalUnreadChrome;
 	const restoreChatGlobalUnreadFavicon = chatGlobalUnreadChromeMod.restoreChatGlobalUnreadFavicon;
+	const CHAT_UNREAD_TITLE_PREFIX_RE = chatGlobalUnreadChromeMod.CHAT_UNREAD_TITLE_PREFIX_RE;
 	const chatUnreadAudioMod = await import(`../shared/chatUnreadAudio.js${qs}`);
 	const playChatUnreadPing = chatUnreadAudioMod.playChatUnreadPing;
 	const chatAudiblePrefMod = await import(`../shared/chatAudibleNotificationsPref.js${qs}`);
@@ -606,7 +689,9 @@ export async function initChatPage(root, options = {}) {
 	if (sendBtnMount) {
 		sendBtnMount.innerHTML = sendIcon('chat-page-send-icon');
 	}
-	const docTitleBase = typeof document !== 'undefined' ? document.title : 'parascene';
+	const docTitleBase = typeof document !== 'undefined'
+		? String(document.title || 'parascene').replace(CHAT_UNREAD_TITLE_PREFIX_RE, '').trim()
+		: 'parascene';
 	let chatGlobalUnreadTotal = 0;
 	let chatGlobalUnreadInitialized = false;
 	let chatGlobalUnreadPoll = null;
@@ -634,6 +719,8 @@ export async function initChatPage(root, options = {}) {
 	let tearDownChatCanvasUi = () => { };
 	let chatThreads = [];
 	let activeThreadId = null;
+	/** Most recent thread-ish meta used to paint desktop/mobile header title + avatar. */
+	let activeHeaderMeta = null;
 	/** @type {string | null} — e.g. reserved `comments`; not a real chat thread id. */
 	let activePseudoChannelSlug = null;
 	/** Shared pager for pseudo-column data (#comments / #feed / #explore / #creations); view layer owns DOM + sentinels. */
@@ -657,7 +744,39 @@ export async function initChatPage(root, options = {}) {
 	let exploreChannelSearchLoading = false;
 	/** True while `loadExploreChannelMessages` is running (browse or search path) so the composer can show the same trailing spinner. */
 	let exploreBrowseMessagesLoading = false;
-	let loadingMessages = false;
+	/** Bumped whenever a new load targets `[data-chat-messages]` so in-flight async work can bail before clobbering a newer navigation. */
+	let chatMessagesPaneEpoch = 0;
+	function bumpChatMessagesPaneEpoch() {
+		return ++chatMessagesPaneEpoch;
+	}
+	function isStaleChatPane(paneEpoch) {
+		return paneEpoch !== chatMessagesPaneEpoch;
+	}
+	/** Depth: thread DM/channel message list (not pseudo channels). */
+	let threadMessagesLoadDepth = 0;
+	let loadingThreadMessages = false;
+	function enterThreadMessagesLoad() {
+		threadMessagesLoadDepth += 1;
+		loadingThreadMessages = true;
+	}
+	function exitThreadMessagesLoad() {
+		threadMessagesLoadDepth = Math.max(0, threadMessagesLoadDepth - 1);
+		loadingThreadMessages = threadMessagesLoadDepth > 0;
+		syncChatMessagePlaceholder();
+	}
+	/** Depth: pseudo-channel panes (#comments / #feed / #explore / #creations). */
+	let pseudoChannelLoadDepth = 0;
+	let loadingPseudoChannelMessages = false;
+	function enterPseudoChannelLoad() {
+		pseudoChannelLoadDepth += 1;
+		loadingPseudoChannelMessages = true;
+		syncChatMessagePlaceholder();
+	}
+	function exitPseudoChannelLoad() {
+		pseudoChannelLoadDepth = Math.max(0, pseudoChannelLoadDepth - 1);
+		loadingPseudoChannelMessages = pseudoChannelLoadDepth > 0;
+		syncChatMessagePlaceholder();
+	}
 	let chatCreationsPollInterval = null;
 	let chatCreationsPollLastReloadAt = 0;
 
@@ -695,6 +814,10 @@ export async function initChatPage(root, options = {}) {
 	let chatSidebarNavClickHandler = null;
 	/** @type {null | ((e: Event) => void)} */
 	let chatSidebarSectionAddHandler = null;
+	/** @type {null | ((e: MouseEvent) => void)} */
+	let chatSidebarDmHoverOverHandler = null;
+	/** @type {null | ((e: MouseEvent) => void)} */
+	let chatSidebarDmHoverOutHandler = null;
 	/** @type {{ closeAll?: () => void } | null} */
 	let chatSidebarModalsApi = null;
 	/** @type {null | (() => void)} */
@@ -713,6 +836,18 @@ export async function initChatPage(root, options = {}) {
 	let chatInlineImageLightboxClickHandler = null;
 	/** @type {null | (() => void)} */
 	let chatHashtagChoiceModalCleanup = null;
+	/** @type {HTMLElement | null} */
+	let chatSidebarDmHoverPopoverEl = null;
+	/** @type {HTMLElement | null} */
+	let chatSidebarDmHoverActiveAnchor = null;
+	/** @type {HTMLElement | null} */
+	let chatSidebarNotificationsMenuEl = null;
+	/** @type {null | ((e: MouseEvent) => void)} */
+	let chatSidebarNotificationsOutsideClickHandler = null;
+	/** @type {Array<object>} */
+	let chatSidebarNotificationsPreviewCache = [];
+	let chatSidebarNotificationsPreviewLoadedAt = 0;
+	let chatSidebarNotificationsPreviewLoading = false;
 
 	let lastMarkReadSentId = null;
 	let lastReadThreadIdForMark = null;
@@ -723,9 +858,27 @@ export async function initChatPage(root, options = {}) {
 	let bottomDwellThreadId = null;
 
 	const CHAT_BOTTOM_THRESHOLD_PX = 56;
+	// TEMP: disable runtime auto-scroll behavior while keeping initial load at bottom.
+	const CHAT_TEMP_DISABLE_AUTO_SCROLL = true;
 	const DM_OFFLINE_GRACE_MS = 45 * 1000;
+	const DM_PROMOTION_RECENT_ACTIVE_WINDOW_MS = 15 * 60 * 1000;
+	const DM_ORDER_WEIGHT_LAST_SEEN = 0.9;
+	const DM_ORDER_WEIGHT_LAST_INTERACTED = 0.1;
+	const DM_ORDER_LAST_SEEN_DECAY_MS = 10 * 60 * 1000;
+	const DM_ORDER_LAST_INTERACTED_DECAY_MS = 45 * 60 * 1000;
+	const DM_ORDER_RECENT_ACTIVE_EXTREME_BUMP = 8;
+	const DM_ORDER_ONLINE_BOOST = 1;
+	const DM_ORDER_STALE_OFFLINE_MULTIPLIER = 0.1;
 	/** @type {Map<number, number>} */
 	const dmLastSeenOnlineAtByUserId = new Map();
+	/** Pin DM avatar URL per user for this page session (prevents poll-time URL churn/re-downloads). */
+	const chatSidebarDmAvatarUrlByUserId = new Map();
+	/** Pin viewer footer avatar URL for this page session. */
+	let chatSidebarViewerAvatarUrlPinned = '';
+	/** Last authored sidebar section HTML (avoid diffing against live DOM mutated by expand/collapse state). */
+	let chatSidebarLastDmHtml = '';
+	let chatSidebarLastServersHtml = '';
+	let chatSidebarLastChannelsHtml = '';
 
 	function isDmConsideredOnlineWithGrace(otherUserId, onlineIds) {
 		const oid = Number(otherUserId);
@@ -742,12 +895,271 @@ export async function initChatPage(root, options = {}) {
 		return false;
 	}
 
+	/** Keep first non-empty DM avatar URL for a user stable during this page session. */
+	function getPinnedSidebarDmAvatarUrl(otherUserId, avatarUrlRaw) {
+		const oid = Number(otherUserId);
+		const incoming = typeof avatarUrlRaw === 'string' ? avatarUrlRaw.trim() : '';
+		if (!Number.isFinite(oid) || oid <= 0) return incoming;
+		const cached = chatSidebarDmAvatarUrlByUserId.get(oid);
+		if (typeof cached === 'string' && cached) return cached;
+		if (incoming) {
+			chatSidebarDmAvatarUrlByUserId.set(oid, incoming);
+			return incoming;
+		}
+		return '';
+	}
+
+	/**
+	 * Keep base DM order stable, but promote online rows into the visible (uncollapsed) window.
+	 * Promotion only swaps with currently visible offline rows so the list does not fully reshuffle.
+	 * @param {object[]} dms
+	 * @param {{
+	 * 	visibleCap?: number,
+	 * 	isOnline?: ((t: object) => boolean) | null,
+	 * 	getLastSeenMs?: ((t: object) => number) | null,
+	 * 	getLastInteractedMs?: ((t: object) => number) | null
+	 * }} [opts]
+	 */
+	function prioritizeOnlineDmsInVisibleWindow(dms, opts = {}) {
+		const raw = Array.isArray(dms) ? dms : [];
+		const capRaw = Number(opts?.visibleCap);
+		const cap =
+			Number.isFinite(capRaw) && capRaw > 0
+				? Math.floor(capRaw)
+				: rosterMod.CHAT_SIDEBAR_COLLAPSE_LIST_CAP;
+		const isOnline = typeof opts?.isOnline === 'function' ? opts.isOnline : () => false;
+		const getLastSeenMs =
+			typeof opts?.getLastSeenMs === 'function'
+				? opts.getLastSeenMs
+				: () => 0;
+		const getLastInteractedMs =
+			typeof opts?.getLastInteractedMs === 'function'
+				? opts.getLastInteractedMs
+				: () => 0;
+		const isPriorityPresenceRow = (row, nowMs) => {
+			if (isOnline(row)) return true;
+			return lastSeenAgeMs(row, nowMs) <= DM_PROMOTION_RECENT_ACTIVE_WINDOW_MS;
+		};
+		const recencyDecayScore = (ms, nowMs, decayMs) => {
+			const ts = Number(ms);
+			if (!Number.isFinite(ts) || ts <= 0) return 0;
+			const age = Math.max(0, nowMs - ts);
+			return Math.exp(-age / decayMs);
+		};
+		const lastSeenAgeMs = (row, nowMs) => {
+			const seenRaw = Number(getLastSeenMs(row));
+			const seenMs = Number.isFinite(seenRaw) ? seenRaw : 0;
+			if (seenMs <= 0) return Infinity;
+			return Math.max(0, nowMs - seenMs);
+		};
+		const scoreRow = (row) => {
+			const nowMs = Date.now();
+			const online = isOnline(row);
+			const recentlyActive = lastSeenAgeMs(row, nowMs) <= DM_PROMOTION_RECENT_ACTIVE_WINDOW_MS;
+			const seenRaw = Number(getLastSeenMs(row));
+			const seenMs = Number.isFinite(seenRaw) ? seenRaw : 0;
+			const interactedRaw = Number(getLastInteractedMs(row));
+			const interactedMs = Number.isFinite(interactedRaw) ? interactedRaw : 0;
+			const seenScore = recencyDecayScore(seenMs, nowMs, DM_ORDER_LAST_SEEN_DECAY_MS);
+			const interactedScore = recencyDecayScore(
+				interactedMs,
+				nowMs,
+				DM_ORDER_LAST_INTERACTED_DECAY_MS
+			);
+			let score =
+				seenScore * DM_ORDER_WEIGHT_LAST_SEEN +
+				interactedScore * DM_ORDER_WEIGHT_LAST_INTERACTED;
+			if (recentlyActive) {
+				// Inside the 15-minute active window, presence should dominate over interaction recency.
+				score += DM_ORDER_RECENT_ACTIVE_EXTREME_BUMP;
+			}
+			if (online) {
+				score += DM_ORDER_ONLINE_BOOST;
+			} else if (!recentlyActive) {
+				// Strongly demote stale-offline rows so recently active users bubble up.
+				score *= DM_ORDER_STALE_OFFLINE_MULTIPLIER;
+			}
+			return score;
+		};
+		const reorderVisibleWithPriorityPresenceFirst = (rows) => {
+			const list = Array.isArray(rows) ? [...rows] : [];
+			if (list.length === 0) return list;
+			const vis = list.slice(0, cap);
+			const restRows = list.slice(cap);
+			const nowMs = Date.now();
+			const pri = [];
+			const other = [];
+			for (let i = 0; i < vis.length; i += 1) {
+				const row = vis[i];
+				if (isPriorityPresenceRow(row, nowMs)) {
+					pri.push({ row, i, score: scoreRow(row) });
+				} else {
+					other.push(row);
+				}
+			}
+			pri.sort((a, b) => {
+				if (a.score !== b.score) return b.score - a.score;
+				return a.i - b.i;
+			});
+			return [...pri.map((x) => x.row), ...other, ...restRows];
+		};
+		if (raw.length <= cap) return reorderVisibleWithPriorityPresenceFirst(raw);
+
+		const visible = raw.slice(0, cap);
+		const rest = raw.slice(cap);
+		const demotableVisibleRanked = [];
+		for (let i = 0; i < visible.length; i += 1) {
+			if (isOnline(visible[i])) continue;
+			demotableVisibleRanked.push({ i, score: scoreRow(visible[i]) });
+		}
+		demotableVisibleRanked.sort((a, b) => {
+			if (a.score !== b.score) return a.score - b.score;
+			return a.i - b.i;
+		});
+		const demotableVisibleIdxs = demotableVisibleRanked.map((x) => x.i);
+		if (demotableVisibleIdxs.length === 0) return [...raw];
+
+		const promotableRestRanked = [];
+		for (let i = 0; i < rest.length; i += 1) {
+			const row = rest[i];
+			const nowMs = Date.now();
+			if (!isPriorityPresenceRow(row, nowMs)) continue;
+			promotableRestRanked.push({ i, score: scoreRow(rest[i]) });
+		}
+		if (promotableRestRanked.length === 0) return [...raw];
+		promotableRestRanked.sort((a, b) => {
+			if (a.score !== b.score) return b.score - a.score;
+			return a.i - b.i;
+		});
+		const promotableRestIdxs = promotableRestRanked.map((x) => x.i);
+
+		const swapCount = Math.min(demotableVisibleIdxs.length, promotableRestIdxs.length);
+		if (swapCount <= 0) return [...raw];
+		const demoteIdxSet = new Set(demotableVisibleIdxs.slice(0, swapCount));
+		const promoteIdxSet = new Set(promotableRestIdxs.slice(0, swapCount));
+		const promoted = [];
+		for (let i = 0; i < rest.length; i += 1) {
+			if (promoteIdxSet.has(i)) promoted.push(rest[i]);
+		}
+		const demoted = [];
+		for (let i = 0; i < visible.length; i += 1) {
+			if (demoteIdxSet.has(i)) demoted.push(visible[i]);
+		}
+		let promotedCursor = 0;
+		const newVisible = visible.map((row, i) => {
+			if (!demoteIdxSet.has(i)) return row;
+			const next = promoted[promotedCursor];
+			promotedCursor += 1;
+			return next;
+		});
+		const restWithoutPromoted = [];
+		for (let i = 0; i < rest.length; i += 1) {
+			if (!promoteIdxSet.has(i)) restWithoutPromoted.push(rest[i]);
+		}
+		return reorderVisibleWithPriorityPresenceFirst([...newVisible, ...demoted, ...restWithoutPromoted]);
+	}
+
 	function dispatchChatUnreadRefresh() {
 		try {
 			document.dispatchEvent(new CustomEvent('chat-unread-refresh'));
 		} catch {
 			// ignore
 		}
+	}
+
+	function formatHoverAgoFromMs(ms) {
+		const n = Number(ms);
+		if (!Number.isFinite(n) || n <= 0) return 'Never';
+		const deltaMs = Date.now() - n;
+		if (Number.isFinite(deltaMs)) {
+			if (deltaMs < 45 * 1000) return 'just now';
+			if (deltaMs < 2 * 60 * 1000) return '1m ago';
+		}
+		try {
+			const iso = new Date(n).toISOString();
+			const rel = typeof formatRelativeTime === 'function' ? formatRelativeTime(iso) : '';
+			return rel || 'Just now';
+		} catch {
+			return 'Just now';
+		}
+	}
+
+	/**
+	 * Avoid churny sidebar row HTML: presence snapshots can move by seconds, which
+	 * would otherwise force `innerHTML` differences and avatar node replacement.
+	 * Quantize to minute buckets for hover metadata attrs.
+	 */
+	function quantizeSidebarHoverMs(ms) {
+		const n = Number(ms);
+		if (!Number.isFinite(n) || n <= 0) return 0;
+		const minute = 60 * 1000;
+		return Math.floor(n / minute) * minute;
+	}
+
+	function ensureChatSidebarDmHoverPopoverEl() {
+		if (chatSidebarDmHoverPopoverEl?.isConnected) return chatSidebarDmHoverPopoverEl;
+		const el = document.createElement('div');
+		el.className = 'chat-page-sidebar-dm-hover-popover';
+		el.setAttribute('role', 'status');
+		el.setAttribute('aria-live', 'polite');
+		el.hidden = true;
+		document.body.appendChild(el);
+		chatSidebarDmHoverPopoverEl = el;
+		return el;
+	}
+
+	function positionChatSidebarDmHoverPopover(anchorEl, popoverEl) {
+		if (!(anchorEl instanceof HTMLElement) || !(popoverEl instanceof HTMLElement)) return;
+		const titleRect = anchorEl.getBoundingClientRect();
+		const row = anchorEl.closest('.chat-page-sidebar-row');
+		const rowRect = row instanceof HTMLElement ? row.getBoundingClientRect() : titleRect;
+		const gap = 12;
+		const margin = 8;
+		const maxWidth = Math.min(320, window.innerWidth - 16);
+		popoverEl.style.maxWidth = `${maxWidth}px`;
+		popoverEl.style.left = '0px';
+		popoverEl.style.top = '0px';
+		popoverEl.hidden = false;
+		const popRect = popoverEl.getBoundingClientRect();
+		// Anchor to full row right edge so the popover clears the DM gear (title span ends before it).
+		let left = rowRect.right + gap;
+		if (left + popRect.width > window.innerWidth - margin) {
+			left = titleRect.left - popRect.width - gap;
+		}
+		left = Math.max(margin, Math.min(left, window.innerWidth - popRect.width - margin));
+		let top = titleRect.top + titleRect.height / 2 - popRect.height / 2;
+		top = Math.max(margin, Math.min(top, window.innerHeight - popRect.height - margin));
+		popoverEl.style.left = `${Math.round(left)}px`;
+		popoverEl.style.top = `${Math.round(top)}px`;
+	}
+
+	function hideChatSidebarDmHoverPopover() {
+		chatSidebarDmHoverActiveAnchor = null;
+		if (chatSidebarDmHoverPopoverEl instanceof HTMLElement) {
+			chatSidebarDmHoverPopoverEl.hidden = true;
+		}
+	}
+
+	function showChatSidebarDmHoverPopover(anchorEl) {
+		if (!(anchorEl instanceof HTMLElement)) return;
+		const popover = ensureChatSidebarDmHoverPopoverEl();
+		const interactedMs = Number(anchorEl.getAttribute('data-chat-dm-last-interacted-ms'));
+		const seenMs = Number(anchorEl.getAttribute('data-chat-dm-last-seen-ms'));
+		popover.innerHTML = '';
+		const titleEl = document.createElement('p');
+		titleEl.className = 'chat-page-sidebar-dm-hover-popover-title';
+		titleEl.textContent = 'Pulse';
+		const rowInteracted = document.createElement('p');
+		rowInteracted.className = 'chat-page-sidebar-dm-hover-popover-row';
+		rowInteracted.textContent = `Last interacted: ${formatHoverAgoFromMs(interactedMs)}`;
+		const rowSeen = document.createElement('p');
+		rowSeen.className = 'chat-page-sidebar-dm-hover-popover-row';
+		rowSeen.textContent = `Last active: ${formatHoverAgoFromMs(seenMs)}`;
+		popover.appendChild(titleEl);
+		popover.appendChild(rowInteracted);
+		popover.appendChild(rowSeen);
+		chatSidebarDmHoverActiveAnchor = anchorEl;
+		positionChatSidebarDmHoverPopover(anchorEl, popover);
 	}
 
 	function patchChatThreadRow(threadId, patch) {
@@ -789,7 +1201,7 @@ export async function initChatPage(root, options = {}) {
 	/** Mark read only after the latest message row is visible (IntersectionObserver). */
 	async function markLatestMessageRead() {
 		const threadId = activeThreadId;
-		if (!threadId || loadingMessages) return;
+		if (!threadId || loadingThreadMessages) return;
 		const messages = lastChatMessagesPayload;
 		if (!Array.isArray(messages) || messages.length === 0) return;
 		const last = messages[messages.length - 1];
@@ -864,6 +1276,11 @@ export async function initChatPage(root, options = {}) {
 	function scrollChatMessagesToFirstUnread(unreadEl) {
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!messagesEl || !unreadEl) return;
+		if (CHAT_TEMP_DISABLE_AUTO_SCROLL) {
+			// TEMP: keep first paint pinned to latest instead of jumping to first unread.
+			scrollChatMessagesToEnd('initial_load');
+			return;
+		}
 		chatStickToBottom = false;
 		const apply = () => {
 			unreadEl.scrollIntoView({ block: 'center', behavior: 'auto' });
@@ -910,9 +1327,13 @@ export async function initChatPage(root, options = {}) {
 	 * animation frames so mobile WebKit finishes layout before we read scrollHeight.
 	 * Async creation embeds and images still grow the list after this — ResizeObserver keeps the bottom pinned.
 	 */
-	function scrollChatMessagesToEnd() {
+	function scrollChatMessagesToEnd(reason = 'runtime') {
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!messagesEl) return;
+		if (CHAT_TEMP_DISABLE_AUTO_SCROLL && reason !== 'initial_load') {
+			// TEMP: disable non-initial auto-scroll jumps.
+			return;
+		}
 		chatStickToBottom = true;
 		teardownBottomDwellTimer();
 		const apply = () => {
@@ -923,6 +1344,15 @@ export async function initChatPage(root, options = {}) {
 			apply();
 			requestAnimationFrame(apply);
 		});
+		if (reason === 'initial_load') {
+			// TEMP: one-time settle snaps for late row growth (images/embeds/layout), without enabling auto-follow.
+			const settleDelays = [120, 320];
+			for (const ms of settleDelays) {
+				window.setTimeout(() => {
+					apply();
+				}, ms);
+			}
+		}
 	}
 
 	/** Feed / explore / creations pseudo-channels: match main feed — newest at top, scroll down for more. */
@@ -941,8 +1371,36 @@ export async function initChatPage(root, options = {}) {
 		});
 	}
 
+	/** After painting a skeleton into `[data-chat-messages]`, snap scroll and prevent scroll until content loads. */
+	function resetAndLockChatMessagesScrollForSkeleton(messagesEl, channelSlug) {
+		if (!(messagesEl instanceof HTMLElement)) return;
+		const slug = String(channelSlug || '').trim().toLowerCase();
+		const feedish = slug === 'feed' || slug === 'explore' || slug === 'creations';
+		const toEnd = feedish && chatFeedLaneScrollMode === 'oldest_first';
+		const apply = () => {
+			messagesEl.scrollTop = toEnd ? messagesEl.scrollHeight : 0;
+		};
+		apply();
+		requestAnimationFrame(() => {
+			apply();
+			requestAnimationFrame(apply);
+		});
+		messagesEl.dataset.chatMessagesScrollLock = '1';
+	}
+
+	function unlockChatMessagesPaneScroll(messagesEl) {
+		if (!(messagesEl instanceof HTMLElement)) return;
+		if (messagesEl.dataset.chatMessagesScrollLock === '1') {
+			delete messagesEl.dataset.chatMessagesScrollLock;
+		}
+	}
+
 	/** Re-scroll after visual viewport changes only if the user was already following the thread. */
 	function nudgeChatScrollIfStuckToBottom() {
+		if (CHAT_TEMP_DISABLE_AUTO_SCROLL) {
+			// TEMP: disable viewport-driven re-pinning.
+			return;
+		}
 		if (!chatStickToBottom) return;
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!messagesEl) return;
@@ -955,6 +1413,10 @@ export async function initChatPage(root, options = {}) {
 
 	function setupChatMessagesScrollAssist() {
 		teardownChatMessagesScrollAssist();
+		if (CHAT_TEMP_DISABLE_AUTO_SCROLL) {
+			// TEMP: keep scroll listeners/observers off so chat does not auto-follow updates.
+			return;
+		}
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!messagesEl) return;
 
@@ -1335,7 +1797,29 @@ export async function initChatPage(root, options = {}) {
 		}
 		const tid = activeThreadId;
 		const hasThread = tid != null && Number.isFinite(Number(tid)) && Number(tid) > 0;
-		bodyInput.placeholder = hasThread && !loadingMessages ? 'Message…' : '';
+		if (!hasThread || loadingThreadMessages || loadingPseudoChannelMessages) {
+			bodyInput.placeholder = '';
+			return;
+		}
+		const meta = (chatThreads || []).find((t) => Number(t.id) === Number(tid));
+		const titleEl = root.querySelector('[data-chat-title]');
+		const uiLabel = titleEl instanceof HTMLElement ? String(titleEl.textContent || '').trim() : '';
+		const metaTitle = meta?.title && String(meta.title).trim() ? String(meta.title).trim() : '';
+		const isChannel = meta?.type === 'channel';
+		const channelSlug = isChannel ? String(meta?.channel_slug || '').trim().toLowerCase() : '';
+		const pseudoLabel = channelSlug ? String(rosterMod.getSidebarPseudoChannelTitle(channelSlug) || '').trim() : '';
+		let label = uiLabel || metaTitle || pseudoLabel;
+		if (!label && isChannel && channelSlug) {
+			label = `#${channelSlug}`;
+		}
+		if (!label || label.toLowerCase() === 'chat') {
+			bodyInput.placeholder = 'Message…';
+			return;
+		}
+		if (isChannel && !label.startsWith('#') && !pseudoLabel) {
+			label = `#${label}`;
+		}
+		bodyInput.placeholder = `Message ${label}…`;
 	}
 
 	function syncExploreChannelBrowseUrl() {
@@ -1453,11 +1937,43 @@ export async function initChatPage(root, options = {}) {
 		const bodyInput = root.querySelector('[data-chat-body-input]');
 		const hint = root.querySelector('[data-chat-pseudo-composer-hint]');
 		const shell = root.querySelector('[data-chat-composer] .chat-page-input-shell');
+		const appHeader = document.querySelector('app-navigation');
+		const appMobileNav = document.querySelector('app-navigation-mobile');
+		const mobileChrome = mainColumn instanceof HTMLElement
+			? mainColumn.querySelector('[data-chat-mobile-chrome]')
+			: null;
+		const shouldShowAppMobileChrome = shouldShowAppMobileChromeForCurrentChatView(activePseudoChannelSlug);
+		const shouldShowAppMobileHeader = shouldShowAppMobileChrome;
+		const shouldShowAppMobileFooter = shouldShowAppMobileChrome;
+		const setMobileComposerOverlayClass = (on) => {
+			if (!document.body) return;
+			const shouldUseOverlay =
+				Boolean(on) &&
+				isChatPageMobileLayout() &&
+				!shouldShowAppMobileHeader &&
+				!shouldShowMobileSidebarFromLocation();
+			document.body.classList.toggle('chat-page--mobile-composer-overlay', shouldUseOverlay);
+		};
+		try {
+			document.documentElement.classList.toggle('chat-page--use-app-mobile-header', shouldShowAppMobileHeader);
+		} catch {
+			// ignore
+		}
+		if (appHeader instanceof HTMLElement) {
+			appHeader.hidden = !shouldShowAppMobileHeader;
+		}
+		if (appMobileNav instanceof HTMLElement) {
+			appMobileNav.hidden = !shouldShowAppMobileFooter;
+		}
+		if (mobileChrome instanceof HTMLElement) {
+			mobileChrome.hidden = shouldShowAppMobileHeader;
+		}
 
 		if (!chatComposerVisible) {
 			if (composerForm instanceof HTMLElement) {
 				composerForm.hidden = true;
 			}
+			setMobileComposerOverlayClass(false);
 			return;
 		}
 		if (
@@ -1476,6 +1992,7 @@ export async function initChatPage(root, options = {}) {
 			if (composerForm instanceof HTMLElement) {
 				composerForm.hidden = true;
 			}
+			setMobileComposerOverlayClass(false);
 			syncChatAttachmentsVisibility();
 			syncChatSendButton();
 			syncChatMessagePlaceholder();
@@ -1485,6 +2002,7 @@ export async function initChatPage(root, options = {}) {
 		if (composerForm instanceof HTMLElement) {
 			composerForm.hidden = false;
 		}
+		setMobileComposerOverlayClass(true);
 
 		if (!(bodyInput instanceof HTMLTextAreaElement)) return;
 
@@ -1514,15 +2032,83 @@ export async function initChatPage(root, options = {}) {
 
 	chatApplyComposerStateRef = applyComposerState;
 
+	function markThreadUiPending() {
+		const titleEl = root.querySelector('[data-chat-title]');
+		if (titleEl instanceof HTMLElement) {
+			titleEl.innerHTML = '';
+			titleEl.removeAttribute('data-chat-title-label');
+			titleEl.setAttribute('data-chat-title-awaiting', '1');
+			titleEl.setAttribute('aria-hidden', 'true');
+		}
+		activeHeaderMeta = null;
+		if (mainColumn instanceof HTMLElement) {
+			const mobileTitle = mainColumn.querySelector('[data-chat-mobile-chrome-title]');
+			const mobileChannel = mobileTitle?.querySelector?.('[data-chat-mobile-chrome-channel]');
+			const mobileCanvasWrap = mobileTitle?.querySelector?.('[data-chat-mobile-chrome-canvas-wrap]');
+			const mobileCanvas = mobileTitle?.querySelector?.('[data-chat-mobile-chrome-canvas]');
+			if (mobileChannel instanceof HTMLElement) mobileChannel.textContent = '';
+			if (mobileCanvas instanceof HTMLElement) mobileCanvas.textContent = '';
+			if (mobileCanvasWrap instanceof HTMLElement) mobileCanvasWrap.hidden = true;
+			if (mobileTitle instanceof HTMLElement) mobileTitle.removeAttribute('aria-label');
+		}
+	}
+
 	function syncChatBrowseViewBodyClass() {
 		if (!document.body) return;
 		const on =
 			chatExploreCreationsBrowseView &&
 			(activePseudoChannelSlug === 'explore' || activePseudoChannelSlug === 'creations');
 		document.body.classList.toggle('chat-page--pseudo-browse-view', on);
+		const viewportScrollMode =
+			activePseudoChannelSlug === 'feed' ||
+			activePseudoChannelSlug === 'explore' ||
+			activePseudoChannelSlug === 'creations';
+		document.body.classList.toggle('chat-page--viewport-scroll', viewportScrollMode);
+		try {
+			document.documentElement.classList.toggle('chat-page--viewport-scroll', viewportScrollMode);
+		} catch {
+			// ignore
+		}
 	}
 
 	syncChatBrowseViewBodyClassRef = syncChatBrowseViewBodyClass;
+
+	function setMobileSidebarMode(open) {
+		if (!document.body) return;
+		const on = Boolean(open) && shouldShowMobileSidebarFromLocation();
+		const shouldShowAppMobileChrome = shouldShowAppMobileChromeForCurrentChatView(activePseudoChannelSlug);
+		document.body.classList.toggle('chat-page--mobile-sidebar-open', on);
+		const viewportScrollMode =
+			on ||
+			activePseudoChannelSlug === 'feed' ||
+			activePseudoChannelSlug === 'explore' ||
+			activePseudoChannelSlug === 'creations';
+		document.body.classList.toggle('chat-page--viewport-scroll', viewportScrollMode);
+		try {
+			document.documentElement.classList.toggle('chat-page--viewport-scroll', viewportScrollMode);
+			if (shouldShowAppMobileChrome) {
+				document.documentElement.classList.add('chat-page--use-app-mobile-header');
+			} else {
+				document.documentElement.classList.remove('chat-page--use-app-mobile-header');
+			}
+		} catch {
+			// ignore
+		}
+		const appHeader = document.querySelector('app-navigation');
+		const appMobileNav = document.querySelector('app-navigation-mobile');
+		const mobileChrome = mainColumn instanceof HTMLElement
+			? mainColumn.querySelector('[data-chat-mobile-chrome]')
+			: null;
+		if (appHeader instanceof HTMLElement) {
+			appHeader.hidden = !shouldShowAppMobileChrome;
+		}
+		if (appMobileNav instanceof HTMLElement) {
+			appMobileNav.hidden = !shouldShowAppMobileChrome;
+		}
+		if (mobileChrome instanceof HTMLElement) {
+			mobileChrome.hidden = shouldShowAppMobileChrome;
+		}
+	}
 
 	function findOptimisticRow(messagesEl, tempId) {
 		if (!messagesEl || !tempId) return null;
@@ -1613,6 +2199,7 @@ export async function initChatPage(root, options = {}) {
 			nsfw: !!img?.nsfw,
 			media_type: typeof img?.media_type === 'string' ? img.media_type : 'image',
 			video_url: typeof img?.video_url === 'string' ? img.video_url : null,
+			meta: img?.meta && typeof img.meta === 'object' ? img.meta : null,
 		};
 	}
 
@@ -1910,23 +2497,20 @@ export async function initChatPage(root, options = {}) {
 		if (!(h1 instanceof HTMLElement) || !(chEl instanceof HTMLElement)) return;
 		const titleEl = root.querySelector('[data-chat-title]');
 		const awaiting = titleEl?.getAttribute('data-chat-title-awaiting') === '1';
-		const channelPart = awaiting ? '' : (titleEl?.textContent?.trim() || '');
-		chEl.textContent = channelPart;
-		if (activeCanvasRow && wrap instanceof HTMLElement && cvEl instanceof HTMLElement) {
-			const canvasPart = String(activeCanvasRow.title || '').trim() || 'Canvas';
-			cvEl.textContent = canvasPart;
-			wrap.hidden = false;
-			const al =
-				channelPart ? `${channelPart}, canvas ${canvasPart}` : `canvas ${canvasPart}`;
-			h1.setAttribute('aria-label', al);
-		} else if (wrap instanceof HTMLElement) {
+		const channelPart = awaiting ? '' : String(titleEl?.getAttribute('data-chat-title-label') || '').trim();
+		chEl.innerHTML = channelPart
+			? buildChatHeaderTitleInnerHtml(activeHeaderMeta, channelPart, { mobile: true })
+			: '';
+		if (wrap instanceof HTMLElement) {
+			// Keep mobile header title stable to the channel name; pinned canvas is indicated
+			// by the toggle button next to the caret.
 			wrap.hidden = true;
 			if (cvEl instanceof HTMLElement) cvEl.textContent = '';
-			if (channelPart) {
-				h1.setAttribute('aria-label', channelPart);
-			} else {
-				h1.removeAttribute('aria-label');
-			}
+		}
+		if (channelPart) {
+			h1.setAttribute('aria-label', channelPart);
+		} else {
+			h1.removeAttribute('aria-label');
 		}
 	}
 
@@ -2018,14 +2602,57 @@ export async function initChatPage(root, options = {}) {
 		document.title = `${label} · ${base}`;
 		applyChatGlobalUnreadChrome(chatGlobalUnreadTotal);
 		const titleEl = root.querySelector('[data-chat-title]');
+		activeHeaderMeta = meta || null;
 		if (titleEl) {
-			titleEl.textContent = label;
+			titleEl.setAttribute('data-chat-title-label', label);
+			titleEl.innerHTML = buildChatHeaderTitleInnerHtml(meta, label, { mobile: false });
 			if (String(label).trim()) {
 				titleEl.removeAttribute('data-chat-title-awaiting');
 				titleEl.removeAttribute('aria-hidden');
 			}
 		}
 		paintMobileChromeTitle();
+	}
+
+	function buildChatHeaderAvatarHtml(meta, opts = {}) {
+		const mobile = opts?.mobile === true;
+		const sizeCls = mobile ? 'chat-page-header-avatar--mobile' : 'chat-page-header-avatar--desktop';
+		if (meta?.type === 'dm') {
+			const ou = meta?.other_user && typeof meta.other_user === 'object' ? meta.other_user : null;
+			const avatarUrl = typeof ou?.avatar_url === 'string' ? ou.avatar_url.trim() : '';
+			const displayName =
+				(typeof ou?.display_name === 'string' && ou.display_name.trim()) ||
+				(typeof ou?.user_name === 'string' && ou.user_name.trim()) ||
+				(typeof meta?.title === 'string' && meta.title.trim().startsWith('@')
+					? meta.title.trim().slice(1)
+					: String(meta?.title || '').trim()) ||
+				'User';
+			const seed =
+				(typeof ou?.user_name === 'string' && ou.user_name.trim()) ||
+				(ou?.id != null ? String(ou.id) : '') ||
+				displayName;
+			const bg = escapeHtml(getAvatarColor(seed));
+			if (avatarUrl) {
+				return `<span class="chat-page-header-avatar ${sizeCls}" aria-hidden="true"><img class="chat-page-header-avatar-img" src="${escapeHtml(avatarUrl)}" alt="" loading="lazy" decoding="async"></span>`;
+			}
+			const glyph = escapeHtml(String(displayName || 'U').trim().charAt(0).toUpperCase() || 'U');
+			return `<span class="chat-page-header-avatar chat-page-header-avatar--fallback ${sizeCls}" style="background: ${bg};" data-chat-header-avatar-glyph="${glyph}" aria-hidden="true"></span>`;
+		}
+		const slugRaw = typeof meta?.channel_slug === 'string' ? meta.channel_slug.trim().toLowerCase() : '';
+		if (slugRaw && rosterMod.SIDEBAR_TOP_STRIP_CHANNEL_SLUGS.has(slugRaw)) {
+			const iconHtml = rosterMod.getPseudoStripRouteIconHtml(slugRaw, 'chat-page-header-route-icon');
+			if (iconHtml) {
+				return `<span class="chat-page-header-avatar chat-page-header-avatar--pseudo-strip ${sizeCls}" aria-hidden="true">${iconHtml}</span>`;
+			}
+		}
+		const seed = slugRaw || String(meta?.title || 'channel').trim().toLowerCase() || 'channel';
+		const bg = escapeHtml(getAvatarColor(seed));
+		return `<span class="chat-page-header-avatar chat-page-header-avatar--channel ${sizeCls}" style="background: ${bg};" data-chat-header-avatar-glyph="#" aria-hidden="true"></span>`;
+	}
+
+	function buildChatHeaderTitleInnerHtml(meta, label, opts = {}) {
+		const avatarHtml = buildChatHeaderAvatarHtml(meta, opts);
+		return `${avatarHtml}<span class="chat-page-header-title-text">${escapeHtml(label)}</span>`;
 	}
 
 	function buildChatReactionMetaRowHtml(m) {
@@ -2649,25 +3276,11 @@ export async function initChatPage(root, options = {}) {
 	}
 
 	function normalizePathForCompare(p) {
-		const s = String(p || '')
-			.replace(/\/+$/, '')
-			.trim();
-		return s || '/';
+		return rosterMod.normalizeChatNavPathForCompare(p);
 	}
 
 	function isChatHrefActive(href) {
-		const cur = normalizePathForCompare(window.location.pathname);
-		let pathOnly = href;
-		if (typeof href === 'string' && href.startsWith('/')) {
-			pathOnly = href.split('?')[0].split('#')[0];
-		} else {
-			try {
-				pathOnly = new URL(href, window.location.origin).pathname;
-			} catch {
-				return false;
-			}
-		}
-		return normalizePathForCompare(pathOnly) === cur;
+		return rosterMod.isChatPseudoStripHrefActive(href);
 	}
 
 	async function fetchJoinedServersForChat() {
@@ -2688,21 +3301,77 @@ export async function initChatPage(root, options = {}) {
 			.filter((s) => Number.isFinite(s.id) && s.id > 0);
 	}
 
-	async function fetchPresenceOnlineIds() {
+	async function fetchPresenceOnlineSnapshot() {
 		try {
 			const res = await fetch('/api/presence/online', { credentials: 'include' });
-			if (!res.ok) return new Set();
+			if (!res.ok) {
+				return { onlineIds: new Set(), lastSeenMsByUserId: new Map() };
+			}
 			const data = await res.json().catch(() => ({}));
 			const users = Array.isArray(data.users) ? data.users : [];
-			const set = new Set();
+			const onlineIds = new Set();
+			const lastSeenMsByUserId = new Map();
 			for (const u of users) {
 				const id = Number(u.user_id);
-				if (Number.isFinite(id) && id > 0) set.add(id);
+				if (!Number.isFinite(id) || id <= 0) continue;
+				onlineIds.add(id);
+				const ms = Date.parse(String(u?.presence_last_seen_at || ''));
+				if (Number.isFinite(ms)) {
+					lastSeenMsByUserId.set(id, ms);
+					dmLastSeenOnlineAtByUserId.set(id, ms);
+				}
 			}
-			return set;
+			return { onlineIds, lastSeenMsByUserId };
 		} catch {
-			return new Set();
+			return { onlineIds: new Set(), lastSeenMsByUserId: new Map() };
 		}
+	}
+
+	async function fetchPresenceLastActiveSnapshot(userIds) {
+		const ids = Array.isArray(userIds)
+			? [...new Set(userIds.map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0))]
+			: [];
+		if (ids.length === 0) return new Map();
+		try {
+			const res = await fetch('/api/presence/last-active', {
+				method: 'POST',
+				credentials: 'include',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ user_ids: ids })
+			});
+			if (!res.ok) return new Map();
+			const data = await res.json().catch(() => ({}));
+			const users = Array.isArray(data.users) ? data.users : [];
+			const out = new Map();
+			for (const u of users) {
+				const id = Number(u?.user_id);
+				if (!Number.isFinite(id) || id <= 0) continue;
+				const activeMs = Date.parse(String(u?.last_active_at || ''));
+				const presenceMs = Date.parse(String(u?.presence_last_seen_at || ''));
+				const a = Number.isFinite(activeMs) ? activeMs : 0;
+				const p = Number.isFinite(presenceMs) ? presenceMs : 0;
+				const best = Math.max(a, p);
+				if (best > 0) out.set(id, best);
+			}
+			return out;
+		} catch {
+			return new Map();
+		}
+	}
+
+	function collectDmOtherUserIdsForPresence(threads) {
+		const list = Array.isArray(threads) ? threads : [];
+		const ids = [];
+		for (const t of list) {
+			if (!t || t.type !== 'dm') continue;
+			const oid = Number(rosterMod.getDmOtherUserId(t));
+			if (!Number.isFinite(oid) || oid <= 0) continue;
+			if (chatViewerId != null && Number.isFinite(Number(chatViewerId)) && Number(oid) === Number(chatViewerId)) {
+				continue;
+			}
+			ids.push(oid);
+		}
+		return [...new Set(ids)];
 	}
 
 	/** For DM sidebar notes-to-self row (title + avatar when thread not created yet). */
@@ -2735,14 +3404,112 @@ export async function initChatPage(root, options = {}) {
 		}
 	}
 
-	/** Desktop sidebar footer: current user; opens same menu as header profile (open-profile). */
+	/** Desktop sidebar footer: current user; opens account menu (open-account-menu), same as header avatar. */
 	async function syncChatSidebarViewerRow() {
 		const sidebar = document.querySelector('[data-chat-sidebar]');
 		const row = sidebar?.querySelector?.('[data-chat-sidebar-user-row]');
 		const avatarEl = sidebar?.querySelector?.('[data-chat-sidebar-user-avatar]');
 		const labelEl = sidebar?.querySelector?.('[data-chat-sidebar-user-label]');
 		const btn = sidebar?.querySelector?.('[data-chat-sidebar-open-profile]');
+		const notifyBtn = sidebar?.querySelector?.('[data-chat-sidebar-open-notifications]');
+		const notifyIconEl = sidebar?.querySelector?.('[data-chat-sidebar-notify-icon]');
+		const notifyBadgeEl = sidebar?.querySelector?.('[data-chat-sidebar-notify-badge]');
+		const creditBtn = sidebar?.querySelector?.('[data-chat-sidebar-open-credits]');
+		const creditIconEl = sidebar?.querySelector?.('[data-chat-sidebar-credit-icon]');
+		const creditBadgeEl = sidebar?.querySelector?.('[data-chat-sidebar-credit-badge]');
+		const creditCountEl = sidebar?.querySelector?.('[data-chat-sidebar-credit-count]');
 		if (!row || !avatarEl || !labelEl || !btn) return;
+		if (notifyIconEl instanceof HTMLElement && !notifyIconEl.innerHTML.trim()) {
+			notifyIconEl.innerHTML = notifyIcon('icon');
+		}
+		if (creditIconEl instanceof HTMLElement && !creditIconEl.innerHTML.trim()) {
+			creditIconEl.innerHTML = creditIcon('icon');
+		}
+
+		function parseCreditsCount(value) {
+			const count = Number(value);
+			if (!Number.isFinite(count)) return 0;
+			return Math.max(0, Math.round(count * 10) / 10);
+		}
+
+		function updateSidebarCreditsUI(value) {
+			if (!(creditCountEl instanceof HTMLElement)) return;
+			const normalized = parseCreditsCount(value);
+			const wholePart = Math.floor(normalized);
+			const decimalPart = normalized - wholePart;
+			creditCountEl.textContent = decimalPart > 0 ? `${wholePart}+` : String(wholePart);
+			if (creditBtn instanceof HTMLButtonElement) {
+				creditBtn.setAttribute('aria-label', `Open credits (${creditCountEl.textContent})`);
+			}
+		}
+
+		function updateSidebarCreditsAttention(canClaim) {
+			if (!(creditBtn instanceof HTMLButtonElement)) return;
+			const show = canClaim === true;
+			creditBtn.classList.toggle('attention', show);
+			if (creditBadgeEl instanceof HTMLElement) {
+				creditBadgeEl.classList.toggle('has-unread', show);
+				creditBadgeEl.textContent = '';
+			}
+			if (show) {
+				creditBtn.setAttribute('aria-label', 'Open credits (daily claim available)');
+			}
+		}
+
+		function updateSidebarNotificationsUI(count) {
+			if (!(notifyBadgeEl instanceof HTMLElement)) return;
+			const n = Number.isFinite(Number(count)) ? Math.max(0, Number(count)) : 0;
+			if (n > 0) {
+				notifyBadgeEl.textContent = n > 99 ? '99+' : String(n);
+				notifyBadgeEl.classList.add('has-unread');
+				if (notifyBtn instanceof HTMLButtonElement) {
+					notifyBtn.setAttribute('aria-label', `${n} unread notifications`);
+				}
+				return;
+			}
+			notifyBadgeEl.textContent = '';
+			notifyBadgeEl.classList.remove('has-unread');
+			if (notifyBtn instanceof HTMLButtonElement) {
+				notifyBtn.setAttribute('aria-label', 'Open notifications');
+			}
+		}
+
+		async function loadSidebarCreditsClaimStatus({ force = false } = {}) {
+			try {
+				const result = await fetchJsonWithStatusDeduped(
+					'/api/credits',
+					{ credentials: 'include' },
+					{ windowMs: force ? 0 : 2000 }
+				);
+				if (!result.ok) {
+					updateSidebarCreditsAttention(null);
+					return;
+				}
+				const canClaim = result?.data && typeof result.data.canClaim === 'boolean'
+					? result.data.canClaim
+					: null;
+				updateSidebarCreditsAttention(canClaim);
+			} catch {
+				updateSidebarCreditsAttention(null);
+			}
+		}
+
+		async function loadSidebarNotificationsCount({ force = false } = {}) {
+			try {
+				const result = await fetchJsonWithStatusDeduped(
+					'/api/notifications/unread-count',
+					{ credentials: 'include' },
+					{ windowMs: force ? 0 : 2000 }
+				);
+				if (!result.ok) {
+					updateSidebarNotificationsUI(0);
+					return;
+				}
+				updateSidebarNotificationsUI(result.data?.count || 0);
+			} catch {
+				updateSidebarNotificationsUI(0);
+			}
+		}
 
 		const vid = chatViewerId;
 		if (vid == null || !Number.isFinite(Number(vid))) {
@@ -2772,10 +3539,14 @@ export async function initChatPage(root, options = {}) {
 				'Account';
 			const handle =
 				(typeof prof.user_name === 'string' && prof.user_name.trim()) || String(vid);
-			const avatarUrl =
+			const avatarUrlRaw =
 				typeof prof.avatar_url === 'string' && prof.avatar_url.trim()
 					? prof.avatar_url.trim()
 					: '';
+			if (!chatSidebarViewerAvatarUrlPinned && avatarUrlRaw) {
+				chatSidebarViewerAvatarUrlPinned = avatarUrlRaw;
+			}
+			const avatarUrl = chatSidebarViewerAvatarUrlPinned || avatarUrlRaw;
 			const avatarHtml = renderCommentAvatarHtml({
 				avatarUrl,
 				displayName: displayName || handle,
@@ -2784,10 +3555,34 @@ export async function initChatPage(root, options = {}) {
 				isFounder: user?.plan === 'founder',
 				flairSize: 'sm'
 			});
-			avatarEl.innerHTML = avatarHtml;
+			if (avatarEl.innerHTML !== avatarHtml) {
+				avatarEl.innerHTML = avatarHtml;
+			}
 			labelEl.textContent = displayName;
 			btn.setAttribute('aria-label', `Account: ${displayName}`);
+			updateSidebarCreditsUI(user?.credits);
+			void loadSidebarNotificationsCount();
+			void loadSidebarCreditsClaimStatus();
+			scheduleChatSidebarNotificationsPreviewPrefetch();
 			row.hidden = false;
+			const notificationsUpdatedHandler = () => {
+				void loadSidebarNotificationsCount({ force: true });
+				scheduleChatSidebarNotificationsPreviewPrefetch({ force: true });
+			};
+			const creditsUpdatedHandler = (event) => {
+				updateSidebarCreditsUI(event?.detail?.count);
+				void loadSidebarCreditsClaimStatus({ force: true });
+			};
+			const creditsClaimStatusHandler = (event) => {
+				const value = event?.detail?.canClaim;
+				updateSidebarCreditsAttention(typeof value === 'boolean' ? value : null);
+			};
+			if (sidebar && !sidebar.dataset.notificationsBound) {
+				sidebar.dataset.notificationsBound = '1';
+				document.addEventListener('notifications-acknowledged', notificationsUpdatedHandler);
+				document.addEventListener('credits-updated', creditsUpdatedHandler);
+				document.addEventListener('credits-claim-status', creditsClaimStatusHandler);
+			}
 		} catch {
 			row.hidden = true;
 		}
@@ -2802,7 +3597,7 @@ export async function initChatPage(root, options = {}) {
 		if (!sidebarRosterPrefetchPack) {
 			sidebarRosterPrefetchPack = {
 				joined: fetchJoinedServersForChat(),
-				presence: fetchPresenceOnlineIds(),
+				presence: fetchPresenceOnlineSnapshot(),
 				profileMini: fetchChatViewerProfileMini()
 			};
 		}
@@ -2831,13 +3626,43 @@ export async function initChatPage(root, options = {}) {
 		}
 
 		const deps = { renderCommentAvatarHtml, getAvatarColor };
+		function captureSectionExpandedState(sectionEl) {
+			if (!(sectionEl instanceof HTMLElement)) return false;
+			const block = sectionEl.querySelector('[data-chat-sidebar-collapsible]');
+			return block instanceof HTMLElement && block.classList.contains('is-expanded');
+		}
+
+		function applySectionExpandedState(sectionEl, expanded) {
+			if (!expanded || !(sectionEl instanceof HTMLElement)) return;
+			const block = sectionEl.querySelector('[data-chat-sidebar-collapsible]');
+			if (!(block instanceof HTMLElement)) return;
+			const rest = block.querySelector('.chat-page-sidebar-collapsible-rest');
+			const moreBtn = block.querySelector('[data-chat-collapsible="more"]');
+			const lessBtn = block.querySelector('[data-chat-collapsible="less"]');
+			if (rest instanceof HTMLElement) rest.hidden = false;
+			block.classList.add('is-expanded');
+			moreBtn?.setAttribute('aria-expanded', 'true');
+			lessBtn?.setAttribute('aria-expanded', 'true');
+		}
 		/**
 		 * Same roster as Connect: merge threads + joined-server channel stubs, then split into
 		 * sections for layout only (DMs / server-linked channels / other channels).
 		 */
-		const render = (threads, joined, onlineIds, viewerProfile) => {
+		const render = (threads, joined, presenceSnapshot, viewerProfile) => {
+			const dmExpanded = captureSectionExpandedState(dmEl);
+			const svExpanded = captureSectionExpandedState(svEl);
+			const chExpanded = captureSectionExpandedState(chEl);
 			const threadsArr = Array.isArray(threads) ? threads : [];
 			const joinedArr = Array.isArray(joined) ? joined : [];
+			const onlineIds = presenceSnapshot?.onlineIds instanceof Set ? presenceSnapshot.onlineIds : new Set();
+			const lastSeenMsByUserId =
+				presenceSnapshot?.lastSeenMsByUserId instanceof Map
+					? presenceSnapshot.lastSeenMsByUserId
+					: new Map();
+			const lastActiveMsByUserId =
+				presenceSnapshot?.lastActiveMsByUserId instanceof Map
+					? presenceSnapshot.lastActiveMsByUserId
+					: new Map();
 			const merged = rosterMod.appendReservedPseudoChannels(
 				rosterMod.mergeThreadRowsWithJoinedServers(threadsArr, joinedArr)
 			);
@@ -2849,9 +3674,68 @@ export async function initChatPage(root, options = {}) {
 				);
 				if (tag) joinedSlugs.add(tag.toLowerCase());
 			}
-			const dmsRaw = merged.filter((t) => t && t.type === 'dm');
+			const dmsRaw = merged.filter((t) => t && t.type === 'dm').map((t) => {
+				if (!t || t.type !== 'dm') return t;
+				const ou = t.other_user && typeof t.other_user === 'object' ? t.other_user : null;
+				const oid = rosterMod.getDmOtherUserId(t);
+				const pinnedAvatarUrl = getPinnedSidebarDmAvatarUrl(oid, ou?.avatar_url);
+				if (!ou) return t;
+				const currentAvatar = typeof ou.avatar_url === 'string' ? ou.avatar_url.trim() : '';
+				if (currentAvatar === pinnedAvatarUrl) return t;
+				return {
+					...t,
+					other_user: {
+						...ou,
+						avatar_url: pinnedAvatarUrl || null
+					}
+				};
+			});
 			const dmsNorm = rosterMod.normalizeDmListWithSelfFirst(dmsRaw, chatViewerId, viewerProfile);
-			const dms = rosterMod.sortDmsWithPinnedOrder(dmsNorm, chatViewerId);
+			const isDmOnlineForSidebar = (t) => {
+				if (!t || t.type !== 'dm') return false;
+				const selfDm = rosterMod.isSelfDmThread(t, chatViewerId);
+				if (selfDm) return true;
+				const oid = rosterMod.getDmOtherUserId(t);
+				return isDmConsideredOnlineWithGrace(oid, onlineIds);
+			};
+			const dmLastActiveMsForSidebar = (t) => {
+				if (!t || t.type !== 'dm') return 0;
+				if (rosterMod.isSelfDmThread(t, chatViewerId)) return Date.now();
+				const oid = rosterMod.getDmOtherUserId(t);
+				const id = Number(oid);
+				if (!Number.isFinite(id) || id <= 0) return 0;
+				const fromLastActive = Number(lastActiveMsByUserId.get(id));
+				if (Number.isFinite(fromLastActive) && fromLastActive > 0) return fromLastActive;
+				const fromSnapshot = Number(lastSeenMsByUserId.get(id));
+				if (Number.isFinite(fromSnapshot) && fromSnapshot > 0) return fromSnapshot;
+				const fromGrace = Number(dmLastSeenOnlineAtByUserId.get(id));
+				if (Number.isFinite(fromGrace) && fromGrace > 0) return fromGrace;
+				return 0;
+			};
+			const dmLastInteractedMsForSidebar = (t) => {
+				if (!t || t.type !== 'dm') return 0;
+				const createdAt = t?.last_message?.created_at;
+				const ms = Date.parse(String(createdAt || ''));
+				return Number.isFinite(ms) ? ms : 0;
+			};
+			const dmDomKeyForSidebarRow = (t) => {
+				if (!t || t.type !== 'dm') return '';
+				const stable = rosterMod.dmStablePinStorageKey(t);
+				if (stable) return stable;
+				const oid = Number(rosterMod.getDmOtherUserId(t));
+				if (Number.isFinite(oid) && oid > 0) return `dm:${oid}`;
+				const id = Number(t.id);
+				if (Number.isFinite(id) && id > 0) return `thread:${id}`;
+				return '';
+			};
+			const dmsPinned = rosterMod.sortDmsWithPinnedOrder(dmsNorm, chatViewerId);
+			// Single explicit ordering point for sidebar DMs before HTML rendering.
+			const dms = prioritizeOnlineDmsInVisibleWindow(dmsPinned, {
+				visibleCap: rosterMod.CHAT_SIDEBAR_COLLAPSE_LIST_CAP,
+				isOnline: isDmOnlineForSidebar,
+					getLastSeenMs: dmLastActiveMsForSidebar,
+				getLastInteractedMs: dmLastInteractedMsForSidebar
+			});
 			const channelRowsRaw = merged.filter((t) => t && t.type === 'channel');
 			const serverChannelsRaw = channelRowsRaw.filter((t) => {
 				const slug =
@@ -2888,9 +3772,7 @@ export async function initChatPage(root, options = {}) {
 				const selfDm = rosterMod.isSelfDmThread(t, chatViewerId);
 				let presenceClass = '';
 				if (t.type === 'dm') {
-					const oid = rosterMod.getDmOtherUserId(t);
-					const online =
-						selfDm || isDmConsideredOnlineWithGrace(oid, onlineIds);
+					const online = isDmOnlineForSidebar(t);
 					presenceClass = online ? 'is-online' : 'is-offline';
 				}
 				const activeClass = active ? ' is-active' : '';
@@ -2911,12 +3793,21 @@ export async function initChatPage(root, options = {}) {
 				const youPill = selfDm
 					? '<span class="chat-page-sidebar-you-pill" aria-label="This is you">you</span>'
 					: '';
+				const dmHoverMetaAttr =
+					t.type === 'dm' && !selfDm
+						? ` data-chat-dm-hover-meta="1" data-chat-dm-last-interacted-ms="${escapeHtml(
+							String(quantizeSidebarHoverMs(dmLastInteractedMsForSidebar(t)))
+						)}" data-chat-dm-last-seen-ms="${escapeHtml(String(quantizeSidebarHoverMs(dmLastActiveMsForSidebar(t))))}"`
+						: '';
 				const dataPseudoSlugAttr =
 					rowOpts &&
 						typeof rowOpts.pseudoSlug === 'string' &&
 						rowOpts.pseudoSlug.trim()
 						? ` data-chat-pseudo-slug="${escapeHtml(rowOpts.pseudoSlug.trim().toLowerCase())}"`
 						: '';
+				const dataHelpAttr = t?.type === 'sidebar_help' ? ' data-chat-sidebar-help="1"' : '';
+				const dmDomKey = dmDomKeyForSidebarRow(t);
+				const dataDmKeyAttr = dmDomKey ? ` data-chat-dm-key="${escapeHtml(dmDomKey)}"` : '';
 				const pinKey =
 					t.type === 'dm' && !selfDm ? rosterMod.dmStablePinStorageKey(t) : null;
 				if (pinKey) {
@@ -2931,12 +3822,12 @@ export async function initChatPage(root, options = {}) {
 							userId: Number.isFinite(oid) && oid > 0 ? oid : undefined
 						}) || (otherUserIdAttr ? `/user/${otherUserIdAttr}` : '/user');
 					const profileHrefAttr = escapeHtml(profileHref);
-					return `<div class="chat-page-sidebar-row chat-page-sidebar-row--dm-with-menu${activeClass}${pc}${extraRow}"${dataPseudoSlugAttr}>
+					return `<div class="chat-page-sidebar-row chat-page-sidebar-row--dm-with-menu${activeClass}${pc}${extraRow}"${dataPseudoSlugAttr}${dataDmKeyAttr}>
 					<a class="chat-page-sidebar-row-link" href="${escapeHtml(href)}">
 					${avatarHtml}
 					<div class="chat-page-sidebar-row-body">
 						<div class="chat-page-sidebar-row-title-line">
-							<span class="chat-page-sidebar-row-title">${escapeHtml(title)}</span>
+							<span class="chat-page-sidebar-row-title"${dmHoverMetaAttr}>${escapeHtml(title)}</span>
 							${youPill}
 							${unreadHtml}
 						</div>
@@ -2945,11 +3836,11 @@ export async function initChatPage(root, options = {}) {
 					<button type="button" class="chat-page-sidebar-server-settings chat-page-sidebar-dm-menu-btn" data-chat-dm-menu="${escapeHtml(pinKey)}" data-chat-dm-profile-href="${profileHrefAttr}" data-chat-dm-other-user-id="${escapeHtml(otherUserIdAttr)}" aria-label="Direct message options" aria-haspopup="menu" aria-expanded="false">${chatSidebarServerGearSvg}</button>
 				</div>`;
 				}
-				return `<a class="chat-page-sidebar-row${activeClass}${pc}${extraRow}" href="${escapeHtml(href)}"${dataPseudoSlugAttr}>
+				return `<a class="chat-page-sidebar-row${activeClass}${pc}${extraRow}" href="${escapeHtml(href)}"${dataPseudoSlugAttr}${dataHelpAttr}${dataDmKeyAttr}>
 					${avatarHtml}
 					<div class="chat-page-sidebar-row-body">
 						<div class="chat-page-sidebar-row-title-line">
-							<span class="chat-page-sidebar-row-title">${escapeHtml(title)}</span>
+							<span class="chat-page-sidebar-row-title"${dmHoverMetaAttr}>${escapeHtml(title)}</span>
 							${youPill}
 							${unreadHtml}
 						</div>
@@ -2994,118 +3885,118 @@ export async function initChatPage(root, options = {}) {
 			/**
 			 * When SSR already rendered the pseudo strip (same rows/hrefs), update active/unread in place
 			 * instead of replacing innerHTML — avoids a visible layout jump on first hydrate.
+			 * Avatars are left as SSR’d; swapping identical markup caused a visible flash.
 			 */
 			function tryPatchPseudoStripInPlace(listEl, stripRows) {
-				const navDupSlugs = rosterMod.SIDEBAR_STRIP_SLUGS_ALSO_IN_APP_PRIMARY_NAV;
-				const anchors = [...listEl.querySelectorAll(':scope > a.chat-page-sidebar-row')];
-				if (anchors.length !== stripRows.length) return false;
-				for (let i = 0; i < stripRows.length; i++) {
-					const t = stripRows[i];
-					const wantSlug =
-						t?.type === 'channel' && typeof t.channel_slug === 'string'
-							? t.channel_slug.trim().toLowerCase()
-							: '';
-					if (!wantSlug) return false;
-					const a = anchors[i];
-					const fromDom = a.getAttribute('data-chat-pseudo-slug');
-					if (fromDom) {
-						if (fromDom.toLowerCase() !== wantSlug) return false;
-					} else {
-						let wantPath;
-						let curPath;
-						try {
-							wantPath = normalizePathForCompare(
-								new URL(rosterMod.buildChatThreadUrl(t), window.location.href).pathname
-							);
-							curPath = normalizePathForCompare(
-								new URL(a.getAttribute('href') || '', window.location.href).pathname
-							);
-						} catch {
-							return false;
-						}
-						if (curPath !== wantPath) return false;
-					}
-					const titleLine = a.querySelector(
-						':scope > .chat-page-sidebar-row-body .chat-page-sidebar-row-title-line'
-					);
-					if (!titleLine) return false;
-				}
-				for (let i = 0; i < stripRows.length; i++) {
-					const t = stripRows[i];
-					const a = anchors[i];
-					const href = rosterMod.buildChatThreadUrl(t);
-					const active = isChatHrefActive(href);
-					const slug =
-						t?.type === 'channel' && typeof t.channel_slug === 'string'
-							? t.channel_slug.trim().toLowerCase()
-							: '';
-					a.setAttribute('href', href);
-					if (slug) a.setAttribute('data-chat-pseudo-slug', slug);
-					a.classList.toggle('is-active', active);
-					a.classList.toggle(
-						'chat-page-sidebar-row--also-in-app-primary-nav',
-						Boolean(slug && navDupSlugs.has(slug))
-					);
-					const titleLine = a.querySelector(
-						':scope > .chat-page-sidebar-row-body .chat-page-sidebar-row-title-line'
-					);
-					titleLine.querySelectorAll('.chat-page-sidebar-unread').forEach((el) => el.remove());
-					const unc = Number(t.unread_count);
-					const showUnread = !active && Number.isFinite(unc) && unc > 0;
-					if (showUnread) {
-						const unreadLabel = unc > 99 ? '99+' : String(unc);
-						const span = document.createElement('span');
-						span.className = 'chat-page-sidebar-unread';
-						span.setAttribute('aria-label', `${unc} unread`);
-						span.textContent = unreadLabel;
-						titleLine.appendChild(span);
-					}
-				}
-				return true;
+				return rosterMod.tryPatchPseudoStripDomInPlace(listEl, stripRows, {
+					normalizePathForCompare,
+					isChatHrefActive
+				});
 			}
 
+			/* Pseudo strip is built on first paint by SSR (`{{CHAT_SIDEBAR_PSEUDO_STRIP_LIST}}`).
+			   Runtime pass updates active/unread state only; no list rebuilds here. */
 			const pseudoListEl = sidebar.querySelector('[data-chat-sidebar-pseudo-list]');
 			if (pseudoListEl) {
 				const stripRows = rosterMod.getSidebarPseudoStripRowsMerged(channelRowsRaw);
-				const navDupSlugs = rosterMod.SIDEBAR_STRIP_SLUGS_ALSO_IN_APP_PRIMARY_NAV;
-				if (!tryPatchPseudoStripInPlace(pseudoListEl, stripRows)) {
-					pseudoListEl.innerHTML = stripRows
-						.map((t) => {
-							const slug =
-								t?.type === 'channel' && typeof t.channel_slug === 'string'
-									? t.channel_slug.trim().toLowerCase()
-									: '';
-							const alsoNav = Boolean(slug && navDupSlugs.has(slug));
-							return rowHtml(t, {
-								extraAnchorClasses: alsoNav ? 'chat-page-sidebar-row--also-in-app-primary-nav' : '',
-								pseudoSlug: slug || undefined
-							});
-						})
-						.join('');
-				}
+				tryPatchPseudoStripInPlace(pseudoListEl, stripRows);
 			}
 
-			dmEl.innerHTML = rosterMod.buildChatSidebarDmListHtml(dms, rowHtml);
-			svEl.innerHTML = rosterMod.buildCollapsibleChatSidebarListHtml(
+			const dmHtml = rosterMod.buildChatSidebarDmListHtml(dms, rowHtml);
+			const svHtml = rosterMod.buildCollapsibleChatSidebarListHtml(
 				serverChannels,
 				serverRowHtml,
 				'<p class="chat-page-sidebar-empty">No servers joined yet.</p>'
 			);
-			chEl.innerHTML = rosterMod.buildCollapsibleChatSidebarListHtml(
+			const chHtml = rosterMod.buildCollapsibleChatSidebarListHtml(
 				otherChannels,
 				rowHtml,
 				'<p class="chat-page-sidebar-empty">No channels yet.</p>'
 			);
+			const dmChanged = chatSidebarLastDmHtml !== dmHtml;
+			const svChanged = chatSidebarLastServersHtml !== svHtml;
+			const chChanged = chatSidebarLastChannelsHtml !== chHtml;
+			if (dmChanged) {
+				/** @type {Map<string, HTMLElement>} */
+				const preservedDmAvatars = new Map();
+				dmEl.querySelectorAll('[data-chat-dm-key]').forEach((row) => {
+					if (!(row instanceof HTMLElement)) return;
+					const key = String(row.getAttribute('data-chat-dm-key') || '').trim();
+					if (!key) return;
+					const avatar = row.querySelector(
+						':scope > .comment-avatar, :scope > .chat-page-sidebar-channel-avatar, :scope > .chat-page-sidebar-row-link > .comment-avatar, :scope > .chat-page-sidebar-row-link > .chat-page-sidebar-channel-avatar'
+					);
+					if (avatar instanceof HTMLElement) preservedDmAvatars.set(key, avatar);
+				});
+				// Build off-DOM so image nodes in new HTML never connect unless actually needed.
+				const tpl = document.createElement('template');
+				tpl.innerHTML = dmHtml;
+				tpl.content.querySelectorAll('[data-chat-dm-key]').forEach((row) => {
+					if (!(row instanceof HTMLElement)) return;
+					const key = String(row.getAttribute('data-chat-dm-key') || '').trim();
+					if (!key) return;
+					const preserved = preservedDmAvatars.get(key);
+					if (!(preserved instanceof HTMLElement)) return;
+					const avatarHost = row.querySelector(
+						':scope > .comment-avatar, :scope > .chat-page-sidebar-channel-avatar, :scope > .chat-page-sidebar-row-link > .comment-avatar, :scope > .chat-page-sidebar-row-link > .chat-page-sidebar-channel-avatar'
+					);
+					if (avatarHost instanceof HTMLElement && avatarHost !== preserved) {
+						avatarHost.replaceWith(preserved);
+					}
+				});
+				dmEl.replaceChildren(tpl.content);
+				chatSidebarLastDmHtml = dmHtml;
+			}
+			if (svChanged) {
+				svEl.innerHTML = svHtml;
+				chatSidebarLastServersHtml = svHtml;
+			}
+			if (chChanged) {
+				chEl.innerHTML = chHtml;
+				chatSidebarLastChannelsHtml = chHtml;
+			}
+			if (dmChanged) applySectionExpandedState(dmEl, dmExpanded);
+			if (svChanged) applySectionExpandedState(svEl, svExpanded);
+			if (chChanged) applySectionExpandedState(chEl, chExpanded);
 		};
 
 		/** Keep `.chat-page-sidebar-scroll` position stable when DMs / servers / channels lists re-render. */
-		function runRender(threads, joined, onlineIds, viewerProfile) {
+		function runRender(threads, joined, presenceSnapshot, viewerProfile) {
 			const scrollEl = sidebar.querySelector('.chat-page-sidebar-scroll');
 			const prevTop = scrollEl ? scrollEl.scrollTop : 0;
-			render(threads, joined, onlineIds, viewerProfile);
+			render(threads, joined, presenceSnapshot, viewerProfile);
 			if (!scrollEl) return;
 			requestAnimationFrame(() => {
 				scrollEl.scrollTop = prevTop;
+			});
+		}
+
+		// While the full network roster loads, show the last session snapshot (same viewer) so
+		// leaving and returning to chat does not flash an empty sidebar. LS may have fresher
+		// threads — prefer in-memory `chatThreads` when present.
+		if (!skipThreads && typeof readSidebarRosterSessionCache === 'function') {
+			const snap = readSidebarRosterSessionCache(chatViewerId);
+			if (snap) {
+				const threadsPaint =
+					Array.isArray(chatThreads) && chatThreads.length > 0 ? chatThreads : snap.threads || [];
+				const joinedPaint = Array.isArray(snap.joined) ? snap.joined : [];
+				const presPaint =
+					snap.presenceSnapshot && typeof snap.presenceSnapshot === 'object'
+						? snap.presenceSnapshot
+						: { onlineIds: new Set(), lastSeenMsByUserId: new Map(), lastActiveMsByUserId: new Map() };
+				runRender(threadsPaint, joinedPaint, presPaint, snap.viewerProfile);
+			}
+		}
+
+		function persistSidebarRosterSnapshot(joined, presenceSnapshot, viewerProfile) {
+			if (typeof writeSidebarRosterSessionCache !== 'function') return;
+			const vid = chatViewerId;
+			if (vid == null || !Number.isFinite(Number(vid)) || Number(vid) <= 0) return;
+			writeSidebarRosterSessionCache(vid, {
+				threads: Array.isArray(chatThreads) ? chatThreads : [],
+				joined: Array.isArray(joined) ? joined : [],
+				presenceSnapshot,
+				viewerProfile
 			});
 		}
 
@@ -3116,25 +4007,39 @@ export async function initChatPage(root, options = {}) {
 
 		if (skipThreads) {
 			const pack = ensureSidebarRosterPrefetchStarted();
-			const [joined, onlineIds, viewerProfile] = await Promise.all([
+			const dmUserIds = collectDmOtherUserIdsForPresence(chatThreads || []);
+			const [joined, presenceOnlineSnapshot, viewerProfile, lastActiveMsByUserId] = await Promise.all([
 				pack.joined,
 				pack.presence,
-				pack.profileMini
+				pack.profileMini,
+				fetchPresenceLastActiveSnapshot(dmUserIds)
 			]);
-			runRender(chatThreads || [], joined, onlineIds, viewerProfile);
+			const presenceSnapshot = {
+				...(presenceOnlineSnapshot || {}),
+				lastActiveMsByUserId
+			};
+			runRender(chatThreads || [], joined, presenceSnapshot, viewerProfile);
+			persistSidebarRosterSnapshot(joined, presenceSnapshot, viewerProfile);
 			await syncChatSidebarViewerRow();
 			return;
 		}
 
 		try {
 			resetSidebarRosterPrefetch();
-			const [_, joined, onlineIds, viewerProfile] = await Promise.all([
+			const [_, joined, presenceOnlineSnapshot, viewerProfile] = await Promise.all([
 				loadChatThreads({ allowCache: true, forceNetwork: true }),
 				fetchJoinedServersForChat(),
-				fetchPresenceOnlineIds(),
+				fetchPresenceOnlineSnapshot(),
 				fetchChatViewerProfileMini()
 			]);
-			runRender(chatThreads || [], joined, onlineIds, viewerProfile);
+			const dmUserIds = collectDmOtherUserIdsForPresence(chatThreads || []);
+			const lastActiveMsByUserId = await fetchPresenceLastActiveSnapshot(dmUserIds);
+			const presenceSnapshot = {
+				...(presenceOnlineSnapshot || {}),
+				lastActiveMsByUserId
+			};
+			runRender(chatThreads || [], joined, presenceSnapshot, viewerProfile);
+			persistSidebarRosterSnapshot(joined, presenceSnapshot, viewerProfile);
 			dispatchChatUnreadRefresh();
 		} catch {
 			// If network fails, keep cached render.
@@ -3142,11 +4047,253 @@ export async function initChatPage(root, options = {}) {
 		await syncChatSidebarViewerRow();
 	}
 
+	function openHeaderNotificationsMenuFromSidebar() {
+		const nav = document.querySelector('app-navigation');
+		if (
+			nav &&
+			typeof nav.toggleNotificationsMenu === 'function' &&
+			window.getComputedStyle(nav).display !== 'none'
+		) {
+			nav.toggleNotificationsMenu();
+			return true;
+		}
+		const headerNotificationsButton = document.querySelector('app-navigation .notifications-button');
+		if (
+			headerNotificationsButton instanceof HTMLButtonElement &&
+			window.getComputedStyle(headerNotificationsButton).display !== 'none'
+		) {
+			headerNotificationsButton.click();
+			return true;
+		}
+		return false;
+	}
+
+	function closeChatSidebarNotificationsMenu() {
+		if (!(chatSidebarNotificationsMenuEl instanceof HTMLElement)) return;
+		chatSidebarNotificationsMenuEl.classList.remove('open');
+		chatSidebarNotificationsMenuEl.hidden = true;
+		document.dispatchEvent(new CustomEvent('modal-closed'));
+	}
+
+	function scheduleChatSidebarNotificationsPreviewPrefetch({ force = false } = {}) {
+		const run = () => {
+			void loadChatSidebarNotificationsPreviewData({ force });
+		};
+		if (window.requestIdleCallback) {
+			window.requestIdleCallback(run, { timeout: 1200 });
+			return;
+		}
+		setTimeout(run, 150);
+	}
+
+	function notificationCreationHref(n) {
+		if (!n) return null;
+		const link = typeof n.link === 'string' ? n.link.trim() : '';
+		if (/^\/creations\/\d+/.test(link)) return link;
+		if (n.creation_id != null && Number.isFinite(Number(n.creation_id))) {
+			return `/creations/${Number(n.creation_id)}`;
+		}
+		return null;
+	}
+
+	function notificationChatHref(n) {
+		if (!n) return null;
+		const link = typeof n.link === 'string' ? n.link.trim() : '';
+		if (/^\/chat\//.test(link)) return link;
+		return null;
+	}
+
+	function notificationPrimaryHref(n) {
+		return notificationChatHref(n) || notificationCreationHref(n);
+	}
+
+	function notificationPrimaryClickable(n) {
+		if (!n) return false;
+		if (n.type === 'tip') return true;
+		if (n.type === 'chat_mention' && notificationChatHref(n)) return true;
+		const href = notificationCreationHref(n);
+		return !!href && (n.type === 'comment' || n.type === 'comment_thread' || n.type === 'creation_activity');
+	}
+
+	function ensureChatSidebarNotificationsMenu(anchorBtn) {
+		if (!(anchorBtn instanceof HTMLElement)) return null;
+		const actionsWrap = anchorBtn.closest('.chat-page-sidebar-footer-actions');
+		if (!(actionsWrap instanceof HTMLElement)) return null;
+		if (chatSidebarNotificationsMenuEl instanceof HTMLElement && actionsWrap.contains(chatSidebarNotificationsMenuEl)) {
+			return chatSidebarNotificationsMenuEl;
+		}
+		const menu = document.createElement('div');
+		menu.className = 'chat-page-sidebar-notifications-menu';
+		menu.hidden = true;
+		menu.innerHTML = `
+			<div class="chat-page-sidebar-notifications-preview" data-chat-sidebar-notifications-preview></div>
+			<div class="chat-page-sidebar-notifications-divider"></div>
+			<button type="button" class="chat-page-sidebar-notifications-view-all" data-chat-sidebar-notifications-view-all>View all</button>
+		`;
+		menu.addEventListener('click', (e) => {
+			e.stopPropagation();
+		});
+		const viewAllBtn = menu.querySelector('[data-chat-sidebar-notifications-view-all]');
+		if (viewAllBtn instanceof HTMLButtonElement) {
+			viewAllBtn.addEventListener('click', () => {
+				closeChatSidebarNotificationsMenu();
+				document.dispatchEvent(new CustomEvent('open-notifications'));
+			});
+		}
+		actionsWrap.appendChild(menu);
+		chatSidebarNotificationsMenuEl = menu;
+		return menu;
+	}
+
+	async function loadChatSidebarNotificationsPreviewData({ force = false } = {}) {
+		const now = Date.now();
+		if (
+			!force &&
+			chatSidebarNotificationsPreviewCache.length > 0 &&
+			now - chatSidebarNotificationsPreviewLoadedAt < 30000
+		) {
+			return chatSidebarNotificationsPreviewCache;
+		}
+		if (chatSidebarNotificationsPreviewLoading) {
+			return chatSidebarNotificationsPreviewCache;
+		}
+		chatSidebarNotificationsPreviewLoading = true;
+		try {
+			const result = await fetchJsonWithStatusDeduped(
+				'/api/notifications',
+				{ credentials: 'include' },
+				{ windowMs: force ? 0 : 2000 }
+			);
+			if (!result.ok) return null;
+			const notifications = Array.isArray(result.data?.notifications)
+				? result.data.notifications.slice(0, 5)
+				: [];
+			chatSidebarNotificationsPreviewCache = notifications;
+			chatSidebarNotificationsPreviewLoadedAt = Date.now();
+			return notifications;
+		} catch {
+			return null;
+		} finally {
+			chatSidebarNotificationsPreviewLoading = false;
+		}
+	}
+
+	function renderChatSidebarNotificationsPreviewItems(preview, notifications) {
+		if (!(preview instanceof HTMLElement)) return;
+		if (!Array.isArray(notifications) || notifications.length === 0) {
+			preview.innerHTML =
+				'<div class="chat-page-sidebar-notifications-menu-item is-static">No notifications yet.</div>';
+			return;
+		}
+		const frag = document.createDocumentFragment();
+		for (const notification of notifications) {
+			const item = document.createElement('button');
+			item.type = 'button';
+			item.className = 'chat-page-sidebar-notifications-menu-item';
+			if (notification.acknowledged_at) item.classList.add('is-read');
+			const title = document.createElement('div');
+			title.className = 'chat-page-sidebar-notifications-title';
+			title.textContent = notification.title || 'Notification';
+			const message = document.createElement('div');
+			message.className = 'chat-page-sidebar-notifications-message';
+			message.textContent = notification.message || '';
+			const time = document.createElement('div');
+			time.className = 'chat-page-sidebar-notifications-time';
+			time.textContent = formatRelativeTime(notification.created_at) || '';
+			item.appendChild(title);
+			item.appendChild(message);
+			item.appendChild(time);
+			const clickable = notificationPrimaryClickable(notification);
+			if (!clickable) {
+				item.disabled = true;
+				item.classList.add('is-static');
+			} else {
+				item.addEventListener('click', async () => {
+					item.classList.add('is-loading');
+					item.setAttribute('aria-busy', 'true');
+					try {
+						await fetch('/api/notifications/acknowledge', {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+							body: new URLSearchParams({ id: String(notification.id) }),
+							credentials: 'include'
+						});
+					} catch {
+						// ignore
+					}
+					closeChatSidebarNotificationsMenu();
+					document.dispatchEvent(new CustomEvent('close-all-modals'));
+					const href = notificationPrimaryHref(notification);
+					if (href) {
+						window.location.href = href;
+						return;
+					}
+					if (notification.type === 'tip') {
+						document.dispatchEvent(
+							new CustomEvent('open-notifications', {
+								detail: { notificationId: notification.id }
+							})
+						);
+						document.dispatchEvent(new CustomEvent('notifications-acknowledged'));
+					}
+				});
+			}
+			frag.appendChild(item);
+		}
+		preview.innerHTML = '';
+		preview.appendChild(frag);
+	}
+
+	async function renderChatSidebarNotificationsPreview(menu) {
+		if (!(menu instanceof HTMLElement)) return;
+		const preview = menu.querySelector('[data-chat-sidebar-notifications-preview]');
+		if (!(preview instanceof HTMLElement)) return;
+		if (chatSidebarNotificationsPreviewCache.length > 0) {
+			renderChatSidebarNotificationsPreviewItems(preview, chatSidebarNotificationsPreviewCache);
+		} else {
+			preview.innerHTML = '<div class="chat-page-sidebar-notifications-menu-item is-loading">Loading...</div>';
+		}
+		try {
+			const notifications = await loadChatSidebarNotificationsPreviewData({
+				force: chatSidebarNotificationsPreviewCache.length === 0
+			});
+			if (!Array.isArray(notifications)) {
+				if (chatSidebarNotificationsPreviewCache.length > 0) return;
+				preview.innerHTML =
+					'<div class="chat-page-sidebar-notifications-menu-item is-static">Failed to load notifications.</div>';
+				return;
+			}
+			renderChatSidebarNotificationsPreviewItems(preview, notifications);
+		} catch {
+			if (chatSidebarNotificationsPreviewCache.length > 0) return;
+			preview.innerHTML =
+				'<div class="chat-page-sidebar-notifications-menu-item is-static">Failed to load notifications.</div>';
+		}
+	}
+
+	async function toggleChatSidebarNotificationsMenu(notificationsBtn) {
+		const menu = ensureChatSidebarNotificationsMenu(notificationsBtn);
+		if (!(menu instanceof HTMLElement)) {
+			document.dispatchEvent(new CustomEvent('open-notifications'));
+			return;
+		}
+		const willOpen = menu.hidden;
+		if (!willOpen) {
+			closeChatSidebarNotificationsMenu();
+			return;
+		}
+		menu.hidden = false;
+		menu.classList.add('open');
+		document.dispatchEvent(new CustomEvent('modal-opened'));
+		await renderChatSidebarNotificationsPreview(menu);
+	}
+
 	function setupChatSidebarClientNav() {
 		const sidebar = document.querySelector('[data-chat-sidebar]');
 		if (!sidebar) return;
 
 		chatSidebarNavClickHandler = (e) => {
+			hideChatSidebarDmHoverPopover();
 			const collapsibleBtn = e.target?.closest?.('[data-chat-collapsible]');
 			if (collapsibleBtn instanceof HTMLButtonElement) {
 				e.preventDefault();
@@ -3158,7 +4305,23 @@ export async function initChatPage(root, options = {}) {
 			if (profileBtn instanceof HTMLButtonElement) {
 				e.preventDefault();
 				e.stopPropagation();
-				document.dispatchEvent(new CustomEvent('open-profile'));
+				document.dispatchEvent(
+					new CustomEvent('open-account-menu', { bubbles: true, detail: { anchor: profileBtn } })
+				);
+				return;
+			}
+			const notificationsBtn = e.target?.closest?.('[data-chat-sidebar-open-notifications]');
+			if (notificationsBtn instanceof HTMLButtonElement) {
+				e.preventDefault();
+				e.stopPropagation();
+				void toggleChatSidebarNotificationsMenu(notificationsBtn);
+				return;
+			}
+			const creditsBtn = e.target?.closest?.('[data-chat-sidebar-open-credits]');
+			if (creditsBtn instanceof HTMLButtonElement) {
+				e.preventDefault();
+				e.stopPropagation();
+				document.dispatchEvent(new CustomEvent('open-credits'));
 				return;
 			}
 			const dmGearBtn = e.target?.closest?.('.chat-page-sidebar-dm-menu-btn[data-chat-dm-menu]');
@@ -3203,12 +4366,47 @@ export async function initChatPage(root, options = {}) {
 				return;
 			}
 			e.preventDefault();
+			setMobileSidebarMode(false);
+			markThreadUiPending();
 			history.pushState({ prsnChat: true }, '', nextUrl.pathname + nextUrl.search + nextUrl.hash);
 			void openThreadForCurrentPath();
 		};
 		sidebar.addEventListener('click', chatSidebarNavClickHandler);
+		chatSidebarDmHoverOverHandler = (e) => {
+			const canHover = window.matchMedia?.('(hover: hover)')?.matches !== false;
+			if (!canHover) return;
+			const t = e.target?.closest?.('.chat-page-sidebar-row-title[data-chat-dm-hover-meta]');
+			if (!(t instanceof HTMLElement)) return;
+			if (chatSidebarDmHoverActiveAnchor === t && chatSidebarDmHoverPopoverEl && !chatSidebarDmHoverPopoverEl.hidden) {
+				return;
+			}
+			showChatSidebarDmHoverPopover(t);
+		};
+		chatSidebarDmHoverOutHandler = (e) => {
+			const t = e.target?.closest?.('.chat-page-sidebar-row-title[data-chat-dm-hover-meta]');
+			if (!(t instanceof HTMLElement)) return;
+			const toEl = e.relatedTarget instanceof Element ? e.relatedTarget : null;
+			if (toEl && (t.contains(toEl) || chatSidebarDmHoverPopoverEl?.contains(toEl))) return;
+			hideChatSidebarDmHoverPopover();
+		};
+		sidebar.addEventListener('mouseover', chatSidebarDmHoverOverHandler);
+		sidebar.addEventListener('mouseout', chatSidebarDmHoverOutHandler);
+		chatSidebarNotificationsOutsideClickHandler = (e) => {
+			if (!(chatSidebarNotificationsMenuEl instanceof HTMLElement)) return;
+			if (chatSidebarNotificationsMenuEl.hidden) return;
+			const t = e.target instanceof Element ? e.target : null;
+			if (!t) return;
+			if (chatSidebarNotificationsMenuEl.contains(t)) return;
+			if (t.closest?.('[data-chat-sidebar-open-notifications]')) return;
+			closeChatSidebarNotificationsMenu();
+		};
+		document.addEventListener('click', chatSidebarNotificationsOutsideClickHandler);
 
 		chatSidebarPopstateHandler = () => {
+			if (shouldShowMobileSidebarFromLocation()) {
+				setMobileSidebarMode(true);
+				return;
+			}
 			void openThreadForCurrentPath();
 		};
 		window.addEventListener('popstate', chatSidebarPopstateHandler);
@@ -3225,6 +4423,7 @@ export async function initChatPage(root, options = {}) {
 			getViewerId: () => chatViewerId,
 			navigateToChatPath: (pathname) => {
 				const path = pathname.startsWith('/') ? pathname : `/${pathname}`;
+				markThreadUiPending();
 				history.pushState({ prsnChat: true }, '', path);
 				void openThreadForCurrentPath();
 			},
@@ -3653,7 +4852,7 @@ export async function initChatPage(root, options = {}) {
 						pseudoColumnPager &&
 						pseudoColumnPager.getHasMore() &&
 						!pseudoColumnPager.isOlderBusy() &&
-						!loadingMessages &&
+						!loadingPseudoChannelMessages &&
 						activePseudoChannelSlug === 'comments'
 					) {
 						void loadMoreCommentsChannelMessages();
@@ -3672,7 +4871,7 @@ export async function initChatPage(root, options = {}) {
 			!pseudoColumnPager ||
 			pseudoColumnPager.isOlderBusy() ||
 			!pseudoColumnPager.getHasMore() ||
-			loadingMessages
+			loadingPseudoChannelMessages
 		) {
 			return;
 		}
@@ -3725,9 +4924,9 @@ export async function initChatPage(root, options = {}) {
 
 	async function loadCommentsChannelMessages() {
 		const messagesEl = root.querySelector('[data-chat-messages]');
-		if (!messagesEl || loadingMessages) return;
-		loadingMessages = true;
-		syncChatMessagePlaceholder();
+		if (!messagesEl) return;
+		const paneEpoch = bumpChatMessagesPaneEpoch();
+		enterPseudoChannelLoad();
 		teardownCommentsChannelLoadMore();
 		teardownFeedChannelLoadMore();
 		teardownExploreChannelLoadMore();
@@ -3779,6 +4978,7 @@ export async function initChatPage(root, options = {}) {
 				},
 			});
 			const r = await pseudoColumnPager.loadInitial();
+			if (isStaleChatPane(paneEpoch)) return;
 			if (!r.ok) {
 				if (r.error instanceof Error) {
 					throw r.error;
@@ -3803,11 +5003,19 @@ export async function initChatPage(root, options = {}) {
 			scrollChatFeedPseudoChannelToTop();
 		} catch (err) {
 			console.error('[Chat page] comments channel:', err);
-			messagesEl.innerHTML = renderEmptyError(err?.message || 'Could not load comments.');
+			if (!isStaleChatPane(paneEpoch)) {
+				paintChatMessagesPaneError(
+					messagesEl,
+					err?.message || 'Could not load comments.',
+					"Couldn't load comments"
+				);
+			}
 		} finally {
-			messagesEl.removeAttribute('aria-busy');
-			loadingMessages = false;
-			syncChatMessagePlaceholder();
+			exitPseudoChannelLoad();
+			unlockChatMessagesPaneScroll(messagesEl);
+			if (!isStaleChatPane(paneEpoch) && messagesEl.isConnected) {
+				messagesEl.removeAttribute('aria-busy');
+			}
 			rebuildTopbarMenuDynamic();
 		}
 	}
@@ -3872,7 +5080,7 @@ export async function initChatPage(root, options = {}) {
 						pseudoColumnPager &&
 						pseudoColumnPager.getHasMore() &&
 						!pseudoColumnPager.isOlderBusy() &&
-						!loadingMessages &&
+						!loadingPseudoChannelMessages &&
 						(activePseudoChannelSlug === 'feed' ||
 							activePseudoChannelSlug === 'explore' ||
 							activePseudoChannelSlug === 'creations')
@@ -3903,6 +5111,58 @@ export async function initChatPage(root, options = {}) {
 		}
 	}
 
+	/**
+	 * Mirror the Creations route pending-token cleanup so chat `#creations` doesn't
+	 * keep reloading forever from stale `sessionStorage.pendingCreations`.
+	 * @param {object[]} creationsFromApi
+	 */
+	function pruneChatCreationsPendingSession(creationsFromApi) {
+		const pending =
+			typeof creationsPollMod.getPendingCreationsFromSession === 'function'
+				? creationsPollMod.getPendingCreationsFromSession()
+				: [];
+		if (!Array.isArray(pending) || pending.length === 0) return;
+		const creations = Array.isArray(creationsFromApi) ? creationsFromApi : [];
+		const nowMs = Date.now();
+		const PENDING_TTL_MS = 3000;
+		const creationsByToken = new Map();
+		for (const item of creations) {
+			if (!item || typeof item !== 'object') continue;
+			const rawMeta = item.meta;
+			let meta = rawMeta && typeof rawMeta === 'object' ? rawMeta : null;
+			if (!meta && typeof rawMeta === 'string') {
+				try {
+					meta = JSON.parse(rawMeta);
+				} catch {
+					meta = null;
+				}
+			}
+			const token = meta && typeof meta.creation_token === 'string' ? meta.creation_token : null;
+			if (token) creationsByToken.set(token, true);
+		}
+		const pendingWithinTtl = pending.filter((p) => {
+			const createdAtRaw = typeof p?.created_at === 'string' ? p.created_at : '';
+			const createdAtMs = createdAtRaw ? Date.parse(createdAtRaw) : NaN;
+			if (!Number.isFinite(createdAtMs)) return true;
+			return nowMs - createdAtMs <= PENDING_TTL_MS;
+		});
+		const filtered = pendingWithinTtl.filter((p) => {
+			const token = typeof p?.creation_token === 'string' ? p.creation_token : null;
+			if (!token) return true;
+			return !creationsByToken.has(token);
+		});
+		const oldPendingStr = JSON.stringify(pending);
+		const newPendingStr = JSON.stringify(filtered);
+		if (oldPendingStr === newPendingStr) return;
+		try {
+			sessionStorage.setItem('pendingCreations', newPendingStr);
+		} catch {
+			// ignore storage write errors
+		}
+		// Notify other views only when the value changed to avoid event loops.
+		document.dispatchEvent(new CustomEvent('creations-pending-updated'));
+	}
+
 	async function chatCreationsPseudoChannelPollTick() {
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!(messagesEl instanceof HTMLElement) || activePseudoChannelSlug !== 'creations') {
@@ -3913,7 +5173,7 @@ export async function initChatPage(root, options = {}) {
 			stopChatCreationsPseudoChannelPoll();
 			return;
 		}
-		if (loadingMessages) return;
+		if (loadingPseudoChannelMessages) return;
 		try {
 			const result = await fetchJsonWithStatusDeduped(
 				'/api/create/images',
@@ -3922,6 +5182,7 @@ export async function initChatPage(root, options = {}) {
 			);
 			if (!result.ok) return;
 			const creations = Array.isArray(result.data?.images) ? result.data.images : [];
+			pruneChatCreationsPendingSession(creations);
 			const hasUpdates = creationsPollMod.computeCreationsPollHasListUpdates(creations, messagesEl);
 			const hasPending = creationsPollMod.hasPendingCreationsReloadHint(messagesEl);
 			const now = Date.now();
@@ -3961,7 +5222,7 @@ export async function initChatPage(root, options = {}) {
 			!pseudoColumnPager ||
 			pseudoColumnPager.isOlderBusy() ||
 			!pseudoColumnPager.getHasMore() ||
-			loadingMessages
+			loadingPseudoChannelMessages
 		) {
 			return;
 		}
@@ -4090,15 +5351,16 @@ export async function initChatPage(root, options = {}) {
 
 	async function loadFeedChannelMessages() {
 		const messagesEl = root.querySelector('[data-chat-messages]');
-		if (!messagesEl || loadingMessages) return;
-		loadingMessages = true;
-		syncChatMessagePlaceholder();
+		if (!messagesEl) return;
+		const paneEpoch = bumpChatMessagesPaneEpoch();
+		enterPseudoChannelLoad();
 		teardownCommentsChannelLoadMore();
 		teardownFeedChannelLoadMore();
 		teardownExploreChannelLoadMore();
 		messagesEl.setAttribute('aria-busy', 'true');
 		try {
 			const feedCardMod = await import(`../shared/feedCardBuild.js${qs}`);
+			if (isStaleChatPane(paneEpoch)) return;
 			const { createFeedItemCard, feedItemToUser, getHiddenFeedItems } = feedCardMod;
 
 			pseudoColumnPager = createPseudoColumnPager({
@@ -4134,6 +5396,7 @@ export async function initChatPage(root, options = {}) {
 				},
 			});
 			const r = await pseudoColumnPager.loadInitial();
+			if (isStaleChatPane(paneEpoch)) return;
 			if (!r.ok) {
 				if (r.error instanceof Error) {
 					throw r.error;
@@ -4219,11 +5482,19 @@ export async function initChatPage(root, options = {}) {
 			}
 		} catch (err) {
 			console.error('[Chat page] feed channel:', err);
-			messagesEl.innerHTML = renderEmptyError(err?.message || 'Could not load feed.');
+			if (!isStaleChatPane(paneEpoch)) {
+				paintChatMessagesPaneError(
+					messagesEl,
+					err?.message || 'Could not load the feed.',
+					"Couldn't load your feed"
+				);
+			}
 		} finally {
-			messagesEl.removeAttribute('aria-busy');
-			loadingMessages = false;
-			syncChatMessagePlaceholder();
+			exitPseudoChannelLoad();
+			unlockChatMessagesPaneScroll(messagesEl);
+			if (!isStaleChatPane(paneEpoch) && messagesEl.isConnected) {
+				messagesEl.removeAttribute('aria-busy');
+			}
 			rebuildTopbarMenuDynamic();
 		}
 	}
@@ -4258,6 +5529,7 @@ export async function initChatPage(root, options = {}) {
 				<span class="creations-bulk-bar-label">Bulk Actions</span>
 				<div class="creations-bulk-actions">
 					<button type="button" class="btn-secondary creations-bulk-queue-btn" data-creations-bulk-queue disabled>Queue for later</button>
+					<button type="button" class="btn-secondary creations-bulk-group-btn" data-creations-bulk-group disabled>Group Creations</button>
 					<button type="button" class="btn-secondary creations-bulk-delete-btn" data-creations-bulk-delete disabled>Delete</button>
 				</div>
 				<button type="button" class="creations-bulk-bar-close" data-creations-bulk-close aria-label="Close bulk actions">×</button>
@@ -4309,6 +5581,7 @@ export async function initChatPage(root, options = {}) {
 		const bulkClose = routeWrap.querySelector('[data-creations-bulk-close]');
 		const bulkDelete = routeWrap.querySelector('[data-creations-bulk-delete]');
 		const bulkQueue = routeWrap.querySelector('[data-creations-bulk-queue]');
+		const bulkGroup = routeWrap.querySelector('[data-creations-bulk-group]');
 		const modalOverlay = routeWrap.querySelector('[data-creations-bulk-delete-modal]');
 		const modalCancel = routeWrap.querySelector('[data-creations-bulk-delete-cancel]');
 		const modalConfirm = routeWrap.querySelector('[data-creations-bulk-delete-confirm]');
@@ -4320,19 +5593,38 @@ export async function initChatPage(root, options = {}) {
 		function updateBulkBarSelection() {
 			const deleteBtn = routeWrap.querySelector('[data-creations-bulk-delete]');
 			const queueBtn = routeWrap.querySelector('[data-creations-bulk-queue]');
+			const groupBtn = routeWrap.querySelector('[data-creations-bulk-group]');
 			if (!bar || !deleteBtn) return;
-			const checked = routeWrap.querySelectorAll('[data-creations-bulk-checkbox]:checked').length;
+			const selectedCards = queryBulkCards().filter((card) =>
+				card.querySelector('[data-creations-bulk-checkbox]:checked')
+			);
+			const checked = selectedCards.length;
 			const hasSelection = checked > 0;
 			const queueableCards = hasSelection
-				? queryBulkCards().filter((card) => {
-						const cb = card.querySelector('[data-creations-bulk-checkbox]:checked');
-						const url = (card.dataset.imageUrl || '').trim();
-						return cb && url;
-					})
+				? selectedCards.filter((card) => {
+					const url = (card.dataset.imageUrl || '').trim();
+					return url;
+				})
 				: [];
+			const eligibleCards = selectedCards.filter((card) => {
+				const isPublished = card.dataset.published === '1';
+				const mediaType = (card.dataset.mediaType || 'image').toLowerCase();
+				const creationStatus = (card.dataset.creationStatus || '').toLowerCase();
+				return !isPublished && mediaType === 'image' && creationStatus === 'completed';
+			});
+			const selectedGroups = selectedCards.filter((card) => card.dataset.groupCreation === '1');
+			let canGroup = false;
+			if (selectedCards.length > 0 && eligibleCards.length === selectedCards.length && selectedGroups.length <= 1) {
+				if (selectedGroups.length === 0) {
+					canGroup = selectedCards.length >= 2;
+				} else {
+					canGroup = selectedCards.length >= 2;
+				}
+			}
 			bar.classList.toggle('has-selection', hasSelection);
 			deleteBtn.disabled = !hasSelection;
 			if (queueBtn) queueBtn.disabled = queueableCards.length === 0;
+			if (groupBtn) groupBtn.disabled = !canGroup;
 		}
 
 		function exitBulkMode() {
@@ -4374,9 +5666,87 @@ export async function initChatPage(root, options = {}) {
 
 		const capAc = new AbortController();
 		routeWrap._chatBulkCap = capAc;
+		let longPressTimer = null;
+		let longPressPointerId = null;
+		let longPressCard = null;
+		let longPressStartX = 0;
+		let longPressStartY = 0;
+		let suppressCardClickUntil = 0;
+
+		function clearLongPressState() {
+			if (longPressTimer) {
+				clearTimeout(longPressTimer);
+				longPressTimer = null;
+			}
+			longPressPointerId = null;
+			longPressCard = null;
+			longPressStartX = 0;
+			longPressStartY = 0;
+		}
+
+		cards.addEventListener(
+			'pointerdown',
+			(e) => {
+				if (!isChatPageMobileLayout()) return;
+				if (routeWrap.classList.contains('is-bulk-mode')) return;
+				if (e.pointerType === 'mouse') return;
+				const card = e.target?.closest?.('.feed-card[data-image-id]');
+				if (!(card instanceof HTMLElement)) return;
+				if (e.target?.closest?.('a,button,input,textarea,select,label,[role="button"]')) return;
+				clearLongPressState();
+				longPressPointerId = e.pointerId;
+				longPressCard = card;
+				longPressStartX = Number(e.clientX) || 0;
+				longPressStartY = Number(e.clientY) || 0;
+				longPressTimer = setTimeout(() => {
+					if (!(longPressCard instanceof HTMLElement)) return;
+					enterBulkMode();
+					const cb = longPressCard.querySelector('[data-creations-bulk-checkbox]');
+					if (cb instanceof HTMLInputElement) cb.checked = true;
+					updateBulkBarSelection();
+					suppressCardClickUntil = Date.now() + 700;
+					clearLongPressState();
+				}, 420);
+			},
+			{ signal: capAc.signal }
+		);
+		cards.addEventListener(
+			'pointermove',
+			(e) => {
+				if (longPressPointerId == null || e.pointerId !== longPressPointerId) return;
+				const dx = Math.abs((Number(e.clientX) || 0) - longPressStartX);
+				const dy = Math.abs((Number(e.clientY) || 0) - longPressStartY);
+				if (dx > 10 || dy > 10) clearLongPressState();
+			},
+			{ signal: capAc.signal }
+		);
+		cards.addEventListener(
+			'pointerup',
+			(e) => {
+				if (longPressPointerId == null || e.pointerId !== longPressPointerId) return;
+				clearLongPressState();
+			},
+			{ signal: capAc.signal }
+		);
+		cards.addEventListener(
+			'pointercancel',
+			(e) => {
+				if (longPressPointerId == null || e.pointerId !== longPressPointerId) return;
+				clearLongPressState();
+			},
+			{ signal: capAc.signal }
+		);
 		cards.addEventListener(
 			'click',
 			(e) => {
+				if (
+					Date.now() < suppressCardClickUntil &&
+					e.target?.closest?.('.feed-card[data-image-id]')
+				) {
+					e.preventDefault();
+					e.stopPropagation();
+					return;
+				}
 				const overlay = e.target.closest('[data-creations-bulk-overlay]');
 				if (!overlay) return;
 				e.stopPropagation();
@@ -4415,6 +5785,16 @@ export async function initChatPage(root, options = {}) {
 				(e) => {
 					e.preventDefault();
 					bulkQueueSelected();
+				},
+				{ signal: capAc.signal }
+			);
+		}
+		if (bulkGroup) {
+			bulkGroup.addEventListener(
+				'click',
+				(e) => {
+					e.preventDefault();
+					void bulkGroupSelected();
 				},
 				{ signal: capAc.signal }
 			);
@@ -4570,32 +5950,94 @@ export async function initChatPage(root, options = {}) {
 				}
 			}
 		}
+
+		async function bulkGroupSelected() {
+			const selected = queryBulkCards().filter((card) =>
+				card.querySelector('[data-creations-bulk-checkbox]:checked')
+			);
+			if (selected.length < 2) return;
+			const invalidCount = selected.filter((card) => {
+				const isPublished = card.dataset.published === '1';
+				const mediaType = (card.dataset.mediaType || 'image').toLowerCase();
+				const creationStatus = (card.dataset.creationStatus || '').toLowerCase();
+				return isPublished || mediaType !== 'image' || creationStatus !== 'completed';
+			}).length;
+			if (invalidCount > 0) {
+				alert('Group Creations supports only completed, unpublished image creations.');
+				return;
+			}
+			const selectedGroups = selected.filter((card) => card.dataset.groupCreation === '1');
+			if (selectedGroups.length > 1) {
+				alert('Select at most one existing group when grouping creations.');
+				return;
+			}
+			const ids = selected
+				.map((card) => Number(card.dataset.imageId))
+				.filter((id) => Number.isFinite(id) && id > 0);
+			if (ids.length < 2) return;
+			const confirmMsg = selectedGroups.length === 1
+				? `Add ${ids.length - 1} image${ids.length - 1 === 1 ? '' : 's'} to the selected group?`
+				: `Group ${ids.length} creations into a single creation?`;
+			if (!window.confirm(confirmMsg)) return;
+			if (!(bulkGroup instanceof HTMLButtonElement)) return;
+			bulkGroup.disabled = true;
+			let errMsg = '';
+			try {
+				const res = await fetch('/api/create/images/group', {
+					method: 'POST',
+					credentials: 'include',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({ ids })
+				});
+				const data = await res.json().catch(() => ({}));
+				if (!res.ok) {
+					errMsg = data?.error || 'Failed to group creations';
+					alert(errMsg);
+					return;
+				}
+				await loadCreationsChannelMessages({ forceFreshFirstPage: true });
+				exitBulkMode();
+			} catch (err) {
+				errMsg = err?.message || 'Failed to group creations';
+				alert(errMsg);
+			} finally {
+				if (bulkGroup.isConnected) {
+					updateBulkBarSelection();
+				}
+			}
+		}
 	}
 
 	async function loadCreationsChannelMessages(options = {}) {
 		const forceFreshFirstPage = options.forceFreshFirstPage === true;
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!messagesEl) return;
-		if (loadingMessages) return;
 		stopChatCreationsPseudoChannelPoll();
 		const viewerId = chatViewerId;
 		if (!Number.isFinite(Number(viewerId)) || Number(viewerId) <= 0) {
-			messagesEl.innerHTML = renderEmptyError('Sign in to see your creations.');
+			paintChatMessagesPaneError(
+				messagesEl,
+				'Sign in to see your creations here.',
+				'Sign in required',
+				{ buttonText: 'Sign in', buttonHref: '/auth' }
+			);
 			stopChatCreationsPseudoChannelPoll();
 			rebuildTopbarMenuDynamic();
 			return;
 		}
-		loadingMessages = true;
-		syncChatMessagePlaceholder();
+		const paneEpoch = bumpChatMessagesPaneEpoch();
+		enterPseudoChannelLoad();
 		teardownCommentsChannelLoadMore();
 		teardownFeedChannelLoadMore();
 		teardownExploreChannelLoadMore();
 		messagesEl.setAttribute('aria-busy', 'true');
 		try {
 			const feedCardMod = await import(`../shared/feedCardBuild.js${qs}`);
+			if (isStaleChatPane(paneEpoch)) return;
 			const { createFeedItemCard, feedItemToUser } = feedCardMod;
 
 			const creationsAuthorHints = await resolveCreationsChannelAuthorHints();
+			if (isStaleChatPane(paneEpoch)) return;
 
 			pseudoColumnPager = createPseudoColumnPager({
 				columnOrder: feedLanePagerColumnOrder(),
@@ -4626,6 +6068,7 @@ export async function initChatPage(root, options = {}) {
 				},
 			});
 			const r = await pseudoColumnPager.loadInitial();
+			if (isStaleChatPane(paneEpoch)) return;
 			if (!r.ok) {
 				if (r.error instanceof Error) {
 					throw r.error;
@@ -4677,6 +6120,7 @@ export async function initChatPage(root, options = {}) {
 			routeWrap.appendChild(cards);
 			insertChatCreationsPseudoBulkChrome(routeWrap, cards);
 			await setupChatCreationsPseudoBulkRoute(routeWrap);
+			if (isStaleChatPane(paneEpoch)) return;
 
 			const sentinel = document.createElement('div');
 			sentinel.dataset.chatFeedLoadSentinel = '1';
@@ -4700,13 +6144,23 @@ export async function initChatPage(root, options = {}) {
 			}
 		} catch (err) {
 			console.error('[Chat page] creations channel:', err);
-			messagesEl.innerHTML = renderEmptyError(err?.message || 'Could not load creations.');
+			if (!isStaleChatPane(paneEpoch)) {
+				paintChatMessagesPaneError(
+					messagesEl,
+					err?.message || 'Could not load your creations.',
+					"Couldn't load creations"
+				);
+			}
 		} finally {
-			messagesEl.removeAttribute('aria-busy');
-			loadingMessages = false;
-			syncChatMessagePlaceholder();
+			exitPseudoChannelLoad();
+			unlockChatMessagesPaneScroll(messagesEl);
+			if (!isStaleChatPane(paneEpoch) && messagesEl.isConnected) {
+				messagesEl.removeAttribute('aria-busy');
+			}
 			rebuildTopbarMenuDynamic();
-			maybeStartChatCreationsPseudoChannelPoll();
+			if (!isStaleChatPane(paneEpoch) && activePseudoChannelSlug === 'creations') {
+				maybeStartChatCreationsPseudoChannelPoll();
+			}
 		}
 	}
 
@@ -4782,10 +6236,10 @@ export async function initChatPage(root, options = {}) {
 
 	async function loadExploreChannelMessages() {
 		const messagesEl = root.querySelector('[data-chat-messages]');
-		if (!messagesEl || loadingMessages) return;
-		loadingMessages = true;
+		if (!messagesEl) return;
+		const paneEpoch = bumpChatMessagesPaneEpoch();
+		enterPseudoChannelLoad();
 		exploreBrowseMessagesLoading = true;
-		syncChatMessagePlaceholder();
 		syncChatExploreComposerChrome();
 		teardownCommentsChannelLoadMore();
 		teardownFeedChannelLoadMore();
@@ -4794,6 +6248,7 @@ export async function initChatPage(root, options = {}) {
 		const qActive = String(exploreQueryRef.q || '').trim();
 		try {
 			const feedCardMod = await import(`../shared/feedCardBuild.js${qs}`);
+			if (isStaleChatPane(paneEpoch)) return;
 			const { createFeedItemCard, feedItemToUser } = feedCardMod;
 
 			if (qActive) {
@@ -4803,6 +6258,7 @@ export async function initChatPage(root, options = {}) {
 				syncChatExploreComposerChrome();
 				try {
 					const merged = await fetchExploreSearchMergedForChat(qActive);
+					if (isStaleChatPane(paneEpoch)) return;
 					pushExploreChannelSearchToHistory(qActive);
 					lastChatMessagesPayload = [];
 					clearPageUsers();
@@ -4876,6 +6332,7 @@ export async function initChatPage(root, options = {}) {
 				},
 			});
 			const r = await pseudoColumnPager.loadInitial();
+			if (isStaleChatPane(paneEpoch)) return;
 			if (!r.ok) {
 				if (r.error instanceof Error) {
 					throw r.error;
@@ -4946,12 +6403,20 @@ export async function initChatPage(root, options = {}) {
 			}
 		} catch (err) {
 			console.error('[Chat page] explore channel:', err);
-			messagesEl.innerHTML = renderEmptyError(err?.message || 'Could not load explore.');
+			if (!isStaleChatPane(paneEpoch)) {
+				paintChatMessagesPaneError(
+					messagesEl,
+					err?.message || 'Could not load explore.',
+					"Couldn't load explore"
+				);
+			}
 		} finally {
-			messagesEl.removeAttribute('aria-busy');
+			exitPseudoChannelLoad();
+			unlockChatMessagesPaneScroll(messagesEl);
 			exploreBrowseMessagesLoading = false;
-			loadingMessages = false;
-			syncChatMessagePlaceholder();
+			if (!isStaleChatPane(paneEpoch) && messagesEl.isConnected) {
+				messagesEl.removeAttribute('aria-busy');
+			}
 			syncChatExploreComposerChrome();
 			if (activePseudoChannelSlug === 'explore' && !String(exploreQueryRef.q || '').trim()) {
 				syncExploreChannelBrowseUrl();
@@ -4963,19 +6428,20 @@ export async function initChatPage(root, options = {}) {
 	async function loadMessages() {
 		const threadId = activeThreadId;
 		const messagesEl = root.querySelector('[data-chat-messages]');
-		if (!threadId || !messagesEl || loadingMessages) return;
+		if (!threadId || !messagesEl) return;
+		const paneEpoch = bumpChatMessagesPaneEpoch();
 		if (threadId !== lastReadThreadIdForMark) {
 			lastReadThreadIdForMark = threadId;
 			lastMarkReadSentId = null;
 		}
-		loadingMessages = true;
-		syncChatMessagePlaceholder();
+		enterThreadMessagesLoad();
 		messagesEl.setAttribute('aria-busy', 'true');
 		const prevVideoStates = captureChatVideoPlaybackStates(messagesEl);
 
 		const viewerId = chatViewerId;
 		try {
 			await refreshChatCanvasesList();
+			if (isStaleChatPane(paneEpoch)) return;
 			const res = await fetch(`/api/chat/threads/${threadId}/messages?limit=50`, {
 				credentials: 'include'
 			});
@@ -4983,6 +6449,7 @@ export async function initChatPage(root, options = {}) {
 			if (!res.ok) {
 				throw new Error(data.message || data.error || 'Failed to load messages');
 			}
+			if (isStaleChatPane(paneEpoch)) return;
 			const messages = Array.isArray(data.messages) ? data.messages : [];
 			const messagesForUi = messages.filter((m) => !getChatCanvasMetaFromMessage(m));
 			lastChatMessagesPayload = messagesForUi;
@@ -5050,25 +6517,32 @@ export async function initChatPage(root, options = {}) {
 			}
 			restoreChatVideoPlaybackStates(messagesEl, prevVideoStates);
 			setupReactionTooltipTap(messagesEl);
-			const firstUnread = messagesEl.querySelector('.connect-chat-msg.is-unread');
-			if (firstUnread) {
-				scrollChatMessagesToFirstUnread(firstUnread);
-			} else {
-				scrollChatMessagesToEnd();
+			// TEMP: always land at latest message on load; disable unread jump behavior for now.
+			scrollChatMessagesToEnd('initial_load');
+			if (!isStaleChatPane(paneEpoch)) {
+				window.setTimeout(() => {
+					if (isStaleChatPane(paneEpoch)) return;
+					setupLatestMessageReadObserver();
+				}, 550);
 			}
-			window.setTimeout(() => {
-				setupLatestMessageReadObserver();
-			}, 550);
 		} catch (err) {
 			console.error('[Chat page] messages:', err);
-			messagesEl.innerHTML = renderEmptyError(err?.message || 'Could not load messages.');
-			chatCanvasesList = [];
-			activeThreadPinnedCanvasId = null;
-			rebuildTopbarMenuDynamic();
+			if (!isStaleChatPane(paneEpoch)) {
+				paintChatMessagesPaneError(
+					messagesEl,
+					err?.message || 'Could not load messages.',
+					"Couldn't load this conversation"
+				);
+				chatCanvasesList = [];
+				activeThreadPinnedCanvasId = null;
+				rebuildTopbarMenuDynamic();
+			}
 		} finally {
-			messagesEl.removeAttribute('aria-busy');
-			loadingMessages = false;
-			syncChatMessagePlaceholder();
+			exitThreadMessagesLoad();
+			unlockChatMessagesPaneScroll(messagesEl);
+			if (!isStaleChatPane(paneEpoch) && messagesEl.isConnected) {
+				messagesEl.removeAttribute('aria-busy');
+			}
 			rebuildTopbarMenuDynamic();
 		}
 	}
@@ -5099,7 +6573,7 @@ export async function initChatPage(root, options = {}) {
 		tearDownVisibilityResync();
 		const onVis = () => {
 			if (document.visibilityState !== 'visible') return;
-			if (!activeThreadId || loadingMessages) return;
+			if (!activeThreadId || loadingThreadMessages) return;
 			void loadMessages();
 		};
 		document.addEventListener('visibilitychange', onVis);
@@ -5119,7 +6593,7 @@ export async function initChatPage(root, options = {}) {
 			roomBroadcastTeardown = await mod.subscribeRoomBroadcast(tid, refetch, {
 				onReconnect: refetch,
 				onDeleted: () => {
-					window.location.href = '/connect#chat';
+					window.location.href = '/chat#channels';
 				}
 			});
 		} catch (err) {
@@ -5523,13 +6997,39 @@ export async function initChatPage(root, options = {}) {
 		await sendChatOutgoing(body, { clearInput: true });
 	}
 
+	/**
+	 * Friendly in-pane error for chat `[data-chat-messages]` (threads, real channels, pseudo lanes).
+	 * @param {HTMLElement | null} messagesEl
+	 * @param {string} [detail]
+	 * @param {string} [title]
+	 * @param {{ buttonText?: string, buttonHref?: string, buttonRoute?: string }} [cta]
+	 */
+	function paintChatMessagesPaneError(messagesEl, detail, title, cta = {}) {
+		if (!(messagesEl instanceof HTMLElement) || typeof renderPaneLoadError !== 'function') return;
+		const msg =
+			typeof detail === 'string' && detail.trim()
+				? detail.trim()
+				: 'Please try again in a moment.';
+		const ttl =
+			typeof title === 'string' && title.trim() ? title.trim() : "Couldn't load this view";
+		messagesEl.innerHTML = renderPaneLoadError(msg, {
+			title: ttl,
+			buttonText: cta.buttonText || '',
+			buttonHref: cta.buttonHref || '',
+			buttonRoute: cta.buttonRoute || '',
+		});
+		messagesEl.removeAttribute('aria-busy');
+		unlockChatMessagesPaneScroll(messagesEl);
+	}
+
 	async function openThreadForCurrentPath() {
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		const errEl = root.querySelector('[data-chat-error]');
 		const parsed = parseChatPathname(window.location.pathname);
+		markThreadUiPending();
 
 		if (parsed.kind === 'empty' || parsed.kind === 'invalid') {
-			window.location.replace('/connect#chat');
+			window.location.replace('/chat#channels');
 			return;
 		}
 
@@ -5537,7 +7037,14 @@ export async function initChatPage(root, options = {}) {
 		tearDownChatCanvasUi();
 		clearChatPendingAttachments();
 		activePseudoChannelSlug = null;
+		if (parsed.kind === 'channel') {
+			const slug = String(parsed.slug || '').trim().toLowerCase();
+			if (slug === 'feed' || slug === 'explore' || slug === 'creations' || slug === 'comments') {
+				activePseudoChannelSlug = slug;
+			}
+		}
 		syncChatBrowseViewBodyClass();
+		applyComposerState();
 		teardownCommentsChannelLoadMore();
 		teardownFeedChannelLoadMore();
 		teardownExploreChannelLoadMore();
@@ -5545,11 +7052,44 @@ export async function initChatPage(root, options = {}) {
 		if (messagesEl) {
 			stopChatCreationsPseudoChannelPoll();
 			teardownChatCreationsPseudoBulkHostIfPresent(messagesEl);
-			messagesEl.innerHTML = renderEmptyState({
-				loading: true,
-				loadingAriaLabel: 'Loading',
-				className: 'chat-page-thread-loading'
-			});
+			const channelSlugForLoading =
+				parsed.kind === 'channel' ? String(parsed.slug || '').trim().toLowerCase() : '';
+			if (channelSlugForLoading === 'feed' && typeof renderFeedCardsSkeleton === 'function') {
+				messagesEl.innerHTML = `<div class="feed-route chat-feed-channel-route">
+					<div class="route-cards feed-cards" data-feed-container aria-busy="true" aria-label="Loading">${renderFeedCardsSkeleton(4)}</div>
+				</div>`;
+				resetAndLockChatMessagesScrollForSkeleton(messagesEl, 'feed');
+			} else if (channelSlugForLoading === 'comments' && typeof renderCommentRowsSkeleton === 'function') {
+				messagesEl.innerHTML = `<div class="chat-comments-channel-loading" aria-busy="true" aria-label="Loading">${renderCommentRowsSkeleton(10)}</div>`;
+				resetAndLockChatMessagesScrollForSkeleton(messagesEl, 'comments');
+			} else if (channelSlugForLoading === 'explore' || channelSlugForLoading === 'creations') {
+				const creationsCls = channelSlugForLoading === 'creations' ? ' creations-route' : '';
+				const browseCls = chatExploreCreationsBrowseView ? ' chat-feed-channel-route--browse-view' : '';
+				const gridInner =
+					chatExploreCreationsBrowseView && typeof renderGridSkeleton === 'function'
+						? renderGridSkeleton(25)
+						: typeof renderFeedCardsSkeleton === 'function'
+							? renderFeedCardsSkeleton(4)
+							: '';
+				if (gridInner) {
+					messagesEl.innerHTML = `<div class="feed-route chat-feed-channel-route${creationsCls}${browseCls}">
+						<div class="route-cards feed-cards" aria-busy="true" aria-label="Loading">${gridInner}</div>
+					</div>`;
+					resetAndLockChatMessagesScrollForSkeleton(messagesEl, channelSlugForLoading);
+				} else {
+					messagesEl.innerHTML = renderEmptyState({
+						loading: true,
+						loadingAriaLabel: 'Loading',
+						className: 'chat-page-thread-loading'
+					});
+				}
+			} else {
+				messagesEl.innerHTML = renderEmptyState({
+					loading: true,
+					loadingAriaLabel: 'Loading',
+					className: 'chat-page-thread-loading'
+				});
+			}
 			messagesEl.setAttribute('aria-busy', 'true');
 		}
 		if (errEl instanceof HTMLElement) {
@@ -5679,11 +7219,14 @@ export async function initChatPage(root, options = {}) {
 					await loadMessages();
 					await bindRoomBroadcast(activeThreadId);
 				} else if (messagesEl) {
-					messagesEl.removeAttribute('aria-busy');
-					messagesEl.innerHTML = '';
+					paintChatMessagesPaneError(
+						messagesEl,
+						'This channel could not be opened. Try again or choose another channel from the sidebar.',
+						"Couldn't open this channel"
+					);
 					if (errEl instanceof HTMLElement) {
-						errEl.hidden = false;
-						errEl.textContent = 'Could not open this channel.';
+						errEl.hidden = true;
+						errEl.textContent = '';
 					}
 				}
 				return;
@@ -5737,11 +7280,14 @@ export async function initChatPage(root, options = {}) {
 					await loadMessages();
 					await bindRoomBroadcast(activeThreadId);
 				} else if (messagesEl) {
-					messagesEl.removeAttribute('aria-busy');
-					messagesEl.innerHTML = '';
+					paintChatMessagesPaneError(
+						messagesEl,
+						'This conversation could not be opened. Try again or start from your inbox.',
+						"Couldn't open this chat"
+					);
 					if (errEl instanceof HTMLElement) {
-						errEl.hidden = false;
-						errEl.textContent = 'Could not open this conversation.';
+						errEl.hidden = true;
+						errEl.textContent = '';
 					}
 				}
 			}
@@ -5751,12 +7297,15 @@ export async function initChatPage(root, options = {}) {
 			console.error('[Chat page]', err);
 			void refreshChatSidebar({ skipThreadsFetch: true });
 			if (messagesEl) {
-				messagesEl.innerHTML = '';
-				messagesEl.removeAttribute('aria-busy');
+				paintChatMessagesPaneError(
+					messagesEl,
+					err?.message || 'Something went wrong while opening chat.',
+					"Couldn't open this view"
+				);
 			}
 			if (errEl instanceof HTMLElement) {
-				errEl.hidden = false;
-				errEl.textContent = err?.message || 'Could not open this conversation.';
+				errEl.hidden = true;
+				errEl.textContent = '';
 			}
 		} finally {
 			syncChatBrowseViewBodyClass();
@@ -6087,9 +7636,30 @@ export async function initChatPage(root, options = {}) {
 			sidebarNav.removeEventListener('click', chatSidebarNavClickHandler);
 			chatSidebarNavClickHandler = null;
 		}
+		if (sidebarNav && typeof chatSidebarDmHoverOverHandler === 'function') {
+			sidebarNav.removeEventListener('mouseover', chatSidebarDmHoverOverHandler);
+			chatSidebarDmHoverOverHandler = null;
+		}
+		if (sidebarNav && typeof chatSidebarDmHoverOutHandler === 'function') {
+			sidebarNav.removeEventListener('mouseout', chatSidebarDmHoverOutHandler);
+			chatSidebarDmHoverOutHandler = null;
+		}
+		if (typeof chatSidebarNotificationsOutsideClickHandler === 'function') {
+			document.removeEventListener('click', chatSidebarNotificationsOutsideClickHandler);
+			chatSidebarNotificationsOutsideClickHandler = null;
+		}
+		if (chatSidebarNotificationsMenuEl instanceof HTMLElement) {
+			chatSidebarNotificationsMenuEl.remove();
+			chatSidebarNotificationsMenuEl = null;
+		}
 		if (sidebarNav && typeof chatSidebarSectionAddHandler === 'function') {
 			sidebarNav.removeEventListener('click', chatSidebarSectionAddHandler);
 			chatSidebarSectionAddHandler = null;
+		}
+		hideChatSidebarDmHoverPopover();
+		if (chatSidebarDmHoverPopoverEl instanceof HTMLElement) {
+			chatSidebarDmHoverPopoverEl.remove();
+			chatSidebarDmHoverPopoverEl = null;
 		}
 		try {
 			chatSidebarModalsApi?.closeAll?.();
@@ -6628,52 +8198,66 @@ export async function initChatPage(root, options = {}) {
 
 	/** Desktop: show pinned canvas name in the top bar; click opens the canvas panel (no auto-open). */
 	function syncTopbarPinnedCanvasButton() {
-		const btn = root.querySelector('[data-chat-topbar-pinned-canvas]');
-		if (!(btn instanceof HTMLButtonElement)) return;
-		btn.removeAttribute('data-chat-canvas-open');
-		if (isChatPageMobileLayout()) {
-			btn.hidden = true;
-			btn.textContent = '';
-			btn.removeAttribute('aria-label');
-			return;
-		}
-		if (!isActiveThreadCanvasEligible()) {
-			btn.hidden = true;
-			btn.textContent = '';
-			btn.removeAttribute('aria-label');
-			return;
-		}
-		const pinId = activeThreadPinnedCanvasId;
-		if (!Number.isFinite(pinId) || pinId <= 0) {
-			btn.hidden = true;
-			btn.textContent = '';
-			btn.removeAttribute('aria-label');
-			return;
-		}
-		const row = chatCanvasesList.find((c) => Number(c.id) === pinId);
-		if (!row) {
-			btn.hidden = true;
-			btn.textContent = '';
-			btn.removeAttribute('aria-label');
-			return;
-		}
-		const panelEl = getChatCanvasPanelEls().panel;
-		const panelOpen = panelEl instanceof HTMLElement && !panelEl.hidden;
-		const viewingPinnedInPanel =
-			panelOpen &&
-			activeCanvasRow != null &&
-			Number(activeCanvasRow.id) === Number(pinId);
-		if (viewingPinnedInPanel) {
-			btn.hidden = true;
-			btn.textContent = '';
-			btn.removeAttribute('aria-label');
-			return;
-		}
-		const title = String(row.title || '').trim() || 'Canvas';
-		btn.hidden = false;
-		btn.textContent = title;
-		btn.setAttribute('data-chat-canvas-open', String(row.id));
-		btn.setAttribute('aria-label', `Open pinned canvas: ${title}`);
+		const desktopBtn = root.querySelector('[data-chat-topbar-pinned-canvas]');
+		const mobileBtn = mainColumn instanceof HTMLElement
+			? mainColumn.querySelector('[data-chat-mobile-pinned-canvas]')
+			: null;
+		const isMobile = isChatPageMobileLayout();
+
+		const applyButtonState = (btn, { mobile = false } = {}) => {
+			if (!(btn instanceof HTMLButtonElement)) return;
+			btn.removeAttribute('data-chat-canvas-open');
+			if ((mobile && !isMobile) || (!mobile && isMobile)) {
+				btn.hidden = true;
+				btn.textContent = '';
+				btn.removeAttribute('aria-label');
+				return;
+			}
+			if (!isActiveThreadCanvasEligible()) {
+				btn.hidden = true;
+				btn.textContent = '';
+				btn.removeAttribute('aria-label');
+				return;
+			}
+			const pinId = activeThreadPinnedCanvasId;
+			if (!Number.isFinite(pinId) || pinId <= 0) {
+				btn.hidden = true;
+				btn.textContent = '';
+				btn.removeAttribute('aria-label');
+				return;
+			}
+			const row = chatCanvasesList.find((c) => Number(c.id) === pinId);
+			if (!row) {
+				btn.hidden = true;
+				btn.textContent = '';
+				btn.removeAttribute('aria-label');
+				return;
+			}
+			const panelEl = getChatCanvasPanelEls().panel;
+			const panelOpen = panelEl instanceof HTMLElement && !panelEl.hidden;
+			const viewingPinnedInPanel =
+				panelOpen &&
+				activeCanvasRow != null &&
+				Number(activeCanvasRow.id) === Number(pinId);
+			if (viewingPinnedInPanel && !mobile) {
+				btn.hidden = true;
+				btn.textContent = '';
+				btn.removeAttribute('aria-label');
+				return;
+			}
+			const title = String(row.title || '').trim() || 'Canvas';
+			btn.hidden = false;
+			btn.textContent = title;
+			btn.setAttribute('data-chat-canvas-open', String(row.id));
+			btn.classList.toggle('is-active', viewingPinnedInPanel);
+			btn.setAttribute(
+				'aria-label',
+				viewingPinnedInPanel ? `Return to channel from pinned canvas: ${title}` : `Open pinned canvas: ${title}`
+			);
+		};
+
+		applyButtonState(desktopBtn, { mobile: false });
+		applyButtonState(mobileBtn, { mobile: true });
 	}
 
 	rebuildTopbarMenuDynamic = () => {
@@ -6761,6 +8345,12 @@ export async function initChatPage(root, options = {}) {
 				closeChatCanvasPanel({ forgetOpenPreference: true });
 			}
 		} else if (tid != null && Number.isFinite(Number(tid)) && Number(tid) > 0) {
+			// Mobile should load the channel first; canvases are opened explicitly
+			// via chevron menu (or desktop pinned-canvas button).
+			if (isChatPageMobileLayout()) {
+				syncTopbarPinnedCanvasButton();
+				return;
+			}
 			const savedId = getStoredOpenCanvasIdForThread(tid);
 			if (savedId != null) {
 				const row = chatCanvasesList.find((c) => Number(c.id) === savedId);
@@ -6902,9 +8492,39 @@ export async function initChatPage(root, options = {}) {
 		) {
 			e.preventDefault();
 			e.stopPropagation();
-			// Navigate without closing canvas/sheet first — closing repaints the thread
-			// (canvas → channel) before the next document loads, which feels like two steps.
-			window.location.assign('/connect#chat');
+			const next = `/chat${window.location.search || ''}#channels`;
+			const cur = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
+			if (next !== cur) {
+				history.pushState({ prsnChat: true }, '', next);
+				try {
+					window.dispatchEvent(new HashChangeEvent('hashchange'));
+				} catch {
+					window.dispatchEvent(new Event('hashchange'));
+				}
+			}
+			setMobileSidebarMode(true);
+			return;
+		}
+		const topbarBack = t.closest('.chat-page-topbar .chat-page-back');
+		if (
+			topbarBack instanceof HTMLAnchorElement &&
+			mainColumn instanceof HTMLElement &&
+			mainColumn.contains(topbarBack) &&
+			isChatPageMobileLayout()
+		) {
+			e.preventDefault();
+			e.stopPropagation();
+			const next = `/chat${window.location.search || ''}#channels`;
+			const cur = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
+			if (next !== cur) {
+				history.pushState({ prsnChat: true }, '', next);
+				try {
+					window.dispatchEvent(new HashChangeEvent('hashchange'));
+				} catch {
+					window.dispatchEvent(new Event('hashchange'));
+				}
+			}
+			setMobileSidebarMode(true);
 			return;
 		}
 		const sheetTrig = t.closest('[data-chat-mobile-chrome-sheet-trigger]');
@@ -6923,6 +8543,27 @@ export async function initChatPage(root, options = {}) {
 				openMobileChromeSheet();
 			} else {
 				closeMobileChromeSheet();
+			}
+			return;
+		}
+		const mobilePinnedCanvasBtn = t.closest('[data-chat-mobile-pinned-canvas][data-chat-canvas-open]');
+		if (mobilePinnedCanvasBtn instanceof HTMLButtonElement) {
+			e.preventDefault();
+			e.stopPropagation();
+			const mid = Number(mobilePinnedCanvasBtn.getAttribute('data-chat-canvas-open'));
+			if (Number.isFinite(mid) && mid > 0) {
+				const panelEl = getChatCanvasPanelEls().panel;
+				const panelOpen = panelEl instanceof HTMLElement && !panelEl.hidden;
+				const isViewingThisPinned =
+					panelOpen &&
+					activeCanvasRow != null &&
+					Number(activeCanvasRow.id) === mid;
+				if (isViewingThisPinned) {
+					closeChatCanvasPanel();
+					return;
+				}
+				const row = chatCanvasesList.find((c) => Number(c.id) === mid);
+				if (row) openChatCanvasPanel(row);
 			}
 			return;
 		}
@@ -7149,11 +8790,64 @@ export async function initChatPage(root, options = {}) {
 	const CHAT_CANVAS_WIDTH_LS = 'prsn-chat-canvas-width-px';
 	const CHAT_CANVAS_WIDTH_MIN = 260;
 	const CHAT_CANVAS_WIDTH_MAX = 720;
+	const CHAT_SIDEBAR_WIDTH_LS = 'prsn-chat-sidebar-width-px';
+	const CHAT_SIDEBAR_WIDTH_MIN = 220;
+	const CHAT_SIDEBAR_WIDTH_MAX = 460;
+	const CHAT_THREAD_PANE_MIN = 420;
+
+	const chatLayoutOuter = root.closest('.chat-page-layout');
+
+	function readCssPxVar(varName) {
+		try {
+			const fromLayout =
+				chatLayoutOuter instanceof HTMLElement
+					? getComputedStyle(chatLayoutOuter).getPropertyValue(varName)
+					: '';
+			const fromRoot = getComputedStyle(document.documentElement).getPropertyValue(varName);
+			const raw = String(fromLayout || fromRoot || '').trim();
+			if (!raw) return null;
+			const n = Number(raw.replace(/px$/i, '').trim());
+			return Number.isFinite(n) ? n : null;
+		} catch {
+			return null;
+		}
+	}
+
+	function getChatCanvasWidthBounds() {
+		const viewport = Math.max(0, window.innerWidth || 0);
+		const sidebarWidth =
+			readCssPxVar('--chat-sidebar-width') ?? CHAT_SIDEBAR_WIDTH_MIN;
+		const maxByViewport = viewport - sidebarWidth - CHAT_THREAD_PANE_MIN;
+		const dynamicMax = Math.min(CHAT_CANVAS_WIDTH_MAX, Math.floor(maxByViewport));
+		const max = Math.max(CHAT_CANVAS_WIDTH_MIN, dynamicMax);
+		return { min: CHAT_CANVAS_WIDTH_MIN, max };
+	}
+
+	function getChatSidebarWidthBounds() {
+		const viewport = Math.max(0, window.innerWidth || 0);
+		const canvasPanel = chatLayoutRoot?.querySelector?.('[data-chat-canvas-panel]');
+		const canvasVisible = canvasPanel instanceof HTMLElement && !canvasPanel.hidden;
+		const canvasWidth = canvasVisible
+			? canvasPanel.getBoundingClientRect().width || (readCssPxVar('--chat-canvas-panel-width') ?? CHAT_CANVAS_WIDTH_MIN)
+			: 0;
+		const maxByViewport = viewport - canvasWidth - CHAT_THREAD_PANE_MIN;
+		const dynamicMax = Math.min(CHAT_SIDEBAR_WIDTH_MAX, Math.floor(maxByViewport));
+		const max = Math.max(CHAT_SIDEBAR_WIDTH_MIN, dynamicMax);
+		return { min: CHAT_SIDEBAR_WIDTH_MIN, max };
+	}
 
 	function clampChatCanvasWidthPx(n) {
 		const x = Number(n);
 		if (!Number.isFinite(x)) return null;
-		return Math.min(CHAT_CANVAS_WIDTH_MAX, Math.max(CHAT_CANVAS_WIDTH_MIN, Math.round(x)));
+		const bounds = getChatCanvasWidthBounds();
+		return Math.min(bounds.max, Math.max(bounds.min, Math.round(x)));
+	}
+
+	function clampChatSidebarWidthPx(n) {
+		const x = Number(n);
+		if (!Number.isFinite(x)) return null;
+		const bounds = getChatSidebarWidthBounds();
+		return Math.min(bounds.max, Math.max(bounds.min, Math.round(x)));
 	}
 
 	function readStoredChatCanvasWidthPx() {
@@ -7166,14 +8860,120 @@ export async function initChatPage(root, options = {}) {
 		}
 	}
 
+	function readStoredChatSidebarWidthPx() {
+		try {
+			const raw = window.localStorage.getItem(CHAT_SIDEBAR_WIDTH_LS);
+			if (raw == null || raw === '') return null;
+			return clampChatSidebarWidthPx(Number(raw));
+		} catch {
+			return null;
+		}
+	}
+
 	function applyChatCanvasPanelWidthPx(px) {
 		if (!(chatLayoutRoot instanceof HTMLElement)) return;
 		const v = clampChatCanvasWidthPx(px);
 		if (v == null) {
 			chatLayoutRoot.style.removeProperty('--chat-canvas-panel-width');
+			document.documentElement.style.removeProperty('--chat-canvas-panel-width');
 			return;
 		}
 		chatLayoutRoot.style.setProperty('--chat-canvas-panel-width', `${v}px`);
+		document.documentElement.style.setProperty('--chat-canvas-panel-width', `${v}px`);
+	}
+
+	function applyChatSidebarWidthPx(px) {
+		const host = chatLayoutOuter instanceof HTMLElement ? chatLayoutOuter : null;
+		if (!host) return;
+		const v = clampChatSidebarWidthPx(px);
+		if (v == null) {
+			host.style.removeProperty('--chat-sidebar-width');
+			document.documentElement.style.removeProperty('--chat-sidebar-width');
+			return;
+		}
+		host.style.setProperty('--chat-sidebar-width', `${v}px`);
+		document.documentElement.style.setProperty('--chat-sidebar-width', `${v}px`);
+	}
+
+	if (chatLayoutOuter instanceof HTMLElement) {
+		const storedSidebar = readStoredChatSidebarWidthPx();
+		if (storedSidebar != null) applyChatSidebarWidthPx(storedSidebar);
+		const sidebarResizeHandle = chatLayoutOuter.querySelector('[data-chat-sidebar-resize-handle]');
+		const sidebarEl = chatLayoutOuter.querySelector('[data-chat-sidebar]');
+		if (sidebarResizeHandle instanceof HTMLElement && sidebarEl instanceof HTMLElement) {
+			let dragPointerId = null;
+			let dragStartX = 0;
+			let dragStartW = 0;
+			const onMove = (ev) => {
+				if (dragPointerId != null && ev.pointerId !== dragPointerId) return;
+				const next = dragStartW + (ev.clientX - dragStartX);
+				applyChatSidebarWidthPx(next);
+				const canvasPanel = chatLayoutRoot?.querySelector?.('[data-chat-canvas-panel]');
+				if (canvasPanel instanceof HTMLElement && !canvasPanel.hidden) {
+					applyChatCanvasPanelWidthPx(canvasPanel.getBoundingClientRect().width);
+				}
+			};
+			const onUp = (ev) => {
+				if (dragPointerId != null && ev.pointerId !== dragPointerId) return;
+				document.removeEventListener('pointermove', onMove);
+				document.removeEventListener('pointerup', onUp);
+				document.removeEventListener('pointercancel', onUp);
+				try {
+					if (
+						dragPointerId != null &&
+						typeof sidebarResizeHandle.hasPointerCapture === 'function' &&
+						sidebarResizeHandle.hasPointerCapture(dragPointerId)
+					) {
+						sidebarResizeHandle.releasePointerCapture(dragPointerId);
+					}
+				} catch {
+					// ignore
+				}
+				dragPointerId = null;
+				const w = sidebarEl.getBoundingClientRect().width;
+				const clamped = clampChatSidebarWidthPx(w);
+				if (clamped != null) {
+					try {
+						window.localStorage.setItem(CHAT_SIDEBAR_WIDTH_LS, String(clamped));
+					} catch {
+						// ignore
+					}
+					applyChatSidebarWidthPx(clamped);
+				}
+			};
+			sidebarResizeHandle.addEventListener('pointerdown', (ev) => {
+				ev.preventDefault();
+				dragPointerId = ev.pointerId;
+				dragStartX = ev.clientX;
+				dragStartW = sidebarEl.getBoundingClientRect().width;
+				try {
+					if (typeof sidebarResizeHandle.setPointerCapture === 'function') {
+						sidebarResizeHandle.setPointerCapture(ev.pointerId);
+					}
+				} catch {
+					// ignore
+				}
+				document.addEventListener('pointermove', onMove);
+				document.addEventListener('pointerup', onUp);
+				document.addEventListener('pointercancel', onUp);
+			});
+			sidebarResizeHandle.addEventListener('keydown', (ev) => {
+				if (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight') return;
+				ev.preventDefault();
+				const cur = clampChatSidebarWidthPx(sidebarEl.getBoundingClientRect().width) ?? CHAT_SIDEBAR_WIDTH_MIN;
+				const step = ev.shiftKey ? 24 : 8;
+				const next = ev.key === 'ArrowLeft' ? cur - step : cur + step;
+				applyChatSidebarWidthPx(next);
+				const clamped = clampChatSidebarWidthPx(sidebarEl.getBoundingClientRect().width);
+				if (clamped != null) {
+					try {
+						window.localStorage.setItem(CHAT_SIDEBAR_WIDTH_LS, String(clamped));
+					} catch {
+						// ignore
+					}
+				}
+			});
+		}
 	}
 
 	if (chatLayoutRoot instanceof HTMLElement) {
@@ -7261,15 +9061,43 @@ export async function initChatPage(root, options = {}) {
 		}
 	}
 
+	window.addEventListener('resize', () => {
+		setMobileSidebarMode(shouldShowMobileSidebarFromLocation());
+		if (chatLayoutOuter instanceof HTMLElement) {
+			const sidebar = chatLayoutOuter.querySelector('[data-chat-sidebar]');
+			if (sidebar instanceof HTMLElement) {
+				applyChatSidebarWidthPx(sidebar.getBoundingClientRect().width);
+			}
+		}
+		if (chatLayoutRoot instanceof HTMLElement) {
+			const panel = chatLayoutRoot.querySelector('[data-chat-canvas-panel]');
+			if (panel instanceof HTMLElement && !panel.hidden) {
+				applyChatCanvasPanelWidthPx(panel.getBoundingClientRect().width);
+			}
+		}
+	});
+
 	document.addEventListener('chat-unread-refresh', onChatGlobalUnreadRefreshDoc);
+	window.addEventListener('hashchange', () => {
+		setMobileSidebarMode(shouldShowMobileSidebarFromLocation());
+	});
+	window.addEventListener('popstate', () => {
+		setMobileSidebarMode(shouldShowMobileSidebarFromLocation());
+	});
 	chatGlobalUnreadPoll = setInterval(() => void loadChatGlobalUnreadSummary(), 45000);
 	void loadChatGlobalUnreadSummary();
 	void hydrateAudibleNotificationsFromProfileOnce();
 	enableLikeButtons(root);
+	const shouldStartInMobileSidebar = shouldShowMobileSidebarFromLocation();
+	setMobileSidebarMode(shouldStartInMobileSidebar);
+	if (shouldStartInMobileSidebar) {
+		// Prioritize sidebar data immediately for /chat#channels first paint.
+		void refreshChatSidebar();
+	}
 	await openThreadForCurrentPath();
 	dispatchChatUnreadRefresh();
-	/** Poll often enough that DM online/offline styling tracks presence without feeling stuck. */
-	chatSidebarPollTimer = setInterval(() => void refreshChatSidebar(), 15000);
+	/** Presence/UI poll: keep roster status fresh without force-refetching all thread metadata. */
+	chatSidebarPollTimer = setInterval(() => void refreshChatSidebar({ skipThreadsFetch: true }), 15000);
 	chatSidebarServersHandler = () => void refreshChatSidebar();
 	document.addEventListener('servers-updated', chatSidebarServersHandler);
 	chatSidebarVisibilityHandler = () => {

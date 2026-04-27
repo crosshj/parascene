@@ -95,3 +95,35 @@ export function renderEmptyError(text, options = {}) {
 	const { className = '' } = options;
 	return renderEmptyState({ rawContent: escapeHtml(text), className });
 }
+
+const PANE_LOAD_ERROR_ICON_DEFAULT = `<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`;
+
+/**
+ * Full empty-state for failed pane loads (chat thread, pseudo-channel, etc.): icon + title + message.
+ * @param {string} message — detail line (escaped)
+ * @param {{ title?: string, icon?: string, buttonText?: string, buttonHref?: string, buttonRoute?: string, className?: string }} [options]
+ * @returns {string}
+ */
+export function renderPaneLoadError(message, options = {}) {
+	const title =
+		typeof options.title === 'string' && options.title.trim()
+			? options.title.trim()
+			: "Couldn't load this";
+	const body =
+		typeof message === 'string' && message.trim()
+			? message.trim()
+			: 'Something went wrong. Please try again in a moment.';
+	const icon =
+		typeof options.icon === 'string' && options.icon.trim() ? options.icon.trim() : PANE_LOAD_ERROR_ICON_DEFAULT;
+	const extra = options.className ? ` ${String(options.className).trim()}` : '';
+	const className = `route-empty-image-grid chat-page-pane-load-error${extra}`.trim();
+	return renderEmptyState({
+		className,
+		icon,
+		title,
+		message: body,
+		buttonText: options.buttonText || '',
+		buttonHref: options.buttonHref || '',
+		buttonRoute: options.buttonRoute || '',
+	});
+}

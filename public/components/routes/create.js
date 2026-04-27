@@ -206,9 +206,6 @@ class AppRouteCreate extends HTMLElement {
           <div class="route-empty-message">You don't have access to any servers yet. Add a server to get started.</div>
         </div>
         <div class="create-route-form-wrap" data-create-form-wrap hidden aria-hidden="true">
-        <div class="route-header">
-          <h3>Create</h3>
-        </div>
         <app-tabs active="basic">
           <tab data-id="basic" label="Advanced" default>
             <div class="route-header">

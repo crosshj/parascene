@@ -6,6 +6,7 @@ import { getBaseAppUrl, getShareBaseUrl } from "./utils/url.js";
 import { verifyShareToken } from "./utils/shareLink.js";
 import { buildRequestMeta } from "./utils/analytics.js";
 import { buildSidebarPseudoStripListStaticHtml } from "../public/shared/chatSidebarRoster.js";
+import { isChatBroadcastMentionSlug } from "../public/shared/chatBroadcastMentions.js";
 
 function getPageForUser(user) {
 	const roleToPage = {
@@ -83,7 +84,9 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			const mentionEnd = mentionStart + 1 + rawToken.length;
 			out += escapeHtml(raw.slice(lastIndex, mentionStart));
 			const normalized = rawToken.toLowerCase();
-			if (sigil === "@" && /^[a-z0-9][a-z0-9_-]{2,23}$/.test(normalized)) {
+			if (sigil === "@" && isChatBroadcastMentionSlug(normalized)) {
+				out += `<span class="mention-broadcast" data-broadcast="${escapeHtml(normalized)}">@${escapeHtml(rawToken)}</span>`;
+			} else if (sigil === "@" && /^[a-z0-9][a-z0-9_-]{2,23}$/.test(normalized)) {
 				out += `<a href="/p/${escapeHtml(normalized)}" class="user-link mention-link">@${escapeHtml(rawToken)}</a>`;
 			} else if (sigil === "#" && /^[a-z0-9][a-z0-9_-]{1,31}$/.test(normalized)) {
 				out += `<a href="/t/${escapeHtml(normalized)}" class="user-link mention-link">#${escapeHtml(rawToken)}</a>`;
@@ -562,7 +565,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			return res.send(htmlContent);
 		}
 
-		// Logged in → get role and serve role page
+		// Logged in → serve chat shell at root (except admin roles).
 		const user = await queries.selectUserById.get(userId);
 		if (!user) {
 			// Only clear cookie if it was actually sent
@@ -576,11 +579,19 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			return res.send(htmlContent);
 		}
 
-		// Serve role-based page
-		const page = getPageForUser(user);
 		const fs = await import("fs/promises");
-		let htmlContent = await fs.readFile(path.join(pagesDir, page), "utf-8");
-		htmlContent = injectCommonHead(htmlContent, getPageTokens(req));
+		let htmlContent;
+		if (String(user.role || "").toLowerCase() === "admin") {
+			const rolePage = getPageForUser(user);
+			htmlContent = await fs.readFile(path.join(pagesDir, rolePage), "utf-8");
+			htmlContent = injectCommonHead(htmlContent, getPageTokens(req));
+		} else {
+			htmlContent = await fs.readFile(path.join(pagesDir, "chat.html"), "utf-8");
+			const chatPageTokens = getPageTokens(req);
+			chatPageTokens.CHAT_SIDEBAR_PSEUDO_STRIP_LIST = buildSidebarPseudoStripListStaticHtml(req.path);
+			htmlContent = replaceTemplateTokens(htmlContent, chatPageTokens);
+			htmlContent = injectCommonHead(htmlContent, getPageTokens(req));
+		}
 		res.setHeader("Content-Type", "text/html");
 		return res.send(htmlContent);
 	});
@@ -1221,15 +1232,33 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			return res.redirect(returnUrl);
 		}
 
-		// Standalone chat UI (no app chrome). List/inbox stays on /connect#chat.
-		if (req.path === "/chat" || req.path === "/chat/") {
-			return res.redirect(302, "/connect#chat");
-		}
-		if (req.path.startsWith("/chat/")) {
+		if (
+			req.path === "/feed" ||
+			req.path === "/feed/" ||
+			req.path === "/explore" ||
+			req.path === "/explore/" ||
+			req.path === "/creations" ||
+			req.path === "/creations/" ||
+			req.path === "/chat" ||
+			req.path === "/chat/" ||
+			req.path.startsWith("/chat/")
+		) {
+			if (String(user.role || "").toLowerCase() === "admin") {
+				const page = getPageForUser(user);
+				const fs = await import("fs/promises");
+				let htmlContent = await fs.readFile(path.join(pagesDir, page), "utf-8");
+				htmlContent = injectCommonHead(htmlContent, getPageTokens(req));
+				res.setHeader("Content-Type", "text/html");
+				return res.send(htmlContent);
+			}
 			const fs = await import("fs/promises");
 			let htmlContent = await fs.readFile(path.join(pagesDir, "chat.html"), "utf-8");
 			const chatPageTokens = getPageTokens(req);
-			chatPageTokens.CHAT_SIDEBAR_PSEUDO_STRIP_LIST = buildSidebarPseudoStripListStaticHtml(req.path);
+			let sidebarPath = req.path;
+			if (req.path === "/feed" || req.path === "/feed/") sidebarPath = "/chat/c/feed";
+			if (req.path === "/explore" || req.path === "/explore/") sidebarPath = "/chat/c/explore";
+			if (req.path === "/creations" || req.path === "/creations/") sidebarPath = "/chat/c/creations";
+			chatPageTokens.CHAT_SIDEBAR_PSEUDO_STRIP_LIST = buildSidebarPseudoStripListStaticHtml(sidebarPath);
 			htmlContent = injectCommonHead(htmlContent, chatPageTokens);
 			res.setHeader("Content-Type", "text/html");
 			return res.send(htmlContent);

@@ -1,8 +1,6 @@
-let formatDate;
+import './account-menu.js';
+
 let fetchJsonWithStatusDeduped;
-let buildProfilePath;
-let helpIcon;
-let getHelpHref;
 let getNsfwContentEnabled;
 let setNsfwContentEnabled;
 let getNsfwObscure;
@@ -28,17 +26,8 @@ async function loadDeps() {
 	const v = getAssetVersionParam();
 	const qs = getImportQuery(v);
 	_depsPromise = (async () => {
-		const datetimeMod = await import(`../../shared/datetime.js${qs}`);
-		formatDate = datetimeMod.formatDate;
-
 		const apiMod = await import(`../../shared/api.js${qs}`);
 		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
-
-		const profileLinksMod = await import(`../../shared/profileLinks.js${qs}`);
-		buildProfilePath = profileLinksMod.buildProfilePath;
-
-		const iconsMod = await import(`../../icons/svg-strings.js${qs}`);
-		helpIcon = iconsMod.helpIcon;
 
 		const nsfwMod = await import(`../../shared/nsfwView.js${qs}`);
 		getNsfwContentEnabled = nsfwMod.getNsfwContentEnabled;
@@ -47,9 +36,6 @@ async function loadDeps() {
 		setNsfwObscure = nsfwMod.setNsfwObscure;
 		applyNsfwPreference = nsfwMod.applyNsfwPreference;
 		NSFW_VIEW_BODY_CLASS = nsfwMod.NSFW_VIEW_BODY_CLASS;
-
-		const helpUrlMod = await import(`../../shared/helpUrl.js${qs}`);
-		getHelpHref = helpUrlMod.getHelpHref;
 
 		const chatAudiblePrefMod = await import(`../../shared/chatAudibleNotificationsPref.js${qs}`);
 		hydrateChatAudibleNotificationsFromServer = chatAudiblePrefMod.hydrateChatAudibleNotificationsFromServer;
@@ -71,7 +57,7 @@ class AppModalProfile extends HTMLElement {
 		this.profileData = null;
 		this.revealedApiKey = null;
 		this.handleEscape = this.handleEscape.bind(this);
-		this.handleOpenEvent = this.handleOpenEvent.bind(this);
+		this.handleOpenSettingsEvent = this.handleOpenSettingsEvent.bind(this);
 		this.handleCloseEvent = this.handleCloseEvent.bind(this);
 		this.handleCloseAllModals = this.handleCloseAllModals.bind(this);
 	}
@@ -86,20 +72,20 @@ class AppModalProfile extends HTMLElement {
 
 	disconnectedCallback() {
 		document.removeEventListener('keydown', this.handleEscape);
-		document.removeEventListener('open-profile', this.handleOpenEvent);
+		document.removeEventListener('open-settings-modal', this.handleOpenSettingsEvent);
 		document.removeEventListener('close-profile', this.handleCloseEvent);
 		document.removeEventListener('close-all-modals', this.handleCloseAllModals);
 	}
 
 	setupEventListeners() {
 		document.addEventListener('keydown', this.handleEscape);
-		document.addEventListener('open-profile', this.handleOpenEvent);
+		document.addEventListener('open-settings-modal', this.handleOpenSettingsEvent);
 		document.addEventListener('close-profile', this.handleCloseEvent);
 		document.addEventListener('close-all-modals', this.handleCloseAllModals);
 
 		const overlay = this.shadowRoot.querySelector('.profile-overlay');
 		const closeButton = this.shadowRoot.querySelector('.profile-close');
-		const logoutForm = this.shadowRoot.querySelector('form[action="/logout"]');
+		const settingsClose = this.shadowRoot.querySelector('[data-settings-close]');
 
 		if (overlay) {
 			overlay.addEventListener('click', (e) => {
@@ -115,17 +101,15 @@ class AppModalProfile extends HTMLElement {
 			});
 		}
 
-		if (logoutForm) {
-			logoutForm.addEventListener('submit', (e) => {
-				// Clear localStorage before submitting logout
-				this.clearCreditsStorage();
-			});
+		if (settingsClose) {
+			settingsClose.addEventListener('click', () => this.close());
 		}
 
 		this.setupNsfwToggles();
 		this.setupAppearOfflineToggle();
 		this.setupAudibleNotificationsToggle();
 		this.setupApiKeyActions();
+		this.setupVynlyTokenActions();
 	}
 
 	setupNsfwToggles() {
@@ -274,7 +258,7 @@ class AppModalProfile extends HTMLElement {
 		}
 	}
 
-	handleOpenEvent() {
+	handleOpenSettingsEvent() {
 		this.open();
 	}
 
@@ -337,7 +321,7 @@ class AppModalProfile extends HTMLElement {
 			if (!result.ok) {
 				if (result.status === 401) {
 					if (!this.profileData) {
-						content.innerHTML = html`<p style="color: var(--text-muted);">Please log in to view your profile.</p>`;
+						content.innerHTML = html`<p style="color: var(--text-muted);">Please log in to change settings.</p>`;
 					}
 					return;
 				}
@@ -346,10 +330,10 @@ class AppModalProfile extends HTMLElement {
 
 			const user = result.data;
 			const nextKey = user
-				? `${user.email || ''}|${user.hasApiKey ? '1' : '0'}|${user.apiKeyPrefix || ''}|${user.created_at || ''}`
+				? `${user.id}|${user.hasApiKey ? '1' : '0'}|${user.apiKeyPrefix || ''}|${user.hasVynlyToken ? '1' : '0'}|${user.vynlyTokenPrefix || ''}`
 				: '';
 			const currentKey = this.profileData
-				? `${this.profileData.email || ''}|${this.profileData.hasApiKey ? '1' : '0'}|${this.profileData.apiKeyPrefix || ''}|${this.profileData.created_at || ''}`
+				? `${this.profileData.id}|${this.profileData.hasApiKey ? '1' : '0'}|${this.profileData.apiKeyPrefix || ''}|${this.profileData.hasVynlyToken ? '1' : '0'}|${this.profileData.vynlyTokenPrefix || ''}`
 				: '';
 
 			if (nextKey !== currentKey) {
@@ -375,16 +359,7 @@ class AppModalProfile extends HTMLElement {
 
 	displayProfile(user) {
 		const content = this.shadowRoot.querySelector('.profile-content');
-		const fullProfileLink = this.shadowRoot.querySelector('[data-full-profile-link]');
 		if (!content) return;
-
-		if (fullProfileLink) {
-			const profileHref = buildProfilePath({
-				userName: user?.profile?.user_name,
-				userId: user?.id
-			});
-			fullProfileLink.setAttribute('href', profileHref || '/user');
-		}
 
 		const escapeHtml = (text) => {
 			const div = document.createElement('div');
@@ -397,8 +372,7 @@ class AppModalProfile extends HTMLElement {
 
 		const revealBlock = this.revealedApiKey
 			? html`
-			<div class="profile-api-reveal" role="status">
-				<p class="profile-api-reveal-label">Copy your key now — it won’t be shown again.</p>
+			<div class="profile-api-reveal" role="status" aria-label="New API key shown once; copy before closing.">
 				<div class="profile-api-reveal-row">
 					<code class="profile-api-reveal-code">${escapeHtml(this.revealedApiKey)}</code>
 					<button type="button" class="btn-secondary" data-profile-api-copy>Copy</button>
@@ -408,34 +382,108 @@ class AppModalProfile extends HTMLElement {
 
 		const keyActions = hasKey
 			? html`
-			<p class="profile-api-active">Active key: <span class="profile-api-masked" aria-hidden="true">${apiKeyMasked}</span></p>
-			<div class="profile-api-actions">
-				<button type="button" class="btn-secondary" data-profile-api-generate>Generate new key</button>
-				<button type="button" class="btn-secondary is-logout" data-profile-api-remove>Remove API key</button>
+			<div class="profile-integration-row">
+				<span class="profile-api-masked" aria-label="Credential on file">${apiKeyMasked}</span>
+				<button type="button" class="btn-secondary is-logout" data-profile-api-remove>Remove</button>
 			</div>`
 			: html`
 			<div class="profile-api-actions">
-				<button type="button" class="btn-secondary" data-profile-api-generate>Generate API key</button>
+				<button type="button" class="btn-secondary" data-profile-api-generate>Generate</button>
+			</div>`;
+
+		const hasVynly = user.hasVynlyToken === true;
+		const tokenMasked = '•'.repeat(24);
+		const vynlyControls = hasVynly
+			? html`
+			<div class="profile-integration-row">
+				<span class="profile-api-masked" aria-label="Credential on file">${tokenMasked}</span>
+				<button type="button" class="btn-secondary is-logout" data-profile-vynly-remove>Remove</button>
+			</div>`
+			: html`
+			<div class="profile-integration-row profile-integration-row--input">
+				<input type="password" class="profile-api-input" data-profile-vynly-input autocomplete="new-password" placeholder="vln_…" spellcheck="false" />
+				<button type="button" class="btn-secondary" data-profile-vynly-save>Save</button>
 			</div>`;
 
 		content.innerHTML = html`
-	<div class="field">
-		<label>Email</label>
-		<div class="value">${escapeHtml(user.email)}</div>
+	<div class="settings-subblock">
+		<h4 class="settings-subheading">parascene API</h4>
+		${revealBlock}
+		${keyActions}
 	</div>
-	<div class="field">
-		<label>Member Since</label>
-		<div class="value">${formatDate(user.created_at) || 'N/A'}</div>
-	</div>
-	<div class="profile-api-key-section">
-		<div class="field">
-			<label>API key</label>
-			<p class="profile-api-hint">Use in the Authorization header: Bearer &lt;key&gt;</p>
-			${revealBlock}
-			${keyActions}
-		</div>
+	<div class="settings-subblock">
+		<h4 class="settings-subheading">vynly.co</h4>
+		${vynlyControls}
 	</div>
     `;
+	}
+
+	setupVynlyTokenActions() {
+		this.shadowRoot.addEventListener('click', async (e) => {
+			const saveBtn = e.target.closest?.('[data-profile-vynly-save]');
+			const remBtn = e.target.closest?.('[data-profile-vynly-remove]');
+			if (!saveBtn && !remBtn) return;
+			e.preventDefault();
+			const input = this.shadowRoot.querySelector('[data-profile-vynly-input]');
+			if (saveBtn) {
+				const token = typeof input?.value === 'string' ? input.value.trim() : '';
+				if (!token) {
+					window.alert('Paste your credential (starts with vln_), then tap Save.');
+					return;
+				}
+				try {
+					const res = await fetchJsonWithStatusDeduped(
+						'/api/profile/vynly-token',
+						{
+							method: 'PUT',
+							credentials: 'include',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ token })
+						},
+						{ windowMs: 0 }
+					);
+					if (res?.ok && res.data) {
+						if (this.profileData) {
+							this.profileData.hasVynlyToken = res.data.hasVynlyToken === true;
+							this.profileData.vynlyTokenPrefix = res.data.vynlyTokenPrefix ?? null;
+						}
+						if (input) input.value = '';
+						this.displayProfile(this.profileData || {});
+					} else {
+						const msg = typeof res?.data?.message === 'string' ? res.data.message : 'Could not save token.';
+						window.alert(msg);
+					}
+				} catch {
+					window.alert('Could not save token.');
+				}
+				return;
+			}
+			if (remBtn) {
+				if (!window.confirm('Remove vynly.co credential? Sharing to Vynly turns off until you save again.')) return;
+				try {
+					const res = await fetchJsonWithStatusDeduped(
+						'/api/profile/vynly-token',
+						{
+							method: 'PUT',
+							credentials: 'include',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ token: '' })
+						},
+						{ windowMs: 0 }
+					);
+					if (res?.ok) {
+						if (this.profileData) {
+							this.profileData.hasVynlyToken = false;
+							this.profileData.vynlyTokenPrefix = null;
+						}
+						if (input) input.value = '';
+						this.displayProfile(this.profileData || {});
+					}
+				} catch {
+					// ignore
+				}
+			}
+		});
 	}
 
 	setupApiKeyActions() {
@@ -508,7 +556,7 @@ class AppModalProfile extends HTMLElement {
           left: 0;
           right: 0;
           bottom: 0;
-          background: rgba(0, 0, 0, 0.5);
+          background: rgba(0, 0, 0, 0.55);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -516,7 +564,9 @@ class AppModalProfile extends HTMLElement {
           opacity: 0;
           visibility: hidden;
           pointer-events: none;
-          transition: opacity 0.2s, visibility 0.2s;
+          transition: opacity 0.2s ease, visibility 0.2s ease;
+          padding: 16px;
+          box-sizing: border-box;
         }
         .profile-overlay.open {
           opacity: 1;
@@ -528,12 +578,14 @@ class AppModalProfile extends HTMLElement {
           border: 1px solid var(--border);
           border-radius: 14px;
           box-shadow: var(--shadow);
-          max-width: 500px;
-          width: 90%;
-          max-height: 90vh;
-          overflow-y: auto;
-          transform: scale(0.95);
-          transition: transform 0.2s;
+          width: min(94vw, 640px);
+          max-width: 640px;
+          max-height: min(92vh, 820px);
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          transform: scale(0.97);
+          transition: transform 0.2s ease;
         }
         .profile-overlay.open .profile-modal {
           transform: scale(1);
@@ -542,71 +594,117 @@ class AppModalProfile extends HTMLElement {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 18px 20px;
+          padding: 18px 28px;
           border-bottom: 1px solid var(--border);
+          flex-shrink: 0;
         }
         .profile-header h2 {
           margin: 0;
-          font-size: 1.5rem;
+          font-size: 1.2rem;
+          font-weight: 650;
+          letter-spacing: -0.02em;
         }
         .profile-close {
           background: transparent;
           border: none;
-          color: var(--text);
+          color: var(--text-muted);
           cursor: pointer;
-          padding: 4px;
+          padding: 6px;
           display: flex;
           align-items: center;
           justify-content: center;
           border-radius: 6px;
-          transition: background-color 0.2s;
+          transition: background-color 0.15s ease, color 0.15s ease;
         }
         .profile-close:hover {
           background: var(--surface-strong);
+          color: var(--text);
         }
         .profile-close-icon {
-          width: 24px;
-          height: 24px;
+          width: 22px;
+          height: 22px;
         }
         .profile-body {
-          padding: 20px;
-        }
-        .profile-actions {
+          flex: 1;
+          min-height: 0;
           display: flex;
-          justify-content: flex-end;
-          padding: 0 20px 20px;
-          gap: 10px;
-          flex-wrap: wrap;
+          flex-direction: column;
+          padding: 0;
         }
-        .profile-actions form {
+        .settings-scroll {
+          overflow-y: auto;
+          padding: 24px 28px 20px;
+          flex: 1;
+          min-height: 0;
+        }
+        .settings-section {
           margin: 0;
+          padding: 0 0 8px 0;
         }
-        /* Mirror global .btn-secondary (shadow DOM does not inherit global.css) */
+        .settings-section + .settings-section {
+          margin-top: 0;
+          padding-top: 32px;
+          border-top: 1px solid var(--border);
+        }
+        .settings-section:last-child {
+          padding-bottom: 4px;
+        }
+        .settings-section-title {
+          margin: 0 0 18px 0;
+          font-size: 0.7rem;
+          font-weight: 650;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          color: var(--text-muted);
+        }
+        .settings-section-body {
+          padding: 0;
+        }
+        .settings-subblock + .settings-subblock {
+          margin-top: 28px;
+          padding-top: 28px;
+          border-top: 1px solid var(--border);
+        }
+        .settings-subheading {
+          margin: 0 0 10px 0;
+          font-size: 0.98rem;
+          font-weight: 600;
+          color: var(--text);
+        }
+        .settings-footer {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 12px;
+          padding: 14px 28px 18px;
+          border-top: 1px solid var(--border);
+          flex-shrink: 0;
+        }
         .btn-secondary,
         a.btn-secondary {
           display: inline-flex;
           align-items: center;
+          justify-content: center;
           gap: 6px;
-          padding: 8px 12px;
+          padding: 8px 16px;
           background: var(--surface);
           border: 1px solid var(--border);
           color: var(--text);
           text-decoration: none;
-          font-size: 0.95rem;
-          transition: background-color 0.2s, border-color 0.2s;
-          box-shadow: var(--shadow);
+          font-size: 0.9rem;
+          transition: background-color 0.15s ease, border-color 0.15s ease;
           cursor: pointer;
           font: inherit;
           border-radius: 6px;
           -webkit-appearance: none;
           appearance: none;
           box-sizing: border-box;
-          line-height: 1;
+          line-height: 1.2;
         }
         @supports (corner-shape: squircle) {
           .btn-secondary,
           a.btn-secondary {
-            border-radius: 14px;
+            border-radius: 10px;
             corner-shape: squircle;
           }
         }
@@ -622,56 +720,14 @@ class AppModalProfile extends HTMLElement {
           border-color: var(--accent);
           background: var(--surface);
         }
-        .btn-secondary .profile-action-icon,
-        a.btn-secondary .profile-action-icon {
-          width: 18px;
-          height: 18px;
-          margin-right: 8px;
-          flex-shrink: 0;
-        }
-        .field {
-          margin: 12px 0;
-        }
-        .field:first-child {
-          margin-top: 0;
-        }
-        .field:last-child {
-          margin-bottom: 0;
-        }
-        .field label,
-        .field .label {
-          display: block;
-          font-weight: 600;
-          margin-bottom: 6px;
-          color: var(--text-muted);
-          font-size: 0.9rem;
-        }
-        .field .value {
-          font-size: 1rem;
-          color: var(--text);
-        }
-        .profile-api-key-section {
-          margin-top: 4px;
-          padding-top: 16px;
-          border-top: 1px solid var(--border);
-        }
-        .profile-api-hint {
-          font-size: 0.85rem;
-          color: var(--text-muted);
-          margin: 0 0 12px 0;
-          line-height: 1.35;
-        }
         .profile-api-reveal {
           margin-bottom: 12px;
-          padding: 12px;
-          border-radius: 10px;
-          background: var(--surface-strong);
-          border: 1px solid var(--border);
-        }
-        .profile-api-reveal-label {
-          margin: 0 0 8px 0;
-          font-size: 0.9rem;
-          color: var(--text-muted);
+          padding: 12px 0;
+          border-radius: 0;
+          background: transparent;
+          border: none;
+          border-left: 3px solid var(--accent);
+          padding-left: 14px;
         }
         .profile-api-reveal-row {
           display: flex;
@@ -682,18 +738,13 @@ class AppModalProfile extends HTMLElement {
         .profile-api-reveal-code {
           flex: 1;
           min-width: 0;
-          font-size: 0.8rem;
+          font-size: 0.78rem;
           word-break: break-all;
           padding: 8px 10px;
           border-radius: 6px;
-          background: var(--surface);
-          border: 1px solid var(--border);
+          background: var(--surface-strong);
+          border: none;
           font-family: ui-monospace, monospace;
-        }
-        .profile-api-active {
-          margin: 0 0 10px 0;
-          font-size: 0.95rem;
-          color: var(--text);
         }
         .profile-api-masked {
           font-family: ui-monospace, monospace;
@@ -705,42 +756,73 @@ class AppModalProfile extends HTMLElement {
           flex-wrap: wrap;
           gap: 8px;
         }
-        .profile-presence-row {
+        .profile-integration-row {
           display: flex;
           align-items: center;
-          justify-content: space-between;
           gap: 12px;
-          margin: 10px 0 0 0;
+          flex-wrap: wrap;
+        }
+        .profile-integration-row .profile-api-masked {
+          flex: 1;
+          min-width: 0;
+          line-height: 1.4;
+        }
+        .profile-integration-row--input .profile-api-input {
+          flex: 1;
+          min-width: 0;
+          margin-bottom: 0;
+          width: auto;
+          max-width: none;
+        }
+        .profile-api-input {
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
+          padding: 8px 10px;
+          margin-bottom: 10px;
+          font-size: 0.85rem;
+          font-family: ui-monospace, monospace;
+          border-radius: 6px;
+          border: 1px solid var(--border);
+          background: var(--surface);
+          color: var(--text);
+        }
+        .profile-presence-row {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 14px;
+          margin-top: 12px;
+        }
+        .profile-presence-row:first-child {
+          margin-top: 0;
         }
         .profile-presence-row label {
           margin: 0;
           font-weight: 600;
-          color: var(--text-muted);
+          color: var(--text);
           font-size: 0.9rem;
+          line-height: 1.35;
         }
         .profile-presence-row input[type="checkbox"] {
           width: 18px;
           height: 18px;
+          margin-top: 2px;
+          flex-shrink: 0;
           cursor: pointer;
           accent-color: var(--accent);
         }
-        .profile-presence-hint {
-          margin: 6px 0 0 0;
-          font-size: 0.85rem;
-          color: var(--text-muted);
-          line-height: 1.35;
-        }
         .profile-nsfw-toggles {
-          margin-top: 20px;
-          padding-top: 16px;
-          border-top: 1px solid var(--border);
+          margin: 0;
+          padding: 0;
+          border: none;
         }
         .profile-nsfw-row {
           display: flex;
-          align-items: center;
+          align-items: flex-start;
           justify-content: space-between;
-          gap: 12px;
-          margin: 10px 0;
+          gap: 14px;
+          margin-top: 12px;
         }
         .profile-nsfw-row:first-child {
           margin-top: 0;
@@ -748,12 +830,15 @@ class AppModalProfile extends HTMLElement {
         .profile-nsfw-row label {
           margin: 0;
           font-weight: 600;
-          color: var(--text-muted);
+          color: var(--text);
           font-size: 0.9rem;
+          line-height: 1.35;
         }
         .profile-nsfw-row input[type="checkbox"] {
           width: 18px;
           height: 18px;
+          margin-top: 2px;
+          flex-shrink: 0;
           cursor: pointer;
           accent-color: var(--accent);
         }
@@ -762,10 +847,10 @@ class AppModalProfile extends HTMLElement {
         }
       </style>
       <div class="profile-overlay">
-        <div class="profile-modal">
+        <div class="profile-modal" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
           <div class="profile-header">
-            <h2>Profile</h2>
-            <button class="profile-close" aria-label="Close">
+            <h2 id="settings-modal-title">Settings</h2>
+            <button type="button" class="profile-close" aria-label="Close">
               <svg class="profile-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
                 <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -773,36 +858,47 @@ class AppModalProfile extends HTMLElement {
             </button>
           </div>
           <div class="profile-body">
-            <div class="profile-content"></div>
-            <div class="profile-presence-block">
-              <div class="profile-presence-row">
-                <label for="profile-appear-offline">Appear offline</label>
-                <input type="checkbox" id="profile-appear-offline" data-appear-offline aria-describedby="profile-appear-offline-desc" />
-              </div>
-              <p id="profile-appear-offline-desc" class="profile-presence-hint">When checked, you are hidden from the public online list.</p>
-              <div class="profile-presence-row">
-                <label for="profile-audible-notifications">Audible notifications</label>
-                <input type="checkbox" id="profile-audible-notifications" data-audible-notifications aria-describedby="profile-audible-notifications-desc" />
-              </div>
-              <p id="profile-audible-notifications-desc" class="profile-presence-hint">Play a sound for new chat activity when this tab is in the background.</p>
-            </div>
-            <div class="profile-nsfw-toggles">
-              <div class="profile-nsfw-row">
-                <label for="profile-nsfw-enable">Enable NSFW Content</label>
-                <input type="checkbox" id="profile-nsfw-enable" data-nsfw-enable aria-describedby="profile-nsfw-enable-desc" />
-              </div>
-              <div class="profile-nsfw-row" data-nsfw-obscure-wrap hidden>
-                <label for="profile-nsfw-obscure">Show NSFW Unobscured</label>
-                <input type="checkbox" id="profile-nsfw-obscure" data-nsfw-obscure aria-describedby="profile-nsfw-obscure-desc" />
-              </div>
+            <div class="settings-scroll">
+              <section class="settings-section" aria-labelledby="settings-presence-heading">
+                <h3 class="settings-section-title" id="settings-presence-heading">Presence &amp; chat</h3>
+                <div class="settings-section-body">
+                  <div class="profile-presence-block">
+                    <div class="profile-presence-row">
+                      <label for="profile-appear-offline">Appear offline</label>
+                      <input type="checkbox" id="profile-appear-offline" data-appear-offline />
+                    </div>
+                    <div class="profile-presence-row">
+                      <label for="profile-audible-notifications">Audible notifications</label>
+                      <input type="checkbox" id="profile-audible-notifications" data-audible-notifications />
+                    </div>
+                  </div>
+                </div>
+              </section>
+              <section class="settings-section" aria-labelledby="settings-content-heading">
+                <h3 class="settings-section-title" id="settings-content-heading">Content</h3>
+                <div class="settings-section-body">
+                  <div class="profile-nsfw-toggles">
+                    <div class="profile-nsfw-row">
+                      <label for="profile-nsfw-enable">Enable NSFW content</label>
+                      <input type="checkbox" id="profile-nsfw-enable" data-nsfw-enable />
+                    </div>
+                    <div class="profile-nsfw-row" data-nsfw-obscure-wrap hidden>
+                      <label for="profile-nsfw-obscure">Show NSFW unobscured</label>
+                      <input type="checkbox" id="profile-nsfw-obscure" data-nsfw-obscure />
+                    </div>
+                  </div>
+                </div>
+              </section>
+              <section class="settings-section" aria-labelledby="settings-integrations-heading">
+                <h3 class="settings-section-title" id="settings-integrations-heading">Integrations</h3>
+                <div class="settings-section-body">
+                  <div class="profile-content"></div>
+                </div>
+              </section>
             </div>
           </div>
-          <div class="profile-actions">
-            <a class="btn-secondary" href="${getHelpHref("/help")}">${helpIcon('profile-action-icon')} Help</a>
-            <a class="btn-secondary" href="/user" data-full-profile-link>View Full Profile</a>
-            <form action="/logout" method="post">
-              <button type="submit" class="btn-secondary is-logout">Logout</button>
-            </form>
+          <div class="settings-footer">
+            <button type="button" class="btn-secondary" data-settings-close>Close</button>
           </div>
         </div>
       </div>
@@ -826,6 +922,8 @@ class AppModalProfile extends HTMLElement {
 			window.localStorage?.removeItem('profile-avatar-url');
 			// Match CHAT_THREADS_CACHE_KEY in shared/chatThreadsCache.js
 			window.localStorage?.removeItem('prsn-chat-threads-v1');
+			// Match CHAT_SIDEBAR_SESSION_ROSTER_KEY in shared/chatSidebarSessionCache.js
+			window.sessionStorage?.removeItem('prsn-chat-sidebar-roster-v1');
 			if (typeof clearChatAudibleNotificationsStorage === 'function') {
 				clearChatAudibleNotificationsStorage();
 			}

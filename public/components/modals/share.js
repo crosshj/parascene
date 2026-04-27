@@ -90,6 +90,8 @@ class AppModalShare extends HTMLElement {
 		this._loading = false;
 		this._openRequestId = 0;
 		this._ctaTimers = new Set();
+		this._vynlyStatusRequestId = 0;
+		this._vynlyShareEligible = true;
 
 		this.handleEscape = this.handleEscape.bind(this);
 		this.handleOpen = this.handleOpen.bind(this);
@@ -193,6 +195,18 @@ class AppModalShare extends HTMLElement {
 										class="share-action-cta-label">Share</span></span>
 							</button>
 			
+							<button type="button" class="share-action-row" data-share-vynly style="display: none;">
+								<span class="share-action-left">
+									<span class="share-option-icon share-option-icon-vynly is-brand">${iconShare}</span>
+									<span class="share-action-text">
+										<span class="share-action-title">Share on Vynly</span>
+										<span class="share-action-subtitle">Cross-post to vynly.co</span>
+									</span>
+								</span>
+								<span class="share-action-cta share-action-cta-vynly" data-cta><span
+										class="share-action-cta-label">Post</span></span>
+							</button>
+			
 							<button type="button" class="share-action-row" data-share-sms>
 								<span class="share-action-left">
 									<span class="share-option-icon">${iconSms}</span>
@@ -282,6 +296,7 @@ class AppModalShare extends HTMLElement {
 		const smsBtn = this.querySelector("[data-share-sms]");
 		const emailBtn = this.querySelector("[data-share-email]");
 		const xBtn = this.querySelector("[data-share-x]");
+		const vynlyBtn = this.querySelector("[data-share-vynly]");
 		const fbBtn = this.querySelector("[data-share-facebook]");
 		const redditBtn = this.querySelector("[data-share-reddit]");
 		const liBtn = this.querySelector("[data-share-linkedin]");
@@ -312,6 +327,7 @@ class AppModalShare extends HTMLElement {
 		if (smsBtn) smsBtn.addEventListener("click", (e) => void this.handleSms(e.currentTarget));
 		if (emailBtn) emailBtn.addEventListener("click", (e) => void this.handleEmail(e.currentTarget));
 		if (xBtn) xBtn.addEventListener("click", (e) => void this.handleX(e.currentTarget));
+		if (vynlyBtn) vynlyBtn.addEventListener("click", (e) => void this.handleVynly(e.currentTarget));
 		if (fbBtn) fbBtn.addEventListener("click", (e) => void this.handleFacebook(e.currentTarget));
 		if (redditBtn) redditBtn.addEventListener("click", (e) => void this.handleReddit(e.currentTarget));
 		if (liBtn) liBtn.addEventListener("click", (e) => void this.handleLinkedIn(e.currentTarget));
@@ -330,7 +346,8 @@ class AppModalShare extends HTMLElement {
 
 	handleOpen(e) {
 		const id = e.detail?.creationId ?? null;
-		this.open(id);
+		const vynlyShareEligible = e.detail?.vynlyShareEligible !== false;
+		this.open(id, { vynlyShareEligible });
 	}
 
 	handleCloseAllModals() {
@@ -348,11 +365,28 @@ class AppModalShare extends HTMLElement {
 		}
 	}
 
-	open(creationId) {
+	async open(creationId, options = {}) {
 		this._creationId = creationId ?? null;
 		this._shareUrl = null;
 		this._openRequestId++;
+		const openGen = this._openRequestId;
+		this._vynlyShareEligible = options.vynlyShareEligible !== false;
 		this.resetAllCtas();
+
+		const vynlyRow = this.querySelector("[data-share-vynly]");
+		if (vynlyRow instanceof HTMLButtonElement) {
+			if (this._vynlyShareEligible === false) {
+				vynlyRow.style.display = "none";
+			} else if (typeof options.vynlyConfigured === "boolean") {
+				vynlyRow.style.display = options.vynlyConfigured ? "" : "none";
+			} else {
+				await this.refreshVynlyRowVisibility();
+				if (openGen !== this._openRequestId) return;
+			}
+		}
+
+		if (openGen !== this._openRequestId) return;
+
 		this._isOpen = true;
 		const overlay = this.querySelector("[data-overlay]");
 		if (overlay) overlay.classList.add("open");
@@ -366,6 +400,8 @@ class AppModalShare extends HTMLElement {
 		this._creationId = null;
 		this._shareUrl = null;
 		this._openRequestId++;
+		this._vynlyStatusRequestId++;
+		this._vynlyShareEligible = true;
 		const overlay = this.querySelector("[data-overlay]");
 		if (overlay) overlay.classList.remove("open");
 		this.resetAllCtas();
@@ -375,6 +411,31 @@ class AppModalShare extends HTMLElement {
 		const nativeBtn = this.querySelector("[data-native-share]");
 		if (nativeBtn instanceof HTMLButtonElement) {
 			nativeBtn.style.display = typeof navigator.share === "function" ? "" : "none";
+		}
+	}
+
+	async refreshVynlyRowVisibility() {
+		const row = this.querySelector("[data-share-vynly]");
+		if (!(row instanceof HTMLButtonElement)) return;
+
+		row.style.display = "none";
+		if (this._vynlyShareEligible === false) {
+			return;
+		}
+
+		const requestId = ++this._vynlyStatusRequestId;
+
+		try {
+			const res = await fetch("/api/vynly/status", { credentials: "include" });
+			if (requestId !== this._vynlyStatusRequestId) return;
+			if (!res.ok) return;
+			const data = await res.json().catch(() => null);
+			if (requestId !== this._vynlyStatusRequestId) return;
+			if (data && data.configured === true) {
+				row.style.display = "";
+			}
+		} catch {
+			// ignore
 		}
 	}
 
@@ -556,6 +617,38 @@ class AppModalShare extends HTMLElement {
 				`https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&hashtags=${encodeURIComponent(hashtags)}`
 			);
 		}, { resetMs: 900 });
+	}
+
+	async handleVynly(buttonEl) {
+		if (this._vynlyShareEligible === false) return;
+		await this.runCtaAction(
+			buttonEl,
+			async () => {
+				const creationId = Number(this._creationId);
+				if (!Number.isFinite(creationId) || creationId <= 0) {
+					throw new Error("Invalid creation");
+				}
+
+				const res = await fetch("/api/vynly/share-from-creation", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					credentials: "include",
+					body: JSON.stringify({ creationId })
+				});
+				const data = await res.json().catch(() => null);
+				if (!res.ok) {
+					throw new Error(
+						(data && (data.error || data.message)) ? String(data.error || data.message) : "Vynly share failed"
+					);
+				}
+				const openUrl =
+					data && typeof data.openUrl === "string" && data.openUrl.trim()
+						? data.openUrl.trim()
+						: "https://vynly.co/";
+				openShareUrl(openUrl);
+			},
+			{ successLabel: "Posted", errorLabel: "Failed", resetMs: 1600 }
+		);
 	}
 
 	async handleFacebook(buttonEl) {

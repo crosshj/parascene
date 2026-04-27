@@ -13,4 +13,8 @@ describe("extractUniqueChatMentionUsernames", () => {
 	it("returns empty for non-strings", () => {
 		expect(extractUniqueChatMentionUsernames(null)).toEqual([]);
 	});
+
+	it("excludes broadcast reserved tokens", () => {
+		expect(extractUniqueChatMentionUsernames("@here @channel @everyone @all @ada")).toEqual(["ada"]);
+	});
 });

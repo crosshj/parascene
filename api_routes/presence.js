@@ -22,6 +22,49 @@ export default function createPresenceRoutes({ queries }) {
 		}
 	});
 
+	router.post("/api/presence/last-active", async (req, res) => {
+		const userId = req.auth?.userId;
+		if (!userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+		if (typeof queries.selectUsersByIds !== "function") {
+			return res.status(501).json({ error: "Not available" });
+		}
+		const raw = Array.isArray(req.body?.user_ids) ? req.body.user_ids : [];
+		const ids = [...new Set(raw.map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0))].slice(0, 500);
+		if (ids.length === 0) {
+			return res.json({ users: [] });
+		}
+		try {
+			const byId = await queries.selectUsersByIds(ids);
+			const users = [];
+			for (const id of ids) {
+				const row = byId?.get?.(Number(id));
+				if (!row) continue;
+				const meta = row?.meta && typeof row.meta === "object" ? row.meta : {};
+				if (meta.appear_offline === true) continue;
+				if (meta.suspended === true) continue;
+				const presenceLastSeenAt =
+					typeof meta.presence_last_seen_at === "string" && meta.presence_last_seen_at.trim()
+						? meta.presence_last_seen_at.trim()
+						: null;
+				const lastActiveAt =
+					typeof row?.last_active_at === "string" && row.last_active_at.trim()
+						? row.last_active_at.trim()
+						: null;
+				users.push({
+					user_id: Number(id),
+					last_active_at: lastActiveAt,
+					presence_last_seen_at: presenceLastSeenAt
+				});
+			}
+			return res.json({ users });
+		} catch (err) {
+			console.warn("[presence] list last-active", err?.message || err);
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
 	router.post("/api/presence/heartbeat", async (req, res) => {
 		const userId = req.auth?.userId;
 		if (!userId) {

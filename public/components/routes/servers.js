@@ -17,6 +17,9 @@ let appendReservedPseudoChannels;
 let mergeThreadRowsWithJoinedServers;
 let getSidebarPseudoStripRowsMerged;
 let buildSidebarPseudoStripListStaticHtml;
+let tryPatchPseudoStripDomInPlace;
+let normalizeChatNavPathForCompare;
+let isChatPseudoStripHrefActive;
 let SIDEBAR_TOP_STRIP_CHANNEL_SLUGS;
 let SIDEBAR_STRIP_SLUGS_ALSO_IN_APP_PRIMARY_NAV;
 let buildChatThreadUrl;
@@ -83,6 +86,9 @@ async function loadDeps() {
 		mergeThreadRowsWithJoinedServers = chatSidebarRosterMod.mergeThreadRowsWithJoinedServers;
 		getSidebarPseudoStripRowsMerged = chatSidebarRosterMod.getSidebarPseudoStripRowsMerged;
 		buildSidebarPseudoStripListStaticHtml = chatSidebarRosterMod.buildSidebarPseudoStripListStaticHtml;
+		tryPatchPseudoStripDomInPlace = chatSidebarRosterMod.tryPatchPseudoStripDomInPlace;
+		normalizeChatNavPathForCompare = chatSidebarRosterMod.normalizeChatNavPathForCompare;
+		isChatPseudoStripHrefActive = chatSidebarRosterMod.isChatPseudoStripHrefActive;
 		SIDEBAR_TOP_STRIP_CHANNEL_SLUGS = chatSidebarRosterMod.SIDEBAR_TOP_STRIP_CHANNEL_SLUGS;
 		SIDEBAR_STRIP_SLUGS_ALSO_IN_APP_PRIMARY_NAV =
 			chatSidebarRosterMod.SIDEBAR_STRIP_SLUGS_ALSO_IN_APP_PRIMARY_NAV;
@@ -150,9 +156,11 @@ function isDmConsideredOnlineWithGrace(otherUserId, onlineIds, lastSeenMap) {
 class AppRouteServers extends HTMLElement {
 	async connectedCallback() {
 		await loadDeps();
+		const pseudoPath =
+			typeof window !== 'undefined' && window.location?.pathname ? window.location.pathname : '';
 		const pseudoStripStaticHtml =
 			typeof buildSidebarPseudoStripListStaticHtml === 'function'
-				? buildSidebarPseudoStripListStaticHtml()
+				? buildSidebarPseudoStripListStaticHtml(pseudoPath)
 				: '';
 		this.innerHTML = html`
 	<div class="servers-route">
@@ -167,7 +175,27 @@ class AppRouteServers extends HTMLElement {
 					<div class="chat-page-sidebar-scroll connect-chat-sidebar-roster" data-connect-chat-scroll
 						aria-busy="true" aria-label="Loading conversations">
 						<div class="chat-page-sidebar-pseudo" data-chat-sidebar-pseudo>
-							<div class="chat-page-sidebar-list" data-chat-sidebar-pseudo-list">${pseudoStripStaticHtml}</div>
+							<div class="chat-page-sidebar-list" data-chat-sidebar-pseudo-list>
+								<div class="chat-page-sidebar-create-sticky">
+									<a href="/create" class="chat-page-sidebar-row chat-page-sidebar-row--create-cta"
+										data-chat-sidebar-strip-create="1">
+										<div class="comment-avatar connect-chat-thread-row-channel-avatar chat-page-sidebar-channel-avatar chat-page-sidebar-channel-avatar--icon-only"
+											aria-hidden="true">
+											<svg class="chat-page-sidebar-channel-route-icon" viewBox="0 0 24 24"
+												fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+												stroke-linejoin="round">
+												<line x1="12" y1="5" x2="12" y2="19" />
+												<line x1="5" y1="12" x2="19" y2="12" />
+											</svg>
+										</div>
+										<div class="chat-page-sidebar-row-body">
+											<div class="chat-page-sidebar-row-title-line">
+												<span class="chat-page-sidebar-row-title">Create</span>
+											</div>
+										</div>
+									</a>
+								</div>
+								${pseudoStripStaticHtml}</div>
 						</div>
 						<section class="chat-page-sidebar-section" aria-labelledby="connect-sidebar-dms-heading">
 							<div class="chat-page-sidebar-section-head">
@@ -586,6 +614,7 @@ class AppRouteServers extends HTMLElement {
 			await this.refreshAdminChatThreadSelect();
 			try {
 				clearCachedChatThreads();
+				window.sessionStorage?.removeItem('prsn-chat-sidebar-roster-v1');
 			} catch {
 				// ignore
 			}
@@ -698,6 +727,11 @@ class AppRouteServers extends HTMLElement {
 				if (result.status === 401) {
 					this._tearDownConnectChatUserBroadcast();
 					clearCachedChatThreads();
+					try {
+						window.sessionStorage?.removeItem('prsn-chat-sidebar-roster-v1');
+					} catch {
+						// ignore
+					}
 					this._chatViewerProfileMini = null;
 					this._chatViewerProfileMiniFetched = false;
 					try {
@@ -841,6 +875,11 @@ class AppRouteServers extends HTMLElement {
 		const rowHtml = (t, rowOpts) => {
 			const href = buildChatThreadUrl(t);
 			const title = typeof t.title === 'string' && t.title.trim() ? t.title.trim() : 'Chat';
+			const dataHelpAttr = t?.type === 'sidebar_help' ? ' data-chat-sidebar-help="1"' : '';
+			const helpActive =
+				t?.type === 'sidebar_help' &&
+				typeof window !== 'undefined' &&
+				(window.location.pathname === '/help' || window.location.pathname.startsWith('/help/'));
 			const avatarHtml = buildChatThreadRowAvatarHtml(t, deps);
 			const selfDm =
 				typeof isSelfDmThread === 'function' && isSelfDmThread(t, this._chatViewerId);
@@ -898,7 +937,8 @@ class AppRouteServers extends HTMLElement {
 				<button type="button" class="chat-page-sidebar-server-settings chat-page-sidebar-dm-menu-btn" data-chat-dm-menu="${escapeHtml(pinKey)}" data-chat-dm-profile-href="${profileHrefAttr}" data-chat-dm-other-user-id="${escapeHtml(otherUserIdAttr)}" aria-label="Direct message options" aria-haspopup="menu" aria-expanded="false">${gearSvg}</button>
 			</div>`;
 			}
-			return `<a class="chat-page-sidebar-row${pc}${extraRow}" href="${escapeHtml(href)}">
+			const helpActiveCls = helpActive ? ' is-active' : '';
+			return `<a class="chat-page-sidebar-row${pc}${extraRow}${helpActiveCls}" href="${escapeHtml(href)}"${dataHelpAttr}>
 				${avatarHtml}
 				<div class="chat-page-sidebar-row-body">
 					<div class="chat-page-sidebar-row-title-line">
@@ -970,24 +1010,18 @@ class AppRouteServers extends HTMLElement {
 		};
 
 		const pseudoListEl = this.querySelector('[data-chat-sidebar-pseudo-list]');
-		if (pseudoListEl && typeof getSidebarPseudoStripRowsMerged === 'function') {
+		if (
+			pseudoListEl &&
+			typeof getSidebarPseudoStripRowsMerged === 'function' &&
+			typeof tryPatchPseudoStripDomInPlace === 'function' &&
+			typeof normalizeChatNavPathForCompare === 'function' &&
+			typeof isChatPseudoStripHrefActive === 'function'
+		) {
 			const stripRows = getSidebarPseudoStripRowsMerged(channelRowsRaw);
-			const navDupSlugs =
-				SIDEBAR_STRIP_SLUGS_ALSO_IN_APP_PRIMARY_NAV instanceof Set
-					? SIDEBAR_STRIP_SLUGS_ALSO_IN_APP_PRIMARY_NAV
-					: new Set();
-			pseudoListEl.innerHTML = stripRows
-				.map((t) => {
-					const slug =
-						t?.type === 'channel' && typeof t.channel_slug === 'string'
-							? t.channel_slug.trim().toLowerCase()
-							: '';
-					const alsoNav = Boolean(slug && navDupSlugs.has(slug));
-					return rowHtml(t, {
-						extraAnchorClasses: alsoNav ? 'chat-page-sidebar-row--also-in-app-primary-nav' : ''
-					});
-				})
-				.join('');
+			tryPatchPseudoStripDomInPlace(pseudoListEl, stripRows, {
+				normalizePathForCompare: normalizeChatNavPathForCompare,
+				isChatHrefActive: isChatPseudoStripHrefActive
+			});
 		}
 
 		dmEl.innerHTML =

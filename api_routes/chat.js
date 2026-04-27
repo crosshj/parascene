@@ -55,17 +55,17 @@ const SEND_RATE_WINDOW_SEC = 60;
 const SEND_RATE_MAX = 60;
 
 /**
- * Slugs reserved for product UX (pseudo / system channels). The client may treat them as channels
- * without a DB row; POST /api/chat/channels must not create user hashtag threads for these names.
+ * Client-only pseudo lanes (no real thread); POST /api/chat/channels rejects these so they are not
+ * created as hashtag channels. Keep in sync with `public/shared/chatSidebarRoster.js` strip.
+ */
+const POST_REJECT_PSEUDO_CHANNEL_SLUGS = new Set(["comments", "feed", "explore", "creations"]);
+
+/**
+ * Reserved names for hashtag picker + collision semantics (includes pseudo slugs + feedback).
+ * `#feedback` is a real channel thread (find-or-create via POST); pseudo slugs stay POST-rejected.
  * Keep in sync with `public/shared/chatSidebarRoster.js` (strip + feedback).
  */
-const SYSTEM_RESERVED_CHANNEL_SLUGS = new Set([
-	"comments",
-	"feed",
-	"explore",
-	"creations",
-	"feedback"
-]);
+const SYSTEM_RESERVED_CHANNEL_SLUGS = new Set([...POST_REJECT_PSEUDO_CHANNEL_SLUGS, "feedback"]);
 
 /** Slugs where founder canvases are blocked (pseudo-column channels). `#feedback` behaves like a normal channel for canvases. */
 const CANVAS_DISALLOWED_CHANNEL_SLUGS = new Set(["comments", "feed", "explore", "creations"]);
@@ -716,10 +716,10 @@ export default function createChatRoutes({ queries, storage }) {
 			return res.status(400).json({ error: "Bad request", message: "Invalid or missing tag" });
 		}
 
-		if (SYSTEM_RESERVED_CHANNEL_SLUGS.has(slug)) {
+		if (POST_REJECT_PSEUDO_CHANNEL_SLUGS.has(slug)) {
 			return res.status(400).json({
 				error: "Bad request",
-				message: "This channel name is reserved.",
+				message: "This channel name is reserved. Use the shortcuts in chat to open that view.",
 			});
 		}
 

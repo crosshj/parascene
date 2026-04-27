@@ -415,6 +415,21 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		updateUserVynlyBearerToken: {
+			run: async (userId, { bearerToken, tokenPrefix } = {}) => {
+				const user = users.find((u) => Number(u.id) === Number(userId));
+				if (!user) return { changes: 0 };
+				user.meta = user.meta != null && typeof user.meta === "object" ? { ...user.meta } : {};
+				if (bearerToken == null || bearerToken === "") {
+					delete user.meta.vynlyBearerToken;
+					delete user.meta.vynlyTokenPrefix;
+				} else {
+					user.meta.vynlyBearerToken = String(bearerToken).trim();
+					user.meta.vynlyTokenPrefix = typeof tokenPrefix === "string" ? tokenPrefix : "";
+				}
+				return { changes: 1 };
+			}
+		},
 		selectUserIdByApiKeyHash: {
 			get: async (hash) => {
 				if (hash == null || typeof hash !== "string" || !hash.trim()) return undefined;
@@ -1736,7 +1751,7 @@ export function openDb() {
 			run: async () => ({ changes: 0 })
 		},
 		insertCreatedImage: {
-			run: async (userId, filename, filePath, width, height, color, status = 'creating') => {
+			run: async (userId, filename, filePath, width, height, color, status = 'creating', meta = null) => {
 				const image = {
 					id: created_images.length > 0
 						? Math.max(...created_images.map(i => i.id || 0)) + 1
@@ -1748,6 +1763,7 @@ export function openDb() {
 					height,
 					color,
 					status,
+					meta,
 					created_at: new Date().toISOString()
 				};
 				created_images.push(image);
@@ -2266,6 +2282,16 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		unmarkCreatedImageUnavailable: {
+			run: async (id, userId) => {
+				const image = created_images.find(
+					(img) => img.id === Number(id) && img.user_id === Number(userId)
+				);
+				if (!image) return { changes: 0 };
+				image.unavailable_at = null;
+				return { changes: 1 };
+			}
+		},
 		deleteCreatedImageById: {
 			run: async (id, userId) => {
 				const index = created_images.findIndex(
@@ -2288,6 +2314,23 @@ export function openDb() {
 				}
 				image.title = title;
 				image.description = description;
+				return { changes: 1 };
+			}
+		},
+		updateCreatedImageGroupCover: {
+			run: async (id, userId, { created_at, file_path, width, height, color, meta }) => {
+				const image = created_images.find(
+					(img) => img.id === Number(id) && img.user_id === Number(userId)
+				);
+				if (!image) {
+					return { changes: 0 };
+				}
+				image.created_at = created_at;
+				image.file_path = file_path;
+				image.width = width;
+				image.height = height;
+				image.color = color ?? null;
+				image.meta = meta;
 				return { changes: 1 };
 			}
 		},

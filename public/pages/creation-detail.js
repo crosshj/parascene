@@ -299,14 +299,14 @@ const STRIP_SEGMENT_DEFS = [
 	},
 	{
 		key: 'follow',
-		show: (d) => !d.isAdmin && d.canShowFollowButton && !d.viewerFollowsCreator,
+		show: (d) => !d.hideActions && !d.isAdmin && d.canShowFollowButton && !d.viewerFollowsCreator,
 		render: (d, escapeFn) => html`
 					<button type="button" class="creation-detail-action-strip-follow" data-follow-button
 						data-follow-user-id="${escapeFn(d.creatorId)}">Follow</button>`
 	},
 	{
 		key: 'like',
-		show: (d) => d.hasEngagementActions && !d.shareMountedPrivate && !d.isAdmin,
+		show: (d) => !d.hideActions && d.hasEngagementActions && !d.shareMountedPrivate && !d.isAdmin,
 		render: (d) => html`
 					<button type="button" class="creation-detail-action-strip-pill${d.creationWithLikes?.viewer_liked ? ' is-liked' : ''}"
 						aria-label="Like" aria-pressed="${d.creationWithLikes?.viewer_liked ? 'true' : 'false'}" data-like-button>
@@ -321,12 +321,12 @@ const STRIP_SEGMENT_DEFS = [
 	},
 	{
 		key: 'pills',
-		show: () => true,
+		show: (d) => !d.hideActions,
 		render: (d) => renderCreationDetailActionStripPills(d.actionsContext)
 	},
 	{
 		key: 'tip',
-		show: (d) => !d.isOwner && !d.isAdmin,
+		show: (d) => !d.hideActions && !d.isOwner && !d.isAdmin,
 		render: () => html`
 					<button type="button" class="creation-detail-action-strip-pill" data-tip-creator-button aria-label="Tip">
 						<span class="creation-detail-action-strip-pill-icon">${creditIcon('')}</span>
@@ -335,7 +335,7 @@ const STRIP_SEGMENT_DEFS = [
 	},
 	{
 		key: 'more',
-		show: (d) => !d.isFailed || (d.isFailed && d.actionsContext?.showDelete),
+		show: (d) => !d.hideActions && (!d.isFailed || (d.isFailed && d.actionsContext?.showDelete)),
 		render: () => html`
 					<button type="button" class="creation-detail-more-btn" aria-label="More options" data-creation-more-btn>
 						<span class="creation-detail-more-dots" aria-hidden="true"></span>
@@ -974,6 +974,9 @@ async function loadCreation() {
 
 	if (!detailContent || !imageEl || !backgroundEl) return;
 
+	const loadToken = ++loadCreationSequence;
+	const isCurrentLoad = () => loadToken === loadCreationSequence;
+
 	function applyLoadedImageState() {
 		const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
 		if (modIcon) modIcon.remove();
@@ -982,6 +985,98 @@ async function loadCreation() {
 			backgroundEl.style.backgroundImage = `url('${imageEl.dataset.currentUrl}')`;
 		}
 		imageEl.style.visibility = 'visible';
+	}
+
+	function urlsMatch(a, b) {
+		const left = String(a || '').trim();
+		const right = String(b || '').trim();
+		if (!left || !right) return false;
+		if (left === right) return true;
+		try {
+			return new URL(left, window.location.origin).href === new URL(right, window.location.origin).href;
+		} catch {
+			return false;
+		}
+	}
+
+	function hasLoadedHeroImage() {
+		return Boolean(imageEl.src && imageEl.complete && imageEl.naturalWidth > 0 && imageEl.style.visibility !== 'hidden');
+	}
+
+	function clearHeroImage() {
+		backgroundEl.style.backgroundImage = '';
+		imageEl.style.visibility = 'hidden';
+		imageEl.removeAttribute('src');
+		delete imageEl.dataset.currentUrl;
+		delete imageEl.dataset.pendingUrl;
+	}
+
+	function resetHeroVideo() {
+		if (!videoEl) return;
+		videoEl.style.display = 'none';
+		videoEl.pause?.();
+		videoEl.removeAttribute('src');
+		try {
+			videoEl.load();
+		} catch {
+			// ignore
+		}
+	}
+
+	function showHeroImage(nextUrl) {
+		const url = String(nextUrl || '').trim();
+		if (!url) return;
+		const currentUrl = imageEl.dataset.currentUrl || imageEl.getAttribute('src') || imageEl.currentSrc || '';
+		if (urlsMatch(currentUrl, url)) {
+			imageEl.dataset.currentUrl = url;
+			if (hasLoadedHeroImage()) {
+				applyLoadedImageState();
+			} else {
+				imageWrapper?.classList.remove('image-error', 'image-error-moderated');
+				imageWrapper?.classList.add('image-loading');
+			}
+			return;
+		}
+
+		const keepCurrentImageVisible = hasLoadedHeroImage();
+		resetHeroVideo();
+		const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
+		if (modIcon) modIcon.remove();
+		imageWrapper?.classList.remove('image-error', 'image-error-moderated');
+		imageWrapper?.classList.toggle('image-loading', !keepCurrentImageVisible);
+		if (!keepCurrentImageVisible) {
+			imageEl.style.visibility = 'hidden';
+		}
+		imageEl.dataset.pendingUrl = url;
+
+		const preload = new Image();
+		preload.onload = () => {
+			if (!isCurrentLoad() || imageEl.dataset.pendingUrl !== url) return;
+			imageEl.dataset.currentUrl = url;
+			delete imageEl.dataset.pendingUrl;
+			backgroundEl.style.backgroundImage = `url('${url}')`;
+			imageEl.src = url;
+			imageEl.style.visibility = 'visible';
+			imageWrapper?.classList.remove('image-loading', 'image-error', 'image-error-moderated');
+		};
+		preload.onerror = () => {
+			if (!isCurrentLoad() || imageEl.dataset.pendingUrl !== url) return;
+			delete imageEl.dataset.pendingUrl;
+			clearHeroImage();
+			imageWrapper?.classList.remove('image-loading');
+			imageWrapper?.classList.add('image-error');
+		};
+		preload.src = url;
+		if (preload.complete && preload.naturalWidth > 0) {
+			preload.onload();
+		}
+	}
+
+	function showHeroLoadingPlaceholder() {
+		resetHeroVideo();
+		clearHeroImage();
+		imageWrapper?.classList.remove('image-error', 'image-error-moderated');
+		imageWrapper?.classList.add('image-loading');
 	}
 
 	detailContent.innerHTML = renderCreationDetailSkeleton();
@@ -1074,15 +1169,11 @@ async function loadCreation() {
 		imageWrapper?.classList.remove('image-loading', 'nsfw', 'image-error-moderated');
 		imageWrapper?.classList.add('image-error');
 		imageWrapper?.removeAttribute('data-creation-id');
-		backgroundEl.style.backgroundImage = '';
-		imageEl.style.visibility = 'hidden';
-		imageEl.removeAttribute('src');
-		delete imageEl.dataset.currentUrl;
+		resetHeroVideo();
+		clearHeroImage();
 		detailContent.innerHTML = renderEmptyState({ title: 'Invalid creation ID' });
 		return;
 	}
-
-	detailContent.innerHTML = renderCreationDetailSkeleton();
 
 	try {
 		const headers = {};
@@ -1109,10 +1200,8 @@ async function loadCreation() {
 				imageWrapper?.classList.remove('image-loading', 'nsfw', 'image-error-moderated');
 				imageWrapper?.classList.add('image-error');
 				imageWrapper?.removeAttribute('data-creation-id');
-				backgroundEl.style.backgroundImage = '';
-				imageEl.style.visibility = 'hidden';
-				imageEl.removeAttribute('src');
-				delete imageEl.dataset.currentUrl;
+				resetHeroVideo();
+				clearHeroImage();
 				detailContent.innerHTML = renderEmptyState({
 					title: 'Creation not found',
 					message: "The creation you're looking for doesn't exist or you don't have access to it.",
@@ -1123,6 +1212,7 @@ async function loadCreation() {
 		}
 
 		const creation = await response.json();
+		if (!isCurrentLoad()) return;
 
 		// Fetch direct children (published creations with mutate_of_id = this id), order by created_at
 		const childrenPromise = fetch(`/api/create/images/${creationId}/children`, { credentials: 'include' })
@@ -1159,6 +1249,7 @@ async function loadCreation() {
 				// ignore like meta load failures
 			}
 		}
+		if (!isCurrentLoad()) return;
 
 		const creationWithLikes = { ...creation, ...likeMeta, created_image_id: creationId };
 		lastCreationMeta = creation;
@@ -1166,7 +1257,6 @@ async function loadCreation() {
 
 		// Set image and blurred background depending on status
 		imageWrapper?.classList.remove('image-error');
-		imageWrapper?.classList.remove('image-loading');
 		imageWrapper?.classList.toggle('nsfw', !!(creation.nsfw ?? creation.meta?.nsfw));
 		if (imageWrapper) {
 			if (creation.nsfw ?? creation.meta?.nsfw) {
@@ -1175,29 +1265,11 @@ async function loadCreation() {
 				imageWrapper.removeAttribute('data-creation-id');
 			}
 		}
-		backgroundEl.style.backgroundImage = '';
-		imageEl.style.visibility = 'hidden';
-		imageEl.dataset.currentUrl = '';
-		imageEl.removeAttribute('src');
-		if (videoEl) {
-			videoEl.style.display = 'none';
-			videoEl.pause?.();
-			videoEl.removeAttribute('src');
-			try {
-				videoEl.load();
-			} catch {
-				// ignore
-			}
-		}
 
 		if (status === 'completed' && mediaType === 'image' && creation.url) {
-			const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
-			if (modIcon) modIcon.remove();
-			imageWrapper?.classList.remove('image-error-moderated');
-			imageWrapper?.classList.add('image-loading');
-			imageEl.dataset.currentUrl = creation.url;
-			imageEl.src = creation.url;
+			showHeroImage(creation.url);
 		} else if (status === 'completed' && mediaType === 'video' && creation.video_url) {
+			clearHeroImage();
 			const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
 			if (modIcon) modIcon.remove();
 			imageWrapper?.classList.remove('image-error-moderated');
@@ -1234,9 +1306,10 @@ async function loadCreation() {
 		} else if (status === 'creating' && !isTimedOut) {
 			const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
 			if (modIcon) modIcon.remove();
-			imageWrapper?.classList.remove('image-error-moderated');
-			imageWrapper?.classList.add('image-loading');
+			showHeroLoadingPlaceholder();
 		} else if (isFailed) {
+			resetHeroVideo();
+			clearHeroImage();
 			// eslint-disable-next-line no-console
 			console.error('[creation-detail] creation status is failed/timed-out; showing image-error', {
 				status,
@@ -1283,6 +1356,7 @@ async function loadCreation() {
 		let currentUserProfile = null;
 		try {
 			const profile = await fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 2000 });
+			if (!isCurrentLoad()) return;
 			if (profile.ok) {
 				currentUser = profile.data ?? null;
 				currentUserProfile = currentUser?.profile ?? null;
@@ -1376,6 +1450,104 @@ async function loadCreation() {
 			deletePermanent: false,
 			deleteLabel: userDeleted && isAdmin ? ' Permanently delete' : ' Delete'
 		};
+		const groupMeta = meta?.group && typeof meta.group === 'object' ? meta.group : null;
+		const isGroupCreation = groupMeta?.kind === 'group_creations';
+		if (isGroupCreation) {
+			actionsContext.showPublish = false;
+			actionsContext.showEdit = false;
+			actionsContext.showUnpublish = false;
+			actionsContext.showMutate = false;
+			actionsContext.showShare = false;
+			actionsContext.showRetry = false;
+			actionsContext.showDelete = false;
+			actionsContext.showQueueForLater = false;
+			actionsContext.showMoreInfoPill = false;
+		}
+		const groupSourcesRaw = Array.isArray(groupMeta?.source_creations) ? groupMeta.source_creations : [];
+		const groupSourcesMapped = groupSourcesRaw
+			.map((source, index) => {
+				const sourceObj = source && typeof source === 'object' ? source : null;
+				if (!sourceObj) return null;
+				const sourceId = Number(sourceObj.id);
+				if (!Number.isFinite(sourceId) || sourceId <= 0) return null;
+				const sourceFilePath = typeof sourceObj.file_path === 'string' ? sourceObj.file_path.trim() : '';
+				const sourceRawTitle = typeof sourceObj.title === 'string' ? sourceObj.title.trim() : '';
+				const sourceTitle = sourceRawTitle
+					? `${sourceRawTitle} (${sourceId})`
+					: `Creation ${sourceId}`;
+				const sourceDescription = typeof sourceObj.description === 'string' ? sourceObj.description.trim() : '';
+				const sourceCreatedAt = typeof sourceObj.created_at === 'string' ? sourceObj.created_at : '';
+				const sourceMeta = sourceObj.meta && typeof sourceObj.meta === 'object' ? sourceObj.meta : null;
+				const sourceArgs = sourceMeta?.args && typeof sourceMeta.args === 'object' && !Array.isArray(sourceMeta.args)
+					? sourceMeta.args
+					: null;
+				const sourceStoredPrompt = typeof sourceMeta?.user_prompt === 'string' ? sourceMeta.user_prompt.trim() : '';
+				const sourceArgsPrompt = typeof sourceArgs?.prompt === 'string' ? sourceArgs.prompt.trim() : '';
+				const sourcePrompt = promptTextForMainUi(sourceStoredPrompt, sourceArgsPrompt);
+				const sourceServerName = typeof sourceMeta?.server_name === 'string' && sourceMeta.server_name.trim()
+					? sourceMeta.server_name.trim()
+					: (sourceMeta?.server_id != null ? String(sourceMeta.server_id) : '');
+				const sourceMethodName = typeof sourceMeta?.method_name === 'string' && sourceMeta.method_name.trim()
+					? sourceMeta.method_name.trim()
+					: (typeof sourceMeta?.method === 'string' ? sourceMeta.method : '');
+				const sourceDuration = formatDuration(sourceMeta || {});
+				const sourceModelRaw = typeof sourceArgs?.model === 'string'
+					? sourceArgs.model.trim()
+					: String(sourceArgs?.model ?? '').trim();
+				const sourceModel = sourceModelRaw
+					? (sourceModelRaw.includes(':') ? sourceModelRaw.split(':')[0] : sourceModelRaw)
+					: '';
+				const sourceMetaItems = [];
+				if (sourceServerName && sourceServerName !== 'Parascene') sourceMetaItems.push(`Server ${sourceServerName}`);
+				if (sourceMethodName && sourceMethodName !== 'Replicate') sourceMetaItems.push(`Method ${sourceMethodName}`);
+				if (sourceModel) sourceMetaItems.push(`Model ${sourceModel}`);
+				if (sourceDuration) sourceMetaItems.push(`Duration ${sourceDuration}`);
+				const sourceGenerationInfo = sourceMetaItems.join(' • ');
+				return {
+					id: sourceId,
+					title: sourceTitle,
+					filePath: sourceFilePath,
+					description: sourceDescription,
+					createdAt: sourceCreatedAt,
+					prompt: sourcePrompt,
+					generationInfo: sourceGenerationInfo
+				};
+			})
+			.filter(Boolean);
+		const coverSourceIdFromMeta = Number(groupMeta?.cover_source_id);
+		const groupSources = [...groupSourcesMapped];
+		if (Number.isFinite(coverSourceIdFromMeta) && coverSourceIdFromMeta > 0) {
+			const coverIndex = groupSources.findIndex((source) => Number(source.id) === coverSourceIdFromMeta);
+			if (coverIndex > 0) {
+				const [coverSource] = groupSources.splice(coverIndex, 1);
+				groupSources.unshift(coverSource);
+			}
+		}
+		const groupSectionHtml = isGroupCreation && groupSources.length > 0
+			? html`
+				<section class="creation-detail-group-section" data-group-creation-section>
+					<div class="creation-detail-group-header">
+						<h3 class="creation-detail-group-title">Grouped Creations</h3>
+						<div class="creation-detail-group-subtitle">${groupSources.length} image${groupSources.length === 1 ? '' : 's'}</div>
+					</div>
+					<div class="creation-detail-group-grid">
+						${groupSources.map((source, index) => source.filePath
+					? html`<button type="button" class="creation-detail-group-item creation-detail-group-thumb${index === 0 ? ' is-active' : ''}"
+									data-group-source-thumb="${source.id}" aria-label="View ${escapeHtml(source.title)}">
+									<img src="${escapeHtml(source.filePath)}" alt="${escapeHtml(source.title)}" loading="lazy" />
+								</button>`
+					: html`<button type="button" class="creation-detail-group-item creation-detail-group-item-fallback creation-detail-group-thumb${index === 0 ? ' is-active' : ''}"
+									data-group-source-thumb="${source.id}" aria-label="View source #${source.id}">#${source.id}</button>`).join('')}
+					</div>
+					${isOwner && !isPublished ? html`
+					<div class="creation-detail-group-actions">
+						<button type="button" class="btn-secondary creation-detail-group-set-cover-btn" data-group-set-cover-btn disabled>Set as cover</button>
+						<button type="button" class="btn-secondary creation-detail-ungroup-btn" data-ungroup-btn>Ungroup Creations</button>
+					</div>
+					` : ''}
+				</section>
+			`
+			: '';
 
 		// User-deleted notice (admin only; owner gets 404)
 		let userDeletedNotice = '';
@@ -1817,9 +1989,11 @@ async function loadCreation() {
 			likeCount,
 			actionsContext,
 			isOwner,
-			isFailed
+			isFailed,
+			hideActions: isGroupCreation
 		};
 		const menuData = { isFailed, hasDetailsModalContent, isOwner, isAdmin, actionsContext };
+		if (!isCurrentLoad()) return;
 
 		detailContent.innerHTML = html`
 			<div class="creation-detail-title-row">
@@ -1830,7 +2004,7 @@ async function loadCreation() {
 			<div class="creation-detail-title-byline creation-detail-title-byline-mobile">${escapeHtml(creatorHandle)}
 				${escapeHtml(mobileBylineText)}</div>
 			${renderCreationDetailActionStrip(stripData, escapeHtml)}
-			${renderCreationDetailMoreMenu(menuData, escapeHtml)}
+			${isGroupCreation ? '' : renderCreationDetailMoreMenu(menuData, escapeHtml)}
 			${userDeletedNotice}
 			${isAdmin && status === 'completed' && !isFailed ? html`
 			<div class="creation-detail-admin-video" data-admin-video-section>
@@ -1846,6 +2020,7 @@ async function loadCreation() {
 			` : ''}
 			
 			${descriptionHtml}
+			${groupSectionHtml}
 			<div class="creation-detail-meta-hidden" aria-hidden="true">
 				${hasDetailsModalContent ? `
 				<button class="feed-card-action" type="button" data-creation-details-link>
@@ -2232,27 +2407,21 @@ async function loadCreation() {
 			const avatarSlot = creatorPlan
 				? `<div class="avatar-with-founder-flair avatar-with-founder-flair--sm"><div class="founder-flair-avatar-ring"><div class="founder-flair-avatar-inner" style="background: ${escapeHtml(creatorColor)};" aria-hidden="true">${avatarInner}</div></div></div>`
 				: `<span class="creation-detail-author-icon" style="background: ${escapeHtml(creatorColor)};">${avatarInner}</span>`;
-			const nameClass = creatorPlan ? 'creation-detail-author-name founder-name' : 'creation-detail-author-name';
-			const handleClass = creatorPlan ? 'creation-detail-author-handle founder-name' : 'creation-detail-author-handle';
-			const nameHandleInner = `<span class="${nameClass}">${escapeHtml(creatorName)}</span>${creatorHandle ? `<span class="${handleClass}">${escapeHtml(creatorHandle)}</span>` : ''}`;
-			const idLine = creatorProfileHref
-				? `<div class="creation-detail-author-id"><a class="creation-detail-author-id-link" href="${escapeHtml(creatorProfileHref)}">${nameHandleInner}</a></div>`
-				: `<div class="creation-detail-author-id"><span class="creation-detail-author-id-link">${nameHandleInner}</span></div>`;
-			const creatorBlock = `
-				<div class="creation-detail-author creation-detail-lineage-modal-creator">
-					<div class="creation-detail-author-avatar-slot">${avatarSlot}</div>
-					${idLine}
-				</div>`;
 			const rawTitle = c.title == null ? '' : String(c.title).trim();
+			const headlineTitle = rawTitle || (pub ? 'Untitled' : `#${c.id}`);
+			const isUntitledHeadline = Boolean(pub && !rawTitle);
 			const descRaw = c.description == null ? '' : String(c.description).trim();
-			const titleBlock = rawTitle
-				? `<div class="creation-detail-lineage-modal-meta"><div class="creation-detail-lineage-modal-meta-label">Title</div><div>${escapeHtml(rawTitle)}</div></div>`
+			const publishedDateRaw = c.published_at || c.created_at || null;
+			const publishedDate = publishedDateRaw ? new Date(publishedDateRaw) : null;
+			const hasPublishedDate = publishedDate instanceof Date && Number.isFinite(publishedDate.valueOf());
+			const publishedTimeAgo =
+				pub && hasPublishedDate ? formatRelativeTime(publishedDate) || '' : '';
+			const bylineHtml = `${creatorHandle ? `${escapeHtml(creatorHandle)} ` : ''}${pub ? `Published${publishedTimeAgo ? ` ${escapeHtml(publishedTimeAgo)}` : ''}` : 'Not published'}`;
+			const descSection = descRaw
+				? `<div class="creation-detail-lineage-modal-copy"><div class="creation-detail-prompt-label-row"><span class="creation-detail-prompt-label">Description</span></div><div class="creation-detail-description creation-detail-lineage-modal-prose">${processUserText(descRaw)}</div></div>`
 				: '';
-			const descBlock = descRaw
-				? `<div class="creation-detail-lineage-modal-meta"><div class="creation-detail-lineage-modal-meta-label">Description</div><div class="creation-detail-lineage-modal-desc">${processUserText(descRaw)}</div></div>`
-				: '';
-			const promptBlock = pText
-				? `<div class="creation-detail-lineage-modal-meta"><div class="creation-detail-lineage-modal-meta-label">Prompt</div><div class="creation-detail-lineage-modal-prompt">${processUserText(pText)}</div></div>`
+			const promptSection = pText
+				? `<div class="creation-detail-lineage-modal-copy"><div class="creation-detail-prompt-label-row"><span class="creation-detail-prompt-label">Prompt</span></div><div class="creation-detail-description creation-detail-lineage-modal-prose creation-detail-lineage-modal-prose--prompt">${processUserText(pText)}</div></div>`
 				: '';
 			const serverName =
 				typeof m.server_name === 'string' && m.server_name.trim()
@@ -2303,13 +2472,14 @@ async function loadCreation() {
 			const styleMeta = m.style && typeof m.style === 'object' ? m.style : null;
 			const styleLabel = styleMeta && typeof styleMeta.label === 'string' ? styleMeta.label.trim() : '';
 			const styleModifiers = styleMeta && typeof styleMeta.modifiers === 'string' ? styleMeta.modifiers.trim() : '';
-			const styleBlock =
+			const styleSection =
 				styleLabel.length > 0
-					? `<div class="creation-detail-lineage-modal-meta"><div class="creation-detail-lineage-modal-meta-label">Style</div><div>${escapeHtml(styleLabel)}</div>${styleModifiers ? `<div class="creation-detail-style-modifiers">${escapeHtml(styleModifiers)}</div>` : ''}</div>`
+					? `<div class="creation-detail-lineage-modal-copy"><div class="creation-detail-prompt-label-row"><span class="creation-detail-prompt-label">Style</span></div><div class="creation-detail-description creation-detail-lineage-modal-prose">${escapeHtml(styleLabel)}${styleModifiers ? `<div class="creation-detail-style-modifiers">${escapeHtml(styleModifiers)}</div>` : ''}</div></div>`
 					: '';
 			const createdRaw = c.created_at ? new Date(c.created_at) : null;
 			const createdOk = createdRaw instanceof Date && Number.isFinite(createdRaw.valueOf());
-			const createdBlock = createdOk ? `<p class="creation-detail-lineage-modal-date">${escapeHtml(formatDateTime(createdRaw))}</p>` : '';
+			const createdRel =
+				createdOk ? escapeHtml(formatRelativeTime(createdRaw) || formatDateTime(createdRaw)) : '';
 			const creationHref = `/creations/${escapeHtml(String(c.id))}`;
 			const stepIdNum = Number(c.id);
 			const pageCreationIdNum = Number(creationId);
@@ -2319,24 +2489,41 @@ async function loadCreation() {
 				Number.isFinite(pageCreationIdNum) &&
 				pageCreationIdNum > 0 &&
 				stepIdNum === pageCreationIdNum;
-			let pubBlock = '';
-			if (isCurrentCreation) {
-				pubBlock = '<p class="creation-detail-lineage-modal-current">CURRENT</p>';
-			} else if (pub) {
-				pubBlock = `<p class="creation-detail-lineage-modal-published"><span class="creation-detail-lineage-modal-published-label">Published</span><a class="creation-detail-lineage-modal-creation-link" href="${creationHref}" aria-label="View full creation"><svg class="creation-detail-lineage-modal-creation-link-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg></a></p>`;
-			} else {
-				pubBlock = '<p class="creation-detail-lineage-modal-unpublished">Unpublished</p>';
-			}
+			const openLinkSvg = `<svg class="creation-detail-lineage-modal-creation-link-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>`;
+			const publishedCta = pub && !isCurrentCreation
+				? `<p class="creation-detail-lineage-modal-published"><span class="creation-detail-lineage-modal-published-label">Published</span><a class="creation-detail-lineage-modal-creation-link creation-detail-lineage-modal-creation-link--inline creation-detail-lineage-modal-creation-link--cta" href="${creationHref}" aria-label="View full creation">${openLinkSvg}<span class="creation-detail-lineage-modal-creation-link-text">View creation</span></a></p>`
+				: '';
+			const metaTitleAttr =
+				createdOk ? ` title="${escapeHtml(formatDateTime(createdRaw))}"` : '';
+			const avatarInnerCell = `<div class="creation-detail-author-avatar-slot">${avatarSlot}</div>`;
+			const avatarCell = creatorProfileHref
+				? `<a class="user-link user-avatar-link" href="${escapeHtml(creatorProfileHref)}" aria-label="View ${escapeHtml(creatorName)} profile">${avatarInnerCell}</a>`
+				: `<div class="creation-detail-lineage-modal-avatar-wrap">${avatarInnerCell}</div>`;
+			const currentBadge = isCurrentCreation
+				? '<p class="creation-detail-lineage-modal-current">Current step</p>'
+				: '';
 			lineageModalBody.innerHTML = `
-				${creatorBlock}
-				<div class="creation-detail-lineage-modal-title">#${escapeHtml(String(c.id))}</div>
-				${titleBlock}
-				${pubBlock}
-				${descBlock}
-				${createdBlock}
+				<div class="creation-detail-lineage-modal-info">
+					<div class="creation-detail-title-row">
+						<div class="creation-detail-title${isUntitledHeadline ? ' creation-detail-title-untitled' : ''}">${escapeHtml(headlineTitle)}</div>
+					</div>
+					<div class="creation-detail-title-byline creation-detail-title-byline-mobile creation-detail-lineage-modal-byline">${bylineHtml}</div>
+					${publishedCta}
+					<div class="feed-card-footer-grid creation-detail-lineage-modal-footer">
+						${avatarCell}
+						<div class="feed-card-content">
+							<div class="feed-card-title creation-detail-lineage-modal-creator-name${creatorPlan ? ' founder-name' : ''}">${escapeHtml(creatorName)}</div>
+							<div class="feed-card-metadata creation-detail-lineage-modal-creation-meta"${metaTitleAttr}>
+								<span>#${escapeHtml(String(c.id))}</span>${createdOk ? `<span class="creation-detail-lineage-modal-meta-sep" aria-hidden="true">·</span><span>${createdRel}</span>` : ''}
+							</div>
+						</div>
+					</div>
+					${currentBadge}
+					${descSection}
+					${promptSection}
+				${styleSection}
 				${serverMethodMetaLine}
-				${styleBlock}
-				${promptBlock}
+				</div>
 			`;
 			try {
 				if (lineageModalOverlay) hydrateUserTextLinks(lineageModalOverlay);
@@ -2952,6 +3139,122 @@ async function loadCreation() {
 			enableLikeButtons(detailContent);
 		}
 
+		if (isGroupCreation && groupSources.length > 0) {
+			const sourceById = new Map(groupSources.map((source) => [Number(source.id), source]));
+			const groupThumbButtons = Array.from(detailContent.querySelectorAll('[data-group-source-thumb]'));
+			const setCoverBtn = detailContent.querySelector('[data-group-set-cover-btn]');
+			const titleEl = detailContent.querySelector('.creation-detail-title');
+			const mainDescriptionEl = detailContent.querySelector('[data-description]');
+			const mainMetaLineEl = detailContent.querySelector('.creation-detail-description-meta-line');
+			let selectedGroupSourceId = Number(groupSources[0]?.id);
+			const currentCoverId = Number(groupSources[0]?.id);
+
+			function syncSetCoverButton() {
+				if (!(setCoverBtn instanceof HTMLButtonElement)) return;
+				const canSetCover =
+					Number.isFinite(selectedGroupSourceId) &&
+					selectedGroupSourceId > 0 &&
+					selectedGroupSourceId !== currentCoverId;
+				setCoverBtn.disabled = !canSetCover;
+			}
+
+			function setActiveGroupSource(sourceId, options = {}) {
+				const shouldUpdateMedia = options.updateMedia !== false;
+				const source = sourceById.get(Number(sourceId));
+				if (!source) return;
+				selectedGroupSourceId = Number(source.id);
+				for (const btn of groupThumbButtons) {
+					const isActive = Number(btn.getAttribute('data-group-source-thumb')) === Number(source.id);
+					btn.classList.toggle('is-active', isActive);
+				}
+				syncSetCoverButton();
+				if (titleEl) {
+					titleEl.textContent = source.title || 'Untitled';
+				}
+				if (mainDescriptionEl) {
+					const descriptionParts = [];
+					if (source.description) {
+						descriptionParts.push(processUserText(source.description));
+					}
+					if (source.prompt) {
+						if (descriptionParts.length > 0) descriptionParts.push('<br><br>');
+						descriptionParts.push('<div class="creation-detail-prompt-label">Prompt</div>');
+						descriptionParts.push(processUserText(source.prompt));
+					}
+					mainDescriptionEl.innerHTML = descriptionParts.join('');
+				}
+				if (mainMetaLineEl) {
+					mainMetaLineEl.textContent = source.generationInfo || '';
+				}
+
+				if (shouldUpdateMedia) {
+					if (source.filePath) {
+						showHeroImage(source.filePath);
+					}
+				}
+			}
+
+			for (const btn of groupThumbButtons) {
+				btn.addEventListener('click', (e) => {
+					e.preventDefault();
+					const sourceId = Number(btn.getAttribute('data-group-source-thumb'));
+					if (!Number.isFinite(sourceId)) return;
+					setActiveGroupSource(sourceId);
+				});
+			}
+			if (setCoverBtn instanceof HTMLButtonElement) {
+				setCoverBtn.addEventListener('click', async () => {
+					if (!Number.isFinite(selectedGroupSourceId) || selectedGroupSourceId <= 0) return;
+					setCoverBtn.disabled = true;
+					try {
+						const res = await fetch(`/api/create/images/${creationId}/group-cover`, {
+							method: 'POST',
+							credentials: 'include',
+							headers: { 'content-type': 'application/json' },
+							body: JSON.stringify({ source_id: selectedGroupSourceId })
+						});
+						const data = await res.json().catch(() => ({}));
+						if (!res.ok) {
+							alert(data?.error || 'Failed to set cover');
+							syncSetCoverButton();
+							return;
+						}
+						await loadCreation();
+					} catch (err) {
+						alert(err?.message || 'Failed to set cover');
+						syncSetCoverButton();
+					}
+				});
+			}
+			// Keep the cover media from the main load path as-is to avoid reloading and flicker.
+			setActiveGroupSource(groupSources[0].id, { updateMedia: false });
+		}
+
+		const ungroupBtn = detailContent.querySelector('[data-ungroup-btn]');
+		if (ungroupBtn instanceof HTMLButtonElement) {
+			ungroupBtn.addEventListener('click', async () => {
+				if (!window.confirm('Ungroup this creation and restore the original creations?')) return;
+				ungroupBtn.disabled = true;
+				try {
+					const res = await fetch(`/api/create/images/${creationId}/ungroup`, {
+						method: 'POST',
+						credentials: 'include'
+					});
+					const data = await res.json().catch(() => ({}));
+					if (!res.ok) {
+						const msg = typeof data?.error === 'string' ? data.error : 'Failed to ungroup creation';
+						alert(msg);
+						ungroupBtn.disabled = false;
+						return;
+					}
+					window.location.href = '/chat/c/creations';
+				} catch (err) {
+					alert(err?.message || 'Failed to ungroup creation');
+					ungroupBtn.disabled = false;
+				}
+			});
+		}
+
 		function scrollToComments() {
 			const el = detailContent.querySelector('#comments');
 			if (!el) return;
@@ -3493,6 +3796,34 @@ async function loadCreation() {
 
 let currentCreationId = null;
 let lastCreationMeta = null;
+let loadCreationSequence = 0;
+
+/**
+ * Video creations cannot use Vynly share (server + client). Mirrors api_routes/utils/vynlyShareFromCreation.js.
+ * @returns {boolean}
+ */
+function isCurrentCreationVideoForVynly() {
+	const c = lastCreationMeta;
+	if (!c || typeof c !== 'object') return false;
+	let meta = c.meta;
+	if (typeof meta === 'string') {
+		try {
+			meta = JSON.parse(meta);
+		} catch {
+			meta = null;
+		}
+	}
+	if (meta && typeof meta === 'object') {
+		if (meta.video && typeof meta.video === 'object') return true;
+		const fp = typeof meta.file_path === 'string' ? meta.file_path.trim() : '';
+		if (fp.startsWith('/api/videos/created/')) return true;
+		const vf = typeof meta.video_filename === 'string' ? meta.video_filename : '';
+		if (vf.startsWith('video/')) return true;
+		if (typeof meta.media_type === 'string' && meta.media_type === 'video') return true;
+	}
+	const mediaType = typeof c.media_type === 'string' ? c.media_type : 'image';
+	return mediaType === 'video';
+}
 
 async function checkAndLoadCreation() {
 	await loadDeps();
@@ -3579,15 +3910,32 @@ document.addEventListener('click', (e) => {
 	}
 });
 
-// Share button handler
-document.addEventListener('click', (e) => {
+// Share button handler — prefetch Vynly status so the share modal can show the Vynly row before it opens.
+document.addEventListener('click', async (e) => {
 	const shareBtn = e.target.closest('[data-share-btn]');
 	if (shareBtn && !shareBtn.disabled) {
 		e.preventDefault();
 		const creationId = getCreationId();
 		if (!creationId) return;
+		const vynlyShareEligible = !isCurrentCreationVideoForVynly();
+		let vynlyConfigured = false;
+		if (vynlyShareEligible) {
+			try {
+				const res = await fetch('/api/vynly/status', { credentials: 'include' });
+				if (res.ok) {
+					const data = await res.json().catch(() => null);
+					vynlyConfigured = Boolean(data?.configured);
+				}
+			} catch {
+				// leave false
+			}
+		}
 		document.dispatchEvent(new CustomEvent('open-share-modal', {
-			detail: { creationId }
+			detail: {
+				creationId,
+				vynlyShareEligible,
+				vynlyConfigured
+			}
 		}));
 	}
 });
