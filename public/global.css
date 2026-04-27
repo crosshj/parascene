@@ -4534,6 +4534,7 @@ body.chat-page main.chat-page-outer {
 	}
 
 	.chat-page-sidebar-footer {
+		position: relative;
 		flex-shrink: 0;
 		border-top: 1px solid var(--border);
 		padding: 6px 8px 10px;
@@ -4607,7 +4608,7 @@ body.chat-page main.chat-page-outer {
 	}
 
 	.chat-page-sidebar-footer-actions {
-		position: relative;
+		position: static;
 		display: inline-flex;
 		flex-direction: row;
 		align-items: center;
@@ -4617,14 +4618,16 @@ body.chat-page main.chat-page-outer {
 
 	.chat-page-sidebar-notifications-menu {
 		position: absolute;
-		right: 0;
+		left: 8px;
 		bottom: calc(100% + 8px);
-		width: min(290px, calc(100vw - 24px));
+		width: min(360px, calc(100vw - 24px));
+		max-height: calc(100vh - 96px);
 		padding: 6px 0;
 		border: 1px solid var(--border);
 		border-radius: 10px;
 		background: var(--surface);
 		box-shadow: var(--shadow);
+		overflow-y: auto;
 		opacity: 0;
 		visibility: hidden;
 		transform: translateY(6px);
