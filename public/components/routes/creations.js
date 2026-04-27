@@ -302,6 +302,13 @@ class AppRouteCreations extends HTMLElement {
 		}
 
 		if (container) {
+			container.addEventListener('contextmenu', (e) => {
+				if (!window.matchMedia('(max-width: 768px)').matches) return;
+				if (!e.target?.closest?.('.route-card.route-card-image[data-image-id]')) return;
+				if (e.target?.closest?.('button,input,textarea,select,label,[role="button"]')) return;
+				e.preventDefault();
+				e.stopPropagation();
+			}, true);
 			// Use capture phase so we run before the card's click handler (which would navigate to detail)
 			container.addEventListener('click', (e) => {
 				const overlay = e.target.closest('[data-creations-bulk-overlay]');

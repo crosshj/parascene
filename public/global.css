@@ -9390,6 +9390,14 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 	border-radius: 10px;
 }
 
+@media (max-width: 768px) {
+	.creations-route .route-card-image[data-image-id],
+	.creations-route .feed-card[data-image-id] {
+		-webkit-touch-callout: none;
+		user-select: none;
+	}
+}
+
 /* Toast: center-bottom confirmation messages */
 .app-toast-container {
 	position: fixed;

@@ -5768,6 +5768,17 @@ export async function initChatPage(root, options = {}) {
 			{ signal: capAc.signal }
 		);
 		cards.addEventListener(
+			'contextmenu',
+			(e) => {
+				if (!isChatPageMobileLayout()) return;
+				if (!e.target?.closest?.('.feed-card[data-image-id]')) return;
+				if (e.target?.closest?.('button,input,textarea,select,label,[role="button"]')) return;
+				e.preventDefault();
+				e.stopPropagation();
+			},
+			{ capture: true, signal: capAc.signal }
+		);
+		cards.addEventListener(
 			'click',
 			(e) => {
 				if (
