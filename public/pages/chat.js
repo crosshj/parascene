@@ -2059,10 +2059,13 @@ export async function initChatPage(root, options = {}) {
 			chatExploreCreationsBrowseView &&
 			(activePseudoChannelSlug === 'explore' || activePseudoChannelSlug === 'creations');
 		document.body.classList.toggle('chat-page--pseudo-browse-view', on);
-		const feedViewportScroll = activePseudoChannelSlug === 'feed';
-		document.body.classList.toggle('chat-page--feed-viewport-scroll', feedViewportScroll);
+		const viewportScrollMode =
+			activePseudoChannelSlug === 'feed' ||
+			activePseudoChannelSlug === 'explore' ||
+			activePseudoChannelSlug === 'creations';
+		document.body.classList.toggle('chat-page--viewport-scroll', viewportScrollMode);
 		try {
-			document.documentElement.classList.toggle('chat-page--feed-viewport-scroll', feedViewportScroll);
+			document.documentElement.classList.toggle('chat-page--viewport-scroll', viewportScrollMode);
 		} catch {
 			// ignore
 		}
@@ -2075,7 +2078,14 @@ export async function initChatPage(root, options = {}) {
 		const on = Boolean(open) && shouldShowMobileSidebarFromLocation();
 		const shouldShowAppMobileChrome = shouldShowAppMobileChromeForCurrentChatView(activePseudoChannelSlug);
 		document.body.classList.toggle('chat-page--mobile-sidebar-open', on);
+		const viewportScrollMode =
+			on ||
+			activePseudoChannelSlug === 'feed' ||
+			activePseudoChannelSlug === 'explore' ||
+			activePseudoChannelSlug === 'creations';
+		document.body.classList.toggle('chat-page--viewport-scroll', viewportScrollMode);
 		try {
+			document.documentElement.classList.toggle('chat-page--viewport-scroll', viewportScrollMode);
 			if (shouldShowAppMobileChrome) {
 				document.documentElement.classList.add('chat-page--use-app-mobile-header');
 			} else {
