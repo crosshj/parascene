@@ -101,12 +101,14 @@ class AppNavigationMobile extends HTMLElement {
 			const next = `/chat${window.location.search || ''}#channels`;
 			const cur = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
 			if (next !== cur) {
+				this.resetSectionScrollAfterRouteChange();
 				window.history.pushState({ prsnChat: true }, '', next);
 				try {
 					window.dispatchEvent(new HashChangeEvent('hashchange'));
 				} catch {
 					window.dispatchEvent(new Event('hashchange'));
 				}
+				this.resetSectionScrollAfterRouteChange();
 			}
 			this.handleRouteChange();
 			return;
@@ -127,12 +129,14 @@ class AppNavigationMobile extends HTMLElement {
 			const next = `${targetPath}${window.location.search || ''}`;
 			const cur = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
 			if (next !== cur) {
+				this.resetSectionScrollAfterRouteChange();
 				window.history.pushState({ prsnChat: true }, '', next);
 				try {
 					window.dispatchEvent(new PopStateEvent('popstate'));
 				} catch {
 					window.dispatchEvent(new Event('popstate'));
 				}
+				this.resetSectionScrollAfterRouteChange();
 			}
 			this.handleRouteChange();
 			return;
@@ -159,12 +163,14 @@ class AppNavigationMobile extends HTMLElement {
 		}
 
 		window.history.pushState({ route }, '', targetPath);
+		this.resetSectionScrollAfterRouteChange();
 		const header = document.querySelector('app-navigation');
 		if (header && typeof header.handleRouteChange === 'function') {
 			header.handleRouteChange();
 		} else {
 			this.updateContentForRoute(route);
 		}
+		this.resetSectionScrollAfterRouteChange();
 		this.handleRouteChange();
 	}
 
@@ -179,11 +185,20 @@ class AppNavigationMobile extends HTMLElement {
 
 	resetSectionScroll() {
 		const scroller = document.scrollingElement || document.documentElement;
-		if (!scroller) return;
-		scroller.scrollTop = 0;
+		if (scroller) scroller.scrollTop = 0;
+		document.documentElement.scrollTop = 0;
+		document.body.scrollTop = 0;
 		if (typeof window.scrollTo === 'function') {
 			window.scrollTo(0, 0);
 		}
+	}
+
+	resetSectionScrollAfterRouteChange() {
+		this.resetSectionScroll();
+		requestAnimationFrame(() => {
+			this.resetSectionScroll();
+			requestAnimationFrame(() => this.resetSectionScroll());
+		});
 	}
 
 	handleRouteChange() {
