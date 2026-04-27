@@ -14,10 +14,13 @@ import { getChatAudibleNotificationsEnabled } from './chatAudibleNotificationsPr
  */
 
 const CHAT_UNREAD_SOUND_HREF = '/audio/universfield-new-notification-07-210334.mp3';
+const CHAT_UNREAD_PING_COOLDOWN_MS = 2000;
 
 let unlockHandlersBound = false;
 let pendingPing = false;
 let audioPrimed = false;
+let lastPingStartedAt = 0;
+let pingInFlight = false;
 
 function tabIsBackgrounded() {
 	return typeof document !== 'undefined' && document.visibilityState === 'hidden';
@@ -50,17 +53,35 @@ async function playNotificationClip() {
 	await a.play();
 }
 
+function isPingCoolingDown() {
+	const now = Date.now();
+	return pingInFlight || (lastPingStartedAt > 0 && now - lastPingStartedAt < CHAT_UNREAD_PING_COOLDOWN_MS);
+}
+
+async function playNotificationClipDebounced() {
+	if (isPingCoolingDown()) return false;
+	lastPingStartedAt = Date.now();
+	pingInFlight = true;
+	try {
+		await playNotificationClip();
+		return true;
+	} finally {
+		pingInFlight = false;
+	}
+}
+
 async function tryFlushPendingPing() {
 	if (!pendingPing) return;
 	if (!getChatAudibleNotificationsEnabled()) {
 		pendingPing = false;
 		return;
 	}
+	if (isPingCoolingDown()) return;
 	try {
 		// Gesture-driven: may run while tab is visible again; still OK — user
 		// activated the document, and this is a single catch-up for a blocked
 		// background notification.
-		await playNotificationClip();
+		if (!(await playNotificationClipDebounced())) return;
 		pendingPing = false;
 	} catch {
 		// still blocked; keep pendingPing true
@@ -93,8 +114,9 @@ export async function playChatUnreadPing() {
 	if (!getChatAudibleNotificationsEnabled()) return false;
 	if (!tabIsBackgrounded()) return false;
 	bindUnlockHandlers();
+	if (isPingCoolingDown()) return false;
 	try {
-		await playNotificationClip();
+		if (!(await playNotificationClipDebounced())) return false;
 		pendingPing = false;
 		return true;
 	} catch {

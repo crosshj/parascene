@@ -1,3 +1,5 @@
+// most of these icons are from lucide.dev, but also consider heroicons.com and tablericons.com
+
 // SVG strings for icons (public/icons). Use across the site (DRY).
 // Each icon is (className?) => string. Wrap full SVG with withAttributes to add optional class.
 
@@ -118,6 +120,25 @@ export const smsIcon = withAttributes(html`
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
 		stroke-linejoin="round" aria-hidden="true">
 		<path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
+	</svg>
+`);
+
+export const notesIcon = withAttributes(html`
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+		stroke-linejoin="round" aria-hidden="true">
+		<path d="M4 2.5m0 2.25a2.25 2.25 0 0 1 2.25 -2.25h11.5a2.25 2.25 0 0 1 2.25 2.25v14.5a2.25 2.25 0 0 1 -2.25 2.25h-11.5a2.25 2.25 0 0 1 -2.25 -2.25z"></path>
+		<path d="M8.25 7l7.5 0"></path>
+		<path d="M8.25 11.5l7.5 0"></path>
+		<path d="M8.25 16l5 0"></path>
+	</svg>
+`);
+
+export const megaphoneIcon = withAttributes(html`
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+		stroke-linejoin="round" aria-hidden="true">
+		<path d="M11 6a13 13 0 0 0 8.4-2.8A1 1 0 0 1 21 4v12a1 1 0 0 1-1.6.8A13 13 0 0 0 11 14H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"></path>
+		<path d="M6 14a12 12 0 0 0 2.4 7.2 2 2 0 0 0 3.2-2.4A8 8 0 0 1 10 14"></path>
+		<path d="M8 6v8"></path>
 	</svg>
 `);
 

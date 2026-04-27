@@ -26,12 +26,12 @@ let buildChatThreadUrl;
 let buildChatThreadRowAvatarHtml;
 let getDmOtherUserId;
 let isSelfDmThread;
-let normalizeDmListWithSelfFirst;
 let buildChatSidebarDmListHtml;
 let buildCollapsibleChatSidebarListHtml;
 let toggleChatSidebarCollapsibleList;
 let sortChannelRowsByLastActivity;
 let sortDmsWithPinnedOrder;
+let prioritizeUnreadRowsInVisibleWindow;
 let dmStablePinStorageKey;
 let buildProfilePath;
 
@@ -96,12 +96,12 @@ async function loadDeps() {
 		buildChatThreadRowAvatarHtml = chatSidebarRosterMod.buildChatThreadRowAvatarHtml;
 		getDmOtherUserId = chatSidebarRosterMod.getDmOtherUserId;
 		isSelfDmThread = chatSidebarRosterMod.isSelfDmThread;
-		normalizeDmListWithSelfFirst = chatSidebarRosterMod.normalizeDmListWithSelfFirst;
 		buildChatSidebarDmListHtml = chatSidebarRosterMod.buildChatSidebarDmListHtml;
 		buildCollapsibleChatSidebarListHtml = chatSidebarRosterMod.buildCollapsibleChatSidebarListHtml;
 		toggleChatSidebarCollapsibleList = chatSidebarRosterMod.toggleChatSidebarCollapsibleList;
 		sortChannelRowsByLastActivity = chatSidebarRosterMod.sortChannelRowsByLastActivity;
 		sortDmsWithPinnedOrder = chatSidebarRosterMod.sortDmsWithPinnedOrder;
+		prioritizeUnreadRowsInVisibleWindow = chatSidebarRosterMod.prioritizeUnreadRowsInVisibleWindow;
 		dmStablePinStorageKey = chatSidebarRosterMod.dmStablePinStorageKey;
 
 		const profileLinksMod = await import(`../../shared/profileLinks.js${qs}`);
@@ -829,13 +829,17 @@ class AppRouteServers extends HTMLElement {
 		}
 		const dmsRaw = merged.filter((t) => t && t.type === 'dm');
 		const dmsNorm =
-			typeof normalizeDmListWithSelfFirst === 'function'
-				? normalizeDmListWithSelfFirst(dmsRaw, this._chatViewerId, this._chatViewerProfileMini)
+			typeof isSelfDmThread === 'function'
+				? dmsRaw.filter((t) => !isSelfDmThread(t, this._chatViewerId))
 				: dmsRaw;
-		const dms =
+		const dmsPinned =
 			typeof sortDmsWithPinnedOrder === 'function'
 				? sortDmsWithPinnedOrder(dmsNorm, this._chatViewerId)
 				: dmsNorm;
+		const dms =
+			typeof prioritizeUnreadRowsInVisibleWindow === 'function'
+				? prioritizeUnreadRowsInVisibleWindow(dmsPinned)
+				: dmsPinned;
 		const channelRowsRaw = merged.filter((t) => t && t.type === 'channel');
 		const serverChannelsRaw = channelRowsRaw.filter((t) => {
 			const slug = typeof t.channel_slug === 'string' ? t.channel_slug.trim().toLowerCase() : '';
@@ -849,14 +853,22 @@ class AppRouteServers extends HTMLElement {
 				return false;
 			return !slug || !joinedSlugs.has(slug);
 		});
-		const serverChannels =
+		const serverChannelsSorted =
 			typeof sortChannelRowsByLastActivity === 'function'
 				? sortChannelRowsByLastActivity(serverChannelsRaw)
 				: serverChannelsRaw;
-		const otherChannels =
+		const otherChannelsSorted =
 			typeof sortChannelRowsByLastActivity === 'function'
 				? sortChannelRowsByLastActivity(otherChannelsRaw)
 				: otherChannelsRaw;
+		const serverChannels =
+			typeof prioritizeUnreadRowsInVisibleWindow === 'function'
+				? prioritizeUnreadRowsInVisibleWindow(serverChannelsSorted)
+				: serverChannelsSorted;
+		const otherChannels =
+			typeof prioritizeUnreadRowsInVisibleWindow === 'function'
+				? prioritizeUnreadRowsInVisibleWindow(otherChannelsSorted)
+				: otherChannelsSorted;
 
 		const deps = { renderCommentAvatarHtml, getAvatarColor };
 		const onlineIds = this._presenceOnlineIds instanceof Set ? this._presenceOnlineIds : new Set();

@@ -487,7 +487,7 @@ function normalizeDmPathUsername(raw) {
 
 /**
  * @param {string} pathname
- * @returns {{ kind: 'empty' } | { kind: 'invalid' } | { kind: 'thread', threadId: number } | { kind: 'channel', slug: string } | { kind: 'dm', userId: number } | { kind: 'dm', userName: string }}
+ * @returns {{ kind: 'empty' } | { kind: 'invalid' } | { kind: 'thread', threadId: number } | { kind: 'channel', slug: string } | { kind: 'dm', userId: number } | { kind: 'dm', userName: string } | { kind: 'dm', self: true }}
  */
 function parseChatPathname(pathname) {
 	const p = String(pathname || '').replace(/\/+$/, '') || '/';
@@ -507,6 +507,9 @@ function parseChatPathname(pathname) {
 	if (parts[0] !== 'chat') return { kind: 'invalid' };
 	if (parts.length === 1) return { kind: 'empty' };
 	const seg = parts[1].toLowerCase();
+	if (seg === 'notes' && parts.length === 2) {
+		return { kind: 'dm', self: true };
+	}
 	if (seg === 'c' && parts[2]) {
 		let slug = parts[2];
 		try {
@@ -730,6 +733,8 @@ export async function initChatPage(root, options = {}) {
 	const COMMENTS_CHANNEL_PAGE_SIZE = 50;
 	/** @type {IntersectionObserver | null} */
 	let feedChannelLoadMoreObserver = null;
+	/** @type {null | (() => void)} */
+	let feedChannelLoadMoreFallbackCleanup = null;
 	/** @type {IntersectionObserver | null} */
 	let feedChannelVideoObserver = null;
 	const FEED_CHANNEL_PAGE_SIZE = 20;
@@ -3706,7 +3711,7 @@ export async function initChatPage(root, options = {}) {
 					}
 				};
 			});
-			const dmsNorm = rosterMod.normalizeDmListWithSelfFirst(dmsRaw, chatViewerId, viewerProfile);
+			const dmsNorm = dmsRaw.filter((t) => !rosterMod.isSelfDmThread(t, chatViewerId));
 			const isDmOnlineForSidebar = (t) => {
 				if (!t || t.type !== 'dm') return false;
 				const selfDm = rosterMod.isSelfDmThread(t, chatViewerId);
@@ -3749,14 +3754,14 @@ export async function initChatPage(root, options = {}) {
 			const dmsPresenceOrdered = prioritizeOnlineDmsInVisibleWindow(dmsPinned, {
 				visibleCap: rosterMod.CHAT_SIDEBAR_COLLAPSE_LIST_CAP,
 				isOnline: isDmOnlineForSidebar,
-					getLastSeenMs: dmLastActiveMsForSidebar,
+				getLastSeenMs: dmLastActiveMsForSidebar,
 				getLastInteractedMs: dmLastInteractedMsForSidebar
 			});
-			const dms = rosterMod.normalizeDmListWithSelfFirst(
-				dmsPresenceOrdered,
-				chatViewerId,
-				viewerProfile
-			);
+			const dmsUnreadOrdered = rosterMod.prioritizeUnreadRowsInVisibleWindow(dmsPresenceOrdered, {
+				visibleCap: rosterMod.CHAT_SIDEBAR_COLLAPSE_LIST_CAP,
+				getLastActivityMs: dmLastInteractedMsForSidebar
+			});
+			const dms = dmsUnreadOrdered;
 			const channelRowsRaw = merged.filter((t) => t && t.type === 'channel');
 			const serverChannelsRaw = channelRowsRaw.filter((t) => {
 				const slug =
@@ -3770,8 +3775,14 @@ export async function initChatPage(root, options = {}) {
 				if (slug && rosterMod.SIDEBAR_TOP_STRIP_CHANNEL_SLUGS.has(slug)) return false;
 				return !slug || !joinedSlugs.has(slug);
 			});
-			const serverChannels = rosterMod.sortChannelRowsByLastActivity(serverChannelsRaw);
-			const otherChannels = rosterMod.sortChannelRowsByLastActivity(otherChannelsRaw);
+			const serverChannels = rosterMod.prioritizeUnreadRowsInVisibleWindow(
+				rosterMod.sortChannelRowsByLastActivity(serverChannelsRaw),
+				{ visibleCap: rosterMod.CHAT_SIDEBAR_COLLAPSE_LIST_CAP }
+			);
+			const otherChannels = rosterMod.prioritizeUnreadRowsInVisibleWindow(
+				rosterMod.sortChannelRowsByLastActivity(otherChannelsRaw),
+				{ visibleCap: rosterMod.CHAT_SIDEBAR_COLLAPSE_LIST_CAP }
+			);
 
 			function joinedServerMetaForSlug(slug) {
 				const key = String(slug || '').trim().toLowerCase();
@@ -4841,6 +4852,10 @@ export async function initChatPage(root, options = {}) {
 			}
 			feedChannelLoadMoreObserver = null;
 		}
+		if (feedChannelLoadMoreFallbackCleanup) {
+			feedChannelLoadMoreFallbackCleanup();
+			feedChannelLoadMoreFallbackCleanup = null;
+		}
 	}
 
 	function teardownFeedChannelLoadMore() {
@@ -5088,6 +5103,84 @@ export async function initChatPage(root, options = {}) {
 		feedChannelVideoObserver.observe(videoEl);
 	}
 
+	function maybeLoadMoreActiveFeedLanePseudoChannel() {
+		if (
+			!pseudoColumnPager ||
+			!pseudoColumnPager.getHasMore() ||
+			pseudoColumnPager.isOlderBusy() ||
+			loadingPseudoChannelMessages
+		) {
+			return;
+		}
+		if (activePseudoChannelSlug === 'feed') {
+			void loadMoreFeedChannelMessages();
+		} else if (activePseudoChannelSlug === 'explore') {
+			void loadMoreExploreChannelMessages();
+		} else if (activePseudoChannelSlug === 'creations') {
+			void loadMoreCreationsChannelMessages();
+		}
+	}
+
+	function feedChannelViewportLoadMarginPx() {
+		if (activePseudoChannelSlug === 'feed') {
+			return chatFeedLaneScrollMode === 'newest_first' ? 1800 : 1200;
+		}
+		if (activePseudoChannelSlug === 'explore' || activePseudoChannelSlug === 'creations') {
+			return 1800;
+		}
+		return 0;
+	}
+
+	function setupFeedChannelViewportLoadFallback(sentinel) {
+		if (!(sentinel instanceof HTMLElement) || !shouldUseViewportScrollForChatMessages()) return;
+		let raf = 0;
+		const getViewportHeight = () => {
+			const vv = window.visualViewport;
+			if (vv && typeof vv.height === 'number' && Number.isFinite(vv.height)) return vv.height;
+			if (typeof window.innerHeight === 'number' && Number.isFinite(window.innerHeight)) return window.innerHeight;
+			return document.documentElement?.clientHeight || 0;
+		};
+		const isNearLoadEdge = () => {
+			const rect = sentinel.getBoundingClientRect();
+			const margin = feedChannelViewportLoadMarginPx();
+			if (margin <= 0) return false;
+			if (chatFeedLaneScrollMode === 'newest_first') {
+				return rect.top <= getViewportHeight() + margin;
+			}
+			return rect.bottom >= -margin;
+		};
+		const check = () => {
+			raf = 0;
+			if (!sentinel.isConnected) return;
+			if (isNearLoadEdge()) {
+				maybeLoadMoreActiveFeedLanePseudoChannel();
+			}
+		};
+		const schedule = () => {
+			if (raf) return;
+			raf = window.requestAnimationFrame(check);
+		};
+		window.addEventListener('scroll', schedule, { passive: true });
+		window.addEventListener('resize', schedule);
+		if (window.visualViewport) {
+			window.visualViewport.addEventListener('resize', schedule);
+			window.visualViewport.addEventListener('scroll', schedule);
+		}
+		feedChannelLoadMoreFallbackCleanup = () => {
+			if (raf) {
+				window.cancelAnimationFrame(raf);
+				raf = 0;
+			}
+			window.removeEventListener('scroll', schedule);
+			window.removeEventListener('resize', schedule);
+			if (window.visualViewport) {
+				window.visualViewport.removeEventListener('resize', schedule);
+				window.visualViewport.removeEventListener('scroll', schedule);
+			}
+		};
+		schedule();
+	}
+
 	function setupFeedChannelLoadMoreObserver(messagesEl) {
 		disconnectFeedChannelLoadObserver();
 		const sentinel = messagesEl.querySelector('[data-chat-feed-load-sentinel]');
@@ -5114,13 +5207,7 @@ export async function initChatPage(root, options = {}) {
 							activePseudoChannelSlug === 'explore' ||
 							activePseudoChannelSlug === 'creations')
 					) {
-						if (activePseudoChannelSlug === 'feed') {
-							void loadMoreFeedChannelMessages();
-						} else if (activePseudoChannelSlug === 'explore') {
-							void loadMoreExploreChannelMessages();
-						} else if (activePseudoChannelSlug === 'creations') {
-							void loadMoreCreationsChannelMessages();
-						}
+						maybeLoadMoreActiveFeedLanePseudoChannel();
 					}
 				}
 			},
@@ -5131,6 +5218,7 @@ export async function initChatPage(root, options = {}) {
 			}
 		);
 		feedChannelLoadMoreObserver.observe(sentinel);
+		setupFeedChannelViewportLoadFallback(sentinel);
 	}
 
 	function stopChatCreationsPseudoChannelPoll() {
@@ -5557,10 +5645,10 @@ export async function initChatPage(root, options = {}) {
 		shell.innerHTML = `
 		<div class="creations-bulk-bar" data-creations-bulk-bar aria-hidden="true">
 			<div class="creations-bulk-bar-inner">
-				<span class="creations-bulk-bar-label">Bulk Actions</span>
+				<span class="creations-bulk-bar-label">Bulk</span>
 				<div class="creations-bulk-actions">
-					<button type="button" class="btn-secondary creations-bulk-queue-btn" data-creations-bulk-queue disabled>Queue for later</button>
-					<button type="button" class="btn-secondary creations-bulk-group-btn" data-creations-bulk-group disabled>Group Creations</button>
+					<button type="button" class="btn-secondary creations-bulk-queue-btn" data-creations-bulk-queue disabled>Queue</button>
+					<button type="button" class="btn-secondary creations-bulk-group-btn" data-creations-bulk-group disabled>Group</button>
 					<button type="button" class="btn-secondary creations-bulk-delete-btn" data-creations-bulk-delete disabled>Delete</button>
 				</div>
 				<button type="button" class="creations-bulk-bar-close" data-creations-bulk-close aria-label="Close bulk actions">×</button>
@@ -7275,11 +7363,18 @@ export async function initChatPage(root, options = {}) {
 			}
 
 			if (parsed.kind === 'dm') {
-				const uid =
-					'userId' in parsed && parsed.userId != null
-						? Number(parsed.userId)
-						: null;
+				const isSelfNotesRoute = 'self' in parsed && parsed.self === true;
+				let uid =
+					isSelfNotesRoute
+						? Number(chatViewerId)
+						: 'userId' in parsed && parsed.userId != null
+							? Number(parsed.userId)
+							: null;
+				if (!Number.isFinite(uid) || uid <= 0) uid = null;
 				const userName = 'userName' in parsed && parsed.userName ? String(parsed.userName) : null;
+				if (uid == null && !userName) {
+					throw new Error('Could not open My Notes until your chat profile is loaded.');
+				}
 
 				const match = (chatThreads || []).find((t) => {
 					if (t.type !== 'dm') return false;
@@ -7292,7 +7387,7 @@ export async function initChatPage(root, options = {}) {
 				});
 				if (match) {
 					activeThreadId = Number(match.id);
-					updateTitleFromMeta(match);
+					updateTitleFromMeta(isSelfNotesRoute ? { ...match, title: 'My Notes' } : match);
 					await loadMessages();
 					await bindRoomBroadcast(activeThreadId);
 					return;
@@ -7318,7 +7413,7 @@ export async function initChatPage(root, options = {}) {
 				if (Number.isFinite(tid) && tid > 0) {
 					activeThreadId = tid;
 					const meta = (chatThreads || []).find((t) => Number(t.id) === tid);
-					updateTitleFromMeta(meta);
+					updateTitleFromMeta(isSelfNotesRoute && meta ? { ...meta, title: 'My Notes' } : meta);
 					await loadMessages();
 					await bindRoomBroadcast(activeThreadId);
 				} else if (messagesEl) {

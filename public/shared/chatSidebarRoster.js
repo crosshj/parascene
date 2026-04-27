@@ -5,7 +5,7 @@
 import { getAvatarColor } from './avatar.js';
 import { serverChannelTagFromServerName } from './serverChatTag.js';
 import { readDmPinKeysOrdered } from './chatDmPins.js';
-import { homeIcon, globeIcon, smsIcon, helpIcon } from '../icons/svg-strings.js';
+import { homeIcon, globeIcon, smsIcon, helpIcon, notesIcon, megaphoneIcon } from '../icons/svg-strings.js';
 
 function escapeHtmlPseudoStrip(str) {
 	return String(str ?? '')
@@ -16,11 +16,14 @@ function escapeHtmlPseudoStrip(str) {
 }
 
 /**
- * Slugs for the fixed top strip (no section label) above DMs on chat + Connect sidebars.
+ * Slugs for the fixed channel rows in the top strip (no section label) above DMs on chat + Connect sidebars.
  * Order: Feed, My Creations, Comments, Explore (above Feedback), Feedback.
  * A separate “Help” row (not a channel) links to `/help` and is appended after Feedback.
  */
 export const SIDEBAR_PSEUDO_STRIP_ORDER = ['feed', 'creations', 'comments', 'explore', 'feedback'];
+
+/** Notes-to-self shortcut: not a channel, opens the viewer's own DM. */
+export const SIDEBAR_NOTES_STRIP_HREF = '/chat/notes';
 
 /** App help docs — sidebar strip row under Feedback; not a chat channel. */
 export const SIDEBAR_HELP_STRIP_HREF = '/help';
@@ -40,8 +43,7 @@ function creationsRouteIcon(className = '') {
 }
 
 function feedbackMegaphoneIcon(className = '') {
-	const cls = className ? ` class="${escapeHtmlPseudoStrip(className)}"` : '';
-	return `<svg${cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11v2"></path><path d="M6 10.5v3"></path><path d="M8.5 9.5L18 6v12l-9.5-3.5z"></path><path d="M8.5 14.5l1.4 4.2c.1.3.4.5.7.5h1.6"></path></svg>`;
+	return megaphoneIcon(className);
 }
 
 function pseudoStripRouteIconSvg(slug, routeIconClass = 'chat-page-sidebar-channel-route-icon') {
@@ -121,12 +123,95 @@ export function sortChatSidebarRowsPriority(threads) {
 	return list;
 }
 
-/** @param {object | null | undefined} t */
-function channelLastActivityMs(t) {
-	const lm = t?.last_message;
+/** @param {object | null | undefined} row */
+export function rowUnreadCount(row) {
+	const n = Number(row?.unread_count);
+	return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/** @param {object | null | undefined} row */
+export function rowLastActivityMs(row) {
+	const lm = row?.last_message;
 	if (!lm || lm.created_at == null) return 0;
 	const ms = Date.parse(String(lm.created_at));
 	return Number.isFinite(ms) ? ms : 0;
+}
+
+/** @param {object | null | undefined} t */
+function channelLastActivityMs(t) {
+	return rowLastActivityMs(t);
+}
+
+/**
+ * Keep base order stable, but ensure the collapsed visible window contains the
+ * most recent unread rows before read rows.
+ * @param {object[]} rows
+ * @param {{
+ *   visibleCap?: number,
+ *   preserveHeadCount?: number,
+ *   getUnreadCount?: ((row: object) => number) | null,
+ *   getLastActivityMs?: ((row: object) => number) | null,
+ * }} [opts]
+ */
+export function prioritizeUnreadRowsInVisibleWindow(rows, opts = {}) {
+	const list = Array.isArray(rows) ? [...rows] : [];
+	if (list.length <= 1) return list;
+	const capRaw = Number(opts?.visibleCap);
+	const cap =
+		Number.isFinite(capRaw) && capRaw > 0
+			? Math.floor(capRaw)
+			: CHAT_SIDEBAR_COLLAPSE_LIST_CAP;
+	if (cap <= 0) return list;
+
+	const preserveRaw = Number(opts?.preserveHeadCount);
+	const preserveHeadCount =
+		Number.isFinite(preserveRaw) && preserveRaw > 0
+			? Math.min(Math.floor(preserveRaw), cap, list.length)
+			: 0;
+	const visibleSlots = Math.min(cap, list.length) - preserveHeadCount;
+	if (visibleSlots <= 0) return list;
+
+	const getUnreadCount =
+		typeof opts?.getUnreadCount === 'function' ? opts.getUnreadCount : rowUnreadCount;
+	const getLastActivityMs =
+		typeof opts?.getLastActivityMs === 'function' ? opts.getLastActivityMs : rowLastActivityMs;
+	const preserved = list.slice(0, preserveHeadCount);
+	const candidates = list.slice(preserveHeadCount);
+	const unreadRanked = [];
+	for (let i = 0; i < candidates.length; i += 1) {
+		const row = candidates[i];
+		const unread = getUnreadCount(row);
+		if (unread > 0) {
+			unreadRanked.push({
+				i,
+				row,
+				unread,
+				lastActivityMs: getLastActivityMs(row)
+			});
+		}
+	}
+	unreadRanked.sort((a, b) => {
+		if (a.lastActivityMs !== b.lastActivityMs) return b.lastActivityMs - a.lastActivityMs;
+		if (a.unread !== b.unread) return b.unread - a.unread;
+		return a.i - b.i;
+	});
+	const selected = [];
+	const selectedIdxs = new Set();
+	for (const item of unreadRanked) {
+		if (selected.length >= visibleSlots) break;
+		selected.push(item.row);
+		selectedIdxs.add(item.i);
+	}
+	for (let i = 0; i < candidates.length && selected.length < visibleSlots; i += 1) {
+		if (selectedIdxs.has(i)) continue;
+		selected.push(candidates[i]);
+		selectedIdxs.add(i);
+	}
+	const rest = [];
+	for (let i = 0; i < candidates.length; i += 1) {
+		if (!selectedIdxs.has(i)) rest.push(candidates[i]);
+	}
+	return [...preserved, ...selected, ...rest];
 }
 
 /**
@@ -247,9 +332,43 @@ function sidebarHelpStripIconSvg(routeIconClass = 'chat-page-sidebar-channel-rou
 	return helpIcon(cls);
 }
 
+function sidebarNotesStripIconSvg(routeIconClass = 'chat-page-sidebar-channel-route-icon') {
+	const cls = String(routeIconClass || '').trim() || 'chat-page-sidebar-channel-route-icon';
+	return notesIcon(cls);
+}
+
 function sidebarHelpStripAvatarHtml() {
 	const icon = sidebarHelpStripIconSvg();
 	return `<div class="comment-avatar connect-chat-thread-row-channel-avatar chat-page-sidebar-channel-avatar chat-page-sidebar-channel-avatar--icon-only" aria-hidden="true">${icon}</div>`;
+}
+
+function sidebarNotesStripAvatarHtml() {
+	const icon = sidebarNotesStripIconSvg();
+	return `<div class="comment-avatar connect-chat-thread-row-channel-avatar chat-page-sidebar-channel-avatar chat-page-sidebar-channel-avatar--icon-only" aria-hidden="true">${icon}</div>`;
+}
+
+/** True when `requestPath` is the notes-to-self shortcut. */
+export function isSidebarNotesPathActive(requestPath) {
+	const path = stripRequestPathname(requestPath);
+	return path === SIDEBAR_NOTES_STRIP_HREF;
+}
+
+/** Strip row object for the notes-to-self shortcut. */
+export function buildSidebarNotesStripRow() {
+	return { type: 'sidebar_notes', title: 'My Notes', href: SIDEBAR_NOTES_STRIP_HREF };
+}
+
+export function buildSidebarNotesStripAnchorHtml(requestPath = '') {
+	const activeCls = isSidebarNotesPathActive(requestPath) ? ' is-active' : '';
+	const avatarHtml = sidebarNotesStripAvatarHtml();
+	return `<a class="chat-page-sidebar-row chat-page-sidebar-row--sidebar-notes${activeCls}" href="${escapeHtmlPseudoStrip(SIDEBAR_NOTES_STRIP_HREF)}" data-chat-sidebar-notes="1">
+				${avatarHtml}
+				<div class="chat-page-sidebar-row-body">
+					<div class="chat-page-sidebar-row-title-line">
+						<span class="chat-page-sidebar-row-title">My Notes</span>
+					</div>
+				</div>
+			</a>`;
 }
 
 export function buildSidebarHelpStripAnchorHtml(requestPath = '') {
@@ -282,6 +401,7 @@ export function buildSidebarPseudoStripListStaticHtml(requestPath = '') {
 		const navDup = SIDEBAR_STRIP_SLUGS_ALSO_IN_APP_PRIMARY_NAV.has(slug);
 		const navCls = navDup ? ' chat-page-sidebar-row--also-in-app-primary-nav' : '';
 		const activeCls = activeSlug === slug ? ' is-active' : '';
+		const notesHtml = slug === 'creations' ? buildSidebarNotesStripAnchorHtml(requestPath) : '';
 		return `<a class="chat-page-sidebar-row${navCls}${activeCls}" href="${escapeHtmlPseudoStrip(href)}" data-chat-pseudo-slug="${escapeHtmlPseudoStrip(slug)}">
 				${avatarHtml}
 				<div class="chat-page-sidebar-row-body">
@@ -289,7 +409,7 @@ export function buildSidebarPseudoStripListStaticHtml(requestPath = '') {
 						<span class="chat-page-sidebar-row-title">${escapeHtmlPseudoStrip(title)}</span>
 					</div>
 				</div>
-			</a>`;
+			</a>${notesHtml}`;
 	}).join('');
 	return channelHtml + buildSidebarHelpStripAnchorHtml(requestPath);
 }
@@ -314,12 +434,22 @@ export function getSidebarPseudoStripRowsMerged(channelRowsRaw) {
 		if (!api) return stub;
 		return { ...api, title: stub.title };
 	});
-	return [...mergedChannels, buildSidebarHelpStripRow()];
+	const out = [];
+	for (const row of mergedChannels) {
+		out.push(row);
+		if (row?.type === 'channel' && String(row.channel_slug || '').toLowerCase() === 'creations') {
+			out.push(buildSidebarNotesStripRow());
+		}
+	}
+	return [...out, buildSidebarHelpStripRow()];
 }
 
 /** @param {object} meta */
 export function buildChatThreadUrl(meta) {
 	if (!meta) return '/connect#chat';
+	if (meta.type === 'sidebar_notes') {
+		return SIDEBAR_NOTES_STRIP_HREF;
+	}
 	if (meta.type === 'sidebar_help') {
 		const h = typeof meta.href === 'string' && meta.href.trim() ? meta.href.trim() : SIDEBAR_HELP_STRIP_HREF;
 		return h.startsWith('/') ? h : SIDEBAR_HELP_STRIP_HREF;
@@ -351,6 +481,7 @@ export function normalizeChatNavPathForCompare(p) {
 	if (!s || s === '/index.html' || s === '/feed') return '/chat/c/feed';
 	if (s === '/explore') return '/chat/c/explore';
 	if (s === '/creations') return '/chat/c/creations';
+	if (s === SIDEBAR_NOTES_STRIP_HREF) return SIDEBAR_NOTES_STRIP_HREF;
 	return s;
 }
 
@@ -400,8 +531,9 @@ export function tryPatchPseudoStripDomInPlace(listEl, stripRows, nav) {
 	for (let i = 0; i < rows.length; i++) {
 		const t = rows[i];
 		const a = anchors[i];
-		if (t?.type === 'sidebar_help') {
-			if (a.getAttribute('data-chat-sidebar-help') !== '1') return false;
+		if (t?.type === 'sidebar_help' || t?.type === 'sidebar_notes') {
+			const attr = t.type === 'sidebar_notes' ? 'data-chat-sidebar-notes' : 'data-chat-sidebar-help';
+			if (a.getAttribute(attr) !== '1') return false;
 			let wantPath;
 			let curPath;
 			try {
@@ -441,11 +573,18 @@ export function tryPatchPseudoStripDomInPlace(listEl, stripRows, nav) {
 		const slug =
 			t?.type === 'channel' && typeof t.channel_slug === 'string' ? t.channel_slug.trim().toLowerCase() : '';
 		a.setAttribute('href', href);
-		if (t?.type === 'sidebar_help') {
+		if (t?.type === 'sidebar_notes') {
+			a.setAttribute('data-chat-sidebar-notes', '1');
+			a.removeAttribute('data-chat-sidebar-help');
+			a.removeAttribute('data-chat-pseudo-slug');
+		} else if (t?.type === 'sidebar_help') {
 			a.setAttribute('data-chat-sidebar-help', '1');
+			a.removeAttribute('data-chat-sidebar-notes');
 			a.removeAttribute('data-chat-pseudo-slug');
 		} else if (slug) {
 			a.setAttribute('data-chat-pseudo-slug', slug);
+			a.removeAttribute('data-chat-sidebar-help');
+			a.removeAttribute('data-chat-sidebar-notes');
 		}
 		a.classList.toggle('is-active', active);
 		a.classList.toggle('chat-page-sidebar-row--also-in-app-primary-nav', Boolean(slug && navDupSlugs.has(slug)));
@@ -453,7 +592,7 @@ export function tryPatchPseudoStripDomInPlace(listEl, stripRows, nav) {
 		if (!titleLine) return false;
 		titleLine.querySelectorAll('.chat-page-sidebar-unread').forEach((el) => el.remove());
 		const unc = Number(t.unread_count);
-		const showUnread = t?.type !== 'sidebar_help' && !active && Number.isFinite(unc) && unc > 0;
+		const showUnread = t?.type === 'channel' && !active && Number.isFinite(unc) && unc > 0;
 		if (showUnread) {
 			const unreadLabel = unc > 99 ? '99+' : String(unc);
 			const span = typeof document !== 'undefined' ? document.createElement('span') : null;
@@ -510,6 +649,9 @@ export function mergeThreadRowsWithJoinedServers(threads, joinedServers) {
  */
 export function buildChatThreadRowAvatarHtml(t, deps) {
 	const { renderCommentAvatarHtml, getAvatarColor } = deps;
+	if (t?.type === 'sidebar_notes') {
+		return sidebarNotesStripAvatarHtml();
+	}
 	if (t?.type === 'sidebar_help') {
 		return sidebarHelpStripAvatarHtml();
 	}

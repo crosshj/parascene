@@ -3,8 +3,10 @@
     "api",
     "api_routes",
     "db",
+    "email",
+    "lib",
     "pages",
-    "email"
+    "public"
   ],
   "ext": "js,json"
 }

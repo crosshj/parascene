@@ -144,9 +144,9 @@ class AppRouteCreations extends HTMLElement {
         </div>
         <div class="creations-bulk-bar" data-creations-bulk-bar aria-hidden="true">
           <div class="creations-bulk-bar-inner">
-            <span class="creations-bulk-bar-label">Bulk Actions</span>
+            <span class="creations-bulk-bar-label">Bulk</span>
             <div class="creations-bulk-actions">
-              <button type="button" class="btn-secondary creations-bulk-queue-btn" data-creations-bulk-queue disabled>Queue for later</button>
+              <button type="button" class="btn-secondary creations-bulk-queue-btn" data-creations-bulk-queue disabled>Queue</button>
               <button type="button" class="btn-secondary creations-bulk-delete-btn" data-creations-bulk-delete disabled>Delete</button>
             </div>
             <button type="button" class="creations-bulk-bar-close" data-creations-bulk-close aria-label="Close bulk actions">×</button>

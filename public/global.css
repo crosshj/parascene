@@ -10161,7 +10161,7 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 
 .creation-group-badge {
 	position: absolute;
-	top: 8px;
+	bottom: 8px;
 	left: 8px;
 	width: 32px;
 	height: 32px;
