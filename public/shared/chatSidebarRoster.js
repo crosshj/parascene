@@ -575,6 +575,13 @@ export function getDmOtherUserId(t) {
 export function isSelfDmThread(t, viewerId) {
 	const vid = Number(viewerId);
 	if (!Number.isFinite(vid) || vid <= 0 || !t || t.type !== 'dm') return false;
+	const pk = typeof t.dm_pair_key === 'string' ? t.dm_pair_key.trim() : '';
+	if (pk) {
+		const parts = pk.split(':').map((p) => Number(p));
+		if (parts.length === 2 && parts.every((n) => Number.isFinite(n))) {
+			if (parts[0] === vid && parts[1] === vid) return true;
+		}
+	}
 	const oid = getDmOtherUserId(t);
 	return Number.isFinite(Number(oid)) && Number(oid) === vid;
 }

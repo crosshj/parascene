@@ -3746,12 +3746,17 @@ export async function initChatPage(root, options = {}) {
 			};
 			const dmsPinned = rosterMod.sortDmsWithPinnedOrder(dmsNorm, chatViewerId);
 			// Single explicit ordering point for sidebar DMs before HTML rendering.
-			const dms = prioritizeOnlineDmsInVisibleWindow(dmsPinned, {
+			const dmsPresenceOrdered = prioritizeOnlineDmsInVisibleWindow(dmsPinned, {
 				visibleCap: rosterMod.CHAT_SIDEBAR_COLLAPSE_LIST_CAP,
 				isOnline: isDmOnlineForSidebar,
 					getLastSeenMs: dmLastActiveMsForSidebar,
 				getLastInteractedMs: dmLastInteractedMsForSidebar
 			});
+			const dms = rosterMod.normalizeDmListWithSelfFirst(
+				dmsPresenceOrdered,
+				chatViewerId,
+				viewerProfile
+			);
 			const channelRowsRaw = merged.filter((t) => t && t.type === 'channel');
 			const serverChannelsRaw = channelRowsRaw.filter((t) => {
 				const slug =
