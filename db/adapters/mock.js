@@ -1726,6 +1726,9 @@ export function openDb() {
 		searchPersonaPromptInjectionsByPrefix: {
 			all: async (_userId, _prefix, _limit) => []
 		},
+		selectPublicPersonaUsernames: {
+			all: async () => []
+		},
 		selectPromptInjectionStyleBySlugForUser: {
 			get: async (_userId, _slug) => null
 		},

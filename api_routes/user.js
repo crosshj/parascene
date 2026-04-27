@@ -529,9 +529,15 @@ export default function createProfileRoutes({ queries }) {
 			const usernames = (Array.isArray(rows) ? rows : [])
 				.map((row) => (typeof row?.user_name === "string" ? row.user_name.trim() : ""))
 				.filter(Boolean);
+			const personaRows = queries.selectPublicPersonaUsernames?.all
+				? await queries.selectPublicPersonaUsernames.all()
+				: [];
+			const personas = (Array.isArray(personaRows) ? personaRows : [])
+				.map((row) => (typeof row?.user_name === "string" ? row.user_name.trim() : ""))
+				.filter(Boolean);
 
 			res.set("Cache-Control", "public, max-age=300");
-			return res.json({ usernames });
+			return res.json({ usernames, personas });
 		} catch (error) {
 			return res.status(500).json({ error: "Internal server error" });
 		}

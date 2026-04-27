@@ -2408,6 +2408,23 @@ export async function openDb() {
 				);
 			}
 		},
+		selectPublicPersonaUsernames: {
+			all: async () => {
+				const stmt = db.prepare(
+					`SELECT tag AS user_name
+					 FROM prompt_injections
+					 WHERE tag_type = 'persona'
+					   AND is_active = 1
+					   AND deleted_at IS NULL
+					   AND owner_user_id IS NULL
+					   AND visibility = 'public'
+					   AND tag IS NOT NULL
+					   AND trim(tag) != ''
+					 ORDER BY lower(tag) ASC`
+				);
+				return Promise.resolve(stmt.all());
+			}
+		},
 		selectPromptInjectionStyleBySlugForUser: {
 			get: async (userId, slug) => {
 				const uid = Number(userId);

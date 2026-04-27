@@ -3362,6 +3362,24 @@ export function openDb() {
 				return out;
 			}
 		},
+		selectPublicPersonaUsernames: {
+			all: async () => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.select("tag")
+					.eq("tag_type", "persona")
+					.eq("is_active", true)
+					.is("deleted_at", null)
+					.is("owner_user_id", null)
+					.eq("visibility", "public")
+					.not("tag", "is", null)
+					.order("tag", { ascending: true });
+				if (error) throw error;
+				return (data ?? [])
+					.map((row) => ({ user_name: typeof row?.tag === "string" ? row.tag.trim() : "" }))
+					.filter((row) => row.user_name);
+			}
+		},
 		/** Exact style row for user (prefers user-owned over global). Case-insensitive tag match. */
 		selectPromptInjectionStyleBySlugForUser: {
 			get: async (userId, slug) => {
