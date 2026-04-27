@@ -3317,6 +3317,24 @@ export function openDb() {
 				return data ?? [];
 			}
 		},
+		selectPublicStyleNames: {
+			all: async () => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.select("tag")
+					.eq("tag_type", "style")
+					.eq("is_active", true)
+					.is("deleted_at", null)
+					.is("owner_user_id", null)
+					.eq("visibility", "public")
+					.not("tag", "is", null)
+					.order("tag", { ascending: true });
+				if (error) throw error;
+				return (data ?? [])
+					.map((row) => ({ tag: typeof row?.tag === "string" ? row.tag.trim() : "" }))
+					.filter((row) => row.tag);
+			}
+		},
 		/** Prefix / substring search for persona tags (library visibility). */
 		searchPersonaPromptInjectionsByPrefix: {
 			all: async (userId, prefix, limit) => {

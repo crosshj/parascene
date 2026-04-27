@@ -2377,6 +2377,23 @@ export async function openDb() {
 				return Promise.resolve(stmt.all(`${p}%`, uid, lim));
 			}
 		},
+		selectPublicStyleNames: {
+			all: async () => {
+				const stmt = db.prepare(
+					`SELECT tag
+					 FROM prompt_injections
+					 WHERE tag_type = 'style'
+					   AND is_active = 1
+					   AND deleted_at IS NULL
+					   AND owner_user_id IS NULL
+					   AND visibility = 'public'
+					   AND tag IS NOT NULL
+					   AND trim(tag) != ''
+					 ORDER BY lower(tag) ASC`
+				);
+				return Promise.resolve(stmt.all());
+			}
+		},
 		searchPersonaPromptInjectionsByPrefix: {
 			all: async (userId, prefix, limit) => {
 				const uid = Number(userId);

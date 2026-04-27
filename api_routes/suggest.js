@@ -77,6 +77,12 @@ function legacyStyleSuggestItems(prefixLower, limit, usedTags) {
 	return out;
 }
 
+function getLegacyStyleNames() {
+	return Object.keys(CREATE_STYLES)
+		.map((key) => String(key || "").trim())
+		.filter((key) => key && key !== "none");
+}
+
 /**
  * GET /api/suggest?source=users|mentions|styles&q=...&limit=10
  * Generic suggest endpoint for triggered autocomplete (mentions, tags, styles, etc.).
@@ -87,6 +93,38 @@ function legacyStyleSuggestItems(prefixLower, limit, usedTags) {
  */
 export default function createSuggestRoutes({ queries }) {
 	const router = express.Router();
+
+	router.get("/api/styles/names", async (req, res) => {
+		try {
+			const used = new Set();
+			const styles = [];
+			const addStyle = (tag) => {
+				const value = typeof tag === "string" ? tag.trim() : "";
+				if (!value) return;
+				const key = value.toLowerCase();
+				if (used.has(key)) return;
+				used.add(key);
+				styles.push(value);
+			};
+
+			const rows = queries.selectPublicStyleNames?.all
+				? await queries.selectPublicStyleNames.all()
+				: [];
+			for (const row of Array.isArray(rows) ? rows : []) {
+				addStyle(row?.tag);
+			}
+			for (const name of getLegacyStyleNames()) {
+				addStyle(name);
+			}
+
+			styles.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+			res.set("Cache-Control", "public, max-age=300");
+			return res.json({ styles });
+		} catch (err) {
+			console.error("[styles/names]", err);
+			return res.status(500).json({ error: "Failed to load styles" });
+		}
+	});
 
 	router.get("/api/suggest", async (req, res) => {
 		try {

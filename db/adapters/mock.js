@@ -1723,6 +1723,9 @@ export function openDb() {
 		searchPromptInjectionStylesByPrefix: {
 			all: async (_userId, _prefix, _limit) => []
 		},
+		selectPublicStyleNames: {
+			all: async () => []
+		},
 		searchPersonaPromptInjectionsByPrefix: {
 			all: async (_userId, _prefix, _limit) => []
 		},
