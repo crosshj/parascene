@@ -545,6 +545,7 @@ export async function openDb() {
            INNER JOIN users u ON u.id = up.user_id
            WHERE up.user_name IS NOT NULL
              AND trim(up.user_name) != ''
+             AND u.role = 'consumer'
              AND (u.meta IS NULL OR json_extract(u.meta, '$.suspended') IS NULL OR json_extract(u.meta, '$.suspended') = 0 OR json_extract(u.meta, '$.suspended') = 'false')
            ORDER BY lower(up.user_name) ASC`
 				);

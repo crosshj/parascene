@@ -173,7 +173,7 @@ export function openDb() {
 		selectPublicUsernames: {
 			all: async () => {
 				const activeUserIds = new Set(
-					users.filter((u) => !u.meta?.suspended).map((u) => Number(u.id))
+					users.filter((u) => u.role === "consumer" && !u.meta?.suspended).map((u) => Number(u.id))
 				);
 				return user_profiles
 					.filter((row) => activeUserIds.has(Number(row.user_id)) && typeof row.user_name === "string" && row.user_name.trim())

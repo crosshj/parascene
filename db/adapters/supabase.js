@@ -167,8 +167,9 @@ export function openDb() {
 				const usersTable = prefixedTable("users");
 				const { data, error } = await serviceClient
 					.from(profilesTable)
-					.select(`user_name, ${usersTable}!inner(meta)`)
+					.select(`user_name, ${usersTable}!inner(role, meta)`)
 					.not("user_name", "is", null)
+					.eq(`${usersTable}.role`, "consumer")
 					.order("user_name", { ascending: true });
 				if (error) throw error;
 				return (data ?? [])
