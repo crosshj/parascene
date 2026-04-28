@@ -3509,6 +3509,7 @@ async function loadCreation() {
 		let commentEditingId = null;
 		let commentEditDraft = '';
 		let commentEditBusy = false;
+		let commentEditMinHeightPx = 0;
 
 		const commentCountEl = detailContent.querySelector('[data-comment-count]');
 		const commentListEl = detailContent.querySelector('[data-comment-list]');
@@ -3709,7 +3710,7 @@ async function loadCreation() {
 				</div>`;
 				const commentBodyHtml = isEditing
 					? `<div class="comment-edit-wrap" data-comment-edit-wrap="${escapeHtml(commentId)}">
-						<textarea class="comment-edit-input" data-comment-edit-input="${escapeHtml(commentId)}" rows="3" maxlength="1000">${escapeHtml(commentEditDraft || (c?.text ?? ''))}</textarea>
+						<textarea class="comment-edit-input" data-comment-edit-input="${escapeHtml(commentId)}" rows="3" maxlength="1000"${commentEditMinHeightPx > 0 ? ` style="min-height: ${Number(commentEditMinHeightPx)}px;"` : ''}>${escapeHtml(commentEditDraft || (c?.text ?? ''))}</textarea>
 						<div class="comment-edit-actions">
 							<button type="button" class="comment-edit-cancel" data-comment-edit-cancel="${escapeHtml(commentId)}"${commentEditBusy ? ' disabled' : ''}>Cancel</button>
 							<button type="button" class="comment-edit-save btn-primary" data-comment-edit-save="${escapeHtml(commentId)}"${commentEditBusy ? ' disabled' : ''}>Save</button>
@@ -3917,6 +3918,12 @@ async function loadCreation() {
 					}
 					commentEditingId = cid;
 					commentEditDraft = item?.text != null ? String(item.text) : '';
+					const textWrap = commentListEl.querySelector(`.comment-item[data-comment-id="${cid}"] .comment-text`);
+					const measuredHeight =
+						textWrap instanceof HTMLElement
+							? Math.ceil(textWrap.getBoundingClientRect().height)
+							: 0;
+					commentEditMinHeightPx = Math.max(92, measuredHeight + 14);
 					commentEditBusy = false;
 					renderComments();
 					const input = commentListEl.querySelector(`[data-comment-edit-input="${cid}"]`);
@@ -3934,6 +3941,7 @@ async function loadCreation() {
 					commentEditingId = null;
 					commentEditDraft = '';
 					commentEditBusy = false;
+					commentEditMinHeightPx = 0;
 					renderComments();
 					return;
 				}
@@ -3975,6 +3983,7 @@ async function loadCreation() {
 						commentEditingId = null;
 						commentEditDraft = '';
 						commentEditBusy = false;
+						commentEditMinHeightPx = 0;
 						renderComments();
 					} finally {
 						commentEditBusy = false;
@@ -4029,6 +4038,30 @@ async function loadCreation() {
 				const input = e.target?.closest?.('[data-comment-edit-input]');
 				if (!(input instanceof HTMLTextAreaElement)) return;
 				commentEditDraft = input.value;
+			});
+			commentListEl.addEventListener('keydown', (e) => {
+				const input = e.target?.closest?.('[data-comment-edit-input]');
+				if (!(input instanceof HTMLTextAreaElement)) return;
+				const cid = input.getAttribute('data-comment-edit-input');
+				if (!cid) return;
+				if (e.key === 'Escape') {
+					e.preventDefault();
+					e.stopPropagation();
+					commentEditingId = null;
+					commentEditDraft = '';
+					commentEditBusy = false;
+					commentEditMinHeightPx = 0;
+					renderComments();
+					return;
+				}
+				if (e.key === 'Enter' && !e.shiftKey) {
+					e.preventDefault();
+					e.stopPropagation();
+					const saveBtn = commentListEl.querySelector(`[data-comment-edit-save="${cid}"]`);
+					if (saveBtn instanceof HTMLButtonElement && !saveBtn.disabled) {
+						saveBtn.click();
+					}
+				}
 			});
 		}
 

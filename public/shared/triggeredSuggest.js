@@ -6,6 +6,7 @@
  * - clearPageUsers()
  * - attachTriggeredSuggest(field, options)  — field: HTMLTextAreaElement or HTMLInputElement (type text)
  * - attachMentionSuggest(field) — @ only
+ * - attachChatMentionSuggest(field) — @ only + chat special mentions
  * - attachPromptInlineSuggest(field) — @ and $ (styles)
  * - isTriggeredSuggestPopupOpen(field) — true while this field owns the open listbox (for Enter-to-send guards)
  */
@@ -375,9 +376,9 @@ function finalizeMentionPopupItems(local, remote, limitNum) {
 	return orderMentionItemsForPopup(limitMentionItemsKeepingSpecial(merged, limitNum));
 }
 
-function getMentionLocalCandidates(qLower) {
+function getMentionLocalCandidates(qLower, includeSpecialMentions = true) {
 	const cachedRemote = getCachedEntriesForSource(MENTION_SUGGEST_CACHE_SOURCE).flat();
-	const specialMentions = getFilteredSpecialMentionItems(qLower);
+	const specialMentions = includeSpecialMentions ? getFilteredSpecialMentionItems(qLower) : [];
 	return mergeUniqueItems([
 		...filterAndSortMentionItems(Array.from(pageUsersMap.values()), qLower),
 		...filterAndSortMentionItems(cachedRemote, qLower),
@@ -391,7 +392,8 @@ function getMentionSuggestions({ source, q, limit }, signal) {
 	const limitNum = capForLimit(limit);
 	const key = `${MENTION_SUGGEST_CACHE_SOURCE}:${qLower}:${limitNum}`;
 	const exactCached = cacheGet(key);
-	const local = getMentionLocalCandidates(qLower).slice(0, limitNum);
+	const includeSpecialMentions = source === "chat_mentions";
+	const local = getMentionLocalCandidates(qLower, includeSpecialMentions).slice(0, limitNum);
 
 	if (exactCached) {
 		return Promise.resolve(finalizeMentionPopupItems(local, exactCached, limitNum));
@@ -457,7 +459,7 @@ function getStyleSuggestions({ source, q, limit }, signal) {
 }
 
 function getCombinedInlineSuggestions({ source, q, limit }, signal) {
-	if (source === "users") return getMentionSuggestions({ source, q, limit }, signal);
+	if (source === "users" || source === "chat_mentions") return getMentionSuggestions({ source, q, limit }, signal);
 	if (source === "styles") return getStyleSuggestions({ source, q, limit }, signal);
 	return defaultGetSuggestions({ source, q, limit }, signal);
 }
@@ -838,13 +840,14 @@ function filterAndSortStyleItems(items, qLower) {
 }
 
 function applyLocalFilter(source, items, qLower) {
-	if (source === "users") return filterAndSortMentionItems(items, qLower);
+	if (source === "users" || source === "chat_mentions") return filterAndSortMentionItems(items, qLower);
 	if (source === "styles") return filterAndSortStyleItems(items, qLower);
 	return items.filter((item) => itemHandle(item).startsWith(qLower));
 }
 
 function getLocalCandidatesForTrigger(trigger, qLower) {
-	if (trigger.source === "users") return getMentionLocalCandidates(qLower);
+	if (trigger.source === "users") return getMentionLocalCandidates(qLower, false);
+	if (trigger.source === "chat_mentions") return getMentionLocalCandidates(qLower, true);
 	return [];
 }
 
@@ -874,18 +877,22 @@ function requestSuggestions(textarea, ctx, reason) {
 	const localCandidates = getLocalCandidatesForTrigger(ctx.trigger, qLower);
 	const localFiltered = applyLocalFilter(ctx.trigger.source, localCandidates, qLower);
 	const localMatches =
-		ctx.trigger.source === "users"
+		(ctx.trigger.source === "users" || ctx.trigger.source === "chat_mentions")
 			? limitMentionItemsKeepingSpecial(localFiltered, DEFAULT_SUGGEST_LIMIT)
 			: localFiltered.slice(0, DEFAULT_SUGGEST_LIMIT);
 
 	const mentionOrderedLocals =
-		ctx.trigger.source === "users" ? orderMentionItemsForPopup(localMatches) : localMatches;
+		(ctx.trigger.source === "users" || ctx.trigger.source === "chat_mentions")
+			? orderMentionItemsForPopup(localMatches)
+			: localMatches;
 	setItems(state, mentionOrderedLocals);
 	state.displayedQuery = requestedQuery;
 
 	// @ trigger uses source "users" but remote rows are cached under mentions (users + personas API).
 	const suggestCacheSource =
-		ctx.trigger.source === "users" ? MENTION_SUGGEST_CACHE_SOURCE : ctx.trigger.source;
+		(ctx.trigger.source === "users" || ctx.trigger.source === "chat_mentions")
+			? MENTION_SUGGEST_CACHE_SOURCE
+			: ctx.trigger.source;
 	const exactCacheKey = `${suggestCacheSource}:${qLower}:${DEFAULT_SUGGEST_LIMIT}`;
 	const exactCached = cacheGet(exactCacheKey);
 	if (exactCached) {
@@ -921,10 +928,12 @@ function requestSuggestions(textarea, ctx, reason) {
 			const base = getLocalCandidatesForTrigger(nowCtx.trigger, nowLower);
 			const nextLocal = applyLocalFilter(nowCtx.trigger.source, base, nowLower).slice(0, DEFAULT_SUGGEST_LIMIT);
 			const nextRemote = nowCtx.query === requestedQuery ? items : applyLocalFilter(nowCtx.trigger.source, items, nowLower);
-			const mergedNext = mergeUniqueItems([...nextLocal, ...nextRemote]).slice(0, DEFAULT_SUGGEST_LIMIT);
+			const mergedNext = mergeUniqueItems([...nextLocal, ...nextRemote]);
 			const nextItems =
-				nowCtx.trigger.source === "users"
-					? orderMentionItemsForPopup(mergedNext)
+				(nowCtx.trigger.source === "users" || nowCtx.trigger.source === "chat_mentions")
+					? orderMentionItemsForPopup(
+						limitMentionItemsKeepingSpecial(mergedNext, DEFAULT_SUGGEST_LIMIT)
+					)
 					: mergedNext;
 
 			current.triggerStart = nowCtx.start;
@@ -1120,6 +1129,13 @@ export function attachTriggeredSuggest(textarea, options) {
 export function attachMentionSuggest(textarea) {
 	attachTriggeredSuggest(textarea, {
 		triggers: [{ char: "@", minChars: 1, source: "users" }],
+		getSuggestions: getMentionSuggestions
+	});
+}
+
+export function attachChatMentionSuggest(textarea) {
+	attachTriggeredSuggest(textarea, {
+		triggers: [{ char: "@", minChars: 1, source: "chat_mentions" }],
 		getSuggestions: getMentionSuggestions
 	});
 }

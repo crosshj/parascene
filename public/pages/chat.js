@@ -128,6 +128,7 @@ let renderEmptyState;
 let renderPaneLoadError;
 let attachAutoGrowTextarea;
 let attachMentionSuggest;
+let attachChatMentionSuggest;
 let isTriggeredSuggestPopupOpen;
 let addPageUsers;
 let clearPageUsers;
@@ -294,6 +295,7 @@ async function loadDeps() {
 
 		const suggestMod = await import(`../shared/triggeredSuggest.js${qs}`);
 		attachMentionSuggest = suggestMod.attachMentionSuggest;
+		attachChatMentionSuggest = suggestMod.attachChatMentionSuggest;
 		isTriggeredSuggestPopupOpen = suggestMod.isTriggeredSuggestPopupOpen;
 		addPageUsers = suggestMod.addPageUsers;
 		clearPageUsers = suggestMod.clearPageUsers;
@@ -802,6 +804,8 @@ export async function initChatPage(root, options = {}) {
 	let lastChatMessagesPayload = [];
 	let activeMessageEditId = null;
 	let activeMessageEditSaving = false;
+	let activeMessageEditMinHeightPx = 0;
+	let chatThreadLoadFailed = false;
 	/** @type {null | (() => void)} */
 	let roomBroadcastTeardown = null;
 	/** @type {null | (() => void)} */
@@ -2008,6 +2012,13 @@ export async function initChatPage(root, options = {}) {
 			setMobileComposerOverlayClass(false);
 			return;
 		}
+		if (!activePseudoChannelSlug && activeThreadId && chatThreadLoadFailed) {
+			if (composerForm instanceof HTMLElement) {
+				composerForm.hidden = true;
+			}
+			setMobileComposerOverlayClass(false);
+			return;
+		}
 		if (
 			activePseudoChannelSlug === 'feed' ||
 			activePseudoChannelSlug === 'explore' ||
@@ -2973,6 +2984,7 @@ export async function initChatPage(root, options = {}) {
 		}
 		activeMessageEditSaving = false;
 		activeMessageEditId = null;
+		activeMessageEditMinHeightPx = 0;
 		replaceChatMessageRowFromPayload(mid, { keepToolbarOpen: false });
 	}
 
@@ -3027,6 +3039,7 @@ export async function initChatPage(root, options = {}) {
 			lastChatMessagesPayload[idx] = data.message;
 			activeMessageEditSaving = false;
 			activeMessageEditId = null;
+			activeMessageEditMinHeightPx = 0;
 			replaceChatMessageRowFromPayload(mid, { keepToolbarOpen: false });
 		} catch (err) {
 			activeMessageEditSaving = false;
@@ -3045,6 +3058,14 @@ export async function initChatPage(root, options = {}) {
 		if (!Number.isFinite(mid) || mid <= 0) return;
 		if (activePseudoChannelSlug) return;
 		if (activeMessageEditSaving) return;
+		let measuredBubbleHeight = 0;
+		const existingRow = root.querySelector(`.connect-chat-msg[data-chat-message-id="${mid}"]`);
+		if (existingRow instanceof HTMLElement) {
+			const existingBubble = existingRow.querySelector('.connect-chat-msg-bubble');
+			if (existingBubble instanceof HTMLElement) {
+				measuredBubbleHeight = Math.ceil(existingBubble.getBoundingClientRect().height);
+			}
+		}
 		if (Number.isFinite(Number(activeMessageEditId)) && Number(activeMessageEditId) !== mid) {
 			cancelActiveChatMessageEdit();
 		}
@@ -3052,6 +3073,7 @@ export async function initChatPage(root, options = {}) {
 		if (!(row instanceof HTMLElement)) return;
 		const bubble = row.querySelector('.connect-chat-msg-bubble');
 		if (!(bubble instanceof HTMLElement)) return;
+		activeMessageEditMinHeightPx = Math.max(92, measuredBubbleHeight + 14);
 		const msg = lastChatMessagesPayload.find((x) => Number(x.id) === mid);
 		if (!msg) return;
 		const bodyValue = msg?.body != null ? String(msg.body) : '';
@@ -3071,6 +3093,17 @@ export async function initChatPage(root, options = {}) {
 		</div>`;
 		const input = bubble.querySelector('[data-chat-message-edit-input]');
 		if (input instanceof HTMLTextAreaElement) {
+			const baseMinHeight = Number.isFinite(activeMessageEditMinHeightPx) && activeMessageEditMinHeightPx > 0
+				? activeMessageEditMinHeightPx
+				: 92;
+			input.style.minHeight = `${baseMinHeight}px`;
+			const syncEditInputHeight = () => {
+				input.style.height = 'auto';
+				const next = Math.max(baseMinHeight, Math.ceil(input.scrollHeight));
+				input.style.height = `${next}px`;
+			};
+			syncEditInputHeight();
+			input.addEventListener('input', syncEditInputHeight);
 			input.focus();
 			input.select();
 			input.addEventListener('keydown', (e) => {
@@ -3079,7 +3112,7 @@ export async function initChatPage(root, options = {}) {
 					cancelActiveChatMessageEdit();
 					return;
 				}
-				if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+				if (e.key === 'Enter' && !e.shiftKey) {
 					e.preventDefault();
 					void saveActiveChatMessageEdit();
 				}
@@ -6971,6 +7004,8 @@ export async function initChatPage(root, options = {}) {
 		const threadId = activeThreadId;
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!threadId || !messagesEl) return;
+		chatThreadLoadFailed = false;
+		applyComposerState();
 		const paneEpoch = bumpChatMessagesPaneEpoch();
 		if (threadId !== lastReadThreadIdForMark) {
 			lastReadThreadIdForMark = threadId;
@@ -7070,14 +7105,22 @@ export async function initChatPage(root, options = {}) {
 		} catch (err) {
 			console.error('[Chat page] messages:', err);
 			if (!isStaleChatPane(paneEpoch)) {
+				chatThreadLoadFailed = true;
 				paintChatMessagesPaneError(
 					messagesEl,
 					err?.message || 'Could not load messages.',
-					"Couldn't load this conversation"
+					"Couldn't load this conversation",
+					{
+						showRetry: true,
+						onRetry: () => {
+							void loadMessages();
+						}
+					}
 				);
 				chatCanvasesList = [];
 				activeThreadPinnedCanvasId = null;
 				rebuildTopbarMenuDynamic();
+				applyComposerState();
 			}
 		} finally {
 			exitThreadMessagesLoad();
@@ -7611,7 +7654,7 @@ export async function initChatPage(root, options = {}) {
 	 * @param {HTMLElement | null} messagesEl
 	 * @param {string} [detail]
 	 * @param {string} [title]
-	 * @param {{ buttonText?: string, buttonHref?: string, buttonRoute?: string }} [cta]
+	 * @param {{ buttonText?: string, buttonHref?: string, buttonRoute?: string, showRetry?: boolean, onRetry?: (() => void) }} [cta]
 	 */
 	function paintChatMessagesPaneError(messagesEl, detail, title, cta = {}) {
 		if (!(messagesEl instanceof HTMLElement) || typeof renderPaneLoadError !== 'function') return;
@@ -7627,6 +7670,19 @@ export async function initChatPage(root, options = {}) {
 			buttonHref: cta.buttonHref || '',
 			buttonRoute: cta.buttonRoute || '',
 		});
+		if (cta.showRetry === true) {
+			const wrap = messagesEl.querySelector('.chat-page-pane-load-error');
+			if (wrap instanceof HTMLElement) {
+				const retryBtn = document.createElement('button');
+				retryBtn.type = 'button';
+				retryBtn.className = 'route-empty-button chat-page-pane-load-retry';
+				retryBtn.textContent = 'Retry';
+				retryBtn.addEventListener('click', () => {
+					if (typeof cta.onRetry === 'function') cta.onRetry();
+				});
+				wrap.appendChild(retryBtn);
+			}
+		}
 		messagesEl.removeAttribute('aria-busy');
 		unlockChatMessagesPaneScroll(messagesEl);
 	}
@@ -7829,11 +7885,13 @@ export async function initChatPage(root, options = {}) {
 					await loadMessages();
 					await bindRoomBroadcast(activeThreadId);
 				} else if (messagesEl) {
+					chatThreadLoadFailed = true;
 					paintChatMessagesPaneError(
 						messagesEl,
 						'This channel could not be opened. Try again or choose another channel from the sidebar.',
 						"Couldn't open this channel"
 					);
+					applyComposerState();
 					if (errEl instanceof HTMLElement) {
 						errEl.hidden = true;
 						errEl.textContent = '';
@@ -7897,11 +7955,13 @@ export async function initChatPage(root, options = {}) {
 					await loadMessages();
 					await bindRoomBroadcast(activeThreadId);
 				} else if (messagesEl) {
+					chatThreadLoadFailed = true;
 					paintChatMessagesPaneError(
 						messagesEl,
 						'This conversation could not be opened. Try again or start from your inbox.',
 						"Couldn't open this chat"
 					);
+					applyComposerState();
 					if (errEl instanceof HTMLElement) {
 						errEl.hidden = true;
 						errEl.textContent = '';
@@ -7914,11 +7974,13 @@ export async function initChatPage(root, options = {}) {
 			console.error('[Chat page]', err);
 			void refreshChatSidebar({ skipThreadsFetch: true });
 			if (messagesEl) {
+				chatThreadLoadFailed = true;
 				paintChatMessagesPaneError(
 					messagesEl,
 					err?.message || 'Something went wrong while opening chat.',
 					"Couldn't open this view"
 				);
+				applyComposerState();
 			}
 			if (errEl instanceof HTMLElement) {
 				errEl.hidden = true;
@@ -8169,7 +8231,11 @@ export async function initChatPage(root, options = {}) {
 
 	if (bodyInput instanceof HTMLTextAreaElement) {
 		attachAutoGrowTextarea(bodyInput);
-		attachMentionSuggest(bodyInput);
+		if (typeof attachChatMentionSuggest === 'function') {
+			attachChatMentionSuggest(bodyInput);
+		} else {
+			attachMentionSuggest(bodyInput);
+		}
 		bodyInput.addEventListener('input', () => {
 			syncChatSendButton();
 			syncChatExploreComposerChrome();
