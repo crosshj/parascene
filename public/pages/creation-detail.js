@@ -971,6 +971,12 @@ async function loadCreation() {
 	const backgroundEl = document.querySelector('[data-background]');
 	const imageWrapper = imageEl?.closest?.('.creation-detail-image-wrapper');
 	const videoEl = document.querySelector('[data-video]');
+	const groupHeroPrevBtn = imageWrapper?.querySelector?.('[data-group-hero-prev]') || null;
+	const groupHeroNextBtn = imageWrapper?.querySelector?.('[data-group-hero-next]') || null;
+	const heroImagePreloadPromises = new Map();
+	const heroImageWarmUrls = new Set();
+	let groupHeroStackEl = null;
+	const groupHeroImageBySourceId = new Map();
 
 	if (!detailContent || !imageEl || !backgroundEl) return;
 
@@ -1023,6 +1029,52 @@ async function loadCreation() {
 		}
 	}
 
+	function appendCreationIdToMediaUrl(url, delegatedCreationId) {
+		const raw = String(url || '').trim();
+		const id = Number(delegatedCreationId);
+		if (!raw || !Number.isFinite(id) || id <= 0) return raw;
+		if (!raw.includes('/api/images/created/') && !raw.includes('/api/videos/created/')) return raw;
+		const [beforeHash, hash = ''] = raw.split('#');
+		if (/[?&]creation_id=/.test(beforeHash)) {
+			return hash ? `${beforeHash}#${hash}` : beforeHash;
+		}
+		const sep = beforeHash.includes('?') ? '&' : '?';
+		const next = `${beforeHash}${sep}creation_id=${encodeURIComponent(String(id))}`;
+		return hash ? `${next}#${hash}` : next;
+	}
+
+	function preloadHeroImageUrl(url) {
+		const key = String(url || '').trim();
+		if (!key) return Promise.resolve();
+		const cached = heroImagePreloadPromises.get(key);
+		if (cached) return cached;
+		const promise = new Promise((resolve) => {
+			const im = new Image();
+			im.onload = () => {
+				heroImageWarmUrls.add(key);
+				if (typeof im.decode === 'function') {
+					im.decode()
+						.then(() => resolve({ ok: true }))
+						.catch(() => resolve({ ok: true }));
+					return;
+				}
+				resolve({ ok: true });
+			};
+			im.onerror = () => resolve({ ok: false });
+			im.decoding = 'async';
+			if ('fetchPriority' in im) {
+				im.fetchPriority = 'high';
+			}
+			im.src = key;
+			if (im.complete && im.naturalWidth > 0) {
+				heroImageWarmUrls.add(key);
+				resolve({ ok: true });
+			}
+		});
+		heroImagePreloadPromises.set(key, promise);
+		return promise;
+	}
+
 	function showHeroImage(nextUrl) {
 		const url = String(nextUrl || '').trim();
 		if (!url) return;
@@ -1048,28 +1100,94 @@ async function loadCreation() {
 			imageEl.style.visibility = 'hidden';
 		}
 		imageEl.dataset.pendingUrl = url;
-
-		const preload = new Image();
-		preload.onload = () => {
-			if (!isCurrentLoad() || imageEl.dataset.pendingUrl !== url) return;
+		if (heroImageWarmUrls.has(url)) {
 			imageEl.dataset.currentUrl = url;
 			delete imageEl.dataset.pendingUrl;
 			backgroundEl.style.backgroundImage = `url('${url}')`;
 			imageEl.src = url;
 			imageEl.style.visibility = 'visible';
 			imageWrapper?.classList.remove('image-loading', 'image-error', 'image-error-moderated');
-		};
-		preload.onerror = () => {
-			if (!isCurrentLoad() || imageEl.dataset.pendingUrl !== url) return;
-			delete imageEl.dataset.pendingUrl;
-			clearHeroImage();
-			imageWrapper?.classList.remove('image-loading');
-			imageWrapper?.classList.add('image-error');
-		};
-		preload.src = url;
-		if (preload.complete && preload.naturalWidth > 0) {
-			preload.onload();
+			return;
 		}
+
+		preloadHeroImageUrl(url).then((result) => {
+			if (!isCurrentLoad() || imageEl.dataset.pendingUrl !== url) return;
+			if (!result?.ok) {
+				delete imageEl.dataset.pendingUrl;
+				clearHeroImage();
+				imageWrapper?.classList.remove('image-loading');
+				imageWrapper?.classList.add('image-error');
+				return;
+			}
+			imageEl.dataset.currentUrl = url;
+			delete imageEl.dataset.pendingUrl;
+			backgroundEl.style.backgroundImage = `url('${url}')`;
+			imageEl.src = url;
+			imageEl.style.visibility = 'visible';
+			imageWrapper?.classList.remove('image-loading', 'image-error', 'image-error-moderated');
+		});
+	}
+
+	function teardownGroupHeroCarousel() {
+		if (groupHeroStackEl && groupHeroStackEl.parentNode) {
+			groupHeroStackEl.parentNode.removeChild(groupHeroStackEl);
+		}
+		groupHeroStackEl = null;
+		groupHeroImageBySourceId.clear();
+		imageWrapper?.classList.remove('group-carousel-active');
+		imageEl.style.removeProperty('display');
+	}
+
+	function setGroupHeroCarouselActive(sourceId) {
+		const sid = Number(sourceId);
+		const activeImg = groupHeroImageBySourceId.get(sid);
+		if (!activeImg) return false;
+		for (const [id, img] of groupHeroImageBySourceId.entries()) {
+			const isActive = Number(id) === sid;
+			img.classList.toggle('is-active', isActive);
+		}
+		const activeUrl = String(activeImg.getAttribute('src') || '').trim();
+		if (activeUrl) {
+			backgroundEl.style.backgroundImage = `url('${activeUrl}')`;
+		}
+		imageWrapper?.classList.remove('image-loading', 'image-error', 'image-error-moderated');
+		return true;
+	}
+
+	function mountGroupHeroCarousel(sources, initialSourceId) {
+		const usable = (Array.isArray(sources) ? sources : [])
+			.filter((source) => source && typeof source === 'object')
+			.map((source) => ({
+				id: Number(source.id),
+				url: typeof source.filePath === 'string' ? source.filePath.trim() : '',
+				title: typeof source.title === 'string' ? source.title : 'Grouped creation image',
+			}))
+			.filter((source) => Number.isFinite(source.id) && source.id > 0 && source.url);
+		if (!imageWrapper || usable.length === 0) return false;
+		teardownGroupHeroCarousel();
+		const stack = document.createElement('div');
+		stack.className = 'creation-detail-group-hero-stack';
+		const initialId = Number(initialSourceId);
+		for (const source of usable) {
+			const img = document.createElement('img');
+			img.className = 'creation-detail-group-hero-image';
+			img.alt = source.title;
+			img.decoding = 'async';
+			img.loading = 'eager';
+			img.src = source.url;
+			if (source.id === initialId) img.classList.add('is-active');
+			groupHeroImageBySourceId.set(source.id, img);
+			stack.appendChild(img);
+		}
+		groupHeroStackEl = stack;
+		imageWrapper.appendChild(stack);
+		imageWrapper.classList.add('group-carousel-active');
+		imageEl.style.display = 'none';
+		if (!setGroupHeroCarouselActive(initialId)) {
+			const first = usable[0];
+			setGroupHeroCarouselActive(first.id);
+		}
+		return true;
 	}
 
 	function showHeroLoadingPlaceholder() {
@@ -1078,6 +1196,8 @@ async function loadCreation() {
 		imageWrapper?.classList.remove('image-error', 'image-error-moderated');
 		imageWrapper?.classList.add('image-loading');
 	}
+
+	teardownGroupHeroCarousel();
 
 	detailContent.innerHTML = renderCreationDetailSkeleton();
 
@@ -1349,6 +1469,10 @@ async function loadCreation() {
 		const shareMountedPrivate = shareMounted && !isPublished;
 		const displayTitle = creation.title || 'Untitled';
 		const isUntitled = !creation.title;
+		const groupTitleForSourceLabels =
+			typeof creation.title === 'string' && creation.title.trim()
+				? creation.title.trim()
+				: 'Untitled';
 
 		// Check if current user owns this creation
 		let currentUserId = null;
@@ -1453,9 +1577,7 @@ async function loadCreation() {
 		const groupMeta = meta?.group && typeof meta.group === 'object' ? meta.group : null;
 		const isGroupCreation = groupMeta?.kind === 'group_creations';
 		if (isGroupCreation) {
-			actionsContext.showPublish = false;
 			actionsContext.showEdit = false;
-			actionsContext.showUnpublish = false;
 			actionsContext.showMutate = false;
 			actionsContext.showShare = false;
 			actionsContext.showRetry = false;
@@ -1463,6 +1585,7 @@ async function loadCreation() {
 			actionsContext.showQueueForLater = false;
 			actionsContext.showMoreInfoPill = false;
 		}
+		const hasGroupPublishActions = Boolean(actionsContext.showPublish || actionsContext.showUnpublish);
 		const groupSourcesRaw = Array.isArray(groupMeta?.source_creations) ? groupMeta.source_creations : [];
 		const groupSourcesMapped = groupSourcesRaw
 			.map((source, index) => {
@@ -1470,11 +1593,9 @@ async function loadCreation() {
 				if (!sourceObj) return null;
 				const sourceId = Number(sourceObj.id);
 				if (!Number.isFinite(sourceId) || sourceId <= 0) return null;
-				const sourceFilePath = typeof sourceObj.file_path === 'string' ? sourceObj.file_path.trim() : '';
+				const sourceFilePathRaw = typeof sourceObj.file_path === 'string' ? sourceObj.file_path.trim() : '';
+				const sourceFilePath = appendCreationIdToMediaUrl(sourceFilePathRaw, creationId);
 				const sourceRawTitle = typeof sourceObj.title === 'string' ? sourceObj.title.trim() : '';
-				const sourceTitle = sourceRawTitle
-					? `${sourceRawTitle} (${sourceId})`
-					: `Creation ${sourceId}`;
 				const sourceDescription = typeof sourceObj.description === 'string' ? sourceObj.description.trim() : '';
 				const sourceCreatedAt = typeof sourceObj.created_at === 'string' ? sourceObj.created_at : '';
 				const sourceMeta = sourceObj.meta && typeof sourceObj.meta === 'object' ? sourceObj.meta : null;
@@ -1505,7 +1626,8 @@ async function loadCreation() {
 				const sourceGenerationInfo = sourceMetaItems.join(' • ');
 				return {
 					id: sourceId,
-					title: sourceTitle,
+					title: sourceRawTitle ? `${sourceRawTitle} (${sourceId})` : `${groupTitleForSourceLabels} (${sourceId})`,
+					rawTitle: sourceRawTitle,
 					filePath: sourceFilePath,
 					description: sourceDescription,
 					createdAt: sourceCreatedAt,
@@ -1523,6 +1645,48 @@ async function loadCreation() {
 				groupSources.unshift(coverSource);
 			}
 		}
+		const allGroupSourceIds = groupSources
+			.map((source) => Number(source?.id))
+			.filter((id) => Number.isFinite(id) && id > 0);
+		if (allGroupSourceIds.length > 0) {
+			const liveTitleById = new Map();
+			await Promise.allSettled(
+				allGroupSourceIds.map(async (id) => {
+					try {
+						const res = await fetch(`/api/create/images/${id}`, lineageFetchInit);
+						if (!res.ok) return;
+						const payload = await res.json().catch(() => null);
+						const liveTitle = typeof payload?.title === 'string' ? payload.title.trim() : '';
+						if (liveTitle) liveTitleById.set(Number(id), liveTitle);
+					} catch {
+						// ignore per-source title fetch errors
+					}
+				})
+			);
+			for (const source of groupSources) {
+				const sourceId = Number(source?.id);
+				if (!Number.isFinite(sourceId) || sourceId <= 0) continue;
+				const liveTitle = liveTitleById.get(sourceId);
+				const fallbackTitle = typeof source?.rawTitle === 'string' ? source.rawTitle.trim() : '';
+				const titleBase = liveTitle || fallbackTitle || groupTitleForSourceLabels;
+				source.title = `${titleBase} (${sourceId})`;
+			}
+		}
+		const hasGroupHeroNavigation = isGroupCreation && groupSources.length > 1;
+		if (imageWrapper instanceof HTMLElement) {
+			imageWrapper.onmouseenter = null;
+			imageWrapper.onmouseleave = null;
+		}
+		if (groupHeroPrevBtn instanceof HTMLButtonElement) {
+			groupHeroPrevBtn.hidden = true;
+			groupHeroPrevBtn.disabled = true;
+			groupHeroPrevBtn.onclick = null;
+		}
+		if (groupHeroNextBtn instanceof HTMLButtonElement) {
+			groupHeroNextBtn.hidden = true;
+			groupHeroNextBtn.disabled = true;
+			groupHeroNextBtn.onclick = null;
+		}
 		const groupSectionHtml = isGroupCreation && groupSources.length > 0
 			? html`
 				<section class="creation-detail-group-section" data-group-creation-section>
@@ -1534,15 +1698,17 @@ async function loadCreation() {
 						${groupSources.map((source, index) => source.filePath
 					? html`<button type="button" class="creation-detail-group-item creation-detail-group-thumb${index === 0 ? ' is-active' : ''}"
 									data-group-source-thumb="${source.id}" aria-label="View ${escapeHtml(source.title)}">
-									<img src="${escapeHtml(source.filePath)}" alt="${escapeHtml(source.title)}" loading="lazy" />
+									<img src="${escapeHtml(source.filePath)}" alt="${escapeHtml(source.title)}" loading="eager" />
 								</button>`
 					: html`<button type="button" class="creation-detail-group-item creation-detail-group-item-fallback creation-detail-group-thumb${index === 0 ? ' is-active' : ''}"
 									data-group-source-thumb="${source.id}" aria-label="View source #${source.id}">#${source.id}</button>`).join('')}
 					</div>
-					${isOwner && !isPublished ? html`
+					${isOwner ? html`
 					<div class="creation-detail-group-actions">
 						<button type="button" class="btn-secondary creation-detail-group-set-cover-btn" data-group-set-cover-btn disabled>Set as cover</button>
-						<button type="button" class="btn-secondary creation-detail-ungroup-btn" data-ungroup-btn>Ungroup Creations</button>
+						${!isPublished
+							? html`<button type="button" class="btn-secondary creation-detail-ungroup-btn" data-ungroup-btn>Ungroup Creations</button>`
+							: ''}
 					</div>
 					` : ''}
 				</section>
@@ -1781,6 +1947,14 @@ async function loadCreation() {
 		let descriptionHtml = '';
 		const descriptionText = typeof creation.description === 'string' ? creation.description.trim() : '';
 		const hasDescription = descriptionText.length > 0;
+		const showGroupLeadDescription = isGroupCreation && hasDescription;
+		const groupLeadDescriptionHtml = showGroupLeadDescription
+			? html`
+				<div class="creation-detail-group-lead-description">
+					<div class="creation-detail-description">${processUserText(descriptionText)}</div>
+				</div>
+			`
+			: '';
 		const hasMetaInDescription = !!(serverName || methodName || displayModel || durationStr);
 		const showDescriptionBlock =
 			descriptionText || hasPromptSection || hasStyle || lineageSectionHtml || hasMetaInDescription;
@@ -1788,15 +1962,16 @@ async function loadCreation() {
 		if (showDescriptionBlock) {
 			const descriptionParts = [];
 			const sameAsPrompt = hasDescription && hasPrompt && textsSameWithinTolerance(descriptionText, promptText);
+			const renderDescriptionInMainBlock = hasDescription && !sameAsPrompt && !showGroupLeadDescription;
 
-			if (hasDescription && !sameAsPrompt) {
+			if (renderDescriptionInMainBlock) {
 				// Show description first (only when it differs from prompt)
 				descriptionParts.push(processUserText(descriptionText));
 			}
 
 			if (hasPrompt) {
 				// Show prompt section: when same as description, only show this; when different, show after description
-				if (hasDescription && !sameAsPrompt) {
+				if (renderDescriptionInMainBlock) {
 					descriptionParts.push('<br><br>');
 				}
 				descriptionParts.push(html`<div class="creation-detail-prompt-label-row">
@@ -1812,7 +1987,7 @@ async function loadCreation() {
 </div>`);
 				descriptionParts.push(processUserText(promptText));
 			} else if (legacyHydratedPromptOnly) {
-				if (hasDescription && !sameAsPrompt) {
+				if (renderDescriptionInMainBlock) {
 					descriptionParts.push('<br><br>');
 				}
 				descriptionParts.push(html`<div class="creation-detail-prompt-label">Prompt</div>`);
@@ -1990,7 +2165,7 @@ async function loadCreation() {
 			actionsContext,
 			isOwner,
 			isFailed,
-			hideActions: isGroupCreation
+			hideActions: isGroupCreation && !hasGroupPublishActions
 		};
 		const menuData = { isFailed, hasDetailsModalContent, isOwner, isAdmin, actionsContext };
 		if (!isCurrentLoad()) return;
@@ -2004,7 +2179,10 @@ async function loadCreation() {
 			<div class="creation-detail-title-byline creation-detail-title-byline-mobile">${escapeHtml(creatorHandle)}
 				${escapeHtml(mobileBylineText)}</div>
 			${renderCreationDetailActionStrip(stripData, escapeHtml)}
-			${isGroupCreation ? '' : renderCreationDetailMoreMenu(menuData, escapeHtml)}
+			${isGroupCreation && !hasGroupPublishActions ? '' : renderCreationDetailMoreMenu(menuData, escapeHtml)}
+			${groupLeadDescriptionHtml}
+			${groupSectionHtml}
+			${groupSectionHtml ? html`<div class="creation-detail-group-divider" aria-hidden="true"></div>` : ''}
 			${userDeletedNotice}
 			${isAdmin && status === 'completed' && !isFailed ? html`
 			<div class="creation-detail-admin-video" data-admin-video-section>
@@ -2020,7 +2198,6 @@ async function loadCreation() {
 			` : ''}
 			
 			${descriptionHtml}
-			${groupSectionHtml}
 			<div class="creation-detail-meta-hidden" aria-hidden="true">
 				${hasDetailsModalContent ? `
 				<button class="feed-card-action" type="button" data-creation-details-link>
@@ -3141,6 +3318,8 @@ async function loadCreation() {
 
 		if (isGroupCreation && groupSources.length > 0) {
 			const sourceById = new Map(groupSources.map((source) => [Number(source.id), source]));
+			const orderedSourceIds = groupSources.map((source) => Number(source.id)).filter((id) => Number.isFinite(id) && id > 0);
+			const sourceIndexById = new Map(orderedSourceIds.map((id, index) => [id, index]));
 			const groupThumbButtons = Array.from(detailContent.querySelectorAll('[data-group-source-thumb]'));
 			const setCoverBtn = detailContent.querySelector('[data-group-set-cover-btn]');
 			const titleEl = detailContent.querySelector('.creation-detail-title');
@@ -3148,6 +3327,7 @@ async function loadCreation() {
 			const mainMetaLineEl = detailContent.querySelector('.creation-detail-description-meta-line');
 			let selectedGroupSourceId = Number(groupSources[0]?.id);
 			const currentCoverId = Number(groupSources[0]?.id);
+			let groupCarouselEnabled = false;
 
 			function syncSetCoverButton() {
 				if (!(setCoverBtn instanceof HTMLButtonElement)) return;
@@ -3189,9 +3369,20 @@ async function loadCreation() {
 
 				if (shouldUpdateMedia) {
 					if (source.filePath) {
-						showHeroImage(source.filePath);
+						if (!groupCarouselEnabled || !setGroupHeroCarouselActive(source.id)) {
+							showHeroImage(source.filePath);
+						}
 					}
 				}
+			}
+
+			function stepGroupSource(direction) {
+				if (orderedSourceIds.length <= 1) return;
+				const currentIndex = sourceIndexById.get(Number(selectedGroupSourceId)) ?? 0;
+				const normalizedDirection = direction >= 0 ? 1 : -1;
+				const nextIndex = (currentIndex + normalizedDirection + orderedSourceIds.length) % orderedSourceIds.length;
+				const nextId = orderedSourceIds[nextIndex];
+				setActiveGroupSource(nextId);
 			}
 
 			for (const btn of groupThumbButtons) {
@@ -3202,6 +3393,51 @@ async function loadCreation() {
 					setActiveGroupSource(sourceId);
 				});
 			}
+			if (hasGroupHeroNavigation && groupHeroPrevBtn instanceof HTMLButtonElement) {
+				groupHeroPrevBtn.onclick = (e) => {
+					e.preventDefault();
+					stepGroupSource(-1);
+				};
+			}
+			if (hasGroupHeroNavigation && groupHeroNextBtn instanceof HTMLButtonElement) {
+				groupHeroNextBtn.onclick = (e) => {
+					e.preventDefault();
+					stepGroupSource(1);
+				};
+			}
+
+			// Strict carousel behavior:
+			// 1) Cover image must load successfully.
+			// 2) Then load remaining images.
+			// 3) Show controls only after all are loaded.
+			// 4) Navigation only changes stacking (no src swaps).
+			void (async () => {
+				if (!isCurrentLoad()) return;
+				const cover = groupSources[0];
+				const coverUrl = typeof cover?.filePath === 'string' ? cover.filePath.trim() : '';
+				if (!coverUrl) return;
+				const coverLoaded = await preloadHeroImageUrl(coverUrl);
+				if (!isCurrentLoad() || !coverLoaded?.ok) return;
+
+				const mounted = mountGroupHeroCarousel(groupSources, Number(cover.id));
+				groupCarouselEnabled = mounted;
+				if (!mounted) return;
+
+				const remainingUrls = groupSources
+					.slice(1)
+					.map((source) => (typeof source?.filePath === 'string' ? source.filePath.trim() : ''))
+					.filter(Boolean);
+				if (remainingUrls.length > 0) {
+					await Promise.allSettled(remainingUrls.map((url) => preloadHeroImageUrl(url)));
+				}
+				if (!isCurrentLoad()) return;
+				if (hasGroupHeroNavigation && groupHeroPrevBtn instanceof HTMLButtonElement && groupHeroNextBtn instanceof HTMLButtonElement) {
+					groupHeroPrevBtn.hidden = false;
+					groupHeroNextBtn.hidden = false;
+					groupHeroPrevBtn.disabled = false;
+					groupHeroNextBtn.disabled = false;
+				}
+			})();
 			if (setCoverBtn instanceof HTMLButtonElement) {
 				setCoverBtn.addEventListener('click', async () => {
 					if (!Number.isFinite(selectedGroupSourceId) || selectedGroupSourceId <= 0) return;

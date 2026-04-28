@@ -3,7 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import Busboy from "busboy";
 import sharp from "sharp";
-import { getThumbnailUrl, getBaseAppUrl, getShareBaseUrl } from "./utils/url.js";
+import { appendCreationIdToMediaUrl, getThumbnailUrl, getBaseAppUrl, getShareBaseUrl } from "./utils/url.js";
 import { buildProviderHeaders } from "./utils/providerAuth.js";
 import { runCreationJob, runProviderPollJob, PROVIDER_TIMEOUT_MS } from "./utils/creationJob.js";
 import { runLandscapeJob } from "./utils/landscapeJob.js";
@@ -152,8 +152,28 @@ export default function createCreateRoutes({ queries, storage }) {
 					lineageOk = false;
 				}
 			}
+			let creationDelegationOk = false;
+			const delegatedRaw = req.query?.creation_id ?? req.query?.group_id;
+			const delegatedCreationId =
+				typeof delegatedRaw === "string" ? parseInt(delegatedRaw, 10) : Number(delegatedRaw);
+			if (!isOwner && !isPublished && !isAdmin && Number.isFinite(delegatedCreationId) && delegatedCreationId > 0) {
+				try {
+					if (userId && !viewerRole) {
+						const u = await queries.selectUserById.get(userId);
+						viewerRole = u?.role || "";
+					}
+					creationDelegationOk = await canViewUnpublishedCreationViaCreationDelegation({
+						ancestorRow: image,
+						creationId: delegatedCreationId,
+						viewerUserId: userId ?? null,
+						viewerRole
+					});
+				} catch {
+					creationDelegationOk = false;
+				}
+			}
 
-			if (!isOwner && !isPublished && !isAdmin && !lineageOk) {
+			if (!isOwner && !isPublished && !isAdmin && !lineageOk && !creationDelegationOk) {
 				return res.status(403).json({ error: "Access denied" });
 			}
 
@@ -235,8 +255,29 @@ export default function createCreateRoutes({ queries, storage }) {
 					lineageOkVideo = false;
 				}
 			}
+			let creationDelegationOkVideo = false;
+			const delegatedRawV = req.query?.creation_id ?? req.query?.group_id;
+			const delegatedCreationIdV =
+				typeof delegatedRawV === "string" ? parseInt(delegatedRawV, 10) : Number(delegatedRawV);
+			if (!isOwner && !isPublished && !isAdmin && Number.isFinite(delegatedCreationIdV) && delegatedCreationIdV > 0) {
+				try {
+					let viewerRole = "";
+					if (userId) {
+						const u = await queries.selectUserById.get(userId);
+						viewerRole = u?.role || "";
+					}
+					creationDelegationOkVideo = await canViewUnpublishedCreationViaCreationDelegation({
+						ancestorRow: image,
+						creationId: delegatedCreationIdV,
+						viewerUserId: userId ?? null,
+						viewerRole
+					});
+				} catch {
+					creationDelegationOkVideo = false;
+				}
+			}
 
-			if (!isOwner && !isPublished && !isAdmin && !lineageOkVideo) {
+			if (!isOwner && !isPublished && !isAdmin && !lineageOkVideo && !creationDelegationOkVideo) {
 				return res.status(403).json({ error: "Access denied" });
 			}
 
@@ -297,6 +338,90 @@ export default function createCreateRoutes({ queries, storage }) {
 			}
 		}
 		return next;
+	}
+
+	function normalizeGroupCoverFilePath(rawPath) {
+		const path = typeof rawPath === "string" ? rawPath.trim() : "";
+		if (!path) return "";
+		try {
+			const parsed = new URL(path, "http://localhost");
+			if (parsed.searchParams.get("variant") === "thumbnail") {
+				parsed.searchParams.delete("variant");
+			}
+			return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+		} catch {
+			return path.replace(/([?&])variant=thumbnail(&)?/g, (_, lead, tail) => {
+				if (lead === "?" && tail) return "?";
+				if (lead === "?" && !tail) return "";
+				if (lead === "&" && tail) return "&";
+				return "";
+			}).replace(/\?$/, "");
+		}
+	}
+
+	function buildGroupCoverUpdateState({
+		groupMeta,
+		groupPayload,
+		sourceCreations,
+		coverSourceId,
+		storage,
+		fallbackGroupRow
+	}) {
+		const sourceList = Array.isArray(sourceCreations)
+			? sourceCreations.filter((item) => item && typeof item === "object")
+			: [];
+		const selectedSource = sourceList.find((item) => Number(item.id) === Number(coverSourceId));
+		if (!selectedSource) return null;
+
+		const reorderedSources = [
+			selectedSource,
+			...sourceList.filter((item) => Number(item.id) !== Number(coverSourceId))
+		].map((item, index) => ({ ...item, order: index }));
+
+		const nextMetaBase = {
+			...(groupMeta && typeof groupMeta === "object" ? groupMeta : {}),
+			group: {
+				...(groupPayload && typeof groupPayload === "object" ? groupPayload : {}),
+				updated_at: nowIso(),
+				cover_source_id: Number(coverSourceId),
+				source_creation_ids: reorderedSources
+					.map((item) => Number(item.id))
+					.filter((n, idx, arr) => Number.isFinite(n) && n > 0 && arr.indexOf(n) === idx),
+				source_creations: reorderedSources
+			}
+		};
+		const nextMeta = syncGroupLineageFromCoverMeta(nextMetaBase, selectedSource.meta);
+
+		const selectedFilePath = normalizeGroupCoverFilePath(
+			typeof selectedSource.filename === "string" && selectedSource.filename
+				? storage.getImageUrl(selectedSource.filename)
+				: (typeof selectedSource.file_path === "string" && selectedSource.file_path
+					? selectedSource.file_path
+					: "")
+		);
+		const fallbackFilePath = normalizeGroupCoverFilePath(fallbackGroupRow?.file_path || "");
+		const nextWidth = Number.isFinite(Number(selectedSource.width))
+			? Number(selectedSource.width)
+			: fallbackGroupRow?.width;
+		const nextHeight = Number.isFinite(Number(selectedSource.height))
+			? Number(selectedSource.height)
+			: fallbackGroupRow?.height;
+		const nextCreatedAt = selectedSource.created_at || fallbackGroupRow?.created_at || nowIso();
+		const nextColor = selectedSource.color ?? fallbackGroupRow?.color ?? null;
+
+		return {
+			selectedSource,
+			reorderedSources,
+			meta: nextMeta,
+			updatePayload: {
+				created_at: nextCreatedAt,
+				file_path: selectedFilePath || fallbackFilePath,
+				width: nextWidth,
+				height: nextHeight,
+				color: nextColor,
+				meta: nextMeta
+			}
+		};
 	}
 
 	/** Character text for cast hydration: Prompt Library personas store it in injection_text (and sometimes meta). */
@@ -380,6 +505,42 @@ export default function createCreateRoutes({ queries, storage }) {
 		const crossUser = Number(parentRow.user_id) !== Number(ancestorRow.user_id);
 		if (crossUser && !parentPublished && viewerRole !== "admin") return false;
 		return true;
+	}
+
+	/**
+	 * Unpublished source image is readable when a viewable delegated creation references it.
+	 * Delegated creation can be itself, lineage ancestor, or grouped source.
+	 */
+	async function canViewUnpublishedCreationViaCreationDelegation({ ancestorRow, creationId, viewerUserId, viewerRole }) {
+		const delegatedId = Number(creationId);
+		if (!Number.isFinite(delegatedId) || delegatedId <= 0) return false;
+		const delegatedRow = await queries.selectCreatedImageByIdAnyUser?.get(delegatedId);
+		if (!delegatedRow) return false;
+		if (delegatedRow.unavailable_at != null && String(delegatedRow.unavailable_at) !== "") return false;
+		const delegatedMeta = parseMeta(delegatedRow.meta);
+		const referencedIds = collectLineageAncestorIdsFromParentMeta(delegatedMeta);
+		referencedIds.add(Number(delegatedRow.id));
+		const groupPayload = delegatedMeta?.group && typeof delegatedMeta.group === "object" ? delegatedMeta.group : null;
+		if (groupPayload?.kind === "group_creations") {
+			const rawIds = Array.isArray(groupPayload.source_creation_ids) ? groupPayload.source_creation_ids : [];
+			for (const id of rawIds) {
+				const n = Number(id);
+				if (Number.isFinite(n) && n > 0) referencedIds.add(n);
+			}
+			const sourceCreations = Array.isArray(groupPayload.source_creations) ? groupPayload.source_creations : [];
+			for (const source of sourceCreations) {
+				const n = Number(source?.id);
+				if (Number.isFinite(n) && n > 0) referencedIds.add(n);
+			}
+			const coverSourceId = Number(groupPayload.cover_source_id);
+			if (Number.isFinite(coverSourceId) && coverSourceId > 0) referencedIds.add(coverSourceId);
+		}
+		if (!referencedIds.has(Number(ancestorRow.id))) return false;
+
+		const delegatedPublished = delegatedRow.published === 1 || delegatedRow.published === true;
+		const viewerOwnsDelegated = viewerUserId != null && Number(delegatedRow.user_id) === Number(viewerUserId);
+		const isAdmin = viewerRole === "admin";
+		return !!(delegatedPublished || viewerOwnsDelegated || isAdmin);
 	}
 
 	/** Append lineage_of so /api/images/created and /api/videos/created accept delegated reads. */
@@ -1844,14 +2005,17 @@ export default function createCreateRoutes({ queries, storage }) {
 
 			const imagesWithUrls = (Array.isArray(images) ? images : []).map((img) => {
 				const status = img.status || "completed";
-				const url = status === "completed" ? (img.file_path || storage.getImageUrl(img.filename)) : null;
 				const meta = parseMeta(img.meta);
+				const creationId = Number(img.id);
+				const rawUrl = status === "completed" ? (img.file_path || storage.getImageUrl(img.filename)) : null;
+				const url = appendCreationIdToMediaUrl(rawUrl, creationId);
 				const mediaType = typeof meta?.media_type === "string" ? meta.media_type : "image";
 				const videoMeta = meta && typeof meta === "object" ? meta.video : null;
-				const videoUrl =
+				const rawVideoUrl =
 					videoMeta && typeof videoMeta.file_path === "string" && videoMeta.file_path
 						? videoMeta.file_path
 						: null;
+				const videoUrl = appendCreationIdToMediaUrl(rawVideoUrl, creationId);
 
 				return {
 					id: img.id,
@@ -2001,11 +2165,15 @@ export default function createCreateRoutes({ queries, storage }) {
 			const meta = parseMeta(image.meta);
 
 			const status = image.status || 'completed';
+			const creationIdForMedia = Number(image.id);
 			let url = status === "completed"
 				? (shareAccess
 					? `/api/share/${encodeURIComponent(shareAccess.version)}/${encodeURIComponent(shareAccess.token)}/image`
 					: (image.file_path || storage.getImageUrl(image.filename)))
 				: null;
+			if (url && !shareAccess) {
+				url = appendCreationIdToMediaUrl(url, creationIdForMedia);
+			}
 
 			const appendLineageToMediaUrls =
 				lineageMediaParentId != null &&
@@ -2028,6 +2196,9 @@ export default function createCreateRoutes({ queries, storage }) {
 				shareAccess && mediaType === "video" && videoUrlRaw
 					? `/api/share/${encodeURIComponent(shareAccess.version)}/${encodeURIComponent(shareAccess.token)}/video`
 					: videoUrlRaw;
+			if (videoUrl && !shareAccess) {
+				videoUrl = appendCreationIdToMediaUrl(videoUrl, creationIdForMedia);
+			}
 			if (videoUrl && appendLineageToMediaUrls) {
 				videoUrl = appendLineageOfToMediaUrl(videoUrl, lineageMediaParentId);
 			}
@@ -2330,7 +2501,9 @@ export default function createCreateRoutes({ queries, storage }) {
 						id: row.id,
 						user_id: row.user_id,
 						filename: row.filename,
-						file_path: row.file_path,
+						file_path: typeof row.filename === "string" && row.filename
+							? storage.getImageUrl(row.filename)
+							: row.file_path,
 						width: row.width,
 						height: row.height,
 						color: row.color,
@@ -2403,10 +2576,16 @@ export default function createCreateRoutes({ queries, storage }) {
 			const firstExtMatch = firstFilenameRaw.match(/(\.[a-z0-9]+)$/i);
 			const firstExt = firstExtMatch ? firstExtMatch[1] : ".png";
 			const groupedFilename = `group/${user.id}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}${firstExt}`;
-			const groupedFilePath =
-				typeof first.file_path === "string" && first.file_path
-					? first.file_path
-					: storage.getImageUrl(first.filename);
+			const fallbackGroupRow = {
+				file_path:
+					typeof first.file_path === "string" && first.file_path
+						? first.file_path
+						: storage.getImageUrl(first.filename),
+				width: first.width,
+				height: first.height,
+				color: first.color ?? null,
+				created_at: first.created_at
+			};
 			const sourceCreations = sourceRows.map((row, index) => {
 				const rowMeta = parseMeta(row.meta);
 				return {
@@ -2414,7 +2593,9 @@ export default function createCreateRoutes({ queries, storage }) {
 					id: row.id,
 					user_id: row.user_id,
 					filename: row.filename,
-					file_path: row.file_path,
+					file_path: typeof row.filename === "string" && row.filename
+						? storage.getImageUrl(row.filename)
+						: row.file_path,
 					width: row.width,
 					height: row.height,
 					color: row.color,
@@ -2440,30 +2621,37 @@ export default function createCreateRoutes({ queries, storage }) {
 					source_creations: sourceCreations
 				}
 			};
-			const groupedMeta = syncGroupLineageFromCoverMeta(groupedMetaBase, parseMeta(first.meta) || {});
+			const initialCoverState = buildGroupCoverUpdateState({
+				groupMeta: groupedMetaBase,
+				groupPayload: groupedMetaBase.group,
+				sourceCreations,
+				coverSourceId: Number(first.id),
+				storage,
+				fallbackGroupRow
+			});
+			if (!initialCoverState) {
+				return res.status(500).json({ error: "Failed to build grouped creation cover" });
+			}
 
 			const insertResult = await queries.insertCreatedImage.run(
 				user.id,
 				groupedFilename,
-				groupedFilePath,
-				first.width,
-				first.height,
-				first.color ?? null,
+				initialCoverState.updatePayload.file_path,
+				initialCoverState.updatePayload.width,
+				initialCoverState.updatePayload.height,
+				initialCoverState.updatePayload.color,
 				"completed",
-				groupedMeta
+				initialCoverState.meta
 			);
 			const groupedId = Number(insertResult?.insertId ?? insertResult?.lastInsertRowid);
 			if (!Number.isFinite(groupedId) || groupedId <= 0) {
 				return res.status(500).json({ error: "Failed to create grouped creation" });
 			}
-			const setCoverCreatedAt = await queries.updateCreatedImageGroupCover?.run(groupedId, user.id, {
-				created_at: first.created_at,
-				file_path: groupedFilePath,
-				width: first.width,
-				height: first.height,
-				color: first.color ?? null,
-				meta: groupedMeta
-			});
+			const setCoverCreatedAt = await queries.updateCreatedImageGroupCover?.run(
+				groupedId,
+				user.id,
+				initialCoverState.updatePayload
+			);
 			if (!setCoverCreatedAt || setCoverCreatedAt.changes === 0) {
 				return res.status(500).json({ error: "Failed to set grouped creation cover timestamp" });
 			}
@@ -2517,43 +2705,23 @@ export default function createCreateRoutes({ queries, storage }) {
 			}
 			const sourceCreationsRaw = Array.isArray(groupPayload.source_creations) ? groupPayload.source_creations : [];
 			const sourceCreations = sourceCreationsRaw.filter((item) => item && typeof item === "object");
-			const targetSource = sourceCreations.find((item) => Number(item.id) === sourceId);
-			if (!targetSource) {
+			const coverState = buildGroupCoverUpdateState({
+				groupMeta,
+				groupPayload,
+				sourceCreations,
+				coverSourceId: sourceId,
+				storage,
+				fallbackGroupRow: groupRow
+			});
+			if (!coverState) {
 				return res.status(400).json({ error: "Selected source is not part of this group" });
 			}
 
-			const reorderedSources = [
-				targetSource,
-				...sourceCreations.filter((item) => Number(item.id) !== sourceId)
-			].map((item, index) => ({ ...item, order: index }));
-
-			const nextMetaBase = {
-				...groupMeta,
-				group: {
-					...groupPayload,
-					updated_at: nowIso(),
-					cover_source_id: sourceId,
-					source_creation_ids: reorderedSources
-						.map((item) => Number(item.id))
-						.filter((n, idx, arr) => Number.isFinite(n) && n > 0 && arr.indexOf(n) === idx),
-					source_creations: reorderedSources
-				}
-			};
-			const nextMeta = syncGroupLineageFromCoverMeta(nextMetaBase, targetSource.meta);
-			const coverFilePath =
-				typeof targetSource.file_path === "string" && targetSource.file_path
-					? targetSource.file_path
-					: (typeof targetSource.filename === "string" && targetSource.filename
-						? storage.getImageUrl(targetSource.filename)
-						: "");
-			const updateResult = await queries.updateCreatedImageGroupCover?.run(groupId, user.id, {
-				created_at: targetSource.created_at,
-				file_path: coverFilePath || groupRow.file_path,
-				width: Number.isFinite(Number(targetSource.width)) ? Number(targetSource.width) : groupRow.width,
-				height: Number.isFinite(Number(targetSource.height)) ? Number(targetSource.height) : groupRow.height,
-				color: targetSource.color ?? groupRow.color ?? null,
-				meta: nextMeta
-			});
+			const updateResult = await queries.updateCreatedImageGroupCover?.run(
+				groupId,
+				user.id,
+				coverState.updatePayload
+			);
 			if (!updateResult || updateResult.changes === 0) {
 				return res.status(500).json({ error: "Failed to set group cover" });
 			}
@@ -2562,8 +2730,8 @@ export default function createCreateRoutes({ queries, storage }) {
 				ok: true,
 				grouped_creation: {
 					id: updatedGroup?.id ?? groupId,
-					created_at: updatedGroup?.created_at ?? targetSource.created_at,
-					meta: parseMeta(updatedGroup?.meta) || nextMeta
+					created_at: updatedGroup?.created_at ?? coverState.updatePayload.created_at,
+					meta: parseMeta(updatedGroup?.meta) || coverState.meta
 				}
 			});
 		} catch (error) {
@@ -2674,11 +2842,6 @@ export default function createCreateRoutes({ queries, storage }) {
 			if (targetImage.published === 1 || targetImage.published === true) {
 				return res.status(400).json({ error: "Image is already published" });
 			}
-			const targetMeta = parseMeta(targetImage.meta) || {};
-			if (targetMeta?.group?.kind === "group_creations") {
-				return res.status(400).json({ error: "Group creations cannot be published yet" });
-			}
-
 			// Publish the image
 			const publishResult = await queries.publishCreatedImage.run(
 				req.params.id,

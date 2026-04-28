@@ -75,3 +75,19 @@ export function getThumbnailUrl(url) {
     return `${url}${separator}variant=thumbnail`;
   }
 }
+
+export function appendCreationIdToMediaUrl(url, creationId) {
+	if (!url) return url;
+	const id = Number(creationId);
+	if (!Number.isFinite(id) || id <= 0) return url;
+	const s = String(url);
+	if (!s.includes("/api/images/created/") && !s.includes("/api/videos/created/")) return url;
+	try {
+		const parsed = new URL(s, "http://localhost");
+		parsed.searchParams.set("creation_id", String(id));
+		return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+	} catch {
+		const sep = s.includes("?") ? "&" : "?";
+		return `${s}${sep}creation_id=${encodeURIComponent(String(id))}`;
+	}
+}

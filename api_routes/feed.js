@@ -1,5 +1,5 @@
 import express from "express";
-import { getThumbnailUrl } from "./utils/url.js";
+import { appendCreationIdToMediaUrl, getThumbnailUrl } from "./utils/url.js";
 
 /** Tip items shown in the newbie feed to explain following and other features */
 const NEWBIE_FEED_TIPS = [
@@ -107,7 +107,7 @@ export default function createFeedRoutes({ queries }) {
 		const enableNsfw = Boolean(user.meta && user.meta.enableNsfw === true);
 
 		const transformItem = (item) => {
-			const imageUrl = item.url || null;
+			const rawImageUrl = item.url || null;
 			// meta may be a JSON string from SQLite; parse once for media_type and video
 			let meta = item.meta;
 			if (typeof meta === "string" && meta) {
@@ -122,10 +122,13 @@ export default function createFeedRoutes({ queries }) {
 					? item.media_type
 					: (meta && typeof meta.media_type === "string" ? meta.media_type : "image");
 			const videoMeta = meta && typeof meta === "object" ? meta.video : null;
-			const videoUrl =
+			const rawVideoUrl =
 				typeof item.video_url === "string" && item.video_url
 					? item.video_url
 					: (videoMeta && typeof videoMeta.file_path === "string" && videoMeta.file_path ? videoMeta.file_path : null);
+			const creationId = Number(item.created_image_id || item.id);
+			const imageUrl = appendCreationIdToMediaUrl(rawImageUrl, creationId);
+			const videoUrl = appendCreationIdToMediaUrl(rawVideoUrl, creationId);
 
 			return {
 				id: item.id,

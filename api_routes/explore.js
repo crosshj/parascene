@@ -1,6 +1,6 @@
 import express from "express";
 import { Redis } from "@upstash/redis";
-import { getThumbnailUrl } from "./utils/url.js";
+import { appendCreationIdToMediaUrl, getThumbnailUrl } from "./utils/url.js";
 import { runSemanticSearch } from "./utils/embeddingsSearch.js";
 import { normalizeTag } from "./utils/tag.js";
 
@@ -28,16 +28,19 @@ function escapeHtml(value) {
 function mapExploreItemsToResponse(items) {
 	const list = Array.isArray(items) ? items : [];
 	return list.map((item) => {
-		const imageUrl = item?.url || null;
+		const rawImageUrl = item?.url || null;
 		const mediaType =
 			typeof item?.media_type === "string"
 				? item.media_type
 				: (item?.meta && typeof item.meta.media_type === "string" ? item.meta.media_type : "image");
 		const videoMeta = item?.meta && typeof item.meta === "object" ? item.meta.video : null;
-		const videoUrl =
+		const rawVideoUrl =
 			typeof item?.video_url === "string" && item.video_url
 				? item.video_url
 				: (videoMeta && typeof videoMeta.file_path === "string" && videoMeta.file_path ? videoMeta.file_path : null);
+		const creationId = Number(item?.created_image_id || item?.id);
+		const imageUrl = appendCreationIdToMediaUrl(rawImageUrl, creationId);
+		const videoUrl = appendCreationIdToMediaUrl(rawVideoUrl, creationId);
 		return {
 			id: item?.id,
 			title: escapeHtml(item?.title != null ? item.title : "Untitled"),
@@ -436,8 +439,9 @@ export default function createExploreRoutes({ queries }) {
 
 			const metaParse = (m) => (typeof m === "string" ? (() => { try { return JSON.parse(m); } catch { return null; } })() : m) ?? null;
 			const images = page.map((img) => {
-				const url = img?.file_path || (img?.filename ? `/api/images/created/${img.filename}` : null);
+				const rawUrl = img?.file_path || (img?.filename ? `/api/images/created/${img.filename}` : null);
 				const meta = metaParse(img?.meta);
+				const url = appendCreationIdToMediaUrl(rawUrl, Number(img?.id));
 				const nsfw = !!(meta && meta.nsfw);
 				const mediaType = meta && typeof meta.media_type === "string" ? meta.media_type : "image";
 				const videoUrl = meta?.video?.file_path && typeof meta.video.file_path === "string" ? meta.video.file_path : null;
@@ -501,8 +505,9 @@ export default function createExploreRoutes({ queries }) {
 
 			const metaParse = (m) => (typeof m === "string" ? (() => { try { return JSON.parse(m); } catch { return null; } })() : m) ?? null;
 			const images = page.map((img) => {
-				const url = img?.file_path || (img?.filename ? `/api/images/created/${img.filename}` : null);
+				const rawUrl = img?.file_path || (img?.filename ? `/api/images/created/${img.filename}` : null);
 				const meta = metaParse(img?.meta);
+				const url = appendCreationIdToMediaUrl(rawUrl, Number(img?.id));
 				const nsfw = !!(meta && meta.nsfw);
 				const mediaType = meta && typeof meta.media_type === "string" ? meta.media_type : "image";
 				const videoUrl = meta?.video?.file_path && typeof meta.video.file_path === "string" ? meta.video.file_path : null;
