@@ -16,6 +16,7 @@ const _qs = (() => {
 })();
 const { getAvatarColor } = await import(`./avatar.js${_qs}`);
 const { getStyleThumbUrl } = await import(`../pages/create-styles.js${_qs}`);
+const { CHAT_BROADCAST_MENTION_SLUGS } = await import(`./chatBroadcastMentions.js${_qs}`);
 
 const DEBOUNCE_MS = 130;
 const POPUP_ID = "triggered-suggest-listbox";
@@ -202,6 +203,13 @@ function itemHandle(item) {
 		const t = (item?.tag ?? item?.label ?? "").toString().trim();
 		return t.toLowerCase();
 	}
+	if (item?.type === "special_mention") {
+		const t = (item?.label ?? item?.insert_text ?? "")
+			.toString()
+			.replace(/^@/, "")
+			.trim();
+		return t.toLowerCase();
+	}
 	if (item?.type === "persona") {
 		const t = (item?.tag ?? item?.sublabel ?? "").replace(/^@/, "").trim();
 		return t.toLowerCase();
@@ -307,27 +315,73 @@ function mergeUniqueItems(items) {
 /** Cache key source for @-mention remote results (users + personas). */
 const MENTION_SUGGEST_CACHE_SOURCE = "mentions";
 
+function specialMentionCopyForSlug(slug) {
+	const s = String(slug || "").trim().toLowerCase();
+	if (s === "here") return "Notify online members";
+	if (s === "everyone") return "Notify all members";
+	if (s === "channel") return "Notify this channel";
+	if (s === "all") return "Notify all in thread";
+	return "Special mention";
+}
+
+const SPECIAL_MENTION_ITEMS = Array.from(CHAT_BROADCAST_MENTION_SLUGS)
+	.sort((a, b) => String(a).localeCompare(String(b)))
+	.map((slug) => {
+		const s = String(slug || "").trim().toLowerCase();
+		return {
+			type: "special_mention",
+			id: `special:${s}`,
+			label: `@${s}`,
+			sublabel: specialMentionCopyForSlug(s),
+			insert_text: `@${s} `
+		};
+	});
+
+function getFilteredSpecialMentionItems(qLower) {
+	const q = String(qLower || "").trim().toLowerCase();
+	if (!q) return SPECIAL_MENTION_ITEMS.slice();
+	return SPECIAL_MENTION_ITEMS.filter((item) => {
+		const handle = itemHandle(item);
+		const label = String(item?.label || "").toLowerCase();
+		return handle.includes(q) || label.includes(q);
+	});
+}
+
 /** Group people first, then personas, for section headers in the popup. */
 function orderMentionItemsForPopup(items) {
 	const users = [];
 	const personas = [];
+	const specialMentions = [];
 	for (const it of items) {
-		if (it?.type === "persona") personas.push(it);
+		if (it?.type === "special_mention") specialMentions.push(it);
+		else if (it?.type === "persona") personas.push(it);
 		else users.push(it);
 	}
-	return [...users, ...personas];
+	return [...users, ...personas, ...specialMentions];
+}
+
+function limitMentionItemsKeepingSpecial(items, limitNum) {
+	const specials = [];
+	const regular = [];
+	for (const it of items) {
+		if (it?.type === "special_mention") specials.push(it);
+		else regular.push(it);
+	}
+	return [...regular.slice(0, limitNum), ...specials];
 }
 
 function finalizeMentionPopupItems(local, remote, limitNum) {
-	const merged = mergeUniqueItems([...local, ...remote]).slice(0, limitNum);
-	return orderMentionItemsForPopup(merged);
+	const merged = mergeUniqueItems([...local, ...remote]);
+	return orderMentionItemsForPopup(limitMentionItemsKeepingSpecial(merged, limitNum));
 }
 
 function getMentionLocalCandidates(qLower) {
 	const cachedRemote = getCachedEntriesForSource(MENTION_SUGGEST_CACHE_SOURCE).flat();
+	const specialMentions = getFilteredSpecialMentionItems(qLower);
 	return mergeUniqueItems([
 		...filterAndSortMentionItems(Array.from(pageUsersMap.values()), qLower),
-		...filterAndSortMentionItems(cachedRemote, qLower)
+		...filterAndSortMentionItems(cachedRemote, qLower),
+		...specialMentions
 	]);
 }
 
@@ -535,9 +589,11 @@ function renderPopup(textarea, mode) {
 		popup.appendChild(row);
 	} else {
 		const hasPersonas = items.some((it) => it?.type === "persona");
-		const hasUsers = items.some((it) => it?.type !== "persona");
+		const hasSpecialMentions = items.some((it) => it?.type === "special_mention");
+		const hasUsers = items.some((it) => it?.type !== "persona" && it?.type !== "special_mention");
 		const firstPersonaIdx = items.findIndex((it) => it?.type === "persona");
-		const showMentionSectionLabels = hasUsers && hasPersonas;
+		const firstSpecialMentionIdx = items.findIndex((it) => it?.type === "special_mention");
+		const showMentionSectionLabels = hasUsers || hasPersonas || hasSpecialMentions;
 
 		items.forEach((item, i) => {
 			if (showMentionSectionLabels && hasUsers && i === 0) {
@@ -552,6 +608,21 @@ function renderPopup(textarea, mode) {
 				sec.className = "triggered-suggest-section";
 				sec.setAttribute("role", "presentation");
 				sec.textContent = "Personas";
+				popup.appendChild(sec);
+			}
+			if (
+				showMentionSectionLabels &&
+				hasSpecialMentions &&
+				i === (
+					hasUsers || hasPersonas
+						? firstSpecialMentionIdx
+						: 0
+				)
+			) {
+				const sec = document.createElement("div");
+				sec.className = "triggered-suggest-section triggered-suggest-section--special";
+				sec.setAttribute("role", "presentation");
+				sec.textContent = "Special mentions";
 				popup.appendChild(sec);
 			}
 
@@ -662,7 +733,14 @@ function renderPopup(textarea, mode) {
 	}
 
 	const selectedEl = popup.querySelector(`.${ITEM_SELECTED_CLASS}`);
-	if (selectedEl) selectedEl.scrollIntoView({ block: "nearest" });
+	if (selectedEl) {
+		if (selectedIndex === 0) {
+			// Keep section labels above the first result visible.
+			popup.scrollTop = 0;
+		} else {
+			selectedEl.scrollIntoView({ block: "nearest" });
+		}
+	}
 
 	// Restore focus to textarea after showing popup; appending/displaying the listbox can cause the browser to move focus
 	requestAnimationFrame(() => {
@@ -794,7 +872,11 @@ function requestSuggestions(textarea, ctx, reason) {
 	const requestedQuery = ctx.query;
 	const qLower = requestedQuery.toLowerCase();
 	const localCandidates = getLocalCandidatesForTrigger(ctx.trigger, qLower);
-	const localMatches = applyLocalFilter(ctx.trigger.source, localCandidates, qLower).slice(0, DEFAULT_SUGGEST_LIMIT);
+	const localFiltered = applyLocalFilter(ctx.trigger.source, localCandidates, qLower);
+	const localMatches =
+		ctx.trigger.source === "users"
+			? limitMentionItemsKeepingSpecial(localFiltered, DEFAULT_SUGGEST_LIMIT)
+			: localFiltered.slice(0, DEFAULT_SUGGEST_LIMIT);
 
 	const mentionOrderedLocals =
 		ctx.trigger.source === "users" ? orderMentionItemsForPopup(localMatches) : localMatches;
@@ -807,8 +889,7 @@ function requestSuggestions(textarea, ctx, reason) {
 	const exactCacheKey = `${suggestCacheSource}:${qLower}:${DEFAULT_SUGGEST_LIMIT}`;
 	const exactCached = cacheGet(exactCacheKey);
 	if (exactCached) {
-		const merged = mergeUniqueItems([...localMatches, ...exactCached]).slice(0, DEFAULT_SUGGEST_LIMIT);
-		const ordered = orderMentionItemsForPopup(merged);
+		const ordered = finalizeMentionPopupItems(localMatches, exactCached, DEFAULT_SUGGEST_LIMIT);
 		setItems(state, ordered);
 		renderPopup(textarea, ordered.length > 0 ? undefined : "empty");
 		return;
@@ -972,17 +1053,14 @@ export function attachTriggeredSuggest(textarea, options) {
 
 		if (!popupOpen) return;
 
-		const popup = getPopup();
-		const isAbove = popup.classList.contains("triggered-suggest-popup--above");
 		const maxIdx = Math.max(0, current.items.length - 1);
 
 		if (e.key === "ArrowDown") {
 			e.preventDefault();
-			// When popup is above (column-reverse), "down" is toward the input = lower index
 			if (current.selectedIndex < 0) {
 				updateSelection(textarea, 0);
 			} else {
-				const next = isAbove ? current.selectedIndex - 1 : current.selectedIndex + 1;
+				const next = current.selectedIndex + 1;
 				updateSelection(textarea, Math.max(0, Math.min(next, maxIdx)));
 			}
 			return;
@@ -990,11 +1068,10 @@ export function attachTriggeredSuggest(textarea, options) {
 
 		if (e.key === "ArrowUp") {
 			e.preventDefault();
-			// When popup is above (column-reverse), "up" is away from the input = higher index
 			if (current.selectedIndex < 0) {
-				updateSelection(textarea, maxIdx);
+				updateSelection(textarea, 0);
 			} else {
-				const next = isAbove ? current.selectedIndex + 1 : current.selectedIndex - 1;
+				const next = current.selectedIndex - 1;
 				updateSelection(textarea, Math.max(0, Math.min(next, maxIdx)));
 			}
 			return;
@@ -1002,13 +1079,13 @@ export function attachTriggeredSuggest(textarea, options) {
 
 		if (e.key === "Home") {
 			e.preventDefault();
-			updateSelection(textarea, isAbove ? maxIdx : 0);
+			updateSelection(textarea, 0);
 			return;
 		}
 
 		if (e.key === "End") {
 			e.preventDefault();
-			updateSelection(textarea, isAbove ? 0 : maxIdx);
+			updateSelection(textarea, maxIdx);
 			return;
 		}
 

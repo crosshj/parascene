@@ -3532,9 +3532,9 @@ app-route-feed {
 	padding: 6px 0;
 }
 
-/* When open above the input, reverse list so first item is nearest to the field */
+/* When open above the input, keep normal top-to-bottom reading order. */
 .triggered-suggest-popup--above {
-	flex-direction: column-reverse;
+	flex-direction: column;
 }
 
 .triggered-suggest-section {
@@ -3546,6 +3546,12 @@ app-route-feed {
 	color: var(--text-muted);
 	pointer-events: none;
 	user-select: none;
+}
+
+.triggered-suggest-section--special {
+	margin-top: 4px;
+	padding-top: 6px;
+	border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
 }
 
 .triggered-suggest-item {
