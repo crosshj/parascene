@@ -1063,12 +1063,14 @@ export async function openDb() {
 			}
 		},
 		presenceHeartbeat: {
-			run: async (userId) => {
+			run: async (userId, clientVersion) => {
 				const sel = db.prepare("SELECT meta FROM users WHERE id = ?");
 				const row = sel.get(userId);
 				if (!row) return Promise.resolve({ changes: 0 });
 				const meta = parseUserMeta(row.meta);
 				meta.presence_last_seen_at = new Date().toISOString();
+				meta.presence_client_version =
+					typeof clientVersion === "string" ? clientVersion.trim() : "";
 				const upd = db.prepare("UPDATE users SET meta = ? WHERE id = ?");
 				const result = upd.run(JSON.stringify(meta), userId);
 				return Promise.resolve({ changes: result.changes });

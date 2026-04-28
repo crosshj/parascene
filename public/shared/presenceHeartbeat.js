@@ -8,12 +8,28 @@ const HEARTBEAT_INTERVAL_MS = 60 * 1000;
 let _timer = null;
 let _started = false;
 
+function getClientAssetVersion() {
+	try {
+		const meta = document.querySelector('meta[name="asset-version"]');
+		const v = meta?.getAttribute('content');
+		return typeof v === 'string' ? v.trim() : '';
+	} catch {
+		return '';
+	}
+}
+
 async function sendPresenceHeartbeat() {
 	try {
+		const v = getClientAssetVersion();
+		if (!v) return;
 		const r = await fetch('/api/presence/heartbeat', {
 			method: 'POST',
 			credentials: 'same-origin',
-			headers: { Accept: 'application/json' }
+			headers: {
+				Accept: 'application/json',
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify({ v })
 		});
 		if (r.status === 401) return;
 	} catch {

@@ -844,7 +844,7 @@ export function openDb() {
 		},
 		/** Presence lives in users.meta until a dedicated table exists: presence_last_seen_at (ISO), appear_offline (boolean). */
 		presenceHeartbeat: {
-			run: async (userId) => {
+			run: async (userId, clientVersion) => {
 				const { data: current, error: selectError } = await serviceClient
 					.from(prefixedTable("users"))
 					.select("meta")
@@ -854,6 +854,8 @@ export function openDb() {
 				const existing = current?.meta ?? null;
 				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
 				meta.presence_last_seen_at = new Date().toISOString();
+				meta.presence_client_version =
+					typeof clientVersion === "string" ? clientVersion.trim() : "";
 				const { error } = await serviceClient
 					.from(prefixedTable("users"))
 					.update({ meta })

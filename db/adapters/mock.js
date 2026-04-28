@@ -497,11 +497,13 @@ export function openDb() {
 			}
 		},
 		presenceHeartbeat: {
-			run: async (userId) => {
+			run: async (userId, clientVersion) => {
 				const user = users.find((u) => Number(u.id) === Number(userId));
 				if (!user) return { changes: 0 };
 				user.meta = user.meta != null && typeof user.meta === "object" ? { ...user.meta } : {};
 				user.meta.presence_last_seen_at = new Date().toISOString();
+				user.meta.presence_client_version =
+					typeof clientVersion === "string" ? clientVersion.trim() : "";
 				return { changes: 1 };
 			}
 		},

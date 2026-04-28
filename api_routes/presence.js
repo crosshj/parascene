@@ -73,8 +73,13 @@ export default function createPresenceRoutes({ queries }) {
 		if (!queries.presenceHeartbeat?.run) {
 			return res.status(501).json({ error: "Not available" });
 		}
+		const rawVersion = req.body?.v;
+		const clientVersion = typeof rawVersion === "string" ? rawVersion.trim() : "";
+		if (!clientVersion) {
+			return res.status(400).json({ error: "Missing client version" });
+		}
 		try {
-			await queries.presenceHeartbeat.run(userId);
+			await queries.presenceHeartbeat.run(userId, clientVersion);
 			return res.json({ ok: true });
 		} catch (err) {
 			console.warn("[presence] heartbeat", err?.message || err);
