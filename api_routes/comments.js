@@ -401,10 +401,6 @@ export default function createCommentsRoutes({ queries }) {
 		const user = await requireUser(req, res, queries);
 		if (!user) return;
 
-		if (String(user.role) !== "admin") {
-			return res.status(403).json({ error: "Forbidden" });
-		}
-
 		const commentId = Number.parseInt(req.params.commentId, 10);
 		if (!Number.isFinite(commentId) || commentId <= 0) {
 			return res.status(400).json({ error: "Invalid comment id" });
@@ -413,6 +409,11 @@ export default function createCommentsRoutes({ queries }) {
 		const comment = await queries.selectCommentById?.get(commentId);
 		if (!comment || comment.created_image_id == null) {
 			return res.status(404).json({ error: "Comment not found" });
+		}
+		const isAdmin = String(user.role) === "admin";
+		const isOwner = Number(comment.user_id) === Number(user.id);
+		if (!isAdmin && !isOwner) {
+			return res.status(403).json({ error: "Forbidden" });
 		}
 
 		const imageId = Number(comment.created_image_id);
@@ -436,6 +437,47 @@ export default function createCommentsRoutes({ queries }) {
 		}
 
 		return res.json({ ok: true, comment_count: commentCount });
+	});
+
+	router.patch("/api/comments/:commentId", async (req, res) => {
+		const user = await requireUser(req, res, queries);
+		if (!user) return;
+
+		const commentId = Number.parseInt(req.params.commentId, 10);
+		if (!Number.isFinite(commentId) || commentId <= 0) {
+			return res.status(400).json({ error: "Invalid comment id" });
+		}
+		const textRaw = req.body?.text;
+		const text = typeof textRaw === "string" ? textRaw.replace(/\u0000/g, "").trim() : "";
+		if (!text) {
+			return res.status(400).json({ error: "Comment text is required" });
+		}
+		if (text.length > 1000) {
+			return res.status(400).json({ error: "Comment too long (max 1000 chars)" });
+		}
+
+		const comment = await queries.selectCommentById?.get(commentId);
+		if (!comment || comment.created_image_id == null) {
+			return res.status(404).json({ error: "Comment not found" });
+		}
+		const imageId = Number(comment.created_image_id);
+		const image = await requireCreatedImageAccess({ queries, imageId, userId: user.id, userRole: user.role });
+		if (!image) {
+			return res.status(404).json({ error: "Image not found" });
+		}
+
+		const isAdmin = String(user.role) === "admin";
+		const isOwner = Number(comment.user_id) === Number(user.id);
+		if (!isAdmin && !isOwner) {
+			return res.status(403).json({ error: "Forbidden" });
+		}
+
+		const up = await queries.updateCommentById?.run(commentId, text);
+		const changes = Number(up?.changes ?? 0);
+		if (!changes) {
+			return res.status(404).json({ error: "Comment not found" });
+		}
+		return res.json({ ok: true, comment: { id: commentId, text } });
 	});
 
 	return router;

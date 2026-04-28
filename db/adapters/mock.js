@@ -2689,7 +2689,28 @@ export function openDb() {
 				return [];
 			}
 		},
-		selectCommentById: { get: async () => null },
+		selectCommentById: {
+			get: async (commentId) => {
+				const id = Number(commentId);
+				const list =
+					(typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.comments_created_image) ??
+					comments_created_image;
+				return list.find((c) => Number(c.id) === id) ?? null;
+			}
+		},
+		updateCommentById: {
+			run: async (commentId, text) => {
+				const id = Number(commentId);
+				const list =
+					(typeof globalThis.__mockDb !== "undefined" && globalThis.__mockDb?.comments_created_image) ??
+					comments_created_image;
+				const row = list.find((c) => Number(c.id) === id);
+				if (!row) return { changes: 0 };
+				row.text = String(text ?? "");
+				row.updated_at = new Date().toISOString();
+				return { changes: 1 };
+			}
+		},
 		deleteCommentById: {
 			run: async (commentId) => {
 				const id = Number(commentId);

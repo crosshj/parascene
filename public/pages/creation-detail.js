@@ -9,6 +9,7 @@ let fetchCreatedImageActivity;
 let postCreatedImageComment;
 let toggleCommentReaction;
 let deleteCreatedImageComment;
+let updateCreatedImageComment;
 let processUserText;
 let hydrateUserTextLinks;
 let attachAutoGrowTextarea;
@@ -74,6 +75,7 @@ async function loadDeps() {
 		postCreatedImageComment = commentsMod.postCreatedImageComment;
 		toggleCommentReaction = commentsMod.toggleCommentReaction;
 		deleteCreatedImageComment = commentsMod.deleteCreatedImageComment;
+		updateCreatedImageComment = commentsMod.updateCreatedImageComment;
 
 		const userTextMod = await import(`/shared/userText.js${qs}`);
 		processUserText = userTextMod.processUserText;
@@ -3504,6 +3506,9 @@ async function loadCreation() {
 			activity: [],
 			commentCount: 0
 		};
+		let commentEditingId = null;
+		let commentEditDraft = '';
+		let commentEditBusy = false;
 
 		const commentCountEl = detailContent.querySelector('[data-comment-count]');
 		const commentListEl = detailContent.querySelector('[data-comment-list]');
@@ -3631,6 +3636,13 @@ async function loadCreation() {
 				const timeAgo = date ? (formatRelativeTime(date) || '') : '';
 				const timeTitle = date ? formatDateTime(date) : '';
 				const safeText = processUserText(c?.text ?? '');
+				const createdMs = c?.created_at ? Date.parse(String(c.created_at)) : NaN;
+				const updatedMs = c?.updated_at ? Date.parse(String(c.updated_at)) : NaN;
+				const isEditedComment =
+					Number.isFinite(createdMs) &&
+					Number.isFinite(updatedMs) &&
+					updatedMs - createdMs >= 1000;
+				const isEditing = Number(commentEditingId) === Number(c?.id);
 				const isFounder = c?.plan === 'founder';
 				const commentAvatarHtml = renderCommentAvatarHtml({
 					avatarUrl,
@@ -3678,18 +3690,32 @@ async function loadCreation() {
 					hasAnyReactions || hasUnusedReactions
 						? `<div class="comment-reaction-pills"><div class="comment-reaction-pills-inner">${reactionPills}${addReactionBtn}</div></div>`
 						: '';
+				const useFullWidthReactionRow = keysWithReactions.length > 2;
+				const canModerateComment = Boolean(commentId) && (isAdmin || (Number(commenterId) > 0 && Number(commenterId) === Number(currentUserId)));
+				const commentActionControls = canModerateComment
+					? `<span class="comment-time-actions" data-comment-time-actions="${escapeHtml(commentId)}">
+						&nbsp;·&nbsp;<button type="button" class="comment-time-action" data-comment-edit="${escapeHtml(commentId)}">${isEditing ? 'cancel' : 'edit'}</button>
+						&nbsp;·&nbsp;<button type="button" class="comment-time-action" data-comment-delete="${escapeHtml(commentId)}">delete</button>
+					</span>`
+					: '';
 				const metaRowHtml = `<div class="comment-meta-row">
 					<div class="comment-meta-top">
-						${timeAgo ? `<span class="comment-time" title="${escapeHtml(timeTitle)}">${escapeHtml(timeAgo)}</span>` : ''}
+						${timeAgo ? `<span class="comment-time" title="${escapeHtml(timeTitle)}">${escapeHtml(timeAgo)}${commentActionControls}</span>` : `${commentActionControls}`}
 						<div class="comment-meta-right">
-							${reactionPillsRow}
+							${useFullWidthReactionRow ? '' : reactionPillsRow}
 						</div>
 					</div>
+					${useFullWidthReactionRow && reactionPillsRow ? `<div class="comment-meta-reactions-row">${reactionPillsRow}</div>` : ''}
 				</div>`;
-
-				const adminDeleteBtn = isAdmin && commentId
-					? `<button type="button" class="comment-admin-delete" data-comment-id="${escapeHtml(commentId)}" aria-label="Delete comment">Delete</button>`
-					: '';
+				const commentBodyHtml = isEditing
+					? `<div class="comment-edit-wrap" data-comment-edit-wrap="${escapeHtml(commentId)}">
+						<textarea class="comment-edit-input" data-comment-edit-input="${escapeHtml(commentId)}" rows="3" maxlength="1000">${escapeHtml(commentEditDraft || (c?.text ?? ''))}</textarea>
+						<div class="comment-edit-actions">
+							<button type="button" class="comment-edit-cancel" data-comment-edit-cancel="${escapeHtml(commentId)}"${commentEditBusy ? ' disabled' : ''}>Cancel</button>
+							<button type="button" class="comment-edit-save btn-primary" data-comment-edit-save="${escapeHtml(commentId)}"${commentEditBusy ? ' disabled' : ''}>Save</button>
+						</div>
+					</div>`
+					: `<div class="comment-text">${safeText}${isEditedComment ? '<span class="comment-text-edited-inline"> (edited)</span>' : ''}</div>`;
 
 				return `
 					<div class="comment-item" data-comment-id="${escapeHtml(commentId)}">
@@ -3707,9 +3733,8 @@ async function loadCreation() {
 										${handle ? `<span class="comment-author-handle${isFounder ? ' founder-name' : ''}">${escapeHtml(handle)}</span>` : ''}
 									</div>
 								`}
-								${adminDeleteBtn}
 							</div>
-							<div class="comment-text">${safeText}</div>
+							${commentBodyHtml}
 							${metaRowHtml}
 						</div>
 					</div>
@@ -3849,14 +3874,17 @@ async function loadCreation() {
 
 		if (commentListEl) {
 			commentListEl.addEventListener('click', async (e) => {
-				const adminDel = e.target?.closest?.('.comment-admin-delete[data-comment-id]');
-				if (adminDel && adminDel instanceof HTMLElement && isAdmin) {
+				const delBtn = e.target?.closest?.('[data-comment-delete]');
+				if (delBtn && delBtn instanceof HTMLElement) {
 					e.preventDefault();
 					e.stopPropagation();
-					const cid = Number(adminDel.dataset.commentId);
+					const cid = Number(delBtn.getAttribute('data-comment-delete'));
 					if (!Number.isFinite(cid)) return;
+					const item = commentsState.activity.find((it) => it.type === 'comment' && Number(it.id) === cid);
+					const canModerateComment = isAdmin || (Number(item?.user_id) > 0 && Number(item.user_id) === Number(currentUserId));
+					if (!canModerateComment) return;
 					if (!window.confirm('Delete this comment? This cannot be undone.')) return;
-					adminDel.disabled = true;
+					if (delBtn instanceof HTMLButtonElement) delBtn.disabled = true;
 					try {
 						const res = await deleteCreatedImageComment(cid);
 						if (!res?.ok) {
@@ -3866,7 +3894,91 @@ async function loadCreation() {
 						}
 						await loadComments({ scrollIfHash: false });
 					} finally {
-						adminDel.disabled = false;
+						if (delBtn instanceof HTMLButtonElement) delBtn.disabled = false;
+					}
+					return;
+				}
+
+				const editToggleBtn = e.target?.closest?.('[data-comment-edit]');
+				if (editToggleBtn && editToggleBtn instanceof HTMLElement) {
+					e.preventDefault();
+					e.stopPropagation();
+					const cid = Number(editToggleBtn.getAttribute('data-comment-edit'));
+					if (!Number.isFinite(cid)) return;
+					const item = commentsState.activity.find((it) => it.type === 'comment' && Number(it.id) === cid);
+					const canModerateComment = isAdmin || (Number(item?.user_id) > 0 && Number(item.user_id) === Number(currentUserId));
+					if (!canModerateComment) return;
+					if (Number(commentEditingId) === cid) {
+						commentEditingId = null;
+						commentEditDraft = '';
+						commentEditBusy = false;
+						renderComments();
+						return;
+					}
+					commentEditingId = cid;
+					commentEditDraft = item?.text != null ? String(item.text) : '';
+					commentEditBusy = false;
+					renderComments();
+					const input = commentListEl.querySelector(`[data-comment-edit-input="${cid}"]`);
+					if (input instanceof HTMLTextAreaElement) {
+						input.focus();
+						input.select();
+					}
+					return;
+				}
+
+				const editCancelBtn = e.target?.closest?.('[data-comment-edit-cancel]');
+				if (editCancelBtn && editCancelBtn instanceof HTMLElement) {
+					e.preventDefault();
+					e.stopPropagation();
+					commentEditingId = null;
+					commentEditDraft = '';
+					commentEditBusy = false;
+					renderComments();
+					return;
+				}
+
+				const editSaveBtn = e.target?.closest?.('[data-comment-edit-save]');
+				if (editSaveBtn && editSaveBtn instanceof HTMLElement) {
+					e.preventDefault();
+					e.stopPropagation();
+					const cid = Number(editSaveBtn.getAttribute('data-comment-edit-save'));
+					if (!Number.isFinite(cid) || commentEditBusy) return;
+					const input = commentListEl.querySelector(`[data-comment-edit-input="${cid}"]`);
+					const nextText = input instanceof HTMLTextAreaElement
+						? String(input.value || '').trim()
+						: String(commentEditDraft || '').trim();
+					if (!nextText) {
+						alert('Comment text is required');
+						return;
+					}
+					const item = commentsState.activity.find((it) => it.type === 'comment' && Number(it.id) === cid);
+					const canModerateComment = isAdmin || (Number(item?.user_id) > 0 && Number(item.user_id) === Number(currentUserId));
+					if (!canModerateComment) return;
+					commentEditBusy = true;
+					if (editSaveBtn instanceof HTMLButtonElement) editSaveBtn.disabled = true;
+					try {
+						const res = await updateCreatedImageComment(cid, nextText);
+						if (!res?.ok) {
+							const msg = typeof res?.data?.error === 'string' ? res.data.error : 'Failed to update comment';
+							alert(msg);
+							return;
+						}
+						const idx = commentsState.activity.findIndex((it) => it.type === 'comment' && Number(it.id) === cid);
+						if (idx >= 0) {
+							commentsState.activity[idx] = {
+								...commentsState.activity[idx],
+								text: nextText,
+								updated_at: new Date().toISOString()
+							};
+						}
+						commentEditingId = null;
+						commentEditDraft = '';
+						commentEditBusy = false;
+						renderComments();
+					} finally {
+						commentEditBusy = false;
+						if (editSaveBtn instanceof HTMLButtonElement) editSaveBtn.disabled = false;
 					}
 					return;
 				}
@@ -3912,6 +4024,11 @@ async function loadCreation() {
 						});
 					});
 				}
+			});
+			commentListEl.addEventListener('input', (e) => {
+				const input = e.target?.closest?.('[data-comment-edit-input]');
+				if (!(input instanceof HTMLTextAreaElement)) return;
+				commentEditDraft = input.value;
 			});
 		}
 

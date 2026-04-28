@@ -643,6 +643,7 @@ export async function initChatPage(root, options = {}) {
 		smileIcon,
 		gearIcon,
 		copyIcon,
+		pencilIcon,
 		trashIcon,
 		helpIcon,
 		linkIcon2
@@ -799,6 +800,8 @@ export async function initChatPage(root, options = {}) {
 	let chatViewportRetryTimeouts = [];
 	let activeReactionPicker = null;
 	let lastChatMessagesPayload = [];
+	let activeMessageEditId = null;
+	let activeMessageEditSaving = false;
 	/** @type {null | (() => void)} */
 	let roomBroadcastTeardown = null;
 	/** @type {null | (() => void)} */
@@ -2787,6 +2790,17 @@ export async function initChatPage(root, options = {}) {
 
 		const senderId = Number(m.sender_id);
 		const isSelf = Number.isFinite(viewerId) && Number.isFinite(senderId) && senderId === viewerId;
+		const canEdit = isSelf || rowOpts.showAdminDelete === true;
+		if (canEdit) {
+			const editBtn = document.createElement('button');
+			editBtn.type = 'button';
+			editBtn.className = 'connect-chat-msg-hover-edit';
+			editBtn.setAttribute('data-chat-hover-edit', '1');
+			editBtn.dataset.chatMessageId = String(messageId);
+			editBtn.setAttribute('aria-label', isSelf ? 'Edit your message' : 'Edit message (moderator)');
+			editBtn.innerHTML = pencilIcon('connect-chat-hover-edit-icon');
+			actions.appendChild(editBtn);
+		}
 		const canDelete = isSelf || rowOpts.showAdminDelete === true;
 		if (canDelete) {
 			const delBtn = document.createElement('button');
@@ -2881,6 +2895,195 @@ export async function initChatPage(root, options = {}) {
 			row.classList.remove('connect-chat-msg--reaction-empty');
 		} else {
 			row.classList.add('connect-chat-msg--reaction-empty');
+		}
+	}
+
+	function getChatMessageEditedAt(m) {
+		const meta = m?.meta;
+		if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return '';
+		const raw = meta.edited_at;
+		if (typeof raw !== 'string') return '';
+		const t = raw.trim();
+		return t || '';
+	}
+
+	function buildChatMessageEditedLabelElement(m) {
+		if (!getChatMessageEditedAt(m)) return null;
+		const inline = document.createElement('span');
+		inline.className = 'connect-chat-msg-edited-inline';
+		inline.textContent = ' (edited)';
+		return inline;
+	}
+
+	function replaceChatMessageRowFromPayload(messageId, opts = {}) {
+		const mid = Number(messageId);
+		if (!Number.isFinite(mid) || mid <= 0) return null;
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		if (!messagesEl) return null;
+		const idx = lastChatMessagesPayload.findIndex((m) => Number(m.id) === mid);
+		if (idx < 0) return null;
+		const existing = messagesEl.querySelector(`.connect-chat-msg[data-chat-message-id="${mid}"]`);
+		if (!existing) return null;
+		const viewerId = Number.isFinite(Number(chatViewerId)) ? Number(chatViewerId) : null;
+		const rowFlags = {
+			effectiveUnread: false,
+			vStart: -1,
+			vEnd: -1,
+			showAdminDelete: chatViewerIsAdmin && !activePseudoChannelSlug,
+			showHoverBar: !activePseudoChannelSlug,
+		};
+		const next = createChatMessageRowElement(
+			lastChatMessagesPayload[idx],
+			idx,
+			lastChatMessagesPayload,
+			viewerId,
+			rowFlags
+		);
+		if (opts.keepToolbarOpen === true) {
+			next.classList.add('connect-chat-msg--toolbar-open');
+		}
+		existing.replaceWith(next);
+		updateChatLatestRowMarker(messagesEl);
+		try {
+			hydrateUserTextLinks(next);
+			hydrateChatYoutubeEmbeds(next);
+			hydrateChatCreationEmbeds(next);
+			bindInlineVideoClickControls(next);
+			if (typeof setupReactionTooltipTap === 'function') {
+				setupReactionTooltipTap(messagesEl);
+			}
+		} catch {
+			// ignore
+		}
+		for (const b of next.querySelectorAll('.connect-chat-msg-bubble')) {
+			trimTrailingWhitespaceAfterChatEmbed(b);
+		}
+		for (const embed of next.querySelectorAll('.connect-chat-creation-embed')) {
+			trimChatCreationEmbedWhitespace(embed);
+		}
+		return next;
+	}
+
+	function cancelActiveChatMessageEdit() {
+		const mid = Number(activeMessageEditId);
+		if (!Number.isFinite(mid) || mid <= 0) {
+			activeMessageEditId = null;
+			activeMessageEditSaving = false;
+			return;
+		}
+		activeMessageEditSaving = false;
+		activeMessageEditId = null;
+		replaceChatMessageRowFromPayload(mid, { keepToolbarOpen: false });
+	}
+
+	async function saveActiveChatMessageEdit() {
+		const mid = Number(activeMessageEditId);
+		if (!Number.isFinite(mid) || mid <= 0 || activeMessageEditSaving) return;
+		const row = root.querySelector(`.connect-chat-msg[data-chat-message-id="${mid}"]`);
+		if (!(row instanceof HTMLElement)) return;
+		const dialog = row.querySelector('.connect-chat-msg-edit-dialog');
+		if (!(dialog instanceof HTMLElement)) return;
+		const input = dialog.querySelector('[data-chat-message-edit-input]');
+		const saveBtn = dialog.querySelector('[data-chat-message-edit-save]');
+		const cancelBtn = dialog.querySelector('[data-chat-message-edit-cancel]');
+		const errEl = dialog.querySelector('[data-chat-message-edit-error]');
+		if (!(input instanceof HTMLTextAreaElement) || !(saveBtn instanceof HTMLButtonElement)) return;
+		const nextBody = String(input.value || '').trim();
+		if (!nextBody) {
+			if (errEl instanceof HTMLElement) {
+				errEl.textContent = 'Message cannot be empty.';
+				errEl.hidden = false;
+			}
+			return;
+		}
+		const idx = lastChatMessagesPayload.findIndex((m) => Number(m.id) === mid);
+		if (idx < 0) return;
+		const prevBody = lastChatMessagesPayload[idx]?.body != null
+			? String(lastChatMessagesPayload[idx].body)
+			: '';
+		if (nextBody === prevBody.trim()) {
+			cancelActiveChatMessageEdit();
+			return;
+		}
+		activeMessageEditSaving = true;
+		row.dataset.chatMessageEditSaving = '1';
+		saveBtn.disabled = true;
+		if (cancelBtn instanceof HTMLButtonElement) cancelBtn.disabled = true;
+		if (errEl instanceof HTMLElement) {
+			errEl.textContent = '';
+			errEl.hidden = true;
+		}
+		try {
+			const res = await fetch(`/api/chat/messages/${mid}`, {
+				method: 'PATCH',
+				credentials: 'include',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ body: nextBody }),
+			});
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok || !data?.message) {
+				throw new Error(data?.message || data?.error || 'Could not save message.');
+			}
+			lastChatMessagesPayload[idx] = data.message;
+			activeMessageEditSaving = false;
+			activeMessageEditId = null;
+			replaceChatMessageRowFromPayload(mid, { keepToolbarOpen: false });
+		} catch (err) {
+			activeMessageEditSaving = false;
+			delete row.dataset.chatMessageEditSaving;
+			saveBtn.disabled = false;
+			if (cancelBtn instanceof HTMLButtonElement) cancelBtn.disabled = false;
+			if (errEl instanceof HTMLElement) {
+				errEl.textContent = err?.message || 'Could not save message.';
+				errEl.hidden = false;
+			}
+		}
+	}
+
+	function startChatMessageEdit(messageId) {
+		const mid = Number(messageId);
+		if (!Number.isFinite(mid) || mid <= 0) return;
+		if (activePseudoChannelSlug) return;
+		if (activeMessageEditSaving) return;
+		if (Number.isFinite(Number(activeMessageEditId)) && Number(activeMessageEditId) !== mid) {
+			cancelActiveChatMessageEdit();
+		}
+		const row = replaceChatMessageRowFromPayload(mid, { keepToolbarOpen: true });
+		if (!(row instanceof HTMLElement)) return;
+		const bubble = row.querySelector('.connect-chat-msg-bubble');
+		if (!(bubble instanceof HTMLElement)) return;
+		const msg = lastChatMessagesPayload.find((x) => Number(x.id) === mid);
+		if (!msg) return;
+		const bodyValue = msg?.body != null ? String(msg.body) : '';
+		row.dataset.chatMessageEditing = '1';
+		activeMessageEditId = mid;
+		activeMessageEditSaving = false;
+		bubble.innerHTML = `<div class="connect-chat-msg-edit-dialog">
+			<textarea class="connect-chat-msg-edit-input" data-chat-message-edit-input rows="4" maxlength="4000" aria-label="Edit message">${escapeHtml(bodyValue)}</textarea>
+			<p class="connect-chat-msg-edit-error" data-chat-message-edit-error hidden></p>
+			<div class="connect-chat-msg-edit-actions">
+				<button type="button" class="connect-chat-msg-edit-cancel" data-chat-message-edit-cancel>Cancel</button>
+				<button type="button" class="btn-primary connect-chat-msg-edit-save" data-chat-message-edit-save>
+					<span class="connect-chat-msg-edit-save-label">Save</span>
+					<span class="connect-chat-msg-edit-save-spinner" aria-hidden="true"></span>
+				</button>
+			</div>
+		</div>`;
+		const input = bubble.querySelector('[data-chat-message-edit-input]');
+		if (input instanceof HTMLTextAreaElement) {
+			input.focus();
+			input.select();
+			input.addEventListener('keydown', (e) => {
+				if (e.key === 'Escape') {
+					e.preventDefault();
+					cancelActiveChatMessageEdit();
+					return;
+				}
+				if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+					e.preventDefault();
+					void saveActiveChatMessageEdit();
+				}
+			});
 		}
 	}
 
@@ -4699,6 +4902,10 @@ export async function initChatPage(root, options = {}) {
 			bubble.innerHTML = `<div class="connect-chat-canvas-inline"><div class="connect-chat-canvas-inline-title">${escapeHtml(canvasMeta.title)}</div><div class="connect-chat-canvas-inline-preview">${preview}</div></div>`;
 		} else {
 			bubble.innerHTML = safeBody;
+		}
+		const editedLabelEl = buildChatMessageEditedLabelElement(m);
+		if (editedLabelEl) {
+			bubble.appendChild(editedLabelEl);
 		}
 		normalizeChatBubbleInlineImageSpacing(bubble);
 		if (!isGroupContinue) {
@@ -7075,6 +7282,37 @@ export async function initChatPage(root, options = {}) {
 		if (inHoverBar) {
 			e.stopPropagation();
 		}
+		const inMessageEditDialog = e.target?.closest?.('.connect-chat-msg-edit-dialog');
+		if (inMessageEditDialog) {
+			e.stopPropagation();
+		}
+
+		const hoverEdit = e.target?.closest?.('[data-chat-hover-edit]');
+		if (hoverEdit instanceof HTMLButtonElement) {
+			e.preventDefault();
+			e.stopPropagation();
+			const messageId = Number(hoverEdit.dataset.chatMessageId);
+			if (!Number.isFinite(messageId)) return;
+			closeChatMessageToolbar();
+			startChatMessageEdit(messageId);
+			return;
+		}
+
+		const editCancel = e.target?.closest?.('[data-chat-message-edit-cancel]');
+		if (editCancel instanceof HTMLButtonElement) {
+			e.preventDefault();
+			e.stopPropagation();
+			cancelActiveChatMessageEdit();
+			return;
+		}
+
+		const editSave = e.target?.closest?.('[data-chat-message-edit-save]');
+		if (editSave instanceof HTMLButtonElement) {
+			e.preventDefault();
+			e.stopPropagation();
+			void saveActiveChatMessageEdit();
+			return;
+		}
 
 		const copyBtn = e.target?.closest?.('[data-chat-hover-copy]');
 		if (copyBtn instanceof HTMLButtonElement) {
@@ -7219,6 +7457,9 @@ export async function initChatPage(root, options = {}) {
 
 		const msgRow = e.target?.closest?.('.connect-chat-msg[data-chat-message-id]');
 		if (msgRow && msgRow instanceof HTMLElement) {
+			if (msgRow.dataset.chatMessageEditing === '1') {
+				return;
+			}
 			if (e.target.closest('a[href], button')) {
 				return;
 			}

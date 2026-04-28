@@ -80,11 +80,24 @@ export async function toggleCommentReaction(commentId, emojiKey) {
 	return { ok: response.ok, status: response.status, data };
 }
 
-/** Admin-only: DELETE /api/comments/:commentId — removes comment and cascaded reactions. */
+/** Owner/admin: DELETE /api/comments/:commentId — removes comment and cascaded reactions. */
 export async function deleteCreatedImageComment(commentId) {
 	const url = `/api/comments/${encodeURIComponent(String(commentId))}`;
 	const response = await fetch(url, {
 		method: 'DELETE',
+		credentials: 'include'
+	});
+	const data = await readResponsePayload(response);
+	return { ok: response.ok, status: response.status, data };
+}
+
+/** Owner/admin: PATCH /api/comments/:commentId with { text }. */
+export async function updateCreatedImageComment(commentId, text) {
+	const url = `/api/comments/${encodeURIComponent(String(commentId))}`;
+	const response = await fetch(url, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ text }),
 		credentials: 'include'
 	});
 	const data = await readResponsePayload(response);

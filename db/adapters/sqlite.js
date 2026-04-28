@@ -3473,13 +3473,20 @@ export async function openDb() {
 				return Promise.resolve(stmt.get(createdImageId));
 			}
 		},
-		/** Single comment by id (for reaction route access check). */
+		/** Single comment by id (for reaction/moderation access checks). */
 		selectCommentById: {
 			get: async (commentId) => {
 				const stmt = db.prepare(
-					`SELECT id, created_image_id FROM comments_created_image WHERE id = ?`
+					`SELECT id, created_image_id, user_id, text, created_at FROM comments_created_image WHERE id = ?`
 				);
 				return Promise.resolve(stmt.get(commentId));
+			}
+		},
+		updateCommentById: {
+			run: async (commentId, text) => {
+				const stmt = db.prepare(`UPDATE comments_created_image SET text = ?, updated_at = datetime('now') WHERE id = ?`);
+				const r = stmt.run(text, commentId);
+				return Promise.resolve({ changes: r.changes });
 			}
 		},
 		/** Deletes comment row; comment_reactions CASCADE. */

@@ -148,10 +148,16 @@ export function createConnectCommentRowElement(comment, opts = {}) {
 
 	const timeAgo = comment?.created_at ? (formatRelativeTime(comment.created_at) || '') : '';
 	const safeText = processUserText(comment?.text ?? '');
+	const createdMs = comment?.created_at ? Date.parse(String(comment.created_at)) : NaN;
+	const updatedMs = comment?.updated_at ? Date.parse(String(comment.updated_at)) : NaN;
+	const isEditedComment =
+		Number.isFinite(createdMs) &&
+		Number.isFinite(updatedMs) &&
+		updatedMs - createdMs >= 1000;
 
 	const commentText = document.createElement('div');
 	commentText.className = 'comment-text';
-	commentText.innerHTML = safeText;
+	commentText.innerHTML = `${safeText}${isEditedComment ? '<span class="comment-text-edited-inline"> (edited)</span>' : ''}`;
 
 	const reactions = comment?.reactions && typeof comment.reactions === 'object' ? comment.reactions : {};
 	let chipsWithCount = [];

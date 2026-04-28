@@ -3747,9 +3747,118 @@ app-route-feed {
 	min-width: 0;
 }
 
+.comment-meta-reactions-row {
+	width: 100%;
+	min-width: 0;
+}
+
+.comment-meta-reactions-row .comment-reaction-pills {
+	width: 100%;
+}
+
+.comment-meta-reactions-row .comment-reaction-pills-inner {
+	width: 100%;
+	justify-content: flex-start;
+}
+
 .comment-meta-row .comment-time {
 	color: var(--text-muted);
 	font-size: 0.85rem;
+}
+
+.comment-time-actions {
+	display: inline-flex;
+	align-items: center;
+}
+
+.comment-time-action {
+	display: inline;
+	margin: 0;
+	padding: 0;
+	border: none;
+	background: transparent;
+	color: var(--text-muted);
+	font-size: 0.85rem;
+	font-family: inherit;
+	font-weight: 400;
+	line-height: inherit;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	cursor: pointer;
+}
+
+.comment-time-action:hover {
+	color: var(--text-muted);
+}
+
+.comment-time-action:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+	border-radius: 4px;
+}
+
+.comment-edit-wrap {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.comment-edit-input {
+	width: 100%;
+	box-sizing: border-box;
+	font: inherit;
+	font-size: 0.95rem;
+	line-height: 1.45;
+	color: var(--text);
+	background: var(--input-bg);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	padding: 8px 10px;
+	resize: vertical;
+}
+
+.comment-edit-actions {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 6px;
+}
+
+.comment-edit-cancel {
+	border: none;
+	background: transparent;
+	color: var(--text-muted);
+	font: inherit;
+	font-size: 0.875rem;
+	padding: 6px 8px;
+	border-radius: 6px;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	cursor: pointer;
+}
+
+.comment-text-edited-inline {
+	font-size: 0.8125rem;
+	line-height: inherit;
+	color: var(--text-muted);
+	opacity: 0.9;
+	white-space: nowrap;
+}
+
+.comment-edit-cancel:hover:not(:disabled) {
+	color: var(--text);
+	background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.comment-edit-cancel:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 1px;
+}
+
+.comment-edit-save {
+	min-width: 64px;
+	padding: 6px 12px;
 }
 
 .comment-reaction-pills {
@@ -7688,6 +7797,7 @@ body.blog-edit-page .blog-edit-route {
 
 .chat-page-messages .connect-chat-msg-hover-react,
 .chat-page-messages .connect-chat-msg-hover-add-react,
+.chat-page-messages .connect-chat-msg-hover-edit,
 .chat-page-messages .connect-chat-msg-hover-copy,
 .chat-page-messages .connect-chat-msg-hover-delete {
 	display: inline-flex;
@@ -7708,6 +7818,7 @@ body.blog-edit-page .blog-edit-route {
 
 .chat-page-messages .connect-chat-msg-hover-react:hover,
 .chat-page-messages .connect-chat-msg-hover-add-react:hover,
+.chat-page-messages .connect-chat-msg-hover-edit:hover,
 .chat-page-messages .connect-chat-msg-hover-copy:hover,
 .chat-page-messages .connect-chat-msg-hover-delete:hover {
 	color: var(--text);
@@ -7721,6 +7832,7 @@ body.blog-edit-page .blog-edit-route {
 
 .chat-page-messages .connect-chat-msg-hover-react:focus-visible,
 .chat-page-messages .connect-chat-msg-hover-add-react:focus-visible,
+.chat-page-messages .connect-chat-msg-hover-edit:focus-visible,
 .chat-page-messages .connect-chat-msg-hover-copy:focus-visible,
 .chat-page-messages .connect-chat-msg-hover-delete:focus-visible {
 	outline: 2px solid var(--focus);
@@ -7734,6 +7846,7 @@ body.blog-edit-page .blog-edit-route {
 
 .chat-page-messages .connect-chat-msg-hover-react-icon,
 .chat-page-messages .connect-chat-hover-add-react-icon,
+.chat-page-messages .connect-chat-hover-edit-icon,
 .chat-page-messages .connect-chat-hover-copy-icon,
 .chat-page-messages .connect-chat-hover-delete-icon {
 	display: block;
@@ -7836,6 +7949,118 @@ body.blog-edit-page .blog-edit-route {
 	white-space: pre-wrap;
 	word-break: break-word;
 	max-width: 100%;
+}
+
+.connect-chat-msg-edited-inline {
+	font-size: 0.8125rem;
+	line-height: inherit;
+	color: var(--text-muted);
+	opacity: 0.9;
+	white-space: nowrap;
+}
+
+.connect-chat-msg[data-chat-message-editing='1'] .connect-chat-msg-hover-bar {
+	opacity: 0 !important;
+	pointer-events: none !important;
+}
+
+.connect-chat-msg[data-chat-message-editing='1'] .connect-chat-msg-inner {
+	width: 100%;
+	align-items: stretch;
+}
+
+.connect-chat-msg[data-chat-message-editing='1'] .connect-chat-msg-bubble {
+	width: 100%;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
+.connect-chat-msg-edit-dialog {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 2px 0;
+}
+
+.connect-chat-msg-edit-input {
+	width: 100%;
+	min-height: 92px;
+	font: inherit;
+	line-height: 1.45;
+	color: var(--text);
+	background: var(--input-bg);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	padding: 8px 10px;
+	resize: vertical;
+	box-sizing: border-box;
+}
+
+.connect-chat-msg-edit-input:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 1px;
+}
+
+.connect-chat-msg-edit-actions {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 6px;
+}
+
+.connect-chat-msg-edit-cancel {
+	border: none;
+	background: transparent;
+	color: var(--text-muted);
+	font: inherit;
+	padding: 6px 8px;
+	border-radius: 6px;
+	cursor: pointer;
+}
+
+.connect-chat-msg-edit-cancel:hover:not(:disabled) {
+	color: var(--text);
+	background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.connect-chat-msg-edit-cancel:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 1px;
+}
+
+.connect-chat-msg-edit-save {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	min-width: 64px;
+	padding: 6px 12px;
+}
+
+.connect-chat-msg-edit-save-spinner {
+	display: none;
+	width: 14px;
+	height: 14px;
+	border: 2px solid color-mix(in srgb, #fff 45%, transparent);
+	border-top-color: #fff;
+	border-radius: 50%;
+	animation: spin 0.8s linear infinite;
+}
+
+.connect-chat-msg[data-chat-message-edit-saving='1'] .connect-chat-msg-edit-save-label {
+	display: none;
+}
+
+.connect-chat-msg[data-chat-message-edit-saving='1'] .connect-chat-msg-edit-save-spinner {
+	display: block;
+}
+
+.connect-chat-msg-edit-error {
+	margin: 0;
+	font-size: 0.8125rem;
+	line-height: 1.35;
+	color: var(--error-text);
 }
 
 /* Pasted / uploaded generic images in chat (see `userText` inline eligible paths). */

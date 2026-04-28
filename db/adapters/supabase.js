@@ -5050,11 +5050,22 @@ export function openDb() {
 			get: async (commentId) => {
 				const { data, error } = await serviceClient
 					.from(prefixedTable("comments_created_image"))
-					.select("id, created_image_id")
+					.select("id, created_image_id, user_id, text, created_at")
 					.eq("id", commentId)
 					.maybeSingle();
 				if (error) throw error;
 				return data ?? null;
+			}
+		},
+		updateCommentById: {
+			run: async (commentId, text) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("comments_created_image"))
+					.update({ text, updated_at: new Date().toISOString() })
+					.eq("id", commentId)
+					.select("id");
+				if (error) throw error;
+				return { changes: (data ?? []).length };
 			}
 		},
 		/** Deletes comment row; prsn_comment_reactions ON DELETE CASCADE. */

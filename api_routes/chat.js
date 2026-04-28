@@ -1318,7 +1318,7 @@ export default function createChatRoutes({ queries, storage }) {
 		}
 	});
 
-	// PATCH /api/chat/messages/:messageId — update canvas title/body (sender only; canvas messages only)
+	// PATCH /api/chat/messages/:messageId — update message body (sender/admin); optional canvas title for canvas messages
 	router.patch("/api/chat/messages/:messageId", async (req, res) => {
 		const userId = requireUser(req, res);
 		if (userId == null) return;
@@ -1348,13 +1348,19 @@ export default function createChatRoutes({ queries, storage }) {
 			if (!msg) {
 				return res.status(404).json({ error: "Not found", message: "Message not found" });
 			}
-			if (!isCanvasMessageRow(msg)) {
-				return res.status(400).json({ error: "Bad request", message: "Not a canvas message" });
+			const isCanvas = isCanvasMessageRow(msg);
+			if (!isCanvas && hasTitle) {
+				return res.status(400).json({
+					error: "Bad request",
+					message: "title can only be edited for canvas messages"
+				});
 			}
 
 			const senderId = Number(msg.sender_id);
-			if (!Number.isFinite(senderId) || senderId !== Number(userId)) {
-				return res.status(403).json({ error: "Forbidden", message: "You can only edit your own canvas" });
+			const isSender = Number.isFinite(senderId) && senderId === Number(userId);
+			const isAdmin = await viewerIsAdminRole(userId);
+			if (!isSender && !isAdmin) {
+				return res.status(403).json({ error: "Forbidden", message: "You can only edit your own messages" });
 			}
 
 			const threadId = Number(msg.thread_id);
@@ -1404,13 +1410,18 @@ export default function createChatRoutes({ queries, storage }) {
 				}
 			}
 
+			const editedAt = new Date().toISOString();
 			const meta = {
 				...prevMeta,
-				canvas: {
+				edited_at: editedAt,
+				edited_by_user_id: Number(userId)
+			};
+			if (isCanvas) {
+				meta.canvas = {
 					...prevCanvas,
 					title: newTitle
-				}
-			};
+				};
+			}
 
 			const { error: upErr } = await sb
 				.from("prsn_chat_messages")

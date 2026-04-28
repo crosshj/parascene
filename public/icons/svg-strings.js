@@ -197,10 +197,12 @@ export const trashIcon = withAttributes(html`
 
 /** Pencil — open or edit. */
 export const pencilIcon = withAttributes(html`
-	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
 		stroke-linejoin="round" aria-hidden="true">
-		<path d="M12 20h9"></path>
-		<path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+		<g transform="translate(-1.8 -1.8) scale(1.15)">
+			<path d="M4 20h4l10.5-10.5a2.828 2.828 0 1 0-4-4L4 16v4"></path>
+			<path d="M13.5 6.5l4 4"></path>
+		</g>
 	</svg>
 `);
 
