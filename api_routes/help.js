@@ -325,14 +325,16 @@ function generateHelpPageHtml({ title, description, html, navigation, isIndex = 
 		</div>
 	`;
 	
+	const pageTitleBase = safeTitle.toLowerCase() === "help" ? "Help" : `${safeTitle} - Help`;
+	const pageTitle = `${pageTitleBase} - parascene`;
 	return addHelpCacheBustToHtml(`<!doctype html>
 <html lang="en">
 <head>
-	<title>${safeTitle} - Help - parascene</title>
-	<meta property="og:title" content="${safeTitle} - Help - parascene" />
+	<title>${pageTitle}</title>
+	<meta property="og:title" content="${pageTitle}" />
 	${description ? `<meta property="og:description" content="${safeDescription}" />` : ''}
 	<meta name="twitter:card" content="summary" />
-	<meta name="twitter:title" content="${safeTitle} - Help - parascene" />
+	<meta name="twitter:title" content="${pageTitle}" />
 	${description ? `<meta name="twitter:description" content="${safeDescription}" />` : ''}
 	<link rel="stylesheet" href="/pages/help.css{{V}}" />
 </head>
