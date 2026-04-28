@@ -684,6 +684,25 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		updateUserShowOwnPostsInFeed: {
+			run: async (userId, showOwnPostsInFeed) => {
+				const { data: current, error: selectError } = await serviceClient
+					.from(prefixedTable("users"))
+					.select("meta")
+					.eq("id", userId)
+					.maybeSingle();
+				if (selectError) throw selectError;
+				const existing = current?.meta ?? null;
+				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
+				meta.showOwnPostsInFeed = Boolean(showOwnPostsInFeed);
+				const { error } = await serviceClient
+					.from(prefixedTable("users"))
+					.update({ meta })
+					.eq("id", userId);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
 		updateUserAudibleNotifications: {
 			run: async (userId, on) => {
 				const { data: current, error: selectError } = await serviceClient
@@ -2060,7 +2079,7 @@ export function openDb() {
 		},
 		selectFeedItems: (() => {
 			const selectFeedItems = {
-			all: async (excludeUserId) => {
+			all: async (excludeUserId, { includeOwnPosts = false } = {}) => {
 				const viewerId = excludeUserId ?? null;
 				if (viewerId === null || viewerId === undefined) {
 					return [];
@@ -2078,6 +2097,9 @@ export function openDb() {
 						.filter((id) => id !== null && id !== undefined)
 						.map((id) => String(id))
 				);
+				if (includeOwnPosts) {
+					followingIdSet.add(String(viewerId));
+				}
 				if (followingIdSet.size === 0) {
 					return [];
 				}
@@ -2216,7 +2238,7 @@ export function openDb() {
 				});
 				return mapped;
 			},
-			getPage: async (viewerId, { limit = 20, offset = 0 } = {}) => {
+			getPage: async (viewerId, { limit = 20, offset = 0, includeOwnPosts = false } = {}) => {
 				const safeLimit = Math.min(Math.max(1, Number(limit) || 20), 100);
 				const safeOffset = Math.max(0, Number(offset) || 0);
 
@@ -2225,37 +2247,39 @@ export function openDb() {
 				}
 
 				// Single round-trip RPC when available (much faster than 3+ API calls)
-				const rpcResult = await serviceClient.rpc("prsn_get_feed_page", {
-					p_viewer_id: viewerId,
-					p_limit: safeLimit,
-					p_offset: safeOffset
-				});
-				if (!rpcResult.error && Array.isArray(rpcResult.data)) {
-					const all = rpcResult.data;
-					const hasMore = all.length > safeLimit;
-					const rows = all.slice(0, safeLimit).map((row) => ({
-						id: row.id,
-						title: row.title,
-						summary: row.summary,
-						author: row.author,
-						tags: row.tags,
-						created_at: row.created_at,
-						created_image_id: row.created_image_id,
-						filename: row.filename,
-						file_path: row.file_path,
-						user_id: row.user_id,
-						meta: row.meta,
-						url: row.url,
-						like_count: Number(row.like_count ?? 0),
-						comment_count: Number(row.comment_count ?? 0),
-						viewer_liked: Boolean(row.viewer_liked),
-						nsfw: Boolean(row.nsfw),
-						author_user_name: row.author_user_name ?? null,
-						author_display_name: row.author_display_name ?? null,
-						author_avatar_url: row.author_avatar_url ?? null,
-						author_plan: row.author_plan ?? "free"
-					}));
-					return { rows, hasMore };
+				if (!includeOwnPosts) {
+					const rpcResult = await serviceClient.rpc("prsn_get_feed_page", {
+						p_viewer_id: viewerId,
+						p_limit: safeLimit,
+						p_offset: safeOffset
+					});
+					if (!rpcResult.error && Array.isArray(rpcResult.data)) {
+						const all = rpcResult.data;
+						const hasMore = all.length > safeLimit;
+						const rows = all.slice(0, safeLimit).map((row) => ({
+							id: row.id,
+							title: row.title,
+							summary: row.summary,
+							author: row.author,
+							tags: row.tags,
+							created_at: row.created_at,
+							created_image_id: row.created_image_id,
+							filename: row.filename,
+							file_path: row.file_path,
+							user_id: row.user_id,
+							meta: row.meta,
+							url: row.url,
+							like_count: Number(row.like_count ?? 0),
+							comment_count: Number(row.comment_count ?? 0),
+							viewer_liked: Boolean(row.viewer_liked),
+							nsfw: Boolean(row.nsfw),
+							author_user_name: row.author_user_name ?? null,
+							author_display_name: row.author_display_name ?? null,
+							author_avatar_url: row.author_avatar_url ?? null,
+							author_plan: row.author_plan ?? "free"
+						}));
+						return { rows, hasMore };
+					}
 				}
 
 				// Fallback: multi-query path (when RPC not deployed or errors)
@@ -2271,6 +2295,9 @@ export function openDb() {
 						.filter((id) => id !== null && id !== undefined)
 						.map((id) => String(id))
 				);
+				if (includeOwnPosts) {
+					followingIdSet.add(String(viewerId));
+				}
 				if (followingIdSet.size === 0) {
 					return { rows: [], hasMore: false };
 				}

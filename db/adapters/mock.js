@@ -402,6 +402,15 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		updateUserShowOwnPostsInFeed: {
+			run: async (userId, showOwnPostsInFeed) => {
+				const user = users.find((u) => Number(u.id) === Number(userId));
+				if (!user) return { changes: 0 };
+				user.meta = user.meta != null && typeof user.meta === "object" ? { ...user.meta } : {};
+				user.meta.showOwnPostsInFeed = Boolean(showOwnPostsInFeed);
+				return { changes: 1 };
+			}
+		},
 		updateUserAudibleNotifications: {
 			run: async (userId, on) => {
 				const user = users.find((u) => Number(u.id) === Number(userId));
@@ -1144,7 +1153,7 @@ export function openDb() {
 		},
 		selectFeedItems: (() => {
 			const selectFeedItems = {
-			all: async (excludeUserId) => {
+			all: async (excludeUserId, { includeOwnPosts = false } = {}) => {
 				const viewerId = excludeUserId ?? null;
 				if (viewerId === null || viewerId === undefined) {
 					return [];
@@ -1155,6 +1164,9 @@ export function openDb() {
 						.filter((row) => row.follower_id === Number(viewerId))
 						.map((row) => String(row.following_id))
 				);
+				if (includeOwnPosts) {
+					followingIdSet.add(String(viewerId));
+				}
 
 				const filtered = feed_items.filter((item) => {
 					const ci = created_images.find((c) => Number(c.id) === Number(item.created_image_id));
@@ -1183,8 +1195,8 @@ export function openDb() {
 					};
 				});
 			},
-			getPage: async (viewerId, { limit = 20, offset = 0 } = {}) => {
-				const full = await selectFeedItems.all(viewerId);
+			getPage: async (viewerId, { limit = 20, offset = 0, includeOwnPosts = false } = {}) => {
+				const full = await selectFeedItems.all(viewerId, { includeOwnPosts });
 				const safeLimit = Math.min(Math.max(1, Number(limit) || 20), 100);
 				const safeOffset = Math.max(0, Number(offset) || 0);
 				const rows = Array.isArray(full) ? full.slice(safeOffset, safeOffset + safeLimit) : [];

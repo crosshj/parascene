@@ -166,6 +166,8 @@ class AppRouteFeed extends HTMLElement {
 		document.addEventListener('route-change', this.routeChangeHandler);
 		this.nsfwPreferenceHandler = () => this.loadFeed({ force: true });
 		document.addEventListener('nsfw-preference-changed', this.nsfwPreferenceHandler);
+		this.feedPreferenceHandler = () => this.loadFeed({ force: true });
+		document.addEventListener('feed-preference-changed', this.feedPreferenceHandler);
 		// Only load feed when feed is the active route (avoids loading on explore/creations and reduces API storm)
 		const initialRoute = window.__CURRENT_ROUTE__ || (window.location.pathname === '/' || window.location.pathname === '' ? 'feed' : window.location.pathname.slice(1).split('/')[0]);
 		if (initialRoute === 'feed') {
@@ -179,6 +181,9 @@ class AppRouteFeed extends HTMLElement {
 		}
 		if (this.nsfwPreferenceHandler) {
 			document.removeEventListener('nsfw-preference-changed', this.nsfwPreferenceHandler);
+		}
+		if (this.feedPreferenceHandler) {
+			document.removeEventListener('feed-preference-changed', this.feedPreferenceHandler);
 		}
 		if (this.feedObserver) {
 			this.feedObserver.disconnect();

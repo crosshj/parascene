@@ -106,6 +106,7 @@ class AppModalProfile extends HTMLElement {
 		}
 
 		this.setupNsfwToggles();
+		this.setupShowOwnPostsToggle();
 		this.setupAppearOfflineToggle();
 		this.setupAudibleNotificationsToggle();
 		this.setupApiKeyActions();
@@ -234,6 +235,40 @@ class AppModalProfile extends HTMLElement {
 		});
 	}
 
+	setupShowOwnPostsToggle() {
+		const checkbox = this.shadowRoot.querySelector('[data-show-own-posts]');
+		if (!checkbox) return;
+
+		const syncFromProfile = () => {
+			checkbox.checked = this.profileData?.showOwnPostsInFeed === true;
+		};
+		syncFromProfile();
+
+		checkbox.addEventListener('change', async () => {
+			const showOwnPostsInFeed = checkbox.checked === true;
+			try {
+				const res = await fetchJsonWithStatusDeduped(
+					'/api/profile',
+					{
+						method: 'PATCH',
+						credentials: 'include',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ showOwnPostsInFeed })
+					},
+					{ windowMs: 0 }
+				);
+				if (res?.ok) {
+					if (this.profileData) this.profileData.showOwnPostsInFeed = showOwnPostsInFeed;
+					document.dispatchEvent(new CustomEvent('feed-preference-changed'));
+				} else {
+					checkbox.checked = !showOwnPostsInFeed;
+				}
+			} catch {
+				checkbox.checked = !showOwnPostsInFeed;
+			}
+		});
+	}
+
 	/** Sync NSFW checkbox state from profile (API) and localStorage when modal opens or profile loads. */
 	syncNsfwTogglesFromStorage() {
 		const enableCheckbox = this.shadowRoot.querySelector('[data-nsfw-enable]');
@@ -255,6 +290,10 @@ class AppModalProfile extends HTMLElement {
 		const audibleBox = this.shadowRoot.querySelector('[data-audible-notifications]');
 		if (audibleBox) {
 			audibleBox.checked = this.profileData?.audibleNotifications !== false;
+		}
+		const showOwnPostsBox = this.shadowRoot.querySelector('[data-show-own-posts]');
+		if (showOwnPostsBox) {
+			showOwnPostsBox.checked = this.profileData?.showOwnPostsInFeed === true;
 		}
 	}
 
@@ -330,10 +369,10 @@ class AppModalProfile extends HTMLElement {
 
 			const user = result.data;
 			const nextKey = user
-				? `${user.id}|${user.hasApiKey ? '1' : '0'}|${user.apiKeyPrefix || ''}|${user.hasVynlyToken ? '1' : '0'}|${user.vynlyTokenPrefix || ''}`
+				? `${user.id}|${user.hasApiKey ? '1' : '0'}|${user.apiKeyPrefix || ''}|${user.hasVynlyToken ? '1' : '0'}|${user.vynlyTokenPrefix || ''}|${user.enableNsfw ? '1' : '0'}|${user.showOwnPostsInFeed ? '1' : '0'}|${user.audibleNotifications !== false ? '1' : '0'}|${user.appear_offline ? '1' : '0'}`
 				: '';
 			const currentKey = this.profileData
-				? `${this.profileData.id}|${this.profileData.hasApiKey ? '1' : '0'}|${this.profileData.apiKeyPrefix || ''}|${this.profileData.hasVynlyToken ? '1' : '0'}|${this.profileData.vynlyTokenPrefix || ''}`
+				? `${this.profileData.id}|${this.profileData.hasApiKey ? '1' : '0'}|${this.profileData.apiKeyPrefix || ''}|${this.profileData.hasVynlyToken ? '1' : '0'}|${this.profileData.vynlyTokenPrefix || ''}|${this.profileData.enableNsfw ? '1' : '0'}|${this.profileData.showOwnPostsInFeed ? '1' : '0'}|${this.profileData.audibleNotifications !== false ? '1' : '0'}|${this.profileData.appear_offline ? '1' : '0'}`
 				: '';
 
 			if (nextKey !== currentKey) {
@@ -885,6 +924,10 @@ class AppModalProfile extends HTMLElement {
                     <div class="profile-nsfw-row" data-nsfw-obscure-wrap hidden>
                       <label for="profile-nsfw-obscure">Show NSFW unobscured</label>
                       <input type="checkbox" id="profile-nsfw-obscure" data-nsfw-obscure />
+                    </div>
+                    <div class="profile-nsfw-row">
+                      <label for="profile-show-own-posts">Show my posts in feed</label>
+                      <input type="checkbox" id="profile-show-own-posts" data-show-own-posts />
                     </div>
                   </div>
                 </div>

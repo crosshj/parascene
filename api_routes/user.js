@@ -607,6 +607,7 @@ export default function createProfileRoutes({ queries }) {
 		const plan = user.meta?.plan ?? "free";
 		const pendingPlanActivation = Boolean(user.meta?.pendingCheckoutSessionId);
 		const enableNsfw = user.meta?.enableNsfw === true;
+		const showOwnPostsInFeed = user.meta?.showOwnPostsInFeed === true;
 		const audibleNotifications = user.meta?.audibleNotifications !== false;
 		const hasApiKey = Boolean(user.meta?.apiKeyHash);
 		const apiKeyPrefix = typeof user.meta?.apiKeyPrefix === "string" ? user.meta.apiKeyPrefix : null;
@@ -628,6 +629,7 @@ export default function createProfileRoutes({ queries }) {
 			profile,
 			welcome,
 			enableNsfw,
+			showOwnPostsInFeed,
 			audibleNotifications,
 			hasApiKey,
 			apiKeyPrefix,
@@ -734,15 +736,22 @@ export default function createProfileRoutes({ queries }) {
 		}
 		const body = req.body && typeof req.body === "object" ? req.body : {};
 		const wantsNsfw = Object.prototype.hasOwnProperty.call(body, "enableNsfw");
+		const wantsShowOwnPosts = Object.prototype.hasOwnProperty.call(body, "showOwnPostsInFeed");
 		const wantsAudible = Object.prototype.hasOwnProperty.call(body, "audibleNotifications");
-		if (!wantsNsfw && !wantsAudible) {
+		if (!wantsNsfw && !wantsShowOwnPosts && !wantsAudible) {
 			return res.status(400).json({
 				error: "Invalid request",
-				message: "Provide enableNsfw and/or audibleNotifications."
+				message: "Provide enableNsfw, showOwnPostsInFeed, and/or audibleNotifications."
 			});
 		}
 		if (wantsNsfw && typeof body.enableNsfw !== "boolean") {
 			return res.status(400).json({ error: "Invalid request", message: "enableNsfw must be a boolean when provided." });
+		}
+		if (wantsShowOwnPosts && typeof body.showOwnPostsInFeed !== "boolean") {
+			return res.status(400).json({
+				error: "Invalid request",
+				message: "showOwnPostsInFeed must be a boolean when provided."
+			});
 		}
 		if (wantsAudible && typeof body.audibleNotifications !== "boolean") {
 			return res.status(400).json({
@@ -757,6 +766,12 @@ export default function createProfileRoutes({ queries }) {
 				}
 				await queries.updateUserEnableNsfw.run(req.auth.userId, body.enableNsfw);
 			}
+			if (wantsShowOwnPosts) {
+				if (!queries.updateUserShowOwnPostsInFeed?.run) {
+					return res.status(500).json({ error: "Not available", message: "Profile update is not available." });
+				}
+				await queries.updateUserShowOwnPostsInFeed.run(req.auth.userId, body.showOwnPostsInFeed);
+			}
 			if (wantsAudible) {
 				if (!queries.updateUserAudibleNotifications?.run) {
 					return res.status(500).json({ error: "Not available", message: "Profile update is not available." });
@@ -765,6 +780,7 @@ export default function createProfileRoutes({ queries }) {
 			}
 			const out = { ok: true };
 			if (wantsNsfw) out.enableNsfw = body.enableNsfw;
+			if (wantsShowOwnPosts) out.showOwnPostsInFeed = body.showOwnPostsInFeed;
 			if (wantsAudible) out.audibleNotifications = body.audibleNotifications;
 			return res.json(out);
 		} catch (err) {

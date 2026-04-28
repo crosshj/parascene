@@ -949,6 +949,17 @@ export async function openDb() {
 				return Promise.resolve({ changes: result.changes });
 			}
 		},
+		updateUserShowOwnPostsInFeed: {
+			run: async (userId, showOwnPostsInFeed) => {
+				const stmt = db.prepare("SELECT meta FROM users WHERE id = ?");
+				const row = stmt.get(userId);
+				const existing = parseUserMeta(row?.meta);
+				const meta = { ...existing, showOwnPostsInFeed: Boolean(showOwnPostsInFeed) };
+				const updateStmt = db.prepare("UPDATE users SET meta = ? WHERE id = ?");
+				const result = updateStmt.run(JSON.stringify(meta), userId);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
 		updateUserAudibleNotifications: {
 			run: async (userId, on) => {
 				const stmt = db.prepare("SELECT meta FROM users WHERE id = ?");
@@ -1987,7 +1998,7 @@ export async function openDb() {
 			}
 		},
 		selectFeedItems: {
-			all: async (excludeUserId) => {
+			all: async (excludeUserId, { includeOwnPosts = false } = {}) => {
 				const viewerId = excludeUserId ?? null;
 				if (viewerId === null || viewerId === undefined) {
 					return Promise.resolve([]);
@@ -2021,19 +2032,22 @@ export async function openDb() {
            LEFT JOIN likes_created_image vl
              ON vl.created_image_id = fi.created_image_id
             AND vl.user_id = ?
-           WHERE ci.user_id IS NOT NULL
-             AND (ci.unavailable_at IS NULL OR ci.unavailable_at = '')
-             AND EXISTS (
-               SELECT 1
-               FROM user_follows uf
-               WHERE uf.follower_id = ?
-                 AND uf.following_id = ci.user_id
-             )
-           ORDER BY fi.created_at DESC`
+          WHERE ci.user_id IS NOT NULL
+            AND (ci.unavailable_at IS NULL OR ci.unavailable_at = '')
+            AND (
+              EXISTS (
+                SELECT 1
+                FROM user_follows uf
+                WHERE uf.follower_id = ?
+                  AND uf.following_id = ci.user_id
+              )
+              OR (? = 1 AND ci.user_id = ?)
+            )
+          ORDER BY fi.created_at DESC`
 				);
-				return Promise.resolve(stmt.all(viewerId, viewerId, viewerId));
+				return Promise.resolve(stmt.all(viewerId, viewerId, viewerId, includeOwnPosts ? 1 : 0, viewerId));
 			},
-			getPage: async (viewerId, { limit = 20, offset = 0 } = {}) => {
+			getPage: async (viewerId, { limit = 20, offset = 0, includeOwnPosts = false } = {}) => {
 				const safeLimit = Math.min(Math.max(1, Number(limit) || 20), 100);
 				const safeOffset = Math.max(0, Number(offset) || 0);
 				// Main query without full-table like/comment aggregates (biggest bottleneck)
@@ -2056,18 +2070,21 @@ export async function openDb() {
            LEFT JOIN likes_created_image vl
              ON vl.created_image_id = fi.created_image_id
             AND vl.user_id = ?
-           WHERE ci.user_id IS NOT NULL
-             AND (ci.unavailable_at IS NULL OR ci.unavailable_at = '')
-             AND EXISTS (
-               SELECT 1
-               FROM user_follows uf
-               WHERE uf.follower_id = ?
-                 AND uf.following_id = ci.user_id
-             )
-           ORDER BY fi.created_at DESC
-           LIMIT ? OFFSET ?`
+          WHERE ci.user_id IS NOT NULL
+            AND (ci.unavailable_at IS NULL OR ci.unavailable_at = '')
+            AND (
+              EXISTS (
+                SELECT 1
+                FROM user_follows uf
+                WHERE uf.follower_id = ?
+                  AND uf.following_id = ci.user_id
+              )
+              OR (? = 1 AND ci.user_id = ?)
+            )
+          ORDER BY fi.created_at DESC
+          LIMIT ? OFFSET ?`
 				);
-				const rows = stmt.all(viewerId, viewerId, viewerId, safeLimit + 1, safeOffset);
+				const rows = stmt.all(viewerId, viewerId, viewerId, includeOwnPosts ? 1 : 0, viewerId, safeLimit + 1, safeOffset);
 				const hasMore = rows.length > safeLimit;
 				const pageRows = rows.slice(0, safeLimit);
 

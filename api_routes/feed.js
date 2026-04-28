@@ -66,17 +66,18 @@ export default function createFeedRoutes({ queries }) {
 
 		const limit = Math.min(Math.max(1, Number(req.query?.limit) || 20), 100);
 		const offset = Math.max(0, Number(req.query?.offset) || 0);
+		const showOwnPostsInFeed = Boolean(user.meta && user.meta.showOwnPostsInFeed === true);
 
 		let rows;
 		let hasMore = false;
 		let isNewbieFeed = false;
 
 		if (typeof queries.selectFeedItems?.getPage === "function") {
-			const page = await queries.selectFeedItems.getPage(user.id, { limit, offset });
+			const page = await queries.selectFeedItems.getPage(user.id, { limit, offset, includeOwnPosts: showOwnPostsInFeed });
 			rows = page?.rows ?? [];
 			hasMore = Boolean(page?.hasMore);
 		} else {
-			const all = await queries.selectFeedItems.all(user.id) ?? [];
+			const all = await queries.selectFeedItems.all(user.id, { includeOwnPosts: showOwnPostsInFeed }) ?? [];
 			rows = all.slice(offset, offset + limit);
 			hasMore = all.length > offset + limit;
 		}
