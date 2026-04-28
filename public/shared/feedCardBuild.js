@@ -11,6 +11,21 @@ import { publishedBadgeHtml } from './creationBadges.js';
 
 const html = String.raw;
 
+function appendCreationIdToMediaUrl(url, creationId) {
+	if (!url) return '';
+	const id = Number(creationId);
+	if (!Number.isFinite(id) || id <= 0) return String(url);
+	const s = String(url);
+	if (!s.includes('/api/images/created/') && !s.includes('/api/videos/created/')) return s;
+	const [beforeHash, hash = ''] = s.split('#');
+	const [pathAndQuery, existingHashRemainder] = [beforeHash, hash ? `#${hash}` : ''];
+	if (/[?&]creation_id=/.test(pathAndQuery)) {
+		return `${pathAndQuery}${existingHashRemainder}`;
+	}
+	const sep = pathAndQuery.includes('?') ? '&' : '?';
+	return `${pathAndQuery}${sep}creation_id=${encodeURIComponent(String(id))}${existingHashRemainder}`;
+}
+
 export function getHiddenFeedItems() {
 	try {
 		const stored = localStorage.getItem('hiddenFeedItems');
@@ -108,10 +123,11 @@ export function applyFeedCardCreationProcessingState(imageContainer, imageEl) {
 
 export function feedItemCardImageUrl(item, preferThumbnail = false) {
 	if (!item) return '';
+	const creationId = Number(item?.created_image_id ?? item?.id);
 	if (preferThumbnail) {
-		return item.thumbnail_url || item.image_url || '';
+		return appendCreationIdToMediaUrl(item.thumbnail_url || item.image_url || '', creationId);
 	}
-	return item.image_url || item.thumbnail_url || '';
+	return appendCreationIdToMediaUrl(item.image_url || item.thumbnail_url || '', creationId);
 }
 
 /**
@@ -120,8 +136,11 @@ export function feedItemCardImageUrl(item, preferThumbnail = false) {
  */
 export function feedItemCardImageUrlCandidates(item, preferThumbnail = false) {
 	if (!item) return [];
-	const full = typeof item.image_url === 'string' ? item.image_url.trim() : '';
-	const thumb = typeof item.thumbnail_url === 'string' ? item.thumbnail_url.trim() : '';
+	const creationId = Number(item?.created_image_id ?? item?.id);
+	const fullRaw = typeof item.image_url === 'string' ? item.image_url.trim() : '';
+	const thumbRaw = typeof item.thumbnail_url === 'string' ? item.thumbnail_url.trim() : '';
+	const full = appendCreationIdToMediaUrl(fullRaw, creationId);
+	const thumb = appendCreationIdToMediaUrl(thumbRaw, creationId);
 	const ordered = preferThumbnail ? [thumb, full] : [full, thumb];
 	const out = [];
 	const seen = new Set();

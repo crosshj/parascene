@@ -1,6 +1,6 @@
 import express from "express";
 import Replicate from "replicate";
-import { getThumbnailUrl } from "./utils/url.js";
+import { appendCreationIdToMediaUrl, getThumbnailUrl } from "./utils/url.js";
 import { getTextEmbeddingFromReplicate } from "./utils/embeddings.js";
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { runSemanticSearch } from "./utils/embeddingsSearch.js";
@@ -202,16 +202,18 @@ function escapeHtml(value) {
 function mapRelatedItemsToResponse(items, viewerLikedIds, reasonMetaByCreationId = null) {
 	const likedSet = new Set((viewerLikedIds ?? []).map(String));
 	return (Array.isArray(items) ? items : []).map((item) => {
-		const imageUrl = item?.url ?? null;
+		const rawImageUrl = item?.url ?? null;
 		const author = item?.author_display_name ?? item?.author_user_name ?? "";
 		const creationId = item?.created_image_id ?? item?.id ?? null;
 		const reasonMeta = reasonMetaByCreationId?.get?.(Number(creationId));
 		const mediaType = typeof item?.meta?.media_type === "string" ? item.meta.media_type : "image";
 		const videoMeta = item?.meta && typeof item.meta === "object" ? item.meta.video : null;
-		const videoUrl =
+		const rawVideoUrl =
 			videoMeta && typeof videoMeta.file_path === "string" && videoMeta.file_path
 				? videoMeta.file_path
 				: null;
+		const imageUrl = appendCreationIdToMediaUrl(rawImageUrl, creationId);
+		const videoUrl = appendCreationIdToMediaUrl(rawVideoUrl, creationId);
 		return {
 			id: item?.id,
 			title: escapeHtml(item?.title != null ? item.title : "Untitled"),
