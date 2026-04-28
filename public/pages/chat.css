@@ -827,6 +827,16 @@ body.chat-page.chat-page--mobile-sidebar-open .chat-page-sidebar-row .chat-page-
 	font-size: clamp(0.6875rem, 0.2vw + 0.62rem, 0.75rem);
 }
 
+body.chat-page.chat-page--mobile-sidebar-open .chat-page-sidebar-row .chat-page-sidebar-skeleton-avatar {
+	width: clamp(28px, 7.5vw, 36px);
+	height: clamp(28px, 7.5vw, 36px);
+	min-width: clamp(28px, 7.5vw, 36px);
+}
+
+body.chat-page.chat-page--mobile-sidebar-open .chat-page-sidebar-row .chat-page-sidebar-skeleton-line {
+	height: clamp(0.875rem, 0.45vw + 0.76rem, 0.9375rem);
+}
+
 body.chat-page.chat-page--mobile-sidebar-open .chat-page-sidebar-channel-avatar--icon-only .chat-page-sidebar-channel-route-icon {
 	width: 21px;
 	height: 21px;
@@ -1967,6 +1977,10 @@ body.chat-page .chat-page-composer-attachment-preview {
 	width: 100%;
 	height: 100%;
 	object-fit: cover;
+}
+
+body.chat-page .chat-page-composer-attachment-preview--clickable {
+	cursor: pointer;
 }
 
 body.chat-page .chat-page-composer-attachment-preview--file {

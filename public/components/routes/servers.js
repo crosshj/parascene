@@ -121,6 +121,20 @@ function escapeHtml(str) {
 		.replace(/'/g, '&#039;');
 }
 
+function renderChatSidebarListSkeleton(count = 5) {
+	const n = Math.max(1, Math.min(10, Number(count) || 5));
+	const widths = ['72%', '58%', '66%', '62%', '74%'];
+	return Array.from(
+		{ length: n },
+		(_, i) => `<div class="chat-page-sidebar-row chat-page-sidebar-row--skeleton" aria-hidden="true">
+			<span class="skeleton skeleton-circle chat-page-sidebar-skeleton-avatar"></span>
+			<span class="chat-page-sidebar-row-body">
+				<span class="skeleton skeleton-line chat-page-sidebar-skeleton-line" style="width: ${widths[i % widths.length]};"></span>
+			</span>
+		</div>`
+	).join('');
+}
+
 /** Label for admin thread `<select>` options (GET /admin/chat/threads rows). */
 function adminChatThreadSelectLabel(t) {
 	const id = t?.id != null ? Number(t.id) : null;
@@ -162,6 +176,7 @@ class AppRouteServers extends HTMLElement {
 			typeof buildSidebarPseudoStripListStaticHtml === 'function'
 				? buildSidebarPseudoStripListStaticHtml(pseudoPath)
 				: '';
+		const sidebarLoadingSkeletonHtml = renderChatSidebarListSkeleton(5);
 		this.innerHTML = html`
 	<div class="servers-route">
 		<div class="route-header">
@@ -210,7 +225,7 @@ class AppRouteServers extends HTMLElement {
 									</svg>
 								</button>
 							</div>
-							<div class="chat-page-sidebar-list" data-chat-sidebar-users></div>
+							<div class="chat-page-sidebar-list" data-chat-sidebar-users>${sidebarLoadingSkeletonHtml}</div>
 						</section>
 						<section class="chat-page-sidebar-section" aria-labelledby="connect-sidebar-servers-heading">
 							<div class="chat-page-sidebar-section-head">
@@ -225,7 +240,7 @@ class AppRouteServers extends HTMLElement {
 									</svg>
 								</button>
 							</div>
-							<div class="chat-page-sidebar-list" data-chat-sidebar-servers></div>
+							<div class="chat-page-sidebar-list" data-chat-sidebar-servers>${sidebarLoadingSkeletonHtml}</div>
 						</section>
 						<section class="chat-page-sidebar-section" aria-labelledby="connect-sidebar-channels-heading">
 							<div class="chat-page-sidebar-section-head">
@@ -240,7 +255,7 @@ class AppRouteServers extends HTMLElement {
 									</svg>
 								</button>
 							</div>
-							<div class="chat-page-sidebar-list" data-chat-sidebar-channels></div>
+							<div class="chat-page-sidebar-list" data-chat-sidebar-channels>${sidebarLoadingSkeletonHtml}</div>
 						</section>
 					</div>
 				</div>

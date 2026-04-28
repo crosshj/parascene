@@ -129,6 +129,7 @@ let renderPaneLoadError;
 let attachAutoGrowTextarea;
 let attachMentionSuggest;
 let attachChatMentionSuggest;
+let attachChatComposerSuggest;
 let isTriggeredSuggestPopupOpen;
 let addPageUsers;
 let clearPageUsers;
@@ -296,6 +297,7 @@ async function loadDeps() {
 		const suggestMod = await import(`../shared/triggeredSuggest.js${qs}`);
 		attachMentionSuggest = suggestMod.attachMentionSuggest;
 		attachChatMentionSuggest = suggestMod.attachChatMentionSuggest;
+		attachChatComposerSuggest = suggestMod.attachChatComposerSuggest;
 		isTriggeredSuggestPopupOpen = suggestMod.isTriggeredSuggestPopupOpen;
 		addPageUsers = suggestMod.addPageUsers;
 		clearPageUsers = suggestMod.clearPageUsers;
@@ -330,6 +332,20 @@ function escapeHtml(str) {
 		.replace(/>/g, '&gt;')
 		.replace(/"/g, '&quot;')
 		.replace(/'/g, '&#039;');
+}
+
+function renderChatSidebarListSkeleton(count = 5) {
+	const n = Math.max(1, Math.min(10, Number(count) || 5));
+	const widths = ['72%', '58%', '66%', '62%', '74%'];
+	return Array.from(
+		{ length: n },
+		(_, i) => `<div class="chat-page-sidebar-row chat-page-sidebar-row--skeleton" aria-hidden="true">
+			<span class="skeleton skeleton-circle chat-page-sidebar-skeleton-avatar"></span>
+			<span class="chat-page-sidebar-row-body">
+				<span class="skeleton skeleton-line chat-page-sidebar-skeleton-line" style="width: ${widths[i % widths.length]};"></span>
+			</span>
+		</div>`
+	).join('');
 }
 
 /**
@@ -1493,6 +1509,10 @@ export async function initChatPage(root, options = {}) {
 
 	const CHAT_MAX_BODY_CHARS = 4000;
 	const CHAT_MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+	const CHAT_COMPOSER_DRAFTS_KEY = 'chat-composer-drafts-v1';
+	const CHAT_GEN_POLL_INTERVAL_MS = 2400;
+	const CHAT_GEN_PREVIEW_PLACEHOLDER =
+		'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 
 	/** Same extensions as server `EXT_NEEDS_WEB_TRANSCODE` — no reliable <img> preview in Chromium. */
 	const CHAT_EXT_NO_BLOB_IMG_PREVIEW = new Set(['.heic', '.heif', '.jxl', '.tif', '.tiff']);
@@ -1536,6 +1556,19 @@ export async function initChatPage(root, options = {}) {
 		return Boolean(item.previewUrl);
 	}
 
+	function chatAttachmentPreviewSrc(item) {
+		const thumb = String(item?.thumbnailUrl || '').trim();
+		if (thumb) return thumb;
+		const preview = String(item?.previewUrl || '').trim();
+		if (preview) return preview;
+		if (item?.status === 'ready' && item?.urlPath) {
+			const path = String(item.urlPath || '').trim();
+			if (/^\/creations\/\d+\/?$/i.test(path)) return '';
+			return path;
+		}
+		return '';
+	}
+
 	function buildAttachmentMessageUrl(item) {
 		const basePath = String(item?.urlPath || '').trim();
 		if (!basePath) return '';
@@ -1554,6 +1587,278 @@ export async function initChatPage(root, options = {}) {
 		} catch {
 			return basePath;
 		}
+	}
+
+	function buildChatGenCreationToken() {
+		const ts = Date.now().toString(36);
+		const rand = Math.random().toString(36).slice(2, 10);
+		return `crt_${ts}_${rand}`;
+	}
+
+	function readChatComposerDrafts() {
+		try {
+			const raw = sessionStorage.getItem(CHAT_COMPOSER_DRAFTS_KEY);
+			const list = JSON.parse(raw || '[]');
+			return Array.isArray(list) ? list : [];
+		} catch {
+			return [];
+		}
+	}
+
+	function writeChatComposerDrafts() {
+		try {
+			const list = chatPendingImages
+				.filter((item) => {
+					if (!item || typeof item !== 'object') return false;
+					if (item.status === 'uploading' && item.source !== 'gen') return false;
+					return true;
+				})
+				.map((item) => ({
+					id: String(item.id || ''),
+					status: String(item.status || ''),
+					fileType: String(item.fileType || ''),
+					fileName: String(item.fileName || ''),
+					fileSize: Number.isFinite(Number(item.fileSize)) ? Number(item.fileSize) : 0,
+					urlPath: String(item.urlPath || ''),
+					thumbnailUrl: String(item.thumbnailUrl || ''),
+					fullImageUrl: String(item.fullImageUrl || ''),
+					errorMessage: String(item.errorMessage || ''),
+					source: String(item.source || ''),
+					generationId: Number.isFinite(Number(item.generationId)) ? Number(item.generationId) : null
+				}))
+				.filter((item) => item.id);
+			sessionStorage.setItem(CHAT_COMPOSER_DRAFTS_KEY, JSON.stringify(list));
+		} catch {
+			// ignore
+		}
+	}
+
+	function restoreChatComposerDraftsFromSession() {
+		const saved = readChatComposerDrafts();
+		if (!Array.isArray(saved) || saved.length === 0) return;
+		chatPendingImages = saved.map((item) => ({
+			id: item.id,
+			status: item.status || 'error',
+			fileType: item.fileType || '',
+			fileName: item.fileName || '',
+			fileSize: Number.isFinite(Number(item.fileSize)) ? Number(item.fileSize) : 0,
+			urlPath: item.urlPath || '',
+			thumbnailUrl: item.thumbnailUrl || '',
+			fullImageUrl: item.fullImageUrl || '',
+			errorMessage: item.errorMessage || '',
+			source: item.source || '',
+			generationId:
+				item.generationId != null && Number.isFinite(Number(item.generationId))
+					? Number(item.generationId)
+					: null
+		}));
+	}
+
+	const chatGenPollTimersByAttachmentId = new Map();
+
+	function stopChatGenPoll(attachmentId) {
+		const key = String(attachmentId || '');
+		if (!key) return;
+		const timer = chatGenPollTimersByAttachmentId.get(key);
+		if (timer != null) {
+			clearInterval(timer);
+			chatGenPollTimersByAttachmentId.delete(key);
+		}
+	}
+
+	function stopAllChatGenPolls() {
+		for (const timer of chatGenPollTimersByAttachmentId.values()) {
+			clearInterval(timer);
+		}
+		chatGenPollTimersByAttachmentId.clear();
+	}
+
+	async function pollChatGenAttachmentOnce(attachmentId) {
+		const idKey = String(attachmentId || '');
+		if (!idKey) return;
+		const entry = chatPendingImages.find((x) => String(x.id) === idKey);
+		if (!entry || !Number.isFinite(Number(entry.generationId)) || Number(entry.generationId) <= 0) {
+			stopChatGenPoll(idKey);
+			return;
+		}
+		try {
+			const result = await fetchJsonWithStatusDeduped(
+				`/api/create/images/${Number(entry.generationId)}`,
+				{ credentials: 'include' },
+				{ windowMs: 0 }
+			);
+			if (!result?.ok || !result.data) return;
+			const data = result.data;
+			const status = typeof data.status === 'string' ? data.status.trim().toLowerCase() : '';
+			if (status === 'creating' || status === 'pending' || status === 'queued' || status === 'processing') {
+				return;
+			}
+			if (status === 'completed') {
+				entry.status = 'ready';
+				entry.urlPath = `/creations/${Number(entry.generationId)}`;
+				entry.fileType = 'image/png';
+				entry.fileName = 'creation.png';
+				entry.thumbnailUrl =
+					typeof data.thumbnail_url === 'string' && data.thumbnail_url.trim()
+						? data.thumbnail_url.trim()
+						: typeof data.url === 'string'
+							? data.url.trim()
+							: '';
+				entry.fullImageUrl =
+					typeof data.url === 'string' && data.url.trim() ? data.url.trim() : '';
+				entry.errorMessage = '';
+				renderChatAttachmentStrip();
+				syncChatSendButton();
+				writeChatComposerDrafts();
+				stopChatGenPoll(idKey);
+				return;
+			}
+			entry.status = 'error';
+			entry.errorMessage = typeof data?.error === 'string' ? data.error : 'Generation failed';
+			renderChatAttachmentStrip();
+			syncChatSendButton();
+			writeChatComposerDrafts();
+			stopChatGenPoll(idKey);
+		} catch {
+			// keep polling on transient failure
+		}
+	}
+
+	function startChatGenPoll(attachmentId) {
+		const idKey = String(attachmentId || '');
+		if (!idKey) return;
+		if (chatGenPollTimersByAttachmentId.has(idKey)) return;
+		const timer = setInterval(() => {
+			void pollChatGenAttachmentOnce(idKey);
+		}, CHAT_GEN_POLL_INTERVAL_MS);
+		chatGenPollTimersByAttachmentId.set(idKey, timer);
+		void pollChatGenAttachmentOnce(idKey);
+	}
+
+	function resumeChatGenPollsFromDrafts() {
+		for (const item of chatPendingImages) {
+			if (item?.source !== 'gen') continue;
+			if (!Number.isFinite(Number(item.generationId)) || Number(item.generationId) <= 0) continue;
+			if (item.status === 'ready' || item.status === 'error') continue;
+			item.status = 'uploading';
+			startChatGenPoll(item.id);
+		}
+	}
+
+	function extractMentionsForGen(prompt) {
+		const text = typeof prompt === 'string' ? prompt : '';
+		if (!text) return [];
+		const out = [];
+		const seen = new Set();
+		const re = /@([a-zA-Z0-9_]+)/g;
+		let match;
+		while ((match = re.exec(text)) !== null) {
+			const full = `@${match[1]}`;
+			if (seen.has(full)) continue;
+			seen.add(full);
+			out.push(full);
+		}
+		return out;
+	}
+
+	function extractStyleKeyFromGenPrompt(prompt) {
+		const tokens = String(prompt || '').match(/\$[a-z0-9_-]+/gi) || [];
+		if (tokens.length === 0) return { styleKey: '', promptWithoutStyle: String(prompt || '').trim() };
+		const last = String(tokens[tokens.length - 1] || '').replace(/^\$/, '').trim().toLowerCase();
+		const promptWithoutStyle = String(prompt || '')
+			.replace(/\$[a-z0-9_-]+/gi, ' ')
+			.replace(/\s+/g, ' ')
+			.trim();
+		return { styleKey: last === 'none' ? '' : last, promptWithoutStyle };
+	}
+
+	async function validateMentionsForGen(prompt) {
+		const mentions = extractMentionsForGen(prompt);
+		if (mentions.length === 0) return { ok: true, mentions, data: null };
+		const res = await fetch('/api/create/validate', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			credentials: 'include',
+			body: JSON.stringify({ args: { prompt } })
+		});
+		const data = await res.json().catch(() => ({}));
+		return { ok: res.ok, mentions, data };
+	}
+
+	async function runChatGenFromPrompt(promptText) {
+		const fullPrompt = String(promptText || '').trim();
+		if (!fullPrompt) throw new Error('Usage: /gen <prompt>');
+		const { styleKey, promptWithoutStyle } = extractStyleKeyFromGenPrompt(fullPrompt);
+		if (!promptWithoutStyle) throw new Error('Usage: /gen <prompt>');
+		const mentionsResult = await validateMentionsForGen(promptWithoutStyle);
+		let hydrateMentions = false;
+		if (!mentionsResult.ok) {
+			let message = 'Mentions could not be validated. Submit anyway?';
+			try {
+				const createSubmitMod = await import(`../shared/createSubmit.js${qs}`);
+				if (typeof createSubmitMod.formatMentionsFailureForDialog === 'function') {
+					message = `${createSubmitMod.formatMentionsFailureForDialog(mentionsResult.data)}\n\nSubmit anyway?`;
+				}
+			} catch {
+				// ignore
+			}
+			if (!window.confirm(message)) {
+				throw new Error('Cancelled /gen.');
+			}
+		} else if (mentionsResult.mentions.length > 0) {
+			hydrateMentions = true;
+		}
+		const args = {
+			prompt: promptWithoutStyle,
+			model: 'xai/grok-imagine-image'
+		};
+		const body = {
+			server_id: 1,
+			method: 'replicate',
+			args,
+			creation_token: buildChatGenCreationToken(),
+			...(hydrateMentions ? { hydrate_mentions: true } : {}),
+			...(styleKey ? { style_key: styleKey } : {})
+		};
+		const res = await fetch('/api/create', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			credentials: 'include',
+			body: JSON.stringify(body)
+		});
+		const data = await res.json().catch(() => ({}));
+		if (!res.ok) {
+			throw new Error(data?.error || data?.message || 'Failed to start /gen.');
+		}
+		const creationId = Number(data?.id);
+		if (!Number.isFinite(creationId) || creationId <= 0) {
+			throw new Error('Generation started but no creation id returned.');
+		}
+		return creationId;
+	}
+
+	function addOptimisticGenAttachment() {
+		const attachmentId =
+			typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+				? crypto.randomUUID()
+				: `att-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+		chatPendingImages.push({
+			id: attachmentId,
+			status: 'uploading',
+			fileType: 'image/png',
+			fileName: 'creation.png',
+			fileSize: 0,
+			source: 'gen',
+			generationId: null,
+			urlPath: '',
+			thumbnailUrl: '',
+			fullImageUrl: '',
+			previewUrl: CHAT_GEN_PREVIEW_PLACEHOLDER
+		});
+		renderChatAttachmentStrip();
+		syncChatSendButton();
+		writeChatComposerDrafts();
+		return attachmentId;
 	}
 
 	function chatMiscGenericKeyFromApiPath(urlPath) {
@@ -1626,13 +1931,27 @@ export async function initChatPage(root, options = {}) {
 			revokeChatAttachmentPreview(e);
 		}
 		chatPendingImages = [];
+		stopAllChatGenPolls();
 		renderChatAttachmentStrip();
 		syncChatSendButton();
+		writeChatComposerDrafts();
 		if (!skipServer) {
 			for (const u of urlsToDelete) {
 				void deleteChatMiscGenericOnServer(u);
 			}
 		}
+	}
+
+	function clearSentReadyChatAttachments() {
+		const sentReady = chatPendingImages.filter((e) => e?.status === 'ready' && e?.urlPath);
+		if (sentReady.length === 0) return;
+		for (const entry of sentReady) {
+			revokeChatAttachmentPreview(entry);
+		}
+		chatPendingImages = chatPendingImages.filter((e) => !(e?.status === 'ready' && e?.urlPath));
+		renderChatAttachmentStrip();
+		syncChatSendButton();
+		writeChatComposerDrafts();
 	}
 
 	function renderChatAttachmentStrip() {
@@ -1652,10 +1971,21 @@ export async function initChatPage(root, options = {}) {
 				const img = document.createElement('img');
 				img.className = 'chat-page-composer-attachment-preview';
 				img.alt = '';
-				if (item.status === 'ready' && item.urlPath) {
-					img.src = item.urlPath;
-				} else if (item.previewUrl) {
-					img.src = item.previewUrl;
+				const previewSrc = chatAttachmentPreviewSrc(item);
+				if (previewSrc) {
+					img.src = previewSrc;
+					if (item.status !== 'uploading') {
+						img.classList.add('chat-page-composer-attachment-preview--clickable');
+						img.addEventListener('click', (e) => {
+							e.preventDefault();
+							e.stopPropagation();
+							const fullSrc =
+								typeof item.fullImageUrl === 'string' && item.fullImageUrl.trim()
+									? item.fullImageUrl.trim()
+									: previewSrc;
+							openChatInlineImageLightbox(fullSrc);
+						});
+					}
 				}
 				card.appendChild(img);
 			} else {
@@ -1690,7 +2020,11 @@ export async function initChatPage(root, options = {}) {
 			rm.className = 'chat-page-composer-attachment-remove';
 			rm.setAttribute('aria-label', 'Remove attachment');
 			rm.textContent = '×';
-			rm.addEventListener('click', () => void removeChatAttachment(item.id));
+			rm.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				void removeChatAttachment(item.id);
+			});
 			card.appendChild(rm);
 
 			list.appendChild(card);
@@ -1704,9 +2038,11 @@ export async function initChatPage(root, options = {}) {
 		const entry = chatPendingImages[idx];
 		const urlToRemove = entry.status === 'ready' && entry.urlPath ? entry.urlPath : null;
 		revokeChatAttachmentPreview(entry);
+		stopChatGenPoll(entry.id);
 		chatPendingImages.splice(idx, 1);
 		renderChatAttachmentStrip();
 		syncChatSendButton();
+		writeChatComposerDrafts();
 		if (urlToRemove) {
 			await deleteChatMiscGenericOnServer(urlToRemove);
 		}
@@ -1763,6 +2099,7 @@ export async function initChatPage(root, options = {}) {
 			});
 			renderChatAttachmentStrip();
 			syncChatSendButton();
+			writeChatComposerDrafts();
 
 			void (async () => {
 				try {
@@ -1783,6 +2120,7 @@ export async function initChatPage(root, options = {}) {
 					ent.status = 'ready';
 					renderChatAttachmentStrip();
 					syncChatSendButton();
+					writeChatComposerDrafts();
 				} catch (err) {
 					console.error('[Chat page] file upload:', err);
 					const ent = chatPendingImages.find((e) => e.id === id);
@@ -1791,6 +2129,7 @@ export async function initChatPage(root, options = {}) {
 					ent.errorMessage = err?.message || 'Upload failed';
 					renderChatAttachmentStrip();
 					syncChatSendButton();
+					writeChatComposerDrafts();
 				}
 			})();
 		}
@@ -1808,9 +2147,11 @@ export async function initChatPage(root, options = {}) {
 		const textLen = String(inp.value || '').trim().length;
 		const readyCount = chatPendingImages.filter((x) => x.status === 'ready' && x.urlPath).length;
 		const hasOutgoing = textLen > 0 || readyCount > 0;
-		const uploading = chatPendingImages.some((x) => x.status === 'uploading');
+		const uploadingNonGen = chatPendingImages.some(
+			(x) => x.status === 'uploading' && x.source !== 'gen'
+		);
 		sendBtn.hidden = !hasOutgoing;
-		sendBtn.disabled = uploading || sendInFlight;
+		sendBtn.disabled = uploadingNonGen || sendInFlight;
 	}
 
 	/** No "Message…" until thread is known and messages are not loading (avoids placeholder vs attach layout churn). Explore keeps a stable placeholder; load state is shown in the trailing control. */
@@ -2612,6 +2953,8 @@ export async function initChatPage(root, options = {}) {
 			}
 			if (wasInitialized && chatGlobalUnreadTotal > prevUnread) {
 				void playChatUnreadPing();
+				// Keep sidebar rows in sync with the same unread signal used for tab/audio.
+				void refreshChatSidebar();
 			}
 			applyChatGlobalUnreadChrome(chatGlobalUnreadTotal);
 		} catch {
@@ -3880,6 +4223,19 @@ export async function initChatPage(root, options = {}) {
 			await syncChatSidebarViewerRow();
 			return;
 		}
+		const cachedRosterSnapshot =
+			!skipThreads && typeof readSidebarRosterSessionCache === 'function'
+				? readSidebarRosterSessionCache(chatViewerId)
+				: null;
+		const hasSidebarMarkup = [dmEl, svEl, chEl].some((el) => {
+			return el instanceof HTMLElement && String(el.innerHTML || '').trim().length > 0;
+		});
+		if (!skipThreads && !cachedRosterSnapshot && !hasSidebarMarkup) {
+			const skeletonHtml = renderChatSidebarListSkeleton(5);
+			dmEl.innerHTML = skeletonHtml;
+			svEl.innerHTML = skeletonHtml;
+			chEl.innerHTML = skeletonHtml;
+		}
 
 		// Phase 1: fast paint from cache (no extra fetches) if we have nothing rendered yet.
 		if (!skipThreads && (chatThreads || []).length === 0) {
@@ -4250,9 +4606,9 @@ export async function initChatPage(root, options = {}) {
 		// While the full network roster loads, show the last session snapshot (same viewer) so
 		// leaving and returning to chat does not flash an empty sidebar. LS may have fresher
 		// threads — prefer in-memory `chatThreads` when present.
-		if (!skipThreads && typeof readSidebarRosterSessionCache === 'function') {
-			const snap = readSidebarRosterSessionCache(chatViewerId);
-			if (snap) {
+		if (!skipThreads) {
+			const snap = cachedRosterSnapshot;
+			if (snap && typeof readSidebarRosterSessionCache === 'function') {
 				const threadsPaint =
 					Array.isArray(chatThreads) && chatThreads.length > 0 ? chatThreads : snap.threads || [];
 				const joinedPaint = Array.isArray(snap.joined) ? snap.joined : [];
@@ -7621,8 +7977,49 @@ export async function initChatPage(root, options = {}) {
 			await commitExploreSearchImmediateFromComposer();
 			return;
 		}
-		if (chatPendingImages.some((x) => x.status === 'uploading')) return;
 		const text = String(bodyInput.value || '').trim();
+		const genCmdMatch = text.match(/^\/gen(?:\s+(.+))?$/i);
+		if (genCmdMatch) {
+			if (errEl instanceof HTMLElement) {
+				errEl.hidden = true;
+				errEl.textContent = '';
+			}
+			bodyInput.value = '';
+			syncChatSendButton();
+			const optimisticAttachmentId = addOptimisticGenAttachment();
+			try {
+				const creationId = await runChatGenFromPrompt(genCmdMatch[1] || '');
+				const entry = chatPendingImages.find((x) => x.id === optimisticAttachmentId);
+				if (entry) {
+					entry.generationId = creationId;
+					entry.previewUrl = '';
+					writeChatComposerDrafts();
+					startChatGenPoll(optimisticAttachmentId);
+				}
+			} catch (err) {
+				const entry = chatPendingImages.find((x) => x.id === optimisticAttachmentId);
+				if (entry) {
+					entry.status = 'error';
+					entry.errorMessage =
+						String(err?.message || '') === 'Cancelled /gen.'
+							? 'Cancelled'
+							: err?.message || 'Could not start /gen.';
+					entry.previewUrl = '';
+					renderChatAttachmentStrip();
+					syncChatSendButton();
+					writeChatComposerDrafts();
+				}
+				if (String(err?.message || '') === 'Cancelled /gen.') {
+					return;
+				}
+				if (errEl instanceof HTMLElement) {
+					errEl.hidden = false;
+					errEl.textContent = err?.message || 'Could not start /gen.';
+				}
+			}
+			return;
+		}
+		if (chatPendingImages.some((x) => x.status === 'uploading' && x.source !== 'gen')) return;
 		const paths = chatPendingImages
 			.filter((x) => x.status === 'ready' && x.urlPath)
 			.map((x) => buildAttachmentMessageUrl(x))
@@ -7645,7 +8042,7 @@ export async function initChatPage(root, options = {}) {
 			errEl.hidden = true;
 			errEl.textContent = '';
 		}
-		clearChatPendingAttachments({ skipServerDelete: true });
+		clearSentReadyChatAttachments();
 		await sendChatOutgoing(body, { clearInput: true });
 	}
 
@@ -7700,7 +8097,6 @@ export async function initChatPage(root, options = {}) {
 
 		optimisticSend = null;
 		tearDownChatCanvasUi();
-		clearChatPendingAttachments();
 		activePseudoChannelSlug = null;
 		if (parsed.kind === 'channel') {
 			const slug = String(parsed.slug || '').trim().toLowerCase();
@@ -8155,6 +8551,9 @@ export async function initChatPage(root, options = {}) {
 
 	const composer = root.querySelector('[data-chat-composer]');
 	const bodyInput = root.querySelector('[data-chat-body-input]');
+	restoreChatComposerDraftsFromSession();
+	resumeChatGenPollsFromDrafts();
+	renderChatAttachmentStrip();
 	if (composer instanceof HTMLFormElement) {
 		composer.addEventListener('submit', (ev) => {
 			ev.preventDefault();
@@ -8231,7 +8630,9 @@ export async function initChatPage(root, options = {}) {
 
 	if (bodyInput instanceof HTMLTextAreaElement) {
 		attachAutoGrowTextarea(bodyInput);
-		if (typeof attachChatMentionSuggest === 'function') {
+		if (typeof attachChatComposerSuggest === 'function') {
+			attachChatComposerSuggest(bodyInput);
+		} else if (typeof attachChatMentionSuggest === 'function') {
 			attachChatMentionSuggest(bodyInput);
 		} else {
 			attachMentionSuggest(bodyInput);
@@ -8296,6 +8697,7 @@ export async function initChatPage(root, options = {}) {
 	}
 
 	const onPageHide = () => {
+		stopAllChatGenPolls();
 		teardownCommentsChannelLoadMore();
 		teardownFeedChannelLoadMore();
 		teardownExploreChannelLoadMore();

@@ -35,6 +35,9 @@ export async function init(version) {
 
 function runCreatePageInit(refreshAutoGrowTextareas) {
 	if (!document.body.classList.contains('create-page') && !document.body.classList.contains('create-page-advanced')) return;
+	const BASIC_CREATE_DEFAULT_SERVER_ID = 1;
+	const BASIC_CREATE_DEFAULT_METHOD_KEY = 'replicate';
+	const BASIC_CREATE_DEFAULT_MODEL = 'xai/grok-imagine-image';
 
 	const changeLink = document.getElementById('create-change-image-link');
 	const area = document.querySelector('.create-image-edit-area');
@@ -153,10 +156,13 @@ function runCreatePageInit(refreshAutoGrowTextareas) {
 		if (savedTabId && typeof tabsEl.setActiveTab === 'function') {
 			tabsEl.setActiveTab(savedTabId, { focus: false });
 		}
-		tabsEl.addEventListener('app-tabs-change', (e) => {
+		const onTabChanged = (e) => {
 			const id = e.detail?.id;
 			saveTab(id);
-		});
+		};
+		// app-tabs emits `tab-change`; keep legacy listener too for compatibility.
+		tabsEl.addEventListener('tab-change', onTabChanged);
+		tabsEl.addEventListener('app-tabs-change', onTabChanged);
 	}
 
 	if (textToImagePrompt || imageEditPrompt) {
@@ -415,9 +421,12 @@ function runCreatePageInit(refreshAutoGrowTextareas) {
 			const { submitCreationWithPending, formatMentionsFailureForDialog } = await import(`../../shared/createSubmit.js${qs}`);
 			const doSubmit = (hydrateMentions) => {
 				submitCreationWithPending({
-					serverId: 1,
-					methodKey: 'fluxImage',
-					args: { prompt: userPrompt },
+					serverId: BASIC_CREATE_DEFAULT_SERVER_ID,
+					methodKey: BASIC_CREATE_DEFAULT_METHOD_KEY,
+					args: {
+						prompt: userPrompt,
+						model: BASIC_CREATE_DEFAULT_MODEL
+					},
 					styleKey: styleKey !== 'none' ? styleKey : undefined,
 					hydrateMentions,
 					navigate: 'full',

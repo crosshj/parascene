@@ -183,6 +183,10 @@ function defaultGetSuggestions({ source, q, limit }, signal) {
 function defaultGetInsertText(item, trigger) {
 	if (item?.insert_text) return item.insert_text;
 	const t = trigger?.char ?? "@";
+	if (item?.type === "command") {
+		const cmd = String(item?.command ?? item?.label ?? "").trim().replace(/^\//, "");
+		return cmd ? `/${cmd} ` : "";
+	}
 	if (item?.type === "style") {
 		const slug = (item?.tag ?? item?.label ?? "").toString().trim();
 		return slug ? `${t}${slug} ` : "";
@@ -200,6 +204,10 @@ function defaultGetInsertText(item, trigger) {
 }
 
 function itemHandle(item) {
+	if (item?.type === "command") {
+		const t = (item?.command ?? item?.label ?? "").toString().replace(/^\//, "").trim();
+		return t.toLowerCase();
+	}
 	if (item?.type === "style") {
 		const t = (item?.tag ?? item?.label ?? "").toString().trim();
 		return t.toLowerCase();
@@ -458,9 +466,33 @@ function getStyleSuggestions({ source, q, limit }, signal) {
 	return defaultGetSuggestions({ source: "styles", q, limit }, signal);
 }
 
+const CHAT_COMMAND_ITEMS = [
+	{
+		type: "command",
+		id: "command:gen",
+		command: "gen",
+		label: "/gen <prompt>",
+		sublabel: "Generate an image in composer",
+		insert_text: "/gen "
+	}
+];
+
+function getCommandSuggestions({ q, limit }) {
+	const qLower = String(q || "").trim().toLowerCase();
+	const cap = capForLimit(limit);
+	const out = CHAT_COMMAND_ITEMS.filter((item) => {
+		if (!qLower) return true;
+		const handle = itemHandle(item);
+		const label = String(item?.label || "").toLowerCase();
+		return handle.includes(qLower) || label.includes(qLower);
+	});
+	return Promise.resolve(out.slice(0, cap));
+}
+
 function getCombinedInlineSuggestions({ source, q, limit }, signal) {
 	if (source === "users" || source === "chat_mentions") return getMentionSuggestions({ source, q, limit }, signal);
 	if (source === "styles") return getStyleSuggestions({ source, q, limit }, signal);
+	if (source === "chat_commands") return getCommandSuggestions({ source, q, limit }, signal);
 	return defaultGetSuggestions({ source, q, limit }, signal);
 }
 
@@ -590,12 +622,14 @@ function renderPopup(textarea, mode) {
 		row.textContent = "No matches found";
 		popup.appendChild(row);
 	} else {
+		const hasCommandsOnly = items.length > 0 && items.every((it) => it?.type === "command");
 		const hasPersonas = items.some((it) => it?.type === "persona");
 		const hasSpecialMentions = items.some((it) => it?.type === "special_mention");
 		const hasUsers = items.some((it) => it?.type !== "persona" && it?.type !== "special_mention");
 		const firstPersonaIdx = items.findIndex((it) => it?.type === "persona");
 		const firstSpecialMentionIdx = items.findIndex((it) => it?.type === "special_mention");
-		const showMentionSectionLabels = hasUsers || hasPersonas || hasSpecialMentions;
+		const showMentionSectionLabels =
+			!hasCommandsOnly && (hasUsers || hasPersonas || hasSpecialMentions);
 
 		items.forEach((item, i) => {
 			if (showMentionSectionLabels && hasUsers && i === 0) {
@@ -1137,6 +1171,17 @@ export function attachChatMentionSuggest(textarea) {
 	attachTriggeredSuggest(textarea, {
 		triggers: [{ char: "@", minChars: 1, source: "chat_mentions" }],
 		getSuggestions: getMentionSuggestions
+	});
+}
+
+export function attachChatComposerSuggest(textarea) {
+	attachTriggeredSuggest(textarea, {
+		triggers: [
+			{ char: "@", minChars: 1, source: "chat_mentions" },
+			{ char: "$", minChars: 1, source: "styles" },
+			{ char: "/", minChars: 1, source: "chat_commands" }
+		],
+		getSuggestions: getCombinedInlineSuggestions
 	});
 }
 
