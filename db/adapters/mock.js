@@ -1191,6 +1191,7 @@ export function openDb() {
 						author_display_name: profile?.display_name ?? null,
 						author_avatar_url: profile?.avatar_url ?? null,
 						author_plan: authorPlan,
+						meta: meta && typeof meta === "object" ? meta : null,
 						nsfw
 					};
 				});

@@ -150,6 +150,7 @@ export default function createFeedRoutes({ queries }) {
 				comment_count: Number(item.comment_count ?? 0),
 				viewer_liked: Boolean(item.viewer_liked),
 				nsfw: !!(item.nsfw),
+				meta: meta && typeof meta === "object" ? meta : null,
 				media_type: mediaType,
 				video_url: videoUrl
 			};

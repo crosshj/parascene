@@ -19,6 +19,7 @@ let attachFeedCardImage;
 let feedItemCardImageUrl;
 let isFeedCreationImageProcessing;
 let markFeedCardImageUnavailable;
+let setupFeedCardGroupCarousel;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -75,6 +76,7 @@ async function loadDeps() {
 		feedItemCardImageUrl = feedCardBuildMod.feedItemCardImageUrl;
 		isFeedCreationImageProcessing = feedCardBuildMod.isFeedCreationImageProcessing;
 		markFeedCardImageUnavailable = feedCardBuildMod.markFeedCardImageUnavailable;
+		setupFeedCardGroupCarousel = feedCardBuildMod.setupFeedCardGroupCarousel;
 	})();
 	return _depsPromise;
 }
@@ -490,10 +492,17 @@ class AppRouteFeed extends HTMLElement {
 				applyFeedCardCreationProcessingState(imageContainer, imageEl);
 			} else {
 				const canShowVideo = isVideo && Boolean(videoUrl);
-				if (!displayUrl && !canShowVideo) {
+				const hasGroupCarousel =
+					!isVideo &&
+					typeof setupFeedCardGroupCarousel === 'function' &&
+					setupFeedCardGroupCarousel(imageContainer, item);
+				if (!displayUrl && !canShowVideo && !hasGroupCarousel) {
 					markFeedCardImageUnavailable(imageContainer, imageEl, { state: 'missing' });
 				} else if (displayUrl) {
 					attachFeedCardImage(imageEl, imageContainer, item, itemIndex, false);
+					if (!isVideo && !hasGroupCarousel && typeof setupFeedCardGroupCarousel === 'function') {
+						setupFeedCardGroupCarousel(imageContainer, item);
+					}
 				}
 			}
 		}

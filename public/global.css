@@ -3158,6 +3158,92 @@ app-route-feed {
 	opacity: 1;
 }
 
+.feed-card-image--group-carousel .feed-card-img {
+	opacity: 0;
+	visibility: hidden;
+}
+
+.feed-card-group-stack {
+	position: absolute;
+	inset: 0;
+}
+
+.feed-card-group-img {
+	position: absolute;
+	inset: 0;
+	display: block;
+	width: 100%;
+	height: 100%;
+	border-radius: inherit;
+	object-fit: cover;
+	object-position: center;
+	opacity: 0;
+	visibility: hidden;
+	transition: opacity 0.14s ease;
+}
+
+.feed-card-group-img.is-active {
+	opacity: 1;
+	visibility: visible;
+}
+
+.feed-card-group-nav {
+	position: absolute;
+	top: 50%;
+	transform: translateY(-50%);
+	width: 42px;
+	height: 42px;
+	border: 1px solid rgba(255, 255, 255, 0.28);
+	border-radius: 50%;
+	background: rgba(0, 0, 0, 0.54);
+	color: rgba(255, 255, 255, 0.94);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	cursor: pointer;
+	z-index: 6;
+	touch-action: manipulation;
+}
+
+.feed-card-group-nav svg {
+	display: block;
+	width: 18px;
+	height: 18px;
+	stroke: currentColor;
+	stroke-width: 2.2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	fill: none;
+	pointer-events: none;
+}
+
+.feed-card-group-nav--prev {
+	left: 8px;
+}
+
+.feed-card-group-nav--next {
+	right: 8px;
+}
+
+.feed-card-group-nav:hover {
+	background: rgba(0, 0, 0, 0.66);
+}
+
+.feed-card-group-nav:active {
+	transform: translateY(-50%);
+}
+
+.feed-card-group-nav:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
+
+.feed-card-image--group-carousel .creation-published-badge,
+.feed-card-image--group-carousel .creation-group-badge {
+	z-index: 5;
+}
+
 /* Same language as route tiles: hide broken <img> glyph, show neutral “unavailable” mark */
 .feed-card-image.error {
 	background:

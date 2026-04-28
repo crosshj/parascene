@@ -152,6 +152,96 @@ export function feedItemCardImageUrlCandidates(item, preferThumbnail = false) {
 	return out;
 }
 
+export function getFeedItemGroupCarouselSources(item) {
+	const creationId = Number(item?.created_image_id ?? item?.id);
+	const groupPayload = item?.meta?.group && typeof item.meta.group === 'object' ? item.meta.group : null;
+	if (groupPayload?.kind !== 'group_creations') return [];
+	const sourcesRaw = Array.isArray(groupPayload?.source_creations) ? groupPayload.source_creations : [];
+	const seen = new Set();
+	const out = [];
+	for (const source of sourcesRaw) {
+		const filePath = typeof source?.file_path === 'string' ? source.file_path.trim() : '';
+		const url = appendCreationIdToMediaUrl(filePath, creationId);
+		if (!url || seen.has(url)) continue;
+		seen.add(url);
+		const sourceTitle = typeof source?.title === 'string' ? source.title.trim() : '';
+		out.push({
+			url,
+			title: sourceTitle || item?.title || 'Grouped creation image'
+		});
+	}
+	return out;
+}
+
+export function setupFeedCardGroupCarousel(imageContainer, item) {
+	if (!(imageContainer instanceof HTMLElement)) return false;
+	if (imageContainer.querySelector('[data-feed-card-group-carousel]')) return true;
+	const sources = getFeedItemGroupCarouselSources(item);
+	if (sources.length <= 1) return false;
+
+	const stack = document.createElement('div');
+	stack.className = 'feed-card-group-stack';
+	stack.setAttribute('data-feed-card-group-carousel', '');
+
+	for (let i = 0; i < sources.length; i += 1) {
+		const source = sources[i];
+		const img = document.createElement('img');
+		img.className = `feed-card-group-img${i === 0 ? ' is-active' : ''}`;
+		img.src = source.url;
+		img.alt = source.title;
+		img.loading = i === 0 ? 'eager' : 'lazy';
+		img.decoding = 'async';
+		img.dataset.groupSlideIndex = String(i);
+		stack.appendChild(img);
+	}
+
+	const makeNavButton = (direction) => {
+		const btn = document.createElement('button');
+		btn.type = 'button';
+		btn.className = `feed-card-group-nav feed-card-group-nav--${direction}`;
+		btn.setAttribute('aria-label', direction === 'prev' ? 'Previous grouped image' : 'Next grouped image');
+		btn.innerHTML = direction === 'prev'
+			? '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M14.5 6.5L9 12l5.5 5.5" /></svg>'
+			: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9.5 6.5L15 12l-5.5 5.5" /></svg>';
+		return btn;
+	};
+	const prevBtn = makeNavButton('prev');
+	const nextBtn = makeNavButton('next');
+	const groupImages = Array.from(stack.querySelectorAll('.feed-card-group-img'));
+	const setActiveIndex = (index) => {
+		if (groupImages.length === 0) return;
+		const next = ((index % groupImages.length) + groupImages.length) % groupImages.length;
+		for (let i = 0; i < groupImages.length; i += 1) {
+			groupImages[i].classList.toggle('is-active', i === next);
+		}
+	};
+	const getActiveIndex = () => {
+		const idx = groupImages.findIndex((img) => img.classList.contains('is-active'));
+		return idx >= 0 ? idx : 0;
+	};
+	prevBtn.addEventListener('click', (e) => {
+		e.preventDefault();
+		e.stopPropagation();
+		setActiveIndex(getActiveIndex() - 1);
+	});
+	nextBtn.addEventListener('click', (e) => {
+		e.preventDefault();
+		e.stopPropagation();
+		setActiveIndex(getActiveIndex() + 1);
+	});
+
+	imageContainer.classList.add('feed-card-image--group-carousel');
+	imageContainer.classList.remove('loading', 'error');
+	imageContainer.classList.add('loaded');
+	imageContainer.removeAttribute('data-feed-img-state');
+	imageContainer.removeAttribute('role');
+	imageContainer.removeAttribute('aria-label');
+	imageContainer.appendChild(stack);
+	imageContainer.appendChild(prevBtn);
+	imageContainer.appendChild(nextBtn);
+	return true;
+}
+
 /**
  * Show the same unavailable treatment as a failed <img> (chat browse + main feed).
  * @param {HTMLElement|null} imageContainer - .feed-card-image
@@ -746,10 +836,14 @@ function finishFeedCreationCardMediaAndClick(
 			applyFeedCardCreationProcessingState(imageContainer, imageEl);
 		} else {
 			const canShowVideo = isVideo && Boolean(videoUrl);
-			if (!displayUrl && !canShowVideo) {
+			const hasGroupCarousel = !isVideo && setupFeedCardGroupCarousel(imageContainer, item);
+			if (!displayUrl && !canShowVideo && !hasGroupCarousel) {
 				markFeedCardImageUnavailable(imageContainer, imageEl, { state: 'missing' });
 			} else if (displayUrl) {
 				attachFeedCardImage(imageEl, imageContainer, item, itemIndex, preferThumbnail);
+				if (!isVideo && !hasGroupCarousel) {
+					setupFeedCardGroupCarousel(imageContainer, item);
+				}
 			}
 		}
 	}
