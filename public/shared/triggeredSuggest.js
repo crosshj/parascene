@@ -623,6 +623,7 @@ function renderPopup(textarea, mode) {
 		popup.appendChild(row);
 	} else {
 		const hasCommandsOnly = items.length > 0 && items.every((it) => it?.type === "command");
+		const hasStylesOnly = items.length > 0 && items.every((it) => it?.type === "style");
 		const hasPersonas = items.some((it) => it?.type === "persona");
 		const hasSpecialMentions = items.some((it) => it?.type === "special_mention");
 		const hasUsers = items.some((it) => it?.type !== "persona" && it?.type !== "special_mention");
@@ -632,6 +633,13 @@ function renderPopup(textarea, mode) {
 			!hasCommandsOnly && (hasUsers || hasPersonas || hasSpecialMentions);
 
 		items.forEach((item, i) => {
+			if (hasStylesOnly && i === 0) {
+				const sec = document.createElement("div");
+				sec.className = "triggered-suggest-section";
+				sec.setAttribute("role", "presentation");
+				sec.textContent = "Styles";
+				popup.appendChild(sec);
+			}
 			if (showMentionSectionLabels && hasUsers && i === 0) {
 				const sec = document.createElement("div");
 				sec.className = "triggered-suggest-section";
