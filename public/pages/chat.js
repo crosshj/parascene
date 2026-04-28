@@ -1879,6 +1879,14 @@ export async function initChatPage(root, options = {}) {
 		}
 	}
 
+	function getExploreChannelSearchFromUrl() {
+		try {
+			return String(new URLSearchParams(window.location.search).get('s') || '').trim();
+		} catch {
+			return '';
+		}
+	}
+
 	function syncChatExploreComposerChrome() {
 		const composerForm = root.querySelector('[data-chat-composer]');
 		const clearBtn = root.querySelector('[data-chat-explore-clear-search]');
@@ -5624,6 +5632,92 @@ export async function initChatPage(root, options = {}) {
 		routeWrap.classList.toggle('chat-feed-channel-route--browse-view', chatExploreCreationsBrowseView);
 	}
 
+	function renderChatExploreSearchBarMarkup(options = {}) {
+		const committed = escapeHtml(String(exploreQueryRef.q || '').trim());
+		const loading = options.loading === true;
+		return `
+		<div class="chat-explore-search-bar" data-chat-explore-search-bar aria-hidden="false">
+			<div class="chat-explore-search-bar-inner">
+				<div class="chat-explore-search-input-wrap">
+					<input type="search" class="chat-explore-search-input" data-chat-explore-search-input
+						placeholder="Search creations..." aria-label="Search creations" value="${committed}"${loading ? ' disabled' : ''} />
+					<button type="button" class="chat-explore-search-clear" data-chat-explore-search-clear
+						aria-label="Clear search" ${committed ? '' : 'hidden'}${loading ? ' disabled' : ''}>×</button>
+				</div>
+				<div class="chat-explore-search-actions">
+					<button type="button" class="chat-explore-search-submit${loading ? ' is-loading' : ''}" data-chat-explore-search-submit aria-label="${loading ? 'Searching...' : 'Search creations'}"${loading ? ' disabled' : ''}>
+						<svg class="chat-explore-search-submit-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+							fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+							stroke-linejoin="round" aria-hidden="true"${loading ? ' hidden' : ''}>
+							<circle cx="11" cy="11" r="8" />
+							<path d="m21 21-4.3-4.3" />
+						</svg>
+						<span class="chat-explore-search-submit-spinner" aria-hidden="true"${loading ? '' : ' hidden'}></span>
+					</button>
+				</div>
+			</div>
+		</div>`;
+	}
+
+	function insertChatExploreSearchChrome(routeWrap, cardsEl) {
+		if (!(routeWrap instanceof HTMLElement)) return;
+		if (routeWrap.querySelector('[data-chat-explore-search-bar]')) return;
+		const shell = document.createElement('div');
+		shell.innerHTML = renderChatExploreSearchBarMarkup();
+		const bar = shell.querySelector('[data-chat-explore-search-bar]');
+		if (!(bar instanceof HTMLElement)) return;
+		if (cardsEl instanceof HTMLElement) {
+			routeWrap.insertBefore(bar, cardsEl);
+		} else {
+			routeWrap.prepend(bar);
+		}
+	}
+
+	function syncChatExploreSearchBar(routeWrap) {
+		if (!(routeWrap instanceof HTMLElement)) return;
+		const bar = routeWrap.querySelector('[data-chat-explore-search-bar]');
+		const input = routeWrap.querySelector('[data-chat-explore-search-input]');
+		const clear = routeWrap.querySelector('[data-chat-explore-search-clear]');
+		const submit = routeWrap.querySelector('[data-chat-explore-search-submit]');
+		const submitIcon = routeWrap.querySelector('.chat-explore-search-submit-icon');
+		const submitSpinner = routeWrap.querySelector('.chat-explore-search-submit-spinner');
+		if (bar instanceof HTMLElement) {
+			bar.setAttribute('aria-hidden', 'false');
+		}
+		if (input instanceof HTMLInputElement && document.activeElement !== input) {
+			input.value = String(exploreQueryRef.q || '').trim();
+		}
+		if (input instanceof HTMLInputElement) {
+			input.disabled = isExploreComposerLoadLocked();
+		}
+		if (clear instanceof HTMLButtonElement) {
+			const value = input instanceof HTMLInputElement
+				? String(input.value || '').trim()
+				: String(exploreQueryRef.q || '').trim();
+			clear.hidden = value.length === 0;
+			clear.disabled = isExploreComposerLoadLocked();
+		}
+		if (submit instanceof HTMLButtonElement) {
+			submit.disabled = isExploreComposerLoadLocked();
+			submit.setAttribute('aria-label', exploreChannelSearchLoading ? 'Searching...' : 'Search creations');
+			submit.classList.toggle('is-loading', exploreChannelSearchLoading);
+		}
+		if (submitIcon instanceof HTMLElement) {
+			submitIcon.hidden = exploreChannelSearchLoading;
+		}
+		if (submitSpinner instanceof HTMLElement) {
+			submitSpinner.hidden = !exploreChannelSearchLoading;
+		}
+	}
+
+	function syncActiveChatExploreSearchBar() {
+		const routeWrap = root.querySelector('[data-chat-messages] [data-chat-explore-creations-lane="1"]');
+		if (routeWrap instanceof HTMLElement) {
+			syncChatExploreSearchBar(routeWrap);
+		}
+		syncChatExploreComposerChrome();
+	}
+
 	/**
 	 * @param {(el: HTMLVideoElement) => void} setupFeedVideo
 	 * @param {'feed' | 'explore' | 'creations'} laneSlug
@@ -6364,18 +6458,39 @@ export async function initChatPage(root, options = {}) {
 		return merged;
 	}
 
-	async function loadExploreChannelMessages() {
+	async function fetchExploreSearchListForChat(kind, trimmed) {
+		const q = encodeURIComponent(trimmed);
+		const url = kind === 'semantic'
+			? `/api/explore/search/semantic?q=${q}&limit=${EXPLORE_SEARCH_FETCH_LIMIT}`
+			: `/api/explore/search?q=${q}&limit=${EXPLORE_SEARCH_FETCH_LIMIT}`;
+		try {
+			const r = await fetch(url, { credentials: 'include' });
+			const data = await r.json().catch(() => null);
+			return { ok: r.ok, items: r.ok && Array.isArray(data?.items) ? data.items : [] };
+		} catch {
+			return { ok: false, items: [] };
+		}
+	}
+
+	async function loadExploreChannelMessages(options = {}) {
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!messagesEl) return;
+		const explicitSearchQuery =
+			typeof options.searchQuery === 'string' ? options.searchQuery.trim() : null;
+		const qActive = explicitSearchQuery != null
+			? explicitSearchQuery
+			: String(exploreQueryRef.q || '').trim();
+		if (qActive) {
+			exploreQueryRef.q = qActive;
+		}
 		const paneEpoch = bumpChatMessagesPaneEpoch();
 		enterPseudoChannelLoad();
 		exploreBrowseMessagesLoading = true;
-		syncChatExploreComposerChrome();
+		syncActiveChatExploreSearchBar();
 		teardownCommentsChannelLoadMore();
 		teardownFeedChannelLoadMore();
 		teardownExploreChannelLoadMore();
 		messagesEl.setAttribute('aria-busy', 'true');
-		const qActive = String(exploreQueryRef.q || '').trim();
 		try {
 			const feedCardMod = await import(`../shared/feedCardBuild.js${qs}`);
 			if (isStaleChatPane(paneEpoch)) return;
@@ -6385,59 +6500,139 @@ export async function initChatPage(root, options = {}) {
 				pseudoColumnPager = null;
 				disconnectFeedChannelLoadObserver();
 				exploreChannelSearchLoading = true;
-				syncChatExploreComposerChrome();
-				try {
-					const merged = await fetchExploreSearchMergedForChat(qActive);
-					if (isStaleChatPane(paneEpoch)) return;
+				syncActiveChatExploreSearchBar();
+				const searchGridInner =
+					chatExploreCreationsBrowseView && typeof renderGridSkeleton === 'function'
+						? renderGridSkeleton(25)
+						: typeof renderFeedCardsSkeleton === 'function'
+							? renderFeedCardsSkeleton(4)
+							: '';
+				if (searchGridInner) {
+					messagesEl.innerHTML = `<div class="feed-route chat-feed-channel-route${chatExploreCreationsBrowseView ? ' chat-feed-channel-route--browse-view' : ''}">
+						${renderChatExploreSearchBarMarkup({ loading: true })}
+						<div class="route-cards feed-cards" aria-busy="true" aria-label="Searching">${searchGridInner}</div>
+					</div>`;
+					resetAndLockChatMessagesScrollForSkeleton(messagesEl, 'explore');
+				}
+				let keywordItems = [];
+				let semanticItems = [];
+				let keywordSettled = false;
+				let semanticSettled = false;
+				let firstList = '';
+				let hasRenderedSearchResults = false;
+				let resolveFirstRenderable;
+				const firstRenderable = new Promise((resolve) => {
+					resolveFirstRenderable = resolve;
+				});
+
+				const finishInitialSearchLoading = () => {
+					if (hasRenderedSearchResults) return;
+					hasRenderedSearchResults = true;
+					exploreChannelSearchLoading = false;
+					exploreBrowseMessagesLoading = false;
+					if (messagesEl.isConnected) {
+						messagesEl.removeAttribute('aria-busy');
+					}
+					unlockChatMessagesPaneScroll(messagesEl);
+					syncActiveChatExploreSearchBar();
+					if (typeof resolveFirstRenderable === 'function') resolveFirstRenderable();
+				};
+
+				const paintSearchItems = (items) => {
+					if (isStaleChatPane(paneEpoch)) return false;
+					if (activePseudoChannelSlug !== 'explore') return false;
+					if (String(exploreQueryRef.q || '').trim() !== qActive) return false;
 					pushExploreChannelSearchToHistory(qActive);
 					lastChatMessagesPayload = [];
 					clearPageUsers();
-					addPageUsers(merged.map(feedItemToUser));
+					addPageUsers(items.map(feedItemToUser));
 					teardownChatCreationsPseudoBulkHostIfPresent(messagesEl);
 					teardownLatestMessageReadObserver();
 					messagesEl.innerHTML = '';
-					if (merged.length === 0) {
-						messagesEl.innerHTML = renderEmptyState({
-							className: 'route-empty-image-grid',
-							title: 'No creations found',
-						});
-						if (chatFeedLaneScrollMode === 'newest_first') {
-							scrollChatFeedPseudoChannelToTop();
-						} else {
-							scrollChatMessagesToEnd();
-						}
-						return;
-					}
 					const routeWrap = document.createElement('div');
 					routeWrap.className = 'feed-route chat-feed-channel-route';
 					applyExploreCreationsBrowseViewClass(routeWrap);
-					const cards = document.createElement('div');
-					cards.className = 'route-cards feed-cards';
-					cards.setAttribute('data-feed-channel-cards', '1');
-					for (let i = 0; i < merged.length; i++) {
-						cards.appendChild(
-							createFeedItemCard(
-								merged[i],
-								i,
-								feedCardOptionsForPseudoLane(
-									(el) => setupFeedChannelVideoAutoplay(messagesEl, el),
-									'explore'
+					if (items.length === 0) {
+						insertChatExploreSearchChrome(routeWrap, null);
+						const empty = document.createElement('div');
+						empty.innerHTML = renderEmptyState({
+							className: 'route-empty-image-grid',
+							title: 'No creations found',
+						});
+						routeWrap.append(...Array.from(empty.childNodes));
+					} else {
+						const cards = document.createElement('div');
+						cards.className = 'route-cards feed-cards';
+						cards.setAttribute('data-feed-channel-cards', '1');
+						for (let i = 0; i < items.length; i++) {
+							cards.appendChild(
+								createFeedItemCard(
+									items[i],
+									i,
+									feedCardOptionsForPseudoLane(
+										(el) => setupFeedChannelVideoAutoplay(messagesEl, el),
+										'explore'
+									)
 								)
-							)
-						);
+							);
+						}
+						routeWrap.appendChild(cards);
+						insertChatExploreSearchChrome(routeWrap, cards);
 					}
-					routeWrap.appendChild(cards);
+					syncChatExploreSearchBar(routeWrap);
 					messagesEl.appendChild(routeWrap);
 					if (chatFeedLaneScrollMode === 'newest_first') {
 						scrollChatFeedPseudoChannelToTop();
 					} else {
 						scrollChatMessagesToEnd();
 					}
-					return;
-				} finally {
-					exploreChannelSearchLoading = false;
-					syncChatExploreComposerChrome();
-				}
+					return true;
+				};
+
+				const renderProgressiveSearchResults = () => {
+					if (
+						isStaleChatPane(paneEpoch) ||
+						activePseudoChannelSlug !== 'explore' ||
+						String(exploreQueryRef.q || '').trim() !== qActive
+					) {
+						if (typeof resolveFirstRenderable === 'function') resolveFirstRenderable();
+						return;
+					}
+					const bothSettled = keywordSettled && semanticSettled;
+					let items = [];
+					if (keywordItems.length > 0 && semanticItems.length > 0) {
+						items = mergeExploreSearchKeywordSemantic(keywordItems, semanticItems, firstList === 'semantic');
+					} else if (keywordItems.length > 0) {
+						if (!firstList) firstList = 'keyword';
+						items = mergeExploreSearchKeywordSemantic(keywordItems, [], false);
+					} else if (semanticItems.length > 0) {
+						if (!firstList) firstList = 'semantic';
+						items = mergeExploreSearchKeywordSemantic([], semanticItems, true);
+					} else if (bothSettled) {
+						items = [];
+					} else {
+						return;
+					}
+					if (paintSearchItems(items)) {
+						finishInitialSearchLoading();
+					}
+				};
+
+				const handleSearchResult = (kind, res) => {
+					if (kind === 'semantic') {
+						semanticSettled = true;
+						semanticItems = Array.isArray(res?.items) ? res.items : [];
+					} else {
+						keywordSettled = true;
+						keywordItems = Array.isArray(res?.items) ? res.items : [];
+					}
+					renderProgressiveSearchResults();
+				};
+
+				fetchExploreSearchListForChat('keyword', qActive).then((res) => handleSearchResult('keyword', res));
+				fetchExploreSearchListForChat('semantic', qActive).then((res) => handleSearchResult('semantic', res));
+				await firstRenderable;
+				return;
 			}
 
 			pseudoColumnPager = createPseudoColumnPager({
@@ -6478,11 +6673,19 @@ export async function initChatPage(root, options = {}) {
 			messagesEl.innerHTML = '';
 
 			if (ordered.length === 0) {
-				messagesEl.innerHTML = renderEmptyState({
+				const routeWrap = document.createElement('div');
+				routeWrap.className = 'feed-route chat-feed-channel-route';
+				applyExploreCreationsBrowseViewClass(routeWrap);
+				insertChatExploreSearchChrome(routeWrap, null);
+				const empty = document.createElement('div');
+				empty.innerHTML = renderEmptyState({
 					className: 'route-empty-image-grid',
 					title: 'Nothing to explore yet',
 					message: 'Published creations from the community will appear here.',
 				});
+				routeWrap.append(...Array.from(empty.childNodes));
+				messagesEl.appendChild(routeWrap);
+				syncChatExploreSearchBar(routeWrap);
 				if (chatFeedLaneScrollMode === 'newest_first') {
 					scrollChatFeedPseudoChannelToTop();
 				} else {
@@ -6510,6 +6713,8 @@ export async function initChatPage(root, options = {}) {
 				);
 			}
 			routeWrap.appendChild(cards);
+			insertChatExploreSearchChrome(routeWrap, cards);
+			syncChatExploreSearchBar(routeWrap);
 
 			const sentinel = document.createElement('div');
 			sentinel.dataset.chatFeedLoadSentinel = '1';
@@ -6547,7 +6752,7 @@ export async function initChatPage(root, options = {}) {
 			if (!isStaleChatPane(paneEpoch) && messagesEl.isConnected) {
 				messagesEl.removeAttribute('aria-busy');
 			}
-			syncChatExploreComposerChrome();
+			syncActiveChatExploreSearchBar();
 			if (activePseudoChannelSlug === 'explore' && !String(exploreQueryRef.q || '').trim()) {
 				syncExploreChannelBrowseUrl();
 			}
@@ -6806,6 +7011,33 @@ export async function initChatPage(root, options = {}) {
 	}
 
 	function onChatMessagesClick(e) {
+		const exploreSearchSubmit = e.target?.closest?.('[data-chat-explore-search-submit]');
+		if (exploreSearchSubmit instanceof HTMLButtonElement) {
+			e.preventDefault();
+			e.stopPropagation();
+			if (activePseudoChannelSlug !== 'explore') return;
+			void commitExploreSearchImmediateFromComposer();
+			return;
+		}
+		const exploreSearchClear = e.target?.closest?.('[data-chat-explore-search-clear]');
+		if (exploreSearchClear instanceof HTMLButtonElement) {
+			e.preventDefault();
+			e.stopPropagation();
+			if (activePseudoChannelSlug !== 'explore') return;
+			if (isExploreComposerLoadLocked()) return;
+			const searchInput = root.querySelector('[data-chat-explore-search-input]');
+			const hadCommittedSearch = String(exploreQueryRef.q || '').trim().length > 0;
+			if (searchInput instanceof HTMLInputElement) {
+				searchInput.value = '';
+			}
+			exploreQueryRef.q = '';
+			syncActiveChatExploreSearchBar();
+			if (hadCommittedSearch) {
+				void loadExploreChannelMessages();
+			}
+			return;
+		}
+
 		const fileLink = e.target?.closest?.('a.user-text-inline-file-link[href]');
 		if (fileLink instanceof HTMLAnchorElement && fileLink.closest('.connect-chat-msg-bubble')) {
 			if (!(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)) {
@@ -7085,9 +7317,15 @@ export async function initChatPage(root, options = {}) {
 	async function commitExploreSearchImmediateFromComposer() {
 		if (activePseudoChannelSlug !== 'explore') return;
 		if (isExploreComposerLoadLocked()) return;
+		const searchInput = root.querySelector('[data-chat-explore-search-input]');
 		const bodyInput = root.querySelector('[data-chat-body-input]');
-		if (!(bodyInput instanceof HTMLTextAreaElement)) return;
-		exploreQueryRef.q = String(bodyInput.value || '').trim();
+		if (searchInput instanceof HTMLInputElement) {
+			exploreQueryRef.q = String(searchInput.value || '').trim();
+		} else if (bodyInput instanceof HTMLTextAreaElement) {
+			exploreQueryRef.q = String(bodyInput.value || '').trim();
+		} else {
+			return;
+		}
 		await loadExploreChannelMessages();
 	}
 
@@ -7173,6 +7411,9 @@ export async function initChatPage(root, options = {}) {
 				activePseudoChannelSlug = slug;
 			}
 		}
+		if (activePseudoChannelSlug === 'explore') {
+			exploreQueryRef.q = getExploreChannelSearchFromUrl();
+		}
 		syncChatBrowseViewBodyClass();
 		applyComposerState();
 		teardownCommentsChannelLoadMore();
@@ -7195,6 +7436,10 @@ export async function initChatPage(root, options = {}) {
 			} else if (channelSlugForLoading === 'explore' || channelSlugForLoading === 'creations') {
 				const creationsCls = channelSlugForLoading === 'creations' ? ' creations-route' : '';
 				const browseCls = chatExploreCreationsBrowseView ? ' chat-feed-channel-route--browse-view' : '';
+				const pendingExploreSearch = channelSlugForLoading === 'explore' && String(exploreQueryRef.q || '').trim().length > 0;
+				const searchBar = channelSlugForLoading === 'explore'
+					? renderChatExploreSearchBarMarkup({ loading: pendingExploreSearch })
+					: '';
 				const gridInner =
 					chatExploreCreationsBrowseView && typeof renderGridSkeleton === 'function'
 						? renderGridSkeleton(25)
@@ -7203,7 +7448,8 @@ export async function initChatPage(root, options = {}) {
 							: '';
 				if (gridInner) {
 					messagesEl.innerHTML = `<div class="feed-route chat-feed-channel-route${creationsCls}${browseCls}">
-						<div class="route-cards feed-cards" aria-busy="true" aria-label="Loading">${gridInner}</div>
+						${searchBar}
+						<div class="route-cards feed-cards" aria-busy="true" aria-label="${pendingExploreSearch ? 'Searching' : 'Loading'}">${gridInner}</div>
 					</div>`;
 					resetAndLockChatMessagesScrollForSkeleton(messagesEl, channelSlugForLoading);
 				} else {
@@ -7295,14 +7541,7 @@ export async function initChatPage(root, options = {}) {
 				if (slug === 'explore') {
 					activePseudoChannelSlug = 'explore';
 					activeThreadId = null;
-					let exploreSearchFromUrl = '';
-					try {
-						exploreSearchFromUrl = String(
-							new URLSearchParams(window.location.search).get('s') || ''
-						).trim();
-					} catch {
-						exploreSearchFromUrl = '';
-					}
+					const exploreSearchFromUrl = getExploreChannelSearchFromUrl();
 					exploreQueryRef.q = exploreSearchFromUrl;
 					const biExplore = root.querySelector('[data-chat-body-input]');
 					if (biExplore instanceof HTMLTextAreaElement) {
@@ -7315,7 +7554,7 @@ export async function initChatPage(root, options = {}) {
 					if (messagesEl) {
 						messagesEl.removeAttribute('aria-busy');
 					}
-					await loadExploreChannelMessages();
+					await loadExploreChannelMessages({ searchQuery: exploreSearchFromUrl });
 					return;
 				}
 				const match = (chatThreads || []).find(
@@ -7852,6 +8091,29 @@ export async function initChatPage(root, options = {}) {
 	if (messagesContainerForReactions && !messagesContainerForReactions.dataset.chatReactionUi) {
 		messagesContainerForReactions.dataset.chatReactionUi = '1';
 		messagesContainerForReactions.addEventListener('click', onChatMessagesClick);
+		messagesContainerForReactions.addEventListener('keydown', (e) => {
+			if (activePseudoChannelSlug !== 'explore') return;
+			if (!(e.target instanceof HTMLInputElement)) return;
+			if (!e.target.matches('[data-chat-explore-search-input]')) return;
+			if (e.key === 'Enter') {
+				e.preventDefault();
+				void commitExploreSearchImmediateFromComposer();
+			}
+		});
+		const resetExploreSearchOnInputClear = (e) => {
+			if (activePseudoChannelSlug !== 'explore') return;
+			if (!(e.target instanceof HTMLInputElement)) return;
+			if (!e.target.matches('[data-chat-explore-search-input]')) return;
+			const next = String(e.target.value || '').trim();
+			const committed = String(exploreQueryRef.q || '').trim();
+			syncActiveChatExploreSearchBar();
+			if (next.length > 0 || committed.length === 0) return;
+			exploreQueryRef.q = '';
+			syncActiveChatExploreSearchBar();
+			void loadExploreChannelMessages();
+		};
+		messagesContainerForReactions.addEventListener('input', resetExploreSearchOnInputClear);
+		messagesContainerForReactions.addEventListener('search', resetExploreSearchOnInputClear, true);
 
 		chatToolbarUnpinOnOtherRowHover = (e) => {
 			if (activePseudoChannelSlug) return;
