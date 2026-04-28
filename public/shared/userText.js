@@ -936,6 +936,20 @@ function creationEmbedTitleDisplayText(data) {
 	return titleRaw;
 }
 
+function appendCreationIdToMediaUrl(url, creationId) {
+	const raw = typeof url === 'string' ? url.trim() : '';
+	const id = Number(creationId);
+	if (!raw || !Number.isFinite(id) || id <= 0) return raw;
+	if (!raw.includes('/api/images/created/') && !raw.includes('/api/videos/created/')) return raw;
+	const [beforeHash, hash = ''] = raw.split('#');
+	if (/[?&]creation_id=/.test(beforeHash)) {
+		return hash ? `${beforeHash}#${hash}` : beforeHash;
+	}
+	const sep = beforeHash.includes('?') ? '&' : '?';
+	const next = `${beforeHash}${sep}creation_id=${encodeURIComponent(String(id))}`;
+	return hash ? `${next}#${hash}` : next;
+}
+
 /**
  * Top bar: title, optional source URL line, open-creation control (image + video embeds).
  * @param {{ creationId: string, titleText: string, sourceLabel: string, barStatic?: boolean }} opts
@@ -1363,6 +1377,85 @@ export function hydrateChatCreationEmbeds(rootEl) {
 			}
 
 			if (url) {
+				const groupPayload = data?.meta?.group && typeof data.meta.group === 'object' ? data.meta.group : null;
+				const groupSourcesRaw = Array.isArray(groupPayload?.source_creations) ? groupPayload.source_creations : [];
+				const groupSourceUrls = [
+					...new Set(
+						groupSourcesRaw
+							.map((source) => {
+								const fp = typeof source?.file_path === 'string' ? source.file_path.trim() : '';
+								return appendCreationIdToMediaUrl(fp, creationId);
+							})
+							.filter(Boolean)
+					)
+				];
+				if (groupPayload?.kind === 'group_creations' && groupSourceUrls.length > 1) {
+					const sourceLabelRaw =
+						(a.getAttribute('data-creation-link-original') || '').trim() ||
+						(a.getAttribute('href') || '').trim() ||
+						'';
+					const hoverBarHtml = chatCreationEmbedMediaHoverBarHtml({
+						creationId,
+						titleText: titleDisplay,
+						sourceLabel: sourceLabelRaw,
+					});
+					const initialAlt = titleRaw.length > 0 ? escapeHtml(titleRaw) : 'grouped creation image';
+					const stackHtml = groupSourceUrls
+						.map((src, index) => `<img class="connect-chat-creation-embed-group-img${index === 0 ? ' is-active' : ''}" src="${escapeHtml(src)}" alt="${initialAlt}" loading="eager" decoding="async" data-group-slide-index="${index}" />`)
+						.join('');
+					wrap.innerHTML =
+						`<div class="connect-chat-creation-embed-media connect-chat-creation-embed-media--has-hover-bar">` +
+						`<div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--group-carousel${nsfwClass}"${nsfwDataAttr}>` +
+						hoverBarHtml +
+						`<div class="connect-chat-creation-embed-group-stack">${stackHtml}</div>` +
+						`<button type="button" class="connect-chat-creation-embed-group-nav connect-chat-creation-embed-group-nav--prev" aria-label="Previous grouped image">` +
+						`<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M14.5 6.5L9 12l5.5 5.5" /></svg>` +
+						`</button>` +
+						`<button type="button" class="connect-chat-creation-embed-group-nav connect-chat-creation-embed-group-nav--next" aria-label="Next grouped image">` +
+						`<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9.5 6.5L15 12l-5.5 5.5" /></svg>` +
+						`</button>` +
+						`</div></div>`;
+					trimWhitespaceOnlyTextNodes(wrap);
+					const groupImages = Array.from(wrap.querySelectorAll('.connect-chat-creation-embed-group-img'));
+					const prevBtn = wrap.querySelector('.connect-chat-creation-embed-group-nav--prev');
+					const nextBtn = wrap.querySelector('.connect-chat-creation-embed-group-nav--next');
+					const setActiveIndex = (index) => {
+						if (groupImages.length === 0) return;
+						const next = ((index % groupImages.length) + groupImages.length) % groupImages.length;
+						for (let i = 0; i < groupImages.length; i += 1) {
+							groupImages[i].classList.toggle('is-active', i === next);
+						}
+					};
+					const getActiveIndex = () => {
+						const idx = groupImages.findIndex((img) => img.classList.contains('is-active'));
+						return idx >= 0 ? idx : 0;
+					};
+					if (groupImages.length <= 1) {
+						if (prevBtn instanceof HTMLButtonElement) prevBtn.hidden = true;
+						if (nextBtn instanceof HTMLButtonElement) nextBtn.hidden = true;
+					} else {
+						if (prevBtn instanceof HTMLButtonElement) {
+							prevBtn.addEventListener('click', (e) => {
+								e.preventDefault();
+								e.stopPropagation();
+								setActiveIndex(getActiveIndex() - 1);
+							});
+						}
+						if (nextBtn instanceof HTMLButtonElement) {
+							nextBtn.addEventListener('click', (e) => {
+								e.preventDefault();
+								e.stopPropagation();
+								setActiveIndex(getActiveIndex() + 1);
+							});
+						}
+					}
+					for (const img of groupImages) {
+						if (img instanceof HTMLImageElement) bindChatCreationEmbedMediaLoadError(wrap, img);
+					}
+					attachChatCreationEmbedDetailLinkReveal(wrap);
+					return;
+				}
+
 				const sourceLabelRaw =
 					(a.getAttribute('data-creation-link-original') || '').trim() ||
 					(a.getAttribute('href') || '').trim() ||

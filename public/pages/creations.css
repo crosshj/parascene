@@ -1292,8 +1292,8 @@ body.creation-detail-page main>section:first-of-type {
 	position: absolute;
 	top: 50%;
 	transform: translateY(-50%);
-	width: 42px;
-	height: 42px;
+	width: 46px;
+	height: 46px;
 	border: 1px solid color-mix(in srgb, var(--text) 22%, transparent);
 	border-radius: 50%;
 	background: color-mix(in srgb, var(--surface) 76%, transparent);
@@ -1306,6 +1306,7 @@ body.creation-detail-page main>section:first-of-type {
 	padding: 0;
 	cursor: pointer;
 	z-index: 3;
+	touch-action: manipulation;
 	backdrop-filter: blur(8px);
 	-webkit-backdrop-filter: blur(8px);
 	opacity: 0;
@@ -1322,6 +1323,7 @@ body.creation-detail-page main>section:first-of-type {
 	stroke-linecap: round;
 	stroke-linejoin: round;
 	fill: none;
+	pointer-events: none;
 }
 
 .creation-detail-hero-nav[hidden] {

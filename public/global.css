@@ -8745,6 +8745,86 @@ body:has(.chat-hashtag-nav-overlay) {
 	line-height: 0;
 }
 
+.connect-chat-creation-embed-inner--group-carousel {
+	position: relative;
+}
+
+.connect-chat-creation-embed-group-stack {
+	position: absolute;
+	inset: 0;
+}
+
+.connect-chat-creation-embed-group-img {
+	position: absolute;
+	inset: 0;
+	display: block;
+	width: 100%;
+	height: 100%;
+	border-radius: inherit;
+	object-fit: cover;
+	object-position: center;
+	opacity: 0;
+	visibility: hidden;
+	transition: opacity 0.14s ease;
+}
+
+.connect-chat-creation-embed-group-img.is-active {
+	opacity: 1;
+	visibility: visible;
+}
+
+.connect-chat-creation-embed-group-nav {
+	position: absolute;
+	top: 50%;
+	transform: translateY(-50%);
+	width: 42px;
+	height: 42px;
+	border: 1px solid rgba(255, 255, 255, 0.28);
+	border-radius: 50%;
+	background: rgba(0, 0, 0, 0.54);
+	color: rgba(255, 255, 255, 0.94);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	cursor: pointer;
+	z-index: 6;
+	touch-action: manipulation;
+}
+
+.connect-chat-creation-embed-group-nav svg {
+	display: block;
+	width: 18px;
+	height: 18px;
+	stroke: currentColor;
+	stroke-width: 2.2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	fill: none;
+	pointer-events: none;
+}
+
+.connect-chat-creation-embed-group-nav--prev {
+	left: 8px;
+}
+
+.connect-chat-creation-embed-group-nav--next {
+	right: 8px;
+}
+
+.connect-chat-creation-embed-group-nav:hover {
+	background: rgba(0, 0, 0, 0.66);
+}
+
+.connect-chat-creation-embed-group-nav:active {
+	transform: translateY(-50%);
+}
+
+.connect-chat-creation-embed-group-nav:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
+
 .connect-chat-creation-embed--square .connect-chat-creation-embed-img {
 	position: absolute;
 	inset: 0;
