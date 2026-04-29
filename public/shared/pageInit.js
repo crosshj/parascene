@@ -96,6 +96,13 @@ export async function runCommonAppInit() {
 			if (!(form instanceof HTMLFormElement)) return;
 			const action = (form.getAttribute('action') || '').trim();
 			if (action !== '/logout') return;
+			try {
+				if (navigator.serviceWorker?.controller) {
+					navigator.serviceWorker.controller.postMessage({ type: 'PRSN_SW_INVALIDATE', all: true });
+				}
+			} catch {
+				// ignore
+			}
 			void (async () => {
 				try {
 					const v = getAssetVersionParam();
@@ -238,7 +245,9 @@ export async function runCommonAppInit() {
 	// Service worker
 	if ('serviceWorker' in navigator) {
 		window.addEventListener('load', () => {
-			navigator.serviceWorker.register('/sw.js').catch(() => {});
+			const v = getAssetVersionParam();
+			const swUrl = v ? `/sw.js?v=${encodeURIComponent(v)}` : '/sw.js';
+			navigator.serviceWorker.register(swUrl).catch(() => {});
 		});
 	}
 }

@@ -14,3 +14,4 @@ import(`./entry.js${_qs}`).catch((err) => {
 	console.error('global.js fallback failed:', err);
 	document.body.classList.add('loaded');
 });
+

@@ -16,6 +16,23 @@ function toSafeInt(value, fallback = 0) {
 	return Number.isFinite(n) ? n : fallback;
 }
 
+function invalidateRelatedCachesAfterLikeMutation() {
+	if (typeof navigator === 'undefined' || !navigator.serviceWorker) return;
+	const message = {
+		type: 'PRSN_SW_INVALIDATE',
+		tags: ['creations', 'feed', 'explore']
+	};
+	if (navigator.serviceWorker.controller) {
+		navigator.serviceWorker.controller.postMessage(message);
+		return;
+	}
+	navigator.serviceWorker.ready
+		.then((registration) => {
+			registration?.active?.postMessage(message);
+		})
+		.catch(() => {});
+}
+
 export function getCreationBaseLikeCount(creation) {
 	if (!creation) return 0;
 
@@ -197,6 +214,7 @@ export function enableLikeButtons(root = document) {
 				button.dataset.likeBaseCount = String(newBase);
 				setDisplayedLikeCount(button, { like_count: newBase }, viewerLiked);
 				applyLikeButtonState(button, viewerLiked, false);
+				invalidateRelatedCachesAfterLikeMutation();
 			})
 			.catch(() => {
 				// Revert optimistic state on failure.

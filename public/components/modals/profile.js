@@ -1,6 +1,7 @@
 import './account-menu.js';
 
 let fetchJsonWithStatusDeduped;
+let invalidateAppCaches;
 let getNsfwContentEnabled;
 let setNsfwContentEnabled;
 let getNsfwObscure;
@@ -28,6 +29,7 @@ async function loadDeps() {
 	_depsPromise = (async () => {
 		const apiMod = await import(`../../shared/api.js${qs}`);
 		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
+		invalidateAppCaches = apiMod.invalidateAppCaches;
 
 		const nsfwMod = await import(`../../shared/nsfwView.js${qs}`);
 		getNsfwContentEnabled = nsfwMod.getNsfwContentEnabled;
@@ -46,6 +48,13 @@ async function loadDeps() {
 }
 
 const html = String.raw;
+
+function invalidateOwnPublicProfileCache(profileData) {
+	const userId = Number(profileData?.id);
+	if (!Number.isFinite(userId) || userId <= 0) return;
+	if (typeof invalidateAppCaches !== 'function') return;
+	invalidateAppCaches({ urls: [`/api/users/${userId}/profile`] });
+}
 
 class AppModalProfile extends HTMLElement {
 	constructor() {
@@ -152,6 +161,7 @@ class AppModalProfile extends HTMLElement {
 					setNsfwContentEnabled(enabled);
 					applyNsfwPreference();
 					document.dispatchEvent(new CustomEvent('nsfw-preference-changed'));
+					invalidateOwnPublicProfileCache(this.profileData);
 				} else {
 					enableCheckbox.checked = !enabled;
 					syncObscureVisibility();
@@ -192,6 +202,7 @@ class AppModalProfile extends HTMLElement {
 				);
 				if (res?.ok) {
 					if (this.profileData) this.profileData.appear_offline = appearOffline;
+					invalidateOwnPublicProfileCache(this.profileData);
 				} else {
 					checkbox.checked = !appearOffline;
 				}
@@ -226,6 +237,7 @@ class AppModalProfile extends HTMLElement {
 				if (res?.ok) {
 					if (this.profileData) this.profileData.audibleNotifications = on;
 					setChatAudibleNotificationsEnabled(on);
+					invalidateOwnPublicProfileCache(this.profileData);
 				} else {
 					checkbox.checked = !on;
 				}
@@ -260,6 +272,7 @@ class AppModalProfile extends HTMLElement {
 				if (res?.ok) {
 					if (this.profileData) this.profileData.showOwnPostsInFeed = showOwnPostsInFeed;
 					document.dispatchEvent(new CustomEvent('feed-preference-changed'));
+					invalidateOwnPublicProfileCache(this.profileData);
 				} else {
 					checkbox.checked = !showOwnPostsInFeed;
 				}
@@ -488,6 +501,7 @@ class AppModalProfile extends HTMLElement {
 						}
 						if (input) input.value = '';
 						this.displayProfile(this.profileData || {});
+						invalidateOwnPublicProfileCache(this.profileData);
 					} else {
 						const msg = typeof res?.data?.message === 'string' ? res.data.message : 'Could not save token.';
 						window.alert(msg);
@@ -517,6 +531,7 @@ class AppModalProfile extends HTMLElement {
 						}
 						if (input) input.value = '';
 						this.displayProfile(this.profileData || {});
+						invalidateOwnPublicProfileCache(this.profileData);
 					}
 				} catch {
 					// ignore
@@ -545,6 +560,7 @@ class AppModalProfile extends HTMLElement {
 							this.profileData.apiKeyPrefix = `${res.data.apiKey.slice(0, 10)}…`;
 						}
 						this.displayProfile(this.profileData || {});
+						invalidateOwnPublicProfileCache(this.profileData);
 					}
 				} catch {
 					// ignore
@@ -566,6 +582,7 @@ class AppModalProfile extends HTMLElement {
 							this.profileData.apiKeyPrefix = null;
 						}
 						await this.loadProfile({ silent: true, force: true });
+						invalidateOwnPublicProfileCache(this.profileData);
 					}
 				} catch {
 					// ignore

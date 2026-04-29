@@ -50,6 +50,25 @@ function buildDedupeKey(url, options = {}) {
 const inflight = new Map(); // key -> Promise<{ok,status,data}>
 const settled = new Map(); // key -> { expiresAt, value: {ok,status,data} }
 
+async function postMessageToServiceWorker(message) {
+	if (typeof navigator === 'undefined' || !navigator.serviceWorker) return false;
+	const controller = navigator.serviceWorker.controller;
+	if (controller) {
+		controller.postMessage(message);
+		return true;
+	}
+	try {
+		const registration = await navigator.serviceWorker.ready;
+		if (registration?.active) {
+			registration.active.postMessage(message);
+			return true;
+		}
+	} catch {
+		return false;
+	}
+	return false;
+}
+
 function pruneSettled() {
 	const now = Date.now();
 	for (const [key, entry] of settled.entries()) {
@@ -117,5 +136,19 @@ export async function fetchJsonWithStatusDeduped(url, options = {}, { windowMs =
 // Tiny convenience for the common pattern: GET JSON with credentials included.
 export function apiGetJsonDeduped(path, { windowMs = 2000 } = {}) {
 	return fetchJsonWithStatusDeduped(path, { credentials: 'include' }, { windowMs });
+}
+
+/**
+ * Ask the active service worker to invalidate selected cache groups.
+ * tags: any of ['feed','explore','creations','images']
+ * urls: specific same-origin paths/urls to evict from data cache
+ */
+export function invalidateAppCaches({ tags = [], urls = [], all = false } = {}) {
+	void postMessageToServiceWorker({
+		type: 'PRSN_SW_INVALIDATE',
+		tags,
+		urls,
+		all: Boolean(all)
+	});
 }
 

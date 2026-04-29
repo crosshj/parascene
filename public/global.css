@@ -8192,6 +8192,7 @@ body.blog-edit-page .blog-edit-route {
 	display: block;
 	margin-block: 2px;
 	max-width: 100%;
+	width: min(260px, 100%);
 }
 
 /* Plain caption merged after normalizeChatBubbleInlineImageSpacing (chat.js).
@@ -8209,16 +8210,44 @@ body.blog-edit-page .blog-edit-route {
 
 .connect-chat-msg-bubble .user-text-inline-image-link {
 	display: block;
+	position: relative;
 	line-height: 0;
 	cursor: zoom-in;
+}
+
+.connect-chat-msg-bubble .user-text-inline-image-link::before {
+	content: '';
+	position: absolute;
+	right: 14px;
+	bottom: 14px;
+	width: 10px;
+	height: 10px;
+	border-top: 2px solid #fff;
+	border-right: 2px solid #fff;
+	pointer-events: none;
+	z-index: 1;
+}
+
+.connect-chat-msg-bubble .user-text-inline-image-link::after {
+	content: '';
+	position: absolute;
+	right: 8px;
+	bottom: 8px;
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	background: color-mix(in srgb, #000 64%, transparent);
+	pointer-events: none;
 }
 
 .connect-chat-msg-bubble .user-text-inline-image {
 	display: block;
 	width: 100%;
 	height: auto;
-	max-height: min(70vh, 520px);
+	aspect-ratio: 1 / 1;
+	max-height: none;
 	object-fit: contain;
+	background: color-mix(in srgb, var(--surface-strong) 74%, var(--bg));
 	border-radius: 8px;
 }
 

@@ -886,8 +886,8 @@ export async function initChatPage(root, options = {}) {
 	let bottomDwellThreadId = null;
 
 	const CHAT_BOTTOM_THRESHOLD_PX = 56;
-	// TEMP: disable runtime auto-scroll behavior while keeping initial load at bottom.
-	const CHAT_TEMP_DISABLE_AUTO_SCROLL = true;
+	// Keep runtime bottom-follow enabled so late media sizing does not leave first load off-bottom.
+	const CHAT_TEMP_DISABLE_AUTO_SCROLL = false;
 	const DM_OFFLINE_GRACE_MS = 45 * 1000;
 	const DM_PROMOTION_RECENT_ACTIVE_WINDOW_MS = 15 * 60 * 1000;
 	const DM_ORDER_WEIGHT_LAST_SEEN = 0.9;

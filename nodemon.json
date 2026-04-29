@@ -8,5 +8,9 @@
     "pages",
     "public"
   ],
-  "ext": "js,json"
+  "ext": "js,json",
+  "events": {
+    "start": "node -e \"require('fs').writeFileSync('public/.asset-version-dev', String(Date.now()))\"",
+    "restart": "node -e \"require('fs').writeFileSync('public/.asset-version-dev', String(Date.now()))\""
+  }
 }

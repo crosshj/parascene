@@ -4,6 +4,23 @@ export function generateCreationToken() {
 	return `crt_${ts}_${rand}`;
 }
 
+function invalidateRelatedDataCaches() {
+	if (typeof navigator === 'undefined' || !navigator.serviceWorker) return;
+	const msg = {
+		type: 'PRSN_SW_INVALIDATE',
+		tags: ['creations', 'feed', 'explore']
+	};
+	if (navigator.serviceWorker.controller) {
+		navigator.serviceWorker.controller.postMessage(msg);
+		return;
+	}
+	navigator.serviceWorker.ready
+		.then((registration) => {
+			registration?.active?.postMessage(msg);
+		})
+		.catch(() => {});
+}
+
 function safeUploadHeaderFilename(name, fallback = 'upload.bin') {
 	const raw = String(name || '').trim();
 	if (!raw) return fallback;
@@ -269,6 +286,7 @@ export function submitCreationWithPending({
 		})
 		.then(() => {
 			removePendingCreation({ pendingKey, pendingId });
+			invalidateRelatedDataCaches();
 		})
 		.catch(async (err) => {
 			removePendingCreation({ pendingKey, pendingId });

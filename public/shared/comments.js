@@ -2,7 +2,7 @@ const _qs = (() => {
 	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
 	return v ? `?v=${encodeURIComponent(v)}` : '';
 })();
-const { fetchJsonWithStatusDeduped } = await import(`/shared/api.js${_qs}`);
+const { fetchJsonWithStatusDeduped, invalidateAppCaches } = await import(`/shared/api.js${_qs}`);
 
 function toQuery(params) {
 	const qs = new URLSearchParams();
@@ -61,6 +61,9 @@ export async function postCreatedImageComment(createdImageId, text) {
 		credentials: 'include'
 	});
 	const data = await readResponsePayload(response);
+	if (response.ok) {
+		invalidateAppCaches({ tags: ['creations', 'feed', 'explore'] });
+	}
 	return { ok: response.ok, status: response.status, data };
 }
 
@@ -88,6 +91,9 @@ export async function deleteCreatedImageComment(commentId) {
 		credentials: 'include'
 	});
 	const data = await readResponsePayload(response);
+	if (response.ok) {
+		invalidateAppCaches({ tags: ['creations', 'feed', 'explore'] });
+	}
 	return { ok: response.ok, status: response.status, data };
 }
 
@@ -101,6 +107,9 @@ export async function updateCreatedImageComment(commentId, text) {
 		credentials: 'include'
 	});
 	const data = await readResponsePayload(response);
+	if (response.ok) {
+		invalidateAppCaches({ tags: ['creations', 'feed', 'explore'] });
+	}
 	return { ok: response.ok, status: response.status, data };
 }
 
