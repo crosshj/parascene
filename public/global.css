@@ -9732,6 +9732,16 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 	box-shadow: var(--shadow);
 }
 
+@media (max-width: 768px) {
+	body.chat-page .creations-bulk-bar {
+		top: 58px;
+	}
+
+	html.chat-page--use-app-mobile-header body.chat-page .creations-bulk-bar {
+		top: 48px;
+	}
+}
+
 .creations-route.is-bulk-mode .creations-bulk-bar {
 	display: block;
 }

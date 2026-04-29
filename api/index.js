@@ -49,6 +49,7 @@ import { clientIdMiddleware } from "../api_routes/middleware/clientId.js";
 import { createWelcomeGate } from "../api_routes/middleware/welcomeGate.js";
 import { createUnauthorizedHandler } from "../api_routes/middleware/unauthorizedHandler.js";
 import { createPrsnCidPersistMiddleware } from "../api_routes/middleware/prsnCidPersist.js";
+import { createRateLimitMiddleware } from "../api_routes/middleware/rateLimit.js";
 
 function shouldLogStartup() {
 	return process.env.ENABLE_STARTUP_LOGS === "true";
@@ -171,6 +172,25 @@ app.use((req, res, next) => {
 app.use(authMiddleware());
 app.use(apiKeyBearerMiddleware(queries));
 app.use(sessionMiddleware(queries));
+app.use(
+	createRateLimitMiddleware({
+		bucket: "api-all",
+		windowSec: 60,
+		limit: (req) => (req.auth?.userId ? 120 : 60),
+		apiOnly: true,
+		failOpen: true
+	})
+);
+app.use(
+	createRateLimitMiddleware({
+		bucket: "api-write",
+		windowSec: 60,
+		limit: (req) => (req.auth?.userId ? 40 : 20),
+		methods: ["POST", "PUT", "PATCH", "DELETE"],
+		apiOnly: true,
+		failOpen: true
+	})
+);
 app.use(createPrsnCidPersistMiddleware(queries));
 app.use(probabilisticSessionCleanup(queries));
 app.use(createWelcomeGate(queries));

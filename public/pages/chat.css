@@ -1801,9 +1801,14 @@ body.chat-page .chat-route {
 
 @media (max-width: 768px) {
 	.chat-explore-search-bar {
+		top: 58px;
 		border-radius: 10px;
 		padding: 10px;
 		margin: 4px 4px 10px;
+	}
+
+	html.chat-page--use-app-mobile-header body.chat-page .chat-explore-search-bar {
+		top: 48px;
 	}
 
 	.chat-explore-search-bar-inner {
