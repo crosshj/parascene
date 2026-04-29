@@ -5,8 +5,13 @@
 
 /** Keep under the server “online” window (e.g. 3 min) so status stays fresh without spamming the API. */
 const HEARTBEAT_INTERVAL_MS = 60 * 1000;
+const HEARTBEAT_BACKOFF_MAX_MS = 5 * 60 * 1000;
+const HEARTBEAT_ACTIVITY_WINDOW_MS = 2 * 60 * 1000;
 let _timer = null;
 let _started = false;
+let _inFlight = false;
+let _consecutiveFailures = 0;
+let _lastMeaningfulActivityAt = Date.now();
 
 function getClientAssetVersion() {
 	try {
@@ -19,9 +24,14 @@ function getClientAssetVersion() {
 }
 
 async function sendPresenceHeartbeat() {
+	if (_inFlight) return false;
+	if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return false;
+	if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
+	if (Date.now() - _lastMeaningfulActivityAt > HEARTBEAT_ACTIVITY_WINDOW_MS) return false;
+	_inFlight = true;
 	try {
 		const v = getClientAssetVersion();
-		if (!v) return;
+		if (!v) return false;
 		const r = await fetch('/api/presence/heartbeat', {
 			method: 'POST',
 			credentials: 'same-origin',
@@ -31,9 +41,15 @@ async function sendPresenceHeartbeat() {
 			},
 			body: JSON.stringify({ v })
 		});
-		if (r.status === 401) return;
+		if (r.status === 401) return false;
+		if (!r.ok) throw new Error(`heartbeat failed (${r.status})`);
+		_consecutiveFailures = 0;
+		return true;
 	} catch {
-		// ignore
+		_consecutiveFailures = Math.min(_consecutiveFailures + 1, 6);
+		return false;
+	} finally {
+		_inFlight = false;
 	}
 }
 
@@ -44,19 +60,55 @@ export function startPresenceHeartbeat() {
 	if (_started || typeof window === 'undefined') return;
 	_started = true;
 
-	const schedule = () => {
-		if (_timer != null) clearInterval(_timer);
-		_timer = setInterval(sendPresenceHeartbeat, HEARTBEAT_INTERVAL_MS);
+	const stopSchedule = () => {
+		if (_timer == null) return;
+		clearTimeout(_timer);
+		_timer = null;
 	};
 
-	void sendPresenceHeartbeat();
-	setTimeout(sendPresenceHeartbeat, 4000);
-	schedule();
+	const scheduleNext = () => {
+		stopSchedule();
+		if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+		if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+		const failureMultiplier = _consecutiveFailures > 0 ? 2 ** _consecutiveFailures : 1;
+		const intervalMs = Math.min(HEARTBEAT_INTERVAL_MS * failureMultiplier, HEARTBEAT_BACKOFF_MAX_MS);
+		_timer = setTimeout(() => {
+			void sendPresenceHeartbeat().finally(scheduleNext);
+		}, intervalMs);
+	};
+
+	void sendPresenceHeartbeat().finally(scheduleNext);
+	setTimeout(() => {
+		void sendPresenceHeartbeat().finally(scheduleNext);
+	}, 4000);
+	scheduleNext();
+
+	const markMeaningfulActivity = () => {
+		_lastMeaningfulActivityAt = Date.now();
+	};
+	markMeaningfulActivity();
+
+	window.addEventListener('pointerdown', markMeaningfulActivity, { passive: true });
+	window.addEventListener('keydown', markMeaningfulActivity, { passive: true });
+	window.addEventListener('submit', markMeaningfulActivity, true);
+	window.addEventListener('route-change', markMeaningfulActivity);
+	window.addEventListener('tab-change', markMeaningfulActivity);
 
 	document.addEventListener('visibilitychange', () => {
 		if (document.visibilityState === 'visible') {
-			void sendPresenceHeartbeat();
+			markMeaningfulActivity();
+			void sendPresenceHeartbeat().finally(scheduleNext);
+			return;
 		}
+		stopSchedule();
+	});
+
+	window.addEventListener('online', () => {
+		void sendPresenceHeartbeat().finally(scheduleNext);
+	});
+
+	window.addEventListener('offline', () => {
+		stopSchedule();
 	});
 
 	/** Clear server presence when the page is discarded (best-effort; not guaranteed on crash/kill). */
