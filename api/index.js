@@ -177,6 +177,18 @@ app.use(
 		bucket: "api-all",
 		windowSec: 60,
 		limit: (req) => (req.auth?.userId ? 120 : 60),
+		shouldApply: (req) => !req.path.startsWith("/api/images/"),
+		apiOnly: true,
+		failOpen: true
+	})
+);
+app.use(
+	createRateLimitMiddleware({
+		bucket: "api-images-read",
+		windowSec: 60,
+		limit: (req) => (req.auth?.userId ? 600 : 300),
+		methods: ["GET", "HEAD"],
+		shouldApply: (req) => req.path.startsWith("/api/images/"),
 		apiOnly: true,
 		failOpen: true
 	})

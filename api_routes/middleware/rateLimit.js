@@ -36,7 +36,8 @@ function createRateLimitMiddleware({
 	methods = null,
 	apiOnly = true,
 	failOpen = true,
-	identifier = defaultIdentifier
+	identifier = defaultIdentifier,
+	shouldApply = null
 }) {
 	const normalizedBucket = String(bucket || "global");
 	const normalizedWindowSec = Number.isFinite(Number(windowSec)) ? Math.max(1, Math.floor(Number(windowSec))) : 60;
@@ -47,6 +48,7 @@ function createRateLimitMiddleware({
 	return async function rateLimitMiddleware(req, res, next) {
 		if (apiOnly && !req.path.startsWith("/api/")) return next();
 		if (normalizedMethods && !normalizedMethods.has(String(req.method || "").toUpperCase())) return next();
+		if (typeof shouldApply === "function" && shouldApply(req) !== true) return next();
 
 		const max = resolveLimit(limit, req);
 		if (!Number.isFinite(max) || max <= 0) return next();
