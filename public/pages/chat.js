@@ -566,6 +566,9 @@ function parseChatPathname(pathname) {
 /** Slugs where canvases are disabled in the client (pseudo-column channels). `#feedback` is allowed; keep aligned with `CANVAS_DISALLOWED_CHANNEL_SLUGS` in api_routes/chat.js */
 const CHAT_CANVAS_DISALLOWED_SLUGS = new Set(['comments', 'feed', 'explore', 'creations']);
 
+/** Bottom spacing for canvas read view; must match `CANVAS_BODY_HTML_SUFFIX` in `api_routes/utils/canvasBodyHtml.js` when `body_html` is omitted. */
+const CANVAS_BODY_HTML_SUFFIX = '<br><br><br>';
+
 /**
  * @param {object | null | undefined} m
  * @returns {{ title: string } | null}
@@ -9110,11 +9113,32 @@ export async function initChatPage(root, options = {}) {
 			titleInput: chatCanvasScope.querySelector('[data-chat-canvas-title-input]'),
 			bodyView: chatCanvasScope.querySelector('[data-chat-canvas-body-view]'),
 			bodyInput: chatCanvasScope.querySelector('[data-chat-canvas-body-input]'),
+			limitHint: chatCanvasScope.querySelector('[data-chat-canvas-limit-hint]'),
 			editFooter: chatCanvasScope.querySelector('[data-chat-canvas-edit-footer]'),
 			moreWrap: chatCanvasScope.querySelector('[data-chat-canvas-more-wrap]'),
 			moreBtn: chatCanvasScope.querySelector('[data-chat-canvas-more]'),
 			ownerMenu: chatCanvasScope.querySelector('[data-chat-canvas-owner-menu]')
 		};
+	}
+
+	function updateCanvasBodyLimitHint(inputEl, hintEl) {
+		if (!(inputEl instanceof HTMLTextAreaElement) || !(hintEl instanceof HTMLElement)) return;
+		const max = Number(inputEl.maxLength);
+		if (!Number.isFinite(max) || max <= 0) {
+			hintEl.hidden = true;
+			hintEl.textContent = '';
+			hintEl.classList.remove('is-at-limit');
+			return;
+		}
+		const used = Math.min(max, String(inputEl.value || '').length);
+		const left = Math.max(0, max - used);
+		hintEl.hidden = false;
+		hintEl.textContent = `${left}/${max} characters left`;
+		if (left === 0) {
+			hintEl.classList.add('is-at-limit');
+			return;
+		}
+		hintEl.classList.remove('is-at-limit');
 	}
 
 	function setChatCanvasOpenBodyClass(on) {
@@ -9145,6 +9169,11 @@ export async function initChatPage(root, options = {}) {
 		if (el.titleInput instanceof HTMLElement) el.titleInput.hidden = true;
 		if (el.bodyView instanceof HTMLElement) el.bodyView.hidden = false;
 		if (el.bodyInput instanceof HTMLElement) el.bodyInput.hidden = true;
+		if (el.limitHint instanceof HTMLElement) {
+			el.limitHint.hidden = true;
+			el.limitHint.textContent = '';
+			el.limitHint.classList.remove('is-at-limit');
+		}
 		if (el.editFooter instanceof HTMLElement) el.editFooter.hidden = true;
 		if (activeCanvasRow && Number(activeCanvasRow.sender_id) === Number(chatViewerId)) {
 			if (el.moreWrap instanceof HTMLElement) el.moreWrap.hidden = false;
@@ -9164,7 +9193,7 @@ export async function initChatPage(root, options = {}) {
 				el.bodyView.innerHTML = serverHtml;
 				el.bodyView.classList.add('chat-page-canvas-body--markdown');
 			} else {
-				el.bodyView.innerHTML = processUserText(activeCanvasRow.body || '');
+				el.bodyView.innerHTML = processUserText(activeCanvasRow.body || '') + CANVAS_BODY_HTML_SUFFIX;
 				el.bodyView.classList.remove('chat-page-canvas-body--markdown');
 			}
 			hydrateUserTextLinks(el.bodyView);
@@ -9202,6 +9231,9 @@ export async function initChatPage(root, options = {}) {
 		if (el.bodyInput instanceof HTMLTextAreaElement) {
 			el.bodyInput.hidden = false;
 			el.bodyInput.value = activeCanvasRow.body;
+			el.bodyInput.maxLength = 4000;
+			el.bodyInput.oninput = () => updateCanvasBodyLimitHint(el.bodyInput, el.limitHint);
+			updateCanvasBodyLimitHint(el.bodyInput, el.limitHint);
 		}
 		if (el.editFooter instanceof HTMLElement) el.editFooter.hidden = false;
 		if (el.moreWrap instanceof HTMLElement) el.moreWrap.hidden = true;
@@ -9506,6 +9538,11 @@ export async function initChatPage(root, options = {}) {
 		bodyTa.maxLength = 4000;
 		bodyTa.placeholder = 'Canvas body';
 
+		const bodyLimitHint = document.createElement('p');
+		bodyLimitHint.className = 'chat-canvas-create-limit-hint';
+		updateCanvasBodyLimitHint(bodyTa, bodyLimitHint);
+		bodyTa.addEventListener('input', () => updateCanvasBodyLimitHint(bodyTa, bodyLimitHint));
+
 		const actions = document.createElement('div');
 		actions.className = 'chat-canvas-create-actions';
 		const cancel = document.createElement('button');
@@ -9521,6 +9558,7 @@ export async function initChatPage(root, options = {}) {
 
 		panel.appendChild(titleIn);
 		panel.appendChild(bodyTa);
+		panel.appendChild(bodyLimitHint);
 		panel.appendChild(actions);
 		overlay.appendChild(panel);
 		document.body.appendChild(overlay);
