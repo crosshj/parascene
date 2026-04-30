@@ -1,5 +1,4 @@
 import express from "express";
-import { Redis } from "@upstash/redis";
 import { broadcastRoomDirty, broadcastUserInboxDirty } from "./utils/realtimeBroadcast.js";
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { normalizeTag } from "./utils/tag.js";
@@ -51,8 +50,6 @@ const MAX_MESSAGE_CHARS = 4000;
 const MAX_CANVAS_TITLE_CHARS = 200;
 const DEFAULT_PAGE_LIMIT = 50;
 const MAX_PAGE_LIMIT = 100;
-const SEND_RATE_WINDOW_SEC = 60;
-const SEND_RATE_MAX = 60;
 
 /**
  * Client-only pseudo lanes (no real thread); POST /api/chat/channels rejects these so they are not
@@ -197,12 +194,6 @@ async function normalizeUnpublishedCreationUrlsInChatBody(body, senderUserId, qu
 	return out;
 }
 
-let redis = null;
-function getRedis() {
-	if (!redis) redis = Redis.fromEnv();
-	return redis;
-}
-
 function dmPairKey(a, b) {
 	const x = Number(a);
 	const y = Number(b);
@@ -237,18 +228,6 @@ function decodeCursor(raw) {
 		return { created_at: c, id: Number(i) };
 	} catch {
 		return null;
-	}
-}
-
-async function rateLimitSend(userId) {
-	try {
-		const r = getRedis();
-		const key = `chat:send:${userId}`;
-		const n = await r.incr(key);
-		if (n === 1) await r.expire(key, SEND_RATE_WINDOW_SEC);
-		return n <= SEND_RATE_MAX;
-	} catch {
-		return true;
 	}
 }
 
@@ -989,10 +968,6 @@ export default function createChatRoutes({ queries, storage }) {
 				return res.status(403).json({ error: "Forbidden", message: "Not a member of this thread" });
 			}
 
-			if (!(await rateLimitSend(userId))) {
-				return res.status(429).json({ error: "Too many requests", message: "Rate limit exceeded" });
-			}
-
 			body = await normalizeUnpublishedCreationUrlsInChatBody(body, userId, queries);
 			if (body.length > MAX_MESSAGE_CHARS) {
 				return res.status(400).json({
@@ -1249,10 +1224,6 @@ export default function createChatRoutes({ queries, storage }) {
 
 			if (!(await isMember(sb, threadId, userId))) {
 				return res.status(403).json({ error: "Forbidden", message: "Not a member of this thread" });
-			}
-
-			if (!(await rateLimitSend(userId))) {
-				return res.status(429).json({ error: "Too many requests", message: "Rate limit exceeded" });
 			}
 
 			body = await normalizeUnpublishedCreationUrlsInChatBody(body, userId, queries);

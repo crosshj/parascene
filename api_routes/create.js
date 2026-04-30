@@ -326,6 +326,20 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	}
 
+	async function bumpFeedVersionCounter() {
+		if (!queries.selectPolicyByKey?.get || !queries.upsertPolicyKey?.run) return;
+		const key = "version_feed";
+		const description = "Global feed cache version. Increment when published feed content changes.";
+		try {
+			const row = await queries.selectPolicyByKey.get(key);
+			const current = Number.parseInt(String(row?.value ?? "0"), 10);
+			const next = Number.isFinite(current) && current >= 0 ? current + 1 : 1;
+			await queries.upsertPolicyKey.run(key, String(next), description);
+		} catch (err) {
+			console.warn("[create] Failed to bump feed version:", err?.message || err);
+		}
+	}
+
 	function syncGroupLineageFromCoverMeta(groupMeta, coverMeta) {
 		const next = groupMeta && typeof groupMeta === "object" ? { ...groupMeta } : {};
 		const source = coverMeta && typeof coverMeta === "object" ? coverMeta : {};
@@ -2883,6 +2897,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				null, // tags
 				parseInt(req.params.id)
 			);
+			await bumpFeedVersionCounter();
 
 			// Get updated image (includes meta with nsfw if we updated it)
 			const updatedImage = isOwner
@@ -3078,6 +3093,7 @@ export default function createCreateRoutes({ queries, storage }) {
 			if (queries.deleteFeedItemByCreatedImageId) {
 				await queries.deleteFeedItemByCreatedImageId.run(parseInt(req.params.id));
 			}
+			await bumpFeedVersionCounter();
 
 			// Delete all likes for this created image
 			if (queries.deleteAllLikesForCreatedImage) {

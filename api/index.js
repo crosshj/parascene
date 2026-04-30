@@ -172,12 +172,13 @@ app.use((req, res, next) => {
 app.use(authMiddleware());
 app.use(apiKeyBearerMiddleware(queries));
 app.use(sessionMiddleware(queries));
+const shouldRateLimitApiKeyTraffic = (req) => req.auth?.apiKeyAuth === true;
 app.use(
 	createRateLimitMiddleware({
 		bucket: "api-all",
 		windowSec: 60,
 		limit: (req) => (req.auth?.userId ? 120 : 60),
-		shouldApply: (req) => !req.path.startsWith("/api/images/"),
+		shouldApply: (req) => shouldRateLimitApiKeyTraffic(req) && !req.path.startsWith("/api/images/"),
 		apiOnly: true,
 		failOpen: true
 	})
@@ -188,7 +189,7 @@ app.use(
 		windowSec: 60,
 		limit: (req) => (req.auth?.userId ? 600 : 300),
 		methods: ["GET", "HEAD"],
-		shouldApply: (req) => req.path.startsWith("/api/images/"),
+		shouldApply: (req) => shouldRateLimitApiKeyTraffic(req) && req.path.startsWith("/api/images/"),
 		apiOnly: true,
 		failOpen: true
 	})
@@ -199,6 +200,7 @@ app.use(
 		windowSec: 60,
 		limit: (req) => (req.auth?.userId ? 40 : 20),
 		methods: ["POST", "PUT", "PATCH", "DELETE"],
+		shouldApply: shouldRateLimitApiKeyTraffic,
 		apiOnly: true,
 		failOpen: true
 	})

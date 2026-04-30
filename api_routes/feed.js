@@ -54,6 +54,28 @@ const NEWBIE_FEED_TIP_INTERVAL = 10;
 export default function createFeedRoutes({ queries }) {
 	const router = express.Router();
 
+	router.get("/api/feed/version", async (req, res) => {
+		if (!req.auth?.userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+		if (!queries.selectPolicyByKey?.get) {
+			return res.json({ key: "version_feed", version: 0, updated_at: null });
+		}
+		try {
+			const row = await queries.selectPolicyByKey.get("version_feed");
+			const parsed = Number.parseInt(String(row?.value ?? "0"), 10);
+			const version = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+			return res.json({
+				key: "version_feed",
+				version,
+				updated_at: row?.updated_at || null
+			});
+		} catch (err) {
+			console.warn("[feed] version", err?.message || err);
+			return res.status(500).json({ error: "Internal server error" });
+		}
+	});
+
 	router.get("/api/feed", async (req, res) => {
 		if (!req.auth?.userId) {
 			return res.status(401).json({ error: "Unauthorized" });
