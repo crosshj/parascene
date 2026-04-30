@@ -52,6 +52,9 @@ function pseudoStripRouteIconSvg(slug, routeIconClass = 'chat-page-sidebar-chann
 	const key = String(slug || '').trim().toLowerCase();
 	if (!key) return '';
 	const cls = String(routeIconClass || '').trim() || 'chat-page-sidebar-channel-route-icon';
+	if (key === 'create' || key === 'creation') return creationsRouteIcon(cls);
+	if (key === 'notes') return sidebarNotesStripIconSvg(cls);
+	if (key === 'help') return sidebarHelpStripIconSvg(cls);
 	if (key === 'feed') return typeof Icons.homeIcon === 'function' ? Icons.homeIcon(cls) : '';
 	if (key === 'explore') return typeof Icons.globeIcon === 'function' ? Icons.globeIcon(cls) : '';
 	if (key === 'creations') return creationsRouteIcon(cls);

@@ -63,7 +63,7 @@ export default function createServersRoutes({ queries }) {
 		return servers.map((server) => {
 			const isSpecial = server.id === 1;
 			const isOwner = server.user_id === userId;
-			let isMember = membershipSet.has(server.id);
+			let isMember = isOwner || membershipSet.has(server.id);
 			if (isSpecial) isMember = true;
 			const canManage = isOwner || isAdmin;
 
@@ -158,7 +158,7 @@ export default function createServersRoutes({ queries }) {
 		// "Owner" means the user who originally created the server.
 		// Admins can still manage all servers, but are not treated as owners.
 		const isOwner = server.user_id === user.id;
-		let isMember = await queries.checkServerMembership.get(serverId, user.id);
+		let isMember = isOwner || await queries.checkServerMembership.get(serverId, user.id);
 		if (isSpecial) {
 			isMember = true;
 		}

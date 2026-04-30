@@ -172,13 +172,45 @@ app.use((req, res, next) => {
 app.use(authMiddleware());
 app.use(apiKeyBearerMiddleware(queries));
 app.use(sessionMiddleware(queries));
-const shouldRateLimitApiKeyTraffic = (req) => req.auth?.apiKeyAuth === true;
+
+function isPollingHeavyPath(pathname) {
+	const p = String(pathname || "");
+	return (
+		p === "/api/chat/unread-summary" ||
+		p === "/api/presence/online" ||
+		p === "/api/presence/last-active" ||
+		p === "/api/notifications/unread-count" ||
+		p === "/api/profile"
+	);
+}
+
+function isApiKeyRequest(req) {
+	return req?.auth?.apiKeyAuth === true;
+}
 app.use(
 	createRateLimitMiddleware({
-		bucket: "api-all",
+		bucket: "api-polling",
 		windowSec: 60,
-		limit: (req) => (req.auth?.userId ? 120 : 60),
-		shouldApply: (req) => shouldRateLimitApiKeyTraffic(req) && !req.path.startsWith("/api/images/"),
+		limit: (req) => {
+			if (!isApiKeyRequest(req)) return null;
+			return req.auth?.userId ? 300 : 120;
+		},
+		methods: ["GET", "HEAD", "POST"],
+		shouldApply: (req) => isPollingHeavyPath(req.path),
+		apiOnly: true,
+		failOpen: true
+	})
+);
+app.use(
+	createRateLimitMiddleware({
+		bucket: "api-read",
+		windowSec: 60,
+		limit: (req) => {
+			if (!isApiKeyRequest(req)) return null;
+			return req.auth?.userId ? 120 : 60;
+		},
+		methods: ["GET", "HEAD"],
+		shouldApply: (req) => !req.path.startsWith("/api/images/") && !isPollingHeavyPath(req.path),
 		apiOnly: true,
 		failOpen: true
 	})
@@ -187,9 +219,12 @@ app.use(
 	createRateLimitMiddleware({
 		bucket: "api-images-read",
 		windowSec: 60,
-		limit: (req) => (req.auth?.userId ? 600 : 300),
+		limit: (req) => {
+			if (!isApiKeyRequest(req)) return null;
+			return req.auth?.userId ? 600 : 300;
+		},
 		methods: ["GET", "HEAD"],
-		shouldApply: (req) => shouldRateLimitApiKeyTraffic(req) && req.path.startsWith("/api/images/"),
+		shouldApply: (req) => isApiKeyRequest(req) && req.path.startsWith("/api/images/"),
 		apiOnly: true,
 		failOpen: true
 	})
@@ -198,9 +233,12 @@ app.use(
 	createRateLimitMiddleware({
 		bucket: "api-write",
 		windowSec: 60,
-		limit: (req) => (req.auth?.userId ? 40 : 20),
+		limit: (req) => {
+			if (!isApiKeyRequest(req)) return null;
+			return req.auth?.userId ? 40 : 20;
+		},
 		methods: ["POST", "PUT", "PATCH", "DELETE"],
-		shouldApply: shouldRateLimitApiKeyTraffic,
+		shouldApply: isApiKeyRequest,
 		apiOnly: true,
 		failOpen: true
 	})

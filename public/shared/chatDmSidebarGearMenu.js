@@ -21,7 +21,14 @@ export function closeDmSidebarGearMenu() {
 
 /**
  * @param {HTMLButtonElement} btn
- * @param {{ onAfterPinChange?: () => void }} [opts]
+ * @param {{
+ *   onAfterPinChange?: () => void,
+ *   onMarkAsRead?: () => (void | Promise<void>),
+ *   showProfile?: boolean,
+ *   showPinToggle?: boolean,
+ *   extraItems?: Array<{ action: string, label: string }>,
+ *   onAction?: (action: string) => (void | Promise<void>)
+ * }} [opts]
  */
 export function openDmSidebarGearMenu(btn, opts = {}) {
 	closeDmSidebarGearMenu();
@@ -33,7 +40,13 @@ export function openDmSidebarGearMenu(btn, opts = {}) {
 			const id = Number(btn.getAttribute('data-chat-dm-other-user-id'));
 			return Number.isFinite(id) && id > 0 ? `/user/${id}` : '/user';
 		})();
+	const inDmContext =
+		Boolean(pinKey.trim()) ||
+		Boolean(btn.getAttribute('data-chat-dm-profile-href')) ||
+		Boolean(btn.getAttribute('data-chat-dm-other-user-id'));
 	const pinned = isDmPinKeyActive(pinKey);
+	const showProfile = opts.showProfile === true || (opts.showProfile !== false && inDmContext);
+	const showPinToggle = opts.showPinToggle === true || (opts.showPinToggle !== false && Boolean(pinKey.trim()));
 
 	const menu = document.createElement('div');
 	menu.className = 'feed-card-menu chat-page-sidebar-dm-row-menu';
@@ -42,33 +55,61 @@ export function openDmSidebarGearMenu(btn, opts = {}) {
 	menu.style.zIndex = '100002';
 	menu.style.boxSizing = 'border-box';
 
-	const itemProfile = document.createElement('button');
-	itemProfile.type = 'button';
-	itemProfile.className = 'feed-card-menu-item';
-	itemProfile.setAttribute('role', 'menuitem');
-	itemProfile.dataset.chatDmMenuAction = 'profile';
-	itemProfile.dataset.chatDmMenuProfileHref = profileHref;
-	itemProfile.textContent = 'View Profile';
-	menu.appendChild(itemProfile);
+	if (showProfile) {
+		const itemProfile = document.createElement('button');
+		itemProfile.type = 'button';
+		itemProfile.className = 'feed-card-menu-item';
+		itemProfile.setAttribute('role', 'menuitem');
+		itemProfile.dataset.chatDmMenuAction = 'profile';
+		itemProfile.dataset.chatDmMenuProfileHref = profileHref;
+		itemProfile.textContent = 'View Profile';
+		menu.appendChild(itemProfile);
+	}
 
-	if (pinned) {
-		const unpin = document.createElement('button');
-		unpin.type = 'button';
-		unpin.className = 'feed-card-menu-item';
-		unpin.setAttribute('role', 'menuitem');
-		unpin.dataset.chatDmMenuAction = 'unpin';
-		unpin.dataset.chatDmMenuKey = pinKey;
-		unpin.textContent = 'Unpin Chat';
-		menu.appendChild(unpin);
-	} else {
-		const pin = document.createElement('button');
-		pin.type = 'button';
-		pin.className = 'feed-card-menu-item';
-		pin.setAttribute('role', 'menuitem');
-		pin.dataset.chatDmMenuAction = 'pin';
-		pin.dataset.chatDmMenuKey = pinKey;
-		pin.textContent = 'Pin Chat';
-		menu.appendChild(pin);
+	if (typeof opts.onMarkAsRead === 'function') {
+		const markRead = document.createElement('button');
+		markRead.type = 'button';
+		markRead.className = 'feed-card-menu-item';
+		markRead.setAttribute('role', 'menuitem');
+		markRead.dataset.chatDmMenuAction = 'mark-read';
+		markRead.textContent = 'Mark as Read';
+		menu.appendChild(markRead);
+	}
+
+	if (showPinToggle) {
+		if (pinned) {
+			const unpin = document.createElement('button');
+			unpin.type = 'button';
+			unpin.className = 'feed-card-menu-item';
+			unpin.setAttribute('role', 'menuitem');
+			unpin.dataset.chatDmMenuAction = 'unpin';
+			unpin.dataset.chatDmMenuKey = pinKey;
+			unpin.textContent = 'Unpin Chat';
+			menu.appendChild(unpin);
+		} else {
+			const pin = document.createElement('button');
+			pin.type = 'button';
+			pin.className = 'feed-card-menu-item';
+			pin.setAttribute('role', 'menuitem');
+			pin.dataset.chatDmMenuAction = 'pin';
+			pin.dataset.chatDmMenuKey = pinKey;
+			pin.textContent = 'Pin Chat';
+			menu.appendChild(pin);
+		}
+	}
+
+	const extraItems = Array.isArray(opts.extraItems) ? opts.extraItems : [];
+	for (const extra of extraItems) {
+		const action = typeof extra?.action === 'string' ? extra.action.trim() : '';
+		const label = typeof extra?.label === 'string' ? extra.label.trim() : '';
+		if (!action || !label) continue;
+		const item = document.createElement('button');
+		item.type = 'button';
+		item.className = 'feed-card-menu-item';
+		item.setAttribute('role', 'menuitem');
+		item.dataset.chatDmMenuAction = action;
+		item.textContent = label;
+		menu.appendChild(item);
 	}
 
 	document.body.appendChild(menu);
@@ -116,6 +157,11 @@ export function openDmSidebarGearMenu(btn, opts = {}) {
 			return;
 		}
 		const key = item.getAttribute('data-chat-dm-menu-key') || pinKey;
+		if (act === 'mark-read') {
+			closeDmSidebarGearMenu();
+			void Promise.resolve(opts.onMarkAsRead?.());
+			return;
+		}
 		if (act === 'pin') {
 			pinDmKey(key);
 			closeDmSidebarGearMenu();
@@ -134,6 +180,11 @@ export function openDmSidebarGearMenu(btn, opts = {}) {
 			} catch {
 				// ignore
 			}
+			return;
+		}
+		if (typeof opts.onAction === 'function') {
+			closeDmSidebarGearMenu();
+			void Promise.resolve(opts.onAction(act || ''));
 		}
 	});
 }

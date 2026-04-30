@@ -16,19 +16,39 @@ import { getChatAudibleNotificationsEnabled } from './chatAudibleNotificationsPr
 const CHAT_UNREAD_SOUND_HREF = '/audio/universfield-new-notification-07-210334.mp3';
 const CHAT_UNREAD_PING_COOLDOWN_MS = 2000;
 
-let unlockHandlersBound = false;
-let pendingPing = false;
-let audioPrimed = false;
-let lastPingStartedAt = 0;
-let pingInFlight = false;
+const CHAT_UNREAD_AUDIO_STATE_KEY = '__parasceneChatUnreadAudioState';
+
+function getSharedState() {
+	if (typeof window === 'undefined') {
+		return {
+			unlockHandlersBound: false,
+			pendingPing: false,
+			audioPrimed: false,
+			lastPingStartedAt: 0,
+			pingInFlight: false
+		};
+	}
+	const existing = window[CHAT_UNREAD_AUDIO_STATE_KEY];
+	if (existing && typeof existing === 'object') return existing;
+	const created = {
+		unlockHandlersBound: false,
+		pendingPing: false,
+		audioPrimed: false,
+		lastPingStartedAt: 0,
+		pingInFlight: false
+	};
+	window[CHAT_UNREAD_AUDIO_STATE_KEY] = created;
+	return created;
+}
 
 function tabIsBackgrounded() {
 	return typeof document !== 'undefined' && document.visibilityState === 'hidden';
 }
 
 async function primeAudioOnUserGesture() {
+	const state = getSharedState();
 	if (!getChatAudibleNotificationsEnabled()) return;
-	if (audioPrimed) return;
+	if (state.audioPrimed) return;
 	try {
 		const a = new Audio(CHAT_UNREAD_SOUND_HREF);
 		a.preload = 'auto';
@@ -40,7 +60,7 @@ async function primeAudioOnUserGesture() {
 		} catch {
 			// ignore
 		}
-		audioPrimed = true;
+		state.audioPrimed = true;
 	} catch {
 		// try again on a later gesture
 	}
@@ -54,26 +74,29 @@ async function playNotificationClip() {
 }
 
 function isPingCoolingDown() {
+	const state = getSharedState();
 	const now = Date.now();
-	return pingInFlight || (lastPingStartedAt > 0 && now - lastPingStartedAt < CHAT_UNREAD_PING_COOLDOWN_MS);
+	return state.pingInFlight || (state.lastPingStartedAt > 0 && now - state.lastPingStartedAt < CHAT_UNREAD_PING_COOLDOWN_MS);
 }
 
 async function playNotificationClipDebounced() {
+	const state = getSharedState();
 	if (isPingCoolingDown()) return false;
-	lastPingStartedAt = Date.now();
-	pingInFlight = true;
+	state.lastPingStartedAt = Date.now();
+	state.pingInFlight = true;
 	try {
 		await playNotificationClip();
 		return true;
 	} finally {
-		pingInFlight = false;
+		state.pingInFlight = false;
 	}
 }
 
 async function tryFlushPendingPing() {
-	if (!pendingPing) return;
+	const state = getSharedState();
+	if (!state.pendingPing) return;
 	if (!getChatAudibleNotificationsEnabled()) {
-		pendingPing = false;
+		state.pendingPing = false;
 		return;
 	}
 	if (isPingCoolingDown()) return;
@@ -82,7 +105,7 @@ async function tryFlushPendingPing() {
 		// activated the document, and this is a single catch-up for a blocked
 		// background notification.
 		if (!(await playNotificationClipDebounced())) return;
-		pendingPing = false;
+		state.pendingPing = false;
 	} catch {
 		// still blocked; keep pendingPing true
 	}
@@ -95,8 +118,9 @@ async function onUserGestureForChatAudio() {
 }
 
 function bindUnlockHandlers() {
-	if (unlockHandlersBound) return;
-	unlockHandlersBound = true;
+	const state = getSharedState();
+	if (state.unlockHandlersBound) return;
+	state.unlockHandlersBound = true;
 	const onUnlock = () => {
 		void onUserGestureForChatAudio();
 	};
@@ -110,6 +134,7 @@ function bindUnlockHandlers() {
  * @returns {Promise<boolean>} true when playback started, false when skipped / queued / blocked
  */
 export async function playChatUnreadPing() {
+	const state = getSharedState();
 	if (typeof document === 'undefined' || typeof window === 'undefined') return false;
 	if (!getChatAudibleNotificationsEnabled()) return false;
 	if (!tabIsBackgrounded()) return false;
@@ -117,10 +142,10 @@ export async function playChatUnreadPing() {
 	if (isPingCoolingDown()) return false;
 	try {
 		if (!(await playNotificationClipDebounced())) return false;
-		pendingPing = false;
+		state.pendingPing = false;
 		return true;
 	} catch {
-		pendingPing = true;
+		state.pendingPing = true;
 		return false;
 	}
 }

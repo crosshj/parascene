@@ -38,45 +38,92 @@ function runCreatePageInit(refreshAutoGrowTextareas) {
 	const BASIC_CREATE_DEFAULT_SERVER_ID = 1;
 	const BASIC_CREATE_DEFAULT_METHOD_KEY = 'replicate';
 	const BASIC_CREATE_DEFAULT_MODEL = 'xai/grok-imagine-image';
+	const BASIC_IMAGE_EDIT_CARRYOVER_KEY = 'create_page_image_edit_carryover';
+	const BASIC_IMAGE_EDIT_SELECTION_KEY = 'create_page_image_edit_selection';
 
 	const changeLink = document.getElementById('create-change-image-link');
 	const area = document.querySelector('.create-image-edit-area');
 	/** @type {string|File|null} */
 	let imageEditValue = null;
 
+	function applyImageEditSelection(value) {
+		const box = area?.closest('.create-image-edit-box');
+		if (!box || !area) return;
+		imageEditValue = value instanceof File || typeof value === 'string' ? value : null;
+		const prevThumb = box.querySelector('.create-image-edit-thumb');
+		if (prevThumb?.src?.startsWith('blob:')) {
+			URL.revokeObjectURL(prevThumb.src);
+		}
+		box.dataset.imageValue = value instanceof File ? value.name : value;
+		const thumbSrc = typeof value === 'string' ? value : value instanceof File ? URL.createObjectURL(value) : null;
+		if (!thumbSrc) return;
+		let thumb = prevThumb || box.querySelector('.create-image-edit-thumb');
+		if (!thumb) {
+			thumb = document.createElement('img');
+			thumb.className = 'create-image-edit-thumb';
+			thumb.alt = '';
+			area.insertBefore(thumb, area.firstChild);
+		}
+		thumb.src = thumbSrc;
+		thumb.hidden = false;
+		area.querySelector('.create-image-edit-placeholder')?.classList.add('is-hidden');
+		changeLink?.classList.add('is-visible');
+		if (typeof updateEditImageButtonState === 'function') updateEditImageButtonState();
+	}
+
 	function openImagePicker() {
 		const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
 		const qs = v ? `?v=${encodeURIComponent(v)}` : '';
 		import(`../../shared/providerFormFields.js${qs}`).then(({ openImagePickerModal }) => {
 			openImagePickerModal({
-				onSelect(value) {
-					const box = area?.closest('.create-image-edit-box');
-					if (!box) return;
-					imageEditValue = value instanceof File || typeof value === 'string' ? value : null;
-					const prevThumb = box.querySelector('.create-image-edit-thumb');
-					if (prevThumb?.src?.startsWith('blob:')) {
-						URL.revokeObjectURL(prevThumb.src);
-					}
-					box.dataset.imageValue = value instanceof File ? value.name : value;
-					const thumbSrc = typeof value === 'string' ? value : value instanceof File ? URL.createObjectURL(value) : null;
-					if (thumbSrc && area) {
-						let thumb = prevThumb || box.querySelector('.create-image-edit-thumb');
-						if (!thumb) {
-							thumb = document.createElement('img');
-							thumb.className = 'create-image-edit-thumb';
-							thumb.alt = '';
-							area.insertBefore(thumb, area.firstChild);
+				async onSelect(value) {
+					if (value instanceof File) {
+						try {
+							const { uploadImageFile } = await import(`../../shared/createSubmit.js${qs}`);
+							const uploaded = await uploadImageFile(value);
+							if (typeof uploaded === 'string' && uploaded.trim()) {
+								applyImageEditSelection(uploaded.trim());
+								try {
+									localStorage.setItem(BASIC_IMAGE_EDIT_SELECTION_KEY, uploaded.trim());
+									localStorage.setItem(STORAGE_KEYS.tab, 'image-edit');
+								} catch (_) {}
+							}
+						} catch (err) {
+							alert(err?.message || 'Image upload failed');
 						}
-						thumb.src = thumbSrc;
-						thumb.hidden = false;
-						area.querySelector('.create-image-edit-placeholder')?.classList.add('is-hidden');
-						changeLink?.classList.add('is-visible');
+						return;
 					}
-					if (typeof updateEditImageButtonState === 'function') updateEditImageButtonState();
+					if (typeof value === 'string' && value.trim()) {
+						const next = value.trim();
+						applyImageEditSelection(next);
+						try {
+							localStorage.setItem(BASIC_IMAGE_EDIT_SELECTION_KEY, next);
+							localStorage.setItem(STORAGE_KEYS.tab, 'image-edit');
+						} catch (_) {}
+						return;
+					}
+					applyImageEditSelection(value);
 				},
 			});
 		});
 	}
+
+	try {
+		const carried = localStorage.getItem(BASIC_IMAGE_EDIT_CARRYOVER_KEY);
+		if (typeof carried === 'string' && carried.trim()) {
+			const next = carried.trim();
+			applyImageEditSelection(next);
+			try {
+				localStorage.setItem(BASIC_IMAGE_EDIT_SELECTION_KEY, next);
+			} catch (_) {}
+			localStorage.removeItem(BASIC_IMAGE_EDIT_CARRYOVER_KEY);
+		} else {
+			const saved = localStorage.getItem(BASIC_IMAGE_EDIT_SELECTION_KEY);
+			if (typeof saved === 'string' && saved.trim()) {
+				applyImageEditSelection(saved.trim());
+			}
+		}
+	} catch (_) {}
 
 	if (area) {
 		area.addEventListener('click', () => {

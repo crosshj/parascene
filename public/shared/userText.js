@@ -91,7 +91,22 @@ function renderPlainUserTextSegment(text) {
 		} else if (sigil === '@' && /^[a-z0-9][a-z0-9_-]{2,23}$/.test(normalized)) {
 			out += `<a href="/p/${escapeHtml(normalized)}" class="user-link mention-link">@${escapeHtml(rawToken)}</a>`;
 		} else if (sigil === '#' && /^[a-z0-9][a-z0-9_-]{1,31}$/.test(normalized)) {
-			out += `<a href="/t/${escapeHtml(normalized)}" class="user-link mention-link">#${escapeHtml(rawToken)}</a>`;
+			const specialHashtagHref = (() => {
+				const map = {
+					create: '/create',
+					feed: '/feed',
+					help: '/help',
+					creations: '/chat/c/creations',
+					creation: '/chat/c/creations',
+					notes: '/chat/notes',
+					explore: '/explore',
+					comments: '/chat/c/comments',
+					feedback: '/chat/c/feedback'
+				};
+				return map[normalized] || '';
+			})();
+			const href = specialHashtagHref || `/t/${normalized}`;
+			out += `<a href="${escapeHtml(href)}" class="user-link mention-link">#${escapeHtml(rawToken)}</a>`;
 		} else if (sigil === '$' && /^(?=.*[a-z])[a-z0-9][a-z0-9_-]{0,63}$/.test(normalized)) {
 			out += `<a href="/styles/${escapeHtml(normalized)}" class="user-link mention-link mention-link--style">$${escapeHtml(rawToken)}</a>`;
 		} else {
@@ -561,7 +576,7 @@ export function textWithCreationLinks(text) {
 			const basePath = stripQueryAndHash(relativePath);
 			if (isInlineEligibleGenericImagePath(basePath)) {
 				const rp = escapeHtml(relativePath);
-				out += `<span class="user-text-inline-image-wrap"><a href="${rp}" class="user-link creation-link user-text-inline-image-link" aria-label="View full image" data-creation-link-original="${escapeHtml(url)}"><img class="user-text-inline-image" src="${rp}" alt="" loading="lazy" decoding="async" /></a></span>`;
+				out += `<span class="user-text-inline-image-wrap is-loading"><a href="${rp}" class="user-link creation-link user-text-inline-image-link" aria-label="View full image" data-creation-link-original="${escapeHtml(url)}"><img class="user-text-inline-image" src="${rp}" alt="" loading="lazy" decoding="async" width="260" height="260" data-inline-image-loading="1" /></a></span>`;
 			} else if (isSafeGenericApiPath(basePath)) {
 				out += renderInlineGenericAttachmentCard(relativePath, url);
 			} else {
@@ -1528,4 +1543,27 @@ export function processUserText(text) {
 export function hydrateUserTextLinks(rootEl) {
 	hydrateYoutubeLinkTitles(rootEl);
 	hydrateXLinkTitles(rootEl);
+	const imgs = rootEl?.querySelectorAll?.('img.user-text-inline-image');
+	if (!imgs || typeof imgs.forEach !== 'function') return;
+	imgs.forEach((img) => {
+		if (!(img instanceof HTMLImageElement)) return;
+		if (img.dataset.inlineImageHydrateBound === '1') return;
+		img.dataset.inlineImageHydrateBound = '1';
+		const wrap = img.closest('.user-text-inline-image-wrap');
+		const done = () => {
+			delete img.dataset.inlineImageLoading;
+			if (wrap instanceof HTMLElement) {
+				wrap.classList.remove('is-loading');
+			}
+		};
+		if (wrap instanceof HTMLElement) {
+			wrap.classList.add('is-loading');
+		}
+		if (img.complete) {
+			done();
+			return;
+		}
+		img.addEventListener('load', done, { once: true });
+		img.addEventListener('error', done, { once: true });
+	});
 }

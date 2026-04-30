@@ -91,6 +91,12 @@ class AppNavigation extends HTMLElement {
 		return ['show-notifications', 'hide-notifications', 'show-profile', 'show-create', 'show-mobile-menu', 'hide-credits', 'default-route', 'credits-count'];
 	}
 
+	shouldRunHeaderChatUnreadPoll() {
+		const pathname = window.location.pathname;
+		if (pathname === '/chat' || pathname.startsWith('/chat/')) return false;
+		return document.body?.dataset?.entry !== 'chat';
+	}
+
 	async connectedCallback() {
 		await loadDeps();
 		// Establish avatar loading state before first render to avoid icon flicker.
@@ -129,7 +135,11 @@ class AppNavigation extends HTMLElement {
 		if (this._chatUnreadPoll) {
 			clearInterval(this._chatUnreadPoll);
 		}
-		this._chatUnreadPoll = setInterval(() => this.loadChatUnreadCount(), 45000);
+		if (this.shouldRunHeaderChatUnreadPoll()) {
+			this._chatUnreadPoll = setInterval(() => this.loadChatUnreadCount(), 45000);
+		} else {
+			this._chatUnreadPoll = null;
+		}
 	}
 
 	disconnectedCallback() {
@@ -1039,8 +1049,9 @@ class AppNavigation extends HTMLElement {
 
 		this.currentRoute = currentRoute;
 
-		// Only reset scroll and dispatch when the route actually changed (stops duplicate loads and handler storms)
-		if (routeChanged && previousRoute != null) {
+		// Reset on first route resolution and real route changes.
+		// This prevents browser-restored scroll positions from dropping initial skeleton views at the bottom.
+		if (previousRoute == null || routeChanged) {
 			this.resetSectionScroll();
 		}
 		if (routeChanged) {

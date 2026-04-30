@@ -77,6 +77,26 @@ function chatSimulateSendFail() {
 	}
 }
 
+/** `?chatSimulateConversationLoadFail=1` — force thread message load failure for error-state UI testing. */
+function chatSimulateConversationLoadFail() {
+	try {
+		return new URLSearchParams(window.location.search).get('chatSimulateConversationLoadFail') === '1';
+	} catch {
+		return false;
+	}
+}
+
+function clearChatSimulateConversationLoadFailParam() {
+	try {
+		const url = new URL(window.location.href);
+		if (!url.searchParams.has('chatSimulateConversationLoadFail')) return;
+		url.searchParams.delete('chatSimulateConversationLoadFail');
+		window.history.replaceState({}, '', url.toString());
+	} catch {
+		// ignore
+	}
+}
+
 /** Hide repeated sender meta when the next message is same author within this window (ms). */
 const CHAT_MESSAGE_GROUP_GAP_MS = 7 * 60 * 1000;
 
@@ -133,6 +153,8 @@ let attachChatComposerSuggest;
 let isTriggeredSuggestPopupOpen;
 let addPageUsers;
 let clearPageUsers;
+let addPageHashtagTargets;
+let clearPageHashtagTargets;
 let enableLikeButtons;
 let createPseudoColumnPager;
 /** @type {((count?: number) => string) | undefined} */
@@ -301,6 +323,8 @@ async function loadDeps() {
 		isTriggeredSuggestPopupOpen = suggestMod.isTriggeredSuggestPopupOpen;
 		addPageUsers = suggestMod.addPageUsers;
 		clearPageUsers = suggestMod.clearPageUsers;
+		addPageHashtagTargets = suggestMod.addPageHashtagTargets;
+		clearPageHashtagTargets = suggestMod.clearPageHashtagTargets;
 
 		const likesMod = await import(`../shared/likes.js${qs}`);
 		enableLikeButtons = likesMod.enableLikeButtons;
@@ -743,6 +767,7 @@ export async function initChatPage(root, options = {}) {
 	let chatCanvasCreateCleanup = null;
 	let tearDownChatCanvasUi = () => { };
 	let chatThreads = [];
+	let chatJoinedServers = [];
 	let activeThreadId = null;
 	/** Most recent thread-ish meta used to paint desktop/mobile header title + avatar. */
 	let activeHeaderMeta = null;
@@ -839,6 +864,14 @@ export async function initChatPage(root, options = {}) {
 	let chatMessagesScrollCleanup = null;
 	/** @type {ReturnType<typeof setInterval> | null} */
 	let chatSidebarPollTimer = null;
+	let chatSidebarLastViewerSyncAt = 0;
+	let lastPresenceOnlineSnapshot = null;
+	let lastPresenceOnlineSnapshotAt = 0;
+	const PRESENCE_ONLINE_SNAPSHOT_TTL_MS = 15000;
+	let lastPresenceLastActiveCache = null;
+	let lastPresenceLastActiveCacheAt = 0;
+	let lastPresenceLastActiveCacheKey = '';
+	const PRESENCE_LAST_ACTIVE_SNAPSHOT_TTL_MS = 15000;
 	/** @type {null | (() => void)} */
 	let chatSidebarServersHandler = null;
 	/** @type {null | ((e: Event) => void)} */
@@ -1200,6 +1233,80 @@ export async function initChatPage(root, options = {}) {
 		if (row) Object.assign(row, patch);
 	}
 
+	function getSidebarThreadLastMessageId(threadId) {
+		const tid = Number(threadId);
+		if (!Number.isFinite(tid) || tid <= 0) return null;
+		const row = (chatThreads || []).find((t) => Number(t.id) === tid);
+		if (!row) return null;
+		const fromLastMessage = Number(row?.last_message?.id);
+		if (Number.isFinite(fromLastMessage) && fromLastMessage > 0) return fromLastMessage;
+		return null;
+	}
+
+	async function markThreadReadByMessageId(threadId, messageId) {
+		const tid = Number(threadId);
+		const mid = Number(messageId);
+		if (!Number.isFinite(tid) || tid <= 0) return false;
+		if (!Number.isFinite(mid) || mid <= 0) return false;
+		try {
+			const res = await fetch(`/api/chat/threads/${tid}/read`, {
+				method: 'POST',
+				credentials: 'include',
+				headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+				body: JSON.stringify({ last_read_message_id: mid })
+			});
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) return false;
+			const lr = data?.last_read_message_id != null ? Number(data.last_read_message_id) : mid;
+			if (Number.isFinite(lr) && lr > 0) {
+				patchChatThreadRow(tid, { last_read_message_id: lr, unread_count: 0 });
+			} else {
+				patchChatThreadRow(tid, { unread_count: 0 });
+			}
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	async function markSidebarThreadRead(threadId) {
+		const tid = Number(threadId);
+		if (!Number.isFinite(tid) || tid <= 0) return;
+		let mid = getSidebarThreadLastMessageId(tid);
+		if (!Number.isFinite(mid) || mid <= 0) {
+			try {
+				await loadChatThreads({ forceNetwork: true });
+			} catch {
+				// ignore
+			}
+			mid = getSidebarThreadLastMessageId(tid);
+		}
+		if (!Number.isFinite(mid) || mid <= 0) {
+			patchChatThreadRow(tid, { unread_count: 0 });
+			dispatchChatUnreadRefresh();
+			void refreshChatSidebar({ skipThreadsFetch: true });
+			return;
+		}
+		const ok = await markThreadReadByMessageId(tid, mid);
+		if (!ok) return;
+		if (Number(activeThreadId) === tid) {
+			fadeOutUnreadHighlightsInDom();
+		}
+		dispatchChatUnreadRefresh();
+		void refreshChatSidebar({ skipThreadsFetch: true });
+	}
+
+	function openServerDetailsFromSidebarButton(settingsBtn) {
+		if (!(settingsBtn instanceof HTMLButtonElement)) return;
+		const sid = Number(settingsBtn.getAttribute('data-chat-server-settings'));
+		if (!Number.isFinite(sid) || sid <= 0) return;
+		const canManage = settingsBtn.getAttribute('data-chat-server-can-manage') === '1';
+		const modal = document.querySelector('app-modal-server');
+		if (modal && typeof modal.open === 'function') {
+			modal.open({ mode: canManage ? 'edit' : 'view', serverId: sid });
+		}
+	}
+
 	function fadeOutUnreadHighlightsInDom() {
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!messagesEl) return;
@@ -1232,7 +1339,7 @@ export async function initChatPage(root, options = {}) {
 	/** Mark read only after the latest message row is visible (IntersectionObserver). */
 	async function markLatestMessageRead() {
 		const threadId = activeThreadId;
-		if (!threadId || loadingThreadMessages) return;
+		if (!threadId) return;
 		const messages = lastChatMessagesPayload;
 		if (!Array.isArray(messages) || messages.length === 0) return;
 		const last = messages[messages.length - 1];
@@ -1240,28 +1347,17 @@ export async function initChatPage(root, options = {}) {
 		if (!Number.isFinite(mid) || mid <= 0) return;
 		if (lastMarkReadSentId === mid) return;
 		lastMarkReadSentId = mid;
+		const ok = await markThreadReadByMessageId(threadId, mid);
+		if (!ok) {
+			lastMarkReadSentId = null;
+			return;
+		}
 		try {
-			const res = await fetch(`/api/chat/threads/${threadId}/read`, {
-				method: 'POST',
-				credentials: 'include',
-				headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-				body: JSON.stringify({ last_read_message_id: mid })
-			});
-			const data = await res.json().catch(() => ({}));
-			if (!res.ok) {
-				lastMarkReadSentId = null;
-				return;
-			}
-			const lr =
-				data?.last_read_message_id != null ? Number(data.last_read_message_id) : mid;
-			if (Number.isFinite(lr) && lr > 0) {
-				patchChatThreadRow(threadId, { last_read_message_id: lr, unread_count: 0 });
-			}
 			fadeOutUnreadHighlightsInDom();
 			dispatchChatUnreadRefresh();
 			void refreshChatSidebar({ skipThreadsFetch: true });
 		} catch {
-			lastMarkReadSentId = null;
+			// ignore
 		}
 	}
 
@@ -1409,15 +1505,41 @@ export async function initChatPage(root, options = {}) {
 		return isChatPageMobileLayout() && document.body.classList.contains('chat-page--viewport-scroll');
 	}
 
+	/**
+	 * Pseudo channels are rendered as top-anchored browse lanes.
+	 * Keep this true for feed/explore/creations/comments so first paint is always at top.
+	 * @param {'feed' | 'explore' | 'creations'} laneSlug
+	 */
+	function isNewestFirstBrowseLane(laneSlug) {
+		if (
+			laneSlug === 'feed' ||
+			laneSlug === 'explore' ||
+			laneSlug === 'creations' ||
+			laneSlug === 'comments'
+		) {
+			return true;
+		}
+		return chatFeedLaneScrollMode === 'newest_first';
+	}
+
 	/** After painting a skeleton into `[data-chat-messages]`, snap scroll and prevent scroll until content loads. */
 	function resetAndLockChatMessagesScrollForSkeleton(messagesEl, channelSlug) {
 		if (!(messagesEl instanceof HTMLElement)) return;
 		const slug = String(channelSlug || '').trim().toLowerCase();
-		const feedish = slug === 'feed' || slug === 'explore' || slug === 'creations';
-		const toEnd = feedish && chatFeedLaneScrollMode === 'oldest_first';
+		const pseudoLane =
+			slug === 'feed' ||
+			slug === 'explore' ||
+			slug === 'creations' ||
+			slug === 'comments';
+		const toEnd = pseudoLane ? false : chatFeedLaneScrollMode === 'oldest_first';
+		// Keep early viewport/resize nudges from forcing browse-lane skeletons to bottom.
+		chatStickToBottom = toEnd;
+		if (!toEnd) {
+			teardownBottomDwellTimer();
+		}
 		const apply = () => {
 			messagesEl.scrollTop = toEnd ? messagesEl.scrollHeight : 0;
-			if (shouldUseViewportScrollForChatMessages() && feedish) {
+			if (shouldUseViewportScrollForChatMessages() && pseudoLane) {
 				window.scrollTo(0, toEnd ? document.documentElement.scrollHeight : 0);
 			}
 		};
@@ -1427,7 +1549,7 @@ export async function initChatPage(root, options = {}) {
 			requestAnimationFrame(apply);
 		});
 		messagesEl.dataset.chatMessagesScrollLock = '1';
-		if (shouldUseViewportScrollForChatMessages() && feedish) {
+		if (shouldUseViewportScrollForChatMessages() && pseudoLane) {
 			document.documentElement.dataset.chatViewportScrollLock = '1';
 			document.body.dataset.chatViewportScrollLock = '1';
 		}
@@ -1451,6 +1573,15 @@ export async function initChatPage(root, options = {}) {
 		if (!chatStickToBottom) return;
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!messagesEl) return;
+		if (messagesEl.dataset.chatMessagesScrollLock === '1') return;
+		if (
+			activePseudoChannelSlug === 'feed' ||
+			activePseudoChannelSlug === 'explore' ||
+			activePseudoChannelSlug === 'creations' ||
+			activePseudoChannelSlug === 'comments'
+		) {
+			return;
+		}
 		const apply = () => {
 			messagesEl.scrollTop = messagesEl.scrollHeight;
 		};
@@ -2347,6 +2478,17 @@ export async function initChatPage(root, options = {}) {
 		}
 		if (mobileChrome instanceof HTMLElement) {
 			mobileChrome.hidden = shouldShowAppMobileHeader;
+		}
+		const isMobileCanvasOpen =
+			isChatPageMobileLayout() &&
+			Boolean(typeof document !== 'undefined' && document.body?.classList.contains('chat-page--canvas-open'));
+
+		if (isMobileCanvasOpen) {
+			if (composerForm instanceof HTMLElement) {
+				composerForm.hidden = true;
+			}
+			setMobileComposerOverlayClass(false);
+			return;
 		}
 
 		if (!chatComposerVisible) {
@@ -3451,14 +3593,16 @@ export async function initChatPage(root, options = {}) {
 			syncEditInputHeight();
 			input.addEventListener('input', syncEditInputHeight);
 			input.focus();
-			input.select();
+			if (!isChatPageMobileLayout()) {
+				input.select();
+			}
 			input.addEventListener('keydown', (e) => {
 				if (e.key === 'Escape') {
 					e.preventDefault();
 					cancelActiveChatMessageEdit();
 					return;
 				}
-				if (e.key === 'Enter' && !e.shiftKey) {
+				if (e.key === 'Enter' && !e.shiftKey && !isChatPageMobileLayout()) {
 					e.preventDefault();
 					void saveActiveChatMessageEdit();
 				}
@@ -3656,6 +3800,28 @@ export async function initChatPage(root, options = {}) {
 		chatInlineImageLightboxEl = null;
 	}
 
+	function pushChatInlineImageLightboxHistoryEntry() {
+		if (!isChatPageMobileLayout()) return;
+		try {
+			const curState = window.history?.state;
+			const baseState = curState && typeof curState === 'object' ? curState : {};
+			window.history.pushState(
+				{ ...baseState, prsnChat: true, prsnChatInlineImageLightbox: true },
+				'',
+				window.location.href
+			);
+		} catch {
+			// ignore
+		}
+	}
+
+	function closeChatInlineImageLightboxFromPopstateIfOpen() {
+		if (!isChatPageMobileLayout()) return false;
+		if (!(chatInlineImageLightboxEl instanceof HTMLElement)) return false;
+		closeChatInlineImageLightbox();
+		return true;
+	}
+
 	function openChatInlineImageLightbox(src) {
 		const url = String(src || '').trim();
 		if (!url) return;
@@ -3700,6 +3866,7 @@ export async function initChatPage(root, options = {}) {
 
 		document.body.appendChild(overlay);
 		chatInlineImageLightboxEl = overlay;
+		pushChatInlineImageLightboxHistoryEntry();
 		requestAnimationFrame(() => {
 			try {
 				closeBtn.focus({ preventScroll: true });
@@ -3829,6 +3996,7 @@ export async function initChatPage(root, options = {}) {
 
 		document.body.appendChild(overlay);
 		chatInlineImageLightboxEl = overlay;
+		pushChatInlineImageLightboxHistoryEntry();
 		requestAnimationFrame(() => {
 			try {
 				closeBtn.focus({ preventScroll: true });
@@ -3836,6 +4004,113 @@ export async function initChatPage(root, options = {}) {
 				closeBtn.focus();
 			}
 		});
+	}
+
+	function syncChatComposerHashtagTargets() {
+		if (
+			typeof clearPageHashtagTargets !== 'function' ||
+			typeof addPageHashtagTargets !== 'function'
+		) {
+			return;
+		}
+		clearPageHashtagTargets();
+		const items = [];
+		const seen = new Set();
+		const joinedServerSlugs = new Set(
+			(Array.isArray(chatJoinedServers) ? chatJoinedServers : [])
+				.map((s) =>
+					serverChannelTagFromServerName(typeof s?.name === 'string' ? s.name : '')
+				)
+				.filter((slug) => Boolean(slug))
+				.map((slug) => String(slug).toLowerCase())
+		);
+		const addTarget = (item) => {
+			const type = String(item?.type || 'channel').trim().toLowerCase();
+			const slug = String(item?.slug || '')
+				.trim()
+				.toLowerCase()
+				.replace(/^#/, '');
+			const dedupeKey = `${type}:${slug}`;
+			if (!slug || seen.has(dedupeKey)) return;
+			seen.add(dedupeKey);
+			items.push({
+				...item,
+				type,
+				slug
+			});
+		};
+
+		for (const t of Array.isArray(chatThreads) ? chatThreads : []) {
+			if (!t || t.type !== 'channel') continue;
+			const slug = typeof t.channel_slug === 'string' ? t.channel_slug.trim().toLowerCase() : '';
+			if (!slug) continue;
+			if (rosterMod.SIDEBAR_TOP_STRIP_CHANNEL_SLUGS.has(slug)) continue;
+			if (joinedServerSlugs.has(slug)) continue;
+			const rawTitle = typeof t.title === 'string' ? t.title.trim() : '';
+			const displayTitle = rawTitle.replace(/^#/, '').trim();
+			addTarget({
+				type: 'channel',
+				id: `channel:${slug}`,
+				label: displayTitle || `#${slug}`,
+				sublabel: `#${slug}`,
+				slug,
+				badge: 'Channel'
+			});
+		}
+
+		for (const slugRaw of rosterMod.SIDEBAR_PSEUDO_STRIP_ORDER || []) {
+			const slug = String(slugRaw || '').trim().toLowerCase();
+			if (!slug) continue;
+			addTarget({
+				type: 'pseudo_channel',
+				id: `pseudo_channel:${slug}`,
+				label: rosterMod.getSidebarPseudoChannelTitle(slug) || `#${slug}`,
+				sublabel: `#${slug}`,
+				slug,
+				badge: 'Default'
+			});
+		}
+		addTarget({
+			type: 'pseudo_channel',
+			id: 'pseudo_channel:create',
+			label: 'Create',
+			sublabel: '#create',
+			slug: 'create',
+			badge: 'Default'
+		});
+		addTarget({
+			type: 'pseudo_channel',
+			id: 'pseudo_channel:notes',
+			label: 'My Notes',
+			sublabel: '#notes',
+			slug: 'notes',
+			badge: 'Default'
+		});
+		addTarget({
+			type: 'pseudo_channel',
+			id: 'pseudo_channel:help',
+			label: 'Help',
+			sublabel: '#help',
+			slug: 'help',
+			badge: 'Default'
+		});
+
+		for (const s of Array.isArray(chatJoinedServers) ? chatJoinedServers : []) {
+			const id = Number(s?.id);
+			const name = typeof s?.name === 'string' ? s.name.trim() : '';
+			const slug = serverChannelTagFromServerName(name);
+			if (!slug) continue;
+			addTarget({
+				type: 'server',
+				id: Number.isFinite(id) && id > 0 ? `server:${id}` : `server:${slug.toLowerCase()}`,
+				label: name || `#${slug}`,
+				sublabel: `#${slug.toLowerCase()}`,
+				slug,
+				badge: 'Server'
+			});
+		}
+
+		addPageHashtagTargets(items);
 	}
 
 	async function loadChatThreads(options = {}) {
@@ -3854,6 +4129,7 @@ export async function initChatPage(root, options = {}) {
 			chatThreads = cached.threads;
 			chatViewerIsAdmin = cached.viewerIsAdmin === true;
 			chatViewerIsFounder = cached.viewerIsFounder === true;
+			syncChatComposerHashtagTargets();
 		}
 
 		if (!needNetwork) {
@@ -3873,6 +4149,7 @@ export async function initChatPage(root, options = {}) {
 		chatThreads = Array.isArray(result.data?.threads) ? result.data.threads : [];
 		chatViewerIsAdmin = Boolean(result.data?.viewer_is_admin);
 		chatViewerIsFounder = Boolean(result.data?.viewer_is_founder);
+		syncChatComposerHashtagTargets();
 		if (chatViewerId != null && Number.isFinite(chatViewerId)) {
 			try {
 				writeCachedChatThreads?.(chatViewerId, chatThreads, {
@@ -3912,11 +4189,18 @@ export async function initChatPage(root, options = {}) {
 			.filter((s) => Number.isFinite(s.id) && s.id > 0);
 	}
 
-	async function fetchPresenceOnlineSnapshot() {
+	async function fetchPresenceOnlineSnapshot({ allowCached = false } = {}) {
+		if (
+			allowCached &&
+			lastPresenceOnlineSnapshot &&
+			Date.now() - lastPresenceOnlineSnapshotAt < PRESENCE_ONLINE_SNAPSHOT_TTL_MS
+		) {
+			return lastPresenceOnlineSnapshot;
+		}
 		try {
 			const res = await fetch('/api/presence/online', { credentials: 'include' });
 			if (!res.ok) {
-				return { onlineIds: new Set(), lastSeenMsByUserId: new Map() };
+				return lastPresenceOnlineSnapshot || { onlineIds: new Set(), lastSeenMsByUserId: new Map() };
 			}
 			const data = await res.json().catch(() => ({}));
 			const users = Array.isArray(data.users) ? data.users : [];
@@ -3932,17 +4216,29 @@ export async function initChatPage(root, options = {}) {
 					dmLastSeenOnlineAtByUserId.set(id, ms);
 				}
 			}
-			return { onlineIds, lastSeenMsByUserId };
+			const snapshot = { onlineIds, lastSeenMsByUserId };
+			lastPresenceOnlineSnapshot = snapshot;
+			lastPresenceOnlineSnapshotAt = Date.now();
+			return snapshot;
 		} catch {
-			return { onlineIds: new Set(), lastSeenMsByUserId: new Map() };
+			return lastPresenceOnlineSnapshot || { onlineIds: new Set(), lastSeenMsByUserId: new Map() };
 		}
 	}
 
-	async function fetchPresenceLastActiveSnapshot(userIds) {
+	async function fetchPresenceLastActiveSnapshot(userIds, { allowCached = false } = {}) {
 		const ids = Array.isArray(userIds)
 			? [...new Set(userIds.map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0))]
 			: [];
 		if (ids.length === 0) return new Map();
+		const idsKey = ids.join(',');
+		if (
+			allowCached &&
+			lastPresenceLastActiveCache &&
+			lastPresenceLastActiveCacheKey === idsKey &&
+			Date.now() - lastPresenceLastActiveCacheAt < PRESENCE_LAST_ACTIVE_SNAPSHOT_TTL_MS
+		) {
+			return new Map(lastPresenceLastActiveCache);
+		}
 		try {
 			const res = await fetch('/api/presence/last-active', {
 				method: 'POST',
@@ -3964,8 +4260,14 @@ export async function initChatPage(root, options = {}) {
 				const best = Math.max(a, p);
 				if (best > 0) out.set(id, best);
 			}
+			lastPresenceLastActiveCache = out;
+			lastPresenceLastActiveCacheAt = Date.now();
+			lastPresenceLastActiveCacheKey = idsKey;
 			return out;
 		} catch {
+			if (lastPresenceLastActiveCache && lastPresenceLastActiveCacheKey === idsKey) {
+				return new Map(lastPresenceLastActiveCache);
+			}
 			return new Map();
 		}
 	}
@@ -4278,6 +4580,8 @@ export async function initChatPage(root, options = {}) {
 			const chExpanded = captureSectionExpandedState(chEl);
 			const threadsArr = Array.isArray(threads) ? threads : [];
 			const joinedArr = Array.isArray(joined) ? joined : [];
+			chatJoinedServers = joinedArr;
+			syncChatComposerHashtagTargets();
 			const onlineIds = presenceSnapshot?.onlineIds instanceof Set ? presenceSnapshot.onlineIds : new Set();
 			const lastSeenMsByUserId =
 				presenceSnapshot?.lastSeenMsByUserId instanceof Map
@@ -4443,8 +4747,15 @@ export async function initChatPage(root, options = {}) {
 				const dataHelpAttr = t?.type === 'sidebar_help' ? ' data-chat-sidebar-help="1"' : '';
 				const dmDomKey = dmDomKeyForSidebarRow(t);
 				const dataDmKeyAttr = dmDomKey ? ` data-chat-dm-key="${escapeHtml(dmDomKey)}"` : '';
+				const threadId = Number(t?.id);
+				const threadIdAttr =
+					Number.isFinite(threadId) && threadId > 0
+						? ` data-chat-row-menu-thread-id="${threadId}"`
+						: '';
 				const pinKey =
 					t.type === 'dm' && !selfDm ? rosterMod.dmStablePinStorageKey(t) : null;
+				const rowKind = t?.type === 'dm' ? 'dm' : t?.type === 'channel' ? 'channel' : 'thread';
+				const gearAriaLabel = rowKind === 'dm' ? 'Direct message options' : 'Channel options';
 				if (pinKey) {
 					const ou = t.other_user;
 					const oid =
@@ -4457,7 +4768,7 @@ export async function initChatPage(root, options = {}) {
 							userId: Number.isFinite(oid) && oid > 0 ? oid : undefined
 						}) || (otherUserIdAttr ? `/user/${otherUserIdAttr}` : '/user');
 					const profileHrefAttr = escapeHtml(profileHref);
-					return `<div class="chat-page-sidebar-row chat-page-sidebar-row--dm-with-menu${activeClass}${pc}${extraRow}"${dataPseudoSlugAttr}${dataDmKeyAttr}>
+					return `<div class="chat-page-sidebar-row chat-page-sidebar-row--dm-with-menu chat-page-sidebar-row--with-menu${activeClass}${pc}${extraRow}"${dataPseudoSlugAttr}${dataDmKeyAttr}>
 					<a class="chat-page-sidebar-row-link" href="${escapeHtml(href)}">
 					${avatarHtml}
 					<div class="chat-page-sidebar-row-body">
@@ -4468,19 +4779,22 @@ export async function initChatPage(root, options = {}) {
 						</div>
 					</div>
 					</a>
-					<button type="button" class="chat-page-sidebar-server-settings chat-page-sidebar-dm-menu-btn" data-chat-dm-menu="${escapeHtml(pinKey)}" data-chat-dm-profile-href="${profileHrefAttr}" data-chat-dm-other-user-id="${escapeHtml(otherUserIdAttr)}" aria-label="Direct message options" aria-haspopup="menu" aria-expanded="false">${chatSidebarServerGearSvg}</button>
+					<button type="button" class="chat-page-sidebar-server-settings chat-page-sidebar-dm-menu-btn" data-chat-dm-menu="${escapeHtml(pinKey)}" data-chat-dm-profile-href="${profileHrefAttr}" data-chat-dm-other-user-id="${escapeHtml(otherUserIdAttr)}"${threadIdAttr} data-chat-row-menu-kind="${rowKind}" aria-label="Direct message options" aria-haspopup="menu" aria-expanded="false">${chatSidebarServerGearSvg}</button>
 				</div>`;
 				}
-				return `<a class="chat-page-sidebar-row${activeClass}${pc}${extraRow}" href="${escapeHtml(href)}"${dataPseudoSlugAttr}${dataHelpAttr}${dataDmKeyAttr}>
-					${avatarHtml}
-					<div class="chat-page-sidebar-row-body">
-						<div class="chat-page-sidebar-row-title-line">
-							<span class="chat-page-sidebar-row-title"${dmHoverMetaAttr}>${escapeHtml(title)}</span>
-							${youPill}
-							${unreadHtml}
+				return `<div class="chat-page-sidebar-row chat-page-sidebar-row--with-menu${activeClass}${pc}${extraRow}"${dataPseudoSlugAttr}${dataHelpAttr}${dataDmKeyAttr}>
+					<a class="chat-page-sidebar-row-link" href="${escapeHtml(href)}">
+						${avatarHtml}
+						<div class="chat-page-sidebar-row-body">
+							<div class="chat-page-sidebar-row-title-line">
+								<span class="chat-page-sidebar-row-title"${dmHoverMetaAttr}>${escapeHtml(title)}</span>
+								${youPill}
+								${unreadHtml}
+							</div>
 						</div>
-					</div>
-				</a>`;
+					</a>
+					<button type="button" class="chat-page-sidebar-server-settings" data-chat-sidebar-row-menu="1"${threadIdAttr} data-chat-row-menu-kind="${rowKind}" aria-label="${gearAriaLabel}" aria-haspopup="menu" aria-expanded="false">${chatSidebarServerGearSvg}</button>
+				</div>`;
 			}
 
 			function serverRowHtml(t) {
@@ -4499,9 +4813,14 @@ export async function initChatPage(root, options = {}) {
 				const slug =
 					typeof t.channel_slug === 'string' ? t.channel_slug.trim().toLowerCase() : '';
 				const meta = joinedServerMetaForSlug(slug);
-				const gearHtml =
+				const threadId = Number(t?.id);
+				const threadIdAttr =
+					Number.isFinite(threadId) && threadId > 0
+						? ` data-chat-row-menu-thread-id="${threadId}"`
+						: '';
+				const serverMenuAttrs =
 					meta && Number.isFinite(Number(meta.id)) && Number(meta.id) > 0
-						? `<button type="button" class="chat-page-sidebar-server-settings" data-chat-server-settings="${Number(meta.id)}" data-chat-server-can-manage="${meta.can_manage ? '1' : '0'}" aria-label="Server details">${chatSidebarServerGearSvg}</button>`
+						? ` data-chat-server-settings="${Number(meta.id)}" data-chat-server-can-manage="${meta.can_manage ? '1' : '0'}"`
 						: '';
 				return `<div class="chat-page-sidebar-row chat-page-sidebar-row--server${activeClass}">
 					<a class="chat-page-sidebar-row-link" href="${escapeHtml(href)}">
@@ -4513,7 +4832,7 @@ export async function initChatPage(root, options = {}) {
 							</div>
 						</div>
 					</a>
-					${gearHtml}
+					<button type="button" class="chat-page-sidebar-server-settings" data-chat-sidebar-row-menu="1"${threadIdAttr} data-chat-row-menu-kind="server"${serverMenuAttrs} aria-label="Server options" aria-haspopup="menu" aria-expanded="false">${chatSidebarServerGearSvg}</button>
 				</div>`;
 			}
 
@@ -4645,9 +4964,9 @@ export async function initChatPage(root, options = {}) {
 			const dmUserIds = collectDmOtherUserIdsForPresence(chatThreads || []);
 			const [joined, presenceOnlineSnapshot, viewerProfile, lastActiveMsByUserId] = await Promise.all([
 				pack.joined,
-				pack.presence,
+				fetchPresenceOnlineSnapshot({ allowCached: true }),
 				pack.profileMini,
-				fetchPresenceLastActiveSnapshot(dmUserIds)
+				fetchPresenceLastActiveSnapshot(dmUserIds, { allowCached: true })
 			]);
 			const presenceSnapshot = {
 				...(presenceOnlineSnapshot || {}),
@@ -4655,7 +4974,10 @@ export async function initChatPage(root, options = {}) {
 			};
 			runRender(chatThreads || [], joined, presenceSnapshot, viewerProfile);
 			persistSidebarRosterSnapshot(joined, presenceSnapshot, viewerProfile);
-			await syncChatSidebarViewerRow();
+			if (Date.now() - chatSidebarLastViewerSyncAt >= 120000) {
+				chatSidebarLastViewerSyncAt = Date.now();
+				await syncChatSidebarViewerRow();
+			}
 			return;
 		}
 
@@ -4679,6 +5001,7 @@ export async function initChatPage(root, options = {}) {
 		} catch {
 			// If network fails, keep cached render.
 		}
+		chatSidebarLastViewerSyncAt = Date.now();
 		await syncChatSidebarViewerRow();
 	}
 
@@ -4964,21 +5287,32 @@ export async function initChatPage(root, options = {}) {
 				e.preventDefault();
 				e.stopPropagation();
 				openDmSidebarGearMenu(dmGearBtn, {
+					onMarkAsRead: () => {
+						const tid = Number(dmGearBtn.getAttribute('data-chat-row-menu-thread-id'));
+						return markSidebarThreadRead(tid);
+					},
 					onAfterPinChange: () => void refreshChatSidebar({ skipThreadsFetch: true })
 				});
 				return;
 			}
-			const settingsBtn = e.target?.closest?.('[data-chat-server-settings]');
+			const settingsBtn = e.target?.closest?.('[data-chat-sidebar-row-menu]');
 			if (settingsBtn instanceof HTMLButtonElement) {
 				e.preventDefault();
 				e.stopPropagation();
+				const tid = Number(settingsBtn.getAttribute('data-chat-row-menu-thread-id'));
 				const sid = Number(settingsBtn.getAttribute('data-chat-server-settings'));
-				if (!Number.isFinite(sid) || sid <= 0) return;
-				const canManage = settingsBtn.getAttribute('data-chat-server-can-manage') === '1';
-				const modal = document.querySelector('app-modal-server');
-				if (modal && typeof modal.open === 'function') {
-					modal.open({ mode: canManage ? 'edit' : 'view', serverId: sid });
-				}
+				const canOpenServerDetails = Number.isFinite(sid) && sid > 0;
+				openDmSidebarGearMenu(settingsBtn, {
+					showProfile: false,
+					showPinToggle: false,
+					onMarkAsRead: () => markSidebarThreadRead(tid),
+					extraItems: canOpenServerDetails ? [{ action: 'server-details', label: 'Server details' }] : [],
+					onAction: (action) => {
+						if (action === 'server-details') {
+							openServerDetailsFromSidebarButton(settingsBtn);
+						}
+					}
+				});
 				return;
 			}
 			const a = e.target?.closest?.('a.chat-page-sidebar-row, a.chat-page-sidebar-row-link');
@@ -5038,6 +5372,9 @@ export async function initChatPage(root, options = {}) {
 		document.addEventListener('click', chatSidebarNotificationsOutsideClickHandler);
 
 		chatSidebarPopstateHandler = () => {
+			if (closeChatInlineImageLightboxFromPopstateIfOpen()) {
+				return;
+			}
 			if (shouldShowMobileSidebarFromLocation()) {
 				setMobileSidebarMode(true);
 				return;
@@ -5659,6 +5996,9 @@ export async function initChatPage(root, options = {}) {
 			if (!isStaleChatPane(paneEpoch) && messagesEl.isConnected) {
 				messagesEl.removeAttribute('aria-busy');
 			}
+			if (!isStaleChatPane(paneEpoch) && activePseudoChannelSlug === 'comments') {
+				scrollChatFeedPseudoChannelToTop();
+			}
 			rebuildTopbarMenuDynamic();
 		}
 	}
@@ -5972,7 +6312,7 @@ export async function initChatPage(root, options = {}) {
 		}
 
 		let anchorTopBefore = 0;
-		if (chatFeedLaneScrollMode === 'oldest_first' && anchor) {
+		if (!isNewestFirstBrowseLane(laneSlug) && anchor) {
 			anchorTopBefore =
 				anchor.getBoundingClientRect().top - messagesEl.getBoundingClientRect().top;
 		}
@@ -5985,7 +6325,7 @@ export async function initChatPage(root, options = {}) {
 				return;
 			}
 			const mergedFiltered =
-				chatFeedLaneScrollMode === 'newest_first'
+				isNewestFirstBrowseLane(laneSlug)
 					? Array.isArray(r.appended) ? r.appended : []
 					: Array.isArray(r.prepended) ? r.prepended : [];
 			if (mergedFiltered.length === 0) {
@@ -5996,7 +6336,7 @@ export async function initChatPage(root, options = {}) {
 			}
 			addPageUsers(mergedFiltered.map(feedItemToUser));
 
-			if (chatFeedLaneScrollMode === 'newest_first') {
+			if (isNewestFirstBrowseLane(laneSlug)) {
 				const idxBase = cards.children.length;
 				for (let i = 0; i < mergedFiltered.length; i++) {
 					cards.appendChild(
@@ -6043,7 +6383,7 @@ export async function initChatPage(root, options = {}) {
 				disconnectFeedChannelLoadObserver();
 			}
 
-			if (chatFeedLaneScrollMode === 'oldest_first') {
+			if (!isNewestFirstBrowseLane(laneSlug)) {
 				void messagesEl.offsetHeight;
 				preserveScrollAfterPrepend(anchorTopBefore);
 				requestAnimationFrame(() => {
@@ -6159,7 +6499,7 @@ export async function initChatPage(root, options = {}) {
 						window.location.href = '/explore';
 					});
 				}
-				if (chatFeedLaneScrollMode === 'newest_first') {
+				if (isNewestFirstBrowseLane('feed')) {
 					scrollChatFeedPseudoChannelToTop();
 				} else {
 					scrollChatMessagesToEnd();
@@ -6191,7 +6531,7 @@ export async function initChatPage(root, options = {}) {
 			sentinel.className = 'chat-page-feed-load-sentinel';
 			sentinel.setAttribute('aria-hidden', 'true');
 			sentinel.style.cssText = 'height:1px;margin:0;padding:0;flex-shrink:0;pointer-events:none';
-			if (chatFeedLaneScrollMode === 'newest_first') {
+			if (isNewestFirstBrowseLane('feed')) {
 				messagesEl.appendChild(routeWrap);
 				messagesEl.appendChild(sentinel);
 				if (pseudoColumnPager.getHasMore()) {
@@ -6220,6 +6560,9 @@ export async function initChatPage(root, options = {}) {
 			unlockChatMessagesPaneScroll(messagesEl);
 			if (!isStaleChatPane(paneEpoch) && messagesEl.isConnected) {
 				messagesEl.removeAttribute('aria-busy');
+			}
+			if (!isStaleChatPane(paneEpoch) && activePseudoChannelSlug === 'feed') {
+				scrollChatFeedPseudoChannelToTop();
 			}
 			rebuildTopbarMenuDynamic();
 		}
@@ -6913,7 +7256,7 @@ export async function initChatPage(root, options = {}) {
 					buttonText: 'Get Started',
 					buttonHref: '/create',
 				});
-				if (chatFeedLaneScrollMode === 'newest_first') {
+				if (isNewestFirstBrowseLane('creations')) {
 					scrollChatFeedPseudoChannelToTop();
 				} else {
 					scrollChatMessagesToEnd();
@@ -6950,7 +7293,7 @@ export async function initChatPage(root, options = {}) {
 			sentinel.className = 'chat-page-feed-load-sentinel';
 			sentinel.setAttribute('aria-hidden', 'true');
 			sentinel.style.cssText = 'height:1px;margin:0;padding:0;flex-shrink:0;pointer-events:none';
-			if (chatFeedLaneScrollMode === 'newest_first') {
+			if (isNewestFirstBrowseLane('creations')) {
 				messagesEl.appendChild(routeWrap);
 				messagesEl.appendChild(sentinel);
 				if (pseudoColumnPager.getHasMore()) {
@@ -6979,6 +7322,10 @@ export async function initChatPage(root, options = {}) {
 			unlockChatMessagesPaneScroll(messagesEl);
 			if (!isStaleChatPane(paneEpoch) && messagesEl.isConnected) {
 				messagesEl.removeAttribute('aria-busy');
+			}
+			// Hard-enforce top anchoring for browse lanes after all unlock/layout work.
+			if (!isStaleChatPane(paneEpoch) && activePseudoChannelSlug === 'creations') {
+				scrollChatFeedPseudoChannelToTop();
 			}
 			rebuildTopbarMenuDynamic();
 			if (!isStaleChatPane(paneEpoch) && activePseudoChannelSlug === 'creations') {
@@ -7180,7 +7527,7 @@ export async function initChatPage(root, options = {}) {
 					}
 					syncChatExploreSearchBar(routeWrap);
 					messagesEl.appendChild(routeWrap);
-					if (chatFeedLaneScrollMode === 'newest_first') {
+					if (isNewestFirstBrowseLane('explore')) {
 						scrollChatFeedPseudoChannelToTop();
 					} else {
 						scrollChatMessagesToEnd();
@@ -7285,7 +7632,7 @@ export async function initChatPage(root, options = {}) {
 				routeWrap.append(...Array.from(empty.childNodes));
 				messagesEl.appendChild(routeWrap);
 				syncChatExploreSearchBar(routeWrap);
-				if (chatFeedLaneScrollMode === 'newest_first') {
+				if (isNewestFirstBrowseLane('explore')) {
 					scrollChatFeedPseudoChannelToTop();
 				} else {
 					scrollChatMessagesToEnd();
@@ -7320,7 +7667,7 @@ export async function initChatPage(root, options = {}) {
 			sentinel.className = 'chat-page-feed-load-sentinel';
 			sentinel.setAttribute('aria-hidden', 'true');
 			sentinel.style.cssText = 'height:1px;margin:0;padding:0;flex-shrink:0;pointer-events:none';
-			if (chatFeedLaneScrollMode === 'newest_first') {
+			if (isNewestFirstBrowseLane('explore')) {
 				messagesEl.appendChild(routeWrap);
 				messagesEl.appendChild(sentinel);
 				if (pseudoColumnPager.getHasMore()) {
@@ -7351,6 +7698,10 @@ export async function initChatPage(root, options = {}) {
 			if (!isStaleChatPane(paneEpoch) && messagesEl.isConnected) {
 				messagesEl.removeAttribute('aria-busy');
 			}
+			// Hard-enforce top anchoring for explore browse lane after unlock/layout work.
+			if (!isStaleChatPane(paneEpoch) && activePseudoChannelSlug === 'explore') {
+				scrollChatFeedPseudoChannelToTop();
+			}
 			syncActiveChatExploreSearchBar();
 			if (activePseudoChannelSlug === 'explore' && !String(exploreQueryRef.q || '').trim()) {
 				syncExploreChannelBrowseUrl();
@@ -7363,6 +7714,7 @@ export async function initChatPage(root, options = {}) {
 		const threadId = activeThreadId;
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!threadId || !messagesEl) return;
+		let shouldAutoMarkRead = false;
 		chatThreadLoadFailed = false;
 		applyComposerState();
 		const paneEpoch = bumpChatMessagesPaneEpoch();
@@ -7376,6 +7728,9 @@ export async function initChatPage(root, options = {}) {
 
 		const viewerId = chatViewerId;
 		try {
+			if (chatSimulateConversationLoadFail()) {
+				throw new Error('Failed to fetch');
+			}
 			await refreshChatCanvasesList();
 			if (isStaleChatPane(paneEpoch)) return;
 			const res = await fetch(`/api/chat/threads/${threadId}/messages?limit=50`, {
@@ -7455,12 +7810,7 @@ export async function initChatPage(root, options = {}) {
 			setupReactionTooltipTap(messagesEl);
 			// TEMP: always land at latest message on load; disable unread jump behavior for now.
 			scrollChatMessagesToEnd('initial_load');
-			if (!isStaleChatPane(paneEpoch)) {
-				window.setTimeout(() => {
-					if (isStaleChatPane(paneEpoch)) return;
-					setupLatestMessageReadObserver();
-				}, 550);
-			}
+			shouldAutoMarkRead = !isStaleChatPane(paneEpoch);
 		} catch (err) {
 			console.error('[Chat page] messages:', err);
 			if (!isStaleChatPane(paneEpoch)) {
@@ -7472,6 +7822,7 @@ export async function initChatPage(root, options = {}) {
 					{
 						showRetry: true,
 						onRetry: () => {
+							clearChatSimulateConversationLoadFailParam();
 							void loadMessages();
 						}
 					}
@@ -7488,6 +7839,9 @@ export async function initChatPage(root, options = {}) {
 				messagesEl.removeAttribute('aria-busy');
 			}
 			rebuildTopbarMenuDynamic();
+			if (shouldAutoMarkRead && Number(activeThreadId) === Number(threadId)) {
+				void markLatestMessageRead();
+			}
 		}
 	}
 
@@ -7660,23 +8014,36 @@ export async function initChatPage(root, options = {}) {
 			}
 		}
 
-		const tagLink = e.target?.closest?.('a.mention-link[href^="/t/"]');
+		const tagLink = e.target?.closest?.('a.mention-link[href]');
 		if (tagLink instanceof HTMLAnchorElement && tagLink.closest('.connect-chat-msg-bubble')) {
-			if (activePseudoChannelSlug) {
-				return;
-			}
 			if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {
 				return;
 			}
-			const href = tagLink.getAttribute('href') || '';
-			const m = href.match(/^\/t\/([^/?#]+)/i);
-			if (!m) {
+			const hrefAttr = tagLink.getAttribute('href') || '';
+			if (!hrefAttr.startsWith('/')) {
+				return;
+			}
+			const pathOnly = hrefAttr.split('?')[0].split('#')[0];
+			const isHashtagTagPath = /^\/t\/([^/?#]+)/i.test(pathOnly);
+			const isChatInAppRoute =
+				pathOnly.startsWith('/chat/') ||
+				pathOnly === '/feed' ||
+				pathOnly === '/explore' ||
+				pathOnly === '/creations';
+			if (!isHashtagTagPath && !isChatInAppRoute) {
 				return;
 			}
 			e.preventDefault();
 			e.stopPropagation();
-			const slug = decodeURIComponent(m[1]);
-			void openChatHashtagDestination(slug);
+			if (isHashtagTagPath) {
+				const m = pathOnly.match(/^\/t\/([^/?#]+)/i);
+				if (!m) return;
+				const slug = decodeURIComponent(m[1]);
+				void openChatHashtagDestination(slug);
+				return;
+			}
+			history.pushState({ prsnChat: true }, '', hrefAttr);
+			void openThreadForCurrentPath();
 			return;
 		}
 
@@ -8075,12 +8442,23 @@ export async function initChatPage(root, options = {}) {
 			if (wrap instanceof HTMLElement) {
 				const retryBtn = document.createElement('button');
 				retryBtn.type = 'button';
-				retryBtn.className = 'route-empty-button chat-page-pane-load-retry';
+				retryBtn.className = 'btn-outlined chat-page-pane-load-retry';
 				retryBtn.textContent = 'Retry';
 				retryBtn.addEventListener('click', () => {
+					messagesEl.innerHTML = renderEmptyState({
+						loading: true,
+						loadingAriaLabel: 'Loading',
+						className: 'chat-page-thread-loading'
+					});
+					messagesEl.setAttribute('aria-busy', 'true');
 					if (typeof cta.onRetry === 'function') cta.onRetry();
 				});
-				wrap.appendChild(retryBtn);
+				const detailEl = wrap.querySelector('.route-empty-message');
+				if (detailEl instanceof HTMLElement) {
+					detailEl.insertAdjacentElement('afterend', retryBtn);
+				} else {
+					wrap.appendChild(retryBtn);
+				}
 			}
 		}
 		messagesEl.removeAttribute('aria-busy');
@@ -8522,11 +8900,41 @@ export async function initChatPage(root, options = {}) {
 		await openThreadForCurrentPath();
 	}
 
+	function resolveSpecialHashtagDestination(slug) {
+		const key = String(slug || '').trim().toLowerCase();
+		if (!key) return null;
+		const map = {
+			create: '/create',
+			feed: '/feed',
+			help: '/help',
+			creations: '/chat/c/creations',
+			creation: '/chat/c/creations',
+			notes: '/chat/notes',
+			explore: '/explore',
+			comments: '/chat/c/comments',
+			feedback: '/chat/c/feedback'
+		};
+		const href = map[key];
+		if (href) return { kind: 'path', href };
+		return null;
+	}
+
 	async function openChatHashtagDestination(slug) {
 		const safe = String(slug || '')
 			.trim()
 			.toLowerCase();
 		if (!safe) {
+			return;
+		}
+		const special = resolveSpecialHashtagDestination(safe);
+		if (special?.kind === 'path' && special.href) {
+			const href = String(special.href || '').trim();
+			if (href.startsWith('/chat/')) {
+				history.pushState({ prsnChat: true }, '', href);
+				await openThreadForCurrentPath();
+				return;
+			}
+			window.location.href = href;
 			return;
 		}
 		try {
@@ -9145,6 +9553,7 @@ export async function initChatPage(root, options = {}) {
 		if (typeof document !== 'undefined' && document.body) {
 			document.body.classList.toggle('chat-page--canvas-open', Boolean(on));
 		}
+		applyComposerState();
 		paintMobileChromeTitle();
 	}
 
@@ -10228,6 +10637,9 @@ export async function initChatPage(root, options = {}) {
 		setMobileSidebarMode(shouldShowMobileSidebarFromLocation());
 	});
 	window.addEventListener('popstate', () => {
+		if (closeChatInlineImageLightboxFromPopstateIfOpen()) {
+			return;
+		}
 		setMobileSidebarMode(shouldShowMobileSidebarFromLocation());
 	});
 	chatGlobalUnreadPoll = setInterval(() => void loadChatGlobalUnreadSummary(), 45000);
@@ -10243,7 +10655,7 @@ export async function initChatPage(root, options = {}) {
 	await openThreadForCurrentPath();
 	dispatchChatUnreadRefresh();
 	/** Presence/UI poll: keep roster status fresh without force-refetching all thread metadata. */
-	chatSidebarPollTimer = setInterval(() => void refreshChatSidebar({ skipThreadsFetch: true }), 15000);
+	chatSidebarPollTimer = setInterval(() => void refreshChatSidebar({ skipThreadsFetch: true }), 30000);
 	chatSidebarServersHandler = () => void refreshChatSidebar();
 	document.addEventListener('servers-updated', chatSidebarServersHandler);
 	chatSidebarVisibilityHandler = () => {

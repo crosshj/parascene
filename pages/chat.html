@@ -11,6 +11,16 @@
 	<link rel="stylesheet" href="/pages/chat.css{{V}}" />
 	<script>
 		(function () {
+			try {
+				if (window.history && 'scrollRestoration' in window.history) {
+					window.history.scrollRestoration = 'manual';
+				}
+			} catch (e) { }
+			try {
+				window.scrollTo(0, 0);
+				document.documentElement.scrollTop = 0;
+				document.body.scrollTop = 0;
+			} catch (e) { }
 			var root = document.documentElement;
 			if (!root) return;
 			function shouldUseAppMobileHeader(pathname) {
@@ -510,6 +520,33 @@
 				return el.scrollHeight - el.scrollTop - el.clientHeight <= t;
 			}
 
+			function normalizePathname(pathname) {
+				var p = String(pathname || '').replace(/\/+$/, '');
+				return p || '/';
+			}
+
+			function isFeedLikePathname() {
+				var path = normalizePathname((window.location && window.location.pathname) ? window.location.pathname : '');
+				var chatChannelMatch = path.match(/^\/chat\/c\/([^\/?#]+)/i);
+				var chatChannel = chatChannelMatch && chatChannelMatch[1]
+					? String(chatChannelMatch[1]).toLowerCase()
+					: '';
+				var chatChannelFeedLike =
+					chatChannel === 'feed' ||
+					chatChannel === 'explore' ||
+					chatChannel === 'creations' ||
+					chatChannel === 'comments';
+				return (
+					path === '/creations' ||
+					path === '/explore' ||
+					path === '/comments' ||
+					path === '/feed' ||
+					path === '/' ||
+					path === '/index.html' ||
+					chatChannelFeedLike
+				);
+			}
+
 			function syncToVisualViewport() {
 				var vv = window.visualViewport;
 				if (!vv) {
@@ -526,6 +563,16 @@
 			}
 
 			function onViewportChange() {
+				if (isFeedLikePathname()) {
+					syncToVisualViewport();
+					try {
+						window.scrollTo(0, 0);
+					} catch (e) { }
+					if (messagesEl) {
+						messagesEl.scrollTop = 0;
+					}
+					return;
+				}
 				var shouldStick = messagesEl && isNearBottom(messagesEl, 64);
 				syncToVisualViewport();
 				if (shouldStick && messagesEl) {
@@ -582,11 +629,53 @@
 						onViewportChange();
 					});
 				});
+				if (isFeedLikePathname()) {
+					try {
+						if (window.history && 'scrollRestoration' in window.history) {
+							window.history.scrollRestoration = 'manual';
+						}
+					} catch (e) { }
+					try {
+						window.scrollTo(0, 0);
+					} catch (e) { }
+					try {
+						document.documentElement.scrollTop = 0;
+						document.body.scrollTop = 0;
+					} catch (e) { }
+				}
 				if (messagesEl) {
-					messagesEl.scrollTop = messagesEl.scrollHeight;
+					messagesEl.scrollTop = isFeedLikePathname() ? 0 : messagesEl.scrollHeight;
+				}
+				// Safari + BFCache can restore a stale inner scroller after first paint.
+				// Keep feed-like lanes hard-pinned to top during bootstrap.
+				var forceFeedLikeTop = function () {
+					if (!isFeedLikePathname()) return;
+					try { window.scrollTo(0, 0); } catch (e) { }
+					try {
+						document.documentElement.scrollTop = 0;
+						document.body.scrollTop = 0;
+					} catch (e) { }
+					if (messagesEl) {
+						messagesEl.scrollTop = 0;
+					}
+				};
+				forceFeedLikeTop();
+				requestAnimationFrame(function () {
+					forceFeedLikeTop();
+					requestAnimationFrame(forceFeedLikeTop);
+				});
+				window.addEventListener('pageshow', forceFeedLikeTop);
+				window.addEventListener('load', forceFeedLikeTop);
+				var settleDelays = [60, 180, 360];
+				for (var i = 0; i < settleDelays.length; i++) {
+					(function (ms) {
+						setTimeout(forceFeedLikeTop, ms);
+					})(settleDelays[i]);
 				}
 				chatViewportCleanup = function () {
 					clearChatViewportRetryTimeouts();
+					window.removeEventListener('pageshow', forceFeedLikeTop);
+					window.removeEventListener('load', forceFeedLikeTop);
 					try {
 						shell.style.removeProperty('top');
 						shell.style.removeProperty('left');
