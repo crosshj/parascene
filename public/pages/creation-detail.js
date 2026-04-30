@@ -2242,7 +2242,10 @@ async function loadCreation() {
 					<textarea class="comment-textarea" rows="1" placeholder="What do you like about this creation?"
 						data-comment-textarea></textarea>
 					<div class="comment-submit-row" data-comment-submit-row style="display: none;">
-						<button class="btn-primary comment-submit-btn" type="button" data-comment-submit>Post</button>
+						<button class="btn-primary comment-submit-btn" type="button" data-comment-submit>
+							<span class="comment-action-btn-label">Post</span>
+							<span class="comment-action-btn-spinner" aria-hidden="true"></span>
+						</button>
 					</div>
 				</div>
 			</div>
@@ -3518,6 +3521,17 @@ async function loadCreation() {
 		const commentTextarea = detailContent.querySelector('[data-comment-textarea]');
 		const commentSubmitRow = detailContent.querySelector('[data-comment-submit-row]');
 		const commentSubmitBtn = detailContent.querySelector('[data-comment-submit]');
+		const isMobileCommentInputMode = () => {
+			try {
+				return window.matchMedia('(pointer: coarse)').matches || window.innerWidth <= 768;
+			} catch {
+				return typeof window.innerWidth === 'number' && window.innerWidth <= 768;
+			}
+		};
+		const setCommentActionButtonLoading = (btn, loading) => {
+			if (!(btn instanceof HTMLButtonElement)) return;
+			btn.classList.toggle('is-loading', Boolean(loading));
+		};
 
 		function setCommentCount(nextCount) {
 			const n = Number(nextCount ?? 0);
@@ -3713,7 +3727,10 @@ async function loadCreation() {
 						<textarea class="comment-edit-input" data-comment-edit-input="${escapeHtml(commentId)}" rows="3" maxlength="1000"${commentEditMinHeightPx > 0 ? ` style="min-height: ${Number(commentEditMinHeightPx)}px;"` : ''}>${escapeHtml(commentEditDraft || (c?.text ?? ''))}</textarea>
 						<div class="comment-edit-actions">
 							<button type="button" class="comment-edit-cancel" data-comment-edit-cancel="${escapeHtml(commentId)}"${commentEditBusy ? ' disabled' : ''}>Cancel</button>
-							<button type="button" class="comment-edit-save btn-primary" data-comment-edit-save="${escapeHtml(commentId)}"${commentEditBusy ? ' disabled' : ''}>Save</button>
+							<button type="button" class="comment-edit-save btn-primary" data-comment-edit-save="${escapeHtml(commentId)}"${commentEditBusy ? ' disabled' : ''}>
+								<span class="comment-action-btn-label">Save</span>
+								<span class="comment-action-btn-spinner" aria-hidden="true"></span>
+							</button>
 						</div>
 					</div>`
 					: `<div class="comment-text">${safeText}${isEditedComment ? '<span class="comment-text-edited-inline"> (edited)</span>' : ''}</div>`;
@@ -3964,7 +3981,10 @@ async function loadCreation() {
 					const canModerateComment = isAdmin || (Number(item?.user_id) > 0 && Number(item.user_id) === Number(currentUserId));
 					if (!canModerateComment) return;
 					commentEditBusy = true;
-					if (editSaveBtn instanceof HTMLButtonElement) editSaveBtn.disabled = true;
+					if (editSaveBtn instanceof HTMLButtonElement) {
+						editSaveBtn.disabled = true;
+						setCommentActionButtonLoading(editSaveBtn, true);
+					}
 					try {
 						const res = await updateCreatedImageComment(cid, nextText);
 						if (!res?.ok) {
@@ -3987,7 +4007,10 @@ async function loadCreation() {
 						renderComments();
 					} finally {
 						commentEditBusy = false;
-						if (editSaveBtn instanceof HTMLButtonElement) editSaveBtn.disabled = false;
+						if (editSaveBtn instanceof HTMLButtonElement) {
+							editSaveBtn.disabled = false;
+							setCommentActionButtonLoading(editSaveBtn, false);
+						}
 					}
 					return;
 				}
@@ -4055,6 +4078,9 @@ async function loadCreation() {
 					return;
 				}
 				if (e.key === 'Enter' && !e.shiftKey) {
+					if (isMobileCommentInputMode()) {
+						return;
+					}
 					e.preventDefault();
 					e.stopPropagation();
 					const saveBtn = commentListEl.querySelector(`[data-comment-edit-save="${cid}"]`);
@@ -4122,6 +4148,14 @@ async function loadCreation() {
 				refreshCommentTextarea();
 				setSubmitVisibility();
 			});
+			commentTextarea.addEventListener('keydown', (e) => {
+				if (e.key !== 'Enter' || e.shiftKey) return;
+				if (isMobileCommentInputMode()) return;
+				e.preventDefault();
+				if (commentSubmitBtn instanceof HTMLButtonElement && !commentSubmitBtn.disabled) {
+					commentSubmitBtn.click();
+				}
+			});
 		}
 
 		if (commentSubmitBtn instanceof HTMLButtonElement && commentTextarea instanceof HTMLTextAreaElement) {
@@ -4129,6 +4163,7 @@ async function loadCreation() {
 				const text = commentTextarea.value.trim();
 				if (!text) return;
 				commentSubmitBtn.disabled = true;
+				setCommentActionButtonLoading(commentSubmitBtn, true);
 				try {
 					const res = await postCreatedImageComment(creationId, text)
 						.catch(() => ({ ok: false, status: 0, data: null }));
@@ -4147,6 +4182,7 @@ async function loadCreation() {
 					alert(err?.message || 'Failed to post comment');
 				} finally {
 					commentSubmitBtn.disabled = false;
+					setCommentActionButtonLoading(commentSubmitBtn, false);
 				}
 			});
 		}

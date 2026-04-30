@@ -3594,8 +3594,34 @@ app-route-feed {
 }
 
 .comment-submit-btn {
+	position: relative;
 	padding: 8px 12px;
 	font-size: 0.9rem;
+}
+
+.comment-action-btn-spinner {
+	display: none;
+	width: 1em;
+	height: 1em;
+	border: 2px solid color-mix(in srgb, currentColor 40%, transparent);
+	border-top-color: currentColor;
+	border-radius: 50%;
+	animation: spin 0.8s linear infinite;
+}
+
+.comment-submit-btn.is-loading .comment-action-btn-label,
+.comment-edit-save.is-loading .comment-action-btn-label {
+	visibility: hidden;
+}
+
+.comment-submit-btn.is-loading .comment-action-btn-spinner,
+.comment-edit-save.is-loading .comment-action-btn-spinner {
+	display: block;
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	margin-left: -0.5em;
+	margin-top: -0.5em;
 }
 
 .comment-list {
@@ -3949,6 +3975,7 @@ app-route-feed {
 }
 
 .comment-edit-save {
+	position: relative;
 	min-width: 64px;
 	padding: 6px 12px;
 }

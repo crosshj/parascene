@@ -3482,14 +3482,16 @@ export async function initChatPage(root, options = {}) {
 			syncEditInputHeight();
 			input.addEventListener('input', syncEditInputHeight);
 			input.focus();
-			input.select();
+			if (!isChatPageMobileLayout()) {
+				input.select();
+			}
 			input.addEventListener('keydown', (e) => {
 				if (e.key === 'Escape') {
 					e.preventDefault();
 					cancelActiveChatMessageEdit();
 					return;
 				}
-				if (e.key === 'Enter' && !e.shiftKey) {
+				if (e.key === 'Enter' && !e.shiftKey && !isChatPageMobileLayout()) {
 					e.preventDefault();
 					void saveActiveChatMessageEdit();
 				}
