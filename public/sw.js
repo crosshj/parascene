@@ -14,12 +14,16 @@ const META_CACHE = `${CACHE_PREFIX}-meta-v${VERSION}`;
 const IMAGE_MAX_ENTRIES = 300;
 const DATA_MAX_ENTRIES = 120;
 const STATIC_MAX_ENTRIES = 400;
+const IMAGE_MANAGED_IDLE_MAX_DAYS = 30;
+const IMAGE_LAST_ACCESSED_MAX_AGE_MS = IMAGE_MANAGED_IDLE_MAX_DAYS * 24 * 60 * 60 * 1000;
+const IMAGE_TRIM_THROTTLE_MS = 60 * 1000;
 const DATA_REVALIDATE_TTL_MS = 30 * 1000;
 const FEED_VERSION_CHECK_TTL_MS = 15 * 1000;
 const FEED_VERSION_CACHE_URL = "/__sw/meta/version_feed";
 const dataRevalidateAtByKey = new Map();
 let feedVersionCheckInFlight = null;
 let nextFeedVersionCheckAt = 0;
+let nextImageTrimAt = 0;
 
 const CACHEABLE_DATA_PATH_PREFIXES = [
 	"/api/feed",
@@ -53,6 +57,10 @@ function isImageRequest(request, url) {
 	return /\.(png|jpe?g|gif|webp|avif|svg)$/i.test(url.pathname);
 }
 
+function isManagedApiImagePath(pathname) {
+	return pathname.startsWith("/api/images/created/") || pathname.startsWith("/api/images/generic/");
+}
+
 function isCacheableStaticRequest(request, url) {
 	if (!isSameOrigin(url)) return false;
 	if (url.pathname.startsWith("/api/")) return false;
@@ -78,6 +86,99 @@ function parseVersionNumber(raw) {
 	const n = Number.parseInt(String(raw ?? ""), 10);
 	if (!Number.isFinite(n) || n < 0) return null;
 	return n;
+}
+
+function imageAccessMetaUrl(requestUrl) {
+	return `/__sw/meta/image-access/${encodeURIComponent(String(requestUrl || ""))}`;
+}
+
+async function getImageLastAccessedMs(requestUrl) {
+	const cache = await caches.open(META_CACHE);
+	const req = new Request(imageAccessMetaUrl(requestUrl));
+	const cached = await cache.match(req);
+	if (!cached) return null;
+	try {
+		const data = await cached.json();
+		const ms = Number(data?.last_accessed_ms);
+		return Number.isFinite(ms) && ms > 0 ? ms : null;
+	} catch {
+		return null;
+	}
+}
+
+async function touchImageLastAccessed(requestUrl, nowMs = Date.now()) {
+	const cache = await caches.open(META_CACHE);
+	const req = new Request(imageAccessMetaUrl(requestUrl));
+	const payload = JSON.stringify({ last_accessed_ms: nowMs });
+	await cache.put(req, new Response(payload, { headers: { "content-type": "application/json" } }));
+}
+
+async function deleteImageLastAccessed(requestUrl) {
+	const cache = await caches.open(META_CACHE);
+	await cache.delete(new Request(imageAccessMetaUrl(requestUrl)));
+}
+
+async function clearImageAccessMetadata() {
+	const cache = await caches.open(META_CACHE);
+	const keys = await cache.keys();
+	await Promise.all(
+		keys
+			.filter((req) => req.url.includes("/__sw/meta/image-access/"))
+			.map((req) => cache.delete(req))
+	);
+}
+
+async function trimManagedImageCache() {
+	const now = Date.now();
+	if (now < nextImageTrimAt) return;
+	nextImageTrimAt = now + IMAGE_TRIM_THROTTLE_MS;
+
+	const cache = await caches.open(IMAGE_CACHE);
+	const keys = await cache.keys();
+	const managedEntries = [];
+
+	for (const req of keys) {
+		try {
+			const parsed = new URL(req.url);
+			if (!isManagedApiImagePath(parsed.pathname)) continue;
+			const lastAccessed = (await getImageLastAccessedMs(req.url)) ?? 0;
+			managedEntries.push({ request: req, requestUrl: req.url, lastAccessed });
+		} catch {
+			// ignore malformed URL entries
+		}
+	}
+
+	// Expire entries that have been idle longer than the configured max age.
+	const idleCutoff = now - IMAGE_LAST_ACCESSED_MAX_AGE_MS;
+	for (const entry of managedEntries) {
+		if (entry.lastAccessed > 0 && entry.lastAccessed >= idleCutoff) continue;
+		await cache.delete(entry.request);
+		await deleteImageLastAccessed(entry.requestUrl);
+	}
+
+	const remainingKeys = await cache.keys();
+	if (remainingKeys.length <= IMAGE_MAX_ENTRIES) return;
+	const overBy = remainingKeys.length - IMAGE_MAX_ENTRIES;
+	if (overBy <= 0) return;
+
+	const remainingManaged = [];
+	for (const req of remainingKeys) {
+		try {
+			const parsed = new URL(req.url);
+			if (!isManagedApiImagePath(parsed.pathname)) continue;
+			const lastAccessed = (await getImageLastAccessedMs(req.url)) ?? 0;
+			remainingManaged.push({ request: req, requestUrl: req.url, lastAccessed });
+		} catch {
+			// ignore malformed URL entries
+		}
+	}
+
+	remainingManaged.sort((a, b) => a.lastAccessed - b.lastAccessed);
+	for (let i = 0; i < Math.min(overBy, remainingManaged.length); i += 1) {
+		const victim = remainingManaged[i];
+		await cache.delete(victim.request);
+		await deleteImageLastAccessed(victim.requestUrl);
+	}
 }
 
 async function trimCacheEntries(cacheName, maxEntries) {
@@ -158,13 +259,31 @@ async function checkFeedVersionAndInvalidateIfNeeded() {
 
 async function cacheFirstImages(request) {
 	const cache = await caches.open(IMAGE_CACHE);
+	let parsedUrl = null;
+	try {
+		parsedUrl = new URL(request.url);
+	} catch {
+		parsedUrl = null;
+	}
+	const trackAccess = parsedUrl != null && isManagedApiImagePath(parsedUrl.pathname);
 	const cached = await cache.match(request);
-	if (cached) return cached;
+	if (cached) {
+		if (trackAccess) {
+			await touchImageLastAccessed(request.url);
+			await trimManagedImageCache();
+		}
+		return cached;
+	}
 	const response = await fetch(request);
 	const isRangeRequest = request.headers?.has("range");
 	if (response && response.ok && response.status === 200 && !isRangeRequest) {
 		await cache.put(request, response.clone());
-		await trimCacheEntries(IMAGE_CACHE, IMAGE_MAX_ENTRIES);
+		if (trackAccess) {
+			await touchImageLastAccessed(request.url);
+			await trimManagedImageCache();
+		} else {
+			await trimCacheEntries(IMAGE_CACHE, IMAGE_MAX_ENTRIES);
+		}
 	}
 	return response;
 }
@@ -259,6 +378,7 @@ async function invalidateByMessage(msg) {
 	if (msg.all === true) {
 		await caches.delete(DATA_CACHE);
 		await caches.delete(IMAGE_CACHE);
+		await clearImageAccessMetadata();
 		dataRevalidateAtByKey.clear();
 		return;
 	}
@@ -281,6 +401,7 @@ async function invalidateByMessage(msg) {
 	}
 	if (tags.includes("images")) {
 		await caches.delete(IMAGE_CACHE);
+		await clearImageAccessMetadata();
 	}
 	if (dataPrefixes.size > 0) {
 		for (const key of [...dataRevalidateAtByKey.keys()]) {
