@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS servers (
   status TEXT NOT NULL,
   status_date TEXT,
   description TEXT,
+  meta TEXT,
   members_count INTEGER NOT NULL DEFAULT 0,
   server_config TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),

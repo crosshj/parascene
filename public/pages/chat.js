@@ -4184,7 +4184,11 @@ export async function initChatPage(root, options = {}) {
 			.map((s) => ({
 				id: Number(s.id),
 				name: typeof s.name === 'string' ? s.name.trim() : '',
-				can_manage: Boolean(s.can_manage)
+				can_manage: Boolean(s.can_manage),
+				avatar_url:
+					typeof s.avatar_url === 'string' && s.avatar_url.trim()
+						? s.avatar_url.trim()
+						: ''
 			}))
 			.filter((s) => Number.isFinite(s.id) && s.id > 0);
 	}
@@ -4801,7 +4805,6 @@ export async function initChatPage(root, options = {}) {
 				const href = rosterMod.buildChatThreadUrl(t);
 				const active = isChatHrefActive(href);
 				const title = typeof t.title === 'string' && t.title.trim() ? t.title.trim() : 'Chat';
-				const avatarHtml = rosterMod.buildChatThreadRowAvatarHtml(t, deps);
 				const activeClass = active ? ' is-active' : '';
 				const unc = Number(t.unread_count);
 				const showUnread =
@@ -4813,6 +4816,11 @@ export async function initChatPage(root, options = {}) {
 				const slug =
 					typeof t.channel_slug === 'string' ? t.channel_slug.trim().toLowerCase() : '';
 				const meta = joinedServerMetaForSlug(slug);
+				const avatarThread =
+					meta && typeof meta.avatar_url === 'string' && meta.avatar_url.trim()
+						? { ...t, server_avatar_url: meta.avatar_url.trim() }
+						: t;
+				const avatarHtml = rosterMod.buildChatThreadRowAvatarHtml(avatarThread, deps);
 				const threadId = Number(t?.id);
 				const threadIdAttr =
 					Number.isFinite(threadId) && threadId > 0

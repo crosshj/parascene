@@ -3082,6 +3082,7 @@ export function openDb() {
             auth_token,
             status_date,
             server_config,
+            meta,
             prsn_users!prsn_servers_user_id_fkey(email)
           `)
 					.order("name", { ascending: true });
@@ -3113,6 +3114,7 @@ export function openDb() {
             auth_token,
             status_date,
             server_config,
+            meta,
             prsn_users!prsn_servers_user_id_fkey(email)
           `)
 					.eq("id", serverId)
@@ -3159,6 +3161,7 @@ export function openDb() {
 						auth_token: server?.auth_token ?? null,
 						status_date: server?.status_date ?? null,
 						description: server?.description ?? null,
+						meta: server?.meta ?? null,
 						members_count: server?.members_count ?? 0,
 						server_config: server?.server_config ?? null,
 						updated_at: new Date().toISOString()

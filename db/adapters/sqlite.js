@@ -1195,6 +1195,7 @@ export async function openDb() {
             ps.auth_token,
             ps.status_date,
             ps.description,
+            ps.meta,
             ps.members_count,
             ps.server_config,
             ps.created_at,
@@ -1216,8 +1217,17 @@ export async function openDb() {
 							serverConfig = null;
 						}
 					}
+					let meta = null;
+					if (row.meta) {
+						try {
+							meta = JSON.parse(row.meta);
+						} catch (e) {
+							meta = null;
+						}
+					}
 					return {
 						...row,
+						meta,
 						server_config: serverConfig
 					};
 				});
@@ -2144,6 +2154,7 @@ export async function openDb() {
             ps.status, 
             ps.members_count, 
             ps.description, 
+            ps.meta,
             ps.created_at,
             ps.server_url,
             ps.auth_token,
@@ -2166,8 +2177,17 @@ export async function openDb() {
 							serverConfig = null;
 						}
 					}
+					let meta = null;
+					if (row.meta) {
+						try {
+							meta = JSON.parse(row.meta);
+						} catch (e) {
+							meta = null;
+						}
+					}
 					return {
 						...row,
+						meta,
 						server_config: serverConfig
 					};
 				});
@@ -2183,6 +2203,7 @@ export async function openDb() {
             ps.status, 
             ps.members_count, 
             ps.description, 
+            ps.meta,
             ps.created_at,
             ps.server_url,
             ps.auth_token,
@@ -2206,8 +2227,17 @@ export async function openDb() {
 						serverConfig = null;
 					}
 				}
+				let meta = null;
+				if (row.meta) {
+					try {
+						meta = JSON.parse(row.meta);
+					} catch (e) {
+						meta = null;
+					}
+				}
 				return {
 					...row,
+					meta,
 					server_config: serverConfig
 				};
 			}
@@ -2237,12 +2267,14 @@ export async function openDb() {
                auth_token = ?,
                status_date = ?,
                description = ?,
+               meta = ?,
                members_count = ?,
                server_config = ?,
                updated_at = datetime('now')
            WHERE id = ?`
 				);
 				const configJson = server?.server_config ? JSON.stringify(server.server_config) : null;
+				const metaJson = server?.meta ? JSON.stringify(server.meta) : null;
 				const result = stmt.run(
 					server?.user_id ?? null,
 					server?.name ?? null,
@@ -2251,6 +2283,7 @@ export async function openDb() {
 					server?.auth_token ?? null,
 					server?.status_date ?? null,
 					server?.description ?? null,
+					metaJson,
 					server?.members_count ?? 0,
 					configJson,
 					serverId
@@ -2321,8 +2354,8 @@ export async function openDb() {
 					? authToken.trim()
 					: null;
 				const stmt = db.prepare(
-					`INSERT INTO servers (user_id, name, status, server_url, auth_token, description, server_config)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`
+					`INSERT INTO servers (user_id, name, status, server_url, auth_token, description, meta, server_config)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 				);
 				const configJson = serverConfig ? JSON.stringify(serverConfig) : null;
 				const result = stmt.run(
@@ -2332,6 +2365,7 @@ export async function openDb() {
 					serverUrl,
 					resolvedAuthToken,
 					description,
+					null,
 					configJson
 				);
 				return Promise.resolve({

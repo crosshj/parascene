@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS prsn_servers (
   status text NOT NULL,
   status_date timestamptz,
   description text,
+  meta jsonb,
   members_count integer NOT NULL DEFAULT 0,
   server_config jsonb,
   created_at timestamptz NOT NULL DEFAULT now(),

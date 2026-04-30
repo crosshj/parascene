@@ -939,6 +939,10 @@ class AppModalServer extends HTMLElement {
 						Description
 						<textarea name="description" placeholder="Server description">${this.escapeHtml(this.serverData.description || '')}</textarea>
 					</label>
+					<label>
+						Avatar URL
+						<input type="text" name="avatar_url" placeholder="/api/images/generic/... or https://..." value="${this.escapeHtml(this.serverData.avatar_url || '')}" />
+					</label>
 					<div id="test-results-container"></div>
 					<div class="server-details">
 						<div class="server-detail-row">
@@ -1019,6 +1023,12 @@ class AppModalServer extends HTMLElement {
 						<div class="server-detail-row">
 							<strong>Description</strong>
 							<span class="server-description-text">${this.escapeHtml(this.serverData.description)}</span>
+						</div>
+					` : ''}
+					${this.serverData.avatar_url ? html`
+						<div class="server-detail-row">
+							<strong>Avatar</strong>
+							<span class="server-description-text">${this.escapeHtml(this.serverData.avatar_url)}</span>
 						</div>
 					` : ''}
 					<div class="server-detail-row">
@@ -1237,6 +1247,7 @@ class AppModalServer extends HTMLElement {
 			server_url: formData.get('server_url'),
 			status: formData.get('status'),
 			description: formData.get('description') || null,
+			avatar_url: (formData.get('avatar_url') || '').toString().trim() || null,
 			auth_token: formData.get('auth_token') || null,
 			custom_headers: customHeadersRaw || null
 		};

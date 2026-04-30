@@ -980,7 +980,6 @@ class AppRouteServers extends HTMLElement {
 		const serverRowHtml = (t) => {
 			const href = buildChatThreadUrl(t);
 			const title = typeof t.title === 'string' && t.title.trim() ? t.title.trim() : 'Chat';
-			const avatarHtml = buildChatThreadRowAvatarHtml(t, deps);
 			const unc = Number(t.unread_count);
 			const showUnread = Number.isFinite(unc) && unc > 0;
 			const unreadLabel = unc > 99 ? '99+' : String(unc);
@@ -989,6 +988,11 @@ class AppRouteServers extends HTMLElement {
 				: '';
 			const slug = typeof t.channel_slug === 'string' ? t.channel_slug.trim().toLowerCase() : '';
 			const meta = joinedServerMetaForSlug(slug);
+			const avatarThread =
+				meta && typeof meta.avatar_url === 'string' && meta.avatar_url.trim()
+					? { ...t, server_avatar_url: meta.avatar_url.trim() }
+					: t;
+			const avatarHtml = buildChatThreadRowAvatarHtml(avatarThread, deps);
 			const gearHtml =
 				meta && Number.isFinite(Number(meta.id)) && Number(meta.id) > 0
 					? `<button type="button" class="chat-page-sidebar-server-settings" data-chat-server-settings="${Number(meta.id)}" data-chat-server-can-manage="${meta.can_manage ? '1' : '0'}" aria-label="Server details">${gearSvg}</button>`
@@ -1101,7 +1105,11 @@ class AppRouteServers extends HTMLElement {
 			.map((s) => ({
 				id: Number(s.id),
 				name: typeof s.name === 'string' ? s.name.trim() : '',
-				can_manage: Boolean(s.can_manage)
+				can_manage: Boolean(s.can_manage),
+				avatar_url:
+					typeof s.avatar_url === 'string' && s.avatar_url.trim()
+						? s.avatar_url.trim()
+						: ''
 			}))
 			.filter((s) => Number.isFinite(s.id) && s.id > 0);
 	}
@@ -1222,6 +1230,27 @@ class AppRouteServers extends HTMLElement {
 			const name = document.createElement('div');
 			name.className = 'admin-title';
 			name.innerHTML = `${server.name || 'Unnamed Server'} ${badges.join('')}`;
+			const serverAvatarUrl = typeof server.avatar_url === 'string' && server.avatar_url.trim() ? server.avatar_url.trim() : '';
+			if (serverAvatarUrl) {
+				const avatarWrap = document.createElement('div');
+				avatarWrap.className = 'server-owner';
+				const avatarRow = document.createElement('div');
+				avatarRow.className = 'server-owner-link';
+				const avatar = document.createElement('div');
+				avatar.className = 'server-owner-avatar';
+				const img = document.createElement('img');
+				img.src = serverAvatarUrl;
+				img.className = 'server-owner-avatar-img';
+				img.alt = '';
+				avatar.appendChild(img);
+				const avatarText = document.createElement('span');
+				avatarText.className = 'server-owner-text';
+				avatarText.innerHTML = html`<span class="server-owner-handle">Server avatar</span>`;
+				avatarRow.appendChild(avatar);
+				avatarRow.appendChild(avatarText);
+				avatarWrap.appendChild(avatarRow);
+				card.appendChild(avatarWrap);
+			}
 
 			const hasDescription = typeof server.description === 'string' && server.description.trim().length > 0;
 			const descriptionText = hasDescription ? server.description.trim() : '';

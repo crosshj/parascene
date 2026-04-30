@@ -684,6 +684,22 @@ export function buildChatThreadRowAvatarHtml(t, deps) {
 			flairSize: 'xs'
 		});
 	}
+	const serverAvatarUrl =
+		typeof t?.server_avatar_url === 'string' ? t.server_avatar_url.trim() : '';
+	if (serverAvatarUrl) {
+		const channelDisplayName =
+			(typeof t?.title === 'string' && t.title.trim()) ||
+			(typeof t?.channel_slug === 'string' && t.channel_slug.trim()) ||
+			'Server';
+		return renderCommentAvatarHtml({
+			avatarUrl: serverAvatarUrl,
+			displayName: channelDisplayName,
+			color: getAvatarColor(String(channelDisplayName).toLowerCase()),
+			href: '',
+			isFounder: false,
+			flairSize: 'xs'
+		});
+	}
 	const slugRaw =
 		(typeof t?.channel_slug === 'string' && t.channel_slug.trim()) ||
 		(typeof t?.title === 'string' && t.title.trim().startsWith('#')

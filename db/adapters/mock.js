@@ -1639,6 +1639,7 @@ export function openDb() {
 				server.auth_token = nextServer?.auth_token ?? null;
 				server.status_date = nextServer?.status_date ?? server.status_date ?? null;
 				server.description = nextServer?.description ?? server.description ?? null;
+				server.meta = nextServer?.meta ?? server.meta ?? null;
 				server.members_count = nextServer?.members_count ?? server.members_count ?? 0;
 				server.server_config = nextServer?.server_config ?? server.server_config ?? null;
 				server.updated_at = new Date().toISOString();

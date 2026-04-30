@@ -381,10 +381,23 @@ export function initChatSidebarModals(options) {
 				const descBlock = desc
 					? `<p class="chat-page-chat-modal-server-desc">${desc}</p>`
 					: '';
+				const serverAvatarUrl =
+					typeof s.avatar_url === 'string' && s.avatar_url.trim() ? s.avatar_url.trim() : '';
+				const serverAvatarBlock = serverAvatarUrl
+					? `<div class="chat-page-chat-modal-server-owner">
+						<div class="chat-page-chat-modal-server-owner-avatar">
+							<img src="${escapeHtml(serverAvatarUrl)}" class="chat-page-chat-modal-server-owner-img" alt="" />
+						</div>
+						<div class="chat-page-chat-modal-server-owner-meta">
+							<span class="chat-page-chat-modal-server-owner-handle">Server avatar</span>
+						</div>
+					</div>`
+					: '';
 				return `<div class="chat-page-chat-modal-server-card" data-chat-server-join-id="${id}">
 					<div class="chat-page-chat-modal-server-row">
 						<div class="chat-page-chat-modal-server-col">
 							<div class="chat-page-chat-modal-server-title">${name}</div>
+							${serverAvatarBlock}
 							${ownerBlock}
 							${descBlock}
 						</div>

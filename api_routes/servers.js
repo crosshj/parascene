@@ -4,6 +4,17 @@ import { buildProviderHeaders, resolveProviderAuthToken } from "./utils/provider
 export default function createServersRoutes({ queries }) {
 	const router = express.Router();
 
+	function normalizeServerMeta(input) {
+		if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+		return { ...input };
+	}
+
+	function extractServerAvatarUrl(server) {
+		const meta = normalizeServerMeta(server?.meta);
+		const raw = typeof meta.avatar_url === "string" ? meta.avatar_url.trim() : "";
+		return raw || null;
+	}
+
 	async function requireUser(req, res) {
 		if (!req.auth?.userId) {
 			res.status(401).json({ error: "Unauthorized" });
@@ -70,6 +81,7 @@ export default function createServersRoutes({ queries }) {
 			const result = {
 				id: server.id,
 				name: server.name,
+				avatar_url: extractServerAvatarUrl(server),
 				description: server.description,
 				status: server.status,
 				members_count: isSpecial ? null : (server.members_count || 0),
@@ -167,6 +179,7 @@ export default function createServersRoutes({ queries }) {
 		const result = {
 			id: server.id,
 			name: server.name,
+			avatar_url: extractServerAvatarUrl(server),
 			description: server.description,
 			status: server.status,
 			members_count: isSpecial ? null : (server.members_count || 0),
@@ -433,6 +446,20 @@ export default function createServersRoutes({ queries }) {
 
 		if (payload.description !== undefined) {
 			nextServer.description = payload.description || null;
+		}
+
+		if (payload.avatar_url !== undefined) {
+			if (payload.avatar_url !== null && typeof payload.avatar_url !== "string") {
+				return res.status(400).json({ error: "avatar_url must be a string or null when provided" });
+			}
+			const avatarUrl = typeof payload.avatar_url === "string" ? payload.avatar_url.trim() : "";
+			const nextMeta = normalizeServerMeta(nextServer.meta);
+			if (avatarUrl) {
+				nextMeta.avatar_url = avatarUrl;
+			} else {
+				delete nextMeta.avatar_url;
+			}
+			nextServer.meta = Object.keys(nextMeta).length ? nextMeta : null;
 		}
 
 		if (payload.custom_headers !== undefined) {
