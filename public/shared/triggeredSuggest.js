@@ -4,6 +4,8 @@
  * Public API preserved:
  * - addPageUsers(items)
  * - clearPageUsers()
+ * - addPageHashtagTargets(items)
+ * - clearPageHashtagTargets()
  * - attachTriggeredSuggest(field, options)  — field: HTMLTextAreaElement or HTMLInputElement (type text)
  * - attachMentionSuggest(field) — @ only
  * - attachChatMentionSuggest(field) — @ only + chat special mentions
@@ -16,6 +18,7 @@ const _qs = (() => {
 	return v ? `?v=${encodeURIComponent(v)}` : '';
 })();
 const { getAvatarColor } = await import(`./avatar.js${_qs}`);
+const { getPseudoStripRouteIconHtml } = await import(`./chatSidebarRoster.js${_qs}`);
 const { getStyleThumbUrl } = await import(`../pages/create-styles.js${_qs}`);
 const { CHAT_BROADCAST_MENTION_SLUGS } = await import(`./chatBroadcastMentions.js${_qs}`);
 
@@ -37,6 +40,7 @@ const suggestCache = new Map();
 const pendingByKey = new Map();
 
 const pageUsersMap = new Map();
+const pageHashtagTargetsMap = new Map();
 const stateByTextarea = new WeakMap();
 
 let sharedPopup = null;
@@ -223,6 +227,20 @@ function itemHandle(item) {
 		const t = (item?.tag ?? item?.sublabel ?? "").replace(/^@/, "").trim();
 		return t.toLowerCase();
 	}
+	if (item?.type === "channel" || item?.type === "server") {
+		const fromSlug = (item?.slug ?? "").toString().trim().replace(/^#/, "").toLowerCase();
+		if (fromSlug) return fromSlug;
+		const fromSublabel = (item?.sublabel ?? "").toString().trim().replace(/^#/, "").toLowerCase();
+		if (fromSublabel) return fromSublabel;
+		return (item?.label ?? "").toString().trim().replace(/^#/, "").toLowerCase();
+	}
+	if (item?.type === "pseudo_channel") {
+		const fromSlug = (item?.slug ?? "").toString().trim().replace(/^#/, "").toLowerCase();
+		if (fromSlug) return fromSlug;
+		const fromSublabel = (item?.sublabel ?? "").toString().trim().replace(/^#/, "").toLowerCase();
+		if (fromSublabel) return fromSublabel;
+		return (item?.label ?? "").toString().trim().replace(/^#/, "").toLowerCase();
+	}
 	const raw = (item?.sublabel || item?.insert_text || item?.label || "").replace(/^@/, "").trim();
 	return raw.toLowerCase();
 }
@@ -269,6 +287,45 @@ export function addPageUsers(items) {
 
 export function clearPageUsers() {
 	pageUsersMap.clear();
+}
+
+function toHashtagTargetItem(raw) {
+	if (!raw || typeof raw !== "object") return null;
+	const kind = String(raw.type || "").trim().toLowerCase();
+	const rawSlug = (raw.slug ?? raw.tag ?? raw.insert_text ?? "").toString().trim().replace(/^#/, "");
+	const slug = rawSlug.toLowerCase();
+	if (!slug) return null;
+
+	const labelRaw = (raw.label ?? "").toString().trim();
+	const label = labelRaw || `#${slug}`;
+	const sublabelRaw = (raw.sublabel ?? "").toString().trim();
+	const sublabel = sublabelRaw || `#${slug}`;
+	const badgeRaw = (raw.badge ?? "").toString().trim();
+	const type = kind === "server" ? "server" : kind === "pseudo_channel" ? "pseudo_channel" : "channel";
+	const idRaw = (raw.id ?? "").toString().trim();
+	const id = idRaw || `${type}:${slug}`;
+
+	return {
+		type,
+		id,
+		slug,
+		label,
+		sublabel,
+		insert_text: `#${slug} `,
+		badge: badgeRaw || (type === "server" ? "Server" : "Channel")
+	};
+}
+
+export function addPageHashtagTargets(items) {
+	if (!Array.isArray(items)) return;
+	for (const raw of items) {
+		const item = toHashtagTargetItem(raw);
+		if (item?.id) pageHashtagTargetsMap.set(item.id, item);
+	}
+}
+
+export function clearPageHashtagTargets() {
+	pageHashtagTargetsMap.clear();
 }
 
 function filterAndSortMentionItems(items, qLower) {
@@ -466,6 +523,44 @@ function getStyleSuggestions({ source, q, limit }, signal) {
 	return defaultGetSuggestions({ source: "styles", q, limit }, signal);
 }
 
+function normalizeHashtagHandle(item) {
+	return String(itemHandle(item) || "").trim().replace(/^#/, "");
+}
+
+function filterAndSortHashtagItems(items, qLower) {
+	if (!qLower) return items.slice();
+	const rows = items
+		.map((item) => ({ item, handle: normalizeHashtagHandle(item) }))
+		.filter(({ item, handle }) => {
+			const label = String(item?.label || "").toLowerCase();
+			return handle.includes(qLower) || label.includes(qLower);
+		});
+
+	rows.sort((a, b) => {
+		const groupRank = (type) => {
+			if (type === "server") return 0;
+			if (type === "channel") return 1;
+			return 2;
+		};
+		const aGroup = groupRank(a.item?.type);
+		const bGroup = groupRank(b.item?.type);
+		if (aGroup !== bGroup) return aGroup - bGroup;
+		const aPrefix = a.handle.startsWith(qLower) ? 0 : 1;
+		const bPrefix = b.handle.startsWith(qLower) ? 0 : 1;
+		if (aPrefix !== bPrefix) return aPrefix - bPrefix;
+		return a.handle.localeCompare(b.handle);
+	});
+
+	return rows.map(({ item }) => item);
+}
+
+function getHashtagSuggestions({ q, limit }) {
+	const qLower = String(q || "").trim().toLowerCase();
+	const cap = capForLimit(limit);
+	const list = Array.from(pageHashtagTargetsMap.values());
+	return Promise.resolve(filterAndSortHashtagItems(list, qLower).slice(0, cap));
+}
+
 const CHAT_COMMAND_ITEMS = [
 	{
 		type: "command",
@@ -492,6 +587,7 @@ function getCommandSuggestions({ q, limit }) {
 function getCombinedInlineSuggestions({ source, q, limit }, signal) {
 	if (source === "users" || source === "chat_mentions") return getMentionSuggestions({ source, q, limit }, signal);
 	if (source === "styles") return getStyleSuggestions({ source, q, limit }, signal);
+	if (source === "chat_hashtags") return getHashtagSuggestions({ q, limit });
 	if (source === "chat_commands") return getCommandSuggestions({ source, q, limit }, signal);
 	return defaultGetSuggestions({ source, q, limit }, signal);
 }
@@ -624,13 +720,22 @@ function renderPopup(textarea, mode) {
 	} else {
 		const hasCommandsOnly = items.length > 0 && items.every((it) => it?.type === "command");
 		const hasStylesOnly = items.length > 0 && items.every((it) => it?.type === "style");
+		const hasServers = items.some((it) => it?.type === "server");
+		const hasDefaultChannels = items.some((it) => it?.type === "pseudo_channel");
+		const hasChannels = items.some((it) => it?.type === "channel");
+		const hasHashtagItems = hasServers || hasDefaultChannels || hasChannels;
 		const hasPersonas = items.some((it) => it?.type === "persona");
 		const hasSpecialMentions = items.some((it) => it?.type === "special_mention");
-		const hasUsers = items.some((it) => it?.type !== "persona" && it?.type !== "special_mention");
+		const hasUsers = items.some(
+			(it) => it?.type !== "persona" && it?.type !== "special_mention" && it?.type !== "server" && it?.type !== "channel" && it?.type !== "pseudo_channel"
+		);
+		const firstServerIdx = items.findIndex((it) => it?.type === "server");
+		const firstDefaultChannelIdx = items.findIndex((it) => it?.type === "pseudo_channel");
+		const firstChannelIdx = items.findIndex((it) => it?.type === "channel");
 		const firstPersonaIdx = items.findIndex((it) => it?.type === "persona");
 		const firstSpecialMentionIdx = items.findIndex((it) => it?.type === "special_mention");
 		const showMentionSectionLabels =
-			!hasCommandsOnly && (hasUsers || hasPersonas || hasSpecialMentions);
+			!hasCommandsOnly && !hasHashtagItems && (hasUsers || hasPersonas || hasSpecialMentions);
 
 		items.forEach((item, i) => {
 			if (hasStylesOnly && i === 0) {
@@ -638,6 +743,27 @@ function renderPopup(textarea, mode) {
 				sec.className = "triggered-suggest-section";
 				sec.setAttribute("role", "presentation");
 				sec.textContent = "Styles";
+				popup.appendChild(sec);
+			}
+			if (hasHashtagItems && hasServers && i === firstServerIdx) {
+				const sec = document.createElement("div");
+				sec.className = "triggered-suggest-section";
+				sec.setAttribute("role", "presentation");
+				sec.textContent = "Servers";
+				popup.appendChild(sec);
+			}
+			if (hasHashtagItems && hasChannels && i === firstChannelIdx) {
+				const sec = document.createElement("div");
+				sec.className = "triggered-suggest-section";
+				sec.setAttribute("role", "presentation");
+				sec.textContent = "Channels";
+				popup.appendChild(sec);
+			}
+			if (hasHashtagItems && hasDefaultChannels && i === firstDefaultChannelIdx) {
+				const sec = document.createElement("div");
+				sec.className = "triggered-suggest-section";
+				sec.setAttribute("role", "presentation");
+				sec.textContent = "default";
 				popup.appendChild(sec);
 			}
 			if (showMentionSectionLabels && hasUsers && i === 0) {
@@ -682,14 +808,49 @@ function renderPopup(textarea, mode) {
 			icon.className = isSquare
 				? "triggered-suggest-item-icon triggered-suggest-item-icon--square"
 				: "triggered-suggest-item-icon";
-			const seed =
-				(item?.sublabel || "").replace(/^@/, "").trim() || item?.id || item?.label || "";
+			const isHashtagType =
+				item?.type === "server" || item?.type === "channel" || item?.type === "pseudo_channel";
+			const seed = isHashtagType
+				? (
+					(item?.slug ?? item?.sublabel ?? item?.label ?? "")
+						.toString()
+						.trim()
+						.replace(/^#/, "")
+						.toLowerCase() || "channel"
+				)
+				: ((item?.sublabel || "").replace(/^@/, "").trim() || item?.id || item?.label || "");
 			const setIconLetterFallback = () => {
 				icon.replaceChildren();
 				icon.style.background = getAvatarColor(seed);
 				icon.textContent = String(item?.label || "?").charAt(0).toUpperCase();
 			};
-			if (item?.icon_url) {
+			const setPseudoChannelIcon = () => {
+				const slug = String(item?.slug || "").trim().toLowerCase();
+				const iconHtml = slug ? getPseudoStripRouteIconHtml(slug, "chat-page-sidebar-channel-route-icon") : "";
+				if (!iconHtml) return false;
+				icon.replaceChildren();
+				icon.style.background = "transparent";
+				const glyph = document.createElement("span");
+				glyph.className = "triggered-suggest-item-route-icon-wrap";
+				glyph.style.display = "inline-flex";
+				glyph.style.alignItems = "center";
+				glyph.style.justifyContent = "center";
+				glyph.style.width = "18px";
+				glyph.style.height = "18px";
+				glyph.style.color = "#fff";
+				glyph.innerHTML = iconHtml;
+				icon.appendChild(glyph);
+				const svg = glyph.querySelector("svg");
+				if (svg) {
+					svg.style.width = "18px";
+					svg.style.height = "18px";
+					svg.style.display = "block";
+				}
+				return true;
+			};
+			if (item?.type === "pseudo_channel" && setPseudoChannelIcon()) {
+				// Icon rendered from shared sidebar pseudo-channel set.
+			} else if (item?.icon_url) {
 				const img = document.createElement("img");
 				img.src = item.icon_url;
 				img.alt = "";
@@ -744,7 +905,12 @@ function renderPopup(textarea, mode) {
 
 			option.appendChild(icon);
 			option.appendChild(text);
-			if (item?.badge) {
+			const showBadge =
+				item?.badge &&
+				item?.type !== "server" &&
+				item?.type !== "channel" &&
+				item?.type !== "pseudo_channel";
+			if (showBadge) {
 				const badge = document.createElement("span");
 				badge.className = "triggered-suggest-item-badge";
 				badge.textContent = item.badge;
@@ -884,12 +1050,14 @@ function filterAndSortStyleItems(items, qLower) {
 function applyLocalFilter(source, items, qLower) {
 	if (source === "users" || source === "chat_mentions") return filterAndSortMentionItems(items, qLower);
 	if (source === "styles") return filterAndSortStyleItems(items, qLower);
+	if (source === "chat_hashtags") return filterAndSortHashtagItems(items, qLower);
 	return items.filter((item) => itemHandle(item).startsWith(qLower));
 }
 
 function getLocalCandidatesForTrigger(trigger, qLower) {
 	if (trigger.source === "users") return getMentionLocalCandidates(qLower, false);
 	if (trigger.source === "chat_mentions") return getMentionLocalCandidates(qLower, true);
+	if (trigger.source === "chat_hashtags") return Array.from(pageHashtagTargetsMap.values());
 	return [];
 }
 
@@ -1186,6 +1354,7 @@ export function attachChatComposerSuggest(textarea) {
 	attachTriggeredSuggest(textarea, {
 		triggers: [
 			{ char: "@", minChars: 1, source: "chat_mentions" },
+			{ char: "#", minChars: 1, source: "chat_hashtags" },
 			{ char: "$", minChars: 1, source: "styles" },
 			{ char: "/", minChars: 1, source: "chat_commands" }
 		],

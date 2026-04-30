@@ -153,6 +153,8 @@ let attachChatComposerSuggest;
 let isTriggeredSuggestPopupOpen;
 let addPageUsers;
 let clearPageUsers;
+let addPageHashtagTargets;
+let clearPageHashtagTargets;
 let enableLikeButtons;
 let createPseudoColumnPager;
 /** @type {((count?: number) => string) | undefined} */
@@ -321,6 +323,8 @@ async function loadDeps() {
 		isTriggeredSuggestPopupOpen = suggestMod.isTriggeredSuggestPopupOpen;
 		addPageUsers = suggestMod.addPageUsers;
 		clearPageUsers = suggestMod.clearPageUsers;
+		addPageHashtagTargets = suggestMod.addPageHashtagTargets;
+		clearPageHashtagTargets = suggestMod.clearPageHashtagTargets;
 
 		const likesMod = await import(`../shared/likes.js${qs}`);
 		enableLikeButtons = likesMod.enableLikeButtons;
@@ -763,6 +767,7 @@ export async function initChatPage(root, options = {}) {
 	let chatCanvasCreateCleanup = null;
 	let tearDownChatCanvasUi = () => { };
 	let chatThreads = [];
+	let chatJoinedServers = [];
 	let activeThreadId = null;
 	/** Most recent thread-ish meta used to paint desktop/mobile header title + avatar. */
 	let activeHeaderMeta = null;
@@ -3966,6 +3971,113 @@ export async function initChatPage(root, options = {}) {
 		});
 	}
 
+	function syncChatComposerHashtagTargets() {
+		if (
+			typeof clearPageHashtagTargets !== 'function' ||
+			typeof addPageHashtagTargets !== 'function'
+		) {
+			return;
+		}
+		clearPageHashtagTargets();
+		const items = [];
+		const seen = new Set();
+		const joinedServerSlugs = new Set(
+			(Array.isArray(chatJoinedServers) ? chatJoinedServers : [])
+				.map((s) =>
+					serverChannelTagFromServerName(typeof s?.name === 'string' ? s.name : '')
+				)
+				.filter((slug) => Boolean(slug))
+				.map((slug) => String(slug).toLowerCase())
+		);
+		const addTarget = (item) => {
+			const type = String(item?.type || 'channel').trim().toLowerCase();
+			const slug = String(item?.slug || '')
+				.trim()
+				.toLowerCase()
+				.replace(/^#/, '');
+			const dedupeKey = `${type}:${slug}`;
+			if (!slug || seen.has(dedupeKey)) return;
+			seen.add(dedupeKey);
+			items.push({
+				...item,
+				type,
+				slug
+			});
+		};
+
+		for (const t of Array.isArray(chatThreads) ? chatThreads : []) {
+			if (!t || t.type !== 'channel') continue;
+			const slug = typeof t.channel_slug === 'string' ? t.channel_slug.trim().toLowerCase() : '';
+			if (!slug) continue;
+			if (rosterMod.SIDEBAR_TOP_STRIP_CHANNEL_SLUGS.has(slug)) continue;
+			if (joinedServerSlugs.has(slug)) continue;
+			const rawTitle = typeof t.title === 'string' ? t.title.trim() : '';
+			const displayTitle = rawTitle.replace(/^#/, '').trim();
+			addTarget({
+				type: 'channel',
+				id: `channel:${slug}`,
+				label: displayTitle || `#${slug}`,
+				sublabel: `#${slug}`,
+				slug,
+				badge: 'Channel'
+			});
+		}
+
+		for (const slugRaw of rosterMod.SIDEBAR_PSEUDO_STRIP_ORDER || []) {
+			const slug = String(slugRaw || '').trim().toLowerCase();
+			if (!slug) continue;
+			addTarget({
+				type: 'pseudo_channel',
+				id: `pseudo_channel:${slug}`,
+				label: rosterMod.getSidebarPseudoChannelTitle(slug) || `#${slug}`,
+				sublabel: `#${slug}`,
+				slug,
+				badge: 'Default'
+			});
+		}
+		addTarget({
+			type: 'pseudo_channel',
+			id: 'pseudo_channel:create',
+			label: 'Create',
+			sublabel: '#create',
+			slug: 'create',
+			badge: 'Default'
+		});
+		addTarget({
+			type: 'pseudo_channel',
+			id: 'pseudo_channel:notes',
+			label: 'My Notes',
+			sublabel: '#notes',
+			slug: 'notes',
+			badge: 'Default'
+		});
+		addTarget({
+			type: 'pseudo_channel',
+			id: 'pseudo_channel:help',
+			label: 'Help',
+			sublabel: '#help',
+			slug: 'help',
+			badge: 'Default'
+		});
+
+		for (const s of Array.isArray(chatJoinedServers) ? chatJoinedServers : []) {
+			const id = Number(s?.id);
+			const name = typeof s?.name === 'string' ? s.name.trim() : '';
+			const slug = serverChannelTagFromServerName(name);
+			if (!slug) continue;
+			addTarget({
+				type: 'server',
+				id: Number.isFinite(id) && id > 0 ? `server:${id}` : `server:${slug.toLowerCase()}`,
+				label: name || `#${slug}`,
+				sublabel: `#${slug.toLowerCase()}`,
+				slug,
+				badge: 'Server'
+			});
+		}
+
+		addPageHashtagTargets(items);
+	}
+
 	async function loadChatThreads(options = {}) {
 		const forceNetwork = options.forceNetwork === true;
 		const allowCache = options.allowCache !== false;
@@ -3982,6 +4094,7 @@ export async function initChatPage(root, options = {}) {
 			chatThreads = cached.threads;
 			chatViewerIsAdmin = cached.viewerIsAdmin === true;
 			chatViewerIsFounder = cached.viewerIsFounder === true;
+			syncChatComposerHashtagTargets();
 		}
 
 		if (!needNetwork) {
@@ -4001,6 +4114,7 @@ export async function initChatPage(root, options = {}) {
 		chatThreads = Array.isArray(result.data?.threads) ? result.data.threads : [];
 		chatViewerIsAdmin = Boolean(result.data?.viewer_is_admin);
 		chatViewerIsFounder = Boolean(result.data?.viewer_is_founder);
+		syncChatComposerHashtagTargets();
 		if (chatViewerId != null && Number.isFinite(chatViewerId)) {
 			try {
 				writeCachedChatThreads?.(chatViewerId, chatThreads, {
@@ -4431,6 +4545,8 @@ export async function initChatPage(root, options = {}) {
 			const chExpanded = captureSectionExpandedState(chEl);
 			const threadsArr = Array.isArray(threads) ? threads : [];
 			const joinedArr = Array.isArray(joined) ? joined : [];
+			chatJoinedServers = joinedArr;
+			syncChatComposerHashtagTargets();
 			const onlineIds = presenceSnapshot?.onlineIds instanceof Set ? presenceSnapshot.onlineIds : new Set();
 			const lastSeenMsByUserId =
 				presenceSnapshot?.lastSeenMsByUserId instanceof Map
@@ -7849,23 +7965,36 @@ export async function initChatPage(root, options = {}) {
 			}
 		}
 
-		const tagLink = e.target?.closest?.('a.mention-link[href^="/t/"]');
+		const tagLink = e.target?.closest?.('a.mention-link[href]');
 		if (tagLink instanceof HTMLAnchorElement && tagLink.closest('.connect-chat-msg-bubble')) {
-			if (activePseudoChannelSlug) {
-				return;
-			}
 			if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {
 				return;
 			}
-			const href = tagLink.getAttribute('href') || '';
-			const m = href.match(/^\/t\/([^/?#]+)/i);
-			if (!m) {
+			const hrefAttr = tagLink.getAttribute('href') || '';
+			if (!hrefAttr.startsWith('/')) {
+				return;
+			}
+			const pathOnly = hrefAttr.split('?')[0].split('#')[0];
+			const isHashtagTagPath = /^\/t\/([^/?#]+)/i.test(pathOnly);
+			const isChatInAppRoute =
+				pathOnly.startsWith('/chat/') ||
+				pathOnly === '/feed' ||
+				pathOnly === '/explore' ||
+				pathOnly === '/creations';
+			if (!isHashtagTagPath && !isChatInAppRoute) {
 				return;
 			}
 			e.preventDefault();
 			e.stopPropagation();
-			const slug = decodeURIComponent(m[1]);
-			void openChatHashtagDestination(slug);
+			if (isHashtagTagPath) {
+				const m = pathOnly.match(/^\/t\/([^/?#]+)/i);
+				if (!m) return;
+				const slug = decodeURIComponent(m[1]);
+				void openChatHashtagDestination(slug);
+				return;
+			}
+			history.pushState({ prsnChat: true }, '', hrefAttr);
+			void openThreadForCurrentPath();
 			return;
 		}
 
@@ -8722,11 +8851,41 @@ export async function initChatPage(root, options = {}) {
 		await openThreadForCurrentPath();
 	}
 
+	function resolveSpecialHashtagDestination(slug) {
+		const key = String(slug || '').trim().toLowerCase();
+		if (!key) return null;
+		const map = {
+			create: '/create',
+			feed: '/feed',
+			help: '/help',
+			creations: '/chat/c/creations',
+			creation: '/chat/c/creations',
+			notes: '/chat/notes',
+			explore: '/explore',
+			comments: '/chat/c/comments',
+			feedback: '/chat/c/feedback'
+		};
+		const href = map[key];
+		if (href) return { kind: 'path', href };
+		return null;
+	}
+
 	async function openChatHashtagDestination(slug) {
 		const safe = String(slug || '')
 			.trim()
 			.toLowerCase();
 		if (!safe) {
+			return;
+		}
+		const special = resolveSpecialHashtagDestination(safe);
+		if (special?.kind === 'path' && special.href) {
+			const href = String(special.href || '').trim();
+			if (href.startsWith('/chat/')) {
+				history.pushState({ prsnChat: true }, '', href);
+				await openThreadForCurrentPath();
+				return;
+			}
+			window.location.href = href;
 			return;
 		}
 		try {
