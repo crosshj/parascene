@@ -58,6 +58,7 @@ async function loadDeps() {
 }
 
 const html = String.raw;
+const BASIC_IMAGE_EDIT_CARRYOVER_KEY = 'create_page_image_edit_carryover';
 
 function escapeHtml(text) {
 	return String(text ?? "")
@@ -140,6 +141,8 @@ class AppRouteCreate extends HTMLElement {
 		this._promptFromUrl = null; // prompt from ?prompt= (landing page); applied when Basic tab has a prompt field
 		this._confirmPrimaryAction = null;
 		this.showHiddenFields = false;
+		this._imageFieldPersistTokens = Object.create(null);
+		this._pendingSavedFieldValues = null;
 	}
 
 	async connectedCallback() {
@@ -478,8 +481,13 @@ class AppRouteCreate extends HTMLElement {
 
 		const switchToBasic = this.querySelector('[data-create-switch-to-basic]');
 		if (switchToBasic) {
-			switchToBasic.addEventListener('click', (e) => {
+			switchToBasic.addEventListener('click', async (e) => {
 				e.preventDefault();
+				try {
+					await this.persistImageForBasicMode();
+				} catch (_) {
+					// Ignore carryover errors and still switch mode.
+				}
 				document.cookie = 'create_editor=simple; path=/; max-age=31536000';
 				window.location.href = '/create';
 			});
@@ -1233,16 +1241,49 @@ class AppRouteCreate extends HTMLElement {
 		}
 
 		const fields = this.selectedMethod.fields;
+		const pendingSaved =
+			this._pendingSavedFieldValues && typeof this._pendingSavedFieldValues === 'object'
+				? this._pendingSavedFieldValues
+				: null;
+		const fieldsForRender = {};
+		Object.keys(fields).forEach((fieldKey) => {
+			const field = fields[fieldKey];
+			if (!field || typeof field !== 'object') {
+				fieldsForRender[fieldKey] = field;
+				return;
+			}
+			if (pendingSaved && isImageUrlField(field)) {
+				const saved = pendingSaved[fieldKey];
+				if (typeof saved === 'string' && saved.trim()) {
+					fieldsForRender[fieldKey] = { ...field, default: saved.trim() };
+					return;
+				}
+			}
+			if (pendingSaved && isImageUrlArrayField(field)) {
+				const saved = pendingSaved[fieldKey];
+				if (Array.isArray(saved)) {
+					const urls = saved
+						.filter((item) => typeof item === 'string' && item.trim())
+						.map((item) => item.trim());
+					if (urls.length > 0) {
+						fieldsForRender[fieldKey] = { ...field, default: urls };
+						return;
+					}
+				}
+			}
+			fieldsForRender[fieldKey] = field;
+		});
 		if (Object.keys(fields).length === 0) {
 			fieldsGroup.style.display = 'none';
 			return;
 		}
 
-		renderFields(fieldsContainer, fields, {
+		renderFields(fieldsContainer, fieldsForRender, {
 			onFieldChange: (fieldKey, value) => {
 				this.fieldValues[fieldKey] = value;
 				this.updateButtonState();
 				this.saveSelections();
+				this.persistImageFieldSelection(fieldKey, value);
 			}
 		});
 
@@ -1649,6 +1690,13 @@ class AppRouteCreate extends HTMLElement {
 			for (const k of Object.keys(fieldValuesForStorage)) {
 				if (fieldValuesForStorage[k] instanceof File) {
 					delete fieldValuesForStorage[k];
+					continue;
+				}
+				if (Array.isArray(fieldValuesForStorage[k])) {
+					const onlyStrings = fieldValuesForStorage[k]
+						.filter((v) => typeof v === 'string' && v.trim())
+						.map((v) => v.trim());
+					fieldValuesForStorage[k] = onlyStrings;
 				}
 			}
 			const selections = {
@@ -1689,6 +1737,10 @@ class AppRouteCreate extends HTMLElement {
 
 			const selections = JSON.parse(stored);
 			if (!selections || !selections.serverId) return false;
+			this._pendingSavedFieldValues =
+				selections.fieldValues && typeof selections.fieldValues === 'object'
+					? selections.fieldValues
+					: null;
 
 			// Restore server selection
 			const server = this.servers.find(s => s.id === Number(selections.serverId));
@@ -2339,6 +2391,106 @@ class AppRouteCreate extends HTMLElement {
 		});
 		// Re-apply URL prompt so it wins over any saved prompt we skipped
 		this.applyUrlPromptToBasicFields();
+	}
+
+	async persistImageFieldSelection(fieldKey, value) {
+		const fields = this.selectedMethod?.fields || {};
+		const field = fields[fieldKey];
+		if (!field) return;
+		const isImageField = isImageUrlField(field);
+		const isImageArrayField = isImageUrlArrayField(field);
+		if (!isImageField && !isImageArrayField) return;
+
+		const token = Date.now() + Math.random();
+		this._imageFieldPersistTokens[fieldKey] = token;
+
+		try {
+			if (isImageField) {
+				if (!(value instanceof File)) return;
+				const uploadedUrl = await uploadImageFile(value);
+				if (this._imageFieldPersistTokens[fieldKey] !== token) return;
+				if (!uploadedUrl || typeof uploadedUrl !== 'string') return;
+				this.fieldValues[fieldKey] = uploadedUrl;
+				this.saveSelections();
+				return;
+			}
+
+			if (!Array.isArray(value)) return;
+			const hasFiles = value.some((item) => item instanceof File);
+			if (!hasFiles) {
+				this.saveSelections();
+				return;
+			}
+			const uploaded = await Promise.all(
+				value.map((item) => (item instanceof File ? uploadImageFile(item) : Promise.resolve(item)))
+			);
+			if (this._imageFieldPersistTokens[fieldKey] !== token) return;
+			const normalized = uploaded
+				.filter((item) => typeof item === 'string' && item.trim())
+				.map((item) => item.trim());
+			this.fieldValues[fieldKey] = normalized;
+			this.saveSelections();
+		} catch {
+			// Keep the current in-memory value if upload fails.
+		}
+	}
+
+	/**
+	 * Persist an attached advanced image so Basic mode's Image Edit can prefill it.
+	 * Supports URL strings directly and uploads File values to get a URL before switching.
+	 */
+	async persistImageForBasicMode() {
+		const fields = this.selectedMethod?.fields;
+		if (!fields || typeof fields !== 'object') return;
+
+		let candidate = null;
+		for (const fieldKey of Object.keys(fields)) {
+			const field = fields[fieldKey];
+			if (isImageUrlField(field)) {
+				const value = this.fieldValues[fieldKey];
+				if (typeof value === 'string' && value.trim()) {
+					candidate = value.trim();
+					break;
+				}
+				if (value instanceof File) {
+					candidate = value;
+					break;
+				}
+			}
+			if (isImageUrlArrayField(field)) {
+				const arr = this.fieldValues[fieldKey];
+				if (!Array.isArray(arr) || arr.length === 0) continue;
+				const firstValid = arr.find((item) => {
+					if (typeof item === 'string' && item.trim()) return true;
+					return item instanceof File;
+				});
+				if (firstValid) {
+					candidate = firstValid;
+					break;
+				}
+			}
+		}
+
+		if (!candidate) return;
+
+		let imageUrl = '';
+		if (candidate instanceof File) {
+			try {
+				imageUrl = await uploadImageFile(candidate);
+			} catch {
+				return;
+			}
+		} else if (typeof candidate === 'string') {
+			imageUrl = candidate.trim();
+		}
+
+		if (!imageUrl) return;
+		try {
+			localStorage.setItem(BASIC_IMAGE_EDIT_CARRYOVER_KEY, imageUrl);
+			localStorage.setItem('create_page_tab', 'image-edit');
+		} catch (_) {
+			// ignore storage errors
+		}
 	}
 }
 

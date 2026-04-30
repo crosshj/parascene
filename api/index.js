@@ -220,7 +220,11 @@ app.use(
 	createRateLimitMiddleware({
 		bucket: "api-write",
 		windowSec: 60,
-		limit: (req) => (req.auth?.userId ? 40 : 20),
+		// Web traffic is exempt; only API-key authenticated requests are write-limited.
+		limit: (req) => {
+			if (req.auth?.apiKeyAuth !== true) return null;
+			return req.auth?.userId ? 40 : 20;
+		},
 		methods: ["POST", "PUT", "PATCH", "DELETE"],
 		apiOnly: true,
 		failOpen: true

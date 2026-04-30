@@ -11621,27 +11621,123 @@ app-modal-publish .publish-checkbox-label input[type="checkbox"] {
 .image-picker-methods {
 	display: flex;
 	flex-direction: column;
-	gap: 0.5rem;
+	gap: 0.625rem;
 	width: 100%;
 }
 
-.image-picker-method-btn {
+.image-picker-method-help {
+	margin: 0;
+	font-size: 0.84rem;
+	color: var(--text-muted);
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.image-picker-method-help-item {
+	position: relative;
+	display: block;
+	padding-left: 14px;
+	line-height: 1.35;
+}
+
+.image-picker-method-help-item::before {
+	content: '•';
+	position: absolute;
+	left: 0;
+	top: 0;
+	color: var(--text-muted);
+}
+
+.image-picker-composer-row {
+	position: relative;
 	width: 100%;
-	padding: 0.65rem 1rem;
-	font-size: 0.95rem;
-	border-radius: 8px;
 	border: 1px solid var(--border);
+	border-radius: 10px;
 	background: var(--input-bg);
-	color: var(--text);
-	cursor: pointer;
-	font-family: inherit;
-	text-align: center;
-	transition: border-color 0.2s ease, background 0.2s ease;
+	transition: border-color 0.15s ease;
 }
 
-.image-picker-method-btn:hover {
-	background: var(--surface-muted);
-	border-color: var(--text-muted);
+.image-picker-composer-row:focus-within {
+	border-color: var(--focus);
+}
+
+.image-picker-composer-add,
+.image-picker-composer-send {
+	position: absolute;
+	top: 50%;
+	transform: translateY(-50%);
+	width: 36px;
+	height: 36px;
+	padding: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+	font-size: 1rem;
+	line-height: 1;
+	z-index: 1;
+}
+
+.image-picker-composer-add:hover,
+.image-picker-composer-send:hover {
+	color: var(--text);
+	background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.image-picker-composer-add:active,
+.image-picker-composer-send:active {
+	transform: translateY(-50%);
+}
+
+.image-picker-composer-add {
+	left: 8px;
+}
+
+.image-picker-composer-send {
+	right: 8px;
+	color: var(--focus);
+}
+
+.image-picker-composer-send:disabled {
+	color: var(--text-muted);
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+.image-picker-composer-send:disabled:hover {
+	color: var(--text-muted);
+	background: transparent;
+}
+
+.image-picker-composer-input {
+	width: 100%;
+	border: none;
+	background: transparent;
+	padding: 11px 52px 11px 50px;
+	font-size: 0.9375rem;
+	line-height: 1.45;
+	color: var(--text);
+}
+
+.image-picker-composer-input:focus {
+	outline: none;
+}
+
+.image-picker-url-hint {
+	margin: 0;
+	font-size: 0.8rem;
+	color: var(--text-muted);
+	min-height: 1.2em;
+	visibility: hidden;
+}
+
+.image-picker-url-hint.is-visible {
+	visibility: visible;
 }
 
 .image-picker-panel {
@@ -11699,20 +11795,10 @@ app-modal-publish .publish-checkbox-label input[type="checkbox"] {
 	border-color: var(--text-muted);
 }
 
-.image-picker-attach-btn {
-	padding: 0.5rem 1rem;
-	font-size: 0.9rem;
-	border-radius: 6px;
-	border: 1px solid var(--border);
-	background: var(--accent);
-	color: var(--accent-text);
-	cursor: pointer;
-	font-family: inherit;
-	align-self: center;
-}
-
-.image-picker-attach-btn:hover:not(:disabled) {
-	opacity: 0.95;
+.image-picker-method-submit {
+	width: 100%;
+	align-self: stretch;
+	margin-top: -0.125rem;
 }
 
 .image-picker-attach-btn:disabled {
