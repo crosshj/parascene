@@ -10566,6 +10566,11 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 	opacity: 0.55;
 }
 
+.chat-page-pane-load-retry {
+	margin-top: 12px;
+	align-self: center;
+}
+
 .route-empty-title {
 	font-size: 1.25rem;
 	font-weight: 600;

@@ -77,6 +77,26 @@ function chatSimulateSendFail() {
 	}
 }
 
+/** `?chatSimulateConversationLoadFail=1` — force thread message load failure for error-state UI testing. */
+function chatSimulateConversationLoadFail() {
+	try {
+		return new URLSearchParams(window.location.search).get('chatSimulateConversationLoadFail') === '1';
+	} catch {
+		return false;
+	}
+}
+
+function clearChatSimulateConversationLoadFailParam() {
+	try {
+		const url = new URL(window.location.href);
+		if (!url.searchParams.has('chatSimulateConversationLoadFail')) return;
+		url.searchParams.delete('chatSimulateConversationLoadFail');
+		window.history.replaceState({}, '', url.toString());
+	} catch {
+		// ignore
+	}
+}
+
 /** Hide repeated sender meta when the next message is same author within this window (ms). */
 const CHAT_MESSAGE_GROUP_GAP_MS = 7 * 60 * 1000;
 
@@ -7376,6 +7396,9 @@ export async function initChatPage(root, options = {}) {
 
 		const viewerId = chatViewerId;
 		try {
+			if (chatSimulateConversationLoadFail()) {
+				throw new Error('Failed to fetch');
+			}
 			await refreshChatCanvasesList();
 			if (isStaleChatPane(paneEpoch)) return;
 			const res = await fetch(`/api/chat/threads/${threadId}/messages?limit=50`, {
@@ -7472,6 +7495,7 @@ export async function initChatPage(root, options = {}) {
 					{
 						showRetry: true,
 						onRetry: () => {
+							clearChatSimulateConversationLoadFailParam();
 							void loadMessages();
 						}
 					}
@@ -8075,12 +8099,23 @@ export async function initChatPage(root, options = {}) {
 			if (wrap instanceof HTMLElement) {
 				const retryBtn = document.createElement('button');
 				retryBtn.type = 'button';
-				retryBtn.className = 'route-empty-button chat-page-pane-load-retry';
+				retryBtn.className = 'btn-outlined chat-page-pane-load-retry';
 				retryBtn.textContent = 'Retry';
 				retryBtn.addEventListener('click', () => {
+					messagesEl.innerHTML = renderEmptyState({
+						loading: true,
+						loadingAriaLabel: 'Loading',
+						className: 'chat-page-thread-loading'
+					});
+					messagesEl.setAttribute('aria-busy', 'true');
 					if (typeof cta.onRetry === 'function') cta.onRetry();
 				});
-				wrap.appendChild(retryBtn);
+				const detailEl = wrap.querySelector('.route-empty-message');
+				if (detailEl instanceof HTMLElement) {
+					detailEl.insertAdjacentElement('afterend', retryBtn);
+				} else {
+					wrap.appendChild(retryBtn);
+				}
 			}
 		}
 		messagesEl.removeAttribute('aria-busy');
