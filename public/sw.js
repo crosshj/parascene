@@ -8,9 +8,9 @@ const VERSION = (() => {
 	}
 })();
 const STATIC_CACHE = `${CACHE_PREFIX}-static-v${VERSION}`;
-const IMAGE_CACHE = `${CACHE_PREFIX}-images-v${VERSION}`;
+const IMAGE_CACHE = `${CACHE_PREFIX}-images`;
 const DATA_CACHE = `${CACHE_PREFIX}-data-v${VERSION}`;
-const META_CACHE = `${CACHE_PREFIX}-meta-v${VERSION}`;
+const META_CACHE = `${CACHE_PREFIX}-meta`;
 const IMAGE_MAX_ENTRIES = 300;
 const DATA_MAX_ENTRIES = 120;
 const STATIC_MAX_ENTRIES = 400;
@@ -433,10 +433,16 @@ self.addEventListener("activate", (event) => {
 	event.waitUntil((async () => {
 		const expectedPrefix = `${CACHE_PREFIX}-`;
 		const expectedVersionTag = `-v${VERSION}`;
+		const persistentCaches = new Set([IMAGE_CACHE, META_CACHE]);
 		const keys = await caches.keys();
 		await Promise.all(
 			keys
-				.filter((name) => name.startsWith(expectedPrefix) && !name.endsWith(expectedVersionTag))
+				.filter(
+					(name) =>
+						name.startsWith(expectedPrefix) &&
+						!name.endsWith(expectedVersionTag) &&
+						!persistentCaches.has(name)
+				)
 				.map((name) => caches.delete(name))
 		);
 		await self.clients.claim();
