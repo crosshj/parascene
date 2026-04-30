@@ -1030,12 +1030,14 @@ body.chat-page.chat-page--mobile-sidebar-open .chat-page-sidebar-row.is-online .
 }
 
 body.chat-page.chat-page--mobile-sidebar-open .chat-page-sidebar-row--server,
-body.chat-page.chat-page--mobile-sidebar-open .chat-page-sidebar-row--dm-with-menu {
+body.chat-page.chat-page--mobile-sidebar-open .chat-page-sidebar-row--dm-with-menu,
+body.chat-page.chat-page--mobile-sidebar-open .chat-page-sidebar-row--with-menu {
 	align-items: stretch;
 }
 
 body.chat-page.chat-page--mobile-sidebar-open .chat-page-sidebar-row--server .chat-page-sidebar-row-link,
-body.chat-page.chat-page--mobile-sidebar-open .chat-page-sidebar-row--dm-with-menu .chat-page-sidebar-row-link {
+body.chat-page.chat-page--mobile-sidebar-open .chat-page-sidebar-row--dm-with-menu .chat-page-sidebar-row-link,
+body.chat-page.chat-page--mobile-sidebar-open .chat-page-sidebar-row--with-menu .chat-page-sidebar-row-link {
 	display: flex;
 	flex-direction: row;
 	align-items: center;

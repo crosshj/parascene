@@ -1228,6 +1228,80 @@ export async function initChatPage(root, options = {}) {
 		if (row) Object.assign(row, patch);
 	}
 
+	function getSidebarThreadLastMessageId(threadId) {
+		const tid = Number(threadId);
+		if (!Number.isFinite(tid) || tid <= 0) return null;
+		const row = (chatThreads || []).find((t) => Number(t.id) === tid);
+		if (!row) return null;
+		const fromLastMessage = Number(row?.last_message?.id);
+		if (Number.isFinite(fromLastMessage) && fromLastMessage > 0) return fromLastMessage;
+		return null;
+	}
+
+	async function markThreadReadByMessageId(threadId, messageId) {
+		const tid = Number(threadId);
+		const mid = Number(messageId);
+		if (!Number.isFinite(tid) || tid <= 0) return false;
+		if (!Number.isFinite(mid) || mid <= 0) return false;
+		try {
+			const res = await fetch(`/api/chat/threads/${tid}/read`, {
+				method: 'POST',
+				credentials: 'include',
+				headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+				body: JSON.stringify({ last_read_message_id: mid })
+			});
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) return false;
+			const lr = data?.last_read_message_id != null ? Number(data.last_read_message_id) : mid;
+			if (Number.isFinite(lr) && lr > 0) {
+				patchChatThreadRow(tid, { last_read_message_id: lr, unread_count: 0 });
+			} else {
+				patchChatThreadRow(tid, { unread_count: 0 });
+			}
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	async function markSidebarThreadRead(threadId) {
+		const tid = Number(threadId);
+		if (!Number.isFinite(tid) || tid <= 0) return;
+		let mid = getSidebarThreadLastMessageId(tid);
+		if (!Number.isFinite(mid) || mid <= 0) {
+			try {
+				await loadChatThreads({ forceNetwork: true });
+			} catch {
+				// ignore
+			}
+			mid = getSidebarThreadLastMessageId(tid);
+		}
+		if (!Number.isFinite(mid) || mid <= 0) {
+			patchChatThreadRow(tid, { unread_count: 0 });
+			dispatchChatUnreadRefresh();
+			void refreshChatSidebar({ skipThreadsFetch: true });
+			return;
+		}
+		const ok = await markThreadReadByMessageId(tid, mid);
+		if (!ok) return;
+		if (Number(activeThreadId) === tid) {
+			fadeOutUnreadHighlightsInDom();
+		}
+		dispatchChatUnreadRefresh();
+		void refreshChatSidebar({ skipThreadsFetch: true });
+	}
+
+	function openServerDetailsFromSidebarButton(settingsBtn) {
+		if (!(settingsBtn instanceof HTMLButtonElement)) return;
+		const sid = Number(settingsBtn.getAttribute('data-chat-server-settings'));
+		if (!Number.isFinite(sid) || sid <= 0) return;
+		const canManage = settingsBtn.getAttribute('data-chat-server-can-manage') === '1';
+		const modal = document.querySelector('app-modal-server');
+		if (modal && typeof modal.open === 'function') {
+			modal.open({ mode: canManage ? 'edit' : 'view', serverId: sid });
+		}
+	}
+
 	function fadeOutUnreadHighlightsInDom() {
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!messagesEl) return;
@@ -1260,7 +1334,7 @@ export async function initChatPage(root, options = {}) {
 	/** Mark read only after the latest message row is visible (IntersectionObserver). */
 	async function markLatestMessageRead() {
 		const threadId = activeThreadId;
-		if (!threadId || loadingThreadMessages) return;
+		if (!threadId) return;
 		const messages = lastChatMessagesPayload;
 		if (!Array.isArray(messages) || messages.length === 0) return;
 		const last = messages[messages.length - 1];
@@ -1268,28 +1342,17 @@ export async function initChatPage(root, options = {}) {
 		if (!Number.isFinite(mid) || mid <= 0) return;
 		if (lastMarkReadSentId === mid) return;
 		lastMarkReadSentId = mid;
+		const ok = await markThreadReadByMessageId(threadId, mid);
+		if (!ok) {
+			lastMarkReadSentId = null;
+			return;
+		}
 		try {
-			const res = await fetch(`/api/chat/threads/${threadId}/read`, {
-				method: 'POST',
-				credentials: 'include',
-				headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-				body: JSON.stringify({ last_read_message_id: mid })
-			});
-			const data = await res.json().catch(() => ({}));
-			if (!res.ok) {
-				lastMarkReadSentId = null;
-				return;
-			}
-			const lr =
-				data?.last_read_message_id != null ? Number(data.last_read_message_id) : mid;
-			if (Number.isFinite(lr) && lr > 0) {
-				patchChatThreadRow(threadId, { last_read_message_id: lr, unread_count: 0 });
-			}
 			fadeOutUnreadHighlightsInDom();
 			dispatchChatUnreadRefresh();
 			void refreshChatSidebar({ skipThreadsFetch: true });
 		} catch {
-			lastMarkReadSentId = null;
+			// ignore
 		}
 	}
 
@@ -4533,8 +4596,15 @@ export async function initChatPage(root, options = {}) {
 				const dataHelpAttr = t?.type === 'sidebar_help' ? ' data-chat-sidebar-help="1"' : '';
 				const dmDomKey = dmDomKeyForSidebarRow(t);
 				const dataDmKeyAttr = dmDomKey ? ` data-chat-dm-key="${escapeHtml(dmDomKey)}"` : '';
+				const threadId = Number(t?.id);
+				const threadIdAttr =
+					Number.isFinite(threadId) && threadId > 0
+						? ` data-chat-row-menu-thread-id="${threadId}"`
+						: '';
 				const pinKey =
 					t.type === 'dm' && !selfDm ? rosterMod.dmStablePinStorageKey(t) : null;
+				const rowKind = t?.type === 'dm' ? 'dm' : t?.type === 'channel' ? 'channel' : 'thread';
+				const gearAriaLabel = rowKind === 'dm' ? 'Direct message options' : 'Channel options';
 				if (pinKey) {
 					const ou = t.other_user;
 					const oid =
@@ -4547,7 +4617,7 @@ export async function initChatPage(root, options = {}) {
 							userId: Number.isFinite(oid) && oid > 0 ? oid : undefined
 						}) || (otherUserIdAttr ? `/user/${otherUserIdAttr}` : '/user');
 					const profileHrefAttr = escapeHtml(profileHref);
-					return `<div class="chat-page-sidebar-row chat-page-sidebar-row--dm-with-menu${activeClass}${pc}${extraRow}"${dataPseudoSlugAttr}${dataDmKeyAttr}>
+					return `<div class="chat-page-sidebar-row chat-page-sidebar-row--dm-with-menu chat-page-sidebar-row--with-menu${activeClass}${pc}${extraRow}"${dataPseudoSlugAttr}${dataDmKeyAttr}>
 					<a class="chat-page-sidebar-row-link" href="${escapeHtml(href)}">
 					${avatarHtml}
 					<div class="chat-page-sidebar-row-body">
@@ -4558,19 +4628,22 @@ export async function initChatPage(root, options = {}) {
 						</div>
 					</div>
 					</a>
-					<button type="button" class="chat-page-sidebar-server-settings chat-page-sidebar-dm-menu-btn" data-chat-dm-menu="${escapeHtml(pinKey)}" data-chat-dm-profile-href="${profileHrefAttr}" data-chat-dm-other-user-id="${escapeHtml(otherUserIdAttr)}" aria-label="Direct message options" aria-haspopup="menu" aria-expanded="false">${chatSidebarServerGearSvg}</button>
+					<button type="button" class="chat-page-sidebar-server-settings chat-page-sidebar-dm-menu-btn" data-chat-dm-menu="${escapeHtml(pinKey)}" data-chat-dm-profile-href="${profileHrefAttr}" data-chat-dm-other-user-id="${escapeHtml(otherUserIdAttr)}"${threadIdAttr} data-chat-row-menu-kind="${rowKind}" aria-label="Direct message options" aria-haspopup="menu" aria-expanded="false">${chatSidebarServerGearSvg}</button>
 				</div>`;
 				}
-				return `<a class="chat-page-sidebar-row${activeClass}${pc}${extraRow}" href="${escapeHtml(href)}"${dataPseudoSlugAttr}${dataHelpAttr}${dataDmKeyAttr}>
-					${avatarHtml}
-					<div class="chat-page-sidebar-row-body">
-						<div class="chat-page-sidebar-row-title-line">
-							<span class="chat-page-sidebar-row-title"${dmHoverMetaAttr}>${escapeHtml(title)}</span>
-							${youPill}
-							${unreadHtml}
+				return `<div class="chat-page-sidebar-row chat-page-sidebar-row--with-menu${activeClass}${pc}${extraRow}"${dataPseudoSlugAttr}${dataHelpAttr}${dataDmKeyAttr}>
+					<a class="chat-page-sidebar-row-link" href="${escapeHtml(href)}">
+						${avatarHtml}
+						<div class="chat-page-sidebar-row-body">
+							<div class="chat-page-sidebar-row-title-line">
+								<span class="chat-page-sidebar-row-title"${dmHoverMetaAttr}>${escapeHtml(title)}</span>
+								${youPill}
+								${unreadHtml}
+							</div>
 						</div>
-					</div>
-				</a>`;
+					</a>
+					<button type="button" class="chat-page-sidebar-server-settings" data-chat-sidebar-row-menu="1"${threadIdAttr} data-chat-row-menu-kind="${rowKind}" aria-label="${gearAriaLabel}" aria-haspopup="menu" aria-expanded="false">${chatSidebarServerGearSvg}</button>
+				</div>`;
 			}
 
 			function serverRowHtml(t) {
@@ -4589,9 +4662,14 @@ export async function initChatPage(root, options = {}) {
 				const slug =
 					typeof t.channel_slug === 'string' ? t.channel_slug.trim().toLowerCase() : '';
 				const meta = joinedServerMetaForSlug(slug);
-				const gearHtml =
+				const threadId = Number(t?.id);
+				const threadIdAttr =
+					Number.isFinite(threadId) && threadId > 0
+						? ` data-chat-row-menu-thread-id="${threadId}"`
+						: '';
+				const serverMenuAttrs =
 					meta && Number.isFinite(Number(meta.id)) && Number(meta.id) > 0
-						? `<button type="button" class="chat-page-sidebar-server-settings" data-chat-server-settings="${Number(meta.id)}" data-chat-server-can-manage="${meta.can_manage ? '1' : '0'}" aria-label="Server details">${chatSidebarServerGearSvg}</button>`
+						? ` data-chat-server-settings="${Number(meta.id)}" data-chat-server-can-manage="${meta.can_manage ? '1' : '0'}"`
 						: '';
 				return `<div class="chat-page-sidebar-row chat-page-sidebar-row--server${activeClass}">
 					<a class="chat-page-sidebar-row-link" href="${escapeHtml(href)}">
@@ -4603,7 +4681,7 @@ export async function initChatPage(root, options = {}) {
 							</div>
 						</div>
 					</a>
-					${gearHtml}
+					<button type="button" class="chat-page-sidebar-server-settings" data-chat-sidebar-row-menu="1"${threadIdAttr} data-chat-row-menu-kind="server"${serverMenuAttrs} aria-label="Server options" aria-haspopup="menu" aria-expanded="false">${chatSidebarServerGearSvg}</button>
 				</div>`;
 			}
 
@@ -5058,21 +5136,32 @@ export async function initChatPage(root, options = {}) {
 				e.preventDefault();
 				e.stopPropagation();
 				openDmSidebarGearMenu(dmGearBtn, {
+					onMarkAsRead: () => {
+						const tid = Number(dmGearBtn.getAttribute('data-chat-row-menu-thread-id'));
+						return markSidebarThreadRead(tid);
+					},
 					onAfterPinChange: () => void refreshChatSidebar({ skipThreadsFetch: true })
 				});
 				return;
 			}
-			const settingsBtn = e.target?.closest?.('[data-chat-server-settings]');
+			const settingsBtn = e.target?.closest?.('[data-chat-sidebar-row-menu]');
 			if (settingsBtn instanceof HTMLButtonElement) {
 				e.preventDefault();
 				e.stopPropagation();
+				const tid = Number(settingsBtn.getAttribute('data-chat-row-menu-thread-id'));
 				const sid = Number(settingsBtn.getAttribute('data-chat-server-settings'));
-				if (!Number.isFinite(sid) || sid <= 0) return;
-				const canManage = settingsBtn.getAttribute('data-chat-server-can-manage') === '1';
-				const modal = document.querySelector('app-modal-server');
-				if (modal && typeof modal.open === 'function') {
-					modal.open({ mode: canManage ? 'edit' : 'view', serverId: sid });
-				}
+				const canOpenServerDetails = Number.isFinite(sid) && sid > 0;
+				openDmSidebarGearMenu(settingsBtn, {
+					showProfile: false,
+					showPinToggle: false,
+					onMarkAsRead: () => markSidebarThreadRead(tid),
+					extraItems: canOpenServerDetails ? [{ action: 'server-details', label: 'Server details' }] : [],
+					onAction: (action) => {
+						if (action === 'server-details') {
+							openServerDetailsFromSidebarButton(settingsBtn);
+						}
+					}
+				});
 				return;
 			}
 			const a = e.target?.closest?.('a.chat-page-sidebar-row, a.chat-page-sidebar-row-link');
@@ -7460,6 +7549,7 @@ export async function initChatPage(root, options = {}) {
 		const threadId = activeThreadId;
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!threadId || !messagesEl) return;
+		let shouldAutoMarkRead = false;
 		chatThreadLoadFailed = false;
 		applyComposerState();
 		const paneEpoch = bumpChatMessagesPaneEpoch();
@@ -7555,12 +7645,7 @@ export async function initChatPage(root, options = {}) {
 			setupReactionTooltipTap(messagesEl);
 			// TEMP: always land at latest message on load; disable unread jump behavior for now.
 			scrollChatMessagesToEnd('initial_load');
-			if (!isStaleChatPane(paneEpoch)) {
-				window.setTimeout(() => {
-					if (isStaleChatPane(paneEpoch)) return;
-					setupLatestMessageReadObserver();
-				}, 550);
-			}
+			shouldAutoMarkRead = !isStaleChatPane(paneEpoch);
 		} catch (err) {
 			console.error('[Chat page] messages:', err);
 			if (!isStaleChatPane(paneEpoch)) {
@@ -7589,6 +7674,9 @@ export async function initChatPage(root, options = {}) {
 				messagesEl.removeAttribute('aria-busy');
 			}
 			rebuildTopbarMenuDynamic();
+			if (shouldAutoMarkRead && Number(activeThreadId) === Number(threadId)) {
+				void markLatestMessageRead();
+			}
 		}
 	}
 
