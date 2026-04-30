@@ -483,6 +483,38 @@ class AppModalServer extends HTMLElement {
 					gap: 1rem;
 				}
 
+				.server-modal-hero {
+					display: flex;
+					flex-direction: column;
+					align-items: center;
+					justify-content: center;
+					gap: 0.75rem;
+					padding: 0.5rem 0 1rem;
+					margin-bottom: 0.25rem;
+				}
+
+				.server-modal-hero-avatar {
+					width: 88px;
+					height: 88px;
+					border-radius: 50%;
+					display: flex;
+					align-items: center;
+					justify-content: center;
+					color: #ffffff;
+					font-weight: 700;
+					font-size: 1.2rem;
+					box-shadow: var(--shadow);
+					overflow: hidden;
+				}
+
+				.server-modal-hero-avatar-img {
+					width: 100%;
+					height: 100%;
+					object-fit: cover;
+					display: block;
+				}
+
+
 				.server-detail-row {
 					display: flex;
 					flex-direction: column;
@@ -1005,9 +1037,26 @@ class AppModalServer extends HTMLElement {
 		if (title) title.textContent = this.serverData.name || 'Server Details';
 		if (body) {
 			const isSpecial = this.serverData.id === 1;
+			const avatarUrl = typeof this.serverData.avatar_url === 'string' ? this.serverData.avatar_url.trim() : '';
+			const serverName = typeof this.serverData.name === 'string' && this.serverData.name.trim()
+				? this.serverData.name.trim()
+				: 'Server';
+			const seed = typeof this.serverData?.channel_slug === 'string' && this.serverData.channel_slug.trim()
+				? this.serverData.channel_slug.trim().toLowerCase()
+				: serverName.toLowerCase();
+			const fallbackBg = typeof getAvatarColor === 'function' ? getAvatarColor(seed || 'server') : '#6366f1';
+			const fallbackInitial = this.escapeHtml(serverName.charAt(0).toUpperCase() || 'S');
+			const avatarInner = avatarUrl
+				? html`<img src="${this.escapeHtml(avatarUrl)}" class="server-modal-hero-avatar-img" alt="" />`
+				: fallbackInitial;
 
 			body.innerHTML = html`
 				<div class="server-details">
+					<div class="server-modal-hero">
+						<div class="server-modal-hero-avatar" style="background: ${fallbackBg};">
+							${avatarInner}
+						</div>
+					</div>
 					${this.serverData.suspended ? html`
 						<div class="server-detail-row server-suspended-notice">
 							<strong>Suspended</strong>
@@ -1015,20 +1064,10 @@ class AppModalServer extends HTMLElement {
 						</div>
 					` : ''}
 					${this.ownerSectionHtml()}
-					<div class="server-detail-row">
-						<strong>Status</strong>
-						<span>${this.serverData.status || '—'}</span>
-					</div>
 					${this.serverData.description ? html`
 						<div class="server-detail-row">
 							<strong>Description</strong>
 							<span class="server-description-text">${this.escapeHtml(this.serverData.description)}</span>
-						</div>
-					` : ''}
-					${this.serverData.avatar_url ? html`
-						<div class="server-detail-row">
-							<strong>Avatar</strong>
-							<span class="server-description-text">${this.escapeHtml(this.serverData.avatar_url)}</span>
 						</div>
 					` : ''}
 					<div class="server-detail-row">

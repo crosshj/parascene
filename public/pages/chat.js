@@ -3170,6 +3170,26 @@ export async function initChatPage(root, options = {}) {
 			return `<span class="chat-page-header-avatar chat-page-header-avatar--fallback ${sizeCls}" style="background: ${bg};" data-chat-header-avatar-glyph="${glyph}" aria-hidden="true"></span>`;
 		}
 		const slugRaw = typeof meta?.channel_slug === 'string' ? meta.channel_slug.trim().toLowerCase() : '';
+		const resolvedServerAvatarUrl = (() => {
+			const direct =
+				typeof meta?.server_avatar_url === 'string' ? meta.server_avatar_url.trim() : '';
+			if (direct) return direct;
+			if (!slugRaw) return '';
+			const joined = Array.isArray(chatJoinedServers) ? chatJoinedServers : [];
+			for (const s of joined) {
+				const tag = serverChannelTagFromServerName(
+					typeof s?.name === 'string' ? s.name : ''
+				);
+				if (!tag || tag.toLowerCase() !== slugRaw) continue;
+				const avatarUrl =
+					typeof s?.avatar_url === 'string' ? s.avatar_url.trim() : '';
+				if (avatarUrl) return avatarUrl;
+			}
+			return '';
+		})();
+		if (resolvedServerAvatarUrl) {
+			return `<span class="chat-page-header-avatar ${sizeCls}" aria-hidden="true"><img class="chat-page-header-avatar-img" src="${escapeHtml(resolvedServerAvatarUrl)}" alt="" loading="lazy" decoding="async"></span>`;
+		}
 		if (slugRaw && rosterMod.SIDEBAR_TOP_STRIP_CHANNEL_SLUGS.has(slugRaw)) {
 			const iconHtml = rosterMod.getPseudoStripRouteIconHtml(slugRaw, 'chat-page-header-route-icon');
 			if (iconHtml) {
