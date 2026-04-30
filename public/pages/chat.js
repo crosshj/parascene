@@ -2368,6 +2368,17 @@ export async function initChatPage(root, options = {}) {
 		if (mobileChrome instanceof HTMLElement) {
 			mobileChrome.hidden = shouldShowAppMobileHeader;
 		}
+		const isMobileCanvasOpen =
+			isChatPageMobileLayout() &&
+			Boolean(typeof document !== 'undefined' && document.body?.classList.contains('chat-page--canvas-open'));
+
+		if (isMobileCanvasOpen) {
+			if (composerForm instanceof HTMLElement) {
+				composerForm.hidden = true;
+			}
+			setMobileComposerOverlayClass(false);
+			return;
+		}
 
 		if (!chatComposerVisible) {
 			if (composerForm instanceof HTMLElement) {
@@ -3676,6 +3687,28 @@ export async function initChatPage(root, options = {}) {
 		chatInlineImageLightboxEl = null;
 	}
 
+	function pushChatInlineImageLightboxHistoryEntry() {
+		if (!isChatPageMobileLayout()) return;
+		try {
+			const curState = window.history?.state;
+			const baseState = curState && typeof curState === 'object' ? curState : {};
+			window.history.pushState(
+				{ ...baseState, prsnChat: true, prsnChatInlineImageLightbox: true },
+				'',
+				window.location.href
+			);
+		} catch {
+			// ignore
+		}
+	}
+
+	function closeChatInlineImageLightboxFromPopstateIfOpen() {
+		if (!isChatPageMobileLayout()) return false;
+		if (!(chatInlineImageLightboxEl instanceof HTMLElement)) return false;
+		closeChatInlineImageLightbox();
+		return true;
+	}
+
 	function openChatInlineImageLightbox(src) {
 		const url = String(src || '').trim();
 		if (!url) return;
@@ -3720,6 +3753,7 @@ export async function initChatPage(root, options = {}) {
 
 		document.body.appendChild(overlay);
 		chatInlineImageLightboxEl = overlay;
+		pushChatInlineImageLightboxHistoryEntry();
 		requestAnimationFrame(() => {
 			try {
 				closeBtn.focus({ preventScroll: true });
@@ -3849,6 +3883,7 @@ export async function initChatPage(root, options = {}) {
 
 		document.body.appendChild(overlay);
 		chatInlineImageLightboxEl = overlay;
+		pushChatInlineImageLightboxHistoryEntry();
 		requestAnimationFrame(() => {
 			try {
 				closeBtn.focus({ preventScroll: true });
@@ -5058,6 +5093,9 @@ export async function initChatPage(root, options = {}) {
 		document.addEventListener('click', chatSidebarNotificationsOutsideClickHandler);
 
 		chatSidebarPopstateHandler = () => {
+			if (closeChatInlineImageLightboxFromPopstateIfOpen()) {
+				return;
+			}
 			if (shouldShowMobileSidebarFromLocation()) {
 				setMobileSidebarMode(true);
 				return;
@@ -9180,6 +9218,7 @@ export async function initChatPage(root, options = {}) {
 		if (typeof document !== 'undefined' && document.body) {
 			document.body.classList.toggle('chat-page--canvas-open', Boolean(on));
 		}
+		applyComposerState();
 		paintMobileChromeTitle();
 	}
 
@@ -10263,6 +10302,9 @@ export async function initChatPage(root, options = {}) {
 		setMobileSidebarMode(shouldShowMobileSidebarFromLocation());
 	});
 	window.addEventListener('popstate', () => {
+		if (closeChatInlineImageLightboxFromPopstateIfOpen()) {
+			return;
+		}
 		setMobileSidebarMode(shouldShowMobileSidebarFromLocation());
 	});
 	chatGlobalUnreadPoll = setInterval(() => void loadChatGlobalUnreadSummary(), 45000);
