@@ -561,7 +561,7 @@ export function textWithCreationLinks(text) {
 			const basePath = stripQueryAndHash(relativePath);
 			if (isInlineEligibleGenericImagePath(basePath)) {
 				const rp = escapeHtml(relativePath);
-				out += `<span class="user-text-inline-image-wrap"><a href="${rp}" class="user-link creation-link user-text-inline-image-link" aria-label="View full image" data-creation-link-original="${escapeHtml(url)}"><img class="user-text-inline-image" src="${rp}" alt="" loading="lazy" decoding="async" /></a></span>`;
+				out += `<span class="user-text-inline-image-wrap is-loading"><a href="${rp}" class="user-link creation-link user-text-inline-image-link" aria-label="View full image" data-creation-link-original="${escapeHtml(url)}"><img class="user-text-inline-image" src="${rp}" alt="" loading="lazy" decoding="async" width="260" height="260" data-inline-image-loading="1" /></a></span>`;
 			} else if (isSafeGenericApiPath(basePath)) {
 				out += renderInlineGenericAttachmentCard(relativePath, url);
 			} else {
@@ -1528,4 +1528,27 @@ export function processUserText(text) {
 export function hydrateUserTextLinks(rootEl) {
 	hydrateYoutubeLinkTitles(rootEl);
 	hydrateXLinkTitles(rootEl);
+	const imgs = rootEl?.querySelectorAll?.('img.user-text-inline-image');
+	if (!imgs || typeof imgs.forEach !== 'function') return;
+	imgs.forEach((img) => {
+		if (!(img instanceof HTMLImageElement)) return;
+		if (img.dataset.inlineImageHydrateBound === '1') return;
+		img.dataset.inlineImageHydrateBound = '1';
+		const wrap = img.closest('.user-text-inline-image-wrap');
+		const done = () => {
+			delete img.dataset.inlineImageLoading;
+			if (wrap instanceof HTMLElement) {
+				wrap.classList.remove('is-loading');
+			}
+		};
+		if (wrap instanceof HTMLElement) {
+			wrap.classList.add('is-loading');
+		}
+		if (img.complete) {
+			done();
+			return;
+		}
+		img.addEventListener('load', done, { once: true });
+		img.addEventListener('error', done, { once: true });
+	});
 }
