@@ -183,11 +183,19 @@ function isPollingHeavyPath(pathname) {
 		p === "/api/profile"
 	);
 }
+
+function isApiKeyRequest(req) {
+	return req?.auth?.apiKeyAuth === true;
+}
+
 app.use(
 	createRateLimitMiddleware({
 		bucket: "api-polling",
 		windowSec: 60,
-		limit: (req) => (req.auth?.userId ? 300 : 120),
+		limit: (req) => {
+			if (!isApiKeyRequest(req)) return null;
+			return req.auth?.userId ? 300 : 120;
+		},
 		methods: ["GET", "HEAD", "POST"],
 		shouldApply: (req) => isPollingHeavyPath(req.path),
 		apiOnly: true,
@@ -198,7 +206,10 @@ app.use(
 	createRateLimitMiddleware({
 		bucket: "api-read",
 		windowSec: 60,
-		limit: (req) => (req.auth?.userId ? 120 : 60),
+		limit: (req) => {
+			if (!isApiKeyRequest(req)) return null;
+			return req.auth?.userId ? 120 : 60;
+		},
 		methods: ["GET", "HEAD"],
 		shouldApply: (req) => !req.path.startsWith("/api/images/") && !isPollingHeavyPath(req.path),
 		apiOnly: true,
@@ -209,7 +220,10 @@ app.use(
 	createRateLimitMiddleware({
 		bucket: "api-images-read",
 		windowSec: 60,
-		limit: (req) => (req.auth?.userId ? 600 : 300),
+		limit: (req) => {
+			if (!isApiKeyRequest(req)) return null;
+			return req.auth?.userId ? 600 : 300;
+		},
 		methods: ["GET", "HEAD"],
 		shouldApply: (req) => req.path.startsWith("/api/images/"),
 		apiOnly: true,
@@ -220,9 +234,8 @@ app.use(
 	createRateLimitMiddleware({
 		bucket: "api-write",
 		windowSec: 60,
-		// Web traffic is exempt; only API-key authenticated requests are write-limited.
 		limit: (req) => {
-			if (req.auth?.apiKeyAuth !== true) return null;
+			if (!isApiKeyRequest(req)) return null;
 			return req.auth?.userId ? 40 : 20;
 		},
 		methods: ["POST", "PUT", "PATCH", "DELETE"],
