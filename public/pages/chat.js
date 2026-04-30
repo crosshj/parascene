@@ -1505,15 +1505,41 @@ export async function initChatPage(root, options = {}) {
 		return isChatPageMobileLayout() && document.body.classList.contains('chat-page--viewport-scroll');
 	}
 
+	/**
+	 * Pseudo channels are rendered as top-anchored browse lanes.
+	 * Keep this true for feed/explore/creations/comments so first paint is always at top.
+	 * @param {'feed' | 'explore' | 'creations'} laneSlug
+	 */
+	function isNewestFirstBrowseLane(laneSlug) {
+		if (
+			laneSlug === 'feed' ||
+			laneSlug === 'explore' ||
+			laneSlug === 'creations' ||
+			laneSlug === 'comments'
+		) {
+			return true;
+		}
+		return chatFeedLaneScrollMode === 'newest_first';
+	}
+
 	/** After painting a skeleton into `[data-chat-messages]`, snap scroll and prevent scroll until content loads. */
 	function resetAndLockChatMessagesScrollForSkeleton(messagesEl, channelSlug) {
 		if (!(messagesEl instanceof HTMLElement)) return;
 		const slug = String(channelSlug || '').trim().toLowerCase();
-		const feedish = slug === 'feed' || slug === 'explore' || slug === 'creations';
-		const toEnd = feedish && chatFeedLaneScrollMode === 'oldest_first';
+		const pseudoLane =
+			slug === 'feed' ||
+			slug === 'explore' ||
+			slug === 'creations' ||
+			slug === 'comments';
+		const toEnd = pseudoLane ? false : chatFeedLaneScrollMode === 'oldest_first';
+		// Keep early viewport/resize nudges from forcing browse-lane skeletons to bottom.
+		chatStickToBottom = toEnd;
+		if (!toEnd) {
+			teardownBottomDwellTimer();
+		}
 		const apply = () => {
 			messagesEl.scrollTop = toEnd ? messagesEl.scrollHeight : 0;
-			if (shouldUseViewportScrollForChatMessages() && feedish) {
+			if (shouldUseViewportScrollForChatMessages() && pseudoLane) {
 				window.scrollTo(0, toEnd ? document.documentElement.scrollHeight : 0);
 			}
 		};
@@ -1523,7 +1549,7 @@ export async function initChatPage(root, options = {}) {
 			requestAnimationFrame(apply);
 		});
 		messagesEl.dataset.chatMessagesScrollLock = '1';
-		if (shouldUseViewportScrollForChatMessages() && feedish) {
+		if (shouldUseViewportScrollForChatMessages() && pseudoLane) {
 			document.documentElement.dataset.chatViewportScrollLock = '1';
 			document.body.dataset.chatViewportScrollLock = '1';
 		}
@@ -1547,6 +1573,15 @@ export async function initChatPage(root, options = {}) {
 		if (!chatStickToBottom) return;
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!messagesEl) return;
+		if (messagesEl.dataset.chatMessagesScrollLock === '1') return;
+		if (
+			activePseudoChannelSlug === 'feed' ||
+			activePseudoChannelSlug === 'explore' ||
+			activePseudoChannelSlug === 'creations' ||
+			activePseudoChannelSlug === 'comments'
+		) {
+			return;
+		}
 		const apply = () => {
 			messagesEl.scrollTop = messagesEl.scrollHeight;
 		};
@@ -5961,6 +5996,9 @@ export async function initChatPage(root, options = {}) {
 			if (!isStaleChatPane(paneEpoch) && messagesEl.isConnected) {
 				messagesEl.removeAttribute('aria-busy');
 			}
+			if (!isStaleChatPane(paneEpoch) && activePseudoChannelSlug === 'comments') {
+				scrollChatFeedPseudoChannelToTop();
+			}
 			rebuildTopbarMenuDynamic();
 		}
 	}
@@ -6274,7 +6312,7 @@ export async function initChatPage(root, options = {}) {
 		}
 
 		let anchorTopBefore = 0;
-		if (chatFeedLaneScrollMode === 'oldest_first' && anchor) {
+		if (!isNewestFirstBrowseLane(laneSlug) && anchor) {
 			anchorTopBefore =
 				anchor.getBoundingClientRect().top - messagesEl.getBoundingClientRect().top;
 		}
@@ -6287,7 +6325,7 @@ export async function initChatPage(root, options = {}) {
 				return;
 			}
 			const mergedFiltered =
-				chatFeedLaneScrollMode === 'newest_first'
+				isNewestFirstBrowseLane(laneSlug)
 					? Array.isArray(r.appended) ? r.appended : []
 					: Array.isArray(r.prepended) ? r.prepended : [];
 			if (mergedFiltered.length === 0) {
@@ -6298,7 +6336,7 @@ export async function initChatPage(root, options = {}) {
 			}
 			addPageUsers(mergedFiltered.map(feedItemToUser));
 
-			if (chatFeedLaneScrollMode === 'newest_first') {
+			if (isNewestFirstBrowseLane(laneSlug)) {
 				const idxBase = cards.children.length;
 				for (let i = 0; i < mergedFiltered.length; i++) {
 					cards.appendChild(
@@ -6345,7 +6383,7 @@ export async function initChatPage(root, options = {}) {
 				disconnectFeedChannelLoadObserver();
 			}
 
-			if (chatFeedLaneScrollMode === 'oldest_first') {
+			if (!isNewestFirstBrowseLane(laneSlug)) {
 				void messagesEl.offsetHeight;
 				preserveScrollAfterPrepend(anchorTopBefore);
 				requestAnimationFrame(() => {
@@ -6461,7 +6499,7 @@ export async function initChatPage(root, options = {}) {
 						window.location.href = '/explore';
 					});
 				}
-				if (chatFeedLaneScrollMode === 'newest_first') {
+				if (isNewestFirstBrowseLane('feed')) {
 					scrollChatFeedPseudoChannelToTop();
 				} else {
 					scrollChatMessagesToEnd();
@@ -6493,7 +6531,7 @@ export async function initChatPage(root, options = {}) {
 			sentinel.className = 'chat-page-feed-load-sentinel';
 			sentinel.setAttribute('aria-hidden', 'true');
 			sentinel.style.cssText = 'height:1px;margin:0;padding:0;flex-shrink:0;pointer-events:none';
-			if (chatFeedLaneScrollMode === 'newest_first') {
+			if (isNewestFirstBrowseLane('feed')) {
 				messagesEl.appendChild(routeWrap);
 				messagesEl.appendChild(sentinel);
 				if (pseudoColumnPager.getHasMore()) {
@@ -6522,6 +6560,9 @@ export async function initChatPage(root, options = {}) {
 			unlockChatMessagesPaneScroll(messagesEl);
 			if (!isStaleChatPane(paneEpoch) && messagesEl.isConnected) {
 				messagesEl.removeAttribute('aria-busy');
+			}
+			if (!isStaleChatPane(paneEpoch) && activePseudoChannelSlug === 'feed') {
+				scrollChatFeedPseudoChannelToTop();
 			}
 			rebuildTopbarMenuDynamic();
 		}
@@ -7215,7 +7256,7 @@ export async function initChatPage(root, options = {}) {
 					buttonText: 'Get Started',
 					buttonHref: '/create',
 				});
-				if (chatFeedLaneScrollMode === 'newest_first') {
+				if (isNewestFirstBrowseLane('creations')) {
 					scrollChatFeedPseudoChannelToTop();
 				} else {
 					scrollChatMessagesToEnd();
@@ -7252,7 +7293,7 @@ export async function initChatPage(root, options = {}) {
 			sentinel.className = 'chat-page-feed-load-sentinel';
 			sentinel.setAttribute('aria-hidden', 'true');
 			sentinel.style.cssText = 'height:1px;margin:0;padding:0;flex-shrink:0;pointer-events:none';
-			if (chatFeedLaneScrollMode === 'newest_first') {
+			if (isNewestFirstBrowseLane('creations')) {
 				messagesEl.appendChild(routeWrap);
 				messagesEl.appendChild(sentinel);
 				if (pseudoColumnPager.getHasMore()) {
@@ -7281,6 +7322,10 @@ export async function initChatPage(root, options = {}) {
 			unlockChatMessagesPaneScroll(messagesEl);
 			if (!isStaleChatPane(paneEpoch) && messagesEl.isConnected) {
 				messagesEl.removeAttribute('aria-busy');
+			}
+			// Hard-enforce top anchoring for browse lanes after all unlock/layout work.
+			if (!isStaleChatPane(paneEpoch) && activePseudoChannelSlug === 'creations') {
+				scrollChatFeedPseudoChannelToTop();
 			}
 			rebuildTopbarMenuDynamic();
 			if (!isStaleChatPane(paneEpoch) && activePseudoChannelSlug === 'creations') {
@@ -7482,7 +7527,7 @@ export async function initChatPage(root, options = {}) {
 					}
 					syncChatExploreSearchBar(routeWrap);
 					messagesEl.appendChild(routeWrap);
-					if (chatFeedLaneScrollMode === 'newest_first') {
+					if (isNewestFirstBrowseLane('explore')) {
 						scrollChatFeedPseudoChannelToTop();
 					} else {
 						scrollChatMessagesToEnd();
@@ -7587,7 +7632,7 @@ export async function initChatPage(root, options = {}) {
 				routeWrap.append(...Array.from(empty.childNodes));
 				messagesEl.appendChild(routeWrap);
 				syncChatExploreSearchBar(routeWrap);
-				if (chatFeedLaneScrollMode === 'newest_first') {
+				if (isNewestFirstBrowseLane('explore')) {
 					scrollChatFeedPseudoChannelToTop();
 				} else {
 					scrollChatMessagesToEnd();
@@ -7622,7 +7667,7 @@ export async function initChatPage(root, options = {}) {
 			sentinel.className = 'chat-page-feed-load-sentinel';
 			sentinel.setAttribute('aria-hidden', 'true');
 			sentinel.style.cssText = 'height:1px;margin:0;padding:0;flex-shrink:0;pointer-events:none';
-			if (chatFeedLaneScrollMode === 'newest_first') {
+			if (isNewestFirstBrowseLane('explore')) {
 				messagesEl.appendChild(routeWrap);
 				messagesEl.appendChild(sentinel);
 				if (pseudoColumnPager.getHasMore()) {
@@ -7652,6 +7697,10 @@ export async function initChatPage(root, options = {}) {
 			exploreBrowseMessagesLoading = false;
 			if (!isStaleChatPane(paneEpoch) && messagesEl.isConnected) {
 				messagesEl.removeAttribute('aria-busy');
+			}
+			// Hard-enforce top anchoring for explore browse lane after unlock/layout work.
+			if (!isStaleChatPane(paneEpoch) && activePseudoChannelSlug === 'explore') {
+				scrollChatFeedPseudoChannelToTop();
 			}
 			syncActiveChatExploreSearchBar();
 			if (activePseudoChannelSlug === 'explore' && !String(exploreQueryRef.q || '').trim()) {

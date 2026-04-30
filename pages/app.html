@@ -3,6 +3,20 @@
 
 <head>
 	<title>parascene</title>
+	<script>
+		(function () {
+			try {
+				if (window.history && 'scrollRestoration' in window.history) {
+					window.history.scrollRestoration = 'manual';
+				}
+			} catch (e) { }
+			try {
+				window.scrollTo(0, 0);
+				document.documentElement.scrollTop = 0;
+				document.body.scrollTop = 0;
+			} catch (e) { }
+		})();
+	</script>
 	<link rel="stylesheet" href="/pages/creations.css{{V}}" />
 </head>
 

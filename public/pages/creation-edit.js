@@ -292,6 +292,7 @@ async function loadEditPage() {
 								aria-label="Source image">
 								<img class="image-thumb" data-source-thumb alt="Source image" />
 							</div>
+							<a href="${creationDetailHref}" class="creation-edit-source-link" data-source-link>change image</a>
 						</div>
 						<div class="create-prompt-wrap is-empty" data-prompt-wrap>
 							<textarea class="create-prompt-input prompt-editor" data-edit-prompt data-mode="image-to-image" rows="3"
@@ -315,6 +316,7 @@ async function loadEditPage() {
 								aria-label="Source image">
 								<img class="image-thumb" data-source-thumb alt="Source image" />
 							</div>
+							<a href="${creationDetailHref}" class="creation-edit-source-link" data-source-link>change image</a>
 						</div>
 						<div class="create-prompt-wrap is-empty" data-prompt-wrap>
 							<textarea class="create-prompt-input prompt-editor" data-edit-prompt data-mode="image-to-video" rows="3"
@@ -365,6 +367,13 @@ async function loadEditPage() {
 			thumbWrap.addEventListener('click', (e) => {
 				e.preventDefault();
 				e.stopPropagation();
+				window.location.href = creationDetailHref;
+			});
+		});
+
+		editContent.querySelectorAll('[data-source-link]').forEach((linkEl) => {
+			linkEl.addEventListener('click', (e) => {
+				e.preventDefault();
 				window.location.href = creationDetailHref;
 			});
 		});

@@ -859,6 +859,15 @@ app-route-create .create-route .image-field-error {
 	transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
+.create-prompt-input.prompt-editor {
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+}
+
+.create-prompt-input.prompt-editor::-webkit-scrollbar {
+	display: none;
+}
+
 .create-prompt-input::placeholder {
 	color: var(--text-muted);
 }

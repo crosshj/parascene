@@ -1049,8 +1049,9 @@ class AppNavigation extends HTMLElement {
 
 		this.currentRoute = currentRoute;
 
-		// Only reset scroll and dispatch when the route actually changed (stops duplicate loads and handler storms)
-		if (routeChanged && previousRoute != null) {
+		// Reset on first route resolution and real route changes.
+		// This prevents browser-restored scroll positions from dropping initial skeleton views at the bottom.
+		if (previousRoute == null || routeChanged) {
 			this.resetSectionScroll();
 		}
 		if (routeChanged) {
