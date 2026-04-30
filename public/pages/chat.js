@@ -859,6 +859,14 @@ export async function initChatPage(root, options = {}) {
 	let chatMessagesScrollCleanup = null;
 	/** @type {ReturnType<typeof setInterval> | null} */
 	let chatSidebarPollTimer = null;
+	let chatSidebarLastViewerSyncAt = 0;
+	let lastPresenceOnlineSnapshot = null;
+	let lastPresenceOnlineSnapshotAt = 0;
+	const PRESENCE_ONLINE_SNAPSHOT_TTL_MS = 15000;
+	let lastPresenceLastActiveCache = null;
+	let lastPresenceLastActiveCacheAt = 0;
+	let lastPresenceLastActiveCacheKey = '';
+	const PRESENCE_LAST_ACTIVE_SNAPSHOT_TTL_MS = 15000;
 	/** @type {null | (() => void)} */
 	let chatSidebarServersHandler = null;
 	/** @type {null | ((e: Event) => void)} */
@@ -3969,11 +3977,18 @@ export async function initChatPage(root, options = {}) {
 			.filter((s) => Number.isFinite(s.id) && s.id > 0);
 	}
 
-	async function fetchPresenceOnlineSnapshot() {
+	async function fetchPresenceOnlineSnapshot({ allowCached = false } = {}) {
+		if (
+			allowCached &&
+			lastPresenceOnlineSnapshot &&
+			Date.now() - lastPresenceOnlineSnapshotAt < PRESENCE_ONLINE_SNAPSHOT_TTL_MS
+		) {
+			return lastPresenceOnlineSnapshot;
+		}
 		try {
 			const res = await fetch('/api/presence/online', { credentials: 'include' });
 			if (!res.ok) {
-				return { onlineIds: new Set(), lastSeenMsByUserId: new Map() };
+				return lastPresenceOnlineSnapshot || { onlineIds: new Set(), lastSeenMsByUserId: new Map() };
 			}
 			const data = await res.json().catch(() => ({}));
 			const users = Array.isArray(data.users) ? data.users : [];
@@ -3989,17 +4004,29 @@ export async function initChatPage(root, options = {}) {
 					dmLastSeenOnlineAtByUserId.set(id, ms);
 				}
 			}
-			return { onlineIds, lastSeenMsByUserId };
+			const snapshot = { onlineIds, lastSeenMsByUserId };
+			lastPresenceOnlineSnapshot = snapshot;
+			lastPresenceOnlineSnapshotAt = Date.now();
+			return snapshot;
 		} catch {
-			return { onlineIds: new Set(), lastSeenMsByUserId: new Map() };
+			return lastPresenceOnlineSnapshot || { onlineIds: new Set(), lastSeenMsByUserId: new Map() };
 		}
 	}
 
-	async function fetchPresenceLastActiveSnapshot(userIds) {
+	async function fetchPresenceLastActiveSnapshot(userIds, { allowCached = false } = {}) {
 		const ids = Array.isArray(userIds)
 			? [...new Set(userIds.map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0))]
 			: [];
 		if (ids.length === 0) return new Map();
+		const idsKey = ids.join(',');
+		if (
+			allowCached &&
+			lastPresenceLastActiveCache &&
+			lastPresenceLastActiveCacheKey === idsKey &&
+			Date.now() - lastPresenceLastActiveCacheAt < PRESENCE_LAST_ACTIVE_SNAPSHOT_TTL_MS
+		) {
+			return new Map(lastPresenceLastActiveCache);
+		}
 		try {
 			const res = await fetch('/api/presence/last-active', {
 				method: 'POST',
@@ -4021,8 +4048,14 @@ export async function initChatPage(root, options = {}) {
 				const best = Math.max(a, p);
 				if (best > 0) out.set(id, best);
 			}
+			lastPresenceLastActiveCache = out;
+			lastPresenceLastActiveCacheAt = Date.now();
+			lastPresenceLastActiveCacheKey = idsKey;
 			return out;
 		} catch {
+			if (lastPresenceLastActiveCache && lastPresenceLastActiveCacheKey === idsKey) {
+				return new Map(lastPresenceLastActiveCache);
+			}
 			return new Map();
 		}
 	}
@@ -4702,9 +4735,9 @@ export async function initChatPage(root, options = {}) {
 			const dmUserIds = collectDmOtherUserIdsForPresence(chatThreads || []);
 			const [joined, presenceOnlineSnapshot, viewerProfile, lastActiveMsByUserId] = await Promise.all([
 				pack.joined,
-				pack.presence,
+				fetchPresenceOnlineSnapshot({ allowCached: true }),
 				pack.profileMini,
-				fetchPresenceLastActiveSnapshot(dmUserIds)
+				fetchPresenceLastActiveSnapshot(dmUserIds, { allowCached: true })
 			]);
 			const presenceSnapshot = {
 				...(presenceOnlineSnapshot || {}),
@@ -4712,7 +4745,10 @@ export async function initChatPage(root, options = {}) {
 			};
 			runRender(chatThreads || [], joined, presenceSnapshot, viewerProfile);
 			persistSidebarRosterSnapshot(joined, presenceSnapshot, viewerProfile);
-			await syncChatSidebarViewerRow();
+			if (Date.now() - chatSidebarLastViewerSyncAt >= 120000) {
+				chatSidebarLastViewerSyncAt = Date.now();
+				await syncChatSidebarViewerRow();
+			}
 			return;
 		}
 
@@ -4736,6 +4772,7 @@ export async function initChatPage(root, options = {}) {
 		} catch {
 			// If network fails, keep cached render.
 		}
+		chatSidebarLastViewerSyncAt = Date.now();
 		await syncChatSidebarViewerRow();
 	}
 
@@ -10322,7 +10359,7 @@ export async function initChatPage(root, options = {}) {
 	await openThreadForCurrentPath();
 	dispatchChatUnreadRefresh();
 	/** Presence/UI poll: keep roster status fresh without force-refetching all thread metadata. */
-	chatSidebarPollTimer = setInterval(() => void refreshChatSidebar({ skipThreadsFetch: true }), 15000);
+	chatSidebarPollTimer = setInterval(() => void refreshChatSidebar({ skipThreadsFetch: true }), 30000);
 	chatSidebarServersHandler = () => void refreshChatSidebar();
 	document.addEventListener('servers-updated', chatSidebarServersHandler);
 	chatSidebarVisibilityHandler = () => {

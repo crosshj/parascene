@@ -91,6 +91,12 @@ class AppNavigation extends HTMLElement {
 		return ['show-notifications', 'hide-notifications', 'show-profile', 'show-create', 'show-mobile-menu', 'hide-credits', 'default-route', 'credits-count'];
 	}
 
+	shouldRunHeaderChatUnreadPoll() {
+		const pathname = window.location.pathname;
+		if (pathname === '/chat' || pathname.startsWith('/chat/')) return false;
+		return document.body?.dataset?.entry !== 'chat';
+	}
+
 	async connectedCallback() {
 		await loadDeps();
 		// Establish avatar loading state before first render to avoid icon flicker.
@@ -129,7 +135,11 @@ class AppNavigation extends HTMLElement {
 		if (this._chatUnreadPoll) {
 			clearInterval(this._chatUnreadPoll);
 		}
-		this._chatUnreadPoll = setInterval(() => this.loadChatUnreadCount(), 45000);
+		if (this.shouldRunHeaderChatUnreadPoll()) {
+			this._chatUnreadPoll = setInterval(() => this.loadChatUnreadCount(), 45000);
+		} else {
+			this._chatUnreadPoll = null;
+		}
 	}
 
 	disconnectedCallback() {
