@@ -11377,7 +11377,8 @@ body.modal-open {
 
 /* Modal Container */
 .modal,
-.publish-modal {
+.publish-modal,
+.image-picker-modal {
 	background: var(--surface);
 	border: 1px solid var(--border);
 	border-radius: 14px;
@@ -11625,6 +11626,14 @@ app-modal-publish .publish-checkbox-label input[type="checkbox"] {
 	width: 100%;
 }
 
+.image-picker-method-intro {
+	margin: 0;
+	font-size: 0.875rem;
+	font-weight: 500;
+	color: var(--text);
+	line-height: 1.4;
+}
+
 .image-picker-method-help {
 	margin: 0;
 	font-size: 0.84rem;
@@ -11722,6 +11731,15 @@ app-modal-publish .publish-checkbox-label input[type="checkbox"] {
 	font-size: 0.9375rem;
 	line-height: 1.45;
 	color: var(--text);
+	font-family: inherit;
+}
+
+.image-picker-modal .image-picker-composer-input {
+	font-size: 0.95rem;
+}
+
+.image-picker-modal .image-picker-composer-input::placeholder {
+	color: var(--text-muted);
 }
 
 .image-picker-composer-input:focus {

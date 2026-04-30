@@ -318,16 +318,20 @@ app-route-create .create-route .field-required {
 	color: var(--error, #e74c3c);
 }
 
-app-route-create .create-route [data-fields-container] .field-hidden {
+app-route-create .create-route .create-fields-hidden-slot {
 	display: none;
+	flex-direction: column;
+	gap: 1.25rem;
 }
 
-app-route-create .create-route [data-fields-container].show-hidden-fields .field-hidden {
+app-route-create .create-route .create-fields-hidden-slot.show-hidden-fields {
 	display: flex;
+	margin-top: 0.75rem;
 }
 
 app-route-create .create-route .create-fields-toggle {
-	margin-bottom: 0.25rem;
+	margin-top: 0.75rem;
+	margin-bottom: 0;
 }
 
 app-route-create .create-route .create-fields-toggle-link {
@@ -977,6 +981,12 @@ body.create-page .create-btn-generate:focus-visible,
 	outline: none;
 	border-color: var(--create-generate-btn-accent) !important;
 	box-shadow: none !important;
+}
+
+/* Basic /create only: visible keyboard focus on CTA (mutate page sets its own ring in creation-edit.css) */
+body.create-page:not(.creation-edit-page) .create-btn-generate:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 3px;
 }
 
 .create-style-divider {

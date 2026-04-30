@@ -1016,12 +1016,6 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 	// Route for creation mutate page - /creations/:id/mutate
 	router.get("/creations/:id/mutate", serveCreationMutatePage);
 
-	// Back-compat: redirect /creations/:id/mutat -> /creations/:id/mutate
-	router.get("/creations/:id/mutat", async (req, res) => {
-		const rawId = typeof req.params?.id === 'string' ? req.params.id : '';
-		return res.redirect(`/creations/${rawId}/mutate`);
-	});
-
 	// Back-compat: redirect /creations/:id/edit -> /creations/:id/mutate
 	router.get("/creations/:id/edit", async (req, res) => {
 		const rawId = typeof req.params?.id === 'string' ? req.params.id : '';

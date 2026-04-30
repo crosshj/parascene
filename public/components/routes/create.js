@@ -143,6 +143,7 @@ class AppRouteCreate extends HTMLElement {
 		this.showHiddenFields = false;
 		this._imageFieldPersistTokens = Object.create(null);
 		this._pendingSavedFieldValues = null;
+		this._crossMethodImageCarryover = null;
 	}
 
 	async connectedCallback() {
@@ -228,10 +229,11 @@ class AppRouteCreate extends HTMLElement {
                 </select>
               </div>
               <div class="form-group" data-fields-group style="display: none;">
+                <div data-fields-container></div>
                 <div class="create-fields-toggle" data-fields-toggle style="display: none;">
                   <a href="#" class="create-fields-toggle-link" data-toggle-hidden-fields>Show hidden fields</a>
                 </div>
-                <div data-fields-container></div>
+                <div class="create-fields-hidden-slot" data-fields-hidden-slot></div>
               </div>
             </form>
             <div class="create-controls">
@@ -407,12 +409,12 @@ class AppRouteCreate extends HTMLElement {
 		}
 
 		const toggleHiddenLink = this.querySelector("[data-toggle-hidden-fields]");
-		const fieldsContainer = this.querySelector("[data-fields-container]");
-		if (toggleHiddenLink && fieldsContainer) {
+		const hiddenFieldsSlot = this.querySelector("[data-fields-hidden-slot]");
+		if (toggleHiddenLink && hiddenFieldsSlot) {
 			toggleHiddenLink.addEventListener("click", (e) => {
 				e.preventDefault();
 				this.showHiddenFields = !this.showHiddenFields;
-				fieldsContainer.classList.toggle("show-hidden-fields", this.showHiddenFields);
+				hiddenFieldsSlot.classList.toggle("show-hidden-fields", this.showHiddenFields);
 				toggleHiddenLink.textContent = this.showHiddenFields ? "Hide hidden fields" : "Show hidden fields";
 			});
 		}
@@ -1107,6 +1109,7 @@ class AppRouteCreate extends HTMLElement {
 			this.selectedServer = null;
 			this.selectedMethod = null;
 			this.fieldValues = {};
+			this._crossMethodImageCarryover = null;
 			this.hideMethodGroup();
 			this.hideFieldsGroup();
 			this.updateButtonState();
@@ -1120,6 +1123,7 @@ class AppRouteCreate extends HTMLElement {
 		this.selectedServer = server;
 		this.selectedMethod = null;
 		this.fieldValues = {};
+		this._crossMethodImageCarryover = null;
 		this.renderMethodOptions();
 		this.hideFieldsGroup();
 		this.updateButtonState();
@@ -1197,6 +1201,7 @@ class AppRouteCreate extends HTMLElement {
 		if (!methodKey) {
 			this.selectedMethod = null;
 			this.fieldValues = {};
+			this._crossMethodImageCarryover = null;
 			this.hideFieldsGroup();
 			this.updateButtonState();
 			this.saveSelections();
@@ -1223,11 +1228,39 @@ class AppRouteCreate extends HTMLElement {
 			return;
 		}
 
+		this._stashCrossMethodImageCarryover();
+
 		this.selectedMethod = serverConfig.methods[methodKey];
 		this.fieldValues = {};
 		this.renderFields();
 		this.updateButtonState();
 		this.saveSelections();
+	}
+
+	/** Stash outgoing image URL(s) so the next generation method can prefill (files omitted until upload finishes). */
+	_stashCrossMethodImageCarryover() {
+		this._crossMethodImageCarryover = null;
+		const fields = this.selectedMethod?.fields;
+		if (!fields || typeof fields !== 'object') return;
+
+		for (const fieldKey of Object.keys(fields)) {
+			const field = fields[fieldKey];
+			const v = this.fieldValues[fieldKey];
+			if (!field || typeof field !== 'object') continue;
+
+			if (isImageUrlField(field) && typeof v === 'string' && v.trim()) {
+				const url = v.trim();
+				this._crossMethodImageCarryover = { url, arrayUrls: null };
+				return;
+			}
+			if (isImageUrlArrayField(field) && Array.isArray(v)) {
+				const strings = v.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim());
+				if (strings.length > 0) {
+					this._crossMethodImageCarryover = { url: strings[0], arrayUrls: strings };
+					return;
+				}
+			}
+		}
 	}
 
 	renderFields() {
@@ -1237,6 +1270,7 @@ class AppRouteCreate extends HTMLElement {
 
 		if (!this.selectedMethod || !this.selectedMethod.fields) {
 			fieldsGroup.style.display = 'none';
+			this._crossMethodImageCarryover = null;
 			return;
 		}
 
@@ -1271,8 +1305,37 @@ class AppRouteCreate extends HTMLElement {
 					}
 				}
 			}
+
+			const carry = this._crossMethodImageCarryover;
+			if (carry?.url && isImageUrlField(field)) {
+				const hasStaticDefault = typeof field.default === 'string' && field.default.trim();
+				if (!hasStaticDefault) {
+					fieldsForRender[fieldKey] = { ...field, default: carry.url };
+					return;
+				}
+			}
+			if (carry && isImageUrlArrayField(field)) {
+				const urls =
+					Array.isArray(carry.arrayUrls) && carry.arrayUrls.length > 0
+						? [...carry.arrayUrls]
+						: carry.url
+							? [carry.url]
+							: null;
+				const hasStaticDefault =
+					(Array.isArray(field.default) &&
+						field.default.some((item) => typeof item === 'string' && item.trim())) ||
+					(typeof field.default === 'string' && field.default.trim());
+				if (urls && !hasStaticDefault) {
+					fieldsForRender[fieldKey] = { ...field, default: urls };
+					return;
+				}
+			}
+
 			fieldsForRender[fieldKey] = field;
 		});
+
+		this._crossMethodImageCarryover = null;
+
 		if (Object.keys(fields).length === 0) {
 			fieldsGroup.style.display = 'none';
 			return;
@@ -1287,23 +1350,31 @@ class AppRouteCreate extends HTMLElement {
 			}
 		});
 
+		const hiddenFieldsSlot = this.querySelector("[data-fields-hidden-slot]");
+		if (hiddenFieldsSlot) {
+			hiddenFieldsSlot.innerHTML = '';
+			fieldsContainer.querySelectorAll(".field-hidden").forEach((node) => hiddenFieldsSlot.appendChild(node));
+		}
+
 		const hasHiddenFields = Object.values(fields).some(f => f && (f.hidden === true || f.hidden === 'true'));
 		const toggleWrap = this.querySelector("[data-fields-toggle]");
 		const toggleLink = this.querySelector("[data-toggle-hidden-fields]");
-		if (toggleWrap && toggleLink) {
+		if (toggleWrap && toggleLink && hiddenFieldsSlot) {
 			if (hasHiddenFields) {
 				toggleWrap.style.display = '';
 				this.showHiddenFields = false;
-				fieldsContainer.classList.remove("show-hidden-fields");
+				hiddenFieldsSlot.classList.remove("show-hidden-fields");
 				toggleLink.textContent = "Show hidden fields";
 			} else {
 				toggleWrap.style.display = 'none';
+				hiddenFieldsSlot.innerHTML = '';
+				hiddenFieldsSlot.classList.remove("show-hidden-fields");
 			}
 		}
 
 		fieldsGroup.style.display = 'flex';
 		this.applyUrlPromptToBasicFields();
-		fieldsContainer.querySelectorAll('.prompt-editor').forEach((el) => attachPromptInlineSuggest(el));
+		fieldsGroup.querySelectorAll(".prompt-editor").forEach((el) => attachPromptInlineSuggest(el));
 	}
 
 	hideMethodGroup() {

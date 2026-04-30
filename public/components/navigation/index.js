@@ -336,7 +336,7 @@ class AppNavigation extends HTMLElement {
 			window.location.pathname === '/pricing' ||
 			window.location.pathname === '/prompt-library' ||
 			window.location.pathname.startsWith('/chat/') ||
-			/^\/creations\/\d+(\/(edit|mutat|mutate))?$/.test(window.location.pathname) ||
+			/^\/creations\/\d+(\/(edit|mutate))?$/.test(window.location.pathname) ||
 			window.location.pathname.startsWith('/s/') ||
 			(window.location.pathname === '/help' || window.location.pathname.startsWith('/help/')) ||
 			window.location.pathname === '/user' ||
@@ -451,6 +451,7 @@ class AppNavigation extends HTMLElement {
 	}
 
 	_maybePlayChatUnreadPing(prev, next) {
+		if (!this.shouldRunHeaderChatUnreadPoll()) return;
 		if (!Number.isFinite(prev) || !Number.isFinite(next) || next <= prev) return;
 		void playChatUnreadPing();
 	}
@@ -977,7 +978,7 @@ class AppNavigation extends HTMLElement {
 		const isServerSentPage = 			pathname === '/pricing' ||
 			pathname === '/prompt-library' ||
 			pathname.startsWith('/chat/') ||
-			/^\/creations\/\d+(\/(edit|mutat|mutate))?$/.test(pathname) ||
+			/^\/creations\/\d+(\/(edit|mutate))?$/.test(pathname) ||
 			pathname.startsWith('/s/') ||
 			(pathname === '/help' || pathname.startsWith('/help/')) ||
 			pathname === '/user' ||

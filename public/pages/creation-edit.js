@@ -128,7 +128,7 @@ function persistMutateForNextCreatePage({ prompt, mutateOfId, normalizedImageUrl
 
 function getCreationId() {
 	const pathname = window.location.pathname;
-	const match = pathname.match(/^\/creations\/(\d+)\/(edit|mutat|mutate)$/);
+	const match = pathname.match(/^\/creations\/(\d+)\/(edit|mutate)$/);
 	return match ? parseInt(match[1], 10) : null;
 }
 
@@ -297,7 +297,7 @@ async function loadEditPage() {
 						<div class="create-prompt-wrap is-empty" data-prompt-wrap>
 							<textarea class="create-prompt-input prompt-editor" data-edit-prompt data-mode="image-to-image" rows="3"
 								placeholder="Describe your changes..."></textarea>
-							<a href="#" class="create-prompt-clear" aria-label="Clear field">clear</a>
+							<a href="#" class="create-prompt-clear" tabindex="-1" aria-label="Clear field">clear</a>
 						</div>
 						<div class="create-controls">
 							<div class="create-controls-buttons">
@@ -321,7 +321,7 @@ async function loadEditPage() {
 						<div class="create-prompt-wrap is-empty" data-prompt-wrap>
 							<textarea class="create-prompt-input prompt-editor" data-edit-prompt data-mode="image-to-video" rows="3"
 								placeholder="Describe the motion or camera movement..."></textarea>
-							<a href="#" class="create-prompt-clear" aria-label="Clear field">clear</a>
+							<a href="#" class="create-prompt-clear" tabindex="-1" aria-label="Clear field">clear</a>
 						</div>
 						<div class="create-controls">
 							<div class="create-controls-buttons">
@@ -709,9 +709,17 @@ document.addEventListener('click', (e) => {
 		});
 	};
 
+	const VIDEO_SUBMIT_CONFIRM =
+		'You are submitting from Image to Video. Video jobs typically require more processing time than image-only mutations, and credits will be charged as shown on this page.\n\nDo you want to continue?';
+
+	function requestSubmit(hydrateMentions) {
+		if (activeMode === 'image-to-video' && !window.confirm(VIDEO_SUBMIT_CONFIRM)) return;
+		doSubmit(hydrateMentions);
+	}
+
 	const mentions = extractMentions(prompt);
 	if (mentions.length === 0) {
-		doSubmit(false);
+		requestSubmit(false);
 		return;
 	}
 
@@ -728,17 +736,17 @@ document.addEventListener('click', (e) => {
 		})
 		.then(({ ok, data }) => {
 			if (ok) {
-				doSubmit(true);
+				requestSubmit(true);
 				return;
 			}
 			const message = formatMentionsFailureForDialog(data);
 			const proceed = window.confirm(message);
-			if (proceed) doSubmit(false);
+			if (proceed) requestSubmit(false);
 		})
 		.catch(() => {
 			const message = formatMentionsFailureForDialog({});
 			const proceed = window.confirm(message);
-			if (proceed) doSubmit(false);
+			if (proceed) requestSubmit(false);
 		});
 });
 

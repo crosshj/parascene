@@ -149,7 +149,7 @@ class AppNavigationMobile extends HTMLElement {
 		const isServerSentPage = window.location.pathname === '/pricing' ||
 			window.location.pathname === '/prompt-library' ||
 			window.location.pathname.startsWith('/chat/') ||
-			/^\/creations\/\d+(\/(edit|mutat|mutate))?$/.test(window.location.pathname) ||
+			/^\/creations\/\d+(\/(edit|mutate))?$/.test(window.location.pathname) ||
 			window.location.pathname.startsWith('/s/') ||
 			(window.location.pathname === '/help' || window.location.pathname.startsWith('/help/')) ||
 			window.location.pathname === '/user' ||

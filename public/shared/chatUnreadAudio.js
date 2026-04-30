@@ -14,7 +14,8 @@ import { getChatAudibleNotificationsEnabled } from './chatAudibleNotificationsPr
  */
 
 const CHAT_UNREAD_SOUND_HREF = '/audio/universfield-new-notification-07-210334.mp3';
-const CHAT_UNREAD_PING_COOLDOWN_MS = 2000;
+/** Long enough for one clip + overlapping unread-summary refetches (nav + chat both refresh). */
+const CHAT_UNREAD_PING_COOLDOWN_MS = 6000;
 
 const CHAT_UNREAD_AUDIO_STATE_KEY = '__parasceneChatUnreadAudioState';
 
@@ -52,11 +53,12 @@ async function primeAudioOnUserGesture() {
 	try {
 		const a = new Audio(CHAT_UNREAD_SOUND_HREF);
 		a.preload = 'auto';
-		a.volume = 0.001;
+		a.muted = true;
 		await a.play();
 		try {
 			a.pause();
 			a.currentTime = 0;
+			a.muted = false;
 		} catch {
 			// ignore
 		}
