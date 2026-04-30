@@ -1860,7 +1860,7 @@ body.chat-page .chat-route {
 	}
 
 	html.chat-page--use-app-mobile-header body.chat-page .chat-explore-search-bar {
-		top: 48px;
+		top: 56px;
 	}
 
 	.chat-explore-search-bar-inner {

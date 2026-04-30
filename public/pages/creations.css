@@ -1251,6 +1251,30 @@ body.creation-detail-page main {
 	max-width: 100%;
 }
 
+@media (max-width: 768px) {
+	/* Keep app chrome pinned on long creation-detail comment threads (mobile Safari can let sticky drift). */
+	body.creation-detail-page app-navigation {
+		position: fixed;
+		top: env(safe-area-inset-top);
+		left: env(safe-area-inset-left);
+		right: env(safe-area-inset-right);
+		z-index: 1000;
+	}
+
+	body.creation-detail-page app-navigation-mobile {
+		position: fixed;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		z-index: 999;
+	}
+
+	body.creation-detail-page main {
+		padding-top: calc(56px + env(safe-area-inset-top, 0px));
+		padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+	}
+}
+
 body.creation-detail-page main>section:first-of-type {
 	margin-top: 0;
 }

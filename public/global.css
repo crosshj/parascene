@@ -9821,7 +9821,7 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 	}
 
 	html.chat-page--use-app-mobile-header body.chat-page .creations-bulk-bar {
-		top: 48px;
+		top: 56px;
 	}
 }
 
