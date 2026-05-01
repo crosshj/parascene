@@ -2,7 +2,7 @@
  * Standalone /chat/* thread UI (plain JS; not a custom element).
  */
 
-import { dismissChallengeVoteModalFromBrowserHistoryIfOpen } from '../shared/challenges/challengeVoteModal.js';
+import { dismissChallengeVoteModalFromBrowserHistoryIfOpen } from '../shared/challenges/index.js';
 
 const ENTER_SENDS = (() => {
 	try {

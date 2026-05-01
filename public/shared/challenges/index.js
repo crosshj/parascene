@@ -13,6 +13,13 @@ export { parseChallengeTimeline } from './model/parseTimeline.js';
 export { buildChallengesChannelModel } from './model/buildChannelModel.js';
 export { summarizeLatestChallengeConfigs } from './model/organizerSummaries.js';
 export { mountChallengesPane, renderChallengesPaneHtml } from './mountPane.js';
+export {
+	applyChallengeVoteScore,
+	buildVoteSlidesNewestFirst,
+	createChallengeVoteModal,
+	dismissChallengeVoteModalFromBrowserHistoryIfOpen,
+	scoreFromChallengeRow
+} from './challengeVoteModal.js';
 export { mountChallengesOrganizerSidebar } from './mountOrganizerSidebar.js';
 export {
 	renderChallengeOrganizerSidebarMarkup,
