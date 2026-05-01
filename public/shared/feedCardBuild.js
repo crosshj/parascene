@@ -7,8 +7,7 @@ import { initLikeButton } from './likes.js';
 import { getAvatarColor } from './avatar.js';
 import { buildProfilePath } from './profileLinks.js';
 import { getHelpHref } from './helpUrl.js';
-import { publishedBadgeHtml } from './creationBadges.js';
-import { trophyIcon } from '../icons/svg-strings.js';
+import { challengeEnteredBadgeHtml, publishedBadgeHtml } from './creationBadges.js';
 import { creationMetaHasChallengeSubmission } from './challengeSubmitMeta.js';
 
 const html = String.raw;
@@ -568,7 +567,7 @@ function buildFeedCreationCard(
 		creationMetaHasChallengeSubmission(parsedMeta) && !item.nsfw;
 	const challengeBlurClass = challengeThumbnailBlur ? ' feed-card-image--challenge-pending' : '';
 	const challengeBlurOverlay = challengeThumbnailBlur
-		? html`<span class="route-media-challenge-blur-overlay" aria-hidden="true"></span><span class="creation-challenge-entered-badge" role="img" aria-label="Entered in challenge" title="Entered in challenge">${trophyIcon()}</span>`
+		? html`<span class="route-media-challenge-blur-overlay" aria-hidden="true"></span>${challengeEnteredBadgeHtml()}`
 		: '';
 
 	if (item.created_image_id) {
