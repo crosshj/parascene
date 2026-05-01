@@ -6695,14 +6695,14 @@ body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading {
 
 .challenge-vote-modal {
 	box-sizing: border-box;
-	width: min(900px, calc(100vw - 24px));
-	max-width: calc(100vw - 20px);
+	width: min(900px, calc(100vw - 16px));
+	max-width: calc(100vw - 12px);
 	max-height: calc(100vh - 20px);
 	overflow: auto;
 	display: flex;
 	flex-direction: column;
 	gap: 12px;
-	padding: 12px 14px max(14px, env(safe-area-inset-bottom, 0px));
+	padding: 12px 10px max(14px, env(safe-area-inset-bottom, 0px));
 	border-radius: 14px;
 	background: var(--surface-elevated, var(--surface, #1a1a22));
 	border: 1px solid var(--border);
@@ -6763,17 +6763,19 @@ body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading {
 	min-width: 0;
 }
 
-/* Same overlay pattern as grouped creations on feed cards (`.feed-card-group-nav`). */
+/* Same overlay pattern as grouped creations on feed cards (`.feed-card-group-nav`).
+   Width follows the dialog — cap height only so short viewports still fit; avoid vh-based width (was leaving empty side gutters on phones). */
 .challenge-vote-modal-media {
-	--vote-media-max-side: min(72vh, calc(100vh - 220px));
 	position: relative;
 	display: flex;
 	align-items: stretch;
 	justify-content: center;
 	box-sizing: border-box;
-	width: min(100%, var(--vote-media-max-side));
-	aspect-ratio: 1;
+	width: 100%;
 	max-width: 100%;
+	aspect-ratio: 1;
+	max-height: min(72vh, calc(100vh - 200px), calc(100dvh - 200px));
+	height: auto;
 	margin: 0 auto;
 	min-height: 0;
 	background: color-mix(in srgb, var(--text) 6%, transparent);
@@ -7028,18 +7030,18 @@ body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading {
 	.challenge-vote-modal-overlay {
 		padding:
 			max(6px, env(safe-area-inset-top))
-			max(8px, env(safe-area-inset-right))
+			max(4px, env(safe-area-inset-right))
 			max(8px, env(safe-area-inset-bottom))
-			max(8px, env(safe-area-inset-left));
+			max(4px, env(safe-area-inset-left));
 		align-items: center;
 	}
 
 	.challenge-vote-modal {
-		width: calc(100vw - 16px);
+		width: calc(100vw - 8px);
 		max-width: 100%;
 		max-height: min(92vh, calc(100dvh - max(12px, env(safe-area-inset-top)) - max(12px, env(safe-area-inset-bottom))));
 		gap: 8px;
-		padding: 8px 10px max(8px, env(safe-area-inset-bottom, 0px));
+		padding: 8px 6px max(8px, env(safe-area-inset-bottom, 0px));
 		border-radius: 12px;
 		box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
 	}
@@ -7065,7 +7067,7 @@ body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading {
 	}
 
 	.challenge-vote-modal-media {
-		--vote-media-max-side: min(42vh, calc(100dvh - 240px));
+		max-height: min(62vh, calc(100dvh - 220px));
 		border-radius: 10px;
 		touch-action: none;
 	}
