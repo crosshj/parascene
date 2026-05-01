@@ -6779,7 +6779,8 @@ body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading {
 	background: color-mix(in srgb, var(--text) 6%, transparent);
 	border-radius: 12px;
 	overflow: hidden;
-	touch-action: manipulation;
+	/* Let JS handle vertical swipe for prev/next; avoid browser / modal scroll stealing the gesture. */
+	touch-action: none;
 }
 
 .challenge-vote-modal-media-stage {
@@ -6801,6 +6802,7 @@ body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading {
 	object-fit: contain;
 	vertical-align: middle;
 	border-radius: 8px;
+	touch-action: none;
 }
 
 .challenge-vote-modal-media-column > .feed-card-group-nav.challenge-vote-nav-out {
@@ -7065,6 +7067,7 @@ body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading {
 	.challenge-vote-modal-media {
 		--vote-media-max-side: min(42vh, calc(100dvh - 240px));
 		border-radius: 10px;
+		touch-action: none;
 	}
 
 	.challenge-vote-modal-controls {
@@ -7512,8 +7515,15 @@ body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading {
 }
 
 @media (max-width: 768px) {
+	/* Gutters: parent `.chat-page-messages` already centers the lane — keep inset modest on phones. */
 	.challenge-pane-root {
-		padding: 10px 32px 96px;
+		padding: 10px 12px 96px;
+	}
+
+	/* Same shell as #feed pseudo-channel: clear fixed app header + status bar (see `.chat-feed-channel-route`). */
+	html.chat-page--use-app-mobile-header body.chat-page .chat-page-messages .challenge-pane-root {
+		padding-top: calc(env(safe-area-inset-top, 0px) + 48px + 12px);
+		padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
 	}
 
 	.challenge-pane-setup-grid {

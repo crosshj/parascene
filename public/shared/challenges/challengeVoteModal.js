@@ -401,6 +401,17 @@ export function createChallengeVoteModal(opts) {
 		return overlay?.querySelector(sel) ?? null;
 	}
 
+	function wireVoteModalVideoTap(stage) {
+		const v = stage.querySelector('video.challenge-vote-modal-video');
+		if (!(v instanceof HTMLVideoElement)) return;
+		const onClick = (e) => {
+			e.stopPropagation();
+			if (v.paused) void v.play().catch(() => {});
+			else v.pause();
+		};
+		v.addEventListener('click', onClick);
+	}
+
 	function injectVoteMediaFromCreation(stage, c, cid) {
 		const mediaType = typeof c.media_type === 'string' ? c.media_type : 'image';
 		const videoUrl = typeof c.video_url === 'string' ? c.video_url.trim() : '';
@@ -412,7 +423,9 @@ export function createChallengeVoteModal(opts) {
 
 		if (mediaType === 'video' && videoUrl) {
 			const poster = thumb || url ? escAttr(thumb || url) : '';
-			stage.innerHTML = `<video class="challenge-vote-modal-video" controls playsinline${poster ? ` poster="${poster}"` : ''} src="${escAttr(videoUrl)}"${idAttr}></video>`;
+			/* No native `controls` — they capture vertical touch before our swipe-to-next handler runs. */
+			stage.innerHTML = `<video class="challenge-vote-modal-video" playsinline preload="metadata" title="Tap to play or pause"${poster ? ` poster="${poster}"` : ''} src="${escAttr(videoUrl)}"${idAttr}></video>`;
+			wireVoteModalVideoTap(stage);
 			lastVoteMediaCreationId = cid;
 			return;
 		}
@@ -735,7 +748,7 @@ export function createChallengeVoteModal(opts) {
 			const dx = ev.clientX - swipeStart.x;
 			const dy = ev.clientY - swipeStart.y;
 			swipeStart = null;
-			const threshold = 48;
+			const threshold = 28;
 			if (Math.abs(dy) < threshold) return;
 			if (Math.abs(dx) > Math.abs(dy) * 1.2) return;
 			if (dy < 0) go(-1);
