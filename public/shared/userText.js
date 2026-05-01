@@ -98,6 +98,7 @@ function renderPlainUserTextSegment(text) {
 					help: '/help',
 					creations: '/chat/c/creations',
 					creation: '/chat/c/creations',
+					challenges: '/challenges',
 					notes: '/chat/notes',
 					explore: '/explore',
 					comments: '/chat/c/comments',

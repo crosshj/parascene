@@ -48,11 +48,11 @@ function isChatPageMobileLayout() {
 
 function shouldUseAppMobileHeaderForChatPath(pathname) {
 	const p = String(pathname || '').replace(/\/+$/, '') || '/';
-	if (p === '/' || p === '/index.html' || p === '/feed' || p === '/explore' || p === '/creations') return true;
+	if (p === '/' || p === '/index.html' || p === '/feed' || p === '/explore' || p === '/creations' || p === '/challenges') return true;
 	if (!p.startsWith('/chat/c/')) return false;
 	const slug = p.slice('/chat/c/'.length).split('/')[0].trim().toLowerCase();
 	if (!slug || slug === 'feedback') return false;
-	return slug === 'feed' || slug === 'explore' || slug === 'creations';
+	return slug === 'feed' || slug === 'explore' || slug === 'creations' || slug === 'challenges';
 }
 
 function shouldShowMobileSidebarFromLocation() {
@@ -64,7 +64,7 @@ function shouldShowAppMobileChromeForCurrentChatView(activePseudoSlug) {
 	if (!isChatPageMobileLayout()) return false;
 	if (shouldShowMobileSidebarFromLocation()) return true;
 	const slug = String(activePseudoSlug || '').trim().toLowerCase();
-	if (slug) return slug === 'feed' || slug === 'explore' || slug === 'creations';
+	if (slug) return slug === 'feed' || slug === 'explore' || slug === 'creations' || slug === 'challenges';
 	return shouldUseAppMobileHeaderForChatPath(window.location.pathname);
 }
 
@@ -547,6 +547,9 @@ function parseChatPathname(pathname) {
 	}
 	if (p === '/creations') {
 		return { kind: 'channel', slug: 'creations' };
+	}
+	if (p === '/challenges') {
+		return { kind: 'channel', slug: 'challenges' };
 	}
 	const parts = p.split('/').filter(Boolean);
 	if (parts[0] !== 'chat') return { kind: 'invalid' };
@@ -8272,7 +8275,8 @@ export async function initChatPage(root, options = {}) {
 				pathOnly.startsWith('/chat/') ||
 				pathOnly === '/feed' ||
 				pathOnly === '/explore' ||
-				pathOnly === '/creations';
+				pathOnly === '/creations' ||
+				pathOnly === '/challenges';
 			if (!isHashtagTagPath && !isChatInAppRoute) {
 				return;
 			}
@@ -9241,6 +9245,7 @@ export async function initChatPage(root, options = {}) {
 			help: '/help',
 			creations: '/chat/c/creations',
 			creation: '/chat/c/creations',
+			challenges: '/challenges',
 			notes: '/chat/notes',
 			explore: '/explore',
 			comments: '/chat/c/comments',

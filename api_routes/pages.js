@@ -1233,6 +1233,8 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			req.path === "/explore/" ||
 			req.path === "/creations" ||
 			req.path === "/creations/" ||
+			req.path === "/challenges" ||
+			req.path === "/challenges/" ||
 			req.path === "/chat" ||
 			req.path === "/chat/" ||
 			req.path.startsWith("/chat/")
@@ -1252,6 +1254,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			if (req.path === "/feed" || req.path === "/feed/") sidebarPath = "/chat/c/feed";
 			if (req.path === "/explore" || req.path === "/explore/") sidebarPath = "/chat/c/explore";
 			if (req.path === "/creations" || req.path === "/creations/") sidebarPath = "/chat/c/creations";
+			if (req.path === "/challenges" || req.path === "/challenges/") sidebarPath = "/chat/c/challenges";
 			chatPageTokens.CHAT_SIDEBAR_PSEUDO_STRIP_LIST = buildSidebarPseudoStripListStaticHtml(sidebarPath);
 			htmlContent = injectCommonHead(htmlContent, chatPageTokens);
 			res.setHeader("Content-Type", "text/html");

@@ -12,6 +12,8 @@ Served to logged-in users whose role is not `admin`. (`/` and `/index.html` use 
 /explore/
 /creations
 /creations/
+/challenges
+/challenges/
 /chat
 /chat/
 /chat/*

@@ -26,6 +26,7 @@ const CHAT_FIRST_ROUTE_PATHS = {
 	feed: '/chat/c/feed',
 	explore: '/chat/c/explore',
 	creations: '/chat/c/creations',
+	challenges: '/chat/c/challenges',
 	connect: '/chat#channels'
 };
 
@@ -49,7 +50,8 @@ function isCurrentDocumentChatShell() {
 		pathname === '/index.html' ||
 		pathname === '/feed' ||
 		pathname === '/explore' ||
-		pathname === '/creations';
+		pathname === '/creations' ||
+		pathname === '/challenges';
 }
 
 class AppNavigationMobile extends HTMLElement {
