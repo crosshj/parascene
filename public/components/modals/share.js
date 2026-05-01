@@ -8,6 +8,7 @@ let emailIcon;
 let shareIcon;
 let linkIcon;
 let qrCodeIcon;
+let pictureIcon;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -35,6 +36,7 @@ async function loadDeps() {
 		shareIcon = iconsMod.shareIcon;
 		linkIcon = iconsMod.linkIcon;
 		qrCodeIcon = iconsMod.qrCodeIcon;
+		pictureIcon = iconsMod.pictureIcon;
 	})();
 	return _depsPromise;
 }
@@ -128,6 +130,7 @@ class AppModalShare extends HTMLElement {
 		const iconShare = shareIcon();
 		const iconQrCode = qrCodeIcon();
 		const iconLink = linkIcon();
+		const iconPicture = pictureIcon();
 
 		this.innerHTML = html`
 			<div class="modal-overlay" data-overlay>
@@ -261,6 +264,17 @@ class AppModalShare extends HTMLElement {
 								</span>
 								<span class="share-action-cta" data-cta><span class="share-action-cta-label">Copy</span></span>
 							</button>
+
+							<button type="button" class="share-action-row" data-open-watermarked>
+								<span class="share-action-left">
+									<span class="share-option-icon">${iconPicture}</span>
+									<span class="share-action-text">
+										<span class="share-action-title">Open watermarked image</span>
+										<span class="share-action-subtitle">Copy or share image file anywhere</span>
+									</span>
+								</span>
+								<span class="share-action-cta" data-cta><span class="share-action-cta-label">Open</span></span>
+							</button>
 						</div>
 			
 						<button type="button" class="share-modal-cancel" data-cancel>Cancel</button>
@@ -291,6 +305,7 @@ class AppModalShare extends HTMLElement {
 		const closeBtn = this.querySelector(".modal-close");
 		const cancelBtn = this.querySelector("[data-cancel]");
 		const copyBtn = this.querySelector("[data-copy-link]");
+		const openWatermarkedBtn = this.querySelector("[data-open-watermarked]");
 		const qrBtn = this.querySelector("[data-qr-code]");
 		const nativeBtn = this.querySelector("[data-native-share]");
 		const smsBtn = this.querySelector("[data-share-sms]");
@@ -312,6 +327,7 @@ class AppModalShare extends HTMLElement {
 		if (cancelBtn) cancelBtn.addEventListener("click", () => this.close());
 
 		if (copyBtn) copyBtn.addEventListener("click", (e) => void this.handleCopy(e.currentTarget));
+		if (openWatermarkedBtn) openWatermarkedBtn.addEventListener("click", (e) => void this.handleOpenWatermarked(e.currentTarget));
 		if (qrBtn) qrBtn.addEventListener("click", (e) => void this.handleQrCode(e.currentTarget));
 		if (nativeBtn) nativeBtn.addEventListener("click", (e) => void this.handleNativeShare(e.currentTarget));
 
@@ -579,6 +595,16 @@ class AppModalShare extends HTMLElement {
 			const ok = await copyTextToClipboard(url);
 			if (!ok) throw new Error("Copy failed");
 		}, { successLabel: "Copied", errorLabel: "Copy failed", resetMs: 1600 });
+	}
+
+	async handleOpenWatermarked(buttonEl) {
+		await this.runCtaAction(buttonEl, async () => {
+			const creationId = Number(this._creationId);
+			if (!Number.isFinite(creationId) || creationId <= 0) {
+				throw new Error("Invalid creation");
+			}
+			openShareUrl(`/api/create/images/${creationId}/watermarked`);
+		}, { successLabel: "Opened", errorLabel: "Failed", resetMs: 1200 });
 	}
 
 	async handleNativeShare(buttonEl) {

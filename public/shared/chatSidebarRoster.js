@@ -38,6 +38,7 @@ const SIDEBAR_PSEUDO_STRIP_TITLES = {
 };
 
 function creationsRouteIcon(className = '') {
+	if (typeof Icons.pictureIcon === 'function') return Icons.pictureIcon(className);
 	const cls = className ? ` class="${escapeHtmlPseudoStrip(className)}"` : '';
 	return `<svg${cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><circle cx="8" cy="10" r="2"></circle><path d="M21 17l-5-5L5 19"></path></svg>`;
 }

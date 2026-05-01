@@ -15,6 +15,8 @@ import { verifyQStashRequest } from "./utils/qstashVerification.js";
 import { ACTIVE_SHARE_VERSION, mintShareToken, verifyShareToken } from "./utils/shareLink.js";
 import { getStyleInfo } from "./utils/createStyles.js";
 import { expandStyleSigilsForProvider } from "./utils/styleSigils.js";
+import { applyVynlyShareWatermark } from "./utils/vynlyShareWatermark.js";
+import { creationRowIsVideo } from "./utils/vynlyShareFromCreation.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -46,6 +48,14 @@ function buildGenericUrl(key) {
 		.filter(Boolean)
 		.map((seg) => encodeURIComponent(seg));
 	return `/api/images/generic/${segments.join("/")}`;
+}
+
+function guessImageContentType(filename) {
+	const f = String(filename || "").toLowerCase();
+	if (f.endsWith(".webp")) return "image/webp";
+	if (f.endsWith(".jpg") || f.endsWith(".jpeg")) return "image/jpeg";
+	if (f.endsWith(".gif")) return "image/gif";
+	return "image/png";
 }
 
 function parseMultipartCreate(req, { maxFileBytes = 12 * 1024 * 1024 } = {}) {
@@ -2373,6 +2383,85 @@ export default function createCreateRoutes({ queries, storage }) {
 			return res.json({ url });
 		} catch (error) {
 			return res.status(500).json({ error: "Failed to mint share link" });
+		}
+	});
+
+	// GET /api/create/images/:id/watermarked - Open a watermarked image export for manual sharing/copying.
+	router.get("/api/create/images/:id/watermarked", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		try {
+			const id = Number(req.params.id);
+			if (!Number.isFinite(id) || id <= 0) {
+				return res.status(400).json({ error: "Invalid creation id" });
+			}
+
+			// First try as owner.
+			let image = await queries.selectCreatedImageById?.get(id, user.id);
+
+			// If not owner, allow if published or admin.
+			if (!image) {
+				const any = await queries.selectCreatedImageByIdAnyUser?.get(id);
+				if (!any) {
+					return res.status(404).json({ error: "Image not found" });
+				}
+				const isPublished = any.published === 1 || any.published === true;
+				const isAdmin = user.role === "admin";
+				if (!isPublished && !isAdmin) {
+					return res.status(404).json({ error: "Image not found" });
+				}
+				image = any;
+			}
+
+			const status = image.status || "completed";
+			if (status !== "completed") {
+				return res.status(400).json({ error: "Only completed images can be exported" });
+			}
+			if (creationRowIsVideo(image.meta)) {
+				return res.status(400).json({ error: "Video creations are not supported for watermarked export" });
+			}
+			if (!image.filename) {
+				return res.status(400).json({ error: "Image file missing" });
+			}
+
+			const sourceBuf = await storage.getImageBuffer(image.filename);
+			if (!sourceBuf || !Buffer.isBuffer(sourceBuf)) {
+				return res.status(500).json({ error: "Failed to read image" });
+			}
+
+			const wm = await applyVynlyShareWatermark(sourceBuf);
+			const outBuf = wm?.buffer && Buffer.isBuffer(wm.buffer) ? wm.buffer : sourceBuf;
+			const contentType =
+				typeof wm?.contentType === "string" && wm.contentType ? wm.contentType : guessImageContentType(image.filename);
+			const suffix =
+				typeof wm?.filenameSuffix === "string" && wm.filenameSuffix
+					? wm.filenameSuffix
+					: contentType === "image/jpeg"
+						? ".jpg"
+						: contentType === "image/webp"
+							? ".webp"
+							: contentType === "image/gif"
+								? ".gif"
+								: ".png";
+
+			const downloadName = `parascene-${id}-watermarked${suffix}`;
+
+			res.set("Cache-Control", "private, no-store, max-age=0");
+			res.set("Content-Type", contentType);
+			res.set("Content-Length", String(outBuf.length));
+			res.set("Content-Disposition", `inline; filename="${downloadName}"`);
+			return res.send(outBuf);
+		} catch (error) {
+			const status =
+				error && typeof error === "object" && "status" in error && typeof error.status === "number"
+					? error.status
+					: 500;
+			const msg = error instanceof Error && error.message ? error.message : "Failed to export watermarked image";
+			if (status >= 400 && status < 600) {
+				return res.status(status).json({ error: msg });
+			}
+			return res.status(500).json({ error: "Failed to export watermarked image" });
 		}
 	});
 

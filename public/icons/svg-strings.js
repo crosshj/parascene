@@ -175,6 +175,16 @@ export const linkIcon2 = withAttributes(html`
 	</svg>
 `);
 
+/** Picture / image frame (same glyph as My Creations in chat sidebar strip). */
+export const pictureIcon = withAttributes(html`
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+		stroke-linejoin="round" aria-hidden="true">
+		<rect x="3" y="5" width="18" height="14" rx="2"></rect>
+		<circle cx="8" cy="10" r="2"></circle>
+		<path d="M21 17l-5-5L5 19"></path>
+	</svg>
+`);
+
 /** Overlapping rectangles — copy tag / duplicate (e.g. prompt library). */
 export const copyIcon = withAttributes(html`
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"
