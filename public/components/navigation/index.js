@@ -1228,6 +1228,15 @@ class AppNavigation extends HTMLElement {
 					document.dispatchEvent(
 						new CustomEvent('open-account-menu', { bubbles: true, detail: { anchor: button } })
 					);
+				} else if (action === 'clear-cache') {
+					void (async () => {
+						const v = getAssetVersionParam();
+						const qs = getImportQuery(v);
+						const { confirmAndHardReloadAfterClearingCaches } = await import(
+							`../../shared/clearClientCaches.js${qs}`
+						);
+						await confirmAndHardReloadAfterClearingCaches();
+					})();
 				} else if (action === 'create') {
 					window.location.href = '/create';
 				}
@@ -1476,6 +1485,7 @@ class AppNavigation extends HTMLElement {
 				html`<a href="${ext.href}" class="nav-link nav-external-link">${ext.label}</a>`
 				).join('')}
 				<a href="${getHelpHref("/help")}" class="mobile-menu-help">Help</a>
+				<button type="button" class="mobile-menu-clear-cache" data-mobile-menu-action="clear-cache">Clear cache</button>
 			</nav>
 			${hasMobileActions ? html`
 			<div class="mobile-menu-actions">

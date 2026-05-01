@@ -2052,6 +2052,28 @@ header .hamburger-button.active span:nth-child(3) {
 	color: var(--text);
 }
 
+.mobile-menu-nav button.mobile-menu-clear-cache {
+	display: block;
+	width: 100%;
+	box-sizing: border-box;
+	padding: 14px 16px;
+	text-align: left;
+	border: none;
+	background: transparent;
+	color: var(--text-muted);
+	font-size: 0.95rem;
+	font-weight: 500;
+	font: inherit;
+	border-radius: 8px;
+	cursor: pointer;
+	transition: background-color 0.2s, color 0.2s;
+}
+
+.mobile-menu-nav button.mobile-menu-clear-cache:hover {
+	background: var(--surface-strong);
+	color: var(--text);
+}
+
 .mobile-menu-actions {
 	display: flex;
 	flex-direction: column;
