@@ -3,6 +3,16 @@
  */
 
 /**
+ * @param {unknown} ms
+ * @returns {number | null}
+ */
+export function parseIso(ms) {
+	if (ms == null) return null;
+	const t = Date.parse(String(ms));
+	return Number.isFinite(t) ? t : null;
+}
+
+/**
  * First 10 keys from api_routes/comments.js REACTION_ORDER — must match API validation.
  * @type {readonly string[]}
  */

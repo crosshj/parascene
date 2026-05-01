@@ -1,16 +1,13 @@
 export {
 	getChallengesImportQuery,
+	parseIso,
 	CHALLENGE_SCORE_REACTION_KEYS,
 	challengeReactionKeyToScore,
 	challengeScoreToReactionKey,
 	weightedScoreFromReactions
 } from './constants.js';
 export { fetchAllChatThreadMessages, buildChallengesChannelModel } from './model/buildChannelModel.js';
-export {
-	parseIso,
-	challengePhaseDisplayLabel,
-	deriveChallengePhase
-} from './model/phases.js';
+export { challengePhaseDisplayLabel, deriveChallengePhase } from './model/phases.js';
 export { parseChallengeTimeline } from './model/parseTimeline.js';
 export { summarizeLatestChallengeConfigs } from './model/organizerSummaries.js';
 export { mountChallengesPane, renderChallengesPaneHtml } from './mountPane.js';

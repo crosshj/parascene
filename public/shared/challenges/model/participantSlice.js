@@ -1,4 +1,5 @@
-import { parseIso, deriveChallengePhase } from './phases.js';
+import { parseIso } from '../constants.js';
+import { deriveChallengePhase } from './phases.js';
 import { extractChallengeEvents } from './extractEvents.js';
 import { CHALLENGE_SCORE_REACTION_KEYS } from '../constants.js';
 import { weightedScoreFromReactions } from '../constants.js';

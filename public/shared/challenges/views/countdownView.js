@@ -1,6 +1,5 @@
 import { pickChallengeConfigTimestamp } from '../challengeAdmin.js';
-import { esc } from '../constants.js';
-import { parseIso } from '../model/phases.js';
+import { esc, parseIso } from '../constants.js';
 
 /**
  * @param {number | null} endMs

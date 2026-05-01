@@ -1,9 +1,9 @@
 import {
 	CHALLENGE_SCORE_REACTION_KEYS,
 	challengeReactionKeyToScore,
-	challengeScoreToReactionKey
+	challengeScoreToReactionKey,
+	parseIso
 } from './constants.js';
-import { parseIso } from './model/phases.js';
 
 /**
  * Set while the vote modal is open. Chat page `popstate` must call
