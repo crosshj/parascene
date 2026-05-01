@@ -16,6 +16,7 @@ let renderEmptyError;
 let renderGridSkeleton;
 let publishedBadgeHtml;
 let buildCreationCardShell;
+let creationMetaHasChallengeSubmission;
 let eyeHiddenIcon;
 let addToMutateQueue;
 
@@ -60,6 +61,9 @@ async function loadDeps() {
 
 		const creationCardMod = await import(`../../shared/creationCard.js${qs}`);
 		buildCreationCardShell = creationCardMod.buildCreationCardShell;
+
+		const challengeMetaMod = await import(`../../shared/challengeSubmitMeta.js${qs}`);
+		creationMetaHasChallengeSubmission = challengeMetaMod.creationMetaHasChallengeSubmission;
 
 		const iconsMod = await import(`../../icons/svg-strings.js${qs}`);
 		eyeHiddenIcon = iconsMod.eyeHiddenIcon;
@@ -961,6 +965,7 @@ class AppRouteCreations extends HTMLElement {
 					publishedInfo = html`<div class="route-meta" title="${formatDateTime(item.published_at)}">Published ${formatRelativeTime(item.published_at)}</div>`;
 				}
 				const meta = parseMeta(item.meta);
+				const inChallenge = creationMetaHasChallengeSubmission(meta);
 				const mediaType =
 					typeof item.media_type === 'string'
 						? item.media_type
@@ -983,6 +988,7 @@ class AppRouteCreations extends HTMLElement {
 					detailsContentHtml: detailsContent,
 					bulkOverlayHtml: bulkOverlay(),
 					nsfw: Boolean(item.nsfw),
+					challengeGridBlur: inChallenge && !item.nsfw,
 				});
 				const mediaEl = card.querySelector('.route-media');
 				const url = item.thumbnail_url || item.url;

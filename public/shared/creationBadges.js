@@ -7,13 +7,18 @@ const _qs = (() => {
 	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
 	return v ? `?v=${encodeURIComponent(v)}` : '';
 })();
-const { globeIcon } = await import(`../icons/svg-strings.js${_qs}`);
+const { globeIcon, trophyIcon } = await import(`../icons/svg-strings.js${_qs}`);
 
 const html = String.raw;
 
 /** Published (globe) badge for creation cards. */
 export function publishedBadgeHtml() {
 	return html`<div class="creation-published-badge" title="Published">${globeIcon()}</div>`;
+}
+
+/** Centered trophy on blurred thumbnails for creations entered in a challenge. */
+export function challengeEnteredBadgeHtml() {
+	return html`<span class="creation-challenge-entered-badge" role="img" aria-label="Entered in challenge" title="Entered in challenge">${trophyIcon()}</span>`;
 }
 
 /** User-deleted (trash) badge for creation cards (e.g. admin view). */

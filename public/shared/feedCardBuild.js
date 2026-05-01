@@ -8,8 +8,28 @@ import { getAvatarColor } from './avatar.js';
 import { buildProfilePath } from './profileLinks.js';
 import { getHelpHref } from './helpUrl.js';
 import { publishedBadgeHtml } from './creationBadges.js';
+import { trophyIcon } from '../icons/svg-strings.js';
+import { creationMetaHasChallengeSubmission } from './challengeSubmitMeta.js';
 
 const html = String.raw;
+
+/**
+ * @param {object} item - feed row (may carry meta object or JSON string)
+ * @returns {object|null}
+ */
+function parseFeedItemMeta(item) {
+	const m = item?.meta;
+	if (m && typeof m === 'object') return m;
+	if (typeof m === 'string') {
+		try {
+			const o = JSON.parse(m);
+			return o && typeof o === 'object' ? o : null;
+		} catch {
+			return null;
+		}
+	}
+	return null;
+}
 
 function appendCreationIdToMediaUrl(url, creationId) {
 	if (!url) return '';
@@ -543,6 +563,14 @@ function buildFeedCreationCard(
 	const mediaType = typeof item.media_type === "string" ? item.media_type : "image";
 	const isVideo = mediaType === "video" && typeof item.video_url === "string" && item.video_url;
 
+	const parsedMeta = parseFeedItemMeta(item);
+	const challengeThumbnailBlur =
+		creationMetaHasChallengeSubmission(parsedMeta) && !item.nsfw;
+	const challengeBlurClass = challengeThumbnailBlur ? ' feed-card-image--challenge-pending' : '';
+	const challengeBlurOverlay = challengeThumbnailBlur
+		? html`<span class="route-media-challenge-blur-overlay" aria-hidden="true"></span><span class="creation-challenge-entered-badge" role="img" aria-label="Entered in challenge" title="Entered in challenge">${trophyIcon()}</span>`
+		: '';
+
 	if (item.created_image_id) {
 		card.setAttribute('data-creation-id', String(item.created_image_id));
 		const stRaw = item?.status;
@@ -581,11 +609,12 @@ function buildFeedCreationCard(
 			</div>`
 				: '';
 		card.innerHTML = html`
-      <div class="feed-card-image${item.nsfw ? ' nsfw' : ''}${isVideo ? ' feed-card-image-video' : ''}">
+      <div class="feed-card-image${item.nsfw ? ' nsfw' : ''}${isVideo ? ' feed-card-image-video' : ''}${challengeBlurClass}">
         <img class="feed-card-img" alt="${item.title || 'Creation'}" loading="lazy" decoding="async">
         ${publishedOverlay}
         ${groupOverlay}
         ${isVideo ? html`<video class="feed-card-video" playsinline muted></video>` : ''}
+        ${challengeBlurOverlay}
         ${bulkOverlayBlock}
       </div>
     `;
@@ -635,9 +664,10 @@ function buildFeedCreationCard(
         `;
 
 	card.innerHTML = html`
-      <div class="feed-card-image${item.nsfw ? ' nsfw' : ''}${isVideo ? ' feed-card-image-video' : ''}">
+      <div class="feed-card-image${item.nsfw ? ' nsfw' : ''}${isVideo ? ' feed-card-image-video' : ''}${challengeBlurClass}">
         <img class="feed-card-img" alt="${item.title || 'Feed image'}" loading="lazy" decoding="async">
         ${isVideo ? html`<video class="feed-card-video" playsinline muted></video>` : ''}
+        ${challengeBlurOverlay}
       </div>
       <div class="feed-card-footer-grid">
         ${profileHref ? html`

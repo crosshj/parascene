@@ -179,7 +179,7 @@ const PARASCENE_SHARE_HOST = 'sh.parascene.com';
  * Expands bare paths like `/creations/123` (not already `https://...`) into absolute URLs
  * so the main URL pass can turn them into same-origin links. Does not match `/creations/123/edit`.
  */
-function expandBareCreationPathsToAbsoluteUrls(text) {
+export function expandBareCreationPathsToAbsoluteUrls(text) {
 	const origin =
 		typeof window !== 'undefined' && window.location?.origin
 			? window.location.origin
@@ -922,6 +922,81 @@ function parseParasceneShareEmbedParams(href) {
 	}
 }
 
+/**
+ * Trim + expand bare `/creations/:id` paths like chat bodies (single-line hero/reference fields).
+ * @param {unknown} raw
+ * @returns {string}
+ */
+export function normalizeHeroMediaReferenceInput(raw) {
+	const t = String(raw ?? '').trim();
+	if (!t) return '';
+	return expandBareCreationPathsToAbsoluteUrls(t);
+}
+
+/**
+ * Creation detail URL (trusted Parascene origin) or `sh…/s/…` share URL → payload for {@link fetchCreationEmbedPayload}.
+ * @param {unknown} raw
+ * @returns {{ kind: 'creation', creationId: string, shareOpts: { shareVersion: string, shareToken: string } | null } | null}
+ */
+export function parseHeroCreationOrShareRef(raw) {
+	const s = normalizeHeroMediaReferenceInput(raw);
+	if (!s) return null;
+
+	const share = parseParasceneShareEmbedParams(s);
+	if (share) {
+		return {
+			kind: 'creation',
+			creationId: share.id,
+			shareOpts: { shareVersion: share.shareVersion, shareToken: share.shareToken }
+		};
+	}
+
+	try {
+		const u = new URL(
+			s,
+			typeof window !== 'undefined' && window.location?.origin
+				? window.location.origin
+				: DEFAULT_APP_ORIGIN
+		);
+		const host = u.hostname.toLowerCase();
+		const isTrusted =
+			(typeof window !== 'undefined' &&
+				window.location &&
+				u.origin === window.location.origin) ||
+			PARASCENE_HOSTS.includes(host);
+		if (!isTrusted) return null;
+		const m = (u.pathname || '').match(/^\/creations\/(\d+)\/?$/i);
+		if (!m) return null;
+		const id = Number(m[1]);
+		if (!Number.isFinite(id) || id <= 0) return null;
+		return { kind: 'creation', creationId: String(id), shareOpts: null };
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Http(s) URL for `<img src>` when input is not a resolvable creation/share reference.
+ * @param {unknown} raw
+ * @returns {string | null}
+ */
+export function parseHeroDirectMediaUrl(raw) {
+	const s = normalizeHeroMediaReferenceInput(raw);
+	if (!s) return null;
+	try {
+		const u = new URL(
+			s,
+			typeof window !== 'undefined' && window.location?.origin
+				? window.location.origin
+				: DEFAULT_APP_ORIGIN
+		);
+		if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+		return u.href;
+	} catch {
+		return null;
+	}
+}
+
 function trimWhitespaceOnlyTextNodes(el) {
 	if (!(el instanceof HTMLElement)) return;
 	let n = el.lastChild;
@@ -1193,7 +1268,7 @@ function attachChatCreationEmbedDetailLinkReveal(wrap) {
 	);
 }
 
-async function fetchCreationForChatEmbed(id, shareOpts) {
+export async function fetchCreationEmbedPayload(id, shareOpts) {
 	const shareVersion =
 		shareOpts && typeof shareOpts.shareVersion === 'string' ? shareOpts.shareVersion.trim() : '';
 	const shareToken =
@@ -1268,7 +1343,7 @@ export function hydrateChatCreationEmbeds(rootEl) {
 		wrap.innerHTML = '<div class="connect-chat-creation-embed-skeleton" aria-hidden="true"></div>';
 		a.insertAdjacentElement('afterend', wrap);
 
-		void fetchCreationForChatEmbed(creationId, shareOpts).then((data) => {
+		void fetchCreationEmbedPayload(creationId, shareOpts).then((data) => {
 			if (!wrap.parentNode) return;
 			wrap.classList.remove('connect-chat-creation-embed--loading');
 

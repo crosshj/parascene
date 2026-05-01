@@ -17,10 +17,10 @@ function escapeHtmlPseudoStrip(str) {
 
 /**
  * Slugs for the fixed channel rows in the top strip (no section label) above DMs on chat + Connect sidebars.
- * Order: Feed, My Creations, Comments, Explore (above Feedback), Feedback.
+ * Order: Feed, Challenges, My Creations, Comments, Explore (above Feedback), Feedback.
  * A separate “Help” row (not a channel) links to `/help` and is appended after Feedback.
  */
-export const SIDEBAR_PSEUDO_STRIP_ORDER = ['feed', 'creations', 'comments', 'explore', 'feedback'];
+export const SIDEBAR_PSEUDO_STRIP_ORDER = ['feed', 'challenges', 'creations', 'comments', 'explore', 'feedback'];
 
 /** Notes-to-self shortcut: not a channel, opens the viewer's own DM. */
 export const SIDEBAR_NOTES_STRIP_HREF = '/chat/notes';
@@ -31,6 +31,7 @@ export const SIDEBAR_HELP_STRIP_HREF = '/help';
 /** @type {Record<string, string>} */
 const SIDEBAR_PSEUDO_STRIP_TITLES = {
 	feed: 'Feed',
+	challenges: 'Challenges',
 	explore: 'Explore',
 	creations: 'My Creations',
 	comments: 'Comments',
@@ -57,6 +58,7 @@ function pseudoStripRouteIconSvg(slug, routeIconClass = 'chat-page-sidebar-chann
 	if (key === 'notes') return sidebarNotesStripIconSvg(cls);
 	if (key === 'help') return sidebarHelpStripIconSvg(cls);
 	if (key === 'feed') return typeof Icons.homeIcon === 'function' ? Icons.homeIcon(cls) : '';
+	if (key === 'challenges') return typeof Icons.trophyIcon === 'function' ? Icons.trophyIcon(cls) : '';
 	if (key === 'explore') return typeof Icons.globeIcon === 'function' ? Icons.globeIcon(cls) : '';
 	if (key === 'creations') return creationsRouteIcon(cls);
 	if (key === 'comments') return typeof Icons.smsIcon === 'function' ? Icons.smsIcon(cls) : '';
@@ -82,6 +84,29 @@ export function getSidebarPseudoChannelTitle(channelSlug) {
 		.trim();
 	if (!s) return null;
 	return SIDEBAR_PSEUDO_STRIP_TITLES[s] ?? null;
+}
+
+/**
+ * Normalize `channel_slug` for header/server matching; infer strip slug from title when slug is missing.
+ * @param {{ type?: string, channel_slug?: unknown, title?: unknown } | null | undefined} meta
+ */
+export function inferPseudoStripSlugFromChannelMeta(meta) {
+	if (!meta || meta.type !== 'channel') return '';
+	const direct =
+		meta.channel_slug != null && String(meta.channel_slug).trim()
+			? String(meta.channel_slug).trim().toLowerCase()
+			: '';
+	if (direct) return direct;
+
+	const title = typeof meta.title === 'string' ? meta.title.trim() : '';
+	if (title.startsWith('#')) {
+		return title.slice(1).trim().toLowerCase();
+	}
+	for (const slug of SIDEBAR_PSEUDO_STRIP_ORDER) {
+		const lab = SIDEBAR_PSEUDO_STRIP_TITLES[slug];
+		if (lab && lab.trim().toLowerCase() === title.toLowerCase()) return slug;
+	}
+	return '';
 }
 
 /** Exclude these from the collapsible “Channels” list — they render only in the top strip. */

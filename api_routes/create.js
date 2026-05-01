@@ -17,6 +17,13 @@ import { getStyleInfo } from "./utils/createStyles.js";
 import { expandStyleSigilsForProvider } from "./utils/styleSigils.js";
 import { applyVynlyShareWatermark } from "./utils/vynlyShareWatermark.js";
 import { creationRowIsVideo } from "./utils/vynlyShareFromCreation.js";
+import { broadcastRoomDirty, broadcastUserInboxDirty } from "./utils/realtimeBroadcast.js";
+import { insertNotificationsForChatMentions } from "./utils/chatMentionNotifications.js";
+import {
+	fetchChatChannelThreadRow,
+	findChallengesChannelThreadId,
+	validateChallengeSubmission
+} from "./utils/challengeSubmitShared.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -334,6 +341,95 @@ export default function createCreateRoutes({ queries, storage }) {
 		} catch {
 			return null;
 		}
+	}
+
+	const MAX_CHALLENGE_CHAT_BODY_CHARS = 4000;
+
+	async function appendChallengeSubmitEligibility(req, user, image, meta, response) {
+		const status = response.status || "completed";
+		const pub = response.published === true || response.published === 1;
+		const group = meta?.group?.kind === "group_creations";
+
+		if (Number(user.id) !== Number(image.user_id)) {
+			return;
+		}
+		if (status !== "completed") {
+			response.challenge_submit = { eligible: false, reason: "not_completed" };
+			return;
+		}
+		if (pub) {
+			response.challenge_submit = { eligible: false, reason: "published" };
+			return;
+		}
+		if (group) {
+			response.challenge_submit = { eligible: false, reason: "group" };
+			return;
+		}
+
+		const raw = req.query?.challenge_submit_thread;
+		let threadId = NaN;
+		if (raw !== undefined && raw !== null && String(raw).trim() !== "") {
+			threadId = typeof raw === "string" ? Number(raw.trim()) : Number(raw);
+		}
+
+		const sb = getSupabaseServiceClient();
+		if ((!Number.isFinite(threadId) || threadId <= 0) && sb) {
+			try {
+				const canonical = await findChallengesChannelThreadId(sb);
+				if (canonical != null) threadId = canonical;
+			} catch {
+				// ignore; threadId stays invalid
+			}
+		}
+
+		if (!Number.isFinite(threadId) || threadId <= 0) {
+			return;
+		}
+
+		if (!sb) {
+			response.challenge_submit = { eligible: false, reason: "service_unavailable" };
+			return;
+		}
+
+		const v = await validateChallengeSubmission({
+			sb,
+			userId: user.id,
+			ownerUserId: image.user_id,
+			creationId: Number(image.id),
+			meta,
+			threadId,
+			note: ""
+		});
+		if (!v.ok) {
+			response.challenge_submit = {
+				eligible: false,
+				reason: "blocked",
+				message: v.message
+			};
+			return;
+		}
+		const cfg = v.cfg && typeof v.cfg === "object" ? v.cfg : {};
+		const rawTitle = typeof cfg.title === "string" ? cfg.title.trim() : "";
+		const cidStr = String(v.challengeId || "").trim();
+		const challengeTitle =
+			rawTitle || (cidStr ? `Challenge: ${cidStr}` : "Challenge");
+		let challengeDetails = "";
+		if (cfg.details != null) {
+			challengeDetails =
+				typeof cfg.details === "string"
+					? cfg.details.trim()
+					: String(cfg.details).trim();
+		}
+		response.challenge_submit = {
+			eligible: true,
+			reason: null,
+			thread_id: threadId,
+			challenge: {
+				challenge_id: cidStr,
+				title: challengeTitle,
+				details: challengeDetails
+			}
+		};
 	}
 
 	async function bumpFeedVersionCounter() {
@@ -2292,10 +2388,250 @@ export default function createCreateRoutes({ queries, storage }) {
 			if (isAdmin && isUnavailable) {
 				response.user_deleted = true;
 			}
+			await appendChallengeSubmitEligibility(req, user, image, meta, response);
 			return res.json(response);
 		} catch (error) {
 			// console.error("Error fetching image:", error);
 			return res.status(500).json({ error: "Failed to fetch image" });
+		}
+	});
+
+	// POST /api/create/images/:id/challenge-submit — owner posts challenge_submission JSON to Challenges thread + records meta.challenge_submissions
+	router.post("/api/create/images/:id/challenge-submit", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		const imageId = Number(req.params.id);
+		if (!Number.isFinite(imageId) || imageId <= 0) {
+			return res.status(400).json({ error: "Invalid creation id" });
+		}
+		const threadId = Number(req.body?.thread_id ?? req.body?.threadId);
+		if (!Number.isFinite(threadId) || threadId <= 0) {
+			return res.status(400).json({ error: "thread_id required" });
+		}
+		const noteRaw = req.body?.note;
+
+		const sb = getSupabaseServiceClient();
+		if (!sb) {
+			return res.status(503).json({ error: "Service unavailable", message: "Database not configured" });
+		}
+
+		try {
+			const image = await queries.selectCreatedImageById.get(imageId, user.id);
+			if (!image) {
+				return res.status(404).json({ error: "Image not found" });
+			}
+
+			const meta = parseMeta(image.meta) || {};
+			const status = image.status || "completed";
+			const pub = image.published === 1 || image.published === true;
+			if (status !== "completed") {
+				return res.status(400).json({ error: "Creation must be finished before entering a challenge." });
+			}
+			if (pub) {
+				return res.status(400).json({
+					error: "Published creations cannot be submitted to a challenge. Un-publish first if allowed."
+				});
+			}
+			if (meta?.group?.kind === "group_creations") {
+				return res.status(400).json({ error: "Group creations cannot be submitted as one challenge entry." });
+			}
+
+			const v = await validateChallengeSubmission({
+				sb,
+				userId: user.id,
+				ownerUserId: image.user_id,
+				creationId: imageId,
+				meta,
+				threadId,
+				note: noteRaw
+			});
+			if (!v.ok) {
+				return res.status(v.status).json({ error: v.message });
+			}
+
+			const payload = {
+				kind: "challenge_submission",
+				challenge_id: v.challengeId,
+				created_image_id: imageId,
+				...(v.noteTrim ? { note: v.noteTrim } : {})
+			};
+			let body = JSON.stringify(payload);
+			if (body.length > MAX_CHALLENGE_CHAT_BODY_CHARS) {
+				return res.status(400).json({ error: "Submission payload too large" });
+			}
+
+			const ins = await sb
+				.from("prsn_chat_messages")
+				.insert({ thread_id: threadId, sender_id: user.id, body })
+				.select("id, thread_id, sender_id, body, created_at")
+				.single();
+
+			if (ins.error) throw ins.error;
+
+			const newMsgId = ins.data?.id != null ? Number(ins.data.id) : null;
+
+			const existingSubs = Array.isArray(meta.challenge_submissions) ? [...meta.challenge_submissions] : [];
+			existingSubs.push({
+				thread_id: threadId,
+				challenge_id: v.challengeId,
+				message_id: Number.isFinite(newMsgId) && newMsgId > 0 ? newMsgId : null,
+				submitted_at: new Date().toISOString()
+			});
+			const nextMeta = { ...meta, challenge_submissions: existingSubs };
+			const up = await queries.updateCreatedImageMeta.run(imageId, user.id, nextMeta);
+			if (!up || up.changes === 0) {
+				console.error("[POST challenge-submit] meta update failed after message insert", imageId);
+				return res.status(500).json({
+					error: "Posted to the challenge channel but could not update creation metadata.",
+					message: ins.data
+				});
+			}
+
+			if (ins.data?.id != null) {
+				const newId = Number(ins.data.id);
+				if (Number.isFinite(newId) && newId > 0) {
+					const { error: readErr } = await sb
+						.from("prsn_chat_members")
+						.update({ last_read_message_id: newId })
+						.eq("thread_id", threadId)
+						.eq("user_id", user.id);
+					if (readErr) throw readErr;
+				}
+				void broadcastRoomDirty(threadId, ins.data.id);
+				const [memRes, threadRes] = await Promise.all([
+					sb.from("prsn_chat_members").select("user_id").eq("thread_id", threadId),
+					sb.from("prsn_chat_threads").select("type, channel_slug, dm_pair_key").eq("id", threadId).maybeSingle()
+				]);
+				const uids = Array.isArray(memRes.data) ? memRes.data.map((r) => r.user_id) : [];
+				void broadcastUserInboxDirty(threadId, uids);
+				void insertNotificationsForChatMentions({
+					queries,
+					memberUserIds: uids,
+					threadId,
+					threadType: threadRes.data?.type,
+					channelSlug: threadRes.data?.channel_slug,
+					dmPairKey: threadRes.data?.dm_pair_key,
+					senderId: user.id,
+					body
+				});
+			}
+
+			return res.status(201).json({
+				ok: true,
+				message: ins.data,
+				meta: nextMeta
+			});
+		} catch (err) {
+			console.error("[POST /api/create/images/:id/challenge-submit]", err);
+			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
+		}
+	});
+
+	// POST /api/create/images/:id/challenge-withdraw — owner removes challenge entries tied to #challenges (meta + chat message)
+	router.post("/api/create/images/:id/challenge-withdraw", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		const imageId = Number(req.params.id);
+		if (!Number.isFinite(imageId) || imageId <= 0) {
+			return res.status(400).json({ error: "Invalid creation id" });
+		}
+
+		const sb = getSupabaseServiceClient();
+		if (!sb) {
+			return res.status(503).json({ error: "Service unavailable", message: "Database not configured" });
+		}
+
+		try {
+			const image = await queries.selectCreatedImageById.get(imageId, user.id);
+			if (!image) {
+				return res.status(404).json({ error: "Image not found" });
+			}
+
+			const meta = parseMeta(image.meta) || {};
+			const subs = Array.isArray(meta.challenge_submissions) ? [...meta.challenge_submissions] : [];
+			if (subs.length === 0) {
+				return res.status(400).json({ error: "This creation is not entered in a challenge." });
+			}
+
+			const canonicalTid = await findChallengesChannelThreadId(sb);
+			const challengesThreadIds = new Set();
+			if (canonicalTid != null) challengesThreadIds.add(canonicalTid);
+
+			const uniqueTids = [
+				...new Set(
+					subs
+						.map((s) => Number(s?.thread_id))
+						.filter((n) => Number.isFinite(n) && n > 0)
+				)
+			];
+			for (const tid of uniqueTids) {
+				if (challengesThreadIds.has(tid)) continue;
+				const row = await fetchChatChannelThreadRow(sb, tid);
+				if (
+					row &&
+					row.type === "channel" &&
+					String(row.channel_slug || "").toLowerCase() === "challenges"
+				) {
+					challengesThreadIds.add(tid);
+				}
+			}
+
+			const toRemove = subs.filter((s) => challengesThreadIds.has(Number(s?.thread_id)));
+			const nextSubs = subs.filter((s) => !challengesThreadIds.has(Number(s?.thread_id)));
+
+			if (toRemove.length === 0) {
+				return res.status(400).json({ error: "No challenge entry found for the community Challenges channel." });
+			}
+
+			for (const r of toRemove) {
+				const tid = Number(r.thread_id);
+				const mid = Number(r.message_id);
+				if (!Number.isFinite(mid) || mid <= 0 || !Number.isFinite(tid) || tid <= 0) continue;
+				await sb
+					.from("prsn_chat_messages")
+					.delete()
+					.eq("id", mid)
+					.eq("sender_id", user.id)
+					.eq("thread_id", tid);
+			}
+
+			const nextMeta = { ...meta, challenge_submissions: nextSubs };
+			const up = await queries.updateCreatedImageMeta.run(imageId, user.id, nextMeta);
+			if (!up || up.changes === 0) {
+				console.error("[POST challenge-withdraw] meta update failed", imageId);
+				return res.status(500).json({ error: "Could not update creation metadata." });
+			}
+
+			const touchedThreads = [
+				...new Set(
+					toRemove
+						.map((x) => Number(x.thread_id))
+						.filter((n) => Number.isFinite(n) && n > 0)
+				)
+			];
+			for (const tid of touchedThreads) {
+				const { data: lastRow } = await sb
+					.from("prsn_chat_messages")
+					.select("id")
+					.eq("thread_id", tid)
+					.order("created_at", { ascending: false })
+					.limit(1)
+					.maybeSingle();
+				const lastId = Number(lastRow?.id);
+				if (Number.isFinite(lastId) && lastId > 0) {
+					void broadcastRoomDirty(tid, lastId);
+				}
+				const memRes = await sb.from("prsn_chat_members").select("user_id").eq("thread_id", tid);
+				const uids = Array.isArray(memRes.data) ? memRes.data.map((row) => row.user_id) : [];
+				void broadcastUserInboxDirty(tid, uids);
+			}
+
+			return res.status(200).json({ ok: true, meta: nextMeta });
+		} catch (err) {
+			console.error("[POST /api/create/images/:id/challenge-withdraw]", err);
+			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
 		}
 	});
 
@@ -2940,6 +3276,16 @@ export default function createCreateRoutes({ queries, storage }) {
 
 			if (targetImage.status !== 'completed') {
 				return res.status(400).json({ error: "Image must be completed before publishing" });
+			}
+
+			const publishMeta = parseMeta(targetImage.meta) || {};
+			if (
+				Array.isArray(publishMeta.challenge_submissions) &&
+				publishMeta.challenge_submissions.length > 0
+			) {
+				return res.status(400).json({
+					error: "Creations submitted to a challenge cannot be published."
+				});
 			}
 
 			if (targetImage.published === 1 || targetImage.published === true) {

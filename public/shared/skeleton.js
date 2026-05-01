@@ -191,3 +191,29 @@ export function renderCreateFormSkeleton() {
 		${skeletonPill('100%', 44)}
 	</div>`;
 }
+
+/**
+ * Chat #challenges pane — title + badge, hero image, Vote, two time lines, Details, Reward.
+ * @returns {string} HTML skeleton (wrap in `.challenge-pane-root` in chat messages column)
+ */
+export function renderChallengePaneSkeleton() {
+	return `<div class="challenge-pane-skeleton" aria-hidden="true">
+		<div class="challenge-pane-skeleton-head">
+			${skeletonLine('78%', 'skeleton-line--short')}
+			${skeletonPill('min(240px, 72%)', 28)}
+		</div>
+		<div class="challenge-pane-skeleton-strip"></div>
+		<div class="challenge-pane-skeleton-vote">${skeletonPill('100%', 48)}</div>
+		<div class="challenge-pane-skeleton-times">${skeletonLine('96%')}</div>
+		<div class="challenge-pane-skeleton-block">
+			${skeletonLine('22%', 'skeleton-line--short')}
+			${skeletonLine('100%')}
+			${skeletonLine('94%')}
+			${skeletonLine('62%', 'skeleton-line--medium')}
+		</div>
+		<div class="challenge-pane-skeleton-block">
+			${skeletonLine('18%', 'skeleton-line--short')}
+			${skeletonLine('86%')}
+		</div>
+	</div>`;
+}

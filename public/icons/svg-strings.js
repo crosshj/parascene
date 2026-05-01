@@ -272,6 +272,18 @@ export const starIcon = withAttributes(html`
 	</svg>
 `);
 
+/** Trophy — Challenges pseudo strip (stroke). */
+export const trophyIcon = withAttributes(html`
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+		stroke-linejoin="round" aria-hidden="true">
+		<path d="M8 21h8"></path>
+		<path d="M12 17v4"></path>
+		<path d="M7 4h10v5a5 5 0 0 1-10 0V4z"></path>
+		<path d="M7 8H5a2 2 0 0 1-2-2V5h4"></path>
+		<path d="M17 8h2a2 2 0 0 0 2-2V5h-4"></path>
+	</svg>
+`);
+
 /** Single filled sparkle (e.g. Mutate action). */
 export const sparkleIcon = withAttributes(html`
 	<svg viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true">

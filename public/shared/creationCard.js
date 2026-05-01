@@ -3,6 +3,8 @@
  * Callers supply details content and handle click/observers. Used by explore, creations, creation-detail, user-profile.
  */
 
+import { challengeEnteredBadgeHtml } from './creationBadges.js';
+
 const html = String.raw;
 
 function escapeAttr(v) {
@@ -22,7 +24,8 @@ function escapeAttr(v) {
  *   badgesHtml?: string,
  *   detailsContentHtml: string,
  *   bulkOverlayHtml?: string,
- *   nsfw?: boolean
+ *   nsfw?: boolean,
+ *   challengeGridBlur?: boolean
  * }} options
  * @returns {string}
  */
@@ -33,14 +36,22 @@ export function buildCreationCardShell(options) {
 		detailsContentHtml,
 		bulkOverlayHtml = '',
 		nsfw = false,
+		challengeGridBlur = false,
 	} = options;
 
 	const attrs = Object.entries(mediaAttrs)
 		.filter(([, v]) => v != null && v !== '')
 		.map(([k, v]) => (v === true ? k : `${k}="${escapeAttr(v)}"`))
 		.join(' ');
-	const mediaClass = 'route-media' + (nsfw ? ' nsfw' : '');
-	const mediaTag = html`<div class="${mediaClass}" aria-hidden="true"${attrs ? ' ' + attrs : ''}></div>`;
+	const mediaClass =
+		'route-media' +
+		(nsfw ? ' nsfw' : '') +
+		(challengeGridBlur && !nsfw ? ' route-media--challenge-pending' : '');
+	const blurOverlay =
+		challengeGridBlur && !nsfw
+			? html`<span class="route-media-challenge-blur-overlay" aria-hidden="true"></span>${challengeEnteredBadgeHtml()}`
+			: '';
+	const mediaTag = html`<div class="${mediaClass}" aria-hidden="true"${attrs ? ' ' + attrs : ''}>${blurOverlay}</div>`;
 
 	return html`<div class="route-card route-card-image">
 ${mediaTag}

@@ -15,7 +15,9 @@ let renderGridSkeleton;
 let renderProfilePageSkeleton;
 let publishedBadgeHtml;
 let userDeletedBadgeHtml;
+let challengeEnteredBadgeHtml;
 let buildCreationCardShell;
+let creationMetaHasChallengeSubmission;
 let buildUserListRowHtml;
 let REACTION_ORDER;
 let REACTION_ICONS;
@@ -72,9 +74,13 @@ async function loadDeps() {
 		const creationBadgesMod = await import(`../shared/creationBadges.js${qs}`);
 		publishedBadgeHtml = creationBadgesMod.publishedBadgeHtml;
 		userDeletedBadgeHtml = creationBadgesMod.userDeletedBadgeHtml;
+		challengeEnteredBadgeHtml = creationBadgesMod.challengeEnteredBadgeHtml;
 
 		const creationCardMod = await import(`../shared/creationCard.js${qs}`);
 		buildCreationCardShell = creationCardMod.buildCreationCardShell;
+
+		const challengeMetaMod = await import(`../shared/challengeSubmitMeta.js${qs}`);
+		creationMetaHasChallengeSubmission = challengeMetaMod.creationMetaHasChallengeSubmission;
 
 		const userCardMod = await import(`../shared/userCard.js${qs}`);
 		buildUserListRowHtml = userCardMod.buildUserListRowHtml;
@@ -813,6 +819,9 @@ function renderImageGrid(
 		}
 
 		const isVideo = item.media_type === 'video' || (item.meta && item.meta.media_type === 'video');
+		const itemMeta = item.meta && typeof item.meta === 'object' ? item.meta : null;
+		const challengeBlur =
+			Boolean(creationMetaHasChallengeSubmission?.(itemMeta)) && !item.nsfw;
 		const mediaAttrs = isVideo ? ' data-media-type="video"' : '';
 		const creationId = Number(item.id);
 		const personaAvatarBtn =
@@ -826,7 +835,8 @@ function renderImageGrid(
 				</button>`
 				: '';
 		card.innerHTML = html`
-			<div class="route-media${item.nsfw ? ' nsfw' : ''}" aria-hidden="true"${mediaAttrs}>
+			<div class="route-media${item.nsfw ? ' nsfw' : ''}${challengeBlur ? ' route-media--challenge-pending' : ''}" aria-hidden="true"${mediaAttrs}>
+				${challengeBlur ? html`<span class="route-media-challenge-blur-overlay" aria-hidden="true"></span>${challengeEnteredBadgeHtml()}` : ''}
 				${personaAvatarBtn}
 			</div>
 			${userDeletedBadge}
@@ -901,6 +911,7 @@ function appendImageGridCards(grid, items, showBadge = false) {
 		const detailsContent = html`
 		<div class="route-title">${escapeHtml(item.title || 'Untitled')}</div>${publishedInfo}<div class="route-meta">${escapeHtml(formatDate(item.created_at) || '')}</div>`;
 		const isVideo = item.media_type === 'video' || (item.meta && item.meta.media_type === 'video');
+		const itemMeta = item.meta && typeof item.meta === 'object' ? item.meta : null;
 		const mediaAttrs = {};
 		if (isVideo) {
 			mediaAttrs['data-media-type'] = 'video';
@@ -910,6 +921,7 @@ function appendImageGridCards(grid, items, showBadge = false) {
 			badgesHtml: userDeletedBadge + publishedBadge,
 			detailsContentHtml: detailsContent,
 			nsfw: Boolean(item.nsfw),
+			challengeGridBlur: Boolean(creationMetaHasChallengeSubmission?.(itemMeta)) && !item.nsfw,
 		});
 		const mediaEl = card.querySelector('.route-media');
 		const url = item.thumbnail_url || item.url;

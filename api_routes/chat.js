@@ -65,7 +65,7 @@ const POST_REJECT_PSEUDO_CHANNEL_SLUGS = new Set(["comments", "feed", "explore",
 const SYSTEM_RESERVED_CHANNEL_SLUGS = new Set([...POST_REJECT_PSEUDO_CHANNEL_SLUGS, "feedback"]);
 
 /** Slugs where founder canvases are blocked (pseudo-column channels). `#feedback` behaves like a normal channel for canvases. */
-const CANVAS_DISALLOWED_CHANNEL_SLUGS = new Set(["comments", "feed", "explore", "creations"]);
+const CANVAS_DISALLOWED_CHANNEL_SLUGS = new Set(["comments", "feed", "explore", "creations", "challenges"]);
 
 /** Match trailing punctuation on pasted URLs (aligned with client `splitUrlTrailingPunctuation`). */
 function splitUrlTrailingPunctuationForChat(rawUrl) {

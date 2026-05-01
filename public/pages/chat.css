@@ -144,6 +144,262 @@ body.chat-page main.chat-page-outer {
 	box-sizing: border-box;
 }
 
+.chat-page-canvas-default-shell {
+	flex: 1 1 auto;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	overflow: hidden;
+}
+
+.chat-page-challenges-organizer-sidebar {
+	flex: 1 1 auto;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	overflow: hidden;
+}
+
+.chat-page-challenges-organizer-sidebar[hidden] {
+	display: none !important;
+}
+
+.chat-page-challenges-organizer-sidebar-inner {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+}
+
+.chat-page-challenges-organizer-sidebar-inner > .chat-page-canvas-panel-body {
+	flex: 1 1 auto;
+	min-height: 0;
+	min-width: 0;
+}
+
+.challenge-pane-organizer-sidebar-body {
+	padding: 12px 14px 20px;
+	box-sizing: border-box;
+}
+
+.challenge-pane-organizer-sidebar-body .challenge-pane-admin-config-form {
+	max-width: none;
+}
+
+.chat-page-challenges-organizer-head .chat-page-canvas-panel-title {
+	flex: 0 1 auto;
+}
+
+.chat-page-chat-modal .modal.modal-medium.chat-page-chat-modal-panel.chat-page-challenges-organizer-modal-panel {
+	box-sizing: border-box;
+	max-width: min(720px, 94vw);
+	width: min(720px, 94vw);
+	height: 100vh;
+	height: 100dvh;
+	max-height: 100vh;
+	max-height: 100dvh;
+	min-height: 0;
+	padding-top: env(safe-area-inset-top);
+	padding-bottom: env(safe-area-inset-bottom);
+}
+
+.challenge-pane-organizer-table-wrap {
+	overflow-x: auto;
+	margin-top: 2px;
+}
+
+.challenge-pane-organizer-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.875rem;
+}
+
+.challenge-pane-organizer-table th {
+	text-align: left;
+	font-weight: 600;
+	font-size: 0.75rem;
+	color: var(--text-muted);
+	padding: 6px 8px 8px 0;
+	border-bottom: 1px solid var(--border);
+}
+
+.challenge-pane-organizer-table td {
+	padding: 10px 8px 10px 0;
+	border-bottom: 1px solid var(--border);
+	vertical-align: middle;
+}
+
+.challenge-pane-organizer-table-actions-head {
+	position: relative;
+	width: 44px;
+	padding-right: 0;
+	text-align: right;
+}
+
+.challenge-pane-organizer-table-actions {
+	width: 44px;
+	text-align: right;
+	padding-right: 0;
+	vertical-align: middle;
+}
+
+.challenge-pane-organizer-table-title {
+	font-weight: 500;
+	color: var(--text);
+	min-width: 0;
+	word-break: break-word;
+}
+
+.challenge-pane-organizer-table-id {
+	font-size: 0.75rem;
+	color: var(--text-muted);
+	margin-top: 2px;
+	word-break: break-all;
+}
+
+.challenge-pane-organizer-table-untitled {
+	color: var(--text-muted);
+	font-style: italic;
+}
+
+.challenge-pane-organizer-gear {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	height: 36px;
+	padding: 0;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+	transition:
+		background-color 0.12s ease,
+		color 0.12s ease;
+}
+
+.challenge-pane-organizer-gear:hover {
+	background: var(--surface-strong);
+	color: var(--text);
+}
+
+.challenge-pane-organizer-gear:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
+
+.challenge-pane-organizer-gear .challenge-pane-organizer-gear-svg,
+.challenge-pane-organizer-gear svg {
+	width: 20px;
+	height: 20px;
+	display: block;
+}
+
+.challenge-pane-organizer-table-ghost .challenge-pane-organizer-table-ghost-cell {
+	padding: 14px 10px;
+	border-bottom: none;
+	border-radius: 10px;
+	border: 1px dashed var(--border);
+	color: var(--text-muted);
+	cursor: pointer;
+	transition:
+		background-color 0.12s ease,
+		border-color 0.12s ease,
+		color 0.12s ease;
+}
+
+.challenge-pane-organizer-table-ghost:focus-visible .challenge-pane-organizer-table-ghost-cell,
+.challenge-pane-organizer-table-ghost:hover .challenge-pane-organizer-table-ghost-cell {
+	background: var(--surface-strong);
+	border-color: var(--text-muted);
+	color: var(--text);
+}
+
+.challenge-pane-organizer-table-ghost:focus-visible {
+	outline: none;
+}
+
+.challenge-pane-organizer-table-ghost-label {
+	font-weight: 500;
+}
+
+.challenge-pane-organizer-sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}
+
+.challenge-pane-organizer-modal-lead {
+	margin-top: 0;
+}
+
+.challenge-pane-organizer-image-hint {
+	margin: -4px 0 10px;
+	font-size: 0.8125rem;
+}
+
+.challenge-pane-organizer-modal-body {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+}
+
+.challenge-pane-organizer-modal-body > p {
+	flex-shrink: 0;
+}
+
+.challenge-pane-organizer-modal-body .challenge-pane-admin-config-form {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	max-width: none;
+}
+
+.challenge-pane-organizer-modal-body .challenge-pane-admin-config-form > .challenge-pane-label:not(.challenge-pane-organizer-details-field),
+.challenge-pane-organizer-modal-body .challenge-pane-admin-config-form > .challenge-pane-admin-rewards-group,
+.challenge-pane-organizer-modal-body .challenge-pane-admin-config-form > .challenge-pane-admin-datetimes,
+.challenge-pane-organizer-modal-body .challenge-pane-admin-config-form > .challenge-pane-admin-submit,
+.challenge-pane-organizer-modal-body .challenge-pane-admin-config-form > .challenge-pane-admin-error {
+	flex-shrink: 0;
+}
+
+/*
+ * Details must not shrink in the flex column: `min-height: 0` + default flex-shrink caused the
+ * label box to collapse while the textarea still painted at full height → overlap on Rewards below.
+ */
+.challenge-pane-organizer-modal-body .challenge-pane-organizer-details-field {
+	flex: 0 1 auto;
+	flex-shrink: 0;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 6px;
+}
+
+.challenge-pane-organizer-modal-body .challenge-pane-organizer-details-textarea {
+	flex: 0 0 auto;
+	min-height: 160px;
+	width: 100%;
+	box-sizing: border-box;
+	resize: vertical;
+}
+
+.chat-page-challenges-organizer-modal-panel .challenge-pane-organizer-modal-body {
+	flex: 1 1 auto;
+	overflow-y: auto;
+	min-height: 0;
+	max-height: none;
+}
+
 @media (prefers-color-scheme: dark) {
 	.chat-page-canvas-panel {
 		border-left: 1px solid rgba(61, 53, 82, 0.3);
@@ -1400,6 +1656,10 @@ body.chat-page.chat-page--mobile-sidebar-open .chat-page-sidebar-create-sticky {
 		display: none !important;
 	}
 
+	.chat-page-challenges-organizer-sidebar .chat-page-challenges-organizer-head {
+		display: flex !important;
+	}
+
 	.chat-page-main-split {
 		position: relative;
 	}
@@ -1889,6 +2149,14 @@ body.chat-page .chat-route {
 	overflow-anchor: none;
 	scrollbar-width: none;
 	-ms-overflow-style: none;
+}
+
+/* Vote modal / any body.modal-open: thread + sidebar scroll locked behind fixed overlay */
+body.chat-page.modal-open .chat-page-messages,
+body.chat-page.modal-open .chat-page-sidebar-scroll {
+	overflow: hidden;
+	overscroll-behavior: none;
+	touch-action: none;
 }
 
 .chat-page-messages::-webkit-scrollbar {

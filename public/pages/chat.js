@@ -163,6 +163,8 @@ let renderFeedCardsSkeleton;
 let renderGridSkeleton;
 /** @type {((count?: number) => string) | undefined} */
 let renderCommentRowsSkeleton;
+/** @type {(() => string) | undefined} */
+let renderChallengePaneSkeleton;
 let toggleChatMessageReaction;
 let setupReactionTooltipTap;
 let createConnectCommentRowElement;
@@ -345,6 +347,7 @@ async function loadDeps() {
 		renderFeedCardsSkeleton = skeletonMod.renderFeedCardsSkeleton;
 		renderGridSkeleton = skeletonMod.renderGridSkeleton;
 		renderCommentRowsSkeleton = skeletonMod.renderCommentRowsSkeleton;
+		renderChallengePaneSkeleton = skeletonMod.renderChallengePaneSkeleton;
 	})();
 	return _depsPromise;
 }
@@ -588,7 +591,7 @@ function parseChatPathname(pathname) {
 }
 
 /** Slugs where canvases are disabled in the client (pseudo-column channels). `#feedback` is allowed; keep aligned with `CANVAS_DISALLOWED_CHANNEL_SLUGS` in api_routes/chat.js */
-const CHAT_CANVAS_DISALLOWED_SLUGS = new Set(['comments', 'feed', 'explore', 'creations']);
+const CHAT_CANVAS_DISALLOWED_SLUGS = new Set(['comments', 'feed', 'explore', 'creations', 'challenges']);
 
 /** Bottom spacing for canvas read view; must match `CANVAS_BODY_HTML_SUFFIX` in `api_routes/utils/canvasBodyHtml.js` when `body_html` is omitted. */
 const CANVAS_BODY_HTML_SUFFIX = '<br><br><br>';
@@ -852,6 +855,12 @@ export async function initChatPage(root, options = {}) {
 	let chatThreadLoadFailed = false;
 	/** @type {null | (() => void)} */
 	let roomBroadcastTeardown = null;
+	/** @type {null | (() => void)} */
+	let challengesPaneTeardown = null;
+	/** @type {null | (() => void)} */
+	let challengesOrganizerSidebarTeardown = null;
+	/** Challenge channel: viewer may open organizer sidebar (see `isChallengeChannelAdmin`). */
+	let chatChallengesOrganizerEligible = false;
 	/** @type {null | (() => void)} */
 	let visibilityResyncCleanup = null;
 	/** True when the viewer is pinned to the latest messages (used for lazy embeds + viewport resize). */
@@ -1530,7 +1539,8 @@ export async function initChatPage(root, options = {}) {
 			slug === 'feed' ||
 			slug === 'explore' ||
 			slug === 'creations' ||
-			slug === 'comments';
+			slug === 'comments' ||
+			slug === 'challenges';
 		const toEnd = pseudoLane ? false : chatFeedLaneScrollMode === 'oldest_first';
 		// Keep early viewport/resize nudges from forcing browse-lane skeletons to bottom.
 		chatStickToBottom = toEnd;
@@ -1578,7 +1588,8 @@ export async function initChatPage(root, options = {}) {
 			activePseudoChannelSlug === 'feed' ||
 			activePseudoChannelSlug === 'explore' ||
 			activePseudoChannelSlug === 'creations' ||
-			activePseudoChannelSlug === 'comments'
+			activePseudoChannelSlug === 'comments' ||
+			activePseudoChannelSlug === 'challenges'
 		) {
 			return;
 		}
@@ -2509,7 +2520,8 @@ export async function initChatPage(root, options = {}) {
 			activePseudoChannelSlug === 'feed' ||
 			activePseudoChannelSlug === 'explore' ||
 			activePseudoChannelSlug === 'creations' ||
-			activePseudoChannelSlug === 'comments'
+			activePseudoChannelSlug === 'comments' ||
+			activePseudoChannelSlug === 'challenges'
 		) {
 			if (composerForm instanceof HTMLFormElement) {
 				delete composerForm.dataset.chatComposerMode;
@@ -2591,7 +2603,8 @@ export async function initChatPage(root, options = {}) {
 		const viewportScrollMode =
 			activePseudoChannelSlug === 'feed' ||
 			activePseudoChannelSlug === 'explore' ||
-			activePseudoChannelSlug === 'creations';
+			activePseudoChannelSlug === 'creations' ||
+			activePseudoChannelSlug === 'challenges';
 		document.body.classList.toggle('chat-page--viewport-scroll', viewportScrollMode);
 		try {
 			document.documentElement.classList.toggle('chat-page--viewport-scroll', viewportScrollMode);
@@ -2611,7 +2624,8 @@ export async function initChatPage(root, options = {}) {
 			on ||
 			activePseudoChannelSlug === 'feed' ||
 			activePseudoChannelSlug === 'explore' ||
-			activePseudoChannelSlug === 'creations';
+			activePseudoChannelSlug === 'creations' ||
+			activePseudoChannelSlug === 'challenges';
 		document.body.classList.toggle('chat-page--viewport-scroll', viewportScrollMode);
 		try {
 			document.documentElement.classList.toggle('chat-page--viewport-scroll', viewportScrollMode);
@@ -2842,6 +2856,31 @@ export async function initChatPage(root, options = {}) {
 		const data = await res.json().catch(() => ({}));
 		if (!res.ok) {
 			return { ok: false, error: data.message || data.error || 'Could not send' };
+		}
+		return { ok: true };
+	}
+
+	async function patchChatMessageBody(messageId, body) {
+		if (chatSimulateSendFail()) {
+			await new Promise((r) => setTimeout(r, 400));
+			return {
+				ok: false,
+				error: 'Simulated failure (remove ?chatSimulateSendFail=1 from the URL to send for real)'
+			};
+		}
+		const mid = Number(messageId);
+		if (!Number.isFinite(mid) || mid <= 0) {
+			return { ok: false, error: 'Invalid message id' };
+		}
+		const res = await fetch(`/api/chat/messages/${mid}`, {
+			method: 'PATCH',
+			credentials: 'include',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ body })
+		});
+		const data = await res.json().catch(() => ({}));
+		if (!res.ok) {
+			return { ok: false, error: data.message || data.error || 'Could not update message' };
 		}
 		return { ok: true };
 	}
@@ -3169,7 +3208,7 @@ export async function initChatPage(root, options = {}) {
 			const glyph = escapeHtml(String(displayName || 'U').trim().charAt(0).toUpperCase() || 'U');
 			return `<span class="chat-page-header-avatar chat-page-header-avatar--fallback ${sizeCls}" style="background: ${bg};" data-chat-header-avatar-glyph="${glyph}" aria-hidden="true"></span>`;
 		}
-		const slugRaw = typeof meta?.channel_slug === 'string' ? meta.channel_slug.trim().toLowerCase() : '';
+		const slugRaw = rosterMod.inferPseudoStripSlugFromChannelMeta(meta);
 		const resolvedServerAvatarUrl = (() => {
 			const direct =
 				typeof meta?.server_avatar_url === 'string' ? meta.server_avatar_url.trim() : '';
@@ -7873,6 +7912,173 @@ export async function initChatPage(root, options = {}) {
 		}
 	}
 
+	/**
+	 * Human-readable title + body when the #challenges pane fails (fetch, chunk load, or mount).
+	 * Keep recoverable cases actionable (Retry); avoid raw stack traces in UI.
+	 */
+	function getChallengesChannelLoadFailureCopy(err) {
+		const raw = err instanceof Error ? err.message : typeof err === 'string' ? err : '';
+		const m = String(raw || '').trim();
+		const lower = m.toLowerCase();
+		const title = "Couldn't load Challenges";
+		let detail =
+			m ||
+			'Something went wrong while loading this channel. You can try again or go back to your channel list.';
+
+		if (/loading chunk \d+ failed|import\(\)|failed to fetch|networkerror|network request failed|load failed/i.test(m)) {
+			detail =
+				"We couldn't finish loading this screen—often a network blip or an interrupted download. Check your connection and tap Retry.";
+		} else if (/sign in|401|403|unauthorized|forbidden/i.test(lower)) {
+			detail =
+				'Your session may have expired. Sign in again in another tab if needed, then tap Retry.';
+		} else if (/not found|404/.test(lower)) {
+			detail = 'This conversation could not be loaded. It may have been removed or you may not have access.';
+		} else if (/status:\s*5\d\d|server could not load|500/.test(lower)) {
+			detail = 'The server had trouble loading this channel. Please try again in a moment.';
+		}
+
+		return { title, detail };
+	}
+
+	async function loadChallengesChannelMessages() {
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		const tid = Number(activeThreadId);
+		if (!messagesEl || !Number.isFinite(tid) || tid <= 0) return;
+
+		try {
+			const ctxMod = await import(`../shared/challengeSubmitContext.js${qs}`);
+			ctxMod.captureChallengeSubmitThread?.(tid);
+		} catch {
+			// ignore
+		}
+
+		applyComposerState();
+		const paneEpoch = bumpChatMessagesPaneEpoch();
+		enterPseudoChannelLoad();
+		messagesEl.setAttribute('aria-busy', 'true');
+		if (typeof challengesPaneTeardown === 'function') {
+			try {
+				challengesPaneTeardown();
+			} catch {
+				// ignore
+			}
+		}
+		challengesPaneTeardown = null;
+		const organizerWasOpen = isChallengesOrganizerSidebarOpen();
+		if (typeof challengesOrganizerSidebarTeardown === 'function') {
+			try {
+				challengesOrganizerSidebarTeardown();
+			} catch {
+				// ignore
+			}
+		}
+		challengesOrganizerSidebarTeardown = null;
+		try {
+			const mod = await import(`../shared/challengesChannel.js${qs}`);
+			const [messages, viewerProf] = await Promise.all([
+				mod.fetchAllChatThreadMessages(tid),
+				fetchChatViewerProfileMini()
+			]);
+			const viewerUserName = viewerProf?.user_name ?? null;
+			chatChallengesOrganizerEligible = Boolean(mod.isChallengeChannelAdmin?.(viewerUserName));
+			if (isStaleChatPane(paneEpoch)) return;
+			lastChatMessagesPayload = [];
+			messagesEl.innerHTML = '';
+			const mountWrap = document.createElement('div');
+			mountWrap.className = 'challenge-pane-root';
+			messagesEl.appendChild(mountWrap);
+
+			const reactionIconHtml = (key, cls) => {
+				const fn = REACTION_ICONS[key];
+				return typeof fn === 'function' ? fn(cls || '') : '';
+			};
+
+			const api = mod.mountChallengesPane({
+				root: mountWrap,
+				threadId: tid,
+				viewerId: Number.isFinite(Number(chatViewerId)) ? Number(chatViewerId) : null,
+				messages,
+				reload: async () => {
+					await loadChallengesChannelMessages();
+				},
+				postMessage: (body) => postChatMessage(tid, body),
+				toggleReaction: (mid, ek) => toggleChatMessageReaction(mid, ek),
+				reactionIconHtml
+			});
+			challengesPaneTeardown = api.destroy;
+
+			const orgHost = chatCanvasScope?.querySelector('[data-chat-challenges-organizer-sidebar]');
+			if (chatChallengesOrganizerEligible && orgHost instanceof HTMLElement && mod.mountChallengesOrganizerSidebar) {
+				const orgApi = mod.mountChallengesOrganizerSidebar(orgHost, {
+					messages,
+					viewerId: Number.isFinite(Number(chatViewerId)) ? Number(chatViewerId) : null,
+					threadId: tid,
+					postMessage: (body) => postChatMessage(tid, body),
+					patchMessage: (messageId, body) => patchChatMessageBody(messageId, body),
+					reload: async () => {
+						await loadChallengesChannelMessages();
+					}
+				});
+				challengesOrganizerSidebarTeardown = orgApi.destroy;
+			} else {
+				chatChallengesOrganizerEligible = false;
+				closeChallengesOrganizerSidebar();
+			}
+
+			if (organizerWasOpen && chatChallengesOrganizerEligible) {
+				openChallengesOrganizerSidebar();
+			}
+
+			const last = messages[messages.length - 1];
+			const midLast = last?.id != null ? Number(last.id) : null;
+			if (Number.isFinite(midLast) && midLast > 0) {
+				void markThreadReadByMessageId(tid, midLast);
+			}
+			scrollChatFeedPseudoChannelToTop();
+		} catch (err) {
+			console.error('[Chat page] challenges channel:', err);
+			chatChallengesOrganizerEligible = false;
+			if (typeof challengesPaneTeardown === 'function') {
+				try {
+					challengesPaneTeardown();
+				} catch {
+					// ignore
+				}
+			}
+			challengesPaneTeardown = null;
+			if (typeof challengesOrganizerSidebarTeardown === 'function') {
+				try {
+					challengesOrganizerSidebarTeardown();
+				} catch {
+					// ignore
+				}
+			}
+			challengesOrganizerSidebarTeardown = null;
+			closeChallengesOrganizerSidebar();
+			if (!isStaleChatPane(paneEpoch)) {
+				const { title, detail } = getChallengesChannelLoadFailureCopy(err);
+				paintChatMessagesPaneError(messagesEl, detail, title, {
+					showRetry: true,
+					onRetry: () => {
+						void loadChallengesChannelMessages();
+					},
+					buttonText: 'Back to channels',
+					buttonHref: '/chat#channels'
+				});
+			}
+		} finally {
+			exitPseudoChannelLoad();
+			unlockChatMessagesPaneScroll(messagesEl);
+			if (!isStaleChatPane(paneEpoch) && messagesEl.isConnected) {
+				messagesEl.removeAttribute('aria-busy');
+			}
+			if (!isStaleChatPane(paneEpoch) && activePseudoChannelSlug === 'challenges') {
+				scrollChatFeedPseudoChannelToTop();
+			}
+			rebuildTopbarMenuDynamic();
+		}
+	}
+
 	function tearDownRoomBroadcast() {
 		if (typeof roomBroadcastTeardown === 'function') {
 			try {
@@ -7899,6 +8105,11 @@ export async function initChatPage(root, options = {}) {
 		tearDownVisibilityResync();
 		const onVis = () => {
 			if (document.visibilityState !== 'visible') return;
+			if (activePseudoChannelSlug === 'challenges') {
+				if (!activeThreadId || loadingPseudoChannelMessages) return;
+				void loadChallengesChannelMessages();
+				return;
+			}
 			if (!activeThreadId || loadingThreadMessages) return;
 			void loadMessages();
 		};
@@ -7914,7 +8125,11 @@ export async function initChatPage(root, options = {}) {
 		try {
 			const mod = await import(`../shared/realtimeBroadcast.js${qs}`);
 			const refetch = () => {
-				void loadMessages();
+				if (activePseudoChannelSlug === 'challenges') {
+					void loadChallengesChannelMessages();
+				} else {
+					void loadMessages();
+				}
 			};
 			roomBroadcastTeardown = await mod.subscribeRoomBroadcast(tid, refetch, {
 				onReconnect: refetch,
@@ -8506,10 +8721,34 @@ export async function initChatPage(root, options = {}) {
 
 		optimisticSend = null;
 		tearDownChatCanvasUi();
+		if (typeof challengesPaneTeardown === 'function') {
+			try {
+				challengesPaneTeardown();
+			} catch {
+				// ignore
+			}
+		}
+		challengesPaneTeardown = null;
+		if (typeof challengesOrganizerSidebarTeardown === 'function') {
+			try {
+				challengesOrganizerSidebarTeardown();
+			} catch {
+				// ignore
+			}
+		}
+		challengesOrganizerSidebarTeardown = null;
+		chatChallengesOrganizerEligible = false;
+		closeChallengesOrganizerSidebar();
 		activePseudoChannelSlug = null;
 		if (parsed.kind === 'channel') {
 			const slug = String(parsed.slug || '').trim().toLowerCase();
-			if (slug === 'feed' || slug === 'explore' || slug === 'creations' || slug === 'comments') {
+			if (
+				slug === 'feed' ||
+				slug === 'explore' ||
+				slug === 'creations' ||
+				slug === 'comments' ||
+				slug === 'challenges'
+			) {
 				activePseudoChannelSlug = slug;
 			}
 		}
@@ -8535,6 +8774,17 @@ export async function initChatPage(root, options = {}) {
 			} else if (channelSlugForLoading === 'comments' && typeof renderCommentRowsSkeleton === 'function') {
 				messagesEl.innerHTML = `<div class="chat-comments-channel-loading" aria-busy="true" aria-label="Loading">${renderCommentRowsSkeleton(10)}</div>`;
 				resetAndLockChatMessagesScrollForSkeleton(messagesEl, 'comments');
+			} else if (channelSlugForLoading === 'challenges') {
+				if (typeof renderChallengePaneSkeleton === 'function') {
+					messagesEl.innerHTML = `<div class="challenge-pane-root" aria-busy="true" aria-label="Loading">${renderChallengePaneSkeleton()}</div>`;
+				} else {
+					messagesEl.innerHTML = renderEmptyState({
+						loading: true,
+						loadingAriaLabel: 'Loading',
+						className: 'chat-page-thread-loading'
+					});
+				}
+				resetAndLockChatMessagesScrollForSkeleton(messagesEl, 'challenges');
 			} else if (channelSlugForLoading === 'explore' || channelSlugForLoading === 'creations') {
 				const creationsCls = channelSlugForLoading === 'creations' ? ' creations-route' : '';
 				const browseCls = chatExploreCreationsBrowseView ? ' chat-feed-channel-route--browse-view' : '';
@@ -8657,6 +8907,60 @@ export async function initChatPage(root, options = {}) {
 						messagesEl.removeAttribute('aria-busy');
 					}
 					await loadExploreChannelMessages({ searchQuery: exploreSearchFromUrl });
+					return;
+				}
+				if (slug === 'challenges') {
+					activePseudoChannelSlug = 'challenges';
+					applyComposerState();
+					const matchCh = (chatThreads || []).find(
+						(t) => t.type === 'channel' && String(t.channel_slug || '').toLowerCase() === 'challenges'
+					);
+					if (matchCh) {
+						activeThreadId = Number(matchCh.id);
+						updateTitleFromMeta(matchCh);
+						if (messagesEl) {
+							messagesEl.removeAttribute('aria-busy');
+						}
+						await loadChallengesChannelMessages();
+						await bindRoomBroadcast(activeThreadId);
+						return;
+					}
+					const resCh = await fetch('/api/chat/channels', {
+						method: 'POST',
+						credentials: 'include',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ tag: 'challenges' })
+					});
+					const dataCh = await resCh.json().catch(() => ({}));
+					if (!resCh.ok) {
+						const msg = dataCh?.message || dataCh?.error || `Could not open channel (${resCh.status})`;
+						throw new Error(msg);
+					}
+					const tidCh = Number(dataCh?.thread?.id);
+					await loadChatThreads({ forceNetwork: true });
+					await refreshChatSidebar({ skipThreadsFetch: true });
+					if (Number.isFinite(tidCh) && tidCh > 0) {
+						activeThreadId = tidCh;
+						const metaCh = (chatThreads || []).find((t) => Number(t.id) === tidCh);
+						updateTitleFromMeta(metaCh || { type: 'channel', channel_slug: 'challenges', title: 'Challenges' });
+						if (messagesEl) {
+							messagesEl.removeAttribute('aria-busy');
+						}
+						await loadChallengesChannelMessages();
+						await bindRoomBroadcast(activeThreadId);
+					} else if (messagesEl) {
+						chatThreadLoadFailed = true;
+						paintChatMessagesPaneError(
+							messagesEl,
+							'This channel could not be opened. Try again or choose another channel from the sidebar.',
+							"Couldn't open this channel"
+						);
+						applyComposerState();
+						if (errEl instanceof HTMLElement) {
+							errEl.hidden = true;
+							errEl.textContent = '';
+						}
+					}
 					return;
 				}
 				const match = (chatThreads || []).find(
@@ -9427,6 +9731,18 @@ export async function initChatPage(root, options = {}) {
 		ch.textContent = channelLabel;
 		if (!activeCanvasRow) ch.classList.add('chat-page-mobile-chrome-sheet-item--current');
 		body.appendChild(ch);
+		if (chatChallengesOrganizerEligible && activePseudoChannelSlug === 'challenges') {
+			const orgMb = document.createElement('button');
+			orgMb.type = 'button';
+			orgMb.className = 'feed-card-menu-item';
+			orgMb.dataset.chatChallengesOrganizerOpen = '';
+			orgMb.setAttribute('role', 'menuitem');
+			orgMb.textContent = 'Organizer tools';
+			if (isChallengesOrganizerSidebarOpen()) {
+				orgMb.classList.add('chat-page-mobile-chrome-sheet-item--current');
+			}
+			body.appendChild(orgMb);
+		}
 		for (const c of chatCanvasesList) {
 			const b = document.createElement('button');
 			b.type = 'button';
@@ -9555,6 +9871,43 @@ export async function initChatPage(root, options = {}) {
 			moreBtn: chatCanvasScope.querySelector('[data-chat-canvas-more]'),
 			ownerMenu: chatCanvasScope.querySelector('[data-chat-canvas-owner-menu]')
 		};
+	}
+
+	function isChallengesOrganizerSidebarOpen() {
+		const orgShell = chatCanvasScope?.querySelector('[data-chat-challenges-organizer-sidebar]');
+		return orgShell instanceof HTMLElement && !orgShell.hidden;
+	}
+
+	function closeChallengesOrganizerSidebar() {
+		const defaultShell = chatCanvasScope?.querySelector('[data-chat-canvas-default-shell]');
+		const orgShell = chatCanvasScope?.querySelector('[data-chat-challenges-organizer-sidebar]');
+		const panel = getChatCanvasPanelEls().panel;
+		if (defaultShell instanceof HTMLElement) defaultShell.hidden = false;
+		if (orgShell instanceof HTMLElement) orgShell.hidden = true;
+		if (panel instanceof HTMLElement) {
+			panel.hidden = true;
+			panel.setAttribute('aria-label', 'Canvas');
+		}
+		setChatCanvasOpenBodyClass(false);
+		rebuildTopbarMenuDynamic();
+		syncTopbarPinnedCanvasButton();
+	}
+
+	function openChallengesOrganizerSidebar() {
+		closeMobileChromeSheet();
+		closeCanvasOwnerDropdown();
+		closeTopbarMenu();
+		const defaultShell = chatCanvasScope?.querySelector('[data-chat-canvas-default-shell]');
+		const orgShell = chatCanvasScope?.querySelector('[data-chat-challenges-organizer-sidebar]');
+		const panel = getChatCanvasPanelEls().panel;
+		if (!(orgShell instanceof HTMLElement) || !(panel instanceof HTMLElement)) return;
+		if (defaultShell instanceof HTMLElement) defaultShell.hidden = true;
+		orgShell.hidden = false;
+		panel.hidden = false;
+		panel.setAttribute('aria-label', 'Challenge organizer tools');
+		setChatCanvasOpenBodyClass(true);
+		rebuildTopbarMenuDynamic();
+		syncTopbarPinnedCanvasButton();
 	}
 
 	function updateCanvasBodyLimitHint(inputEl, hintEl) {
@@ -9727,6 +10080,10 @@ export async function initChatPage(root, options = {}) {
 	function openChatCanvasPanel(row) {
 		closeMobileChromeSheet();
 		closeCanvasOwnerDropdown();
+		const defaultShellOpen = chatCanvasScope.querySelector('[data-chat-canvas-default-shell]');
+		const orgShellOpen = chatCanvasScope.querySelector('[data-chat-challenges-organizer-sidebar]');
+		if (defaultShellOpen instanceof HTMLElement) defaultShellOpen.hidden = false;
+		if (orgShellOpen instanceof HTMLElement) orgShellOpen.hidden = true;
 		activeCanvasRow = {
 			id: Number(row.id),
 			title: String(row.title || '').trim(),
@@ -9748,6 +10105,10 @@ export async function initChatPage(root, options = {}) {
 	}
 
 	closeChatCanvasPanel = ({ forgetOpenPreference = false } = {}) => {
+		if (isChallengesOrganizerSidebarOpen()) {
+			closeChallengesOrganizerSidebar();
+			return;
+		}
 		if (forgetOpenPreference && activeThreadId != null) {
 			forgetOpenCanvasForThread(activeThreadId);
 		}
@@ -9853,6 +10214,15 @@ export async function initChatPage(root, options = {}) {
 			bulkBtn.setAttribute('role', 'menuitem');
 			bulkBtn.textContent = 'Bulk actions';
 			dyn.appendChild(bulkBtn);
+		}
+		if (chatChallengesOrganizerEligible && activePseudoChannelSlug === 'challenges') {
+			const orgBtn = document.createElement('button');
+			orgBtn.type = 'button';
+			orgBtn.className = 'feed-card-menu-item';
+			orgBtn.dataset.chatChallengesOrganizerOpen = '';
+			orgBtn.setAttribute('role', 'menuitem');
+			orgBtn.textContent = 'Organizer tools';
+			dyn.appendChild(orgBtn);
 		}
 		if (isActiveThreadCanvasEligible() && chatViewerIsFounder) {
 			const createBtn = document.createElement('button');
@@ -10180,6 +10550,18 @@ export async function initChatPage(root, options = {}) {
 			runChatRefresh();
 			return;
 		}
+		if (t.closest('[data-chat-challenges-organizer-open]')) {
+			e.preventDefault();
+			closeTopbarMenu();
+			closeMobileChromeSheet();
+			openChallengesOrganizerSidebar();
+			return;
+		}
+		if (t.closest('[data-chat-challenges-organizer-close]')) {
+			e.preventDefault();
+			closeChallengesOrganizerSidebar();
+			return;
+		}
 		if (t.closest('[data-chat-canvas-create]')) {
 			e.preventDefault();
 			closeTopbarMenu();
@@ -10199,6 +10581,10 @@ export async function initChatPage(root, options = {}) {
 		}
 		if (t.closest('[data-chat-canvas-close]')) {
 			e.preventDefault();
+			if (isChallengesOrganizerSidebarOpen()) {
+				closeChallengesOrganizerSidebar();
+				return;
+			}
 			closeChatCanvasPanel({ forgetOpenPreference: true });
 			return;
 		}

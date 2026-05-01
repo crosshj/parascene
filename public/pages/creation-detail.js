@@ -1310,7 +1310,22 @@ async function loadCreation() {
 
 		const lineageFetchInit = { credentials: 'include', headers: { ...headers } };
 
-		const response = await fetch(`/api/create/images/${creationId}`, {
+		let challengeSubmitQs = '';
+		if (!isShareMountedView()) {
+			try {
+				const v = getAssetVersionParam();
+				const qs = getImportQuery(v);
+				const ctxMod = await import(`/shared/challengeSubmitContext.js${qs}`);
+				const ctx = ctxMod.readChallengeSubmitContext?.();
+				if (ctx?.threadId) {
+					challengeSubmitQs = `?challenge_submit_thread=${encodeURIComponent(String(ctx.threadId))}`;
+				}
+			} catch {
+				// ignore
+			}
+		}
+
+		const response = await fetch(`/api/create/images/${creationId}${challengeSubmitQs}`, {
 			credentials: 'include',
 			headers
 		});
@@ -1345,6 +1360,8 @@ async function loadCreation() {
 
 		const status = creation.status || 'completed';
 		const meta = creation.meta || null;
+		const challengeSubmissions = Array.isArray(meta?.challenge_submissions) ? meta.challenge_submissions : [];
+		const hasChallengeSubmission = challengeSubmissions.length > 0;
 		const mediaType = typeof creation.media_type === 'string'
 			? creation.media_type
 			: (meta && typeof meta.media_type === 'string' ? meta.media_type : 'image');
@@ -1561,7 +1578,13 @@ async function loadCreation() {
 		const queueForLaterLabel = isQueuedForLater ? 'Remove from queue' : 'Queue for later';
 		const hasDetailsForFailed = isFailed && (Object.keys(meta?.args || {}).length > 0 || (meta?.provider_error != null && typeof meta.provider_error === 'object'));
 		const actionsContext = {
-			showPublish: canEdit && !isPublished && status === 'completed' && !isFailed && !adminViewingUserDeleted,
+			showPublish:
+				canEdit &&
+				!isPublished &&
+				status === 'completed' &&
+				!isFailed &&
+				!adminViewingUserDeleted &&
+				!hasChallengeSubmission,
 			showEdit: canEdit && status === 'completed' && !isFailed && !adminViewingUserDeleted,
 			showUnpublish: canEdit && isPublished && !isFailed && !adminViewingUserDeleted,
 			showMutate: !isAdmin && status === 'completed' && !isFailed && Boolean(creation.url),
@@ -2169,17 +2192,101 @@ async function loadCreation() {
 			isFailed,
 			hideActions: isGroupCreation && !hasGroupPublishActions
 		};
-		const menuData = { isFailed, hasDetailsModalContent, isOwner, isAdmin, actionsContext };
+		const menuData = {
+			isFailed,
+			hasDetailsModalContent,
+			isOwner,
+			isAdmin,
+			actionsContext
+		};
+
+		const challengeTrophyIconSvg = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+	stroke-linejoin="round" aria-hidden="true">
+	<path d="M8 21h8"></path>
+	<path d="M12 17v4"></path>
+	<path d="M7 4h10v5a5 5 0 0 1-10 0V4z"></path>
+	<path d="M7 8H5a2 2 0 0 1-2-2V5h4"></path>
+	<path d="M17 8h2a2 2 0 0 0 2-2V5h-4"></path>
+</svg>`;
+		const challengesChannelHref = '/chat/c/challenges';
+		const challengeWithdrawBtnHtml =
+			isOwner && hasChallengeSubmission
+				? html`<button type="button" class="creation-detail-challenge-banner-withdraw" data-challenge-withdraw-btn>Remove from challenge</button>`
+				: '';
+		const challengeDetailBannerHtml = hasChallengeSubmission
+			? html`
+			<div class="creation-detail-challenge-banner" role="status">
+				<div class="creation-detail-challenge-banner-main">
+					<div class="creation-detail-challenge-banner-icon">${challengeTrophyIconSvg}</div>
+					<div class="creation-detail-challenge-banner-body">
+						<p class="creation-detail-challenge-banner-title">Challenge entry</p>
+						<p class="creation-detail-challenge-banner-detail">${isOwner && !isPublished
+							? 'This creation is entered in a challenge. Publishing is not available while it remains a challenge entry.'
+							: 'This creation was submitted to a community challenge.'}</p>
+					</div>
+				</div>
+				<div class="creation-detail-challenge-banner-actions">
+					${challengeWithdrawBtnHtml}
+					<a class="creation-detail-challenge-banner-link btn-outlined" href="${challengesChannelHref}">Open Challenges</a>
+				</div>
+			</div>`
+			: '';
+
+		const showChallengeSubmitCta = Boolean(creation.challenge_submit?.eligible);
+		const challengeSubmitCtaHtml = showChallengeSubmitCta
+			? html`
+			<div class="creation-detail-challenge-submit-cta">
+				<button type="button" class="creation-detail-challenge-submit-btn" data-challenge-submit-detail-btn>
+					<span class="creation-detail-challenge-submit-btn-icon" aria-hidden="true">${challengeTrophyIconSvg}</span>
+					<span class="creation-detail-challenge-submit-btn-label">Submit to challenge</span>
+				</button>
+				<p class="creation-detail-challenge-submit-hint">Enter this creation in the active challenge (Chat → Challenges).</p>
+			</div>`
+			: '';
+
+		const challengeSubmitModalHtml = showChallengeSubmitCta
+			? html`
+			<div class="creation-detail-challenge-submit-modal-overlay" data-challenge-submit-modal aria-hidden="true">
+				<div class="creation-detail-challenge-submit-modal" role="dialog" aria-modal="true"
+					aria-labelledby="challenge-submit-modal-title">
+					<div class="creation-detail-challenge-submit-modal-header">
+						<h3 id="challenge-submit-modal-title" class="creation-detail-challenge-submit-modal-heading">Submit to challenge?</h3>
+						<button type="button" class="creation-detail-challenge-submit-modal-dismiss" data-challenge-submit-modal-dismiss
+							aria-label="Close">
+							<span aria-hidden="true">×</span>
+						</button>
+					</div>
+					<div class="creation-detail-challenge-submit-modal-body">
+						<p class="creation-detail-challenge-submit-modal-section-label">Current challenge</p>
+						<h4 class="creation-detail-challenge-submit-modal-challenge-title" data-challenge-submit-modal-challenge-title></h4>
+						<div class="creation-detail-challenge-submit-modal-challenge-details user-text" data-challenge-submit-modal-challenge-details></div>
+						<p class="creation-detail-challenge-submit-modal-verify">Please confirm this creation fits the challenge theme and rules before you submit.</p>
+					</div>
+					<p class="creation-detail-challenge-submit-modal-error" data-challenge-submit-modal-error role="alert" hidden></p>
+					<div class="creation-detail-challenge-submit-modal-footer">
+						<button type="button" class="creation-detail-challenge-submit-modal-cancel" data-challenge-submit-modal-cancel>Cancel</button>
+						<button type="button" class="btn-primary creation-detail-challenge-submit-modal-confirm" data-challenge-submit-modal-confirm>
+							<span class="creation-detail-challenge-submit-modal-confirm-label">Submit</span>
+							<span class="creation-detail-challenge-submit-modal-confirm-spinner" aria-hidden="true"></span>
+						</button>
+					</div>
+				</div>
+			</div>`
+			: '';
+
 		if (!isCurrentLoad()) return;
 
 		detailContent.innerHTML = html`
 			<div class="creation-detail-title-row">
 				${(creation.nsfw ?? creation.meta?.nsfw) ? html`<span class="creation-detail-nsfw-tag">NSFW</span>` : ''}
+				${hasChallengeSubmission ? html`<span class="creation-detail-challenge-chip" title="Entered in a community challenge">${challengeTrophyIconSvg}<span class="creation-detail-challenge-chip-label">Challenge entry</span></span>` :
+				''}
 				<div class="creation-detail-title${isUntitled ? ' creation-detail-title-untitled' : ''}">${escapeHtml(displayTitle)}
 				</div>
 			</div>
-			<div class="creation-detail-title-byline creation-detail-title-byline-mobile">${escapeHtml(creatorHandle)}
-				${escapeHtml(mobileBylineText)}</div>
+			${hasChallengeSubmission && isOwner ? '' : html`<div class="creation-detail-title-byline creation-detail-title-byline-mobile">${escapeHtml(creatorHandle)}
+				${escapeHtml(mobileBylineText)}</div>`}
+			${challengeDetailBannerHtml}
 			${renderCreationDetailActionStrip(stripData, escapeHtml)}
 			${isGroupCreation && !hasGroupPublishActions ? '' : renderCreationDetailMoreMenu(menuData, escapeHtml)}
 			${groupLeadDescriptionHtml}
@@ -2200,6 +2307,7 @@ async function loadCreation() {
 			` : ''}
 			
 			${descriptionHtml}
+			${challengeSubmitCtaHtml}
 			<div class="creation-detail-meta-hidden" aria-hidden="true">
 				${hasDetailsModalContent ? `
 				<button class="feed-card-action" type="button" data-creation-details-link>
@@ -2291,6 +2399,7 @@ async function loadCreation() {
 					</div>
 				</div>
 			</div>
+			${challengeSubmitModalHtml}
 			<div class="creation-detail-lineage-modal-overlay" data-lineage-modal aria-hidden="true">
 				<div class="creation-detail-lineage-modal" role="dialog" aria-modal="true" aria-labelledby="lineage-modal-title">
 					<div class="creation-detail-lineage-modal-desktop-chrome">
@@ -3173,6 +3282,201 @@ async function loadCreation() {
 				followButtons.forEach((btn) => { btn.style.display = 'none'; });
 			});
 		});
+
+		const challengeSubmitModal = detailContent.querySelector('[data-challenge-submit-modal]');
+		const challengeSubmitModalDismiss = detailContent.querySelector('[data-challenge-submit-modal-dismiss]');
+		const challengeSubmitModalCancel = detailContent.querySelector('[data-challenge-submit-modal-cancel]');
+		const challengeSubmitModalConfirm = detailContent.querySelector('[data-challenge-submit-modal-confirm]');
+		const challengeSubmitModalError = detailContent.querySelector('[data-challenge-submit-modal-error]');
+		const challengeSubmitModalTitleSlot = detailContent.querySelector('[data-challenge-submit-modal-challenge-title]');
+		const challengeSubmitModalDetailsSlot = detailContent.querySelector('[data-challenge-submit-modal-challenge-details]');
+
+		let challengeSubmitModalEscapeHandler = null;
+
+		function populateChallengeSubmitModal() {
+			const ch = lastCreationMeta?.challenge_submit?.challenge;
+			const safeTitle =
+				typeof ch?.title === 'string' && ch.title.trim()
+					? ch.title.trim()
+					: 'Challenge';
+			if (challengeSubmitModalTitleSlot) {
+				challengeSubmitModalTitleSlot.textContent = safeTitle;
+			}
+			if (challengeSubmitModalDetailsSlot) {
+				const d = typeof ch?.details === 'string' ? ch.details.trim() : '';
+				if (d) {
+					challengeSubmitModalDetailsSlot.innerHTML = processUserText(d);
+					hydrateUserTextLinks(challengeSubmitModalDetailsSlot);
+				} else {
+					challengeSubmitModalDetailsSlot.innerHTML =
+						'<p class="creation-detail-challenge-submit-modal-no-details">No additional description was provided for this challenge.</p>';
+				}
+			}
+		}
+
+		function openChallengeSubmitModal() {
+			if (!(challengeSubmitModal instanceof HTMLElement)) return;
+			populateChallengeSubmitModal();
+			if (challengeSubmitModalError instanceof HTMLElement) {
+				challengeSubmitModalError.textContent = '';
+				challengeSubmitModalError.hidden = true;
+			}
+			if (challengeSubmitModalConfirm instanceof HTMLButtonElement) {
+				challengeSubmitModalConfirm.disabled = false;
+				challengeSubmitModalConfirm.classList.remove('is-loading');
+			}
+			challengeSubmitModal.classList.add('open');
+			challengeSubmitModal.removeAttribute('aria-hidden');
+			document.body.classList.add('modal-open');
+			challengeSubmitModalEscapeHandler = (e) => {
+				if (e.key !== 'Escape') return;
+				e.preventDefault();
+				closeChallengeSubmitModal();
+			};
+			document.addEventListener('keydown', challengeSubmitModalEscapeHandler);
+		}
+
+		function closeChallengeSubmitModal() {
+			if (!(challengeSubmitModal instanceof HTMLElement)) return;
+			challengeSubmitModal.classList.remove('open');
+			challengeSubmitModal.setAttribute('aria-hidden', 'true');
+			document.body.classList.remove('modal-open');
+			if (challengeSubmitModalEscapeHandler) {
+				document.removeEventListener('keydown', challengeSubmitModalEscapeHandler);
+				challengeSubmitModalEscapeHandler = null;
+			}
+			if (challengeSubmitModalConfirm instanceof HTMLButtonElement) {
+				challengeSubmitModalConfirm.disabled = false;
+				challengeSubmitModalConfirm.classList.remove('is-loading');
+			}
+		}
+
+		async function runChallengeSubmitFromModalConfirm() {
+			const btn = challengeSubmitModalConfirm;
+			if (!(btn instanceof HTMLButtonElement) || btn.disabled || btn.classList.contains('is-loading')) return;
+			if (challengeSubmitModalError instanceof HTMLElement) {
+				challengeSubmitModalError.textContent = '';
+				challengeSubmitModalError.hidden = true;
+			}
+			btn.disabled = true;
+			btn.classList.add('is-loading');
+			try {
+				const v = getAssetVersionParam();
+				const qs = getImportQuery(v);
+				const ctxMod = await import(`/shared/challengeSubmitContext.js${qs}`);
+				const fromApi = Number(lastCreationMeta?.challenge_submit?.thread_id);
+				const fromCtx = Number(ctxMod.readChallengeSubmitContext?.()?.threadId);
+				const tid =
+					Number.isFinite(fromApi) && fromApi > 0
+						? fromApi
+						: Number.isFinite(fromCtx) && fromCtx > 0
+							? fromCtx
+							: NaN;
+				if (!Number.isFinite(tid) || tid <= 0) {
+					const msg = 'Could not resolve the Challenges channel. Open Chat → Challenges and try again.';
+					if (challengeSubmitModalError instanceof HTMLElement) {
+						challengeSubmitModalError.textContent = msg;
+						challengeSubmitModalError.hidden = false;
+					} else {
+						showToast(msg);
+					}
+					return;
+				}
+				const res = await fetch(`/api/create/images/${creationId}/challenge-submit`, {
+					method: 'POST',
+					credentials: 'include',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ thread_id: tid })
+				});
+				const data = await res.json().catch(() => ({}));
+				if (!res.ok) {
+					const errMsg = data?.error || data?.message || 'Could not submit to challenge';
+					if (challengeSubmitModalError instanceof HTMLElement) {
+						challengeSubmitModalError.textContent = errMsg;
+						challengeSubmitModalError.hidden = false;
+					} else {
+						showToast(errMsg);
+					}
+					return;
+				}
+				closeChallengeSubmitModal();
+				showToast('Submitted to challenge');
+				loadCreation();
+			} catch (err) {
+				const msg = err?.message || 'Could not submit';
+				if (challengeSubmitModalError instanceof HTMLElement) {
+					challengeSubmitModalError.textContent = msg;
+					challengeSubmitModalError.hidden = false;
+				} else {
+					showToast(msg);
+				}
+			} finally {
+				if (btn instanceof HTMLButtonElement) {
+					btn.disabled = false;
+					btn.classList.remove('is-loading');
+				}
+			}
+		}
+
+		const challengeSubmitDetailBtn = detailContent.querySelector('[data-challenge-submit-detail-btn]');
+		if (challengeSubmitDetailBtn instanceof HTMLButtonElement) {
+			challengeSubmitDetailBtn.addEventListener('click', (e) => {
+				e.preventDefault();
+				openChallengeSubmitModal();
+			});
+		}
+
+		const challengeWithdrawBtn = detailContent.querySelector('[data-challenge-withdraw-btn]');
+		if (challengeWithdrawBtn instanceof HTMLButtonElement) {
+			challengeWithdrawBtn.addEventListener('click', async () => {
+				if (
+					!window.confirm(
+						'Remove this creation from the challenge? Your submission in the Challenges channel will be deleted.'
+					)
+				) {
+					return;
+				}
+				challengeWithdrawBtn.disabled = true;
+				try {
+					const res = await fetch(`/api/create/images/${creationId}/challenge-withdraw`, {
+						method: 'POST',
+						credentials: 'include',
+						headers: { 'Content-Type': 'application/json' }
+					});
+					const data = await res.json().catch(() => ({}));
+					if (!res.ok) {
+						showToast(data?.error || data?.message || 'Could not remove from challenge');
+						return;
+					}
+					showToast('Removed from challenge');
+					loadCreation();
+				} catch (err) {
+					showToast(err?.message || 'Could not remove from challenge');
+				} finally {
+					challengeWithdrawBtn.disabled = false;
+				}
+			});
+		}
+
+		if (challengeSubmitModalDismiss instanceof HTMLButtonElement) {
+			challengeSubmitModalDismiss.addEventListener('click', () => closeChallengeSubmitModal());
+		}
+
+		if (challengeSubmitModalCancel instanceof HTMLButtonElement) {
+			challengeSubmitModalCancel.addEventListener('click', () => closeChallengeSubmitModal());
+		}
+
+		if (challengeSubmitModalConfirm instanceof HTMLButtonElement) {
+			challengeSubmitModalConfirm.addEventListener('click', () => {
+				void runChallengeSubmitFromModalConfirm();
+			});
+		}
+
+		if (challengeSubmitModal instanceof HTMLElement) {
+			challengeSubmitModal.addEventListener('click', (e) => {
+				if (e.target === challengeSubmitModal) closeChallengeSubmitModal();
+			});
+		}
 
 		// Mobile more button popup: open/close and trigger same actions as meta row
 		const moreBtn = detailContent.querySelector('[data-creation-more-btn]');

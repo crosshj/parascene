@@ -1,0 +1,215 @@
+import { deriveChallengePhase } from "../../public/shared/challenges/model/phases.js";
+
+const MAX_NOTE_CHARS = 500;
+const MESSAGE_FETCH_LIMIT = 500;
+const RECENT_SELF_SCAN = 120;
+
+/**
+ * @param {unknown} body
+ */
+export function tryParseChallengeJsonBody(body) {
+	if (body == null) return null;
+	const s = String(body).trim();
+	if (!s || (!s.startsWith("{") && !s.startsWith("["))) return null;
+	try {
+		const o = JSON.parse(s);
+		return o && typeof o === "object" && !Array.isArray(o) ? o : null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * @param {{ body?: unknown, created_at?: string }[]} messagesAsc chronological
+ * @returns {object | null} latest challenge_config payload
+ */
+export function pickLatestChallengeConfigPayload(messagesAsc) {
+	let latest = null;
+	let latestTs = -1;
+	for (const m of messagesAsc) {
+		const p = tryParseChallengeJsonBody(m?.body);
+		if (!p || String(p.kind || "").trim() !== "challenge_config") continue;
+		const t = Date.parse(m.created_at || "");
+		if (Number.isFinite(t) && t >= latestTs) {
+			latestTs = t;
+			latest = p;
+		}
+	}
+	return latest;
+}
+
+/**
+ * @param {object | null | undefined} meta
+ * @param {number} threadId
+ * @param {string} challengeId
+ */
+export function metaHasChallengeSubmission(meta, threadId, challengeId) {
+	const arr = meta?.challenge_submissions;
+	if (!Array.isArray(arr)) return false;
+	const tid = Number(threadId);
+	const cid = String(challengeId || "").trim();
+	return arr.some(
+		(x) =>
+			x &&
+			typeof x === "object" &&
+			Number(x.thread_id) === tid &&
+			String(x.challenge_id || "").trim() === cid
+	);
+}
+
+/**
+ * @param {import("@supabase/supabase-js").SupabaseClient} sb
+ * @param {number} threadId
+ * @param {number} userId
+ */
+export async function isChatThreadMember(sb, threadId, userId) {
+	const { data, error } = await sb
+		.from("prsn_chat_members")
+		.select("user_id")
+		.eq("thread_id", threadId)
+		.eq("user_id", userId)
+		.maybeSingle();
+	if (error) throw error;
+	return !!data;
+}
+
+/**
+ * @param {import("@supabase/supabase-js").SupabaseClient} sb
+ * @param {number} threadId
+ */
+export async function fetchChatChannelThreadRow(sb, threadId) {
+	const { data, error } = await sb
+		.from("prsn_chat_threads")
+		.select("type, channel_slug, meta, dm_pair_key")
+		.eq("id", threadId)
+		.maybeSingle();
+	if (error) throw error;
+	return data || null;
+}
+
+/**
+ * Canonical #challenges channel thread id (global channel row).
+ * @param {import("@supabase/supabase-js").SupabaseClient} sb
+ * @returns {Promise<number | null>}
+ */
+export async function findChallengesChannelThreadId(sb) {
+	const { data, error } = await sb
+		.from("prsn_chat_threads")
+		.select("id")
+		.eq("type", "channel")
+		.eq("channel_slug", "challenges")
+		.maybeSingle();
+	if (error) throw error;
+	const id = Number(data?.id);
+	return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+/**
+ * @param {import("@supabase/supabase-js").SupabaseClient} sb
+ * @param {number} threadId
+ */
+export async function fetchThreadMessagesChronological(sb, threadId, limit = MESSAGE_FETCH_LIMIT) {
+	const { data, error } = await sb
+		.from("prsn_chat_messages")
+		.select("id, body, created_at, sender_id")
+		.eq("thread_id", threadId)
+		.order("created_at", { ascending: true })
+		.limit(limit);
+	if (error) throw error;
+	return Array.isArray(data) ? data : [];
+}
+
+/**
+ * @param {import("@supabase/supabase-js").SupabaseClient} sb
+ */
+export async function findDuplicateChallengeSubmissionMessage(sb, threadId, senderId, creationId, challengeId) {
+	const { data, error } = await sb
+		.from("prsn_chat_messages")
+		.select("body")
+		.eq("thread_id", threadId)
+		.eq("sender_id", senderId)
+		.order("created_at", { ascending: false })
+		.limit(RECENT_SELF_SCAN);
+	if (error) throw error;
+	const cid = String(challengeId || "").trim();
+	const idNum = Number(creationId);
+	for (const row of Array.isArray(data) ? data : []) {
+		const p = tryParseChallengeJsonBody(row?.body);
+		if (!p || String(p.kind || "").trim() !== "challenge_submission") continue;
+		const pc = p.challenge_id != null ? String(p.challenge_id).trim() : "";
+		const img = p.created_image_id != null ? Number(p.created_image_id) : NaN;
+		if (pc === cid && Number.isFinite(img) && img === idNum) return true;
+	}
+	return false;
+}
+
+/**
+ * @param {{
+ *   sb: import("@supabase/supabase-js").SupabaseClient,
+ *   userId: number,
+ *   ownerUserId: number,
+ *   creationId: number,
+ *   meta: object | null,
+ *   threadId: number,
+ *   note?: string,
+ *   nowMs?: number,
+ * }} args
+ * @returns {Promise<{ ok: true, challengeId: string, cfg: object, threadRow: object, noteTrim: string } | { ok: false, status: number, message: string }>}
+ */
+export async function validateChallengeSubmission({ sb, userId, ownerUserId, creationId, meta, threadId, note, nowMs }) {
+	const now = typeof nowMs === "number" ? nowMs : Date.now();
+	if (Number(userId) !== Number(ownerUserId)) {
+		return { ok: false, status: 403, message: "Only the creation owner can submit to a challenge." };
+	}
+	const tid = Number(threadId);
+	if (!Number.isFinite(tid) || tid <= 0) {
+		return { ok: false, status: 400, message: "Invalid challenge thread." };
+	}
+
+	let noteTrim = typeof note === "string" ? note.replace(/\u0000/g, "").trim() : "";
+	if (noteTrim.length > MAX_NOTE_CHARS) noteTrim = noteTrim.slice(0, MAX_NOTE_CHARS);
+
+	try {
+		const member = await isChatThreadMember(sb, tid, userId);
+		if (!member) {
+			return { ok: false, status: 403, message: "Join the Challenges channel before submitting." };
+		}
+
+		const threadRow = await fetchChatChannelThreadRow(sb, tid);
+		const slug = String(threadRow?.channel_slug || "").toLowerCase();
+		if (!threadRow || threadRow.type !== "channel" || slug !== "challenges") {
+			return { ok: false, status: 403, message: "Submissions must go to the Challenges channel thread." };
+		}
+
+		const messages = await fetchThreadMessagesChronological(sb, tid);
+		const cfg = pickLatestChallengeConfigPayload(messages);
+		const challengeId =
+			cfg && cfg.challenge_id != null ? String(cfg.challenge_id).trim() : "";
+		if (!challengeId) {
+			return { ok: false, status: 400, message: "No challenge is configured in this thread yet." };
+		}
+
+		const phase = deriveChallengePhase(cfg, now);
+		if (phase !== "submitting" && phase !== "submit_and_vote") {
+			return { ok: false, status: 400, message: "This challenge is not accepting submissions right now." };
+		}
+
+		if (metaHasChallengeSubmission(meta, tid, challengeId)) {
+			return {
+				ok: false,
+				status: 409,
+				message: "This creation is already entered in the current challenge."
+			};
+		}
+
+		const dupMsg = await findDuplicateChallengeSubmissionMessage(sb, tid, userId, creationId, challengeId);
+		if (dupMsg) {
+			return { ok: false, status: 409, message: "You already posted this entry to the challenge." };
+		}
+
+		return { ok: true, challengeId, cfg, threadRow, noteTrim };
+	} catch (err) {
+		const msg = err?.message || "Challenge validation failed";
+		return { ok: false, status: 500, message: msg };
+	}
+}

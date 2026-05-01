@@ -277,6 +277,10 @@
 	position: relative;
 }
 
+.route-media.route-media--challenge-pending .persona-mentions-set-avatar-btn {
+	z-index: 8;
+}
+
 .persona-mentions-set-avatar-btn {
 	position: absolute;
 	bottom: 8px;

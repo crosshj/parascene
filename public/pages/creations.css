@@ -2097,6 +2097,205 @@ body.creation-detail-page main>section:first-of-type {
 	flex-shrink: 0;
 }
 
+.creation-detail-challenge-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	flex-shrink: 0;
+	font-size: 0.65rem;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--accent);
+	border: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
+	background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+	padding: 5px 10px;
+	border-radius: 999px;
+	line-height: 1;
+}
+
+.creation-detail-challenge-chip svg {
+	display: block;
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+}
+
+.creation-detail-challenge-chip-label {
+	line-height: 1.2;
+}
+
+.creation-detail-challenge-banner {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 12px;
+	margin: 0 0 12px;
+	padding: 12px 14px;
+	border-radius: 10px;
+	border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+	background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+
+.creation-detail-challenge-banner-main {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	min-width: 0;
+}
+
+.creation-detail-challenge-banner-icon {
+	flex-shrink: 0;
+	color: var(--accent);
+	line-height: 0;
+}
+
+.creation-detail-challenge-banner-icon svg {
+	display: block;
+	width: 22px;
+	height: 22px;
+}
+
+.creation-detail-challenge-banner-body {
+	flex: 1;
+	min-width: 0;
+}
+
+.creation-detail-challenge-banner-title {
+	margin: 0 0 4px;
+	font-size: 0.8125rem;
+	font-weight: 600;
+	color: var(--text);
+}
+
+.creation-detail-challenge-banner-detail {
+	margin: 0;
+	font-size: 0.8125rem;
+	line-height: 1.45;
+	color: var(--text-muted);
+}
+
+.creation-detail-challenge-banner-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px 12px;
+	width: 100%;
+}
+
+.creation-detail-challenge-banner-withdraw {
+	margin: 0;
+	padding: 7px 10px;
+	font-size: 0.8125rem;
+	font-weight: 600;
+	line-height: 1.2;
+	color: var(--text-muted);
+	background: transparent;
+	border: none;
+	border-radius: 6px;
+	cursor: pointer;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+
+.creation-detail-challenge-banner-withdraw:hover {
+	color: var(--text);
+}
+
+.creation-detail-challenge-banner-withdraw:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+
+.creation-detail-challenge-banner-link.btn-outlined {
+	box-sizing: border-box;
+	font-size: 0.8125rem;
+	font-weight: 600;
+	line-height: 1.2;
+	padding: 7px 14px;
+	white-space: nowrap;
+	border-radius: 6px;
+}
+
+@supports (corner-shape: squircle) {
+
+	.creation-detail-challenge-banner-link.btn-outlined {
+		border-radius: 6px;
+		corner-shape: initial;
+	}
+}
+
+.creation-detail-challenge-submit-cta {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 8px;
+	margin: 0 0 20px;
+	max-width: 28rem;
+}
+
+.creation-detail-challenge-submit-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	margin: 0;
+	padding: 10px 16px;
+	border-radius: 10px;
+	border: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
+	background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+	color: var(--accent);
+	font-size: 0.875rem;
+	font-weight: 600;
+	line-height: 1.25;
+	cursor: pointer;
+	text-decoration: none;
+	box-sizing: border-box;
+	transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+	font: inherit;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.creation-detail-challenge-submit-btn-icon {
+	display: inline-flex;
+	line-height: 0;
+	color: var(--accent);
+}
+
+.creation-detail-challenge-submit-btn-icon svg {
+	display: block;
+	width: 18px;
+	height: 18px;
+}
+
+.creation-detail-challenge-submit-btn:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--accent) 17%, var(--surface));
+	border-color: color-mix(in srgb, var(--accent) 58%, transparent);
+	box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.creation-detail-challenge-submit-btn:active:not(:disabled) {
+	background: color-mix(in srgb, var(--accent) 22%, var(--surface));
+}
+
+.creation-detail-challenge-submit-btn:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
+
+.creation-detail-challenge-submit-btn:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+	box-shadow: none;
+}
+
+.creation-detail-challenge-submit-hint {
+	margin: 0;
+	font-size: 0.75rem;
+	line-height: 1.45;
+	color: var(--text-muted);
+}
+
 .creation-detail-title {
 	font-size: 1.5rem;
 	font-weight: 600;
