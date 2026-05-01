@@ -1519,15 +1519,16 @@ export async function initChatPage(root, options = {}) {
 
 	/**
 	 * Pseudo channels are rendered as top-anchored browse lanes.
-	 * Keep this true for feed/explore/creations/comments so first paint is always at top.
-	 * @param {'feed' | 'explore' | 'creations'} laneSlug
+	 * Keep this true for feed/explore/creations/comments/challenges so first paint is always at top.
+	 * @param {'feed' | 'explore' | 'creations' | 'comments' | 'challenges'} laneSlug
 	 */
 	function isNewestFirstBrowseLane(laneSlug) {
 		if (
 			laneSlug === 'feed' ||
 			laneSlug === 'explore' ||
 			laneSlug === 'creations' ||
-			laneSlug === 'comments'
+			laneSlug === 'comments' ||
+			laneSlug === 'challenges'
 		) {
 			return true;
 		}
@@ -8823,6 +8824,17 @@ export async function initChatPage(root, options = {}) {
 				});
 			}
 			messagesEl.setAttribute('aria-busy', 'true');
+		}
+		/* Mobile viewport-scroll lanes: snap window + pane to top as soon as we swap routes (before async fetch),
+		 * same issue as feed/explore/creations — otherwise the previous scroll position lingers under the skeleton. */
+		if (
+			activePseudoChannelSlug === 'feed' ||
+			activePseudoChannelSlug === 'explore' ||
+			activePseudoChannelSlug === 'creations' ||
+			activePseudoChannelSlug === 'comments' ||
+			activePseudoChannelSlug === 'challenges'
+		) {
+			scrollChatFeedPseudoChannelToTop();
 		}
 		if (errEl instanceof HTMLElement) {
 			errEl.hidden = true;

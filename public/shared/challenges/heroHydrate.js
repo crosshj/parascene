@@ -1,8 +1,16 @@
-import {
+/** Static `../userText.js` can stay cached without `?v=` while `challengesChannel.js` updates — missing exports at runtime. */
+const _qs = (() => {
+	const v =
+		typeof document !== 'undefined'
+			? document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || ''
+			: '';
+	return v ? `?v=${encodeURIComponent(v)}` : '';
+})();
+const {
 	fetchCreationEmbedPayload,
 	parseHeroCreationOrShareRef,
 	parseHeroDirectMediaUrl
-} from '../userText.js';
+} = await import(`../userText.js${_qs}`);
 
 /**
  * @param {object | null} data — GET /api/create/images/:id
