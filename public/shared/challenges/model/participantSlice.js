@@ -1,8 +1,7 @@
-import { parseIso } from './times.js';
-import { deriveChallengePhase } from './phases.js';
+import { parseIso, deriveChallengePhase } from './phases.js';
 import { extractChallengeEvents } from './extractEvents.js';
 import { CHALLENGE_SCORE_REACTION_KEYS } from '../constants.js';
-import { weightedScoreFromReactions } from '../scoring.js';
+import { weightedScoreFromReactions } from '../constants.js';
 
 /**
  * Latest config by message created_at (participant-focused thread view).

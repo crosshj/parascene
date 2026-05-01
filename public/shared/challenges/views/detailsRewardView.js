@@ -2,7 +2,7 @@ import {
 	challengeConfigHasStructuredRewardFields,
 	pickChallengeHeroImageUrl
 } from '../challengeAdmin.js';
-import { esc } from './htmlEscape.js';
+import { esc } from '../constants.js';
 
 /**
  * Hero image above description (`hero_image_url` on challenge_config).

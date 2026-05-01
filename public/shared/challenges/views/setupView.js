@@ -1,5 +1,5 @@
 import { challengePhaseDisplayLabel } from '../model/phases.js';
-import { esc } from './htmlEscape.js';
+import { esc } from '../constants.js';
 
 function bucketTitle(label, count) {
 	return `<h4 class="challenge-pane-setup-bucket-title">${esc(label)} <span class="challenge-pane-setup-count">(${count})</span></h4>`;

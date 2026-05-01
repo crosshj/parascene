@@ -1,5 +1,5 @@
 import { challengePhaseDisplayLabel } from '../model/phases.js';
-import { esc } from './htmlEscape.js';
+import { esc } from '../constants.js';
 
 /**
  * @param {{ title: string, phase: string, countdownHtml?: string }} vm

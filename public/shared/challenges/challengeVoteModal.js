@@ -3,7 +3,7 @@ import {
 	challengeReactionKeyToScore,
 	challengeScoreToReactionKey
 } from './constants.js';
-import { parseIso } from './model/times.js';
+import { parseIso } from './model/phases.js';
 
 /**
  * Set while the vote modal is open. Chat page `popstate` must call

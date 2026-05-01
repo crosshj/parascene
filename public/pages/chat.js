@@ -2,7 +2,16 @@
  * Standalone /chat/* thread UI (plain JS; not a custom element).
  */
 
-import { dismissChallengeVoteModalFromBrowserHistoryIfOpen } from '../shared/challenges/index.js';
+/**
+ * Bound after versioned dynamic import in initChatPage (see `?v=` on `challengeVoteModal.js`, same as other shared imports).
+ * @type {null | (() => boolean)}
+ */
+let dismissChallengeVoteModalFromBrowserHistoryIfOpenRef = null;
+
+function dismissChallengeVoteModalFromBrowserHistoryIfOpen() {
+	const fn = dismissChallengeVoteModalFromBrowserHistoryIfOpenRef;
+	return typeof fn === 'function' ? fn() : false;
+}
 
 const ENTER_SENDS = (() => {
 	try {
@@ -687,6 +696,9 @@ export async function initChatPage(root, options = {}) {
 
 	const v = getAssetVersionParam();
 	const qs = getImportQuery(v);
+	const challengeVoteModalMod = await import(`../shared/challenges/challengeVoteModal.js${qs}`);
+	dismissChallengeVoteModalFromBrowserHistoryIfOpenRef =
+		challengeVoteModalMod.dismissChallengeVoteModalFromBrowserHistoryIfOpen;
 	const {
 		sendIcon,
 		notifyIcon,
@@ -8002,7 +8014,7 @@ export async function initChatPage(root, options = {}) {
 				return typeof fn === 'function' ? fn(cls || '') : '';
 			};
 
-			const api = mod.mountChallengesPane({
+			const api = await mod.mountChallengesPane({
 				root: mountWrap,
 				threadId: tid,
 				viewerId: Number.isFinite(Number(chatViewerId)) ? Number(chatViewerId) : null,
@@ -8026,7 +8038,8 @@ export async function initChatPage(root, options = {}) {
 					patchMessage: (messageId, body) => patchChatMessageBody(messageId, body),
 					reload: async () => {
 						await loadChallengesChannelMessages();
-					}
+					},
+					gearIcon
 				});
 				challengesOrganizerSidebarTeardown = orgApi.destroy;
 			} else {

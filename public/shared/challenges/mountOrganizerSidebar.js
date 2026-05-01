@@ -1,4 +1,3 @@
-import { gearIcon } from '../../icons/svg-strings.js';
 import { buildChallengesChannelModel } from './model/buildChannelModel.js';
 import { summarizeLatestChallengeConfigs } from './model/organizerSummaries.js';
 import {
@@ -22,9 +21,15 @@ import {
  *   postMessage: (body: string) => Promise<{ ok: boolean, error?: string }>,
  *   patchMessage?: (messageId: number, body: string) => Promise<{ ok: boolean, error?: string }>,
  *   reload: () => Promise<void>,
- * }} opts
+ *   gearIcon: (className?: string) => string,
+ * }} opts — `gearIcon` must come from the same versioned `svg-strings` import as `chat.js` (avoid an extra uncached static import here).
  */
 export function mountChallengesOrganizerSidebar(host, opts) {
+	const gearIcon =
+		typeof opts.gearIcon === 'function'
+			? opts.gearIcon
+			: /** @param {string} [cls] */ (cls) =>
+					`<svg class="${String(cls || '').trim()}" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" /></svg>`;
 	let rowByChallengeId = new Map();
 
 	const closeModal = () => {

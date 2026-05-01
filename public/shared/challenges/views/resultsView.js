@@ -1,4 +1,4 @@
-import { esc } from './htmlEscape.js';
+import { esc } from '../constants.js';
 
 /**
  * @param {{ ranked: object[] }} vm
