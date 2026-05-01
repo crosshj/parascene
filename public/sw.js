@@ -8,10 +8,18 @@ const VERSION = (() => {
 	}
 })();
 const STATIC_CACHE = `${CACHE_PREFIX}-static-v${VERSION}`;
+/** Persistent bucket for all `/api/images/*` (survives SW `?v=` updates). LRU + last-access metadata. */
 const IMAGE_CACHE = `${CACHE_PREFIX}-images`;
+/**
+ * Versioned bucket for bundled public image URLs (`/images/`, image-like `/icons/*`).
+ * Resets when app/SW asset `?v=` changes (same lifecycle as STATIC_CACHE).
+ * Other public modules (JS/CSS under `/components/`, `/pages/`, …) use STATIC_CACHE, not this.
+ */
+const PUBLIC_IMAGE_CACHE = `${CACHE_PREFIX}-public-images-v${VERSION}`;
 const DATA_CACHE = `${CACHE_PREFIX}-data-v${VERSION}`;
 const META_CACHE = `${CACHE_PREFIX}-meta`;
 const IMAGE_MAX_ENTRIES = 300;
+const PUBLIC_IMAGE_MAX_ENTRIES = 120;
 const DATA_MAX_ENTRIES = 120;
 const STATIC_MAX_ENTRIES = 400;
 const IMAGE_MANAGED_IDLE_MAX_DAYS = 30;
@@ -57,8 +65,16 @@ function isImageRequest(request, url) {
 	return /\.(png|jpe?g|gif|webp|avif|svg)$/i.test(url.pathname);
 }
 
-function isManagedApiImagePath(pathname) {
-	return pathname.startsWith("/api/images/created/") || pathname.startsWith("/api/images/generic/");
+function isApiImagesPath(pathname) {
+	return String(pathname || "").startsWith("/api/images/");
+}
+
+/** Files shipped under public/ for URLs like /images/servers/*.png — not user-generated API images. */
+function isPublicBundledImagePath(pathname) {
+	const p = String(pathname || "");
+	if (p.startsWith("/images/")) return true;
+	if (p.startsWith("/icons/") && /\.(png|jpe?g|gif|webp|avif|svg)$/i.test(p)) return true;
+	return false;
 }
 
 function isCacheableStaticRequest(request, url) {
@@ -140,7 +156,7 @@ async function trimManagedImageCache() {
 	for (const req of keys) {
 		try {
 			const parsed = new URL(req.url);
-			if (!isManagedApiImagePath(parsed.pathname)) continue;
+			if (!isApiImagesPath(parsed.pathname)) continue;
 			const lastAccessed = (await getImageLastAccessedMs(req.url)) ?? 0;
 			managedEntries.push({ request: req, requestUrl: req.url, lastAccessed });
 		} catch {
@@ -165,7 +181,7 @@ async function trimManagedImageCache() {
 	for (const req of remainingKeys) {
 		try {
 			const parsed = new URL(req.url);
-			if (!isManagedApiImagePath(parsed.pathname)) continue;
+			if (!isApiImagesPath(parsed.pathname)) continue;
 			const lastAccessed = (await getImageLastAccessedMs(req.url)) ?? 0;
 			remainingManaged.push({ request: req, requestUrl: req.url, lastAccessed });
 		} catch {
@@ -257,7 +273,26 @@ async function checkFeedVersionAndInvalidateIfNeeded() {
 	}
 }
 
-async function cacheFirstImages(request) {
+function shouldPersistImageResponse(response, url) {
+	if (!response || !response.ok || response.status !== 200) return false;
+	// Avoid caching redirect chains as the final URL (e.g. /images/x.png → HTML welcome page).
+	if (response.redirected) return false;
+	const ct = (response.headers.get("content-type") || "").toLowerCase();
+	const pathname = url.pathname || "";
+	if (ct.includes("text/html") || ct.includes("application/json")) return false;
+	if (pathname.startsWith("/api/images/")) {
+		return true;
+	}
+	if (ct.startsWith("image/")) return true;
+	// Some hosts omit Content-Type; only persist extension-named URLs when not obviously text.
+	if (/\.(png|jpe?g|gif|webp|avif|svg)$/i.test(pathname)) {
+		return !ct.includes("text/");
+	}
+	return false;
+}
+
+/** Cache-first in persistent IMAGE_CACHE: `/api/images/*` (tracked) and incidental same-origin images. */
+async function cacheFirstPersistentImages(request) {
 	const cache = await caches.open(IMAGE_CACHE);
 	let parsedUrl = null;
 	try {
@@ -265,18 +300,31 @@ async function cacheFirstImages(request) {
 	} catch {
 		parsedUrl = null;
 	}
-	const trackAccess = parsedUrl != null && isManagedApiImagePath(parsedUrl.pathname);
+	const pathname = parsedUrl?.pathname || "";
+	const trackAccess = isApiImagesPath(pathname);
 	const cached = await cache.match(request);
 	if (cached) {
-		if (trackAccess) {
-			await touchImageLastAccessed(request.url);
-			await trimManagedImageCache();
+		const badCt = (cached.headers.get("content-type") || "").toLowerCase();
+		if (badCt.includes("text/html") || badCt.includes("application/json")) {
+			await cache.delete(request);
+		} else {
+			if (trackAccess) {
+				await touchImageLastAccessed(request.url);
+				await trimManagedImageCache();
+			}
+			return cached;
 		}
-		return cached;
 	}
 	const response = await fetch(request);
 	const isRangeRequest = request.headers?.has("range");
-	if (response && response.ok && response.status === 200 && !isRangeRequest) {
+	if (
+		response &&
+		response.ok &&
+		response.status === 200 &&
+		!isRangeRequest &&
+		parsedUrl &&
+		shouldPersistImageResponse(response, parsedUrl)
+	) {
 		await cache.put(request, response.clone());
 		if (trackAccess) {
 			await touchImageLastAccessed(request.url);
@@ -284,6 +332,43 @@ async function cacheFirstImages(request) {
 		} else {
 			await trimCacheEntries(IMAGE_CACHE, IMAGE_MAX_ENTRIES);
 		}
+	}
+	return response;
+}
+
+async function cacheFirstPublicImages(request) {
+	let parsedUrl = null;
+	try {
+		parsedUrl = new URL(request.url);
+	} catch {
+		parsedUrl = null;
+	}
+	const pathname = parsedUrl?.pathname || "";
+	const cache = await caches.open(PUBLIC_IMAGE_CACHE);
+	const legacy = await caches.open(IMAGE_CACHE);
+	await legacy.delete(request);
+
+	const cached = await cache.match(request);
+	if (cached) {
+		const badCt = (cached.headers.get("content-type") || "").toLowerCase();
+		if (badCt.includes("text/html") || badCt.includes("application/json")) {
+			await cache.delete(request);
+		} else {
+			return cached;
+		}
+	}
+	const response = await fetch(request);
+	const isRangeRequest = request.headers?.has("range");
+	if (
+		response &&
+		response.ok &&
+		response.status === 200 &&
+		!isRangeRequest &&
+		parsedUrl &&
+		shouldPersistImageResponse(response, parsedUrl)
+	) {
+		await cache.put(request, response.clone());
+		await trimCacheEntries(PUBLIC_IMAGE_CACHE, PUBLIC_IMAGE_MAX_ENTRIES);
 	}
 	return response;
 }
@@ -378,6 +463,7 @@ async function invalidateByMessage(msg) {
 	if (msg.all === true) {
 		await caches.delete(DATA_CACHE);
 		await caches.delete(IMAGE_CACHE);
+		await caches.delete(PUBLIC_IMAGE_CACHE);
 		await clearImageAccessMetadata();
 		dataRevalidateAtByKey.clear();
 		return;
@@ -399,6 +485,7 @@ async function invalidateByMessage(msg) {
 			// Ignore invalid urls.
 		}
 	}
+	// API-backed images only; bundled `/images/` stay on versioned PUBLIC_IMAGE_CACHE until next SW ?v=.
 	if (tags.includes("images")) {
 		await caches.delete(IMAGE_CACHE);
 		await clearImageAccessMetadata();
@@ -460,7 +547,11 @@ self.addEventListener("fetch", (event) => {
 		return;
 	}
 	if (isImageRequest(request, url)) {
-		event.respondWith(cacheFirstImages(request));
+		event.respondWith(
+			isPublicBundledImagePath(url.pathname)
+				? cacheFirstPublicImages(request)
+				: cacheFirstPersistentImages(request)
+		);
 		return;
 	}
 	if (isCacheableStaticRequest(request, url)) {

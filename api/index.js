@@ -131,6 +131,16 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 
+// Server sidebar icons live under public/images. On Vercel the rewrite sends many URLs to this handler;
+// without this, /images/* falls through to the HTML catch-all and <img> gets HTML (broken icons).
+app.use(
+	"/images",
+	express.static(path.join(staticDir, "images"), {
+		index: false,
+		fallthrough: false
+	})
+);
+
 // Ensure every browser/client gets a stable first-party ID for analytics linkage.
 app.use(clientIdMiddleware);
 

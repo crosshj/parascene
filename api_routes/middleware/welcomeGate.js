@@ -2,6 +2,10 @@ import { computeWelcome } from "../utils/welcome.js";
 
 /** Paths that are allowed even when welcome is required (no redirect/block). */
 const ALLOWED_PATHS = [
+	// Bundled static icons (server sidebar avatars, etc.) — must not redirect or img/CSS breaks with HTML.
+	{ pathPrefix: "/images/", method: "GET" },
+	{ pathPrefix: "/icons/", method: "GET" },
+	{ pathPrefix: "/audio/", method: "GET" },
 	{ path: "/welcome", method: "GET" },
 	{ path: "/api/profile", methods: ["GET", "PUT", "POST", "PATCH"] },
 	{ path: "/api/profile/api-key", methods: ["POST", "DELETE"] },

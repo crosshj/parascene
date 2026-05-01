@@ -55,6 +55,74 @@ function clearLogoutSideEffects() {
 	}
 }
 
+async function hardResetClientCaches() {
+	// Ask active SW to clear its own named caches and metadata first.
+	try {
+		if (navigator.serviceWorker?.controller) {
+			navigator.serviceWorker.controller.postMessage({
+				type: 'PRSN_SW_INVALIDATE',
+				all: true
+			});
+		}
+	} catch {
+		// ignore
+	}
+
+	// Clear Cache Storage buckets.
+	try {
+		const keys = await caches.keys();
+		await Promise.all(keys.map((key) => caches.delete(key)));
+	} catch {
+		// ignore
+	}
+
+	// Unregister service workers so next load starts clean.
+	try {
+		if (navigator.serviceWorker?.getRegistrations) {
+			const regs = await navigator.serviceWorker.getRegistrations();
+			await Promise.all(regs.map((reg) => reg.unregister()));
+		}
+	} catch {
+		// ignore
+	}
+
+	// Best-effort local/session state reset.
+	try {
+		window.localStorage?.clear();
+	} catch {
+		// ignore
+	}
+	try {
+		window.sessionStorage?.clear();
+	} catch {
+		// ignore
+	}
+
+	// Best-effort IndexedDB wipe for debugging sanity checks.
+	try {
+		if (window.indexedDB?.databases && typeof window.indexedDB.deleteDatabase === 'function') {
+			const dbs = await window.indexedDB.databases();
+			await Promise.all(
+				(dbs || [])
+					.map((db) => (typeof db?.name === 'string' ? db.name : ''))
+					.filter(Boolean)
+					.map((name) => new Promise((resolve) => {
+						try {
+							const req = window.indexedDB.deleteDatabase(name);
+							req.onsuccess = () => resolve();
+							req.onerror = () => resolve();
+							req.onblocked = () => resolve();
+						} catch {
+							resolve();
+						}
+					}))
+			);
+		}
+	} catch {
+		// ignore
+	}
+}
+
 function resolveMenuAnchor(detailAnchor) {
 	if (detailAnchor instanceof Element) return detailAnchor;
 	const navBtn = document.querySelector('app-navigation .profile-button');
@@ -197,6 +265,10 @@ class AppAccountMenu extends HTMLElement {
 					<span class="account-menu-label">Help</span>
 				</a>
 				<div class="account-menu-divider" aria-hidden="true"></div>
+				<button type="button" class="account-menu-item" data-action="clear-cache" role="menuitem">
+					${gearIcon('account-menu-svg')}
+					<span class="account-menu-label">Clear cache</span>
+				</button>
 				<button type="button" class="account-menu-item danger" data-action="logout" role="menuitem">
 					${logOutIcon('account-menu-svg')}
 					<span class="account-menu-label">Log Out</span>
@@ -266,6 +338,19 @@ class AppAccountMenu extends HTMLElement {
 			form.action = '/logout';
 			document.body.appendChild(form);
 			form.submit();
+			return;
+		}
+		if (action === 'clear-cache') {
+			e.preventDefault();
+			this.close();
+			const ok = window.confirm(
+				'Clear all local caches and storage, unregister service workers, and reload now?'
+			);
+			if (!ok) return;
+			await hardResetClientCaches();
+			const current = new URL(window.location.href);
+			current.searchParams.set('cache_reset', String(Date.now()));
+			window.location.replace(current.toString());
 		}
 	}
 
