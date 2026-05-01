@@ -133,6 +133,23 @@ export function createChallengeVoteModal(opts) {
 	let mediaSwipeCleanup = /** @type {null | (() => void)} */ (null);
 	/** Skip replacing media when the same creation is already shown (prevents layout flicker). */
 	let lastVoteMediaCreationId = /** @type {number | null} */ (null);
+	/** `pushState` layer while modal is open — browser back should close modal. */
+	let voteModalHistoryPushed = false;
+	let voteModalPopStateInstalled = false;
+	/** Ignore the next `popstate` from programmatic `history.back()` after closing/replacing the modal. */
+	let voteModalPopstateSuppress = 0;
+
+	function ensureVoteModalPopStateListener() {
+		if (voteModalPopStateInstalled) return;
+		voteModalPopStateInstalled = true;
+		window.addEventListener('popstate', () => {
+			if (voteModalPopstateSuppress > 0) {
+				voteModalPopstateSuppress -= 1;
+				return;
+			}
+			if (overlay) destroy(true);
+		});
+	}
 
 	function cancelVoteCommitDebounce() {
 		if (voteCommitTimer != null) {
@@ -194,12 +211,19 @@ export function createChallengeVoteModal(opts) {
 		}, VOTE_COMMIT_DEBOUNCE_MS);
 	}
 
-	function destroy() {
+	/**
+	 * @param {boolean} [isFromPopState] — true when `history` already moved back (do not call `history.back()`).
+	 */
+	function destroy(isFromPopState = false) {
 		flushPendingVoteCommit();
 		sliderBusy = false;
 		heatNeedsSeedFromRow = true;
 		lastPaintedHeatScore = 0;
 		pendingHeatScore = null;
+
+		const shouldHistoryBack = voteModalHistoryPushed && !isFromPopState;
+		voteModalHistoryPushed = false;
+
 		document.removeEventListener('keydown', onVoteModalDocumentKeydown, true);
 		if (typeof heatDragCleanup === 'function') {
 			try {
@@ -217,12 +241,18 @@ export function createChallengeVoteModal(opts) {
 			}
 			mediaSwipeCleanup = null;
 		}
-		if (!overlay) return;
-		overlay.remove();
-		overlay = null;
-		prefetchKeepAlive.length = 0;
-		document.body.classList.remove('modal-open');
-		document.documentElement.classList.remove('modal-open');
+		if (overlay) {
+			overlay.remove();
+			overlay = null;
+			prefetchKeepAlive.length = 0;
+			document.body.classList.remove('modal-open');
+			document.documentElement.classList.remove('modal-open');
+		}
+
+		if (shouldHistoryBack) {
+			voteModalPopstateSuppress += 1;
+			history.back();
+		}
 	}
 
 	/**
@@ -235,7 +265,7 @@ export function createChallengeVoteModal(opts) {
 		if (e.key === 'Escape') {
 			e.preventDefault();
 			e.stopPropagation();
-			destroy();
+			destroy(false);
 			return;
 		}
 
@@ -775,7 +805,7 @@ export function createChallengeVoteModal(opts) {
 
 		const dismiss = overlay.querySelector('[data-challenge-vote-dismiss]');
 		if (dismiss instanceof HTMLButtonElement) {
-			dismiss.addEventListener('click', () => destroy());
+			dismiss.addEventListener('click', () => destroy(false));
 		}
 
 		const prevBtn = overlay.querySelector('[data-challenge-vote-prev]');
@@ -864,6 +894,12 @@ export function createChallengeVoteModal(opts) {
 			if (panelFocus instanceof HTMLElement) {
 				requestAnimationFrame(() => panelFocus.focus());
 			}
+
+			ensureVoteModalPopStateListener();
+			voteModalHistoryPushed = true;
+			const prevState =
+				typeof history.state === 'object' && history.state !== null ? history.state : {};
+			history.pushState({ ...prevState, psChallengeVoteModal: 1 }, '', window.location.href);
 		},
 		destroy
 	};
