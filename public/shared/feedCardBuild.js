@@ -1,14 +1,46 @@
 /**
  * Feed card DOM builders shared by `app-route-feed` and chat `#feed` pseudo-channel.
+ *
+ * This file is always loaded via `import(\`.../feedCardBuild.js${qs}\`)` from the feed route, but
+ * static `import './sibling.js'` would still fetch siblings **without** `?v=` and can serve stale
+ * chunks (missing exports). All direct siblings are loaded below with the same asset-version query.
  */
-import { buildBlogPostPublicPath, BLOG_CAMPAIGN_INTERNAL } from './blogCampaignPath.js';
-import { formatDateTime, formatRelativeTime } from './datetime.js';
-import { initLikeButton } from './likes.js';
-import { getAvatarColor } from './avatar.js';
-import { buildProfilePath } from './profileLinks.js';
-import { getHelpHref } from './helpUrl.js';
-import { challengeEnteredBadgeHtml, publishedBadgeHtml } from './creationBadges.js';
-import { creationMetaHasChallengeSubmission } from './challengeSubmitMeta.js';
+const _qs = (() => {
+	const v =
+		typeof document !== 'undefined'
+			? document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || ''
+			: '';
+	return v ? `?v=${encodeURIComponent(v)}` : '';
+})();
+
+const [
+	blogCampaignPathMod,
+	datetimeMod,
+	likesMod,
+	avatarMod,
+	profileLinksMod,
+	helpUrlMod,
+	challengeSubmitMetaMod,
+	creationBadgesMod,
+] = await Promise.all([
+	import(`./blogCampaignPath.js${_qs}`),
+	import(`./datetime.js${_qs}`),
+	import(`./likes.js${_qs}`),
+	import(`./avatar.js${_qs}`),
+	import(`./profileLinks.js${_qs}`),
+	import(`./helpUrl.js${_qs}`),
+	import(`./challengeSubmitMeta.js${_qs}`),
+	import(`./creationBadges.js${_qs}`),
+]);
+
+const { buildBlogPostPublicPath, BLOG_CAMPAIGN_INTERNAL } = blogCampaignPathMod;
+const { formatDateTime, formatRelativeTime } = datetimeMod;
+const { initLikeButton } = likesMod;
+const { getAvatarColor } = avatarMod;
+const { buildProfilePath } = profileLinksMod;
+const { getHelpHref } = helpUrlMod;
+const { creationMetaHasChallengeSubmission } = challengeSubmitMetaMod;
+const { challengeEnteredBadgeHtml, publishedBadgeHtml } = creationBadgesMod;
 
 const html = String.raw;
 
