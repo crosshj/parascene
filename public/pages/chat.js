@@ -2,6 +2,8 @@
  * Standalone /chat/* thread UI (plain JS; not a custom element).
  */
 
+import { dismissChallengeVoteModalFromBrowserHistoryIfOpen } from '../shared/challenges/challengeVoteModal.js';
+
 const ENTER_SENDS = (() => {
 	try {
 		return window.matchMedia('(hover: hover) and (pointer: fine)').matches;
@@ -5443,6 +5445,9 @@ export async function initChatPage(root, options = {}) {
 		document.addEventListener('click', chatSidebarNotificationsOutsideClickHandler);
 
 		chatSidebarPopstateHandler = () => {
+			if (dismissChallengeVoteModalFromBrowserHistoryIfOpen()) {
+				return;
+			}
 			if (closeChatInlineImageLightboxFromPopstateIfOpen()) {
 				return;
 			}
@@ -11068,6 +11073,9 @@ export async function initChatPage(root, options = {}) {
 		setMobileSidebarMode(shouldShowMobileSidebarFromLocation());
 	});
 	window.addEventListener('popstate', () => {
+		if (dismissChallengeVoteModalFromBrowserHistoryIfOpen()) {
+			return;
+		}
 		if (closeChatInlineImageLightboxFromPopstateIfOpen()) {
 			return;
 		}
