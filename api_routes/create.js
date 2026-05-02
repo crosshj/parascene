@@ -20,6 +20,7 @@ import { creationRowIsVideo } from "./utils/vynlyShareFromCreation.js";
 import { broadcastRoomDirty, broadcastUserInboxDirty } from "./utils/realtimeBroadcast.js";
 import { insertNotificationsForChatMentions } from "./utils/chatMentionNotifications.js";
 import {
+	canViewUnpublishedCreationViaChallengeMessage,
 	fetchChatChannelThreadRow,
 	findChallengesChannelThreadId,
 	validateChallengeSubmission
@@ -190,7 +191,26 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			}
 
-			if (!isOwner && !isPublished && !isAdmin && !lineageOk && !creationDelegationOk) {
+			let challengeMessageOk = false;
+			const challengeMsgRawImg = req.query?.challenge_message_id ?? req.query?.challenge_msg;
+			const challengeMidImg =
+				typeof challengeMsgRawImg === "string" ? parseInt(challengeMsgRawImg, 10) : Number(challengeMsgRawImg);
+			if (!isOwner && !isPublished && !isAdmin && userId && Number.isFinite(challengeMidImg) && challengeMidImg > 0) {
+				const sbCh = getSupabaseServiceClient();
+				if (sbCh) {
+					try {
+						challengeMessageOk = await canViewUnpublishedCreationViaChallengeMessage(sbCh, {
+							ancestorRow: image,
+							challengeMessageId: challengeMidImg,
+							viewerUserId: userId
+						});
+					} catch {
+						challengeMessageOk = false;
+					}
+				}
+			}
+
+			if (!isOwner && !isPublished && !isAdmin && !lineageOk && !creationDelegationOk && !challengeMessageOk) {
 				return res.status(403).json({ error: "Access denied" });
 			}
 
@@ -294,7 +314,33 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			}
 
-			if (!isOwner && !isPublished && !isAdmin && !lineageOkVideo && !creationDelegationOkVideo) {
+			let challengeMessageOkVideo = false;
+			const challengeMsgRawVid = req.query?.challenge_message_id ?? req.query?.challenge_msg;
+			const challengeMidVid =
+				typeof challengeMsgRawVid === "string" ? parseInt(challengeMsgRawVid, 10) : Number(challengeMsgRawVid);
+			if (!isOwner && !isPublished && !isAdmin && userId && Number.isFinite(challengeMidVid) && challengeMidVid > 0) {
+				const sbVid = getSupabaseServiceClient();
+				if (sbVid) {
+					try {
+						challengeMessageOkVideo = await canViewUnpublishedCreationViaChallengeMessage(sbVid, {
+							ancestorRow: image,
+							challengeMessageId: challengeMidVid,
+							viewerUserId: userId
+						});
+					} catch {
+						challengeMessageOkVideo = false;
+					}
+				}
+			}
+
+			if (
+				!isOwner &&
+				!isPublished &&
+				!isAdmin &&
+				!lineageOkVideo &&
+				!creationDelegationOkVideo &&
+				!challengeMessageOkVideo
+			) {
 				return res.status(403).json({ error: "Access denied" });
 			}
 
@@ -675,6 +721,21 @@ export default function createCreateRoutes({ queries, storage }) {
 		} catch {
 			const sep = s.includes("?") ? "&" : "?";
 			return `${s}${sep}lineage_of=${encodeURIComponent(String(lineageParentId))}`;
+		}
+	}
+
+	/** Append challenge_message_id for delegated reads of unpublished challenge entries. */
+	function appendChallengeMessageIdToMediaUrl(url, challengeMessageId) {
+		if (!url || !challengeMessageId) return url;
+		const s = String(url);
+		if (!s.includes("/api/images/created/") && !s.includes("/api/videos/created/")) return url;
+		try {
+			const parsed = new URL(url, "http://localhost");
+			parsed.searchParams.set("challenge_message_id", String(challengeMessageId));
+			return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+		} catch {
+			const sep = s.includes("?") ? "&" : "?";
+			return `${s}${sep}challenge_message_id=${encodeURIComponent(String(challengeMessageId))}`;
 		}
 	}
 
@@ -2184,6 +2245,7 @@ export default function createCreateRoutes({ queries, storage }) {
 
 			let shareAccess = null;
 			let lineageMediaParentId = null;
+			let challengeMediaMessageId = null;
 
 			// If not found as owner, check if it exists and is either published or user is admin
 			if (!image) {
@@ -2222,6 +2284,31 @@ export default function createCreateRoutes({ queries, storage }) {
 							if (ok) {
 								image = anyImage;
 								lineageMediaParentId = lineagePid;
+							}
+						}
+					}
+
+					// Blind-vote submissions are unpublished — allow viewers in #challenges when message id proves entry.
+					if (!image && !isUnavailable) {
+						const cmRaw = req.query?.challenge_message_id ?? req.query?.challenge_msg;
+						const chMid =
+							typeof cmRaw === "string" ? parseInt(cmRaw, 10) : Number(cmRaw);
+						if (Number.isFinite(chMid) && chMid > 0) {
+							const sbVote = getSupabaseServiceClient();
+							if (sbVote) {
+								try {
+									const voteOk = await canViewUnpublishedCreationViaChallengeMessage(sbVote, {
+										ancestorRow: anyImage,
+										challengeMessageId: chMid,
+										viewerUserId: user.id
+									});
+									if (voteOk) {
+										image = anyImage;
+										challengeMediaMessageId = chMid;
+									}
+								} catch {
+									// ignore
+								}
 							}
 						}
 					}
@@ -2302,8 +2389,18 @@ export default function createCreateRoutes({ queries, storage }) {
 				!shareAccess &&
 				status === "completed";
 
+			const appendChallengeToMediaUrls =
+				challengeMediaMessageId != null &&
+				!isPublished &&
+				!isOwner &&
+				!shareAccess &&
+				status === "completed";
+
 			if (url && appendLineageToMediaUrls) {
 				url = appendLineageOfToMediaUrl(url, lineageMediaParentId);
+			}
+			if (url && appendChallengeToMediaUrls) {
+				url = appendChallengeMessageIdToMediaUrl(url, challengeMediaMessageId);
 			}
 
 			const mediaType = typeof meta?.media_type === "string" ? meta.media_type : "image";
@@ -2321,6 +2418,9 @@ export default function createCreateRoutes({ queries, storage }) {
 			}
 			if (videoUrl && appendLineageToMediaUrls) {
 				videoUrl = appendLineageOfToMediaUrl(videoUrl, lineageMediaParentId);
+			}
+			if (videoUrl && appendChallengeToMediaUrls) {
+				videoUrl = appendChallengeMessageIdToMediaUrl(videoUrl, challengeMediaMessageId);
 			}
 			const sourceImageUrl =
 				typeof meta?.source_image_url === "string" && meta.source_image_url

@@ -120,7 +120,54 @@ export async function fetchThreadMessagesChronological(sb, threadId, limit = MES
 }
 
 /**
+ * Viewer may load another user's unpublished challenge entry when it is referenced by an existing
+ * `challenge_submission` chat message in #challenges and the viewer is a thread member (same gate as submissions).
+ *
  * @param {import("@supabase/supabase-js").SupabaseClient} sb
+ * @param {{
+ *   ancestorRow: { id?: unknown, unavailable_at?: unknown },
+ *   challengeMessageId: number,
+ *   viewerUserId: number,
+ * }} args
+ */
+export async function canViewUnpublishedCreationViaChallengeMessage(sb, args) {
+	const ancestorRow = args?.ancestorRow;
+	const mid = Number(args?.challengeMessageId);
+	const vid = Number(args?.viewerUserId);
+	if (!ancestorRow || !Number.isFinite(mid) || mid <= 0 || !Number.isFinite(vid) || vid <= 0) {
+		return false;
+	}
+	if (ancestorRow.unavailable_at != null && ancestorRow.unavailable_at !== "") return false;
+
+	const { data: row, error } = await sb
+		.from("prsn_chat_messages")
+		.select("id, thread_id, body")
+		.eq("id", mid)
+		.maybeSingle();
+	if (error) throw error;
+	if (!row) return false;
+
+	const p = tryParseChallengeJsonBody(row.body);
+	if (!p || String(p.kind || "").trim() !== "challenge_submission") return false;
+	const imgFromMsg = p.created_image_id != null ? Number(p.created_image_id) : NaN;
+	if (!Number.isFinite(imgFromMsg) || imgFromMsg !== Number(ancestorRow.id)) return false;
+
+	const tid = Number(row.thread_id);
+	if (!Number.isFinite(tid) || tid <= 0) return false;
+
+	const threadRow = await fetchChatChannelThreadRow(sb, tid);
+	const slug = String(threadRow?.channel_slug || "").toLowerCase();
+	if (!threadRow || threadRow.type !== "channel" || slug !== "challenges") return false;
+
+	return isChatThreadMember(sb, tid, vid);
+}
+
+/**
+ * @param {import("@supabase/supabase-js").SupabaseClient} sb
+ * @param {number} threadId
+ * @param {number} senderId
+ * @param {number} creationId
+ * @param {string} challengeId
  */
 export async function findDuplicateChallengeSubmissionMessage(sb, threadId, senderId, creationId, challengeId) {
 	const { data, error } = await sb

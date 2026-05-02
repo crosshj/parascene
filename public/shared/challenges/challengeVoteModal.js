@@ -342,32 +342,57 @@ export function createChallengeVoteModal(opts) {
 		}
 	}
 
-	async function fetchCreation(creationId) {
+	function voteFetchCacheKey(creationId, challengeMessageId) {
 		const id = Number(creationId);
-		if (!Number.isFinite(id) || id <= 0) return null;
-		if (cacheByCreationId.has(id)) return cacheByCreationId.get(id);
-		const existing = creationFetchInflight.get(id);
+		const mid =
+			challengeMessageId != null &&
+			Number.isFinite(Number(challengeMessageId)) &&
+			Number(challengeMessageId) > 0
+				? Number(challengeMessageId)
+				: 0;
+		if (!Number.isFinite(id) || id <= 0) return '';
+		return `${id}:${mid}`;
+	}
+
+	function challengeMessageQueryParam(row) {
+		const mid = row?.messageId != null ? Number(row.messageId) : NaN;
+		return Number.isFinite(mid) && mid > 0 ? mid : null;
+	}
+
+	async function fetchCreation(creationId, challengeMessageId) {
+		const id = Number(creationId);
+		const ck = voteFetchCacheKey(id, challengeMessageId);
+		if (!ck) return null;
+		if (cacheByCreationId.has(ck)) return cacheByCreationId.get(ck);
+		const existing = creationFetchInflight.get(ck);
 		if (existing) return existing;
+
+		const qs =
+			challengeMessageId != null &&
+			Number.isFinite(Number(challengeMessageId)) &&
+			Number(challengeMessageId) > 0
+				? `?challenge_message_id=${encodeURIComponent(String(Number(challengeMessageId)))}`
+				: '';
 
 		const p = (async () => {
 			try {
-				const res = await fetch(`/api/create/images/${encodeURIComponent(String(id))}`, {
+				const res = await fetch(`/api/create/images/${encodeURIComponent(String(id))}${qs}`, {
 					credentials: 'include'
 				});
 				const data = res.ok ? await res.json().catch(() => null) : null;
-				cacheByCreationId.set(id, data);
+				cacheByCreationId.set(ck, data);
 				return data;
 			} catch {
-				cacheByCreationId.set(id, null);
+				cacheByCreationId.set(ck, null);
 				return null;
 			} finally {
-				if (creationFetchInflight.get(id) === p) {
-					creationFetchInflight.delete(id);
+				if (creationFetchInflight.get(ck) === p) {
+					creationFetchInflight.delete(ck);
 				}
 			}
 		})();
 
-		creationFetchInflight.set(id, p);
+		creationFetchInflight.set(ck, p);
 		return p;
 	}
 
@@ -425,7 +450,8 @@ export function createChallengeVoteModal(opts) {
 		if (!overlay?.isConnected) return;
 		const cid = row.creationId != null ? Number(row.creationId) : NaN;
 		if (!Number.isFinite(cid) || cid <= 0) return;
-		const c = await fetchCreation(cid);
+		const msgId = challengeMessageQueryParam(row);
+		const c = await fetchCreation(cid, msgId);
 		if (!overlay?.isConnected || !c || c._error) return;
 		warmCreationMediaInBrowser(cid, c);
 	}
@@ -502,7 +528,9 @@ export function createChallengeVoteModal(opts) {
 			return;
 		}
 
-		const cached = cacheByCreationId.has(cid) ? cacheByCreationId.get(cid) : undefined;
+		const msgId = challengeMessageQueryParam(row);
+		const fetchKey = voteFetchCacheKey(cid, msgId);
+		const cached = fetchKey && cacheByCreationId.has(fetchKey) ? cacheByCreationId.get(fetchKey) : undefined;
 		if (cached !== undefined) {
 			if (!overlay) return;
 			if (!cached || cached._error) {
@@ -516,7 +544,7 @@ export function createChallengeVoteModal(opts) {
 		}
 
 		stage.innerHTML = '<p class="challenge-vote-modal-media-loading" role="status">Loading…</p>';
-		const c = await fetchCreation(cid);
+		const c = await fetchCreation(cid, msgId);
 		if (!overlay) return;
 		if (!c || c._error) {
 			stage.innerHTML =
