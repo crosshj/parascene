@@ -1,9 +1,23 @@
-import {
+/**
+ * Same `?v=` as `mountPane` / `getChallengesImportQuery` — **never** static-import `./constants.js`
+ * here or this file’s version query won’t apply to that dependency (stale bundle vs new modal).
+ */
+function voteModalConstantsQs() {
+	try {
+		if (typeof document === 'undefined') return '';
+		const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
+		return v ? `?v=${encodeURIComponent(v)}` : '';
+	} catch {
+		return '';
+	}
+}
+
+const {
 	CHALLENGE_SCORE_REACTION_KEYS,
 	challengeReactionKeyToScore,
 	challengeScoreToReactionKey,
 	parseIso
-} from './constants.js';
+} = await import(`./constants.js${voteModalConstantsQs()}`);
 
 /**
  * Set while the vote modal is open. Chat page `popstate` must call

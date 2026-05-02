@@ -85,6 +85,42 @@ function isCacheableStaticRequest(request, url) {
 	return CACHEABLE_STATIC_PATH_PREFIXES.some((prefix) => url.pathname.startsWith(prefix));
 }
 
+/** Path matches our static public buckets (`/shared/`, `/components/`, … or exact `/entry.js`, …). */
+function isPublicStaticAssetPath(pathname) {
+	if (CACHEABLE_STATIC_EXACT_PATHS.has(pathname)) return true;
+	return CACHEABLE_STATIC_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+}
+
+/**
+ * Plain ESM often static-imports `./foo.js` without `?v=`; that URL can desync from `foo.js?v=asset`.
+ * Append `v` from this SW’s registration URL so fetch/cache keys align with dynamic imports.
+ */
+function requestWithAssetVersionIfNeeded(request) {
+	try {
+		const url = new URL(request.url);
+		if (!isSameOrigin(url)) return request;
+		if (!isHttpGetRequest(request)) return request;
+		if (!isPublicStaticAssetPath(url.pathname)) return request;
+		if (!/\.(js|mjs|css)$/i.test(url.pathname)) return request;
+		if (url.searchParams.has("v")) return request;
+
+		url.searchParams.set("v", VERSION);
+		return new Request(url.href, {
+			method: request.method,
+			headers: request.headers,
+			mode: request.mode,
+			credentials: request.credentials,
+			cache: request.cache,
+			redirect: request.redirect,
+			referrer: request.referrer,
+			referrerPolicy: request.referrerPolicy,
+			integrity: request.integrity
+		});
+	} catch {
+		return request;
+	}
+}
+
 function isCacheableDataRequest(request, url) {
 	if (!isSameOrigin(url)) return false;
 	if (request.destination && request.destination !== "") return false;
@@ -555,7 +591,7 @@ self.addEventListener("fetch", (event) => {
 		return;
 	}
 	if (isCacheableStaticRequest(request, url)) {
-		event.respondWith(cacheFirstStatic(request));
+		event.respondWith(cacheFirstStatic(requestWithAssetVersionIfNeeded(request)));
 		return;
 	}
 	if (isCacheableDataRequest(request, url)) {
