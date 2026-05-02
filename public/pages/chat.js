@@ -11085,11 +11085,16 @@ export async function initChatPage(root, options = {}) {
 	window.addEventListener('hashchange', () => {
 		setMobileSidebarMode(shouldShowMobileSidebarFromLocation());
 	});
-	window.addEventListener('popstate', () => {
+	window.addEventListener('popstate', (e) => {
+		// Vote modal / lightbox dismiss runs here before `chatSidebarPopstateHandler`. Without
+		// stopImmediatePropagation, the second listener still runs: dismiss ref is already
+		// cleared so it falls through to openThreadForCurrentPath() and leaves the lane.
 		if (dismissChallengeVoteModalFromBrowserHistoryIfOpen()) {
+			e.stopImmediatePropagation();
 			return;
 		}
 		if (closeChatInlineImageLightboxFromPopstateIfOpen()) {
+			e.stopImmediatePropagation();
 			return;
 		}
 		setMobileSidebarMode(shouldShowMobileSidebarFromLocation());
