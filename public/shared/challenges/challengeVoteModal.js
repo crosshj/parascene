@@ -800,8 +800,14 @@ export function createChallengeVoteModal(opts) {
 			const threshold = 28;
 			if (Math.abs(dy) < threshold) return;
 			if (Math.abs(dx) > Math.abs(dy) * 1.2) return;
-			/* Swipe up → older / “down” stack (nextBtn); swipe down → newer / “up” stack (prevBtn). */
-			if (dy < 0) go(1);
+			/*
+			 * Mobile swipe vs chevrons (same as nextBtn/prevBtn click handlers ~30 lines below):
+			 * - Finger moves UP on screen → dy < 0 → go(+1) → older submission → lower chevron “down”.
+			 * - Finger moves DOWN → dy > 0 → go(-1) → newer submission → upper chevron “up”.
+			 * (Arrow keys unchanged: ↑ newer, ↓ older.)
+			 */
+			const fingerMovedUp = dy < 0;
+			if (fingerMovedUp) go(1);
 			else go(-1);
 		};
 
