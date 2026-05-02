@@ -1,4 +1,5 @@
 import { esc } from '../constants.js';
+import { rankedSubmissionsForPeerVoting } from '../model/participantSlice.js';
 
 /**
  * @param {{
@@ -52,7 +53,8 @@ function phaseShowsVoteUiInModalOnly(phase) {
 export function renderChallengeVoteHeroCta(vm) {
 	if (!phaseShowsVoteUiInModalOnly(vm.phase)) return '';
 
-	const voteDisabled = vm.ranked.length === 0;
+	const peerRanked = rankedSubmissionsForPeerVoting(vm.ranked, vm.viewerId ?? null);
+	const voteDisabled = peerRanked.length === 0;
 	const showSubmitTab =
 		vm.phase !== 'submitting' && vm.phase !== 'submit_and_vote';
 	const badgeOnHero = !showSubmitTab;
@@ -94,6 +96,7 @@ export function renderChallengeVoteHeroCta(vm) {
  */
 export function renderSubmissionsSection(vm) {
 	const listHtml = renderSubmissionsList(vm);
+	const peerRanked = rankedSubmissionsForPeerVoting(vm.ranked, vm.viewerId ?? null);
 	const modalVoteOnly = phaseShowsVoteUiInModalOnly(vm.phase);
 
 	if (!challengePhaseUsesSubmitVoteTabs(vm.phase)) {
@@ -103,13 +106,20 @@ export function renderSubmissionsSection(vm) {
 		return html;
 	}
 
-	const voteDisabled = vm.ranked.length === 0;
+	const voteDisabled = peerRanked.length === 0;
 	const showSubmitTab =
 		vm.phase !== 'submitting' && vm.phase !== 'submit_and_vote';
 
 	if (modalVoteOnly && !showSubmitTab) {
 		if (voteDisabled) {
-			return `<section class="challenge-pane-section challenge-pane-submissions-section"><p class="challenge-pane-muted">No submissions yet.</p></section>`;
+			const onlyOwn =
+				Array.isArray(vm.ranked) &&
+				vm.ranked.length > 0 &&
+				peerRanked.length === 0;
+			const msg = onlyOwn
+				? 'No one else has submitted yet—check back to vote on other entries.'
+				: 'No submissions yet.';
+			return `<section class="challenge-pane-section challenge-pane-submissions-section"><p class="challenge-pane-muted">${esc(msg)}</p></section>`;
 		}
 		return '';
 	}

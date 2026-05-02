@@ -1,4 +1,5 @@
 import { buildChallengesChannelModel } from './model/buildChannelModel.js';
+import { rankedSubmissionsForPeerVoting } from './model/participantSlice.js';
 import { getChallengesImportQuery } from './constants.js';
 import { renderEmptyParticipantPane } from './views/emptyParticipantView.js';
 import { renderHeroSection } from './views/heroView.js';
@@ -201,6 +202,7 @@ export async function mountChallengesPane(opts) {
 	});
 
 	const ranked = model.participant.rankedSubmissions;
+	const rankedPeers = rankedSubmissionsForPeerVoting(ranked, viewerId);
 	const phase = model.participant.phase;
 
 	root.innerHTML = renderChallengesPaneHtml(model, {
@@ -212,11 +214,11 @@ export async function mountChallengesPane(opts) {
 	const voteModal = createChallengeVoteModal({
 		toggleReaction,
 		onAfterVote: () => {
-			syncVoteTabChrome(root, ranked, viewerId, phase);
+			syncVoteTabChrome(root, rankedPeers, viewerId, phase);
 		}
 	});
 
-	syncVoteTabChrome(root, ranked, viewerId, phase);
+	syncVoteTabChrome(root, rankedPeers, viewerId, phase);
 
 	const onRootClick = async (e) => {
 		const tabBtn = e.target?.closest?.('[data-challenge-action-tab]');
@@ -244,7 +246,7 @@ export async function mountChallengesPane(opts) {
 		const voteOpen = e.target?.closest?.('[data-challenge-vote-open]');
 		if (voteOpen instanceof HTMLButtonElement) {
 			if (!phaseUsesModalVoteOnly(phase)) return;
-			const slides = buildVoteSlidesNewestFirst(ranked);
+			const slides = buildVoteSlidesNewestFirst(rankedPeers);
 			if (!slides.length) return;
 			const challengeTitle = model.participant.latestConfig
 				? participantHeroViewModel(model.participant.latestConfig).title

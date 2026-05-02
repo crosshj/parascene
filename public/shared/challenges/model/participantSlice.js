@@ -85,6 +85,22 @@ export function rankSubmissionsForChallenge(submissionsForChallenge, reactionsBy
 }
 
 /**
+ * Rows you may score in blind voting (excludes the viewer’s own submission(s)).
+ * @param {object[]} ranked — output of {@link rankSubmissionsForChallenge}
+ * @param {number | null | undefined} viewerId
+ */
+export function rankedSubmissionsForPeerVoting(ranked, viewerId) {
+	const arr = Array.isArray(ranked) ? ranked : [];
+	const vid = Number(viewerId);
+	if (!Number.isFinite(vid) || vid <= 0) return arr;
+	return arr.filter((r) => {
+		const sid = r.senderId != null ? Number(r.senderId) : NaN;
+		if (!Number.isFinite(sid)) return true;
+		return sid !== vid;
+	});
+}
+
+/**
  * Map message id → reactions object from full thread messages.
  * @param {object[]} messages
  */
