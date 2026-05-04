@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+	<title>parascene — Connections</title>
+	<link rel="stylesheet" href="/pages/creations.css{{V}}" />
+	<link rel="stylesheet" href="/pages/integrations.css{{V}}" />
+</head>
+
+<body class="integrations-page">
+	<!--APP_HEADER-->
+
+	<app-modal-profile></app-modal-profile>
+	<app-modal-credits></app-modal-credits>
+	<app-modal-notifications></app-modal-notifications>
+
+	<!--APP_MOBILE_BOTTOM_NAV-->
+
+	<main class="integrations-route">
+		<div class="route-header">
+			<div class="route-header-title-row">
+				<h3>Connections</h3>
+				<a href="/help/developer/login-with-parascene{{V}}" class="btn-secondary">How it works</a>
+			</div>
+			<p class="integrations-intro">
+				API credentials, sites you use Parascene to sign into, and developer apps you register—everything for connecting
+				other tools and services lives here.
+			</p>
+		</div>
+
+		<hr class="integrations-section-divider" aria-hidden="true" />
+
+		<section class="integrations-section integrations-section--credentials" aria-labelledby="integrations-credentials-heading">
+			<h4 id="integrations-credentials-heading" class="integrations-section-title">API &amp; credentials</h4>
+			<p class="integrations-intro">
+				Use your Parascene API key only on <strong>your servers</strong>. Link vynly.co if you share content there.
+			</p>
+			<div class="integrations-credential-block">
+				<h5 class="integrations-subhead">parascene API</h5>
+				<div data-integrations-credential-api class="integrations-credential-mount"></div>
+			</div>
+			<div class="integrations-credential-block">
+				<h5 class="integrations-subhead">vynly.co</h5>
+				<div data-integrations-credential-vynly class="integrations-credential-mount"></div>
+			</div>
+		</section>
+
+		<hr class="integrations-section-divider" aria-hidden="true" />
+
+		<section class="integrations-section integrations-section--user" aria-labelledby="integrations-grants-heading">
+			<h4 id="integrations-grants-heading" class="integrations-section-title">Sites &amp; apps you use</h4>
+			<p class="integrations-intro">
+				Other sites and apps you opened with your Parascene account. Revoke to sign them out—they won’t keep access until you sign in again.
+			</p>
+			<div data-integrations-grants-list class="integrations-grants-wrap"></div>
+			<p data-integrations-grants-empty class="integrations-intro" hidden>Nothing connected yet.</p>
+		</section>
+
+		<hr class="integrations-section-divider" aria-hidden="true" />
+
+		<section class="integrations-section integrations-section--dev" aria-labelledby="integrations-dev-heading">
+			<h4 id="integrations-dev-heading" class="integrations-section-title">Apps you build</h4>
+			<p class="integrations-intro">
+				For developers: each registered app gets a public ID and redirect URLs. Exchange authorization codes on
+				<strong>your server</strong> with your Parascene API key—never in the browser.
+			</p>
+			<p class="integrations-toolbar">
+				<button type="button" class="btn-primary" data-open-register-dialog>Register an app</button>
+			</p>
+			<div data-integrations-list class="integrations-list-wrap"></div>
+			<p data-integrations-empty class="integrations-intro" hidden>You haven’t registered an app yet.</p>
+		</section>
+
+		<p class="integrations-status" data-integrations-status role="status" aria-live="polite"></p>
+	</main>
+
+	<footer class="site-footer" role="contentinfo">
+		<nav class="site-footer-nav" aria-label="Footer">
+			<a href="https://www.parascene.com/help{{V}}">Help</a>
+			<a href="https://www.parascene.com/help/privacy{{V}}">Privacy Policy</a>
+			<a href="https://www.parascene.com/help/terms-of-service{{V}}">Terms of Service</a>
+		</nav>
+		<p class="site-footer-copy">&copy; 2026 parascene. All rights reserved.</p>
+	</footer>
+
+	<dialog class="integrations-dialog" data-integrations-dialog aria-labelledby="integrations-dialog-title">
+		<div class="integrations-dialog-inner">
+			<h4 id="integrations-dialog-title" class="integrations-dialog-title" data-dialog-title>Register an app</h4>
+			<p class="integrations-dialog-clientid" data-dialog-client-id-wrap hidden>
+				<span class="integrations-dialog-label">Public app ID</span>
+				<code class="integrations-dialog-code" data-dialog-client-id></code>
+			</p>
+			<label for="integrations-dialog-name">Display name</label>
+			<input
+				id="integrations-dialog-name"
+				type="text"
+				maxlength="200"
+				autocomplete="off"
+				placeholder="My product"
+				data-dialog-name
+			/>
+			<label for="integrations-dialog-uris">Redirect URLs (one per line, https or http for localhost)</label>
+			<textarea
+				id="integrations-dialog-uris"
+				rows="5"
+				spellcheck="false"
+				placeholder="https://myapp.com/oauth/callback"
+				data-dialog-uris
+			></textarea>
+			<div class="integrations-dialog-actions">
+				<button type="button" class="btn-primary" data-dialog-save>Save</button>
+				<button type="button" class="btn-secondary" data-dialog-cancel>Cancel</button>
+			</div>
+		</div>
+	</dialog>
+
+	<script type="module" src="/pages/integrations-main.js{{V}}"></script>
+</body>
+
+</html>

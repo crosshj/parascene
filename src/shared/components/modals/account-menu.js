@@ -2,7 +2,7 @@ import { fetchJsonWithStatusDeduped } from '../../api.js';
 import { buildProfilePath } from '../../profileLinks.js';
 import { clearChatAudibleNotificationsStorage } from '/shared/chatAudibleNotificationsPref.js';
 import { getHelpHref } from '../../helpUrl.js';
-import { userProfileIcon, gearIcon, helpIcon, logOutIcon } from '/icons/svg-strings.js';
+import { userProfileIcon, gearIcon, globeIcon, helpIcon, logOutIcon } from '/icons/svg-strings.js';
 import { confirmAndHardReloadAfterClearingCaches } from '/shared/clearClientCaches.js';
 
 function clearLogoutSideEffects() {
@@ -153,6 +153,10 @@ class AppAccountMenu extends HTMLElement {
 					${userProfileIcon('account-menu-svg')}
 					<span class="account-menu-label">View Profile</span>
 				</button>
+				<button type="button" class="account-menu-item" data-action="integrations" role="menuitem">
+					${globeIcon('account-menu-svg')}
+					<span class="account-menu-label">Connections</span>
+				</button>
 				<button type="button" class="account-menu-item" data-action="settings" role="menuitem">
 					${gearIcon('account-menu-svg')}
 					<span class="account-menu-label">Settings</span>
@@ -222,6 +226,12 @@ class AppAccountMenu extends HTMLElement {
 			e.preventDefault();
 			this.close();
 			document.dispatchEvent(new CustomEvent('open-settings-modal'));
+			return;
+		}
+		if (action === 'integrations') {
+			e.preventDefault();
+			this.close();
+			window.location.href = '/integrations';
 			return;
 		}
 		if (action === 'logout') {

@@ -64,7 +64,6 @@ class AppModalProfile extends HTMLElement {
 		this.profileLoading = false;
 		this.profileLoadedAt = 0;
 		this.profileData = null;
-		this.revealedApiKey = null;
 		this.handleEscape = this.handleEscape.bind(this);
 		this.handleOpenSettingsEvent = this.handleOpenSettingsEvent.bind(this);
 		this.handleCloseEvent = this.handleCloseEvent.bind(this);
@@ -118,8 +117,6 @@ class AppModalProfile extends HTMLElement {
 		this.setupShowOwnPostsToggle();
 		this.setupAppearOfflineToggle();
 		this.setupAudibleNotificationsToggle();
-		this.setupApiKeyActions();
-		this.setupVynlyTokenActions();
 	}
 
 	setupNsfwToggles() {
@@ -349,7 +346,6 @@ class AppModalProfile extends HTMLElement {
 	close() {
 		if (!this._isOpen) return;
 		this._isOpen = false;
-		this.revealedApiKey = null;
 		const overlay = this.shadowRoot.querySelector('.profile-overlay');
 		if (overlay) {
 			overlay.classList.remove('open');
@@ -359,7 +355,6 @@ class AppModalProfile extends HTMLElement {
 
 	async loadProfile({ silent = true, force = false } = {}) {
 		const content = this.shadowRoot.querySelector('.profile-content');
-		if (!content) return;
 
 		if (this.profileLoading) return;
 		const now = Date.now();
@@ -372,7 +367,7 @@ class AppModalProfile extends HTMLElement {
 			}, { windowMs: 2000 });
 			if (!result.ok) {
 				if (result.status === 401) {
-					if (!this.profileData) {
+					if (!this.profileData && content) {
 						content.innerHTML = html`<p style="color: var(--text-muted);">Please log in to change settings.</p>`;
 					}
 					return;
@@ -390,7 +385,6 @@ class AppModalProfile extends HTMLElement {
 
 			if (nextKey !== currentKey) {
 				this.profileData = user;
-				this.displayProfile(user);
 			}
 			this.profileLoadedAt = Date.now();
 			// Keep localStorage in sync with server so publish modal and others get correct default
@@ -401,203 +395,12 @@ class AppModalProfile extends HTMLElement {
 			this.syncNsfwTogglesFromStorage();
 		} catch (error) {
 			// console.error('Error loading profile:', error);
-			if (!silent && !this.profileData) {
+			if (!silent && !this.profileData && content) {
 				content.innerHTML = html`<p style="color: var(--text-muted);">Failed to load profile information.</p>`;
 			}
 		} finally {
 			this.profileLoading = false;
 		}
-	}
-
-	displayProfile(user) {
-		const content = this.shadowRoot.querySelector('.profile-content');
-		if (!content) return;
-
-		const escapeHtml = (text) => {
-			const div = document.createElement('div');
-			div.textContent = text;
-			return div.innerHTML;
-		};
-
-		const hasKey = user.hasApiKey === true;
-		const apiKeyMasked = '•'.repeat(24);
-
-		const revealBlock = this.revealedApiKey
-			? html`
-			<div class="profile-api-reveal" role="status" aria-label="New API key shown once; copy before closing.">
-				<div class="profile-api-reveal-row">
-					<code class="profile-api-reveal-code">${escapeHtml(this.revealedApiKey)}</code>
-					<button type="button" class="btn-secondary" data-profile-api-copy>Copy</button>
-				</div>
-			</div>`
-			: '';
-
-		const keyActions = hasKey
-			? html`
-			<div class="profile-integration-row">
-				<span class="profile-api-masked" aria-label="Credential on file">${apiKeyMasked}</span>
-				<button type="button" class="btn-secondary is-logout" data-profile-api-remove>Remove</button>
-			</div>`
-			: html`
-			<div class="profile-api-actions">
-				<button type="button" class="btn-secondary" data-profile-api-generate>Generate</button>
-			</div>`;
-
-		const hasVynly = user.hasVynlyToken === true;
-		const tokenMasked = '•'.repeat(24);
-		const vynlyControls = hasVynly
-			? html`
-			<div class="profile-integration-row">
-				<span class="profile-api-masked" aria-label="Credential on file">${tokenMasked}</span>
-				<button type="button" class="btn-secondary is-logout" data-profile-vynly-remove>Remove</button>
-			</div>`
-			: html`
-			<div class="profile-integration-row profile-integration-row--input">
-				<input type="password" class="profile-api-input" data-profile-vynly-input autocomplete="new-password" placeholder="vln_…" spellcheck="false" />
-				<button type="button" class="btn-secondary" data-profile-vynly-save>Save</button>
-			</div>`;
-
-		content.innerHTML = html`
-	<div class="settings-subblock">
-		<h4 class="settings-subheading">parascene API</h4>
-		${revealBlock}
-		${keyActions}
-	</div>
-	<div class="settings-subblock">
-		<h4 class="settings-subheading">vynly.co</h4>
-		${vynlyControls}
-	</div>
-    `;
-	}
-
-	setupVynlyTokenActions() {
-		this.shadowRoot.addEventListener('click', async (e) => {
-			const saveBtn = e.target.closest?.('[data-profile-vynly-save]');
-			const remBtn = e.target.closest?.('[data-profile-vynly-remove]');
-			if (!saveBtn && !remBtn) return;
-			e.preventDefault();
-			const input = this.shadowRoot.querySelector('[data-profile-vynly-input]');
-			if (saveBtn) {
-				const token = typeof input?.value === 'string' ? input.value.trim() : '';
-				if (!token) {
-					window.alert('Paste your credential (starts with vln_), then tap Save.');
-					return;
-				}
-				try {
-					const res = await fetchJsonWithStatusDeduped(
-						'/api/profile/vynly-token',
-						{
-							method: 'PUT',
-							credentials: 'include',
-							headers: { 'Content-Type': 'application/json' },
-							body: JSON.stringify({ token })
-						},
-						{ windowMs: 0 }
-					);
-					if (res?.ok && res.data) {
-						if (this.profileData) {
-							this.profileData.hasVynlyToken = res.data.hasVynlyToken === true;
-							this.profileData.vynlyTokenPrefix = res.data.vynlyTokenPrefix ?? null;
-						}
-						if (input) input.value = '';
-						this.displayProfile(this.profileData || {});
-						invalidateOwnPublicProfileCache(this.profileData);
-					} else {
-						const msg = typeof res?.data?.message === 'string' ? res.data.message : 'Could not save token.';
-						window.alert(msg);
-					}
-				} catch {
-					window.alert('Could not save token.');
-				}
-				return;
-			}
-			if (remBtn) {
-				if (!window.confirm('Remove vynly.co credential? Sharing to Vynly turns off until you save again.')) return;
-				try {
-					const res = await fetchJsonWithStatusDeduped(
-						'/api/profile/vynly-token',
-						{
-							method: 'PUT',
-							credentials: 'include',
-							headers: { 'Content-Type': 'application/json' },
-							body: JSON.stringify({ token: '' })
-						},
-						{ windowMs: 0 }
-					);
-					if (res?.ok) {
-						if (this.profileData) {
-							this.profileData.hasVynlyToken = false;
-							this.profileData.vynlyTokenPrefix = null;
-						}
-						if (input) input.value = '';
-						this.displayProfile(this.profileData || {});
-						invalidateOwnPublicProfileCache(this.profileData);
-					}
-				} catch {
-					// ignore
-				}
-			}
-		});
-	}
-
-	setupApiKeyActions() {
-		this.shadowRoot.addEventListener('click', async (e) => {
-			const gen = e.target.closest?.('[data-profile-api-generate]');
-			const rem = e.target.closest?.('[data-profile-api-remove]');
-			const copy = e.target.closest?.('[data-profile-api-copy]');
-			if (gen) {
-				e.preventDefault();
-				try {
-					const res = await fetchJsonWithStatusDeduped('/api/profile/api-key', {
-						method: 'POST',
-						credentials: 'include',
-						headers: { 'Content-Type': 'application/json' }
-					}, { windowMs: 0 });
-					if (res?.ok && typeof res.data?.apiKey === 'string') {
-						this.revealedApiKey = res.data.apiKey;
-						if (this.profileData) {
-							this.profileData.hasApiKey = true;
-							this.profileData.apiKeyPrefix = `${res.data.apiKey.slice(0, 10)}…`;
-						}
-						this.displayProfile(this.profileData || {});
-						invalidateOwnPublicProfileCache(this.profileData);
-					}
-				} catch {
-					// ignore
-				}
-				return;
-			}
-			if (rem) {
-				e.preventDefault();
-				if (!window.confirm('Remove this API key? Apps using it will stop working.')) return;
-				try {
-					const res = await fetchJsonWithStatusDeduped('/api/profile/api-key', {
-						method: 'DELETE',
-						credentials: 'include'
-					}, { windowMs: 0 });
-					if (res?.ok) {
-						this.revealedApiKey = null;
-						if (this.profileData) {
-							this.profileData.hasApiKey = false;
-							this.profileData.apiKeyPrefix = null;
-						}
-						await this.loadProfile({ silent: true, force: true });
-						invalidateOwnPublicProfileCache(this.profileData);
-					}
-				} catch {
-					// ignore
-				}
-				return;
-			}
-			if (copy && this.revealedApiKey) {
-				e.preventDefault();
-				try {
-					await navigator.clipboard.writeText(this.revealedApiKey);
-				} catch {
-					// ignore
-				}
-			}
-		});
 	}
 
 	render() {
@@ -830,6 +633,17 @@ class AppModalProfile extends HTMLElement {
           width: auto;
           max-width: none;
         }
+        .profile-integration-hint {
+          font-size: 0.85rem;
+          color: var(--text-muted);
+          line-height: 1.45;
+          margin: 0 0 10px 0;
+        }
+        .profile-integration-hint a {
+          color: var(--accent);
+          text-decoration: underline;
+          text-underline-offset: 2px;
+        }
         .profile-api-input {
           width: 100%;
           max-width: 100%;
@@ -947,12 +761,6 @@ class AppModalProfile extends HTMLElement {
                       <input type="checkbox" id="profile-show-own-posts" data-show-own-posts />
                     </div>
                   </div>
-                </div>
-              </section>
-              <section class="settings-section" aria-labelledby="settings-integrations-heading">
-                <h3 class="settings-section-title" id="settings-integrations-heading">Integrations</h3>
-                <div class="settings-section-body">
-                  <div class="profile-content"></div>
                 </div>
               </section>
             </div>

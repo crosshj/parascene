@@ -6,10 +6,10 @@ description: Create a key and call the parascene API programmatically
 ## Create or manage a key
 
 1. Sign in.
-2. Open **Profile** (avatar / profile icon in the header; on small screens, open the menu first).
-3. Under **API key**, choose **Generate API key** (or **Generate new key** to replace an existing one).
-4. **Copy the key immediately.** It is shown only once. Rotating generates a new secret and invalidates the old one.
-5. To revoke access, use **Remove API key**.
+2. Open **Connections** from the account menu (avatar, top right), or go to `/integrations`.
+3. Under **parascene API**, choose **Generate** (or **Remove** to revoke an existing key first, then generate a new one).
+4. **Copy the key immediately.** It is shown only once. Generating a new key invalidates the old one.
+5. To revoke access, use **Remove** next to the masked key.
 
 Key management (generate / remove) requires a normal browser session. You cannot create or delete keys using the API key itself.
 
@@ -120,3 +120,7 @@ Details: **[API - Chat](/help/developer/api-chat)**
 - `GET` `/api/servers`
 - `GET` `/api/servers/:id`
 - `POST` `/api/servers/:id/join`
+
+## Third-party login (“Log in with Parascene”)
+
+For external apps that sign users in with Parascene (authorization code + PKCE, short-lived access tokens, refresh tokens, user revocation), see **[Log in with Parascene (developer)](/help/developer/login-with-parascene)**.

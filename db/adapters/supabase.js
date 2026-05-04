@@ -784,6 +784,280 @@ export function openDb() {
 				return data?.id != null ? { id: data.id } : undefined;
 			}
 		},
+		insertOauthClient: {
+			run: async ({ ownerUserId, clientId, name, redirectUrisJson }) => {
+				let urs = redirectUrisJson;
+				if (typeof redirectUrisJson === "string") {
+					try {
+						urs = JSON.parse(redirectUrisJson);
+					} catch {
+						urs = [];
+					}
+				}
+				if (!Array.isArray(urs)) urs = [];
+				const { data, error } = await serviceClient
+					.from(prefixedTable("oauth_clients"))
+					.insert({
+						owner_user_id: ownerUserId,
+						client_id: clientId,
+						name,
+						redirect_uris: urs
+					})
+					.select("id")
+					.single();
+				if (error) throw error;
+				const id = data?.id;
+				return { insertId: id, lastInsertRowid: id };
+			}
+		},
+		selectOauthClientByPublicClientId: {
+			get: async (clientId) => {
+				if (clientId == null || typeof clientId !== "string" || !clientId.trim()) return undefined;
+				const { data, error } = await serviceClient
+					.from(prefixedTable("oauth_clients"))
+					.select("id, client_id, owner_user_id, name, redirect_uris, created_at, meta")
+					.eq("client_id", clientId.trim())
+					.maybeSingle();
+				if (error) throw error;
+				if (!data) return undefined;
+				return {
+					id: data.id,
+					client_id: data.client_id,
+					owner_user_id: data.owner_user_id,
+					name: data.name,
+					redirect_uris: data.redirect_uris,
+					created_at: data.created_at,
+					meta: data.meta
+				};
+			}
+		},
+		selectOauthClientsByOwner: {
+			all: async (ownerUserId) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("oauth_clients"))
+					.select("id, client_id, owner_user_id, name, redirect_uris, created_at, meta")
+					.eq("owner_user_id", ownerUserId)
+					.order("id", { ascending: false });
+				if (error) throw error;
+				return data ?? [];
+			}
+		},
+		selectOauthClientByInternalIdForOwner: {
+			get: async (internalId, ownerUserId) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("oauth_clients"))
+					.select("id, client_id, owner_user_id, name, redirect_uris, created_at, meta")
+					.eq("id", internalId)
+					.eq("owner_user_id", ownerUserId)
+					.maybeSingle();
+				if (error) throw error;
+				return data ?? undefined;
+			}
+		},
+		updateOauthClientForOwner: {
+			run: async (internalId, ownerUserId, { name, redirectUrisJson }) => {
+				let urs = redirectUrisJson;
+				if (typeof redirectUrisJson === "string") {
+					try {
+						urs = JSON.parse(redirectUrisJson);
+					} catch {
+						urs = [];
+					}
+				}
+				if (!Array.isArray(urs)) urs = [];
+				const { error } = await serviceClient
+					.from(prefixedTable("oauth_clients"))
+					.update({
+						name,
+						redirect_uris: urs
+					})
+					.eq("id", internalId)
+					.eq("owner_user_id", ownerUserId);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
+		deleteOauthClientForOwner: {
+			run: async (internalId, ownerUserId) => {
+				const { error } = await serviceClient
+					.from(prefixedTable("oauth_clients"))
+					.delete()
+					.eq("id", internalId)
+					.eq("owner_user_id", ownerUserId);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
+		insertOAuthAuthorizationCode: {
+			run: async ({
+				codeHash,
+				userId,
+				oauthClientInternalId,
+				redirectUri,
+				codeChallenge,
+				expiresAtIso
+			}) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("oauth_authorization_codes"))
+					.insert({
+						code_hash: codeHash,
+						user_id: userId,
+						oauth_client_id: oauthClientInternalId,
+						redirect_uri: redirectUri,
+						code_challenge: codeChallenge,
+						expires_at: expiresAtIso
+					})
+					.select("id")
+					.single();
+				if (error) throw error;
+				return { insertId: data?.id };
+			}
+		},
+		consumeOAuthAuthorizationCode: {
+			get: async (codeHash) => {
+				if (codeHash == null || typeof codeHash !== "string" || !codeHash.trim()) return undefined;
+				const h = codeHash.trim();
+				const { data: row, error: selErr } = await serviceClient
+					.from(prefixedTable("oauth_authorization_codes"))
+					.select(
+						"id, code_hash, user_id, oauth_client_id, redirect_uri, code_challenge, expires_at, consumed_at, meta"
+					)
+					.eq("code_hash", h)
+					.maybeSingle();
+				if (selErr) throw selErr;
+				if (!row || row.consumed_at) return undefined;
+				const exp = Date.parse(row.expires_at);
+				if (!Number.isFinite(exp) || exp <= Date.now()) return undefined;
+				const { error: updErr } = await serviceClient
+					.from(prefixedTable("oauth_authorization_codes"))
+					.update({ consumed_at: new Date().toISOString() })
+					.eq("id", row.id);
+				if (updErr) throw updErr;
+				return row;
+			}
+		},
+		revokeOAuthGrantsForUserClient: {
+			run: async (userId, oauthClientInternalId) => {
+				const now = new Date().toISOString();
+				const { error } = await serviceClient
+					.from(prefixedTable("oauth_grants"))
+					.update({ revoked_at: now })
+					.eq("user_id", userId)
+					.eq("oauth_client_id", oauthClientInternalId)
+					.is("revoked_at", null);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
+		insertOAuthGrant: {
+			run: async ({ userId, oauthClientInternalId, refreshTokenHash, scopes }) => {
+				const { data, error } = await serviceClient
+					.from(prefixedTable("oauth_grants"))
+					.insert({
+						user_id: userId,
+						oauth_client_id: oauthClientInternalId,
+						refresh_token_hash: refreshTokenHash,
+						scopes
+					})
+					.select("id")
+					.single();
+				if (error) throw error;
+				return { insertId: data?.id, lastInsertRowid: data?.id };
+			}
+		},
+		selectOAuthGrantByRefreshTokenHash: {
+			get: async (refreshTokenHash) => {
+				if (refreshTokenHash == null || typeof refreshTokenHash !== "string") return undefined;
+				const { data: grant, error } = await serviceClient
+					.from(prefixedTable("oauth_grants"))
+					.select("id, user_id, oauth_client_id, refresh_token_hash, scopes, revoked_at, meta")
+					.eq("refresh_token_hash", refreshTokenHash)
+					.is("revoked_at", null)
+					.maybeSingle();
+				if (error) throw error;
+				if (!grant) return undefined;
+				const { data: client, error: cErr } = await serviceClient
+					.from(prefixedTable("oauth_clients"))
+					.select("client_id, owner_user_id")
+					.eq("id", grant.oauth_client_id)
+					.maybeSingle();
+				if (cErr) throw cErr;
+				return {
+					...grant,
+					public_client_id: client?.client_id,
+					owner_user_id: client?.owner_user_id
+				};
+			}
+		},
+		updateOAuthGrantRefreshToken: {
+			run: async (grantId, newRefreshTokenHash) => {
+				const now = new Date().toISOString();
+				const { error } = await serviceClient
+					.from(prefixedTable("oauth_grants"))
+					.update({ refresh_token_hash: newRefreshTokenHash, last_used_at: now })
+					.eq("id", grantId)
+					.is("revoked_at", null);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
+		touchOAuthGrantLastUsed: {
+			run: async (grantId) => {
+				const now = new Date().toISOString();
+				const { error } = await serviceClient
+					.from(prefixedTable("oauth_grants"))
+					.update({ last_used_at: now })
+					.eq("id", grantId)
+					.is("revoked_at", null);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
+		selectIntegrationGrantsForUser: {
+			all: async (userId) => {
+				const { data: grants, error } = await serviceClient
+					.from(prefixedTable("oauth_grants"))
+					.select("id, oauth_client_id, created_at, last_used_at, scopes, meta")
+					.eq("user_id", userId)
+					.is("revoked_at", null)
+					.order("created_at", { ascending: false });
+				if (error) throw error;
+				if (!grants?.length) return [];
+				const clientIds = [...new Set(grants.map((g) => g.oauth_client_id))];
+				const { data: clients, error: cErr } = await serviceClient
+					.from(prefixedTable("oauth_clients"))
+					.select("id, client_id, name")
+					.in("id", clientIds);
+				if (cErr) throw cErr;
+				const byId = new Map((clients ?? []).map((c) => [c.id, c]));
+				return grants.map((g) => {
+					const c = byId.get(g.oauth_client_id);
+					return {
+						id: g.id,
+						oauth_client_id: g.oauth_client_id,
+						public_client_id: c?.client_id ?? null,
+						app_name: c?.name ?? null,
+						created_at: g.created_at,
+						last_used_at: g.last_used_at,
+						scopes: g.scopes,
+						meta: g.meta ?? null
+					};
+				});
+			}
+		},
+		revokeOAuthGrantByIdForUser: {
+			run: async (grantId, userId) => {
+				const now = new Date().toISOString();
+				const { error } = await serviceClient
+					.from(prefixedTable("oauth_grants"))
+					.update({ revoked_at: now, refresh_token_hash: null })
+					.eq("id", grantId)
+					.eq("user_id", userId)
+					.is("revoked_at", null);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
 		recordCheckoutReturn: {
 			run: async (userId, sessionId, returnedAt) => {
 				const { data: current, error: selectError } = await serviceClient

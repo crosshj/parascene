@@ -644,7 +644,7 @@ export default function createProfileRoutes({ queries }) {
 		if (!req.auth?.userId) {
 			return res.status(401).json({ error: "Unauthorized" });
 		}
-		if (req.auth?.apiKeyAuth) {
+		if (req.auth?.apiKeyAuth || req.auth?.integrationAccess) {
 			return res.status(403).json({
 				error: "Forbidden",
 				message: "Manage your Vynly token while signed in on the website."
@@ -685,7 +685,7 @@ export default function createProfileRoutes({ queries }) {
 		if (!req.auth?.userId) {
 			return res.status(401).json({ error: "Unauthorized" });
 		}
-		if (req.auth?.apiKeyAuth) {
+		if (req.auth?.apiKeyAuth || req.auth?.integrationAccess) {
 			return res.status(403).json({
 				error: "Forbidden",
 				message: "Manage API keys while signed in on the website."
@@ -711,7 +711,7 @@ export default function createProfileRoutes({ queries }) {
 		if (!req.auth?.userId) {
 			return res.status(401).json({ error: "Unauthorized" });
 		}
-		if (req.auth?.apiKeyAuth) {
+		if (req.auth?.apiKeyAuth || req.auth?.integrationAccess) {
 			return res.status(403).json({
 				error: "Forbidden",
 				message: "Manage API keys while signed in on the website."

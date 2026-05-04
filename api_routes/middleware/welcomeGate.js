@@ -21,7 +21,11 @@ const ALLOWED_PATHS = [
 	{ path: "/api/qr", methods: ["GET"] },
 	{ path: "/logout", methods: ["POST"] },
 	{ path: "/auth.html", methods: ["GET"] },
-	{ path: "/me", methods: ["GET"] }
+	{ path: "/me", methods: ["GET"] },
+	{ path: "/oauth/token", methods: ["POST"] },
+	{ path: "/oauth/userinfo", method: "GET" },
+	{ path: "/oauth/authorize/continue", methods: ["POST"] },
+	{ path: "/integrations", method: "GET" }
 ];
 
 function isAllowed(method, pathName) {

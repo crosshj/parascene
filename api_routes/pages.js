@@ -1175,6 +1175,40 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 		return res.redirect(301, "/pricing");
 	});
 
+	// OAuth / developer integrations (logged-in only; same chrome as pricing).
+	router.get("/integrations", async (req, res) => {
+		const user = await requireLoggedInUser(req, res);
+		if (!user) return;
+
+		const fs = await import("fs/promises");
+		let pageHtml = await fs.readFile(path.join(pagesDir, "integrations.html"), "utf-8");
+
+		let headerHtml = "";
+		let includeMobileBottomNav = false;
+		try {
+			const rolePageName = getPageForUser(user);
+			const rolePagePath = path.join(pagesDir, rolePageName);
+			const roleHtml = await fs.readFile(rolePagePath, "utf-8");
+			const headerMatch = roleHtml.match(/<app-navigation[\s\S]*?<\/app-navigation>/i);
+			if (headerMatch) headerHtml = headerMatch[0];
+			includeMobileBottomNav = /<app-navigation-mobile\b/i.test(roleHtml);
+		} catch {
+			// ignore
+		}
+		pageHtml = pageHtml.replace("<!--APP_HEADER-->", headerHtml || guestHeaderHtml);
+		pageHtml = pageHtml.replace(
+			"<!--APP_MOBILE_BOTTOM_NAV-->",
+			includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
+		);
+
+		const tokens = getPageTokens(req);
+		tokens.PAGE_META_DESCRIPTION =
+			"API key, vynly.co, sites you use, and apps you build—manage how Parascene connects to your tools and accounts.";
+		pageHtml = injectCommonHead(pageHtml, tokens);
+		res.setHeader("Content-Type", "text/html");
+		return res.send(pageHtml);
+	});
+
 	// Try page (unauthenticated). try.html includes global.css and entry.js itself; do not inject common head to avoid loading them twice.
 	router.get("/try", async (req, res) => {
 		const fs = await import("fs/promises");

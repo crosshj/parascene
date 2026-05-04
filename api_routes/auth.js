@@ -1,5 +1,6 @@
 import { expressjwt } from "express-jwt";
 import crypto from "crypto";
+import jwt from "jsonwebtoken";
 
 const COOKIE_NAME = "ps_session";
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -68,6 +69,34 @@ function apiKeyBearerMiddleware(queries) {
 			return next();
 		} catch (err) {
 			return next(err);
+		}
+	};
+}
+
+/** Valid Bearer integration access JWT overrides session/API key auth for this request. */
+function integrationBearerMiddleware() {
+	return function integrationBearer(req, res, next) {
+		const authz = req.headers.authorization || "";
+		const m = /^Bearer\s+(\S+)/i.exec(authz);
+		if (!m) return next();
+		const token = m[1];
+		if (token.startsWith("psn_")) return next();
+		const parts = token.split(".");
+		if (parts.length !== 3) return next();
+		try {
+			const payload = jwt.verify(token, getJwtSecret(), { algorithms: ["HS256"] });
+			if (payload.typ !== "integration_access") return next();
+			const sub = Number(payload.sub);
+			if (!Number.isFinite(sub) || sub <= 0) return next();
+			req.auth = {
+				userId: sub,
+				integrationAccess: true,
+				oauthClientId: typeof payload.cid === "string" ? payload.cid : "",
+				oauthScopes: typeof payload.scope === "string" ? payload.scope : ""
+			};
+			return next();
+		} catch {
+			return next();
 		}
 	};
 }
@@ -375,6 +404,7 @@ export {
 	getJwtSecret,
 	authMiddleware,
 	apiKeyBearerMiddleware,
+	integrationBearerMiddleware,
 	sessionMiddleware,
 	probabilisticSessionCleanup,
 	hashToken,

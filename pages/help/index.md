@@ -41,6 +41,7 @@ Browse by topic or use the search above.
 
 - [API Overview](/help/developer/api) — Create an API key, base URL, and full route index.
 - [API - Chat](/help/developer/api-chat) — DM and channel threads, messages, and reactions.
+- [Log in with Parascene (developer)](/help/developer/login-with-parascene) — Register an app (PKCE, tokens); API key, revoke, and app setup on **Connections** (`/integrations`).
 
 <br />
 

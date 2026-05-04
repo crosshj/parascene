@@ -293,6 +293,7 @@ class AppNavigation extends HTMLElement {
 		// If so, use full page navigation for ANY route change
 		const isServerSentPage = window.location.pathname === '/create' ||
 			window.location.pathname === '/pricing' ||
+			window.location.pathname === '/integrations' ||
 			window.location.pathname === '/prompt-library' ||
 			window.location.pathname.startsWith('/chat/') ||
 			/^\/creations\/\d+(\/(edit|mutate))?$/.test(window.location.pathname) ||
@@ -932,6 +933,7 @@ class AppNavigation extends HTMLElement {
 		// If we're on a server-sent page (like creation detail, pricing), don't handle route changes
 		// Any navigation should result in a full page load
 		const isServerSentPage = 			pathname === '/pricing' ||
+			pathname === '/integrations' ||
 			pathname === '/prompt-library' ||
 			pathname.startsWith('/chat/') ||
 			/^\/creations\/\d+(\/(edit|mutate))?$/.test(pathname) ||

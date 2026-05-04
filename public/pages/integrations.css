@@ -1,0 +1,319 @@
+/* Connected sites + developer apps — uses creations.css + global */
+
+body.integrations-page main {
+	max-width: 720px;
+}
+
+.integrations-section-divider {
+	border: none;
+	border-top: 1px solid var(--border);
+	margin: 28px 0 24px;
+	height: 0;
+	background: none;
+}
+
+.integrations-route > .integrations-section-divider:first-of-type {
+	margin-top: 22px;
+}
+
+.integrations-section {
+	margin-top: 0;
+}
+
+.integrations-subhead {
+	margin: 0 0 10px;
+	font-size: 0.95rem;
+	font-weight: 600;
+	color: var(--text);
+}
+
+.integrations-credential-block {
+	margin-bottom: 20px;
+}
+
+.integrations-credential-block:last-of-type {
+	margin-bottom: 0;
+}
+
+.integrations-credential-mount:empty {
+	min-height: 0;
+}
+
+.integrations-credential-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	flex-wrap: wrap;
+}
+
+.integrations-credential-row .integrations-api-masked {
+	flex: 1;
+	min-width: 0;
+	line-height: 1.4;
+	font-family: ui-monospace, monospace;
+	letter-spacing: 0.12em;
+	user-select: none;
+}
+
+.integrations-credential-row--input .integrations-api-input {
+	flex: 1;
+	min-width: 0;
+	margin-bottom: 0;
+}
+
+.integrations-credential-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.integrations-api-reveal {
+	margin-bottom: 10px;
+}
+
+.integrations-api-reveal-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.integrations-api-reveal-code {
+	flex: 1;
+	min-width: 0;
+	font-size: 0.78rem;
+	word-break: break-all;
+	padding: 8px 10px;
+	border-radius: 6px;
+	background: var(--surface-strong);
+	font-family: ui-monospace, monospace;
+}
+
+.integrations-api-input {
+	width: 100%;
+	max-width: 100%;
+	box-sizing: border-box;
+	padding: 8px 10px;
+	margin-bottom: 0;
+	font-size: 0.85rem;
+	font-family: ui-monospace, monospace;
+	border-radius: 6px;
+	border: 1px solid var(--border);
+	background: var(--surface);
+	color: var(--text);
+}
+
+.integrations-section--user {
+	padding-bottom: 8px;
+}
+
+.integrations-section-title {
+	margin: 0 0 10px;
+	font-size: 1.05rem;
+}
+
+.integrations-toolbar {
+	margin: 12px 0 18px;
+}
+
+.integrations-grant-card {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	padding: 14px 16px;
+	margin-bottom: 12px;
+}
+
+.integrations-grant-meta {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	flex: 1;
+	min-width: 0;
+}
+
+.integrations-grant-name {
+	font-weight: 600;
+	color: var(--text);
+	font-size: 0.95rem;
+}
+
+.integrations-grant-date {
+	font-size: 0.82rem;
+	color: var(--text-muted);
+}
+
+.integrations-card {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	padding: 16px 18px;
+	margin-bottom: 14px;
+}
+
+.integrations-card-title {
+	margin: 0 0 10px;
+	font-size: 1.05rem;
+}
+
+.integrations-client-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 10px;
+	font-size: 0.85rem;
+}
+
+.integrations-client-label {
+	font-weight: 600;
+	color: var(--text-muted);
+	font-size: 0.82rem;
+	width: 100%;
+}
+
+.integrations-client-row code {
+	font-size: 0.78rem;
+	word-break: break-all;
+	flex: 1;
+	min-width: 0;
+	padding: 6px 8px;
+	border-radius: 6px;
+	background: var(--surface-strong);
+}
+
+.integrations-uri-caption {
+	margin: 0 0 6px;
+	font-size: 0.85rem;
+	color: var(--text-muted);
+}
+
+.integrations-uri-list {
+	margin: 0;
+	padding-left: 1.2rem;
+	font-size: 0.88rem;
+	color: var(--text-muted);
+}
+
+.integrations-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 12px;
+}
+
+.integrations-intro {
+	font-size: 0.92rem;
+	color: var(--text-muted);
+	line-height: 1.5;
+	margin-bottom: 8px;
+}
+
+.integrations-status {
+	font-size: 0.88rem;
+	margin-top: 12px;
+	min-height: 1.2em;
+}
+
+.integrations-status[data-variant='error'] {
+	color: var(--error-text);
+}
+
+.integrations-status[data-variant='ok'] {
+	color: var(--text-muted);
+}
+
+/* Register / edit app (native dialog) */
+.integrations-dialog {
+	border: none;
+	border-radius: 14px;
+	padding: 0;
+	max-width: min(520px, 92vw);
+	background: var(--surface);
+	color: var(--text);
+	box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+.integrations-dialog::backdrop {
+	background: rgba(0, 0, 0, 0.55);
+}
+
+.integrations-dialog-inner {
+	padding: 20px 22px 18px;
+}
+
+.integrations-dialog-title {
+	margin: 0 0 14px;
+	font-size: 1.1rem;
+}
+
+.integrations-dialog-clientid {
+	margin: 0 0 12px;
+	font-size: 0.88rem;
+}
+
+.integrations-dialog-label {
+	display: block;
+	font-weight: 600;
+	margin-bottom: 4px;
+	color: var(--text-muted);
+	font-size: 0.85rem;
+}
+
+.integrations-dialog-code {
+	display: block;
+	font-size: 0.78rem;
+	word-break: break-all;
+	padding: 8px 10px;
+	border-radius: 6px;
+	background: var(--surface-strong);
+}
+
+.integrations-dialog label {
+	display: block;
+	font-weight: 600;
+	font-size: 0.9rem;
+	margin-bottom: 6px;
+}
+
+.integrations-dialog input[type='text'],
+.integrations-dialog textarea {
+	width: 100%;
+	box-sizing: border-box;
+	padding: 8px 10px;
+	border-radius: 6px;
+	border: 1px solid var(--border);
+	background: var(--surface);
+	color: var(--text);
+	font-size: 0.9rem;
+	margin-bottom: 12px;
+}
+
+.integrations-dialog textarea {
+	min-height: 100px;
+	font-family: ui-monospace, monospace;
+	font-size: 0.82rem;
+	resize: vertical;
+}
+
+.integrations-dialog-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 4px;
+}
+
+@media (max-width: 768px) {
+	.integrations-dialog-inner {
+		padding: 16px 16px 14px;
+	}
+
+	/* Body footer only; app-navigation mobile bar stays visible */
+	body.integrations-page .site-footer {
+		display: none;
+	}
+}

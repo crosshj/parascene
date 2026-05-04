@@ -22,6 +22,10 @@ const creations = [];
 const templates = [];
 const user_follows = [];
 
+const oauth_clients = [];
+const oauth_authorization_codes = [];
+const oauth_grants = [];
+
 const created_images = [];
 const created_images_anon = [];
 const try_requests = [];
@@ -455,6 +459,251 @@ export function openDb() {
 				if (hash == null || typeof hash !== "string" || !hash.trim()) return undefined;
 				const user = users.find((u) => u.meta?.apiKeyHash === hash.trim());
 				return user ? { id: user.id } : undefined;
+			}
+		},
+		insertOauthClient: {
+			run: async ({ ownerUserId, clientId, name, redirectUrisJson }) => {
+				let urs = redirectUrisJson;
+				if (typeof redirectUrisJson === "string") {
+					try {
+						urs = JSON.parse(redirectUrisJson);
+					} catch {
+						urs = [];
+					}
+				}
+				if (!Array.isArray(urs)) urs = [];
+				const id = oauth_clients.length ? Math.max(...oauth_clients.map((c) => c.id)) + 1 : 1;
+				oauth_clients.push({
+					id,
+					client_id: clientId,
+					owner_user_id: ownerUserId,
+					name,
+					redirect_uris: JSON.stringify(urs),
+					created_at: new Date().toISOString(),
+					meta: null
+				});
+				return { insertId: id, lastInsertRowid: id };
+			}
+		},
+		selectOauthClientByPublicClientId: {
+			get: async (clientId) => {
+				if (clientId == null || typeof clientId !== "string" || !clientId.trim()) return undefined;
+				const c = oauth_clients.find((x) => x.client_id === clientId.trim());
+				if (!c) return undefined;
+				return { ...c, redirect_uris: c.redirect_uris };
+			}
+		},
+		selectOauthClientsByOwner: {
+			all: async (ownerUserId) =>
+				oauth_clients
+					.filter((c) => Number(c.owner_user_id) === Number(ownerUserId))
+					.sort((a, b) => b.id - a.id)
+					.map((c) => ({
+						id: c.id,
+						client_id: c.client_id,
+						owner_user_id: c.owner_user_id,
+						name: c.name,
+						redirect_uris: c.redirect_uris,
+						created_at: c.created_at,
+						meta: c.meta ?? null
+					}))
+		},
+		selectOauthClientByInternalIdForOwner: {
+			get: async (internalId, ownerUserId) => {
+				const c = oauth_clients.find(
+					(x) => Number(x.id) === Number(internalId) && Number(x.owner_user_id) === Number(ownerUserId)
+				);
+				return c
+					? {
+							id: c.id,
+							client_id: c.client_id,
+							owner_user_id: c.owner_user_id,
+							name: c.name,
+							redirect_uris: c.redirect_uris,
+							created_at: c.created_at,
+							meta: c.meta ?? null
+						}
+					: undefined;
+			}
+		},
+		updateOauthClientForOwner: {
+			run: async (internalId, ownerUserId, { name, redirectUrisJson }) => {
+				const c = oauth_clients.find(
+					(x) => Number(x.id) === Number(internalId) && Number(x.owner_user_id) === Number(ownerUserId)
+				);
+				if (!c) return { changes: 0 };
+				let urs = redirectUrisJson;
+				if (typeof redirectUrisJson === "string") {
+					try {
+						urs = JSON.parse(redirectUrisJson);
+					} catch {
+						urs = [];
+					}
+				}
+				if (!Array.isArray(urs)) urs = [];
+				c.name = name;
+				c.redirect_uris = JSON.stringify(urs);
+				return { changes: 1 };
+			}
+		},
+		deleteOauthClientForOwner: {
+			run: async (internalId, ownerUserId) => {
+				const idx = oauth_clients.findIndex(
+					(x) => Number(x.id) === Number(internalId) && Number(x.owner_user_id) === Number(ownerUserId)
+				);
+				if (idx === -1) return { changes: 0 };
+				oauth_clients.splice(idx, 1);
+				for (let i = oauth_authorization_codes.length - 1; i >= 0; i--) {
+					if (Number(oauth_authorization_codes[i].oauth_client_id) === Number(internalId)) {
+						oauth_authorization_codes.splice(i, 1);
+					}
+				}
+				for (let i = oauth_grants.length - 1; i >= 0; i--) {
+					if (Number(oauth_grants[i].oauth_client_id) === Number(internalId)) {
+						oauth_grants.splice(i, 1);
+					}
+				}
+				return { changes: 1 };
+			}
+		},
+		insertOAuthAuthorizationCode: {
+			run: async ({
+				codeHash,
+				userId,
+				oauthClientInternalId,
+				redirectUri,
+				codeChallenge,
+				expiresAtIso
+			}) => {
+				const id = oauth_authorization_codes.length
+					? Math.max(...oauth_authorization_codes.map((r) => r.id)) + 1
+					: 1;
+				oauth_authorization_codes.push({
+					id,
+					code_hash: codeHash,
+					user_id: userId,
+					oauth_client_id: oauthClientInternalId,
+					redirect_uri: redirectUri,
+					code_challenge: codeChallenge,
+					expires_at: expiresAtIso,
+					consumed_at: null,
+					created_at: new Date().toISOString(),
+					meta: null
+				});
+				return { insertId: id };
+			}
+		},
+		consumeOAuthAuthorizationCode: {
+			get: async (codeHash) => {
+				if (codeHash == null || typeof codeHash !== "string" || !codeHash.trim()) return undefined;
+				const row = oauth_authorization_codes.find((r) => r.code_hash === codeHash.trim());
+				if (!row || row.consumed_at) return undefined;
+				const exp = Date.parse(row.expires_at);
+				if (!Number.isFinite(exp) || exp <= Date.now()) return undefined;
+				row.consumed_at = new Date().toISOString();
+				return row;
+			}
+		},
+		revokeOAuthGrantsForUserClient: {
+			run: async (userId, oauthClientInternalId) => {
+				let n = 0;
+				for (const g of oauth_grants) {
+					if (
+						Number(g.user_id) === Number(userId) &&
+						Number(g.oauth_client_id) === Number(oauthClientInternalId) &&
+						!g.revoked_at
+					) {
+						g.revoked_at = new Date().toISOString();
+						n++;
+					}
+				}
+				return { changes: n };
+			}
+		},
+		insertOAuthGrant: {
+			run: async ({ userId, oauthClientInternalId, refreshTokenHash, scopes }) => {
+				const id = oauth_grants.length ? Math.max(...oauth_grants.map((g) => g.id)) + 1 : 1;
+				oauth_grants.push({
+					id,
+					user_id: userId,
+					oauth_client_id: oauthClientInternalId,
+					refresh_token_hash: refreshTokenHash,
+					scopes,
+					created_at: new Date().toISOString(),
+					revoked_at: null,
+					last_used_at: null,
+					meta: null
+				});
+				return { insertId: id, lastInsertRowid: id };
+			}
+		},
+		selectOAuthGrantByRefreshTokenHash: {
+			get: async (refreshTokenHash) => {
+				if (refreshTokenHash == null || typeof refreshTokenHash !== "string") return undefined;
+				const g = oauth_grants.find(
+					(x) => x.refresh_token_hash === refreshTokenHash && !x.revoked_at
+				);
+				if (!g) return undefined;
+				const c = oauth_clients.find((x) => Number(x.id) === Number(g.oauth_client_id));
+				if (!c) return undefined;
+				return {
+					id: g.id,
+					user_id: g.user_id,
+					oauth_client_id: g.oauth_client_id,
+					refresh_token_hash: g.refresh_token_hash,
+					scopes: g.scopes,
+					revoked_at: g.revoked_at,
+					meta: g.meta ?? null,
+					public_client_id: c.client_id,
+					owner_user_id: c.owner_user_id
+				};
+			}
+		},
+		updateOAuthGrantRefreshToken: {
+			run: async (grantId, newRefreshTokenHash) => {
+				const g = oauth_grants.find((x) => Number(x.id) === Number(grantId) && !x.revoked_at);
+				if (!g) return { changes: 0 };
+				g.refresh_token_hash = newRefreshTokenHash;
+				g.last_used_at = new Date().toISOString();
+				return { changes: 1 };
+			}
+		},
+		touchOAuthGrantLastUsed: {
+			run: async (grantId) => {
+				const g = oauth_grants.find((x) => Number(x.id) === Number(grantId) && !x.revoked_at);
+				if (!g) return { changes: 0 };
+				g.last_used_at = new Date().toISOString();
+				return { changes: 1 };
+			}
+		},
+		selectIntegrationGrantsForUser: {
+			all: async (userId) =>
+				oauth_grants
+					.filter((g) => Number(g.user_id) === Number(userId) && !g.revoked_at)
+					.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+					.map((g) => {
+						const c = oauth_clients.find((x) => Number(x.id) === Number(g.oauth_client_id));
+						return {
+							id: g.id,
+							oauth_client_id: g.oauth_client_id,
+							public_client_id: c?.client_id ?? null,
+							app_name: c?.name ?? null,
+							created_at: g.created_at,
+							last_used_at: g.last_used_at,
+							scopes: g.scopes,
+							meta: g.meta ?? null
+						};
+					})
+		},
+		revokeOAuthGrantByIdForUser: {
+			run: async (grantId, userId) => {
+				const g = oauth_grants.find(
+					(x) => Number(x.id) === Number(grantId) && Number(x.user_id) === Number(userId) && !x.revoked_at
+				);
+				if (!g) return { changes: 0 };
+				g.revoked_at = new Date().toISOString();
+				g.refresh_token_hash = null;
+				return { changes: 1 };
 			}
 		},
 		recordCheckoutReturn: {

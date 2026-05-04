@@ -37,6 +37,7 @@ Served to logged-in users whose role is not `admin`. (`/` and `/index.html` use 
 /auth.html
 /pricing
 /pricing.html
+/integrations
 /try
 /auth
 /*

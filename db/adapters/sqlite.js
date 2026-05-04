@@ -236,6 +236,71 @@ function ensurePromptInjectionsTable(db) {
 	}
 }
 
+/** OAuth-style integration clients, authorization codes, and grants (see db/schemas/supabase_08_oauth.sql). */
+function ensureOauthTables(db) {
+	try {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS oauth_clients (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				client_id TEXT NOT NULL UNIQUE,
+				owner_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+				name TEXT NOT NULL,
+				redirect_uris TEXT NOT NULL DEFAULT '[]',
+				created_at TEXT NOT NULL DEFAULT (datetime('now')),
+				meta TEXT
+			)
+		`);
+		db.exec("CREATE INDEX IF NOT EXISTS idx_oauth_clients_owner ON oauth_clients(owner_user_id)");
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS oauth_authorization_codes (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				code_hash TEXT NOT NULL UNIQUE,
+				user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+				oauth_client_id INTEGER NOT NULL REFERENCES oauth_clients(id) ON DELETE CASCADE,
+				redirect_uri TEXT NOT NULL,
+				code_challenge TEXT NOT NULL,
+				expires_at TEXT NOT NULL,
+				consumed_at TEXT,
+				created_at TEXT NOT NULL DEFAULT (datetime('now')),
+				meta TEXT
+			)
+		`);
+		db.exec("CREATE INDEX IF NOT EXISTS idx_oauth_codes_expires ON oauth_authorization_codes(expires_at)");
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS oauth_grants (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+				oauth_client_id INTEGER NOT NULL REFERENCES oauth_clients(id) ON DELETE CASCADE,
+				refresh_token_hash TEXT UNIQUE,
+				scopes TEXT NOT NULL DEFAULT 'openid profile',
+				created_at TEXT NOT NULL DEFAULT (datetime('now')),
+				revoked_at TEXT,
+				last_used_at TEXT,
+				meta TEXT
+			)
+		`);
+		db.exec("CREATE INDEX IF NOT EXISTS idx_oauth_grants_user ON oauth_grants(user_id)");
+		db.exec("CREATE INDEX IF NOT EXISTS idx_oauth_grants_client ON oauth_grants(oauth_client_id)");
+	} catch (error) {
+		// ignore
+	}
+}
+
+function ensureOauthMetaColumns(db) {
+	try {
+		let columns = db.prepare("PRAGMA table_info(oauth_authorization_codes)").all();
+		if (columns.length && !columns.find((c) => c.name === "meta")) {
+			db.exec("ALTER TABLE oauth_authorization_codes ADD COLUMN meta TEXT");
+		}
+		columns = db.prepare("PRAGMA table_info(oauth_grants)").all();
+		if (columns.length && !columns.find((c) => c.name === "meta")) {
+			db.exec("ALTER TABLE oauth_grants ADD COLUMN meta TEXT");
+		}
+	} catch (error) {
+		// ignore
+	}
+}
+
 /** Make created_image_anon_id nullable so we can set NULL when image is transitioned to a user. */
 function ensureTryRequestsCreatedImageAnonIdNullable(db) {
 	try {
@@ -274,6 +339,19 @@ function parseUserMeta(value) {
 	}
 }
 
+/** Nullable extension blob for oauth_* rows (stored as TEXT JSON in SQLite). */
+function parseOptionalMetaJson(value) {
+	if (value == null || value === "") return null;
+	if (typeof value === "object") return value;
+	if (typeof value !== "string") return null;
+	try {
+		const o = JSON.parse(value);
+		return o == null ? null : o;
+	} catch {
+		return null;
+	}
+}
+
 function prsnCidsFromProfileMeta(meta) {
 	const m = meta && typeof meta === "object" ? meta : {};
 	const raw = m.prsn_cids;
@@ -300,6 +378,8 @@ export async function openDb() {
 	ensureSharePageViewsMetaColumn(db);
 	ensureCommentReactionsTable(db);
 	ensurePromptInjectionsTable(db);
+	ensureOauthTables(db);
+	ensureOauthMetaColumns(db);
 
 	const transferCreditsTxn = db.transaction((fromUserId, toUserId, amount) => {
 		const ensureCreditsRowStmt = db.prepare(
@@ -1015,6 +1095,186 @@ export async function openDb() {
 				);
 				const row = stmt.get(hash.trim());
 				return row ? { id: row.id } : undefined;
+			}
+		},
+		insertOauthClient: {
+			run: async ({ ownerUserId, clientId, name, redirectUrisJson }) => {
+				const stmt = db.prepare(
+					`INSERT INTO oauth_clients (owner_user_id, client_id, name, redirect_uris)
+					 VALUES (?, ?, ?, ?)`
+				);
+				const result = stmt.run(ownerUserId, clientId, name, redirectUrisJson);
+				return { insertId: result.lastInsertRowid, lastInsertRowid: result.lastInsertRowid };
+			}
+		},
+		selectOauthClientByPublicClientId: {
+			get: async (clientId) => {
+				if (clientId == null || typeof clientId !== "string" || !clientId.trim()) return undefined;
+				const stmt = db.prepare(
+					`SELECT id, client_id, owner_user_id, name, redirect_uris, created_at, meta FROM oauth_clients WHERE client_id = ?`
+				);
+				const row = stmt.get(clientId.trim());
+				return row ?? undefined;
+			}
+		},
+		selectOauthClientsByOwner: {
+			all: async (ownerUserId) => {
+				const stmt = db.prepare(
+					`SELECT id, client_id, owner_user_id, name, redirect_uris, created_at, meta FROM oauth_clients WHERE owner_user_id = ? ORDER BY id DESC`
+				);
+				return stmt.all(ownerUserId);
+			}
+		},
+		selectOauthClientByInternalIdForOwner: {
+			get: async (internalId, ownerUserId) => {
+				const stmt = db.prepare(
+					`SELECT id, client_id, owner_user_id, name, redirect_uris, created_at, meta FROM oauth_clients WHERE id = ? AND owner_user_id = ?`
+				);
+				const row = stmt.get(internalId, ownerUserId);
+				return row ?? undefined;
+			}
+		},
+		updateOauthClientForOwner: {
+			run: async (internalId, ownerUserId, { name, redirectUrisJson }) => {
+				const stmt = db.prepare(
+					`UPDATE oauth_clients SET name = ?, redirect_uris = ? WHERE id = ? AND owner_user_id = ?`
+				);
+				const result = stmt.run(name, redirectUrisJson, internalId, ownerUserId);
+				return { changes: result.changes };
+			}
+		},
+		deleteOauthClientForOwner: {
+			run: async (internalId, ownerUserId) => {
+				const stmt = db.prepare(`DELETE FROM oauth_clients WHERE id = ? AND owner_user_id = ?`);
+				const result = stmt.run(internalId, ownerUserId);
+				return { changes: result.changes };
+			}
+		},
+		insertOAuthAuthorizationCode: {
+			run: async ({
+				codeHash,
+				userId,
+				oauthClientInternalId,
+				redirectUri,
+				codeChallenge,
+				expiresAtIso
+			}) => {
+				const stmt = db.prepare(
+					`INSERT INTO oauth_authorization_codes (code_hash, user_id, oauth_client_id, redirect_uri, code_challenge, expires_at)
+					 VALUES (?, ?, ?, ?, ?, ?)`
+				);
+				const result = stmt.run(
+					codeHash,
+					userId,
+					oauthClientInternalId,
+					redirectUri,
+					codeChallenge,
+					expiresAtIso
+				);
+				return { insertId: result.lastInsertRowid };
+			}
+		},
+		consumeOAuthAuthorizationCode: {
+			get: async (codeHash) => {
+				if (codeHash == null || typeof codeHash !== "string" || !codeHash.trim()) return undefined;
+				const txn = db.transaction(() => {
+					const sel = db.prepare(
+						`SELECT id, code_hash, user_id, oauth_client_id, redirect_uri, code_challenge, expires_at, consumed_at, meta
+						 FROM oauth_authorization_codes WHERE code_hash = ?`
+					);
+					const row = sel.get(codeHash.trim());
+					if (!row || row.consumed_at) return undefined;
+					const exp = Date.parse(row.expires_at);
+					if (!Number.isFinite(exp) || exp <= Date.now()) return undefined;
+					db.prepare(`UPDATE oauth_authorization_codes SET consumed_at = datetime('now') WHERE id = ?`).run(row.id);
+					return row;
+				});
+				return txn();
+			}
+		},
+		revokeOAuthGrantsForUserClient: {
+			run: async (userId, oauthClientInternalId) => {
+				const stmt = db.prepare(
+					`UPDATE oauth_grants SET revoked_at = datetime('now')
+					 WHERE user_id = ? AND oauth_client_id = ? AND revoked_at IS NULL`
+				);
+				const result = stmt.run(userId, oauthClientInternalId);
+				return { changes: result.changes };
+			}
+		},
+		insertOAuthGrant: {
+			run: async ({ userId, oauthClientInternalId, refreshTokenHash, scopes }) => {
+				const stmt = db.prepare(
+					`INSERT INTO oauth_grants (user_id, oauth_client_id, refresh_token_hash, scopes)
+					 VALUES (?, ?, ?, ?)`
+				);
+				const result = stmt.run(userId, oauthClientInternalId, refreshTokenHash, scopes);
+				return { insertId: result.lastInsertRowid, lastInsertRowid: result.lastInsertRowid };
+			}
+		},
+		selectOAuthGrantByRefreshTokenHash: {
+			get: async (refreshTokenHash) => {
+				if (refreshTokenHash == null || typeof refreshTokenHash !== "string") return undefined;
+				const stmt = db.prepare(
+					`SELECT g.id, g.user_id, g.oauth_client_id, g.refresh_token_hash, g.scopes, g.revoked_at, g.meta,
+					        c.client_id AS public_client_id, c.owner_user_id
+					 FROM oauth_grants g
+					 JOIN oauth_clients c ON c.id = g.oauth_client_id
+					 WHERE g.refresh_token_hash = ? AND g.revoked_at IS NULL`
+				);
+				const row = stmt.get(refreshTokenHash);
+				return row ?? undefined;
+			}
+		},
+		updateOAuthGrantRefreshToken: {
+			run: async (grantId, newRefreshTokenHash) => {
+				const stmt = db.prepare(
+					`UPDATE oauth_grants SET refresh_token_hash = ?, last_used_at = datetime('now') WHERE id = ? AND revoked_at IS NULL`
+				);
+				const result = stmt.run(newRefreshTokenHash, grantId);
+				return { changes: result.changes };
+			}
+		},
+		touchOAuthGrantLastUsed: {
+			run: async (grantId) => {
+				const stmt = db.prepare(
+					`UPDATE oauth_grants SET last_used_at = datetime('now') WHERE id = ? AND revoked_at IS NULL`
+				);
+				const result = stmt.run(grantId);
+				return { changes: result.changes };
+			}
+		},
+		selectIntegrationGrantsForUser: {
+			all: async (userId) => {
+				const stmt = db.prepare(
+					`SELECT g.id, g.oauth_client_id, c.client_id AS public_client_id, c.name AS app_name,
+					        g.created_at, g.last_used_at, g.scopes, g.meta
+					 FROM oauth_grants g
+					 JOIN oauth_clients c ON c.id = g.oauth_client_id
+					 WHERE g.user_id = ? AND g.revoked_at IS NULL
+					 ORDER BY g.created_at DESC`
+				);
+				const rows = stmt.all(userId);
+				return rows.map((r) => ({
+					id: r.id,
+					oauth_client_id: r.oauth_client_id,
+					public_client_id: r.public_client_id,
+					app_name: r.app_name,
+					created_at: r.created_at,
+					last_used_at: r.last_used_at,
+					scopes: r.scopes,
+					meta: parseOptionalMetaJson(r.meta)
+				}));
+			}
+		},
+		revokeOAuthGrantByIdForUser: {
+			run: async (grantId, userId) => {
+				const stmt = db.prepare(
+					`UPDATE oauth_grants SET revoked_at = datetime('now'), refresh_token_hash = NULL
+					 WHERE id = ? AND user_id = ? AND revoked_at IS NULL`
+				);
+				const result = stmt.run(grantId, userId);
+				return { changes: result.changes };
 			}
 		},
 		recordCheckoutReturn: {

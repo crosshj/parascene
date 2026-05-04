@@ -11,6 +11,7 @@ const ENTRY_FROM_BODY_CLASS = {
 	'try-page': 'try',
 	'share-page': 'try', // try.html has share-page too; use try entry
 	'pricing-page': 'pricing',
+	'integrations-page': 'integrations',
 	'creation-detail-page': 'creation-detail',
 	'creation-edit-page': 'creation-edit',
 	'style-detail-page': 'style-detail',

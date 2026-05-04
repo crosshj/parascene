@@ -38,10 +38,12 @@ import createTryRoutes from "../api_routes/try.js";
 import {
 	authMiddleware,
 	apiKeyBearerMiddleware,
+	integrationBearerMiddleware,
 	probabilisticSessionCleanup,
 	sessionMiddleware,
 	shouldLogSession
 } from "../api_routes/auth.js";
+import createOAuthIntegrationRoutes from "../api_routes/oauthIntegration.js";
 import { canonicalHostRedirect } from "../api_routes/middleware/canonicalHost.js";
 import { apiSubdomainRedirect } from "../api_routes/middleware/apiSubdomainRedirect.js";
 import { shareSubdomainRedirect } from "../api_routes/middleware/shareSubdomainRedirect.js";
@@ -191,6 +193,7 @@ app.use((req, res, next) => {
 
 app.use(authMiddleware());
 app.use(apiKeyBearerMiddleware(queries));
+app.use(integrationBearerMiddleware());
 app.use(sessionMiddleware(queries));
 
 function isPollingHeavyPath(pathname) {
@@ -205,7 +208,7 @@ function isPollingHeavyPath(pathname) {
 }
 
 function isApiKeyRequest(req) {
-	return req?.auth?.apiKeyAuth === true;
+	return req?.auth?.apiKeyAuth === true || req?.auth?.integrationAccess === true;
 }
 app.use(
 	createRateLimitMiddleware({
@@ -265,9 +268,32 @@ app.use(
 );
 app.use(createPrsnCidPersistMiddleware(queries));
 app.use(probabilisticSessionCleanup(queries));
+app.use(
+	createRateLimitMiddleware({
+		bucket: "oauth-authorize",
+		windowSec: 60,
+		limit: 60,
+		methods: ["GET"],
+		shouldApply: (req) => req.path === "/oauth/authorize",
+		apiOnly: false,
+		failOpen: true
+	})
+);
+app.use(
+	createRateLimitMiddleware({
+		bucket: "oauth-token",
+		windowSec: 60,
+		limit: 45,
+		methods: ["POST"],
+		shouldApply: (req) => req.path === "/oauth/token",
+		apiOnly: false,
+		failOpen: true
+	})
+);
 app.use(createWelcomeGate(queries));
 
 app.use(createSupabaseSessionRoutes({ queries }));
+app.use(createOAuthIntegrationRoutes({ queries }));
 app.use(createUserRoutes({ queries }));
 app.use(createPresenceRoutes({ queries }));
 app.use(createFollowsRoutes({ queries }));

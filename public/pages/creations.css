@@ -3322,9 +3322,18 @@ button.creation-detail-history-thumb-link.creation-detail-history-unavailable.cr
 }
 
 @media (max-width: 768px) {
-	.creation-detail-hero {
-		min-height: 50vh;
+	/* Match hero to the image; min-height was leaving bands above/below the image. */
+	/* contain: paint keeps filter/backdrop blur from painting above the hero (frosted header samples it otherwise). */
+	body.creation-detail-page .creation-detail-hero {
+		min-height: 0;
 		border-radius: 0;
+		contain: paint;
+	}
+
+	/* scale(1.1) + heavy blur extend past the hero top into the fixed header’s backdrop-filter region. */
+	.creation-detail-background {
+		transform: none;
+		filter: blur(28px);
 	}
 
 	.creation-detail-background,
@@ -3352,9 +3361,16 @@ button.creation-detail-history-thumb-link.creation-detail-history-unavailable.cr
 	}
 }
 
+/* Closed native <dialog> uses display:none. Modal layout below sets display:flex/block and was overriding
+   that, so closed dialogs (Landscape / debug / cost confirm) stayed in the tree — visible on overscroll and
+   behind the frosted header. Only apply layout when open. */
+dialog.creation-detail-dialog:not([open]) {
+	display: none;
+}
+
 /* Landscape modal - single dialog; app colors, full width with small padding.
    Constrain height and overflow so header/footer stay visible; image/placeholder fit without scrolling. */
-.creation-detail-dialog.landscape-modal {
+.creation-detail-dialog.landscape-modal[open] {
 	width: calc(100vw - 24px);
 	max-width: calc(100vw - 24px);
 	height: 90vh;
@@ -3424,7 +3440,7 @@ button.creation-detail-history-thumb-link.creation-detail-history-unavailable.cr
 }
 
 /* Support info copied confirmation modal */
-.creation-detail-dialog.debug-copied-modal {
+.creation-detail-dialog.debug-copied-modal[open] {
 	width: max-content;
 	max-width: min(360px, 90vw);
 	padding: 24px;
@@ -3567,7 +3583,7 @@ button.creation-detail-history-thumb-link.creation-detail-history-unavailable.cr
 }
 
 /* Cost confirm: small modal, narrow to content */
-.creation-detail-dialog.landscape-cost-dialog {
+.creation-detail-dialog.landscape-cost-dialog[open] {
 	width: max-content;
 	max-width: min(400px, 90vw);
 	padding: 24px;
@@ -3624,7 +3640,7 @@ button.creation-detail-history-thumb-link.creation-detail-history-unavailable.cr
 /* Mobile: size modal to content so it isn't forced to 90vh and doesn't dominate the screen.
    Use fit-content so the dialog is exactly as tall as its contents (auto can expand incorrectly). */
 @media (max-width: 768px) {
-	.creation-detail-dialog.landscape-modal {
+	.creation-detail-dialog.landscape-modal[open] {
 		height: fit-content;
 		min-height: 0;
 		max-height: 85vh;
