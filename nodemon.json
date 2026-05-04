@@ -6,9 +6,15 @@
     "email",
     "lib",
     "pages",
-    "public"
+    "public",
+    "src"
+  ],
+  "ignore": [
+    "public/build/**",
+    "public/.asset-version-dev"
   ],
   "ext": "js,json",
+  "exec": "((node scripts/check-rollup-devdeps.mjs && npx rollup -c src/rollup.config.mjs) || true); node scripts/build-chat-bundle-css.mjs; node {{filename}}",
   "events": {
     "start": "node -e \"require('fs').writeFileSync('public/.asset-version-dev', String(Date.now()))\"",
     "restart": "node -e \"require('fs').writeFileSync('public/.asset-version-dev', String(Date.now()))\""

@@ -39,6 +39,7 @@ const CACHEABLE_DATA_PATH_PREFIXES = [
 	"/api/creations"
 ];
 const CACHEABLE_STATIC_PATH_PREFIXES = [
+	"/build/",
 	"/components/",
 	"/icons/",
 	"/pages/",

@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "prebuild": "node scripts/check-rollup-devdeps.mjs",
+    "build": "npx rollup -c src/rollup.config.mjs",
     "watch": "NODE_ENV=dev PORT=2367 nodemon api/index.js",
     "reset": "node db/reset.js",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
@@ -33,9 +35,13 @@
   },
   "devDependencies": {
     "@jest/globals": "^30.2.0",
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "@rollup/plugin-terser": "^1.0.0",
     "better-sqlite3": "^9.6.0",
+    "clean-css": "^5.3.3",
     "jest": "^30.2.0",
     "nodemon": "^3.1.11",
+    "rollup": "^4.60.2",
     "vercel": "^50.13.2"
   },
   "overrides": {

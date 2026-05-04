@@ -125,10 +125,10 @@ function getCommonHead() {
 		<link rel="preconnect" href="https://fonts.googleapis.com">
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
-		<link rel="stylesheet" href="/global.css{{V}}" />
+		{{GLOBAL_CSS_LINK}}
 		<meta name="asset-version" content="{{V_PARAM}}" />
 		{{PRSN_SUPABASE_BOOT}}
-		<script type="module" src="/entry.js{{V}}"></script>
+		<script type="module" src="{{ENTRY_MODULE_SRC}}"></script>
 		{{CANONICAL_LINK}}
 		{{OG_URL_TAG}}
 	`.trimEnd();
@@ -174,7 +174,20 @@ export function injectCommonHead(htmlContent, extraTokens) {
 
 	const commonHead = getCommonHead();
 	const existingHeadContent = headMatch[1];
-	const tokens = { CANONICAL_LINK: "", PRSN_SUPABASE_BOOT: "", ...extraTokens };
+	const ex = extraTokens || {};
+	const tokens = {
+		CANONICAL_LINK: "",
+		PRSN_SUPABASE_BOOT: "",
+		...ex,
+		ENTRY_MODULE_SRC:
+			ex.ENTRY_MODULE_SRC !== undefined && ex.ENTRY_MODULE_SRC !== null && String(ex.ENTRY_MODULE_SRC).length > 0
+				? String(ex.ENTRY_MODULE_SRC)
+				: `/entry.js${ex.V ?? ""}`
+	};
+	if (tokens.GLOBAL_CSS_LINK === undefined) {
+		const vq = ex.V ?? "";
+		tokens.GLOBAL_CSS_LINK = `\t\t<link rel="stylesheet" href="/global.css${vq}" />\n`;
+	}
 	const withHead = htmlContent.replace(/<head>[\s\S]*?<\/head>/i, `<head>\n${commonHead}${existingHeadContent}</head>`);
 	return replacePageTokens(withHead, tokens);
 }

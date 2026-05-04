@@ -11,7 +11,7 @@ import DOMPurify from "isomorphic-dompurify";
 /** Flip to `false` to stop emitting `body_html` from the canvases API. */
 export const CANVAS_SERVER_RENDERED_BODY_HTML = true;
 
-/** Appended to every rendered canvas body HTML (read view spacing). Keep in sync with `CANVAS_BODY_HTML_SUFFIX` in `public/pages/chat.js` fallback path. */
+/** Appended to every rendered canvas body HTML (read view spacing). Keep in sync with `CANVAS_BODY_HTML_SUFFIX` in `src/chat/chatPage.js` fallback path. */
 export const CANVAS_BODY_HTML_SUFFIX = "<br><br><br>";
 
 const markedOpts = {

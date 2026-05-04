@@ -141,6 +141,16 @@ app.use(
 	})
 );
 
+// Rollup chat bundle lives under public/build/ (gitignored). Without this, a missing file falls through
+// to the HTML catch-all and the browser reports a MIME error on the script tag.
+app.use(
+	"/build",
+	express.static(path.join(staticDir, "build"), {
+		index: false,
+		fallthrough: false
+	})
+);
+
 // Ensure every browser/client gets a stable first-party ID for analytics linkage.
 app.use(clientIdMiddleware);
 

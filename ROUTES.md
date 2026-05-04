@@ -40,3 +40,5 @@ Served to logged-in users whose role is not `admin`. (`/` and `/index.html` use 
 /try
 /auth
 /*
+
+Note: `src/`-only pattern applies to bundled code (chat: `src/chat/main.js` → `public/build/chat.bundle.js` + `chat.bundle.css`; shared UI web components in `src/shared/components/`; other deps in `src/shared/`, `src/chat/`). Unbundled routes stay on `public/`. Other routes listed here may need case-by-case handling (entry module, server-rendered HTML, service worker) when/if they move behind a `src/` bundle.

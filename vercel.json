@@ -1,5 +1,7 @@
 {
   "version": 2,
+  "installCommand": "npm install --include=dev",
+  "buildCommand": "npm run build",
   "redirects": [
     {
       "source": "/:path*",

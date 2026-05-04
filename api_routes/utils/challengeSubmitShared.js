@@ -1,4 +1,4 @@
-import { deriveChallengePhase } from "../../public/shared/challenges/model/phases.js";
+import { deriveChallengePhase } from "../../src/chat/challenges/model/phases.js";
 
 const MAX_NOTE_CHARS = 500;
 const MESSAGE_FETCH_LIMIT = 500;

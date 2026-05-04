@@ -109,6 +109,16 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 		return out;
 	}
 
+	/** Served HTML tokens for `pages/chat.html` (sidebar strip + Rollup chat bundle entry). */
+	function buildChatPageTokens(req, sidebarStripPath) {
+		const t = getPageTokens(req);
+		t.CHAT_SIDEBAR_PSEUDO_STRIP_LIST = buildSidebarPseudoStripListStaticHtml(sidebarStripPath);
+		t.ENTRY_MODULE_SRC = `/build/chat.bundle.js${t.V}`;
+		// chat.html loads `/build/chat.bundle.css` (global + chat.css); omit duplicate `/global.css` from injectCommonHead.
+		t.GLOBAL_CSS_LINK = "";
+		return t;
+	}
+
 	function serializeInlineScript(value) {
 		return JSON.stringify(value).replace(/</g, "\\u003c");
 	}
@@ -587,10 +597,9 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			htmlContent = injectCommonHead(htmlContent, getPageTokens(req));
 		} else {
 			htmlContent = await fs.readFile(path.join(pagesDir, "chat.html"), "utf-8");
-			const chatPageTokens = getPageTokens(req);
-			chatPageTokens.CHAT_SIDEBAR_PSEUDO_STRIP_LIST = buildSidebarPseudoStripListStaticHtml(req.path);
+			const chatPageTokens = buildChatPageTokens(req, req.path);
 			htmlContent = replaceTemplateTokens(htmlContent, chatPageTokens);
-			htmlContent = injectCommonHead(htmlContent, getPageTokens(req));
+			htmlContent = injectCommonHead(htmlContent, chatPageTokens);
 		}
 		res.setHeader("Content-Type", "text/html");
 		return res.send(htmlContent);
@@ -1249,13 +1258,12 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			}
 			const fs = await import("fs/promises");
 			let htmlContent = await fs.readFile(path.join(pagesDir, "chat.html"), "utf-8");
-			const chatPageTokens = getPageTokens(req);
 			let sidebarPath = req.path;
 			if (req.path === "/feed" || req.path === "/feed/") sidebarPath = "/chat/c/feed";
 			if (req.path === "/explore" || req.path === "/explore/") sidebarPath = "/chat/c/explore";
 			if (req.path === "/creations" || req.path === "/creations/") sidebarPath = "/chat/c/creations";
 			if (req.path === "/challenges" || req.path === "/challenges/") sidebarPath = "/chat/c/challenges";
-			chatPageTokens.CHAT_SIDEBAR_PSEUDO_STRIP_LIST = buildSidebarPseudoStripListStaticHtml(sidebarPath);
+			const chatPageTokens = buildChatPageTokens(req, sidebarPath);
 			htmlContent = injectCommonHead(htmlContent, chatPageTokens);
 			res.setHeader("Content-Type", "text/html");
 			return res.send(htmlContent);

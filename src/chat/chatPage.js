@@ -1,9 +1,61 @@
 /**
  * Standalone /chat/* thread UI (plain JS; not a custom element).
+ * Source of truth for `initChatPage`: bundled via `src/rollup.config.mjs` (not served as `/pages/*.js`).
  */
 
+import * as _cdDatetime from '../shared/datetime.js';
+import * as _cdApi from '../shared/api.js';
+import * as _cdChatThreadsCache from '../shared/chatThreadsCache.js';
+import * as _cdChatSidebarSessionCache from '../shared/chatSidebarSessionCache.js';
+import * as _cdAvatar from '../shared/avatar.js';
+import * as _cdProfileLinks from '../shared/profileLinks.js';
+import * as _cdCommentItem from '../shared/commentItem.js';
+import * as _cdUserText from '../shared/userText.js';
+import * as _cdEmptyState from '../shared/emptyState.js';
+import * as _cdAutogrow from '../shared/autogrow.js';
+import * as _cdTriggeredSuggest from '../shared/triggeredSuggest.js';
+import * as _cdLikes from '../shared/likes.js';
+import * as _cdComments from '../shared/comments.js';
+import * as _cdReactionTooltipTap from '../shared/reactionTooltipTap.js';
+import * as _cdConnectCommentCard from '../shared/connectCommentCard.js';
+import * as _cdPseudoChannelColumnPager from '../shared/pseudoChannelColumnPager.js';
+import * as _cdSkeleton from '../shared/skeleton.js';
+import { dismissChallengeVoteModalFromBrowserHistoryIfOpen as dismissChallengeVoteModalImpl } from './challenges/challengeVoteModal.js';
+import {
+	sendIcon,
+	notifyIcon,
+	creditIcon,
+	REACTION_ORDER,
+	REACTION_ICONS,
+	smileIcon,
+	gearIcon,
+	copyIcon,
+	pencilIcon,
+	trashIcon,
+	helpIcon,
+	linkIcon2
+} from '/icons/svg-strings.js';
+import * as rosterMod from '../shared/chatSidebarRoster.js';
+import { openDmSidebarGearMenu } from '/shared/chatDmSidebarGearMenu.js';
+import { serverChannelTagFromServerName } from '../shared/serverChatTag.js';
+import * as creationsPollMod from '/shared/creationsInFlightPoller.js';
+import {
+	applyChatGlobalUnreadChrome,
+	restoreChatGlobalUnreadFavicon,
+	CHAT_UNREAD_TITLE_PREFIX_RE
+} from '/shared/chatGlobalUnreadChrome.js';
+import { playChatUnreadPing } from '/shared/chatUnreadAudio.js';
+import { hydrateChatAudibleNotificationsFromServer } from '/shared/chatAudibleNotificationsPref.js';
+import { formatMentionsFailureForDialog, uploadChatFile } from '/shared/createSubmit.js';
+import { subscribeUserBroadcast, subscribeRoomBroadcast } from '../shared/realtimeBroadcast.js';
+import { initChatSidebarModals } from '../shared/components/modals/chatSidebarModals.js';
+import { createFeedItemCard, feedItemToUser, getHiddenFeedItems } from '../shared/feedCardBuild.js';
+import { addToMutateQueue } from '/shared/mutateQueue.js';
+import { captureChallengeSubmitThread } from '/shared/challengeSubmitContext.js';
+import * as challengesChannelModule from './challengesChannel.js';
+
 /**
- * Bound after versioned dynamic import in initChatPage (see `?v=` on `challengeVoteModal.js`, same as other shared imports).
+ * Set when `initChatPage` runs (binds the vote-modal dismiss impl from the static graph).
  * @type {null | (() => boolean)}
  */
 let dismissChallengeVoteModalFromBrowserHistoryIfOpenRef = null;
@@ -285,82 +337,49 @@ function getImportQuery(version) {
 	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
 }
 
-let _depsPromise;
+let _chatDepsLoaded = false;
+/**
+ * Binds `let` references to the static `import * as _cd…` graph at the top of this file.
+ * Avoid adding more absolute `/shared/…` loads here via async loader patterns — Rollup can emit a late `var` and break init order.
+ */
 async function loadDeps() {
-	if (_depsPromise) return _depsPromise;
-	const v = getAssetVersionParam();
-	const qs = getImportQuery(v);
-	_depsPromise = (async () => {
-		const datetimeMod = await import(`../shared/datetime.js${qs}`);
-		formatRelativeTime = datetimeMod.formatRelativeTime;
-
-		const apiMod = await import(`../shared/api.js${qs}`);
-		fetchJsonWithStatusDeduped = apiMod.fetchJsonWithStatusDeduped;
-
-		const chatThreadsCacheMod = await import(`../shared/chatThreadsCache.js${qs}`);
-		readCachedChatThreads = chatThreadsCacheMod.readCachedChatThreads;
-		writeCachedChatThreads = chatThreadsCacheMod.writeCachedChatThreads;
-		clearCachedChatThreads = chatThreadsCacheMod.clearCachedChatThreads;
-		isChatThreadsCacheStale = chatThreadsCacheMod.isChatThreadsCacheStale;
-
-		const chatSidebarSessionCacheMod = await import(`../shared/chatSidebarSessionCache.js${qs}`);
-		readSidebarRosterSessionCache = chatSidebarSessionCacheMod.readSidebarRosterSessionCache;
-		writeSidebarRosterSessionCache = chatSidebarSessionCacheMod.writeSidebarRosterSessionCache;
-		clearSidebarRosterSessionCache = chatSidebarSessionCacheMod.clearSidebarRosterSessionCache;
-
-		const avatarMod = await import(`../shared/avatar.js${qs}`);
-		getAvatarColor = avatarMod.getAvatarColor;
-
-		const profileLinksMod = await import(`../shared/profileLinks.js${qs}`);
-		buildProfilePath = profileLinksMod.buildProfilePath;
-
-		const commentItemMod = await import(`../shared/commentItem.js${qs}`);
-		renderCommentAvatarHtml = commentItemMod.renderCommentAvatarHtml;
-
-		const userTextMod = await import(`../shared/userText.js${qs}`);
-		processUserText = userTextMod.processUserText;
-		hydrateUserTextLinks = userTextMod.hydrateUserTextLinks;
-		hydrateChatCreationEmbeds = userTextMod.hydrateChatCreationEmbeds;
-
-		const emptyStateMod = await import(`../shared/emptyState.js${qs}`);
-		renderEmptyState = emptyStateMod.renderEmptyState;
-		renderPaneLoadError = emptyStateMod.renderPaneLoadError;
-
-		const autogrowMod = await import(`../shared/autogrow.js${qs}`);
-		attachAutoGrowTextarea = autogrowMod.attachAutoGrowTextarea;
-
-		const suggestMod = await import(`../shared/triggeredSuggest.js${qs}`);
-		attachMentionSuggest = suggestMod.attachMentionSuggest;
-		attachChatMentionSuggest = suggestMod.attachChatMentionSuggest;
-		attachChatComposerSuggest = suggestMod.attachChatComposerSuggest;
-		isTriggeredSuggestPopupOpen = suggestMod.isTriggeredSuggestPopupOpen;
-		addPageUsers = suggestMod.addPageUsers;
-		clearPageUsers = suggestMod.clearPageUsers;
-		addPageHashtagTargets = suggestMod.addPageHashtagTargets;
-		clearPageHashtagTargets = suggestMod.clearPageHashtagTargets;
-
-		const likesMod = await import(`../shared/likes.js${qs}`);
-		enableLikeButtons = likesMod.enableLikeButtons;
-
-		const commentsMod = await import(`../shared/comments.js${qs}`);
-		toggleChatMessageReaction = commentsMod.toggleChatMessageReaction;
-
-		const tooltipTapMod = await import(`../shared/reactionTooltipTap.js${qs}`);
-		setupReactionTooltipTap = tooltipTapMod.setupReactionTooltipTap;
-
-		const connectCardMod = await import(`../shared/connectCommentCard.js${qs}`);
-		createConnectCommentRowElement = connectCardMod.createConnectCommentRowElement;
-
-		const columnPagerMod = await import(`../shared/pseudoChannelColumnPager.js${qs}`);
-		createPseudoColumnPager = columnPagerMod.createPseudoColumnPager;
-
-		const skeletonMod = await import(`../shared/skeleton.js${qs}`);
-		renderFeedCardsSkeleton = skeletonMod.renderFeedCardsSkeleton;
-		renderGridSkeleton = skeletonMod.renderGridSkeleton;
-		renderCommentRowsSkeleton = skeletonMod.renderCommentRowsSkeleton;
-		renderChallengePaneSkeleton = skeletonMod.renderChallengePaneSkeleton;
-	})();
-	return _depsPromise;
+	if (_chatDepsLoaded) return;
+	_chatDepsLoaded = true;
+	formatRelativeTime = _cdDatetime.formatRelativeTime;
+	fetchJsonWithStatusDeduped = _cdApi.fetchJsonWithStatusDeduped;
+	readCachedChatThreads = _cdChatThreadsCache.readCachedChatThreads;
+	writeCachedChatThreads = _cdChatThreadsCache.writeCachedChatThreads;
+	clearCachedChatThreads = _cdChatThreadsCache.clearCachedChatThreads;
+	isChatThreadsCacheStale = _cdChatThreadsCache.isChatThreadsCacheStale;
+	readSidebarRosterSessionCache = _cdChatSidebarSessionCache.readSidebarRosterSessionCache;
+	writeSidebarRosterSessionCache = _cdChatSidebarSessionCache.writeSidebarRosterSessionCache;
+	clearSidebarRosterSessionCache = _cdChatSidebarSessionCache.clearSidebarRosterSessionCache;
+	getAvatarColor = _cdAvatar.getAvatarColor;
+	buildProfilePath = _cdProfileLinks.buildProfilePath;
+	renderCommentAvatarHtml = _cdCommentItem.renderCommentAvatarHtml;
+	processUserText = _cdUserText.processUserText;
+	hydrateUserTextLinks = _cdUserText.hydrateUserTextLinks;
+	hydrateChatCreationEmbeds = _cdUserText.hydrateChatCreationEmbeds;
+	renderEmptyState = _cdEmptyState.renderEmptyState;
+	renderPaneLoadError = _cdEmptyState.renderPaneLoadError;
+	attachAutoGrowTextarea = _cdAutogrow.attachAutoGrowTextarea;
+	attachMentionSuggest = _cdTriggeredSuggest.attachMentionSuggest;
+	attachChatMentionSuggest = _cdTriggeredSuggest.attachChatMentionSuggest;
+	attachChatComposerSuggest = _cdTriggeredSuggest.attachChatComposerSuggest;
+	isTriggeredSuggestPopupOpen = _cdTriggeredSuggest.isTriggeredSuggestPopupOpen;
+	addPageUsers = _cdTriggeredSuggest.addPageUsers;
+	clearPageUsers = _cdTriggeredSuggest.clearPageUsers;
+	addPageHashtagTargets = _cdTriggeredSuggest.addPageHashtagTargets;
+	clearPageHashtagTargets = _cdTriggeredSuggest.clearPageHashtagTargets;
+	enableLikeButtons = _cdLikes.enableLikeButtons;
+	toggleChatMessageReaction = _cdComments.toggleChatMessageReaction;
+	setupReactionTooltipTap = _cdReactionTooltipTap.setupReactionTooltipTap;
+	createConnectCommentRowElement = _cdConnectCommentCard.createConnectCommentRowElement;
+	createPseudoColumnPager = _cdPseudoChannelColumnPager.createPseudoColumnPager;
+	renderFeedCardsSkeleton = _cdSkeleton.renderFeedCardsSkeleton;
+	renderGridSkeleton = _cdSkeleton.renderGridSkeleton;
+	renderCommentRowsSkeleton = _cdSkeleton.renderCommentRowsSkeleton;
+	renderChallengePaneSkeleton = _cdSkeleton.renderChallengePaneSkeleton;
 }
 
 function escapeHtml(str) {
@@ -694,40 +713,11 @@ export async function initChatPage(root, options = {}) {
 
 	await loadDeps();
 
+	dismissChallengeVoteModalFromBrowserHistoryIfOpenRef = dismissChallengeVoteModalImpl;
+
 	const v = getAssetVersionParam();
 	const qs = getImportQuery(v);
-	const challengeVoteModalMod = await import(`../shared/challenges/challengeVoteModal.js${qs}`);
-	dismissChallengeVoteModalFromBrowserHistoryIfOpenRef =
-		challengeVoteModalMod.dismissChallengeVoteModalFromBrowserHistoryIfOpen;
-	const {
-		sendIcon,
-		notifyIcon,
-		creditIcon,
-		REACTION_ORDER,
-		REACTION_ICONS,
-		smileIcon,
-		gearIcon,
-		copyIcon,
-		pencilIcon,
-		trashIcon,
-		helpIcon,
-		linkIcon2
-	} = await import(`../icons/svg-strings.js${qs}`);
 	const chatSidebarServerGearSvg = gearIcon('chat-page-sidebar-server-settings-icon');
-	const rosterMod = await import(`../shared/chatSidebarRoster.js${qs}`);
-	const chatDmSidebarGearMenuMod = await import(`../shared/chatDmSidebarGearMenu.js${qs}`);
-	const openDmSidebarGearMenu = chatDmSidebarGearMenuMod.openDmSidebarGearMenu;
-	const serverChatTagMod = await import(`../shared/serverChatTag.js${qs}`);
-	const serverChannelTagFromServerName = serverChatTagMod.serverChannelTagFromServerName;
-	const creationsPollMod = await import(`../shared/creationsInFlightPoller.js${qs}`);
-	const chatGlobalUnreadChromeMod = await import(`../shared/chatGlobalUnreadChrome.js${qs}`);
-	const applyChatGlobalUnreadChrome = chatGlobalUnreadChromeMod.applyChatGlobalUnreadChrome;
-	const restoreChatGlobalUnreadFavicon = chatGlobalUnreadChromeMod.restoreChatGlobalUnreadFavicon;
-	const CHAT_UNREAD_TITLE_PREFIX_RE = chatGlobalUnreadChromeMod.CHAT_UNREAD_TITLE_PREFIX_RE;
-	const chatUnreadAudioMod = await import(`../shared/chatUnreadAudio.js${qs}`);
-	const playChatUnreadPing = chatUnreadAudioMod.playChatUnreadPing;
-	const chatAudiblePrefMod = await import(`../shared/chatAudibleNotificationsPref.js${qs}`);
-	const hydrateChatAudibleNotificationsFromServer = chatAudiblePrefMod.hydrateChatAudibleNotificationsFromServer;
 
 	async function hydrateAudibleNotificationsFromProfileOnce() {
 		try {
@@ -1958,9 +1948,8 @@ export async function initChatPage(root, options = {}) {
 		if (!mentionsResult.ok) {
 			let message = 'Mentions could not be validated. Submit anyway?';
 			try {
-				const createSubmitMod = await import(`../shared/createSubmit.js${qs}`);
-				if (typeof createSubmitMod.formatMentionsFailureForDialog === 'function') {
-					message = `${createSubmitMod.formatMentionsFailureForDialog(mentionsResult.data)}\n\nSubmit anyway?`;
+				if (typeof formatMentionsFailureForDialog === 'function') {
+					message = `${formatMentionsFailureForDialog(mentionsResult.data)}\n\nSubmit anyway?`;
 				}
 			} catch {
 				// ignore
@@ -2224,18 +2213,6 @@ export async function initChatPage(root, options = {}) {
 			errStrip.textContent = '';
 		}
 
-		let mod;
-		try {
-			mod = await import(`../shared/createSubmit.js${qs}`);
-		} catch (err) {
-			console.error('[Chat page] upload module:', err);
-			if (errStrip instanceof HTMLElement) {
-				errStrip.hidden = false;
-				errStrip.textContent = 'Could not load file upload.';
-			}
-			return;
-		}
-
 		for (const file of arr) {
 			if (file.size > CHAT_MAX_UPLOAD_BYTES) {
 				if (errStrip instanceof HTMLElement) {
@@ -2266,7 +2243,7 @@ export async function initChatPage(root, options = {}) {
 
 			void (async () => {
 				try {
-					const { url: urlPath, displayAsFile } = await mod.uploadChatFile(file);
+					const { url: urlPath, displayAsFile } = await uploadChatFile(file);
 					const path = String(urlPath || '').trim();
 					if (!path) throw new Error('Upload returned no URL');
 					const ent = chatPendingImages.find((e) => e.id === id);
@@ -3123,8 +3100,7 @@ export async function initChatPage(root, options = {}) {
 		}
 		tearDownChatGlobalUnreadBroadcast();
 		try {
-			const mod = await import(`../shared/realtimeBroadcast.js${qs}`);
-			chatGlobalUnreadBroadcastTeardown = await mod.subscribeUserBroadcast(id, () => {
+			chatGlobalUnreadBroadcastTeardown = await subscribeUserBroadcast(id, () => {
 				void loadChatGlobalUnreadSummary();
 			});
 			chatGlobalUnreadBroadcastBoundId = id;
@@ -5473,12 +5449,11 @@ export async function initChatPage(root, options = {}) {
 	}
 
 	/** Plus buttons → section-specific modals (new DM, servers, channels). */
-	async function setupChatSidebarSectionAdds() {
+	function setupChatSidebarSectionAdds() {
 		const sidebar = document.querySelector('[data-chat-sidebar]');
 		if (!sidebar) return;
 
-		const mod = await import(`../components/modals/chatSidebarModals.js${qs}`);
-		chatSidebarModalsApi = mod.initChatSidebarModals({
+		chatSidebarModalsApi = initChatSidebarModals({
 			getThreads: () => chatThreads || [],
 			getViewerId: () => chatViewerId,
 			navigateToChatPath: (pathname) => {
@@ -6004,9 +5979,8 @@ export async function initChatPage(root, options = {}) {
 				columnOrder: 'feed',
 				getItemKey: (m) => (Number.isFinite(Number(m?.id)) ? String(m.id) : ''),
 				fetchPage: async ({ initial, items }) => {
-					const commentsMod = await import(`../shared/comments.js${qs}`);
 					if (initial) {
-						const result = await commentsMod.fetchLatestComments({ limit: COMMENTS_CHANNEL_PAGE_SIZE });
+						const result = await _cdComments.fetchLatestComments({ limit: COMMENTS_CHANNEL_PAGE_SIZE });
 						if (!result.ok) {
 							const msg =
 								result.data?.message ||
@@ -6031,7 +6005,7 @@ export async function initChatPage(root, options = {}) {
 					if (!before) {
 						return { pageItems: [], hasMore: false };
 					}
-					const result = await commentsMod.fetchLatestComments({
+					const result = await _cdComments.fetchLatestComments({
 						limit: COMMENTS_CHANNEL_PAGE_SIZE,
 						before,
 					});
@@ -6406,8 +6380,6 @@ export async function initChatPage(root, options = {}) {
 		}
 
 		try {
-			const feedCardMod = await import(`../shared/feedCardBuild.js${qs}`);
-			const { createFeedItemCard, feedItemToUser } = feedCardMod;
 			const r = await pseudoColumnPager.loadOlder();
 			if (!r.ok) {
 				return;
@@ -6513,9 +6485,7 @@ export async function initChatPage(root, options = {}) {
 		teardownExploreChannelLoadMore();
 		messagesEl.setAttribute('aria-busy', 'true');
 		try {
-			const feedCardMod = await import(`../shared/feedCardBuild.js${qs}`);
 			if (isStaleChatPane(paneEpoch)) return;
-			const { createFeedItemCard, feedItemToUser, getHiddenFeedItems } = feedCardMod;
 
 			pseudoColumnPager = createPseudoColumnPager({
 				columnOrder: feedLanePagerColumnOrder(),
@@ -6817,8 +6787,6 @@ export async function initChatPage(root, options = {}) {
 		routeWrap._chatBulkCap?.abort();
 		const cards = routeWrap.querySelector('[data-feed-channel-cards]');
 		if (!(cards instanceof HTMLElement)) return;
-		const mutateQueueMod = await import(`../shared/mutateQueue.js${qs}`);
-		const { addToMutateQueue } = mutateQueueMod;
 
 		const bar = routeWrap.querySelector('[data-creations-bulk-bar]');
 		const bulkClose = routeWrap.querySelector('[data-creations-bulk-close]');
@@ -7286,9 +7254,7 @@ export async function initChatPage(root, options = {}) {
 		teardownExploreChannelLoadMore();
 		messagesEl.setAttribute('aria-busy', 'true');
 		try {
-			const feedCardMod = await import(`../shared/feedCardBuild.js${qs}`);
 			if (isStaleChatPane(paneEpoch)) return;
-			const { createFeedItemCard, feedItemToUser } = feedCardMod;
 
 			const creationsAuthorHints = await resolveCreationsChannelAuthorHints();
 			if (isStaleChatPane(paneEpoch)) return;
@@ -7526,9 +7492,7 @@ export async function initChatPage(root, options = {}) {
 		teardownExploreChannelLoadMore();
 		messagesEl.setAttribute('aria-busy', 'true');
 		try {
-			const feedCardMod = await import(`../shared/feedCardBuild.js${qs}`);
 			if (isStaleChatPane(paneEpoch)) return;
-			const { createFeedItemCard, feedItemToUser } = feedCardMod;
 
 			if (qActive) {
 				pseudoColumnPager = null;
@@ -7967,8 +7931,7 @@ export async function initChatPage(root, options = {}) {
 		if (!messagesEl || !Number.isFinite(tid) || tid <= 0) return;
 
 		try {
-			const ctxMod = await import(`../shared/challengeSubmitContext.js${qs}`);
-			ctxMod.captureChallengeSubmitThread?.(tid);
+			captureChallengeSubmitThread?.(tid);
 		} catch {
 			// ignore
 		}
@@ -7995,13 +7958,12 @@ export async function initChatPage(root, options = {}) {
 		}
 		challengesOrganizerSidebarTeardown = null;
 		try {
-			const mod = await import(`../shared/challengesChannel.js${qs}`);
 			const [messages, viewerProf] = await Promise.all([
-				mod.fetchAllChatThreadMessages(tid),
+				challengesChannelModule.fetchAllChatThreadMessages(tid),
 				fetchChatViewerProfileMini()
 			]);
 			const viewerUserName = viewerProf?.user_name ?? null;
-			chatChallengesOrganizerEligible = Boolean(mod.isChallengeChannelAdmin?.(viewerUserName));
+			chatChallengesOrganizerEligible = Boolean(challengesChannelModule.isChallengeChannelAdmin?.(viewerUserName));
 			if (isStaleChatPane(paneEpoch)) return;
 			lastChatMessagesPayload = [];
 			messagesEl.innerHTML = '';
@@ -8014,7 +7976,7 @@ export async function initChatPage(root, options = {}) {
 				return typeof fn === 'function' ? fn(cls || '') : '';
 			};
 
-			const api = await mod.mountChallengesPane({
+			const api = await challengesChannelModule.mountChallengesPane({
 				root: mountWrap,
 				threadId: tid,
 				viewerId: Number.isFinite(Number(chatViewerId)) ? Number(chatViewerId) : null,
@@ -8029,8 +7991,8 @@ export async function initChatPage(root, options = {}) {
 			challengesPaneTeardown = api.destroy;
 
 			const orgHost = chatCanvasScope?.querySelector('[data-chat-challenges-organizer-sidebar]');
-			if (chatChallengesOrganizerEligible && orgHost instanceof HTMLElement && mod.mountChallengesOrganizerSidebar) {
-				const orgApi = mod.mountChallengesOrganizerSidebar(orgHost, {
+			if (chatChallengesOrganizerEligible && orgHost instanceof HTMLElement && challengesChannelModule.mountChallengesOrganizerSidebar) {
+				const orgApi = challengesChannelModule.mountChallengesOrganizerSidebar(orgHost, {
 					messages,
 					viewerId: Number.isFinite(Number(chatViewerId)) ? Number(chatViewerId) : null,
 					threadId: tid,
@@ -8145,7 +8107,6 @@ export async function initChatPage(root, options = {}) {
 		const tid = Number(threadId);
 		if (!Number.isFinite(tid) || tid <= 0) return;
 		try {
-			const mod = await import(`../shared/realtimeBroadcast.js${qs}`);
 			const refetch = () => {
 				if (activePseudoChannelSlug === 'challenges') {
 					void loadChallengesChannelMessages();
@@ -8153,7 +8114,7 @@ export async function initChatPage(root, options = {}) {
 					void loadMessages();
 				}
 			};
-			roomBroadcastTeardown = await mod.subscribeRoomBroadcast(tid, refetch, {
+			roomBroadcastTeardown = await subscribeRoomBroadcast(tid, refetch, {
 				onReconnect: refetch,
 				onDeleted: () => {
 					window.location.href = '/chat#channels';

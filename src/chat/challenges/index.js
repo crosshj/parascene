@@ -1,5 +1,4 @@
 export {
-	getChallengesImportQuery,
 	parseIso,
 	CHALLENGE_SCORE_REACTION_KEYS,
 	challengeReactionKeyToScore,

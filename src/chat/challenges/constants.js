@@ -1,5 +1,5 @@
 /**
- * Challenge scoring reactions + helpers + `?v=` for dynamic imports (plain ESM: avoid extra micro-files).
+ * Challenge scoring reactions and small shared helpers.
  */
 
 /**
@@ -66,19 +66,6 @@ export function weightedScoreFromReactions(reactions) {
 		sum += n * w;
 	}
 	return sum;
-}
-
-/**
- * Query suffix for dynamic `import()` (`?v=…`). Matches `meta[name="asset-version"]` / chat `getImportQuery`.
- */
-export function getChallengesImportQuery() {
-	try {
-		if (typeof document === 'undefined') return '';
-		const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
-		return v ? `?v=${encodeURIComponent(v)}` : '';
-	} catch {
-		return '';
-	}
 }
 
 /** HTML attribute escape for challenge view templates (was a separate file). */

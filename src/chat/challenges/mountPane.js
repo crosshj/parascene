@@ -1,6 +1,5 @@
 import { buildChallengesChannelModel } from './model/buildChannelModel.js';
 import { rankedSubmissionsForPeerVoting } from './model/participantSlice.js';
-import { getChallengesImportQuery } from './constants.js';
 import { renderEmptyParticipantPane } from './views/emptyParticipantView.js';
 import { renderHeroSection } from './views/heroView.js';
 import { participantHeroViewModel } from './views/presentParticipantHero.js';
@@ -8,15 +7,12 @@ import { renderChallengeCountdowns } from './views/countdownView.js';
 import { renderChallengeHeroImage, renderDetailsAndReward } from './views/detailsRewardView.js';
 import { renderChallengeVoteHeroCta, renderSubmissionsSection } from './views/submissionsView.js';
 import { renderResultsSection } from './views/resultsView.js';
-
-/** One shared import of `userText` for hero hydration (avoids a separate `heroHydrate.js` module). */
-let userTextHelpersPromise = /** @type {Promise<typeof import('../userText.js')> | null} */ (null);
-function getUserTextHelpers() {
-	if (!userTextHelpersPromise) {
-		userTextHelpersPromise = import(`../userText.js${getChallengesImportQuery()}`);
-	}
-	return userTextHelpersPromise;
-}
+import {
+	fetchCreationEmbedPayload,
+	parseHeroCreationOrShareRef,
+	parseHeroDirectMediaUrl
+} from '../../shared/userText.js';
+import { createChallengeVoteModal, buildVoteSlidesNewestFirst } from './challengeVoteModal.js';
 
 /**
  * @param {object | null} data — GET /api/create/images/:id
@@ -42,8 +38,6 @@ function imageUrlFromCreationPayload(data) {
  * @param {Element | null | undefined} rootEl
  */
 async function hydrateChallengeHeroImage(rootEl) {
-	const { fetchCreationEmbedPayload, parseHeroCreationOrShareRef, parseHeroDirectMediaUrl } =
-		await getUserTextHelpers();
 	const wrap = rootEl?.querySelector?.('[data-challenge-hero-pending]');
 	if (!(wrap instanceof HTMLElement)) return;
 
@@ -193,8 +187,6 @@ function syncVoteTabChrome(root, ranked, viewerId, phase) {
  */
 export async function mountChallengesPane(opts) {
 	const { root, viewerId, messages, reload, toggleReaction } = opts;
-	const voteMod = await import(`./challengeVoteModal.js${getChallengesImportQuery()}`);
-	const { createChallengeVoteModal, buildVoteSlidesNewestFirst } = voteMod;
 
 	const model = buildChallengesChannelModel(messages, {
 		viewerId,
