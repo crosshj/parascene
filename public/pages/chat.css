@@ -2675,7 +2675,7 @@ body.chat-page .chat-page-send-btn .chat-page-send-icon {
 		min-height: auto;
 		overflow: visible;
 		overscroll-behavior-y: auto;
-		-webkit-overflow-scrolling: auto;
+		padding-inline: 0;
 	}
 
 	html.chat-page.chat-page--viewport-scroll[data-chat-viewport-scroll-lock='1'],

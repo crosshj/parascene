@@ -9,7 +9,11 @@ export { fetchAllChatThreadMessages, buildChallengesChannelModel } from './model
 export { challengePhaseDisplayLabel, deriveChallengePhase } from './model/phases.js';
 export { parseChallengeTimeline } from './model/parseTimeline.js';
 export { summarizeLatestChallengeConfigs } from './model/organizerSummaries.js';
-export { mountChallengesPane, renderChallengesPaneHtml } from './mountPane.js';
+export {
+	mountChallengesPane,
+	renderChallengesPaneHtml,
+	openChallengeVoteModalFromMessages
+} from './mountPane.js';
 export { mountChallengesOrganizerSidebar } from './mountOrganizerSidebar.js';
 export {
 	renderChallengeOrganizerSidebarMarkup,

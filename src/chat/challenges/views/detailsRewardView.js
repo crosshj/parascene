@@ -271,7 +271,7 @@ export function renderRewardsSection(cfg) {
 		);
 	}
 
-	return `<section class="challenge-pane-section challenge-pane-rewards-section">
+	return `<section id="challenge-details" class="challenge-pane-section challenge-pane-rewards-section">
 			<h3 class="challenge-pane-section-label">Rewards</h3>
 			<div class="challenge-rewards-stack">${cards.join('')}</div>
 		</section>`;
@@ -283,7 +283,7 @@ export function renderRewardsSection(cfg) {
 export function renderDetailsAndReward(cfg) {
 	let html = '';
 	if (cfg.details) {
-		html += `<section class="challenge-pane-section"><h3 class="challenge-pane-section-label">Details</h3><div class="challenge-pane-details user-text">${esc(String(cfg.details))}</div></section>`;
+		html += `<section id="challenge-details" class="challenge-pane-section"><h3 class="challenge-pane-section-label">Details</h3><div class="challenge-pane-details user-text">${esc(String(cfg.details))}</div></section>`;
 	}
 	html += renderRewardsSection(cfg);
 	return html;

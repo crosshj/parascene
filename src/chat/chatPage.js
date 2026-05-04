@@ -50,6 +50,12 @@ import { formatMentionsFailureForDialog, uploadChatFile } from '/shared/createSu
 import { subscribeUserBroadcast, subscribeRoomBroadcast } from '../shared/realtimeBroadcast.js';
 import { initChatSidebarModals } from '../shared/components/modals/chatSidebarModals.js';
 import { createFeedItemCard, feedItemToUser, getHiddenFeedItems } from '../shared/feedCardBuild.js';
+import {
+	FEED_CHANNEL_PAGE_SIZE,
+	getChatFeedItemKey,
+	createChatFeedFetchPage
+} from './feed/feedChannelData.js';
+import { createChatFeedChannelElements } from './feed/feedChannelView.js';
 import { addToMutateQueue } from '/shared/mutateQueue.js';
 import { captureChallengeSubmitThread } from '/shared/challengeSubmitContext.js';
 import * as challengesChannelModule from './challengesChannel.js';
@@ -794,7 +800,6 @@ export async function initChatPage(root, options = {}) {
 	let feedChannelLoadMoreFallbackCleanup = null;
 	/** @type {IntersectionObserver | null} */
 	let feedChannelVideoObserver = null;
-	const FEED_CHANNEL_PAGE_SIZE = 20;
 	/** Aligned with `CREATIONS_PAGE_SIZE` in `components/routes/creations.js` + `/api/create/images`. */
 	const CREATIONS_CHANNEL_PAGE_SIZE = 50;
 	const EXPLORE_CHANNEL_PAGE_SIZE = 24;
@@ -6489,35 +6494,12 @@ export async function initChatPage(root, options = {}) {
 
 			pseudoColumnPager = createPseudoColumnPager({
 				columnOrder: feedLanePagerColumnOrder(),
-				getItemKey: (it) => {
-					if (it.type === 'tip' || it.type === 'blog_post') {
-						return `${it.type}:${it.id ?? it.slug ?? it.title ?? ''}`;
-					}
-					return String(it.created_image_id || it.id || '');
-				},
-				fetchPage: async ({ initial, items }) => {
-					const offset = initial ? 0 : items.length;
-					const feed = await fetchJsonWithStatusDeduped(
-						`/api/feed?limit=${FEED_CHANNEL_PAGE_SIZE}&offset=${offset}`,
-						{ credentials: 'include' },
-						{ windowMs: 30000 }
-					);
-					if (!feed.ok) {
-						if (initial) {
-							const msg = feed.data?.message || feed.data?.error || 'Failed to load feed';
-							throw new Error(typeof msg === 'string' ? msg : 'Failed to load feed');
-						}
-						return { pageItems: [], hasMore: false };
-					}
-					let pageItems = Array.isArray(feed.data?.items) ? feed.data.items : [];
-					const hiddenIds = getHiddenFeedItems();
-					pageItems = pageItems.filter((item) => {
-						if (item.type === 'tip' || item.type === 'blog_post') return true;
-						const itemId = String(item.created_image_id || item.id);
-						return !hiddenIds.includes(itemId);
-					});
-					return { pageItems, hasMore: Boolean(feed.data?.hasMore) };
-				},
+				getItemKey: getChatFeedItemKey,
+				fetchPage: createChatFeedFetchPage({
+					fetchJsonWithStatusDeduped,
+					getHiddenFeedItems,
+					pageSize: FEED_CHANNEL_PAGE_SIZE
+				})
 			});
 			const r = await pseudoColumnPager.loadInitial();
 			if (isStaleChatPane(paneEpoch)) return;
@@ -6565,30 +6547,16 @@ export async function initChatPage(root, options = {}) {
 				return;
 			}
 
-			const routeWrap = document.createElement('div');
-			routeWrap.className = 'feed-route chat-feed-channel-route';
-			const cards = document.createElement('div');
-			cards.className = 'route-cards feed-cards';
-			cards.setAttribute('data-feed-channel-cards', '1');
-			for (let i = 0; i < ordered.length; i++) {
-				cards.appendChild(
-					createFeedItemCard(
-						ordered[i],
-						i,
-						feedCardOptionsForPseudoLane(
-							(el) => setupFeedChannelVideoAutoplay(messagesEl, el),
-							'feed'
-						)
+			const { routeWrap, sentinel } = createChatFeedChannelElements(ordered, (item, i) =>
+				createFeedItemCard(
+					item,
+					i,
+					feedCardOptionsForPseudoLane(
+						(el) => setupFeedChannelVideoAutoplay(messagesEl, el),
+						'feed'
 					)
-				);
-			}
-			routeWrap.appendChild(cards);
-
-			const sentinel = document.createElement('div');
-			sentinel.dataset.chatFeedLoadSentinel = '1';
-			sentinel.className = 'chat-page-feed-load-sentinel';
-			sentinel.setAttribute('aria-hidden', 'true');
-			sentinel.style.cssText = 'height:1px;margin:0;padding:0;flex-shrink:0;pointer-events:none';
+				)
+			);
 			if (isNewestFirstBrowseLane('feed')) {
 				messagesEl.appendChild(routeWrap);
 				messagesEl.appendChild(sentinel);
@@ -8060,6 +8028,53 @@ export async function initChatPage(root, options = {}) {
 				scrollChatFeedPseudoChannelToTop();
 			}
 			rebuildTopbarMenuDynamic();
+		}
+	}
+
+	async function openChallengeVoteModalFromFeedCard() {
+		const viewerIdNum = Number.isFinite(Number(chatViewerId)) ? Number(chatViewerId) : null;
+		let challengesThreadId = Number.NaN;
+		const match = (chatThreads || []).find(
+			(t) => t.type === 'channel' && String(t.channel_slug || '').toLowerCase() === 'challenges'
+		);
+		if (match) challengesThreadId = Number(match.id);
+		if (!Number.isFinite(challengesThreadId) || challengesThreadId <= 0) {
+			const res = await fetch('/api/chat/channels', {
+				method: 'POST',
+				credentials: 'include',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ tag: 'challenges' })
+			});
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				throw new Error(data?.message || data?.error || `Could not open channel (${res.status})`);
+			}
+			const tid = Number(data?.thread?.id);
+			if (!Number.isFinite(tid) || tid <= 0) {
+				throw new Error('Could not resolve #challenges thread.');
+			}
+			challengesThreadId = tid;
+			await loadChatThreads({ forceNetwork: true });
+			await refreshChatSidebar({ skipThreadsFetch: true });
+		}
+
+		const messages = await challengesChannelModule.fetchAllChatThreadMessages(challengesThreadId);
+		const opened = challengesChannelModule.openChallengeVoteModalFromMessages?.({
+			messages,
+			viewerId: viewerIdNum,
+			toggleReaction: (mid, ek) => toggleChatMessageReaction(mid, ek),
+			onAfterVote: () => {
+				if (
+					activePseudoChannelSlug === 'challenges' &&
+					Number.isFinite(Number(activeThreadId)) &&
+					Number(activeThreadId) === Number(challengesThreadId)
+				) {
+					void loadChallengesChannelMessages();
+				}
+			}
+		});
+		if (!opened) {
+			window.location.href = '/challenges';
 		}
 	}
 
@@ -11043,6 +11058,14 @@ export async function initChatPage(root, options = {}) {
 	});
 
 	document.addEventListener('chat-unread-refresh', onChatGlobalUnreadRefreshDoc);
+	window.addEventListener('ps:challenge-vote-modal-request', (e) => {
+		if (e instanceof CustomEvent) {
+			e.preventDefault();
+		}
+		void openChallengeVoteModalFromFeedCard().catch(() => {
+			window.location.href = '/challenges';
+		});
+	});
 	window.addEventListener('hashchange', () => {
 		setMobileSidebarMode(shouldShowMobileSidebarFromLocation());
 	});

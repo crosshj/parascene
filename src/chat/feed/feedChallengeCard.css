@@ -1,0 +1,515 @@
+.feed-card-engagement {
+	padding: 1.2em 0;
+	margin: 2.2em 0;
+}
+
+.feed-card-engagement-inner {
+	background:
+		radial-gradient(120% 140% at 78% 78%, rgba(16, 185, 129, 0.28) 0%, rgba(16, 185, 129, 0) 52%),
+		radial-gradient(120% 130% at 16% -10%, rgba(45, 212, 191, 0.18) 0%, rgba(45, 212, 191, 0) 44%),
+		linear-gradient(135deg, #075c59 0%, #0a6661 48%, #0b7a66 100%);
+	border-radius: 14px;
+	border: 1px solid color-mix(in srgb, #ffffff 14%, transparent);
+	padding: 24px 26px 22px;
+	text-align: left;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	box-shadow: 0 8px 22px rgba(5, 24, 26, 0.28);
+}
+
+.feed-card-engagement-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.feed-card-engagement-kicker {
+	font-size: 0.72rem;
+	font-weight: 600;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: rgba(163, 228, 218, 0.7);
+	margin: 0;
+}
+
+.feed-card-engagement-status-chip {
+	font-size: 0.72rem;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: #042f2e;
+	background: rgba(219, 255, 248, 0.5);
+	padding: 7px 12px;
+	border-radius: 999px;
+	white-space: nowrap;
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+}
+
+.feed-card-engagement-status-chip-icon {
+	width: 0.95em;
+	height: 0.95em;
+	flex-shrink: 0;
+	display: block;
+	opacity: 0.95;
+}
+
+.feed-card-engagement-content-row {
+	display: flex;
+	align-items: flex-start;
+	gap: 14px;
+	min-width: 0;
+}
+
+.feed-card-engagement-content-row-challenge-grid {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	column-gap: 14px;
+	row-gap: 6px;
+	align-items: start;
+	min-width: 0;
+}
+
+.feed-card-engagement-content-row-challenge-grid > .feed-card-engagement-thumb-wrap {
+	grid-column: 1;
+	grid-row: 1;
+}
+
+.feed-card-engagement-content-row-challenge-grid > .feed-card-engagement-main {
+	grid-column: 2;
+	grid-row: 1;
+}
+
+.feed-card-engagement-content-row-challenge-grid > .feed-card-engagement-hook {
+	grid-column: 1 / -1;
+	grid-row: 2;
+	margin: 0;
+}
+
+.feed-card-engagement-content-row-challenge-grid > .feed-card-engagement-actions {
+	grid-column: 1 / -1;
+	grid-row: 3;
+	justify-content: flex-start;
+	flex-wrap: wrap;
+}
+
+.feed-card-engagement-content-row-challenge-grid:not(:has(.feed-card-engagement-hook)) > .feed-card-engagement-actions {
+	grid-row: 2;
+}
+
+.feed-card-engagement-thumb {
+	width: 86px;
+	height: 86px;
+	object-fit: cover;
+	border-radius: 14px;
+	flex: 0 0 auto;
+	border: 1px solid color-mix(in srgb, #ffffff 22%, transparent);
+	box-shadow: 0 4px 14px rgba(2, 23, 21, 0.35);
+}
+
+.feed-card-engagement-thumb-wrap {
+	position: relative;
+	width: 86px;
+	height: 86px;
+	flex: 0 0 auto;
+	border-radius: 14px;
+	overflow: hidden;
+}
+
+.feed-card-engagement-thumb-wrap .feed-card-engagement-thumb {
+	width: 100%;
+	height: 100%;
+	opacity: 0;
+	transition: opacity 0.2s ease;
+}
+
+.feed-card-engagement-thumb-wrap.is-loaded .feed-card-engagement-thumb {
+	opacity: 1;
+}
+
+.feed-card-engagement-thumb-placeholder {
+	position: absolute;
+	inset: 0;
+	border-radius: 14px;
+	background: linear-gradient(
+		110deg,
+		rgba(224, 255, 249, 0.22) 8%,
+		rgba(224, 255, 249, 0.42) 18%,
+		rgba(224, 255, 249, 0.22) 33%
+	);
+	background-size: 200% 100%;
+	animation: feed-card-thumb-shimmer 1.2s linear infinite;
+	border: 1px solid color-mix(in srgb, #ffffff 16%, transparent);
+}
+
+.feed-card-engagement-thumb-wrap.is-loaded .feed-card-engagement-thumb-placeholder {
+	display: none;
+}
+
+.feed-card-engagement-thumb-wrap.is-error .feed-card-engagement-thumb-placeholder {
+	animation: none;
+	background: color-mix(in srgb, #e5e7eb 40%, transparent);
+}
+
+.feed-card-engagement-title-copy {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding-top: 2px;
+	min-width: 0;
+}
+
+.feed-card-engagement-main {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	min-width: 0;
+	flex: 1 1 auto;
+}
+
+.feed-card-engagement-inner-challenge .feed-card-engagement-main {
+	gap: 6px;
+}
+
+.feed-card-engagement-title {
+	font-weight: 700;
+	font-size: 1.1rem;
+	letter-spacing: 0.02em;
+	color: rgba(240, 255, 252, 0.98);
+	margin: 0;
+	line-height: 1.15;
+}
+
+a.feed-card-engagement-title.feed-card-engagement-title-link {
+	display: inline;
+	text-decoration: none;
+	color: inherit;
+	cursor: pointer;
+	align-self: flex-start;
+	max-width: 100%;
+}
+
+a.feed-card-engagement-title.feed-card-engagement-title-link:hover {
+	text-decoration: underline;
+	text-underline-offset: 3px;
+	color: rgba(255, 255, 255, 1);
+}
+
+.feed-card-engagement-subtitle {
+	font-size: 0.92rem;
+	line-height: 1.35;
+	color: rgba(217, 248, 243, 0.88);
+	margin: 0;
+}
+
+.feed-card-engagement-social-proof {
+	font-size: 0.98rem;
+	font-weight: 500;
+	line-height: 1.35;
+	color: rgba(229, 255, 250, 0.94);
+	margin: 0;
+	width: 100%;
+	min-width: 0;
+	max-width: 100%;
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+	justify-content: flex-start;
+	flex-wrap: wrap;
+	gap: 6px 10px;
+}
+
+.feed-card-engagement-proof-sep {
+	display: block;
+	width: 5px;
+	height: 5px;
+	border-radius: 50%;
+	background: rgba(45, 212, 191, 0.88);
+	flex: 0 0 auto;
+	align-self: center;
+}
+
+.feed-card-engagement-proof-item {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 6px;
+	vertical-align: baseline;
+	min-width: 0;
+	max-width: 100%;
+	flex: 0 1 auto;
+	overflow-wrap: anywhere;
+	word-break: break-word;
+}
+
+.feed-card-engagement-proof-icon {
+	width: 0.9em;
+	height: 0.9em;
+	opacity: 0.88;
+	transform: translateY(1px);
+	flex: 0 0 auto;
+}
+
+.feed-card-engagement-hook {
+	font-size: 0.9rem;
+	line-height: 1.35;
+	color: rgba(224, 254, 248, 0.92);
+	margin: 0;
+	display: inline-flex;
+	align-items: center;
+	gap: 9px;
+}
+
+.feed-card-engagement-hook::before {
+	content: '✶';
+	color: rgba(133, 246, 226, 0.92);
+	font-size: 0.94rem;
+	line-height: 1;
+}
+
+.feed-card-engagement-inner-challenge .feed-card-engagement-hook {
+	font-size: 1.02rem;
+	line-height: 1.4;
+	margin-top: 0;
+}
+
+.feed-card-engagement-actions {
+	display: flex;
+	align-items: center;
+	gap: 24px;
+}
+
+.feed-card-engagement-actions-dual {
+	justify-content: flex-start;
+	flex-wrap: wrap;
+	width: 100%;
+}
+
+.feed-card-engagement-actions-dual .feed-card-engagement-cta:not(.feed-card-engagement-cta--text) {
+	flex: 0 1 auto;
+}
+
+.feed-card-engagement-actions-dual .feed-card-engagement-cta--text {
+	flex: 0 1 auto;
+}
+
+.feed-card-engagement-cta-icon {
+	width: 1em;
+	height: 1em;
+	flex-shrink: 0;
+	display: block;
+}
+
+.feed-card-engagement .feed-card-engagement-cta,
+.feed-card-engagement-cta {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	min-width: 8rem;
+	min-height: 40px;
+	text-align: center;
+	font-size: 0.875rem;
+	font-weight: 600;
+	letter-spacing: 0.01em;
+	background: #ffffff !important;
+	color: #075953 !important;
+	border: none;
+	border-radius: 8px;
+	box-shadow: 0 1px 2px rgba(3, 26, 24, 0.1);
+	padding: 7px 14px;
+}
+
+.feed-card-engagement .feed-card-engagement-cta::before,
+.feed-card-engagement-cta::before {
+	content: '◫';
+	font-size: 1.02em;
+	line-height: 1;
+	opacity: 0.86;
+}
+
+.feed-card-engagement-actions-dual .feed-card-engagement-cta::before {
+	content: none;
+}
+
+/* Chained .feed-card-engagement-cta--outline so specificity beats
+   `.feed-card-engagement .feed-card-engagement-cta` filled rules (otherwise both CTAs stay mint). */
+.feed-card-engagement .feed-card-engagement-cta.feed-card-engagement-cta--outline {
+	background: transparent !important;
+	color: rgba(240, 255, 252, 0.96) !important;
+	border: 1px solid color-mix(in srgb, #ffffff 48%, transparent);
+	box-shadow: none;
+	padding: 6px 12px;
+	border-radius: 8px;
+}
+
+.feed-card-engagement .feed-card-engagement-cta.feed-card-engagement-cta--outline:hover {
+	background: color-mix(in srgb, #ffffff 14%, transparent) !important;
+	color: #ffffff !important;
+	border-color: color-mix(in srgb, #ffffff 75%, transparent);
+	box-shadow: none;
+}
+
+/* Secondary CTA: text link (no mint pill, no icons); chained for specificity over filled base. */
+.feed-card-engagement .feed-card-engagement-cta.feed-card-engagement-cta--text {
+	background: transparent !important;
+	border: none !important;
+	box-shadow: none !important;
+	color: rgba(255, 255, 255, 0.92) !important;
+	font-weight: 400;
+	font-size: 0.875rem;
+	min-width: 0;
+	min-height: auto;
+	padding: 6px 4px;
+	text-decoration: none;
+	transform: none;
+	transition: none;
+}
+
+.feed-card-engagement .feed-card-engagement-cta.feed-card-engagement-cta--text:hover,
+.feed-card-engagement .feed-card-engagement-cta.feed-card-engagement-cta--text:active {
+	background: transparent !important;
+	box-shadow: none !important;
+	transform: none !important;
+	color: rgba(255, 255, 255, 0.92) !important;
+	text-decoration: underline;
+	text-decoration-thickness: 1px;
+	text-underline-offset: 3px;
+}
+
+.feed-card-engagement .feed-card-engagement-cta:hover:not(.feed-card-engagement-cta--outline):not(.feed-card-engagement-cta--text),
+.feed-card-engagement-cta:hover:not(.feed-card-engagement-cta--outline):not(.feed-card-engagement-cta--text) {
+	background: #ffffff !important;
+	color: #022c22 !important;
+	box-shadow: 0 2px 8px rgba(3, 26, 24, 0.14);
+}
+
+.feed-card-engagement-details {
+	font-size: 0.92rem;
+	color: rgba(236, 255, 251, 0.95);
+	text-decoration: underline;
+	text-underline-offset: 3px;
+	font-weight: 500;
+}
+
+.feed-card-engagement-details:hover {
+	color: #ffffff;
+}
+
+@keyframes feed-card-thumb-shimmer {
+	0% {
+		background-position: 200% 0;
+	}
+	100% {
+		background-position: -200% 0;
+	}
+}
+
+@media (max-width: 768px) {
+	.feed-card-engagement-content-row-challenge-grid {
+		grid-template-columns: auto minmax(0, 1fr);
+		column-gap: 10px;
+		row-gap: 4px;
+	}
+
+	.feed-card-engagement-inner {
+		padding: 16px 14px 14px;
+		gap: 10px;
+		border-radius: 0;
+	}
+
+	.feed-card-engagement-status-chip {
+		padding: 5px 9px;
+		font-size: 0.66rem;
+		border-radius: 999px;
+	}
+
+	.feed-card-engagement-thumb {
+		width: 56px;
+		height: 56px;
+		border-radius: 10px;
+	}
+
+	.feed-card-engagement-thumb-wrap {
+		width: 56px;
+		height: 56px;
+		border-radius: 10px;
+	}
+
+	.feed-card-engagement-thumb-placeholder {
+		border-radius: 10px;
+	}
+
+	.feed-card-engagement-inner-challenge .feed-card-engagement-main {
+		gap: 4px;
+	}
+
+	.feed-card-engagement-title {
+		font-size: 1.06rem;
+	}
+
+	.feed-card-engagement-subtitle {
+		font-size: 0.84rem;
+	}
+
+	.feed-card-engagement-social-proof {
+		font-size: 0.82rem;
+		gap: 6px 6px;
+		row-gap: 8px;
+	}
+
+	.feed-card-engagement-proof-sep {
+		width: 4px;
+		height: 4px;
+	}
+
+	.feed-card-engagement-proof-item {
+		flex: 0 1 auto;
+	}
+
+	.feed-card-engagement-inner-challenge .feed-card-engagement-proof-icon,
+	.feed-card-engagement-inner-challenge .feed-card-engagement-status-chip-icon {
+		display: none !important;
+	}
+
+	.feed-card-engagement-hook {
+		font-size: 0.84rem;
+	}
+
+	.feed-card-engagement-inner-challenge .feed-card-engagement-hook {
+		font-size: 0.95rem;
+	}
+
+	.feed-card-engagement-actions {
+		gap: 20px;
+	}
+
+	.feed-card-engagement .feed-card-engagement-cta,
+	.feed-card-engagement-cta {
+		min-width: 7rem;
+		min-height: 38px;
+		font-size: 0.8125rem;
+		border-radius: 8px;
+		padding: 6px 12px;
+	}
+
+	.feed-card-engagement .feed-card-engagement-actions-dual .feed-card-engagement-cta:not(.feed-card-engagement-cta--text) {
+		flex: 0 1 auto;
+		min-width: 7rem;
+		max-width: none;
+	}
+
+	.feed-card-engagement .feed-card-engagement-actions-dual .feed-card-engagement-cta--text {
+		flex: 0 1 auto;
+		min-width: 0;
+		max-width: none;
+		padding: 6px 2px;
+		font-size: 0.8125rem;
+	}
+
+	.feed-card-engagement-details {
+		font-size: 0.84rem;
+	}
+}

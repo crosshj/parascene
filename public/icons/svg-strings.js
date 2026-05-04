@@ -42,6 +42,25 @@ export const userProfileIcon = withAttributes(html`
 	</svg>
 `);
 
+/** Outlined single-person icon (lucide user). */
+export const personOutlined = withAttributes(html`
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+		stroke-linejoin="round" aria-hidden="true">
+		<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+		<circle cx="12" cy="7" r="4"></circle>
+	</svg>
+`);
+
+/** Outlined multi-person icon (lucide users-round). */
+export const peopleOutlined = withAttributes(html`
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+		stroke-linejoin="round" aria-hidden="true">
+		<path d="M18 21a8 8 0 0 0-16 0"></path>
+		<circle cx="10" cy="8" r="5"></circle>
+		<path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3"></path>
+	</svg>
+`);
+
 /** Sign out / log out (stroke). */
 export const logOutIcon = withAttributes(html`
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -182,6 +201,25 @@ export const pictureIcon = withAttributes(html`
 		<rect x="3" y="5" width="18" height="14" rx="2"></rect>
 		<circle cx="8" cy="10" r="2"></circle>
 		<path d="M21 17l-5-5L5 19"></path>
+	</svg>
+`);
+
+/** Clock at 3 o'clock — lucide clock-3 (e.g. challenge “ends in” pill). */
+export const clock3Icon = withAttributes(html`
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+		stroke-linejoin="round" aria-hidden="true">
+		<circle cx="12" cy="12" r="10"></circle>
+		<path d="M12 6v6h4"></path>
+	</svg>
+`);
+
+/** 2×2 grid — “View” CTA on challenge feed card (heroicons-style). */
+export const viewGridIcon = withAttributes(html`
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+		stroke-linejoin="round" aria-hidden="true">
+		<path
+			d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z">
+		</path>
 	</svg>
 `);
 

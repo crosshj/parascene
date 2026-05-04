@@ -111,7 +111,7 @@ export async function findChallengesChannelThreadId(sb) {
 export async function fetchThreadMessagesChronological(sb, threadId, limit = MESSAGE_FETCH_LIMIT) {
 	const { data, error } = await sb
 		.from("prsn_chat_messages")
-		.select("id, body, created_at, sender_id")
+		.select("id, body, created_at, sender_id, reactions")
 		.eq("thread_id", threadId)
 		.order("created_at", { ascending: true })
 		.limit(limit);

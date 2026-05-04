@@ -9,6 +9,14 @@ import * as profileLinksMod from './profileLinks.js';
 import * as helpUrlMod from './helpUrl.js';
 import * as challengeSubmitMetaMod from './challengeSubmitMeta.js';
 import * as creationBadgesMod from './creationBadges.js';
+import {
+	clock3Icon,
+	pictureIcon,
+	personOutlined,
+	sparkleIcon,
+	trophyIcon,
+	viewGridIcon
+} from '/icons/svg-strings.js';
 
 const { buildBlogPostPublicPath, BLOG_CAMPAIGN_INTERNAL } = blogCampaignPathMod;
 const { formatDateTime, formatRelativeTime } = datetimeMod;
@@ -373,6 +381,297 @@ export function attachFeedCardImage(imageEl, imageContainer, item, itemIndex, pr
 	};
 
 	tryLoad(0);
+}
+
+function escapeHtmlFeedCardText(s) {
+	return String(s ?? "")
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;");
+}
+
+/**
+ * Virtual engagement row from GET /api/feed (`type: "engagement"`).
+ * @param {object} item
+ */
+function buildEngagementFeedCard(item) {
+	const card = document.createElement("div");
+	card.className = "feed-card feed-card-engagement";
+	const rawId = typeof item.id === "string" ? item.id.trim() : "";
+	if (rawId) {
+		card.dataset.feedEngagementId = rawId;
+	}
+
+	const variant =
+		typeof item.variant === "string" && item.variant.trim()
+			? item.variant.trim()
+			: "contest_stats";
+	const payload =
+		item.payload && typeof item.payload === "object" && !Array.isArray(item.payload)
+			? item.payload
+			: {};
+
+	if (variant === "contest_stats" || variant === "challenge_stats") {
+		const title = escapeHtmlFeedCardText(payload.title || "Community");
+		const subtitle = payload.subtitle ? escapeHtmlFeedCardText(String(payload.subtitle)) : "";
+		const kicker =
+			typeof payload.kicker === "string" && payload.kicker.trim()
+				? escapeHtmlFeedCardText(payload.kicker.trim())
+				: "Contest";
+		const stats = Array.isArray(payload.stats) ? payload.stats : [];
+		const ctaLabel = escapeHtmlFeedCardText(payload.ctaLabel || "Learn more");
+		const rawCta = String(payload.ctaRoute || "/explore").trim();
+		const ctaRoute = rawCta.startsWith("/help") ? getHelpHref(rawCta) : rawCta;
+		const ctaAction =
+			typeof payload.ctaAction === "string" && payload.ctaAction.trim()
+				? payload.ctaAction.trim()
+				: "";
+		const isExternal =
+			ctaRoute.startsWith("http://") || ctaRoute.startsWith("https://");
+		const targetAttr = isExternal ? ' target="_blank" rel="noopener noreferrer"' : "";
+		const detailsLabel = escapeHtmlFeedCardText(payload.detailsLabel || "Details");
+		const rawDetails = String(payload.detailsRoute || "").trim();
+		const detailsRoute = rawDetails.startsWith("/help") ? getHelpHref(rawDetails) : rawDetails;
+		const detailsIsExternal =
+			detailsRoute.startsWith("http://") || detailsRoute.startsWith("https://");
+		const detailsTargetAttr = detailsIsExternal
+			? ' target="_blank" rel="noopener noreferrer"'
+			: "";
+		const statusChip = payload.statusChip ? escapeHtmlFeedCardText(String(payload.statusChip)) : "";
+		const socialProofLine = payload.socialProofLine
+			? escapeHtmlFeedCardText(String(payload.socialProofLine))
+			: "";
+		const hook = payload.hook ? escapeHtmlFeedCardText(String(payload.hook)) : "";
+		const heroImageUrl =
+			typeof payload.heroImageUrl === "string" && payload.heroImageUrl.trim()
+				? escapeHtmlFeedCardText(payload.heroImageUrl.trim())
+				: "";
+
+		const statsNodes = stats.slice(0, 8).map((row) => {
+			const label = escapeHtmlFeedCardText(row?.label ?? "");
+			const value = escapeHtmlFeedCardText(row?.value ?? "—");
+			return html`<div class="feed-card-engagement-stat"><span class="feed-card-engagement-stat-value">${value}</span><span class="feed-card-engagement-stat-label">${label}</span></div>`;
+		});
+
+		const statsHtml = statsNodes.length ? statsNodes.join("") : "";
+
+		const socialProofHtml = (() => {
+			if (!socialProofLine) return "";
+			const parts = socialProofLine
+				.split("•")
+				.map((s) => String(s || "").trim())
+				.filter(Boolean)
+				.slice(0, 3)
+				.map((part, idx) => {
+					const icon =
+						idx === 0
+							? pictureIcon('feed-card-engagement-proof-icon')
+							: idx === 1
+								? personOutlined('feed-card-engagement-proof-icon')
+								: trophyIcon('feed-card-engagement-proof-icon');
+					const m = part.match(/^(\d[\d,]*)\s+(.+)$/);
+					if (m) {
+						return `<span class="feed-card-engagement-proof-item">${icon}<strong>${escapeHtmlFeedCardText(m[1])}</strong> ${escapeHtmlFeedCardText(m[2])}</span>`;
+					}
+					return `<span class="feed-card-engagement-proof-item">${icon}${escapeHtmlFeedCardText(part)}</span>`;
+				});
+			if (!parts.length) return "";
+			const proofSep = '<span class="feed-card-engagement-proof-sep" aria-hidden="true"></span>';
+			return parts.join(proofSep);
+		})();
+
+		if (variant === "challenge_stats") {
+			const voteLabelRaw =
+				typeof payload.challengeVoteLabel === "string" && payload.challengeVoteLabel.trim()
+					? payload.challengeVoteLabel.trim()
+					: "Vote";
+			const voteLabel = escapeHtmlFeedCardText(voteLabelRaw);
+			const voteLeadingIcon =
+				voteLabelRaw !== "Vote" ? viewGridIcon("feed-card-engagement-cta-icon") : "";
+			const rawVoteRoute = String(payload.challengeVoteRoute || "/challenges").trim();
+			const voteRoute = rawVoteRoute.startsWith("/help") ? getHelpHref(rawVoteRoute) : rawVoteRoute;
+			/* Primary always first (filled); secondary is text link to the right. Vote primary when
+			 * label is Vote; otherwise Create is primary and view side is always "View Entries". */
+			const voteIsPrimary = voteLabelRaw === "Vote";
+			const voteAction =
+				typeof payload.challengeVoteAction === "string" ? payload.challengeVoteAction.trim() : "";
+			const enterLabel = escapeHtmlFeedCardText(payload.challengeEnterLabel || "Create");
+			const rawEnterRoute = String(payload.challengeEnterRoute || "/create").trim();
+			const enterRoute = rawEnterRoute.startsWith("/help") ? getHelpHref(rawEnterRoute) : rawEnterRoute;
+			const rawChallengeTitleRoute = String(payload.challengeTitleRoute || "/challenges").trim();
+			const challengeTitleHref = rawChallengeTitleRoute.startsWith("/help")
+				? getHelpHref(rawChallengeTitleRoute)
+				: rawChallengeTitleRoute;
+			const voteActionAttr = escapeHtmlFeedCardText(voteAction);
+			const primaryClass = "route-empty-button feed-card-engagement-cta";
+			const secondaryClass =
+				"route-empty-button feed-card-engagement-cta feed-card-engagement-cta--text";
+			const viewEntriesLabel = escapeHtmlFeedCardText("View Entries");
+			const titleLink = html`<a class="feed-card-engagement-title feed-card-engagement-title-link" href="${challengeTitleHref}" data-challenge-title-link>${title}</a>`;
+
+			const thumbBlock = heroImageUrl
+				? html`<div class="feed-card-engagement-thumb-wrap is-loading" data-engagement-thumb-wrap>
+						<span class="feed-card-engagement-thumb-placeholder" aria-hidden="true"></span>
+						<img class="feed-card-engagement-thumb" src="${heroImageUrl}" alt="" loading="lazy" decoding="async" data-engagement-thumb>
+					</div>`
+				: "";
+			const statsOrSocialBlock =
+				socialProofLine
+					? html`<div class="feed-card-engagement-social-proof">${socialProofHtml}</div>`
+					: statsHtml
+						? html`<div class="feed-card-engagement-stats">${statsHtml}</div>`
+						: "";
+			const hookBlock = hook ? html`<div class="feed-card-engagement-hook">${hook}</div>` : "";
+			const enterLeadingIcon = sparkleIcon("feed-card-engagement-cta-icon");
+			const actionsBlock = voteIsPrimary
+				? html`<div class="feed-card-engagement-actions feed-card-engagement-actions-dual">
+						<a class="${primaryClass}" href="${voteRoute}" data-engagement-vote-cta data-engagement-vote-action="${voteActionAttr}">${voteLeadingIcon}${voteLabel}</a>
+						<a class="${secondaryClass}" href="${enterRoute}" data-engagement-enter-cta>${enterLabel}</a>
+					</div>`
+				: html`<div class="feed-card-engagement-actions feed-card-engagement-actions-dual">
+						<a class="${primaryClass}" href="${enterRoute}" data-engagement-enter-cta>${enterLeadingIcon}${enterLabel}</a>
+						<a class="${secondaryClass}" href="${voteRoute}" data-engagement-vote-cta data-engagement-vote-action="${voteActionAttr}">${viewEntriesLabel}</a>
+					</div>`;
+			const mainStackNoThumb = html`<div class="feed-card-engagement-main">
+					<div class="feed-card-engagement-title-copy">
+						${titleLink}
+						${subtitle ? html`<div class="feed-card-engagement-subtitle">${subtitle}</div>` : ""}
+					</div>
+					${statsOrSocialBlock}
+					${hookBlock}
+					${actionsBlock}
+				</div>`;
+			const mainStackThumbGrid = html`<div class="feed-card-engagement-main">
+					<div class="feed-card-engagement-title-copy">
+						<div class="feed-card-engagement-title">${title}</div>
+						${subtitle ? html`<div class="feed-card-engagement-subtitle">${subtitle}</div>` : ""}
+					</div>
+					${statsOrSocialBlock}
+				</div>`;
+			card.innerHTML = html`
+				<div class="feed-card-engagement-inner feed-card-engagement-inner-challenge">
+					<div class="feed-card-engagement-head">
+						<div class="feed-card-engagement-kicker">${kicker}</div>
+						${statusChip
+							? html`<div class="feed-card-engagement-status-chip">${clock3Icon('feed-card-engagement-status-chip-icon')}${statusChip}</div>`
+							: ""}
+					</div>
+					<div class="feed-card-engagement-content-row${heroImageUrl ? " feed-card-engagement-content-row-challenge-grid" : ""}">
+						${heroImageUrl ? html`${thumbBlock}${mainStackThumbGrid}${hookBlock}${actionsBlock}` : html`${mainStackNoThumb}`}
+					</div>
+				</div>
+			`;
+		} else {
+			card.innerHTML = html`
+				<div class="feed-card-engagement-inner">
+					<div class="feed-card-engagement-kicker">${kicker}</div>
+					<div class="feed-card-engagement-title">${title}</div>
+					${subtitle ? html`<div class="feed-card-engagement-subtitle">${subtitle}</div>` : ""}
+					${statsHtml ? html`<div class="feed-card-engagement-stats">${statsHtml}</div>` : ""}
+					<a class="route-empty-button feed-card-engagement-cta" href="${ctaRoute}"${targetAttr} data-engagement-cta>${ctaLabel}</a>
+				</div>
+			`;
+		}
+
+		if (variant === "challenge_stats") {
+			const voteEl = card.querySelector("[data-engagement-vote-cta]");
+			const enterEl = card.querySelector("[data-engagement-enter-cta]");
+			if (voteEl instanceof HTMLAnchorElement) {
+				voteEl.addEventListener("click", (e) => {
+					const action = voteEl.getAttribute("data-engagement-vote-action") || "";
+					if (action === "challenge_vote_modal") {
+						e.preventDefault();
+						const reqEvent = new CustomEvent("ps:challenge-vote-modal-request", {
+							bubbles: true,
+							cancelable: true,
+							detail: { source: "feed_challenge_card" }
+						});
+						window.dispatchEvent(reqEvent);
+						if (reqEvent.defaultPrevented) {
+							return;
+						}
+					}
+					e.preventDefault();
+					const href = voteEl.getAttribute("href") || "/challenges";
+					window.location.href = href;
+				});
+			}
+			if (enterEl instanceof HTMLAnchorElement) {
+				enterEl.addEventListener("click", (e) => {
+					e.preventDefault();
+					window.location.href = enterEl.getAttribute("href") || "/create";
+				});
+			}
+			const titleLinkEl = card.querySelector("[data-challenge-title-link]");
+			if (titleLinkEl instanceof HTMLAnchorElement) {
+				titleLinkEl.addEventListener("click", (e) => {
+					e.preventDefault();
+					window.location.href = titleLinkEl.getAttribute("href") || "/challenges";
+				});
+			}
+		} else {
+			const ctaEl = card.querySelector("[data-engagement-cta]");
+			if (ctaEl) {
+				ctaEl.addEventListener("click", (e) => {
+					if (ctaAction === "challenge_vote_modal") {
+						e.preventDefault();
+						const reqEvent = new CustomEvent("ps:challenge-vote-modal-request", {
+							bubbles: true,
+							cancelable: true,
+							detail: { source: "feed_challenge_card" }
+						});
+						window.dispatchEvent(reqEvent);
+						if (reqEvent.defaultPrevented) {
+							return;
+						}
+					}
+					e.preventDefault();
+					if (isExternal && ctaEl.getAttribute("target") === "_blank") {
+						window.open(ctaRoute, "_blank", "noopener,noreferrer");
+					} else {
+						window.location.href = ctaRoute;
+					}
+				});
+			}
+			const detailsEl = card.querySelector("[data-engagement-details]");
+			if (detailsEl && detailsRoute) {
+				detailsEl.addEventListener("click", (e) => {
+					e.preventDefault();
+					if (detailsIsExternal && detailsEl.getAttribute("target") === "_blank") {
+						window.open(detailsRoute, "_blank", "noopener,noreferrer");
+					} else {
+						window.location.href = detailsRoute;
+					}
+				});
+			}
+		}
+		const thumbWrap = card.querySelector("[data-engagement-thumb-wrap]");
+		const thumbImg = card.querySelector("[data-engagement-thumb]");
+		if (thumbWrap instanceof HTMLElement && thumbImg instanceof HTMLImageElement) {
+			const markLoaded = () => {
+				thumbWrap.classList.remove("is-loading", "is-error");
+				thumbWrap.classList.add("is-loaded");
+			};
+			const markError = () => {
+				thumbWrap.classList.remove("is-loading", "is-loaded");
+				thumbWrap.classList.add("is-error");
+			};
+			thumbImg.addEventListener("load", markLoaded, { once: true });
+			thumbImg.addEventListener("error", markError, { once: true });
+			if (thumbImg.complete && thumbImg.naturalWidth > 0) {
+				markLoaded();
+			}
+		}
+
+		return card;
+	}
+
+	card.innerHTML = html`
+		<div class="feed-card-engagement-inner">
+			<div class="feed-card-engagement-title">${escapeHtmlFeedCardText(payload.title || "Update")}</div>
+		</div>
+	`;
+	return card;
 }
 
 function buildFeedTipCard(item) {
@@ -964,6 +1263,9 @@ export function createFeedItemCard(item, itemIndex, options = {}) {
 	}
 	if (item.type === "blog_post") {
 		return buildFeedBlogPostCard(item);
+	}
+	if (item.type === "engagement") {
+		return buildEngagementFeedCard(item);
 	}
 	return buildFeedCreationCard(item, itemIndex, setupFeedVideo, hideFeedCardMetadata, preferThumbnail, creationsBulkChrome);
 }

@@ -72,6 +72,23 @@ async function hydrateChallengeHeroImage(rootEl) {
 	if (img instanceof HTMLImageElement) img.hidden = true;
 }
 
+function consumeAutoOpenVoteIntentFromUrl() {
+	try {
+		const u = new URL(window.location.href);
+		const open = String(u.searchParams.get('open') || '').trim().toLowerCase();
+		const action = String(u.searchParams.get('challenge_action') || '').trim().toLowerCase();
+		const shouldOpen = open === 'vote' || action === 'vote';
+		if (!shouldOpen) return false;
+		u.searchParams.delete('open');
+		u.searchParams.delete('challenge_action');
+		const next = `${u.pathname}${u.search}${u.hash}`;
+		history.replaceState(history.state, '', next);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 /**
  * @param {ReturnType<typeof buildChallengesChannelModel>} model
  * @param {{
@@ -210,6 +227,16 @@ export async function mountChallengesPane(opts) {
 		}
 	});
 
+	const tryOpenVoteModal = () => {
+		if (!phaseUsesModalVoteOnly(phase)) return;
+		const slides = buildVoteSlidesNewestFirst(rankedPeers);
+		if (!slides.length) return;
+		const challengeTitle = model.participant.latestConfig
+			? participantHeroViewModel(model.participant.latestConfig).title
+			: '';
+		voteModal.open(slides, { challengeTitle });
+	};
+
 	syncVoteTabChrome(root, rankedPeers, viewerId, phase);
 
 	const onRootClick = async (e) => {
@@ -237,17 +264,14 @@ export async function mountChallengesPane(opts) {
 
 		const voteOpen = e.target?.closest?.('[data-challenge-vote-open]');
 		if (voteOpen instanceof HTMLButtonElement) {
-			if (!phaseUsesModalVoteOnly(phase)) return;
-			const slides = buildVoteSlidesNewestFirst(rankedPeers);
-			if (!slides.length) return;
-			const challengeTitle = model.participant.latestConfig
-				? participantHeroViewModel(model.participant.latestConfig).title
-				: '';
-			voteModal.open(slides, { challengeTitle });
+			tryOpenVoteModal();
 		}
 	};
 
 	root.addEventListener('click', onRootClick);
+	if (consumeAutoOpenVoteIntentFromUrl()) {
+		tryOpenVoteModal();
+	}
 
 	return {
 		destroy: () => {
@@ -256,4 +280,45 @@ export async function mountChallengesPane(opts) {
 			root.innerHTML = '';
 		}
 	};
+}
+
+/**
+ * Open vote modal without mounting the full Challenges pane (used by feed CTA).
+ * @param {{
+ *   messages: object[],
+ *   viewerId: number | null,
+ *   toggleReaction: (messageId: number, emojiKey: string) => Promise<{ ok?: boolean, data?: { added?: boolean } }>,
+ *   onAfterVote?: () => void,
+ * }} opts
+ * @returns {boolean} whether modal opened
+ */
+export function openChallengeVoteModalFromMessages(opts) {
+	const messages = Array.isArray(opts?.messages) ? opts.messages : [];
+	const viewerId = Number.isFinite(Number(opts?.viewerId)) ? Number(opts.viewerId) : null;
+	const toggleReaction = opts?.toggleReaction;
+	if (typeof toggleReaction !== 'function' || messages.length === 0) return false;
+
+	const model = buildChallengesChannelModel(messages, {
+		viewerId,
+		nowMs: Date.now()
+	});
+	const rankedPeers = rankedSubmissionsForPeerVoting(model.participant.rankedSubmissions, viewerId);
+	const phase = model.participant.phase;
+	if (!phaseUsesModalVoteOnly(phase)) return false;
+	const slides = buildVoteSlidesNewestFirst(rankedPeers);
+	if (!slides.length) return false;
+
+	const challengeTitle = model.participant.latestConfig
+		? participantHeroViewModel(model.participant.latestConfig).title
+		: '';
+	const voteModal = createChallengeVoteModal({
+		toggleReaction,
+		onAfterVote: () => {
+			if (typeof opts?.onAfterVote === 'function') {
+				opts.onAfterVote();
+			}
+		}
+	});
+	voteModal.open(slides, { challengeTitle });
+	return true;
 }
