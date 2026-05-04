@@ -7,6 +7,17 @@ Third-party apps can use an authorization-code flow with PKCE. End users sign in
 
 For general API usage (personal API key, route list), see **[API Overview](/help/developer/api)**.
 
+## Example app (start here)
+
+**[parascene-client](https://github.com/crosshj/parascene-client)** is a tiny open-source sample you can clone or deploy: plain HTML, Vercel serverless routes, Parascene sign-in and callback, tokens kept on the server, signed session cookie, refresh, and log out—no framework.
+
+1. Fork or clone the repo.
+2. In **Connections** (`/integrations`), create your API key and register an app. Set the redirect URI to your app’s OAuth return path (exact match), e.g. `https://<project>.vercel.app/api/auth/callback` for the sample.
+3. Add the env vars the README lists (API key, `client_id`, optional extras).
+4. Deploy (for example to Vercel) and walk through sign-in once.
+
+Use it to validate your own integration or as a template. The code comments match the steps below.
+
 ## Prerequisites
 
 - A Parascene account for the integration developer.

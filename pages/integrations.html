@@ -20,13 +20,23 @@
 		<div class="route-header">
 			<div class="route-header-title-row">
 				<h3>Connections</h3>
-				<a href="/help/developer/login-with-parascene{{V}}" class="btn-secondary">How it works</a>
 			</div>
 			<p class="integrations-intro">
-				API credentials, sites you use Parascene to sign into, and developer apps you register—everything for connecting
-				other tools and services lives here.
+				Sites and apps you’ve signed into with Parascene, your API credentials, and developer apps you register—everything
+				for connecting other tools and services lives here.
 			</p>
 		</div>
+
+		<hr class="integrations-section-divider" aria-hidden="true" />
+
+		<section class="integrations-section integrations-section--user" aria-labelledby="integrations-grants-heading">
+			<h4 id="integrations-grants-heading" class="integrations-section-title">Sites &amp; apps you use</h4>
+			<p class="integrations-intro">
+				Other sites and apps you opened with your Parascene account. Revoke to sign them out—they won’t keep access until you sign in again.
+			</p>
+			<div data-integrations-grants-list class="integrations-grants-wrap"></div>
+			<p data-integrations-grants-empty class="integrations-intro" hidden>Nothing connected yet.</p>
+		</section>
 
 		<hr class="integrations-section-divider" aria-hidden="true" />
 
@@ -47,25 +57,15 @@
 
 		<hr class="integrations-section-divider" aria-hidden="true" />
 
-		<section class="integrations-section integrations-section--user" aria-labelledby="integrations-grants-heading">
-			<h4 id="integrations-grants-heading" class="integrations-section-title">Sites &amp; apps you use</h4>
-			<p class="integrations-intro">
-				Other sites and apps you opened with your Parascene account. Revoke to sign them out—they won’t keep access until you sign in again.
-			</p>
-			<div data-integrations-grants-list class="integrations-grants-wrap"></div>
-			<p data-integrations-grants-empty class="integrations-intro" hidden>Nothing connected yet.</p>
-		</section>
-
-		<hr class="integrations-section-divider" aria-hidden="true" />
-
 		<section class="integrations-section integrations-section--dev" aria-labelledby="integrations-dev-heading">
 			<h4 id="integrations-dev-heading" class="integrations-section-title">Apps you build</h4>
 			<p class="integrations-intro">
 				For developers: each registered app gets a public ID and redirect URLs. Exchange authorization codes on
 				<strong>your server</strong> with your Parascene API key—never in the browser.
 			</p>
-			<p class="integrations-toolbar">
+			<p class="integrations-toolbar integrations-toolbar--actions">
 				<button type="button" class="btn-primary" data-open-register-dialog>Register an app</button>
+				<a href="/help/developer/login-with-parascene{{V}}" class="btn-secondary">How it works</a>
 			</p>
 			<div data-integrations-list class="integrations-list-wrap"></div>
 			<p data-integrations-empty class="integrations-intro" hidden>You haven’t registered an app yet.</p>

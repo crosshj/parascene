@@ -124,3 +124,5 @@ Details: **[API - Chat](/help/developer/api-chat)**
 ## Third-party login (“Log in with Parascene”)
 
 For external apps that sign users in with Parascene (authorization code + PKCE, short-lived access tokens, refresh tokens, user revocation), see **[Log in with Parascene (developer)](/help/developer/login-with-parascene)**.
+
+**Working example:** [parascene-client on GitHub](https://github.com/crosshj/parascene-client) — minimal HTML + Vercel, ready to copy and deploy.

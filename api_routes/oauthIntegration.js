@@ -360,8 +360,13 @@ export default function createOAuthIntegrationRoutes({ queries }) {
 
 		if (!req.auth?.userId) {
 			const base = getBaseAppUrl();
-			const returnUrl = `${base}${req.originalUrl || ""}`;
-			return res.redirect(302, `${base}/auth.html?returnUrl=${encodeURIComponent(returnUrl)}`);
+			// Path + query only. Full URLs break auth.html and POST /login: `returnUrl` must be
+			// a same-site path (no `://`) for hidden fields and sanitizeReturnUrl to accept it.
+			const afterLogin =
+				typeof req.originalUrl === "string" && req.originalUrl.startsWith("/")
+					? req.originalUrl
+					: "/oauth/authorize";
+			return res.redirect(302, `${base}/auth.html?returnUrl=${encodeURIComponent(afterLogin)}`);
 		}
 		if (req.auth.apiKeyAuth || req.auth.integrationAccess) {
 			return badRequest(res, "Use a website session to authorize OAuth");
@@ -370,7 +375,14 @@ export default function createOAuthIntegrationRoutes({ queries }) {
 		const profileRow = await queries.selectUserProfileByUserId?.get(req.auth.userId);
 		const welcome = computeWelcome({ profileRow });
 		if (welcome.required) {
-			return res.redirect(302, "/welcome");
+			const resumeOAuth =
+				typeof req.originalUrl === "string" && req.originalUrl.startsWith("/")
+					? req.originalUrl
+					: "/oauth/authorize";
+			return res.redirect(
+				302,
+				`/welcome?${new URLSearchParams({ returnUrl: resumeOAuth }).toString()}`
+			);
 		}
 
 		const scopeNorm = normalizeScope(q.scope);
@@ -431,7 +443,20 @@ export default function createOAuthIntegrationRoutes({ queries }) {
 		const profileRow = await queries.selectUserProfileByUserId?.get(req.auth.userId);
 		const welcome = computeWelcome({ profileRow });
 		if (welcome.required) {
-			return res.redirect(302, "/welcome");
+			const resume = new URLSearchParams({
+				response_type: "code",
+				client_id,
+				redirect_uri,
+				state,
+				scope,
+				code_challenge,
+				code_challenge_method: "S256"
+			});
+			const resumeOAuth = `/oauth/authorize?${resume.toString()}`;
+			return res.redirect(
+				302,
+				`/welcome?${new URLSearchParams({ returnUrl: resumeOAuth }).toString()}`
+			);
 		}
 
 		const rawCode = randomUrlSafe(32);

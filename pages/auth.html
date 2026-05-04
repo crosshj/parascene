@@ -134,7 +134,26 @@
 						// Basic client-side hardening; server still validates.
 						if (typeof returnUrl === 'string') {
 							returnUrl = returnUrl.trim();
-							if (returnUrl.startsWith('/') && !returnUrl.startsWith('//') && returnUrl.indexOf('://') === -1 && returnUrl.length <= 2048) {
+							// Same-origin absolute URL (e.g. older OAuth redirects) -> path + search only
+							if (returnUrl.indexOf('://') !== -1) {
+								try {
+									var u = new URL(returnUrl, window.location.origin);
+									if (u.origin === window.location.origin) {
+										returnUrl = u.pathname + u.search;
+									} else {
+										returnUrl = '';
+									}
+								} catch (e1) {
+									returnUrl = '';
+								}
+							}
+							if (
+								returnUrl &&
+								returnUrl.startsWith('/') &&
+								!returnUrl.startsWith('//') &&
+								returnUrl.indexOf('://') === -1 &&
+								returnUrl.length <= 2048
+							) {
 								var inputs = document.querySelectorAll('input[data-return-url][name="returnUrl"]');
 								inputs.forEach(function (el) {
 									el.value = returnUrl;

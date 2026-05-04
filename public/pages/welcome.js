@@ -133,6 +133,25 @@ function getWelcomeTestEmail() {
 	}
 }
 
+/** Same-site path only; aligns with pages.js `normalizeReturnUrl` (e.g. OAuth → welcome → consent). */
+function getWelcomeReturnUrlFromQuery() {
+	try {
+		const params = new URLSearchParams(window.location.search || '');
+		const raw = String(params.get('returnUrl') || '').trim();
+		if (!raw) return null;
+		if (!raw.startsWith('/') || raw.startsWith('//') || raw.includes('://')) return null;
+		if (raw.length > 2048) return null;
+		if (raw === '/auth' || raw === '/auth.html' || raw === '/welcome') return null;
+		return raw;
+	} catch {
+		return null;
+	}
+}
+
+function getWelcomeDestination() {
+	return getWelcomeReturnUrlFromQuery() || '/';
+}
+
 async function ensureNeedsWelcome() {
 	const testEmail = getWelcomeTestEmail();
 	const testMode = testEmail !== null;
@@ -155,7 +174,7 @@ async function ensureNeedsWelcome() {
 
 	const welcome = result.data?.welcome || null;
 	if (welcome && welcome.required === false && !testMode) {
-		window.location.href = '/';
+		window.location.href = getWelcomeDestination();
 		return null;
 	}
 
@@ -797,7 +816,7 @@ async function init() {
 
 			// Navigate away without resetting UI (keep spinner, leave page as-is)
 			didSucceed = true;
-			window.location.href = '/';
+			window.location.href = getWelcomeDestination();
 		} finally {
 			if (!didSucceed) {
 				resetSubmitState();
