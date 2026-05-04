@@ -3,22 +3,34 @@
  * Use with .creation-published-badge and .creation-user-deleted-badge (styles in global.css).
  */
 
-const _qs = (() => {
-	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
-	return v ? `?v=${encodeURIComponent(v)}` : '';
-})();
-const { globeIcon, trophyIcon } = await import(`../icons/svg-strings.js${_qs}`);
+import * as SvgIcons from '../icons/svg-strings.js';
 
 const html = String.raw;
 
+/** Inline trophy if dynamic/cache-split imports ever omit {@link SvgIcons.trophyIcon} (matches lucide outline trophy). */
+function trophyIconMarkupFallback() {
+	return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+		stroke-linejoin="round" aria-hidden="true" data-from="creation-badges-fallback">
+		<path d="M8 21h8"></path>
+		<path d="M12 17v4"></path>
+		<path d="M7 4h10v5a5 5 0 0 1-10 0V4z"></path>
+		<path d="M7 8H5a2 2 0 0 1-2-2V5h4"></path>
+		<path d="M17 8h2a2 2 0 0 0 2-2V5h-4"></path>
+	</svg>`;
+}
+
 /** Published (globe) badge for creation cards. */
 export function publishedBadgeHtml() {
-	return html`<div class="creation-published-badge" title="Published">${globeIcon()}</div>`;
+	const g = SvgIcons.globeIcon;
+	const inner = typeof g === 'function' ? g() : '';
+	return html`<div class="creation-published-badge" title="Published">${inner}</div>`;
 }
 
 /** Centered trophy on blurred thumbnails for creations entered in a challenge. */
 export function challengeEnteredBadgeHtml() {
-	return html`<span class="creation-challenge-entered-badge" role="img" aria-label="Entered in challenge" title="Entered in challenge">${trophyIcon()}</span>`;
+	const t = SvgIcons.trophyIcon;
+	const inner = typeof t === 'function' ? t() : trophyIconMarkupFallback();
+	return html`<span class="creation-challenge-entered-badge" role="img" aria-label="Entered in challenge" title="Entered in challenge">${inner}</span>`;
 }
 
 /** User-deleted (trash) badge for creation cards (e.g. admin view). */
