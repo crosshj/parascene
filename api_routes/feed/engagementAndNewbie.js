@@ -154,19 +154,19 @@ export const NEWBIE_FEED_TIPS = [
 	},
 	{
 		id: "tip-connect-chat",
-		title: "Chat on Connect",
+		title: "Chat with others",
 		message: "Open hashtag channels and DMs in the app under Connect. It’s the home for text chat here.",
-		cta: "Connect",
-		ctaRoute: "/connect#chat"
+		cta: "Chat",
+		ctaRoute: "/chat"
 	},
-	{
-		id: "tip-discord",
-		title: "Join our Discord",
-		message: "For voice, events, and the wider community outside the app, join our Discord server.",
-		cta: "Join Discord",
-		ctaRoute: "https://discord.gg/pqzWstTb8f",
-		ctaTarget: "_blank"
-	},
+	// {
+	// 	id: "tip-discord",
+	// 	title: "Join our Discord",
+	// 	message: "For voice, events, and the wider community outside the app, join our Discord server.",
+	// 	cta: "Join Discord",
+	// 	ctaRoute: "https://discord.gg/pqzWstTb8f",
+	// 	ctaTarget: "_blank"
+	// },
 	{
 		id: "tip-help",
 		title: "Help & docs",
@@ -213,8 +213,8 @@ export function buildChallengeEngagementVirtualRows(snapshot) {
 	const totalCreditsRaw = snapshot.totalRewardCredits;
 	const totalCredits =
 		typeof totalCreditsRaw === "number" &&
-		Number.isFinite(totalCreditsRaw) &&
-		totalCreditsRaw > 0
+			Number.isFinite(totalCreditsRaw) &&
+			totalCreditsRaw > 0
 			? Math.round(totalCreditsRaw)
 			: null;
 	const prizeDisplay =
@@ -308,9 +308,9 @@ export function mergeEngagementIntoPage(baseItems, engagementItems, opts) {
 		item,
 		slot:
 			item.slot === "top" ||
-			item.slot === "after_first" ||
-			item.slot === "after_second" ||
-			item.slot === "after_fifth"
+				item.slot === "after_first" ||
+				item.slot === "after_second" ||
+				item.slot === "after_fifth"
 				? item.slot
 				: "after_first"
 	}));

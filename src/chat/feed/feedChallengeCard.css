@@ -18,6 +18,66 @@
 	box-shadow: 0 8px 22px rgba(5, 24, 26, 0.28);
 }
 
+/* Challenge stats card: purple / magenta gradient (distinct from contest_stats teal). */
+.feed-card-engagement-inner.feed-card-engagement-inner-challenge {
+	background:
+		radial-gradient(115% 95% at 92% 18%, rgba(255, 170, 220, 0.28) 0%, transparent 52%),
+		radial-gradient(95% 110% at 4% 92%, rgba(55, 28, 72, 0.45) 0%, transparent 48%),
+		linear-gradient(104deg, #6d3d78 0%, #854090 44%, #b050b0 100%);
+	border: 1px solid color-mix(in srgb, #ffffff 16%, transparent);
+	box-shadow: 0 10px 28px rgba(28, 8, 38, 0.38);
+}
+
+.feed-card-engagement-inner-challenge .feed-card-engagement-kicker {
+	color: rgba(255, 255, 255, 0.58);
+}
+
+.feed-card-engagement-inner-challenge .feed-card-engagement-status-chip {
+	color: #3a1745;
+	background: rgba(245, 228, 255, 0.52);
+}
+
+.feed-card-engagement-inner-challenge .feed-card-engagement-subtitle {
+	color: rgba(255, 255, 255, 0.72);
+}
+
+.feed-card-engagement-inner-challenge .feed-card-engagement-social-proof {
+	color: rgba(255, 255, 255, 0.9);
+}
+
+.feed-card-engagement-inner-challenge .feed-card-engagement-proof-sep {
+	background: rgba(236, 130, 198, 0.92);
+}
+
+.feed-card-engagement-inner-challenge .feed-card-engagement-hook {
+	color: rgba(255, 255, 255, 0.94);
+}
+
+.feed-card-engagement-inner-challenge .feed-card-engagement-thumb {
+	border: 1px solid color-mix(in srgb, #ffffff 26%, transparent);
+	box-shadow: 0 4px 14px rgba(18, 6, 28, 0.45);
+}
+
+.feed-card-engagement-inner-challenge .feed-card-engagement-thumb-placeholder {
+	background: linear-gradient(
+		110deg,
+		rgba(230, 200, 245, 0.18) 8%,
+		rgba(250, 215, 245, 0.38) 18%,
+		rgba(230, 200, 245, 0.18) 33%
+	);
+	border: 1px solid color-mix(in srgb, #ffffff 18%, transparent);
+}
+
+.feed-card-engagement-inner.feed-card-engagement-inner-challenge .feed-card-engagement-cta:not(.feed-card-engagement-cta--text):not(.feed-card-engagement-cta--outline) {
+	color: #4a1f58 !important;
+	box-shadow: 0 1px 3px rgba(28, 8, 38, 0.16);
+}
+
+.feed-card-engagement-inner.feed-card-engagement-inner-challenge .feed-card-engagement-cta:hover:not(.feed-card-engagement-cta--outline):not(.feed-card-engagement-cta--text) {
+	color: #351433 !important;
+	box-shadow: 0 2px 8px rgba(28, 8, 38, 0.18);
+}
+
 .feed-card-engagement-head {
 	display: flex;
 	align-items: center;

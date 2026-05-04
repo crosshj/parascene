@@ -609,6 +609,20 @@ function buildEngagementFeedCard(item) {
 					window.location.href = titleLinkEl.getAttribute("href") || "/challenges";
 				});
 			}
+			const challengeCardListHref =
+				titleLinkEl instanceof HTMLAnchorElement
+					? String(titleLinkEl.getAttribute("href") || "/challenges").trim() || "/challenges"
+					: "/challenges";
+			card.addEventListener("click", (e) => {
+				const raw = e.target;
+				const el = raw instanceof Element ? raw : raw?.parentElement;
+				if (!el || !(el instanceof Element)) return;
+				if (el.closest(".feed-card-engagement-actions")) return;
+				if (el.closest("a[href]")) return;
+				if (el.closest("button")) return;
+				e.preventDefault();
+				window.location.href = challengeCardListHref;
+			});
 		} else {
 			const ctaEl = card.querySelector("[data-engagement-cta]");
 			if (ctaEl) {
