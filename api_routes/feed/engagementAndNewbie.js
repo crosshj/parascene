@@ -37,7 +37,8 @@ function formatEndsInSummary(deadlineMs, nowMs) {
  * - Has unvoted → primary **Vote** (filled). Secondary **Create**: outline if already entered,
  *   else filled; if both would be filled (not entered yet), **Create** becomes outline so Vote wins.
  * - No unvoted left (caught up, or only own/no peers’ entries to score) → primary **Create**
- *   (filled), secondary **View Entries** (outline). In-feed vote modal only when unvoted remain.
+ *   (filled), secondary **View Entries** (text). Vote / View Entries still opens the in-feed modal
+ *   whenever the challenge is in a voting phase (same as “Vote”).
  */
 function pickChallengeDualCtaPayload(snapshot) {
 	const phase = typeof snapshot?.phase === "string" ? snapshot.phase : "";
@@ -46,7 +47,7 @@ function pickChallengeDualCtaPayload(snapshot) {
 	const entered = Boolean(snapshot?.viewerHasEntered);
 
 	const voteLabel = hasUnvoted ? "Vote" : "View Entries";
-	const voteAction = isVotePhase && hasUnvoted ? "challenge_vote_modal" : "";
+	const voteAction = isVotePhase ? "challenge_vote_modal" : "";
 
 	let voteOutlined;
 	let enterOutlined;
