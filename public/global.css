@@ -7026,6 +7026,15 @@ body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading {
 	color: var(--text-muted);
 }
 
+.challenge-vote-modal-media-fallback.challenge-vote-modal-media-fallback--empty {
+	max-width: 34rem;
+	line-height: 1.5;
+}
+
+.challenge-vote-modal-overlay--empty .challenge-vote-modal-media {
+	min-height: 120px;
+}
+
 @media (max-width: 768px) {
 	.challenge-vote-modal-overlay {
 		padding:

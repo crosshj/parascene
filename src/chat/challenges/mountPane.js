@@ -230,7 +230,6 @@ export async function mountChallengesPane(opts) {
 	const tryOpenVoteModal = () => {
 		if (!phaseUsesModalVoteOnly(phase)) return;
 		const slides = buildVoteSlidesNewestFirst(rankedPeers);
-		if (!slides.length) return;
 		const challengeTitle = model.participant.latestConfig
 			? participantHeroViewModel(model.participant.latestConfig).title
 			: '';
@@ -306,7 +305,6 @@ export function openChallengeVoteModalFromMessages(opts) {
 	const phase = model.participant.phase;
 	if (!phaseUsesModalVoteOnly(phase)) return false;
 	const slides = buildVoteSlidesNewestFirst(rankedPeers);
-	if (!slides.length) return false;
 
 	const challengeTitle = model.participant.latestConfig
 		? participantHeroViewModel(model.participant.latestConfig).title

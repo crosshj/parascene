@@ -289,6 +289,7 @@ export function createChallengeVoteModal(opts) {
 
 		/* Score keys: Left/Right adjust horizontal heat slider (never gate on sliderBusy — same rationale as before). */
 		if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') {
+			if (slides.length === 0) return;
 			const rootEl = overlay.querySelector('[data-challenge-vote-slider]');
 			if (!(rootEl instanceof HTMLElement)) return;
 			const cur = Number(rootEl.getAttribute('aria-valuenow'));
@@ -614,6 +615,32 @@ export function createChallengeVoteModal(opts) {
 
 	function syncChrome(opts = {}) {
 		const reloadMedia = opts.reloadMedia !== false;
+		const controls = el('.challenge-vote-modal-controls');
+		if (controls instanceof HTMLElement) {
+			controls.hidden = slides.length === 0;
+			controls.setAttribute('aria-hidden', slides.length === 0 ? 'true' : 'false');
+		}
+		if (slides.length === 0) {
+			const prevBtn = el('[data-challenge-vote-prev]');
+			const nextBtn = el('[data-challenge-vote-next]');
+			if (prevBtn instanceof HTMLButtonElement) {
+				prevBtn.hidden = true;
+				prevBtn.setAttribute('aria-hidden', 'true');
+				prevBtn.disabled = true;
+			}
+			if (nextBtn instanceof HTMLButtonElement) {
+				nextBtn.hidden = true;
+				nextBtn.setAttribute('aria-hidden', 'true');
+				nextBtn.disabled = true;
+			}
+			const stage = el('[data-challenge-vote-media]');
+			if (stage instanceof HTMLElement) {
+				stage.innerHTML =
+					'<p class="challenge-vote-modal-media-fallback challenge-vote-modal-media-fallback--empty" role="status">No other entries to score here yet (for example, you may be the only submitter, or every peer entry is already scored). Open Challenges for the full view.</p>';
+			}
+			return;
+		}
+
 		const row = slides[slideIdx];
 		const prevBtn = el('[data-challenge-vote-prev]');
 		const nextBtn = el('[data-challenge-vote-next]');
@@ -848,17 +875,19 @@ export function createChallengeVoteModal(opts) {
 			dismiss.addEventListener('click', () => destroy(false));
 		}
 
-		const prevBtn = overlay.querySelector('[data-challenge-vote-prev]');
-		if (prevBtn instanceof HTMLButtonElement) {
-			prevBtn.addEventListener('click', () => go(-1));
-		}
-		const nextBtn = overlay.querySelector('[data-challenge-vote-next]');
-		if (nextBtn instanceof HTMLButtonElement) {
-			nextBtn.addEventListener('click', () => go(1));
-		}
+		if (slides.length > 0) {
+			const prevBtn = overlay.querySelector('[data-challenge-vote-prev]');
+			if (prevBtn instanceof HTMLButtonElement) {
+				prevBtn.addEventListener('click', () => go(-1));
+			}
+			const nextBtn = overlay.querySelector('[data-challenge-vote-next]');
+			if (nextBtn instanceof HTMLButtonElement) {
+				nextBtn.addEventListener('click', () => go(1));
+			}
 
-		bindHeatControl();
-		bindMediaSwipeNav();
+			bindHeatControl();
+			bindMediaSwipeNav();
+		}
 	}
 
 	function voteModalHeadingText(challengeTitle) {
@@ -873,7 +902,6 @@ export function createChallengeVoteModal(opts) {
 		 */
 		open(nextSlides, openOpts = {}) {
 			slides = Array.isArray(nextSlides) ? nextSlides : [];
-			if (!slides.length) return;
 			cacheByCreationId = new Map();
 			creationFetchInflight = new Map();
 			mediaWarmByCreationId = new Set();
@@ -922,6 +950,7 @@ export function createChallengeVoteModal(opts) {
 			`;
 
 			document.body.appendChild(overlay);
+			overlay.classList.toggle('challenge-vote-modal-overlay--empty', slides.length === 0);
 			const titleEl = overlay.querySelector('#challenge-vote-modal-title');
 			if (titleEl instanceof HTMLElement) titleEl.textContent = headingText;
 
