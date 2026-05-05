@@ -175,11 +175,32 @@ function parseChatMessageCreatedMs(m) {
 	return Number.isFinite(t) ? t : NaN;
 }
 
+function isChannelInviteSystemBoundaryMessage(m) {
+	const meta = m?.meta;
+	const systemEventRaw =
+		meta && typeof meta === 'object' && !Array.isArray(meta) ? meta.system_event : null;
+	const systemEvent =
+		systemEventRaw && typeof systemEventRaw === 'object' && !Array.isArray(systemEventRaw)
+			? systemEventRaw
+			: null;
+	if (String(systemEvent?.kind || '').trim().toLowerCase() === 'channel_invite_sent') return true;
+	const bodyTextRaw = String(m?.body ?? '').trim();
+	return (
+		Boolean(bodyTextRaw) &&
+		/^\s*@?[a-z0-9_]+\s+invited\s+@?[a-z0-9_]+(?:\s*,\s*@?[a-z0-9_]+)*\s+to the channel\s*$/i.test(
+			bodyTextRaw
+		)
+	);
+}
+
 /**
  * Same sender as the row above and within the time window — one visual group (single meta row).
  */
 function isChatMessageGroupContinue(prev, current) {
 	if (prev == null || current == null) return false;
+	if (isChannelInviteSystemBoundaryMessage(prev) || isChannelInviteSystemBoundaryMessage(current)) {
+		return false;
+	}
 	if (Number(prev.sender_id) !== Number(current.sender_id)) return false;
 	const prevMs = parseChatMessageCreatedMs(prev);
 	const curMs = parseChatMessageCreatedMs(current);
@@ -192,6 +213,7 @@ function isChatMessageGroupContinue(prev, current) {
 /** Whether an optimistic bubble can stack under the last loaded message from the viewer. */
 function isOptimisticChatGroupContinue(lastMessage, viewerId) {
 	if (lastMessage == null || !Number.isFinite(Number(viewerId))) return false;
+	if (isChannelInviteSystemBoundaryMessage(lastMessage)) return false;
 	if (Number(lastMessage.sender_id) !== Number(viewerId)) return false;
 	const lastMs = parseChatMessageCreatedMs(lastMessage);
 	if (!Number.isFinite(lastMs)) return false;
@@ -4454,7 +4476,13 @@ export async function initChatPage(root, options = {}) {
 
 	function b64ToBytes(s) {
 		try {
-			const raw = atob(String(s || ''));
+			let src = String(s || '').trim();
+			if (!src) return null;
+			// Accept both base64url (`-_`) and classic base64 (`+/`) payloads.
+			src = src.replace(/-/g, '+').replace(/_/g, '/');
+			const pad = src.length % 4;
+			if (pad) src += '='.repeat(4 - pad);
+			const raw = atob(src);
 			const out = new Uint8Array(raw.length);
 			for (let i = 0; i < raw.length; i += 1) out[i] = raw.charCodeAt(i);
 			return out;
@@ -5958,12 +5986,15 @@ export async function initChatPage(root, options = {}) {
 			systemEventRaw && typeof systemEventRaw === 'object' && !Array.isArray(systemEventRaw)
 				? systemEventRaw
 				: null;
+		const bodyTextRaw = String(m?.body ?? '').trim();
+		const isLegacyInviteSystemLine = isChannelInviteSystemBoundaryMessage(m);
 		const isChannelInviteSystemEvent =
 			String(systemEvent?.kind || '').trim().toLowerCase() === 'channel_invite_sent';
+		const shouldRenderAsSystemEvent = isChannelInviteSystemEvent || isLegacyInviteSystemLine;
 		const prev = i > 0 ? messages[i - 1] : null;
-		const isGroupContinue = isChannelInviteSystemEvent ? false : isChatMessageGroupContinue(prev, m);
+		const isGroupContinue = shouldRenderAsSystemEvent ? false : isChatMessageGroupContinue(prev, m);
 		const row = document.createElement('div');
-		row.className = `connect-chat-msg${isSelf ? ' is-self' : ''}${isGroupContinue ? ' is-group-continue' : ''}${isChannelInviteSystemEvent ? ' connect-chat-msg--system-event' : ''}`;
+		row.className = `connect-chat-msg${isSelf ? ' is-self' : ''}${isGroupContinue ? ' is-group-continue' : ''}${shouldRenderAsSystemEvent ? ' connect-chat-msg--system-event' : ''}`;
 		row.setAttribute('data-chat-message-id', String(m.id));
 		const effectiveUnread = rowOpts.effectiveUnread;
 		const vStart = rowOpts.vStart;
@@ -6011,9 +6042,10 @@ export async function initChatPage(root, options = {}) {
 		const safeBody = processUserText(m.body ?? '');
 		const bubble = document.createElement('div');
 		bubble.className = 'connect-chat-msg-bubble';
-		if (isChannelInviteSystemEvent) {
+		if (shouldRenderAsSystemEvent) {
 			bubble.classList.add('connect-chat-msg-bubble--system-event');
-			bubble.innerHTML = `<div class="chat-channel-system-event-line">--- ${safeBody} ---</div>`;
+			const plain = escapeHtml(String(m?.body ?? '').trim() || 'Channel update');
+			bubble.innerHTML = `<div class="chat-channel-system-event-line"><span class="chat-channel-system-event-text">${plain}</span></div>`;
 		} else if (canvasMeta) {
 			bubble.classList.add('connect-chat-msg-bubble--canvas');
 			const preview = processUserText(m.body ?? '');
@@ -6052,7 +6084,7 @@ export async function initChatPage(root, options = {}) {
 			bubble.appendChild(editedLabelEl);
 		}
 		normalizeChatBubbleInlineImageSpacing(bubble);
-		if (!isGroupContinue && !isChannelInviteSystemEvent) {
+		if (!isGroupContinue && !shouldRenderAsSystemEvent) {
 			const metaLine = document.createElement('div');
 			metaLine.className = 'connect-chat-msg-meta';
 			const handleRaw = m.sender_user_name != null ? String(m.sender_user_name).trim() : '';
@@ -6108,7 +6140,7 @@ export async function initChatPage(root, options = {}) {
 			inner.appendChild(footer);
 		}
 		row.appendChild(inner);
-		if (rowOpts.showHoverBar && !isChannelInviteSystemEvent) {
+		if (rowOpts.showHoverBar && !shouldRenderAsSystemEvent) {
 			const hoverBar = buildChatMessageHoverBarElement(m, viewerId, rowOpts);
 			if (hoverBar) row.appendChild(hoverBar);
 		}
@@ -8119,6 +8151,10 @@ export async function initChatPage(root, options = {}) {
 				}
 				messagesForUi = [];
 				for (const m of messagesForUiRaw) {
+					if (m?.private_decrypted === true) {
+						messagesForUi.push(m);
+						continue;
+					}
 					const body = String(m?.body || '');
 					if (body.startsWith(CHAT_PRIVATE_MSG_PREFIX)) {
 						const dec = await decryptPrivateText(body.slice(CHAT_PRIVATE_MSG_PREFIX.length), k);

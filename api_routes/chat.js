@@ -113,7 +113,8 @@ function splitUrlTrailingPunctuationForChat(rawUrl) {
 }
 
 /**
- * Spans in `text` that are bare `/creations/:id` or http(s) URLs whose path is exactly `/creations/:id` (not `/edit`, etc.).
+ * Spans in `text` that are bare `/creations/:id` or `/api/create/images/:id`,
+ * or http(s) URLs whose path is exactly one of those forms.
  */
 function collectCreationDetailUrlSpansInChatBody(text) {
 	const spans = [];
@@ -125,9 +126,11 @@ function collectCreationDetailUrlSpansInChatBody(text) {
 		const { url } = splitUrlTrailingPunctuationForChat(raw);
 		try {
 			const u = new URL(url);
-			const mm = (u.pathname || "").match(/^\/creations\/(\d+)\/?$/i);
+			const mm = (u.pathname || "").match(
+				/^(?:\/creations\/(\d+)\/?|\/api\/create\/images\/(\d+)\/?)$/i
+			);
 			if (mm) {
-				const id = Number(mm[1]);
+				const id = Number(mm[1] || mm[2]);
 				if (Number.isFinite(id) && id > 0) {
 					spans.push({ start: m.index, end: m.index + raw.length, id });
 				}
@@ -145,6 +148,15 @@ function collectCreationDetailUrlSpansInChatBody(text) {
 			spans.push({ start, end, id });
 		}
 	}
+	const bareApiRe = /(^|[\s(])\/api\/create\/images\/(\d+)(?=\/?(?:[\s]|$|[.,!?;:)]|\)|\?|#))/gi;
+	while ((m = bareApiRe.exec(t)) !== null) {
+		const id = Number(m[2]);
+		const start = m.index + m[1].length;
+		const end = bareApiRe.lastIndex;
+		if (Number.isFinite(id) && id > 0) {
+			spans.push({ start, end, id });
+		}
+	}
 	spans.sort((a, b) => a.start - b.start || b.end - a.end - (b.start - a.start));
 	const out = [];
 	let lastEnd = -1;
@@ -158,7 +170,22 @@ function collectCreationDetailUrlSpansInChatBody(text) {
 
 async function mintShareUrlForOwnerUnpublishedCreation(id, senderUserId, queries, shareBase, bust) {
 	try {
-		const row = await queries.selectCreatedImageById?.get(id, senderUserId);
+		let row = await queries.selectCreatedImageById?.get(id, senderUserId);
+		if (!row && typeof queries.selectCreatedImageByIdAnyUser?.get === "function") {
+			const anyRow = await queries.selectCreatedImageByIdAnyUser.get(id);
+			const ownerId = Number(anyRow?.user_id);
+			const senderIdNum = Number(senderUserId);
+			if (
+				anyRow &&
+				Number.isFinite(ownerId) &&
+				ownerId > 0 &&
+				Number.isFinite(senderIdNum) &&
+				senderIdNum > 0 &&
+				ownerId === senderIdNum
+			) {
+				row = anyRow;
+			}
+		}
 		if (!row) return null;
 		const pub = row.published === 1 || row.published === true;
 		if (pub) return null;
@@ -332,7 +359,7 @@ function encryptPrivateTextWithSecret(plainText, secret) {
 		const ciphertext = Buffer.concat([enc.update(String(plainText || ""), "utf8"), enc.final()]);
 		const tag = enc.getAuthTag();
 		const payload = Buffer.concat([ciphertext, tag]);
-		return `${base64UrlEncodeBuffer(iv)}.${base64UrlEncodeBuffer(payload)}`;
+		return `${base64UrlEncodeFromBuffer(iv)}.${base64UrlEncodeFromBuffer(payload)}`;
 	} catch {
 		return null;
 	}
@@ -480,6 +507,52 @@ export default function createChatRoutes({ queries, storage }) {
 		if (error) throw error;
 		const meta = data?.meta;
 		return meta && typeof meta === "object" && !Array.isArray(meta) ? { ...meta } : {};
+	}
+
+	async function normalizeBodyForThreadStorage(sb, threadRow, userId, bodyRaw) {
+		const body = typeof bodyRaw === "string" ? bodyRaw : "";
+		const isPrivateChannel =
+			threadRow?.type === "channel" &&
+			threadVisibilityFromMeta(threadRow?.meta) === PRIVATE_CHANNEL_VISIBILITY;
+		if (!isPrivateChannel) {
+			return normalizeUnpublishedCreationUrlsInChatBody(body, userId, queries);
+		}
+		if (!body.startsWith(CHAT_PRIVATE_BODY_PREFIX)) {
+			return body;
+		}
+		const cipherToken = body.slice(CHAT_PRIVATE_BODY_PREFIX.length);
+		if (!cipherToken) {
+			throw new Error("Private channel message payload is invalid");
+		}
+		const userMeta = await getUserMeta(sb, userId);
+		const keyMap =
+			userMeta.chat_private_keys &&
+			typeof userMeta.chat_private_keys === "object" &&
+			!Array.isArray(userMeta.chat_private_keys)
+				? userMeta.chat_private_keys
+				: {};
+		const keyEntry =
+			keyMap[String(Number(threadRow?.id))] &&
+			typeof keyMap[String(Number(threadRow?.id))] === "object"
+				? keyMap[String(Number(threadRow?.id))]
+				: null;
+		const secretK = typeof keyEntry?.k === "string" ? keyEntry.k.trim() : "";
+		if (!secretK) {
+			throw new Error("Private channel key missing for sender");
+		}
+		const plain = decryptPrivateTextWithSecret(cipherToken, secretK);
+		if (plain == null) {
+			throw new Error("Could not decrypt private channel message");
+		}
+		const normalizedPlain = await normalizeUnpublishedCreationUrlsInChatBody(plain, userId, queries);
+		if (normalizedPlain === plain) {
+			return body;
+		}
+		const nextCipher = encryptPrivateTextWithSecret(normalizedPlain, secretK);
+		if (!nextCipher) {
+			throw new Error("Could not encrypt private channel message");
+		}
+		return `${CHAT_PRIVATE_BODY_PREFIX}${nextCipher}`;
 	}
 
 	async function setUserPrivateKeyForThread(sb, userId, threadId, secretK) {
@@ -667,6 +740,33 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 			return res.status(200).json({ total_unread: total, viewer_id: userId });
 		} catch (err) {
 			console.error("[GET /api/chat/unread-summary]", err);
+			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
+		}
+	});
+
+	// POST /api/chat/normalize-body  { body } — canonicalize outgoing body (e.g. unpublished /creations/:id -> share URL)
+	router.post("/api/chat/normalize-body", async (req, res) => {
+		const userId = requireUser(req, res);
+		if (userId == null) return;
+		const bodyRaw = req.body?.body;
+		const body =
+			typeof bodyRaw === "string"
+				? bodyRaw.replace(/\u0000/g, "").trim()
+				: "";
+		if (!body) {
+			return res.status(400).json({ error: "Bad request", message: "body required" });
+		}
+		if (body.length > MAX_MESSAGE_CHARS) {
+			return res.status(400).json({
+				error: "Bad request",
+				message: `body must be at most ${MAX_MESSAGE_CHARS} characters`
+			});
+		}
+		try {
+			const normalized = await normalizeUnpublishedCreationUrlsInChatBody(body, userId, queries);
+			return res.status(200).json({ body: normalized });
+		} catch (err) {
+			console.error("[POST /api/chat/normalize-body]", err);
 			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
 		}
 	});
@@ -1342,9 +1442,10 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 					invitedHandles
 				});
 				const channelSystemCipher = encryptPrivateTextWithSecret(channelSystemBodyPlain, secretK);
-				const channelSystemBody = channelSystemCipher
-					? `${CHAT_PRIVATE_BODY_PREFIX}${channelSystemCipher}`
-					: `${CHAT_PRIVATE_BODY_PREFIX}`;
+				if (!channelSystemCipher) {
+					throw new Error("Could not encrypt private channel system event");
+				}
+				const channelSystemBody = `${CHAT_PRIVATE_BODY_PREFIX}${channelSystemCipher}`;
 				const systemMeta = {
 					system_event: {
 						kind: SYSTEM_EVENT_KIND_CHANNEL_INVITE_SENT,
@@ -1673,6 +1774,53 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 
 			let messagesOut = await enrichChatMessagesWithSenderProfiles(sb, page);
 			messagesOut = enrichChatReactionsFromMessageColumn(messagesOut, userId);
+			const { data: threadRow } = await sb
+				.from("prsn_chat_threads")
+				.select("id, type, meta")
+				.eq("id", threadId)
+				.maybeSingle();
+			const isPrivateChannel =
+				threadRow?.type === "channel" &&
+				threadVisibilityFromMeta(threadRow?.meta) === PRIVATE_CHANNEL_VISIBILITY;
+			if (isPrivateChannel && messagesOut.length > 0) {
+				const userMeta = await getUserMeta(sb, userId);
+				const keyMap =
+					userMeta.chat_private_keys &&
+					typeof userMeta.chat_private_keys === "object" &&
+					!Array.isArray(userMeta.chat_private_keys)
+						? userMeta.chat_private_keys
+						: {};
+				const keyEntry =
+					keyMap[String(Number(threadId))] &&
+					typeof keyMap[String(Number(threadId))] === "object"
+						? keyMap[String(Number(threadId))]
+						: null;
+				const secretK = typeof keyEntry?.k === "string" ? keyEntry.k.trim() : "";
+				const nextMessages = [];
+				for (const m of messagesOut) {
+					const body = String(m?.body || "");
+					if (!body.startsWith(CHAT_PRIVATE_BODY_PREFIX) || !secretK) {
+						nextMessages.push({ ...m, body: "[Encrypted message]" });
+						continue;
+					}
+					const dec = decryptPrivateTextWithSecret(body.slice(CHAT_PRIVATE_BODY_PREFIX.length), secretK);
+					if (dec == null) {
+						nextMessages.push({ ...m, body: "[Encrypted message]" });
+						continue;
+					}
+					const normalizedDec = await normalizeUnpublishedCreationUrlsInChatBody(
+						dec,
+						Number(m?.sender_id),
+						queries
+					);
+					nextMessages.push({
+						...m,
+						body: typeof normalizedDec === "string" && normalizedDec ? normalizedDec : dec,
+						private_decrypted: true
+					});
+				}
+				messagesOut = nextMessages;
+			}
 
 			let nextBefore = null;
 			if (messagesOut.length > 0) {
@@ -1742,7 +1890,7 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 				});
 			}
 
-			body = await normalizeUnpublishedCreationUrlsInChatBody(body, userId, queries);
+			body = await normalizeBodyForThreadStorage(sb, threadRow, userId, body);
 			if (body.length > MAX_MESSAGE_CHARS) {
 				return res.status(400).json({
 					error: "Bad request",
@@ -2165,11 +2313,7 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 						message: "Private channel messages must be encrypted"
 					});
 				}
-				newBody =
-					threadRow.type === "channel" &&
-					threadVisibilityFromMeta(threadRow.meta) === PRIVATE_CHANNEL_VISIBILITY
-						? b
-						: await normalizeUnpublishedCreationUrlsInChatBody(b, userId, queries);
+				newBody = await normalizeBodyForThreadStorage(sb, threadRow, userId, b);
 				if (newBody.length > MAX_MESSAGE_CHARS) {
 					return res.status(400).json({
 						error: "Bad request",

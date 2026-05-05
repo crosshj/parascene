@@ -566,6 +566,14 @@ const CHAT_COMMAND_ITEMS = [
 		label: "/gen <prompt>",
 		sublabel: "Generate an image in composer",
 		insert_text: "/gen "
+	},
+	{
+		type: "command",
+		id: "command:invite",
+		command: "invite",
+		label: "/invite @username",
+		sublabel: "Send a private-channel invite via DM",
+		insert_text: "/invite "
 	}
 ];
 

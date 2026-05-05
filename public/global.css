@@ -9369,21 +9369,44 @@ body.blog-edit-page .blog-edit-route {
 }
 
 .connect-chat-msg--system-event {
-	padding-top: 6px;
-	padding-bottom: 6px;
+	padding: 14px 8px;
+}
+
+.connect-chat-msg--system-event .connect-chat-msg-inner {
+	width: 100%;
+	padding-block: 1em;
 }
 
 .connect-chat-msg-bubble--system-event {
 	padding: 0;
+	width: 100%;
+	max-width: 100%;
 }
 
 .chat-channel-system-event-line {
-	font-size: 0.8rem;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	width: 100%;
+	font-size: 0.78rem;
 	line-height: 1.25;
-	letter-spacing: 0.02em;
-	text-align: center;
 	color: var(--text-muted);
 	opacity: 0.9;
+}
+
+.chat-channel-system-event-line::before,
+.chat-channel-system-event-line::after {
+	content: '';
+	flex: 1 1 auto;
+	height: 1px;
+	background: var(--border);
+	opacity: 0.8;
+}
+
+.chat-channel-system-event-text {
+	flex: 0 0 auto;
+	text-align: center;
+	white-space: nowrap;
 }
 
 .chat-timed-message {
