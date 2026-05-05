@@ -8,6 +8,7 @@ import { insertNotificationsForChatMentions } from "./utils/chatMentionNotificat
 import { REACTION_ORDER } from "./comments.js";
 import { getShareBaseUrl } from "./utils/url.js";
 import { ACTIVE_SHARE_VERSION, mintShareToken } from "./utils/shareLink.js";
+import { removeJoinedPrivateChannelInviteDmMessages } from "./utils/chatInviteCleanup.js";
 import {
 	collectChatMiscGenericKeysFromMessageBody,
 	isChatMiscGenericKeyOwnedByUser
@@ -1292,6 +1293,11 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 			const { data: memRows } = await sb.from("prsn_chat_members").select("user_id").eq("thread_id", threadId);
 			const uids = Array.isArray(memRows) ? memRows.map((r) => r.user_id) : [];
 			void broadcastUserInboxDirty(threadId, uids);
+			try {
+				await removeJoinedPrivateChannelInviteDmMessages({ sb, userId });
+			} catch (cleanupErr) {
+				console.warn("[POST /api/chat/invites/accept] invite DM cleanup:", cleanupErr?.message || cleanupErr);
+			}
 			return res.status(200).json({ ok: true, thread_id: threadId });
 		} catch (err) {
 			console.error("[POST /api/chat/invites/accept]", err);
@@ -1356,7 +1362,9 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 					? `@${inviterProfile.user_name.trim()}`
 					: inviterName;
 			const sent = [];
+			const alreadyJoined = [];
 			const invitedHandles = [];
+			const processedRecipientIds = new Set();
 			for (const r of recipients) {
 				let toUserId = null;
 				let toUserHandle = "";
@@ -1385,6 +1393,12 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 				}
 				if (!Number.isFinite(Number(toUserId)) || Number(toUserId) <= 0) continue;
 				if (Number(toUserId) === Number(userId)) continue;
+				if (processedRecipientIds.has(Number(toUserId))) continue;
+				processedRecipientIds.add(Number(toUserId));
+				if (await isMember(sb, threadId, toUserId)) {
+					alreadyJoined.push(toUserHandle || `user ${Number(toUserId)}`);
+					continue;
+				}
 				const expiresAtMs = Date.now() + TIMED_MESSAGE_DEFAULT_INVITE_TTL_MS;
 				const inviteToken = mintChatInviteToken({
 					threadId,
@@ -1405,7 +1419,8 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 							invite_token: inviteToken
 						},
 						private_channel_invite: {
-							channel_thread_id: threadId
+							channel_thread_id: threadId,
+							invitee_user_id: Number(toUserId)
 						}
 					}
 				};
@@ -1479,10 +1494,21 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 					}
 				}
 			}
+			const alreadyJoinedUnique = [...new Set(alreadyJoined)];
+			if (sent.length === 0 && alreadyJoinedUnique.length > 0) {
+				return res.status(409).json({
+					error: "Conflict",
+					message: `Already joined: ${alreadyJoinedUnique.join(", ")}`,
+					already_joined: alreadyJoinedUnique,
+					sent_count: 0,
+					sent: []
+				});
+			}
 			return res.status(200).json({
 				ok: true,
 				sent_count: sent.length,
-				sent
+				sent,
+				already_joined: alreadyJoinedUnique
 			});
 		} catch (err) {
 			console.error("[POST /api/chat/invites/dm]", err);

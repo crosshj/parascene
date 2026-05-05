@@ -10,6 +10,8 @@ import express from "express";
 import { pullCreationFeedRows } from "./feed/pullCreationFeedRows.js";
 import { pullChallengeFeedSnapshot } from "./feed/pullChallengeFeedSnapshot.js";
 import { assembleFeedItems } from "./feed/assembleFeedItems.js";
+import { getSupabaseServiceClient } from "./utils/supabaseService.js";
+import { removeJoinedPrivateChannelInviteDmMessages } from "./utils/chatInviteCleanup.js";
 
 export default function createFeedRoutes({ queries }) {
 	const router = express.Router();
@@ -44,6 +46,14 @@ export default function createFeedRoutes({ queries }) {
 		const user = await queries.selectUserById.get(req.auth?.userId);
 		if (!user) {
 			return res.status(404).json({ error: "User not found" });
+		}
+		try {
+			const sb = getSupabaseServiceClient();
+			if (sb) {
+				await removeJoinedPrivateChannelInviteDmMessages({ sb, userId: user.id });
+			}
+		} catch (cleanupErr) {
+			console.warn("[GET /api/feed] invite DM cleanup", cleanupErr?.message || cleanupErr);
 		}
 
 		const limit = Math.min(Math.max(1, Number(req.query?.limit) || 20), 100);

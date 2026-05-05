@@ -5998,6 +5998,15 @@ export async function initChatPage(root, options = {}) {
 			timedMeta?.cta &&
 			typeof timedMeta.cta === 'object'
 		) {
+			const privateInviteMetaRaw =
+				timedMeta?.private_channel_invite &&
+				typeof timedMeta.private_channel_invite === 'object' &&
+				!Array.isArray(timedMeta.private_channel_invite)
+					? timedMeta.private_channel_invite
+					: null;
+			const inviteeUserId = Number(privateInviteMetaRaw?.invitee_user_id);
+			const isInviteForViewer =
+				Number.isFinite(inviteeUserId) && Number.isFinite(viewerId) ? inviteeUserId === Number(viewerId) : true;
 			const expiresAtRaw = typeof timedMeta.expires_at === 'string' ? timedMeta.expires_at.trim() : '';
 			const expMs = Date.parse(expiresAtRaw);
 			const expLabel = Number.isFinite(expMs) ? (formatRelativeTime(expiresAtRaw) || '') : '';
@@ -6010,11 +6019,11 @@ export async function initChatPage(root, options = {}) {
 			bubble.classList.add('connect-chat-msg-bubble--timed-invite');
 			bubble.innerHTML = `
 				<div class="chat-timed-message">
-					<div class="chat-timed-message-title">Private channel invite</div>
+					<div class="chat-timed-message-title">${isInviteForViewer ? 'Private channel invite' : 'Pending Invite'}</div>
 					<div class="chat-timed-message-body">${safeBody}</div>
 					${expLabel ? `<div class="chat-timed-message-expiry">Expires ${escapeHtml(expLabel)}</div>` : ''}
 					<div class="chat-timed-message-actions">
-						<button type="button" class="btn-primary chat-timed-message-cta" data-chat-timed-accept-invite="${escapeHtml(inviteToken)}">${escapeHtml(ctaLabel)}</button>
+						${isInviteForViewer ? `<button type="button" class="btn-primary chat-timed-message-cta" data-chat-timed-accept-invite="${escapeHtml(inviteToken)}">${escapeHtml(ctaLabel)}</button>` : '<span class="chat-timed-message-pending">Waiting for recipient</span>'}
 					</div>
 				</div>
 			`;
@@ -9078,7 +9087,13 @@ export async function initChatPage(root, options = {}) {
 		if (!res.ok) {
 			throw new Error(data?.message || data?.error || 'Could not send invites.');
 		}
-		return Number(data?.sent_count) || 0;
+		const alreadyJoined = Array.isArray(data?.already_joined)
+			? data.already_joined.map((x) => String(x || '').trim()).filter(Boolean)
+			: [];
+		return {
+			sentCount: Number(data?.sent_count) || 0,
+			alreadyJoined
+		};
 	}
 
 	async function submitChatMessage() {
@@ -9096,10 +9111,17 @@ export async function initChatPage(root, options = {}) {
 			syncChatSendButton();
 			try {
 				const recipients = parseInviteRecipientsFromCommand(inviteDmCmdMatch[1] || '');
-				const sentCount = await sendInviteDmToRecipients(recipients);
+				const inviteResult = await sendInviteDmToRecipients(recipients);
+				const sentCount = Number(inviteResult?.sentCount) || 0;
+				const alreadyJoined = Array.isArray(inviteResult?.alreadyJoined) ? inviteResult.alreadyJoined : [];
 				if (errEl instanceof HTMLElement) {
-					errEl.hidden = true;
-					errEl.textContent = '';
+					if (alreadyJoined.length > 0) {
+						errEl.hidden = false;
+						errEl.textContent = `Already joined: ${alreadyJoined.join(', ')}`;
+					} else {
+						errEl.hidden = true;
+						errEl.textContent = '';
+					}
 				}
 				if (sentCount > 0) {
 					await loadMessages();
