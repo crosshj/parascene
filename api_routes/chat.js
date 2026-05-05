@@ -1,4 +1,5 @@
 import express from "express";
+import crypto from "crypto";
 import { broadcastRoomDirty, broadcastUserInboxDirty } from "./utils/realtimeBroadcast.js";
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { normalizeTag } from "./utils/tag.js";
@@ -50,6 +51,12 @@ const MAX_MESSAGE_CHARS = 4000;
 const MAX_CANVAS_TITLE_CHARS = 200;
 const DEFAULT_PAGE_LIMIT = 50;
 const MAX_PAGE_LIMIT = 100;
+const PRIVATE_CHANNEL_VISIBILITY = "private";
+const CHAT_PRIVATE_BODY_PREFIX = "enc:v1:";
+const INVITE_TOKEN_VERSION = "ci1";
+const INVITE_TOKEN_TTL_MS = 1000 * 60 * 60 * 24 * 7;
+const TIMED_MESSAGE_KIND_CHANNEL_INVITE = "channel_invite";
+const TIMED_MESSAGE_DEFAULT_INVITE_TTL_MS = 1000 * 60 * 60 * 24 * 3;
 
 /**
  * Client-only pseudo lanes (no real thread); POST /api/chat/channels rejects these so they are not
@@ -203,6 +210,135 @@ function dmPairKey(a, b) {
 	return `${lo}:${hi}`;
 }
 
+function base64UrlEncodeFromBuffer(buf) {
+	return Buffer.from(buf).toString("base64url");
+}
+
+function base64UrlDecodeToBuffer(value) {
+	try {
+		return Buffer.from(String(value || ""), "base64url");
+	} catch {
+		return null;
+	}
+}
+
+function getChatInviteSecret() {
+	const envSecret = String(process.env.CHAT_INVITE_SECRET || "").trim();
+	return envSecret || "parascene-chat-invite-v1";
+}
+
+function signInvitePayload(payloadB64) {
+	return crypto
+		.createHmac("sha256", getChatInviteSecret())
+		.update(String(payloadB64))
+		.digest("base64url")
+		.slice(0, 20);
+}
+
+function mintChatInviteToken({ threadId, secretK, inviterUserId, expiresAtMs }) {
+	const payload = {
+		v: INVITE_TOKEN_VERSION,
+		t: Number(threadId),
+		k: String(secretK || ""),
+		u: Number(inviterUserId),
+		e: Number(expiresAtMs)
+	};
+	const p = base64UrlEncodeFromBuffer(Buffer.from(JSON.stringify(payload), "utf8"));
+	const s = signInvitePayload(p);
+	return `${p}.${s}`;
+}
+
+function verifyChatInviteToken(raw) {
+	const parts = String(raw || "").split(".");
+	if (parts.length !== 2) return { ok: false, error: "INVALID_TOKEN" };
+	const [p, s] = parts;
+	if (!p || !s) return { ok: false, error: "INVALID_TOKEN" };
+	const expected = signInvitePayload(p);
+	const sigBuf = Buffer.from(String(s), "utf8");
+	const expBuf = Buffer.from(String(expected), "utf8");
+	if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+		return { ok: false, error: "BAD_SIGNATURE" };
+	}
+	const payloadBuf = base64UrlDecodeToBuffer(p);
+	if (!payloadBuf) return { ok: false, error: "INVALID_PAYLOAD" };
+	let payload;
+	try {
+		payload = JSON.parse(payloadBuf.toString("utf8"));
+	} catch {
+		return { ok: false, error: "INVALID_PAYLOAD" };
+	}
+	if (payload?.v !== INVITE_TOKEN_VERSION) return { ok: false, error: "BAD_VERSION" };
+	const threadId = Number(payload?.t);
+	const inviterUserId = Number(payload?.u);
+	const expiresAtMs = Number(payload?.e);
+	const secretK = typeof payload?.k === "string" ? payload.k.trim() : "";
+	if (!Number.isFinite(threadId) || threadId <= 0) return { ok: false, error: "BAD_THREAD" };
+	if (!Number.isFinite(inviterUserId) || inviterUserId <= 0) return { ok: false, error: "BAD_USER" };
+	if (!Number.isFinite(expiresAtMs) || expiresAtMs <= 0) return { ok: false, error: "BAD_EXP" };
+	if (!secretK) return { ok: false, error: "BAD_KEY" };
+	if (Date.now() > expiresAtMs) return { ok: false, error: "EXPIRED" };
+	return { ok: true, threadId, inviterUserId, expiresAtMs, secretK };
+}
+
+function threadVisibilityFromMeta(meta) {
+	if (!meta || typeof meta !== "object" || Array.isArray(meta)) return "public";
+	const raw = typeof meta.visibility === "string" ? meta.visibility.trim().toLowerCase() : "";
+	return raw === PRIVATE_CHANNEL_VISIBILITY ? PRIVATE_CHANNEL_VISIBILITY : "public";
+}
+
+function buildPrivateChannelMeta({ prevMeta, encName, encProbe }) {
+	const prev =
+		prevMeta && typeof prevMeta === "object" && !Array.isArray(prevMeta) ? { ...prevMeta } : {};
+	prev.visibility = PRIVATE_CHANNEL_VISIBILITY;
+	prev.enc_v = 1;
+	prev.enc_name = String(encName || "");
+	prev.enc_probe = String(encProbe || "");
+	return prev;
+}
+
+function randomPrivateSlug() {
+	return `p-${crypto.randomBytes(9).toString("base64url").replace(/[^a-z0-9_-]/gi, "").toLowerCase()}`;
+}
+
+function decryptPrivateTextWithSecret(token, secret) {
+	const parts = String(token || "").split(".");
+	if (parts.length !== 2) return null;
+	const iv = base64UrlDecodeToBuffer(parts[0]);
+	const ctAndTag = base64UrlDecodeToBuffer(parts[1]);
+	const sec = String(secret || "");
+	if (!iv || !ctAndTag || !sec) return null;
+	if (iv.length !== 12 || ctAndTag.length <= 16) return null;
+	try {
+		const key = crypto.createHash("sha256").update(sec).digest();
+		const tag = ctAndTag.subarray(ctAndTag.length - 16);
+		const ciphertext = ctAndTag.subarray(0, ctAndTag.length - 16);
+		const dec = crypto.createDecipheriv("aes-256-gcm", key, iv);
+		dec.setAuthTag(tag);
+		const plain = Buffer.concat([dec.update(ciphertext), dec.final()]).toString("utf8");
+		return plain || null;
+	} catch {
+		return null;
+	}
+}
+
+function parseTimedMessageMeta(rawMeta) {
+	const m = rawMeta && typeof rawMeta === "object" && !Array.isArray(rawMeta) ? rawMeta : null;
+	if (!m) return null;
+	const ts = m.time_sensitive;
+	if (!ts || typeof ts !== "object" || Array.isArray(ts)) return null;
+	const kind = typeof ts.kind === "string" ? ts.kind.trim().toLowerCase() : "";
+	const expiresAt = typeof ts.expires_at === "string" ? ts.expires_at.trim() : "";
+	const expMs = Date.parse(expiresAt);
+	if (!kind || !expiresAt || !Number.isFinite(expMs)) return null;
+	return { kind, expires_at: expiresAt, expires_ms: expMs, raw: ts };
+}
+
+function isTimedMessageExpired(rawMeta, nowMs = Date.now()) {
+	const parsed = parseTimedMessageMeta(rawMeta);
+	if (!parsed) return false;
+	return parsed.expires_ms <= nowMs;
+}
+
 /** Same rules as `normalizeUsername` in user.js — public handle for DM URLs. */
 function normalizeDmUsernameInput(input) {
 	const raw = typeof input === "string" ? input.trim() : "";
@@ -318,6 +454,99 @@ export default function createChatRoutes({ queries, storage }) {
 		return sb;
 	}
 
+	async function getUserMeta(sb, userId) {
+		const { data, error } = await sb
+			.from("prsn_users")
+			.select("meta")
+			.eq("id", userId)
+			.maybeSingle();
+		if (error) throw error;
+		const meta = data?.meta;
+		return meta && typeof meta === "object" && !Array.isArray(meta) ? { ...meta } : {};
+	}
+
+	async function setUserPrivateKeyForThread(sb, userId, threadId, secretK) {
+		const next = await getUserMeta(sb, userId);
+		const keys =
+			next.chat_private_keys &&
+			typeof next.chat_private_keys === "object" &&
+			!Array.isArray(next.chat_private_keys)
+				? { ...next.chat_private_keys }
+				: {};
+		keys[String(Number(threadId))] = {
+			k: String(secretK || ""),
+			v: 1,
+			added_at: new Date().toISOString()
+		};
+		next.chat_private_keys = keys;
+		const { error } = await sb.from("prsn_users").update({ meta: next }).eq("id", userId);
+		if (error) throw error;
+	}
+
+	async function removeUserPrivateKeyForThread(sb, userId, threadId) {
+		const next = await getUserMeta(sb, userId);
+		const keys =
+			next.chat_private_keys &&
+			typeof next.chat_private_keys === "object" &&
+			!Array.isArray(next.chat_private_keys)
+				? { ...next.chat_private_keys }
+				: null;
+		if (!keys) return;
+		delete keys[String(Number(threadId))];
+		next.chat_private_keys = keys;
+		const { error } = await sb.from("prsn_users").update({ meta: next }).eq("id", userId);
+		if (error) throw error;
+	}
+
+	async function ensureDmThreadForUsers(sb, aUserId, bUserId) {
+		const pairKey = dmPairKey(aUserId, bUserId);
+		if (!pairKey) throw new Error("Invalid DM user ids");
+		const { data: existing } = await sb
+			.from("prsn_chat_threads")
+			.select("id")
+			.eq("type", "dm")
+			.eq("dm_pair_key", pairKey)
+			.maybeSingle();
+		let threadId = existing?.id;
+		if (!threadId) {
+			const ins = await sb
+				.from("prsn_chat_threads")
+				.insert({ type: "dm", dm_pair_key: pairKey, channel_slug: null })
+				.select("id")
+				.single();
+			if (ins.error) {
+				const { data: again } = await sb
+					.from("prsn_chat_threads")
+					.select("id")
+					.eq("type", "dm")
+					.eq("dm_pair_key", pairKey)
+					.maybeSingle();
+				threadId = again?.id;
+			} else {
+				threadId = ins.data?.id;
+			}
+		}
+		if (!threadId) throw new Error("Could not create DM thread");
+		const members =
+			Number(aUserId) === Number(bUserId)
+				? [{ thread_id: threadId, user_id: aUserId }]
+				: [
+						{ thread_id: threadId, user_id: aUserId },
+						{ thread_id: threadId, user_id: bUserId }
+					];
+		const { error: memErr } = await sb.from("prsn_chat_members").upsert(members, {
+			onConflict: "thread_id,user_id",
+			ignoreDuplicates: true
+		});
+		if (memErr) throw memErr;
+		return { threadId: Number(threadId), pairKey };
+	}
+
+	function buildTimedChannelInviteBody({ inviterName }) {
+		const who = inviterName && String(inviterName).trim() ? String(inviterName).trim() : "A member";
+		return `${who} invited you to a private channel.`;
+	}
+
 	async function isMember(sb, threadId, userId) {
 		const { data, error } = await sb
 			.from("prsn_chat_members")
@@ -430,6 +659,27 @@ export default function createChatRoutes({ queries, storage }) {
 			if (error) throw error;
 
 			const list = Array.isArray(rows) ? rows : [];
+			const viewerMeta = await getUserMeta(sb, userId);
+			const viewerPrivateKeys =
+				viewerMeta.chat_private_keys &&
+				typeof viewerMeta.chat_private_keys === "object" &&
+				!Array.isArray(viewerMeta.chat_private_keys)
+					? viewerMeta.chat_private_keys
+					: {};
+			const threadIds = list
+				.map((row) => Number(row?.thread_id))
+				.filter((n) => Number.isFinite(n) && n > 0);
+			const threadMetaById = new Map();
+			if (threadIds.length > 0) {
+				const { data: threadsMetaRows, error: tErr } = await sb
+					.from("prsn_chat_threads")
+					.select("id, meta")
+					.in("id", threadIds);
+				if (tErr) throw tErr;
+				for (const tr of threadsMetaRows || []) {
+					threadMetaById.set(Number(tr.id), tr.meta && typeof tr.meta === "object" ? tr.meta : {});
+				}
+			}
 			const otherIds = new Set();
 			for (const row of list) {
 				if (row?.thread_type === "dm" && row?.dm_pair_key) {
@@ -463,14 +713,41 @@ export default function createChatRoutes({ queries, storage }) {
 
 				if (type === "channel") {
 					const slug = row.channel_slug ? String(row.channel_slug) : "";
+					const threadMeta = threadMetaById.get(id) || {};
+					const visibility = threadVisibilityFromMeta(threadMeta);
+					let title = slug ? `#${slug}` : "Channel";
+					if (visibility === PRIVATE_CHANNEL_VISIBILITY) {
+						const keyEntry =
+							viewerPrivateKeys[String(id)] && typeof viewerPrivateKeys[String(id)] === "object"
+								? viewerPrivateKeys[String(id)]
+								: null;
+						const k = typeof keyEntry?.k === "string" ? keyEntry.k.trim() : "";
+						const encName =
+							typeof threadMeta.enc_name === "string" ? String(threadMeta.enc_name).trim() : "";
+						const dec = k && encName ? decryptPrivateTextWithSecret(encName, k) : null;
+						title = dec && dec.trim() ? dec.trim() : "Private channel";
+					}
 					return {
 						id,
 						type: "channel",
 						channel_slug: slug,
-						title: slug ? `#${slug}` : "Channel",
+						title,
 						last_message: lastMessage,
 						last_read_message_id: Number.isFinite(lastRead) && lastRead > 0 ? lastRead : null,
-						unread_count: unreadCount
+						unread_count: unreadCount,
+						visibility,
+						enc_name:
+							visibility === PRIVATE_CHANNEL_VISIBILITY &&
+							typeof threadMeta.enc_name === "string" &&
+							threadMeta.enc_name.trim()
+								? String(threadMeta.enc_name)
+								: null,
+						enc_probe:
+							visibility === PRIVATE_CHANNEL_VISIBILITY &&
+							typeof threadMeta.enc_probe === "string" &&
+							threadMeta.enc_probe.trim()
+								? String(threadMeta.enc_probe)
+								: null
 					};
 				}
 
@@ -534,12 +811,14 @@ export default function createChatRoutes({ queries, storage }) {
 		try {
 			const { data, error } = await sb
 				.from("prsn_chat_threads")
-				.select("channel_slug")
+				.select("channel_slug, meta")
 				.eq("type", "channel");
 			if (error) throw error;
 			const set = new Set();
 			for (const row of data || []) {
 				const s = row?.channel_slug != null ? String(row.channel_slug).trim() : "";
+				const visibility = threadVisibilityFromMeta(row?.meta);
+				if (visibility === PRIVATE_CHANNEL_VISIBILITY) continue;
 				if (s) set.add(s);
 			}
 			const slugs = [...set].sort((a, b) => a.localeCompare(b));
@@ -568,12 +847,13 @@ export default function createChatRoutes({ queries, storage }) {
 		try {
 			const { data, error } = await sb
 				.from("prsn_chat_threads")
-				.select("id")
+				.select("id, meta")
 				.eq("type", "channel")
 				.eq("channel_slug", slug)
 				.maybeSingle();
 			if (error) throw error;
-			return res.status(200).json({ slug, channelExists: Boolean(data?.id) });
+			const exists = Boolean(data?.id) && threadVisibilityFromMeta(data?.meta) !== PRIVATE_CHANNEL_VISIBILITY;
+			return res.status(200).json({ slug, channelExists: exists });
 		} catch (err) {
 			console.error("[GET /api/chat/hashtag-channel-exists]", err);
 			return res.status(500).json({ error: "Server error", message: "Failed" });
@@ -690,9 +970,21 @@ export default function createChatRoutes({ queries, storage }) {
 		const sb = getSb(res);
 		if (!sb) return;
 
-		const slug = normalizeTag(req.body?.tag ?? req.body?.channel ?? "");
+		const visibilityRaw = typeof req.body?.visibility === "string" ? req.body.visibility.trim().toLowerCase() : "";
+		const isPrivate = visibilityRaw === PRIVATE_CHANNEL_VISIBILITY;
+		const encName = typeof req.body?.enc_name === "string" ? req.body.enc_name.trim() : "";
+		const encProbe = typeof req.body?.enc_probe === "string" ? req.body.enc_probe.trim() : "";
+		const secretK = typeof req.body?.secret_k === "string" ? req.body.secret_k.trim() : "";
+		let slug = normalizeTag(req.body?.tag ?? req.body?.channel ?? "");
+		if (isPrivate) slug = encName;
 		if (!slug) {
 			return res.status(400).json({ error: "Bad request", message: "Invalid or missing tag" });
+		}
+		if (isPrivate && (!encName || !encProbe || !secretK)) {
+			return res.status(400).json({
+				error: "Bad request",
+				message: "enc_name, enc_probe, and secret_k are required for private channels"
+			});
 		}
 
 		if (POST_REJECT_PSEUDO_CHANNEL_SLUGS.has(slug)) {
@@ -713,9 +1005,10 @@ export default function createChatRoutes({ queries, storage }) {
 			let threadId = existing?.id;
 
 			if (!threadId) {
+				const threadMeta = isPrivate ? buildPrivateChannelMeta({ prevMeta: null, encName, encProbe }) : {};
 				const ins = await sb
 					.from("prsn_chat_threads")
-					.insert({ type: "channel", dm_pair_key: null, channel_slug: slug })
+					.insert({ type: "channel", dm_pair_key: null, channel_slug: slug, meta: threadMeta })
 					.select("id")
 					.single();
 				if (ins.error) {
@@ -740,12 +1033,305 @@ export default function createChatRoutes({ queries, storage }) {
 				{ onConflict: "thread_id,user_id", ignoreDuplicates: true }
 			);
 			if (memErr) throw memErr;
+			if (isPrivate) {
+				await setUserPrivateKeyForThread(sb, userId, threadId, secretK);
+			}
 
 			return res.status(200).json({
-				thread: { id: threadId, type: "channel", channel_slug: slug, dm_pair_key: null }
+				thread: {
+					id: threadId,
+					type: "channel",
+					channel_slug: slug,
+					dm_pair_key: null,
+					visibility: isPrivate ? PRIVATE_CHANNEL_VISIBILITY : "public",
+					enc_name: isPrivate ? encName : null,
+					enc_probe: isPrivate ? encProbe : null
+				}
 			});
 		} catch (err) {
 			console.error("[POST /api/chat/channels]", err);
+			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
+		}
+	});
+
+	// POST /api/chat/invites  { thread_id } — private channel only; member can issue.
+	router.post("/api/chat/invites", async (req, res) => {
+		const userId = requireUser(req, res);
+		if (userId == null) return;
+		const sb = getSb(res);
+		if (!sb) return;
+		const threadId = Number(req.body?.thread_id ?? req.body?.threadId);
+		if (!Number.isFinite(threadId) || threadId <= 0) {
+			return res.status(400).json({ error: "Bad request", message: "thread_id required" });
+		}
+		try {
+			if (!(await isMember(sb, threadId, userId))) {
+				return res.status(403).json({ error: "Forbidden", message: "Not a member of this thread" });
+			}
+			const { data: thread, error: thErr } = await sb
+				.from("prsn_chat_threads")
+				.select("id, type, meta")
+				.eq("id", threadId)
+				.maybeSingle();
+			if (thErr) throw thErr;
+			if (!thread || thread.type !== "channel") {
+				return res.status(400).json({ error: "Bad request", message: "Invite only supports channels" });
+			}
+			if (threadVisibilityFromMeta(thread.meta) !== PRIVATE_CHANNEL_VISIBILITY) {
+				return res.status(400).json({ error: "Bad request", message: "Invites are only for private channels" });
+			}
+			const userMeta = await getUserMeta(sb, userId);
+			const keyMap =
+				userMeta.chat_private_keys &&
+				typeof userMeta.chat_private_keys === "object" &&
+				!Array.isArray(userMeta.chat_private_keys)
+					? userMeta.chat_private_keys
+					: {};
+			const keyEntry =
+				keyMap[String(threadId)] && typeof keyMap[String(threadId)] === "object"
+					? keyMap[String(threadId)]
+					: null;
+			const secretK = typeof keyEntry?.k === "string" ? keyEntry.k.trim() : "";
+			if (!secretK) {
+				return res.status(400).json({ error: "Bad request", message: "Missing channel key for inviter" });
+			}
+			const expiresAtMs = Date.now() + INVITE_TOKEN_TTL_MS;
+			const inviteToken = mintChatInviteToken({
+				threadId,
+				secretK,
+				inviterUserId: userId,
+				expiresAtMs
+			});
+			const inviteUrl = `${getShareBaseUrl()}/chat#ci=${encodeURIComponent(inviteToken)}`;
+			return res.status(200).json({
+				invite_token: inviteToken,
+				invite_url: inviteUrl,
+				expires_at: new Date(expiresAtMs).toISOString()
+			});
+		} catch (err) {
+			console.error("[POST /api/chat/invites]", err);
+			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
+		}
+	});
+
+	// POST /api/chat/invites/accept  { invite_token } — joins private channel and copies key to invitee meta.
+	router.post("/api/chat/invites/accept", async (req, res) => {
+		const userId = requireUser(req, res);
+		if (userId == null) return;
+		const sb = getSb(res);
+		if (!sb) return;
+		const inviteToken = typeof req.body?.invite_token === "string" ? req.body.invite_token.trim() : "";
+		if (!inviteToken) {
+			return res.status(400).json({ error: "Bad request", message: "invite_token required" });
+		}
+		try {
+			const parsed = verifyChatInviteToken(inviteToken);
+			if (!parsed.ok) {
+				return res.status(400).json({ error: "Bad request", message: "Invalid or expired invite token" });
+			}
+			const threadId = parsed.threadId;
+			const { data: thread, error: thErr } = await sb
+				.from("prsn_chat_threads")
+				.select("id, type, meta")
+				.eq("id", threadId)
+				.maybeSingle();
+			if (thErr) throw thErr;
+			if (!thread || thread.type !== "channel") {
+				return res.status(404).json({ error: "Not found", message: "Channel not found" });
+			}
+			if (threadVisibilityFromMeta(thread.meta) !== PRIVATE_CHANNEL_VISIBILITY) {
+				return res.status(400).json({ error: "Bad request", message: "Invite is not for a private channel" });
+			}
+			if (!(await isMember(sb, threadId, parsed.inviterUserId))) {
+				return res.status(403).json({ error: "Forbidden", message: "Invite issuer is no longer a member" });
+			}
+			const { error: memErr } = await sb.from("prsn_chat_members").upsert(
+				{ thread_id: threadId, user_id: userId },
+				{ onConflict: "thread_id,user_id", ignoreDuplicates: true }
+			);
+			if (memErr) throw memErr;
+			await setUserPrivateKeyForThread(sb, userId, threadId, parsed.secretK);
+			const { data: memRows } = await sb.from("prsn_chat_members").select("user_id").eq("thread_id", threadId);
+			const uids = Array.isArray(memRows) ? memRows.map((r) => r.user_id) : [];
+			void broadcastUserInboxDirty(threadId, uids);
+			return res.status(200).json({ ok: true, thread_id: threadId });
+		} catch (err) {
+			console.error("[POST /api/chat/invites/accept]", err);
+			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
+		}
+	});
+
+	// POST /api/chat/invites/dm  { thread_id, recipients: [{ user_id? user_name? }] }
+	router.post("/api/chat/invites/dm", async (req, res) => {
+		const userId = requireUser(req, res);
+		if (userId == null) return;
+		const sb = getSb(res);
+		if (!sb) return;
+		const threadId = Number(req.body?.thread_id ?? req.body?.threadId);
+		const recipients = Array.isArray(req.body?.recipients) ? req.body.recipients : [];
+		if (!Number.isFinite(threadId) || threadId <= 0) {
+			return res.status(400).json({ error: "Bad request", message: "thread_id required" });
+		}
+		if (recipients.length === 0) {
+			return res.status(400).json({ error: "Bad request", message: "recipients required" });
+		}
+		try {
+			if (!(await isMember(sb, threadId, userId))) {
+				return res.status(403).json({ error: "Forbidden", message: "Not a member of this thread" });
+			}
+			const { data: thread, error: thErr } = await sb
+				.from("prsn_chat_threads")
+				.select("id, type, meta")
+				.eq("id", threadId)
+				.maybeSingle();
+			if (thErr) throw thErr;
+			if (!thread || thread.type !== "channel" || threadVisibilityFromMeta(thread.meta) !== PRIVATE_CHANNEL_VISIBILITY) {
+				return res.status(400).json({ error: "Bad request", message: "Only private channels support DM invites" });
+			}
+			const inviterMeta = await getUserMeta(sb, userId);
+			const keyMap =
+				inviterMeta.chat_private_keys &&
+				typeof inviterMeta.chat_private_keys === "object" &&
+				!Array.isArray(inviterMeta.chat_private_keys)
+					? inviterMeta.chat_private_keys
+					: {};
+			const keyEntry =
+				keyMap[String(threadId)] && typeof keyMap[String(threadId)] === "object"
+					? keyMap[String(threadId)]
+					: null;
+			const secretK = typeof keyEntry?.k === "string" ? keyEntry.k.trim() : "";
+			if (!secretK) {
+				return res.status(400).json({ error: "Bad request", message: "Missing channel key for inviter" });
+			}
+			const inviterProfile =
+				typeof queries?.selectUserProfileByUserId?.get === "function"
+					? await queries.selectUserProfileByUserId.get(userId).catch(() => null)
+					: null;
+			const inviterName =
+				typeof inviterProfile?.display_name === "string" && inviterProfile.display_name.trim()
+					? inviterProfile.display_name.trim()
+					: typeof inviterProfile?.user_name === "string" && inviterProfile.user_name.trim()
+						? `@${inviterProfile.user_name.trim()}`
+						: "A member";
+			const sent = [];
+			for (const r of recipients) {
+				let toUserId = null;
+				const idCandidate = Number(r?.user_id ?? r?.userId);
+				if (Number.isFinite(idCandidate) && idCandidate > 0) {
+					toUserId = idCandidate;
+				} else {
+					const un = normalizeDmUsernameInput(r?.user_name ?? r?.userName ?? "");
+					if (un && typeof queries?.selectUserProfileByUsername?.get === "function") {
+						const p = await queries.selectUserProfileByUsername.get(un).catch(() => null);
+						const uid = Number(p?.user_id);
+						if (Number.isFinite(uid) && uid > 0) toUserId = uid;
+					}
+				}
+				if (!Number.isFinite(Number(toUserId)) || Number(toUserId) <= 0) continue;
+				if (Number(toUserId) === Number(userId)) continue;
+				const expiresAtMs = Date.now() + TIMED_MESSAGE_DEFAULT_INVITE_TTL_MS;
+				const inviteToken = mintChatInviteToken({
+					threadId,
+					secretK,
+					inviterUserId: userId,
+					expiresAtMs
+				});
+				const { threadId: dmThreadId } = await ensureDmThreadForUsers(sb, userId, toUserId);
+				const body = buildTimedChannelInviteBody({ inviterName });
+				const meta = {
+					time_sensitive: {
+						kind: TIMED_MESSAGE_KIND_CHANNEL_INVITE,
+						expires_at: new Date(expiresAtMs).toISOString(),
+						delete_on_expire: true,
+						cta: {
+							action: "accept_private_channel_invite",
+							label: "Accept invite",
+							invite_token: inviteToken
+						},
+						private_channel_invite: {
+							channel_thread_id: threadId
+						}
+					}
+				};
+				const ins = await sb
+					.from("prsn_chat_messages")
+					.insert({
+						thread_id: dmThreadId,
+						sender_id: userId,
+						body,
+						meta
+					})
+					.select("id")
+					.single();
+				if (ins.error) throw ins.error;
+				const mid = Number(ins.data?.id);
+				if (Number.isFinite(mid) && mid > 0) {
+					const { error: readErr } = await sb
+						.from("prsn_chat_members")
+						.update({ last_read_message_id: mid })
+						.eq("thread_id", dmThreadId)
+						.eq("user_id", userId);
+					if (readErr) throw readErr;
+					void broadcastRoomDirty(dmThreadId, mid);
+				}
+				const mem = await sb.from("prsn_chat_members").select("user_id").eq("thread_id", dmThreadId);
+				const uids = Array.isArray(mem.data) ? mem.data.map((x) => x.user_id) : [];
+				void broadcastUserInboxDirty(dmThreadId, uids);
+				sent.push({ to_user_id: Number(toUserId), dm_thread_id: dmThreadId });
+			}
+			return res.status(200).json({
+				ok: true,
+				sent_count: sent.length,
+				sent
+			});
+		} catch (err) {
+			console.error("[POST /api/chat/invites/dm]", err);
+			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
+		}
+	});
+
+	// GET /api/chat/threads/:threadId/private-key — return viewer key for private thread.
+	router.get("/api/chat/threads/:threadId/private-key", async (req, res) => {
+		const userId = requireUser(req, res);
+		if (userId == null) return;
+		const sb = getSb(res);
+		if (!sb) return;
+		const threadId = Number(req.params.threadId);
+		if (!Number.isFinite(threadId) || threadId <= 0) {
+			return res.status(400).json({ error: "Bad request", message: "Invalid thread id" });
+		}
+		try {
+			if (!(await isMember(sb, threadId, userId))) {
+				return res.status(403).json({ error: "Forbidden", message: "Not a member of this thread" });
+			}
+			const { data: thread, error: thErr } = await sb
+				.from("prsn_chat_threads")
+				.select("meta")
+				.eq("id", threadId)
+				.maybeSingle();
+			if (thErr) throw thErr;
+			if (!thread || threadVisibilityFromMeta(thread.meta) !== PRIVATE_CHANNEL_VISIBILITY) {
+				return res.status(404).json({ error: "Not found", message: "Private key not available" });
+			}
+			const userMeta = await getUserMeta(sb, userId);
+			const keyMap =
+				userMeta.chat_private_keys &&
+				typeof userMeta.chat_private_keys === "object" &&
+				!Array.isArray(userMeta.chat_private_keys)
+					? userMeta.chat_private_keys
+					: {};
+			const row =
+				keyMap[String(threadId)] && typeof keyMap[String(threadId)] === "object"
+					? keyMap[String(threadId)]
+					: null;
+			const k = typeof row?.k === "string" ? row.k.trim() : "";
+			const v = Number(row?.v);
+			if (!k) {
+				return res.status(404).json({ error: "Not found", message: "Private key missing" });
+			}
+			return res.status(200).json({ k, v: Number.isFinite(v) && v > 0 ? v : 1 });
+		} catch (err) {
+			console.error("[GET /api/chat/threads/:threadId/private-key]", err);
 			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
 		}
 	});
@@ -786,12 +1372,41 @@ export default function createChatRoutes({ queries, storage }) {
 			const lr = memRow?.last_read_message_id != null ? Number(memRow.last_read_message_id) : null;
 
 			const out = { ...thread };
+			const visibility = threadVisibilityFromMeta(thread.meta);
+			out.visibility = visibility;
+			out.enc_name =
+				visibility === PRIVATE_CHANNEL_VISIBILITY && typeof thread?.meta?.enc_name === "string"
+					? thread.meta.enc_name
+					: null;
+			out.enc_probe =
+				visibility === PRIVATE_CHANNEL_VISIBILITY && typeof thread?.meta?.enc_probe === "string"
+					? thread.meta.enc_probe
+					: null;
 			out.last_read_message_id = Number.isFinite(lr) && lr > 0 ? lr : null;
 			const pcm = getPinnedCanvasMessageIdFromThreadRow(thread);
 			out.pinned_canvas_message_id = pcm;
 			if (thread.type === "channel") {
 				const slug = thread.channel_slug ? String(thread.channel_slug) : "";
-				out.title = slug ? `#${slug}` : "Channel";
+				if (visibility === PRIVATE_CHANNEL_VISIBILITY) {
+					const viewerMeta = await getUserMeta(sb, userId);
+					const keyMap =
+						viewerMeta.chat_private_keys &&
+						typeof viewerMeta.chat_private_keys === "object" &&
+						!Array.isArray(viewerMeta.chat_private_keys)
+							? viewerMeta.chat_private_keys
+							: {};
+					const keyEntry =
+						keyMap[String(threadId)] && typeof keyMap[String(threadId)] === "object"
+							? keyMap[String(threadId)]
+							: null;
+					const k = typeof keyEntry?.k === "string" ? keyEntry.k.trim() : "";
+					const encName =
+						typeof thread?.meta?.enc_name === "string" ? thread.meta.enc_name.trim() : "";
+					const dec = k && encName ? decryptPrivateTextWithSecret(encName, k) : null;
+					out.title = dec && dec.trim() ? dec.trim() : "Private channel";
+				} else {
+					out.title = slug ? `#${slug}` : "Channel";
+				}
 			} else if (thread.type === "dm" && thread.dm_pair_key) {
 				const otherId = otherUserIdFromDmPairKey(thread.dm_pair_key, userId);
 				let profile = null;
@@ -875,6 +1490,34 @@ export default function createChatRoutes({ queries, storage }) {
 		}
 	});
 
+	// POST /api/chat/threads/:threadId/leave — remove self from thread + clear private key cache for that thread.
+	router.post("/api/chat/threads/:threadId/leave", async (req, res) => {
+		const userId = requireUser(req, res);
+		if (userId == null) return;
+		const sb = getSb(res);
+		if (!sb) return;
+		const threadId = Number(req.params.threadId);
+		if (!Number.isFinite(threadId) || threadId <= 0) {
+			return res.status(400).json({ error: "Bad request", message: "Invalid thread id" });
+		}
+		try {
+			if (!(await isMember(sb, threadId, userId))) {
+				return res.status(200).json({ ok: true, left: false });
+			}
+			const { error } = await sb
+				.from("prsn_chat_members")
+				.delete()
+				.eq("thread_id", threadId)
+				.eq("user_id", userId);
+			if (error) throw error;
+			await removeUserPrivateKeyForThread(sb, userId, threadId);
+			return res.status(200).json({ ok: true, left: true });
+		} catch (err) {
+			console.error("[POST /api/chat/threads/:threadId/leave]", err);
+			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
+		}
+	});
+
 	// GET /api/chat/threads/:threadId/messages?limit=&before=
 	router.get("/api/chat/threads/:threadId/messages", async (req, res) => {
 		const userId = requireUser(req, res);
@@ -912,8 +1555,21 @@ export default function createChatRoutes({ queries, storage }) {
 			if (error) throw error;
 
 			const list = Array.isArray(rows) ? rows : [];
-			const hasMore = list.length > limit;
-			const page = hasMore ? list.slice(0, limit) : list;
+			const nowMs = Date.now();
+			const expiredIds = list
+				.filter((m) => isTimedMessageExpired(m?.meta, nowMs))
+				.map((m) => Number(m.id))
+				.filter((n) => Number.isFinite(n) && n > 0);
+			if (expiredIds.length > 0) {
+				const { error: delErr } = await sb.from("prsn_chat_messages").delete().in("id", expiredIds);
+				if (delErr) throw delErr;
+			}
+			const visibleList =
+				expiredIds.length > 0
+					? list.filter((m) => !expiredIds.includes(Number(m.id)))
+					: list;
+			const hasMore = visibleList.length > limit;
+			const page = hasMore ? visibleList.slice(0, limit) : visibleList;
 			page.reverse();
 
 			let messagesOut = await enrichChatMessagesWithSenderProfiles(sb, page);
@@ -966,6 +1622,25 @@ export default function createChatRoutes({ queries, storage }) {
 		try {
 			if (!(await isMember(sb, threadId, userId))) {
 				return res.status(403).json({ error: "Forbidden", message: "Not a member of this thread" });
+			}
+			const { data: threadRow, error: thErr } = await sb
+				.from("prsn_chat_threads")
+				.select("id, type, meta")
+				.eq("id", threadId)
+				.maybeSingle();
+			if (thErr) throw thErr;
+			if (!threadRow) {
+				return res.status(404).json({ error: "Not found", message: "Thread not found" });
+			}
+			if (
+				threadRow.type === "channel" &&
+				threadVisibilityFromMeta(threadRow.meta) === PRIVATE_CHANNEL_VISIBILITY &&
+				!String(body || "").startsWith(CHAT_PRIVATE_BODY_PREFIX)
+			) {
+				return res.status(400).json({
+					error: "Bad request",
+					message: "Private channel messages must be encrypted"
+				});
 			}
 
 			body = await normalizeUnpublishedCreationUrlsInChatBody(body, userId, queries);
@@ -1338,6 +2013,15 @@ export default function createChatRoutes({ queries, storage }) {
 			if (!(await isMember(sb, threadId, userId))) {
 				return res.status(403).json({ error: "Forbidden", message: "Not a member of this thread" });
 			}
+			const { data: threadRow, error: thErr } = await sb
+				.from("prsn_chat_threads")
+				.select("id, type, meta")
+				.eq("id", threadId)
+				.maybeSingle();
+			if (thErr) throw thErr;
+			if (!threadRow) {
+				return res.status(404).json({ error: "Not found", message: "Thread not found" });
+			}
 
 			const prevMeta =
 				msg.meta && typeof msg.meta === "object" && !Array.isArray(msg.meta) ? { ...msg.meta } : {};
@@ -1372,7 +2056,21 @@ export default function createChatRoutes({ queries, storage }) {
 						message: `body must be at most ${MAX_MESSAGE_CHARS} characters`
 					});
 				}
-				newBody = await normalizeUnpublishedCreationUrlsInChatBody(b, userId, queries);
+				if (
+					threadRow.type === "channel" &&
+					threadVisibilityFromMeta(threadRow.meta) === PRIVATE_CHANNEL_VISIBILITY &&
+					!String(b).startsWith(CHAT_PRIVATE_BODY_PREFIX)
+				) {
+					return res.status(400).json({
+						error: "Bad request",
+						message: "Private channel messages must be encrypted"
+					});
+				}
+				newBody =
+					threadRow.type === "channel" &&
+					threadVisibilityFromMeta(threadRow.meta) === PRIVATE_CHANNEL_VISIBILITY
+						? b
+						: await normalizeUnpublishedCreationUrlsInChatBody(b, userId, queries);
 				if (newBody.length > MAX_MESSAGE_CHARS) {
 					return res.status(400).json({
 						error: "Bad request",

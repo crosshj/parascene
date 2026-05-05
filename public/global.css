@@ -5162,6 +5162,20 @@ body.chat-page main.chat-page-outer {
 		margin: 0 0 16px;
 	}
 
+	.chat-page-chat-modal-private-section {
+		margin-top: 6px;
+		margin-bottom: 16px;
+		padding-bottom: 14px;
+		border-bottom: 1px solid var(--border);
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+
+	.chat-page-chat-modal-subhead--private {
+		margin: 0;
+	}
+
 	.chat-page-chat-modal-field {
 		display: flex;
 		flex-direction: column;
@@ -5171,6 +5185,10 @@ body.chat-page main.chat-page-outer {
 
 	.chat-page-chat-modal-panel--channels .chat-page-chat-modal-field .chat-page-chat-modal-label {
 		margin-bottom: 8px;
+	}
+
+	.chat-page-chat-modal-panel--channels .chat-page-chat-modal-field .chat-page-chat-modal-subhead {
+		margin: 0 0 8px;
 	}
 
 	.chat-page-chat-modal-hint--tight {
@@ -5249,6 +5267,27 @@ body.chat-page main.chat-page-outer {
 	.chat-page-chat-modal-tag-row .chat-page-chat-modal-open-btn {
 		flex-shrink: 0;
 		min-width: 88px;
+		min-height: 40px;
+		height: auto;
+		align-self: stretch;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0 14px;
+		font-size: 0.875rem;
+		font-weight: 600;
+		line-height: 1;
+		border-radius: 6px;
+		box-sizing: border-box;
+	}
+
+	.chat-page-chat-modal-tag-row--private-invite {
+		margin-top: 4px;
+	}
+
+	.chat-page-chat-modal-copy-btn.btn-outlined {
+		flex-shrink: 0;
+		min-width: 84px;
 		min-height: 40px;
 		height: auto;
 		align-self: stretch;
@@ -9316,6 +9355,48 @@ body.blog-edit-page .blog-edit-route {
 	white-space: pre-wrap;
 	word-break: break-word;
 	max-width: 100%;
+}
+
+.connect-chat-msg-bubble--timed-invite {
+	padding: 0.35rem 0.95rem 0.45rem;
+}
+
+.chat-timed-message {
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	background: color-mix(in srgb, var(--surface) 94%, var(--bg));
+	padding: 10px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.chat-timed-message-title {
+	font-size: 0.75rem;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	color: var(--text-muted);
+	font-weight: 700;
+}
+
+.chat-timed-message-body {
+	font-size: 0.9rem;
+	line-height: 1.35;
+}
+
+.chat-timed-message-expiry {
+	font-size: 0.78rem;
+	color: var(--text-muted);
+}
+
+.chat-timed-message-actions {
+	display: flex;
+}
+
+.chat-timed-message-cta.btn-primary {
+	min-height: 34px;
+	padding: 0 12px;
+	font-size: 0.82rem;
 }
 
 .connect-chat-msg-edited-inline {

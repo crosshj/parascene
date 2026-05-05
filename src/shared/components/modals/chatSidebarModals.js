@@ -47,6 +47,27 @@ function getJoinedChannelSlugs(threads) {
 	return set;
 }
 
+function bytesToB64(bytes) {
+	if (!(bytes instanceof Uint8Array)) return '';
+	let s = '';
+	for (const b of bytes) s += String.fromCharCode(b);
+	return btoa(s);
+}
+
+async function deriveAesKeyFromSecret(secret) {
+	const enc = new TextEncoder();
+	const hash = await crypto.subtle.digest('SHA-256', enc.encode(String(secret || '')));
+	return crypto.subtle.importKey('raw', hash, { name: 'AES-GCM' }, false, ['encrypt']);
+}
+
+async function encryptPrivateText(plain, secret) {
+	const key = await deriveAesKeyFromSecret(secret);
+	const iv = crypto.getRandomValues(new Uint8Array(12));
+	const enc = new TextEncoder().encode(String(plain || ''));
+	const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc);
+	return `${bytesToB64(iv)}.${bytesToB64(new Uint8Array(ct))}`;
+}
+
 /**
  * @param {object} options
  * @param {() => object[]} options.getThreads
@@ -143,14 +164,27 @@ export function initChatSidebarModals(options) {
 			<button type="button" class="modal-close chat-page-chat-modal-close" data-chat-modal-close aria-label="Close"><span class="modal-close-icon" aria-hidden="true">×</span></button>
 		</div>
 		<div class="modal-body">
-			<p class="chat-page-chat-modal-lead">Open an existing tag channel or create a new one.</p>
+			<p class="chat-page-chat-modal-lead">Open, create, or invite.</p>
 			<div class="chat-page-chat-modal-field">
-				<label class="chat-page-chat-modal-label" for="chat-modal-channel-tag">Open or create by tag</label>
+				<h4 class="chat-page-chat-modal-subhead">Open channel</h4>
 				<div class="chat-page-chat-modal-tag-row">
 					<input type="text" id="chat-modal-channel-tag" class="chat-page-chat-modal-input chat-page-chat-modal-input--tag" placeholder="e.g. pixelart" maxlength="40" autocomplete="off" data-chat-channel-tag-input />
 					<button type="button" class="btn-primary chat-page-chat-modal-open-btn" data-chat-channel-open>Open</button>
 				</div>
-				<p class="chat-page-chat-modal-hint chat-page-chat-modal-hint--tight">Lowercase, 2–32 characters, letters, numbers, <code>_</code> and <code>-</code>.</p>
+				<p class="chat-page-chat-modal-hint chat-page-chat-modal-hint--tight">Tag: 2–32 chars, lowercase letters, numbers, <code>_</code>, <code>-</code>.</p>
+			</div>
+			<div class="chat-page-chat-modal-private-section">
+				<h4 class="chat-page-chat-modal-subhead chat-page-chat-modal-subhead--private">Private channel</h4>
+				<p class="chat-page-chat-modal-hint chat-page-chat-modal-hint--tight">Hidden + encrypted. Creates an invite link.</p>
+				<div class="chat-page-chat-modal-tag-row">
+					<input type="text" class="chat-page-chat-modal-input chat-page-chat-modal-input--tag" placeholder="e.g. Game Night" maxlength="60" autocomplete="off" data-chat-private-channel-name />
+					<button type="button" class="btn-primary chat-page-chat-modal-open-btn" data-chat-private-channel-create>Create</button>
+				</div>
+				<div class="chat-page-chat-modal-tag-row chat-page-chat-modal-tag-row--private-invite" data-chat-private-invite-wrap hidden>
+					<input type="text" class="chat-page-chat-modal-input chat-page-chat-modal-input--tag" readonly data-chat-private-invite-output />
+					<button type="button" class="btn-outlined chat-page-chat-modal-copy-btn" data-chat-private-invite-copy>Copy</button>
+				</div>
+				<p class="chat-page-chat-modal-hint chat-page-chat-modal-hint--tight" data-chat-private-channel-status hidden></p>
 			</div>
 			<div class="chat-page-chat-modal-channels-browse">
 				<h4 class="chat-page-chat-modal-subhead">Existing channels</h4>
@@ -196,6 +230,117 @@ export function initChatSidebarModals(options) {
 				}
 			});
 		}
+
+		const privateCreateBtn = document.querySelector('[data-chat-private-channel-create]');
+		const privateNameInput = document.querySelector('[data-chat-private-channel-name]');
+		const privateInviteWrap = document.querySelector('[data-chat-private-invite-wrap]');
+		const privateInviteOutput = document.querySelector('[data-chat-private-invite-output]');
+		const privateInviteCopyBtn = document.querySelector('[data-chat-private-invite-copy]');
+		const privateStatus = document.querySelector('[data-chat-private-channel-status]');
+		const resetPrivateUi = () => {
+			if (privateInviteWrap instanceof HTMLElement) privateInviteWrap.hidden = true;
+			if (privateInviteOutput instanceof HTMLInputElement) privateInviteOutput.value = '';
+			if (privateStatus instanceof HTMLElement) {
+				privateStatus.hidden = true;
+				privateStatus.textContent = '';
+			}
+		};
+		const setPrivateStatus = (msg) => {
+			if (!(privateStatus instanceof HTMLElement)) return;
+			privateStatus.hidden = false;
+			privateStatus.textContent = String(msg || '');
+		};
+		const runPrivateCreate = async () => {
+			if (!(privateNameInput instanceof HTMLInputElement)) return;
+			const name = String(privateNameInput.value || '').trim();
+			if (!name) {
+				setPrivateStatus('Enter a private channel name first.');
+				return;
+			}
+			if (!(privateCreateBtn instanceof HTMLButtonElement)) return;
+			privateCreateBtn.disabled = true;
+			try {
+				const secret = bytesToB64(crypto.getRandomValues(new Uint8Array(32)));
+				const encName = await encryptPrivateText(name, secret);
+				const encProbe = await encryptPrivateText('PARASCENE_CHANNEL_OK_V1', secret);
+				const createRes = await fetch('/api/chat/channels', {
+					method: 'POST',
+					credentials: 'include',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						visibility: 'private',
+						enc_name: encName,
+						enc_probe: encProbe,
+						secret_k: secret
+					})
+				});
+				const createData = await createRes.json().catch(() => ({}));
+				if (!createRes.ok) {
+					setPrivateStatus(createData?.message || createData?.error || 'Could not create private channel.');
+					return;
+				}
+				const threadId = Number(createData?.thread?.id);
+				if (!Number.isFinite(threadId) || threadId <= 0) {
+					setPrivateStatus('Private channel was created but could not be opened.');
+					return;
+				}
+				const invRes = await fetch('/api/chat/invites', {
+					method: 'POST',
+					credentials: 'include',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ thread_id: threadId })
+				});
+				const invData = await invRes.json().catch(() => ({}));
+				if (!invRes.ok) {
+					setPrivateStatus(invData?.message || invData?.error || 'Channel created; invite link failed.');
+				} else {
+					const inviteUrl = typeof invData?.invite_url === 'string' ? invData.invite_url : '';
+					if (inviteUrl && privateInviteOutput instanceof HTMLInputElement) {
+						privateInviteOutput.value = inviteUrl;
+						if (privateInviteWrap instanceof HTMLElement) privateInviteWrap.hidden = false;
+						setPrivateStatus('Private channel created. Share this invite link.');
+					}
+				}
+				closeAll();
+				navigateToChatPath(`/chat/t/${encodeURIComponent(String(threadId))}`);
+				refreshSidebar();
+			} catch {
+				setPrivateStatus('Could not create private channel.');
+			} finally {
+				privateCreateBtn.disabled = false;
+			}
+		};
+		if (privateCreateBtn instanceof HTMLButtonElement) {
+			privateCreateBtn.addEventListener('click', () => void runPrivateCreate());
+		}
+		if (privateNameInput instanceof HTMLInputElement) {
+			privateNameInput.addEventListener('keydown', (ev) => {
+				if (ev.key === 'Enter') {
+					ev.preventDefault();
+					void runPrivateCreate();
+				}
+			});
+			privateNameInput.addEventListener('input', () => {
+				if (privateStatus instanceof HTMLElement && !privateStatus.hidden) {
+					privateStatus.hidden = true;
+				}
+			});
+		}
+		if (privateInviteCopyBtn instanceof HTMLButtonElement && privateInviteOutput instanceof HTMLInputElement) {
+			privateInviteCopyBtn.addEventListener('click', async () => {
+				const value = String(privateInviteOutput.value || '').trim();
+				if (!value) return;
+				try {
+					if (navigator.clipboard?.writeText) {
+						await navigator.clipboard.writeText(value);
+						setPrivateStatus('Invite link copied.');
+					}
+				} catch {
+					setPrivateStatus('Copy failed. Select and copy manually.');
+				}
+			});
+		}
+		resetPrivateUi();
 
 		const addCustom = document.querySelector('[data-chat-servers-add-custom]');
 		if (addCustom instanceof HTMLButtonElement) {
@@ -432,12 +577,11 @@ export function initChatSidebarModals(options) {
 			return key && !alreadyIn.has(key);
 		});
 		if (slugs.length === 0) {
-			listEl.innerHTML = '<p class="route-empty">No channels yet. Create one with the field above.</p>';
+			listEl.innerHTML = '<p class="route-empty">No channels found.</p>';
 			return;
 		}
 		if (browseSlugs.length === 0) {
-			listEl.innerHTML =
-				'<p class="route-empty">No other channels to browse—you are already in every channel listed here. Open one from the sidebar, or use the field above to open or create a tag.</p>';
+			listEl.innerHTML = '<p class="route-empty">No joinable channels.</p>';
 			return;
 		}
 		listEl.innerHTML = browseSlugs
@@ -510,6 +654,17 @@ export function initChatSidebarModals(options) {
 		ensureDom();
 		const chInput = document.querySelector('[data-chat-channel-tag-input]');
 		if (chInput instanceof HTMLInputElement) chInput.value = '';
+		const pInput = document.querySelector('[data-chat-private-channel-name]');
+		const pStatus = document.querySelector('[data-chat-private-channel-status]');
+		const pWrap = document.querySelector('[data-chat-private-invite-wrap]');
+		const pOut = document.querySelector('[data-chat-private-invite-output]');
+		if (pInput instanceof HTMLInputElement) pInput.value = '';
+		if (pStatus instanceof HTMLElement) {
+			pStatus.hidden = true;
+			pStatus.textContent = '';
+		}
+		if (pWrap instanceof HTMLElement) pWrap.hidden = true;
+		if (pOut instanceof HTMLInputElement) pOut.value = '';
 		openOverlay('chat-modal-channels');
 		void loadChannelsModal();
 	}

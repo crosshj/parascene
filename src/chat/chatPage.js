@@ -783,6 +783,9 @@ export async function initChatPage(root, options = {}) {
 	let chatCanvasCreateCleanup = null;
 	let tearDownChatCanvasUi = () => { };
 	let chatThreads = [];
+	const chatPrivateKeyByThreadId = new Map();
+	const CHAT_PRIVATE_PROBE_TEXT = 'PARASCENE_CHANNEL_OK_V1';
+	const CHAT_PRIVATE_MSG_PREFIX = 'enc:v1:';
 	let chatJoinedServers = [];
 	let activeThreadId = null;
 	/** Most recent thread-ish meta used to paint desktop/mobile header title + avatar. */
@@ -2847,11 +2850,21 @@ export async function initChatPage(root, options = {}) {
 				error: 'Simulated failure (remove ?chatSimulateSendFail=1 from the URL to send for real)'
 			};
 		}
+		let wireBody = String(body || '');
+		const meta = (await ensureThreadMetaById(threadId)) || chatPrivateThreadMetaById(threadId);
+		if (isPrivateChannelThreadMeta(meta)) {
+			const k = await fetchPrivateThreadKey(threadId);
+			if (!k) {
+				return { ok: false, error: 'Missing private key for this channel' };
+			}
+			const enc = await encryptPrivateText(wireBody, k);
+			wireBody = `${CHAT_PRIVATE_MSG_PREFIX}${enc}`;
+		}
 		const res = await fetch(`/api/chat/threads/${threadId}/messages`, {
 			method: 'POST',
 			credentials: 'include',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ body })
+			body: JSON.stringify({ body: wireBody })
 		});
 		const data = await res.json().catch(() => ({}));
 		if (!res.ok) {
@@ -2872,11 +2885,20 @@ export async function initChatPage(root, options = {}) {
 		if (!Number.isFinite(mid) || mid <= 0) {
 			return { ok: false, error: 'Invalid message id' };
 		}
+		let wireBody = String(body || '');
+		const threadId = Number(activeThreadId);
+		const meta = (await ensureThreadMetaById(threadId)) || chatPrivateThreadMetaById(threadId);
+		if (isPrivateChannelThreadMeta(meta)) {
+			const k = await fetchPrivateThreadKey(threadId);
+			if (!k) return { ok: false, error: 'Missing private key for this channel' };
+			const enc = await encryptPrivateText(wireBody, k);
+			wireBody = `${CHAT_PRIVATE_MSG_PREFIX}${enc}`;
+		}
 		const res = await fetch(`/api/chat/messages/${mid}`, {
 			method: 'PATCH',
 			credentials: 'include',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ body })
+			body: JSON.stringify({ body: wireBody })
 		});
 		const data = await res.json().catch(() => ({}));
 		if (!res.ok) {
@@ -4185,6 +4207,7 @@ export async function initChatPage(root, options = {}) {
 		if (cached && !forceNetwork) {
 			chatViewerId = cached.viewerId;
 			chatThreads = cached.threads;
+			void hydratePrivateThreadTitlesInPlace(chatThreads);
 			chatViewerIsAdmin = cached.viewerIsAdmin === true;
 			chatViewerIsFounder = cached.viewerIsFounder === true;
 			syncChatComposerHashtagTargets();
@@ -4205,6 +4228,11 @@ export async function initChatPage(root, options = {}) {
 		}
 		chatViewerId = result.data?.viewer_id != null ? Number(result.data.viewer_id) : null;
 		chatThreads = Array.isArray(result.data?.threads) ? result.data.threads : [];
+		for (const t of chatThreads) {
+			if (!t || t.type !== 'channel' || String(t.visibility || '').toLowerCase() !== 'private') continue;
+			t.title = 'Private channel';
+		}
+		await hydratePrivateThreadTitlesInPlace(chatThreads);
 		chatViewerIsAdmin = Boolean(result.data?.viewer_is_admin);
 		chatViewerIsFounder = Boolean(result.data?.viewer_is_founder);
 		syncChatComposerHashtagTargets();
@@ -4219,6 +4247,125 @@ export async function initChatPage(root, options = {}) {
 			}
 		}
 		return { fromCache: Boolean(cached), fromNetwork: true };
+	}
+
+	function chatPrivateThreadMetaById(threadId) {
+		const tid = Number(threadId);
+		if (!Number.isFinite(tid) || tid <= 0) return null;
+		return (chatThreads || []).find((t) => Number(t?.id) === tid) || null;
+	}
+
+	async function ensureThreadMetaById(threadId) {
+		const tid = Number(threadId);
+		if (!Number.isFinite(tid) || tid <= 0) return null;
+		const existing = chatPrivateThreadMetaById(tid);
+		if (existing) return existing;
+		try {
+			const res = await fetch(`/api/chat/threads/${tid}`, { credentials: 'include' });
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok || !data?.thread || typeof data.thread !== 'object') return existing || null;
+			const t = data.thread;
+			const idx = (chatThreads || []).findIndex((x) => Number(x?.id) === tid);
+			if (idx >= 0) {
+				chatThreads[idx] = { ...chatThreads[idx], ...t };
+			} else {
+				chatThreads.push(t);
+			}
+			return t;
+		} catch {
+			return existing || null;
+		}
+	}
+
+	function isPrivateChannelThreadMeta(meta) {
+		return (
+			meta?.type === 'channel' &&
+			String(meta?.visibility || '').trim().toLowerCase() === 'private'
+		);
+	}
+
+	async function fetchPrivateThreadKey(threadId) {
+		const tid = Number(threadId);
+		if (!Number.isFinite(tid) || tid <= 0) return null;
+		if (chatPrivateKeyByThreadId.has(tid)) {
+			return chatPrivateKeyByThreadId.get(tid);
+		}
+		const res = await fetch(`/api/chat/threads/${tid}/private-key`, { credentials: 'include' });
+		const data = await res.json().catch(() => ({}));
+		if (!res.ok) return null;
+		const k = typeof data?.k === 'string' ? data.k.trim() : '';
+		if (!k) return null;
+		chatPrivateKeyByThreadId.set(tid, k);
+		return k;
+	}
+
+	function bytesToB64(bytes) {
+		if (!(bytes instanceof Uint8Array)) return '';
+		let s = '';
+		for (const b of bytes) s += String.fromCharCode(b);
+		return btoa(s);
+	}
+
+	function b64ToBytes(s) {
+		try {
+			const raw = atob(String(s || ''));
+			const out = new Uint8Array(raw.length);
+			for (let i = 0; i < raw.length; i += 1) out[i] = raw.charCodeAt(i);
+			return out;
+		} catch {
+			return null;
+		}
+	}
+
+	async function deriveAesKeyFromSecret(secret) {
+		const enc = new TextEncoder();
+		const hash = await crypto.subtle.digest('SHA-256', enc.encode(String(secret || '')));
+		return crypto.subtle.importKey('raw', hash, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+	}
+
+	async function encryptPrivateText(plain, secret) {
+		const key = await deriveAesKeyFromSecret(secret);
+		const iv = crypto.getRandomValues(new Uint8Array(12));
+		const enc = new TextEncoder().encode(String(plain || ''));
+		const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc);
+		return `${bytesToB64(iv)}.${bytesToB64(new Uint8Array(ct))}`;
+	}
+
+	async function decryptPrivateText(token, secret) {
+		const parts = String(token || '').split('.');
+		if (parts.length !== 2) return null;
+		const iv = b64ToBytes(parts[0]);
+		const ct = b64ToBytes(parts[1]);
+		if (!(iv instanceof Uint8Array) || !(ct instanceof Uint8Array)) return null;
+		try {
+			const key = await deriveAesKeyFromSecret(secret);
+			const plainBuf = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+			return new TextDecoder().decode(plainBuf);
+		} catch {
+			return null;
+		}
+	}
+
+	async function hydratePrivateThreadTitlesInPlace(threads) {
+		const list = Array.isArray(threads) ? threads : [];
+		for (const t of list) {
+			if (!isPrivateChannelThreadMeta(t)) continue;
+			const tid = Number(t.id);
+			if (!Number.isFinite(tid) || tid <= 0) continue;
+			const encName = typeof t.enc_name === 'string' ? t.enc_name.trim() : '';
+			if (!encName) continue;
+			const k = await fetchPrivateThreadKey(tid);
+			if (!k) continue;
+			const probe = typeof t.enc_probe === 'string' ? t.enc_probe.trim() : '';
+			if (probe) {
+				const probePlain = await decryptPrivateText(probe, k);
+				if (probePlain !== CHAT_PRIVATE_PROBE_TEXT) continue;
+			}
+			const dec = await decryptPrivateText(encName, k);
+			if (dec && dec.trim()) {
+				t.title = dec.trim();
+			}
+		}
 	}
 
 	function normalizePathForCompare(p) {
@@ -5690,6 +5837,13 @@ export async function initChatPage(root, options = {}) {
 		const inner = document.createElement('div');
 		inner.className = 'connect-chat-msg-inner';
 		const canvasMeta = getChatCanvasMetaFromMessage(m);
+		const timedMetaRaw = m?.meta && typeof m.meta === 'object' && !Array.isArray(m.meta)
+			? m.meta.time_sensitive
+			: null;
+		const timedMeta =
+			timedMetaRaw && typeof timedMetaRaw === 'object' && !Array.isArray(timedMetaRaw)
+				? timedMetaRaw
+				: null;
 		const safeBody = processUserText(m.body ?? '');
 		const bubble = document.createElement('div');
 		bubble.className = 'connect-chat-msg-bubble';
@@ -5697,6 +5851,32 @@ export async function initChatPage(root, options = {}) {
 			bubble.classList.add('connect-chat-msg-bubble--canvas');
 			const preview = processUserText(m.body ?? '');
 			bubble.innerHTML = `<div class="connect-chat-canvas-inline"><div class="connect-chat-canvas-inline-title">${escapeHtml(canvasMeta.title)}</div><div class="connect-chat-canvas-inline-preview">${preview}</div></div>`;
+		} else if (
+			timedMeta &&
+			String(timedMeta.kind || '').trim().toLowerCase() === 'channel_invite' &&
+			timedMeta?.cta &&
+			typeof timedMeta.cta === 'object'
+		) {
+			const expiresAtRaw = typeof timedMeta.expires_at === 'string' ? timedMeta.expires_at.trim() : '';
+			const expMs = Date.parse(expiresAtRaw);
+			const expLabel = Number.isFinite(expMs) ? (formatRelativeTime(expiresAtRaw) || '') : '';
+			const ctaLabel =
+				typeof timedMeta?.cta?.label === 'string' && timedMeta.cta.label.trim()
+					? timedMeta.cta.label.trim()
+					: 'Accept invite';
+			const inviteToken =
+				typeof timedMeta?.cta?.invite_token === 'string' ? timedMeta.cta.invite_token.trim() : '';
+			bubble.classList.add('connect-chat-msg-bubble--timed-invite');
+			bubble.innerHTML = `
+				<div class="chat-timed-message">
+					<div class="chat-timed-message-title">Private channel invite</div>
+					<div class="chat-timed-message-body">${safeBody}</div>
+					${expLabel ? `<div class="chat-timed-message-expiry">Expires ${escapeHtml(expLabel)}</div>` : ''}
+					<div class="chat-timed-message-actions">
+						<button type="button" class="btn-primary chat-timed-message-cta" data-chat-timed-accept-invite="${escapeHtml(inviteToken)}">${escapeHtml(ctaLabel)}</button>
+					</div>
+				</div>
+			`;
 		} else {
 			bubble.innerHTML = safeBody;
 		}
@@ -7762,7 +7942,26 @@ export async function initChatPage(root, options = {}) {
 			}
 			if (isStaleChatPane(paneEpoch)) return;
 			const messages = Array.isArray(data.messages) ? data.messages : [];
-			const messagesForUi = messages.filter((m) => !getChatCanvasMetaFromMessage(m));
+			const messagesForUiRaw = messages.filter((m) => !getChatCanvasMetaFromMessage(m));
+			const threadMetaForPriv = chatPrivateThreadMetaById(threadId);
+			let messagesForUi = messagesForUiRaw;
+			if (isPrivateChannelThreadMeta(threadMetaForPriv)) {
+				const k = await fetchPrivateThreadKey(threadId);
+				if (!k) {
+					throw new Error('Private channel key missing. Re-open using invite link.');
+				}
+				messagesForUi = [];
+				for (const m of messagesForUiRaw) {
+					const body = String(m?.body || '');
+					if (body.startsWith(CHAT_PRIVATE_MSG_PREFIX)) {
+						const dec = await decryptPrivateText(body.slice(CHAT_PRIVATE_MSG_PREFIX.length), k);
+						messagesForUi.push({ ...m, body: dec != null ? dec : '[Encrypted message]' });
+					} else {
+						// Never render legacy plaintext in private channels.
+						messagesForUi.push({ ...m, body: '[Encrypted message]' });
+					}
+				}
+			}
 			lastChatMessagesPayload = messagesForUi;
 			teardownChatCreationsPseudoBulkHostIfPresent(messagesEl);
 			teardownLatestMessageReadObserver();
@@ -8215,6 +8414,41 @@ export async function initChatPage(root, options = {}) {
 	}
 
 	function onChatMessagesClick(e) {
+		const acceptInviteBtn = e.target?.closest?.('[data-chat-timed-accept-invite]');
+		if (acceptInviteBtn instanceof HTMLButtonElement) {
+			e.preventDefault();
+			e.stopPropagation();
+			const token = String(acceptInviteBtn.getAttribute('data-chat-timed-accept-invite') || '').trim();
+			if (!token) return;
+			void (async () => {
+				const res = await fetch('/api/chat/invites/accept', {
+					method: 'POST',
+					credentials: 'include',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ invite_token: token })
+				});
+				const data = await res.json().catch(() => ({}));
+				const errEl = root.querySelector('[data-chat-error]');
+				if (!res.ok) {
+					if (errEl instanceof HTMLElement) {
+						errEl.hidden = false;
+						errEl.textContent = data?.message || data?.error || 'Invite could not be accepted.';
+					}
+					return;
+				}
+				const threadId = Number(data?.thread_id);
+				if (Number.isFinite(threadId) && threadId > 0) {
+					await loadChatThreads({ forceNetwork: true });
+					await refreshChatSidebar({ skipThreadsFetch: true });
+					history.pushState({ prsnChat: true }, '', `/chat/t/${encodeURIComponent(String(threadId))}`);
+					await openThreadForCurrentPath();
+				}
+			})().catch(() => {
+				// ignore
+			});
+			return;
+		}
+
 		const exploreSearchSubmit = e.target?.closest?.('[data-chat-explore-search-submit]');
 		if (exploreSearchSubmit instanceof HTMLButtonElement) {
 			e.preventDefault();
@@ -8581,6 +8815,129 @@ export async function initChatPage(root, options = {}) {
 		await loadExploreChannelMessages();
 	}
 
+	async function createPrivateChannelFromCommand(rawName) {
+		const name = String(rawName || '').trim();
+		if (!name) throw new Error('Private channel name required. Example: /private game-night');
+		const secret = bytesToB64(crypto.getRandomValues(new Uint8Array(32)));
+		const encName = await encryptPrivateText(name, secret);
+		const encProbe = await encryptPrivateText(CHAT_PRIVATE_PROBE_TEXT, secret);
+		const res = await fetch('/api/chat/channels', {
+			method: 'POST',
+			credentials: 'include',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				visibility: 'private',
+				enc_name: encName,
+				enc_probe: encProbe,
+				secret_k: secret
+			})
+		});
+		const data = await res.json().catch(() => ({}));
+		if (!res.ok) {
+			throw new Error(data?.message || data?.error || `Could not create private channel (${res.status})`);
+		}
+		const threadId = Number(data?.thread?.id);
+		if (!Number.isFinite(threadId) || threadId <= 0) {
+			throw new Error('Private channel creation failed.');
+		}
+		chatPrivateKeyByThreadId.set(threadId, secret);
+		const invRes = await fetch('/api/chat/invites', {
+			method: 'POST',
+			credentials: 'include',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ thread_id: threadId })
+		});
+		const invData = await invRes.json().catch(() => ({}));
+		if (!invRes.ok) {
+			throw new Error(invData?.message || invData?.error || `Could not create invite (${invRes.status})`);
+		}
+		const inviteUrl = typeof invData?.invite_url === 'string' ? invData.invite_url : '';
+		if (inviteUrl && navigator.clipboard?.writeText) {
+			try {
+				await navigator.clipboard.writeText(inviteUrl);
+			} catch {
+				// ignore
+			}
+		}
+		await loadChatThreads({ forceNetwork: true });
+		await refreshChatSidebar({ skipThreadsFetch: true });
+		history.pushState({ prsnChat: true }, '', `/chat/t/${encodeURIComponent(String(threadId))}`);
+		await openThreadForCurrentPath();
+		return inviteUrl;
+	}
+
+	async function createInviteForActiveThread() {
+		const threadId = Number(activeThreadId);
+		if (!Number.isFinite(threadId) || threadId <= 0) {
+			throw new Error('Open a channel first.');
+		}
+		const meta = chatPrivateThreadMetaById(threadId);
+		if (!isPrivateChannelThreadMeta(meta)) {
+			throw new Error('Invites are only for private channels.');
+		}
+		const invRes = await fetch('/api/chat/invites', {
+			method: 'POST',
+			credentials: 'include',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ thread_id: threadId })
+		});
+		const invData = await invRes.json().catch(() => ({}));
+		if (!invRes.ok) {
+			throw new Error(invData?.message || invData?.error || `Could not create invite (${invRes.status})`);
+		}
+		const inviteUrl = typeof invData?.invite_url === 'string' ? invData.invite_url : '';
+		if (!inviteUrl) throw new Error('Invite created, but URL was missing.');
+		if (navigator.clipboard?.writeText) {
+			try {
+				await navigator.clipboard.writeText(inviteUrl);
+			} catch {
+				// ignore
+			}
+		}
+		return inviteUrl;
+	}
+
+	function parseInviteRecipientsFromCommand(raw) {
+		const text = String(raw || '').trim();
+		if (!text) return [];
+		const tokens = text
+			.split(/[\s,]+/)
+			.map((x) => String(x || '').trim())
+			.filter(Boolean);
+		const out = [];
+		for (const t of tokens) {
+			const name = t.startsWith('@') ? t.slice(1).trim().toLowerCase() : t.toLowerCase();
+			if (/^[a-z0-9][a-z0-9_]{2,23}$/.test(name)) {
+				out.push({ user_name: name });
+			}
+		}
+		return out;
+	}
+
+	async function sendInviteDmToRecipients(recipients) {
+		const threadId = Number(activeThreadId);
+		if (!Number.isFinite(threadId) || threadId <= 0) {
+			throw new Error('Open a channel first.');
+		}
+		const meta = chatPrivateThreadMetaById(threadId);
+		if (!isPrivateChannelThreadMeta(meta)) {
+			throw new Error('DM invites are only for private channels.');
+		}
+		const list = Array.isArray(recipients) ? recipients : [];
+		if (list.length === 0) throw new Error('Add at least one @username.');
+		const res = await fetch('/api/chat/invites/dm', {
+			method: 'POST',
+			credentials: 'include',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ thread_id: threadId, recipients: list })
+		});
+		const data = await res.json().catch(() => ({}));
+		if (!res.ok) {
+			throw new Error(data?.message || data?.error || 'Could not send invites.');
+		}
+		return Number(data?.sent_count) || 0;
+	}
+
 	async function submitChatMessage() {
 		const bodyInput = root.querySelector('[data-chat-body-input]');
 		const errEl = root.querySelector('[data-chat-error]');
@@ -8590,6 +8947,67 @@ export async function initChatPage(root, options = {}) {
 			return;
 		}
 		const text = String(bodyInput.value || '').trim();
+		const inviteDmCmdMatch = text.match(/^\/invite\s+(.+)$/i);
+		if (inviteDmCmdMatch) {
+			bodyInput.value = '';
+			syncChatSendButton();
+			try {
+				const recipients = parseInviteRecipientsFromCommand(inviteDmCmdMatch[1] || '');
+				const sentCount = await sendInviteDmToRecipients(recipients);
+				if (errEl instanceof HTMLElement) {
+					errEl.hidden = false;
+					errEl.textContent =
+						sentCount > 0 ? `Invite sent to ${sentCount} user${sentCount === 1 ? '' : 's'}.` : 'No invites sent.';
+				}
+			} catch (err) {
+				if (errEl instanceof HTMLElement) {
+					errEl.hidden = false;
+					errEl.textContent = err?.message || 'Could not send invites.';
+				}
+			}
+			return;
+		}
+
+		const inviteCmdMatch = text.match(/^\/invite$/i);
+		if (inviteCmdMatch) {
+			bodyInput.value = '';
+			syncChatSendButton();
+			try {
+				const inviteUrl = await createInviteForActiveThread();
+				if (errEl instanceof HTMLElement) {
+					errEl.hidden = false;
+					errEl.textContent = inviteUrl
+						? 'Invite link copied to clipboard.'
+						: 'Invite link created.';
+				}
+			} catch (err) {
+				if (errEl instanceof HTMLElement) {
+					errEl.hidden = false;
+					errEl.textContent = err?.message || 'Could not create invite.';
+				}
+			}
+			return;
+		}
+		const privateCmdMatch = text.match(/^\/private\s+(.+)$/i);
+		if (privateCmdMatch) {
+			bodyInput.value = '';
+			syncChatSendButton();
+			try {
+				const inviteUrl = await createPrivateChannelFromCommand(privateCmdMatch[1] || '');
+				if (errEl instanceof HTMLElement) {
+					errEl.hidden = false;
+					errEl.textContent = inviteUrl
+						? 'Private channel created. Invite link copied to clipboard.'
+						: 'Private channel created.';
+				}
+			} catch (err) {
+				if (errEl instanceof HTMLElement) {
+					errEl.hidden = false;
+					errEl.textContent = err?.message || 'Could not create private channel.';
+				}
+			}
+			return;
+		}
 		const genCmdMatch = text.match(/^\/gen(?:\s+(.+))?$/i);
 		if (genCmdMatch) {
 			if (errEl instanceof HTMLElement) {
@@ -11083,6 +11501,36 @@ export async function initChatPage(root, options = {}) {
 		}
 		setMobileSidebarMode(shouldShowMobileSidebarFromLocation());
 	});
+
+	async function acceptInviteFromHashIfPresent() {
+		const hash = String(window.location.hash || '');
+		const m = hash.match(/(?:^#|[?&])ci=([^&]+)/i);
+		if (!m) return false;
+		const token = decodeURIComponent(m[1] || '').trim();
+		if (!token) return false;
+		const res = await fetch('/api/chat/invites/accept', {
+			method: 'POST',
+			credentials: 'include',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ invite_token: token })
+		});
+		const data = await res.json().catch(() => ({}));
+		const threadId = Number(data?.thread_id);
+		history.replaceState({ prsnChat: true }, '', '/chat');
+		if (!res.ok || !Number.isFinite(threadId) || threadId <= 0) {
+			const errEl = root.querySelector('[data-chat-error]');
+			if (errEl instanceof HTMLElement) {
+				errEl.hidden = false;
+				errEl.textContent = data?.message || data?.error || 'Invite could not be accepted.';
+			}
+			return false;
+		}
+		await loadChatThreads({ forceNetwork: true });
+		await refreshChatSidebar({ skipThreadsFetch: true });
+		history.replaceState({ prsnChat: true }, '', `/chat/t/${encodeURIComponent(String(threadId))}`);
+		return true;
+	}
+
 	chatGlobalUnreadPoll = setInterval(() => void loadChatGlobalUnreadSummary(), 45000);
 	void loadChatGlobalUnreadSummary();
 	void hydrateAudibleNotificationsFromProfileOnce();
@@ -11093,6 +11541,7 @@ export async function initChatPage(root, options = {}) {
 		// Prioritize sidebar data immediately for /chat#channels first paint.
 		void refreshChatSidebar();
 	}
+	await acceptInviteFromHashIfPresent();
 	await openThreadForCurrentPath();
 	dispatchChatUnreadRefresh();
 	/** Presence/UI poll: keep roster status fresh without force-refetching all thread metadata. */

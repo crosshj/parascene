@@ -50,6 +50,11 @@ function feedbackMegaphoneIcon(className = '') {
 	return `<svg${cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 6a13 13 0 0 0 8.4-2.8A1 1 0 0 1 21 4v12a1 1 0 0 1-1.6.8A13 13 0 0 0 11 14H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"></path><path d="M6 14a12 12 0 0 0 2.4 7.2 2 2 0 0 0 3.2-2.4A8 8 0 0 1 10 14"></path><path d="M8 6v8"></path></svg>`;
 }
 
+function privateChannelLockIcon(className = '') {
+	const cls = className ? ` class="${escapeHtmlPseudoStrip(className)}"` : '';
+	return `<svg${cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 1 1 8 0v3"></path></svg>`;
+}
+
 function pseudoStripRouteIconSvg(slug, routeIconClass = 'chat-page-sidebar-channel-route-icon') {
 	const key = String(slug || '').trim().toLowerCase();
 	if (!key) return '';
@@ -732,6 +737,10 @@ export function buildChatThreadRowAvatarHtml(t, deps) {
 			? t.title.trim().slice(1)
 			: '') ||
 		'';
+	const isPrivateChannel = t?.type === 'channel' && String(t?.visibility || '').trim().toLowerCase() === 'private';
+	if (isPrivateChannel) {
+		return `<div class="comment-avatar connect-chat-thread-row-channel-avatar chat-page-sidebar-channel-avatar chat-page-sidebar-channel-avatar--icon-only" aria-hidden="true">${privateChannelLockIcon('chat-page-sidebar-channel-route-icon')}</div>`;
+	}
 	const slugKey = slugRaw.toLowerCase();
 	if (SIDEBAR_TOP_STRIP_CHANNEL_SLUGS.has(slugKey)) {
 		const iconAvatarHtml = pseudoStripRouteIconAvatarHtml(slugKey);

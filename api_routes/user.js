@@ -30,7 +30,14 @@ export default function createProfileRoutes({ queries }) {
 
 	function sanitizeUserMetaForClient(meta) {
 		if (!meta || typeof meta !== "object") return meta;
-		const { apiKeyHash: _h, vynlyBearerToken: _v, presence_last_seen_at: _p, appear_offline: _a, ...rest } = meta;
+		const {
+			apiKeyHash: _h,
+			vynlyBearerToken: _v,
+			presence_last_seen_at: _p,
+			appear_offline: _a,
+			chat_private_keys: _c,
+			...rest
+		} = meta;
 		return rest;
 	}
 
