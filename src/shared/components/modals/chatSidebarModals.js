@@ -54,6 +54,22 @@ function bytesToB64(bytes) {
 	return btoa(s);
 }
 
+/**
+ * Same channel tag rules as `normalizeTag` on the API.
+ * Strip leading `#`, lowercase, require `[a-z0-9][a-z0-9_-]{1,31}`.
+ * @param {string} input
+ * @returns {string | null}
+ */
+function normalizeChannelTagLikeApi(input) {
+	const source = typeof input === 'string' ? input : '';
+	if (!source) return null;
+	const raw = source.replace(/^#+/, '');
+	if (!raw) return null;
+	if (raw !== raw.trim()) return null;
+	if (!/^[a-z0-9][a-z0-9_-]{1,31}$/.test(raw)) return null;
+	return raw;
+}
+
 async function deriveAesKeyFromSecret(secret) {
 	const enc = new TextEncoder();
 	const hash = await crypto.subtle.digest('SHA-256', enc.encode(String(secret || '')));
@@ -72,12 +88,17 @@ async function encryptPrivateText(plain, secret) {
  * @param {object} options
  * @param {() => object[]} options.getThreads
  * @param {() => number | null} options.getViewerId
+ * @param {() => boolean} [options.getViewerCanCreatePrivateChannel]
  * @param {(pathname: string) => void} options.navigateToChatPath
  * @param {() => void} options.refreshSidebar
  */
 export function initChatSidebarModals(options) {
 	const getThreads = typeof options.getThreads === 'function' ? options.getThreads : () => [];
 	const getViewerId = typeof options.getViewerId === 'function' ? options.getViewerId : () => null;
+	const getViewerCanCreatePrivateChannel =
+		typeof options.getViewerCanCreatePrivateChannel === 'function'
+			? options.getViewerCanCreatePrivateChannel
+			: () => false;
 	const navigateToChatPath =
 		typeof options.navigateToChatPath === 'function' ? options.navigateToChatPath : () => { };
 	const refreshSidebar =
@@ -164,22 +185,23 @@ export function initChatSidebarModals(options) {
 			<button type="button" class="modal-close chat-page-chat-modal-close" data-chat-modal-close aria-label="Close"><span class="modal-close-icon" aria-hidden="true">×</span></button>
 		</div>
 		<div class="modal-body">
-			<p class="chat-page-chat-modal-lead">Open, create, or invite.</p>
-			<div class="chat-page-chat-modal-field">
+			<div class="chat-page-chat-modal-channel-group chat-page-chat-modal-field">
 				<h4 class="chat-page-chat-modal-subhead">Open channel</h4>
+				<p class="chat-page-chat-modal-hint chat-page-chat-modal-hint--tight">Public + unique.</p>
 				<div class="chat-page-chat-modal-tag-row">
-					<input type="text" id="chat-modal-channel-tag" class="chat-page-chat-modal-input chat-page-chat-modal-input--tag" placeholder="e.g. pixelart" maxlength="40" autocomplete="off" data-chat-channel-tag-input />
+					<input type="text" id="chat-modal-channel-tag" class="chat-page-chat-modal-input chat-page-chat-modal-input--tag" placeholder="e.g. pixelart" maxlength="32" autocomplete="off" data-chat-channel-tag-input />
 					<button type="button" class="btn-primary chat-page-chat-modal-open-btn" data-chat-channel-open>Open</button>
 				</div>
-				<p class="chat-page-chat-modal-hint chat-page-chat-modal-hint--tight">Tag: 2–32 chars, lowercase letters, numbers, <code>_</code>, <code>-</code>.</p>
+				<p class="chat-page-chat-modal-hint chat-page-chat-modal-hint--tight chat-page-chat-modal-hint--validation" data-chat-channel-tag-hint>Use 2–32 chars: lowercase letters, numbers, <code>_</code>, <code>-</code>.</p>
 			</div>
-			<div class="chat-page-chat-modal-private-section">
-				<h4 class="chat-page-chat-modal-subhead chat-page-chat-modal-subhead--private">Private channel</h4>
-				<p class="chat-page-chat-modal-hint chat-page-chat-modal-hint--tight">Hidden + encrypted. Creates an invite link.</p>
+			<div class="chat-page-chat-modal-channel-group" data-chat-private-channel-section>
+				<h4 class="chat-page-chat-modal-subhead">Private channel</h4>
+				<p class="chat-page-chat-modal-hint chat-page-chat-modal-hint--tight">Hidden + encrypted.</p>
 				<div class="chat-page-chat-modal-tag-row">
-					<input type="text" class="chat-page-chat-modal-input chat-page-chat-modal-input--tag" placeholder="e.g. Game Night" maxlength="60" autocomplete="off" data-chat-private-channel-name />
+					<input type="text" class="chat-page-chat-modal-input chat-page-chat-modal-input--tag" placeholder="e.g. game_night" maxlength="32" autocomplete="off" data-chat-private-channel-name />
 					<button type="button" class="btn-primary chat-page-chat-modal-open-btn" data-chat-private-channel-create>Create</button>
 				</div>
+				<p class="chat-page-chat-modal-hint chat-page-chat-modal-hint--tight chat-page-chat-modal-hint--validation" data-chat-private-channel-name-hint>Use 2–32 chars: lowercase letters, numbers, <code>_</code>, <code>-</code>.</p>
 				<div class="chat-page-chat-modal-tag-row chat-page-chat-modal-tag-row--private-invite" data-chat-private-invite-wrap hidden>
 					<input type="text" class="chat-page-chat-modal-input chat-page-chat-modal-input--tag" readonly data-chat-private-invite-output />
 					<button type="button" class="btn-outlined chat-page-chat-modal-copy-btn" data-chat-private-invite-copy>Copy</button>
@@ -221,6 +243,31 @@ export function initChatSidebarModals(options) {
 
 		const chOpen = document.querySelector('[data-chat-channel-open]');
 		const chInput = document.querySelector('[data-chat-channel-tag-input]');
+		const chHint = document.querySelector('[data-chat-channel-tag-hint]');
+		const hideChannelTagHint = () => {
+			if (chHint instanceof HTMLElement) chHint.classList.remove('is-visible');
+		};
+		const showChannelTagHint = () => {
+			if (chHint instanceof HTMLElement) chHint.classList.add('is-visible');
+		};
+		const setOpenChannelInvalidUi = (isInvalid) => {
+			const bad = Boolean(isInvalid);
+			if (chInput instanceof HTMLInputElement) chInput.classList.toggle('is-invalid', bad);
+			if (chOpen instanceof HTMLButtonElement) chOpen.disabled = bad;
+		};
+		const syncOpenChannelValidationUi = () => {
+			const v = String(chInput instanceof HTMLInputElement ? chInput.value || '' : '');
+			if (!v) {
+				hideChannelTagHint();
+				setOpenChannelInvalidUi(false);
+				return;
+			}
+			const normalized = normalizeChannelTagLikeApi(v);
+			const isInvalid = !normalized;
+			if (isInvalid) showChannelTagHint();
+			else hideChannelTagHint();
+			setOpenChannelInvalidUi(isInvalid);
+		};
 		if (chOpen instanceof HTMLButtonElement && chInput instanceof HTMLInputElement) {
 			chOpen.addEventListener('click', () => void openChannelByTag(chInput.value));
 			chInput.addEventListener('keydown', (ev) => {
@@ -229,6 +276,7 @@ export function initChatSidebarModals(options) {
 					void openChannelByTag(chInput.value);
 				}
 			});
+			chInput.addEventListener('input', syncOpenChannelValidationUi);
 		}
 
 		const privateCreateBtn = document.querySelector('[data-chat-private-channel-create]');
@@ -237,9 +285,36 @@ export function initChatSidebarModals(options) {
 		const privateInviteOutput = document.querySelector('[data-chat-private-invite-output]');
 		const privateInviteCopyBtn = document.querySelector('[data-chat-private-invite-copy]');
 		const privateStatus = document.querySelector('[data-chat-private-channel-status]');
+		const privateNameHint = document.querySelector('[data-chat-private-channel-name-hint]');
+		const hidePrivateNameHint = () => {
+			if (privateNameHint instanceof HTMLElement) privateNameHint.classList.remove('is-visible');
+		};
+		const showPrivateNameHint = () => {
+			if (privateNameHint instanceof HTMLElement) privateNameHint.classList.add('is-visible');
+		};
+		const setPrivateChannelInvalidUi = (isInvalid) => {
+			const bad = Boolean(isInvalid);
+			if (privateNameInput instanceof HTMLInputElement) privateNameInput.classList.toggle('is-invalid', bad);
+			if (privateCreateBtn instanceof HTMLButtonElement) privateCreateBtn.disabled = bad;
+		};
+		const syncPrivateChannelValidationUi = () => {
+			const v = String(privateNameInput instanceof HTMLInputElement ? privateNameInput.value || '' : '');
+			if (!v) {
+				hidePrivateNameHint();
+				setPrivateChannelInvalidUi(false);
+				return;
+			}
+			const normalized = normalizeChannelTagLikeApi(v);
+			const isInvalid = !normalized;
+			if (isInvalid) showPrivateNameHint();
+			else hidePrivateNameHint();
+			setPrivateChannelInvalidUi(isInvalid);
+		};
 		const resetPrivateUi = () => {
 			if (privateInviteWrap instanceof HTMLElement) privateInviteWrap.hidden = true;
 			if (privateInviteOutput instanceof HTMLInputElement) privateInviteOutput.value = '';
+			hidePrivateNameHint();
+			setPrivateChannelInvalidUi(false);
 			if (privateStatus instanceof HTMLElement) {
 				privateStatus.hidden = true;
 				privateStatus.textContent = '';
@@ -252,11 +327,12 @@ export function initChatSidebarModals(options) {
 		};
 		const runPrivateCreate = async () => {
 			if (!(privateNameInput instanceof HTMLInputElement)) return;
-			const name = String(privateNameInput.value || '').trim();
+			const name = normalizeChannelTagLikeApi(privateNameInput.value || '');
 			if (!name) {
-				setPrivateStatus('Enter a private channel name first.');
+				showPrivateNameHint();
 				return;
 			}
+			hidePrivateNameHint();
 			if (!(privateCreateBtn instanceof HTMLButtonElement)) return;
 			privateCreateBtn.disabled = true;
 			try {
@@ -321,6 +397,7 @@ export function initChatSidebarModals(options) {
 				}
 			});
 			privateNameInput.addEventListener('input', () => {
+				syncPrivateChannelValidationUi();
 				if (privateStatus instanceof HTMLElement && !privateStatus.hidden) {
 					privateStatus.hidden = true;
 				}
@@ -559,7 +636,7 @@ export function initChatSidebarModals(options) {
 		const listEl = document.querySelector('[data-chat-channels-list]');
 		if (!listEl) return;
 		listEl.setAttribute('aria-busy', 'true');
-		listEl.innerHTML = '<p class="chat-page-chat-modal-loading">Loading…</p>';
+		listEl.innerHTML = '<p class="route-empty">Loading…</p>';
 		const result = await fetchJsonWithStatusDeduped(
 			'/api/chat/channel-slugs',
 			{ credentials: 'include' },
@@ -602,11 +679,25 @@ export function initChatSidebarModals(options) {
 	}
 
 	async function openChannelByTag(raw) {
-		const tag = String(raw || '').trim();
+		const chHint = document.querySelector('[data-chat-channel-tag-hint]');
+		const chInput = document.querySelector('[data-chat-channel-tag-input]');
+		const chOpen = document.querySelector('[data-chat-channel-open]');
+		const hideHint = () => {
+			if (chHint instanceof HTMLElement) chHint.classList.remove('is-visible');
+		};
+		const showHint = () => {
+			if (chHint instanceof HTMLElement) chHint.classList.add('is-visible');
+		};
+		const tag = normalizeChannelTagLikeApi(raw || '');
 		if (!tag) {
-			window.alert('Enter a channel tag.');
+			showHint();
+			if (chInput instanceof HTMLInputElement) chInput.classList.add('is-invalid');
+			if (chOpen instanceof HTMLButtonElement) chOpen.disabled = true;
 			return;
 		}
+		hideHint();
+		if (chInput instanceof HTMLInputElement) chInput.classList.remove('is-invalid');
+		if (chOpen instanceof HTMLButtonElement) chOpen.disabled = false;
 		const res = await fetch('/api/chat/channels', {
 			method: 'POST',
 			credentials: 'include',
@@ -653,11 +744,17 @@ export function initChatSidebarModals(options) {
 	function openChannelsModal() {
 		ensureDom();
 		const chInput = document.querySelector('[data-chat-channel-tag-input]');
+		const chOpen = document.querySelector('[data-chat-channel-open]');
+		const chHint = document.querySelector('[data-chat-channel-tag-hint]');
 		if (chInput instanceof HTMLInputElement) chInput.value = '';
+		if (chInput instanceof HTMLInputElement) chInput.classList.remove('is-invalid');
+		if (chOpen instanceof HTMLButtonElement) chOpen.disabled = false;
+		if (chHint instanceof HTMLElement) chHint.classList.remove('is-visible');
 		const pInput = document.querySelector('[data-chat-private-channel-name]');
 		const pStatus = document.querySelector('[data-chat-private-channel-status]');
 		const pWrap = document.querySelector('[data-chat-private-invite-wrap]');
 		const pOut = document.querySelector('[data-chat-private-invite-output]');
+		const pSection = document.querySelector('[data-chat-private-channel-section]');
 		if (pInput instanceof HTMLInputElement) pInput.value = '';
 		if (pStatus instanceof HTMLElement) {
 			pStatus.hidden = true;
@@ -665,6 +762,9 @@ export function initChatSidebarModals(options) {
 		}
 		if (pWrap instanceof HTMLElement) pWrap.hidden = true;
 		if (pOut instanceof HTMLInputElement) pOut.value = '';
+		if (pSection instanceof HTMLElement) {
+			pSection.hidden = !Boolean(getViewerCanCreatePrivateChannel());
+		}
 		openOverlay('chat-modal-channels');
 		void loadChannelsModal();
 	}

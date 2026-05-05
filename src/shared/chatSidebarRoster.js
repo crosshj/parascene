@@ -51,8 +51,27 @@ function feedbackMegaphoneIcon(className = '') {
 }
 
 function privateChannelLockIcon(className = '') {
-	const cls = className ? ` class="${escapeHtmlPseudoStrip(className)}"` : '';
-	return `<svg${cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 1 1 8 0v3"></path></svg>`;
+	const cls = [className, 'chat-page-sidebar-lock-icon'].filter(Boolean).join(' ').trim();
+	const attr = cls ? ` class="${escapeHtmlPseudoStrip(cls)}"` : '';
+	return `<svg${attr} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="11" width="13" height="8.5" rx="2"></rect><path d="M8.5 11V8.5a3.5 3.5 0 1 1 7 0V11"></path></svg>`;
+}
+
+/**
+ * Stable private-channel avatar color seed shared by sidebar/header behavior.
+ * Uses thread id + channel label to reduce collisions while staying deterministic.
+ * @param {{ id?: unknown, title?: unknown, channel_slug?: unknown } | null | undefined} threadMeta
+ * @returns {string}
+ */
+function privateChannelColorSeed(threadMeta) {
+	const idPart = Number.isFinite(Number(threadMeta?.id)) ? String(Number(threadMeta.id)) : '0';
+	let labelPart =
+		typeof threadMeta?.title === 'string' && threadMeta.title.trim()
+			? threadMeta.title.trim()
+			: typeof threadMeta?.channel_slug === 'string' && threadMeta.channel_slug.trim()
+				? threadMeta.channel_slug.trim()
+				: 'private';
+	labelPart = labelPart.replace(/^#+/, '').trim().toLowerCase() || 'private';
+	return `private:${idPart}:${labelPart}`;
 }
 
 function pseudoStripRouteIconSvg(slug, routeIconClass = 'chat-page-sidebar-channel-route-icon') {
@@ -481,6 +500,58 @@ export function getSidebarPseudoStripRowsMerged(channelRowsRaw) {
 	return [...out, buildSidebarHelpStripRow()];
 }
 
+/**
+ * Build a stable URL-safe display segment for optional thread-name paths.
+ * @param {string} raw
+ * @returns {string}
+ */
+function toChatThreadNamePathSegment(raw) {
+	const s = String(raw || '')
+		.trim()
+		.replace(/^#+/, '')
+		.toLowerCase();
+	if (!s) return '';
+	return s
+		.replace(/['"]/g, '')
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-+|-+$/g, '')
+		.slice(0, 64);
+}
+
+/**
+ * Canonical thread URL: `/chat/t/:id` with optional display segment.
+ * @param {number} threadId
+ * @param {{ title?: unknown, channel_slug?: unknown } | null | undefined} meta
+ */
+function buildCanonicalChatThreadPath(threadId, meta) {
+	const id = Number(threadId);
+	if (!Number.isFinite(id) || id <= 0) return '/chat';
+	let label = '';
+	if (meta && typeof meta === 'object') {
+		if (typeof meta.title === 'string' && meta.title.trim()) {
+			label = meta.title.trim();
+		} else if (typeof meta.channel_slug === 'string' && meta.channel_slug.trim()) {
+			label = meta.channel_slug.trim();
+		}
+	}
+	const seg = toChatThreadNamePathSegment(label);
+	const base = `/chat/t/${encodeURIComponent(String(id))}`;
+	return seg ? `${base}/${encodeURIComponent(seg)}` : base;
+}
+
+/**
+ * @param {{ type?: unknown, visibility?: unknown } | null | undefined} meta
+ * @returns {boolean}
+ */
+function isPrivateChannelMeta(meta) {
+	return (
+		meta &&
+		typeof meta === 'object' &&
+		meta.type === 'channel' &&
+		String(meta.visibility || '').trim().toLowerCase() === 'private'
+	);
+}
+
 /** @param {object} meta */
 export function buildChatThreadUrl(meta) {
 	if (!meta) return '/connect#chat';
@@ -491,8 +562,14 @@ export function buildChatThreadUrl(meta) {
 		const h = typeof meta.href === 'string' && meta.href.trim() ? meta.href.trim() : SIDEBAR_HELP_STRIP_HREF;
 		return h.startsWith('/') ? h : SIDEBAR_HELP_STRIP_HREF;
 	}
-	if (meta.type === 'channel' && meta.channel_slug) {
-		return `/chat/c/${encodeURIComponent(String(meta.channel_slug))}`;
+	if (meta.type === 'channel') {
+		const id = Number(meta.id);
+		if (Number.isFinite(id) && id > 0 && isPrivateChannelMeta(meta)) {
+			return buildCanonicalChatThreadPath(id, meta);
+		}
+		if (meta.channel_slug) {
+			return `/chat/c/${encodeURIComponent(String(meta.channel_slug))}`;
+		}
 	}
 	if (meta.type === 'dm') {
 		const un = typeof meta.other_user?.user_name === 'string' ? meta.other_user.user_name.trim() : '';
@@ -519,6 +596,8 @@ export function normalizeChatNavPathForCompare(p) {
 	if (s === '/explore') return '/chat/c/explore';
 	if (s === '/creations') return '/chat/c/creations';
 	if (s === SIDEBAR_NOTES_STRIP_HREF) return SIDEBAR_NOTES_STRIP_HREF;
+	const t = s.match(/^\/chat\/t\/(\d+)(?:\/[^/?#]+)?$/i);
+	if (t && t[1]) return `/chat/t/${t[1]}`;
 	return s;
 }
 
@@ -739,7 +818,8 @@ export function buildChatThreadRowAvatarHtml(t, deps) {
 		'';
 	const isPrivateChannel = t?.type === 'channel' && String(t?.visibility || '').trim().toLowerCase() === 'private';
 	if (isPrivateChannel) {
-		return `<div class="comment-avatar connect-chat-thread-row-channel-avatar chat-page-sidebar-channel-avatar chat-page-sidebar-channel-avatar--icon-only" aria-hidden="true">${privateChannelLockIcon('chat-page-sidebar-channel-route-icon')}</div>`;
+		const color = getAvatarColor(privateChannelColorSeed(t));
+		return `<div class="comment-avatar connect-chat-thread-row-channel-avatar chat-page-sidebar-channel-avatar" style="background: ${color};" aria-hidden="true">${privateChannelLockIcon('chat-page-sidebar-channel-route-icon')}</div>`;
 	}
 	const slugKey = slugRaw.toLowerCase();
 	if (SIDEBAR_TOP_STRIP_CHANNEL_SLUGS.has(slugKey)) {

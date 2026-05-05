@@ -567,6 +567,22 @@ function normalizeDmPathUsername(raw) {
 }
 
 /**
+ * Same channel tag rules as API `normalizeTag`.
+ * Strip leading `#`, lowercase, require `[a-z0-9][a-z0-9_-]{1,31}`.
+ * @param {string} input
+ * @returns {string | null}
+ */
+function normalizeChannelTagLikeApi(input) {
+	const source = typeof input === 'string' ? input : '';
+	if (!source) return null;
+	const raw = source.replace(/^#+/, '');
+	if (!raw) return null;
+	if (raw !== raw.trim()) return null;
+	if (!/^[a-z0-9][a-z0-9_-]{1,31}$/.test(raw)) return null;
+	return raw;
+}
+
+/**
  * @param {string} pathname
  * @returns {{ kind: 'empty' } | { kind: 'invalid' } | { kind: 'thread', threadId: number } | { kind: 'channel', slug: string } | { kind: 'dm', userId: number } | { kind: 'dm', userName: string } | { kind: 'dm', self: true }}
  */
@@ -627,6 +643,84 @@ function parseChatPathname(pathname) {
 		if (Number.isFinite(tid) && tid > 0) return { kind: 'thread', threadId: tid };
 	}
 	return { kind: 'invalid' };
+}
+
+/**
+ * Build a stable URL-safe display segment for optional chat thread name paths.
+ * @param {string} raw
+ * @returns {string}
+ */
+function toChatThreadNamePathSegment(raw) {
+	const s = String(raw || '')
+		.trim()
+		.replace(/^#+/, '')
+		.toLowerCase();
+	if (!s) return '';
+	return s
+		.replace(/['"]/g, '')
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-+|-+$/g, '')
+		.slice(0, 64);
+}
+
+/**
+ * Canonical thread URL: `/chat/t/:threadId` with optional display segment.
+ * @param {number} threadId
+ * @param {{ title?: unknown, channel_slug?: unknown } | null | undefined} meta
+ * @returns {string}
+ */
+function buildCanonicalChatThreadPath(threadId, meta) {
+	const tid = Number(threadId);
+	if (!Number.isFinite(tid) || tid <= 0) return '/chat';
+	let label = '';
+	if (meta && typeof meta === 'object') {
+		if (typeof meta.title === 'string' && meta.title.trim()) {
+			label = meta.title.trim();
+		} else if (typeof meta.channel_slug === 'string' && meta.channel_slug.trim()) {
+			label = meta.channel_slug.trim();
+		}
+	}
+	const seg = toChatThreadNamePathSegment(label);
+	const base = `/chat/t/${encodeURIComponent(String(tid))}`;
+	return seg ? `${base}/${encodeURIComponent(seg)}` : base;
+}
+
+/**
+ * Whether this thread meta describes a private channel.
+ * @param {{ type?: unknown, visibility?: unknown } | null | undefined} meta
+ * @returns {boolean}
+ */
+function isPrivateChannelMeta(meta) {
+	return (
+		meta &&
+		typeof meta === 'object' &&
+		meta.type === 'channel' &&
+		String(meta.visibility || '').trim().toLowerCase() === 'private'
+	);
+}
+
+/**
+ * Route model:
+ * - private channels: `/chat/t/:id/:name`
+ * - public channels: `/chat/c/:slug`
+ * - everything else: `/chat/t/:id`
+ * @param {number} threadId
+ * @param {{ type?: unknown, visibility?: unknown, channel_slug?: unknown, title?: unknown } | null | undefined} meta
+ * @returns {string}
+ */
+function buildPreferredChatThreadPath(threadId, meta) {
+	if (isPrivateChannelMeta(meta)) {
+		return buildCanonicalChatThreadPath(threadId, meta);
+	}
+	if (meta && typeof meta === 'object' && meta.type === 'channel') {
+		const slug = typeof meta.channel_slug === 'string' ? meta.channel_slug.trim() : '';
+		if (slug) return `/chat/c/${encodeURIComponent(slug)}`;
+	}
+	const tid = Number(threadId);
+	if (Number.isFinite(tid) && tid > 0) {
+		return `/chat/t/${encodeURIComponent(String(tid))}`;
+	}
+	return '/chat';
 }
 
 /** Slugs where canvases are disabled in the client (pseudo-column channels). `#feedback` is allowed; keep aligned with `CANVAS_DISALLOWED_CHANNEL_SLUGS` in api_routes/chat.js */
@@ -1318,6 +1412,37 @@ export async function initChatPage(root, options = {}) {
 		}
 		dispatchChatUnreadRefresh();
 		void refreshChatSidebar({ skipThreadsFetch: true });
+	}
+
+	async function leaveChannelFromSidebar(threadId) {
+		const tid = Number(threadId);
+		if (!Number.isFinite(tid) || tid <= 0) return;
+		const ok = window.confirm('Leave this channel?');
+		if (!ok) return;
+		const wasActive = Number(activeThreadId) === tid;
+		try {
+			const res = await fetch(`/api/chat/threads/${tid}/leave`, {
+				method: 'POST',
+				credentials: 'include',
+				headers: { Accept: 'application/json' }
+			});
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				throw new Error(data?.message || data?.error || `Could not leave channel (${res.status})`);
+			}
+			await loadChatThreads({ forceNetwork: true });
+			await refreshChatSidebar({ skipThreadsFetch: true });
+			if (wasActive) {
+				history.pushState({ prsnChat: true }, '', '/chat/c/feed');
+				await openThreadForCurrentPath();
+			}
+		} catch (err) {
+			const errEl = root.querySelector('[data-chat-error]');
+			if (errEl instanceof HTMLElement) {
+				errEl.hidden = false;
+				errEl.textContent = err?.message || 'Could not leave channel.';
+			}
+		}
 	}
 
 	function openServerDetailsFromSidebarButton(settingsBtn) {
@@ -3208,6 +3333,21 @@ export async function initChatPage(root, options = {}) {
 	function buildChatHeaderAvatarHtml(meta, opts = {}) {
 		const mobile = opts?.mobile === true;
 		const sizeCls = mobile ? 'chat-page-header-avatar--mobile' : 'chat-page-header-avatar--desktop';
+		const privateLockIconHtml = (iconCls) => {
+			const cls = escapeHtml(String(iconCls || '').trim() || 'chat-page-header-route-icon');
+			return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="11" width="13" height="8.5" rx="2"></rect><path d="M8.5 11V8.5a3.5 3.5 0 1 1 7 0V11"></path></svg>`;
+		};
+		const privateChannelColorSeed = (threadMeta) => {
+			const idPart = Number.isFinite(Number(threadMeta?.id)) ? String(Number(threadMeta.id)) : '0';
+			let labelPart =
+				typeof threadMeta?.title === 'string' && threadMeta.title.trim()
+					? threadMeta.title.trim()
+					: typeof threadMeta?.channel_slug === 'string' && threadMeta.channel_slug.trim()
+						? threadMeta.channel_slug.trim()
+						: 'private';
+			labelPart = labelPart.replace(/^#+/, '').trim().toLowerCase() || 'private';
+			return `private:${idPart}:${labelPart}`;
+		};
 		if (meta?.type === 'dm') {
 			const ou = meta?.other_user && typeof meta.other_user === 'object' ? meta.other_user : null;
 			const avatarUrl = typeof ou?.avatar_url === 'string' ? ou.avatar_url.trim() : '';
@@ -3255,6 +3395,12 @@ export async function initChatPage(root, options = {}) {
 			if (iconHtml) {
 				return `<span class="chat-page-header-avatar chat-page-header-avatar--pseudo-strip ${sizeCls}" aria-hidden="true">${iconHtml}</span>`;
 			}
+		}
+		const isPrivateChannel = String(meta?.visibility || '').trim().toLowerCase() === 'private';
+		if (isPrivateChannel) {
+			const seed = privateChannelColorSeed(meta);
+			const bg = escapeHtml(getAvatarColor(seed));
+			return `<span class="chat-page-header-avatar chat-page-header-avatar--channel ${sizeCls}" style="background: ${bg};" aria-hidden="true">${privateLockIconHtml('chat-page-header-route-icon')}</span>`;
 		}
 		const seed = slugRaw || String(meta?.title || 'channel').trim().toLowerCase() || 'channel';
 		const bg = escapeHtml(getAvatarColor(seed));
@@ -4363,7 +4509,7 @@ export async function initChatPage(root, options = {}) {
 			}
 			const dec = await decryptPrivateText(encName, k);
 			if (dec && dec.trim()) {
-				t.title = dec.trim();
+				t.title = `#${dec.trim()}`;
 			}
 		}
 	}
@@ -5514,15 +5660,24 @@ export async function initChatPage(root, options = {}) {
 				e.stopPropagation();
 				const tid = Number(settingsBtn.getAttribute('data-chat-row-menu-thread-id'));
 				const sid = Number(settingsBtn.getAttribute('data-chat-server-settings'));
+				const rowKind = String(settingsBtn.getAttribute('data-chat-row-menu-kind') || '').trim().toLowerCase();
 				const canOpenServerDetails = Number.isFinite(sid) && sid > 0;
+				const canLeaveChannel = rowKind === 'channel' && Number.isFinite(tid) && tid > 0;
+				const extraItems = [];
+				if (canOpenServerDetails) extraItems.push({ action: 'server-details', label: 'Server details' });
+				if (canLeaveChannel) extraItems.push({ action: 'leave-channel', label: 'Leave channel' });
 				openDmSidebarGearMenu(settingsBtn, {
 					showProfile: false,
 					showPinToggle: false,
 					onMarkAsRead: () => markSidebarThreadRead(tid),
-					extraItems: canOpenServerDetails ? [{ action: 'server-details', label: 'Server details' }] : [],
+					extraItems,
 					onAction: (action) => {
 						if (action === 'server-details') {
 							openServerDetailsFromSidebarButton(settingsBtn);
+							return;
+						}
+						if (action === 'leave-channel') {
+							void leaveChannelFromSidebar(tid);
 						}
 					}
 				});
@@ -5608,6 +5763,7 @@ export async function initChatPage(root, options = {}) {
 		chatSidebarModalsApi = initChatSidebarModals({
 			getThreads: () => chatThreads || [],
 			getViewerId: () => chatViewerId,
+			getViewerCanCreatePrivateChannel: () => Boolean(chatViewerIsFounder || chatViewerIsAdmin),
 			navigateToChatPath: (pathname) => {
 				const path = pathname.startsWith('/') ? pathname : `/${pathname}`;
 				markThreadUiPending();
@@ -5796,10 +5952,18 @@ export async function initChatPage(root, options = {}) {
 	function createChatMessageRowElement(m, i, messages, viewerId, rowOpts) {
 		const senderId = Number(m.sender_id);
 		const isSelf = Number.isFinite(viewerId) && senderId === viewerId;
+		const systemEventRaw =
+			m?.meta && typeof m.meta === 'object' && !Array.isArray(m.meta) ? m.meta.system_event : null;
+		const systemEvent =
+			systemEventRaw && typeof systemEventRaw === 'object' && !Array.isArray(systemEventRaw)
+				? systemEventRaw
+				: null;
+		const isChannelInviteSystemEvent =
+			String(systemEvent?.kind || '').trim().toLowerCase() === 'channel_invite_sent';
 		const prev = i > 0 ? messages[i - 1] : null;
-		const isGroupContinue = isChatMessageGroupContinue(prev, m);
+		const isGroupContinue = isChannelInviteSystemEvent ? false : isChatMessageGroupContinue(prev, m);
 		const row = document.createElement('div');
-		row.className = `connect-chat-msg${isSelf ? ' is-self' : ''}${isGroupContinue ? ' is-group-continue' : ''}`;
+		row.className = `connect-chat-msg${isSelf ? ' is-self' : ''}${isGroupContinue ? ' is-group-continue' : ''}${isChannelInviteSystemEvent ? ' connect-chat-msg--system-event' : ''}`;
 		row.setAttribute('data-chat-message-id', String(m.id));
 		const effectiveUnread = rowOpts.effectiveUnread;
 		const vStart = rowOpts.vStart;
@@ -5847,7 +6011,10 @@ export async function initChatPage(root, options = {}) {
 		const safeBody = processUserText(m.body ?? '');
 		const bubble = document.createElement('div');
 		bubble.className = 'connect-chat-msg-bubble';
-		if (canvasMeta) {
+		if (isChannelInviteSystemEvent) {
+			bubble.classList.add('connect-chat-msg-bubble--system-event');
+			bubble.innerHTML = `<div class="chat-channel-system-event-line">--- ${safeBody} ---</div>`;
+		} else if (canvasMeta) {
 			bubble.classList.add('connect-chat-msg-bubble--canvas');
 			const preview = processUserText(m.body ?? '');
 			bubble.innerHTML = `<div class="connect-chat-canvas-inline"><div class="connect-chat-canvas-inline-title">${escapeHtml(canvasMeta.title)}</div><div class="connect-chat-canvas-inline-preview">${preview}</div></div>`;
@@ -5885,7 +6052,7 @@ export async function initChatPage(root, options = {}) {
 			bubble.appendChild(editedLabelEl);
 		}
 		normalizeChatBubbleInlineImageSpacing(bubble);
-		if (!isGroupContinue) {
+		if (!isGroupContinue && !isChannelInviteSystemEvent) {
 			const metaLine = document.createElement('div');
 			metaLine.className = 'connect-chat-msg-meta';
 			const handleRaw = m.sender_user_name != null ? String(m.sender_user_name).trim() : '';
@@ -5941,7 +6108,7 @@ export async function initChatPage(root, options = {}) {
 			inner.appendChild(footer);
 		}
 		row.appendChild(inner);
-		if (rowOpts.showHoverBar) {
+		if (rowOpts.showHoverBar && !isChannelInviteSystemEvent) {
 			const hoverBar = buildChatMessageHoverBarElement(m, viewerId, rowOpts);
 			if (hoverBar) row.appendChild(hoverBar);
 		}
@@ -8440,7 +8607,8 @@ export async function initChatPage(root, options = {}) {
 				if (Number.isFinite(threadId) && threadId > 0) {
 					await loadChatThreads({ forceNetwork: true });
 					await refreshChatSidebar({ skipThreadsFetch: true });
-					history.pushState({ prsnChat: true }, '', `/chat/t/${encodeURIComponent(String(threadId))}`);
+					const meta = (chatThreads || []).find((t) => Number(t.id) === threadId);
+					history.pushState({ prsnChat: true }, '', buildPreferredChatThreadPath(threadId, meta));
 					await openThreadForCurrentPath();
 				}
 			})().catch(() => {
@@ -8816,8 +8984,10 @@ export async function initChatPage(root, options = {}) {
 	}
 
 	async function createPrivateChannelFromCommand(rawName) {
-		const name = String(rawName || '').trim();
-		if (!name) throw new Error('Private channel name required. Example: /private game-night');
+		const name = normalizeChannelTagLikeApi(rawName || '');
+		if (!name) {
+			throw new Error('Private channel tag must be 2–32 chars: lowercase letters, numbers, _, -.');
+		}
 		const secret = bytesToB64(crypto.getRandomValues(new Uint8Array(32)));
 		const encName = await encryptPrivateText(name, secret);
 		const encProbe = await encryptPrivateText(CHAT_PRIVATE_PROBE_TEXT, secret);
@@ -8861,7 +9031,8 @@ export async function initChatPage(root, options = {}) {
 		}
 		await loadChatThreads({ forceNetwork: true });
 		await refreshChatSidebar({ skipThreadsFetch: true });
-		history.pushState({ prsnChat: true }, '', `/chat/t/${encodeURIComponent(String(threadId))}`);
+		const meta = (chatThreads || []).find((t) => Number(t.id) === threadId);
+		history.pushState({ prsnChat: true }, '', buildPreferredChatThreadPath(threadId, meta));
 		await openThreadForCurrentPath();
 		return inviteUrl;
 	}
@@ -8955,9 +9126,11 @@ export async function initChatPage(root, options = {}) {
 				const recipients = parseInviteRecipientsFromCommand(inviteDmCmdMatch[1] || '');
 				const sentCount = await sendInviteDmToRecipients(recipients);
 				if (errEl instanceof HTMLElement) {
-					errEl.hidden = false;
-					errEl.textContent =
-						sentCount > 0 ? `Invite sent to ${sentCount} user${sentCount === 1 ? '' : 's'}.` : 'No invites sent.';
+					errEl.hidden = true;
+					errEl.textContent = '';
+				}
+				if (sentCount > 0) {
+					await loadMessages();
 				}
 			} catch (err) {
 				if (errEl instanceof HTMLElement) {
@@ -9269,6 +9442,11 @@ export async function initChatPage(root, options = {}) {
 				await refreshChatSidebar({ skipThreadsFetch: true });
 				activeThreadId = parsed.threadId;
 				const meta = (chatThreads || []).find((t) => Number(t.id) === parsed.threadId);
+				const canonicalPath = buildPreferredChatThreadPath(parsed.threadId, meta);
+				const curPath = String(window.location.pathname || '');
+				if (curPath !== canonicalPath) {
+					history.replaceState({ prsnChat: true }, '', canonicalPath);
+				}
 				updateTitleFromMeta(meta);
 				await loadMessages();
 				await bindRoomBroadcast(activeThreadId);
@@ -9396,6 +9574,11 @@ export async function initChatPage(root, options = {}) {
 				);
 				if (match) {
 					activeThreadId = Number(match.id);
+					const canonicalPath = buildPreferredChatThreadPath(activeThreadId, match);
+					const curPath = String(window.location.pathname || '');
+					if (curPath !== canonicalPath) {
+						history.replaceState({ prsnChat: true }, '', canonicalPath);
+					}
 					updateTitleFromMeta(match);
 					await loadMessages();
 					await bindRoomBroadcast(activeThreadId);
@@ -9418,6 +9601,11 @@ export async function initChatPage(root, options = {}) {
 				if (Number.isFinite(tid) && tid > 0) {
 					activeThreadId = tid;
 					const meta = (chatThreads || []).find((t) => Number(t.id) === tid);
+					const canonicalPath = buildPreferredChatThreadPath(activeThreadId, meta);
+					const curPath = String(window.location.pathname || '');
+					if (curPath !== canonicalPath) {
+						history.replaceState({ prsnChat: true }, '', canonicalPath);
+					}
 					updateTitleFromMeta(meta);
 					await loadMessages();
 					await bindRoomBroadcast(activeThreadId);

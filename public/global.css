@@ -5155,53 +5155,40 @@ body.chat-page main.chat-page-outer {
 
 	.chat-page-chat-modal-panel--channels .modal-body {
 		gap: 0;
-		padding-top: 16px;
+		padding-top: 18px;
 	}
 
 	.chat-page-chat-modal-panel--channels .chat-page-chat-modal-lead {
 		margin: 0 0 16px;
 	}
 
-	.chat-page-chat-modal-private-section {
-		margin-top: 6px;
-		margin-bottom: 16px;
-		padding-bottom: 14px;
-		border-bottom: 1px solid var(--border);
+	.chat-page-chat-modal-channel-group {
+		margin: 0 0 14px;
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
-	}
-
-	.chat-page-chat-modal-subhead--private {
-		margin: 0;
-	}
-
-	.chat-page-chat-modal-field {
-		display: flex;
-		flex-direction: column;
-		gap: 0;
 		min-width: 0;
 	}
 
-	.chat-page-chat-modal-panel--channels .chat-page-chat-modal-field .chat-page-chat-modal-label {
+	.chat-page-chat-modal-panel--channels .chat-page-chat-modal-channel-group .chat-page-chat-modal-label {
 		margin-bottom: 8px;
 	}
 
-	.chat-page-chat-modal-panel--channels .chat-page-chat-modal-field .chat-page-chat-modal-subhead {
-		margin: 0 0 8px;
+	.chat-page-chat-modal-panel--channels .chat-page-chat-modal-channel-group .chat-page-chat-modal-subhead {
+		margin: 0 0 6px;
 	}
 
 	.chat-page-chat-modal-hint--tight {
-		margin-top: 8px;
+		margin-top: 4px;
 	}
 
 	.chat-page-chat-modal-channels-browse {
-		margin-top: 18px;
+		margin-top: 2px;
 		padding-top: 14px;
 		border-top: 1px solid var(--border);
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: 10px;
 		min-height: 0;
 	}
 
@@ -5220,6 +5207,21 @@ body.chat-page main.chat-page-outer {
 	.chat-page-chat-modal-hint code {
 		font-size: 0.8125rem;
 	}
+
+.chat-page-chat-modal-hint--validation {
+	visibility: hidden;
+	min-height: 1.3rem;
+}
+
+.chat-page-chat-modal-hint--validation.is-visible {
+	visibility: visible;
+	color: #ef4444;
+}
+
+.chat-page-chat-modal-input.is-invalid {
+	border-color: #ef4444;
+	box-shadow: 0 0 0 1px #ef4444 inset;
+}
 
 	.chat-page-chat-modal-label {
 		display: block;
@@ -5678,6 +5680,11 @@ body.chat-page main.chat-page-outer {
 	display: block;
 	width: 17px;
 	height: 17px;
+}
+
+.chat-page-sidebar-lock-icon {
+	width: 14px;
+	height: 14px;
 }
 
 	.chat-page-sidebar-row-body {
@@ -9359,6 +9366,24 @@ body.blog-edit-page .blog-edit-route {
 
 .connect-chat-msg-bubble--timed-invite {
 	padding: 0.35rem 0.95rem 0.45rem;
+}
+
+.connect-chat-msg--system-event {
+	padding-top: 6px;
+	padding-bottom: 6px;
+}
+
+.connect-chat-msg-bubble--system-event {
+	padding: 0;
+}
+
+.chat-channel-system-event-line {
+	font-size: 0.8rem;
+	line-height: 1.25;
+	letter-spacing: 0.02em;
+	text-align: center;
+	color: var(--text-muted);
+	opacity: 0.9;
 }
 
 .chat-timed-message {

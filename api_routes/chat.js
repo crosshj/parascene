@@ -57,6 +57,7 @@ const INVITE_TOKEN_VERSION = "ci1";
 const INVITE_TOKEN_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 const TIMED_MESSAGE_KIND_CHANNEL_INVITE = "channel_invite";
 const TIMED_MESSAGE_DEFAULT_INVITE_TTL_MS = 1000 * 60 * 60 * 24 * 3;
+const SYSTEM_EVENT_KIND_CHANNEL_INVITE_SENT = "channel_invite_sent";
 
 /**
  * Client-only pseudo lanes (no real thread); POST /api/chat/channels rejects these so they are not
@@ -321,6 +322,22 @@ function decryptPrivateTextWithSecret(token, secret) {
 	}
 }
 
+function encryptPrivateTextWithSecret(plainText, secret) {
+	const sec = String(secret || "");
+	if (!sec) return null;
+	try {
+		const iv = crypto.randomBytes(12);
+		const key = crypto.createHash("sha256").update(sec).digest();
+		const enc = crypto.createCipheriv("aes-256-gcm", key, iv);
+		const ciphertext = Buffer.concat([enc.update(String(plainText || ""), "utf8"), enc.final()]);
+		const tag = enc.getAuthTag();
+		const payload = Buffer.concat([ciphertext, tag]);
+		return `${base64UrlEncodeBuffer(iv)}.${base64UrlEncodeBuffer(payload)}`;
+	} catch {
+		return null;
+	}
+}
+
 function parseTimedMessageMeta(rawMeta) {
 	const m = rawMeta && typeof rawMeta === "object" && !Array.isArray(rawMeta) ? rawMeta : null;
 	if (!m) return null;
@@ -547,6 +564,15 @@ export default function createChatRoutes({ queries, storage }) {
 		return `${who} invited you to a private channel.`;
 	}
 
+function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
+	const inviter = String(inviterHandle || "").trim() || "Someone";
+	const invited = Array.isArray(invitedHandles)
+		? invitedHandles.map((h) => String(h || "").trim()).filter(Boolean)
+		: [];
+	const invitedText = invited.length > 0 ? invited.join(", ") : "someone";
+	return `${inviter} invited ${invitedText} to the channel`;
+}
+
 	async function isMember(sb, threadId, userId) {
 		const { data, error } = await sb
 			.from("prsn_chat_members")
@@ -725,7 +751,7 @@ export default function createChatRoutes({ queries, storage }) {
 						const encName =
 							typeof threadMeta.enc_name === "string" ? String(threadMeta.enc_name).trim() : "";
 						const dec = k && encName ? decryptPrivateTextWithSecret(encName, k) : null;
-						title = dec && dec.trim() ? dec.trim() : "Private channel";
+						title = dec && dec.trim() ? `#${dec.trim()}` : "#private";
 					}
 					return {
 						id,
@@ -986,6 +1012,18 @@ export default function createChatRoutes({ queries, storage }) {
 				message: "enc_name, enc_probe, and secret_k are required for private channels"
 			});
 		}
+		if (isPrivate) {
+			const [isAdmin, isFounder] = await Promise.all([
+				viewerIsAdminRole(userId),
+				viewerIsFounderPlan(userId)
+			]);
+			if (!isAdmin && !isFounder) {
+				return res.status(403).json({
+					error: "Forbidden",
+					message: "Only founders or admins can create private channels"
+				});
+			}
+		}
 
 		if (POST_REJECT_PSEUDO_CHANNEL_SLUGS.has(slug)) {
 			return res.status(400).json({
@@ -1213,18 +1251,36 @@ export default function createChatRoutes({ queries, storage }) {
 					: typeof inviterProfile?.user_name === "string" && inviterProfile.user_name.trim()
 						? `@${inviterProfile.user_name.trim()}`
 						: "A member";
+			const inviterHandle =
+				typeof inviterProfile?.user_name === "string" && inviterProfile.user_name.trim()
+					? `@${inviterProfile.user_name.trim()}`
+					: inviterName;
 			const sent = [];
+			const invitedHandles = [];
 			for (const r of recipients) {
 				let toUserId = null;
+				let toUserHandle = "";
 				const idCandidate = Number(r?.user_id ?? r?.userId);
 				if (Number.isFinite(idCandidate) && idCandidate > 0) {
 					toUserId = idCandidate;
+					if (typeof queries?.selectUserProfileByUserId?.get === "function") {
+						const p = await queries.selectUserProfileByUserId.get(toUserId).catch(() => null);
+						if (typeof p?.user_name === "string" && p.user_name.trim()) {
+							toUserHandle = `@${p.user_name.trim()}`;
+						}
+					}
 				} else {
 					const un = normalizeDmUsernameInput(r?.user_name ?? r?.userName ?? "");
 					if (un && typeof queries?.selectUserProfileByUsername?.get === "function") {
 						const p = await queries.selectUserProfileByUsername.get(un).catch(() => null);
 						const uid = Number(p?.user_id);
-						if (Number.isFinite(uid) && uid > 0) toUserId = uid;
+						if (Number.isFinite(uid) && uid > 0) {
+							toUserId = uid;
+							toUserHandle =
+								typeof p?.user_name === "string" && p.user_name.trim()
+									? `@${p.user_name.trim()}`
+									: "";
+						}
 					}
 				}
 				if (!Number.isFinite(Number(toUserId)) || Number(toUserId) <= 0) continue;
@@ -1277,7 +1333,50 @@ export default function createChatRoutes({ queries, storage }) {
 				const mem = await sb.from("prsn_chat_members").select("user_id").eq("thread_id", dmThreadId);
 				const uids = Array.isArray(mem.data) ? mem.data.map((x) => x.user_id) : [];
 				void broadcastUserInboxDirty(dmThreadId, uids);
+				if (toUserHandle) invitedHandles.push(toUserHandle);
 				sent.push({ to_user_id: Number(toUserId), dm_thread_id: dmThreadId });
+			}
+			if (sent.length > 0) {
+				const channelSystemBodyPlain = buildChannelInviteSystemBody({
+					inviterHandle,
+					invitedHandles
+				});
+				const channelSystemCipher = encryptPrivateTextWithSecret(channelSystemBodyPlain, secretK);
+				const channelSystemBody = channelSystemCipher
+					? `${CHAT_PRIVATE_BODY_PREFIX}${channelSystemCipher}`
+					: `${CHAT_PRIVATE_BODY_PREFIX}`;
+				const systemMeta = {
+					system_event: {
+						kind: SYSTEM_EVENT_KIND_CHANNEL_INVITE_SENT,
+						inviter_user_id: Number(userId),
+						invited_user_ids: sent.map((x) => Number(x.to_user_id)).filter((n) => Number.isFinite(n) && n > 0)
+					}
+				};
+				const insSystem = await sb
+					.from("prsn_chat_messages")
+					.insert({
+						thread_id: threadId,
+						sender_id: userId,
+						body: channelSystemBody,
+						meta: systemMeta
+					})
+					.select("id")
+					.single();
+				if (!insSystem.error) {
+					const sysMid = Number(insSystem.data?.id);
+					if (Number.isFinite(sysMid) && sysMid > 0) {
+						const { error: readErr } = await sb
+							.from("prsn_chat_members")
+							.update({ last_read_message_id: sysMid })
+							.eq("thread_id", threadId)
+							.eq("user_id", userId);
+						if (readErr) throw readErr;
+						void broadcastRoomDirty(threadId, sysMid);
+						const mem = await sb.from("prsn_chat_members").select("user_id").eq("thread_id", threadId);
+						const uids = Array.isArray(mem.data) ? mem.data.map((x) => x.user_id) : [];
+						void broadcastUserInboxDirty(threadId, uids);
+					}
+				}
 			}
 			return res.status(200).json({
 				ok: true,
@@ -1403,7 +1502,7 @@ export default function createChatRoutes({ queries, storage }) {
 					const encName =
 						typeof thread?.meta?.enc_name === "string" ? thread.meta.enc_name.trim() : "";
 					const dec = k && encName ? decryptPrivateTextWithSecret(encName, k) : null;
-					out.title = dec && dec.trim() ? dec.trim() : "Private channel";
+					out.title = dec && dec.trim() ? `#${dec.trim()}` : "#private";
 				} else {
 					out.title = slug ? `#${slug}` : "Channel";
 				}
