@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "prebuild": "node scripts/check-rollup-devdeps.mjs",
-    "build": "npx rollup -c src/rollup.config.mjs",
+    "build": "rollup -c src/rollup.config.mjs",
     "watch": "NODE_ENV=dev PORT=2367 nodemon api/index.js",
+    "install:local": "node package.local.js",
     "reset": "node db/reset.js",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
     "test:int": "RUN_INTEGRATION_TESTS=true NODE_OPTIONS=--experimental-vm-modules jest --config jest.config.js --testPathIgnorePatterns '^$' --testMatch '**/test/**/*.integration.test.js'"
@@ -36,12 +37,9 @@
     "better-sqlite3": "^9.6.0"
   },
   "devDependencies": {
-    "@jest/globals": "^30.2.0",
     "@rollup/plugin-node-resolve": "^16.0.3",
     "@rollup/plugin-terser": "^1.0.0",
     "clean-css": "^5.3.3",
-    "jest": "^30.2.0",
-    "nodemon": "^3.1.11",
     "rollup": "^4.60.2"
   },
   "overrides": {

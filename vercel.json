@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "installCommand": "npm install --include=dev",
+  "installCommand": "npm ci --include=dev",
   "buildCommand": "npm run build",
   "redirects": [
     {
