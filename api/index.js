@@ -59,9 +59,9 @@ function shouldLogStartup() {
 
 // Handle unhandled promise rejections
 process.on("unhandledRejection", (reason, promise) => {
-	// console.error("Unhandled Promise Rejection:", reason);
+	console.error("[Startup] Unhandled Promise Rejection:", reason);
 	if (reason instanceof Error) {
-		// console.error("Error stack:", reason.stack);
+		console.error("Error stack:", reason.stack);
 	}
 	// Don't exit in production, but log the error
 	if (process.env.NODE_ENV === "production") {
@@ -70,6 +70,14 @@ process.on("unhandledRejection", (reason, promise) => {
 		// console.error("Exiting due to unhandled rejection in development");
 		process.exit(1);
 	}
+});
+
+process.on("uncaughtException", (error) => {
+	console.error("[Startup] Uncaught Exception:", error);
+	if (error instanceof Error) {
+		console.error("Error stack:", error.stack);
+	}
+	process.exit(1);
 });
 
 const app = express();
@@ -100,14 +108,13 @@ try {
 		// console.log("[Startup] Database initialized successfully");
 	}
 } catch (error) {
-	if (shouldLogStartup()) {
-		// console.error("[Startup] Failed to initialize database:", error);
-		// console.error("[Startup] Error details:", error.message);
-		if (error.message?.includes("Missing required env var")) {
-			// console.error("\n[Startup] Please ensure all required environment variables are set.");
-			// console.error("[Startup] For Supabase: SUPABASE_URL and SUPABASE_ANON_KEY are required.");
-		}
+	console.error("[Startup] Failed to initialize database:", error);
+	console.error("[Startup] Error details:", error?.message || String(error));
+	if (error.message?.includes("Missing required env var")) {
+		console.error("\n[Startup] Please ensure all required environment variables are set.");
+		console.error("[Startup] For Supabase: SUPABASE_URL and SUPABASE_ANON_KEY are required.");
 	}
+
 	process.exit(1);
 }
 

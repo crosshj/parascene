@@ -12,6 +12,7 @@ let deleteCreatedImageComment;
 let updateCreatedImageComment;
 let processUserText;
 let hydrateUserTextLinks;
+let hydrateRichUserTextEmbeds;
 let attachAutoGrowTextarea;
 let attachMentionSuggest;
 let addPageUsers;
@@ -28,6 +29,8 @@ let creditIcon;
 let eyeHiddenIcon;
 let shareIcon;
 let sparkleIcon;
+let sendIcon;
+let plusIcon;
 let REACTION_ORDER;
 let REACTION_ICONS;
 let smileIcon;
@@ -39,6 +42,7 @@ let skeletonCircle;
 let skeletonPill;
 let buildCreationCardShell;
 let renderCommentAvatarHtml;
+let uploadImageFile;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -80,6 +84,7 @@ async function loadDeps() {
 		const userTextMod = await import(`/shared/userText.js${qs}`);
 		processUserText = userTextMod.processUserText;
 		hydrateUserTextLinks = userTextMod.hydrateUserTextLinks;
+		hydrateRichUserTextEmbeds = userTextMod.hydrateRichUserTextEmbeds;
 
 		const autogrowMod = await import(`/shared/autogrow.js${qs}`);
 		attachAutoGrowTextarea = autogrowMod.attachAutoGrowTextarea;
@@ -112,6 +117,8 @@ async function loadDeps() {
 		eyeHiddenIcon = iconsMod.eyeHiddenIcon;
 		shareIcon = iconsMod.shareIcon;
 		sparkleIcon = iconsMod.sparkleIcon;
+		sendIcon = iconsMod.sendIcon;
+		plusIcon = iconsMod.plusIcon;
 		REACTION_ORDER = iconsMod.REACTION_ORDER;
 		REACTION_ICONS = iconsMod.REACTION_ICONS;
 		smileIcon = iconsMod.smileIcon;
@@ -131,6 +138,9 @@ async function loadDeps() {
 
 		const commentItemMod = await import(`/shared/commentItem.js${qs}`);
 		renderCommentAvatarHtml = commentItemMod.renderCommentAvatarHtml;
+
+		const createSubmitMod = await import(`/shared/createSubmit.js${qs}`);
+		uploadImageFile = createSubmitMod.uploadImageFile;
 	})();
 	return _depsPromise;
 }
@@ -2347,14 +2357,20 @@ async function loadCreation() {
 						viewerInitial)}
 				</div>
 				<div class="comment-input-body">
-					<textarea class="comment-textarea" rows="1" placeholder="What do you like about this creation?"
-						data-comment-textarea></textarea>
-					<div class="comment-submit-row" data-comment-submit-row style="display: none;">
-						<button class="btn-primary comment-submit-btn" type="button" data-comment-submit>
-							<span class="comment-action-btn-label">Post</span>
+					<div class="comment-composer-row">
+						<button type="button" class="comment-input-attach" data-comment-attach
+							aria-label="Attach image">
+							${typeof plusIcon === 'function' ? plusIcon('comment-input-attach-icon') : '+'}
+						</button>
+						<textarea class="comment-textarea comment-textarea--composer" rows="1" placeholder="What do you like about this creation?"
+							data-comment-textarea></textarea>
+						<button class="comment-submit-btn comment-submit-btn--composer" type="button" data-comment-submit>
+							<span class="comment-action-btn-label comment-action-btn-label--arrow" aria-hidden="true">${typeof sendIcon === 'function' ? sendIcon('comment-send-icon') : '➤'}</span>
 							<span class="comment-action-btn-spinner" aria-hidden="true"></span>
 						</button>
+						<input type="file" hidden accept="image/*" data-comment-attach-input />
 					</div>
+					<span class="comment-input-attach-status" data-comment-attach-status aria-live="polite"></span>
 				</div>
 			</div>
 			` : ''}
@@ -3823,8 +3839,10 @@ async function loadCreation() {
 		const commentsSortEl = detailContent.querySelector('[data-comments-sort]');
 		const commentsToolbarEl = detailContent.querySelector('.comments-toolbar');
 		const commentTextarea = detailContent.querySelector('[data-comment-textarea]');
-		const commentSubmitRow = detailContent.querySelector('[data-comment-submit-row]');
 		const commentSubmitBtn = detailContent.querySelector('[data-comment-submit]');
+		const commentAttachBtn = detailContent.querySelector('[data-comment-attach]');
+		const commentAttachInput = detailContent.querySelector('[data-comment-attach-input]');
+		const commentAttachStatus = detailContent.querySelector('[data-comment-attach-status]');
 		const isMobileCommentInputMode = () => {
 			try {
 				return window.matchMedia('(pointer: coarse)').matches || window.innerWidth <= 768;
@@ -3836,6 +3854,8 @@ async function loadCreation() {
 			if (!(btn instanceof HTMLButtonElement)) return;
 			btn.classList.toggle('is-loading', Boolean(loading));
 		};
+		let commentQuickSubmitInFlight = false;
+		let commentComposerBusyPlaceholderPrev = '';
 
 		function setCommentCount(nextCount) {
 			const n = Number(nextCount ?? 0);
@@ -4063,8 +4083,13 @@ async function loadCreation() {
 				`;
 			}).join('');
 
-			// Comments were re-rendered; hydrate any special link labels within them.
-			hydrateUserTextLinks(commentListEl);
+			// Comments were re-rendered; run full chat-style rich hydration so uploaded
+			// images, creation/share links, YouTube URLs, and inline videos render inline.
+			if (typeof hydrateRichUserTextEmbeds === 'function') {
+				hydrateRichUserTextEmbeds(commentListEl);
+			} else {
+				hydrateUserTextLinks(commentListEl);
+			}
 		}
 
 		let activeReactionPicker = null;
@@ -4438,13 +4463,59 @@ async function loadCreation() {
 
 		function setSubmitVisibility() {
 			if (!(commentTextarea instanceof HTMLTextAreaElement)) return;
-			if (!(commentSubmitRow instanceof HTMLElement)) return;
+			if (!(commentSubmitBtn instanceof HTMLButtonElement)) return;
 			const hasText = commentTextarea.value.trim().length > 0;
-			commentSubmitRow.style.display = hasText ? '' : 'none';
+			const isLoading = commentSubmitBtn.classList.contains('is-loading');
+			const forceVisible = commentQuickSubmitInFlight || isLoading;
+			commentSubmitBtn.hidden = !(hasText || forceVisible);
+			if (!commentSubmitBtn.classList.contains('is-loading')) {
+				commentSubmitBtn.disabled = !hasText;
+			}
+			if (commentAttachBtn instanceof HTMLButtonElement) {
+				// Keep comments single-mode: typed text OR media/sticker quick-send.
+				commentAttachBtn.hidden = false;
+				commentAttachBtn.style.visibility = 'visible';
+				commentAttachBtn.disabled = commentQuickSubmitInFlight;
+				commentAttachBtn.classList.toggle('comment-input-attach--text-disabled', hasText);
+				if (hasText) closeCommentAttachChoiceModal();
+			}
 		}
 		const refreshCommentTextarea = commentTextarea instanceof HTMLTextAreaElement
 			? attachAutoGrowTextarea(commentTextarea)
 			: () => { };
+
+		function setCommentComposerBusy(busy, placeholder = 'Posting...') {
+			const on = Boolean(busy);
+			if (commentTextarea instanceof HTMLTextAreaElement) {
+				if (on) {
+					commentComposerBusyPlaceholderPrev = String(commentTextarea.getAttribute('placeholder') || commentTextarea.placeholder || '');
+					commentTextarea.disabled = true;
+					commentTextarea.placeholder = placeholder;
+				} else {
+					commentTextarea.disabled = false;
+					commentTextarea.placeholder = commentComposerBusyPlaceholderPrev || 'What do you like about this creation?';
+				}
+			}
+			if (commentSubmitBtn instanceof HTMLButtonElement) {
+				commentSubmitBtn.hidden = false;
+				commentSubmitBtn.disabled = on;
+				setCommentActionButtonLoading(commentSubmitBtn, on);
+			}
+			setSubmitVisibility();
+		}
+
+		async function submitCommentText(text) {
+			const body = typeof text === 'string' ? text.trim() : '';
+			if (!body) return { ok: false, skipped: true };
+			const res = await postCreatedImageComment(creationId, body)
+				.catch(() => ({ ok: false, status: 0, data: null }));
+			if (!res.ok) {
+				const message = typeof res.data?.error === 'string' ? res.data.error : 'Failed to post comment';
+				throw new Error(message);
+			}
+			await loadComments({ scrollIfHash: false });
+			return { ok: true };
+		}
 
 		if (commentTextarea instanceof HTMLTextAreaElement) {
 			attachMentionSuggest(commentTextarea);
@@ -4466,27 +4537,427 @@ async function loadCreation() {
 			commentSubmitBtn.addEventListener('click', async () => {
 				const text = commentTextarea.value.trim();
 				if (!text) return;
+				if (commentQuickSubmitInFlight) return;
 				commentSubmitBtn.disabled = true;
 				setCommentActionButtonLoading(commentSubmitBtn, true);
 				try {
-					const res = await postCreatedImageComment(creationId, text)
-						.catch(() => ({ ok: false, status: 0, data: null }));
-					if (!res.ok) {
-						const message = typeof res.data?.error === 'string' ? res.data.error : 'Failed to post comment';
-						throw new Error(message);
-					}
-
+					await submitCommentText(text);
 					commentTextarea.value = '';
 					refreshCommentTextarea();
 					setSubmitVisibility();
-
-					// Reload list to ensure correct ordering + count.
-					await loadComments({ scrollIfHash: false });
 				} catch (err) {
 					alert(err?.message || 'Failed to post comment');
 				} finally {
 					commentSubmitBtn.disabled = false;
 					setCommentActionButtonLoading(commentSubmitBtn, false);
+				}
+			});
+		}
+
+		/* Comment media/sticker attachments:
+		 * - primary "+" opens a choice popup ("Upload an image" or "Use a sticker")
+		 * - sticker picker loads/saves URLs in users.meta.comment_stickers
+		 * - selecting any item inserts URL into comment text; renderer handles enrichment */
+		function setCommentAttachStatus(text, { tone } = {}) {
+			if (!(commentAttachStatus instanceof HTMLElement)) return;
+			commentAttachStatus.textContent = String(text || '');
+			commentAttachStatus.classList.toggle('is-error', tone === 'error');
+		}
+
+		function insertCommentText(insertText) {
+			if (!(commentTextarea instanceof HTMLTextAreaElement)) return;
+			const value = String(commentTextarea.value || '');
+			const start = typeof commentTextarea.selectionStart === 'number'
+				? commentTextarea.selectionStart
+				: value.length;
+			const end = typeof commentTextarea.selectionEnd === 'number'
+				? commentTextarea.selectionEnd
+				: value.length;
+			const before = value.slice(0, start);
+			const after = value.slice(end);
+			const needsLeadingNewline = before.length > 0 && !/\n$/.test(before);
+			const needsTrailingNewline = after.length > 0 && !/^\n/.test(after);
+			const insertion = `${needsLeadingNewline ? '\n' : ''}${insertText}${needsTrailingNewline ? '\n' : ''}`;
+			commentTextarea.value = `${before}${insertion}${after}`;
+			const caret = (before + insertion).length;
+			try {
+				commentTextarea.setSelectionRange(caret, caret);
+			} catch {
+				// ignore selection-range errors (textarea not focused, etc.)
+			}
+			commentTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+		}
+
+		let commentStickerUrls = null;
+		let commentAttachChoiceModal = null;
+		let commentStickerModal = null;
+		let commentAttachChoiceOutsideClick = null;
+		let commentAttachChoiceEscape = null;
+		const COMMENT_STICKER_SLOT_LIMIT = 12;
+		let commentStickerUploadSlotIndex = null;
+		let commentStickerLoadingSlotIndex = null;
+		let commentStickerModalBusy = false;
+
+		async function fetchCommentStickerUrls() {
+			if (Array.isArray(commentStickerUrls)) return commentStickerUrls;
+			const res = await fetch('/api/profile/comment-stickers', {
+				method: 'GET',
+				credentials: 'include',
+				headers: { Accept: 'application/json' }
+			}).catch(() => null);
+			if (!res || !res.ok) {
+				commentStickerUrls = [];
+				return commentStickerUrls;
+			}
+			const data = await res.json().catch(() => null);
+			commentStickerUrls = Array.isArray(data?.stickers) ? data.stickers : [];
+			return commentStickerUrls;
+		}
+
+		async function persistCommentStickerUrls(next) {
+			const list = Array.isArray(next) ? next.slice(0, COMMENT_STICKER_SLOT_LIMIT) : [];
+			const res = await fetch('/api/profile/comment-stickers', {
+				method: 'PUT',
+				credentials: 'include',
+				headers: {
+					'Content-Type': 'application/json',
+					Accept: 'application/json'
+				},
+				body: JSON.stringify({ stickers: list })
+			}).catch(() => null);
+			if (!res || !res.ok) {
+				const payload = await res?.json?.().catch(() => null);
+				throw new Error(payload?.message || payload?.error || 'Failed to save stickers');
+			}
+			const payload = await res.json().catch(() => null);
+			commentStickerUrls = Array.isArray(payload?.stickers) ? payload.stickers : list;
+			return commentStickerUrls;
+		}
+
+		function closeCommentAttachChoiceModal() {
+			if (!(commentAttachChoiceModal instanceof HTMLElement)) return;
+			commentAttachChoiceModal.remove();
+			commentAttachChoiceModal = null;
+			if (typeof commentAttachChoiceOutsideClick === 'function') {
+				document.removeEventListener('pointerdown', commentAttachChoiceOutsideClick, true);
+				commentAttachChoiceOutsideClick = null;
+			}
+			if (typeof commentAttachChoiceEscape === 'function') {
+				document.removeEventListener('keydown', commentAttachChoiceEscape, true);
+				commentAttachChoiceEscape = null;
+			}
+		}
+
+		function closeCommentStickerModal() {
+			if (!(commentStickerModal instanceof HTMLElement)) return;
+			if (commentStickerModalBusy) return;
+			commentStickerModal.classList.remove('open');
+			commentStickerModal.setAttribute('aria-hidden', 'true');
+		}
+
+		function ensureCommentAttachChoiceModal() {
+			if (commentAttachChoiceModal instanceof HTMLElement) return commentAttachChoiceModal;
+			const pop = document.createElement('div');
+			pop.className = 'comment-attach-popover';
+			pop.setAttribute('role', 'menu');
+			pop.setAttribute('aria-label', 'Add to comment');
+			pop.innerHTML = `
+				<button type="button" class="comment-attach-popover-item" data-comment-attach-choice-upload role="menuitem">
+					<span class="comment-attach-popover-item-icon" aria-hidden="true">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M4 17v1a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1"></path>
+							<polyline points="7 9 12 4 17 9"></polyline>
+							<line x1="12" y1="4" x2="12" y2="16"></line>
+						</svg>
+					</span>
+					<span class="comment-attach-popover-item-label">Upload an Image</span>
+				</button>
+				<button type="button" class="comment-attach-popover-item" data-comment-attach-choice-sticker role="menuitem">
+					<span class="comment-attach-popover-item-icon" aria-hidden="true">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<rect x="4" y="4" width="16" height="16" rx="3"></rect>
+							<path d="M9 10h.01"></path>
+							<path d="M15 10h.01"></path>
+							<path d="M8 15c1 .9 2.3 1.4 4 1.4s3-.5 4-1.4"></path>
+						</svg>
+					</span>
+					<span class="comment-attach-popover-item-label">Use a Sticker</span>
+				</button>
+			`;
+			pop.querySelector('[data-comment-attach-choice-upload]')?.addEventListener('click', () => {
+				closeCommentAttachChoiceModal();
+				if (commentAttachInput instanceof HTMLInputElement) {
+					commentAttachInput.value = '';
+					commentAttachInput.click();
+				}
+			});
+			pop.querySelector('[data-comment-attach-choice-sticker]')?.addEventListener('click', () => {
+				closeCommentAttachChoiceModal();
+				void openCommentStickerModal();
+			});
+			document.body.appendChild(pop);
+			commentAttachChoiceModal = pop;
+			commentAttachChoiceOutsideClick = (e) => {
+				if (!(commentAttachChoiceModal instanceof HTMLElement)) return;
+				if (commentAttachChoiceModal.contains(e.target)) return;
+				if (commentAttachBtn instanceof HTMLElement && commentAttachBtn.contains(e.target)) return;
+				closeCommentAttachChoiceModal();
+			};
+			document.addEventListener('pointerdown', commentAttachChoiceOutsideClick, true);
+			commentAttachChoiceEscape = (e) => {
+				if (e.key !== 'Escape') return;
+				closeCommentAttachChoiceModal();
+			};
+			document.addEventListener('keydown', commentAttachChoiceEscape, true);
+			return pop;
+		}
+
+		function ensureCommentStickerModal() {
+			if (commentStickerModal instanceof HTMLElement) return commentStickerModal;
+			const overlay = document.createElement('div');
+			overlay.className = 'comment-sticker-modal-overlay';
+			overlay.setAttribute('aria-hidden', 'true');
+			overlay.innerHTML = `
+				<div class="comment-sticker-modal" role="dialog" aria-modal="true" aria-label="Choose sticker">
+					<div class="comment-sticker-modal-head">
+						<div class="comment-sticker-modal-title">Your Stickers</div>
+						<button type="button" class="comment-sticker-modal-close" data-comment-sticker-close aria-label="Close">
+							<svg class="comment-sticker-modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+								<line x1="18" y1="6" x2="6" y2="18"></line>
+								<line x1="6" y1="6" x2="18" y2="18"></line>
+							</svg>
+						</button>
+					</div>
+					<input type="file" hidden accept="image/*" data-comment-sticker-upload-input />
+					<div class="comment-sticker-grid" data-comment-sticker-grid></div>
+					<span class="comment-sticker-modal-status" data-comment-sticker-status aria-live="polite"></span>
+					<div class="comment-sticker-modal-busy" data-comment-sticker-busy hidden aria-hidden="true">
+						<span class="comment-sticker-modal-busy-spinner"></span>
+					</div>
+				</div>
+			`;
+			overlay.addEventListener('click', (e) => {
+				if (e.target === overlay) closeCommentStickerModal();
+			});
+			overlay.querySelector('[data-comment-sticker-close]')?.addEventListener('click', () => {
+				closeCommentStickerModal();
+			});
+			document.body.appendChild(overlay);
+			commentStickerModal = overlay;
+			return overlay;
+		}
+
+		function normalizeCommentStickerSlotList(list) {
+			if (!Array.isArray(list)) return [];
+			const out = [];
+			for (const item of list) {
+				if (typeof item !== 'string') continue;
+				const trimmed = item.trim();
+				if (!trimmed || out.includes(trimmed)) continue;
+				out.push(trimmed);
+				if (out.length >= COMMENT_STICKER_SLOT_LIMIT) break;
+			}
+			return out;
+		}
+
+		function setStickerModalStatus(text, { tone } = {}) {
+			const status = commentStickerModal?.querySelector?.('[data-comment-sticker-status]');
+			if (!(status instanceof HTMLElement)) return;
+			status.textContent = String(text || '');
+			status.classList.toggle('is-error', tone === 'error');
+		}
+
+		function setCommentStickerModalBusy(isBusy) {
+			commentStickerModalBusy = Boolean(isBusy);
+			const modalCard = commentStickerModal?.querySelector?.('.comment-sticker-modal');
+			if (!(modalCard instanceof HTMLElement)) return;
+			modalCard.classList.toggle('is-busy', commentStickerModalBusy);
+			const busyEl = modalCard.querySelector('[data-comment-sticker-busy]');
+			if (busyEl instanceof HTMLElement) busyEl.hidden = !commentStickerModalBusy;
+		}
+
+		async function refreshStickerGrid() {
+			const grid = commentStickerModal?.querySelector?.('[data-comment-sticker-grid]');
+			if (!(grid instanceof HTMLElement)) return;
+			grid.innerHTML = new Array(COMMENT_STICKER_SLOT_LIMIT).fill(0).map(() => `
+				<div class="comment-sticker-slot comment-sticker-slot--loading" aria-hidden="true"></div>
+			`).join('');
+			const stickers = normalizeCommentStickerSlotList(await fetchCommentStickerUrls());
+			commentStickerUrls = stickers;
+			const slotCount = COMMENT_STICKER_SLOT_LIMIT;
+			grid.innerHTML = new Array(slotCount).fill(0).map((_, idx) => {
+				const url = stickers[idx];
+				if (url) {
+					return `
+						<div class="comment-sticker-slot comment-sticker-slot--filled" data-comment-sticker-card="${idx}">
+							<button type="button" class="comment-sticker-pick" data-comment-sticker-pick="${idx}" title="Use sticker">
+								<img src="${escapeHtml(url)}" alt="" loading="lazy" decoding="async" />
+							</button>
+							<button type="button" class="comment-sticker-slot-delete" data-comment-sticker-delete="${idx}" aria-label="Delete sticker" title="Delete sticker">×</button>
+						</div>
+					`;
+				}
+				return `
+					<button type="button" class="comment-sticker-slot comment-sticker-slot--empty" data-comment-sticker-blank="${idx}" title="Upload sticker">
+						${idx === commentStickerLoadingSlotIndex
+							? '<span class="comment-sticker-slot-spinner" aria-hidden="true"></span>'
+							: '<span class="comment-sticker-slot-plus" aria-hidden="true">+</span>'}
+					</button>
+				`;
+			}).join('');
+			grid.querySelectorAll('[data-comment-sticker-pick]').forEach((btn) => {
+				btn.addEventListener('click', async () => {
+					const i = Number(btn.getAttribute('data-comment-sticker-pick'));
+					const list = Array.isArray(commentStickerUrls) ? [...commentStickerUrls] : [];
+					const url = list[i];
+					if (!url) return;
+					if (commentQuickSubmitInFlight) return;
+					commentQuickSubmitInFlight = true;
+					setCommentStickerModalBusy(true);
+					setCommentComposerBusy(true, 'Posting...');
+					if (commentAttachBtn instanceof HTMLButtonElement) {
+						commentAttachBtn.disabled = true;
+					}
+					try {
+						await submitCommentText(url);
+					} catch (err) {
+						setCommentAttachStatus(err?.message || 'Failed to post sticker', { tone: 'error' });
+						return;
+					} finally {
+						setCommentStickerModalBusy(false);
+						commentQuickSubmitInFlight = false;
+						setCommentComposerBusy(false);
+						if (commentAttachBtn instanceof HTMLButtonElement) {
+							commentAttachBtn.disabled = false;
+						}
+						setSubmitVisibility();
+					}
+					// Keep "last used" stickers at the front.
+					const reordered = [url, ...list.filter((x) => x !== url)];
+					commentStickerUrls = reordered.slice(0, COMMENT_STICKER_SLOT_LIMIT);
+					void persistCommentStickerUrls(commentStickerUrls).catch(() => {});
+					closeCommentStickerModal();
+					if (commentTextarea instanceof HTMLTextAreaElement) commentTextarea.focus();
+				});
+			});
+			grid.querySelectorAll('[data-comment-sticker-blank]').forEach((btn) => {
+				btn.addEventListener('click', () => {
+					if (commentStickerLoadingSlotIndex !== null) return;
+					const uploadInput = commentStickerModal?.querySelector?.('[data-comment-sticker-upload-input]');
+					if (!(uploadInput instanceof HTMLInputElement)) return;
+					commentStickerUploadSlotIndex = Number(btn.getAttribute('data-comment-sticker-blank'));
+					uploadInput.value = '';
+					uploadInput.click();
+				});
+			});
+			grid.querySelectorAll('[data-comment-sticker-delete]').forEach((btn) => {
+				btn.addEventListener('click', async () => {
+					const i = Number(btn.getAttribute('data-comment-sticker-delete'));
+					const list = Array.isArray(commentStickerUrls) ? [...commentStickerUrls] : [];
+					const url = list[i];
+					if (!url) return;
+					const ok = window.confirm('Delete this sticker forever?');
+					if (!ok) return;
+					const next = list.filter((x, idx) => idx !== i);
+					commentStickerUrls = next;
+					try {
+						await persistCommentStickerUrls(next);
+						await refreshStickerGrid();
+						setStickerModalStatus('');
+					} catch (err) {
+						setStickerModalStatus(err?.message || 'Failed to delete sticker', { tone: 'error' });
+					}
+				});
+			});
+		}
+
+		async function openCommentStickerModal() {
+			const modal = ensureCommentStickerModal();
+			modal.classList.add('open');
+			modal.setAttribute('aria-hidden', 'false');
+			setCommentStickerModalBusy(false);
+			setStickerModalStatus('');
+			await refreshStickerGrid();
+			setStickerModalStatus('');
+			const uploadInput = modal.querySelector('[data-comment-sticker-upload-input]');
+			if (uploadInput instanceof HTMLInputElement && uploadInput.dataset.bound !== '1') {
+				uploadInput.dataset.bound = '1';
+				uploadInput.addEventListener('change', async () => {
+					const file = uploadInput.files?.[0];
+					if (!file) return;
+					if (typeof uploadImageFile !== 'function') {
+						setStickerModalStatus('Upload unavailable. Refresh and try again.', { tone: 'error' });
+						return;
+					}
+					const pickedSlotIndex = Number.isInteger(commentStickerUploadSlotIndex) ? commentStickerUploadSlotIndex : null;
+					commentStickerLoadingSlotIndex = pickedSlotIndex;
+					await refreshStickerGrid();
+					setStickerModalStatus('');
+					try {
+						const url = await uploadImageFile(file, { uploadKind: 'generic' });
+						if (typeof url !== 'string' || !url) throw new Error('Upload returned no URL');
+						const existing = normalizeCommentStickerSlotList(commentStickerUrls);
+						const base = existing.filter((x) => x !== url);
+						const next = [...base];
+						const slotIndex = Number.isInteger(commentStickerUploadSlotIndex) ? commentStickerUploadSlotIndex : next.length;
+						const insertAt = Math.max(0, Math.min(slotIndex, next.length));
+						next.splice(insertAt, 0, url);
+						await persistCommentStickerUrls(next);
+						await refreshStickerGrid();
+						setStickerModalStatus('');
+					} catch (err) {
+						setStickerModalStatus(err?.message || 'Upload failed', { tone: 'error' });
+					} finally {
+						commentStickerUploadSlotIndex = null;
+						commentStickerLoadingSlotIndex = null;
+						uploadInput.value = '';
+						await refreshStickerGrid();
+					}
+				});
+			}
+		}
+
+		if (commentAttachBtn instanceof HTMLButtonElement && commentAttachInput instanceof HTMLInputElement) {
+			commentAttachBtn.addEventListener('click', () => {
+				if (commentAttachBtn.disabled) return;
+				if (commentAttachChoiceModal instanceof HTMLElement) {
+					closeCommentAttachChoiceModal();
+					return;
+				}
+				const pop = ensureCommentAttachChoiceModal();
+				const rect = commentAttachBtn.getBoundingClientRect();
+				const width = 240;
+				const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+				const left = Math.max(8, Math.min(rect.left, viewportWidth - width - 8));
+				pop.style.left = `${left}px`;
+				pop.style.top = `${Math.round(rect.top - 8)}px`;
+				pop.style.transform = 'translateY(-100%)';
+			});
+			commentAttachInput.addEventListener('change', async () => {
+				const file = commentAttachInput.files?.[0];
+				if (!file) return;
+				if (typeof uploadImageFile !== 'function') {
+					setCommentAttachStatus('Upload unavailable. Refresh and try again.', { tone: 'error' });
+					return;
+				}
+				if (commentQuickSubmitInFlight) return;
+				commentQuickSubmitInFlight = true;
+				setCommentComposerBusy(true, 'Posting...');
+				commentAttachBtn.disabled = true;
+				commentAttachBtn.classList.add('is-loading');
+				try {
+					const url = await uploadImageFile(file, { uploadKind: 'generic' });
+					if (typeof url !== 'string' || !url) throw new Error('Upload returned no URL');
+					await submitCommentText(url);
+				} catch (err) {
+					setCommentAttachStatus(err?.message || 'Upload/post failed', { tone: 'error' });
+				} finally {
+					commentQuickSubmitInFlight = false;
+					setCommentComposerBusy(false);
+					commentAttachBtn.disabled = false;
+					commentAttachBtn.classList.remove('is-loading');
+					commentAttachInput.value = '';
+					setSubmitVisibility();
 				}
 			});
 		}

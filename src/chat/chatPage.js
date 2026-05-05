@@ -235,6 +235,9 @@ let renderCommentAvatarHtml;
 let processUserText;
 let hydrateUserTextLinks;
 let hydrateChatCreationEmbeds;
+let hydrateYoutubeEmbeds;
+let bindInlineVideoClickControls;
+let hydrateRichUserTextEmbeds;
 let renderEmptyState;
 let renderPaneLoadError;
 let attachAutoGrowTextarea;
@@ -388,6 +391,9 @@ async function loadDeps() {
 	processUserText = _cdUserText.processUserText;
 	hydrateUserTextLinks = _cdUserText.hydrateUserTextLinks;
 	hydrateChatCreationEmbeds = _cdUserText.hydrateChatCreationEmbeds;
+	hydrateYoutubeEmbeds = _cdUserText.hydrateYoutubeEmbeds;
+	bindInlineVideoClickControls = _cdUserText.bindInlineVideoClickControls;
+	hydrateRichUserTextEmbeds = _cdUserText.hydrateRichUserTextEmbeds;
 	renderEmptyState = _cdEmptyState.renderEmptyState;
 	renderPaneLoadError = _cdEmptyState.renderPaneLoadError;
 	attachAutoGrowTextarea = _cdAutogrow.attachAutoGrowTextarea;
@@ -491,67 +497,9 @@ function normalizeChatBubbleInlineImageSpacing(bubble) {
 	}
 }
 
-function bindInlineVideoClickControls(rootEl) {
-	const root =
-		rootEl instanceof Element || rootEl instanceof Document ? rootEl : document;
-	if (!root || typeof root.querySelectorAll !== 'function') return;
-	for (const video of root.querySelectorAll('video[data-inline-click-controls="1"]')) {
-		if (!(video instanceof HTMLVideoElement)) continue;
-		if (video.dataset.clickControlsBound === '1') continue;
-		video.dataset.clickControlsBound = '1';
-		video.controls = false;
-		const wrap = video.closest('.connect-chat-creation-embed-inner--video');
-		const overlay = wrap?.querySelector?.('.user-text-inline-video-play-overlay');
-		const activate = () => {
-			video.controls = true;
-			if (wrap instanceof HTMLElement) wrap.classList.add('user-text-inline-video--active');
-			if (overlay instanceof HTMLButtonElement) overlay.hidden = true;
-			void video.play().catch(() => {
-				// ignore autoplay/gesture issues; controls are now visible.
-			});
-		};
-		if (overlay instanceof HTMLButtonElement) {
-			overlay.addEventListener('click', () => activate());
-		}
-		video.addEventListener('click', () => {
-			if (video.controls) return;
-			activate();
-		});
-	}
-}
-
-function hydrateChatYoutubeEmbeds(rootEl) {
-	const root =
-		rootEl instanceof Element || rootEl instanceof Document ? rootEl : document;
-	if (!root || typeof root.querySelectorAll !== 'function') return;
-
-	const links = Array.from(root.querySelectorAll('a[data-youtube-video-id][href]'));
-	for (const a of links) {
-		if (!(a instanceof HTMLAnchorElement)) continue;
-		if (a.dataset.chatYoutubeEmbed === 'true') continue;
-		const videoId = String(a.dataset.youtubeVideoId || '').trim();
-		if (!/^[a-zA-Z0-9_-]{6,}$/.test(videoId)) continue;
-		a.dataset.chatYoutubeEmbed = 'true';
-
-		const wrap = document.createElement('div');
-		wrap.className = 'connect-chat-youtube-embed';
-		const title = a.textContent ? String(a.textContent).trim() : '';
-		const safeTitle = title || `youtube ${videoId}`;
-		const iframe = document.createElement('iframe');
-		iframe.className = 'connect-chat-youtube-embed-iframe';
-		iframe.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?rel=0`;
-		iframe.title = safeTitle;
-		iframe.setAttribute(
-			'allow',
-			'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share'
-		);
-		iframe.setAttribute('allowfullscreen', '');
-		iframe.setAttribute('loading', 'lazy');
-		iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
-		wrap.appendChild(iframe);
-		a.insertAdjacentElement('afterend', wrap);
-	}
-}
+/* `bindInlineVideoClickControls` and `hydrateChatYoutubeEmbeds` now live in
+ * `/shared/userText.js` (`bindInlineVideoClickControls`, `hydrateYoutubeEmbeds`) and are
+ * imported via the `hydrateRichUserTextEmbeds` aggregate. */
 
 /** Same issue inside `.connect-chat-creation-embed` (e.g. after `</div>` before title). */
 function trimChatCreationEmbedWhitespace(embed) {
@@ -2977,10 +2925,7 @@ export async function initChatPage(root, options = {}) {
 		row.appendChild(inner);
 		messagesEl.appendChild(row);
 		row.setAttribute('data-chat-latest', '1');
-		hydrateUserTextLinks(row);
-		hydrateChatYoutubeEmbeds(row);
-		hydrateChatCreationEmbeds(row);
-		bindInlineVideoClickControls(row);
+		hydrateRichUserTextEmbeds(row);
 		for (const b of row.querySelectorAll('.connect-chat-msg-bubble')) {
 			trimTrailingWhitespaceAfterChatEmbed(b);
 		}
@@ -3692,10 +3637,7 @@ export async function initChatPage(root, options = {}) {
 		existing.replaceWith(next);
 		updateChatLatestRowMarker(messagesEl);
 		try {
-			hydrateUserTextLinks(next);
-			hydrateChatYoutubeEmbeds(next);
-			hydrateChatCreationEmbeds(next);
-			bindInlineVideoClickControls(next);
+			hydrateRichUserTextEmbeds(next);
 			if (typeof setupReactionTooltipTap === 'function') {
 				setupReactionTooltipTap(messagesEl);
 			}
@@ -5963,7 +5905,7 @@ export async function initChatPage(root, options = {}) {
 				messagesEl.appendChild(row);
 			}
 		}
-		hydrateUserTextLinks(messagesEl);
+		hydrateRichUserTextEmbeds(messagesEl);
 		if (typeof setupReactionTooltipTap === 'function') {
 			setupReactionTooltipTap(messagesEl);
 		}
@@ -6334,7 +6276,7 @@ export async function initChatPage(root, options = {}) {
 				}
 			}
 
-			hydrateUserTextLinks(messagesEl);
+			hydrateRichUserTextEmbeds(messagesEl);
 			if (typeof setupReactionTooltipTap === 'function') {
 				setupReactionTooltipTap(messagesEl);
 			}
@@ -8218,10 +8160,7 @@ export async function initChatPage(root, options = {}) {
 				showAdminDelete: chatViewerIsAdmin && !activePseudoChannelSlug,
 				showHoverBar: !activePseudoChannelSlug,
 			});
-			hydrateUserTextLinks(messagesEl);
-			hydrateChatYoutubeEmbeds(messagesEl);
-			hydrateChatCreationEmbeds(messagesEl);
-			bindInlineVideoClickControls(messagesEl);
+			hydrateRichUserTextEmbeds(messagesEl);
 			for (const bubble of messagesEl.querySelectorAll('.connect-chat-msg-bubble')) {
 				trimTrailingWhitespaceAfterChatEmbed(bubble);
 			}
@@ -8599,10 +8538,7 @@ export async function initChatPage(root, options = {}) {
 			updateChatLatestRowMarker(messagesEl);
 			dispatchChatUnreadRefresh();
 			try {
-				hydrateUserTextLinks(rowRestored);
-				hydrateChatYoutubeEmbeds(rowRestored);
-				hydrateChatCreationEmbeds(rowRestored);
-				bindInlineVideoClickControls(rowRestored);
+				hydrateRichUserTextEmbeds(rowRestored);
 			} catch {
 				// ignore
 			}
@@ -10639,9 +10575,7 @@ export async function initChatPage(root, options = {}) {
 				el.bodyView.innerHTML = processUserText(activeCanvasRow.body || '') + CANVAS_BODY_HTML_SUFFIX;
 				el.bodyView.classList.remove('chat-page-canvas-body--markdown');
 			}
-			hydrateUserTextLinks(el.bodyView);
-			hydrateChatCreationEmbeds(el.bodyView);
-			hydrateChatYoutubeEmbeds(el.bodyView);
+			hydrateRichUserTextEmbeds(el.bodyView);
 		}
 		const isOwner = Number(activeCanvasRow.sender_id) === Number(chatViewerId);
 		if (el.moreWrap instanceof HTMLElement) el.moreWrap.hidden = !isOwner;

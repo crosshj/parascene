@@ -1643,3 +1643,92 @@ export function hydrateUserTextLinks(rootEl) {
 		img.addEventListener('error', done, { once: true });
 	});
 }
+
+/**
+ * Insert a YouTube iframe sibling after each `a[data-youtube-video-id]` link produced by
+ * `processUserText`. Idempotent — safe to call repeatedly on the same root.
+ *
+ * @param {Element|Document} rootEl
+ */
+export function hydrateYoutubeEmbeds(rootEl) {
+	const root =
+		rootEl instanceof Element || rootEl instanceof Document ? rootEl : document;
+	if (!root || typeof root.querySelectorAll !== 'function') return;
+
+	const links = Array.from(root.querySelectorAll('a[data-youtube-video-id][href]'));
+	for (const a of links) {
+		if (!(a instanceof HTMLAnchorElement)) continue;
+		if (a.dataset.youtubeEmbedHydrated === 'true') continue;
+		const videoId = String(a.dataset.youtubeVideoId || '').trim();
+		if (!/^[a-zA-Z0-9_-]{6,}$/.test(videoId)) continue;
+		a.dataset.youtubeEmbedHydrated = 'true';
+
+		const wrap = document.createElement('div');
+		wrap.className = 'connect-chat-youtube-embed';
+		const title = a.textContent ? String(a.textContent).trim() : '';
+		const safeTitle = title || `youtube ${videoId}`;
+		const iframe = document.createElement('iframe');
+		iframe.className = 'connect-chat-youtube-embed-iframe';
+		iframe.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?rel=0`;
+		iframe.title = safeTitle;
+		iframe.setAttribute(
+			'allow',
+			'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share'
+		);
+		iframe.setAttribute('allowfullscreen', '');
+		iframe.setAttribute('loading', 'lazy');
+		iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+		wrap.appendChild(iframe);
+		a.replaceWith(wrap);
+	}
+}
+
+/**
+ * Inline videos (`video[data-inline-click-controls="1"]`) start without controls so the bubble
+ * stays compact; first user click reveals controls and starts playback. Idempotent.
+ *
+ * @param {Element|Document} rootEl
+ */
+export function bindInlineVideoClickControls(rootEl) {
+	const root =
+		rootEl instanceof Element || rootEl instanceof Document ? rootEl : document;
+	if (!root || typeof root.querySelectorAll !== 'function') return;
+	for (const video of root.querySelectorAll('video[data-inline-click-controls="1"]')) {
+		if (!(video instanceof HTMLVideoElement)) continue;
+		if (video.dataset.clickControlsBound === '1') continue;
+		video.dataset.clickControlsBound = '1';
+		video.controls = false;
+		const wrap = video.closest('.connect-chat-creation-embed-inner--video');
+		const overlay = wrap?.querySelector?.('.user-text-inline-video-play-overlay');
+		const activate = () => {
+			video.controls = true;
+			if (wrap instanceof HTMLElement) wrap.classList.add('user-text-inline-video--active');
+			if (overlay instanceof HTMLButtonElement) overlay.hidden = true;
+			void video.play().catch(() => {
+				// ignore autoplay/gesture issues; controls are now visible.
+			});
+		};
+		if (overlay instanceof HTMLButtonElement) {
+			overlay.addEventListener('click', () => activate());
+		}
+		video.addEventListener('click', () => {
+			if (video.controls) return;
+			activate();
+		});
+	}
+}
+
+/**
+ * Full hydration pass for any container that renders user text via `processUserText`:
+ * link titles + inline image loading + YouTube iframes + creation/share-link card embeds +
+ * inline video click-to-play. Use this anywhere you want chat-style rich rendering
+ * (chat messages, comments, etc.).
+ *
+ * @param {Element|Document} rootEl
+ */
+export function hydrateRichUserTextEmbeds(rootEl) {
+	hydrateUserTextLinks(rootEl);
+	hydrateYoutubeEmbeds(rootEl);
+	hydrateChatCreationEmbeds(rootEl);
+	bindInlineVideoClickControls(rootEl);
+}

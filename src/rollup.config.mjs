@@ -36,6 +36,7 @@ function shouldMinifyChatBundle() {
 }
 
 const minifyChatBundle = shouldMinifyChatBundle();
+let loggedSupabaseCircular = false;
 
 /** Dynamic imports like `/shared/api.js${qs}` → `/shared/api.js?v=…` must resolve to disk paths without `?`. */
 function stripUrlQueryAndHash(id) {
@@ -160,21 +161,38 @@ export default {
 		resolveBundledSupabaseBrowser(),
 		...(minifyChatBundle
 			? [
-					terser({
-						ecma: 2022,
-						module: true,
-						compress: {
-							passes: 1,
-							unsafe: false,
-							unsafe_comps: false,
-						},
-						format: {
-							comments: false,
-						},
-					}),
-				]
+				terser({
+					ecma: 2022,
+					module: true,
+					compress: {
+						passes: 1,
+						unsafe: false,
+						unsafe_comps: false,
+					},
+					format: {
+						comments: false,
+					},
+				}),
+			]
 			: []),
 		buildChatCssBundlePlugin(),
 		touchDevAssetStampPlugin(),
 	],
+	onwarn(warning, warn) {
+		// Ignore the known circular dependency inside Supabase WebAuthn helpers.
+		if (
+			warning.code === 'CIRCULAR_DEPENDENCY' &&
+			Array.isArray(warning.ids) &&
+			warning.ids.some((id) => id && id.includes('/webauthn'))
+		) {
+			if (!loggedSupabaseCircular) {
+				console.log(
+					'[rollup] suppressed circular dep warning for Supabase WebAuthn modules'
+				);
+				loggedSupabaseCircular = true;
+			}
+			return;
+		}
+		warn(warning);
+	},
 };

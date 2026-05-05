@@ -1051,6 +1051,19 @@ export async function openDb() {
 				return Promise.resolve({ changes: result.changes });
 			}
 		},
+		updateUserCommentStickers: {
+			run: async (userId, stickers) => {
+				const stmt = db.prepare("SELECT meta FROM users WHERE id = ?");
+				const row = stmt.get(userId);
+				const existing = parseUserMeta(row?.meta);
+				const meta = { ...existing };
+				const next = Array.isArray(stickers) ? stickers : [];
+				meta.comment_stickers = next;
+				const updateStmt = db.prepare("UPDATE users SET meta = ? WHERE id = ?");
+				const result = updateStmt.run(JSON.stringify(meta), userId);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
 		updateUserApiKey: {
 			run: async (userId, { apiKeyHash, apiKeyPrefix } = {}) => {
 				const stmt = db.prepare("SELECT meta FROM users WHERE id = ?");

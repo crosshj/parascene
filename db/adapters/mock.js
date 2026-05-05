@@ -424,6 +424,15 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		updateUserCommentStickers: {
+			run: async (userId, stickers) => {
+				const user = users.find((u) => Number(u.id) === Number(userId));
+				if (!user) return { changes: 0 };
+				user.meta = user.meta != null && typeof user.meta === "object" ? { ...user.meta } : {};
+				user.meta.comment_stickers = Array.isArray(stickers) ? stickers : [];
+				return { changes: 1 };
+			}
+		},
 		updateUserApiKey: {
 			run: async (userId, { apiKeyHash, apiKeyPrefix } = {}) => {
 				const user = users.find((u) => Number(u.id) === Number(userId));

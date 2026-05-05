@@ -646,6 +646,63 @@ export default function createProfileRoutes({ queries }) {
 		});
 	});
 
+	function normalizeCommentStickerUrl(raw) {
+		const value = typeof raw === "string" ? raw.trim() : "";
+		if (!value) return null;
+		// Restrict to generic image routes so sticker references stay on our storage namespace.
+		if (!value.startsWith("/api/images/generic/")) return null;
+		if (value.includes("..")) return null;
+		if (value.length > 1024) return null;
+		return value;
+	}
+
+	function normalizeCommentStickerList(rawList) {
+		const inList = Array.isArray(rawList) ? rawList : [];
+		const out = [];
+		const seen = new Set();
+		for (const raw of inList) {
+			const url = normalizeCommentStickerUrl(raw);
+			if (!url || seen.has(url)) continue;
+			seen.add(url);
+			out.push(url);
+			if (out.length >= 120) break;
+		}
+		return out;
+	}
+
+	router.get("/api/profile/comment-stickers", async (req, res) => {
+		if (!req.auth?.userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+		const user = await queries.selectUserById.get(req.auth.userId);
+		if (!user) {
+			return res.status(404).json({ error: "User not found" });
+		}
+		const stickers = normalizeCommentStickerList(user?.meta?.comment_stickers);
+		return res.json({ stickers });
+	});
+
+	router.put("/api/profile/comment-stickers", async (req, res) => {
+		if (!req.auth?.userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+		if (!queries.updateUserCommentStickers?.run) {
+			return res.status(500).json({ error: "Not available", message: "Sticker storage is not available." });
+		}
+		const body = req.body && typeof req.body === "object" ? req.body : {};
+		if (!Array.isArray(body.stickers)) {
+			return res.status(400).json({ error: "Invalid request", message: "stickers must be an array." });
+		}
+		const stickers = normalizeCommentStickerList(body.stickers);
+		try {
+			await queries.updateUserCommentStickers.run(req.auth.userId, stickers);
+			return res.json({ ok: true, stickers });
+		} catch (err) {
+			console.error("[PUT /api/profile/comment-stickers]", err);
+			return res.status(500).json({ error: "Failed to update", message: err?.message || "Could not update stickers." });
+		}
+	});
+
 	// Save or clear Vynly agent token (Bearer for vynly.co API). Stored in users.meta; never returned in full after save.
 	router.put("/api/profile/vynly-token", async (req, res) => {
 		if (!req.auth?.userId) {
