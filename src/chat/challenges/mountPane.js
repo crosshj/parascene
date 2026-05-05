@@ -105,10 +105,11 @@ export function renderChallengesPaneHtml(model, opts) {
 		return html;
 	}
 
-	const heroVm = participantHeroViewModel(latestConfig);
+	const heroVm = participantHeroViewModel(latestConfig, rankedSubmissions);
 	html += renderHeroSection({
 		title: heroVm.title,
 		phase,
+		stats: heroVm.stats,
 		countdownHtml: renderChallengeCountdowns(latestConfig, phase, model.nowMs)
 	});
 
@@ -231,7 +232,7 @@ export async function mountChallengesPane(opts) {
 		if (!phaseUsesModalVoteOnly(phase)) return;
 		const slides = buildVoteSlidesNewestFirst(rankedPeers);
 		const challengeTitle = model.participant.latestConfig
-			? participantHeroViewModel(model.participant.latestConfig).title
+			? participantHeroViewModel(model.participant.latestConfig, rankedPeers).title
 			: '';
 		voteModal.open(slides, { challengeTitle });
 	};
@@ -307,7 +308,7 @@ export function openChallengeVoteModalFromMessages(opts) {
 	const slides = buildVoteSlidesNewestFirst(rankedPeers);
 
 	const challengeTitle = model.participant.latestConfig
-		? participantHeroViewModel(model.participant.latestConfig).title
+		? participantHeroViewModel(model.participant.latestConfig, rankedPeers).title
 		: '';
 	const voteModal = createChallengeVoteModal({
 		toggleReaction,

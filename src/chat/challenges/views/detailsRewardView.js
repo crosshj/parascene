@@ -286,5 +286,44 @@ export function renderDetailsAndReward(cfg) {
 		html += `<section id="challenge-details" class="challenge-pane-section"><h3 class="challenge-pane-section-label">Details</h3><div class="challenge-pane-details user-text">${esc(String(cfg.details))}</div></section>`;
 	}
 	html += renderRewardsSection(cfg);
+	html += renderHowToEnterSection();
 	return html;
+}
+
+function renderHowToEnterSection() {
+	return `<section class="challenge-pane-section challenge-pane-howto-section">
+			<h3 class="challenge-pane-section-label">How to enter</h3>
+			<ol class="challenge-pane-howto-steps">
+				<li class="challenge-pane-howto-step">
+					<span class="challenge-pane-howto-step-num" aria-hidden="true">1</span>
+					<div class="challenge-pane-howto-step-body">
+						<p class="challenge-pane-howto-step-title">Design for the brief</p>
+						<p class="challenge-pane-howto-step-text">Read <strong>Details</strong> above and make something that fits the theme, constraints, and vibe of this round.</p>
+						<p class="challenge-pane-howto-step-text">Voting is blind: people score entries without knowing who made them. Aim for work that stands on its own—skip obvious signatures, watermarks, or tells that make it easy to guess your workflow or identity.</p>
+					</div>
+				</li>
+				<li class="challenge-pane-howto-step">
+					<span class="challenge-pane-howto-step-num" aria-hidden="true">2</span>
+					<div class="challenge-pane-howto-step-body">
+						<p class="challenge-pane-howto-step-title">Generate in Create</p>
+						<p class="challenge-pane-howto-step-text">Open <a href="/create">Create</a>, run your idea, and finish the image or video. You’ll submit from the creation page once generation is complete.</p>
+					</div>
+				</li>
+				<li class="challenge-pane-howto-step">
+					<span class="challenge-pane-howto-step-num" aria-hidden="true">3</span>
+					<div class="challenge-pane-howto-step-body">
+						<p class="challenge-pane-howto-step-title">Submit before you publish</p>
+						<p class="challenge-pane-howto-step-text"><strong>Published</strong> creations can’t be entered—keep yours unpublished until you submit.</p>
+						<p class="challenge-pane-howto-step-text">After you enter, that creation <strong>can’t be published</strong> while it’s still an active challenge entry (the app blocks publishing so judging stays fair). If you need it public sooner, withdraw from the challenge on the creation page first.</p>
+					</div>
+				</li>
+				<li class="challenge-pane-howto-step">
+					<span class="challenge-pane-howto-step-num" aria-hidden="true">4</span>
+					<div class="challenge-pane-howto-step-body">
+						<p class="challenge-pane-howto-step-title">Enter from your creation</p>
+						<p class="challenge-pane-howto-step-text">Open the finished creation and choose <strong>Submit to challenge</strong>. Then come back here to vote (when voting is open) and watch results.</p>
+					</div>
+				</li>
+			</ol>
+		</section>`;
 }

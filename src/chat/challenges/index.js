@@ -3,7 +3,8 @@ export {
 	CHALLENGE_SCORE_REACTION_KEYS,
 	challengeReactionKeyToScore,
 	challengeScoreToReactionKey,
-	weightedScoreFromReactions
+	weightedScoreFromReactions,
+	totalVoteCountFromChallengeReactions
 } from './constants.js';
 export { fetchAllChatThreadMessages, buildChallengesChannelModel } from './model/buildChannelModel.js';
 export { challengePhaseDisplayLabel, deriveChallengePhase } from './model/phases.js';

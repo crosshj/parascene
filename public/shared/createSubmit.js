@@ -32,6 +32,166 @@ function safeUploadHeaderFilename(name, fallback = 'upload.bin') {
 	return cleaned || fallback;
 }
 
+/**
+ * Edge/CDN body limits (e.g. Vercel serverless) can reject POST bodies below Express `limit`.
+ * Keep uploads under that cap so /api/images/generic is reachable.
+ */
+const CLIENT_IMAGE_UPLOAD_TARGET_BYTES = 3 * 1024 * 1024;
+
+/** Max longest edge before client-side resize (paste/screenshots). */
+const CLIENT_IMAGE_UPLOAD_MAX_EDGE_PX = 2048;
+
+/** @type {boolean | null} */
+let canvasWebpEncodeSupported = null;
+
+function canvasSupportsWebpEncode() {
+	if (canvasWebpEncodeSupported !== null) return canvasWebpEncodeSupported;
+	try {
+		const c = document.createElement('canvas');
+		c.width = 1;
+		c.height = 1;
+		const u = c.toDataURL('image/webp');
+		canvasWebpEncodeSupported = /^data:image\/webp/i.test(u);
+	} catch {
+		canvasWebpEncodeSupported = false;
+	}
+	return canvasWebpEncodeSupported;
+}
+
+function basenameWithoutExtension(name) {
+	const raw = String(name || '').trim();
+	const i = raw.lastIndexOf('.');
+	if (i <= 0) return raw || 'image';
+	return raw.slice(0, i) || 'image';
+}
+
+/**
+ * @param {HTMLCanvasElement} canvas
+ * @param {string} type
+ * @param {number} quality
+ * @returns {Promise<Blob | null>}
+ */
+function blobFromCanvas(canvas, type, quality) {
+	return new Promise((resolve) => {
+		canvas.toBlob((b) => resolve(b || null), type, quality);
+	});
+}
+
+/**
+ * @param {HTMLCanvasElement} src
+ * @param {number} targetW
+ * @param {number} targetH
+ * @returns {HTMLCanvasElement}
+ */
+function copyCanvasToSize(src, targetW, targetH) {
+	const out = document.createElement('canvas');
+	out.width = Math.max(1, Math.round(targetW));
+	out.height = Math.max(1, Math.round(targetH));
+	const ctx = out.getContext('2d');
+	ctx.imageSmoothingEnabled = true;
+	ctx.imageSmoothingQuality = 'high';
+	ctx.drawImage(src, 0, 0, out.width, out.height);
+	return out;
+}
+
+/**
+ * @param {HTMLCanvasElement} canvas
+ * @param {number} maxBytes
+ * @returns {Promise<{ blob: Blob, type: string } | null>}
+ */
+async function encodeRasterCanvasUnderByteBudget(canvas, maxBytes) {
+	const tries = [];
+	if (canvasSupportsWebpEncode()) {
+		for (let q = 0.88; q >= 0.42; q -= 0.06) {
+			tries.push(['image/webp', q]);
+		}
+	}
+	for (let q = 0.9; q >= 0.46; q -= 0.06) {
+		tries.push(['image/jpeg', q]);
+	}
+	for (const [type, q] of tries) {
+		const blob = await blobFromCanvas(canvas, type, q);
+		if (blob && blob.size > 0 && blob.size <= maxBytes) {
+			return { blob, type };
+		}
+	}
+	return null;
+}
+
+/**
+ * Downscale / re-encode raster images so POST bodies stay under edge payload limits.
+ * HEIC and other undecodable types are returned unchanged.
+ *
+ * @param {File} file
+ * @returns {Promise<File>}
+ */
+async function shrinkRasterImageFileForGenericUpload(file) {
+	if (!file || !(file instanceof File)) return file;
+	const mime = String(file.type || '').toLowerCase();
+	if (!mime.startsWith('image/') || mime === 'image/svg+xml') return file;
+
+	let bitmap;
+	try {
+		bitmap = await createImageBitmap(file);
+	} catch {
+		return file;
+	}
+
+	try {
+		const w = bitmap.width;
+		const h = bitmap.height;
+		const maxEdge = Math.max(w, h);
+		const tooBigBytes = file.size > CLIENT_IMAGE_UPLOAD_TARGET_BYTES;
+		const tooBigPixels = maxEdge > CLIENT_IMAGE_UPLOAD_MAX_EDGE_PX;
+		if (!tooBigBytes && !tooBigPixels) {
+			return file;
+		}
+
+		const pixelScale = Math.min(1, CLIENT_IMAGE_UPLOAD_MAX_EDGE_PX / maxEdge);
+		let cw = Math.max(1, Math.round(w * pixelScale));
+		let ch = Math.max(1, Math.round(h * pixelScale));
+
+		let canvas = document.createElement('canvas');
+		canvas.width = cw;
+		canvas.height = ch;
+		const ctx = canvas.getContext('2d');
+		ctx.imageSmoothingEnabled = true;
+		ctx.imageSmoothingQuality = 'high';
+		ctx.drawImage(bitmap, 0, 0, cw, ch);
+
+		const baseName = basenameWithoutExtension(file.name);
+
+		for (let attempt = 0; attempt < 14; attempt += 1) {
+			const encoded = await encodeRasterCanvasUnderByteBudget(
+				canvas,
+				CLIENT_IMAGE_UPLOAD_TARGET_BYTES
+			);
+			if (encoded) {
+				const ext = encoded.type === 'image/webp' ? '.webp' : '.jpg';
+				return new File([encoded.blob], `${baseName}${ext}`, { type: encoded.type });
+			}
+			const nw = Math.max(1, Math.round(canvas.width * 0.82));
+			const nh = Math.max(1, Math.round(canvas.height * 0.82));
+			if (nw >= canvas.width && nh >= canvas.height) break;
+			canvas = copyCanvasToSize(canvas, nw, nh);
+		}
+
+		const cap = 320;
+		const tinyScale = Math.min(cap / canvas.width, cap / canvas.height, 1);
+		const tw = Math.max(1, Math.round(canvas.width * tinyScale));
+		const th = Math.max(1, Math.round(canvas.height * tinyScale));
+		const tiny = copyCanvasToSize(canvas, tw, th);
+		const lastBlob = await blobFromCanvas(tiny, 'image/jpeg', 0.34);
+		if (lastBlob && lastBlob.size > 0 && lastBlob.size <= CLIENT_IMAGE_UPLOAD_TARGET_BYTES) {
+			return new File([lastBlob], `${baseName}.jpg`, { type: 'image/jpeg' });
+		}
+
+		return file;
+	} finally {
+		bitmap.close();
+	}
+}
+
 function addPendingCreation({ creationToken }) {
 	const pendingId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 	const pendingItem = {
@@ -81,22 +241,24 @@ function navigateToCreations({ mode }) {
 
 /**
  * Upload a file to the generic image endpoint; returns the image URL path on success (e.g. `/api/images/generic/...`).
+ * Large pasted images are downscaled / re-encoded client-side so POST bodies stay under edge payload limits (e.g. Vercel).
  * @param {File} file
  * @param {{ uploadKind?: 'edited' | 'generic' }} [options] — `generic` uses miscellaneous profile storage (`generic_*` keys); `edited` resizes to 1024² PNG (create inputs).
  */
 export async function uploadImageFile(file, options = {}) {
 	if (!file || !(file instanceof File)) throw new Error('Invalid file');
 	const uploadKind = options.uploadKind === 'generic' ? 'generic' : 'edited';
+	const prepared = await shrinkRasterImageFileForGenericUpload(file);
 	const defaultName = uploadKind === 'generic' ? 'paste.png' : 'image.png';
-	const safeName = safeUploadHeaderFilename(file.name, defaultName);
+	const safeName = safeUploadHeaderFilename(prepared.name || file.name, defaultName);
 	const res = await fetch('/api/images/generic', {
 		method: 'POST',
 		headers: {
-			'Content-Type': file.type || 'image/png',
+			'Content-Type': prepared.type || file.type || 'image/png',
 			'X-upload-kind': uploadKind,
 			'X-upload-name': safeName
 		},
-		body: file,
+		body: prepared,
 		credentials: 'include'
 	});
 	if (!res.ok) {
@@ -111,20 +273,24 @@ export async function uploadImageFile(file, options = {}) {
 /**
  * Upload any file to chat misc endpoint namespace (`/api/images/generic`).
  * Server stores image/video as `generic_*` and other files as `misc_*`.
+ * Raster images are shrunk client-side when needed so uploads clear edge body limits.
  * @param {File} file
  * @returns {Promise<{ url: string, displayAsFile: boolean }>}
  */
 export async function uploadChatFile(file) {
 	if (!file || !(file instanceof File)) throw new Error('Invalid file');
-	const safeName = safeUploadHeaderFilename(file.name, 'upload.bin');
+	const mime = String(file.type || '').toLowerCase();
+	const prepared =
+		mime.startsWith('image/') ? await shrinkRasterImageFileForGenericUpload(file) : file;
+	const safeName = safeUploadHeaderFilename(prepared.name || file.name, 'upload.bin');
 	const res = await fetch('/api/images/generic', {
 		method: 'POST',
 		headers: {
-			'Content-Type': file.type || 'application/octet-stream',
+			'Content-Type': prepared.type || file.type || 'application/octet-stream',
 			'X-upload-kind': 'generic',
 			'X-upload-name': safeName
 		},
-		body: file,
+		body: prepared,
 		credentials: 'include'
 	});
 	if (!res.ok) {

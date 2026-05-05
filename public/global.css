@@ -6970,6 +6970,75 @@ body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading {
 	max-width: 100%;
 }
 
+.challenge-pane-hero-stats {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 8px;
+	margin-top: 10px;
+}
+
+.challenge-pane-hero-stat {
+	display: grid;
+	grid-template-columns: 32px minmax(0, 1fr);
+	align-items: center;
+	column-gap: 12px;
+	padding: 10px 12px;
+	border-radius: 10px;
+	border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+	background: color-mix(in srgb, var(--surface-strong) 42%, transparent);
+	min-width: 0;
+}
+
+.challenge-pane-hero-stat-copy {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.challenge-pane-hero-stat-icon {
+	display: flex;
+	grid-row: 1 / span 2;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 100%;
+	min-height: 40px;
+	flex: 0 0 auto;
+	color: color-mix(in srgb, var(--text) 82%, var(--text-muted));
+}
+
+.challenge-pane-hero-stat-icon svg {
+	display: block;
+	width: 26px;
+	height: 26px;
+}
+
+.challenge-pane-hero-stat-value {
+	font-size: 0.9375rem;
+	font-weight: 600;
+	line-height: 1.25;
+	color: var(--text);
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.challenge-pane-hero-stat-label {
+	font-size: 0.6875rem;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	line-height: 1.2;
+	color: var(--text-muted);
+}
+
+@media (max-width: 768px) {
+	.challenge-pane-hero-stats {
+		grid-template-columns: 1fr;
+	}
+}
+
 .challenge-pane-title {
 	font-size: 1.25rem;
 	font-weight: 600;
@@ -7010,7 +7079,7 @@ body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading {
 	letter-spacing: 0.09em;
 	text-transform: uppercase;
 	margin: 0 0 8px;
-	color: var(--text-muted);
+	color: color-mix(in srgb, var(--text-muted) 72%, var(--accent, #5eead4) 28%);
 }
 
 .challenge-pane-action-tabs {
@@ -7658,6 +7727,119 @@ body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading {
 	font-size: 0.9375rem;
 	line-height: 1.5;
 	color: var(--text);
+}
+
+.challenge-pane-howto-section {
+	margin-top: 0;
+	padding-top: 24px;
+}
+
+.challenge-pane-howto-steps {
+	margin: 0;
+	padding: 0;
+	padding-inline-start: 0;
+	list-style: none;
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+}
+
+.challenge-pane-howto-step {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	column-gap: 10px;
+	align-items: start;
+	position: relative;
+	box-sizing: border-box;
+	margin: 0;
+	margin-inline: 0;
+	padding: 2px 0;
+	padding-inline-start: 8px;
+	list-style: none;
+	border: none;
+}
+
+.challenge-pane-howto-step::before {
+	content: '';
+	position: absolute;
+	inset-block: 2px;
+	left: 0;
+	width: 3px;
+	border-radius: 1px;
+	background: var(--accent, #5eead4);
+	opacity: 0.22;
+	pointer-events: none;
+}
+
+.challenge-pane-howto-step-num {
+	display: block;
+	min-width: 1.1em;
+	text-align: right;
+	font-size: clamp(1.35rem, 4vw, 1.625rem);
+	font-weight: 700;
+	line-height: 1.15;
+	letter-spacing: -0.04em;
+	font-variant-numeric: tabular-nums;
+	color: var(--accent, #5eead4);
+	padding-top: 1px;
+	-webkit-text-fill-color: currentColor;
+}
+
+.challenge-pane-howto-step-body {
+	min-width: 0;
+}
+
+.challenge-pane-howto-step-title {
+	margin: 0 0 6px;
+	font-size: 0.9375rem;
+	font-weight: 650;
+	line-height: 1.35;
+	letter-spacing: -0.01em;
+	color: var(--text);
+	-webkit-text-fill-color: currentColor;
+}
+
+.challenge-pane-howto-step-text {
+	margin: 0 0 8px;
+	font-size: 0.875rem;
+	line-height: 1.55;
+	color: var(--text-muted);
+	-webkit-text-fill-color: currentColor;
+}
+
+.challenge-pane-howto-step-text:last-child {
+	margin-bottom: 0;
+}
+
+.challenge-pane-howto-step-text strong {
+	color: color-mix(in srgb, var(--text) 82%, var(--text-muted) 18%);
+	font-weight: 600;
+	-webkit-text-fill-color: currentColor;
+}
+
+.challenge-pane-howto-step-text a {
+	color: var(--accent, #6b5cff);
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+
+.challenge-pane-howto-step-text a:hover {
+	filter: brightness(1.06);
+}
+
+@media (max-width: 768px) {
+	.challenge-pane-howto-step {
+		column-gap: 8px;
+		padding-inline-start: 7px;
+	}
+
+	.challenge-pane-howto-steps {
+		gap: 16px;
+	}
+
+	.challenge-pane-howto-section {
+		padding-top: 20px;
+	}
 }
 
 .challenge-pane-rewards-section {

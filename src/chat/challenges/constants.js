@@ -68,6 +68,24 @@ export function weightedScoreFromReactions(reactions) {
 	return sum;
 }
 
+/**
+ * How many challenge-score reactions exist on one message (count aggregates or user-id arrays).
+ * @param {Record<string, unknown>} reactions
+ */
+export function totalVoteCountFromChallengeReactions(reactions) {
+	if (!reactions || typeof reactions !== 'object') return 0;
+	let sum = 0;
+	for (const key of CHALLENGE_SCORE_REACTION_KEYS) {
+		const raw = reactions[key];
+		if (Array.isArray(raw)) {
+			sum += raw.length;
+		} else if (typeof raw === 'number' && Number.isFinite(raw)) {
+			sum += Math.max(0, Math.floor(raw));
+		}
+	}
+	return sum;
+}
+
 /** HTML attribute escape for challenge view templates (was a separate file). */
 export function esc(s) {
 	return String(s ?? '')
