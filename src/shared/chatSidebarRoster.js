@@ -17,10 +17,10 @@ function escapeHtmlPseudoStrip(str) {
 
 /**
  * Slugs for the fixed channel rows in the top strip (no section label) above DMs on chat + Connect sidebars.
- * Order: Feed, Challenges, My Creations, Comments, Explore (above Feedback), Feedback.
+ * Order: Feed, Challenges, My Creations, Comments, Explore, Prompt Library, Feedback.
  * A separate “Help” row (not a channel) links to `/help` and is appended after Feedback.
  */
-export const SIDEBAR_PSEUDO_STRIP_ORDER = ['feed', 'challenges', 'creations', 'comments', 'explore', 'feedback'];
+export const SIDEBAR_PSEUDO_STRIP_ORDER = ['feed', 'challenges', 'creations', 'comments', 'explore', 'prompt-library', 'feedback'];
 
 /** Notes-to-self shortcut: not a channel, opens the viewer's own DM. */
 export const SIDEBAR_NOTES_STRIP_HREF = '/chat/notes';
@@ -33,6 +33,7 @@ const SIDEBAR_PSEUDO_STRIP_TITLES = {
 	feed: 'Feed',
 	challenges: 'Challenges',
 	explore: 'Explore',
+	'prompt-library': 'Prompt Library',
 	creations: 'My Creations',
 	comments: 'Comments',
 	feedback: 'Feedback',
@@ -84,6 +85,7 @@ function pseudoStripRouteIconSvg(slug, routeIconClass = 'chat-page-sidebar-chann
 	if (key === 'feed') return typeof Icons.homeIcon === 'function' ? Icons.homeIcon(cls) : '';
 	if (key === 'challenges') return typeof Icons.trophyIcon === 'function' ? Icons.trophyIcon(cls) : '';
 	if (key === 'explore') return typeof Icons.globeIcon === 'function' ? Icons.globeIcon(cls) : '';
+	if (key === 'prompt-library') return typeof Icons.promptLibraryIcon === 'function' ? Icons.promptLibraryIcon(cls) : '';
 	if (key === 'creations') return creationsRouteIcon(cls);
 	if (key === 'comments') return typeof Icons.smsIcon === 'function' ? Icons.smsIcon(cls) : '';
 	if (key === 'feedback') return feedbackMegaphoneIcon(cls);
@@ -347,6 +349,8 @@ export function buildSidebarPseudoStripRows() {
 export function pseudoStripActiveSlugFromRequestPath(requestPath) {
 	const raw = String(requestPath || '').trim();
 	if (!raw) return null;
+	const pathOnly = stripRequestPathname(raw);
+	if (pathOnly === '/prompt-library') return 'prompt-library';
 	const match = raw.match(/\/chat\/c\/([^/?#]+)/);
 	if (!match) return null;
 	try {
@@ -450,7 +454,8 @@ export function buildSidebarPseudoStripListStaticHtml(requestPath = '') {
 	const activeSlug = pseudoStripActiveSlugFromRequestPath(requestPath);
 	const channelHtml = SIDEBAR_PSEUDO_STRIP_ORDER.map((slug) => {
 		const title = SIDEBAR_PSEUDO_STRIP_TITLES[slug] || `#${slug}`;
-		const href = `/chat/c/${encodeURIComponent(slug)}`;
+		const href =
+			slug === 'prompt-library' ? '/prompt-library' : `/chat/c/${encodeURIComponent(slug)}`;
 		const bg = getAvatarColor(slug);
 		const iconAvatarHtml = pseudoStripRouteIconAvatarHtml(slug);
 		const avatarHtml = iconAvatarHtml || `<div class="comment-avatar connect-chat-thread-row-channel-avatar chat-page-sidebar-channel-avatar" style="background: ${escapeHtmlPseudoStrip(bg)};" aria-hidden="true">#</div>`;
@@ -568,6 +573,8 @@ export function buildChatThreadUrl(meta) {
 			return buildCanonicalChatThreadPath(id, meta);
 		}
 		if (meta.channel_slug) {
+			const slugLow = String(meta.channel_slug).trim().toLowerCase();
+			if (slugLow === 'prompt-library') return '/prompt-library';
 			return `/chat/c/${encodeURIComponent(String(meta.channel_slug))}`;
 		}
 	}
@@ -595,10 +602,220 @@ export function normalizeChatNavPathForCompare(p) {
 	if (!s || s === '/index.html' || s === '/feed') return '/chat/c/feed';
 	if (s === '/explore') return '/chat/c/explore';
 	if (s === '/creations') return '/chat/c/creations';
+	if (s === '/prompt-library') return '/prompt-library';
 	if (s === SIDEBAR_NOTES_STRIP_HREF) return SIDEBAR_NOTES_STRIP_HREF;
 	const t = s.match(/^\/chat\/t\/(\d+)(?:\/[^/?#]+)?$/i);
 	if (t && t[1]) return `/chat/t/${t[1]}`;
 	return s;
+}
+
+/** Matches server `normalizeDmUsernameInput` / profile handle rules (user.js). Align with chatPage `normalizeDmPathUsername`. */
+function normalizeDmPathUsernameForSidebar(raw) {
+	if (typeof raw !== 'string') return null;
+	let s = raw.trim();
+	if (!s) return null;
+	if (s.startsWith('@')) s = s.slice(1).trim();
+	s = s.toLowerCase();
+	if (!/^[a-z0-9][a-z0-9_]{2,23}$/.test(s)) return null;
+	return s;
+}
+
+/**
+ * Same URL shapes as chatPage `parseChatPathname` — used so sidebar `is-active` matches canonical `/chat/t/:id` URLs.
+ * @param {string} pathname
+ * @returns {{ kind: 'empty' } | { kind: 'invalid' } | { kind: 'thread', threadId: number } | { kind: 'channel', slug: string } | { kind: 'dm', userId: number } | { kind: 'dm', userName: string } | { kind: 'dm', self: true }}
+ */
+export function parseChatSidebarPathname(pathname) {
+	const p = String(pathname || '').replace(/\/+$/, '') || '/';
+	if (p === '/' || p === '/index.html' || p === '/feed') {
+		return { kind: 'channel', slug: 'feed' };
+	}
+	if (p === '/chat') {
+		return { kind: 'channel', slug: 'feed' };
+	}
+	if (p === '/explore') {
+		return { kind: 'channel', slug: 'explore' };
+	}
+	if (p === '/creations') {
+		return { kind: 'channel', slug: 'creations' };
+	}
+	if (p === '/challenges') {
+		return { kind: 'channel', slug: 'challenges' };
+	}
+	if (p === '/prompt-library') {
+		return { kind: 'channel', slug: 'prompt-library' };
+	}
+	const parts = p.split('/').filter(Boolean);
+	if (parts[0] !== 'chat') return { kind: 'invalid' };
+	if (parts.length === 1) return { kind: 'empty' };
+	const seg = parts[1].toLowerCase();
+	if (seg === 'notes' && parts.length === 2) {
+		return { kind: 'dm', self: true };
+	}
+	if (seg === 'c' && parts[2]) {
+		let slug = parts[2];
+		try {
+			slug = decodeURIComponent(slug);
+		} catch {
+			// keep raw
+		}
+		return { kind: 'channel', slug };
+	}
+	if (seg === 'dm' && parts[2]) {
+		let rawSeg = parts[2];
+		try {
+			rawSeg = decodeURIComponent(rawSeg);
+		} catch {
+			// keep raw
+		}
+		rawSeg = String(rawSeg).trim();
+		if (!rawSeg) return { kind: 'invalid' };
+		if (/^\d+$/.test(rawSeg)) {
+			const uid = Number(rawSeg);
+			if (Number.isFinite(uid) && uid > 0) return { kind: 'dm', userId: uid };
+			return { kind: 'invalid' };
+		}
+		const un = normalizeDmPathUsernameForSidebar(rawSeg);
+		if (un) return { kind: 'dm', userName: un };
+		return { kind: 'invalid' };
+	}
+	if (seg === 't' && parts[2]) {
+		const tid = Number(parts[2]);
+		if (Number.isFinite(tid) && tid > 0) return { kind: 'thread', threadId: tid };
+	}
+	return { kind: 'invalid' };
+}
+
+/**
+ * @param {string} href
+ * @returns {string}
+ */
+function chatSidebarHrefPathnameOnly(href) {
+	if (typeof href !== 'string') return '';
+	const h = href.trim();
+	if (!h) return '';
+	if (h.startsWith('/')) {
+		return h.split('?')[0].split('#')[0];
+	}
+	if (typeof window === 'undefined' || !window.location?.origin) return '';
+	try {
+		return new URL(h, window.location.origin).pathname;
+	} catch {
+		return '';
+	}
+}
+
+/**
+ * @param {{ kind?: string, slug?: string, threadId?: number, userId?: number, userName?: string, self?: boolean }} parsed
+ * @param {object[]} threads
+ * @param {unknown} viewerId
+ * @returns {number | null}
+ */
+function resolveSidebarThreadIdForParsed(parsed, threads, viewerId) {
+	if (!parsed || parsed.kind === 'invalid' || parsed.kind === 'empty') return null;
+	if (parsed.kind === 'thread') {
+		const id = Number(parsed.threadId);
+		return Number.isFinite(id) && id > 0 ? id : null;
+	}
+	const list = Array.isArray(threads) ? threads : [];
+	if (parsed.kind === 'channel') {
+		const slug = String(parsed.slug || '').trim().toLowerCase();
+		if (!slug) return null;
+		const ch = list.find(
+			(t) =>
+				t &&
+				t.type === 'channel' &&
+				String(t.channel_slug || '')
+					.trim()
+					.toLowerCase() === slug
+		);
+		if (!ch) return null;
+		const id = Number(ch.id);
+		return Number.isFinite(id) && id > 0 ? id : null;
+	}
+	if (parsed.kind === 'dm') {
+		if ('self' in parsed && parsed.self === true) {
+			const selfDm = list.find((t) => isSelfDmThread(t, viewerId));
+			if (!selfDm) return null;
+			const id = Number(selfDm.id);
+			return Number.isFinite(id) && id > 0 ? id : null;
+		}
+		const uid = 'userId' in parsed && parsed.userId != null ? Number(parsed.userId) : null;
+		const userName =
+			'userName' in parsed && parsed.userName ? String(parsed.userName).toLowerCase() : '';
+		const dm = list.find((t) => {
+			if (!t || t.type !== 'dm') return false;
+			if (uid != null && Number.isFinite(uid) && uid > 0) {
+				return Number(getDmOtherUserId(t)) === uid;
+			}
+			if (userName) {
+				const o = String(t.other_user?.user_name || '').toLowerCase();
+				return o === userName;
+			}
+			return false;
+		});
+		if (!dm) return null;
+		const id = Number(dm.id);
+		return Number.isFinite(id) && id > 0 ? id : null;
+	}
+	return null;
+}
+
+/**
+ * Whether `href` points at the current chat location, including when the URL was canonicalized to `/chat/t/:id`
+ * while the sidebar still links via `/chat/dm/…` or `/chat/c/:slug`.
+ *
+ * @param {string} href
+ * @param {{ pathname?: string, threads?: object[], viewerId?: unknown }} [ctx]
+ */
+export function isChatSidebarHrefActive(href, ctx = {}) {
+	const pathnameRaw =
+		typeof ctx.pathname === 'string'
+			? ctx.pathname
+			: typeof window !== 'undefined'
+				? window.location.pathname
+				: '';
+	const curPath = String(pathnameRaw || '').replace(/\/+$/, '') || '/';
+	const hrefPathRaw = chatSidebarHrefPathnameOnly(href);
+	const hrefPath = String(hrefPathRaw || '').replace(/\/+$/, '') || '/';
+	if (!hrefPathRaw) return false;
+
+	if (normalizeChatNavPathForCompare(curPath) === normalizeChatNavPathForCompare(hrefPath)) {
+		return true;
+	}
+
+	if (hrefPath === SIDEBAR_HELP_STRIP_HREF) {
+		return isSidebarHelpPathActive(curPath);
+	}
+
+	const cur = parseChatSidebarPathname(curPath);
+	const target = parseChatSidebarPathname(hrefPath);
+	if (cur.kind === 'invalid' || target.kind === 'invalid') return false;
+
+	if (cur.kind === 'channel' && target.kind === 'channel') {
+		return String(cur.slug || '').toLowerCase() === String(target.slug || '').toLowerCase();
+	}
+
+	if (cur.kind === 'thread' && target.kind === 'thread') {
+		return Number(cur.threadId) === Number(target.threadId);
+	}
+
+	const threads = Array.isArray(ctx.threads) ? ctx.threads : [];
+	const viewerId = ctx.viewerId;
+	const curTid = resolveSidebarThreadIdForParsed(cur, threads, viewerId);
+	const targetTid = resolveSidebarThreadIdForParsed(target, threads, viewerId);
+	if (
+		curTid != null &&
+		targetTid != null &&
+		Number.isFinite(curTid) &&
+		Number.isFinite(targetTid) &&
+		curTid > 0 &&
+		targetTid > 0
+	) {
+		return curTid === targetTid;
+	}
+
+	return false;
 }
 
 /** Whether `href` is the current chat pseudo thread (standalone or in-app). */

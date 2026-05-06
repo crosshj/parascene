@@ -20,6 +20,7 @@ let buildSidebarPseudoStripListStaticHtml;
 let tryPatchPseudoStripDomInPlace;
 let normalizeChatNavPathForCompare;
 let isChatPseudoStripHrefActive;
+let isChatSidebarHrefActive;
 let SIDEBAR_TOP_STRIP_CHANNEL_SLUGS;
 let SIDEBAR_STRIP_SLUGS_ALSO_IN_APP_PRIMARY_NAV;
 let buildChatThreadUrl;
@@ -89,6 +90,7 @@ async function loadDeps() {
 		tryPatchPseudoStripDomInPlace = chatSidebarRosterMod.tryPatchPseudoStripDomInPlace;
 		normalizeChatNavPathForCompare = chatSidebarRosterMod.normalizeChatNavPathForCompare;
 		isChatPseudoStripHrefActive = chatSidebarRosterMod.isChatPseudoStripHrefActive;
+		isChatSidebarHrefActive = chatSidebarRosterMod.isChatSidebarHrefActive;
 		SIDEBAR_TOP_STRIP_CHANNEL_SLUGS = chatSidebarRosterMod.SIDEBAR_TOP_STRIP_CHANNEL_SLUGS;
 		SIDEBAR_STRIP_SLUGS_ALSO_IN_APP_PRIMARY_NAV =
 			chatSidebarRosterMod.SIDEBAR_STRIP_SLUGS_ALSO_IN_APP_PRIMARY_NAV;
@@ -1051,7 +1053,14 @@ class AppRouteServers extends HTMLElement {
 			const stripRows = getSidebarPseudoStripRowsMerged(channelRowsRaw);
 			tryPatchPseudoStripDomInPlace(pseudoListEl, stripRows, {
 				normalizePathForCompare: normalizeChatNavPathForCompare,
-				isChatHrefActive: isChatPseudoStripHrefActive
+				isChatHrefActive: (href) =>
+					typeof isChatSidebarHrefActive === 'function'
+						? isChatSidebarHrefActive(href, {
+								pathname: window.location.pathname,
+								threads: this._chatThreads,
+								viewerId: this._chatViewerId
+							})
+						: isChatPseudoStripHrefActive(href)
 			});
 		}
 

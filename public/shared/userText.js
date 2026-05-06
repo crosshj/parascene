@@ -1,4 +1,4 @@
-import { eyeHiddenIcon, linkIcon2 } from '../icons/svg-strings.js';
+import { eyeHiddenIcon, linkIcon2 } from '/icons/svg-strings.js';
 import { isChatBroadcastMentionSlug } from './chatBroadcastMentions.js';
 
 /**
@@ -577,7 +577,7 @@ export function textWithCreationLinks(text) {
 			const basePath = stripQueryAndHash(relativePath);
 			if (isInlineEligibleGenericImagePath(basePath)) {
 				const rp = escapeHtml(relativePath);
-				out += `<span class="user-text-inline-image-wrap is-loading"><a href="${rp}" class="user-link creation-link user-text-inline-image-link" aria-label="View full image" data-creation-link-original="${escapeHtml(url)}"><img class="user-text-inline-image" src="${rp}" alt="" loading="lazy" decoding="async" width="260" height="260" data-inline-image-loading="1" /></a></span>`;
+				out += `<span class="user-text-inline-image-wrap is-loading"><a href="${rp}" class="user-link creation-link user-text-inline-image-link" aria-label="View full image" data-creation-link-original="${escapeHtml(url)}"><img class="user-text-inline-image" src="${rp}" alt="" width="260" height="260" loading="lazy" decoding="async" data-inline-image-loading="1" /></a></span>`;
 			} else if (isSafeGenericApiPath(basePath)) {
 				out += renderInlineGenericAttachmentCard(relativePath, url);
 			} else {
@@ -1042,79 +1042,24 @@ function appendCreationIdToMediaUrl(url, creationId) {
 }
 
 /**
- * Top bar: title, optional source URL line, open-creation control (image + video embeds).
- * @param {{ creationId: string, titleText: string, sourceLabel: string, barStatic?: boolean }} opts
- * @returns {string}
- */
-function chatCreationEmbedMediaHoverBarHtml({
-	creationId,
-	titleText,
-	sourceLabel,
-	barStatic = false,
-}) {
-	const staticClass = barStatic ? ' connect-chat-creation-embed-media-hover-bar--static' : '';
-	const titleRaw = typeof titleText === 'string' ? titleText.trim() : '';
-	const source = (sourceLabel || '').trim();
-	let titleLine;
-	if (titleRaw === 'Still processing…') {
-		titleLine = `<span class="connect-chat-creation-embed-hover-bar-title connect-chat-creation-embed-hover-bar-title--pending">${escapeHtml(titleRaw)}</span>`;
-	} else if (titleRaw) {
-		titleLine = `<span class="connect-chat-creation-embed-hover-bar-title">${escapeHtml(titleRaw)}</span>`;
-	} else {
-		titleLine =
-			'<span class="connect-chat-creation-embed-hover-bar-title connect-chat-creation-embed-hover-bar-title--untitled"><em>untitled</em></span>';
-	}
-	const sourceLine = source
-		? `<span class="connect-chat-creation-embed-hover-bar-source" title="${escapeHtml(source)}">${escapeHtml(source)}</span>`
-		: '';
-	return (
-		`<div class="connect-chat-creation-embed-media-hover-bar${staticClass}">` +
-		`<div class="connect-chat-creation-embed-hover-bar-main">` +
-		titleLine +
-		sourceLine +
-		`</div>` +
-		`${chatCreationEmbedDetailLinkHtml(creationId, { variant: 'hover-bar' })}` +
-		`</div>`
-	);
-}
-
-/**
- * @param {string} creationId
- * @param {{ variant?: 'hover-bar' }} [opts]
- */
-function chatCreationEmbedDetailLinkHtml(creationId, opts = {}) {
-	const detailPageHref = `/creations/${encodeURIComponent(creationId)}`;
-	const variantClass =
-		opts.variant === 'hover-bar' ? ' connect-chat-creation-embed-detail-link--hover-bar' : '';
-	return (
-		`<a class="connect-chat-creation-embed-detail-link${variantClass}" href="${escapeHtml(detailPageHref)}" aria-label="Open creation" title="Open creation">${linkIcon2()}</a>`
-	);
-}
-
-/**
  * Same visuals as `.route-media.route-media-error` / moderated icon on feed and creation detail.
- * Title appears in the top bar (static); the tile communicates failure/moderation.
- * @param {{ moderated?: boolean, titleText?: string, creationId?: string }} opts
+ * Optional title line above the icon when `titleText` is set.
+ * @param {{ moderated?: boolean, titleText?: string }} opts
  * @returns {string}
  */
-function chatCreationEmbedFailureHtml({ moderated = false, titleText = '', creationId } = {}) {
+function chatCreationEmbedFailureHtml({ moderated = false, titleText = '' } = {}) {
 	const modClass = moderated ? ' route-media-error-moderated' : '';
 	const iconHtml = moderated
 		? `<span class="route-media-error-moderated-icon" role="img" aria-label="Content moderated">${eyeHiddenIcon()}</span>`
 		: '';
-	const id = creationId && String(creationId).trim() ? String(creationId).trim() : '';
-	const barHtml = id
-		? chatCreationEmbedMediaHoverBarHtml({
-				creationId: id,
-				titleText: typeof titleText === 'string' ? titleText : '',
-				sourceLabel: '',
-				barStatic: true,
-			})
-		: '';
+	const titleLine =
+		typeof titleText === 'string' && titleText.trim()
+			? `<div class="connect-chat-creation-embed-status-message">${escapeHtml(titleText.trim())}</div>`
+			: '';
 	return (
-		`<div class="connect-chat-creation-embed-media connect-chat-creation-embed-media--has-hover-bar">` +
+		`<div class="connect-chat-creation-embed-media">` +
 		`<div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--error-layout">` +
-		barHtml +
+		titleLine +
 		`<div class="route-media route-media-error connect-chat-creation-embed-route-error${modClass}" aria-hidden="true">${iconHtml}</div></div></div>`
 	);
 }
@@ -1131,7 +1076,9 @@ function bindChatCreationEmbedMediaLoadError(wrap, mediaEl) {
 		if (!wrap.parentNode) return;
 		wrap.classList.remove('connect-chat-creation-embed--loading', 'connect-chat-creation-embed--pending');
 		wrap.classList.add('connect-chat-creation-embed--error');
-		const titleEl = wrap.querySelector('.connect-chat-creation-embed-hover-bar-title');
+		const titleEl =
+			wrap.querySelector('.connect-chat-creation-embed-hover-bar-title') ||
+			wrap.querySelector('.connect-chat-creation-embed-status-message');
 		const titlePlain = titleEl && titleEl.textContent ? titleEl.textContent.trim() : '';
 		const id = String(wrap.getAttribute('data-creation-id') || '').trim();
 		wrap.innerHTML = chatCreationEmbedFailureHtml({
@@ -1341,7 +1288,11 @@ export function hydrateChatCreationEmbeds(rootEl) {
 		wrap.className =
 			'connect-chat-creation-embed connect-chat-creation-embed--loading connect-chat-creation-embed--square';
 		wrap.setAttribute('data-creation-id', creationId);
-		wrap.innerHTML = '<div class="connect-chat-creation-embed-skeleton" aria-hidden="true"></div>';
+		wrap.innerHTML =
+			'<div class="connect-chat-creation-embed-media">' +
+			'<div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--loading-shell">' +
+			'<div class="connect-chat-creation-embed-skeleton connect-chat-creation-embed-skeleton--pending-fill" aria-hidden="true"></div>' +
+			'</div></div>';
 		a.insertAdjacentElement('afterend', wrap);
 
 		void fetchCreationEmbedPayload(creationId, shareOpts).then((data) => {
@@ -1417,14 +1368,9 @@ export function hydrateChatCreationEmbeds(rootEl) {
 				if (isPending) {
 					wrap.classList.add('connect-chat-creation-embed--pending');
 					wrap.innerHTML =
-						'<div class="connect-chat-creation-embed-media connect-chat-creation-embed-media--has-hover-bar">' +
+						'<div class="connect-chat-creation-embed-media">' +
 						'<div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--pending">' +
-						chatCreationEmbedMediaHoverBarHtml({
-							creationId,
-							titleText: 'Still processing…',
-							sourceLabel: '',
-							barStatic: true,
-						}) +
+						'<div class="connect-chat-creation-embed-status-message connect-chat-creation-embed-status-message--pending" role="status">Still processing…</div>' +
 						'<div class="connect-chat-creation-embed-skeleton connect-chat-creation-embed-skeleton--pending-fill" aria-hidden="true"></div>' +
 						'</div></div>';
 					trimWhitespaceOnlyTextNodes(wrap);
@@ -1445,19 +1391,9 @@ export function hydrateChatCreationEmbeds(rootEl) {
 			}
 
 			if (mediaType === 'video' && videoUrl) {
-				const sourceLabelRaw =
-					(a.getAttribute('data-creation-link-original') || '').trim() ||
-					(a.getAttribute('href') || '').trim() ||
-					'';
-				const hoverBarHtml = chatCreationEmbedMediaHoverBarHtml({
-					creationId,
-					titleText: titleDisplay,
-					sourceLabel: sourceLabelRaw,
-				});
-				// Keep --square on video too so it matches image dimensions (CSS handles square video frame).
 				const poster = url ? ` poster="${escapeHtml(url)}"` : '';
 				/* No whitespace between tags — otherwise pre-wrap line-height creates stray text nodes and gaps. */
-				wrap.innerHTML = `<div class="connect-chat-creation-embed-media connect-chat-creation-embed-media--has-hover-bar"><div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--video${nsfwClass}"${nsfwDataAttr}>${hoverBarHtml}<video class="connect-chat-creation-embed-video" autoplay muted loop controls playsinline controlslist="nodownload" preload="metadata" src="${escapeHtml(videoUrl)}"${poster}></video></div></div>`;
+				wrap.innerHTML = `<div class="connect-chat-creation-embed-media"><div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--video${nsfwClass}"${nsfwDataAttr}><video class="connect-chat-creation-embed-video" autoplay muted loop controls playsinline controlslist="nodownload" preload="metadata" src="${escapeHtml(videoUrl)}"${poster}></video></div></div>`;
 				trimWhitespaceOnlyTextNodes(wrap);
 				const vid = wrap.querySelector('.connect-chat-creation-embed-video');
 				if (vid instanceof HTMLVideoElement) {
@@ -1481,23 +1417,13 @@ export function hydrateChatCreationEmbeds(rootEl) {
 					)
 				];
 				if (groupPayload?.kind === 'group_creations' && groupSourceUrls.length > 1) {
-					const sourceLabelRaw =
-						(a.getAttribute('data-creation-link-original') || '').trim() ||
-						(a.getAttribute('href') || '').trim() ||
-						'';
-					const hoverBarHtml = chatCreationEmbedMediaHoverBarHtml({
-						creationId,
-						titleText: titleDisplay,
-						sourceLabel: sourceLabelRaw,
-					});
 					const initialAlt = titleRaw.length > 0 ? escapeHtml(titleRaw) : 'grouped creation image';
 					const stackHtml = groupSourceUrls
 						.map((src, index) => `<img class="connect-chat-creation-embed-group-img${index === 0 ? ' is-active' : ''}" src="${escapeHtml(src)}" alt="${initialAlt}" loading="eager" decoding="async" data-group-slide-index="${index}" />`)
 						.join('');
 					wrap.innerHTML =
-						`<div class="connect-chat-creation-embed-media connect-chat-creation-embed-media--has-hover-bar">` +
+						`<div class="connect-chat-creation-embed-media">` +
 						`<div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--group-carousel${nsfwClass}"${nsfwDataAttr}>` +
-						hoverBarHtml +
 						`<div class="connect-chat-creation-embed-group-stack">${stackHtml}</div>` +
 						`<button type="button" class="connect-chat-creation-embed-group-nav connect-chat-creation-embed-group-nav--prev" aria-label="Previous grouped image">` +
 						`<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M14.5 6.5L9 12l5.5 5.5" /></svg>` +
@@ -1547,18 +1473,14 @@ export function hydrateChatCreationEmbeds(rootEl) {
 					return;
 				}
 
-				const sourceLabelRaw =
-					(a.getAttribute('data-creation-link-original') || '').trim() ||
-					(a.getAttribute('href') || '').trim() ||
-					'';
-				const hoverBarHtml = chatCreationEmbedMediaHoverBarHtml({
-					creationId,
-					titleText: titleDisplay,
-					sourceLabel: sourceLabelRaw,
-				});
 				const alt =
 					titleRaw.length > 0 ? escapeHtml(titleRaw) : 'untitled';
-				wrap.innerHTML = `<div class="connect-chat-creation-embed-media connect-chat-creation-embed-media--has-hover-bar"><div class="connect-chat-creation-embed-inner${nsfwClass}"${nsfwDataAttr}>${hoverBarHtml}<img class="connect-chat-creation-embed-img" src="${escapeHtml(url)}" alt="${alt}" loading="lazy" decoding="async" /></div></div>`;
+				wrap.innerHTML =
+					`<div class="connect-chat-creation-embed-media">` +
+					`<div class="connect-chat-creation-embed-inner${nsfwClass}"${nsfwDataAttr}>` +
+					`<a href="${escapeHtml(url)}" class="user-link user-text-inline-image-link" aria-label="View full image">` +
+					`<img class="connect-chat-creation-embed-img" src="${escapeHtml(url)}" alt="${alt}" width="260" height="260" loading="eager" decoding="async" />` +
+					`</a></div></div>`;
 				trimWhitespaceOnlyTextNodes(wrap);
 				const img = wrap.querySelector('.connect-chat-creation-embed-img');
 				if (img instanceof HTMLImageElement) {

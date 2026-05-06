@@ -4022,7 +4022,7 @@ export async function initChatPage(root, options = {}) {
 		return true;
 	}
 
-	function openChatInlineImageLightbox(src) {
+	function openChatInlineImageLightbox(src, creationMeta) {
 		const url = String(src || '').trim();
 		if (!url) return;
 		closeReactionPicker();
@@ -4032,7 +4032,10 @@ export async function initChatPage(root, options = {}) {
 		overlay.className = 'chat-inline-image-lightbox';
 		overlay.setAttribute('role', 'dialog');
 		overlay.setAttribute('aria-modal', 'true');
-		overlay.setAttribute('aria-label', 'Image');
+		overlay.setAttribute(
+			'aria-label',
+			creationMeta?.creationId ? 'Creation preview' : 'Image'
+		);
 
 		const closeBtn = document.createElement('button');
 		closeBtn.type = 'button';
@@ -4051,6 +4054,63 @@ export async function initChatPage(root, options = {}) {
 		frame.appendChild(imgEl);
 		overlay.appendChild(closeBtn);
 		overlay.appendChild(frame);
+
+		const cidRaw =
+			creationMeta && typeof creationMeta.creationId !== 'undefined'
+				? String(creationMeta.creationId).trim()
+				: '';
+		if (cidRaw) {
+			const detailPath = `/creations/${encodeURIComponent(cidRaw)}`;
+			const shareOrigin = String(_cdUserText.DEFAULT_APP_ORIGIN || 'https://www.parascene.com').replace(
+				/\/+$/,
+				''
+			);
+			let absoluteUrl = '';
+			try {
+				absoluteUrl = new URL(detailPath, shareOrigin).href;
+			} catch {
+				absoluteUrl = `${shareOrigin}${detailPath}`;
+			}
+
+			const footer = document.createElement('div');
+			footer.className = 'chat-inline-image-lightbox-footer';
+
+			const goBtn = document.createElement('a');
+			goBtn.className = 'btn-primary chat-inline-image-lightbox-footer-btn';
+			goBtn.href = detailPath;
+			goBtn.setAttribute('aria-label', 'Go to creation');
+			goBtn.innerHTML =
+				`<span class="chat-inline-image-lightbox-footer-btn-lead" aria-hidden="true">${linkIcon2()}</span>` +
+				`<span>Go To Creation</span>`;
+
+			const copyBtn = document.createElement('button');
+			copyBtn.type = 'button';
+			copyBtn.className = 'btn-secondary chat-inline-image-lightbox-footer-btn';
+			copyBtn.setAttribute('aria-label', 'Copy creation link');
+			copyBtn.innerHTML =
+				`<span aria-hidden="true">${copyIcon('chat-inline-image-lightbox-copy-icon')}</span>` +
+				`<span data-chat-inline-lightbox-copy-label="">Copy link</span>`;
+			copyBtn.addEventListener('click', async () => {
+				try {
+					if (!navigator.clipboard?.writeText) return;
+					await navigator.clipboard.writeText(absoluteUrl);
+					const lab = copyBtn.querySelector('[data-chat-inline-lightbox-copy-label]');
+					if (lab) {
+						const prev = lab.textContent || '';
+						lab.textContent = 'Copied!';
+						window.setTimeout(() => {
+							lab.textContent = prev || 'Copy link';
+						}, 2000);
+					}
+				} catch {
+					// ignore
+				}
+			});
+
+			footer.appendChild(goBtn);
+			footer.appendChild(copyBtn);
+			overlay.appendChild(footer);
+		}
 
 		chatInlineImageLightboxKeydown = (e) => {
 			if (e.key !== 'Escape') return;
@@ -4499,7 +4559,41 @@ export async function initChatPage(root, options = {}) {
 	}
 
 	function isChatHrefActive(href) {
-		return rosterMod.isChatPseudoStripHrefActive(href);
+		return rosterMod.isChatSidebarHrefActive(href, {
+			pathname: window.location.pathname,
+			threads: chatThreads,
+			viewerId: chatViewerId
+		});
+	}
+
+	/**
+	 * Top pseudo strip (`[data-chat-sidebar-pseudo-list]`): set `is-active` synchronously from `pathname`.
+	 * Runs on sidebar click before async pane work so highlight matches immediately; also covers patch failures.
+	 */
+	function syncChatSidebarPseudoStripActiveNow(pathname) {
+		const sidebar = document.querySelector('[data-chat-sidebar]');
+		if (!sidebar) return;
+		const listEl = sidebar.querySelector('[data-chat-sidebar-pseudo-list]');
+		if (!(listEl instanceof HTMLElement)) return;
+		const pathRaw =
+			typeof pathname === 'string' && pathname.trim()
+				? pathname.trim()
+				: String(window.location.pathname || '');
+		const path = pathRaw.replace(/\/+$/, '') || '/';
+		const ctx = {
+			pathname: path,
+			threads: chatThreads,
+			viewerId: chatViewerId
+		};
+		const anchors = listEl.querySelectorAll(
+			':scope > a.chat-page-sidebar-row:not([data-chat-sidebar-strip-create])'
+		);
+		for (const a of anchors) {
+			if (!(a instanceof HTMLAnchorElement)) continue;
+			const href = a.getAttribute('href') || '';
+			const active = rosterMod.isChatSidebarHrefActive(href, ctx);
+			a.classList.toggle('is-active', active);
+		}
 	}
 
 	async function fetchJoinedServersForChat() {
@@ -5192,7 +5286,10 @@ export async function initChatPage(root, options = {}) {
 			const pseudoListEl = sidebar.querySelector('[data-chat-sidebar-pseudo-list]');
 			if (pseudoListEl) {
 				const stripRows = rosterMod.getSidebarPseudoStripRowsMerged(channelRowsRaw);
-				tryPatchPseudoStripInPlace(pseudoListEl, stripRows);
+				const patched = tryPatchPseudoStripInPlace(pseudoListEl, stripRows);
+				if (!patched) {
+					syncChatSidebarPseudoStripActiveNow(window.location.pathname);
+				}
 			}
 
 			const dmHtml = rosterMod.buildChatSidebarDmListHtml(dms, rowHtml);
@@ -5680,12 +5777,14 @@ export async function initChatPage(root, options = {}) {
 			const next = normalizePathForCompare(nextUrl.pathname);
 			if (cur === next) {
 				e.preventDefault();
+				syncChatSidebarPseudoStripActiveNow(nextUrl.pathname);
 				return;
 			}
 			e.preventDefault();
 			setMobileSidebarMode(false);
 			markThreadUiPending();
 			history.pushState({ prsnChat: true }, '', nextUrl.pathname + nextUrl.search + nextUrl.hash);
+			syncChatSidebarPseudoStripActiveNow(nextUrl.pathname);
 			void openThreadForCurrentPath();
 		};
 		sidebar.addEventListener('click', chatSidebarNavClickHandler);
@@ -9305,6 +9404,7 @@ export async function initChatPage(root, options = {}) {
 	}
 
 	async function openThreadForCurrentPath() {
+		syncChatSidebarPseudoStripActiveNow(window.location.pathname);
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		const errEl = root.querySelector('[data-chat-error]');
 		const parsed = parseChatPathname(window.location.pathname);
@@ -10206,19 +10306,49 @@ export async function initChatPage(root, options = {}) {
 	}
 
 	chatInlineImageLightboxClickHandler = (e) => {
+		const bubble = e.target?.closest?.('.connect-chat-msg-bubble');
+		if (!bubble || !root.contains(bubble)) return;
+
+		const groupInner = e.target?.closest?.('.connect-chat-creation-embed-inner--group-carousel');
+		if (groupInner && bubble.contains(groupInner)) {
+			if (e.target.closest?.('.connect-chat-creation-embed-group-nav')) return;
+			const embedWrap = groupInner.closest('.connect-chat-creation-embed');
+			const creationId =
+				embedWrap instanceof HTMLElement
+					? String(embedWrap.getAttribute('data-creation-id') || '').trim()
+					: '';
+			const active = groupInner.querySelector('.connect-chat-creation-embed-group-img.is-active');
+			let src = '';
+			if (active instanceof HTMLImageElement) {
+				src = active.currentSrc || active.getAttribute('src') || '';
+			}
+			if (!src) return;
+			e.preventDefault();
+			e.stopPropagation();
+			openChatInlineImageLightbox(src, creationId ? { creationId } : null);
+			return;
+		}
+
 		const a = e.target?.closest?.('a.user-text-inline-image-link');
 		if (!(a instanceof HTMLAnchorElement)) return;
-		if (!a.closest('.connect-chat-msg-bubble')) return;
+		if (!bubble.contains(a)) return;
 		if (!root.contains(a)) return;
 		e.preventDefault();
 		e.stopPropagation();
-		const thumb = a.querySelector('img.user-text-inline-image');
+		const thumb =
+			a.querySelector('img.user-text-inline-image') ||
+			a.querySelector('img.connect-chat-creation-embed-img');
 		let src = '';
 		if (thumb instanceof HTMLImageElement) {
 			src = thumb.currentSrc || thumb.getAttribute('src') || '';
 		}
 		if (!src) src = a.getAttribute('href') || '';
-		openChatInlineImageLightbox(src);
+		const embedWrap = a.closest('.connect-chat-creation-embed');
+		const creationId =
+			embedWrap instanceof HTMLElement
+				? String(embedWrap.getAttribute('data-creation-id') || '').trim()
+				: '';
+		openChatInlineImageLightbox(src, creationId ? { creationId } : null);
 	};
 	root.addEventListener('click', chatInlineImageLightboxClickHandler);
 

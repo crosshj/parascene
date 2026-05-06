@@ -6805,6 +6805,11 @@ body.chat-page .chat-page-messages video {
 	height: auto;
 }
 
+/* Inline pasted generic images: stay inside the 260px-tall wrap (letterboxing lives on `.user-text-inline-image-wrap`). */
+body.chat-page .chat-page-messages .connect-chat-msg-bubble .user-text-inline-image {
+	max-height: 100%;
+}
+
 body.chat-page .chat-page-messages iframe {
 	max-width: 100%;
 }
@@ -10246,15 +10251,20 @@ body.blog-edit-page .blog-edit-route {
 
 /* Pasted / uploaded generic images in chat (see `userText` inline eligible paths). */
 .connect-chat-msg-bubble .user-text-inline-image-wrap {
-	display: block;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 	position: relative;
 	margin-block: 2px;
+	box-sizing: border-box;
+	width: fit-content;
 	max-width: 100%;
-	width: 260px;
-	aspect-ratio: 1 / 1;
-	min-height: 180px;
+	min-height: 260px;
+	height: 260px;
+	max-height: 260px;
 	border-radius: 8px;
 	overflow: hidden;
+	background: color-mix(in srgb, var(--surface-strong) 58%, var(--bg));
 }
 
 .connect-chat-msg-bubble .user-text-inline-image-wrap::before {
@@ -10276,6 +10286,33 @@ body.blog-edit-page .blog-edit-route {
 	display: block;
 }
 
+/* While loading: reserve at least a 260×260 box (square when the lane is ≥260px wide). */
+.connect-chat-msg-bubble .user-text-inline-image-wrap.is-loading {
+	width: min(260px, 100%);
+	min-width: min(260px, 100%);
+	min-height: 260px;
+	height: 260px;
+	max-height: 260px;
+	aspect-ratio: unset;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
+.connect-chat-msg-bubble .user-text-inline-image-wrap.is-loading .user-text-inline-image-link {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	height: 100%;
+	min-height: 0;
+	min-width: 0;
+}
+
+.connect-chat-msg-bubble .user-text-inline-image-wrap.is-loading .user-text-inline-image-link::before,
+.connect-chat-msg-bubble .user-text-inline-image-wrap.is-loading .user-text-inline-image-link::after {
+	display: none;
+}
+
 /* Plain caption merged after normalizeChatBubbleInlineImageSpacing (chat.js).
    ~12px matches bubble padding (2+2) + row padding between back-to-back messages (3+3)
    when the next row is group-continue (inner pulls up 4px). */
@@ -10290,12 +10327,20 @@ body.blog-edit-page .blog-edit-route {
 }
 
 .connect-chat-msg-bubble .user-text-inline-image-link {
-	display: block;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 	position: relative;
+	flex: 1;
+	align-self: stretch;
+	min-width: 0;
+	min-height: 0;
+	width: 100%;
+	max-width: 100%;
+	height: 100%;
 	line-height: 0;
 	cursor: zoom-in;
-	width: 100%;
-	height: 100%;
+	vertical-align: top;
 }
 
 .connect-chat-msg-bubble .user-text-inline-image-link::before {
@@ -10305,10 +10350,10 @@ body.blog-edit-page .blog-edit-route {
 	bottom: 14px;
 	width: 10px;
 	height: 10px;
-	border-top: 2px solid #fff;
-	border-right: 2px solid #fff;
+	border-top: 2px solid rgba(255, 255, 255, 0.95);
+	border-right: 2px solid rgba(255, 255, 255, 0.95);
 	pointer-events: none;
-	z-index: 1;
+	z-index: 3;
 }
 
 .connect-chat-msg-bubble .user-text-inline-image-link::after {
@@ -10319,23 +10364,28 @@ body.blog-edit-page .blog-edit-route {
 	width: 22px;
 	height: 22px;
 	border-radius: 50%;
-	background: color-mix(in srgb, #000 64%, transparent);
+	background: rgba(15, 23, 42, 0.72);
+	box-shadow:
+		0 0 0 1px rgba(255, 255, 255, 0.22),
+		0 2px 10px rgba(15, 23, 42, 0.35);
 	pointer-events: none;
+	z-index: 2;
 }
 
 .connect-chat-msg-bubble .user-text-inline-image {
 	display: block;
-	width: 100%;
-	height: 100%;
-	aspect-ratio: 1 / 1;
-	max-height: none;
+	width: auto;
+	max-width: 100%;
+	height: auto;
+	max-height: 100%;
 	object-fit: contain;
+	object-position: center;
 	background: transparent;
 	border-radius: 8px;
 	opacity: 1;
 	transition: opacity 0.18s ease;
 	position: relative;
-	z-index: 1;
+	z-index: 0;
 }
 
 .connect-chat-msg-bubble .user-text-inline-image[data-inline-image-loading='1'] {
@@ -10502,8 +10552,9 @@ body.blog-edit-page .blog-edit-route {
 	inset: 0;
 	z-index: 100000;
 	display: flex;
-	align-items: center;
-	justify-content: center;
+	flex-direction: column;
+	align-items: stretch;
+	justify-content: flex-start;
 	padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
 		max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
 	box-sizing: border-box;
@@ -10549,12 +10600,44 @@ body.blog-edit-page .blog-edit-route {
 	display: flex;
 	align-items: center;
 	justify-content: center;
+	flex: 1 1 auto;
 	width: 100%;
-	height: 100%;
+	min-height: 0;
 	max-width: 100%;
 	max-height: 100%;
 	margin: 0;
 	pointer-events: none;
+}
+
+.chat-inline-image-lightbox-footer {
+	position: relative;
+	z-index: 3;
+	flex-shrink: 0;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	padding: 4px 8px max(20px, calc(12px + env(safe-area-inset-bottom)));
+	pointer-events: auto;
+}
+
+.chat-inline-image-lightbox-footer-btn {
+	border-radius: 10px;
+}
+
+.chat-inline-image-lightbox-footer-btn-lead svg,
+.chat-inline-image-lightbox-footer-btn > span:first-child svg {
+	display: block;
+	width: 18px;
+	height: 18px;
+	flex-shrink: 0;
+}
+
+button.chat-inline-image-lightbox-footer-btn.btn-secondary {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
 }
 
 .chat-inline-image-lightbox-img {
@@ -10578,6 +10661,28 @@ body.blog-edit-page .blog-edit-route {
 	background: #000;
 	border-radius: 8px;
 	pointer-events: auto;
+}
+
+@media (max-width: 768px) {
+	.chat-inline-image-lightbox {
+		padding-left: env(safe-area-inset-left, 0px);
+		padding-right: env(safe-area-inset-right, 0px);
+		padding-top: max(8px, env(safe-area-inset-top));
+		padding-bottom: max(8px, env(safe-area-inset-bottom));
+	}
+
+	.chat-inline-image-lightbox-img {
+		max-width: 100%;
+		max-height: 100%;
+		border-radius: 6px;
+	}
+
+	.chat-inline-image-lightbox-video {
+		width: 100%;
+		max-width: 100%;
+		max-height: 100%;
+		border-radius: 6px;
+	}
 }
 
 .chat-inline-image-lightbox-video-shell {
@@ -10869,6 +10974,7 @@ body:has(.chat-hashtag-nav-overlay) {
 	box-sizing: border-box;
 	display: flex;
 	flex-direction: column;
+	align-items: flex-start;
 	gap: 0;
 }
 
@@ -11211,9 +11317,9 @@ body:has(.chat-hashtag-nav-overlay) {
 
 /*
  * Square creation previews: one 1×1 frame for skeleton + image so they align on swap.
- * Image fills the frame (cover) so there’s no letterboxing vs the placeholder.
+ * Images use contain so previews are never cropped (chat bubbles override frame height below).
  */
-.connect-chat-creation-embed--square .connect-chat-creation-embed-inner:not(.connect-chat-creation-embed-inner--video) {
+.connect-chat-creation-embed--square .connect-chat-creation-embed-inner:not(.connect-chat-creation-embed-inner--video):not(.connect-chat-creation-embed-inner--loading-shell) {
 	display: block;
 	position: relative;
 	width: 100%;
@@ -11222,6 +11328,31 @@ body:has(.chat-hashtag-nav-overlay) {
 	border-radius: 12px;
 	overflow: hidden;
 	line-height: 0;
+}
+
+.connect-chat-creation-embed-inner--loading-shell {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	width: 100%;
+	min-width: 0;
+	min-height: 160px;
+	max-width: 100%;
+	aspect-ratio: 1 / 1;
+	border-radius: 12px;
+	overflow: hidden;
+	line-height: 0;
+	background: color-mix(in srgb, var(--surface-strong) 58%, var(--bg));
+}
+
+.connect-chat-creation-embed-inner--loading-shell .connect-chat-creation-embed-skeleton,
+.connect-chat-creation-embed-inner--loading-shell .connect-chat-creation-embed-skeleton--pending-fill {
+	flex: 1;
+	align-self: stretch;
+	min-height: 0;
+	width: 100%;
+	border-radius: inherit;
 }
 
 .connect-chat-creation-embed-inner--group-carousel {
@@ -11240,7 +11371,7 @@ body:has(.chat-hashtag-nav-overlay) {
 	width: 100%;
 	height: 100%;
 	border-radius: inherit;
-	object-fit: cover;
+	object-fit: contain;
 	object-position: center;
 	opacity: 0;
 	visibility: hidden;
@@ -11311,8 +11442,212 @@ body:has(.chat-hashtag-nav-overlay) {
 	width: 100%;
 	height: 100%;
 	border-radius: inherit;
-	object-fit: cover;
+	object-fit: contain;
 	object-position: center;
+}
+
+/*
+ * Chat message bubbles only: match generic pasted-image rules — max height 260px, width fluid,
+ * contain fit, ≥260×260 loading placeholder (aligned with `.user-text-inline-image-*`).
+ */
+.connect-chat-msg-bubble .connect-chat-creation-embed {
+	width: fit-content;
+	max-width: 100%;
+	container-type: normal;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed-media {
+	width: auto;
+	max-width: 100%;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed-inner--loading-shell {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	width: fit-content;
+	max-width: 100%;
+	min-width: min(260px, 100%);
+	min-height: 260px;
+	height: 260px;
+	max-height: 260px;
+	aspect-ratio: unset;
+	overflow: hidden;
+	line-height: 0;
+	border-radius: 12px;
+	background: color-mix(in srgb, var(--surface-strong) 58%, var(--bg));
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed-inner--loading-shell .connect-chat-creation-embed-skeleton--pending-fill {
+	flex: 1;
+	align-self: stretch;
+	min-height: 0;
+	width: 100%;
+	border-radius: inherit;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed-inner--pending {
+	width: min(260px, 100%);
+	max-width: 100%;
+	min-height: 260px;
+	max-height: 260px;
+	aspect-ratio: unset;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed--square .connect-chat-creation-embed-inner.connect-chat-creation-embed-inner--video {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: fit-content;
+	max-width: 100%;
+	min-width: 0;
+	height: 260px;
+	min-height: 260px;
+	max-height: 260px;
+	aspect-ratio: unset;
+	background: color-mix(in srgb, var(--surface-strong) 58%, var(--bg));
+	box-sizing: border-box;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed--square .connect-chat-creation-embed-video {
+	position: relative;
+	inset: auto;
+	display: block;
+	width: auto;
+	max-width: 100%;
+	height: auto;
+	max-height: 260px;
+	object-fit: contain;
+	object-position: center;
+	border-radius: inherit;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed--square .connect-chat-creation-embed-inner:not(.connect-chat-creation-embed-inner--video):not(.connect-chat-creation-embed-inner--group-carousel):not(.connect-chat-creation-embed-inner--html):not(.connect-chat-creation-embed-inner--pending):not(.connect-chat-creation-embed-inner--error-layout):not(.connect-chat-creation-embed-inner--loading-shell) {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: fit-content;
+	max-width: 100%;
+	min-width: 0;
+	height: 260px;
+	min-height: 260px;
+	max-height: 260px;
+	aspect-ratio: unset;
+	overflow: hidden;
+	line-height: 0;
+	box-sizing: border-box;
+	background: color-mix(in srgb, var(--surface-strong) 58%, var(--bg));
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed--square .connect-chat-creation-embed-inner.connect-chat-creation-embed-inner--group-carousel {
+	width: fit-content;
+	max-width: 100%;
+	min-width: 0;
+	height: 260px;
+	min-height: 260px;
+	max-height: 260px;
+	aspect-ratio: unset;
+	box-sizing: border-box;
+	background: color-mix(in srgb, var(--surface-strong) 58%, var(--bg));
+	cursor: zoom-in;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed-inner--group-carousel .connect-chat-creation-embed-group-img {
+	object-fit: contain;
+	object-position: center;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed-group-nav {
+	cursor: pointer;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed-inner--group-carousel .connect-chat-creation-embed-group-stack::before {
+	content: '';
+	position: absolute;
+	right: 14px;
+	bottom: 14px;
+	width: 10px;
+	height: 10px;
+	border-top: 2px solid rgba(255, 255, 255, 0.95);
+	border-right: 2px solid rgba(255, 255, 255, 0.95);
+	pointer-events: none;
+	z-index: 5;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed-inner--group-carousel .connect-chat-creation-embed-group-stack::after {
+	content: '';
+	position: absolute;
+	right: 8px;
+	bottom: 8px;
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	background: rgba(15, 23, 42, 0.72);
+	box-shadow:
+		0 0 0 1px rgba(255, 255, 255, 0.22),
+		0 2px 10px rgba(15, 23, 42, 0.35);
+	pointer-events: none;
+	z-index: 4;
+}
+
+@media (prefers-color-scheme: dark) {
+	.connect-chat-msg-bubble .user-text-inline-image-link::after,
+	.connect-chat-msg-bubble .connect-chat-creation-embed-inner--group-carousel .connect-chat-creation-embed-group-stack::after {
+		background: color-mix(in srgb, #000 66%, transparent);
+		box-shadow:
+			0 0 0 1px rgba(255, 255, 255, 0.18),
+			0 2px 12px rgba(0, 0, 0, 0.45);
+	}
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed--square .connect-chat-creation-embed-inner > .user-text-inline-image-link {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex: 1;
+	align-self: stretch;
+	min-width: 0;
+	min-height: 0;
+	width: 100%;
+	max-width: 100%;
+	height: 100%;
+	position: relative;
+	line-height: 0;
+	cursor: zoom-in;
+	vertical-align: top;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed--square .connect-chat-creation-embed-img {
+	position: static;
+	inset: auto;
+	display: block;
+	width: auto;
+	max-width: 100%;
+	height: auto;
+	max-height: 260px;
+	object-fit: contain;
+	object-position: center;
+	margin: 0;
+	flex-shrink: 0;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed--square .connect-chat-creation-embed-inner--error-layout {
+	aspect-ratio: unset;
+	height: 260px;
+	min-height: 260px;
+	max-height: 260px;
+	width: fit-content;
+	max-width: 100%;
+	min-width: 0;
+	box-sizing: border-box;
+	background: color-mix(in srgb, var(--surface-strong) 58%, var(--bg));
+}
+
+body.chat-page .chat-page-messages .connect-chat-msg-bubble .connect-chat-creation-embed--square .connect-chat-creation-embed-img {
+	max-height: 260px;
+	max-width: 100%;
 }
 
 /* Match feed/cards image-unavailable + moderated icons inside the square frame */
@@ -11337,6 +11672,27 @@ body:has(.chat-hashtag-nav-overlay) {
 	-webkit-user-drag: none;
 	-webkit-user-select: none;
 	user-select: none;
+}
+
+.connect-chat-creation-embed-status-message {
+	flex-shrink: 0;
+	padding: 8px 10px 4px;
+	font-size: 0.75rem;
+	font-weight: 600;
+	line-height: 1.25;
+	color: var(--text-muted);
+	text-align: center;
+	box-sizing: border-box;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed-inner--error-layout .connect-chat-creation-embed-status-message {
+	color: var(--text);
+	padding-bottom: 8px;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed-inner--pending .connect-chat-creation-embed-status-message--pending {
+	padding-top: 10px;
+	padding-bottom: 4px;
 }
 
 .connect-chat-creation-embed-inner--pending {

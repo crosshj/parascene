@@ -254,17 +254,6 @@ class AppModalShare extends HTMLElement {
 								<span class="share-action-cta" data-cta><span class="share-action-cta-label">Show</span></span>
 							</button>
 			
-							<button type="button" class="share-action-row" data-copy-link>
-								<span class="share-action-left">
-									<span class="share-option-icon">${iconLink}</span>
-									<span class="share-action-text">
-										<span class="share-action-title">Copy link</span>
-										<span class="share-action-subtitle">Share it anywhere</span>
-									</span>
-								</span>
-								<span class="share-action-cta" data-cta><span class="share-action-cta-label">Copy</span></span>
-							</button>
-
 							<button type="button" class="share-action-row" data-open-watermarked>
 								<span class="share-action-left">
 									<span class="share-option-icon">${iconPicture}</span>
@@ -274,6 +263,17 @@ class AppModalShare extends HTMLElement {
 									</span>
 								</span>
 								<span class="share-action-cta" data-cta><span class="share-action-cta-label">Open</span></span>
+							</button>
+
+							<button type="button" class="share-action-row" data-copy-link>
+								<span class="share-action-left">
+									<span class="share-option-icon">${iconLink}</span>
+									<span class="share-action-text">
+										<span class="share-action-title">Copy link</span>
+										<span class="share-action-subtitle">Share it anywhere</span>
+									</span>
+								</span>
+								<span class="share-action-cta" data-cta><span class="share-action-cta-label">Copy</span></span>
 							</button>
 						</div>
 			
