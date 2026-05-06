@@ -29,6 +29,8 @@ import {
 	REACTION_ICONS,
 	smileIcon,
 	gearIcon,
+	statsBarsIcon,
+	plusIcon,
 	copyIcon,
 	pencilIcon,
 	trashIcon,
@@ -8319,7 +8321,9 @@ export async function initChatPage(root, options = {}) {
 					reload: async () => {
 						await loadChallengesChannelMessages();
 					},
-					gearIcon
+					gearIcon,
+					statsIcon: statsBarsIcon,
+					plusIcon
 				});
 				challengesOrganizerSidebarTeardown = orgApi.destroy;
 			} else {

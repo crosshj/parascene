@@ -14,6 +14,7 @@ import {
 	isChatMiscGenericKeyOwnedByUser
 } from "./utils/chatMiscGenericKeys.js";
 import { canvasBodyMarkdownToSafeHtml } from "./utils/canvasBodyHtml.js";
+import { CHALLENGE_SCORE_REACTION_KEYS } from "../src/chat/challenges/constants.js";
 
 function normalizeChatReactionsBucket(raw) {
 	const out = {};
@@ -46,6 +47,18 @@ function enrichChatReactionsFromMessageColumn(messages, viewerId) {
 		}
 		return { ...m, reactions, viewer_reactions };
 	});
+}
+
+function tryParseChallengeJsonBody(body) {
+	if (body == null) return null;
+	const s = String(body).trim();
+	if (!s || (!s.startsWith("{") && !s.startsWith("["))) return null;
+	try {
+		const parsed = JSON.parse(s);
+		return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+	} catch {
+		return null;
+	}
 }
 
 const MAX_MESSAGE_CHARS = 4000;
@@ -1861,6 +1874,184 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 			});
 		} catch (err) {
 			console.error("[GET .../messages]", err);
+			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
+		}
+	});
+
+	// GET /api/chat/threads/:threadId/challenges/:challengeId/stats
+	router.get("/api/chat/threads/:threadId/challenges/:challengeId/stats", async (req, res) => {
+		const userId = requireUser(req, res);
+		if (userId == null) return;
+		const sb = getSb(res);
+		if (!sb) return;
+
+		const threadId = Number(req.params.threadId);
+		if (!Number.isFinite(threadId) || threadId <= 0) {
+			return res.status(400).json({ error: "Bad request", message: "Invalid thread id" });
+		}
+		const challengeId = String(req.params.challengeId || "").trim();
+		if (!challengeId) {
+			return res.status(400).json({ error: "Bad request", message: "Invalid challenge id" });
+		}
+
+		try {
+			if (!(await isMember(sb, threadId, userId))) {
+				return res.status(403).json({ error: "Forbidden", message: "Not a member of this thread" });
+			}
+
+			const { data: rows, error } = await sb
+				.from("prsn_chat_messages")
+				.select("id, sender_id, body, reactions, created_at")
+				.eq("thread_id", threadId)
+				.order("created_at", { ascending: true })
+				.order("id", { ascending: true });
+			if (error) throw error;
+
+			const topCandidates = [];
+			const votesPerUserId = new Map();
+			const submissionsPerSenderId = new Map();
+			for (const msg of Array.isArray(rows) ? rows : []) {
+				const payload = tryParseChallengeJsonBody(msg?.body);
+				if (!payload || String(payload.kind || "").trim() !== "challenge_submission") {
+					continue;
+				}
+				const cid = payload.challenge_id != null ? String(payload.challenge_id).trim() : "";
+				if (cid !== challengeId) continue;
+
+				const senderId = msg.sender_id != null ? Number(msg.sender_id) : NaN;
+				if (Number.isFinite(senderId) && senderId > 0) {
+					submissionsPerSenderId.set(
+						senderId,
+						(submissionsPerSenderId.get(senderId) || 0) + 1
+					);
+				}
+
+				const creationId =
+					payload.created_image_id != null ? Number(payload.created_image_id) : NaN;
+				const creationIdSafe =
+					Number.isFinite(creationId) && creationId > 0 ? Math.floor(creationId) : null;
+				const reactions =
+					msg?.reactions && typeof msg.reactions === "object" && !Array.isArray(msg.reactions)
+						? msg.reactions
+						: {};
+
+				let voteValue = 0;
+				let voteCount = 0;
+				for (let i = 0; i < CHALLENGE_SCORE_REACTION_KEYS.length; i += 1) {
+					const key = CHALLENGE_SCORE_REACTION_KEYS[i];
+					const weight = i + 1;
+					const ids = Array.isArray(reactions[key]) ? reactions[key] : [];
+					for (const rawUid of ids) {
+						const uid = Number(rawUid);
+						if (!Number.isFinite(uid) || uid <= 0) continue;
+						voteCount += 1;
+						voteValue += weight;
+						votesPerUserId.set(uid, (votesPerUserId.get(uid) || 0) + 1);
+					}
+				}
+
+				topCandidates.push({
+					creationId: creationIdSafe,
+					creatorUserId:
+						Number.isFinite(senderId) && senderId > 0 ? Math.floor(senderId) : null,
+					voteValue,
+					voteCount,
+					sortId: Number.isFinite(Number(msg?.id)) ? Number(msg.id) : 0
+				});
+			}
+
+			topCandidates.sort((a, b) => {
+				if (b.voteValue !== a.voteValue) return b.voteValue - a.voteValue;
+				if (b.voteCount !== a.voteCount) return b.voteCount - a.voteCount;
+				return a.sortId - b.sortId;
+			});
+
+			const slice = topCandidates.slice(0, 10);
+
+			const voterLeaderboard = [...votesPerUserId.entries()]
+				.map(([uid, n]) => ({ userId: uid, voteCount: n }))
+				.sort((a, b) => {
+					if (b.voteCount !== a.voteCount) return b.voteCount - a.voteCount;
+					return a.userId - b.userId;
+				})
+				.slice(0, 10);
+
+			const submitterLeaderboard = [...submissionsPerSenderId.entries()]
+				.map(([uid, n]) => ({ userId: uid, submissionCount: n }))
+				.sort((a, b) => {
+					if (b.submissionCount !== a.submissionCount) {
+						return b.submissionCount - a.submissionCount;
+					}
+					return a.userId - b.userId;
+				})
+				.slice(0, 10);
+
+			const profileIds = [
+				...new Set([
+					...voterLeaderboard.map((r) => r.userId),
+					...submitterLeaderboard.map((r) => r.userId),
+					...slice
+						.map((r) => r.creatorUserId)
+						.filter((id) => Number.isFinite(Number(id)) && Number(id) > 0)
+				])
+			];
+			/** @type {Map<number, object>} */
+			let profileMap = new Map();
+			if (profileIds.length > 0 && typeof queries.selectUserProfilesByUserIds === "function") {
+				try {
+					const fetched = await queries.selectUserProfilesByUserIds(profileIds);
+					profileMap = fetched instanceof Map ? fetched : new Map();
+				} catch {
+					profileMap = new Map();
+				}
+			}
+
+			const userNameFromProfileMap = (uid) => {
+				const p = profileMap.get(uid);
+				return p && typeof p.user_name === "string" ? String(p.user_name).trim() : "";
+			};
+
+			const topVoters = voterLeaderboard.map((row) => ({
+				userId: row.userId,
+				voteCount: row.voteCount,
+				userName: userNameFromProfileMap(row.userId) || null
+			}));
+
+			const topSubmitters = submitterLeaderboard.map((row) => ({
+				userId: row.userId,
+				submissionCount: row.submissionCount,
+				userName: userNameFromProfileMap(row.userId) || null
+			}));
+
+			const topCreations = slice.map((row) => {
+				const cuid =
+					row.creatorUserId != null &&
+					Number.isFinite(Number(row.creatorUserId)) &&
+					Number(row.creatorUserId) > 0
+						? Math.floor(Number(row.creatorUserId))
+						: null;
+				return {
+					creationId: row.creationId,
+					messageId:
+						Number.isFinite(Number(row.sortId)) && Number(row.sortId) > 0
+							? Math.floor(Number(row.sortId))
+							: null,
+					voteValue: row.voteValue,
+					voteCount: row.voteCount,
+					creatorUserId: cuid,
+					creatorUserName: cuid != null ? userNameFromProfileMap(cuid) || null : null
+				};
+			});
+
+			return res.status(200).json({
+				ok: true,
+				challengeId,
+				topCreations,
+				topSubmitters,
+				topVoters
+			});
+		} catch (err) {
+			console.error("[GET /api/chat/threads/:threadId/challenges/:challengeId/stats]", err);
 			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
 		}
 	});

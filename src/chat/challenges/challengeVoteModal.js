@@ -32,13 +32,18 @@ export function scoreFromChallengeRow(row) {
 }
 
 /**
- * Submissions with message id, newest first (for blind voting flow).
+ * Submissions with message id for blind voting: **unvoted entries first**, then by **`created_at` descending**
+ * (newest among unvoted, newest among voted).
  * @param {object[]} ranked — ranked submission rows from participant model
  */
 export function buildVoteSlidesNewestFirst(ranked) {
+	const votedRank = (row) => (scoreFromChallengeRow(row) > 0 ? 1 : 0);
 	return [...ranked]
 		.filter((r) => r.messageId && Number(r.messageId) > 0)
 		.sort((a, b) => {
+			const ra = votedRank(a);
+			const rb = votedRank(b);
+			if (ra !== rb) return ra - rb;
 			const tb = parseIso(b.msg?.created_at) ?? 0;
 			const ta = parseIso(a.msg?.created_at) ?? 0;
 			return tb - ta;

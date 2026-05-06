@@ -577,6 +577,16 @@ export const gearIcon = withAttributes(html`
 	</svg>
 `);
 
+/** Challenge organizer stats / bar chart (stroke, 24×24). */
+export const statsBarsIcon = withAttributes(html`
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+		stroke-linejoin="round" aria-hidden="true">
+		<path d="M6 20V12"></path>
+		<path d="M12 20V6"></path>
+		<path d="M18 20v-8"></path>
+	</svg>
+`);
+
 /** Reaction icon key → (className?) => svgString. Use for comment reactions. */
 export const REACTION_ICONS = {
 	thumbsUp: thumbsUpReactionIcon,

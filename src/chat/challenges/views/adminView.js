@@ -191,9 +191,12 @@ export function renderChallengeOrganizerFormsHtml(vm) {
 
 /**
  * @param {{ challenge_id: string, title: string }[]} rows
- * @param {string} gearIconSvg — trusted markup from app icon helper
+ * @param {{ gearIconSvg: string, statsIconSvg: string, plusIconSvg: string }} icons — trusted markup from app icon helpers
  */
-export function renderChallengeOrganizerTableHtml(rows, gearIconSvg) {
+export function renderChallengeOrganizerTableHtml(rows, icons) {
+	const gearIconSvg = icons?.gearIconSvg || '';
+	const statsIconSvg = icons?.statsIconSvg || '';
+	const plusIconSvg = icons?.plusIconSvg || '';
 	const bodyRows = (rows || [])
 		.map((r) => {
 			const title =
@@ -207,31 +210,225 @@ export function renderChallengeOrganizerTableHtml(rows, gearIconSvg) {
 					<div class="challenge-pane-organizer-table-id">${cid}</div>
 				</td>
 				<td class="challenge-pane-organizer-table-actions">
-					<button type="button" class="challenge-pane-organizer-gear" data-challenges-organizer-edit="${cid}"
-						aria-label="Edit challenge">${gearIconSvg}</button>
+					<div class="challenge-pane-organizer-table-actions-inner">
+						<button type="button" class="challenge-pane-organizer-stats-trigger" data-challenges-organizer-stats="${cid}"
+							aria-label="View challenge stats">${statsIconSvg}</button>
+						<button type="button" class="challenge-pane-organizer-gear" data-challenges-organizer-edit="${cid}"
+							aria-label="Edit challenge">${gearIconSvg}</button>
+					</div>
 				</td>
 			</tr>`;
 		})
 		.join('');
 
-	return `<div class="challenge-pane-organizer-table-wrap">
-			<table class="challenge-pane-organizer-table">
-				<thead>
-					<tr>
-						<th scope="col">Challenge</th>
-						<th scope="col" class="challenge-pane-organizer-table-actions-head"><span class="challenge-pane-organizer-sr-only">Actions</span></th>
-					</tr>
-				</thead>
-				<tbody>
-					${bodyRows}
-					<tr class="challenge-pane-organizer-table-ghost" data-challenges-organizer-add-row tabindex="0" role="button">
-						<td colspan="2" class="challenge-pane-organizer-table-ghost-cell">
-							<span class="challenge-pane-organizer-table-ghost-label">Add challenge</span>
-						</td>
-					</tr>
-				</tbody>
-			</table>
+	return `<div class="challenge-pane-organizer-table-shell">
+			<div class="challenge-pane-organizer-table-wrap">
+				<table class="challenge-pane-organizer-table">
+					<thead>
+						<tr>
+							<th scope="col">Challenge</th>
+							<th scope="col" class="challenge-pane-organizer-table-actions-head"><span class="challenge-pane-organizer-sr-only">Actions</span></th>
+						</tr>
+					</thead>
+					<tbody>
+						${bodyRows}
+					</tbody>
+				</table>
+			</div>
+			<div class="challenge-pane-organizer-add-strip" data-challenges-organizer-add-row tabindex="0" role="button">
+				<span class="challenge-pane-organizer-add-strip-inner">
+					<span class="challenge-pane-organizer-add-strip-plus" aria-hidden="true">${plusIconSvg}</span>
+					<span class="challenge-pane-organizer-add-strip-label">Add challenge</span>
+				</span>
+			</div>
 		</div>`;
+}
+
+/**
+ * @param {{
+ *   challengeTitle?: string,
+ *   topCreations?: {
+ *     creationId: number | null,
+ *     messageId: number | null,
+ *     voteValue: number,
+ *     voteCount: number,
+ *     creatorUserId: number | null,
+ *     creatorUserName: string | null,
+ *   }[],
+ *   topSubmitters?: { userId: number, submissionCount: number, userName: string | null }[],
+ *   topVoters?: { userId: number, voteCount: number, userName: string | null }[],
+ *   loading?: boolean,
+ *   error?: string | null,
+ * }} vm
+ */
+export function renderChallengeOrganizerStatsModalInnerHtml(vm) {
+	const loading = vm?.loading === true;
+	const error = typeof vm?.error === 'string' ? vm.error.trim() : '';
+	if (loading) {
+		return `<p class="challenge-pane-muted">Loading stats…</p>`;
+	}
+	if (error) {
+		return `<p class="challenge-pane-form-error challenge-pane-organizer-stats-error" role="alert">${esc(error)}</p>`;
+	}
+	const challengeTitle =
+		typeof vm?.challengeTitle === 'string' && vm.challengeTitle.trim()
+			? vm.challengeTitle.trim()
+			: 'Challenge';
+	const topCreations = Array.isArray(vm?.topCreations) ? vm.topCreations : [];
+	const rowsHtml = topCreations
+		.map((row, i) => {
+			const rank = i + 1;
+			const cid =
+				Number.isFinite(Number(row?.creationId)) && Number(row.creationId) > 0
+					? Number(row.creationId)
+					: null;
+			const voteValue = Number.isFinite(Number(row?.voteValue))
+				? Math.max(0, Math.floor(Number(row.voteValue)))
+				: 0;
+			const voteCount = Number.isFinite(Number(row?.voteCount))
+				? Math.max(0, Math.floor(Number(row.voteCount)))
+				: 0;
+			const messageId =
+				Number.isFinite(Number(row?.messageId)) && Number(row.messageId) > 0
+					? Math.floor(Number(row.messageId))
+					: null;
+			const midAttr =
+				messageId != null ? ` data-challenge-message-id="${esc(String(messageId))}"` : '';
+			const thumbBlock = cid
+				? `<span class="challenge-pane-organizer-stats-thumb-slot" data-challenge-stats-thumb-slot="" data-creation-id="${esc(String(cid))}"${midAttr}>
+					<span class="challenge-pane-organizer-stats-thumb challenge-pane-organizer-stats-thumb--placeholder" aria-hidden="true"></span>
+				</span>`
+				: `<span class="challenge-pane-organizer-stats-thumb challenge-pane-organizer-stats-thumb--placeholder" aria-hidden="true"></span>`;
+			const creatorUid =
+				Number.isFinite(Number(row?.creatorUserId)) && Number(row.creatorUserId) > 0
+					? Math.floor(Number(row.creatorUserId))
+					: null;
+			const creatorUnRaw =
+				row?.creatorUserName != null && String(row.creatorUserName).trim()
+					? String(row.creatorUserName).trim()
+					: '';
+			const creatorCell =
+				creatorUnRaw && creatorUid != null
+					? `<a class="challenge-pane-organizer-stats-voter-link" href="/p/${encodeURIComponent(creatorUnRaw.toLowerCase())}">@${esc(creatorUnRaw)}</a>`
+					: creatorUid != null
+						? `<span class="challenge-pane-muted">User ${esc(String(creatorUid))}</span>`
+						: '<span class="challenge-pane-muted">Unknown</span>';
+			const creationCell = cid
+				? `<a class="challenge-pane-organizer-stats-creation" href="/creations/${encodeURIComponent(
+						String(cid)
+					)}" aria-label="View creation ${esc(String(cid))}">
+					${thumbBlock}
+				</a>`
+				: '<span class="challenge-pane-muted">Unknown creation</span>';
+			return `<tr>
+				<td>${esc(String(rank))}</td>
+				<td>${creationCell}</td>
+				<td>${creatorCell}</td>
+				<td>${esc(String(voteValue))}</td>
+				<td>${esc(String(voteCount))}</td>
+			</tr>`;
+		})
+		.join('');
+	const bodyTable = rowsHtml
+		? `<table class="challenge-pane-organizer-stats-table">
+			<thead>
+				<tr>
+					<th scope="col">#</th>
+					<th scope="col">Creation</th>
+					<th scope="col">Creator</th>
+					<th scope="col">Vote value</th>
+					<th scope="col">Votes</th>
+				</tr>
+			</thead>
+			<tbody>${rowsHtml}</tbody>
+		</table>`
+		: `<p class="challenge-pane-muted challenge-pane-organizer-stats-empty">No submissions with votes yet.</p>`;
+
+	const topSubmitters = Array.isArray(vm?.topSubmitters) ? vm.topSubmitters : [];
+	const submitterRowsHtml = topSubmitters
+		.map((row, i) => {
+			const rank = i + 1;
+			const uid = Number.isFinite(Number(row?.userId)) ? Math.floor(Number(row.userId)) : null;
+			const submissionCount = Number.isFinite(Number(row?.submissionCount))
+				? Math.max(0, Math.floor(Number(row.submissionCount)))
+				: 0;
+			const unRaw =
+				row?.userName != null && String(row.userName).trim()
+					? String(row.userName).trim()
+					: '';
+			const userCell =
+				unRaw && uid != null
+					? `<a class="challenge-pane-organizer-stats-voter-link" href="/p/${encodeURIComponent(unRaw.toLowerCase())}">@${esc(unRaw)}</a>`
+					: uid != null
+						? `<span class="challenge-pane-muted">User ${esc(String(uid))}</span>`
+						: '<span class="challenge-pane-muted">Unknown</span>';
+			return `<tr>
+				<td>${esc(String(rank))}</td>
+				<td>${userCell}</td>
+				<td>${esc(String(submissionCount))}</td>
+			</tr>`;
+		})
+		.join('');
+	const submittersTable = submitterRowsHtml
+		? `<table class="challenge-pane-organizer-stats-table challenge-pane-organizer-stats-table--submitters">
+			<thead>
+				<tr>
+					<th scope="col">#</th>
+					<th scope="col">Entrant</th>
+					<th scope="col">Submissions</th>
+				</tr>
+			</thead>
+			<tbody>${submitterRowsHtml}</tbody>
+		</table>`
+		: `<p class="challenge-pane-muted challenge-pane-organizer-stats-empty">No submissions yet.</p>`;
+
+	const topVoters = Array.isArray(vm?.topVoters) ? vm.topVoters : [];
+	const voterRowsHtml = topVoters
+		.map((row, i) => {
+			const rank = i + 1;
+			const uid = Number.isFinite(Number(row?.userId)) ? Math.floor(Number(row.userId)) : null;
+			const voteCount = Number.isFinite(Number(row?.voteCount))
+				? Math.max(0, Math.floor(Number(row.voteCount)))
+				: 0;
+			const unRaw =
+				row?.userName != null && String(row.userName).trim()
+					? String(row.userName).trim()
+					: '';
+			const voterCell =
+				unRaw && uid != null
+					? `<a class="challenge-pane-organizer-stats-voter-link" href="/p/${encodeURIComponent(unRaw.toLowerCase())}">@${esc(unRaw)}</a>`
+					: uid != null
+						? `<span class="challenge-pane-muted">User ${esc(String(uid))}</span>`
+						: '<span class="challenge-pane-muted">Unknown</span>';
+			return `<tr>
+				<td>${esc(String(rank))}</td>
+				<td>${voterCell}</td>
+				<td>${esc(String(voteCount))}</td>
+			</tr>`;
+		})
+		.join('');
+	const votersTable = voterRowsHtml
+		? `<table class="challenge-pane-organizer-stats-table challenge-pane-organizer-stats-table--voters">
+			<thead>
+				<tr>
+					<th scope="col">#</th>
+					<th scope="col">Voter</th>
+					<th scope="col">Votes</th>
+				</tr>
+			</thead>
+			<tbody>${voterRowsHtml}</tbody>
+		</table>`
+		: `<p class="challenge-pane-muted challenge-pane-organizer-stats-empty">No votes cast yet.</p>`;
+
+	return `<section class="challenge-pane-organizer-stats-view">
+		<p class="challenge-pane-organizer-stats-kicker">${esc(challengeTitle)}</p>
+		<h4 class="challenge-pane-organizer-stats-subhead">Top 10 creations by vote value</h4>
+		<div class="challenge-pane-organizer-stats-table-wrap">${bodyTable}</div>
+		<h4 class="challenge-pane-organizer-stats-subhead challenge-pane-organizer-stats-subhead--secondary">Top 10 entrants by submissions</h4>
+		<div class="challenge-pane-organizer-stats-table-wrap">${submittersTable}</div>
+		<h4 class="challenge-pane-organizer-stats-subhead challenge-pane-organizer-stats-subhead--secondary">Top 10 voters by votes cast</h4>
+		<div class="challenge-pane-organizer-stats-table-wrap">${votersTable}</div>
+	</section>`;
 }
 
 /**
@@ -260,12 +457,20 @@ function renderChallengeOrganizerModalHtml() {
 }
 
 /**
- * @param {{ rows: { challenge_id: string, title: string }[], gearIconSvg: string }} vm
+ * @param {{
+ *   rows: { challenge_id: string, title: string }[],
+ *   gearIconSvg: string,
+ *   statsIconSvg: string,
+ *   plusIconSvg: string,
+ * }} vm
  */
 export function renderChallengeOrganizerSidebarMarkup(vm) {
 	const rows = vm.rows || [];
-	const gearSvg = vm.gearIconSvg || '';
-	const table = renderChallengeOrganizerTableHtml(rows, gearSvg);
+	const table = renderChallengeOrganizerTableHtml(rows, {
+		gearIconSvg: vm.gearIconSvg || '',
+		statsIconSvg: vm.statsIconSvg || '',
+		plusIconSvg: vm.plusIconSvg || ''
+	});
 	const modal = renderChallengeOrganizerModalHtml();
 	return `<div class="chat-page-challenges-organizer-sidebar-inner">
 			<div class="chat-page-canvas-panel-body">

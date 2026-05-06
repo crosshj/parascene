@@ -7,8 +7,61 @@ import {
 } from './challengeAdmin.js';
 import {
 	renderChallengeOrganizerSidebarMarkup,
-	renderChallengeOrganizerModalInnerHtml
+	renderChallengeOrganizerModalInnerHtml,
+	renderChallengeOrganizerStatsModalInnerHtml
 } from './views/adminView.js';
+
+/** Creation payload from GET /api/create/images/:id (with optional challenge_message_id). */
+function statsThumbSrcFromCreationPayload(c) {
+	if (!c || c._error) return '';
+	const mediaType = typeof c.media_type === 'string' ? c.media_type : 'image';
+	const videoUrl = typeof c.video_url === 'string' ? c.video_url.trim() : '';
+	const url = typeof c.url === 'string' ? c.url.trim() : '';
+	const thumb = typeof c.thumbnail_url === 'string' ? c.thumbnail_url.trim() : '';
+	if (mediaType === 'video') return (thumb || url || videoUrl).trim();
+	return (url || thumb).trim();
+}
+
+function escapeHtmlAttr(value) {
+	return String(value ?? '')
+		.replace(/&/g, '&amp;')
+		.replace(/"/g, '&quot;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;');
+}
+
+/**
+ * Same authorization path as blind voting: `?challenge_message_id=` unlocks unpublished challenge entries.
+ * @param {HTMLElement} rootEl — modal body containing `[data-challenge-stats-thumb-slot]`
+ */
+async function hydrateChallengeOrganizerStatsThumbs(rootEl) {
+	const slots = rootEl.querySelectorAll('[data-challenge-stats-thumb-slot]');
+	await Promise.all(
+		[...slots].map(async (slot) => {
+			const cid = Number(slot.getAttribute('data-creation-id'));
+			const midRaw = slot.getAttribute('data-challenge-message-id');
+			const mid = Number(midRaw);
+			if (!Number.isFinite(cid) || cid <= 0) return;
+			const qs =
+				Number.isFinite(mid) && mid > 0
+					? `?challenge_message_id=${encodeURIComponent(String(mid))}`
+					: '';
+			let src = '';
+			try {
+				const res = await fetch(`/api/create/images/${encodeURIComponent(String(cid))}${qs}`, {
+					credentials: 'include'
+				});
+				const c = res.ok ? await res.json().catch(() => null) : null;
+				src = statsThumbSrcFromCreationPayload(c);
+			} catch {
+				src = '';
+			}
+			if (src && slot.isConnected) {
+				slot.innerHTML = `<img class="challenge-pane-organizer-stats-thumb" src="${escapeHtmlAttr(src)}" alt="" width="40" height="40" decoding="async" loading="lazy" />`;
+			}
+		})
+	);
+}
 
 /**
  * Challenge organizer UI in the chat right sidebar (same panel chrome as canvases).
@@ -22,7 +75,9 @@ import {
  *   patchMessage?: (messageId: number, body: string) => Promise<{ ok: boolean, error?: string }>,
  *   reload: () => Promise<void>,
  *   gearIcon: (className?: string) => string,
- * }} opts — `gearIcon` must come from the same versioned `svg-strings` import as `chat.js` (avoid an extra uncached static import here).
+ *   statsIcon?: (className?: string) => string,
+ *   plusIcon?: (className?: string) => string,
+ * }} opts — icon helpers should come from the same versioned `svg-strings` import as `chat.js` (avoid an extra uncached static import here).
  */
 export function mountChallengesOrganizerSidebar(host, opts) {
 	const gearIcon =
@@ -30,9 +85,21 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 			? opts.gearIcon
 			: /** @param {string} [cls] */ (cls) =>
 					`<svg class="${String(cls || '').trim()}" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" /></svg>`;
+	const statsIcon =
+		typeof opts.statsIcon === 'function'
+			? opts.statsIcon
+			: /** @param {string} [cls] */ (cls) =>
+					`<svg class="${String(cls || '').trim()}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 20V12M12 20V6M18 20v-8"/></svg>`;
+	const plusIcon =
+		typeof opts.plusIcon === 'function'
+			? opts.plusIcon
+			: /** @param {string} [cls] */ (cls) =>
+					`<svg class="${String(cls || '').trim()}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
 	let rowByChallengeId = new Map();
+	let activeStatsRequestToken = 0;
 
 	const closeModal = () => {
+		activeStatsRequestToken += 1;
 		const modalEl = host.querySelector('[data-challenges-organizer-modal]');
 		if (!(modalEl instanceof HTMLElement)) return;
 		modalEl.classList.remove('open');
@@ -59,6 +126,67 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 		);
 		modalEl.classList.add('open');
 		modalEl.setAttribute('aria-hidden', 'false');
+	};
+
+	/**
+	 * @param {string} challengeId
+	 * @param {string} challengeTitle
+	 */
+	const openStatsModal = async (challengeId, challengeTitle) => {
+		const cid = String(challengeId || '').trim();
+		if (!cid) return;
+		const modalEl = host.querySelector('[data-challenges-organizer-modal]');
+		const modalTitle = host.querySelector('[data-challenges-organizer-modal-title]');
+		const modalBody = host.querySelector('[data-challenges-organizer-modal-body]');
+		if (
+			!(modalEl instanceof HTMLElement) ||
+			!(modalTitle instanceof HTMLElement) ||
+			!(modalBody instanceof HTMLElement)
+		) {
+			return;
+		}
+		const requestToken = ++activeStatsRequestToken;
+		modalTitle.textContent = 'Challenge stats';
+		modalBody.innerHTML = renderChallengeOrganizerStatsModalInnerHtml({
+			challengeTitle,
+			loading: true
+		});
+		modalEl.classList.add('open');
+		modalEl.setAttribute('aria-hidden', 'false');
+		try {
+			const endpoint = `/api/chat/threads/${encodeURIComponent(String(opts.threadId))}/challenges/${encodeURIComponent(cid)}/stats`;
+			const res = await fetch(endpoint, { credentials: 'include' });
+			const data = await res.json().catch(() => ({}));
+			if (requestToken !== activeStatsRequestToken) return;
+			if (!res.ok || data?.ok !== true) {
+				const msg =
+					typeof data?.message === 'string' && data.message.trim()
+						? data.message.trim()
+						: 'Could not load challenge stats.';
+				modalBody.innerHTML = renderChallengeOrganizerStatsModalInnerHtml({
+					challengeTitle,
+					error: msg
+				});
+				return;
+			}
+			modalBody.innerHTML = renderChallengeOrganizerStatsModalInnerHtml({
+				challengeTitle,
+				topCreations: data.topCreations,
+				topSubmitters: data.topSubmitters,
+				topVoters: data.topVoters
+			});
+			if (requestToken !== activeStatsRequestToken) return;
+			void hydrateChallengeOrganizerStatsThumbs(modalBody);
+		} catch (err) {
+			if (requestToken !== activeStatsRequestToken) return;
+			modalBody.innerHTML = renderChallengeOrganizerStatsModalInnerHtml({
+				challengeTitle,
+				error:
+					err instanceof Error && err.message
+						? err.message
+						: 'Could not load challenge stats.'
+			});
+		}
 	};
 
 	const onDocEscape = (e) => {
@@ -245,6 +373,14 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 			if (row?.payload) {
 				openModal('edit', row.payload, row.configMessageId);
 			}
+			return;
+		}
+
+		const statsBtn = t.closest('[data-challenges-organizer-stats]');
+		if (statsBtn instanceof HTMLButtonElement) {
+			const cid = statsBtn.getAttribute('data-challenges-organizer-stats') || '';
+			const row = rowByChallengeId.get(cid);
+			void openStatsModal(cid, row?.title || cid);
 		}
 	};
 
@@ -269,9 +405,13 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 		rowByChallengeId = new Map(summaries.map((s) => [s.challenge_id, s]));
 
 		const gearSvg = gearIcon('challenge-pane-organizer-gear-svg');
+		const statsSvg = statsIcon('challenge-pane-organizer-stats-trigger-svg');
+		const plusSvg = plusIcon('challenge-pane-organizer-plus-svg');
 		host.innerHTML = renderChallengeOrganizerSidebarMarkup({
 			rows: summaries,
-			gearIconSvg: gearSvg
+			gearIconSvg: gearSvg,
+			statsIconSvg: statsSvg,
+			plusIconSvg: plusSvg
 		});
 	};
 
