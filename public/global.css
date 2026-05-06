@@ -6401,6 +6401,7 @@ body.chat-page .chat-page-thread-body {
 	display: flex;
 	flex-direction: column;
 	position: relative;
+	isolation: isolate;
 	width: 100%;
 	box-sizing: border-box;
 }
@@ -6408,17 +6409,17 @@ body.chat-page .chat-page-thread-body {
 /* In-thread topbar is hidden ≤768px (mobile chrome replaces it). When visible, overlay the scroll
    area so backdrop-filter blurs message/content scrolling underneath. */
 @media (min-width: 769px) {
-	body.chat-page .chat-page-topbar {
-		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		width: 100%;
-		z-index: 3;
+	body.chat-page .chat-page-messages {
+		padding: calc(var(--chat-chrome-header-height, 48px) + 12px) 12px 8px 12px;
 	}
 
-	body.chat-page .chat-page-messages {
-		padding: calc(var(--chat-chrome-header-height, 48px) + 8px) 12px 8px 12px;
+	/*
+	 * Lower carousel arrows slightly on desktop (mobile chrome differs).
+	 * Stacking vs header is enforced later — see `.chat-page-thread-body > header.chat-page-topbar`.
+	 */
+	body.chat-page .chat-page-messages .feed-card-group-nav,
+	body.chat-page .chat-page-messages .connect-chat-creation-embed-group-nav {
+		top: 54%;
 	}
 }
 
@@ -6498,6 +6499,29 @@ header.chat-page-topbar::after {
 .chat-page-sidebar-head > * {
 	position: relative;
 	z-index: 1;
+}
+
+/*
+ * Desktop thread glass header must sit above *all* overlays in the scroll column (carousel arrows,
+ * zoom-corner pseudo-elements z-index 3–6, message hover bars). Header z-index only needs to beat
+ * `.chat-page-messages { z-index: 0 }` here — descendant overlays stay trapped inside the column.
+ * This block is intentionally AFTER
+ * `.chat-page-topbar { position: relative; z-index: 2 }` and uses the thread child selector so it always wins.
+ */
+@media (min-width: 769px) {
+	body.chat-page .chat-page-thread-body > header.chat-page-topbar {
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		width: 100%;
+		z-index: 2;
+	}
+
+	body.chat-page .chat-page-thread-body > .chat-page-messages {
+		position: relative;
+		z-index: 0;
+	}
 }
 
 .chat-page-canvas-panel-head {
@@ -6781,6 +6805,7 @@ body.chat-page .chat-page-canvas-panel-body {
 	flex-direction: column;
 	gap: 0;
 	position: relative;
+	z-index: 0;
 	/* Avoid browser scroll anchoring fighting manual scrollTop when prepending older messages. */
 	overflow-anchor: none;
 }
@@ -10609,6 +10634,62 @@ body.blog-edit-page .blog-edit-route {
 	pointer-events: none;
 }
 
+/* Gallery frame inherits pointer-events: none so backdrop clicks reach the overlay (nav/img keep pointer-events: auto). */
+
+.chat-inline-image-lightbox-gallery-nav {
+	position: absolute;
+	top: 50%;
+	transform: translateY(-50%);
+	width: 42px;
+	height: 42px;
+	border: 1px solid rgba(255, 255, 255, 0.28);
+	border-radius: 50%;
+	background: rgba(0, 0, 0, 0.54);
+	color: rgba(255, 255, 255, 0.94);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	cursor: pointer;
+	z-index: 4;
+	touch-action: manipulation;
+	pointer-events: auto;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.chat-inline-image-lightbox-gallery-nav svg {
+	display: block;
+	width: 18px;
+	height: 18px;
+	stroke: currentColor;
+	stroke-width: 2.2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	fill: none;
+	pointer-events: none;
+}
+
+.chat-inline-image-lightbox-gallery-nav--prev {
+	left: max(8px, env(safe-area-inset-left));
+}
+
+.chat-inline-image-lightbox-gallery-nav--next {
+	right: max(8px, env(safe-area-inset-right));
+}
+
+.chat-inline-image-lightbox-gallery-nav:hover {
+	background: rgba(0, 0, 0, 0.66);
+}
+
+.chat-inline-image-lightbox-gallery-nav:active {
+	transform: translateY(-50%);
+}
+
+.chat-inline-image-lightbox-gallery-nav:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
+
 .chat-inline-image-lightbox-footer {
 	position: relative;
 	z-index: 3;
@@ -11319,7 +11400,7 @@ body:has(.chat-hashtag-nav-overlay) {
  * Square creation previews: one 1×1 frame for skeleton + image so they align on swap.
  * Images use contain so previews are never cropped (chat bubbles override frame height below).
  */
-.connect-chat-creation-embed--square .connect-chat-creation-embed-inner:not(.connect-chat-creation-embed-inner--video):not(.connect-chat-creation-embed-inner--loading-shell) {
+.connect-chat-creation-embed--square .connect-chat-creation-embed-inner:not(.connect-chat-creation-embed-inner--video):not(.connect-chat-creation-embed-inner--loading-shell):not(.connect-chat-creation-embed-inner--group-carousel):not(.connect-chat-creation-embed-inner--html):not(.connect-chat-creation-embed-inner--pending):not(.connect-chat-creation-embed-inner--error-layout) {
 	display: block;
 	position: relative;
 	width: 100%;
@@ -11356,7 +11437,15 @@ body:has(.chat-hashtag-nav-overlay) {
 }
 
 .connect-chat-creation-embed-inner--group-carousel {
+	display: block;
 	position: relative;
+	width: 100%;
+	aspect-ratio: 1 / 1;
+	min-width: 0;
+	max-width: 100%;
+	border-radius: 12px;
+	overflow: hidden;
+	line-height: 0;
 }
 
 .connect-chat-creation-embed-group-stack {
@@ -11456,9 +11545,18 @@ body:has(.chat-hashtag-nav-overlay) {
 	container-type: normal;
 }
 
+.connect-chat-msg-bubble .connect-chat-creation-embed.connect-chat-creation-embed--square {
+	min-width: min(260px, 100%);
+}
+
 .connect-chat-msg-bubble .connect-chat-creation-embed-media {
 	width: auto;
 	max-width: 100%;
+}
+
+/* Absolute-positioned carousel layers don't contribute width; keep shell ≥ preview column (matches loading-shell). */
+.connect-chat-msg-bubble .connect-chat-creation-embed--square > .connect-chat-creation-embed-media {
+	min-width: min(260px, 100%);
 }
 
 .connect-chat-msg-bubble .connect-chat-creation-embed-inner--loading-shell {
@@ -11490,6 +11588,7 @@ body:has(.chat-hashtag-nav-overlay) {
 .connect-chat-msg-bubble .connect-chat-creation-embed-inner--pending {
 	width: min(260px, 100%);
 	max-width: 100%;
+	min-width: min(260px, 100%);
 	min-height: 260px;
 	max-height: 260px;
 	aspect-ratio: unset;
@@ -11542,9 +11641,13 @@ body:has(.chat-hashtag-nav-overlay) {
 }
 
 .connect-chat-msg-bubble .connect-chat-creation-embed--square .connect-chat-creation-embed-inner.connect-chat-creation-embed-inner--group-carousel {
-	width: fit-content;
+	display: block;
+	position: relative;
+	overflow: hidden;
+	line-height: 0;
+	width: min(260px, 100%);
 	max-width: 100%;
-	min-width: 0;
+	min-width: min(260px, 100%);
 	height: 260px;
 	min-height: 260px;
 	max-height: 260px;

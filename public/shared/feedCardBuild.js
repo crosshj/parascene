@@ -205,7 +205,9 @@ export function feedItemCardImageUrlCandidates(item, preferThumbnail = false) {
 
 export function getFeedItemGroupCarouselSources(item) {
 	const creationId = Number(item?.created_image_id ?? item?.id);
-	const groupPayload = item?.meta?.group && typeof item.meta.group === 'object' ? item.meta.group : null;
+	const parsedMeta = parseFeedItemMeta(item);
+	const groupPayload =
+		parsedMeta?.group && typeof parsedMeta.group === 'object' ? parsedMeta.group : null;
 	if (groupPayload?.kind !== 'group_creations') return [];
 	const sourcesRaw = Array.isArray(groupPayload?.source_creations) ? groupPayload.source_creations : [];
 	const seen = new Set();
@@ -290,6 +292,15 @@ export function setupFeedCardGroupCarousel(imageContainer, item) {
 	imageContainer.appendChild(stack);
 	imageContainer.appendChild(prevBtn);
 	imageContainer.appendChild(nextBtn);
+
+	const cardEl = imageContainer.closest('.feed-card');
+	if (cardEl instanceof HTMLElement) {
+		try {
+			cardEl.dataset.feedGroupCarouselUrls = JSON.stringify(sources.map((s) => s.url));
+		} catch {
+			delete cardEl.dataset.feedGroupCarouselUrls;
+		}
+	}
 	return true;
 }
 
@@ -576,7 +587,8 @@ function stampChatCreationsBulkDatasetOnFeedCard(card, item, preferThumbnail) {
 	const mediaTypeRaw = item?.media_type;
 	const mediaType = typeof mediaTypeRaw === 'string' ? mediaTypeRaw.trim().toLowerCase() : 'image';
 	card.dataset.mediaType = mediaType || 'image';
-	const isGroupCreation = item?.meta?.group?.kind === 'group_creations';
+	const parsedMeta = parseFeedItemMeta(item);
+	const isGroupCreation = parsedMeta?.group?.kind === 'group_creations';
 	card.dataset.groupCreation = isGroupCreation ? '1' : '0';
 	const imageUrlRaw = feedItemCardImageUrl(item, preferThumbnail);
 	card.dataset.imageUrl = typeof imageUrlRaw === 'string' ? imageUrlRaw.trim() : '';
@@ -622,7 +634,7 @@ function buildFeedCreationCard(
 		card.className = "feed-card feed-card--image-only";
 		const isPublished = item.published === true || item.published === 1;
 		const publishedOverlay = isPublished ? publishedBadgeHtml() : '';
-		const isGroupCreation = item?.meta?.group?.kind === 'group_creations';
+		const isGroupCreation = parsedMeta?.group?.kind === 'group_creations';
 		const groupOverlay = isGroupCreation
 			? html`<span class="creation-group-badge" aria-label="Group creation" title="Group creation">
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"
@@ -891,6 +903,7 @@ function finishFeedCreationCardMediaAndClick(
 	const displayUrl = feedItemCardImageUrl(item, preferThumbnail);
 	const videoUrl = typeof item.video_url === 'string' ? item.video_url.trim() : '';
 	const processing = isFeedCreationImageProcessing(item);
+	const moderated = item?.is_moderated_error === true;
 
 	if (imageEl && imageContainer) {
 		if (processing) {
@@ -899,12 +912,27 @@ function finishFeedCreationCardMediaAndClick(
 			const canShowVideo = isVideo && Boolean(videoUrl);
 			const hasGroupCarousel = !isVideo && setupFeedCardGroupCarousel(imageContainer, item);
 			if (!displayUrl && !canShowVideo && !hasGroupCarousel) {
-				markFeedCardImageUnavailable(imageContainer, imageEl, { state: 'missing' });
-			} else if (displayUrl) {
+				markFeedCardImageUnavailable(imageContainer, imageEl, {
+					state: moderated ? 'moderated' : 'missing',
+					moderated
+				});
+			} else if (displayUrl && !hasGroupCarousel) {
 				attachFeedCardImage(imageEl, imageContainer, item, itemIndex, preferThumbnail);
 				if (!isVideo && !hasGroupCarousel) {
 					setupFeedCardGroupCarousel(imageContainer, item);
 				}
+			} else if (hasGroupCarousel) {
+				teardownFeedCardCreationProcessingUi(imageContainer);
+				imageEl?.removeAttribute?.('src');
+				imageEl?.removeAttribute?.('data-feed-image-url');
+				imageEl?.style?.removeProperty?.('opacity');
+				imageContainer.classList.remove('loading', 'error', 'feed-card-image-error-moderated');
+				imageContainer.removeAttribute('data-feed-img-state');
+				imageContainer.removeAttribute('role');
+				imageContainer.removeAttribute('aria-label');
+				const modIcon = imageContainer.querySelector('.route-media-error-moderated-icon');
+				if (modIcon) modIcon.remove();
+				imageContainer.classList.add('loaded');
 			}
 		}
 	}

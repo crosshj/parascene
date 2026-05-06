@@ -2353,6 +2353,7 @@ body.chat-page .chat-route {
 	flex-direction: column;
 	gap: 0;
 	position: relative;
+	z-index: 0;
 	overflow-anchor: none;
 	scrollbar-width: none;
 	-ms-overflow-style: none;

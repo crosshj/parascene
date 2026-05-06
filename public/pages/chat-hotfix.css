@@ -132,9 +132,17 @@ body.chat-page .chat-page-messages .connect-chat-msg-bubble .user-text-inline-im
 	container-type: normal;
 }
 
+.connect-chat-msg-bubble .connect-chat-creation-embed.connect-chat-creation-embed--square {
+	min-width: min(260px, 100%);
+}
+
 .connect-chat-msg-bubble .connect-chat-creation-embed-media {
 	width: auto;
 	max-width: 100%;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed--square > .connect-chat-creation-embed-media {
+	min-width: min(260px, 100%);
 }
 
 .connect-chat-msg-bubble .connect-chat-creation-embed-inner--loading-shell {
@@ -166,6 +174,7 @@ body.chat-page .chat-page-messages .connect-chat-msg-bubble .user-text-inline-im
 .connect-chat-msg-bubble .connect-chat-creation-embed-inner--pending {
 	width: min(260px, 100%);
 	max-width: 100%;
+	min-width: min(260px, 100%);
 	min-height: 260px;
 	max-height: 260px;
 	aspect-ratio: unset;
@@ -218,9 +227,13 @@ body.chat-page .chat-page-messages .connect-chat-msg-bubble .user-text-inline-im
 }
 
 .connect-chat-msg-bubble .connect-chat-creation-embed--square .connect-chat-creation-embed-inner.connect-chat-creation-embed-inner--group-carousel {
-	width: fit-content;
+	display: block;
+	position: relative;
+	overflow: hidden;
+	line-height: 0;
+	width: min(260px, 100%);
 	max-width: 100%;
-	min-width: 0;
+	min-width: min(260px, 100%);
 	height: 260px;
 	min-height: 260px;
 	max-height: 260px;
@@ -350,6 +363,11 @@ body.chat-page .chat-page-messages .connect-chat-msg-bubble .connect-chat-creati
 	min-height: 0;
 }
 
+/* Stale chat.bundle: --gallery set pointer-events:auto on the full flex frame and swallowed backdrop clicks */
+.chat-inline-image-lightbox-frame.chat-inline-image-lightbox-frame--gallery {
+	pointer-events: none;
+}
+
 .chat-inline-image-lightbox-footer {
 	position: relative;
 	z-index: 3;
@@ -421,5 +439,34 @@ button.chat-inline-image-lightbox-footer-btn.btn-secondary {
 		max-width: 100%;
 		max-height: 100%;
 		border-radius: 6px;
+	}
+}
+
+/*
+ * Desktop: force thread header above feed/embed chrome even when /build/chat.bundle.css is stale.
+ * chat.html loads this sheet after the bundle — carousel arrows + zoom pseudo-elements stay underneath.
+ */
+@media (min-width: 769px) {
+	html.chat-page body.chat-page .chat-page-thread-body {
+		isolation: isolate;
+	}
+
+	html.chat-page body.chat-page .chat-page-thread-body > header.chat-page-topbar {
+		position: absolute !important;
+		top: 0 !important;
+		left: 0 !important;
+		right: 0 !important;
+		width: 100% !important;
+		z-index: 2 !important;
+	}
+
+	html.chat-page body.chat-page .chat-page-thread-body > .chat-page-messages {
+		position: relative !important;
+		z-index: 0 !important;
+	}
+
+	html.chat-page body.chat-page .chat-page-messages .feed-card-group-nav,
+	html.chat-page body.chat-page .chat-page-messages .connect-chat-creation-embed-group-nav {
+		top: 54%;
 	}
 }

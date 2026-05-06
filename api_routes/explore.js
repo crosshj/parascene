@@ -28,12 +28,20 @@ function escapeHtml(value) {
 function mapExploreItemsToResponse(items) {
 	const list = Array.isArray(items) ? items : [];
 	return list.map((item) => {
+		let meta = item?.meta;
+		if (typeof meta === "string" && meta) {
+			try {
+				meta = JSON.parse(meta);
+			} catch {
+				meta = null;
+			}
+		}
 		const rawImageUrl = item?.url || null;
 		const mediaType =
 			typeof item?.media_type === "string"
 				? item.media_type
-				: (item?.meta && typeof item.meta.media_type === "string" ? item.meta.media_type : "image");
-		const videoMeta = item?.meta && typeof item.meta === "object" ? item.meta.video : null;
+				: (meta && typeof meta.media_type === "string" ? meta.media_type : "image");
+		const videoMeta = meta && typeof meta === "object" ? meta.video : null;
 		const rawVideoUrl =
 			typeof item?.video_url === "string" && item.video_url
 				? item.video_url
@@ -59,6 +67,7 @@ function mapExploreItemsToResponse(items) {
 			comment_count: Number(item?.comment_count ?? 0),
 			viewer_liked: Boolean(item?.viewer_liked),
 			nsfw: !!(item?.nsfw),
+			meta: meta && typeof meta === "object" ? meta : null,
 			media_type: mediaType,
 			video_url: videoUrl
 		};

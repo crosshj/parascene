@@ -2240,7 +2240,9 @@ export async function initChatPage(root, options = {}) {
 								typeof item.fullImageUrl === 'string' && item.fullImageUrl.trim()
 									? item.fullImageUrl.trim()
 									: previewSrc;
-							openChatInlineImageLightbox(fullSrc);
+							openChatInlineImageLightbox(previewSrc || fullSrc, {
+								sourceImg: img,
+							});
 						});
 					}
 				}
@@ -3989,6 +3991,73 @@ export async function initChatPage(root, options = {}) {
 		activeReactionPicker = panel;
 	}
 
+	/**
+	 * Match the visible grouped slide to galleryUrls for opening the lightbox.
+	 * String equality often fails because img.currentSrc is absolute while galleryUrls may be relative.
+	 */
+	function resolveGroupCarouselOpenIndex(activeImg, galleryUrls) {
+		if (!(activeImg instanceof HTMLImageElement) || !Array.isArray(galleryUrls) || galleryUrls.length === 0) {
+			return 0;
+		}
+		const rawAttr =
+			activeImg.getAttribute('data-group-slide-index') ||
+			(typeof activeImg.dataset?.groupSlideIndex === 'string' ? activeImg.dataset.groupSlideIndex : '');
+		const fromAttr = Number(String(rawAttr || '').trim());
+		if (Number.isFinite(fromAttr) && fromAttr >= 0 && fromAttr < galleryUrls.length) return fromAttr;
+
+		const trimmedSrc = String(activeImg.currentSrc || activeImg.getAttribute('src') || '').trim();
+		const eqIdx = galleryUrls.findIndex((u) => String(u || '').trim() === trimmedSrc);
+		if (eqIdx >= 0) return eqIdx;
+
+		try {
+			const activeUrl = new URL(trimmedSrc, window.location.origin);
+			for (let i = 0; i < galleryUrls.length; i++) {
+				const gu = String(galleryUrls[i] || '').trim();
+				if (!gu) continue;
+				try {
+					const gUrl = new URL(gu, window.location.origin);
+					if (gUrl.href === activeUrl.href) return i;
+				} catch {
+					/* ignore */
+				}
+			}
+			const ap = activeUrl.pathname + activeUrl.search;
+			for (let i = 0; i < galleryUrls.length; i++) {
+				const gu = String(galleryUrls[i] || '').trim();
+				if (!gu) continue;
+				try {
+					const gUrl = new URL(gu, window.location.origin);
+					if (gUrl.pathname + gUrl.search === ap) return i;
+				} catch {
+					/* ignore */
+				}
+			}
+		} catch {
+			/* ignore */
+		}
+		return 0;
+	}
+
+	function attachChatInlineImageLightboxBackdropClose(overlay) {
+		overlay.addEventListener('click', (e) => {
+			const t = e.target;
+			if (!(t instanceof Element)) return;
+			if (t.closest('.chat-inline-image-lightbox-footer')) return;
+			if (t.closest('.chat-inline-image-lightbox-close')) return;
+			if (
+				t.closest('.chat-inline-image-lightbox-img') ||
+				t.closest('.chat-inline-image-lightbox-canvas') ||
+				t.closest('.chat-inline-image-lightbox-gallery-nav') ||
+				t.closest('.chat-inline-image-lightbox-video') ||
+				t.closest('.chat-inline-image-lightbox-video-shell') ||
+				t.closest('.chat-inline-image-lightbox-iframe')
+			) {
+				return;
+			}
+			closeChatInlineImageLightbox();
+		});
+	}
+
 	function closeChatInlineImageLightbox() {
 		if (typeof chatInlineImageLightboxKeydown === 'function') {
 			document.removeEventListener('keydown', chatInlineImageLightboxKeydown);
@@ -4023,8 +4092,28 @@ export async function initChatPage(root, options = {}) {
 	}
 
 	function openChatInlineImageLightbox(src, creationMeta) {
-		const url = String(src || '').trim();
-		if (!url) return;
+		const rawGallery =
+			creationMeta && Array.isArray(creationMeta.galleryUrls)
+				? creationMeta.galleryUrls.map((u) => String(u || '').trim()).filter(Boolean)
+				: [];
+		const galleryImgs =
+			Array.isArray(creationMeta?.galleryImgs) ?
+				creationMeta.galleryImgs.filter((n) => n instanceof HTMLImageElement)
+			: [];
+		const primarySourceImg =
+			creationMeta?.sourceImg instanceof HTMLImageElement ? creationMeta.sourceImg : null;
+		const useGallery = rawGallery.length > 1;
+		let galleryIndex = Number(creationMeta?.galleryIndex);
+		if (!Number.isFinite(galleryIndex)) galleryIndex = 0;
+		const srcTrim = String(src || '').trim();
+		if (useGallery) {
+			const matchIdx = rawGallery.indexOf(srcTrim);
+			if (matchIdx >= 0) galleryIndex = matchIdx;
+			galleryIndex = Math.max(0, Math.min(rawGallery.length - 1, galleryIndex));
+		}
+		const primarySrc = useGallery ? rawGallery[galleryIndex] : srcTrim;
+		const url = String(primarySrc || '').trim();
+		if (!url && !(primarySourceImg?.parentNode && !useGallery)) return;
 		closeReactionPicker();
 		closeChatInlineImageLightbox();
 
@@ -4044,14 +4133,138 @@ export async function initChatPage(root, options = {}) {
 		closeBtn.textContent = '×';
 
 		const frame = document.createElement('div');
-		frame.className = 'chat-inline-image-lightbox-frame';
+		frame.className = useGallery
+			? 'chat-inline-image-lightbox-frame chat-inline-image-lightbox-frame--gallery'
+			: 'chat-inline-image-lightbox-frame';
 
-		const imgEl = document.createElement('img');
-		imgEl.className = 'chat-inline-image-lightbox-img';
-		imgEl.src = url;
-		imgEl.alt = '';
+		/** @type {HTMLElement | null} */
+		let mountedLightboxVisual = null;
 
-		frame.appendChild(imgEl);
+		const detachMountedLightboxVisual = () => {
+			if (mountedLightboxVisual?.parentNode) {
+				mountedLightboxVisual.parentNode.removeChild(mountedLightboxVisual);
+			}
+			mountedLightboxVisual = null;
+		};
+
+		const mountBitmapCopyFromSourceImg = (source) => {
+			if (!(source instanceof HTMLImageElement) || !source.parentNode) return false;
+			if (!source.complete || source.naturalWidth === 0) return false;
+			detachMountedLightboxVisual();
+			const w = source.naturalWidth;
+			const h = source.naturalHeight;
+			const canvas = document.createElement('canvas');
+			canvas.width = w;
+			canvas.height = h;
+			const ctx = canvas.getContext('2d');
+			if (!ctx) return false;
+			try {
+				ctx.drawImage(source, 0, 0);
+			} catch {
+				detachMountedLightboxVisual();
+				return false;
+			}
+			canvas.className = 'chat-inline-image-lightbox-img chat-inline-image-lightbox-canvas';
+			canvas.setAttribute('role', 'img');
+			const alt = typeof source.alt === 'string' ? source.alt.trim() : '';
+			if (alt) canvas.setAttribute('aria-label', alt);
+			else canvas.setAttribute('aria-hidden', 'true');
+			mountedLightboxVisual = canvas;
+			mountIntoFrame(canvas);
+			return true;
+		};
+
+		let prevGalleryBtn = null;
+		let nextGalleryBtn = null;
+		const makeGalleryNav = (direction) => {
+			const btn = document.createElement('button');
+			btn.type = 'button';
+			btn.className = `chat-inline-image-lightbox-gallery-nav chat-inline-image-lightbox-gallery-nav--${direction}`;
+			btn.setAttribute(
+				'aria-label',
+				direction === 'prev' ? 'Previous image' : 'Next image'
+			);
+			btn.innerHTML =
+				direction === 'prev'
+					? '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M14.5 6.5L9 12l5.5 5.5" /></svg>'
+					: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9.5 6.5L15 12l-5.5 5.5" /></svg>';
+			return btn;
+		};
+
+		const mountIntoFrame = (node) => {
+			if (useGallery && prevGalleryBtn) frame.insertBefore(node, prevGalleryBtn);
+			else frame.appendChild(node);
+		};
+
+		const mountSyntheticImg = (srcUrl) => {
+			detachMountedLightboxVisual();
+			const img = document.createElement('img');
+			img.className = 'chat-inline-image-lightbox-img';
+			img.src = String(srcUrl || '').trim();
+			img.alt = '';
+			mountedLightboxVisual = img;
+			mountIntoFrame(img);
+		};
+
+		const mountGallerySlide = (idx) => {
+			const slideUrl = String(rawGallery[idx] || '').trim();
+			const cand = galleryImgs[idx];
+			if (mountBitmapCopyFromSourceImg(cand)) return;
+			detachMountedLightboxVisual();
+			if (slideUrl) mountSyntheticImg(slideUrl);
+		};
+
+		const mountSingleSlide = () => {
+			if (primarySourceImg instanceof HTMLImageElement && primarySourceImg.parentNode) {
+				if (mountBitmapCopyFromSourceImg(primarySourceImg)) return;
+			}
+			detachMountedLightboxVisual();
+			const fallbackUrl = String(srcTrim || '').trim();
+			if (fallbackUrl) mountSyntheticImg(fallbackUrl);
+		};
+
+		let activeGalleryIndex = useGallery ? galleryIndex : 0;
+		const slideChangeCb =
+			useGallery && typeof creationMeta?.onGalleryLightboxSlideChange === 'function'
+				? creationMeta.onGalleryLightboxSlideChange
+				: null;
+		const notifyCarouselBehindLightbox = () => {
+			if (!slideChangeCb) return;
+			try {
+				slideChangeCb(activeGalleryIndex);
+			} catch {
+				/* ignore */
+			}
+		};
+		const applyGalleryIndex = (nextIdx) => {
+			if (!useGallery || rawGallery.length === 0) return;
+			activeGalleryIndex =
+				((nextIdx % rawGallery.length) + rawGallery.length) % rawGallery.length;
+			mountGallerySlide(activeGalleryIndex);
+			notifyCarouselBehindLightbox();
+		};
+
+		if (useGallery) {
+			prevGalleryBtn = makeGalleryNav('prev');
+			nextGalleryBtn = makeGalleryNav('next');
+			prevGalleryBtn.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				applyGalleryIndex(activeGalleryIndex - 1);
+			});
+			nextGalleryBtn.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				applyGalleryIndex(activeGalleryIndex + 1);
+			});
+			frame.appendChild(prevGalleryBtn);
+			frame.appendChild(nextGalleryBtn);
+		}
+
+		if (useGallery) mountGallerySlide(activeGalleryIndex);
+		else mountSingleSlide();
+		if (useGallery) notifyCarouselBehindLightbox();
+
 		overlay.appendChild(closeBtn);
 		overlay.appendChild(frame);
 
@@ -4113,15 +4326,20 @@ export async function initChatPage(root, options = {}) {
 		}
 
 		chatInlineImageLightboxKeydown = (e) => {
-			if (e.key !== 'Escape') return;
-			e.preventDefault();
-			closeChatInlineImageLightbox();
+			if (e.key === 'Escape') {
+				e.preventDefault();
+				closeChatInlineImageLightbox();
+				return;
+			}
+			if (useGallery && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+				e.preventDefault();
+				if (e.key === 'ArrowLeft') applyGalleryIndex(activeGalleryIndex - 1);
+				else applyGalleryIndex(activeGalleryIndex + 1);
+			}
 		};
 		document.addEventListener('keydown', chatInlineImageLightboxKeydown);
 
-		overlay.addEventListener('click', (e) => {
-			if (e.target === overlay) closeChatInlineImageLightbox();
-		});
+		attachChatInlineImageLightboxBackdropClose(overlay);
 		closeBtn.addEventListener('click', () => closeChatInlineImageLightbox());
 
 		document.body.appendChild(overlay);
@@ -4249,9 +4467,7 @@ export async function initChatPage(root, options = {}) {
 		};
 		document.addEventListener('keydown', chatInlineImageLightboxKeydown);
 
-		overlay.addEventListener('click', (e) => {
-			if (e.target === overlay) closeChatInlineImageLightbox();
-		});
+		attachChatInlineImageLightboxBackdropClose(overlay);
 		closeBtn.addEventListener('click', () => closeChatInlineImageLightbox());
 
 		document.body.appendChild(overlay);
@@ -10317,15 +10533,60 @@ export async function initChatPage(root, options = {}) {
 				embedWrap instanceof HTMLElement
 					? String(embedWrap.getAttribute('data-creation-id') || '').trim()
 					: '';
+			let galleryUrls = [];
+			try {
+				const raw =
+					groupInner instanceof HTMLElement ? groupInner.dataset.chatGroupGalleryUrls || '' : '';
+				if (raw) galleryUrls = JSON.parse(raw);
+			} catch {
+				galleryUrls = [];
+			}
+			if (!Array.isArray(galleryUrls) || galleryUrls.length < 2) {
+				galleryUrls = Array.from(groupInner.querySelectorAll('.connect-chat-creation-embed-group-img'))
+					.map((img) =>
+						img instanceof HTMLImageElement ? String(img.currentSrc || img.src || '').trim() : ''
+					)
+					.filter(Boolean);
+			}
+			const galleryImgs = Array.from(
+				groupInner.querySelectorAll('.connect-chat-creation-embed-group-img')
+			).filter((n) => n instanceof HTMLImageElement);
 			const active = groupInner.querySelector('.connect-chat-creation-embed-group-img.is-active');
 			let src = '';
 			if (active instanceof HTMLImageElement) {
 				src = active.currentSrc || active.getAttribute('src') || '';
 			}
+			if (!src && galleryUrls[0]) src = galleryUrls[0];
 			if (!src) return;
 			e.preventDefault();
 			e.stopPropagation();
-			openChatInlineImageLightbox(src, creationId ? { creationId } : null);
+			const idx =
+				active instanceof HTMLImageElement
+					? resolveGroupCarouselOpenIndex(active, galleryUrls)
+					: 0;
+			openChatInlineImageLightbox(src, {
+				...(creationId ? { creationId } : {}),
+				...(galleryUrls.length > 1
+					? {
+							galleryUrls,
+							galleryIndex: idx,
+							galleryImgs,
+							onGalleryLightboxSlideChange: (slideIdx) => {
+								const imgs = groupInner.querySelectorAll('.connect-chat-creation-embed-group-img');
+								const len = imgs.length;
+								if (len === 0) return;
+								const wrapped = ((slideIdx % len) + len) % len;
+								for (let i = 0; i < imgs.length; i += 1) {
+									imgs[i].classList.toggle('is-active', i === wrapped);
+								}
+							},
+						}
+					: active instanceof HTMLImageElement
+						? { sourceImg: active }
+						: galleryImgs[0]
+							? { sourceImg: galleryImgs[0] }
+							: {}),
+			});
 			return;
 		}
 
@@ -10348,8 +10609,76 @@ export async function initChatPage(root, options = {}) {
 			embedWrap instanceof HTMLElement
 				? String(embedWrap.getAttribute('data-creation-id') || '').trim()
 				: '';
-		openChatInlineImageLightbox(src, creationId ? { creationId } : null);
+		openChatInlineImageLightbox(src, {
+			...(creationId ? { creationId } : {}),
+			...(thumb instanceof HTMLImageElement ? { sourceImg: thumb } : {}),
+		});
 	};
+	root.addEventListener(
+		'click',
+		(e) => {
+			if (!(root instanceof HTMLElement)) return;
+			if (!(e.target instanceof Element)) return;
+			const cardsHost = e.target.closest('[data-feed-channel-cards]');
+			if (!cardsHost || !root.contains(cardsHost)) return;
+			const imageWrap = e.target.closest('.feed-card-image--group-carousel');
+			if (!(imageWrap instanceof HTMLElement)) return;
+			if (e.target.closest('.feed-card-group-nav')) return;
+			if (e.target.closest('[data-creations-bulk-overlay]')) return;
+			const card = imageWrap.closest('.feed-card[data-creation-id]');
+			if (!(card instanceof HTMLElement)) return;
+
+			let galleryUrls = [];
+			try {
+				const raw = card.dataset.feedGroupCarouselUrls;
+				if (raw) galleryUrls = JSON.parse(raw);
+			} catch {
+				galleryUrls = [];
+			}
+			if (!Array.isArray(galleryUrls) || galleryUrls.length < 2) {
+				galleryUrls = Array.from(imageWrap.querySelectorAll('.feed-card-group-img'))
+					.map((img) =>
+						img instanceof HTMLImageElement ? String(img.currentSrc || img.src || '').trim() : ''
+					)
+					.filter(Boolean);
+			}
+			if (galleryUrls.length < 2) return;
+
+			const galleryImgs = Array.from(imageWrap.querySelectorAll('.feed-card-group-img')).filter(
+				(n) => n instanceof HTMLImageElement
+			);
+
+			const active = imageWrap.querySelector('.feed-card-group-img.is-active');
+			let src =
+				active instanceof HTMLImageElement
+					? String(active.currentSrc || active.getAttribute('src') || '').trim()
+					: '';
+			if (!src) src = galleryUrls[0];
+			const cid = String(card.getAttribute('data-creation-id') || '').trim();
+
+			e.preventDefault();
+			e.stopPropagation();
+			const idx =
+				active instanceof HTMLImageElement ? resolveGroupCarouselOpenIndex(active, galleryUrls) : 0;
+			openChatInlineImageLightbox(src, {
+				...(cid ? { creationId: cid } : {}),
+				galleryUrls,
+				galleryIndex: idx,
+				galleryImgs,
+				onGalleryLightboxSlideChange: (slideIdx) => {
+					const imgs = imageWrap.querySelectorAll('.feed-card-group-img');
+					const len = imgs.length;
+					if (len === 0) return;
+					const wrapped = ((slideIdx % len) + len) % len;
+					for (let i = 0; i < imgs.length; i += 1) {
+						imgs[i].classList.toggle('is-active', i === wrapped);
+					}
+				},
+			});
+		},
+		true
+	);
+
 	root.addEventListener('click', chatInlineImageLightboxClickHandler);
 
 	chatToolbarOutsidePointerHandler = (e) => {
