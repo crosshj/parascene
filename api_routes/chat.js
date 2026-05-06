@@ -2624,6 +2624,29 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 
 			const bodyForAssets = msg.body != null ? String(msg.body) : "";
 			const senderIdForAssets = Number(msg.sender_id);
+			const previousMessageIdRes = await sb
+				.from("prsn_chat_messages")
+				.select("id")
+				.eq("thread_id", threadId)
+				.lt("id", messageId)
+				.order("id", { ascending: false })
+				.limit(1)
+				.maybeSingle();
+			if (previousMessageIdRes.error) throw previousMessageIdRes.error;
+			const previousMessageId =
+				previousMessageIdRes.data?.id != null ? Number(previousMessageIdRes.data.id) : null;
+
+			// Keep read state stable when deleting the member's current read pointer.
+			const readPointerPatch =
+				Number.isFinite(previousMessageId) && previousMessageId > 0
+					? { last_read_message_id: previousMessageId }
+					: { last_read_message_id: null };
+			const { error: readPointerErr } = await sb
+				.from("prsn_chat_members")
+				.update(readPointerPatch)
+				.eq("thread_id", threadId)
+				.eq("last_read_message_id", messageId);
+			if (readPointerErr) throw readPointerErr;
 
 			const { error: delErr } = await sb.from("prsn_chat_messages").delete().eq("id", messageId);
 			if (delErr) throw delErr;
