@@ -17,10 +17,10 @@ function escapeHtmlPseudoStrip(str) {
 
 /**
  * Slugs for the fixed channel rows in the top strip (no section label) above DMs on chat + Connect sidebars.
- * Order: Feed, Challenges, My Creations, Comments, Explore (above Feedback), Feedback.
+ * Order: Feed, Challenges, My Creations, Comments, Explore, Prompt Library, Feedback.
  * A separate “Help” row (not a channel) links to `/help` and is appended after Feedback.
  */
-export const SIDEBAR_PSEUDO_STRIP_ORDER = ['feed', 'challenges', 'creations', 'comments', 'explore', 'feedback'];
+export const SIDEBAR_PSEUDO_STRIP_ORDER = ['feed', 'challenges', 'creations', 'comments', 'explore', 'prompt-library', 'feedback'];
 
 /** Notes-to-self shortcut: not a channel, opens the viewer's own DM. */
 export const SIDEBAR_NOTES_STRIP_HREF = '/chat/notes';
@@ -33,6 +33,7 @@ const SIDEBAR_PSEUDO_STRIP_TITLES = {
 	feed: 'Feed',
 	challenges: 'Challenges',
 	explore: 'Explore',
+	'prompt-library': 'Prompt Library',
 	creations: 'My Creations',
 	comments: 'Comments',
 	feedback: 'Feedback',
@@ -60,6 +61,7 @@ function pseudoStripRouteIconSvg(slug, routeIconClass = 'chat-page-sidebar-chann
 	if (key === 'feed') return typeof Icons.homeIcon === 'function' ? Icons.homeIcon(cls) : '';
 	if (key === 'challenges') return typeof Icons.trophyIcon === 'function' ? Icons.trophyIcon(cls) : '';
 	if (key === 'explore') return typeof Icons.globeIcon === 'function' ? Icons.globeIcon(cls) : '';
+	if (key === 'prompt-library') return typeof Icons.promptLibraryIcon === 'function' ? Icons.promptLibraryIcon(cls) : '';
 	if (key === 'creations') return creationsRouteIcon(cls);
 	if (key === 'comments') return typeof Icons.smsIcon === 'function' ? Icons.smsIcon(cls) : '';
 	if (key === 'feedback') return feedbackMegaphoneIcon(cls);
@@ -323,6 +325,8 @@ export function buildSidebarPseudoStripRows() {
 export function pseudoStripActiveSlugFromRequestPath(requestPath) {
 	const raw = String(requestPath || '').trim();
 	if (!raw) return null;
+	const pathOnly = stripRequestPathname(raw);
+	if (pathOnly === '/prompt-library') return 'prompt-library';
 	const match = raw.match(/\/chat\/c\/([^/?#]+)/);
 	if (!match) return null;
 	try {
@@ -426,7 +430,9 @@ export function buildSidebarPseudoStripListStaticHtml(requestPath = '') {
 	const activeSlug = pseudoStripActiveSlugFromRequestPath(requestPath);
 	const channelHtml = SIDEBAR_PSEUDO_STRIP_ORDER.map((slug) => {
 		const title = SIDEBAR_PSEUDO_STRIP_TITLES[slug] || `#${slug}`;
-		const href = `/chat/c/${encodeURIComponent(slug)}`;
+		const href = slug === 'prompt-library'
+			? '/prompt-library'
+			: `/chat/c/${encodeURIComponent(slug)}`;
 		const bg = getAvatarColor(slug);
 		const iconAvatarHtml = pseudoStripRouteIconAvatarHtml(slug);
 		const avatarHtml = iconAvatarHtml || `<div class="comment-avatar connect-chat-thread-row-channel-avatar chat-page-sidebar-channel-avatar" style="background: ${escapeHtmlPseudoStrip(bg)};" aria-hidden="true">#</div>`;
@@ -487,6 +493,8 @@ export function buildChatThreadUrl(meta) {
 		return h.startsWith('/') ? h : SIDEBAR_HELP_STRIP_HREF;
 	}
 	if (meta.type === 'channel' && meta.channel_slug) {
+		const slug = String(meta.channel_slug).trim().toLowerCase();
+		if (slug === 'prompt-library') return '/prompt-library';
 		return `/chat/c/${encodeURIComponent(String(meta.channel_slug))}`;
 	}
 	if (meta.type === 'dm') {
@@ -513,6 +521,7 @@ export function normalizeChatNavPathForCompare(p) {
 	if (!s || s === '/index.html' || s === '/feed') return '/chat/c/feed';
 	if (s === '/explore') return '/chat/c/explore';
 	if (s === '/creations') return '/chat/c/creations';
+	if (s === '/prompt-library') return '/prompt-library';
 	if (s === SIDEBAR_NOTES_STRIP_HREF) return SIDEBAR_NOTES_STRIP_HREF;
 	return s;
 }

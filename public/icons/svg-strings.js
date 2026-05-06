@@ -371,6 +371,14 @@ export const globeIcon = withAttributes(html`
 	</svg>
 `);
 
+/** Open book icon (e.g. prompt library nav). */
+export const promptLibraryIcon = withAttributes(html`
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+		stroke-linejoin="round" aria-hidden="true">
+		<path d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25"></path>
+	</svg>
+`);
+
 /** User avatar icon: square, light grey bg, darker grey head + shoulders. Circle shape from CSS (e.g. border-radius: 50%). */
 export const userAvatarIcon = withAttributes(html`
 	<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
