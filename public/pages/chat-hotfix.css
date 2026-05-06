@@ -1,0 +1,9 @@
+/* Hotfix: moderated media should not also show generic unavailable mask. */
+.feed-card-image.error.feed-card-image-error-moderated::after,
+.feed-card-image.nsfw.error.feed-card-image-error-moderated::after,
+body.view-nsfw .feed-card-image.nsfw.error.feed-card-image-error-moderated::after,
+.route-media.route-media-error.route-media-error-moderated::after,
+.route-media.route-media-error:has(.route-media-error-moderated-icon)::after,
+.feed-card-image.error:has(.route-media-error-moderated-icon)::after {
+	display: none !important;
+}

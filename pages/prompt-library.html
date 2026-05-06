@@ -27,22 +27,8 @@
 					<p class="prompt-library-intro" data-prompt-library-intro>Saved styles and personas you can use in prompts. Loading…</p>
 				</div>
 
-				<app-tabs active="styles">
-					<tab data-id="styles" label="Styles" default>
-						<div class="prompt-library-table-wrap">
-							<table class="prompt-library-table prompt-library-table--styles" aria-label="Styles">
-								<thead>
-									<tr>
-										<th scope="col" class="prompt-library-col-thumb" aria-label="Preview"></th>
-										<th scope="col">Tag</th>
-										<th scope="col" class="prompt-library-col-actions" aria-hidden="true"></th>
-									</tr>
-								</thead>
-								<tbody data-prompt-library-styles-tbody></tbody>
-							</table>
-						</div>
-					</tab>
-					<tab data-id="personas" label="Personas">
+				<app-tabs active="personas">
+					<tab data-id="personas" label="Personas" default>
 						<div class="prompt-library-table-wrap">
 							<table class="prompt-library-table prompt-library-table--personas" aria-label="Personas">
 								<thead>
@@ -53,6 +39,20 @@
 									</tr>
 								</thead>
 								<tbody data-prompt-library-personas-tbody></tbody>
+							</table>
+						</div>
+					</tab>
+					<tab data-id="styles" label="Styles">
+						<div class="prompt-library-table-wrap">
+							<table class="prompt-library-table prompt-library-table--styles" aria-label="Styles">
+								<thead>
+									<tr>
+										<th scope="col" class="prompt-library-col-thumb" aria-label="Preview"></th>
+										<th scope="col">Tag</th>
+										<th scope="col" class="prompt-library-col-actions" aria-hidden="true"></th>
+									</tr>
+								</thead>
+								<tbody data-prompt-library-styles-tbody></tbody>
 							</table>
 						</div>
 					</tab>

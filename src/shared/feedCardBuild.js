@@ -11,6 +11,7 @@ import * as challengeSubmitMetaMod from './challengeSubmitMeta.js';
 import * as creationBadgesMod from './creationBadges.js';
 import {
 	clock3Icon,
+	eyeHiddenIcon,
 	pictureIcon,
 	personOutlined,
 	sparkleIcon,
@@ -288,17 +289,31 @@ export function markFeedCardImageUnavailable(imageContainer, imageEl, attrs = {}
 	if (!imageContainer) return;
 	teardownFeedCardCreationProcessingUi(imageContainer);
 	const state = typeof attrs.state === 'string' && attrs.state.trim() ? attrs.state.trim() : 'unavailable';
+	const moderated = attrs.moderated === true;
 	const label =
 		typeof attrs.label === 'string' && attrs.label.trim()
 			? attrs.label.trim()
+			: moderated
+				? 'Content moderated'
 			: state === 'missing'
 				? 'No preview available'
 				: 'Image could not be loaded';
 	imageContainer.classList.remove('loading', 'loaded');
 	imageContainer.classList.add('error');
+	imageContainer.classList.toggle('feed-card-image-error-moderated', moderated);
 	imageContainer.setAttribute('data-feed-img-state', state);
 	imageContainer.setAttribute('role', 'img');
 	imageContainer.setAttribute('aria-label', label);
+	const existingModIcon = imageContainer.querySelector('.route-media-error-moderated-icon');
+	if (existingModIcon) existingModIcon.remove();
+	if (moderated) {
+		const moderatedIconEl = document.createElement('span');
+		moderatedIconEl.className = 'route-media-error-moderated-icon';
+		moderatedIconEl.setAttribute('role', 'img');
+		moderatedIconEl.setAttribute('aria-label', 'Content moderated');
+		moderatedIconEl.innerHTML = eyeHiddenIcon();
+		imageContainer.appendChild(moderatedIconEl);
+	}
 	if (imageEl instanceof HTMLImageElement) {
 		imageEl.style.opacity = '0';
 		imageEl.removeAttribute('src');
@@ -315,13 +330,17 @@ export function markFeedCardImageUnavailable(imageContainer, imageEl, attrs = {}
  */
 export function attachFeedCardImage(imageEl, imageContainer, item, itemIndex, preferThumbnail = false) {
 	const urls = feedItemCardImageUrlCandidates(item, preferThumbnail);
+	const moderated = item?.is_moderated_error === true;
 	if (!imageEl || !imageContainer) return;
 	if (isFeedCreationImageProcessing(item)) {
 		applyFeedCardCreationProcessingState(imageContainer, imageEl);
 		return;
 	}
 	if (urls.length === 0) {
-		markFeedCardImageUnavailable(imageContainer, imageEl, { state: 'missing' });
+		markFeedCardImageUnavailable(imageContainer, imageEl, {
+			state: moderated ? 'moderated' : 'missing',
+			moderated
+		});
 		return;
 	}
 
@@ -334,7 +353,10 @@ export function attachFeedCardImage(imageEl, imageContainer, item, itemIndex, pr
 	const tryLoad = (idx) => {
 		const url = urls[idx];
 		if (!url) {
-			markFeedCardImageUnavailable(imageContainer, imageEl, { state: 'unavailable' });
+			markFeedCardImageUnavailable(imageContainer, imageEl, {
+				state: moderated ? 'moderated' : 'unavailable',
+				moderated
+			});
 			return;
 		}
 
@@ -343,9 +365,12 @@ export function attachFeedCardImage(imageEl, imageContainer, item, itemIndex, pr
 			teardownFeedCardCreationProcessingUi(imageContainer);
 			imageContainer.classList.add('loaded');
 			imageContainer.classList.remove('error');
+			imageContainer.classList.remove('feed-card-image-error-moderated');
 			imageContainer.removeAttribute('data-feed-img-state');
 			imageContainer.removeAttribute('aria-label');
 			imageContainer.removeAttribute('role');
+			const existingModIcon = imageContainer.querySelector('.route-media-error-moderated-icon');
+			if (existingModIcon) existingModIcon.remove();
 			if (imageEl instanceof HTMLImageElement) {
 				imageEl.style.removeProperty('opacity');
 			}
@@ -356,7 +381,10 @@ export function attachFeedCardImage(imageEl, imageContainer, item, itemIndex, pr
 				imageEl.removeAttribute('src');
 				queueMicrotask(() => tryLoad(idx + 1));
 			} else {
-				markFeedCardImageUnavailable(imageContainer, imageEl, { state: 'unavailable' });
+				markFeedCardImageUnavailable(imageContainer, imageEl, {
+					state: moderated ? 'moderated' : 'unavailable',
+					moderated
+				});
 			}
 		};
 
@@ -371,7 +399,10 @@ export function attachFeedCardImage(imageEl, imageContainer, item, itemIndex, pr
 		teardownFeedCardCreationProcessingUi(imageContainer);
 		imageContainer.classList.add('loading');
 		imageContainer.classList.remove('loaded', 'error');
+		imageContainer.classList.remove('feed-card-image-error-moderated');
 		imageContainer.removeAttribute('data-feed-img-state');
+		const existingModIcon = imageContainer.querySelector('.route-media-error-moderated-icon');
+		if (existingModIcon) existingModIcon.remove();
 
 		imageEl.src = url;
 
@@ -1181,6 +1212,7 @@ function finishFeedCreationCardMediaAndClick(
 	const displayUrl = feedItemCardImageUrl(item, preferThumbnail);
 	const videoUrl = typeof item.video_url === 'string' ? item.video_url.trim() : '';
 	const processing = isFeedCreationImageProcessing(item);
+	const moderated = item?.is_moderated_error === true;
 
 	if (imageEl && imageContainer) {
 		if (processing) {
@@ -1189,7 +1221,10 @@ function finishFeedCreationCardMediaAndClick(
 			const canShowVideo = isVideo && Boolean(videoUrl);
 			const hasGroupCarousel = !isVideo && setupFeedCardGroupCarousel(imageContainer, item);
 			if (!displayUrl && !canShowVideo && !hasGroupCarousel) {
-				markFeedCardImageUnavailable(imageContainer, imageEl, { state: 'missing' });
+				markFeedCardImageUnavailable(imageContainer, imageEl, {
+					state: moderated ? 'moderated' : 'missing',
+					moderated
+				});
 			} else if (displayUrl) {
 				attachFeedCardImage(imageEl, imageContainer, item, itemIndex, preferThumbnail);
 				if (!isVideo && !hasGroupCarousel) {

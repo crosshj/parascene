@@ -2847,6 +2847,7 @@ export async function initChatPage(root, options = {}) {
 			comment_count: 0,
 			viewer_liked: false,
 			nsfw: !!img?.nsfw,
+			is_moderated_error: img?.is_moderated_error === true,
 			media_type: typeof img?.media_type === 'string' ? img.media_type : 'image',
 			video_url: typeof img?.video_url === 'string' ? img.video_url : null,
 			meta: img?.meta && typeof img.meta === 'object' ? img.meta : null,

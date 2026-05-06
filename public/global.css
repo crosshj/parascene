@@ -3271,6 +3271,10 @@ app-route-feed {
 	pointer-events: none;
 }
 
+.feed-card-image.error.feed-card-image-error-moderated::after {
+	display: none;
+}
+
 .feed-card-image.feed-card-image-video {
 	position: relative;
 }
@@ -13803,6 +13807,12 @@ body.view-nsfw .feed-card-image.nsfw.error::after {
 	-webkit-mask: var(--icon-image-unavailable) center / contain no-repeat;
 	mask: var(--icon-image-unavailable) center / contain no-repeat;
 	opacity: 0.85;
+}
+
+/* Moderated error tiles use the eye-hidden icon element instead of the generic unavailable mask. */
+.feed-card-image.nsfw.error.feed-card-image-error-moderated::after,
+body.view-nsfw .feed-card-image.nsfw.error.feed-card-image-error-moderated::after {
+	display: none;
 }
 
 /* One-off reveal (creation detail hero, chat embed, etc.) */
