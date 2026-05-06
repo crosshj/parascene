@@ -80,6 +80,15 @@ async function hydrateChallengeOrganizerStatsThumbs(rootEl) {
  * }} opts — icon helpers should come from the same versioned `svg-strings` import as `chat.js` (avoid an extra uncached static import here).
  */
 export function mountChallengesOrganizerSidebar(host, opts) {
+	const setOrganizerModalOpenClass = (on) => {
+		try {
+			document.body?.classList.toggle('chat-page--challenges-organizer-modal-open', Boolean(on));
+			document.documentElement?.classList.toggle('chat-page--challenges-organizer-modal-open', Boolean(on));
+		} catch {
+			// ignore
+		}
+	};
+
 	const gearIcon =
 		typeof opts.gearIcon === 'function'
 			? opts.gearIcon
@@ -101,9 +110,13 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 	const closeModal = () => {
 		activeStatsRequestToken += 1;
 		const modalEl = host.querySelector('[data-challenges-organizer-modal]');
-		if (!(modalEl instanceof HTMLElement)) return;
+		if (!(modalEl instanceof HTMLElement)) {
+			setOrganizerModalOpenClass(false);
+			return;
+		}
 		modalEl.classList.remove('open');
 		modalEl.setAttribute('aria-hidden', 'true');
+		setOrganizerModalOpenClass(false);
 	};
 
 	const openModal = (mode, editPayload, configMessageId) => {
@@ -126,6 +139,7 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 		);
 		modalEl.classList.add('open');
 		modalEl.setAttribute('aria-hidden', 'false');
+		setOrganizerModalOpenClass(true);
 	};
 
 	/**
@@ -153,6 +167,7 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 		});
 		modalEl.classList.add('open');
 		modalEl.setAttribute('aria-hidden', 'false');
+		setOrganizerModalOpenClass(true);
 		try {
 			const endpoint = `/api/chat/threads/${encodeURIComponent(String(opts.threadId))}/challenges/${encodeURIComponent(cid)}/stats`;
 			const res = await fetch(endpoint, { credentials: 'include' });
@@ -424,6 +439,7 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 
 	return {
 		destroy: () => {
+			setOrganizerModalOpenClass(false);
 			document.removeEventListener('keydown', onDocEscape);
 			host.removeEventListener('click', onHostClick);
 			host.removeEventListener('keydown', onHostKeydown);

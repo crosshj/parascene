@@ -25,12 +25,12 @@
 			if (!root) return;
 			function shouldUseAppMobileHeader(pathname) {
 				var p = String(pathname || '').replace(/\/+$/, '') || '/';
-				if (p === '/' || p === '/index.html' || p === '/feed' || p === '/explore' || p === '/creations' || p === '/challenges') return true;
+				if (p === '/' || p === '/index.html' || p === '/feed' || p === '/explore' || p === '/creations') return true;
 				if (!p.startsWith('/chat/c/')) return false;
 				var slug = p.slice('/chat/c/'.length).split('/')[0] || '';
 				slug = String(slug).toLowerCase().trim();
 				if (!slug || slug === 'feedback') return false;
-				return slug === 'feed' || slug === 'explore' || slug === 'creations' || slug === 'challenges';
+				return slug === 'feed' || slug === 'explore' || slug === 'creations';
 			}
 			function shouldUseChannelsSidebar(pathname, hash) {
 				var p = String(pathname || '').replace(/\/+$/, '') || '/';

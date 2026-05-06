@@ -119,11 +119,11 @@ function isChatPageMobileLayout() {
 
 function shouldUseAppMobileHeaderForChatPath(pathname) {
 	const p = String(pathname || '').replace(/\/+$/, '') || '/';
-	if (p === '/' || p === '/index.html' || p === '/feed' || p === '/explore' || p === '/creations' || p === '/challenges') return true;
+	if (p === '/' || p === '/index.html' || p === '/feed' || p === '/explore' || p === '/creations') return true;
 	if (!p.startsWith('/chat/c/')) return false;
 	const slug = p.slice('/chat/c/'.length).split('/')[0].trim().toLowerCase();
 	if (!slug || slug === 'feedback') return false;
-	return slug === 'feed' || slug === 'explore' || slug === 'creations' || slug === 'challenges';
+	return slug === 'feed' || slug === 'explore' || slug === 'creations';
 }
 
 function shouldShowMobileSidebarFromLocation() {
@@ -135,7 +135,7 @@ function shouldShowAppMobileChromeForCurrentChatView(activePseudoSlug) {
 	if (!isChatPageMobileLayout()) return false;
 	if (shouldShowMobileSidebarFromLocation()) return true;
 	const slug = String(activePseudoSlug || '').trim().toLowerCase();
-	if (slug) return slug === 'feed' || slug === 'explore' || slug === 'creations' || slug === 'challenges';
+	if (slug) return slug === 'feed' || slug === 'explore' || slug === 'creations';
 	return shouldUseAppMobileHeaderForChatPath(window.location.pathname);
 }
 
@@ -2564,7 +2564,9 @@ export async function initChatPage(root, options = {}) {
 		const mobileChrome = mainColumn instanceof HTMLElement
 			? mainColumn.querySelector('[data-chat-mobile-chrome]')
 			: null;
-		const shouldShowAppMobileChrome = shouldShowAppMobileChromeForCurrentChatView(activePseudoChannelSlug);
+		const isMobileSidebarOpen = Boolean(document.body?.classList.contains('chat-page--mobile-sidebar-open'));
+		const shouldShowAppMobileChrome =
+			isMobileSidebarOpen || shouldShowAppMobileChromeForCurrentChatView(activePseudoChannelSlug);
 		const shouldShowAppMobileHeader = shouldShowAppMobileChrome;
 		const shouldShowAppMobileFooter = shouldShowAppMobileChrome;
 		const setMobileComposerOverlayClass = (on) => {
@@ -2583,9 +2585,11 @@ export async function initChatPage(root, options = {}) {
 		}
 		if (appHeader instanceof HTMLElement) {
 			appHeader.hidden = !shouldShowAppMobileHeader;
+			if (shouldShowAppMobileHeader) appHeader.removeAttribute('hidden');
 		}
 		if (appMobileNav instanceof HTMLElement) {
 			appMobileNav.hidden = !shouldShowAppMobileFooter;
+			if (shouldShowAppMobileFooter) appMobileNav.removeAttribute('hidden');
 		}
 		if (mobileChrome instanceof HTMLElement) {
 			mobileChrome.hidden = shouldShowAppMobileHeader;
@@ -2717,8 +2721,9 @@ export async function initChatPage(root, options = {}) {
 
 	function setMobileSidebarMode(open) {
 		if (!document.body) return;
-		const on = Boolean(open) && shouldShowMobileSidebarFromLocation();
-		const shouldShowAppMobileChrome = shouldShowAppMobileChromeForCurrentChatView(activePseudoChannelSlug);
+		const on = Boolean(open);
+		const shouldShowAppMobileChrome =
+			on || shouldShowAppMobileChromeForCurrentChatView(activePseudoChannelSlug);
 		document.body.classList.toggle('chat-page--mobile-sidebar-open', on);
 		const viewportScrollMode =
 			on ||
@@ -2729,7 +2734,7 @@ export async function initChatPage(root, options = {}) {
 		document.body.classList.toggle('chat-page--viewport-scroll', viewportScrollMode);
 		try {
 			document.documentElement.classList.toggle('chat-page--viewport-scroll', viewportScrollMode);
-			if (shouldShowAppMobileChrome) {
+			if (shouldShowAppMobileHeader) {
 				document.documentElement.classList.add('chat-page--use-app-mobile-header');
 			} else {
 				document.documentElement.classList.remove('chat-page--use-app-mobile-header');
@@ -2744,9 +2749,11 @@ export async function initChatPage(root, options = {}) {
 			: null;
 		if (appHeader instanceof HTMLElement) {
 			appHeader.hidden = !shouldShowAppMobileChrome;
+			if (shouldShowAppMobileChrome) appHeader.removeAttribute('hidden');
 		}
 		if (appMobileNav instanceof HTMLElement) {
 			appMobileNav.hidden = !shouldShowAppMobileChrome;
+			if (shouldShowAppMobileChrome) appMobileNav.removeAttribute('hidden');
 		}
 		if (mobileChrome instanceof HTMLElement) {
 			mobileChrome.hidden = shouldShowAppMobileChrome;

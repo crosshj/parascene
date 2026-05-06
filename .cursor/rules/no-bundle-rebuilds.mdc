@@ -1,0 +1,11 @@
+---
+description: Do not run or request bundle rebuilds
+alwaysApply: true
+---
+
+# No Bundle Rebuilds
+
+- Never run bundle rebuild commands in this repo.
+- Never ask the user to rebuild a bundle.
+- Assume the user's environment handles bundle generation/refresh.
+- If UI changes are not visible, debug CSS/JS logic and precedence directly without suggesting rebuild steps.
