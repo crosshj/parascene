@@ -147,7 +147,7 @@ export function createConnectCommentRowElement(comment, opts = {}) {
 	});
 
 	const timeAgo = comment?.created_at ? (formatRelativeTime(comment.created_at) || '') : '';
-	const safeText = processUserText(comment?.text ?? '');
+	const safeText = processUserText(comment?.text ?? '', { messageMarkdown: true });
 	const createdMs = comment?.created_at ? Date.parse(String(comment.created_at)) : NaN;
 	const updatedMs = comment?.updated_at ? Date.parse(String(comment.updated_at)) : NaN;
 	const isEditedComment =

@@ -65,7 +65,7 @@ function escapeRegExp(value) {
 	return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function renderPlainUserTextSegment(text) {
+function renderPlainUserTextSegmentBase(text) {
 	const transformed = applyEmojiTextTransforms(String(text ?? ''));
 	if (!transformed) return '';
 
@@ -118,6 +118,33 @@ function renderPlainUserTextSegment(text) {
 
 	out += escapeHtml(transformed.slice(lastIndex));
 	return out;
+}
+
+function renderInlineMarkdownText(text) {
+	const raw = String(text ?? '');
+	if (!raw) return '';
+	const tokenRe = /`([^`\n]+)`|\*\*([^*\n]+)\*\*|\*([^*\n]+)\*/g;
+	let out = '';
+	let lastIndex = 0;
+	let match;
+	while ((match = tokenRe.exec(raw)) !== null) {
+		out += renderPlainUserTextSegmentBase(raw.slice(lastIndex, match.index));
+		if (typeof match[1] === 'string') {
+			out += `<code class="user-text-msg-inline-code">${escapeHtml(match[1])}</code>`;
+		} else if (typeof match[2] === 'string') {
+			out += `<strong class="user-text-msg-strong">${renderPlainUserTextSegmentBase(match[2])}</strong>`;
+		} else if (typeof match[3] === 'string') {
+			out += `<em class="user-text-msg-em">${renderPlainUserTextSegmentBase(match[3])}</em>`;
+		}
+		lastIndex = match.index + match[0].length;
+	}
+	out += renderPlainUserTextSegmentBase(raw.slice(lastIndex));
+	return out;
+}
+
+function renderPlainUserTextSegment(text, { inlineMarkdown = false } = {}) {
+	if (!inlineMarkdown) return renderPlainUserTextSegmentBase(text);
+	return renderInlineMarkdownText(text);
 }
 
 function splitUrlTrailingPunctuation(rawUrl) {
@@ -554,10 +581,8 @@ const CREATION_URL_RE = /https?:\/\/[^\s"'<>]+\/creations\/(\d+)\/?/g;
  * @param {string} text - Raw user text (may contain URLs and special characters)
  * @returns {string} - HTML-safe string with parascene URLs as relative <a href="..."> links
  */
-export function textWithCreationLinks(text) {
-	const raw = expandBareInlineGenericImageApiPaths(
-		expandBareCreationPathsToAbsoluteUrls(String(text ?? ''))
-	);
+function textWithCreationLinksCore(text, { inlineMarkdown = false } = {}) {
+	const raw = String(text ?? '');
 	if (!raw) return '';
 
 	const urlRe = /https?:\/\/[^\s"'<>]+/g;
@@ -569,7 +594,7 @@ export function textWithCreationLinks(text) {
 		const start = match.index;
 		const rawUrl = match[0];
 
-		out += renderPlainUserTextSegment(raw.slice(lastIndex, start));
+		out += renderPlainUserTextSegment(raw.slice(lastIndex, start), { inlineMarkdown });
 
 		const { url, trailing } = splitUrlTrailingPunctuation(rawUrl);
 		const relativePath = getParasceneRelativePath(url);
@@ -626,8 +651,121 @@ export function textWithCreationLinks(text) {
 		lastIndex = start + rawUrl.length;
 	}
 
-	out += renderPlainUserTextSegment(raw.slice(lastIndex));
+	out += renderPlainUserTextSegment(raw.slice(lastIndex), { inlineMarkdown });
 	return out;
+}
+
+function renderMessageMarkdownLine(line) {
+	const rawLine = String(line ?? '');
+	if (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(rawLine)) {
+		return '<div class="user-text-msg-hr" role="separator" aria-hidden="true"></div>';
+	}
+
+	const quoteMatch = rawLine.match(/^\s*>\s?(.*)$/);
+	if (quoteMatch) {
+		const body = textWithCreationLinksCore(quoteMatch[1] || '', { inlineMarkdown: true });
+		return `<div class="user-text-msg-quote">${body}</div>`;
+	}
+
+	const headingMatch = rawLine.match(/^\s*(#{1,})\s+(.*)$/);
+	if (headingMatch) {
+		const levelRaw = headingMatch[1] || '#';
+		const level = Math.min(3, Math.max(1, levelRaw.length));
+		const body = textWithCreationLinksCore(headingMatch[2] || '', { inlineMarkdown: true });
+		return `<div class="user-text-msg-h${level}">${body}</div>`;
+	}
+
+	return textWithCreationLinksCore(rawLine, { inlineMarkdown: true });
+}
+
+function renderMessageMarkdownText(rawText) {
+	const lines = String(rawText ?? '').split('\n');
+	const out = [];
+	const codeLines = [];
+	const listItems = [];
+	let inCode = false;
+	let listMode = '';
+
+	const flushCode = () => {
+		out.push(
+			`<pre class="user-text-msg-code-block"><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`
+		);
+		codeLines.length = 0;
+	};
+
+	const flushList = () => {
+		if (!listMode || listItems.length === 0) {
+			listMode = '';
+			listItems.length = 0;
+			return;
+		}
+		const taskCls = listMode === 'task' ? ' user-text-msg-list--task' : '';
+		out.push(`<ul class="user-text-msg-list${taskCls}">${listItems.join('')}</ul>`);
+		listMode = '';
+		listItems.length = 0;
+	};
+
+	for (const line of lines) {
+		if (String(line ?? '').trim() === '```') {
+			flushList();
+			if (inCode) {
+				flushCode();
+				inCode = false;
+			} else {
+				inCode = true;
+				codeLines.length = 0;
+			}
+			continue;
+		}
+		if (inCode) {
+			codeLines.push(String(line ?? ''));
+			continue;
+		}
+		const rawLine = String(line ?? '');
+		const checkboxMatch = rawLine.match(/^\s*-\s\[( |x|X)\]\s+(.*)$/);
+		if (checkboxMatch) {
+			if (listMode !== 'task') {
+				flushList();
+				listMode = 'task';
+			}
+			const checked = checkboxMatch[1].toLowerCase() === 'x';
+			const checkedAttr = checked ? ' checked' : '';
+			const label = textWithCreationLinksCore(checkboxMatch[2] || '', { inlineMarkdown: true });
+			listItems.push(
+				`<li class="user-text-msg-list-item user-text-msg-list-item--task"><input class="user-text-msg-checkbox-input" type="checkbox" disabled${checkedAttr} /><span class="user-text-msg-checkbox-label">${label}</span></li>`
+			);
+			continue;
+		}
+		const listMatch = rawLine.match(/^\s*-\s+(.*)$/);
+		if (listMatch) {
+			if (listMode !== 'ul') {
+				flushList();
+				listMode = 'ul';
+			}
+			const body = textWithCreationLinksCore(listMatch[1] || '', { inlineMarkdown: true });
+			listItems.push(`<li class="user-text-msg-list-item">${body}</li>`);
+			continue;
+		}
+
+		flushList();
+		const rendered = renderMessageMarkdownLine(rawLine);
+		if (rendered) out.push(rendered);
+	}
+
+	flushList();
+	if (inCode) flushCode();
+	return out.join('');
+}
+
+export function textWithCreationLinks(text, options = {}) {
+	const raw = expandBareInlineGenericImageApiPaths(
+		expandBareCreationPathsToAbsoluteUrls(String(text ?? ''))
+	);
+	if (!raw) return '';
+	if (options && options.messageMarkdown === true) {
+		return renderMessageMarkdownText(raw);
+	}
+	return textWithCreationLinksCore(raw);
 }
 
 const YT_TITLE_CACHE_PREFIX = 'ps_yt_title_v2:';
@@ -1571,8 +1709,8 @@ export function hydrateChatCreationEmbeds(rootEl) {
  * @param {string} text - Raw user text (may contain URLs and special characters)
  * @returns {string} - HTML-safe string with all URLs converted to links
  */
-export function processUserText(text) {
-	return textWithCreationLinks(text);
+export function processUserText(text, options = {}) {
+	return textWithCreationLinks(text, options);
 }
 
 /**

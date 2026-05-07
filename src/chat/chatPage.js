@@ -2386,6 +2386,12 @@ export async function initChatPage(root, options = {}) {
 		const sendBtn = root.querySelector('[data-chat-send]');
 		const inp = root.querySelector('[data-chat-body-input]');
 		if (!(sendBtn instanceof HTMLButtonElement) || !(inp instanceof HTMLTextAreaElement)) return;
+		const shell = root.querySelector('[data-chat-composer] .chat-page-input-shell');
+		if (shell instanceof HTMLElement) {
+			const max = Number(inp.maxLength);
+			const atLimit = Number.isFinite(max) && max > 0 && String(inp.value || '').length >= max;
+			shell.classList.toggle('is-at-limit', atLimit);
+		}
 		if (activePseudoChannelSlug) {
 			sendBtn.hidden = true;
 			sendBtn.disabled = false;
@@ -2930,7 +2936,7 @@ export async function initChatPage(root, options = {}) {
 
 		const bubble = document.createElement('div');
 		bubble.className = 'connect-chat-msg-bubble';
-		bubble.innerHTML = processUserText(opt.body ?? '');
+		bubble.innerHTML = processUserText(opt.body ?? '', { messageMarkdown: true });
 		normalizeChatBubbleInlineImageSpacing(bubble);
 		inner.appendChild(bubble);
 
@@ -6306,7 +6312,7 @@ export async function initChatPage(root, options = {}) {
 			timedMetaRaw && typeof timedMetaRaw === 'object' && !Array.isArray(timedMetaRaw)
 				? timedMetaRaw
 				: null;
-		const safeBody = processUserText(m.body ?? '');
+		const safeBody = processUserText(m.body ?? '', { messageMarkdown: true });
 		const bubble = document.createElement('div');
 		bubble.className = 'connect-chat-msg-bubble';
 		if (shouldRenderAsSystemEvent) {
@@ -6315,7 +6321,7 @@ export async function initChatPage(root, options = {}) {
 			bubble.innerHTML = `<div class="chat-channel-system-event-line"><span class="chat-channel-system-event-text">${plain}</span></div>`;
 		} else if (canvasMeta) {
 			bubble.classList.add('connect-chat-msg-bubble--canvas');
-			const preview = processUserText(m.body ?? '');
+			const preview = processUserText(m.body ?? '', { messageMarkdown: true });
 			bubble.innerHTML = `<div class="connect-chat-canvas-inline"><div class="connect-chat-canvas-inline-title">${escapeHtml(canvasMeta.title)}</div><div class="connect-chat-canvas-inline-preview">${preview}</div></div>`;
 		} else if (
 			timedMeta &&
@@ -10988,7 +10994,7 @@ export async function initChatPage(root, options = {}) {
 				el.bodyView.innerHTML = serverHtml;
 				el.bodyView.classList.add('chat-page-canvas-body--markdown');
 			} else {
-				el.bodyView.innerHTML = processUserText(activeCanvasRow.body || '') + CANVAS_BODY_HTML_SUFFIX;
+				el.bodyView.innerHTML = processUserText(activeCanvasRow.body || '', { messageMarkdown: true }) + CANVAS_BODY_HTML_SUFFIX;
 				el.bodyView.classList.remove('chat-page-canvas-body--markdown');
 			}
 			hydrateRichUserTextEmbeds(el.bodyView);

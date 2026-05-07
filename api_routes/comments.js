@@ -331,7 +331,7 @@ export default function createCommentsRoutes({ queries }) {
 		if (!text) {
 			return res.status(400).json({ error: "Comment text is required" });
 		}
-		if (text.length > 2000) {
+		if (text.length > 4000) {
 			return res.status(400).json({ error: "Comment is too long" });
 		}
 
@@ -452,8 +452,8 @@ export default function createCommentsRoutes({ queries }) {
 		if (!text) {
 			return res.status(400).json({ error: "Comment text is required" });
 		}
-		if (text.length > 1000) {
-			return res.status(400).json({ error: "Comment too long (max 1000 chars)" });
+		if (text.length > 4000) {
+			return res.status(400).json({ error: "Comment too long (max 4000 chars)" });
 		}
 
 		const comment = await queries.selectCommentById?.get(commentId);

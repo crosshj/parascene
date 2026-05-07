@@ -2363,7 +2363,7 @@ async function loadCreation() {
 							${typeof plusIcon === 'function' ? plusIcon('comment-input-attach-icon') : '+'}
 						</button>
 						<textarea class="comment-textarea comment-textarea--composer" rows="1" placeholder="What do you like about this creation?"
-							data-comment-textarea></textarea>
+							maxlength="4000" data-comment-textarea></textarea>
 						<button class="comment-submit-btn comment-submit-btn--composer" type="button" data-comment-submit>
 							<span class="comment-action-btn-label comment-action-btn-label--arrow" aria-hidden="true">${typeof sendIcon === 'function' ? sendIcon('comment-send-icon') : '➤'}</span>
 							<span class="comment-action-btn-spinner" aria-hidden="true"></span>
@@ -3838,6 +3838,7 @@ async function loadCreation() {
 		const commentListEl = detailContent.querySelector('[data-comment-list]');
 		const commentsSortEl = detailContent.querySelector('[data-comments-sort]');
 		const commentsToolbarEl = detailContent.querySelector('.comments-toolbar');
+		const commentComposerRow = detailContent.querySelector('.comment-composer-row');
 		const commentTextarea = detailContent.querySelector('[data-comment-textarea]');
 		const commentSubmitBtn = detailContent.querySelector('[data-comment-submit]');
 		const commentAttachBtn = detailContent.querySelector('[data-comment-attach]');
@@ -3974,7 +3975,7 @@ async function loadCreation() {
 				const date = c?.created_at ? new Date(c.created_at) : null;
 				const timeAgo = date ? (formatRelativeTime(date) || '') : '';
 				const timeTitle = date ? formatDateTime(date) : '';
-				const safeText = processUserText(c?.text ?? '');
+				const safeText = processUserText(c?.text ?? '', { messageMarkdown: true });
 				const createdMs = c?.created_at ? Date.parse(String(c.created_at)) : NaN;
 				const updatedMs = c?.updated_at ? Date.parse(String(c.updated_at)) : NaN;
 				const isEditedComment =
@@ -4037,7 +4038,7 @@ async function loadCreation() {
 						&nbsp;·&nbsp;<button type="button" class="comment-time-action" data-comment-delete="${escapeHtml(commentId)}">delete</button>
 					</span>`
 					: '';
-				const metaRowHtml = `<div class="comment-meta-row">
+				const metaRowHtml = isEditing ? '' : `<div class="comment-meta-row">
 					<div class="comment-meta-top">
 						${timeAgo ? `<span class="comment-time" title="${escapeHtml(timeTitle)}">${escapeHtml(timeAgo)}${commentActionControls}</span>` : `${commentActionControls}`}
 						<div class="comment-meta-right">
@@ -4048,7 +4049,7 @@ async function loadCreation() {
 				</div>`;
 				const commentBodyHtml = isEditing
 					? `<div class="comment-edit-wrap" data-comment-edit-wrap="${escapeHtml(commentId)}">
-						<textarea class="comment-edit-input" data-comment-edit-input="${escapeHtml(commentId)}" rows="3" maxlength="1000"${commentEditMinHeightPx > 0 ? ` style="min-height: ${Number(commentEditMinHeightPx)}px;"` : ''}>${escapeHtml(commentEditDraft || (c?.text ?? ''))}</textarea>
+						<textarea class="comment-edit-input" data-comment-edit-input="${escapeHtml(commentId)}" rows="3" maxlength="4000"${commentEditMinHeightPx > 0 ? ` style="min-height: ${Number(commentEditMinHeightPx)}px;"` : ''}>${escapeHtml(commentEditDraft || (c?.text ?? ''))}</textarea>
 						<div class="comment-edit-actions">
 							<button type="button" class="comment-edit-cancel" data-comment-edit-cancel="${escapeHtml(commentId)}"${commentEditBusy ? ' disabled' : ''}>Cancel</button>
 							<button type="button" class="comment-edit-save btn-primary" data-comment-edit-save="${escapeHtml(commentId)}"${commentEditBusy ? ' disabled' : ''}>
@@ -4275,7 +4276,9 @@ async function loadCreation() {
 					const input = commentListEl.querySelector(`[data-comment-edit-input="${cid}"]`);
 					if (input instanceof HTMLTextAreaElement) {
 						input.focus();
-						input.select();
+						const end = String(input.value || '').length;
+						input.setSelectionRange(end, end);
+						syncCommentEditInputUi(input);
 					}
 					return;
 				}
@@ -4390,6 +4393,7 @@ async function loadCreation() {
 				const input = e.target?.closest?.('[data-comment-edit-input]');
 				if (!(input instanceof HTMLTextAreaElement)) return;
 				commentEditDraft = input.value;
+				syncCommentEditInputUi(input);
 			});
 			commentListEl.addEventListener('keydown', (e) => {
 				const input = e.target?.closest?.('[data-comment-edit-input]');
@@ -4464,6 +4468,11 @@ async function loadCreation() {
 		function setSubmitVisibility() {
 			if (!(commentTextarea instanceof HTMLTextAreaElement)) return;
 			if (!(commentSubmitBtn instanceof HTMLButtonElement)) return;
+			if (commentComposerRow instanceof HTMLElement) {
+				const max = Number(commentTextarea.maxLength);
+				const atLimit = Number.isFinite(max) && max > 0 && String(commentTextarea.value || '').length >= max;
+				commentComposerRow.classList.toggle('is-at-limit', atLimit);
+			}
 			const hasText = commentTextarea.value.trim().length > 0;
 			const isLoading = commentSubmitBtn.classList.contains('is-loading');
 			const forceVisible = commentQuickSubmitInFlight || isLoading;
@@ -4483,6 +4492,20 @@ async function loadCreation() {
 		const refreshCommentTextarea = commentTextarea instanceof HTMLTextAreaElement
 			? attachAutoGrowTextarea(commentTextarea)
 			: () => { };
+
+		function syncCommentEditInputUi(input) {
+			if (!(input instanceof HTMLTextAreaElement)) return;
+			const wrap = input.closest('.comment-edit-wrap');
+			const max = Number(input.maxLength);
+			const atLimit = Number.isFinite(max) && max > 0 && String(input.value || '').length >= max;
+			if (wrap instanceof HTMLElement) {
+				wrap.classList.toggle('is-at-limit', atLimit);
+			}
+			const minHeightPx = Number.parseFloat(String(input.style.minHeight || '0')) || 0;
+			input.style.height = 'auto';
+			const next = Math.max(minHeightPx, Math.ceil(input.scrollHeight || 0));
+			if (next > 0) input.style.height = `${next}px`;
+		}
 
 		function setCommentComposerBusy(busy, placeholder = 'Posting...') {
 			const on = Boolean(busy);

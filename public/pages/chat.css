@@ -2503,6 +2503,11 @@ body.chat-page .chat-page-input-shell:focus-within {
 	border-color: var(--focus);
 }
 
+body.chat-page .chat-page-input-shell.is-at-limit,
+body.chat-page .chat-page-input-shell.is-at-limit:focus-within {
+	border-color: var(--warning-text, #b45309);
+}
+
 body.chat-page .chat-page-composer-attachments {
 	flex-shrink: 0;
 }
@@ -2705,7 +2710,6 @@ body.chat-page .chat-page-composer-input {
 	box-shadow: none;
 	resize: none;
 	min-height: 44px;
-	max-height: 160px;
 	padding: 10px 6px 10px 2px;
 	line-height: 1.45;
 	font-size: 0.9375rem;

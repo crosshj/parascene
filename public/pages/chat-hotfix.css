@@ -252,6 +252,139 @@ body.chat-page .chat-page-messages .connect-chat-msg-bubble .user-text-inline-im
 	cursor: pointer;
 }
 
+/*
+ * Markdown message rendering hotfix:
+ * chat.html links this file after /build/chat.bundle.css, so put chat-only overrides here
+ * to ensure they apply even when bundle css is stale.
+ */
+body.chat-page .chat-page-messages .connect-chat-msg-inner {
+	align-items: stretch;
+}
+
+body.chat-page .chat-page-messages .connect-chat-msg-bubble {
+	width: 100%;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
+body.chat-page .chat-page-messages .connect-chat-msg-bubble .user-text-msg-hr {
+	display: block;
+	width: 100%;
+	max-width: 100%;
+	height: 1px;
+	margin: 1.5em 0;
+	background: color-mix(in srgb, var(--text-muted) 40%, transparent);
+	border-radius: 999px;
+}
+
+body.chat-page .chat-page-messages .connect-chat-msg-bubble .user-text-msg-code-block {
+	display: block;
+	width: 100%;
+	max-width: 100%;
+	margin: 1.5em 0;
+	padding: 7px 10px;
+	border: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
+	border-radius: 6px;
+	background: color-mix(in srgb, var(--surface) 96%, var(--accent) 4%);
+	box-sizing: border-box;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+body.chat-page .chat-page-messages .connect-chat-msg-bubble .user-text-msg-inline-code {
+	background: color-mix(in srgb, var(--surface) 68%, var(--accent));
+}
+
+body.chat-page .chat-page-messages .connect-chat-msg-bubble .user-text-msg-h3 {
+	font-size: 0.8125rem;
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--text-muted);
+	line-height: 1.25;
+}
+
+body.chat-page .chat-page-messages .connect-chat-msg-bubble .user-text-msg-h1 {
+	font-size: 0.8125rem;
+	color: var(--text-muted);
+	text-decoration: none;
+}
+
+body.chat-page .chat-page-messages .connect-chat-msg-bubble .user-text-msg-h2 {
+	font-size: 0.8125rem;
+	letter-spacing: 0.1em;
+	color: var(--text-muted);
+}
+
+body.chat-page .chat-page-messages .connect-chat-msg-bubble .user-text-msg-h1,
+body.chat-page .chat-page-messages .connect-chat-msg-bubble .user-text-msg-h2,
+body.chat-page .chat-page-messages .connect-chat-msg-bubble .user-text-msg-h3 {
+	margin: 2em 0 0.25em;
+}
+
+body.chat-page .chat-page-messages .connect-chat-msg-bubble .user-text-msg-quote {
+	display: block;
+	margin: 1em 0;
+	padding: 0.08em 0 0.08em 11px;
+	border-left: 2px solid color-mix(in srgb, var(--accent) 48%, transparent);
+	color: color-mix(in srgb, var(--text) 70%, var(--accent));
+	font-style: italic;
+}
+
+body.chat-page .chat-page-messages .connect-chat-msg-bubble .user-text-msg-checkbox-input {
+	float: left;
+	appearance: none;
+	-webkit-appearance: none;
+	width: 13px;
+	height: 13px;
+	margin: 0.32em 8px 0.15em 0;
+	padding: 0;
+	border: 1px solid color-mix(in srgb, var(--text) 55%, var(--border));
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	pointer-events: none;
+	vertical-align: top;
+}
+
+body.chat-page .chat-page-messages .connect-chat-msg-bubble .user-text-msg-checkbox-input:checked {
+	background-color: transparent;
+	background-image:
+		linear-gradient(
+			45deg,
+			transparent 42%,
+			color-mix(in srgb, var(--text) 62%, transparent) 44%,
+			color-mix(in srgb, var(--text) 62%, transparent) 56%,
+			transparent 58%
+		),
+		linear-gradient(
+			-45deg,
+			transparent 42%,
+			color-mix(in srgb, var(--text) 62%, transparent) 44%,
+			color-mix(in srgb, var(--text) 62%, transparent) 56%,
+			transparent 58%
+		);
+	border-color: color-mix(in srgb, var(--text) 42%, var(--border));
+}
+
+body.chat-page .chat-page-messages .connect-chat-msg-bubble .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item {
+	list-style: none;
+	margin-left: 0;
+	padding-left: 0;
+	padding-inline-start: 0;
+	text-indent: 0;
+}
+
+body.chat-page .chat-page-messages .connect-chat-msg-bubble .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item::marker {
+	content: '';
+}
+
+body.chat-page .chat-page-messages .connect-chat-msg-bubble .user-text-msg-list.user-text-msg-list--task {
+	padding-left: 0;
+	padding-inline-start: 0;
+	margin-left: 0;
+}
+
 .connect-chat-msg-bubble .connect-chat-creation-embed-inner--group-carousel .connect-chat-creation-embed-group-stack::before {
 	content: '';
 	position: absolute;
