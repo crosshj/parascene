@@ -15,6 +15,19 @@ function extractInviteChannelThreadId(meta) {
 	return Number.isFinite(id) && id > 0 ? id : null;
 }
 
+function extractInviteeUserId(meta) {
+	if (!meta || typeof meta !== "object" || Array.isArray(meta)) return null;
+	const ts = meta.time_sensitive;
+	if (!ts || typeof ts !== "object" || Array.isArray(ts)) return null;
+	const invite =
+		ts.private_channel_invite && typeof ts.private_channel_invite === "object"
+			? ts.private_channel_invite
+			: null;
+	if (!invite) return null;
+	const id = Number(invite.invitee_user_id ?? invite.inviteeUserId);
+	return Number.isFinite(id) && id > 0 ? id : null;
+}
+
 /**
  * Remove DM invite messages that point to channels the user already joined.
  * Safe to call opportunistically on unrelated requests (feed load, invite accept, etc).
@@ -76,6 +89,9 @@ export async function removeJoinedPrivateChannelInviteDmMessages({ sb, userId })
 		const dmThreadId = Number(row?.thread_id);
 		if (!Number.isFinite(messageId) || messageId <= 0) continue;
 		if (!Number.isFinite(dmThreadId) || dmThreadId <= 0) continue;
+		const inviteeUserId = extractInviteeUserId(row?.meta);
+		// Only clear invites from the perspective of the invitee after they joined.
+		if (!Number.isFinite(inviteeUserId) || inviteeUserId !== viewerId) continue;
 		const invitedChannelThreadId = extractInviteChannelThreadId(row?.meta);
 		if (!Number.isFinite(invitedChannelThreadId) || !joinedChannelThreadIds.has(invitedChannelThreadId)) continue;
 		deleteIds.push(messageId);
