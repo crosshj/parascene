@@ -10533,60 +10533,10 @@ export async function initChatPage(root, options = {}) {
 				embedWrap instanceof HTMLElement
 					? String(embedWrap.getAttribute('data-creation-id') || '').trim()
 					: '';
-			let galleryUrls = [];
-			try {
-				const raw =
-					groupInner instanceof HTMLElement ? groupInner.dataset.chatGroupGalleryUrls || '' : '';
-				if (raw) galleryUrls = JSON.parse(raw);
-			} catch {
-				galleryUrls = [];
-			}
-			if (!Array.isArray(galleryUrls) || galleryUrls.length < 2) {
-				galleryUrls = Array.from(groupInner.querySelectorAll('.connect-chat-creation-embed-group-img'))
-					.map((img) =>
-						img instanceof HTMLImageElement ? String(img.currentSrc || img.src || '').trim() : ''
-					)
-					.filter(Boolean);
-			}
-			const galleryImgs = Array.from(
-				groupInner.querySelectorAll('.connect-chat-creation-embed-group-img')
-			).filter((n) => n instanceof HTMLImageElement);
-			const active = groupInner.querySelector('.connect-chat-creation-embed-group-img.is-active');
-			let src = '';
-			if (active instanceof HTMLImageElement) {
-				src = active.currentSrc || active.getAttribute('src') || '';
-			}
-			if (!src && galleryUrls[0]) src = galleryUrls[0];
-			if (!src) return;
+			if (!creationId) return;
 			e.preventDefault();
 			e.stopPropagation();
-			const idx =
-				active instanceof HTMLImageElement
-					? resolveGroupCarouselOpenIndex(active, galleryUrls)
-					: 0;
-			openChatInlineImageLightbox(src, {
-				...(creationId ? { creationId } : {}),
-				...(galleryUrls.length > 1
-					? {
-							galleryUrls,
-							galleryIndex: idx,
-							galleryImgs,
-							onGalleryLightboxSlideChange: (slideIdx) => {
-								const imgs = groupInner.querySelectorAll('.connect-chat-creation-embed-group-img');
-								const len = imgs.length;
-								if (len === 0) return;
-								const wrapped = ((slideIdx % len) + len) % len;
-								for (let i = 0; i < imgs.length; i += 1) {
-									imgs[i].classList.toggle('is-active', i === wrapped);
-								}
-							},
-						}
-					: active instanceof HTMLImageElement
-						? { sourceImg: active }
-						: galleryImgs[0]
-							? { sourceImg: galleryImgs[0] }
-							: {}),
-			});
+			window.location.href = `/creations/${encodeURIComponent(creationId)}`;
 			return;
 		}
 
@@ -10643,38 +10593,11 @@ export async function initChatPage(root, options = {}) {
 					.filter(Boolean);
 			}
 			if (galleryUrls.length < 2) return;
-
-			const galleryImgs = Array.from(imageWrap.querySelectorAll('.feed-card-group-img')).filter(
-				(n) => n instanceof HTMLImageElement
-			);
-
-			const active = imageWrap.querySelector('.feed-card-group-img.is-active');
-			let src =
-				active instanceof HTMLImageElement
-					? String(active.currentSrc || active.getAttribute('src') || '').trim()
-					: '';
-			if (!src) src = galleryUrls[0];
 			const cid = String(card.getAttribute('data-creation-id') || '').trim();
-
+			if (!cid) return;
 			e.preventDefault();
 			e.stopPropagation();
-			const idx =
-				active instanceof HTMLImageElement ? resolveGroupCarouselOpenIndex(active, galleryUrls) : 0;
-			openChatInlineImageLightbox(src, {
-				...(cid ? { creationId: cid } : {}),
-				galleryUrls,
-				galleryIndex: idx,
-				galleryImgs,
-				onGalleryLightboxSlideChange: (slideIdx) => {
-					const imgs = imageWrap.querySelectorAll('.feed-card-group-img');
-					const len = imgs.length;
-					if (len === 0) return;
-					const wrapped = ((slideIdx % len) + len) % len;
-					for (let i = 0; i < imgs.length; i += 1) {
-						imgs[i].classList.toggle('is-active', i === wrapped);
-					}
-				},
-			});
+			window.location.href = `/creations/${encodeURIComponent(cid)}`;
 		},
 		true
 	);
