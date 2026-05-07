@@ -847,6 +847,8 @@ export async function initChatPage(root, options = {}) {
 	let chatCanvasOwnerMenuOutside = null;
 	/** @type {null | (() => void)} */
 	let chatCanvasCreateCleanup = null;
+	/** @type {null | (() => void)} */
+	let privateChannelMembersOverlayCleanup = null;
 	let tearDownChatCanvasUi = () => { };
 	let chatThreads = [];
 	const chatPrivateKeyByThreadId = new Map();
@@ -6340,6 +6342,9 @@ export async function initChatPage(root, options = {}) {
 				Number.isFinite(inviteeUserId) && Number.isFinite(viewerId) ? inviteeUserId === Number(viewerId) : true;
 			const expiresAtRaw = typeof timedMeta.expires_at === 'string' ? timedMeta.expires_at.trim() : '';
 			const expMs = Date.parse(expiresAtRaw);
+			const nowMs = Date.now();
+			const isExpired =
+				timedMeta?.expired === true || (Number.isFinite(expMs) ? nowMs > expMs : false);
 			const expLabel = Number.isFinite(expMs) ? (formatRelativeTime(expiresAtRaw) || '') : '';
 			const ctaLabel =
 				typeof timedMeta?.cta?.label === 'string' && timedMeta.cta.label.trim()
@@ -6348,13 +6353,18 @@ export async function initChatPage(root, options = {}) {
 			const inviteToken =
 				typeof timedMeta?.cta?.invite_token === 'string' ? timedMeta.cta.invite_token.trim() : '';
 			bubble.classList.add('connect-chat-msg-bubble--timed-invite');
+			if (isExpired) bubble.classList.add('connect-chat-msg-bubble--timed-invite-expired');
 			bubble.innerHTML = `
 				<div class="chat-timed-message">
-					<div class="chat-timed-message-title">${isInviteForViewer ? 'Private channel invite' : 'Pending Invite'}</div>
+					<div class="chat-timed-message-title">${isExpired ? 'Invite expired' : (isInviteForViewer ? 'Private channel invite' : 'Pending Invite')}</div>
 					<div class="chat-timed-message-body">${safeBody}</div>
-					${expLabel ? `<div class="chat-timed-message-expiry">Expires ${escapeHtml(expLabel)}</div>` : ''}
+					${expLabel ? `<div class="chat-timed-message-expiry">${isExpired ? 'Expired' : 'Expires'} ${escapeHtml(expLabel)}</div>` : ''}
 					<div class="chat-timed-message-actions">
-						${isInviteForViewer ? `<button type="button" class="btn-primary chat-timed-message-cta" data-chat-timed-accept-invite="${escapeHtml(inviteToken)}">${escapeHtml(ctaLabel)}</button>` : '<span class="chat-timed-message-pending">Waiting for recipient</span>'}
+						${isExpired
+							? '<span class="chat-timed-message-pending">Invite expired</span>'
+							: (isInviteForViewer
+								? `<button type="button" class="btn-primary chat-timed-message-cta" data-chat-timed-accept-invite="${escapeHtml(inviteToken)}">${escapeHtml(ctaLabel)}</button>`
+								: '<span class="chat-timed-message-pending">Waiting for recipient</span>')}
 					</div>
 				</div>
 			`;
@@ -10715,6 +10725,15 @@ export async function initChatPage(root, options = {}) {
 		return true;
 	}
 
+	function canOpenPrivateChannelMembersModal() {
+		return (
+			!activePseudoChannelSlug &&
+			Number.isFinite(Number(activeThreadId)) &&
+			Number(activeThreadId) > 0 &&
+			isPrivateChannelMeta(activeHeaderMeta)
+		);
+	}
+
 	function rebuildMobileChromeSheet() {
 		const body =
 			mainColumn instanceof HTMLElement ? mainColumn.querySelector('[data-chat-mobile-chrome-sheet-body]') : null;
@@ -10777,6 +10796,15 @@ export async function initChatPage(root, options = {}) {
 		refresh.setAttribute('role', 'menuitem');
 		refresh.textContent = 'Refresh';
 		body.appendChild(refresh);
+		if (canOpenPrivateChannelMembersModal()) {
+			const membersBtn = document.createElement('button');
+			membersBtn.type = 'button';
+			membersBtn.className = 'feed-card-menu-item';
+			membersBtn.dataset.chatPrivateMembersOpen = '';
+			membersBtn.setAttribute('role', 'menuitem');
+			membersBtn.textContent = 'Members';
+			body.appendChild(membersBtn);
+		}
 		if (isActiveThreadCanvasEligible() && chatViewerIsFounder) {
 			const createBtn = document.createElement('button');
 			createBtn.type = 'button';
@@ -11233,6 +11261,15 @@ export async function initChatPage(root, options = {}) {
 			orgBtn.textContent = 'Organizer tools';
 			dyn.appendChild(orgBtn);
 		}
+		if (canOpenPrivateChannelMembersModal()) {
+			const membersBtn = document.createElement('button');
+			membersBtn.type = 'button';
+			membersBtn.className = 'feed-card-menu-item';
+			membersBtn.dataset.chatPrivateMembersOpen = '';
+			membersBtn.setAttribute('role', 'menuitem');
+			membersBtn.textContent = 'Members';
+			dyn.appendChild(membersBtn);
+		}
 		if (isActiveThreadCanvasEligible() && chatViewerIsFounder) {
 			const createBtn = document.createElement('button');
 			createBtn.type = 'button';
@@ -11434,8 +11471,128 @@ export async function initChatPage(root, options = {}) {
 		titleIn.focus();
 	}
 
+	function closePrivateChannelMembersOverlay() {
+		if (typeof privateChannelMembersOverlayCleanup === 'function') {
+			try {
+				privateChannelMembersOverlayCleanup();
+			} catch {
+				// ignore
+			}
+			privateChannelMembersOverlayCleanup = null;
+		}
+	}
+
+	function showPrivateChannelMembersOverlay() {
+		closePrivateChannelMembersOverlay();
+		if (!canOpenPrivateChannelMembersModal()) return;
+		const tid = Number(activeThreadId);
+		const overlay = document.createElement('div');
+		overlay.className = 'modal-overlay open chat-private-members-overlay';
+		overlay.setAttribute('role', 'dialog');
+		overlay.setAttribute('aria-modal', 'true');
+		overlay.setAttribute('aria-label', 'Private channel members');
+		const panel = document.createElement('div');
+		panel.className = 'modal chat-private-members-dialog';
+		panel.innerHTML = `
+			<div class="chat-private-members-head">
+				<h2 class="chat-private-members-title">Members</h2>
+				<button type="button" class="modal-close" data-chat-private-members-close aria-label="Close">
+					<span class="modal-close-icon" aria-hidden="true">×</span>
+				</button>
+			</div>
+			<div class="chat-private-members-body">
+				<div class="chat-private-members-loading" data-chat-private-members-loading>Loading members…</div>
+				<p class="chat-private-members-error" data-chat-private-members-error hidden></p>
+				<div class="chat-private-members-table-wrap" data-chat-private-members-table-wrap hidden>
+					<table class="chat-private-members-table">
+						<thead>
+							<tr>
+								<th scope="col">User</th>
+								<th scope="col">Status</th>
+							</tr>
+						</thead>
+						<tbody data-chat-private-members-tbody></tbody>
+					</table>
+				</div>
+			</div>
+		`;
+		overlay.appendChild(panel);
+		document.body.appendChild(overlay);
+		const loadingEl = panel.querySelector('[data-chat-private-members-loading]');
+		const errEl = panel.querySelector('[data-chat-private-members-error]');
+		const tableWrap = panel.querySelector('[data-chat-private-members-table-wrap]');
+		const tbody = panel.querySelector('[data-chat-private-members-tbody]');
+		const setError = (msg) => {
+			if (loadingEl instanceof HTMLElement) loadingEl.hidden = true;
+			if (tableWrap instanceof HTMLElement) tableWrap.hidden = true;
+			if (errEl instanceof HTMLElement) {
+				errEl.hidden = false;
+				errEl.textContent = String(msg || 'Could not load members.');
+			}
+		};
+		void (async () => {
+			try {
+				const res = await fetch(`/api/chat/threads/${tid}/member-status`, { credentials: 'include' });
+				const data = await res.json().catch(() => ({}));
+				if (!res.ok) {
+					setError(data?.message || data?.error || 'Could not load members.');
+					return;
+				}
+				const list = Array.isArray(data?.members) ? data.members : [];
+				if (!(tbody instanceof HTMLElement)) return;
+				tbody.innerHTML = list
+					.map((row) => {
+						const userId = Number(row?.user_id);
+						const userNameRaw =
+							typeof row?.user_name === 'string' && row.user_name.trim() ? row.user_name.trim() : '';
+						const display = userNameRaw ? `@${userNameRaw}` : `User ${userId}`;
+						const avatarUrl =
+							typeof row?.avatar_url === 'string' && row.avatar_url.trim() ? row.avatar_url.trim() : '';
+						const statusRaw =
+							String(row?.status || '').trim().toLowerCase() === 'joined' ? 'Joined' : 'Invited';
+						const color = getAvatarColor(userNameRaw || String(userId));
+						const avatarHtml = renderCommentAvatarHtml({
+							avatarUrl,
+							displayName: display,
+							color,
+							href: '',
+							isFounder: false,
+							flairSize: 'xs'
+						});
+						return `<tr>
+							<td>
+								<div class="chat-private-members-user-cell">
+									${avatarHtml}
+									<span class="chat-private-members-username">${escapeHtml(display)}</span>
+								</div>
+							</td>
+							<td><span class="chat-private-members-status chat-private-members-status--${statusRaw.toLowerCase()}">${statusRaw}</span></td>
+						</tr>`;
+					})
+					.join('');
+				if (loadingEl instanceof HTMLElement) loadingEl.hidden = true;
+				if (tableWrap instanceof HTMLElement) tableWrap.hidden = false;
+			} catch {
+				setError('Could not load members.');
+			}
+		})();
+		const close = () => closePrivateChannelMembersOverlay();
+		const onKey = (ev) => {
+			if (ev.key === 'Escape') close();
+		};
+		overlay.addEventListener('click', (ev) => {
+			if (ev.target === overlay || ev.target?.closest?.('[data-chat-private-members-close]')) close();
+		});
+		document.addEventListener('keydown', onKey);
+		privateChannelMembersOverlayCleanup = () => {
+			document.removeEventListener('keydown', onKey);
+			overlay.remove();
+		};
+	}
+
 	tearDownChatCanvasUi = () => {
 		closeChatCanvasCreateOverlay();
+		closePrivateChannelMembersOverlay();
 		closeMobileChromeSheet();
 		closeChatCanvasPanel();
 		chatCanvasesList = [];
@@ -11557,6 +11714,13 @@ export async function initChatPage(root, options = {}) {
 			closeMobileChromeSheet();
 			closeTopbarMenu();
 			runChatRefresh();
+			return;
+		}
+		if (t.closest('[data-chat-private-members-open]')) {
+			e.preventDefault();
+			closeTopbarMenu();
+			closeMobileChromeSheet();
+			showPrivateChannelMembersOverlay();
 			return;
 		}
 		if (t.closest('[data-chat-challenges-organizer-open]')) {

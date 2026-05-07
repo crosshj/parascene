@@ -1,0 +1,22 @@
+---
+description: Enforce reusable color token naming
+alwaysApply: true
+---
+
+# Design Token Naming
+
+- Prefer reusable design-system token names over feature/state-specific names.
+- Do not create tokens tied to a page, component, or flow (for example `chat-*`, `members-*`, `invite-*`).
+- Avoid naming base color tokens as states (for example `success`, `warning`) unless they are semantic aliases mapped from base tokens.
+
+## Naming Model
+
+- Base hue tokens (reusable): `--color-green`, `--color-amber`
+- Role variants from base hues: `--color-green-fg`, `--color-green-bg-subtle`
+- Optional semantic aliases can map to base hues when needed (for example `--state-success-fg: var(--color-green-fg)`).
+
+## Rules
+
+- New component styles should consume existing global tokens first.
+- If a new token is needed, define it in `public/global.css` as a reusable system token.
+- Keep naming generic and composable so tokens can be reused across unrelated UI.

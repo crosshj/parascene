@@ -41,6 +41,13 @@
 
 	/* Founder flair – name/handle text color (matches flair ring/label) */
 	--founder-flair-name: #9657c2;
+	/* Reusable hue tokens (not tied to component/state names) */
+	--color-green: #16a34a;
+	--color-amber: #d97706;
+	--color-green-fg: color-mix(in srgb, var(--color-green) 80%, var(--text));
+	--color-green-bg-subtle: color-mix(in srgb, var(--color-green) 16%, var(--surface));
+	--color-amber-fg: color-mix(in srgb, var(--color-amber) 84%, var(--text));
+	--color-amber-bg-subtle: color-mix(in srgb, var(--color-amber) 18%, var(--surface));
 }
 
 /* Original dark theme (commented out)
@@ -95,6 +102,13 @@
 		--share-x-bg: #ffffff;
 		--share-x-fg: #0b0b0b;
 		--founder-flair-name: #9657c2;
+		/* Reusable hue tokens (dark mode) */
+		--color-green: #22c55e;
+		--color-amber: #f59e0b;
+		--color-green-fg: color-mix(in srgb, var(--color-green) 74%, white);
+		--color-green-bg-subtle: color-mix(in srgb, var(--color-green) 28%, var(--surface));
+		--color-amber-fg: color-mix(in srgb, var(--color-amber) 78%, white);
+		--color-amber-bg-subtle: color-mix(in srgb, var(--color-amber) 30%, var(--surface));
 	}
 }
 

@@ -1666,6 +1666,111 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 		}
 	});
 
+	// GET /api/chat/threads/:threadId/member-status — private channel roster (joined vs invited)
+	router.get("/api/chat/threads/:threadId/member-status", async (req, res) => {
+		const userId = requireUser(req, res);
+		if (userId == null) return;
+		const sb = getSb(res);
+		if (!sb) return;
+		const threadId = Number(req.params.threadId);
+		if (!Number.isFinite(threadId) || threadId <= 0) {
+			return res.status(400).json({ error: "Bad request", message: "Invalid thread id" });
+		}
+		try {
+			if (!(await isMember(sb, threadId, userId))) {
+				return res.status(403).json({ error: "Forbidden", message: "Not a member of this thread" });
+			}
+			const { data: thread, error: threadErr } = await sb
+				.from("prsn_chat_threads")
+				.select("id, type, meta")
+				.eq("id", threadId)
+				.maybeSingle();
+			if (threadErr) throw threadErr;
+			if (!thread || thread.type !== "channel") {
+				return res.status(400).json({ error: "Bad request", message: "Only channel threads are supported" });
+			}
+			if (threadVisibilityFromMeta(thread.meta) !== PRIVATE_CHANNEL_VISIBILITY) {
+				return res.status(400).json({ error: "Bad request", message: "Only private channels are supported" });
+			}
+			const { data: memberRows, error: memberErr } = await sb
+				.from("prsn_chat_members")
+				.select("user_id")
+				.eq("thread_id", threadId);
+			if (memberErr) throw memberErr;
+			const joinedIds = new Set(
+				(memberRows || [])
+					.map((row) => Number(row?.user_id))
+					.filter((n) => Number.isFinite(n) && n > 0)
+			);
+			const { data: inviteRows, error: inviteErr } = await sb
+				.from("prsn_chat_messages")
+				.select("meta")
+				.eq("thread_id", threadId)
+				.contains("meta", { system_event: { kind: SYSTEM_EVENT_KIND_CHANNEL_INVITE_SENT } })
+				.order("id", { ascending: false })
+				.limit(200);
+			if (inviteErr) throw inviteErr;
+			const invitedIds = new Set();
+			for (const row of inviteRows || []) {
+				const meta = row?.meta && typeof row.meta === "object" && !Array.isArray(row.meta) ? row.meta : null;
+				const eventRaw = meta?.system_event;
+				const event =
+					eventRaw && typeof eventRaw === "object" && !Array.isArray(eventRaw) ? eventRaw : null;
+				if (String(event?.kind || "").trim().toLowerCase() !== SYSTEM_EVENT_KIND_CHANNEL_INVITE_SENT) continue;
+				const ids = Array.isArray(event?.invited_user_ids) ? event.invited_user_ids : [];
+				for (const rawId of ids) {
+					const n = Number(rawId);
+					if (Number.isFinite(n) && n > 0) invitedIds.add(n);
+				}
+			}
+			const allIds = [...new Set([...joinedIds, ...invitedIds])];
+			let profileMap = new Map();
+			if (allIds.length > 0 && typeof queries.selectUserProfilesByUserIds === "function") {
+				try {
+					const fetched = await queries.selectUserProfilesByUserIds(allIds);
+					if (fetched instanceof Map) profileMap = fetched;
+				} catch {
+					profileMap = new Map();
+				}
+			}
+			const members = allIds
+				.map((id) => {
+					const profile = profileMap.get(id);
+					const userName =
+						typeof profile?.user_name === "string" && profile.user_name.trim()
+							? profile.user_name.trim()
+							: null;
+					const avatarUrl =
+						typeof profile?.avatar_url === "string" && profile.avatar_url.trim()
+							? profile.avatar_url.trim()
+							: null;
+					const status = joinedIds.has(id) ? "joined" : "invited";
+					return {
+						user_id: id,
+						user_name: userName,
+						avatar_url: avatarUrl,
+						status
+					};
+				})
+				.sort((a, b) => {
+					if (a.status !== b.status) return a.status === "joined" ? -1 : 1;
+					const aName = String(a.user_name || "").toLowerCase();
+					const bName = String(b.user_name || "").toLowerCase();
+					if (aName && bName) return aName.localeCompare(bName);
+					if (aName) return -1;
+					if (bName) return 1;
+					return a.user_id - b.user_id;
+				});
+			return res.status(200).json({
+				thread_id: threadId,
+				members
+			});
+		} catch (err) {
+			console.error("[GET /api/chat/threads/:threadId/member-status]", err);
+			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
+		}
+	});
+
 	// POST /api/chat/threads/:threadId/read  { last_read_message_id }
 	router.post("/api/chat/threads/:threadId/read", async (req, res) => {
 		const userId = requireUser(req, res);
@@ -1795,23 +1900,44 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 
 			const list = Array.isArray(rows) ? rows : [];
 			const nowMs = Date.now();
-			const expiredIds = list
-				.filter((m) => isTimedMessageExpired(m?.meta, nowMs))
-				.map((m) => Number(m.id))
-				.filter((n) => Number.isFinite(n) && n > 0);
-			if (expiredIds.length > 0) {
-				const { error: delErr } = await sb.from("prsn_chat_messages").delete().in("id", expiredIds);
+			const expiredIdsToDelete = [];
+			for (const m of list) {
+				if (!isTimedMessageExpired(m?.meta, nowMs)) continue;
+				const parsed = parseTimedMessageMeta(m?.meta);
+				const mid = Number(m?.id);
+				if (!Number.isFinite(mid) || mid <= 0) continue;
+				// Keep private-channel invite rows visible after expiry so both sides can see "expired".
+				if (parsed?.kind === TIMED_MESSAGE_KIND_CHANNEL_INVITE) continue;
+				expiredIdsToDelete.push(mid);
+			}
+			if (expiredIdsToDelete.length > 0) {
+				const { error: delErr } = await sb.from("prsn_chat_messages").delete().in("id", expiredIdsToDelete);
 				if (delErr) throw delErr;
 			}
 			const visibleList =
-				expiredIds.length > 0
-					? list.filter((m) => !expiredIds.includes(Number(m.id)))
+				expiredIdsToDelete.length > 0
+					? list.filter((m) => !expiredIdsToDelete.includes(Number(m.id)))
 					: list;
 			const hasMore = visibleList.length > limit;
 			const page = hasMore ? visibleList.slice(0, limit) : visibleList;
 			page.reverse();
 
 			let messagesOut = await enrichChatMessagesWithSenderProfiles(sb, page);
+			messagesOut = messagesOut.map((m) => {
+				const parsed = parseTimedMessageMeta(m?.meta);
+				if (!parsed || parsed.kind !== TIMED_MESSAGE_KIND_CHANNEL_INVITE) return m;
+				if (!isTimedMessageExpired(m?.meta, nowMs)) return m;
+				const meta =
+					m?.meta && typeof m.meta === "object" && !Array.isArray(m.meta) ? { ...m.meta } : {};
+				const ts =
+					meta.time_sensitive && typeof meta.time_sensitive === "object" && !Array.isArray(meta.time_sensitive)
+						? { ...meta.time_sensitive }
+						: null;
+				if (!ts) return m;
+				ts.expired = true;
+				meta.time_sensitive = ts;
+				return { ...m, meta };
+			});
 			messagesOut = enrichChatReactionsFromMessageColumn(messagesOut, userId);
 			const { data: threadRow } = await sb
 				.from("prsn_chat_threads")

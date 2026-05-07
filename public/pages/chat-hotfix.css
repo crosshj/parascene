@@ -607,3 +607,46 @@ button.chat-inline-image-lightbox-footer-btn.btn-secondary {
 		top: 54%;
 	}
 }
+
+/*
+ * Private-channel members modal status pills:
+ * keep this in chat-hotfix so it overrides stale `/build/chat.bundle.css`.
+ */
+:root {
+	--color-green: #16a34a;
+	--color-amber: #d97706;
+	--color-green-fg: color-mix(in srgb, var(--color-green) 80%, var(--text));
+	--color-green-bg-subtle: color-mix(in srgb, var(--color-green) 16%, var(--surface));
+	--color-amber-fg: color-mix(in srgb, var(--color-amber) 84%, var(--text));
+	--color-amber-bg-subtle: color-mix(in srgb, var(--color-amber) 18%, var(--surface));
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--color-green: #22c55e;
+		--color-amber: #f59e0b;
+		--color-green-fg: color-mix(in srgb, var(--color-green) 74%, white);
+		--color-green-bg-subtle: color-mix(in srgb, var(--color-green) 28%, var(--surface));
+		--color-amber-fg: color-mix(in srgb, var(--color-amber) 78%, white);
+		--color-amber-bg-subtle: color-mix(in srgb, var(--color-amber) 30%, var(--surface));
+	}
+}
+
+.chat-private-members-status--joined {
+	color: var(--color-green-fg);
+	background: var(--color-green-bg-subtle);
+}
+
+.chat-private-members-status--invited {
+	color: var(--color-amber-fg);
+	background: var(--color-amber-bg-subtle);
+}
+
+/* Expired invite cards should read as inactive, not actionable. */
+.connect-chat-msg-bubble--timed-invite-expired .chat-timed-message {
+	opacity: 0.88;
+}
+
+.connect-chat-msg-bubble--timed-invite-expired .chat-timed-message-title {
+	color: var(--text-muted);
+}
