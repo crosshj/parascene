@@ -232,6 +232,15 @@ export const copyIcon = withAttributes(html`
 	</svg>
 `);
 
+/** Curved reply arrow — hover message actions. */
+export const replyTurnIcon = withAttributes(html`
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"
+		stroke-linejoin="round" aria-hidden="true">
+		<polyline points="9 17 4 12 9 7"></polyline>
+		<path d="M20 18v-2a4 4 0 0 0-4-4H4"></path>
+	</svg>
+`);
+
 /** Trash — delete row / message. */
 export const trashIcon = withAttributes(html`
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"

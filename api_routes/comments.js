@@ -1,5 +1,7 @@
 import express from "express";
 import { getThumbnailUrl } from "./utils/url.js";
+import { composeCommentStampedReply } from "./utils/commentReplyStamp.js";
+import { sanitizeClientReplyPreview } from "./utils/chatReplyStamp.js";
 
 /** Allowed emoji keys for comment reactions, in display order. Must match frontend REACTION_ORDER. */
 export const REACTION_ORDER = [
@@ -137,6 +139,28 @@ function normalizeOffset(raw) {
 	return Math.max(0, n);
 }
 
+async function attachReplyParentExistsToComments(queries, createdImageId, items) {
+	if (!queries.selectCommentIdsForImage?.all || !Array.isArray(items)) return items;
+	const cid = Number(createdImageId);
+	const refs = [
+		...new Set(
+			items
+				.filter((it) => it?.type === "comment")
+				.map((it) => Number(it?.meta?.reply?.referenced_id))
+				.filter((n) => Number.isFinite(n) && n > 0)
+		)
+	];
+	if (refs.length === 0) return items;
+	const alive = await queries.selectCommentIdsForImage.all(cid, refs);
+	const set = new Set((alive ?? []).map((id) => Number(id)));
+	return items.map((it) => {
+		if (it.type !== "comment") return it;
+		const ref = Number(it?.meta?.reply?.referenced_id);
+		if (!Number.isFinite(ref)) return it;
+		return { ...it, reply_parent_exists: set.has(ref) };
+	});
+}
+
 
 export default function createCommentsRoutes({ queries }) {
 	const router = express.Router();
@@ -267,7 +291,9 @@ export default function createCommentsRoutes({ queries }) {
 			}
 		}
 
-		return res.json({ items, comment_count: commentCount });
+		const itemsFinal = await attachReplyParentExistsToComments(queries, imageId, items);
+
+		return res.json({ items: itemsFinal, comment_count: commentCount });
 	});
 
 	router.post("/api/comments/:commentId/reactions", async (req, res) => {
@@ -335,7 +361,40 @@ export default function createCommentsRoutes({ queries }) {
 			return res.status(400).json({ error: "Comment is too long" });
 		}
 
-		const comment = await queries.insertCreatedImageComment?.run(user.id, imageId, text);
+		const rawRef = req.body?.referenced_comment_id ?? req.body?.reply_to_comment_id;
+		let referencedCid =
+			rawRef !== undefined && rawRef !== null && String(rawRef).trim()
+				? Number.parseInt(String(rawRef).trim(), 10)
+				: NaN;
+		if (!Number.isFinite(referencedCid)) {
+			referencedCid = NaN;
+		}
+
+		let metaPayload = {};
+
+		if (Number.isFinite(referencedCid) && referencedCid > 0) {
+			const parent = await queries.selectCommentById?.get(referencedCid);
+			const parentImg = Number(parent?.created_image_id);
+			if (
+				!parent ||
+				!Number.isFinite(parentImg) ||
+				parentImg !== imageId
+			) {
+				return res.status(400).json({ error: "Invalid referenced comment" });
+			}
+			metaPayload.reply = await composeCommentStampedReply(
+				queries,
+				referencedCid,
+				parent,
+				sanitizeClientReplyPreview(req.body?.reply_preview)
+			);
+		}
+
+		const comment = await queries.insertCreatedImageComment?.run(user.id, imageId, text, metaPayload);
+		let commentOut = comment ? { ...comment } : comment;
+		if (commentOut?.meta?.reply) {
+			commentOut = { ...commentOut, reply_parent_exists: true };
+		}
 
 		// console.log(`[Comments] POST /api/created-images/${req.params.id}/comments`);
 
@@ -392,7 +451,7 @@ export default function createCommentsRoutes({ queries }) {
 		}
 
 		return res.json({
-			comment,
+			comment: commentOut ?? comment,
 			comment_count: commentCount
 		});
 	});

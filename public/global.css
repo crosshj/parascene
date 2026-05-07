@@ -4677,6 +4677,61 @@ app-route-feed {
 	justify-content: flex-start;
 }
 
+.comment-inline-reply {
+	width: 100%;
+	min-width: 0;
+	box-sizing: border-box;
+	padding-top: 4px;
+}
+
+.comment-inline-reply[hidden] {
+	display: none !important;
+}
+
+.comment-inline-reply-shell.comment-input {
+	margin-top: 10px;
+	margin-bottom: 0;
+	align-items: flex-start;
+}
+
+.comment-inline-reply-input-body {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	width: 100%;
+	min-width: 0;
+}
+
+.comment-inline-reply-composer .comment-inline-reply-field {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.comment-inline-reply-cancel {
+	align-self: flex-start;
+	margin: 0;
+	padding: 2px 0;
+	border: none;
+	background: none;
+	font: inherit;
+	color: var(--text-muted);
+	font-size: 0.8125rem;
+	cursor: pointer;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.comment-inline-reply-cancel:hover {
+	color: var(--text);
+}
+
+.comment-inline-reply-cancel:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+	border-radius: 4px;
+}
+
 .comment-meta-row .comment-time {
 	color: var(--text-muted);
 	font-size: 0.85rem;
@@ -4858,7 +4913,8 @@ app-route-feed {
 }
 
 
-.comment-reaction-add {
+.comment-reaction-add,
+.comment-reaction-reply {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -4876,22 +4932,26 @@ app-route-feed {
 	transition: background 0.1s ease, color 0.1s ease;
 }
 
-.comment-reaction-add:hover {
+.comment-reaction-add:hover,
+.comment-reaction-reply:hover {
 	background: color-mix(in srgb, var(--text) 14%, var(--surface));
 	color: var(--text);
 }
 
 @media (prefers-color-scheme: dark) {
-	.comment-reaction-add {
+	.comment-reaction-add,
+	.comment-reaction-reply {
 		background: color-mix(in srgb, var(--focus) 12%, var(--surface-strong));
 	}
 
-	.comment-reaction-add:hover {
+	.comment-reaction-add:hover,
+	.comment-reaction-reply:hover {
 		background: color-mix(in srgb, var(--focus) 20%, var(--surface-strong));
 	}
 }
 
-.comment-reaction-add:disabled {
+.comment-reaction-add:disabled,
+.comment-reaction-reply:disabled {
 	opacity: 0.7;
 	cursor: not-allowed;
 }
@@ -4959,6 +5019,17 @@ app-route-feed {
 
 .comment-reaction-add .comment-reaction-add-icon {
 	color: var(--text-muted);
+}
+
+.comment-reaction-reply .comment-reaction-reply-icon {
+	display: block;
+	width: 18px;
+	height: 18px;
+	color: var(--text-muted);
+}
+
+.comment-reaction-reply:hover .comment-reaction-reply-icon {
+	color: var(--text);
 }
 
 /* Reaction picker popover */
@@ -8860,6 +8931,80 @@ body.chat-page .chat-page-input-shell.is-at-limit:focus-within {
 	border-color: var(--warning-text, #b45309);
 }
 
+body.chat-page .chat-page-composer-reply[data-chat-composer-reply] {
+	flex-shrink: 0;
+	box-sizing: border-box;
+	padding: 6px 10px;
+	background: color-mix(in srgb, var(--text) 7%, var(--input-bg));
+}
+
+body.chat-page .chat-page-composer-reply[data-chat-composer-reply][hidden] {
+	display: none !important;
+}
+
+body.chat-page .chat-page-composer-reply-strip {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	column-gap: 8px;
+	align-items: center;
+	min-height: 26px;
+	width: 100%;
+	min-width: 0;
+}
+
+body.chat-page .chat-page-composer-reply-text {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 0.8125rem;
+	line-height: 1.3;
+	color: var(--text-muted);
+}
+
+body.chat-page .chat-page-composer-reply-name {
+	font-weight: 700;
+	color: var(--text);
+}
+
+body.chat-page .chat-page-composer-reply-dismiss {
+	flex-shrink: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 26px;
+	margin: 0;
+	padding: 0;
+	border: none;
+	border-radius: 50%;
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+	transition: background 0.12s ease, color 0.12s ease;
+	-webkit-tap-highlight-color: transparent;
+	align-self: center;
+}
+
+body.chat-page .chat-page-composer-reply-dismiss-icon {
+	display: block;
+	width: 13px;
+	height: 13px;
+	max-width: 13px;
+	max-height: 13px;
+	flex-shrink: 0;
+}
+
+body.chat-page .chat-page-composer-reply-dismiss:hover {
+	color: var(--text);
+	background: transparent;
+}
+
+body.chat-page .chat-page-composer-reply-dismiss:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 1px;
+}
+
 body.chat-page .chat-page-composer-attachments {
 	flex-shrink: 0;
 }
@@ -10211,12 +10356,22 @@ body.blog-edit-page .blog-edit-route {
 }
 
 @media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
-	.chat-page-messages .connect-chat-msg:hover {
+	.chat-page-messages .connect-chat-msg:hover:not(.connect-chat-msg--reply-target) {
 		background: color-mix(in srgb, var(--text) 5%, transparent);
+	}
+
+	.chat-page-messages .connect-chat-msg.connect-chat-msg--reply-target:hover {
+		background: color-mix(in srgb, var(--focus) 18%, transparent);
 	}
 }
 
-/* Slack-style hover toolbar: quick reactions, full picker, copy, delete (own / mod).
+/* Reply target: full-row wash (like hover) + focus tint, not a box around inner content */
+.chat-page-messages .connect-chat-msg.connect-chat-msg--reply-target {
+	background: color-mix(in srgb, var(--focus) 12%, transparent);
+	box-shadow: inset 3px 0 0 var(--focus);
+}
+
+/* Slack-style hover toolbar: quick reactions, reply, copy/edit/delete (own / mod).
    Hidden by default: desktop shows on hover/focus/pinned; touch shows only when tapped (see chat.js `--toolbar-open`). */
 .chat-page-messages .connect-chat-msg-hover-bar {
 	position: absolute;
@@ -10273,7 +10428,8 @@ body.blog-edit-page .blog-edit-route {
 .chat-page-messages .connect-chat-msg-hover-add-react,
 .chat-page-messages .connect-chat-msg-hover-edit,
 .chat-page-messages .connect-chat-msg-hover-copy,
-.chat-page-messages .connect-chat-msg-hover-delete {
+.chat-page-messages .connect-chat-msg-hover-delete,
+.chat-page-messages .connect-chat-msg-hover-reply {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -10294,7 +10450,8 @@ body.blog-edit-page .blog-edit-route {
 .chat-page-messages .connect-chat-msg-hover-add-react:hover,
 .chat-page-messages .connect-chat-msg-hover-edit:hover,
 .chat-page-messages .connect-chat-msg-hover-copy:hover,
-.chat-page-messages .connect-chat-msg-hover-delete:hover {
+.chat-page-messages .connect-chat-msg-hover-delete:hover,
+.chat-page-messages .connect-chat-msg-hover-reply:hover {
 	color: var(--text);
 	background: color-mix(in srgb, var(--text) 8%, transparent);
 }
@@ -10308,7 +10465,8 @@ body.blog-edit-page .blog-edit-route {
 .chat-page-messages .connect-chat-msg-hover-add-react:focus-visible,
 .chat-page-messages .connect-chat-msg-hover-edit:focus-visible,
 .chat-page-messages .connect-chat-msg-hover-copy:focus-visible,
-.chat-page-messages .connect-chat-msg-hover-delete:focus-visible {
+.chat-page-messages .connect-chat-msg-hover-delete:focus-visible,
+.chat-page-messages .connect-chat-msg-hover-reply:focus-visible {
 	outline: 2px solid var(--focus);
 	outline-offset: 1px;
 }
@@ -10322,7 +10480,8 @@ body.blog-edit-page .blog-edit-route {
 .chat-page-messages .connect-chat-hover-add-react-icon,
 .chat-page-messages .connect-chat-hover-edit-icon,
 .chat-page-messages .connect-chat-hover-copy-icon,
-.chat-page-messages .connect-chat-hover-delete-icon {
+.chat-page-messages .connect-chat-hover-delete-icon,
+.chat-page-messages .connect-chat-hover-reply-icon {
 	display: block;
 	width: 18px;
 	height: 18px;
@@ -10351,6 +10510,250 @@ body.blog-edit-page .blog-edit-route {
 	align-items: flex-start;
 	gap: 2px;
 	max-width: 100%;
+}
+
+/* Reply quote (message list + composer strip) */
+.msg-reply-indicator {
+	width: 100%;
+	max-width: 100%;
+	box-sizing: border-box;
+	margin: 0 0 2px 0;
+}
+
+.msg-reply-indicator-inner {
+	display: flex;
+	flex-direction: row;
+	align-items: flex-start;
+	gap: 8px;
+	min-width: 0;
+	width: 100%;
+	padding: 6px 10px;
+	border-radius: 8px;
+	border: 1px solid color-mix(in srgb, var(--text) 12%, var(--border));
+	background: color-mix(in srgb, var(--text) 6%, var(--surface-muted));
+	text-align: left;
+	font: inherit;
+	color: inherit;
+	cursor: default;
+	box-sizing: border-box;
+}
+
+button.msg-reply-indicator-inner {
+	cursor: pointer;
+}
+
+button.msg-reply-indicator-inner:hover {
+	background: color-mix(in srgb, var(--text) 10%, var(--surface-muted));
+	border-color: color-mix(in srgb, var(--text) 18%, var(--border));
+}
+
+.msg-reply-indicator--unreachable .msg-reply-indicator-inner {
+	opacity: 0.85;
+}
+
+.msg-reply-indicator-avatar {
+	flex-shrink: 0;
+}
+
+.msg-reply-indicator-avatar .comment-avatar {
+	margin-top: 0;
+}
+
+.msg-reply-indicator-text {
+	flex: 1 1 auto;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.msg-reply-indicator-top {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 6px;
+	min-width: 0;
+}
+
+.msg-reply-indicator-name {
+	font-size: 0.8125rem;
+	font-weight: 600;
+	color: var(--text);
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.msg-reply-indicator-badge {
+	font-size: 0.7rem;
+	font-weight: 500;
+	text-transform: uppercase;
+	letter-spacing: 0.02em;
+	color: var(--text-muted);
+	flex-shrink: 0;
+}
+
+.msg-reply-indicator-preview {
+	font-size: 0.8125rem;
+	line-height: 1.35;
+	color: var(--text-muted);
+	word-break: break-word;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+/* Compact reply citations (chat + creation-detail comments): bracket, muted inline @handle + snippet, above author row in DOM */
+.chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact {
+	margin: 0 0 -2px;
+	width: 100%;
+	max-width: 100%;
+	padding-left: 12px;
+	box-sizing: border-box;
+}
+
+body.creation-detail-page [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact {
+	margin: 0 0 -2px;
+	margin-left: -27px;
+	width: 100%;
+	max-width: 100%;
+	padding-left: 0;
+	box-sizing: border-box;
+}
+
+.chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-inner,
+body.creation-detail-page [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-inner {
+	padding: 0;
+	border: none;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	align-items: center;
+	min-height: 0;
+	gap: 2px;
+	min-width: 0;
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-target-mark,
+body.creation-detail-page [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-target-mark {
+	flex-shrink: 0;
+	align-self: center;
+	display: block;
+	width: 11px;
+	height: 11px;
+	box-sizing: border-box;
+	margin: 0 0 -10px 0;
+	border: none;
+	border-left: 2px solid color-mix(in srgb, var(--text-muted) 55%, var(--border));
+	border-top: 2px solid color-mix(in srgb, var(--text-muted) 55%, var(--border));
+	border-top-left-radius: 4px;
+}
+
+.chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact.msg-reply-indicator--unreachable .msg-reply-indicator-target-mark,
+body.creation-detail-page [data-comment-list]
+	.comment-body
+	> .msg-reply-indicator.msg-reply-indicator--compact.msg-reply-indicator--unreachable
+	.msg-reply-indicator-target-mark {
+	border-left-color: color-mix(in srgb, var(--text-muted) 38%, var(--border));
+	border-top-color: color-mix(in srgb, var(--text-muted) 38%, var(--border));
+}
+
+.chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact button.msg-reply-indicator-inner:hover,
+.chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact button.msg-reply-indicator-inner:active,
+body.creation-detail-page [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact button.msg-reply-indicator-inner:hover,
+body.creation-detail-page [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact button.msg-reply-indicator-inner:active {
+	background: transparent;
+}
+
+.chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact button.msg-reply-indicator-inner:focus-visible,
+body.creation-detail-page [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact button.msg-reply-indicator-inner:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+	border-radius: 6px;
+}
+
+.chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-badge,
+body.creation-detail-page [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-badge {
+	display: none;
+}
+
+.chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-text,
+body.creation-detail-page [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-text {
+	flex-direction: row;
+	flex-wrap: nowrap;
+	align-items: baseline;
+	gap: 6px;
+	min-width: 0;
+}
+
+.chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-top,
+body.creation-detail-page [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-top {
+	display: contents;
+}
+
+.chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-name,
+body.creation-detail-page [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-name {
+	font-size: 0.78rem;
+	font-weight: 600;
+	flex: 0 1 auto;
+	max-width: 42%;
+	min-width: 0;
+	color: var(--text-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-preview,
+body.creation-detail-page [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-preview {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-size: 0.78rem;
+	line-height: 1.35;
+	color: color-mix(in srgb, var(--text-muted) 86%, transparent);
+	word-break: break-word;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	display: block;
+	-webkit-line-clamp: unset;
+	-webkit-box-orient: unset;
+}
+
+/* Creation-detail comment row: pull author avatar down when compact reply citation is first in body */
+body.creation-detail-page [data-comment-list] .comment-item:has(> .comment-body > .msg-reply-indicator.msg-reply-indicator--compact) {
+	align-items: start;
+}
+
+body.creation-detail-page [data-comment-list] .comment-item:has(> .comment-body > .msg-reply-indicator.msg-reply-indicator--compact) > .comment-avatar {
+	margin-top: 22px;
+	align-self: start;
+}
+
+.msg-reply-jump-flash {
+	animation: msg-reply-jump-flash 3.6s forwards;
+}
+
+/* Hold at highlight, then slow ease-out fade (timing-function on keyframes scopes segment → next) */
+@keyframes msg-reply-jump-flash {
+	0% {
+		background-color: color-mix(in srgb, var(--focus) 28%, transparent);
+		animation-timing-function: linear;
+	}
+
+	28% {
+		background-color: color-mix(in srgb, var(--focus) 28%, transparent);
+		animation-timing-function: ease-out;
+	}
+
+	100% {
+		background-color: transparent;
+	}
 }
 
 /* Same sender as the message above: only the first row in the run shows meta */

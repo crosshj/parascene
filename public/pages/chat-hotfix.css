@@ -261,6 +261,174 @@ body.chat-page .chat-page-messages .connect-chat-msg-inner {
 	align-items: stretch;
 }
 
+/*
+ * Reply target: tint the entire message row (same idea as row hover).
+ * Generated chat.bundle.css can lag global.css — stale bundles still shipped inner-only
+ * highlight rules; neutralize those so the wash reads edge-to-edge in the padded lane.
+ */
+body.chat-page .chat-page-messages .connect-chat-msg.connect-chat-msg--reply-target {
+	background: color-mix(in srgb, var(--focus) 12%, transparent);
+	box-shadow: inset 3px 0 0 var(--focus);
+	transition: background-color 0.12s ease;
+}
+
+body.chat-page .chat-page-messages .connect-chat-msg.connect-chat-msg--reply-target > .connect-chat-msg-inner {
+	background: transparent !important;
+	border-radius: 0 !important;
+	box-shadow: none !important;
+}
+
+body.chat-page .chat-page-messages .connect-chat-msg.connect-chat-msg--reply-target > .connect-chat-msg-inner::before {
+	content: none !important;
+	display: none !important;
+}
+
+@media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+	body.chat-page .chat-page-messages .connect-chat-msg.connect-chat-msg--reply-target:hover {
+		background: color-mix(in srgb, var(--focus) 18%, transparent);
+	}
+
+	body.chat-page .chat-page-messages .connect-chat-msg.connect-chat-msg--reply-target:hover > .connect-chat-msg-inner {
+		background: transparent !important;
+	}
+}
+
+/* Composer reply strip + × dismiss: stale chat.bundle.css may lag global.css */
+body.chat-page .chat-page-composer-reply[data-chat-composer-reply] {
+	flex-shrink: 0;
+	box-sizing: border-box;
+	padding: 6px 10px;
+	background: color-mix(in srgb, var(--text) 7%, var(--input-bg));
+	border-bottom: none;
+}
+
+body.chat-page .chat-page-composer-reply-dismiss {
+	background: transparent;
+	transition: background 0.12s ease, color 0.12s ease;
+}
+
+body.chat-page .chat-page-composer-reply-dismiss:hover {
+	color: var(--text);
+	background: transparent;
+}
+
+/* Compact reply citations: hotfix mirrors global when bundles lag */
+body.chat-page .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact {
+	margin: 0 0 -2px;
+	width: 100%;
+	max-width: 100%;
+	padding-left: 12px;
+	box-sizing: border-box;
+}
+
+body.creation-detail-page [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact {
+	margin: 0 0 -2px;
+	margin-left: -27px;
+	width: 100%;
+	max-width: 100%;
+	padding-left: 0;
+	box-sizing: border-box;
+}
+
+body.chat-page .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-inner,
+body.creation-detail-page [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-inner {
+	padding: 0;
+	border: none;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	align-items: center;
+	min-height: 0;
+	gap: 2px;
+	min-width: 0;
+	width: 100%;
+	box-sizing: border-box;
+}
+
+body.chat-page .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-target-mark,
+body.creation-detail-page [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-target-mark {
+	flex-shrink: 0;
+	align-self: center;
+	display: block;
+	width: 11px;
+	height: 11px;
+	box-sizing: border-box;
+	margin: 0 0 -10px 0;
+	border: none;
+	border-left: 2px solid color-mix(in srgb, var(--text-muted) 55%, var(--border));
+	border-top: 2px solid color-mix(in srgb, var(--text-muted) 55%, var(--border));
+	border-top-left-radius: 4px;
+}
+
+body.chat-page .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact.msg-reply-indicator--unreachable .msg-reply-indicator-target-mark,
+body.creation-detail-page [data-comment-list]
+	.comment-body
+	> .msg-reply-indicator.msg-reply-indicator--compact.msg-reply-indicator--unreachable
+	.msg-reply-indicator-target-mark {
+	border-left-color: color-mix(in srgb, var(--text-muted) 38%, var(--border));
+	border-top-color: color-mix(in srgb, var(--text-muted) 38%, var(--border));
+}
+
+body.chat-page .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact button.msg-reply-indicator-inner:hover,
+body.chat-page .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact button.msg-reply-indicator-inner:active,
+body.creation-detail-page [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact button.msg-reply-indicator-inner:hover,
+body.creation-detail-page [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact button.msg-reply-indicator-inner:active {
+	background: transparent;
+}
+
+body.chat-page .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact button.msg-reply-indicator-inner:focus-visible,
+body.creation-detail-page [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact button.msg-reply-indicator-inner:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+	border-radius: 6px;
+}
+
+body.chat-page .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-badge,
+body.creation-detail-page [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-badge {
+	display: none;
+}
+
+body.chat-page .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-text,
+body.creation-detail-page [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-text {
+	flex-direction: row;
+	flex-wrap: nowrap;
+	align-items: baseline;
+	gap: 6px;
+	min-width: 0;
+}
+
+body.chat-page .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-top,
+body.creation-detail-page [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-top {
+	display: contents;
+}
+
+body.chat-page .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-name,
+body.creation-detail-page [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-name {
+	font-size: 0.78rem;
+	font-weight: 600;
+	flex: 0 1 auto;
+	max-width: 42%;
+	min-width: 0;
+	color: var(--text-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+body.chat-page .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-preview,
+body.creation-detail-page [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-preview {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-size: 0.78rem;
+	line-height: 1.35;
+	color: color-mix(in srgb, var(--text-muted) 86%, transparent);
+	word-break: break-word;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	display: block;
+}
+
 body.chat-page .chat-page-messages .connect-chat-msg-bubble {
 	width: 100%;
 	max-width: 100%;

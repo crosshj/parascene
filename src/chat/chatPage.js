@@ -20,6 +20,8 @@ import * as _cdReactionTooltipTap from '../shared/reactionTooltipTap.js';
 import * as _cdConnectCommentCard from '../shared/connectCommentCard.js';
 import * as _cdPseudoChannelColumnPager from '../shared/pseudoChannelColumnPager.js';
 import * as _cdSkeleton from '../shared/skeleton.js';
+import { createReplyIndicatorElement } from '../shared/replyIndicatorUi.js';
+import { plainTextReplyPreview } from '../shared/plainTextReplyPreview.js';
 import { dismissChallengeVoteModalFromBrowserHistoryIfOpen as dismissChallengeVoteModalImpl } from './challenges/challengeVoteModal.js';
 import {
 	sendIcon,
@@ -32,6 +34,7 @@ import {
 	statsBarsIcon,
 	plusIcon,
 	copyIcon,
+	replyTurnIcon,
 	pencilIcon,
 	trashIcon,
 	helpIcon,
@@ -932,6 +935,7 @@ export async function initChatPage(root, options = {}) {
 	let chatViewportRetryTimeouts = [];
 	let activeReactionPicker = null;
 	let lastChatMessagesPayload = [];
+	let chatComposerReferencedMessageId = null;
 	let activeMessageEditId = null;
 	let activeMessageEditSaving = false;
 	let activeMessageEditMinHeightPx = 0;
@@ -2564,6 +2568,85 @@ export async function initChatPage(root, options = {}) {
 		}
 	}
 
+	function clearChatComposerReplyTarget() {
+		chatComposerReferencedMessageId = null;
+		syncChatComposerReplyStripUi();
+	}
+
+	function chatComposerReplyTargetAuthorLabel(referencedMid, srcMsg) {
+		const viewerId = chatViewerId;
+		const sid = srcMsg?.sender_id != null ? Number(srcMsg.sender_id) : NaN;
+		const handleRaw =
+			srcMsg && srcMsg.sender_user_name != null ? String(srcMsg.sender_user_name).trim() : '';
+		const isSelf = Number.isFinite(viewerId) && Number.isFinite(sid) && sid === viewerId;
+		if (handleRaw) return `@${handleRaw}`;
+		if (isSelf) return 'You';
+		const mid = Number(referencedMid);
+		return Number.isFinite(sid) ? `User ${sid}` : Number.isFinite(mid) ? `Message ${mid}` : 'Message';
+	}
+
+	function syncChatComposerReplyStripUi() {
+		const wrap = root.querySelector('[data-chat-composer-reply]');
+		const messagesEl = root.querySelector('[data-chat-messages]');
+
+		function clearReplyTargetHighlight() {
+			if (!messagesEl) return;
+			for (const el of messagesEl.querySelectorAll('.connect-chat-msg.connect-chat-msg--reply-target')) {
+				el.classList.remove('connect-chat-msg--reply-target');
+			}
+		}
+
+		if (!(wrap instanceof HTMLElement)) {
+			clearReplyTargetHighlight();
+			return;
+		}
+
+		while (wrap.firstChild) wrap.removeChild(wrap.firstChild);
+		const mid = Number(chatComposerReferencedMessageId);
+		if (!Number.isFinite(mid) || mid <= 0 || activePseudoChannelSlug) {
+			wrap.hidden = true;
+			clearReplyTargetHighlight();
+			return;
+		}
+
+		clearReplyTargetHighlight();
+
+		const src = lastChatMessagesPayload.find((x) => Number(x.id) === mid);
+		const authorLabel = src ? chatComposerReplyTargetAuthorLabel(mid, src) : 'User';
+
+		wrap.hidden = false;
+		const rowStrip = document.createElement('div');
+		rowStrip.className = 'chat-page-composer-reply-strip';
+
+		const textCol = document.createElement('span');
+		textCol.className = 'chat-page-composer-reply-text';
+		textCol.appendChild(document.createTextNode('Replying to '));
+		const nameEl = document.createElement('strong');
+		nameEl.className = 'chat-page-composer-reply-name';
+		nameEl.textContent = authorLabel;
+		textCol.appendChild(nameEl);
+
+		const xBtn = document.createElement('button');
+		xBtn.type = 'button';
+		xBtn.className = 'chat-page-composer-reply-dismiss';
+		xBtn.setAttribute('aria-label', 'Cancel reply');
+		xBtn.innerHTML =
+			'<svg class="chat-page-composer-reply-dismiss-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+		xBtn.addEventListener('click', (ev) => {
+			ev.preventDefault();
+			clearChatComposerReplyTarget();
+			const inp = root.querySelector('[data-chat-body-input]');
+			if (inp instanceof HTMLTextAreaElement) inp.focus({ preventScroll: true });
+		});
+
+		rowStrip.appendChild(textCol);
+		rowStrip.appendChild(xBtn);
+		wrap.appendChild(rowStrip);
+
+		const target = messagesEl?.querySelector(`.connect-chat-msg[data-chat-message-id="${mid}"]`);
+		if (target) target.classList.add('connect-chat-msg--reply-target');
+	}
+
 	function applyComposerState() {
 		const composerForm = root.querySelector('[data-chat-composer]');
 		const bodyInput = root.querySelector('[data-chat-body-input]');
@@ -2613,6 +2696,7 @@ export async function initChatPage(root, options = {}) {
 				composerForm.hidden = true;
 			}
 			setMobileComposerOverlayClass(false);
+			clearChatComposerReplyTarget();
 			return;
 		}
 
@@ -2621,6 +2705,7 @@ export async function initChatPage(root, options = {}) {
 				composerForm.hidden = true;
 			}
 			setMobileComposerOverlayClass(false);
+			clearChatComposerReplyTarget();
 			return;
 		}
 		if (!activePseudoChannelSlug && activeThreadId && chatThreadLoadFailed) {
@@ -2628,6 +2713,7 @@ export async function initChatPage(root, options = {}) {
 				composerForm.hidden = true;
 			}
 			setMobileComposerOverlayClass(false);
+			clearChatComposerReplyTarget();
 			return;
 		}
 		if (
@@ -2637,6 +2723,7 @@ export async function initChatPage(root, options = {}) {
 			activePseudoChannelSlug === 'comments' ||
 			activePseudoChannelSlug === 'challenges'
 		) {
+			clearChatComposerReplyTarget();
 			if (composerForm instanceof HTMLFormElement) {
 				delete composerForm.dataset.chatComposerMode;
 			}
@@ -2683,11 +2770,13 @@ export async function initChatPage(root, options = {}) {
 		syncChatSendButton();
 		syncChatMessagePlaceholder();
 		syncChatExploreComposerChrome();
+		syncChatComposerReplyStripUi();
 	}
 
 	chatApplyComposerStateRef = applyComposerState;
 
 	function markThreadUiPending() {
+		clearChatComposerReplyTarget();
 		const titleEl = root.querySelector('[data-chat-title]');
 		if (titleEl instanceof HTMLElement) {
 			titleEl.innerHTML = '';
@@ -2864,6 +2953,53 @@ export async function initChatPage(root, options = {}) {
 		};
 	}
 
+	function buildOptimisticReplyPostOptsFrom(opt) {
+		const refMid = Number(opt?.referencedMessageId);
+		if (!Number.isFinite(refMid) || refMid <= 0) return {};
+		return {
+			referencedMessageId: refMid,
+			replyPreview: typeof opt.replyPreview === 'string' ? opt.replyPreview : ''
+		};
+	}
+
+	function buildOptimisticSendRecord({ tempId, body, threadId, status, errorMessage, sendOpts }) {
+		const rec = { tempId, body, threadId, status };
+		if (typeof errorMessage === 'string' && errorMessage) {
+			rec.errorMessage = errorMessage;
+		}
+		const refMid = Number(sendOpts?.referencedMessageId);
+		if (Number.isFinite(refMid) && refMid > 0) {
+			rec.referencedMessageId = refMid;
+			rec.replyPreview = typeof sendOpts?.replyPreview === 'string' ? sendOpts.replyPreview : '';
+		}
+		return rec;
+	}
+
+	function optimisticReplyMetaShapeForIndicator(opt) {
+		const refMid = Number(opt?.referencedMessageId);
+		if (!Number.isFinite(refMid) || refMid <= 0) return null;
+		const replySrc = lastChatMessagesPayload.find((x) => Number(x.id) === refMid);
+		if (!replySrc || typeof replySrc !== 'object') return null;
+		const storedPreview = typeof opt.replyPreview === 'string' ? opt.replyPreview.trim() : '';
+		const preview =
+			storedPreview ||
+			plainTextReplyPreview(replySrc.body != null ? String(replySrc.body) : '');
+		return {
+			referenced_id: refMid,
+			preview_text: preview,
+			sender_user_name:
+				replySrc.sender_user_name != null
+					? String(replySrc.sender_user_name).trim().slice(0, 64)
+					: '',
+			sender_id: replySrc.sender_id != null ? Number(replySrc.sender_id) : NaN,
+			sender_avatar_url:
+				replySrc.sender_avatar_url != null
+					? String(replySrc.sender_avatar_url).trim().slice(0, 4096)
+					: '',
+			sender_plan: replySrc.sender_plan
+		};
+	}
+
 	function mountOptimisticRow(messagesEl, opt, sameSenderAsPrev, viewerId) {
 		const row = document.createElement('div');
 		const pending = opt.status === 'pending';
@@ -2871,6 +3007,16 @@ export async function initChatPage(root, options = {}) {
 		row.setAttribute('data-chat-optimistic-id', opt.tempId);
 		const inner = document.createElement('div');
 		inner.className = 'connect-chat-msg-inner';
+		const rs = optimisticReplyMetaShapeForIndicator(opt);
+		if (rs) {
+			try {
+				inner.appendChild(
+					createReplyIndicatorElement(rs, true, { kind: 'chat', omitAvatar: true })
+				);
+			} catch {
+				// ignore malformed optimistic reply preview
+			}
+		}
 		const hints = getViewerChatProfileHints();
 		const handleRaw = hints.handleRaw;
 		const displayForAvatar = handleRaw || 'You';
@@ -2954,7 +3100,7 @@ export async function initChatPage(root, options = {}) {
 		}
 	}
 
-	async function postChatMessage(threadId, body) {
+	async function postChatMessage(threadId, body, sendOpts = {}) {
 		if (chatSimulateSendFail()) {
 			await new Promise((r) => setTimeout(r, 400));
 			return {
@@ -2972,11 +3118,22 @@ export async function initChatPage(root, options = {}) {
 			const enc = await encryptPrivateText(wireBody, k);
 			wireBody = `${CHAT_PRIVATE_MSG_PREFIX}${enc}`;
 		}
+		const refMid = Number(sendOpts.referencedMessageId);
+		const hasRef = Number.isFinite(refMid) && refMid > 0;
+		const payload = {
+			body: wireBody,
+			...(hasRef
+				? {
+						referenced_message_id: refMid,
+						reply_preview: typeof sendOpts.replyPreview === 'string' ? sendOpts.replyPreview.slice(0, 400) : ''
+					}
+				: {})
+		};
 		const res = await fetch(`/api/chat/threads/${threadId}/messages`, {
 			method: 'POST',
 			credentials: 'include',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ body: wireBody })
+			body: JSON.stringify(payload)
 		});
 		const data = await res.json().catch(() => ({}));
 		if (!res.ok) {
@@ -2985,7 +3142,7 @@ export async function initChatPage(root, options = {}) {
 		return { ok: true };
 	}
 
-	async function patchChatMessageBody(messageId, body) {
+	async function patchChatMessage(messageId, payload = {}) {
 		if (chatSimulateSendFail()) {
 			await new Promise((r) => setTimeout(r, 400));
 			return {
@@ -2997,26 +3154,50 @@ export async function initChatPage(root, options = {}) {
 		if (!Number.isFinite(mid) || mid <= 0) {
 			return { ok: false, error: 'Invalid message id' };
 		}
-		let wireBody = String(body || '');
+		const outPayload = { ...(payload && typeof payload === 'object' ? payload : {}) };
 		const threadId = Number(activeThreadId);
 		const meta = (await ensureThreadMetaById(threadId)) || chatPrivateThreadMetaById(threadId);
-		if (isPrivateChannelThreadMeta(meta)) {
+		if (isPrivateChannelThreadMeta(meta) && Object.prototype.hasOwnProperty.call(outPayload, 'body')) {
+			let wireBody = String(outPayload.body || '');
 			const k = await fetchPrivateThreadKey(threadId);
 			if (!k) return { ok: false, error: 'Missing private key for this channel' };
 			const enc = await encryptPrivateText(wireBody, k);
 			wireBody = `${CHAT_PRIVATE_MSG_PREFIX}${enc}`;
+			outPayload.body = wireBody;
 		}
 		const res = await fetch(`/api/chat/messages/${mid}`, {
 			method: 'PATCH',
 			credentials: 'include',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ body: wireBody })
+			body: JSON.stringify(outPayload)
 		});
 		const data = await res.json().catch(() => ({}));
 		if (!res.ok) {
 			return { ok: false, error: data.message || data.error || 'Could not update message' };
 		}
-		return { ok: true };
+		const message = await decryptMessageForActiveThread(data?.message || null, threadId);
+		return { ok: true, message };
+	}
+
+	async function patchChatMessageBody(messageId, body) {
+		return patchChatMessage(messageId, { body });
+	}
+
+	async function decryptMessageForActiveThread(message, threadId) {
+		if (!message || typeof message !== 'object') return null;
+		const meta = (await ensureThreadMetaById(threadId)) || chatPrivateThreadMetaById(threadId);
+		if (!isPrivateChannelThreadMeta(meta)) return message;
+		if (message?.private_decrypted === true) return message;
+		const body = String(message?.body || '');
+		if (!body.startsWith(CHAT_PRIVATE_MSG_PREFIX)) {
+			return { ...message, body: '[Encrypted message]' };
+		}
+		const k = await fetchPrivateThreadKey(threadId);
+		if (!k) {
+			return { ...message, body: '[Encrypted message]' };
+		}
+		const dec = await decryptPrivateText(body.slice(CHAT_PRIVATE_MSG_PREFIX.length), k);
+		return { ...message, body: dec != null ? dec : '[Encrypted message]' };
 	}
 
 	function placeOptimisticInDom(messagesEl, opt) {
@@ -3051,37 +3232,46 @@ export async function initChatPage(root, options = {}) {
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!messagesEl) return;
 		const { threadId, body } = optimisticSend;
+		const replyPostOpts = buildOptimisticReplyPostOptsFrom(optimisticSend);
 		const errEl = root.querySelector('[data-chat-error]');
 		sendInFlight = true;
-		optimisticSend = { tempId, body, threadId, status: 'pending' };
+		optimisticSend = buildOptimisticSendRecord({
+			tempId,
+			body,
+			threadId,
+			status: 'pending',
+			sendOpts: replyPostOpts
+		});
 		placeOptimisticInDom(messagesEl, optimisticSend);
 		if (errEl instanceof HTMLElement) {
 			errEl.hidden = true;
 			errEl.textContent = '';
 		}
 		try {
-			const result = await postChatMessage(threadId, body);
+			const result = await postChatMessage(threadId, body, replyPostOpts);
 			if (!result.ok) {
-				optimisticSend = {
+				optimisticSend = buildOptimisticSendRecord({
 					tempId,
 					body,
 					threadId,
 					status: 'failed',
-					errorMessage: result.error
-				};
+					errorMessage: result.error,
+					sendOpts: replyPostOpts
+				});
 				placeOptimisticInDom(messagesEl, optimisticSend);
 				return;
 			}
 			await afterSendSuccess(threadId);
 		} catch (err) {
 			console.error('[Chat page] resend:', err);
-			optimisticSend = {
+			optimisticSend = buildOptimisticSendRecord({
 				tempId,
 				body,
 				threadId,
 				status: 'failed',
-				errorMessage: err?.message || 'Could not send message.'
-			};
+				errorMessage: err?.message || 'Could not send message.',
+				sendOpts: replyPostOpts
+			});
 			placeOptimisticInDom(messagesEl, optimisticSend);
 		} finally {
 			sendInFlight = false;
@@ -3490,6 +3680,20 @@ export async function initChatPage(root, options = {}) {
 		const actions = document.createElement('div');
 		actions.className = 'connect-chat-msg-hover-actions';
 
+		const replyBtn =
+			activePseudoChannelSlug || !messageRowSupportsReply(m)
+				? null
+				: (() => {
+						const btn = document.createElement('button');
+						btn.type = 'button';
+						btn.className = 'connect-chat-msg-hover-reply';
+						btn.setAttribute('data-chat-hover-reply', '1');
+						btn.dataset.chatMessageId = String(messageId);
+						btn.setAttribute('aria-label', 'Reply');
+						btn.innerHTML = replyTurnIcon('connect-chat-hover-reply-icon');
+						return btn;
+					})();
+
 		const copyBtn = document.createElement('button');
 		copyBtn.type = 'button';
 		copyBtn.className = 'connect-chat-msg-hover-copy';
@@ -3530,6 +3734,7 @@ export async function initChatPage(root, options = {}) {
 
 		bar.appendChild(quick);
 		bar.appendChild(addBtn);
+		if (replyBtn) bar.appendChild(replyBtn);
 		bar.appendChild(sep);
 		bar.appendChild(actions);
 		return bar;
@@ -3724,17 +3929,11 @@ export async function initChatPage(root, options = {}) {
 			errEl.hidden = true;
 		}
 		try {
-			const res = await fetch(`/api/chat/messages/${mid}`, {
-				method: 'PATCH',
-				credentials: 'include',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ body: nextBody }),
-			});
-			const data = await res.json().catch(() => ({}));
-			if (!res.ok || !data?.message) {
-				throw new Error(data?.message || data?.error || 'Could not save message.');
+			const result = await patchChatMessage(mid, { body: nextBody });
+			if (!result.ok || !result.message) {
+				throw new Error(result.error || 'Could not save message.');
 			}
-			lastChatMessagesPayload[idx] = data.message;
+			lastChatMessagesPayload[idx] = result.message;
 			activeMessageEditSaving = false;
 			activeMessageEditId = null;
 			activeMessageEditMinHeightPx = 0;
@@ -6245,6 +6444,46 @@ export async function initChatPage(root, options = {}) {
 		updateCommentsChannelLatestMarker(messagesEl);
 	}
 
+	function buildLocalChatReplyStampFromPayload(referencedId, srcMsg) {
+		const rid = Number(referencedId);
+		if (!Number.isFinite(rid) || rid <= 0 || !srcMsg) return null;
+		const handleRaw = srcMsg.sender_user_name != null ? String(srcMsg.sender_user_name).trim() : '';
+		const sid = Number(srcMsg.sender_id);
+		return {
+			referenced_id: rid,
+			sender_id: Number.isFinite(sid) ? sid : undefined,
+			sender_user_name: handleRaw || null,
+			sender_avatar_url: srcMsg.sender_avatar_url != null ? String(srcMsg.sender_avatar_url) : '',
+			sender_plan: srcMsg.sender_plan === 'founder' ? 'founder' : 'free',
+			preview_text: plainTextReplyPreview(String(srcMsg.body ?? ''))
+		};
+	}
+
+	function messageRowSupportsReply(m) {
+		if (!m || m.id == null) return false;
+		const systemEventRaw =
+			m?.meta && typeof m.meta === 'object' && !Array.isArray(m.meta) ? m.meta.system_event : null;
+		const systemEvent =
+			systemEventRaw && typeof systemEventRaw === 'object' && !Array.isArray(systemEventRaw)
+				? systemEventRaw
+				: null;
+		const isLegacyInviteSystemLine = isChannelInviteSystemBoundaryMessage(m);
+		const isChannelInviteSystemEvent =
+			String(systemEvent?.kind || '').trim().toLowerCase() === 'channel_invite_sent';
+		if (isChannelInviteSystemEvent || isLegacyInviteSystemLine) return false;
+		if (getChatCanvasMetaFromMessage(m)) return false;
+		const timedMetaRaw =
+			m?.meta && typeof m.meta === 'object' && !Array.isArray(m.meta) ? m.meta.time_sensitive : null;
+		const timedMeta =
+			timedMetaRaw && typeof timedMetaRaw === 'object' && !Array.isArray(timedMetaRaw)
+				? timedMetaRaw
+				: null;
+		if (timedMeta && String(timedMeta.kind || '').trim().toLowerCase() === 'channel_invite') {
+			return false;
+		}
+		return true;
+	}
+
 	/**
 	 * @param {object} m
 	 * @param {number} i
@@ -6376,6 +6615,17 @@ export async function initChatPage(root, options = {}) {
 			bubble.appendChild(editedLabelEl);
 		}
 		normalizeChatBubbleInlineImageSpacing(bubble);
+		if (!shouldRenderAsSystemEvent) {
+			const rs = m?.meta?.reply;
+			if (rs && typeof rs === 'object' && Number.isFinite(Number(rs.referenced_id))) {
+				const reachable = m?.reply_parent_exists !== false;
+				try {
+					inner.appendChild(createReplyIndicatorElement(rs, reachable, { kind: 'chat', omitAvatar: true }));
+				} catch {
+					/* ignore malformed reply meta */
+				}
+			}
+		}
 		if (!isGroupContinue && !shouldRenderAsSystemEvent) {
 			const metaLine = document.createElement('div');
 			metaLine.className = 'connect-chat-msg-meta';
@@ -6475,6 +6725,7 @@ export async function initChatPage(root, options = {}) {
 			} else {
 				messagesEl.appendChild(empty);
 			}
+			syncChatComposerReplyStripUi();
 			return;
 		}
 
@@ -6508,6 +6759,8 @@ export async function initChatPage(root, options = {}) {
 			const sameSenderAsPrev = isOptimisticChatGroupContinue(last, viewerId);
 			mountOptimisticRow(messagesEl, optimisticSend, sameSenderAsPrev, viewerId);
 		}
+
+		syncChatComposerReplyStripUi();
 	}
 
 	function disconnectCommentsChannelLoadObserver() {
@@ -9051,6 +9304,26 @@ export async function initChatPage(root, options = {}) {
 			return;
 		}
 
+		const replyBtn = e.target?.closest?.('[data-chat-hover-reply]');
+		if (replyBtn instanceof HTMLButtonElement) {
+			if (activePseudoChannelSlug) {
+				e.preventDefault();
+				return;
+			}
+			e.preventDefault();
+			e.stopPropagation();
+			const messageId = Number(replyBtn.dataset.chatMessageId);
+			if (!Number.isFinite(messageId)) return;
+			closeChatMessageToolbar();
+			chatComposerReferencedMessageId = messageId;
+			syncChatComposerReplyStripUi();
+			const inp = root.querySelector('[data-chat-body-input]');
+			if (inp instanceof HTMLTextAreaElement) {
+				inp.focus();
+			}
+			return;
+		}
+
 		const copyBtn = e.target?.closest?.('[data-chat-hover-copy]');
 		if (copyBtn instanceof HTMLButtonElement) {
 			e.preventDefault();
@@ -9240,6 +9513,21 @@ export async function initChatPage(root, options = {}) {
 				? crypto.randomUUID()
 				: `opt-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
+		const refMid = Number(chatComposerReferencedMessageId);
+		const replySrc =
+			Number.isFinite(refMid) && refMid > 0
+				? lastChatMessagesPayload.find((x) => Number(x.id) === refMid)
+				: null;
+		const sendOpts =
+			Number.isFinite(refMid) && refMid > 0
+				? {
+						referencedMessageId: refMid,
+						replyPreview: plainTextReplyPreview(
+							replySrc?.body != null ? String(replySrc.body) : ''
+						)
+					}
+				: {};
+
 		sendInFlight = true;
 		if (errEl instanceof HTMLElement) {
 			errEl.hidden = true;
@@ -9251,33 +9539,42 @@ export async function initChatPage(root, options = {}) {
 			syncChatSendButton();
 		}
 
-		optimisticSend = { tempId, body: text, threadId, status: 'pending' };
+		optimisticSend = buildOptimisticSendRecord({
+			tempId,
+			body: text,
+			threadId,
+			status: 'pending',
+			sendOpts
+		});
 		messagesEl.querySelector('.chat-page-empty-hint')?.remove();
 		placeOptimisticInDom(messagesEl, optimisticSend);
 
 		try {
-			const result = await postChatMessage(threadId, text);
+			const result = await postChatMessage(threadId, text, sendOpts);
 			if (!result.ok) {
-				optimisticSend = {
+				optimisticSend = buildOptimisticSendRecord({
 					tempId,
 					body: text,
 					threadId,
 					status: 'failed',
-					errorMessage: result.error
-				};
+					errorMessage: result.error,
+					sendOpts
+				});
 				placeOptimisticInDom(messagesEl, optimisticSend);
 				return;
 			}
+			clearChatComposerReplyTarget();
 			await afterSendSuccess(threadId);
 		} catch (err) {
 			console.error('[Chat page] send:', err);
-			optimisticSend = {
+			optimisticSend = buildOptimisticSendRecord({
 				tempId,
 				body: text,
 				threadId,
 				status: 'failed',
-				errorMessage: err?.message || 'Could not send message.'
-			};
+				errorMessage: err?.message || 'Could not send message.',
+				sendOpts
+			});
 			placeOptimisticInDom(messagesEl, optimisticSend);
 		} finally {
 			sendInFlight = false;
@@ -11868,18 +12165,12 @@ export async function initChatPage(root, options = {}) {
 			const mid = Number(activeCanvasRow.id);
 			void (async () => {
 				try {
-					const res = await fetch(`/api/chat/messages/${mid}`, {
-						method: 'PATCH',
-						credentials: 'include',
-						headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-						body: JSON.stringify({ title, body })
-					});
-					const data = await res.json().catch(() => ({}));
-					if (!res.ok) {
-						window.alert(data.message || data.error || 'Could not save');
+					const result = await patchChatMessage(mid, { title, body });
+					if (!result.ok) {
+						window.alert(result.error || 'Could not save');
 						return;
 					}
-					const msgRow = data.message;
+					const msgRow = result.message;
 					if (msgRow) {
 						const cm = getChatCanvasMetaFromMessage(msgRow);
 						activeCanvasRow = {

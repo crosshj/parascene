@@ -52,12 +52,20 @@ async function readResponsePayload(response) {
 	}
 }
 
-export async function postCreatedImageComment(createdImageId, text) {
+export async function postCreatedImageComment(createdImageId, text, extras = {}) {
+	const bodyPayload = { text: typeof text === 'string' ? text : '' };
+	const refRaw = extras?.referenced_comment_id ?? extras?.reply_to_comment_id;
+	const refNum = Number(refRaw);
+	if (Number.isFinite(refNum) && refNum > 0) {
+		bodyPayload.referenced_comment_id = refNum;
+	}
+	const rp = extras?.reply_preview;
+	if (typeof rp === 'string' && rp.trim()) bodyPayload.reply_preview = rp.trim();
 	const url = `/api/created-images/${encodeURIComponent(String(createdImageId))}/comments`;
 	const response = await fetch(url, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ text }),
+		body: JSON.stringify(bodyPayload),
 		credentials: 'include'
 	});
 	const data = await readResponsePayload(response);

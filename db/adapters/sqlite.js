@@ -3668,28 +3668,59 @@ export async function openDb() {
 			}
 		},
 		insertCreatedImageComment: {
-			run: async (userId, createdImageId, text) => {
+			run: async (userId, createdImageId, text, metaJson) => {
+				const metaStr =
+					metaJson && typeof metaJson === "object" && !Array.isArray(metaJson)
+						? JSON.stringify(metaJson)
+						: typeof metaJson === "string" && metaJson.trim()
+							? metaJson.trim()
+							: "{}";
 				const insertStmt = db.prepare(
-					`INSERT INTO comments_created_image (user_id, created_image_id, text)
-           VALUES (?, ?, ?)`
+					`INSERT INTO comments_created_image (user_id, created_image_id, text, meta)
+           VALUES (?, ?, ?, ?)`
 				);
-				const result = insertStmt.run(userId, createdImageId, text);
+				const result = insertStmt.run(userId, createdImageId, text, metaStr);
 				const id = Number(result.lastInsertRowid);
 
 				const selectStmt = db.prepare(
-					`SELECT c.id, c.user_id, c.created_image_id, c.text, c.created_at, c.updated_at,
+					`SELECT c.id, c.user_id, c.created_image_id, c.text, c.created_at, c.updated_at, c.meta,
                   up.user_name, up.display_name, up.avatar_url
            FROM comments_created_image c
            LEFT JOIN user_profiles up ON up.user_id = c.user_id
            WHERE c.id = ?`
 				);
 				const row = selectStmt.get(id);
+				let meta = {};
+				try {
+					meta = row?.meta ? JSON.parse(String(row.meta)) : {};
+				} catch {
+					meta = {};
+				}
+				const { meta: _metaCol, ...rest } = row ?? {};
 				return Promise.resolve({
-					...row,
+					...rest,
+					meta,
 					changes: result.changes,
 					insertId: id,
 					lastInsertRowid: id
 				});
+			}
+		},
+		selectCommentIdsForImage: {
+			all: async (createdImageId, commentIds) => {
+				const imageId = Number(createdImageId);
+				if (!Number.isFinite(imageId) || imageId <= 0) return [];
+				const ids = Array.isArray(commentIds)
+					? [...new Set(commentIds.map((x) => Number(x)).filter((n) => Number.isFinite(n) && n > 0))]
+					: [];
+				if (ids.length === 0) return [];
+				const placeholders = ids.map(() => "?").join(",");
+				const stmt = db.prepare(
+					`SELECT id FROM comments_created_image
+           WHERE created_image_id = ? AND id IN (${placeholders})`
+				);
+				const rows = stmt.all(imageId, ...ids) ?? [];
+				return Promise.resolve(rows.map((r) => Number(r.id)).filter((n) => Number.isFinite(n) && n > 0));
 			}
 		},
 		selectCreatedImageCommenterUserIdsDistinct: {
@@ -3716,7 +3747,7 @@ export async function openDb() {
 				const offset = Number.isFinite(offsetRaw) ? Math.max(0, offsetRaw) : 0;
 
 				const stmt = db.prepare(
-					`SELECT c.id, c.user_id, c.created_image_id, c.text, c.created_at, c.updated_at,
+					`SELECT c.id, c.user_id, c.created_image_id, c.text, c.created_at, c.updated_at, c.meta,
                   up.user_name, up.display_name, up.avatar_url,
                   json_extract(u.meta,'$.plan') AS plan
            FROM comments_created_image c
@@ -3726,7 +3757,23 @@ export async function openDb() {
            ORDER BY c.created_at ${order}
            LIMIT ? OFFSET ?`
 				);
-				return Promise.resolve(stmt.all(createdImageId, limit, offset));
+				const rows = stmt.all(createdImageId, limit, offset) ?? [];
+				return Promise.resolve(
+					rows.map((r) => ({
+						...r,
+						plan: r.plan === "founder" ? "founder" : "free",
+						meta:
+							r?.meta !== undefined && r?.meta !== null && String(r.meta).trim()
+								? (() => {
+										try {
+											return JSON.parse(String(r.meta));
+										} catch {
+											return {};
+										}
+									})()
+								: {}
+					}))
+				);
 			}
 		},
 		selectLatestCreatedImageComments: {
@@ -3739,7 +3786,7 @@ export async function openDb() {
 						? options.before.trim()
 						: null;
 
-				const sql = `SELECT c.id, c.user_id, c.created_image_id, c.text, c.created_at, c.updated_at,
+				const sql = `SELECT c.id, c.user_id, c.created_image_id, c.text, c.created_at, c.updated_at, c.meta,
                   up.user_name, up.display_name, up.avatar_url,
                   json_extract(u.meta,'$.plan') AS plan,
                   ci.title AS created_image_title,
@@ -3763,13 +3810,22 @@ export async function openDb() {
            LIMIT ?`;
 				const stmt = db.prepare(sql);
 				const rows = before ? stmt.all(before, limit) : stmt.all(limit);
-				return Promise.resolve(rows.map((r) => ({
-					...r,
-					plan: r.plan === 'founder' ? 'founder' : 'free',
-					created_image_owner_plan: r.created_image_owner_plan === 'founder' ? 'founder' : 'free',
-					nsfw: !!(r.nsfw),
-					created_image_media_type: r.created_image_media_type === 'video' ? 'video' : 'image'
-				})));
+				return Promise.resolve(rows.map((r) => {
+					let meta = {};
+					try {
+						meta = r?.meta ? JSON.parse(String(r.meta)) : {};
+					} catch {
+						meta = {};
+					}
+					return {
+						...r,
+						meta,
+						plan: r.plan === 'founder' ? 'founder' : 'free',
+						created_image_owner_plan: r.created_image_owner_plan === 'founder' ? 'founder' : 'free',
+						nsfw: !!(r.nsfw),
+						created_image_media_type: r.created_image_media_type === 'video' ? 'video' : 'image'
+					};
+				}));
 			}
 		},
 		selectCreatedImageCommentCount: {
@@ -3786,9 +3842,17 @@ export async function openDb() {
 		selectCommentById: {
 			get: async (commentId) => {
 				const stmt = db.prepare(
-					`SELECT id, created_image_id, user_id, text, created_at FROM comments_created_image WHERE id = ?`
+					`SELECT id, created_image_id, user_id, text, created_at, meta FROM comments_created_image WHERE id = ?`
 				);
-				return Promise.resolve(stmt.get(commentId));
+				const row = stmt.get(commentId);
+				if (!row) return Promise.resolve(null);
+				let meta = {};
+				try {
+					meta = row?.meta ? JSON.parse(String(row.meta)) : {};
+				} catch {
+					meta = {};
+				}
+				return Promise.resolve({ ...row, meta });
 			}
 		},
 		updateCommentById: {

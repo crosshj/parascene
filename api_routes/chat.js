@@ -15,6 +15,7 @@ import {
 } from "./utils/chatMiscGenericKeys.js";
 import { canvasBodyMarkdownToSafeHtml } from "./utils/canvasBodyHtml.js";
 import { CHALLENGE_SCORE_REACTION_KEYS } from "../src/chat/challenges/constants.js";
+import { composeChatStampedReply, sanitizeClientReplyPreview } from "./utils/chatReplyStamp.js";
 
 function normalizeChatReactionsBucket(raw) {
 	const out = {};
@@ -46,6 +47,37 @@ function enrichChatReactionsFromMessageColumn(messages, viewerId) {
 			}
 		}
 		return { ...m, reactions, viewer_reactions };
+	});
+}
+
+/**
+ * Marks each message whose `meta.reply.referenced_id` still exists in-thread.
+ */
+async function enrichMessagesReplyParentExists(sb, threadId, messages) {
+	const tid = Number(threadId);
+	if (!Array.isArray(messages) || messages.length === 0 || !Number.isFinite(tid) || tid <= 0) return messages;
+
+	const refs = [
+		...new Set(
+			messages
+				.map((m) => Number(m?.meta?.reply?.referenced_id))
+				.filter((n) => Number.isFinite(n) && n > 0)
+		)
+	];
+	if (refs.length === 0) {
+		return messages.map((m) => {
+			if (!m?.meta?.reply?.referenced_id) return m;
+			return { ...m, reply_parent_exists: false };
+		});
+	}
+	const { data, error } = await sb.from("prsn_chat_messages").select("id").eq("thread_id", tid).in("id", refs);
+	if (error) throw error;
+	const alive = new Set((data ?? []).map((row) => Number(row.id)));
+
+	return messages.map((m) => {
+		const ref = Number(m?.meta?.reply?.referenced_id);
+		if (!Number.isFinite(ref) || ref <= 0) return m;
+		return { ...m, reply_parent_exists: alive.has(ref) };
 	});
 }
 
@@ -1987,6 +2019,8 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 				messagesOut = nextMessages;
 			}
 
+			messagesOut = await enrichMessagesReplyParentExists(sb, threadId, messagesOut);
+
 			let nextBefore = null;
 			if (messagesOut.length > 0) {
 				const oldest = messagesOut[0];
@@ -2241,10 +2275,33 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 				});
 			}
 
+			const refRaw = req.body?.referenced_message_id;
+			let referencedMid = Number.parseInt(String(refRaw ?? ""), 10);
+			if (refRaw == null || String(refRaw).trim() === "") {
+				referencedMid = NaN;
+			}
+			let metaIns = {};
+
+			if (Number.isFinite(referencedMid) && referencedMid > 0) {
+				const { data: parentMsg, error: parErr } = await sb
+					.from("prsn_chat_messages")
+					.select("id, thread_id, sender_id, body, meta")
+					.eq("id", referencedMid)
+					.maybeSingle();
+				if (parErr) throw parErr;
+				const ptid = Number(parentMsg?.thread_id);
+				if (!parentMsg || !Number.isFinite(ptid) || ptid !== threadId) {
+					return res.status(400).json({ error: "Bad request", message: "Invalid referenced message" });
+				}
+				const clientPrev = sanitizeClientReplyPreview(req.body?.reply_preview);
+				const stamped = await composeChatStampedReply(sb, referencedMid, parentMsg, clientPrev);
+				metaIns = { reply: stamped };
+			}
+
 			const ins = await sb
 				.from("prsn_chat_messages")
-				.insert({ thread_id: threadId, sender_id: userId, body })
-				.select("id, thread_id, sender_id, body, created_at")
+				.insert({ thread_id: threadId, sender_id: userId, body, meta: metaIns })
+				.select("id, thread_id, sender_id, body, created_at, meta, reactions")
 				.single();
 
 			if (ins.error) throw ins.error;
@@ -2278,7 +2335,15 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 				});
 			}
 
-			return res.status(201).json({ message: ins.data });
+			let messageOut = ins.data;
+			const enrichedNew = await enrichChatMessagesWithSenderProfiles(sb, [messageOut]);
+			messageOut = enrichedNew[0] || messageOut;
+			messageOut = enrichChatReactionsFromMessageColumn([messageOut], userId)[0];
+			if (messageOut?.meta?.reply) {
+				messageOut = { ...messageOut, reply_parent_exists: true };
+			}
+
+			return res.status(201).json({ message: messageOut });
 		} catch (err) {
 			console.error("[POST .../messages]", err);
 			return res.status(500).json({ error: "Server error", message: err?.message || "Failed" });
@@ -2702,6 +2767,9 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 			const enriched = await enrichChatMessagesWithSenderProfiles(sb, [out]);
 			out = enriched[0] || out;
 			out = enrichChatReactionsFromMessageColumn([out], userId)[0];
+
+			const withExist = await enrichMessagesReplyParentExists(sb, threadId, [out]);
+			out = withExist[0] || out;
 
 			return res.status(200).json({ message: out });
 		} catch (err) {

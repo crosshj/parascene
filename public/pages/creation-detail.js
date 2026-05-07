@@ -15,6 +15,7 @@ let hydrateUserTextLinks;
 let hydrateRichUserTextEmbeds;
 let attachAutoGrowTextarea;
 let attachMentionSuggest;
+let isTriggeredSuggestPopupOpen;
 let addPageUsers;
 let clearPageUsers;
 let textsSameWithinTolerance;
@@ -34,6 +35,8 @@ let plusIcon;
 let REACTION_ORDER;
 let REACTION_ICONS;
 let smileIcon;
+let replyTurnIcon;
+let plainTextReplyPreview;
 let renderEmptyState;
 let renderEmptyLoading;
 let renderEmptyError;
@@ -43,6 +46,7 @@ let skeletonPill;
 let buildCreationCardShell;
 let renderCommentAvatarHtml;
 let uploadImageFile;
+let createReplyIndicatorElement;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -81,6 +85,9 @@ async function loadDeps() {
 		deleteCreatedImageComment = commentsMod.deleteCreatedImageComment;
 		updateCreatedImageComment = commentsMod.updateCreatedImageComment;
 
+		const replyUiMod = await import(`/shared/replyIndicatorUi.js${qs}`);
+		createReplyIndicatorElement = replyUiMod.createReplyIndicatorElement;
+
 		const userTextMod = await import(`/shared/userText.js${qs}`);
 		processUserText = userTextMod.processUserText;
 		hydrateUserTextLinks = userTextMod.hydrateUserTextLinks;
@@ -91,6 +98,7 @@ async function loadDeps() {
 
 		const suggestMod = await import(`/shared/triggeredSuggest.js${qs}`);
 		attachMentionSuggest = suggestMod.attachMentionSuggest;
+		isTriggeredSuggestPopupOpen = suggestMod.isTriggeredSuggestPopupOpen;
 		addPageUsers = suggestMod.addPageUsers;
 		clearPageUsers = suggestMod.clearPageUsers;
 
@@ -122,6 +130,10 @@ async function loadDeps() {
 		REACTION_ORDER = iconsMod.REACTION_ORDER;
 		REACTION_ICONS = iconsMod.REACTION_ICONS;
 		smileIcon = iconsMod.smileIcon;
+		replyTurnIcon = iconsMod.replyTurnIcon;
+
+		const replyPreviewMod = await import(`/shared/plainTextReplyPreview.js${qs}`);
+		plainTextReplyPreview = replyPreviewMod.plainTextReplyPreview;
 
 		const emptyStateMod = await import(`/shared/emptyState.js${qs}`);
 		renderEmptyState = emptyStateMod.renderEmptyState;
@@ -3857,6 +3869,51 @@ async function loadCreation() {
 		};
 		let commentQuickSubmitInFlight = false;
 		let commentComposerBusyPlaceholderPrev = '';
+		let commentInlineReplyParentId = null;
+		let commentInlineReplyFocusPending = false;
+
+		function syncInlineReplySubmitUi(textarea) {
+			if (!(textarea instanceof HTMLTextAreaElement) || !commentListEl) return;
+			const cid = textarea.getAttribute('data-comment-inline-textarea');
+			if (!cid) return;
+			const row = textarea.closest('.comment-composer-row');
+			if (row instanceof HTMLElement) {
+				const max = Number(textarea.maxLength);
+				const atLimit =
+					Number.isFinite(max) && max > 0 && String(textarea.value || '').length >= max;
+				row.classList.toggle('is-at-limit', atLimit);
+			}
+			const btn = commentListEl.querySelector(`[data-comment-inline-submit="${cid}"]`);
+			if (!(btn instanceof HTMLButtonElement)) return;
+			const hasText = textarea.value.trim().length > 0;
+			btn.hidden = !hasText;
+			btn.disabled = !hasText || commentQuickSubmitInFlight;
+		}
+
+		function hydrateOpenInlineReplyComposer() {
+			if (!(commentListEl instanceof HTMLElement) || commentInlineReplyParentId == null) return;
+			const pid = String(commentInlineReplyParentId);
+			const ta = commentListEl.querySelector(`[data-comment-inline-textarea="${pid}"]`);
+			if (!(ta instanceof HTMLTextAreaElement)) return;
+			attachMentionSuggest(ta);
+			const miniRefresh = attachAutoGrowTextarea(ta);
+			miniRefresh();
+			syncInlineReplySubmitUi(ta);
+			if (!commentInlineReplyFocusPending) return;
+			commentInlineReplyFocusPending = false;
+			requestAnimationFrame(() => {
+				try {
+					ta.focus({ preventScroll: true });
+					ta.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+				} catch {
+					try {
+						ta.focus();
+					} catch {
+						/* ignore */
+					}
+				}
+			});
+		}
 
 		function setCommentCount(nextCount) {
 			const n = Number(nextCount ?? 0);
@@ -3867,11 +3924,41 @@ async function loadCreation() {
 			}
 		}
 
+		function mountCommentReplyIndicators() {
+			if (!(commentListEl instanceof HTMLElement)) return;
+			if (typeof createReplyIndicatorElement !== 'function') return;
+			for (const row of commentListEl.querySelectorAll('.comment-item[data-comment-id]')) {
+				const cid = Number(row.getAttribute('data-comment-id'));
+				if (!Number.isFinite(cid) || cid <= 0) continue;
+				const body = row.querySelector('.comment-body');
+				const top = row.querySelector('.comment-top');
+				if (!(body instanceof HTMLElement) || !(top instanceof HTMLElement)) continue;
+				for (const old of body.querySelectorAll('.msg-reply-indicator')) {
+					old.remove();
+				}
+				const c = commentsState.activity.find(
+					(it) => it.type === 'comment' && Number(it?.id) === cid
+				);
+				if (!c) continue;
+				const reply = c.meta && typeof c.meta === 'object' ? c.meta.reply : null;
+				if (!reply || typeof reply !== 'object') continue;
+				const refId = reply.referenced_id != null ? Number(reply.referenced_id) : NaN;
+				if (!Number.isFinite(refId) || refId <= 0) continue;
+				const reachable = c.reply_parent_exists !== false;
+				const el = createReplyIndicatorElement(reply, reachable, {
+					kind: 'comment',
+					omitAvatar: true,
+				});
+				top.insertAdjacentElement('beforebegin', el);
+			}
+		}
+
 		function renderComments() {
 			if (!commentListEl) return;
 
 			const list = Array.isArray(commentsState.activity) ? commentsState.activity : [];
 			if (list.length === 0) {
+				commentInlineReplyParentId = null;
 				if (commentsToolbarEl instanceof HTMLElement) {
 					commentsToolbarEl.style.display = 'none';
 				}
@@ -3893,6 +3980,39 @@ async function loadCreation() {
 			if (commentsToolbarEl instanceof HTMLElement) {
 				commentsToolbarEl.style.display = '';
 			}
+
+			const viewerAllowsCommentReplyUi =
+				commentTextarea instanceof HTMLTextAreaElement &&
+				Number(currentUserId) > 0 &&
+				typeof replyTurnIcon === 'function';
+
+			const viewerInlineReplyAvatarHtml = viewerAllowsCommentReplyUi
+				? `<div class="comment-avatar comment-inline-reply-avatar"${
+						!viewerPlan ? ` style="background: ${escapeHtml(viewerColor)};"` : ''
+					}>${
+						viewerPlan
+							? `<div class="avatar-with-founder-flair avatar-with-founder-flair--sm">
+							<div class="founder-flair-avatar-ring">
+								<div class="founder-flair-avatar-inner" data-founder-flair-avatar-bg aria-hidden="true">
+									${viewerAvatarUrl ? `<img class="comment-avatar-img" src="${escapeHtml(viewerAvatarUrl)}" alt="">` : `${escapeHtml(viewerInitial)}`}
+								</div>
+							</div>
+						</div>`
+							: viewerAvatarUrl
+								? `<img class="comment-avatar-img" src="${escapeHtml(viewerAvatarUrl)}" alt="">`
+								: `${escapeHtml(viewerInitial)}`
+					}</div>`
+				: '';
+
+			if (
+				commentInlineReplyParentId != null &&
+				!list.some(
+					(it) => it.type === 'comment' && Number(it?.id) === Number(commentInlineReplyParentId)
+				)
+			) {
+				commentInlineReplyParentId = null;
+			}
+
 			commentListEl.innerHTML = list.map((item) => {
 				if (item?.type === 'tip') {
 					const t = item;
@@ -4026,10 +4146,15 @@ async function loadCreation() {
 					}).join('')
 					: '';
 				const addReactionBtn = hasUnusedReactions ? `<button type="button" class="comment-reaction-add" data-comment-id="${escapeHtml(commentId)}" aria-label="Add reaction" title="Add reaction"><span class="comment-reaction-icon-wrap" aria-hidden="true">${smileIcon('comment-reaction-add-icon')}</span></button>` : '';
-				const reactionPillsRow =
-					hasAnyReactions || hasUnusedReactions
-						? `<div class="comment-reaction-pills"><div class="comment-reaction-pills-inner">${reactionPills}${addReactionBtn}</div></div>`
-						: '';
+				const canReplyToCommentRow = Boolean(commentId) && viewerAllowsCommentReplyUi;
+				const replyToCommentHtml = canReplyToCommentRow
+					? `<button type="button" class="comment-reaction-reply" data-comment-reply="${escapeHtml(commentId)}"
+							aria-label="Reply" title="Reply"><span class="comment-reaction-icon-wrap" aria-hidden="true">${replyTurnIcon('comment-reaction-reply-icon')}</span></button>`
+					: '';
+				const reactionInnerMarkup = `${reactionPills}${addReactionBtn}${replyToCommentHtml}`;
+				const reactionPillsRow = reactionInnerMarkup.trim() !== ''
+					? `<div class="comment-reaction-pills"><div class="comment-reaction-pills-inner">${reactionInnerMarkup}</div></div>`
+					: '';
 				const useFullWidthReactionRow = keysWithReactions.length > 2;
 				const canModerateComment = Boolean(commentId) && (isAdmin || (Number(commenterId) > 0 && Number(commenterId) === Number(currentUserId)));
 				const commentActionControls = canModerateComment
@@ -4047,6 +4172,38 @@ async function loadCreation() {
 					</div>
 					${useFullWidthReactionRow && reactionPillsRow ? `<div class="comment-meta-reactions-row">${reactionPillsRow}</div>` : ''}
 				</div>`;
+				const inlineSlotOpen =
+					viewerAllowsCommentReplyUi &&
+					!isEditing &&
+					Number(commentInlineReplyParentId) === Number(c?.id);
+				const inlineReplyHtml =
+					viewerAllowsCommentReplyUi && !isEditing
+						? `<div class="comment-inline-reply"${
+								inlineSlotOpen ? '' : ' hidden'
+							} data-comment-inline-reply-root="${escapeHtml(commentId)}">
+					<div class="comment-input comment-inline-reply-shell">
+						${viewerInlineReplyAvatarHtml}
+						<div class="comment-input-body comment-inline-reply-input-body">
+							<div class="comment-composer-row comment-inline-reply-composer">
+								<textarea class="comment-textarea comment-textarea--composer comment-inline-reply-field" rows="1" maxlength="4000" data-comment-inline-textarea="${escapeHtml(
+									commentId
+								)}" placeholder="Write a reply…" aria-label="Reply to comment"></textarea>
+								<button type="button" class="comment-submit-btn comment-submit-btn--composer" data-comment-inline-submit="${escapeHtml(
+									commentId
+								)}" aria-label="Send reply" hidden>
+									<span class="comment-action-btn-label comment-action-btn-label--arrow" aria-hidden="true">${
+										typeof sendIcon === 'function' ? sendIcon('comment-inline-send-icon') : '➤'
+									}</span>
+									<span class="comment-action-btn-spinner" aria-hidden="true"></span>
+								</button>
+							</div>
+							<button type="button" class="comment-inline-reply-cancel" data-comment-inline-cancel="${escapeHtml(
+								commentId
+							)}">Cancel</button>
+						</div>
+					</div>
+				</div>`
+						: '';
 				const commentBodyHtml = isEditing
 					? `<div class="comment-edit-wrap" data-comment-edit-wrap="${escapeHtml(commentId)}">
 						<textarea class="comment-edit-input" data-comment-edit-input="${escapeHtml(commentId)}" rows="3" maxlength="4000"${commentEditMinHeightPx > 0 ? ` style="min-height: ${Number(commentEditMinHeightPx)}px;"` : ''}>${escapeHtml(commentEditDraft || (c?.text ?? ''))}</textarea>
@@ -4079,6 +4236,7 @@ async function loadCreation() {
 							</div>
 							${commentBodyHtml}
 							${metaRowHtml}
+							${inlineReplyHtml}
 						</div>
 					</div>
 				`;
@@ -4091,6 +4249,8 @@ async function loadCreation() {
 			} else {
 				hydrateUserTextLinks(commentListEl);
 			}
+			mountCommentReplyIndicators();
+			hydrateOpenInlineReplyComposer();
 		}
 
 		let activeReactionPicker = null;
@@ -4222,6 +4382,63 @@ async function loadCreation() {
 
 		if (commentListEl) {
 			commentListEl.addEventListener('click', async (e) => {
+				const replyToBtn = e.target?.closest?.('[data-comment-reply]');
+				if (replyToBtn && replyToBtn instanceof HTMLElement) {
+					e.preventDefault();
+					e.stopPropagation();
+					if (!(Number(currentUserId) > 0)) return;
+					const cid = Number(replyToBtn.getAttribute('data-comment-reply'));
+					if (!Number.isFinite(cid)) return;
+					const item = commentsState.activity.find((it) => it.type === 'comment' && Number(it.id) === cid);
+					if (!item) return;
+					closeReactionPicker();
+					commentInlineReplyParentId = cid;
+					commentInlineReplyFocusPending = true;
+					renderComments();
+					return;
+				}
+
+				const inlineCancel = e.target?.closest?.('[data-comment-inline-cancel]');
+				if (inlineCancel && inlineCancel instanceof HTMLElement) {
+					e.preventDefault();
+					e.stopPropagation();
+					commentInlineReplyParentId = null;
+					renderComments();
+					return;
+				}
+
+				const inlineSubmitBtn = e.target?.closest?.('[data-comment-inline-submit]');
+				if (inlineSubmitBtn instanceof HTMLButtonElement) {
+					e.preventDefault();
+					e.stopPropagation();
+					const cid = Number(inlineSubmitBtn.getAttribute('data-comment-inline-submit'));
+					if (!Number.isFinite(cid) || inlineSubmitBtn.disabled || commentQuickSubmitInFlight) return;
+					void (async () => {
+						inlineSubmitBtn.disabled = true;
+						setCommentActionButtonLoading(inlineSubmitBtn, true);
+						const ta = commentListEl.querySelector(`[data-comment-inline-textarea="${cid}"]`);
+						const body = ta instanceof HTMLTextAreaElement ? String(ta.value || '').trim() : '';
+						if (!body) {
+							inlineSubmitBtn.disabled = false;
+							setCommentActionButtonLoading(inlineSubmitBtn, false);
+							return;
+						}
+						try {
+							await submitCommentText(body, { referencedCommentId: cid });
+							if (ta instanceof HTMLTextAreaElement) {
+								ta.value = '';
+								syncInlineReplySubmitUi(ta);
+							}
+						} catch (err) {
+							alert(err?.message || 'Failed to post comment');
+						} finally {
+							inlineSubmitBtn.disabled = false;
+							setCommentActionButtonLoading(inlineSubmitBtn, false);
+						}
+					})();
+					return;
+				}
+
 				const delBtn = e.target?.closest?.('[data-comment-delete]');
 				if (delBtn && delBtn instanceof HTMLElement) {
 					e.preventDefault();
@@ -4263,6 +4480,7 @@ async function loadCreation() {
 						renderComments();
 						return;
 					}
+					commentInlineReplyParentId = null;
 					commentEditingId = cid;
 					commentEditDraft = item?.text != null ? String(item.text) : '';
 					const textWrap = commentListEl.querySelector(`.comment-item[data-comment-id="${cid}"] .comment-text`);
@@ -4390,12 +4608,47 @@ async function loadCreation() {
 				}
 			});
 			commentListEl.addEventListener('input', (e) => {
+				const inlineTa = e.target?.closest?.('[data-comment-inline-textarea]');
+				if (inlineTa instanceof HTMLTextAreaElement) {
+					syncInlineReplySubmitUi(inlineTa);
+					return;
+				}
 				const input = e.target?.closest?.('[data-comment-edit-input]');
 				if (!(input instanceof HTMLTextAreaElement)) return;
 				commentEditDraft = input.value;
 				syncCommentEditInputUi(input);
 			});
 			commentListEl.addEventListener('keydown', (e) => {
+				const inlineTa = e.target?.closest?.('[data-comment-inline-textarea]');
+				if (inlineTa instanceof HTMLTextAreaElement) {
+					const pid = inlineTa.getAttribute('data-comment-inline-textarea');
+					if (e.key === 'Escape') {
+						e.preventDefault();
+						e.stopPropagation();
+						commentInlineReplyParentId = null;
+						renderComments();
+						return;
+					}
+					if (e.key === 'Enter' && !e.shiftKey) {
+						if (
+							typeof isTriggeredSuggestPopupOpen === 'function' &&
+							isTriggeredSuggestPopupOpen(inlineTa)
+						) {
+							return;
+						}
+						if (isMobileCommentInputMode()) return;
+						e.preventDefault();
+						e.stopPropagation();
+						const sb =
+							pid && commentListEl instanceof HTMLElement
+								? commentListEl.querySelector(`[data-comment-inline-submit="${pid}"]`)
+								: null;
+						if (sb instanceof HTMLButtonElement && !sb.disabled && !sb.hidden) {
+							sb.click();
+						}
+					}
+					return;
+				}
 				const input = e.target?.closest?.('[data-comment-edit-input]');
 				if (!(input instanceof HTMLTextAreaElement)) return;
 				const cid = input.getAttribute('data-comment-edit-input');
@@ -4527,14 +4780,27 @@ async function loadCreation() {
 			setSubmitVisibility();
 		}
 
-		async function submitCommentText(text) {
+		async function submitCommentText(text, { referencedCommentId } = {}) {
 			const body = typeof text === 'string' ? text.trim() : '';
 			if (!body) return { ok: false, skipped: true };
-			const res = await postCreatedImageComment(creationId, body)
+			const extras = {};
+			const refCid = Number(referencedCommentId);
+			if (Number.isFinite(refCid) && refCid > 0 && typeof plainTextReplyPreview === 'function') {
+				const refItem = commentsState.activity.find(
+					(it) => it.type === 'comment' && Number(it.id) === refCid
+				);
+				const rawParent = refItem?.text != null ? String(refItem.text) : '';
+				extras.referenced_comment_id = refCid;
+				extras.reply_preview = plainTextReplyPreview(rawParent);
+			}
+			const res = await postCreatedImageComment(creationId, body, extras)
 				.catch(() => ({ ok: false, status: 0, data: null }));
 			if (!res.ok) {
 				const message = typeof res.data?.error === 'string' ? res.data.error : 'Failed to post comment';
 				throw new Error(message);
+			}
+			if (Number.isFinite(refCid) && refCid > 0) {
+				commentInlineReplyParentId = null;
 			}
 			await loadComments({ scrollIfHash: false });
 			return { ok: true };

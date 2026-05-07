@@ -4984,15 +4984,18 @@ export function openDb() {
 			}
 		},
 		insertCreatedImageComment: {
-			run: async (userId, createdImageId, text) => {
+			run: async (userId, createdImageId, text, metaPayload) => {
+				const meta =
+					metaPayload && typeof metaPayload === "object" && !Array.isArray(metaPayload) ? metaPayload : {};
 				const { data, error } = await serviceClient
 					.from(prefixedTable("comments_created_image"))
 					.insert({
 						user_id: userId,
 						created_image_id: createdImageId,
-						text
+						text,
+						meta
 					})
-					.select("id, user_id, created_image_id, text, created_at, updated_at")
+					.select("id, user_id, created_image_id, text, created_at, updated_at, meta")
 					.single();
 				if (error) throw error;
 
@@ -5041,7 +5044,7 @@ export function openDb() {
 
 				let q = serviceClient
 					.from(prefixedTable("comments_created_image"))
-					.select("id, user_id, created_image_id, text, created_at, updated_at")
+					.select("id, user_id, created_image_id, text, created_at, updated_at, meta")
 					.eq("created_image_id", createdImageId)
 					.order("created_at", { ascending: order === "asc" });
 
@@ -5091,8 +5094,11 @@ export function openDb() {
 						? profileByUserId.get(String(row.user_id)) ?? null
 						: null;
 					const plan = row?.user_id != null ? (planByUserId.get(String(row.user_id)) ?? "free") : "free";
+					const meta =
+						row?.meta && typeof row.meta === "object" && !Array.isArray(row.meta) ? row.meta : {};
 					return {
 						...row,
+						meta,
 						user_name: profile?.user_name ?? null,
 						display_name: profile?.display_name ?? null,
 						avatar_url: profile?.avatar_url ?? null,
@@ -5193,7 +5199,7 @@ export function openDb() {
 
 				let commentsQuery = serviceClient
 					.from(prefixedTable("comments_created_image"))
-					.select("id, user_id, created_image_id, text, created_at, updated_at")
+					.select("id, user_id, created_image_id, text, created_at, updated_at, meta")
 					.order("created_at", { ascending: false });
 				if (before) {
 					commentsQuery = commentsQuery.lt("created_at", before);
@@ -5251,8 +5257,11 @@ export function openDb() {
 							: null;
 						const nsfw = !!(image?.meta && typeof image.meta === "object" && image.meta.nsfw);
 						const created_image_media_type = image?.meta?.media_type === "video" ? "video" : "image";
+						const meta =
+							row?.meta && typeof row.meta === "object" && !Array.isArray(row.meta) ? row.meta : {};
 						return {
 							...row,
+							meta,
 							created_image_title: image?.title ?? null,
 							created_image_url: image?.file_path ?? null,
 							created_image_created_at: image?.created_at ?? null,
@@ -5344,15 +5353,35 @@ export function openDb() {
 				return { comment_count: Number(data?.comment_count ?? 0) };
 			}
 		},
+		selectCommentIdsForImage: {
+			all: async (createdImageId, commentIds) => {
+				const imageId = Number(createdImageId);
+				if (!Number.isFinite(imageId) || imageId <= 0) return [];
+				const ids = Array.isArray(commentIds)
+					? [...new Set(commentIds.map((x) => Number(x)).filter((n) => Number.isFinite(n) && n > 0))]
+					: [];
+				if (ids.length === 0) return [];
+				const { data, error } = await serviceClient
+					.from(prefixedTable("comments_created_image"))
+					.select("id")
+					.eq("created_image_id", imageId)
+					.in("id", ids);
+				if (error) throw error;
+				return (data ?? []).map((r) => Number(r.id)).filter((n) => Number.isFinite(n) && n > 0);
+			}
+		},
 		selectCommentById: {
 			get: async (commentId) => {
 				const { data, error } = await serviceClient
 					.from(prefixedTable("comments_created_image"))
-					.select("id, created_image_id, user_id, text, created_at")
+					.select("id, created_image_id, user_id, text, created_at, meta")
 					.eq("id", commentId)
 					.maybeSingle();
 				if (error) throw error;
-				return data ?? null;
+				if (!data) return null;
+				const meta =
+					data?.meta && typeof data.meta === "object" && !Array.isArray(data.meta) ? data.meta : {};
+				return { ...data, meta };
 			}
 		},
 		updateCommentById: {
