@@ -655,7 +655,7 @@ function textWithCreationLinksCore(text, { inlineMarkdown = false } = {}) {
 	return out;
 }
 
-function renderMessageMarkdownLine(line) {
+function renderMessageMarkdownLine(line, { isFirstItem = false } = {}) {
 	const rawLine = String(line ?? '');
 	if (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(rawLine)) {
 		return '<div class="user-text-msg-hr" role="separator" aria-hidden="true"></div>';
@@ -672,7 +672,8 @@ function renderMessageMarkdownLine(line) {
 		const levelRaw = headingMatch[1] || '#';
 		const level = Math.min(3, Math.max(1, levelRaw.length));
 		const body = textWithCreationLinksCore(headingMatch[2] || '', { inlineMarkdown: true });
-		return `<div class="user-text-msg-h${level}">${body}</div>`;
+		const firstCls = isFirstItem ? ' user-text-msg-heading--first-item' : '';
+		return `<div class="user-text-msg-h${level}${firstCls}">${body}</div>`;
 	}
 
 	return textWithCreationLinksCore(rawLine, { inlineMarkdown: true });
@@ -685,6 +686,8 @@ function renderMessageMarkdownText(rawText) {
 	const listItems = [];
 	let inCode = false;
 	let listMode = '';
+	let pendingSoftBreak = false;
+	let prevInlineLine = false;
 
 	const flushCode = () => {
 		out.push(
@@ -708,6 +711,8 @@ function renderMessageMarkdownText(rawText) {
 	for (const line of lines) {
 		if (String(line ?? '').trim() === '```') {
 			flushList();
+			pendingSoftBreak = false;
+			prevInlineLine = false;
 			if (inCode) {
 				flushCode();
 				inCode = false;
@@ -722,18 +727,26 @@ function renderMessageMarkdownText(rawText) {
 			continue;
 		}
 		const rawLine = String(line ?? '');
+		if (rawLine.trim() === '') {
+			flushList();
+			pendingSoftBreak = true;
+			prevInlineLine = false;
+			continue;
+		}
 		const checkboxMatch = rawLine.match(/^\s*-\s\[( |x|X)\]\s+(.*)$/);
 		if (checkboxMatch) {
 			if (listMode !== 'task') {
 				flushList();
 				listMode = 'task';
 			}
+			pendingSoftBreak = false;
 			const checked = checkboxMatch[1].toLowerCase() === 'x';
 			const checkedAttr = checked ? ' checked' : '';
 			const label = textWithCreationLinksCore(checkboxMatch[2] || '', { inlineMarkdown: true });
 			listItems.push(
 				`<li class="user-text-msg-list-item user-text-msg-list-item--task"><input class="user-text-msg-checkbox-input" type="checkbox" disabled${checkedAttr} /><span class="user-text-msg-checkbox-label">${label}</span></li>`
 			);
+			prevInlineLine = false;
 			continue;
 		}
 		const listMatch = rawLine.match(/^\s*-\s+(.*)$/);
@@ -742,14 +755,29 @@ function renderMessageMarkdownText(rawText) {
 				flushList();
 				listMode = 'ul';
 			}
+			pendingSoftBreak = false;
 			const body = textWithCreationLinksCore(listMatch[1] || '', { inlineMarkdown: true });
 			listItems.push(`<li class="user-text-msg-list-item">${body}</li>`);
+			prevInlineLine = false;
 			continue;
 		}
 
 		flushList();
-		const rendered = renderMessageMarkdownLine(rawLine);
+		const isBlockLine =
+			/^\s*(#{1,})\s+/.test(rawLine) ||
+			/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(rawLine) ||
+			/^\s*>\s?/.test(rawLine);
+		if (!isBlockLine) {
+			if (pendingSoftBreak && out.length > 0) {
+				out.push('<br><br>');
+			} else if (prevInlineLine && out.length > 0) {
+				out.push('<br>');
+			}
+		}
+		const rendered = renderMessageMarkdownLine(rawLine, { isFirstItem: out.length === 0 });
 		if (rendered) out.push(rendered);
+		pendingSoftBreak = false;
+		prevInlineLine = !isBlockLine;
 	}
 
 	flushList();

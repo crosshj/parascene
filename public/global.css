@@ -2993,7 +2993,10 @@ app-route-feed {
 .chat-page-canvas-body .user-text-msg-h3,
 .connect-chat-canvas-inline-preview .user-text-msg-h1,
 .connect-chat-canvas-inline-preview .user-text-msg-h2,
-.connect-chat-canvas-inline-preview .user-text-msg-h3 {
+.connect-chat-canvas-inline-preview .user-text-msg-h3,
+.creation-detail-description .user-text-msg-h1,
+.creation-detail-description .user-text-msg-h2,
+.creation-detail-description .user-text-msg-h3 {
 	display: block;
 	margin: 2em 0 0.25em;
 	font-size: inherit;
@@ -3007,7 +3010,8 @@ app-route-feed {
 .connect-chat-msg-bubble .user-text-msg-h1,
 .comment-text .user-text-msg-h1,
 .chat-page-canvas-body .user-text-msg-h1,
-.connect-chat-canvas-inline-preview .user-text-msg-h1 {
+.connect-chat-canvas-inline-preview .user-text-msg-h1,
+.creation-detail-description .user-text-msg-h1 {
 	font-size: 0.8125rem;
 	font-weight: 700;
 	letter-spacing: 0.1em;
@@ -3017,7 +3021,8 @@ app-route-feed {
 .connect-chat-msg-bubble .user-text-msg-h2,
 .comment-text .user-text-msg-h2,
 .chat-page-canvas-body .user-text-msg-h2,
-.connect-chat-canvas-inline-preview .user-text-msg-h2 {
+.connect-chat-canvas-inline-preview .user-text-msg-h2,
+.creation-detail-description .user-text-msg-h2 {
 	font-size: 0.8125rem;
 	letter-spacing: 0.1em;
 	font-weight: 700;
@@ -3027,7 +3032,8 @@ app-route-feed {
 .connect-chat-msg-bubble .user-text-msg-h3,
 .comment-text .user-text-msg-h3,
 .chat-page-canvas-body .user-text-msg-h3,
-.connect-chat-canvas-inline-preview .user-text-msg-h3 {
+.connect-chat-canvas-inline-preview .user-text-msg-h3,
+.creation-detail-description .user-text-msg-h3 {
 	font-size: 0.8125rem;
 	letter-spacing: 0.1em;
 	font-weight: 700;
@@ -3037,7 +3043,8 @@ app-route-feed {
 .connect-chat-msg-bubble .user-text-msg-hr,
 .comment-text .user-text-msg-hr,
 .chat-page-canvas-body .user-text-msg-hr,
-.connect-chat-canvas-inline-preview .user-text-msg-hr {
+.connect-chat-canvas-inline-preview .user-text-msg-hr,
+.creation-detail-description .user-text-msg-hr {
 	display: block;
 	width: 100%;
 	max-width: 100%;
@@ -3051,7 +3058,8 @@ app-route-feed {
 .connect-chat-msg-bubble .user-text-msg-checkbox,
 .comment-text .user-text-msg-checkbox,
 .chat-page-canvas-body .user-text-msg-checkbox,
-.connect-chat-canvas-inline-preview .user-text-msg-checkbox {
+.connect-chat-canvas-inline-preview .user-text-msg-checkbox,
+.creation-detail-description .user-text-msg-checkbox {
 	display: flex;
 	flex-direction: row;
 	align-items: center;
@@ -3062,7 +3070,8 @@ app-route-feed {
 .connect-chat-msg-bubble .user-text-msg-checkbox-input,
 .comment-text .user-text-msg-checkbox-input,
 .chat-page-canvas-body .user-text-msg-checkbox-input,
-.connect-chat-canvas-inline-preview .user-text-msg-checkbox-input {
+.connect-chat-canvas-inline-preview .user-text-msg-checkbox-input,
+.creation-detail-description .user-text-msg-checkbox-input {
 	float: left;
 	appearance: none;
 	-webkit-appearance: none;
@@ -3081,7 +3090,8 @@ app-route-feed {
 .connect-chat-msg-bubble .user-text-msg-checkbox-input:checked,
 .comment-text .user-text-msg-checkbox-input:checked,
 .chat-page-canvas-body .user-text-msg-checkbox-input:checked,
-.connect-chat-canvas-inline-preview .user-text-msg-checkbox-input:checked {
+.connect-chat-canvas-inline-preview .user-text-msg-checkbox-input:checked,
+.creation-detail-description .user-text-msg-checkbox-input:checked {
 	background-color: transparent;
 	background-image:
 		linear-gradient(
@@ -3104,7 +3114,8 @@ app-route-feed {
 .connect-chat-msg-bubble .user-text-msg-checkbox-label,
 .comment-text .user-text-msg-checkbox-label,
 .chat-page-canvas-body .user-text-msg-checkbox-label,
-.connect-chat-canvas-inline-preview .user-text-msg-checkbox-label {
+.connect-chat-canvas-inline-preview .user-text-msg-checkbox-label,
+.creation-detail-description .user-text-msg-checkbox-label {
 	flex: 1;
 	min-width: 0;
 }
@@ -3112,7 +3123,8 @@ app-route-feed {
 .connect-chat-msg-bubble .user-text-msg-list,
 .comment-text .user-text-msg-list,
 .chat-page-canvas-body .user-text-msg-list,
-.connect-chat-canvas-inline-preview .user-text-msg-list {
+.connect-chat-canvas-inline-preview .user-text-msg-list,
+.creation-detail-description .user-text-msg-list {
 	margin: 8px 0 0;
 	padding-left: 20px;
 	color: var(--text);
@@ -3121,14 +3133,16 @@ app-route-feed {
 .connect-chat-msg-bubble .user-text-msg-list .user-text-msg-list-item,
 .comment-text .user-text-msg-list .user-text-msg-list-item,
 .chat-page-canvas-body .user-text-msg-list .user-text-msg-list-item,
-.connect-chat-canvas-inline-preview .user-text-msg-list .user-text-msg-list-item {
+.connect-chat-canvas-inline-preview .user-text-msg-list .user-text-msg-list-item,
+.creation-detail-description .user-text-msg-list .user-text-msg-list-item {
 	margin: 6px 0;
 }
 
 .connect-chat-msg-bubble .user-text-msg-list.user-text-msg-list--task,
 .comment-text .user-text-msg-list.user-text-msg-list--task,
 .chat-page-canvas-body .user-text-msg-list.user-text-msg-list--task,
-.connect-chat-canvas-inline-preview .user-text-msg-list.user-text-msg-list--task {
+.connect-chat-canvas-inline-preview .user-text-msg-list.user-text-msg-list--task,
+.creation-detail-description .user-text-msg-list.user-text-msg-list--task {
 	list-style: none;
 	padding-left: 0;
 	padding-inline-start: 0;
@@ -3139,7 +3153,8 @@ app-route-feed {
 .connect-chat-msg-bubble .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item,
 .comment-text .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item,
 .chat-page-canvas-body .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item,
-.connect-chat-canvas-inline-preview .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item {
+.connect-chat-canvas-inline-preview .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item,
+.creation-detail-description .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item {
 	display: flow-root;
 	list-style: none;
 	margin: 5px 0;
@@ -3152,14 +3167,16 @@ app-route-feed {
 .connect-chat-msg-bubble .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item::marker,
 .comment-text .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item::marker,
 .chat-page-canvas-body .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item::marker,
-.connect-chat-canvas-inline-preview .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item::marker {
+.connect-chat-canvas-inline-preview .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item::marker,
+.creation-detail-description .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item::marker {
 	content: '';
 }
 
 .connect-chat-msg-bubble .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item:has(> .user-text-msg-checkbox-input:checked),
 .comment-text .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item:has(> .user-text-msg-checkbox-input:checked),
 .chat-page-canvas-body .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item:has(> .user-text-msg-checkbox-input:checked),
-.connect-chat-canvas-inline-preview .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item:has(> .user-text-msg-checkbox-input:checked) {
+.connect-chat-canvas-inline-preview .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item:has(> .user-text-msg-checkbox-input:checked),
+.creation-detail-description .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item:has(> .user-text-msg-checkbox-input:checked) {
 	color: color-mix(in srgb, var(--text) 58%, var(--bg));
 	text-decoration: line-through;
 	text-decoration-thickness: 1px;
@@ -3170,7 +3187,8 @@ app-route-feed {
 .connect-chat-msg-bubble .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item:has(> .user-text-msg-checkbox-input:checked) a,
 .comment-text .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item:has(> .user-text-msg-checkbox-input:checked) a,
 .chat-page-canvas-body .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item:has(> .user-text-msg-checkbox-input:checked) a,
-.connect-chat-canvas-inline-preview .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item:has(> .user-text-msg-checkbox-input:checked) a {
+.connect-chat-canvas-inline-preview .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item:has(> .user-text-msg-checkbox-input:checked) a,
+.creation-detail-description .user-text-msg-list.user-text-msg-list--task .user-text-msg-list-item:has(> .user-text-msg-checkbox-input:checked) a {
 	color: color-mix(in srgb, var(--accent, #6b5cff) 55%, var(--text-muted, #888));
 	text-decoration: line-through;
 }
@@ -3178,7 +3196,8 @@ app-route-feed {
 .connect-chat-msg-bubble .user-text-msg-quote,
 .comment-text .user-text-msg-quote,
 .chat-page-canvas-body .user-text-msg-quote,
-.connect-chat-canvas-inline-preview .user-text-msg-quote {
+.connect-chat-canvas-inline-preview .user-text-msg-quote,
+.creation-detail-description .user-text-msg-quote {
 	display: block;
 	margin: 1em 0;
 	padding: 0.08em 0 0.08em 11px;
@@ -3190,7 +3209,8 @@ app-route-feed {
 .connect-chat-msg-bubble .user-text-msg-inline-code,
 .comment-text .user-text-msg-inline-code,
 .chat-page-canvas-body .user-text-msg-inline-code,
-.connect-chat-canvas-inline-preview .user-text-msg-inline-code {
+.connect-chat-canvas-inline-preview .user-text-msg-inline-code,
+.creation-detail-description .user-text-msg-inline-code {
 	padding: 0.05em 0.35em;
 	border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
 	border-radius: 4px;
@@ -3202,7 +3222,8 @@ app-route-feed {
 .connect-chat-msg-bubble .user-text-msg-code-block,
 .comment-text .user-text-msg-code-block,
 .chat-page-canvas-body .user-text-msg-code-block,
-.connect-chat-canvas-inline-preview .user-text-msg-code-block {
+.connect-chat-canvas-inline-preview .user-text-msg-code-block,
+.creation-detail-description .user-text-msg-code-block {
 	display: block;
 	width: 100%;
 	max-width: 100%;
@@ -3222,8 +3243,48 @@ app-route-feed {
 .connect-chat-msg-bubble .user-text-msg-code-block code,
 .comment-text .user-text-msg-code-block code,
 .chat-page-canvas-body .user-text-msg-code-block code,
-.connect-chat-canvas-inline-preview .user-text-msg-code-block code {
+.connect-chat-canvas-inline-preview .user-text-msg-code-block code,
+.creation-detail-description .user-text-msg-code-block code {
 	font: inherit;
+}
+
+.connect-chat-msg-bubble > .user-text-msg-heading--first-item,
+.comment-text > .user-text-msg-heading--first-item,
+.chat-page-canvas-body > .user-text-msg-heading--first-item,
+.connect-chat-canvas-inline-preview > .user-text-msg-heading--first-item,
+.creation-detail-description > .user-text-msg-heading--first-item {
+	margin-top: 1em;
+}
+
+/* Creation detail description prose stays muted; keep token/link colors intact. */
+.creation-detail-description {
+	color: var(--text-muted);
+}
+
+.creation-detail-description .user-text-msg-list,
+.creation-detail-description .user-text-msg-list .user-text-msg-list-item,
+.creation-detail-description .user-text-msg-checkbox-label,
+.creation-detail-description .user-text-msg-quote,
+.creation-detail-description .user-text-msg-h1,
+.creation-detail-description .user-text-msg-h2,
+.creation-detail-description .user-text-msg-h3 {
+	color: var(--text-muted);
+}
+
+.creation-detail-description a {
+	color: var(--accent);
+}
+
+.creation-detail-description .mention-link {
+	color: color-mix(in srgb, var(--accent) 55%, var(--text-muted));
+}
+
+.creation-detail-description .mention-link:hover {
+	color: color-mix(in srgb, var(--accent) 65%, var(--text));
+}
+
+.creation-detail-description .mention-broadcast {
+	color: color-mix(in srgb, var(--accent) 58%, var(--text-muted));
 }
 
 /* Full-width markdown block rows in chat: only widen bubbles that actually contain

@@ -1986,7 +1986,7 @@ async function loadCreation() {
 		const groupLeadDescriptionHtml = showGroupLeadDescription
 			? html`
 				<div class="creation-detail-group-lead-description">
-					<div class="creation-detail-description">${processUserText(descriptionText)}</div>
+					<div class="creation-detail-description">${processUserText(descriptionText, { messageMarkdown: true })}</div>
 				</div>
 			`
 			: '';
@@ -2001,7 +2001,7 @@ async function loadCreation() {
 
 			if (renderDescriptionInMainBlock) {
 				// Show description first (only when it differs from prompt)
-				descriptionParts.push(processUserText(descriptionText));
+				descriptionParts.push(processUserText(descriptionText, { messageMarkdown: true }));
 			}
 
 			if (hasPrompt) {
@@ -2725,7 +2725,7 @@ async function loadCreation() {
 				pub && hasPublishedDate ? formatRelativeTime(publishedDate) || '' : '';
 			const bylineHtml = `${creatorHandle ? `${escapeHtml(creatorHandle)} ` : ''}${pub ? `Published${publishedTimeAgo ? ` ${escapeHtml(publishedTimeAgo)}` : ''}` : 'Not published'}`;
 			const descSection = descRaw
-				? `<div class="creation-detail-lineage-modal-copy"><div class="creation-detail-prompt-label-row"><span class="creation-detail-prompt-label">Description</span></div><div class="creation-detail-description creation-detail-lineage-modal-prose">${processUserText(descRaw)}</div></div>`
+				? `<div class="creation-detail-lineage-modal-copy"><div class="creation-detail-prompt-label-row"><span class="creation-detail-prompt-label">Description</span></div><div class="creation-detail-description creation-detail-lineage-modal-prose">${processUserText(descRaw, { messageMarkdown: true })}</div></div>`
 				: '';
 			const promptSection = pText
 				? `<div class="creation-detail-lineage-modal-copy"><div class="creation-detail-prompt-label-row"><span class="creation-detail-prompt-label">Prompt</span></div><div class="creation-detail-description creation-detail-lineage-modal-prose creation-detail-lineage-modal-prose--prompt">${processUserText(pText)}</div></div>`
@@ -3679,7 +3679,7 @@ async function loadCreation() {
 				if (mainDescriptionEl) {
 					const descriptionParts = [];
 					if (source.description) {
-						descriptionParts.push(processUserText(source.description));
+						descriptionParts.push(processUserText(source.description, { messageMarkdown: true }));
 					}
 					if (source.prompt) {
 						if (descriptionParts.length > 0) descriptionParts.push('<br><br>');
