@@ -301,6 +301,7 @@ CREATE TABLE IF NOT EXISTS comments_created_image (
   user_id INTEGER NOT NULL,
   created_image_id INTEGER NOT NULL,
   text TEXT NOT NULL,
+  meta TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (user_id) REFERENCES users(id),

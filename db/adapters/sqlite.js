@@ -153,6 +153,18 @@ function ensureSharePageViewsMetaColumn(db) {
 	}
 }
 
+/** Reply snapshots / extensions on creation comments (see db/schemas/sqlite_04_comments_meta.sql). */
+function ensureCommentsCreatedImageMetaColumn(db) {
+	try {
+		const columns = db.prepare("PRAGMA table_info(comments_created_image)").all();
+		if (!columns.some((c) => c.name === "meta")) {
+			db.exec("ALTER TABLE comments_created_image ADD COLUMN meta TEXT NOT NULL DEFAULT '{}'");
+		}
+	} catch (error) {
+		// ignore
+	}
+}
+
 /** Comment reactions: one row per (comment, user, emoji_key). */
 function ensureCommentReactionsTable(db) {
 	try {
@@ -376,6 +388,7 @@ export async function openDb() {
 	ensureTryRequestsMetaColumn(db);
 	ensureTryRequestsCreatedImageAnonIdNullable(db);
 	ensureSharePageViewsMetaColumn(db);
+	ensureCommentsCreatedImageMetaColumn(db);
 	ensureCommentReactionsTable(db);
 	ensurePromptInjectionsTable(db);
 	ensureOauthTables(db);

@@ -232,12 +232,12 @@ export const copyIcon = withAttributes(html`
 	</svg>
 `);
 
-/** Curved reply arrow — hover message actions. */
+/** Curved reply arrow — hover reply actions (chat + comments). */
 export const replyTurnIcon = withAttributes(html`
-	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"
-		stroke-linejoin="round" aria-hidden="true">
-		<polyline points="9 17 4 12 9 7"></polyline>
-		<path d="M20 18v-2a4 4 0 0 0-4-4H4"></path>
+	<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+		<path fill="currentColor"
+			d="M2.3 7.3a1 1 0 0 0 0 1.4l5 5a1 1 0 0 0 1.4-1.4L5.42 9H11a7 7 0 0 1 7 7v4a1 1 0 1 0 2 0v-4a9 9 0 0 0-9-9H5.41l3.3-3.3a1 1 0 0 0-1.42-1.4l-5 5Z">
+		</path>
 	</svg>
 `);
 

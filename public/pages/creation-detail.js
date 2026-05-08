@@ -3888,6 +3888,11 @@ async function loadCreation() {
 			const hasText = textarea.value.trim().length > 0;
 			btn.hidden = !hasText;
 			btn.disabled = !hasText || commentQuickSubmitInFlight;
+			const attachBtn = commentListEl.querySelector(`[data-comment-inline-attach="${cid}"]`);
+			if (attachBtn instanceof HTMLButtonElement) {
+				attachBtn.disabled = commentQuickSubmitInFlight;
+				attachBtn.classList.toggle('comment-input-attach--text-disabled', hasText);
+			}
 		}
 
 		function hydrateOpenInlineReplyComposer() {
@@ -3895,9 +3900,12 @@ async function loadCreation() {
 			const pid = String(commentInlineReplyParentId);
 			const ta = commentListEl.querySelector(`[data-comment-inline-textarea="${pid}"]`);
 			if (!(ta instanceof HTMLTextAreaElement)) return;
-			attachMentionSuggest(ta);
-			const miniRefresh = attachAutoGrowTextarea(ta);
-			miniRefresh();
+			if (ta.dataset.inlineComposerHydrated !== '1') {
+				attachMentionSuggest(ta);
+				const miniRefresh = attachAutoGrowTextarea(ta);
+				miniRefresh();
+				ta.dataset.inlineComposerHydrated = '1';
+			}
 			syncInlineReplySubmitUi(ta);
 			if (!commentInlineReplyFocusPending) return;
 			commentInlineReplyFocusPending = false;
@@ -3913,6 +3921,30 @@ async function loadCreation() {
 					}
 				}
 			});
+		}
+
+		function syncInlineReplyOpenState() {
+			if (!(commentListEl instanceof HTMLElement)) return;
+			const list = Array.isArray(commentsState.activity) ? commentsState.activity : [];
+			if (
+				commentInlineReplyParentId != null &&
+				!list.some((it) => it.type === 'comment' && Number(it?.id) === Number(commentInlineReplyParentId))
+			) {
+				commentInlineReplyParentId = null;
+			}
+			for (const el of commentListEl.querySelectorAll('.comment-inline-reply[data-comment-inline-reply-root]')) {
+				const rid = el.getAttribute('data-comment-inline-reply-root');
+				const open =
+					commentInlineReplyParentId != null &&
+					rid != null &&
+					String(commentInlineReplyParentId) === String(rid);
+				if (open) {
+					el.removeAttribute('hidden');
+				} else {
+					el.setAttribute('hidden', '');
+				}
+			}
+			hydrateOpenInlineReplyComposer();
 		}
 
 		function setCommentCount(nextCount) {
@@ -4185,6 +4217,10 @@ async function loadCreation() {
 						${viewerInlineReplyAvatarHtml}
 						<div class="comment-input-body comment-inline-reply-input-body">
 							<div class="comment-composer-row comment-inline-reply-composer">
+								<button type="button" class="comment-input-attach" data-comment-inline-attach="${escapeHtml(commentId)}"
+									aria-label="Attach image">
+									${typeof plusIcon === 'function' ? plusIcon('comment-input-attach-icon') : '+'}
+								</button>
 								<textarea class="comment-textarea comment-textarea--composer comment-inline-reply-field" rows="1" maxlength="4000" data-comment-inline-textarea="${escapeHtml(
 									commentId
 								)}" placeholder="Write a reply…" aria-label="Reply to comment"></textarea>
@@ -4196,7 +4232,10 @@ async function loadCreation() {
 									}</span>
 									<span class="comment-action-btn-spinner" aria-hidden="true"></span>
 								</button>
+								<input type="file" hidden accept="image/*" data-comment-inline-attach-input="${escapeHtml(commentId)}" />
 							</div>
+							<span class="comment-input-attach-status" data-comment-inline-attach-status="${escapeHtml(commentId)}"
+								aria-live="polite"></span>
 							<button type="button" class="comment-inline-reply-cancel" data-comment-inline-cancel="${escapeHtml(
 								commentId
 							)}">Cancel</button>
@@ -4394,7 +4433,7 @@ async function loadCreation() {
 					closeReactionPicker();
 					commentInlineReplyParentId = cid;
 					commentInlineReplyFocusPending = true;
-					renderComments();
+					syncInlineReplyOpenState();
 					return;
 				}
 
@@ -4403,7 +4442,30 @@ async function loadCreation() {
 					e.preventDefault();
 					e.stopPropagation();
 					commentInlineReplyParentId = null;
-					renderComments();
+					syncInlineReplyOpenState();
+					return;
+				}
+
+				const inlineAttachBtn = e.target?.closest?.('[data-comment-inline-attach]');
+				if (inlineAttachBtn instanceof HTMLButtonElement) {
+					e.preventDefault();
+					e.stopPropagation();
+					if (inlineAttachBtn.disabled) return;
+					const cid = Number(inlineAttachBtn.getAttribute('data-comment-inline-attach'));
+					if (!Number.isFinite(cid) || cid <= 0) return;
+					commentAttachContext = { kind: 'inline', referencedCommentId: cid };
+					if (commentAttachChoiceModal instanceof HTMLElement) {
+						closeCommentAttachChoiceModal();
+						return;
+					}
+					const pop = ensureCommentAttachChoiceModal();
+					const rect = inlineAttachBtn.getBoundingClientRect();
+					const width = 240;
+					const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+					const left = Math.max(8, Math.min(rect.left, viewportWidth - width - 8));
+					pop.style.left = `${left}px`;
+					pop.style.top = `${Math.round(rect.top - 8)}px`;
+					pop.style.transform = 'translateY(-100%)';
 					return;
 				}
 
@@ -4618,6 +4680,16 @@ async function loadCreation() {
 				commentEditDraft = input.value;
 				syncCommentEditInputUi(input);
 			});
+			commentListEl.addEventListener('change', async (e) => {
+				const inlineAttachInput = e.target?.closest?.('[data-comment-inline-attach-input]');
+				if (!(inlineAttachInput instanceof HTMLInputElement)) return;
+				const cid = Number(inlineAttachInput.getAttribute('data-comment-inline-attach-input'));
+				if (!Number.isFinite(cid) || cid <= 0) return;
+				const attachBtn = commentListEl.querySelector(`[data-comment-inline-attach="${cid}"]`);
+				const file = inlineAttachInput.files?.[0];
+				commentAttachContext = { kind: 'inline', referencedCommentId: cid };
+				await handleCommentAttachInputChange(file, commentAttachContext, attachBtn, inlineAttachInput);
+			});
 			commentListEl.addEventListener('keydown', (e) => {
 				const inlineTa = e.target?.closest?.('[data-comment-inline-textarea]');
 				if (inlineTa instanceof HTMLTextAreaElement) {
@@ -4626,7 +4698,7 @@ async function loadCreation() {
 						e.preventDefault();
 						e.stopPropagation();
 						commentInlineReplyParentId = null;
-						renderComments();
+						syncInlineReplyOpenState();
 						return;
 					}
 					if (e.key === 'Enter' && !e.shiftKey) {
@@ -4780,24 +4852,45 @@ async function loadCreation() {
 			setSubmitVisibility();
 		}
 
+		function extractCommentPostFailureMessage(res) {
+			const d = res?.data;
+			if (typeof d?.error === 'string' && d.error.trim()) return d.error.trim();
+			if (typeof d?.message === 'string' && d.message.trim()) return d.message.trim();
+			if (d && typeof d === 'object' && typeof d.detail === 'string' && d.detail.trim()) return d.detail.trim();
+			if (typeof d === 'string' && d.trim()) {
+				const t = d.trim();
+				return t.length > 280 ? `${t.slice(0, 280)}…` : t;
+			}
+			if (!res?.status) return 'Network error';
+			if (res.status === 401) return 'Unauthorized';
+			if (res.status === 403) return 'Forbidden';
+			return 'Failed to post comment';
+		}
+
 		async function submitCommentText(text, { referencedCommentId } = {}) {
 			const body = typeof text === 'string' ? text.trim() : '';
 			if (!body) return { ok: false, skipped: true };
 			const extras = {};
 			const refCid = Number(referencedCommentId);
-			if (Number.isFinite(refCid) && refCid > 0 && typeof plainTextReplyPreview === 'function') {
-				const refItem = commentsState.activity.find(
-					(it) => it.type === 'comment' && Number(it.id) === refCid
-				);
-				const rawParent = refItem?.text != null ? String(refItem.text) : '';
+			if (Number.isFinite(refCid) && refCid > 0) {
 				extras.referenced_comment_id = refCid;
-				extras.reply_preview = plainTextReplyPreview(rawParent);
+				if (typeof plainTextReplyPreview === 'function') {
+					const refItem = commentsState.activity.find(
+						(it) => it.type === 'comment' && Number(it.id) === refCid
+					);
+					const rawParent = refItem?.text != null ? String(refItem.text) : '';
+					try {
+						const rp = plainTextReplyPreview(rawParent);
+						if (typeof rp === 'string' && rp.trim()) extras.reply_preview = rp.trim();
+					} catch {
+						/* omit reply_preview */
+					}
+				}
 			}
 			const res = await postCreatedImageComment(creationId, body, extras)
 				.catch(() => ({ ok: false, status: 0, data: null }));
 			if (!res.ok) {
-				const message = typeof res.data?.error === 'string' ? res.data.error : 'Failed to post comment';
-				throw new Error(message);
+				throw new Error(extractCommentPostFailureMessage(res));
 			}
 			if (Number.isFinite(refCid) && refCid > 0) {
 				commentInlineReplyParentId = null;
@@ -4847,34 +4940,76 @@ async function loadCreation() {
 		 * - primary "+" opens a choice popup ("Upload an image" or "Use a sticker")
 		 * - sticker picker loads/saves URLs in users.meta.comment_stickers
 		 * - selecting any item inserts URL into comment text; renderer handles enrichment */
-		function setCommentAttachStatus(text, { tone } = {}) {
-			if (!(commentAttachStatus instanceof HTMLElement)) return;
-			commentAttachStatus.textContent = String(text || '');
-			commentAttachStatus.classList.toggle('is-error', tone === 'error');
+		function getInlineReplyComposerElements(referencedCommentId) {
+			if (!(commentListEl instanceof HTMLElement)) return {};
+			const cid = Number(referencedCommentId);
+			if (!Number.isFinite(cid) || cid <= 0) return {};
+			const textarea = commentListEl.querySelector(`[data-comment-inline-textarea="${cid}"]`);
+			const submitBtn = commentListEl.querySelector(`[data-comment-inline-submit="${cid}"]`);
+			const attachBtn = commentListEl.querySelector(`[data-comment-inline-attach="${cid}"]`);
+			const attachInput = commentListEl.querySelector(`[data-comment-inline-attach-input="${cid}"]`);
+			const statusEl = commentListEl.querySelector(`[data-comment-inline-attach-status="${cid}"]`);
+			return { textarea, submitBtn, attachBtn, attachInput, statusEl };
 		}
 
-		function insertCommentText(insertText) {
-			if (!(commentTextarea instanceof HTMLTextAreaElement)) return;
-			const value = String(commentTextarea.value || '');
-			const start = typeof commentTextarea.selectionStart === 'number'
-				? commentTextarea.selectionStart
-				: value.length;
-			const end = typeof commentTextarea.selectionEnd === 'number'
-				? commentTextarea.selectionEnd
-				: value.length;
+		let commentAttachContext = { kind: 'main', referencedCommentId: null };
+
+		function resolveAttachTextarea(context = commentAttachContext) {
+			if (context?.kind === 'inline') {
+				const { textarea } = getInlineReplyComposerElements(context.referencedCommentId);
+				return textarea instanceof HTMLTextAreaElement ? textarea : null;
+			}
+			return commentTextarea instanceof HTMLTextAreaElement ? commentTextarea : null;
+		}
+
+		function resolveAttachButton(context = commentAttachContext) {
+			if (context?.kind === 'inline') {
+				const { attachBtn } = getInlineReplyComposerElements(context.referencedCommentId);
+				return attachBtn instanceof HTMLButtonElement ? attachBtn : null;
+			}
+			return commentAttachBtn instanceof HTMLButtonElement ? commentAttachBtn : null;
+		}
+
+		function resolveAttachInput(context = commentAttachContext) {
+			if (context?.kind === 'inline') {
+				const { attachInput } = getInlineReplyComposerElements(context.referencedCommentId);
+				return attachInput instanceof HTMLInputElement ? attachInput : null;
+			}
+			return commentAttachInput instanceof HTMLInputElement ? commentAttachInput : null;
+		}
+
+		function setCommentAttachStatus(text, { tone, context } = {}) {
+			const ctx = context && typeof context === 'object' ? context : commentAttachContext;
+			let target = null;
+			if (ctx?.kind === 'inline') {
+				target = getInlineReplyComposerElements(ctx.referencedCommentId).statusEl;
+			} else {
+				target = commentAttachStatus;
+			}
+			if (!(target instanceof HTMLElement)) return;
+			target.textContent = String(text || '');
+			target.classList.toggle('is-error', tone === 'error');
+		}
+
+		function insertCommentText(insertText, context = commentAttachContext) {
+			const ta = resolveAttachTextarea(context);
+			if (!(ta instanceof HTMLTextAreaElement)) return;
+			const value = String(ta.value || '');
+			const start = typeof ta.selectionStart === 'number' ? ta.selectionStart : value.length;
+			const end = typeof ta.selectionEnd === 'number' ? ta.selectionEnd : value.length;
 			const before = value.slice(0, start);
 			const after = value.slice(end);
 			const needsLeadingNewline = before.length > 0 && !/\n$/.test(before);
 			const needsTrailingNewline = after.length > 0 && !/^\n/.test(after);
 			const insertion = `${needsLeadingNewline ? '\n' : ''}${insertText}${needsTrailingNewline ? '\n' : ''}`;
-			commentTextarea.value = `${before}${insertion}${after}`;
+			ta.value = `${before}${insertion}${after}`;
 			const caret = (before + insertion).length;
 			try {
-				commentTextarea.setSelectionRange(caret, caret);
+				ta.setSelectionRange(caret, caret);
 			} catch {
 				// ignore selection-range errors (textarea not focused, etc.)
 			}
-			commentTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+			ta.dispatchEvent(new Event('input', { bubbles: true }));
 		}
 
 		let commentStickerUrls = null;
@@ -4975,9 +5110,10 @@ async function loadCreation() {
 			`;
 			pop.querySelector('[data-comment-attach-choice-upload]')?.addEventListener('click', () => {
 				closeCommentAttachChoiceModal();
-				if (commentAttachInput instanceof HTMLInputElement) {
-					commentAttachInput.value = '';
-					commentAttachInput.click();
+				const input = resolveAttachInput(commentAttachContext);
+				if (input instanceof HTMLInputElement) {
+					input.value = '';
+					input.click();
 				}
 			});
 			pop.querySelector('[data-comment-attach-choice-sticker]')?.addEventListener('click', () => {
@@ -4989,7 +5125,10 @@ async function loadCreation() {
 			commentAttachChoiceOutsideClick = (e) => {
 				if (!(commentAttachChoiceModal instanceof HTMLElement)) return;
 				if (commentAttachChoiceModal.contains(e.target)) return;
-				if (commentAttachBtn instanceof HTMLElement && commentAttachBtn.contains(e.target)) return;
+				const trigger = e.target instanceof HTMLElement
+					? e.target.closest('[data-comment-attach], [data-comment-inline-attach]')
+					: null;
+				if (trigger) return;
 				closeCommentAttachChoiceModal();
 			};
 			document.addEventListener('pointerdown', commentAttachChoiceOutsideClick, true);
@@ -5104,21 +5243,27 @@ async function loadCreation() {
 					commentQuickSubmitInFlight = true;
 					setCommentStickerModalBusy(true);
 					setCommentComposerBusy(true, 'Posting...');
-					if (commentAttachBtn instanceof HTMLButtonElement) {
-						commentAttachBtn.disabled = true;
-					}
+					const attachBtn = resolveAttachButton(commentAttachContext);
+					if (attachBtn instanceof HTMLButtonElement) attachBtn.disabled = true;
 					try {
-						await submitCommentText(url);
+						if (commentAttachContext?.kind === 'inline') {
+							await submitCommentText(url, {
+								referencedCommentId: Number(commentAttachContext.referencedCommentId)
+							});
+						} else {
+							await submitCommentText(url);
+						}
 					} catch (err) {
-						setCommentAttachStatus(err?.message || 'Failed to post sticker', { tone: 'error' });
+						setCommentAttachStatus(err?.message || 'Failed to post sticker', {
+							tone: 'error',
+							context: commentAttachContext
+						});
 						return;
 					} finally {
 						setCommentStickerModalBusy(false);
 						commentQuickSubmitInFlight = false;
 						setCommentComposerBusy(false);
-						if (commentAttachBtn instanceof HTMLButtonElement) {
-							commentAttachBtn.disabled = false;
-						}
+						if (attachBtn instanceof HTMLButtonElement) attachBtn.disabled = false;
 						setSubmitVisibility();
 					}
 					// Keep "last used" stickers at the front.
@@ -5126,7 +5271,8 @@ async function loadCreation() {
 					commentStickerUrls = reordered.slice(0, COMMENT_STICKER_SLOT_LIMIT);
 					void persistCommentStickerUrls(commentStickerUrls).catch(() => {});
 					closeCommentStickerModal();
-					if (commentTextarea instanceof HTMLTextAreaElement) commentTextarea.focus();
+					const ta = resolveAttachTextarea(commentAttachContext);
+					if (ta instanceof HTMLTextAreaElement) ta.focus();
 				});
 			});
 			grid.querySelectorAll('[data-comment-sticker-blank]').forEach((btn) => {
@@ -5206,9 +5352,50 @@ async function loadCreation() {
 			}
 		}
 
+		async function handleCommentAttachInputChange(file, context, attachBtn, attachInput) {
+			if (!file) return;
+			if (typeof uploadImageFile !== 'function') {
+				setCommentAttachStatus('Upload unavailable. Refresh and try again.', {
+					tone: 'error',
+					context
+				});
+				return;
+			}
+			if (commentQuickSubmitInFlight) return;
+			commentQuickSubmitInFlight = true;
+			setCommentComposerBusy(true, 'Posting...');
+			if (attachBtn instanceof HTMLButtonElement) {
+				attachBtn.disabled = true;
+				attachBtn.classList.add('is-loading');
+			}
+			try {
+				const url = await uploadImageFile(file, { uploadKind: 'generic' });
+				if (typeof url !== 'string' || !url) throw new Error('Upload returned no URL');
+				if (context?.kind === 'inline') {
+					await submitCommentText(url, { referencedCommentId: Number(context.referencedCommentId) });
+				} else {
+					await submitCommentText(url);
+				}
+			} catch (err) {
+				setCommentAttachStatus(err?.message || 'Upload/post failed', { tone: 'error', context });
+			} finally {
+				commentQuickSubmitInFlight = false;
+				setCommentComposerBusy(false);
+				if (attachBtn instanceof HTMLButtonElement) {
+					attachBtn.disabled = false;
+					attachBtn.classList.remove('is-loading');
+				}
+				if (attachInput instanceof HTMLInputElement) {
+					attachInput.value = '';
+				}
+				setSubmitVisibility();
+			}
+		}
+
 		if (commentAttachBtn instanceof HTMLButtonElement && commentAttachInput instanceof HTMLInputElement) {
 			commentAttachBtn.addEventListener('click', () => {
 				if (commentAttachBtn.disabled) return;
+				commentAttachContext = { kind: 'main', referencedCommentId: null };
 				if (commentAttachChoiceModal instanceof HTMLElement) {
 					closeCommentAttachChoiceModal();
 					return;
@@ -5224,30 +5411,12 @@ async function loadCreation() {
 			});
 			commentAttachInput.addEventListener('change', async () => {
 				const file = commentAttachInput.files?.[0];
-				if (!file) return;
-				if (typeof uploadImageFile !== 'function') {
-					setCommentAttachStatus('Upload unavailable. Refresh and try again.', { tone: 'error' });
-					return;
-				}
-				if (commentQuickSubmitInFlight) return;
-				commentQuickSubmitInFlight = true;
-				setCommentComposerBusy(true, 'Posting...');
-				commentAttachBtn.disabled = true;
-				commentAttachBtn.classList.add('is-loading');
-				try {
-					const url = await uploadImageFile(file, { uploadKind: 'generic' });
-					if (typeof url !== 'string' || !url) throw new Error('Upload returned no URL');
-					await submitCommentText(url);
-				} catch (err) {
-					setCommentAttachStatus(err?.message || 'Upload/post failed', { tone: 'error' });
-				} finally {
-					commentQuickSubmitInFlight = false;
-					setCommentComposerBusy(false);
-					commentAttachBtn.disabled = false;
-					commentAttachBtn.classList.remove('is-loading');
-					commentAttachInput.value = '';
-					setSubmitVisibility();
-				}
+				await handleCommentAttachInputChange(
+					file,
+					{ kind: 'main', referencedCommentId: null },
+					commentAttachBtn,
+					commentAttachInput
+				);
 			});
 		}
 

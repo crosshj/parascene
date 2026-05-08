@@ -17,7 +17,7 @@ function collapseWhitespace(text) {
 function stripUrlLikeSegments(text) {
 	let s = String(text ?? '');
 	const urlLike =
-		/\b(https?:\/\/[^\s<>()]+)|(www\.[^\s<>()]+\.[a-z]{2,}[^\s<>()]*)/gi;
+		/\b(https?:\/\/[^\s<>()]+)|(www\.[^\s<>()]+\.[a-z]{2,}[^\s<>()]*)|(\/api\/[^\s<>()]+)|(\/[^\s<>()]+\.(?:png|jpe?g|gif|webp|avif|svg|mp4|webm|mov)(?:\?[^\s<>()]*)?)/gi;
 	s = s.replace(urlLike, '').replace(/\(\s*\)/g, '');
 	return collapseWhitespace(s);
 }

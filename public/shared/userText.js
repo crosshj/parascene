@@ -404,7 +404,10 @@ function expandBareInlineGenericImageApiPaths(text) {
 	);
 }
 
-const PARASCENE_HOSTS = [new URL(DEFAULT_APP_ORIGIN).hostname];
+const PARASCENE_HOSTS = [
+	new URL(DEFAULT_APP_ORIGIN).hostname,
+	'parascene.com'
+];
 
 /**
  * If the URL points to parascene (same-origin or known parascene host), returns the relative

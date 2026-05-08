@@ -338,122 +338,139 @@ export default function createCommentsRoutes({ queries }) {
 	});
 
 	router.post("/api/created-images/:id/comments", async (req, res) => {
-
-		const user = await requireUser(req, res, queries);
-		if (!user) return;
-
-		const imageId = Number.parseInt(req.params.id, 10);
-		if (!Number.isFinite(imageId) || imageId <= 0) {
-			return res.status(400).json({ error: "Invalid image id" });
-		}
-
-		const image = await requireCreatedImageAccess({ queries, imageId, userId: user.id, userRole: user.role });
-		if (!image) {
-			return res.status(404).json({ error: "Image not found" });
-		}
-
-		const rawText = req.body?.text;
-		const text = typeof rawText === "string" ? rawText.trim() : "";
-		if (!text) {
-			return res.status(400).json({ error: "Comment text is required" });
-		}
-		if (text.length > 4000) {
-			return res.status(400).json({ error: "Comment is too long" });
-		}
-
-		const rawRef = req.body?.referenced_comment_id ?? req.body?.reply_to_comment_id;
-		let referencedCid =
-			rawRef !== undefined && rawRef !== null && String(rawRef).trim()
-				? Number.parseInt(String(rawRef).trim(), 10)
-				: NaN;
-		if (!Number.isFinite(referencedCid)) {
-			referencedCid = NaN;
-		}
-
-		let metaPayload = {};
-
-		if (Number.isFinite(referencedCid) && referencedCid > 0) {
-			const parent = await queries.selectCommentById?.get(referencedCid);
-			const parentImg = Number(parent?.created_image_id);
-			if (
-				!parent ||
-				!Number.isFinite(parentImg) ||
-				parentImg !== imageId
-			) {
-				return res.status(400).json({ error: "Invalid referenced comment" });
-			}
-			metaPayload.reply = await composeCommentStampedReply(
-				queries,
-				referencedCid,
-				parent,
-				sanitizeClientReplyPreview(req.body?.reply_preview)
-			);
-		}
-
-		const comment = await queries.insertCreatedImageComment?.run(user.id, imageId, text, metaPayload);
-		let commentOut = comment ? { ...comment } : comment;
-		if (commentOut?.meta?.reply) {
-			commentOut = { ...commentOut, reply_parent_exists: true };
-		}
-
-		// console.log(`[Comments] POST /api/created-images/${req.params.id}/comments`);
-
-		// Best-effort in-app notifications: creation owner + prior commenters (for digest / in-app).
-		// Do not block comment creation if notification insert fails.
 		try {
-			if (queries.insertNotification?.run) {
-				const commenterId = Number(user.id);
-				const creationTitle = typeof image?.title === "string" ? image.title.trim() : "";
-				const title = "New comment";
-				const link = `/creations/${encodeURIComponent(String(imageId))}`;
-				const target = { creation_id: imageId };
-				const meta = creationTitle ? { creation_title: creationTitle } : {};
-
-				// Notify creation owner when someone else comments (so they get digest / in-app).
-				const ownerUserId = Number(image?.user_id);
-				if (Number.isFinite(ownerUserId) && ownerUserId > 0 && ownerUserId !== commenterId) {
-					const message = creationTitle
-						? `Someone commented on “${creationTitle}”.`
-						: `Someone commented on your creation.`;
-					await queries.insertNotification.run(ownerUserId, null, title, message, link, commenterId, "comment", target, meta);
+			const user = await requireUser(req, res, queries);
+			if (!user) return;
+	
+			const imageId = Number.parseInt(req.params.id, 10);
+			if (!Number.isFinite(imageId) || imageId <= 0) {
+				return res.status(400).json({ error: "Invalid image id" });
+			}
+	
+			const image = await requireCreatedImageAccess({ queries, imageId, userId: user.id, userRole: user.role });
+			if (!image) {
+				return res.status(404).json({ error: "Image not found" });
+			}
+	
+			const rawText = req.body?.text;
+			const text = typeof rawText === "string" ? rawText.trim() : "";
+			if (!text) {
+				return res.status(400).json({ error: "Comment text is required" });
+			}
+			if (text.length > 4000) {
+				return res.status(400).json({ error: "Comment is too long" });
+			}
+	
+			const rawRef = req.body?.referenced_comment_id ?? req.body?.reply_to_comment_id;
+			let referencedCid =
+				rawRef !== undefined && rawRef !== null && String(rawRef).trim()
+					? Number.parseInt(String(rawRef).trim(), 10)
+					: NaN;
+			if (!Number.isFinite(referencedCid)) {
+				referencedCid = NaN;
+			}
+	
+			let metaPayload = {};
+	
+			if (Number.isFinite(referencedCid) && referencedCid > 0) {
+				const parent = await queries.selectCommentById?.get(referencedCid);
+				const parentImg = Number(parent?.created_image_id);
+				if (
+					!parent ||
+					!Number.isFinite(parentImg) ||
+					parentImg !== imageId
+				) {
+					return res.status(400).json({ error: "Invalid referenced comment" });
 				}
-
-				// Notify prior commenters (excluding current commenter and owner, to avoid duplicate).
-				if (queries.selectCreatedImageCommenterUserIdsDistinct?.all) {
-					const rawIds = await queries.selectCreatedImageCommenterUserIdsDistinct.all(imageId);
-					const recipientIds = Array.from(new Set(
-						(rawIds ?? [])
-							.map((r) => Number(r?.user_id ?? r))
-							.filter((id) => Number.isFinite(id) && id > 0 && id !== commenterId && id !== ownerUserId)
-					));
-
-					if (recipientIds.length > 0) {
+				try {
+					metaPayload.reply = await composeCommentStampedReply(
+						queries,
+						referencedCid,
+						parent,
+						sanitizeClientReplyPreview(req.body?.reply_preview)
+					);
+				} catch (composeErr) {
+					console.error("[Comments] composeCommentStampedReply failed:", composeErr);
+					const uid = Number(parent?.user_id);
+					metaPayload.reply = {
+						referenced_id: referencedCid,
+						sender_id: Number.isFinite(uid) && uid > 0 ? uid : undefined,
+						sender_user_name: null,
+						sender_avatar_url: null,
+						sender_plan: "free",
+						preview_text: ""
+					};
+				}
+			}
+	
+			const comment = await queries.insertCreatedImageComment?.run(user.id, imageId, text, metaPayload);
+			let commentOut = comment ? { ...comment } : comment;
+			if (commentOut?.meta?.reply) {
+				commentOut = { ...commentOut, reply_parent_exists: true };
+			}
+	
+			// console.log(`[Comments] POST /api/created-images/${req.params.id}/comments`);
+	
+			// Best-effort in-app notifications: creation owner + prior commenters (for digest / in-app).
+			// Do not block comment creation if notification insert fails.
+			try {
+				if (queries.insertNotification?.run) {
+					const commenterId = Number(user.id);
+					const creationTitle = typeof image?.title === "string" ? image.title.trim() : "";
+					const title = "New comment";
+					const link = `/creations/${encodeURIComponent(String(imageId))}`;
+					const target = { creation_id: imageId };
+					const meta = creationTitle ? { creation_title: creationTitle } : {};
+	
+					// Notify creation owner when someone else comments (so they get digest / in-app).
+					const ownerUserId = Number(image?.user_id);
+					if (Number.isFinite(ownerUserId) && ownerUserId > 0 && ownerUserId !== commenterId) {
 						const message = creationTitle
 							? `Someone commented on “${creationTitle}”.`
-							: `Someone commented on a creation you commented on.`;
-
-						for (const toUserId of recipientIds) {
-							await queries.insertNotification.run(toUserId, null, title, message, link, commenterId, "comment_thread", target, meta);
+							: `Someone commented on your creation.`;
+						await queries.insertNotification.run(ownerUserId, null, title, message, link, commenterId, "comment", target, meta);
+					}
+	
+					// Notify prior commenters (excluding current commenter and owner, to avoid duplicate).
+					if (queries.selectCreatedImageCommenterUserIdsDistinct?.all) {
+						const rawIds = await queries.selectCreatedImageCommenterUserIdsDistinct.all(imageId);
+						const recipientIds = Array.from(new Set(
+							(rawIds ?? [])
+								.map((r) => Number(r?.user_id ?? r))
+								.filter((id) => Number.isFinite(id) && id > 0 && id !== commenterId && id !== ownerUserId)
+						));
+	
+						if (recipientIds.length > 0) {
+							const message = creationTitle
+								? `Someone commented on “${creationTitle}”.`
+								: `Someone commented on a creation you commented on.`;
+	
+							for (const toUserId of recipientIds) {
+								await queries.insertNotification.run(toUserId, null, title, message, link, commenterId, "comment_thread", target, meta);
+							}
 						}
 					}
 				}
+			} catch (error) {
+				// This catch exists so comment posting still succeeds even if notifications fail.
 			}
-		} catch (error) {
-			// This catch exists so comment posting still succeeds even if notifications fail.
+	
+			let commentCount = null;
+			try {
+				const countRow = await queries.selectCreatedImageCommentCount?.get(imageId);
+				commentCount = Number(countRow?.comment_count ?? 0);
+			} catch {
+				// ignore count failures
+			}
+	
+			return res.json({
+				comment: commentOut ?? comment,
+				comment_count: commentCount
+			});
+		} catch (err) {
+			console.error("[Comments] POST /api/created-images/:id/comments failed:", err);
+			return res.status(500).json({ error: "Failed to post comment" });
 		}
-
-		let commentCount = null;
-		try {
-			const countRow = await queries.selectCreatedImageCommentCount?.get(imageId);
-			commentCount = Number(countRow?.comment_count ?? 0);
-		} catch {
-			// ignore count failures
-		}
-
-		return res.json({
-			comment: commentOut ?? comment,
-			comment_count: commentCount
-		});
 	});
 
 	router.delete("/api/comments/:commentId", async (req, res) => {

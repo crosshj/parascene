@@ -9,6 +9,7 @@ import { buildProfilePath } from './profileLinks.js';
 import { renderCommentAvatarHtml } from './commentItem.js';
 import { processUserText } from './userText.js';
 import { REACTION_ORDER, REACTION_ICONS } from '../icons/svg-strings.js';
+import { createReplyIndicatorElement } from './replyIndicatorUi.js';
 
 function escapeHtml(str) {
 	return String(str ?? '')
@@ -68,6 +69,7 @@ export function createConnectCommentRowElement(comment, opts = {}) {
 		row.addEventListener('click', (e) => {
 			const target = e.target;
 			if (target instanceof HTMLElement && target.closest('a')) return;
+			if (target instanceof HTMLElement && target.closest('.msg-reply-indicator-inner')) return;
 			window.location.href = href;
 		});
 		row.addEventListener('keydown', (e) => {
@@ -159,6 +161,19 @@ export function createConnectCommentRowElement(comment, opts = {}) {
 	commentText.className = 'comment-text';
 	commentText.innerHTML = `${safeText}${isEditedComment ? '<span class="comment-text-edited-inline"> (edited)</span>' : ''}`;
 
+	const replyMetaRaw = comment?.meta?.reply;
+	const replyMeta =
+		replyMetaRaw && typeof replyMetaRaw === 'object' && !Array.isArray(replyMetaRaw)
+			? replyMetaRaw
+			: null;
+	const replyRefId = Number(replyMeta?.referenced_id);
+	let replyIndicatorEl = null;
+	if (replyMeta && Number.isFinite(replyRefId) && replyRefId > 0) {
+		replyIndicatorEl = createReplyIndicatorElement(replyMeta, true, { kind: 'comment', omitAvatar: true });
+		replyIndicatorEl.classList.add('connect-comment-reply');
+		row.classList.add('has-reply-indicator');
+	}
+
 	const reactions = comment?.reactions && typeof comment.reactions === 'object' ? comment.reactions : {};
 	let chipsWithCount = [];
 	let reactionsEl = null;
@@ -217,6 +232,9 @@ export function createConnectCommentRowElement(comment, opts = {}) {
 	row.appendChild(creationTitle);
 	row.appendChild(creatorRow);
 	row.appendChild(commentText);
+	if (replyIndicatorEl) {
+		row.appendChild(replyIndicatorEl);
+	}
 	row.appendChild(footer);
 	if (reactionsEl?.innerHTML) {
 		row.classList.add('has-reactions');

@@ -357,7 +357,7 @@ body.creation-detail-page [data-comment-list] .comment-body > .msg-reply-indicat
 	border: none;
 	border-left: 2px solid color-mix(in srgb, var(--text-muted) 55%, var(--border));
 	border-top: 2px solid color-mix(in srgb, var(--text-muted) 55%, var(--border));
-	border-top-left-radius: 4px;
+	border-top-left-radius: 15px;
 }
 
 body.chat-page .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicator.msg-reply-indicator--compact.msg-reply-indicator--unreachable .msg-reply-indicator-target-mark,
@@ -406,12 +406,12 @@ body.chat-page .chat-page-messages .connect-chat-msg-inner > .msg-reply-indicato
 body.creation-detail-page [data-comment-list] .comment-body > .msg-reply-indicator.msg-reply-indicator--compact .msg-reply-indicator-name {
 	font-size: 0.78rem;
 	font-weight: 600;
-	flex: 0 1 auto;
-	max-width: 42%;
+	flex: 0 0 auto;
+	max-width: none;
 	min-width: 0;
 	color: var(--text-muted);
-	overflow: hidden;
-	text-overflow: ellipsis;
+	overflow: visible;
+	text-overflow: clip;
 	white-space: nowrap;
 }
 
@@ -642,6 +642,172 @@ body.chat-page .chat-page-messages .connect-chat-msg-bubble .user-text-msg-list.
 body.chat-page .chat-page-messages .connect-chat-msg-bubble .connect-chat-creation-embed--square .connect-chat-creation-embed-img {
 	max-height: 260px;
 	max-width: 100%;
+}
+
+/*
+ * #comments pseudo-channel uses `.comments-channel-plain-msg.connect-comment` cards (not `.connect-chat-msg-bubble`).
+ * When chat.bundle.css is stale, generic `.connect-chat-creation-embed--square` wins and previews fill the lane — cap here
+ * (aligned with `.comment-text .user-text-inline-image` / global.css).
+ */
+body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text a.creation-link:has(+ .connect-chat-creation-embed),
+body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text a.creation-link.connect-chat-creation-embed-paired-link {
+	display: block;
+	height: 0;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	border: 0;
+	line-height: 0;
+	font-size: 0;
+	opacity: 0;
+	pointer-events: none;
+}
+
+body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed {
+	margin-top: 6px;
+	width: fit-content;
+	max-width: 100%;
+	min-width: 0;
+	box-sizing: border-box;
+	container-type: normal;
+}
+
+body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed.connect-chat-creation-embed--square {
+	min-width: min(250px, 100%);
+}
+
+body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed-media {
+	width: auto;
+	max-width: 100%;
+}
+
+body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed--square > .connect-chat-creation-embed-media {
+	min-width: min(250px, 100%);
+}
+
+body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed-inner--loading-shell {
+	width: fit-content;
+	max-width: 100%;
+	min-width: min(250px, 100%);
+	min-height: 250px;
+	height: 250px;
+	max-height: 250px;
+	aspect-ratio: unset;
+}
+
+body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed-inner--pending {
+	width: min(250px, 100%);
+	max-width: 100%;
+	min-width: min(250px, 100%);
+	min-height: 250px;
+	max-height: 250px;
+	aspect-ratio: unset;
+}
+
+body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-inner.connect-chat-creation-embed-inner--video {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: fit-content;
+	max-width: 100%;
+	min-width: 0;
+	height: 250px;
+	min-height: 250px;
+	max-height: 250px;
+	aspect-ratio: unset;
+	background: color-mix(in srgb, var(--surface-strong) 58%, var(--bg));
+	box-sizing: border-box;
+}
+
+body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-video {
+	position: relative;
+	inset: auto;
+	display: block;
+	width: auto;
+	max-width: 100%;
+	height: auto;
+	max-height: 250px;
+	object-fit: contain;
+	object-position: center;
+	border-radius: inherit;
+}
+
+body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-inner:not(.connect-chat-creation-embed-inner--video):not(.connect-chat-creation-embed-inner--group-carousel):not(.connect-chat-creation-embed-inner--html):not(.connect-chat-creation-embed-inner--pending):not(.connect-chat-creation-embed-inner--error-layout):not(.connect-chat-creation-embed-inner--loading-shell) {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: fit-content;
+	max-width: 100%;
+	min-width: 0;
+	height: 250px;
+	min-height: 250px;
+	max-height: 250px;
+	aspect-ratio: unset;
+	overflow: hidden;
+	line-height: 0;
+	box-sizing: border-box;
+	background: color-mix(in srgb, var(--surface-strong) 58%, var(--bg));
+}
+
+body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-inner.connect-chat-creation-embed-inner--group-carousel {
+	display: block;
+	position: relative;
+	overflow: hidden;
+	line-height: 0;
+	width: min(250px, 100%);
+	max-width: 100%;
+	min-width: min(250px, 100%);
+	height: 250px;
+	min-height: 250px;
+	max-height: 250px;
+	aspect-ratio: unset;
+	box-sizing: border-box;
+	background: color-mix(in srgb, var(--surface-strong) 58%, var(--bg));
+	cursor: zoom-in;
+}
+
+body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-inner > .user-text-inline-image-link {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex: 1;
+	align-self: stretch;
+	min-width: 0;
+	min-height: 0;
+	width: 100%;
+	max-width: 100%;
+	height: 100%;
+	position: relative;
+	line-height: 0;
+	cursor: zoom-in;
+	vertical-align: top;
+}
+
+body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-img {
+	position: static;
+	inset: auto;
+	display: block;
+	width: auto;
+	max-width: 100%;
+	height: auto;
+	max-height: 250px;
+	object-fit: contain;
+	object-position: center;
+	margin: 0;
+	flex-shrink: 0;
+}
+
+body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-inner--error-layout {
+	aspect-ratio: unset;
+	height: 250px;
+	min-height: 250px;
+	max-height: 250px;
+	width: fit-content;
+	max-width: 100%;
+	min-width: 0;
+	box-sizing: border-box;
+	background: color-mix(in srgb, var(--surface-strong) 58%, var(--bg));
 }
 
 /* Stale chat.bundle: previews must use contain (not cover) */
