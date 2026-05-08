@@ -1442,6 +1442,62 @@ body.creation-detail-page main>section:first-of-type {
 	object-fit: cover;
 }
 
+.creation-detail-video-muted-badge {
+	position: absolute;
+	bottom: 14px;
+	right: 14px;
+	z-index: 4;
+	width: 46px;
+	height: 46px;
+	border: 1px solid color-mix(in srgb, var(--text) 22%, transparent);
+	border-radius: 50%;
+	background: color-mix(in srgb, var(--surface) 76%, transparent);
+	color: var(--text);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	cursor: pointer;
+	touch-action: manipulation;
+	backdrop-filter: blur(8px);
+	-webkit-backdrop-filter: blur(8px);
+	pointer-events: auto;
+	transition:
+		background-color 0.16s ease,
+		border-color 0.16s ease,
+		transform 0.16s ease;
+}
+
+.creation-detail-video-muted-badge[hidden] {
+	display: none !important;
+}
+
+.creation-detail-video-muted-badge svg {
+	width: 22px;
+	height: 22px;
+	display: block;
+	stroke: currentColor;
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	fill: none;
+	pointer-events: none;
+}
+
+.creation-detail-video-muted-badge:hover {
+	background: color-mix(in srgb, var(--surface) 88%, transparent);
+	border-color: color-mix(in srgb, var(--text) 35%, transparent);
+}
+
+.creation-detail-video-muted-badge:active {
+	transform: scale(0.97);
+}
+
+.creation-detail-video-muted-badge:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
 .creation-detail-image:not([src]),
 .creation-detail-image[src=""] {
 	display: none;

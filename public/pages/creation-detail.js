@@ -995,6 +995,7 @@ async function loadCreation() {
 	const backgroundEl = document.querySelector('[data-background]');
 	const imageWrapper = imageEl?.closest?.('.creation-detail-image-wrapper');
 	const videoEl = document.querySelector('[data-video]');
+	const videoMutedBadgeEl = imageWrapper?.querySelector?.('[data-video-muted-badge]') || null;
 	const groupHeroPrevBtn = imageWrapper?.querySelector?.('[data-group-hero-prev]') || null;
 	const groupHeroNextBtn = imageWrapper?.querySelector?.('[data-group-hero-next]') || null;
 	const heroImagePreloadPromises = new Map();
@@ -1041,6 +1042,15 @@ async function loadCreation() {
 		delete imageEl.dataset.pendingUrl;
 	}
 
+	function syncHeroVideoMutedBadge() {
+		if (!videoMutedBadgeEl || !videoEl) return;
+		const visible =
+			videoEl.style.display !== 'none' &&
+			Boolean(videoEl.getAttribute('src')) &&
+			videoEl.muted;
+		videoMutedBadgeEl.hidden = !visible;
+	}
+
 	function resetHeroVideo() {
 		if (!videoEl) return;
 		videoEl.style.display = 'none';
@@ -1051,6 +1061,25 @@ async function loadCreation() {
 		} catch {
 			// ignore
 		}
+		if (videoMutedBadgeEl) videoMutedBadgeEl.hidden = true;
+	}
+
+	function applyHeroVideoUserUnmute() {
+		if (!videoEl || videoEl.style.display === 'none') return;
+		if (!videoEl.controls) {
+			videoEl.controls = true;
+			videoEl.setAttribute('controls', '');
+		}
+		if (videoEl.muted) {
+			videoEl.muted = false;
+			videoEl.removeAttribute('muted');
+			try {
+				videoEl.play();
+			} catch {
+				// ignore play errors; user can press play in controls
+			}
+		}
+		syncHeroVideoMutedBadge();
 	}
 
 	function appendCreationIdToMediaUrl(url, delegatedCreationId) {
@@ -1262,6 +1291,11 @@ async function loadCreation() {
 				if (modIcon) modIcon.remove();
 				imageWrapper?.classList.remove('image-loading', 'image-error', 'image-error-moderated');
 				videoEl.style.display = 'block';
+				syncHeroVideoMutedBadge();
+			});
+
+			videoEl.addEventListener('volumechange', () => {
+				syncHeroVideoMutedBadge();
 			});
 
 			videoEl.addEventListener('error', (event) => {
@@ -1283,6 +1317,7 @@ async function loadCreation() {
 				} catch {
 					// ignore
 				}
+				if (videoMutedBadgeEl) videoMutedBadgeEl.hidden = true;
 			});
 		}
 
@@ -1290,17 +1325,16 @@ async function loadCreation() {
 		if (!videoEl.dataset.controlsOnClickAttached) {
 			videoEl.dataset.controlsOnClickAttached = '1';
 			videoEl.addEventListener('click', () => {
-				if (!videoEl.controls) {
-					videoEl.controls = true;
-					videoEl.setAttribute('controls', '');
-					videoEl.muted = false;
-					videoEl.removeAttribute('muted');
-					try {
-						videoEl.play();
-					} catch {
-						// ignore play errors; user can press play in controls
-					}
-				}
+				applyHeroVideoUserUnmute();
+			});
+		}
+
+		if (videoMutedBadgeEl && !videoMutedBadgeEl.dataset.heroMutedBadgeAttached) {
+			videoMutedBadgeEl.dataset.heroMutedBadgeAttached = '1';
+			videoMutedBadgeEl.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				applyHeroVideoUserUnmute();
 			});
 		}
 	}
@@ -1442,6 +1476,7 @@ async function loadCreation() {
 			}
 
 			if (videoEl) {
+				if (videoMutedBadgeEl) videoMutedBadgeEl.hidden = true;
 				// Use bgUrl (creation image or thumbnail) as poster while video loads.
 				if (bgUrl) {
 					videoEl.setAttribute('poster', bgUrl);
