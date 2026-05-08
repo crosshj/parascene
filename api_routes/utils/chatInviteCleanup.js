@@ -29,6 +29,65 @@ function extractInviteeUserId(meta) {
 }
 
 /**
+ * Keep member read pointers valid when deleting messages in bulk.
+ * Matches DELETE /api/chat/messages/:messageId behavior by rewinding to
+ * the previous existing message in the same thread (or null).
+ *
+ * @param {{ sb: any, threadId: number, deleteMessageIds: number[] }} opts
+ */
+async function repairLastReadPointersForDeletedMessages({ sb, threadId, deleteMessageIds }) {
+	const tid = Number(threadId);
+	if (!Number.isFinite(tid) || tid <= 0) return;
+	const deletedIds = [...new Set((deleteMessageIds || []).map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0))];
+	if (deletedIds.length === 0) return;
+
+	const { data: memberRows, error: membersErr } = await sb
+		.from("prsn_chat_members")
+		.select("user_id, last_read_message_id")
+		.eq("thread_id", tid)
+		.in("last_read_message_id", deletedIds);
+	if (membersErr) throw membersErr;
+	if (!Array.isArray(memberRows) || memberRows.length === 0) return;
+
+	const uniquePointers = [...new Set(memberRows
+		.map((row) => Number(row?.last_read_message_id))
+		.filter((id) => Number.isFinite(id) && id > 0))];
+
+	/** @type {Map<number, number | null>} */
+	const fallbackByDeletedPointer = new Map();
+	for (const pointerId of uniquePointers) {
+		const { data: prevRow, error: prevErr } = await sb
+			.from("prsn_chat_messages")
+			.select("id")
+			.eq("thread_id", tid)
+			.lt("id", pointerId)
+			.not("id", "in", `(${deletedIds.join(",")})`)
+			.order("id", { ascending: false })
+			.limit(1)
+			.maybeSingle();
+		if (prevErr) throw prevErr;
+		const fallback =
+			prevRow?.id != null && Number.isFinite(Number(prevRow.id)) && Number(prevRow.id) > 0
+				? Number(prevRow.id)
+				: null;
+		fallbackByDeletedPointer.set(pointerId, fallback);
+	}
+
+	for (const pointerId of uniquePointers) {
+		const fallback = fallbackByDeletedPointer.get(pointerId) ?? null;
+		const patch = Number.isFinite(Number(fallback)) && Number(fallback) > 0
+			? { last_read_message_id: Number(fallback) }
+			: { last_read_message_id: null };
+		const { error: updErr } = await sb
+			.from("prsn_chat_members")
+			.update(patch)
+			.eq("thread_id", tid)
+			.eq("last_read_message_id", pointerId);
+		if (updErr) throw updErr;
+	}
+}
+
+/**
  * Remove DM invite messages that point to channels the user already joined.
  * Safe to call opportunistically on unrelated requests (feed load, invite accept, etc).
  */
@@ -84,6 +143,8 @@ export async function removeJoinedPrivateChannelInviteDmMessages({ sb, userId })
 
 	const deleteIds = [];
 	const affectedThreadIds = new Set();
+	/** @type {Map<number, number[]>} */
+	const deleteIdsByThread = new Map();
 	for (const row of inviteRows) {
 		const messageId = Number(row?.id);
 		const dmThreadId = Number(row?.thread_id);
@@ -96,9 +157,20 @@ export async function removeJoinedPrivateChannelInviteDmMessages({ sb, userId })
 		if (!Number.isFinite(invitedChannelThreadId) || !joinedChannelThreadIds.has(invitedChannelThreadId)) continue;
 		deleteIds.push(messageId);
 		affectedThreadIds.add(dmThreadId);
+		const existing = deleteIdsByThread.get(dmThreadId) || [];
+		existing.push(messageId);
+		deleteIdsByThread.set(dmThreadId, existing);
 	}
 	if (deleteIds.length === 0) {
 		return { removed_count: 0, affected_threads: [] };
+	}
+
+	for (const [threadId, threadDeleteIds] of deleteIdsByThread.entries()) {
+		await repairLastReadPointersForDeletedMessages({
+			sb,
+			threadId,
+			deleteMessageIds: threadDeleteIds
+		});
 	}
 
 	const { error: deleteErr } = await sb.from("prsn_chat_messages").delete().in("id", deleteIds);

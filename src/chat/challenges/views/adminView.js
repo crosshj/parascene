@@ -257,6 +257,7 @@ export function renderChallengeOrganizerTableHtml(rows, icons) {
  *   }[],
  *   topSubmitters?: { userId: number, submissionCount: number, userName: string | null }[],
  *   topVoters?: { userId: number, voteCount: number, userName: string | null }[],
+ *   excludedUserNames?: string[],
  *   loading?: boolean,
  *   error?: string | null,
  * }} vm
@@ -274,8 +275,46 @@ export function renderChallengeOrganizerStatsModalInnerHtml(vm) {
 		typeof vm?.challengeTitle === 'string' && vm.challengeTitle.trim()
 			? vm.challengeTitle.trim()
 			: 'Challenge';
+	const excludedUserNames = Array.isArray(vm?.excludedUserNames)
+		? vm.excludedUserNames
+		: [];
+	const excludedSet = new Set(
+		excludedUserNames
+			.map((name) => String(name || '').trim().replace(/^@+/, '').toLowerCase())
+			.filter(Boolean)
+	);
+	const excludedDisplayValue = excludedUserNames.join(', ');
 	const topCreations = Array.isArray(vm?.topCreations) ? vm.topCreations : [];
-	const rowsHtml = topCreations
+	const filteredTopCreations = topCreations.filter((row) => {
+		const creatorUserName =
+			row?.creatorUserName != null ? String(row.creatorUserName).trim().toLowerCase() : '';
+		return !creatorUserName || !excludedSet.has(creatorUserName);
+	});
+	const sortedTopCreations = [...filteredTopCreations].sort((a, b) => {
+		const aVoteValue = Number.isFinite(Number(a?.voteValue))
+			? Math.max(0, Math.floor(Number(a.voteValue)))
+			: 0;
+		const bVoteValue = Number.isFinite(Number(b?.voteValue))
+			? Math.max(0, Math.floor(Number(b.voteValue)))
+			: 0;
+		const aVoteCount = Number.isFinite(Number(a?.voteCount))
+			? Math.max(0, Math.floor(Number(a.voteCount)))
+			: 0;
+		const bVoteCount = Number.isFinite(Number(b?.voteCount))
+			? Math.max(0, Math.floor(Number(b.voteCount)))
+			: 0;
+		const aAverageVote = aVoteCount > 0 ? aVoteValue / aVoteCount : 0;
+		const bAverageVote = bVoteCount > 0 ? bVoteValue / bVoteCount : 0;
+		if (bAverageVote !== aAverageVote) {
+			return bAverageVote - aAverageVote;
+		}
+		if (bVoteValue !== aVoteValue) {
+			return bVoteValue - aVoteValue;
+		}
+		return bVoteCount - aVoteCount;
+	});
+	const rowsHtml = sortedTopCreations
+		.slice(0, 10)
 		.map((row, i) => {
 			const rank = i + 1;
 			const cid =
@@ -288,6 +327,8 @@ export function renderChallengeOrganizerStatsModalInnerHtml(vm) {
 			const voteCount = Number.isFinite(Number(row?.voteCount))
 				? Math.max(0, Math.floor(Number(row.voteCount)))
 				: 0;
+			const averageVote = voteCount > 0 ? voteValue / voteCount : 0;
+			const averageVoteDisplay = Number.isFinite(averageVote) ? averageVote.toFixed(2) : '0.00';
 			const messageId =
 				Number.isFinite(Number(row?.messageId)) && Number(row.messageId) > 0
 					? Math.floor(Number(row.messageId))
@@ -326,6 +367,7 @@ export function renderChallengeOrganizerStatsModalInnerHtml(vm) {
 				<td>${creatorCell}</td>
 				<td>${esc(String(voteValue))}</td>
 				<td>${esc(String(voteCount))}</td>
+				<td>${esc(averageVoteDisplay)}</td>
 			</tr>`;
 		})
 		.join('');
@@ -338,6 +380,7 @@ export function renderChallengeOrganizerStatsModalInnerHtml(vm) {
 					<th scope="col">Creator</th>
 					<th scope="col">Vote value</th>
 					<th scope="col">Votes</th>
+					<th scope="col">Average vote</th>
 				</tr>
 			</thead>
 			<tbody>${rowsHtml}</tbody>
@@ -345,7 +388,12 @@ export function renderChallengeOrganizerStatsModalInnerHtml(vm) {
 		: `<p class="challenge-pane-muted challenge-pane-organizer-stats-empty">No submissions with votes yet.</p>`;
 
 	const topSubmitters = Array.isArray(vm?.topSubmitters) ? vm.topSubmitters : [];
-	const submitterRowsHtml = topSubmitters
+	const filteredTopSubmitters = topSubmitters.filter((row) => {
+		const userName = row?.userName != null ? String(row.userName).trim().toLowerCase() : '';
+		return !userName || !excludedSet.has(userName);
+	});
+	const submitterRowsHtml = filteredTopSubmitters
+		.slice(0, 10)
 		.map((row, i) => {
 			const rank = i + 1;
 			const uid = Number.isFinite(Number(row?.userId)) ? Math.floor(Number(row.userId)) : null;
@@ -383,7 +431,12 @@ export function renderChallengeOrganizerStatsModalInnerHtml(vm) {
 		: `<p class="challenge-pane-muted challenge-pane-organizer-stats-empty">No submissions yet.</p>`;
 
 	const topVoters = Array.isArray(vm?.topVoters) ? vm.topVoters : [];
-	const voterRowsHtml = topVoters
+	const filteredTopVoters = topVoters.filter((row) => {
+		const userName = row?.userName != null ? String(row.userName).trim().toLowerCase() : '';
+		return !userName || !excludedSet.has(userName);
+	});
+	const voterRowsHtml = filteredTopVoters
+		.slice(0, 10)
 		.map((row, i) => {
 			const rank = i + 1;
 			const uid = Number.isFinite(Number(row?.userId)) ? Math.floor(Number(row.userId)) : null;
@@ -422,7 +475,12 @@ export function renderChallengeOrganizerStatsModalInnerHtml(vm) {
 
 	return `<section class="challenge-pane-organizer-stats-view">
 		<p class="challenge-pane-organizer-stats-kicker">${esc(challengeTitle)}</p>
-		<h4 class="challenge-pane-organizer-stats-subhead">Top 10 creations by vote value</h4>
+		<h4 class="challenge-pane-organizer-stats-subhead">Top 10 creations by average vote</h4>
+		<form class="challenge-pane-organizer-stats-filter" data-challenge-stats-filter-form>
+			<label class="challenge-pane-organizer-stats-filter-label" for="challenge-stats-excluded-usernames">Exclude usernames</label>
+			<input id="challenge-stats-excluded-usernames" type="text" class="challenge-pane-input challenge-pane-organizer-stats-filter-input" data-challenge-stats-filter-input name="excluded_usernames" value="${esc(excludedDisplayValue)}" placeholder="organizer, user2" autocomplete="off" />
+			<button type="submit" class="btn-outlined challenge-pane-organizer-stats-filter-apply">Apply</button>
+		</form>
 		<div class="challenge-pane-organizer-stats-table-wrap">${bodyTable}</div>
 		<h4 class="challenge-pane-organizer-stats-subhead challenge-pane-organizer-stats-subhead--secondary">Top 10 entrants by submissions</h4>
 		<div class="challenge-pane-organizer-stats-table-wrap">${submittersTable}</div>

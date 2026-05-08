@@ -2126,15 +2126,12 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 				return a.sortId - b.sortId;
 			});
 
-			const slice = topCandidates.slice(0, 10);
-
 			const voterLeaderboard = [...votesPerUserId.entries()]
 				.map(([uid, n]) => ({ userId: uid, voteCount: n }))
 				.sort((a, b) => {
 					if (b.voteCount !== a.voteCount) return b.voteCount - a.voteCount;
 					return a.userId - b.userId;
-				})
-				.slice(0, 10);
+				});
 
 			const submitterLeaderboard = [...submissionsPerSenderId.entries()]
 				.map(([uid, n]) => ({ userId: uid, submissionCount: n }))
@@ -2143,14 +2140,13 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 						return b.submissionCount - a.submissionCount;
 					}
 					return a.userId - b.userId;
-				})
-				.slice(0, 10);
+				});
 
 			const profileIds = [
 				...new Set([
 					...voterLeaderboard.map((r) => r.userId),
 					...submitterLeaderboard.map((r) => r.userId),
-					...slice
+					...topCandidates
 						.map((r) => r.creatorUserId)
 						.filter((id) => Number.isFinite(Number(id)) && Number(id) > 0)
 				])
@@ -2183,7 +2179,7 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 				userName: userNameFromProfileMap(row.userId) || null
 			}));
 
-			const topCreations = slice.map((row) => {
+			const topCreations = topCandidates.map((row) => {
 				const cuid =
 					row.creatorUserId != null &&
 					Number.isFinite(Number(row.creatorUserId)) &&
@@ -2386,22 +2382,67 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 				.limit(200);
 			if (error) throw error;
 
-			const canvases = (Array.isArray(rows) ? rows : [])
-				.filter((row) => isCanvasMessageRow(row))
-				.map((row) => {
-					const title = String(row.meta?.canvas?.title || "").trim();
-					const body = row.body != null ? String(row.body) : "";
-					const entry = {
-						id: Number(row.id),
-						sender_id: Number(row.sender_id),
-						title,
-						body,
-						created_at: row.created_at
-					};
-					const body_html = canvasBodyMarkdownToSafeHtml(body);
-					if (body_html) entry.body_html = body_html;
-					return entry;
-				});
+			const enrichedRows = await enrichChatMessagesWithSenderProfiles(
+				sb,
+				Array.isArray(rows) ? rows : []
+			);
+			const isPrivateChannel =
+				thread.type === "channel" &&
+				threadVisibilityFromMeta(thread.meta) === PRIVATE_CHANNEL_VISIBILITY;
+			let privateSecretK = "";
+			if (isPrivateChannel) {
+				const userMeta = await getUserMeta(sb, userId);
+				const keyMap =
+					userMeta.chat_private_keys &&
+					typeof userMeta.chat_private_keys === "object" &&
+					!Array.isArray(userMeta.chat_private_keys)
+						? userMeta.chat_private_keys
+						: {};
+				const keyEntry =
+					keyMap[String(Number(threadId))] &&
+					typeof keyMap[String(Number(threadId))] === "object"
+						? keyMap[String(Number(threadId))]
+						: null;
+				privateSecretK = typeof keyEntry?.k === "string" ? keyEntry.k.trim() : "";
+			}
+
+			const canvases = [];
+			for (const row of enrichedRows) {
+				if (!isCanvasMessageRow(row)) continue;
+				const title = String(row.meta?.canvas?.title || "").trim();
+				let body = row.body != null ? String(row.body) : "";
+				if (isPrivateChannel) {
+					if (!body.startsWith(CHAT_PRIVATE_BODY_PREFIX) || !privateSecretK) {
+						body = "[Encrypted message]";
+					} else {
+						const dec = decryptPrivateTextWithSecret(body.slice(CHAT_PRIVATE_BODY_PREFIX.length), privateSecretK);
+						if (dec == null) {
+							body = "[Encrypted message]";
+						} else {
+							const normalizedDec = await normalizeUnpublishedCreationUrlsInChatBody(
+								dec,
+								Number(row?.sender_id),
+								queries
+							);
+							body = typeof normalizedDec === "string" && normalizedDec ? normalizedDec : dec;
+						}
+					}
+				}
+				const entry = {
+					id: Number(row.id),
+					sender_id: Number(row.sender_id),
+					sender_user_name:
+						typeof row.sender_user_name === "string" && row.sender_user_name.trim()
+							? row.sender_user_name.trim()
+							: null,
+					title,
+					body,
+					created_at: row.created_at
+				};
+				const body_html = canvasBodyMarkdownToSafeHtml(body);
+				if (body_html) entry.body_html = body_html;
+				canvases.push(entry);
+			}
 			const pinned_message_id = getPinnedCanvasMessageIdFromThreadRow(thread);
 			return res.status(200).json({ canvases, pinned_message_id });
 		} catch (err) {

@@ -8860,7 +8860,8 @@ export async function initChatPage(root, options = {}) {
 			}
 		}
 		challengesPaneTeardown = null;
-		const organizerWasOpen = isChallengesOrganizerSidebarOpen();
+		const organizerWasOpen =
+			isChallengesOrganizerSidebarOpen() || isOpenOrganizerToolsStoredForThread(tid);
 		if (typeof challengesOrganizerSidebarTeardown === 'function') {
 			try {
 				challengesOrganizerSidebarTeardown();
@@ -8907,6 +8908,7 @@ export async function initChatPage(root, options = {}) {
 				const orgApi = challengesChannelModule.mountChallengesOrganizerSidebar(orgHost, {
 					messages,
 					viewerId: Number.isFinite(Number(chatViewerId)) ? Number(chatViewerId) : null,
+					viewerUserName,
 					threadId: tid,
 					postMessage: (body) => postChatMessage(tid, body),
 					patchMessage: (messageId, body) => patchChatMessageBody(messageId, body),
@@ -11058,6 +11060,15 @@ export async function initChatPage(root, options = {}) {
 		ch.textContent = channelLabel;
 		if (!activeCanvasRow) ch.classList.add('chat-page-mobile-chrome-sheet-item--current');
 		body.appendChild(ch);
+		if (canOpenPrivateChannelMembersModal()) {
+			const membersBtn = document.createElement('button');
+			membersBtn.type = 'button';
+			membersBtn.className = 'feed-card-menu-item';
+			membersBtn.dataset.chatPrivateMembersOpen = '';
+			membersBtn.setAttribute('role', 'menuitem');
+			membersBtn.textContent = 'Members';
+			body.appendChild(membersBtn);
+		}
 		if (chatChallengesOrganizerEligible && activePseudoChannelSlug === 'challenges') {
 			const orgMb = document.createElement('button');
 			orgMb.type = 'button';
@@ -11070,22 +11081,54 @@ export async function initChatPage(root, options = {}) {
 			}
 			body.appendChild(orgMb);
 		}
-		for (const c of chatCanvasesList) {
-			const b = document.createElement('button');
-			b.type = 'button';
-			b.className = 'feed-card-menu-item';
-			b.dataset.chatCanvasOpen = String(c.id);
-			b.setAttribute('role', 'menuitem');
-			b.textContent = c.title;
-			if (activeCanvasRow && Number(activeCanvasRow.id) === Number(c.id)) {
-				b.classList.add('chat-page-mobile-chrome-sheet-item--current');
+		const canCreateCanvas = isActiveThreadCanvasEligible() && chatViewerIsFounder;
+		const hasCanvasSection = chatCanvasesList.length > 0 || canCreateCanvas;
+		if (hasCanvasSection) {
+			const sectionLabel = document.createElement('div');
+			sectionLabel.className = 'chat-page-menu-section-muted';
+			sectionLabel.textContent = 'Canvases';
+			body.appendChild(sectionLabel);
+			for (const c of chatCanvasesList) {
+				const row = document.createElement('div');
+				row.className = 'chat-page-menu-canvas-row';
+				const b = document.createElement('button');
+				b.type = 'button';
+				b.className = 'feed-card-menu-item chat-page-menu-canvas-open';
+				b.dataset.chatCanvasOpen = String(c.id);
+				b.setAttribute('role', 'menuitem');
+				b.textContent = c.title;
+				if (activeCanvasRow && Number(activeCanvasRow.id) === Number(c.id)) {
+					b.classList.add('chat-page-mobile-chrome-sheet-item--current');
+				}
+				row.appendChild(b);
+				const isOwner = Number(c?.sender_id) === Number(chatViewerId);
+				if (isOwner) {
+					const editInline = document.createElement('button');
+					editInline.type = 'button';
+					editInline.className = 'chat-page-menu-canvas-edit-inline';
+					editInline.dataset.chatCanvasEditInline = String(c.id);
+					editInline.setAttribute('role', 'menuitem');
+					editInline.setAttribute('aria-label', `Edit canvas: ${String(c.title || 'Canvas')}`);
+					editInline.innerHTML =
+						'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+					row.appendChild(editInline);
+				}
+				body.appendChild(row);
 			}
-			body.appendChild(b);
+			if (canCreateCanvas) {
+				const createBtn = document.createElement('button');
+				createBtn.type = 'button';
+				createBtn.className = 'feed-card-menu-item';
+				createBtn.dataset.chatCanvasCreate = '';
+				createBtn.setAttribute('role', 'menuitem');
+				createBtn.textContent = 'Create canvas…';
+				body.appendChild(createBtn);
+			}
+			const divider = document.createElement('div');
+			divider.className = 'chat-page-mobile-chrome-sheet-divider';
+			divider.setAttribute('aria-hidden', 'true');
+			body.appendChild(divider);
 		}
-		const divider = document.createElement('div');
-		divider.className = 'chat-page-mobile-chrome-sheet-divider';
-		divider.setAttribute('aria-hidden', 'true');
-		body.appendChild(divider);
 		const refresh = document.createElement('button');
 		refresh.type = 'button';
 		refresh.className = 'feed-card-menu-item';
@@ -11093,35 +11136,8 @@ export async function initChatPage(root, options = {}) {
 		refresh.setAttribute('role', 'menuitem');
 		refresh.textContent = 'Refresh';
 		body.appendChild(refresh);
-		if (canOpenPrivateChannelMembersModal()) {
-			const membersBtn = document.createElement('button');
-			membersBtn.type = 'button';
-			membersBtn.className = 'feed-card-menu-item';
-			membersBtn.dataset.chatPrivateMembersOpen = '';
-			membersBtn.setAttribute('role', 'menuitem');
-			membersBtn.textContent = 'Members';
-			body.appendChild(membersBtn);
-		}
-		if (isActiveThreadCanvasEligible() && chatViewerIsFounder) {
-			const createBtn = document.createElement('button');
-			createBtn.type = 'button';
-			createBtn.className = 'feed-card-menu-item';
-			createBtn.dataset.chatCanvasCreate = '';
-			createBtn.setAttribute('role', 'menuitem');
-			createBtn.textContent = 'Create canvas…';
-			body.appendChild(createBtn);
-		}
 		if (activeCanvasRow && isActiveThreadCanvasEligible()) {
 			const isOwner = Number(activeCanvasRow.sender_id) === Number(chatViewerId);
-			if (isOwner) {
-				const edit = document.createElement('button');
-				edit.type = 'button';
-				edit.className = 'feed-card-menu-item';
-				edit.dataset.chatCanvasEdit = '';
-				edit.setAttribute('role', 'menuitem');
-				edit.textContent = 'Edit canvas';
-				body.appendChild(edit);
-			}
 			if (!isChatPageMobileLayout()) {
 				const pinId = activeThreadPinnedCanvasId;
 				const isPinnedRow = Number.isFinite(pinId) && pinId === Number(activeCanvasRow.id);
@@ -11218,6 +11234,7 @@ export async function initChatPage(root, options = {}) {
 		const defaultShell = chatCanvasScope?.querySelector('[data-chat-canvas-default-shell]');
 		const orgShell = chatCanvasScope?.querySelector('[data-chat-challenges-organizer-sidebar]');
 		const panel = getChatCanvasPanelEls().panel;
+		forgetOpenOrganizerToolsForActiveThread();
 		if (defaultShell instanceof HTMLElement) defaultShell.hidden = false;
 		if (orgShell instanceof HTMLElement) orgShell.hidden = true;
 		if (panel instanceof HTMLElement) {
@@ -11240,6 +11257,7 @@ export async function initChatPage(root, options = {}) {
 		if (defaultShell instanceof HTMLElement) defaultShell.hidden = true;
 		orgShell.hidden = false;
 		panel.hidden = false;
+		rememberOpenOrganizerToolsForActiveThread();
 		panel.setAttribute('aria-label', 'Challenge organizer tools');
 		setChatCanvasOpenBodyClass(true);
 		rebuildTopbarMenuDynamic();
@@ -11286,6 +11304,9 @@ export async function initChatPage(root, options = {}) {
 
 	function exitCanvasEditUi({ revert } = {}) {
 		const el = getChatCanvasPanelEls();
+		if (el.panel instanceof HTMLElement) {
+			el.panel.classList.remove('chat-page-canvas-panel--editing');
+		}
 		const rev = revert === true;
 		if (rev && activeCanvasRow) {
 			if (el.titleInput instanceof HTMLInputElement) el.titleInput.value = chatCanvasEditSnapshot.title;
@@ -11307,10 +11328,30 @@ export async function initChatPage(root, options = {}) {
 		if (activeCanvasRow) paintCanvasPanelReadOnly();
 	}
 
+	function normalizeCanvasOwnerUserName(raw) {
+		const trimmed = typeof raw === 'string' ? raw.trim() : '';
+		if (!trimmed) return '';
+		return trimmed.replace(/^@+/, '');
+	}
+
+	function renderCanvasTitleWithOwnerMarkup(titleRaw, ownerUserNameRaw) {
+		const title = String(titleRaw || '').trim() || 'Canvas';
+		const ownerUserName = normalizeCanvasOwnerUserName(ownerUserNameRaw);
+		if (!ownerUserName) {
+			return `<span class="chat-page-canvas-title-main">${escapeHtml(title)}</span>`;
+		}
+		return `<span class="chat-page-canvas-title-main">${escapeHtml(title)}</span><span class="chat-page-canvas-title-owner-sep" aria-hidden="true">•</span><span class="chat-page-canvas-title-owner-muted">@${escapeHtml(ownerUserName)}</span>`;
+	}
+
+	function applyCanvasTitleWithOwner(el, titleRaw, ownerUserNameRaw) {
+		if (!(el instanceof HTMLElement)) return;
+		el.innerHTML = renderCanvasTitleWithOwnerMarkup(titleRaw, ownerUserNameRaw);
+	}
+
 	function paintCanvasPanelReadOnly() {
 		const el = getChatCanvasPanelEls();
 		if (!activeCanvasRow) return;
-		if (el.titleView instanceof HTMLElement) el.titleView.textContent = activeCanvasRow.title;
+		applyCanvasTitleWithOwner(el.titleView, activeCanvasRow.title, activeCanvasRow.sender_user_name);
 		if (el.bodyView instanceof HTMLElement) {
 			/** Prefer server-rendered markdown HTML from GET …/canvases (`body_html`); else linkify plain text. */
 			const serverHtml =
@@ -11343,6 +11384,9 @@ export async function initChatPage(root, options = {}) {
 	function enterCanvasEditUi() {
 		if (!activeCanvasRow) return;
 		const el = getChatCanvasPanelEls();
+		if (el.panel instanceof HTMLElement) {
+			el.panel.classList.add('chat-page-canvas-panel--editing');
+		}
 		chatCanvasEditSnapshot = { title: activeCanvasRow.title, body: activeCanvasRow.body };
 		closeCanvasOwnerDropdown();
 		if (el.titleView instanceof HTMLElement) el.titleView.hidden = true;
@@ -11364,10 +11408,11 @@ export async function initChatPage(root, options = {}) {
 	}
 
 	const CHAT_OPEN_CANVAS_BY_THREAD_LS = 'prsn-chat-open-canvas-by-thread-v1';
+	const CHAT_OPEN_ORGANIZER_TOOLS_BY_THREAD_LS = 'prsn-chat-open-organizer-tools-by-thread-v1';
 
-	function readOpenCanvasByThreadMap() {
+	function readOpenByThreadMap(storageKey) {
 		try {
-			const raw = window.localStorage?.getItem(CHAT_OPEN_CANVAS_BY_THREAD_LS);
+			const raw = window.localStorage?.getItem(storageKey);
 			if (!raw) return {};
 			const o = JSON.parse(raw);
 			return o && typeof o === 'object' && !Array.isArray(o) ? o : {};
@@ -11376,12 +11421,29 @@ export async function initChatPage(root, options = {}) {
 		}
 	}
 
-	function writeOpenCanvasByThreadMap(map) {
+	function writeOpenByThreadMap(storageKey, map) {
 		try {
-			window.localStorage.setItem(CHAT_OPEN_CANVAS_BY_THREAD_LS, JSON.stringify(map));
+			window.localStorage.setItem(storageKey, JSON.stringify(map));
 		} catch {
 			// ignore quota / private mode
 		}
+	}
+
+	function setOpenByThreadPreference(storageKey, threadId, rawValue) {
+		const tid = Number(threadId);
+		if (!Number.isFinite(tid) || tid <= 0) return;
+		const map = readOpenByThreadMap(storageKey);
+		map[String(tid)] = rawValue;
+		writeOpenByThreadMap(storageKey, map);
+	}
+
+	function forgetOpenByThreadPreference(storageKey, threadId) {
+		const tid = Number(threadId);
+		if (!Number.isFinite(tid) || tid <= 0) return;
+		const map = readOpenByThreadMap(storageKey);
+		if (map[String(tid)] == null) return;
+		delete map[String(tid)];
+		writeOpenByThreadMap(storageKey, map);
 	}
 
 	function rememberOpenCanvasForActiveThread(canvasMessageId) {
@@ -11389,26 +11451,36 @@ export async function initChatPage(root, options = {}) {
 		if (tid == null || !Number.isFinite(Number(tid)) || Number(tid) <= 0) return;
 		const mid = Number(canvasMessageId);
 		if (!Number.isFinite(mid) || mid <= 0) return;
-		const map = readOpenCanvasByThreadMap();
-		map[String(tid)] = mid;
-		writeOpenCanvasByThreadMap(map);
+		setOpenByThreadPreference(CHAT_OPEN_CANVAS_BY_THREAD_LS, tid, mid);
 	}
 
 	function forgetOpenCanvasForThread(threadId) {
-		const tid = Number(threadId);
-		if (!Number.isFinite(tid) || tid <= 0) return;
-		const map = readOpenCanvasByThreadMap();
-		if (map[String(tid)] == null) return;
-		delete map[String(tid)];
-		writeOpenCanvasByThreadMap(map);
+		forgetOpenByThreadPreference(CHAT_OPEN_CANVAS_BY_THREAD_LS, threadId);
 	}
 
 	function getStoredOpenCanvasIdForThread(threadId) {
 		const tid = Number(threadId);
 		if (!Number.isFinite(tid) || tid <= 0) return null;
-		const v = readOpenCanvasByThreadMap()[String(tid)];
+		const v = readOpenByThreadMap(CHAT_OPEN_CANVAS_BY_THREAD_LS)[String(tid)];
 		const n = Number(v);
 		return Number.isFinite(n) && n > 0 ? n : null;
+	}
+
+	function rememberOpenOrganizerToolsForActiveThread() {
+		if (activeThreadId == null) return;
+		setOpenByThreadPreference(CHAT_OPEN_ORGANIZER_TOOLS_BY_THREAD_LS, activeThreadId, 1);
+	}
+
+	function forgetOpenOrganizerToolsForActiveThread() {
+		if (activeThreadId == null) return;
+		forgetOpenByThreadPreference(CHAT_OPEN_ORGANIZER_TOOLS_BY_THREAD_LS, activeThreadId);
+	}
+
+	function isOpenOrganizerToolsStoredForThread(threadId) {
+		const tid = Number(threadId);
+		if (!Number.isFinite(tid) || tid <= 0) return false;
+		const v = readOpenByThreadMap(CHAT_OPEN_ORGANIZER_TOOLS_BY_THREAD_LS)[String(tid)];
+		return Number(v) === 1 || v === true;
 	}
 
 	function openChatCanvasPanel(row) {
@@ -11423,9 +11495,16 @@ export async function initChatPage(root, options = {}) {
 			title: String(row.title || '').trim(),
 			body: row.body != null ? String(row.body) : '',
 			body_html: typeof row.body_html === 'string' ? row.body_html : null,
-			sender_id: Number(row.sender_id)
+			sender_id: Number(row.sender_id),
+			sender_user_name:
+				typeof row.sender_user_name === 'string' && row.sender_user_name.trim()
+					? row.sender_user_name.trim()
+					: null
 		};
 		const el = getChatCanvasPanelEls();
+		if (el.panel instanceof HTMLElement) {
+			el.panel.classList.remove('chat-page-canvas-panel--editing');
+		}
 		if (el.editFooter instanceof HTMLElement) el.editFooter.hidden = true;
 		if (el.titleInput instanceof HTMLElement) el.titleInput.hidden = true;
 		if (el.bodyInput instanceof HTMLElement) el.bodyInput.hidden = true;
@@ -11450,6 +11529,9 @@ export async function initChatPage(root, options = {}) {
 		closeCanvasOwnerDropdown();
 		activeCanvasRow = null;
 		const el = getChatCanvasPanelEls();
+		if (el.panel instanceof HTMLElement) {
+			el.panel.classList.remove('chat-page-canvas-panel--editing');
+		}
 		if (el.editFooter instanceof HTMLElement) el.editFooter.hidden = true;
 		if (el.titleInput instanceof HTMLElement) el.titleInput.hidden = true;
 		if (el.bodyInput instanceof HTMLElement) el.bodyInput.hidden = true;
@@ -11524,7 +11606,9 @@ export async function initChatPage(root, options = {}) {
 			btn.classList.toggle('is-active', viewingPinnedInPanel);
 			btn.setAttribute(
 				'aria-label',
-				viewingPinnedInPanel ? `Return to channel from pinned canvas: ${title}` : `Open pinned canvas: ${title}`
+				viewingPinnedInPanel
+					? `Return to channel from pinned canvas: ${title}`
+					: `Open pinned canvas: ${title}`
 			);
 		};
 
@@ -11540,6 +11624,16 @@ export async function initChatPage(root, options = {}) {
 			return;
 		}
 		dyn.replaceChildren();
+		if (canOpenPrivateChannelMembersModal()) {
+			const membersBtn = document.createElement('button');
+			membersBtn.type = 'button';
+			membersBtn.className = 'feed-card-menu-item';
+			membersBtn.dataset.chatPrivateMembersOpen = '';
+			membersBtn.setAttribute('role', 'menuitem');
+			membersBtn.textContent = 'Members';
+			dyn.appendChild(membersBtn);
+		}
+
 		if (activePseudoChannelSlug === 'creations') {
 			const bulkBtn = document.createElement('button');
 			bulkBtn.type = 'button';
@@ -11558,31 +11652,43 @@ export async function initChatPage(root, options = {}) {
 			orgBtn.textContent = 'Organizer tools';
 			dyn.appendChild(orgBtn);
 		}
-		if (canOpenPrivateChannelMembersModal()) {
-			const membersBtn = document.createElement('button');
-			membersBtn.type = 'button';
-			membersBtn.className = 'feed-card-menu-item';
-			membersBtn.dataset.chatPrivateMembersOpen = '';
-			membersBtn.setAttribute('role', 'menuitem');
-			membersBtn.textContent = 'Members';
-			dyn.appendChild(membersBtn);
+		const canCreateCanvas = isActiveThreadCanvasEligible() && chatViewerIsFounder;
+		const hasCanvasSection = chatCanvasesList.length > 0 || canCreateCanvas;
+		if (hasCanvasSection) {
+			const sectionLabel = document.createElement('div');
+			sectionLabel.className = 'chat-page-menu-section-muted';
+			sectionLabel.textContent = 'Canvases';
+			dyn.appendChild(sectionLabel);
+			for (const c of chatCanvasesList) {
+				const b = document.createElement('button');
+				b.type = 'button';
+				b.className = 'feed-card-menu-item';
+				b.dataset.chatCanvasOpen = String(c.id);
+				b.setAttribute('role', 'menuitem');
+				b.textContent = c.title;
+				dyn.appendChild(b);
+			}
+			if (canCreateCanvas) {
+				const createBtn = document.createElement('button');
+				createBtn.type = 'button';
+				createBtn.className = 'feed-card-menu-item';
+				createBtn.dataset.chatCanvasCreate = '';
+				createBtn.setAttribute('role', 'menuitem');
+				createBtn.textContent = 'Create canvas…';
+				dyn.appendChild(createBtn);
+			}
+			const divider = document.createElement('div');
+			divider.className = 'chat-page-menu-divider';
+			divider.setAttribute('aria-hidden', 'true');
+			dyn.appendChild(divider);
 		}
-		if (isActiveThreadCanvasEligible() && chatViewerIsFounder) {
-			const createBtn = document.createElement('button');
-			createBtn.type = 'button';
-			createBtn.className = 'feed-card-menu-item';
-			createBtn.dataset.chatCanvasCreate = '';
-			createBtn.textContent = 'Create canvas…';
-			dyn.appendChild(createBtn);
-		}
-		for (const c of chatCanvasesList) {
-			const b = document.createElement('button');
-			b.type = 'button';
-			b.className = 'feed-card-menu-item';
-			b.dataset.chatCanvasOpen = String(c.id);
-			b.textContent = c.title;
-			dyn.appendChild(b);
-		}
+		const refreshBtn = document.createElement('button');
+		refreshBtn.type = 'button';
+		refreshBtn.className = 'feed-card-menu-item';
+		refreshBtn.dataset.chatMobileChromeRefresh = '';
+		refreshBtn.setAttribute('role', 'menuitem');
+		refreshBtn.textContent = 'Refresh';
+		dyn.appendChild(refreshBtn);
 		rebuildMobileChromeSheet();
 		syncTopbarPinnedCanvasButton();
 	};
@@ -11626,7 +11732,11 @@ export async function initChatPage(root, options = {}) {
 					title: String(up.title || '').trim(),
 					body: up.body != null ? String(up.body) : '',
 					body_html: typeof up.body_html === 'string' ? up.body_html : null,
-					sender_id: Number(up.sender_id)
+					sender_id: Number(up.sender_id),
+					sender_user_name:
+						typeof up.sender_user_name === 'string' && up.sender_user_name.trim()
+							? up.sender_user_name.trim()
+							: null
 				};
 				const el = getChatCanvasPanelEls();
 				const editing = el.editFooter instanceof HTMLElement && !el.editFooter.hidden;
@@ -11742,12 +11852,24 @@ export async function initChatPage(root, options = {}) {
 				await refreshChatCanvasesList();
 				await loadMessages();
 				if (Number.isFinite(id) && id > 0) {
-					const row = chatCanvasesList.find((c) => Number(c.id) === id) || {
+					const rowFromList = chatCanvasesList.find((c) => Number(c.id) === id) || null;
+					const row = rowFromList || {
 						id,
 						title,
 						body,
-						sender_id: chatViewerId
+						sender_id: chatViewerId,
+						sender_user_name: null
 					};
+					const meta = (await ensureThreadMetaById(tid)) || chatPrivateThreadMetaById(tid);
+					if (
+						isPrivateChannelThreadMeta(meta) &&
+						String(row.body || '').trim() === '[Encrypted message]'
+					) {
+						// Keep author-visible plaintext for the just-created canvas panel even if
+						// the immediate canvases refresh cannot decrypt yet.
+						row.body = body;
+						row.body_html = null;
+					}
 					openChatCanvasPanel(row);
 				}
 			} catch (err) {
@@ -12049,6 +12171,20 @@ export async function initChatPage(root, options = {}) {
 			if (row) openChatCanvasPanel(row);
 			return;
 		}
+		const editInlineEl = t.closest('[data-chat-canvas-edit-inline]');
+		if (editInlineEl instanceof HTMLElement) {
+			e.preventDefault();
+			e.stopPropagation();
+			closeTopbarMenu();
+			closeMobileChromeSheet();
+			const id = Number(editInlineEl.getAttribute('data-chat-canvas-edit-inline'));
+			const row = chatCanvasesList.find((c) => Number(c.id) === id);
+			if (row) {
+				openChatCanvasPanel(row);
+				enterCanvasEditUi();
+			}
+			return;
+		}
 		if (t.closest('[data-chat-canvas-close]')) {
 			e.preventDefault();
 			if (isChallengesOrganizerSidebarOpen()) {
@@ -12178,7 +12314,11 @@ export async function initChatPage(root, options = {}) {
 							title: cm?.title || title,
 							body: msgRow.body != null ? String(msgRow.body) : body,
 							body_html: null,
-							sender_id: Number(msgRow.sender_id)
+							sender_id: Number(msgRow.sender_id),
+							sender_user_name:
+								typeof msgRow.sender_user_name === 'string' && msgRow.sender_user_name.trim()
+									? msgRow.sender_user_name.trim()
+									: null
 						};
 					}
 					exitCanvasEditUi({ revert: false });

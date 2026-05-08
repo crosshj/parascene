@@ -70,6 +70,7 @@ async function hydrateChallengeOrganizerStatsThumbs(rootEl) {
  * @param {{
  *   messages: object[],
  *   viewerId: number | null,
+ *   viewerUserName?: string | null,
  *   threadId: number,
  *   postMessage: (body: string) => Promise<{ ok: boolean, error?: string }>,
  *   patchMessage?: (messageId: number, body: string) => Promise<{ ok: boolean, error?: string }>,
@@ -80,6 +81,18 @@ async function hydrateChallengeOrganizerStatsThumbs(rootEl) {
  * }} opts — icon helpers should come from the same versioned `svg-strings` import as `chat.js` (avoid an extra uncached static import here).
  */
 export function mountChallengesOrganizerSidebar(host, opts) {
+	const parseExcludedUsernames = (raw) => {
+		const seen = new Set();
+		return String(raw || '')
+			.split(',')
+			.map((part) => part.trim().replace(/^@+/, '').toLowerCase())
+			.filter((name) => {
+				if (!name || seen.has(name)) return false;
+				seen.add(name);
+				return true;
+			});
+	};
+
 	const setOrganizerModalOpenClass = (on) => {
 		try {
 			document.body?.classList.toggle('chat-page--challenges-organizer-modal-open', Boolean(on));
@@ -106,9 +119,12 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 					`<svg class="${String(cls || '').trim()}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
 	let rowByChallengeId = new Map();
 	let activeStatsRequestToken = 0;
+	/** @type {{ challengeTitle: string, data: { topCreations?: object[], topSubmitters?: object[], topVoters?: object[] }, excludedUserNames: string[] } | null} */
+	let activeStatsModalState = null;
 
 	const closeModal = () => {
 		activeStatsRequestToken += 1;
+		activeStatsModalState = null;
 		const modalEl = host.querySelector('[data-challenges-organizer-modal]');
 		if (!(modalEl instanceof HTMLElement)) {
 			setOrganizerModalOpenClass(false);
@@ -184,11 +200,22 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 				});
 				return;
 			}
-			modalBody.innerHTML = renderChallengeOrganizerStatsModalInnerHtml({
+			const defaultExcludedUserNames = parseExcludedUsernames(opts.viewerUserName || '');
+			activeStatsModalState = {
 				challengeTitle,
-				topCreations: data.topCreations,
-				topSubmitters: data.topSubmitters,
-				topVoters: data.topVoters
+				data: {
+					topCreations: data.topCreations,
+					topSubmitters: data.topSubmitters,
+					topVoters: data.topVoters
+				},
+				excludedUserNames: defaultExcludedUserNames
+			};
+			modalBody.innerHTML = renderChallengeOrganizerStatsModalInnerHtml({
+				challengeTitle: activeStatsModalState.challengeTitle,
+				topCreations: activeStatsModalState.data.topCreations,
+				topSubmitters: activeStatsModalState.data.topSubmitters,
+				topVoters: activeStatsModalState.data.topVoters,
+				excludedUserNames: activeStatsModalState.excludedUserNames
 			});
 			if (requestToken !== activeStatsRequestToken) return;
 			void hydrateChallengeOrganizerStatsThumbs(modalBody);
@@ -216,8 +243,25 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 
 	const onAdminConfigSubmit = async (e) => {
 		e.preventDefault();
-		const adminForm = e.target;
-		if (!(adminForm instanceof HTMLFormElement)) return;
+		const form = e.target;
+		if (!(form instanceof HTMLFormElement)) return;
+		if (form.matches('[data-challenge-stats-filter-form]')) {
+			const modalBody = host.querySelector('[data-challenges-organizer-modal-body]');
+			if (!(modalBody instanceof HTMLElement) || !activeStatsModalState) return;
+			const input = form.querySelector('[data-challenge-stats-filter-input]');
+			if (!(input instanceof HTMLInputElement)) return;
+			activeStatsModalState.excludedUserNames = parseExcludedUsernames(input.value);
+			modalBody.innerHTML = renderChallengeOrganizerStatsModalInnerHtml({
+				challengeTitle: activeStatsModalState.challengeTitle,
+				topCreations: activeStatsModalState.data.topCreations,
+				topSubmitters: activeStatsModalState.data.topSubmitters,
+				topVoters: activeStatsModalState.data.topVoters,
+				excludedUserNames: activeStatsModalState.excludedUserNames
+			});
+			void hydrateChallengeOrganizerStatsThumbs(modalBody);
+			return;
+		}
+		const adminForm = form;
 		const modalEl = host.querySelector('[data-challenges-organizer-modal]');
 		if (!modalEl?.contains(adminForm)) return;
 
