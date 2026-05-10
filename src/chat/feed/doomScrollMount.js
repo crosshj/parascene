@@ -878,6 +878,24 @@ export async function mountChatDoomScroll(opts) {
 
 	scroller.addEventListener('click', bindFollowClick);
 
+	/** Same minted URL as app-modal-share (`POST /api/create/images/:id/share` → `sh.parascene.com/s/...`). */
+	async function resolveParasceneShareUrl(creationId) {
+		const id = String(creationId || '').trim();
+		if (!id) return null;
+		try {
+			const res = await fetch(`/api/create/images/${encodeURIComponent(id)}/share`, {
+				method: 'POST',
+				credentials: 'include'
+			});
+			if (!res.ok) return null;
+			const data = await res.json().catch(() => null);
+			const u = typeof data?.url === 'string' ? data.url.trim() : '';
+			return u || null;
+		} catch {
+			return null;
+		}
+	}
+
 	function onShareClick(ev) {
 		const t = ev.target;
 		if (!(t instanceof Element)) return;
@@ -888,14 +906,24 @@ export async function mountChatDoomScroll(opts) {
 		if (!cid) return;
 		ev.preventDefault();
 		ev.stopPropagation();
-		const url = `${window.location.origin}/creations/${encodeURIComponent(cid)}`;
-		if (navigator.share) {
-			navigator.share({ url }).catch(() => {
-				copyUrl(url);
-			});
-		} else {
-			copyUrl(url);
-		}
+		if (btn.dataset.shareBusy === '1') return;
+		btn.dataset.shareBusy = '1';
+		const fallbackUrl = `${window.location.origin}/creations/${encodeURIComponent(cid)}`;
+		void (async () => {
+			try {
+				const minted = await resolveParasceneShareUrl(cid);
+				const url = minted || fallbackUrl;
+				if (navigator.share) {
+					await navigator.share({ url }).catch(() => {
+						copyUrl(url);
+					});
+				} else {
+					copyUrl(url);
+				}
+			} finally {
+				delete btn.dataset.shareBusy;
+			}
+		})();
 	}
 
 	function copyUrl(url) {
