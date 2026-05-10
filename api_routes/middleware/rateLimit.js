@@ -25,6 +25,19 @@ function resolveClientIp(req) {
 		.trim() || "unknown";
 }
 
+async function ensureRateLimitWindowTtl(r, key, windowSec, current) {
+	if (current === 1) {
+		await r.expire(key, windowSec);
+		return;
+	}
+	const ttlRaw = await r.ttl(key);
+	const ttlNum = typeof ttlRaw === "number" ? ttlRaw : Number(ttlRaw);
+	// Redis: -1 = key exists but has no expiry (e.g. failed EXPIRE after INCR). Without TTL the counter never resets.
+	if (!Number.isFinite(ttlNum) || ttlNum === -1) {
+		await r.expire(key, windowSec);
+	}
+}
+
 /**
  * Basic fixed-window limiter backed by Upstash Redis.
  * Defaults to fail-open: if Redis check fails, request is allowed.
@@ -58,14 +71,15 @@ function createRateLimitMiddleware({
 			const key = `rl:${normalizedBucket}:${keyId}`;
 			const r = getRedis();
 			const current = Number(await r.incr(key));
-			if (current === 1) await r.expire(key, normalizedWindowSec);
+			await ensureRateLimitWindowTtl(r, key, normalizedWindowSec, current);
 
 			const remaining = Math.max(0, max - current);
 			res.setHeader("X-RateLimit-Limit", String(max));
 			res.setHeader("X-RateLimit-Remaining", String(remaining));
 
 			if (current > max) {
-				const ttl = Number(await r.ttl(key));
+				const ttlRaw = await r.ttl(key);
+				const ttl = typeof ttlRaw === "number" ? ttlRaw : Number(ttlRaw);
 				if (Number.isFinite(ttl) && ttl > 0) {
 					res.setHeader("Retry-After", String(ttl));
 				}
@@ -74,9 +88,11 @@ function createRateLimitMiddleware({
 					identifier: keyId,
 					limit: max,
 					current,
-					retry_after_sec: Number.isFinite(ttl) ? Math.max(0, ttl) : null,
+					ttl_sec_raw: Number.isFinite(ttl) ? ttl : ttlRaw ?? null,
+					retry_after_sec: Number.isFinite(ttl) && ttl > 0 ? ttl : null,
 					user_id: Number.isFinite(Number(req?.auth?.userId)) ? Number(req.auth.userId) : null,
 					api_key_auth: req?.auth?.apiKeyAuth === true,
+					integration_access: req?.auth?.integrationAccess === true,
 					ip: resolveClientIp(req),
 					method: String(req.method || "").toUpperCase(),
 					path: req.path
