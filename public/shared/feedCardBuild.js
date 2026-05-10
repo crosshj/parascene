@@ -1018,3 +1018,190 @@ export function createFeedItemCard(item, itemIndex, options = {}) {
 	}
 	return buildFeedCreationCard(item, itemIndex, setupFeedVideo, hideFeedCardMetadata, preferThumbnail, creationsBulkChrome);
 }
+
+/**
+ * Feed row is a creation with playable video (chat #feed mobile spotlight strip).
+ * @param {object|null|undefined} item
+ * @returns {boolean}
+ */
+export function isFeedRowVideoCreation(item) {
+	if (!item || typeof item !== "object") return false;
+	const type = item.type;
+	if (type === "tip" || type === "blog_post" || type === "engagement") return false;
+	const mediaType = typeof item.media_type === "string" ? item.media_type.trim().toLowerCase() : "image";
+	const videoUrl = typeof item.video_url === "string" ? item.video_url.trim() : "";
+	return mediaType === "video" && Boolean(videoUrl);
+}
+
+/**
+ * First `max` video creations in feed order, plus remaining rows with those creations removed (no duplicate cards below).
+ * @param {object[]} ordered
+ * @param {number} [max]
+ * @returns {{ spotlightVideos: object[], remainingItems: object[] }}
+ */
+export function partitionFeedVideosForChatSpotlight(ordered, max = 4) {
+	const lim = Math.max(0, Math.min(10, Number(max) || 4));
+	const spotlightVideos = [];
+	const takenIds = new Set();
+	if (Array.isArray(ordered)) {
+		for (const item of ordered) {
+			if (spotlightVideos.length >= lim) break;
+			if (!isFeedRowVideoCreation(item)) continue;
+			const rawId = item.created_image_id ?? item.id;
+			if (rawId == null || rawId === "") continue;
+			spotlightVideos.push(item);
+			takenIds.add(String(rawId));
+		}
+	}
+	const remainingItems = Array.isArray(ordered)
+		? ordered.filter((item) => {
+				const rawId = item?.created_image_id ?? item?.id;
+				if (rawId == null) return true;
+				return !takenIds.has(String(rawId));
+			})
+		: [];
+	return { spotlightVideos, remainingItems };
+}
+
+/**
+ * Chat spotlight strip is visually loud; stored titles are often ALL CAPS while list cards
+ * look calmer. Same API field as `.feed-card-title` — this only adjusts overlay display when
+ * the string is overwhelmingly uppercase (leaves mixed-case titles untouched).
+ * @param {string} raw
+ * @returns {string}
+ */
+function softenShoutingFeedTitleForSpotlight(raw) {
+	if (typeof raw !== "string") return "";
+	const s = raw.trim();
+	if (!s) return "";
+	let letterCount = 0;
+	let upperLetterCount = 0;
+	for (let i = 0; i < s.length; i++) {
+		const c = s[i];
+		const lower = c.toLowerCase();
+		const upper = c.toUpperCase();
+		if (lower !== upper) {
+			letterCount++;
+			if (c === upper) upperLetterCount++;
+		}
+	}
+	if (letterCount < 4 || upperLetterCount / letterCount < 0.75) return s;
+
+	return s.replace(/[A-Za-z\u00C0-\u024F]+/g, (word) => {
+		if (word.length <= 2 && word === word.toUpperCase()) return word;
+		if (/^[IVXLCDM]+$/i.test(word)) return word;
+		return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+	});
+}
+
+/**
+ * Single spotlight tile: poster/thumbnail only — no `<video>` (chat #feed mobile 2×2 strip).
+ * @param {object} item
+ * @param {number} itemIndex
+ * @returns {HTMLDivElement}
+ */
+export function createFeedSpotlightVideoTile(item, itemIndex) {
+	const wrap = document.createElement("div");
+	wrap.className = "chat-feed-mobile-spotlight-cell";
+
+	const creationId = item?.created_image_id ?? item?.id;
+	const href = creationId != null ? `/creations/${creationId}` : "#";
+	const titleRaw = typeof item.title === "string" ? item.title.trim() : "";
+	const titleDisplay = softenShoutingFeedTitleForSpotlight(titleRaw);
+
+	const mediaType = typeof item.media_type === "string" ? item.media_type : "image";
+	const videoUrl = typeof item.video_url === "string" ? item.video_url.trim() : "";
+	const isVideo = mediaType === "video" && Boolean(videoUrl);
+
+	const inner = document.createElement("div");
+	inner.className = "chat-feed-mobile-spotlight-cell-inner";
+
+	const hit = document.createElement("a");
+	hit.className = "chat-feed-mobile-spotlight-cell-hit";
+	hit.href = href;
+	hit.setAttribute("aria-label", titleDisplay ? `Open creation: ${titleDisplay}` : "Open creation");
+
+	const imageContainer = document.createElement("div");
+	imageContainer.className = `feed-card-image chat-feed-mobile-spotlight-cell-media${item.nsfw ? " nsfw" : ""}`;
+
+	const img = document.createElement("img");
+	img.className = "feed-card-img";
+	img.alt = "";
+	img.decoding = "async";
+
+	imageContainer.appendChild(img);
+	if (titleRaw) {
+		const overlay = document.createElement("div");
+		overlay.className = "chat-feed-mobile-spotlight-overlay";
+		overlay.setAttribute("aria-hidden", "true");
+		const stack = document.createElement("div");
+		stack.className = "chat-feed-mobile-spotlight-overlay-stack";
+		const titleEl = document.createElement("p");
+		titleEl.className = "image-overlay-text chat-feed-mobile-spotlight-overlay-title";
+		titleEl.textContent = titleDisplay;
+		stack.appendChild(titleEl);
+		overlay.appendChild(stack);
+		imageContainer.appendChild(overlay);
+	}
+	hit.appendChild(imageContainer);
+
+	const moreBtn = document.createElement("button");
+	moreBtn.type = "button";
+	moreBtn.className = "chat-feed-mobile-spotlight-more";
+	moreBtn.setAttribute("aria-label", "More options");
+	moreBtn.innerHTML =
+		'<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="12" cy="19" r="1.6"></circle></svg>';
+	moreBtn.addEventListener("click", (e) => {
+		e.preventDefault();
+		e.stopPropagation();
+	});
+
+	inner.appendChild(hit);
+	inner.appendChild(moreBtn);
+	wrap.appendChild(inner);
+
+	const displayUrl = feedItemCardImageUrl(item, false);
+	const processing = isFeedCreationImageProcessing(item);
+	const moderated = item?.is_moderated_error === true;
+
+	if (!isFeedRowVideoCreation(item)) {
+		markFeedCardImageUnavailable(imageContainer, img, {
+			state: moderated ? "moderated" : "missing",
+			moderated
+		});
+		return wrap;
+	}
+
+	if (img && imageContainer) {
+		if (processing) {
+			applyFeedCardCreationProcessingState(imageContainer, img);
+		} else {
+			const hasGroupCarousel = !isVideo && setupFeedCardGroupCarousel(imageContainer, item);
+			if (hasGroupCarousel) {
+				teardownFeedCardCreationProcessingUi(imageContainer);
+				img?.removeAttribute?.("src");
+				img?.removeAttribute?.("data-feed-image-url");
+				img?.style?.removeProperty?.("opacity");
+				imageContainer.classList.remove("loading", "error", "feed-card-image-error-moderated");
+				imageContainer.removeAttribute("data-feed-img-state");
+				imageContainer.removeAttribute("aria-label");
+				imageContainer.removeAttribute("role");
+				const modIcon = imageContainer.querySelector(".route-media-error-moderated-icon");
+				if (modIcon) modIcon.remove();
+				imageContainer.classList.add("loaded");
+			} else if (!displayUrl) {
+				markFeedCardImageUnavailable(imageContainer, img, {
+					state: moderated ? "moderated" : "missing",
+					moderated
+				});
+			} else {
+				attachFeedCardImage(img, imageContainer, item, itemIndex, false);
+				if (!isVideo) {
+					setupFeedCardGroupCarousel(imageContainer, item);
+				}
+			}
+		}
+	}
+
+	return wrap;
+}

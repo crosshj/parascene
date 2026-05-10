@@ -1995,7 +1995,7 @@ export async function openDb() {
 					return Promise.resolve([]);
 				}
 				const stmt = db.prepare(
-					`SELECT fi.id, fi.title, fi.summary, fi.author, fi.tags, fi.created_at, 
+					`SELECT fi.id, COALESCE(NULLIF(TRIM(ci.title), ''), fi.title) AS title, fi.summary, fi.author, fi.tags, fi.created_at, 
                   fi.created_image_id, ci.filename, ci.file_path, ci.user_id, ci.meta,
                   up.user_name AS author_user_name,
                   up.display_name AS author_display_name,
@@ -2042,7 +2042,7 @@ export async function openDb() {
 				const lim = Math.min(Math.max(0, Number(limit) || 24), 500);
 				const off = Math.max(0, Number(offset) || 0);
 				const stmt = db.prepare(
-					`SELECT fi.id, fi.title, fi.summary, fi.author, fi.tags, fi.created_at,
+					`SELECT fi.id, COALESCE(NULLIF(TRIM(ci.title), ''), fi.title) AS title, fi.summary, fi.author, fi.tags, fi.created_at,
                   fi.created_image_id, ci.filename, ci.file_path, ci.user_id, ci.meta,
                   up.user_name AS author_user_name,
                   up.display_name AS author_display_name,
@@ -2086,7 +2086,7 @@ export async function openDb() {
 			all: async (userId) => {
 				// All published feed items, newest first (no viewer/follow filtering). Used for Advanced create "Newest".
 				const stmt = db.prepare(
-					`SELECT fi.id, fi.title, fi.summary, fi.author, fi.tags, fi.created_at,
+					`SELECT fi.id, COALESCE(NULLIF(TRIM(ci.title), ''), fi.title) AS title, fi.summary, fi.author, fi.tags, fi.created_at,
                   fi.created_image_id, ci.filename, ci.file_path, ci.user_id,
                   up.user_name AS author_user_name,
                   up.display_name AS author_display_name,
@@ -2121,7 +2121,7 @@ export async function openDb() {
 					return Promise.resolve([]);
 				}
 				const stmt = db.prepare(
-					`SELECT fi.id, fi.title, fi.summary, fi.author, fi.tags, fi.created_at,
+					`SELECT fi.id, COALESCE(NULLIF(TRIM(ci.title), ''), fi.title) AS title, fi.summary, fi.author, fi.tags, fi.created_at,
                   fi.created_image_id, ci.filename, ci.file_path, ci.user_id,
                   up.user_name AS author_user_name,
                   up.display_name AS author_display_name,
@@ -2302,7 +2302,7 @@ export async function openDb() {
 					return Promise.resolve([]);
 				}
 				const stmt = db.prepare(
-					`SELECT fi.id, fi.title, fi.summary, fi.author, fi.tags, fi.created_at, 
+					`SELECT fi.id, COALESCE(NULLIF(TRIM(ci.title), ''), fi.title) AS title, fi.summary, fi.author, fi.tags, fi.created_at, 
                   fi.created_image_id, ci.filename, ci.file_path, ci.user_id, ci.meta,
                   up.user_name AS author_user_name,
                   up.display_name AS author_display_name,
@@ -2350,7 +2350,7 @@ export async function openDb() {
 				const safeOffset = Math.max(0, Number(offset) || 0);
 				// Main query without full-table like/comment aggregates (biggest bottleneck)
 				const stmt = db.prepare(
-					`SELECT fi.id, fi.title, fi.summary, fi.author, fi.tags, fi.created_at,
+					`SELECT fi.id, COALESCE(NULLIF(TRIM(ci.title), ''), fi.title) AS title, fi.summary, fi.author, fi.tags, fi.created_at,
                   fi.created_image_id, ci.filename, ci.file_path, ci.user_id, ci.meta,
                   up.user_name AS author_user_name,
                   up.display_name AS author_display_name,

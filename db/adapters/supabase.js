@@ -34,6 +34,14 @@ function prefixedTable(name) {
 	return `prsn_${name}`;
 }
 
+/** Prefer `created_images.title` when set so API matches creation detail / edits (`feed_items.title` can lag). */
+function resolveFeedRowTitle(creationTitle, feedItemTitle) {
+	const ct = typeof creationTitle === "string" ? creationTitle.trim() : "";
+	if (ct) return ct;
+	if (feedItemTitle == null) return "";
+	return String(feedItemTitle);
+}
+
 export function openDb() {
 	const supabaseUrl = requireEnv("SUPABASE_URL");
 	const supabaseKey = requireEnv("SUPABASE_ANON_KEY");
@@ -2403,7 +2411,7 @@ export function openDb() {
 				const { data, error } = await serviceClient
 					.from(prefixedTable("feed_items"))
 					.select(
-						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images(filename, file_path, user_id, unavailable_at, meta)"
+						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images(filename, file_path, user_id, unavailable_at, meta, title)"
 					)
 					.order("created_at", { ascending: false });
 				if (error) throw error;
@@ -2415,8 +2423,10 @@ export function openDb() {
 					const unavailable_at = prsn_created_images?.unavailable_at ?? null;
 					const meta = prsn_created_images?.meta;
 					const nsfw = !!(meta && typeof meta === "object" && meta.nsfw);
+					const title = resolveFeedRowTitle(prsn_created_images?.title, rest.title);
 					return {
 						...rest,
+						title,
 						filename,
 						user_id,
 						unavailable_at,
@@ -2551,28 +2561,52 @@ export function openDb() {
 					if (!rpcResult.error && Array.isArray(rpcResult.data)) {
 						const all = rpcResult.data;
 						const hasMore = all.length > safeLimit;
-						const rows = all.slice(0, safeLimit).map((row) => ({
-							id: row.id,
-							title: row.title,
-							summary: row.summary,
-							author: row.author,
-							tags: row.tags,
-							created_at: row.created_at,
-							created_image_id: row.created_image_id,
-							filename: row.filename,
-							file_path: row.file_path,
-							user_id: row.user_id,
-							meta: row.meta,
-							url: row.url,
-							like_count: Number(row.like_count ?? 0),
-							comment_count: Number(row.comment_count ?? 0),
-							viewer_liked: Boolean(row.viewer_liked),
-							nsfw: Boolean(row.nsfw),
-							author_user_name: row.author_user_name ?? null,
-							author_display_name: row.author_display_name ?? null,
-							author_avatar_url: row.author_avatar_url ?? null,
-							author_plan: row.author_plan ?? "free"
-						}));
+						const pageSlice = all.slice(0, safeLimit);
+						const creationIds = pageSlice
+							.map((row) => row.created_image_id)
+							.filter((cid) => cid != null && cid !== undefined)
+							.map((cid) => Number(cid))
+							.filter((cid) => Number.isFinite(cid) && cid > 0);
+						let titleByCreationId = new Map();
+						if (creationIds.length > 0) {
+							const { data: titleRows, error: titleErr } = await serviceClient
+								.from(prefixedTable("created_images"))
+								.select("id, title")
+								.in("id", creationIds);
+							if (!titleErr && Array.isArray(titleRows)) {
+								titleByCreationId = new Map(titleRows.map((r) => [String(r.id), r.title]));
+							}
+						}
+						const rows = pageSlice.map((row) => {
+							const key =
+								row.created_image_id != null && row.created_image_id !== undefined
+									? String(row.created_image_id)
+									: null;
+							const ct = key ? titleByCreationId.get(key) : undefined;
+							const title = resolveFeedRowTitle(ct, row.title);
+							return {
+								id: row.id,
+								title,
+								summary: row.summary,
+								author: row.author,
+								tags: row.tags,
+								created_at: row.created_at,
+								created_image_id: row.created_image_id,
+								filename: row.filename,
+								file_path: row.file_path,
+								user_id: row.user_id,
+								meta: row.meta,
+								url: row.url,
+								like_count: Number(row.like_count ?? 0),
+								comment_count: Number(row.comment_count ?? 0),
+								viewer_liked: Boolean(row.viewer_liked),
+								nsfw: Boolean(row.nsfw),
+								author_user_name: row.author_user_name ?? null,
+								author_display_name: row.author_display_name ?? null,
+								author_avatar_url: row.author_avatar_url ?? null,
+								author_plan: row.author_plan ?? "free"
+							};
+						});
 						return { rows, hasMore };
 					}
 				}
@@ -2602,7 +2636,7 @@ export function openDb() {
 				const { data: pageData, error: pageError } = await serviceClient
 					.from(prefixedTable("feed_items"))
 					.select(
-						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images!inner(filename, file_path, user_id, unavailable_at, meta)"
+						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images!inner(filename, file_path, user_id, unavailable_at, meta, title)"
 					)
 					.in("prsn_created_images.user_id", followingIds)
 					.order("created_at", { ascending: false })
@@ -2617,8 +2651,10 @@ export function openDb() {
 					const unavailable_at = prsn_created_images?.unavailable_at ?? null;
 					const meta = prsn_created_images?.meta;
 					const nsfw = !!(meta && typeof meta === "object" && meta.nsfw);
+					const title = resolveFeedRowTitle(prsn_created_images?.title, rest.title);
 					return {
 						...rest,
+						title,
 						filename,
 						user_id,
 						unavailable_at,
@@ -2770,7 +2806,7 @@ export function openDb() {
 				const { data, error } = await serviceClient
 					.from(prefixedTable("feed_items"))
 					.select(
-						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images(filename, file_path, user_id, meta)"
+						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images(filename, file_path, user_id, meta, title)"
 					)
 					.order("created_at", { ascending: false });
 				if (error) throw error;
@@ -2782,8 +2818,10 @@ export function openDb() {
 					const user_id = prsn_created_images?.user_id ?? null;
 					const meta = prsn_created_images?.meta ?? null;
 					const nsfw = !!(meta && typeof meta === "object" && meta.nsfw);
+					const title = resolveFeedRowTitle(prsn_created_images?.title, rest.title);
 					return {
 						...rest,
+						title,
 						filename,
 						user_id,
 						meta,
@@ -2927,7 +2965,7 @@ export function openDb() {
 				let query = serviceClient
 					.from(prefixedTable("feed_items"))
 					.select(
-						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images!inner(filename, file_path, user_id, unavailable_at, meta)"
+						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images!inner(filename, file_path, user_id, unavailable_at, meta, title)"
 					)
 					.not("prsn_created_images.user_id", "is", null)
 					.is("prsn_created_images.unavailable_at", null)
@@ -2949,8 +2987,10 @@ export function openDb() {
 						const meta = prsn_created_images?.meta ?? null;
 						const nsfw = !!(meta && typeof meta === "object" && meta.nsfw);
 						const resolvedUrl = file_path || (filename ? `/api/images/created/${filename}` : null);
+						const title = resolveFeedRowTitle(prsn_created_images?.title, rest.title);
 						return {
 							...rest,
+							title,
 							filename,
 							user_id,
 							meta,
@@ -3043,7 +3083,7 @@ export function openDb() {
 				const { data, error } = await serviceClient
 					.from(prefixedTable("feed_items"))
 					.select(
-						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images(filename, file_path, user_id)"
+						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images(filename, file_path, user_id, title)"
 					)
 					.order("created_at", { ascending: false });
 				if (error) throw error;
@@ -3053,8 +3093,10 @@ export function openDb() {
 					const filename = prsn_created_images?.filename ?? null;
 					const file_path = prsn_created_images?.file_path ?? null;
 					const user_id = prsn_created_images?.user_id ?? null;
+					const title = resolveFeedRowTitle(prsn_created_images?.title, rest.title);
 					return {
 						...rest,
+						title,
 						filename,
 						user_id,
 						url: file_path || (filename ? `/api/images/created/${filename}` : null),
@@ -3132,7 +3174,7 @@ export function openDb() {
 				const { data, error } = await serviceClient
 					.from(prefixedTable("feed_items"))
 					.select(
-						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images(filename, file_path, user_id, meta)"
+						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images(filename, file_path, user_id, meta, title)"
 					)
 					.order("created_at", { ascending: false });
 				if (error) throw error;
@@ -3144,8 +3186,10 @@ export function openDb() {
 					const user_id = prsn_created_images?.user_id ?? null;
 					const meta = prsn_created_images?.meta;
 					const nsfw = !!(meta && typeof meta === "object" && meta.nsfw);
+					const title = resolveFeedRowTitle(prsn_created_images?.title, rest.title);
 					return {
 						...rest,
+						title,
 						filename,
 						user_id,
 						nsfw,

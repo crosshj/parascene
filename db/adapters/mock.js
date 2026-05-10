@@ -28,6 +28,12 @@ const oauth_grants = [];
 
 const created_images = [];
 const created_images_anon = [];
+
+function feedTitlePreferCreation(creationTitle, feedItemTitle) {
+	const ct = typeof creationTitle === "string" ? creationTitle.trim() : "";
+	if (ct) return ct;
+	return feedItemTitle ?? "";
+}
 const try_requests = [];
 const sessions = [];
 const user_credits = [];
@@ -1444,8 +1450,10 @@ export function openDb() {
 					const authorPlan = user?.meta?.plan === "founder" ? "founder" : "free";
 					const meta = ci?.meta;
 					const nsfw = !!(meta && typeof meta === "object" && meta.nsfw);
+					const title = feedTitlePreferCreation(ci?.title, item.title);
 					return {
 						...item,
+						title,
 						user_id: authorId,
 						author_user_name: profile?.user_name ?? null,
 						author_display_name: profile?.display_name ?? null,
@@ -1492,8 +1500,10 @@ export function openDb() {
 				return filtered.map((item) => {
 					const profile = user_profiles.find((p) => p.user_id === Number(item.user_id));
 					const ci = created_images.find((c) => Number(c.id) === Number(item.created_image_id));
+					const title = feedTitlePreferCreation(ci?.title, item.title);
 					return {
 						...item,
+						title,
 						author_user_name: profile?.user_name ?? null,
 						author_display_name: profile?.display_name ?? null,
 						author_avatar_url: profile?.avatar_url ?? null,
@@ -1533,8 +1543,10 @@ export function openDb() {
 					const profile = user_profiles.find((p) => p.user_id === Number(item.user_id));
 					const ci = created_images.find((c) => Number(c.id) === Number(item.created_image_id));
 					const url = item.url ?? (ci?.file_path ?? (ci?.filename ? `/api/images/created/${ci.filename}` : null));
+					const title = feedTitlePreferCreation(ci?.title, item.title);
 					return {
 						...item,
+						title,
 						url,
 						author_user_name: profile?.user_name ?? null,
 						author_display_name: profile?.display_name ?? null,
@@ -1569,11 +1581,14 @@ export function openDb() {
 					.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
 				return filtered.map((item) => {
 					const cid = Number(item.created_image_id);
+					const ci = created_images.find((c) => Number(c.id) === cid);
+					const title = feedTitlePreferCreation(ci?.title, item.title);
 					const likeCount = likes_created_image.filter((l) => Number(l.created_image_id) === cid).length;
 					const commentCount = comments_created_image.filter((c) => Number(c.created_image_id) === cid).length;
 					const profile = user_profiles.find((p) => p.user_id === Number(item.user_id));
 					return {
 						...item,
+						title,
 						like_count: likeCount,
 						comment_count: commentCount,
 						viewer_liked: false,
@@ -1614,11 +1629,13 @@ export function openDb() {
 					const cid = Number(item.created_image_id);
 					const ci = created_images.find((c) => Number(c.id) === cid);
 					const nsfw = !!(ci?.meta && typeof ci.meta === "object" && ci.meta.nsfw);
+					const title = feedTitlePreferCreation(ci?.title, item.title);
 					const likeCount = likes_created_image.filter((l) => Number(l.created_image_id) === cid).length;
 					const commentCount = comments_created_image.filter((c) => Number(c.created_image_id) === cid).length;
 					const profile = user_profiles.find((p) => p.user_id === Number(item.user_id));
 					return {
 						...item,
+						title,
 						nsfw,
 						like_count: likeCount,
 						comment_count: commentCount,

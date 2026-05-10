@@ -54,13 +54,18 @@ import { hydrateChatAudibleNotificationsFromServer } from '/shared/chatAudibleNo
 import { formatMentionsFailureForDialog, uploadChatFile } from '/shared/createSubmit.js';
 import { subscribeUserBroadcast, subscribeRoomBroadcast } from '../shared/realtimeBroadcast.js';
 import { initChatSidebarModals } from '../shared/components/modals/chatSidebarModals.js';
-import { createFeedItemCard, feedItemToUser, getHiddenFeedItems } from '../shared/feedCardBuild.js';
+import {
+	createFeedItemCard,
+	feedItemToUser,
+	getHiddenFeedItems,
+	partitionFeedVideosForChatSpotlight
+} from '../shared/feedCardBuild.js';
 import {
 	FEED_CHANNEL_PAGE_SIZE,
 	getChatFeedItemKey,
 	createChatFeedFetchPage
 } from './feed/feedChannelData.js';
-import { createChatFeedChannelElements } from './feed/feedChannelView.js';
+import { createChatFeedChannelElements, getChatFeedMobileSpotlightHtml } from './feed/feedChannelView.js';
 import { addToMutateQueue } from '/shared/mutateQueue.js';
 import { captureChallengeSubmitThread } from '/shared/challengeSubmitContext.js';
 import * as challengesChannelModule from './challengesChannel.js';
@@ -7471,15 +7476,19 @@ export async function initChatPage(root, options = {}) {
 				return;
 			}
 
-			const { routeWrap, sentinel } = createChatFeedChannelElements(ordered, (item, i) =>
-				createFeedItemCard(
-					item,
-					i,
-					feedCardOptionsForPseudoLane(
-						(el) => setupFeedChannelVideoAutoplay(messagesEl, el),
-						'feed'
-					)
-				)
+			const { spotlightVideos, remainingItems } = partitionFeedVideosForChatSpotlight(ordered, 4);
+			const { routeWrap, sentinel } = createChatFeedChannelElements(
+				remainingItems,
+				(item, i) =>
+					createFeedItemCard(
+						item,
+						i,
+						feedCardOptionsForPseudoLane(
+							(el) => setupFeedChannelVideoAutoplay(messagesEl, el),
+							'feed'
+						)
+					),
+				{ spotlightVideos }
 			);
 			if (isNewestFirstBrowseLane('feed')) {
 				messagesEl.appendChild(routeWrap);
@@ -9995,6 +10004,7 @@ export async function initChatPage(root, options = {}) {
 				parsed.kind === 'channel' ? String(parsed.slug || '').trim().toLowerCase() : '';
 			if (channelSlugForLoading === 'feed' && typeof renderFeedCardsSkeleton === 'function') {
 				messagesEl.innerHTML = `<div class="feed-route chat-feed-channel-route">
+					${getChatFeedMobileSpotlightHtml()}
 					<div class="route-cards feed-cards" data-feed-container aria-busy="true" aria-label="Loading">${renderFeedCardsSkeleton(4)}</div>
 				</div>`;
 				resetAndLockChatMessagesScrollForSkeleton(messagesEl, 'feed');

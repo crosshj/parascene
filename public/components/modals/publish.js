@@ -123,6 +123,7 @@ class AppModalPublish extends HTMLElement {
 						<div class="publish-field">
 							<label for="publish-title">Title <span class="field-required" data-title-required aria-hidden="true">*</span></label>
 							<input type="text" id="publish-title" name="title" placeholder="Enter a title for your creation"
+								autocapitalize="off" autocorrect="off" spellcheck="false"
 								required />
 						</div>
 						<div class="publish-field">
