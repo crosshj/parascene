@@ -158,6 +158,19 @@ export function handleNsfwClick(e) {
 		return true;
 	}
 
+	const doomSlideNsfw = e.target?.closest?.('.chat-doom-slide-media-frame.nsfw:not(.nsfw-revealed)');
+	if (doomSlideNsfw) {
+		if (document.body.classList.contains(NSFW_VIEW_BODY_CLASS)) return false;
+		if (!getNsfwContentEnabled()) return false;
+		if (!window.confirm(NSFW_CONFIRM_MESSAGE_THIS_IMAGE)) return true;
+		revealNsfwElementOnly(doomSlideNsfw);
+		doomSlideNsfw.dispatchEvent(new CustomEvent('prsn-doom-nsfw-revealed', { bubbles: true }));
+		return true;
+	}
+
+	/* Revealed doom clip: do not fall through to creationId/session confirm — allow pause/play. */
+	if (e.target?.closest?.('.chat-doom-slide-media-frame.nsfw.nsfw-revealed')) return false;
+
 	const creationId = getCreationIdFromNsfwElement(e.target);
 	if (!creationId) return false;
 

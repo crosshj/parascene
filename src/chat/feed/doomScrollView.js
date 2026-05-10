@@ -33,12 +33,61 @@ export function formatDoomCaption(item) {
  * Syncs optional `.chat-doom-poster` img so the placeholder matches the video frame (native
  * `poster=` does not follow `object-fit` reliably).
  *
+ * When `mediaWrap` + `mediaFrame` are passed, sizes the frame to the video’s **drawn** bounds
+ * (letterboxed rect for contain) so NSFW blur stays inside the picture, not the full viewport cell.
+ *
  * @param {HTMLVideoElement} video
+ * @param {HTMLElement} [mediaWrap]
+ * @param {HTMLElement} [mediaFrame]
  */
-export function bindDoomVideoAspectFit(video) {
+export function bindDoomVideoAspectFit(video, mediaWrap, mediaFrame) {
 	if (!(video instanceof HTMLVideoElement)) return;
 	const posterImg =
 		video.parentElement?.querySelector?.(':scope > img.chat-doom-poster') ?? null;
+
+	const syncFrameLayout = () => {
+		if (!(mediaWrap instanceof HTMLElement) || !(mediaFrame instanceof HTMLElement)) return;
+		const W = mediaWrap.clientWidth;
+		const H = mediaWrap.clientHeight;
+		if (!Number.isFinite(W) || !Number.isFinite(H) || W <= 0 || H <= 0) return;
+
+		let vw = video.videoWidth;
+		let vh = video.videoHeight;
+		if (!Number.isFinite(vw) || !Number.isFinite(vh) || vw <= 0 || vh <= 0) {
+			if (posterImg) {
+				vw = posterImg.naturalWidth;
+				vh = posterImg.naturalHeight;
+			}
+		}
+		if (!Number.isFinite(vw) || !Number.isFinite(vh) || vw <= 0 || vh <= 0) {
+			mediaFrame.style.cssText =
+				'position:absolute;inset:0;width:100%;height:100%;overflow:hidden;';
+			return;
+		}
+
+		const useContain = vw >= vh;
+		if (!useContain) {
+			mediaFrame.style.cssText =
+				'position:absolute;inset:0;width:100%;height:100%;overflow:hidden;';
+			return;
+		}
+
+		const scale = Math.min(W / vw, H / vh);
+		const dispW = vw * scale;
+		const dispH = vh * scale;
+		const left = (W - dispW) / 2;
+		const top = (H - dispH) / 2;
+		mediaFrame.style.cssText = [
+			'position:absolute',
+			`left:${left}px`,
+			`top:${top}px`,
+			`width:${dispW}px`,
+			`height:${dispH}px`,
+			'overflow:hidden',
+			'right:auto',
+			'bottom:auto'
+		].join(';');
+	};
 
 	const syncFit = () => {
 		const vw = video.videoWidth;
@@ -47,6 +96,7 @@ export function bindDoomVideoAspectFit(video) {
 			const useContain = vw >= vh;
 			video.classList.toggle('chat-doom-video--fit-contain', useContain);
 			if (posterImg) posterImg.classList.toggle('chat-doom-video--fit-contain', useContain);
+			syncFrameLayout();
 			return;
 		}
 		if (posterImg) {
@@ -58,12 +108,18 @@ export function bindDoomVideoAspectFit(video) {
 				posterImg.classList.toggle('chat-doom-video--fit-contain', useContain);
 			}
 		}
+		syncFrameLayout();
 	};
 
 	video.addEventListener('loadedmetadata', syncFit);
 	posterImg?.addEventListener('load', syncFit);
 	if (video.readyState >= 1) syncFit();
 	if (posterImg?.complete) syncFit();
+
+	if (typeof ResizeObserver !== 'undefined' && mediaWrap instanceof HTMLElement && mediaFrame instanceof HTMLElement) {
+		const ro = new ResizeObserver(() => syncFrameLayout());
+		ro.observe(mediaWrap);
+	}
 
 	video.addEventListener(
 		'loadeddata',
@@ -163,6 +219,12 @@ export function createDoomSlideElement(item, viewerUserId) {
 		uid > 0 &&
 		Number(uid) === Number(viewerUserId);
 
+	const isNsfw =
+		item.nsfw === true ||
+		item.nsfw === 1 ||
+		item.nsfw === '1' ||
+		String(item.nsfw || '').toLowerCase() === 'true';
+
 	const slide = document.createElement('section');
 	slide.className = 'chat-doom-slide';
 	slide.dataset.creationId = String(cid);
@@ -180,6 +242,10 @@ export function createDoomSlideElement(item, viewerUserId) {
 	const mediaWrap = document.createElement('div');
 	mediaWrap.className = 'chat-doom-slide-media';
 	mediaWrap.setAttribute('data-chat-doom-slide-media', '1');
+
+	const mediaFrame = document.createElement('div');
+	mediaFrame.className = `chat-doom-slide-media-frame${isNsfw ? ' nsfw' : ''}`;
+	if (isNsfw) mediaFrame.setAttribute('data-creation-id', String(cid));
 
 	/** Layered poster img matches video `object-fit` / aspect logic; avoid native `video.poster`. */
 	let posterImg = null;
@@ -209,8 +275,9 @@ export function createDoomSlideElement(item, viewerUserId) {
 		</div>
 	`;
 
-	if (posterImg) mediaWrap.appendChild(posterImg);
-	mediaWrap.appendChild(video);
+	if (posterImg) mediaFrame.appendChild(posterImg);
+	mediaFrame.appendChild(video);
+	mediaWrap.appendChild(mediaFrame);
 	mediaWrap.appendChild(playOverlay);
 
 	const overlay = document.createElement('div');
@@ -300,7 +367,7 @@ export function createDoomSlideElement(item, viewerUserId) {
 	slide.appendChild(overlay);
 	slide.appendChild(progress);
 
-	bindDoomVideoAspectFit(video);
+	bindDoomVideoAspectFit(video, mediaWrap, mediaFrame);
 
 	return slide;
 }

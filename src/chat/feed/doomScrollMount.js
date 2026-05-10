@@ -101,8 +101,8 @@ export async function mountChatDoomScroll(opts) {
 
 	/** @type {Map<string, object>} */
 	const videoByKey = new Map();
-	/** @type {object[]} */
-	const orderedVideos = [];
+	/** @type {object[]} (reassigned when trimming above URL anchor) */
+	let orderedVideos = [];
 	for (const it of feedAccumulated) {
 		if (!isFeedRowVideoCreation(it)) continue;
 		const key = getChatFeedItemKey(it);
@@ -126,6 +126,20 @@ export async function mountChatDoomScroll(opts) {
 		}
 	} else {
 		void summaryPromise.catch(() => {});
+	}
+
+	/*
+	 * Treat `/chat/c/feed/doom/:id` as the *window start*: drop newer clips above the anchor so the URL clip is always slide 0.
+	 * Avoids landing deep after `/creations/…` → Back (same URL tail): user resumes from that clip, not scrolled far below earlier slides.
+	 */
+	if (anchorIndex > 0) {
+		orderedVideos = orderedVideos.slice(anchorIndex);
+		anchorIndex = 0;
+		videoByKey.clear();
+		for (const it of orderedVideos) {
+			const k = getChatFeedItemKey(it);
+			videoByKey.set(k, it);
+		}
 	}
 
 	messagesEl.classList.add('chat-page-messages--doom-host');
@@ -386,6 +400,18 @@ export async function mountChatDoomScroll(opts) {
 		}
 	}
 
+	function slideNsfwBlocked(slide) {
+		if (!(slide instanceof HTMLElement)) return false;
+		const frame = slide.querySelector('.chat-doom-slide-media-frame.nsfw');
+		if (!(frame instanceof HTMLElement)) return false;
+		try {
+			if (document.body.classList.contains('view-nsfw')) return false;
+		} catch {
+			// ignore
+		}
+		return !frame.classList.contains('nsfw-revealed');
+	}
+
 	function playActive() {
 		const list = slides();
 		const slide = list[activeIdx];
@@ -393,7 +419,8 @@ export async function mountChatDoomScroll(opts) {
 		slide.removeAttribute('data-chat-doom-user-paused');
 		const v = slide.querySelector('video.chat-doom-video');
 		if (!(v instanceof HTMLVideoElement)) return;
-		v.muted = preferMuted;
+		/* Obscured NSFW still autoplays (muted); browser policy allows muted autoplay. */
+		v.muted = slideNsfwBlocked(slide) ? true : preferMuted;
 		const p = v.play();
 		if (p && typeof p.catch === 'function') {
 			p.catch(() => {
@@ -453,22 +480,21 @@ export async function mountChatDoomScroll(opts) {
 	}
 
 	/**
-	 * Keep `/chat/c/feed/doom/:creationId` aligned with the centered slide so:
-	 * - leaving for `/creations/:id` and pressing Back returns to doom on the same clip
-	 * - `replaceState` avoids extra entries while swiping; Back from doom still goes to feed (prior history entry)
+	 * One history entry for doom: pathname tracks the centered clip via `replaceState` only (no stack spam).
+	 * Back from `/creations/…` restores that URL; mount trims the feed so that id is slide 0.
 	 */
-	function syncBrowserUrlToActiveDoomSlide() {
+	function syncBrowserUrlToCenteredSlide() {
 		if (suppressSwipePauseForAnchorScroll) return;
-		if (suppressSwipePauseForFeedAppend) return;
 		const list = slides();
-		const slide = list[activeIdx];
+		if (list.length === 0) return;
+		const idx = slideIndexAtScrollerMidpoint();
+		const slide = list[idx];
 		if (!(slide instanceof HTMLElement)) return;
 		const raw = slide.dataset.creationId;
 		const cid = raw != null ? String(raw).trim() : '';
 		if (!cid) return;
-		let nextPath = '';
 		try {
-			nextPath = `/chat/c/feed/doom/${encodeURIComponent(cid)}`;
+			const nextPath = `/chat/c/feed/doom/${encodeURIComponent(cid)}`;
 			const u = new URL(window.location.href);
 			if (u.pathname === nextPath) return;
 			history.replaceState({ prsnChat: true }, '', nextPath + u.search + u.hash);
@@ -486,7 +512,7 @@ export async function mountChatDoomScroll(opts) {
 		applyActiveVisual();
 		playActive();
 		if (prev !== activeIdx) void prefetchFollowForSlide(activeIdx);
-		syncBrowserUrlToActiveDoomSlide();
+		syncBrowserUrlToCenteredSlide();
 	}
 
 	let scrollIdle = 0;
@@ -511,15 +537,56 @@ export async function mountChatDoomScroll(opts) {
 		pauseAll();
 	}
 
-	function onScrollerScroll() {
-		pauseAllVideosOnUserSwipeIntent();
+	function scheduleResolveAfterScroll() {
 		window.clearTimeout(scrollIdle);
 		scrollIdle = window.setTimeout(() => {
 			resolveActiveFromScroll();
 			void maybeAppendMore(true);
 		}, 80);
 	}
+
+	function onScrollerScroll() {
+		pauseAllVideosOnUserSwipeIntent();
+		scheduleResolveAfterScroll();
+	}
 	scroller.addEventListener('scroll', onScrollerScroll, { passive: true });
+
+	scroller.addEventListener('prsn-doom-nsfw-revealed', () => {
+		playActive();
+		syncPlayOverlayForSlide(slides()[activeIdx]);
+	});
+
+	const onNsfwPreferenceChangedForDoom = () => {
+		queueMicrotask(() => {
+			try {
+				if (!document.body.classList.contains('view-nsfw')) {
+					for (const s of slides()) {
+						const fr = s.querySelector('.chat-doom-slide-media-frame.nsfw');
+						if (fr instanceof HTMLElement) fr.classList.remove('nsfw-revealed');
+					}
+				}
+			} catch {
+				// ignore
+			}
+			playActive();
+			const cur = slides()[activeIdx];
+			if (cur instanceof HTMLElement) syncPlayOverlayForSlide(cur);
+		});
+	};
+	document.addEventListener('nsfw-preference-changed', onNsfwPreferenceChangedForDoom);
+
+	const onScrollerScrollEnd = () => {
+		window.clearTimeout(scrollIdle);
+		resolveActiveFromScroll();
+		void maybeAppendMore(true);
+	};
+	/* Snap / momentum end (Chromium, Safari 16.4+): URL lags when few intermediate scroll events fire. */
+	scroller.addEventListener('scrollend', onScrollerScrollEnd, { passive: true });
+
+	/* First snap after mount may not drive the debounced scroll path reliably — align URL once. */
+	const mountDoomUrlSyncTimer = window.setTimeout(() => {
+		resolveActiveFromScroll();
+	}, 250);
 
 	/** Touch/wheel often fire before `scroll` — pause immediately so audio cannot leak into the next clip. */
 	let touchSwipeStartY = /** @type {number | null} */ (null);
@@ -1019,6 +1086,9 @@ export async function mountChatDoomScroll(opts) {
 			doomIoAppendTimer = null;
 		}
 		scroller.removeEventListener('scroll', onScrollerScroll);
+		scroller.removeEventListener('scrollend', onScrollerScrollEnd);
+		document.removeEventListener('nsfw-preference-changed', onNsfwPreferenceChangedForDoom);
+		window.clearTimeout(mountDoomUrlSyncTimer);
 		io.disconnect();
 		scroller.removeEventListener('click', bindFollowClick);
 		scroller.removeEventListener('click', onShareClick);
