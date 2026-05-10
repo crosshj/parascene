@@ -452,6 +452,31 @@ export async function mountChatDoomScroll(opts) {
 		return best;
 	}
 
+	/**
+	 * Keep `/chat/c/feed/doom/:creationId` aligned with the centered slide so:
+	 * - leaving for `/creations/:id` and pressing Back returns to doom on the same clip
+	 * - `replaceState` avoids extra entries while swiping; Back from doom still goes to feed (prior history entry)
+	 */
+	function syncBrowserUrlToActiveDoomSlide() {
+		if (suppressSwipePauseForAnchorScroll) return;
+		if (suppressSwipePauseForFeedAppend) return;
+		const list = slides();
+		const slide = list[activeIdx];
+		if (!(slide instanceof HTMLElement)) return;
+		const raw = slide.dataset.creationId;
+		const cid = raw != null ? String(raw).trim() : '';
+		if (!cid) return;
+		let nextPath = '';
+		try {
+			nextPath = `/chat/c/feed/doom/${encodeURIComponent(cid)}`;
+			const u = new URL(window.location.href);
+			if (u.pathname === nextPath) return;
+			history.replaceState({ prsnChat: true }, '', nextPath + u.search + u.hash);
+		} catch {
+			// ignore
+		}
+	}
+
 	function resolveActiveFromScroll() {
 		const list = slides();
 		if (list.length === 0) return;
@@ -461,6 +486,7 @@ export async function mountChatDoomScroll(opts) {
 		applyActiveVisual();
 		playActive();
 		if (prev !== activeIdx) void prefetchFollowForSlide(activeIdx);
+		syncBrowserUrlToActiveDoomSlide();
 	}
 
 	let scrollIdle = 0;
