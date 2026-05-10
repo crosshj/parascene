@@ -2891,11 +2891,10 @@ export async function initChatPage(root, options = {}) {
 		document.body.classList.toggle('chat-page--viewport-scroll', viewportScrollMode);
 		try {
 			document.documentElement.classList.toggle('chat-page--viewport-scroll', viewportScrollMode);
-			if (shouldShowAppMobileHeader) {
-				document.documentElement.classList.add('chat-page--use-app-mobile-header');
-			} else {
-				document.documentElement.classList.remove('chat-page--use-app-mobile-header');
-			}
+			document.documentElement.classList.toggle(
+				'chat-page--use-app-mobile-header',
+				shouldShowAppMobileChrome
+			);
 		} catch {
 			// ignore
 		}
