@@ -3646,6 +3646,7 @@ body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topb
 }
 
 .chat-doom-progress {
+	display: none;
 	position: absolute;
 	left: 0;
 	right: 0;
