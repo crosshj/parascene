@@ -2289,7 +2289,8 @@ async function loadCreation() {
 			</div>`
 			: '';
 
-		const showChallengeSubmitCta = Boolean(creation.challenge_submit?.eligible);
+		const showChallengeSubmitCta =
+			Boolean(creation.challenge_submit?.eligible) && mediaType !== 'video';
 		const challengeSubmitCtaHtml = showChallengeSubmitCta
 			? html`
 			<div class="creation-detail-challenge-submit-cta">

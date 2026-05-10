@@ -451,8 +451,16 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 				videoPath && videoPath.startsWith("/")
 					? `${base.replace(/\/$/, "")}${videoPath}`
 					: videoPath;
+			const shareVideoPlayBtn = `
+					<button type="button" class="share-video-play-btn" data-share-video-play aria-label="Play video">
+						<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+							<path d="M8 5v14l11-7z" />
+						</svg>
+					</button>`;
 			const shareHeroMediaHtml = isVideo && shareVideoUrl
-				? `<video class="share-image share-video" playsinline muted loop autoplay poster="${escapeHtml(shareImageSrc)}" src="${escapeHtml(shareVideoUrl)}" aria-label="${escapeHtml(imageAlt)}"></video>`
+				? `<div class="share-hero-video-wrap">
+					<video class="share-image share-video" data-share-hero-video playsinline muted loop preload="metadata" poster="${escapeHtml(shareImageSrc)}" src="${escapeHtml(shareVideoUrl)}" aria-label="${escapeHtml(imageAlt)}"></video>${shareVideoPlayBtn}
+				</div>`
 				: `<img class="share-image" src="${escapeHtml(shareImageSrc)}" alt="${escapeHtml(imageAlt)}" />`;
 
 			const shareIntroHtml = showCreator

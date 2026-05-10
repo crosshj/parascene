@@ -117,4 +117,32 @@ function handleShareCreateSubmit(e) {
 			promptInput.focus();
 		});
 	}
+
+	const shareVideoWrap = document.querySelector(".share-hero-video-wrap");
+	const shareVideoEl = shareVideoWrap?.querySelector?.("[data-share-hero-video]") || null;
+	const shareVideoPlayBtn = shareVideoWrap?.querySelector?.("[data-share-video-play]") || null;
+	if (shareVideoEl && shareVideoPlayBtn) {
+		let shareVideoOverlayConsumed = false;
+
+		function applyShareVideoFirstPlay() {
+			if (shareVideoOverlayConsumed) return;
+			shareVideoOverlayConsumed = true;
+			shareVideoPlayBtn.hidden = true;
+			shareVideoEl.controls = true;
+			shareVideoEl.setAttribute("controls", "");
+			shareVideoEl.muted = false;
+			shareVideoEl.removeAttribute("muted");
+			try {
+				shareVideoEl.play();
+			} catch {
+				// ignore; native controls remain available
+			}
+		}
+
+		shareVideoPlayBtn.addEventListener("click", (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			applyShareVideoFirstPlay();
+		});
+	}
 })();
