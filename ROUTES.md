@@ -18,6 +18,8 @@ Served to logged-in users whose role is not `admin`. (`/` and `/index.html` use 
 /chat/
 /chat/*
 
+Fullscreen vertical feed videos (mobile doom scroll from `#feed` video cards): `/chat/c/feed/doom/:creationId` (numeric creation id).
+
 ## Other routes (`api_routes/pages.js`)
 
 /s/:version/:token/:bust?

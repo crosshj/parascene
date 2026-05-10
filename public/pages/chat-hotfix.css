@@ -984,3 +984,17 @@ button.chat-inline-image-lightbox-footer-btn.btn-secondary {
 .connect-chat-msg-bubble--timed-invite-expired .chat-timed-message-title {
 	color: var(--text-muted);
 }
+
+/*
+ * Doom scroll top scrim: bundle minify can corrupt `linear-gradient(... to bottom ...)` on
+ * `.chat-doom-topbar` to `background: 0 0`. Mirror slide scrim (`180deg`) here until bundle refresh.
+ */
+.chat-doom-topbar {
+	background: linear-gradient(
+		180deg,
+		rgba(0, 0, 0, 0.58) 0%,
+		rgba(0, 0, 0, 0.28) 28%,
+		rgba(0, 0, 0, 0.08) 46%,
+		transparent 62%
+	) !important;
+}

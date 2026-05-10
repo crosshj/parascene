@@ -652,6 +652,13 @@ export function parseChatSidebarPathname(pathname) {
 	if (seg === 'notes' && parts.length === 2) {
 		return { kind: 'dm', self: true };
 	}
+	if (seg === 'c' && parts.length >= 5) {
+		const ch = String(parts[2]).toLowerCase();
+		const sub = String(parts[3]).toLowerCase();
+		if (ch === 'feed' && sub === 'doom') {
+			return { kind: 'channel', slug: 'feed' };
+		}
+	}
 	if (seg === 'c' && parts[2]) {
 		let slug = parts[2];
 		try {

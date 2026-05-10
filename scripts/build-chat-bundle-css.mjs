@@ -3,6 +3,7 @@
  * - `public/global.css`
  * - `public/pages/chat.css`
  * - optional `src/chat/feed/feedChallengeCard.css` overrides (source-of-truth for chat-only feed card tweaks)
+ * - optional `src/chat/doom/DoomCommentsPopover.css` (doom comments sheet)
  * Same logic as the Rollup plugin; runnable standalone (`node scripts/build-chat-bundle-css.mjs`)
  * so dev servers always get a CSS file when Rollup is skipped or partially fails.
  */
@@ -31,17 +32,22 @@ export async function buildChatBundleCss() {
 	const globalPath = path.join(repoRoot, 'public', 'global.css');
 	const chatPath = path.join(repoRoot, 'public', 'pages', 'chat.css');
 	const srcFeedCardPath = path.join(repoRoot, 'src', 'chat', 'feed', 'feedChallengeCard.css');
+	const doomCommentsPath = path.join(repoRoot, 'src', 'chat', 'doom', 'DoomCommentsPopover.css');
 	const outPath = path.join(repoRoot, 'public', 'build', 'chat.bundle.css');
 	const globalCss = fs.readFileSync(globalPath, 'utf8');
 	const chatCss = fs.readFileSync(chatPath, 'utf8');
 	const srcFeedCardCss = fs.existsSync(srcFeedCardPath)
 		? fs.readFileSync(srcFeedCardPath, 'utf8')
 		: '';
+	const doomCommentsCss = fs.existsSync(doomCommentsPath)
+		? fs.readFileSync(doomCommentsPath, 'utf8')
+		: '';
 	const combined = `${globalCss}
 
 /* public/pages/chat.css (after global.css) */
 ${chatCss}
 ${srcFeedCardCss ? `\n/* src/chat/feed/feedChallengeCard.css (after chat.css) */\n${srcFeedCardCss}\n` : ''}
+${doomCommentsCss ? `\n/* src/chat/doom/DoomCommentsPopover.css */\n${doomCommentsCss}\n` : ''}
 `;
 	let out = combined;
 	if (shouldMinify()) {

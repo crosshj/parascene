@@ -9,9 +9,10 @@ const SPOTLIGHT_SLOTS = 4;
 /**
  * Mobile-only (CSS): 2×2 strip above the vertical feed — skeleton tiles or image previews.
  * @param {object[]} [spotlightVideos]
+ * @param {{ resolveSpotlightHref?: (item: object) => string | undefined, performSpotlightNavigation?: (href: string, ev: MouseEvent) => void }} [tileOptions]
  * @returns {HTMLDivElement}
  */
-function createChatFeedMobileSpotlightElement(spotlightVideos = []) {
+function createChatFeedMobileSpotlightElement(spotlightVideos = [], tileOptions = {}) {
 	const wrap = document.createElement('div');
 	wrap.className = 'chat-feed-mobile-spotlight';
 	const grid = document.createElement('div');
@@ -20,7 +21,7 @@ function createChatFeedMobileSpotlightElement(spotlightVideos = []) {
 	for (let i = 0; i < SPOTLIGHT_SLOTS; i += 1) {
 		const item = videos[i];
 		if (item) {
-			grid.appendChild(createFeedSpotlightVideoTile(item, i));
+			grid.appendChild(createFeedSpotlightVideoTile(item, i, tileOptions));
 		} else {
 			const cell = document.createElement('div');
 			cell.className = 'chat-feed-mobile-spotlight-cell chat-feed-mobile-spotlight-cell--placeholder';
@@ -69,9 +70,18 @@ export function getChatFeedMobileSpotlightHtml() {
  * Mobile: interleaved spotlight strips and card sections from {@link partitionChatFeedMobileAlternating}.
  * @param {Array<{ type: 'spotlight', videos: object[] } | { type: 'cards', items: object[] }>} segments
  * @param {(item: object, index: number) => HTMLElement} renderCard
+ * @param {{ resolveSpotlightHref?: (item: object) => string | undefined, performSpotlightNavigation?: (href: string, ev: MouseEvent) => void }} [channelOptions]
  * @returns {{ routeWrap: HTMLDivElement, cards: HTMLDivElement, sentinel: HTMLDivElement }}
  */
-export function createChatFeedChannelElementsFromSegments(segments, renderCard) {
+export function createChatFeedChannelElementsFromSegments(segments, renderCard, channelOptions = {}) {
+	/** @type {{ resolveSpotlightHref?: (item: object) => string | undefined, performSpotlightNavigation?: (href: string, ev: MouseEvent) => void }} */
+	const spotlightOpts = {};
+	if (typeof channelOptions.resolveSpotlightHref === 'function') {
+		spotlightOpts.resolveSpotlightHref = channelOptions.resolveSpotlightHref;
+	}
+	if (typeof channelOptions.performSpotlightNavigation === 'function') {
+		spotlightOpts.performSpotlightNavigation = channelOptions.performSpotlightNavigation;
+	}
 	const routeWrap = document.createElement('div');
 	routeWrap.className = 'feed-route chat-feed-channel-route';
 	let cardIndex = 0;
@@ -83,7 +93,7 @@ export function createChatFeedChannelElementsFromSegments(segments, renderCard) 
 		if (!seg || typeof seg !== 'object') continue;
 		if (seg.type === 'spotlight') {
 			const vids = Array.isArray(seg.videos) ? seg.videos : [];
-			routeWrap.appendChild(createChatFeedMobileSpotlightElement(vids));
+			routeWrap.appendChild(createChatFeedMobileSpotlightElement(vids, spotlightOpts));
 		} else if (seg.type === 'cards') {
 			const items = Array.isArray(seg.items) ? seg.items : [];
 			if (items.length === 0) continue;
@@ -120,16 +130,21 @@ export function createChatFeedChannelElementsFromSegments(segments, renderCard) 
 /**
  * @param {object[]} ordered — feed rows from the pager (`/api/feed`)
  * @param {(item: object, index: number) => HTMLElement} renderCard — typically `createFeedItemCard` + options
- * @param {{ spotlightVideos?: object[] }} [options]
+ * @param {{ spotlightVideos?: object[], resolveSpotlightHref?: (item: object) => string | undefined }} [options]
  * @returns {{ routeWrap: HTMLDivElement, cards: HTMLDivElement, sentinel: HTMLDivElement }}
  */
 export function createChatFeedChannelElements(ordered, renderCard, options = {}) {
 	const spotlightVideos = Array.isArray(options.spotlightVideos) ? options.spotlightVideos : [];
+	const channelOpts =
+		typeof options.resolveSpotlightHref === 'function'
+			? { resolveSpotlightHref: options.resolveSpotlightHref }
+			: {};
 	return createChatFeedChannelElementsFromSegments(
 		[
 			{ type: 'spotlight', videos: spotlightVideos },
 			{ type: 'cards', items: Array.isArray(ordered) ? ordered : [] }
 		],
-		renderCard
+		renderCard,
+		channelOpts
 	);
 }

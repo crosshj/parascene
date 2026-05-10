@@ -1,0 +1,188 @@
+/* Doom scroll — comments bottom sheet (WIP notice + link to creation detail). Merged into chat.bundle.css */
+
+.chat-doom-comments-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 12000;
+	display: flex;
+	align-items: flex-end;
+	justify-content: center;
+	box-sizing: border-box;
+	padding: 0;
+	margin: 0;
+}
+
+.chat-doom-comments-overlay[hidden] {
+	display: none !important;
+}
+
+.chat-doom-comments-backdrop {
+	position: absolute;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.6);
+}
+
+.chat-doom-comments-sheet {
+	position: relative;
+	z-index: 1;
+	width: 100%;
+	max-width: 720px;
+	max-height: 65vh;
+	min-height: 600px;
+	margin: 0 auto;
+	background-color: var(--surface);
+	background-image: none;
+	color: var(--text);
+	border-radius: 16px 16px 0 0;
+	box-shadow: var(--shadow);
+	display: flex;
+	flex-direction: column;
+	box-sizing: border-box;
+	overflow: hidden;
+	isolation: isolate;
+}
+
+.chat-doom-comments-handle {
+	flex-shrink: 0;
+	width: 40px;
+	height: 5px;
+	margin: 10px auto 6px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--text) 22%, transparent);
+}
+
+.chat-doom-comments-head {
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 4px 16px 12px;
+	border-bottom: 1px solid var(--border);
+}
+
+.chat-doom-comments-head-title-block {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: nowrap;
+	align-items: baseline;
+	gap: 8px;
+	min-width: 0;
+	flex: 1;
+}
+
+.chat-doom-comments-title {
+	margin: 0;
+	font-size: 1.125rem;
+	font-weight: 700;
+	line-height: 1.25;
+	letter-spacing: -0.02em;
+	color: var(--text);
+}
+
+.chat-doom-comments-count-wrap {
+	flex-shrink: 0;
+}
+
+.chat-doom-comments-count {
+	font-size: 0.8125rem;
+	font-weight: 400;
+	line-height: 1.25;
+	color: var(--text-muted);
+}
+
+.chat-doom-comments-count--skeleton {
+	display: inline-block;
+	min-width: 32px;
+	height: 13px;
+	border-radius: 4px;
+	background: var(--skeleton);
+	vertical-align: middle;
+	animation: chat-doom-comments-count-pulse 1.2s ease-in-out infinite;
+}
+
+.chat-doom-comments-close {
+	flex-shrink: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	height: 36px;
+	margin: 0;
+	padding: 0;
+	border: none;
+	border-radius: 50%;
+	background: transparent;
+	color: var(--text);
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.chat-doom-comments-close-icon {
+	display: block;
+	pointer-events: none;
+}
+
+.chat-doom-comments-close:hover {
+	background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.chat-doom-comments-close:active {
+	background: color-mix(in srgb, var(--text) 12%, transparent);
+}
+
+.chat-doom-comments-close:focus-visible {
+	outline: 2px solid var(--focus, #6366f1);
+	outline-offset: 2px;
+}
+
+.chat-doom-comments-body {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
+	padding: 20px 16px calc(24px + env(safe-area-inset-bottom));
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 18px;
+	box-sizing: border-box;
+}
+
+.chat-doom-comments-wip-note {
+	margin: 0;
+	font-size: 0.9375rem;
+	font-weight: 400;
+	line-height: 1.45;
+	text-align: center;
+	color: var(--text-muted);
+}
+
+.chat-doom-comments-detail-btn {
+	box-sizing: border-box;
+	width: 100%;
+	justify-content: center;
+	text-align: center;
+	padding-top: 12px;
+	padding-bottom: 12px;
+	border-radius: 6px;
+}
+
+@keyframes chat-doom-comments-count-pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.5;
+	}
+}
+
+@media (min-width: 769px) {
+	.chat-doom-comments-sheet {
+		max-height: min(70vh, 680px);
+		border-radius: 16px;
+		margin-bottom: 16px;
+	}
+}

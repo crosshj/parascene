@@ -921,7 +921,9 @@ function buildFeedCreationCard(
 	setupFeedVideo,
 	hideFeedCardMetadata = false,
 	preferThumbnail = false,
-	creationsBulkChrome = false
+	creationsBulkChrome = false,
+	resolveCreationCardHref = null,
+	performCreationNavigation = null
 ) {
 	const card = document.createElement("div");
 	const mediaType = typeof item.media_type === "string" ? item.media_type : "image";
@@ -985,7 +987,17 @@ function buildFeedCreationCard(
 		if (creationsBulkChrome) {
 			stampChatCreationsBulkDatasetOnFeedCard(card, item, preferThumbnail);
 		}
-		finishFeedCreationCardMediaAndClick(card, item, itemIndex, setupFeedVideo, isVideo, preferThumbnail, creationsBulkChrome);
+		finishFeedCreationCardMediaAndClick(
+			card,
+			item,
+			itemIndex,
+			setupFeedVideo,
+			isVideo,
+			preferThumbnail,
+			creationsBulkChrome,
+			resolveCreationCardHref,
+			performCreationNavigation
+		);
 		return card;
 	}
 
@@ -1201,7 +1213,17 @@ function buildFeedCreationCard(
 		stampChatCreationsBulkDatasetOnFeedCard(card, item, preferThumbnail);
 	}
 
-	finishFeedCreationCardMediaAndClick(card, item, itemIndex, setupFeedVideo, isVideo, preferThumbnail, creationsBulkChrome);
+	finishFeedCreationCardMediaAndClick(
+		card,
+		item,
+		itemIndex,
+		setupFeedVideo,
+		isVideo,
+		preferThumbnail,
+		creationsBulkChrome,
+		resolveCreationCardHref,
+		performCreationNavigation
+	);
 	return card;
 }
 
@@ -1209,6 +1231,8 @@ function buildFeedCreationCard(
  * @param {boolean} isVideo
  * @param {boolean} preferThumbnail
  * @param {boolean} creationsBulkChrome
+ * @param {null | ((item: object) => string | undefined)} resolveCreationCardHref
+ * @param {null | ((href: string, ev: MouseEvent) => void)} performCreationNavigation
  */
 function finishFeedCreationCardMediaAndClick(
 	card,
@@ -1217,7 +1241,9 @@ function finishFeedCreationCardMediaAndClick(
 	setupFeedVideo,
 	isVideo,
 	preferThumbnail = false,
-	creationsBulkChrome = false
+	creationsBulkChrome = false,
+	resolveCreationCardHref = null,
+	performCreationNavigation = null
 ) {
 	const imageEl = card.querySelector('.feed-card-img');
 	const imageContainer = card.querySelector('.feed-card-image');
@@ -1302,7 +1328,20 @@ function finishFeedCreationCardMediaAndClick(
 			if (actionsRow && actionsRow.contains(e.target)) {
 				return;
 			}
-			window.location.href = `/creations/${item.created_image_id}`;
+			let href = `/creations/${item.created_image_id}`;
+			if (typeof resolveCreationCardHref === 'function') {
+				try {
+					const alt = resolveCreationCardHref(item);
+					if (typeof alt === 'string' && alt.trim()) href = alt.trim();
+				} catch {
+					// keep default href
+				}
+			}
+			if (typeof performCreationNavigation === 'function') {
+				performCreationNavigation(href, e);
+			} else {
+				window.location.href = href;
+			}
 		});
 
 		// Prevent actions row from triggering card click
@@ -1324,6 +1363,8 @@ function finishFeedCreationCardMediaAndClick(
  *   hideFeedCardMetadata?: boolean,
  *   preferThumbnail?: boolean,
  *   creationsBulkChrome?: boolean,
+ *   resolveCreationCardHref?: (item: object) => string | undefined,
+ *   performCreationNavigation?: (href: string, ev: MouseEvent) => void,
  * }} [options]
  */
 export function createFeedItemCard(item, itemIndex, options = {}) {
@@ -1331,6 +1372,10 @@ export function createFeedItemCard(item, itemIndex, options = {}) {
 	const hideFeedCardMetadata = options.hideFeedCardMetadata === true;
 	const preferThumbnail = options.preferThumbnail === true;
 	const creationsBulkChrome = options.creationsBulkChrome === true;
+	const resolveCreationCardHref =
+		typeof options.resolveCreationCardHref === 'function' ? options.resolveCreationCardHref : null;
+	const performCreationNavigation =
+		typeof options.performCreationNavigation === 'function' ? options.performCreationNavigation : null;
 	if (item.type === "tip") {
 		return buildFeedTipCard(item);
 	}
@@ -1340,7 +1385,16 @@ export function createFeedItemCard(item, itemIndex, options = {}) {
 	if (item.type === "engagement") {
 		return buildEngagementFeedCard(item);
 	}
-	return buildFeedCreationCard(item, itemIndex, setupFeedVideo, hideFeedCardMetadata, preferThumbnail, creationsBulkChrome);
+	return buildFeedCreationCard(
+		item,
+		itemIndex,
+		setupFeedVideo,
+		hideFeedCardMetadata,
+		preferThumbnail,
+		creationsBulkChrome,
+		resolveCreationCardHref,
+		performCreationNavigation
+	);
 }
 
 /**
@@ -1461,7 +1515,7 @@ export function partitionChatFeedMobileAlternating(ordered) {
  * @param {string} raw
  * @returns {string}
  */
-function softenShoutingFeedTitleForSpotlight(raw) {
+export function softenShoutingFeedTitleForSpotlight(raw) {
 	if (typeof raw !== "string") return "";
 	const s = raw.trim();
 	if (!s) return "";
@@ -1489,14 +1543,23 @@ function softenShoutingFeedTitleForSpotlight(raw) {
  * Single spotlight tile: poster/thumbnail only — no `<video>` (chat #feed mobile 2×2 strip).
  * @param {object} item
  * @param {number} itemIndex
+ * @param {{ resolveSpotlightHref?: (item: object) => string | undefined, performSpotlightNavigation?: (href: string, ev: MouseEvent) => void }} [options]
  * @returns {HTMLDivElement}
  */
-export function createFeedSpotlightVideoTile(item, itemIndex) {
+export function createFeedSpotlightVideoTile(item, itemIndex, options = {}) {
 	const wrap = document.createElement("div");
 	wrap.className = "chat-feed-mobile-spotlight-cell";
 
 	const creationId = item?.created_image_id ?? item?.id;
-	const href = creationId != null ? `/creations/${creationId}` : "#";
+	let href = creationId != null ? `/creations/${creationId}` : "#";
+	if (typeof options.resolveSpotlightHref === "function") {
+		try {
+			const alt = options.resolveSpotlightHref(item);
+			if (typeof alt === "string" && alt.trim()) href = alt.trim();
+		} catch {
+			// keep default href
+		}
+	}
 	const titleRaw = typeof item.title === "string" ? item.title.trim() : "";
 	const titleDisplay = softenShoutingFeedTitleForSpotlight(titleRaw);
 
@@ -1511,6 +1574,14 @@ export function createFeedSpotlightVideoTile(item, itemIndex) {
 	hit.className = "chat-feed-mobile-spotlight-cell-hit";
 	hit.href = href;
 	hit.setAttribute("aria-label", titleDisplay ? `Open creation: ${titleDisplay}` : "Open creation");
+	if (typeof options.performSpotlightNavigation === "function") {
+		hit.addEventListener("click", (ev) => {
+			ev.preventDefault();
+			const h = hit.getAttribute("href");
+			if (!h || h === "#") return;
+			options.performSpotlightNavigation(h, ev);
+		});
+	}
 
 	const imageContainer = document.createElement("div");
 	imageContainer.className = `feed-card-image chat-feed-mobile-spotlight-cell-media${item.nsfw ? " nsfw" : ""}`;

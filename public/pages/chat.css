@@ -1845,10 +1845,6 @@ body.chat-page.chat-page--mobile-sidebar-open .chat-page-sidebar-create-sticky {
 		display: none !important;
 	}
 
-	html:not(.chat-page--use-app-mobile-header) body.chat-page .chat-page-thread-body .chat-page-messages {
-		padding-top: calc(58px + 10px);
-	}
-
 	.chat-page-mobile-chrome-title {
 		margin: 0;
 		display: flex;
@@ -2658,8 +2654,9 @@ body.chat-page.modal-open .chat-page-sidebar-scroll {
 	display: none;
 }
 
-body.chat-page .chat-page-messages img,
-body.chat-page .chat-page-messages video {
+/* Exclude doom fullscreen media — `height:auto` makes intrinsic-sized video/poster in absolute fills → huge letterboxing / false “scroll gap”. */
+body.chat-page .chat-page-messages img:not(.chat-doom-poster),
+body.chat-page .chat-page-messages video:not(.chat-doom-video) {
 	max-width: 100%;
 	height: auto;
 }
@@ -3194,6 +3191,706 @@ body.chat-page .chat-page-send-btn .chat-page-send-icon {
 		overscroll-behavior-y: auto;
 		-webkit-overflow-scrolling: auto;
 	}
+}
+
+/*
+ * Doom fullscreen host: no lane/browse padding. Browse-mode rules in global.css use
+ * `!important` on horizontal padding — excluded via `:not(.chat-page-messages--doom-host)` there;
+ * keep `!important` so nothing else reintroduces top inset (~48px+16px + safe-area feel).
+ */
+body.chat-page .chat-page-thread-body .chat-page-messages.chat-page-messages--doom-host {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	/* Fixed `.chat-doom-scroll-root` is out of flow — reserve a viewport so parents don’t collapse. */
+	min-height: 100dvh;
+	min-width: 0;
+	width: 100%;
+	max-width: 100%;
+	padding: 0 !important;
+	overflow: hidden;
+	scrollbar-gutter: auto;
+	position: relative;
+}
+
+/* Full-bleed doom: flex column must absorb height below mobile chrome + composer. */
+/*
+ * Doom is edge-to-edge: drop body safe-area padding so var(--bg) doesn’t show as a band above video.
+ * Safe inset remains on `.chat-doom-topbar` (padding + env(safe-area-inset-top)).
+ */
+body.chat-page.chat-page--doom-scroll {
+	padding-top: 0;
+}
+
+/* Doom has its own top chrome; hide stacked chat/app headers so nothing sits above the video. */
+body.chat-page.chat-page--doom-scroll > .chat-shell > app-navigation {
+	display: none !important;
+}
+
+@media (max-width: 768px) {
+	body.chat-page.chat-page--doom-scroll .chat-page-mobile-chrome,
+	body.chat-page.chat-page--doom-scroll .chat-page-mobile-chrome-sheet {
+		display: none !important;
+	}
+}
+
+body.chat-page.chat-page--doom-scroll .chat-page-thread-body,
+body.chat-page.chat-page--doom-scroll .chat-route {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+	min-width: 0;
+}
+
+/*
+ * Thread embeds use `max-width:100%; height:auto` on messages img/video — doom media must be excluded
+ * (`:not(.chat-doom-video)` / `:not(.chat-doom-poster)`) or intrinsic height breaks absolute-fill slides.
+ * Slides are sized with `100dvh` (fixed fullscreen shell); fill media with `height:100%` inside each slide.
+ */
+body.chat-page .chat-page-messages.chat-page-messages--doom-host video.chat-doom-video {
+	max-width: none;
+	width: 100%;
+	height: 100%;
+	min-height: 100%;
+	object-fit: cover;
+	object-position: center;
+}
+
+body.chat-page .chat-page-messages.chat-page-messages--doom-host video.chat-doom-video.chat-doom-video--fit-contain {
+	object-fit: contain;
+}
+
+/*
+ * Doom poster img: same box + object-fit as video (global `body.chat-page .chat-page-messages img`
+ * uses height:auto — override here). Native video poster ignores object-fit consistently.
+ */
+body.chat-page .chat-page-messages.chat-page-messages--doom-host img.chat-doom-poster {
+	max-width: none;
+	width: 100%;
+	height: 100%;
+	min-height: 100%;
+	object-fit: cover;
+	object-position: center;
+}
+
+body.chat-page .chat-page-messages.chat-page-messages--doom-host img.chat-doom-poster.chat-doom-video--fit-contain {
+	object-fit: contain;
+}
+
+/*
+ * Full-viewport doom layer (Option A): escapes thread `%` height chain; snap scroll owns one obvious box.
+ * Below typical modal layers; above thread chrome.
+ */
+.chat-doom-scroll-root {
+	position: fixed;
+	inset: 0;
+	z-index: 25;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	min-width: 0;
+	width: 100%;
+	max-width: 100%;
+	box-sizing: border-box;
+	background: #000;
+	color: #fff;
+}
+
+/*
+ * Top scrim: strong enough for white icons on pale video; still fades out before mid-frame.
+ * Use `180deg` (not `to bottom`): bundle minify can break `to bottom`.
+ */
+.chat-doom-topbar {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	z-index: 5;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: calc(10px + env(safe-area-inset-top)) 12px 14px;
+	background: linear-gradient(
+		180deg,
+		rgba(0, 0, 0, 0.58) 0%,
+		rgba(0, 0, 0, 0.28) 28%,
+		rgba(0, 0, 0, 0.08) 46%,
+		transparent 62%
+	);
+	pointer-events: none;
+}
+
+.chat-doom-topbar > * {
+	pointer-events: auto;
+}
+
+.chat-doom-topbar-spacer {
+	flex: 1;
+	min-width: 0;
+}
+
+/*
+ * Global `button { background: var(--accent); … }` applies to bare buttons.
+ * Doom uses `<button class="chat-page-back">` / mute — reset before layering chrome.
+ */
+.chat-doom-topbar > button {
+	appearance: none;
+	-webkit-appearance: none;
+	align-self: center;
+	padding: 0;
+	border: none;
+	font: inherit;
+	font-weight: 500;
+	filter: none;
+	box-shadow: none;
+	cursor: pointer;
+	touch-action: manipulation;
+}
+
+.chat-doom-topbar > button:hover {
+	filter: none;
+	transform: none;
+}
+
+.chat-doom-topbar > button:active {
+	transform: none;
+}
+
+/*
+ * Beat global `button { background:var(--accent) }` — higher specificity + fallbacks.
+ */
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar a.chat-page-back,
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar button.chat-page-back {
+	background: transparent !important;
+	border: none !important;
+	box-shadow: none !important;
+	color: #fff !important;
+	margin: -6px 0 -6px -6px;
+	text-decoration: none;
+	filter:
+		drop-shadow(0 0 1px rgba(0, 0, 0, 1))
+		drop-shadow(0 1px 2px rgba(0, 0, 0, 0.95))
+		drop-shadow(0 2px 10px rgba(0, 0, 0, 0.75));
+}
+
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar a.chat-page-back:hover,
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar button.chat-page-back:hover {
+	background: rgba(255, 255, 255, 0.14) !important;
+	filter:
+		drop-shadow(0 0 1px rgba(0, 0, 0, 1))
+		drop-shadow(0 1px 2px rgba(0, 0, 0, 0.95))
+		drop-shadow(0 2px 10px rgba(0, 0, 0, 0.75)) !important;
+}
+
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar a.chat-page-back:focus-visible,
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar button.chat-page-back:focus-visible {
+	outline-color: #fff;
+}
+
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar a.chat-page-back:active,
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar button.chat-page-back:active {
+	transform: none !important;
+}
+
+/* Same back control as chat headers; scrim + halo keeps glyph readable on bright frames. */
+.chat-doom-topbar .chat-page-back {
+	background: transparent;
+	color: #fff;
+	margin: -6px 0 -6px -6px;
+}
+
+.chat-doom-topbar .chat-page-back .chat-page-back-icon {
+	text-shadow:
+		0 0 1px rgba(0, 0, 0, 1),
+		0 1px 2px rgba(0, 0, 0, 0.98),
+		0 2px 8px rgba(0, 0, 0, 0.85),
+		0 0 20px rgba(0, 0, 0, 0.55);
+}
+
+.chat-doom-topbar .chat-page-back:hover {
+	background: rgba(255, 255, 255, 0.12);
+}
+
+.chat-doom-topbar .chat-page-back:focus-visible {
+	outline-color: #fff;
+}
+
+/* Mute: icon only — no pill, no hover disk (halo lives on `svg` so it isn’t a round mat). */
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar button.creation-detail-video-muted-badge {
+	background: transparent !important;
+	border: none !important;
+	border-radius: 0 !important;
+	box-shadow: none !important;
+	color: #fff !important;
+	filter: none !important;
+}
+
+.chat-doom-topbar .creation-detail-video-muted-badge {
+	position: static;
+	flex-shrink: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	min-width: 44px;
+	min-height: 44px;
+	width: 44px;
+	height: 44px;
+	padding: 0;
+	border: none;
+	border-radius: 0;
+	background: transparent;
+	color: #fff;
+	cursor: pointer;
+	touch-action: manipulation;
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+	transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar button.creation-detail-video-muted-badge:hover {
+	background: transparent !important;
+	border: none !important;
+	filter: none !important;
+}
+
+.chat-doom-topbar .creation-detail-video-muted-badge:hover {
+	background: transparent;
+	opacity: 0.92;
+}
+
+.chat-doom-topbar .creation-detail-video-muted-badge:active {
+	transform: scale(0.97);
+}
+
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar button.creation-detail-video-muted-badge:active {
+	transform: scale(0.97);
+}
+
+.chat-doom-topbar .creation-detail-video-muted-badge:focus-visible {
+	outline: 2px solid rgba(255, 255, 255, 0.65);
+	outline-offset: 2px;
+}
+
+.chat-doom-topbar .chat-doom-mute-glyph {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+}
+
+.chat-doom-topbar .creation-detail-video-muted-badge svg {
+	width: 22px;
+	height: 22px;
+	display: block;
+	stroke: currentColor;
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	fill: none;
+	pointer-events: none;
+	filter:
+		drop-shadow(0 0 1px rgba(0, 0, 0, 1))
+		drop-shadow(0 1px 2px rgba(0, 0, 0, 0.95))
+		drop-shadow(0 2px 10px rgba(0, 0, 0, 0.78));
+}
+
+.chat-doom-topbar .creation-detail-video-muted-badge [hidden] {
+	display: none !important;
+}
+
+.chat-doom-scroller {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0;
+	min-width: 0;
+	overflow-y: auto;
+	overflow-x: hidden;
+	overflow-anchor: none;
+	scroll-snap-type: y mandatory;
+	-webkit-overflow-scrolling: touch;
+	scrollbar-gutter: auto;
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+}
+
+.chat-doom-scroller::-webkit-scrollbar {
+	width: 0;
+	height: 0;
+	display: none;
+}
+
+/* One slide = one dynamic viewport (zydeco-style), not `%` of nested flex. */
+.chat-page-messages--doom-host .chat-doom-slide,
+.chat-doom-slide {
+	position: relative;
+	flex-shrink: 0;
+	min-height: 100dvh;
+	height: 100dvh;
+	scroll-snap-align: start;
+	scroll-snap-stop: always;
+	overflow: hidden;
+	background: #000;
+}
+
+/* Bottom-heavy scrim for caption/rail only — no top band (reads as an extra “header”). */
+.chat-doom-slide::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	z-index: 1;
+	background: linear-gradient(
+		180deg,
+		transparent 0%,
+		transparent 42%,
+		rgba(0, 0, 0, 0.22) 72%,
+		rgba(0, 0, 0, 0.75) 100%
+	);
+}
+
+/* Fill viewport height; landscape video crops left/right (no letterboxing). */
+.chat-doom-slide-media {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	z-index: 0;
+	background: #000;
+}
+
+.chat-doom-slide-media .chat-doom-poster {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	max-width: none;
+	object-fit: cover;
+	object-position: center;
+	pointer-events: none;
+	background: #000;
+}
+
+.chat-doom-slide-media .chat-doom-poster.chat-doom-video--fit-contain {
+	object-fit: contain;
+}
+
+/*
+ * Fill the slide; portrait clips via cover; square/landscape may use `.chat-doom-video--fit-contain`
+ * (set from intrinsic dimensions in `bindDoomVideoAspectFit`).
+ */
+.chat-doom-video {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	max-width: none;
+	object-fit: cover;
+	object-position: center;
+	background: #000;
+}
+
+.chat-doom-video.chat-doom-video--fit-contain {
+	object-fit: contain;
+}
+
+.chat-doom-play-overlay {
+	position: absolute;
+	inset: 0;
+	z-index: 2;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	pointer-events: none;
+}
+
+.chat-doom-play-overlay[hidden] {
+	display: none !important;
+}
+
+.chat-doom-play-overlay-inner {
+	width: 72px;
+	height: 72px;
+	border-radius: 50%;
+	background: rgba(0, 0, 0, 0.45);
+	color: #fff;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+}
+
+.chat-doom-play-glyph {
+	width: 36px;
+	height: 36px;
+	margin-left: 5px;
+	opacity: 0.95;
+}
+
+.chat-doom-pause-glyph {
+	width: 34px;
+	height: 34px;
+	opacity: 0.95;
+}
+
+.chat-doom-play-overlay-inner--pausehint {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	pointer-events: none;
+}
+
+.chat-doom-progress {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 6;
+	pointer-events: none;
+}
+
+.chat-doom-progress-track {
+	height: 3px;
+	background: rgba(255, 255, 255, 0.2);
+	overflow: hidden;
+}
+
+.chat-doom-progress-fill {
+	display: block;
+	height: 100%;
+	width: 100%;
+	background: rgba(255, 255, 255, 0.92);
+	transform: scaleX(0);
+	transform-origin: 0 50%;
+	will-change: transform;
+}
+
+.chat-doom-slide-overlay {
+	position: absolute;
+	inset: 0;
+	z-index: 4;
+	pointer-events: none;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-end;
+	padding-bottom: calc(24px + env(safe-area-inset-bottom));
+}
+
+.chat-doom-slide-overlay > * {
+	pointer-events: auto;
+}
+
+.chat-doom-rail {
+	position: absolute;
+	right: 10px;
+	bottom: calc(72px + env(safe-area-inset-bottom));
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 14px;
+	z-index: 3;
+}
+
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail button.chat-doom-rail-btn,
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail button.feed-card-action {
+	background: transparent !important;
+	border: none !important;
+	box-shadow: none !important;
+	color: rgba(255, 255, 255, 0.95) !important;
+	filter: none !important;
+	align-self: center;
+	font-weight: 500;
+}
+
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail button.chat-doom-rail-btn:hover,
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail button.feed-card-action:hover {
+	filter: none !important;
+	transform: none !important;
+	background: rgba(255, 255, 255, 0.08) !important;
+}
+
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail button.chat-doom-rail-btn:active,
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail button.feed-card-action:active {
+	transform: none !important;
+}
+
+.chat-doom-rail-item {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+}
+
+.chat-doom-rail-btn {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+	padding: 6px 4px;
+	border: none;
+	background: transparent;
+	color: inherit;
+	cursor: pointer;
+	text-decoration: none;
+	font-size: 11px;
+	line-height: 1.2;
+	max-width: 72px;
+	text-align: center;
+}
+
+.chat-doom-rail .feed-card-action.chat-doom-rail-btn {
+	flex-direction: column;
+	gap: 4px;
+	padding: 6px 4px;
+	font-size: 11px;
+	line-height: 1.2;
+	max-width: 72px;
+	color: rgba(255, 255, 255, 0.95);
+}
+
+.chat-doom-rail .feed-card-action.chat-doom-rail-btn svg {
+	width: 26px;
+	height: 26px;
+}
+
+.chat-doom-rail .feed-card-action-count {
+	color: inherit;
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.chat-doom-rail-count {
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.chat-doom-rail-label {
+	opacity: 0.92;
+}
+
+.chat-doom-bottom {
+	padding: 0 56px 0 14px;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
+.chat-doom-bottom-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: nowrap;
+	margin-bottom: 8px;
+}
+
+/* Shorts-like scale (~32px) next to 14px handle — reads closer to mobile references than 40px */
+.chat-doom-avatar-wrap {
+	flex-shrink: 0;
+	width: 32px;
+	height: 32px;
+	border-radius: 50%;
+	overflow: hidden;
+	box-sizing: border-box;
+	border: 1px solid rgba(255, 255, 255, 0.32);
+	background: rgba(255, 255, 255, 0.1);
+}
+
+.chat-doom-avatar {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.chat-doom-avatar-placeholder {
+	display: block;
+	width: 100%;
+	height: 100%;
+	border-radius: 50%;
+	background: rgba(255, 255, 255, 0.14);
+}
+
+.chat-doom-creator-meta {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+	min-width: 0;
+	flex: 1;
+	color: inherit;
+}
+
+.chat-doom-follow-slot {
+	display: inline-flex;
+	align-items: center;
+	justify-content: flex-start;
+	flex-shrink: 0;
+	max-width: 100%;
+}
+
+.chat-doom-follow-slot[hidden] {
+	display: none !important;
+}
+
+.chat-doom-creator-text {
+	display: inline-flex;
+	align-items: center;
+	font-size: 14px;
+	font-weight: 600;
+	line-height: 1.25;
+	text-decoration: none;
+	color: inherit;
+	text-shadow: 0 1px 4px rgba(0, 0, 0, 0.65);
+}
+
+.chat-doom-handle {
+	font-weight: 500;
+	opacity: 0.95;
+}
+
+.chat-doom-caption {
+	margin: 0;
+	font-size: 14px;
+	line-height: 1.35;
+	text-shadow: 0 1px 4px rgba(0, 0, 0, 0.65);
+	max-height: 4.2em;
+	overflow: hidden;
+	text-transform: none;
+	font-variant: normal;
+	letter-spacing: normal;
+}
+
+.chat-doom-follow {
+	flex-shrink: 0;
+	padding: 6px 12px;
+	border-radius: 999px;
+	font-size: 13px;
+	line-height: 1.2;
+	box-sizing: border-box;
+	white-space: nowrap;
+}
+
+.chat-doom-error {
+	padding: 48px 20px;
+	text-align: center;
+	color: var(--color-text);
+}
+
+.chat-doom-scroll-loading {
+	min-height: 120px;
+}
+
+.chat-doom-error-title {
+	font-weight: 600;
+	margin: 0 0 8px;
+}
+
+.chat-doom-error-detail {
+	margin: 0 0 16px;
+	opacity: 0.85;
 }
 
 @media print {

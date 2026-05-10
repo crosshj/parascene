@@ -1,0 +1,977 @@
+/**
+ * Mount / teardown fullscreen doom scroll for `/chat/c/feed/doom/:creationId`.
+ */
+
+import {
+	createChatFeedFetchPage,
+	FEED_CHANNEL_PAGE_SIZE,
+	getChatFeedItemKey
+} from './feedChannelData.js';
+import { isFeedRowVideoCreation } from '../../shared/feedCardBuild.js';
+import { initLikeButton } from '../../shared/likes.js';
+import { createDoomScrollShell, createDoomSlideElement } from './doomScrollView.js';
+import {
+	destroyDoomCommentsPopover,
+	openDoomCommentsPopover
+} from '../doom/doomCommentsPopover.js';
+
+/** @type {null | (() => void)} */
+let activeTeardown = null;
+
+function setChatPageDoomScrollBodyClass(on) {
+	if (typeof document === 'undefined' || !document.body) return;
+	document.body.classList.toggle('chat-page--doom-scroll', Boolean(on));
+}
+
+export function teardownChatDoomScroll() {
+	setChatPageDoomScrollBodyClass(false);
+	if (typeof activeTeardown === 'function') {
+		try {
+			activeTeardown();
+		} catch {
+			// ignore
+		}
+		activeTeardown = null;
+	}
+}
+
+/**
+ * @param {object} item
+ * @param {number} startCreationId
+ * @returns {boolean}
+ */
+function feedRowMatchesCreation(item, startCreationId) {
+	const cid = Number(item?.created_image_id ?? item?.id);
+	return Number.isFinite(cid) && cid === startCreationId;
+}
+
+/**
+ * @param {object} opts
+ * @param {HTMLElement} opts.messagesEl
+ * @param {number} opts.startCreationId
+ * @param {Function} opts.fetchJsonWithStatusDeduped
+ * @param {() => string[]} opts.getHiddenFeedItems
+ * @param {number | null} opts.viewerUserId
+ * @param {() => void} [opts.applyComposerState]
+ * @param {() => void} [opts.syncChatBrowseViewBodyClass]
+ * @param {() => void} [opts.navigateToFeedChannel] SPA back navigation (defaults to full navigation)
+ */
+export async function mountChatDoomScroll(opts) {
+	const messagesEl = opts.messagesEl;
+	const startCreationId = opts.startCreationId;
+	const fetchJsonWithStatusDeduped = opts.fetchJsonWithStatusDeduped;
+	const getHiddenFeedItems = opts.getHiddenFeedItems;
+	const viewerUserId =
+		opts.viewerUserId != null && Number.isFinite(Number(opts.viewerUserId))
+			? Number(opts.viewerUserId)
+			: null;
+
+	if (!(messagesEl instanceof HTMLElement)) return;
+	teardownChatDoomScroll();
+
+	const fetchPage = createChatFeedFetchPage({
+		fetchJsonWithStatusDeduped,
+		getHiddenFeedItems,
+		pageSize: FEED_CHANNEL_PAGE_SIZE
+	});
+
+	/** Overlap anchor summary with first `/api/feed` page — saves one RTT when feed alone misses the creation. */
+	const summaryPromise = fetchJsonWithStatusDeduped(
+		`/api/creations/${encodeURIComponent(String(startCreationId))}/summary`,
+		{ credentials: 'include' },
+		{ windowMs: 0 }
+	).catch(() => ({ ok: false }));
+
+	/** @type {object[]} */
+	let feedAccumulated = [];
+	const firstFeed = await fetchPage({ initial: true, items: [] });
+	feedAccumulated = Array.isArray(firstFeed.pageItems) ? firstFeed.pageItems.slice() : [];
+	let feedHasMore = Boolean(firstFeed.hasMore);
+
+	while (
+		feedHasMore &&
+		!feedAccumulated.some((it) => feedRowMatchesCreation(it, startCreationId))
+	) {
+		const r = await fetchPage({ initial: false, items: feedAccumulated });
+		const pageItems = Array.isArray(r.pageItems) ? r.pageItems : [];
+		feedAccumulated = feedAccumulated.concat(pageItems);
+		feedHasMore = Boolean(r.hasMore);
+		if (!feedHasMore) break;
+	}
+
+	/** @type {Map<string, object>} */
+	const videoByKey = new Map();
+	/** @type {object[]} */
+	const orderedVideos = [];
+	for (const it of feedAccumulated) {
+		if (!isFeedRowVideoCreation(it)) continue;
+		const key = getChatFeedItemKey(it);
+		if (videoByKey.has(key)) continue;
+		videoByKey.set(key, it);
+		orderedVideos.push(it);
+	}
+
+	let anchorIndex = orderedVideos.findIndex((it) => feedRowMatchesCreation(it, startCreationId));
+
+	if (anchorIndex < 0) {
+		const sum = await summaryPromise;
+		if (sum.ok && sum.data?.item && isFeedRowVideoCreation(sum.data.item)) {
+			const it = sum.data.item;
+			const k = getChatFeedItemKey(it);
+			if (!videoByKey.has(k)) {
+				videoByKey.set(k, it);
+				orderedVideos.push(it);
+			}
+			anchorIndex = orderedVideos.findIndex((x) => feedRowMatchesCreation(x, startCreationId));
+		}
+	} else {
+		void summaryPromise.catch(() => {});
+	}
+
+	messagesEl.classList.add('chat-page-messages--doom-host');
+	setChatPageDoomScrollBodyClass(true);
+	messagesEl.innerHTML = '';
+
+	if (orderedVideos.length === 0 || anchorIndex < 0) {
+		const err = document.createElement('div');
+		err.className = 'chat-doom-error';
+		err.innerHTML = `
+			<p class="chat-doom-error-title">Video unavailable</p>
+			<p class="chat-doom-error-detail">This creation could not be loaded in the feed viewer.</p>
+			<button type="button" class="btn-primary chat-doom-error-back" data-chat-doom-back>Back to feed</button>
+		`;
+		messagesEl.appendChild(err);
+		const eb = err.querySelector('[data-chat-doom-back]');
+		if (eb instanceof HTMLElement) {
+			eb.addEventListener('click', () => {
+				if (typeof opts.navigateToFeedChannel === 'function') {
+					opts.navigateToFeedChannel();
+				} else {
+					window.location.href = '/chat/c/feed';
+				}
+			});
+		}
+		if (typeof opts.applyComposerState === 'function') opts.applyComposerState();
+		activeTeardown = () => {
+			setChatPageDoomScrollBodyClass(false);
+			messagesEl.classList.remove('chat-page-messages--doom-host');
+		};
+		return;
+	}
+
+	const shell = createDoomScrollShell();
+	const scroller = shell.querySelector('[data-chat-doom-scroller]');
+	const backBtn = shell.querySelector('[data-chat-doom-back]');
+	const muteBtn = shell.querySelector('[data-chat-doom-mute]');
+	const muteOn = shell.querySelector('[data-chat-doom-mute-on]');
+	const muteOff = shell.querySelector('[data-chat-doom-mute-off]');
+
+	if (!(scroller instanceof HTMLElement)) {
+		messagesEl.innerHTML = '';
+		setChatPageDoomScrollBodyClass(false);
+		messagesEl.classList.remove('chat-page-messages--doom-host');
+		return;
+	}
+
+	const tryMutedFromStorage = () => {
+		try {
+			return sessionStorage.getItem('chatDoomPreferMuted') === '1';
+		} catch {
+			return false;
+		}
+	};
+	let preferMuted = tryMutedFromStorage();
+
+	function syncMuteUi() {
+		if (muteOn instanceof HTMLElement) muteOn.hidden = !preferMuted;
+		if (muteOff instanceof HTMLElement) muteOff.hidden = preferMuted;
+		if (muteBtn instanceof HTMLElement) {
+			muteBtn.setAttribute('aria-label', preferMuted ? 'Unmute video' : 'Mute video');
+		}
+	}
+	syncMuteUi();
+
+	/** @type {ReturnType<typeof setTimeout> | null} */
+	let pauseFlashTimer = null;
+
+	function syncPlayOverlayForSlide(slide) {
+		const v = slide.querySelector('video.chat-doom-video');
+		const o = slide.querySelector('[data-chat-doom-play-overlay]');
+		if (!v || !o) return;
+		const playInner = o.querySelector('[data-chat-doom-play-icon]');
+		const hint = o.querySelector('[data-chat-doom-pause-hint]');
+		if (playInner instanceof HTMLElement) playInner.hidden = false;
+		if (hint instanceof HTMLElement) hint.hidden = true;
+		const userPaused = slide.getAttribute('data-chat-doom-user-paused') === '1';
+		const isActive = slide.classList.contains('chat-doom-slide--active');
+		const showPlayHint = v.paused && userPaused && isActive;
+		o.hidden = !showPlayHint;
+		o.setAttribute('aria-hidden', showPlayHint ? 'false' : 'true');
+	}
+
+	function flashPauseHint(slide) {
+		const o = slide.querySelector('[data-chat-doom-play-overlay]');
+		const hint = o?.querySelector?.('[data-chat-doom-pause-hint]');
+		const playInner = o?.querySelector?.('[data-chat-doom-play-icon]');
+		if (!(o instanceof HTMLElement) || !(hint instanceof HTMLElement)) return;
+		if (pauseFlashTimer) window.clearTimeout(pauseFlashTimer);
+		o.hidden = false;
+		hint.hidden = false;
+		if (playInner instanceof HTMLElement) playInner.hidden = true;
+		o.setAttribute('aria-hidden', 'false');
+		pauseFlashTimer = window.setTimeout(() => {
+			pauseFlashTimer = null;
+			const v = slide.querySelector('video.chat-doom-video');
+			if (!(v instanceof HTMLVideoElement)) return;
+			hint.hidden = true;
+			if (playInner instanceof HTMLElement) playInner.hidden = false;
+			syncPlayOverlayForSlide(slide);
+		}, 480);
+	}
+
+	/**
+	 * @param {HTMLElement} slide
+	 */
+	function bindDoomSlidePlaybackUi(slide) {
+		const v = slide.querySelector('video.chat-doom-video');
+		if (!(v instanceof HTMLVideoElement)) return;
+		const sync = () => syncPlayOverlayForSlide(slide);
+		v.addEventListener('play', () => {
+			slide.removeAttribute('data-chat-doom-user-paused');
+			sync();
+		});
+		/* Do not infer “user paused” from `pause` — scroll/snap/autoplay policy also pause the element.
+		   Only `onDoomMediaClick` sets `data-chat-doom-user-paused` when the user taps to pause. */
+		v.addEventListener('pause', sync);
+		sync();
+	}
+
+	function appendDoomSlideForItem(item) {
+		const slide = createDoomSlideElement(item, viewerUserId ?? -1);
+		scroller.appendChild(slide);
+		bindDoomSlidePlaybackUi(slide);
+		const likeBtn = slide.querySelector('button[data-like-button]');
+		if (likeBtn instanceof HTMLElement) initLikeButton(likeBtn, item);
+	}
+
+	/** Sync slides through anchor first so scroll-to-anchor + playback run without waiting on the full list. */
+	for (let si = 0; si <= anchorIndex && si < orderedVideos.length; si += 1) {
+		appendDoomSlideForItem(orderedVideos[si]);
+	}
+
+	messagesEl.appendChild(shell);
+
+	if (typeof opts.applyComposerState === 'function') opts.applyComposerState();
+	if (typeof opts.syncChatBrowseViewBodyClass === 'function') opts.syncChatBrowseViewBodyClass();
+
+	const slides = () => Array.from(scroller.querySelectorAll('.chat-doom-slide'));
+
+	/** @type {(() => void) | null} */
+	let detachProgressListener = null;
+
+	function bindProgressForSlide(slide, v) {
+		const fill = slide.querySelector('[data-chat-doom-progress-fill]');
+		if (!(fill instanceof HTMLElement)) return () => {};
+		const tick = () => {
+			const d = v.duration;
+			const t = v.currentTime;
+			if (!Number.isFinite(d) || d <= 0) {
+				fill.style.transform = 'scaleX(0)';
+				return;
+			}
+			const p = Math.min(1, Math.max(0, t / d));
+			fill.style.transform = `scaleX(${p})`;
+		};
+		v.addEventListener('timeupdate', tick);
+		v.addEventListener('loadedmetadata', tick);
+		tick();
+		return () => {
+			v.removeEventListener('timeupdate', tick);
+			v.removeEventListener('loadedmetadata', tick);
+		};
+	}
+
+	function attachActiveProgressListener() {
+		if (typeof detachProgressListener === 'function') {
+			detachProgressListener();
+			detachProgressListener = null;
+		}
+		const list = slides();
+		const slide = list[activeIdx];
+		if (!(slide instanceof HTMLElement)) return;
+		const v = slide.querySelector('video.chat-doom-video');
+		if (!(v instanceof HTMLVideoElement)) return;
+		detachProgressListener = bindProgressForSlide(slide, v);
+	}
+
+	/** Skip swipe-audio kill only for the initial programmatic anchor scroll (mount). */
+	let suppressSwipePauseForAnchorScroll = false;
+
+	/** Skip pause-on-scroll while we re-snap after feed append (same gesture system as swipe intent). */
+	let suppressSwipePauseForFeedAppend = false;
+
+	function scrollToAnchor() {
+		const list = slides();
+		const el = list[anchorIndex];
+		if (!(el instanceof HTMLElement)) return;
+		suppressSwipePauseForAnchorScroll = true;
+		try {
+			el.scrollIntoView({ block: 'start', behavior: 'auto' });
+		} finally {
+			queueMicrotask(() => {
+				suppressSwipePauseForAnchorScroll = false;
+			});
+		}
+	}
+	requestAnimationFrame(() => {
+		requestAnimationFrame(scrollToAnchor);
+	});
+
+	/** @type {number} */
+	let activeIdx = anchorIndex;
+
+	/**
+	 * `scrollTop` that aligns a slide’s top to the scroller snapport top.
+	 * Prefer `offsetTop` vs the positioned scroller (see `.chat-doom-scroller { position: relative }`)
+	 * so we match the scroll offset model — `getBoundingClientRect` + snap can drift cumulatively after each append.
+	 */
+	function scrollTopToAlignSlideTop(slide) {
+		if (!(slide instanceof HTMLElement) || !(scroller instanceof HTMLElement)) return null;
+		if (slide.parentElement === scroller && slide.offsetParent === scroller) {
+			const y = slide.offsetTop;
+			return Number.isFinite(y) ? y : null;
+		}
+		const sr = scroller.getBoundingClientRect();
+		const r = slide.getBoundingClientRect();
+		const y = scroller.scrollTop + (r.top - sr.top);
+		return Number.isFinite(y) ? y : null;
+	}
+
+	/**
+	 * After feed append: re-snap using measured geometry (not idx × height).
+	 * Temporarily clears scroll-snap so mandatory snap does not fight programmatic `scrollTop` (stacking offset each load).
+	 * @param {HTMLElement | null} lockSlide
+	 */
+	function stabilizeDoomScrollPosition(lockSlide) {
+		if (!(lockSlide instanceof HTMLElement) || !lockSlide.isConnected) return;
+		const targetTop = scrollTopToAlignSlideTop(lockSlide);
+		if (targetTop == null) return;
+		const next = Math.max(0, targetTop);
+		if (Math.abs(scroller.scrollTop - next) < 1) return;
+
+		suppressSwipePauseForFeedAppend = true;
+		const prevSnap = scroller.style.scrollSnapType;
+		scroller.style.scrollSnapType = 'none';
+
+		const apply = () => {
+			const y = scrollTopToAlignSlideTop(lockSlide);
+			if (y != null) scroller.scrollTop = Math.max(0, y);
+		};
+		apply();
+		requestAnimationFrame(() => {
+			apply();
+			requestAnimationFrame(() => {
+				scroller.style.scrollSnapType = prevSnap;
+				queueMicrotask(() => {
+					suppressSwipePauseForFeedAppend = false;
+				});
+			});
+		});
+	}
+
+	function pauseAll() {
+		for (const s of slides()) {
+			const v = s.querySelector('video.chat-doom-video');
+			if (v instanceof HTMLVideoElement) v.pause();
+		}
+	}
+
+	function playActive() {
+		const list = slides();
+		const slide = list[activeIdx];
+		if (!(slide instanceof HTMLElement)) return;
+		slide.removeAttribute('data-chat-doom-user-paused');
+		const v = slide.querySelector('video.chat-doom-video');
+		if (!(v instanceof HTMLVideoElement)) return;
+		v.muted = preferMuted;
+		const p = v.play();
+		if (p && typeof p.catch === 'function') {
+			p.catch(() => {
+				preferMuted = true;
+				try {
+					sessionStorage.setItem('chatDoomPreferMuted', '1');
+				} catch {
+					// ignore
+				}
+				syncMuteUi();
+				v.muted = true;
+				v.play().catch(() => {});
+			});
+		}
+		attachActiveProgressListener();
+	}
+
+	function applyActiveVisual() {
+		const list = slides();
+		for (let i = 0; i < list.length; i += 1) {
+			list[i].classList.toggle('chat-doom-slide--active', i === activeIdx);
+		}
+	}
+
+	function setActiveIndex(next) {
+		const list = slides();
+		if (list.length === 0) return;
+		const clamped = Math.max(0, Math.min(list.length - 1, next));
+		activeIdx = clamped;
+		pauseAll();
+		applyActiveVisual();
+		playActive();
+		void prefetchFollowForSlide(activeIdx);
+	}
+
+	/**
+	 * Which slide’s vertical center is closest to the scroller’s vertical center.
+	 * Uses live layout — not `activeIdx`, which only updates after scroll-idle debounce and can be stale mid-gesture.
+	 */
+	function slideIndexAtScrollerMidpoint() {
+		const list = slides();
+		if (list.length === 0) return 0;
+		const sr = scroller.getBoundingClientRect();
+		const mid = sr.top + sr.height * 0.5;
+		let best = 0;
+		let bestDist = Infinity;
+		for (let i = 0; i < list.length; i += 1) {
+			const r = list[i].getBoundingClientRect();
+			const c = (r.top + r.bottom) / 2;
+			const d = Math.abs(c - mid);
+			if (d < bestDist) {
+				bestDist = d;
+				best = i;
+			}
+		}
+		return best;
+	}
+
+	function resolveActiveFromScroll() {
+		const list = slides();
+		if (list.length === 0) return;
+		const best = slideIndexAtScrollerMidpoint();
+		const prev = activeIdx;
+		activeIdx = best;
+		applyActiveVisual();
+		playActive();
+		if (prev !== activeIdx) void prefetchFollowForSlide(activeIdx);
+	}
+
+	let scrollIdle = 0;
+	let feedBusy = false;
+
+	/** Prefetch `/api/feed` pages when within this many slides of the newest-loaded tail (scroll down / older). */
+	const DOOM_FEED_NEAR_END_SLACK = 5;
+	/** If a page has no new video rows (images-only, dupes, tips), keep paging until we append slides or run out. */
+	const DOOM_FEED_MAX_EMPTY_PAGES_IN_ROW = 32;
+
+	function isNearEndOfSlideList() {
+		const list = slides();
+		if (list.length === 0) return false;
+		const lastIdx = list.length - 1;
+		return activeIdx >= lastIdx - DOOM_FEED_NEAR_END_SLACK;
+	}
+
+	/** Pause every video on first pixel of motion — before debounced slide resolution — stops audio bleed. */
+	function pauseAllVideosOnUserSwipeIntent() {
+		if (suppressSwipePauseForAnchorScroll) return;
+		if (suppressSwipePauseForFeedAppend) return;
+		pauseAll();
+	}
+
+	function onScrollerScroll() {
+		pauseAllVideosOnUserSwipeIntent();
+		window.clearTimeout(scrollIdle);
+		scrollIdle = window.setTimeout(() => {
+			resolveActiveFromScroll();
+			void maybeAppendMore(true);
+		}, 80);
+	}
+	scroller.addEventListener('scroll', onScrollerScroll, { passive: true });
+
+	/** Touch/wheel often fire before `scroll` — pause immediately so audio cannot leak into the next clip. */
+	let touchSwipeStartY = /** @type {number | null} */ (null);
+	scroller.addEventListener(
+		'touchstart',
+		(ev) => {
+			touchSwipeStartY = ev.touches[0]?.clientY ?? null;
+		},
+		{ passive: true }
+	);
+	scroller.addEventListener(
+		'touchmove',
+		(ev) => {
+			if (suppressSwipePauseForAnchorScroll) return;
+			const y = ev.touches[0]?.clientY;
+			if (touchSwipeStartY == null || y == null) return;
+			if (Math.abs(y - touchSwipeStartY) > 12) pauseAllVideosOnUserSwipeIntent();
+		},
+		{ passive: true }
+	);
+	scroller.addEventListener(
+		'touchend',
+		() => {
+			touchSwipeStartY = null;
+		},
+		{ passive: true }
+	);
+	scroller.addEventListener(
+		'wheel',
+		() => {
+			pauseAllVideosOnUserSwipeIntent();
+		},
+		{ passive: true }
+	);
+
+	function goToAdjacentSlide(delta) {
+		const list = slides();
+		if (list.length === 0) return;
+		const next = Math.max(0, Math.min(list.length - 1, activeIdx + delta));
+		const el = list[next];
+		if (!(el instanceof HTMLElement)) return;
+		el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	}
+
+	function onDoomMediaClick(ev) {
+		const t = ev.target;
+		if (!(t instanceof Element)) return;
+		const media = t.closest('[data-chat-doom-slide-media]');
+		if (!(media instanceof HTMLElement)) return;
+		if (t.closest('button, a')) return;
+		const slide = media.closest('.chat-doom-slide');
+		const v = slide?.querySelector('video.chat-doom-video');
+		if (!(v instanceof HTMLVideoElement) || !(slide instanceof HTMLElement)) return;
+		ev.preventDefault();
+		if (v.paused) {
+			void v.play();
+		} else {
+			slide.setAttribute('data-chat-doom-user-paused', '1');
+			v.pause();
+			flashPauseHint(slide);
+		}
+	}
+	scroller.addEventListener('click', onDoomMediaClick);
+
+	function onDoomKeydown(ev) {
+		if (ev.defaultPrevented) return;
+		const ae = document.activeElement;
+		if (
+			ae instanceof HTMLInputElement ||
+			ae instanceof HTMLTextAreaElement ||
+			(ae instanceof HTMLElement && ae.isContentEditable)
+		) {
+			return;
+		}
+		if (ev.key === 'ArrowDown') {
+			ev.preventDefault();
+			goToAdjacentSlide(1);
+		} else if (ev.key === 'ArrowUp') {
+			ev.preventDefault();
+			goToAdjacentSlide(-1);
+		}
+	}
+	window.addEventListener('keydown', onDoomKeydown);
+
+	/** Debounce IO: layout thrashing + wide rootMargin can enqueue many callbacks → burst `/api/feed` with ascending offsets. */
+	const DOOM_IO_APPEND_DEBOUNCE_MS = 280;
+	/** @type {ReturnType<typeof setTimeout> | null} */
+	let doomIoAppendTimer = null;
+	const io = new IntersectionObserver(
+		(entries) => {
+			for (const e of entries) {
+				if (!e.isIntersecting || e.target !== scroller.lastElementChild) continue;
+				if (feedBusy || !feedHasMore) continue;
+				if (doomIoAppendTimer != null) window.clearTimeout(doomIoAppendTimer);
+				doomIoAppendTimer = window.setTimeout(() => {
+					doomIoAppendTimer = null;
+					if (feedBusy || !feedHasMore) return;
+					void maybeAppendMore(false);
+				}, DOOM_IO_APPEND_DEBOUNCE_MS);
+			}
+		},
+		{ root: scroller, rootMargin: '280px 0px', threshold: 0 }
+	);
+	const obsSlides = slides();
+	if (obsSlides.length > 0) io.observe(obsSlides[obsSlides.length - 1]);
+
+	function updateIoTarget() {
+		io.disconnect();
+		const list = slides();
+		if (list.length > 0) io.observe(list[list.length - 1]);
+	}
+
+	/**
+	 * @param {object} [opts]
+	 * @param {boolean} [opts.skipStabilize] — caller stabilizes once after a burst (empty-page chains).
+	 * @returns {Promise<boolean>} whether any new video slides were appended
+	 */
+	async function fetchAndAppendFeedPageFromNetwork(opts = {}) {
+		const skipStabilize = Boolean(opts.skipStabilize);
+		const r = await fetchPage({ initial: false, items: feedAccumulated });
+		const pageItems = Array.isArray(r.pageItems) ? r.pageItems : [];
+		feedAccumulated = feedAccumulated.concat(pageItems);
+		feedHasMore = Boolean(r.hasMore);
+
+		const frag = document.createDocumentFragment();
+		const pending = [];
+		for (const it of pageItems) {
+			if (!isFeedRowVideoCreation(it)) continue;
+			const key = getChatFeedItemKey(it);
+			if (videoByKey.has(key)) continue;
+			videoByKey.set(key, it);
+			const slide = createDoomSlideElement(it, viewerUserId ?? -1);
+			frag.appendChild(slide);
+			pending.push({ slide, item: it });
+		}
+
+		const appended = pending.length > 0;
+		if (appended) {
+			scroller.appendChild(frag);
+			for (const { slide, item } of pending) {
+				bindDoomSlidePlaybackUi(slide);
+				const likeBtn = slide.querySelector('button[data-like-button]');
+				if (likeBtn instanceof HTMLElement) initLikeButton(likeBtn, item);
+			}
+			updateIoTarget();
+			if (!skipStabilize) {
+				const listNow = slides();
+				const li = Math.min(
+					Math.max(slideIndexAtScrollerMidpoint(), 0),
+					Math.max(0, listNow.length - 1)
+				);
+				const anchorNow = listNow[li];
+				if (anchorNow instanceof HTMLElement) stabilizeDoomScrollPosition(anchorNow);
+			}
+		}
+		return appended;
+	}
+
+	/**
+	 * @param {boolean} [requireNearEnd] — when false, fetch whenever invoked (e.g. last slide observer).
+	 */
+	async function maybeAppendMore(requireNearEnd = true) {
+		if (!feedHasMore || feedBusy) return;
+		const list = slides();
+		if (list.length === 0) return;
+		if (requireNearEnd && !isNearEndOfSlideList()) return;
+
+		feedBusy = true;
+		try {
+			let emptyPages = 0;
+			let anyAppended = false;
+			while (
+				feedHasMore &&
+				(requireNearEnd ? isNearEndOfSlideList() : true) &&
+				emptyPages < DOOM_FEED_MAX_EMPTY_PAGES_IN_ROW
+			) {
+				const lenBefore = slides().length;
+				const didAppend = await fetchAndAppendFeedPageFromNetwork({ skipStabilize: true });
+				const lenAfter = slides().length;
+				if (didAppend || lenAfter > lenBefore) anyAppended = true;
+				if (lenAfter > lenBefore) break;
+				emptyPages += 1;
+				if (!feedHasMore) break;
+			}
+			/* After awaits, align from viewport geometry — activeIdx can lag scroll-idle debounce. */
+			if (anyAppended) {
+				const listAfter = slides();
+				const idx = Math.min(
+					Math.max(slideIndexAtScrollerMidpoint(), 0),
+					Math.max(0, listAfter.length - 1)
+				);
+				const anchor = listAfter[idx];
+				if (anchor instanceof HTMLElement) stabilizeDoomScrollPosition(anchor);
+			}
+		} catch {
+			feedHasMore = false;
+		} finally {
+			feedBusy = false;
+		}
+	}
+
+	/** Preload next `/api/feed` page after critical DOM — idle only; never blocks initial paint. */
+	function scheduleIdleDoomNextFeedPage() {
+		if (!feedHasMore) return;
+		const run = () => {
+			void (async () => {
+				if (!feedHasMore || feedBusy) return;
+				feedBusy = true;
+				try {
+					let emptyPages = 0;
+					let anyAppended = false;
+					while (
+						feedHasMore &&
+						emptyPages < DOOM_FEED_MAX_EMPTY_PAGES_IN_ROW
+					) {
+						const lenBefore = slides().length;
+						const didAppend = await fetchAndAppendFeedPageFromNetwork({ skipStabilize: true });
+						const lenAfter = slides().length;
+						if (didAppend || lenAfter > lenBefore) anyAppended = true;
+						if (lenAfter > lenBefore) break;
+						emptyPages += 1;
+						if (!feedHasMore) break;
+					}
+					if (anyAppended) {
+						const listAfter = slides();
+						const idx = Math.min(
+							Math.max(slideIndexAtScrollerMidpoint(), 0),
+							Math.max(0, listAfter.length - 1)
+						);
+						const anchor = listAfter[idx];
+						if (anchor instanceof HTMLElement) stabilizeDoomScrollPosition(anchor);
+					}
+				} catch {
+					// flake — user can still trigger scroll fetch
+				} finally {
+					feedBusy = false;
+				}
+			})();
+		};
+		if (typeof requestIdleCallback !== 'undefined') {
+			requestIdleCallback(run, { timeout: 4500 });
+		} else {
+			window.setTimeout(run, 2);
+		}
+	}
+
+	const DOOM_TAIL_CHUNK = 12;
+	let tailSlideIdx = anchorIndex + 1;
+	function appendTailSlidesChunk() {
+		const end = Math.min(tailSlideIdx + DOOM_TAIL_CHUNK, orderedVideos.length);
+
+		const frag = document.createDocumentFragment();
+		const batch = [];
+		for (; tailSlideIdx < end; tailSlideIdx += 1) {
+			const item = orderedVideos[tailSlideIdx];
+			const slide = createDoomSlideElement(item, viewerUserId ?? -1);
+			frag.appendChild(slide);
+			batch.push({ slide, item });
+		}
+		scroller.appendChild(frag);
+		for (const { slide, item } of batch) {
+			bindDoomSlidePlaybackUi(slide);
+			const likeBtn = slide.querySelector('button[data-like-button]');
+			if (likeBtn instanceof HTMLElement) initLikeButton(likeBtn, item);
+		}
+		updateIoTarget();
+		const tailDone = tailSlideIdx >= orderedVideos.length;
+		if (tailDone) {
+			const listAfterChunk = slides();
+			const idxChunk = Math.min(
+				Math.max(slideIndexAtScrollerMidpoint(), 0),
+				Math.max(0, listAfterChunk.length - 1)
+			);
+			const anchorChunk = listAfterChunk[idxChunk];
+			if (anchorChunk instanceof HTMLElement) stabilizeDoomScrollPosition(anchorChunk);
+			scheduleIdleDoomNextFeedPage();
+		} else {
+			requestAnimationFrame(appendTailSlidesChunk);
+		}
+	}
+	if (anchorIndex + 1 < orderedVideos.length) {
+		requestAnimationFrame(appendTailSlidesChunk);
+	} else {
+		scheduleIdleDoomNextFeedPage();
+	}
+
+	/** @type {Map<number, { viewer_follows?: boolean, is_self?: boolean }>} */
+	const followCache = new Map();
+
+	async function prefetchFollowForSlide(idx) {
+		const list = slides();
+		const slide = list[idx];
+		if (!(slide instanceof HTMLElement)) return;
+		const uidRaw = slide.dataset.userId;
+		const uid = Number(uidRaw);
+		if (!Number.isFinite(uid) || uid <= 0) return;
+		if (viewerUserId != null && uid === viewerUserId) return;
+		if (followCache.has(uid)) {
+			applyFollowUi(slide, followCache.get(uid));
+			return;
+		}
+		try {
+			const res = await fetchJsonWithStatusDeduped(
+				`/api/users/${encodeURIComponent(String(uid))}/profile`,
+				{ credentials: 'include' },
+				{ windowMs: 60000 }
+			);
+			if (!res.ok || !res.data) {
+				for (const s of slides()) {
+					if (Number(s.dataset.userId) === uid) applyFollowUi(s, undefined);
+				}
+				return;
+			}
+			const payload = {
+				viewer_follows: Boolean(res.data.viewer_follows),
+				is_self: Boolean(res.data.is_self)
+			};
+			followCache.set(uid, payload);
+			for (const s of slides()) {
+				if (Number(s.dataset.userId) === uid) applyFollowUi(s, payload);
+			}
+		} catch {
+			for (const s of slides()) {
+				if (Number(s.dataset.userId) === uid) applyFollowUi(s, undefined);
+			}
+		}
+	}
+
+	/**
+	 * @param {HTMLElement} slide
+	 * @param {{ viewer_follows?: boolean, is_self?: boolean } | undefined} data — undefined = optimistic “show Follow” (fetch failed)
+	 */
+	function applyFollowUi(slide, data) {
+		const slot = slide.querySelector('[data-chat-doom-follow-slot]');
+		const btn = slide.querySelector('[data-chat-doom-follow]');
+		if (!(btn instanceof HTMLElement)) return;
+
+		const hideFollow = Boolean(data?.is_self || data?.viewer_follows);
+
+		if (hideFollow) {
+			btn.hidden = true;
+			if (slot instanceof HTMLElement) slot.hidden = true;
+			return;
+		}
+
+		btn.hidden = false;
+		if (slot instanceof HTMLElement) {
+			slot.hidden = false;
+			slot.removeAttribute('aria-hidden');
+		}
+	}
+
+	function bindFollowClick(ev) {
+		const t = ev.target;
+		if (!(t instanceof Element)) return;
+		const btn = t.closest('[data-chat-doom-follow]');
+		if (!(btn instanceof HTMLButtonElement)) return;
+		const uid = Number(btn.dataset.followUserId);
+		if (!Number.isFinite(uid) || uid <= 0) return;
+		if (btn.dataset.followBusy === '1') return;
+		btn.dataset.followBusy = '1';
+		fetch(`/api/users/${encodeURIComponent(String(uid))}/follow`, {
+			method: 'POST',
+			credentials: 'include'
+		})
+			.then((res) => {
+				if (!res.ok) return;
+				followCache.set(uid, { viewer_follows: true });
+				for (const s of slides()) {
+					if (Number(s.dataset.userId) === uid) {
+						const b = s.querySelector('[data-chat-doom-follow]');
+						if (b instanceof HTMLElement) b.hidden = true;
+						const slot = s.querySelector('[data-chat-doom-follow-slot]');
+						if (slot instanceof HTMLElement) slot.hidden = true;
+					}
+				}
+			})
+			.finally(() => {
+				delete btn.dataset.followBusy;
+			});
+	}
+
+	scroller.addEventListener('click', bindFollowClick);
+
+	function onShareClick(ev) {
+		const t = ev.target;
+		if (!(t instanceof Element)) return;
+		const btn = t.closest('[data-chat-doom-share]');
+		if (!(btn instanceof HTMLElement)) return;
+		const slide = btn.closest('.chat-doom-slide');
+		const cid = slide instanceof HTMLElement ? slide.dataset.creationId : '';
+		if (!cid) return;
+		ev.preventDefault();
+		ev.stopPropagation();
+		const url = `${window.location.origin}/creations/${encodeURIComponent(cid)}`;
+		if (navigator.share) {
+			navigator.share({ url }).catch(() => {
+				copyUrl(url);
+			});
+		} else {
+			copyUrl(url);
+		}
+	}
+
+	function copyUrl(url) {
+		if (navigator.clipboard?.writeText) {
+			navigator.clipboard.writeText(url).catch(() => {});
+		}
+	}
+
+	scroller.addEventListener('click', onShareClick);
+
+	function onCommentsRailClick(ev) {
+		const a = ev.target.closest('[data-chat-doom-comments]');
+		if (!(a instanceof HTMLAnchorElement)) return;
+		ev.preventDefault();
+		ev.stopPropagation();
+		const countEl = a.querySelector('.chat-doom-rail-count');
+		const commentCountLabel =
+			countEl && typeof countEl.textContent === 'string' ? countEl.textContent.trim() : '';
+		const detailHref = (a.getAttribute('href') || '').trim();
+		openDoomCommentsPopover({ commentCountLabel, detailHref });
+	}
+	scroller.addEventListener('click', onCommentsRailClick);
+
+	if (backBtn instanceof HTMLElement) {
+		backBtn.addEventListener('click', (ev) => {
+			ev.preventDefault();
+			if (typeof opts.navigateToFeedChannel === 'function') {
+				opts.navigateToFeedChannel();
+			} else {
+				window.location.href = '/chat/c/feed';
+			}
+		});
+	}
+
+	if (muteBtn instanceof HTMLElement) {
+		muteBtn.addEventListener('click', () => {
+			preferMuted = !preferMuted;
+			try {
+				sessionStorage.setItem('chatDoomPreferMuted', preferMuted ? '1' : '0');
+			} catch {
+				// ignore
+			}
+			syncMuteUi();
+			const list = slides();
+			const slide = list[activeIdx];
+			const v = slide?.querySelector?.('video.chat-doom-video');
+			if (v instanceof HTMLVideoElement) {
+				v.muted = preferMuted;
+			}
+		});
+	}
+
+	applyActiveVisual();
+	pauseAll();
+	playActive();
+	void prefetchFollowForSlide(activeIdx);
+
+	activeTeardown = () => {
+		destroyDoomCommentsPopover();
+		if (typeof detachProgressListener === 'function') {
+			detachProgressListener();
+			detachProgressListener = null;
+		}
+		if (pauseFlashTimer) window.clearTimeout(pauseFlashTimer);
+		if (doomIoAppendTimer != null) {
+			window.clearTimeout(doomIoAppendTimer);
+			doomIoAppendTimer = null;
+		}
+		scroller.removeEventListener('scroll', onScrollerScroll);
+		io.disconnect();
+		scroller.removeEventListener('click', bindFollowClick);
+		scroller.removeEventListener('click', onShareClick);
+		scroller.removeEventListener('click', onCommentsRailClick);
+		scroller.removeEventListener('click', onDoomMediaClick);
+		window.removeEventListener('keydown', onDoomKeydown);
+		window.clearTimeout(scrollIdle);
+		messagesEl.classList.remove('chat-page-messages--doom-host');
+	};
+}

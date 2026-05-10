@@ -58,6 +58,7 @@ import {
 	createFeedItemCard,
 	feedItemToUser,
 	getHiddenFeedItems,
+	isFeedRowVideoCreation,
 	partitionChatFeedMobileAlternating
 } from '../shared/feedCardBuild.js';
 import {
@@ -66,6 +67,7 @@ import {
 	createChatFeedFetchPage
 } from './feed/feedChannelData.js';
 import { createChatFeedChannelElementsFromSegments, getChatFeedMobileSpotlightHtml } from './feed/feedChannelView.js';
+import { mountChatDoomScroll, teardownChatDoomScroll } from './feed/doomScrollMount.js';
 import { addToMutateQueue } from '/shared/mutateQueue.js';
 import { captureChallengeSubmitThread } from '/shared/challengeSubmitContext.js';
 import * as challengesChannelModule from './challengesChannel.js';
@@ -125,11 +127,46 @@ function isChatPageMobileLayout() {
 	}
 }
 
+/**
+ * Broader than {@link isChatPageMobileLayout}: used for Spotlight → doom only (`resolveFeedLaneVideoToDoomHref`).
+ */
+function shouldRouteFeedVideoCardToDoomScroll() {
+	if (isChatPageMobileLayout()) return true;
+	try {
+		if (window.matchMedia('(max-width: 768px)').matches) return true;
+		if (window.matchMedia('(pointer: coarse)').matches) return true;
+		const ua = String(window.navigator?.userAgent || '').toLowerCase();
+		if (/android|iphone|ipod|ipad|mobile/.test(ua)) return true;
+	} catch {
+		// ignore
+	}
+	return false;
+}
+
+/**
+ * @param {object} item — feed creation row
+ * @returns {boolean}
+ */
+function isDoomEligibleFeedVideoItem(item) {
+	if (!item || typeof item !== 'object') return false;
+	const t = item.type;
+	if (t === 'tip' || t === 'blog_post' || t === 'engagement') return false;
+	const videoUrl = typeof item.video_url === 'string' ? item.video_url.trim() : '';
+	if (!videoUrl) return false;
+	if (isFeedRowVideoCreation(item)) return true;
+	const mt = typeof item.media_type === 'string' ? item.media_type.trim().toLowerCase() : '';
+	return mt !== 'image';
+}
+
 function shouldUseAppMobileHeaderForChatPath(pathname) {
 	const p = String(pathname || '').replace(/\/+$/, '') || '/';
 	if (p === '/' || p === '/index.html' || p === '/feed' || p === '/explore' || p === '/creations') return true;
 	if (!p.startsWith('/chat/c/')) return false;
-	const slug = p.slice('/chat/c/'.length).split('/')[0].trim().toLowerCase();
+	const segments = p.slice('/chat/c/'.length).split('/').filter(Boolean);
+	const seg0 = segments[0] ? String(segments[0]).trim().toLowerCase() : '';
+	const seg1 = segments[1] ? String(segments[1]).trim().toLowerCase() : '';
+	if (seg0 === 'feed' && seg1 === 'doom') return false;
+	const slug = seg0;
 	if (!slug || slug === 'feedback') return false;
 	return slug === 'feed' || slug === 'explore' || slug === 'creations';
 }
@@ -564,7 +601,7 @@ function normalizeChannelTagLikeApi(input) {
 
 /**
  * @param {string} pathname
- * @returns {{ kind: 'empty' } | { kind: 'invalid' } | { kind: 'thread', threadId: number } | { kind: 'channel', slug: string } | { kind: 'dm', userId: number } | { kind: 'dm', userName: string } | { kind: 'dm', self: true }}
+ * @returns {{ kind: 'empty' } | { kind: 'invalid' } | { kind: 'thread', threadId: number } | { kind: 'channel', slug: string } | { kind: 'doom_scroll', startCreationId: number } | { kind: 'dm', userId: number } | { kind: 'dm', userName: string } | { kind: 'dm', self: true }}
  */
 function parseChatPathname(pathname) {
 	const p = String(pathname || '').replace(/\/+$/, '') || '/';
@@ -589,6 +626,17 @@ function parseChatPathname(pathname) {
 	const seg = parts[1].toLowerCase();
 	if (seg === 'notes' && parts.length === 2) {
 		return { kind: 'dm', self: true };
+	}
+	if (seg === 'c' && parts.length >= 5) {
+		const ch = String(parts[2]).toLowerCase();
+		const sub = String(parts[3]).toLowerCase();
+		if (ch === 'feed' && sub === 'doom') {
+			const cid = Number.parseInt(String(parts[4]), 10);
+			if (Number.isFinite(cid) && cid > 0) {
+				return { kind: 'doom_scroll', startCreationId: cid };
+			}
+			return { kind: 'invalid' };
+		}
 	}
 	if (seg === 'c' && parts[2]) {
 		let slug = parts[2];
@@ -1710,6 +1758,7 @@ export async function initChatPage(root, options = {}) {
 		if (messagesEl.dataset.chatMessagesScrollLock === '1') return;
 		if (
 			activePseudoChannelSlug === 'feed' ||
+			activePseudoChannelSlug === 'feed_doom' ||
 			activePseudoChannelSlug === 'explore' ||
 			activePseudoChannelSlug === 'creations' ||
 			activePseudoChannelSlug === 'comments' ||
@@ -2690,7 +2739,8 @@ export async function initChatPage(root, options = {}) {
 			if (shouldShowAppMobileFooter) appMobileNav.removeAttribute('hidden');
 		}
 		if (mobileChrome instanceof HTMLElement) {
-			mobileChrome.hidden = shouldShowAppMobileHeader;
+			mobileChrome.hidden =
+				shouldShowAppMobileHeader || activePseudoChannelSlug === 'feed_doom';
 		}
 		const isMobileCanvasOpen =
 			isChatPageMobileLayout() &&
@@ -2723,6 +2773,7 @@ export async function initChatPage(root, options = {}) {
 		}
 		if (
 			activePseudoChannelSlug === 'feed' ||
+			activePseudoChannelSlug === 'feed_doom' ||
 			activePseudoChannelSlug === 'explore' ||
 			activePseudoChannelSlug === 'creations' ||
 			activePseudoChannelSlug === 'comments' ||
@@ -2810,6 +2861,7 @@ export async function initChatPage(root, options = {}) {
 		document.body.classList.toggle('chat-page--pseudo-browse-view', on);
 		const viewportScrollMode =
 			activePseudoChannelSlug === 'feed' ||
+			activePseudoChannelSlug === 'feed_doom' ||
 			activePseudoChannelSlug === 'explore' ||
 			activePseudoChannelSlug === 'creations' ||
 			activePseudoChannelSlug === 'challenges';
@@ -2832,6 +2884,7 @@ export async function initChatPage(root, options = {}) {
 		const viewportScrollMode =
 			on ||
 			activePseudoChannelSlug === 'feed' ||
+			activePseudoChannelSlug === 'feed_doom' ||
 			activePseudoChannelSlug === 'explore' ||
 			activePseudoChannelSlug === 'creations' ||
 			activePseudoChannelSlug === 'challenges';
@@ -2860,7 +2913,8 @@ export async function initChatPage(root, options = {}) {
 			if (shouldShowAppMobileChrome) appMobileNav.removeAttribute('hidden');
 		}
 		if (mobileChrome instanceof HTMLElement) {
-			mobileChrome.hidden = shouldShowAppMobileChrome;
+			mobileChrome.hidden =
+				shouldShowAppMobileChrome || activePseudoChannelSlug === 'feed_doom';
 		}
 	}
 
@@ -7353,7 +7407,8 @@ export async function initChatPage(root, options = {}) {
 					const { segments } = partitionChatFeedMobileAlternating(orderedFull);
 					const { routeWrap: routeWrapNew } = createChatFeedChannelElementsFromSegments(
 						segments,
-						renderFeedCard
+						renderFeedCard,
+						feedChannelMobileSpotlightOptions
 					);
 					applyExploreCreationsBrowseViewClass(routeWrapNew, 'feed');
 					routeWrapFeed.replaceWith(routeWrapNew);
@@ -7548,13 +7603,15 @@ export async function initChatPage(root, options = {}) {
 			if (shouldChatFeedUseMobileAlternatingLayout()) {
 				routeResult = createChatFeedChannelElementsFromSegments(
 					partitionChatFeedMobileAlternating(ordered).segments,
-					renderFeedCard
+					renderFeedCard,
+					feedChannelMobileSpotlightOptions
 				);
 			} else {
 				/* Desktop: no spotlight row (hidden on wide CSS anyway) — show every feed row as a full card. */
 				routeResult = createChatFeedChannelElementsFromSegments(
 					[{ type: 'cards', items: ordered }],
-					renderFeedCard
+					renderFeedCard,
+					feedChannelMobileSpotlightOptions
 				);
 			}
 			const { routeWrap, sentinel } = routeResult;
@@ -7699,6 +7756,84 @@ export async function initChatPage(root, options = {}) {
 		syncChatExploreComposerChrome();
 	}
 
+	/** Feed channel Spotlight tiles only → doom scroll (list cards use `/creations/:id`). */
+	function resolveFeedLaneVideoToDoomHref(item) {
+		if (!isDoomEligibleFeedVideoItem(item)) return undefined;
+		if (!shouldRouteFeedVideoCardToDoomScroll()) return undefined;
+		const cid = item.created_image_id ?? item.id;
+		if (cid == null || cid === '') return undefined;
+		return `/chat/c/feed/doom/${encodeURIComponent(String(cid))}`;
+	}
+
+	/**
+	 * Runs synchronously from Spotlight tap → doom (SPA navigation); clears muted pref for autoplay.
+	 * Doom mounts after awaits, so this cannot carry browser user activation to video.play(); it does:
+	 * - Clear sticky muted preference from a prior failed unmuted autoplay (`chatDoomPreferMuted`).
+	 * - Best-effort AudioContext.resume() while still on the click stack (helps some policies; no-op otherwise).
+	 */
+	function primeChatDoomPlaybackFromNavigationGesture() {
+		try {
+			sessionStorage.setItem('chatDoomPreferMuted', '0');
+		} catch {
+			// ignore
+		}
+		try {
+			const AC = window.AudioContext || window.webkitAudioContext;
+			if (typeof AC !== 'function') return;
+			const ctx = new AC();
+			const r = ctx.resume();
+			if (r && typeof r.finally === 'function') {
+				r.finally(() => {
+					try {
+						ctx.close();
+					} catch {
+						// ignore
+					}
+				});
+			} else {
+				try {
+					ctx.close();
+				} catch {
+					// ignore
+				}
+			}
+		} catch {
+			// ignore
+		}
+	}
+
+	/** Same-origin URLs handled by chat: pushState then openThreadForCurrentPath; otherwise full navigation. */
+	function navigateWithinChatShell(href, ev) {
+		if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+		let url;
+		try {
+			url = new URL(href, window.location.href);
+		} catch {
+			window.location.assign(href);
+			return;
+		}
+		if (url.origin !== window.location.origin) {
+			window.location.assign(url.href);
+			return;
+		}
+		const parsed = parseChatPathname(url.pathname);
+		const spaKinds = new Set(['thread', 'channel', 'doom_scroll', 'dm']);
+		if (!spaKinds.has(parsed.kind)) {
+			window.location.assign(url.pathname + url.search + url.hash);
+			return;
+		}
+		if (parsed.kind === 'doom_scroll') {
+			primeChatDoomPlaybackFromNavigationGesture();
+		}
+		history.pushState({ prsnChat: true }, '', url.pathname + url.search + url.hash);
+		void openThreadForCurrentPath();
+	}
+
+	const feedChannelMobileSpotlightOptions = {
+		resolveSpotlightHref: resolveFeedLaneVideoToDoomHref,
+		performSpotlightNavigation: navigateWithinChatShell,
+	};
+
 	/**
 	 * @param {(el: HTMLVideoElement) => void} setupFeedVideo
 	 * @param {'feed' | 'explore' | 'creations'} laneSlug
@@ -7710,7 +7845,7 @@ export async function initChatPage(root, options = {}) {
 			setupFeedVideo,
 			hideFeedCardMetadata: hide,
 			preferThumbnail: laneSlug === 'explore' || laneSlug === 'creations',
-			creationsBulkChrome: laneSlug === 'creations',
+			creationsBulkChrome: laneSlug === 'creations'
 		};
 	}
 
@@ -10055,6 +10190,7 @@ export async function initChatPage(root, options = {}) {
 		challengesOrganizerSidebarTeardown = null;
 		chatChallengesOrganizerEligible = false;
 		closeChallengesOrganizerSidebar();
+		teardownChatDoomScroll();
 		activePseudoChannelSlug = null;
 		if (parsed.kind === 'channel') {
 			const slug = String(parsed.slug || '').trim().toLowerCase();
@@ -10067,6 +10203,9 @@ export async function initChatPage(root, options = {}) {
 			) {
 				activePseudoChannelSlug = slug;
 			}
+		}
+		if (parsed.kind === 'doom_scroll') {
+			activePseudoChannelSlug = 'feed_doom';
 		}
 		if (activePseudoChannelSlug === 'explore') {
 			exploreQueryRef.q = getExploreChannelSearchFromUrl();
@@ -10082,7 +10221,11 @@ export async function initChatPage(root, options = {}) {
 			teardownChatCreationsPseudoBulkHostIfPresent(messagesEl);
 			const channelSlugForLoading =
 				parsed.kind === 'channel' ? String(parsed.slug || '').trim().toLowerCase() : '';
-			if (channelSlugForLoading === 'feed' && typeof renderFeedCardsSkeleton === 'function') {
+			if (parsed.kind === 'doom_scroll') {
+				messagesEl.innerHTML =
+					'<div class="chat-doom-scroll-loading route-loading chat-page-thread-loading" aria-busy="true" aria-label="Loading"></div>';
+				resetAndLockChatMessagesScrollForSkeleton(messagesEl, 'feed');
+			} else if (channelSlugForLoading === 'feed' && typeof renderFeedCardsSkeleton === 'function') {
 				messagesEl.innerHTML = `<div class="feed-route chat-feed-channel-route">
 					${getChatFeedMobileSpotlightHtml()}
 					<div class="route-cards feed-cards" data-feed-container aria-busy="true" aria-label="Loading">${renderFeedCardsSkeleton(4)}</div>
@@ -10141,6 +10284,7 @@ export async function initChatPage(root, options = {}) {
 		 * same issue as feed/explore/creations — otherwise the previous scroll position lingers under the skeleton. */
 		if (
 			activePseudoChannelSlug === 'feed' ||
+			activePseudoChannelSlug === 'feed_doom' ||
 			activePseudoChannelSlug === 'explore' ||
 			activePseudoChannelSlug === 'creations' ||
 			activePseudoChannelSlug === 'comments' ||
@@ -10181,6 +10325,37 @@ export async function initChatPage(root, options = {}) {
 			}
 
 			await refreshChatSidebar({ skipThreadsFetch: true });
+
+			if (parsed.kind === 'doom_scroll') {
+				activeThreadId = null;
+				updateTitleFromMeta({
+					type: 'channel',
+					channel_slug: 'feed',
+				});
+				if (messagesEl) {
+					messagesEl.removeAttribute('aria-busy');
+				}
+				try {
+					await mountChatDoomScroll({
+						messagesEl,
+						startCreationId: parsed.startCreationId,
+						fetchJsonWithStatusDeduped,
+						getHiddenFeedItems,
+						viewerUserId: chatViewerId,
+						applyComposerState,
+						syncChatBrowseViewBodyClass,
+						navigateToFeedChannel: () => {
+							history.pushState({ prsnChat: true }, '', '/chat/c/feed');
+							void openThreadForCurrentPath();
+						},
+					});
+				} catch (doomErr) {
+					teardownChatDoomScroll();
+					throw doomErr;
+				}
+				rebuildTopbarMenuDynamic();
+				return;
+			}
 
 			if (parsed.kind === 'channel') {
 				const slug = String(parsed.slug).toLowerCase().trim();

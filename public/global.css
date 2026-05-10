@@ -7428,8 +7428,8 @@ body.chat-page .chat-page-canvas-panel-body {
 }
 
 /* Defensive: media and long tokens cannot extend past the message column (page scroll stays vertical-only). */
-body.chat-page .chat-page-messages img,
-body.chat-page .chat-page-messages video {
+body.chat-page .chat-page-messages img:not(.chat-doom-poster),
+body.chat-page .chat-page-messages video:not(.chat-doom-video) {
 	max-width: 100%;
 	height: auto;
 }
@@ -9026,28 +9026,7 @@ body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading {
 	}
 
 	.chat-page-messages .chat-feed-channel-route .chat-feed-mobile-spotlight-more {
-		position: absolute;
-		top: 6px;
-		right: 6px;
-		z-index: 2;
-		width: 32px;
-		height: 32px;
-		padding: 0;
-		border: none;
-		border-radius: 50%;
-		background: rgba(0, 0, 0, 0.38);
-		color: rgba(255, 255, 255, 0.96);
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		cursor: pointer;
-		-webkit-tap-highlight-color: transparent;
-	}
-
-	.chat-page-messages .chat-feed-channel-route .chat-feed-mobile-spotlight-more svg {
-		width: 18px;
-		height: 18px;
-		display: block;
+		display: none;
 	}
 
 	.chat-page-messages .chat-feed-channel-route .feed-card-image.chat-feed-mobile-spotlight-cell-media {
@@ -9162,7 +9141,7 @@ body.chat-page.chat-page--pseudo-browse-view .chat-page-messages .feed-route.cha
 	}
 }
 
-body.chat-page.chat-page--pseudo-browse-view .chat-page-thread-body .chat-page-messages {
+body.chat-page.chat-page--pseudo-browse-view .chat-page-thread-body .chat-page-messages:not(.chat-page-messages--doom-host) {
 	width: 100%;
 	align-self: center;
 	box-sizing: border-box;
@@ -9171,14 +9150,14 @@ body.chat-page.chat-page--pseudo-browse-view .chat-page-thread-body .chat-page-m
 }
 
 @supports (width: 1cqi) {
-	body.chat-page.chat-page--pseudo-browse-view .chat-page-thread-body .chat-page-messages {
+	body.chat-page.chat-page--pseudo-browse-view .chat-page-thread-body .chat-page-messages:not(.chat-page-messages--doom-host) {
 		padding-left: max(16px, calc((100cqi - min(var(--chat-browse-lane-max, 960px), 100cqi)) / 2 + 16px));
 		padding-right: max(16px, calc((100cqi - min(var(--chat-browse-lane-max, 960px), 100cqi)) / 2 + 16px));
 	}
 }
 
 @media (max-width: 768px) {
-	body.chat-page.chat-page--pseudo-browse-view .chat-page-thread-body .chat-page-messages {
+	body.chat-page.chat-page--pseudo-browse-view .chat-page-thread-body .chat-page-messages:not(.chat-page-messages--doom-host) {
 		padding-top: calc(48px + 16px);
 		padding-left: 4px !important;
 		padding-right: 4px !important;
@@ -9193,7 +9172,7 @@ body.chat-page.chat-page--pseudo-browse-view .chat-page-thread-body .chat-page-m
 	}
 
 	@supports (width: 1cqi) {
-		body.chat-page.chat-page--pseudo-browse-view .chat-page-thread-body .chat-page-messages {
+		body.chat-page.chat-page--pseudo-browse-view .chat-page-thread-body .chat-page-messages:not(.chat-page-messages--doom-host) {
 			padding-left: 4px !important;
 			padding-right: 4px !important;
 		}
