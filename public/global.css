@@ -8934,6 +8934,10 @@ body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading {
 		box-sizing: border-box;
 	}
 
+	.chat-page-messages .chat-feed-channel-route .route-cards.feed-cards + .chat-feed-mobile-spotlight {
+		padding-top: 12px;
+	}
+
 	.chat-page-messages .chat-feed-channel-route .chat-feed-mobile-spotlight-grid {
 		display: grid;
 		grid-template-columns: 1fr 1fr;

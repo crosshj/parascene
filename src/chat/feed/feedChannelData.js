@@ -5,7 +5,7 @@
 
 import { getHiddenFeedItems } from '../../shared/feedCardBuild.js';
 
-export const FEED_CHANNEL_PAGE_SIZE = 20;
+export const FEED_CHANNEL_PAGE_SIZE = 28;
 
 /**
  * Stable keys for dedupe across `/api/feed` pages (tips, blog, engagement, creations).

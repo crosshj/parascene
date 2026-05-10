@@ -58,14 +58,14 @@ import {
 	createFeedItemCard,
 	feedItemToUser,
 	getHiddenFeedItems,
-	partitionFeedVideosForChatSpotlight
+	partitionChatFeedMobileAlternating
 } from '../shared/feedCardBuild.js';
 import {
 	FEED_CHANNEL_PAGE_SIZE,
 	getChatFeedItemKey,
 	createChatFeedFetchPage
 } from './feed/feedChannelData.js';
-import { createChatFeedChannelElements, getChatFeedMobileSpotlightHtml } from './feed/feedChannelView.js';
+import { createChatFeedChannelElementsFromSegments, getChatFeedMobileSpotlightHtml } from './feed/feedChannelView.js';
 import { addToMutateQueue } from '/shared/mutateQueue.js';
 import { captureChallengeSubmitThread } from '/shared/challengeSubmitContext.js';
 import * as challengesChannelModule from './challengesChannel.js';
@@ -7287,10 +7287,19 @@ export async function initChatPage(root, options = {}) {
 			return;
 		}
 		const messagesEl = root.querySelector('[data-chat-messages]');
-		const cards = messagesEl?.querySelector('[data-feed-channel-cards]');
-		if (!(messagesEl instanceof HTMLElement) || !(cards instanceof HTMLElement)) {
+		const cardsTailPre =
+			messagesEl?.querySelector('[data-feed-channel-cards-tail]') ||
+			messagesEl?.querySelector('[data-feed-channel-cards]');
+		const routeWrapFeedPre = messagesEl?.querySelector('.chat-feed-channel-route');
+		const useMobileFeedSegments =
+			laneSlug === 'feed' && shouldChatFeedUseMobileAlternatingLayout();
+		if (!(messagesEl instanceof HTMLElement)) return;
+		if (useMobileFeedSegments) {
+			if (!(routeWrapFeedPre instanceof HTMLElement)) return;
+		} else if (!(cardsTailPre instanceof HTMLElement)) {
 			return;
 		}
+		const cards = /** @type {HTMLElement} */ (cardsTailPre);
 		const col = pseudoColumnPager.getItems();
 		if (!Array.isArray(col) || col.length === 0) {
 			return;
@@ -7329,6 +7338,43 @@ export async function initChatPage(root, options = {}) {
 				return;
 			}
 			addPageUsers(mergedFiltered.map(feedItemToUser));
+
+			if (
+				laneSlug === 'feed' &&
+				isNewestFirstBrowseLane(laneSlug) &&
+				shouldChatFeedUseMobileAlternatingLayout()
+			) {
+				const routeWrapFeed = messagesEl.querySelector('.chat-feed-channel-route');
+				if (routeWrapFeed instanceof HTMLElement) {
+					const prevBottom =
+						messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight;
+					const orderedFull = pseudoColumnPager.getItems();
+					const renderFeedCard = createFeedChannelCardRenderer(messagesEl);
+					const { segments } = partitionChatFeedMobileAlternating(orderedFull);
+					const { routeWrap: routeWrapNew } = createChatFeedChannelElementsFromSegments(
+						segments,
+						renderFeedCard
+					);
+					applyExploreCreationsBrowseViewClass(routeWrapNew, 'feed');
+					routeWrapFeed.replaceWith(routeWrapNew);
+					requestAnimationFrame(() => {
+						const targetTop =
+							messagesEl.scrollHeight - messagesEl.clientHeight - prevBottom;
+						messagesEl.scrollTop = Math.max(0, targetTop);
+						requestAnimationFrame(() => {
+							const targetTop2 =
+								messagesEl.scrollHeight - messagesEl.clientHeight - prevBottom;
+							messagesEl.scrollTop = Math.max(0, targetTop2);
+						});
+					});
+				}
+				if (pseudoColumnPager.getHasMore()) {
+					setupFeedChannelLoadMoreObserver(messagesEl);
+				} else {
+					disconnectFeedChannelLoadObserver();
+				}
+				return;
+			}
 
 			if (isNewestFirstBrowseLane(laneSlug)) {
 				const idxBase = cards.children.length;
@@ -7409,6 +7455,26 @@ export async function initChatPage(root, options = {}) {
 		await loadMoreFeedLanePseudoChannelMessages('creations');
 	}
 
+	function shouldChatFeedUseMobileAlternatingLayout() {
+		try {
+			return window.matchMedia('(max-width: 768px)').matches;
+		} catch {
+			return false;
+		}
+	}
+
+	function createFeedChannelCardRenderer(messagesElHost) {
+		return (item, i) =>
+			createFeedItemCard(
+				item,
+				i,
+				feedCardOptionsForPseudoLane(
+					(el) => setupFeedChannelVideoAutoplay(messagesElHost, el),
+					'feed'
+				)
+			);
+	}
+
 	async function loadFeedChannelMessages() {
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!messagesEl) return;
@@ -7476,20 +7542,23 @@ export async function initChatPage(root, options = {}) {
 				return;
 			}
 
-			const { spotlightVideos, remainingItems } = partitionFeedVideosForChatSpotlight(ordered, 4);
-			const { routeWrap, sentinel } = createChatFeedChannelElements(
-				remainingItems,
-				(item, i) =>
-					createFeedItemCard(
-						item,
-						i,
-						feedCardOptionsForPseudoLane(
-							(el) => setupFeedChannelVideoAutoplay(messagesEl, el),
-							'feed'
-						)
-					),
-				{ spotlightVideos }
-			);
+			const renderFeedCard = createFeedChannelCardRenderer(messagesEl);
+			/** @type {{ routeWrap: HTMLDivElement, sentinel: HTMLDivElement }} */
+			let routeResult;
+			if (shouldChatFeedUseMobileAlternatingLayout()) {
+				routeResult = createChatFeedChannelElementsFromSegments(
+					partitionChatFeedMobileAlternating(ordered).segments,
+					renderFeedCard
+				);
+			} else {
+				/* Desktop: no spotlight row (hidden on wide CSS anyway) — show every feed row as a full card. */
+				routeResult = createChatFeedChannelElementsFromSegments(
+					[{ type: 'cards', items: ordered }],
+					renderFeedCard
+				);
+			}
+			const { routeWrap, sentinel } = routeResult;
+			applyExploreCreationsBrowseViewClass(routeWrap, 'feed');
 			if (isNewestFirstBrowseLane('feed')) {
 				messagesEl.appendChild(routeWrap);
 				messagesEl.appendChild(sentinel);
@@ -7527,10 +7596,21 @@ export async function initChatPage(root, options = {}) {
 		}
 	}
 
-	function applyExploreCreationsBrowseViewClass(routeWrap) {
+	/**
+	 * Grid browse UI applies only to `#explore` / `#creations`. `#feed` stays a vertical list of full cards (same as before browse mode existed).
+	 * @param {'feed' | 'explore' | 'creations'} laneSlug
+	 */
+	function applyExploreCreationsBrowseViewClass(routeWrap, laneSlug) {
 		if (!(routeWrap instanceof HTMLElement)) return;
-		routeWrap.dataset.chatExploreCreationsLane = '1';
-		routeWrap.classList.toggle('chat-feed-channel-route--browse-view', chatExploreCreationsBrowseView);
+		const browseLane = laneSlug === 'explore' || laneSlug === 'creations';
+		if (browseLane) {
+			routeWrap.dataset.chatExploreCreationsLane = '1';
+		} else {
+			delete routeWrap.dataset.chatExploreCreationsLane;
+		}
+		const useBrowseGrid =
+			chatExploreCreationsBrowseView && browseLane;
+		routeWrap.classList.toggle('chat-feed-channel-route--browse-view', useBrowseGrid);
 	}
 
 	function renderChatExploreSearchBarMarkup(options = {}) {
@@ -8222,7 +8302,7 @@ export async function initChatPage(root, options = {}) {
 			const routeWrap = document.createElement('div');
 			routeWrap.className = 'feed-route chat-feed-channel-route creations-route';
 			routeWrap.dataset.chatCreationsBulkHost = '1';
-			applyExploreCreationsBrowseViewClass(routeWrap);
+			applyExploreCreationsBrowseViewClass(routeWrap, 'creations');
 			const cards = document.createElement('div');
 			cards.className = 'route-cards feed-cards';
 			cards.setAttribute('data-feed-channel-cards', '1');
@@ -8450,7 +8530,7 @@ export async function initChatPage(root, options = {}) {
 					messagesEl.innerHTML = '';
 					const routeWrap = document.createElement('div');
 					routeWrap.className = 'feed-route chat-feed-channel-route';
-					applyExploreCreationsBrowseViewClass(routeWrap);
+					applyExploreCreationsBrowseViewClass(routeWrap, 'explore');
 					if (items.length === 0) {
 						insertChatExploreSearchChrome(routeWrap, null);
 						const empty = document.createElement('div');
@@ -8574,7 +8654,7 @@ export async function initChatPage(root, options = {}) {
 			if (ordered.length === 0) {
 				const routeWrap = document.createElement('div');
 				routeWrap.className = 'feed-route chat-feed-channel-route';
-				applyExploreCreationsBrowseViewClass(routeWrap);
+				applyExploreCreationsBrowseViewClass(routeWrap, 'explore');
 				insertChatExploreSearchChrome(routeWrap, null);
 				const empty = document.createElement('div');
 				empty.innerHTML = renderEmptyState({
@@ -8595,7 +8675,7 @@ export async function initChatPage(root, options = {}) {
 
 			const routeWrap = document.createElement('div');
 			routeWrap.className = 'feed-route chat-feed-channel-route';
-			applyExploreCreationsBrowseViewClass(routeWrap);
+			applyExploreCreationsBrowseViewClass(routeWrap, 'explore');
 			const cards = document.createElement('div');
 			cards.className = 'route-cards feed-cards';
 			cards.setAttribute('data-feed-channel-cards', '1');

@@ -1387,6 +1387,73 @@ export function partitionFeedVideosForChatSpotlight(ordered, max = 4) {
 	return { spotlightVideos, remainingItems };
 }
 
+const CHAT_FEED_SPOTLIGHT_GROUP_MAX = 3;
+const CHAT_FEED_SPOTLIGHT_VIDEOS = 4;
+const CHAT_FEED_BETWEEN_CARDS = 3;
+
+/**
+ * @param {object[]} items — mutable pool in feed order
+ * @param {number} max
+ * @returns {object[]}
+ */
+function takeNextVideoCreationsForChatSpotlightFromPool(items, max) {
+	const out = [];
+	let i = 0;
+	while (out.length < max && i < items.length) {
+		const it = items[i];
+		if (isFeedRowVideoCreation(it) && (it.created_image_id != null || it.id != null)) {
+			out.push(items.splice(i, 1)[0]);
+		} else {
+			i += 1;
+		}
+	}
+	return out;
+}
+
+/**
+ * @param {object[]} items — mutable pool; takes from the front
+ * @param {number} n
+ * @returns {object[]}
+ */
+function takeNextNFromPool(items, n) {
+	const out = [];
+	const k = Math.max(0, Math.min(n, items.length));
+	for (let p = 0; p < k; p += 1) {
+		out.push(items.shift());
+	}
+	return out;
+}
+
+/**
+ * Mobile chat #feed: up to three 2×2 video spotlights, three cards between consecutive grids, flat tail.
+ * Walks feed order; spotlight slots take the next video creations; between-chunks take the next rows from what remains.
+ *
+ * @param {object[]} ordered
+ * @returns {{ segments: Array<{ type: 'spotlight', videos: object[] } | { type: 'cards', items: object[] }> }}
+ */
+export function partitionChatFeedMobileAlternating(ordered) {
+	const pool = Array.isArray(ordered) ? ordered.slice() : [];
+	/** @type {Array<{ type: 'spotlight', videos: object[] } | { type: 'cards', items: object[] }>} */
+	const segments = [];
+
+	for (let g = 0; g < CHAT_FEED_SPOTLIGHT_GROUP_MAX; g += 1) {
+		const videos = takeNextVideoCreationsForChatSpotlightFromPool(pool, CHAT_FEED_SPOTLIGHT_VIDEOS);
+		segments.push({ type: "spotlight", videos });
+		if (g < CHAT_FEED_SPOTLIGHT_GROUP_MAX - 1) {
+			const chunk = takeNextNFromPool(pool, CHAT_FEED_BETWEEN_CARDS);
+			if (chunk.length > 0) {
+				segments.push({ type: "cards", items: chunk });
+			}
+		}
+	}
+
+	if (pool.length > 0) {
+		segments.push({ type: "cards", items: pool.slice() });
+	}
+
+	return { segments };
+}
+
 /**
  * Chat spotlight strip is visually loud; stored titles are often ALL CAPS while list cards
  * look calmer. Same API field as `.feed-card-title` — this only adjusts overlay display when

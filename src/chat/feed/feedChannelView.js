@@ -35,12 +35,86 @@ function createChatFeedMobileSpotlightElement(spotlightVideos = []) {
 	return wrap;
 }
 
+function createFeedChannelSentinel() {
+	const sentinel = document.createElement('div');
+	sentinel.dataset.chatFeedLoadSentinel = '1';
+	sentinel.className = 'chat-page-feed-load-sentinel';
+	sentinel.setAttribute('aria-hidden', 'true');
+	sentinel.style.cssText = 'height:1px;margin:0;padding:0;flex-shrink:0;pointer-events:none';
+	return sentinel;
+}
+
+/**
+ * @param {HTMLElement} routeWrap
+ */
+function stampTailCardsHost(routeWrap) {
+	const hosts = routeWrap.querySelectorAll('[data-feed-channel-cards]');
+	for (let i = 0; i < hosts.length; i += 1) {
+		hosts[i].removeAttribute('data-feed-channel-cards-tail');
+	}
+	if (hosts.length > 0) {
+		hosts[hosts.length - 1].setAttribute('data-feed-channel-cards-tail', '1');
+	}
+}
+
 /**
  * HTML for the mobile spotlight strip (loading skeleton only). Keeps grid shell in sync with {@link createChatFeedMobileSpotlightElement}.
  * @returns {string}
  */
 export function getChatFeedMobileSpotlightHtml() {
 	return createChatFeedMobileSpotlightElement([]).outerHTML;
+}
+
+/**
+ * Mobile: interleaved spotlight strips and card sections from {@link partitionChatFeedMobileAlternating}.
+ * @param {Array<{ type: 'spotlight', videos: object[] } | { type: 'cards', items: object[] }>} segments
+ * @param {(item: object, index: number) => HTMLElement} renderCard
+ * @returns {{ routeWrap: HTMLDivElement, cards: HTMLDivElement, sentinel: HTMLDivElement }}
+ */
+export function createChatFeedChannelElementsFromSegments(segments, renderCard) {
+	const routeWrap = document.createElement('div');
+	routeWrap.className = 'feed-route chat-feed-channel-route';
+	let cardIndex = 0;
+	/** @type {HTMLDivElement | null} */
+	let lastCards = null;
+	const list = Array.isArray(segments) ? segments : [];
+	for (let s = 0; s < list.length; s += 1) {
+		const seg = list[s];
+		if (!seg || typeof seg !== 'object') continue;
+		if (seg.type === 'spotlight') {
+			const vids = Array.isArray(seg.videos) ? seg.videos : [];
+			routeWrap.appendChild(createChatFeedMobileSpotlightElement(vids));
+		} else if (seg.type === 'cards') {
+			const items = Array.isArray(seg.items) ? seg.items : [];
+			if (items.length === 0) continue;
+			const cards = document.createElement('div');
+			cards.className = 'route-cards feed-cards';
+			cards.setAttribute('data-feed-channel-cards', '1');
+			for (let i = 0; i < items.length; i += 1) {
+				cards.appendChild(renderCard(items[i], cardIndex));
+				cardIndex += 1;
+			}
+			routeWrap.appendChild(cards);
+			lastCards = cards;
+		}
+	}
+	stampTailCardsHost(routeWrap);
+	const sentinel = createFeedChannelSentinel();
+	const tailEl = routeWrap.querySelector('[data-feed-channel-cards-tail]');
+	/** @type {HTMLDivElement} */
+	const cardsOut =
+		tailEl instanceof HTMLDivElement
+			? tailEl
+			: lastCards ||
+				(() => {
+					const empty = document.createElement('div');
+					empty.className = 'route-cards feed-cards';
+					empty.setAttribute('data-feed-channel-cards', '1');
+					routeWrap.appendChild(empty);
+					stampTailCardsHost(routeWrap);
+					return empty;
+				})();
+	return { routeWrap, cards: cardsOut, sentinel };
 }
 
 /**
@@ -51,22 +125,11 @@ export function getChatFeedMobileSpotlightHtml() {
  */
 export function createChatFeedChannelElements(ordered, renderCard, options = {}) {
 	const spotlightVideos = Array.isArray(options.spotlightVideos) ? options.spotlightVideos : [];
-	const routeWrap = document.createElement('div');
-	routeWrap.className = 'feed-route chat-feed-channel-route';
-	routeWrap.appendChild(createChatFeedMobileSpotlightElement(spotlightVideos));
-	const cards = document.createElement('div');
-	cards.className = 'route-cards feed-cards';
-	cards.setAttribute('data-feed-channel-cards', '1');
-	for (let i = 0; i < ordered.length; i++) {
-		cards.appendChild(renderCard(ordered[i], i));
-	}
-	routeWrap.appendChild(cards);
-
-	const sentinel = document.createElement('div');
-	sentinel.dataset.chatFeedLoadSentinel = '1';
-	sentinel.className = 'chat-page-feed-load-sentinel';
-	sentinel.setAttribute('aria-hidden', 'true');
-	sentinel.style.cssText = 'height:1px;margin:0;padding:0;flex-shrink:0;pointer-events:none';
-
-	return { routeWrap, cards, sentinel };
+	return createChatFeedChannelElementsFromSegments(
+		[
+			{ type: 'spotlight', videos: spotlightVideos },
+			{ type: 'cards', items: Array.isArray(ordered) ? ordered : [] }
+		],
+		renderCard
+	);
 }
