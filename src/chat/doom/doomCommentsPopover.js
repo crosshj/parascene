@@ -1,32 +1,52 @@
 /**
  * Doom scroll: comments bottom sheet — WIP; links out to creation detail for comments.
+ * History + rail click are consumed in `chatPage.js` (document/window capture) so this module
+ * only owns DOM, `#comments` push/replaceState, and teardown.
  */
+
+const SHEET_HASH = '#comments';
 
 /** @type {HTMLElement | null} */
 let overlayEl = null;
-
 /** @type {((ev: KeyboardEvent) => void) | null} */
 let escapeHandler = null;
-
 let priorBodyOverflow = '';
+let didSetBodyOverflow = false;
 
 /**
- * @param {HTMLElement} root
+ * Called from `chatPage` capture listeners. If the sheet is open and the URL no longer has
+ * `#comments`, close the sheet and return true so the caller can `stopImmediatePropagation`.
+ * @returns {boolean}
  */
-function bindOverlayDismiss(root) {
-	const backdrop = root.querySelector('[data-chat-doom-comments-dismiss]');
-	const closeBtn = root.querySelector('[data-chat-doom-comments-close]');
-	const detailLink = root.querySelector('[data-chat-doom-comments-detail]');
-	if (backdrop instanceof HTMLElement) {
-		backdrop.addEventListener('click', () => closeDoomCommentsPopover());
-	}
-	if (closeBtn instanceof HTMLElement) {
-		closeBtn.addEventListener('click', () => closeDoomCommentsPopover());
-	}
-	if (detailLink instanceof HTMLElement) {
-		detailLink.addEventListener('click', (ev) => {
-			if (detailLink.getAttribute('aria-disabled') === 'true') {
+export function tryConsumeDoomCommentsHistoryForCapture() {
+	if (!(overlayEl instanceof HTMLElement) || overlayEl.hidden) return false;
+	if (document.documentElement?.dataset?.chatDoomCommentsOpen !== '1') return false;
+	if (window.location.hash === SHEET_HASH) return false;
+	closeDoomCommentsPopover({ fromHistory: true });
+	return true;
+}
+
+function stripSheetHashFromUrl() {
+	if (window.location.hash !== SHEET_HASH) return;
+	const u = new URL(window.location.href);
+	u.hash = '';
+	window.history.replaceState(window.history.state || {}, '', `${u.pathname}${u.search || ''}`);
+}
+
+function bindDismiss(root) {
+	const stop = (ev) => {
+		ev.preventDefault();
+		ev.stopPropagation();
+		closeDoomCommentsPopover();
+	};
+	root.querySelector('[data-chat-doom-comments-dismiss]')?.addEventListener('click', stop);
+	root.querySelector('[data-chat-doom-comments-close]')?.addEventListener('click', stop);
+	const detail = root.querySelector('[data-chat-doom-comments-detail]');
+	if (detail instanceof HTMLElement) {
+		detail.addEventListener('click', (ev) => {
+			if (detail.getAttribute('aria-disabled') === 'true') {
 				ev.preventDefault();
+				ev.stopPropagation();
 				return;
 			}
 			closeDoomCommentsPopover();
@@ -35,7 +55,7 @@ function bindOverlayDismiss(root) {
 }
 
 function ensureOverlay() {
-	if (overlayEl instanceof HTMLElement && overlayEl.isConnected) return overlayEl;
+	if (overlayEl?.isConnected) return overlayEl;
 
 	const wrap = document.createElement('div');
 	wrap.className = 'chat-doom-comments-overlay';
@@ -69,19 +89,20 @@ function ensureOverlay() {
 
 	document.body.appendChild(wrap);
 	overlayEl = wrap;
-	bindOverlayDismiss(wrap);
+	bindDismiss(wrap);
 	return wrap;
 }
 
 /**
  * @param {object} [opts]
- * @param {string} [opts.commentCountLabel] — digits from rail badge (display only)
- * @param {string} [opts.detailHref] — creation detail URL (e.g. /creations/&lt;id&gt;#comments)
+ * @param {string} [opts.commentCountLabel]
+ * @param {string} [opts.detailHref]
  */
 export function openDoomCommentsPopover(opts = {}) {
 	const root = ensureOverlay();
-	const label = typeof opts.commentCountLabel === 'string' ? opts.commentCountLabel.trim() : '';
-	const detailHrefRaw = typeof opts.detailHref === 'string' ? opts.detailHref.trim() : '';
+	const label = String(opts.commentCountLabel ?? '').trim();
+	const detailHref = String(opts.detailHref ?? '').trim();
+
 	const countEl = root.querySelector('[data-chat-doom-comments-count]');
 	const wrapEl = root.querySelector('[data-chat-doom-comments-count-wrap]');
 	const detailEl = root.querySelector('[data-chat-doom-comments-detail]');
@@ -97,12 +118,11 @@ export function openDoomCommentsPopover(opts = {}) {
 			countEl.setAttribute('aria-hidden', 'true');
 		}
 	}
-	if (wrapEl instanceof HTMLElement) {
-		wrapEl.hidden = false;
-	}
+	if (wrapEl instanceof HTMLElement) wrapEl.hidden = false;
+
 	if (detailEl instanceof HTMLAnchorElement) {
-		if (detailHrefRaw) {
-			detailEl.href = detailHrefRaw;
+		if (detailHref) {
+			detailEl.href = detailHref;
 			detailEl.removeAttribute('aria-disabled');
 		} else {
 			detailEl.href = '#';
@@ -110,15 +130,28 @@ export function openDoomCommentsPopover(opts = {}) {
 		}
 	}
 
+	document.documentElement.dataset.chatDoomCommentsOpen = '1';
+
+	if (window.location.hash !== SHEET_HASH) {
+		const st = typeof history.state === 'object' && history.state !== null ? history.state : {};
+		window.history.pushState(
+			{ ...st, doomCommentsSheet: 1 },
+			'',
+			`${window.location.pathname}${window.location.search || ''}${SHEET_HASH}`
+		);
+	}
+
 	root.hidden = false;
 	root.setAttribute('aria-hidden', 'false');
 
-	priorBodyOverflow = document.body.style.overflow;
-	document.body.style.overflow = 'hidden';
-
-	if (escapeHandler) {
-		window.removeEventListener('keydown', escapeHandler);
+	didSetBodyOverflow = false;
+	if (!document.body.classList.contains('chat-page--doom-scroll')) {
+		priorBodyOverflow = document.body.style.overflow;
+		document.body.style.overflow = 'hidden';
+		didSetBodyOverflow = true;
 	}
+
+	if (escapeHandler) window.removeEventListener('keydown', escapeHandler);
 	escapeHandler = (ev) => {
 		if (ev.key === 'Escape') {
 			ev.preventDefault();
@@ -131,18 +164,24 @@ export function openDoomCommentsPopover(opts = {}) {
 	if (closeBtn instanceof HTMLElement) closeBtn.focus();
 }
 
-export function closeDoomCommentsPopover() {
+export function closeDoomCommentsPopover(opts = {}) {
 	if (!(overlayEl instanceof HTMLElement)) return;
+
 	overlayEl.hidden = true;
 	overlayEl.setAttribute('aria-hidden', 'true');
-	document.body.style.overflow = priorBodyOverflow;
+
+	if (didSetBodyOverflow) document.body.style.overflow = priorBodyOverflow;
+	didSetBodyOverflow = false;
+
 	if (escapeHandler) {
 		window.removeEventListener('keydown', escapeHandler);
 		escapeHandler = null;
 	}
+	delete document.documentElement.dataset.chatDoomCommentsOpen;
+
+	if (!opts.fromHistory && window.location.hash === SHEET_HASH) stripSheetHashFromUrl();
 }
 
-/** Remove from DOM (e.g. doom scroll teardown). */
 export function destroyDoomCommentsPopover() {
 	closeDoomCommentsPopover();
 	try {

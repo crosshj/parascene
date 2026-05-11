@@ -76,9 +76,34 @@ import {
 } from './feed/feedChannelData.js';
 import { createChatFeedChannelElementsFromSegments, getChatFeedMobileSpotlightHtml } from './feed/feedChannelView.js';
 import { mountChatDoomScroll, teardownChatDoomScroll } from './feed/doomScrollMount.js';
+import { openDoomCommentsPopover, tryConsumeDoomCommentsHistoryForCapture } from './doom/doomCommentsPopover.js';
 import { addToMutateQueue } from '/shared/mutateQueue.js';
 import { captureChallengeSubmitThread } from '/shared/challengeSubmitContext.js';
 import * as challengesChannelModule from './challengesChannel.js';
+
+(function installDoomCommentsSheetCapture() {
+	function onHistoryCapture(ev) {
+		if (tryConsumeDoomCommentsHistoryForCapture()) {
+			ev.stopImmediatePropagation();
+		}
+	}
+	window.addEventListener('popstate', onHistoryCapture, true);
+	window.addEventListener('hashchange', onHistoryCapture, true);
+
+	function onDoomCommentsRailClickCapture(ev) {
+		if (!document.body?.classList?.contains('chat-page--doom-scroll')) return;
+		const a = ev.target?.closest?.('[data-chat-doom-comments]');
+		if (!(a instanceof HTMLAnchorElement)) return;
+		ev.preventDefault();
+		ev.stopImmediatePropagation();
+		const countEl = a.querySelector('.chat-doom-rail-count');
+		const commentCountLabel =
+			countEl && typeof countEl.textContent === 'string' ? countEl.textContent.trim() : '';
+		const detailHref = (a.getAttribute('href') || '').trim();
+		openDoomCommentsPopover({ commentCountLabel, detailHref });
+	}
+	document.addEventListener('click', onDoomCommentsRailClickCapture, true);
+})();
 
 /**
  * Set when `initChatPage` runs (binds the vote-modal dismiss impl from the static graph).

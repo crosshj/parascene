@@ -10,10 +10,7 @@ import {
 import { isFeedRowVideoCreation } from '../../shared/feedCardBuild.js';
 import { initLikeButton } from '../../shared/likes.js';
 import { createDoomScrollShell, createDoomSlideElement } from './doomScrollView.js';
-import {
-	destroyDoomCommentsPopover,
-	openDoomCommentsPopover
-} from '../doom/doomCommentsPopover.js';
+import { destroyDoomCommentsPopover, openDoomCommentsPopover } from '../doom/doomCommentsPopover.js';
 
 /** @type {null | (() => void)} */
 let activeTeardown = null;
@@ -488,6 +485,11 @@ export async function mountChatDoomScroll(opts) {
 	 */
 	function syncBrowserUrlToCenteredSlide() {
 		if (suppressSwipePauseForAnchorScroll) return;
+		try {
+			if (document.documentElement?.dataset?.chatDoomCommentsOpen === '1') return;
+		} catch {
+			// ignore
+		}
 		const list = slides();
 		if (list.length === 0) return;
 		const idx = slideIndexAtScrollerMidpoint();
@@ -1076,19 +1078,6 @@ export async function mountChatDoomScroll(opts) {
 
 	scroller.addEventListener('click', onShareClick);
 
-	function onCommentsRailClick(ev) {
-		const a = ev.target.closest('[data-chat-doom-comments]');
-		if (!(a instanceof HTMLAnchorElement)) return;
-		ev.preventDefault();
-		ev.stopPropagation();
-		const countEl = a.querySelector('.chat-doom-rail-count');
-		const commentCountLabel =
-			countEl && typeof countEl.textContent === 'string' ? countEl.textContent.trim() : '';
-		const detailHref = (a.getAttribute('href') || '').trim();
-		openDoomCommentsPopover({ commentCountLabel, detailHref });
-	}
-	scroller.addEventListener('click', onCommentsRailClick);
-
 	if (backBtn instanceof HTMLElement) {
 		backBtn.addEventListener('click', (ev) => {
 			ev.preventDefault();
@@ -1123,6 +1112,24 @@ export async function mountChatDoomScroll(opts) {
 	playActive();
 	void startDeferredDoomHeavyWork();
 
+	if (window.location.hash === '#comments') {
+		queueMicrotask(() => {
+			if (!doomMountAlive) return;
+			const list = slides();
+			const slide = list[activeIdx];
+			const a = slide?.querySelector?.('[data-chat-doom-comments]');
+			let commentCountLabel = '';
+			let detailHref = `/creations/${encodeURIComponent(String(startCreationId))}#comments`;
+			if (a instanceof HTMLAnchorElement) {
+				const h = (a.getAttribute('href') || '').trim();
+				if (h) detailHref = h;
+				const ce = a.querySelector('.chat-doom-rail-count');
+				if (ce && typeof ce.textContent === 'string') commentCountLabel = ce.textContent.trim();
+			}
+			openDoomCommentsPopover({ commentCountLabel, detailHref });
+		});
+	}
+
 	activeTeardown = () => {
 		doomMountAlive = false;
 		destroyDoomCommentsPopover();
@@ -1145,7 +1152,6 @@ export async function mountChatDoomScroll(opts) {
 		io.disconnect();
 		scroller.removeEventListener('click', bindFollowClick);
 		scroller.removeEventListener('click', onShareClick);
-		scroller.removeEventListener('click', onCommentsRailClick);
 		scroller.removeEventListener('click', onDoomMediaClick);
 		window.removeEventListener('keydown', onDoomKeydown);
 		window.clearTimeout(scrollIdle);
