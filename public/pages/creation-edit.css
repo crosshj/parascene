@@ -102,8 +102,9 @@
 
 .creation-edit-route .creation-edit-i2v-controls-row--gear .creation-edit-i2v-gear-btn {
 	grid-column: 3;
-	justify-self: end;
+	justify-self: start;
 	align-self: center;
+	margin-left: 0.5em;
 }
 
 .creation-edit-route .creation-edit-i2v-gear-btn {
