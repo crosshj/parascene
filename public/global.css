@@ -5190,12 +5190,16 @@ app-route-feed {
 
 .comment-text .user-text-inline-image-link {
 	display: inline-block;
+	position: relative;
 	max-width: 100%;
 	line-height: 0;
+	cursor: zoom-in;
 }
 
 .comment-text .user-text-inline-image {
 	display: block;
+	position: relative;
+	z-index: 0;
 	width: auto;
 	max-width: 100%;
 	height: auto;
@@ -5289,6 +5293,7 @@ app-route-feed {
 	aspect-ratio: unset;
 	background: color-mix(in srgb, var(--surface-strong) 58%, var(--bg));
 	box-sizing: border-box;
+	cursor: zoom-in;
 }
 
 .comment-body .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-video,
@@ -5303,6 +5308,8 @@ app-route-feed {
 	object-fit: contain;
 	object-position: center;
 	border-radius: inherit;
+	pointer-events: none;
+	z-index: 0;
 }
 
 .comment-body .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-inner:not(.connect-chat-creation-embed-inner--video):not(.connect-chat-creation-embed-inner--group-carousel):not(.connect-chat-creation-embed-inner--html):not(.connect-chat-creation-embed-inner--pending):not(.connect-chat-creation-embed-inner--error-layout):not(.connect-chat-creation-embed-inner--loading-shell),
@@ -5362,7 +5369,7 @@ app-route-feed {
 
 .comment-body .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-img,
 .connect-comment .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-img {
-	position: static;
+	position: relative;
 	inset: auto;
 	display: block;
 	width: auto;
@@ -5373,6 +5380,7 @@ app-route-feed {
 	object-position: center;
 	margin: 0;
 	flex-shrink: 0;
+	z-index: 0;
 }
 
 .comment-body .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-inner--error-layout,
@@ -11484,6 +11492,76 @@ body.creation-detail-page [data-comment-list] .comment-item:has(> .comment-body 
 	z-index: 2;
 }
 
+.connect-chat-msg-bubble .connect-chat-creation-embed--square .connect-chat-creation-embed-inner > .user-text-inline-image-link::before,
+.comment-body .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-inner > .user-text-inline-image-link::before,
+.connect-comment .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-inner > .user-text-inline-image-link::before,
+.comment-body .comment-text .user-text-inline-image-link::before,
+.connect-comment .comment-text .user-text-inline-image-link::before {
+	content: '';
+	position: absolute;
+	right: 14px;
+	bottom: 14px;
+	width: 10px;
+	height: 10px;
+	border-top: 2px solid rgba(255, 255, 255, 0.95);
+	border-right: 2px solid rgba(255, 255, 255, 0.95);
+	pointer-events: none;
+	z-index: 3;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed--square .connect-chat-creation-embed-inner > .user-text-inline-image-link::after,
+.comment-body .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-inner > .user-text-inline-image-link::after,
+.connect-comment .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-inner > .user-text-inline-image-link::after,
+.comment-body .comment-text .user-text-inline-image-link::after,
+.connect-comment .comment-text .user-text-inline-image-link::after {
+	content: '';
+	position: absolute;
+	right: 8px;
+	bottom: 8px;
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	background: rgba(15, 23, 42, 0.72);
+	box-shadow:
+		0 0 0 1px rgba(255, 255, 255, 0.22),
+		0 2px 10px rgba(15, 23, 42, 0.35);
+	pointer-events: none;
+	z-index: 2;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed-inner--video::before,
+.comment-body .comment-text .connect-chat-creation-embed-inner--video::before,
+.connect-comment .comment-text .connect-chat-creation-embed-inner--video::before {
+	content: '';
+	position: absolute;
+	right: 14px;
+	bottom: 14px;
+	width: 10px;
+	height: 10px;
+	border-top: 2px solid rgba(255, 255, 255, 0.95);
+	border-right: 2px solid rgba(255, 255, 255, 0.95);
+	pointer-events: none;
+	z-index: 3;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed-inner--video::after,
+.comment-body .comment-text .connect-chat-creation-embed-inner--video::after,
+.connect-comment .comment-text .connect-chat-creation-embed-inner--video::after {
+	content: '';
+	position: absolute;
+	right: 8px;
+	bottom: 8px;
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	background: rgba(15, 23, 42, 0.72);
+	box-shadow:
+		0 0 0 1px rgba(255, 255, 255, 0.22),
+		0 2px 10px rgba(15, 23, 42, 0.35);
+	pointer-events: none;
+	z-index: 2;
+}
+
 .connect-chat-msg-bubble .user-text-inline-image {
 	display: block;
 	width: auto;
@@ -11819,16 +11897,76 @@ button.chat-inline-image-lightbox-footer-btn.btn-secondary {
 	pointer-events: auto;
 }
 
+.chat-inline-image-lightbox-video-slot {
+	position: relative;
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	width: min(1024px, 96vw, 88vh);
+	max-width: 100%;
+	aspect-ratio: 1;
+	max-height: min(88vh, 100%);
+	height: auto;
+	pointer-events: auto;
+}
+
+/* Same shimmer as global `.skeleton` (theme tokens + skeleton-shimmer on ::after). */
+.chat-inline-image-lightbox-video-placeholder.skeleton {
+	position: absolute;
+	inset: 0;
+	z-index: 2;
+	pointer-events: none;
+	box-sizing: border-box;
+	border-radius: 8px;
+}
+
+.chat-inline-image-lightbox-video.chat-inline-image-lightbox-video--pending {
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	display: block;
+	box-sizing: border-box;
+	width: 100%;
+	height: 100%;
+	max-width: none;
+	max-height: none;
+	margin: 0;
+	object-fit: contain;
+	opacity: 0;
+	background: #000;
+	border-radius: 8px;
+	pointer-events: auto;
+}
+
 .chat-inline-image-lightbox-video {
 	display: block;
-	width: min(96vw, calc(100vw - 32px));
-	max-width: min(96vw, calc(100vw - 32px));
-	max-height: min(88vh, calc(100vh - 32px));
+	max-width: min(96vw, 100%);
+	max-height: min(88vh, 100%);
+	width: auto;
 	height: auto;
 	object-fit: contain;
 	background: #000;
 	border-radius: 8px;
 	pointer-events: auto;
+}
+
+.chat-inline-image-lightbox-video-slot--playing .chat-inline-image-lightbox-video {
+	position: relative;
+	inset: auto;
+	z-index: auto;
+	width: auto;
+	height: auto;
+	max-width: min(96vw, 100%);
+	max-height: min(88vh, 100%);
+	opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.chat-inline-image-lightbox-video-placeholder.skeleton::after {
+		animation: none;
+	}
 }
 
 @media (max-width: 768px) {
@@ -11845,28 +11983,30 @@ button.chat-inline-image-lightbox-footer-btn.btn-secondary {
 		border-radius: 6px;
 	}
 
+	.chat-inline-image-lightbox-video-slot {
+		width: min(1024px, 100%, 88vh);
+		max-height: 100%;
+	}
+
+	.chat-inline-image-lightbox-video-placeholder.skeleton {
+		border-radius: 6px;
+	}
+
+	.chat-inline-image-lightbox-video.chat-inline-image-lightbox-video--pending {
+		border-radius: 6px;
+	}
+
 	.chat-inline-image-lightbox-video {
-		width: 100%;
 		max-width: 100%;
 		max-height: 100%;
 		border-radius: 6px;
 	}
-}
 
-.chat-inline-image-lightbox-video-shell {
-	position: relative;
-	display: block;
-	max-width: min(96vw, calc(100vw - 32px));
-	max-height: min(88vh, calc(100vh - 32px));
-	pointer-events: auto;
-}
-
-.chat-inline-image-lightbox-video-shell .connect-chat-creation-embed-media-hover-bar {
-	border-radius: 8px 8px 0 0;
-}
-
-.chat-inline-image-lightbox-video-shell .chat-inline-image-lightbox-video {
-	border-radius: 8px;
+	.chat-inline-image-lightbox-video-slot--playing .chat-inline-image-lightbox-video {
+		max-width: 100%;
+		max-height: 100%;
+		border-radius: 6px;
+	}
 }
 
 .chat-inline-image-lightbox-iframe {
@@ -12455,9 +12595,15 @@ body:has(.chat-hashtag-nav-overlay) {
 }
 
 .connect-chat-creation-embed-inner--video {
+	position: relative;
 	border: none;
 	border-radius: 10px;
 	line-height: 0;
+}
+
+.connect-chat-creation-embed-inner--video:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
 }
 
 /* Square creation previews: videos should use the same 1×1 frame as images. */
@@ -12470,6 +12616,7 @@ body:has(.chat-hashtag-nav-overlay) {
 	border-radius: 12px;
 	overflow: hidden;
 	line-height: 0;
+	cursor: zoom-in;
 }
 
 .connect-chat-creation-embed--square .connect-chat-creation-embed-video {
@@ -12481,6 +12628,8 @@ body:has(.chat-hashtag-nav-overlay) {
 	object-fit: cover;
 	object-position: center;
 	border-radius: inherit;
+	pointer-events: none;
+	z-index: 0;
 }
 
 /*
@@ -12694,6 +12843,7 @@ body:has(.chat-hashtag-nav-overlay) {
 	aspect-ratio: unset;
 	background: color-mix(in srgb, var(--surface-strong) 58%, var(--bg));
 	box-sizing: border-box;
+	cursor: zoom-in;
 }
 
 .connect-chat-msg-bubble .connect-chat-creation-embed--square .connect-chat-creation-embed-video {
@@ -12707,6 +12857,8 @@ body:has(.chat-hashtag-nav-overlay) {
 	object-fit: contain;
 	object-position: center;
 	border-radius: inherit;
+	pointer-events: none;
+	z-index: 0;
 }
 
 .connect-chat-msg-bubble .connect-chat-creation-embed--square .connect-chat-creation-embed-inner:not(.connect-chat-creation-embed-inner--video):not(.connect-chat-creation-embed-inner--group-carousel):not(.connect-chat-creation-embed-inner--html):not(.connect-chat-creation-embed-inner--pending):not(.connect-chat-creation-embed-inner--error-layout):not(.connect-chat-creation-embed-inner--loading-shell) {
@@ -12784,7 +12936,15 @@ body:has(.chat-hashtag-nav-overlay) {
 
 @media (prefers-color-scheme: dark) {
 	.connect-chat-msg-bubble .user-text-inline-image-link::after,
-	.connect-chat-msg-bubble .connect-chat-creation-embed-inner--group-carousel .connect-chat-creation-embed-group-stack::after {
+	.connect-chat-msg-bubble .connect-chat-creation-embed-inner--group-carousel .connect-chat-creation-embed-group-stack::after,
+	.connect-chat-msg-bubble .connect-chat-creation-embed-inner--video::after,
+	.connect-chat-msg-bubble .connect-chat-creation-embed--square .connect-chat-creation-embed-inner > .user-text-inline-image-link::after,
+	.comment-body .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-inner > .user-text-inline-image-link::after,
+	.connect-comment .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-inner > .user-text-inline-image-link::after,
+	.comment-body .comment-text .user-text-inline-image-link::after,
+	.connect-comment .comment-text .user-text-inline-image-link::after,
+	.comment-body .comment-text .connect-chat-creation-embed-inner--video::after,
+	.connect-comment .comment-text .connect-chat-creation-embed-inner--video::after {
 		background: color-mix(in srgb, #000 66%, transparent);
 		box-shadow:
 			0 0 0 1px rgba(255, 255, 255, 0.18),
@@ -12810,7 +12970,7 @@ body:has(.chat-hashtag-nav-overlay) {
 }
 
 .connect-chat-msg-bubble .connect-chat-creation-embed--square .connect-chat-creation-embed-img {
-	position: static;
+	position: relative;
 	inset: auto;
 	display: block;
 	width: auto;
@@ -12821,6 +12981,7 @@ body:has(.chat-hashtag-nav-overlay) {
 	object-position: center;
 	margin: 0;
 	flex-shrink: 0;
+	z-index: 0;
 }
 
 .connect-chat-msg-bubble .connect-chat-creation-embed--square .connect-chat-creation-embed-inner--error-layout {

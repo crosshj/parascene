@@ -717,6 +717,7 @@ body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .
 	aspect-ratio: unset;
 	background: color-mix(in srgb, var(--surface-strong) 58%, var(--bg));
 	box-sizing: border-box;
+	cursor: zoom-in;
 }
 
 body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-video {
@@ -730,6 +731,8 @@ body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .
 	object-fit: contain;
 	object-position: center;
 	border-radius: inherit;
+	pointer-events: none;
+	z-index: 0;
 }
 
 body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-creation-embed--square .connect-chat-creation-embed-inner:not(.connect-chat-creation-embed-inner--video):not(.connect-chat-creation-embed-inner--group-carousel):not(.connect-chat-creation-embed-inner--html):not(.connect-chat-creation-embed-inner--pending):not(.connect-chat-creation-embed-inner--error-layout):not(.connect-chat-creation-embed-inner--loading-shell) {

@@ -1605,8 +1605,8 @@ export function hydrateChatCreationEmbeds(rootEl) {
 
 			if (mediaType === 'video' && videoUrl) {
 				const poster = url ? ` poster="${escapeHtml(url)}"` : '';
-				/* No whitespace between tags — otherwise pre-wrap line-height creates stray text nodes and gaps. */
-				wrap.innerHTML = `<div class="connect-chat-creation-embed-media"><div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--video${nsfwClass}"${nsfwDataAttr}><video class="connect-chat-creation-embed-video" autoplay muted loop controls playsinline controlslist="nodownload" preload="metadata" src="${escapeHtml(videoUrl)}"${poster}></video></div></div>`;
+				/* Inline: muted preview, no controls (same affordance as image thumbs via CSS). Full controls + sound in lightbox. */
+				wrap.innerHTML = `<div class="connect-chat-creation-embed-media"><div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--video${nsfwClass}"${nsfwDataAttr} role="button" tabindex="0" aria-label="Open video" title="Open video"><video class="connect-chat-creation-embed-video" autoplay muted loop playsinline preload="metadata" src="${escapeHtml(videoUrl)}"${poster}></video></div></div>`;
 				trimWhitespaceOnlyTextNodes(wrap);
 				const vid = wrap.querySelector('.connect-chat-creation-embed-video');
 				if (vid instanceof HTMLVideoElement) {

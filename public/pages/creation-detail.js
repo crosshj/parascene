@@ -57,6 +57,9 @@ function getImportQuery(version) {
 	return version && typeof version === 'string' ? `?v=${encodeURIComponent(version)}` : '';
 }
 
+/** @type {typeof import('/shared/chatInlineImageLightbox.js') | null} */
+let creationDetailInlineLightboxMod = null;
+
 let _depsPromise;
 async function loadDeps() {
 	if (_depsPromise) return _depsPromise;
@@ -92,6 +95,8 @@ async function loadDeps() {
 		processUserText = userTextMod.processUserText;
 		hydrateUserTextLinks = userTextMod.hydrateUserTextLinks;
 		hydrateRichUserTextEmbeds = userTextMod.hydrateRichUserTextEmbeds;
+
+		creationDetailInlineLightboxMod = await import(`/shared/chatInlineImageLightbox.js${qs}`);
 
 		const autogrowMod = await import(`/shared/autogrow.js${qs}`);
 		attachAutoGrowTextarea = autogrowMod.attachAutoGrowTextarea;
@@ -1004,6 +1009,14 @@ async function loadCreation() {
 	const groupHeroImageBySourceId = new Map();
 
 	if (!detailContent || !imageEl || !backgroundEl) return;
+
+	if (creationDetailInlineLightboxMod && !detailContent.dataset.prsnInlineLightboxBound) {
+		detailContent.dataset.prsnInlineLightboxBound = '1';
+		creationDetailInlineLightboxMod.bindChatInlineImageLightboxClickDelegation(detailContent, {
+			bubbleSelector: null,
+			openHooks: {},
+		});
+	}
 
 	const loadToken = ++loadCreationSequence;
 	const isCurrentLoad = () => loadToken === loadCreationSequence;
@@ -6214,6 +6227,9 @@ async function handleUnpublish() {
 // Use capture phase to ensure we get the event before header handles it
 window.addEventListener('popstate', (e) => {
 	// console.log('popstate event fired', window.location.pathname);
+	if (creationDetailInlineLightboxMod?.closeChatInlineImageLightboxFromPopstateIfOpen?.()) {
+		return;
+	}
 	// Check if we're still on a creation detail page
 	const creationId = getCreationId();
 	if (creationId) {
