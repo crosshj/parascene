@@ -3762,6 +3762,79 @@ body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail
 	transform: none !important;
 }
 
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail a.chat-doom-rail-btn {
+	background: transparent !important;
+	border: none !important;
+	box-shadow: none !important;
+	color: rgba(255, 255, 255, 0.95) !important;
+	filter: none !important;
+	align-self: center;
+	font-weight: 500;
+	-webkit-tap-highlight-color: transparent;
+}
+
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail a.chat-doom-rail-btn:hover {
+	filter: none !important;
+	transform: none !important;
+	background: rgba(255, 255, 255, 0.08) !important;
+}
+
+/*
+ * Creation-detail DNA link: anchor padding extends past the 40px round icon by ~4–8px, so
+ * any rail-link wash (hover/active/focus/tap-highlight) reads as a stray rectangle around
+ * the circle. The icon itself already has its own (now-transparent) hit area; suppress all
+ * interactive surfaces on the anchor for this one link.
+ */
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail a.chat-doom-rail-btn[data-chat-doom-creation-detail],
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail a.chat-doom-rail-btn[data-chat-doom-creation-detail]:hover,
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail a.chat-doom-rail-btn[data-chat-doom-creation-detail]:active,
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail a.chat-doom-rail-btn[data-chat-doom-creation-detail]:focus,
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail a.chat-doom-rail-btn[data-chat-doom-creation-detail]:focus-visible,
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail a.chat-doom-rail-btn[data-chat-doom-creation-detail]:focus-within {
+	background: transparent !important;
+	outline: none !important;
+	box-shadow: none !important;
+	-webkit-tap-highlight-color: transparent !important;
+}
+
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail a.chat-doom-rail-btn:active {
+	transform: none !important;
+}
+
+/*
+ * Rail anchors are icon-only and visually centered inside the DNA badge / glyph; the default
+ * browser focus / tap-highlight ring is a transparent box around the wider flex column hit
+ * area and reads as a stray rectangle. Suppress it on the link itself; the inner badge's
+ * own :hover wash + active state still provides feedback.
+ */
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail a.chat-doom-rail-btn:focus,
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail a.chat-doom-rail-btn:focus-visible {
+	outline: none !important;
+	box-shadow: none !important;
+	background: transparent !important;
+}
+
+/*
+ * DNA glyph in the doom rail: circular hit target (40px) around the 26×26 SVG; no fill or
+ * shadow so it reads as a clean icon ring like the heart, without a tinted badge behind it.
+ */
+.chat-doom-rail-icon--dna {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
+	background: transparent;
+	box-shadow: none;
+}
+
+.chat-doom-rail-icon--dna svg {
+	display: block;
+	width: 26px;
+	height: 26px;
+}
+
 .chat-doom-rail-item {
 	display: flex;
 	flex-direction: column;

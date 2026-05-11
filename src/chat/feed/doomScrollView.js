@@ -288,6 +288,25 @@ export function createDoomSlideElement(item, viewerUserId) {
 	/** Heart + share icon match feed / creation-detail (`public/icons/svg-strings.js` shareIcon path). */
 	rail.innerHTML = `
 		<div class="chat-doom-rail-item">
+			<a class="chat-doom-rail-btn chat-doom-rail-link" href="/creations/${encodeURIComponent(String(cid))}" data-chat-doom-creation-detail aria-label="View creation">
+				<span class="chat-doom-rail-icon chat-doom-rail-icon--dna" aria-hidden="true">
+					<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<path d="m10 16 1.5 1.5" />
+						<path d="m14 8-1.5-1.5" />
+						<path d="M15 2c-1.798 1.998-2.518 3.995-2.807 5.993" />
+						<path d="m16.5 10.5 1 1" />
+						<path d="m17 6-2.891-2.891" />
+						<path d="M2 15c6.667-6 13.333 0 20-6" />
+						<path d="m20 9 .891.891" />
+						<path d="M3.109 14.109 4 15" />
+						<path d="m6.5 12.5 1 1" />
+						<path d="m7 18 2.891 2.891" />
+						<path d="M9 22c1.798-1.998 2.518-3.995 2.807-5.993" />
+					</svg>
+				</span>
+			</a>
+		</div>
+		<div class="chat-doom-rail-item">
 			<button type="button" class="feed-card-action chat-doom-rail-btn" data-like-button aria-label="Like"
 				data-like-base-count="${String(Math.max(0, likeCount - (item.viewer_liked ? 1 : 0)))}">
 				<span class="chat-doom-rail-icon" aria-hidden="true">
