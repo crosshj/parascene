@@ -3359,24 +3359,6 @@ button.creation-detail-history-thumb-link.creation-detail-history-unavailable.cr
 	border: 0;
 }
 
-.comments-heading {
-	font-size: 1rem;
-	font-weight: 600;
-	color: var(--text);
-	margin: 0;
-}
-
-.comments-toolbar {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 12px;
-}
-
-.comments-toolbar .comments-sort {
-	margin-left: auto;
-}
-
 @media (max-width: 768px) {
 	/* Match hero to the image; min-height was leaving bands above/below the image. */
 	/* contain: paint keeps filter/backdrop blur from painting above the hero (frosted header samples it otherwise). */

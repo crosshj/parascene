@@ -320,6 +320,13 @@ export function createDoomSlideElement(item, viewerUserId) {
 
 	const bottom = document.createElement('div');
 	bottom.className = 'chat-doom-bottom';
+	if (Number.isFinite(cid) && cid > 0) {
+		bottom.setAttribute('data-chat-doom-detail', '');
+		bottom.setAttribute(
+			'data-chat-doom-detail-href',
+			`/creations/${encodeURIComponent(String(cid))}`
+		);
+	}
 
 	const avatarHtml = avatarUrl
 		? `<span class="chat-doom-avatar-wrap"><img class="chat-doom-avatar" src="${escapeHtmlAttr(avatarUrl)}" alt="" width="32" height="32" loading="eager" decoding="async"></span>`

@@ -103,6 +103,25 @@ import * as challengesChannelModule from './challengesChannel.js';
 		openDoomCommentsPopover({ commentCountLabel, detailHref });
 	}
 	document.addEventListener('click', onDoomCommentsRailClickCapture, true);
+
+	/**
+	 * Doom slide bottom bar (`.chat-doom-bottom`: avatar + @handle + follow + caption) is a click
+	 * surface for the creation detail. Inner anchors/buttons (username link, follow) still own
+	 * their own clicks; everything else navigates to `/creations/:id`.
+	 */
+	function onDoomDetailBarClickCapture(ev) {
+		if (!document.body?.classList?.contains('chat-page--doom-scroll')) return;
+		const bar = ev.target?.closest?.('[data-chat-doom-detail]');
+		if (!(bar instanceof HTMLElement)) return;
+		const interactive = ev.target?.closest?.('a, button, input, textarea, select, [role="button"]');
+		if (interactive && interactive !== bar && bar.contains(interactive)) return;
+		const href = (bar.getAttribute('data-chat-doom-detail-href') || '').trim();
+		if (!href) return;
+		ev.preventDefault();
+		ev.stopImmediatePropagation();
+		window.location.href = href;
+	}
+	document.addEventListener('click', onDoomDetailBarClickCapture, true);
 })();
 
 /**

@@ -1,4 +1,4 @@
-/* Doom scroll — comments bottom sheet (WIP notice + link to creation detail). Merged into chat.bundle.css */
+/* Doom scroll — comments bottom sheet. Merged into chat.bundle.css */
 
 .chat-doom-comments-overlay {
 	position: fixed;
@@ -132,9 +132,15 @@
 	background: color-mix(in srgb, var(--text) 12%, transparent);
 }
 
+.chat-doom-comments-close:focus,
 .chat-doom-comments-close:focus-visible {
-	outline: 2px solid var(--focus, #6366f1);
-	outline-offset: 2px;
+	outline: none;
+	box-shadow: none;
+}
+
+/* Drag handle is hidden for now but kept in layout so the sheet's top padding/spacing stays the same. */
+.chat-doom-comments-handle {
+	visibility: hidden;
 }
 
 .chat-doom-comments-body {
@@ -142,31 +148,56 @@
 	min-height: 0;
 	overflow-y: auto;
 	-webkit-overflow-scrolling: touch;
-	padding: 20px 16px calc(24px + env(safe-area-inset-bottom));
+	padding: 12px 16px calc(24px + env(safe-area-inset-bottom));
 	display: flex;
 	flex-direction: column;
 	align-items: stretch;
-	gap: 18px;
 	box-sizing: border-box;
 }
 
-.chat-doom-comments-wip-note {
-	margin: 0;
-	font-size: 0.9375rem;
-	font-weight: 400;
-	line-height: 1.45;
-	text-align: center;
+.chat-doom-comments-body .creation-comments-thread {
+	display: flex;
+	flex-direction: column;
+}
+
+/* Lock sheet body scroll while the shared thread shows its loading skeleton (see onCommentsLoadingChange). */
+.chat-doom-comments-body[data-chat-doom-comments-body-scroll-lock='1'] {
+	overflow: hidden;
+	overscroll-behavior: contain;
+}
+
+.chat-doom-comments-body .comment-list {
+	margin-top: 12px;
+}
+
+/* Sheet header already shows the comment count, and sort is unnecessary chrome here;
+   hide the whole toolbar so the comment list sits directly under the composer. */
+.chat-doom-comments-body .comments-toolbar {
+	display: none;
+}
+
+.chat-doom-comments-error {
+	margin: 12px 0;
 	color: var(--text-muted);
+	text-align: center;
+	font-size: 0.9rem;
 }
 
-.chat-doom-comments-detail-btn {
-	box-sizing: border-box;
-	width: 100%;
-	justify-content: center;
-	text-align: center;
-	padding-top: 12px;
-	padding-bottom: 12px;
-	border-radius: 6px;
+/*
+ * Reaction picker, attach popover, and sticker modal are appended to <body> so they
+ * inherit a low global z-index (1000–1300). The doom sheet sits at 12000; lift these
+ * portaled popovers above the sheet whenever the sheet is open.
+ */
+html[data-chat-doom-comments-open='1'] .comment-reaction-picker {
+	z-index: 12100;
+}
+
+html[data-chat-doom-comments-open='1'] .comment-sticker-modal-overlay {
+	z-index: 12200;
+}
+
+html[data-chat-doom-comments-open='1'] .comment-attach-popover {
+	z-index: 12300;
 }
 
 @keyframes chat-doom-comments-count-pulse {
