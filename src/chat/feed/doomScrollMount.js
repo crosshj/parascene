@@ -286,7 +286,9 @@ export async function mountChatDoomScroll(opts) {
 	function bindProgressForSlide(slide, v) {
 		const fill = slide.querySelector('[data-chat-doom-progress-fill]');
 		if (!(fill instanceof HTMLElement)) return () => {};
+		let progressRaf = 0;
 		const tick = () => {
+			progressRaf = 0;
 			const d = v.duration;
 			const t = v.currentTime;
 			if (!Number.isFinite(d) || d <= 0) {
@@ -296,11 +298,16 @@ export async function mountChatDoomScroll(opts) {
 			const p = Math.min(1, Math.max(0, t / d));
 			fill.style.transform = `scaleX(${p})`;
 		};
-		v.addEventListener('timeupdate', tick);
+		const scheduleTick = () => {
+			if (progressRaf) return;
+			progressRaf = window.requestAnimationFrame(tick);
+		};
+		v.addEventListener('timeupdate', scheduleTick);
 		v.addEventListener('loadedmetadata', tick);
 		tick();
 		return () => {
-			v.removeEventListener('timeupdate', tick);
+			if (progressRaf) window.cancelAnimationFrame(progressRaf);
+			v.removeEventListener('timeupdate', scheduleTick);
 			v.removeEventListener('loadedmetadata', tick);
 		};
 	}
@@ -721,7 +728,7 @@ export async function mountChatDoomScroll(opts) {
 			const key = getChatFeedItemKey(it);
 			if (videoByKey.has(key)) continue;
 			videoByKey.set(key, it);
-			const slide = createDoomSlideElement(it, viewerUserId ?? -1);
+			const slide = createDoomSlideElement(it, viewerUserId ?? -1, { backgroundLoad: true });
 			frag.appendChild(slide);
 			pending.push({ slide, item: it });
 		}
@@ -836,8 +843,22 @@ export async function mountChatDoomScroll(opts) {
 		}
 	}
 
-	const DOOM_TAIL_CHUNK = 12;
+	/** Small batches + idle yield: a dozen videos × metadata + eager posters in one frame was janking the anchor decode. */
+	const DOOM_TAIL_CHUNK = 4;
 	let tailSlideIdx = anchorIndex + 1;
+
+	function scheduleNextTailChunk() {
+		const run = () => {
+			if (!doomMountAlive) return;
+			requestAnimationFrame(appendTailSlidesChunk);
+		};
+		if (typeof requestIdleCallback !== 'undefined') {
+			requestIdleCallback(run, { timeout: 900 });
+		} else {
+			window.setTimeout(run, 48);
+		}
+	}
+
 	function appendTailSlidesChunk() {
 		const end = Math.min(tailSlideIdx + DOOM_TAIL_CHUNK, orderedVideos.length);
 
@@ -845,7 +866,7 @@ export async function mountChatDoomScroll(opts) {
 		const batch = [];
 		for (; tailSlideIdx < end; tailSlideIdx += 1) {
 			const item = orderedVideos[tailSlideIdx];
-			const slide = createDoomSlideElement(item, viewerUserId ?? -1);
+			const slide = createDoomSlideElement(item, viewerUserId ?? -1, { backgroundLoad: true });
 			frag.appendChild(slide);
 			batch.push({ slide, item });
 		}
@@ -867,7 +888,7 @@ export async function mountChatDoomScroll(opts) {
 			if (anchorChunk instanceof HTMLElement) stabilizeDoomScrollPosition(anchorChunk);
 			scheduleIdleDoomNextFeedPage();
 		} else {
-			requestAnimationFrame(appendTailSlidesChunk);
+			scheduleNextTailChunk();
 		}
 	}
 
@@ -918,7 +939,7 @@ export async function mountChatDoomScroll(opts) {
 			resolveActiveFromScroll();
 		}, 250);
 		if (anchorIndex + 1 < orderedVideos.length) {
-			requestAnimationFrame(appendTailSlidesChunk);
+			scheduleNextTailChunk();
 		} else {
 			scheduleIdleDoomNextFeedPage();
 		}

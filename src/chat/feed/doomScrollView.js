@@ -177,9 +177,11 @@ export function createDoomScrollShell(opts = {}) {
 /**
  * @param {object} item
  * @param {number} viewerUserId
+ * @param {{ backgroundLoad?: boolean }} [slideOpts] — off-screen tail: lighter media hints so the active clip keeps bandwidth / decode headroom.
  * @returns {HTMLDivElement}
  */
-export function createDoomSlideElement(item, viewerUserId) {
+export function createDoomSlideElement(item, viewerUserId, slideOpts = {}) {
+	const bgLoad = Boolean(slideOpts.backgroundLoad);
 	const cid = Number(item.created_image_id || item.id);
 	const uid = Number(item.user_id);
 	const videoUrl = typeof item.video_url === 'string' ? item.video_url.trim() : '';
@@ -236,7 +238,7 @@ export function createDoomSlideElement(item, viewerUserId) {
 	video.playsInline = true;
 	video.loop = true;
 	video.muted = true;
-	video.preload = 'metadata';
+	video.preload = bgLoad ? 'none' : 'metadata';
 	if (videoUrl) video.src = videoUrl;
 
 	const mediaWrap = document.createElement('div');
@@ -254,7 +256,7 @@ export function createDoomSlideElement(item, viewerUserId) {
 		posterImg.className = 'chat-doom-poster';
 		posterImg.alt = '';
 		posterImg.decoding = 'async';
-		posterImg.loading = 'eager';
+		posterImg.loading = bgLoad ? 'lazy' : 'eager';
 		posterImg.src = poster;
 	}
 
@@ -347,8 +349,9 @@ export function createDoomSlideElement(item, viewerUserId) {
 		);
 	}
 
+	const avatarLoading = bgLoad ? 'lazy' : 'eager';
 	const avatarHtml = avatarUrl
-		? `<span class="chat-doom-avatar-wrap"><img class="chat-doom-avatar" src="${escapeHtmlAttr(avatarUrl)}" alt="" width="32" height="32" loading="eager" decoding="async"></span>`
+		? `<span class="chat-doom-avatar-wrap"><img class="chat-doom-avatar" src="${escapeHtmlAttr(avatarUrl)}" alt="" width="32" height="32" loading="${avatarLoading}" decoding="async"></span>`
 		: `<span class="chat-doom-avatar-wrap chat-doom-avatar-placeholder" aria-hidden="true"></span>`;
 
 	/** Username only in the rail — omit display name / email prefix when we have a handle. */
