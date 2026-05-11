@@ -13,6 +13,9 @@ let MUTATE_DEFAULT_METHOD_KEY;
 let MUTATE_DEFAULT_MODEL;
 let MUTATE_VIDEO_DEFAULT_METHOD_KEY;
 let MUTATE_VIDEO_DEFAULT_MODEL;
+let MUTATE_VIDEO_LTX_SERVER_ID;
+let MUTATE_VIDEO_LTX_METHOD_KEY;
+let MUTATE_VIDEO_LTX_MODEL;
 let renderEmptyState;
 let renderEmptyLoading;
 let renderEmptyError;
@@ -64,6 +67,9 @@ async function loadDeps() {
 		MUTATE_DEFAULT_MODEL = generationDefaultsMod.MUTATE_DEFAULT_MODEL;
 		MUTATE_VIDEO_DEFAULT_METHOD_KEY = generationDefaultsMod.MUTATE_VIDEO_DEFAULT_METHOD_KEY;
 		MUTATE_VIDEO_DEFAULT_MODEL = generationDefaultsMod.MUTATE_VIDEO_DEFAULT_MODEL;
+		MUTATE_VIDEO_LTX_SERVER_ID = generationDefaultsMod.MUTATE_VIDEO_LTX_SERVER_ID;
+		MUTATE_VIDEO_LTX_METHOD_KEY = generationDefaultsMod.MUTATE_VIDEO_LTX_METHOD_KEY;
+		MUTATE_VIDEO_LTX_MODEL = generationDefaultsMod.MUTATE_VIDEO_LTX_MODEL;
 		const emptyStateMod = await import(`/shared/emptyState.js${qs}`);
 		renderEmptyState = emptyStateMod.renderEmptyState;
 		renderEmptyLoading = emptyStateMod.renderEmptyLoading;
@@ -82,6 +88,7 @@ async function loadDeps() {
 
 const html = String.raw;
 const MUTATE_MODE_STORAGE_KEY = 'mutate_page_mode';
+const MUTATE_I2V_ENGINE_STORAGE_KEY = 'mutate_i2v_engine';
 
 function toParasceneImageUrl(raw) {
 	const base = (typeof window !== 'undefined' && window.location?.origin) || DEFAULT_APP_ORIGIN;
@@ -135,7 +142,8 @@ function getCreationId() {
 function loadSavedMutateMode() {
 	try {
 		const saved = localStorage.getItem(MUTATE_MODE_STORAGE_KEY);
-		return saved === 'image-to-video' ? 'image-to-video' : 'image-to-image';
+		if (saved === 'image-to-video' || saved === 'image-to-video-ltx') return 'image-to-video';
+		return 'image-to-image';
 	} catch {
 		return 'image-to-image';
 	}
@@ -147,6 +155,11 @@ function persistMutateMode(mode) {
 	} catch {
 		// ignore storage errors
 	}
+}
+
+function mutateModeFromTabOrDataset(idOrMode) {
+	const v = typeof idOrMode === 'string' ? idOrMode.trim() : '';
+	return v === 'image-to-video' ? 'image-to-video' : 'image-to-image';
 }
 
 function withVariant(url, variant) {
@@ -234,23 +247,26 @@ async function loadEditPage() {
 
 		const servers = await loadMutateServerOptions();
 		const server = servers.find((s) => Number(s.id) === Number(MUTATE_DEFAULT_SERVER_ID));
-		if (!server) {
+		const ltxServer = servers.find((s) => Number(s.id) === Number(MUTATE_VIDEO_LTX_SERVER_ID));
+		if (!server && !ltxServer) {
 			editContent.innerHTML = renderEmptyState({
 				title: 'Mutate unavailable',
 				message: 'You do not have access to the default mutate server.',
 			});
 			return;
 		}
-		const methods = server.server_config && typeof server.server_config === 'object' ? server.server_config.methods : null;
-		if (!methods || typeof methods !== 'object') {
+		const methods = server?.server_config && typeof server.server_config === 'object' ? server.server_config.methods : null;
+		const ltxMethods = ltxServer?.server_config && typeof ltxServer.server_config === 'object' ? ltxServer.server_config.methods : null;
+		if ((!methods || typeof methods !== 'object') && (!ltxMethods || typeof ltxMethods !== 'object')) {
 			editContent.innerHTML = renderEmptyState({
 				title: 'Mutate unavailable',
 				message: 'No mutate methods are available on this server.',
 			});
 			return;
 		}
-		const imageMethodDef = methods[MUTATE_DEFAULT_METHOD_KEY];
-		const videoMethodDef = methods[MUTATE_VIDEO_DEFAULT_METHOD_KEY];
+		const imageMethodDef = methods?.[MUTATE_DEFAULT_METHOD_KEY];
+		const videoMethodDef = methods?.[MUTATE_VIDEO_DEFAULT_METHOD_KEY];
+		const ltxVideoMethodDef = ltxMethods?.[MUTATE_VIDEO_LTX_METHOD_KEY];
 
 		function getMethodCost(methodDef) {
 			if (!methodDef || typeof methodDef !== 'object') return null;
@@ -266,9 +282,12 @@ async function loadEditPage() {
 
 		const imageCost = getMethodCost(imageMethodDef);
 		const videoCost = getMethodCost(videoMethodDef);
+		const ltxCost = getMethodCost(ltxVideoMethodDef);
 		const hasImageMode = Boolean(imageMethodDef) && Number.isFinite(imageCost) && imageCost >= 0;
 		const hasVideoMode = Boolean(videoMethodDef) && Number.isFinite(videoCost) && videoCost >= 0;
-		if (!hasImageMode && !hasVideoMode) {
+		const hasLtxVideoMode = Boolean(ltxVideoMethodDef) && Number.isFinite(ltxCost) && ltxCost >= 0;
+		const hasI2vTab = hasVideoMode || hasLtxVideoMode;
+		if (!hasImageMode && !hasI2vTab) {
 			editContent.innerHTML = renderEmptyState({
 				title: 'Mutate unavailable',
 				message: 'No valid mutate modes are configured for this server.',
@@ -276,14 +295,14 @@ async function loadEditPage() {
 			return;
 		}
 
-		const savedMode = loadSavedMutateMode();
-		let activeMode = savedMode;
-		if (activeMode === 'image-to-video' && !hasVideoMode) activeMode = 'image-to-image';
-		if (activeMode === 'image-to-image' && !hasImageMode) activeMode = 'image-to-video';
+		let activeMode = loadSavedMutateMode();
+		if (!hasImageMode && hasI2vTab) activeMode = 'image-to-video';
+		if (activeMode === 'image-to-video' && !hasI2vTab) activeMode = 'image-to-image';
+		if (activeMode === 'image-to-image' && !hasImageMode && hasI2vTab) activeMode = 'image-to-video';
 
 		editContent.innerHTML = html`
 			<div class="create-content creation-edit-create-content">
-				<app-tabs active="${activeMode === 'image-to-video' ? 'image-to-video' : 'image-to-image'}">
+				<app-tabs active="${activeMode}">
 					${hasImageMode ? html`
 					<tab label="Image Edit" data-id="image-to-image" ${activeMode==='image-to-image' ? 'default' : '' }>
 						<h1 class="create-title">What do you want to change?</h1>
@@ -308,7 +327,7 @@ async function loadEditPage() {
 						</div>
 					</tab>
 					` : ''}
-					${hasVideoMode ? html`
+					${hasI2vTab ? html`
 					<tab label="Image To Video" data-id="image-to-video" ${activeMode==='image-to-video' ? 'default' : '' }>
 						<h1 class="create-title">What happens next?</h1>
 						<div class="create-image-edit-wrap creation-edit-source-wrap">
@@ -324,9 +343,20 @@ async function loadEditPage() {
 							<a href="#" class="create-prompt-clear" tabindex="-1" aria-label="Clear field">clear</a>
 						</div>
 						<div class="create-controls">
-							<div class="create-controls-buttons">
+							<div class="create-controls-buttons creation-edit-i2v-controls-row ${hasVideoMode && hasLtxVideoMode ? 'creation-edit-i2v-controls-row--gear' : ''}">
+								${hasVideoMode && hasLtxVideoMode ? html`
+								<span class="creation-edit-i2v-controls-spacer" aria-hidden="true"></span>
+								` : ''}
 								<button class="create-btn-generate btn-primary" data-generate-btn
 									data-generate-mode="image-to-video" disabled>Animate</button>
+								${hasVideoMode && hasLtxVideoMode ? html`
+								<button type="button" class="creation-edit-i2v-gear-btn" data-creation-edit-i2v-gear aria-label="Video settings">
+									<svg class="creation-edit-i2v-gear-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+										<circle cx="12" cy="12" r="3"></circle>
+										<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+									</svg>
+								</button>
+								` : ''}
 							</div>
 							<p class="create-cost" data-mutate-cost data-mode-cost="image-to-video">Loading credits…</p>
 						</div>
@@ -339,6 +369,37 @@ async function loadEditPage() {
 					</nav>
 				</footer>
 			</div>
+			${hasVideoMode && hasLtxVideoMode ? html`
+			<div class="modal-overlay creation-edit-i2v-modal" data-creation-edit-i2v-modal aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="creation-edit-i2v-modal-title">
+				<div class="modal modal-small">
+					<div class="modal-header">
+						<h3 id="creation-edit-i2v-modal-title">Video settings</h3>
+						<button type="button" class="modal-close" data-creation-edit-i2v-modal-dismiss aria-label="Close">
+							<span class="modal-close-icon" aria-hidden="true">×</span>
+						</button>
+					</div>
+					<div class="modal-body">
+						<div class="creation-edit-i2v-modal-section-head">
+							<h4 class="creation-edit-i2v-modal-engine-heading" id="creation-edit-i2v-engine-heading">Engine</h4>
+						</div>
+						<div class="creation-edit-i2v-modal-radios" role="radiogroup" aria-labelledby="creation-edit-i2v-engine-heading">
+							<label class="creation-edit-i2v-modal-radio">
+								<input type="radio" name="creation-edit-i2v-engine" value="ltx" data-i2v-modal-engine />
+								<span class="creation-edit-i2v-modal-radio-label">LTX Self-hosted</span>
+							</label>
+							<label class="creation-edit-i2v-modal-radio">
+								<input type="radio" name="creation-edit-i2v-engine" value="wan" data-i2v-modal-engine />
+								<span class="creation-edit-i2v-modal-radio-label">WAN Cloud</span>
+							</label>
+						</div>
+					</div>
+					<div class="modal-footer">
+						<button type="button" class="btn-secondary" data-creation-edit-i2v-modal-cancel>Cancel</button>
+						<button type="button" class="btn-primary" data-creation-edit-i2v-modal-save>Save</button>
+					</div>
+				</div>
+			</div>
+			` : ''}
 		`;
 
 		// Wire up image thumbnail (with shimmer) and click-to-view behavior.
@@ -412,8 +473,106 @@ async function loadEditPage() {
 			}
 		}
 
+		function loadSavedI2vEngine() {
+			try {
+				const v = localStorage.getItem(MUTATE_I2V_ENGINE_STORAGE_KEY);
+				if (v === 'wan' || v === 'replicate') return 'wan';
+				if (v === 'ltx') return 'ltx';
+				return 'ltx';
+			} catch {
+				return 'ltx';
+			}
+		}
+
+		function persistI2vEngine(engine) {
+			try {
+				localStorage.setItem(MUTATE_I2V_ENGINE_STORAGE_KEY, engine === 'wan' ? 'wan' : 'ltx');
+			} catch {
+				// ignore
+			}
+		}
+
+		let i2vEngine = loadSavedI2vEngine();
+		if (i2vEngine === 'ltx' && !hasLtxVideoMode) i2vEngine = 'wan';
+		if (i2vEngine === 'wan' && !hasVideoMode && hasLtxVideoMode) i2vEngine = 'ltx';
+		editContent.dataset.mutateI2vEngine = i2vEngine;
+
+		const i2vModal = editContent.querySelector('[data-creation-edit-i2v-modal]');
+		const i2vGearBtn = editContent.querySelector('[data-creation-edit-i2v-gear]');
+		const i2vModalRadios = Array.from(editContent.querySelectorAll('[data-i2v-modal-engine]'));
+
+		function syncI2vModalRadiosFromEngine() {
+			i2vModalRadios.forEach((r) => {
+				if (r instanceof HTMLInputElement) r.checked = r.value === i2vEngine;
+			});
+		}
+
+		function openI2vModal() {
+			if (!(i2vModal instanceof HTMLElement)) return;
+			syncI2vModalRadiosFromEngine();
+			i2vModal.classList.add('open');
+			i2vModal.setAttribute('aria-hidden', 'false');
+			const checked = i2vModalRadios.find((r) => r instanceof HTMLInputElement && r.checked);
+			const toFocus = checked instanceof HTMLElement ? checked : i2vModalRadios[0];
+			if (toFocus instanceof HTMLElement) toFocus.focus();
+		}
+
+		function closeI2vModal() {
+			if (!(i2vModal instanceof HTMLElement)) return;
+			i2vModal.classList.remove('open');
+			i2vModal.setAttribute('aria-hidden', 'true');
+			if (i2vGearBtn instanceof HTMLElement) i2vGearBtn.focus();
+		}
+
+		function onI2vModalSave() {
+			const picked = i2vModalRadios.find((r) => r instanceof HTMLInputElement && r.checked);
+			const next = picked?.value === 'wan' ? 'wan' : 'ltx';
+			i2vEngine = next;
+			editContent.dataset.mutateI2vEngine = i2vEngine;
+			persistI2vEngine(i2vEngine);
+			updateCostAndButtonState();
+			closeI2vModal();
+		}
+
+		i2vGearBtn?.addEventListener('click', (e) => {
+			e.preventDefault();
+			openI2vModal();
+		});
+
+		i2vModal?.querySelector('[data-creation-edit-i2v-modal-dismiss]')?.addEventListener('click', (e) => {
+			e.preventDefault();
+			closeI2vModal();
+		});
+		i2vModal?.querySelector('[data-creation-edit-i2v-modal-cancel]')?.addEventListener('click', (e) => {
+			e.preventDefault();
+			closeI2vModal();
+		});
+		i2vModal?.querySelector('[data-creation-edit-i2v-modal-save]')?.addEventListener('click', (e) => {
+			e.preventDefault();
+			onI2vModalSave();
+		});
+
+		i2vModal?.addEventListener('click', (e) => {
+			if (e.target === i2vModal) closeI2vModal();
+		});
+
+		const onI2vModalEscape = (e) => {
+			if (e.key !== 'Escape') return;
+			if (!(i2vModal instanceof HTMLElement) || !i2vModal.classList.contains('open')) return;
+			e.preventDefault();
+			closeI2vModal();
+		};
+		document.addEventListener('keydown', onI2vModalEscape);
+
 		function getModeCost(mode) {
-			return mode === 'image-to-video' ? videoCost : imageCost;
+			if (mode === 'image-to-video') {
+				if (i2vEngine === 'ltx' && hasLtxVideoMode) return ltxCost;
+				if (i2vEngine === 'wan' && hasVideoMode) return videoCost;
+				if (hasLtxVideoMode) return ltxCost;
+				if (hasVideoMode) return videoCost;
+				return null;
+			}
+			return imageCost;
 		}
 
 		function updateCostAndButtonState() {
@@ -423,13 +582,13 @@ async function loadEditPage() {
 			};
 			promptEls.forEach((el) => {
 				if (!(el instanceof HTMLTextAreaElement)) return;
-				const mode = el.dataset.mode === 'image-to-video' ? 'image-to-video' : 'image-to-image';
+				const mode = mutateModeFromTabOrDataset(el.dataset.mode);
 				promptsByMode[mode] = el.value || '';
 			});
 
 			costEls.forEach((costEl) => {
 				if (!(costEl instanceof HTMLElement)) return;
-				const mode = costEl.dataset.modeCost === 'image-to-video' ? 'image-to-video' : 'image-to-image';
+				const mode = mutateModeFromTabOrDataset(costEl.dataset.modeCost);
 				const cost = getModeCost(mode);
 				costEl.classList.remove('insufficient');
 				if (creditsCount == null) {
@@ -447,7 +606,7 @@ async function loadEditPage() {
 
 			generateBtns.forEach((buttonEl) => {
 				if (!(buttonEl instanceof HTMLButtonElement)) return;
-				const mode = buttonEl.dataset.generateMode === 'image-to-video' ? 'image-to-video' : 'image-to-image';
+				const mode = mutateModeFromTabOrDataset(buttonEl.dataset.generateMode);
 				const hasPrompt = (promptsByMode[mode] || '').trim().length > 0;
 				const cost = getModeCost(mode);
 				const hasEnoughCredits = creditsCount != null && Number.isFinite(cost) && creditsCount >= cost;
@@ -455,9 +614,10 @@ async function loadEditPage() {
 			});
 		}
 		tabsEl?.addEventListener('tab-change', (e) => {
-			const mode = e?.detail?.id === 'image-to-video' ? 'image-to-video' : 'image-to-image';
+			const mode = mutateModeFromTabOrDataset(e?.detail?.id);
 			activeMode = mode;
 			persistMutateMode(mode);
+			if (i2vModal instanceof HTMLElement && i2vModal.classList.contains('open')) closeI2vModal();
 		});
 
 		// Image Edit prompt: same localStorage/sessionStorage as /create (see entry-create.js savePrompts).
@@ -658,11 +818,13 @@ document.addEventListener('click', (e) => {
 
 	const imageUrl = container?.dataset?.mutateImageUrl || '';
 	const sourceIdRaw = container?.dataset?.mutateSourceId || '';
-	const activeMode = btn.getAttribute('data-generate-mode') === 'image-to-video'
-		? 'image-to-video'
-		: 'image-to-image';
+	const activeMode = mutateModeFromTabOrDataset(btn.getAttribute('data-generate-mode'));
+	const rawEngine = container?.dataset?.mutateI2vEngine;
+	const i2vEngineFromDom = rawEngine === 'wan' || rawEngine === 'replicate' ? 'wan' : 'ltx';
 
-	const serverId = MUTATE_DEFAULT_SERVER_ID;
+	const serverId = activeMode === 'image-to-video' && i2vEngineFromDom === 'ltx'
+		? MUTATE_VIDEO_LTX_SERVER_ID
+		: MUTATE_DEFAULT_SERVER_ID;
 	const mutateOfId = Number(sourceIdRaw);
 
 	// Safety checks (button should already be disabled if these are missing).
@@ -694,16 +856,36 @@ document.addEventListener('click', (e) => {
 			normalizedImageUrl,
 			published: container?.dataset?.mutatePublished === '1',
 		});
+		let methodKey;
+		let args;
+		if (activeMode === 'image-to-video' && i2vEngineFromDom === 'ltx') {
+			methodKey = MUTATE_VIDEO_LTX_METHOD_KEY;
+			args = {
+				seed: '',
+				model: MUTATE_VIDEO_LTX_MODEL,
+				prompt,
+				input_images: [normalizedImageUrl],
+			};
+		} else if (activeMode === 'image-to-video') {
+			methodKey = MUTATE_VIDEO_DEFAULT_METHOD_KEY;
+			args = {
+				prompt,
+				image: normalizedImageUrl,
+				model: MUTATE_VIDEO_DEFAULT_MODEL,
+			};
+		} else {
+			methodKey = MUTATE_DEFAULT_METHOD_KEY;
+			args = {
+				prompt,
+				image_url: normalizedImageUrl,
+				model: MUTATE_DEFAULT_MODEL,
+			};
+		}
 		submitCreationWithPending({
 			serverId,
-			methodKey: activeMode === 'image-to-video' ? MUTATE_VIDEO_DEFAULT_METHOD_KEY : MUTATE_DEFAULT_METHOD_KEY,
+			methodKey,
 			mutateOfId,
-			args: {
-				prompt,
-				...(activeMode === 'image-to-video'
-					? { image: normalizedImageUrl, model: MUTATE_VIDEO_DEFAULT_MODEL }
-					: { image_url: normalizedImageUrl, model: MUTATE_DEFAULT_MODEL }),
-			},
+			args,
 			hydrateMentions,
 			navigate: 'full'
 		});

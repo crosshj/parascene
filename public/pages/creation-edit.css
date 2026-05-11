@@ -22,7 +22,7 @@
 .creation-edit-route .create-controls {
 	display: flex;
 	flex-direction: column;
-	gap: 6px;
+	gap: 10px;
 	align-items: center;
 	margin-top: 0.5rem;
 	width: 100%;
@@ -68,6 +68,142 @@
 .creation-edit-route .create-cost.insufficient {
 	color: var(--error, #e74c3c);
 	font-weight: 500;
+}
+
+.creation-edit-route .creation-edit-i2v-controls-row {
+	width: 100%;
+	display: flex;
+	flex-wrap: nowrap;
+	justify-content: center;
+	align-items: center;
+	box-sizing: border-box;
+}
+
+.creation-edit-route .creation-edit-i2v-controls-row--gear {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) min(250px, 100%) minmax(0, 1fr);
+	align-items: center;
+	column-gap: 0;
+}
+
+.creation-edit-route .creation-edit-i2v-controls-row--gear .creation-edit-i2v-controls-spacer {
+	grid-column: 1;
+	min-width: 0;
+	pointer-events: none;
+}
+
+.creation-edit-route .creation-edit-i2v-controls-row--gear .create-btn-generate {
+	grid-column: 2;
+	justify-self: stretch;
+	width: 100%;
+	max-width: none;
+	box-sizing: border-box;
+}
+
+.creation-edit-route .creation-edit-i2v-controls-row--gear .creation-edit-i2v-gear-btn {
+	grid-column: 3;
+	justify-self: end;
+	align-self: center;
+}
+
+.creation-edit-route .creation-edit-i2v-gear-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 44px;
+	height: 44px;
+	padding: 0;
+	margin: 0;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--text-muted);
+	box-shadow: none;
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
+	transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.creation-edit-route .creation-edit-i2v-gear-btn:hover {
+	background: color-mix(in srgb, var(--text) 6%, transparent);
+	color: var(--text);
+}
+
+.creation-edit-route .creation-edit-i2v-gear-btn:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
+
+.creation-edit-route .creation-edit-i2v-gear-icon {
+	display: block;
+	width: 20px;
+	height: 20px;
+	flex-shrink: 0;
+}
+
+.creation-edit-route .creation-edit-i2v-modal-section-head {
+	padding: 0 0 2px;
+	margin: 0 0 10px;
+	box-sizing: border-box;
+}
+
+.creation-edit-route .creation-edit-i2v-modal-engine-heading {
+	margin: 0;
+	padding: 4px 10px 2px;
+	font-size: 0.6875rem;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text-muted);
+	line-height: 1.2;
+}
+
+.creation-edit-route .creation-edit-i2v-modal-radios {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	width: 100%;
+}
+
+.creation-edit-route .creation-edit-i2v-modal-radio {
+	display: flex;
+	flex-direction: row;
+	align-items: flex-start;
+	gap: 10px;
+	margin: 0;
+	padding: 10px 12px;
+	border-radius: 6px;
+	border: 1px solid var(--border);
+	background: var(--input-bg);
+	color: var(--text);
+	font-size: 0.9375rem;
+	line-height: 1.35;
+	cursor: pointer;
+	box-sizing: border-box;
+	transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.creation-edit-route .creation-edit-i2v-modal-radio:hover {
+	background: var(--surface-muted);
+	border-color: color-mix(in srgb, var(--text) 14%, var(--border));
+}
+
+.creation-edit-route .creation-edit-i2v-modal-radio:has(input:focus-visible) {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
+
+.creation-edit-route .creation-edit-i2v-modal-radio input {
+	margin: 3px 0 0;
+	flex-shrink: 0;
+	accent-color: var(--accent, #6366f1);
+	cursor: pointer;
+}
+
+.creation-edit-route .creation-edit-i2v-modal-radio-label {
+	flex: 1;
+	min-width: 0;
+	padding-top: 1px;
 }
 
 .creation-edit-route .creation-edit-source-wrap {
