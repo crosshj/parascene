@@ -1102,17 +1102,23 @@ button.chat-inline-image-lightbox-footer-btn.btn-secondary {
 }
 
 .chat-doom-comments-sheet {
+	/* Bottom-anchored Shorts-style sheet; height = keyboard cover + visible content area.
+	 * See DoomCommentsPopover.css for full rationale (mirrored here in case chat.bundle is stale). */
+	--chat-doom-sheet-keyboard-cover: 45dvh;
+	--chat-doom-sheet-content: 30dvh;
+
 	position: absolute;
 	left: 0;
 	right: 0;
 	bottom: 0;
+	top: auto;
 	margin: 0 auto;
 	max-width: 720px;
 	width: 100%;
 	box-sizing: border-box;
-	top: max(12dvh, env(safe-area-inset-top, 0px));
+	height: calc(var(--chat-doom-sheet-keyboard-cover) + var(--chat-doom-sheet-content));
+	max-height: calc(100dvh - env(safe-area-inset-top, 0px));
 	min-height: 0;
-	max-height: none;
 }
 
 @media (min-width: 769px) {
@@ -1128,6 +1134,7 @@ button.chat-inline-image-lightbox-footer-btn.btn-secondary {
 		right: auto;
 		bottom: auto;
 		top: auto;
+		height: auto;
 		max-height: min(70dvh, 680px);
 		min-height: min(600px, 70dvh);
 	}

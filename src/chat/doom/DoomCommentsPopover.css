@@ -22,21 +22,37 @@
 }
 
 .chat-doom-comments-sheet {
+	/*
+	 * Bottom-anchored Shorts-style sheet. `interactive-widget=overlays-content` (set on the
+	 * viewport meta while the sheet is open) keeps the layout viewport stable when the soft
+	 * keyboard opens, so the keyboard draws over the lower portion of the sheet.
+	 *
+	 * Sheet height is expressed as `<keyboard budget> + <content budget>`:
+	 *   - `--chat-doom-sheet-keyboard-cover` ≈ typical mobile soft-keyboard height
+	 *     (Gboard portrait + suggestion strip / iOS predictive bar lands ~38–48dvh).
+	 *   - `--chat-doom-sheet-content` is the comfortable area visible ABOVE the keyboard
+	 *     (header + composer + a few scroll rows).
+	 *
+	 * Tweak either var to change how much of the page the sheet covers; the math is
+	 * intentional so the relationship to the keyboard stays readable.
+	 */
+	--chat-doom-sheet-keyboard-cover: 45dvh;
+	--chat-doom-sheet-content: 30dvh;
+
 	position: absolute;
 	left: 0;
 	right: 0;
 	bottom: 0;
+	top: auto;
 	z-index: 1;
 	margin: 0 auto;
 	max-width: 720px;
 	width: 100%;
 	box-sizing: border-box;
-	/* Shorts-style: height comes from top inset to bottom edge (no min-height). With
-	 * `interactive-widget=overlays-content` (set while sheet is open), the keyboard can
-	 * draw over the lower portion of the sheet instead of shrinking the whole layout. */
-	top: max(12dvh, env(safe-area-inset-top, 0px));
+	height: calc(var(--chat-doom-sheet-keyboard-cover) + var(--chat-doom-sheet-content));
+	/* Never overlap the status-bar / notch even if the budgets sum to > 100dvh. */
+	max-height: calc(100dvh - env(safe-area-inset-top, 0px));
 	min-height: 0;
-	max-height: none;
 	background-color: var(--surface);
 	background-image: none;
 	color: var(--text);
@@ -229,6 +245,7 @@ html[data-chat-doom-comments-open='1'] .comment-attach-popover {
 		right: auto;
 		bottom: auto;
 		top: auto;
+		height: auto;
 		max-height: min(70dvh, 680px);
 		min-height: min(600px, 70dvh);
 		border-radius: 16px;
