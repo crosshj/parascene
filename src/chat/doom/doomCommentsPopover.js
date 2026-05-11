@@ -9,6 +9,39 @@
 
 const SHEET_HASH = '#comments';
 
+/**
+ * While the comments sheet is open, swap `<meta name="viewport" interactive-widget>` to
+ * `overlays-content` where supported (e.g. Chrome Android) so the soft keyboard can draw on top
+ * of the page instead of shrinking the layout viewport — closer to YouTube Shorts. Restored on
+ * close. Other engines may ignore the hint and keep resizing the layout.
+ */
+let savedViewportContentForCommentsSheet = null;
+
+function applyOverlaysViewportForCommentsSheet() {
+	if (savedViewportContentForCommentsSheet != null) return;
+	const meta = document.querySelector('meta[name="viewport"]');
+	if (!(meta instanceof HTMLMetaElement) || typeof meta.content !== 'string') return;
+	savedViewportContentForCommentsSheet = meta.content;
+	let next = savedViewportContentForCommentsSheet.replace(
+		/\binteractive-widget\s*=\s*[\w-]+/gi,
+		'interactive-widget=overlays-content'
+	);
+	if (!/\binteractive-widget\s*=/i.test(next)) {
+		const t = savedViewportContentForCommentsSheet.trim();
+		next = t ? `${t.replace(/,\s*$/, '')}, interactive-widget=overlays-content` : 'interactive-widget=overlays-content';
+	}
+	meta.setAttribute('content', next);
+}
+
+function restoreViewportAfterCommentsSheet() {
+	if (savedViewportContentForCommentsSheet == null) return;
+	const meta = document.querySelector('meta[name="viewport"]');
+	if (meta instanceof HTMLMetaElement) {
+		meta.setAttribute('content', savedViewportContentForCommentsSheet);
+	}
+	savedViewportContentForCommentsSheet = null;
+}
+
 /** @type {HTMLElement | null} */
 let overlayEl = null;
 /** @type {((ev: KeyboardEvent) => void) | null} */
@@ -195,6 +228,8 @@ export function openDoomCommentsPopover(opts = {}) {
 	root.hidden = false;
 	root.setAttribute('aria-hidden', 'false');
 
+	applyOverlaysViewportForCommentsSheet();
+
 	didSetBodyOverflow = false;
 	if (!document.body.classList.contains('chat-page--doom-scroll')) {
 		priorBodyOverflow = document.body.style.overflow;
@@ -284,6 +319,8 @@ async function mountThreadIntoSheet(root, { createdImageId, viewerHint, isAdminH
 }
 
 export function closeDoomCommentsPopover(opts = {}) {
+	restoreViewportAfterCommentsSheet();
+
 	if (!(overlayEl instanceof HTMLElement)) return;
 
 	overlayEl.hidden = true;

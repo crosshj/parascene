@@ -4,9 +4,8 @@
 	position: fixed;
 	inset: 0;
 	z-index: 12000;
-	display: flex;
-	align-items: flex-end;
-	justify-content: center;
+	/* Mobile: block layout + absolutely positioned sheet (top inset → bottom). Desktop overrides below. */
+	display: block;
 	box-sizing: border-box;
 	padding: 0;
 	margin: 0;
@@ -23,13 +22,21 @@
 }
 
 .chat-doom-comments-sheet {
-	position: relative;
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
 	z-index: 1;
-	width: 100%;
-	max-width: 720px;
-	max-height: 65vh;
-	min-height: 600px;
 	margin: 0 auto;
+	max-width: 720px;
+	width: 100%;
+	box-sizing: border-box;
+	/* Shorts-style: height comes from top inset to bottom edge (no min-height). With
+	 * `interactive-widget=overlays-content` (set while sheet is open), the keyboard can
+	 * draw over the lower portion of the sheet instead of shrinking the whole layout. */
+	top: max(12dvh, env(safe-area-inset-top, 0px));
+	min-height: 0;
+	max-height: none;
 	background-color: var(--surface);
 	background-image: none;
 	color: var(--text);
@@ -37,7 +44,6 @@
 	box-shadow: var(--shadow);
 	display: flex;
 	flex-direction: column;
-	box-sizing: border-box;
 	overflow: hidden;
 	isolation: isolate;
 }
@@ -211,8 +217,20 @@ html[data-chat-doom-comments-open='1'] .comment-attach-popover {
 }
 
 @media (min-width: 769px) {
+	.chat-doom-comments-overlay {
+		display: flex;
+		align-items: flex-end;
+		justify-content: center;
+	}
+
 	.chat-doom-comments-sheet {
-		max-height: min(70vh, 680px);
+		position: relative;
+		left: auto;
+		right: auto;
+		bottom: auto;
+		top: auto;
+		max-height: min(70dvh, 680px);
+		min-height: min(600px, 70dvh);
 		border-radius: 16px;
 		margin-bottom: 16px;
 	}

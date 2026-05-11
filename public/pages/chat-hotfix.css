@@ -1087,6 +1087,52 @@ button.chat-inline-image-lightbox-footer-btn.btn-secondary {
 	padding-top: 12px;
 }
 
+/* Gap between the composer and the comment-list divider in the doom sheet. Mirrors
+ * DoomCommentsPopover.css so it applies even when chat.bundle.css is stale. */
+.chat-doom-comments-body [data-comment-list] {
+	margin-top: 12px;
+}
+
+/*
+ * Doom comments sheet (mobile): top-anchored absolute layout + desktop flex/min-height.
+ * Mirrors DoomCommentsPopover.css when chat.bundle.css is stale.
+ */
+.chat-doom-comments-overlay {
+	display: block;
+}
+
+.chat-doom-comments-sheet {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	margin: 0 auto;
+	max-width: 720px;
+	width: 100%;
+	box-sizing: border-box;
+	top: max(12dvh, env(safe-area-inset-top, 0px));
+	min-height: 0;
+	max-height: none;
+}
+
+@media (min-width: 769px) {
+	.chat-doom-comments-overlay {
+		display: flex;
+		align-items: flex-end;
+		justify-content: center;
+	}
+
+	.chat-doom-comments-sheet {
+		position: relative;
+		left: auto;
+		right: auto;
+		bottom: auto;
+		top: auto;
+		max-height: min(70dvh, 680px);
+		min-height: min(600px, 70dvh);
+	}
+}
+
 .chat-doom-comments-body[data-chat-doom-comments-body-scroll-lock='1'] {
 	overflow: hidden;
 	overscroll-behavior: contain;
