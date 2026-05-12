@@ -36,12 +36,17 @@ export function formatDoomCaption(item) {
  * When `mediaWrap` + `mediaFrame` are passed, sizes the frame to the video’s **drawn** bounds
  * (letterboxed rect for contain) so NSFW blur stays inside the picture, not the full viewport cell.
  *
+ * When `forceCover` is true (creation flagged `doom_scroll_full_height`), skip contain entirely:
+ * the video fills the device viewport (cover) regardless of intrinsic aspect ratio.
+ *
  * @param {HTMLVideoElement} video
  * @param {HTMLElement} [mediaWrap]
  * @param {HTMLElement} [mediaFrame]
+ * @param {{ forceCover?: boolean }} [opts]
  */
-export function bindDoomVideoAspectFit(video, mediaWrap, mediaFrame) {
+export function bindDoomVideoAspectFit(video, mediaWrap, mediaFrame, opts = {}) {
 	if (!(video instanceof HTMLVideoElement)) return;
+	const forceCover = Boolean(opts.forceCover);
 	const posterImg =
 		video.parentElement?.querySelector?.(':scope > img.chat-doom-poster') ?? null;
 
@@ -65,7 +70,7 @@ export function bindDoomVideoAspectFit(video, mediaWrap, mediaFrame) {
 			return;
 		}
 
-		const useContain = vw >= vh;
+		const useContain = !forceCover && vw >= vh;
 		if (!useContain) {
 			mediaFrame.style.cssText =
 				'position:absolute;inset:0;width:100%;height:100%;overflow:hidden;';
@@ -93,7 +98,7 @@ export function bindDoomVideoAspectFit(video, mediaWrap, mediaFrame) {
 		const vw = video.videoWidth;
 		const vh = video.videoHeight;
 		if (Number.isFinite(vw) && Number.isFinite(vh) && vw > 0 && vh > 0) {
-			const useContain = vw >= vh;
+			const useContain = !forceCover && vw >= vh;
 			video.classList.toggle('chat-doom-video--fit-contain', useContain);
 			if (posterImg) posterImg.classList.toggle('chat-doom-video--fit-contain', useContain);
 			syncFrameLayout();
@@ -103,7 +108,7 @@ export function bindDoomVideoAspectFit(video, mediaWrap, mediaFrame) {
 			const iw = posterImg.naturalWidth;
 			const ih = posterImg.naturalHeight;
 			if (Number.isFinite(iw) && Number.isFinite(ih) && iw > 0 && ih > 0) {
-				const useContain = iw >= ih;
+				const useContain = !forceCover && iw >= ih;
 				video.classList.toggle('chat-doom-video--fit-contain', useContain);
 				posterImg.classList.toggle('chat-doom-video--fit-contain', useContain);
 			}
@@ -226,6 +231,11 @@ export function createDoomSlideElement(item, viewerUserId, slideOpts = {}) {
 		item.nsfw === 1 ||
 		item.nsfw === '1' ||
 		String(item.nsfw || '').toLowerCase() === 'true';
+
+	/** Creator opted this video into full-height (cover) layout in doom scroll. */
+	const forceDoomCover =
+		item?.doom_scroll_full_height === true ||
+		(item?.meta && typeof item.meta === 'object' && item.meta.doom_scroll_full_height === true);
 
 	const slide = document.createElement('section');
 	slide.className = 'chat-doom-slide';
@@ -396,7 +406,7 @@ export function createDoomSlideElement(item, viewerUserId, slideOpts = {}) {
 	slide.appendChild(overlay);
 	slide.appendChild(progress);
 
-	bindDoomVideoAspectFit(video, mediaWrap, mediaFrame);
+	bindDoomVideoAspectFit(video, mediaWrap, mediaFrame, { forceCover: forceDoomCover });
 
 	return slide;
 }

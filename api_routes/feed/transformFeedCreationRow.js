@@ -52,6 +52,8 @@ export function transformFeedCreationRow(item) {
 		nsfw: !!(item.nsfw),
 		meta: meta && typeof meta === "object" ? meta : null,
 		media_type: mediaType,
-		video_url: videoUrl
+		video_url: videoUrl,
+		doom_scroll_full_height:
+			meta && typeof meta === "object" && meta.doom_scroll_full_height === true
 	};
 }

@@ -67,6 +67,7 @@ class AppModalPublish extends HTMLElement {
 		this._mode = 'publish'; // 'publish' or 'edit'
 		this._creationId = null;
 		this._creationPublished = false; // set when opening edit
+		this._creationIsVideo = false;
 		this._loading = false;
 		this._openRequestId = 0;
 		this.handleEscape = this.handleEscape.bind(this);
@@ -135,6 +136,12 @@ class AppModalPublish extends HTMLElement {
 							<label class="publish-checkbox-label">
 								<input type="checkbox" id="publish-nsfw" name="nsfw" />
 								<span>Not Suitable for Work (NSFW)</span>
+							</label>
+						</div>
+						<div class="publish-field publish-field-checkbox" data-doom-full-height-row style="display: none;">
+							<label class="publish-checkbox-label">
+								<input type="checkbox" id="publish-doom-full-height" name="doom_full_height" />
+								<span>Full-height in doom scroll</span>
 							</label>
 						</div>
 					</div>
@@ -259,9 +266,36 @@ class AppModalPublish extends HTMLElement {
 		return this._isOpen;
 	}
 
+	setDoomFullHeightFieldState(isVideo, checked = false) {
+		this._creationIsVideo = Boolean(isVideo);
+		const row = this.querySelector('[data-doom-full-height-row]');
+		const checkbox = this.querySelector('#publish-doom-full-height');
+		if (row instanceof HTMLElement) {
+			row.style.display = this._creationIsVideo ? '' : 'none';
+		}
+		if (checkbox instanceof HTMLInputElement) {
+			checkbox.checked = this._creationIsVideo ? Boolean(checked) : false;
+			checkbox.disabled = this._loading || !this._creationIsVideo;
+		}
+	}
+
+	readDoomFullHeightFromCreation(creation) {
+		if (!creation || typeof creation !== 'object') return false;
+		const meta = creation.meta && typeof creation.meta === 'object' ? creation.meta : null;
+		return meta?.doom_scroll_full_height === true;
+	}
+
+	readIsVideoCreation(creation) {
+		if (!creation || typeof creation !== 'object') return false;
+		if (creation.media_type === 'video') return true;
+		const meta = creation.meta && typeof creation.meta === 'object' ? creation.meta : null;
+		return meta?.media_type === 'video';
+	}
+
 	async openPublish(creationId) {
 		this._mode = 'publish';
 		this._creationId = creationId;
+		this.setDoomFullHeightFieldState(false, false);
 		this.updateModalContent();
 		this.open();
 
@@ -306,6 +340,10 @@ class AppModalPublish extends HTMLElement {
 
 			const nsfwCheckbox = this.querySelector('#publish-nsfw');
 			if (nsfwCheckbox) nsfwCheckbox.checked = defaultNsfwChecked(creation);
+			this.setDoomFullHeightFieldState(
+				this.readIsVideoCreation(creation),
+				this.readDoomFullHeightFromCreation(creation)
+			);
 
 			// Update submit button state based on title (required for publish)
 			const submitBtn2 = this.querySelector('[data-publish-submit]');
@@ -352,6 +390,10 @@ class AppModalPublish extends HTMLElement {
 			if (descriptionTextarea) descriptionTextarea.value = creation.description || '';
 			const nsfwCheckbox = this.querySelector('#publish-nsfw');
 			if (nsfwCheckbox) nsfwCheckbox.checked = defaultNsfwChecked(creation);
+			this.setDoomFullHeightFieldState(
+				this.readIsVideoCreation(creation),
+				this.readDoomFullHeightFromCreation(creation)
+			);
 
 			this.updateModalContent();
 			this.open();
@@ -426,10 +468,13 @@ class AppModalPublish extends HTMLElement {
 		const titleInput = this.querySelector('#publish-title');
 		const descriptionTextarea = this.querySelector('#publish-description');
 		const nsfwCheckbox = this.querySelector('#publish-nsfw');
+		const doomFullHeightCheckbox = this.querySelector('#publish-doom-full-height');
 		const submitBtn = this.querySelector('[data-publish-submit]');
 		if (titleInput) titleInput.value = '';
 		if (descriptionTextarea) descriptionTextarea.value = '';
 		if (nsfwCheckbox) nsfwCheckbox.checked = false;
+		if (doomFullHeightCheckbox) doomFullHeightCheckbox.checked = false;
+		this.setDoomFullHeightFieldState(false, false);
 		if (submitBtn) submitBtn.disabled = true;
 		this.hideAlert();
 	}
@@ -462,6 +507,7 @@ class AppModalPublish extends HTMLElement {
 		const titleInput = this.querySelector('#publish-title');
 		const descriptionTextarea = this.querySelector('#publish-description');
 		const nsfwCheckbox = this.querySelector('#publish-nsfw');
+		const doomFullHeightCheckbox = this.querySelector('#publish-doom-full-height');
 		const loadingOverlay = this.querySelector('.publish-modal-loading');
 		const submitBtn = this.querySelector('[data-publish-submit]');
 		const cancelLink = this.querySelector('.publish-cancel-link');
@@ -471,6 +517,9 @@ class AppModalPublish extends HTMLElement {
 		const title = titleInput.value.trim();
 		const description = descriptionTextarea ? descriptionTextarea.value.trim() : '';
 		const nsfw = nsfwCheckbox ? nsfwCheckbox.checked : false;
+		const doomScrollFullHeight = this._creationIsVideo && doomFullHeightCheckbox
+			? doomFullHeightCheckbox.checked
+			: undefined;
 
 		// Title rules:
 		// - Publish: always required
@@ -491,6 +540,7 @@ class AppModalPublish extends HTMLElement {
 		titleInput.disabled = true;
 		if (descriptionTextarea) descriptionTextarea.disabled = true;
 		if (nsfwCheckbox) nsfwCheckbox.disabled = true;
+		if (doomFullHeightCheckbox) doomFullHeightCheckbox.disabled = true;
 		if (submitBtn) submitBtn.disabled = true;
 		if (cancelLink) {
 			cancelLink.style.pointerEvents = 'none';
@@ -499,9 +549,9 @@ class AppModalPublish extends HTMLElement {
 
 		try {
 			if (this._mode === 'edit') {
-				await this.handleEditSubmit(title, description, nsfw);
+				await this.handleEditSubmit(title, description, nsfw, doomScrollFullHeight);
 			} else {
-				await this.handlePublishSubmit(title, description, nsfw);
+				await this.handlePublishSubmit(title, description, nsfw, doomScrollFullHeight);
 			}
 		} catch (error) {
 			// console.error(`Error ${this._mode === 'edit' ? 'updating' : 'publishing'} creation:`, error);
@@ -512,6 +562,7 @@ class AppModalPublish extends HTMLElement {
 			titleInput.disabled = false;
 			if (descriptionTextarea) descriptionTextarea.disabled = false;
 			if (nsfwCheckbox) nsfwCheckbox.disabled = false;
+			if (doomFullHeightCheckbox) doomFullHeightCheckbox.disabled = !this._creationIsVideo;
 			if (submitBtn) submitBtn.disabled = false;
 			if (cancelLink) {
 				cancelLink.style.pointerEvents = '';
@@ -521,13 +572,18 @@ class AppModalPublish extends HTMLElement {
 		}
 	}
 
-	async handlePublishSubmit(title, description, nsfw) {
+	async handlePublishSubmit(title, description, nsfw, doomScrollFullHeight) {
 		const response = await fetch(`/api/create/images/${this._creationId}/publish`, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json'
 			},
-			body: JSON.stringify({ title, description, nsfw }),
+			body: JSON.stringify({
+				title,
+				description,
+				nsfw,
+				doom_scroll_full_height: doomScrollFullHeight
+			}),
 			credentials: 'include'
 		});
 
@@ -540,13 +596,18 @@ class AppModalPublish extends HTMLElement {
 		window.location.href = `/creations/${this._creationId}`;
 	}
 
-	async handleEditSubmit(title, description, nsfw) {
+	async handleEditSubmit(title, description, nsfw, doomScrollFullHeight) {
 		const response = await fetch(`/api/create/images/${this._creationId}`, {
 			method: 'PUT',
 			headers: {
 				'Content-Type': 'application/json'
 			},
-			body: JSON.stringify({ title, description, nsfw }),
+			body: JSON.stringify({
+				title,
+				description,
+				nsfw,
+				doom_scroll_full_height: doomScrollFullHeight
+			}),
 			credentials: 'include'
 		});
 

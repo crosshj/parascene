@@ -3345,7 +3345,7 @@ export default function createCreateRoutes({ queries, storage }) {
 		if (!user) return;
 
 		try {
-			const { title, description, nsfw } = req.body;
+			const { title, description, nsfw, doom_scroll_full_height: doomScrollFullHeight } = req.body;
 
 			if (!title || title.trim() === '') {
 				return res.status(400).json({ error: "Title is required" });
@@ -3404,10 +3404,16 @@ export default function createCreateRoutes({ queries, storage }) {
 				return res.status(500).json({ error: "Failed to publish image" });
 			}
 
-			// Persist NSFW flag in meta when provided
-			if (typeof nsfw !== 'undefined') {
+			// Persist publish options in meta when provided
+			if (typeof nsfw !== 'undefined' || typeof doomScrollFullHeight !== 'undefined') {
 				const currentMeta = parseMeta(targetImage.meta) || {};
-				const mergedMeta = { ...currentMeta, nsfw: !!nsfw };
+				const mergedMeta = { ...currentMeta };
+				if (typeof nsfw !== 'undefined') {
+					mergedMeta.nsfw = !!nsfw;
+				}
+				if (typeof doomScrollFullHeight !== 'undefined') {
+					mergedMeta.doom_scroll_full_height = !!doomScrollFullHeight;
+				}
 				await queries.updateCreatedImageMeta.run(req.params.id, targetImage.user_id, mergedMeta);
 			}
 
@@ -3476,7 +3482,7 @@ export default function createCreateRoutes({ queries, storage }) {
 		if (!user) return;
 
 		try {
-			const { title, description, nsfw } = req.body;
+			const { title, description, nsfw, doom_scroll_full_height: doomScrollFullHeight } = req.body;
 
 			// Get the image to verify ownership or admin status
 			const image = await queries.selectCreatedImageById.get(
@@ -3526,10 +3532,16 @@ export default function createCreateRoutes({ queries, storage }) {
 				return res.status(500).json({ error: "Failed to update image" });
 			}
 
-			// Persist NSFW flag in meta when provided
-			if (typeof nsfw !== 'undefined') {
+			// Persist edit options in meta when provided
+			if (typeof nsfw !== 'undefined' || typeof doomScrollFullHeight !== 'undefined') {
 				const currentMeta = parseMeta(targetImage.meta) || {};
-				const mergedMeta = { ...currentMeta, nsfw: !!nsfw };
+				const mergedMeta = { ...currentMeta };
+				if (typeof nsfw !== 'undefined') {
+					mergedMeta.nsfw = !!nsfw;
+				}
+				if (typeof doomScrollFullHeight !== 'undefined') {
+					mergedMeta.doom_scroll_full_height = !!doomScrollFullHeight;
+				}
 				await queries.updateCreatedImageMeta.run(req.params.id, targetImage.user_id, mergedMeta);
 			}
 

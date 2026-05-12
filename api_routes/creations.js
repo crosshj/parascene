@@ -238,7 +238,9 @@ function mapRelatedItemsToResponse(items, viewerLikedIds, reasonMetaByCreationId
 			recsys_click_score: Number.isFinite(Number(reasonMeta?.click_score)) ? Number(reasonMeta.click_score) : null,
 			recsys_click_share: Number.isFinite(Number(reasonMeta?.click_share)) ? Number(reasonMeta.click_share) : null,
 			media_type: mediaType,
-			video_url: videoUrl
+			video_url: videoUrl,
+			doom_scroll_full_height:
+				item?.meta && typeof item.meta === "object" && item.meta.doom_scroll_full_height === true
 		};
 	});
 }
