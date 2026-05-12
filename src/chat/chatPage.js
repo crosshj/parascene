@@ -7320,7 +7320,7 @@ export async function initChatPage(root, options = {}) {
 		syncChatExploreComposerChrome();
 	}
 
-	/** Feed channel Spotlight tiles only → doom scroll (list cards use `/creations/:id`). */
+	/** Feed channel: video cards (spotlight + list) → doom scroll when eligible; images → `/creations/:id`. */
 	function resolveFeedLaneVideoToDoomHref(item) {
 		if (!isDoomEligibleFeedVideoItem(item)) return undefined;
 		if (!shouldRouteFeedVideoCardToDoomScroll()) return undefined;
@@ -7405,12 +7405,20 @@ export async function initChatPage(root, options = {}) {
 	function feedCardOptionsForPseudoLane(setupFeedVideo, laneSlug) {
 		const hide =
 			chatExploreCreationsBrowseView && (laneSlug === 'explore' || laneSlug === 'creations');
-		return {
+		const base = {
 			setupFeedVideo,
 			hideFeedCardMetadata: hide,
 			preferThumbnail: laneSlug === 'explore' || laneSlug === 'creations',
 			creationsBulkChrome: laneSlug === 'creations'
 		};
+		if (laneSlug === 'feed') {
+			return {
+				...base,
+				resolveCreationCardHref: resolveFeedLaneVideoToDoomHref,
+				performCreationNavigation: navigateWithinChatShell
+			};
+		}
+		return base;
 	}
 
 	function insertChatCreationsPseudoBulkChrome(routeWrap, cardsEl) {

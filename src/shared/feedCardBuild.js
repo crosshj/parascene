@@ -1412,6 +1412,23 @@ export function isFeedRowVideoCreation(item) {
 }
 
 /**
+ * Creation rows that belong in the between-spotlight card strips: non-video feed creations with an id.
+ * (Skips tips/blog/engagement like {@link isFeedRowVideoCreation}.)
+ *
+ * @param {object|null|undefined} item
+ * @returns {boolean}
+ */
+function isFeedRowImageCreationBetweenSpotlightStrips(item) {
+	if (!item || typeof item !== "object") return false;
+	const type = item.type;
+	if (type === "tip" || type === "blog_post" || type === "engagement") return false;
+	if (isFeedRowVideoCreation(item)) return false;
+	const rawId = item.created_image_id ?? item.id;
+	if (rawId == null || rawId === "") return false;
+	return true;
+}
+
+/**
  * First `max` video creations in feed order, plus remaining rows with those creations removed (no duplicate cards below).
  * @param {object[]} ordered
  * @param {number} [max]
@@ -1465,22 +1482,29 @@ function takeNextVideoCreationsForChatSpotlightFromPool(items, max) {
 }
 
 /**
- * @param {object[]} items — mutable pool; takes from the front
- * @param {number} n
+ * @param {object[]} items — mutable pool in feed order
+ * @param {number} max
  * @returns {object[]}
  */
-function takeNextNFromPool(items, n) {
+function takeNextImageCreationsForChatBetweenSpotlightStripsFromPool(items, max) {
 	const out = [];
-	const k = Math.max(0, Math.min(n, items.length));
-	for (let p = 0; p < k; p += 1) {
-		out.push(items.shift());
+	let i = 0;
+	while (out.length < max && i < items.length) {
+		const it = items[i];
+		if (isFeedRowImageCreationBetweenSpotlightStrips(it)) {
+			out.push(items.splice(i, 1)[0]);
+		} else {
+			i += 1;
+		}
 	}
 	return out;
 }
 
 /**
- * Mobile chat #feed: up to three 2×2 video spotlights, three cards between consecutive grids, flat tail.
- * Walks feed order; spotlight slots take the next video creations; between-chunks take the next rows from what remains.
+ * Mobile chat #feed: up to three 2×2 video spotlights; between each pair of strips, the next three
+ * non-video creation cards (images / static creations in feed order). Remaining pool is the tail.
+ * Spotlight pulls videos greedily; between-strips pull only image (non-video) creations — tips/blog
+ * rows stay in the pool until the tail.
  *
  * @param {object[]} ordered
  * @returns {{ segments: Array<{ type: 'spotlight', videos: object[] } | { type: 'cards', items: object[] }> }}
@@ -1494,7 +1518,10 @@ export function partitionChatFeedMobileAlternating(ordered) {
 		const videos = takeNextVideoCreationsForChatSpotlightFromPool(pool, CHAT_FEED_SPOTLIGHT_VIDEOS);
 		segments.push({ type: "spotlight", videos });
 		if (g < CHAT_FEED_SPOTLIGHT_GROUP_MAX - 1) {
-			const chunk = takeNextNFromPool(pool, CHAT_FEED_BETWEEN_CARDS);
+			const chunk = takeNextImageCreationsForChatBetweenSpotlightStripsFromPool(
+				pool,
+				CHAT_FEED_BETWEEN_CARDS
+			);
 			if (chunk.length > 0) {
 				segments.push({ type: "cards", items: chunk });
 			}
