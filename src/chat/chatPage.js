@@ -180,22 +180,6 @@ function isChatPageMobileLayout() {
 }
 
 /**
- * Broader than {@link isChatPageMobileLayout}: used for Spotlight → doom only (`resolveFeedLaneVideoToDoomHref`).
- */
-function shouldRouteFeedVideoCardToDoomScroll() {
-	if (isChatPageMobileLayout()) return true;
-	try {
-		if (window.matchMedia('(max-width: 768px)').matches) return true;
-		if (window.matchMedia('(pointer: coarse)').matches) return true;
-		const ua = String(window.navigator?.userAgent || '').toLowerCase();
-		if (/android|iphone|ipod|ipad|mobile/.test(ua)) return true;
-	} catch {
-		// ignore
-	}
-	return false;
-}
-
-/**
  * @param {object} item — feed creation row
  * @returns {boolean}
  */
@@ -6684,10 +6668,10 @@ export async function initChatPage(root, options = {}) {
 
 	function feedChannelViewportLoadMarginPx() {
 		if (activePseudoChannelSlug === 'feed') {
-			return chatFeedLaneScrollMode === 'newest_first' ? 1800 : 1200;
+			return chatFeedLaneScrollMode === 'newest_first' ? 4000 : 1200;
 		}
 		if (activePseudoChannelSlug === 'explore' || activePseudoChannelSlug === 'creations') {
-			return 1800;
+			return 4000;
 		}
 		return 0;
 	}
@@ -6752,7 +6736,7 @@ export async function initChatPage(root, options = {}) {
 		const observerRoot = useViewportRoot ? null : messagesEl;
 		const observerRootMargin =
 			chatFeedLaneScrollMode === 'newest_first'
-				? '0px 0px 1400px 0px'
+				? '0px 0px 4000px 0px'
 				: '1400px 0px 0px 0px';
 		feedChannelLoadMoreObserver = new IntersectionObserver(
 			(entries) => {
@@ -7320,10 +7304,12 @@ export async function initChatPage(root, options = {}) {
 		syncChatExploreComposerChrome();
 	}
 
-	/** Feed channel: video cards (spotlight + list) → doom scroll when eligible; images → `/creations/:id`. */
+	/**
+	 * Feed channel: video cards (spotlight + list) → doom scroll whenever the row is an eligible video
+	 * creation (mobile and desktop). Images fall through to `/creations/:id`.
+	 */
 	function resolveFeedLaneVideoToDoomHref(item) {
 		if (!isDoomEligibleFeedVideoItem(item)) return undefined;
-		if (!shouldRouteFeedVideoCardToDoomScroll()) return undefined;
 		const cid = item.created_image_id ?? item.id;
 		if (cid == null || cid === '') return undefined;
 		return `/chat/c/feed/doom/${encodeURIComponent(String(cid))}`;

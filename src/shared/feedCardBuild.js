@@ -1429,6 +1429,33 @@ function isFeedRowImageCreationBetweenSpotlightStrips(item) {
 }
 
 /**
+ * Challenge promo card from `/api/feed` (`type: "engagement"`, `variant: "challenge_stats"`).
+ * @param {object|null|undefined} item
+ * @returns {boolean}
+ */
+function isChallengeEngagementFeedRow(item) {
+	if (!item || typeof item !== "object") return false;
+	if (item.type !== "engagement") return false;
+	const v = typeof item.variant === "string" ? item.variant.trim().toLowerCase() : "";
+	return v === "challenge_stats" || v === "contest_stats";
+}
+
+/**
+ * @param {object[]} items — mutable pool in feed order
+ * @param {(it: object) => boolean} predicate
+ * @returns {object | null}
+ */
+function spliceFirstFeedPoolMatch(items, predicate) {
+	if (!Array.isArray(items)) return null;
+	for (let i = 0; i < items.length; i += 1) {
+		if (predicate(items[i])) {
+			return items.splice(i, 1)[0];
+		}
+	}
+	return null;
+}
+
+/**
  * First `max` video creations in feed order, plus remaining rows with those creations removed (no duplicate cards below).
  * @param {object[]} ordered
  * @param {number} [max]
@@ -1460,7 +1487,6 @@ export function partitionFeedVideosForChatSpotlight(ordered, max = 4) {
 
 const CHAT_FEED_SPOTLIGHT_GROUP_MAX = 3;
 const CHAT_FEED_SPOTLIGHT_VIDEOS = 4;
-const CHAT_FEED_BETWEEN_CARDS = 3;
 
 /**
  * @param {object[]} items — mutable pool in feed order
@@ -1482,29 +1508,31 @@ function takeNextVideoCreationsForChatSpotlightFromPool(items, max) {
 }
 
 /**
+ * One between-spotlight row: first and third slots are non-video creations; middle is the challenge
+ * engagement card when present, otherwise another image creation. Tips/blog stay in the pool for the tail.
+ *
  * @param {object[]} items — mutable pool in feed order
- * @param {number} max
  * @returns {object[]}
  */
-function takeNextImageCreationsForChatBetweenSpotlightStripsFromPool(items, max) {
-	const out = [];
-	let i = 0;
-	while (out.length < max && i < items.length) {
-		const it = items[i];
-		if (isFeedRowImageCreationBetweenSpotlightStrips(it)) {
-			out.push(items.splice(i, 1)[0]);
-		} else {
-			i += 1;
-		}
-	}
-	return out;
+function takeNextBetweenSpotlightThreeSlotStripFromPool(items) {
+	const chunk = [];
+	const first = spliceFirstFeedPoolMatch(items, isFeedRowImageCreationBetweenSpotlightStrips);
+	if (first) chunk.push(first);
+
+	let middle =
+		spliceFirstFeedPoolMatch(items, isChallengeEngagementFeedRow) ||
+		spliceFirstFeedPoolMatch(items, isFeedRowImageCreationBetweenSpotlightStrips);
+	if (middle) chunk.push(middle);
+
+	const third = spliceFirstFeedPoolMatch(items, isFeedRowImageCreationBetweenSpotlightStrips);
+	if (third) chunk.push(third);
+
+	return chunk;
 }
 
 /**
- * Mobile chat #feed: up to three 2×2 video spotlights; between each pair of strips, the next three
- * non-video creation cards (images / static creations in feed order). Remaining pool is the tail.
- * Spotlight pulls videos greedily; between-strips pull only image (non-video) creations — tips/blog
- * rows stay in the pool until the tail.
+ * Mobile chat #feed: three 2×2 video spotlights; after each strip, three card slots (image, challenge
+ * engagement when available, image); then one tail with everything left in feed order.
  *
  * @param {object[]} ordered
  * @returns {{ segments: Array<{ type: 'spotlight', videos: object[] } | { type: 'cards', items: object[] }> }}
@@ -1517,14 +1545,9 @@ export function partitionChatFeedMobileAlternating(ordered) {
 	for (let g = 0; g < CHAT_FEED_SPOTLIGHT_GROUP_MAX; g += 1) {
 		const videos = takeNextVideoCreationsForChatSpotlightFromPool(pool, CHAT_FEED_SPOTLIGHT_VIDEOS);
 		segments.push({ type: "spotlight", videos });
-		if (g < CHAT_FEED_SPOTLIGHT_GROUP_MAX - 1) {
-			const chunk = takeNextImageCreationsForChatBetweenSpotlightStripsFromPool(
-				pool,
-				CHAT_FEED_BETWEEN_CARDS
-			);
-			if (chunk.length > 0) {
-				segments.push({ type: "cards", items: chunk });
-			}
+		const chunk = takeNextBetweenSpotlightThreeSlotStripFromPool(pool);
+		if (chunk.length > 0) {
+			segments.push({ type: "cards", items: chunk });
 		}
 	}
 

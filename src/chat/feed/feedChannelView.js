@@ -68,7 +68,7 @@ export function getChatFeedMobileSpotlightHtml() {
 
 /**
  * Mobile: interleaved spotlight strips and card sections from {@link partitionChatFeedMobileAlternating}
- * (between strips: next three non-video creation cards; tail preserves full feed order).
+ * (after each 2×2: three slots — image, challenge engagement when present, image; tail is the rest in order).
  * @param {Array<{ type: 'spotlight', videos: object[] } | { type: 'cards', items: object[] }>} segments
  * @param {(item: object, index: number) => HTMLElement} renderCard
  * @param {{ resolveSpotlightHref?: (item: object) => string | undefined, performSpotlightNavigation?: (href: string, ev: MouseEvent) => void }} [channelOptions]
