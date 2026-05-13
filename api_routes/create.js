@@ -66,7 +66,7 @@ function guessImageContentType(filename) {
 	return "image/png";
 }
 
-function parseMultipartCreate(req, { maxFileBytes = 12 * 1024 * 1024 } = {}) {
+function parseMultipartCreate(req, { maxFileBytes = 50 * 1024 * 1024 } = {}) {
 	return new Promise((resolve, reject) => {
 		const busboy = Busboy({ headers: req.headers, limits: { fileSize: maxFileBytes, files: 1, fields: 20 } });
 		const fields = {};
@@ -3764,6 +3764,85 @@ export default function createCreateRoutes({ queries, storage }) {
 			// console.error("Error adding admin video:", err);
 			const message = err?.message && typeof err.message === "string" ? err.message : "Failed to add video";
 			return res.status(500).json({ error: "Failed to add video", message });
+		}
+	});
+
+	// POST /api/create/images/:id/admin-restore-user-delete — Admin only: undo owner soft-delete (clear unavailable_at).
+	router.post("/api/create/images/:id/admin-restore-user-delete", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		if (user.role !== "admin") {
+			return res.status(403).json({ error: "Forbidden: Admin role required" });
+		}
+
+		const id = Number(req.params.id);
+		if (!Number.isFinite(id) || id <= 0) {
+			return res.status(400).json({ error: "Invalid creation id" });
+		}
+
+		if (!queries.selectCreatedImageByIdAnyUser?.get || !queries.unmarkCreatedImageUnavailable?.run) {
+			return res.status(503).json({ error: "Restore not available" });
+		}
+
+		try {
+			const image = await queries.selectCreatedImageByIdAnyUser.get(id);
+			if (!image) {
+				return res.status(404).json({ error: "Creation not found" });
+			}
+
+			const wasUserDeleted =
+				image.unavailable_at != null && String(image.unavailable_at).trim() !== "";
+			if (!wasUserDeleted) {
+				return res.status(400).json({ error: "Creation is not user-deleted" });
+			}
+
+			const ownerId = image.user_id;
+			const unmarkResult = await queries.unmarkCreatedImageUnavailable.run(id, ownerId);
+			if (!unmarkResult || unmarkResult.changes === 0) {
+				return res.status(500).json({ error: "Failed to restore creation" });
+			}
+
+			const isPublished = image.published === 1 || image.published === true;
+			if (isPublished && queries.insertFeedItem?.run) {
+				let existingFeed = null;
+				try {
+					existingFeed = await queries.selectFeedItemByCreatedImageId?.get?.(id);
+				} catch {
+					existingFeed = null;
+				}
+				if (!existingFeed) {
+					let feedAuthor = "User";
+					if (ownerId) {
+						try {
+							const creator = await queries.selectUserById.get(ownerId);
+							if (creator?.email) {
+								feedAuthor = creator.email;
+							}
+						} catch {
+							// ignore
+						}
+					}
+					const title = String(image.title || "").trim() || "Untitled";
+					const description = image.description ? String(image.description).trim() : "";
+					await queries.insertFeedItem.run(title, description, feedAuthor, null, id);
+					await bumpFeedVersionCounter();
+				}
+			}
+
+			const updatedImage = await queries.selectCreatedImageByIdAnyUser.get(id);
+			if (updatedImage && (updatedImage.published === 1 || updatedImage.published === true)) {
+				scheduleEmbeddingJob({ creation: updatedImage, queries }).catch((err) => {
+					console.warn("[create] Failed to schedule embedding job:", err?.message || err);
+				});
+			}
+
+			return res.json({ ok: true, restored: true });
+		} catch (error) {
+			return res.status(500).json({
+				error: "Failed to restore creation",
+				message: error?.message || String(error)
+			});
 		}
 	});
 

@@ -3,7 +3,13 @@ import path from "path";
 import Busboy from "busboy";
 import sharp from "sharp";
 import { buildProviderHeaders, resolveProviderAuthToken } from "./utils/providerAuth.js";
-import { fetchImageBufferFromUrl, createPlaceholderImageBuffer, runAnonCreationJob } from "./utils/creationJob.js";
+import {
+	fetchImageBufferFromUrl,
+	createPlaceholderImageBuffer,
+	runAnonCreationJob,
+	probeProviderAsyncJob,
+	repairProviderAsyncVideoJob,
+} from "./utils/creationJob.js";
 import { scheduleAnonCreationJob } from "./utils/scheduleCreationJob.js";
 import { getEmailSettings } from "./utils/emailSettings.js";
 import { getBaseAppUrlForEmail } from "./utils/url.js";
@@ -2105,6 +2111,147 @@ export default function createAdminRoutes({ queries, storage }) {
 				error: `Failed to connect to provider server: ${fetchError.message}`,
 				server_url: normalizedUrl
 			});
+		}
+	});
+
+	/**
+	 * POST /admin/creations/:id/provider-async-video-recovery
+	 * Body JSON (optional): { "mode": "probe" | "repair" | "probe_then_repair", "force": false, "max_video_mb": 150, "repair_timeout_ms": 180000 }
+	 * - repair (default): single POST to provider (same body as worker poll); if response is video/*, upload and patch meta.video. No QStash, no poll loop.
+	 * - probe: same as /probe-provider-job (no writes).
+	 * - probe_then_repair: optional second POST only when probe headers indicated video/* (avoids downloading when still JSON-in-progress).
+	 */
+	router.post("/admin/creations/:id/provider-async-video-recovery", async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+
+		const creationId = Number(req.params.id);
+		if (!Number.isFinite(creationId) || creationId <= 0) {
+			return res.status(400).json({ error: "Invalid creation ID" });
+		}
+
+		const body = req.body && typeof req.body === "object" ? req.body : {};
+		const modeRaw = typeof body.mode === "string" ? body.mode.trim().toLowerCase() : "";
+		const mode = modeRaw === "probe" || modeRaw === "probe_then_repair" ? modeRaw : "repair";
+		const force = body.force === true || String(req.query.force || "") === "1";
+		const maxMb = Number(body.max_video_mb);
+		const maxVideoBytes =
+			Number.isFinite(maxMb) && maxMb > 0 ? Math.round(maxMb * 1024 * 1024) : undefined;
+		const repairTimeoutRaw = Number(body.repair_timeout_ms);
+		const repairTimeoutMs =
+			Number.isFinite(repairTimeoutRaw) && repairTimeoutRaw >= 5000 ? repairTimeoutRaw : undefined;
+
+		const repairOpts = { force, maxVideoBytes, repairTimeoutMs };
+
+		try {
+			if (mode === "probe") {
+				const probe = await probeProviderAsyncJob({ queries, createdImageId: creationId });
+				if (!probe.ok && probe.reason === "not_found") {
+					return res.status(404).json({ mode, probe });
+				}
+				if (!probe.ok) {
+					return res.status(400).json({ mode, probe });
+				}
+				return res.json({ mode, probe });
+			}
+
+			if (mode === "repair") {
+				const repair = await repairProviderAsyncVideoJob({
+					queries,
+					storage,
+					createdImageId: creationId,
+					options: repairOpts,
+				});
+				if (!repair.ok && repair.reason === "not_found") {
+					return res.status(404).json({ mode, repair });
+				}
+				if (
+					!repair.ok &&
+					[
+						"invalid_id",
+						"missing_server_id",
+						"missing_job_id",
+						"missing_method",
+						"fetch_error",
+						"storage_upload_video_unavailable",
+						"unsupported_adapter",
+						"server_not_found",
+						"invalid_user_id",
+					].includes(repair.reason)
+				) {
+					return res.status(400).json({ mode, repair });
+				}
+				return res.json({ mode, repair });
+			}
+
+			const probe = await probeProviderAsyncJob({ queries, createdImageId: creationId });
+			if (!probe.ok && probe.reason === "not_found") {
+				return res.status(404).json({ mode, probe, repair: null });
+			}
+			if (!probe.ok) {
+				return res.status(400).json({
+					mode,
+					probe,
+					repair: { skipped: true, reason: "probe_failed" },
+				});
+			}
+			if (probe.kind !== "video" || !probe.recoverable_video) {
+				return res.json({
+					mode,
+					probe,
+					repair: {
+						skipped: true,
+						reason:
+							probe.kind === "json" && probe.still_in_progress
+								? "provider_still_json_in_progress"
+								: "probe_did_not_see_video_response",
+						hint:
+							probe.kind === "json" && probe.still_in_progress
+								? "Run mode=repair or probe_then_repair again after the provider may return video/*."
+								: undefined,
+					},
+				});
+			}
+
+			const repair = await repairProviderAsyncVideoJob({
+				queries,
+				storage,
+				createdImageId: creationId,
+				options: repairOpts,
+			});
+			return res.json({ mode, probe, repair });
+		} catch (err) {
+			console.error("[admin] provider-async-video-recovery:", err);
+			return res.status(500).json({ error: "Recovery failed", message: err?.message || "Error" });
+		}
+	});
+
+	/**
+	 * POST /admin/creations/:id/probe-provider-job — Diagnostic only: POST the same async poll
+	 * body as the creation worker (meta.server_id, provider_job_id). Does not write the DB.
+	 * Use to see whether the provider still returns video/* for a stuck creation.
+	 */
+	router.post("/admin/creations/:id/probe-provider-job", async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+
+		const creationId = Number(req.params.id);
+		if (!Number.isFinite(creationId) || creationId <= 0) {
+			return res.status(400).json({ error: "Invalid creation ID" });
+		}
+
+		try {
+			const result = await probeProviderAsyncJob({ queries, createdImageId: creationId });
+			if (!result.ok && result.reason === "not_found") {
+				return res.status(404).json(result);
+			}
+			if (!result.ok) {
+				return res.status(400).json(result);
+			}
+			return res.json(result);
+		} catch (err) {
+			console.error("[admin] probe-provider-job:", err);
+			return res.status(500).json({ error: "Probe failed", message: err?.message || "Error" });
 		}
 	});
 

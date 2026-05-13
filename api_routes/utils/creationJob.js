@@ -3,6 +3,11 @@ import { scheduleProviderPollJob } from "./scheduleCreationJob.js";
 import sharp from "sharp";
 
 const PROVIDER_TIMEOUT_MS = 50_000;
+/** When the provider returns finished video bytes (sync or async poll), allow long downloads. Override with CREATION_PROVIDER_VIDEO_FETCH_TIMEOUT_MS (ms, min 10000). */
+const PROVIDER_VIDEO_FETCH_TIMEOUT_MS = (() => {
+	const n = Number(process.env.CREATION_PROVIDER_VIDEO_FETCH_TIMEOUT_MS);
+	return Number.isFinite(n) && n >= 10_000 ? n : 600_000;
+})();
 const DEFAULT_WIDTH = 1024;
 const DEFAULT_HEIGHT = 1024;
 const MAX_PROVIDER_POLL_ATTEMPTS = 60;
@@ -35,6 +40,11 @@ function mergeMeta(existing, patch) {
 	const base = existing && typeof existing === "object" ? existing : {};
 	const next = { ...base, ...(patch && typeof patch === "object" ? patch : {}) };
 	return next;
+}
+
+function creationMethodMayReturnVideoBytes(method) {
+	const m = String(method || "").toLowerCase();
+	return m.includes("video") || m.includes("i2v") || m.includes("ltx");
 }
 
 function isRemoteAsyncEnv() {
@@ -232,10 +242,25 @@ async function finalizeCreationJob({
 			});
 			logCreation("Video uploaded for creation", { imageId, videoFilename, videoUrl, contentType: videoContentType });
 		} catch (err) {
-			logCreationWarn("Failed to upload video for creation; continuing with image only", safeErrorMessage(err));
+			logCreationError(
+				`Failed to upload video for creation; refusing to mark job complete without meta.video (${videoBuffer?.length ?? 0} bytes from provider)`,
+				safeErrorMessage(err),
+			);
 			videoFilename = null;
 			videoUrl = null;
 		}
+	}
+
+	if (isVideo && !videoUrl) {
+		const detail =
+			!videoBuffer
+				? "Video completion requested but no video bytes were available to store."
+				: typeof storage.uploadVideo !== "function"
+					? "Video bytes were returned but storage.uploadVideo is not configured."
+					: "Video bytes could not be uploaded to storage.";
+		const err = new Error(`${detail} Refusing to mark creation ${imageId} completed as video.`);
+		err.code = "VIDEO_STORAGE_FAILED";
+		throw err;
 	}
 
 	const completedAtIso = new Date().toISOString();
@@ -404,6 +429,8 @@ export async function runCreationJob({ queries, storage, payload }) {
 	const providerPayload = asyncRequested
 		? { method, args: argsForProvider, async: true }
 		: { method, args: argsForProvider };
+	const providerFetchTimeoutMs =
+		asyncRequested ? PROVIDER_TIMEOUT_MS : creationMethodMayReturnVideoBytes(method) ? PROVIDER_VIDEO_FETCH_TIMEOUT_MS : PROVIDER_TIMEOUT_MS;
 	console.log("[Creation] Sending to provider:", JSON.stringify(providerPayload, null, 2));
 
 	try {
@@ -418,7 +445,7 @@ export async function runCreationJob({ queries, storage, payload }) {
 				server.server_config?.custom_headers
 			),
 			body: JSON.stringify(providerPayload),
-			signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+			signal: AbortSignal.timeout(providerFetchTimeoutMs),
 		});
 
 		const providerContentType = String(providerResponse.headers.get("content-type") || "").toLowerCase();
@@ -906,7 +933,7 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 				server.server_config?.custom_headers
 			),
 			body: JSON.stringify(pollBody),
-			signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+			signal: AbortSignal.timeout(PROVIDER_VIDEO_FETCH_TIMEOUT_MS),
 		});
 
 		const providerContentType = String(providerResponse.headers.get("content-type") || "").toLowerCase();
@@ -1165,5 +1192,562 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 	});
 }
 
-export { PROVIDER_TIMEOUT_MS, fetchImageBufferFromUrl, createPlaceholderImageBuffer };
+const DEFAULT_REPAIR_VIDEO_TIMEOUT_MS = PROVIDER_VIDEO_FETCH_TIMEOUT_MS;
+const DEFAULT_REPAIR_MAX_VIDEO_BYTES = 150 * 1024 * 1024;
+
+/**
+ * Resolve DB rows + poll body for async provider jobs (probe / repair).
+ * @returns {Promise<
+ *   | { ok: false; reason: string; message?: string; server_id?: number }
+ *   | {
+ * 			ok: true;
+ * 			image: object;
+ * 			server: object;
+ * 			existingMeta: Record<string, unknown>;
+ * 			pollBody: { method: string; async: boolean; args: { job_id: string } };
+ * 			imageId: number;
+ * 			serverId: number;
+ * 			baseOut: Record<string, unknown>;
+ * 		}
+ * >}
+ */
+async function resolveProviderAsyncPollContext(queries, createdImageId) {
+	const imageId = Number(createdImageId);
+	if (!Number.isFinite(imageId) || imageId < 1) {
+		return { ok: false, reason: "invalid_id" };
+	}
+	const getAny = queries.selectCreatedImageByIdAnyUser?.get;
+	if (typeof getAny !== "function") {
+		return { ok: false, reason: "unsupported_adapter" };
+	}
+	const image = await getAny(imageId);
+	if (!image) {
+		return { ok: false, reason: "not_found" };
+	}
+	const existingMeta = parseMeta(image.meta) || {};
+	const serverId = Number(existingMeta.server_id);
+	if (!Number.isFinite(serverId) || serverId < 1) {
+		return {
+			ok: false,
+			reason: "missing_server_id",
+			message: "meta.server_id is missing; cannot reach the provider for this creation.",
+		};
+	}
+	const getServer = queries.selectServerById?.get;
+	if (typeof getServer !== "function") {
+		return { ok: false, reason: "unsupported_adapter" };
+	}
+	const server = await getServer(serverId);
+	if (!server?.server_url) {
+		return { ok: false, reason: "server_not_found", server_id: serverId };
+	}
+	const argsPayload = existingMeta.provider_last_payload;
+	const pollJobId =
+		(argsPayload && typeof argsPayload.job_id === "string" && argsPayload.job_id) ||
+		(typeof existingMeta.provider_job_id === "string" && existingMeta.provider_job_id) ||
+		null;
+	if (!pollJobId) {
+		return {
+			ok: false,
+			reason: "missing_job_id",
+			message: "meta.provider_job_id (or provider_last_payload.job_id) is missing.",
+		};
+	}
+	const pollMethod = existingMeta.provider_method || existingMeta.method;
+	if (!pollMethod || typeof pollMethod !== "string") {
+		return { ok: false, reason: "missing_method", message: "meta.provider_method / meta.method missing." };
+	}
+	const pollBody = {
+		method: pollMethod,
+		async: true,
+		args: { job_id: pollJobId },
+	};
+	const baseOut = {
+		ok: true,
+		created_image_id: imageId,
+		poll_body: pollBody,
+		server_id: serverId,
+		server_url: server.server_url,
+		server_row_status: server.status || null,
+		creation_row_status: image.status || null,
+	};
+	return {
+		ok: true,
+		image,
+		server,
+		existingMeta,
+		pollBody,
+		imageId,
+		serverId,
+		baseOut,
+	};
+}
+
+async function completeRepairAfterVideoBytes({
+	baseOut,
+	image,
+	existingMeta,
+	imageId,
+	userId,
+	queries,
+	storage,
+	maxVideoBytes,
+	videoBuf,
+	contentType,
+	provider_http_status,
+}) {
+	const httpStatus = provider_http_status ?? 200;
+	const ctLower = String(contentType || "").toLowerCase();
+	if (!videoBuf || videoBuf.length === 0) {
+		return {
+			...baseOut,
+			repaired: false,
+			provider_http_status: httpStatus,
+			provider_content_type: ctLower,
+			summary: "Empty video body.",
+		};
+	}
+	if (videoBuf.length > maxVideoBytes) {
+		return {
+			...baseOut,
+			repaired: false,
+			provider_http_status: httpStatus,
+			video_byte_length: videoBuf.length,
+			summary: `Body (${videoBuf.length} B) exceeds maxVideoBytes (${maxVideoBytes} B).`,
+		};
+	}
+
+	const baseCt = (ctLower.split(";")[0] || "video/mp4").trim() || "video/mp4";
+	const baseExt =
+		typeof baseCt === "string" && baseCt.startsWith("video/") && baseCt.split("/")[1]
+			? baseCt.split("/")[1]
+			: "mp4";
+	const safeExt = (baseExt.split("+")[0].split(";")[0].trim() || "mp4").replace(/[^a-z0-9]/gi, "") || "mp4";
+	const timestamp = Date.now();
+	const random = Math.random().toString(36).substring(2, 9);
+	const videoFilename = `video/${userId}_${imageId}_${timestamp}_${random}.${safeExt}`;
+	let videoUrl;
+	try {
+		videoUrl = await storage.uploadVideo(videoBuf, videoFilename, {
+			contentType: baseCt,
+		});
+	} catch (err) {
+		return {
+			...baseOut,
+			repaired: false,
+			provider_http_status: httpStatus,
+			provider_content_type: ctLower,
+			video_byte_length: videoBuf.length,
+			summary: "Failed to upload video to storage.",
+			upload_error: safeErrorMessage(err),
+		};
+	}
+
+	const argsObj = existingMeta.args && typeof existingMeta.args === "object" ? existingMeta.args : {};
+	const sourceFromArgs =
+		(typeof argsObj.image_url === "string" && argsObj.image_url) ||
+		(typeof argsObj.image === "string" && argsObj.image) ||
+		(Array.isArray(argsObj.input_images) && typeof argsObj.input_images[0] === "string" && argsObj.input_images[0]) ||
+		null;
+
+	const metaPatch = {
+		media_type: "video",
+		completed_at: existingMeta.completed_at || new Date().toISOString(),
+		video: {
+			filename: videoFilename,
+			file_path: videoUrl,
+			content_type: baseCt,
+		},
+		provider_status: "succeeded",
+		provider_video_repaired_at: new Date().toISOString(),
+		...(!existingMeta.source_image_url && sourceFromArgs
+			? { source_image_url: String(sourceFromArgs).trim() }
+			: {}),
+	};
+
+	const mergedMeta = mergeMeta(existingMeta, metaPatch);
+
+	const upMeta = queries.updateCreatedImageMeta?.run;
+	if (typeof upMeta !== "function") {
+		return {
+			...baseOut,
+			repaired: false,
+			video_url: videoUrl,
+			summary: "Video uploaded but adapter has no updateCreatedImageMeta — orphan object may exist in storage.",
+		};
+	}
+	const up = await upMeta(imageId, userId, mergedMeta);
+	const changes = Number(up?.changes ?? 0);
+	if (!up || changes === 0) {
+		return {
+			...baseOut,
+			repaired: false,
+			video_url: videoUrl,
+			summary: "Video uploaded but meta update affected 0 rows.",
+		};
+	}
+
+	if (image.status === "failed" && typeof queries.updateCreatedImageStatus?.run === "function") {
+		try {
+			await queries.updateCreatedImageStatus.run(imageId, userId, "completed");
+		} catch {
+			// best-effort
+		}
+	}
+
+	return {
+		...baseOut,
+		repaired: true,
+		provider_http_status: httpStatus,
+		provider_content_type: ctLower,
+		video_byte_length: videoBuf.length,
+		video_url: videoUrl,
+		video_filename: videoFilename,
+		summary: "meta.video patched via admin repair (single provider request; no polling).",
+	};
+}
+
+/**
+ * Admin/diagnostic: send the same async poll POST as runProviderPollJob without
+ * updating the database. Does not download full video bodies (cancels stream when content-type is video/*).
+ */
+export async function probeProviderAsyncJob({ queries, createdImageId }) {
+	const ctx = await resolveProviderAsyncPollContext(queries, createdImageId);
+	if (!ctx.ok) {
+		return ctx;
+	}
+	const { server, pollBody, baseOut } = ctx;
+	let providerResponse;
+	try {
+		providerResponse = await fetch(server.server_url, {
+			method: "POST",
+			headers: buildProviderHeaders(
+				{
+					"Content-Type": "application/json",
+					Accept: "image/png",
+				},
+				server.auth_token,
+				server.server_config?.custom_headers
+			),
+			body: JSON.stringify(pollBody),
+			signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+		});
+	} catch (err) {
+		return {
+			...baseOut,
+			ok: false,
+			reason: "fetch_error",
+			message: safeErrorMessage(err),
+		};
+	}
+	const httpStatus = providerResponse.status;
+	const contentType = String(providerResponse.headers.get("content-type") || "").toLowerCase();
+	const contentLengthHdr = providerResponse.headers.get("content-length");
+	const parsedLen = contentLengthHdr != null && contentLengthHdr !== "" ? Number(contentLengthHdr) : NaN;
+	const contentLength = Number.isFinite(parsedLen) ? parsedLen : null;
+
+	if (!providerResponse.ok) {
+		const payloadErr = await readProviderErrorPayload(providerResponse);
+		return {
+			...baseOut,
+			provider_http_status: httpStatus,
+			provider_content_type: contentType,
+			provider_error_body: payloadErr.body,
+			recoverable_video: false,
+			summary: "Provider returned a non-2xx response for the poll request.",
+		};
+	}
+
+	if (contentType.includes("application/json")) {
+		let body = null;
+		try {
+			body = await providerResponse.json().catch(() => null);
+		} catch {
+			body = null;
+		}
+		let jsonStringTruncated = false;
+		let jsonStringPreview = null;
+		try {
+			const s = JSON.stringify(body);
+			if (s.length > 20000) {
+				jsonStringTruncated = true;
+				jsonStringPreview = `${s.slice(0, 20000)}…`;
+			}
+		} catch {
+			jsonStringPreview = "[unserializable]";
+			jsonStringTruncated = true;
+		}
+		const statusLower = typeof body?.status === "string" ? body.status.toLowerCase() : "";
+		const stillRunning = ["processing", "pending", "running", "queued", "starting"].includes(statusLower);
+		const terminalCompleted = ["completed", "succeeded", "done"].includes(statusLower);
+		return {
+			...baseOut,
+			provider_http_status: httpStatus,
+			provider_content_type: contentType,
+			kind: "json",
+			provider_json: jsonStringTruncated ? null : body,
+			provider_json_string_preview: jsonStringTruncated ? jsonStringPreview : null,
+			json_string_truncated: jsonStringTruncated,
+			async_job_status: typeof body?.status === "string" ? body.status : null,
+			still_in_progress: stillRunning,
+			terminal_completed_json: terminalCompleted,
+			recoverable_video: false,
+			summary: stillRunning
+				? "Provider still reports in-progress JSON (job may still be running; a later poll might return video/* bytes)."
+				: terminalCompleted
+					? "Provider reports a terminal completed status in JSON only. Parascene normally expects video bytes on a different poll; if the row is already completed without meta.video, this JSON-only terminal response may indicate a provider/worker mismatch."
+					: "Provider returned JSON (see provider_json).",
+		};
+	}
+
+	if (contentType.startsWith("video/")) {
+		try {
+			await providerResponse.body?.cancel?.();
+		} catch {
+			// ignore
+		}
+		return {
+			...baseOut,
+			provider_http_status: httpStatus,
+			provider_content_type: contentType,
+			provider_content_length: contentLength,
+			kind: "video",
+			recoverable_video: true,
+			summary:
+				"Provider returned video/* (headers only; body not downloaded). A full recovery flow could upload this stream to storage and patch meta.video — not done by this probe.",
+		};
+	}
+
+	if (Number.isFinite(contentLength) && contentLength > 5 * 1024 * 1024) {
+		try {
+			await providerResponse.body?.cancel?.();
+		} catch {
+			// ignore
+		}
+		return {
+			...baseOut,
+			provider_http_status: httpStatus,
+			provider_content_type: contentType,
+			provider_content_length: contentLength,
+			kind: "binary_skipped",
+			recoverable_video: false,
+			summary: "Large non-JSON response skipped in probe to avoid loading entire body into memory.",
+		};
+	}
+
+	const rawBuffer = Buffer.from(await providerResponse.arrayBuffer());
+	return {
+		...baseOut,
+		provider_http_status: httpStatus,
+		provider_content_type: contentType,
+		kind: "binary",
+		provider_body_bytes: rawBuffer.length,
+		recoverable_video: false,
+		summary: "Provider returned a small non-JSON body (e.g. PNG). Unexpected for a video poll unless the job already finished with an image.",
+	};
+}
+
+/**
+ * Admin: one POST to the provider (same poll body as runProviderPollJob). If the response is video/*,
+ * uploads to storage and patches meta.video. No QStash scheduling and no multi-step polling loop.
+ * Does not run when meta.video.file_path is already set unless options.force === true.
+ */
+export async function repairProviderAsyncVideoJob({ queries, storage, createdImageId, options = {} }) {
+	const force = options.force === true;
+	const maxVideoBytes =
+		Number.isFinite(Number(options.maxVideoBytes)) && Number(options.maxVideoBytes) > 0
+			? Number(options.maxVideoBytes)
+			: DEFAULT_REPAIR_MAX_VIDEO_BYTES;
+	const repairTimeoutMs =
+		Number.isFinite(Number(options.repairTimeoutMs)) && Number(options.repairTimeoutMs) >= 5000
+			? Number(options.repairTimeoutMs)
+			: DEFAULT_REPAIR_VIDEO_TIMEOUT_MS;
+
+	if (!storage || typeof storage.uploadVideo !== "function") {
+		return {
+			ok: false,
+			reason: "storage_upload_video_unavailable",
+			message: "storage.uploadVideo is not configured.",
+		};
+	}
+
+	const ctx = await resolveProviderAsyncPollContext(queries, createdImageId);
+	if (!ctx.ok) {
+		return ctx;
+	}
+	const { image, server, existingMeta, pollBody, imageId, baseOut } = ctx;
+	const userId = Number(image.user_id);
+	if (!Number.isFinite(userId) || userId < 1) {
+		return { ...baseOut, ok: false, reason: "invalid_user_id", message: "creation.user_id missing." };
+	}
+
+	const existingVideoPath =
+		existingMeta &&
+		typeof existingMeta.video === "object" &&
+		existingMeta.video &&
+		typeof existingMeta.video.file_path === "string" &&
+		existingMeta.video.file_path.trim();
+	if (existingVideoPath && !force) {
+		return {
+			...baseOut,
+			repaired: false,
+			skipped: true,
+			reason: "already_has_video",
+			existing_video_url: String(existingMeta.video.file_path).trim(),
+			summary: "meta.video.file_path is already set. Pass options.force=true (or JSON body.force) to replace.",
+		};
+	}
+
+	let providerResponse;
+	try {
+		providerResponse = await fetch(server.server_url, {
+			method: "POST",
+			headers: buildProviderHeaders(
+				{
+					"Content-Type": "application/json",
+					Accept: "image/png",
+				},
+				server.auth_token,
+				server.server_config?.custom_headers
+			),
+			body: JSON.stringify(pollBody),
+			signal: AbortSignal.timeout(repairTimeoutMs),
+		});
+	} catch (err) {
+		return {
+			...baseOut,
+			ok: false,
+			reason: "fetch_error",
+			message: safeErrorMessage(err),
+		};
+	}
+
+	const httpStatus = providerResponse.status;
+	const contentType = String(providerResponse.headers.get("content-type") || "").toLowerCase();
+	const contentLengthHdr = providerResponse.headers.get("content-length");
+	const parsedLen = contentLengthHdr != null && contentLengthHdr !== "" ? Number(contentLengthHdr) : NaN;
+	const contentLength = Number.isFinite(parsedLen) ? parsedLen : null;
+
+	if (!providerResponse.ok) {
+		const payloadErr = await readProviderErrorPayload(providerResponse);
+		return {
+			...baseOut,
+			repaired: false,
+			provider_http_status: httpStatus,
+			provider_content_type: contentType,
+			provider_error_body: payloadErr.body,
+			summary: "Provider returned non-2xx; database unchanged.",
+		};
+	}
+
+	if (contentType.includes("application/json")) {
+		let body = null;
+		try {
+			body = await providerResponse.json().catch(() => null);
+		} catch {
+			body = null;
+		}
+		const statusLower = typeof body?.status === "string" ? body.status.toLowerCase() : "";
+		const stillRunning = ["processing", "pending", "running", "queued", "starting"].includes(statusLower);
+		return {
+			...baseOut,
+			repaired: false,
+			provider_http_status: httpStatus,
+			provider_content_type: contentType,
+			kind: "json",
+			provider_json: body,
+			still_in_progress: stillRunning,
+			summary: stillRunning
+				? "Provider still in progress (JSON). Retry repair later when the job may return video/*."
+				: "Provider returned JSON without video bytes; cannot repair from this response.",
+		};
+	}
+
+	if (!contentType.startsWith("video/")) {
+		if (Number.isFinite(contentLength) && contentLength > 5 * 1024 * 1024) {
+			try {
+				await providerResponse.body?.cancel?.();
+			} catch {
+				// ignore
+			}
+			return {
+				...baseOut,
+				repaired: false,
+				provider_http_status: httpStatus,
+				provider_content_type: contentType,
+				provider_content_length: contentLength,
+				summary: "Unexpected large non-video body; skipped read. Database unchanged.",
+			};
+		}
+		let byteLen = 0;
+		try {
+			const rawBuffer = Buffer.from(await providerResponse.arrayBuffer());
+			byteLen = rawBuffer.length;
+		} catch {
+			byteLen = 0;
+		}
+		return {
+			...baseOut,
+			repaired: false,
+			provider_http_status: httpStatus,
+			provider_content_type: contentType,
+			provider_body_bytes: byteLen,
+			summary: "Provider did not return video/*; no repair applied.",
+		};
+	}
+
+	if (Number.isFinite(contentLength) && contentLength > maxVideoBytes) {
+		try {
+			await providerResponse.body?.cancel?.();
+		} catch {
+			// ignore
+		}
+		return {
+			...baseOut,
+			repaired: false,
+			provider_http_status: httpStatus,
+			provider_content_type: contentType,
+			provider_content_length: contentLength,
+			video_byte_length: contentLength,
+			summary: `Content-Length (${contentLength} B) exceeds maxVideoBytes (${maxVideoBytes} B).`,
+		};
+	}
+
+	const videoBuf = Buffer.from(await providerResponse.arrayBuffer());
+	if (videoBuf.length > maxVideoBytes) {
+		return {
+			...baseOut,
+			repaired: false,
+			provider_http_status: httpStatus,
+			provider_content_type: contentType,
+			video_byte_length: videoBuf.length,
+			summary: `Downloaded body (${videoBuf.length} B) exceeds maxVideoBytes (${maxVideoBytes} B).`,
+		};
+	}
+	if (videoBuf.length === 0) {
+		return {
+			...baseOut,
+			repaired: false,
+			provider_http_status: httpStatus,
+			provider_content_type: contentType,
+			summary: "Provider returned empty video body.",
+		};
+	}
+
+	return completeRepairAfterVideoBytes({
+		baseOut,
+		image,
+		existingMeta,
+		imageId,
+		userId,
+		queries,
+		storage,
+		maxVideoBytes,
+		videoBuf,
+		contentType,
+		provider_http_status: httpStatus,
+	});
+}
+
+export { PROVIDER_TIMEOUT_MS, PROVIDER_VIDEO_FETCH_TIMEOUT_MS, fetchImageBufferFromUrl, createPlaceholderImageBuffer };
 

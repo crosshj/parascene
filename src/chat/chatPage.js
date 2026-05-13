@@ -30,6 +30,7 @@ import * as _cdPseudoChannelColumnPager from '../shared/pseudoChannelColumnPager
 import * as _cdSkeleton from '../shared/skeleton.js';
 import { createReplyIndicatorElement } from '../shared/replyIndicatorUi.js';
 import { plainTextReplyPreview } from '../shared/plainTextReplyPreview.js';
+import { CHAT_UPLOAD_MAX_BYTES, chatUploadMaxSizeLabel } from '../shared/chatUploadMaxBytes.js';
 import { dismissChallengeVoteModalFromBrowserHistoryIfOpen as dismissChallengeVoteModalImpl } from './challenges/challengeVoteModal.js';
 import {
 	sendIcon,
@@ -1858,7 +1859,6 @@ export async function initChatPage(root, options = {}) {
 	}
 
 	const CHAT_MAX_BODY_CHARS = 4000;
-	const CHAT_MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 	const CHAT_COMPOSER_DRAFTS_KEY = 'chat-composer-drafts-v1';
 	const CHAT_GEN_POLL_INTERVAL_MS = 2400;
 	const CHAT_GEN_PREVIEW_PLACEHOLDER =
@@ -2413,10 +2413,10 @@ export async function initChatPage(root, options = {}) {
 		}
 
 		for (const file of arr) {
-			if (file.size > CHAT_MAX_UPLOAD_BYTES) {
+			if (file.size > CHAT_UPLOAD_MAX_BYTES) {
 				if (errStrip instanceof HTMLElement) {
 					errStrip.hidden = false;
-					errStrip.textContent = `"${file.name || 'File'}" is too large (max 10MB).`;
+					errStrip.textContent = `"${file.name || 'File'}" is too large (max ${chatUploadMaxSizeLabel()}).`;
 				}
 				continue;
 			}

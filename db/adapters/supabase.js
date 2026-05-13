@@ -6640,6 +6640,7 @@ export function openDb() {
 
 		uploadVideo: async (buffer, filename, options = {}) => {
 			const contentType = String(options?.contentType || "video/mp4");
+			// Supabase project may enforce a lower max object size in Dashboard → Storage → bucket limits.
 			const { error } = await storageClient.storage
 				.from(STORAGE_BUCKET)
 				.upload(filename, buffer, {

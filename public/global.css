@@ -14069,6 +14069,37 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 	color: var(--error-text);
 }
 
+.creation-detail-admin-video-repair {
+	margin-top: 12px;
+	padding-top: 12px;
+	border-top: 1px solid var(--border);
+}
+
+.creation-detail-admin-video-repair-label {
+	margin: 0 0 6px;
+	font-size: 0.8125rem;
+	font-weight: 600;
+	color: var(--text);
+}
+
+.creation-detail-admin-video-repair-hint {
+	margin: 0 0 10px;
+	font-size: 0.8125rem;
+	line-height: 1.45;
+	color: var(--text-muted);
+}
+
+.creation-detail-admin-provider-repair {
+	margin-bottom: 8px;
+}
+
+.creation-detail-admin-provider-repair-status {
+	margin: 0;
+	font-size: 0.8125rem;
+	line-height: 1.4;
+	color: var(--text-muted);
+}
+
 /* Set as profile picture confirm modal (creation detail) */
 .creation-detail-set-avatar-modal-overlay {
 	position: fixed;

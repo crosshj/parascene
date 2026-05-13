@@ -1628,6 +1628,7 @@ async function loadCreation() {
 		const userDeleted = Boolean(creation.user_deleted);
 		const adminViewingUserDeleted = isAdmin && userDeleted;
 		const showQueueForLater = !isAdmin && status === 'completed' && !isFailed && Boolean(creation.url);
+		const showAdminVideoTools = isAdmin && !adminViewingUserDeleted && (status === 'completed' || status === 'failed');
 		const normalizedImageUrlForQueue = showQueueForLater ? normalizeImageUrlForQueue(creation.url) : '';
 		let isQueuedForLater = false;
 		if (showQueueForLater && normalizedImageUrlForQueue) {
@@ -1815,7 +1816,9 @@ async function loadCreation() {
 		if (creation.user_deleted) {
 			userDeletedNotice = html`
 				<div class="creation-detail-user-deleted-notice" role="status">
-					User deleted this creation. Visible to admin only.
+					<span class="creation-detail-user-deleted-notice-text">User deleted this creation. Visible to admin only.</span>
+					<button type="button" class="btn-secondary creation-detail-user-deleted-restore-btn" data-admin-restore-user-deleted>Restore for user</button>
+					<p class="creation-detail-user-deleted-restore-error" data-admin-restore-user-deleted-error hidden></p>
 				</div>
 			`;
 		}
@@ -2364,7 +2367,7 @@ async function loadCreation() {
 			${groupSectionHtml}
 			${groupSectionHtml ? html`<div class="creation-detail-group-divider" aria-hidden="true"></div>` : ''}
 			${userDeletedNotice}
-			${isAdmin && status === 'completed' && !isFailed ? html`
+			${showAdminVideoTools ? html`
 			<div class="creation-detail-admin-video" data-admin-video-section>
 				<p class="creation-detail-admin-video-label">${creation.video_url ? 'Replace video' : 'Add video'}</p>
 				<form class="creation-detail-admin-video-form" data-admin-video-form>
@@ -2373,6 +2376,12 @@ async function loadCreation() {
 					<button type="submit" class="btn-primary creation-detail-admin-video-submit"
 						data-admin-video-submit>${creation.video_url ? 'Replace' : 'Upload'}</button>
 				</form>
+				<div class="creation-detail-admin-video-repair" data-admin-provider-repair-wrap>
+					<p class="creation-detail-admin-video-repair-label">Provider recovery</p>
+					<p class="creation-detail-admin-video-repair-hint">Single request to the provider (same POST body as the worker poll). No QStash and no client-side polling—if the job is done, the response can be the video bytes in one round trip.</p>
+					<button type="button" class="btn-secondary creation-detail-admin-provider-repair" data-admin-provider-repair>Fetch video from provider</button>
+					<p class="creation-detail-admin-provider-repair-status" data-admin-provider-repair-status role="status" hidden></p>
+				</div>
 				<p class="creation-detail-admin-video-error" data-admin-video-error role="alert" style="display: none;"></p>
 			</div>
 			` : ''}
@@ -3213,6 +3222,92 @@ async function loadCreation() {
 					if (adminVideoSubmit) {
 						adminVideoSubmit.disabled = false;
 					}
+				}
+			});
+		}
+
+		const adminRestoreUserDeletedBtn = detailContent.querySelector('[data-admin-restore-user-deleted]');
+		const adminRestoreUserDeletedErr = detailContent.querySelector('[data-admin-restore-user-deleted-error]');
+		if (adminRestoreUserDeletedBtn instanceof HTMLButtonElement) {
+			adminRestoreUserDeletedBtn.addEventListener('click', async () => {
+				if (adminRestoreUserDeletedErr instanceof HTMLElement) {
+					adminRestoreUserDeletedErr.hidden = true;
+					adminRestoreUserDeletedErr.textContent = '';
+				}
+				adminRestoreUserDeletedBtn.disabled = true;
+				try {
+					const res = await fetch(`/api/create/images/${creationId}/admin-restore-user-delete`, {
+						method: 'POST',
+						credentials: 'include'
+					});
+					const data = await res.json().catch(() => ({}));
+					if (!res.ok) {
+						if (adminRestoreUserDeletedErr instanceof HTMLElement) {
+							adminRestoreUserDeletedErr.textContent =
+								data?.error || data?.message || `Request failed (${res.status})`;
+							adminRestoreUserDeletedErr.hidden = false;
+						}
+						return;
+					}
+					await loadCreation();
+				} catch {
+					if (adminRestoreUserDeletedErr instanceof HTMLElement) {
+						adminRestoreUserDeletedErr.textContent = 'Request failed. Please try again.';
+						adminRestoreUserDeletedErr.hidden = false;
+					}
+				} finally {
+					adminRestoreUserDeletedBtn.disabled = false;
+				}
+			});
+		}
+
+		const adminProviderRepairBtn = detailContent.querySelector('[data-admin-provider-repair]');
+		const adminProviderRepairStatus = detailContent.querySelector('[data-admin-provider-repair-status]');
+		if (adminProviderRepairBtn instanceof HTMLButtonElement) {
+			adminProviderRepairBtn.addEventListener('click', async () => {
+				const adminVideoErrorEl = detailContent.querySelector('[data-admin-video-error]');
+				if (adminProviderRepairStatus) {
+					adminProviderRepairStatus.hidden = false;
+					adminProviderRepairStatus.textContent = 'Contacting provider…';
+				}
+				adminProviderRepairBtn.disabled = true;
+				if (adminVideoErrorEl) {
+					adminVideoErrorEl.textContent = '';
+					adminVideoErrorEl.style.display = 'none';
+				}
+				try {
+					const res = await fetch(`/admin/creations/${creationId}/provider-async-video-recovery`, {
+						method: 'POST',
+						credentials: 'include',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ mode: 'repair' }),
+					});
+					const data = await res.json().catch(() => ({}));
+					const repair = data.repair != null ? data.repair : data;
+					const ok = res.ok && repair && repair.repaired === true;
+					const detail =
+						repair?.summary ||
+						repair?.message ||
+						(repair?.upload_error ? `Upload: ${repair.upload_error}` : '') ||
+						data?.error ||
+						(!res.ok ? `HTTP ${res.status}` : '');
+					if (adminProviderRepairStatus) {
+						adminProviderRepairStatus.textContent = ok
+							? `${detail || 'Done.'} Reloading…`
+							: detail || 'Could not recover video from provider.';
+					}
+					if (ok) {
+						await loadCreation();
+					} else if (adminVideoErrorEl && (detail || !res.ok)) {
+						adminVideoErrorEl.textContent = adminProviderRepairStatus?.textContent || detail || 'Recovery failed';
+						adminVideoErrorEl.style.display = '';
+					}
+				} catch (err) {
+					if (adminProviderRepairStatus) {
+						adminProviderRepairStatus.textContent = err?.message || 'Request failed';
+					}
+				} finally {
+					adminProviderRepairBtn.disabled = false;
 				}
 			});
 		}

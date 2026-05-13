@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import sharp from "sharp";
+import { CHAT_UPLOAD_MAX_BYTES } from "../src/shared/chatUploadMaxBytes.js";
 import { isChatMiscGenericKeyOwnedByUser, safeDecodeGenericImageKeyTail } from "./utils/chatMiscGenericKeys.js";
 
 function guessContentType(key, hintedName = "") {
@@ -70,8 +71,6 @@ function buildImageUrl(namespace, key) {
 		.map((s) => encodeURIComponent(s));
 	return `/api/images/${ns}/${segments.join("/")}`;
 }
-
-const CHAT_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
 
 /** Max edge when transcoding HEIC/TIFF/JXL so huge phone photos stay bounded. */
 const GENERIC_TRANSCODE_MAX_EDGE = 4096;
