@@ -7305,10 +7305,10 @@ export async function initChatPage(root, options = {}) {
 	}
 
 	/**
-	 * Feed channel: video cards (spotlight + list) → doom scroll whenever the row is an eligible video
-	 * creation (mobile and desktop). Images fall through to `/creations/:id`.
+	 * Feed channel: eligible video rows → doom scroll on mobile only. Desktop always uses `/creations/:id`.
 	 */
 	function resolveFeedLaneVideoToDoomHref(item) {
+		if (!isChatPageMobileLayout()) return undefined;
 		if (!isDoomEligibleFeedVideoItem(item)) return undefined;
 		const cid = item.created_image_id ?? item.id;
 		if (cid == null || cid === '') return undefined;
@@ -7370,6 +7370,10 @@ export async function initChatPage(root, options = {}) {
 		const spaKinds = new Set(['thread', 'channel', 'doom_scroll', 'dm']);
 		if (!spaKinds.has(parsed.kind)) {
 			window.location.assign(url.pathname + url.search + url.hash);
+			return;
+		}
+		if (parsed.kind === 'doom_scroll' && !isChatPageMobileLayout()) {
+			window.location.assign(`/creations/${encodeURIComponent(String(parsed.startCreationId))}`);
 			return;
 		}
 		if (parsed.kind === 'doom_scroll') {
@@ -9721,6 +9725,10 @@ export async function initChatPage(root, options = {}) {
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		const errEl = root.querySelector('[data-chat-error]');
 		const parsed = parseChatPathname(window.location.pathname);
+		if (parsed.kind === 'doom_scroll' && !isChatPageMobileLayout()) {
+			window.location.replace(`/creations/${encodeURIComponent(String(parsed.startCreationId))}`);
+			return;
+		}
 		markThreadUiPending();
 
 		if (parsed.kind === 'empty' || parsed.kind === 'invalid') {
