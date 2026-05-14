@@ -15581,6 +15581,28 @@ body.modal-open {
 	pointer-events: auto;
 }
 
+@media (max-width: 768px) {
+	.modal-overlay,
+	.publish-modal-overlay,
+	.image-picker-modal-overlay,
+	[data-publish-modal],
+	[data-todo-modal],
+	[data-todo-readonly],
+	[data-server-modal],
+	.chat-page-chat-modal,
+	[data-anon-detail-modal],
+	[data-image-picker-modal],
+	[data-tip-creator-modal],
+	#todo-modal,
+	#todo-readonly-modal,
+	#server-modal {
+		padding-top: max(8px, env(safe-area-inset-top, 0px));
+		padding-right: max(8px, env(safe-area-inset-right, 0px));
+		padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+		padding-left: max(8px, env(safe-area-inset-left, 0px));
+	}
+}
+
 /* Modal Container */
 .modal,
 .publish-modal,
@@ -15592,6 +15614,7 @@ body.modal-open {
 	max-width: 500px;
 	width: 90%;
 	max-height: 90vh;
+	max-height: 90dvh;
 	overflow: hidden;
 	transform: scale(0.95);
 	transition: transform 0.2s;
@@ -15818,6 +15841,70 @@ app-modal-publish .publish-checkbox-label input[type="checkbox"] {
 	}
 }
 
+/* Publish / edit creation: full-viewport sheet on small screens (no floating card chrome) */
+@media (max-width: 768px) {
+	app-modal-publish .publish-modal-overlay {
+		align-items: stretch !important;
+		justify-content: flex-start !important;
+		padding: 0 !important;
+		background: var(--surface) !important;
+	}
+
+	app-modal-publish .publish-modal {
+		flex: 1;
+		width: 100%;
+		max-width: none;
+		min-height: 0;
+		max-height: none;
+		border-radius: 0;
+		border: none;
+		box-shadow: none;
+		transform: none;
+	}
+
+	app-modal-publish .publish-modal-overlay.open .publish-modal {
+		transform: none;
+	}
+
+	app-modal-publish .publish-modal-header {
+		padding-top: max(6px, env(safe-area-inset-top, 0px));
+		padding-bottom: 8px;
+		padding-left: max(12px, env(safe-area-inset-left, 0px));
+		padding-right: max(12px, env(safe-area-inset-right, 0px));
+	}
+
+	app-modal-publish .publish-modal-header h2,
+	app-modal-publish .publish-modal-header h3 {
+		font-size: 1.125rem;
+		line-height: 1.3;
+		font-weight: 600;
+	}
+
+	app-modal-publish .publish-modal-close {
+		padding: 4px;
+		min-width: 36px;
+		min-height: 36px;
+	}
+
+	app-modal-publish .publish-modal-body {
+		padding-top: 16px;
+		padding-bottom: 16px;
+		padding-left: max(12px, env(safe-area-inset-left, 0px));
+		padding-right: max(12px, env(safe-area-inset-right, 0px));
+	}
+
+	app-modal-publish .publish-modal-footer {
+		padding-bottom: max(14px, env(safe-area-inset-bottom, 0px));
+		padding-top: 12px;
+		padding-left: max(12px, env(safe-area-inset-left, 0px));
+		padding-right: max(12px, env(safe-area-inset-right, 0px));
+	}
+
+	app-modal-publish .publish-field textarea {
+		min-height: min(200px, 42vh);
+	}
+}
+
 .modal-overlay.open .modal,
 .publish-modal-overlay.open .publish-modal,
 .image-picker-modal-overlay.open .image-picker-modal,
@@ -15841,6 +15928,7 @@ app-modal-publish .publish-checkbox-label input[type="checkbox"] {
 	justify-content: space-between;
 	padding: 18px 20px;
 	border-bottom: 1px solid var(--border);
+	flex-shrink: 0;
 }
 
 .modal-header h2,
@@ -15882,6 +15970,11 @@ app-modal-publish .publish-checkbox-label input[type="checkbox"] {
 
 .image-picker-modal-body {
 	padding: 20px;
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
+	overscroll-behavior: contain;
 }
 
 .image-picker-methods {
@@ -16221,6 +16314,7 @@ app-modal-publish .publish-checkbox-label input[type="checkbox"] {
 	justify-content: space-between;
 	padding: 18px 20px;
 	border-bottom: 1px solid var(--border);
+	flex-shrink: 0;
 }
 
 .publish-modal-header h2,
@@ -16266,13 +16360,21 @@ app-modal-publish .publish-checkbox-label input[type="checkbox"] {
 /* Modal Body */
 .modal-body {
 	padding: 20px;
-	flex: 1;
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
+	overscroll-behavior: contain;
 }
 
 /* Publish Modal Body */
 .publish-modal-body {
 	padding: 20px;
-	flex: 1;
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
+	overscroll-behavior: contain;
 }
 
 /* Modal Footer */
@@ -16284,6 +16386,7 @@ app-modal-publish .publish-checkbox-label input[type="checkbox"] {
 	padding: 18px 20px;
 	border-top: 1px solid var(--border);
 	gap: 12px;
+	flex-shrink: 0;
 }
 
 /* Tip modal (creation detail) */
@@ -16437,12 +16540,6 @@ app-modal-publish .publish-checkbox-label input[type="checkbox"] {
 }
 
 /* More Info / Creation Details Modal */
-app-modal-creation-details .modal-body {
-	overflow-y: auto;
-	-webkit-overflow-scrolling: touch;
-	min-height: 0;
-}
-
 app-modal-creation-details .creation-details-args {
 	white-space: pre-wrap;
 	word-break: break-word;
