@@ -6771,9 +6771,8 @@ export async function initChatPage(root, options = {}) {
 		disconnectFeedChannelLoadObserver();
 		const sentinel = messagesEl.querySelector('[data-chat-feed-load-sentinel]');
 		if (!sentinel) return;
-		const useViewportRoot =
-			window.matchMedia('(max-width: 768px)').matches &&
-			document.body.classList.contains('chat-page--viewport-scroll');
+		/* Match `shouldUseViewportScrollForChatMessages()` — mobile UA/coarse pointer can be ≤900px while CSS is still 768px. */
+		const useViewportRoot = shouldUseViewportScrollForChatMessages();
 		const observerRoot = useViewportRoot ? null : messagesEl;
 		const observerRootMargin =
 			chatFeedLaneScrollMode === 'newest_first'
@@ -7064,11 +7063,7 @@ export async function initChatPage(root, options = {}) {
 	}
 
 	function shouldChatFeedUseMobileAlternatingLayout() {
-		try {
-			return window.matchMedia('(max-width: 768px)').matches;
-		} catch {
-			return false;
-		}
+		return isChatPageMobileLayout();
 	}
 
 	function createFeedChannelCardRenderer(messagesElHost) {
