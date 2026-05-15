@@ -291,13 +291,50 @@ export function buildChallengeEngagementVirtualRows(snapshot) {
 	];
 }
 
+/** Chat slot-pack page one: middle of first between-spotlight strip (after 4v + 1st non-video). */
+export const SLOT_PACK_FIRST_ENGAGEMENT_INSERT_INDEX = 5;
+
 /**
  * @param {object[]} baseItems
  * @param {object[]} engagementItems
- * @param {{ limit: number }} opts
+ * @returns {object[]}
+ */
+export function injectEngagementIntoSlotPackHead(baseItems, engagementItems) {
+	const inserts = Array.isArray(engagementItems) ? engagementItems : [];
+	if (inserts.length === 0) {
+		return Array.isArray(baseItems) ? baseItems : [];
+	}
+	const { slot: _drop, ...rest } = inserts[0];
+	const row = { ...rest };
+	const out = [...(Array.isArray(baseItems) ? baseItems : [])];
+	const idx = Math.min(SLOT_PACK_FIRST_ENGAGEMENT_INSERT_INDEX, out.length);
+	out.splice(idx, 0, row);
+	return out;
+}
+
+function effectiveEngagementSlotForSurface(slot, feedSurface) {
+	const normalized =
+		slot === "top" ||
+			slot === "after_first" ||
+			slot === "after_second" ||
+			slot === "after_fifth"
+			? slot
+			: "after_first";
+	if (feedSurface !== "chat") return normalized;
+	/* Chat `#feed` (desktop flat + mobile partition): avoid burying at slot 5 on first page. */
+	if (normalized === "after_fifth") return "after_second";
+	return normalized;
+}
+
+/**
+ * @param {object[]} baseItems
+ * @param {object[]} engagementItems
+ * @param {{ limit: number, feedSurface?: string }} opts
  */
 export function mergeEngagementIntoPage(baseItems, engagementItems, opts) {
 	const limit = Math.min(Math.max(1, Number(opts?.limit) || 20), 100);
+	const feedSurface =
+		typeof opts?.feedSurface === "string" ? opts.feedSurface.trim().toLowerCase() : "";
 	const list = [...(Array.isArray(baseItems) ? baseItems : [])];
 	const inserts = [...(Array.isArray(engagementItems) ? engagementItems : [])];
 
@@ -307,13 +344,7 @@ export function mergeEngagementIntoPage(baseItems, engagementItems, opts) {
 
 	const withSlot = inserts.map((item) => ({
 		item,
-		slot:
-			item.slot === "top" ||
-				item.slot === "after_first" ||
-				item.slot === "after_second" ||
-				item.slot === "after_fifth"
-				? item.slot
-				: "after_first"
+		slot: effectiveEngagementSlotForSurface(item.slot, feedSurface)
 	}));
 
 	withSlot.sort((a, b) => slotToIndex(b.slot) - slotToIndex(a.slot));

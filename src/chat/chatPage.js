@@ -7090,13 +7090,15 @@ export async function initChatPage(root, options = {}) {
 		try {
 			if (isStaleChatPane(paneEpoch)) return;
 
+			const useMobileFeedLayout = shouldChatFeedUseMobileAlternatingLayout();
 			pseudoColumnPager = createPseudoColumnPager({
 				columnOrder: feedLanePagerColumnOrder(),
 				getItemKey: getChatFeedItemKey,
 				fetchPage: createChatFeedFetchPage({
 					fetchJsonWithStatusDeduped,
 					getHiddenFeedItems,
-					pageSize: FEED_CHANNEL_PAGE_SIZE
+					pageSize: FEED_CHANNEL_PAGE_SIZE,
+					mobileChatSlotPack: useMobileFeedLayout
 				})
 			});
 			const r = await pseudoColumnPager.loadInitial();
@@ -7155,7 +7157,7 @@ export async function initChatPage(root, options = {}) {
 					feedChannelMobileSpotlightOptions
 				);
 			} else {
-				/* Desktop: no spotlight row (hidden on wide CSS anyway) — show every feed row as a full card. */
+				/* Desktop: full cards in API order (standard feed; slot-pack is mobile-only). */
 				routeResult = createChatFeedChannelElementsFromSegments(
 					[{ type: 'cards', items: ordered }],
 					renderFeedCard,

@@ -20,10 +20,12 @@ async function ensureStyleDetailDeps() {
 		const qs = getAssetVersionQs();
 		styleDetailDepsPromise = Promise.all([
 			import(`./create-styles.js${qs}`),
-			import(`../shared/avatar.js${qs}`)
-		]).then(([cs, av]) => ({
+			import(`../shared/avatar.js${qs}`),
+			import(`../icons/svg-strings.js${qs}`)
+		]).then(([cs, av, icons]) => ({
 			getStyleThumbUrl: cs.getStyleThumbUrl,
-			getAvatarColor: av.getAvatarColor
+			getAvatarColor: av.getAvatarColor,
+			pencilIcon: icons.pencilIcon
 		}));
 	}
 	return styleDetailDepsPromise;
@@ -35,6 +37,15 @@ function escapeHtml(text) {
 		.replace(/</g, "&lt;")
 		.replace(/>/g, "&gt;")
 		.replace(/"/g, "&quot;");
+}
+
+/** Prefer API `message`, then non-generic `error`, else fallback (e.g. plain "Forbidden"). */
+function apiErrorMessageFromResponse(data, fallback) {
+	const msg = typeof data?.message === "string" ? data.message.trim() : "";
+	if (msg) return msg;
+	const err = typeof data?.error === "string" ? data.error.trim() : "";
+	if (err && err !== "Forbidden") return err;
+	return fallback;
 }
 
 function isNewStylePath() {
@@ -92,7 +103,9 @@ function wireStyleThumbModal(root, tag) {
 
 	function openModal() {
 		showErr("");
-		input.value = "";
+		const hero = root.querySelector(".style-detail-hero");
+		const prefill = String(hero?.dataset.styleThumbCreationPrefill ?? "").trim();
+		input.value = prefill;
 		modalRoot.hidden = false;
 		requestAnimationFrame(() => input.focus());
 	}
@@ -136,7 +149,12 @@ function wireStyleThumbModal(root, tag) {
 						return;
 					}
 					if (res.status === 403) {
-						showErr("You don't have permission to change this style image.");
+						showErr(
+							apiErrorMessageFromResponse(
+								data,
+								"You don't have permission to change this style image."
+							)
+						);
 						return;
 					}
 					if (!res.ok) {
@@ -184,7 +202,9 @@ function wireStyleThumbModal(root, tag) {
 					return;
 				}
 				if (res.status === 403) {
-					showErr("You don't have permission to set this style image.");
+					showErr(
+						apiErrorMessageFromResponse(data, "You don't have permission to set this style image.")
+					);
 					return;
 				}
 				if (!res.ok) {
@@ -209,7 +229,124 @@ function wireStyleThumbModal(root, tag) {
 	});
 }
 
-function renderStyle(root, loading, errRoot, style, adminCanDelete, canSetStyleThumb, deps) {
+function wireStyleEditModal(root, style) {
+	if (!root || !style || typeof style !== "object") return;
+	const tag = String(style.tag ?? "").trim().toLowerCase();
+	if (!tag) return;
+	const openBtn = root.querySelector("[data-style-edit-open]");
+	const modalRoot = root.querySelector("[data-style-edit-modal-root]");
+	const form = root.querySelector("[data-style-edit-form]");
+	const errEl = root.querySelector("[data-style-edit-error]");
+	const cancelBtn = root.querySelector("[data-style-edit-cancel]");
+	const submitBtn = root.querySelector("[data-style-edit-submit]");
+	const dismissEls = root.querySelectorAll("[data-style-edit-dismiss]");
+	if (
+		!(openBtn instanceof HTMLButtonElement) ||
+		!(modalRoot instanceof HTMLElement) ||
+		!(form instanceof HTMLFormElement) ||
+		!(errEl instanceof HTMLElement)
+	) {
+		return;
+	}
+
+	function showErr(msg) {
+		errEl.textContent = msg || "";
+		errEl.hidden = !msg;
+	}
+
+	function openModal() {
+		showErr("");
+		modalRoot.hidden = false;
+		const firstInput = form.querySelector("input, textarea, select");
+		if (firstInput instanceof HTMLElement) {
+			requestAnimationFrame(() => firstInput.focus());
+		}
+	}
+
+	function closeModal() {
+		modalRoot.hidden = true;
+		showErr("");
+	}
+
+	openBtn.addEventListener("click", () => openModal());
+	if (cancelBtn instanceof HTMLElement) {
+		cancelBtn.addEventListener("click", () => closeModal());
+	}
+	for (const el of dismissEls) {
+		el.addEventListener("click", () => closeModal());
+	}
+	modalRoot.addEventListener("keydown", (e) => {
+		if (e.key === "Escape") {
+			e.preventDefault();
+			closeModal();
+		}
+	});
+
+	form.addEventListener("submit", (e) => {
+		e.preventDefault();
+		showErr("");
+		const fd = new FormData(form);
+		const injectionText = String(fd.get("injection_text") ?? "").trim();
+		if (!injectionText) {
+			showErr("Prompt modifiers are required.");
+			return;
+		}
+		const payload = {
+			title: String(fd.get("title") ?? "").trim() || null,
+			description: String(fd.get("description") ?? "").trim() || null,
+			visibility: String(fd.get("visibility") ?? "public").trim().toLowerCase(),
+			injection_text: injectionText
+		};
+		if (payload.visibility !== "public" && payload.visibility !== "unlisted") {
+			showErr("Visibility must be public or unlisted.");
+			return;
+		}
+		const creationLink = String(fd.get("creation_link") ?? "").trim();
+		const prefillSaved = String(form.getAttribute("data-style-creation-link-prefill") || "").trim();
+		if (creationLink && creationLink !== prefillSaved) {
+			payload.creation_link = creationLink;
+		}
+
+		void (async () => {
+			if (submitBtn instanceof HTMLButtonElement) submitBtn.disabled = true;
+			try {
+				const res = await fetch(`/api/styles/${encodeURIComponent(tag)}`, {
+					method: "PATCH",
+					credentials: "include",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify(payload)
+				});
+				const data = await res.json().catch(() => ({}));
+				if (res.status === 401) {
+					window.location.href = `/auth.html?returnUrl=${encodeURIComponent(window.location.pathname)}`;
+					return;
+				}
+				if (res.status === 403) {
+					showErr(apiErrorMessageFromResponse(data, "You don't have permission to edit this style."));
+					return;
+				}
+				if (!res.ok) {
+					const msg =
+						typeof data?.message === "string"
+							? data.message
+							: typeof data?.error === "string"
+								? data.error
+								: "Could not save style.";
+					showErr(msg);
+					return;
+				}
+				closeModal();
+				window.location.reload();
+			} catch {
+				showErr("Could not save style.");
+			} finally {
+				if (submitBtn instanceof HTMLButtonElement) submitBtn.disabled = false;
+			}
+		})();
+	});
+}
+
+function renderStyle(root, loading, errRoot, style, adminCanDelete, canSetStyleThumb, canEditStyle, deps) {
 	if (loading) loading.hidden = true;
 	if (errRoot) errRoot.hidden = true;
 	if (!root) return;
@@ -217,6 +354,7 @@ function renderStyle(root, loading, errRoot, style, adminCanDelete, canSetStyleT
 
 	const getStyleThumbUrl = deps?.getStyleThumbUrl;
 	const getAvatarColor = deps?.getAvatarColor;
+	const pencilIcon = typeof deps?.pencilIcon === "function" ? deps.pencilIcon : null;
 	const thumbFromPreset =
 		typeof getStyleThumbUrl === "function" ? getStyleThumbUrl : () => "";
 	const colorFromSeed = typeof getAvatarColor === "function" ? getAvatarColor : () => "#6b7280";
@@ -231,6 +369,18 @@ function renderStyle(root, loading, errRoot, style, adminCanDelete, canSetStyleT
 	const mods = style.injection_text && String(style.injection_text).trim();
 	const thumbInitial = (String(displayTitle || tag).trim().charAt(0) || "?").toUpperCase();
 	const thumbPlaceholderBg = colorFromSeed(tag);
+	const thumbCreationIdRaw = style.style_thumb_creation_id;
+	const thumbCreationId =
+		thumbCreationIdRaw != null &&
+		Number.isFinite(Number(thumbCreationIdRaw)) &&
+		Number(thumbCreationIdRaw) > 0
+			? Number(thumbCreationIdRaw)
+			: null;
+	const savedCreationLinkPath = thumbCreationId ? `/creations/${thumbCreationId}` : "";
+	const heroThumbPrefillAttr =
+		savedCreationLinkPath !== ""
+			? ` data-style-thumb-creation-prefill="${escapeHtml(savedCreationLinkPath)}"`
+			: "";
 
 	document.title = `${displayTitle} — parascene`;
 
@@ -267,11 +417,60 @@ function renderStyle(root, loading, errRoot, style, adminCanDelete, canSetStyleT
 		</div>`
 		: "";
 
+	const editIconSvg = pencilIcon ? pencilIcon("style-detail-edit-icon") : "";
+	const editBtnHtml = canEditStyle
+		? `<button type="button" class="style-detail-edit-open" data-style-edit-open aria-label="Edit style">${editIconSvg}<span>Edit</span></button>`
+		: "";
+	const editModal = canEditStyle
+		? `
+		<div class="style-detail-thumb-modal style-detail-editor-modal" hidden data-style-edit-modal-root>
+			<div class="style-detail-thumb-modal-overlay" data-style-edit-dismiss tabindex="-1" aria-hidden="true"></div>
+			<div class="style-detail-thumb-modal-panel style-detail-editor-modal-panel" role="dialog" aria-modal="true" aria-labelledby="style-editor-modal-title">
+				<h2 id="style-editor-modal-title" class="style-detail-thumb-modal-title">Edit style</h2>
+				<form class="style-detail-form style-detail-form--modal" data-style-edit-form data-style-creation-link-prefill="${escapeHtml(savedCreationLinkPath)}">
+					<p class="style-detail-form-error" data-style-edit-error hidden role="alert"></p>
+					<div class="field">
+						<label for="style-edit-title">Title <span class="style-detail-optional">(optional)</span></label>
+						<input id="style-edit-title" name="title" type="text" class="style-detail-form-input" autocomplete="off" maxlength="200" value="${escapeHtml(style.title ?? "")}" />
+					</div>
+					<div class="field">
+						<label for="style-edit-description">Description <span class="style-detail-optional">(optional)</span></label>
+						<textarea id="style-edit-description" name="description" class="style-detail-form-input" rows="3" maxlength="2000">${escapeHtml(style.description ?? "")}</textarea>
+					</div>
+					<div class="field">
+						<label for="style-edit-visibility">Visibility</label>
+						<select id="style-edit-visibility" name="visibility" class="style-detail-form-select">
+							<option value="public"${vis === "public" ? " selected" : ""}>Public (listed for everyone)</option>
+							<option value="unlisted"${vis === "unlisted" ? " selected" : ""}>Unlisted (usable with $tag, not promoted in lists)</option>
+						</select>
+					</div>
+					<div class="field">
+						<label for="style-edit-modifiers">Prompt modifiers</label>
+						<textarea id="style-edit-modifiers" name="injection_text" class="style-detail-form-input style-detail-form-modifiers" required rows="10" maxlength="32000">${escapeHtml(mods || "")}</textarea>
+					</div>
+					<div class="field">
+						<label for="style-edit-creation-link">Style image from creation <span class="style-detail-optional">(optional)</span></label>
+						<input id="style-edit-creation-link" name="creation_link" type="text" class="style-detail-form-input" autocomplete="off" placeholder="/creations/123" value="${escapeHtml(savedCreationLinkPath)}" />
+						<span class="style-detail-hint">Pre-filled when we know the source creation. Leave as-is to skip re-processing the image.</span>
+					</div>
+					<div class="style-detail-thumb-modal-actions">
+						<span class="style-detail-thumb-modal-actions-spacer"></span>
+						<button type="button" class="style-detail-form-cancel" data-style-edit-cancel data-style-edit-dismiss>Cancel</button>
+						<button type="submit" class="btn-primary" data-style-edit-submit>Save changes</button>
+					</div>
+				</form>
+			</div>
+		</div>`
+		: "";
+
 	root.innerHTML = `
-		<div class="style-detail-hero">
+		<div class="style-detail-hero"${heroThumbPrefillAttr}>
 			${thumbWrap}
 			<div class="style-detail-identity">
-				<h1 class="style-detail-title">${escapeHtml(displayTitle)}</h1>
+				<div class="style-detail-title-row">
+					<h1 class="style-detail-title">${escapeHtml(displayTitle)}</h1>
+					${editBtnHtml}
+				</div>
 				<p class="style-detail-slug">Use in prompts: <code>$${escapeHtml(tag)}</code></p>
 				${vis ? `<p class="style-detail-meta">Visibility: ${escapeHtml(vis)}</p>` : ""}
 			</div>
@@ -290,10 +489,14 @@ function renderStyle(root, loading, errRoot, style, adminCanDelete, canSetStyleT
 			</div>
 		</div>
 		${thumbModal}
+		${editModal}
 	`;
 
 	if (canSetStyleThumb) {
 		wireStyleThumbModal(root, tag);
+	}
+	if (canEditStyle) {
+		wireStyleEditModal(root, style);
 	}
 
 	const thumbEl = root.querySelector(".style-detail-thumb");
@@ -398,6 +601,11 @@ function renderNewStyleForm(root, loading, errRoot) {
 				<label for="style-new-modifiers">Prompt modifiers</label>
 				<textarea id="style-new-modifiers" name="injection_text" class="style-detail-form-input style-detail-form-modifiers" required rows="10" maxlength="32000" placeholder="Text appended for the model when this style is active."></textarea>
 			</div>
+			<div class="field">
+				<label for="style-new-creation-link">Style image from creation <span class="style-detail-optional">(optional)</span></label>
+				<input id="style-new-creation-link" name="creation_link" type="text" class="style-detail-form-input" autocomplete="off" placeholder="/creations/123" />
+				<span class="style-detail-hint">Paste a published creation link or id to set the style image while saving.</span>
+			</div>
 			<div class="style-detail-footer style-detail-footer--form">
 				<div class="style-detail-footer-inner">
 					<a href="/prompt-library#styles" class="style-detail-form-cancel">Cancel</a>
@@ -441,6 +649,7 @@ function renderNewStyleForm(root, loading, errRoot) {
 		const title = String(fd.get("title") ?? "").trim();
 		const description = String(fd.get("description") ?? "").trim();
 		const visibility = String(fd.get("visibility") ?? "public").trim().toLowerCase();
+		const creationLink = String(fd.get("creation_link") ?? "").trim();
 
 		void (async () => {
 			if (submitBtn instanceof HTMLButtonElement) submitBtn.disabled = true;
@@ -475,6 +684,25 @@ function renderNewStyleForm(root, loading, errRoot) {
 					return;
 				}
 				const savedTag = typeof data?.tag === "string" ? data.tag : tag;
+				if (creationLink) {
+					const thumbRes = await fetch(`/api/styles/${encodeURIComponent(savedTag)}`, {
+						method: "PATCH",
+						credentials: "include",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ creation_link: creationLink })
+					});
+					const thumbData = await thumbRes.json().catch(() => ({}));
+					if (!thumbRes.ok) {
+						const msg =
+							typeof thumbData?.message === "string"
+								? thumbData.message
+								: typeof thumbData?.error === "string"
+									? thumbData.error
+									: "Style was saved but image could not be set.";
+						showError(msg);
+						return;
+					}
+				}
 				window.location.href = `/styles/${encodeURIComponent(savedTag)}`;
 			} catch {
 				showError("Could not save style.");
@@ -549,7 +777,8 @@ async function loadExistingStyle(deps) {
 
 		const adminCanDelete = Boolean(data?.adminCanDelete);
 		const canSetStyleThumb = Boolean(data?.canSetStyleThumb);
-		renderStyle(root, loading, errRoot, style, adminCanDelete, canSetStyleThumb, deps);
+		const canEditStyle = Boolean(data?.canEditStyle);
+		renderStyle(root, loading, errRoot, style, adminCanDelete, canSetStyleThumb, canEditStyle, deps);
 	} catch {
 		renderError(root, loading, errRoot, "Could not load style.");
 	}

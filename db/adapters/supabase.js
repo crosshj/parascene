@@ -2381,6 +2381,115 @@ export function openDb() {
 			}
 		},
 		selectFeedItems: (() => {
+			/** Like/comment counts, viewer liked, and author profile fields for feed creation rows. */
+			async function enrichFeedCreationRows(viewerId, pageRows) {
+				if (!Array.isArray(pageRows) || pageRows.length === 0) return pageRows;
+
+				const createdImageIds = pageRows
+					.map((item) => item.created_image_id)
+					.filter((id) => id !== null && id !== undefined);
+				if (createdImageIds.length === 0) return pageRows;
+
+				const authorIds = Array.from(
+					new Set(
+						pageRows
+							.map((item) => item.user_id)
+							.filter((id) => id !== null && id !== undefined)
+							.map((id) => Number(id))
+							.filter((id) => Number.isFinite(id) && id > 0)
+					)
+				);
+
+				const [
+					likeCountResult,
+					commentCountResult,
+					likedResult,
+					profileResult,
+					userResult
+				] = await Promise.all([
+					serviceClient
+						.from(prefixedTable("created_image_like_counts"))
+						.select("created_image_id, like_count")
+						.in("created_image_id", createdImageIds),
+					serviceClient
+						.from(prefixedTable("created_image_comment_counts"))
+						.select("created_image_id, comment_count")
+						.in("created_image_id", createdImageIds),
+					viewerId != null
+						? serviceClient
+							.from(prefixedTable("likes_created_image"))
+							.select("created_image_id")
+							.eq("user_id", viewerId)
+							.in("created_image_id", createdImageIds)
+						: Promise.resolve({ data: [], error: null }),
+					authorIds.length > 0
+						? serviceClient
+							.from(prefixedTable("user_profiles"))
+							.select("user_id, user_name, display_name, avatar_url")
+							.in("user_id", authorIds)
+						: Promise.resolve({ data: [], error: null }),
+					authorIds.length > 0
+						? serviceClient
+							.from(prefixedTable("users"))
+							.select("id, meta")
+							.in("id", authorIds)
+						: Promise.resolve({ data: [], error: null })
+				]);
+
+				if (likeCountResult.error) throw likeCountResult.error;
+				if (commentCountResult.error) throw commentCountResult.error;
+				if (likedResult.error) throw likedResult.error;
+				if (profileResult.error) throw profileResult.error;
+				if (userResult.error) throw userResult.error;
+
+				const countById = new Map(
+					(likeCountResult.data ?? []).map((row) => [String(row.created_image_id), Number(row.like_count ?? 0)])
+				);
+				const commentCountById = new Map(
+					(commentCountResult.data ?? []).map((row) => [
+						String(row.created_image_id),
+						Number(row.comment_count ?? 0)
+					])
+				);
+				const likedIdSet = likedResult.data?.length
+					? new Set((likedResult.data ?? []).map((row) => String(row.created_image_id)))
+					: null;
+				const profileByUserId = new Map(
+					(profileResult.data ?? []).map((row) => [String(row.user_id), row])
+				);
+				const planByUserId = new Map();
+				(userResult.data ?? []).forEach((row) => {
+					const plan = row?.meta?.plan === "founder" ? "founder" : "free";
+					planByUserId.set(String(row.id), plan);
+				});
+
+				return pageRows.map((item) => {
+					const key =
+						item.created_image_id === null || item.created_image_id === undefined
+							? null
+							: String(item.created_image_id);
+					const likeCount = key ? (countById.get(key) ?? 0) : 0;
+					const commentCount = key ? (commentCountById.get(key) ?? 0) : 0;
+					const viewerLiked = key && likedIdSet ? likedIdSet.has(key) : false;
+					const profile =
+						item.user_id !== null && item.user_id !== undefined
+							? profileByUserId.get(String(item.user_id)) ?? null
+							: null;
+					const authorPlan =
+						item.user_id != null ? (planByUserId.get(String(item.user_id)) ?? "free") : "free";
+					return {
+						...item,
+						like_count: likeCount,
+						comment_count: commentCount,
+						viewer_liked: viewerLiked,
+						author_user_name: profile?.user_name ?? null,
+						author_display_name: profile?.display_name ?? null,
+						author_avatar_url: profile?.avatar_url ?? null,
+						author_plan: authorPlan
+					};
+				});
+			}
+
 			const selectFeedItems = {
 			all: async (excludeUserId, { includeOwnPosts = false } = {}) => {
 				const viewerId = excludeUserId ?? null;
@@ -2777,6 +2886,350 @@ export function openDb() {
 				});
 
 				return { rows: mapped, hasMore };
+			},
+			getVideoFeedPage: async (viewerId, { limit = 20, offset = 0, includeOwnPosts = false } = {}) => {
+				const safeLimit = Math.min(Math.max(1, Number(limit) || 20), 100);
+				const safeOffset = Math.max(0, Number(offset) || 0);
+				if (viewerId === null || viewerId === undefined) {
+					return { rows: [], hasMore: false };
+				}
+
+				const { data: followRows, error: followError } = await serviceClient
+					.from(prefixedTable("user_follows"))
+					.select("following_id")
+					.eq("follower_id", viewerId);
+				if (followError) throw followError;
+
+				const followingIdSet = new Set(
+					(followRows ?? [])
+						.map((row) => row?.following_id)
+						.filter((id) => id !== null && id !== undefined)
+						.map((id) => String(id))
+				);
+				if (includeOwnPosts) followingIdSet.add(String(viewerId));
+				if (followingIdSet.size === 0) return { rows: [], hasMore: false };
+
+				const followingIds = Array.from(followingIdSet);
+				const { data: pageData, error: pageError } = await serviceClient
+					.from(prefixedTable("feed_items"))
+					.select(
+						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images!inner(filename, file_path, user_id, unavailable_at, meta, title)"
+					)
+					.in("prsn_created_images.user_id", followingIds)
+					.eq("prsn_created_images.meta->>media_type", "video")
+					.order("created_at", { ascending: false })
+					.order("created_image_id", { ascending: false })
+					.range(safeOffset, safeOffset + safeLimit);
+				if (pageError) throw pageError;
+
+				const items = (pageData ?? []).map((item) => {
+					const { prsn_created_images, ...rest } = item;
+					const filename = prsn_created_images?.filename ?? null;
+					const file_path = prsn_created_images?.file_path ?? null;
+					const user_id = prsn_created_images?.user_id ?? null;
+					const unavailable_at = prsn_created_images?.unavailable_at ?? null;
+					const meta = prsn_created_images?.meta;
+					const nsfw = !!(meta && typeof meta === "object" && meta.nsfw);
+					const title = resolveFeedRowTitle(prsn_created_images?.title, rest.title);
+					return {
+						...rest,
+						title,
+						filename,
+						user_id,
+						unavailable_at,
+						nsfw,
+						meta,
+						url: file_path || (filename ? `/api/images/created/${filename}` : null),
+						like_count: 0,
+						comment_count: 0,
+						viewer_liked: false
+					};
+				});
+				const filtered = items.filter((item) => {
+					if (item.user_id === null || item.user_id === undefined) return false;
+					if (item.unavailable_at != null && item.unavailable_at !== "") return false;
+					return followingIdSet.has(String(item.user_id));
+				});
+
+				const hasMore = filtered.length > safeLimit;
+				const pageRows = filtered.slice(0, safeLimit);
+				const mapped = await enrichFeedCreationRows(viewerId, pageRows);
+				return { rows: mapped, hasMore };
+			},
+			getPageAfterImageCursor: async (
+				viewerId,
+				{
+					limit = 20,
+					includeOwnPosts = false,
+					afterCreatedAt = "",
+					afterCreatedImageId = 0
+				} = {}
+			) => {
+				const safeLimit = Math.min(Math.max(1, Number(limit) || 20), 100);
+				const cursorAt = String(afterCreatedAt ?? "");
+				const cursorId = Number(afterCreatedImageId);
+				if (viewerId === null || viewerId === undefined || !cursorAt) {
+					return { rows: [], hasMore: false };
+				}
+
+				const rowIsStrictlyOlder = (item) => {
+					const ra = String(item?.created_at ?? "");
+					const ca = cursorAt;
+					if (ra < ca) return true;
+					if (ra > ca) return false;
+					const rid = Number(item?.created_image_id ?? item?.id);
+					return Number.isFinite(rid) && Number.isFinite(cursorId) && rid < cursorId;
+				};
+
+				const { data: followRows, error: followError } = await serviceClient
+					.from(prefixedTable("user_follows"))
+					.select("following_id")
+					.eq("follower_id", viewerId);
+				if (followError) throw followError;
+
+				const followingIdSet = new Set(
+					(followRows ?? [])
+						.map((row) => row?.following_id)
+						.filter((id) => id !== null && id !== undefined)
+						.map((id) => String(id))
+				);
+				if (includeOwnPosts) {
+					followingIdSet.add(String(viewerId));
+				}
+				if (followingIdSet.size === 0) {
+					return { rows: [], hasMore: false };
+				}
+
+				const followingIds = Array.from(followingIdSet);
+				const fetchCap = Math.min(200, Math.max(safeLimit + 1, safeLimit * 3));
+				const { data: pageData, error: pageError } = await serviceClient
+					.from(prefixedTable("feed_items"))
+					.select(
+						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images!inner(filename, file_path, user_id, unavailable_at, meta, title)"
+					)
+					.in("prsn_created_images.user_id", followingIds)
+					.lte("created_at", cursorAt)
+					.order("created_at", { ascending: false })
+					.order("created_image_id", { ascending: false })
+					.limit(fetchCap);
+				if (pageError) throw pageError;
+
+				const items = (pageData ?? []).map((item) => {
+					const { prsn_created_images, ...rest } = item;
+					const filename = prsn_created_images?.filename ?? null;
+					const file_path = prsn_created_images?.file_path ?? null;
+					const user_id = prsn_created_images?.user_id ?? null;
+					const unavailable_at = prsn_created_images?.unavailable_at ?? null;
+					const meta = prsn_created_images?.meta;
+					const nsfw = !!(meta && typeof meta === "object" && meta.nsfw);
+					const title = resolveFeedRowTitle(prsn_created_images?.title, rest.title);
+					return {
+						...rest,
+						title,
+						filename,
+						user_id,
+						unavailable_at,
+						nsfw,
+						meta,
+						url: file_path || (filename ? `/api/images/created/${filename}` : null),
+						like_count: 0,
+						comment_count: 0,
+						viewer_liked: false
+					};
+				});
+				const filtered = items.filter((item) => {
+					if (item.user_id === null || item.user_id === undefined) return false;
+					if (item.unavailable_at != null && item.unavailable_at !== "") return false;
+					if (!followingIdSet.has(String(item.user_id))) return false;
+					return rowIsStrictlyOlder(item);
+				});
+
+				const hasMore = filtered.length > safeLimit;
+				const pageRows = filtered.slice(0, safeLimit);
+
+				const createdImageIds = pageRows
+					.map((item) => item.created_image_id)
+					.filter((id) => id !== null && id !== undefined);
+
+				if (createdImageIds.length === 0) {
+					return { rows: pageRows, hasMore };
+				}
+
+				const authorIds = Array.from(
+					new Set(
+						pageRows
+							.map((item) => item.user_id)
+							.filter((id) => id !== null && id !== undefined)
+							.map((id) => Number(id))
+							.filter((id) => Number.isFinite(id) && id > 0)
+					)
+				);
+
+				const [
+					likeCountResult,
+					commentCountResult,
+					likedResult,
+					profileResult,
+					userResult
+				] = await Promise.all([
+					serviceClient
+						.from(prefixedTable("created_image_like_counts"))
+						.select("created_image_id, like_count")
+						.in("created_image_id", createdImageIds),
+					serviceClient
+						.from(prefixedTable("created_image_comment_counts"))
+						.select("created_image_id, comment_count")
+						.in("created_image_id", createdImageIds),
+					viewerId != null
+						? serviceClient
+							.from(prefixedTable("likes_created_image"))
+							.select("created_image_id")
+							.eq("user_id", viewerId)
+							.in("created_image_id", createdImageIds)
+						: Promise.resolve({ data: [], error: null }),
+					authorIds.length > 0
+						? serviceClient
+							.from(prefixedTable("user_profiles"))
+							.select("user_id, user_name, display_name, avatar_url")
+							.in("user_id", authorIds)
+						: Promise.resolve({ data: [], error: null }),
+					authorIds.length > 0
+						? serviceClient
+							.from(prefixedTable("users"))
+							.select("id, meta")
+							.in("id", authorIds)
+						: Promise.resolve({ data: [], error: null })
+				]);
+
+				if (likeCountResult.error) throw likeCountResult.error;
+				if (commentCountResult.error) throw commentCountResult.error;
+				if (likedResult.error) throw likedResult.error;
+				if (profileResult.error) throw profileResult.error;
+				if (userResult.error) throw userResult.error;
+
+				const countById = new Map(
+					(likeCountResult.data ?? []).map((row) => [String(row.created_image_id), Number(row.like_count ?? 0)])
+				);
+				const commentCountById = new Map(
+					(commentCountResult.data ?? []).map((row) => [String(row.created_image_id), Number(row.comment_count ?? 0)])
+				);
+				const likedIdSet = likedResult.data?.length
+					? new Set((likedResult.data ?? []).map((row) => String(row.created_image_id)))
+					: null;
+
+				const profileByUserId = new Map(
+					(profileResult.data ?? []).map((row) => [String(row.user_id), row])
+				);
+				const planByUserId = new Map();
+				(userResult.data ?? []).forEach((row) => {
+					const plan = row?.meta?.plan === "founder" ? "founder" : "free";
+					planByUserId.set(String(row.id), plan);
+				});
+
+				const mapped = pageRows.map((item) => {
+					const key =
+						item.created_image_id === null || item.created_image_id === undefined
+							? null
+							: String(item.created_image_id);
+					const likeCount = key ? (countById.get(key) ?? 0) : 0;
+					const commentCount = key ? (commentCountById.get(key) ?? 0) : 0;
+					const viewerLiked = key && likedIdSet ? likedIdSet.has(key) : false;
+					const profile =
+						item.user_id !== null && item.user_id !== undefined
+							? profileByUserId.get(String(item.user_id)) ?? null
+							: null;
+					const authorPlan =
+						item.user_id != null ? (planByUserId.get(String(item.user_id)) ?? "free") : "free";
+					return {
+						...item,
+						like_count: likeCount,
+						comment_count: commentCount,
+						viewer_liked: viewerLiked,
+						author_user_name: profile?.user_name ?? null,
+						author_display_name: profile?.display_name ?? null,
+						author_avatar_url: profile?.avatar_url ?? null,
+						author_plan: authorPlan
+					};
+				});
+
+				return { rows: mapped, hasMore };
+			},
+			getLatestFeedSlotPackHead: async (
+				viewerId,
+				{ videoLimit = 12, imageLimit = 9, includeOwnPosts = false } = {}
+			) => {
+				if (viewerId === null || viewerId === undefined) {
+					return { videos: [], images: [] };
+				}
+				const safeVid = Math.min(Math.max(1, Number(videoLimit) || 12), 50);
+				const safeImg = Math.min(Math.max(1, Number(imageLimit) || 9), 50);
+
+				const { data: followRows, error: followError } = await serviceClient
+					.from(prefixedTable("user_follows"))
+					.select("following_id")
+					.eq("follower_id", viewerId);
+				if (followError) throw followError;
+
+				const followingIdSet = new Set(
+					(followRows ?? [])
+						.map((r) => r?.following_id)
+						.filter((id) => id !== null && id !== undefined)
+						.map((id) => String(id))
+				);
+				if (includeOwnPosts) followingIdSet.add(String(viewerId));
+				if (followingIdSet.size === 0) return { videos: [], images: [] };
+
+				const followingIds = Array.from(followingIdSet);
+				const cols =
+					"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images!inner(filename, file_path, user_id, unavailable_at, meta, title)";
+
+				const [vidResult, imgResult] = await Promise.all([
+					serviceClient
+						.from(prefixedTable("feed_items"))
+						.select(cols)
+						.in("prsn_created_images.user_id", followingIds)
+						.eq("prsn_created_images.meta->>media_type", "video")
+						.order("created_at", { ascending: false })
+						.order("created_image_id", { ascending: false })
+						.limit(safeVid),
+					serviceClient
+						.from(prefixedTable("feed_items"))
+						.select(cols)
+						.in("prsn_created_images.user_id", followingIds)
+						.not("prsn_created_images.meta->>media_type", "eq", "video")
+						.order("created_at", { ascending: false })
+						.order("created_image_id", { ascending: false })
+						.limit(safeImg)
+				]);
+				if (vidResult.error) throw vidResult.error;
+				if (imgResult.error) throw imgResult.error;
+
+				const mapRow = (item) => {
+					const { prsn_created_images, ...rest } = item;
+					const filename = prsn_created_images?.filename ?? null;
+					const file_path = prsn_created_images?.file_path ?? null;
+					const user_id = prsn_created_images?.user_id ?? null;
+					const unavailable_at = prsn_created_images?.unavailable_at ?? null;
+					const meta = prsn_created_images?.meta;
+					const nsfw = !!(meta && typeof meta === "object" && meta.nsfw);
+					const title = resolveFeedRowTitle(prsn_created_images?.title, rest.title);
+					return {
+						...rest, title, filename, user_id, unavailable_at, nsfw, meta,
+						url: file_path || (filename ? `/api/images/created/${filename}` : null),
+						like_count: 0, comment_count: 0, viewer_liked: false
+					};
+				};
+				const filterRow = (item) =>
+					item.user_id !== null &&
+					item.user_id !== undefined &&
+					(item.unavailable_at == null || item.unavailable_at === "") &&
+					followingIdSet.has(String(item.user_id));
+
+				let videos = (vidResult.data ?? []).map(mapRow).filter(filterRow);
+				let images = (imgResult.data ?? []).map(mapRow).filter(filterRow);
+				videos = await enrichFeedCreationRows(viewerId, videos);
+				images = await enrichFeedCreationRows(viewerId, images);
+				return { videos, images };
 			}
 			};
 			return selectFeedItems;
@@ -3857,6 +4310,40 @@ export function openDb() {
 				if (updErr) throw updErr;
 				const n = Array.isArray(updated) ? updated.length : 0;
 				return { changes: n };
+			}
+		},
+		updateGlobalStyleCatalogByTag: {
+			run: async (tag, patch) => {
+				const t = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				if (!t || !patch || typeof patch !== "object") return { changes: 0 };
+				const update = {};
+				if (Object.prototype.hasOwnProperty.call(patch, "title")) {
+					update.title = patch.title ?? null;
+				}
+				if (Object.prototype.hasOwnProperty.call(patch, "description")) {
+					update.description = patch.description ?? null;
+				}
+				if (Object.prototype.hasOwnProperty.call(patch, "visibility")) {
+					update.visibility = patch.visibility ?? "public";
+				}
+				if (Object.prototype.hasOwnProperty.call(patch, "injectionText")) {
+					update.injection_text = patch.injectionText ?? "";
+				}
+				if (Object.keys(update).length === 0) return { changes: 0 };
+				update.updated_at = new Date().toISOString();
+				const { data, error } = await serviceClient
+					.from(prefixedTable("prompt_injections"))
+					.update(update)
+					.eq("tag_type", "style")
+					.is("owner_user_id", null)
+					.eq("is_active", true)
+					.is("deleted_at", null)
+					.eq("tag", t)
+					.select("id");
+				if (error) throw error;
+				return { changes: Array.isArray(data) ? data.length : 0 };
 			}
 		},
 		/** Soft-delete every active style row for this tag (admin catalog cleanup). */

@@ -2445,11 +2445,19 @@ async function loadCreation() {
 							aria-label="Close">×</button>
 						<h3 id="lineage-modal-title" class="creation-detail-lineage-modal-heading">Lineage</h3>
 					</div>
-					<header class="creation-detail-lineage-modal-mobile-chrome chat-page-topbar">
-						<button type="button" class="chat-page-back" data-lineage-modal-dismiss aria-label="Back">
-							<span class="chat-page-back-icon" aria-hidden="true">&lt;-</span>
-						</button>
-						<h3 class="chat-page-title">Lineage</h3>
+					<header class="creation-detail-lineage-modal-mobile-chrome chat-page-mobile-chrome"
+						aria-label="Lineage navigation">
+						<div class="creation-detail-lineage-modal-mobile-chrome-toolbar">
+							<button type="button" class="chat-page-mobile-chrome-back" data-lineage-modal-dismiss
+								aria-label="Back">
+								<span class="chat-page-back-icon" aria-hidden="true">&lt;-</span>
+							</button>
+							<h1 class="chat-page-mobile-chrome-title">
+								<span class="chat-page-mobile-chrome-channel-part">
+									<span class="chat-page-header-title-text">Lineage</span>
+								</span>
+							</h1>
+						</div>
 					</header>
 					<div class="creation-detail-lineage-modal-scroll">
 						<div class="creation-detail-lineage-modal-columns">

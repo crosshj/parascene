@@ -3,6 +3,7 @@ import { pullBlogFeedItems } from "./pullBlogFeedItems.js";
 import {
 	applyNewbieFeedTips,
 	buildChallengeEngagementVirtualRows,
+	injectEngagementIntoSlotPackHead,
 	mergeEngagementIntoPage
 } from "./engagementAndNewbie.js";
 
@@ -18,17 +19,25 @@ export async function assembleFeedItems({
 	limit,
 	offset,
 	creationPull,
-	challengeSnapshot
+	challengeSnapshot,
+	feedSurface = ""
 }) {
 	const enableNsfw = Boolean(user.meta && user.meta.enableNsfw === true);
 	const { rows, hasMore, isNewbieFeed } = creationPull;
+	const skipBlogMerge =
+		Boolean(creationPull?.mobileChatSlotPackPageOne) || Boolean(creationPull?.videoFeedOnly);
+	const skipEngagement =
+		Boolean(creationPull?.videoFeedOnly) ||
+		Boolean(creationPull?.mobileChatSlotPackContinuation);
+	const surface =
+		typeof feedSurface === "string" ? feedSurface.trim().toLowerCase() : "";
 
 	let itemsWithImages = rows.map(transformFeedCreationRow);
 	if (!enableNsfw) {
 		itemsWithImages = itemsWithImages.filter((item) => !item.nsfw);
 	}
 
-	if (offset === 0) {
+	if (offset === 0 && !skipBlogMerge) {
 		const blogItems = await pullBlogFeedItems(queries, limit);
 		if (blogItems.length > 0) {
 			itemsWithImages = [...itemsWithImages, ...blogItems]
@@ -39,13 +48,23 @@ export async function assembleFeedItems({
 		}
 	}
 
-	const engagementVirtual =
-		offset === 0 && challengeSnapshot?.ok && challengeSnapshot.active
+	let engagementVirtual =
+		offset === 0 &&
+		!skipEngagement &&
+		challengeSnapshot?.ok &&
+		challengeSnapshot.active
 			? buildChallengeEngagementVirtualRows(challengeSnapshot)
 			: [];
 
-	const pageAfterEngagement = mergeEngagementIntoPage(itemsWithImages, engagementVirtual, {
-		limit
+	let listForEngagement = itemsWithImages;
+	if (creationPull?.mobileChatSlotPackPageOne && engagementVirtual.length > 0) {
+		listForEngagement = injectEngagementIntoSlotPackHead(itemsWithImages, engagementVirtual);
+		engagementVirtual = [];
+	}
+
+	const pageAfterEngagement = mergeEngagementIntoPage(listForEngagement, engagementVirtual, {
+		limit,
+		feedSurface: surface
 	});
 
 	const items = applyNewbieFeedTips(pageAfterEngagement, isNewbieFeed);

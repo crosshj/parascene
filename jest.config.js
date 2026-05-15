@@ -1,7 +1,9 @@
 export default {
 	testEnvironment: 'node',
 	transform: {},
-	moduleNameMapper: {},
+	moduleNameMapper: {
+		'^/icons/svg-strings\\.js$': '<rootDir>/test/mocks/iconsSvgStrings.js'
+	},
 	testMatch: ['**/test/**/*.test.js'],
 	testPathIgnorePatterns: [
 		'/node_modules/',

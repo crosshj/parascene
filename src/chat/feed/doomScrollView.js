@@ -3,7 +3,12 @@
  */
 
 import { buildProfilePath } from '../../shared/profileLinks.js';
-import { softenShoutingFeedTitleForSpotlight } from '../../shared/feedCardBuild.js';
+import {
+	feedItemCardImageUrlCandidates,
+	softenShoutingFeedTitleForSpotlight
+} from '../../shared/feedCardBuild.js';
+import { getAvatarColor } from '../../shared/avatar.js';
+import { renderCommentAvatarHtml } from '../../shared/commentItem.js';
 
 /**
  * @param {unknown} s
@@ -126,13 +131,33 @@ export function bindDoomVideoAspectFit(video, mediaWrap, mediaFrame, opts = {}) 
 		ro.observe(mediaWrap);
 	}
 
+	/* Video stacks above the poster; keep poster visible until playback paints (feed / detail behavior). */
+	video.style.opacity = '0';
+	const revealVideo = () => {
+		video.style.opacity = '1';
+		if (posterImg) posterImg.hidden = true;
+	};
+	video.addEventListener('playing', revealVideo, { once: true });
 	video.addEventListener(
-		'loadeddata',
+		'timeupdate',
 		() => {
-			if (posterImg) posterImg.hidden = true;
+			if (video.currentTime > 0) revealVideo();
 		},
 		{ once: true }
 	);
+	if (!video.paused && video.readyState >= 2) revealVideo();
+}
+
+/**
+ * Show poster again when leaving a slide (next swipe should preview like feed before play).
+ * @param {HTMLElement} slide
+ */
+export function resetDoomSlidePosterPreview(slide) {
+	if (!(slide instanceof HTMLElement)) return;
+	const video = slide.querySelector('video.chat-doom-video');
+	const posterImg = slide.querySelector('img.chat-doom-poster');
+	if (video instanceof HTMLVideoElement) video.style.opacity = '0';
+	if (posterImg instanceof HTMLImageElement) posterImg.hidden = false;
 }
 
 /**
@@ -190,10 +215,9 @@ export function createDoomSlideElement(item, viewerUserId, slideOpts = {}) {
 	const cid = Number(item.created_image_id || item.id);
 	const uid = Number(item.user_id);
 	const videoUrl = typeof item.video_url === 'string' ? item.video_url.trim() : '';
-	const poster =
-		(typeof item.thumbnail_url === 'string' && item.thumbnail_url) ||
-		(typeof item.image_url === 'string' && item.image_url) ||
-		'';
+	/** Same thumbnail-first URLs as feed cards / creation detail (`?variant=thumbnail`). */
+	const posterCandidates = feedItemCardImageUrlCandidates(item, true);
+	const poster = posterCandidates[0] || '';
 
 	const authorUserName =
 		typeof item.author_user_name === 'string' && item.author_user_name.trim()
@@ -201,13 +225,15 @@ export function createDoomSlideElement(item, viewerUserId, slideOpts = {}) {
 			: null;
 	const profileHref = buildProfilePath({ userName: authorUserName, userId: uid });
 
+	const legacyAuthor =
+		typeof item.author === 'string' && item.author.trim() && !item.author.includes('@')
+			? item.author.trim()
+			: null;
 	const displayName =
 		(typeof item.author_display_name === 'string' && item.author_display_name.trim()
 			? item.author_display_name.trim()
 			: null) ||
-		(typeof item.author === 'string' && item.author.trim()
-			? item.author.trim()
-			: '') ||
+		legacyAuthor ||
 		'Creator';
 	const handle = authorUserName || '';
 
@@ -261,13 +287,23 @@ export function createDoomSlideElement(item, viewerUserId, slideOpts = {}) {
 
 	/** Layered poster img matches video `object-fit` / aspect logic; avoid native `video.poster`. */
 	let posterImg = null;
-	if (poster) {
+	if (posterCandidates.length > 0) {
 		posterImg = document.createElement('img');
 		posterImg.className = 'chat-doom-poster';
 		posterImg.alt = '';
 		posterImg.decoding = 'async';
 		posterImg.loading = bgLoad ? 'lazy' : 'eager';
-		posterImg.src = poster;
+		let posterTry = 0;
+		const tryPosterSrc = () => {
+			const url = posterCandidates[posterTry];
+			if (!url) return;
+			posterImg.src = url;
+		};
+		posterImg.addEventListener('error', () => {
+			posterTry += 1;
+			if (posterTry < posterCandidates.length) tryPosterSrc();
+		});
+		tryPosterSrc();
 	}
 
 	const playOverlay = document.createElement('div');
@@ -359,10 +395,15 @@ export function createDoomSlideElement(item, viewerUserId, slideOpts = {}) {
 		);
 	}
 
-	const avatarLoading = bgLoad ? 'lazy' : 'eager';
-	const avatarHtml = avatarUrl
-		? `<span class="chat-doom-avatar-wrap"><img class="chat-doom-avatar" src="${escapeHtmlAttr(avatarUrl)}" alt="" width="32" height="32" loading="${avatarLoading}" decoding="async"></span>`
-		: `<span class="chat-doom-avatar-wrap chat-doom-avatar-placeholder" aria-hidden="true"></span>`;
+	const avatarSeed = handle || displayName || String(uid || '');
+	const avatarSlotHtml = `<div class="chat-doom-avatar-slot">${renderCommentAvatarHtml({
+		avatarUrl,
+		displayName: handle || displayName || 'Creator',
+		color: getAvatarColor(avatarSeed),
+		href: profileHref || '',
+		isFounder: item.author_plan === 'founder',
+		flairSize: 'sm'
+	})}</div>`;
 
 	/** Username only in the rail — omit display name / email prefix when we have a handle. */
 	const creatorNameHtml = handle
@@ -384,7 +425,7 @@ export function createDoomSlideElement(item, viewerUserId, slideOpts = {}) {
 
 	bottom.innerHTML = `
 		<div class="chat-doom-bottom-row">
-			${avatarHtml}
+			${avatarSlotHtml}
 			<div class="chat-doom-creator-meta">
 				${profileLink}
 				${followSlot}

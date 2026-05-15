@@ -7566,7 +7566,7 @@ body.chat-page .chat-page-canvas-panel-body {
 }
 
 /* Defensive: media and long tokens cannot extend past the message column (page scroll stays vertical-only). */
-body.chat-page .chat-page-messages img:not(.chat-doom-poster),
+body.chat-page .chat-page-messages img:not(.chat-doom-poster):not(.chat-doom-avatar):not(.feed-card-img):not(.comment-avatar-img),
 body.chat-page .chat-page-messages video:not(.chat-doom-video) {
 	max-width: 100%;
 	height: auto;
@@ -14833,9 +14833,12 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 	min-height: 0;
 }
 
-/* Chat message pane: failed channel / thread / pseudo load — readable, not full-page empty */
+/* Chat message pane: failed channel / thread / pseudo load — generous top inset so icon/title clear app + chat chrome */
 .chat-page-messages .chat-page-pane-load-error.route-empty.route-empty-state {
-	padding: 36px 20px 48px;
+	padding-top: max(96px, calc(56px + env(safe-area-inset-top, 0px) + 40px));
+	padding-right: 20px;
+	padding-bottom: 48px;
+	padding-left: 20px;
 	min-height: 0;
 	max-width: 440px;
 	margin: 0 auto;

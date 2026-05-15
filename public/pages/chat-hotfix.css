@@ -1181,3 +1181,54 @@ button.chat-inline-image-lightbox-footer-btn.btn-secondary {
 		transparent 62%
 	) !important;
 }
+
+/*
+ * Bundled chat.css applies `height:auto` to message imgs except `.chat-doom-poster`, which squashes
+ * doom avatars + feed card media into thin strips (reads as a “line” beside @handle). Hotfix until
+ * chat.bundle.css is rebuilt with the same exclusions in source global.css / chat.css.
+ */
+body.chat-page .chat-page-messages img.chat-doom-avatar,
+body.chat-page .chat-page-messages img.chat-doom-poster,
+body.chat-page .chat-page-messages img.feed-card-img,
+body.chat-page .chat-page-messages img.comment-avatar-img {
+	display: block !important;
+	max-width: none !important;
+	width: 100% !important;
+	height: 100% !important;
+	min-height: 0 !important;
+	object-fit: cover !important;
+	object-position: center !important;
+}
+
+body.chat-page .chat-page-messages.chat-page-messages--doom-host img.chat-doom-avatar {
+	max-width: none !important;
+}
+
+body.chat-page .chat-page-messages .chat-doom-avatar-wrap,
+body.chat-page .chat-page-messages .chat-doom-avatar-slot {
+	flex-shrink: 0 !important;
+	width: 32px !important;
+	height: 32px !important;
+	min-width: 32px !important;
+	min-height: 32px !important;
+}
+
+body.chat-page .chat-page-messages .chat-doom-bottom-row .chat-doom-avatar-slot .comment-avatar {
+	width: 32px !important;
+	height: 32px !important;
+	margin: 0 !important;
+}
+
+.chat-doom-progress {
+	display: none !important;
+}
+
+/* Pane load failure: keep warning icon + title below global header (bundled global.css may lag). */
+.chat-page-messages .chat-page-pane-load-error.route-empty.route-empty-state {
+	padding-top: max(96px, calc(56px + env(safe-area-inset-top, 0px) + 40px)) !important;
+}
+
+/* No native playback chrome over doom metadata (custom rail + bottom bar only). */
+body.chat-page .chat-page-messages.chat-page-messages--doom-host video.chat-doom-video::-webkit-media-controls {
+	display: none !important;
+}

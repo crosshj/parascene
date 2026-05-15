@@ -7,9 +7,18 @@ import {
 	FEED_CHANNEL_PAGE_SIZE,
 	getChatFeedItemKey
 } from './feedChannelData.js';
+import {
+	buildDoomVideoWindowFromFeed,
+	collectDedupedVideoCreationsFromFeedAccumulation,
+	feedRowMatchesCreation
+} from './doomOrderCore.js';
 import { isFeedRowVideoCreation } from '../../shared/feedCardBuild.js';
 import { initLikeButton } from '../../shared/likes.js';
-import { createDoomScrollShell, createDoomSlideElement } from './doomScrollView.js';
+import {
+	createDoomScrollShell,
+	createDoomSlideElement,
+	resetDoomSlidePosterPreview
+} from './doomScrollView.js';
 import { destroyDoomCommentsPopover, openDoomCommentsPopover } from '../doom/doomCommentsPopover.js';
 
 /** @type {null | (() => void)} */
@@ -30,16 +39,6 @@ export function teardownChatDoomScroll() {
 		}
 		activeTeardown = null;
 	}
-}
-
-/**
- * @param {object} item
- * @param {number} startCreationId
- * @returns {boolean}
- */
-function feedRowMatchesCreation(item, startCreationId) {
-	const cid = Number(item?.created_image_id ?? item?.id);
-	return Number.isFinite(cid) && cid === startCreationId;
 }
 
 /**
@@ -69,7 +68,8 @@ export async function mountChatDoomScroll(opts) {
 	const fetchPage = createChatFeedFetchPage({
 		fetchJsonWithStatusDeduped,
 		getHiddenFeedItems,
-		pageSize: FEED_CHANNEL_PAGE_SIZE
+		pageSize: FEED_CHANNEL_PAGE_SIZE,
+		videosOnly: true
 	});
 
 	/** @type {object[]} */
@@ -89,21 +89,10 @@ export async function mountChatDoomScroll(opts) {
 		if (!feedHasMore) break;
 	}
 
-	/** @type {Map<string, object>} */
-	const videoByKey = new Map();
-	/** @type {object[]} (reassigned when trimming above URL anchor) */
-	let orderedVideos = [];
-	for (const it of feedAccumulated) {
-		if (!isFeedRowVideoCreation(it)) continue;
-		const key = getChatFeedItemKey(it);
-		if (videoByKey.has(key)) continue;
-		videoByKey.set(key, it);
-		orderedVideos.push(it);
-	}
-
-	let anchorIndex = orderedVideos.findIndex((it) => feedRowMatchesCreation(it, startCreationId));
-
-	if (anchorIndex < 0) {
+	const { orderedVideos: dedupedVideos } =
+		collectDedupedVideoCreationsFromFeedAccumulation(feedAccumulated);
+	let summaryItem = null;
+	if (dedupedVideos.findIndex((it) => feedRowMatchesCreation(it, startCreationId)) < 0) {
 		/* Fetch summary only when feed pages missed the creation — avoids competing with first `/api/feed` + first video. */
 		const sum = await fetchJsonWithStatusDeduped(
 			`/api/creations/${encodeURIComponent(String(startCreationId))}/summary`,
@@ -111,28 +100,22 @@ export async function mountChatDoomScroll(opts) {
 			{ windowMs: 0 }
 		).catch(() => ({ ok: false }));
 		if (sum.ok && sum.data?.item && isFeedRowVideoCreation(sum.data.item)) {
-			const it = sum.data.item;
-			const k = getChatFeedItemKey(it);
-			if (!videoByKey.has(k)) {
-				videoByKey.set(k, it);
-				orderedVideos.push(it);
-			}
-			anchorIndex = orderedVideos.findIndex((x) => feedRowMatchesCreation(x, startCreationId));
+			summaryItem = sum.data.item;
 		}
 	}
 
-	/*
-	 * Treat `/chat/c/feed/doom/:id` as the *window start*: drop newer clips above the anchor so the URL clip is always slide 0.
-	 * Avoids landing deep after `/creations/…` → Back (same URL tail): user resumes from that clip, not scrolled far below earlier slides.
-	 */
-	if (anchorIndex > 0) {
-		orderedVideos = orderedVideos.slice(anchorIndex);
-		anchorIndex = 0;
-		videoByKey.clear();
-		for (const it of orderedVideos) {
-			const k = getChatFeedItemKey(it);
-			videoByKey.set(k, it);
-		}
+	const { windowVideos: orderedVideos, anchorIndex } = buildDoomVideoWindowFromFeed({
+		feedAccumulated,
+		startCreationId,
+		summaryItem,
+		getItemKey: getChatFeedItemKey
+	});
+
+	/** @type {Map<string, object>} */
+	const videoByKey = new Map();
+	for (const it of orderedVideos) {
+		const k = getChatFeedItemKey(it);
+		videoByKey.set(k, it);
 	}
 
 	messagesEl.classList.add('chat-page-messages--doom-host');
@@ -401,9 +384,12 @@ export async function mountChatDoomScroll(opts) {
 	}
 
 	function pauseAll() {
-		for (const s of slides()) {
+		const list = slides();
+		for (let i = 0; i < list.length; i += 1) {
+			const s = list[i];
 			const v = s.querySelector('video.chat-doom-video');
 			if (v instanceof HTMLVideoElement) v.pause();
+			if (i !== activeIdx) resetDoomSlidePosterPreview(s);
 		}
 	}
 

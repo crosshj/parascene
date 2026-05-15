@@ -2,12 +2,17 @@
  * Feed API routes (`GET /api/feed`, `GET /api/feed/version`).
  *
  * Pipeline overview:
- *   1. Pull creation rows (followed → explore → newbie fallback) — `./feed/pullCreationFeedRows.js`
+ *   1. Pull creation rows (followed → explore → newbie fallback), or slot-pack / cursor pulls — `./feed/pullCreationFeedRows.js`, `./feed/pullMobileChatSlotPackFeed.js`
  *   2. On first page: optional challenge snapshot for engagement card — `./feed/pullChallengeFeedSnapshot.js`
  *   3. Assemble JSON (`transform`, NSFW, blog merge, engagement merge, newbie tips) — `./feed/assembleFeedItems.js`
  */
 import express from "express";
 import { pullCreationFeedRows } from "./feed/pullCreationFeedRows.js";
+import {
+	pullCreationFeedRowsAfterImageCursor,
+	pullMobileChatSlotPackFeedPageOne
+} from "./feed/pullMobileChatSlotPackFeed.js";
+import { pullVideoFeedRows } from "./feed/pullVideoFeedRows.js";
 import { pullChallengeFeedSnapshot } from "./feed/pullChallengeFeedSnapshot.js";
 import { assembleFeedItems } from "./feed/assembleFeedItems.js";
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
@@ -59,14 +64,53 @@ export default function createFeedRoutes({ queries }) {
 		const limit = Math.min(Math.max(1, Number(req.query?.limit) || 20), 100);
 		const offset = Math.max(0, Number(req.query?.offset) || 0);
 		const showOwnPostsInFeed = Boolean(user.meta && user.meta.showOwnPostsInFeed === true);
+		const slotPack = String(req.query?.slot_pack || "").trim() === "mobile_chat_v1";
+		const videosOnly = String(req.query?.creation_media || "").trim() === "video";
+		const afterAt = req.query?.feed_after_image_created_at;
+		const afterId = req.query?.feed_after_image_id;
+		const afterIdNum = Number.parseInt(String(afterId ?? ""), 10);
+		const hasImageCursor =
+			slotPack &&
+			afterAt != null &&
+			String(afterAt).length > 0 &&
+			Number.isFinite(afterIdNum) &&
+			afterIdNum > 0;
 
-		const creationPull = await pullCreationFeedRows({
-			queries,
-			userId: user.id,
-			limit,
-			offset,
-			showOwnPosts: showOwnPostsInFeed
-		});
+		let creationPull;
+		if (videosOnly) {
+			creationPull = await pullVideoFeedRows({
+				queries,
+				userId: user.id,
+				limit,
+				offset,
+				showOwnPosts: showOwnPostsInFeed
+			});
+		} else if (hasImageCursor) {
+			creationPull = await pullCreationFeedRowsAfterImageCursor({
+				queries,
+				userId: user.id,
+				limit,
+				showOwnPosts: showOwnPostsInFeed,
+				afterCreatedAt: String(afterAt),
+				afterCreatedImageId: afterIdNum
+			});
+		} else if (slotPack && offset === 0) {
+			creationPull = await pullMobileChatSlotPackFeedPageOne({
+				queries,
+				userId: user.id,
+				limit,
+				showOwnPosts: showOwnPostsInFeed,
+				enableNsfw: Boolean(user.meta && user.meta.enableNsfw === true)
+			});
+		} else {
+			creationPull = await pullCreationFeedRows({
+				queries,
+				userId: user.id,
+				limit,
+				offset,
+				showOwnPosts: showOwnPostsInFeed
+			});
+		}
 
 		let challengeSnapshot = { ok: false };
 		if (offset === 0) {
@@ -80,16 +124,27 @@ export default function createFeedRoutes({ queries }) {
 			}
 		}
 
+		const feedSurface = String(req.query?.feed_surface || "").trim();
+
 		const { items, hasMore } = await assembleFeedItems({
 			queries,
 			user,
 			limit,
 			offset,
 			creationPull,
-			challengeSnapshot
+			challengeSnapshot,
+			feedSurface
 		});
 
-		return res.json({ items, hasMore });
+		const body = { items, hasMore };
+		if (slotPack && creationPull?.slotPackFeedCursor) {
+			const c = creationPull.slotPackFeedCursor;
+			body.feed_cursor = {
+				after_image_created_at: c.created_at,
+				after_image_id: String(c.created_image_id)
+			};
+		}
+		return res.json(body);
 	});
 
 	return router;

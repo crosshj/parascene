@@ -81,6 +81,33 @@ function ensureCreatedImagesMetaColumn(db) {
 	}
 }
 
+/** Attach per-page like/comment counts (same pattern as selectFeedItems.getPage). */
+function enrichSqliteFeedPageRowsWithCounts(db, pageRows) {
+	if (!Array.isArray(pageRows) || pageRows.length === 0) return pageRows;
+	const cids = [...new Set(pageRows.map((r) => r.created_image_id).filter((id) => id != null))];
+	if (cids.length === 0) return pageRows;
+	const placeholders = cids.map(() => "?").join(",");
+	const likeRows = db
+		.prepare(
+			`SELECT created_image_id, COUNT(*) AS like_count FROM likes_created_image WHERE created_image_id IN (${placeholders}) GROUP BY created_image_id`
+		)
+		.all(...cids);
+	const commentRows = db
+		.prepare(
+			`SELECT created_image_id, COUNT(*) AS comment_count FROM comments_created_image WHERE created_image_id IN (${placeholders}) GROUP BY created_image_id`
+		)
+		.all(...cids);
+	const likeByCid = new Map(likeRows.map((r) => [r.created_image_id, Number(r.like_count)]));
+	const commentByCid = new Map(commentRows.map((r) => [r.created_image_id, Number(r.comment_count)]));
+	for (const row of pageRows) {
+		if (row.created_image_id != null) {
+			row.like_count = likeByCid.get(row.created_image_id) ?? 0;
+			row.comment_count = commentByCid.get(row.created_image_id) ?? 0;
+		}
+	}
+	return pageRows;
+}
+
 function ensureCreatedImagesUnavailableAtColumn(db) {
 	try {
 		const columns = db.prepare("PRAGMA table_info(created_images)").all();
@@ -2379,7 +2406,7 @@ export async function openDb() {
               )
               OR (? = 1 AND ci.user_id = ?)
             )
-          ORDER BY fi.created_at DESC
+          ORDER BY fi.created_at DESC, fi.created_image_id DESC
           LIMIT ? OFFSET ?`
 				);
 				const rows = stmt.all(viewerId, viewerId, viewerId, includeOwnPosts ? 1 : 0, viewerId, safeLimit + 1, safeOffset);
@@ -2407,6 +2434,210 @@ export async function openDb() {
 				}
 
 				return { rows: pageRows, hasMore };
+			},
+			getVideoFeedPage: async (viewerId, { limit = 20, offset = 0, includeOwnPosts = false } = {}) => {
+				const safeLimit = Math.min(Math.max(1, Number(limit) || 20), 100);
+				const safeOffset = Math.max(0, Number(offset) || 0);
+				const stmt = db.prepare(
+					`SELECT fi.id, COALESCE(NULLIF(TRIM(ci.title), ''), fi.title) AS title, fi.summary, fi.author, fi.tags, fi.created_at,
+                  fi.created_image_id, ci.filename, ci.file_path, ci.user_id, ci.meta,
+                  up.user_name AS author_user_name,
+                  up.display_name AS author_display_name,
+                  up.avatar_url AS author_avatar_url,
+                  CASE WHEN json_extract(u.meta,'$.plan') = 'founder' THEN 'founder' ELSE 'free' END AS author_plan,
+                  COALESCE(ci.file_path, CASE WHEN ci.filename IS NOT NULL THEN '/api/images/created/' || ci.filename ELSE NULL END) as url,
+                  0 AS like_count,
+                  0 AS comment_count,
+                  CASE WHEN ? IS NOT NULL AND vl.user_id IS NOT NULL THEN 1 ELSE 0 END AS viewer_liked,
+                  (json_extract(ci.meta,'$.nsfw') = 1 OR json_extract(ci.meta,'$.nsfw') = 'true') AS nsfw
+           FROM feed_items fi
+           LEFT JOIN created_images ci ON fi.created_image_id = ci.id
+           LEFT JOIN user_profiles up ON up.user_id = ci.user_id
+           LEFT JOIN users u ON u.id = ci.user_id
+           LEFT JOIN likes_created_image vl
+             ON vl.created_image_id = fi.created_image_id
+            AND vl.user_id = ?
+          WHERE ci.user_id IS NOT NULL
+            AND (ci.unavailable_at IS NULL OR ci.unavailable_at = '')
+            AND json_extract(ci.meta,'$.media_type') = 'video'
+            AND ci.meta IS NOT NULL
+            AND (
+              EXISTS (
+                SELECT 1
+                FROM user_follows uf
+                WHERE uf.follower_id = ?
+                  AND uf.following_id = ci.user_id
+              )
+              OR (? = 1 AND ci.user_id = ?)
+            )
+          ORDER BY fi.created_at DESC, fi.created_image_id DESC
+          LIMIT ? OFFSET ?`
+				);
+				const rows = stmt.all(
+					viewerId,
+					viewerId,
+					viewerId,
+					includeOwnPosts ? 1 : 0,
+					viewerId,
+					safeLimit + 1,
+					safeOffset
+				);
+				const hasMore = rows.length > safeLimit;
+				const pageRows = rows.slice(0, safeLimit);
+				enrichSqliteFeedPageRowsWithCounts(db, pageRows);
+				return { rows: pageRows, hasMore };
+			},
+			getPageAfterImageCursor: async (
+				viewerId,
+				{
+					limit = 20,
+					includeOwnPosts = false,
+					afterCreatedAt = "",
+					afterCreatedImageId = 0
+				} = {}
+			) => {
+				const safeLimit = Math.min(Math.max(1, Number(limit) || 20), 100);
+				const cursorAt = String(afterCreatedAt ?? "");
+				const cursorId = Number(afterCreatedImageId);
+				if (viewerId === null || viewerId === undefined || !cursorAt) {
+					return { rows: [], hasMore: false };
+				}
+				const stmt = db.prepare(
+					`SELECT fi.id, COALESCE(NULLIF(TRIM(ci.title), ''), fi.title) AS title, fi.summary, fi.author, fi.tags, fi.created_at,
+                  fi.created_image_id, ci.filename, ci.file_path, ci.user_id, ci.meta,
+                  up.user_name AS author_user_name,
+                  up.display_name AS author_display_name,
+                  up.avatar_url AS author_avatar_url,
+                  CASE WHEN json_extract(u.meta,'$.plan') = 'founder' THEN 'founder' ELSE 'free' END AS author_plan,
+                  COALESCE(ci.file_path, CASE WHEN ci.filename IS NOT NULL THEN '/api/images/created/' || ci.filename ELSE NULL END) as url,
+                  0 AS like_count,
+                  0 AS comment_count,
+                  CASE WHEN ? IS NOT NULL AND vl.user_id IS NOT NULL THEN 1 ELSE 0 END AS viewer_liked,
+                  (json_extract(ci.meta,'$.nsfw') = 1 OR json_extract(ci.meta,'$.nsfw') = 'true') AS nsfw
+           FROM feed_items fi
+           LEFT JOIN created_images ci ON fi.created_image_id = ci.id
+           LEFT JOIN user_profiles up ON up.user_id = ci.user_id
+           LEFT JOIN users u ON u.id = ci.user_id
+           LEFT JOIN likes_created_image vl
+             ON vl.created_image_id = fi.created_image_id
+            AND vl.user_id = ?
+          WHERE ci.user_id IS NOT NULL
+            AND (ci.unavailable_at IS NULL OR ci.unavailable_at = '')
+            AND (
+              EXISTS (
+                SELECT 1
+                FROM user_follows uf
+                WHERE uf.follower_id = ?
+                  AND uf.following_id = ci.user_id
+              )
+              OR (? = 1 AND ci.user_id = ?)
+            )
+            AND (
+              fi.created_at < ?
+              OR (fi.created_at = ? AND fi.created_image_id < ?)
+            )
+          ORDER BY fi.created_at DESC, fi.created_image_id DESC
+          LIMIT ?`
+				);
+				const rows = stmt.all(
+					viewerId,
+					viewerId,
+					viewerId,
+					includeOwnPosts ? 1 : 0,
+					viewerId,
+					cursorAt,
+					cursorAt,
+					Number.isFinite(cursorId) ? cursorId : 0,
+					safeLimit + 1
+				);
+				const hasMore = rows.length > safeLimit;
+				const pageRows = rows.slice(0, safeLimit);
+
+				const cids = [...new Set(pageRows.map((r) => r.created_image_id).filter((id) => id != null))];
+				if (cids.length > 0) {
+					const placeholders = cids.map(() => "?").join(",");
+					const likeRows = db.prepare(
+						`SELECT created_image_id, COUNT(*) AS like_count FROM likes_created_image WHERE created_image_id IN (${placeholders}) GROUP BY created_image_id`
+					).all(...cids);
+					const commentRows = db.prepare(
+						`SELECT created_image_id, COUNT(*) AS comment_count FROM comments_created_image WHERE created_image_id IN (${placeholders}) GROUP BY created_image_id`
+					).all(...cids);
+					const likeByCid = new Map(likeRows.map((r) => [r.created_image_id, Number(r.like_count)]));
+					const commentByCid = new Map(commentRows.map((r) => [r.created_image_id, Number(r.comment_count)]));
+					for (const row of pageRows) {
+						if (row.created_image_id != null) {
+							row.like_count = likeByCid.get(row.created_image_id) ?? 0;
+							row.comment_count = commentByCid.get(row.created_image_id) ?? 0;
+						}
+					}
+				}
+
+				return { rows: pageRows, hasMore };
+			},
+			getLatestFeedSlotPackHead: async (
+				viewerId,
+				{ videoLimit = 12, imageLimit = 9, includeOwnPosts = false } = {}
+			) => {
+				if (viewerId === null || viewerId === undefined) {
+					return { videos: [], images: [] };
+				}
+				const safeVid = Math.min(Math.max(1, Number(videoLimit) || 12), 50);
+				const safeImg = Math.min(Math.max(1, Number(imageLimit) || 9), 50);
+				const followFilter = `
+          EXISTS (
+            SELECT 1 FROM user_follows uf
+            WHERE uf.follower_id = ?
+              AND uf.following_id = ci.user_id
+          )
+          OR (? = 1 AND ci.user_id = ?)
+				`;
+				const colsFn = (viewerParam) => `
+          fi.id, COALESCE(NULLIF(TRIM(ci.title), ''), fi.title) AS title, fi.summary,
+          fi.author, fi.tags, fi.created_at, fi.created_image_id,
+          ci.filename, ci.file_path, ci.user_id, ci.meta,
+          up.user_name AS author_user_name,
+          up.display_name AS author_display_name,
+          up.avatar_url AS author_avatar_url,
+          CASE WHEN json_extract(u.meta,'$.plan') = 'founder' THEN 'founder' ELSE 'free' END AS author_plan,
+          COALESCE(ci.file_path, CASE WHEN ci.filename IS NOT NULL THEN '/api/images/created/' || ci.filename ELSE NULL END) AS url,
+          0 AS like_count, 0 AS comment_count,
+          CASE WHEN ${viewerParam} IS NOT NULL AND vl.user_id IS NOT NULL THEN 1 ELSE 0 END AS viewer_liked,
+          (json_extract(ci.meta,'$.nsfw') = 1 OR json_extract(ci.meta,'$.nsfw') = 'true') AS nsfw
+				`;
+				const joins = `
+          FROM feed_items fi
+          LEFT JOIN created_images ci ON fi.created_image_id = ci.id
+          LEFT JOIN user_profiles up ON up.user_id = ci.user_id
+          LEFT JOIN users u ON u.id = ci.user_id
+          LEFT JOIN likes_created_image vl
+            ON vl.created_image_id = fi.created_image_id AND vl.user_id = ?
+				`;
+				const where = `
+          WHERE ci.user_id IS NOT NULL
+            AND (ci.unavailable_at IS NULL OR ci.unavailable_at = '')
+            AND (${followFilter})
+				`;
+				// Videos: media_type = 'video' in meta
+				const vidStmt = db.prepare(`
+          SELECT ${colsFn('?')} ${joins} ${where}
+            AND json_extract(ci.meta,'$.media_type') = 'video'
+            AND ci.meta IS NOT NULL
+          ORDER BY fi.created_at DESC, fi.created_image_id DESC
+          LIMIT ?
+				`);
+				// Images: anything that is not a video
+				const imgStmt = db.prepare(`
+          SELECT ${colsFn('?')} ${joins} ${where}
+            AND (json_extract(ci.meta,'$.media_type') IS NULL OR json_extract(ci.meta,'$.media_type') != 'video')
+          ORDER BY fi.created_at DESC, fi.created_image_id DESC
+          LIMIT ?
+				`);
+				const own = includeOwnPosts ? 1 : 0;
+				const videos = vidStmt.all(viewerId, viewerId, viewerId, viewerId, own, viewerId, safeVid);
+				const images = imgStmt.all(viewerId, viewerId, viewerId, viewerId, own, viewerId, safeImg);
+				enrichSqliteFeedPageRowsWithCounts(db, videos);
+				enrichSqliteFeedPageRowsWithCounts(db, images);
+				return { videos, images };
 			}
 		},
 		selectExploreItems: {
@@ -2857,6 +3088,44 @@ export async function openDb() {
 					`UPDATE prompt_injections SET meta = ?, updated_at = datetime('now') WHERE id = ?`
 				);
 				const result = stmt.run(JSON.stringify(meta), row.id);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		updateGlobalStyleCatalogByTag: {
+			run: async (tag, patch) => {
+				const t = String(tag ?? "")
+					.trim()
+					.toLowerCase();
+				if (!t || !patch || typeof patch !== "object") return Promise.resolve({ changes: 0 });
+				const set = [];
+				const values = [];
+				if (Object.prototype.hasOwnProperty.call(patch, "title")) {
+					set.push("title = ?");
+					values.push(patch.title ?? null);
+				}
+				if (Object.prototype.hasOwnProperty.call(patch, "description")) {
+					set.push("description = ?");
+					values.push(patch.description ?? null);
+				}
+				if (Object.prototype.hasOwnProperty.call(patch, "visibility")) {
+					set.push("visibility = ?");
+					values.push(patch.visibility ?? "public");
+				}
+				if (Object.prototype.hasOwnProperty.call(patch, "injectionText")) {
+					set.push("injection_text = ?");
+					values.push(patch.injectionText ?? "");
+				}
+				if (set.length === 0) return Promise.resolve({ changes: 0 });
+				const stmt = db.prepare(
+					`UPDATE prompt_injections
+					 SET ${set.join(", ")}, updated_at = datetime('now')
+					 WHERE tag_type = 'style'
+					   AND owner_user_id IS NULL
+					   AND is_active = 1
+					   AND deleted_at IS NULL
+					   AND lower(tag) = lower(?)`
+				);
+				const result = stmt.run(...values, t);
 				return Promise.resolve({ changes: result.changes });
 			}
 		},

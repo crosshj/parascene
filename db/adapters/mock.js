@@ -1471,6 +1471,72 @@ export function openDb() {
 				const rows = Array.isArray(full) ? full.slice(safeOffset, safeOffset + safeLimit) : [];
 				const hasMore = Array.isArray(full) && full.length > safeOffset + safeLimit;
 				return { rows, hasMore };
+			},
+			getVideoFeedPage: async (viewerId, { limit = 20, offset = 0, includeOwnPosts = false } = {}) => {
+				const full = await selectFeedItems.all(viewerId, { includeOwnPosts });
+				const isVideo = (row) => {
+					const meta = row?.meta;
+					return meta && typeof meta === "object" && meta.media_type === "video";
+				};
+				const videos = Array.isArray(full)
+					? full.filter(isVideo).sort((a, b) => {
+							const c = String(b.created_at || "").localeCompare(String(a.created_at || ""));
+							if (c !== 0) return c;
+							return Number(b.created_image_id || 0) - Number(a.created_image_id || 0);
+						})
+					: [];
+				const safeLimit = Math.min(Math.max(1, Number(limit) || 20), 100);
+				const safeOffset = Math.max(0, Number(offset) || 0);
+				const rows = videos.slice(safeOffset, safeOffset + safeLimit);
+				const hasMore = videos.length > safeOffset + safeLimit;
+				return { rows, hasMore };
+			},
+			getPageAfterImageCursor: async (
+				viewerId,
+				{
+					limit = 20,
+					includeOwnPosts = false,
+					afterCreatedAt = "",
+					afterCreatedImageId = 0
+				} = {}
+			) => {
+				const full = await selectFeedItems.all(viewerId, { includeOwnPosts });
+				const safeLimit = Math.min(Math.max(1, Number(limit) || 20), 100);
+				const cursorAt = String(afterCreatedAt ?? "");
+				const cursorId = Number(afterCreatedImageId);
+				const sorted = Array.isArray(full)
+					? full.slice().sort((a, b) => {
+							const c = String(b.created_at || "").localeCompare(String(a.created_at || ""));
+							if (c !== 0) return c;
+							return Number(b.created_image_id || 0) - Number(a.created_image_id || 0);
+						})
+					: [];
+				const older = sorted.filter((row) => {
+					const ra = String(row?.created_at ?? "");
+					if (ra < cursorAt) return true;
+					if (ra > cursorAt) return false;
+					return Number(row?.created_image_id ?? row?.id ?? 0) < cursorId;
+				});
+				const hasMore = older.length > safeLimit;
+				const rows = older.slice(0, safeLimit);
+				return { rows, hasMore };
+			},
+			getLatestFeedSlotPackHead: async (viewerId, { videoLimit = 12, imageLimit = 9, includeOwnPosts = false } = {}) => {
+				const full = await selectFeedItems.all(viewerId, { includeOwnPosts });
+				const sorted = Array.isArray(full)
+					? full.slice().sort((a, b) => {
+							const c = String(b.created_at || "").localeCompare(String(a.created_at || ""));
+							if (c !== 0) return c;
+							return Number(b.created_image_id || 0) - Number(a.created_image_id || 0);
+						})
+					: [];
+				const isVideo = (row) => {
+					const meta = row?.meta;
+					return meta && typeof meta === "object" && meta.media_type === "video";
+				};
+				const videos = sorted.filter(isVideo).slice(0, Math.min(Math.max(1, Number(videoLimit) || 12), 50));
+				const images = sorted.filter((r) => !isVideo(r)).slice(0, Math.min(Math.max(1, Number(imageLimit) || 9), 50));
+				return { videos, images };
 			}
 			};
 			return selectFeedItems;
@@ -2030,6 +2096,9 @@ export function openDb() {
 			get: async (_tag) => null
 		},
 		updateGlobalStyleCatalogMetaByTag: {
+			run: async () => ({ changes: 0 })
+		},
+		updateGlobalStyleCatalogByTag: {
 			run: async () => ({ changes: 0 })
 		},
 		deletePromptInjectionStylesByTagAdmin: {

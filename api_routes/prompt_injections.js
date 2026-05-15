@@ -108,6 +108,13 @@ function parseInjectionMeta(raw) {
 	}
 }
 
+/** Positive integer id from meta JSON (number or numeric string), else null. */
+function parseMetaPositiveInt(value) {
+	if (value == null) return null;
+	const n = Number(typeof value === "string" ? value.trim() : value);
+	return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 function parseMultipartPersonaCatalog(req) {
 	return new Promise((resolve, reject) => {
 		const busboy = Busboy({
@@ -277,13 +284,18 @@ export default function createPromptInjectionsRoutes({ queries, storage }) {
 			const rowMeta = parseInjectionMeta(row.meta);
 			let styleThumbUrl =
 				typeof rowMeta.style_thumb_url === "string" ? rowMeta.style_thumb_url.trim() : "";
-			if (!styleThumbUrl) {
+			let styleThumbCreationId = parseMetaPositiveInt(rowMeta.style_thumb_creation_id);
+			if (!styleThumbUrl || styleThumbCreationId == null) {
 				const gFn = queries.selectGlobalStylePromptInjectionByTag?.get;
 				if (typeof gFn === "function") {
 					const globalRow = await gFn(slug);
 					const gm = parseInjectionMeta(globalRow?.meta);
-					styleThumbUrl =
-						typeof gm.style_thumb_url === "string" ? gm.style_thumb_url.trim() : "";
+					if (!styleThumbUrl && typeof gm.style_thumb_url === "string") {
+						styleThumbUrl = gm.style_thumb_url.trim();
+					}
+					if (styleThumbCreationId == null) {
+						styleThumbCreationId = parseMetaPositiveInt(gm.style_thumb_creation_id);
+					}
 				}
 			}
 			res.set("Cache-Control", "private, max-age=60");
@@ -294,10 +306,12 @@ export default function createPromptInjectionsRoutes({ queries, storage }) {
 					description: row.description ?? null,
 					visibility: row.visibility ?? null,
 					injection_text: typeof row.injection_text === "string" ? row.injection_text : null,
-					style_thumb_url: styleThumbUrl || null
+					style_thumb_url: styleThumbUrl || null,
+					style_thumb_creation_id: styleThumbCreationId
 				},
 				adminCanDelete: isAdminUser(user),
-				canSetStyleThumb: canPromotePersona(user)
+				canSetStyleThumb: canPromotePersona(user),
+				canEditStyle: canPromotePersona(user)
 			});
 		} catch (err) {
 			console.error("[styles]", err);
@@ -306,8 +320,15 @@ export default function createPromptInjectionsRoutes({ queries, storage }) {
 	});
 
 	/**
-	 * PATCH /api/styles/:slug — admin/founder: set catalog style image from a published creation link, or clear.
-	 * Body: { creation_link?: string, clear_thumb?: boolean }
+	 * PATCH /api/styles/:slug — admin/founder: update catalog style fields and/or style image.
+	 * Body: {
+	 *   title?: string|null,
+	 *   description?: string|null,
+	 *   visibility?: 'public'|'unlisted',
+	 *   injection_text?: string,
+	 *   creation_link?: string,
+	 *   clear_thumb?: boolean
+	 * }
 	 */
 	router.patch("/api/styles/:slug", async (req, res) => {
 		try {
@@ -318,9 +339,6 @@ export default function createPromptInjectionsRoutes({ queries, storage }) {
 			if (!canPromotePersona(user)) {
 				return res.status(403).json({ error: "Forbidden" });
 			}
-			if (!storage?.uploadGenericImage || typeof storage.getImageBuffer !== "function") {
-				return res.status(501).json({ error: "Style images are not available" });
-			}
 			const raw = String(req.params?.slug ?? "").trim();
 			const slug = raw.toLowerCase();
 			if (!STYLE_SLUG_RE.test(slug)) {
@@ -328,7 +346,12 @@ export default function createPromptInjectionsRoutes({ queries, storage }) {
 			}
 			const fnGetGlobal = queries.selectGlobalStylePromptInjectionByTag?.get;
 			const fnUpdateMeta = queries.updateGlobalStyleCatalogMetaByTag?.run;
-			if (typeof fnGetGlobal !== "function" || typeof fnUpdateMeta !== "function") {
+			const fnUpdateCatalog = queries.updateGlobalStyleCatalogByTag?.run;
+			if (
+				typeof fnGetGlobal !== "function" ||
+				typeof fnUpdateMeta !== "function" ||
+				typeof fnUpdateCatalog !== "function"
+			) {
 				return res.status(501).json({ error: "Styles are not available" });
 			}
 			const globalRow = await fnGetGlobal(slug);
@@ -337,8 +360,111 @@ export default function createPromptInjectionsRoutes({ queries, storage }) {
 			}
 
 			const body = req.body && typeof req.body === "object" ? req.body : {};
+			const wantsCatalogPatch =
+				Object.prototype.hasOwnProperty.call(body, "title") ||
+				Object.prototype.hasOwnProperty.call(body, "description") ||
+				Object.prototype.hasOwnProperty.call(body, "visibility") ||
+				Object.prototype.hasOwnProperty.call(body, "injection_text");
+			const catalogPatch = {};
+			if (Object.prototype.hasOwnProperty.call(body, "title")) {
+				const titleRaw = body.title == null ? "" : String(body.title).trim();
+				if (titleRaw.length > 200) {
+					return res.status(400).json({ error: "Title too long" });
+				}
+				catalogPatch.title = titleRaw || null;
+			}
+			if (Object.prototype.hasOwnProperty.call(body, "description")) {
+				const descRaw = body.description == null ? "" : String(body.description).trim();
+				if (descRaw.length > 2000) {
+					return res.status(400).json({ error: "Description too long" });
+				}
+				catalogPatch.description = descRaw || null;
+			}
+			if (Object.prototype.hasOwnProperty.call(body, "visibility")) {
+				const vis = String(body.visibility ?? "")
+					.trim()
+					.toLowerCase();
+				if (vis !== "public" && vis !== "unlisted") {
+					return res.status(400).json({ error: "Visibility must be public or unlisted" });
+				}
+				catalogPatch.visibility = vis;
+			}
+			if (Object.prototype.hasOwnProperty.call(body, "injection_text")) {
+				const injRaw = String(body.injection_text ?? "").trim();
+				if (!injRaw) {
+					return res.status(400).json({ error: "Prompt modifiers are required" });
+				}
+				if (injRaw.length > 32000) {
+					return res.status(400).json({ error: "Prompt modifiers are too long" });
+				}
+				catalogPatch.injectionText = injRaw;
+			}
 			const clearThumb = body.clear_thumb === true;
 			const linkRaw = typeof body.creation_link === "string" ? body.creation_link.trim() : "";
+			const wantsThumbPatch = clearThumb || Boolean(linkRaw);
+			if (!wantsCatalogPatch && !wantsThumbPatch) {
+				return res.status(400).json({ error: "No style updates provided" });
+			}
+
+			/** When setting a new thumb from a creation, validate before mutating catalog fields. */
+			let validatedThumbCreation = null;
+			if (wantsThumbPatch && !clearThumb && linkRaw) {
+				const creationIdEarly = parseCreationIdFromLink(linkRaw);
+				if (!creationIdEarly) {
+					return res.status(400).json({
+						error: "Invalid link",
+						message: "Paste a creation URL such as /creations/123 or a numeric id."
+					});
+				}
+				const fnAnyEarly = queries.selectCreatedImageByIdAnyUser?.get;
+				if (typeof fnAnyEarly !== "function") {
+					return res.status(501).json({ error: "Not available" });
+				}
+				const creationEarly = await fnAnyEarly(creationIdEarly);
+				if (!creationEarly) {
+					return res.status(404).json({ error: "Creation not found" });
+				}
+				const pubEarly = creationEarly.published === 1 || creationEarly.published === true;
+				if (!pubEarly) {
+					return res.status(400).json({
+						error: "Invalid creation",
+						message: "Only published creations can be used as a style image."
+					});
+				}
+				if (creationEarly.unavailable_at != null && String(creationEarly.unavailable_at).trim() !== "") {
+					return res.status(400).json({
+						error: "Invalid creation",
+						message: "This creation is unavailable."
+					});
+				}
+				const cMetaEarly = parseInjectionMeta(creationEarly.meta);
+				if (cMetaEarly?.media_type === "video") {
+					return res.status(400).json({ error: "Video creations cannot be used as a style image." });
+				}
+				const statusEarly =
+					creationEarly.status != null ? String(creationEarly.status).trim().toLowerCase() : "";
+				if (statusEarly && statusEarly !== "completed") {
+					return res.status(400).json({ error: "Creation is not ready to use as an image." });
+				}
+				const filenameEarly = creationEarly.filename != null ? String(creationEarly.filename).trim() : "";
+				if (!filenameEarly || filenameEarly.includes("..") || filenameEarly.includes("/")) {
+					return res.status(400).json({ error: "Invalid creation image" });
+				}
+				validatedThumbCreation = creationEarly;
+			}
+
+			if (wantsCatalogPatch) {
+				const result = await fnUpdateCatalog(slug, catalogPatch);
+				if (!result || Number(result.changes) < 1) {
+					return res.status(500).json({ error: "Could not update style" });
+				}
+			}
+			if (!wantsThumbPatch) {
+				return res.json({ ok: true });
+			}
+			if (!storage?.uploadGenericImage || typeof storage.getImageBuffer !== "function") {
+				return res.status(501).json({ error: "Style images are not available" });
+			}
 
 			const meta = parseInjectionMeta(globalRow.meta);
 			const oldThumbUrl = typeof meta.style_thumb_url === "string" ? meta.style_thumb_url.trim() : "";
@@ -346,7 +472,7 @@ export default function createPromptInjectionsRoutes({ queries, storage }) {
 			const pendingDeletes = [];
 
 			if (clearThumb) {
-				await fnUpdateMeta(slug, { style_thumb_url: null });
+				await fnUpdateMeta(slug, { style_thumb_url: null, style_thumb_creation_id: null });
 				if (oldKey && storage.deleteGenericImage) {
 					pendingDeletes.push(oldKey);
 				}
@@ -362,44 +488,11 @@ export default function createPromptInjectionsRoutes({ queries, storage }) {
 				return res.json({ ok: true, style_thumb_url: null });
 			}
 
-			const creationId = parseCreationIdFromLink(linkRaw);
-			if (!creationId) {
-				return res.status(400).json({
-					error: "Invalid link",
-					message: "Paste a creation URL such as /creations/123 or a numeric id."
-				});
-			}
-
-			const fnAny = queries.selectCreatedImageByIdAnyUser?.get;
-			if (typeof fnAny !== "function") {
-				return res.status(501).json({ error: "Not available" });
-			}
-			const creation = await fnAny(creationId);
+			const creation = validatedThumbCreation;
 			if (!creation) {
-				return res.status(404).json({ error: "Creation not found" });
-			}
-			const pub = creation.published === 1 || creation.published === true;
-			if (!pub) {
-				return res.status(403).json({
-					error: "Forbidden",
-					message: "Only published creations can be used as a style image."
-				});
-			}
-			if (creation.unavailable_at != null && String(creation.unavailable_at).trim() !== "") {
-				return res.status(403).json({ error: "Forbidden", message: "This creation is unavailable." });
-			}
-			const cMeta = parseInjectionMeta(creation.meta);
-			if (cMeta?.media_type === "video") {
-				return res.status(400).json({ error: "Video creations cannot be used as a style image." });
-			}
-			const status = creation.status != null ? String(creation.status).trim().toLowerCase() : "";
-			if (status && status !== "completed") {
-				return res.status(400).json({ error: "Creation is not ready to use as an image." });
+				return res.status(500).json({ error: "Style image validation failed" });
 			}
 			const filename = creation.filename != null ? String(creation.filename).trim() : "";
-			if (!filename || filename.includes("..") || filename.includes("/")) {
-				return res.status(400).json({ error: "Invalid creation image" });
-			}
 
 			const now = Date.now();
 			const rand = Math.random().toString(36).slice(2, 9);
@@ -429,7 +522,11 @@ export default function createPromptInjectionsRoutes({ queries, storage }) {
 				return res.status(500).json({ error: "Could not store style image" });
 			}
 			const newUrl = buildGenericUrl(stored);
-			await fnUpdateMeta(slug, { style_thumb_url: newUrl });
+			const sourceCreationId = parseMetaPositiveInt(creation.id);
+			await fnUpdateMeta(slug, {
+				style_thumb_url: newUrl,
+				...(sourceCreationId != null ? { style_thumb_creation_id: sourceCreationId } : {})
+			});
 			if (oldKey && oldThumbUrl !== newUrl && storage.deleteGenericImage) {
 				pendingDeletes.push(oldKey);
 			}
