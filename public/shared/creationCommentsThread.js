@@ -1176,6 +1176,19 @@ export async function mountCreationCommentsThread(container, options) {
 		syncCommentEditInputUi(input);
 	};
 
+	const onCommentListPaste = (e) => {
+		const inlineTa = e.target?.closest?.('[data-comment-inline-textarea]');
+		if (inlineTa instanceof HTMLTextAreaElement) {
+			const cid = Number(inlineTa.getAttribute('data-comment-inline-textarea'));
+			if (!Number.isFinite(cid) || cid <= 0) return;
+			void handleCommentComposerPaste(
+				e,
+				{ kind: 'inline', referencedCommentId: cid },
+				inlineTa,
+			);
+		}
+	};
+
 	const onCommentListChange = async (e) => {
 		const inlineAttachInput = e.target?.closest?.('[data-comment-inline-attach-input]');
 		if (!(inlineAttachInput instanceof HTMLInputElement)) return;
@@ -1248,6 +1261,7 @@ export async function mountCreationCommentsThread(container, options) {
 	if (commentListEl instanceof HTMLElement) {
 		commentListEl.addEventListener('click', onCommentListClick);
 		commentListEl.addEventListener('input', onCommentListInput);
+		commentListEl.addEventListener('paste', onCommentListPaste);
 		commentListEl.addEventListener('change', onCommentListChange);
 		commentListEl.addEventListener('keydown', onCommentListKeydown);
 	}
@@ -1457,10 +1471,16 @@ export async function mountCreationCommentsThread(container, options) {
 		}
 	};
 
+	const onComposerPaste = (e) => {
+		if (!(commentTextarea instanceof HTMLTextAreaElement)) return;
+		void handleCommentComposerPaste(e, { kind: 'main', referencedCommentId: null }, commentTextarea);
+	};
+
 	if (commentTextarea instanceof HTMLTextAreaElement) {
 		attachMentionSuggest(commentTextarea);
 		commentTextarea.addEventListener('input', onComposerInput);
 		commentTextarea.addEventListener('keydown', onComposerKeydown);
+		commentTextarea.addEventListener('paste', onComposerPaste);
 	}
 	if (commentSubmitBtn instanceof HTMLButtonElement && commentTextarea instanceof HTMLTextAreaElement) {
 		commentSubmitBtn.addEventListener('click', onComposerSubmit);
@@ -1861,6 +1881,37 @@ export async function mountCreationCommentsThread(container, options) {
 		}
 	}
 
+	function extractClipboardImageFiles(clipboardData) {
+		if (!clipboardData) return [];
+		const imageFiles = [];
+		for (const it of clipboardData.items || []) {
+			if (it.kind !== 'file') continue;
+			const f = it.getAsFile();
+			if (f) imageFiles.push(f);
+		}
+		if (imageFiles.length === 0 && clipboardData.files && clipboardData.files.length > 0) {
+			for (const f of clipboardData.files) {
+				if (f) imageFiles.push(f);
+			}
+		}
+		return imageFiles.filter((f) => String(f.type || '').startsWith('image/'));
+	}
+
+	async function handleCommentComposerPaste(ev, context, textarea) {
+		if (!(textarea instanceof HTMLTextAreaElement) || textarea.disabled) return;
+		if (commentQuickSubmitInFlight) return;
+		if (String(textarea.value || '').trim().length > 0) return;
+		const cd = ev.clipboardData;
+		if (!cd) return;
+		const imageFiles = extractClipboardImageFiles(cd);
+		if (imageFiles.length === 0) return;
+		ev.preventDefault();
+		commentAttachContext = context;
+		const attachBtn = resolveAttachButton(context);
+		const attachInput = resolveAttachInput(context);
+		await handleCommentAttachInputChange(imageFiles[0], context, attachBtn, attachInput);
+	}
+
 	async function handleCommentAttachInputChange(file, context, attachBtn, attachInput) {
 		if (!file) return;
 		if (typeof uploadImageFile !== 'function') {
@@ -1965,6 +2016,7 @@ export async function mountCreationCommentsThread(container, options) {
 		if (commentListEl instanceof HTMLElement) {
 			commentListEl.removeEventListener('click', onCommentListClick);
 			commentListEl.removeEventListener('input', onCommentListInput);
+			commentListEl.removeEventListener('paste', onCommentListPaste);
 			commentListEl.removeEventListener('change', onCommentListChange);
 			commentListEl.removeEventListener('keydown', onCommentListKeydown);
 		}
@@ -1974,6 +2026,7 @@ export async function mountCreationCommentsThread(container, options) {
 		if (commentTextarea instanceof HTMLTextAreaElement) {
 			commentTextarea.removeEventListener('input', onComposerInput);
 			commentTextarea.removeEventListener('keydown', onComposerKeydown);
+			commentTextarea.removeEventListener('paste', onComposerPaste);
 		}
 		if (commentSubmitBtn instanceof HTMLButtonElement) {
 			commentSubmitBtn.removeEventListener('click', onComposerSubmit);
