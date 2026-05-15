@@ -13,6 +13,7 @@ import {
 	feedRowMatchesCreation
 } from './doomOrderCore.js';
 import { isFeedRowVideoCreation } from '../../shared/feedCardBuild.js';
+import { safeMediaPlay } from '../../shared/safeMediaPlay.js';
 import { initLikeButton } from '../../shared/likes.js';
 import {
 	createDoomScrollShell,
@@ -718,7 +719,7 @@ export async function mountChatDoomScroll(opts) {
 		if (!(v instanceof HTMLVideoElement) || !(slide instanceof HTMLElement)) return;
 		ev.preventDefault();
 		if (v.paused) {
-			void v.play();
+			safeMediaPlay(v);
 		} else {
 			slide.setAttribute('data-chat-doom-user-paused', '1');
 			v.pause();

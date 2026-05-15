@@ -3424,19 +3424,13 @@ body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topb
 	color: #fff !important;
 	margin: -6px 0 -6px -6px;
 	text-decoration: none;
-	filter:
-		drop-shadow(0 0 1px rgba(0, 0, 0, 1))
-		drop-shadow(0 1px 2px rgba(0, 0, 0, 0.95))
-		drop-shadow(0 2px 10px rgba(0, 0, 0, 0.75));
+	filter: none !important;
 }
 
 body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar a.chat-page-back:hover,
 body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar button.chat-page-back:hover {
 	background: rgba(255, 255, 255, 0.14) !important;
-	filter:
-		drop-shadow(0 0 1px rgba(0, 0, 0, 1))
-		drop-shadow(0 1px 2px rgba(0, 0, 0, 0.95))
-		drop-shadow(0 2px 10px rgba(0, 0, 0, 0.75)) !important;
+	filter: none !important;
 }
 
 body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar a.chat-page-back:focus-visible,
@@ -3449,19 +3443,16 @@ body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topb
 	transform: none !important;
 }
 
-/* Same back control as chat headers; scrim + halo keeps glyph readable on bright frames. */
+/* Same back control as chat headers; top scrim keeps glyph readable on bright frames. */
 .chat-doom-topbar .chat-page-back {
 	background: transparent;
 	color: #fff;
 	margin: -6px 0 -6px -6px;
+	filter: none;
 }
 
 .chat-doom-topbar .chat-page-back .chat-page-back-icon {
-	text-shadow:
-		0 0 1px rgba(0, 0, 0, 1),
-		0 1px 2px rgba(0, 0, 0, 0.98),
-		0 2px 8px rgba(0, 0, 0, 0.85),
-		0 0 20px rgba(0, 0, 0, 0.55);
+	text-shadow: none;
 }
 
 .chat-doom-topbar .chat-page-back:hover {
@@ -3472,7 +3463,7 @@ body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topb
 	outline-color: #fff;
 }
 
-/* Mute: icon only — no pill, no hover disk (halo lives on `svg` so it isn’t a round mat). */
+/* Mute: icon only — no pill, no hover disk. */
 body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar button.creation-detail-video-muted-badge {
 	background: transparent !important;
 	border: none !important;
@@ -3548,10 +3539,7 @@ body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topb
 	stroke-linejoin: round;
 	fill: none;
 	pointer-events: none;
-	filter:
-		drop-shadow(0 0 1px rgba(0, 0, 0, 1))
-		drop-shadow(0 1px 2px rgba(0, 0, 0, 0.95))
-		drop-shadow(0 2px 10px rgba(0, 0, 0, 0.78));
+	filter: none;
 }
 
 .chat-doom-topbar .creation-detail-video-muted-badge [hidden] {

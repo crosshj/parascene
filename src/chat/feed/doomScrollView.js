@@ -229,8 +229,8 @@ export function createDoomSlideElement(item, viewerUserId, slideOpts = {}) {
 	const cid = Number(item.created_image_id || item.id);
 	const uid = Number(item.user_id);
 	const videoUrl = typeof item.video_url === 'string' ? item.video_url.trim() : '';
-	/** Same thumbnail-first URLs as feed cards / creation detail (`?variant=thumbnail`). */
-	const posterCandidates = feedItemCardImageUrlCandidates(item, true);
+	/** Full `image_url` for poster fidelity; thumb only as fallback if full fails to load. */
+	const posterCandidates = feedItemCardImageUrlCandidates(item, false);
 	const poster = posterCandidates[0] || '';
 
 	const authorUserName =

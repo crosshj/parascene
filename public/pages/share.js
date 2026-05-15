@@ -132,11 +132,7 @@ function handleShareCreateSubmit(e) {
 			shareVideoEl.setAttribute("controls", "");
 			shareVideoEl.muted = false;
 			shareVideoEl.removeAttribute("muted");
-			try {
-				shareVideoEl.play();
-			} catch {
-				// ignore; native controls remain available
-			}
+			void shareVideoEl.play().catch(() => {});
 		}
 
 		shareVideoPlayBtn.addEventListener("click", (e) => {

@@ -31,6 +31,7 @@ import * as _cdSkeleton from '../shared/skeleton.js';
 import { createReplyIndicatorElement } from '../shared/replyIndicatorUi.js';
 import { plainTextReplyPreview } from '../shared/plainTextReplyPreview.js';
 import { CHAT_UPLOAD_MAX_BYTES, chatUploadMaxSizeLabel } from '../shared/chatUploadMaxBytes.js';
+import { safeMediaPlay } from '../shared/safeMediaPlay.js';
 import { dismissChallengeVoteModalFromBrowserHistoryIfOpen as dismissChallengeVoteModalImpl } from './challenges/challengeVoteModal.js';
 import {
 	sendIcon,
@@ -4233,8 +4234,7 @@ export async function initChatPage(root, options = {}) {
 					}
 					v.currentTime = t;
 					if (!wasPaused) {
-						const p = v.play();
-						if (p && typeof p.catch === 'function') p.catch(() => { });
+						safeMediaPlay(v);
 					}
 				} catch {
 					// ignore
@@ -6673,11 +6673,7 @@ export async function initChatPage(root, options = {}) {
 			const src = videoEl.dataset.feedVideoSrc;
 			if (src) {
 				videoEl.src = src;
-				try {
-					videoEl.play();
-				} catch {
-					// ignore
-				}
+				safeMediaPlay(videoEl);
 			}
 			return;
 		}
@@ -6692,12 +6688,8 @@ export async function initChatPage(root, options = {}) {
 							if (!el.src && src) {
 								el.src = src;
 							}
-							try {
-								el.play();
-								el.classList.add('is-active');
-							} catch {
-								// ignore autoplay errors
-							}
+							safeMediaPlay(el);
+							el.classList.add('is-active');
 						} else {
 							try {
 								el.pause();

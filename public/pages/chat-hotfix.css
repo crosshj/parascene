@@ -1193,6 +1193,32 @@ button.chat-inline-image-lightbox-footer-btn.btn-secondary {
 	) !important;
 }
 
+/* Doom topbar icons: no drop-shadow halo (bundle may still ship old filter until rebuild). */
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar a.chat-page-back,
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar button.chat-page-back,
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar a.chat-page-back:hover,
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar button.chat-page-back:hover {
+	filter: none !important;
+}
+
+.chat-doom-topbar .chat-page-back,
+.chat-doom-topbar .chat-page-back:hover {
+	filter: none !important;
+}
+
+.chat-doom-topbar .chat-page-back .chat-page-back-icon {
+	text-shadow: none !important;
+}
+
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar button.creation-detail-video-muted-badge,
+body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topbar button.creation-detail-video-muted-badge:hover {
+	filter: none !important;
+}
+
+.chat-doom-topbar .creation-detail-video-muted-badge svg {
+	filter: none !important;
+}
+
 /*
  * Bundled chat.css applies `height:auto` to message imgs except `.chat-doom-poster`, which squashes
  * doom avatars + feed card media into thin strips (reads as a “line” beside @handle). Hotfix until

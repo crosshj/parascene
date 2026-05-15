@@ -59,6 +59,8 @@ function getImportQuery(version) {
 
 /** @type {typeof import('/shared/chatInlineImageLightbox.js') | null} */
 let creationDetailInlineLightboxMod = null;
+/** @type {typeof import('/shared/safeMediaPlay.js').safeMediaPlay | null} */
+let safeMediaPlay = null;
 
 let _depsPromise;
 async function loadDeps() {
@@ -97,6 +99,9 @@ async function loadDeps() {
 		hydrateRichUserTextEmbeds = userTextMod.hydrateRichUserTextEmbeds;
 
 		creationDetailInlineLightboxMod = await import(`/shared/chatInlineImageLightbox.js${qs}`);
+
+		const safeMediaPlayMod = await import(`/shared/safeMediaPlay.js${qs}`);
+		safeMediaPlay = safeMediaPlayMod.safeMediaPlay;
 
 		const autogrowMod = await import(`/shared/autogrow.js${qs}`);
 		attachAutoGrowTextarea = autogrowMod.attachAutoGrowTextarea;
@@ -1086,10 +1091,8 @@ async function loadCreation() {
 		if (videoEl.muted) {
 			videoEl.muted = false;
 			videoEl.removeAttribute('muted');
-			try {
-				videoEl.play();
-			} catch {
-				// ignore play errors; user can press play in controls
+			if (typeof safeMediaPlay === 'function') {
+				safeMediaPlay(videoEl);
 			}
 		}
 		syncHeroVideoMutedBadge();
@@ -1506,10 +1509,8 @@ async function loadCreation() {
 				videoEl.setAttribute('autoplay', '');
 				videoEl.setAttribute('loop', '');
 				videoEl.src = creation.video_url;
-				try {
-					videoEl.play();
-				} catch {
-					// ignore autoplay errors; user can manually play
+				if (typeof safeMediaPlay === 'function') {
+					safeMediaPlay(videoEl);
 				}
 			}
 		} else if (status === 'creating' && !isTimedOut) {

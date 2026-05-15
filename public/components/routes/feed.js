@@ -20,6 +20,8 @@ let feedItemCardImageUrl;
 let isFeedCreationImageProcessing;
 let markFeedCardImageUnavailable;
 let setupFeedCardGroupCarousel;
+/** @type {typeof import('../../shared/safeMediaPlay.js').safeMediaPlay} */
+let safeMediaPlay;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -77,6 +79,9 @@ async function loadDeps() {
 		isFeedCreationImageProcessing = feedCardBuildMod.isFeedCreationImageProcessing;
 		markFeedCardImageUnavailable = feedCardBuildMod.markFeedCardImageUnavailable;
 		setupFeedCardGroupCarousel = feedCardBuildMod.setupFeedCardGroupCarousel;
+
+		const safeMediaPlayMod = await import(`../../shared/safeMediaPlay.js${qs}`);
+		safeMediaPlay = safeMediaPlayMod.safeMediaPlay;
 	})();
 	return _depsPromise;
 }
@@ -570,11 +575,7 @@ class AppRouteFeed extends HTMLElement {
 			const src = videoEl.dataset.feedVideoSrc;
 			if (src) {
 				videoEl.src = src;
-				try {
-					videoEl.play();
-				} catch {
-					// ignore
-				}
+				safeMediaPlay(videoEl);
 			}
 			return;
 		}
@@ -589,12 +590,8 @@ class AppRouteFeed extends HTMLElement {
 						if (!el.src && src) {
 							el.src = src;
 						}
-						try {
-							el.play();
-							el.classList.add('is-active');
-						} catch {
-							// ignore autoplay errors
-						}
+						safeMediaPlay(el);
+						el.classList.add('is-active');
 					} else {
 						try {
 							el.pause();
