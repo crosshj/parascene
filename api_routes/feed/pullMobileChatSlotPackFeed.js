@@ -2,8 +2,8 @@
  * Mobile chat `#feed` slot-pack page one:
  *   1. One query: latest 12 videos + latest 9 images from followed feed.
  *   2. Interleave into 4v+3i × 3 head (in recency order per type).
- *   3. Cursor = latest of (12th video, 9th image). Tail = plain feed older than cursor.
- *   4. Page 2+ = plain feed older than cursor (may repeat some head items — accepted).
+ *   3. `feed_cursor` = newer of (least-recent head video, least-recent head image). Tail = older than cursor.
+ *   4. Page 2+ = plain feed older than `feed_cursor`; response includes advanced `feed_cursor` for the next page.
  */
 import {
 	MOBILE_CHAT_BETWEEN_SPOTLIGHT_NONVIDEO_SLOTS,
@@ -64,17 +64,41 @@ export function interleaveSlotPackHead(videos, images) {
 }
 
 /**
- * Cursor = latest of last head video and last head image.
- * @param {object[]} rawVideos
- * @param {object[]} rawImages
+ * Slot-pack continuation cursor for page 2+:
+ * the **newer** of (least-recent video in head, least-recent image in head).
+ * Head lists are newest-first, so “least recent” = last element in each list.
+ * @param {object[]} rawVideos — newest first (up to 12)
+ * @param {object[]} rawImages — newest first (up to 9)
  */
 export function latestCursorFromSlotPackHeadLists(rawVideos, rawImages) {
-	const lastVideo = rawVideos.length > 0 ? rawVideos[rawVideos.length - 1] : null;
-	const lastImage = rawImages.length > 0 ? rawImages[rawImages.length - 1] : null;
-	if (!lastVideo && !lastImage) return null;
-	const boundary = lastVideo && lastImage ? pickLatest(lastVideo, lastImage)
-		: lastVideo ?? lastImage;
+	const leastRecentVideo = rawVideos.length > 0 ? rawVideos[rawVideos.length - 1] : null;
+	const leastRecentImage = rawImages.length > 0 ? rawImages[rawImages.length - 1] : null;
+	if (!leastRecentVideo && !leastRecentImage) return null;
+	const boundary =
+		leastRecentVideo && leastRecentImage
+			? pickLatest(leastRecentVideo, leastRecentImage)
+			: leastRecentVideo ?? leastRecentImage;
 	return rowToCursor(boundary);
+}
+
+/**
+ * Oldest creation row in a feed page (for advancing `feed_cursor` after cursor-based load-more).
+ * @param {object[]} rows
+ */
+export function oldestCreationCursorFromFeedRows(rows) {
+	const list = Array.isArray(rows) ? rows : [];
+	let oldest = null;
+	for (const row of list) {
+		if (!row || typeof row !== "object") continue;
+		const cid = Number(row.created_image_id ?? row.id);
+		const at = row.created_at;
+		if (!Number.isFinite(cid) || cid <= 0 || at == null || String(at).length === 0) continue;
+		if (!oldest || feedRowIsStrictlyOlderThanCursor(row, oldest.created_at, oldest.created_image_id)) {
+			oldest = { created_at: String(at), created_image_id: cid };
+		}
+	}
+	if (!oldest) return null;
+	return { created_at: oldest.created_at, created_image_id: oldest.created_image_id };
 }
 
 async function pullFeedTailAfterCursor(queries, userId, { limit, showOwnPosts, cursor }) {
@@ -200,5 +224,12 @@ export async function pullCreationFeedRowsAfterImageCursor({
 	if (rows.length === 0) {
 		return pullCreationFeedRows({ queries, userId, limit: safeLimit, offset: 0, showOwnPosts });
 	}
-	return { rows, hasMore, isNewbieFeed: false, mobileChatSlotPackContinuation: true };
+	const slotPackFeedCursor = oldestCreationCursorFromFeedRows(rows);
+	return {
+		rows,
+		hasMore,
+		isNewbieFeed: false,
+		mobileChatSlotPackContinuation: true,
+		slotPackFeedCursor
+	};
 }

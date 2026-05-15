@@ -962,8 +962,14 @@ export async function initChatPage(root, options = {}) {
 	let feedChannelLoadMoreObserver = null;
 	/** @type {null | (() => void)} */
 	let feedChannelLoadMoreFallbackCleanup = null;
-	/** Edge-trigger for feed/explore/creations load sentinel (large rootMargin stays intersecting without scroll). */
+	/** Edge-trigger for feed lane preload target (card or sentinel). */
 	let feedChannelSentinelWasIntersecting = false;
+	/** After a preload load, ignore repeat triggers until the target leaves the band. */
+	let feedChannelLoadLatchArmed = true;
+	let feedChannelScrollWasNearLoadEdge = false;
+	/** Start loading older feed rows when this many `.feed-card` items remain below the reader. */
+	const FEED_LANE_PRELOAD_CARDS_FROM_END = 5;
+	const FEED_LANE_COUNTABLE_CARD_SELECTOR = '.feed-card';
 	/** @type {IntersectionObserver | null} */
 	let feedChannelVideoObserver = null;
 	/** Aligned with `CREATIONS_PAGE_SIZE` in `components/routes/creations.js` + `/api/create/images`. */
@@ -6457,6 +6463,8 @@ export async function initChatPage(root, options = {}) {
 			feedChannelLoadMoreFallbackCleanup = null;
 		}
 		feedChannelSentinelWasIntersecting = false;
+		feedChannelLoadLatchArmed = true;
+		feedChannelScrollWasNearLoadEdge = false;
 	}
 
 	function teardownFeedChannelLoadMore() {
@@ -6782,12 +6790,73 @@ export async function initChatPage(root, options = {}) {
 	}
 
 	/**
+	 * @param {HTMLElement} messagesEl
+	 * @param {'feed' | 'explore' | 'creations'} laneSlug
+	 */
+	function getFeedLaneFeedCards(messagesEl, laneSlug) {
+		const routeWrap = messagesEl.querySelector('.chat-feed-channel-route');
+		if (routeWrap instanceof HTMLElement) {
+			return routeWrap.querySelectorAll(FEED_LANE_COUNTABLE_CARD_SELECTOR);
+		}
+		const host = resolveFeedLaneCardsHost(messagesEl, laneSlug);
+		if (host instanceof HTMLElement) {
+			return host.querySelectorAll(FEED_LANE_COUNTABLE_CARD_SELECTOR);
+		}
+		return messagesEl.querySelectorAll(FEED_LANE_COUNTABLE_CARD_SELECTOR);
+	}
+
+	/**
+	 * @param {HTMLElement} messagesEl
+	 * @param {'feed' | 'explore' | 'creations'} laneSlug
+	 * @returns {HTMLElement | null}
+	 */
+	function getFeedLanePreloadTriggerCard(messagesEl, laneSlug) {
+		const cards = getFeedLaneFeedCards(messagesEl, laneSlug);
+		const n = cards.length;
+		if (n === 0) return null;
+		const idx = Math.max(0, n - FEED_LANE_PRELOAD_CARDS_FROM_END);
+		const el = cards[idx];
+		return el instanceof HTMLElement ? el : null;
+	}
+
+	function feedLaneUsesCardPreloadTrigger(laneSlug) {
+		return laneSlug === 'feed' || laneSlug === 'explore' || laneSlug === 'creations';
+	}
+
+	/**
+	 * @param {HTMLElement} messagesEl
+	 * @param {'feed' | 'explore' | 'creations'} laneSlug
+	 */
+	function isFeedLanePreloadTriggerReached(messagesEl, laneSlug) {
+		const trigger = getFeedLanePreloadTriggerCard(messagesEl, laneSlug);
+		if (!trigger) return false;
+		const scrollRoot = getFeedChannelLoadScrollRoot(messagesEl);
+		const rect = trigger.getBoundingClientRect();
+		return rect.top < scrollRoot.bottom && rect.bottom > scrollRoot.top;
+	}
+
+	/**
+	 * @param {HTMLElement} messagesEl
+	 * @returns {HTMLElement | null}
+	 */
+	function resolveFeedChannelLoadMoreObserveTarget(messagesEl) {
+		const slug = activePseudoChannelSlug;
+		if (feedLaneUsesCardPreloadTrigger(slug)) {
+			const trigger = getFeedLanePreloadTriggerCard(messagesEl, slug);
+			if (trigger) return trigger;
+		}
+		const sentinel = messagesEl.querySelector('[data-chat-feed-load-sentinel]');
+		return sentinel instanceof HTMLElement ? sentinel : null;
+	}
+
+	/**
+	 * Fallback pixel band when there are no countable cards yet.
 	 * @param {HTMLElement} [messagesEl]
 	 */
 	function feedChannelViewportLoadMarginPx(messagesEl) {
 		let margin = 0;
 		if (activePseudoChannelSlug === 'feed') {
-			margin = chatFeedLaneScrollMode === 'newest_first' ? 1200 : 1200;
+			margin = 1200;
 		} else if (
 			activePseudoChannelSlug === 'explore' ||
 			activePseudoChannelSlug === 'creations' ||
@@ -6801,13 +6870,10 @@ export async function initChatPage(root, options = {}) {
 				? messagesEl
 				: root.querySelector('[data-chat-messages]');
 		if (margin > 0 && host instanceof HTMLElement) {
-			if (feedChannelMessagesUseDocumentScroll(host)) {
-				const vh = feedChannelVisualViewportHeightPx();
-				if (vh > 0) margin = Math.max(margin, Math.round(vh * 2.5));
-			} else {
-				const paneH = host.clientHeight;
-				if (paneH > 0) margin = Math.max(margin, Math.round(paneH * 2));
-			}
+			const paneH = feedChannelMessagesUseDocumentScroll(host)
+				? feedChannelVisualViewportHeightPx()
+				: host.clientHeight;
+			if (paneH > 0) margin = Math.max(margin, Math.round(paneH * 0.75));
 		}
 		return margin;
 	}
@@ -6867,9 +6933,15 @@ export async function initChatPage(root, options = {}) {
 		if (!(host instanceof HTMLElement)) return false;
 		const margin = feedChannelViewportLoadMarginPx(host);
 		if (margin <= 0) return false;
-		const dist = feedChannelSentinelDistanceToLoadEndPx(sentinel, host);
 		if (feedChannelLoadSentinelAtBottom()) {
-			return dist <= margin;
+			const slug = activePseudoChannelSlug;
+			if (
+				feedLaneUsesCardPreloadTrigger(slug) &&
+				getFeedLaneFeedCards(host, slug).length > 0
+			) {
+				return isFeedLanePreloadTriggerReached(host, slug);
+			}
+			return feedChannelSentinelDistanceToLoadEndPx(sentinel, host) <= margin;
 		}
 		const scrollRoot = getFeedChannelLoadScrollRoot(host);
 		const rect = sentinel.getBoundingClientRect();
@@ -6879,56 +6951,26 @@ export async function initChatPage(root, options = {}) {
 	/**
 	 * @param {HTMLElement} sentinel
 	 * @param {HTMLElement} [messagesEl]
+	 * @returns {boolean} whether a load was started
 	 */
 	function maybeLoadMoreFeedChannelIfNear(sentinel, messagesEl) {
-		if (!isFeedChannelSentinelNearLoadEdge(sentinel, messagesEl)) return;
-		maybeLoadMoreActiveFeedLanePseudoChannel();
-	}
-
-	/**
-	 * After a page append the sentinel often stays inside a large rootMargin without a new IO
-	 * callback. Re-observe and explicitly probe so chained loads continue while still near the end.
-	 * @param {HTMLElement} sentinel
-	 * @param {HTMLElement} [messagesEl]
-	 */
-	function scheduleFeedChannelLoadMoreProbe(sentinel, messagesEl) {
-		if (!(sentinel instanceof HTMLElement)) return;
-		requestAnimationFrame(() => {
-			requestAnimationFrame(() => {
-				if (!sentinel.isConnected) return;
-				feedChannelSentinelWasIntersecting = false;
-				if (feedChannelLoadMoreObserver) {
-					try {
-						feedChannelLoadMoreObserver.unobserve(sentinel);
-						feedChannelLoadMoreObserver.observe(sentinel);
-					} catch {
-						// ignore
-					}
-				}
-			});
-		});
-	}
-
-	/** Re-check distance after layout/scroll restore so page 2+ can chain without a manual scroll jiggle. */
-	function scheduleFeedChannelLoadMoreTicks(sentinel, messagesEl) {
-		if (!(sentinel instanceof HTMLElement)) return;
 		const host =
 			messagesEl instanceof HTMLElement
 				? messagesEl
 				: root.querySelector('[data-chat-messages]');
-		if (!(host instanceof HTMLElement)) return;
-		const tick = () => {
-			if (!sentinel.isConnected) return;
-			maybeLoadMoreFeedChannelIfNear(sentinel, host);
-		};
-		tick();
-		requestAnimationFrame(tick);
-		requestAnimationFrame(() => {
-			requestAnimationFrame(tick);
-		});
-		window.setTimeout(tick, 0);
-		window.setTimeout(tick, 100);
-		window.setTimeout(tick, 280);
+		if (!(host instanceof HTMLElement) || !(sentinel instanceof HTMLElement)) return false;
+		const near = isFeedChannelSentinelNearLoadEdge(sentinel, host);
+		if (!near) {
+			feedChannelLoadLatchArmed = true;
+			feedChannelScrollWasNearLoadEdge = false;
+			return false;
+		}
+		const enteredNearBand = !feedChannelScrollWasNearLoadEdge;
+		feedChannelScrollWasNearLoadEdge = true;
+		if (!enteredNearBand || !feedChannelLoadLatchArmed) return false;
+		feedChannelLoadLatchArmed = false;
+		maybeLoadMoreActiveFeedLanePseudoChannel();
+		return true;
 	}
 
 	/**
@@ -7061,17 +7103,27 @@ export async function initChatPage(root, options = {}) {
 
 	function setupFeedChannelLoadMoreObserver(messagesEl) {
 		disconnectFeedChannelLoadObserver();
-		const sentinel = messagesEl.querySelector('[data-chat-feed-load-sentinel]');
-		if (!sentinel) return;
+		const observeTarget = resolveFeedChannelLoadMoreObserveTarget(messagesEl);
+		if (!(observeTarget instanceof HTMLElement)) return;
+		const slug = activePseudoChannelSlug;
+		const usesCardTrigger =
+			feedLaneUsesCardPreloadTrigger(slug) &&
+			observeTarget === getFeedLanePreloadTriggerCard(messagesEl, slug);
 		feedChannelSentinelWasIntersecting = false;
 		const observerRoot = getFeedChannelIntersectionRoot(messagesEl);
 		feedChannelLoadMoreObserver = new IntersectionObserver(
 			(entries) => {
 				for (const e of entries) {
-					if (e.target !== sentinel) continue;
-					feedChannelSentinelWasIntersecting = e.isIntersecting;
+					if (e.target !== observeTarget) continue;
+					const wasIntersecting = feedChannelSentinelWasIntersecting;
+					const nowIntersecting = e.isIntersecting;
+					feedChannelSentinelWasIntersecting = nowIntersecting;
+					if (!nowIntersecting) {
+						feedChannelLoadLatchArmed = true;
+						continue;
+					}
+					if (wasIntersecting || !feedChannelLoadLatchArmed) continue;
 					if (
-						!e.isIntersecting ||
 						!pseudoColumnPager ||
 						!pseudoColumnPager.getHasMore() ||
 						pseudoColumnPager.isOlderBusy() ||
@@ -7082,34 +7134,36 @@ export async function initChatPage(root, options = {}) {
 					) {
 						continue;
 					}
+					feedChannelLoadLatchArmed = false;
 					maybeLoadMoreActiveFeedLanePseudoChannel();
 				}
 			},
 			{
 				root: observerRoot,
-				rootMargin: feedChannelObserverRootMargin(messagesEl),
+				rootMargin: usesCardTrigger ? '0px' : feedChannelObserverRootMargin(messagesEl),
 				threshold: 0,
 			}
 		);
-		feedChannelLoadMoreObserver.observe(sentinel);
-		setupFeedChannelLoadMoreScrollFallback(sentinel, messagesEl);
-		scheduleFeedChannelLoadMoreTicks(sentinel, messagesEl);
+		feedChannelLoadMoreObserver.observe(observeTarget);
+		const sentinel = messagesEl.querySelector('[data-chat-feed-load-sentinel]');
+		if (sentinel instanceof HTMLElement) {
+			setupFeedChannelLoadMoreScrollFallback(sentinel, messagesEl);
+		}
 	}
 
 	function refreshFeedChannelLoadMoreAfterAppend(messagesEl) {
 		if (!(messagesEl instanceof HTMLElement)) return;
-		const sentinel = messagesEl.querySelector('[data-chat-feed-load-sentinel]');
-		if (!(sentinel instanceof HTMLElement)) return;
 		if (!pseudoColumnPager?.getHasMore()) {
 			disconnectFeedChannelLoadObserver();
 			return;
 		}
-		if (!feedChannelLoadMoreObserver) {
-			setupFeedChannelLoadMoreObserver(messagesEl);
-			return;
-		}
-		scheduleFeedChannelLoadMoreProbe(sentinel, messagesEl);
-		scheduleFeedChannelLoadMoreTicks(sentinel, messagesEl);
+		const sentinel = messagesEl.querySelector('[data-chat-feed-load-sentinel]');
+		const stillNear =
+			sentinel instanceof HTMLElement && isFeedChannelSentinelNearLoadEdge(sentinel, messagesEl);
+		setupFeedChannelLoadMoreObserver(messagesEl);
+		feedChannelLoadLatchArmed = false;
+		feedChannelScrollWasNearLoadEdge = stillNear;
+		feedChannelSentinelWasIntersecting = stillNear;
 	}
 
 	/**
@@ -7280,11 +7334,6 @@ export async function initChatPage(root, options = {}) {
 				anchor.getBoundingClientRect().top - messagesEl.getBoundingClientRect().top;
 		}
 
-		const loadSentinel = messagesEl.querySelector('[data-chat-feed-load-sentinel]');
-		const chainLoadsFromNearEnd =
-			loadSentinel instanceof HTMLElement &&
-			isFeedChannelSentinelNearLoadEdge(loadSentinel, messagesEl);
-
 		try {
 			const r = await pseudoColumnPager.loadOlder();
 			if (!r.ok) {
@@ -7295,6 +7344,11 @@ export async function initChatPage(root, options = {}) {
 					? Array.isArray(r.appended) ? r.appended : []
 					: Array.isArray(r.prepended) ? r.prepended : [];
 			if (mergedFiltered.length === 0) {
+				const loadSentinel = messagesEl.querySelector('[data-chat-feed-load-sentinel]');
+				feedChannelLoadLatchArmed = false;
+				feedChannelScrollWasNearLoadEdge =
+					loadSentinel instanceof HTMLElement &&
+					isFeedChannelSentinelNearLoadEdge(loadSentinel, messagesEl);
 				refreshFeedChannelLoadMoreAfterAppend(messagesEl);
 				return;
 			}
@@ -7348,28 +7402,6 @@ export async function initChatPage(root, options = {}) {
 			}
 
 			refreshFeedChannelLoadMoreAfterAppend(messagesEl);
-
-			/*
-			 * Scroll restore moves content up; the sentinel leaves the preload band even though
-			 * the user is still reading toward the end. Keep fetching while we were near before this page.
-			 */
-			if (
-				chainLoadsFromNearEnd &&
-				pseudoColumnPager.getHasMore() &&
-				!pseudoColumnPager.isOlderBusy() &&
-				loadSentinel instanceof HTMLElement
-			) {
-				scheduleFeedChannelLoadMoreTicks(loadSentinel, messagesEl);
-				requestAnimationFrame(() => {
-					if (
-						activePseudoChannelSlug === laneSlug &&
-						pseudoColumnPager?.getHasMore() &&
-						!pseudoColumnPager.isOlderBusy()
-					) {
-						void loadMoreFeedLanePseudoChannelMessages(laneSlug);
-					}
-				});
-			}
 
 			if (!isNewestFirstBrowseLane(laneSlug)) {
 				void messagesEl.offsetHeight;
