@@ -962,6 +962,8 @@ export async function initChatPage(root, options = {}) {
 	let feedChannelLoadMoreObserver = null;
 	/** @type {null | (() => void)} */
 	let feedChannelLoadMoreFallbackCleanup = null;
+	/** Edge-trigger for feed/explore/creations load sentinel (large rootMargin stays intersecting without scroll). */
+	let feedChannelSentinelWasIntersecting = false;
 	/** @type {IntersectionObserver | null} */
 	let feedChannelVideoObserver = null;
 	/** Aligned with `CREATIONS_PAGE_SIZE` in `components/routes/creations.js` + `/api/create/images`. */
@@ -1715,7 +1717,14 @@ export async function initChatPage(root, options = {}) {
 	}
 
 	function shouldUseViewportScrollForChatMessages() {
-		return isChatPageMobileLayout() && document.body.classList.contains('chat-page--viewport-scroll');
+		if (!isChatPageMobileLayout()) return false;
+		if (!document.body.classList.contains('chat-page--viewport-scroll')) return false;
+		/* Must match `chat.css` `@media (max-width: 768px)` viewport-scroll rules. */
+		try {
+			return window.matchMedia('(max-width: 768px)').matches;
+		} catch {
+			return true;
+		}
 	}
 
 	/**
@@ -1904,6 +1913,20 @@ export async function initChatPage(root, options = {}) {
 			return item.fileType !== '';
 		}
 		return Boolean(item.previewUrl);
+	}
+
+	/** Use <video> thumbnail when we have a blob preview or uploaded URL. */
+	function chatComposerUsesVideoThumbnail(item, kindFromType) {
+		if (kindFromType !== 'video') return false;
+		if (item.status === 'ready' && item.urlPath) return true;
+		return Boolean(item.previewUrl);
+	}
+
+	function chatAttachmentVideoPreviewSrc(item) {
+		if (item?.status === 'ready' && item?.urlPath) {
+			return buildAttachmentMessageUrl(item) || String(item.urlPath || '').trim();
+		}
+		return String(item?.previewUrl || '').trim();
 	}
 
 	function chatAttachmentPreviewSrc(item) {
@@ -2339,6 +2362,37 @@ export async function initChatPage(root, options = {}) {
 					}
 				}
 				card.appendChild(img);
+			} else if (chatComposerUsesVideoThumbnail(item, kind)) {
+				const panel = document.createElement('div');
+				panel.className =
+					'chat-page-composer-attachment-preview chat-page-composer-attachment-preview--video';
+				const previewSrc = chatAttachmentVideoPreviewSrc(item);
+				if (previewSrc) {
+					const video = document.createElement('video');
+					video.className = 'chat-page-composer-attachment-video';
+					video.muted = true;
+					video.playsInline = true;
+					video.preload = 'metadata';
+					video.setAttribute('aria-hidden', 'true');
+					video.src = previewSrc;
+					panel.appendChild(video);
+					const play = document.createElement('span');
+					play.className = 'chat-page-composer-attachment-play';
+					play.setAttribute('aria-hidden', 'true');
+					panel.appendChild(play);
+					if (item.status !== 'uploading') {
+						panel.classList.add('chat-page-composer-attachment-preview--clickable');
+						panel.title = 'Play video';
+						panel.addEventListener('click', (e) => {
+							e.preventDefault();
+							e.stopPropagation();
+							openChatAttachmentPreviewLightbox(previewSrc, 'video', {
+								sourceVideo: video,
+							});
+						});
+					}
+				}
+				card.appendChild(panel);
 			} else {
 				const panel = document.createElement('div');
 				panel.className = 'chat-page-composer-attachment-preview chat-page-composer-attachment-preview--file';
@@ -2424,9 +2478,12 @@ export async function initChatPage(root, options = {}) {
 				typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
 					? crypto.randomUUID()
 					: `att-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+			const fileKind = chatAttachmentKindFromType(file.type);
 			const useBlobImgPreview =
-				chatAttachmentKindFromType(file.type) === 'image' && !chatImageFileSkipBlobPreview(file);
-			const previewUrl = useBlobImgPreview ? URL.createObjectURL(file) : '';
+				fileKind === 'image' && !chatImageFileSkipBlobPreview(file);
+			const useBlobVideoPreview = fileKind === 'video';
+			const previewUrl =
+				useBlobImgPreview || useBlobVideoPreview ? URL.createObjectURL(file) : '';
 			chatPendingImages.push({
 				id,
 				previewUrl,
@@ -6399,6 +6456,7 @@ export async function initChatPage(root, options = {}) {
 			feedChannelLoadMoreFallbackCleanup();
 			feedChannelLoadMoreFallbackCleanup = null;
 		}
+		feedChannelSentinelWasIntersecting = false;
 	}
 
 	function teardownFeedChannelLoadMore() {
@@ -6666,45 +6724,283 @@ export async function initChatPage(root, options = {}) {
 		}
 	}
 
-	function feedChannelViewportLoadMarginPx() {
+	/** Browse lanes keep the load sentinel at the bottom (newest at top). */
+	function feedChannelLoadSentinelAtBottom() {
+		const slug = activePseudoChannelSlug;
+		return (
+			slug === 'feed' ||
+			slug === 'explore' ||
+			slug === 'creations' ||
+			slug === 'comments' ||
+			slug === 'challenges' ||
+			chatFeedLaneScrollMode === 'newest_first'
+		);
+	}
+
+	function feedChannelVisualViewportHeightPx() {
+		const vv = window.visualViewport;
+		if (vv && typeof vv.height === 'number' && Number.isFinite(vv.height) && vv.height > 0) {
+			return Math.round(vv.height);
+		}
+		if (typeof window.innerHeight === 'number' && Number.isFinite(window.innerHeight) && window.innerHeight > 0) {
+			return Math.round(window.innerHeight);
+		}
+		return Math.round(document.documentElement?.clientHeight || 0);
+	}
+
+	function feedChannelScrollViewportBottomPx() {
+		const vv = window.visualViewport;
+		if (vv && typeof vv.height === 'number' && Number.isFinite(vv.height) && typeof vv.offsetTop === 'number') {
+			return vv.offsetTop + vv.height;
+		}
+		return feedChannelVisualViewportHeightPx();
+	}
+
+	function getFeedChannelScrollContainer(messagesEl) {
+		if (feedChannelMessagesUseDocumentScroll(messagesEl)) {
+			const el = document.scrollingElement || document.documentElement;
+			return el instanceof Element ? el : document.documentElement;
+		}
+		return messagesEl instanceof HTMLElement ? messagesEl : document.documentElement;
+	}
+
+	/** True when `html` scrolls the lane (`overflow: visible` on messages); false when `[data-chat-messages]` scrolls. */
+	function feedChannelMessagesUseDocumentScroll(messagesEl) {
+		if (!shouldUseViewportScrollForChatMessages()) return false;
+		if (!(messagesEl instanceof HTMLElement)) return false;
+		try {
+			const oy = getComputedStyle(messagesEl).overflowY;
+			return oy === 'visible' || oy === 'clip';
+		} catch {
+			return true;
+		}
+	}
+
+	function getFeedChannelIntersectionRoot(messagesEl) {
+		if (feedChannelMessagesUseDocumentScroll(messagesEl)) return null;
+		return messagesEl instanceof HTMLElement ? messagesEl : null;
+	}
+
+	/**
+	 * @param {HTMLElement} [messagesEl]
+	 */
+	function feedChannelViewportLoadMarginPx(messagesEl) {
+		let margin = 0;
 		if (activePseudoChannelSlug === 'feed') {
-			return chatFeedLaneScrollMode === 'newest_first' ? 4000 : 1200;
+			margin = chatFeedLaneScrollMode === 'newest_first' ? 1200 : 1200;
+		} else if (
+			activePseudoChannelSlug === 'explore' ||
+			activePseudoChannelSlug === 'creations' ||
+			activePseudoChannelSlug === 'comments' ||
+			activePseudoChannelSlug === 'challenges'
+		) {
+			margin = 1200;
 		}
-		if (activePseudoChannelSlug === 'explore' || activePseudoChannelSlug === 'creations') {
-			return 4000;
+		const host =
+			messagesEl instanceof HTMLElement
+				? messagesEl
+				: root.querySelector('[data-chat-messages]');
+		if (margin > 0 && host instanceof HTMLElement) {
+			if (feedChannelMessagesUseDocumentScroll(host)) {
+				const vh = feedChannelVisualViewportHeightPx();
+				if (vh > 0) margin = Math.max(margin, Math.round(vh * 2.5));
+			} else {
+				const paneH = host.clientHeight;
+				if (paneH > 0) margin = Math.max(margin, Math.round(paneH * 2));
+			}
 		}
-		return 0;
+		return margin;
+	}
+
+	function feedChannelObserverRootMargin(messagesEl) {
+		const px = String(feedChannelViewportLoadMarginPx(messagesEl));
+		if (feedChannelLoadSentinelAtBottom()) {
+			return `0px 0px ${px}px 0px`;
+		}
+		return `${px}px 0px 0px 0px`;
+	}
+
+	function getFeedChannelScrollportBottomPx(messagesEl) {
+		if (feedChannelMessagesUseDocumentScroll(messagesEl)) {
+			return feedChannelScrollViewportBottomPx();
+		}
+		if (messagesEl instanceof HTMLElement) {
+			return messagesEl.getBoundingClientRect().bottom;
+		}
+		return feedChannelScrollViewportBottomPx();
+	}
+
+	function getFeedChannelLoadScrollRoot(messagesEl) {
+		const vv = window.visualViewport;
+		const top =
+			feedChannelMessagesUseDocumentScroll(messagesEl) && vv && Number.isFinite(vv.offsetTop)
+				? vv.offsetTop
+				: messagesEl instanceof HTMLElement
+					? messagesEl.getBoundingClientRect().top
+					: 0;
+		return {
+			kind: feedChannelMessagesUseDocumentScroll(messagesEl) ? 'viewport' : 'element',
+			top,
+			bottom: getFeedChannelScrollportBottomPx(messagesEl)
+		};
+	}
+
+	/**
+	 * Pixels from the visible load edge to the sentinel top (≤ margin ⇒ preload).
+	 * @param {HTMLElement} sentinel
+	 * @param {HTMLElement} messagesEl
+	 */
+	function feedChannelSentinelDistanceToLoadEndPx(sentinel, messagesEl) {
+		return sentinel.getBoundingClientRect().top - getFeedChannelScrollportBottomPx(messagesEl);
+	}
+
+	/**
+	 * @param {HTMLElement} sentinel
+	 * @param {HTMLElement} [messagesEl]
+	 */
+	function isFeedChannelSentinelNearLoadEdge(sentinel, messagesEl) {
+		if (!(sentinel instanceof HTMLElement) || !sentinel.isConnected) return false;
+		const host =
+			messagesEl instanceof HTMLElement
+				? messagesEl
+				: root.querySelector('[data-chat-messages]');
+		if (!(host instanceof HTMLElement)) return false;
+		const margin = feedChannelViewportLoadMarginPx(host);
+		if (margin <= 0) return false;
+		const dist = feedChannelSentinelDistanceToLoadEndPx(sentinel, host);
+		if (feedChannelLoadSentinelAtBottom()) {
+			return dist <= margin;
+		}
+		const scrollRoot = getFeedChannelLoadScrollRoot(host);
+		const rect = sentinel.getBoundingClientRect();
+		return rect.bottom >= scrollRoot.top - margin;
+	}
+
+	/**
+	 * @param {HTMLElement} sentinel
+	 * @param {HTMLElement} [messagesEl]
+	 */
+	function maybeLoadMoreFeedChannelIfNear(sentinel, messagesEl) {
+		if (!isFeedChannelSentinelNearLoadEdge(sentinel, messagesEl)) return;
+		maybeLoadMoreActiveFeedLanePseudoChannel();
+	}
+
+	/**
+	 * After a page append the sentinel often stays inside a large rootMargin without a new IO
+	 * callback. Re-observe and explicitly probe so chained loads continue while still near the end.
+	 * @param {HTMLElement} sentinel
+	 * @param {HTMLElement} [messagesEl]
+	 */
+	function scheduleFeedChannelLoadMoreProbe(sentinel, messagesEl) {
+		if (!(sentinel instanceof HTMLElement)) return;
+		requestAnimationFrame(() => {
+			requestAnimationFrame(() => {
+				if (!sentinel.isConnected) return;
+				feedChannelSentinelWasIntersecting = false;
+				if (feedChannelLoadMoreObserver) {
+					try {
+						feedChannelLoadMoreObserver.unobserve(sentinel);
+						feedChannelLoadMoreObserver.observe(sentinel);
+					} catch {
+						// ignore
+					}
+				}
+			});
+		});
+	}
+
+	/** Re-check distance after layout/scroll restore so page 2+ can chain without a manual scroll jiggle. */
+	function scheduleFeedChannelLoadMoreTicks(sentinel, messagesEl) {
+		if (!(sentinel instanceof HTMLElement)) return;
+		const host =
+			messagesEl instanceof HTMLElement
+				? messagesEl
+				: root.querySelector('[data-chat-messages]');
+		if (!(host instanceof HTMLElement)) return;
+		const tick = () => {
+			if (!sentinel.isConnected) return;
+			maybeLoadMoreFeedChannelIfNear(sentinel, host);
+		};
+		tick();
+		requestAnimationFrame(tick);
+		requestAnimationFrame(() => {
+			requestAnimationFrame(tick);
+		});
+		window.setTimeout(tick, 0);
+		window.setTimeout(tick, 100);
+		window.setTimeout(tick, 280);
 	}
 
 	/**
 	 * Preserve scroll when appending older feed rows (mobile viewport scroll uses `window`, not `[data-chat-messages]`).
 	 * @param {HTMLElement} messagesEl
-	 * @returns {{ kind: 'viewport', scrollY: number, docHeight: number } | { kind: 'element', bottom: number }}
+	 * @returns {{ snap: { kind: 'viewport', scrollY: number, docHeight: number } | { kind: 'element', bottom: number }, anchorEl: Element | null, anchorOffset: number, useViewport: boolean }}
 	 */
 	function capturePseudoFeedLaneScroll(messagesEl) {
-		if (shouldUseViewportScrollForChatMessages()) {
-			return {
-				kind: 'viewport',
-				scrollY: window.scrollY,
-				docHeight: document.documentElement.scrollHeight
-			};
+		const useViewport = feedChannelMessagesUseDocumentScroll(messagesEl);
+		const scrollEl = useViewport ? getFeedChannelScrollContainer(messagesEl) : null;
+		const snap = useViewport
+			? {
+					kind: 'viewport',
+					scrollY:
+						scrollEl instanceof Element
+							? scrollEl.scrollTop
+							: window.scrollY,
+					docHeight: document.documentElement.scrollHeight
+				}
+			: {
+					kind: 'element',
+					bottom: messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight
+				};
+		const scrollRoot = getFeedChannelLoadScrollRoot(messagesEl);
+		let anchorEl = null;
+		let anchorOffset = 0;
+		const cardSelector =
+			'.feed-card, .feed-card-engagement, .feed-card-tip, .feed-card-blog, .chat-feed-mobile-spotlight';
+		const cards = messagesEl.querySelectorAll(cardSelector);
+		for (let i = 0; i < cards.length; i += 1) {
+			const card = cards[i];
+			if (!(card instanceof Element)) continue;
+			const r = card.getBoundingClientRect();
+			if (r.bottom > scrollRoot.top + 4) {
+				anchorEl = card;
+				anchorOffset = r.top - scrollRoot.top;
+				break;
+			}
 		}
-		return {
-			kind: 'element',
-			bottom: messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight
-		};
+		return { snap, anchorEl, anchorOffset, useViewport };
 	}
 
 	/**
 	 * @param {HTMLElement} messagesEl
-	 * @param {{ kind: 'viewport', scrollY: number, docHeight: number } | { kind: 'element', bottom: number }} snap
+	 * @param {{ snap: { kind: 'viewport', scrollY: number, docHeight: number } | { kind: 'element', bottom: number }, anchorEl: Element | null, anchorOffset: number, useViewport: boolean }} captured
 	 */
-	function restorePseudoFeedLaneScroll(messagesEl, snap) {
-		if (!snap) return;
+	function restorePseudoFeedLaneScroll(messagesEl, captured) {
+		if (!captured) return;
+		const { snap, anchorEl, anchorOffset, useViewport } = captured;
 		const apply = () => {
+			if (anchorEl instanceof Element && anchorEl.isConnected) {
+				const scrollRoot = getFeedChannelLoadScrollRoot(messagesEl);
+				const r = anchorEl.getBoundingClientRect();
+				const delta = r.top - scrollRoot.top - anchorOffset;
+				if (Number.isFinite(delta) && Math.abs(delta) > 0.25) {
+					if (useViewport) {
+						window.scrollBy(0, delta);
+					} else {
+						messagesEl.scrollTop += delta;
+					}
+				}
+				return;
+			}
 			if (snap.kind === 'viewport') {
 				const delta = document.documentElement.scrollHeight - snap.docHeight;
-				window.scrollTo(0, Math.max(0, snap.scrollY + delta));
+				const scrollEl = getFeedChannelScrollContainer(messagesEl);
+				const targetTop = Math.max(0, snap.scrollY + delta);
+				if (scrollEl instanceof Element) {
+					scrollEl.scrollTop = targetTop;
+				} else {
+					window.scrollTo(0, targetTop);
+				}
 				return;
 			}
 			const targetTop = messagesEl.scrollHeight - messagesEl.clientHeight - snap.bottom;
@@ -6717,48 +7013,44 @@ export async function initChatPage(root, options = {}) {
 		});
 	}
 
-	function setupFeedChannelViewportLoadFallback(sentinel) {
-		if (!(sentinel instanceof HTMLElement) || !shouldUseViewportScrollForChatMessages()) return;
+	function setupFeedChannelLoadMoreScrollFallback(sentinel, messagesEl) {
+		if (!(sentinel instanceof HTMLElement) || !(messagesEl instanceof HTMLElement)) return;
 		let raf = 0;
-		const getViewportHeight = () => {
-			const vv = window.visualViewport;
-			if (vv && typeof vv.height === 'number' && Number.isFinite(vv.height)) return vv.height;
-			if (typeof window.innerHeight === 'number' && Number.isFinite(window.innerHeight)) return window.innerHeight;
-			return document.documentElement?.clientHeight || 0;
-		};
-		const isNearLoadEdge = () => {
-			const rect = sentinel.getBoundingClientRect();
-			const margin = feedChannelViewportLoadMarginPx();
-			if (margin <= 0) return false;
-			if (chatFeedLaneScrollMode === 'newest_first') {
-				return rect.top <= getViewportHeight() + margin;
-			}
-			return rect.bottom >= -margin;
-		};
 		const check = () => {
 			raf = 0;
 			if (!sentinel.isConnected) return;
-			if (isNearLoadEdge()) {
-				maybeLoadMoreActiveFeedLanePseudoChannel();
-			}
+			maybeLoadMoreFeedChannelIfNear(sentinel, messagesEl);
 		};
 		const schedule = () => {
 			if (raf) return;
 			raf = window.requestAnimationFrame(check);
 		};
-		window.addEventListener('scroll', schedule, { passive: true });
-		window.addEventListener('resize', schedule);
-		if (window.visualViewport) {
-			window.visualViewport.addEventListener('resize', schedule);
-			window.visualViewport.addEventListener('scroll', schedule);
+		/* Pane scroll is the common case (desktop + mobile >768px); document scroll only ≤768 viewport-scroll. */
+		messagesEl.addEventListener('scroll', schedule, { passive: true });
+		const docScroll = feedChannelMessagesUseDocumentScroll(messagesEl);
+		const scrollContainer = docScroll ? getFeedChannelScrollContainer(messagesEl) : null;
+		if (docScroll) {
+			window.addEventListener('scroll', schedule, { passive: true });
+			if (scrollContainer instanceof Element) {
+				scrollContainer.addEventListener('scroll', schedule, { passive: true });
+			}
+			if (window.visualViewport) {
+				window.visualViewport.addEventListener('resize', schedule);
+				window.visualViewport.addEventListener('scroll', schedule);
+			}
 		}
+		window.addEventListener('resize', schedule);
 		feedChannelLoadMoreFallbackCleanup = () => {
 			if (raf) {
 				window.cancelAnimationFrame(raf);
 				raf = 0;
 			}
+			messagesEl.removeEventListener('scroll', schedule);
 			window.removeEventListener('scroll', schedule);
 			window.removeEventListener('resize', schedule);
+			if (scrollContainer instanceof Element) {
+				scrollContainer.removeEventListener('scroll', schedule);
+			}
 			if (window.visualViewport) {
 				window.visualViewport.removeEventListener('resize', schedule);
 				window.visualViewport.removeEventListener('scroll', schedule);
@@ -6771,39 +7063,73 @@ export async function initChatPage(root, options = {}) {
 		disconnectFeedChannelLoadObserver();
 		const sentinel = messagesEl.querySelector('[data-chat-feed-load-sentinel]');
 		if (!sentinel) return;
-		/* Match `shouldUseViewportScrollForChatMessages()` — mobile UA/coarse pointer can be ≤900px while CSS is still 768px. */
-		const useViewportRoot = shouldUseViewportScrollForChatMessages();
-		const observerRoot = useViewportRoot ? null : messagesEl;
-		const observerRootMargin =
-			chatFeedLaneScrollMode === 'newest_first'
-				? '0px 0px 4000px 0px'
-				: '1400px 0px 0px 0px';
+		feedChannelSentinelWasIntersecting = false;
+		const observerRoot = getFeedChannelIntersectionRoot(messagesEl);
 		feedChannelLoadMoreObserver = new IntersectionObserver(
 			(entries) => {
 				for (const e of entries) {
+					if (e.target !== sentinel) continue;
+					feedChannelSentinelWasIntersecting = e.isIntersecting;
 					if (
-						e.target === sentinel &&
-						e.isIntersecting &&
-						pseudoColumnPager &&
-						pseudoColumnPager.getHasMore() &&
-						!pseudoColumnPager.isOlderBusy() &&
-						!loadingPseudoChannelMessages &&
-						(activePseudoChannelSlug === 'feed' ||
-							activePseudoChannelSlug === 'explore' ||
-							activePseudoChannelSlug === 'creations')
+						!e.isIntersecting ||
+						!pseudoColumnPager ||
+						!pseudoColumnPager.getHasMore() ||
+						pseudoColumnPager.isOlderBusy() ||
+						loadingPseudoChannelMessages ||
+						(activePseudoChannelSlug !== 'feed' &&
+							activePseudoChannelSlug !== 'explore' &&
+							activePseudoChannelSlug !== 'creations')
 					) {
-						maybeLoadMoreActiveFeedLanePseudoChannel();
+						continue;
 					}
+					maybeLoadMoreActiveFeedLanePseudoChannel();
 				}
 			},
 			{
 				root: observerRoot,
-				rootMargin: observerRootMargin,
+				rootMargin: feedChannelObserverRootMargin(messagesEl),
 				threshold: 0,
 			}
 		);
 		feedChannelLoadMoreObserver.observe(sentinel);
-		setupFeedChannelViewportLoadFallback(sentinel);
+		setupFeedChannelLoadMoreScrollFallback(sentinel, messagesEl);
+		scheduleFeedChannelLoadMoreTicks(sentinel, messagesEl);
+	}
+
+	function refreshFeedChannelLoadMoreAfterAppend(messagesEl) {
+		if (!(messagesEl instanceof HTMLElement)) return;
+		const sentinel = messagesEl.querySelector('[data-chat-feed-load-sentinel]');
+		if (!(sentinel instanceof HTMLElement)) return;
+		if (!pseudoColumnPager?.getHasMore()) {
+			disconnectFeedChannelLoadObserver();
+			return;
+		}
+		if (!feedChannelLoadMoreObserver) {
+			setupFeedChannelLoadMoreObserver(messagesEl);
+			return;
+		}
+		scheduleFeedChannelLoadMoreProbe(sentinel, messagesEl);
+		scheduleFeedChannelLoadMoreTicks(sentinel, messagesEl);
+	}
+
+	/**
+	 * @param {HTMLElement} messagesEl
+	 * @param {'feed' | 'explore' | 'creations'} laneSlug
+	 * @returns {HTMLElement | null}
+	 */
+	function resolveFeedLaneCardsHost(messagesEl, laneSlug) {
+		const routeWrap = messagesEl.querySelector('.chat-feed-channel-route');
+		if (laneSlug === 'feed' && shouldChatFeedUseMobileAlternatingLayout()) {
+			if (!(routeWrap instanceof HTMLElement)) return null;
+			const cards =
+				routeWrap.querySelector('[data-feed-channel-cards-tail]') ||
+				routeWrap.querySelector('[data-feed-channel-cards]');
+			return cards instanceof HTMLElement ? cards : null;
+		}
+		const cards =
+			messagesEl.querySelector('[data-feed-channel-cards-tail]') ||
+			messagesEl.querySelector('[data-feed-channel-cards]');
+		return cards instanceof HTMLElement ? cards : null;
 	}
 
 	function stopChatCreationsPseudoChannelPoll() {
@@ -6929,19 +7255,9 @@ export async function initChatPage(root, options = {}) {
 			return;
 		}
 		const messagesEl = root.querySelector('[data-chat-messages]');
-		const cardsTailPre =
-			messagesEl?.querySelector('[data-feed-channel-cards-tail]') ||
-			messagesEl?.querySelector('[data-feed-channel-cards]');
-		const routeWrapFeedPre = messagesEl?.querySelector('.chat-feed-channel-route');
-		const useMobileFeedSegments =
-			laneSlug === 'feed' && shouldChatFeedUseMobileAlternatingLayout();
 		if (!(messagesEl instanceof HTMLElement)) return;
-		if (useMobileFeedSegments) {
-			if (!(routeWrapFeedPre instanceof HTMLElement)) return;
-		} else if (!(cardsTailPre instanceof HTMLElement)) {
-			return;
-		}
-		const cards = /** @type {HTMLElement} */ (cardsTailPre);
+		const cards = resolveFeedLaneCardsHost(messagesEl, laneSlug);
+		if (!cards) return;
 		const col = pseudoColumnPager.getItems();
 		if (!Array.isArray(col) || col.length === 0) {
 			return;
@@ -6964,6 +7280,11 @@ export async function initChatPage(root, options = {}) {
 				anchor.getBoundingClientRect().top - messagesEl.getBoundingClientRect().top;
 		}
 
+		const loadSentinel = messagesEl.querySelector('[data-chat-feed-load-sentinel]');
+		const chainLoadsFromNearEnd =
+			loadSentinel instanceof HTMLElement &&
+			isFeedChannelSentinelNearLoadEdge(loadSentinel, messagesEl);
+
 		try {
 			const r = await pseudoColumnPager.loadOlder();
 			if (!r.ok) {
@@ -6974,9 +7295,7 @@ export async function initChatPage(root, options = {}) {
 					? Array.isArray(r.appended) ? r.appended : []
 					: Array.isArray(r.prepended) ? r.prepended : [];
 			if (mergedFiltered.length === 0) {
-				if (!pseudoColumnPager.getHasMore()) {
-					disconnectFeedChannelLoadObserver();
-				}
+				refreshFeedChannelLoadMoreAfterAppend(messagesEl);
 				return;
 			}
 			addPageUsers(mergedFiltered.map(feedItemToUser));
@@ -6984,6 +7303,10 @@ export async function initChatPage(root, options = {}) {
 			if (isNewestFirstBrowseLane(laneSlug)) {
 				const scrollSnap = capturePseudoFeedLaneScroll(messagesEl);
 				const idxBase = cards.children.length;
+				/*
+				 * Mobile `#feed`: page 1 is spotlight segments + cards; load-more is always plain
+				 * cards in the tail host (same as desktop append — no re-partitioning).
+				 */
 				for (let i = 0; i < mergedFiltered.length; i++) {
 					cards.appendChild(
 						createFeedItemCard(
@@ -7024,10 +7347,28 @@ export async function initChatPage(root, options = {}) {
 				}
 			}
 
-			if (pseudoColumnPager.getHasMore()) {
-				setupFeedChannelLoadMoreObserver(messagesEl);
-			} else {
-				disconnectFeedChannelLoadObserver();
+			refreshFeedChannelLoadMoreAfterAppend(messagesEl);
+
+			/*
+			 * Scroll restore moves content up; the sentinel leaves the preload band even though
+			 * the user is still reading toward the end. Keep fetching while we were near before this page.
+			 */
+			if (
+				chainLoadsFromNearEnd &&
+				pseudoColumnPager.getHasMore() &&
+				!pseudoColumnPager.isOlderBusy() &&
+				loadSentinel instanceof HTMLElement
+			) {
+				scheduleFeedChannelLoadMoreTicks(loadSentinel, messagesEl);
+				requestAnimationFrame(() => {
+					if (
+						activePseudoChannelSlug === laneSlug &&
+						pseudoColumnPager?.getHasMore() &&
+						!pseudoColumnPager.isOlderBusy()
+					) {
+						void loadMoreFeedLanePseudoChannelMessages(laneSlug);
+					}
+				});
 			}
 
 			if (!isNewestFirstBrowseLane(laneSlug)) {
@@ -7098,6 +7439,7 @@ export async function initChatPage(root, options = {}) {
 					fetchJsonWithStatusDeduped,
 					getHiddenFeedItems,
 					pageSize: FEED_CHANNEL_PAGE_SIZE,
+					/* API slot-pack on page 1 only; load-more uses plain feed + cursor. Layout partition is initial-only below. */
 					mobileChatSlotPack: useMobileFeedLayout
 				})
 			});

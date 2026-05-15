@@ -12034,12 +12034,17 @@ button.chat-inline-image-lightbox-footer-btn.btn-secondary {
 	align-items: center;
 	justify-content: center;
 	box-sizing: border-box;
-	width: min(1024px, 96vw, 88vh);
-	max-width: 100%;
-	aspect-ratio: 1;
+	width: auto;
+	max-width: min(96vw, 100%);
 	max-height: min(88vh, 100%);
 	height: auto;
+	aspect-ratio: var(--chat-lightbox-video-ar, 1);
 	pointer-events: auto;
+}
+
+.chat-inline-image-lightbox-video-slot--sized {
+	width: auto;
+	max-width: min(96vw, 100%);
 }
 
 /* Same shimmer as global `.skeleton` (theme tokens + skeleton-shimmer on ::after). */
@@ -12114,7 +12119,7 @@ button.chat-inline-image-lightbox-footer-btn.btn-secondary {
 	}
 
 	.chat-inline-image-lightbox-video-slot {
-		width: min(1024px, 100%, 88vh);
+		max-width: 100%;
 		max-height: 100%;
 	}
 
@@ -12960,20 +12965,120 @@ body:has(.chat-hashtag-nav-overlay) {
 	aspect-ratio: unset;
 }
 
-.connect-chat-msg-bubble .connect-chat-creation-embed--square .connect-chat-creation-embed-inner.connect-chat-creation-embed-inner--video {
+/* Inline chat videos: square placeholder while loading; loaded width from aspect ratio within 260px height. */
+.connect-chat-msg-bubble .connect-chat-creation-embed--square.is-loading:has(.connect-chat-creation-embed-inner--video),
+.connect-chat-msg-bubble [data-generic-video-embed].is-loading {
+	position: relative;
+	width: min(260px, 100%);
+	min-width: min(260px, 100%);
+	max-width: 100%;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed--square.is-loading:has(.connect-chat-creation-embed-inner--video)::before,
+.connect-chat-msg-bubble [data-generic-video-embed].is-loading::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	display: block;
+	border-radius: 12px;
+	background: linear-gradient(110deg,
+			color-mix(in srgb, var(--surface-strong) 78%, var(--bg)) 8%,
+			color-mix(in srgb, var(--surface-strong) 60%, var(--bg)) 18%,
+			color-mix(in srgb, var(--surface-strong) 78%, var(--bg)) 33%);
+	background-size: 220% 100%;
+	animation: inline-image-loading-shimmer 1.1s linear infinite;
+	pointer-events: none;
+	z-index: 1;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed--square.is-loading > .connect-chat-creation-embed-media,
+.connect-chat-msg-bubble [data-generic-video-embed].is-loading > .connect-chat-creation-embed-media {
+	min-width: min(260px, 100%);
+	width: min(260px, 100%);
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed--square.is-loading .connect-chat-creation-embed-inner.connect-chat-creation-embed-inner--video,
+.connect-chat-msg-bubble [data-generic-video-embed].is-loading .connect-chat-creation-embed-inner.connect-chat-creation-embed-inner--video {
+	width: min(260px, 100%);
+	min-width: min(260px, 100%);
+	height: 260px;
+	min-height: 260px;
+	max-height: 260px;
+	aspect-ratio: 1 / 1;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed--square.is-loading .connect-chat-creation-embed-video,
+.connect-chat-msg-bubble [data-generic-video-embed].is-loading .connect-chat-creation-embed-video,
+.connect-chat-msg-bubble .connect-chat-creation-embed-video[data-inline-video-loading='1'] {
+	opacity: 0;
+	visibility: hidden;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed--square.is-loading .connect-chat-creation-embed-inner--video::before,
+.connect-chat-msg-bubble .connect-chat-creation-embed--square.is-loading .connect-chat-creation-embed-inner--video::after,
+.connect-chat-msg-bubble [data-generic-video-embed].is-loading .connect-chat-creation-embed-inner--video::before,
+.connect-chat-msg-bubble [data-generic-video-embed].is-loading .connect-chat-creation-embed-inner--video::after,
+.connect-chat-msg-bubble .connect-chat-creation-embed--square.is-loading .chat-doom-play-overlay,
+.connect-chat-msg-bubble [data-generic-video-embed].is-loading .chat-doom-play-overlay {
+	display: none;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed--square:not(.is-loading) .connect-chat-creation-embed-inner.connect-chat-creation-embed-inner--video,
+.connect-chat-msg-bubble [data-generic-video-embed]:not(.is-loading) .connect-chat-creation-embed-inner.connect-chat-creation-embed-inner--video {
 	display: flex;
 	align-items: center;
 	justify-content: center;
+	position: relative;
 	width: fit-content;
 	max-width: 100%;
 	min-width: 0;
-	height: 260px;
-	min-height: 260px;
+	height: auto;
+	min-height: 0;
 	max-height: 260px;
 	aspect-ratio: unset;
 	background: color-mix(in srgb, var(--surface-strong) 58%, var(--bg));
 	box-sizing: border-box;
 	cursor: zoom-in;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed-inner--video .chat-doom-play-overlay {
+	position: absolute;
+	inset: 0;
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	pointer-events: none;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed-inner--video .chat-doom-play-overlay-inner {
+	width: 72px;
+	height: 72px;
+	border-radius: 50%;
+	background: rgba(0, 0, 0, 0.45);
+	color: #fff;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed-inner--video .chat-doom-play-glyph {
+	width: 36px;
+	height: 36px;
+	margin-left: 5px;
+	opacity: 0.95;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed--square:not(.is-loading):has(.connect-chat-creation-embed-inner--video),
+.connect-chat-msg-bubble [data-generic-video-embed]:not(.is-loading) {
+	min-width: 0;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed--square:not(.is-loading):has(.connect-chat-creation-embed-inner--video) > .connect-chat-creation-embed-media,
+.connect-chat-msg-bubble [data-generic-video-embed]:not(.is-loading) > .connect-chat-creation-embed-media {
+	min-width: 0;
+	width: auto;
 }
 
 .connect-chat-msg-bubble .connect-chat-creation-embed--square .connect-chat-creation-embed-video {
@@ -12989,6 +13094,12 @@ body:has(.chat-hashtag-nav-overlay) {
 	border-radius: inherit;
 	pointer-events: none;
 	z-index: 0;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed--square:not(.is-loading) .connect-chat-creation-embed-video,
+.connect-chat-msg-bubble [data-generic-video-embed]:not(.is-loading) .connect-chat-creation-embed-video {
+	opacity: 1;
+	visibility: visible;
 }
 
 .connect-chat-msg-bubble .connect-chat-creation-embed--square .connect-chat-creation-embed-inner:not(.connect-chat-creation-embed-inner--video):not(.connect-chat-creation-embed-inner--group-carousel):not(.connect-chat-creation-embed-inner--html):not(.connect-chat-creation-embed-inner--pending):not(.connect-chat-creation-embed-inner--error-layout):not(.connect-chat-creation-embed-inner--loading-shell) {

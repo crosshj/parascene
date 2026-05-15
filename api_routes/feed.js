@@ -69,8 +69,8 @@ export default function createFeedRoutes({ queries }) {
 		const afterAt = req.query?.feed_after_image_created_at;
 		const afterId = req.query?.feed_after_image_id;
 		const afterIdNum = Number.parseInt(String(afterId ?? ""), 10);
+		/* Chat load-more after slot-pack page one: cursor without `slot_pack` (plain feed older than boundary). */
 		const hasImageCursor =
-			slotPack &&
 			afterAt != null &&
 			String(afterAt).length > 0 &&
 			Number.isFinite(afterIdNum) &&
@@ -137,7 +137,7 @@ export default function createFeedRoutes({ queries }) {
 		});
 
 		const body = { items, hasMore };
-		if (slotPack && creationPull?.slotPackFeedCursor) {
+		if (creationPull?.slotPackFeedCursor) {
 			const c = creationPull.slotPackFeedCursor;
 			body.feed_cursor = {
 				after_image_created_at: c.created_at,

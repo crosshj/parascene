@@ -339,25 +339,24 @@ function inlineGenericAttachmentTitle(relativePath) {
 	return name || 'Video';
 }
 
+/** Same play glyph as doom scroll (`chat-doom-play-*`). */
+const INLINE_CHAT_VIDEO_PLAY_OVERLAY_HTML =
+	`<div class="chat-doom-play-overlay" aria-hidden="true">` +
+	`<div class="chat-doom-play-overlay-inner">` +
+	`<svg class="chat-doom-play-glyph" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>` +
+	`</div></div>`;
+
 function renderInlineGenericVideo(relativePath, originalUrl) {
 	const rp = escapeHtml(relativePath);
-	const original = escapeHtml(originalUrl);
-	const title = escapeHtml(inlineGenericAttachmentTitle(relativePath));
+	void originalUrl;
+	/* Square placeholder until loaded; paused thumb with doom play + expand icons only. */
 	return (
-		`<span class="user-text-inline-video-wrap">` +
-		`<div class="connect-chat-creation-embed-media connect-chat-creation-embed-media--has-hover-bar">` +
-		`<div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--video">` +
-		`<button type="button" class="user-text-inline-video-play-overlay" aria-label="Play video">` +
-		`<span class="user-text-inline-video-play-overlay-icon" aria-hidden="true">▶</span>` +
-		`</button>` +
-		`<div class="connect-chat-creation-embed-media-hover-bar">` +
-		`<div class="connect-chat-creation-embed-hover-bar-main">` +
-		`<span class="connect-chat-creation-embed-hover-bar-title">${title}</span>` +
-		`</div>` +
-		`<a class="connect-chat-creation-embed-detail-link connect-chat-creation-embed-detail-link--hover-bar user-link creation-link" href="${rp}" target="_blank" rel="noopener noreferrer" aria-label="Open video" title="Open video" data-creation-link-original="${original}">${linkIcon2()}</a>` +
-		`</div>` +
-		`<video class="connect-chat-creation-embed-video" playsinline loop preload="metadata" src="${rp}" aria-label="Attached video" data-inline-click-controls="1"></video>` +
-		`</div></div></span>`
+		`<div class="connect-chat-creation-embed connect-chat-creation-embed--square is-loading" data-generic-video-embed="1">` +
+		`<div class="connect-chat-creation-embed-media">` +
+		`<div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--video" role="button" tabindex="0" aria-label="Open video" title="Open video">` +
+		`<video class="connect-chat-creation-embed-video" playsinline preload="metadata" src="${rp}" aria-label="Attached video" data-inline-video-loading="1"></video>` +
+		INLINE_CHAT_VIDEO_PLAY_OVERLAY_HTML +
+		`</div></div></div>`
 	);
 }
 
@@ -606,6 +605,10 @@ function textWithCreationLinksCore(text, { inlineMarkdown = false } = {}) {
 			if (isInlineEligibleGenericImagePath(basePath)) {
 				const rp = escapeHtml(relativePath);
 				out += `<span class="user-text-inline-image-wrap is-loading"><a href="${rp}" class="user-link creation-link user-text-inline-image-link" aria-label="View full image" data-creation-link-original="${escapeHtml(url)}"><img class="user-text-inline-image" src="${rp}" alt="" width="260" height="260" loading="lazy" decoding="async" data-inline-image-loading="1" /></a></span>`;
+			} else if (isInlineEligibleGenericVideoPath(relativePath)) {
+				out += renderInlineGenericVideo(relativePath, url);
+			} else if (isInlineEligibleGenericHtmlPath(relativePath)) {
+				out += renderInlineGenericHtml(relativePath, url);
 			} else if (isSafeGenericApiPath(basePath)) {
 				out += renderInlineGenericAttachmentCard(relativePath, url);
 			} else {
@@ -1605,11 +1608,13 @@ export function hydrateChatCreationEmbeds(rootEl) {
 
 			if (mediaType === 'video' && videoUrl) {
 				const poster = url ? ` poster="${escapeHtml(url)}"` : '';
-				/* Inline: muted preview, no controls (same affordance as image thumbs via CSS). Full controls + sound in lightbox. */
-				wrap.innerHTML = `<div class="connect-chat-creation-embed-media"><div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--video${nsfwClass}"${nsfwDataAttr} role="button" tabindex="0" aria-label="Open video" title="Open video"><video class="connect-chat-creation-embed-video" autoplay muted loop playsinline preload="metadata" src="${escapeHtml(videoUrl)}"${poster}></video></div></div>`;
+				/* Inline: paused thumb + play/expand icons; full controls + sound in lightbox. */
+				wrap.classList.add('is-loading');
+				wrap.innerHTML = `<div class="connect-chat-creation-embed-media"><div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--video${nsfwClass}"${nsfwDataAttr} role="button" tabindex="0" aria-label="Open video" title="Open video"><video class="connect-chat-creation-embed-video" playsinline preload="metadata" src="${escapeHtml(videoUrl)}"${poster} data-inline-video-loading="1"></video>${INLINE_CHAT_VIDEO_PLAY_OVERLAY_HTML}</div></div>`;
 				trimWhitespaceOnlyTextNodes(wrap);
 				const vid = wrap.querySelector('.connect-chat-creation-embed-video');
 				if (vid instanceof HTMLVideoElement) {
+					bindInlineChatVideoPreviewLoading(wrap, vid);
 					bindChatCreationEmbedMediaLoadError(wrap, vid);
 				}
 				attachChatCreationEmbedDetailLinkReveal(wrap);
@@ -1818,6 +1823,74 @@ export function hydrateYoutubeEmbeds(rootEl) {
 }
 
 /**
+ * Bind load-error handling on pasted generic video embeds (no creation id).
+ *
+ * @param {Element|Document} rootEl
+ */
+function bindInlineChatVideoPreviewLoading(embed, video) {
+	if (!(embed instanceof HTMLElement) || !(video instanceof HTMLVideoElement)) return;
+	if (video.dataset.inlineVideoHydrateBound === '1') return;
+	video.dataset.inlineVideoHydrateBound = '1';
+
+	const reveal = () => {
+		delete video.dataset.inlineVideoLoading;
+		embed.classList.remove('is-loading');
+		if (video.videoWidth > 0 && video.videoHeight > 0) {
+			video.dataset.inlineVideoWidth = String(video.videoWidth);
+			video.dataset.inlineVideoHeight = String(video.videoHeight);
+		}
+	};
+
+	const tryReveal = () => {
+		if (video.error) return;
+		if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0) {
+			reveal();
+		}
+	};
+
+	if (video.dataset.inlineVideoLoading === '1') {
+		embed.classList.add('is-loading');
+	} else {
+		tryReveal();
+	}
+
+	video.addEventListener('loadeddata', tryReveal, { once: true });
+	video.addEventListener('loadedmetadata', tryReveal, { once: true });
+	tryReveal();
+}
+
+function hydrateInlineGenericVideoEmbeds(rootEl) {
+	const root =
+		rootEl instanceof Element || rootEl instanceof Document ? rootEl : document;
+	if (!root || typeof root.querySelectorAll !== 'function') return;
+	for (const embed of root.querySelectorAll('[data-generic-video-embed="1"]')) {
+		if (!(embed instanceof HTMLElement)) continue;
+		if (embed.dataset.genericVideoHydrated === '1') continue;
+		embed.dataset.genericVideoHydrated = '1';
+		const vid = embed.querySelector('.connect-chat-creation-embed-video');
+		if (vid instanceof HTMLVideoElement) {
+			bindInlineChatVideoPreviewLoading(embed, vid);
+			bindChatCreationEmbedMediaLoadError(embed, vid);
+		}
+	}
+}
+
+function hydrateInlineChatCreationVideoEmbeds(rootEl) {
+	const root =
+		rootEl instanceof Element || rootEl instanceof Document ? rootEl : document;
+	if (!root || typeof root.querySelectorAll !== 'function') return;
+	for (const embed of root.querySelectorAll(
+		'.connect-chat-creation-embed[data-creation-id] .connect-chat-creation-embed-inner--video'
+	)) {
+		const inner = embed;
+		const wrap = inner.closest('.connect-chat-creation-embed');
+		const vid = inner.querySelector('.connect-chat-creation-embed-video');
+		if (!(wrap instanceof HTMLElement) || !(vid instanceof HTMLVideoElement)) continue;
+		bindInlineChatVideoPreviewLoading(wrap, vid);
+	}
+}
+
+/**
  * Inline videos (`video[data-inline-click-controls="1"]`) start without controls so the bubble
  * stays compact; first user click reveals controls and starts playback. Idempotent.
  *
@@ -1855,7 +1928,7 @@ export function bindInlineVideoClickControls(rootEl) {
 /**
  * Full hydration pass for any container that renders user text via `processUserText`:
  * link titles + inline image loading + YouTube iframes + creation/share-link card embeds +
- * inline video click-to-play. Use this anywhere you want chat-style rich rendering
+ * generic upload video embeds. Use this anywhere you want chat-style rich rendering
  * (chat messages, comments, etc.).
  *
  * @param {Element|Document} rootEl
@@ -1864,5 +1937,7 @@ export function hydrateRichUserTextEmbeds(rootEl) {
 	hydrateUserTextLinks(rootEl);
 	hydrateYoutubeEmbeds(rootEl);
 	hydrateChatCreationEmbeds(rootEl);
+	hydrateInlineGenericVideoEmbeds(rootEl);
+	hydrateInlineChatCreationVideoEmbeds(rootEl);
 	bindInlineVideoClickControls(rootEl);
 }

@@ -6,6 +6,107 @@ let chatInlineImageLightboxEl = null;
 /** @type {null | ((e: KeyboardEvent) => void)} */
 let chatInlineImageLightboxKeydown = null;
 
+/**
+ * When the lightbox reuses an inline bubble video, restore it on close instead of discarding it.
+ * @type {null | {
+ *   video: HTMLVideoElement,
+ *   inner: HTMLElement,
+ *   playOverlay: Element | null,
+ *   nextSibling: ChildNode | null,
+ *   className: string,
+ *   controls: boolean,
+ *   muted: boolean,
+ *   loop: boolean,
+ *   autoplay: boolean,
+ *   preload: string,
+ *   playsInline: boolean,
+ *   currentTime: number
+ * }}
+ */
+let chatInlineVideoLightboxRestore = null;
+
+/**
+ * @param {HTMLVideoElement} video
+ * @returns {{ width: number, height: number }}
+ */
+function inlineVideoIntrinsicSize(video) {
+	if (!(video instanceof HTMLVideoElement)) return { width: 0, height: 0 };
+	const w = Number(video.videoWidth);
+	const h = Number(video.videoHeight);
+	if (w > 0 && h > 0) return { width: w, height: h };
+	const dw = Number(video.dataset.inlineVideoWidth);
+	const dh = Number(video.dataset.inlineVideoHeight);
+	if (Number.isFinite(dw) && Number.isFinite(dh) && dw > 0 && dh > 0) {
+		return { width: dw, height: dh };
+	}
+	return { width: 0, height: 0 };
+}
+
+/**
+ * @param {HTMLElement} slot
+ * @param {number} width
+ * @param {number} height
+ */
+function applyLightboxVideoSlotAspect(slot, width, height) {
+	const w = Number(width);
+	const h = Number(height);
+	if (!(slot instanceof HTMLElement) || !(w > 0 && h > 0)) return;
+	slot.style.setProperty('--chat-lightbox-video-ar', `${w} / ${h}`);
+	slot.classList.add('chat-inline-image-lightbox-video-slot--sized');
+}
+
+/**
+ * @param {HTMLVideoElement} video
+ */
+function captureInlineVideoLightboxRestore(video) {
+	const inner = video.closest('.connect-chat-creation-embed-inner--video');
+	if (!(inner instanceof HTMLElement)) return null;
+	return {
+		video,
+		inner,
+		playOverlay: inner.querySelector('.chat-doom-play-overlay'),
+		nextSibling: video.nextSibling,
+		className: video.className,
+		controls: video.controls,
+		muted: video.muted,
+		loop: video.loop,
+		autoplay: video.autoplay,
+		preload: video.preload,
+		playsInline: video.playsInline,
+		currentTime: video.currentTime
+	};
+}
+
+function restoreInlineVideoFromLightbox() {
+	const state = chatInlineVideoLightboxRestore;
+	chatInlineVideoLightboxRestore = null;
+	if (!state) return;
+	const { video, inner, playOverlay, nextSibling } = state;
+	if (!(video instanceof HTMLVideoElement) || !(inner instanceof HTMLElement)) return;
+	try {
+		video.pause();
+	} catch {
+		// ignore
+	}
+	video.currentTime = 0;
+	video.className = state.className;
+	video.controls = state.controls;
+	video.muted = state.muted;
+	video.loop = state.loop;
+	video.autoplay = state.autoplay;
+	video.preload = state.preload;
+	video.playsInline = state.playsInline;
+	if (inner.isConnected) {
+		if (playOverlay && playOverlay.parentNode === inner) {
+			inner.insertBefore(video, playOverlay);
+		} else if (nextSibling && nextSibling.parentNode === inner) {
+			inner.insertBefore(video, nextSibling);
+		} else {
+			inner.prepend(video);
+		}
+	}
+}
+
 /** Same rules as chat page mobile layout (768px + coarse-pointer heuristics). */
 function isInlineImageLightboxMobileHistoryLayout() {
 	const isLikelyMobileUa = (() => {
@@ -61,6 +162,7 @@ function attachChatInlineImageLightboxBackdropClose(overlay) {
 }
 
 export function closeChatInlineImageLightbox() {
+	restoreInlineVideoFromLightbox();
 	if (typeof chatInlineImageLightboxKeydown === 'function') {
 		document.removeEventListener('keydown', chatInlineImageLightboxKeydown);
 		chatInlineImageLightboxKeydown = null;
@@ -380,7 +482,7 @@ export function openChatInlineImageLightbox(src, creationMeta, hooks) {
 /**
  * @param {string} src
  * @param {'video' | 'html' | string} kind
- * @param {{ beforeOpen?: () => void, creationId?: string }} [hooks]
+ * @param {{ beforeOpen?: () => void, creationId?: string, sourceVideo?: HTMLVideoElement }} [hooks]
  */
 export function openChatAttachmentPreviewLightbox(src, kind, hooks) {
 	const url = String(src || '').trim();
@@ -409,8 +511,19 @@ export function openChatAttachmentPreviewLightbox(src, kind, hooks) {
 	let revealChatLightboxVideo = null;
 
 	if (kind === 'video') {
+		const sourceVideo =
+			hooks?.sourceVideo instanceof HTMLVideoElement ? hooks.sourceVideo : null;
+		const canReuseInline =
+			sourceVideo &&
+			sourceVideo.parentNode &&
+			!chatInlineVideoLightboxRestore;
+		const { width: intrinsicW, height: intrinsicH } = canReuseInline
+			? inlineVideoIntrinsicSize(sourceVideo)
+			: { width: 0, height: 0 };
+
 		const slot = document.createElement('div');
 		slot.className = 'chat-inline-image-lightbox-video-slot';
+		applyLightboxVideoSlotAspect(slot, intrinsicW, intrinsicH);
 
 		const placeholder = document.createElement('div');
 		placeholder.className = 'chat-inline-image-lightbox-video-placeholder skeleton';
@@ -418,18 +531,39 @@ export function openChatAttachmentPreviewLightbox(src, kind, hooks) {
 		placeholder.setAttribute('aria-live', 'polite');
 		placeholder.setAttribute('aria-label', 'Loading video');
 
-		const video = document.createElement('video');
-		video.className =
-			'chat-inline-image-lightbox-video chat-inline-image-lightbox-video--pending';
-		video.controls = true;
-		video.playsInline = true;
-		video.loop = true;
-		video.setAttribute('loop', '');
-		video.preload = 'auto';
-		video.muted = false;
-		video.defaultMuted = false;
-		video.autoplay = true;
-		video.src = url;
+		/** @type {HTMLVideoElement} */
+		let video;
+		if (canReuseInline) {
+			const restore = captureInlineVideoLightboxRestore(sourceVideo);
+			if (restore) chatInlineVideoLightboxRestore = restore;
+			video = sourceVideo;
+			video.classList.add('chat-inline-image-lightbox-video');
+			video.controls = true;
+			video.playsInline = true;
+			video.loop = true;
+			video.setAttribute('loop', '');
+			video.muted = false;
+			video.defaultMuted = false;
+			video.autoplay = true;
+			if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && intrinsicW > 0) {
+				video.classList.remove('chat-inline-image-lightbox-video--pending');
+			} else {
+				video.classList.add('chat-inline-image-lightbox-video--pending');
+			}
+		} else {
+			video = document.createElement('video');
+			video.className =
+				'chat-inline-image-lightbox-video chat-inline-image-lightbox-video--pending';
+			video.controls = true;
+			video.playsInline = true;
+			video.loop = true;
+			video.setAttribute('loop', '');
+			video.preload = 'auto';
+			video.muted = false;
+			video.defaultMuted = false;
+			video.autoplay = true;
+			video.src = url;
+		}
 		lightboxPreviewVideo = video;
 
 		let placeholderDone = false;
@@ -440,11 +574,21 @@ export function openChatAttachmentPreviewLightbox(src, kind, hooks) {
 			slot.classList.add('chat-inline-image-lightbox-video-slot--playing');
 			video.classList.remove('chat-inline-image-lightbox-video--pending');
 		};
-		video.addEventListener('playing', revealChatLightboxVideo, { once: true });
-		video.addEventListener('error', revealChatLightboxVideo, { once: true });
+
+		const hasInlineFrame =
+			canReuseInline &&
+			video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+			intrinsicW > 0;
+		if (hasInlineFrame) {
+			revealChatLightboxVideo();
+		} else {
+			video.addEventListener('playing', revealChatLightboxVideo, { once: true });
+			video.addEventListener('loadeddata', revealChatLightboxVideo, { once: true });
+			video.addEventListener('error', revealChatLightboxVideo, { once: true });
+		}
 
 		slot.appendChild(video);
-		slot.appendChild(placeholder);
+		if (!hasInlineFrame) slot.appendChild(placeholder);
 		frame.appendChild(slot);
 	} else {
 		const iframe = document.createElement('iframe');
@@ -559,6 +703,7 @@ export function bindChatInlineImageLightboxClickDelegation(rootEl, options = {})
 			openChatAttachmentPreviewLightbox(src, 'video', {
 				...openHooks,
 				...(creationId ? { creationId } : {}),
+				sourceVideo: vid,
 			});
 			return;
 		}
@@ -619,6 +764,7 @@ export function bindChatInlineImageLightboxClickDelegation(rootEl, options = {})
 		openChatAttachmentPreviewLightbox(src, 'video', {
 			...openHooks,
 			...(creationId ? { creationId } : {}),
+			sourceVideo: vid,
 		});
 	};
 

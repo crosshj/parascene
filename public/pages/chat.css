@@ -2854,6 +2854,48 @@ body.chat-page .chat-page-composer-attachment-preview--file {
 	color: var(--text-muted);
 }
 
+body.chat-page .chat-page-composer-attachment-preview--video {
+	position: relative;
+	display: block;
+	background: #000;
+}
+
+body.chat-page .chat-page-composer-attachment-video {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	pointer-events: none;
+}
+
+body.chat-page .chat-page-composer-attachment-play {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	pointer-events: none;
+}
+
+body.chat-page .chat-page-composer-attachment-play::before {
+	content: '';
+	width: 26px;
+	height: 26px;
+	border-radius: 50%;
+	background: color-mix(in srgb, #000 55%, transparent);
+	box-shadow: 0 1px 4px color-mix(in srgb, #000 35%, transparent);
+}
+
+body.chat-page .chat-page-composer-attachment-play::after {
+	content: '';
+	position: absolute;
+	width: 0;
+	height: 0;
+	margin-left: 2px;
+	border-top: 5px solid transparent;
+	border-bottom: 5px solid transparent;
+	border-left: 8px solid rgba(255, 255, 255, 0.95);
+}
+
 body.chat-page .chat-page-composer-attachment-file-name {
 	max-width: 100%;
 	font-size: 0.5rem;

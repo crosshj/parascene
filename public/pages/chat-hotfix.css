@@ -180,15 +180,26 @@ body.chat-page .chat-page-messages .connect-chat-msg-bubble .user-text-inline-im
 	aspect-ratio: unset;
 }
 
-.connect-chat-msg-bubble .connect-chat-creation-embed--square .connect-chat-creation-embed-inner.connect-chat-creation-embed-inner--video {
+.connect-chat-msg-bubble .connect-chat-creation-embed--square.is-loading .connect-chat-creation-embed-inner.connect-chat-creation-embed-inner--video,
+.connect-chat-msg-bubble [data-generic-video-embed].is-loading .connect-chat-creation-embed-inner.connect-chat-creation-embed-inner--video {
+	width: min(260px, 100%);
+	min-width: min(260px, 100%);
+	height: 260px;
+	min-height: 260px;
+	max-height: 260px;
+	aspect-ratio: 1 / 1;
+}
+
+.connect-chat-msg-bubble .connect-chat-creation-embed--square:not(.is-loading) .connect-chat-creation-embed-inner.connect-chat-creation-embed-inner--video,
+.connect-chat-msg-bubble [data-generic-video-embed]:not(.is-loading) .connect-chat-creation-embed-inner.connect-chat-creation-embed-inner--video {
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	width: fit-content;
 	max-width: 100%;
 	min-width: 0;
-	height: 260px;
-	min-height: 260px;
+	height: auto;
+	min-height: 0;
 	max-height: 260px;
 	aspect-ratio: unset;
 	background: color-mix(in srgb, var(--surface-strong) 58%, var(--bg));
