@@ -54,29 +54,42 @@ async function rasterizeWatermarkLogo(w, h, opts = {}) {
 
 /**
  * Compute average luminance in the region where the watermark will be placed.
+ * Sharp's `stats()` does not honor upstream `.extract()` in the same pipeline — it stats the
+ * full original image unless we rasterize the ROI first (see sharpjs/sharp#2803).
  *
  * @param {Buffer} baseBuffer
+ * @param {number} imgW
+ * @param {number} imgH
  * @param {number} left
  * @param {number} top
  * @param {number} regionW
  * @param {number} regionH
  * @returns {Promise<number | null>}
  */
-async function samplePlacementLuminance(baseBuffer, left, top, regionW, regionH) {
+async function samplePlacementLuminance(baseBuffer, imgW, imgH, left, top, regionW, regionH) {
 	try {
-		const stats = await sharp(baseBuffer, { failOn: "none" })
+		const exLeft = Math.max(0, Math.floor(left));
+		const exTop = Math.max(0, Math.floor(top));
+		const maxW = Math.max(1, imgW - exLeft);
+		const maxH = Math.max(1, imgH - exTop);
+		const exW = Math.min(Math.max(1, Math.floor(regionW)), maxW);
+		const exH = Math.min(Math.max(1, Math.floor(regionH)), maxH);
+		const roi = await sharp(baseBuffer, { failOn: "none" })
 			.extract({
-				left: Math.max(0, Math.floor(left)),
-				top: Math.max(0, Math.floor(top)),
-				width: Math.max(1, Math.floor(regionW)),
-				height: Math.max(1, Math.floor(regionH))
+				left: exLeft,
+				top: exTop,
+				width: exW,
+				height: exH
 			})
-			.stats();
+			.toBuffer();
+		const stats = await sharp(roi, { failOn: "none" }).stats();
 		const channels = Array.isArray(stats.channels) ? stats.channels : [];
-		const r = (channels[0]?.mean ?? 0) / 255;
-		const g = (channels[1]?.mean ?? 0) / 255;
-		const b = (channels[2]?.mean ?? 0) / 255;
-		return (0.2126 * r) + (0.7152 * g) + (0.0722 * b);
+		const rMean = (channels[0]?.mean ?? 0) / 255;
+		const gMean =
+			channels.length >= 3 ? (channels[1]?.mean ?? 0) / 255 : rMean;
+		const bMean =
+			channels.length >= 3 ? (channels[2]?.mean ?? 0) / 255 : rMean;
+		return (0.2126 * rMean) + (0.7152 * gMean) + (0.0722 * bMean);
 	} catch {
 		return null;
 	}
@@ -123,7 +136,7 @@ export async function applyVynlyShareWatermark(buffer) {
 	const left = Math.max(0, w - logo.width - pad);
 	const top = Math.max(0, h - logo.height - pad);
 
-	const luminance = await samplePlacementLuminance(orientedBuffer, left, top, logo.width, logo.height);
+	const luminance = await samplePlacementLuminance(orientedBuffer, w, h, left, top, logo.width, logo.height);
 	if (typeof luminance === "number" && luminance >= LIGHT_BG_LUMINANCE_THRESHOLD) {
 		try {
 			logo = await rasterizeWatermarkLogo(w, h, { darkVariant: true });
