@@ -17,7 +17,8 @@ import { initLikeButton } from '../../shared/likes.js';
 import {
 	createDoomScrollShell,
 	createDoomSlideElement,
-	resetDoomSlidePosterPreview
+	revealDoomSlideVideoPlayback,
+	rewindDoomSlideVideo
 } from './doomScrollView.js';
 import { destroyDoomCommentsPopover, openDoomCommentsPopover } from '../doom/doomCommentsPopover.js';
 
@@ -176,10 +177,14 @@ export async function mountChatDoomScroll(opts) {
 	let preferMuted = tryMutedFromStorage();
 
 	function syncMuteUi() {
-		if (muteOn instanceof HTMLElement) muteOn.hidden = !preferMuted;
-		if (muteOff instanceof HTMLElement) muteOff.hidden = preferMuted;
+		const list = slides();
+		const slide = list[activeIdx];
+		const v = slide?.querySelector?.('video.chat-doom-video');
+		const uiMuted = v instanceof HTMLVideoElement ? v.muted : preferMuted;
+		if (muteOn instanceof HTMLElement) muteOn.hidden = !uiMuted;
+		if (muteOff instanceof HTMLElement) muteOff.hidden = uiMuted;
 		if (muteBtn instanceof HTMLElement) {
-			muteBtn.setAttribute('aria-label', preferMuted ? 'Unmute video' : 'Mute video');
+			muteBtn.setAttribute('aria-label', uiMuted ? 'Unmute video' : 'Mute video');
 		}
 	}
 	syncMuteUi();
@@ -388,8 +393,9 @@ export async function mountChatDoomScroll(opts) {
 		for (let i = 0; i < list.length; i += 1) {
 			const s = list[i];
 			const v = s.querySelector('video.chat-doom-video');
-			if (v instanceof HTMLVideoElement) v.pause();
-			if (i !== activeIdx) resetDoomSlidePosterPreview(s);
+			if (!(v instanceof HTMLVideoElement)) continue;
+			v.pause();
+			if (i !== activeIdx) rewindDoomSlideVideo(s);
 		}
 	}
 
@@ -412,22 +418,63 @@ export async function mountChatDoomScroll(opts) {
 		slide.removeAttribute('data-chat-doom-user-paused');
 		const v = slide.querySelector('video.chat-doom-video');
 		if (!(v instanceof HTMLVideoElement)) return;
-		/* Obscured NSFW still autoplays (muted); browser policy allows muted autoplay. */
-		v.muted = slideNsfwBlocked(slide) ? true : preferMuted;
-		const p = v.play();
+		try {
+			v.currentTime = 0;
+		} catch {
+			// ignore
+		}
+		const posterImg = slide.querySelector('img.chat-doom-poster');
+		const alreadyRevealed =
+			posterImg instanceof HTMLImageElement && posterImg.hidden;
+		if (alreadyRevealed) revealDoomSlideVideoPlayback(slide);
+		const revealPlayback = () => {
+			if (slides()[activeIdx] !== slide) return;
+			revealDoomSlideVideoPlayback(slide);
+		};
+		const onFirstFrame = () => {
+			if (slides()[activeIdx] !== slide) {
+				v.removeEventListener('timeupdate', onFirstFrame);
+				return;
+			}
+			if (v.currentTime > 0) {
+				v.removeEventListener('timeupdate', onFirstFrame);
+				revealPlayback();
+			}
+		};
+		v.addEventListener('playing', revealPlayback, { once: true });
+		v.addEventListener('timeupdate', onFirstFrame);
+		if (!v.paused && v.readyState >= 2 && v.currentTime > 0) {
+			revealPlayback();
+		}
+
+		const applyMuteForSlide = (forceMutedForAutoplay) => {
+			/* Obscured NSFW still autoplays (muted); browser policy allows muted autoplay. */
+			v.muted = slideNsfwBlocked(slide) || forceMutedForAutoplay ? true : preferMuted;
+		};
+
+		const runPlay = (forceMutedForAutoplay) => {
+			applyMuteForSlide(forceMutedForAutoplay);
+			const p = v.play();
+			if (!p || typeof p.then !== 'function') return p;
+			return p.then(() => {
+				if (!v.paused && v.readyState >= 2) revealPlayback();
+			});
+		};
+
+		const p = runPlay(false);
 		if (p && typeof p.catch === 'function') {
 			p.catch(() => {
-				preferMuted = true;
-				try {
-					sessionStorage.setItem('chatDoomPreferMuted', '1');
-				} catch {
-					// ignore
+				/* Autoplay with sound is often blocked — retry muted without overwriting user preference. */
+				if (preferMuted || slideNsfwBlocked(slide)) return;
+				const retry = runPlay(true);
+				if (retry && typeof retry.finally === 'function') {
+					retry.finally(() => syncMuteUi());
+				} else {
+					syncMuteUi();
 				}
-				syncMuteUi();
-				v.muted = true;
-				v.play().catch(() => {});
 			});
 		}
+		syncMuteUi();
 		attachActiveProgressListener();
 	}
 
@@ -1098,18 +1145,29 @@ export async function mountChatDoomScroll(opts) {
 
 	if (muteBtn instanceof HTMLElement) {
 		muteBtn.addEventListener('click', () => {
-			preferMuted = !preferMuted;
+			const list = slides();
+			const slide = list[activeIdx];
+			const v = slide?.querySelector?.('video.chat-doom-video');
+			if (!(slide instanceof HTMLElement) || !(v instanceof HTMLVideoElement)) return;
+			if (slideNsfwBlocked(slide)) return;
+
+			preferMuted = !v.muted;
 			try {
 				sessionStorage.setItem('chatDoomPreferMuted', preferMuted ? '1' : '0');
 			} catch {
 				// ignore
 			}
+			v.muted = preferMuted;
 			syncMuteUi();
-			const list = slides();
-			const slide = list[activeIdx];
-			const v = slide?.querySelector?.('video.chat-doom-video');
-			if (v instanceof HTMLVideoElement) {
-				v.muted = preferMuted;
+			if (!preferMuted) {
+				const p = v.play();
+				if (p && typeof p.catch === 'function') {
+					p.catch(() => {
+						v.muted = true;
+						v.play().catch(() => {});
+						syncMuteUi();
+					});
+				}
 			}
 		});
 	}

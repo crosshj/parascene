@@ -133,10 +133,8 @@ export function bindDoomVideoAspectFit(video, mediaWrap, mediaFrame, opts = {}) 
 
 	/* Video stacks above the poster; keep poster visible until playback paints (feed / detail behavior). */
 	video.style.opacity = '0';
-	const revealVideo = () => {
-		video.style.opacity = '1';
-		if (posterImg) posterImg.hidden = true;
-	};
+	const slideEl = video.closest('.chat-doom-slide');
+	const revealVideo = () => revealDoomSlideVideoPlayback(slideEl);
 	video.addEventListener('playing', revealVideo, { once: true });
 	video.addEventListener(
 		'timeupdate',
@@ -149,15 +147,31 @@ export function bindDoomVideoAspectFit(video, mediaWrap, mediaFrame, opts = {}) 
 }
 
 /**
- * Show poster again when leaving a slide (next swipe should preview like feed before play).
- * @param {HTMLElement} slide
+ * Hide poster and show the playing video (first frame / resume visible).
+ * @param {HTMLElement | null | undefined} slide
  */
-export function resetDoomSlidePosterPreview(slide) {
+export function revealDoomSlideVideoPlayback(slide) {
 	if (!(slide instanceof HTMLElement)) return;
 	const video = slide.querySelector('video.chat-doom-video');
 	const posterImg = slide.querySelector('img.chat-doom-poster');
-	if (video instanceof HTMLVideoElement) video.style.opacity = '0';
-	if (posterImg instanceof HTMLImageElement) posterImg.hidden = false;
+	if (video instanceof HTMLVideoElement) video.style.opacity = '1';
+	if (posterImg instanceof HTMLImageElement) posterImg.hidden = true;
+}
+
+/**
+ * Pause and rewind when leaving a slide — keep the last frame visible (no poster swap).
+ * @param {HTMLElement} slide
+ */
+export function rewindDoomSlideVideo(slide) {
+	if (!(slide instanceof HTMLElement)) return;
+	const video = slide.querySelector('video.chat-doom-video');
+	if (!(video instanceof HTMLVideoElement)) return;
+	video.pause();
+	try {
+		video.currentTime = 0;
+	} catch {
+		// ignore seek errors on unloaded media
+	}
 }
 
 /**

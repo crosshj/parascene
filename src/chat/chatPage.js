@@ -6676,6 +6676,47 @@ export async function initChatPage(root, options = {}) {
 		return 0;
 	}
 
+	/**
+	 * Preserve scroll when appending older feed rows (mobile viewport scroll uses `window`, not `[data-chat-messages]`).
+	 * @param {HTMLElement} messagesEl
+	 * @returns {{ kind: 'viewport', scrollY: number, docHeight: number } | { kind: 'element', bottom: number }}
+	 */
+	function capturePseudoFeedLaneScroll(messagesEl) {
+		if (shouldUseViewportScrollForChatMessages()) {
+			return {
+				kind: 'viewport',
+				scrollY: window.scrollY,
+				docHeight: document.documentElement.scrollHeight
+			};
+		}
+		return {
+			kind: 'element',
+			bottom: messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight
+		};
+	}
+
+	/**
+	 * @param {HTMLElement} messagesEl
+	 * @param {{ kind: 'viewport', scrollY: number, docHeight: number } | { kind: 'element', bottom: number }} snap
+	 */
+	function restorePseudoFeedLaneScroll(messagesEl, snap) {
+		if (!snap) return;
+		const apply = () => {
+			if (snap.kind === 'viewport') {
+				const delta = document.documentElement.scrollHeight - snap.docHeight;
+				window.scrollTo(0, Math.max(0, snap.scrollY + delta));
+				return;
+			}
+			const targetTop = messagesEl.scrollHeight - messagesEl.clientHeight - snap.bottom;
+			messagesEl.scrollTop = Math.max(0, targetTop);
+		};
+		apply();
+		requestAnimationFrame(() => {
+			apply();
+			requestAnimationFrame(apply);
+		});
+	}
+
 	function setupFeedChannelViewportLoadFallback(sentinel) {
 		if (!(sentinel instanceof HTMLElement) || !shouldUseViewportScrollForChatMessages()) return;
 		let raf = 0;
@@ -6941,45 +6982,8 @@ export async function initChatPage(root, options = {}) {
 			}
 			addPageUsers(mergedFiltered.map(feedItemToUser));
 
-			if (
-				laneSlug === 'feed' &&
-				isNewestFirstBrowseLane(laneSlug) &&
-				shouldChatFeedUseMobileAlternatingLayout()
-			) {
-				const routeWrapFeed = messagesEl.querySelector('.chat-feed-channel-route');
-				if (routeWrapFeed instanceof HTMLElement) {
-					const prevBottom =
-						messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight;
-					const orderedFull = pseudoColumnPager.getItems();
-					const renderFeedCard = createFeedChannelCardRenderer(messagesEl);
-					const { segments } = partitionChatFeedMobileAlternating(orderedFull);
-					const { routeWrap: routeWrapNew } = createChatFeedChannelElementsFromSegments(
-						segments,
-						renderFeedCard,
-						feedChannelMobileSpotlightOptions
-					);
-					applyExploreCreationsBrowseViewClass(routeWrapNew, 'feed');
-					routeWrapFeed.replaceWith(routeWrapNew);
-					requestAnimationFrame(() => {
-						const targetTop =
-							messagesEl.scrollHeight - messagesEl.clientHeight - prevBottom;
-						messagesEl.scrollTop = Math.max(0, targetTop);
-						requestAnimationFrame(() => {
-							const targetTop2 =
-								messagesEl.scrollHeight - messagesEl.clientHeight - prevBottom;
-							messagesEl.scrollTop = Math.max(0, targetTop2);
-						});
-					});
-				}
-				if (pseudoColumnPager.getHasMore()) {
-					setupFeedChannelLoadMoreObserver(messagesEl);
-				} else {
-					disconnectFeedChannelLoadObserver();
-				}
-				return;
-			}
-
 			if (isNewestFirstBrowseLane(laneSlug)) {
+				const scrollSnap = capturePseudoFeedLaneScroll(messagesEl);
 				const idxBase = cards.children.length;
 				for (let i = 0; i < mergedFiltered.length; i++) {
 					cards.appendChild(
@@ -6993,6 +6997,7 @@ export async function initChatPage(root, options = {}) {
 						)
 					);
 				}
+				restorePseudoFeedLaneScroll(messagesEl, scrollSnap);
 			} else if (anchor) {
 				for (let i = 0; i < mergedFiltered.length; i++) {
 					const row = createFeedItemCard(
