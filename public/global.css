@@ -7565,8 +7565,9 @@ body.chat-page .chat-page-canvas-panel-body {
 	}
 }
 
-/* Defensive: media and long tokens cannot extend past the message column (page scroll stays vertical-only). */
-body.chat-page .chat-page-messages img:not(.chat-doom-poster):not(.chat-doom-avatar):not(.feed-card-img):not(.comment-avatar-img),
+/* Defensive: media and long tokens cannot extend past the message column (page scroll stays vertical-only).
+ * Exclude fixed-aspect tiles (doom, feed cards, challenges hero strip). */
+body.chat-page .chat-page-messages img:not(.chat-doom-poster):not(.chat-doom-avatar):not(.feed-card-img):not(.comment-avatar-img):not(.challenge-pane-hero-image),
 body.chat-page .chat-page-messages video:not(.chat-doom-video) {
 	max-width: 100%;
 	height: auto;

@@ -1220,14 +1220,15 @@ body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topb
 }
 
 /*
- * Bundled chat.css applies `height:auto` to message imgs except `.chat-doom-poster`, which squashes
- * doom avatars + feed card media into thin strips (reads as a “line” beside @handle). Hotfix until
+ * Bundled chat.css applies `height:auto` to message imgs except several fixed-aspect tiles; without that,
+ * challenges hero strip + doom avatars + feed card media squash into thin strips. Hotfix until
  * chat.bundle.css is rebuilt with the same exclusions in source global.css / chat.css.
  */
 body.chat-page .chat-page-messages img.chat-doom-avatar,
 body.chat-page .chat-page-messages img.chat-doom-poster,
 body.chat-page .chat-page-messages img.feed-card-img,
-body.chat-page .chat-page-messages img.comment-avatar-img {
+body.chat-page .chat-page-messages img.comment-avatar-img,
+body.chat-page .chat-page-messages img.challenge-pane-hero-image {
 	display: block !important;
 	max-width: none !important;
 	width: 100% !important;
