@@ -187,7 +187,6 @@ export async function mountChatDoomScroll(opts) {
 			muteBtn.setAttribute('aria-label', uiMuted ? 'Unmute video' : 'Mute video');
 		}
 	}
-	syncMuteUi();
 
 	/** @type {ReturnType<typeof setTimeout> | null} */
 	let pauseFlashTimer = null;
@@ -267,6 +266,9 @@ export async function mountChatDoomScroll(opts) {
 	if (typeof opts.syncChatBrowseViewBodyClass === 'function') opts.syncChatBrowseViewBodyClass();
 
 	const slides = () => Array.from(scroller.querySelectorAll('.chat-doom-slide'));
+	/** @type {number} */
+	let activeIdx = anchorIndex;
+	syncMuteUi();
 
 	/** @type {(() => void) | null} */
 	let detachProgressListener = null;
@@ -335,9 +337,6 @@ export async function mountChatDoomScroll(opts) {
 	requestAnimationFrame(() => {
 		requestAnimationFrame(scrollToAnchor);
 	});
-
-	/** @type {number} */
-	let activeIdx = anchorIndex;
 
 	/**
 	 * `scrollTop` that aligns a slide’s top to the scroller snapport top.
@@ -565,14 +564,33 @@ export async function mountChatDoomScroll(opts) {
 
 	/** Prefetch `/api/feed` pages when within this many slides of the newest-loaded tail (scroll down / older). */
 	const DOOM_FEED_NEAR_END_SLACK = 5;
+	/** Geometry fallback for mobile momentum/snap: fetch when within ~2 viewport heights of scroller tail. */
+	const DOOM_FEED_NEAR_END_MAX_BOTTOM_PX = 2;
 	/** If a page has no new video rows (images-only, dupes, tips), keep paging until we append slides or run out. */
 	const DOOM_FEED_MAX_EMPTY_PAGES_IN_ROW = 32;
+	/** Scroll fallback: debounce near-end checks so mobile scroll does not starve tail fetches. */
+	const DOOM_SCROLL_APPEND_DEBOUNCE_MS = 120;
+
+	function distanceToScrollerBottomPx() {
+		const remain = scroller.scrollHeight - (scroller.scrollTop + scroller.clientHeight);
+		return Number.isFinite(remain) ? Math.max(0, remain) : Infinity;
+	}
 
 	function isNearEndOfSlideList() {
 		const list = slides();
 		if (list.length === 0) return false;
 		const lastIdx = list.length - 1;
-		return activeIdx >= lastIdx - DOOM_FEED_NEAR_END_SLACK;
+		const midpointIdx = Math.max(
+			0,
+			Math.min(lastIdx, slideIndexAtScrollerMidpoint())
+		);
+		const nearByIndex = midpointIdx >= lastIdx - DOOM_FEED_NEAR_END_SLACK;
+		if (nearByIndex) return true;
+		const bottomSlackPx = Math.max(
+			scroller.clientHeight * DOOM_FEED_NEAR_END_MAX_BOTTOM_PX,
+			1
+		);
+		return distanceToScrollerBottomPx() <= bottomSlackPx;
 	}
 
 	/** Pause every video on first pixel of motion — before debounced slide resolution — stops audio bleed. */
@@ -590,8 +608,23 @@ export async function mountChatDoomScroll(opts) {
 		}, 80);
 	}
 
+	/** @type {ReturnType<typeof setTimeout> | null} */
+	let doomScrollAppendTimer = null;
+
+	function scheduleNearEndAppendCheckFromScroll() {
+		if (feedBusy || !feedHasMore) return;
+		if (doomScrollAppendTimer != null) window.clearTimeout(doomScrollAppendTimer);
+		doomScrollAppendTimer = window.setTimeout(() => {
+			doomScrollAppendTimer = null;
+			if (feedBusy || !feedHasMore) return;
+			if (!isNearEndOfSlideList()) return;
+			void maybeAppendMore(true);
+		}, DOOM_SCROLL_APPEND_DEBOUNCE_MS);
+	}
+
 	function onScrollerScroll() {
 		pauseAllVideosOnUserSwipeIntent();
+		scheduleNearEndAppendCheckFromScroll();
 		scheduleResolveAfterScroll();
 	}
 	scroller.addEventListener('scroll', onScrollerScroll, { passive: true });
@@ -1206,6 +1239,10 @@ export async function mountChatDoomScroll(opts) {
 		if (doomIoAppendTimer != null) {
 			window.clearTimeout(doomIoAppendTimer);
 			doomIoAppendTimer = null;
+		}
+		if (doomScrollAppendTimer != null) {
+			window.clearTimeout(doomScrollAppendTimer);
+			doomScrollAppendTimer = null;
 		}
 		if (mountDoomUrlSyncTimer != null) {
 			window.clearTimeout(mountDoomUrlSyncTimer);
