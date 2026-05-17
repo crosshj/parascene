@@ -132,9 +132,8 @@ export function bindDoomVideoAspectFit(video, mediaWrap, mediaFrame, opts = {}) 
 		ro.observe(mediaWrap);
 	}
 
-	/* Video stacks above the poster; keep poster visible until playback paints (feed / detail behavior). */
-	video.style.opacity = '0';
 	const slideEl = video.closest('.chat-doom-slide');
+	prepareDoomSlideVideoPlayback(slideEl);
 	bindDoomVideoRevealWhenFrameReady(video, slideEl, {
 		shouldReveal: () => slideEl instanceof HTMLElement && slideEl.classList.contains('chat-doom-slide--active')
 	});
@@ -142,6 +141,60 @@ export function bindDoomVideoAspectFit(video, mediaWrap, mediaFrame, opts = {}) 
 
 /** @type {WeakMap<HTMLVideoElement, () => void>} */
 const doomVideoRevealCleanupByVideo = new WeakMap();
+
+function doomRevealNeedsExtraFrameGate() {
+	try {
+		if (window.matchMedia('(pointer: coarse)').matches) return true;
+	} catch {
+		// ignore
+	}
+	return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+}
+
+/**
+ * @param {HTMLImageElement | null | undefined} posterImg
+ */
+function doomPosterImageReady(posterImg) {
+	if (!(posterImg instanceof HTMLImageElement)) return true;
+	if (posterImg.hidden) return true;
+	return posterImg.complete && posterImg.naturalWidth > 0;
+}
+
+/**
+ * Show creation poster, hide video until a composited frame (mobile-safe).
+ * @param {HTMLElement | null | undefined} slide
+ */
+export function prepareDoomSlideVideoPlayback(slide) {
+	if (!(slide instanceof HTMLElement)) return;
+	const video = slide.querySelector('video.chat-doom-video');
+	const posterImg = slide.querySelector('img.chat-doom-poster');
+	if (video instanceof HTMLVideoElement) {
+		video.classList.add('chat-doom-video--awaiting-frame');
+		video.style.opacity = '0';
+	}
+	if (posterImg instanceof HTMLImageElement) {
+		posterImg.hidden = false;
+	}
+}
+
+/**
+ * @param {HTMLElement | null | undefined} slide
+ * @param {() => void} onReady
+ */
+function whenDoomPosterReady(slide, onReady) {
+	const posterImg = slide?.querySelector?.('img.chat-doom-poster');
+	if (!(posterImg instanceof HTMLImageElement) || doomPosterImageReady(posterImg)) {
+		onReady();
+		return;
+	}
+	const done = () => {
+		posterImg.removeEventListener('load', done);
+		posterImg.removeEventListener('error', done);
+		onReady();
+	};
+	posterImg.addEventListener('load', done, { once: true });
+	posterImg.addEventListener('error', done, { once: true });
+}
 
 /**
  * Keep poster visible until the video has a composited frame (not merely `playing`).
@@ -182,12 +235,33 @@ export function bindDoomVideoRevealWhenFrameReady(video, slide, opts = {}) {
 		doomVideoRevealCleanupByVideo.delete(video);
 	};
 
-	const reveal = () => {
+	const revealNow = () => {
 		if (done) return;
 		if (!shouldReveal()) return;
 		done = true;
 		cleanup();
 		revealDoomSlideVideoPlayback(slide);
+	};
+
+	const reveal = () => {
+		if (done) return;
+		if (!shouldReveal()) return;
+		whenDoomPosterReady(slide, revealNow);
+	};
+
+	const scheduleRvfc = () => {
+		if (typeof video.requestVideoFrameCallback !== 'function') return;
+		const needExtra = doomRevealNeedsExtraFrameGate();
+		let seen = 0;
+		const onFrame = () => {
+			seen += 1;
+			if (needExtra && seen < 2) {
+				rvfcId = video.requestVideoFrameCallback(onFrame);
+				return;
+			}
+			reveal();
+		};
+		rvfcId = video.requestVideoFrameCallback(onFrame);
 	};
 
 	if (!video.paused && video.readyState >= 2 && video.currentTime > 0) {
@@ -200,11 +274,7 @@ export function bindDoomVideoRevealWhenFrameReady(video, slide, opts = {}) {
 	};
 	video.addEventListener('timeupdate', onTimeUpdate);
 
-	if (typeof video.requestVideoFrameCallback === 'function') {
-		rvfcId = video.requestVideoFrameCallback(() => {
-			reveal();
-		});
-	}
+	scheduleRvfc();
 
 	doomVideoRevealCleanupByVideo.set(video, cleanup);
 	return cleanup;
@@ -218,7 +288,10 @@ export function revealDoomSlideVideoPlayback(slide) {
 	if (!(slide instanceof HTMLElement)) return;
 	const video = slide.querySelector('video.chat-doom-video');
 	const posterImg = slide.querySelector('img.chat-doom-poster');
-	if (video instanceof HTMLVideoElement) video.style.opacity = '1';
+	if (video instanceof HTMLVideoElement) {
+		video.classList.remove('chat-doom-video--awaiting-frame');
+		video.style.opacity = '1';
+	}
 	if (posterImg instanceof HTMLImageElement) posterImg.hidden = true;
 }
 
@@ -236,6 +309,7 @@ export function rewindDoomSlideVideo(slide) {
 	} catch {
 		// ignore seek errors on unloaded media
 	}
+	prepareDoomSlideVideoPlayback(slide);
 }
 
 /**
@@ -347,7 +421,7 @@ export function createDoomSlideElement(item, viewerUserId, slideOpts = {}) {
 	if (Number.isFinite(uid) && uid > 0) slide.dataset.userId = String(uid);
 
 	const video = document.createElement('video');
-	video.className = 'chat-doom-video';
+	video.className = 'chat-doom-video chat-doom-video--awaiting-frame';
 	video.setAttribute('playsinline', '');
 	video.playsInline = true;
 	video.loop = true;
@@ -372,6 +446,9 @@ export function createDoomSlideElement(item, viewerUserId, slideOpts = {}) {
 		posterImg.alt = '';
 		posterImg.decoding = 'async';
 		posterImg.loading = bgLoad ? 'lazy' : 'eager';
+		if (!bgLoad && 'fetchPriority' in posterImg) {
+			posterImg.fetchPriority = 'high';
+		}
 		let posterTry = 0;
 		const tryPosterSrc = () => {
 			const url = posterCandidates[posterTry];
