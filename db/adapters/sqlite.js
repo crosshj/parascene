@@ -2435,57 +2435,108 @@ export async function openDb() {
 
 				return { rows: pageRows, hasMore };
 			},
-			getVideoFeedPage: async (viewerId, { limit = 20, offset = 0, includeOwnPosts = false } = {}) => {
+			getSitePublishedVideoFeedPage: async (
+				viewerId,
+				{ limit = 20, mode = "head", startCreationId = null, afterCreatedImageId = null } = {}
+			) => {
 				const safeLimit = Math.min(Math.max(1, Number(limit) || 20), 100);
-				const safeOffset = Math.max(0, Number(offset) || 0);
-				const stmt = db.prepare(
-					`SELECT fi.id, COALESCE(NULLIF(TRIM(ci.title), ''), fi.title) AS title, fi.summary, fi.author, fi.tags, fi.created_at,
-                  fi.created_image_id, ci.filename, ci.file_path, ci.user_id, ci.meta,
-                  up.user_name AS author_user_name,
-                  up.display_name AS author_display_name,
-                  up.avatar_url AS author_avatar_url,
-                  CASE WHEN json_extract(u.meta,'$.plan') = 'founder' THEN 'founder' ELSE 'free' END AS author_plan,
-                  COALESCE(ci.file_path, CASE WHEN ci.filename IS NOT NULL THEN '/api/images/created/' || ci.filename ELSE NULL END) as url,
-                  0 AS like_count,
-                  0 AS comment_count,
-                  CASE WHEN ? IS NOT NULL AND vl.user_id IS NOT NULL THEN 1 ELSE 0 END AS viewer_liked,
-                  (json_extract(ci.meta,'$.nsfw') = 1 OR json_extract(ci.meta,'$.nsfw') = 'true') AS nsfw
-           FROM feed_items fi
-           LEFT JOIN created_images ci ON fi.created_image_id = ci.id
-           LEFT JOIN user_profiles up ON up.user_id = ci.user_id
-           LEFT JOIN users u ON u.id = ci.user_id
-           LEFT JOIN likes_created_image vl
-             ON vl.created_image_id = fi.created_image_id
-            AND vl.user_id = ?
-          WHERE ci.user_id IS NOT NULL
-            AND (ci.unavailable_at IS NULL OR ci.unavailable_at = '')
-            AND json_extract(ci.meta,'$.media_type') = 'video'
-            AND ci.meta IS NOT NULL
-            AND (
-              EXISTS (
-                SELECT 1
-                FROM user_follows uf
-                WHERE uf.follower_id = ?
-                  AND uf.following_id = ci.user_id
-              )
-              OR (? = 1 AND ci.user_id = ?)
-            )
-          ORDER BY fi.created_at DESC, fi.created_image_id DESC
-          LIMIT ? OFFSET ?`
-				);
-				const rows = stmt.all(
-					viewerId,
-					viewerId,
-					viewerId,
-					includeOwnPosts ? 1 : 0,
-					viewerId,
-					safeLimit + 1,
-					safeOffset
-				);
+				const baseSelect = `
+          SELECT fi.id, COALESCE(NULLIF(TRIM(ci.title), ''), fi.title) AS title, fi.summary, fi.author, fi.tags, fi.created_at,
+                 fi.created_image_id, ci.filename, ci.file_path, ci.user_id, ci.meta,
+                 up.user_name AS author_user_name,
+                 up.display_name AS author_display_name,
+                 up.avatar_url AS author_avatar_url,
+                 CASE WHEN json_extract(u.meta,'$.plan') = 'founder' THEN 'founder' ELSE 'free' END AS author_plan,
+                 COALESCE(ci.file_path, CASE WHEN ci.filename IS NOT NULL THEN '/api/images/created/' || ci.filename ELSE NULL END) as url,
+                 0 AS like_count,
+                 0 AS comment_count,
+                 CASE WHEN ? IS NOT NULL AND vl.user_id IS NOT NULL THEN 1 ELSE 0 END AS viewer_liked,
+                 (json_extract(ci.meta,'$.nsfw') = 1 OR json_extract(ci.meta,'$.nsfw') = 'true') AS nsfw
+            FROM feed_items fi
+            LEFT JOIN created_images ci ON fi.created_image_id = ci.id
+            LEFT JOIN user_profiles up ON up.user_id = ci.user_id
+            LEFT JOIN users u ON u.id = ci.user_id
+            LEFT JOIN likes_created_image vl
+              ON vl.created_image_id = fi.created_image_id
+             AND vl.user_id = ?
+           WHERE ci.user_id IS NOT NULL
+             AND (ci.unavailable_at IS NULL OR ci.unavailable_at = '')
+             AND ci.meta IS NOT NULL
+             AND json_extract(ci.meta,'$.media_type') = 'video'
+        `;
+				const fetchRowsByWhere = (whereSql, whereArgs) => {
+					const stmt = db.prepare(
+						`${baseSelect} ${whereSql}
+           ORDER BY fi.created_at DESC, fi.created_image_id DESC
+           LIMIT ?`
+					);
+					return stmt.all(viewerId, viewerId, ...whereArgs, safeLimit + 1);
+				};
+				let rows;
+				if (mode === "from_anchor") {
+					const anchorId = Number(startCreationId);
+					if (!Number.isFinite(anchorId) || anchorId <= 0) {
+						return { rows: [], hasMore: false, cursor: null };
+					}
+					const anchorStmt = db.prepare(
+						`SELECT fi.created_at
+             FROM feed_items fi
+             LEFT JOIN created_images ci ON fi.created_image_id = ci.id
+            WHERE fi.created_image_id = ?
+              AND ci.user_id IS NOT NULL
+              AND (ci.unavailable_at IS NULL OR ci.unavailable_at = '')
+              AND ci.meta IS NOT NULL
+              AND json_extract(ci.meta,'$.media_type') = 'video'
+            LIMIT 1`
+					);
+					const anchor = anchorStmt.get(anchorId);
+					if (!anchor?.created_at) return { rows: [], hasMore: false, cursor: null };
+					rows = fetchRowsByWhere(
+						`AND (
+              fi.created_image_id = ?
+              OR fi.created_at < ?
+              OR (fi.created_at = ? AND fi.created_image_id < ?)
+            )`,
+						[
+							anchorId,
+							String(anchor.created_at),
+							String(anchor.created_at),
+							anchorId
+						]
+					);
+				} else if (mode === "older_than") {
+					const cursorId = Number(afterCreatedImageId);
+					if (!Number.isFinite(cursorId) || cursorId <= 0) {
+						return { rows: [], hasMore: false, cursor: null };
+					}
+					const cursorStmt = db.prepare(
+						`SELECT fi.created_at
+             FROM feed_items fi
+             LEFT JOIN created_images ci ON fi.created_image_id = ci.id
+            WHERE fi.created_image_id = ?
+              AND ci.user_id IS NOT NULL
+              AND (ci.unavailable_at IS NULL OR ci.unavailable_at = '')
+              AND ci.meta IS NOT NULL
+              AND json_extract(ci.meta,'$.media_type') = 'video'
+            LIMIT 1`
+					);
+					const cursor = cursorStmt.get(cursorId);
+					if (!cursor?.created_at) return { rows: [], hasMore: false, cursor: null };
+					rows = fetchRowsByWhere(
+						`AND (fi.created_at < ? OR (fi.created_at = ? AND fi.created_image_id < ?))`,
+						[String(cursor.created_at), String(cursor.created_at), cursorId]
+					);
+				} else {
+					rows = fetchRowsByWhere("", []);
+				}
 				const hasMore = rows.length > safeLimit;
 				const pageRows = rows.slice(0, safeLimit);
 				enrichSqliteFeedPageRowsWithCounts(db, pageRows);
-				return { rows: pageRows, hasMore };
+				const last = pageRows.length > 0 ? pageRows[pageRows.length - 1] : null;
+				const cursor = last
+					? { after_created_image_id: String(last.created_image_id ?? last.id) }
+					: null;
+				return { rows: pageRows, hasMore, cursor };
 			},
 			getPageAfterImageCursor: async (
 				viewerId,
@@ -2617,14 +2668,6 @@ export async function openDb() {
             AND (ci.unavailable_at IS NULL OR ci.unavailable_at = '')
             AND (${followFilter})
 				`;
-				// Videos: media_type = 'video' in meta
-				const vidStmt = db.prepare(`
-          SELECT ${colsFn('?')} ${joins} ${where}
-            AND json_extract(ci.meta,'$.media_type') = 'video'
-            AND ci.meta IS NOT NULL
-          ORDER BY fi.created_at DESC, fi.created_image_id DESC
-          LIMIT ?
-				`);
 				// Images: anything that is not a video
 				const imgStmt = db.prepare(`
           SELECT ${colsFn('?')} ${joins} ${where}
@@ -2633,9 +2676,12 @@ export async function openDb() {
           LIMIT ?
 				`);
 				const own = includeOwnPosts ? 1 : 0;
-				const videos = vidStmt.all(viewerId, viewerId, viewerId, viewerId, own, viewerId, safeVid);
+				const siteVideoPage = await selectFeedItems.getSitePublishedVideoFeedPage(viewerId, {
+					mode: "head",
+					limit: safeVid
+				});
+				const videos = Array.isArray(siteVideoPage?.rows) ? siteVideoPage.rows : [];
 				const images = imgStmt.all(viewerId, viewerId, viewerId, viewerId, own, viewerId, safeImg);
-				enrichSqliteFeedPageRowsWithCounts(db, videos);
 				enrichSqliteFeedPageRowsWithCounts(db, images);
 				return { videos, images };
 			}

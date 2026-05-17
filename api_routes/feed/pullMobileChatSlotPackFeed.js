@@ -1,6 +1,6 @@
 /**
  * Mobile chat `#feed` slot-pack page one:
- *   1. One query: latest 12 videos + latest 9 images from followed feed.
+ *   1. One query family: latest 12 site-wide videos + latest 9 images from followed feed.
  *   2. Interleave into 4v+3i × 3 head (in recency order per type).
  *   3. `feed_cursor` = newer of (least-recent head video, least-recent head image). Tail = older than cursor.
  *   4. Page 2+ = plain feed older than `feed_cursor`; response includes advanced `feed_cursor` for the next page.

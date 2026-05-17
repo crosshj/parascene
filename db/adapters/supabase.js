@@ -3,6 +3,7 @@ import path from "path";
 import sharp from "sharp";
 import { RELATED_PARAM_DEFAULTS, RELATED_PARAM_KEYS } from "./relatedParams.js";
 import { getThumbnailUrl } from "../../api_routes/utils/url.js";
+import { putAnchorCreationFirst } from "../../api_routes/feed/doomSiteVideoTimeline.js";
 
 // Note: Supabase schema must be provisioned separately (SQL editor/migrations).
 // This adapter expects all tables to be prefixed with "prsn_".
@@ -2887,42 +2888,24 @@ export function openDb() {
 
 				return { rows: mapped, hasMore };
 			},
-			getVideoFeedPage: async (viewerId, { limit = 20, offset = 0, includeOwnPosts = false } = {}) => {
+			getSitePublishedVideoFeedPage: async (
+				viewerId,
+				{ limit = 20, mode = "head", startCreationId = null, afterCreatedImageId = null } = {}
+			) => {
 				const safeLimit = Math.min(Math.max(1, Number(limit) || 20), 100);
-				const safeOffset = Math.max(0, Number(offset) || 0);
-				if (viewerId === null || viewerId === undefined) {
-					return { rows: [], hasMore: false };
-				}
-
-				const { data: followRows, error: followError } = await serviceClient
-					.from(prefixedTable("user_follows"))
-					.select("following_id")
-					.eq("follower_id", viewerId);
-				if (followError) throw followError;
-
-				const followingIdSet = new Set(
-					(followRows ?? [])
-						.map((row) => row?.following_id)
-						.filter((id) => id !== null && id !== undefined)
-						.map((id) => String(id))
-				);
-				if (includeOwnPosts) followingIdSet.add(String(viewerId));
-				if (followingIdSet.size === 0) return { rows: [], hasMore: false };
-
-				const followingIds = Array.from(followingIdSet);
-				const { data: pageData, error: pageError } = await serviceClient
-					.from(prefixedTable("feed_items"))
-					.select(
-						"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images!inner(filename, file_path, user_id, unavailable_at, meta, title)"
-					)
-					.in("prsn_created_images.user_id", followingIds)
-					.eq("prsn_created_images.meta->>media_type", "video")
-					.order("created_at", { ascending: false })
-					.order("created_image_id", { ascending: false })
-					.range(safeOffset, safeOffset + safeLimit);
-				if (pageError) throw pageError;
-
-				const items = (pageData ?? []).map((item) => {
+				const rowIsStrictlyOlder = (item, cursorAt, cursorId) => {
+					const ra = String(item?.created_at ?? "");
+					const ca = String(cursorAt ?? "");
+					if (ra < ca) return true;
+					if (ra > ca) return false;
+					const rid = Number(item?.created_image_id ?? item?.id);
+					const cid = Number(cursorId);
+					if (!Number.isFinite(rid) || !Number.isFinite(cid)) {
+						return ra === ca && String(item?.created_image_id ?? item?.id) < String(cursorId);
+					}
+					return rid < cid;
+				};
+				const mapFeedRow = (item) => {
 					const { prsn_created_images, ...rest } = item;
 					const filename = prsn_created_images?.filename ?? null;
 					const file_path = prsn_created_images?.file_path ?? null;
@@ -2944,17 +2927,97 @@ export function openDb() {
 						comment_count: 0,
 						viewer_liked: false
 					};
-				});
-				const filtered = items.filter((item) => {
-					if (item.user_id === null || item.user_id === undefined) return false;
-					if (item.unavailable_at != null && item.unavailable_at !== "") return false;
-					return followingIdSet.has(String(item.user_id));
-				});
-
-				const hasMore = filtered.length > safeLimit;
-				const pageRows = filtered.slice(0, safeLimit);
+				};
+				const cols =
+					"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images!inner(filename, file_path, user_id, unavailable_at, meta, title)";
+				const cap = Math.min(300, Math.max(safeLimit + 1, safeLimit * 4));
+				let query = serviceClient
+					.from(prefixedTable("feed_items"))
+					.select(cols)
+					.eq("prsn_created_images.meta->>media_type", "video")
+					.order("created_at", { ascending: false })
+					.order("created_image_id", { ascending: false })
+					.limit(cap);
+				if (mode === "from_anchor") {
+					const anchorId = Number(startCreationId);
+					if (!Number.isFinite(anchorId) || anchorId <= 0) {
+						return { rows: [], hasMore: false, cursor: null };
+					}
+					const { data: anchorRow, error: anchorErr } = await serviceClient
+						.from(prefixedTable("feed_items"))
+						.select("created_at, created_image_id, prsn_created_images!inner(unavailable_at, meta)")
+						.eq("created_image_id", anchorId)
+						.eq("prsn_created_images.meta->>media_type", "video")
+						.maybeSingle();
+					if (anchorErr) throw anchorErr;
+					if (!anchorRow?.created_at) return { rows: [], hasMore: false, cursor: null };
+					query = query.lte("created_at", String(anchorRow.created_at));
+					const { data, error } = await query;
+					if (error) throw error;
+					const filtered = putAnchorCreationFirst(
+						(data ?? [])
+							.map(mapFeedRow)
+							.filter((row) => {
+								if (row.unavailable_at != null && row.unavailable_at !== "") return false;
+								const rid = Number(row?.created_image_id ?? row?.id);
+								if (rid === anchorId) return true;
+								return rowIsStrictlyOlder(row, anchorRow.created_at, anchorId);
+							}),
+						anchorId
+					);
+					const hasMore = filtered.length > safeLimit;
+					const pageRows = filtered.slice(0, safeLimit);
+					const mapped = await enrichFeedCreationRows(viewerId, pageRows);
+					const last = mapped.length > 0 ? mapped[mapped.length - 1] : null;
+					const cursor = last
+						? { after_created_image_id: String(last.created_image_id ?? last.id) }
+						: null;
+					return { rows: mapped, hasMore, cursor };
+				}
+				if (mode === "older_than") {
+					const cursorId = Number(afterCreatedImageId);
+					if (!Number.isFinite(cursorId) || cursorId <= 0) {
+						return { rows: [], hasMore: false, cursor: null };
+					}
+					const { data: cursorRow, error: cursorErr } = await serviceClient
+						.from(prefixedTable("feed_items"))
+						.select("created_at, created_image_id, prsn_created_images!inner(unavailable_at, meta)")
+						.eq("created_image_id", cursorId)
+						.eq("prsn_created_images.meta->>media_type", "video")
+						.maybeSingle();
+					if (cursorErr) throw cursorErr;
+					if (!cursorRow?.created_at) return { rows: [], hasMore: false, cursor: null };
+					query = query.lte("created_at", String(cursorRow.created_at));
+					const { data, error } = await query;
+					if (error) throw error;
+					const filtered = (data ?? [])
+						.map(mapFeedRow)
+						.filter((row) =>
+							(row.unavailable_at == null || row.unavailable_at === "") &&
+							rowIsStrictlyOlder(row, cursorRow.created_at, cursorId)
+						);
+					const hasMore = filtered.length > safeLimit;
+					const pageRows = filtered.slice(0, safeLimit);
+					const mapped = await enrichFeedCreationRows(viewerId, pageRows);
+					const last = mapped.length > 0 ? mapped[mapped.length - 1] : null;
+					const cursor = last
+						? { after_created_image_id: String(last.created_image_id ?? last.id) }
+						: null;
+					return { rows: mapped, hasMore, cursor };
+				}
+				const { data, error } = await query;
+				if (error) throw error;
+				const mappedRows = (data ?? [])
+					.map(mapFeedRow)
+					.filter((row) => row.unavailable_at == null || row.unavailable_at === "");
+				const hasMore = mappedRows.length > safeLimit;
+				const pageRows = mappedRows.slice(0, safeLimit);
 				const mapped = await enrichFeedCreationRows(viewerId, pageRows);
-				return { rows: mapped, hasMore };
+				const last = mapped.length > 0 ? mapped[mapped.length - 1] : null;
+				const cursor = last
+					? { after_created_image_id: String(last.created_image_id ?? last.id) }
+					: null;
+				return { rows: mapped, hasMore, cursor };
 			},
 			getPageAfterImageCursor: async (
 				viewerId,
@@ -3177,22 +3240,18 @@ export function openDb() {
 						.map((id) => String(id))
 				);
 				if (includeOwnPosts) followingIdSet.add(String(viewerId));
-				if (followingIdSet.size === 0) return { videos: [], images: [] };
 
 				const followingIds = Array.from(followingIdSet);
 				const cols =
 					"id, title, summary, author, tags, created_at, created_image_id, prsn_created_images!inner(filename, file_path, user_id, unavailable_at, meta, title)";
 
-				const [vidResult, imgResult] = await Promise.all([
-					serviceClient
-						.from(prefixedTable("feed_items"))
-						.select(cols)
-						.in("prsn_created_images.user_id", followingIds)
-						.eq("prsn_created_images.meta->>media_type", "video")
-						.order("created_at", { ascending: false })
-						.order("created_image_id", { ascending: false })
-						.limit(safeVid),
-					serviceClient
+				const [siteVideoPage, imgResult] = await Promise.all([
+					selectFeedItems.getSitePublishedVideoFeedPage(viewerId, {
+						mode: "head",
+						limit: safeVid
+					}),
+					followingIds.length > 0
+						? serviceClient
 						.from(prefixedTable("feed_items"))
 						.select(cols)
 						.in("prsn_created_images.user_id", followingIds)
@@ -3200,8 +3259,8 @@ export function openDb() {
 						.order("created_at", { ascending: false })
 						.order("created_image_id", { ascending: false })
 						.limit(safeImg)
+						: Promise.resolve({ data: [], error: null })
 				]);
-				if (vidResult.error) throw vidResult.error;
 				if (imgResult.error) throw imgResult.error;
 
 				const mapRow = (item) => {
@@ -3225,9 +3284,8 @@ export function openDb() {
 					(item.unavailable_at == null || item.unavailable_at === "") &&
 					followingIdSet.has(String(item.user_id));
 
-				let videos = (vidResult.data ?? []).map(mapRow).filter(filterRow);
+				let videos = Array.isArray(siteVideoPage?.rows) ? siteVideoPage.rows : [];
 				let images = (imgResult.data ?? []).map(mapRow).filter(filterRow);
-				videos = await enrichFeedCreationRows(viewerId, videos);
 				images = await enrichFeedCreationRows(viewerId, images);
 				return { videos, images };
 			}

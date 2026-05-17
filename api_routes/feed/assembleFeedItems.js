@@ -24,11 +24,8 @@ export async function assembleFeedItems({
 }) {
 	const enableNsfw = Boolean(user.meta && user.meta.enableNsfw === true);
 	const { rows, hasMore, isNewbieFeed } = creationPull;
-	const skipBlogMerge =
-		Boolean(creationPull?.mobileChatSlotPackPageOne) || Boolean(creationPull?.videoFeedOnly);
-	const skipEngagement =
-		Boolean(creationPull?.videoFeedOnly) ||
-		Boolean(creationPull?.mobileChatSlotPackContinuation);
+	const skipBlogMerge = Boolean(creationPull?.mobileChatSlotPackPageOne);
+	const skipEngagement = Boolean(creationPull?.mobileChatSlotPackContinuation);
 	const surface =
 		typeof feedSurface === "string" ? feedSurface.trim().toLowerCase() : "";
 

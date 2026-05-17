@@ -1,10 +1,9 @@
 /**
- * Feed API routes (`GET /api/feed`, `GET /api/feed/version`).
+ * Feed API routes (`GET /api/feed`, `GET /api/feed/doom`, `GET /api/feed/version`).
  *
- * Pipeline overview:
- *   1. Pull creation rows (followed → explore → newbie fallback), or slot-pack / cursor pulls — `./feed/pullCreationFeedRows.js`, `./feed/pullMobileChatSlotPackFeed.js`
- *   2. On first page: optional challenge snapshot for engagement card — `./feed/pullChallengeFeedSnapshot.js`
- *   3. Assemble JSON (`transform`, NSFW, blog merge, engagement merge, newbie tips) — `./feed/assembleFeedItems.js`
+ * `/api/feed` — chat feed (followed, slot-pack, cursor tail). `./feed/pullCreationFeedRows.js`, `./feed/pullMobileChatSlotPackFeed.js`
+ * `/api/feed/doom` — site-wide video timeline for doom scroll. `./feed/pullDoomFeedRows.js`
+ * Both use `./feed/assembleFeedItems.js` (feed only) or `transformFeedCreationRow` (doom).
  */
 import express from "express";
 import { pullCreationFeedRows } from "./feed/pullCreationFeedRows.js";
@@ -12,11 +11,12 @@ import {
 	pullCreationFeedRowsAfterImageCursor,
 	pullMobileChatSlotPackFeedPageOne
 } from "./feed/pullMobileChatSlotPackFeed.js";
-import { pullVideoFeedRows } from "./feed/pullVideoFeedRows.js";
+import { pullDoomFeedRows } from "./feed/pullDoomFeedRows.js";
 import { pullChallengeFeedSnapshot } from "./feed/pullChallengeFeedSnapshot.js";
 import { assembleFeedItems } from "./feed/assembleFeedItems.js";
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { removeJoinedPrivateChannelInviteDmMessages } from "./utils/chatInviteCleanup.js";
+import { transformFeedCreationRow } from "./feed/transformFeedCreationRow.js";
 
 export default function createFeedRoutes({ queries }) {
 	const router = express.Router();
@@ -65,7 +65,6 @@ export default function createFeedRoutes({ queries }) {
 		const offset = Math.max(0, Number(req.query?.offset) || 0);
 		const showOwnPostsInFeed = Boolean(user.meta && user.meta.showOwnPostsInFeed === true);
 		const slotPack = String(req.query?.slot_pack || "").trim() === "mobile_chat_v1";
-		const videosOnly = String(req.query?.creation_media || "").trim() === "video";
 		const afterAt = req.query?.feed_after_image_created_at;
 		const afterId = req.query?.feed_after_image_id;
 		const afterIdNum = Number.parseInt(String(afterId ?? ""), 10);
@@ -77,15 +76,7 @@ export default function createFeedRoutes({ queries }) {
 			afterIdNum > 0;
 
 		let creationPull;
-		if (videosOnly) {
-			creationPull = await pullVideoFeedRows({
-				queries,
-				userId: user.id,
-				limit,
-				offset,
-				showOwnPosts: showOwnPostsInFeed
-			});
-		} else if (hasImageCursor) {
+		if (hasImageCursor) {
 			creationPull = await pullCreationFeedRowsAfterImageCursor({
 				queries,
 				userId: user.id,
@@ -145,6 +136,45 @@ export default function createFeedRoutes({ queries }) {
 			};
 		}
 		return res.json(body);
+	});
+
+	router.get("/api/feed/doom", async (req, res) => {
+		if (!req.auth?.userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+		const user = await queries.selectUserById.get(req.auth?.userId);
+		if (!user) {
+			return res.status(404).json({ error: "User not found" });
+		}
+		const limit = Math.min(Math.max(1, Number(req.query?.limit) || 20), 100);
+		const startCreationId = Number.parseInt(String(req.query?.start ?? ""), 10);
+		const afterCreatedImageId = Number.parseInt(String(req.query?.after_created_image_id ?? ""), 10);
+		const mode = Number.isFinite(startCreationId) && startCreationId > 0
+			? "from_anchor"
+			: Number.isFinite(afterCreatedImageId) && afterCreatedImageId > 0
+				? "older_than"
+				: "head";
+		const showOwnPostsInFeed = Boolean(user.meta && user.meta.showOwnPostsInFeed === true);
+		const enableNsfw = Boolean(user.meta && user.meta.enableNsfw === true);
+		const pull = await pullDoomFeedRows({
+			queries,
+			viewerId: user.id,
+			user,
+			limit,
+			mode,
+			startCreationId,
+			afterCreatedImageId,
+			enableNsfw,
+			showOwnPosts: showOwnPostsInFeed
+		});
+		const items = (pull.rows ?? [])
+			.map(transformFeedCreationRow)
+			.filter((item) => (enableNsfw ? true : !item.nsfw));
+		return res.json({
+			items,
+			hasMore: Boolean(pull.hasMore),
+			cursor: pull.cursor ?? null
+		});
 	});
 
 	return router;

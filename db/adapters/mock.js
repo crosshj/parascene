@@ -1472,24 +1472,98 @@ export function openDb() {
 				const hasMore = Array.isArray(full) && full.length > safeOffset + safeLimit;
 				return { rows, hasMore };
 			},
-			getVideoFeedPage: async (viewerId, { limit = 20, offset = 0, includeOwnPosts = false } = {}) => {
-				const full = await selectFeedItems.all(viewerId, { includeOwnPosts });
-				const isVideo = (row) => {
-					const meta = row?.meta;
-					return meta && typeof meta === "object" && meta.media_type === "video";
-				};
-				const videos = Array.isArray(full)
-					? full.filter(isVideo).sort((a, b) => {
-							const c = String(b.created_at || "").localeCompare(String(a.created_at || ""));
-							if (c !== 0) return c;
-							return Number(b.created_image_id || 0) - Number(a.created_image_id || 0);
-						})
-					: [];
+			getSitePublishedVideoFeedPage: async (
+				_viewerId,
+				{ limit = 20, mode = "head", startCreationId = null, afterCreatedImageId = null } = {}
+			) => {
 				const safeLimit = Math.min(Math.max(1, Number(limit) || 20), 100);
-				const safeOffset = Math.max(0, Number(offset) || 0);
-				const rows = videos.slice(safeOffset, safeOffset + safeLimit);
-				const hasMore = videos.length > safeOffset + safeLimit;
-				return { rows, hasMore };
+				const isStrictlyOlder = (row, cursorAt, cursorId) => {
+					const ra = String(row?.created_at ?? "");
+					const ca = String(cursorAt ?? "");
+					if (ra < ca) return true;
+					if (ra > ca) return false;
+					const rid = Number(row?.created_image_id ?? row?.id);
+					const cid = Number(cursorId);
+					if (!Number.isFinite(rid) || !Number.isFinite(cid)) {
+						return ra === ca && String(row?.created_image_id ?? row?.id) < String(cursorId);
+					}
+					return rid < cid;
+				};
+				const compareDesc = (a, b) => {
+					const c = String(b.created_at || "").localeCompare(String(a.created_at || ""));
+					if (c !== 0) return c;
+					return Number(b.created_image_id || b.id || 0) - Number(a.created_image_id || a.id || 0);
+				};
+				const isPublishedVideo = (row) => {
+					const ci = created_images.find((c) => Number(c.id) === Number(row?.created_image_id));
+					if (!ci) return false;
+					if (ci.unavailable_at != null && ci.unavailable_at !== "") return false;
+					const meta = ci?.meta;
+					if (!meta || typeof meta !== "object") return false;
+					return meta.media_type === "video";
+				};
+				const allSiteVideos = feed_items
+					.filter(isPublishedVideo)
+					.map((item) => {
+						const ci = created_images.find((c) => Number(c.id) === Number(item.created_image_id));
+						const authorId = ci?.user_id ?? item.user_id;
+						const profile = user_profiles.find((p) => p.user_id === Number(authorId));
+						const user = users.find((u) => Number(u.id) === Number(authorId));
+						const authorPlan = user?.meta?.plan === "founder" ? "founder" : "free";
+						const meta = ci?.meta;
+						return {
+							...item,
+							title: feedTitlePreferCreation(ci?.title, item.title),
+							user_id: authorId ?? null,
+							author_user_name: profile?.user_name ?? null,
+							author_display_name: profile?.display_name ?? null,
+							author_avatar_url: profile?.avatar_url ?? null,
+							author_plan: authorPlan,
+							meta: meta && typeof meta === "object" ? meta : null,
+							nsfw: !!(meta && typeof meta === "object" && meta.nsfw)
+						};
+					})
+					.sort(compareDesc);
+
+				let source = allSiteVideos;
+				if (mode === "from_anchor") {
+					const anchorId = Number(startCreationId);
+					const anchor = allSiteVideos.find(
+						(row) => Number(row.created_image_id ?? row.id) === anchorId
+					);
+					if (!anchor) return { rows: [], hasMore: false, cursor: null };
+					source = allSiteVideos.filter((row) => {
+						const rid = Number(row.created_image_id ?? row.id);
+						if (rid === anchorId) return true;
+						return isStrictlyOlder(row, anchor.created_at, anchorId);
+					});
+					const anchorIdx = source.findIndex(
+						(row) => Number(row.created_image_id ?? row.id) === anchorId
+					);
+					if (anchorIdx > 0) {
+						source = [source[anchorIdx], ...source.slice(anchorIdx + 1)];
+					}
+				} else if (mode === "older_than") {
+					const cursorId = Number(afterCreatedImageId);
+					if (!Number.isFinite(cursorId) || cursorId <= 0) {
+						return { rows: [], hasMore: false, cursor: null };
+					}
+					const cursor = allSiteVideos.find(
+						(row) => Number(row.created_image_id ?? row.id) === cursorId
+					);
+					if (!cursor) return { rows: [], hasMore: false, cursor: null };
+					source = allSiteVideos.filter((row) =>
+						isStrictlyOlder(row, cursor.created_at, cursorId)
+					);
+				}
+
+				const rows = source.slice(0, safeLimit);
+				const hasMore = source.length > safeLimit;
+				const last = rows.length > 0 ? rows[rows.length - 1] : null;
+				const cursor = last
+					? { after_created_image_id: String(last.created_image_id ?? last.id) }
+					: null;
+				return { rows, hasMore, cursor };
 			},
 			getPageAfterImageCursor: async (
 				viewerId,
@@ -1534,7 +1608,11 @@ export function openDb() {
 					const meta = row?.meta;
 					return meta && typeof meta === "object" && meta.media_type === "video";
 				};
-				const videos = sorted.filter(isVideo).slice(0, Math.min(Math.max(1, Number(videoLimit) || 12), 50));
+				const siteVideoPage = await selectFeedItems.getSitePublishedVideoFeedPage(viewerId, {
+					mode: "head",
+					limit: Math.min(Math.max(1, Number(videoLimit) || 12), 50)
+				});
+				const videos = Array.isArray(siteVideoPage?.rows) ? siteVideoPage.rows : [];
 				const images = sorted.filter((r) => !isVideo(r)).slice(0, Math.min(Math.max(1, Number(imageLimit) || 9), 50));
 				return { videos, images };
 			}
