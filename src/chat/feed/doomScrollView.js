@@ -135,16 +135,79 @@ export function bindDoomVideoAspectFit(video, mediaWrap, mediaFrame, opts = {}) 
 	/* Video stacks above the poster; keep poster visible until playback paints (feed / detail behavior). */
 	video.style.opacity = '0';
 	const slideEl = video.closest('.chat-doom-slide');
-	const revealVideo = () => revealDoomSlideVideoPlayback(slideEl);
-	video.addEventListener('playing', revealVideo, { once: true });
-	video.addEventListener(
-		'timeupdate',
-		() => {
-			if (video.currentTime > 0) revealVideo();
-		},
-		{ once: true }
-	);
-	if (!video.paused && video.readyState >= 2) revealVideo();
+	bindDoomVideoRevealWhenFrameReady(video, slideEl, {
+		shouldReveal: () => slideEl instanceof HTMLElement && slideEl.classList.contains('chat-doom-slide--active')
+	});
+}
+
+/** @type {WeakMap<HTMLVideoElement, () => void>} */
+const doomVideoRevealCleanupByVideo = new WeakMap();
+
+/**
+ * Keep poster visible until the video has a composited frame (not merely `playing`).
+ * Prefers `requestVideoFrameCallback`; falls back to `timeupdate` with `currentTime > 0`.
+ *
+ * @param {HTMLVideoElement} video
+ * @param {HTMLElement | null | undefined} slide
+ * @param {{ shouldReveal?: () => boolean }} [opts]
+ * @returns {() => void} cleanup — cancels pending frame wait
+ */
+export function bindDoomVideoRevealWhenFrameReady(video, slide, opts = {}) {
+	if (!(video instanceof HTMLVideoElement)) return () => {};
+
+	const prev = doomVideoRevealCleanupByVideo.get(video);
+	if (prev) prev();
+
+	let done = false;
+	const shouldReveal = typeof opts.shouldReveal === 'function' ? opts.shouldReveal : () => true;
+
+	/** @type {number | undefined} */
+	let rvfcId;
+	/** @type {(() => void) | null} */
+	let onTimeUpdate = null;
+
+	const cleanup = () => {
+		if (onTimeUpdate) {
+			video.removeEventListener('timeupdate', onTimeUpdate);
+			onTimeUpdate = null;
+		}
+		if (rvfcId != null && typeof video.cancelVideoFrameCallback === 'function') {
+			try {
+				video.cancelVideoFrameCallback(rvfcId);
+			} catch {
+				// ignore
+			}
+			rvfcId = undefined;
+		}
+		doomVideoRevealCleanupByVideo.delete(video);
+	};
+
+	const reveal = () => {
+		if (done) return;
+		if (!shouldReveal()) return;
+		done = true;
+		cleanup();
+		revealDoomSlideVideoPlayback(slide);
+	};
+
+	if (!video.paused && video.readyState >= 2 && video.currentTime > 0) {
+		reveal();
+		return cleanup;
+	}
+
+	onTimeUpdate = () => {
+		if (video.currentTime > 0) reveal();
+	};
+	video.addEventListener('timeupdate', onTimeUpdate);
+
+	if (typeof video.requestVideoFrameCallback === 'function') {
+		rvfcId = video.requestVideoFrameCallback(() => {
+			reveal();
+		});
+	}
+
+	doomVideoRevealCleanupByVideo.set(video, cleanup);
+	return cleanup;
 }
 
 /**

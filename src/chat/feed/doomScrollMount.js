@@ -16,6 +16,7 @@ import {
 } from '../../shared/safeMediaPlay.js';
 import { initLikeButton } from '../../shared/likes.js';
 import {
+	bindDoomVideoRevealWhenFrameReady,
 	createDoomScrollShell,
 	createDoomSlideElement,
 	revealDoomSlideVideoPlayback,
@@ -439,25 +440,9 @@ export async function mountChatDoomScroll(opts) {
 		const alreadyRevealed =
 			posterImg instanceof HTMLImageElement && posterImg.hidden;
 		if (alreadyRevealed) revealDoomSlideVideoPlayback(slide);
-		const revealPlayback = () => {
-			if (slides()[activeIdx] !== slide) return;
-			revealDoomSlideVideoPlayback(slide);
-		};
-		const onFirstFrame = () => {
-			if (slides()[activeIdx] !== slide) {
-				v.removeEventListener('timeupdate', onFirstFrame);
-				return;
-			}
-			if (v.currentTime > 0) {
-				v.removeEventListener('timeupdate', onFirstFrame);
-				revealPlayback();
-			}
-		};
-		v.addEventListener('playing', revealPlayback, { once: true });
-		v.addEventListener('timeupdate', onFirstFrame);
-		if (!v.paused && v.readyState >= 2 && v.currentTime > 0) {
-			revealPlayback();
-		}
+		bindDoomVideoRevealWhenFrameReady(v, slide, {
+			shouldReveal: () => slides()[activeIdx] === slide
+		});
 
 		const applyMuteForSlide = (forceMutedForAutoplay) => {
 			/* Obscured NSFW still autoplays (muted); browser policy allows muted autoplay. */
@@ -469,7 +454,6 @@ export async function mountChatDoomScroll(opts) {
 			safeMediaPlayWithHandlers(v, {
 				onPlayed: () => {
 					if (slides()[activeIdx] !== slide) return;
-					if (!v.paused && v.readyState >= 2) revealPlayback();
 					syncPlayOverlayForSlide(slide);
 				},
 				onRejected: (err) => {
