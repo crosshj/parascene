@@ -1,5 +1,9 @@
 import { eyeHiddenIcon, linkIcon2 } from '/icons/svg-strings.js';
 import { isChatBroadcastMentionSlug } from './chatBroadcastMentions.js';
+import {
+	attachMediaAudioLeveling,
+	primeMediaElementForAudioLeveling
+} from './mediaAudioLeveling.js';
 
 /**
  * Escapes text for safe HTML insertion.
@@ -354,7 +358,7 @@ function renderInlineGenericVideo(relativePath, originalUrl) {
 		`<div class="connect-chat-creation-embed connect-chat-creation-embed--square is-loading" data-generic-video-embed="1">` +
 		`<div class="connect-chat-creation-embed-media">` +
 		`<div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--video" role="button" tabindex="0" aria-label="Open video" title="Open video">` +
-		`<video class="connect-chat-creation-embed-video" playsinline preload="metadata" src="${rp}" aria-label="Attached video" data-inline-video-loading="1"></video>` +
+		`<video class="connect-chat-creation-embed-video" playsinline preload="metadata" crossorigin="anonymous" src="${rp}" aria-label="Attached video" data-inline-video-loading="1"></video>` +
 		INLINE_CHAT_VIDEO_PLAY_OVERLAY_HTML +
 		`</div></div></div>`
 	);
@@ -1610,7 +1614,7 @@ export function hydrateChatCreationEmbeds(rootEl) {
 				const poster = url ? ` poster="${escapeHtml(url)}"` : '';
 				/* Inline: paused thumb + play/expand icons; full controls + sound in lightbox. */
 				wrap.classList.add('is-loading');
-				wrap.innerHTML = `<div class="connect-chat-creation-embed-media"><div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--video${nsfwClass}"${nsfwDataAttr} role="button" tabindex="0" aria-label="Open video" title="Open video"><video class="connect-chat-creation-embed-video" playsinline preload="metadata" src="${escapeHtml(videoUrl)}"${poster} data-inline-video-loading="1"></video>${INLINE_CHAT_VIDEO_PLAY_OVERLAY_HTML}</div></div>`;
+				wrap.innerHTML = `<div class="connect-chat-creation-embed-media"><div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--video${nsfwClass}"${nsfwDataAttr} role="button" tabindex="0" aria-label="Open video" title="Open video"><video class="connect-chat-creation-embed-video" playsinline preload="metadata" crossorigin="anonymous" src="${escapeHtml(videoUrl)}"${poster} data-inline-video-loading="1"></video>${INLINE_CHAT_VIDEO_PLAY_OVERLAY_HTML}</div></div>`;
 				trimWhitespaceOnlyTextNodes(wrap);
 				const vid = wrap.querySelector('.connect-chat-creation-embed-video');
 				if (vid instanceof HTMLVideoElement) {
@@ -1831,6 +1835,7 @@ function bindInlineChatVideoPreviewLoading(embed, video) {
 	if (!(embed instanceof HTMLElement) || !(video instanceof HTMLVideoElement)) return;
 	if (video.dataset.inlineVideoHydrateBound === '1') return;
 	video.dataset.inlineVideoHydrateBound = '1';
+	primeMediaElementForAudioLeveling(video);
 
 	const reveal = () => {
 		delete video.dataset.inlineVideoLoading;
@@ -1911,6 +1916,7 @@ export function bindInlineVideoClickControls(rootEl) {
 			video.controls = true;
 			if (wrap instanceof HTMLElement) wrap.classList.add('user-text-inline-video--active');
 			if (overlay instanceof HTMLButtonElement) overlay.hidden = true;
+			attachMediaAudioLeveling(video);
 			void video.play().catch(() => {
 				// ignore autoplay/gesture issues; controls are now visible.
 			});

@@ -3,6 +3,8 @@
  * Swallow expected rejections so they do not appear as uncaught promise errors in devtools.
  */
 
+import { attachMediaAudioLeveling } from './mediaAudioLeveling.js';
+
 /** @param {unknown} err */
 export function isMediaPlayAbortError(err) {
 	return err != null && typeof err === 'object' && /** @type {{ name?: string }} */ (err).name === 'AbortError';
@@ -19,6 +21,7 @@ export function isMediaAutoplayBlockedError(err) {
  */
 export function safeMediaPlay(media) {
 	if (!(media instanceof HTMLMediaElement)) return undefined;
+	attachMediaAudioLeveling(media);
 	try {
 		const p = media.play();
 		if (p != null && typeof p.catch === 'function') {
@@ -42,6 +45,7 @@ export function safeMediaPlay(media) {
  */
 export function safeMediaPlayWithHandlers(media, opts = {}) {
 	if (!(media instanceof HTMLMediaElement)) return;
+	attachMediaAudioLeveling(media);
 	try {
 		const p = media.play();
 		if (p == null || typeof p.then !== 'function') return;

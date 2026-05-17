@@ -16,6 +16,7 @@ import {
 	partitionFeedVideosForChatSpotlight
 } from './chatFeedMobilePartition.js';
 import { addHiddenFeedItem, getHiddenFeedItems } from './feedHiddenItems.js';
+import { primeMediaElementForAudioLeveling } from './mediaAudioLeveling.js';
 export {
 	addHiddenFeedItem,
 	getHiddenFeedItems,
@@ -1281,6 +1282,7 @@ function finishFeedCreationCardMediaAndClick(
 	if (isVideo && !processing) {
 		const videoEl = card.querySelector('.feed-card-video');
 		if (videoEl) {
+			primeMediaElementForAudioLeveling(videoEl);
 			const posterUrl = displayUrl || "";
 			if (posterUrl) {
 				videoEl.poster = posterUrl;

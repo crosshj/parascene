@@ -1,5 +1,9 @@
 import { copyIcon, linkIcon2 } from '/icons/svg-strings.js';
 import { DEFAULT_APP_ORIGIN } from './userText.js';
+import {
+	attachMediaAudioLeveling,
+	primeMediaElementForAudioLeveling
+} from './mediaAudioLeveling.js';
 
 /** @type {HTMLElement | null} */
 let chatInlineImageLightboxEl = null;
@@ -562,8 +566,11 @@ export function openChatAttachmentPreviewLightbox(src, kind, hooks) {
 			video.muted = false;
 			video.defaultMuted = false;
 			video.autoplay = true;
+			primeMediaElementForAudioLeveling(video);
 			video.src = url;
 		}
+		primeMediaElementForAudioLeveling(video);
+		attachMediaAudioLeveling(video);
 		lightboxPreviewVideo = video;
 
 		let placeholderDone = false;
@@ -636,6 +643,7 @@ export function openChatAttachmentPreviewLightbox(src, kind, hooks) {
 			closeBtn.focus();
 		}
 		if (lightboxPreviewVideo) {
+			attachMediaAudioLeveling(lightboxPreviewVideo);
 			void lightboxPreviewVideo.play().catch(() => {
 				// Placeholder stays until playback starts (e.g. user taps play if autoplay is blocked).
 			});

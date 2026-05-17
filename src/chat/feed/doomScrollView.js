@@ -9,6 +9,7 @@ import {
 } from '../../shared/feedCardBuild.js';
 import { getAvatarColor } from '../../shared/avatar.js';
 import { renderCommentAvatarHtml } from '../../shared/commentItem.js';
+import { primeMediaElementForAudioLeveling } from '../../shared/mediaAudioLeveling.js';
 
 /**
  * @param {unknown} s
@@ -289,6 +290,7 @@ export function createDoomSlideElement(item, viewerUserId, slideOpts = {}) {
 	video.loop = true;
 	video.muted = true;
 	video.preload = bgLoad ? 'none' : 'metadata';
+	primeMediaElementForAudioLeveling(video);
 	if (videoUrl) video.src = videoUrl;
 
 	const mediaWrap = document.createElement('div');

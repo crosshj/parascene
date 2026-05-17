@@ -22,6 +22,7 @@ const [
 	helpUrlMod,
 	challengeSubmitMetaMod,
 	creationBadgesMod,
+	mediaAudioLevelingMod,
 ] = await Promise.all([
 	import(`./blogCampaignPath.js${_qs}`),
 	import(`./datetime.js${_qs}`),
@@ -31,6 +32,7 @@ const [
 	import(`./helpUrl.js${_qs}`),
 	import(`./challengeSubmitMeta.js${_qs}`),
 	import(`./creationBadges.js${_qs}`),
+	import(`./mediaAudioLeveling.js${_qs}`),
 ]);
 
 const { buildBlogPostPublicPath, BLOG_CAMPAIGN_INTERNAL } = blogCampaignPathMod;
@@ -41,6 +43,7 @@ const { buildProfilePath } = profileLinksMod;
 const { getHelpHref } = helpUrlMod;
 const { creationMetaHasChallengeSubmission } = challengeSubmitMetaMod;
 const { challengeEnteredBadgeHtml, publishedBadgeHtml } = creationBadgesMod;
+const { primeMediaElementForAudioLeveling } = mediaAudioLevelingMod;
 
 const html = String.raw;
 
@@ -967,6 +970,7 @@ function finishFeedCreationCardMediaAndClick(
 	if (isVideo && !processing) {
 		const videoEl = card.querySelector('.feed-card-video');
 		if (videoEl) {
+			primeMediaElementForAudioLeveling(videoEl);
 			const posterUrl = displayUrl || "";
 			if (posterUrl) {
 				videoEl.poster = posterUrl;
