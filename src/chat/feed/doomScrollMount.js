@@ -19,7 +19,6 @@ import {
 	bindDoomVideoRevealWhenFrameReady,
 	createDoomScrollShell,
 	createDoomSlideElement,
-	prepareDoomSlideVideoPlayback,
 	revealDoomSlideVideoPlayback,
 	rewindDoomSlideVideo
 } from './doomScrollView.js';
@@ -436,7 +435,6 @@ export async function mountChatDoomScroll(opts) {
 			} catch {
 				// ignore
 			}
-			prepareDoomSlideVideoPlayback(slide);
 		}
 		const posterImg = slide.querySelector('img.chat-doom-poster');
 		const alreadyRevealed =

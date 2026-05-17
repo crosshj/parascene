@@ -5,7 +5,11 @@ import { appendCreationIdToMediaUrl, getThumbnailUrl } from "../utils/url.js";
  * @param {object} item
  */
 export function transformFeedCreationRow(item) {
-	const rawImageUrl = item.url || null;
+	/** DB rows use `url`; assembled API items use `image_url` — both paths must stay idempotent. */
+	const rawImageUrl =
+		(typeof item.url === "string" && item.url.trim()) ||
+		(typeof item.image_url === "string" && item.image_url.trim()) ||
+		null;
 	let meta = item.meta;
 	if (typeof meta === "string" && meta) {
 		try {

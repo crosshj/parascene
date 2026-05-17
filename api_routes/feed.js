@@ -3,7 +3,7 @@
  *
  * `/api/feed` — chat feed (followed, slot-pack, cursor tail). `./feed/pullCreationFeedRows.js`, `./feed/pullMobileChatSlotPackFeed.js`
  * `/api/feed/doom` — site-wide video timeline for doom scroll. `./feed/pullDoomFeedRows.js`
- * Both use `./feed/assembleFeedItems.js` (feed only) or `transformFeedCreationRow` (doom).
+ * `/api/feed/doom` items are transformed in `pullDoomFeedRows` / `assembleFeedItems` (not re-mapped here).
  */
 import express from "express";
 import { pullCreationFeedRows } from "./feed/pullCreationFeedRows.js";
@@ -16,8 +16,6 @@ import { pullChallengeFeedSnapshot } from "./feed/pullChallengeFeedSnapshot.js";
 import { assembleFeedItems } from "./feed/assembleFeedItems.js";
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { removeJoinedPrivateChannelInviteDmMessages } from "./utils/chatInviteCleanup.js";
-import { transformFeedCreationRow } from "./feed/transformFeedCreationRow.js";
-
 export default function createFeedRoutes({ queries }) {
 	const router = express.Router();
 
@@ -167,9 +165,7 @@ export default function createFeedRoutes({ queries }) {
 			enableNsfw,
 			showOwnPosts: showOwnPostsInFeed
 		});
-		const items = (pull.rows ?? [])
-			.map(transformFeedCreationRow)
-			.filter((item) => (enableNsfw ? true : !item.nsfw));
+		const items = (pull.rows ?? []).filter((item) => (enableNsfw ? true : !item.nsfw));
 		return res.json({
 			items,
 			hasMore: Boolean(pull.hasMore),

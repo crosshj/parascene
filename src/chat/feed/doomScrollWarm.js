@@ -1,5 +1,6 @@
 /**
  * Two-stage off-screen doom video warm-up (metadata → auto on swipe / visibility).
+ * Only bumps `preload` — no `video.load()` (reload flashes black on iOS).
  */
 
 /** @typedef {'metadata' | 'auto'} DoomVideoWarmLevel */
@@ -43,11 +44,6 @@ export function warmDoomVideoElement(video, level) {
 		if (cur === 'metadata' || cur === 'auto') return false;
 		video.preload = 'metadata';
 		video.setAttribute('data-chat-doom-warm', 'metadata');
-		try {
-			video.load();
-		} catch {
-			// ignore
-		}
 		return true;
 	}
 
@@ -56,11 +52,6 @@ export function warmDoomVideoElement(video, level) {
 		if (cur === 'auto') return false;
 		video.preload = 'auto';
 		video.setAttribute('data-chat-doom-warm', 'auto');
-		try {
-			video.load();
-		} catch {
-			// ignore
-		}
 		return true;
 	}
 
@@ -72,20 +63,8 @@ export function warmDoomVideoElement(video, level) {
  * @param {DoomVideoWarmLevel} level
  * @returns {boolean}
  */
-function warmDoomSlidePoster(slide) {
-	if (!(slide instanceof HTMLElement)) return;
-	const img = slide.querySelector('img.chat-doom-poster');
-	if (!(img instanceof HTMLImageElement)) return;
-	if (img.complete && img.naturalWidth > 0) return;
-	img.loading = 'eager';
-	if ('fetchPriority' in img) {
-		img.fetchPriority = 'high';
-	}
-}
-
 export function warmDoomSlideVideo(slide, level) {
 	if (!(slide instanceof HTMLElement)) return false;
-	warmDoomSlidePoster(slide);
 	const v = slide.querySelector('video.chat-doom-video');
 	return warmDoomVideoElement(v instanceof HTMLVideoElement ? v : null, level);
 }
