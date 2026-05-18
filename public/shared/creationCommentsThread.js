@@ -310,6 +310,36 @@ export async function mountCreationCommentsThread(container, options) {
 		}
 	};
 
+	/** Doom sheet only: lift focused fields above the overlay keyboard band. */
+	function scrollDoomSheetCommentFieldIntoView(el) {
+		if (!(el instanceof HTMLElement)) return false;
+		if (!el.closest('[data-chat-doom-comments-body]')) return false;
+		const run = () => {
+			try {
+				el.focus({ preventScroll: true });
+			} catch {
+				try {
+					el.focus();
+				} catch {
+					/* ignore */
+				}
+			}
+			try {
+				el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+			} catch {
+				try {
+					el.scrollIntoView({ block: 'start' });
+				} catch {
+					/* ignore */
+				}
+			}
+		};
+		requestAnimationFrame(() => {
+			requestAnimationFrame(run);
+		});
+		return true;
+	}
+
 	const setCommentActionButtonLoading = (btn, loading) => {
 		if (!(btn instanceof HTMLButtonElement)) return;
 		btn.classList.toggle('is-loading', Boolean(loading));
@@ -357,18 +387,7 @@ export async function mountCreationCommentsThread(container, options) {
 		syncInlineReplySubmitUi(ta);
 		if (!commentInlineReplyFocusPending) return;
 		commentInlineReplyFocusPending = false;
-		requestAnimationFrame(() => {
-			try {
-				ta.focus({ preventScroll: true });
-				ta.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-			} catch {
-				try {
-					ta.focus();
-				} catch {
-					/* ignore */
-				}
-			}
-		});
+		scrollDoomSheetCommentFieldIntoView(ta);
 	}
 
 	function syncInlineReplyOpenState() {
@@ -1049,7 +1068,9 @@ export async function mountCreationCommentsThread(container, options) {
 			renderComments();
 			const input = commentListEl.querySelector(`[data-comment-edit-input="${cid}"]`);
 			if (input instanceof HTMLTextAreaElement) {
-				input.focus();
+				if (!scrollDoomSheetCommentFieldIntoView(input)) {
+					input.focus();
+				}
 				const end = String(input.value || '').length;
 				input.setSelectionRange(end, end);
 				syncCommentEditInputUi(input);
@@ -1475,12 +1496,18 @@ export async function mountCreationCommentsThread(container, options) {
 		if (!(commentTextarea instanceof HTMLTextAreaElement)) return;
 		void handleCommentComposerPaste(e, { kind: 'main', referencedCommentId: null }, commentTextarea);
 	};
+	const onComposerFocus = () => {
+		if (commentTextarea instanceof HTMLTextAreaElement) {
+			scrollDoomSheetCommentFieldIntoView(commentTextarea);
+		}
+	};
 
 	if (commentTextarea instanceof HTMLTextAreaElement) {
 		attachMentionSuggest(commentTextarea);
 		commentTextarea.addEventListener('input', onComposerInput);
 		commentTextarea.addEventListener('keydown', onComposerKeydown);
 		commentTextarea.addEventListener('paste', onComposerPaste);
+		commentTextarea.addEventListener('focus', onComposerFocus);
 	}
 	if (commentSubmitBtn instanceof HTMLButtonElement && commentTextarea instanceof HTMLTextAreaElement) {
 		commentSubmitBtn.addEventListener('click', onComposerSubmit);
@@ -2027,6 +2054,7 @@ export async function mountCreationCommentsThread(container, options) {
 			commentTextarea.removeEventListener('input', onComposerInput);
 			commentTextarea.removeEventListener('keydown', onComposerKeydown);
 			commentTextarea.removeEventListener('paste', onComposerPaste);
+			commentTextarea.removeEventListener('focus', onComposerFocus);
 		}
 		if (commentSubmitBtn instanceof HTMLButtonElement) {
 			commentSubmitBtn.removeEventListener('click', onComposerSubmit);

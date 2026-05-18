@@ -198,6 +198,20 @@
 	display: none;
 }
 
+/* Mobile: trailing scroll room + scroll-margin so reply/edit fields can clear the soft keyboard. */
+@media (max-width: 768px) {
+	.chat-doom-comments-body {
+		padding-bottom: calc(var(--chat-doom-sheet-keyboard-cover) + 24px + env(safe-area-inset-bottom, 0px));
+	}
+
+	.chat-doom-comments-body .comment-textarea,
+	.chat-doom-comments-body .comment-edit-input,
+	.chat-doom-comments-body .comment-inline-reply-field {
+		scroll-margin-top: 12px;
+		scroll-margin-bottom: var(--chat-doom-sheet-keyboard-cover);
+	}
+}
+
 .chat-doom-comments-error {
 	margin: 12px 0;
 	color: var(--text-muted);

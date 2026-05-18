@@ -1156,6 +1156,19 @@ button.chat-inline-image-lightbox-footer-btn.btn-secondary {
 	overscroll-behavior: contain;
 }
 
+@media (max-width: 768px) {
+	.chat-doom-comments-body {
+		padding-bottom: calc(var(--chat-doom-sheet-keyboard-cover) + 24px + env(safe-area-inset-bottom, 0px));
+	}
+
+	.chat-doom-comments-body .comment-textarea,
+	.chat-doom-comments-body .comment-edit-input,
+	.chat-doom-comments-body .comment-inline-reply-field {
+		scroll-margin-top: 12px;
+		scroll-margin-bottom: var(--chat-doom-sheet-keyboard-cover);
+	}
+}
+
 /*
  * Doom comments main composer: a stale chat.bundle.css may still ship an override that pulls
  * `[data-comment-input]` left by 42px and zeroes its outer margins. The main composer should
