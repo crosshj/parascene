@@ -17,6 +17,7 @@ import { getStyleInfo } from "./utils/createStyles.js";
 import { expandStyleSigilsForProvider } from "./utils/styleSigils.js";
 import { applyVynlyShareWatermark } from "./utils/vynlyShareWatermark.js";
 import { creationRowIsVideo } from "./utils/vynlyShareFromCreation.js";
+import { sendBufferWithRangeSupport } from "./utils/sendBufferWithRangeSupport.js";
 import { broadcastRoomDirty, broadcastUserInboxDirty } from "./utils/realtimeBroadcast.js";
 import { insertNotificationsForChatMentions } from "./utils/chatMentionNotifications.js";
 import {
@@ -352,9 +353,11 @@ export default function createCreateRoutes({ queries, storage }) {
 			}
 
 			const videoBuffer = await storage.getVideoBuffer(filename);
-			res.setHeader("Content-Type", contentType);
-			res.setHeader("Cache-Control", "public, max-age=3600");
-			return res.send(videoBuffer);
+			return sendBufferWithRangeSupport(res, videoBuffer, {
+				contentType,
+				cacheControl: "public, max-age=3600",
+				rangeHeader: typeof req.headers.range === "string" ? req.headers.range : "",
+			});
 		} catch (error) {
 			if (error.message && error.message.includes("not found")) {
 				return res.status(404).json({ error: "Video not found" });

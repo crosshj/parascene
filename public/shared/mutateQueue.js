@@ -19,11 +19,14 @@ function readQueue() {
 						: item.published === false || item.published === 0
 							? false
 							: undefined;
+				const frameTimeSec = Number(item.frameTimeSec);
 				return {
 					sourceId: Number.isFinite(sourceIdNum) && sourceIdNum > 0 ? sourceIdNum : null,
 					imageUrl,
 					queuedAt: Number.isFinite(Number(item.queuedAt)) ? Number(item.queuedAt) : Date.now(),
-					published
+					published,
+					...(item.fromFrame === true ? { fromFrame: true } : {}),
+					...(Number.isFinite(frameTimeSec) && frameTimeSec >= 0 ? { frameTimeSec } : {}),
 				};
 			})
 			.filter(Boolean);
@@ -45,19 +48,22 @@ export function loadMutateQueue() {
 	return readQueue();
 }
 
-export function addToMutateQueue({ sourceId, imageUrl, published }) {
+export function addToMutateQueue({ sourceId, imageUrl, published, fromFrame, frameTimeSec }) {
 	const url = typeof imageUrl === 'string' ? imageUrl.trim() : '';
 	const idNum = Number(sourceId);
 	if (!url) return;
 
 	const current = readQueue();
-	const filtered = current.filter((item) => item.imageUrl !== url && item.sourceId !== idNum);
+	const filtered = current.filter((item) => item.imageUrl !== url);
 	const isPublished = published === true || published === 1;
+	const frameSec = Number(frameTimeSec);
 	const nextItem = {
 		sourceId: Number.isFinite(idNum) && idNum > 0 ? idNum : null,
 		imageUrl: url,
 		queuedAt: Date.now(),
-		published: isPublished
+		published: isPublished,
+		...(fromFrame === true ? { fromFrame: true } : {}),
+		...(Number.isFinite(frameSec) && frameSec >= 0 ? { frameTimeSec: frameSec } : {}),
 	};
 	filtered.unshift(nextItem);
 	writeQueue(filtered);

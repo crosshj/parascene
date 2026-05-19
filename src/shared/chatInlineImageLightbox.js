@@ -28,6 +28,19 @@ let chatInlineImageLightboxKeydown = null;
  * }}
  */
 let chatInlineVideoLightboxRestore = null;
+/** @type {null | (() => void)} */
+let chatVideoGalleryLightboxTeardown = null;
+
+function runChatVideoGalleryLightboxTeardown() {
+	if (typeof chatVideoGalleryLightboxTeardown === 'function') {
+		try {
+			chatVideoGalleryLightboxTeardown();
+		} catch {
+			// ignore
+		}
+	}
+	chatVideoGalleryLightboxTeardown = null;
+}
 
 /**
  * @param {HTMLVideoElement} video
@@ -157,6 +170,7 @@ function attachChatInlineImageLightboxBackdropClose(overlay) {
 			t.closest('.chat-inline-image-lightbox-canvas') ||
 			t.closest('.chat-inline-image-lightbox-gallery-nav') ||
 			t.closest('.chat-inline-image-lightbox-video') ||
+			t.closest('.chat-inline-image-lightbox-video-slot--gallery') ||
 			t.closest('.chat-inline-image-lightbox-iframe')
 		) {
 			return;
@@ -166,6 +180,7 @@ function attachChatInlineImageLightboxBackdropClose(overlay) {
 }
 
 export function closeChatInlineImageLightbox() {
+	runChatVideoGalleryLightboxTeardown();
 	restoreInlineVideoFromLightbox();
 	if (typeof chatInlineImageLightboxKeydown === 'function') {
 		document.removeEventListener('keydown', chatInlineImageLightboxKeydown);
@@ -481,6 +496,418 @@ export function openChatInlineImageLightbox(src, creationMeta, hooks) {
 			closeBtn.focus();
 		}
 	});
+}
+
+/**
+ * Sequential video gallery in the shared inline lightbox (oldest → newest, loops on end).
+ *
+ * @param {Array<{ url: string, creationId?: string | number, width?: number, height?: number }>} slides
+ * @param {{
+ *   beforeOpen?: () => void,
+ *   galleryLabel?: string,
+ *   startIndex?: number,
+ *   loopGallery?: boolean,
+ *   autoAdvanceOnEnded?: boolean,
+ *   onClose?: () => void,
+ * }} [hooks]
+ */
+export function openChatVideoGalleryLightbox(slides, hooks) {
+	const onCloseHook = hooks && typeof hooks.onClose === 'function' ? hooks.onClose : null;
+	const rawSlides = Array.isArray(slides) ? slides : [];
+	const normalized = rawSlides
+		.map((s) => {
+			const w = Number(s?.width);
+			const h = Number(s?.height);
+			return {
+				url: String(s?.url || '').trim(),
+				creationId:
+					s?.creationId != null && String(s.creationId).trim() !== ''
+						? String(s.creationId).trim()
+						: '',
+				width: Number.isFinite(w) && w > 0 ? w : 0,
+				height: Number.isFinite(h) && h > 0 ? h : 0,
+			};
+		})
+		.filter((s) => s.url);
+	if (normalized.length === 0) return;
+
+	if (hooks && typeof hooks.beforeOpen === 'function') hooks.beforeOpen();
+	closeChatInlineImageLightbox();
+
+	const loopGallery = hooks?.loopGallery !== false;
+	const autoAdvanceOnEnded = hooks?.autoAdvanceOnEnded !== false;
+	const galleryLabel =
+		typeof hooks?.galleryLabel === 'string' && hooks.galleryLabel.trim()
+			? hooks.galleryLabel.trim()
+			: 'Video gallery';
+	const len = normalized.length;
+	let startIndex = Number(hooks?.startIndex);
+	if (!Number.isFinite(startIndex)) startIndex = 0;
+	startIndex = Math.max(0, Math.min(len - 1, startIndex));
+
+	const overlay = document.createElement('div');
+	overlay.className = 'chat-inline-image-lightbox chat-inline-image-lightbox--video-gallery';
+	overlay.setAttribute('role', 'dialog');
+	overlay.setAttribute('aria-modal', 'true');
+	overlay.setAttribute('aria-label', galleryLabel);
+
+	const closeBtn = document.createElement('button');
+	closeBtn.type = 'button';
+	closeBtn.className = 'chat-inline-image-lightbox-close';
+	closeBtn.setAttribute('aria-label', 'Close');
+	closeBtn.textContent = '×';
+
+	const frame = document.createElement('div');
+	frame.className = 'chat-inline-image-lightbox-frame chat-inline-image-lightbox-frame--video-gallery';
+
+	const videoSlot = document.createElement('div');
+	videoSlot.className =
+		'chat-inline-image-lightbox-video-slot chat-inline-image-lightbox-video-slot--gallery';
+	videoSlot.style.setProperty('--chat-lightbox-video-ar', '16 / 9');
+
+	const applyGallerySlideAspectToSlot = (slide) => {
+		if (!slide) return;
+		const w = Number(slide.width);
+		const h = Number(slide.height);
+		if (Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0) {
+			applyLightboxVideoSlotAspect(videoSlot, w, h);
+		}
+	};
+
+	const galleryPlaceholder = document.createElement('div');
+	galleryPlaceholder.className = 'chat-inline-image-lightbox-video-placeholder skeleton';
+	galleryPlaceholder.setAttribute('role', 'status');
+	galleryPlaceholder.setAttribute('aria-live', 'polite');
+	galleryPlaceholder.setAttribute('aria-label', 'Loading video');
+
+	let galleryPlaceholderHidden = false;
+	const hideGalleryPlaceholder = () => {
+		if (galleryPlaceholderHidden) return;
+		galleryPlaceholderHidden = true;
+		if (galleryPlaceholder.parentNode) galleryPlaceholder.remove();
+	};
+
+	const revealGalleryVideo = (video) => {
+		hideGalleryPlaceholder();
+		if (video instanceof HTMLVideoElement) {
+			video.classList.remove('chat-inline-image-lightbox-video--pending');
+		}
+		videoSlot.classList.add('chat-inline-image-lightbox-video-slot--playing');
+	};
+
+	const videos = [0, 1].map(() => {
+		const video = document.createElement('video');
+		video.className = 'chat-inline-image-lightbox-video chat-inline-image-lightbox-video--gallery';
+		video.controls = false;
+		video.removeAttribute('controls');
+		video.setAttribute('controlsList', 'nodownload nofullscreen noremoteplayback');
+		video.disablePictureInPicture = true;
+		video.playsInline = true;
+		video.preload = 'auto';
+		video.muted = false;
+		video.defaultMuted = false;
+		primeMediaElementForAudioLeveling(video);
+		attachMediaAudioLeveling(video);
+		video.classList.add('chat-inline-image-lightbox-video--pending');
+		videoSlot.appendChild(video);
+		return video;
+	});
+	videoSlot.appendChild(galleryPlaceholder);
+	frame.appendChild(videoSlot);
+
+	overlay.appendChild(closeBtn);
+	overlay.appendChild(frame);
+
+	let activeIndex = startIndex;
+	let activePlayer = 0;
+	let advanceLock = false;
+
+	const setActivePlayerVisible = (which) => {
+		videos.forEach((v, i) => {
+			v.classList.toggle('is-active', i === which);
+		});
+	};
+
+	const syncVideoSlotAspect = (video) => {
+		if (!(video instanceof HTMLVideoElement)) return;
+		const { width, height } = inlineVideoIntrinsicSize(video);
+		if (width > 0 && height > 0) {
+			applyLightboxVideoSlotAspect(videoSlot, width, height);
+		}
+	};
+
+	const playerLoaded = [
+		{ slideIdx: -1, url: '' },
+		{ slideIdx: -1, url: '' },
+	];
+
+	const slideIndexWrapped = (idx) => ((idx % len) + len) % len;
+
+	const slideUrlAt = (idx) => {
+		const slide = normalized[slideIndexWrapped(idx)];
+		return slide?.url || '';
+	};
+
+	const isPlayerReadyForSlide = (playerIdx, slideIdx) => {
+		const video = videos[playerIdx];
+		if (!(video instanceof HTMLVideoElement)) return false;
+		const idx = slideIndexWrapped(slideIdx);
+		const url = slideUrlAt(idx);
+		const st = playerLoaded[playerIdx];
+		return (
+			st.url === url &&
+			st.slideIdx === idx &&
+			video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA
+		);
+	};
+
+	const loadVideoSrc = (video, url) =>
+		new Promise((resolve) => {
+			const onMeta = () => syncVideoSlotAspect(video);
+			const done = () => {
+				video.removeEventListener('canplay', done);
+				video.removeEventListener('loadeddata', done);
+				video.removeEventListener('loadedmetadata', onMeta);
+				video.removeEventListener('error', done);
+				resolve();
+			};
+			video.addEventListener('canplay', done, { once: true });
+			video.addEventListener('loadeddata', done, { once: true });
+			video.addEventListener('loadedmetadata', onMeta, { once: true });
+			video.addEventListener('error', done, { once: true });
+			video.pause();
+			video.loop = false;
+			video.removeAttribute('loop');
+			video.controls = false;
+			video.removeAttribute('controls');
+			video.src = url;
+			try {
+				video.load();
+			} catch {
+				done();
+			}
+			if (video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+				done();
+				return;
+			}
+			window.setTimeout(done, 8000);
+		});
+
+	const ensurePlayerLoaded = async (playerIdx, slideIdx, opts = {}) => {
+		const video = videos[playerIdx];
+		if (!(video instanceof HTMLVideoElement)) return false;
+		const idx = slideIndexWrapped(slideIdx);
+		const url = slideUrlAt(idx);
+		if (!url) return false;
+		if (!opts.force && isPlayerReadyForSlide(playerIdx, idx)) {
+			return true;
+		}
+		await loadVideoSrc(video, url);
+		playerLoaded[playerIdx] = { slideIdx: idx, url };
+		return true;
+	};
+
+	const preloadNextSlide = () => {
+		if (len <= 1) return;
+		const nextIdx = loopGallery ? (activeIndex + 1) % len : Math.min(activeIndex + 1, len - 1);
+		const bufPlayer = 1 - activePlayer;
+		void ensurePlayerLoaded(bufPlayer, nextIdx);
+	};
+
+	const tryPlayVideo = async (video) => {
+		try {
+			await video.play();
+			return true;
+		} catch {
+			video.muted = true;
+			try {
+				await video.play();
+				return true;
+			} catch {
+				return false;
+			}
+		}
+	};
+
+	const attachEarlyPreload = (video) => {
+		if (len <= 1 || !(video instanceof HTMLVideoElement)) return;
+		const onTimeUpdate = () => {
+			const d = video.duration;
+			const remain = d - video.currentTime;
+			if (!Number.isFinite(d) || d <= 0 || !Number.isFinite(remain)) return;
+			if (remain > 2.5) return;
+			video.removeEventListener('timeupdate', onTimeUpdate);
+			preloadNextSlide();
+		};
+		video.addEventListener('timeupdate', onTimeUpdate);
+	};
+
+	const playVideoInitial = async (video) => {
+		if (!(video instanceof HTMLVideoElement)) return;
+		syncVideoSlotAspect(video);
+		video.classList.add('chat-inline-image-lightbox-video--pending');
+		let revealed = false;
+		const revealOnce = () => {
+			if (revealed) return;
+			revealed = true;
+			revealGalleryVideo(video);
+		};
+		video.addEventListener('playing', revealOnce, { once: true });
+		video.addEventListener('loadeddata', revealOnce, { once: true });
+		video.addEventListener('error', revealOnce, { once: true });
+		await tryPlayVideo(video);
+		if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+			revealOnce();
+		}
+		attachEarlyPreload(video);
+	};
+
+	const crossfadeToPlayer = async (incomingPlayer, outgoingPlayer) => {
+		const incoming = videos[incomingPlayer];
+		const outgoing = videos[outgoingPlayer];
+		if (!(incoming instanceof HTMLVideoElement)) return;
+
+		incoming.classList.remove('chat-inline-image-lightbox-video--pending');
+		syncVideoSlotAspect(incoming);
+		incoming.currentTime = 0;
+
+		incoming.classList.add('is-active');
+		incoming.style.zIndex = '2';
+		if (outgoing instanceof HTMLVideoElement) {
+			outgoing.classList.add('is-active');
+			outgoing.style.zIndex = '1';
+		}
+
+		let handedOff = false;
+		const handoff = () => {
+			if (handedOff) return;
+			handedOff = true;
+			if (outgoing instanceof HTMLVideoElement) {
+				outgoing.pause();
+				outgoing.classList.remove('is-active');
+				outgoing.style.removeProperty('z-index');
+			}
+			incoming.style.removeProperty('z-index');
+			setActivePlayerVisible(incomingPlayer);
+			videoSlot.classList.add('chat-inline-image-lightbox-video-slot--playing');
+		};
+
+		incoming.addEventListener('playing', handoff, { once: true });
+		incoming.addEventListener(
+			'timeupdate',
+			() => {
+				if (incoming.currentTime > 0.05) handoff();
+			},
+			{ once: true }
+		);
+
+		await tryPlayVideo(incoming);
+		if (!incoming.paused || incoming.currentTime > 0) {
+			handoff();
+		}
+		attachEarlyPreload(incoming);
+	};
+
+	const applyGalleryIndex = async (nextIdx, opts = {}) => {
+		const autoplay = opts.autoplay !== false;
+		if (advanceLock) return;
+		advanceLock = true;
+		try {
+			const idx = loopGallery ? ((nextIdx % len) + len) % len : Math.max(0, Math.min(len - 1, nextIdx));
+			if (!loopGallery && idx === activeIndex && opts.force !== true) return;
+
+			const incomingPlayer = len > 1 ? 1 - activePlayer : 0;
+			const outgoingPlayer = activePlayer;
+			const isFirst = !galleryPlaceholderHidden;
+
+			if (isFirst) {
+				applyGallerySlideAspectToSlot(normalized[idx]);
+			}
+
+			await ensurePlayerLoaded(incomingPlayer, idx, { force: opts.force });
+
+			activeIndex = idx;
+
+			const incomingVideo = videos[incomingPlayer];
+			const outgoingVideo = videos[outgoingPlayer];
+
+			if (!autoplay) {
+				setActivePlayerVisible(incomingPlayer);
+				activePlayer = incomingPlayer;
+				preloadNextSlide();
+				return;
+			}
+
+			if (isFirst) {
+				setActivePlayerVisible(incomingPlayer);
+				await playVideoInitial(incomingVideo);
+			} else {
+				await crossfadeToPlayer(incomingPlayer, outgoingPlayer);
+			}
+
+			activePlayer = incomingPlayer;
+			preloadNextSlide();
+		} finally {
+			advanceLock = false;
+		}
+	};
+
+	const onVideoEnded = (e) => {
+		if (!autoAdvanceOnEnded || advanceLock) return;
+		if (e?.target !== videos[activePlayer]) return;
+		if (!loopGallery && activeIndex >= len - 1) return;
+		void applyGalleryIndex(activeIndex + 1, { autoplay: true });
+	};
+
+	videos.forEach((v) => v.addEventListener('ended', onVideoEnded));
+
+	chatVideoGalleryLightboxTeardown = () => {
+		videos.forEach((v) => {
+			v.removeEventListener('ended', onVideoEnded);
+			try {
+				v.pause();
+			} catch {
+				// ignore
+			}
+			v.removeAttribute('src');
+			try {
+				v.load();
+			} catch {
+				// ignore
+			}
+		});
+		videoSlot.classList.remove('chat-inline-image-lightbox-video-slot--playing');
+		overlay.querySelector('.chat-inline-image-lightbox-footer')?.remove();
+		if (onCloseHook) {
+			try {
+				onCloseHook();
+			} catch {
+				// ignore
+			}
+		}
+	};
+
+	chatInlineImageLightboxKeydown = (e) => {
+		if (e.key === 'Escape') {
+			e.preventDefault();
+			closeChatInlineImageLightbox();
+		}
+	};
+	document.addEventListener('keydown', chatInlineImageLightboxKeydown);
+
+	attachChatInlineImageLightboxBackdropClose(overlay);
+	closeBtn.addEventListener('click', () => closeChatInlineImageLightbox());
+
+	document.body.appendChild(overlay);
+	chatInlineImageLightboxEl = overlay;
+	pushChatInlineImageLightboxHistoryEntry();
+
+	setActivePlayerVisible(0);
+	applyGallerySlideAspectToSlot(normalized[startIndex]);
+
+	void (async () => {
+		await applyGalleryIndex(startIndex, { autoplay: true, force: true });
+	})();
 }
 
 /**

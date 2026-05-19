@@ -25,6 +25,7 @@ let NSFW_VIEW_BODY_CLASS;
 let addToMutateQueue;
 let loadMutateQueue;
 let removeFromMutateQueueByImageUrl;
+let openQueueFromFrameModal;
 let showToast;
 let creditIcon;
 let eyeHiddenIcon;
@@ -126,6 +127,9 @@ async function loadDeps() {
 		addToMutateQueue = mutateQueueMod.addToMutateQueue;
 		loadMutateQueue = mutateQueueMod.loadMutateQueue;
 		removeFromMutateQueueByImageUrl = mutateQueueMod.removeFromMutateQueueByImageUrl;
+
+		const queueFromFrameMod = await import(`/shared/queueFromFrameModal.js${qs}`);
+		openQueueFromFrameModal = queueFromFrameMod.openQueueFromFrameModal;
 
 		const toastMod = await import(`/shared/toast.js${qs}`);
 		showToast = toastMod.showToast;
@@ -417,6 +421,16 @@ const MORE_MENU_ITEM_DEFS = [
 	<line x1="3" y1="10" x2="21" y2="10"></line>
 </svg>`,
 		label: (d) => (d.actionsContext?.queueForLaterLabel ?? 'Queue for later')
+	},
+	{
+		action: 'queue-from-frame',
+		show: (d) => d.actionsContext?.showQueueFromFrame,
+		icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+	stroke-linejoin="round" aria-hidden="true">
+	<rect x="2" y="4" width="20" height="16" rx="2"></rect>
+	<path d="M10 9v6l5-3-5-3z"></path>
+</svg>`,
+		label: 'Queue from frame'
 	},
 	{
 		action: 'set-avatar',
@@ -1629,6 +1643,12 @@ async function loadCreation() {
 		const userDeleted = Boolean(creation.user_deleted);
 		const adminViewingUserDeleted = isAdmin && userDeleted;
 		const showQueueForLater = !isAdmin && status === 'completed' && !isFailed && Boolean(creation.url);
+		const showQueueFromFrame =
+			!isAdmin &&
+			status === 'completed' &&
+			!isFailed &&
+			mediaType === 'video' &&
+			Boolean(creation.video_url);
 		const showAdminVideoTools = isAdmin && !adminViewingUserDeleted && (status === 'completed' || status === 'failed');
 		const normalizedImageUrlForQueue = showQueueForLater ? normalizeImageUrlForQueue(creation.url) : '';
 		let isQueuedForLater = false;
@@ -1665,6 +1685,7 @@ async function loadCreation() {
 			showMoreInfoPill: hasDetailsForFailed,
 			showDelete: canEdit && !isAdmin,
 			showQueueForLater,
+			showQueueFromFrame,
 			queueForLaterLabel,
 			isFailed,
 			deleteDisabled: (userDeleted && isAdmin) ? false : !(!isPublished && (status === 'failed' || (status === 'creating' && isTimedOut) || status === 'completed')),
@@ -1680,6 +1701,7 @@ async function loadCreation() {
 			actionsContext.showRetry = false;
 			actionsContext.showDelete = false;
 			actionsContext.showQueueForLater = false;
+			actionsContext.showQueueFromFrame = false;
 			actionsContext.showMoreInfoPill = false;
 		}
 		const hasGroupPublishActions = Boolean(actionsContext.showPublish || actionsContext.showUnpublish);
@@ -1863,10 +1885,18 @@ async function loadCreation() {
 			historyChainIds.push(creationId);
 		}
 
+		const lineageVideoPlayGlyphSvg =
+			'<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>';
 		const currentIndicatorHtml = `
 			<button type="button" class="creation-detail-history-current creation-detail-history-lineage-btn" data-lineage-ancestor-open="${creationId}"
 				aria-label="Current creation — open in lineage">
 				<span class="creation-detail-history-current-text">current</span>
+			</button>
+		`;
+		const lineageVideoPlayBtnHtml = `
+			<button type="button" class="creation-detail-history-play-lineage-btn" data-lineage-video-playlist-btn hidden
+				aria-label="Play video lineage">
+				<span class="creation-detail-history-play-lineage-icon">${lineageVideoPlayGlyphSvg}</span>
 			</button>
 		`;
 
@@ -1959,9 +1989,11 @@ async function loadCreation() {
 
 			ancestorsHtml = html`
 				<div class="creation-detail-history-wrap">
-					<div class="creation-detail-history-label">Ancestors</div>
+					<div class="creation-detail-history-header">
+						<div class="creation-detail-history-label">Ancestors</div>
+					</div>
 					<div class="creation-detail-history" data-creation-history>
-						${parts}${currentIndicatorHtml}
+						${parts}${currentIndicatorHtml}${lineageVideoPlayBtnHtml}
 					</div>
 				</div>
 			`;
@@ -2541,6 +2573,77 @@ async function loadCreation() {
 		let lineageNavIndex = 0;
 		const lineageModalCreationById = new Map();
 
+		function creationJsonIsLineageVideo(c) {
+			if (!c || typeof c !== 'object') return false;
+			if ((c.status || 'completed') !== 'completed') return false;
+			const m = c.meta && typeof c.meta === 'object' ? c.meta : {};
+			const mt = typeof m.media_type === 'string' ? m.media_type : '';
+			if (mt === 'video' && c.video_url) return true;
+			return Boolean(c.video_url);
+		}
+
+		/** meta.history is oldest → newest; current is last in the chain. */
+		async function collectLineageVideoSlidesOldestFirst() {
+			const chain =
+				lineageModalChainIdsOrdered.length > 0 ? [...lineageModalChainIdsOrdered] : [];
+			if (chain.length === 0) return [];
+			await prefetchLineageModalCreationsAndMedia(chain);
+			const out = [];
+			for (const id of chain) {
+				const c = lineageModalCreationById.get(id);
+				if (!creationJsonIsLineageVideo(c)) continue;
+				const url = String(c.video_url || '').trim();
+				if (!url) continue;
+				const w = Number(c.width);
+				const h = Number(c.height);
+				const slide = { url, creationId: id };
+				if (Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0) {
+					slide.width = w;
+					slide.height = h;
+				}
+				out.push(slide);
+			}
+			return out;
+		}
+
+		async function openLineageVideoPlaylist() {
+			const pageVideo = document.querySelector('video[data-video]');
+			let shouldResumePageVideo = false;
+			if (pageVideo instanceof HTMLVideoElement && !pageVideo.paused) {
+				shouldResumePageVideo = true;
+				pageVideo.pause();
+			}
+			const slides = await collectLineageVideoSlidesOldestFirst();
+			if (slides.length === 0) {
+				if (shouldResumePageVideo && pageVideo instanceof HTMLVideoElement) {
+					if (typeof safeMediaPlay === 'function') safeMediaPlay(pageVideo);
+					else void pageVideo.play().catch(() => {});
+				}
+				showToast('No videos in this lineage');
+				return;
+			}
+			if (!creationDetailInlineLightboxMod?.openChatVideoGalleryLightbox) {
+				if (shouldResumePageVideo && pageVideo instanceof HTMLVideoElement) {
+					if (typeof safeMediaPlay === 'function') safeMediaPlay(pageVideo);
+					else void pageVideo.play().catch(() => {});
+				}
+				return;
+			}
+			creationDetailInlineLightboxMod.openChatVideoGalleryLightbox(slides, {
+				galleryLabel: 'Video lineage',
+				startIndex: 0,
+				loopGallery: true,
+				autoAdvanceOnEnded: true,
+				onClose: () => {
+					if (!shouldResumePageVideo || !(pageVideo instanceof HTMLVideoElement)) return;
+					shouldResumePageVideo = false;
+					if (typeof safeMediaPlay === 'function') safeMediaPlay(pageVideo);
+					else void pageVideo.play().catch(() => {});
+				},
+			});
+		}
+
+
 		function preloadLineageImageUrl(url) {
 			if (!url || typeof url !== 'string') return Promise.resolve();
 			return new Promise((resolve) => {
@@ -2997,6 +3100,18 @@ async function loadCreation() {
 					}
 				}
 			});
+		}
+
+		const lineageVideoPlaylistBtn = detailContent.querySelector('[data-lineage-video-playlist-btn]');
+		if (lineageVideoPlaylistBtn instanceof HTMLButtonElement && lineageModalChainIdsOrdered.length >= 2) {
+			lineageVideoPlaylistBtn.addEventListener('click', (e) => {
+				e.preventDefault();
+				void openLineageVideoPlaylist();
+			});
+			void (async () => {
+				const slides = await collectLineageVideoSlidesOldestFirst();
+				if (slides.length >= 2) lineageVideoPlaylistBtn.hidden = false;
+			})();
 		}
 
 		// Hydrate ancestor thumbnails when the slot had no thumb URL (rare): fill img[data-history-img] inside lineage buttons.
@@ -3692,7 +3807,21 @@ async function loadCreation() {
 								// ignore storage errors
 							}
 						}
-					}
+					},
+					'queue-from-frame': async () => {
+						if (!showQueueFromFrame || !creation.video_url) return;
+						closeMobileMoreMenu();
+						await loadDeps();
+						if (typeof openQueueFromFrameModal !== 'function') return;
+						openQueueFromFrameModal({
+							videoUrl: String(creation.video_url),
+							sourceId: Number(creationId),
+							published: isPublished,
+							uploadImageFile,
+							addToMutateQueue,
+							showToast,
+						});
+					},
 				};
 				if (typeof targets[action] === 'function') targets[action]();
 				closeMobileMoreMenu();
