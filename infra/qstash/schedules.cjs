@@ -15,7 +15,6 @@ const QSTASH_SCHEDULES = [
 		label: "Email digest / lifecycle cron",
 		destinationPath: "/api/worker/notifications",
 		cron: "0 * * * *",
-		body: {},
 		method: "POST"
 	},
 	{

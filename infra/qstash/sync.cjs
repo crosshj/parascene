@@ -38,25 +38,30 @@ function getArg(name) {
  */
 async function upsertSchedule(def, destination, { token, qstashBase, dryRun }) {
 	const scheduleUrl = `${qstashBase}/v2/schedules/${destination}`;
-	const body = def.body ?? {};
+	const hasBody = def.body !== undefined;
+	const body = hasBody ? def.body : null;
 
 	console.log(`\n${def.id} — ${def.label}`);
 	console.log(`  cron:        ${def.cron}`);
 	console.log(`  destination: ${destination}`);
-	console.log(`  body:        ${JSON.stringify(body)}`);
+	console.log(`  body:        ${hasBody ? JSON.stringify(body) : "(none)"}`);
 
 	if (dryRun) return { id: def.id, dryRun: true };
 
+	const headers = {
+		Authorization: `Bearer ${token}`,
+		"Upstash-Cron": def.cron,
+		"Upstash-Schedule-Id": def.id,
+		"Upstash-Method": def.method || "POST"
+	};
+	if (hasBody) {
+		headers["Content-Type"] = "application/json";
+	}
+
 	const res = await fetch(scheduleUrl, {
 		method: "POST",
-		headers: {
-			Authorization: `Bearer ${token}`,
-			"Content-Type": "application/json",
-			"Upstash-Cron": def.cron,
-			"Upstash-Schedule-Id": def.id,
-			"Upstash-Method": def.method || "POST"
-		},
-		body: JSON.stringify(body)
+		headers,
+		body: hasBody ? JSON.stringify(body) : undefined
 	});
 
 	const text = await res.text();

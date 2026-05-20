@@ -37,7 +37,7 @@ Do not configure schedules only by hand in the Upstash console — edit `schedul
 
 | Schedule id | Cron (UTC) | Destination | Body |
 |-------------|------------|-------------|------|
-| `parascene-notifications-cron` | `0 * * * *` | `https://api.<domain>/api/worker/notifications` | `{}` |
+| `parascene-notifications-cron` | `0 * * * *` | `https://api.<domain>/api/worker/notifications` | (none) |
 | `parascene-visit-pulse-flush` | `10 5 * * *` (00:10 US East; flushes **yesterday US East** partition) | `https://api.<domain>/api/worker/jobs` | `{ "job_type": "visit_pulse_flush", "args": {} }` |
 
 **Auth:** QStash signing keys on workers; notifications also accepts `CRON_SECRET` Bearer for admin manual run.

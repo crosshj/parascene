@@ -61,41 +61,55 @@ export async function verifyQStashRequest(req) {
 		return false;
 	}
 
-	// Use raw body when set (e.g. cron route mounted with express.raw()). Otherwise: QStash signs the raw body;
-	// for empty POST (e.g. cron) that is "". Vercel/serverless often parses empty body as {} so we must use ""
-	// for verification when body is missing or empty object, else we'd pass "{}" and body hash would not match.
-	const body =
-		req.rawBodyForVerify !== undefined
-			? req.rawBodyForVerify
-			: typeof req.body === "string"
-				? req.body
-				: req.body != null && typeof req.body === "object" && Object.keys(req.body).length === 0
-					? ""
-					: req.body != null
-						? JSON.stringify(req.body)
-						: "";
+	// QStash signs the raw request body. Vercel/serverless often parses an empty POST as {}.
+	// Schedules configured with body: {} send the literal "{}" — try both when parsed body is empty.
+	const bodyCandidates = getBodyCandidatesForVerify(req);
 	const path = req.originalUrl || req.url || "/api/worker/create";
 
 	logQStash("Verifying QStash signature", {
 		path,
-		has_body: !!body,
-		body_length: body?.length || 0,
+		body_candidates: bodyCandidates.length,
+		body_lengths: bodyCandidates.map((b) => b?.length || 0),
 		signature_length: signature?.length || 0,
 	});
 
-	try {
-		await receiver.verify({
-			body,
-			signature,
-		});
-		logQStash("QStash signature verified successfully");
-		return true;
-	} catch (err) {
-		logQStashError("QStash signature verification failed", {
-			error: err.message,
-			error_type: err.constructor.name,
-			path,
-		});
-		return false;
+	for (const body of bodyCandidates) {
+		try {
+			await receiver.verify({
+				body,
+				signature,
+			});
+			logQStash("QStash signature verified successfully", { body_length: body?.length || 0 });
+			return true;
+		} catch (err) {
+			logQStash("QStash signature attempt failed", {
+				body_length: body?.length || 0,
+				error: err.message,
+			});
+		}
 	}
+
+	logQStashError("QStash signature verification failed", { path, body_candidates: bodyCandidates.length });
+	return false;
+}
+
+/** @returns {string[]} Raw body string(s) to try for signature verification (newest schedules omit body → ""). */
+function getBodyCandidatesForVerify(req) {
+	if (req.rawBodyForVerify !== undefined) {
+		return [req.rawBodyForVerify];
+	}
+	if (typeof req.body === "string") {
+		return [req.body];
+	}
+	if (req.body == null) {
+		return [""];
+	}
+	if (typeof req.body === "object") {
+		const keys = Object.keys(req.body);
+		if (keys.length === 0) {
+			return ["", "{}"];
+		}
+		return [JSON.stringify(req.body)];
+	}
+	return [String(req.body)];
 }
