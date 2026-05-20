@@ -235,7 +235,7 @@ export default function createBlogAdminRoutes({ queries }) {
 				published_at: null,
 				meta: {}
 			});
-			const row = await queries.selectBlogPostById.get(result.insertId ?? result.lastInsertRowid);
+			const row = await queries.selectBlogPostById.get(result.insertId);
 			return res.status(201).json({ post: rowToJson(row) });
 		} catch (e) {
 			return res.status(500).json({ error: e?.message || "Failed to create post" });

@@ -97,8 +97,7 @@ function parseMultipartCreate(req, { maxFileBytes = 50 * 1024 * 1024 } = {}) {
 
 export default function createCreateRoutes({ queries, storage }) {
 	const router = express.Router();
-	// Serve created images statically (for filesystem-based adapters)
-	// This will be used as fallback for filesystem adapters
+	// Legacy local files under db/data/images/created (optional fallback)
 	const imagesDir = path.join(__dirname, "..", "db", "data", "images", "created");
 	router.use("/images/created", express.static(imagesDir));
 
@@ -1838,7 +1837,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				try {
 					const u = new URL(normalized);
 					const path = u.pathname || "";
-					// Backend serves at /api/images/created/*; some adapters (sqlite/mock) return /images/created/ in getImageUrl.
+					// Backend serves at /api/images/created/*; normalize legacy /images/created/ paths from storage.
 					const prefixWithApi = "/api/images/created/";
 					const prefixNoApi = "/images/created/";
 					if (path.startsWith(prefixWithApi)) return path.slice(prefixWithApi.length) || null;
@@ -2182,8 +2181,6 @@ export default function createCreateRoutes({ queries, storage }) {
 			const images = await queries.selectCreatedImagesForUser.all(user.id, {
 				limit: pageLimit,
 				offset,
-				// Supabase adapter will honor this to filter at DB level.
-				// Other adapters will ignore it and rely on the JS filter below.
 				viewerEnableNsfw: enableNsfw
 			});
 
@@ -2223,7 +2220,6 @@ export default function createCreateRoutes({ queries, storage }) {
 				};
 			});
 
-			// For non-Supabase adapters, still enforce NSFW filtering in JS.
 			const filtered = enableNsfw ? imagesWithUrls : imagesWithUrls.filter((img) => !img.nsfw);
 			const has_more = images.length === pageLimit;
 
@@ -3185,7 +3181,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				"completed",
 				initialCoverState.meta
 			);
-			const groupedId = Number(insertResult?.insertId ?? insertResult?.lastInsertRowid);
+			const groupedId = Number(insertResult?.insertId);
 			if (!Number.isFinite(groupedId) || groupedId <= 0) {
 				return res.status(500).json({ error: "Failed to create grouped creation" });
 			}

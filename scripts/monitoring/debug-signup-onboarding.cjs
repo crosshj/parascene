@@ -637,7 +637,7 @@ async function main() {
 			console.log('- Full repair requires SUPABASE_SERVICE_ROLE_KEY.');
 		} else {
 			try {
-				const { openDb: openSupabaseDb } = await import('../../db/adapters/supabase.js');
+				const { openDb: openSupabaseDb } = await import('../../db/supabase.js');
 				const dbInstance = openSupabaseDb();
 				const storage = dbInstance?.storage;
 				if (!storage?.getImageBufferAnon || !storage?.uploadImage || !storage?.deleteImageAnon) {

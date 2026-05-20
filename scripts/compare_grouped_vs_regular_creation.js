@@ -80,7 +80,7 @@ function deriveUiFields(row, storage) {
 }
 
 async function loadSnapshot(id, ctx) {
-	const { queries, db, storage } = ctx;
+	const { queries, storage } = ctx;
 	const created = await queries.selectCreatedImageByIdAnyUser.get(id);
 	const feedItem = typeof queries.selectFeedItemByCreatedImageId?.get === "function"
 		? await queries.selectFeedItemByCreatedImageId.get(id)
@@ -90,25 +90,13 @@ async function loadSnapshot(id, ctx) {
 		: [];
 	const projected = Array.isArray(projectedRows) ? (projectedRows[0] || null) : null;
 
-	let rawCreated = null;
-	if (db && typeof db.prepare === "function") {
-		try {
-			rawCreated = db.prepare(
-				`SELECT id, user_id, filename, file_path, width, height, color, status, created_at, published, published_at, title, description, meta, unavailable_at
-				 FROM created_images WHERE id = ?`
-			).get(id);
-		} catch {
-			rawCreated = null;
-		}
-	}
-
-	const meta = parseMeta(created?.meta ?? rawCreated?.meta);
+	const meta = parseMeta(created?.meta);
 	const group = meta?.group && typeof meta.group === "object" ? meta.group : null;
 	const sourceCreations = Array.isArray(group?.source_creations) ? group.source_creations : [];
 
 	return {
 		id,
-		created: pick(created || rawCreated, [
+		created: pick(created, [
 			"id",
 			"user_id",
 			"filename",
@@ -124,7 +112,7 @@ async function loadSnapshot(id, ctx) {
 			"description",
 			"unavailable_at"
 		]),
-		derived_ui: deriveUiFields(created || rawCreated, storage),
+		derived_ui: deriveUiFields(created, storage),
 		feed_item_row: feedItem
 			? pick(feedItem, ["id", "created_image_id", "title", "summary", "author", "tags", "created_at"])
 			: null,

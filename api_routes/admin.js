@@ -13,7 +13,7 @@ import {
 import { scheduleAnonCreationJob } from "./utils/scheduleCreationJob.js";
 import { getEmailSettings } from "./utils/emailSettings.js";
 import { getBaseAppUrlForEmail } from "./utils/url.js";
-import { RELATED_PARAM_KEYS } from "../db/adapters/relatedParams.js";
+import { RELATED_PARAM_KEYS } from "../db/relatedParams.js";
 import { runNotificationsCronForTests } from "../api/worker/notifications.js";
 import { buildRequestMeta } from "./utils/analytics.js";
 import { prsnCidFromMeta } from "./utils/prsnCids.js";
@@ -2174,7 +2174,7 @@ export default function createAdminRoutes({ queries, storage }) {
 						"missing_method",
 						"fetch_error",
 						"storage_upload_video_unavailable",
-						"unsupported_adapter",
+						"missing_db_query",
 						"server_not_found",
 						"invalid_user_id",
 					].includes(repair.reason)

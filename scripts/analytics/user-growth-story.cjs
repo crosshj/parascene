@@ -297,65 +297,6 @@ function normalizeUsers(rows) {
 		.filter((u) => u.role === 'consumer' && !u.suspended)
 }
 
-function getRows(db, sql, params = []) {
-	try {
-		return db.prepare(sql).all(...params)
-	} catch {
-		return []
-	}
-}
-
-function loadEvents(db, minIso, allowedUserIds) {
-	const events = []
-	const allowed = allowedUserIds instanceof Set ? allowedUserIds : null
-	const push = (rows, type, userKey = 'user_id', tsKey = 'created_at', extra = null) => {
-		for (const row of rows) {
-			const userId = Number(row?.[userKey])
-			const ts = safeDate(row?.[tsKey])
-			if (!Number.isFinite(userId) || userId <= 0 || !ts) continue
-			if (allowed && !allowed.has(userId)) continue
-			if (ts < new Date(minIso)) continue
-			events.push({
-				user_id: userId,
-				ts,
-				type,
-				...(typeof extra === 'function' ? extra(row) : {})
-			})
-		}
-	}
-
-	push(getRows(db, `SELECT user_id, created_at, published_at, meta FROM created_images WHERE created_at >= datetime(?)`, [minIso]), 'creation', 'user_id', 'created_at', row => {
-		let isMutation = false
-		try {
-			const meta = row?.meta && typeof row.meta === 'string' ? JSON.parse(row.meta) : (row?.meta || {})
-			const mid = Number(meta?.mutate_of_id)
-			isMutation = Number.isFinite(mid) && mid > 0
-		} catch {
-			isMutation = false
-		}
-		return { isMutation, published_at: row?.published_at || null }
-	})
-	push(getRows(db, `SELECT user_id, created_at FROM comments_created_image WHERE created_at >= datetime(?)`, [minIso]), 'comment')
-	push(getRows(db, `SELECT user_id, created_at FROM likes_created_image WHERE created_at >= datetime(?)`, [minIso]), 'like')
-	push(getRows(db, `SELECT user_id, created_at FROM comment_reactions WHERE created_at >= datetime(?)`, [minIso]), 'reaction')
-	push(getRows(db, `SELECT user_id, created_at FROM sessions WHERE created_at >= datetime(?)`, [minIso]), 'session')
-	push(getRows(db, `SELECT from_user_id, created_at FROM tip_activity WHERE created_at >= datetime(?)`, [minIso]), 'tip_sent', 'from_user_id', 'created_at')
-	push(getRows(db, `SELECT to_user_id, created_at FROM tip_activity WHERE created_at >= datetime(?)`, [minIso]), 'tip_received', 'to_user_id', 'created_at')
-	push(getRows(db, `SELECT id AS user_id, last_active_at AS created_at FROM users WHERE last_active_at IS NOT NULL AND last_active_at >= datetime(?)`, [minIso]), 'touch')
-
-	// Treat published_at as a separate action while preserving creation time events.
-	const publishedRows = getRows(db, `SELECT user_id, published_at FROM created_images WHERE published_at IS NOT NULL AND published_at >= datetime(?)`, [minIso])
-	for (const row of publishedRows) {
-		const userId = Number(row?.user_id)
-		const ts = safeDate(row?.published_at)
-		if (!Number.isFinite(userId) || userId <= 0 || !ts) continue
-		if (allowed && !allowed.has(userId)) continue
-		events.push({ user_id: userId, ts, type: 'publish' })
-	}
-
-	return events
-}
-
 async function fetchSupabaseRows(client, table, columns) {
 	const pageSize = 1000
 	const out = []
@@ -569,25 +510,7 @@ async function loadFromDbInstance(dbInstance, minIso) {
 		return { users, events, sourceLabel: 'supabase', shareTryFunnel }
 	}
 
-	if (dbInstance?.db && typeof dbInstance.db.prepare === 'function') {
-		const sqliteEvents = loadEvents(dbInstance.db, minIso, allowedUserIds)
-		let shareRows = []
-		let tryRows = []
-		try {
-			shareRows = dbInstance.db.prepare(`SELECT viewed_at, anon_cid, meta FROM share_page_views`).all()
-		} catch {
-			shareRows = []
-		}
-		try {
-			tryRows = dbInstance.db.prepare(`SELECT anon_cid, created_at, meta FROM try_requests`).all()
-		} catch {
-			tryRows = []
-		}
-		const shareTryFunnel = buildShareTryFunnel(shareRows, tryRows)
-		return { users, events: sqliteEvents, sourceLabel: 'sqlite', shareTryFunnel }
-	}
-
-	throw new Error('Unsupported DB adapter: expected Supabase client or SQLite database handle.')
+	throw new Error('Unsupported database: expected Supabase client from openDb().')
 }
 
 function buildStory(users, events) {
@@ -1142,8 +1065,6 @@ ${report.shareTryFunnel ? `
 }
 
 async function main() {
-	// Default to Supabase when .env provides credentials.
-	if (!process.env.DB_ADAPTER) process.env.DB_ADAPTER = 'supabase'
 	const { openDb } = await import('../../db/index.js')
 	const dbInstance = await openDb({ quiet: true })
 	const lookbackStart = addDays(startOfUtcDay(new Date()), -LOOKBACK_DAYS)
@@ -1158,9 +1079,8 @@ async function main() {
 	const defaultOut = path.join(REPO_ROOT, '.output', 'user-growth-story', `user-growth-story-${outStamp}.html`)
 	const OUT = process.env.OUT || defaultOut
 	await fs.mkdir(path.dirname(OUT), { recursive: true })
-	const html = renderHtml(report).replace('</h1>', `</h1>\n<p class="small">Data source: ${esc(sourceLabel === 'supabase' ? 'Supabase (via DB adapter)' : 'SQLite (via DB adapter)')}</p>`)
+	const html = renderHtml(report).replace('</h1>', `</h1>\n<p class="small">Data source: ${esc('Supabase')}</p>`)
 	await fs.writeFile(OUT, html)
-	if (typeof dbInstance?.db?.close === 'function') dbInstance.db.close()
 	console.log(`wrote ${OUT}`)
 }
 

@@ -3,7 +3,7 @@
  * One-time migration: import markdown files under pages/blog/ into blog_posts as drafts.
  * Usage: node scripts/migrate-blog-to-db.mjs <author_user_id>
  *
- * Loads repo-root .env via dotenv, defaults DB_ADAPTER to supabase (set SUPABASE_* in .env).
+ * Loads repo-root .env via dotenv (set SUPABASE_* in .env).
  * Prefer SUPABASE_SERVICE_ROLE_KEY so inserts bypass RLS (same as the API server).
  */
 import dotenv from "dotenv";
@@ -20,9 +20,6 @@ const pagesDir = path.join(repoRoot, "pages");
 const blogDir = path.join(pagesDir, "blog");
 
 dotenv.config({ path: path.join(repoRoot, ".env") });
-if (!process.env.DB_ADAPTER) {
-	process.env.DB_ADAPTER = "supabase";
-}
 
 function requireSupabaseEnv() {
 	const missing = ["SUPABASE_URL", "SUPABASE_ANON_KEY"].filter((k) => !process.env[k]?.trim());
@@ -46,9 +43,7 @@ async function main() {
 		process.exit(1);
 	}
 
-	if (process.env.DB_ADAPTER === "supabase") {
-		requireSupabaseEnv();
-	}
+	requireSupabaseEnv();
 
 	const { queries } = await openDb({ quiet: true });
 	const posts = await scanBlogDirectory(blogDir, blogDir);

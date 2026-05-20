@@ -99,7 +99,6 @@ try {
 		// console.log("[Startup] Environment:", {
 		// 	VERCEL: !!process.env.VERCEL,
 		// 	NODE_ENV: process.env.NODE_ENV,
-		// 	DB_ADAPTER: process.env.DB_ADAPTER || "sqlite (default)"
 		// });
 	}
 	const dbResult = await openDb();

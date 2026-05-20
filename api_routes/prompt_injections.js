@@ -727,7 +727,7 @@ export default function createPromptInjectionsRoutes({ queries, storage }) {
 			try {
 				const result = await fnInsert(tag, injectionText, title, description, meta);
 				return res.status(201).json({
-					id: result.insertId ?? result.lastInsertRowid ?? null,
+					id: result.insertId ?? null,
 					tag,
 					title,
 					injection_text: injectionText

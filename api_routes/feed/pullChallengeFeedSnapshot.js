@@ -177,7 +177,7 @@ function phaseSubtitle(phase) {
 
 /**
  * Live data from #challenges thread (latest `challenge_config` + matching `challenge_submission` messages).
- * SQLite-only dev setups return `{ ok: false }` without throwing.
+ * Returns `{ ok: false }` when challenge data is unavailable (e.g. no #challenges thread).
  *
  * @returns {Promise<{
  *   ok: boolean,

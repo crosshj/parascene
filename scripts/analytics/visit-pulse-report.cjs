@@ -8,7 +8,7 @@
  *   node scripts/analytics/visit-pulse-report.cjs --live
  *   node scripts/analytics/visit-pulse-report.cjs --json
  *
- * DB: apply db/schemas/supabase_11_visit_pulse_days.sql (Supabase) or use SQLite adapter.
+ * DB: apply db/schemas/supabase_11_visit_pulse_days.sql in Supabase.
  * Redis: UPSTASH_REDIS_REST_* in .env
  */
 

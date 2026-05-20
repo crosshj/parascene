@@ -15,17 +15,16 @@ Pages are served from `pages/`. Static assets are served from `public/`
 
 ## local db + auth
 
-- SQLite file is stored at `db/data/app.db`
+- Database: Supabase (set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` in `.env`)
 - Auth routes: `POST /signup`, `POST /login`, `POST /logout`
 - Session check: `GET /me`
 
-To reset to a blank database:
+To wipe and re-seed a **dev** Supabase project (destructive; not an npm script):
 
-```sh
-npm run reset
-```
+1. In `.env`: `ALLOW_DB_RESET=true` and `RESET_SUPABASE_PROJECT_REF` = project ref from Supabase → Settings → General (must match `SUPABASE_URL`).
+2. Run: `node db/reset.js`
 
-Seeded accounts after reset (run `npm run reset` if you already seeded):
+Seeded accounts after reset:
 
 - `consumer@example.com` / `p123@#`
 - `creator@example.com` / `p123@#`

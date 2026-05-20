@@ -2,11 +2,11 @@ import { createClient } from "@supabase/supabase-js";
 import path from "path";
 import sharp from "sharp";
 import { RELATED_PARAM_DEFAULTS, RELATED_PARAM_KEYS } from "./relatedParams.js";
-import { getThumbnailUrl } from "../../api_routes/utils/url.js";
-import { putAnchorCreationFirst } from "../../api_routes/feed/doomSiteVideoTimeline.js";
+import { getThumbnailUrl } from "../api_routes/utils/url.js";
+import { putAnchorCreationFirst } from "../api_routes/feed/doomSiteVideoTimeline.js";
 
 // Note: Supabase schema must be provisioned separately (SQL editor/migrations).
-// This adapter expects all tables to be prefixed with "prsn_".
+// All application tables use the "prsn_" prefix.
 
 function requireEnv(name) {
 	const value = process.env[name];
@@ -452,7 +452,6 @@ export function openDb() {
 				if (error) throw error;
 				return {
 					insertId: data.id,
-					lastInsertRowid: data.id,
 					changes: 1
 				};
 			}
@@ -468,7 +467,6 @@ export function openDb() {
 				if (error) throw error;
 				return {
 					insertId: data.id,
-					lastInsertRowid: data.id,
 					changes: 1
 				};
 			}
@@ -835,7 +833,7 @@ export function openDb() {
 					.single();
 				if (error) throw error;
 				const id = data?.id;
-				return { insertId: id, lastInsertRowid: id };
+				return { insertId: id };
 			}
 		},
 		selectOauthClientByPublicClientId: {
@@ -990,7 +988,7 @@ export function openDb() {
 					.select("id")
 					.single();
 				if (error) throw error;
-				return { insertId: data?.id, lastInsertRowid: data?.id };
+				return { insertId: data?.id };
 			}
 		},
 		selectOAuthGrantByRefreshTokenHash: {
@@ -1928,7 +1926,6 @@ export function openDb() {
 				if (error) throw error;
 				return {
 					insertId: data.id,
-					lastInsertRowid: data.id,
 					changes: 1
 				};
 			}
@@ -1987,7 +1984,7 @@ export function openDb() {
 					.select("id")
 					.single();
 				if (error) throw error;
-				return { insertId: data.id, lastInsertRowid: data.id, changes: 1 };
+				return { insertId: data.id, changes: 1 };
 			}
 		},
 		selectUserEmailCampaignState: {
@@ -4459,7 +4456,6 @@ export function openDb() {
 				if (error) throw error;
 				return {
 					changes: data?.id != null ? 1 : 0,
-					lastInsertRowid: data?.id,
 					insertId: data?.id
 				};
 			}
@@ -4509,7 +4505,6 @@ export function openDb() {
 				if (error) throw error;
 				return {
 					insertId: data.id,
-					lastInsertRowid: data.id,
 					changes: 1
 				};
 			}
@@ -4595,7 +4590,6 @@ export function openDb() {
 				if (error) throw error;
 				return {
 					insertId: data.id,
-					lastInsertRowid: data.id,
 					changes: 1
 				};
 			}
@@ -6178,7 +6172,6 @@ export function openDb() {
 				if (error) throw error;
 				return {
 					insertId: data.id,
-					lastInsertRowid: data.id,
 					changes: 1
 				};
 			}
@@ -6497,7 +6490,7 @@ export function openDb() {
 					.select("id")
 					.single();
 				if (error) throw error;
-				return { insertId: data.id, lastInsertRowid: data.id, changes: 1 };
+				return { insertId: data.id, changes: 1 };
 			}
 		},
 		updateBlogPost: {
@@ -6727,7 +6720,6 @@ export function openDb() {
 				if (error) throw error;
 				return {
 					insertId: data.id,
-					lastInsertRowid: data.id,
 					changes: 1
 				};
 			}
@@ -6806,7 +6798,6 @@ export function openDb() {
 				if (error) throw error;
 				return {
 					insertId: data.id,
-					lastInsertRowid: data.id,
 					changes: 1
 				};
 			}

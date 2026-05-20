@@ -150,7 +150,7 @@ export default function createExploreRoutes({ queries }) {
 	// Text search across all feed items (both people you follow and the broader explore feed).
 	// For now this does an in-memory filter over the combined feed items:
 	// title, summary, tags, author, author_display_name, author_user_name.
-	// This keeps behavior consistent across adapters and can be upgraded to
+	// In-memory filter for now; can be upgraded to
 	// full-text search (including metadata and comments) without changing the API.
 	router.get("/api/explore/search", async (req, res) => {
 		try {

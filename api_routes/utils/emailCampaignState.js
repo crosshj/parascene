@@ -9,7 +9,7 @@
  * Single source of truth for "campaign X implies steps Y are done".
  */
 
-/** Steps we can mark as completed (keys match adapter method names). */
+/** Steps we can mark as completed (keys match query method names on `queries`). */
 const STEP_METHODS = {
 	welcome: "upsertUserEmailCampaignStateWelcome",
 	first_creation_nudge: "upsertUserEmailCampaignStateFirstCreationNudge"

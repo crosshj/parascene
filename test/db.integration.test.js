@@ -101,8 +101,7 @@ describe('Database Integration Tests', () => {
 			}
 			supabaseServiceClient = createClient(supabaseUrl, serviceRoleKey);
 
-			// Initialize db abstraction with Supabase adapter
-			process.env.DB_ADAPTER = 'supabase';
+			// Initialize database queries
 			const db = await openDb({ quiet: true });
 			dbQueries = db.queries;
 
@@ -205,7 +204,6 @@ describe('Database Integration Tests', () => {
 			}
 			supabaseServiceClient = createClient(supabaseUrl, serviceRoleKey);
 
-			process.env.DB_ADAPTER = 'supabase';
 			const db = await openDb({ quiet: true });
 			dbQueries = db.queries;
 
@@ -386,12 +384,11 @@ describe('Database Integration Tests', () => {
 			}
 			supabaseServiceClient = createClient(supabaseUrl, serviceRoleKey);
 
-			process.env.DB_ADAPTER = 'supabase';
 			const db = await openDb({ quiet: true });
 			dbQueries = db.queries;
 		});
 
-		it('should reproduce oceanman explore results using adapter pagination', async () => {
+		it('should reproduce oceanman explore results using query pagination', async () => {
 			const { data: profile, error: profileError } = await supabaseServiceClient
 				.from('prsn_user_profiles')
 				.select('user_id, user_name')
@@ -407,7 +404,7 @@ describe('Database Integration Tests', () => {
 			expect(Number.isFinite(viewerId)).toBe(true);
 
 			// Reproduce /api/explore behavior:
-			// frontend requests limit=100, API asks adapter for limit+1 to compute hasMore.
+			// frontend requests limit=100, API asks for limit+1 to compute hasMore.
 			const pageSize = 100;
 			let offset = 0;
 			let hasMore = true;

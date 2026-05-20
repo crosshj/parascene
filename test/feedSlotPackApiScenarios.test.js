@@ -48,7 +48,7 @@ describe('interleaveSlotPackHead', () => {
 	});
 });
 
-describe('pullMobileChatSlotPackFeedPageOne (mock DB)', () => {
+describe('pullMobileChatSlotPackFeedPageOne (mock queries)', () => {
 	const pullOpts = () => ({
 		userId: 1,
 		limit: SLOT_PACK_PAGE_LIMIT,

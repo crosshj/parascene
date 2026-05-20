@@ -78,7 +78,7 @@ async function main() {
 			"and user has zero published non-welcome creations (avatar and unpublished try creations do not count)."
 		);
 	} else {
-		console.log("User is not currently eligible according to the adapter query.");
+		console.log("User is not currently eligible according to the database query.");
 	}
 
 	if (typeof db.close === "function") {

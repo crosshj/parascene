@@ -18,7 +18,7 @@ export async function runVisitPulseFlush({ args = {} } = {}) {
 
 	const { queries } = await openDb({ quiet: true });
 	if (!queries.upsertVisitPulseDay?.run) {
-		throw new Error("upsertVisitPulseDay not available on DB adapter");
+		throw new Error("upsertVisitPulseDay query is not available");
 	}
 
 	await queries.upsertVisitPulseDay.run(snapshot);

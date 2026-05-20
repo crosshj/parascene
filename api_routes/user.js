@@ -297,8 +297,7 @@ export default function createProfileRoutes({ queries }) {
 
 		const passwordHash = bcrypt.hashSync(password, 12);
 		const info = await queries.insertUser.run(email, passwordHash, "consumer");
-		// Support both insertId (standardized) and lastInsertRowid (legacy SQLite)
-		const userId = info.insertId || info.lastInsertRowid;
+		const userId = info.insertId;
 
 		// Persist referral (sharer/source) from share page → auth form so we know who referred this user
 		const referrerUserId = req.body.referrer_user_id != null ? Number(req.body.referrer_user_id) : null;
@@ -1143,7 +1142,7 @@ export default function createProfileRoutes({ queries }) {
 											"completed",
 											meta
 										);
-										createdImageId = insertResult?.insertId ?? insertResult?.lastInsertRowid;
+										createdImageId = insertResult?.insertId;
 									} else {
 										const existing = (existingCreations || []).find((c) => c.meta?.source_anon_id === row.id || c.meta?.source_anon_id === Number(row.id));
 										createdImageId = existing?.id;
@@ -1202,7 +1201,7 @@ export default function createProfileRoutes({ queries }) {
 							"completed",
 							welcomeMetaOrNull
 						);
-						const createdImageId = insertResult?.insertId ?? insertResult?.lastInsertRowid;
+						const createdImageId = insertResult?.insertId;
 						if (createdImageId) {
 							payload.avatar_url = newUrl;
 							await queries.upsertUserProfile.run(req.auth.userId, payload);
@@ -1476,7 +1475,7 @@ export default function createProfileRoutes({ queries }) {
 									"completed",
 									creationMetaOrNull
 								);
-								createdImageId = insertResult?.insertId ?? insertResult?.lastInsertRowid;
+								createdImageId = insertResult?.insertId;
 								if (createdImageId) {
 									avatar_url = newUrl;
 									if (oldAvatarKey && storage.deleteGenericImage) pendingDeletes.push(oldAvatarKey);
@@ -1764,8 +1763,6 @@ export default function createProfileRoutes({ queries }) {
 			} else if (queries.selectPublishedCreatedImagesForUser?.all) {
 				images = await queries.selectPublishedCreatedImagesForUser.all(targetUserId, {
 					...pagination,
-					// Supabase adapter will honor this to filter NSFW at DB level;
-					// sqlite/mock ignore it and rely on JS filter below.
 					viewerEnableNsfw: enableNsfw
 				});
 			} else if (queries.selectCreatedImagesForUser?.all) {
@@ -2039,7 +2036,7 @@ export default function createProfileRoutes({ queries }) {
 					result = await queries.acknowledgeNotificationById.run(id, user.id, user.role);
 				}
 			} catch (ackError) {
-				// Fallback: e.g. missing columns on older DB, or adapter quirk
+				// Fallback when bulk ack by creation is unavailable (e.g. older schema)
 				if (process.env.NODE_ENV !== "production") {
 					console.error("Notification ack (by-creation path) failed, falling back to single ack:", ackError?.message ?? ackError);
 				}

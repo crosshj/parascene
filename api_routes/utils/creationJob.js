@@ -1218,7 +1218,7 @@ async function resolveProviderAsyncPollContext(queries, createdImageId) {
 	}
 	const getAny = queries.selectCreatedImageByIdAnyUser?.get;
 	if (typeof getAny !== "function") {
-		return { ok: false, reason: "unsupported_adapter" };
+		return { ok: false, reason: "missing_db_query" };
 	}
 	const image = await getAny(imageId);
 	if (!image) {
@@ -1235,7 +1235,7 @@ async function resolveProviderAsyncPollContext(queries, createdImageId) {
 	}
 	const getServer = queries.selectServerById?.get;
 	if (typeof getServer !== "function") {
-		return { ok: false, reason: "unsupported_adapter" };
+		return { ok: false, reason: "missing_db_query" };
 	}
 	const server = await getServer(serverId);
 	if (!server?.server_url) {
@@ -1373,7 +1373,7 @@ async function completeRepairAfterVideoBytes({
 			...baseOut,
 			repaired: false,
 			video_url: videoUrl,
-			summary: "Video uploaded but adapter has no updateCreatedImageMeta — orphan object may exist in storage.",
+			summary: "Video uploaded but updateCreatedImageMeta is unavailable — orphan object may exist in storage.",
 		};
 	}
 	const up = await upMeta(imageId, userId, mergedMeta);

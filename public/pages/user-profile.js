@@ -2190,7 +2190,7 @@ async function init() {
 		// ignore errors
 	}
 
-	// Normalize json fields in case adapter returned strings (sqlite)
+	// Normalize json fields in case API returned JSON strings
 	profile.socials = safeJsonParse(profile.socials, {});
 	profile.badges = safeJsonParse(profile.badges, []);
 	profile.meta = safeJsonParse(profile.meta, {});
