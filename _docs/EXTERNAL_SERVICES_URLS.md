@@ -27,17 +27,22 @@ Use the **api** subdomain for any URL you configure in Stripe or QStash below (e
 
 ---
 
-## 2. QStash Schedules (notifications cron)
+## 2. QStash Schedules (declarative infra)
 
-**Where:** [Upstash QStash](https://console.upstash.com/) → Schedules. The schedule that triggers the notifications/digest cron.
+**Source of truth:** `infra/qstash/schedules.cjs`  
+**Apply (like a migration):** `node infra/qstash/sync.cjs`  
+**Docs:** `infra/qstash/README.md`
 
-**URL you set:**  
-`https://api.yourdomain.com/api/worker/notifications`
+Do not configure schedules only by hand in the Upstash console — edit `schedules.cjs` and re-run sync so prod/staging stay repeatable.
 
-**Method:** POST  
-**Auth:** QStash signs the request (your app verifies with QStash signing keys). Optionally you can also use `CRON_SECRET` Bearer if the handler allows it.
+| Schedule id | Cron (UTC) | Destination | Body |
+|-------------|------------|-------------|------|
+| `parascene-notifications-cron` | `0 * * * *` | `https://api.<domain>/api/worker/notifications` | `{}` |
+| `parascene-visit-pulse-flush` | `10 5 * * *` (00:10 US East; flushes **yesterday US East** partition) | `https://api.<domain>/api/worker/jobs` | `{ "job_type": "visit_pulse_flush", "args": {} }` |
 
-**Why:** The cron runs digest emails, welcome emails, nudges, re-engagement, and creation highlights. Use the **api** subdomain so the request is passthrough and not proxied/challenged by Cloudflare.
+**Auth:** QStash signing keys on workers; notifications also accepts `CRON_SECRET` Bearer for admin manual run.
+
+**api subdomain:** Passthrough DNS (not Cloudflare-proxied www) for all callback URLs.
 
 ---
 
@@ -46,7 +51,7 @@ Use the **api** subdomain for any URL you configure in Stripe or QStash below (e
 **Where:** You don’t configure a URL in the Upstash dashboard. Your **app** tells QStash where to POST when it *publishes* a job (creation jobs, generic jobs). That callback base URL comes from your app’s API hostname (see `api_routes/utils/url.js` → `getQStashCallbackBaseUrl()`).
 
 **URLs QStash will call (built by the app):**
-- `https://<api-host>/api/worker/jobs` — generic jobs (e.g. embedding)
+- `https://<api-host>/api/worker/jobs` — generic jobs (embedding, `visit_pulse_flush`)
 - `https://<api-host>/api/worker/create` — creation/landscape jobs
 
 **What you need to do:** Ensure the app’s API hostname (e.g. in `url.js` or env) is the **api** subdomain (e.g. `api.yourdomain.com`) so these callbacks go to passthrough and don’t hit Cloudflare proxy/challenge.
@@ -65,6 +70,6 @@ Use the **api** subdomain for any URL you configure in Stripe or QStash below (e
 | Service                | What to update |
 |------------------------|----------------|
 | **Stripe**             | Webhook endpoint URL → `https://api.<domain>/api/webhooks/stripe` |
-| **QStash Schedules**   | Notifications schedule destination URL → `https://api.<domain>/api/worker/notifications` |
+| **QStash Schedules**   | Edit `infra/qstash/schedules.cjs`, run `node infra/qstash/sync.cjs` |
 | **QStash (publish)**   | No URL in dashboard; ensure app `url.js` / env uses `api.<domain>` so job callbacks use api subdomain |
 | **Cloudflare**         | DNS for api and sh; keep api and sh as passthrough for callbacks and unfurling |

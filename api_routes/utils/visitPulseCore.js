@@ -1,5 +1,8 @@
 /**
- * Shared visit-pulse logic (Redis keys, 15-min UTC blocks, range merge, Redis read).
+ * Shared visit-pulse logic (Redis keys, 15-min blocks, range merge, Redis read).
+ * Redis key + DB `day`: US East calendar date (UTC-5, no DST).
+ * Timestamps in hashes and details.ranges: UTC ISO.
+ * Flush cron: 00:10 US East (05:10 UTC) → yesterday US East partition.
  */
 
 import { Redis } from "@upstash/redis";
@@ -7,11 +10,22 @@ import { Redis } from "@upstash/redis";
 export const PULSE_BLOCK_MINUTES = 15;
 export const PULSE_BLOCKS_PER_DAY = (24 * 60) / PULSE_BLOCK_MINUTES;
 
+/** `pulse:day:{date}:…` and DB `day` column — US Eastern calendar date, fixed UTC-5. */
+export const PULSE_DAY_PARTITION_LABEL = "US East (UTC-5, no DST)";
+/** first_seen, last_seen, range endpoints. */
+export const PULSE_TIMESTAMPS_TZ = "UTC";
+export const PULSE_US_EAST_UTC_OFFSET_HOURS = 5;
+export const PULSE_US_EAST_OFFSET_MS = PULSE_US_EAST_UTC_OFFSET_HOURS * 60 * 60 * 1000;
+
+export const PULSE_FLUSH_CRON_UTC = "10 5 * * *";
+export const PULSE_FLUSH_TRIGGER_LABEL =
+	"00:10 US East (UTC-5, no DST) → flush yesterday US East partition";
+
 export const PULSE_ACTIVE_KEY = "pulse:active";
 export const PULSE_DAY_TTL_SEC = 72 * 60 * 60;
 export const PULSE_ACTIVE_TTL_SEC = 10 * 60;
 export const PULSE_DEDUPE_TTL_SEC = 90;
-export const PULSE_DETAILS_VERSION = 1;
+export const PULSE_DETAILS_VERSION = 2;
 
 /** @param {string} dayKey YYYY-MM-DD */
 export function pulseDayHashKey(dayKey, visitorKey) {
@@ -32,28 +46,38 @@ export function pulseDedupeKey(visitorKey) {
 	return `pulse:dedupe:${visitorKey}`;
 }
 
-export function utcDayKey(date = new Date()) {
-	return date.toISOString().slice(0, 10);
+/** US East calendar date YYYY-MM-DD (fixed UTC-5) — Redis + DB partition. */
+export function usEastDayKey(date = new Date()) {
+	const shifted = new Date(date.getTime() - PULSE_US_EAST_OFFSET_MS);
+	const y = shifted.getUTCFullYear();
+	const m = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+	const d = String(shifted.getUTCDate()).padStart(2, "0");
+	return `${y}-${m}-${d}`;
 }
 
-/** @param {string} dayKey YYYY-MM-DD */
-export function utcDayStartMs(dayKey) {
-	return Date.parse(`${dayKey}T00:00:00.000Z`);
+/** Midnight US East for partition dayKey → UTC epoch ms. */
+export function usEastDayStartMs(dayKey) {
+	const parts = String(dayKey || "")
+		.trim()
+		.split("-")
+		.map((x) => Number(x));
+	const [y, m, d] = parts;
+	if (!y || !m || !d) throw new Error(`usEastDayStartMs: invalid dayKey ${dayKey}`);
+	return Date.UTC(y, m - 1, d, PULSE_US_EAST_UTC_OFFSET_HOURS, 0, 0, 0);
 }
 
-/** UTC 15-minute block index 0..95 for a timestamp. */
-export function utcBlockIndex(nowMs) {
-	const dayKey = utcDayKey(new Date(nowMs));
-	const dayStart = utcDayStartMs(dayKey);
+/** 15-minute block index 0..95 within a US East partition day. */
+export function pulseBlockIndexForDay(dayKey, nowMs) {
+	const dayStart = usEastDayStartMs(dayKey);
 	const offset = nowMs - dayStart;
 	if (!Number.isFinite(offset) || offset < 0) return 0;
 	const idx = Math.floor(offset / (PULSE_BLOCK_MINUTES * 60 * 1000));
 	return Math.min(PULSE_BLOCKS_PER_DAY - 1, Math.max(0, idx));
 }
 
-/** @param {string} dayKey @param {number} blockIndex */
+/** @param {string} dayKey US East partition @param {number} blockIndex */
 export function blockIndexToRangeIso(dayKey, blockIndex) {
-	const startMs = utcDayStartMs(dayKey) + blockIndex * PULSE_BLOCK_MINUTES * 60 * 1000;
+	const startMs = usEastDayStartMs(dayKey) + blockIndex * PULSE_BLOCK_MINUTES * 60 * 1000;
 	const endMs = startMs + PULSE_BLOCK_MINUTES * 60 * 1000;
 	return [new Date(startMs).toISOString(), new Date(endMs).toISOString()];
 }
@@ -91,6 +115,125 @@ export function mergeBlockIndicesToRanges(dayKey, indices) {
 	return ranges;
 }
 
+/** @param {string} dayKey @param {Array<[string, string]>} ranges */
+export function rangesToBlockIndices(dayKey, ranges) {
+	const dayStart = usEastDayStartMs(dayKey);
+	const blockMs = PULSE_BLOCK_MINUTES * 60 * 1000;
+	const indices = new Set();
+	for (const pair of ranges || []) {
+		const startMs = Date.parse(pair?.[0]);
+		const endMs = Date.parse(pair?.[1]);
+		if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) continue;
+		for (let b = 0; b < PULSE_BLOCKS_PER_DAY; b++) {
+			const bStart = dayStart + b * blockMs;
+			const bEnd = bStart + blockMs;
+			if (bEnd > startMs && bStart < endMs) indices.add(b);
+		}
+	}
+	return [...indices];
+}
+
+/**
+ * Merge one visitor's stored row with incoming (Redis) data — union 15-min blocks, keep higher hit count.
+ * @param {string} dayKey
+ * @param {{ visitor_key: string, user_id?: number|null, client_id?: string|null, hits?: number, ranges?: Array<[string,string]> }} stored
+ * @param {{ visitor_key: string, user_id?: number|null, client_id?: string|null, hits?: number, ranges?: Array<[string,string]> }} incoming
+ */
+export function mergeVisitorPulse(dayKey, stored, incoming) {
+	const key = stored?.visitor_key || incoming?.visitor_key;
+	const blocks = new Set([
+		...rangesToBlockIndices(dayKey, stored?.ranges),
+		...rangesToBlockIndices(dayKey, incoming?.ranges)
+	]);
+	const ranges = mergeBlockIndicesToRanges(dayKey, [...blocks]);
+	const parsed = parseVisitorKey(key);
+	return {
+		visitor_key: key,
+		user_id: stored?.user_id ?? incoming?.user_id ?? parsed.user_id,
+		client_id: stored?.client_id ?? incoming?.client_id ?? parsed.client_id,
+		hits: Math.max(Number(stored?.hits) || 0, Number(incoming?.hits) || 0),
+		ranges,
+		active_blocks: blocks.size
+	};
+}
+
+/** @param {string} dayKey @param {Array<object>} visitors */
+export function buildSnapshotFromVisitors(dayKey, visitors, meta = {}) {
+	const list = Array.isArray(visitors) ? visitors : [];
+	const authed = list.filter((v) => parseVisitorKey(v.visitor_key).kind === "user").length;
+	const anon = list.filter((v) => parseVisitorKey(v.visitor_key).kind === "anon").length;
+	return {
+		day: dayKey,
+		unique_visitors: list.length,
+		authed_visitors: authed,
+		anon_visitors: anon,
+		total_hits: list.reduce((n, v) => n + (Number(v.hits) || 0), 0),
+		total_active_blocks: list.reduce((n, v) => n + (Number(v.active_blocks) || 0), 0),
+		details: {
+			version: PULSE_DETAILS_VERSION,
+			day_partition: PULSE_DAY_PARTITION_LABEL,
+			timestamps: PULSE_TIMESTAMPS_TZ,
+			flush_trigger: PULSE_FLUSH_TRIGGER_LABEL,
+			...meta,
+			visitors: list.map((v) => ({
+				visitor_key: v.visitor_key,
+				user_id: v.user_id ?? null,
+				client_id: v.client_id ?? null,
+				hits: Number(v.hits) || 0,
+				ranges: Array.isArray(v.ranges) ? v.ranges : []
+			}))
+		}
+	};
+}
+
+/**
+ * Merge existing DB row with a fresh Redis snapshot (re-flush safe).
+ * @param {object|null|undefined} existingRow
+ * @param {object} redisSnapshot
+ */
+export function mergeDaySnapshots(existingRow, redisSnapshot) {
+	const dayKey = String(redisSnapshot?.day || existingRow?.day || "").trim();
+	if (!dayKey) throw new Error("mergeDaySnapshots: missing day");
+
+	const storedList = Array.isArray(existingRow?.details?.visitors) ? existingRow.details.visitors : [];
+	const redisList = Array.isArray(redisSnapshot?.details?.visitors) ? redisSnapshot.details.visitors : [];
+	const byKey = new Map();
+
+	for (const v of storedList) {
+		const key = String(v?.visitor_key || "").trim();
+		if (!key) continue;
+		const parsed = parseVisitorKey(key);
+		byKey.set(key, {
+			visitor_key: key,
+			user_id: v.user_id ?? parsed.user_id,
+			client_id: v.client_id ?? parsed.client_id,
+			hits: Number(v.hits) || 0,
+			ranges: Array.isArray(v.ranges) ? v.ranges : [],
+			active_blocks: rangesToBlockIndices(dayKey, v.ranges).length
+		});
+	}
+
+	for (const v of redisList) {
+		const key = String(v?.visitor_key || "").trim();
+		if (!key) continue;
+		const incoming = {
+			visitor_key: key,
+			...parseVisitorKey(key),
+			hits: Number(v.hits) || 0,
+			ranges: Array.isArray(v.ranges) ? v.ranges : [],
+			active_blocks: rangesToBlockIndices(dayKey, v.ranges).length
+		};
+		if (byKey.has(key)) {
+			byKey.set(key, mergeVisitorPulse(dayKey, byKey.get(key), incoming));
+		} else {
+			byKey.set(key, incoming);
+		}
+	}
+
+	const merged = [...byKey.values()].sort((a, b) => a.visitor_key.localeCompare(b.visitor_key));
+	return buildSnapshotFromVisitors(dayKey, merged, { merged_flush: true });
+}
+
 /** @param {string} visitorKey */
 export function parseVisitorKey(visitorKey) {
 	const raw = String(visitorKey || "");
@@ -126,7 +269,7 @@ async function scanKeys(r, pattern) {
 }
 
 /**
- * Load one visitor's Redis state for a UTC day.
+ * Load one visitor's Redis state for one US East partition day.
  * @param {import('@upstash/redis').Redis} r
  * @param {string} dayKey
  * @param {string} visitorKey
@@ -150,7 +293,7 @@ export async function loadVisitorPulseFromRedis(r, dayKey, visitorKey) {
 }
 
 /**
- * Scan Redis for all visitors on a UTC day and build flush payload.
+ * Scan Redis for all visitors on one US East partition day and build flush payload.
  * @param {import('@upstash/redis').Redis} [r]
  * @param {string} dayKey
  */
@@ -166,29 +309,7 @@ export async function buildDaySnapshotFromRedis(dayKey, r = getPulseRedis()) {
 		visitors.push(await loadVisitorPulseFromRedis(r, dayKey, visitorKey));
 	}
 
-	const authed = visitors.filter((v) => v.kind === "user").length;
-	const anon = visitors.filter((v) => v.kind === "anon").length;
-	const totalHits = visitors.reduce((n, v) => n + (v.hits || 0), 0);
-	const totalActiveBlocks = visitors.reduce((n, v) => n + (v.active_blocks || 0), 0);
-
-	return {
-		day: dayKey,
-		unique_visitors: visitors.length,
-		authed_visitors: authed,
-		anon_visitors: anon,
-		total_hits: totalHits,
-		total_active_blocks: totalActiveBlocks,
-		details: {
-			version: PULSE_DETAILS_VERSION,
-			visitors: visitors.map((v) => ({
-				visitor_key: v.visitor_key,
-				user_id: v.user_id,
-				client_id: v.client_id,
-				hits: v.hits,
-				ranges: v.ranges
-			}))
-		}
-	};
+	return buildSnapshotFromVisitors(dayKey, visitors);
 }
 
 /**
@@ -204,7 +325,7 @@ export async function recordPulseToRedis(visitorKey, nowMs, dayKey, r = getPulse
 	if (dedupeOk == null) return;
 
 	const iso = new Date(nowMs).toISOString();
-	const block = String(utcBlockIndex(nowMs));
+	const block = String(pulseBlockIndexForDay(dayKey, nowMs));
 	const dayHashKey = pulseDayHashKey(dayKey, visitorKey);
 	const blocksKey = pulseBlocksSetKey(dayKey, visitorKey);
 	const pipe = r.pipeline();
@@ -219,8 +340,8 @@ export async function recordPulseToRedis(visitorKey, nowMs, dayKey, r = getPulse
 	await pipe.exec();
 }
 
-export function yesterdayUtcDayKey() {
-	const d = new Date();
-	d.setUTCDate(d.getUTCDate() - 1);
-	return utcDayKey(d);
+/** Previous US East partition day (nightly flush default). */
+export function yesterdayUsEastDayKey() {
+	const todayStart = usEastDayStartMs(usEastDayKey());
+	return usEastDayKey(new Date(todayStart - 1));
 }

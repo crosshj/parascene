@@ -4,8 +4,9 @@
  * Design goals (notes)
  * - passive: no new client beacons; piggyback on existing Express traffic only
  * - everyone: anonymous via prsn_cid (v:), logged-in via user id (u:)
- * - timeline: 15-min UTC blocks → merged ranges per visitor (multiple sessions OK)
- * - bird's-eye: one DB row per day (summary cols + details.visitors[].ranges); cross-day = query columns only
+ * - timeline: 15-min blocks on US East day grid; range endpoints stored as UTC ISO
+ * - bird's-eye: one DB row per US East calendar day (summary cols + details.visitors[].ranges)
+ * - flush at US East EOD → yesterday US East partition (union ranges; safe re-flush)
  * - vercel-friendly: warm lambda Map throttles Redis; Redis merge + nightly flush to DB
  * - low chatter: skip static, workers, webhooks, poll routes
  * - fail-open: Redis down → request still succeeds
@@ -24,7 +25,7 @@ export {
 	pulseDayHashKey,
 	pulseDayScanPattern,
 	pulseBlocksSetKey,
-	utcDayKey,
+	usEastDayKey,
 	recordPulseToRedis,
 	buildDaySnapshotFromRedis,
 	mergeBlockIndicesToRanges,
@@ -33,7 +34,7 @@ export {
 	PULSE_BLOCKS_PER_DAY
 } from "../utils/visitPulseCore.js";
 
-import { recordPulseToRedis, utcDayKey } from "../utils/visitPulseCore.js";
+import { recordPulseToRedis, usEastDayKey } from "../utils/visitPulseCore.js";
 
 const localLastPulseMs = new Map();
 const LOCAL_PULSE_MIN_MS = 60_000;
@@ -129,7 +130,7 @@ export function createVisitPulseMiddleware(options = {}) {
 		const nowMs = Date.now();
 		if (!shouldPulseLocally(visitorKey, nowMs)) return next();
 
-		const dayKey = utcDayKey(new Date(nowMs));
+		const dayKey = usEastDayKey(new Date(nowMs));
 		void recordPulseToRedis(visitorKey, nowMs, dayKey).catch((err) => {
 			if (!failOpen) {
 				console.warn("[visit-pulse] redis", err?.message || err);

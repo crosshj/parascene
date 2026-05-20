@@ -1,4 +1,4 @@
--- Visit pulse: one row per UTC day (summary columns + details jsonb for timeline drill-down).
+-- Visit pulse: one row per US East calendar day (UTC-5, no DST). details ranges are UTC ISO. Flush at US East EOD.
 
 CREATE TABLE IF NOT EXISTS prsn_visit_pulse_days (
   day date PRIMARY KEY,

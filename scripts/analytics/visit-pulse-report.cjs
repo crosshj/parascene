@@ -31,9 +31,6 @@ function hasFlag(name) {
 	return process.argv.slice(2).includes(`--${name}`);
 }
 
-function utcDayKey(date = new Date()) {
-	return date.toISOString().slice(0, 10);
-}
 
 function pad(str, width) {
 	const s = String(str ?? "");
@@ -52,9 +49,9 @@ function formatRanges(ranges) {
 }
 
 /** @param {string} dayKey @param {Array<[string,string]>} ranges */
-function renderTimeline(dayKey, ranges, blocksPerDay, blockMinutes) {
+function renderTimeline(dayKey, ranges, blocksPerDay, blockMinutes, dayStartMs) {
 	const chars = new Array(blocksPerDay).fill("·");
-	const dayStart = Date.parse(`${dayKey}T00:00:00.000Z`);
+	const dayStart = dayStartMs;
 	for (const [startIso, endIso] of ranges || []) {
 		const startMs = Date.parse(startIso);
 		const endMs = Date.parse(endIso);
@@ -98,7 +95,7 @@ async function loadLiveFromRedis(dayKey) {
 	return { snapshot, activeNow };
 }
 
-function printReport({ dayKey, source, row, activeNow, blocksPerDay, blockMinutes, asJson }) {
+function printReport({ dayKey, source, row, activeNow, blocksPerDay, blockMinutes, dayStartMs, tzLabel, asJson }) {
 	const visitors = row?.details?.visitors ?? [];
 	const summary = {
 		day: dayKey,
@@ -117,7 +114,7 @@ function printReport({ dayKey, source, row, activeNow, blocksPerDay, blockMinute
 		return;
 	}
 
-	console.log(`Visit pulse — ${dayKey} (UTC)  [${source}]`);
+	console.log(`Visit pulse — ${dayKey} (${tzLabel})  [${source}]`);
 	console.log("");
 	console.log(
 		`Visitors: ${summary.unique_visitors}  (authed ${summary.authed_visitors}, anon ${summary.anon_visitors})`
@@ -127,7 +124,7 @@ function printReport({ dayKey, source, row, activeNow, blocksPerDay, blockMinute
 	if (summary.flushed_at) console.log(`Flushed at: ${summary.flushed_at}`);
 	if (summary.active_now) console.log(`Active now (Redis): ${summary.active_now}`);
 	console.log("");
-	console.log(`Timeline: # = active 15-min block, · = idle (${blockMinutes}m blocks, UTC)`);
+	console.log(`Timeline: # = active 15-min block, · = idle (${blockMinutes}m blocks, ${tzLabel})`);
 	console.log("");
 
 	if (activeNow?.length) {
@@ -157,19 +154,31 @@ function printReport({ dayKey, source, row, activeNow, blocksPerDay, blockMinute
 					? `anon ${String(v.client_id).slice(0, 12)}`
 					: v.visitor_key;
 		console.log(`${pad(id, 20)} hits ${pad(v.hits ?? 0, 5)}`);
-		console.log(`  ${renderTimeline(dayKey, v.ranges, blocksPerDay, blockMinutes)}`);
+		console.log(`  ${renderTimeline(dayKey, v.ranges, blocksPerDay, blockMinutes, dayStartMs)}`);
 		console.log(`  ${formatRanges(v.ranges)}`);
 		console.log("");
 	}
 }
 
 async function main() {
-	const dayKey = getArg("day") || utcDayKey();
 	const asJson = hasFlag("json");
 	const live = hasFlag("live");
-	const { PULSE_BLOCK_MINUTES, PULSE_BLOCKS_PER_DAY } = await import(
-		"../../api_routes/utils/visitPulseCore.js"
-	);
+	const {
+		PULSE_BLOCK_MINUTES,
+		PULSE_BLOCKS_PER_DAY,
+		usEastDayKey,
+		usEastDayStartMs,
+		PULSE_DAY_PARTITION_LABEL,
+		PULSE_TIMESTAMPS_TZ
+	} = await import("../../api_routes/utils/visitPulseCore.js");
+	const dayKey = getArg("day") || usEastDayKey();
+	const dayStartMs = usEastDayStartMs(dayKey);
+	const reportOpts = {
+		blocksPerDay: PULSE_BLOCKS_PER_DAY,
+		blockMinutes: PULSE_BLOCK_MINUTES,
+		dayStartMs,
+		tzLabel: `${PULSE_DAY_PARTITION_LABEL}; times ${PULSE_TIMESTAMPS_TZ}`
+	};
 
 	if (live) {
 		const { snapshot, activeNow } = await loadLiveFromRedis(dayKey);
@@ -178,8 +187,7 @@ async function main() {
 			source: "redis-live",
 			row: snapshot,
 			activeNow,
-			blocksPerDay: PULSE_BLOCKS_PER_DAY,
-			blockMinutes: PULSE_BLOCK_MINUTES,
+			...reportOpts,
 			asJson
 		});
 		return;
@@ -198,14 +206,13 @@ async function main() {
 			source: "db",
 			row,
 			activeNow: [],
-			blocksPerDay: PULSE_BLOCKS_PER_DAY,
-			blockMinutes: PULSE_BLOCK_MINUTES,
+			...reportOpts,
 			asJson
 		});
 		return;
 	}
 
-	const today = utcDayKey();
+	const today = usEastDayKey();
 	if (dayKey === today) {
 		try {
 			const { snapshot, activeNow } = await loadLiveFromRedis(dayKey);
@@ -215,8 +222,7 @@ async function main() {
 					source: "redis-live (not flushed)",
 					row: snapshot,
 					activeNow,
-					blocksPerDay: PULSE_BLOCKS_PER_DAY,
-					blockMinutes: PULSE_BLOCK_MINUTES,
+					...reportOpts,
 					asJson
 				});
 				return;
@@ -231,8 +237,7 @@ async function main() {
 		source: "none",
 		row: { details: { visitors: [] } },
 		activeNow: [],
-		blocksPerDay: PULSE_BLOCKS_PER_DAY,
-		blockMinutes: PULSE_BLOCK_MINUTES,
+		...reportOpts,
 		asJson
 	});
 }

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * Flush visit pulse from Redis into DB for one UTC day.
+ * Flush visit pulse from Redis into DB for one US East partition day (UTC ISO in details).
  *
  * Usage:
- *   node scripts/analytics/visit-pulse-flush.cjs           # yesterday UTC
+ *   node scripts/analytics/visit-pulse-flush.cjs           # yesterday US East
  *   node scripts/analytics/visit-pulse-flush.cjs --day 2026-05-20
- *   node scripts/analytics/visit-pulse-flush.cjs --today   # today UTC (partial day)
+ *   node scripts/analytics/visit-pulse-flush.cjs --today   # today US East (partial)
  */
 
 const { loadEnv } = require("../repo-root.cjs");
@@ -31,7 +31,8 @@ async function main() {
 	const { runVisitPulseFlush } = await import("../../api_routes/utils/visitPulseFlush.js");
 	let day = getArg("day");
 	if (hasFlag("today")) {
-		day = new Date().toISOString().slice(0, 10);
+		const { usEastDayKey } = await import("../../api_routes/utils/visitPulseCore.js");
+		day = usEastDayKey();
 	}
 	const args = day ? { day } : {};
 	const result = await runVisitPulseFlush({ args });
