@@ -1,8 +1,39 @@
 #!/usr/bin/env node
-const fs = require('fs/promises')
-const path = require('path')
-const { REPO_ROOT, loadEnv } = require('../repo-root.cjs')
+/**
+ * User growth story report.
+ *
+ * HTML: user-growth-story.html · CSS: report.css ({{!styleBlock}})
+ */
+import fs from 'fs/promises'
+import path from 'path'
+import { fileURLToPath } from 'url'
+import { REPO_ROOT, loadEnv } from '../repo-root.cjs'
+import { loadReportStyleBlock } from './report-styles.js'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 loadEnv()
+
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+
+const USER_GROWTH_STORY_HTML_TEMPLATE = path.join(__dirname, 'user-growth-story.html')
+
+let userGrowthStoryHtmlTemplateCache = null
+
+/** {{name}} = escaped; {{!name}} = raw HTML */
+function fillHtmlTemplate(template, values) {
+	return template.replace(/\{\{(!?)([a-zA-Z0-9_]+)\}\}/g, (_, raw, key) => {
+		if (!(key in values)) return ''
+		const v = values[key]
+		return raw === '!' ? String(v ?? '') : esc(v)
+	})
+}
+
+async function loadUserGrowthStoryHtmlTemplate() {
+	if (!userGrowthStoryHtmlTemplateCache) {
+		userGrowthStoryHtmlTemplateCache = await fs.readFile(USER_GROWTH_STORY_HTML_TEMPLATE, 'utf8')
+	}
+	return userGrowthStoryHtmlTemplateCache
+}
 
 const TZ = process.env.TZ_NAME || 'UTC'
 const LOOKBACK_DAYS = Number(process.env.LOOKBACK_DAYS || 120)
@@ -10,7 +41,6 @@ const COHORT_WEEKS = Number(process.env.COHORT_WEEKS || 12)
 const WINDOW_DAYS = Number(process.env.WINDOW_DAYS || 30)
 const now = new Date()
 
-const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
 const n = x => Number.isFinite(x) ? x : 0
 const pct = (a, b) => !b ? '0.0%' : `${(100 * a / b).toFixed(1)}%`
 const pp = (a, b) => `${((a - b) * 100).toFixed(1)}pp`
@@ -784,64 +814,8 @@ function buildStory(users, events) {
 	}
 }
 
-function renderHtml(report) {
-	const anonymizedPayload = buildAnonymizedExportPayload(report)
-	const anonymizedPayloadJson = JSON.stringify(anonymizedPayload)
-	const earliestWeek = report.cumulativeUsersByWeek[0]?.week || '—'
-	const latestWeek = report.cumulativeUsersByWeek[report.cumulativeUsersByWeek.length - 1]?.week || '—'
-	return `<!doctype html>
-<meta charset="utf-8">
-<title>Parascene User Growth Story</title>
-<meta name="darkreader-lock" />
-<style>
-	body{font:14px/1.45 system-ui,sans-serif;max-width:1240px;margin:24px auto;padding:0 16px;color:#111}
-	h1,h2{margin:0 0 12px}
-	section{margin:0 0 28px}
-	table{border-collapse:collapse;width:100%}
-	th,td{padding:6px 8px;border-bottom:1px solid #e5e7eb;vertical-align:top;text-align:left}
-	th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#475569}
-	.small{color:#64748b;font-size:12px}
-	.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
-	.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-	.card{border:1px solid #e5e7eb;padding:12px}
-	ul{padding-left:18px;margin:8px 0 0}
-	.warn{color:#92400e}
-	.copy-row{display:flex;gap:8px;align-items:center;margin:8px 0 16px}
-	.copy-status{color:#64748b;font-size:12px}
-	@media (max-width: 900px){.grid,.grid-2{grid-template-columns:1fr}}
-</style>
-<p class="small"><a href=".">Up one folder</a></p>
-<h1>Parascene User Growth Story</h1>
-<div class="copy-row">
-	<button type="button" id="copy-anonymized-report">Copy anonymized report data</button>
-	<span class="copy-status" id="copy-anonymized-status" aria-live="polite"></span>
-</div>
-<p class="small">Generated: ${esc(fmt.format(now))} (${esc(TZ)})</p>
-<p class="small">Coverage: all-time user growth from ${esc(earliestWeek)} to ${esc(latestWeek)}. Activity/engagement calculations use last ${LOOKBACK_DAYS} days by default (set LOOKBACK_DAYS to change).</p>
-
-<section class="grid">
-	<div class="card"><div class="small">Total users (all-time)</div><div>${report.totalUsers}</div></div>
-	<div class="card"><div class="small">Paid users (current snapshot)</div><div>${report.paidUsers}</div></div>
-	<div class="card"><div class="small">DAU (latest day)</div><div>${report.latestDay.dau}</div></div>
-	<div class="card"><div class="small">WAU (latest week)</div><div>${report.latestWeek.wau}</div></div>
-	<div class="card"><div class="small">MAU (latest month)</div><div>${report.latestMonth.mau}</div></div>
-	<div class="card"><div class="small">Core actions / active user (${WINDOW_DAYS}d)</div><div>${report.actionsPerActive.toFixed(2)}</div></div>
-</section>
-
-<section>
-	<h2>Quick glossary (plain English)</h2>
-	<ul>
-		<li><strong>DAU</strong>: daily active users (unique users active on a day). Use for daily heartbeat.</li>
-		<li><strong>WAU</strong>: weekly active users (unique users active in a week). Use for short-term trend and stickiness.</li>
-		<li><strong>MAU</strong>: monthly active users (unique users active in a month). Use for broader growth baseline.</li>
-		<li><strong>Retention (W+1, W+4)</strong>: of users who joined in a week, % who come back 1 and 4 weeks later. Use for product-market fit signal.</li>
-		<li><strong>Core actions/user</strong>: how much users actually do (comments, creations, publish, likes, reactions, mutations, tips sent).</li>
-	</ul>
-</section>
-
-<section>
-	<h2>All-time growth since launch</h2>
-	<div class="grid-2">
+function buildAllTimeGrowthHtml(report) {
+	return `<div class="grid-2">
 		<div class="card">
 			<div class="small">DAU (all days, with trend)</div>
 			${sparklineWithTrend(report.dailyAllTimeRows, 'dau', 'day', '#0ea5e9')}
@@ -868,112 +842,38 @@ function renderHtml(report) {
 		</div>
 		<div class="card"><div class="small">Legend</div><p class="small">Dashed red line indicates linear regression trend.</p></div>
 	</div>
-	<p class="small">This section answers “are we gaining users over all time?” directly from user signups since launch.</p>
-</section>
+	<p class="small">This section answers “are we gaining users over all time?” directly from user signups since launch.</p>`
+}
 
-<section>
-	<h2>Story</h2>
-	<ul>${report.observations.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
-</section>
-
-<section>
-	<h2>If we keep only three</h2>
-	<ul>
-		<li><strong>Active users:</strong> WAU ${report.latestWeek.wau}, MAU ${report.latestMonth.mau}.</li>
-		<li><strong>Retention:</strong> review W+1 and W+4 cohort rates below.</li>
-		<li><strong>Core action per user:</strong> ${report.actionsPerActive.toFixed(2)} over the last ${WINDOW_DAYS} days.</li>
-	</ul>
-</section>
-
-<section>
-	<h2>Active users and growth</h2>
-	<p class="small">No non-all-time charts are shown. This section keeps a numeric weekly table only.</p>
-	${table(report.weeklyGrowthRows, [
-		{ label: 'Week', key: 'week' },
-		{ label: 'WAU', key: 'wau' },
-		{ label: 'New users', key: 'new_users' },
-		{ label: 'WAU WoW', key: 'wau_wow' },
-		{ label: 'New users WoW', key: 'new_users_wow' }
-	])}
-</section>
-
-<section>
-	<h2>Retention by cohort</h2>
-	${table(report.cohortRows, [
-		{ label: 'Cohort week', key: 'cohort' },
-		{ label: 'Signups', key: 'signups' },
-		{ label: 'W+1 retained', key: 'w1_retained' },
-		{ label: 'W+1 rate', html: r => pct(r.w1_retained, r.signups) },
-		{ label: 'W+4 retained', key: 'w4_retained' },
-		{ label: 'W+4 rate', html: r => pct(r.w4_retained, r.signups) },
-		{ label: 'W1-W4 gap', html: r => r.signups ? pp(r.w1_rate, r.w4_rate) : '—' }
-	])}
-</section>
-
-<section>
-	<h2>Engagement depth leaders (core actions)</h2>
-	${table(report.actionLeaders, [
-		{ label: 'User', html: r => esc(r.email) },
-		{ label: 'Core actions', key: 'core_actions' },
-		{ label: 'Active days', key: 'active_days' },
-		{ label: 'Actions/active day', html: r => r.actions_per_active_day.toFixed(2) },
-		{ label: 'Creations', key: 'creations' },
-		{ label: 'Publishes', key: 'publishes' },
-		{ label: 'Comments', key: 'comments' },
-		{ label: 'Likes', key: 'likes' },
-		{ label: 'Reactions', key: 'reactions' },
-		{ label: 'Mutations', key: 'mutations' }
-	])}
-</section>
-
-<section>
-	<h2>Conversion funnel (${WINDOW_DAYS}d signup cohort)</h2>
-	${table([{
-		visitors: 'N/A (not tracked in app DB)',
-		signups: report.funnel.signup30,
-		activated: report.funnel.activated30,
-		retained: report.funnel.retained30,
-		paid: report.funnel.paid30
-	}], [
-		{ label: 'Visitors', key: 'visitors' },
-		{ label: 'Signups', key: 'signups' },
-		{ label: 'Activated (core action <= 7d)', key: 'activated' },
-		{ label: 'Retained (activity days 8-30)', key: 'retained' },
-		{ label: 'Paid now', key: 'paid' },
-		{ label: 'Activation rate', html: r => pct(r.activated, r.signups) },
-		{ label: 'Retention rate', html: r => pct(r.retained, r.signups) },
-		{ label: 'Paid conversion', html: r => pct(r.paid, r.signups) }
-	])}
-	<p class="small warn">Visitor-level funnel stages require web analytics/page-view instrumentation outside the app DB.</p>
-</section>
-
-${report.shareTryFunnel ? `
-<section>
+function buildShareTrySectionHtml(report) {
+	if (!report.shareTryFunnel) return ''
+	const f = report.shareTryFunnel
+	return `<section>
 	<h2>Share + try-flow conversion signals</h2>
 	${table([
 		{
 			window: 'All-time',
-			share_views: report.shareTryFunnel.all_time.share_page_views,
-			share_cids: report.shareTryFunnel.all_time.share_unique_anon_cids,
-			try_requests: report.shareTryFunnel.all_time.try_requests,
-			try_cids: report.shareTryFunnel.all_time.try_unique_anon_cids,
-			try_from_share_cids: report.shareTryFunnel.all_time.try_unique_cids_from_share,
-			transitioned_cids: report.shareTryFunnel.all_time.transitioned_unique_anon_cids,
-			transitioned_users: report.shareTryFunnel.all_time.transitioned_unique_users,
-			try_to_transition: report.shareTryFunnel.all_time.try_to_transition_rate_by_cid,
-			share_to_transition: report.shareTryFunnel.all_time.share_to_transition_rate_by_cid
+			share_views: f.all_time.share_page_views,
+			share_cids: f.all_time.share_unique_anon_cids,
+			try_requests: f.all_time.try_requests,
+			try_cids: f.all_time.try_unique_anon_cids,
+			try_from_share_cids: f.all_time.try_unique_cids_from_share,
+			transitioned_cids: f.all_time.transitioned_unique_anon_cids,
+			transitioned_users: f.all_time.transitioned_unique_users,
+			try_to_transition: f.all_time.try_to_transition_rate_by_cid,
+			share_to_transition: f.all_time.share_to_transition_rate_by_cid
 		},
 		{
 			window: `Last ${WINDOW_DAYS}d`,
-			share_views: report.shareTryFunnel.last_30d.share_page_views,
-			share_cids: report.shareTryFunnel.last_30d.share_unique_anon_cids,
-			try_requests: report.shareTryFunnel.last_30d.try_requests,
-			try_cids: report.shareTryFunnel.last_30d.try_unique_anon_cids,
+			share_views: f.last_30d.share_page_views,
+			share_cids: f.last_30d.share_unique_anon_cids,
+			try_requests: f.last_30d.try_requests,
+			try_cids: f.last_30d.try_unique_anon_cids,
 			try_from_share_cids: '—',
-			transitioned_cids: report.shareTryFunnel.last_30d.transitioned_unique_anon_cids,
-			transitioned_users: report.shareTryFunnel.last_30d.transitioned_unique_users,
-			try_to_transition: report.shareTryFunnel.last_30d.try_to_transition_rate_by_cid,
-			share_to_transition: report.shareTryFunnel.last_30d.share_to_transition_rate_by_cid
+			transitioned_cids: f.last_30d.transitioned_unique_anon_cids,
+			transitioned_users: f.last_30d.transitioned_unique_users,
+			try_to_transition: f.last_30d.try_to_transition_rate_by_cid,
+			share_to_transition: f.last_30d.share_to_transition_rate_by_cid
 		}
 	], [
 		{ label: 'Window', key: 'window' },
@@ -991,21 +891,21 @@ ${report.shareTryFunnel ? `
 	${table([
 		{
 			window: 'All-time',
-			share_clients: report.shareTryFunnel.all_time.share_unique_client_ids,
-			try_clients: report.shareTryFunnel.all_time.try_unique_client_ids,
-			try_cids_with_client: report.shareTryFunnel.all_time.try_unique_cids_with_client_id,
-			try_client_coverage: report.shareTryFunnel.all_time.try_client_id_coverage_by_cid,
-			transitioned_clients: report.shareTryFunnel.all_time.transitioned_unique_client_ids,
-			client_to_transition: report.shareTryFunnel.all_time.try_client_to_transition_rate
+			share_clients: f.all_time.share_unique_client_ids,
+			try_clients: f.all_time.try_unique_client_ids,
+			try_cids_with_client: f.all_time.try_unique_cids_with_client_id,
+			try_client_coverage: f.all_time.try_client_id_coverage_by_cid,
+			transitioned_clients: f.all_time.transitioned_unique_client_ids,
+			client_to_transition: f.all_time.try_client_to_transition_rate
 		},
 		{
 			window: `Last ${WINDOW_DAYS}d`,
-			share_clients: report.shareTryFunnel.last_30d.share_unique_client_ids,
-			try_clients: report.shareTryFunnel.last_30d.try_unique_client_ids,
-			try_cids_with_client: report.shareTryFunnel.last_30d.try_unique_cids_with_client_id,
-			try_client_coverage: report.shareTryFunnel.last_30d.try_client_id_coverage_by_cid,
-			transitioned_clients: report.shareTryFunnel.last_30d.transitioned_unique_client_ids,
-			client_to_transition: report.shareTryFunnel.last_30d.try_client_to_transition_rate
+			share_clients: f.last_30d.share_unique_client_ids,
+			try_clients: f.last_30d.try_unique_client_ids,
+			try_cids_with_client: f.last_30d.try_unique_cids_with_client_id,
+			try_client_coverage: f.last_30d.try_client_id_coverage_by_cid,
+			transitioned_clients: f.last_30d.transitioned_unique_client_ids,
+			client_to_transition: f.last_30d.try_client_to_transition_rate
 		}
 	], [
 		{ label: 'Window', key: 'window' },
@@ -1017,14 +917,11 @@ ${report.shareTryFunnel ? `
 		{ label: 'prsn_cid→transition rate', html: r => typeof r.client_to_transition === 'number' ? pct(r.client_to_transition, 1) : '—' }
 	])}
 	<p class="small">Identity graph coverage: how well prsn_cid is present and linked across share/try/transition events.</p>
-</section>
-` : ''}
+</section>`
+}
 
-<section>
-	<h2>Churn snapshot</h2>
-	<p>${report.churned} of ${report.prevActive} users active in the previous ${WINDOW_DAYS}-day window did not return in the latest window (${pct(report.churned, report.prevActive)}).</p>
-</section>
-<script>
+function buildCopyScriptHtml(anonymizedPayloadJson) {
+	return `<script>
 (() => {
 	const payload = ${anonymizedPayloadJson};
 	const btn = document.getElementById('copy-anonymized-report');
@@ -1060,8 +957,81 @@ ${report.shareTryFunnel ? `
 		}
 	});
 })();
-</script>
-`
+</script>`
+}
+
+async function renderHtml(report) {
+	const anonymizedPayload = buildAnonymizedExportPayload(report)
+	const anonymizedPayloadJson = JSON.stringify(anonymizedPayload)
+	const earliestWeek = report.cumulativeUsersByWeek[0]?.week || '—'
+	const latestWeek = report.cumulativeUsersByWeek[report.cumulativeUsersByWeek.length - 1]?.week || '—'
+	const template = await loadUserGrowthStoryHtmlTemplate()
+	const styleBlock = await loadReportStyleBlock()
+	return fillHtmlTemplate(template, {
+		styleBlock,
+		dataSource: 'Supabase',
+		generatedAt: fmt.format(now),
+		tzLabel: TZ,
+		earliestWeek,
+		latestWeek,
+		lookbackDays: LOOKBACK_DAYS,
+		windowDays: WINDOW_DAYS,
+		totalUsers: report.totalUsers,
+		paidUsers: report.paidUsers,
+		latestDau: report.latestDay.dau,
+		latestWau: report.latestWeek.wau,
+		latestMau: report.latestMonth.mau,
+		actionsPerActive: report.actionsPerActive.toFixed(2),
+		allTimeGrowthHtml: buildAllTimeGrowthHtml(report),
+		observationsHtml: report.observations.map(x => `<li>${esc(x)}</li>`).join(''),
+		weeklyGrowthTableHtml: table(report.weeklyGrowthRows, [
+			{ label: 'Week', key: 'week' },
+			{ label: 'WAU', key: 'wau' },
+			{ label: 'New users', key: 'new_users' },
+			{ label: 'WAU WoW', key: 'wau_wow' },
+			{ label: 'New users WoW', key: 'new_users_wow' }
+		]),
+		cohortTableHtml: table(report.cohortRows, [
+			{ label: 'Cohort week', key: 'cohort' },
+			{ label: 'Signups', key: 'signups' },
+			{ label: 'W+1 retained', key: 'w1_retained' },
+			{ label: 'W+1 rate', html: r => pct(r.w1_retained, r.signups) },
+			{ label: 'W+4 retained', key: 'w4_retained' },
+			{ label: 'W+4 rate', html: r => pct(r.w4_retained, r.signups) },
+			{ label: 'W1-W4 gap', html: r => r.signups ? pp(r.w1_rate, r.w4_rate) : '—' }
+		]),
+		actionLeadersTableHtml: table(report.actionLeaders, [
+			{ label: 'User', html: r => esc(r.email) },
+			{ label: 'Core actions', key: 'core_actions' },
+			{ label: 'Active days', key: 'active_days' },
+			{ label: 'Actions/active day', html: r => r.actions_per_active_day.toFixed(2) },
+			{ label: 'Creations', key: 'creations' },
+			{ label: 'Publishes', key: 'publishes' },
+			{ label: 'Comments', key: 'comments' },
+			{ label: 'Likes', key: 'likes' },
+			{ label: 'Reactions', key: 'reactions' },
+			{ label: 'Mutations', key: 'mutations' }
+		]),
+		funnelTableHtml: table([{
+			visitors: 'N/A (not tracked in app DB)',
+			signups: report.funnel.signup30,
+			activated: report.funnel.activated30,
+			retained: report.funnel.retained30,
+			paid: report.funnel.paid30
+		}], [
+			{ label: 'Visitors', key: 'visitors' },
+			{ label: 'Signups', key: 'signups' },
+			{ label: 'Activated (core action <= 7d)', key: 'activated' },
+			{ label: 'Retained (activity days 8-30)', key: 'retained' },
+			{ label: 'Paid now', key: 'paid' },
+			{ label: 'Activation rate', html: r => pct(r.activated, r.signups) },
+			{ label: 'Retention rate', html: r => pct(r.retained, r.signups) },
+			{ label: 'Paid conversion', html: r => pct(r.paid, r.signups) }
+		]),
+		shareTrySectionHtml: buildShareTrySectionHtml(report),
+		churnParagraph: `${report.churned} of ${report.prevActive} users active in the previous ${WINDOW_DAYS}-day window did not return in the latest window (${pct(report.churned, report.prevActive)}).`,
+		copyScriptHtml: buildCopyScriptHtml(anonymizedPayloadJson)
+	})
 }
 
 async function main() {
@@ -1079,8 +1049,7 @@ async function main() {
 	const defaultOut = path.join(REPO_ROOT, '.output', 'user-growth-story', `user-growth-story-${outStamp}.html`)
 	const OUT = process.env.OUT || defaultOut
 	await fs.mkdir(path.dirname(OUT), { recursive: true })
-	const html = renderHtml(report).replace('</h1>', `</h1>\n<p class="small">Data source: ${esc('Supabase')}</p>`)
-	await fs.writeFile(OUT, html)
+	await fs.writeFile(OUT, await renderHtml(report))
 	console.log(`wrote ${OUT}`)
 }
 

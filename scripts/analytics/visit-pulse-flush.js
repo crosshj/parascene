@@ -3,12 +3,12 @@
  * Flush visit pulse from Redis into DB for one US East partition day (UTC ISO in details).
  *
  * Usage:
- *   node scripts/analytics/visit-pulse-flush.cjs           # yesterday US East
- *   node scripts/analytics/visit-pulse-flush.cjs --day 2026-05-20
- *   node scripts/analytics/visit-pulse-flush.cjs --today   # today US East (partial)
+ *   node scripts/analytics/visit-pulse-flush.js           # yesterday US East
+ *   node scripts/analytics/visit-pulse-flush.js --day 2026-05-20
+ *   node scripts/analytics/visit-pulse-flush.js --today   # today US East (partial)
  */
 
-const { loadEnv } = require("../repo-root.cjs");
+import { loadEnv } from "../repo-root.cjs";
 loadEnv();
 
 function getArg(name) {

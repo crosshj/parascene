@@ -1,7 +1,38 @@
 #!/usr/bin/env node
-const fs = require('fs/promises')
-const path = require('path')
-const { REPO_ROOT } = require('../repo-root.cjs')
+/**
+ * HN today report.
+ *
+ * HTML: hn-today.html · CSS: report.css ({{!styleBlock}})
+ */
+import fs from 'fs/promises'
+import path from 'path'
+import { fileURLToPath } from 'url'
+import { REPO_ROOT } from '../repo-root.cjs'
+import { loadReportStyleBlock } from './report-styles.js'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+
+const HN_TODAY_HTML_TEMPLATE = path.join(__dirname, 'hn-today.html')
+
+let hnTodayHtmlTemplateCache = null
+
+/** {{name}} = escaped; {{!name}} = raw HTML */
+function fillHtmlTemplate(template, values) {
+	return template.replace(/\{\{(!?)([a-zA-Z0-9_]+)\}\}/g, (_, raw, key) => {
+		if (!(key in values)) return ''
+		const v = values[key]
+		return raw === '!' ? String(v ?? '') : esc(v)
+	})
+}
+
+async function loadHnTodayHtmlTemplate() {
+	if (!hnTodayHtmlTemplateCache) {
+		hnTodayHtmlTemplateCache = await fs.readFile(HN_TODAY_HTML_TEMPLATE, 'utf8')
+	}
+	return hnTodayHtmlTemplateCache
+}
 
 const TZ = process.env.TZ_NAME || 'America/New_York'
 const CONCURRENCY = Number(process.env.CONCURRENCY || 24)
@@ -55,7 +86,6 @@ const dateTimeFmt = new Intl.DateTimeFormat('en-US', {
 	hour12: true
 })
 
-const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
 const n = x => Number.isFinite(x) ? x : 0
 const median = a => !a.length ? 0 : [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)]
 const avg = a => !a.length ? 0 : a.reduce((s, x) => s + x, 0) / a.length
@@ -262,105 +292,55 @@ function table(rows, cols) {
 		}</tbody></table>`
 }
 
-function html(report) {
+async function buildHtmlReport(report) {
 	const topSet = new Set(report.topToday.map(s => s.id))
-	return `<!doctype html>
-<meta charset="utf-8">
-<title>HN Today</title>
-<meta name="darkreader-lock" />
-<style>
-	body{font:14px/1.45 system-ui,sans-serif;max-width:1180px;margin:24px auto;padding:0 16px;color:#111}
-	h1,h2{margin:0 0 12px}
-	section{margin:0 0 28px}
-	table{border-collapse:collapse;width:100%}
-	th,td{padding:6px 8px;border-bottom:1px solid #e5e7eb;vertical-align:top;text-align:left}
-	th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#475569}
-	.small{color:#64748b;font-size:12px}
-	.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
-	.card{border:1px solid #e5e7eb;padding:12px}
-	a{color:#b45309;text-decoration:none}
-	ul{padding-left:18px;margin:8px 0 0}
-</style>
-<p class="small"><a href=".">Up one folder</a></p>
-<h1>Hacker News Today</h1>
-<p class="small">Timezone: ${esc(TZ)} · Generated: ${esc(dateTimeFmt.format(now))}</p>
-
-<section class="grid">
-	<div class="card"><div class="small">Stories submitted today</div><div>${report.stories.length}</div></div>
-	<div class="card"><div class="small">Made current top feed</div><div>${report.topToday.length}</div></div>
-	<div class="card"><div class="small">Made current best feed</div><div>${report.bestToday.length}</div></div>
-	<div class="card"><div class="small">Top-feed hit rate</div><div>${pct(report.topToday.length, report.stories.length)}</div></div>
-</section>
-
-<section>
-	<h2>Observations</h2>
-	<ul>${report.observations.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
-</section>
-
-<section>
-	<h2>Submission time vs score</h2>
-	${scatterSvg(report.stories, topSet)}
-	<p class="small">Blue = all stories today. Gold = stories that are currently in the top feed.</p>
-</section>
-
-<section>
-	<h2>Hourly windows</h2>
-	${table(report.hourStats, [
-		{ label: 'Hour', key: 'hour' },
-		{ label: 'Stories', key: 'count' },
-		{ label: 'Top hits', key: 'topHits' },
-		{ label: 'Best hits', key: 'bestHits' },
-		{ label: 'Top hit rate', html: r => pct(r.topHits, r.count) },
-		{ label: 'Median score', html: r => r.medianScore.toFixed(1) },
-		{ label: 'Median comments', html: r => r.medianComments.toFixed(1) }
-	])}
-</section>
-
-<section>
-	<h2>Stories from today in current top feed</h2>
-	${table(report.topToday, [
-		{ label: 'Rank', html: r => r.topRank },
-		{ label: 'Submitted', html: r => esc(dateTimeFmt.format(new Date(r.time * 1000))) },
-		{ label: 'Age(h)', html: r => r.ageHours.toFixed(1) },
-		{ label: 'Score', key: 'score' },
-		{ label: 'Comments', html: r => n(r.descendants) },
-		{ label: 'Score/h', html: r => r.scorePerHour.toFixed(1) },
-		{ label: 'Title', html: r => `<a href="https://news.ycombinator.com/item?id=${r.id}">${esc(r.title)}</a>` }
-	])}
-</section>
-
-<section>
-	<h2>Fastest risers</h2>
-	${table(report.fastest, [
-		{ label: 'Submitted', html: r => esc(dateTimeFmt.format(new Date(r.time * 1000))) },
-		{ label: 'Age(h)', html: r => r.ageHours.toFixed(1) },
-		{ label: 'Score', key: 'score' },
-		{ label: 'Score/h', html: r => r.scorePerHour.toFixed(1) },
-		{ label: 'Comments/h', html: r => r.commentsPerHour.toFixed(1) },
-		{ label: 'Title', html: r => `<a href="https://news.ycombinator.com/item?id=${r.id}">${esc(r.title)}</a>` }
-	])}
-</section>
-
-<section>
-	<h2>Score leaders today</h2>
-	${table(report.scoreLeaders, [
-		{ label: 'Submitted', html: r => esc(dateTimeFmt.format(new Date(r.time * 1000))) },
-		{ label: 'Score', key: 'score' },
-		{ label: 'Comments', html: r => n(r.descendants) },
-		{ label: 'Top', html: r => r.topRank || '' },
-		{ label: 'Best', html: r => r.bestRank || '' },
-		{ label: 'Title', html: r => `<a href="https://news.ycombinator.com/item?id=${r.id}">${esc(r.title)}</a>` }
-	])}
-</section>
-
-<section>
-	<h2>Notes</h2>
-	<ul>
-		<li>This only measures stories submitted today in ${esc(TZ)}.</li>
-		<li>“Top” and “best” are current snapshots, not a historical replay.</li>
-		<li>The script infers audience presence from outcome concentration by submission window, not from actual vote events.</li>
-	</ul>
-</section>`
+	const template = await loadHnTodayHtmlTemplate()
+	const styleBlock = await loadReportStyleBlock()
+	return fillHtmlTemplate(template, {
+		styleBlock,
+		tzLabel: TZ,
+		generatedAt: dateTimeFmt.format(now),
+		storiesCount: report.stories.length,
+		topTodayCount: report.topToday.length,
+		bestTodayCount: report.bestToday.length,
+		topHitRate: pct(report.topToday.length, report.stories.length),
+		observationsHtml: report.observations.map(x => `<li>${esc(x)}</li>`).join(''),
+		scatterSvg: scatterSvg(report.stories, topSet),
+		hourlyTableHtml: table(report.hourStats, [
+			{ label: 'Hour', key: 'hour' },
+			{ label: 'Stories', key: 'count' },
+			{ label: 'Top hits', key: 'topHits' },
+			{ label: 'Best hits', key: 'bestHits' },
+			{ label: 'Top hit rate', html: r => pct(r.topHits, r.count) },
+			{ label: 'Median score', html: r => r.medianScore.toFixed(1) },
+			{ label: 'Median comments', html: r => r.medianComments.toFixed(1) }
+		]),
+		topTodayTableHtml: table(report.topToday, [
+			{ label: 'Rank', html: r => r.topRank },
+			{ label: 'Submitted', html: r => esc(dateTimeFmt.format(new Date(r.time * 1000))) },
+			{ label: 'Age(h)', html: r => r.ageHours.toFixed(1) },
+			{ label: 'Score', key: 'score' },
+			{ label: 'Comments', html: r => n(r.descendants) },
+			{ label: 'Score/h', html: r => r.scorePerHour.toFixed(1) },
+			{ label: 'Title', html: r => `<a href="https://news.ycombinator.com/item?id=${r.id}">${esc(r.title)}</a>` }
+		]),
+		fastestTableHtml: table(report.fastest, [
+			{ label: 'Submitted', html: r => esc(dateTimeFmt.format(new Date(r.time * 1000))) },
+			{ label: 'Age(h)', html: r => r.ageHours.toFixed(1) },
+			{ label: 'Score', key: 'score' },
+			{ label: 'Score/h', html: r => r.scorePerHour.toFixed(1) },
+			{ label: 'Comments/h', html: r => r.commentsPerHour.toFixed(1) },
+			{ label: 'Title', html: r => `<a href="https://news.ycombinator.com/item?id=${r.id}">${esc(r.title)}</a>` }
+		]),
+		scoreLeadersTableHtml: table(report.scoreLeaders, [
+			{ label: 'Submitted', html: r => esc(dateTimeFmt.format(new Date(r.time * 1000))) },
+			{ label: 'Score', key: 'score' },
+			{ label: 'Comments', html: r => n(r.descendants) },
+			{ label: 'Top', html: r => r.topRank || '' },
+			{ label: 'Best', html: r => r.bestRank || '' },
+			{ label: 'Title', html: r => `<a href="https://news.ycombinator.com/item?id=${r.id}">${esc(r.title)}</a>` }
+		])
+	})
 }
 
 async function main() {
@@ -377,7 +357,7 @@ async function main() {
 	const OUT = process.env.OUT || defaultOut
 
 	await fs.mkdir(path.dirname(OUT), { recursive: true })
-	await fs.writeFile(OUT, html(report))
+	await fs.writeFile(OUT, await buildHtmlReport(report))
 	console.log(`wrote ${OUT}`)
 }
 

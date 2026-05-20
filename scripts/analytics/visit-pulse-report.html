@@ -1,0 +1,57 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Visit pulse {{dayKey}}</title>
+<meta name="darkreader-lock" />
+{{!styleBlock}}
+<p class="small"><a href=".">Up one folder</a></p>
+<h1>Visit pulse — {{dayKey}}</h1>
+<p class="small">Partition: {{tzLabel}} · Source: {{source}} · Generated: {{generatedEt}} <span class="small">(UTC
+		{{generatedUtc}})</span></p>
+
+<section class="grid">
+	<div class="card">
+		<div class="small">Unique visitors</div>
+		<div>{{uniqueVisitors}}</div>
+	</div>
+	<div class="card">
+		<div class="small">Logged in</div>
+		<div>{{authedVisitors}}</div>
+	</div>
+	<div class="card">
+		<div class="small">Anonymous cookies</div>
+		<div>{{anonVisitors}} <span class="small">({{oneHitAnon}} single-hit)</span></div>
+	</div>
+	<div class="card">
+		<div class="small">Peak hour (stacked)</div>
+		<div>{{peakHourCount}} @ {{peakHourLabel}} {{displayTz}}</div>
+	</div>
+</section>
+
+<section>
+	<h2>Who was active by hour</h2>
+	<p class="small">Stacked bars: returning users keep stack order from the previous hour; inactive users drop out (no
+		gaps). Times shown in {{displayTz}}; hover includes UTC.</p>
+	<div class="chart-wrap">
+		{{!chartSvg}}
+	</div>
+</section>
+
+<section>
+	<div class="table-grid">
+		<h2>Logged-in users</h2>
+		{{!authedTableHtml}}
+		<h2>Anonymous cookies</h2>
+		{{!anonTableHtml}}
+	</div>
+</section>
+
+<section>
+	<h2>Notes</h2>
+	<ul>
+		<li>Day partition key uses fixed US East (UTC−5). All times on this page use {{displayTz}} ({{easternTz}}).
+			Stored range data is UTC.</li>
+		<li>Anonymous table: multi-hit per cookie; single-hit one row per hour (count in Hits).</li>
+		{{!flushedNoteHtml}}
+		{{!activeNowNoteHtml}}
+	</ul>
+</section>

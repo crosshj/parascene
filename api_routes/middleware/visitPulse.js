@@ -6,11 +6,11 @@
  * - everyone: anonymous via prsn_cid (v:), logged-in via user id (u:)
  * - timeline: 15-min blocks on US East day grid; range endpoints stored as UTC ISO
  * - bird's-eye: one DB row per US East calendar day (summary cols + details.visitors[].ranges)
- * - flush at US East EOD → yesterday US East partition (union ranges; safe re-flush)
- * - vercel-friendly: warm lambda Map throttles Redis; Redis merge + nightly flush to DB
+ * - flush at US East EOD → yesterday US East partition (Redis → DB replace)
+ * - vercel-friendly: warm lambda Map throttles Redis; nightly flush to DB
  * - low chatter: skip static, workers, webhooks, poll routes
  * - fail-open: Redis down → request still succeeds
- * - consume: scripts/analytics/visit-pulse-report.cjs (--live for Redis today)
+ * - consume: scripts/analytics/visit-pulse-report.js (--live for Redis today)
  *
  * Redis keys
  * - pulse:day:{date}:{visitorKey}     HASH first_seen, last_seen, hits
@@ -40,13 +40,23 @@ const localLastPulseMs = new Map();
 const LOCAL_PULSE_MIN_MS = 60_000;
 const LOCAL_MAP_MAX_KEYS = 10_000;
 
-const SKIP_PATH_PREFIXES = ["/api/worker/", "/api/webhooks/"];
+const SKIP_PATH_PREFIXES = [
+	"/api/worker/",
+	"/api/webhooks/",
+	"/api/presence/"
+];
 
+/** Background polls — any HTTP method */
 const SKIP_PATH_EXACT = new Set([
 	"/api/chat/unread-summary",
-	"/api/presence/online",
-	"/api/presence/last-active",
 	"/api/notifications/unread-count"
+]);
+
+/** Nav / sidebar session chrome (GET only; PUT/PATCH still pulse) */
+const SKIP_PATH_GET_ONLY = new Set([
+	"/api/profile",
+	"/api/credits",
+	"/api/notifications"
 ]);
 
 const SKIP_STATIC_EXT = new Set([
@@ -81,11 +91,13 @@ function pruneLocalMapIfNeeded() {
 
 function shouldSkipRequest(req) {
 	const p = String(req.path || "");
-	if (req.method === "OPTIONS") return true;
+	const method = String(req.method || "GET").toUpperCase();
+	if (method === "OPTIONS") return true;
 	for (const prefix of SKIP_PATH_PREFIXES) {
 		if (p.startsWith(prefix)) return true;
 	}
 	if (SKIP_PATH_EXACT.has(p)) return true;
+	if (method === "GET" && SKIP_PATH_GET_ONLY.has(p)) return true;
 	const dot = p.lastIndexOf(".");
 	if (dot !== -1) {
 		const ext = p.slice(dot).toLowerCase();

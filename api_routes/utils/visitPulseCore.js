@@ -1,5 +1,5 @@
 /**
- * Shared visit-pulse logic (Redis keys, 15-min blocks, range merge, Redis read).
+ * Shared visit-pulse logic (Redis keys, 15-min blocks, Redis read).
  * Redis key + DB `day`: US East calendar date (UTC-5, no DST).
  * Timestamps in hashes and details.ranges: UTC ISO.
  * Flush cron: 00:10 US East (05:10 UTC) → yesterday US East partition.
@@ -115,48 +115,6 @@ export function mergeBlockIndicesToRanges(dayKey, indices) {
 	return ranges;
 }
 
-/** @param {string} dayKey @param {Array<[string, string]>} ranges */
-export function rangesToBlockIndices(dayKey, ranges) {
-	const dayStart = usEastDayStartMs(dayKey);
-	const blockMs = PULSE_BLOCK_MINUTES * 60 * 1000;
-	const indices = new Set();
-	for (const pair of ranges || []) {
-		const startMs = Date.parse(pair?.[0]);
-		const endMs = Date.parse(pair?.[1]);
-		if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) continue;
-		for (let b = 0; b < PULSE_BLOCKS_PER_DAY; b++) {
-			const bStart = dayStart + b * blockMs;
-			const bEnd = bStart + blockMs;
-			if (bEnd > startMs && bStart < endMs) indices.add(b);
-		}
-	}
-	return [...indices];
-}
-
-/**
- * Merge one visitor's stored row with incoming (Redis) data — union 15-min blocks, keep higher hit count.
- * @param {string} dayKey
- * @param {{ visitor_key: string, user_id?: number|null, client_id?: string|null, hits?: number, ranges?: Array<[string,string]> }} stored
- * @param {{ visitor_key: string, user_id?: number|null, client_id?: string|null, hits?: number, ranges?: Array<[string,string]> }} incoming
- */
-export function mergeVisitorPulse(dayKey, stored, incoming) {
-	const key = stored?.visitor_key || incoming?.visitor_key;
-	const blocks = new Set([
-		...rangesToBlockIndices(dayKey, stored?.ranges),
-		...rangesToBlockIndices(dayKey, incoming?.ranges)
-	]);
-	const ranges = mergeBlockIndicesToRanges(dayKey, [...blocks]);
-	const parsed = parseVisitorKey(key);
-	return {
-		visitor_key: key,
-		user_id: stored?.user_id ?? incoming?.user_id ?? parsed.user_id,
-		client_id: stored?.client_id ?? incoming?.client_id ?? parsed.client_id,
-		hits: Math.max(Number(stored?.hits) || 0, Number(incoming?.hits) || 0),
-		ranges,
-		active_blocks: blocks.size
-	};
-}
-
 /** @param {string} dayKey @param {Array<object>} visitors */
 export function buildSnapshotFromVisitors(dayKey, visitors, meta = {}) {
 	const list = Array.isArray(visitors) ? visitors : [];
@@ -184,54 +142,6 @@ export function buildSnapshotFromVisitors(dayKey, visitors, meta = {}) {
 			}))
 		}
 	};
-}
-
-/**
- * Merge existing DB row with a fresh Redis snapshot (re-flush safe).
- * @param {object|null|undefined} existingRow
- * @param {object} redisSnapshot
- */
-export function mergeDaySnapshots(existingRow, redisSnapshot) {
-	const dayKey = String(redisSnapshot?.day || existingRow?.day || "").trim();
-	if (!dayKey) throw new Error("mergeDaySnapshots: missing day");
-
-	const storedList = Array.isArray(existingRow?.details?.visitors) ? existingRow.details.visitors : [];
-	const redisList = Array.isArray(redisSnapshot?.details?.visitors) ? redisSnapshot.details.visitors : [];
-	const byKey = new Map();
-
-	for (const v of storedList) {
-		const key = String(v?.visitor_key || "").trim();
-		if (!key) continue;
-		const parsed = parseVisitorKey(key);
-		byKey.set(key, {
-			visitor_key: key,
-			user_id: v.user_id ?? parsed.user_id,
-			client_id: v.client_id ?? parsed.client_id,
-			hits: Number(v.hits) || 0,
-			ranges: Array.isArray(v.ranges) ? v.ranges : [],
-			active_blocks: rangesToBlockIndices(dayKey, v.ranges).length
-		});
-	}
-
-	for (const v of redisList) {
-		const key = String(v?.visitor_key || "").trim();
-		if (!key) continue;
-		const incoming = {
-			visitor_key: key,
-			...parseVisitorKey(key),
-			hits: Number(v.hits) || 0,
-			ranges: Array.isArray(v.ranges) ? v.ranges : [],
-			active_blocks: rangesToBlockIndices(dayKey, v.ranges).length
-		};
-		if (byKey.has(key)) {
-			byKey.set(key, mergeVisitorPulse(dayKey, byKey.get(key), incoming));
-		} else {
-			byKey.set(key, incoming);
-		}
-	}
-
-	const merged = [...byKey.values()].sort((a, b) => a.visitor_key.localeCompare(b.visitor_key));
-	return buildSnapshotFromVisitors(dayKey, merged, { merged_flush: true });
 }
 
 /** @param {string} visitorKey */

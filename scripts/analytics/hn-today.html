@@ -1,0 +1,68 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>HN Today</title>
+<meta name="darkreader-lock" />
+{{!styleBlock}}
+<p class="small"><a href=".">Up one folder</a></p>
+<h1>Hacker News Today</h1>
+<p class="small">Timezone: {{tzLabel}} · Generated: {{generatedAt}}</p>
+
+<section class="grid">
+	<div class="card">
+		<div class="small">Stories submitted today</div>
+		<div>{{storiesCount}}</div>
+	</div>
+	<div class="card">
+		<div class="small">Made current top feed</div>
+		<div>{{topTodayCount}}</div>
+	</div>
+	<div class="card">
+		<div class="small">Made current best feed</div>
+		<div>{{bestTodayCount}}</div>
+	</div>
+	<div class="card">
+		<div class="small">Top-feed hit rate</div>
+		<div>{{topHitRate}}</div>
+	</div>
+</section>
+
+<section>
+	<h2>Observations</h2>
+	<ul>{{!observationsHtml}}</ul>
+</section>
+
+<section>
+	<h2>Submission time vs score</h2>
+	{{!scatterSvg}}
+	<p class="small">Blue = all stories today. Gold = stories that are currently in the top feed.</p>
+</section>
+
+<section>
+	<h2>Hourly windows</h2>
+	{{!hourlyTableHtml}}
+</section>
+
+<section>
+	<h2>Stories from today in current top feed</h2>
+	{{!topTodayTableHtml}}
+</section>
+
+<section>
+	<h2>Fastest risers</h2>
+	{{!fastestTableHtml}}
+</section>
+
+<section>
+	<h2>Score leaders today</h2>
+	{{!scoreLeadersTableHtml}}
+</section>
+
+<section>
+	<h2>Notes</h2>
+	<ul>
+		<li>This only measures stories submitted today in {{tzLabel}}.</li>
+		<li>“Top” and “best” are current snapshots, not a historical replay.</li>
+		<li>The script infers audience presence from outcome concentration by submission window, not from actual vote
+			events.</li>
+	</ul>
+</section>
