@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-require('dotenv').config();
+const { loadEnv } = require('../repo-root.cjs');
+loadEnv();
 
 const { createClient } = require('@supabase/supabase-js');
 

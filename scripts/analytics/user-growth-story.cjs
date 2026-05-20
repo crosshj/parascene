@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 const fs = require('fs/promises')
 const path = require('path')
-require('dotenv').config()
+const { REPO_ROOT, loadEnv } = require('../repo-root.cjs')
+loadEnv()
 
 const TZ = process.env.TZ_NAME || 'UTC'
 const LOOKBACK_DAYS = Number(process.env.LOOKBACK_DAYS || 120)
@@ -1143,7 +1144,7 @@ ${report.shareTryFunnel ? `
 async function main() {
 	// Default to Supabase when .env provides credentials.
 	if (!process.env.DB_ADAPTER) process.env.DB_ADAPTER = 'supabase'
-	const { openDb } = await import('../db/index.js')
+	const { openDb } = await import('../../db/index.js')
 	const dbInstance = await openDb({ quiet: true })
 	const lookbackStart = addDays(startOfUtcDay(new Date()), -LOOKBACK_DAYS)
 	const loaded = await loadFromDbInstance(dbInstance, lookbackStart.toISOString())
@@ -1154,7 +1155,7 @@ async function main() {
 	report.shareTryFunnel = loaded.shareTryFunnel || null
 
 	const outStamp = toIsoDate(startOfUtcDay(now))
-	const defaultOut = path.join('.output', 'user-growth-story', `user-growth-story-${outStamp}.html`)
+	const defaultOut = path.join(REPO_ROOT, '.output', 'user-growth-story', `user-growth-story-${outStamp}.html`)
 	const OUT = process.env.OUT || defaultOut
 	await fs.mkdir(path.dirname(OUT), { recursive: true })
 	const html = renderHtml(report).replace('</h1>', `</h1>\n<p class="small">Data source: ${esc(sourceLabel === 'supabase' ? 'Supabase (via DB adapter)' : 'SQLite (via DB adapter)')}</p>`)

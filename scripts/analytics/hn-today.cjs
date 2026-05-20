@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 const fs = require('fs/promises')
 const path = require('path')
+const { REPO_ROOT } = require('../repo-root.cjs')
 
 const TZ = process.env.TZ_NAME || 'America/New_York'
 const CONCURRENCY = Number(process.env.CONCURRENCY || 24)
@@ -372,7 +373,7 @@ async function main() {
 	const report = analyze(stories, topIds, bestIds)
 
 	const stamp = zonedFilenameStamp(now, TZ)
-	const defaultOut = `.output/hn-today/hn-today-${stamp}.html`
+	const defaultOut = path.join(REPO_ROOT, '.output', 'hn-today', `hn-today-${stamp}.html`)
 	const OUT = process.env.OUT || defaultOut
 
 	await fs.mkdir(path.dirname(OUT), { recursive: true })

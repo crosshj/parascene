@@ -169,6 +169,18 @@ function ensureTryRequestsMetaColumn(db) {
 	}
 }
 
+/** Visit pulse daily rollup (see db/schemas/sqlite_05_visit_pulse_days.sql). */
+function ensureVisitPulseDaysTable(db) {
+	try {
+		const schemaPath = path.join(__dirname, "..", "schemas", "sqlite_05_visit_pulse_days.sql");
+		if (fs.existsSync(schemaPath)) {
+			db.exec(fs.readFileSync(schemaPath, "utf8"));
+		}
+	} catch (error) {
+		// ignore
+	}
+}
+
 function ensureSharePageViewsMetaColumn(db) {
 	try {
 		const columns = db.prepare("PRAGMA table_info(share_page_views)").all();
@@ -415,6 +427,7 @@ export async function openDb() {
 	ensureTryRequestsMetaColumn(db);
 	ensureTryRequestsCreatedImageAnonIdNullable(db);
 	ensureSharePageViewsMetaColumn(db);
+	ensureVisitPulseDaysTable(db);
 	ensureCommentsCreatedImageMetaColumn(db);
 	ensureCommentReactionsTable(db);
 	ensurePromptInjectionsTable(db);
@@ -4337,6 +4350,60 @@ export async function openDb() {
 					lastInsertRowid: result.lastInsertRowid,
 					changes: result.changes
 				});
+			}
+		},
+		upsertVisitPulseDay: {
+			run: async (snapshot) => {
+				const day = String(snapshot?.day || "").trim();
+				if (!day) throw new Error("visit pulse snapshot missing day");
+				const details =
+					typeof snapshot.details === "string"
+						? snapshot.details
+						: JSON.stringify(snapshot.details ?? {});
+				const flushedAt = snapshot.flushed_at || new Date().toISOString();
+				const stmt = db.prepare(
+					`INSERT INTO visit_pulse_days (
+            day, unique_visitors, authed_visitors, anon_visitors,
+            total_hits, total_active_blocks, flushed_at, details
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(day) DO UPDATE SET
+            unique_visitors = excluded.unique_visitors,
+            authed_visitors = excluded.authed_visitors,
+            anon_visitors = excluded.anon_visitors,
+            total_hits = excluded.total_hits,
+            total_active_blocks = excluded.total_active_blocks,
+            flushed_at = excluded.flushed_at,
+            details = excluded.details`
+				);
+				const result = stmt.run(
+					day,
+					Number(snapshot.unique_visitors) || 0,
+					Number(snapshot.authed_visitors) || 0,
+					Number(snapshot.anon_visitors) || 0,
+					Number(snapshot.total_hits) || 0,
+					Number(snapshot.total_active_blocks) || 0,
+					flushedAt,
+					details
+				);
+				return Promise.resolve({ changes: result.changes });
+			}
+		},
+		selectVisitPulseDay: {
+			get: async (day) => {
+				const stmt = db.prepare(
+					`SELECT day, unique_visitors, authed_visitors, anon_visitors,
+              total_hits, total_active_blocks, flushed_at, details
+           FROM visit_pulse_days WHERE day = ?`
+				);
+				const row = stmt.get(String(day || "").trim());
+				if (!row) return Promise.resolve(undefined);
+				let details = {};
+				try {
+					details = row.details ? JSON.parse(row.details) : {};
+				} catch {
+					details = {};
+				}
+				return Promise.resolve({ ...row, details });
 			}
 		},
 		insertJob: {

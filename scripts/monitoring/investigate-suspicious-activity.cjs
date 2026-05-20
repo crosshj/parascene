@@ -5,7 +5,7 @@
  * Requires: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (recommended; anon may hit RLS).
  *
  * Usage (placeholders only — pass your own values):
- *   node scripts/investigate-suspicious-activity.cjs \
+ *   node scripts/monitoring/investigate-suspicious-activity.cjs \
  *     --ip 203.0.113.10 \
  *     --client-id 00000000-0000-4000-8000-000000000001 \
  *     --cf-ray 0000000000000000-AAA
@@ -18,14 +18,15 @@
  *   --json                     (machine-readable output)
  *
  * Example (fabricated identifiers):
- *   node scripts/investigate-suspicious-activity.cjs \
+ *   node scripts/monitoring/investigate-suspicious-activity.cjs \
  *     --ip 198.51.100.2 \
  *     --client-id 11111111-1111-4111-8111-111111111111 \
  *     --cf-ray ffffffffffffffff-ORD \
  *     --email-like suspicious_prefix
  */
 
-require('dotenv').config();
+const { loadEnv } = require('../repo-root.cjs');
+loadEnv();
 
 const { createClient } = require('@supabase/supabase-js');
 
@@ -210,7 +211,7 @@ async function main() {
 	const asJson = hasFlag('json');
 
 	if (!clientId && !ip && !cfRay && !anonCid && !emailLike && !userIdArg) {
-		console.log(`Usage: node scripts/investigate-suspicious-activity.cjs --client-id <uuid> [--ip ...] [--cf-ray ...] [--anon-cid ...] [--email-like <substring>] [--user-id N]`);
+		console.log(`Usage: node scripts/monitoring/investigate-suspicious-activity.cjs --client-id <uuid> [--ip ...] [--cf-ray ...] [--anon-cid ...] [--email-like <substring>] [--user-id N]`);
 		console.log(`Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (strongly recommended)`);
 		process.exit(1);
 	}

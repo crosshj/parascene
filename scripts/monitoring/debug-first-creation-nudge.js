@@ -1,11 +1,13 @@
-import "dotenv/config";
-import { openDb } from "../db/index.js";
+import { openDb } from "../../db/index.js";
+import { loadEnv } from "../repo-root.cjs";
+
+loadEnv();
 
 async function main() {
 	const raw = process.argv[2];
 	const userId = Number(raw);
 	if (!Number.isFinite(userId) || userId <= 0) {
-		console.error("Usage: node scripts/debug-first-creation-nudge.js <userId>");
+		console.error("Usage: node scripts/monitoring/debug-first-creation-nudge.js <userId>");
 		process.exit(1);
 	}
 

@@ -52,6 +52,7 @@ import { createWelcomeGate } from "../api_routes/middleware/welcomeGate.js";
 import { createUnauthorizedHandler } from "../api_routes/middleware/unauthorizedHandler.js";
 import { createPrsnCidPersistMiddleware } from "../api_routes/middleware/prsnCidPersist.js";
 import { createRateLimitMiddleware } from "../api_routes/middleware/rateLimit.js";
+import { createVisitPulseMiddleware } from "../api_routes/middleware/visitPulse.js";
 
 function shouldLogStartup() {
 	return process.env.ENABLE_STARTUP_LOGS === "true";
@@ -202,6 +203,7 @@ app.use(authMiddleware());
 app.use(apiKeyBearerMiddleware(queries));
 app.use(integrationBearerMiddleware());
 app.use(sessionMiddleware(queries));
+app.use(createVisitPulseMiddleware({ failOpen: true }));
 
 function isPollingHeavyPath(pathname) {
 	const p = String(pathname || "");

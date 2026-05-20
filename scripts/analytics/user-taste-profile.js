@@ -4,13 +4,15 @@
 this is WIP and not quite there; just trying to pull together some comcept of what users like
 */
 
-import "dotenv/config";
 import { createClient } from "@supabase/supabase-js";
 import fs from "fs";
 import path from "path";
+import { REPO_ROOT, loadEnv } from "../repo-root.cjs";
+
+loadEnv();
 
 const SAMPLE_LIMIT = 20;
-const OUTPUT_DIR = ".output/tastes";
+const OUTPUT_DIR = path.join(REPO_ROOT, ".output", "tastes");
 const WRITE_INDIVIDUAL_USER_PAGES = true;
 
 function runFolderName(date) {
@@ -434,7 +436,7 @@ async function main() {
 		}))
 	};
 
-	const outDir = path.resolve(process.cwd(), OUTPUT_DIR, runFolderName(generatedAt));
+	const outDir = path.join(OUTPUT_DIR, runFolderName(generatedAt));
 	fs.mkdirSync(outDir, { recursive: true });
 
 	const indexHtml = renderTasteProfilesHtml(output, {

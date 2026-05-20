@@ -2,6 +2,7 @@ import "dotenv/config";
 import { openDb } from "../../db/index.js";
 import { verifyQStashRequest } from "../../api_routes/utils/qstashVerification.js";
 import { runEmbeddingJob } from "../../api_routes/utils/embeddingJob.js";
+import { runVisitPulseFlush } from "../../api_routes/utils/visitPulseFlush.js";
 
 console.log("[Jobs Worker] Module loaded at", new Date().toISOString());
 
@@ -28,7 +29,8 @@ function captureQStashMeta(req) {
 }
 
 const JOB_HANDLERS = {
-	embedding: runEmbeddingJob
+	embedding: runEmbeddingJob,
+	visit_pulse_flush: runVisitPulseFlush
 };
 
 export default async function handler(req, res) {
