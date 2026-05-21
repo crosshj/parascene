@@ -5542,8 +5542,10 @@ app-route-feed {
 	pointer-events: none;
 }
 
-.comment-body .comment-text .connect-chat-media-embed,
-.connect-comment .comment-text .connect-chat-media-embed {
+.comment-body .comment-text .connect-chat-youtube-embed,
+.comment-body .comment-text .connect-chat-suno-embed,
+.connect-comment .comment-text .connect-chat-youtube-embed,
+.connect-comment .comment-text .connect-chat-suno-embed {
 	margin-top: 6px;
 }
 
@@ -12827,102 +12829,42 @@ body:has(.chat-hashtag-nav-overlay) {
 	margin-top: 1px;
 }
 
-/* YouTube / Suno embed wrappers (see responsive vs narrow-column blocks below). */
-.connect-chat-media-embed {
-	--embed-w: 560;
-	--embed-h: 315;
-	width: 100%;
-	max-width: 100%;
-	min-width: 0;
+.connect-chat-youtube-embed {
 	margin-top: 0;
 	padding-block: 0;
+	width: 100%;
+	min-width: 0;
+	max-width: 100%;
 	box-sizing: border-box;
-	overflow: hidden;
-	position: relative;
-	border-radius: 12px;
 }
 
-.connect-chat-youtube-embed {
-	--embed-w: 560;
-	--embed-h: 315;
-}
-
-.connect-chat-suno-embed {
-	--embed-w: 760;
-	--embed-h: 240;
-}
-
-.connect-chat-media-embed > iframe,
-.connect-chat-youtube-embed-iframe,
-.connect-chat-suno-embed-iframe {
+.connect-chat-youtube-embed-iframe {
 	display: block;
+	width: 100%;
+	max-width: 100%;
+	aspect-ratio: 16 / 9;
 	border: 0;
-	border-radius: inherit;
+	border-radius: 12px;
 	background: #000;
 }
 
-/* Wide comment threads (creation detail, etc.): responsive iframe — worked before scaling landed. */
-.comment-body .comment-text .connect-chat-media-embed {
-	container-type: normal;
-	aspect-ratio: var(--embed-w) / var(--embed-h);
-}
-
-.comment-body .comment-text .connect-chat-media-embed > iframe,
-.comment-body .comment-text .connect-chat-youtube-embed-iframe,
-.comment-body .comment-text .connect-chat-suno-embed-iframe {
-	position: absolute;
-	inset: 0;
+.connect-chat-suno-embed {
+	margin-top: 0;
+	padding-block: 0;
 	width: 100%;
-	height: 100%;
+	min-width: 0;
 	max-width: 100%;
-	min-width: 0;
-	transform: none;
+	box-sizing: border-box;
 }
 
-/*
- * Narrow lanes (#comments grid, chat bubbles): Suno/YouTube use fixed pixel layouts inside the iframe.
- * Scale to column width; aspect-ratio sets height (not height: calc(100cqi * …)).
- */
-.connect-comment .comment-text .connect-chat-media-embed,
-.connect-chat-msg-bubble .connect-chat-media-embed {
-	container-type: inline-size;
-	aspect-ratio: var(--embed-w) / var(--embed-h);
-}
-
-.connect-comment .comment-text .connect-chat-media-embed > iframe,
-.connect-comment .comment-text .connect-chat-youtube-embed-iframe,
-.connect-comment .comment-text .connect-chat-suno-embed-iframe,
-.connect-chat-msg-bubble .connect-chat-media-embed > iframe,
-.connect-chat-msg-bubble .connect-chat-youtube-embed-iframe,
-.connect-chat-msg-bubble .connect-chat-suno-embed-iframe {
-	position: absolute;
-	top: 0;
-	left: 0;
-	width: calc(var(--embed-w) * 1px);
-	height: calc(var(--embed-h) * 1px);
-	max-width: none;
-	min-width: 0;
-	transform-origin: top left;
-	transform: scale(calc(100cqi / var(--embed-w)));
-}
-
-@supports not (width: 1cqi) {
-	.connect-comment .comment-text .connect-chat-media-embed,
-	.connect-chat-msg-bubble .connect-chat-media-embed {
-		container-type: normal;
-	}
-
-	.connect-comment .comment-text .connect-chat-media-embed > iframe,
-	.connect-comment .comment-text .connect-chat-youtube-embed-iframe,
-	.connect-comment .comment-text .connect-chat-suno-embed-iframe,
-	.connect-chat-msg-bubble .connect-chat-media-embed > iframe,
-	.connect-chat-msg-bubble .connect-chat-youtube-embed-iframe,
-	.connect-chat-msg-bubble .connect-chat-suno-embed-iframe {
-		inset: 0;
-		width: 100%;
-		height: 100%;
-		transform: none;
-	}
+.connect-chat-suno-embed-iframe {
+	display: block;
+	width: 100%;
+	max-width: 100%;
+	aspect-ratio: 19 / 6;
+	border: 0;
+	border-radius: 12px;
+	background: #000;
 }
 
 .connect-chat-creation-embed--square.connect-chat-creation-embed--loading .connect-chat-creation-embed-skeleton {

@@ -839,17 +839,15 @@ body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .
 	background: color-mix(in srgb, var(--surface-strong) 58%, var(--bg));
 }
 
-/* #comments: grid + fixed-width Suno/YouTube players — scale iframes to column (stale chat.bundle.css lacks this). */
+/* #comments grid: let the text column shrink (stale chat.bundle may lack minmax(0, 1fr)). */
 body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment.connect-comment {
 	min-width: 0;
 	max-width: 100%;
-	overflow-x: clip;
 }
 
 body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text {
 	min-width: 0;
 	max-width: 100%;
-	overflow-x: clip;
 }
 
 body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text a.creation-link[data-youtube-video-id]:has(+ .connect-chat-youtube-embed),
@@ -866,39 +864,35 @@ body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .
 	pointer-events: none;
 }
 
-body.chat-page .chat-page-messages .connect-comment .comment-text .connect-chat-media-embed,
-body.chat-page .chat-page-messages .connect-chat-msg-bubble .connect-chat-media-embed {
-	container-type: inline-size;
-	aspect-ratio: var(--embed-w) / var(--embed-h);
-	width: 100% !important;
-	max-width: 100% !important;
-	min-width: 0 !important;
-	overflow: hidden !important;
-	position: relative;
-	box-sizing: border-box;
-	border-radius: 12px;
-}
-
+/* Same embed pattern as pre-Suno YouTube (62aed868) — duplicate here when chat.bundle.css is stale. */
+body.chat-page .chat-page-messages .connect-chat-youtube-embed,
 body.chat-page .chat-page-messages .connect-chat-suno-embed {
-	--embed-w: 760;
-	--embed-h: 240;
+	margin-top: 0;
+	padding-block: 0;
+	width: 100%;
+	min-width: 0;
+	max-width: 100%;
+	box-sizing: border-box;
 }
 
-body.chat-page .chat-page-messages .connect-comment .comment-text .connect-chat-media-embed > iframe,
-body.chat-page .chat-page-messages .connect-comment .comment-text .connect-chat-youtube-embed-iframe,
-body.chat-page .chat-page-messages .connect-comment .comment-text .connect-chat-suno-embed-iframe,
-body.chat-page .chat-page-messages .connect-chat-msg-bubble .connect-chat-media-embed > iframe,
-body.chat-page .chat-page-messages .connect-chat-msg-bubble .connect-chat-youtube-embed-iframe,
-body.chat-page .chat-page-messages .connect-chat-msg-bubble .connect-chat-suno-embed-iframe {
-	position: absolute !important;
-	top: 0;
-	left: 0;
-	width: calc(var(--embed-w) * 1px) !important;
-	height: calc(var(--embed-h) * 1px) !important;
-	max-width: none !important;
+body.chat-page .chat-page-messages .connect-chat-youtube-embed-iframe {
+	display: block;
+	width: 100%;
+	max-width: 100%;
+	aspect-ratio: 16 / 9;
 	border: 0;
-	transform-origin: top left;
-	transform: scale(calc(100cqi / var(--embed-w))) !important;
+	border-radius: 12px;
+	background: #000;
+}
+
+body.chat-page .chat-page-messages .connect-chat-suno-embed-iframe {
+	display: block;
+	width: 100%;
+	max-width: 100%;
+	aspect-ratio: 19 / 6;
+	border: 0;
+	border-radius: 12px;
+	background: #000;
 }
 
 /* Stale chat.bundle: previews must use contain (not cover) */

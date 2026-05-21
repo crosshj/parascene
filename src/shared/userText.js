@@ -2002,7 +2002,7 @@ export function hydrateYoutubeEmbeds(rootEl) {
 		a.dataset.youtubeEmbedHydrated = 'true';
 
 		const wrap = document.createElement('div');
-		wrap.className = 'connect-chat-youtube-embed connect-chat-media-embed';
+		wrap.className = 'connect-chat-youtube-embed';
 		const title = a.textContent ? String(a.textContent).trim() : '';
 		const safeTitle = title || `youtube ${videoId}`;
 		const iframe = document.createElement('iframe');
@@ -2029,7 +2029,7 @@ function mountSunoEmbed(a, songId, titleText) {
 	a.dataset.sunoSongId = songId;
 
 	const wrap = document.createElement('div');
-	wrap.className = 'connect-chat-suno-embed connect-chat-media-embed';
+	wrap.className = 'connect-chat-suno-embed';
 	const safeTitle = titleText || `suno ${songId.slice(0, 8)}`;
 	const iframe = document.createElement('iframe');
 	iframe.className = 'connect-chat-suno-embed-iframe';
