@@ -11,7 +11,12 @@ import {
 	repairProviderAsyncVideoJob,
 } from "./utils/creationJob.js";
 import { scheduleAnonCreationJob } from "./utils/scheduleCreationJob.js";
-import { getEmailSettings } from "./utils/emailSettings.js";
+import {
+	buildAdminBroadcastEmailData,
+	filterAdminBroadcastRecipients,
+	parseAdminBroadcastBody
+} from "./utils/adminBroadcast.js";
+import { getEffectiveRecipient, getEmailSettings } from "./utils/emailSettings.js";
 import { getBaseAppUrlForEmail } from "./utils/url.js";
 import { RELATED_PARAM_KEYS } from "../db/relatedParams.js";
 import { runNotificationsCronForTests } from "../api/worker/notifications.js";
@@ -1478,7 +1483,8 @@ export default function createAdminRoutes({ queries, storage }) {
 		"firstCreationNudge",
 		"reengagement",
 		"creationHighlight",
-		"supportReport"
+		"supportReport",
+		"adminBroadcast"
 	];
 
 	function getEmailTemplateSampleData() {
@@ -1588,6 +1594,15 @@ export default function createAdminRoutes({ queries, storage }) {
 				creationUrl: `${baseUrl}/creations/123`,
 				commentCount: 8
 			},
+			adminBroadcast: {
+				recipientName: "Alex",
+				emailSubject: "Two weeks left in the current challenge",
+				headline: "Two weeks left in the current challenge",
+				message:
+					"The challenge closes soon. If you have not submitted yet, there is still time — and we would love to see what you make.",
+				ctaText: "View challenges",
+				ctaUrl: `${baseUrl}/connect#challenges`
+			},
 			supportReport: {
 				requesterName: "Sam",
 				requesterEmail: "sam@example.com",
@@ -1639,6 +1654,35 @@ export default function createAdminRoutes({ queries, storage }) {
 		};
 	}
 
+	router.post("/admin/email-templates/:templateName/preview", async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+
+		const { templateName } = req.params;
+		if (templateName !== "adminBroadcast") {
+			return res.status(400).json({ error: "Live preview is only available for Admin broadcast." });
+		}
+
+		const parsed = parseAdminBroadcastBody(req.body);
+		if (!parsed.ok) {
+			return res.status(400).json({ error: parsed.error });
+		}
+
+		try {
+			const { renderEmailTemplate } = await import("../email/index.js");
+			const data = buildAdminBroadcastEmailData(
+				{ user_name: null, display_name: "Alex", email: "preview@parascene.com" },
+				parsed.data
+			);
+			const { html } = renderEmailTemplate("adminBroadcast", data);
+			res.setHeader("Content-Type", "text/html; charset=utf-8");
+			res.send(html);
+		} catch (error) {
+			console.error("[admin] email preview failed:", templateName, error?.message || error);
+			res.status(500).json({ error: error?.message || "Failed to render preview." });
+		}
+	});
+
 	router.get("/admin/email-templates/:templateName", async (req, res) => {
 		const adminUser = await requireAdmin(req, res);
 		if (!adminUser) return;
@@ -1670,12 +1714,117 @@ export default function createAdminRoutes({ queries, storage }) {
 		}
 	});
 
+	router.get("/admin/broadcast-recipients", async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+
+		try {
+			const users = await queries.selectUsers.all();
+			const eligible = filterAdminBroadcastRecipients(users);
+			const settings = await getEmailSettings(queries);
+			res.json({
+				eligibleCount: eligible.length,
+				dryRun: settings.dryRun,
+				emailUseTestRecipient: settings.emailUseTestRecipient
+			});
+		} catch (error) {
+			console.error("[admin] broadcast-recipients failed:", error?.message || error);
+			res.status(500).json({ error: error?.message || "Failed to load broadcast recipients." });
+		}
+	});
+
+	router.post("/admin/send-broadcast", async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+
+		const parsed = parseAdminBroadcastBody(req.body);
+		if (!parsed.ok) {
+			return res.status(400).json({ error: parsed.error });
+		}
+		const shared = parsed.data;
+
+		try {
+			const settings = await getEmailSettings(queries);
+			const users = await queries.selectUsers.all();
+			const recipients = filterAdminBroadcastRecipients(users);
+
+			if (recipients.length === 0) {
+				return res.status(400).json({ error: "No eligible recipients (active consumers with email)." });
+			}
+
+			if (!settings.dryRun && (!process.env.RESEND_API_KEY || !process.env.RESEND_SYSTEM_EMAIL)) {
+				return res.status(503).json({
+					error: "Email delivery is not configured (missing Resend environment variables)."
+				});
+			}
+
+			if (settings.dryRun) {
+				return res.status(200).json({
+					ok: true,
+					dryRun: true,
+					emailUseTestRecipient: settings.emailUseTestRecipient,
+					eligible: recipients.length,
+					sent: 0,
+					failed: 0
+				});
+			}
+
+			const { sendTemplatedEmail } = await import("../email/index.js");
+
+			let sent = 0;
+			let failed = 0;
+			const errors = [];
+
+			for (const user of recipients) {
+				const email = String(user.email).trim();
+				const data = buildAdminBroadcastEmailData(user, shared);
+
+				try {
+					const to = getEffectiveRecipient(settings, email);
+					await sendTemplatedEmail({
+						to,
+						template: "adminBroadcast",
+						data
+					});
+					if (queries.insertEmailSend?.run) {
+						await queries.insertEmailSend.run(user.id, "admin_broadcast", null);
+					}
+					sent++;
+				} catch (err) {
+					failed++;
+					if (errors.length < 5) {
+						errors.push({ userId: user.id, message: err?.message || "Send failed" });
+					}
+				}
+			}
+
+			res.status(200).json({
+				ok: true,
+				dryRun: false,
+				emailUseTestRecipient: settings.emailUseTestRecipient,
+				eligible: recipients.length,
+				sent,
+				failed,
+				errors: errors.length > 0 ? errors : undefined
+			});
+		} catch (error) {
+			console.error("[admin] send-broadcast failed:", error?.message || error);
+			res.status(500).json({ error: error?.message || "Failed to send broadcast." });
+		}
+	});
+
 	router.post("/admin/send-test-email", async (req, res) => {
 		const adminUser = await requireAdmin(req, res);
 		if (!adminUser) return;
 
 		const to = typeof req.body?.to === "string" ? req.body.to.trim() : "";
 		const template = typeof req.body?.template === "string" ? req.body.template.trim() : "";
+
+		if (template === "adminBroadcast") {
+			return res.status(400).json({
+				error: "Admin broadcast sends to all active consumers. Use the broadcast send action on the Manual Send tab."
+			});
+		}
 
 		if (!to) {
 			return res.status(400).json({ error: "Recipient email is required." });

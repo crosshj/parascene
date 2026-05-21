@@ -29,15 +29,24 @@ export function createNotificationsCronQueries(overrides = {}) {
 			get: jest.fn(async () => ({ count: 0 }))
 		},
 		selectNotificationsForUser: {
-			all: jest.fn(async () => [{ acknowledged_at: null, link: "/creations/1" }])
-		},
-		selectDigestActivityByOwnerSince: {
 			all: jest.fn(async () => [
-				{ created_image_id: 1, title: "Test creation", comment_count: 1 }
+				{
+					id: 10,
+					acknowledged_at: null,
+					link: "/creations/1",
+					type: "comment",
+					actor_user_id: 2,
+					user_id: 1,
+					target: { creation_id: 1 },
+					meta: { creation_title: "Test creation" },
+					created_at: new Date().toISOString(),
+					title: "Comment",
+					message: "Someone commented"
+				}
 			])
 		},
-		selectDigestActivityByCommenterSince: {
-			all: jest.fn(async () => [])
+		selectUserProfileByUserId: {
+			get: jest.fn(async () => ({ display_name: "Commenter", user_name: "commenter" }))
 		},
 		// No re-engagement / highlight / welcome / nudge candidates for this test.
 		selectUsersEligibleForReengagement: {

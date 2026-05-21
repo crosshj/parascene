@@ -7,6 +7,12 @@ import { notifyIcon, creditIcon } from '/icons/svg-strings.js';
 import { getHelpHref } from '../../helpUrl.js';
 import { hydrateChatAudibleNotificationsFromServer } from '/shared/chatAudibleNotificationsPref.js';
 import { subscribeUserBroadcast } from '../../realtimeBroadcast.js';
+import {
+	notificationChatHref,
+	notificationCreationHref,
+	notificationPrimaryClickable,
+	notificationPrimaryHref
+} from '../../notificationNav.js';
 
 const html = String.raw;
 
@@ -710,33 +716,7 @@ class AppNavigation extends HTMLElement {
 				return;
 			}
 
-			const notificationCreationHref = (n) => {
-				if (!n) return null;
-				const link = typeof n.link === 'string' ? n.link.trim() : '';
-				if (/^\/creations\/\d+/.test(link)) return link;
-				if (n.creation_id != null && Number.isFinite(Number(n.creation_id))) {
-					return `/creations/${Number(n.creation_id)}`;
-				}
-				return null;
-			};
-
-			const notificationChatHref = (n) => {
-				if (!n) return null;
-				const link = typeof n.link === 'string' ? n.link.trim() : '';
-				if (/^\/chat\//.test(link)) return link;
-				return null;
-			};
-
-			const notificationPrimaryHref = (n) => notificationChatHref(n) || notificationCreationHref(n);
-
-			const hasClickTarget = (n) => {
-				if (!n) return false;
-				if (n.type === 'tip') return true;
-				if (n.type === 'chat_mention' && notificationChatHref(n)) return true;
-				const href = notificationCreationHref(n);
-				if (!href) return false;
-				return n.type === 'comment' || n.type === 'comment_thread' || n.type === 'creation_activity';
-			};
+			const hasClickTarget = (n) => notificationPrimaryClickable(n);
 
 			const fragment = document.createDocumentFragment();
 			for (const notification of notifications) {

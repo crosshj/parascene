@@ -20,7 +20,28 @@ function getCreationIdFromRow(row) {
 	return null;
 }
 
-const COLLAPSE_TYPES = new Set(["comment", "comment_thread", "tip"]);
+/**
+ * @param {{ target?: string | object | null }} row
+ * @returns {number | null}
+ */
+function getThreadIdFromRow(row) {
+	if (row?.target != null) {
+		const target = typeof row.target === "string"
+			? (() => { try { return JSON.parse(row.target); } catch { return null; } })()
+			: row.target;
+		const id = target?.thread_id;
+		if (id != null && Number.isFinite(Number(id))) return Number(id);
+	}
+	return null;
+}
+
+const COLLAPSE_TYPES = new Set([
+	"comment",
+	"comment_thread",
+	"tip",
+	"creation_mention",
+	"comment_mention"
+]);
 
 /** Only collapse notifications from the last N hours; older ones stay individual. */
 const RECENT_WITHIN_HOURS = 24;
@@ -142,4 +163,4 @@ export function collapseNotificationsByCreation(notifications) {
 	return [...recentResult, ...olderResult];
 }
 
-export { getCreationIdFromRow };
+export { getCreationIdFromRow, getThreadIdFromRow };

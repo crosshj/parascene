@@ -5,9 +5,9 @@ import { dmChatInboxTitleFromProfile, otherUserIdFromDmPairKey } from "../../api
 /**
  * Build chat thread lines for the activity digest email (unread from others, recent window).
  * @param {{ queries: { selectDigestChatUnreadThreadsSince?: { all: (userId: number, sinceIso: string, limit: number) => Promise<object[]> }, selectUserProfilesByUserIds?: (ids: number[]) => Promise<Map<number, object>> } }} args
- * @returns {Promise<{ chatThreadItems: { title: string; unread_count: number; thread_url: string }[] }>}
+ * @returns {Promise<{ chatThreadItems: { title: string; unread_count: number; thread_url: string; thread_type?: string }[] }>}
  */
-export async function buildChatDigestEmailSection({ queries, userId, sinceIso, maxThreads = 8 }) {
+export async function buildChatDigestEmailSection({ queries, userId, sinceIso, maxThreads = 8, dmOnly = false }) {
 	if (!queries?.selectDigestChatUnreadThreadsSince?.all) {
 		return { chatThreadItems: [] };
 	}
@@ -21,7 +21,10 @@ export async function buildChatDigestEmailSection({ queries, userId, sinceIso, m
 	} catch {
 		return { chatThreadItems: [] };
 	}
-	const list = Array.isArray(rows) ? rows : [];
+	let list = Array.isArray(rows) ? rows : [];
+	if (dmOnly) {
+		list = list.filter((row) => String(row?.thread_type || "").trim() === "dm");
+	}
 
 	const otherIds = new Set();
 	for (const row of list) {
@@ -61,7 +64,8 @@ export async function buildChatDigestEmailSection({ queries, userId, sinceIso, m
 			return {
 				title: `#${slug}`,
 				unread_count: Number.isFinite(unc) && unc > 0 ? unc : 0,
-				thread_url: threadUrl
+				thread_url: threadUrl,
+				thread_type: "channel"
 			};
 		}
 		if (ttype === "dm") {
@@ -69,13 +73,15 @@ export async function buildChatDigestEmailSection({ queries, userId, sinceIso, m
 			return {
 				title: `DM · ${dmTitle}`,
 				unread_count: Number.isFinite(unc) && unc > 0 ? unc : 0,
-				thread_url: threadUrl
+				thread_url: threadUrl,
+				thread_type: "dm"
 			};
 		}
 		return {
 			title: "Chat",
 			unread_count: Number.isFinite(unc) && unc > 0 ? unc : 0,
-			thread_url: threadUrl
+			thread_url: threadUrl,
+			thread_type: ttype || "chat"
 		};
 	});
 

@@ -1743,6 +1743,44 @@ export function openDb() {
 				return data ?? undefined;
 			}
 		},
+		acknowledgeNotificationsForUserAndThread: {
+			run: async (userId, role, threadId) => {
+				const tid = Number(threadId);
+				if (!Number.isFinite(tid) || tid <= 0) return { changes: 0 };
+				let query = serviceClient
+					.from(prefixedTable("notifications"))
+					.select("id, target, type")
+					.is("acknowledged_at", null)
+					.in("type", ["chat_mention"]);
+				const { query: filteredQuery, hasFilter } = applyUserOrRoleFilter(query, userId, role);
+				if (!hasFilter) return { changes: 0 };
+				const { data, error } = await filteredQuery;
+				if (error) throw error;
+				const ids = (data ?? [])
+					.filter((row) => {
+						let target = row?.target;
+						if (typeof target === "string") {
+							try {
+								target = JSON.parse(target);
+							} catch {
+								return false;
+							}
+						}
+						return Number(target?.thread_id) === tid;
+					})
+					.map((row) => row.id)
+					.filter((id) => id != null);
+				if (ids.length === 0) return { changes: 0 };
+				const now = new Date().toISOString();
+				const { data: updated, error: upErr } = await serviceClient
+					.from(prefixedTable("notifications"))
+					.update({ acknowledged_at: now })
+					.in("id", ids)
+					.select("id");
+				if (upErr) throw upErr;
+				return { changes: (updated ?? []).length };
+			}
+		},
 		acknowledgeNotificationsForUserAndCreation: {
 			run: async (userId, role, creationId) => {
 				const linkPattern = `/creations/${creationId}`;

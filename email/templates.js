@@ -552,6 +552,32 @@ function renderChatThreadList(items, sectionTitle) {
   `;
 }
 
+function renderNotificationDigestList(items) {
+	const list = Array.isArray(items) ? items : [];
+	if (list.length === 0) return "";
+	return html`
+	<div
+		style="margin:16px 0 0; padding:14px 16px; border:1px solid #e2e8f0; border-radius:12px; background:#f8fafc; font-family:Arial, Helvetica, sans-serif;">
+		<div
+			style="color:#475569; font-size:13px; margin:0 0 10px; font-weight:600; font-family:Arial, Helvetica, sans-serif;">
+			For you</div>
+		<ul style="margin:0; padding:0; list-style:none; font-family:Arial, Helvetica, sans-serif;">
+			${list.map((item) => {
+		const title = item?.title && String(item.title).trim() ? escapeHtml(String(item.title).trim()) : "Notification";
+		const message = item?.message && String(item.message).trim() ? escapeHtml(String(item.message).trim()) : "";
+		const url = item?.url && String(item.url).trim() ? escapeHtml(String(item.url).trim()) : "";
+		const inner = message
+			? `<strong>${title}</strong><br /><span style="color:#475569; font-size:14px;">${message}</span>`
+			: `<strong>${title}</strong>`;
+		return url
+			? `<li style="margin:0 0 12px;"><a href="${url}" style="color:#0f172a; text-decoration:none; font-size:15px; line-height:1.6;">${inner}</a></li>`
+			: `<li style="margin:0 0 12px; color:#0f172a; font-size:15px; line-height:1.6;">${inner}</li>`;
+	}).join("")}
+		</ul>
+	</div>
+  `;
+}
+
 function renderActivityList(items, sectionTitle) {
 	const list = Array.isArray(items) ? items : [];
 	if (list.length === 0) return "";
@@ -578,32 +604,39 @@ export function renderDigestActivity({
 	recipientName = "there",
 	activitySummary = "You have new activity.",
 	feedUrl = getBaseAppUrlForEmail(),
+	notificationItems = [],
 	activityItems = [],
 	otherCreationsActivityItems = [],
 	chatThreadItems = []
 } = {}) {
 	const safeName = escapeHtml(recipientName);
 	const safeSummary = escapeHtml(activitySummary);
+	const notifLines = Array.isArray(notificationItems) ? notificationItems : [];
 	const items = Array.isArray(activityItems) ? activityItems : [];
 	const otherItems = Array.isArray(otherCreationsActivityItems) ? otherCreationsActivityItems : [];
 	const chatItems = Array.isArray(chatThreadItems) ? chatThreadItems : [];
-	const totalCount = items.length + otherItems.length;
+	const legacyCount = items.length + otherItems.length;
+	const notifCount = notifLines.length;
 	const chatCount = chatItems.length;
 	const subject =
-		chatCount > 0 && totalCount === 0
-			? "You have unread chat on parascene"
+		chatCount > 0 && notifCount === 0 && legacyCount === 0
+			? "You have unread messages on parascene"
 			: "You have new activity on parascene!";
 	const preheader =
-		chatCount > 0 && totalCount === 0
-			? `${chatCount} conversation${chatCount === 1 ? "" : "s"} waiting for you`
-			: totalCount > 0
-				? `${totalCount} creation${totalCount === 1 ? "" : "s"} with new comments${chatCount > 0 ? ` · ${chatCount} in chat` : ""}`
-				: (activitySummary || "You have new activity on parascene.");
+		notifCount > 0
+			? `${notifCount} notification${notifCount === 1 ? "" : "s"}${chatCount > 0 ? ` · ${chatCount} DM${chatCount === 1 ? "" : "s"}` : ""}`
+			: chatCount > 0 && legacyCount === 0
+				? `${chatCount} direct message${chatCount === 1 ? "" : "s"} waiting for you`
+				: legacyCount > 0
+					? `${legacyCount} creation${legacyCount === 1 ? "" : "s"} with new comments${chatCount > 0 ? ` · ${chatCount} in chat` : ""}`
+					: (activitySummary || "You have new activity on parascene.");
 
-	const yourCreationsHtml = renderActivityList(items, "Your creations");
-	const otherCreationsHtml = renderActivityList(otherItems, "Creations you've commented on");
-	const chatHtml = renderChatThreadList(chatItems, "Chat");
-	const activityListHtml = yourCreationsHtml || otherCreationsHtml || chatHtml ? html`
+	const notifHtml = renderNotificationDigestList(notifLines);
+	const yourCreationsHtml = notifLines.length > 0 ? "" : renderActivityList(items, "Your creations");
+	const otherCreationsHtml = notifLines.length > 0 ? "" : renderActivityList(otherItems, "Creations you've commented on");
+	const chatHtml = renderChatThreadList(chatItems, "Direct messages");
+	const activityListHtml = notifHtml || yourCreationsHtml || otherCreationsHtml || chatHtml ? html`
+	${notifHtml}
 	${yourCreationsHtml}
 	${otherCreationsHtml}
 	${chatHtml}
@@ -618,12 +651,23 @@ export function renderDigestActivity({
 		preheader,
 		title: "Your activity",
 		bodyHtml,
-		ctaText: chatCount > 0 && totalCount === 0 ? "Open chat" : "View activity",
+		ctaText: chatCount > 0 && notifCount === 0 && legacyCount === 0 ? "Open messages" : "View activity",
 		ctaUrl: feedUrl,
 		footerText: "You're receiving this because you have notifications on parascene."
 	});
 
 	const textSections = [];
+	if (notifLines.length > 0) {
+		textSections.push(
+			"For you:",
+			...notifLines.map((item) => {
+				const title = (item?.title && String(item.title).trim()) || "Notification";
+				const message = (item?.message && String(item.message).trim()) || "";
+				const url = (item?.url && String(item.url).trim()) || feedUrl;
+				return message ? `  • ${title} — ${message} — ${url}` : `  • ${title} — ${url}`;
+			})
+		);
+	}
 	if (items.length > 0) {
 		textSections.push("Your creations:", ...items.map((item) => {
 			const title = (item?.title && String(item.title).trim()) || "Untitled";
@@ -639,7 +683,7 @@ export function renderDigestActivity({
 		}));
 	}
 	if (chatItems.length > 0) {
-		textSections.push("Chat:", ...chatItems.map((item) => {
+		textSections.push("Direct messages:", ...chatItems.map((item) => {
 			const title = (item?.title && String(item.title).trim()) || "Chat";
 			const count = Number(item?.unread_count ?? 0);
 			const u = (item?.thread_url && String(item.thread_url).trim()) || feedUrl;
@@ -655,6 +699,61 @@ export function renderDigestActivity({
 		`View activity: ${feedUrl}`
 	];
 	const text = textLines.join("\n");
+	return { subject, html: emailHtml, text };
+}
+
+/**
+ * Admin-composed broadcast to all active consumers: short note + one CTA.
+ */
+export function renderAdminBroadcast({
+	recipientName = "there",
+	emailSubject = "News from parascene",
+	headline = "",
+	message = "",
+	ctaText = "Visit parascene",
+	ctaUrl = getBaseAppUrlForEmail()
+} = {}) {
+	const safeName = escapeHtml(recipientName);
+	const subject = String(emailSubject || "").trim() || "News from parascene";
+	const safeHeadline = escapeHtml((headline || subject).trim());
+	const safeMessage = escapeHtml(String(message || "").trim()).replace(/\n/g, "<br />");
+	const safeCta = escapeHtml(String(ctaText || "").trim() || "Learn more");
+	const ctaHref = String(ctaUrl || "").trim() || getBaseAppUrlForEmail();
+	const preheader =
+		String(message || "")
+			.trim()
+			.split(/\n/)[0]
+			.slice(0, 120) || subject;
+
+	const bodyHtml = html`
+	<p style="margin:0 0 12px; font-family:Arial, Helvetica, sans-serif;">Hi ${safeName},</p>
+	<div style="color:#334155; font-size:15px; line-height:1.7; font-family:Arial, Helvetica, sans-serif;">
+		${safeMessage}
+	</div>
+	<p style="margin:16px 0 0; font-family:Arial, Helvetica, sans-serif;">— The parascene team</p>
+	`;
+
+	const emailHtml = baseEmailLayout({
+		preheader,
+		title: safeHeadline,
+		bodyHtml,
+		ctaText: safeCta,
+		ctaUrl: ctaHref,
+		footerText: "You're receiving this because you're part of the parascene community."
+	});
+
+	const text = [
+		`Hi ${recipientName},`,
+		"",
+		String(message || "").trim(),
+		"",
+		"— The parascene team",
+		"",
+		`${String(ctaText || "").trim() || "Learn more"}: ${ctaHref}`
+	]
+		.filter((line, i, arr) => !(line === "" && arr[i - 1] === ""))
+		.join("\n");
+
 	return { subject, html: emailHtml, text };
 }
 
@@ -957,5 +1056,6 @@ export const templates = {
 	firstCreationNudge: renderFirstCreationNudge,
 	reengagement: renderReengagement,
 	creationHighlight: renderCreationHighlight,
-	supportReport: renderSupportReport
+	supportReport: renderSupportReport,
+	adminBroadcast: renderAdminBroadcast
 };

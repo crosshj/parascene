@@ -2,6 +2,10 @@ let formatDateTime;
 let formatRelativeTime;
 let fetchJsonWithStatusDeduped;
 let closeModalsAndNavigate;
+let notificationCreationHref;
+let notificationChatHref;
+let notificationPrimaryHref;
+let notificationPrimaryClickable;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -27,42 +31,17 @@ async function loadDeps() {
 
 		const navMod = await import(`../../shared/navigation.js${qs}`);
 		closeModalsAndNavigate = navMod.closeModalsAndNavigate;
+
+		const notifNavMod = await import(`../../shared/notificationNav.js${qs}`);
+		notificationCreationHref = notifNavMod.notificationCreationHref;
+		notificationChatHref = notifNavMod.notificationChatHref;
+		notificationPrimaryHref = notifNavMod.notificationPrimaryHref;
+		notificationPrimaryClickable = notifNavMod.notificationPrimaryClickable;
 	})();
 	return _depsPromise;
 }
 
 const html = String.raw;
-
-/** Same rules as nav preview: API may omit creation_id; link can still be /creations/:id. */
-function notificationCreationHref(n) {
-	if (!n) return null;
-	const link = typeof n.link === 'string' ? n.link.trim() : '';
-	if (/^\/creations\/\d+/.test(link)) return link;
-	if (n.creation_id != null && Number.isFinite(Number(n.creation_id))) {
-		return `/creations/${Number(n.creation_id)}`;
-	}
-	return null;
-}
-
-function notificationChatHref(n) {
-	if (!n) return null;
-	const link = typeof n.link === 'string' ? n.link.trim() : '';
-	if (/^\/chat\//.test(link)) return link;
-	return null;
-}
-
-function notificationPrimaryHref(n) {
-	return notificationChatHref(n) || notificationCreationHref(n);
-}
-
-/** Row is actionable on primary click: tips always (incl. admin tips with link "/"), plus comments/activity with a creation URL. */
-function notificationPrimaryClickable(n) {
-	if (!n) return false;
-	if (n.type === 'tip') return true;
-	if (n.type === 'chat_mention' && notificationChatHref(n)) return true;
-	const href = notificationCreationHref(n);
-	return !!href && (n.type === 'comment' || n.type === 'comment_thread' || n.type === 'creation_activity');
-}
 
 class AppModalNotifications extends HTMLElement {
 	constructor() {

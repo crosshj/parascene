@@ -5,7 +5,7 @@ import { sendTemplatedEmail } from "../../email/index.js";
 import { getBaseAppUrlForEmail } from "../../api_routes/utils/url.js";
 import { getEmailSettings, getEffectiveRecipient } from "../../api_routes/utils/emailSettings.js";
 import { markPreviousStepsCompleted } from "../../api_routes/utils/emailCampaignState.js";
-import { buildChatDigestEmailSection } from "./chatDigestEmail.js";
+import { buildNotificationDigestLines, buildDmChatDigestSection } from "./digestEmailSection.js";
 
 const CRON_SECRET_ENV = "CRON_SECRET";
 
@@ -101,45 +101,20 @@ async function runNotificationsCron({ queries }) {
 			continue;
 		}
 
-		const unreadNotifications = await (queries.selectNotificationsForUser?.all(userId, user?.role) ?? []);
-		const unreadCreationIds = new Set();
-		for (const notif of unreadNotifications) {
-			if (!notif.acknowledged_at && notif.link) {
-				const match = String(notif.link).match(/\/creations\/(\d+)/);
-				if (match && match[1]) {
-					const creationId = Number(match[1]);
-					if (Number.isFinite(creationId) && creationId > 0) {
-						unreadCreationIds.add(creationId);
-					}
-				}
-			}
-		}
-
-		const ownerRows = await (queries.selectDigestActivityByOwnerSince?.all(userId, sinceIso) ?? []);
-		const commenterRows = await (queries.selectDigestActivityByCommenterSince?.all(userId, sinceIso) ?? []);
-
-		const filteredOwnerRows = ownerRows.filter((r) => {
-			const creationId = Number(r?.created_image_id);
-			return Number.isFinite(creationId) && unreadCreationIds.has(creationId);
+		const notificationItems = await buildNotificationDigestLines({
+			queries,
+			userId,
+			userRole: user?.role,
+			sinceIso
 		});
-		const filteredCommenterRows = commenterRows.filter((r) => {
-			const creationId = Number(r?.created_image_id);
-			return Number.isFinite(creationId) && unreadCreationIds.has(creationId);
+		const { chatThreadItems } = await buildDmChatDigestSection({
+			queries,
+			userId,
+			sinceIso,
+			maxThreads: 8
 		});
 
-		const activityItems = filteredOwnerRows.map((r) => ({
-			title: r?.title && String(r.title).trim() ? String(r.title).trim() : "Untitled",
-			comment_count: Number(r?.comment_count ?? 0)
-		}));
-		const otherCreationsActivityItems = filteredCommenterRows.map((r) => ({
-			title: r?.title && String(r.title).trim() ? String(r.title).trim() : "Untitled",
-			comment_count: Number(r?.comment_count ?? 0)
-		}));
-
-		const { chatThreadItems } = await buildChatDigestEmailSection({ queries, userId, sinceIso, maxThreads: 8 });
-
-		const hasDigestBody =
-			activityItems.length > 0 || otherCreationsActivityItems.length > 0 || chatThreadItems.length > 0;
+		const hasDigestBody = notificationItems.length > 0 || chatThreadItems.length > 0;
 		if (!hasDigestBody) {
 			skipped++;
 			continue;
@@ -152,24 +127,23 @@ async function runNotificationsCron({ queries }) {
 			const to = getEffectiveRecipient(settings, email);
 			const recipientName = user?.display_name || user?.user_name || email.split("@")[0] || "there";
 			const feedUrl = getBaseAppUrlForEmail();
-			let digestPrimaryUrl = feedUrl;
-			if (
-				activityItems.length === 0 &&
-				otherCreationsActivityItems.length === 0 &&
-				chatThreadItems.length > 0
-			) {
-				const first = chatThreadItems[0]?.thread_url;
-				digestPrimaryUrl =
-					chatThreadItems.length === 1 && typeof first === "string" && first.trim()
-						? first.trim()
-						: `${String(feedUrl).replace(/\/+$/, "")}/connect#chat`;
-			}
+			const firstNotifUrl =
+				notificationItems[0]?.url && String(notificationItems[0].url).trim()
+					? String(notificationItems[0].url).trim()
+					: null;
+			const firstChatUrl =
+				chatThreadItems[0]?.thread_url && String(chatThreadItems[0].thread_url).trim()
+					? String(chatThreadItems[0].thread_url).trim()
+					: null;
+			const digestPrimaryUrl = firstNotifUrl || firstChatUrl || feedUrl;
 			const activitySummary =
-				chatThreadItems.length > 0 && activityItems.length === 0 && otherCreationsActivityItems.length === 0
-					? "You have unread messages in chat."
+				notificationItems.length > 0 && chatThreadItems.length > 0
+					? "People on parascene reached out — here's what you missed."
 					: chatThreadItems.length > 0
-						? "You have new activity on parascene — including chat."
-						: "You have new activity.";
+						? "You have unread direct messages."
+						: notificationItems.length === 1
+							? notificationItems[0].message || "You have a new notification."
+							: "You have new notifications on parascene.";
 
 			try {
 				await sendTemplatedEmail({
@@ -179,8 +153,7 @@ async function runNotificationsCron({ queries }) {
 						recipientName,
 						activitySummary,
 						feedUrl: digestPrimaryUrl,
-						activityItems,
-						otherCreationsActivityItems,
+						notificationItems,
 						chatThreadItems
 					}
 				});

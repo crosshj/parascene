@@ -32,6 +32,12 @@ import { createReplyIndicatorElement } from '../shared/replyIndicatorUi.js';
 import { plainTextReplyPreview } from '../shared/plainTextReplyPreview.js';
 import { CHAT_UPLOAD_MAX_BYTES, chatUploadMaxSizeLabel } from '../shared/chatUploadMaxBytes.js';
 import { safeMediaPlay } from '../shared/safeMediaPlay.js';
+import {
+	notificationChatHref,
+	notificationCreationHref,
+	notificationPrimaryClickable,
+	notificationPrimaryHref
+} from '../shared/notificationNav.js';
 import { dismissChallengeVoteModalFromBrowserHistoryIfOpen as dismissChallengeVoteModalImpl } from './challenges/challengeVoteModal.js';
 import {
 	sendIcon,
@@ -5571,35 +5577,6 @@ export async function initChatPage(root, options = {}) {
 			return;
 		}
 		setTimeout(run, 150);
-	}
-
-	function notificationCreationHref(n) {
-		if (!n) return null;
-		const link = typeof n.link === 'string' ? n.link.trim() : '';
-		if (/^\/creations\/\d+/.test(link)) return link;
-		if (n.creation_id != null && Number.isFinite(Number(n.creation_id))) {
-			return `/creations/${Number(n.creation_id)}`;
-		}
-		return null;
-	}
-
-	function notificationChatHref(n) {
-		if (!n) return null;
-		const link = typeof n.link === 'string' ? n.link.trim() : '';
-		if (/^\/chat\//.test(link)) return link;
-		return null;
-	}
-
-	function notificationPrimaryHref(n) {
-		return notificationChatHref(n) || notificationCreationHref(n);
-	}
-
-	function notificationPrimaryClickable(n) {
-		if (!n) return false;
-		if (n.type === 'tip') return true;
-		if (n.type === 'chat_mention' && notificationChatHref(n)) return true;
-		const href = notificationCreationHref(n);
-		return !!href && (n.type === 'comment' || n.type === 'comment_thread' || n.type === 'creation_activity');
 	}
 
 	function ensureChatSidebarNotificationsMenu(anchorBtn) {

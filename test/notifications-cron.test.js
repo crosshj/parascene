@@ -118,9 +118,9 @@ describe("notifications worker cron", () => {
 					all: jest.fn(async () => [
 						{
 							thread_id: 22,
-							thread_type: "channel",
-							channel_slug: "feedback",
-							dm_pair_key: null,
+							thread_type: "dm",
+							channel_slug: null,
+							dm_pair_key: "1:9",
 							unread_count: 2
 						}
 					])
@@ -138,7 +138,7 @@ describe("notifications worker cron", () => {
 					data: expect.objectContaining({
 						chatThreadItems: expect.arrayContaining([
 							expect.objectContaining({
-								title: "#feedback",
+								title: expect.stringMatching(/^DM ·/),
 								unread_count: 2
 							})
 						])

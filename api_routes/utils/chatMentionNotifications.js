@@ -1,10 +1,14 @@
-import { extractUniqueChatMentionUsernames } from "./chatAtMentions.js";
 import { pathnameChatOpenForViewer } from "./chatDeepLinks.js";
+import { extractUserMentionHandles } from "./textMentions.js";
+import { insertActivityNotification } from "./activityNotifications.js";
 
 /**
- * After a chat message is stored, notify @mentioned thread members (in-app notification → digest email path).
+ * Chat in-app notifications for @username mentions in **channels only**.
+ * DMs use chat roster + global badge only (no bell rows — chat owns that UX).
+ * @here / @channel are highlighted in the message UI but do not create bell rows.
+ *
  * @param {{
- *   queries: { insertNotification?: { run: (...args: unknown[]) => Promise<unknown> }, selectUserProfileByUsername?: { get: (u: string) => Promise<object | undefined> } },
+ *   queries: { insertNotification?: { run: (...args: unknown[]) => Promise<unknown> }, selectUserProfileByUsername?: { get: (u: string) => Promise<object | undefined> }, selectNotificationsForUser?: { all: (...args: unknown[]) => Promise<object[]> } },
  *   memberUserIds: number[],
  *   threadId: number,
  *   threadType: string | null | undefined,
@@ -24,10 +28,11 @@ export async function insertNotificationsForChatMentions({
 	senderId,
 	body
 }) {
-	if (!queries?.insertNotification?.run || !queries?.selectUserProfileByUsername?.get) return;
+	if (!queries?.insertNotification?.run) return;
 
-	const handles = extractUniqueChatMentionUsernames(body);
-	if (handles.length === 0) return;
+	const tid = Number(threadId);
+	const sid = Number(senderId);
+	if (!Number.isFinite(tid) || tid <= 0 || !Number.isFinite(sid) || sid <= 0) return;
 
 	const memberSet = new Set(
 		(Array.isArray(memberUserIds) ? memberUserIds : [])
@@ -35,16 +40,29 @@ export async function insertNotificationsForChatMentions({
 			.filter((id) => Number.isFinite(id) && id > 0)
 	);
 
-	const target = { thread_id: threadId };
 	const ttype = typeof threadType === "string" ? threadType.trim() : "";
+	if (ttype === "dm") return;
+
 	const slug = typeof channelSlug === "string" && channelSlug.trim() ? channelSlug.trim() : null;
 	const dmKey = typeof dmPairKey === "string" && dmPairKey.trim() ? dmPairKey.trim() : null;
-	const meta = {
+	const target = { thread_id: tid };
+	const metaBase = {
 		thread_type: ttype || null,
 		channel_slug: slug,
 		...(ttype === "dm" && dmKey ? { dm_pair_key: dmKey } : {})
 	};
 
+	const linkForViewer = (viewerUserId) =>
+		pathnameChatOpenForViewer({
+			threadId: tid,
+			threadType: ttype || null,
+			channelSlug: slug,
+			dmPairKey: ttype === "dm" ? dmKey : null,
+			viewerUserId,
+			otherUserProfile: null
+		});
+
+	const handles = extractUserMentionHandles(body);
 	for (const handle of handles) {
 		let profile;
 		try {
@@ -53,36 +71,17 @@ export async function insertNotificationsForChatMentions({
 			continue;
 		}
 		const toUserId = profile?.user_id != null ? Number(profile.user_id) : null;
-		if (!Number.isFinite(toUserId) || toUserId <= 0 || toUserId === senderId) continue;
+		if (!Number.isFinite(toUserId) || toUserId <= 0 || toUserId === sid) continue;
 		if (!memberSet.has(toUserId)) continue;
 
-		const link = pathnameChatOpenForViewer({
-			threadId,
-			threadType: ttype || null,
-			channelSlug: slug,
-			dmPairKey: ttype === "dm" ? dmKey : null,
-			viewerUserId: toUserId,
-			otherUserProfile: null
+		await insertActivityNotification({
+			queries,
+			toUserId,
+			actorUserId: sid,
+			type: "chat_mention",
+			target,
+			link: linkForViewer(toUserId),
+			meta: metaBase
 		});
-
-		const title = "Chat mention";
-		const message = "Someone mentioned you in chat.";
-		try {
-			await queries.insertNotification.run(
-				toUserId,
-				null,
-				title,
-				message,
-				link,
-				senderId,
-				"chat_mention",
-				target,
-				meta
-			);
-		} catch (err) {
-			if (process.env.NODE_ENV !== "production") {
-				console.error("[chat mention notification]", err?.message ?? err);
-			}
-		}
 	}
 }

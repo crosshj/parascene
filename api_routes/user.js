@@ -20,7 +20,16 @@ import {
 import { getBaseAppUrl, getBaseAppUrlForEmail, getThumbnailUrl } from "./utils/url.js";
 import { computeWelcome, WELCOME_VERSION } from "./utils/welcome.js";
 import { resolveNotificationDisplay } from "./utils/notificationResolver.js";
-import { collapseNotificationsByCreation, getCreationIdFromRow } from "./utils/notificationCollapse.js";
+import {
+	collapseNotificationsByCreation,
+	getCreationIdFromRow,
+	getThreadIdFromRow
+} from "./utils/notificationCollapse.js";
+import {
+	countUnreadNotificationsForBell,
+	filterNotificationsForBell,
+	isDmChatMentionNotification
+} from "./utils/notificationBellFilter.js";
 import { getReactionsForCommentIds } from "./comments.js";
 import { getClientIdFromRequest, mergePrsnCidsIntoProfileMeta, prsnCidFromMeta } from "./utils/prsnCids.js";
 import { appendPrsnCidsForUserId, tryRequestMetaFromRow } from "./utils/userPrsnCids.js";
@@ -1938,11 +1947,20 @@ export default function createProfileRoutes({ queries }) {
 
 			const limitRaw = Number.parseInt(String(req.query?.limit ?? "25"), 10);
 			const limit = Number.isFinite(limitRaw) ? Math.min(200, Math.max(1, limitRaw)) : 25;
-			const rows = await queries.selectNotificationsForUser.all(
+			const fetched = await queries.selectNotificationsForUser.all(
 				user.id,
 				user.role,
-				limit
+				Math.min(200, Math.max(limit, limit * 4))
 			);
+			const rows = filterNotificationsForBell(fetched).slice(0, limit);
+
+			// Retire legacy DM chat_mention rows so they do not linger unacknowledged in DB.
+			for (const row of fetched) {
+				if (!isDmChatMentionNotification(row) || row?.acknowledged_at) continue;
+				if (!queries.acknowledgeNotificationById?.run) continue;
+				void queries.acknowledgeNotificationById.run(row.id, user.id, user.role).catch(() => {});
+			}
+
 			const resolved = await Promise.all(
 				rows.map(async (row) => {
 					const r = typeof row?.type === "string" && row.type.trim()
@@ -1989,11 +2007,9 @@ export default function createProfileRoutes({ queries }) {
 				return res.json({ count: 0 });
 			}
 
-			const result = await queries.selectUnreadNotificationCount.get(
-				user.id,
-				user.role
-			);
-			return res.json({ count: result?.count ?? 0 });
+			const fetched = await queries.selectNotificationsForUser.all(user.id, user.role, 200);
+			const count = countUnreadNotificationsForBell(fetched);
+			return res.json({ count });
 		} catch (error) {
 			// console.error("Error loading unread notification count:", error);
 			return res.json({ count: 0 });
@@ -2020,18 +2036,33 @@ export default function createProfileRoutes({ queries }) {
 			// as read (no per-sub-item state; the collapsed row is one unit).
 			let result;
 			try {
-				if (queries.selectNotificationById?.get && queries.acknowledgeNotificationsForUserAndCreation?.run) {
+				if (queries.selectNotificationById?.get) {
 					const row = await queries.selectNotificationById.get(id, user.id, user.role);
 					if (!row) {
 						return res.status(404).json({ error: "Notification not found" });
 					}
 					const creationId = getCreationIdFromRow(row);
+					const threadId = getThreadIdFromRow(row);
 					const type = typeof row.type === "string" ? row.type.trim() : null;
-					const collapseTypes = new Set(["comment", "comment_thread", "tip"]);
-					const acknowledgeByCreation = creationId != null && type && collapseTypes.has(type);
-					result = acknowledgeByCreation
-						? await queries.acknowledgeNotificationsForUserAndCreation.run(user.id, user.role, creationId)
-						: await queries.acknowledgeNotificationById.run(id, user.id, user.role);
+					const collapseTypes = new Set([
+						"comment",
+						"comment_thread",
+						"tip",
+						"creation_mention",
+						"comment_mention"
+					]);
+					const chatTypes = new Set(["chat_mention"]);
+					const acknowledgeByCreation =
+						creationId != null && type && collapseTypes.has(type) && queries.acknowledgeNotificationsForUserAndCreation?.run;
+					const acknowledgeByThread =
+						threadId != null && type && chatTypes.has(type) && queries.acknowledgeNotificationsForUserAndThread?.run;
+					if (acknowledgeByCreation) {
+						result = await queries.acknowledgeNotificationsForUserAndCreation.run(user.id, user.role, creationId);
+					} else if (acknowledgeByThread) {
+						result = await queries.acknowledgeNotificationsForUserAndThread.run(user.id, user.role, threadId);
+					} else {
+						result = await queries.acknowledgeNotificationById.run(id, user.id, user.role);
+					}
 				} else {
 					result = await queries.acknowledgeNotificationById.run(id, user.id, user.role);
 				}

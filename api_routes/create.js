@@ -20,6 +20,7 @@ import { creationRowIsVideo } from "./utils/vynlyShareFromCreation.js";
 import { sendBufferWithRangeSupport } from "./utils/sendBufferWithRangeSupport.js";
 import { broadcastRoomDirty, broadcastUserInboxDirty } from "./utils/realtimeBroadcast.js";
 import { insertNotificationsForChatMentions } from "./utils/chatMentionNotifications.js";
+import { notifyCreationMentionsOnPublish } from "./utils/activityNotifications.js";
 import {
 	canViewUnpublishedCreationViaChallengeMessage,
 	fetchChatChannelThreadRow,
@@ -2488,6 +2489,16 @@ export default function createCreateRoutes({ queries, storage }) {
 				response.user_deleted = true;
 			}
 			await appendChallengeSubmitEligibility(req, user, image, meta, response);
+
+			if (queries.acknowledgeNotificationsForUserAndCreation?.run) {
+				const cid = Number(image.id);
+				if (Number.isFinite(cid) && cid > 0) {
+					void queries.acknowledgeNotificationsForUserAndCreation
+						.run(user.id, user.role, cid)
+						.catch(() => {});
+				}
+			}
+
 			return res.json(response);
 		} catch (error) {
 			// console.error("Error fetching image:", error);
@@ -3450,6 +3461,16 @@ export default function createCreateRoutes({ queries, storage }) {
 			});
 
 			const updatedMeta = parseMeta(updatedImage?.meta);
+
+			void notifyCreationMentionsOnPublish({
+				queries,
+				creationId: updatedImage.id,
+				publisherUserId: targetImage.user_id,
+				title: title.trim(),
+				description: description ? description.trim() : null,
+				meta: updatedMeta
+			});
+
 			return res.json({
 				id: updatedImage.id,
 				filename: updatedImage.filename,

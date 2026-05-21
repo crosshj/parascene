@@ -1859,6 +1859,13 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 				.eq("user_id", userId);
 			if (upErr) throw upErr;
 
+			if (queries.acknowledgeNotificationsForUserAndThread?.run) {
+				const u = await queries.selectUserById?.get(userId);
+				void queries.acknowledgeNotificationsForUserAndThread
+					.run(userId, u?.role ?? null, threadId)
+					.catch(() => {});
+			}
+
 			return res.status(200).json({ ok: true, last_read_message_id: mid });
 		} catch (err) {
 			console.error("[POST /api/chat/threads/:threadId/read]", err);

@@ -9,6 +9,10 @@ let setNsfwContentEnabled;
 let notifyIcon;
 let creditIcon;
 let getHelpHref;
+let notificationCreationHref;
+let notificationChatHref;
+let notificationPrimaryHref;
+let notificationPrimaryClickable;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -44,6 +48,12 @@ async function loadDeps() {
 
 		const chatAudiblePrefMod = await import(`../../shared/chatAudibleNotificationsPref.js${qs}`);
 		hydrateChatAudibleNotificationsFromServer = chatAudiblePrefMod.hydrateChatAudibleNotificationsFromServer;
+
+		const notifNavMod = await import(`../../shared/notificationNav.js${qs}`);
+		notificationCreationHref = notifNavMod.notificationCreationHref;
+		notificationChatHref = notifNavMod.notificationChatHref;
+		notificationPrimaryHref = notifNavMod.notificationPrimaryHref;
+		notificationPrimaryClickable = notifNavMod.notificationPrimaryClickable;
 	})();
 	return _depsPromise;
 }
@@ -754,33 +764,7 @@ class AppNavigation extends HTMLElement {
 				return;
 			}
 
-			const notificationCreationHref = (n) => {
-				if (!n) return null;
-				const link = typeof n.link === 'string' ? n.link.trim() : '';
-				if (/^\/creations\/\d+/.test(link)) return link;
-				if (n.creation_id != null && Number.isFinite(Number(n.creation_id))) {
-					return `/creations/${Number(n.creation_id)}`;
-				}
-				return null;
-			};
-
-			const notificationChatHref = (n) => {
-				if (!n) return null;
-				const link = typeof n.link === 'string' ? n.link.trim() : '';
-				if (/^\/chat\//.test(link)) return link;
-				return null;
-			};
-
-			const notificationPrimaryHref = (n) => notificationChatHref(n) || notificationCreationHref(n);
-
-			const hasClickTarget = (n) => {
-				if (!n) return false;
-				if (n.type === 'tip') return true;
-				if (n.type === 'chat_mention' && notificationChatHref(n)) return true;
-				const href = notificationCreationHref(n);
-				if (!href) return false;
-				return n.type === 'comment' || n.type === 'comment_thread' || n.type === 'creation_activity';
-			};
+			const hasClickTarget = (n) => notificationPrimaryClickable(n);
 
 			const fragment = document.createDocumentFragment();
 			for (const notification of notifications) {

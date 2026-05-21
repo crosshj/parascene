@@ -1,6 +1,7 @@
 import express from "express";
 import { getThumbnailUrl } from "./utils/url.js";
 import { composeCommentStampedReply } from "./utils/commentReplyStamp.js";
+import { notifyCommentMentions } from "./utils/activityNotifications.js";
 import { sanitizeClientReplyPreview } from "./utils/chatReplyStamp.js";
 
 /** Allowed emoji keys for comment reactions, in display order. Must match frontend REACTION_ORDER. */
@@ -421,7 +422,8 @@ export default function createCommentsRoutes({ queries }) {
 					const link = `/creations/${encodeURIComponent(String(imageId))}`;
 					const target = { creation_id: imageId };
 					const meta = creationTitle ? { creation_title: creationTitle } : {};
-	
+					const alreadyNotifiedUserIds = [];
+
 					// Notify creation owner when someone else comments (so they get digest / in-app).
 					const ownerUserId = Number(image?.user_id);
 					if (Number.isFinite(ownerUserId) && ownerUserId > 0 && ownerUserId !== commenterId) {
@@ -429,8 +431,9 @@ export default function createCommentsRoutes({ queries }) {
 							? `Someone commented on “${creationTitle}”.`
 							: `Someone commented on your creation.`;
 						await queries.insertNotification.run(ownerUserId, null, title, message, link, commenterId, "comment", target, meta);
+						alreadyNotifiedUserIds.push(ownerUserId);
 					}
-	
+
 					// Notify prior commenters (excluding current commenter and owner, to avoid duplicate).
 					if (queries.selectCreatedImageCommenterUserIdsDistinct?.all) {
 						const rawIds = await queries.selectCreatedImageCommenterUserIdsDistinct.all(imageId);
@@ -439,17 +442,27 @@ export default function createCommentsRoutes({ queries }) {
 								.map((r) => Number(r?.user_id ?? r))
 								.filter((id) => Number.isFinite(id) && id > 0 && id !== commenterId && id !== ownerUserId)
 						));
-	
+
 						if (recipientIds.length > 0) {
 							const message = creationTitle
 								? `Someone commented on “${creationTitle}”.`
 								: `Someone commented on a creation you commented on.`;
-	
+
 							for (const toUserId of recipientIds) {
 								await queries.insertNotification.run(toUserId, null, title, message, link, commenterId, "comment_thread", target, meta);
+								alreadyNotifiedUserIds.push(toUserId);
 							}
 						}
 					}
+
+					await notifyCommentMentions({
+						queries,
+						creationId: imageId,
+						commenterId,
+						commentText: text,
+						creationTitle,
+						alreadyNotifiedUserIds
+					});
 				}
 			} catch (error) {
 				// This catch exists so comment posting still succeeds even if notifications fail.

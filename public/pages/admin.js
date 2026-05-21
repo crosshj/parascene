@@ -632,12 +632,30 @@ function initEmailSendPanel() {
 	const feedbackField = document.getElementById("email-send-feedback-field");
 	const feedbackOriginal = document.getElementById("email-send-feedback-original");
 	const feedbackMessage = document.getElementById("email-send-feedback-message");
+	const broadcastField = document.getElementById("email-send-broadcast-field");
+	const broadcastSubject = document.getElementById("email-send-broadcast-subject");
+	const broadcastHeadline = document.getElementById("email-send-broadcast-headline");
+	const broadcastMessage = document.getElementById("email-send-broadcast-message");
+	const broadcastCtaText = document.getElementById("email-send-broadcast-cta-text");
+	const broadcastCtaUrl = document.getElementById("email-send-broadcast-cta-url");
+	const recipientSection = document.getElementById("email-send-recipient-section");
+	const broadcastAudienceEl = document.getElementById("email-send-broadcast-audience");
+	const previewBtn = document.getElementById("email-send-preview");
+	const previewDialog = document.getElementById("email-send-preview-dialog");
+	const previewCloseBtn = document.getElementById("email-send-preview-close");
+	const previewIframe = document.getElementById("email-send-preview-iframe");
+	const submitLabelEl = submitBtn?.querySelector(".admin-settings-save-label");
 	const toDisplayEl = recipientSelected?.querySelector(".admin-email-send-to-display");
+	let broadcastAudienceMeta = null;
+	let previewRefreshTimer = null;
 	if (!container || !form || !statusEl || !submitBtn || emailSendPanelInitialized) return;
 	emailSendPanelInitialized = true;
 
 	if (feedbackOriginal) attachAutoGrowTextarea(feedbackOriginal);
 	if (feedbackMessage) attachAutoGrowTextarea(feedbackMessage);
+	if (broadcastMessage) attachAutoGrowTextarea(broadcastMessage);
+
+	const defaultBroadcastCtaUrl = `${window.location.origin.replace(/\/$/, "")}/connect#challenges`;
 
 	function setStatus(message, isError = false) {
 		statusEl.textContent = message || "";
@@ -645,10 +663,154 @@ function initEmailSendPanel() {
 		statusEl.classList.toggle("admin-email-send-status-success", message && !isError);
 	}
 
-	function updateFeedbackFieldVisibility() {
-		const isFeedback = (templateSelect?.value ?? "") === "featureRequestFeedback";
+	function setSubmitLabel(text) {
+		if (submitLabelEl) submitLabelEl.textContent = text;
+	}
+
+	async function refreshBroadcastAudienceNote() {
+		if (!broadcastAudienceEl) return;
+		const template = templateSelect?.value ?? "";
+		if (template !== "adminBroadcast") {
+			broadcastAudienceEl.hidden = true;
+			broadcastAudienceEl.textContent = "";
+			broadcastAudienceMeta = null;
+			return;
+		}
+		broadcastAudienceEl.hidden = false;
+		broadcastAudienceEl.textContent = "Loading audience…";
+		try {
+			const response = await fetch("/admin/broadcast-recipients", { credentials: "include" });
+			const data = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				broadcastAudienceEl.textContent = data?.error || "Could not load recipient count.";
+				broadcastAudienceMeta = null;
+				return;
+			}
+			broadcastAudienceMeta = data;
+			const count = Number(data.eligibleCount) || 0;
+			const parts = [
+				`Sends to ${count} active consumer${count === 1 ? "" : "s"} (not admins, not suspended).`
+			];
+			if (data.dryRun) {
+				parts.push("Dry run is on — no email will be delivered.");
+			} else if (data.emailUseTestRecipient) {
+				parts.push("Test recipient mode is on — all messages go to the Resend test address.");
+			}
+			broadcastAudienceEl.textContent = parts.join(" ");
+		} catch {
+			broadcastAudienceEl.textContent = "Could not load recipient count.";
+			broadcastAudienceMeta = null;
+		}
+	}
+
+	function updateCustomTemplateFieldsVisibility() {
+		const template = templateSelect?.value ?? "";
+		const isFeedback = template === "featureRequestFeedback";
+		const isBroadcast = template === "adminBroadcast";
+		if (recipientSection) recipientSection.hidden = isBroadcast;
+		if (recipientSelect) recipientSelect.required = !isBroadcast;
+		if (toInput) toInput.required = !isBroadcast && recipientSelect?.value === "manual";
 		if (feedbackField) feedbackField.hidden = !isFeedback;
 		if (feedbackMessage) feedbackMessage.required = isFeedback;
+		if (broadcastField) broadcastField.hidden = !isBroadcast;
+		if (broadcastSubject) broadcastSubject.required = isBroadcast;
+		if (broadcastMessage) broadcastMessage.required = isBroadcast;
+		if (broadcastCtaText) broadcastCtaText.required = isBroadcast;
+		if (broadcastCtaUrl) broadcastCtaUrl.required = isBroadcast;
+		if (previewBtn) previewBtn.hidden = !isBroadcast;
+		if (!isBroadcast) closeBroadcastPreview();
+		if (isBroadcast && broadcastCtaUrl && !broadcastCtaUrl.value.trim()) {
+			broadcastCtaUrl.value = defaultBroadcastCtaUrl;
+		}
+		setSubmitLabel(isBroadcast ? "Send broadcast" : "Send email");
+		void refreshBroadcastAudienceNote();
+	}
+
+	function getBroadcastFormValues() {
+		return {
+			emailSubject: (broadcastSubject?.value ?? "").trim(),
+			headline: (broadcastHeadline?.value ?? "").trim(),
+			message: (broadcastMessage?.value ?? "").trim(),
+			ctaText: (broadcastCtaText?.value ?? "").trim(),
+			ctaUrl: (broadcastCtaUrl?.value ?? "").trim()
+		};
+	}
+
+	function validateBroadcastFormValues() {
+		const { emailSubject, message, ctaText, ctaUrl } = getBroadcastFormValues();
+		if (!emailSubject || !message || !ctaText || !ctaUrl) {
+			return { ok: false, error: "Please fill in subject, message, button label, and button URL to preview." };
+		}
+		return { ok: true };
+	}
+
+	function closeBroadcastPreview() {
+		if (previewDialog?.open) previewDialog.close();
+	}
+
+	async function loadBroadcastPreviewHtml() {
+		const validation = validateBroadcastFormValues();
+		if (!validation.ok) {
+			return { ok: false, error: validation.error };
+		}
+		const response = await fetch("/admin/email-templates/adminBroadcast/preview", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			credentials: "include",
+			body: JSON.stringify(getBroadcastFormValues())
+		});
+		const contentType = response.headers.get("content-type") || "";
+		if (!response.ok) {
+			if (contentType.includes("application/json")) {
+				const data = await response.json().catch(() => ({}));
+				return { ok: false, error: data?.error || "Failed to load preview." };
+			}
+			return { ok: false, error: "Failed to load preview." };
+		}
+		const html = await response.text();
+		return { ok: true, html };
+	}
+
+	async function openBroadcastPreview() {
+		if (!previewDialog || !previewIframe) return;
+		const validation = validateBroadcastFormValues();
+		if (!validation.ok) {
+			setStatus(validation.error, true);
+			return;
+		}
+		if (previewBtn) {
+			previewBtn.disabled = true;
+			previewBtn.textContent = "Loading…";
+		}
+		setStatus("", false);
+		try {
+			const result = await loadBroadcastPreviewHtml();
+			if (!result.ok) {
+				setStatus(result.error, true);
+				return;
+			}
+			previewIframe.srcdoc = result.html;
+			if (!previewDialog.open) previewDialog.showModal();
+		} catch {
+			setStatus("Failed to load preview.", true);
+		} finally {
+			if (previewBtn) {
+				previewBtn.disabled = false;
+				previewBtn.textContent = "Preview email";
+			}
+		}
+	}
+
+	function scheduleBroadcastPreviewRefresh() {
+		if (!previewDialog?.open) return;
+		if (previewRefreshTimer) clearTimeout(previewRefreshTimer);
+		previewRefreshTimer = setTimeout(async () => {
+			previewRefreshTimer = null;
+			const validation = validateBroadcastFormValues();
+			if (!validation.ok || !previewIframe) return;
+			const result = await loadBroadcastPreviewHtml();
+			if (result.ok) previewIframe.srcdoc = result.html;
+		}, 500);
 	}
 
 	function getFeedbackFormValues() {
@@ -753,7 +915,7 @@ function initEmailSendPanel() {
 	const validTemplateValues = new Set([
 		"helloFromParascene", "commentReceived", "commentReceivedDelegated", "featureRequest",
 		"featureRequestFeedback", "passwordReset", "digestActivity", "welcome",
-		"firstCreationNudge", "reengagement", "creationHighlight", "supportReport"
+		"firstCreationNudge", "reengagement", "creationHighlight", "supportReport", "adminBroadcast"
 	]);
 
 	function restoreSavedSelection() {
@@ -771,7 +933,7 @@ function initEmailSendPanel() {
 			// Ignore storage errors
 		}
 		updateRecipientUI();
-		updateFeedbackFieldVisibility();
+		updateCustomTemplateFieldsVisibility();
 	}
 
 	loadRecipientUsers().then(restoreSavedSelection);
@@ -790,7 +952,7 @@ function initEmailSendPanel() {
 
 	if (templateSelect) {
 		templateSelect.addEventListener("change", () => {
-			updateFeedbackFieldVisibility();
+			updateCustomTemplateFieldsVisibility();
 			try {
 				sessionStorage.setItem("admin-email-send-template", templateSelect.value ?? "");
 			} catch {
@@ -798,23 +960,95 @@ function initEmailSendPanel() {
 			}
 		});
 	}
-	updateFeedbackFieldVisibility();
+	updateCustomTemplateFieldsVisibility();
+
+	if (previewBtn) {
+		previewBtn.addEventListener("click", () => {
+			void openBroadcastPreview();
+		});
+	}
+	if (previewCloseBtn) {
+		previewCloseBtn.addEventListener("click", () => closeBroadcastPreview());
+	}
+	for (const el of [broadcastSubject, broadcastHeadline, broadcastMessage, broadcastCtaText, broadcastCtaUrl]) {
+		if (!el) continue;
+		el.addEventListener("input", scheduleBroadcastPreviewRefresh);
+		el.addEventListener("change", scheduleBroadcastPreviewRefresh);
+	}
 
 	form.addEventListener("submit", async (e) => {
 		e.preventDefault();
-		const { to, recipientName } = getToAndRecipient();
 		const template = (form.elements.template?.value ?? "").trim();
-		if (!to || !template) {
+		if (!template) {
+			setStatus("Please select a template.", true);
+			return;
+		}
+
+		if (template === "adminBroadcast") {
+			const { emailSubject, message, ctaText, ctaUrl } = getBroadcastFormValues();
+			if (!emailSubject || !message || !ctaText || !ctaUrl) {
+				setStatus("Please fill in subject, message, button label, and button URL.", true);
+				return;
+			}
+			if (!broadcastAudienceMeta || !(Number(broadcastAudienceMeta.eligibleCount) > 0)) {
+				setStatus("No eligible recipients. Refresh the page or check user accounts.", true);
+				return;
+			}
+			const count = Number(broadcastAudienceMeta.eligibleCount);
+			const dryNote = broadcastAudienceMeta.dryRun ? " Dry run is on — no email will be delivered." : "";
+			const confirmed = window.confirm(
+				`Send this broadcast to ${count} active consumer${count === 1 ? "" : "s"} (not admins, not suspended)?${dryNote}`
+			);
+			if (!confirmed) return;
+
+			submitBtn.disabled = true;
+			submitBtn.classList.add("is-loading");
+			setStatus("Sending broadcast…", false);
+			try {
+				const response = await fetch("/admin/send-broadcast", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					credentials: "include",
+					body: JSON.stringify(getBroadcastFormValues())
+				});
+				const data = await response.json().catch(() => ({}));
+				if (response.ok && data?.ok) {
+					if (data.dryRun) {
+						setStatus(`Dry run: ${data.eligible} recipient${data.eligible === 1 ? "" : "s"} would receive this broadcast.`);
+					} else if (data.failed > 0) {
+						setStatus(
+							`Broadcast finished: ${data.sent} sent, ${data.failed} failed (of ${data.eligible}).`,
+							true
+						);
+					} else {
+						setStatus(`Broadcast sent to ${data.sent} recipient${data.sent === 1 ? "" : "s"}.`);
+					}
+					void refreshBroadcastAudienceNote();
+				} else {
+					setStatus(data?.error || "Failed to send broadcast.", true);
+				}
+			} catch {
+				setStatus("Failed to send broadcast.", true);
+			} finally {
+				submitBtn.disabled = false;
+				submitBtn.classList.remove("is-loading");
+			}
+			return;
+		}
+
+		const { to, recipientName } = getToAndRecipient();
+		if (!to) {
 			setStatus("Please choose a recipient and select a template.", true);
 			return;
 		}
 		if (template === "featureRequestFeedback") {
-			const { originalRequest, message } = getFeedbackFormValues();
+			const { message } = getFeedbackFormValues();
 			if (!message) {
 				setStatus("Please enter a reply for the Feature Request Feedback template.", true);
 				return;
 			}
 		}
+
 		submitBtn.disabled = true;
 		submitBtn.classList.add("is-loading");
 		setStatus("Sending…", false);
@@ -871,7 +1105,8 @@ async function loadEmailTemplates() {
 			{ name: "firstCreationNudge", label: "First creation nudge" },
 			{ name: "reengagement", label: "Re-engagement" },
 			{ name: "creationHighlight", label: "Creation highlight" },
-			{ name: "supportReport", label: "Support report" }
+			{ name: "supportReport", label: "Support report" },
+			{ name: "adminBroadcast", label: "Admin broadcast" }
 		];
 
 		container.innerHTML = "";

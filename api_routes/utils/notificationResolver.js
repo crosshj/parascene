@@ -66,20 +66,43 @@ export async function resolveNotificationDisplay(row, queries) {
 			const message = `${actorName} commented`;
 			return { title, message, link: baseLink, creation_title: creationTitle || null };
 		}
+		case "creation_mention": {
+			const title = creationTitle
+				? `${actorName} mentioned you in “${creationTitle}”`
+				: `${actorName} mentioned you in a creation`;
+			const message = creationTitle
+				? `See the creation “${creationTitle}”.`
+				: "See the creation where you were mentioned.";
+			return { title, message, link: baseLink, creation_title: creationTitle || null };
+		}
+		case "comment_mention": {
+			const title = creationTitle
+				? `${actorName} mentioned you on “${creationTitle}”`
+				: `${actorName} mentioned you in a comment`;
+			const message = creationTitle
+				? `Read the comment on “${creationTitle}”.`
+				: "Read the comment where you were mentioned.";
+			return { title, message, link: baseLink, creation_title: creationTitle || null };
+		}
 		case "chat_mention": {
 			const threadId =
 				target?.thread_id != null && Number.isFinite(Number(target.thread_id)) ? Number(target.thread_id) : null;
 			if (threadId == null) return null;
 			const slug = typeof meta?.channel_slug === "string" && meta.channel_slug.trim() ? meta.channel_slug.trim() : null;
 			const ttype = typeof meta?.thread_type === "string" ? meta.thread_type.trim() : "";
+			const broadcast = typeof meta?.broadcast === "string" ? meta.broadcast.trim() : "";
 			const place =
 				ttype === "channel" && slug
 					? `#${slug}`
 					: ttype === "dm"
 						? "a direct message"
 						: "chat";
-			const title = `Mentioned you in ${place}`;
-			const message = `${actorName} mentioned you`;
+			const title = broadcast
+				? `${actorName} mentioned @${broadcast} in ${place}`
+				: `Mentioned you in ${place}`;
+			const message = broadcast
+				? `${actorName} pinged everyone in ${place}`
+				: `${actorName} mentioned you`;
 			const viewerId = row?.user_id != null && Number.isFinite(Number(row.user_id)) ? Number(row.user_id) : null;
 			let otherUserProfile = null;
 			if (ttype === "dm" && viewerId != null && queries.selectUserProfileByUserId?.get) {

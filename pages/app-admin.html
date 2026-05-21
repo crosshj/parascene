@@ -80,7 +80,7 @@
 					</tab>
 					<tab data-id="send" label="Manual Send">
 						<div id="email-send-container" class="admin-emails-send-panel">
-							<p class="admin-email-send-intro">Send a test email to verify templates and delivery, or send a Feature Request response.</p>
+							<p class="admin-email-send-intro">Send a test email, a feature-request reply, or a community broadcast to all active consumers.</p>
 							<form id="email-send-form" class="admin-email-send-form">
 								<section class="admin-settings-section">
 									<div class="admin-settings-field">
@@ -98,33 +98,52 @@
 											<option value="reengagement">Re-engagement</option>
 											<option value="creationHighlight">Creation highlight</option>
 											<option value="supportReport">Support report</option>
+											<option value="adminBroadcast">Admin broadcast</option>
 										</select>
 									</div>
-									<div class="admin-settings-field">
-										<label class="admin-settings-label" for="email-send-recipient">Recipient</label>
-										<select id="email-send-recipient" name="recipient" class="admin-settings-input" aria-describedby="email-send-recipient-desc">
-											<option value="">— Select user —</option>
-											<option value="manual" selected>Enter manually…</option>
-										</select>
-										<p id="email-send-recipient-desc" class="admin-detail">Choose a user from the list or enter an email and name manually.</p>
+									<div id="email-send-recipient-section">
+										<div class="admin-settings-field">
+											<label class="admin-settings-label" for="email-send-recipient">Recipient</label>
+											<select id="email-send-recipient" name="recipient" class="admin-settings-input" aria-describedby="email-send-recipient-desc">
+												<option value="">— Select user —</option>
+												<option value="manual" selected>Enter manually…</option>
+											</select>
+											<p id="email-send-recipient-desc" class="admin-detail">Choose a user from the list or enter an email and name manually.</p>
+										</div>
+										<div id="email-send-recipient-selected" class="admin-email-send-recipient-selected" hidden>
+											<p class="admin-email-send-to-display" aria-live="polite"></p>
+										</div>
+										<div id="email-send-recipient-manual" class="admin-settings-field" hidden>
+											<label class="admin-settings-label" for="email-send-to">To</label>
+											<input type="email" id="email-send-to" name="to" class="admin-settings-input"
+												placeholder="you@example.com" />
+											<label class="admin-settings-label" for="email-send-feedback-name">Recipient name</label>
+											<input type="text" id="email-send-feedback-name" name="recipientName" class="admin-settings-input" placeholder="e.g. Alex" />
+										</div>
 									</div>
-									<div id="email-send-recipient-selected" class="admin-email-send-recipient-selected" hidden>
-										<p class="admin-email-send-to-display" aria-live="polite"></p>
-									</div>
-									<div id="email-send-recipient-manual" class="admin-settings-field" hidden>
-										<label class="admin-settings-label" for="email-send-to">To</label>
-										<input type="email" id="email-send-to" name="to" class="admin-settings-input"
-											placeholder="you@example.com" />
-										<label class="admin-settings-label" for="email-send-feedback-name">Recipient name</label>
-										<input type="text" id="email-send-feedback-name" name="recipientName" class="admin-settings-input" placeholder="e.g. Alex" />
-									</div>
+									<p id="email-send-broadcast-audience" class="admin-detail admin-email-send-broadcast-audience" hidden></p>
 									<div id="email-send-feedback-field" class="admin-settings-field" hidden>
 										<label class="admin-settings-label" for="email-send-feedback-original">Original feature request</label>
 										<textarea id="email-send-feedback-original" name="originalRequest" class="admin-settings-input admin-email-send-textarea" data-autogrow rows="8" placeholder="Paste or type the original feature request…"></textarea>
 										<label class="admin-settings-label" for="email-send-feedback-message">Reply</label>
 										<textarea id="email-send-feedback-message" name="message" class="admin-settings-input admin-email-send-textarea" data-autogrow rows="8" placeholder="Type your response to the feature requester…"></textarea>
 									</div>
-									<div class="admin-settings-actions">
+									<div id="email-send-broadcast-field" class="admin-settings-field admin-email-send-broadcast-fields" hidden>
+										<label class="admin-settings-label" for="email-send-broadcast-subject">Email subject</label>
+										<input type="text" id="email-send-broadcast-subject" name="emailSubject" class="admin-settings-input" placeholder="e.g. Two weeks left in the current challenge" />
+										<label class="admin-settings-label" for="email-send-broadcast-headline">Headline in email (optional)</label>
+										<input type="text" id="email-send-broadcast-headline" name="headline" class="admin-settings-input" placeholder="Defaults to email subject" />
+										<label class="admin-settings-label" for="email-send-broadcast-message">Message</label>
+										<textarea id="email-send-broadcast-message" name="message" class="admin-settings-input admin-email-send-textarea" data-autogrow rows="6" placeholder="Short note for the community…"></textarea>
+										<label class="admin-settings-label" for="email-send-broadcast-cta-text">Button label</label>
+										<input type="text" id="email-send-broadcast-cta-text" name="ctaText" class="admin-settings-input" placeholder="e.g. View challenges" />
+										<label class="admin-settings-label" for="email-send-broadcast-cta-url">Button URL</label>
+										<input type="url" id="email-send-broadcast-cta-url" name="ctaUrl" class="admin-settings-input" placeholder="https://www.parascene.com/connect#challenges" />
+									</div>
+									<div class="admin-settings-actions admin-email-send-actions">
+										<button type="button" id="email-send-preview" class="btn-secondary admin-email-send-preview" hidden>
+											Preview email
+										</button>
 										<button type="submit" id="email-send-submit" class="btn-primary admin-settings-save">
 											<span class="admin-settings-save-label">Send email</span>
 											<span class="admin-settings-save-spinner" aria-hidden="true"></span>
@@ -133,6 +152,20 @@
 								</section>
 							</form>
 							<div id="email-send-status" class="admin-email-send-status" role="alert" aria-live="polite"></div>
+							<dialog id="email-send-preview-dialog" class="admin-email-preview-dialog" aria-labelledby="email-send-preview-dialog-title">
+								<div class="admin-email-preview-dialog-panel">
+									<header class="admin-email-preview-dialog-header">
+										<div>
+											<h2 id="email-send-preview-dialog-title" class="admin-email-preview-dialog-title">Broadcast preview</h2>
+											<p class="admin-detail admin-email-preview-dialog-note">Sample greeting uses “Alex”. Each recipient gets their own name when sent.</p>
+										</div>
+										<button type="button" id="email-send-preview-close" class="btn-secondary admin-email-preview-dialog-close">Close</button>
+									</header>
+									<div class="admin-email-preview-iframe-wrap">
+										<iframe id="email-send-preview-iframe" class="admin-email-preview-iframe" title="Broadcast email preview"></iframe>
+									</div>
+								</div>
+							</dialog>
 						</div>
 					</tab>
 					<tab data-id="settings" label="Settings">
