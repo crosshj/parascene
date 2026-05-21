@@ -5528,8 +5528,12 @@ app-route-feed {
 
 .comment-body .comment-text a.creation-link[data-youtube-video-id]:has(+ .connect-chat-youtube-embed),
 .connect-comment .comment-text a.creation-link[data-youtube-video-id]:has(+ .connect-chat-youtube-embed),
+.creation-detail-description a.creation-link[data-youtube-video-id]:has(+ .connect-chat-youtube-embed),
+.creation-detail-lineage-modal-prose a.creation-link[data-youtube-video-id]:has(+ .connect-chat-youtube-embed),
 .comment-body .comment-text a.creation-link[data-suno-url]:has(+ .connect-chat-suno-embed),
-.connect-comment .comment-text a.creation-link[data-suno-url]:has(+ .connect-chat-suno-embed) {
+.connect-comment .comment-text a.creation-link[data-suno-url]:has(+ .connect-chat-suno-embed),
+.creation-detail-description a.creation-link[data-suno-url]:has(+ .connect-chat-suno-embed),
+.creation-detail-lineage-modal-prose a.creation-link[data-suno-url]:has(+ .connect-chat-suno-embed) {
 	display: block;
 	height: 0;
 	margin: 0;
@@ -5545,7 +5549,11 @@ app-route-feed {
 .comment-body .comment-text .connect-chat-youtube-embed,
 .comment-body .comment-text .connect-chat-suno-embed,
 .connect-comment .comment-text .connect-chat-youtube-embed,
-.connect-comment .comment-text .connect-chat-suno-embed {
+.connect-comment .comment-text .connect-chat-suno-embed,
+.creation-detail-description .connect-chat-youtube-embed,
+.creation-detail-description .connect-chat-suno-embed,
+.creation-detail-lineage-modal-prose .connect-chat-youtube-embed,
+.creation-detail-lineage-modal-prose .connect-chat-suno-embed {
 	margin-top: 6px;
 }
 
@@ -12836,6 +12844,9 @@ body:has(.chat-hashtag-nav-overlay) {
 	min-width: 0;
 	max-width: 100%;
 	box-sizing: border-box;
+	border-radius: 12px;
+	overflow: hidden;
+	background-color: var(--image-placeholder);
 }
 
 .connect-chat-youtube-embed-iframe {
@@ -12845,7 +12856,7 @@ body:has(.chat-hashtag-nav-overlay) {
 	aspect-ratio: 16 / 9;
 	border: 0;
 	border-radius: 12px;
-	background: #000;
+	background-color: var(--image-placeholder);
 }
 
 .connect-chat-suno-embed {
@@ -12855,6 +12866,9 @@ body:has(.chat-hashtag-nav-overlay) {
 	min-width: 0;
 	max-width: 100%;
 	box-sizing: border-box;
+	border-radius: 12px;
+	overflow: hidden;
+	background-color: var(--image-placeholder);
 }
 
 .connect-chat-suno-embed-iframe {
@@ -12864,7 +12878,7 @@ body:has(.chat-hashtag-nav-overlay) {
 	aspect-ratio: 19 / 6;
 	border: 0;
 	border-radius: 12px;
-	background: #000;
+	background-color: var(--image-placeholder);
 }
 
 .connect-chat-creation-embed--square.connect-chat-creation-embed--loading .connect-chat-creation-embed-skeleton {

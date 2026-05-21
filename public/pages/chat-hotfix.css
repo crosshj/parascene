@@ -873,6 +873,9 @@ body.chat-page .chat-page-messages .connect-chat-suno-embed {
 	min-width: 0;
 	max-width: 100%;
 	box-sizing: border-box;
+	border-radius: 12px;
+	overflow: hidden;
+	background-color: var(--image-placeholder);
 }
 
 body.chat-page .chat-page-messages .connect-chat-youtube-embed-iframe {
@@ -882,7 +885,7 @@ body.chat-page .chat-page-messages .connect-chat-youtube-embed-iframe {
 	aspect-ratio: 16 / 9;
 	border: 0;
 	border-radius: 12px;
-	background: #000;
+	background-color: var(--image-placeholder);
 }
 
 body.chat-page .chat-page-messages .connect-chat-suno-embed-iframe {
@@ -892,7 +895,7 @@ body.chat-page .chat-page-messages .connect-chat-suno-embed-iframe {
 	aspect-ratio: 19 / 6;
 	border: 0;
 	border-radius: 12px;
-	background: #000;
+	background-color: var(--image-placeholder);
 }
 
 /* Stale chat.bundle: previews must use contain (not cover) */

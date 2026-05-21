@@ -2423,6 +2423,32 @@ body.creation-detail-page main>section:first-of-type {
 	word-break: break-word;
 }
 
+.creation-detail-description .connect-chat-youtube-embed,
+.creation-detail-description .connect-chat-suno-embed,
+.creation-detail-lineage-modal-prose .connect-chat-youtube-embed,
+.creation-detail-lineage-modal-prose .connect-chat-suno-embed {
+	width: 100%;
+}
+
+.creation-detail-description .connect-chat-youtube-embed-iframe,
+.creation-detail-lineage-modal-prose .connect-chat-youtube-embed-iframe {
+	max-height: 169px;
+}
+
+.creation-detail-description .connect-chat-suno-embed-iframe,
+.creation-detail-lineage-modal-prose .connect-chat-suno-embed-iframe {
+	max-height: 100px;
+}
+
+@media (max-width: 768px) {
+	.creation-detail-description .connect-chat-youtube-embed-iframe,
+	.creation-detail-lineage-modal-prose .connect-chat-youtube-embed-iframe,
+	.creation-detail-description .connect-chat-suno-embed-iframe,
+	.creation-detail-lineage-modal-prose .connect-chat-suno-embed-iframe {
+		max-height: none;
+	}
+}
+
 .creation-detail-description-meta-label {
 	color: var(--text-muted);
 	font-weight: 500;

@@ -2548,8 +2548,12 @@ async function loadCreation() {
 			}
 		}
 
-		// After rendering description (and initial scaffold), hydrate any special link labels.
-		hydrateUserTextLinks(detailContent);
+		// After rendering description (and initial scaffold), hydrate link titles + media embeds.
+		if (typeof hydrateRichUserTextEmbeds === 'function') {
+			hydrateRichUserTextEmbeds(detailContent);
+		} else {
+			hydrateUserTextLinks(detailContent);
+		}
 		setupCollapsibleDescription(detailContent);
 
 		const copyPromptBtn = detailContent.querySelector('[data-copy-prompt-btn]');
@@ -2967,7 +2971,13 @@ async function loadCreation() {
 				</div>
 			`;
 			try {
-				if (lineageModalOverlay) hydrateUserTextLinks(lineageModalOverlay);
+				if (lineageModalOverlay) {
+					if (typeof hydrateRichUserTextEmbeds === 'function') {
+						hydrateRichUserTextEmbeds(lineageModalOverlay);
+					} else {
+						hydrateUserTextLinks(lineageModalOverlay);
+					}
+				}
 			} catch {
 				// ignore
 			}
@@ -3554,7 +3564,11 @@ async function loadCreation() {
 				const d = typeof ch?.details === 'string' ? ch.details.trim() : '';
 				if (d) {
 					challengeSubmitModalDetailsSlot.innerHTML = processUserText(d);
-					hydrateUserTextLinks(challengeSubmitModalDetailsSlot);
+					if (typeof hydrateRichUserTextEmbeds === 'function') {
+						hydrateRichUserTextEmbeds(challengeSubmitModalDetailsSlot);
+					} else {
+						hydrateUserTextLinks(challengeSubmitModalDetailsSlot);
+					}
 				} else {
 					challengeSubmitModalDetailsSlot.innerHTML =
 						'<p class="creation-detail-challenge-submit-modal-no-details">No additional description was provided for this challenge.</p>';
@@ -3933,6 +3947,11 @@ async function loadCreation() {
 						descriptionParts.push(processUserText(source.prompt));
 					}
 					mainDescriptionEl.innerHTML = descriptionParts.join('');
+					if (typeof hydrateRichUserTextEmbeds === 'function') {
+						hydrateRichUserTextEmbeds(mainDescriptionEl);
+					} else if (typeof hydrateUserTextLinks === 'function') {
+						hydrateUserTextLinks(mainDescriptionEl);
+					}
 				}
 				if (mainMetaLineEl) {
 					mainMetaLineEl.textContent = source.generationInfo || '';
