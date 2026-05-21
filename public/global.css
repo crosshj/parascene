@@ -5526,6 +5526,34 @@ app-route-feed {
 	background: color-mix(in srgb, var(--surface-strong) 58%, var(--bg));
 }
 
+.comment-body .comment-text a.creation-link[data-youtube-video-id]:has(+ .connect-chat-youtube-embed),
+.connect-comment .comment-text a.creation-link[data-youtube-video-id]:has(+ .connect-chat-youtube-embed),
+.comment-body .comment-text a.creation-link[data-suno-url]:has(+ .connect-chat-suno-embed),
+.connect-comment .comment-text a.creation-link[data-suno-url]:has(+ .connect-chat-suno-embed) {
+	display: block;
+	height: 0;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	border: 0;
+	line-height: 0;
+	font-size: 0;
+	opacity: 0;
+	pointer-events: none;
+}
+
+.comment-body .comment-text .connect-chat-youtube-embed,
+.comment-body .comment-text .connect-chat-suno-embed,
+.connect-comment .comment-text .connect-chat-youtube-embed,
+.connect-comment .comment-text .connect-chat-suno-embed {
+	margin-top: 6px;
+	width: 100%;
+	max-width: 100%;
+	min-width: 0;
+	overflow: hidden;
+	box-sizing: border-box;
+}
+
 .comment-tip-text {
 	margin-top: 4px;
 	display: flex;
@@ -12832,15 +12860,22 @@ body:has(.chat-hashtag-nav-overlay) {
 	min-width: 0;
 	max-width: 100%;
 	box-sizing: border-box;
+	overflow: hidden;
+	border-radius: 12px;
+	position: relative;
+	aspect-ratio: 19 / 6;
 }
 
 .connect-chat-suno-embed-iframe {
 	display: block;
+	position: absolute;
+	inset: 0;
 	width: 100%;
+	height: 100%;
 	max-width: 100%;
-	aspect-ratio: 19 / 6;
+	min-width: 0;
 	border: 0;
-	border-radius: 12px;
+	border-radius: inherit;
 	background: #000;
 }
 
@@ -13735,6 +13770,8 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 	grid-area: text;
 	margin-top: 8px;
 	margin-bottom: 0;
+	min-width: 0;
+	max-width: 100%;
 }
 
 .connect-comment > .msg-reply-indicator.msg-reply-indicator--compact.connect-comment-reply {

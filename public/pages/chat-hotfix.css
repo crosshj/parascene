@@ -839,6 +839,53 @@ body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .
 	background: color-mix(in srgb, var(--surface-strong) 58%, var(--bg));
 }
 
+/* #comments + creation threads: Suno/YouTube embeds must stay inside the text column (Suno defaults to ~760px wide). */
+body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text {
+	min-width: 0;
+	max-width: 100%;
+}
+
+body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text a.creation-link[data-youtube-video-id]:has(+ .connect-chat-youtube-embed),
+body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text a.creation-link[data-suno-url]:has(+ .connect-chat-suno-embed) {
+	display: block;
+	height: 0;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	border: 0;
+	line-height: 0;
+	font-size: 0;
+	opacity: 0;
+	pointer-events: none;
+}
+
+body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-youtube-embed,
+body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .comment-text .connect-chat-suno-embed,
+.connect-chat-suno-embed {
+	width: 100%;
+	max-width: 100%;
+	min-width: 0;
+	overflow: hidden;
+	box-sizing: border-box;
+}
+
+.connect-chat-suno-embed {
+	position: relative;
+	aspect-ratio: 19 / 6;
+	border-radius: 12px;
+}
+
+.connect-chat-suno-embed-iframe {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	max-width: 100%;
+	min-width: 0;
+	border: 0;
+	border-radius: inherit;
+}
+
 /* Stale chat.bundle: previews must use contain (not cover) */
 .connect-chat-creation-embed--square .connect-chat-creation-embed-img {
 	object-fit: contain;
