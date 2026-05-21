@@ -5542,16 +5542,9 @@ app-route-feed {
 	pointer-events: none;
 }
 
-.comment-body .comment-text .connect-chat-youtube-embed,
-.comment-body .comment-text .connect-chat-suno-embed,
-.connect-comment .comment-text .connect-chat-youtube-embed,
-.connect-comment .comment-text .connect-chat-suno-embed {
+.comment-body .comment-text .connect-chat-media-embed,
+.connect-comment .comment-text .connect-chat-media-embed {
 	margin-top: 6px;
-	width: 100%;
-	max-width: 100%;
-	min-width: 0;
-	overflow: hidden;
-	box-sizing: border-box;
 }
 
 .comment-tip-text {
@@ -12834,49 +12827,68 @@ body:has(.chat-hashtag-nav-overlay) {
 	margin-top: 1px;
 }
 
-.connect-chat-youtube-embed {
+/*
+ * Third-party players (YouTube ~560px, Suno ~760px) use fixed layouts inside the iframe.
+ * Scale the iframe to the column width (container queries) instead of only sizing the iframe element.
+ */
+.connect-chat-media-embed {
+	--embed-w: 560;
+	--embed-h: 315;
+	container-type: inline-size;
+	width: 100%;
+	max-width: 100%;
+	min-width: 0;
 	margin-top: 0;
 	padding-block: 0;
-	width: 100%;
-	min-width: 0;
-	max-width: 100%;
 	box-sizing: border-box;
+	overflow: hidden;
+	position: relative;
+	border-radius: 12px;
+	height: calc(100cqi * var(--embed-h) / var(--embed-w));
 }
 
-.connect-chat-youtube-embed-iframe {
-	display: block;
-	width: 100%;
-	max-width: 100%;
-	aspect-ratio: 16 / 9;
-	border: 0;
-	border-radius: 12px;
-	background: #000;
+.connect-chat-youtube-embed {
+	--embed-w: 560;
+	--embed-h: 315;
 }
 
 .connect-chat-suno-embed {
-	margin-top: 0;
-	padding-block: 0;
-	width: 100%;
-	min-width: 0;
-	max-width: 100%;
-	box-sizing: border-box;
-	overflow: hidden;
-	border-radius: 12px;
-	position: relative;
-	aspect-ratio: 19 / 6;
+	--embed-w: 760;
+	--embed-h: 240;
 }
 
+.connect-chat-media-embed > iframe,
+.connect-chat-youtube-embed-iframe,
 .connect-chat-suno-embed-iframe {
 	display: block;
 	position: absolute;
-	inset: 0;
-	width: 100%;
-	height: 100%;
-	max-width: 100%;
+	top: 0;
+	left: 0;
+	width: calc(var(--embed-w) * 1px);
+	height: calc(var(--embed-h) * 1px);
+	max-width: none;
 	min-width: 0;
 	border: 0;
 	border-radius: inherit;
 	background: #000;
+	transform-origin: top left;
+	transform: scale(calc(100cqi / var(--embed-w)));
+}
+
+@supports not (width: 1cqi) {
+	.connect-chat-media-embed {
+		height: auto;
+		aspect-ratio: var(--embed-w) / var(--embed-h);
+	}
+
+	.connect-chat-media-embed > iframe,
+	.connect-chat-youtube-embed-iframe,
+	.connect-chat-suno-embed-iframe {
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		transform: none;
+	}
 }
 
 .connect-chat-creation-embed--square.connect-chat-creation-embed--loading .connect-chat-creation-embed-skeleton {
@@ -13595,7 +13607,7 @@ body.chat-page .chat-page-messages .connect-chat-msg-bubble .connect-chat-creati
 
 .connect-comment {
 	display: grid;
-	grid-template-columns: 128px 1fr;
+	grid-template-columns: 128px minmax(0, 1fr);
 	column-gap: 12px;
 	row-gap: 0;
 	grid-template-areas:
@@ -13607,6 +13619,10 @@ body.chat-page .chat-page-messages .connect-chat-msg-bubble .connect-chat-creati
 	align-items: start;
 	padding: 12px 0;
 	cursor: pointer;
+	min-width: 0;
+	max-width: 100%;
+	box-sizing: border-box;
+	overflow-x: clip;
 }
 
 .connect-comment.has-reactions {
@@ -13904,7 +13920,7 @@ body.view-nsfw .connect-comment-thumb[data-media-type="video"].nsfw::after {
 
 @media (max-width: 768px) {
 	.connect-comment {
-		grid-template-columns: 64px 1fr;
+		grid-template-columns: 64px minmax(0, 1fr);
 		column-gap: 10px;
 		row-gap: 0;
 		padding: 10px 0;
