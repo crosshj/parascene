@@ -866,12 +866,10 @@ body.chat-page .chat-page-messages .comments-channel-plain-msg.connect-comment .
 	pointer-events: none;
 }
 
-body.chat-page .chat-page-messages .connect-chat-media-embed,
-body.chat-page .chat-page-messages .connect-chat-youtube-embed,
-body.chat-page .chat-page-messages .connect-chat-suno-embed {
-	--embed-w: 560;
-	--embed-h: 315;
+body.chat-page .chat-page-messages .connect-comment .comment-text .connect-chat-media-embed,
+body.chat-page .chat-page-messages .connect-chat-msg-bubble .connect-chat-media-embed {
 	container-type: inline-size;
+	aspect-ratio: var(--embed-w) / var(--embed-h);
 	width: 100% !important;
 	max-width: 100% !important;
 	min-width: 0 !important;
@@ -879,7 +877,6 @@ body.chat-page .chat-page-messages .connect-chat-suno-embed {
 	position: relative;
 	box-sizing: border-box;
 	border-radius: 12px;
-	height: calc(100cqi * var(--embed-h) / var(--embed-w));
 }
 
 body.chat-page .chat-page-messages .connect-chat-suno-embed {
@@ -887,9 +884,12 @@ body.chat-page .chat-page-messages .connect-chat-suno-embed {
 	--embed-h: 240;
 }
 
-body.chat-page .chat-page-messages .connect-chat-media-embed > iframe,
-body.chat-page .chat-page-messages .connect-chat-youtube-embed-iframe,
-body.chat-page .chat-page-messages .connect-chat-suno-embed-iframe {
+body.chat-page .chat-page-messages .connect-comment .comment-text .connect-chat-media-embed > iframe,
+body.chat-page .chat-page-messages .connect-comment .comment-text .connect-chat-youtube-embed-iframe,
+body.chat-page .chat-page-messages .connect-comment .comment-text .connect-chat-suno-embed-iframe,
+body.chat-page .chat-page-messages .connect-chat-msg-bubble .connect-chat-media-embed > iframe,
+body.chat-page .chat-page-messages .connect-chat-msg-bubble .connect-chat-youtube-embed-iframe,
+body.chat-page .chat-page-messages .connect-chat-msg-bubble .connect-chat-suno-embed-iframe {
 	position: absolute !important;
 	top: 0;
 	left: 0;

@@ -12827,14 +12827,10 @@ body:has(.chat-hashtag-nav-overlay) {
 	margin-top: 1px;
 }
 
-/*
- * Third-party players (YouTube ~560px, Suno ~760px) use fixed layouts inside the iframe.
- * Scale the iframe to the column width (container queries) instead of only sizing the iframe element.
- */
+/* YouTube / Suno embed wrappers (see responsive vs narrow-column blocks below). */
 .connect-chat-media-embed {
 	--embed-w: 560;
 	--embed-h: 315;
-	container-type: inline-size;
 	width: 100%;
 	max-width: 100%;
 	min-width: 0;
@@ -12844,7 +12840,6 @@ body:has(.chat-hashtag-nav-overlay) {
 	overflow: hidden;
 	position: relative;
 	border-radius: 12px;
-	height: calc(100cqi * var(--embed-h) / var(--embed-w));
 }
 
 .connect-chat-youtube-embed {
@@ -12861,6 +12856,45 @@ body:has(.chat-hashtag-nav-overlay) {
 .connect-chat-youtube-embed-iframe,
 .connect-chat-suno-embed-iframe {
 	display: block;
+	border: 0;
+	border-radius: inherit;
+	background: #000;
+}
+
+/* Wide comment threads (creation detail, etc.): responsive iframe — worked before scaling landed. */
+.comment-body .comment-text .connect-chat-media-embed {
+	container-type: normal;
+	aspect-ratio: var(--embed-w) / var(--embed-h);
+}
+
+.comment-body .comment-text .connect-chat-media-embed > iframe,
+.comment-body .comment-text .connect-chat-youtube-embed-iframe,
+.comment-body .comment-text .connect-chat-suno-embed-iframe {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	max-width: 100%;
+	min-width: 0;
+	transform: none;
+}
+
+/*
+ * Narrow lanes (#comments grid, chat bubbles): Suno/YouTube use fixed pixel layouts inside the iframe.
+ * Scale to column width; aspect-ratio sets height (not height: calc(100cqi * …)).
+ */
+.connect-comment .comment-text .connect-chat-media-embed,
+.connect-chat-msg-bubble .connect-chat-media-embed {
+	container-type: inline-size;
+	aspect-ratio: var(--embed-w) / var(--embed-h);
+}
+
+.connect-comment .comment-text .connect-chat-media-embed > iframe,
+.connect-comment .comment-text .connect-chat-youtube-embed-iframe,
+.connect-comment .comment-text .connect-chat-suno-embed-iframe,
+.connect-chat-msg-bubble .connect-chat-media-embed > iframe,
+.connect-chat-msg-bubble .connect-chat-youtube-embed-iframe,
+.connect-chat-msg-bubble .connect-chat-suno-embed-iframe {
 	position: absolute;
 	top: 0;
 	left: 0;
@@ -12868,22 +12902,22 @@ body:has(.chat-hashtag-nav-overlay) {
 	height: calc(var(--embed-h) * 1px);
 	max-width: none;
 	min-width: 0;
-	border: 0;
-	border-radius: inherit;
-	background: #000;
 	transform-origin: top left;
 	transform: scale(calc(100cqi / var(--embed-w)));
 }
 
 @supports not (width: 1cqi) {
-	.connect-chat-media-embed {
-		height: auto;
-		aspect-ratio: var(--embed-w) / var(--embed-h);
+	.connect-comment .comment-text .connect-chat-media-embed,
+	.connect-chat-msg-bubble .connect-chat-media-embed {
+		container-type: normal;
 	}
 
-	.connect-chat-media-embed > iframe,
-	.connect-chat-youtube-embed-iframe,
-	.connect-chat-suno-embed-iframe {
+	.connect-comment .comment-text .connect-chat-media-embed > iframe,
+	.connect-comment .comment-text .connect-chat-youtube-embed-iframe,
+	.connect-comment .comment-text .connect-chat-suno-embed-iframe,
+	.connect-chat-msg-bubble .connect-chat-media-embed > iframe,
+	.connect-chat-msg-bubble .connect-chat-youtube-embed-iframe,
+	.connect-chat-msg-bubble .connect-chat-suno-embed-iframe {
 		inset: 0;
 		width: 100%;
 		height: 100%;
