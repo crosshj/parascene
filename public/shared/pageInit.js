@@ -39,6 +39,55 @@ async function loadDeps() {
 }
 
 /**
+ * Wait until each app-navigation instance has run render() (header in DOM), not merely whenDefined.
+ */
+async function waitForAppNavigationShell() {
+	const navs = document.querySelectorAll('app-navigation');
+	if (!navs.length) return;
+
+	await Promise.all(
+		[...navs].map(
+			(el) =>
+				new Promise((resolve) => {
+					if (el.querySelector('header')) {
+						resolve();
+						return;
+					}
+					let settled = false;
+					const finish = () => {
+						if (settled) return true;
+						if (el.querySelector('header')) {
+							settled = true;
+							resolve();
+							return true;
+						}
+						return false;
+					};
+					const obs = new MutationObserver(() => {
+						finish();
+					});
+					obs.observe(el, { childList: true, subtree: true });
+					requestAnimationFrame(() => {
+						requestAnimationFrame(() => {
+							if (finish()) {
+								obs.disconnect();
+								return;
+							}
+							setTimeout(() => {
+								obs.disconnect();
+								if (!settled) {
+									settled = true;
+									resolve();
+								}
+							}, 2000);
+						});
+					});
+				})
+		)
+	);
+}
+
+/**
  * Wait for DOM and the given custom element tags to be defined, then add body.loaded.
  * @param {string[]} customElementTags - e.g. ['app-navigation', 'app-route-feed']
  */
@@ -52,6 +101,9 @@ export async function waitForComponents(customElementTags) {
 		await Promise.all(
 			customElementTags.map((tag) => customElements.whenDefined(tag))
 		);
+	}
+	if (customElementTags?.includes('app-navigation')) {
+		await waitForAppNavigationShell();
 	}
 	await new Promise((resolve) => {
 		requestAnimationFrame(() => {

@@ -519,6 +519,46 @@ function extractXStatusInfo(url) {
 	return null;
 }
 
+const SUNO_UUID_RE =
+	/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+
+function extractSunoLinkInfo(url) {
+	let parsed;
+	try {
+		parsed = new URL(String(url || ''));
+	} catch {
+		return null;
+	}
+
+	const host = parsed.hostname.toLowerCase();
+	if (host !== 'suno.com' && host !== 'www.suno.com') return null;
+
+	const pathname = parsed.pathname || '';
+
+	const songMatch = pathname.match(/^\/song\/([a-f0-9-]{36})\/?$/i);
+	if (songMatch?.[1] && SUNO_UUID_RE.test(songMatch[1])) {
+		return { songId: songMatch[1].toLowerCase(), slug: '' };
+	}
+
+	const embedMatch = pathname.match(/^\/embed\/([a-f0-9-]{36})\/?$/i);
+	if (embedMatch?.[1] && SUNO_UUID_RE.test(embedMatch[1])) {
+		return { songId: embedMatch[1].toLowerCase(), slug: '' };
+	}
+
+	const shareMatch = pathname.match(/^\/s\/([A-Za-z0-9]{8,32})\/?$/);
+	if (shareMatch?.[1]) {
+		return { songId: '', slug: shareMatch[1] };
+	}
+
+	return null;
+}
+
+function sunoLinkLabel({ songId, slug }) {
+	if (songId) return songId.slice(0, 8);
+	if (slug) return slug;
+	return 'suno';
+}
+
 function extractXHashtagInfo(url) {
 	let parsed;
 	try {
@@ -576,6 +616,9 @@ const CREATION_URL_RE = /https?:\/\/[^\s"'<>]+\/creations\/(\d+)\/?/g;
  * - Initial label is `youtube {videoId}`
  * - Call `hydrateYoutubeLinkTitles(rootEl)` to asynchronously replace the link text with `youtube @handle - {title...}`
  *
+ * Also detects Suno URLs (`/s/…`, `/song/…`, `/embed/…`) and converts them into links labeled `suno …`.
+ * Call `hydrateSunoLinkTitles(rootEl)` and `hydrateSunoEmbeds(rootEl)` (or `hydrateRichUserTextEmbeds`) for titles and player embeds.
+ *
  * Also detects X/Twitter post URLs and converts them into links with a consistent label:
  * - Initial label is `x-twitter @{user}` (or `x-twitter {statusId}` when username not present)
  * - Call `hydrateXLinkTitles(rootEl)` to asynchronously replace the link text with `x-twitter @handle - {excerpt...}` when available
@@ -627,6 +670,20 @@ function textWithCreationLinksCore(text, { inlineMarkdown = false } = {}) {
 		if (videoId) {
 			const safeUrl = escapeHtml(url);
 			out += `<a href="${safeUrl}" class="user-link creation-link" target="_blank" rel="noopener noreferrer" data-youtube-url="${safeUrl}" data-youtube-video-id="${escapeHtml(videoId)}">youtube ${escapeHtml(videoId)}</a>`;
+			out += escapeHtml(trailing);
+			lastIndex = start + rawUrl.length;
+			continue;
+		}
+
+		const suno = extractSunoLinkInfo(url);
+		if (suno) {
+			const safeUrl = escapeHtml(url);
+			const label = sunoLinkLabel(suno);
+			const songAttr = suno.songId
+				? ` data-suno-song-id="${escapeHtml(suno.songId)}"`
+				: '';
+			const slugAttr = suno.slug ? ` data-suno-slug="${escapeHtml(suno.slug)}"` : '';
+			out += `<a href="${safeUrl}" class="user-link creation-link" target="_blank" rel="noopener noreferrer" data-suno-url="${safeUrl}"${songAttr}${slugAttr}>suno ${escapeHtml(label)}</a>`;
 			out += escapeHtml(trailing);
 			lastIndex = start + rawUrl.length;
 			continue;
@@ -918,6 +975,142 @@ export function hydrateYoutubeLinkTitles(rootEl) {
 			const label = formatYoutubeLabel(payload);
 			if (label) a.textContent = label;
 			a.dataset.youtubeTitleHydrated = 'true';
+		});
+	}
+}
+
+const SUNO_RESOLVE_CACHE_PREFIX = 'ps_suno_resolve_v1:';
+const SUNO_RESOLVE_TTL_MS = 1000 * 60 * 60 * 24 * 30;
+const sunoResolveInFlight = new Map();
+
+function getCachedSunoResolve(cacheKey) {
+	try {
+		const raw = localStorage.getItem(`${SUNO_RESOLVE_CACHE_PREFIX}${cacheKey}`);
+		if (!raw) return null;
+		const parsed = JSON.parse(raw);
+		if (
+			!parsed ||
+			typeof parsed.songId !== 'string' ||
+			typeof parsed.savedAt !== 'number'
+		) {
+			return null;
+		}
+		if (Date.now() - parsed.savedAt > SUNO_RESOLVE_TTL_MS) return null;
+		return {
+			songId: parsed.songId,
+			title: typeof parsed.title === 'string' ? parsed.title : '',
+			creator: typeof parsed.creator === 'string' ? parsed.creator : '',
+		};
+	} catch {
+		return null;
+	}
+}
+
+function setCachedSunoResolve(cacheKey, payload) {
+	try {
+		localStorage.setItem(
+			`${SUNO_RESOLVE_CACHE_PREFIX}${cacheKey}`,
+			JSON.stringify({
+				songId: payload.songId,
+				title: payload.title || '',
+				creator: payload.creator || '',
+				savedAt: Date.now(),
+			})
+		);
+	} catch {
+		// ignore quota / private mode
+	}
+}
+
+function formatSunoLabel({ title, creator, songId, slug }) {
+	const t = clipText(title, { max: 72 });
+	const c = clipText(creator, { max: 40 });
+	if (t && c) return `suno ${c} - ${t}`;
+	if (t) return `suno - ${t}`;
+	if (songId) return `suno ${songId.slice(0, 8)}`;
+	if (slug) return `suno ${slug}`;
+	return '';
+}
+
+function fetchSunoResolve(url) {
+	const key = String(url || '').trim();
+	if (!key) return Promise.resolve(null);
+	const cached = getCachedSunoResolve(key);
+	if (cached) return Promise.resolve(cached);
+
+	let p = sunoResolveInFlight.get(key);
+	if (!p) {
+		p = fetch(`/api/suno/resolve?url=${encodeURIComponent(key)}`, {
+			method: 'GET',
+			headers: { Accept: 'application/json' },
+		})
+			.then(async (res) => {
+				if (!res.ok) return null;
+				const data = await res.json().catch(() => null);
+				const songId =
+					typeof data?.songId === 'string' ? data.songId.trim() : '';
+				if (!songId || !SUNO_UUID_RE.test(songId)) return null;
+				const payload = {
+					songId,
+					title: typeof data?.title === 'string' ? data.title.trim() : '',
+					creator:
+						typeof data?.creator === 'string' ? data.creator.trim() : '',
+				};
+				setCachedSunoResolve(key, payload);
+				return payload;
+			})
+			.catch(() => null)
+			.finally(() => {
+				sunoResolveInFlight.delete(key);
+			});
+		sunoResolveInFlight.set(key, p);
+	}
+	return p;
+}
+
+export function hydrateSunoLinkTitles(rootEl) {
+	const root =
+		rootEl instanceof Element || rootEl instanceof Document ? rootEl : document;
+	if (!root || typeof root.querySelectorAll !== 'function') return;
+
+	const links = Array.from(root.querySelectorAll('a[data-suno-url][href]'));
+	for (const a of links) {
+		if (!(a instanceof HTMLAnchorElement)) continue;
+		if (a.dataset.sunoTitleHydrated === 'true') continue;
+
+		const url = String(a.dataset.sunoUrl || a.getAttribute('href') || '').trim();
+		if (!url) continue;
+
+		const slug = String(a.dataset.sunoSlug || '').trim();
+		const songId = String(a.dataset.sunoSongId || '').trim();
+		const cacheKey = url;
+
+		const cached = getCachedSunoResolve(cacheKey);
+		if (cached) {
+			const label = formatSunoLabel({
+				title: cached.title,
+				creator: cached.creator,
+				songId: cached.songId || songId,
+				slug,
+			});
+			if (label) a.textContent = label;
+			if (cached.songId) a.dataset.sunoSongId = cached.songId;
+			a.dataset.sunoTitleHydrated = 'true';
+			continue;
+		}
+
+		void fetchSunoResolve(url).then((payload) => {
+			if (!payload?.songId) return;
+			if (a.dataset.sunoUrl !== url && a.getAttribute('href') !== url) return;
+			a.dataset.sunoSongId = payload.songId;
+			const label = formatSunoLabel({
+				title: payload.title,
+				creator: payload.creator,
+				songId: payload.songId,
+				slug,
+			});
+			if (label) a.textContent = label;
+			a.dataset.sunoTitleHydrated = 'true';
 		});
 	}
 }
@@ -1732,6 +1925,7 @@ export function hydrateChatCreationEmbeds(rootEl) {
  * It handles:
  * - Parascene (same-origin) URLs → relative links (/creations/123, /feed, etc.)
  * - YouTube URLs → links with titles (hydrated asynchronously)
+ * - Suno URLs → links with titles and embed player (hydrated asynchronously)
  * - X/Twitter URLs → links with titles (hydrated asynchronously)
  * - Generic http(s) URLs → clickable links
  *
@@ -1754,13 +1948,14 @@ export function processUserText(text, options = {}) {
 }
 
 /**
- * Hydrates all special link types (YouTube, X) within a container element.
+ * Hydrates all special link types (YouTube, Suno, X) within a container element.
  * Call this after inserting processed user text into the DOM.
  *
  * @param {Element|Document} rootEl - Container element or document to search within
  */
 export function hydrateUserTextLinks(rootEl) {
 	hydrateYoutubeLinkTitles(rootEl);
+	hydrateSunoLinkTitles(rootEl);
 	hydrateXLinkTitles(rootEl);
 	const imgs = rootEl?.querySelectorAll?.('img.user-text-inline-image');
 	if (!imgs || typeof imgs.forEach !== 'function') return;
@@ -1823,6 +2018,81 @@ export function hydrateYoutubeEmbeds(rootEl) {
 		iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
 		wrap.appendChild(iframe);
 		a.replaceWith(wrap);
+	}
+}
+
+function mountSunoEmbed(a, songId, titleText) {
+	if (!(a instanceof HTMLAnchorElement)) return;
+	if (a.dataset.sunoEmbedHydrated === 'true') return;
+	if (!songId || !SUNO_UUID_RE.test(songId)) return;
+	a.dataset.sunoEmbedHydrated = 'true';
+	a.dataset.sunoSongId = songId;
+
+	const wrap = document.createElement('div');
+	wrap.className = 'connect-chat-suno-embed';
+	const safeTitle = titleText || `suno ${songId.slice(0, 8)}`;
+	const iframe = document.createElement('iframe');
+	iframe.className = 'connect-chat-suno-embed-iframe';
+	iframe.src = `https://suno.com/embed/${encodeURIComponent(songId)}`;
+	iframe.title = safeTitle;
+	iframe.setAttribute('allow', 'autoplay; encrypted-media; fullscreen');
+	iframe.setAttribute('allowfullscreen', '');
+	iframe.setAttribute('loading', 'lazy');
+	iframe.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
+	wrap.appendChild(iframe);
+	a.replaceWith(wrap);
+}
+
+/**
+ * Insert a Suno iframe sibling after each `a[data-suno-url]` link from `processUserText`.
+ * Short `/s/…` links are resolved via `/api/suno/resolve` before embedding.
+ *
+ * @param {Element|Document} rootEl
+ */
+export function hydrateSunoEmbeds(rootEl) {
+	const root =
+		rootEl instanceof Element || rootEl instanceof Document ? rootEl : document;
+	if (!root || typeof root.querySelectorAll !== 'function') return;
+
+	const links = Array.from(root.querySelectorAll('a[data-suno-url][href]'));
+	for (const a of links) {
+		if (!(a instanceof HTMLAnchorElement)) continue;
+		if (a.dataset.sunoEmbedHydrated === 'true') continue;
+
+		const url = String(a.dataset.sunoUrl || a.getAttribute('href') || '').trim();
+		let songId = String(a.dataset.sunoSongId || '').trim();
+		const titleText = a.textContent ? String(a.textContent).trim() : '';
+
+		if (songId && SUNO_UUID_RE.test(songId)) {
+			mountSunoEmbed(a, songId, titleText);
+			continue;
+		}
+
+		if (!url) continue;
+		a.dataset.sunoEmbedPending = 'true';
+		void fetchSunoResolve(url).then((payload) => {
+			if (!payload?.songId) {
+				delete a.dataset.sunoEmbedPending;
+				return;
+			}
+			if (a.dataset.sunoEmbedHydrated === 'true') return;
+			const label = formatSunoLabel({
+				title: payload.title,
+				creator: payload.creator,
+				songId: payload.songId,
+				slug: a.dataset.sunoSlug || '',
+			});
+			if (label && a.dataset.sunoTitleHydrated !== 'true') {
+				a.textContent = label;
+				a.dataset.sunoTitleHydrated = 'true';
+			}
+			mountSunoEmbed(
+				a,
+				payload.songId,
+				label || titleText || `suno ${payload.songId.slice(0, 8)}`
+			);
+			delete a.dataset.sunoEmbedPending;
+		});
 	}
 }
 
@@ -1942,6 +2212,7 @@ export function bindInlineVideoClickControls(rootEl) {
 export function hydrateRichUserTextEmbeds(rootEl) {
 	hydrateUserTextLinks(rootEl);
 	hydrateYoutubeEmbeds(rootEl);
+	hydrateSunoEmbeds(rootEl);
 	hydrateChatCreationEmbeds(rootEl);
 	hydrateInlineGenericVideoEmbeds(rootEl);
 	hydrateInlineChatCreationVideoEmbeds(rootEl);

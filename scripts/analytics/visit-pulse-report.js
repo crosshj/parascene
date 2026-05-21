@@ -48,8 +48,40 @@ async function loadVisitPulseHtmlTemplate() {
 	return visitPulseHtmlTemplateCache;
 }
 
-const AUTHED_CHART_COLORS = ["#2563eb", "#7c3aed", "#059669", "#d97706", "#dc2626", "#0891b2", "#4f46e5", "#0d9488"];
 const ANON_CHART_COLOR = "#94a3b8";
+
+/** @param {number} h 0–360 @param {number} s 0–100 @param {number} l 0–100 */
+function hslToHex(h, s, l) {
+	const a = (s / 100) * Math.min(l / 100, 1 - l / 100);
+	const f = (n) => {
+		const k = (n + h / 30) % 12;
+		const x = l / 100 - a * Math.max(-1, Math.min(k - 3, Math.min(9 - k, 1)));
+		return Math.round(255 * x)
+			.toString(16)
+			.padStart(2, "0");
+	};
+	return `#${f(0)}${f(8)}${f(4)}`;
+}
+
+/** Golden-angle hues with alternating S/L so 50+ authed series stay separable on light backgrounds. */
+function buildDistinctChartPalette(size = 64) {
+	const GOLDEN_DEG = 137.508;
+	const profiles = [
+		{ s: 78, l: 42 },
+		{ s: 68, l: 52 },
+		{ s: 88, l: 36 },
+		{ s: 58, l: 48 }
+	];
+	const colors = [];
+	for (let i = 0; i < size; i++) {
+		const hue = (i * GOLDEN_DEG) % 360;
+		const { s, l } = profiles[i % profiles.length];
+		colors.push(hslToHex(hue, s, l));
+	}
+	return colors;
+}
+
+const AUTHED_CHART_COLORS = buildDistinctChartPalette(64);
 const HOURS_PER_DAY = 24;
 
 const EASTERN_TZ = "America/New_York";

@@ -12546,7 +12546,8 @@ body:has(.chat-hashtag-nav-overlay) {
 	gap: 0;
 }
 
-.connect-chat-msg-bubble:has(.connect-chat-youtube-embed) {
+.connect-chat-msg-bubble:has(.connect-chat-youtube-embed),
+.connect-chat-msg-bubble:has(.connect-chat-suno-embed) {
 	border: none;
 	background: transparent;
 	padding: 2px 1em;
@@ -12566,7 +12567,8 @@ body:has(.chat-hashtag-nav-overlay) {
 	gap: 2px;
 }
 
-.connect-chat-msg:has(.connect-chat-msg-bubble:has(.connect-chat-youtube-embed)) {
+.connect-chat-msg:has(.connect-chat-msg-bubble:has(.connect-chat-youtube-embed)),
+.connect-chat-msg:has(.connect-chat-msg-bubble:has(.connect-chat-suno-embed)) {
 	gap: 2px;
 }
 
@@ -12576,7 +12578,8 @@ body:has(.chat-hashtag-nav-overlay) {
 	padding-bottom: 0;
 }
 
-.connect-chat-msg-bubble:has(.connect-chat-youtube-embed) + .connect-chat-msg-footer {
+.connect-chat-msg-bubble:has(.connect-chat-youtube-embed) + .connect-chat-msg-footer,
+.connect-chat-msg-bubble:has(.connect-chat-suno-embed) + .connect-chat-msg-footer {
 	margin-top: 0;
 	padding-top: 0;
 	padding-bottom: 0;
@@ -12591,6 +12594,9 @@ body:has(.chat-hashtag-nav-overlay) {
 }
 
 .connect-chat-msg:has(.connect-chat-msg-bubble:has(.connect-chat-youtube-embed))
+	.connect-chat-msg-footer
+	.comment-meta-row,
+.connect-chat-msg:has(.connect-chat-msg-bubble:has(.connect-chat-suno-embed))
 	.connect-chat-msg-footer
 	.comment-meta-row {
 	gap: 4px;
@@ -12613,7 +12619,8 @@ body:has(.chat-hashtag-nav-overlay) {
 	pointer-events: none;
 }
 
-.connect-chat-msg-bubble a.creation-link[data-youtube-video-id]:has(+ .connect-chat-youtube-embed) {
+.connect-chat-msg-bubble a.creation-link[data-youtube-video-id]:has(+ .connect-chat-youtube-embed),
+.connect-chat-msg-bubble a.creation-link[data-suno-url]:has(+ .connect-chat-suno-embed) {
 	display: block;
 	height: 0;
 	margin: 0;
@@ -12630,7 +12637,8 @@ body:has(.chat-hashtag-nav-overlay) {
 	background: transparent;
 }
 
-.connect-chat-msg.is-self .connect-chat-msg-bubble:has(.connect-chat-youtube-embed) {
+.connect-chat-msg.is-self .connect-chat-msg-bubble:has(.connect-chat-youtube-embed),
+.connect-chat-msg.is-self .connect-chat-msg-bubble:has(.connect-chat-suno-embed) {
 	background: transparent;
 }
 
@@ -12812,6 +12820,25 @@ body:has(.chat-hashtag-nav-overlay) {
 	width: 100%;
 	max-width: 100%;
 	aspect-ratio: 16 / 9;
+	border: 0;
+	border-radius: 12px;
+	background: #000;
+}
+
+.connect-chat-suno-embed {
+	margin-top: 0;
+	padding-block: 0;
+	width: 100%;
+	min-width: 0;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
+.connect-chat-suno-embed-iframe {
+	display: block;
+	width: 100%;
+	max-width: 100%;
+	aspect-ratio: 19 / 6;
 	border: 0;
 	border-radius: 12px;
 	background: #000;

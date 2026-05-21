@@ -105,8 +105,25 @@ function getSupabaseBootHtml() {
 	);
 }
 
+function getLoadGuardStyleBlock() {
+	return html`
+		<style id="prsn-load-guard">
+			body:not(.loaded) {
+				visibility: hidden;
+				opacity: 0;
+			}
+
+			/* Light-DOM route labels (e.g. Chat / Explore / Creations) before app-navigation upgrades */
+			app-navigation:not(:defined) {
+				display: none !important;
+			}
+		</style>
+	`.trimEnd();
+}
+
 function getCommonHead() {
 	return html`
+		${getLoadGuardStyleBlock()}
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="color-scheme" content="light dark" />
