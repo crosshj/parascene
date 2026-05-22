@@ -794,6 +794,33 @@ function anonVisitorsTableHtml(anon, dayStartMs, et, displayTz) {
 
 const PULSE_DAY_MS = 24 * 60 * 60 * 1000;
 
+/** First N partition hours; bots usually show up on complete days. */
+const PULSE_NAV_EARLY_HOUR_COUNT = 6;
+/** Last N partition hours (18–23). */
+const PULSE_NAV_LATE_START_HOUR = 18;
+/** Min stacked visitors across the early/late band to enable Prev/Next. */
+const PULSE_NAV_MIN_BAND_TOTAL = 3;
+
+/** @param {number[]} hourTotals */
+function pulseDayHasReasonableEarlyTraffic(hourTotals) {
+	let n = 0;
+	for (let h = 0; h < PULSE_NAV_EARLY_HOUR_COUNT; h++) n += Number(hourTotals[h]) || 0;
+	return n >= PULSE_NAV_MIN_BAND_TOTAL;
+}
+
+/** @param {number[]} hourTotals */
+function pulseDayHasReasonableLateTraffic(hourTotals) {
+	let n = 0;
+	for (let h = PULSE_NAV_LATE_START_HOUR; h < HOURS_PER_DAY; h++) n += Number(hourTotals[h]) || 0;
+	return n >= PULSE_NAV_MIN_BAND_TOTAL;
+}
+
+/** @param {"Prev"|"Next"} label @param {string} dayKey @param {boolean} enabled */
+function buildPulseDayNavLinkHtml(label, dayKey, enabled) {
+	if (!enabled) return `<span aria-disabled="true">${esc(label)}</span>`;
+	return `<a href="#" data-pulse-day-nav data-day="${esc(dayKey)}">${esc(label)}</a>`;
+}
+
 /** @param {string} dayKey @param {number} deltaDays */
 async function adjacentPulseDayKey(dayKey, deltaDays) {
 	const { usEastDayStartMs, usEastDayKey } = await import("../../api_routes/utils/visitPulseCore.js");
@@ -802,6 +829,9 @@ async function adjacentPulseDayKey(dayKey, deltaDays) {
 
 async function renderVisitPulseHtml(bundle) {
 	const { dayKey, source, row, activeNow, tzLabel, dayStartMs, stack, et, displayTz } = bundle;
+	const hourTotals = stack.hourTotals || [];
+	const prevNavEnabled = pulseDayHasReasonableEarlyTraffic(hourTotals);
+	const nextNavEnabled = pulseDayHasReasonableLateTraffic(hourTotals);
 	const [prevDayKey, nextDayKey] = await Promise.all([
 		adjacentPulseDayKey(dayKey, -1),
 		adjacentPulseDayKey(dayKey, 1)
@@ -832,8 +862,8 @@ async function renderVisitPulseHtml(bundle) {
 	return fillHtmlTemplate(template, {
 		styleBlock,
 		dayKey,
-		prevDayKey,
-		nextDayKey,
+		prevDayNavHtml: buildPulseDayNavLinkHtml("Prev", prevDayKey, prevNavEnabled),
+		nextDayNavHtml: buildPulseDayNavLinkHtml("Next", nextDayKey, nextNavEnabled),
 		tzLabel,
 		source,
 		generatedEt: et.formatFromMs(Date.now()),

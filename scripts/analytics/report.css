@@ -90,6 +90,13 @@ nav .sep {
 	color: var(--report-muted-fg);
 }
 
+nav a[aria-disabled="true"],
+nav span[aria-disabled="true"] {
+	color: var(--report-muted-fg);
+	cursor: default;
+	pointer-events: none;
+}
+
 .lede {
 	max-width: 72ch;
 	margin-bottom: 16px;

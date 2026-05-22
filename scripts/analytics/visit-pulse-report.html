@@ -6,9 +6,9 @@
 <nav class="small" aria-label="Report navigation">
 	<a href=".">Up one folder</a>
 	<span class="sep" aria-hidden="true">·</span>
-	<a href="#" data-pulse-day-nav data-day="{{prevDayKey}}">Prev</a>
+	{{!prevDayNavHtml}}
 	<span class="sep" aria-hidden="true">·</span>
-	<a href="#" data-pulse-day-nav data-day="{{nextDayKey}}">Next</a>
+	{{!nextDayNavHtml}}
 </nav>
 <h1>Visit pulse — {{dayKey}}</h1>
 <p class="small">Partition: {{tzLabel}} · Source: {{source}} · Generated: {{generatedEt}} <span class="small">(UTC
