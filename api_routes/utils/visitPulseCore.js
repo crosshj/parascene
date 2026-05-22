@@ -165,16 +165,16 @@ export function getPulseRedis() {
 
 async function scanKeys(r, pattern) {
 	const keys = [];
-	let cursor = 0;
+	let cursor = "0";
 	do {
 		const result = await r.scan(cursor, { match: pattern, count: 200 });
-		const next = Array.isArray(result) ? result[0] : 0;
+		const next = Array.isArray(result) ? result[0] : "0";
 		const batch = Array.isArray(result) ? result[1] : [];
-		cursor = typeof next === "string" ? Number(next) : next;
+		cursor = next == null ? "0" : String(next);
 		for (const k of batch || []) {
 			if (k) keys.push(String(k));
 		}
-	} while (cursor !== 0);
+	} while (cursor !== "0");
 	return keys;
 }
 

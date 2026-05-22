@@ -1,4 +1,24 @@
-/* Analytics report pages (offline HTML). One stylesheet; reports differ by markup only. */
+/*
+ * =============================================================================
+ * REPORT.CSS — SHARED ANALYTICS REPORT LIBRARY ONLY
+ * =============================================================================
+ *
+ * Do NOT add styles here unless they belong in a reusable report design library.
+ *
+ * OK:
+ *   - Generic elements and layout (nav, section, table, button, .card, .grid)
+ *   - Reusable utility/pattern classes any offline report can use (.small, .copy-row, .sep)
+ *   - Design tokens in :root (--report-*)
+ *
+ * NOT OK:
+ *   - Report-specific or feature-specific selectors (visit-pulse-*, growth-story-*, etc.)
+ *   - Page-one-off layout tied to a single HTML template
+ *   - Anything that could live in one report’s markup alone
+ *
+ * Reports differ by HTML only; this file is inlined into each generated page.
+ * Prefer semantic elements + shared classes. Scope with elements (nav, main), not product names.
+ * =============================================================================
+ */
 
 :root {
 	--report-max-width: 1180px;
@@ -56,6 +76,18 @@ section {
 
 .back {
 	margin-bottom: 18px;
+}
+
+nav {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0 10px;
+	margin: 0 0 18px;
+}
+
+nav .sep {
+	color: var(--report-muted-fg);
 }
 
 .lede {

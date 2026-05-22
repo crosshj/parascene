@@ -1,0 +1,47 @@
+---
+description: Offline analytics reports — shared CSS library and generalized HTML only
+globs: scripts/analytics/**
+alwaysApply: false
+---
+
+# Analytics reports (HTML + report.css)
+
+Offline reports under `scripts/analytics/` share one design library. **Reports differ by markup only** — not by per-report CSS or class names.
+
+Read the block comment at the top of `scripts/analytics/report.css` before editing styles or templates.
+
+## report.css
+
+- **Only** reusable report-library rules: tokens (`--report-*`), elements (`nav`, `section`, `table`, `button`), and generic patterns (`.card`, `.grid`, `.copy-row`, `.small`, `.sep`).
+- **Never** add selectors named after a report or feature (`visit-pulse-*`, `growth-story-*`, etc.).
+- Prefer **element selectors** and existing shared classes over new one-off classes.
+
+## HTML templates (`*.html`) and report builders (`*.js`)
+
+- Use **semantic structure** and classes already defined in `report.css` (`nav`, `main`, `section`, `.card`, `.grid`, `.copy-row`, …).
+- **Do not** invent template-only or report-specific **CSS class names** for layout or look. If styling is needed, extend the shared library in `report.css` in a generalized way, or use a semantic element (`nav`, not `.report-top-links`).
+- **`data-*` attributes** are fine for behavior (delegated clicks, copy payloads) — they are not styling hooks.
+- Avoid inline `style=""` in templates except truly dynamic values (e.g. chart swatch colors from data).
+- Generated HTML inlines `report.css` via `report-styles.js`; do not add separate per-report stylesheets.
+
+## Examples
+
+```html
+<!-- BAD: report-scoped styling class -->
+<p class="visit-pulse-day-nav">…</p>
+
+<!-- GOOD: shared library + semantics -->
+<nav class="small" aria-label="Report navigation">…</nav>
+```
+
+```css
+/* BAD */
+.visit-pulse-chart { padding: 12px; }
+
+/* GOOD — any report with a chart wrapper can use this */
+.chart-wrap { padding: 12px; }
+```
+
+## When something is report-specific
+
+Put it in that report’s **HTML content or JS data**, not in `report.css` and not in a report-named class. Reusable UI patterns discovered while building one report belong in `report.css` only after generalizing the name and structure.

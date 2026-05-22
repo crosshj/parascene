@@ -3,10 +3,21 @@
 <title>Visit pulse {{dayKey}}</title>
 <meta name="darkreader-lock" />
 {{!styleBlock}}
-<p class="small"><a href=".">Up one folder</a></p>
+<nav class="small" aria-label="Report navigation">
+	<a href=".">Up one folder</a>
+	<span class="sep" aria-hidden="true">·</span>
+	<a href="#" data-pulse-day-nav data-day="{{prevDayKey}}">Prev</a>
+	<span class="sep" aria-hidden="true">·</span>
+	<a href="#" data-pulse-day-nav data-day="{{nextDayKey}}">Next</a>
+</nav>
 <h1>Visit pulse — {{dayKey}}</h1>
 <p class="small">Partition: {{tzLabel}} · Source: {{source}} · Generated: {{generatedEt}} <span class="small">(UTC
 		{{generatedUtc}})</span></p>
+<div class="copy-row">
+	<button type="button" id="copy-pulse-summary">Copy summary JSON</button>
+	<button type="button" id="copy-pulse-raw">Copy raw JSON</button>
+	<span class="copy-status" id="copy-pulse-status" aria-live="polite"></span>
+</div>
 
 <section class="grid">
 	<div class="card">
@@ -55,3 +66,4 @@
 		{{!activeNowNoteHtml}}
 	</ul>
 </section>
+{{!copyScriptHtml}}

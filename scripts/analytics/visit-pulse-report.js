@@ -310,6 +310,201 @@ function visitorSortKey(v) {
 	return [authed, hits, String(v.visitor_key || "")];
 }
 
+function sortVisitors(visitors) {
+	return [...(visitors || [])].sort((a, b) => {
+		const ka = visitorSortKey(a);
+		const kb = visitorSortKey(b);
+		return ka[0] - kb[0] || ka[1] - kb[1] || ka[2].localeCompare(kb[2]);
+	});
+}
+
+/** CLI --json and “Copy raw JSON” on HTML reports. */
+function buildVisitPulseRawPayload({ dayKey, source, row, activeNow, visitors }) {
+	const summary = {
+		day: dayKey,
+		source,
+		unique_visitors: row?.unique_visitors ?? 0,
+		authed_visitors: row?.authed_visitors ?? 0,
+		anon_visitors: row?.anon_visitors ?? 0,
+		total_hits: row?.total_hits ?? 0,
+		total_active_blocks: row?.total_active_blocks ?? 0,
+		flushed_at: row?.flushed_at ?? null,
+		active_now: activeNow?.length ?? 0
+	};
+	return { summary, visitors: sortVisitors(visitors), active_now: activeNow ?? [] };
+}
+
+/** Anonymous table shape for HTML + summary (no activity ranges). */
+function buildAnonTablePayload(anon, dayStartMs, et) {
+	const multiHit = [...anon]
+		.filter((v) => (Number(v.hits) || 0) > 1)
+		.sort((a, b) => (Number(b.hits) || 0) - (Number(a.hits) || 0));
+	const singleHit = anon.filter((v) => (Number(v.hits) || 0) <= 1);
+
+	const byHour = Array.from({ length: HOURS_PER_DAY }, () => 0);
+	for (const v of singleHit) {
+		for (const h of visitorActiveHours(v, dayStartMs)) byHour[h]++;
+	}
+	const singleHitByHour = byHour
+		.map((count, hour_index) => ({ hour_index, count }))
+		.filter((r) => r.count > 0)
+		.map((r) => ({
+			kind: "single_hit_hour",
+			label: "Single-hit",
+			hits: r.count,
+			hour_index: r.hour_index,
+			hour_label: et.partitionHourShortLabel(r.hour_index, dayStartMs)
+		}));
+
+	return {
+		multi_hit: multiHit.map((v) => ({
+			kind: "cookie",
+			cookie: anonCookieLabel(v),
+			client_id: v.client_id ?? null,
+			hits: Number(v.hits) || 0,
+			active_hours: et.visitorActiveHourLabels(v, dayStartMs)
+		})),
+		single_hit_by_hour: singleHitByHour
+	};
+}
+
+function buildHourlyActivitySummary(stack, dayStartMs, et) {
+	const anonSeries = stack.series.find((s) => s.kind === "anon");
+	return Array.from({ length: HOURS_PER_DAY }, (_, h) => {
+		const stacked_total = stack.hourTotals[h] || 0;
+		if (!stacked_total) return null;
+		return {
+			hour_index: h,
+			hour_label: et.partitionHourShortLabel(h, dayStartMs),
+			stacked_total,
+			authed_count: stack.slotByHour[h]?.size ?? 0,
+			anon_cookies: anonSeries ? Number(anonSeries.values[h]) || 0 : 0
+		};
+	}).filter(Boolean);
+}
+
+function buildChartSeriesSummary(stack, dayStartMs, et) {
+	return stack.series.map((s) => ({
+		id: s.id,
+		label: s.label,
+		sub: s.sub,
+		kind: s.kind,
+		hits: s.hits,
+		active_hours: s.values
+			.map((v, h) => (v ? et.partitionHourShortLabel(h, dayStartMs) : null))
+			.filter(Boolean)
+	}));
+}
+
+/** Page-visible data for “Copy summary JSON” (no per-visitor range timestamps). */
+function buildVisitPulseSummaryPayload(bundle) {
+	const { dayKey, source, row, activeNow, tzLabel, displayTz, stack, et, visitors, dayStartMs } = bundle;
+	const anon = (visitors || []).filter((v) => v.user_id == null);
+	const authed = (visitors || []).filter((v) => v.user_id != null);
+	const oneHitAnon = anon.filter((v) => (Number(v.hits) || 0) <= 1).length;
+	const colorMap = authedColorByUserId(stack.series);
+	const anonTables = buildAnonTablePayload(anon, dayStartMs, et);
+
+	return {
+		day: dayKey,
+		source,
+		partition: tzLabel,
+		display_tz: displayTz,
+		eastern_tz: EASTERN_TZ,
+		generated_at_et: et.formatFromMs(Date.now()),
+		generated_at_utc: et.formatUtcIso(new Date().toISOString()),
+		unique_visitors: row?.unique_visitors ?? 0,
+		authed_visitors: row?.authed_visitors ?? 0,
+		anon_visitors: row?.anon_visitors ?? 0,
+		single_hit_anon: oneHitAnon,
+		total_hits: row?.total_hits ?? 0,
+		total_active_blocks: row?.total_active_blocks ?? 0,
+		peak_hour: {
+			count: stack.peakHour.n,
+			label: et.partitionHourShortLabel(stack.peakHour.h, dayStartMs),
+			hour_index: stack.peakHour.h,
+			display_tz: displayTz
+		},
+		flushed_at: row?.flushed_at ?? null,
+		active_now: {
+			count: activeNow?.length ?? 0,
+			visitors: (activeNow || []).map((v) => ({
+				user_id: v.user_id ?? null,
+				display_label: v.display_label ?? null,
+				user_name: v.user_name ?? null,
+				client_id: v.client_id ? anonCookieLabel(v) : null,
+				last_pulse_at: v.last_pulse_at ?? null
+			}))
+		},
+		hourly_activity: buildHourlyActivitySummary(stack, dayStartMs, et),
+		chart_series: buildChartSeriesSummary(stack, dayStartMs, et),
+		logged_in_users: [...authed]
+			.sort((a, b) => (Number(b.hits) || 0) - (Number(a.hits) || 0))
+			.map((v) => ({
+				user_id: v.user_id,
+				display_label: v.display_label || `user ${v.user_id}`,
+				user_name: v.user_name ?? null,
+				hits: Number(v.hits) || 0,
+				chart_color: colorMap.get(Number(v.user_id)) ?? null,
+				active_hours: et.visitorActiveHourLabels(v, dayStartMs)
+			})),
+		anonymous: anonTables
+	};
+}
+
+function buildVisitPulsePageScriptHtml(summaryPayload, rawPayload) {
+	const summaryJson = JSON.stringify(summaryPayload);
+	const rawJson = JSON.stringify(rawPayload);
+	return `<script>
+(() => {
+	const summaryPayload = ${summaryJson};
+	const rawPayload = ${rawJson};
+	const status = document.getElementById('copy-pulse-status');
+	const setStatus = (msg) => { if (status) status.textContent = msg || ''; };
+	async function copyText(text) {
+		if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+			await navigator.clipboard.writeText(text);
+			return;
+		}
+		const ta = document.createElement('textarea');
+		ta.value = text;
+		ta.setAttribute('readonly', 'true');
+		ta.style.position = 'fixed';
+		ta.style.top = '-1000px';
+		ta.style.left = '-1000px';
+		document.body.appendChild(ta);
+		ta.select();
+		ta.setSelectionRange(0, ta.value.length);
+		const ok = document.execCommand('copy');
+		document.body.removeChild(ta);
+		if (!ok) throw new Error('Copy failed');
+	}
+	async function onCopy(btn, payload, label) {
+		if (!btn) return;
+		btn.addEventListener('click', async () => {
+			try {
+				setStatus('Copying…');
+				await copyText(JSON.stringify(payload, null, 2));
+				setStatus('Copied ' + label + ' to clipboard.');
+			} catch (_err) {
+				setStatus('Copy failed.');
+			}
+		});
+	}
+	onCopy(document.getElementById('copy-pulse-summary'), summaryPayload, 'summary JSON');
+	onCopy(document.getElementById('copy-pulse-raw'), rawPayload, 'raw JSON');
+	document.addEventListener('click', function (e) {
+		var link = e.target && e.target.closest ? e.target.closest('[data-pulse-day-nav]') : null;
+		if (!link) return;
+		e.preventDefault();
+		var day = link.getAttribute('data-day');
+		if (!day) return;
+		location.href = 'visit-pulse-' + day + '.html';
+	});
+})();
+</script>`;
+}
+
 function formatVisitorLine(v) {
 	if (v.user_id != null) {
 		const handle = v.user_name ? `@${v.user_name}` : null;
@@ -549,29 +744,19 @@ function anonCookieLabel(v) {
 }
 
 function anonVisitorsTableHtml(anon, dayStartMs, et, displayTz) {
-	const multiHit = [...anon]
+	const { single_hit_by_hour: singleHitRows } = buildAnonTablePayload(anon, dayStartMs, et);
+	const multiHitVisitors = [...anon]
 		.filter((v) => (Number(v.hits) || 0) > 1)
 		.sort((a, b) => (Number(b.hits) || 0) - (Number(a.hits) || 0));
-	const singleHit = anon.filter((v) => (Number(v.hits) || 0) <= 1);
-
-	const byHour = Array.from({ length: HOURS_PER_DAY }, () => 0);
-	for (const v of singleHit) {
-		for (const h of visitorActiveHours(v, dayStartMs)) byHour[h]++;
-	}
-	const singleHitRows = byHour
-		.map((count, hour) => ({ hour, count }))
-		.filter((r) => r.count > 0)
-		.map((r) => ({
-			_single_hit_hour: true,
-			label: "Single-hit",
-			hits: r.count,
-			hours: et.partitionHourShortLabel(r.hour, dayStartMs),
-			ranges: et.hourWindowEt(r.hour, dayStartMs)
-		}));
-
 	const rows = [
-		...multiHit.map((v) => ({ ...v, _visitor: true })),
-		...singleHitRows
+		...multiHitVisitors.map((v) => ({ ...v, _visitor: true })),
+		...singleHitRows.map((r) => ({
+			_single_hit_hour: true,
+			label: r.label,
+			hits: r.hits,
+			hours: r.hour_label,
+			ranges: et.hourWindowEt(r.hour_index, dayStartMs)
+		}))
 	];
 
 	if (!rows.length) return "<p class=\"small\">None.</p>";
@@ -607,8 +792,20 @@ function anonVisitorsTableHtml(anon, dayStartMs, et, displayTz) {
 	);
 }
 
+const PULSE_DAY_MS = 24 * 60 * 60 * 1000;
+
+/** @param {string} dayKey @param {number} deltaDays */
+async function adjacentPulseDayKey(dayKey, deltaDays) {
+	const { usEastDayStartMs, usEastDayKey } = await import("../../api_routes/utils/visitPulseCore.js");
+	return usEastDayKey(new Date(usEastDayStartMs(dayKey) + deltaDays * PULSE_DAY_MS));
+}
+
 async function renderVisitPulseHtml(bundle) {
 	const { dayKey, source, row, activeNow, tzLabel, dayStartMs, stack, et, displayTz } = bundle;
+	const [prevDayKey, nextDayKey] = await Promise.all([
+		adjacentPulseDayKey(dayKey, -1),
+		adjacentPulseDayKey(dayKey, 1)
+	]);
 	const visitors = bundle.visitors || [];
 	const authed = visitors.filter((v) => v.user_id != null);
 	const anon = visitors.filter((v) => v.user_id == null);
@@ -621,11 +818,22 @@ async function renderVisitPulseHtml(bundle) {
 		? `<li>${esc(String(activeNow.length))} visitor(s) in Redis active set right now.</li>`
 		: "";
 
+	const summaryPayload = buildVisitPulseSummaryPayload(bundle);
+	const rawPayload = buildVisitPulseRawPayload({
+		dayKey,
+		source,
+		row,
+		activeNow,
+		visitors
+	});
+
 	const template = await loadVisitPulseHtmlTemplate();
 	const styleBlock = await loadReportStyleBlock();
 	return fillHtmlTemplate(template, {
 		styleBlock,
 		dayKey,
+		prevDayKey,
+		nextDayKey,
 		tzLabel,
 		source,
 		generatedEt: et.formatFromMs(Date.now()),
@@ -668,7 +876,8 @@ async function renderVisitPulseHtml(bundle) {
 		),
 		anonTableHtml: anonVisitorsTableHtml(anon, dayStartMs, et, displayTz),
 		flushedNoteHtml,
-		activeNowNoteHtml
+		activeNowNoteHtml,
+		copyScriptHtml: buildVisitPulsePageScriptHtml(summaryPayload, rawPayload)
 	});
 }
 
@@ -694,31 +903,18 @@ async function loadLiveFromRedis(dayKey) {
 }
 
 function printReport({ dayKey, source, row, activeNow, blocksPerDay, blockMinutes, dayStartMs, tzLabel, et, asJson }) {
-	const visitors = [...(row?.details?.visitors ?? [])].sort((a, b) => {
-		const ka = visitorSortKey(a);
-		const kb = visitorSortKey(b);
-		return ka[0] - kb[0] || ka[1] - kb[1] || ka[2].localeCompare(kb[2]);
-	});
+	const visitors = sortVisitors(row?.details?.visitors ?? []);
 	const authed = visitors.filter((v) => v.user_id != null);
 	const activeAuthedIds = new Set(
 		(activeNow || []).filter((v) => v.user_id != null).map((v) => Number(v.user_id))
 	);
-	const summary = {
-		day: dayKey,
-		source,
-		unique_visitors: row?.unique_visitors ?? 0,
-		authed_visitors: row?.authed_visitors ?? 0,
-		anon_visitors: row?.anon_visitors ?? 0,
-		total_hits: row?.total_hits ?? 0,
-		total_active_blocks: row?.total_active_blocks ?? 0,
-		flushed_at: row?.flushed_at ?? null,
-		active_now: activeNow?.length ?? 0
-	};
 
 	if (asJson) {
-		console.log(JSON.stringify({ summary, visitors, active_now: activeNow ?? [] }, null, 2));
+		console.log(JSON.stringify(buildVisitPulseRawPayload({ dayKey, source, row, activeNow, visitors }), null, 2));
 		return;
 	}
+
+	const summary = buildVisitPulseRawPayload({ dayKey, source, row, activeNow, visitors }).summary;
 
 	console.log(`Visit pulse — ${dayKey} (${tzLabel})  [${source}]`);
 	console.log("");
