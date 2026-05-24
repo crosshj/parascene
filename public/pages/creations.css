@@ -1255,7 +1255,7 @@ body.create-page:not(.creation-edit-page) .create-btn-generate:focus-visible {
 	display: none;
 }
 
-/* Extended landscape loading: no card chrome */
+/* Extended landscape loading: solid surface placeholder, no card chrome */
 .creation-detail-image-wrapper.hero-layout-landscape.image-loading,
 .creation-detail-image-wrapper.hero-layout-landscape.image-error {
 	border: none;
@@ -1264,17 +1264,8 @@ body.create-page:not(.creation-edit-page) .create-btn-generate:focus-visible {
 	animation: none;
 }
 
-/* Extended portrait (4:5, 9:16): transparent shimmer placeholder, no card chrome */
-.creation-detail-image-wrapper.hero-layout-portrait.image-loading,
-.creation-detail-image-wrapper.hero-layout-portrait.image-error {
-	border: none;
-	box-shadow: none;
-}
-
 .creation-detail-image-wrapper.hero-layout-landscape.image-loading,
-.creation-detail-image-wrapper.hero-layout-landscape.image-error,
-.creation-detail-image-wrapper.hero-layout-portrait.image-loading,
-.creation-detail-image-wrapper.hero-layout-portrait.image-error {
+.creation-detail-image-wrapper.hero-layout-landscape.image-error {
 	display: block;
 }
 
@@ -1330,10 +1321,18 @@ body.creation-detail-page main>section:first-of-type {
 	background: var(--surface);
 }
 
-.creation-detail-hero:has(.hero-layout-landscape),
-.creation-detail-hero:has(.hero-layout-portrait) {
+.creation-detail-hero:has(.hero-layout-landscape) {
 	min-height: 0;
 	display: block;
+	--hero-max-height: min(80vh, calc(100svh - 10.5rem));
+}
+
+.creation-detail-hero:has(.hero-layout-portrait) {
+	min-height: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
 	--hero-max-height: min(80vh, calc(100svh - 10.5rem));
 }
 
@@ -1361,17 +1360,29 @@ body.creation-detail-page main>section:first-of-type {
 	padding: 0;
 }
 
-/* Portrait (4:5, 9:16): aspect box + contain */
+/* Portrait (4:5, 9:16): sized wrapper; loading uses aspect box, loaded img drives height */
 .creation-detail-image-wrapper.hero-layout-portrait {
-	width: 100%;
-	max-width: 100%;
+	width: min(92vw, calc(var(--hero-max-height, 80vh) * var(--hero-aspect-w, 4) / var(--hero-aspect-h, 5)), 1100px);
+	max-width: 90%;
 	max-height: var(--hero-max-height, 80vh);
 	aspect-ratio: var(--hero-aspect-ratio);
 	height: auto;
 	margin-inline: auto;
 	display: block;
+	padding: 0;
 	line-height: 0;
 	overflow: hidden;
+}
+
+.creation-detail-image-wrapper.hero-layout-portrait.image-loading,
+.creation-detail-image-wrapper.hero-layout-portrait.image-error {
+	aspect-ratio: var(--hero-aspect-ratio);
+	display: block;
+}
+
+.creation-detail-image-wrapper.hero-layout-portrait:not(.image-loading):not(.image-error) {
+	aspect-ratio: auto;
+	max-height: none;
 }
 
 /* 16:9: width from aspect + max-height; img drives height when loaded (no letterbox bands) */
@@ -1486,15 +1497,14 @@ body.creation-detail-page main>section:first-of-type {
 	object-fit: contain;
 }
 
-/* Portrait: fill aspect box */
+/* Portrait: img drives wrapper height (no letterboxing inside the box) */
 .creation-detail-image-wrapper.hero-layout-portrait:not(.image-loading):not(.image-error):not(.group-carousel-active) > img[data-image] {
 	width: 100%;
-	height: 100%;
+	height: auto;
 	max-width: none;
 	max-height: none;
-	object-fit: contain;
-	object-position: center;
-	box-shadow: none;
+	display: block;
+	object-fit: unset;
 	border-radius: 0;
 }
 
@@ -1518,7 +1528,9 @@ body.creation-detail-page main>section:first-of-type {
 }
 
 .creation-detail-image-wrapper.hero-layout-legacy.image-loading,
-.creation-detail-image-wrapper.hero-layout-legacy.image-error {
+.creation-detail-image-wrapper.hero-layout-legacy.image-error,
+.creation-detail-image-wrapper.hero-layout-portrait.image-loading,
+.creation-detail-image-wrapper.hero-layout-portrait.image-error {
 	border-radius: 0;
 }
 
@@ -3752,7 +3764,7 @@ button.creation-detail-history-thumb-link.creation-detail-history-unavailable.cr
 		max-width: min(100%, 1408px, calc(var(--hero-max-height, 80vh) * var(--hero-aspect-w, 16) / var(--hero-aspect-h, 9)));
 	}
 
-	/* Portrait: full viewport width; height from ratio (do not shrink width for max-height) */
+	/* Portrait: full width on mobile; loading aspect box matches loaded img footprint */
 	.creation-detail-image-wrapper.hero-layout-portrait {
 		width: 100%;
 		max-width: 100%;
@@ -3761,19 +3773,7 @@ button.creation-detail-history-thumb-link.creation-detail-history-unavailable.cr
 
 	.creation-detail-image-wrapper.hero-layout-portrait.image-loading,
 	.creation-detail-image-wrapper.hero-layout-portrait.image-error {
-		aspect-ratio: var(--hero-aspect-ratio);
-	}
-
-	.creation-detail-image-wrapper.hero-layout-portrait:not(.image-loading):not(.image-error):not(.group-carousel-active) {
-		aspect-ratio: auto;
-	}
-
-	.creation-detail-image-wrapper.hero-layout-portrait:not(.image-loading):not(.image-error):not(.group-carousel-active) > img[data-image] {
-		width: 100%;
-		height: auto;
-		max-width: none;
 		max-height: none;
-		object-fit: unset;
 	}
 
 	.creation-detail-footer {
