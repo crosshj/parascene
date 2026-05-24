@@ -309,6 +309,115 @@ app-route-create .create-route .form-hint {
 	margin: -0.15rem 0 0 0;
 }
 
+app-route-create .create-route .aspect-ratio-selector-wrap {
+	width: 100%;
+}
+
+app-route-create .create-route .aspect-ratio-selector {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.35rem;
+	width: 100%;
+}
+
+app-route-create .create-route .aspect-ratio-option {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 0.35rem;
+	flex: 1 1 0;
+	min-width: 4.5rem;
+	max-width: 6.5rem;
+	padding: 0.55rem 0.35rem 0.45rem;
+	border: 1px solid transparent;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+	font-family: inherit;
+	transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+app-route-create .create-route .aspect-ratio-option:hover {
+	background: var(--surface-strong);
+	color: var(--text);
+}
+
+app-route-create .create-route .aspect-ratio-option:focus-visible {
+	outline: none;
+	border-color: color-mix(in srgb, var(--text) 25%, var(--border));
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--text) 12%, transparent);
+}
+
+app-route-create .create-route .aspect-ratio-option.is-selected {
+	background: color-mix(in srgb, var(--text) 8%, transparent);
+	border-color: transparent;
+	color: var(--text);
+}
+
+app-route-create .create-route .aspect-ratio-option-ratio {
+	font-size: 0.75rem;
+	line-height: 1.2;
+	font-weight: 500;
+	letter-spacing: 0.01em;
+}
+
+app-route-create .create-route .aspect-ratio-option.is-selected .aspect-ratio-option-ratio {
+	color: var(--text);
+}
+
+app-route-create .create-route .aspect-ratio-option-shape {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 2.75rem;
+	height: 2.75rem;
+	flex-shrink: 0;
+}
+
+app-route-create .create-route .aspect-ratio-option-shape-inner {
+	display: block;
+	border: 1.5px solid color-mix(in srgb, var(--text-muted) 50%, var(--border));
+	border-radius: 4px;
+	background: color-mix(in srgb, var(--text) 5%, transparent);
+	transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+app-route-create .create-route .aspect-ratio-option:hover .aspect-ratio-option-shape-inner {
+	border-color: currentColor;
+}
+
+app-route-create .create-route .aspect-ratio-option.is-selected .aspect-ratio-option-shape-inner {
+	border-color: currentColor;
+	background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+app-route-create .create-route .aspect-ratio-option-label {
+	font-size: 0.7rem;
+	line-height: 1.2;
+	text-transform: lowercase;
+	letter-spacing: 0.02em;
+}
+
+app-route-create .create-route .aspect-ratio-option.is-selected .aspect-ratio-option-label {
+	color: var(--text);
+	font-weight: 500;
+}
+
+@media (max-width: 768px) {
+	app-route-create .create-route .aspect-ratio-selector {
+		display: grid;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		gap: 0.35rem;
+	}
+
+	app-route-create .create-route .aspect-ratio-option {
+		min-width: 0;
+		max-width: none;
+	}
+}
+
 app-route-create .create-route .create-cost.insufficient {
 	color: var(--error, #e74c3c);
 	font-weight: 500;

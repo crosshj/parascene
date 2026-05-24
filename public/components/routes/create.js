@@ -5,6 +5,7 @@ let submitCreationWithPending;
 let uploadImageFile;
 let formatMentionsFailureForDialog;
 let renderFields;
+let shouldUseAspectRatioSelector;
 let isPromptLikeField;
 let isImageUrlField;
 let isImageUrlArrayField;
@@ -38,6 +39,7 @@ async function loadDeps() {
 
 		const providerFormFieldsMod = await import(`../../shared/providerFormFields.js${qs}`);
 		renderFields = providerFormFieldsMod.renderFields;
+		shouldUseAspectRatioSelector = (await import(`../../shared/aspectRatio.js${qs}`)).shouldUseAspectRatioSelector;
 		isPromptLikeField = providerFormFieldsMod.isPromptLikeField;
 		isImageUrlField = providerFormFieldsMod.isImageUrlField;
 		isImageUrlArrayField = providerFormFieldsMod.isImageUrlArrayField;
@@ -1326,6 +1328,15 @@ class AppRouteCreate extends HTMLElement {
 					}
 				}
 			}
+			if (pendingSaved && fieldKey === 'aspect_ratio') {
+				const saved = pendingSaved[fieldKey];
+				if (typeof saved === 'string' && saved.trim()) {
+					const trimmed = saved.trim();
+					fieldsForRender[fieldKey] = { ...field, default: trimmed };
+					this.fieldValues.aspect_ratio = trimmed;
+					return;
+				}
+			}
 
 			const carry = this._crossMethodImageCarryover;
 			if (carry?.url && isImageUrlField(field)) {
@@ -1355,6 +1366,26 @@ class AppRouteCreate extends HTMLElement {
 			fieldsForRender[fieldKey] = field;
 		});
 
+		this.applyAspectRatioFieldVisibility(fieldsForRender, fields);
+
+		Object.keys(fieldsForRender).forEach((fieldKey) => {
+			const stored = this.fieldValues[fieldKey];
+			const field = fieldsForRender[fieldKey];
+			if (!field || typeof field !== 'object') return;
+			if (stored instanceof File) return;
+			if (Array.isArray(stored)) {
+				fieldsForRender[fieldKey] = { ...field, default: stored };
+				return;
+			}
+			if (typeof stored === 'boolean') {
+				fieldsForRender[fieldKey] = { ...field, default: stored };
+				return;
+			}
+			if (stored !== undefined && stored !== null && String(stored).trim() !== '') {
+				fieldsForRender[fieldKey] = { ...field, default: stored };
+			}
+		});
+
 		this._crossMethodImageCarryover = null;
 
 		if (Object.keys(fields).length === 0) {
@@ -1362,35 +1393,53 @@ class AppRouteCreate extends HTMLElement {
 			return;
 		}
 
-		renderFields(fieldsContainer, fieldsForRender, {
-			onFieldChange: (fieldKey, value) => {
-				this.fieldValues[fieldKey] = value;
-				this.updateButtonState();
-				this.saveSelections();
-				this.persistImageFieldSelection(fieldKey, value);
-			}
-		});
+		this._renderingFields = true;
+		try {
+			renderFields(fieldsContainer, fieldsForRender, {
+				formContext: this.getFormFieldContext(),
+				onFieldChange: (fieldKey, value) => {
+					this.fieldValues[fieldKey] = value;
+					this.updateButtonState();
+					this.saveSelections();
+					this.persistImageFieldSelection(fieldKey, value);
+					if (fieldKey === 'model' && !this._renderingFields) {
+						const shouldShow =
+							typeof shouldUseAspectRatioSelector === 'function' &&
+							shouldUseAspectRatioSelector(this.getFormFieldContext());
+						const hasAspectRatioField = !!this.querySelector('[data-field-key="aspect_ratio"]');
+						if (shouldShow !== hasAspectRatioField) {
+							this.renderFields();
+						}
+					}
+				}
+			});
 
-		const hiddenFieldsSlot = this.querySelector("[data-fields-hidden-slot]");
-		if (hiddenFieldsSlot) {
-			hiddenFieldsSlot.innerHTML = '';
-			fieldsContainer.querySelectorAll(".field-hidden").forEach((node) => hiddenFieldsSlot.appendChild(node));
-		}
-
-		const hasHiddenFields = Object.values(fields).some(f => f && (f.hidden === true || f.hidden === 'true'));
-		const toggleWrap = this.querySelector("[data-fields-toggle]");
-		const toggleLink = this.querySelector("[data-toggle-hidden-fields]");
-		if (toggleWrap && toggleLink && hiddenFieldsSlot) {
-			if (hasHiddenFields) {
-				toggleWrap.style.display = '';
-				this.showHiddenFields = false;
-				hiddenFieldsSlot.classList.remove("show-hidden-fields");
-				toggleLink.textContent = "Show hidden fields";
-			} else {
-				toggleWrap.style.display = 'none';
+			const hiddenFieldsSlot = this.querySelector("[data-fields-hidden-slot]");
+			if (hiddenFieldsSlot) {
 				hiddenFieldsSlot.innerHTML = '';
-				hiddenFieldsSlot.classList.remove("show-hidden-fields");
+				fieldsContainer.querySelectorAll(".field-hidden").forEach((node) => hiddenFieldsSlot.appendChild(node));
 			}
+
+			const hasHiddenFields = Object.entries(fields).some(([key, f]) => {
+				if (key === 'aspect_ratio') return false;
+				return f && (f.hidden === true || f.hidden === 'true');
+			});
+			const toggleWrap = this.querySelector("[data-fields-toggle]");
+			const toggleLink = this.querySelector("[data-toggle-hidden-fields]");
+			if (toggleWrap && toggleLink && hiddenFieldsSlot) {
+				if (hasHiddenFields) {
+					toggleWrap.style.display = '';
+					this.showHiddenFields = false;
+					hiddenFieldsSlot.classList.remove("show-hidden-fields");
+					toggleLink.textContent = "Show hidden fields";
+				} else {
+					toggleWrap.style.display = 'none';
+					hiddenFieldsSlot.innerHTML = '';
+					hiddenFieldsSlot.classList.remove("show-hidden-fields");
+				}
+			}
+		} finally {
+			this._renderingFields = false;
 		}
 
 		fieldsGroup.style.display = 'flex';
@@ -1481,7 +1530,13 @@ class AppRouteCreate extends HTMLElement {
 
 		// Check if all required fields are filled
 		const fields = this.selectedMethod.fields || {};
-		const requiredFields = Object.keys(fields).filter(key => fields[key].required);
+		const formContext = this.getFormFieldContext();
+		const requiredFields = Object.keys(fields).filter((key) => {
+			if (key === 'aspect_ratio' && typeof shouldUseAspectRatioSelector === 'function' && !shouldUseAspectRatioSelector(formContext)) {
+				return false;
+			}
+			return fields[key].required;
+		});
 		const allRequiredFilled = requiredFields.every(key => {
 			const value = this.fieldValues[key];
 			if (value === undefined || value === null) return false;
@@ -1817,6 +1872,51 @@ class AppRouteCreate extends HTMLElement {
 		if (!this.selectedServer || !this.selectedMethod) return null;
 		const methods = this.selectedServer.server_config?.methods || {};
 		return Object.keys(methods).find(key => methods[key] === this.selectedMethod) || null;
+	}
+
+	getFormFieldContext() {
+		const modelField = this.selectedMethod?.fields?.model;
+		const modelDefault = modelField?.default;
+		const modelValue = String(this.fieldValues.model ?? modelDefault ?? '');
+		return {
+			serverId: this.selectedServer?.id,
+			methodKey: this.getMethodKey(),
+			modelValue
+		};
+	}
+
+	applyAspectRatioFieldVisibility(fieldsForRender, allFields) {
+		const aspectField = fieldsForRender.aspect_ratio ?? allFields?.aspect_ratio;
+		if (!aspectField || typeof aspectField !== 'object') return;
+
+		const formContext = this.getFormFieldContext();
+		const showAspectRatio =
+			typeof shouldUseAspectRatioSelector === 'function' && shouldUseAspectRatioSelector(formContext);
+
+		if (showAspectRatio) {
+			const pendingSaved =
+				this._pendingSavedFieldValues && typeof this._pendingSavedFieldValues === 'object'
+					? this._pendingSavedFieldValues
+					: null;
+			const saved =
+				(typeof this.fieldValues.aspect_ratio === 'string' && this.fieldValues.aspect_ratio.trim()) ||
+				(typeof pendingSaved?.aspect_ratio === 'string' && pendingSaved.aspect_ratio.trim()) ||
+				'';
+			const fieldWithDefault = saved
+				? { ...aspectField, hidden: false, default: saved }
+				: { ...aspectField, hidden: false };
+			fieldsForRender.aspect_ratio = fieldWithDefault;
+			if (saved) this.fieldValues.aspect_ratio = saved;
+			return;
+		}
+
+		delete fieldsForRender.aspect_ratio;
+		if (this.fieldValues.aspect_ratio === undefined || this.fieldValues.aspect_ratio === '') {
+			const def = aspectField.default;
+			if (def !== undefined && def !== null && String(def).trim()) {
+				this.fieldValues.aspect_ratio = String(def);
+			}
+		}
 	}
 
 	restoreSelections() {
@@ -2459,9 +2559,50 @@ class AppRouteCreate extends HTMLElement {
 
 	restoreFieldValues(savedFieldValues) {
 		const fields = this.selectedMethod?.fields || {};
-		Object.keys(savedFieldValues).forEach(fieldKey => {
+		if (typeof savedFieldValues.aspect_ratio === 'string' && savedFieldValues.aspect_ratio.trim()) {
+			this.fieldValues.aspect_ratio = savedFieldValues.aspect_ratio.trim();
+		}
+
+		const fieldKeys = Object.keys(savedFieldValues);
+		const orderedKeys = [
+			...fieldKeys.filter((key) => key === 'model'),
+			...fieldKeys.filter((key) => key === 'aspect_ratio'),
+			...fieldKeys.filter((key) => key !== 'model' && key !== 'aspect_ratio'),
+		];
+
+		const restoreAspectRatioSelection = (savedValue) => {
+			const value = String(savedValue || '').trim();
+			if (!value) return false;
+			const option = this.querySelector(
+				`[data-field-key="aspect_ratio"] .aspect-ratio-option[data-value="${value}"]`
+			);
+			if (option) {
+				option.click();
+				return true;
+			}
+			const hidden = this.querySelector('#field-aspect_ratio');
+			if (hidden) {
+				hidden.value = value;
+				hidden.dispatchEvent(new Event('input', { bubbles: true }));
+				hidden.dispatchEvent(new Event('change', { bubbles: true }));
+				return true;
+			}
+			return false;
+		};
+
+		orderedKeys.forEach((fieldKey) => {
 			// Query-param prompt supersedes saved prompt on Basic tab
 			if (this._promptFromUrl && isPromptLikeField(fieldKey, fields[fieldKey])) return;
+
+			if (fieldKey === 'aspect_ratio') {
+				const savedValue = savedFieldValues[fieldKey];
+				if (savedValue !== undefined && savedValue !== null && String(savedValue).trim()) {
+					this.fieldValues.aspect_ratio = String(savedValue).trim();
+					restoreAspectRatioSelection(savedValue);
+				}
+				return;
+			}
+
 			let el = this.querySelector(`#field-${fieldKey}`);
 			if (el?.classList?.contains('form-switch')) {
 				el = el.querySelector('.form-switch-input');

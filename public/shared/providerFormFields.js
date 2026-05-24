@@ -3,6 +3,8 @@
  * Field types are handled by separate handlers so new types can be added easily.
  */
 
+import { parseAspectRatioString, shouldUseAspectRatioSelector, ASPECT_RATIO_SELECTOR_LABELS } from './aspectRatio.js';
+
 const _qs = (() => {
 	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
 	return v ? `?v=${encodeURIComponent(v)}` : '';
@@ -126,6 +128,111 @@ function normalizeSelectOptions(options) {
 		}
 		return { value: '', label: '', hint: '' };
 	});
+}
+
+/** Short labels for grok-imagine aspect ratio selector (matches competitor UI). */
+function resolveAspectRatioOptionLabel(value, optionLabel, optionHint) {
+	const key = String(value || '').trim();
+	if (optionHint && String(optionHint).trim()) return String(optionHint).trim();
+	if (ASPECT_RATIO_SELECTOR_LABELS[key]) return ASPECT_RATIO_SELECTOR_LABELS[key];
+	if (optionLabel && String(optionLabel).trim() && String(optionLabel).trim() !== key) {
+		return String(optionLabel).trim();
+	}
+	return key;
+}
+
+function aspectShapeDimensions(w, h, max = 40) {
+	if (w >= h) {
+		return { width: max, height: Math.max(4, Math.round((max * h) / w)) };
+	}
+	return { width: Math.max(4, Math.round((max * w) / h)), height: max };
+}
+
+function createAspectRatioSelectorField(fieldKey, field, context) {
+	const { fieldIdPrefix, onValueChange } = context;
+	const options = normalizeSelectOptions(field.options || []).filter((opt) => opt.value);
+	const defaultValue =
+		field.default !== undefined && field.default !== null ? String(field.default) : options[0]?.value || '';
+
+	const hiddenInput = document.createElement('input');
+	hiddenInput.type = 'hidden';
+	hiddenInput.id = `${fieldIdPrefix}${fieldKey}`;
+	hiddenInput.name = fieldKey;
+	hiddenInput.value = defaultValue;
+	if (field.required) hiddenInput.required = true;
+
+	const group = document.createElement('div');
+	group.className = 'aspect-ratio-selector';
+	group.setAttribute('role', 'radiogroup');
+	group.setAttribute('aria-labelledby', `${fieldIdPrefix}${fieldKey}-label`);
+
+	const notify = (value) => onValueChange(fieldKey, value);
+
+	const setSelected = (value) => {
+		const next = String(value || '');
+		hiddenInput.value = next;
+		group.querySelectorAll('.aspect-ratio-option').forEach((btn) => {
+			const isSelected = btn.getAttribute('data-value') === next;
+			btn.setAttribute('aria-checked', isSelected ? 'true' : 'false');
+			btn.classList.toggle('is-selected', isSelected);
+		});
+		notify(next);
+	};
+
+	options.forEach(({ value, label, hint }) => {
+		const parsed = parseAspectRatioString(value);
+		if (!parsed) return;
+
+		const [w, h] = parsed;
+		const dims = aspectShapeDimensions(w, h);
+		const shortLabel = resolveAspectRatioOptionLabel(value, label, hint);
+
+		const btn = document.createElement('button');
+		btn.type = 'button';
+		btn.className = 'aspect-ratio-option';
+		btn.setAttribute('role', 'radio');
+		btn.setAttribute('data-value', value);
+		btn.setAttribute('aria-label', `${value} ${shortLabel}`);
+
+		const ratioEl = document.createElement('span');
+		ratioEl.className = 'aspect-ratio-option-ratio';
+		ratioEl.textContent = value;
+
+		const shapeEl = document.createElement('span');
+		shapeEl.className = 'aspect-ratio-option-shape';
+		shapeEl.setAttribute('aria-hidden', 'true');
+		const shapeInner = document.createElement('span');
+		shapeInner.className = 'aspect-ratio-option-shape-inner';
+		shapeInner.style.width = `${dims.width}px`;
+		shapeInner.style.height = `${dims.height}px`;
+		shapeEl.appendChild(shapeInner);
+
+		const labelEl = document.createElement('span');
+		labelEl.className = 'aspect-ratio-option-label';
+		labelEl.textContent = shortLabel;
+
+		btn.appendChild(ratioEl);
+		btn.appendChild(shapeEl);
+		btn.appendChild(labelEl);
+
+		btn.addEventListener('click', () => setSelected(value));
+		btn.addEventListener('keydown', (e) => {
+			if (e.key === ' ' || e.key === 'Enter') {
+				e.preventDefault();
+				setSelected(value);
+			}
+		});
+
+		group.appendChild(btn);
+	});
+
+	const wrapper = document.createElement('div');
+	wrapper.className = 'aspect-ratio-selector-wrap';
+	wrapper.appendChild(hiddenInput);
+	wrapper.appendChild(group);
+
+	setSelected(defaultValue);
+	return wrapper;
 }
 
 function createSelectField(fieldKey, field, context) {
@@ -634,6 +741,7 @@ const FIELD_HANDLERS = {
 	textarea: createTextareaField,
 	text: createTextField,
 	select: createSelectField,
+	aspect_ratio_selector: createAspectRatioSelectorField,
 	boolean: createBooleanField,
 	image: createImageField,
 	image_array: createImageArrayField
@@ -654,7 +762,14 @@ export function isImageUrlArrayField(field) {
 	return field?.type === 'image_url_array';
 }
 
-export function getFieldType(fieldKey, field) {
+export function getFieldType(fieldKey, field, context) {
+	if (
+		fieldKey === 'aspect_ratio' &&
+		field?.type === 'select' &&
+		shouldUseAspectRatioSelector(context)
+	) {
+		return 'aspect_ratio_selector';
+	}
 	if (field?.type === 'color') return 'color';
 	if (field?.type === 'select') return 'select';
 	if (field?.type === 'boolean') return 'boolean';
@@ -674,7 +789,8 @@ export function getFieldType(fieldKey, field) {
  * @returns {HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement}
  */
 export function createFieldInput(fieldKey, field, context) {
-	const type = getFieldType(fieldKey, field);
+	const formContext = context?.formContext ?? context;
+	const type = getFieldType(fieldKey, field, formContext);
 	const handler = FIELD_HANDLERS[type] || FIELD_HANDLERS.text;
 	return handler(fieldKey, field, context);
 }
@@ -690,13 +806,13 @@ const DEFAULTS = {
 };
 
 /** Stable order: non-image fields first (config order), then image / image_array—config key order alone varies per method on the server. */
-function sortedProviderFieldKeys(fields) {
+function sortedProviderFieldKeys(fields, context) {
 	const keys = Object.keys(fields);
 	const imageKeys = [];
 	const restKeys = [];
 	for (const fieldKey of keys) {
 		const field = fields[fieldKey];
-		const t = getFieldType(fieldKey, field);
+		const t = getFieldType(fieldKey, field, context);
 		if (t === 'image' || t === 'image_array') imageKeys.push(fieldKey);
 		else restKeys.push(fieldKey);
 	}
@@ -716,22 +832,29 @@ function sortedProviderFieldKeys(fields) {
  * @param {string} [options.labelClassName] - Class for labels
  * @param {string} [options.requiredClassName] - Class for required asterisk span
  * @param {string} [options.fieldIdPrefix] - Prefix for input id/for (default 'field-')
+ * @param {{ serverId?: unknown, methodKey?: unknown, modelValue?: unknown }} [options.formContext] - Server/method/model for conditional field UI
  */
 export function renderFields(container, fields, options = {}) {
 	if (!container || !fields || typeof fields !== 'object') return;
 
 	const opts = { ...DEFAULTS, ...options };
-	const fieldKeys = sortedProviderFieldKeys(fields);
+	const formContext = opts.formContext && typeof opts.formContext === 'object' ? opts.formContext : null;
+	const fieldKeys = sortedProviderFieldKeys(fields, formContext);
 	if (fieldKeys.length === 0) return;
 
 	container.innerHTML = '';
 
 	fieldKeys.forEach((fieldKey) => {
 		const field = fields[fieldKey];
+		if (fieldKey === 'aspect_ratio' && !shouldUseAspectRatioSelector(formContext)) {
+			return;
+		}
 		const fieldGroup = document.createElement('div');
-		const type = getFieldType(fieldKey, field);
+		const type = getFieldType(fieldKey, field, formContext);
 		fieldGroup.className = type === 'boolean' ? 'form-group form-group-checkbox' : 'form-group';
-		if (field && (field.hidden === true || field.hidden === 'true')) {
+		fieldGroup.setAttribute('data-field-key', fieldKey);
+		const isProviderHidden = field && (field.hidden === true || field.hidden === 'true');
+		if (isProviderHidden && fieldKey !== 'aspect_ratio') {
 			fieldGroup.classList.add('field-hidden');
 			fieldGroup.setAttribute('data-field-hidden', 'true');
 		}
@@ -741,11 +864,15 @@ export function renderFields(container, fields, options = {}) {
 			requiredClassName: opts.requiredClassName,
 			fieldIdPrefix: opts.fieldIdPrefix
 		});
+		if (type === 'aspect_ratio_selector') {
+			label.id = `${opts.fieldIdPrefix}${fieldKey}-label`;
+		}
 		const input = createFieldInput(fieldKey, field, {
 			inputClassName: opts.inputClassName,
 			selectClassName: opts.selectClassName,
 			fieldIdPrefix: opts.fieldIdPrefix,
-			onValueChange: opts.onFieldChange
+			onValueChange: opts.onFieldChange,
+			formContext
 		});
 
 		fieldGroup.appendChild(label);

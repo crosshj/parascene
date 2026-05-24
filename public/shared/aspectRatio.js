@@ -1,10 +1,43 @@
 /** Known aspect ratio keys (provider / create UI). */
+import {
+	MUTATE_DEFAULT_METHOD_KEY,
+	MUTATE_DEFAULT_MODEL,
+	MUTATE_DEFAULT_SERVER_ID,
+} from './generationDefaults.js';
+
 export const ASPECT_RATIO_PRESETS = {
 	'1:1': [1, 1],
 	'4:5': [4, 5],
 	'9:16': [9, 16],
 	'16:9': [16, 9],
 };
+
+/** Short labels for grok-imagine aspect ratio selector (matches competitor UI). */
+export const ASPECT_RATIO_SELECTOR_LABELS = {
+	'16:9': 'cinema',
+	'3:2': 'landscape',
+	'5:4': 'computer',
+	'1:1': 'square',
+	'4:5': 'portrait',
+	'2:3': 'tablet',
+	'9:16': 'phone',
+};
+
+/**
+ * Visual aspect ratio picker on createAdvanced for grok-imagine + replicate on server 1.
+ * @param {{ serverId?: unknown, methodKey?: unknown, modelValue?: unknown } | null | undefined} context
+ * @returns {boolean}
+ */
+export function shouldUseAspectRatioSelector(context, {
+	serverId = MUTATE_DEFAULT_SERVER_ID,
+	methodKey = MUTATE_DEFAULT_METHOD_KEY,
+	modelValue = MUTATE_DEFAULT_MODEL,
+} = {}) {
+	if (!context || typeof context !== 'object') return false;
+	if (Number(context.serverId) !== Number(serverId)) return false;
+	if (String(context.methodKey || '') !== String(methodKey)) return false;
+	return String(context.modelValue || '') === String(modelValue);
+}
 
 /** Non-square ratios that use the extended detail-hero layout (1:1 keeps legacy square box). */
 export const EXTENDED_HERO_ASPECT_RATIOS = new Set(['4:5', '9:16', '16:9']);
