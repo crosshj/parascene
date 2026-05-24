@@ -175,6 +175,8 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			width: image?.width,
 			height: image?.height,
 			meta,
+			media_type: image?.media_type,
+			video_url: image?.video_url,
 		});
 		let layoutClass = layout ? ` hero-layout-${layout.mode}` : ' hero-layout-legacy';
 		if (layout?.mode === 'portrait') {

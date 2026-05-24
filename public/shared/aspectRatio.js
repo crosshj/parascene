@@ -134,12 +134,34 @@ export function portraitHeroSizing(w, h) {
 }
 
 /**
+ * True when a creation row represents video media (detail hero stays 1:1 square).
+ * @param {{ video_url?: unknown, media_type?: unknown, meta?: unknown } | null | undefined} creation
+ * @returns {boolean}
+ */
+export function creationHasVideo(creation) {
+	if (!creation || typeof creation !== 'object') return false;
+	if (typeof creation.video_url === 'string' && creation.video_url.trim()) return true;
+	const topMediaType = typeof creation.media_type === 'string' ? creation.media_type.trim() : '';
+	if (topMediaType === 'video') return true;
+	const meta = normalizeCreationMeta(creation.meta);
+	if (!meta) return false;
+	if (meta.video && typeof meta.video === 'object') return true;
+	const fp = typeof meta.file_path === 'string' ? meta.file_path.trim() : '';
+	if (fp.startsWith('/api/videos/created/')) return true;
+	const vf = typeof meta.video_filename === 'string' ? meta.video_filename : '';
+	if (vf.startsWith('video/')) return true;
+	return typeof meta.media_type === 'string' && meta.media_type === 'video';
+}
+
+/**
  * Extended hero layout applies only to supported non-square ratios (4:5, 9:16, 16:9)
  * or non-square stored dimensions. 1:1 keeps the legacy square container.
- * @param {{ width?: unknown, height?: unknown, meta?: unknown } | null | undefined} creation
+ * Video creations always use legacy 1:1 (do not infer ratio from dimensions/args).
+ * @param {{ width?: unknown, height?: unknown, meta?: unknown, media_type?: unknown, video_url?: unknown } | null | undefined} creation
  * @returns {boolean}
  */
 export function shouldUseExtendedHeroLayout(creation) {
+	if (creationHasVideo(creation)) return false;
 	const meta = normalizeCreationMeta(creation?.meta);
 	const argRaw = meta?.args?.aspect_ratio;
 	if (argRaw != null && String(argRaw).trim()) {
