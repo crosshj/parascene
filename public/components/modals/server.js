@@ -1447,6 +1447,13 @@ class AppModalServer extends HTMLElement {
 				renderProviderCapabilities(container, data.capabilities);
 			}
 
+			try {
+				localStorage.removeItem('create-servers-cache');
+			} catch (e) {
+				// ignore
+			}
+			window.dispatchEvent(new CustomEvent('parascene:servers-config-updated'));
+
 			// Reload server data
 			await this.loadServer(this.serverId);
 			this.renderEditMode();

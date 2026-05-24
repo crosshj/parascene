@@ -136,6 +136,7 @@ class AppRouteCreate extends HTMLElement {
 		this.fieldValues = {};
 		this.servers = [];
 		this.handleCreditsUpdated = this.handleCreditsUpdated.bind(this);
+		this.handleServersConfigUpdated = this.handleServersConfigUpdated.bind(this);
 		this.storageKey = 'create-page-selections';
 		this._advancedConfirm = null; // { serverId, args, cost } when cost dialog is open
 		this._promptFromUrl = null; // prompt from ?prompt= (landing page); applied when Basic tab has a prompt field
@@ -375,6 +376,7 @@ class AppRouteCreate extends HTMLElement {
 
 	disconnectedCallback() {
 		document.removeEventListener('credits-updated', this.handleCreditsUpdated);
+		document.removeEventListener('parascene:servers-config-updated', this.handleServersConfigUpdated);
 		if (this._boundPreviewEscape) {
 			document.removeEventListener('keydown', this._boundPreviewEscape);
 		}
@@ -565,12 +567,30 @@ class AppRouteCreate extends HTMLElement {
 		}
 
 		document.addEventListener('credits-updated', this.handleCreditsUpdated);
+		document.addEventListener('parascene:servers-config-updated', this.handleServersConfigUpdated);
 	}
 
-	/** True if both arrays have the same length and same id/name per index (so we can skip re-rendering). */
+	/** True if both arrays match id, name, and server_config (so we can skip re-rendering). */
 	serversListSame(a, b) {
 		if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
-		return a.every((s, i) => s?.id === b[i]?.id && s?.name === b[i]?.name);
+		return a.every((s, i) => {
+			const t = b[i];
+			if (s?.id !== t?.id || s?.name !== t?.name) return false;
+			return JSON.stringify(s?.server_config ?? null) === JSON.stringify(t?.server_config ?? null);
+		});
+	}
+
+	clearServersCache() {
+		try {
+			localStorage.removeItem('create-servers-cache');
+		} catch (e) {
+			// ignore
+		}
+	}
+
+	handleServersConfigUpdated() {
+		this.clearServersCache();
+		this.loadServers({ forceApply: true });
 	}
 
 	/** Process raw API servers (filter + parse server_config) into form we use. */
@@ -671,7 +691,8 @@ class AppRouteCreate extends HTMLElement {
 	}
 
 	/** Cache-then-refresh: show cached servers immediately if available (localStorage), then refresh in background. */
-	loadServers() {
+	loadServers(options = {}) {
+		const { forceApply = false } = options;
 		const CACHE_KEY = 'create-servers-cache';
 		const storage = typeof localStorage !== 'undefined' ? localStorage : null;
 		try {
@@ -706,8 +727,8 @@ class AppRouteCreate extends HTMLElement {
 				} catch (e) {
 					// ignore
 				}
-				// Skip DOM update when API returned the same list (avoids rebuild + focus steal)
-				if (this.serversListSame(processed, this.servers)) return;
+				// Skip DOM update when API returned the same list and config (avoids rebuild + focus steal)
+				if (!forceApply && this.serversListSame(processed, this.servers)) return;
 				// Save focus before servers update; applyServers mutates selects and can steal focus
 				const promptEl = this.querySelector('[data-advanced-prompt]');
 				const hadFocusOnPrompt = promptEl && document.activeElement === promptEl;

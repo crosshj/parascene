@@ -48,6 +48,7 @@ let buildCreationCardShell;
 let renderCommentAvatarHtml;
 let uploadImageFile;
 let createReplyIndicatorElement;
+let applyHeroAspectLayoutToElement;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -167,6 +168,9 @@ async function loadDeps() {
 
 		const createSubmitMod = await import(`/shared/createSubmit.js${qs}`);
 		uploadImageFile = createSubmitMod.uploadImageFile;
+
+		const aspectRatioMod = await import(`/shared/aspectRatio.js${qs}`);
+		applyHeroAspectLayoutToElement = aspectRatioMod.applyHeroAspectLayoutToElement;
 	})();
 	return _depsPromise;
 }
@@ -1040,14 +1044,61 @@ async function loadCreation() {
 	const loadToken = ++loadCreationSequence;
 	const isCurrentLoad = () => loadToken === loadCreationSequence;
 
+	function heroImageDisplayedUrl() {
+		return (
+			imageEl.dataset.currentUrl ||
+			imageEl.currentSrc ||
+			imageEl.getAttribute('src') ||
+			''
+		);
+	}
+
 	function applyLoadedImageState() {
 		const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
 		if (modIcon) modIcon.remove();
 		imageWrapper?.classList.remove('image-loading', 'image-error', 'image-error-moderated');
-		if (imageEl.dataset.currentUrl) {
-			backgroundEl.style.backgroundImage = `url('${imageEl.dataset.currentUrl}')`;
+		const url = String(heroImageDisplayedUrl() || '').trim();
+		if (url) {
+			imageEl.dataset.currentUrl = url;
+			setHeroBackgroundUrl(url);
 		}
 		imageEl.style.visibility = 'visible';
+	}
+
+	function ensureHeroImageVisible() {
+		imageEl.style.visibility = 'visible';
+		imageWrapper?.classList.remove('image-loading', 'image-error', 'image-error-moderated');
+	}
+
+	/** @returns {boolean} true if src was assigned (false = already on this url) */
+	function assignHeroImageSrc(url) {
+		const next = String(url || '').trim();
+		if (!next) return false;
+		const prev = String(heroImageDisplayedUrl() || '').trim();
+		if (prev && urlsMatch(prev, next)) {
+			imageEl.dataset.currentUrl = next;
+			return false;
+		}
+		imageEl.dataset.currentUrl = next;
+		imageEl.src = next;
+		return true;
+	}
+
+	function normalizeHeroMediaUrl(url) {
+		const raw = String(url || '').trim();
+		if (!raw) return '';
+		try {
+			const parsed = new URL(raw, window.location.origin);
+			if (parsed.searchParams.has('creation_id')) {
+				parsed.searchParams.delete('creation_id');
+			}
+			if (!parsed.searchParams.toString()) {
+				parsed.search = '';
+			}
+			return parsed.href;
+		} catch {
+			return raw;
+		}
 	}
 
 	function urlsMatch(a, b) {
@@ -1055,6 +1106,9 @@ async function loadCreation() {
 		const right = String(b || '').trim();
 		if (!left || !right) return false;
 		if (left === right) return true;
+		const normLeft = normalizeHeroMediaUrl(left);
+		const normRight = normalizeHeroMediaUrl(right);
+		if (normLeft && normRight && normLeft === normRight) return true;
 		try {
 			return new URL(left, window.location.origin).href === new URL(right, window.location.origin).href;
 		} catch {
@@ -1062,12 +1116,28 @@ async function loadCreation() {
 		}
 	}
 
+	function setHeroBackgroundUrl(url) {
+		if (!backgroundEl) return;
+		const next = String(url || '').trim();
+		const prev = String(backgroundEl.dataset.bgUrl || '').trim();
+		if (!next) {
+			if (prev || backgroundEl.style.backgroundImage) {
+				delete backgroundEl.dataset.bgUrl;
+				backgroundEl.style.backgroundImage = '';
+			}
+			return;
+		}
+		if (prev && urlsMatch(prev, next)) return;
+		backgroundEl.dataset.bgUrl = next;
+		backgroundEl.style.backgroundImage = `url("${next.replace(/"/g, '\\"')}")`;
+	}
+
 	function hasLoadedHeroImage() {
 		return Boolean(imageEl.src && imageEl.complete && imageEl.naturalWidth > 0 && imageEl.style.visibility !== 'hidden');
 	}
 
 	function clearHeroImage() {
-		backgroundEl.style.backgroundImage = '';
+		setHeroBackgroundUrl('');
 		imageEl.style.visibility = 'hidden';
 		imageEl.removeAttribute('src');
 		delete imageEl.dataset.currentUrl;
@@ -1161,14 +1231,16 @@ async function loadCreation() {
 	function showHeroImage(nextUrl) {
 		const url = String(nextUrl || '').trim();
 		if (!url) return;
-		const currentUrl = imageEl.dataset.currentUrl || imageEl.getAttribute('src') || imageEl.currentSrc || '';
+		const currentUrl = String(heroImageDisplayedUrl() || '').trim();
 		if (urlsMatch(currentUrl, url)) {
 			imageEl.dataset.currentUrl = url;
 			if (hasLoadedHeroImage()) {
-				applyLoadedImageState();
-			} else {
-				imageWrapper?.classList.remove('image-error', 'image-error-moderated');
-				imageWrapper?.classList.add('image-loading');
+				return;
+			}
+			imageWrapper?.classList.remove('image-error', 'image-error-moderated');
+			imageWrapper?.classList.add('image-loading');
+			if (!currentUrl) {
+				assignHeroImageSrc(url);
 			}
 			return;
 		}
@@ -1184,12 +1256,17 @@ async function loadCreation() {
 		}
 		imageEl.dataset.pendingUrl = url;
 		if (heroImageWarmUrls.has(url)) {
-			imageEl.dataset.currentUrl = url;
 			delete imageEl.dataset.pendingUrl;
-			backgroundEl.style.backgroundImage = `url('${url}')`;
-			imageEl.src = url;
-			imageEl.style.visibility = 'visible';
-			imageWrapper?.classList.remove('image-loading', 'image-error', 'image-error-moderated');
+			if (!assignHeroImageSrc(url)) {
+				ensureHeroImageVisible();
+				return;
+			}
+			if (imageEl.complete && imageEl.naturalWidth > 0) {
+				applyLoadedImageState();
+			} else {
+				setHeroBackgroundUrl(url);
+				ensureHeroImageVisible();
+			}
 			return;
 		}
 
@@ -1202,12 +1279,17 @@ async function loadCreation() {
 				imageWrapper?.classList.add('image-error');
 				return;
 			}
-			imageEl.dataset.currentUrl = url;
 			delete imageEl.dataset.pendingUrl;
-			backgroundEl.style.backgroundImage = `url('${url}')`;
-			imageEl.src = url;
-			imageEl.style.visibility = 'visible';
-			imageWrapper?.classList.remove('image-loading', 'image-error', 'image-error-moderated');
+			if (!assignHeroImageSrc(url)) {
+				ensureHeroImageVisible();
+				return;
+			}
+			if (imageEl.complete && imageEl.naturalWidth > 0) {
+				applyLoadedImageState();
+			} else {
+				setHeroBackgroundUrl(url);
+				ensureHeroImageVisible();
+			}
 		});
 	}
 
@@ -1231,7 +1313,7 @@ async function loadCreation() {
 		}
 		const activeUrl = String(activeImg.getAttribute('src') || '').trim();
 		if (activeUrl) {
-			backgroundEl.style.backgroundImage = `url('${activeUrl}')`;
+			setHeroBackgroundUrl(activeUrl);
 		}
 		imageWrapper?.classList.remove('image-loading', 'image-error', 'image-error-moderated');
 		return true;
@@ -1299,7 +1381,7 @@ async function loadCreation() {
 			// Show error placeholder; do not clear moderated state — loadCreation() may have already set it for a failed creation
 			imageWrapper?.classList.remove('image-loading');
 			imageWrapper?.classList.add('image-error');
-			backgroundEl.style.backgroundImage = '';
+			setHeroBackgroundUrl('');
 			// Hide default browser broken-image UI
 			imageEl.style.visibility = 'hidden';
 		});
@@ -1307,7 +1389,12 @@ async function loadCreation() {
 
 	// If server-rendered image has already loaded before handlers attach, apply loaded state now.
 	if (imageEl.src && imageEl.complete && imageEl.naturalWidth > 0) {
-		applyLoadedImageState();
+		const srcUrl = String(imageEl.currentSrc || imageEl.getAttribute('src') || '').trim();
+		if (srcUrl) {
+			imageEl.dataset.currentUrl = srcUrl;
+			setHeroBackgroundUrl(srcUrl);
+		}
+		ensureHeroImageVisible();
 	}
 
 	// Attach video load/error handlers once for video creations
@@ -1339,7 +1426,7 @@ async function loadCreation() {
 				});
 				imageWrapper?.classList.remove('image-loading');
 				imageWrapper?.classList.add('image-error');
-				backgroundEl.style.backgroundImage = '';
+				setHeroBackgroundUrl('');
 				videoEl.style.display = 'none';
 				videoEl.removeAttribute('src');
 				try {
@@ -1437,6 +1524,8 @@ async function loadCreation() {
 		const creation = await response.json();
 		if (!isCurrentLoad()) return;
 
+		applyHeroAspectLayoutToElement(imageWrapper, creation);
+
 		// Fetch direct children (published creations with mutate_of_id = this id), order by created_at
 		const childrenPromise = fetch(`/api/create/images/${creationId}/children`, { credentials: 'include' })
 			.then((r) => (r.ok ? r.json() : []))
@@ -1502,7 +1591,7 @@ async function loadCreation() {
 
 			const bgUrl = creation.url || creation.thumbnail_url || null;
 			if (bgUrl) {
-				backgroundEl.style.backgroundImage = `url('${bgUrl}')`;
+				setHeroBackgroundUrl(bgUrl);
 			}
 
 			if (videoEl) {

@@ -7,6 +7,7 @@ import { verifyShareToken } from "./utils/shareLink.js";
 import { buildRequestMeta } from "./utils/analytics.js";
 import { buildSidebarPseudoStripListStaticHtml } from "../public/shared/chatSidebarRoster.js";
 import { isChatBroadcastMentionSlug } from "../public/shared/chatBroadcastMentions.js";
+import { portraitHeroSizing, resolveExtendedHeroLayout } from "../public/shared/aspectRatio.js";
 
 function getPageForUser(user) {
 	const roleToPage = {
@@ -167,12 +168,25 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 		return injected;
 	}
 
-	function injectCreationDetailHeroNsfwClass(pageHtml, image) {
+	function injectCreationDetailHeroWrapper(pageHtml, image) {
 		const isNsfw = isCreationImageNsfw(image);
-		const wrapperClass = `creation-detail-image-wrapper image-loading${isNsfw ? " nsfw" : ""}`;
+		const meta = parseImageMeta(image?.meta);
+		const layout = resolveExtendedHeroLayout({
+			width: image?.width,
+			height: image?.height,
+			meta,
+		});
+		let layoutClass = layout ? ` hero-layout-${layout.mode}` : ' hero-layout-legacy';
+		if (layout?.mode === 'portrait') {
+			layoutClass += ' hero-portrait-by-width';
+		}
+		const styleAttr = layout
+			? ` style="--hero-aspect-w: ${layout.w}; --hero-aspect-h: ${layout.h}; --hero-aspect-ratio: ${layout.w} / ${layout.h}"`
+			: '';
+		const wrapperClass = `creation-detail-image-wrapper image-loading${layoutClass}${isNsfw ? " nsfw" : ""}`;
 		return String(pageHtml ?? "").replace(
 			/<div class="creation-detail-image-wrapper image-loading">/,
-			`<div class="${wrapperClass}">`
+			'<div class="' + wrapperClass + '"' + styleAttr + '>'
 		);
 	}
 
@@ -1098,7 +1112,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 				includeMobileBottomNav ? "<app-navigation-mobile></app-navigation-mobile>" : ""
 			);
 			pageHtml = injectCreationDetailHeroMedia(pageHtml, image);
-			pageHtml = injectCreationDetailHeroNsfwClass(pageHtml, image);
+			pageHtml = injectCreationDetailHeroWrapper(pageHtml, image);
 
 			pageHtml = injectCommonHead(pageHtml, getPageTokens(req));
 
