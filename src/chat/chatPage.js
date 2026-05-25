@@ -2807,6 +2807,7 @@ export async function initChatPage(root, options = {}) {
 
 	function isOverlayCreateComposerPseudoChannel() {
 		return (
+			activePseudoChannelSlug === 'feed' ||
 			activePseudoChannelSlug === 'creations' ||
 			activePseudoChannelSlug === 'comments' ||
 			activePseudoChannelSlug === 'explore' ||
@@ -2814,14 +2815,18 @@ export async function initChatPage(root, options = {}) {
 		);
 	}
 
+	/** Doom scroll lane: full-screen video — no bottom composer. */
+	function isFeedDoomLaneHideBottomComposers() {
+		return activePseudoChannelSlug === 'feed_doom';
+	}
+
 	/** Pseudo lanes on mobile: no overlay create composer (use /create from nav). */
 	function isMobilePseudoChannelHideBottomComposers() {
-		return (
-			isChatPageMobileLayout() &&
-			(activePseudoChannelSlug === 'feed' ||
-				activePseudoChannelSlug === 'feed_doom' ||
-				isOverlayCreateComposerPseudoChannel())
-		);
+		return isChatPageMobileLayout() && isOverlayCreateComposerPseudoChannel();
+	}
+
+	function shouldHideBottomComposers() {
+		return isFeedDoomLaneHideBottomComposers() || isMobilePseudoChannelHideBottomComposers();
 	}
 
 	/** Full create composer overlay — desktop/tablet pseudo channels only. */
@@ -2966,7 +2971,7 @@ export async function initChatPage(root, options = {}) {
 			return;
 		}
 		setFeedOverlayCreateComposerVisible(false);
-		if (isMobilePseudoChannelHideBottomComposers()) {
+		if (shouldHideBottomComposers()) {
 			clearChatComposerReplyTarget();
 			if (composerForm instanceof HTMLFormElement) {
 				delete composerForm.dataset.chatComposerMode;
@@ -7876,6 +7881,7 @@ export async function initChatPage(root, options = {}) {
 			creationsBulkChrome: laneSlug === 'creations',
 			enableComposerDragSource:
 				hide && (laneSlug === 'explore' || laneSlug === 'creations'),
+			performShellNavigation: navigateWithinChatShell,
 		};
 		if (laneSlug === 'feed') {
 			return {
@@ -11179,6 +11185,15 @@ export async function initChatPage(root, options = {}) {
 			) {
 				return;
 			}
+			/* Challenge engagement CTAs use card-level handlers + performShellNavigation (avoid SPA then reload). */
+			if (
+				link.closest('[data-engagement-enter-cta]') ||
+				link.closest('[data-challenge-title-link]') ||
+				link.closest('[data-engagement-vote-cta]') ||
+				link.closest('[data-engagement-cta]')
+			) {
+				return;
+			}
 			if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
 			const hrefAttr = (link.getAttribute('href') || '').trim();
 			if (!hrefAttr.startsWith('/')) return;
@@ -11188,6 +11203,7 @@ export async function initChatPage(root, options = {}) {
 				pathOnly === '/explore' ||
 				pathOnly === '/creations' ||
 				pathOnly === '/challenges' ||
+				pathOnly === '/create' ||
 				pathOnly.startsWith('/chat/');
 			if (!isFeedShellRoute) return;
 			navigateWithinChatShell(hrefAttr, e);

@@ -14,7 +14,12 @@ import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { verifyQStashRequest } from "./utils/qstashVerification.js";
 import { ACTIVE_SHARE_VERSION, mintShareToken, verifyShareToken } from "./utils/shareLink.js";
 import { getStyleInfo } from "./utils/createStyles.js";
-import { expandStyleSigilsForProvider, stripStyleSigilsFromPrompt } from "./utils/styleSigils.js";
+import {
+	applyPickerStyleModifiersToPrompt,
+	expandStyleSigilsForProvider,
+	resolveStyleModifiersForPicker,
+	stripStyleSigilsFromPrompt
+} from "./utils/styleSigils.js";
 import { applyVynlyShareWatermark } from "./utils/vynlyShareWatermark.js";
 import { creationRowIsVideo } from "./utils/vynlyShareFromCreation.js";
 import { sendBufferWithRangeSupport } from "./utils/sendBufferWithRangeSupport.js";
@@ -1502,14 +1507,18 @@ export default function createCreateRoutes({ queries, storage }) {
 				typeof argsForProvider.prompt === "string" ? argsForProvider.prompt.trim() : "";
 
 			// $style tokens in prompt: strip sigils and append "style:" section (all methods — not only advanced_generate).
-			// When the client sends style_key from the picker, modifiers come from that path — drop $ tokens only.
+			// When the client sends style_key (carousel or composer), resolve legacy + catalog styles — drop $ tokens.
 			if (typeof argsForProvider.prompt === "string") {
-				const styleKeyTrim =
-					typeof style_key === "string" ? style_key.trim() : "";
-				const styleFromPicker =
-					styleKeyTrim && styleKeyTrim !== "none" && getStyleInfo(styleKeyTrim);
-				if (styleFromPicker) {
-					argsForProvider.prompt = stripStyleSigilsFromPrompt(argsForProvider.prompt);
+				const pickerModifiers = await resolveStyleModifiersForPicker(
+					queries,
+					user.id,
+					typeof style_key === "string" ? style_key : ""
+				);
+				if (pickerModifiers !== null) {
+					argsForProvider.prompt = applyPickerStyleModifiersToPrompt(
+						argsForProvider.prompt,
+						pickerModifiers
+					);
 				} else {
 					const expanded = await expandStyleSigilsForProvider(
 						queries,
@@ -1538,14 +1547,22 @@ export default function createCreateRoutes({ queries, storage }) {
 			// Apply style transformation when style_key is provided (create.html flow). Store style in meta; user_prompt is originalPromptForMeta (captured above).
 			let styleForMeta = null;
 			if (style_key && typeof style_key === "string" && !isAdvancedGenerate) {
-				const styleInfo = getStyleInfo(style_key.trim());
+				const styleKeyTrim = style_key.trim();
+				const styleInfo = getStyleInfo(styleKeyTrim);
 				if (styleInfo) {
 					styleForMeta = { key: styleInfo.key, label: styleInfo.label, modifiers: styleInfo.modifiers };
-					if (styleInfo.modifiers && typeof argsForProvider.prompt === "string") {
-						const userPrompt = argsForProvider.prompt.trim();
-						if (userPrompt) {
-							argsForProvider.prompt = `# style\n${styleInfo.modifiers}\n\n# prompt\n${userPrompt}`;
-						}
+				} else {
+					const catalogMods = await resolveStyleModifiersForPicker(
+						queries,
+						user.id,
+						styleKeyTrim
+					);
+					if (catalogMods !== null) {
+						styleForMeta = {
+							key: styleKeyTrim,
+							label: styleKeyTrim,
+							modifiers: catalogMods
+						};
 					}
 				}
 			}

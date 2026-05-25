@@ -2,7 +2,7 @@
  * $-style tokens in prompts: extract, resolve (DB + legacy CREATE_STYLES), expand for provider.
  */
 
-import { getLegacyStyleModifiersForSlug } from "./createStyles.js";
+import { getLegacyStyleModifiersForSlug, getStyleInfo } from "./createStyles.js";
 
 /** Match $slug: slug starts with a letter (avoids $100, etc.). */
 const STYLE_SIGIL_RE = /\$([a-zA-Z][a-zA-Z0-9_-]*)/g;
@@ -52,18 +52,49 @@ async function resolveStyleModifiers(queries, userId, slug) {
 	const raw = typeof slug === "string" ? slug.trim() : "";
 	if (!raw) return null;
 
+	let hasCatalogRow = false;
 	const fn = queries.selectPromptInjectionStyleBySlugForUser?.get;
 	if (typeof fn === "function") {
 		const row = await fn(userId, raw);
 		if (row) {
+			hasCatalogRow = true;
 			if (typeof row.injection_text === "string" && row.injection_text.trim()) {
 				return row.injection_text.trim();
 			}
-			// Catalog row may exist for autocomplete but use legacy modifiers only.
 		}
 	}
 
-	return getLegacyStyleModifiersForSlug(raw);
+	const legacy = getLegacyStyleModifiersForSlug(raw);
+	if (legacy !== null) return legacy;
+	if (hasCatalogRow) return "";
+	return null;
+}
+
+/**
+ * Resolve modifiers for create.html / composer style_key (legacy preset or prompt-injection catalog).
+ * @returns {Promise<string | null>} null when style is unknown
+ */
+export async function resolveStyleModifiersForPicker(queries, userId, styleKey) {
+	const key = typeof styleKey === "string" ? styleKey.trim() : "";
+	if (!key || key === "none") return null;
+	const legacy = getStyleInfo(key);
+	if (legacy) return String(legacy.modifiers ?? "").trim();
+	return resolveStyleModifiers(queries, userId, key);
+}
+
+/**
+ * @param {string} promptText
+ * @param {string} modifiers
+ * @returns {string}
+ */
+export function applyPickerStyleModifiersToPrompt(promptText, modifiers) {
+	const userPrompt = stripStyleSigilsFromPrompt(
+		typeof promptText === "string" ? promptText : ""
+	);
+	const mods = typeof modifiers === "string" ? modifiers.trim() : "";
+	if (!mods) return userPrompt;
+	if (!userPrompt.trim()) return `style:\n${mods}`;
+	return `${userPrompt.trim()}\n\nstyle:\n${mods}`;
 }
 
 /**
@@ -88,11 +119,11 @@ export async function expandStyleSigilsForProvider(queries, userId, promptText) 
 
 	for (const t of tokens) {
 		const mods = await resolveStyleModifiers(queries, userId, t.slug);
-		if (!mods) {
+		if (mods === null) {
 			failed_styles.push({ token: `$${t.slug}`, reason: "style_not_found" });
 			continue;
 		}
-		modifiersParts.push(mods);
+		if (mods) modifiersParts.push(mods);
 		resolved.push({ slug: t.slug });
 	}
 

@@ -18,7 +18,8 @@ export function renderChallengeHeroImage(cfg, titleFallback) {
 			: 'Challenge image';
 	return `<section class="challenge-pane-section challenge-pane-hero-image-section" aria-label="Challenge image">
 			<div class="challenge-pane-hero-image-wrap challenge-pane-hero-image-wrap--strip challenge-pane-hero-image-wrap--pending" data-challenge-hero-pending data-challenge-hero-ref="${esc(raw)}">
-				<img class="challenge-pane-hero-image" alt="${esc(alt)}" loading="lazy" decoding="async" data-challenge-hero-img hidden />
+				<span class="challenge-pane-hero-image-placeholder" data-challenge-hero-placeholder aria-hidden="true"></span>
+				<img class="challenge-pane-hero-image" alt="${esc(alt)}" decoding="async" data-challenge-hero-img hidden />
 				<p class="challenge-pane-muted challenge-pane-hero-image-fallback" data-challenge-hero-fallback hidden></p>
 			</div>
 		</section>`;

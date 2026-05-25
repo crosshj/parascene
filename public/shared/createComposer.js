@@ -51,17 +51,25 @@ const STORAGE_KEYS = {
 	methodCredits: 'create_page_method_credits',
 };
 
-/** @typedef {{ selectValue: string, value: string, label: string, serverId: number, methodKey: string }} VideoModelOption */
+/** @typedef {{ selectValue: string, value: string, label: string, serverId: number, methodKey: string, methodLabel: string }} ComposerModelRouteOption */
+
+/** @typedef {ComposerModelRouteOption} VideoModelOption */
+
+/** @typedef {ComposerModelRouteOption} ImageModelOption */
+
+function encodeComposerRouteKey(serverId, methodKey, model) {
+	return `${serverId}\x1e${methodKey}\x1e${model}`;
+}
 
 function encodeVideoRouteKey(serverId, methodKey, model) {
-	return `${serverId}\x1e${methodKey}\x1e${model}`;
+	return encodeComposerRouteKey(serverId, methodKey, model);
 }
 
 /**
  * @param {string} key
  * @returns {{ serverId: number, methodKey: string, model: string } | null}
  */
-function parseVideoRouteKey(key) {
+function parseComposerRouteKey(key) {
 	const parts = String(key).split('\x1e');
 	if (parts.length < 3) return null;
 	const serverId = Number(parts[0]);
@@ -69,6 +77,96 @@ function parseVideoRouteKey(key) {
 	const model = parts.slice(2).join('\x1e');
 	if (!Number.isFinite(serverId) || serverId < 1 || !methodKey || !model) return null;
 	return { serverId, methodKey, model };
+}
+
+function parseVideoRouteKey(key) {
+	return parseComposerRouteKey(key);
+}
+
+/**
+ * @param {number} serverId
+ * @param {string} methodKey
+ * @param {string} model
+ * @param {string} label
+ * @param {string} [methodLabel]
+ * @returns {ImageModelOption}
+ */
+function toImageModelOption(serverId, methodKey, model, label, methodLabel) {
+	const value = String(model || '').trim();
+	const display = String(label || value).trim() || value;
+	const key = String(methodKey);
+	return {
+		selectValue: encodeComposerRouteKey(serverId, key, value),
+		value,
+		label: display,
+		serverId: Number(serverId),
+		methodKey: key,
+		methodLabel: String(methodLabel || '').trim() || getComposerMethodGroupLabel(null, key),
+	};
+}
+
+/**
+ * @param {unknown} methodDef
+ * @param {string} methodKey
+ * @returns {string}
+ */
+function getComposerMethodGroupLabel(methodDef, methodKey) {
+	if (methodDef && typeof methodDef === 'object') {
+		const name = /** @type {{ name?: unknown }} */ (methodDef).name;
+		if (typeof name === 'string' && name.trim()) return name.trim();
+	}
+	const key = String(methodKey || '').trim();
+	if (key === MUTATE_VIDEO_LTX_METHOD_KEY) return 'LTX Self-hosted';
+	if (key === MUTATE_VIDEO_DEFAULT_METHOD_KEY) return 'WAN Cloud';
+	return formatMethodKeyLabel(key);
+}
+
+/**
+ * @param {string} methodKey
+ * @returns {string}
+ */
+function formatMethodKeyLabel(methodKey) {
+	const key = String(methodKey || '').trim();
+	if (!key) return 'Other';
+	return key
+		.replace(/[_-]+/g, ' ')
+		.replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
+/**
+ * @param {ComposerModelRouteOption[]} routeOptions
+ * @param {(opt: ComposerModelRouteOption) => string} labelForOption
+ * @param {HTMLSelectElement} selectEl
+ */
+function appendGroupedRouteOptionsToSelect(selectEl, routeOptions, labelForOption) {
+	/** @type {Map<string, { groupLabel: string, options: ComposerModelRouteOption[] }>} */
+	const groups = new Map();
+	/** @type {string[]} */
+	const order = [];
+	for (const opt of routeOptions) {
+		const groupKey = `${opt.serverId}:${opt.methodKey}`;
+		if (!groups.has(groupKey)) {
+			order.push(groupKey);
+			groups.set(groupKey, {
+				groupLabel: opt.methodLabel || formatMethodKeyLabel(opt.methodKey),
+				options: [],
+			});
+		}
+		groups.get(groupKey).options.push(opt);
+	}
+	for (const groupKey of order) {
+		const group = groups.get(groupKey);
+		if (!group?.options.length) continue;
+		const optgroup = document.createElement('optgroup');
+		optgroup.label = group.groupLabel;
+		for (const opt of group.options) {
+			const option = document.createElement('option');
+			option.value = opt.selectValue;
+			option.textContent = labelForOption(opt) || opt.label || opt.value;
+			optgroup.appendChild(option);
+		}
+		selectEl.appendChild(optgroup);
+	}
 }
 
 function readStoredOutputMode() {
@@ -118,8 +216,6 @@ function readStoredAttachmentUrls() {
 		return [];
 	}
 }
-
-/** @typedef {{ value: string, label: string }} CreateComposerModelOption */
 
 /**
  * @param {unknown} raw — string[], { value, label }[], or { [modelId]: label } map from server_config.
@@ -216,9 +312,9 @@ function parseServerConfig(server) {
 }
 
 /**
- * All image-side model options on server 1 (same field source as Advanced create per method).
+ * Image model options on a server, each tied to the method that owns the model field.
  * @param {unknown} server
- * @returns {CreateComposerModelOption[]}
+ * @returns {ImageModelOption[]}
  */
 function collectImageModelOptionsFromServer(server) {
 	const cfg = parseServerConfig(server);
@@ -228,9 +324,11 @@ function collectImageModelOptionsFromServer(server) {
 					cfg.methods
 				)
 			: null;
-	if (!methods) return [];
+	if (!methods || !server) return [];
+	const serverId = Number(/** @type {{ id?: unknown }} */ (server).id);
+	if (!Number.isFinite(serverId) || serverId < 1) return [];
 	const seen = new Set();
-	/** @type {CreateComposerModelOption[]} */
+	/** @type {ImageModelOption[]} */
 	const out = [];
 	for (const [methodKey, methodDef] of Object.entries(methods)) {
 		if (
@@ -241,11 +339,14 @@ function collectImageModelOptionsFromServer(server) {
 		}
 		const field = methodDef?.fields?.model;
 		if (!field) continue;
+		const methodLabel = getComposerMethodGroupLabel(methodDef, methodKey);
 		const opts = normalizeModelOptions(field.options ?? field.choices ?? field.enum);
 		for (const opt of opts) {
-			if (!opt.value || seen.has(opt.value)) continue;
-			seen.add(opt.value);
-			out.push(opt);
+			if (!opt.value) continue;
+			const row = toImageModelOption(serverId, methodKey, opt.value, opt.label, methodLabel);
+			if (seen.has(row.selectValue)) continue;
+			seen.add(row.selectValue);
+			out.push(row);
 		}
 	}
 	return out;
@@ -309,6 +410,7 @@ function collectVideoModelOptionsFromServers(servers) {
 		label: 'LTX Self-hosted',
 		serverId: PARASCENE_BLUE_SERVER_ID,
 		methodKey: MUTATE_VIDEO_LTX_METHOD_KEY,
+		methodLabel: getComposerMethodGroupLabel(null, MUTATE_VIDEO_LTX_METHOD_KEY),
 	};
 
 	/** @type {VideoModelOption[]} */
@@ -324,7 +426,9 @@ function collectVideoModelOptionsFromServers(servers) {
 						cfg.methods
 					)
 				: null;
-		const field = methods?.[methodKey]?.fields?.model;
+		const methodDef = methods?.[methodKey];
+		const field = methodDef?.fields?.model;
+		const methodLabel = getComposerMethodGroupLabel(methodDef, methodKey);
 		let opts = normalizeModelOptions(field?.options ?? field?.choices ?? field?.enum);
 		if (opts.length === 0 && fallbackModel) {
 			opts = [{ value: fallbackModel, label: fallbackLabel || fallbackModel }];
@@ -340,6 +444,7 @@ function collectVideoModelOptionsFromServers(servers) {
 				label: opt.label,
 				serverId: Number(server.id),
 				methodKey,
+				methodLabel,
 			};
 			row.label = getVideoOptionLabel(row);
 			options.push(row);
@@ -373,6 +478,7 @@ function collectVideoModelOptionsFromServers(servers) {
 				label: 'WAN Cloud',
 				serverId: MUTATE_DEFAULT_SERVER_ID,
 				methodKey: MUTATE_VIDEO_DEFAULT_METHOD_KEY,
+				methodLabel: getComposerMethodGroupLabel(null, MUTATE_VIDEO_DEFAULT_METHOD_KEY),
 			};
 			wan.label = getVideoOptionLabel(wan);
 			options.push(wan);
@@ -384,7 +490,14 @@ function collectVideoModelOptionsFromServers(servers) {
 }
 
 async function fetchBasicModelOptions() {
-	const fallback = [{ value: BASIC_CREATE_DEFAULT_MODEL, label: BASIC_MODEL_DISPLAY }];
+	const fallback = [
+		toImageModelOption(
+			BASIC_CREATE_DEFAULT_SERVER_ID,
+			BASIC_CREATE_DEFAULT_METHOD_KEY,
+			BASIC_CREATE_DEFAULT_MODEL,
+			BASIC_MODEL_DISPLAY
+		),
+	];
 	try {
 		const result = await fetchServersForComposer();
 		if (!result?.ok) return fallback;
@@ -435,6 +548,7 @@ async function fetchVideoModelOptions() {
 		label: 'LTX Self-hosted',
 		serverId: PARASCENE_BLUE_SERVER_ID,
 		methodKey: MUTATE_VIDEO_LTX_METHOD_KEY,
+		methodLabel: getComposerMethodGroupLabel(null, MUTATE_VIDEO_LTX_METHOD_KEY),
 	};
 	try {
 		const result = await fetchServersForComposer();
@@ -530,7 +644,6 @@ export function mountCreateComposer(host, opts = {}) {
 
 	const navigate = opts.navigate === 'none' || opts.navigate === 'creations' ? opts.navigate : 'full';
 	const refreshAutoGrow = opts.refreshAutoGrowTextareas || (() => {});
-	const contentRoot = host.closest('.create-content') || host.parentElement;
 
 	const storedModelValue = readStoredModelValue();
 	const storedModelLabel = readStoredModelLabel();
@@ -603,18 +716,6 @@ export function mountCreateComposer(host, opts = {}) {
 									<span data-create-aspect-label>1:1</span>
 								</button>
 							</div>
-							<span class="create-composer-toolbar-divider" data-create-more-divider
-								aria-hidden="true"></span>
-							<button type="button" class="create-composer-toolbar-chip create-composer-toolbar-chip--icon create-composer-more-btn"
-								data-create-composer-more aria-haspopup="dialog" aria-expanded="false"
-								aria-label="Style and more">
-								<svg class="create-composer-toolbar-chip-icon" xmlns="http://www.w3.org/2000/svg"
-									viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-									<circle cx="12" cy="5" r="1.5"/>
-									<circle cx="12" cy="12" r="1.5"/>
-									<circle cx="12" cy="19" r="1.5"/>
-								</svg>
-							</button>
 						</div>
 						<div class="create-composer-toolbar-trail">
 							<p class="create-composer-cost" data-create-composer-cost aria-live="polite"></p>
@@ -638,15 +739,6 @@ export function mountCreateComposer(host, opts = {}) {
 					</div>
 				</div>
 			</div>
-			<div class="create-composer-sheet-backdrop" data-create-composer-sheet-backdrop hidden></div>
-			<div class="create-composer-sheet" data-create-composer-sheet hidden role="dialog" aria-label="Choose a style">
-				<div class="create-composer-sheet-header">
-					<span class="create-composer-sheet-title">Choose a style</span>
-					<button type="button" class="create-composer-sheet-close" data-create-composer-sheet-close
-						aria-label="Close">×</button>
-				</div>
-				<div class="create-composer-sheet-body" data-create-composer-sheet-body></div>
-			</div>
 		</div>
 	`;
 
@@ -656,11 +748,6 @@ export function mountCreateComposer(host, opts = {}) {
 	const promptInput = host.querySelector('[data-create-composer-prompt]');
 	const submitBtn = host.querySelector('[data-create-composer-submit]');
 	const advancedLink = host.querySelector('[data-create-composer-advanced]');
-	const moreBtn = host.querySelector('[data-create-composer-more]');
-	const sheetBackdrop = host.querySelector('[data-create-composer-sheet-backdrop]');
-	const sheet = host.querySelector('[data-create-composer-sheet]');
-	const sheetBody = host.querySelector('[data-create-composer-sheet-body]');
-	const sheetClose = host.querySelector('[data-create-composer-sheet-close]');
 	const modelLabel = host.querySelector('[data-create-model-label]');
 	const modelSelect = host.querySelector('[data-create-model-select]');
 	const aspectWrap = host.querySelector('[data-create-aspect-wrap]');
@@ -668,22 +755,12 @@ export function mountCreateComposer(host, opts = {}) {
 	const aspectPopover = host.querySelector('[data-create-aspect-popover]');
 	const aspectPopoverBody = host.querySelector('[data-create-aspect-popover-body]');
 	const aspectPopoverClose = host.querySelector('[data-create-aspect-popover-close]');
-	const moreDivider = host.querySelector('[data-create-more-divider]');
 	const aspectLabel = host.querySelector('[data-create-aspect-label]');
 	const modeBtns = host.querySelectorAll('[data-create-mode]');
 	const composerRoot = host.querySelector('.create-composer');
 	const composerDropSurface =
 		host.querySelector('.create-composer-input-shell') || composerRoot;
 	const costEl = host.querySelector('[data-create-composer-cost]');
-
-	const styleBlock = contentRoot?.querySelector('[data-create-style-block]');
-	const styleCards = styleBlock?.querySelector('.create-style-cards');
-	const styleColumns = styleCards ? styleCards.querySelectorAll('.create-style-column') : [];
-
-	if (styleBlock && sheetBody) {
-		sheetBody.appendChild(styleBlock);
-		styleBlock.hidden = false;
-	}
 
 	/** @type {(string|File)[]} */
 	let attachmentItems = [];
@@ -696,12 +773,19 @@ export function mountCreateComposer(host, opts = {}) {
 	let selectedAspect = '1:1';
 	/** @type {'image' | 'video'} */
 	let outputMode = readStoredOutputMode();
-	/** @type {CreateComposerModelOption[]} */
-	let imageModelOptions = [{ value: initialModelValue, label: initialModelLabel }];
+	/** @type {ImageModelOption[]} */
+	let imageModelOptions = [
+		toImageModelOption(
+			BASIC_CREATE_DEFAULT_SERVER_ID,
+			BASIC_CREATE_DEFAULT_METHOD_KEY,
+			initialModelValue || BASIC_CREATE_DEFAULT_MODEL,
+			initialModelLabel || BASIC_MODEL_DISPLAY
+		),
+	];
 	/** @type {VideoModelOption[]} */
 	let videoModelOptions = [];
-	/** @type {CreateComposerModelOption[]} */
-	let modelOptions = imageModelOptions;
+	/** @type {{ value: string, label: string }[]} */
+	let modelOptions = imageModelOptions.map((o) => ({ value: o.selectValue, label: o.label }));
 	let selectedModel = initialModelValue;
 	const mutateOptions = {
 		serverId: MUTATE_DEFAULT_SERVER_ID,
@@ -798,10 +882,18 @@ export function mountCreateComposer(host, opts = {}) {
 	}
 
 	function getFormFieldContext() {
+		if (isVideoMode()) {
+			return {
+				serverId: BASIC_CREATE_DEFAULT_SERVER_ID,
+				methodKey: BASIC_CREATE_DEFAULT_METHOD_KEY,
+				modelValue: '',
+			};
+		}
+		const route = getSelectedImageRoute();
 		return {
-			serverId: BASIC_CREATE_DEFAULT_SERVER_ID,
-			methodKey: BASIC_CREATE_DEFAULT_METHOD_KEY,
-			modelValue: isVideoMode() ? '' : selectedModel,
+			serverId: route?.serverId ?? BASIC_CREATE_DEFAULT_SERVER_ID,
+			methodKey: route?.methodKey ?? BASIC_CREATE_DEFAULT_METHOD_KEY,
+			modelValue: route?.value ?? selectedModel,
 		};
 	}
 
@@ -818,7 +910,7 @@ export function mountCreateComposer(host, opts = {}) {
 		if (isVideoMode()) {
 			return videoModelOptions.map((o) => ({ value: o.selectValue, label: o.label }));
 		}
-		return imageModelOptions;
+		return imageModelOptions.map((o) => ({ value: o.selectValue, label: o.label }));
 	}
 
 	function saveModelSelection(value) {
@@ -827,8 +919,10 @@ export function mountCreateComposer(host, opts = {}) {
 				localStorage.setItem(STORAGE_KEYS.videoModel, value);
 			} else {
 				localStorage.setItem(STORAGE_KEYS.model, value);
-				const match = imageModelOptions.find((o) => o.value === value);
-				const label = match?.label || value;
+				const match =
+					imageModelOptions.find((o) => o.selectValue === value) ||
+					imageModelOptions.find((o) => o.value === value);
+				const label = match?.label || match?.value || value;
 				if (label) localStorage.setItem(STORAGE_KEYS.modelLabel, label);
 			}
 		} catch (_) {}
@@ -852,6 +946,35 @@ export function mountCreateComposer(host, opts = {}) {
 		return videoModelOptions.find((o) => o.selectValue === fallbackKey) || videoModelOptions[0];
 	}
 
+	function getDefaultImageSelectValue() {
+		const preferred = imageModelOptions.find(
+			(o) =>
+				o.serverId === BASIC_CREATE_DEFAULT_SERVER_ID &&
+				o.methodKey === BASIC_CREATE_DEFAULT_METHOD_KEY &&
+				o.value === BASIC_CREATE_DEFAULT_MODEL
+		);
+		return preferred?.selectValue || imageModelOptions[0]?.selectValue || '';
+	}
+
+	function getSelectedImageRoute() {
+		const bySelect = imageModelOptions.find((o) => o.selectValue === selectedModel);
+		if (bySelect) return bySelect;
+		const parsed = parseComposerRouteKey(selectedModel);
+		if (parsed) {
+			const byRoute = imageModelOptions.find(
+				(o) =>
+					o.serverId === parsed.serverId &&
+					o.methodKey === parsed.methodKey &&
+					o.value === parsed.model
+			);
+			if (byRoute) return byRoute;
+		}
+		const byModel = imageModelOptions.find((o) => o.value === selectedModel);
+		if (byModel) return byModel;
+		const fallbackKey = getDefaultImageSelectValue();
+		return imageModelOptions.find((o) => o.selectValue === fallbackKey) || imageModelOptions[0];
+	}
+
 	function syncModelLabel() {
 		const list = getActiveModelList();
 		const match = list.find((o) => o.value === selectedModel);
@@ -859,7 +982,7 @@ export function mountCreateComposer(host, opts = {}) {
 		if (isVideoMode()) {
 			text = getVideoOptionLabel(getSelectedVideoRoute()) || text || 'LTX Self-hosted';
 		} else {
-			text = text || selectedModel || BASIC_MODEL_DISPLAY;
+			text = getSelectedImageRoute()?.label || text || selectedModel || BASIC_MODEL_DISPLAY;
 		}
 		if (modelLabel) modelLabel.textContent = text;
 		if (modelSelect instanceof HTMLSelectElement) {
@@ -870,32 +993,15 @@ export function mountCreateComposer(host, opts = {}) {
 		} catch (_) {}
 	}
 
-	function getModelOptionDisplayLabel(opt) {
-		if (isVideoMode()) {
-			return getVideoOptionLabel(
-				videoModelOptions.find((o) => o.selectValue === opt.value) || {
-					selectValue: opt.value,
-					value: opt.value,
-					label: opt.label,
-					serverId: 0,
-					methodKey: '',
-				}
-			);
-		}
-		return opt.label || opt.value;
-	}
-
 	function populateModelSelect() {
 		if (!(modelSelect instanceof HTMLSelectElement)) return;
 		const prev = selectedModel;
 		const list = getActiveModelList();
 		modelSelect.innerHTML = '';
-		for (const opt of list) {
-			const option = document.createElement('option');
-			option.value = opt.value;
-			option.textContent = getModelOptionDisplayLabel(opt) || opt.value;
-			modelSelect.appendChild(option);
-		}
+		const routeOptions = isVideoMode() ? videoModelOptions : imageModelOptions;
+		appendGroupedRouteOptionsToSelect(modelSelect, routeOptions, (opt) =>
+			isVideoMode() ? getVideoOptionLabel(opt) || opt.label || opt.value : opt.label || opt.value
+		);
 		let next;
 		if (isVideoMode()) {
 			try {
@@ -911,9 +1017,29 @@ export function mountCreateComposer(host, opts = {}) {
 				next = getDefaultVideoSelectValue();
 			}
 		} else {
-			next = list.some((o) => o.value === prev)
-				? prev
-				: list[0]?.value || BASIC_CREATE_DEFAULT_MODEL;
+			try {
+				const saved = localStorage.getItem(STORAGE_KEYS.model);
+				if (saved && imageModelOptions.some((o) => o.selectValue === saved)) {
+					next = saved;
+				} else if (saved) {
+					const legacy = imageModelOptions.find((o) => o.value === saved);
+					next = legacy?.selectValue;
+				}
+			} catch (_) {}
+			if (!next) {
+				const parsed = parseComposerRouteKey(prev);
+				if (parsed) {
+					const legacy = imageModelOptions.find(
+						(o) =>
+							o.serverId === parsed.serverId &&
+							o.methodKey === parsed.methodKey &&
+							o.value === parsed.model
+					);
+					next = legacy?.selectValue;
+				}
+			}
+			if (!next && list.some((o) => o.value === prev)) next = prev;
+			if (!next) next = getDefaultImageSelectValue() || list[0]?.value || '';
 		}
 		modelSelect.value = next;
 		selectedModel = next;
@@ -939,15 +1065,32 @@ export function mountCreateComposer(host, opts = {}) {
 		imageModelOptions =
 			Array.isArray(imageOpts) && imageOpts.length > 0
 				? imageOpts
-				: [{ value: BASIC_CREATE_DEFAULT_MODEL, label: BASIC_MODEL_DISPLAY }];
+				: [
+						toImageModelOption(
+							BASIC_CREATE_DEFAULT_SERVER_ID,
+							BASIC_CREATE_DEFAULT_METHOD_KEY,
+							BASIC_CREATE_DEFAULT_MODEL,
+							BASIC_MODEL_DISPLAY
+						),
+					];
 		videoModelOptions = sortVideoModelOptions(
 			Array.isArray(videoOpts) && videoOpts.length > 0 ? videoOpts : [buildBootstrapVideoOption()]
 		);
-		if (!imageModelOptions.some((o) => o.value === selectedModel) && !isVideoMode()) {
-			const fallback =
-				imageModelOptions.find((o) => o.value === BASIC_CREATE_DEFAULT_MODEL) ||
-				imageModelOptions[0];
-			if (fallback) selectedModel = fallback.value;
+		if (!isVideoMode()) {
+			const stillValid =
+				imageModelOptions.some((o) => o.selectValue === selectedModel) ||
+				imageModelOptions.some((o) => o.value === selectedModel) ||
+				parseComposerRouteKey(selectedModel) != null;
+			if (!stillValid) {
+				const fallback =
+					imageModelOptions.find(
+						(o) =>
+							o.serverId === BASIC_CREATE_DEFAULT_SERVER_ID &&
+							o.methodKey === BASIC_CREATE_DEFAULT_METHOD_KEY &&
+							o.value === BASIC_CREATE_DEFAULT_MODEL
+					) || imageModelOptions[0];
+				if (fallback) selectedModel = fallback.selectValue;
+			}
 		}
 		modelOptions = getActiveModelList();
 		populateModelSelect();
@@ -993,10 +1136,9 @@ export function mountCreateComposer(host, opts = {}) {
 			if (!mutateOptions.serverId || !mutateOptions.methodKey) return null;
 			return { serverId: mutateOptions.serverId, methodKey: mutateOptions.methodKey };
 		}
-		return {
-			serverId: BASIC_CREATE_DEFAULT_SERVER_ID,
-			methodKey: BASIC_CREATE_DEFAULT_METHOD_KEY,
-		};
+		const route = getSelectedImageRoute();
+		if (!route) return null;
+		return { serverId: route.serverId, methodKey: route.methodKey };
 	}
 
 	function methodCreditCacheKey(serverId, methodKey) {
@@ -1041,6 +1183,7 @@ export function mountCreateComposer(host, opts = {}) {
 			label: 'LTX Self-hosted',
 			serverId: PARASCENE_BLUE_SERVER_ID,
 			methodKey: MUTATE_VIDEO_LTX_METHOD_KEY,
+			methodLabel: getComposerMethodGroupLabel(null, MUTATE_VIDEO_LTX_METHOD_KEY),
 		};
 		try {
 			const saved = localStorage.getItem(STORAGE_KEYS.videoModel);
@@ -1052,6 +1195,7 @@ export function mountCreateComposer(host, opts = {}) {
 					label: '',
 					serverId: parsed.serverId,
 					methodKey: parsed.methodKey,
+					methodLabel: getComposerMethodGroupLabel(null, parsed.methodKey),
 				};
 				option.label = getVideoOptionLabel(option);
 			}
@@ -1254,9 +1398,6 @@ export function mountCreateComposer(host, opts = {}) {
 				submitBtn.setAttribute('aria-label', attached ? 'Edit image' : 'Create');
 			}
 		}
-		const showMore = !attached && !isVideoMode();
-		if (moreBtn instanceof HTMLElement) moreBtn.hidden = !showMore;
-		if (moreDivider instanceof HTMLElement) moreDivider.hidden = !showMore;
 		syncAspectFooterState();
 		updateSubmitButtonState();
 		syncComposerAccentFlow();
@@ -1269,12 +1410,6 @@ export function mountCreateComposer(host, opts = {}) {
 			localStorage.setItem(STORAGE_KEYS.prompt, value);
 			localStorage.setItem(STORAGE_KEYS.promptText, value);
 			localStorage.setItem(STORAGE_KEYS.promptImageEdit, value);
-		} catch (_) {}
-	}
-
-	function saveStyleIndex(index) {
-		try {
-			localStorage.setItem(STORAGE_KEYS.styleIndex, String(index ?? ''));
 		} catch (_) {}
 	}
 
@@ -1463,15 +1598,33 @@ export function mountCreateComposer(host, opts = {}) {
 		});
 	}
 
+	function firstStyleSigilKey(text) {
+		const m = String(text || '').match(/\$([a-zA-Z][a-zA-Z0-9_-]*)/);
+		return m && m[1] ? m[1].toLowerCase() : '';
+	}
+
+	function resolveSubmitStyleKey(promptText) {
+		let key = getSelectedStyleKey();
+		if (!key || key === 'none') {
+			const fromSigil = firstStyleSigilKey(promptText);
+			if (fromSigil) key = fromSigil;
+		}
+		return key && key !== 'none' ? key : undefined;
+	}
+
 	function getSelectedStyleKey() {
-		const section = styleBlock?.querySelector('.create-style-section');
-		const selected = section?.querySelector('.create-style-card.is-selected');
-		if (selected) return selected.getAttribute('data-key') || 'none';
 		try {
 			return (localStorage.getItem(STORAGE_KEYS.styleSelected) || 'none').trim();
 		} catch {
 			return 'none';
 		}
+	}
+
+	function syncStyleSelectionFromPrompt() {
+		if (!(promptInput instanceof HTMLTextAreaElement)) return;
+		const slug = firstStyleSigilKey(promptInput.value);
+		if (!slug) return;
+		saveStyleSelected(slug);
 	}
 
 	function setComposerSubmitting(active) {
@@ -1586,30 +1739,6 @@ export function mountCreateComposer(host, opts = {}) {
 		}
 	}
 
-	function selectCard(card) {
-		const key = card?.getAttribute('data-key');
-		if (!key) return;
-		const cards = styleBlock?.querySelectorAll('.create-style-card');
-		if (cards?.length) {
-			cards.forEach((c) => c.classList.remove('is-selected'));
-			card.classList.add('is-selected');
-		}
-		saveStyleSelected(key);
-	}
-
-	function scrollToStyleColumnAndUpdateDots(index) {
-		if (!styleCards || !styleColumns.length) return;
-		const step = styleColumns[0].offsetWidth + (parseFloat(getComputedStyle(styleCards).gap) || 12);
-		const i = Math.max(0, Math.min(index, styleColumns.length - 1));
-		styleCards.scrollLeft = i * step;
-		const dotsWrap = styleCards.closest('.create-style-section')?.querySelector('.create-style-dots');
-		const dots = dotsWrap?.querySelectorAll('.create-style-dot');
-		if (dots?.length) {
-			const activeStart = Math.max(0, Math.min(i, styleColumns.length - 4));
-			dots.forEach((d, j) => d.classList.toggle('is-active', j >= activeStart && j < activeStart + 4));
-		}
-	}
-
 	function positionAspectPopover() {
 		if (!aspectPopover || !aspectBtn || aspectPopover.hidden) return;
 		const rect = aspectBtn.getBoundingClientRect();
@@ -1626,16 +1755,6 @@ export function mountCreateComposer(host, opts = {}) {
 			buildAspectPopover();
 			positionAspectPopover();
 		}
-	}
-
-	function setStyleSheetOpen(open) {
-		if (!sheet || !sheetBackdrop) return;
-		const on = Boolean(open);
-		if (on) setAspectPopoverOpen(false);
-		sheet.hidden = !on;
-		sheetBackdrop.hidden = !on;
-		if (moreBtn) moreBtn.setAttribute('aria-expanded', on ? 'true' : 'false');
-		document.body.classList.toggle('create-composer-sheet-open', on);
 	}
 
 	function updateAspectBtnLabel(ratio) {
@@ -1845,9 +1964,10 @@ export function mountCreateComposer(host, opts = {}) {
 				alert('Please choose an image.');
 				return;
 			}
+			const imageRoute = getSelectedImageRoute();
 			const mutateArgs = {
 				prompt: userPrompt,
-				model: selectedModel,
+				model: imageRoute?.value || selectedModel,
 				input_images: imageUrls,
 			};
 			if (imageUrls.length === 1) mutateArgs.image_url = imageUrls[0];
@@ -1890,19 +2010,25 @@ export function mountCreateComposer(host, opts = {}) {
 			return;
 		}
 
-		const styleKey = getSelectedStyleKey();
+		const imageRoute = getSelectedImageRoute();
+		const submitRoute = getComposerSubmitRoute();
+		if (!imageRoute || !submitRoute) {
+			setComposerSubmitting(false);
+			return;
+		}
+		const styleKey = resolveSubmitStyleKey(userPrompt);
 		const args = buildSubmitArgs(
-			{ prompt: userPrompt, model: selectedModel },
+			{ prompt: userPrompt, model: imageRoute.value },
 			getAspectRatioForSubmit(),
 			getFormFieldContext()
 		);
 		const mentions = extractMentions(userPrompt);
 		if (mentions.length === 0) {
 			dispatchCreationSubmit({
-				serverId: BASIC_CREATE_DEFAULT_SERVER_ID,
-				methodKey: BASIC_CREATE_DEFAULT_METHOD_KEY,
+				serverId: submitRoute.serverId,
+				methodKey: submitRoute.methodKey,
 				args,
-				styleKey: styleKey !== 'none' ? styleKey : undefined,
+				styleKey,
 				hydrateMentions: false,
 			});
 			return;
@@ -1910,10 +2036,10 @@ export function mountCreateComposer(host, opts = {}) {
 		const validateResult = await validateMentionsSimple({ args: { prompt: userPrompt } });
 		if (validateResult.ok) {
 			dispatchCreationSubmit({
-				serverId: BASIC_CREATE_DEFAULT_SERVER_ID,
-				methodKey: BASIC_CREATE_DEFAULT_METHOD_KEY,
+				serverId: submitRoute.serverId,
+				methodKey: submitRoute.methodKey,
 				args,
-				styleKey: styleKey !== 'none' ? styleKey : undefined,
+				styleKey,
 				hydrateMentions: true,
 			});
 			return;
@@ -1921,10 +2047,10 @@ export function mountCreateComposer(host, opts = {}) {
 		const message = formatMentionsFailureForDialog(validateResult.data);
 		if (window.confirm(message + '\n\nSubmit anyway?')) {
 			dispatchCreationSubmit({
-				serverId: BASIC_CREATE_DEFAULT_SERVER_ID,
-				methodKey: BASIC_CREATE_DEFAULT_METHOD_KEY,
+				serverId: submitRoute.serverId,
+				methodKey: submitRoute.methodKey,
 				args,
-				styleKey: styleKey !== 'none' ? styleKey : undefined,
+				styleKey,
 				hydrateMentions: false,
 			});
 			return;
@@ -2006,6 +2132,7 @@ export function mountCreateComposer(host, opts = {}) {
 
 	if (promptInput) {
 		const onPromptInput = () => {
+			syncStyleSelectionFromPrompt();
 			schedulePromptSave();
 			updateSubmitButtonState();
 			try {
@@ -2162,159 +2289,23 @@ export function mountCreateComposer(host, opts = {}) {
 		window.removeEventListener('scroll', onRepositionToolbarPopovers, true);
 	});
 
-	if (moreBtn) {
-		const onMore = () => setStyleSheetOpen(sheet?.hidden);
-		moreBtn.addEventListener('click', onMore);
-		teardownFns.push(() => moreBtn.removeEventListener('click', onMore));
-	}
-	if (sheetClose) {
-		const onSheetClose = () => setStyleSheetOpen(false);
-		sheetClose.addEventListener('click', onSheetClose);
-		teardownFns.push(() => sheetClose.removeEventListener('click', onSheetClose));
-	}
-	if (sheetBackdrop) {
-		const onBackdrop = () => setStyleSheetOpen(false);
-		sheetBackdrop.addEventListener('click', onBackdrop);
-		teardownFns.push(() => sheetBackdrop.removeEventListener('click', onBackdrop));
-	}
-
 	if (submitBtn) {
 		const onSubmitClick = () => void handleSubmit();
 		submitBtn.addEventListener('click', onSubmitClick);
 		teardownFns.push(() => submitBtn.removeEventListener('click', onSubmitClick));
 	}
 
-	// Style carousel wiring
-	const allStyleCards = styleBlock?.querySelectorAll('.create-style-card');
-	if (allStyleCards?.length) {
-		allStyleCards.forEach((card, i) => {
-			card.setAttribute('data-color-index', String(i % 9));
-		});
-		import(`/pages/create-styles.js${qs}`)
-			.then(({ getStyleThumbUrl }) => {
-				allStyleCards.forEach((card) => {
-					const key = card.getAttribute('data-key');
-					if (!key) return;
-					const url = key === 'none' ? '/assets/style-thumbs/none.webp' : getStyleThumbUrl(key);
-					if (!url) return;
-					if (card.querySelector('.create-style-card-thumb')) return;
-					const img = document.createElement('img');
-					img.className = 'create-style-card-thumb';
-					img.src = url;
-					img.width = 140;
-					img.height = 160;
-					img.loading = 'lazy';
-					img.decoding = 'async';
-					img.alt = '';
-					card.insertBefore(img, card.firstChild);
-				});
-			})
-			.catch(() => {});
-
-		const savedStyleSelected = (() => {
-			try {
-				return (localStorage.getItem(STORAGE_KEYS.styleSelected) || '').trim();
-			} catch {
-				return '';
-			}
-		})();
-		const savedStyleIndex = (() => {
-			try {
-				const n = parseInt(localStorage.getItem(STORAGE_KEYS.styleIndex), 10);
-				return isNaN(n) ? null : n;
-			} catch {
-				return null;
-			}
-		})();
-
-		const runStyleRestore = () => {
-			let scrollIndex = null;
-			if (savedStyleSelected && styleCards) {
-				const selectedCard = Array.from(styleCards.querySelectorAll('.create-style-card')).find(
-					(c) => c.getAttribute('data-key') === savedStyleSelected
-				);
-				if (selectedCard) {
-					const column = selectedCard.closest('.create-style-column');
-					if (column) {
-						scrollIndex = Array.from(styleColumns).indexOf(column);
-						if (scrollIndex >= 0) selectedCard.classList.add('is-selected');
-					}
-				}
-			}
-			if (styleCards && !styleCards.querySelector('.create-style-card.is-selected')) {
-				const noneCard = Array.from(styleCards.querySelectorAll('.create-style-card')).find(
-					(c) => c.getAttribute('data-key') === 'none'
-				);
-				if (noneCard) {
-					noneCard.classList.add('is-selected');
-					const column = noneCard.closest('.create-style-column');
-					if (column) scrollIndex = Array.from(styleColumns).indexOf(column);
-				}
-			}
-			if (scrollIndex == null && savedStyleIndex != null && savedStyleIndex >= 0) scrollIndex = savedStyleIndex;
-			if (scrollIndex != null) scrollToStyleColumnAndUpdateDots(scrollIndex);
-		};
-		requestAnimationFrame(() => requestAnimationFrame(runStyleRestore));
-
-		const cardClickHandlers = [];
-		styleBlock?.querySelectorAll('.create-style-card[data-key]').forEach((card) => {
-			const handler = () => selectCard(card);
-			card.addEventListener('click', handler);
-			cardClickHandlers.push({ card, handler });
-		});
-
-		let styleSaveTimer;
-		const scheduleStyleSave = () => {
-			clearTimeout(styleSaveTimer);
-			styleSaveTimer = setTimeout(() => {
-				if (!styleCards || !styleColumns.length) return;
-				const step = styleColumns[0].offsetWidth + (parseFloat(getComputedStyle(styleCards).gap) || 12);
-				const index = Math.round(styleCards.scrollLeft / step);
-				const i = Math.max(0, Math.min(index, styleColumns.length - 1));
-				saveStyleIndex(i);
-				const dotsWrap = styleCards.closest('.create-style-section')?.querySelector('.create-style-dots');
-				const dots = dotsWrap?.querySelectorAll('.create-style-dot');
-				if (dots?.length) {
-					const activeStart = Math.max(0, Math.min(i, styleColumns.length - 4));
-					dots.forEach((d, j) => d.classList.toggle('is-active', j >= activeStart && j < activeStart + 4));
-				}
-			}, 200);
-		};
-		if (styleCards) {
-			styleCards.addEventListener('scroll', scheduleStyleSave, { passive: true });
-			if ('scrollend' in styleCards) styleCards.addEventListener('scrollend', scheduleStyleSave);
-			teardownFns.push(() => {
-				styleCards.removeEventListener('scroll', scheduleStyleSave);
-				if ('scrollend' in styleCards) styleCards.removeEventListener('scrollend', scheduleStyleSave);
-			});
-		}
-		teardownFns.push(() => {
-			for (const { card, handler } of cardClickHandlers) card.removeEventListener('click', handler);
-		});
-	}
-
 	return {
 		refreshModelOptions,
 		destroy() {
 			clearTimeout(promptSaveTimer);
-			setStyleSheetOpen(false);
 			setAspectPopoverOpen(false);
-			document.body.classList.remove('create-composer-sheet-open');
 			for (const fn of teardownFns) {
 				try {
 					fn();
 				} catch (_) {}
 			}
 			revokeAttachmentBlobUrls();
-			if (styleBlock && contentRoot && sheetBody?.contains(styleBlock)) {
-				const placeholder = document.createElement('div');
-				placeholder.setAttribute('data-create-style-block', '');
-				placeholder.hidden = true;
-				contentRoot.appendChild(placeholder);
-				styleBlock.hidden = true;
-				contentRoot.replaceChild(styleBlock, placeholder);
-				placeholder.remove();
-			}
 			host.innerHTML = '';
 		},
 	};

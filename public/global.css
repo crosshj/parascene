@@ -8751,6 +8751,48 @@ body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading {
 	flex: 0 0 auto;
 }
 
+.challenge-pane-hero-image-placeholder {
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	border-radius: inherit;
+	background: linear-gradient(
+		110deg,
+		color-mix(in srgb, var(--text) 6%, transparent) 8%,
+		color-mix(in srgb, var(--text) 12%, transparent) 18%,
+		color-mix(in srgb, var(--text) 6%, transparent) 33%
+	);
+	background-size: 200% 100%;
+	animation: challenge-pane-hero-image-shimmer 1.2s linear infinite;
+}
+
+.challenge-pane-hero-image-wrap--loaded .challenge-pane-hero-image-placeholder,
+.challenge-pane-hero-image-wrap--error .challenge-pane-hero-image-placeholder {
+	display: none;
+}
+
+@keyframes challenge-pane-hero-image-shimmer {
+	0% {
+		background-position: 200% 0;
+	}
+	100% {
+		background-position: -200% 0;
+	}
+}
+
+.challenge-pane-hero-image-wrap--loading .challenge-pane-hero-image[hidden],
+.challenge-pane-hero-image-wrap--pending .challenge-pane-hero-image[hidden] {
+	visibility: hidden;
+	opacity: 0;
+}
+
+.challenge-pane-hero-image-wrap--error {
+	min-height: 120px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
 .challenge-pane-hero-image-fallback {
 	margin: 0;
 	padding: 12px;

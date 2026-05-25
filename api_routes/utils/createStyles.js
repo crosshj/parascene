@@ -75,14 +75,14 @@ export function getLegacyStyleModifiersForSlug(slug) {
 	if (!slug || typeof slug !== 'string') return null;
 	const trimmed = slug.trim();
 	if (!trimmed) return null;
-	const direct = getStyleInfo(trimmed);
-	if (direct?.modifiers && String(direct.modifiers).trim()) return String(direct.modifiers).trim();
 	const lower = trimmed.toLowerCase();
+	if (lower === 'none') return '';
+	const direct = getStyleInfo(trimmed);
+	if (direct) return String(direct.modifiers ?? '').trim();
 	for (const key of Object.keys(CREATE_STYLES)) {
 		if (key.toLowerCase() === lower) {
 			const info = getStyleInfo(key);
-			const m = info?.modifiers != null ? String(info.modifiers).trim() : '';
-			return m || null;
+			return info ? String(info.modifiers ?? '').trim() : null;
 		}
 	}
 	return null;

@@ -44,32 +44,73 @@ async function hydrateChallengeHeroImage(rootEl) {
 	const raw = wrap.getAttribute('data-challenge-hero-ref') || '';
 	const img = wrap.querySelector('[data-challenge-hero-img]');
 	const fallback = wrap.querySelector('[data-challenge-hero-fallback]');
+	const placeholder = wrap.querySelector('[data-challenge-hero-placeholder]');
+
+	const showFallback = (message) => {
+		wrap.removeAttribute('data-challenge-hero-pending');
+		wrap.classList.remove(
+			'challenge-pane-hero-image-wrap--pending',
+			'challenge-pane-hero-image-wrap--loading'
+		);
+		wrap.classList.add('challenge-pane-hero-image-wrap--error');
+		if (img instanceof HTMLImageElement) {
+			img.removeAttribute('src');
+			img.hidden = true;
+		}
+		if (placeholder instanceof HTMLElement) placeholder.hidden = true;
+		if (fallback instanceof HTMLElement) {
+			fallback.hidden = false;
+			fallback.textContent = message;
+		}
+	};
 
 	let src = null;
 	const cref = parseHeroCreationOrShareRef(raw);
 	if (cref?.kind === 'creation') {
 		const data = await fetchCreationEmbedPayload(cref.creationId, cref.shareOpts);
 		src = imageUrlFromCreationPayload(data);
-	}
-	if (!src) {
+	} else {
 		src = parseHeroDirectMediaUrl(raw);
 	}
 
-	wrap.removeAttribute('data-challenge-hero-pending');
-	wrap.classList.remove('challenge-pane-hero-image-wrap--pending');
-
-	if (src && img instanceof HTMLImageElement) {
-		img.src = src;
-		img.hidden = false;
-		if (fallback instanceof HTMLElement) fallback.hidden = true;
+	if (!src || !(img instanceof HTMLImageElement)) {
+		showFallback('Could not load challenge image.');
 		return;
 	}
 
-	if (fallback instanceof HTMLElement) {
-		fallback.hidden = false;
-		fallback.textContent = 'Could not load challenge image.';
+	wrap.classList.add('challenge-pane-hero-image-wrap--loading');
+	if (fallback instanceof HTMLElement) fallback.hidden = true;
+
+	const revealLoaded = () => {
+		wrap.removeAttribute('data-challenge-hero-pending');
+		wrap.classList.remove(
+			'challenge-pane-hero-image-wrap--pending',
+			'challenge-pane-hero-image-wrap--loading',
+			'challenge-pane-hero-image-wrap--error'
+		);
+		wrap.classList.add('challenge-pane-hero-image-wrap--loaded');
+		if (placeholder instanceof HTMLElement) placeholder.hidden = true;
+		img.hidden = false;
+	};
+
+	img.addEventListener(
+		'load',
+		() => {
+			if (img.naturalWidth > 0) revealLoaded();
+		},
+		{ once: true }
+	);
+	img.addEventListener(
+		'error',
+		() => {
+			showFallback('Could not load challenge image.');
+		},
+		{ once: true }
+	);
+	img.src = src;
+	if (img.complete && img.naturalWidth > 0) {
+		revealLoaded();
 	}
-	if (img instanceof HTMLImageElement) img.hidden = true;
 }
 
 function consumeAutoOpenVoteIntentFromUrl() {

@@ -428,10 +428,25 @@ function escapeHtmlFeedCardText(s) {
 }
 
 /**
+ * @param {string} href
+ * @param {MouseEvent} e
+ * @param {null | ((href: string, ev: MouseEvent) => void)} performShellNavigation
+ */
+function navigateEngagementFeedCardHref(href, e, performShellNavigation) {
+	e.preventDefault();
+	if (typeof performShellNavigation === "function") {
+		performShellNavigation(href, e);
+		return;
+	}
+	window.location.href = href;
+}
+
+/**
  * Virtual engagement row from GET /api/feed (`type: "engagement"`).
  * @param {object} item
+ * @param {null | ((href: string, ev: MouseEvent) => void)} [performShellNavigation]
  */
-function buildEngagementFeedCard(item) {
+function buildEngagementFeedCard(item, performShellNavigation = null) {
 	const card = document.createElement("div");
 	card.className = "feed-card feed-card-engagement";
 	const rawId = typeof item.id === "string" ? item.id.trim() : "";
@@ -628,22 +643,21 @@ function buildEngagementFeedCard(item) {
 							return;
 						}
 					}
-					e.preventDefault();
 					const href = voteEl.getAttribute("href") || "/challenges";
-					window.location.href = href;
+					navigateEngagementFeedCardHref(href, e, performShellNavigation);
 				});
 			}
 			if (enterEl instanceof HTMLAnchorElement) {
 				enterEl.addEventListener("click", (e) => {
-					e.preventDefault();
-					window.location.href = enterEl.getAttribute("href") || "/create";
+					const href = enterEl.getAttribute("href") || "/create";
+					navigateEngagementFeedCardHref(href, e, performShellNavigation);
 				});
 			}
 			const titleLinkEl = card.querySelector("[data-challenge-title-link]");
 			if (titleLinkEl instanceof HTMLAnchorElement) {
 				titleLinkEl.addEventListener("click", (e) => {
-					e.preventDefault();
-					window.location.href = titleLinkEl.getAttribute("href") || "/challenges";
+					const href = titleLinkEl.getAttribute("href") || "/challenges";
+					navigateEngagementFeedCardHref(href, e, performShellNavigation);
 				});
 			}
 			const challengeCardListHref =
@@ -657,8 +671,7 @@ function buildEngagementFeedCard(item) {
 				if (el.closest(".feed-card-engagement-actions")) return;
 				if (el.closest("a[href]")) return;
 				if (el.closest("button")) return;
-				e.preventDefault();
-				window.location.href = challengeCardListHref;
+				navigateEngagementFeedCardHref(challengeCardListHref, e, performShellNavigation);
 			});
 		} else {
 			const ctaEl = card.querySelector("[data-engagement-cta]");
@@ -676,12 +689,12 @@ function buildEngagementFeedCard(item) {
 							return;
 						}
 					}
-					e.preventDefault();
 					if (isExternal && ctaEl.getAttribute("target") === "_blank") {
+						e.preventDefault();
 						window.open(ctaRoute, "_blank", "noopener,noreferrer");
-					} else {
-						window.location.href = ctaRoute;
+						return;
 					}
+					navigateEngagementFeedCardHref(ctaRoute, e, performShellNavigation);
 				});
 			}
 			const detailsEl = card.querySelector("[data-engagement-details]");
@@ -1372,6 +1385,7 @@ function finishFeedCreationCardMediaAndClick(
  *   creationsBulkChrome?: boolean,
  *   resolveCreationCardHref?: (item: object) => string | undefined,
  *   performCreationNavigation?: (href: string, ev: MouseEvent) => void,
+ *   performShellNavigation?: (href: string, ev: MouseEvent) => void,
  *   enableComposerDragSource?: boolean,
  * }} [options]
  */
@@ -1384,6 +1398,8 @@ export function createFeedItemCard(item, itemIndex, options = {}) {
 		typeof options.resolveCreationCardHref === 'function' ? options.resolveCreationCardHref : null;
 	const performCreationNavigation =
 		typeof options.performCreationNavigation === 'function' ? options.performCreationNavigation : null;
+	const performShellNavigation =
+		typeof options.performShellNavigation === 'function' ? options.performShellNavigation : null;
 	const enableComposerDragSource = options.enableComposerDragSource === true;
 	if (item.type === "tip") {
 		return buildFeedTipCard(item);
@@ -1392,7 +1408,7 @@ export function createFeedItemCard(item, itemIndex, options = {}) {
 		return buildFeedBlogPostCard(item);
 	}
 	if (item.type === "engagement") {
-		return buildEngagementFeedCard(item);
+		return buildEngagementFeedCard(item, performShellNavigation);
 	}
 	return buildFeedCreationCard(
 		item,
