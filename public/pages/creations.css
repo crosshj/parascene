@@ -2,13 +2,9 @@
 
 /* Create page: enough top padding so sticky header doesn't cover first row (e.g. Input Images Remove buttons) */
 body.create-page main {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: flex-start;
 	max-width: 1400px;
 	margin: 0 auto;
-	padding: 1.5rem 16px 48px;
+	padding: 36px 16px 48px;
 }
 
 .create-page-footer {
@@ -68,9 +64,10 @@ body.create-page main {
 	align-items: center;
 	gap: 1rem;
 	width: 100%;
-	max-width: min(100%, 42rem);
+	/* 4 style cards (140px each) + 3 gaps (0.75rem) */
+	max-width: calc(4 * 140px + 3 * 0.75rem);
 	margin: 0 auto;
-	padding: 0 1rem 2rem;
+	padding: 0;
 }
 
 [data-create-composer-host] {
@@ -1016,10 +1013,6 @@ body.create-composer-sheet-open {
 }
 
 @media (max-width: 768px) {
-	.create-content {
-		padding: 0 0.75rem 1.5rem;
-	}
-
 	.create-composer-toolbar {
 		padding: 4px var(--create-composer-pad-x) 6px;
 		gap: 0.1rem 0.4rem;

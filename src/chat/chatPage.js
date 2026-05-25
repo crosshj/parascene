@@ -2814,19 +2814,20 @@ export async function initChatPage(root, options = {}) {
 		);
 	}
 
-	function isMobilePseudoChannelWithoutCreateComposer() {
+	/** Pseudo lanes on mobile: no overlay create composer (use /create from nav). */
+	function isMobilePseudoChannelHideBottomComposers() {
 		return (
 			isChatPageMobileLayout() &&
-			(activePseudoChannelSlug === 'explore' ||
-				activePseudoChannelSlug === 'comments' ||
-				activePseudoChannelSlug === 'challenges')
+			(activePseudoChannelSlug === 'feed' ||
+				activePseudoChannelSlug === 'feed_doom' ||
+				isOverlayCreateComposerPseudoChannel())
 		);
 	}
 
-	/** Full create composer overlay — hidden on mobile #explore / #comments / #challenges. */
+	/** Full create composer overlay — desktop/tablet pseudo channels only. */
 	function shouldShowChatCreateComposerOverlay() {
 		if (!isOverlayCreateComposerPseudoChannel()) return false;
-		if (isMobilePseudoChannelWithoutCreateComposer()) return false;
+		if (isChatPageMobileLayout()) return false;
 		return true;
 	}
 
@@ -2965,11 +2966,7 @@ export async function initChatPage(root, options = {}) {
 			return;
 		}
 		setFeedOverlayCreateComposerVisible(false);
-		if (
-			activePseudoChannelSlug === 'feed' ||
-			activePseudoChannelSlug === 'feed_doom' ||
-			isMobilePseudoChannelWithoutCreateComposer()
-		) {
+		if (isMobilePseudoChannelHideBottomComposers()) {
 			clearChatComposerReplyTarget();
 			if (composerForm instanceof HTMLFormElement) {
 				delete composerForm.dataset.chatComposerMode;
