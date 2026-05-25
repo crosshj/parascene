@@ -2803,6 +2803,74 @@ export async function initChatPage(root, options = {}) {
 		if (target) target.classList.add('connect-chat-msg--reply-target');
 	}
 
+	let chatCreateComposerApi = null;
+
+	function isOverlayCreateComposerPseudoChannel() {
+		return (
+			activePseudoChannelSlug === 'creations' ||
+			activePseudoChannelSlug === 'comments' ||
+			activePseudoChannelSlug === 'explore' ||
+			activePseudoChannelSlug === 'challenges'
+		);
+	}
+
+	function isMobilePseudoChannelWithoutCreateComposer() {
+		return (
+			isChatPageMobileLayout() &&
+			(activePseudoChannelSlug === 'explore' ||
+				activePseudoChannelSlug === 'comments' ||
+				activePseudoChannelSlug === 'challenges')
+		);
+	}
+
+	/** Full create composer overlay — hidden on mobile #explore / #comments / #challenges. */
+	function shouldShowChatCreateComposerOverlay() {
+		if (!isOverlayCreateComposerPseudoChannel()) return false;
+		if (isMobilePseudoChannelWithoutCreateComposer()) return false;
+		return true;
+	}
+
+	function refreshChatCreateComposerModelsIfVisible() {
+		if (!chatCreateComposerApi?.refreshModelOptions) return;
+		const createComposerEl = root.querySelector('[data-chat-create-composer]');
+		if (createComposerEl instanceof HTMLElement && !createComposerEl.hidden) {
+			void chatCreateComposerApi.refreshModelOptions();
+		}
+	}
+
+	async function mountChatCreateComposer() {
+		if (chatCreateComposerApi) return;
+		const createComposerHost = root.querySelector('[data-create-composer-host]');
+		if (!(createComposerHost instanceof HTMLElement)) return;
+		try {
+			const v =
+				document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() ||
+				'';
+			const qs = v ? `?v=${encodeURIComponent(v)}` : '';
+			const { mountCreateComposer } = await import(`/shared/createComposer.js${qs}`);
+			chatCreateComposerApi = mountCreateComposer(createComposerHost, {
+				refreshAutoGrowTextareas: _cdAutogrow.refreshAutoGrowTextareas,
+				navigate: 'creations',
+				attachPromptSuggest: _cdTriggeredSuggest.attachCreateComposerSuggest,
+			});
+		} catch (err) {
+			console.error('[Chat page] create composer mount failed:', err);
+		}
+	}
+
+	function setFeedOverlayCreateComposerVisible(visible) {
+		const createComposerEl = root.querySelector('[data-chat-create-composer]');
+		if (createComposerEl instanceof HTMLElement) {
+			createComposerEl.hidden = !visible;
+		}
+		if (visible) {
+			refreshChatCreateComposerModelsIfVisible();
+		}
+		if (!document.body) return;
+		const shouldUseOverlay = Boolean(visible) && !shouldShowMobileSidebarFromLocation();
+		document.body.classList.toggle('chat-page--create-composer-overlay', shouldUseOverlay);
+	}
+
 	function applyComposerState() {
 		const composerForm = root.querySelector('[data-chat-composer]');
 		const bodyInput = root.querySelector('[data-chat-body-input]');
@@ -2853,6 +2921,7 @@ export async function initChatPage(root, options = {}) {
 				composerForm.hidden = true;
 			}
 			setMobileComposerOverlayClass(false);
+			setFeedOverlayCreateComposerVisible(false);
 			clearChatComposerReplyTarget();
 			return;
 		}
@@ -2862,6 +2931,7 @@ export async function initChatPage(root, options = {}) {
 				composerForm.hidden = true;
 			}
 			setMobileComposerOverlayClass(false);
+			setFeedOverlayCreateComposerVisible(false);
 			clearChatComposerReplyTarget();
 			return;
 		}
@@ -2870,16 +2940,35 @@ export async function initChatPage(root, options = {}) {
 				composerForm.hidden = true;
 			}
 			setMobileComposerOverlayClass(false);
+			setFeedOverlayCreateComposerVisible(false);
 			clearChatComposerReplyTarget();
 			return;
 		}
+		if (shouldShowChatCreateComposerOverlay()) {
+			clearChatComposerReplyTarget();
+			if (composerForm instanceof HTMLFormElement) {
+				delete composerForm.dataset.chatComposerMode;
+			}
+			clearChatPendingAttachments();
+			if (hint instanceof HTMLElement) {
+				hint.hidden = true;
+			}
+			if (composerForm instanceof HTMLElement) {
+				composerForm.hidden = true;
+			}
+			setMobileComposerOverlayClass(false);
+			setFeedOverlayCreateComposerVisible(true);
+			syncChatAttachmentsVisibility();
+			syncChatSendButton();
+			syncChatMessagePlaceholder();
+			syncChatExploreComposerChrome();
+			return;
+		}
+		setFeedOverlayCreateComposerVisible(false);
 		if (
 			activePseudoChannelSlug === 'feed' ||
 			activePseudoChannelSlug === 'feed_doom' ||
-			activePseudoChannelSlug === 'explore' ||
-			activePseudoChannelSlug === 'creations' ||
-			activePseudoChannelSlug === 'comments' ||
-			activePseudoChannelSlug === 'challenges'
+			isMobilePseudoChannelWithoutCreateComposer()
 		) {
 			clearChatComposerReplyTarget();
 			if (composerForm instanceof HTMLFormElement) {
@@ -3067,6 +3156,48 @@ export async function initChatPage(root, options = {}) {
 		} catch {
 			return fallback;
 		}
+	}
+
+	function mapPendingCreationToFeedItem(pending, viewerId, authorHints) {
+		const rawId = pending?.id;
+		const numId = Number(rawId);
+		const hasServerId =
+			Number.isFinite(numId) && numId > 0 && !String(rawId).startsWith('pending-');
+		const statusRaw = pending?.status || 'creating';
+		const status =
+			typeof statusRaw === 'string' ? statusRaw.trim().toLowerCase() : 'creating';
+		const handleRaw = authorHints?.handleRaw != null ? String(authorHints.handleRaw).trim() : '';
+		const displayName =
+			authorHints?.displayName != null ? String(authorHints.displayName).trim() : '';
+		const avatarUrl = authorHints?.avatarUrl != null ? String(authorHints.avatarUrl).trim() : '';
+		const uid = viewerId != null ? Number(viewerId) : NaN;
+		return {
+			created_image_id: hasServerId ? numId : null,
+			id: hasServerId ? numId : rawId,
+			title: 'Creating...',
+			summary: '',
+			status: status === 'pending' ? 'pending' : 'creating',
+			image_url: null,
+			thumbnail_url: null,
+			user_id: Number.isFinite(uid) ? uid : null,
+			author_user_name: handleRaw,
+			author_display_name: displayName,
+			author_avatar_url: avatarUrl,
+			created_at: pending?.created_at ?? new Date().toISOString(),
+			published: false,
+			published_at: null,
+			like_count: 0,
+			comment_count: 0,
+			viewer_liked: false,
+			nsfw: false,
+			is_moderated_error: false,
+			media_type: 'image',
+			video_url: null,
+			meta:
+				typeof pending?.creation_token === 'string' && pending.creation_token.trim()
+					? { creation_token: pending.creation_token.trim() }
+					: null,
+		};
 	}
 
 	function mapUserCreatedImageApiRowToFeedItem(img, viewerId, authorHints) {
@@ -7130,7 +7261,8 @@ export async function initChatPage(root, options = {}) {
 		const stillNear =
 			sentinel instanceof HTMLElement && isFeedChannelSentinelNearLoadEdge(sentinel, messagesEl);
 		setupFeedChannelLoadMoreObserver(messagesEl);
-		feedChannelLoadLatchArmed = false;
+		/* Re-arm when still in the preload band so we do not chain load-more on observer reconnect. */
+		feedChannelLoadLatchArmed = true;
 		feedChannelScrollWasNearLoadEdge = stillNear;
 		feedChannelSentinelWasIntersecting = stillNear;
 	}
@@ -7744,7 +7876,9 @@ export async function initChatPage(root, options = {}) {
 			setupFeedVideo,
 			hideFeedCardMetadata: hide,
 			preferThumbnail: laneSlug === 'explore' || laneSlug === 'creations',
-			creationsBulkChrome: laneSlug === 'creations'
+			creationsBulkChrome: laneSlug === 'creations',
+			enableComposerDragSource:
+				hide && (laneSlug === 'explore' || laneSlug === 'creations'),
 		};
 		if (laneSlug === 'feed') {
 			return {
@@ -8253,8 +8387,16 @@ export async function initChatPage(root, options = {}) {
 		}
 	}
 
+	let chatCreationsNavigateDetail = null;
+
 	async function loadCreationsChannelMessages(options = {}) {
-		const forceFreshFirstPage = options.forceFreshFirstPage === true;
+		const navOpts =
+			options.forceFreshFirstPage != null
+				? options
+				: chatCreationsNavigateDetail && typeof chatCreationsNavigateDetail === 'object'
+					? chatCreationsNavigateDetail
+					: {};
+		const forceFreshFirstPage = navOpts.forceFreshFirstPage === true;
 		const messagesEl = root.querySelector('[data-chat-messages]');
 		if (!messagesEl) return;
 		stopChatCreationsPseudoChannelPoll();
@@ -8318,7 +8460,10 @@ export async function initChatPage(root, options = {}) {
 				}
 				throw new Error(typeof r.reason === 'string' ? r.reason : 'Failed to load creations');
 			}
-			const ordered = pseudoColumnPager.getItems();
+			let ordered = pseudoColumnPager.getItems();
+			ordered = creationsPollMod.mergeSessionPendingIntoFeedItems(ordered, (p) =>
+				mapPendingCreationToFeedItem(p, viewerId, creationsAuthorHints)
+			);
 			lastChatMessagesPayload = [];
 			clearPageUsers();
 			addPageUsers(ordered.map(feedItemToUser));
@@ -10306,7 +10451,10 @@ export async function initChatPage(root, options = {}) {
 					if (messagesEl) {
 						messagesEl.removeAttribute('aria-busy');
 					}
-					await loadCreationsChannelMessages();
+					await loadCreationsChannelMessages({
+						forceFreshFirstPage:
+							chatCreationsNavigateDetail?.forceFreshFirstPage === true,
+					});
 					return;
 				}
 				if (slug === 'explore') {
@@ -11016,6 +11164,39 @@ export async function initChatPage(root, options = {}) {
 		bubbleSelector: '.connect-chat-msg-bubble',
 		openHooks: { beforeOpen: closeReactionPicker },
 	});
+	root.addEventListener(
+		'click',
+		(e) => {
+			if (!(root instanceof HTMLElement)) return;
+			if (!(e.target instanceof Element)) return;
+			const cardsHost = e.target.closest('[data-feed-channel-cards]');
+			if (!cardsHost || !root.contains(cardsHost)) return;
+			const link = e.target.closest('a[href]');
+			if (!(link instanceof HTMLAnchorElement)) return;
+			if (link.hasAttribute('data-profile-link')) return;
+			const voteCta = link.closest('[data-engagement-vote-cta]');
+			if (
+				voteCta instanceof HTMLAnchorElement &&
+				(voteCta.getAttribute('data-engagement-vote-action') || '').trim() ===
+					'challenge_vote_modal'
+			) {
+				return;
+			}
+			if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+			const hrefAttr = (link.getAttribute('href') || '').trim();
+			if (!hrefAttr.startsWith('/')) return;
+			const pathOnly = hrefAttr.split('?')[0].split('#')[0];
+			const isFeedShellRoute =
+				pathOnly === '/feed' ||
+				pathOnly === '/explore' ||
+				pathOnly === '/creations' ||
+				pathOnly === '/challenges' ||
+				pathOnly.startsWith('/chat/');
+			if (!isFeedShellRoute) return;
+			navigateWithinChatShell(hrefAttr, e);
+		},
+		true
+	);
 	root.addEventListener(
 		'click',
 		(e) => {
@@ -12811,6 +12992,15 @@ export async function initChatPage(root, options = {}) {
 		}
 		setMobileSidebarMode(shouldShowMobileSidebarFromLocation());
 	});
+	document.addEventListener('prsn-chat-open-path', (e) => {
+		chatCreationsNavigateDetail =
+			e && typeof e === 'object' && e.detail && typeof e.detail === 'object'
+				? e.detail
+				: { forceFreshFirstPage: true };
+		void openThreadForCurrentPath().finally(() => {
+			chatCreationsNavigateDetail = null;
+		});
+	});
 
 	async function acceptInviteFromHashIfPresent() {
 		const hash = String(window.location.hash || '');
@@ -12852,7 +13042,9 @@ export async function initChatPage(root, options = {}) {
 		void refreshChatSidebar();
 	}
 	await acceptInviteFromHashIfPresent();
+	await mountChatCreateComposer();
 	await openThreadForCurrentPath();
+	refreshChatCreateComposerModelsIfVisible();
 	dispatchChatUnreadRefresh();
 	/** Presence/UI poll: keep roster status fresh without force-refetching all thread metadata. */
 	chatSidebarPollTimer = setInterval(() => void refreshChatSidebar({ skipThreadsFetch: true }), 30000);
@@ -12866,6 +13058,7 @@ export async function initChatPage(root, options = {}) {
 	document.addEventListener('creations-pending-updated', () => {
 		if (activePseudoChannelSlug === 'creations') maybeStartChatCreationsPseudoChannelPoll();
 	});
+
 	setupChatSidebarClientNav();
 	await setupChatSidebarSectionAdds();
 }

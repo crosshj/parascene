@@ -17,27 +17,8 @@
 
 	<main>
 		<div class="create-content">
-			<app-tabs active="text-to-image">
-				<tab label="Text-To-Image" data-id="text-to-image" default>
-					<h1 class="create-title">What do you want to create?</h1>
-					<div class="create-prompt-wrap">
-						<textarea class="create-prompt-input prompt-editor" placeholder="Describe your creation..."
-							rows="3" data-autogrow="true"></textarea>
-						<a href="#" class="create-prompt-clear" tabindex="-1" aria-label="Clear field" data-prompt-clear>clear</a>
-					</div>
-					<!--
-					<div class="create-action-pills">
-						<button type="button" class="create-pill create-pill-surprise">Surprise Me</button>
-						<button type="button" class="create-pill create-pill-inspiration">
-							<span class="create-pill-icon" aria-hidden="true"></span>
-							Inspiration
-						</button>
-					</div>
-					-->
-					<button type="button" class="create-btn-generate btn-primary" disabled>Create</button>
-					<div class="create-style-divider">
-						<span class="create-style-divider-text">Choose a style</span>
-					</div>
+			<div data-create-composer-host></div>
+			<div data-create-style-block hidden>
 					<div class="create-style-section">
 						<div class="create-style-cards" role="list">
 							<div class="create-style-column">
@@ -205,78 +186,9 @@
 							<span class="create-style-dot"></span>
 						</div>
 					</div>
-				</tab>
-				<tab label="Image Edit" data-id="image-edit">
-					<h1 class="create-title">What do you want to change?</h1>
-					<div class="create-image-edit-wrap">
-						<div class="create-image-edit-box">
-							<div class="create-image-edit-area" role="button" tabindex="0" data-choose-image aria-label="Choose image">
-								<span class="create-image-edit-placeholder">Choose image</span>
-							</div>
-						</div>
-						<a href="#" class="create-change-image-link" id="create-change-image-link">change image</a>
-					</div>
-					<div class="create-prompt-wrap">
-						<textarea class="create-prompt-input prompt-editor" placeholder="Describe your changes..."
-							rows="3" data-autogrow="true"></textarea>
-						<a href="#" class="create-prompt-clear" tabindex="-1" aria-label="Clear field" data-prompt-clear>clear</a>
-					</div>
-					<button type="button" class="create-btn-generate btn-primary" disabled>Edit</button>
-				</tab>
-			</app-tabs>
+			</div>
 		</div>
-		<footer class="create-page-footer">
-			<nav class="create-page-footer-nav" aria-label="More create options">
-				<a href="/create" class="create-page-footer-link create-switch-to-advanced" id="create-switch-to-advanced">Advanced mode</a>
-			</nav>
-		</footer>
 	</main>
-	<script>
-		(function () {
-			var link = document.getElementById('create-switch-to-advanced');
-			if (link) {
-				link.addEventListener('click', function (e) {
-					e.preventDefault();
-					document.cookie = 'create_editor=; path=/; max-age=0';
-					window.location.href = '/create';
-				});
-			}
-		})();
-		(function () {
-			var el = document.querySelector('.create-style-cards');
-			if (!el) return;
-			var columns = el.querySelectorAll('.create-style-column');
-			if (!columns.length) return;
-			var dotsWrap = el.closest('.create-style-section').querySelector('.create-style-dots');
-			var dots = dotsWrap ? dotsWrap.querySelectorAll('.create-style-dot') : [];
-			var step = columns[0].offsetWidth + (parseFloat(getComputedStyle(el).gap) || 12);
-			var snapTimer;
-			function updateDots() {
-				var index = Math.round(el.scrollLeft / step);
-				index = Math.max(0, Math.min(index, columns.length - 4));
-				for (var i = 0; i < dots.length; i++) {
-					dots[i].classList.toggle('is-active', i >= index && i < index + 4);
-				}
-			}
-			function snapToNearest() {
-				var nearest = Math.round(el.scrollLeft / step) * step;
-				el.scrollTo({ left: nearest, behavior: 'auto' });
-				updateDots();
-			}
-			function scheduleSnap() {
-				updateDots();
-				clearTimeout(snapTimer);
-				snapTimer = setTimeout(snapToNearest, 50);
-			}
-			el.addEventListener('scroll', scheduleSnap, { passive: true });
-			if ('onscrollend' in el) {
-				el.addEventListener('scrollend', function () {
-					snapToNearest();
-				});
-			}
-			updateDots();
-		})();
-	</script>
 </body>
 
 </html>

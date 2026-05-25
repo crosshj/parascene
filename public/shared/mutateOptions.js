@@ -2,6 +2,8 @@
  * Mutate: server list from API; default server/method in ./generationDefaults.js.
  */
 
+import { isPublicGenerationServerId } from './generationDefaults.js';
+
 const _qs = (() => {
 	const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
 	return v ? `?v=${encodeURIComponent(v)}` : '';
@@ -44,7 +46,13 @@ export async function loadMutateServerOptions() {
 		if (!result?.ok) return [];
 		const servers = Array.isArray(result.data?.servers) ? result.data.servers : [];
 		return servers
-			.filter(server => !server.suspended && (server.id === 1 || server.is_owner === true || server.is_member === true))
+			.filter(
+				(server) =>
+					!server.suspended &&
+					(isPublicGenerationServerId(server.id) ||
+						server.is_owner === true ||
+						server.is_member === true)
+			)
 			.map(normalizeServerConfig)
 			.filter(Boolean);
 	} catch {

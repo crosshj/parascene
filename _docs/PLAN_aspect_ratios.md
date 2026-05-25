@@ -86,6 +86,10 @@ Reference mock — `_docs/PLAN_aspect_ratios_create_ui.png`
 
 ![create composer mock](PLAN_aspect_ratios_create_ui.png)
 
+Attached-image variant (thumb + add in header) — `_docs/PLAN_aspect_ratios_create_ui_attached.png`
+
+![create composer with attachment](PLAN_aspect_ratios_create_ui_attached.png)
+
 ### Today
 
 - `pages/create.html` — `app-tabs`: Text-To-Image + Image Edit

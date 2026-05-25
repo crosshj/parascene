@@ -16,6 +16,17 @@ import {
 
 const html = String.raw;
 
+/** Basic create composer + grid (overlay) — My Creations pseudo-channel in chat. */
+const MY_CREATIONS_CREATE_HREF = '/chat/c/creations';
+
+function isMyCreationsCreateDestination(pathname) {
+	return (
+		pathname === MY_CREATIONS_CREATE_HREF ||
+		pathname === '/creations' ||
+		pathname === '/create'
+	);
+}
+
 const AVATAR_URL_STORAGE_KEY = 'profile-avatar-url';
 
 class AppNavigation extends HTMLElement {
@@ -325,12 +336,11 @@ class AppNavigation extends HTMLElement {
 		if (createButtons.length === 0) return;
 
 		const pathname = window.location.pathname;
-		const currentRoute = pathname === '/' || pathname === '' ? this.defaultRoute : pathname.slice(1);
-		const isCreateRoute = currentRoute === 'create' || pathname === '/create';
+		const isCreateDestination = isMyCreationsCreateDestination(pathname);
 
 		createButtons.forEach(createButton => {
-			createButton.disabled = isCreateRoute;
-			createButton.classList.toggle('is-active', isCreateRoute);
+			createButton.disabled = isCreateDestination;
+			createButton.classList.toggle('is-active', isCreateDestination);
 		});
 	}
 
@@ -1060,11 +1070,11 @@ class AppNavigation extends HTMLElement {
 					e.stopPropagation();
 					return;
 				}
-				// Allow default navigation for link to /create (standalone create page)
-				if (createButton.getAttribute?.('href') === '/create') return;
+				const href = createButton.getAttribute?.('href');
+				if (href === MY_CREATIONS_CREATE_HREF || href === '/create') return;
 				e.preventDefault();
 				e.stopPropagation();
-				this.navigateToRoute('create');
+				window.location.href = MY_CREATIONS_CREATE_HREF;
 				if (createButton.closest('.mobile-menu')) {
 					this.closeMobileMenu();
 				}
@@ -1311,7 +1321,7 @@ class AppNavigation extends HTMLElement {
 				).join('')}
 			</nav>
 			${showCreate ? html`
-			<a href="/create" class="action-item create-button btn-primary">
+			<a href="${MY_CREATIONS_CREATE_HREF}" class="action-item create-button btn-primary">
 				Create
 			</a>
 			` : ''}
@@ -1414,7 +1424,7 @@ class AppNavigation extends HTMLElement {
 			${hasMobileActions ? html`
 			<div class="mobile-menu-actions">
 				${showCreate ? html`
-				<a href="/create" class="create-button btn-primary">
+				<a href="${MY_CREATIONS_CREATE_HREF}" class="create-button btn-primary">
 					Create
 				</a>
 				` : ''}

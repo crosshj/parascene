@@ -1,4 +1,5 @@
 import express from "express";
+import { isPublicGenerationServerId } from "../public/shared/generationDefaults.js";
 import { buildProviderHeaders, resolveProviderAuthToken } from "./utils/providerAuth.js";
 
 export default function createServersRoutes({ queries }) {
@@ -72,10 +73,10 @@ export default function createServersRoutes({ queries }) {
 			})());
 
 		return servers.map((server) => {
-			const isSpecial = server.id === 1;
+			const isPublicGen = isPublicGenerationServerId(server.id);
 			const isOwner = server.user_id === userId;
 			let isMember = isOwner || membershipSet.has(server.id);
-			if (isSpecial) isMember = true;
+			if (isPublicGen) isMember = true;
 			const canManage = isOwner || isAdmin;
 
 			const result = {
@@ -84,12 +85,12 @@ export default function createServersRoutes({ queries }) {
 				avatar_url: extractServerAvatarUrl(server),
 				description: server.description,
 				status: server.status,
-				members_count: isSpecial ? null : (server.members_count || 0),
+				members_count: isPublicGen ? null : (server.members_count || 0),
 				created_at: server.created_at,
 				is_owner: isOwner,
 				is_member: isMember,
 				can_manage: canManage,
-				can_join_leave: !isSpecial,
+				can_join_leave: !isPublicGen,
 				suspended: server.status === "suspended"
 			};
 
@@ -115,7 +116,7 @@ export default function createServersRoutes({ queries }) {
 				result.server_url = server.server_url;
 				result.auth_token = server.auth_token;
 				result.server_config = server.server_config;
-			} else if (server.server_config && (isSpecial || isMember)) {
+			} else if (server.server_config && (isPublicGen || isMember)) {
 				result.server_config = server.server_config;
 			}
 
@@ -166,12 +167,12 @@ export default function createServersRoutes({ queries }) {
 			return res.status(404).json({ error: "Server not found" });
 		}
 
-		const isSpecial = server.id === 1;
+		const isPublicGen = isPublicGenerationServerId(server.id);
 		// "Owner" means the user who originally created the server.
 		// Admins can still manage all servers, but are not treated as owners.
 		const isOwner = server.user_id === user.id;
 		let isMember = isOwner || await queries.checkServerMembership.get(serverId, user.id);
-		if (isSpecial) {
+		if (isPublicGen) {
 			isMember = true;
 		}
 		const canManage = isOwner || isAdmin;
@@ -182,13 +183,13 @@ export default function createServersRoutes({ queries }) {
 			avatar_url: extractServerAvatarUrl(server),
 			description: server.description,
 			status: server.status,
-			members_count: isSpecial ? null : (server.members_count || 0),
+			members_count: isPublicGen ? null : (server.members_count || 0),
 			created_at: server.created_at,
 			updated_at: server.updated_at,
 			is_owner: isOwner,
 			is_member: isMember,
 			can_manage: canManage,
-			can_join_leave: !isSpecial,
+			can_join_leave: !isPublicGen,
 			suspended: server.status === 'suspended',
 			viewer_is_admin: isAdmin
 		};
@@ -219,10 +220,8 @@ export default function createServersRoutes({ queries }) {
 			result.server_url = server.server_url;
 			result.auth_token = server.auth_token;
 			result.server_config = server.server_config;
-		} else if (server.server_config && (isSpecial || isMember)) {
-			// Special server's generation methods are available to all users.
-			// For non-special servers, expose server_config to members so they can
-			// see and use the available generation methods.
+		} else if (server.server_config && (isPublicGen || isMember)) {
+			// Parascene Home + Parascene Blue: methods available to all users.
 			result.server_config = server.server_config;
 		}
 

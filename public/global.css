@@ -2220,12 +2220,18 @@ header .hamburger-button.active span:nth-child(3) {
 }
 
 @media (max-width: 768px) {
+	:root {
+		--app-mobile-bottom-nav-stack-height: 60px;
+		--app-mobile-bottom-nav-dock-inset: var(--app-mobile-bottom-nav-stack-height);
+		--app-mobile-bottom-nav-clearance: calc(96px + env(safe-area-inset-bottom));
+	}
+
 	.mobile-bottom-nav-wrap {
 		display: flex;
 	}
 
 	body:not(.landing-page) main {
-		padding-bottom: calc(96px + env(safe-area-inset-bottom));
+		padding-bottom: var(--app-mobile-bottom-nav-clearance);
 	}
 }
 
@@ -9403,8 +9409,9 @@ body.chat-page .chat-page-pseudo-composer-hint {
 	flex-shrink: 0;
 }
 
-/* Top edge only: rounded upper corners, square lower corners (bottom bar) */
-body.chat-page .chat-page-input-shell {
+/* Bordered composer card shell (chat + create). */
+body.chat-page .chat-page-input-shell,
+.create-composer-input-shell {
 	display: flex;
 	flex-direction: column;
 	align-items: stretch;
@@ -9420,7 +9427,12 @@ body.chat-page .chat-page-input-shell {
 	transition: border-top-color 0.15s ease;
 }
 
-body.chat-page .chat-page-input-shell:focus-within {
+.create-composer .create-composer-input-shell {
+	overflow: visible;
+}
+
+body.chat-page .chat-page-input-shell:focus-within,
+.create-composer-input-shell:focus-within {
 	border-color: var(--focus);
 }
 

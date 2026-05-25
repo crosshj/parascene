@@ -55,8 +55,11 @@ async function resolveStyleModifiers(queries, userId, slug) {
 	const fn = queries.selectPromptInjectionStyleBySlugForUser?.get;
 	if (typeof fn === "function") {
 		const row = await fn(userId, raw);
-		if (row && typeof row.injection_text === "string" && row.injection_text.trim()) {
-			return row.injection_text.trim();
+		if (row) {
+			if (typeof row.injection_text === "string" && row.injection_text.trim()) {
+				return row.injection_text.trim();
+			}
+			// Catalog row may exist for autocomplete but use legacy modifiers only.
 		}
 	}
 

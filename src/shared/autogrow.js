@@ -93,6 +93,18 @@ export function attachAutoGrowTextarea(textarea, { maxHeightPx = DEFAULT_MAX_HEI
 	return refresh;
 }
 
+/**
+ * Match chat composer: on mobile (coarse/no fine pointer), Enter inserts a newline;
+ * on desktop, Enter submits and Shift+Enter inserts a newline.
+ */
+export function composerEnterKeySubmits() {
+	try {
+		return window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+	} catch {
+		return typeof window.innerWidth === 'number' && window.innerWidth >= 768;
+	}
+}
+
 export function refreshAutoGrowTextareas(root = document) {
 	const scope = root instanceof Document ? root : root instanceof HTMLElement ? root : document;
 	const textareas = Array.from(

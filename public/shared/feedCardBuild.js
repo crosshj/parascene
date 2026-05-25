@@ -595,6 +595,9 @@ function stampChatCreationsBulkDatasetOnFeedCard(card, item, preferThumbnail) {
 	card.dataset.groupCreation = isGroupCreation ? '1' : '0';
 	const imageUrlRaw = feedItemCardImageUrl(item, preferThumbnail);
 	card.dataset.imageUrl = typeof imageUrlRaw === 'string' ? imageUrlRaw.trim() : '';
+	const fullImageUrlRaw = feedItemCardImageUrl(item, false);
+	card.dataset.imageUrlFull =
+		typeof fullImageUrlRaw === 'string' ? fullImageUrlRaw.trim() : card.dataset.imageUrl;
 }
 
 function buildFeedCreationCard(

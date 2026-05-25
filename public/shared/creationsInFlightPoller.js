@@ -39,6 +39,65 @@ export function hasPendingCreationsReloadHint(root) {
  * @param {unknown[]} creationsFromApi — `result.data.images` from `GET /api/create/images` (default limit).
  * @param {ParentNode|null} root
  */
+function parseCreationMeta(meta) {
+	if (meta && typeof meta === 'object') return meta;
+	if (typeof meta === 'string' && meta.trim()) {
+		try {
+			return JSON.parse(meta);
+		} catch {
+			return null;
+		}
+	}
+	return null;
+}
+
+/**
+ * Prepend session pending/creating placeholders ahead of API-mapped feed rows (dedupe by id + creation_token).
+ * @param {object[]} feedItems
+ * @param {(pending: object) => object | null} mapPending
+ * @returns {object[]}
+ */
+export function mergeSessionPendingIntoFeedItems(feedItems, mapPending) {
+	const apiItems = Array.isArray(feedItems) ? feedItems : [];
+	const pending = getPendingCreationsFromSession();
+	if (!pending.length || typeof mapPending !== 'function') {
+		return apiItems;
+	}
+
+	const apiIds = new Set();
+	const apiTokens = new Set();
+	for (const item of apiItems) {
+		const id = item?.created_image_id ?? item?.id;
+		const numId = Number(id);
+		if (Number.isFinite(numId) && numId > 0) {
+			apiIds.add(numId);
+		}
+		const meta = parseCreationMeta(item?.meta);
+		const token =
+			typeof meta?.creation_token === 'string' ? meta.creation_token.trim() : '';
+		if (token) apiTokens.add(token);
+	}
+
+	const placeholders = [];
+	for (const row of pending) {
+		const mapped = mapPending(row);
+		if (!mapped) continue;
+		const pid = Number(mapped.created_image_id ?? mapped.id);
+		if (Number.isFinite(pid) && pid > 0 && apiIds.has(pid)) continue;
+		const token =
+			typeof row?.creation_token === 'string' ? row.creation_token.trim() : '';
+		if (token && apiTokens.has(token)) continue;
+		placeholders.push(mapped);
+	}
+
+	const combined = [...placeholders, ...apiItems];
+	return combined.sort((a, b) => {
+		const ta = Date.parse(String(a?.created_at || '')) || 0;
+		const tb = Date.parse(String(b?.created_at || '')) || 0;
+		return tb - ta;
+	});
+}
+
 export function computeCreationsPollHasListUpdates(creationsFromApi, root) {
 	if (!root) return false;
 	const list = Array.isArray(creationsFromApi) ? creationsFromApi : [];

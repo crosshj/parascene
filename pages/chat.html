@@ -9,6 +9,7 @@
 	<meta name="theme-color" content="#242131" />
 	<meta name="description" content="Chat in Parascene Connect: direct messages, servers, and channels." />
 	<link rel="stylesheet" href="/build/chat.bundle.css{{V}}" />
+	<link rel="stylesheet" href="/pages/creations.css{{V}}" />
 	<link rel="stylesheet" href="/pages/chat-hotfix.css{{V}}" />
 	<script>
 		(function () {
@@ -77,7 +78,7 @@
 
 <body data-entry="chat" class="chat-page">
 	<div id="chatShell" class="chat-shell">
-		<app-navigation show-notifications show-profile show-create default-route="feed">
+		<app-navigation show-notifications show-profile default-route="feed">
 			<a data-route="feed">Feed</a>
 			<a data-route="explore">Explore</a>
 			<a data-route="creations">Creations</a>
@@ -105,25 +106,6 @@
 					<div class="chat-page-sidebar-scroll">
 						<div class="chat-page-sidebar-pseudo" data-chat-sidebar-pseudo>
 							<div class="chat-page-sidebar-list" data-chat-sidebar-pseudo-list>
-								<div class="chat-page-sidebar-create-sticky">
-									<a href="/create" class="chat-page-sidebar-row chat-page-sidebar-row--create-cta"
-										data-chat-sidebar-strip-create="1">
-										<div class="comment-avatar connect-chat-thread-row-channel-avatar chat-page-sidebar-channel-avatar chat-page-sidebar-channel-avatar--icon-only"
-											aria-hidden="true">
-											<svg class="chat-page-sidebar-channel-route-icon" viewBox="0 0 24 24"
-												fill="none" stroke="currentColor" stroke-width="2"
-												stroke-linecap="round" stroke-linejoin="round">
-												<line x1="12" y1="5" x2="12" y2="19" />
-												<line x1="5" y1="12" x2="19" y2="12" />
-											</svg>
-										</div>
-										<div class="chat-page-sidebar-row-body">
-											<div class="chat-page-sidebar-row-title-line">
-												<span class="chat-page-sidebar-row-title">Create</span>
-											</div>
-										</div>
-									</a>
-								</div>
 								{{CHAT_SIDEBAR_PSEUDO_STRIP_LIST}}
 							</div>
 						</div>
@@ -450,6 +432,10 @@
 										</div>
 									</div>
 								</form>
+								<div class="chat-page-create-composer" data-chat-create-composer hidden
+									aria-label="Create">
+									<div class="chat-page-create-composer-host" data-create-composer-host></div>
+								</div>
 							</div>
 						</div>
 						<div class="chat-page-canvas-resize-handle" data-chat-canvas-resize-handle role="separator"

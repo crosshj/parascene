@@ -194,7 +194,7 @@ class AppRouteServers extends HTMLElement {
 						<div class="chat-page-sidebar-pseudo" data-chat-sidebar-pseudo>
 							<div class="chat-page-sidebar-list" data-chat-sidebar-pseudo-list>
 								<div class="chat-page-sidebar-create-sticky">
-									<a href="/create" class="chat-page-sidebar-row chat-page-sidebar-row--create-cta"
+									<a href="/chat/c/creations" class="chat-page-sidebar-row chat-page-sidebar-row--create-cta"
 										data-chat-sidebar-strip-create="1">
 										<div class="comment-avatar connect-chat-thread-row-channel-avatar chat-page-sidebar-channel-avatar chat-page-sidebar-channel-avatar--icon-only"
 											aria-hidden="true">

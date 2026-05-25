@@ -109,8 +109,9 @@ function toParasceneImageUrl(raw) {
 function persistMutateImageEditDraftToStorage(prompt) {
 	const text = typeof prompt === 'string' ? prompt : '';
 	try {
+		localStorage.setItem('create_page_prompt', text);
 		localStorage.setItem('create_page_prompt_image_edit', text);
-		localStorage.setItem('create_page_tab', 'image-edit');
+		localStorage.setItem('create_page_prompt_text', text);
 	} catch (_) { }
 	try {
 		const sk = 'create-page-selections';

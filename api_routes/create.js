@@ -14,7 +14,7 @@ import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { verifyQStashRequest } from "./utils/qstashVerification.js";
 import { ACTIVE_SHARE_VERSION, mintShareToken, verifyShareToken } from "./utils/shareLink.js";
 import { getStyleInfo } from "./utils/createStyles.js";
-import { expandStyleSigilsForProvider } from "./utils/styleSigils.js";
+import { expandStyleSigilsForProvider, stripStyleSigilsFromPrompt } from "./utils/styleSigils.js";
 import { applyVynlyShareWatermark } from "./utils/vynlyShareWatermark.js";
 import { creationRowIsVideo } from "./utils/vynlyShareFromCreation.js";
 import { sendBufferWithRangeSupport } from "./utils/sendBufferWithRangeSupport.js";
@@ -1502,18 +1502,31 @@ export default function createCreateRoutes({ queries, storage }) {
 				typeof argsForProvider.prompt === "string" ? argsForProvider.prompt.trim() : "";
 
 			// $style tokens in prompt: strip sigils and append "style:" section (all methods — not only advanced_generate).
+			// When the client sends style_key from the picker, modifiers come from that path — drop $ tokens only.
 			if (typeof argsForProvider.prompt === "string") {
-				const expanded = await expandStyleSigilsForProvider(queries, user.id, argsForProvider.prompt);
-				if (!expanded.ok) {
-					return res.status(400).json({
-						error: "Invalid style references",
-						message: (expanded.failed_styles || [])
-							.map((f) => `${f.token} (${f.reason})`)
-							.join(", "),
-						failed_styles: expanded.failed_styles
-					});
+				const styleKeyTrim =
+					typeof style_key === "string" ? style_key.trim() : "";
+				const styleFromPicker =
+					styleKeyTrim && styleKeyTrim !== "none" && getStyleInfo(styleKeyTrim);
+				if (styleFromPicker) {
+					argsForProvider.prompt = stripStyleSigilsFromPrompt(argsForProvider.prompt);
+				} else {
+					const expanded = await expandStyleSigilsForProvider(
+						queries,
+						user.id,
+						argsForProvider.prompt
+					);
+					if (!expanded.ok) {
+						return res.status(400).json({
+							error: "Invalid style references",
+							message: (expanded.failed_styles || [])
+								.map((f) => `${f.token} (${f.reason})`)
+								.join(", "),
+							failed_styles: expanded.failed_styles
+						});
+					}
+					argsForProvider.prompt = expanded.providerPrompt;
 				}
-				argsForProvider.prompt = expanded.providerPrompt;
 			}
 
 			// Async hint: only for methods that explicitly support async.

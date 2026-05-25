@@ -10,6 +10,7 @@
  * - attachMentionSuggest(field) — @ only
  * - attachChatMentionSuggest(field) — @ only + chat special mentions
  * - attachPromptInlineSuggest(field) — @ and $ (styles)
+ * - attachCreateComposerSuggest(field) — @ (users, personas, styles) and $ (styles)
  * - isTriggeredSuggestPopupOpen(field) — true while this field owns the open listbox (for Enter-to-send guards)
  */
 
@@ -193,7 +194,7 @@ function defaultGetInsertText(item, trigger) {
 	}
 	if (item?.type === "style") {
 		const slug = (item?.tag ?? item?.label ?? "").toString().trim();
-		return slug ? `${t}${slug} ` : "";
+		return slug ? `$${slug} ` : "";
 	}
 	if ((item?.type === "user" || item?.type === "persona") && item?.sublabel) {
 		const handle = String(item.sublabel).replace(/^@/, "").trim();
@@ -584,6 +585,30 @@ function getCommandSuggestions({ q, limit }) {
 	return Promise.resolve(out.slice(0, cap));
 }
 
+function getCreateComposerLocalCandidates(qLower) {
+	return mergeUniqueItems([
+		...getMentionLocalCandidates(qLower, false),
+		...filterAndSortStyleItems(getCachedEntriesForSource("styles").flat(), qLower),
+	]);
+}
+
+function getCreateComposerInlineSuggestions({ source, q, limit }, signal) {
+	if (source === "styles") return getStyleSuggestions({ source, q, limit }, signal);
+	if (source === "create_composer") {
+		const cap = capForLimit(limit);
+		const mentionLimit = Math.max(4, Math.ceil(cap * 0.6));
+		const styleLimit = Math.max(3, cap - mentionLimit);
+		return Promise.all([
+			getMentionSuggestions({ source: "users", q, limit: mentionLimit }, signal),
+			getStyleSuggestions({ source: "styles", q, limit: styleLimit }, signal),
+		]).then(([mentions, styles]) => {
+			const orderedMentions = orderMentionItemsForPopup(mentions);
+			return mergeUniqueItems([...orderedMentions, ...styles]).slice(0, cap);
+		});
+	}
+	return getCombinedInlineSuggestions({ source, q, limit }, signal);
+}
+
 function getCombinedInlineSuggestions({ source, q, limit }, signal) {
 	if (source === "users" || source === "chat_mentions") return getMentionSuggestions({ source, q, limit }, signal);
 	if (source === "styles") return getStyleSuggestions({ source, q, limit }, signal);
@@ -725,14 +750,22 @@ function renderPopup(textarea, mode) {
 		const hasChannels = items.some((it) => it?.type === "channel");
 		const hasHashtagItems = hasServers || hasDefaultChannels || hasChannels;
 		const hasPersonas = items.some((it) => it?.type === "persona");
+		const hasStyles = items.some((it) => it?.type === "style");
 		const hasSpecialMentions = items.some((it) => it?.type === "special_mention");
 		const hasUsers = items.some(
-			(it) => it?.type !== "persona" && it?.type !== "special_mention" && it?.type !== "server" && it?.type !== "channel" && it?.type !== "pseudo_channel"
+			(it) =>
+				it?.type !== "persona" &&
+				it?.type !== "style" &&
+				it?.type !== "special_mention" &&
+				it?.type !== "server" &&
+				it?.type !== "channel" &&
+				it?.type !== "pseudo_channel"
 		);
 		const firstServerIdx = items.findIndex((it) => it?.type === "server");
 		const firstDefaultChannelIdx = items.findIndex((it) => it?.type === "pseudo_channel");
 		const firstChannelIdx = items.findIndex((it) => it?.type === "channel");
 		const firstPersonaIdx = items.findIndex((it) => it?.type === "persona");
+		const firstStyleIdx = items.findIndex((it) => it?.type === "style");
 		const firstSpecialMentionIdx = items.findIndex((it) => it?.type === "special_mention");
 		const showMentionSectionLabels =
 			!hasCommandsOnly && !hasHashtagItems && (hasUsers || hasPersonas || hasSpecialMentions);
@@ -793,6 +826,13 @@ function renderPopup(textarea, mode) {
 				sec.className = "triggered-suggest-section triggered-suggest-section--special";
 				sec.setAttribute("role", "presentation");
 				sec.textContent = "Special mentions";
+				popup.appendChild(sec);
+			}
+			if (hasStyles && !hasStylesOnly && i === firstStyleIdx) {
+				const sec = document.createElement("div");
+				sec.className = "triggered-suggest-section";
+				sec.setAttribute("role", "presentation");
+				sec.textContent = "Styles";
 				popup.appendChild(sec);
 			}
 
@@ -1084,15 +1124,20 @@ function requestSuggestions(textarea, ctx, reason) {
 
 	const requestedQuery = ctx.query;
 	const qLower = requestedQuery.toLowerCase();
-	const localCandidates = getLocalCandidatesForTrigger(ctx.trigger, qLower);
-	const localFiltered = applyLocalFilter(ctx.trigger.source, localCandidates, qLower);
+	const isCreateComposer = ctx.trigger.source === "create_composer";
+	const localCandidates = isCreateComposer
+		? getCreateComposerLocalCandidates(qLower)
+		: getLocalCandidatesForTrigger(ctx.trigger, qLower);
+	const localFiltered = isCreateComposer
+		? localCandidates
+		: applyLocalFilter(ctx.trigger.source, localCandidates, qLower);
 	const localMatches =
-		(ctx.trigger.source === "users" || ctx.trigger.source === "chat_mentions")
+		ctx.trigger.source === "users" || ctx.trigger.source === "chat_mentions"
 			? limitMentionItemsKeepingSpecial(localFiltered, DEFAULT_SUGGEST_LIMIT)
 			: localFiltered.slice(0, DEFAULT_SUGGEST_LIMIT);
 
 	const mentionOrderedLocals =
-		(ctx.trigger.source === "users" || ctx.trigger.source === "chat_mentions")
+		ctx.trigger.source === "users" || ctx.trigger.source === "chat_mentions"
 			? orderMentionItemsForPopup(localMatches)
 			: localMatches;
 	setItems(state, mentionOrderedLocals);
@@ -1135,16 +1180,26 @@ function requestSuggestions(textarea, ctx, reason) {
 			}
 
 			const nowLower = nowCtx.query.toLowerCase();
-			const base = getLocalCandidatesForTrigger(nowCtx.trigger, nowLower);
-			const nextLocal = applyLocalFilter(nowCtx.trigger.source, base, nowLower).slice(0, DEFAULT_SUGGEST_LIMIT);
-			const nextRemote = nowCtx.query === requestedQuery ? items : applyLocalFilter(nowCtx.trigger.source, items, nowLower);
+			const nowIsCreateComposer = nowCtx.trigger.source === "create_composer";
+			const base = nowIsCreateComposer
+				? getCreateComposerLocalCandidates(nowLower)
+				: getLocalCandidatesForTrigger(nowCtx.trigger, nowLower);
+			const nextLocal = nowIsCreateComposer
+				? base.slice(0, DEFAULT_SUGGEST_LIMIT)
+				: applyLocalFilter(nowCtx.trigger.source, base, nowLower).slice(0, DEFAULT_SUGGEST_LIMIT);
+			const nextRemote =
+				nowCtx.query === requestedQuery
+					? items
+					: nowIsCreateComposer
+						? items
+						: applyLocalFilter(nowCtx.trigger.source, items, nowLower);
 			const mergedNext = mergeUniqueItems([...nextLocal, ...nextRemote]);
 			const nextItems =
-				(nowCtx.trigger.source === "users" || nowCtx.trigger.source === "chat_mentions")
+				nowCtx.trigger.source === "users" || nowCtx.trigger.source === "chat_mentions"
 					? orderMentionItemsForPopup(
-						limitMentionItemsKeepingSpecial(mergedNext, DEFAULT_SUGGEST_LIMIT)
-					)
-					: mergedNext;
+							limitMentionItemsKeepingSpecial(mergedNext, DEFAULT_SUGGEST_LIMIT)
+						)
+					: mergedNext.slice(0, DEFAULT_SUGGEST_LIMIT);
 
 			current.triggerStart = nowCtx.start;
 			current.currentTrigger = nowCtx.trigger;
@@ -1375,5 +1430,16 @@ export function attachPromptInlineSuggest(textarea) {
 			{ char: "$", minChars: 1, source: "styles" }
 		],
 		getSuggestions: getCombinedInlineSuggestions
+	});
+}
+
+/** Basic create composer: @ lists people, personas, and styles; $ lists styles only. */
+export function attachCreateComposerSuggest(textarea) {
+	attachTriggeredSuggest(textarea, {
+		triggers: [
+			{ char: "@", minChars: 1, source: "create_composer" },
+			{ char: "$", minChars: 1, source: "styles" },
+		],
+		getSuggestions: getCreateComposerInlineSuggestions,
 	});
 }

@@ -33,6 +33,7 @@ import {
 	trophyIcon,
 	viewGridIcon
 } from '/icons/svg-strings.js';
+import { attachFeedCardCreationDragSource } from './creationComposerDrag.js';
 
 const { buildBlogPostPublicPath, BLOG_CAMPAIGN_INTERNAL } = blogCampaignPathMod;
 const { formatDateTime, formatRelativeTime } = datetimeMod;
@@ -532,7 +533,7 @@ function buildEngagementFeedCard(item) {
 			const voteAction =
 				typeof payload.challengeVoteAction === "string" ? payload.challengeVoteAction.trim() : "";
 			const enterLabel = escapeHtmlFeedCardText(payload.challengeEnterLabel || "Create");
-			const rawEnterRoute = String(payload.challengeEnterRoute || "/create").trim();
+			const rawEnterRoute = String(payload.challengeEnterRoute || "/creations").trim();
 			const enterRoute = rawEnterRoute.startsWith("/help") ? getHelpHref(rawEnterRoute) : rawEnterRoute;
 			const rawChallengeTitleRoute = String(payload.challengeTitleRoute || "/challenges").trim();
 			const challengeTitleHref = rawChallengeTitleRoute.startsWith("/help")
@@ -907,6 +908,9 @@ function stampChatCreationsBulkDatasetOnFeedCard(card, item, preferThumbnail) {
 	card.dataset.groupCreation = isGroupCreation ? '1' : '0';
 	const imageUrlRaw = feedItemCardImageUrl(item, preferThumbnail);
 	card.dataset.imageUrl = typeof imageUrlRaw === 'string' ? imageUrlRaw.trim() : '';
+	const fullImageUrlRaw = feedItemCardImageUrl(item, false);
+	card.dataset.imageUrlFull =
+		typeof fullImageUrlRaw === 'string' ? fullImageUrlRaw.trim() : card.dataset.imageUrl;
 }
 
 function buildFeedCreationCard(
@@ -917,7 +921,8 @@ function buildFeedCreationCard(
 	preferThumbnail = false,
 	creationsBulkChrome = false,
 	resolveCreationCardHref = null,
-	performCreationNavigation = null
+	performCreationNavigation = null,
+	enableComposerDragSource = false
 ) {
 	const card = document.createElement("div");
 	const mediaType = typeof item.media_type === "string" ? item.media_type : "image";
@@ -978,7 +983,7 @@ function buildFeedCreationCard(
         ${bulkOverlayBlock}
       </div>
     `;
-		if (creationsBulkChrome) {
+		if (creationsBulkChrome || enableComposerDragSource) {
 			stampChatCreationsBulkDatasetOnFeedCard(card, item, preferThumbnail);
 		}
 		finishFeedCreationCardMediaAndClick(
@@ -990,7 +995,8 @@ function buildFeedCreationCard(
 			preferThumbnail,
 			creationsBulkChrome,
 			resolveCreationCardHref,
-			performCreationNavigation
+			performCreationNavigation,
+			enableComposerDragSource
 		);
 		return card;
 	}
@@ -1216,7 +1222,8 @@ function buildFeedCreationCard(
 		preferThumbnail,
 		creationsBulkChrome,
 		resolveCreationCardHref,
-		performCreationNavigation
+		performCreationNavigation,
+		enableComposerDragSource
 	);
 	return card;
 }
@@ -1237,7 +1244,8 @@ function finishFeedCreationCardMediaAndClick(
 	preferThumbnail = false,
 	creationsBulkChrome = false,
 	resolveCreationCardHref = null,
-	performCreationNavigation = null
+	performCreationNavigation = null,
+	enableComposerDragSource = false
 ) {
 	const imageEl = card.querySelector('.feed-card-img');
 	const imageContainer = card.querySelector('.feed-card-image');
@@ -1348,6 +1356,10 @@ function finishFeedCreationCardMediaAndClick(
 			});
 		}
 	}
+
+	if (enableComposerDragSource) {
+		attachFeedCardCreationDragSource(card);
+	}
 }
 
 /**
@@ -1360,6 +1372,7 @@ function finishFeedCreationCardMediaAndClick(
  *   creationsBulkChrome?: boolean,
  *   resolveCreationCardHref?: (item: object) => string | undefined,
  *   performCreationNavigation?: (href: string, ev: MouseEvent) => void,
+ *   enableComposerDragSource?: boolean,
  * }} [options]
  */
 export function createFeedItemCard(item, itemIndex, options = {}) {
@@ -1371,6 +1384,7 @@ export function createFeedItemCard(item, itemIndex, options = {}) {
 		typeof options.resolveCreationCardHref === 'function' ? options.resolveCreationCardHref : null;
 	const performCreationNavigation =
 		typeof options.performCreationNavigation === 'function' ? options.performCreationNavigation : null;
+	const enableComposerDragSource = options.enableComposerDragSource === true;
 	if (item.type === "tip") {
 		return buildFeedTipCard(item);
 	}
@@ -1388,7 +1402,8 @@ export function createFeedItemCard(item, itemIndex, options = {}) {
 		preferThumbnail,
 		creationsBulkChrome,
 		resolveCreationCardHref,
-		performCreationNavigation
+		performCreationNavigation,
+		enableComposerDragSource
 	);
 }
 

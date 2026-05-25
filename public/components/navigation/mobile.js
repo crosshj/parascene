@@ -25,7 +25,8 @@ const html = String.raw;
 const CHAT_FIRST_ROUTE_PATHS = {
 	feed: '/chat/c/feed',
 	explore: '/chat/c/explore',
-	creations: '/chat/c/creations',
+	creations: '/creations',
+	create: '/creations',
 	challenges: '/chat/c/challenges',
 	connect: '/chat#channels'
 };
@@ -36,10 +37,26 @@ function getMobileNavTargetPath(route) {
 	return CHAT_FIRST_ROUTE_PATHS[key] || `/${key}`;
 }
 
+function isChatShellChannelPath(targetPath) {
+	if (typeof targetPath !== 'string') return false;
+	const pathOnly = targetPath.trim().split('?')[0].split('#')[0].replace(/\/+$/, '') || '/';
+	return (
+		pathOnly === '/feed' ||
+		pathOnly === '/explore' ||
+		pathOnly === '/creations' ||
+		pathOnly === '/challenges'
+	);
+}
+
 function isChatNavTargetPath(targetPath) {
 	if (typeof targetPath !== 'string') return false;
 	const normalized = targetPath.trim().toLowerCase();
-	return normalized === '/chat' || normalized.startsWith('/chat/') || normalized.startsWith('/chat#');
+	return (
+		normalized === '/chat' ||
+		normalized.startsWith('/chat/') ||
+		normalized.startsWith('/chat#') ||
+		isChatShellChannelPath(targetPath)
+	);
 }
 
 function isCurrentDocumentChatShell() {
@@ -94,11 +111,6 @@ class AppNavigationMobile extends HTMLElement {
 		const isChatFirstTarget = isChatNavTargetPath(targetPath);
 		const isOnChatPage = isCurrentDocumentChatShell();
 
-		// Create is a standalone page; full navigation to/from it
-		if (route === 'create') {
-			window.location.href = '/create';
-			return;
-		}
 		if (route === 'connect' && isOnChatPage) {
 			const next = `/chat${window.location.search || ''}#channels`;
 			const cur = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
@@ -241,15 +253,17 @@ class AppNavigationMobile extends HTMLElement {
 		if (pathname === '/prompt-library') {
 			currentRoute = null;
 		}
-		// Create is a standalone page at /create
-		const isCreatePage = pathname === '/create';
+		const isCreateDestination =
+			pathname === '/chat/c/creations' || pathname === '/creations';
 		navButtons.forEach(button => {
 			const route = button.getAttribute('data-route');
+			if (button.classList.contains('create-button')) {
+				button.classList.toggle('is-active', isCreateDestination);
+				button.disabled = isCreateDestination;
+				return;
+			}
 			const isActive = Boolean(currentRoute) && route === currentRoute;
 			button.classList.toggle('is-active', isActive);
-			if (button.classList.contains('create-button')) {
-				button.disabled = isCreatePage;
-			}
 		});
 	}
 

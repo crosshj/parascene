@@ -221,9 +221,139 @@ function removePendingCreation({ pendingKey, pendingId }) {
 	document.dispatchEvent(new CustomEvent('creations-pending-updated'));
 }
 
-function navigateToCreations({ mode }) {
+function promotePendingCreation({ pendingKey, pendingId, serverId, creationToken, status = 'creating' }) {
+	try {
+		const current = JSON.parse(sessionStorage.getItem(pendingKey) || '[]');
+		if (!Array.isArray(current)) return;
+		const sid = Number(serverId);
+		const next = current.map((item) => {
+			if (item?.id !== pendingId) return item;
+			return {
+				...item,
+				id: Number.isFinite(sid) && sid > 0 ? sid : item.id,
+				status: status || 'creating',
+				creation_token:
+					typeof creationToken === 'string' && creationToken.trim()
+						? creationToken.trim()
+						: item.creation_token,
+				created_at: item.created_at || new Date().toISOString(),
+			};
+		});
+		sessionStorage.setItem(pendingKey, JSON.stringify(next));
+	} catch {
+		// ignore
+	}
+	document.dispatchEvent(new CustomEvent('creations-pending-updated'));
+}
+
+function parseImageListMeta(meta) {
+	if (meta && typeof meta === 'object') return meta;
+	if (typeof meta === 'string' && meta.trim()) {
+		try {
+			return JSON.parse(meta);
+		} catch {
+			return null;
+		}
+	}
+	return null;
+}
+
+function imageListIncludesCreation(images, { id, creationToken }) {
+	const list = Array.isArray(images) ? images : [];
+	const wantId = Number(id);
+	const token = typeof creationToken === 'string' ? creationToken.trim() : '';
+	for (const img of list) {
+		if (Number.isFinite(wantId) && wantId > 0 && Number(img?.id) === wantId) {
+			return true;
+		}
+		const meta = parseImageListMeta(img?.meta);
+		if (token && meta?.creation_token === token) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * Poll list endpoint until the new row is visible (read-after-write).
+ * @returns {Promise<boolean>}
+ */
+async function waitUntilCreationListed({ id, creationToken, maxAttempts = 50, intervalMs = 300 }) {
+	const qs = (() => {
+		const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim() || '';
+		return v ? `?v=${encodeURIComponent(v)}` : '';
+	})();
+	const { fetchJsonWithStatusDeduped } = await import(`/shared/api.js${qs}`);
+	invalidateRelatedDataCaches();
+
+	for (let attempt = 0; attempt < maxAttempts; attempt++) {
+		const result = await fetchJsonWithStatusDeduped(
+			'/api/create/images?limit=80&offset=0',
+			{ credentials: 'include' },
+			{ windowMs: 0, dedupeKey: `wait-creation-listed:${id}:${attempt}` }
+		);
+		if (result?.ok && imageListIncludesCreation(result.data?.images, { id, creationToken })) {
+			return true;
+		}
+		if (attempt < maxAttempts - 1) {
+			await new Promise((resolve) => setTimeout(resolve, intervalMs));
+		}
+	}
+	return false;
+}
+
+function normalizePathname(pathname) {
+	return String(pathname || '').replace(/\/+$/, '') || '/';
+}
+
+function isOnCreationsPath() {
+	return normalizePathname(window.location.pathname) === '/creations';
+}
+
+function refreshCreationsRoute() {
+	try {
+		const creationsRoute = document.querySelector('app-route-creations');
+		if (creationsRoute && typeof creationsRoute.loadCreations === 'function') {
+			void creationsRoute.loadCreations();
+			return;
+		}
+	} catch {
+		// ignore
+	}
+	document.dispatchEvent(new CustomEvent('creations-pending-updated'));
+}
+
+function navigateToCreations({ mode, creationId, forceFreshFirstPage = true }) {
+	const detail = {
+		forceFreshFirstPage: Boolean(forceFreshFirstPage),
+		creationId: Number.isFinite(Number(creationId)) ? Number(creationId) : 0,
+	};
+
 	if (mode === 'full') {
 		window.location.href = '/creations';
+		return;
+	}
+	if (mode === 'none') return;
+
+	const onChatPage =
+		typeof document !== 'undefined' &&
+		document.body?.classList.contains('chat-page') &&
+		document.querySelector('[data-chat-page]');
+	if (onChatPage) {
+		const path = '/creations';
+		const current = normalizePathname(window.location.pathname);
+		if (current !== path) {
+			window.history.pushState({ prsnChat: true }, '', path);
+		}
+		document.dispatchEvent(
+			new CustomEvent('prsn-chat-open-path', { bubbles: true, detail })
+		);
+		return;
+	}
+
+	if (isOnCreationsPath()) {
+		refreshCreationsRoute();
+		document.dispatchEvent(new CustomEvent('creations-pending-updated'));
 		return;
 	}
 
@@ -237,6 +367,13 @@ function navigateToCreations({ mode }) {
 
 	// Fallback: hash-based routing
 	window.location.hash = 'creations';
+}
+
+/** Backend accepted the job — row exists with status `creating`. */
+function isAcceptedCreationResponse(data) {
+	const id = Number(data?.id);
+	const status = String(data?.status || '').trim().toLowerCase();
+	return Number.isFinite(id) && id > 0 && status === 'creating';
 }
 
 /**
@@ -333,12 +470,13 @@ export function formatMentionsFailureForDialog(data) {
 
 /**
  * Shared submit helper for /create and /creations/:id/mutate.
- * - Adds a pending creation entry (sessionStorage)
- * - Navigates to creations immediately (optimistic)
- * - POSTs /api/create with { server_id, method, args, creation_token } (JSON).
- *   Image fields follow the server method `fields` config (e.g. `image_url` or `input_images` URL array). Upload via /api/images/generic when needed.
+ * - Session pending placeholder while POST runs (promoted to server id + `creating` on success)
+ * - Waits until `GET /api/create/images` includes the new row, then navigates/refreshes
+ * - Leaves pending in session until the grid merge/poll dedupes it (same as standalone Creations route)
+ * - Image fields follow the server method `fields` config; upload via /api/images/generic when needed.
+ * @returns {Promise<{ id: number, status: string } | null>}
  */
-export function submitCreationWithPending({
+export async function submitCreationWithPending({
 	serverId,
 	methodKey,
 	args,
@@ -347,24 +485,14 @@ export function submitCreationWithPending({
 	creditCost,
 	hydrateMentions,
 	styleKey,
-	navigate = 'spa', // 'spa' | 'full'
+	navigate = 'spa', // 'spa' | 'full' | 'creations' | 'none'
 	onInsufficientCredits,
 	onError
 }) {
-	if (!serverId || !methodKey) return;
+	if (!serverId || !methodKey) return null;
 
 	const creationToken = generateCreationToken();
 	const { pendingKey, pendingId } = addPendingCreation({ creationToken });
-
-	// Best-effort: refresh creations route if it exists (SPA only).
-	try {
-		const creationsRoute = document.querySelector('app-route-creations');
-		if (creationsRoute && typeof creationsRoute.loadCreations === 'function') {
-			void creationsRoute.loadCreations();
-		}
-	} catch {
-		// ignore
-	}
 
 	let parentIds = [];
 	if (Array.isArray(mutateParentIds)) {
@@ -391,78 +519,78 @@ export function submitCreationWithPending({
 		...(styleKey && typeof styleKey === 'string' && styleKey.trim() ? { style_key: styleKey.trim() } : {})
 	};
 
-	const doFetch = () =>
-		fetch('/api/create', {
+	try {
+		const response = await fetch('/api/create', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			credentials: 'include',
 			body: JSON.stringify(payload)
 		});
 
-	// Full navigate: use fetch with keepalive so request survives page unload and Content-Type is set (so server parses JSON and hydrate_mentions).
-	if (navigate === 'full') {
+		let data = null;
 		try {
-			fetch('/api/create', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				credentials: 'include',
-				body: JSON.stringify(payload),
-				keepalive: true
-			}).catch(() => null);
+			data = await response.json();
 		} catch {
-			// ignore
+			data = null;
 		}
 
-		navigateToCreations({ mode: navigate });
-		return;
-	}
-
-	navigateToCreations({ mode: navigate });
-
-	doFetch()
-		.then(async (response) => {
-			if (!response.ok) {
-				let error = null;
-				try {
-					error = await response.json();
-				} catch {
-					error = null;
-				}
-
-				if (response.status === 402) {
-					document.dispatchEvent(new CustomEvent('credits-updated', {
-						detail: { count: Number(error?.current ?? 0) }
-					}));
-					if (typeof onInsufficientCredits === 'function') {
-						await onInsufficientCredits(error);
-					}
-					throw new Error(error?.message || 'Insufficient credits');
-				}
-
-				throw new Error(error?.error || error?.message || 'Failed to create image');
-			}
-
-			const data = await response.json();
-			if (typeof data?.credits_remaining === 'number') {
+		if (!response.ok) {
+			if (response.status === 402) {
 				document.dispatchEvent(new CustomEvent('credits-updated', {
-					detail: { count: data.credits_remaining }
+					detail: { count: Number(data?.current ?? 0) }
 				}));
-			}
-			return null;
-		})
-		.then(() => {
-			removePendingCreation({ pendingKey, pendingId });
-			invalidateRelatedDataCaches();
-		})
-		.catch(async (err) => {
-			removePendingCreation({ pendingKey, pendingId });
-			if (typeof onError === 'function') {
-				try {
-					await onError(err);
-				} catch {
-					// ignore
+				if (typeof onInsufficientCredits === 'function') {
+					await onInsufficientCredits(data);
 				}
+				throw new Error(data?.message || 'Insufficient credits');
 			}
+			throw new Error(data?.error || data?.message || 'Failed to create image');
+		}
+
+		if (!isAcceptedCreationResponse(data)) {
+			throw new Error('Create did not start — unexpected response from server');
+		}
+		if (typeof data?.credits_remaining === 'number') {
+			document.dispatchEvent(new CustomEvent('credits-updated', {
+				detail: { count: data.credits_remaining }
+			}));
+		}
+
+		const serverId = Number(data.id);
+		const creationToken = payload.creation_token;
+		promotePendingCreation({
+			pendingKey,
+			pendingId,
+			serverId,
+			creationToken,
+			status: 'creating',
 		});
+
+		await waitUntilCreationListed({ id: serverId, creationToken });
+		invalidateRelatedDataCaches();
+
+		if (navigate !== 'none') {
+			navigateToCreations({
+				mode: navigate,
+				creationId: serverId,
+				forceFreshFirstPage: true,
+			});
+		} else {
+			refreshCreationsRoute();
+			document.dispatchEvent(new CustomEvent('creations-pending-updated'));
+		}
+
+		return { id: serverId, status: String(data.status), creationToken };
+	} catch (err) {
+		removePendingCreation({ pendingKey, pendingId });
+		if (typeof onError === 'function') {
+			try {
+				await onError(err);
+			} catch {
+				// ignore
+			}
+		}
+		throw err;
+	}
 }
 
