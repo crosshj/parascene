@@ -2022,6 +2022,7 @@ export function mountCreateComposer(host, opts = {}) {
 			getAspectRatioForSubmit(),
 			getFormFieldContext()
 		);
+		const mutateLineage = getMutateLineageForSubmit();
 		const mentions = extractMentions(userPrompt);
 		if (mentions.length === 0) {
 			dispatchCreationSubmit({
@@ -2030,6 +2031,7 @@ export function mountCreateComposer(host, opts = {}) {
 				args,
 				styleKey,
 				hydrateMentions: false,
+				...mutateLineage,
 			});
 			return;
 		}
@@ -2041,6 +2043,7 @@ export function mountCreateComposer(host, opts = {}) {
 				args,
 				styleKey,
 				hydrateMentions: true,
+				...mutateLineage,
 			});
 			return;
 		}
@@ -2052,6 +2055,7 @@ export function mountCreateComposer(host, opts = {}) {
 				args,
 				styleKey,
 				hydrateMentions: false,
+				...mutateLineage,
 			});
 			return;
 		}

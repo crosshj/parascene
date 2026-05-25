@@ -1360,7 +1360,10 @@ class AppNavigation extends HTMLElement {
 				${(this.routes || []).map(route => {
 				const routeId = route.id;
 				const routeLabel = route.label;
-				const isChatRoute = routeId === 'connect' || String(routeLabel || '').trim().toLowerCase() === 'chat';
+				const isChatRoute =
+					routeId === 'connect' ||
+					routeId === 'feed' ||
+					['chat', 'feed'].includes(String(routeLabel || '').trim().toLowerCase());
 				const chatBadge =
 					isChatRoute
 						? html`<span class="nav-link-unread-badge" aria-hidden="true"></span>`
@@ -1461,7 +1464,10 @@ class AppNavigation extends HTMLElement {
 				${(this.routes || []).map(route => {
 				const routeId = route.id;
 				const routeLabel = route.label;
-				const isChatRoute = routeId === 'connect' || String(routeLabel || '').trim().toLowerCase() === 'chat';
+				const isChatRoute =
+					routeId === 'connect' ||
+					routeId === 'feed' ||
+					['chat', 'feed'].includes(String(routeLabel || '').trim().toLowerCase());
 				const chatBadge =
 					isChatRoute
 						? html`<span class="nav-link-unread-badge" aria-hidden="true"></span>`

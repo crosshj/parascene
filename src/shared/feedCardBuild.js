@@ -1220,9 +1220,11 @@ function buildFeedCreationCard(
 		});
 	}
 
-	if (creationsBulkChrome) {
-		const imageWrap = card.querySelector('.feed-card-image');
-		appendCreationsBulkOverlayToFeedCardImage(imageWrap);
+	if (creationsBulkChrome || enableComposerDragSource) {
+		if (creationsBulkChrome) {
+			const imageWrap = card.querySelector('.feed-card-image');
+			appendCreationsBulkOverlayToFeedCardImage(imageWrap);
+		}
 		stampChatCreationsBulkDatasetOnFeedCard(card, item, preferThumbnail);
 	}
 

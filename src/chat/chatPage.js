@@ -7880,7 +7880,7 @@ export async function initChatPage(root, options = {}) {
 			preferThumbnail: laneSlug === 'explore' || laneSlug === 'creations',
 			creationsBulkChrome: laneSlug === 'creations',
 			enableComposerDragSource:
-				hide && (laneSlug === 'explore' || laneSlug === 'creations'),
+				laneSlug === 'feed' || laneSlug === 'explore' || laneSlug === 'creations',
 			performShellNavigation: navigateWithinChatShell,
 		};
 		if (laneSlug === 'feed') {
