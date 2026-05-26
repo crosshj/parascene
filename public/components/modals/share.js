@@ -82,6 +82,41 @@ function buildSmsHref(body) {
 	return `sms:${sep}body=${encodeURIComponent(body)}`;
 }
 
+function canShareImageFiles() {
+	if (typeof navigator.share !== "function") return false;
+	if (typeof navigator.canShare !== "function") return true;
+	try {
+		const probe = new File([new Uint8Array(0)], "probe.jpg", { type: "image/jpeg" });
+		return navigator.canShare({ files: [probe] });
+	} catch {
+		return false;
+	}
+}
+
+function extensionForImageContentType(contentType) {
+	const t = String(contentType || "").toLowerCase();
+	if (t === "image/jpeg") return ".jpg";
+	if (t === "image/webp") return ".webp";
+	if (t === "image/gif") return ".gif";
+	return ".png";
+}
+
+function parseFilenameFromContentDisposition(header) {
+	if (!header || typeof header !== "string") return null;
+	const m = /filename\*=UTF-8''([^;]+)|filename="([^"]+)"|filename=([^;\s]+)/i.exec(header);
+	const raw = m?.[1] || m?.[2] || m?.[3];
+	if (!raw) return null;
+	try {
+		return decodeURIComponent(raw.trim());
+	} catch {
+		return raw.trim();
+	}
+}
+
+function isShareAbortError(err) {
+	return err && typeof err === "object" && "name" in err && err.name === "AbortError";
+}
+
 class AppModalShare extends HTMLElement {
 	constructor() {
 		super();
@@ -236,11 +271,22 @@ class AppModalShare extends HTMLElement {
 								<span class="share-action-left">
 									<span class="share-option-icon">${iconShare}</span>
 									<span class="share-action-text">
-										<span class="share-action-title">Device share</span>
-										<span class="share-action-subtitle">Use your device's share menu</span>
+										<span class="share-action-title">Device Link Share</span>
+										<span class="share-action-subtitle">Share the creation link via your device</span>
 									</span>
 								</span>
 								<span class="share-action-cta" data-cta><span class="share-action-cta-label">Open</span></span>
+							</button>
+
+							<button type="button" class="share-action-row" data-share-image-file style="display: none;">
+								<span class="share-action-left">
+									<span class="share-option-icon">${iconPicture}</span>
+									<span class="share-action-text">
+										<span class="share-action-title">Device Image Share</span>
+										<span class="share-action-subtitle">Share the creation image file</span>
+									</span>
+								</span>
+								<span class="share-action-cta" data-cta><span class="share-action-cta-label">Share</span></span>
 							</button>
 			
 							<button type="button" class="share-action-row" data-qr-code>
@@ -308,6 +354,7 @@ class AppModalShare extends HTMLElement {
 		const openWatermarkedBtn = this.querySelector("[data-open-watermarked]");
 		const qrBtn = this.querySelector("[data-qr-code]");
 		const nativeBtn = this.querySelector("[data-native-share]");
+		const shareImageFileBtn = this.querySelector("[data-share-image-file]");
 		const smsBtn = this.querySelector("[data-share-sms]");
 		const emailBtn = this.querySelector("[data-share-email]");
 		const xBtn = this.querySelector("[data-share-x]");
@@ -330,6 +377,9 @@ class AppModalShare extends HTMLElement {
 		if (openWatermarkedBtn) openWatermarkedBtn.addEventListener("click", (e) => void this.handleOpenWatermarked(e.currentTarget));
 		if (qrBtn) qrBtn.addEventListener("click", (e) => void this.handleQrCode(e.currentTarget));
 		if (nativeBtn) nativeBtn.addEventListener("click", (e) => void this.handleNativeShare(e.currentTarget));
+		if (shareImageFileBtn) {
+			shareImageFileBtn.addEventListener("click", (e) => void this.handleShareImageFile(e.currentTarget));
+		}
 
 		const qrOverlay = this.querySelector("[data-qr-overlay]");
 		const qrCloseBtn = this.querySelector(".qr-modal-close");
@@ -427,6 +477,10 @@ class AppModalShare extends HTMLElement {
 		const nativeBtn = this.querySelector("[data-native-share]");
 		if (nativeBtn instanceof HTMLButtonElement) {
 			nativeBtn.style.display = typeof navigator.share === "function" ? "" : "none";
+		}
+		const shareImageFileBtn = this.querySelector("[data-share-image-file]");
+		if (shareImageFileBtn instanceof HTMLButtonElement) {
+			shareImageFileBtn.style.display = canShareImageFiles() ? "" : "none";
 		}
 	}
 
@@ -616,6 +670,45 @@ class AppModalShare extends HTMLElement {
 				text: "A creation on Parascene",
 				url
 			});
+		}, { resetMs: 900 });
+	}
+
+	async handleShareImageFile(buttonEl) {
+		await this.runCtaAction(buttonEl, async () => {
+			const creationId = Number(this._creationId);
+			if (!Number.isFinite(creationId) || creationId <= 0) {
+				throw new Error("Invalid creation");
+			}
+			if (!canShareImageFiles()) {
+				throw new Error("Not supported on this device");
+			}
+
+			const res = await fetch(`/api/create/images/${creationId}/image`, {
+				credentials: "include"
+			});
+			if (!res.ok) {
+				const data = await res.json().catch(() => null);
+				throw new Error(
+					(data && data.error) ? String(data.error) : "Failed to load image"
+				);
+			}
+
+			const blob = await res.blob();
+			const contentType = blob.type || res.headers.get("Content-Type") || "image/png";
+			const fromHeader = parseFilenameFromContentDisposition(res.headers.get("Content-Disposition"));
+			const fallbackName = `parascene-${creationId}${extensionForImageContentType(contentType)}`;
+			const file = new File([blob], fromHeader || fallbackName, { type: contentType });
+
+			if (typeof navigator.canShare === "function" && !navigator.canShare({ files: [file] })) {
+				throw new Error("Not supported on this device");
+			}
+
+			try {
+				await navigator.share({ files: [file] });
+			} catch (err) {
+				if (isShareAbortError(err)) return;
+				throw err;
+			}
 		}, { resetMs: 900 });
 	}
 

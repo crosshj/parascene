@@ -2862,6 +2862,74 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	});
 
+	// GET /api/create/images/:id/image - Original creation image (still frame for videos) for device share/save.
+	router.get("/api/create/images/:id/image", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		try {
+			const id = Number(req.params.id);
+			if (!Number.isFinite(id) || id <= 0) {
+				return res.status(400).json({ error: "Invalid creation id" });
+			}
+
+			let image = await queries.selectCreatedImageById?.get(id, user.id);
+
+			if (!image) {
+				const any = await queries.selectCreatedImageByIdAnyUser?.get(id);
+				if (!any) {
+					return res.status(404).json({ error: "Image not found" });
+				}
+				const isPublished = any.published === 1 || any.published === true;
+				const isAdmin = user.role === "admin";
+				if (!isPublished && !isAdmin) {
+					return res.status(404).json({ error: "Image not found" });
+				}
+				image = any;
+			}
+
+			const status = image.status || "completed";
+			if (status !== "completed") {
+				return res.status(400).json({ error: "Only completed creations can be exported" });
+			}
+			if (!image.filename) {
+				return res.status(400).json({ error: "Image file missing" });
+			}
+
+			const sourceBuf = await storage.getImageBuffer(image.filename);
+			if (!sourceBuf || !Buffer.isBuffer(sourceBuf)) {
+				return res.status(500).json({ error: "Failed to read image" });
+			}
+
+			const contentType = guessImageContentType(image.filename);
+			const suffix =
+				contentType === "image/jpeg"
+					? ".jpg"
+					: contentType === "image/webp"
+						? ".webp"
+						: contentType === "image/gif"
+							? ".gif"
+							: ".png";
+			const downloadName = `parascene-${id}${suffix}`;
+
+			res.set("Cache-Control", "private, no-store, max-age=0");
+			res.set("Content-Type", contentType);
+			res.set("Content-Length", String(sourceBuf.length));
+			res.set("Content-Disposition", `inline; filename="${downloadName}"`);
+			return res.send(sourceBuf);
+		} catch (error) {
+			const status =
+				error && typeof error === "object" && "status" in error && typeof error.status === "number"
+					? error.status
+					: 500;
+			const msg = error instanceof Error && error.message ? error.message : "Failed to export image";
+			if (status >= 400 && status < 600) {
+				return res.status(status).json({ error: msg });
+			}
+			return res.status(500).json({ error: "Failed to export image" });
+		}
+	});
+
 	// GET /api/create/images/:id/watermarked - Open a watermarked image export for manual sharing/copying.
 	router.get("/api/create/images/:id/watermarked", async (req, res) => {
 		const user = await requireUser(req, res);
