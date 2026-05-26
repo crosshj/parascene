@@ -624,9 +624,31 @@ function buildHourlyStackSeries(visitors, dayStartMs) {
 	return { series, hourTotals, peakHour, slotByHour };
 }
 
-function stackedHourChartSvg({ series, hourTotals, slotByHour, dayStartMs, dayKey, et }) {
+const HOUR_CHART_HEIGHT = 280;
+
+/** @param {number} maxY @param {number} padL @param {number} padR @param {number} w @param {number} padT @param {number} chartH @param {number} chartBottom */
+function hourChartLinearTicks(maxY, padL, padR, w, padT, chartH, chartBottom) {
+	return [0, Math.ceil(maxY / 2), maxY]
+		.filter((v, i, a) => a.indexOf(v) === i)
+		.map((tick) => {
+			const y = chartBottom - (tick / maxY) * chartH;
+			return `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${w - padR}" y2="${y.toFixed(1)}" stroke="#e2e8f0" stroke-dasharray="4 4"/><text x="${padL - 6}" y="${(y + 4).toFixed(1)}" text-anchor="end" font-size="10" fill="#64748b">${tick}</text>`;
+		})
+		.join("");
+}
+
+/** @param {object} opts */
+function wrapHourChartSvg(opts) {
+	const {
+		ariaLabel,
+		dayStartMs,
+		dayKey,
+		et,
+		barsHtml,
+		yTicksHtml,
+		h = HOUR_CHART_HEIGHT
+	} = opts;
 	const w = 1080;
-	const h = 380;
 	const padL = 44;
 	const padR = 16;
 	const padT = 16;
@@ -634,49 +656,7 @@ function stackedHourChartSvg({ series, hourTotals, slotByHour, dayStartMs, dayKe
 	const chartW = w - padL - padR;
 	const chartH = h - padT - padB;
 	const colW = chartW / HOURS_PER_DAY;
-	const maxY = Math.max(...hourTotals, 1);
-
-	const authedSeries = series.filter((s) => s.kind === "authed");
-	const anonSeries = series.find((s) => s.kind === "anon");
-	const unitH = chartH / maxY;
-
-	const grid = Array.from({ length: HOURS_PER_DAY }, (_, hour) => {
-		const total = Number(hourTotals[hour]) || 0;
-		if (total <= 0) return "";
-
-		const slots = slotByHour[hour] || new Map();
-		const authedLayers = slots.size;
-
-		const segments = [];
-		const hourStartMs = dayStartMs + hour * 60 * 60 * 1000;
-		const hourEndMs = dayStartMs + (hour + 1) * 60 * 60 * 1000;
-		const utcStart = et.formatUtcIso(new Date(hourStartMs).toISOString());
-		const utcEnd = et.formatUtcIso(new Date(hourEndMs).toISOString());
-		const x = (padL + hour * colW + 1).toFixed(1);
-		const barW = Math.max(1, colW - 2).toFixed(1);
-
-		for (const s of authedSeries) {
-			if (!Number(s.values[hour])) continue;
-			const userId = Number(String(s.id).slice(2));
-			const slot = slots.get(userId);
-			if (slot == null) continue;
-			const y = (padT + chartH - (slot + 1) * unitH).toFixed(1);
-			segments.push(
-				`<rect x="${x}" y="${y}" width="${barW}" height="${unitH.toFixed(1)}" fill="${s.color}" opacity="0.92"><title>${esc(s.label)} · ${esc(et.partitionHourShortLabel(hour, dayStartMs))} (${esc(et.hourWindowEt(hour, dayStartMs))})\nUTC ${esc(utcStart)} – ${esc(utcEnd)}\nactive</title></rect>`
-			);
-		}
-
-		const anonN = Number(anonSeries?.values[hour]) || 0;
-		if (anonN > 0 && anonSeries) {
-			const anonH = anonN * unitH;
-			const y = (padT + chartH - authedLayers * unitH - anonH).toFixed(1);
-			segments.push(
-				`<rect x="${x}" y="${y}" width="${barW}" height="${anonH.toFixed(1)}" fill="${anonSeries.color}" opacity="0.85"><title>${esc(anonSeries.label)} · ${esc(et.partitionHourShortLabel(hour, dayStartMs))} (${esc(et.hourWindowEt(hour, dayStartMs))})\nUTC ${esc(utcStart)} – ${esc(utcEnd)}\n${anonN} anon cookies</title></rect>`
-			);
-		}
-
-		return segments.join("");
-	}).join("");
+	const chartBottom = padT + chartH;
 
 	const xLabels = Array.from({ length: HOURS_PER_DAY }, (_, hour) => {
 		if (hour % 2 !== 0) return "";
@@ -684,23 +664,116 @@ function stackedHourChartSvg({ series, hourTotals, slotByHour, dayStartMs, dayKe
 		return `<text x="${x.toFixed(1)}" y="${h - 18}" text-anchor="middle" font-size="10" fill="#64748b">${esc(et.partitionHourShortLabel(hour, dayStartMs))}</text>`;
 	}).join("");
 
-	const yTicks = [0, Math.ceil(maxY / 2), maxY]
-		.filter((v, i, a) => a.indexOf(v) === i)
-		.map((tick) => {
-			const y = padT + chartH - (tick / maxY) * chartH;
-			return `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${w - padR}" y2="${y.toFixed(1)}" stroke="#e2e8f0" stroke-dasharray="4 4"/><text x="${padL - 6}" y="${(y + 4).toFixed(1)}" text-anchor="end" font-size="10" fill="#64748b">${tick}</text>`;
-		})
-		.join("");
-
-	return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" aria-label="Active visitors by hour">
+	return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" aria-label="${esc(ariaLabel)}">
 		<rect width="${w}" height="${h}" fill="#fff"/>
-		<line x1="${padL}" y1="${padT + chartH}" x2="${w - padR}" y2="${padT + chartH}" stroke="#cbd5e1"/>
-		<line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT + chartH}" stroke="#cbd5e1"/>
-		${yTicks}
-		${grid}
+		<line x1="${padL}" y1="${chartBottom.toFixed(1)}" x2="${w - padR}" y2="${chartBottom.toFixed(1)}" stroke="#cbd5e1"/>
+		<line x1="${padL}" y1="${padT}" x2="${padL}" y2="${chartBottom.toFixed(1)}" stroke="#cbd5e1"/>
+		${yTicksHtml}
+		${barsHtml}
 		${xLabels}
-		<text x="${(padL + chartW / 2).toFixed(1)}" y="${h - 4}" text-anchor="middle" font-size="11" fill="#475569">Hour (${esc(et.tzAbbr(dayStartMs))}) · partition ${esc(dayKey)}</text>
+		<text x="${(padL + chartW / 2).toFixed(1)}" y="${h - 4}" text-anchor="middle" font-size="11" fill="#475569">Hour (${esc(et.tzAbbr(dayStartMs))}) · ${esc(dayKey)}</text>
 	</svg>`;
+}
+
+/** @param {number} hour @param {number} dayStartMs @param {object} et */
+function hourBarMeta(hour, dayStartMs, et) {
+	const hourStartMs = dayStartMs + hour * 60 * 60 * 1000;
+	const hourEndMs = dayStartMs + (hour + 1) * 60 * 60 * 1000;
+	return {
+		label: et.partitionHourShortLabel(hour, dayStartMs),
+		window: et.hourWindowEt(hour, dayStartMs),
+		utcStart: et.formatUtcIso(new Date(hourStartMs).toISOString()),
+		utcEnd: et.formatUtcIso(new Date(hourEndMs).toISOString())
+	};
+}
+
+function authedHourChartSvg({ series, slotByHour, dayStartMs, dayKey, et }) {
+	const authedSeries = series.filter((s) => s.kind === "authed");
+	const maxAuthed = Math.max(0, ...slotByHour.map((slots) => slots?.size ?? 0));
+	if (!maxAuthed) return '<p class="small">No logged-in activity this day.</p>';
+
+	const w = 1080;
+	const h = HOUR_CHART_HEIGHT;
+	const padL = 44;
+	const padR = 16;
+	const padT = 16;
+	const padB = 52;
+	const chartW = w - padL - padR;
+	const chartH = h - padT - padB;
+	const colW = chartW / HOURS_PER_DAY;
+	const chartBottom = padT + chartH;
+	const maxY = Math.max(maxAuthed, 1);
+	const unitH = chartH / maxY;
+
+	const barsHtml = Array.from({ length: HOURS_PER_DAY }, (_, hour) => {
+		const slots = slotByHour[hour] || new Map();
+		if (!slots.size) return "";
+		const meta = hourBarMeta(hour, dayStartMs, et);
+		const x = (padL + hour * colW + 1).toFixed(1);
+		const barW = Math.max(1, colW - 2).toFixed(1);
+		const segments = [];
+
+		for (const s of authedSeries) {
+			if (!Number(s.values[hour])) continue;
+			const userId = Number(String(s.id).slice(2));
+			const slot = slots.get(userId);
+			if (slot == null) continue;
+			const y = (chartBottom - (slot + 1) * unitH).toFixed(1);
+			segments.push(
+				`<rect x="${x}" y="${y}" width="${barW}" height="${unitH.toFixed(1)}" fill="${s.color}" opacity="0.92"><title>${esc(s.label)} · ${esc(meta.label)} (${esc(meta.window)})\nUTC ${esc(meta.utcStart)} – ${esc(meta.utcEnd)}\nactive</title></rect>`
+			);
+		}
+		return segments.join("");
+	}).join("");
+
+	return wrapHourChartSvg({
+		ariaLabel: "Logged-in users active by hour",
+		dayStartMs,
+		dayKey,
+		et,
+		barsHtml,
+		yTicksHtml: hourChartLinearTicks(maxY, padL, padR, w, padT, chartH, chartBottom)
+	});
+}
+
+function anonHourChartSvg({ series, dayStartMs, dayKey, et }) {
+	const anonSeries = series.find((s) => s.kind === "anon");
+	const anonValues = anonSeries?.values || [];
+	const maxAnon = Math.max(0, ...anonValues.map((n) => Number(n) || 0));
+	if (!maxAnon || !anonSeries) return '<p class="small">No anonymous activity this day.</p>';
+
+	const w = 1080;
+	const h = HOUR_CHART_HEIGHT;
+	const padL = 44;
+	const padR = 16;
+	const padT = 16;
+	const padB = 52;
+	const chartW = w - padL - padR;
+	const chartH = h - padT - padB;
+	const colW = chartW / HOURS_PER_DAY;
+	const chartBottom = padT + chartH;
+	const maxY = Math.max(maxAnon, 1);
+	const unitH = chartH / maxY;
+
+	const barsHtml = Array.from({ length: HOURS_PER_DAY }, (_, hour) => {
+		const anonN = Number(anonValues[hour]) || 0;
+		if (anonN <= 0) return "";
+		const meta = hourBarMeta(hour, dayStartMs, et);
+		const x = (padL + hour * colW + 1).toFixed(1);
+		const barW = Math.max(1, colW - 2).toFixed(1);
+		const barH = anonN * unitH;
+		const y = (chartBottom - barH).toFixed(1);
+		return `<rect x="${x}" y="${y}" width="${barW}" height="${barH.toFixed(1)}" fill="${anonSeries.color}" opacity="0.85"><title>${esc(anonSeries.label)} · ${esc(meta.label)} (${esc(meta.window)})\nUTC ${esc(meta.utcStart)} – ${esc(meta.utcEnd)}\n${anonN} anon cookies</title></rect>`;
+	}).join("");
+
+	return wrapHourChartSvg({
+		ariaLabel: "Anonymous cookies active by hour",
+		dayStartMs,
+		dayKey,
+		et,
+		barsHtml,
+		yTicksHtml: hourChartLinearTicks(maxY, padL, padR, w, padT, chartH, chartBottom)
+	});
 }
 
 function authedColorByUserId(series) {
@@ -876,9 +949,15 @@ async function renderVisitPulseHtml(bundle) {
 		peakHourLabel: et.partitionHourShortLabel(stack.peakHour.h, dayStartMs),
 		displayTz,
 		easternTz: EASTERN_TZ,
-		chartSvg: stackedHourChartSvg({
-			...stack,
+		authedChartSvg: authedHourChartSvg({
+			series: stack.series,
 			slotByHour: stack.slotByHour,
+			dayStartMs,
+			dayKey,
+			et
+		}),
+		anonChartSvg: anonHourChartSvg({
+			series: stack.series,
 			dayStartMs,
 			dayKey,
 			et

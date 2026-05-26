@@ -268,6 +268,11 @@ th {
 	margin-top: 0;
 }
 
+.table-grid > .chart-wrap,
+.table-grid > p.small {
+	grid-column: 1 / -1;
+}
+
 .table-subgrid {
 	display: grid;
 	grid-template-columns: subgrid;

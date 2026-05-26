@@ -39,19 +39,19 @@
 </section>
 
 <section>
-	<h2>Who was active by hour</h2>
-	<p class="small">Stacked bars: returning users keep stack order from the previous hour; inactive users drop out (no
-		gaps). Times shown in {{displayTz}}; hover includes UTC.</p>
-	<div class="chart-wrap">
-		{{!chartSvg}}
-	</div>
-</section>
-
-<section>
 	<div class="table-grid">
 		<h2>Logged-in users</h2>
+		<p class="small">Active by hour: returning users keep stack order from the previous hour; inactive users drop
+			out (no gaps). Times in {{displayTz}}; hover includes UTC.</p>
+		<div class="chart-wrap">
+			{{!authedChartSvg}}
+		</div>
 		{{!authedTableHtml}}
 		<h2>Anonymous cookies</h2>
+		<p class="small">Cookies active per hour (stack height = count). Times in {{displayTz}}; hover includes UTC.</p>
+		<div class="chart-wrap">
+			{{!anonChartSvg}}
+		</div>
 		{{!anonTableHtml}}
 	</div>
 </section>
