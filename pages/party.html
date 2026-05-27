@@ -1,0 +1,805 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+	<meta name="theme-color" content="#0a0a0f" />
+	<meta name="apple-mobile-web-app-capable" content="yes" />
+	<title>Party — camera capture POC</title>
+	<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+	<style>
+		:root {
+			--bg: #0a0a0f;
+			--surface: #16161f;
+			--border: #2a2a38;
+			--text: #f2f2f7;
+			--muted: #9b9bb0;
+			--accent: #7c6cff;
+			--accent-fg: #fff;
+			--danger: #ff6b6b;
+			--ok: #3dd68c;
+			--safe-top: env(safe-area-inset-top, 0px);
+			--safe-bottom: env(safe-area-inset-bottom, 0px);
+			--safe-left: env(safe-area-inset-left, 0px);
+			--safe-right: env(safe-area-inset-right, 0px);
+			--party-layout-max: 28rem;
+		}
+
+		*,
+		*::before,
+		*::after {
+			box-sizing: border-box;
+		}
+
+		html,
+		body {
+			margin: 0;
+			min-height: 100%;
+			background: var(--bg);
+			color: var(--text);
+			font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+			-webkit-font-smoothing: antialiased;
+		}
+
+		body.party-body {
+			display: flex;
+			justify-content: center;
+		}
+
+		.party-app {
+			width: 100%;
+			max-width: var(--party-layout-max);
+			min-height: 100dvh;
+			display: flex;
+			flex-direction: column;
+			padding:
+				calc(12px + var(--safe-top))
+				calc(12px + var(--safe-right))
+				calc(12px + var(--safe-bottom))
+				calc(12px + var(--safe-left));
+		}
+
+		.party-header h1 {
+			margin: 0 0 4px;
+			font-size: 1.25rem;
+			font-weight: 700;
+		}
+
+		.party-header p {
+			margin: 0;
+			font-size: 0.875rem;
+			color: var(--muted);
+			line-height: 1.4;
+		}
+
+		.party-screen {
+			flex: 1;
+			display: flex;
+			flex-direction: column;
+			gap: 12px;
+			margin-top: 12px;
+			min-height: 0;
+		}
+
+		.party-screen[hidden] {
+			display: none !important;
+		}
+
+		.party-card {
+			background: var(--surface);
+			border: 1px solid var(--border);
+			border-radius: 10px;
+			padding: 14px;
+		}
+
+		.party-card h2 {
+			margin: 0 0 8px;
+			font-size: 0.95rem;
+			font-weight: 600;
+		}
+
+		.party-methods {
+			display: flex;
+			flex-direction: column;
+			gap: 8px;
+		}
+
+		.party-method-btn {
+			display: block;
+			width: 100%;
+			text-align: left;
+			padding: 12px 14px;
+			border-radius: 6px;
+			border: 1px solid var(--border);
+			background: var(--bg);
+			color: var(--text);
+			font: inherit;
+			cursor: pointer;
+		}
+
+		.party-method-btn:active {
+			transform: scale(0.99);
+		}
+
+		.party-method-btn strong {
+			display: block;
+			font-size: 0.9rem;
+			margin-bottom: 2px;
+		}
+
+		.party-method-btn span {
+			font-size: 0.75rem;
+			color: var(--muted);
+			line-height: 1.35;
+		}
+
+		.party-method-btn[data-recommended='true'] {
+			border-color: var(--accent);
+		}
+
+		.party-actions {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 8px;
+			margin-top: auto;
+		}
+
+		.party-btn {
+			flex: 1;
+			min-width: 120px;
+			padding: 12px 16px;
+			border-radius: 6px;
+			border: none;
+			font: inherit;
+			font-weight: 600;
+			cursor: pointer;
+		}
+
+		.party-btn--primary {
+			background: var(--accent);
+			color: var(--accent-fg);
+		}
+
+		.party-btn--ghost {
+			background: transparent;
+			color: var(--muted);
+			border: 1px solid var(--border);
+		}
+
+		.party-btn--shutter {
+			width: 72px;
+			height: 72px;
+			flex: 0 0 auto;
+			border-radius: 50%;
+			border: 4px solid #fff;
+			background: rgba(255, 255, 255, 0.2);
+			margin: 0 auto;
+		}
+
+		.party-btn--shutter:active {
+			background: #fff;
+		}
+
+		.party-live {
+			position: relative;
+			flex: 1;
+			min-height: 240px;
+			border-radius: 10px;
+			overflow: hidden;
+			background: #000;
+		}
+
+		.party-live video,
+		.party-live img {
+			width: 100%;
+			height: 100%;
+			object-fit: cover;
+			display: block;
+		}
+
+		.party-live-status {
+			position: absolute;
+			left: 10px;
+			right: 10px;
+			top: 10px;
+			padding: 6px 10px;
+			border-radius: 6px;
+			background: rgba(0, 0, 0, 0.55);
+			font-size: 0.75rem;
+			color: #fff;
+			pointer-events: none;
+		}
+
+		.party-preview-wrap {
+			flex: 1;
+			min-height: 200px;
+			border-radius: 10px;
+			overflow: hidden;
+			background: #000;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+
+		.party-preview-wrap img,
+		.party-preview-wrap video {
+			max-width: 100%;
+			max-height: 50dvh;
+			object-fit: contain;
+		}
+
+		.party-meta {
+			font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+			font-size: 0.7rem;
+			line-height: 1.5;
+			color: var(--muted);
+			white-space: pre-wrap;
+			word-break: break-word;
+			max-height: 140px;
+			overflow: auto;
+		}
+
+		.party-log {
+			margin-top: 8px;
+			border-top: 1px solid var(--border);
+			padding-top: 8px;
+		}
+
+		.party-log summary {
+			cursor: pointer;
+			font-size: 0.8rem;
+			color: var(--muted);
+			user-select: none;
+		}
+
+		.party-log-list {
+			margin: 8px 0 0;
+			padding: 0;
+			list-style: none;
+			max-height: 120px;
+			overflow: auto;
+			font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+			font-size: 0.65rem;
+			line-height: 1.45;
+		}
+
+		.party-log-list li {
+			padding: 2px 0;
+			border-bottom: 1px solid var(--border);
+			color: var(--muted);
+		}
+
+		.party-log-list li[data-level='error'] {
+			color: var(--danger);
+		}
+
+		.party-log-list li[data-level='ok'] {
+			color: var(--ok);
+		}
+
+		.party-badge {
+			display: inline-block;
+			font-size: 0.65rem;
+			font-weight: 700;
+			text-transform: uppercase;
+			letter-spacing: 0.04em;
+			padding: 2px 6px;
+			border-radius: 4px;
+			background: var(--accent);
+			color: var(--accent-fg);
+			margin-left: 6px;
+			vertical-align: middle;
+		}
+
+		.party-hidden-input {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			opacity: 0;
+			pointer-events: none;
+		}
+
+		@media (min-width: 769px) {
+			body.party-body {
+				padding: 24px 16px;
+			}
+
+			.party-app {
+				min-height: 0;
+				border: 1px solid var(--border);
+				border-radius: 14px;
+				background: var(--bg);
+			}
+
+			.party-live {
+				flex: 0 1 auto;
+				max-height: min(70vh, 640px);
+				aspect-ratio: 3 / 4;
+			}
+
+			.party-preview-wrap {
+				flex: 0 1 auto;
+				max-height: min(70vh, 640px);
+			}
+
+			.party-preview-wrap img,
+			.party-preview-wrap video {
+				max-height: min(70vh, 640px);
+			}
+		}
+	</style>
+</head>
+
+<body class="party-body">
+	<div class="party-app" id="party-app">
+		<header class="party-header">
+			<h1>Party <span class="party-badge">POC</span></h1>
+			<p>Compare capture paths on your device. Tap a method — each opens from your tap (required for camera).</p>
+		</header>
+
+		<!-- Screen: pick method -->
+		<section class="party-screen" id="party-screen-home" data-screen="home">
+			<div class="party-card">
+				<h2>Capture methods</h2>
+				<div class="party-methods" id="party-methods"></div>
+			</div>
+			<div class="party-card">
+				<h2>Environment</h2>
+				<pre class="party-meta" id="party-env-meta"></pre>
+			</div>
+		</section>
+
+		<!-- Screen: live viewfinder (getUserMedia only) -->
+		<section class="party-screen" id="party-screen-live" data-screen="live" hidden>
+			<div class="party-live" id="party-live-stage">
+				<video id="party-live-video" playsinline muted autoplay></video>
+				<div class="party-live-status" id="party-live-status">Starting camera…</div>
+			</div>
+			<div class="party-actions">
+				<button type="button" class="party-btn party-btn--ghost" data-action="cancel-live">Cancel</button>
+				<button type="button" class="party-btn party-btn--shutter" data-action="shutter" aria-label="Take photo"></button>
+				<button type="button" class="party-btn party-btn--ghost" data-action="flip-camera">Flip</button>
+			</div>
+		</section>
+
+		<!-- Screen: preview result -->
+		<section class="party-screen" id="party-screen-preview" data-screen="preview" hidden>
+			<div class="party-preview-wrap" id="party-preview-stage"></div>
+			<pre class="party-meta" id="party-result-meta"></pre>
+			<div class="party-actions">
+				<button type="button" class="party-btn party-btn--ghost" data-action="retake">Try again</button>
+				<button type="button" class="party-btn party-btn--primary" data-action="done">Done (keep preview)</button>
+			</div>
+		</section>
+
+		<details class="party-log">
+			<summary>Event log (<span id="party-log-count">0</span>)</summary>
+			<ul class="party-log-list" id="party-log-list"></ul>
+		</details>
+	</div>
+
+	<!-- Native capture inputs (one per variant; modular handlers attach by data-method) -->
+	<input type="file" class="party-hidden-input" id="party-input-native-env" accept="image/*" capture="environment" />
+	<input type="file" class="party-hidden-input" id="party-input-native-user" accept="image/*" capture="user" />
+	<input type="file" class="party-hidden-input" id="party-input-native-picker" accept="image/*" />
+	<input type="file" class="party-hidden-input" id="party-input-native-video" accept="video/*" capture="environment" />
+
+	<script>
+		/**
+		 * Party camera POC — single-file layout with module-shaped namespaces.
+		 * Future split: party/log.js, party/capture-native.js, party/capture-live.js, party/ui.js, party/app.js
+		 */
+		(function () {
+			'use strict';
+
+			/** @typedef {'home'|'live'|'preview'} PartyScreenId */
+			/** @typedef {{ id: string, label: string, hint: string, recommended?: boolean, kind: 'native'|'live', inputId?: string, facing?: 'environment'|'user' }} CaptureMethod */
+
+			// --- party/constants ---
+			const CAPTURE_METHODS = /** @type {CaptureMethod[]} */ ([
+				{
+					id: 'native-env',
+					kind: 'native',
+					label: 'Native — rear camera hint',
+					hint: 'input[capture=environment]. Usually opens system camera on mobile.',
+					recommended: true,
+					inputId: 'party-input-native-env'
+				},
+				{
+					id: 'native-user',
+					kind: 'native',
+					label: 'Native — front camera hint',
+					hint: 'input[capture=user]. Selfie path on many devices.',
+					inputId: 'party-input-native-user'
+				},
+				{
+					id: 'native-picker',
+					kind: 'native',
+					label: 'Native — picker (no capture attr)',
+					hint: 'OS sheet: Photo Library + Take Photo. Most reliable fallback.',
+					recommended: true,
+					inputId: 'party-input-native-picker'
+				},
+				{
+					id: 'native-video',
+					kind: 'native',
+					label: 'Native — video rear hint',
+					hint: 'accept=video/* capture=environment. Tests video capture path.',
+					inputId: 'party-input-native-video'
+				},
+				{
+					id: 'live-gum',
+					kind: 'live',
+					label: 'In-page — getUserMedia viewfinder',
+					hint: 'Custom preview + shutter. More control; iOS/Android quirks differ.',
+					facing: 'environment'
+				}
+			]);
+
+			// --- party/log ---
+			const PartyLog = {
+				_max: 80,
+				_list: null,
+				_count: null,
+				init(listEl, countEl) {
+					this._list = listEl;
+					this._count = countEl;
+				},
+				/** @param {'info'|'ok'|'error'} level */
+				write(level, message, detail) {
+					const ts = new Date().toISOString().slice(11, 23);
+					const line = detail != null ? `${message} — ${JSON.stringify(detail)}` : message;
+					console.log(`[party][${level}]`, message, detail ?? '');
+					if (!this._list) return;
+					const li = document.createElement('li');
+					li.dataset.level = level;
+					li.textContent = `${ts} ${line}`;
+					this._list.prepend(li);
+					while (this._list.children.length > this._max) {
+						this._list.lastChild?.remove();
+					}
+					if (this._count) this._count.textContent = String(this._list.children.length);
+				},
+				info(msg, detail) { this.write('info', msg, detail); },
+				ok(msg, detail) { this.write('ok', msg, detail); },
+				error(msg, detail) { this.write('error', msg, detail); }
+			};
+
+			// --- party/dom ---
+			const PartyDom = {
+				screens: {},
+				methodsRoot: null,
+				envMeta: null,
+				previewStage: null,
+				resultMeta: null,
+				liveVideo: null,
+				liveStatus: null,
+				inputs: {},
+				init(root) {
+					root.querySelectorAll('[data-screen]').forEach((el) => {
+						const id = el.getAttribute('data-screen');
+						if (id) this.screens[id] = el;
+					});
+					this.methodsRoot = document.getElementById('party-methods');
+					this.envMeta = document.getElementById('party-env-meta');
+					this.previewStage = document.getElementById('party-preview-stage');
+					this.resultMeta = document.getElementById('party-result-meta');
+					this.liveVideo = document.getElementById('party-live-video');
+					this.liveStatus = document.getElementById('party-live-status');
+					CAPTURE_METHODS.forEach((m) => {
+						if (m.inputId) this.inputs[m.id] = document.getElementById(m.inputId);
+					});
+				},
+				/** @param {PartyScreenId} screenId */
+				showScreen(screenId) {
+					Object.entries(this.screens).forEach(([id, el]) => {
+						el.hidden = id !== screenId;
+					});
+				},
+				setLiveStatus(text) {
+					if (this.liveStatus) this.liveStatus.textContent = text;
+				},
+				clearPreview() {
+					if (!this.previewStage) return;
+					this.previewStage.replaceChildren();
+				},
+				renderMethods(onPick) {
+					if (!this.methodsRoot) return;
+					this.methodsRoot.replaceChildren();
+					CAPTURE_METHODS.forEach((method) => {
+						const btn = document.createElement('button');
+						btn.type = 'button';
+						btn.className = 'party-method-btn';
+						btn.dataset.methodId = method.id;
+						if (method.recommended) btn.dataset.recommended = 'true';
+						btn.innerHTML = `<strong>${method.label}${method.recommended ? ' <span class="party-badge">try first</span>' : ''}</strong><span>${method.hint}</span>`;
+						btn.addEventListener('click', () => onPick(method));
+						this.methodsRoot.appendChild(btn);
+					});
+				},
+				renderEnvMeta() {
+					if (!this.envMeta) return;
+					const secure = window.isSecureContext;
+					const hasGum = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+					const hasPerm = !!(navigator.permissions && navigator.permissions.query);
+					const lines = [
+						`secure context: ${secure}`,
+						`mediaDevices.getUserMedia: ${hasGum}`,
+						`permissions.query: ${hasPerm}`,
+						`platform: ${navigator.platform || '—'}`,
+						`ua: ${navigator.userAgent}`
+					];
+					this.envMeta.textContent = lines.join('\n');
+					if (!secure) PartyLog.error('Not a secure context — camera APIs require HTTPS or localhost');
+				}
+			};
+
+			// --- party/state ---
+			const PartyState = {
+				activeMethod: null,
+				previewObjectUrl: null,
+				liveStream: null,
+				liveFacing: 'environment',
+				lastFile: null,
+				resetPreview() {
+					if (this.previewObjectUrl) {
+						URL.revokeObjectURL(this.previewObjectUrl);
+						this.previewObjectUrl = null;
+					}
+					this.lastFile = null;
+					PartyDom.clearPreview();
+				}
+			};
+
+			// --- party/files ---
+			const PartyFiles = {
+				/** @returns {Promise<{ width?: number, height?: number }>} */
+				imageDimensions(file) {
+					return new Promise((resolve) => {
+						if (!file.type.startsWith('image/')) return resolve({});
+						const url = URL.createObjectURL(file);
+						const img = new Image();
+						img.onload = () => {
+							const out = { width: img.naturalWidth, height: img.naturalHeight };
+							URL.revokeObjectURL(url);
+							resolve(out);
+						};
+						img.onerror = () => {
+							URL.revokeObjectURL(url);
+							resolve({});
+						};
+						img.src = url;
+					});
+				},
+				/** @param {File} file */
+				async describe(file) {
+					const dims = await this.imageDimensions(file);
+					return {
+						name: file.name,
+						type: file.type,
+						size: file.size,
+						lastModified: file.lastModified,
+						...dims
+					};
+				},
+				/** @param {File} file */
+				showPreview(file) {
+					PartyState.resetPreview();
+					const url = URL.createObjectURL(file);
+					PartyState.previewObjectUrl = url;
+					PartyState.lastFile = file;
+					if (file.type.startsWith('video/')) {
+						const video = document.createElement('video');
+						video.src = url;
+						video.controls = true;
+						video.playsInline = true;
+						PartyDom.previewStage.appendChild(video);
+					} else {
+						const img = document.createElement('img');
+						img.src = url;
+						img.alt = 'Captured preview';
+						PartyDom.previewStage.appendChild(img);
+					}
+				}
+			};
+
+			// --- party/capture-native ---
+			const PartyCaptureNative = {
+				/** @param {CaptureMethod} method */
+				open(method) {
+					const input = PartyDom.inputs[method.id];
+					if (!input) {
+						PartyLog.error('Missing file input', { methodId: method.id });
+						return;
+					}
+					PartyState.activeMethod = method;
+					input.value = '';
+					PartyLog.info('Opening native input', { methodId: method.id });
+					input.click();
+				},
+				bind() {
+					CAPTURE_METHODS.filter((m) => m.kind === 'native').forEach((method) => {
+						const input = PartyDom.inputs[method.id];
+						if (!input) return;
+						input.addEventListener('change', () => PartyApp.onNativeFileSelected(method, input));
+						input.addEventListener('cancel', () => {
+							PartyLog.info('Native picker cancelled', { methodId: method.id });
+						});
+					});
+				}
+			};
+
+			// --- party/capture-live ---
+			const PartyCaptureLive = {
+				async start(method) {
+					PartyState.activeMethod = method;
+					PartyState.liveFacing = method.facing || 'environment';
+					PartyDom.showScreen('live');
+					PartyDom.setLiveStatus('Requesting camera…');
+					await this.stop();
+					if (!navigator.mediaDevices?.getUserMedia) {
+						PartyLog.error('getUserMedia unavailable');
+						PartyDom.setLiveStatus('Camera API not available');
+						PartyDom.showScreen('home');
+						return;
+					}
+					try {
+						const constraints = {
+							audio: false,
+							video: {
+								facingMode: PartyState.liveFacing,
+								width: { ideal: 1920 },
+								height: { ideal: 1080 }
+							}
+						};
+						PartyLog.info('getUserMedia', constraints);
+						const stream = await navigator.mediaDevices.getUserMedia(constraints);
+						PartyState.liveStream = stream;
+						PartyDom.liveVideo.srcObject = stream;
+						await PartyDom.liveVideo.play().catch(() => {});
+						PartyDom.setLiveStatus(`Live — ${PartyState.liveFacing}`);
+						PartyLog.ok('Live stream started');
+					} catch (err) {
+						PartyLog.error('getUserMedia failed', { message: err?.message || String(err) });
+						PartyDom.setLiveStatus(err?.message || 'Permission denied');
+						setTimeout(() => PartyDom.showScreen('home'), 1200);
+					}
+				},
+				async stop() {
+					if (PartyState.liveStream) {
+						PartyState.liveStream.getTracks().forEach((t) => t.stop());
+						PartyState.liveStream = null;
+					}
+					if (PartyDom.liveVideo) PartyDom.liveVideo.srcObject = null;
+				},
+				async flip() {
+					PartyState.liveFacing = PartyState.liveFacing === 'environment' ? 'user' : 'environment';
+					const method = PartyState.activeMethod || { id: 'live-gum', kind: 'live', facing: PartyState.liveFacing };
+					await this.start({ ...method, facing: PartyState.liveFacing });
+				},
+				/** @returns {Promise<File|null>} */
+				async captureFrame() {
+					const video = PartyDom.liveVideo;
+					if (!video || !video.videoWidth) {
+						PartyLog.error('No video frame to capture');
+						return null;
+					}
+					const canvas = document.createElement('canvas');
+					canvas.width = video.videoWidth;
+					canvas.height = video.videoHeight;
+					const ctx = canvas.getContext('2d');
+					if (!ctx) return null;
+					ctx.drawImage(video, 0, 0);
+					const blob = await new Promise((resolve) => {
+						canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.92);
+					});
+					if (!blob) {
+						PartyLog.error('canvas.toBlob failed');
+						return null;
+					}
+					return new File([blob], `party-live-${Date.now()}.jpg`, { type: 'image/jpeg' });
+				}
+			};
+
+			// --- party/app ---
+			const PartyApp = {
+				init() {
+					PartyLog.init(
+						document.getElementById('party-log-list'),
+						document.getElementById('party-log-count')
+					);
+					PartyDom.init(document.getElementById('party-app'));
+					PartyDom.renderEnvMeta();
+					PartyDom.renderMethods((method) => this.onMethodPicked(method));
+					PartyCaptureNative.bind();
+					this.bindActions();
+					PartyLog.ok('Party POC ready');
+					document.addEventListener('visibilitychange', () => {
+						if (document.hidden && PartyState.liveStream) {
+							PartyLog.info('Page hidden — live stream may pause on some browsers');
+						}
+					});
+				},
+				bindActions() {
+					document.querySelector('[data-action="cancel-live"]')?.addEventListener('click', () => {
+						PartyCaptureLive.stop();
+						PartyDom.showScreen('home');
+						PartyLog.info('Live capture cancelled');
+					});
+					document.querySelector('[data-action="flip-camera"]')?.addEventListener('click', () => {
+						PartyCaptureLive.flip();
+					});
+					document.querySelector('[data-action="shutter"]')?.addEventListener('click', () => {
+						this.onLiveShutter();
+					});
+					document.querySelector('[data-action="retake"]')?.addEventListener('click', () => {
+						PartyState.resetPreview();
+						const method = PartyState.activeMethod;
+						if (method?.kind === 'live') {
+							PartyCaptureLive.start(method);
+						} else if (method) {
+							PartyDom.showScreen('home');
+						} else {
+							PartyDom.showScreen('home');
+						}
+					});
+					document.querySelector('[data-action="done"]')?.addEventListener('click', () => {
+						PartyCaptureLive.stop();
+						PartyDom.showScreen('home');
+						PartyLog.info('Preview kept; returned home');
+					});
+				},
+				/** @param {CaptureMethod} method */
+				onMethodPicked(method) {
+					PartyLog.info('Method selected', { id: method.id, kind: method.kind });
+					if (method.kind === 'native') {
+						PartyCaptureNative.open(method);
+						return;
+					}
+					PartyCaptureLive.start(method);
+				},
+				/** @param {CaptureMethod} method */
+				/** @param {HTMLInputElement} input */
+				async onNativeFileSelected(method, input) {
+					const file = input.files?.[0];
+					if (!file) {
+						PartyLog.info('Native flow ended with no file', { methodId: method.id });
+						return;
+					}
+					PartyLog.ok('Native file received', { methodId: method.id, type: file.type, size: file.size });
+					await this.showResult(file);
+				},
+				async onLiveShutter() {
+					PartyLog.info('Shutter tapped');
+					const file = await PartyCaptureLive.captureFrame();
+					if (!file) return;
+					await PartyCaptureLive.stop();
+					PartyLog.ok('Live frame captured', { size: file.size });
+					await this.showResult(file);
+				},
+				/** @param {File} file */
+				async showResult(file) {
+					const meta = await PartyFiles.describe(file);
+					PartyFiles.showPreview(file);
+					if (PartyDom.resultMeta) {
+						PartyDom.resultMeta.textContent = JSON.stringify(
+							{ method: PartyState.activeMethod?.id, ...meta },
+							null,
+							2
+						);
+					}
+					PartyDom.showScreen('preview');
+				}
+			};
+
+			if (document.readyState === 'loading') {
+				document.addEventListener('DOMContentLoaded', () => PartyApp.init());
+			} else {
+				PartyApp.init();
+			}
+		})();
+	</script>
+</body>
+
+</html>

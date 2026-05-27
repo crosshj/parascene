@@ -41,6 +41,7 @@ Fullscreen vertical feed videos (mobile doom scroll from `#feed` video cards): `
 /pricing.html
 /integrations
 /try
+/party
 /auth
 /*
 

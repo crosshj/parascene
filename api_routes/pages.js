@@ -1242,6 +1242,15 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 		return res.send(htmlContent);
 	});
 
+	// Party camera capture POC (unauthenticated, self-contained HTML).
+	router.get("/party", async (req, res) => {
+		const fs = await import("fs/promises");
+		let htmlContent = await fs.readFile(path.join(pagesDir, "party.html"), "utf-8");
+		htmlContent = replaceTemplateTokens(htmlContent, getPageTokens(req));
+		res.setHeader("Content-Type", "text/html");
+		return res.send(htmlContent);
+	});
+
 	// Catch-all route for sub-routes - serve the same page for all routes
 	// This allows clean URLs like /feed, /explore, etc. while serving the same HTML
 	router.get("/*", async (req, res, next) => {
@@ -1251,6 +1260,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			req.path.startsWith("/creations/") ||
 			req.path.startsWith("/help") ||
 			req.path === "/welcome" ||
+			req.path === "/party" ||
 			req.path === "/prompt-library" ||
 			req.path === "/user" ||
 			req.path.startsWith("/user/") ||
