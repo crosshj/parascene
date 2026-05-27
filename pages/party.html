@@ -6,6 +6,7 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 	<meta name="theme-color" content="#0a0a0f" />
 	<meta name="apple-mobile-web-app-capable" content="yes" />
+	<meta name="mobile-web-app-capable" content="yes" />
 	<title>Party Mode</title>
 	<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 	<style>
@@ -623,7 +624,7 @@
 
 			/** @typedef {'processing'|'ready'|'committed'|'failed'} PartyItemStatus */
 			/** @typedef {'portrait'|'landscape'|'square'} PartyOrientation */
-			/** @typedef {{ dataUrl: string, width: number, height: number, orientation: PartyOrientation, aspectRatio: string, exifCorrected: boolean, screenOrientation?: string|null }} PartyStoredPhoto */
+			/** @typedef {{ dataUrl: string, width: number, height: number, orientation: PartyOrientation, aspectRatio: string, exifCorrected: boolean, screenOrientation?: string|null, captureSource?: string, viewportCorrected?: boolean, holdSource?: string }} PartyStoredPhoto */
 			/** @typedef {{ id: string, status: PartyItemStatus, createdAt: string, updatedAt: string, prompt: string, originalDataUrl: string, resultDataUrl?: string, error?: string, creationId?: number, width?: number, height?: number, orientation?: PartyOrientation, aspectRatio?: string, exifCorrected?: boolean, screenOrientation?: string|null }} PartyQueueItem */
 			/** @typedef {{ id: string, friendlyName: string, hint: string, kind: 'native'|'live', inputId?: string, facing?: 'environment'|'user', default?: boolean }} CaptureMethodDef */
 
@@ -707,8 +708,127 @@
 				}
 			};
 
+			// --- party/page ---
+			const PartyPage = {
+				_portraitLockTried: false,
+				/** Best-effort: keep the page in portrait (works best when installed as PWA). */
+				tryLockPortrait() {
+					if (this._portraitLockTried) return;
+					this._portraitLockTried = true;
+					const lock = screen.orientation?.lock;
+					if (typeof lock !== 'function') return;
+					lock.call(screen.orientation, 'portrait').then(() => {
+						PartyLog.write('Page orientation locked to portrait');
+					}).catch(() => {
+						PartyLog.write('Could not lock page orientation (browser may ignore when rotation is off)');
+					});
+				},
+				bindPortraitLock() {
+					const root = document.getElementById('party-app');
+					if (!root) return;
+					const once = () => {
+						this.tryLockPortrait();
+						root.removeEventListener('pointerdown', once);
+					};
+					root.addEventListener('pointerdown', once, { passive: true });
+				}
+			};
+
+			// --- party/motion (gyro — works when system rotation lock is on) ---
+			const PartyMotion = {
+				_beta: null,
+				_gamma: null,
+				_handler: null,
+				_listening: false,
+				start() {
+					if (this._listening || typeof window === 'undefined') return;
+					if (!('DeviceOrientationEvent' in window)) return;
+					this._handler = (e) => {
+						if (e.beta != null) this._beta = e.beta;
+						if (e.gamma != null) this._gamma = e.gamma;
+					};
+					window.addEventListener('deviceorientation', this._handler, true);
+					this._listening = true;
+				},
+				stop() {
+					if (!this._listening || !this._handler) return;
+					window.removeEventListener('deviceorientation', this._handler, true);
+					this._handler = null;
+					this._listening = false;
+				},
+				/** @returns {PartyOrientation|null} */
+				getHoldOrientation() {
+					const beta = this._beta;
+					const gamma = this._gamma;
+					if (beta == null || gamma == null) return null;
+					const absGamma = Math.abs(gamma);
+					if (absGamma < 45) return 'portrait';
+					if (absGamma > 55) return 'landscape';
+					return null;
+				},
+				/**
+				 * Sample how the user is holding the phone at shutter time.
+				 * @returns {Promise<{ orientation: PartyOrientation, source: string, gamma: number|null }>}
+				 */
+				sampleHoldOrientation() {
+					const cached = this.getHoldOrientation();
+					if (cached) {
+						return Promise.resolve({
+							orientation: cached,
+							source: 'gyro',
+							gamma: this._gamma
+						});
+					}
+					if (!('DeviceOrientationEvent' in window)) {
+						return Promise.resolve({
+							orientation: PartyImages.getLayoutOrientation(),
+							source: 'layout',
+							gamma: null
+						});
+					}
+					return new Promise((resolve) => {
+						let settled = false;
+						const finish = (orientation, source, gamma) => {
+							if (settled) return;
+							settled = true;
+							clearTimeout(timer);
+							window.removeEventListener('deviceorientation', onMotion, true);
+							resolve({ orientation, source, gamma });
+						};
+						const onMotion = (e) => {
+							if (e.beta != null) this._beta = e.beta;
+							if (e.gamma != null) this._gamma = e.gamma;
+							const hold = this.getHoldOrientation();
+							if (hold) finish(hold, 'gyro', this._gamma);
+						};
+						const timer = window.setTimeout(() => {
+							finish(PartyImages.getLayoutOrientation(), 'layout', this._gamma);
+						}, 120);
+						window.addEventListener('deviceorientation', onMotion, true);
+					});
+				}
+			};
+
 			// --- party/images ---
 			const PartyImages = {
+				/** Locked portrait UI / narrow viewport — not how the user is holding the phone. */
+				getLayoutOrientation() {
+					return window.innerHeight >= window.innerWidth ? 'portrait' : 'landscape';
+				},
+				/** Screen orientation API (misleading when system rotation lock is on). */
+				getViewportOrientation() {
+					const type = String(screen.orientation?.type || '');
+					if (type.includes('portrait')) return 'portrait';
+					if (type.includes('landscape')) return 'landscape';
+					if (screen.orientation?.angle != null) {
+						const a = ((Number(screen.orientation.angle) % 360) + 360) % 360;
+						return a === 90 || a === 270 ? 'landscape' : 'portrait';
+					}
+					if (typeof window.orientation === 'number' && window.orientation !== 0) {
+						return Math.abs(window.orientation) === 90 ? 'landscape' : 'portrait';
+					}
+					return this.getLayoutOrientation();
+				},
 				/** @param {number} width @param {number} height @returns {PartyOrientation} */
 				classifyOrientation(width, height) {
 					const ratio = width / height;
@@ -735,8 +855,66 @@
 					const dims = item.width && item.height ? `${item.width}×${item.height}` : '';
 					const ar = item.aspectRatio ? `Suggested transform ratio: ${item.aspectRatio}` : '';
 					const exif = item.exifCorrected === false ? ' (raw file pixels — EXIF may differ)' : '';
-					const screen = item.screenOrientation ? ` · device ${item.screenOrientation}` : '';
-					return [name + exif + screen, dims, ar].filter(Boolean).join(' · ');
+					const live = item.captureSource === 'live-viewfinder'
+						? (item.viewportCorrected ? ' (rotated to match hold)' : ' (live capture)')
+						: '';
+					const hold = item.holdSource ? ` · hold: ${item.holdSource}` : '';
+					const screen = item.screenOrientation ? ` · screen ${item.screenOrientation}` : '';
+					return [name + exif + live + hold + screen, dims, ar].filter(Boolean).join(' · ');
+				},
+				/**
+				 * getUserMedia frames are often landscape in pixel data while the phone is portrait.
+				 * Rotate into canvas so stored image + orientation match physical hold (gyro when available).
+				 * @param {HTMLVideoElement} video
+				 * @param {{ orientation: PartyOrientation, source: string, gamma?: number|null }} hold
+				 */
+				drawVideoFrameToCanvas(video, hold) {
+					const vw = video.videoWidth;
+					const vh = video.videoHeight;
+					if (!vw || !vh) throw new Error('No video frame');
+					const physical = hold.orientation;
+					const gamma = hold.gamma ?? PartyMotion._gamma;
+					const bufferLandscape = vw > vh * 1.05;
+					const bufferPortrait = vh > vw * 1.05;
+					const mismatch =
+						(physical === 'portrait' && bufferLandscape) ||
+						(physical === 'landscape' && bufferPortrait);
+					const canvas = document.createElement('canvas');
+					const ctx = canvas.getContext('2d');
+					if (!ctx) throw new Error('Canvas unavailable');
+					if (!mismatch) {
+						canvas.width = vw;
+						canvas.height = vh;
+						ctx.drawImage(video, 0, 0, vw, vh);
+						return { canvas, viewportCorrected: false, holdSource: hold.source };
+					}
+					canvas.width = vh;
+					canvas.height = vw;
+					const portraitCcw = gamma != null && gamma > 0;
+					if (physical === 'portrait') {
+						if (portraitCcw) {
+							ctx.translate(0, canvas.height);
+							ctx.rotate(-Math.PI / 2);
+						} else {
+							ctx.translate(canvas.width, 0);
+							ctx.rotate(Math.PI / 2);
+						}
+					} else if (portraitCcw) {
+						ctx.translate(canvas.width, 0);
+						ctx.rotate(Math.PI / 2);
+					} else {
+						ctx.translate(0, canvas.height);
+						ctx.rotate(-Math.PI / 2);
+					}
+					ctx.drawImage(video, 0, 0, vw, vh);
+					return { canvas, viewportCorrected: true, holdSource: hold.source };
+				},
+				async canvasToJpegBlob(canvas, quality = 0.9) {
+					const blob = await new Promise((resolve) => {
+						canvas.toBlob((b) => resolve(b), 'image/jpeg', quality);
+					});
+					if (!blob) throw new Error('Could not encode photo');
+					return blob;
 				},
 				/** Decode with EXIF orientation applied when the browser supports it */
 				async _decodeSource(file) {
@@ -770,8 +948,8 @@
 					ctx.drawImage(drawable, 0, 0, width, height);
 					return canvas;
 				},
-				/** @param {File|Blob} file @returns {Promise<PartyStoredPhoto>} */
-				async preparePhoto(file, maxEdge = STORED_IMAGE_MAX_EDGE) {
+				/** @param {File|Blob} file @param {{ captureSource?: string, viewportCorrected?: boolean, holdSource?: string }} [meta] @returns {Promise<PartyStoredPhoto>} */
+				async preparePhoto(file, meta = {}, maxEdge = STORED_IMAGE_MAX_EDGE) {
 					if (!String(file.type || '').startsWith('image/')) {
 						throw new Error('Only images are supported in Party Mode');
 					}
@@ -793,7 +971,10 @@
 							orientation,
 							aspectRatio: this.suggestAspectRatio(w, h),
 							exifCorrected: decoded.exifCorrected,
-							screenOrientation
+							screenOrientation,
+							captureSource: meta.captureSource,
+							viewportCorrected: meta.viewportCorrected === true,
+							holdSource: meta.holdSource
 						};
 					} finally {
 						decoded.close();
@@ -921,7 +1102,10 @@
 						orientation: photo.orientation,
 						aspectRatio: photo.aspectRatio,
 						exifCorrected: photo.exifCorrected,
-						screenOrientation: photo.screenOrientation ?? null
+						screenOrientation: photo.screenOrientation ?? null,
+						captureSource: photo.captureSource,
+						viewportCorrected: photo.viewportCorrected === true,
+						holdSource: photo.holdSource
 					};
 					this.items.unshift(item);
 					this.selectedId = null;
@@ -996,6 +1180,71 @@
 				}
 			};
 
+			// --- party/audio (Web Audio — no sound files) ---
+			const PartyAudio = {
+				_audioCtx: null,
+				getAudioContext() {
+					const Ctx = window.AudioContext || window.webkitAudioContext;
+					if (!Ctx) return null;
+					if (!this._audioCtx) this._audioCtx = new Ctx();
+					return this._audioCtx;
+				},
+				async _ready() {
+					const ctx = this.getAudioContext();
+					if (!ctx) return null;
+					if (ctx.state === 'suspended') {
+						try {
+							await ctx.resume();
+						} catch (_) {
+							return null;
+						}
+					}
+					return ctx;
+				},
+				/** Short synthetic shutter click (noise burst + click) */
+				async playShutter() {
+					const ctx = await this._ready();
+					if (!ctx) return;
+					const now = ctx.currentTime;
+					const peak = 0.35;
+
+					const clickOsc = ctx.createOscillator();
+					const clickGain = ctx.createGain();
+					clickOsc.type = 'square';
+					clickOsc.frequency.setValueAtTime(1800, now);
+					clickOsc.frequency.exponentialRampToValueAtTime(400, now + 0.02);
+					clickGain.gain.setValueAtTime(peak * 0.5, now);
+					clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+					clickOsc.connect(clickGain);
+					clickGain.connect(ctx.destination);
+					clickOsc.start(now);
+					clickOsc.stop(now + 0.05);
+
+					const duration = 0.06;
+					const bufferSize = Math.ceil(ctx.sampleRate * duration);
+					const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+					const data = buffer.getChannelData(0);
+					for (let i = 0; i < bufferSize; i++) {
+						const t = i / bufferSize;
+						data[i] = (Math.random() * 2 - 1) * Math.exp(-t * 14);
+					}
+					const noise = ctx.createBufferSource();
+					noise.buffer = buffer;
+					const filter = ctx.createBiquadFilter();
+					filter.type = 'bandpass';
+					filter.frequency.value = 2200;
+					filter.Q.value = 0.6;
+					const noiseGain = ctx.createGain();
+					noiseGain.gain.setValueAtTime(peak, now);
+					noiseGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+					noise.connect(filter);
+					filter.connect(noiseGain);
+					noiseGain.connect(ctx.destination);
+					noise.start(now);
+					noise.stop(now + duration);
+				}
+			};
+
 			// --- party/capture ---
 			const PartyCapture = {
 				/** @type {CaptureMethodDef|null} */
@@ -1039,9 +1288,11 @@
 							: method.hint;
 					}
 					if (isLive) {
+						PartyMotion.start();
 						await this.startLive();
 					} else {
 						await this.stopLive();
+						PartyMotion.stop();
 					}
 				},
 				async onSnapPressed() {
@@ -1063,16 +1314,19 @@
 					}
 				},
 				async onLiveShutter() {
+					PartyPage.tryLockPortrait();
+					void PartyAudio.playShutter();
 					const video = this.els.liveVideo;
 					if (!video?.videoWidth) return;
-					const canvas = document.createElement('canvas');
-					canvas.width = video.videoWidth;
-					canvas.height = video.videoHeight;
-					canvas.getContext('2d')?.drawImage(video, 0, 0);
-					const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.9));
-					if (!blob) return;
 					try {
-						const photo = await PartyImages.preparePhoto(blob);
+						const hold = await PartyMotion.sampleHoldOrientation();
+						const { canvas, viewportCorrected, holdSource } = PartyImages.drawVideoFrameToCanvas(video, hold);
+						const blob = await PartyImages.canvasToJpegBlob(canvas, 0.9);
+						const photo = await PartyImages.preparePhoto(blob, {
+							captureSource: 'live-viewfinder',
+							viewportCorrected,
+							holdSource: holdSource || hold.source
+						});
 						if (typeof this._onSnap === 'function') this._onSnap(photo);
 					} catch (err) {
 						PartyLog.write(`Shutter failed: ${err?.message || err}`);
@@ -1106,6 +1360,7 @@
 						this.stream = null;
 					}
 					if (this.els.liveVideo) this.els.liveVideo.srcObject = null;
+					PartyMotion.stop();
 					this._setStatus('');
 				},
 				async flipLive() {
@@ -1274,6 +1529,7 @@
 			// --- party/app ---
 			const PartyApp = {
 				init() {
+					PartyPage.bindPortraitLock();
 					PartyLog.init(document.getElementById('party-log-list'));
 					const els = {
 						methodSelect: document.getElementById('party-method-select'),
