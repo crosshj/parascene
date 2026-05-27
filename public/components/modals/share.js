@@ -9,6 +9,7 @@ let shareIcon;
 let linkIcon;
 let qrCodeIcon;
 let pictureIcon;
+let googlePhotosIcon;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -37,6 +38,7 @@ async function loadDeps() {
 		linkIcon = iconsMod.linkIcon;
 		qrCodeIcon = iconsMod.qrCodeIcon;
 		pictureIcon = iconsMod.pictureIcon;
+		googlePhotosIcon = iconsMod.googlePhotosIcon;
 	})();
 	return _depsPromise;
 }
@@ -131,6 +133,7 @@ class AppModalShare extends HTMLElement {
 		this._vynlyShareEligible = true;
 		this._googlePhotosStatusRequestId = 0;
 		this._googlePhotosConfigured = false;
+		this._imageExportEligible = false;
 
 		this.handleEscape = this.handleEscape.bind(this);
 		this.handleOpen = this.handleOpen.bind(this);
@@ -168,6 +171,9 @@ class AppModalShare extends HTMLElement {
 		const iconQrCode = qrCodeIcon();
 		const iconLink = linkIcon();
 		const iconPicture = pictureIcon();
+		const iconGooglePhotos = googlePhotosIcon(
+			"share-option-icon share-option-icon-google-photos is-brand"
+		);
 
 		this.innerHTML = html`
 			<div class="modal-overlay" data-overlay>
@@ -234,6 +240,17 @@ class AppModalShare extends HTMLElement {
 								<span class="share-action-cta share-action-cta-linkedin" data-cta><span
 										class="share-action-cta-label">Share</span></span>
 							</button>
+
+							<button type="button" class="share-action-row" data-share-google-photos style="display: none;">
+								<span class="share-action-left">
+									<span class="share-option-icon share-option-icon-google-photos is-brand">${iconGooglePhotos}</span>
+									<span class="share-action-text">
+										<span class="share-action-title">Google Photos</span>
+										<span class="share-action-subtitle">Send to your Parascene album</span>
+									</span>
+								</span>
+								<span class="share-action-cta share-action-cta-google-photos" data-cta><span class="share-action-cta-label">Send</span></span>
+							</button>
 			
 							<button type="button" class="share-action-row" data-share-vynly style="display: none;">
 								<span class="share-action-left">
@@ -289,17 +306,6 @@ class AppModalShare extends HTMLElement {
 									</span>
 								</span>
 								<span class="share-action-cta" data-cta><span class="share-action-cta-label">Share</span></span>
-							</button>
-
-							<button type="button" class="share-action-row" data-share-google-photos style="display: none;">
-								<span class="share-action-left">
-									<span class="share-option-icon">${iconPicture}</span>
-									<span class="share-action-text">
-										<span class="share-action-title">Google Photos</span>
-										<span class="share-action-subtitle">Send to your Parascene album</span>
-									</span>
-								</span>
-								<span class="share-action-cta" data-cta><span class="share-action-cta-label">Send</span></span>
 							</button>
 			
 							<button type="button" class="share-action-row" data-qr-code>
@@ -430,7 +436,8 @@ class AppModalShare extends HTMLElement {
 	handleOpen(e) {
 		const id = e.detail?.creationId ?? null;
 		const vynlyShareEligible = e.detail?.vynlyShareEligible !== false;
-		this.open(id, { vynlyShareEligible });
+		const imageExportEligible = e.detail?.imageExportEligible === true;
+		this.open(id, { vynlyShareEligible, imageExportEligible });
 	}
 
 	handleCloseAllModals() {
@@ -454,6 +461,7 @@ class AppModalShare extends HTMLElement {
 		this._openRequestId++;
 		const openGen = this._openRequestId;
 		this._vynlyShareEligible = options.vynlyShareEligible !== false;
+		this._imageExportEligible = options.imageExportEligible === true;
 		this.resetAllCtas();
 
 		const vynlyRow = this.querySelector("[data-share-vynly]");
@@ -490,6 +498,7 @@ class AppModalShare extends HTMLElement {
 		this._googlePhotosStatusRequestId++;
 		this._vynlyShareEligible = true;
 		this._googlePhotosConfigured = false;
+		this._imageExportEligible = false;
 		const overlay = this.querySelector("[data-overlay]");
 		if (overlay) overlay.classList.remove("open");
 		this.resetAllCtas();
@@ -502,11 +511,13 @@ class AppModalShare extends HTMLElement {
 		}
 		const shareImageFileBtn = this.querySelector("[data-share-image-file]");
 		if (shareImageFileBtn instanceof HTMLButtonElement) {
-			shareImageFileBtn.style.display = canShareImageFiles() ? "" : "none";
+			const showImageFile = this._imageExportEligible && canShareImageFiles();
+			shareImageFileBtn.style.display = showImageFile ? "" : "none";
 		}
 		const googlePhotosBtn = this.querySelector("[data-share-google-photos]");
 		if (googlePhotosBtn instanceof HTMLButtonElement) {
-			googlePhotosBtn.style.display = this._googlePhotosConfigured ? "" : "none";
+			const showGoogle = this._googlePhotosConfigured && this._imageExportEligible;
+			googlePhotosBtn.style.display = showGoogle ? "" : "none";
 		}
 	}
 
@@ -515,6 +526,8 @@ class AppModalShare extends HTMLElement {
 		if (!(row instanceof HTMLButtonElement)) return;
 
 		row.style.display = "none";
+		if (!this._imageExportEligible) return;
+
 		const requestId = ++this._googlePhotosStatusRequestId;
 		try {
 			const res = await fetch("/api/google-photos/status", { credentials: "include" });
@@ -523,7 +536,7 @@ class AppModalShare extends HTMLElement {
 			const data = await res.json().catch(() => null);
 			if (requestId !== this._googlePhotosStatusRequestId) return;
 			this._googlePhotosConfigured = data && data.configured === true;
-			row.style.display = this._googlePhotosConfigured ? "" : "none";
+			row.style.display = this._googlePhotosConfigured && this._imageExportEligible ? "" : "none";
 		} catch {
 			// ignore
 		}

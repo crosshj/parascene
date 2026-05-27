@@ -227,7 +227,8 @@ Mutate`,
 			inner: html`<span class="creation-detail-action-strip-pill-icon">${shareIcon('')}</span>
 Share`,
 			show: (c) => c?.showShare,
-			disabled: (c) => !c?.showShare
+			disabled: (c) => !c?.showShare,
+			extraAttrs: (c) => (c?.imageExportEligible ? ' data-image-export-eligible="1"' : '')
 		},
 		{
 			key: 'edit',
@@ -1770,6 +1771,8 @@ async function loadCreation() {
 			showUnpublish: canEdit && isPublished && !isFailed && !adminViewingUserDeleted,
 			showMutate: !isAdmin && status === 'completed' && !isFailed && Boolean(creation.url),
 			showShare: !shareMountedPrivate && status === 'completed' && !isFailed,
+			imageExportEligible:
+				status === 'completed' && !isFailed && (isOwner || isPublished || isAdmin),
 			showRetry: canEdit && isFailed && !adminViewingUserDeleted,
 			showMoreInfoPill: hasDetailsForFailed,
 			showDelete: canEdit && !isAdmin,
@@ -4332,6 +4335,7 @@ document.addEventListener('click', async (e) => {
 		const creationId = getCreationId();
 		if (!creationId) return;
 		const vynlyShareEligible = !isCurrentCreationVideoForVynly();
+		const imageExportEligible = shareBtn.dataset.imageExportEligible === '1';
 		let vynlyConfigured = false;
 		if (vynlyShareEligible) {
 			try {
@@ -4348,7 +4352,8 @@ document.addEventListener('click', async (e) => {
 			detail: {
 				creationId,
 				vynlyShareEligible,
-				vynlyConfigured
+				vynlyConfigured,
+				imageExportEligible
 			}
 		}));
 	}

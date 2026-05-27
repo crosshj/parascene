@@ -2,6 +2,7 @@ import crypto from "crypto";
 import express from "express";
 import jwt from "jsonwebtoken";
 import { getJwtSecret } from "./auth.js";
+import { resolveCreationImageForExport } from "./utils/resolveCreationImageForExport.js";
 import { getBaseAppUrl } from "./utils/url.js";
 
 const GOOGLE_OAUTH_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -416,15 +417,11 @@ export default function createGooglePhotosRoutes({ queries, storage }) {
 				await queries.updateGooglePhotosConnectionAlbum.run(user.id, created);
 			}
 
-			// Load creation still image bytes (same behavior as device image share).
-			if (!queries.selectCreatedImageById?.get) {
-				return res.status(500).json({ error: "Server error", message: "Creation lookup not available" });
+			const resolved = await resolveCreationImageForExport({ queries, creationId, user });
+			if (!resolved.ok) {
+				return res.status(resolved.status).json({ error: resolved.error });
 			}
-			const image = await queries.selectCreatedImageById.get(creationId, user.id);
-			if (!image || !image.filename) {
-				return res.status(404).json({ error: "Creation not found" });
-			}
-			const bytes = await storage.getImageBuffer(image.filename);
+			const bytes = await storage.getImageBuffer(resolved.image.filename);
 			const filename = `parascene-${creationId}.png`;
 			const uploadToken = await uploadBytesToPhotos({
 				accessToken: access.access_token,
