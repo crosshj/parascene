@@ -135,6 +135,16 @@ export const linkedinIcon = withAttributes(html`
 	</svg>
 `);
 
+/** Google Photos pinwheel (official brand colors). */
+export const googlePhotosIcon = withAttributes(html`
+	<svg viewBox="0 0 48 48" aria-hidden="true">
+		<path fill="#FBBC04" d="M43.611 20.083H30.111v13.5h13.5V20.083z"></path>
+		<path fill="#4285F4" d="M20.083 4.5H6.583v13.5h13.5V4.5z"></path>
+		<path fill="#34A853" d="M4.5 27.917v13.5h13.5v-13.5H4.5z"></path>
+		<path fill="#EA4335" d="M27.917 43.611V30.111h13.5v13.5h-13.5z"></path>
+	</svg>
+`);
+
 export const smsIcon = withAttributes(html`
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
 		stroke-linejoin="round" aria-hidden="true">

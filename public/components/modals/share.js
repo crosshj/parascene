@@ -9,6 +9,7 @@ let shareIcon;
 let linkIcon;
 let qrCodeIcon;
 let pictureIcon;
+let googlePhotosIcon;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -37,6 +38,7 @@ async function loadDeps() {
 		linkIcon = iconsMod.linkIcon;
 		qrCodeIcon = iconsMod.qrCodeIcon;
 		pictureIcon = iconsMod.pictureIcon;
+		googlePhotosIcon = iconsMod.googlePhotosIcon;
 	})();
 	return _depsPromise;
 }
@@ -129,6 +131,9 @@ class AppModalShare extends HTMLElement {
 		this._ctaTimers = new Set();
 		this._vynlyStatusRequestId = 0;
 		this._vynlyShareEligible = true;
+		this._googlePhotosStatusRequestId = 0;
+		this._googlePhotosConfigured = false;
+		this._imageExportEligible = false;
 
 		this.handleEscape = this.handleEscape.bind(this);
 		this.handleOpen = this.handleOpen.bind(this);
@@ -166,6 +171,9 @@ class AppModalShare extends HTMLElement {
 		const iconQrCode = qrCodeIcon();
 		const iconLink = linkIcon();
 		const iconPicture = pictureIcon();
+		const iconGooglePhotos = googlePhotosIcon(
+			"share-option-icon share-option-icon-google-photos is-brand"
+		);
 
 		this.innerHTML = html`
 			<div class="modal-overlay" data-overlay>
@@ -231,6 +239,17 @@ class AppModalShare extends HTMLElement {
 								</span>
 								<span class="share-action-cta share-action-cta-linkedin" data-cta><span
 										class="share-action-cta-label">Share</span></span>
+							</button>
+
+							<button type="button" class="share-action-row" data-share-google-photos style="display: none;">
+								<span class="share-action-left">
+									<span class="share-option-icon share-option-icon-google-photos is-brand">${iconGooglePhotos}</span>
+									<span class="share-action-text">
+										<span class="share-action-title">Google Photos</span>
+										<span class="share-action-subtitle">Send to your Parascene album</span>
+									</span>
+								</span>
+								<span class="share-action-cta share-action-cta-google-photos" data-cta><span class="share-action-cta-label">Send</span></span>
 							</button>
 			
 							<button type="button" class="share-action-row" data-share-vynly style="display: none;">
@@ -355,6 +374,7 @@ class AppModalShare extends HTMLElement {
 		const qrBtn = this.querySelector("[data-qr-code]");
 		const nativeBtn = this.querySelector("[data-native-share]");
 		const shareImageFileBtn = this.querySelector("[data-share-image-file]");
+		const googlePhotosBtn = this.querySelector("[data-share-google-photos]");
 		const smsBtn = this.querySelector("[data-share-sms]");
 		const emailBtn = this.querySelector("[data-share-email]");
 		const xBtn = this.querySelector("[data-share-x]");
@@ -379,6 +399,9 @@ class AppModalShare extends HTMLElement {
 		if (nativeBtn) nativeBtn.addEventListener("click", (e) => void this.handleNativeShare(e.currentTarget));
 		if (shareImageFileBtn) {
 			shareImageFileBtn.addEventListener("click", (e) => void this.handleShareImageFile(e.currentTarget));
+		}
+		if (googlePhotosBtn) {
+			googlePhotosBtn.addEventListener("click", (e) => void this.handleShareGooglePhotos(e.currentTarget));
 		}
 
 		const qrOverlay = this.querySelector("[data-qr-overlay]");
@@ -413,7 +436,8 @@ class AppModalShare extends HTMLElement {
 	handleOpen(e) {
 		const id = e.detail?.creationId ?? null;
 		const vynlyShareEligible = e.detail?.vynlyShareEligible !== false;
-		this.open(id, { vynlyShareEligible });
+		const imageExportEligible = e.detail?.imageExportEligible === true;
+		this.open(id, { vynlyShareEligible, imageExportEligible });
 	}
 
 	handleCloseAllModals() {
@@ -437,6 +461,7 @@ class AppModalShare extends HTMLElement {
 		this._openRequestId++;
 		const openGen = this._openRequestId;
 		this._vynlyShareEligible = options.vynlyShareEligible !== false;
+		this._imageExportEligible = options.imageExportEligible === true;
 		this.resetAllCtas();
 
 		const vynlyRow = this.querySelector("[data-share-vynly]");
@@ -453,6 +478,9 @@ class AppModalShare extends HTMLElement {
 
 		if (openGen !== this._openRequestId) return;
 
+		await this.refreshGooglePhotosRowVisibility();
+		if (openGen !== this._openRequestId) return;
+
 		this._isOpen = true;
 		const overlay = this.querySelector("[data-overlay]");
 		if (overlay) overlay.classList.add("open");
@@ -467,7 +495,10 @@ class AppModalShare extends HTMLElement {
 		this._shareUrl = null;
 		this._openRequestId++;
 		this._vynlyStatusRequestId++;
+		this._googlePhotosStatusRequestId++;
 		this._vynlyShareEligible = true;
+		this._googlePhotosConfigured = false;
+		this._imageExportEligible = false;
 		const overlay = this.querySelector("[data-overlay]");
 		if (overlay) overlay.classList.remove("open");
 		this.resetAllCtas();
@@ -480,7 +511,34 @@ class AppModalShare extends HTMLElement {
 		}
 		const shareImageFileBtn = this.querySelector("[data-share-image-file]");
 		if (shareImageFileBtn instanceof HTMLButtonElement) {
-			shareImageFileBtn.style.display = canShareImageFiles() ? "" : "none";
+			const showImageFile = this._imageExportEligible && canShareImageFiles();
+			shareImageFileBtn.style.display = showImageFile ? "" : "none";
+		}
+		const googlePhotosBtn = this.querySelector("[data-share-google-photos]");
+		if (googlePhotosBtn instanceof HTMLButtonElement) {
+			const showGoogle = this._googlePhotosConfigured && this._imageExportEligible;
+			googlePhotosBtn.style.display = showGoogle ? "" : "none";
+		}
+	}
+
+	async refreshGooglePhotosRowVisibility() {
+		const row = this.querySelector("[data-share-google-photos]");
+		if (!(row instanceof HTMLButtonElement)) return;
+
+		row.style.display = "none";
+		if (!this._imageExportEligible) return;
+
+		const requestId = ++this._googlePhotosStatusRequestId;
+		try {
+			const res = await fetch("/api/google-photos/status", { credentials: "include" });
+			if (requestId !== this._googlePhotosStatusRequestId) return;
+			if (!res.ok) return;
+			const data = await res.json().catch(() => null);
+			if (requestId !== this._googlePhotosStatusRequestId) return;
+			this._googlePhotosConfigured = data && data.configured === true;
+			row.style.display = this._googlePhotosConfigured && this._imageExportEligible ? "" : "none";
+		} catch {
+			// ignore
 		}
 	}
 
@@ -710,6 +768,38 @@ class AppModalShare extends HTMLElement {
 				throw err;
 			}
 		}, { resetMs: 900 });
+	}
+
+	async handleShareGooglePhotos(buttonEl) {
+		await this.runCtaAction(buttonEl, async () => {
+			const creationId = Number(this._creationId);
+			if (!Number.isFinite(creationId) || creationId <= 0) {
+				throw new Error("Invalid creation");
+			}
+
+			const statusRes = await fetch("/api/google-photos/status", { credentials: "include" });
+			const status = await statusRes.json().catch(() => null);
+			if (!statusRes.ok || !status || status.configured !== true) {
+				throw new Error("Google Photos is not configured");
+			}
+			if (status.connected !== true) {
+				window.location.href = "/integrations#google-photos=connect";
+				return;
+			}
+
+			const res = await fetch("/api/google-photos/upload", {
+				method: "POST",
+				credentials: "include",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ creationId })
+			});
+			const data = await res.json().catch(() => null);
+			if (!res.ok) {
+				throw new Error(
+					(data && (data.error || data.message)) ? String(data.error || data.message) : "Upload failed"
+				);
+			}
+		}, { successLabel: "Sent", errorLabel: "Failed", resetMs: 1100 });
 	}
 
 	async handleSms(buttonEl) {

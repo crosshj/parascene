@@ -798,6 +798,87 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		selectGooglePhotosConnectionByUserId: {
+			get: async (userId) => {
+				const id = Number(userId);
+				if (!Number.isFinite(id) || id <= 0) return undefined;
+				const { data, error } = await serviceClient
+					.from(prefixedTable("google_photos_connections"))
+					.select(
+						"user_id, refresh_token_enc, scopes, album_id, album_title, created_at, updated_at, revoked_at, meta"
+					)
+					.eq("user_id", id)
+					.maybeSingle();
+				if (error) throw error;
+				return data ?? undefined;
+			}
+		},
+		upsertGooglePhotosConnection: {
+			run: async (
+				userId,
+				{ refreshTokenEnc, scopes, albumId, albumTitle, revokedAtIso, meta } = {}
+			) => {
+				const id = Number(userId);
+				if (!Number.isFinite(id) || id <= 0) throw new Error("Invalid user id");
+				const row = {
+					user_id: id,
+					refresh_token_enc: String(refreshTokenEnc || ""),
+					scopes: typeof scopes === "string" ? scopes : "",
+					album_id: typeof albumId === "string" ? albumId : null,
+					album_title: typeof albumTitle === "string" ? albumTitle : null,
+					updated_at: new Date().toISOString(),
+					revoked_at: typeof revokedAtIso === "string" ? revokedAtIso : null,
+					meta: meta && typeof meta === "object" ? meta : null
+				};
+				if (!row.refresh_token_enc) throw new Error("Missing refresh token");
+				const { error } = await serviceClient
+					.from(prefixedTable("google_photos_connections"))
+					.upsert(row, { onConflict: "user_id" });
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
+		updateGooglePhotosConnectionAlbum: {
+			run: async (userId, { albumId, albumTitle } = {}) => {
+				const id = Number(userId);
+				if (!Number.isFinite(id) || id <= 0) throw new Error("Invalid user id");
+				const { error } = await serviceClient
+					.from(prefixedTable("google_photos_connections"))
+					.update({
+						album_id: typeof albumId === "string" ? albumId : null,
+						album_title: typeof albumTitle === "string" ? albumTitle : null,
+						updated_at: new Date().toISOString()
+					})
+					.eq("user_id", id);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
+		revokeGooglePhotosConnection: {
+			run: async (userId) => {
+				const id = Number(userId);
+				if (!Number.isFinite(id) || id <= 0) throw new Error("Invalid user id");
+				const now = new Date().toISOString();
+				const { error } = await serviceClient
+					.from(prefixedTable("google_photos_connections"))
+					.update({ revoked_at: now, updated_at: now })
+					.eq("user_id", id);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
+		deleteGooglePhotosConnection: {
+			run: async (userId) => {
+				const id = Number(userId);
+				if (!Number.isFinite(id) || id <= 0) throw new Error("Invalid user id");
+				const { error } = await serviceClient
+					.from(prefixedTable("google_photos_connections"))
+					.delete()
+					.eq("user_id", id);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
 		selectUserIdByApiKeyHash: {
 			get: async (hash) => {
 				if (hash == null || typeof hash !== "string" || !hash.trim()) return undefined;

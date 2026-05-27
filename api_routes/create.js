@@ -32,6 +32,7 @@ import {
 	findChallengesChannelThreadId,
 	validateChallengeSubmission
 } from "./utils/challengeSubmitShared.js";
+import { resolveCreationImageForExport } from "./utils/resolveCreationImageForExport.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2869,32 +2870,11 @@ export default function createCreateRoutes({ queries, storage }) {
 
 		try {
 			const id = Number(req.params.id);
-			if (!Number.isFinite(id) || id <= 0) {
-				return res.status(400).json({ error: "Invalid creation id" });
+			const resolved = await resolveCreationImageForExport({ queries, creationId: id, user });
+			if (!resolved.ok) {
+				return res.status(resolved.status).json({ error: resolved.error });
 			}
-
-			let image = await queries.selectCreatedImageById?.get(id, user.id);
-
-			if (!image) {
-				const any = await queries.selectCreatedImageByIdAnyUser?.get(id);
-				if (!any) {
-					return res.status(404).json({ error: "Image not found" });
-				}
-				const isPublished = any.published === 1 || any.published === true;
-				const isAdmin = user.role === "admin";
-				if (!isPublished && !isAdmin) {
-					return res.status(404).json({ error: "Image not found" });
-				}
-				image = any;
-			}
-
-			const status = image.status || "completed";
-			if (status !== "completed") {
-				return res.status(400).json({ error: "Only completed creations can be exported" });
-			}
-			if (!image.filename) {
-				return res.status(400).json({ error: "Image file missing" });
-			}
+			const image = resolved.image;
 
 			const sourceBuf = await storage.getImageBuffer(image.filename);
 			if (!sourceBuf || !Buffer.isBuffer(sourceBuf)) {

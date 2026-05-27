@@ -45,6 +45,7 @@ import {
 	shouldLogSession
 } from "../api_routes/auth.js";
 import createOAuthIntegrationRoutes from "../api_routes/oauthIntegration.js";
+import createGooglePhotosRoutes from "../api_routes/googlePhotos.js";
 import { canonicalHostRedirect } from "../api_routes/middleware/canonicalHost.js";
 import { apiSubdomainRedirect } from "../api_routes/middleware/apiSubdomainRedirect.js";
 import { shareSubdomainRedirect } from "../api_routes/middleware/shareSubdomainRedirect.js";
@@ -303,6 +304,7 @@ app.use(createWelcomeGate(queries));
 
 app.use(createSupabaseSessionRoutes({ queries }));
 app.use(createOAuthIntegrationRoutes({ queries }));
+app.use(createGooglePhotosRoutes({ queries, storage }));
 app.use(createUserRoutes({ queries }));
 app.use(createPresenceRoutes({ queries }));
 app.use(createFollowsRoutes({ queries }));

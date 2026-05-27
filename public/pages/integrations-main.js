@@ -149,9 +149,34 @@ function renderVynlyBlock(user) {
 	</div>`;
 }
 
+function renderGooglePhotosBlock(status) {
+	const configured = status?.configured === true;
+	const connected = status?.connected === true;
+	const albumTitle =
+		typeof status?.albumTitle === 'string' && status.albumTitle.trim()
+			? status.albumTitle.trim()
+			: 'Parascene';
+
+	if (!configured) {
+		return `<p class="integrations-intro">Google Photos is not configured on this environment.</p>`;
+	}
+
+	if (!connected) {
+		return `<div class="integrations-credential-actions">
+		<button type="button" class="btn-secondary" data-int-google-photos-connect>Connect</button>
+	</div>`;
+	}
+
+	return `<div class="integrations-credential-row">
+		<span class="integrations-api-masked" aria-label="Default album">${escapeHtml(albumTitle)}</span>
+		<button type="button" class="btn-secondary is-logout" data-int-google-photos-disconnect>Disconnect</button>
+	</div>`;
+}
+
 async function main() {
 	const apiMount = document.querySelector('[data-integrations-credential-api]');
 	const vynlyMount = document.querySelector('[data-integrations-credential-vynly]');
+	const googlePhotosMount = document.querySelector('[data-integrations-credential-google-photos]');
 	const listEl = document.querySelector('[data-integrations-list]');
 	const emptyEl = document.querySelector('[data-integrations-empty]');
 	const grantsListEl = document.querySelector('[data-integrations-grants-list]');
@@ -170,6 +195,7 @@ async function main() {
 	let revealedApiKey = null;
 	let apps = [];
 	let grants = [];
+	let googlePhotosStatus = null;
 	/** @type {string | null} null = create mode */
 	let editingPublicClientId = null;
 
@@ -179,6 +205,9 @@ async function main() {
 		}
 		if (vynlyMount) {
 			vynlyMount.innerHTML = profileUser ? renderVynlyBlock(profileUser) : '';
+		}
+		if (googlePhotosMount) {
+			googlePhotosMount.innerHTML = renderGooglePhotosBlock(googlePhotosStatus);
 		}
 	}
 
@@ -385,6 +414,31 @@ async function main() {
 		}
 	});
 
+	googlePhotosMount?.addEventListener('click', async (e) => {
+		const connectBtn = e.target.closest?.('[data-int-google-photos-connect]');
+		const disconnectBtn = e.target.closest?.('[data-int-google-photos-disconnect]');
+		if (!connectBtn && !disconnectBtn) return;
+		e.preventDefault();
+
+		if (connectBtn) {
+			window.location.href = `/api/google-photos/connect?returnUrl=${encodeURIComponent('/integrations')}`;
+			return;
+		}
+
+		if (disconnectBtn) {
+			if (!window.confirm('Disconnect Google Photos? Sharing to Google Photos will turn off until you connect again.')) {
+				return;
+			}
+			const res = await fetchJson('/api/google-photos/disconnect', { method: 'POST' });
+			if (!res.ok) {
+				setStatus(statusEl, res.data?.message || res.data?.error || 'Could not disconnect.', 'error');
+				return;
+			}
+			await load();
+			setStatus(statusEl, 'Disconnected Google Photos.', 'ok');
+		}
+	});
+
 	async function refreshProfileOnly() {
 		const res = await fetchJson('/api/profile');
 		if (res.ok && res.data) {
@@ -394,11 +448,14 @@ async function main() {
 
 	async function load() {
 		setStatus(statusEl, '');
-		const [profileRes, appsRes, grantsRes] = await Promise.all([
+		const [profileRes, appsRes, grantsRes, googleRes] = await Promise.all([
 			fetchJson('/api/profile'),
 			fetchJson('/api/integration/apps'),
-			fetchJson('/api/profile/integration-grants')
+			fetchJson('/api/profile/integration-grants'),
+			fetchJson('/api/google-photos/status')
 		]);
+
+		googlePhotosStatus = googleRes.ok && googleRes.data ? googleRes.data : { configured: false, connected: false };
 
 		if (!profileRes.ok) {
 			setStatus(statusEl, profileRes.data?.message || profileRes.data?.error || 'Could not load your profile.', 'error');
@@ -425,6 +482,15 @@ async function main() {
 
 		renderApps();
 		renderGrants();
+
+		const hash = String(window.location.hash || '');
+		if (hash.includes('google-photos=ok')) {
+			setStatus(statusEl, 'Connected Google Photos.', 'ok');
+		} else if (hash.includes('google-photos=deny')) {
+			setStatus(statusEl, 'Google Photos connection cancelled.', 'error');
+		} else if (hash.includes('google-photos=fail')) {
+			setStatus(statusEl, 'Google Photos connection failed.', 'error');
+		}
 	}
 
 	function renderApps() {
