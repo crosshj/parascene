@@ -6,12 +6,13 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 	<meta name="theme-color" content="#0a0a0f" />
 	<meta name="apple-mobile-web-app-capable" content="yes" />
-	<title>Party — camera capture POC</title>
+	<title>Party Mode</title>
 	<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 	<style>
 		:root {
 			--bg: #0a0a0f;
 			--surface: #16161f;
+			--surface-raised: #1e1e2a;
 			--border: #2a2a38;
 			--text: #f2f2f7;
 			--muted: #9b9bb0;
@@ -19,6 +20,7 @@
 			--accent-fg: #fff;
 			--danger: #ff6b6b;
 			--ok: #3dd68c;
+			--amber: #f5c542;
 			--safe-top: env(safe-area-inset-top, 0px);
 			--safe-bottom: env(safe-area-inset-bottom, 0px);
 			--safe-left: env(safe-area-inset-left, 0px);
@@ -53,6 +55,7 @@
 			min-height: 100dvh;
 			display: flex;
 			flex-direction: column;
+			gap: 12px;
 			padding:
 				calc(12px + var(--safe-top))
 				calc(12px + var(--safe-right))
@@ -61,93 +64,118 @@
 		}
 
 		.party-header h1 {
-			margin: 0 0 4px;
-			font-size: 1.25rem;
+			margin: 0;
+			font-size: 1.2rem;
 			font-weight: 700;
 		}
 
 		.party-header p {
-			margin: 0;
-			font-size: 0.875rem;
+			margin: 4px 0 0;
+			font-size: 0.8rem;
 			color: var(--muted);
 			line-height: 1.4;
 		}
 
-		.party-screen {
-			flex: 1;
+		.party-badge {
+			display: inline-block;
+			font-size: 0.6rem;
+			font-weight: 700;
+			text-transform: uppercase;
+			letter-spacing: 0.04em;
+			padding: 2px 6px;
+			border-radius: 4px;
+			background: var(--accent);
+			color: var(--accent-fg);
+			margin-left: 6px;
+			vertical-align: middle;
+		}
+
+		.party-field {
 			display: flex;
 			flex-direction: column;
-			gap: 12px;
-			margin-top: 12px;
-			min-height: 0;
+			gap: 4px;
 		}
 
-		.party-screen[hidden] {
-			display: none !important;
-		}
-
-		.party-card {
-			background: var(--surface);
-			border: 1px solid var(--border);
-			border-radius: 10px;
-			padding: 14px;
-		}
-
-		.party-card h2 {
-			margin: 0 0 8px;
-			font-size: 0.95rem;
-			font-weight: 600;
-		}
-
-		.party-methods {
-			display: flex;
-			flex-direction: column;
-			gap: 8px;
-		}
-
-		.party-method-btn {
-			display: block;
-			width: 100%;
-			text-align: left;
-			padding: 12px 14px;
-			border-radius: 6px;
-			border: 1px solid var(--border);
-			background: var(--bg);
-			color: var(--text);
-			font: inherit;
-			cursor: pointer;
-		}
-
-		.party-method-btn:active {
-			transform: scale(0.99);
-		}
-
-		.party-method-btn strong {
-			display: block;
-			font-size: 0.9rem;
-			margin-bottom: 2px;
-		}
-
-		.party-method-btn span {
+		.party-field label {
 			font-size: 0.75rem;
 			color: var(--muted);
-			line-height: 1.35;
 		}
 
-		.party-method-btn[data-recommended='true'] {
-			border-color: var(--accent);
+		.party-select {
+			width: 100%;
+			padding: 10px 12px;
+			border-radius: 6px;
+			border: 1px solid var(--border);
+			background: var(--surface);
+			color: var(--text);
+			font: inherit;
 		}
 
-		.party-actions {
+		.party-capture {
 			display: flex;
-			flex-wrap: wrap;
+			flex-direction: column;
+			gap: 10px;
+		}
+
+		.party-viewfinder {
+			position: relative;
+			width: 100%;
+			aspect-ratio: 3 / 4;
+			border-radius: 10px;
+			overflow: hidden;
+			background: #000;
+			border: 1px solid var(--border);
+		}
+
+		.party-viewfinder video,
+		.party-viewfinder img {
+			width: 100%;
+			height: 100%;
+			object-fit: cover;
+			display: block;
+		}
+
+		.party-viewfinder-placeholder {
+			position: absolute;
+			inset: 0;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
 			gap: 8px;
-			margin-top: auto;
+			padding: 16px;
+			text-align: center;
+			color: var(--muted);
+			font-size: 0.85rem;
+			line-height: 1.4;
+		}
+
+		.party-viewfinder-placeholder strong {
+			color: var(--text);
+			font-size: 1rem;
+		}
+
+		.party-viewfinder-status {
+			position: absolute;
+			left: 8px;
+			right: 8px;
+			top: 8px;
+			padding: 5px 8px;
+			border-radius: 6px;
+			background: rgba(0, 0, 0, 0.55);
+			font-size: 0.7rem;
+			color: #fff;
+			pointer-events: none;
+		}
+
+		.party-capture-actions {
+			display: grid;
+			grid-template-columns: 1fr auto 1fr;
+			align-items: center;
+			gap: 8px;
 		}
 
 		.party-btn {
-			flex: 1;
-			min-width: 120px;
 			padding: 12px 16px;
 			border-radius: 6px;
 			border: none;
@@ -165,87 +193,258 @@
 			background: transparent;
 			color: var(--muted);
 			border: 1px solid var(--border);
+			flex: none;
+			min-width: 0;
+		}
+
+		.party-btn--snap {
+			grid-column: 1 / -1;
+			width: 100%;
+			padding: 14px;
+			font-size: 1rem;
 		}
 
 		.party-btn--shutter {
 			width: 72px;
 			height: 72px;
-			flex: 0 0 auto;
+			min-width: 72px;
+			max-width: 72px;
+			padding: 0;
+			flex: 0 0 72px;
+			aspect-ratio: 1;
 			border-radius: 50%;
 			border: 4px solid #fff;
 			background: rgba(255, 255, 255, 0.2);
 			margin: 0 auto;
+			justify-self: center;
 		}
 
 		.party-btn--shutter:active {
 			background: #fff;
 		}
 
-		.party-live {
-			position: relative;
-			flex: 1;
-			min-height: 240px;
-			border-radius: 10px;
-			overflow: hidden;
-			background: #000;
+		.party-capture-actions--live .party-btn--snap {
+			display: none;
 		}
 
-		.party-live video,
-		.party-live img {
+		.party-capture-actions--live .party-btn--shutter {
+			display: block;
+		}
+
+		.party-capture-actions:not(.party-capture-actions--live) .party-btn--shutter {
+			display: none;
+		}
+
+		.party-section {
+			display: flex;
+			flex-direction: column;
+			gap: 8px;
+			min-height: 0;
+		}
+
+		.party-section-head {
+			display: flex;
+			align-items: baseline;
+			justify-content: space-between;
+			gap: 8px;
+		}
+
+		.party-section-head h2 {
+			margin: 0;
+			font-size: 0.85rem;
+			font-weight: 600;
+		}
+
+		.party-section-head span {
+			font-size: 0.75rem;
+			color: var(--muted);
+		}
+
+		.party-queue-scroll {
+			display: flex;
+			gap: 8px;
+			overflow-x: auto;
+			padding-bottom: 4px;
+			-webkit-overflow-scrolling: touch;
+			scroll-snap-type: x proximity;
+		}
+
+		.party-queue-empty {
+			font-size: 0.8rem;
+			color: var(--muted);
+			padding: 12px;
+			border: 1px dashed var(--border);
+			border-radius: 10px;
+			text-align: center;
+		}
+
+		.party-queue-item {
+			position: relative;
+			flex: 0 0 72px;
+			width: 72px;
+			height: 72px;
+			padding: 0;
+			border: 2px solid transparent;
+			border-radius: 8px;
+			overflow: hidden;
+			background: var(--surface);
+			cursor: pointer;
+			scroll-snap-align: start;
+		}
+
+		.party-queue-item img {
 			width: 100%;
 			height: 100%;
 			object-fit: cover;
 			display: block;
 		}
 
-		.party-live-status {
-			position: absolute;
-			left: 10px;
-			right: 10px;
-			top: 10px;
-			padding: 6px 10px;
-			border-radius: 6px;
-			background: rgba(0, 0, 0, 0.55);
-			font-size: 0.75rem;
-			color: #fff;
-			pointer-events: none;
+		.party-queue-item[data-status='processing'] {
+			border-color: var(--amber);
 		}
 
-		.party-preview-wrap {
-			flex: 1;
-			min-height: 200px;
-			border-radius: 10px;
-			overflow: hidden;
-			background: #000;
+		.party-queue-item[data-status='ready'] {
+			border-color: var(--ok);
+		}
+
+		.party-queue-item[data-selected='true'] {
+			box-shadow: 0 0 0 2px var(--accent);
+		}
+
+		.party-queue-item-badge {
+			position: absolute;
+			left: 4px;
+			right: 4px;
+			bottom: 4px;
+			padding: 2px 4px;
+			border-radius: 4px;
+			font-size: 0.55rem;
+			font-weight: 700;
+			text-transform: uppercase;
+			text-align: center;
+			background: rgba(0, 0, 0, 0.7);
+			color: #fff;
+		}
+
+		.party-queue-item[data-status='processing'] .party-queue-item-badge {
+			color: var(--amber);
+		}
+
+		.party-queue-item[data-status='ready'] .party-queue-item-badge {
+			color: var(--ok);
+		}
+
+		.party-queue-spinner {
+			position: absolute;
+			inset: 0;
 			display: flex;
 			align-items: center;
 			justify-content: center;
+			background: rgba(0, 0, 0, 0.45);
 		}
 
-		.party-preview-wrap img,
-		.party-preview-wrap video {
-			max-width: 100%;
-			max-height: 50dvh;
-			object-fit: contain;
+		.party-queue-spinner::after {
+			content: '';
+			width: 22px;
+			height: 22px;
+			border: 2px solid rgba(255, 255, 255, 0.25);
+			border-top-color: #fff;
+			border-radius: 50%;
+			animation: party-spin 0.8s linear infinite;
 		}
 
-		.party-meta {
-			font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+		@keyframes party-spin {
+			to { transform: rotate(360deg); }
+		}
+
+		.party-review {
+			background: var(--surface);
+			border: 1px solid var(--border);
+			border-radius: 10px;
+			padding: 12px;
+			display: flex;
+			flex-direction: column;
+			gap: 10px;
+		}
+
+		.party-review[hidden] {
+			display: none !important;
+		}
+
+		.party-compare {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 8px;
+		}
+
+		.party-compare-col {
+			display: flex;
+			flex-direction: column;
+			gap: 4px;
+			min-width: 0;
+		}
+
+		.party-compare-col span {
 			font-size: 0.7rem;
-			line-height: 1.5;
 			color: var(--muted);
-			white-space: pre-wrap;
-			word-break: break-word;
-			max-height: 140px;
-			overflow: auto;
+			text-transform: uppercase;
+			letter-spacing: 0.03em;
 		}
 
-		.party-log {
-			margin-top: 8px;
+		.party-compare-frame {
+			aspect-ratio: 3 / 4;
+			border-radius: 8px;
+			overflow: hidden;
+			background: #000;
+		}
+
+		.party-compare-frame img {
+			width: 100%;
+			height: 100%;
+			object-fit: cover;
+			display: block;
+		}
+
+		.party-review-actions {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 8px;
+		}
+
+		.party-review-actions .party-btn {
+			flex: 1;
+			min-width: 120px;
+		}
+
+		.party-review-orientation {
+			margin: 0;
+			font-size: 0.75rem;
+			color: var(--muted);
+			line-height: 1.4;
+		}
+
+		.party-queue-orient {
+			position: absolute;
+			top: 3px;
+			right: 3px;
+			min-width: 14px;
+			padding: 1px 3px;
+			border-radius: 4px;
+			font-size: 0.5rem;
+			font-weight: 800;
+			text-transform: uppercase;
+			background: rgba(0, 0, 0, 0.72);
+			color: #fff;
+			line-height: 1.2;
+		}
+
+		.party-committed {
+			margin-top: auto;
 			border-top: 1px solid var(--border);
 			padding-top: 8px;
 		}
 
+		.party-committed summary,
 		.party-log summary {
 			cursor: pointer;
 			font-size: 0.8rem;
@@ -253,43 +452,50 @@
 			user-select: none;
 		}
 
+		.party-committed-list {
+			margin: 8px 0 0;
+			padding: 0;
+			list-style: none;
+			display: flex;
+			flex-wrap: wrap;
+			gap: 6px;
+		}
+
+		.party-committed-thumb {
+			width: 48px;
+			height: 48px;
+			padding: 0;
+			border: 2px solid transparent;
+			border-radius: 6px;
+			overflow: hidden;
+			background: var(--surface);
+			cursor: pointer;
+			opacity: 0.75;
+		}
+
+		.party-committed-thumb[data-selected='true'] {
+			opacity: 1;
+			border-color: var(--accent);
+			box-shadow: 0 0 0 2px var(--accent);
+		}
+
+		.party-committed-thumb img {
+			width: 100%;
+			height: 100%;
+			object-fit: cover;
+			display: block;
+		}
+
 		.party-log-list {
 			margin: 8px 0 0;
 			padding: 0;
 			list-style: none;
-			max-height: 120px;
+			max-height: 100px;
 			overflow: auto;
-			font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-			font-size: 0.65rem;
-			line-height: 1.45;
-		}
-
-		.party-log-list li {
-			padding: 2px 0;
-			border-bottom: 1px solid var(--border);
+			font-family: ui-monospace, Menlo, monospace;
+			font-size: 0.62rem;
+			line-height: 1.4;
 			color: var(--muted);
-		}
-
-		.party-log-list li[data-level='error'] {
-			color: var(--danger);
-		}
-
-		.party-log-list li[data-level='ok'] {
-			color: var(--ok);
-		}
-
-		.party-badge {
-			display: inline-block;
-			font-size: 0.65rem;
-			font-weight: 700;
-			text-transform: uppercase;
-			letter-spacing: 0.04em;
-			padding: 2px 6px;
-			border-radius: 4px;
-			background: var(--accent);
-			color: var(--accent-fg);
-			margin-left: 6px;
-			vertical-align: middle;
 		}
 
 		.party-hidden-input {
@@ -309,23 +515,10 @@
 				min-height: 0;
 				border: 1px solid var(--border);
 				border-radius: 14px;
-				background: var(--bg);
 			}
 
-			.party-live {
-				flex: 0 1 auto;
-				max-height: min(70vh, 640px);
-				aspect-ratio: 3 / 4;
-			}
-
-			.party-preview-wrap {
-				flex: 0 1 auto;
-				max-height: min(70vh, 640px);
-			}
-
-			.party-preview-wrap img,
-			.party-preview-wrap video {
-				max-height: min(70vh, 640px);
+			.party-viewfinder {
+				max-height: min(55vh, 520px);
 			}
 		}
 	</style>
@@ -334,462 +527,820 @@
 <body class="party-body">
 	<div class="party-app" id="party-app">
 		<header class="party-header">
-			<h1>Party <span class="party-badge">POC</span></h1>
-			<p>Compare capture paths on your device. Tap a method — each opens from your tap (required for camera).</p>
+			<h1>Party Mode <span class="party-badge">POC</span></h1>
+			<p>Snap guest photos, queue transforms, review when ready, then send to Google Photos.</p>
 		</header>
 
-		<!-- Screen: pick method -->
-		<section class="party-screen" id="party-screen-home" data-screen="home">
-			<div class="party-card">
-				<h2>Capture methods</h2>
-				<div class="party-methods" id="party-methods"></div>
+		<section class="party-capture" aria-label="Take photo">
+			<div class="party-field">
+				<label for="party-method-select">Camera input</label>
+				<select class="party-select" id="party-method-select" aria-label="Camera input method"></select>
 			</div>
-			<div class="party-card">
-				<h2>Environment</h2>
-				<pre class="party-meta" id="party-env-meta"></pre>
+
+			<div class="party-viewfinder" id="party-viewfinder">
+				<div class="party-viewfinder-placeholder" id="party-viewfinder-placeholder">
+					<strong>Ready to shoot</strong>
+					<span id="party-viewfinder-hint">Tap Take photo to open the camera.</span>
+				</div>
+				<video id="party-live-video" playsinline muted autoplay hidden></video>
+				<div class="party-viewfinder-status" id="party-viewfinder-status" hidden></div>
+			</div>
+
+			<div class="party-capture-actions" id="party-capture-actions">
+				<button type="button" class="party-btn party-btn--snap party-btn--primary" id="party-snap-btn">Take photo</button>
+				<button type="button" class="party-btn party-btn--ghost" id="party-flip-btn" hidden>Flip</button>
+				<button type="button" class="party-btn party-btn--shutter" id="party-shutter-btn" aria-label="Take photo" hidden></button>
 			</div>
 		</section>
 
-		<!-- Screen: live viewfinder (getUserMedia only) -->
-		<section class="party-screen" id="party-screen-live" data-screen="live" hidden>
-			<div class="party-live" id="party-live-stage">
-				<video id="party-live-video" playsinline muted autoplay></video>
-				<div class="party-live-status" id="party-live-status">Starting camera…</div>
+		<section class="party-section" aria-label="Processing queue">
+			<div class="party-section-head">
+				<h2>Queue</h2>
+				<span id="party-queue-summary">Nothing processing</span>
 			</div>
-			<div class="party-actions">
-				<button type="button" class="party-btn party-btn--ghost" data-action="cancel-live">Cancel</button>
-				<button type="button" class="party-btn party-btn--shutter" data-action="shutter" aria-label="Take photo"></button>
-				<button type="button" class="party-btn party-btn--ghost" data-action="flip-camera">Flip</button>
+			<div class="party-queue-scroll" id="party-queue-list">
+				<p class="party-queue-empty" id="party-queue-empty">Snapped photos appear here while the model works.</p>
 			</div>
 		</section>
 
-		<!-- Screen: preview result -->
-		<section class="party-screen" id="party-screen-preview" data-screen="preview" hidden>
-			<div class="party-preview-wrap" id="party-preview-stage"></div>
-			<pre class="party-meta" id="party-result-meta"></pre>
-			<div class="party-actions">
-				<button type="button" class="party-btn party-btn--ghost" data-action="retake">Try again</button>
-				<button type="button" class="party-btn party-btn--primary" data-action="done">Done (keep preview)</button>
+		<section class="party-review" id="party-review" hidden>
+			<div class="party-section-head">
+				<h2>Review</h2>
+				<span id="party-review-status"></span>
+			</div>
+			<p class="party-review-orientation" id="party-review-orientation" hidden></p>
+			<div class="party-compare">
+				<div class="party-compare-col">
+					<span>Original</span>
+					<div class="party-compare-frame">
+						<img id="party-review-original" alt="Original photo" />
+					</div>
+				</div>
+				<div class="party-compare-col">
+					<span>Transformed</span>
+					<div class="party-compare-frame">
+						<img id="party-review-result" alt="Transformed photo" />
+					</div>
+				</div>
+			</div>
+			<div class="party-review-actions">
+				<button type="button" class="party-btn party-btn--ghost" id="party-redo-btn">Redo</button>
+				<button type="button" class="party-btn party-btn--primary" id="party-commit-btn">Add to Google Photos</button>
 			</div>
 		</section>
+
+		<details class="party-committed">
+			<summary>Sent to Google Photos (<span id="party-committed-count">0</span>)</summary>
+			<div class="party-committed-list" id="party-committed-list" role="list"></div>
+		</details>
 
 		<details class="party-log">
-			<summary>Event log (<span id="party-log-count">0</span>)</summary>
+			<summary>Event log</summary>
 			<ul class="party-log-list" id="party-log-list"></ul>
 		</details>
 	</div>
 
-	<!-- Native capture inputs (one per variant; modular handlers attach by data-method) -->
 	<input type="file" class="party-hidden-input" id="party-input-native-env" accept="image/*" capture="environment" />
 	<input type="file" class="party-hidden-input" id="party-input-native-user" accept="image/*" capture="user" />
 	<input type="file" class="party-hidden-input" id="party-input-native-picker" accept="image/*" />
-	<input type="file" class="party-hidden-input" id="party-input-native-video" accept="video/*" capture="environment" />
 
 	<script>
 		/**
-		 * Party camera POC — single-file layout with module-shaped namespaces.
-		 * Future split: party/log.js, party/capture-native.js, party/capture-live.js, party/ui.js, party/app.js
+		 * Party Mode POC — one-page flow. Module-shaped for future split.
+		 * Storage: localStorage (queue metadata + JPEG data URLs). No new DB tables.
+		 * Transform: mocked delay + canvas stylize. Wire-up target: uploadImageFile + submitCreationWithPending + poll.
 		 */
 		(function () {
 			'use strict';
 
-			/** @typedef {'home'|'live'|'preview'} PartyScreenId */
-			/** @typedef {{ id: string, label: string, hint: string, recommended?: boolean, kind: 'native'|'live', inputId?: string, facing?: 'environment'|'user' }} CaptureMethod */
+			const STORAGE_KEY = 'parascene_party_queue_v1';
+			const METHOD_STORAGE_KEY = 'parascene_party_capture_method_v1';
+			const PARTY_PROMPT = 'Party portrait — warm stylized guest photo for the album';
+			const MOCK_PROCESS_MS_MIN = 6000;
+			const MOCK_PROCESS_MS_MAX = 14000;
+			const MAX_QUEUE_ITEMS = 24;
+			const STORED_IMAGE_MAX_EDGE = 960;
 
-			// --- party/constants ---
-			const CAPTURE_METHODS = /** @type {CaptureMethod[]} */ ([
+			/** @typedef {'processing'|'ready'|'committed'|'failed'} PartyItemStatus */
+			/** @typedef {'portrait'|'landscape'|'square'} PartyOrientation */
+			/** @typedef {{ dataUrl: string, width: number, height: number, orientation: PartyOrientation, aspectRatio: string, exifCorrected: boolean, screenOrientation?: string|null }} PartyStoredPhoto */
+			/** @typedef {{ id: string, status: PartyItemStatus, createdAt: string, updatedAt: string, prompt: string, originalDataUrl: string, resultDataUrl?: string, error?: string, creationId?: number, width?: number, height?: number, orientation?: PartyOrientation, aspectRatio?: string, exifCorrected?: boolean, screenOrientation?: string|null }} PartyQueueItem */
+			/** @typedef {{ id: string, friendlyName: string, hint: string, kind: 'native'|'live', inputId?: string, facing?: 'environment'|'user', default?: boolean }} CaptureMethodDef */
+
+			const CAPTURE_METHODS = /** @type {CaptureMethodDef[]} */ ([
+				{
+					id: 'native-picker',
+					friendlyName: 'Camera or photo library',
+					hint: 'Most reliable — iOS/Android picker with Take Photo option.',
+					kind: 'native',
+					inputId: 'party-input-native-picker',
+					default: true
+				},
 				{
 					id: 'native-env',
+					friendlyName: 'Rear camera',
+					hint: 'Opens the system camera when supported.',
 					kind: 'native',
-					label: 'Native — rear camera hint',
-					hint: 'input[capture=environment]. Usually opens system camera on mobile.',
-					recommended: true,
 					inputId: 'party-input-native-env'
 				},
 				{
 					id: 'native-user',
+					friendlyName: 'Front camera (selfie)',
+					hint: 'Front-facing camera when supported.',
 					kind: 'native',
-					label: 'Native — front camera hint',
-					hint: 'input[capture=user]. Selfie path on many devices.',
 					inputId: 'party-input-native-user'
 				},
 				{
-					id: 'native-picker',
-					kind: 'native',
-					label: 'Native — picker (no capture attr)',
-					hint: 'OS sheet: Photo Library + Take Photo. Most reliable fallback.',
-					recommended: true,
-					inputId: 'party-input-native-picker'
-				},
-				{
-					id: 'native-video',
-					kind: 'native',
-					label: 'Native — video rear hint',
-					hint: 'accept=video/* capture=environment. Tests video capture path.',
-					inputId: 'party-input-native-video'
-				},
-				{
 					id: 'live-gum',
+					friendlyName: 'In-app viewfinder',
+					hint: 'Live preview in the page — best for rapid consecutive shots on supported devices.',
 					kind: 'live',
-					label: 'In-page — getUserMedia viewfinder',
-					hint: 'Custom preview + shutter. More control; iOS/Android quirks differ.',
 					facing: 'environment'
 				}
 			]);
 
 			// --- party/log ---
 			const PartyLog = {
-				_max: 80,
 				_list: null,
-				_count: null,
-				init(listEl, countEl) {
-					this._list = listEl;
-					this._count = countEl;
-				},
-				/** @param {'info'|'ok'|'error'} level */
-				write(level, message, detail) {
-					const ts = new Date().toISOString().slice(11, 23);
-					const line = detail != null ? `${message} — ${JSON.stringify(detail)}` : message;
-					console.log(`[party][${level}]`, message, detail ?? '');
+				init(el) { this._list = el; },
+				write(msg) {
+					console.log('[party]', msg);
 					if (!this._list) return;
 					const li = document.createElement('li');
-					li.dataset.level = level;
-					li.textContent = `${ts} ${line}`;
+					li.textContent = `${new Date().toISOString().slice(11, 19)} ${msg}`;
 					this._list.prepend(li);
-					while (this._list.children.length > this._max) {
-						this._list.lastChild?.remove();
-					}
-					if (this._count) this._count.textContent = String(this._list.children.length);
-				},
-				info(msg, detail) { this.write('info', msg, detail); },
-				ok(msg, detail) { this.write('ok', msg, detail); },
-				error(msg, detail) { this.write('error', msg, detail); }
+					while (this._list.children.length > 40) this._list.lastChild?.remove();
+				}
 			};
 
-			// --- party/dom ---
-			const PartyDom = {
-				screens: {},
-				methodsRoot: null,
-				envMeta: null,
-				previewStage: null,
-				resultMeta: null,
-				liveVideo: null,
-				liveStatus: null,
-				inputs: {},
-				init(root) {
-					root.querySelectorAll('[data-screen]').forEach((el) => {
-						const id = el.getAttribute('data-screen');
-						if (id) this.screens[id] = el;
+			// --- party/storage ---
+			const PartyStorage = {
+				load() {
+					try {
+						const raw = localStorage.getItem(STORAGE_KEY);
+						if (!raw) return { version: 1, items: [] };
+						const data = JSON.parse(raw);
+						if (!data || data.version !== 1 || !Array.isArray(data.items)) return { version: 1, items: [] };
+						return data;
+					} catch {
+						return { version: 1, items: [] };
+					}
+				},
+				save(data) {
+					try {
+						localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+					} catch (err) {
+						PartyLog.write(`Storage save failed: ${err?.message || err}`);
+					}
+				},
+				loadMethodId() {
+					try {
+						return localStorage.getItem(METHOD_STORAGE_KEY) || '';
+					} catch {
+						return '';
+					}
+				},
+				saveMethodId(id) {
+					try {
+						localStorage.setItem(METHOD_STORAGE_KEY, id);
+					} catch (_) { /* ignore */ }
+				}
+			};
+
+			// --- party/images ---
+			const PartyImages = {
+				/** @param {number} width @param {number} height @returns {PartyOrientation} */
+				classifyOrientation(width, height) {
+					const ratio = width / height;
+					if (ratio > 1.05) return 'landscape';
+					if (ratio < 0.95) return 'portrait';
+					return 'square';
+				},
+				/** Closest create-style aspect_ratio for provider submit */
+				suggestAspectRatio(width, height) {
+					const o = this.classifyOrientation(width, height);
+					if (o === 'square') return '1:1';
+					if (o === 'portrait') return height / width >= 1.55 ? '9:16' : '4:5';
+					return width / height >= 1.55 ? '16:9' : '4:5';
+				},
+				orientationShortLabel(orientation) {
+					if (orientation === 'landscape') return 'L';
+					if (orientation === 'portrait') return 'P';
+					if (orientation === 'square') return 'S';
+					return '?';
+				},
+				formatOrientationDetail(item) {
+					if (!item?.orientation) return '';
+					const name = item.orientation.charAt(0).toUpperCase() + item.orientation.slice(1);
+					const dims = item.width && item.height ? `${item.width}×${item.height}` : '';
+					const ar = item.aspectRatio ? `Suggested transform ratio: ${item.aspectRatio}` : '';
+					const exif = item.exifCorrected === false ? ' (raw file pixels — EXIF may differ)' : '';
+					const screen = item.screenOrientation ? ` · device ${item.screenOrientation}` : '';
+					return [name + exif + screen, dims, ar].filter(Boolean).join(' · ');
+				},
+				/** Decode with EXIF orientation applied when the browser supports it */
+				async _decodeSource(file) {
+					if (typeof createImageBitmap === 'function') {
+						try {
+							const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+							return { drawable: bitmap, width: bitmap.width, height: bitmap.height, exifCorrected: true, close: () => bitmap.close() };
+						} catch (_) { /* fall through */ }
+					}
+					const url = URL.createObjectURL(file);
+					try {
+						const img = await this._loadImage(url);
+						return {
+							drawable: img,
+							width: img.naturalWidth,
+							height: img.naturalHeight,
+							exifCorrected: false,
+							close: () => URL.revokeObjectURL(url)
+						};
+					} catch (err) {
+						URL.revokeObjectURL(url);
+						throw err;
+					}
+				},
+				_drawToCanvas(drawable, width, height) {
+					const canvas = document.createElement('canvas');
+					canvas.width = width;
+					canvas.height = height;
+					const ctx = canvas.getContext('2d');
+					if (!ctx) throw new Error('Canvas unavailable');
+					ctx.drawImage(drawable, 0, 0, width, height);
+					return canvas;
+				},
+				/** @param {File|Blob} file @returns {Promise<PartyStoredPhoto>} */
+				async preparePhoto(file, maxEdge = STORED_IMAGE_MAX_EDGE) {
+					if (!String(file.type || '').startsWith('image/')) {
+						throw new Error('Only images are supported in Party Mode');
+					}
+					const decoded = await this._decodeSource(file);
+					try {
+						const scale = Math.min(1, maxEdge / Math.max(decoded.width, decoded.height));
+						const w = Math.max(1, Math.round(decoded.width * scale));
+						const h = Math.max(1, Math.round(decoded.height * scale));
+						const canvas = this._drawToCanvas(decoded.drawable, w, h);
+						const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+						const orientation = this.classifyOrientation(w, h);
+						const screenOrientation = typeof screen !== 'undefined' && screen.orientation?.type
+							? screen.orientation.type
+							: null;
+						return {
+							dataUrl,
+							width: w,
+							height: h,
+							orientation,
+							aspectRatio: this.suggestAspectRatio(w, h),
+							exifCorrected: decoded.exifCorrected,
+							screenOrientation
+						};
+					} finally {
+						decoded.close();
+					}
+				},
+				/** Backfill orientation for items saved before metadata existed */
+				async hydrateItemMeta(item) {
+					if (item.orientation && item.width && item.height) return;
+					const img = await this._loadImage(item.originalDataUrl);
+					item.width = img.naturalWidth;
+					item.height = img.naturalHeight;
+					item.orientation = this.classifyOrientation(item.width, item.height);
+					item.aspectRatio = this.suggestAspectRatio(item.width, item.height);
+					if (item.exifCorrected == null) item.exifCorrected = true;
+				},
+				_loadImage(src) {
+					return new Promise((resolve, reject) => {
+						const img = new Image();
+						img.onload = () => resolve(img);
+						img.onerror = () => reject(new Error('Could not load image'));
+						img.src = src;
 					});
-					this.methodsRoot = document.getElementById('party-methods');
-					this.envMeta = document.getElementById('party-env-meta');
-					this.previewStage = document.getElementById('party-preview-stage');
-					this.resultMeta = document.getElementById('party-result-meta');
-					this.liveVideo = document.getElementById('party-live-video');
-					this.liveStatus = document.getElementById('party-live-status');
+				},
+				/** POC “diffusion” — visible stylize until real /api/create is wired */
+				async mockTransform(originalDataUrl) {
+					const img = await this._loadImage(originalDataUrl);
+					const canvas = document.createElement('canvas');
+					canvas.width = img.naturalWidth;
+					canvas.height = img.naturalHeight;
+					const ctx = canvas.getContext('2d');
+					ctx.drawImage(img, 0, 0);
+					ctx.fillStyle = 'rgba(124, 108, 255, 0.22)';
+					ctx.fillRect(0, 0, canvas.width, canvas.height);
+					ctx.globalCompositeOperation = 'overlay';
+					ctx.fillStyle = 'rgba(255, 210, 140, 0.35)';
+					ctx.fillRect(0, 0, canvas.width, canvas.height);
+					ctx.globalCompositeOperation = 'source-over';
+					return canvas.toDataURL('image/jpeg', 0.85);
+				}
+			};
+
+			// --- party/queue ---
+			const PartyQueue = {
+				/** @type {PartyQueueItem[]} */
+				items: [],
+				/** @type {string|null} */
+				selectedId: null,
+				/** @type {Map<string, number>} */
+				_timers: new Map(),
+				_onChange: null,
+				init(onChange) {
+					this._onChange = onChange;
+					const data = PartyStorage.load();
+					this.items = data.items.filter((it) => it && it.id && it.originalDataUrl);
+					void this._hydrateAllMeta();
+					this._resumeProcessing();
+					this._emit();
+				},
+				async _hydrateAllMeta() {
+					let changed = false;
+					for (const item of this.items) {
+						if (item.orientation && item.width) continue;
+						try {
+							await PartyImages.hydrateItemMeta(item);
+							changed = true;
+						} catch (_) { /* ignore */ }
+					}
+					if (changed) this._persist();
+				},
+				_emit() {
+					if (typeof this._onChange === 'function') this._onChange();
+				},
+				_resumeProcessing() {
+					this.items
+						.filter((it) => it.status === 'processing')
+						.forEach((it) => this._scheduleMockJob(it.id));
+				},
+				_scheduleMockJob(id) {
+					if (this._timers.has(id)) return;
+					const delay = MOCK_PROCESS_MS_MIN + Math.random() * (MOCK_PROCESS_MS_MAX - MOCK_PROCESS_MS_MIN);
+					const timer = window.setTimeout(() => this._finishMockJob(id), delay);
+					this._timers.set(id, timer);
+				},
+				async _finishMockJob(id) {
+					this._timers.delete(id);
+					const item = this.items.find((it) => it.id === id);
+					if (!item || item.status !== 'processing') return;
+					try {
+						item.resultDataUrl = await PartyImages.mockTransform(item.originalDataUrl);
+						item.status = 'ready';
+						item.updatedAt = new Date().toISOString();
+						PartyLog.write(`Transform ready: ${id}`);
+					} catch (err) {
+						item.status = 'failed';
+						item.error = err?.message || 'Transform failed';
+						item.updatedAt = new Date().toISOString();
+						PartyLog.write(`Transform failed: ${id}`);
+					}
+					this._persist();
+					this._emit();
+				},
+				_persist() {
+					const active = this.items
+						.filter((it) => it.status !== 'committed')
+						.slice(-MAX_QUEUE_ITEMS);
+					const committed = this.items.filter((it) => it.status === 'committed').slice(-12);
+					this.items = [...active, ...committed];
+					PartyStorage.save({ version: 1, items: this.items });
+				},
+				_newId() {
+					return `pty_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+				},
+				/** @param {PartyStoredPhoto} photo */
+				enqueue(photo) {
+					/** @type {PartyQueueItem} */
+					const item = {
+						id: this._newId(),
+						status: 'processing',
+						createdAt: new Date().toISOString(),
+						updatedAt: new Date().toISOString(),
+						prompt: PARTY_PROMPT,
+						originalDataUrl: photo.dataUrl,
+						width: photo.width,
+						height: photo.height,
+						orientation: photo.orientation,
+						aspectRatio: photo.aspectRatio,
+						exifCorrected: photo.exifCorrected,
+						screenOrientation: photo.screenOrientation ?? null
+					};
+					this.items.unshift(item);
+					this.selectedId = null;
+					this._persist();
+					this._scheduleMockJob(item.id);
+					this._emit();
+					PartyLog.write(`Queued: ${item.id}`);
+					return item;
+				},
+				select(id) {
+					const item = this.items.find((it) => {
+						return it.id === id && (it.status === 'ready' || it.status === 'committed');
+					});
+					if (!item) return null;
+					this.selectedId = id;
+					this._emit();
+					return item;
+				},
+				selectedItem() {
+					if (!this.selectedId) return null;
+					return this.items.find((it) => it.id === this.selectedId) || null;
+				},
+				clearSelection() {
+					this.selectedId = null;
+					this._emit();
+				},
+				redo(id) {
+					const idx = this.items.findIndex((it) => it.id === id);
+					if (idx === -1) return;
+					const item = this.items[idx];
+					const timer = this._timers.get(id);
+					if (timer) {
+						clearTimeout(timer);
+						this._timers.delete(id);
+					}
+					item.status = 'processing';
+					item.resultDataUrl = undefined;
+					item.error = undefined;
+					item.updatedAt = new Date().toISOString();
+					if (idx > 0) {
+						this.items.splice(idx, 1);
+						this.items.unshift(item);
+					}
+					this.selectedId = null;
+					this._persist();
+					this._scheduleMockJob(id);
+					this._emit();
+					PartyLog.write(`Redo queued: ${id}`);
+				},
+				commit(id) {
+					const item = this.items.find((it) => it.id === id);
+					if (!item || item.status !== 'ready') return false;
+					item.status = 'committed';
+					item.updatedAt = new Date().toISOString();
+					if (this.selectedId === id) this.selectedId = null;
+					this._persist();
+					this._emit();
+					PartyLog.write(`Committed: ${id}`);
+					return true;
+				},
+				activeItems() {
+					return this.items.filter((it) => it.status !== 'committed');
+				},
+				committedItems() {
+					return this.items.filter((it) => it.status === 'committed');
+				},
+				processingCount() {
+					return this.items.filter((it) => it.status === 'processing').length;
+				},
+				readyCount() {
+					return this.items.filter((it) => it.status === 'ready').length;
+				}
+			};
+
+			// --- party/capture ---
+			const PartyCapture = {
+				/** @type {CaptureMethodDef|null} */
+				method: null,
+				/** @type {MediaStream|null} */
+				stream: null,
+				facing: 'environment',
+				/** @type {Record<string, HTMLInputElement>} */
+				inputs: {},
+				els: {},
+				_onSnap: null,
+				init(els, onSnap) {
+					this.els = els;
+					this._onSnap = onSnap;
 					CAPTURE_METHODS.forEach((m) => {
 						if (m.inputId) this.inputs[m.id] = document.getElementById(m.inputId);
 					});
-				},
-				/** @param {PartyScreenId} screenId */
-				showScreen(screenId) {
-					Object.entries(this.screens).forEach(([id, el]) => {
-						el.hidden = id !== screenId;
+					Object.values(this.inputs).forEach((input) => {
+						input?.addEventListener('change', () => this._onNativeChange(input));
 					});
+					els.snapBtn?.addEventListener('click', () => this.onSnapPressed());
+					els.shutterBtn?.addEventListener('click', () => this.onLiveShutter());
+					els.flipBtn?.addEventListener('click', () => this.flipLive());
 				},
-				setLiveStatus(text) {
-					if (this.liveStatus) this.liveStatus.textContent = text;
+				getMethod(id) {
+					return CAPTURE_METHODS.find((m) => m.id === id) || CAPTURE_METHODS.find((m) => m.default) || CAPTURE_METHODS[0];
 				},
-				clearPreview() {
-					if (!this.previewStage) return;
-					this.previewStage.replaceChildren();
-				},
-				renderMethods(onPick) {
-					if (!this.methodsRoot) return;
-					this.methodsRoot.replaceChildren();
-					CAPTURE_METHODS.forEach((method) => {
-						const btn = document.createElement('button');
-						btn.type = 'button';
-						btn.className = 'party-method-btn';
-						btn.dataset.methodId = method.id;
-						if (method.recommended) btn.dataset.recommended = 'true';
-						btn.innerHTML = `<strong>${method.label}${method.recommended ? ' <span class="party-badge">try first</span>' : ''}</strong><span>${method.hint}</span>`;
-						btn.addEventListener('click', () => onPick(method));
-						this.methodsRoot.appendChild(btn);
-					});
-				},
-				renderEnvMeta() {
-					if (!this.envMeta) return;
-					const secure = window.isSecureContext;
-					const hasGum = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-					const hasPerm = !!(navigator.permissions && navigator.permissions.query);
-					const lines = [
-						`secure context: ${secure}`,
-						`mediaDevices.getUserMedia: ${hasGum}`,
-						`permissions.query: ${hasPerm}`,
-						`platform: ${navigator.platform || '—'}`,
-						`ua: ${navigator.userAgent}`
-					];
-					this.envMeta.textContent = lines.join('\n');
-					if (!secure) PartyLog.error('Not a secure context — camera APIs require HTTPS or localhost');
-				}
-			};
-
-			// --- party/state ---
-			const PartyState = {
-				activeMethod: null,
-				previewObjectUrl: null,
-				liveStream: null,
-				liveFacing: 'environment',
-				lastFile: null,
-				resetPreview() {
-					if (this.previewObjectUrl) {
-						URL.revokeObjectURL(this.previewObjectUrl);
-						this.previewObjectUrl = null;
+				/** @param {CaptureMethodDef} method */
+				async setMethod(method) {
+					this.method = method;
+					PartyStorage.saveMethodId(method.id);
+					const isLive = method.kind === 'live';
+					this.els.actions?.classList.toggle('party-capture-actions--live', isLive);
+					this.els.flipBtn.hidden = !isLive;
+					this.els.placeholder.hidden = isLive;
+					this.els.liveVideo.hidden = !isLive;
+					this.els.status.hidden = !isLive;
+					if (this.els.hint) {
+						this.els.hint.textContent = isLive
+							? 'Use the shutter below. You can snap several shots — each joins the queue.'
+							: method.hint;
 					}
-					this.lastFile = null;
-					PartyDom.clearPreview();
-				}
-			};
-
-			// --- party/files ---
-			const PartyFiles = {
-				/** @returns {Promise<{ width?: number, height?: number }>} */
-				imageDimensions(file) {
-					return new Promise((resolve) => {
-						if (!file.type.startsWith('image/')) return resolve({});
-						const url = URL.createObjectURL(file);
-						const img = new Image();
-						img.onload = () => {
-							const out = { width: img.naturalWidth, height: img.naturalHeight };
-							URL.revokeObjectURL(url);
-							resolve(out);
-						};
-						img.onerror = () => {
-							URL.revokeObjectURL(url);
-							resolve({});
-						};
-						img.src = url;
-					});
-				},
-				/** @param {File} file */
-				async describe(file) {
-					const dims = await this.imageDimensions(file);
-					return {
-						name: file.name,
-						type: file.type,
-						size: file.size,
-						lastModified: file.lastModified,
-						...dims
-					};
-				},
-				/** @param {File} file */
-				showPreview(file) {
-					PartyState.resetPreview();
-					const url = URL.createObjectURL(file);
-					PartyState.previewObjectUrl = url;
-					PartyState.lastFile = file;
-					if (file.type.startsWith('video/')) {
-						const video = document.createElement('video');
-						video.src = url;
-						video.controls = true;
-						video.playsInline = true;
-						PartyDom.previewStage.appendChild(video);
+					if (isLive) {
+						await this.startLive();
 					} else {
-						const img = document.createElement('img');
-						img.src = url;
-						img.alt = 'Captured preview';
-						PartyDom.previewStage.appendChild(img);
+						await this.stopLive();
 					}
-				}
-			};
-
-			// --- party/capture-native ---
-			const PartyCaptureNative = {
-				/** @param {CaptureMethod} method */
-				open(method) {
-					const input = PartyDom.inputs[method.id];
-					if (!input) {
-						PartyLog.error('Missing file input', { methodId: method.id });
-						return;
-					}
-					PartyState.activeMethod = method;
+				},
+				async onSnapPressed() {
+					if (!this.method) return;
+					if (this.method.kind === 'live') return;
+					const input = this.inputs[this.method.id];
+					if (!input) return;
 					input.value = '';
-					PartyLog.info('Opening native input', { methodId: method.id });
 					input.click();
 				},
-				bind() {
-					CAPTURE_METHODS.filter((m) => m.kind === 'native').forEach((method) => {
-						const input = PartyDom.inputs[method.id];
-						if (!input) return;
-						input.addEventListener('change', () => PartyApp.onNativeFileSelected(method, input));
-						input.addEventListener('cancel', () => {
-							PartyLog.info('Native picker cancelled', { methodId: method.id });
-						});
-					});
-				}
-			};
-
-			// --- party/capture-live ---
-			const PartyCaptureLive = {
-				async start(method) {
-					PartyState.activeMethod = method;
-					PartyState.liveFacing = method.facing || 'environment';
-					PartyDom.showScreen('live');
-					PartyDom.setLiveStatus('Requesting camera…');
-					await this.stop();
-					if (!navigator.mediaDevices?.getUserMedia) {
-						PartyLog.error('getUserMedia unavailable');
-						PartyDom.setLiveStatus('Camera API not available');
-						PartyDom.showScreen('home');
-						return;
-					}
+				async _onNativeChange(input) {
+					const file = input.files?.[0];
+					if (!file) return;
 					try {
-						const constraints = {
-							audio: false,
-							video: {
-								facingMode: PartyState.liveFacing,
-								width: { ideal: 1920 },
-								height: { ideal: 1080 }
-							}
-						};
-						PartyLog.info('getUserMedia', constraints);
-						const stream = await navigator.mediaDevices.getUserMedia(constraints);
-						PartyState.liveStream = stream;
-						PartyDom.liveVideo.srcObject = stream;
-						await PartyDom.liveVideo.play().catch(() => {});
-						PartyDom.setLiveStatus(`Live — ${PartyState.liveFacing}`);
-						PartyLog.ok('Live stream started');
+						const photo = await PartyImages.preparePhoto(file);
+						if (typeof this._onSnap === 'function') this._onSnap(photo);
 					} catch (err) {
-						PartyLog.error('getUserMedia failed', { message: err?.message || String(err) });
-						PartyDom.setLiveStatus(err?.message || 'Permission denied');
-						setTimeout(() => PartyDom.showScreen('home'), 1200);
+						PartyLog.write(`Capture failed: ${err?.message || err}`);
 					}
 				},
-				async stop() {
-					if (PartyState.liveStream) {
-						PartyState.liveStream.getTracks().forEach((t) => t.stop());
-						PartyState.liveStream = null;
-					}
-					if (PartyDom.liveVideo) PartyDom.liveVideo.srcObject = null;
-				},
-				async flip() {
-					PartyState.liveFacing = PartyState.liveFacing === 'environment' ? 'user' : 'environment';
-					const method = PartyState.activeMethod || { id: 'live-gum', kind: 'live', facing: PartyState.liveFacing };
-					await this.start({ ...method, facing: PartyState.liveFacing });
-				},
-				/** @returns {Promise<File|null>} */
-				async captureFrame() {
-					const video = PartyDom.liveVideo;
-					if (!video || !video.videoWidth) {
-						PartyLog.error('No video frame to capture');
-						return null;
-					}
+				async onLiveShutter() {
+					const video = this.els.liveVideo;
+					if (!video?.videoWidth) return;
 					const canvas = document.createElement('canvas');
 					canvas.width = video.videoWidth;
 					canvas.height = video.videoHeight;
-					const ctx = canvas.getContext('2d');
-					if (!ctx) return null;
-					ctx.drawImage(video, 0, 0);
-					const blob = await new Promise((resolve) => {
-						canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.92);
-					});
-					if (!blob) {
-						PartyLog.error('canvas.toBlob failed');
-						return null;
+					canvas.getContext('2d')?.drawImage(video, 0, 0);
+					const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.9));
+					if (!blob) return;
+					try {
+						const photo = await PartyImages.preparePhoto(blob);
+						if (typeof this._onSnap === 'function') this._onSnap(photo);
+					} catch (err) {
+						PartyLog.write(`Shutter failed: ${err?.message || err}`);
 					}
-					return new File([blob], `party-live-${Date.now()}.jpg`, { type: 'image/jpeg' });
+				},
+				async startLive() {
+					await this.stopLive();
+					if (!navigator.mediaDevices?.getUserMedia) {
+						this._setStatus('Camera API unavailable');
+						return;
+					}
+					this.facing = this.method?.facing || 'environment';
+					this._setStatus('Starting camera…');
+					try {
+						const stream = await navigator.mediaDevices.getUserMedia({
+							audio: false,
+							video: { facingMode: this.facing, width: { ideal: 1280 }, height: { ideal: 720 } }
+						});
+						this.stream = stream;
+						this.els.liveVideo.srcObject = stream;
+						await this.els.liveVideo.play().catch(() => {});
+						this._setStatus(`Live — ${this.facing}`);
+					} catch (err) {
+						this._setStatus(err?.message || 'Camera blocked');
+						PartyLog.write(`getUserMedia: ${err?.message || err}`);
+					}
+				},
+				async stopLive() {
+					if (this.stream) {
+						this.stream.getTracks().forEach((t) => t.stop());
+						this.stream = null;
+					}
+					if (this.els.liveVideo) this.els.liveVideo.srcObject = null;
+					this._setStatus('');
+				},
+				async flipLive() {
+					this.facing = this.facing === 'environment' ? 'user' : 'environment';
+					await this.startLive();
+				},
+				_setStatus(text) {
+					if (!this.els.status) return;
+					this.els.status.hidden = !text;
+					this.els.status.textContent = text;
+				}
+			};
+
+			// --- party/ui ---
+			const PartyUI = {
+				els: {},
+				init(els) {
+					this.els = els;
+					els.redoBtn?.addEventListener('click', () => PartyApp.onRedo());
+					els.commitBtn?.addEventListener('click', () => PartyApp.onCommit());
+				},
+				renderMethodSelect(selectedId, onChange) {
+					const sel = this.els.methodSelect;
+					if (!sel) return;
+					sel.replaceChildren();
+					CAPTURE_METHODS.forEach((m) => {
+						const opt = document.createElement('option');
+						opt.value = m.id;
+						opt.textContent = m.friendlyName;
+						sel.appendChild(opt);
+					});
+					sel.value = selectedId;
+					sel.addEventListener('change', () => onChange(sel.value));
+				},
+				renderQueue() {
+					const list = this.els.queueList;
+					const empty = this.els.queueEmpty;
+					if (!list) return;
+					const active = PartyQueue.activeItems();
+					const processing = PartyQueue.processingCount();
+					const ready = PartyQueue.readyCount();
+					if (this.els.queueSummary) {
+						if (!active.length) {
+							this.els.queueSummary.textContent = 'Nothing processing';
+						} else if (processing && ready) {
+							this.els.queueSummary.textContent = `${processing} processing · ${ready} ready`;
+						} else if (processing) {
+							this.els.queueSummary.textContent = `${processing} processing`;
+						} else {
+							this.els.queueSummary.textContent = `${ready} ready to review`;
+						}
+					}
+					list.querySelectorAll('.party-queue-item').forEach((n) => n.remove());
+					if (!active.length) {
+						empty.hidden = false;
+						return;
+					}
+					empty.hidden = true;
+					active.forEach((item) => {
+						const btn = document.createElement('button');
+						btn.type = 'button';
+						btn.className = 'party-queue-item';
+						btn.dataset.status = item.status;
+						btn.dataset.itemId = item.id;
+						if (PartyQueue.selectedId === item.id) btn.dataset.selected = 'true';
+						const img = document.createElement('img');
+						img.src = item.originalDataUrl;
+						img.alt = '';
+						btn.appendChild(img);
+						if (item.orientation) {
+							const orient = document.createElement('span');
+							orient.className = 'party-queue-orient';
+							orient.textContent = PartyImages.orientationShortLabel(item.orientation);
+							orient.title = PartyImages.formatOrientationDetail(item);
+							btn.appendChild(orient);
+						}
+						const badge = document.createElement('span');
+						badge.className = 'party-queue-item-badge';
+						badge.textContent = item.status === 'processing' ? 'Working' : item.status === 'ready' ? 'Ready' : item.status;
+						btn.appendChild(badge);
+						if (item.status === 'processing') {
+							const spin = document.createElement('div');
+							spin.className = 'party-queue-spinner';
+							spin.setAttribute('aria-hidden', 'true');
+							btn.appendChild(spin);
+						}
+						btn.addEventListener('click', () => {
+							if (item.status === 'ready') PartyApp.openReview(item.id);
+							else if (item.status === 'failed') {
+								PartyQueue.redo(item.id);
+								PartyUI.renderAll();
+							}
+						});
+						list.appendChild(btn);
+					});
+				},
+				renderReview() {
+					const panel = this.els.review;
+					if (!panel) return;
+					const item = PartyQueue.selectedItem();
+					if (!item || (item.status !== 'ready' && item.status !== 'committed')) {
+						panel.hidden = true;
+						if (this.els.redoBtn) this.els.redoBtn.hidden = false;
+						if (this.els.commitBtn) this.els.commitBtn.hidden = false;
+						if (this.els.reviewOrientation) this.els.reviewOrientation.hidden = true;
+						return;
+					}
+					const isCommitted = item.status === 'committed';
+					panel.hidden = false;
+					if (this.els.reviewOriginal) this.els.reviewOriginal.src = item.originalDataUrl;
+					if (this.els.reviewResult) this.els.reviewResult.src = item.resultDataUrl || '';
+					if (this.els.reviewStatus) {
+						this.els.reviewStatus.textContent = isCommitted
+							? 'Sent to Google Photos'
+							: 'Ready — keep or redo';
+					}
+					if (this.els.reviewOrientation) {
+						const detail = PartyImages.formatOrientationDetail(item);
+						if (detail) {
+							this.els.reviewOrientation.hidden = false;
+							this.els.reviewOrientation.textContent = detail;
+						} else {
+							this.els.reviewOrientation.hidden = true;
+							this.els.reviewOrientation.textContent = '';
+						}
+					}
+					if (this.els.redoBtn) {
+						this.els.redoBtn.hidden = false;
+						this.els.redoBtn.textContent = isCommitted ? 'Re-transform' : 'Redo';
+					}
+					if (this.els.commitBtn) {
+						this.els.commitBtn.hidden = isCommitted;
+					}
+				},
+				renderCommitted() {
+					const committed = PartyQueue.committedItems();
+					if (this.els.committedCount) {
+						this.els.committedCount.textContent = String(committed.length);
+					}
+					const list = this.els.committedList;
+					if (!list) return;
+					list.replaceChildren();
+					committed.slice().reverse().forEach((item) => {
+						const btn = document.createElement('button');
+						btn.type = 'button';
+						btn.className = 'party-committed-thumb';
+						btn.dataset.itemId = item.id;
+						btn.setAttribute('aria-label', 'Review sent photo');
+						if (PartyQueue.selectedId === item.id) btn.dataset.selected = 'true';
+						const img = document.createElement('img');
+						img.src = item.resultDataUrl || item.originalDataUrl;
+						img.alt = '';
+						btn.appendChild(img);
+						btn.setAttribute('role', 'listitem');
+						btn.addEventListener('click', () => PartyApp.openReview(item.id, { fromCommitted: true }));
+						list.appendChild(btn);
+					});
+				},
+				renderAll() {
+					this.renderQueue();
+					this.renderReview();
+					this.renderCommitted();
 				}
 			};
 
 			// --- party/app ---
 			const PartyApp = {
 				init() {
-					PartyLog.init(
-						document.getElementById('party-log-list'),
-						document.getElementById('party-log-count')
-					);
-					PartyDom.init(document.getElementById('party-app'));
-					PartyDom.renderEnvMeta();
-					PartyDom.renderMethods((method) => this.onMethodPicked(method));
-					PartyCaptureNative.bind();
-					this.bindActions();
-					PartyLog.ok('Party POC ready');
-					document.addEventListener('visibilitychange', () => {
-						if (document.hidden && PartyState.liveStream) {
-							PartyLog.info('Page hidden — live stream may pause on some browsers');
-						}
+					PartyLog.init(document.getElementById('party-log-list'));
+					const els = {
+						methodSelect: document.getElementById('party-method-select'),
+						viewfinder: document.getElementById('party-viewfinder'),
+						placeholder: document.getElementById('party-viewfinder-placeholder'),
+						hint: document.getElementById('party-viewfinder-hint'),
+						liveVideo: document.getElementById('party-live-video'),
+						status: document.getElementById('party-viewfinder-status'),
+						actions: document.getElementById('party-capture-actions'),
+						snapBtn: document.getElementById('party-snap-btn'),
+						shutterBtn: document.getElementById('party-shutter-btn'),
+						flipBtn: document.getElementById('party-flip-btn'),
+						queueList: document.getElementById('party-queue-list'),
+						queueEmpty: document.getElementById('party-queue-empty'),
+						queueSummary: document.getElementById('party-queue-summary'),
+						review: document.getElementById('party-review'),
+						reviewOriginal: document.getElementById('party-review-original'),
+						reviewResult: document.getElementById('party-review-result'),
+						reviewStatus: document.getElementById('party-review-status'),
+						reviewOrientation: document.getElementById('party-review-orientation'),
+						redoBtn: document.getElementById('party-redo-btn'),
+						commitBtn: document.getElementById('party-commit-btn'),
+						committedCount: document.getElementById('party-committed-count'),
+						committedList: document.getElementById('party-committed-list'),
+						committedDetails: document.querySelector('.party-committed')
+					};
+					PartyUI.init(els);
+					PartyCapture.init(els, (dataUrl) => this.onPhotoCaptured(dataUrl));
+					PartyQueue.init(() => PartyUI.renderAll());
+
+					const savedMethod = PartyStorage.loadMethodId();
+					const method = PartyCapture.getMethod(savedMethod);
+					PartyUI.renderMethodSelect(method.id, (id) => {
+						PartyCapture.setMethod(PartyCapture.getMethod(id));
 					});
+					PartyCapture.setMethod(method);
+					PartyUI.renderAll();
+					PartyLog.write('Party Mode ready');
 				},
-				bindActions() {
-					document.querySelector('[data-action="cancel-live"]')?.addEventListener('click', () => {
-						PartyCaptureLive.stop();
-						PartyDom.showScreen('home');
-						PartyLog.info('Live capture cancelled');
-					});
-					document.querySelector('[data-action="flip-camera"]')?.addEventListener('click', () => {
-						PartyCaptureLive.flip();
-					});
-					document.querySelector('[data-action="shutter"]')?.addEventListener('click', () => {
-						this.onLiveShutter();
-					});
-					document.querySelector('[data-action="retake"]')?.addEventListener('click', () => {
-						PartyState.resetPreview();
-						const method = PartyState.activeMethod;
-						if (method?.kind === 'live') {
-							PartyCaptureLive.start(method);
-						} else if (method) {
-							PartyDom.showScreen('home');
-						} else {
-							PartyDom.showScreen('home');
-						}
-					});
-					document.querySelector('[data-action="done"]')?.addEventListener('click', () => {
-						PartyCaptureLive.stop();
-						PartyDom.showScreen('home');
-						PartyLog.info('Preview kept; returned home');
-					});
+				onPhotoCaptured(photo) {
+					PartyLog.write(`Snap ${photo.orientation} ${photo.width}×${photo.height} → ${photo.aspectRatio}`);
+					PartyQueue.enqueue(photo);
+					PartyUI.renderAll();
 				},
-				/** @param {CaptureMethod} method */
-				onMethodPicked(method) {
-					PartyLog.info('Method selected', { id: method.id, kind: method.kind });
-					if (method.kind === 'native') {
-						PartyCaptureNative.open(method);
-						return;
+				openReview(id, opts = {}) {
+					const item = PartyQueue.select(id);
+					if (!item) return;
+					if (opts.fromCommitted && PartyUI.els.committedDetails) {
+						PartyUI.els.committedDetails.open = true;
 					}
-					PartyCaptureLive.start(method);
+					PartyUI.renderAll();
+					PartyUI.els.review?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 				},
-				/** @param {CaptureMethod} method */
-				/** @param {HTMLInputElement} input */
-				async onNativeFileSelected(method, input) {
-					const file = input.files?.[0];
-					if (!file) {
-						PartyLog.info('Native flow ended with no file', { methodId: method.id });
-						return;
-					}
-					PartyLog.ok('Native file received', { methodId: method.id, type: file.type, size: file.size });
-					await this.showResult(file);
+				onRedo() {
+					const id = PartyQueue.selectedId;
+					if (!id) return;
+					PartyQueue.redo(id);
+					PartyUI.renderAll();
+					PartyUI.els.queueList?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 				},
-				async onLiveShutter() {
-					PartyLog.info('Shutter tapped');
-					const file = await PartyCaptureLive.captureFrame();
-					if (!file) return;
-					await PartyCaptureLive.stop();
-					PartyLog.ok('Live frame captured', { size: file.size });
-					await this.showResult(file);
-				},
-				/** @param {File} file */
-				async showResult(file) {
-					const meta = await PartyFiles.describe(file);
-					PartyFiles.showPreview(file);
-					if (PartyDom.resultMeta) {
-						PartyDom.resultMeta.textContent = JSON.stringify(
-							{ method: PartyState.activeMethod?.id, ...meta },
-							null,
-							2
-						);
-					}
-					PartyDom.showScreen('preview');
+				onCommit() {
+					const id = PartyQueue.selectedId;
+					if (!id) return;
+					const ok = PartyQueue.commit(id);
+					if (!ok) return;
+					window.alert('POC: This would add the transformed photo to your Google Photos album.');
+					PartyUI.renderAll();
 				}
 			};
 
