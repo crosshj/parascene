@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="party-page-root">
 
 <head>
 	<meta charset="utf-8" />
@@ -8,25 +8,14 @@
 	<meta name="apple-mobile-web-app-capable" content="yes" />
 	<meta name="mobile-web-app-capable" content="yes" />
 	<title>Party Mode</title>
-	<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+	<link rel="stylesheet" href="/pages/creations.css{{V}}" />
 	<style>
 		:root {
-			--bg: #0a0a0f;
-			--surface: #16161f;
-			--surface-raised: #1e1e2a;
-			--border: #2a2a38;
-			--text: #f2f2f7;
-			--muted: #9b9bb0;
-			--accent: #7c6cff;
-			--accent-fg: #fff;
-			--danger: #ff6b6b;
-			--ok: #3dd68c;
-			--amber: #f5c542;
-			--safe-top: env(safe-area-inset-top, 0px);
-			--safe-bottom: env(safe-area-inset-bottom, 0px);
-			--safe-left: env(safe-area-inset-left, 0px);
-			--safe-right: env(safe-area-inset-right, 0px);
-			--party-layout-max: 28rem;
+			--party-aspect: 16 / 9;
+			--party-muted: var(--text-muted, #9b9bb0);
+			--party-ok: var(--color-green-fg, #3dd68c);
+			--party-amber: var(--color-amber, #f5c542);
+			--party-danger: var(--color-red-fg, #ff6b6b);
 		}
 
 		*,
@@ -35,93 +24,323 @@
 			box-sizing: border-box;
 		}
 
-		html,
-		body {
-			margin: 0;
+		html.party-page-root,
+		body.party-page {
+			height: 100%;
 			min-height: 100%;
+			overflow: hidden;
+			font-family: var(--font-family);
+		}
+
+		body.party-page {
+			margin: 0;
 			background: var(--bg);
 			color: var(--text);
-			font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 			-webkit-font-smoothing: antialiased;
 		}
 
-		body.party-body {
+		body.party-page main.party-page-outer {
+			width: 100%;
+			max-width: none;
+			margin: 0;
+			padding: 0;
+			height: 100dvh;
+			height: var(--party-vh, 100dvh);
 			display: flex;
+			flex-direction: column;
+			min-height: 0;
+			box-sizing: border-box;
+		}
+
+		@media (max-width: 768px) {
+			body.party-page main.party-page-outer {
+				padding-bottom: 0;
+			}
+		}
+
+		.party-route {
+			flex: 1 1 auto;
+			min-height: 0;
+			display: flex;
+			flex-direction: column;
+			width: 100%;
+		}
+
+		.party-frame {
+			flex: 1 1 auto;
+			min-height: 0;
+			display: flex;
+			flex-direction: column;
+			width: 100%;
+		}
+
+		body.party-page .party-frame > .chat-page-topbar {
+			flex-shrink: 0;
+			padding-top: env(safe-area-inset-top);
+			min-height: calc(48px + env(safe-area-inset-top));
+			height: calc(48px + env(safe-area-inset-top));
+		}
+
+		body.party-page .chat-page-back .chat-page-back-icon {
+			display: inline-block;
+			font-family: inherit;
+			font-size: 26px;
+			line-height: 1;
+			font-variant-ligatures: common-ligatures contextual;
+			font-feature-settings: 'liga' 1, 'clig' 1, 'calt' 1;
+		}
+
+		body.party-page .chat-page-topbar-actions .feed-card-action-more svg {
+			width: 26px;
+			height: 26px;
+		}
+
+		.party-scroll {
+			flex: 1 1 auto;
+			min-height: 0;
+			overflow-x: hidden;
+			overflow-y: auto;
+			-webkit-overflow-scrolling: touch;
+			overscroll-behavior: contain;
+			padding: 12px 0 16px;
+		}
+
+		.party-grid-section + .party-grid-section {
+			margin-top: 16px;
+		}
+
+		.party-grid-head {
+			position: static;
+			display: flex;
+			flex-direction: row;
+			align-items: center;
+			margin: 0 0 6px;
+			padding: 4px 16px 0;
+			box-sizing: border-box;
+			background: none;
+			border: none;
+			backdrop-filter: none;
+			-webkit-backdrop-filter: none;
+		}
+
+		.party-grid-head::before {
+			content: none;
+			display: none;
+		}
+
+		.party-grid-title {
+			margin: 0;
+			padding: 0;
+			font-size: 0.6875rem;
+			font-weight: 700;
+			letter-spacing: 0.08em;
+			text-transform: uppercase;
+			color: var(--text-muted);
+			line-height: 1.2;
+		}
+
+		.party-grid {
+			display: grid;
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+			gap: 0;
+		}
+
+		@media (min-width: 480px) {
+			.party-grid {
+				grid-template-columns: repeat(4, minmax(0, 1fr));
+			}
+		}
+
+		.party-grid-empty {
+			margin: 0 16px;
+			font-size: 0.8rem;
+			color: var(--party-muted);
+			padding: 16px 12px;
+			border: 1px dashed color-mix(in srgb, var(--border) 80%, transparent);
+			border-radius: 10px;
+			text-align: center;
+		}
+
+		.party-queue-empty {
+			margin: 0;
+			padding: 28px 24px 20px;
+			font-size: 0.875rem;
+			line-height: 1.45;
+			color: var(--text-muted);
+			text-align: center;
+		}
+
+		.party-grid-empty[hidden],
+		.party-queue-empty[hidden] {
+			display: none !important;
+		}
+
+		.party-dock {
+			flex-shrink: 0;
+			width: 100%;
+			padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+			border-top: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+			background: color-mix(in srgb, var(--surface-strong, var(--surface)) 70%, transparent);
+			backdrop-filter: blur(14px) saturate(145%);
+			-webkit-backdrop-filter: blur(14px) saturate(145%);
+			box-sizing: border-box;
+		}
+
+		body.party-page .party-snap-btn {
+			width: 100%;
+			max-width: none;
+			margin: 0;
+			padding: 14px 16px;
+			border-radius: 999px;
+			font-size: 1rem;
+			font-weight: 600;
+		}
+
+		.party-capture-overlay {
+			position: fixed;
+			inset: 0;
+			z-index: 80;
+			display: flex;
+			flex-direction: column;
+			background: #000;
+			padding-top: env(safe-area-inset-top);
+			isolation: isolate;
+		}
+
+		body.party-page.party-page--capture-open .party-view--main {
+			visibility: hidden;
+		}
+
+		.party-capture-overlay[hidden] {
+			display: none !important;
+		}
+
+		body.party-page.party-page--capture-open {
+			overflow: hidden;
+		}
+
+		.party-capture-topbar {
+			flex-shrink: 0;
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			min-height: 48px;
+			height: 48px;
+			padding: 0 12px;
+			background: rgba(0, 0, 0, 0.72);
+			border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+		}
+
+		body.party-page .party-capture-topbar > button {
+			appearance: none;
+			-webkit-appearance: none;
+			box-shadow: none;
+			filter: none;
+		}
+
+		body.party-page .party-capture-topbar .chat-page-back {
+			background: transparent;
+			border: none;
+			color: #fff;
+		}
+
+		.party-capture-topbar .chat-page-title {
+			flex: 1;
+			color: #fff;
+		}
+
+		.party-capture-overlay .party-viewfinder {
+			flex: 1 1 auto;
+			min-height: 0;
+			width: 100%;
+			aspect-ratio: unset;
+			border: none;
+			border-radius: 0;
+			background: #000;
+		}
+
+		.party-capture-controls {
+			flex-shrink: 0;
+			display: grid;
+			grid-template-columns: 1fr auto 1fr;
+			align-items: center;
+			padding: 12px 24px calc(16px + env(safe-area-inset-bottom));
+			background: #000;
+		}
+
+		body.party-page .party-capture-controls > button {
+			appearance: none;
+			-webkit-appearance: none;
+			padding: 0;
+			border: none;
+			font: inherit;
+			box-shadow: none;
+			filter: none;
+			cursor: pointer;
+			touch-action: manipulation;
+			-webkit-tap-highlight-color: transparent;
+		}
+
+		.party-capture-shutter {
+			grid-column: 2;
+			justify-self: center;
+			width: 76px;
+			height: 76px;
+			border-radius: 50%;
+			border: 4px solid #fff;
+			background: rgba(255, 255, 255, 0.28);
+			display: flex;
+			align-items: center;
 			justify-content: center;
 		}
 
-		.party-app {
-			width: 100%;
-			max-width: var(--party-layout-max);
-			min-height: 100dvh;
-			display: flex;
-			flex-direction: column;
-			gap: 12px;
-			padding:
-				calc(12px + var(--safe-top))
-				calc(12px + var(--safe-right))
-				calc(12px + var(--safe-bottom))
-				calc(12px + var(--safe-left));
+		.party-capture-shutter:active {
+			background: #fff;
 		}
 
-		.party-header h1 {
-			margin: 0;
-			font-size: 1.2rem;
-			font-weight: 700;
+		.party-capture-shutter-inner {
+			width: 62px;
+			height: 62px;
+			border-radius: 50%;
+			border: 2px solid rgba(255, 255, 255, 0.85);
+			background: rgba(255, 255, 255, 0.92);
+			pointer-events: none;
 		}
 
-		.party-header p {
-			margin: 4px 0 0;
-			font-size: 0.8rem;
-			color: var(--muted);
-			line-height: 1.4;
+		.party-capture-shutter:active .party-capture-shutter-inner {
+			width: 56px;
+			height: 56px;
+			background: #fff;
 		}
 
-		.party-badge {
-			display: inline-block;
-			font-size: 0.6rem;
-			font-weight: 700;
-			text-transform: uppercase;
-			letter-spacing: 0.04em;
-			padding: 2px 6px;
-			border-radius: 4px;
-			background: var(--accent);
-			color: var(--accent-fg);
-			margin-left: 6px;
-			vertical-align: middle;
+		.party-capture-flip-btn {
+			grid-column: 3;
+			justify-self: center;
+			width: 48px;
+			height: 48px;
+			border-radius: 50%;
+			border: 2px solid rgba(255, 255, 255, 0.72);
+			background: rgba(255, 255, 255, 0.12);
+			color: #fff;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
 		}
 
-		.party-field {
-			display: flex;
-			flex-direction: column;
-			gap: 4px;
+		.party-capture-flip-btn:active {
+			background: rgba(255, 255, 255, 0.22);
 		}
 
-		.party-field label {
-			font-size: 0.75rem;
-			color: var(--muted);
-		}
-
-		.party-select {
-			width: 100%;
-			padding: 10px 12px;
-			border-radius: 6px;
-			border: 1px solid var(--border);
-			background: var(--surface);
-			color: var(--text);
-			font: inherit;
-		}
-
-		.party-capture {
-			display: flex;
-			flex-direction: column;
-			gap: 10px;
+		.party-capture-flip-btn svg {
+			width: 26px;
+			height: 26px;
+			display: block;
 		}
 
 		.party-viewfinder {
 			position: relative;
 			width: 100%;
-			aspect-ratio: 3 / 4;
+			aspect-ratio: var(--party-aspect);
 			border-radius: 10px;
 			overflow: hidden;
 			background: #000;
@@ -146,7 +365,7 @@
 			gap: 8px;
 			padding: 16px;
 			text-align: center;
-			color: var(--muted);
+			color: var(--party-muted);
 			font-size: 0.85rem;
 			line-height: 1.4;
 		}
@@ -167,6 +386,34 @@
 			font-size: 0.7rem;
 			color: #fff;
 			pointer-events: none;
+			z-index: 2;
+		}
+
+		.party-viewfinder-flash {
+			position: absolute;
+			inset: 0;
+			background: #fff;
+			opacity: 0;
+			pointer-events: none;
+			z-index: 4;
+		}
+
+		.party-viewfinder-flash.is-active {
+			animation: party-shutter-flash 0.32s ease-out;
+		}
+
+		@keyframes party-shutter-flash {
+			0% {
+				opacity: 0;
+			}
+
+			12% {
+				opacity: 0.95;
+			}
+
+			100% {
+				opacity: 0;
+			}
 		}
 
 		.party-capture-actions {
@@ -187,12 +434,12 @@
 
 		.party-btn--primary {
 			background: var(--accent);
-			color: var(--accent-fg);
+			color: var(--accent-fg, #fff);
 		}
 
 		.party-btn--ghost {
 			background: transparent;
-			color: var(--muted);
+			color: var(--party-muted);
 			border: 1px solid var(--border);
 			flex: none;
 			min-width: 0;
@@ -236,83 +483,38 @@
 			display: none;
 		}
 
-		.party-section {
-			display: flex;
-			flex-direction: column;
-			gap: 8px;
-			min-height: 0;
-		}
-
-		.party-section-head {
-			display: flex;
-			align-items: baseline;
-			justify-content: space-between;
-			gap: 8px;
-		}
-
-		.party-section-head h2 {
-			margin: 0;
-			font-size: 0.85rem;
-			font-weight: 600;
-		}
-
-		.party-section-head span {
-			font-size: 0.75rem;
-			color: var(--muted);
-		}
-
-		.party-queue-scroll {
-			display: flex;
-			gap: 8px;
-			overflow-x: auto;
-			padding-bottom: 4px;
-			-webkit-overflow-scrolling: touch;
-			scroll-snap-type: x proximity;
-		}
-
-		.party-queue-empty {
-			font-size: 0.8rem;
-			color: var(--muted);
-			padding: 12px;
-			border: 1px dashed var(--border);
-			border-radius: 10px;
-			text-align: center;
-		}
-
-		.party-queue-item {
+		.party-grid-item {
 			position: relative;
-			flex: 0 0 72px;
-			width: 72px;
-			height: 72px;
+			width: 100%;
+			aspect-ratio: var(--party-aspect);
 			padding: 0;
-			border: 2px solid transparent;
-			border-radius: 8px;
+			border: none;
+			border-radius: 0;
 			overflow: hidden;
 			background: var(--surface);
 			cursor: pointer;
-			scroll-snap-align: start;
 		}
 
-		.party-queue-item img {
+		.party-grid-item img {
 			width: 100%;
 			height: 100%;
 			object-fit: cover;
 			display: block;
 		}
 
-		.party-queue-item[data-status='processing'] {
-			border-color: var(--amber);
+		.party-grid-item[data-status='processing'] {
+			box-shadow: inset 0 0 0 2px var(--party-amber);
 		}
 
-		.party-queue-item[data-status='ready'] {
-			border-color: var(--ok);
+		.party-grid-item[data-status='ready'] {
+			box-shadow: inset 0 0 0 2px var(--party-ok);
 		}
 
-		.party-queue-item[data-selected='true'] {
-			box-shadow: 0 0 0 2px var(--accent);
+		.party-grid-item[data-selected='true'] {
+			box-shadow: inset 0 0 0 2px var(--accent);
 		}
 
-		.party-queue-item-badge {
+		.party-grid-item-badge {
 			position: absolute;
 			left: 4px;
 			right: 4px;
@@ -327,12 +529,20 @@
 			color: #fff;
 		}
 
-		.party-queue-item[data-status='processing'] .party-queue-item-badge {
-			color: var(--amber);
+		.party-grid-item[data-status='processing'] .party-grid-item-badge {
+			color: var(--party-amber);
 		}
 
-		.party-queue-item[data-status='ready'] .party-queue-item-badge {
-			color: var(--ok);
+		.party-grid-item[data-status='ready'] .party-grid-item-badge {
+			color: var(--party-ok);
+		}
+
+		.party-grid-item--sent {
+			opacity: 0.82;
+		}
+
+		.party-grid-item--sent[data-selected='true'] {
+			opacity: 1;
 		}
 
 		.party-queue-spinner {
@@ -358,72 +568,141 @@
 			to { transform: rotate(360deg); }
 		}
 
-		.party-review {
-			background: var(--surface);
-			border: 1px solid var(--border);
-			border-radius: 10px;
-			padding: 12px;
+		.party-review-overlay {
+			position: fixed;
+			inset: 0;
+			z-index: 60;
 			display: flex;
 			flex-direction: column;
-			gap: 10px;
+			min-height: 100dvh;
+			background: var(--bg);
+			overflow-y: auto;
+			-webkit-overflow-scrolling: touch;
 		}
 
-		.party-review[hidden] {
+		.party-review-overlay[hidden] {
 			display: none !important;
 		}
 
-		.party-compare {
-			display: grid;
-			grid-template-columns: 1fr 1fr;
-			gap: 8px;
+		body.party-page.party-page--review-open .party-view--main {
+			visibility: hidden;
 		}
 
-		.party-compare-col {
+		.party-detail {
+			width: 100%;
+			max-width: none;
+			margin: auto 0;
+			flex-shrink: 0;
 			display: flex;
 			flex-direction: column;
-			gap: 4px;
-			min-width: 0;
 		}
 
-		.party-compare-col span {
-			font-size: 0.7rem;
-			color: var(--muted);
-			text-transform: uppercase;
-			letter-spacing: 0.03em;
+		.party-detail-media {
+			width: 100%;
+			flex: 0 0 auto;
 		}
 
-		.party-compare-frame {
-			aspect-ratio: 3 / 4;
-			border-radius: 8px;
-			overflow: hidden;
+		.party-detail-frame {
+			position: relative;
+			width: 100%;
+			aspect-ratio: var(--party-aspect);
 			background: #000;
 		}
 
-		.party-compare-frame img {
+		.party-detail-frame + .party-detail-frame {
+			border-top: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+		}
+
+		.party-detail-label {
+			position: absolute;
+			left: 10px;
+			top: 10px;
+			z-index: 1;
+			padding: 4px 8px;
+			border-radius: 4px;
+			font-size: 0.65rem;
+			font-weight: 700;
+			text-transform: uppercase;
+			letter-spacing: 0.04em;
+			color: #fff;
+			background: rgba(0, 0, 0, 0.55);
+			pointer-events: none;
+		}
+
+		.party-detail-frame img {
 			width: 100%;
 			height: 100%;
 			object-fit: cover;
 			display: block;
 		}
 
-		.party-review-actions {
+		.party-detail-frame img[hidden] {
+			display: none;
+		}
+
+		.party-detail-working {
+			position: absolute;
+			inset: 0;
 			display: flex;
-			flex-wrap: wrap;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			gap: 12px;
+			background: #000;
+			color: var(--party-amber);
+			font-size: 0.875rem;
+			font-weight: 600;
+			text-transform: uppercase;
+			letter-spacing: 0.04em;
+		}
+
+		.party-detail-working[hidden] {
+			display: none !important;
+		}
+
+		.party-detail-working-spinner {
+			width: 28px;
+			height: 28px;
+			border: 2px solid rgba(255, 255, 255, 0.25);
+			border-top-color: var(--party-amber);
+			border-radius: 50%;
+			animation: party-spin 0.8s linear infinite;
+		}
+
+		.party-detail-actions {
+			flex-shrink: 0;
+			display: flex;
+			flex-wrap: nowrap;
 			gap: 8px;
+			padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+			border-top: 1px solid var(--border);
+			background: var(--bg);
 		}
 
-		.party-review-actions .party-btn {
-			flex: 1;
-			min-width: 120px;
+		.party-detail-actions[hidden] {
+			display: none !important;
 		}
 
-		.party-review-orientation {
-			margin: 0;
-			font-size: 0.75rem;
-			color: var(--muted);
-			line-height: 1.4;
+		.party-detail-actions .party-btn {
+			flex: 1 1 0;
+			min-width: 0;
+			padding: 10px 8px;
+			font-size: 0.875rem;
 		}
 
+		.party-detail-actions .party-btn:disabled {
+			opacity: 0.45;
+			cursor: not-allowed;
+		}
+
+		.party-btn--danger {
+			background: transparent;
+			color: var(--party-danger);
+			border: 1px solid var(--party-danger);
+		}
+
+		/* Portrait/gyro queue badge — re-enable with PORTRAIT/GYRO block in party.html script */
+		/*
 		.party-queue-orient {
 			position: absolute;
 			top: 3px;
@@ -438,54 +717,7 @@
 			color: #fff;
 			line-height: 1.2;
 		}
-
-		.party-committed {
-			margin-top: auto;
-			border-top: 1px solid var(--border);
-			padding-top: 8px;
-		}
-
-		.party-committed summary,
-		.party-log summary {
-			cursor: pointer;
-			font-size: 0.8rem;
-			color: var(--muted);
-			user-select: none;
-		}
-
-		.party-committed-list {
-			margin: 8px 0 0;
-			padding: 0;
-			list-style: none;
-			display: flex;
-			flex-wrap: wrap;
-			gap: 6px;
-		}
-
-		.party-committed-thumb {
-			width: 48px;
-			height: 48px;
-			padding: 0;
-			border: 2px solid transparent;
-			border-radius: 6px;
-			overflow: hidden;
-			background: var(--surface);
-			cursor: pointer;
-			opacity: 0.75;
-		}
-
-		.party-committed-thumb[data-selected='true'] {
-			opacity: 1;
-			border-color: var(--accent);
-			box-shadow: 0 0 0 2px var(--accent);
-		}
-
-		.party-committed-thumb img {
-			width: 100%;
-			height: 100%;
-			object-fit: cover;
-			display: block;
-		}
+		*/
 
 		.party-log-list {
 			margin: 8px 0 0;
@@ -496,7 +728,16 @@
 			font-family: ui-monospace, Menlo, monospace;
 			font-size: 0.62rem;
 			line-height: 1.4;
-			color: var(--muted);
+			color: var(--party-muted);
+		}
+
+		body.party-page > app-navigation,
+		body.party-page > app-navigation-mobile {
+			display: none !important;
+		}
+
+		body.party-page.party-page--review-open {
+			overflow: hidden;
 		}
 
 		.party-hidden-input {
@@ -507,99 +748,330 @@
 			pointer-events: none;
 		}
 
+		.party-dock--split {
+			display: flex;
+			flex-direction: row;
+			align-items: center;
+			gap: 10px;
+		}
+
+		.party-dock--split .party-dock-cancel {
+			flex: 1 1 0;
+			min-width: 0;
+			padding: 14px 16px;
+			border-radius: 999px;
+			border: 1px solid var(--border);
+			background: transparent;
+			color: var(--text);
+			font: inherit;
+			font-weight: 600;
+			cursor: pointer;
+		}
+
+		.party-dock--split .party-dock-save {
+			flex: 1 1 0;
+			min-width: 0;
+			padding: 14px 16px;
+			border-radius: 999px;
+			font-size: 1rem;
+			font-weight: 600;
+		}
+
+		.party-view {
+			flex: 1 1 auto;
+			min-height: 0;
+			display: flex;
+			flex-direction: column;
+			width: 100%;
+		}
+
+		.party-view[hidden] {
+			display: none !important;
+		}
+
+		body.party-page .chat-page-topbar-actions[hidden] {
+			display: none !important;
+		}
+
+		body.party-page .chat-page-topbar .party-topbar-back {
+			appearance: none;
+			-webkit-appearance: none;
+			border: none;
+			background: transparent;
+			cursor: pointer;
+			font: inherit;
+		}
+
+		.party-settings-form {
+			display: flex;
+			flex-direction: column;
+			gap: 20px;
+			box-sizing: border-box;
+			width: 100%;
+			padding: 0 16px;
+		}
+
+		.party-settings-section {
+			display: flex;
+			flex-direction: column;
+			gap: 10px;
+		}
+
+		.party-settings-section-title {
+			margin: 0;
+			font-size: 0.9rem;
+			font-weight: 600;
+		}
+
+		.party-settings-section-desc,
+		.party-settings-note {
+			margin: 0;
+			font-size: 0.78rem;
+			color: var(--party-muted);
+			line-height: 1.45;
+		}
+
+		.party-field {
+			display: flex;
+			flex-direction: column;
+			gap: 6px;
+		}
+
+		.party-field label {
+			font-size: 0.75rem;
+			color: var(--party-muted);
+		}
+
+		.party-field-hint {
+			margin: 0;
+			font-size: 0.72rem;
+			color: var(--party-muted);
+			line-height: 1.4;
+		}
+
+		.party-select,
+		.party-input,
+		.party-textarea {
+			width: 100%;
+			max-width: 100%;
+			padding: 10px 12px;
+			border-radius: 6px;
+			border: 1px solid var(--border);
+			background: var(--surface);
+			color: var(--text);
+			font: inherit;
+			box-sizing: border-box;
+		}
+
+		.party-select:focus-visible,
+		.party-input:focus-visible,
+		.party-textarea:focus-visible {
+			outline: none;
+			border-color: var(--focus);
+			box-shadow: none;
+		}
+
+		.party-textarea {
+			min-height: 88px;
+			resize: vertical;
+			line-height: 1.45;
+		}
+
+		.party-field-row {
+			display: flex;
+			align-items: flex-start;
+			gap: 10px;
+		}
+
+		.party-field-row input[type='checkbox'] {
+			margin-top: 3px;
+			flex-shrink: 0;
+		}
+
+		.party-field-row label {
+			font-size: 0.85rem;
+			color: var(--text);
+			line-height: 1.4;
+		}
+
 		@media (min-width: 769px) {
-			body.party-body {
-				padding: 24px 16px;
+			body.party-page .party-scroll {
+				padding-left: max(0px, calc((100% - 720px) / 2));
+				padding-right: max(0px, calc((100% - 720px) / 2));
 			}
 
-			.party-app {
-				min-height: 0;
-				border: 1px solid var(--border);
-				border-radius: 14px;
-			}
-
-			.party-viewfinder {
-				max-height: min(55vh, 520px);
+			body.party-page .party-dock {
+				padding-left: max(12px, calc((100% - 720px) / 2 + 12px));
+				padding-right: max(12px, calc((100% - 720px) / 2 + 12px));
 			}
 		}
 	</style>
 </head>
 
-<body class="party-body">
-	<div class="party-app" id="party-app">
-		<header class="party-header">
-			<h1>Party Mode <span class="party-badge">POC</span></h1>
-			<p>Snap guest photos, queue transforms, review when ready, then send to Google Photos.</p>
-		</header>
+<body class="party-page">
+	<app-modal-profile></app-modal-profile>
+	<app-modal-credits></app-modal-credits>
+	<app-modal-notifications></app-modal-notifications>
 
-		<section class="party-capture" aria-label="Take photo">
-			<div class="party-field">
-				<label for="party-method-select">Camera input</label>
-				<select class="party-select" id="party-method-select" aria-label="Camera input method"></select>
-			</div>
-
-			<div class="party-viewfinder" id="party-viewfinder">
-				<div class="party-viewfinder-placeholder" id="party-viewfinder-placeholder">
-					<strong>Ready to shoot</strong>
-					<span id="party-viewfinder-hint">Tap Take photo to open the camera.</span>
-				</div>
-				<video id="party-live-video" playsinline muted autoplay hidden></video>
-				<div class="party-viewfinder-status" id="party-viewfinder-status" hidden></div>
-			</div>
-
-			<div class="party-capture-actions" id="party-capture-actions">
-				<button type="button" class="party-btn party-btn--snap party-btn--primary" id="party-snap-btn">Take photo</button>
-				<button type="button" class="party-btn party-btn--ghost" id="party-flip-btn" hidden>Flip</button>
-				<button type="button" class="party-btn party-btn--shutter" id="party-shutter-btn" aria-label="Take photo" hidden></button>
-			</div>
-		</section>
-
-		<section class="party-section" aria-label="Processing queue">
-			<div class="party-section-head">
-				<h2>Queue</h2>
-				<span id="party-queue-summary">Nothing processing</span>
-			</div>
-			<div class="party-queue-scroll" id="party-queue-list">
-				<p class="party-queue-empty" id="party-queue-empty">Snapped photos appear here while the model works.</p>
-			</div>
-		</section>
-
-		<section class="party-review" id="party-review" hidden>
-			<div class="party-section-head">
-				<h2>Review</h2>
-				<span id="party-review-status"></span>
-			</div>
-			<p class="party-review-orientation" id="party-review-orientation" hidden></p>
-			<div class="party-compare">
-				<div class="party-compare-col">
-					<span>Original</span>
-					<div class="party-compare-frame">
-						<img id="party-review-original" alt="Original photo" />
+	<main class="party-page-outer">
+		<div class="party-route" id="party-app">
+			<div class="party-frame" id="party-frame">
+				<header class="chat-page-topbar" aria-label="Party navigation">
+					<a href="/create" class="chat-page-back party-topbar-back" id="party-topbar-back" aria-label="Back to create">
+						<span class="chat-page-back-icon" aria-hidden="true">&lt;-</span>
+					</a>
+					<h1 class="chat-page-title" id="party-topbar-title">Party Mode</h1>
+					<div class="chat-page-topbar-actions" id="party-topbar-actions">
+						<button type="button" class="feed-card-action-more" id="party-settings-open" aria-label="Party settings">
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+								<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
+								<circle cx="12" cy="12" r="3"></circle>
+							</svg>
+						</button>
 					</div>
+				</header>
+
+				<div class="party-view party-view--main" id="party-view-main">
+				<div class="party-scroll">
+					<section class="party-grid-section" id="party-pending-section" aria-label="Queue">
+						<div class="party-grid-head">
+							<h2 class="party-grid-title">Queue</h2>
+						</div>
+						<div class="party-grid" id="party-pending-grid"></div>
+						<p class="party-queue-empty" id="party-pending-empty">Capture a photo to transform.</p>
+					</section>
+
+					<section class="party-grid-section" aria-label="Pushed">
+						<div class="party-grid-head">
+							<h2 class="party-grid-title">Pushed</h2>
+						</div>
+						<div class="party-grid" id="party-sent-grid"></div>
+						<p class="party-grid-empty" id="party-sent-empty" hidden>No photos pushed yet.</p>
+					</section>
 				</div>
-				<div class="party-compare-col">
-					<span>Transformed</span>
-					<div class="party-compare-frame">
-						<img id="party-review-result" alt="Transformed photo" />
+
+				<footer class="party-dock">
+					<button type="button" class="btn-primary party-snap-btn" id="party-snap-btn">Capture</button>
+				</footer>
+				</div>
+
+				<div class="party-view party-view--settings" id="party-view-settings" hidden>
+					<div class="party-scroll">
+						<form class="party-settings-form" id="party-settings-form">
+							<section class="party-settings-section" aria-labelledby="party-settings-party-title">
+								<h2 class="party-settings-section-title" id="party-settings-party-title">This party</h2>
+								<p class="party-settings-section-desc">Saved for this party only. New captures use the prompt below.</p>
+
+								<div class="party-field">
+									<label for="party-settings-party-name">Party name</label>
+									<input class="party-input" type="text" id="party-settings-party-name" name="partyName" maxlength="80" placeholder="Saturday night" autocomplete="off" />
+								</div>
+
+								<div class="party-field">
+									<label for="party-settings-prompt">Transform prompt</label>
+									<textarea class="party-textarea prompt-editor" id="party-settings-prompt" name="prompt" rows="4" maxlength="2000" placeholder="Describe the look for every guest photo…"></textarea>
+									<p class="party-field-hint">Same image-to-image model as basic Create — landscape 16:9.</p>
+								</div>
+							</section>
+
+							<section class="party-settings-section" aria-labelledby="party-settings-device-title">
+								<h2 class="party-settings-section-title" id="party-settings-device-title">Device</h2>
+								<p class="party-settings-section-desc">Applies every time you use Party Mode on this device.</p>
+
+								<div class="party-field">
+									<label for="party-settings-capture-method">Camera input</label>
+									<select class="party-select" id="party-settings-capture-method" name="captureMethodId"></select>
+									<p class="party-field-hint" id="party-settings-capture-hint"></p>
+								</div>
+
+								<div class="party-field-row">
+									<input type="checkbox" id="party-settings-shutter-sound" name="shutterSound" checked />
+									<label for="party-settings-shutter-sound">Play shutter sound when capturing in the in-app viewfinder</label>
+								</div>
+							</section>
+
+							<section class="party-settings-section" aria-labelledby="party-settings-behavior-title">
+								<h2 class="party-settings-section-title" id="party-settings-behavior-title">Behavior</h2>
+
+								<div class="party-field-row">
+									<input type="checkbox" id="party-settings-auto-review" name="autoReviewReady" />
+									<label for="party-settings-auto-review">Open review automatically when a transform finishes</label>
+								</div>
+
+								<p class="party-settings-note">Photos are always captured and transformed in landscape 16:9. Hold your phone sideways when shooting.</p>
+							</section>
+						</form>
 					</div>
+
+					<footer class="party-dock party-dock--split">
+						<button type="button" class="party-dock-cancel" id="party-settings-cancel">Cancel</button>
+						<button type="button" class="btn-primary party-dock-save" id="party-settings-save">Save</button>
+					</footer>
 				</div>
 			</div>
-			<div class="party-review-actions">
+		</div>
+	</main>
+
+	<div class="party-review-overlay" id="party-review-overlay" hidden>
+		<div class="party-detail" id="party-detail" aria-label="Photo detail">
+			<div class="party-detail-media">
+				<div class="party-detail-frame party-detail-frame--result">
+					<span class="party-detail-label">Transformed</span>
+					<div class="party-detail-working" id="party-review-working" hidden>
+						<div class="party-detail-working-spinner" aria-hidden="true"></div>
+						<span>Working</span>
+					</div>
+					<img id="party-review-result" alt="Transformed photo" hidden />
+				</div>
+				<div class="party-detail-frame party-detail-frame--source">
+					<span class="party-detail-label">Source</span>
+					<img id="party-review-original" alt="Source photo" />
+				</div>
+			</div>
+			<div class="party-detail-actions" id="party-detail-actions-queue">
 				<button type="button" class="party-btn party-btn--ghost" id="party-redo-btn">Redo</button>
-				<button type="button" class="party-btn party-btn--primary" id="party-commit-btn">Add to Google Photos</button>
+				<button type="button" class="party-btn party-btn--primary" id="party-push-btn">Push</button>
+				<button type="button" class="party-btn party-btn--danger" id="party-discard-btn">Discard</button>
+				<button type="button" class="party-btn party-btn--ghost" id="party-cancel-btn">Dismiss</button>
 			</div>
-		</section>
-
-		<details class="party-committed">
-			<summary>Sent to Google Photos (<span id="party-committed-count">0</span>)</summary>
-			<div class="party-committed-list" id="party-committed-list" role="list"></div>
-		</details>
-
-		<details class="party-log">
-			<summary>Event log</summary>
-			<ul class="party-log-list" id="party-log-list"></ul>
-		</details>
+			<div class="party-detail-actions" id="party-detail-actions-pushed" hidden>
+				<button type="button" class="party-btn party-btn--danger" id="party-pushed-discard-btn">Discard</button>
+				<button type="button" class="party-btn party-btn--ghost" id="party-dismiss-btn">Dismiss</button>
+			</div>
+		</div>
 	</div>
+
+	<div class="party-capture-overlay" id="party-capture-overlay" hidden>
+		<header class="party-capture-topbar" aria-label="Camera">
+			<button type="button" class="chat-page-back party-capture-close" id="party-capture-close" aria-label="Close camera">
+				<span class="chat-page-back-icon" aria-hidden="true">&lt;-</span>
+			</button>
+			<h1 class="chat-page-title">Snap</h1>
+		</header>
+		<div class="party-viewfinder" id="party-viewfinder">
+			<div class="party-viewfinder-placeholder" id="party-viewfinder-placeholder">
+				<strong>Starting camera…</strong>
+				<span id="party-viewfinder-hint">Hold your phone sideways for 16:9.</span>
+			</div>
+			<video id="party-live-video" playsinline muted autoplay hidden></video>
+			<div class="party-viewfinder-flash" id="party-viewfinder-flash" aria-hidden="true"></div>
+			<div class="party-viewfinder-status" id="party-viewfinder-status" hidden></div>
+		</div>
+		<footer class="party-capture-controls" aria-label="Camera controls">
+			<button type="button" class="party-capture-shutter" id="party-capture-shutter-btn" aria-label="Take photo">
+				<span class="party-capture-shutter-inner" aria-hidden="true"></span>
+			</button>
+			<button type="button" class="party-capture-flip-btn" id="party-flip-btn" aria-label="Flip camera">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<path d="M7 7h10l-2.5-2.5M17 17H7l2.5 2.5"></path>
+					<path d="M16 7a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"></path>
+					<path d="M8 17a4 4 0 0 0 4 4h5a4 4 0 0 0 4-4v-2"></path>
+				</svg>
+			</button>
+		</footer>
+	</div>
+
+	<ul class="party-log-list" id="party-log-list" hidden></ul>
 
 	<input type="file" class="party-hidden-input" id="party-input-native-env" accept="image/*" capture="environment" />
 	<input type="file" class="party-hidden-input" id="party-input-native-user" accept="image/*" capture="user" />
@@ -609,23 +1081,33 @@
 		/**
 		 * Party Mode POC — one-page flow. Module-shaped for future split.
 		 * Storage: localStorage (queue metadata + JPEG data URLs). No new DB tables.
-		 * Transform: mocked delay + canvas stylize. Wire-up target: uploadImageFile + submitCreationWithPending + poll.
+		 * Transform: default mutate model via /api/create (uploadImageFile + poll /api/create/images/:id).
 		 */
 		(function () {
 			'use strict';
 
 			const STORAGE_KEY = 'parascene_party_queue_v1';
 			const METHOD_STORAGE_KEY = 'parascene_party_capture_method_v1';
-			const PARTY_PROMPT = 'Party portrait — warm stylized guest photo for the album';
-			const MOCK_PROCESS_MS_MIN = 6000;
-			const MOCK_PROCESS_MS_MAX = 14000;
+			const DEVICE_SETTINGS_KEY = 'parascene_party_device_settings_v1';
+			const PARTY_SETTINGS_KEY = 'parascene_party_session_settings_v1';
+			const DEFAULT_PARTY_PROMPT = 'Party landscape guest photo — warm stylized album shot';
+			const PARTY_ASPECT_RATIO = '16:9';
+			const PARTY_ASPECT_W = 16;
+			const PARTY_ASPECT_H = 9;
+			const PARTY_ORIENTATION = 'landscape';
+			// Toggle: landscape-only (active) vs portrait/gyro — see PORTRAIT/GYRO blocks below
 			const MAX_QUEUE_ITEMS = 24;
-			const STORED_IMAGE_MAX_EDGE = 960;
+			const TRANSFORM_POLL_MS = 2500;
+			const TRANSFORM_POLL_MAX = 120;
+			/** Queue + capture — exact 16:9 at 1280×720. */
+			const STORED_IMAGE_LONG_EDGE = 1280;
+			/** Grok i2i input — same 16:9 box (1280×720). */
+			const GROK_INPUT_LONG_EDGE = 1280;
 
 			/** @typedef {'processing'|'ready'|'committed'|'failed'} PartyItemStatus */
 			/** @typedef {'portrait'|'landscape'|'square'} PartyOrientation */
 			/** @typedef {{ dataUrl: string, width: number, height: number, orientation: PartyOrientation, aspectRatio: string, exifCorrected: boolean, screenOrientation?: string|null, captureSource?: string, viewportCorrected?: boolean, holdSource?: string }} PartyStoredPhoto */
-			/** @typedef {{ id: string, status: PartyItemStatus, createdAt: string, updatedAt: string, prompt: string, originalDataUrl: string, resultDataUrl?: string, error?: string, creationId?: number, width?: number, height?: number, orientation?: PartyOrientation, aspectRatio?: string, exifCorrected?: boolean, screenOrientation?: string|null }} PartyQueueItem */
+			/** @typedef {{ id: string, status: PartyItemStatus, createdAt: string, updatedAt: string, prompt: string, originalDataUrl: string, resultDataUrl?: string, error?: string, creationId?: number, creationToken?: string, width?: number, height?: number, orientation?: PartyOrientation, aspectRatio?: string, exifCorrected?: boolean, screenOrientation?: string|null }} PartyQueueItem */
 			/** @typedef {{ id: string, friendlyName: string, hint: string, kind: 'native'|'live', inputId?: string, facing?: 'environment'|'user', default?: boolean }} CaptureMethodDef */
 
 			const CAPTURE_METHODS = /** @type {CaptureMethodDef[]} */ ([
@@ -640,21 +1122,21 @@
 				{
 					id: 'native-env',
 					friendlyName: 'Rear camera',
-					hint: 'Opens the system camera when supported.',
-					kind: 'native',
-					inputId: 'party-input-native-env'
+					hint: 'Full-screen in-app viewfinder using the rear camera.',
+					kind: 'live',
+					facing: 'environment'
 				},
 				{
 					id: 'native-user',
 					friendlyName: 'Front camera (selfie)',
-					hint: 'Front-facing camera when supported.',
-					kind: 'native',
-					inputId: 'party-input-native-user'
+					hint: 'Full-screen in-app viewfinder using the front camera.',
+					kind: 'live',
+					facing: 'user'
 				},
 				{
 					id: 'live-gum',
 					friendlyName: 'In-app viewfinder',
-					hint: 'Live preview in the page — best for rapid consecutive shots on supported devices.',
+					hint: 'Full-screen live preview — best for rapid consecutive shots.',
 					kind: 'live',
 					facing: 'environment'
 				}
@@ -708,10 +1190,307 @@
 				}
 			};
 
+			// --- party/settings ---
+			const PartySettings = {
+				_device: null,
+				_party: null,
+				_draftDevice: null,
+				_draftParty: null,
+				_defaults: {
+					device: {
+						version: 1,
+						captureMethodId: 'native-picker',
+						shutterSound: true
+					},
+					party: {
+						version: 1,
+						partyName: '',
+						prompt: DEFAULT_PARTY_PROMPT,
+						autoReviewReady: false,
+						groupPartyKey: '',
+						groupCreationId: null,
+						pendingGroupCreationId: null
+					}
+				},
+				_clone(obj) {
+					return JSON.parse(JSON.stringify(obj));
+				},
+				_loadJson(key, fallback) {
+					try {
+						const raw = localStorage.getItem(key);
+						if (!raw) return this._clone(fallback);
+						const data = JSON.parse(raw);
+						if (!data || typeof data !== 'object') return this._clone(fallback);
+						return { ...this._clone(fallback), ...data, version: 1 };
+					} catch {
+						return this._clone(fallback);
+					}
+				},
+				_saveJson(key, data) {
+					try {
+						localStorage.setItem(key, JSON.stringify(data));
+					} catch (err) {
+						PartyLog.write(`Settings save failed: ${err?.message || err}`);
+					}
+				},
+				_partyGroupKey(party = this._party) {
+					const name = String(party?.partyName || '').trim();
+					const prompt = String(party?.prompt || DEFAULT_PARTY_PROMPT).trim() || DEFAULT_PARTY_PROMPT;
+					return `${name}|${prompt}`;
+				},
+				_resetPartyGroupTracking(party = this._party) {
+					if (!party) return;
+					party.groupCreationId = null;
+					party.pendingGroupCreationId = null;
+					party.groupPartyKey = this._partyGroupKey(party);
+				},
+				_syncPartyGroupScope() {
+					const key = this._partyGroupKey();
+					if (this._party.groupPartyKey === key) return false;
+					this._resetPartyGroupTracking();
+					this._saveJson(PARTY_SETTINGS_KEY, this._party);
+					return true;
+				},
+				load() {
+					const legacyMethod = PartyStorage.loadMethodId();
+					this._device = this._loadJson(DEVICE_SETTINGS_KEY, this._defaults.device);
+					if (legacyMethod && !localStorage.getItem(DEVICE_SETTINGS_KEY)) {
+						this._device.captureMethodId = legacyMethod;
+					}
+					this._party = this._loadJson(PARTY_SETTINGS_KEY, this._defaults.party);
+					if (!String(this._party.prompt || '').trim()) {
+						this._party.prompt = DEFAULT_PARTY_PROMPT;
+					}
+					this._syncPartyGroupScope();
+					this._draftDevice = null;
+					this._draftParty = null;
+					return { device: this._device, party: this._party };
+				},
+				getPrompt() {
+					const prompt = String((this._party?.prompt ?? DEFAULT_PARTY_PROMPT)).trim();
+					return prompt || DEFAULT_PARTY_PROMPT;
+				},
+				getCaptureMethodId() {
+					return this._device?.captureMethodId || 'native-picker';
+				},
+				getShutterSound() {
+					return this._device?.shutterSound !== false;
+				},
+				getAutoReviewReady() {
+					return this._party?.autoReviewReady === true;
+				},
+				getPartyName() {
+					return String(this._party?.partyName || '').trim();
+				},
+				getGroupCreationId() {
+					const n = Number(this._party?.groupCreationId);
+					return Number.isFinite(n) && n > 0 ? n : null;
+				},
+				getPendingGroupCreationId() {
+					const n = Number(this._party?.pendingGroupCreationId);
+					return Number.isFinite(n) && n > 0 ? n : null;
+				},
+				setGroupCreationId(id) {
+					this._party.groupCreationId = Number.isFinite(Number(id)) && Number(id) > 0 ? Number(id) : null;
+					this._party.pendingGroupCreationId = null;
+					this._party.groupPartyKey = this._partyGroupKey();
+					this._saveJson(PARTY_SETTINGS_KEY, this._party);
+				},
+				setPendingGroupCreationId(id) {
+					this._party.pendingGroupCreationId = Number.isFinite(Number(id)) && Number(id) > 0
+						? Number(id)
+						: null;
+					this._party.groupPartyKey = this._partyGroupKey();
+					this._saveJson(PARTY_SETTINGS_KEY, this._party);
+				},
+				startDraft() {
+					this._draftDevice = this._clone(this._device);
+					this._draftParty = this._clone(this._party);
+				},
+				cancelDraft() {
+					this._draftDevice = null;
+					this._draftParty = null;
+				},
+				getDraft() {
+					return {
+						device: this._draftDevice || this._device,
+						party: this._draftParty || this._party
+					};
+				},
+				readDraftFromForm(form) {
+					if (!form || !this._draftDevice || !this._draftParty) return;
+					const methodId = form.elements.captureMethodId?.value || 'native-picker';
+					this._draftDevice.captureMethodId = CAPTURE_METHODS.some((m) => m.id === methodId)
+						? methodId
+						: 'native-picker';
+					this._draftDevice.shutterSound = form.elements.shutterSound?.checked !== false;
+					this._draftParty.partyName = String(form.elements.partyName?.value || '').trim();
+					const prompt = String(form.elements.prompt?.value || '').trim();
+					this._draftParty.prompt = prompt || DEFAULT_PARTY_PROMPT;
+					this._draftParty.autoReviewReady = form.elements.autoReviewReady?.checked === true;
+				},
+				applyDraft() {
+					if (!this._draftDevice || !this._draftParty) return false;
+					const prevKey = this._partyGroupKey(this._party);
+					this._device = this._clone(this._draftDevice);
+					this._party = this._clone(this._draftParty);
+					if (prevKey !== this._partyGroupKey(this._party)) {
+						this._resetPartyGroupTracking(this._party);
+					}
+					this._saveJson(DEVICE_SETTINGS_KEY, this._device);
+					this._saveJson(PARTY_SETTINGS_KEY, this._party);
+					PartyStorage.saveMethodId(this._device.captureMethodId);
+					this._draftDevice = null;
+					this._draftParty = null;
+					PartyLog.write('Party settings saved');
+					return true;
+				}
+			};
+
+			// --- party/group ---
+			const PartyGroup = {
+				_chain: Promise.resolve(),
+				assignCreation(creationId) {
+					this._chain = this._chain
+						.then(() => this._assignCreation(creationId))
+						.catch((err) => {
+							PartyLog.write(`Group failed: ${err?.message || err}`);
+						});
+					return this._chain;
+				},
+				_partyLabel() {
+					const name = PartySettings.getPartyName();
+					return name || 'Party Mode';
+				},
+				async _assignCreation(creationId) {
+					const id = Number(creationId);
+					if (!Number.isFinite(id) || id <= 0) return;
+					PartySettings._syncPartyGroupScope();
+
+					const groupId = PartySettings.getGroupCreationId();
+					if (groupId) {
+						if (groupId === id) return;
+						await this._callGroup({ ids: [groupId, id] });
+						PartyLog.write(`Added creation ${id} to party group ${groupId}`);
+						return;
+					}
+
+					if (PartySettings.getPendingGroupCreationId()) {
+						PartySettings.setPendingGroupCreationId(null);
+					}
+
+					const data = await this._callGroup({
+						ids: [id],
+						partyName: this._partyLabel()
+					});
+					const groupedId = Number(data?.grouped_creation?.id);
+					if (!Number.isFinite(groupedId) || groupedId <= 0) {
+						throw new Error('Group response missing id');
+					}
+					PartySettings.setGroupCreationId(groupedId);
+					PartyLog.write(`Started party group "${this._partyLabel()}" (${groupedId}) with creation ${id}`);
+				},
+				async _callGroup({ ids, partyName = '' }) {
+					const body = { ids };
+					if (partyName) body.party_name = partyName;
+					const res = await fetch('/api/create/images/group', {
+						method: 'POST',
+						credentials: 'include',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify(body)
+					});
+					const data = await res.json().catch(() => ({}));
+					if (!res.ok) {
+						throw new Error(data?.error || data?.message || `Group failed (${res.status})`);
+					}
+					return data;
+				}
+			};
+
+			// --- party/nav ---
+			const PartyNav = {
+				view: 'main',
+				els: {},
+				init(els) {
+					this.els = els;
+					els.settingsOpen?.addEventListener('click', () => this.openSettings());
+					els.settingsCancel?.addEventListener('click', () => this.closeSettings(false));
+					els.settingsSave?.addEventListener('click', () => this.closeSettings(true));
+					els.settingsForm?.addEventListener('change', (e) => {
+						if (e.target?.name === 'captureMethodId') {
+							PartyUI.updateCaptureMethodHint(e.target.value);
+						}
+					});
+					els.topbarBack?.addEventListener('click', (e) => {
+						if (this.view !== 'settings') return;
+						e.preventDefault();
+						this.closeSettings(false);
+					});
+				},
+				openSettings() {
+					void PartyCapture.closeCaptureOverlay();
+					PartySettings.startDraft();
+					PartyUI.populateSettingsForm();
+					this.setView('settings');
+				},
+				closeSettings(save) {
+					if (save) {
+						PartySettings.readDraftFromForm(this.els.settingsForm);
+						if (!PartySettings.applyDraft()) return;
+						const method = PartyCapture.getMethod(PartySettings.getCaptureMethodId());
+						void PartyCapture.setMethod(method);
+					} else {
+						PartySettings.cancelDraft();
+					}
+					this.setView('main');
+				},
+				setView(view) {
+					this.view = view;
+					const isSettings = view === 'settings';
+					if (this.els.viewMain) this.els.viewMain.hidden = isSettings;
+					if (this.els.viewSettings) this.els.viewSettings.hidden = !isSettings;
+					if (this.els.topbarTitle) {
+						this.els.topbarTitle.textContent = isSettings ? 'Party Settings' : 'Party Mode';
+					}
+					if (this.els.topbarActions) this.els.topbarActions.hidden = isSettings;
+					if (this.els.topbarBack) {
+						this.els.topbarBack.href = isSettings ? '#' : '/create';
+						this.els.topbarBack.setAttribute(
+							'aria-label',
+							isSettings ? 'Back to party' : 'Back to create'
+						);
+					}
+					document.body.classList.toggle('party-page--settings-open', isSettings);
+				}
+			};
+
 			// --- party/page ---
 			const PartyPage = {
+				_landscapeLockTried: false,
+				/** Best-effort landscape lock (PWA / some Android browsers). */
+				tryLockLandscape() {
+					if (this._landscapeLockTried) return;
+					this._landscapeLockTried = true;
+					const lock = screen.orientation?.lock;
+					if (typeof lock !== 'function') return;
+					lock.call(screen.orientation, 'landscape').then(() => {
+						PartyLog.write('Page orientation locked to landscape');
+					}).catch(() => {
+						PartyLog.write('Could not lock page to landscape (OK if system rotation is off)');
+					});
+				},
+				bindLandscapeLock() {
+					const root = document.getElementById('party-app');
+					if (!root) return;
+					const once = () => {
+						this.tryLockLandscape();
+						root.removeEventListener('pointerdown', once);
+					};
+					root.addEventListener('pointerdown', once, { passive: true });
+				}
+
+				/* Portrait page lock — use instead of tryLockLandscape when UI should stay portrait
 				_portraitLockTried: false,
-				/** Best-effort: keep the page in portrait (works best when installed as PWA). */
 				tryLockPortrait() {
 					if (this._portraitLockTried) return;
 					this._portraitLockTried = true;
@@ -720,7 +1499,7 @@
 					lock.call(screen.orientation, 'portrait').then(() => {
 						PartyLog.write('Page orientation locked to portrait');
 					}).catch(() => {
-						PartyLog.write('Could not lock page orientation (browser may ignore when rotation is off)');
+						PartyLog.write('Could not lock page orientation');
 					});
 				},
 				bindPortraitLock() {
@@ -732,9 +1511,17 @@
 					};
 					root.addEventListener('pointerdown', once, { passive: true });
 				}
+				*/
 			};
 
-			// --- party/motion (gyro — works when system rotation lock is on) ---
+			/*
+			 * --- PORTRAIT / GYRO ORIENTATION (disabled — landscape-only POC) ---
+			 * Re-enable for portrait captures or rotation-lock + physical hold detection.
+			 * - PartyCapture.setMethod: PartyMotion.start() / stop() when isLive
+			 * - PartyCapture.onLiveShutter: sampleHoldOrientation + drawVideoFrameToCanvasWithHold
+			 * - preparePhoto: skip _toLandscapeCanvas; use classifyOrientation + suggestAspectRatio
+			 * - PartyUI.renderQueue: P/L/S badge (see .party-queue-orient CSS)
+			 *
 			const PartyMotion = {
 				_beta: null,
 				_gamma: null,
@@ -756,7 +1543,6 @@
 					this._handler = null;
 					this._listening = false;
 				},
-				/** @returns {PartyOrientation|null} */
 				getHoldOrientation() {
 					const beta = this._beta;
 					const gamma = this._gamma;
@@ -766,10 +1552,6 @@
 					if (absGamma > 55) return 'landscape';
 					return null;
 				},
-				/**
-				 * Sample how the user is holding the phone at shutter time.
-				 * @returns {Promise<{ orientation: PartyOrientation, source: string, gamma: number|null }>}
-				 */
 				sampleHoldOrientation() {
 					const cached = this.getHoldOrientation();
 					if (cached) {
@@ -808,14 +1590,23 @@
 					});
 				}
 			};
+			*/
 
-			// --- party/images ---
+			// --- party/images (landscape-only — all captures normalized to width > height, 16:9 transform) ---
 			const PartyImages = {
-				/** Locked portrait UI / narrow viewport — not how the user is holding the phone. */
+				formatOrientationDetail(item) {
+					const dims = item.width && item.height ? `${item.width}×${item.height}` : '';
+					const rotated = item.viewportCorrected ? ' · rotated to landscape' : '';
+					const ar = `Transform ratio: ${item.aspectRatio || PARTY_ASPECT_RATIO}`;
+					return ['Landscape' + rotated, dims, ar].filter(Boolean).join(' · ');
+				},
+
+				/*
+				 * Portrait / gyro helpers (disabled — use with PartyMotion for multi-orientation POC)
+				 *
 				getLayoutOrientation() {
 					return window.innerHeight >= window.innerWidth ? 'portrait' : 'landscape';
 				},
-				/** Screen orientation API (misleading when system rotation lock is on). */
 				getViewportOrientation() {
 					const type = String(screen.orientation?.type || '');
 					if (type.includes('portrait')) return 'portrait';
@@ -829,14 +1620,12 @@
 					}
 					return this.getLayoutOrientation();
 				},
-				/** @param {number} width @param {number} height @returns {PartyOrientation} */
 				classifyOrientation(width, height) {
 					const ratio = width / height;
 					if (ratio > 1.05) return 'landscape';
 					if (ratio < 0.95) return 'portrait';
 					return 'square';
 				},
-				/** Closest create-style aspect_ratio for provider submit */
 				suggestAspectRatio(width, height) {
 					const o = this.classifyOrientation(width, height);
 					if (o === 'square') return '1:1';
@@ -849,7 +1638,7 @@
 					if (orientation === 'square') return 'S';
 					return '?';
 				},
-				formatOrientationDetail(item) {
+				formatOrientationDetailMulti(item) {
 					if (!item?.orientation) return '';
 					const name = item.orientation.charAt(0).toUpperCase() + item.orientation.slice(1);
 					const dims = item.width && item.height ? `${item.width}×${item.height}` : '';
@@ -862,13 +1651,7 @@
 					const screen = item.screenOrientation ? ` · screen ${item.screenOrientation}` : '';
 					return [name + exif + live + hold + screen, dims, ar].filter(Boolean).join(' · ');
 				},
-				/**
-				 * getUserMedia frames are often landscape in pixel data while the phone is portrait.
-				 * Rotate into canvas so stored image + orientation match physical hold (gyro when available).
-				 * @param {HTMLVideoElement} video
-				 * @param {{ orientation: PartyOrientation, source: string, gamma?: number|null }} hold
-				 */
-				drawVideoFrameToCanvas(video, hold) {
+				drawVideoFrameToCanvasWithHold(video, hold) {
 					const vw = video.videoWidth;
 					const vh = video.videoHeight;
 					if (!vw || !vh) throw new Error('No video frame');
@@ -909,9 +1692,107 @@
 					ctx.drawImage(video, 0, 0, vw, vh);
 					return { canvas, viewportCorrected: true, holdSource: hold.source };
 				},
+				*/
+
+				/** Rotate portrait buffers to landscape (width > height). */
+				_toLandscapeCanvas(drawable, srcW, srcH) {
+					const needsRotate = srcH > srcW * 1.05;
+					const outW = needsRotate ? srcH : srcW;
+					const outH = needsRotate ? srcW : srcH;
+					const canvas = document.createElement('canvas');
+					canvas.width = outW;
+					canvas.height = outH;
+					const ctx = canvas.getContext('2d');
+					if (!ctx) throw new Error('Canvas unavailable');
+					if (needsRotate) {
+						ctx.translate(outW, 0);
+						ctx.rotate(Math.PI / 2);
+						ctx.drawImage(drawable, 0, 0, srcW, srcH);
+					} else {
+						ctx.drawImage(drawable, 0, 0, srcW, srcH);
+					}
+					return { canvas, width: outW, height: outH, rotated: needsRotate };
+				},
+				/**
+				 * Landscape-first, center cover-crop to ratio, scale so width = longEdge.
+				 * 16:9 @ 1280 → 1280×720 (Grok + queue).
+				 */
+				_fitAspectRatioCanvas(drawable, srcW, srcH, ratioW, ratioH, longEdge) {
+					const norm = this._toLandscapeCanvas(drawable, srcW, srcH);
+					const w = norm.width;
+					const h = norm.height;
+					const targetRatio = ratioW / ratioH;
+					const srcRatio = w / h;
+					let cropW;
+					let cropH;
+					let sx;
+					let sy;
+					if (srcRatio > targetRatio) {
+						cropH = h;
+						cropW = h * targetRatio;
+						sx = (w - cropW) / 2;
+						sy = 0;
+					} else {
+						cropW = w;
+						cropH = w / targetRatio;
+						sx = 0;
+						sy = (h - cropH) / 2;
+					}
+					const outW = Math.max(1, Math.round(longEdge));
+					const outH = Math.max(1, Math.round((longEdge * ratioH) / ratioW));
+					const canvas = document.createElement('canvas');
+					canvas.width = outW;
+					canvas.height = outH;
+					const ctx = canvas.getContext('2d');
+					if (!ctx) throw new Error('Canvas unavailable');
+					ctx.imageSmoothingEnabled = true;
+					ctx.imageSmoothingQuality = 'high';
+					ctx.drawImage(norm.canvas, sx, sy, cropW, cropH, 0, 0, outW, outH);
+					return {
+						canvas,
+						width: outW,
+						height: outH,
+						rotated: norm.rotated,
+						cropped: cropW < w - 0.5 || cropH < h - 0.5
+					};
+				},
+				_scaleCanvas(srcCanvas, srcW, srcH, destW, destH) {
+					const canvas = document.createElement('canvas');
+					canvas.width = destW;
+					canvas.height = destH;
+					const ctx = canvas.getContext('2d');
+					if (!ctx) throw new Error('Canvas unavailable');
+					ctx.drawImage(srcCanvas, 0, 0, srcW, srcH, 0, 0, destW, destH);
+					return canvas;
+				},
+				/** @param {HTMLVideoElement} video */
+				drawVideoFrameToCanvas(video) {
+					const vw = video.videoWidth;
+					const vh = video.videoHeight;
+					if (!vw || !vh) throw new Error('No video frame');
+					const fitted = this._fitAspectRatioCanvas(
+						video,
+						vw,
+						vh,
+						PARTY_ASPECT_W,
+						PARTY_ASPECT_H,
+						STORED_IMAGE_LONG_EDGE
+					);
+					return {
+						canvas: fitted.canvas,
+						viewportCorrected: fitted.rotated || fitted.cropped
+					};
+				},
 				async canvasToJpegBlob(canvas, quality = 0.9) {
 					const blob = await new Promise((resolve) => {
 						canvas.toBlob((b) => resolve(b), 'image/jpeg', quality);
+					});
+					if (!blob) throw new Error('Could not encode photo');
+					return blob;
+				},
+				async canvasToPngBlob(canvas) {
+					const blob = await new Promise((resolve) => {
+						canvas.toBlob((b) => resolve(b), 'image/png');
 					});
 					if (!blob) throw new Error('Could not encode photo');
 					return blob;
@@ -939,55 +1820,83 @@
 						throw err;
 					}
 				},
-				_drawToCanvas(drawable, width, height) {
-					const canvas = document.createElement('canvas');
-					canvas.width = width;
-					canvas.height = height;
-					const ctx = canvas.getContext('2d');
-					if (!ctx) throw new Error('Canvas unavailable');
-					ctx.drawImage(drawable, 0, 0, width, height);
-					return canvas;
-				},
-				/** @param {File|Blob} file @param {{ captureSource?: string, viewportCorrected?: boolean, holdSource?: string }} [meta] @returns {Promise<PartyStoredPhoto>} */
-				async preparePhoto(file, meta = {}, maxEdge = STORED_IMAGE_MAX_EDGE) {
+				/** @param {File|Blob} file @param {{ captureSource?: string, viewportCorrected?: boolean }} [meta] @returns {Promise<PartyStoredPhoto>} */
+				async preparePhoto(file, meta = {}, longEdge = STORED_IMAGE_LONG_EDGE) {
 					if (!String(file.type || '').startsWith('image/')) {
 						throw new Error('Only images are supported in Party Mode');
 					}
 					const decoded = await this._decodeSource(file);
 					try {
+						/* Portrait/gyro preparePhoto (disabled — no forced landscape):
 						const scale = Math.min(1, maxEdge / Math.max(decoded.width, decoded.height));
 						const w = Math.max(1, Math.round(decoded.width * scale));
 						const h = Math.max(1, Math.round(decoded.height * scale));
-						const canvas = this._drawToCanvas(decoded.drawable, w, h);
+						const canvas = document.createElement('canvas');
+						canvas.width = w;
+						canvas.height = h;
+						canvas.getContext('2d').drawImage(decoded.drawable, 0, 0, w, h);
 						const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
 						const orientation = this.classifyOrientation(w, h);
-						const screenOrientation = typeof screen !== 'undefined' && screen.orientation?.type
-							? screen.orientation.type
-							: null;
 						return {
-							dataUrl,
-							width: w,
-							height: h,
-							orientation,
+							dataUrl, width: w, height: h, orientation,
 							aspectRatio: this.suggestAspectRatio(w, h),
 							exifCorrected: decoded.exifCorrected,
-							screenOrientation,
+							screenOrientation: screen.orientation?.type ?? null,
 							captureSource: meta.captureSource,
 							viewportCorrected: meta.viewportCorrected === true,
 							holdSource: meta.holdSource
+						};
+						*/
+
+						const fitted = this._fitAspectRatioCanvas(
+							decoded.drawable,
+							decoded.width,
+							decoded.height,
+							PARTY_ASPECT_W,
+							PARTY_ASPECT_H,
+							longEdge
+						);
+						const dataUrl = fitted.canvas.toDataURL('image/jpeg', 0.82);
+						return {
+							dataUrl,
+							width: fitted.width,
+							height: fitted.height,
+							orientation: PARTY_ORIENTATION,
+							aspectRatio: PARTY_ASPECT_RATIO,
+							exifCorrected: decoded.exifCorrected,
+							screenOrientation: null,
+							captureSource: meta.captureSource,
+							viewportCorrected: meta.viewportCorrected === true || fitted.rotated || fitted.cropped
 						};
 					} finally {
 						decoded.close();
 					}
 				},
-				/** Backfill orientation for items saved before metadata existed */
+				/** Exact 16:9 PNG at 1280×720 — bypasses edited-upload 1024² server crop. */
+				async dataUrlToGrokUploadFile(dataUrl, filename) {
+					const img = await this._loadImage(dataUrl);
+					const fitted = this._fitAspectRatioCanvas(
+						img,
+						img.naturalWidth,
+						img.naturalHeight,
+						PARTY_ASPECT_W,
+						PARTY_ASPECT_H,
+						GROK_INPUT_LONG_EDGE
+					);
+					const blob = await this.canvasToPngBlob(fitted.canvas);
+					return new File([blob], filename, { type: 'image/png' });
+				},
+				/** Backfill metadata for items saved before exact 16:9 normalization */
 				async hydrateItemMeta(item) {
-					if (item.orientation && item.width && item.height) return;
-					const img = await this._loadImage(item.originalDataUrl);
-					item.width = img.naturalWidth;
-					item.height = img.naturalHeight;
-					item.orientation = this.classifyOrientation(item.width, item.height);
-					item.aspectRatio = this.suggestAspectRatio(item.width, item.height);
+					if (!item.width || !item.height || item.aspectRatio !== PARTY_ASPECT_RATIO) {
+						const img = await this._loadImage(item.originalDataUrl);
+						item.width = img.naturalWidth;
+						item.height = img.naturalHeight;
+					}
+					const ratioOk = item.width > 0 && Math.abs((item.width / item.height) - (PARTY_ASPECT_W / PARTY_ASPECT_H)) < 0.02;
+					if (ratioOk && item.aspectRatio === PARTY_ASPECT_RATIO) return;
+					item.orientation = PARTY_ORIENTATION;
+					item.aspectRatio = PARTY_ASPECT_RATIO;
 					if (item.exifCorrected == null) item.exifCorrected = true;
 				},
 				_loadImage(src) {
@@ -997,24 +1906,194 @@
 						img.onerror = () => reject(new Error('Could not load image'));
 						img.src = src;
 					});
-				},
-				/** POC “diffusion” — visible stylize until real /api/create is wired */
-				async mockTransform(originalDataUrl) {
-					const img = await this._loadImage(originalDataUrl);
-					const canvas = document.createElement('canvas');
-					canvas.width = img.naturalWidth;
-					canvas.height = img.naturalHeight;
-					const ctx = canvas.getContext('2d');
-					ctx.drawImage(img, 0, 0);
-					ctx.fillStyle = 'rgba(124, 108, 255, 0.22)';
-					ctx.fillRect(0, 0, canvas.width, canvas.height);
-					ctx.globalCompositeOperation = 'overlay';
-					ctx.fillStyle = 'rgba(255, 210, 140, 0.35)';
-					ctx.fillRect(0, 0, canvas.width, canvas.height);
-					ctx.globalCompositeOperation = 'source-over';
-					return canvas.toDataURL('image/jpeg', 0.85);
 				}
 			};
+
+			function partyAssetQs() {
+				const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim();
+				return v ? `?v=${encodeURIComponent(v)}` : '';
+			}
+
+			/** Submit + poll: MUTATE_DEFAULT_* → Grok image-to-image (image_url + prompt), logged-in /api/create. */
+			const PartyTransform = {
+				_pollTimers: new Map(),
+				_modules: null,
+				async _loadModules() {
+					if (this._modules) return this._modules;
+					const qs = partyAssetQs();
+					const [createSubmit, defaults] = await Promise.all([
+						import(`/shared/createSubmit.js${qs}`),
+						import(`/shared/generationDefaults.js${qs}`)
+					]);
+					this._modules = {
+						uploadImageFile: createSubmit.uploadImageFile,
+						generateCreationToken: createSubmit.generateCreationToken,
+						serverId: defaults.MUTATE_DEFAULT_SERVER_ID,
+						methodKey: defaults.MUTATE_DEFAULT_METHOD_KEY,
+						model: defaults.MUTATE_DEFAULT_MODEL
+					};
+					return this._modules;
+				},
+				cancel(itemId) {
+					const t = this._pollTimers.get(itemId);
+					if (t) clearTimeout(t);
+					this._pollTimers.delete(itemId);
+				},
+				_fail(queue, item, message) {
+					item.status = 'failed';
+					item.error = message || 'Transform failed';
+					item.updatedAt = new Date().toISOString();
+					queue._persist();
+					queue._emit();
+					PartyLog.write(`Transform failed: ${item.id} — ${item.error}`);
+				},
+				async start(itemId, queue) {
+					const item = queue.items.find((it) => it.id === itemId);
+					if (!item || item.status !== 'processing') return;
+					this.cancel(itemId);
+					try {
+						const mod = await this._loadModules();
+						const file = await PartyImages.dataUrlToGrokUploadFile(
+							item.originalDataUrl,
+							`party-${itemId}.png`
+						);
+						const imageUrl = await mod.uploadImageFile(file, { uploadKind: 'generic' });
+						const creationToken = mod.generateCreationToken();
+						const args = {
+							prompt: item.prompt || PartySettings.getPrompt(),
+							image_url: imageUrl,
+							model: mod.model,
+							aspect_ratio: PARTY_ASPECT_RATIO
+						};
+						PartyLog.write(`Grok upload ${GROK_INPUT_LONG_EDGE}×${Math.round((GROK_INPUT_LONG_EDGE * PARTY_ASPECT_H) / PARTY_ASPECT_W)} (${PARTY_ASPECT_RATIO})`);
+						const res = await fetch('/api/create', {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							credentials: 'include',
+							body: JSON.stringify({
+								server_id: mod.serverId,
+								method: mod.methodKey,
+								args,
+								creation_token: creationToken,
+								hydrate_mentions: false
+							})
+						});
+						let data = null;
+						try {
+							data = await res.json();
+						} catch {
+							data = null;
+						}
+						if (!res.ok) {
+							if (res.status === 402 && typeof data?.credits_remaining === 'number') {
+								document.dispatchEvent(new CustomEvent('credits-updated', {
+									detail: { count: data.credits_remaining }
+								}));
+							}
+							throw new Error(data?.message || data?.error || `Create failed (${res.status})`);
+						}
+						const creationId = Number(data?.id);
+						const status = String(data?.status || '').toLowerCase();
+						if (!Number.isFinite(creationId) || creationId <= 0 || status !== 'creating') {
+							throw new Error('Create did not start — unexpected response');
+						}
+						if (typeof data?.credits_remaining === 'number') {
+							document.dispatchEvent(new CustomEvent('credits-updated', {
+								detail: { count: data.credits_remaining }
+							}));
+						}
+						item.creationId = creationId;
+						item.creationToken = creationToken;
+						item.updatedAt = new Date().toISOString();
+						queue._persist();
+						PartyLog.write(`Transform started: creation ${creationId}`);
+						this._poll(itemId, queue, 0);
+					} catch (err) {
+						this._fail(queue, item, err?.message || String(err));
+					}
+				},
+				_poll(itemId, queue, attempt) {
+					const item = queue.items.find((it) => it.id === itemId);
+					if (!item || item.status !== 'processing' || !item.creationId) return;
+					const run = async () => {
+						const current = queue.items.find((it) => it.id === itemId);
+						if (!current || current.status !== 'processing' || !current.creationId) return;
+						try {
+							const res = await fetch(`/api/create/images/${current.creationId}`, {
+								credentials: 'include'
+							});
+							const data = await res.json().catch(() => ({}));
+							if (!res.ok) {
+								throw new Error(data?.error || data?.message || `Poll failed (${res.status})`);
+							}
+							const status = String(data?.status || '').toLowerCase();
+							if (status === 'completed') {
+								const url = data?.url || data?.thumbnail_url;
+								if (!url) throw new Error('No result image URL');
+								current.resultDataUrl = url;
+								current.status = 'ready';
+								current.updatedAt = new Date().toISOString();
+								this.cancel(itemId);
+								queue._persist();
+								queue._emit();
+								PartyLog.write(`Transform ready: creation ${current.creationId}`);
+								void PartyGroup.assignCreation(current.creationId);
+								if (PartySettings.getAutoReviewReady()) {
+									PartyApp.openReview(current.id);
+								}
+								return;
+							}
+							if (status === 'failed') {
+								let meta = data?.meta;
+								if (typeof meta === 'string' && meta.trim()) {
+									try {
+										meta = JSON.parse(meta);
+									} catch {
+										meta = null;
+									}
+								}
+								const errMsg =
+									(typeof meta === 'object' && meta && typeof meta.error === 'string' && meta.error) ||
+									data?.error ||
+									'Transform failed';
+								this.cancel(itemId);
+								this._fail(queue, current, errMsg);
+								return;
+							}
+							if (attempt + 1 >= TRANSFORM_POLL_MAX) {
+								this.cancel(itemId);
+								this._fail(queue, current, 'Transform timed out');
+								return;
+							}
+							const timer = window.setTimeout(() => this._poll(itemId, queue, attempt + 1), TRANSFORM_POLL_MS);
+							this._pollTimers.set(itemId, timer);
+						} catch (err) {
+							if (attempt + 1 >= TRANSFORM_POLL_MAX) {
+								this.cancel(itemId);
+								this._fail(queue, current, err?.message || 'Transform failed');
+								return;
+							}
+							const timer = window.setTimeout(() => this._poll(itemId, queue, attempt + 1), TRANSFORM_POLL_MS);
+							this._pollTimers.set(itemId, timer);
+						}
+					};
+					void run();
+				},
+				resumeAll(queue) {
+					queue.items
+						.filter((it) => it.status === 'processing')
+						.forEach((it) => {
+							if (it.creationId) this._poll(it.id, queue, 0);
+							else void this.start(it.id, queue);
+						});
+				}
+			};
+
+			/*
+			 * Mock canvas stylize (disabled — PartyTransform uses /api/create + default mutate model)
+			 *
+				async mockTransform(originalDataUrl) { ... }
+			 */
 
 			// --- party/queue ---
 			const PartyQueue = {
@@ -1022,16 +2101,15 @@
 				items: [],
 				/** @type {string|null} */
 				selectedId: null,
-				/** @type {Map<string, number>} */
-				_timers: new Map(),
 				_onChange: null,
 				init(onChange) {
 					this._onChange = onChange;
 					const data = PartyStorage.load();
 					this.items = data.items.filter((it) => it && it.id && it.originalDataUrl);
-					void this._hydrateAllMeta();
-					this._resumeProcessing();
-					this._emit();
+					void this._hydrateAllMeta().then(() => {
+						PartyTransform.resumeAll(this);
+						this._emit();
+					});
 				},
 				async _hydrateAllMeta() {
 					let changed = false;
@@ -1046,35 +2124,6 @@
 				},
 				_emit() {
 					if (typeof this._onChange === 'function') this._onChange();
-				},
-				_resumeProcessing() {
-					this.items
-						.filter((it) => it.status === 'processing')
-						.forEach((it) => this._scheduleMockJob(it.id));
-				},
-				_scheduleMockJob(id) {
-					if (this._timers.has(id)) return;
-					const delay = MOCK_PROCESS_MS_MIN + Math.random() * (MOCK_PROCESS_MS_MAX - MOCK_PROCESS_MS_MIN);
-					const timer = window.setTimeout(() => this._finishMockJob(id), delay);
-					this._timers.set(id, timer);
-				},
-				async _finishMockJob(id) {
-					this._timers.delete(id);
-					const item = this.items.find((it) => it.id === id);
-					if (!item || item.status !== 'processing') return;
-					try {
-						item.resultDataUrl = await PartyImages.mockTransform(item.originalDataUrl);
-						item.status = 'ready';
-						item.updatedAt = new Date().toISOString();
-						PartyLog.write(`Transform ready: ${id}`);
-					} catch (err) {
-						item.status = 'failed';
-						item.error = err?.message || 'Transform failed';
-						item.updatedAt = new Date().toISOString();
-						PartyLog.write(`Transform failed: ${id}`);
-					}
-					this._persist();
-					this._emit();
 				},
 				_persist() {
 					const active = this.items
@@ -1095,29 +2144,31 @@
 						status: 'processing',
 						createdAt: new Date().toISOString(),
 						updatedAt: new Date().toISOString(),
-						prompt: PARTY_PROMPT,
+						prompt: PartySettings.getPrompt(),
 						originalDataUrl: photo.dataUrl,
 						width: photo.width,
 						height: photo.height,
 						orientation: photo.orientation,
 						aspectRatio: photo.aspectRatio,
 						exifCorrected: photo.exifCorrected,
-						screenOrientation: photo.screenOrientation ?? null,
 						captureSource: photo.captureSource,
-						viewportCorrected: photo.viewportCorrected === true,
-						holdSource: photo.holdSource
+						viewportCorrected: photo.viewportCorrected === true
 					};
 					this.items.unshift(item);
 					this.selectedId = null;
 					this._persist();
-					this._scheduleMockJob(item.id);
 					this._emit();
 					PartyLog.write(`Queued: ${item.id}`);
+					void PartyTransform.start(item.id, this);
 					return item;
 				},
 				select(id) {
 					const item = this.items.find((it) => {
-						return it.id === id && (it.status === 'ready' || it.status === 'committed');
+						return it.id === id && (
+							it.status === 'processing'
+							|| it.status === 'ready'
+							|| it.status === 'committed'
+						);
 					});
 					if (!item) return null;
 					this.selectedId = id;
@@ -1136,14 +2187,12 @@
 					const idx = this.items.findIndex((it) => it.id === id);
 					if (idx === -1) return;
 					const item = this.items[idx];
-					const timer = this._timers.get(id);
-					if (timer) {
-						clearTimeout(timer);
-						this._timers.delete(id);
-					}
+					PartyTransform.cancel(id);
 					item.status = 'processing';
 					item.resultDataUrl = undefined;
 					item.error = undefined;
+					item.creationId = undefined;
+					item.creationToken = undefined;
 					item.updatedAt = new Date().toISOString();
 					if (idx > 0) {
 						this.items.splice(idx, 1);
@@ -1151,11 +2200,11 @@
 					}
 					this.selectedId = null;
 					this._persist();
-					this._scheduleMockJob(id);
 					this._emit();
 					PartyLog.write(`Redo queued: ${id}`);
+					void PartyTransform.start(id, this);
 				},
-				commit(id) {
+				push(id) {
 					const item = this.items.find((it) => it.id === id);
 					if (!item || item.status !== 'ready') return false;
 					item.status = 'committed';
@@ -1163,7 +2212,18 @@
 					if (this.selectedId === id) this.selectedId = null;
 					this._persist();
 					this._emit();
-					PartyLog.write(`Committed: ${id}`);
+					PartyLog.write(`Pushed: ${id}`);
+					return true;
+				},
+				discard(id) {
+					const idx = this.items.findIndex((it) => it.id === id);
+					if (idx === -1) return false;
+					PartyTransform.cancel(id);
+					this.items.splice(idx, 1);
+					if (this.selectedId === id) this.selectedId = null;
+					this._persist();
+					this._emit();
+					PartyLog.write(`Discarded: ${id}`);
 					return true;
 				},
 				activeItems() {
@@ -1203,6 +2263,7 @@
 				},
 				/** Short synthetic shutter click (noise burst + click) */
 				async playShutter() {
+					if (!PartySettings.getShutterSound()) return;
 					const ctx = await this._ready();
 					if (!ctx) return;
 					const now = ctx.currentTime;
@@ -1266,42 +2327,79 @@
 						input?.addEventListener('change', () => this._onNativeChange(input));
 					});
 					els.snapBtn?.addEventListener('click', () => this.onSnapPressed());
-					els.shutterBtn?.addEventListener('click', () => this.onLiveShutter());
+					els.captureShutterBtn?.addEventListener('click', () => this.onCaptureSnapPressed());
+					els.captureClose?.addEventListener('click', () => this.closeCaptureOverlay());
 					els.flipBtn?.addEventListener('click', () => this.flipLive());
+				},
+				isOverlayOpen() {
+					return Boolean(this.els.captureOverlay && !this.els.captureOverlay.hidden);
+				},
+				async openCaptureOverlay() {
+					if (!this.method || !this.usesInAppViewfinder(this.method)) return;
+					if (this.els.captureOverlay) this.els.captureOverlay.hidden = false;
+					document.body.classList.add('party-page--capture-open');
+					if (this.els.placeholder) {
+						this.els.placeholder.hidden = false;
+						const strong = this.els.placeholder.querySelector('strong');
+						if (strong) strong.textContent = 'Starting camera…';
+					}
+					if (this.els.liveVideo) this.els.liveVideo.hidden = true;
+					await this.startLive();
+				},
+				async closeCaptureOverlay() {
+					if (this.els.captureOverlay) this.els.captureOverlay.hidden = true;
+					document.body.classList.remove('party-page--capture-open');
+					await this.stopLive();
+				},
+				/** White flash over viewfinder — in-app shutter only */
+				playShutterFlash() {
+					const el = this.els.viewfinderFlash;
+					if (!el) return;
+					el.classList.remove('is-active');
+					void el.offsetWidth;
+					el.classList.add('is-active');
+					const onEnd = () => {
+						el.classList.remove('is-active');
+						el.removeEventListener('animationend', onEnd);
+					};
+					el.addEventListener('animationend', onEnd);
 				},
 				getMethod(id) {
 					return CAPTURE_METHODS.find((m) => m.id === id) || CAPTURE_METHODS.find((m) => m.default) || CAPTURE_METHODS[0];
+				},
+				usesInAppViewfinder(method) {
+					return method?.kind === 'live';
 				},
 				/** @param {CaptureMethodDef} method */
 				async setMethod(method) {
 					this.method = method;
 					PartyStorage.saveMethodId(method.id);
-					const isLive = method.kind === 'live';
-					this.els.actions?.classList.toggle('party-capture-actions--live', isLive);
-					this.els.flipBtn.hidden = !isLive;
-					this.els.placeholder.hidden = isLive;
-					this.els.liveVideo.hidden = !isLive;
-					this.els.status.hidden = !isLive;
+					const isLive = this.usesInAppViewfinder(method);
 					if (this.els.hint) {
 						this.els.hint.textContent = isLive
-							? 'Use the shutter below. You can snap several shots — each joins the queue.'
-							: method.hint;
+							? 'Landscape 16:9 — tap Snap to shoot, close to return to your queue.'
+							: `${method.hint} Photos are saved as landscape (16:9).`;
 					}
-					if (isLive) {
-						PartyMotion.start();
-						await this.startLive();
-					} else {
-						await this.stopLive();
-						PartyMotion.stop();
+					if (!isLive) {
+						await this.closeCaptureOverlay();
 					}
 				},
 				async onSnapPressed() {
 					if (!this.method) return;
-					if (this.method.kind === 'live') return;
+					if (this.usesInAppViewfinder(this.method)) {
+						if (!this.isOverlayOpen()) {
+							await this.openCaptureOverlay();
+						}
+						return;
+					}
 					const input = this.inputs[this.method.id];
 					if (!input) return;
 					input.value = '';
 					input.click();
+				},
+				async onCaptureSnapPressed() {
+					if (!this.method || !this.usesInAppViewfinder(this.method)) return;
+					await this.onLiveShutter();
 				},
 				async _onNativeChange(input) {
 					const file = input.files?.[0];
@@ -1314,26 +2412,39 @@
 					}
 				},
 				async onLiveShutter() {
-					PartyPage.tryLockPortrait();
+					PartyPage.tryLockLandscape();
+					this.playShutterFlash();
 					void PartyAudio.playShutter();
 					const video = this.els.liveVideo;
 					if (!video?.videoWidth) return;
 					try {
+						// Landscape-only (active):
+						const { canvas, viewportCorrected } = PartyImages.drawVideoFrameToCanvas(video);
+						const blob = await PartyImages.canvasToJpegBlob(canvas, 0.9);
+						const photo = await PartyImages.preparePhoto(blob, {
+							captureSource: 'live-viewfinder',
+							viewportCorrected
+						});
+
+						/* Portrait/gyro live capture (disabled):
 						const hold = await PartyMotion.sampleHoldOrientation();
-						const { canvas, viewportCorrected, holdSource } = PartyImages.drawVideoFrameToCanvas(video, hold);
+						const { canvas, viewportCorrected, holdSource } = PartyImages.drawVideoFrameToCanvasWithHold(video, hold);
 						const blob = await PartyImages.canvasToJpegBlob(canvas, 0.9);
 						const photo = await PartyImages.preparePhoto(blob, {
 							captureSource: 'live-viewfinder',
 							viewportCorrected,
 							holdSource: holdSource || hold.source
 						});
+						*/
+
 						if (typeof this._onSnap === 'function') this._onSnap(photo);
+						await this.closeCaptureOverlay();
 					} catch (err) {
 						PartyLog.write(`Shutter failed: ${err?.message || err}`);
 					}
 				},
 				async startLive() {
-					await this.stopLive();
+					await this.stopLive({ keepOverlay: true });
 					if (!navigator.mediaDevices?.getUserMedia) {
 						this._setStatus('Camera API unavailable');
 						return;
@@ -1348,20 +2459,28 @@
 						this.stream = stream;
 						this.els.liveVideo.srcObject = stream;
 						await this.els.liveVideo.play().catch(() => {});
-						this._setStatus(`Live — ${this.facing}`);
+						if (this.els.placeholder) this.els.placeholder.hidden = true;
+						if (this.els.liveVideo) this.els.liveVideo.hidden = false;
+						this._setStatus('');
 					} catch (err) {
+						if (this.els.placeholder) {
+							this.els.placeholder.hidden = false;
+							const strong = this.els.placeholder.querySelector('strong');
+							if (strong) strong.textContent = 'Camera blocked';
+						}
 						this._setStatus(err?.message || 'Camera blocked');
 						PartyLog.write(`getUserMedia: ${err?.message || err}`);
 					}
 				},
-				async stopLive() {
+				async stopLive(opts = {}) {
 					if (this.stream) {
 						this.stream.getTracks().forEach((t) => t.stop());
 						this.stream = null;
 					}
 					if (this.els.liveVideo) this.els.liveVideo.srcObject = null;
-					PartyMotion.stop();
-					this._setStatus('');
+					if (!opts.keepOverlay) {
+						this._setStatus('');
+					}
 				},
 				async flipLive() {
 					this.facing = this.facing === 'environment' ? 'user' : 'environment';
@@ -1380,10 +2499,13 @@
 				init(els) {
 					this.els = els;
 					els.redoBtn?.addEventListener('click', () => PartyApp.onRedo());
-					els.commitBtn?.addEventListener('click', () => PartyApp.onCommit());
+					els.pushBtn?.addEventListener('click', () => PartyApp.onPush());
+					els.discardBtn?.addEventListener('click', () => PartyApp.onDiscard());
+					els.pushedDiscardBtn?.addEventListener('click', () => PartyApp.onDiscard());
+					els.cancelBtn?.addEventListener('click', () => PartyApp.closeReview());
+					els.dismissBtn?.addEventListener('click', () => PartyApp.closeReview());
 				},
-				renderMethodSelect(selectedId, onChange) {
-					const sel = this.els.methodSelect;
+				_fillCaptureMethodSelect(sel, selectedId) {
 					if (!sel) return;
 					sel.replaceChildren();
 					CAPTURE_METHODS.forEach((m) => {
@@ -1393,53 +2515,78 @@
 						sel.appendChild(opt);
 					});
 					sel.value = selectedId;
-					sel.addEventListener('change', () => onChange(sel.value));
 				},
-				renderQueue() {
-					const list = this.els.queueList;
-					const empty = this.els.queueEmpty;
+				updateCaptureMethodHint(methodId) {
+					const method = PartyCapture.getMethod(methodId);
+					if (this.els.settingsCaptureHint) {
+						this.els.settingsCaptureHint.textContent = method?.hint || '';
+					}
+				},
+				populateSettingsForm() {
+					const draft = PartySettings.getDraft();
+					const form = this.els.settingsForm;
+					if (!form) return;
+					this._fillCaptureMethodSelect(form.elements.captureMethodId, draft.device.captureMethodId);
+					form.elements.shutterSound.checked = draft.device.shutterSound !== false;
+					form.elements.partyName.value = draft.party.partyName || '';
+					form.elements.prompt.value = draft.party.prompt || DEFAULT_PARTY_PROMPT;
+					form.elements.autoReviewReady.checked = draft.party.autoReviewReady === true;
+					this.updateCaptureMethodHint(draft.device.captureMethodId);
+				},
+				renderPendingGrid() {
+					const list = this.els.pendingGrid;
+					const empty = this.els.pendingEmpty;
 					if (!list) return;
 					const active = PartyQueue.activeItems();
-					const processing = PartyQueue.processingCount();
-					const ready = PartyQueue.readyCount();
-					if (this.els.queueSummary) {
-						if (!active.length) {
-							this.els.queueSummary.textContent = 'Nothing processing';
-						} else if (processing && ready) {
-							this.els.queueSummary.textContent = `${processing} processing · ${ready} ready`;
-						} else if (processing) {
-							this.els.queueSummary.textContent = `${processing} processing`;
-						} else {
-							this.els.queueSummary.textContent = `${ready} ready to review`;
-						}
-					}
-					list.querySelectorAll('.party-queue-item').forEach((n) => n.remove());
 					if (!active.length) {
-						empty.hidden = false;
+						list.replaceChildren();
+						if (empty) empty.hidden = false;
 						return;
 					}
-					empty.hidden = true;
+					if (empty) empty.hidden = true;
+					list.replaceChildren();
 					active.forEach((item) => {
-						const btn = document.createElement('button');
-						btn.type = 'button';
-						btn.className = 'party-queue-item';
-						btn.dataset.status = item.status;
-						btn.dataset.itemId = item.id;
-						if (PartyQueue.selectedId === item.id) btn.dataset.selected = 'true';
-						const img = document.createElement('img');
-						img.src = item.originalDataUrl;
-						img.alt = '';
-						btn.appendChild(img);
-						if (item.orientation) {
-							const orient = document.createElement('span');
-							orient.className = 'party-queue-orient';
-							orient.textContent = PartyImages.orientationShortLabel(item.orientation);
-							orient.title = PartyImages.formatOrientationDetail(item);
-							btn.appendChild(orient);
-						}
+						list.appendChild(this._buildGridItem(item, { sent: false }));
+					});
+				},
+				renderSentGrid() {
+					const committed = PartyQueue.committedItems();
+					const list = this.els.sentGrid;
+					const empty = this.els.sentEmpty;
+					if (!list) return;
+					list.replaceChildren();
+					if (!committed.length) {
+						if (empty) empty.hidden = false;
+						return;
+					}
+					if (empty) empty.hidden = true;
+					committed.slice().reverse().forEach((item) => {
+						list.appendChild(this._buildGridItem(item, { sent: true }));
+					});
+				},
+				_buildGridItem(item, opts = {}) {
+					const btn = document.createElement('button');
+					btn.type = 'button';
+					btn.className = 'party-grid-item';
+					if (opts.sent) btn.classList.add('party-grid-item--sent');
+					btn.dataset.status = item.status;
+					btn.dataset.itemId = item.id;
+					if (PartyQueue.selectedId === item.id) btn.dataset.selected = 'true';
+					const img = document.createElement('img');
+					const showResult = opts.sent || item.status === 'ready';
+					img.src = showResult
+						? (item.resultDataUrl || item.originalDataUrl)
+						: item.originalDataUrl;
+					img.alt = '';
+					btn.appendChild(img);
+					if (!opts.sent) {
 						const badge = document.createElement('span');
-						badge.className = 'party-queue-item-badge';
-						badge.textContent = item.status === 'processing' ? 'Working' : item.status === 'ready' ? 'Ready' : item.status;
+						badge.className = 'party-grid-item-badge';
+						badge.textContent = item.status === 'processing'
+							? 'Working'
+							: item.status === 'ready'
+								? 'Ready'
+								: item.status;
 						btn.appendChild(badge);
 						if (item.status === 'processing') {
 							const spin = document.createElement('div');
@@ -1447,155 +2594,160 @@
 							spin.setAttribute('aria-hidden', 'true');
 							btn.appendChild(spin);
 						}
-						btn.addEventListener('click', () => {
-							if (item.status === 'ready') PartyApp.openReview(item.id);
-							else if (item.status === 'failed') {
-								PartyQueue.redo(item.id);
-								PartyUI.renderAll();
-							}
-						});
-						list.appendChild(btn);
+					}
+					btn.addEventListener('click', () => {
+						if (
+							item.status === 'processing'
+							|| item.status === 'ready'
+							|| item.status === 'committed'
+						) {
+							PartyApp.openReview(item.id);
+						} else if (item.status === 'failed') {
+							PartyQueue.redo(item.id);
+							PartyUI.renderAll();
+						}
 					});
+					return btn;
 				},
 				renderReview() {
-					const panel = this.els.review;
-					if (!panel) return;
+					const overlay = this.els.reviewOverlay;
+					if (!overlay) return;
 					const item = PartyQueue.selectedItem();
-					if (!item || (item.status !== 'ready' && item.status !== 'committed')) {
-						panel.hidden = true;
-						if (this.els.redoBtn) this.els.redoBtn.hidden = false;
-						if (this.els.commitBtn) this.els.commitBtn.hidden = false;
-						if (this.els.reviewOrientation) this.els.reviewOrientation.hidden = true;
+					const reviewable = item && (
+						item.status === 'processing'
+						|| item.status === 'ready'
+						|| item.status === 'committed'
+					);
+					if (!reviewable) {
+						overlay.hidden = true;
+						document.body.classList.remove('party-page--review-open');
 						return;
 					}
-					const isCommitted = item.status === 'committed';
-					panel.hidden = false;
+					const isProcessing = item.status === 'processing';
+					const isPushed = item.status === 'committed';
+					overlay.hidden = false;
+					document.body.classList.add('party-page--review-open');
 					if (this.els.reviewOriginal) this.els.reviewOriginal.src = item.originalDataUrl;
-					if (this.els.reviewResult) this.els.reviewResult.src = item.resultDataUrl || '';
-					if (this.els.reviewStatus) {
-						this.els.reviewStatus.textContent = isCommitted
-							? 'Sent to Google Photos'
-							: 'Ready — keep or redo';
-					}
-					if (this.els.reviewOrientation) {
-						const detail = PartyImages.formatOrientationDetail(item);
-						if (detail) {
-							this.els.reviewOrientation.hidden = false;
-							this.els.reviewOrientation.textContent = detail;
+					if (this.els.reviewWorking) this.els.reviewWorking.hidden = !isProcessing;
+					if (this.els.reviewResult) {
+						if (isProcessing) {
+							this.els.reviewResult.hidden = true;
+							this.els.reviewResult.removeAttribute('src');
 						} else {
-							this.els.reviewOrientation.hidden = true;
-							this.els.reviewOrientation.textContent = '';
+							this.els.reviewResult.hidden = false;
+							this.els.reviewResult.src = item.resultDataUrl || '';
 						}
 					}
-					if (this.els.redoBtn) {
-						this.els.redoBtn.hidden = false;
-						this.els.redoBtn.textContent = isCommitted ? 'Re-transform' : 'Redo';
-					}
-					if (this.els.commitBtn) {
-						this.els.commitBtn.hidden = isCommitted;
-					}
-				},
-				renderCommitted() {
-					const committed = PartyQueue.committedItems();
-					if (this.els.committedCount) {
-						this.els.committedCount.textContent = String(committed.length);
-					}
-					const list = this.els.committedList;
-					if (!list) return;
-					list.replaceChildren();
-					committed.slice().reverse().forEach((item) => {
-						const btn = document.createElement('button');
-						btn.type = 'button';
-						btn.className = 'party-committed-thumb';
-						btn.dataset.itemId = item.id;
-						btn.setAttribute('aria-label', 'Review sent photo');
-						if (PartyQueue.selectedId === item.id) btn.dataset.selected = 'true';
-						const img = document.createElement('img');
-						img.src = item.resultDataUrl || item.originalDataUrl;
-						img.alt = '';
-						btn.appendChild(img);
-						btn.setAttribute('role', 'listitem');
-						btn.addEventListener('click', () => PartyApp.openReview(item.id, { fromCommitted: true }));
-						list.appendChild(btn);
-					});
+					if (this.els.actionsQueue) this.els.actionsQueue.hidden = isPushed;
+					if (this.els.actionsPushed) this.els.actionsPushed.hidden = !isPushed;
+					if (this.els.redoBtn) this.els.redoBtn.disabled = isProcessing;
+					if (this.els.pushBtn) this.els.pushBtn.disabled = isProcessing;
 				},
 				renderAll() {
-					this.renderQueue();
+					this.renderPendingGrid();
+					this.renderSentGrid();
 					this.renderReview();
-					this.renderCommitted();
 				}
 			};
 
 			// --- party/app ---
 			const PartyApp = {
 				init() {
-					PartyPage.bindPortraitLock();
+					PartyPage.bindLandscapeLock();
 					PartyLog.init(document.getElementById('party-log-list'));
+					PartySettings.load();
 					const els = {
-						methodSelect: document.getElementById('party-method-select'),
+						viewMain: document.getElementById('party-view-main'),
+						viewSettings: document.getElementById('party-view-settings'),
+						topbarBack: document.getElementById('party-topbar-back'),
+						topbarTitle: document.getElementById('party-topbar-title'),
+						topbarActions: document.getElementById('party-topbar-actions'),
+						settingsOpen: document.getElementById('party-settings-open'),
+						settingsCancel: document.getElementById('party-settings-cancel'),
+						settingsSave: document.getElementById('party-settings-save'),
+						settingsForm: document.getElementById('party-settings-form'),
+						settingsCaptureHint: document.getElementById('party-settings-capture-hint'),
+						captureOverlay: document.getElementById('party-capture-overlay'),
+						captureClose: document.getElementById('party-capture-close'),
+						captureShutterBtn: document.getElementById('party-capture-shutter-btn'),
 						viewfinder: document.getElementById('party-viewfinder'),
 						placeholder: document.getElementById('party-viewfinder-placeholder'),
 						hint: document.getElementById('party-viewfinder-hint'),
 						liveVideo: document.getElementById('party-live-video'),
+						viewfinderFlash: document.getElementById('party-viewfinder-flash'),
 						status: document.getElementById('party-viewfinder-status'),
-						actions: document.getElementById('party-capture-actions'),
 						snapBtn: document.getElementById('party-snap-btn'),
-						shutterBtn: document.getElementById('party-shutter-btn'),
 						flipBtn: document.getElementById('party-flip-btn'),
-						queueList: document.getElementById('party-queue-list'),
-						queueEmpty: document.getElementById('party-queue-empty'),
-						queueSummary: document.getElementById('party-queue-summary'),
-						review: document.getElementById('party-review'),
+						pendingSection: document.getElementById('party-pending-section'),
+						pendingGrid: document.getElementById('party-pending-grid'),
+						pendingEmpty: document.getElementById('party-pending-empty'),
+						sentGrid: document.getElementById('party-sent-grid'),
+						sentEmpty: document.getElementById('party-sent-empty'),
+						reviewOverlay: document.getElementById('party-review-overlay'),
 						reviewOriginal: document.getElementById('party-review-original'),
+						reviewWorking: document.getElementById('party-review-working'),
 						reviewResult: document.getElementById('party-review-result'),
-						reviewStatus: document.getElementById('party-review-status'),
-						reviewOrientation: document.getElementById('party-review-orientation'),
+						actionsQueue: document.getElementById('party-detail-actions-queue'),
+						actionsPushed: document.getElementById('party-detail-actions-pushed'),
 						redoBtn: document.getElementById('party-redo-btn'),
-						commitBtn: document.getElementById('party-commit-btn'),
-						committedCount: document.getElementById('party-committed-count'),
-						committedList: document.getElementById('party-committed-list'),
-						committedDetails: document.querySelector('.party-committed')
+						pushBtn: document.getElementById('party-push-btn'),
+						discardBtn: document.getElementById('party-discard-btn'),
+						cancelBtn: document.getElementById('party-cancel-btn'),
+						pushedDiscardBtn: document.getElementById('party-pushed-discard-btn'),
+						dismissBtn: document.getElementById('party-dismiss-btn')
 					};
 					PartyUI.init(els);
-					PartyCapture.init(els, (dataUrl) => this.onPhotoCaptured(dataUrl));
+					PartyNav.init(els);
+					PartyCapture.init(els, (photo) => this.onPhotoCaptured(photo));
 					PartyQueue.init(() => PartyUI.renderAll());
 
-					const savedMethod = PartyStorage.loadMethodId();
-					const method = PartyCapture.getMethod(savedMethod);
-					PartyUI.renderMethodSelect(method.id, (id) => {
-						PartyCapture.setMethod(PartyCapture.getMethod(id));
-					});
-					PartyCapture.setMethod(method);
+					const method = PartyCapture.getMethod(PartySettings.getCaptureMethodId());
+					void PartyCapture.setMethod(method);
 					PartyUI.renderAll();
 					PartyLog.write('Party Mode ready');
 				},
 				onPhotoCaptured(photo) {
-					PartyLog.write(`Snap ${photo.orientation} ${photo.width}×${photo.height} → ${photo.aspectRatio}`);
+					PartyLog.write(`Snap landscape ${photo.width}×${photo.height} → ${photo.aspectRatio}`);
 					PartyQueue.enqueue(photo);
 					PartyUI.renderAll();
 				},
-				openReview(id, opts = {}) {
+				openReview(id) {
 					const item = PartyQueue.select(id);
 					if (!item) return;
-					if (opts.fromCommitted && PartyUI.els.committedDetails) {
-						PartyUI.els.committedDetails.open = true;
-					}
 					PartyUI.renderAll();
-					PartyUI.els.review?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+				},
+				closeReview() {
+					PartyQueue.selectedId = null;
+					PartyUI.renderAll();
 				},
 				onRedo() {
 					const id = PartyQueue.selectedId;
 					if (!id) return;
 					PartyQueue.redo(id);
+					this.closeReview();
 					PartyUI.renderAll();
-					PartyUI.els.queueList?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 				},
-				onCommit() {
+				onPush() {
 					const id = PartyQueue.selectedId;
 					if (!id) return;
-					const ok = PartyQueue.commit(id);
+					const ok = PartyQueue.push(id);
 					if (!ok) return;
-					window.alert('POC: This would add the transformed photo to your Google Photos album.');
+					window.alert('POC: Push would send the transformed photo to your Google Photos album.');
+					this.closeReview();
+					PartyUI.renderAll();
+				},
+				onDiscard() {
+					const id = PartyQueue.selectedId;
+					if (!id) return;
+					const item = PartyQueue.selectedItem();
+					const msg = item?.status === 'committed'
+						? 'Remove this photo from Pushed? (POC: does not delete from Google Photos.)'
+						: item?.status === 'processing'
+							? 'Discard this photo while it is still processing?'
+							: 'Discard this photo? It will be removed from the queue.';
+					if (!window.confirm(msg)) return;
+					PartyQueue.discard(id);
+					this.closeReview();
 					PartyUI.renderAll();
 				}
 			};

@@ -1242,13 +1242,24 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 		return res.send(htmlContent);
 	});
 
-	// Party camera capture POC (unauthenticated, self-contained HTML).
+	// Party Mode — logged-in; same image-to-image path as basic create (Grok via replicate).
 	router.get("/party", async (req, res) => {
-		const fs = await import("fs/promises");
-		let htmlContent = await fs.readFile(path.join(pagesDir, "party.html"), "utf-8");
-		htmlContent = replaceTemplateTokens(htmlContent, getPageTokens(req));
-		res.setHeader("Content-Type", "text/html");
-		return res.send(htmlContent);
+		const user = await requireLoggedInUser(req, res);
+		if (!user) return;
+
+		try {
+			const fs = await import("fs/promises");
+			let pageHtml = await fs.readFile(path.join(pagesDir, "party.html"), "utf-8");
+
+			pageHtml = pageHtml.replace("<!--APP_HEADER-->", "");
+			pageHtml = pageHtml.replace("<!--APP_MOBILE_BOTTOM_NAV-->", "");
+
+			pageHtml = injectCommonHead(pageHtml, getPageTokens(req));
+			res.setHeader("Content-Type", "text/html");
+			return res.send(pageHtml);
+		} catch {
+			return res.status(500).send("Internal server error");
+		}
 	});
 
 	// Catch-all route for sub-routes - serve the same page for all routes

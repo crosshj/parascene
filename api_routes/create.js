@@ -3045,6 +3045,7 @@ export default function createCreateRoutes({ queries, storage }) {
 
 		try {
 			const rawIds = Array.isArray(req.body?.ids) ? req.body.ids : [];
+			const partyNameRaw = typeof req.body?.party_name === "string" ? req.body.party_name.trim() : "";
 			const ids = [];
 			const seen = new Set();
 			for (const raw of rawIds) {
@@ -3053,7 +3054,10 @@ export default function createCreateRoutes({ queries, storage }) {
 				seen.add(n);
 				ids.push(n);
 			}
-			if (ids.length < 2) {
+			if (ids.length < 1) {
+				return res.status(400).json({ error: "No creations selected" });
+			}
+			if (ids.length < 2 && !partyNameRaw) {
 				return res.status(400).json({ error: "Select at least 2 creations to group" });
 			}
 
@@ -3238,6 +3242,7 @@ export default function createCreateRoutes({ queries, storage }) {
 			const groupedMetaBase = {
 				...(parseMeta(first.meta) || {}),
 				media_type: "image",
+				...(partyNameRaw ? { party: { mode: true, name: partyNameRaw } } : {}),
 				group: {
 					kind: "group_creations",
 					version: 1,
@@ -3283,6 +3288,10 @@ export default function createCreateRoutes({ queries, storage }) {
 				return res.status(500).json({ error: "Failed to set grouped creation cover timestamp" });
 			}
 
+			if (partyNameRaw) {
+				await queries.updateCreatedImage.run(groupedId, user.id, partyNameRaw, null, false);
+			}
+
 			for (const row of sourceRows) {
 				const markResult = await queries.markCreatedImageUnavailable?.run(row.id, user.id);
 				if (!markResult || markResult.changes === 0) {
@@ -3297,6 +3306,7 @@ export default function createCreateRoutes({ queries, storage }) {
 			const groupedMetaOut = parseMeta(grouped.meta);
 			return res.json({
 				ok: true,
+				mode: partyNameRaw && sourceRows.length === 1 ? "create_party_group" : "create_group",
 				grouped_creation: {
 					id: grouped.id,
 					status: grouped.status || "completed",
