@@ -3420,6 +3420,60 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	});
 
+	// GET /api/party/groups - List in-progress party group creations for the signed-in user.
+	router.get("/api/party/groups", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		try {
+			const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
+			const enableNsfw = Boolean(user.meta && user.meta.enableNsfw === true);
+			const images = await queries.selectCreatedImagesForUser.all(user.id, {
+				limit: 200,
+				offset: 0,
+				viewerEnableNsfw: enableNsfw
+			});
+			const parties = [];
+			for (const img of Array.isArray(images) ? images : []) {
+				const meta = parseMeta(img.meta) || {};
+				if (meta?.party?.mode !== true || meta?.group?.kind !== "group_creations") continue;
+				const queue = Array.isArray(meta.party.queue) ? meta.party.queue : [];
+				const pushed = Array.isArray(meta.party.pushed) ? meta.party.pushed : [];
+				const sourceIds = Array.isArray(meta.group?.source_creation_ids)
+					? meta.group.source_creation_ids
+					: [];
+				const name =
+					(typeof meta.party?.name === "string" && meta.party.name.trim()) ||
+					(typeof meta.party?.settings?.partyName === "string" && meta.party.settings.partyName.trim()) ||
+					(typeof img.title === "string" && img.title.trim()) ||
+					"Party Mode";
+				const status = img.status || "completed";
+				const rawUrl =
+					status === "completed"
+						? img.file_path || storage.getImageUrl(img.filename)
+						: null;
+				const url = rawUrl ? appendCreationIdToMediaUrl(rawUrl, Number(img.id)) : null;
+				parties.push({
+					id: Number(img.id),
+					title: typeof img.title === "string" && img.title.trim() ? img.title.trim() : name,
+					name,
+					updated_at:
+						(typeof meta.group?.updated_at === "string" && meta.group.updated_at) ||
+						(typeof meta.group?.grouped_at === "string" && meta.group.grouped_at) ||
+						img.created_at,
+					photo_count: sourceIds.length,
+					queue_count: queue.length,
+					pushed_count: pushed.length,
+					thumbnail_url: url ? getThumbnailUrl(url) : null
+				});
+				if (parties.length >= limit) break;
+			}
+			return res.json({ parties });
+		} catch (error) {
+			return res.status(500).json({ error: "Failed to list party groups" });
+		}
+	});
+
 	// POST /api/create/images/:id/party-settings - Persist Party Mode settings, queue, and pushed state on a party group.
 	router.post("/api/create/images/:id/party-settings", async (req, res) => {
 		const user = await requireUser(req, res);

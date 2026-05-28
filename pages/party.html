@@ -894,6 +894,147 @@
 			line-height: 1.4;
 		}
 
+		.party-field-label {
+			font-size: 0.75rem;
+			color: var(--party-muted);
+		}
+
+		.party-settings-choose-btn {
+			width: 100%;
+			justify-content: center;
+		}
+
+		.party-settings-linked {
+			margin: 0;
+			font-size: 0.78rem;
+			color: var(--party-muted);
+			line-height: 1.4;
+		}
+
+		.party-picker-overlay {
+			position: fixed;
+			inset: 0;
+			z-index: 120;
+			display: flex;
+			align-items: flex-end;
+			justify-content: center;
+			padding: 0;
+			background: rgba(0, 0, 0, 0.72);
+		}
+
+		.party-picker-overlay[hidden] {
+			display: none;
+		}
+
+		.party-picker {
+			display: flex;
+			flex-direction: column;
+			width: 100%;
+			max-width: 720px;
+			max-height: min(72vh, 560px);
+			background: var(--party-surface);
+			border-radius: 14px 14px 0 0;
+			overflow: hidden;
+		}
+
+		.party-picker-head {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 12px;
+			padding: 14px 16px;
+			border-bottom: 1px solid var(--party-border);
+		}
+
+		.party-picker-head h2 {
+			margin: 0;
+			font-size: 0.95rem;
+			font-weight: 600;
+		}
+
+		.party-picker-close {
+			padding: 6px 10px;
+			border: none;
+			border-radius: 6px;
+			background: transparent;
+			color: var(--party-muted);
+			font: inherit;
+			font-size: 0.82rem;
+			cursor: pointer;
+		}
+
+		.party-picker-body {
+			flex: 1;
+			overflow-y: auto;
+			-webkit-overflow-scrolling: touch;
+		}
+
+		.party-picker-item {
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			width: 100%;
+			padding: 12px 16px;
+			border: none;
+			border-bottom: 1px solid var(--party-border);
+			background: transparent;
+			color: inherit;
+			text-align: left;
+			cursor: pointer;
+			font: inherit;
+		}
+
+		.party-picker-item[data-selected='true'] {
+			background: var(--party-surface-raised);
+		}
+
+		.party-picker-item-thumb {
+			flex: 0 0 52px;
+			width: 52px;
+			height: 52px;
+			border-radius: 6px;
+			overflow: hidden;
+			background: var(--party-surface-raised);
+		}
+
+		.party-picker-item-thumb img {
+			width: 100%;
+			height: 100%;
+			object-fit: cover;
+		}
+
+		.party-picker-item-main {
+			flex: 1;
+			min-width: 0;
+			display: flex;
+			flex-direction: column;
+			gap: 4px;
+		}
+
+		.party-picker-item-name {
+			font-size: 0.88rem;
+			font-weight: 600;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		.party-picker-item-meta {
+			font-size: 0.72rem;
+			color: var(--party-muted);
+			line-height: 1.35;
+		}
+
+		.party-picker-empty,
+		.party-picker-status {
+			margin: 0;
+			padding: 16px;
+			font-size: 0.78rem;
+			color: var(--party-muted);
+			text-align: center;
+			line-height: 1.45;
+		}
+
 		@media (min-width: 769px) {
 			body.party-page .party-scroll {
 				padding-left: max(0px, calc((100% - 720px) / 2));
@@ -965,6 +1106,12 @@
 								<div class="party-field">
 									<label for="party-settings-party-name">Party name</label>
 									<input class="party-input" type="text" id="party-settings-party-name" name="partyName" maxlength="80" placeholder="Saturday night" autocomplete="off" />
+								</div>
+
+								<div class="party-field">
+									<span class="party-field-label">Resume on this device</span>
+									<p class="party-settings-linked" id="party-settings-linked-hint">Not linked yet — a group starts when your first photo finishes transforming.</p>
+									<button type="button" class="party-btn party-btn--ghost party-settings-choose-btn" id="party-settings-choose-party">Choose party…</button>
 								</div>
 
 								<div class="party-field">
@@ -1072,6 +1219,18 @@
 	</div>
 
 	<ul class="party-log-list" id="party-log-list" hidden></ul>
+
+	<div class="party-picker-overlay" id="party-picker-overlay" hidden>
+		<div class="party-picker" role="dialog" aria-modal="true" aria-labelledby="party-picker-title">
+			<header class="party-picker-head">
+				<h2 id="party-picker-title">Choose party</h2>
+				<button type="button" class="party-picker-close" id="party-picker-close">Cancel</button>
+			</header>
+			<div class="party-picker-body" id="party-picker-list"></div>
+			<p class="party-picker-empty" id="party-picker-empty" hidden>No parties yet. Finish transforming a photo on any device to start one.</p>
+			<p class="party-picker-status" id="party-picker-status" hidden></p>
+		</div>
+	</div>
 
 	<input type="file" class="party-hidden-input" id="party-input-native-env" accept="image/*" capture="environment" />
 	<input type="file" class="party-hidden-input" id="party-input-native-user" accept="image/*" capture="user" />
@@ -1468,11 +1627,31 @@
 						const settingsChanged = this.applyPartySettingsFromMeta(payload);
 						const queueChanged = this.applyPartyQueueFromMeta(payload);
 						const pushedChanged = this.applyPartyPushedFromMeta(payload);
+						PartyQueue.hydrateFromGroupResponse(data);
 						return settingsChanged || queueChanged || pushedChanged;
 					} catch (err) {
 						PartyLog.write(`Party group load failed: ${err?.message || err}`);
 						return false;
 					}
+				},
+				getLinkedPartyLabel() {
+					const groupId = this.getGroupCreationId();
+					if (!groupId) return '';
+					const name = this.getPartyName();
+					return name || `Party #${groupId}`;
+				},
+				async selectPartyGroup(groupId) {
+					const id = Number(groupId);
+					if (!Number.isFinite(id) || id <= 0) return false;
+					this._party.groupCreationId = id;
+					this._party.groupPartyKey = this._partyGroupKey(this._party);
+					this._saveJson(PARTY_SETTINGS_KEY, this._party);
+					const ok = await this.loadFromGroup();
+					if (!ok) return false;
+					this._party.groupPartyKey = this._partyGroupKey(this._party);
+					this._saveJson(PARTY_SETTINGS_KEY, this._party);
+					if (this._draftParty) this._draftParty = this._clone(this._party);
+					return true;
 				},
 				async syncToGroup() {
 					const groupId = this.getGroupCreationId();
@@ -1650,6 +1829,123 @@
 				}
 			};
 
+			// --- party/picker ---
+			const PartyPicker = {
+				els: {},
+				_parties: [],
+				init(els) {
+					this.els = els;
+					els.choosePartyBtn?.addEventListener('click', () => { void this.open(); });
+					els.pickerClose?.addEventListener('click', () => this.close());
+					els.pickerOverlay?.addEventListener('click', (e) => {
+						if (e.target === els.pickerOverlay) this.close();
+					});
+				},
+				close() {
+					if (this.els.pickerOverlay) this.els.pickerOverlay.hidden = true;
+					if (this.els.pickerStatus) {
+						this.els.pickerStatus.hidden = true;
+						this.els.pickerStatus.textContent = '';
+					}
+				},
+				async open() {
+					if (!this.els.pickerOverlay) return;
+					this.els.pickerOverlay.hidden = false;
+					if (this.els.pickerList) this.els.pickerList.replaceChildren();
+					if (this.els.pickerEmpty) this.els.pickerEmpty.hidden = true;
+					if (this.els.pickerStatus) {
+						this.els.pickerStatus.hidden = false;
+						this.els.pickerStatus.textContent = 'Loading parties…';
+					}
+					try {
+						const res = await fetch('/api/party/groups', { credentials: 'include' });
+						const data = await res.json().catch(() => ({}));
+						if (!res.ok) {
+							throw new Error(data?.error || data?.message || `Load failed (${res.status})`);
+						}
+						this._parties = Array.isArray(data?.parties) ? data.parties : [];
+						this.render();
+					} catch (err) {
+						if (this.els.pickerStatus) {
+							this.els.pickerStatus.hidden = false;
+							this.els.pickerStatus.textContent = err?.message || 'Could not load parties.';
+						}
+					}
+				},
+				render() {
+					const list = this.els.pickerList;
+					const empty = this.els.pickerEmpty;
+					const status = this.els.pickerStatus;
+					if (!list) return;
+					list.replaceChildren();
+					if (status) status.hidden = true;
+					if (!this._parties.length) {
+						if (empty) empty.hidden = false;
+						return;
+					}
+					if (empty) empty.hidden = true;
+					const linkedId = PartySettings.getGroupCreationId();
+					this._parties.forEach((party) => {
+						list.appendChild(this._buildItem(party, linkedId));
+					});
+				},
+				_buildItem(party, linkedId) {
+					const btn = document.createElement('button');
+					btn.type = 'button';
+					btn.className = 'party-picker-item';
+					const id = Number(party?.id);
+					if (Number.isFinite(id) && id > 0 && id === linkedId) {
+						btn.dataset.selected = 'true';
+					}
+					const thumb = document.createElement('div');
+					thumb.className = 'party-picker-item-thumb';
+					if (party?.thumbnail_url) {
+						const img = document.createElement('img');
+						img.src = party.thumbnail_url;
+						img.alt = '';
+						thumb.appendChild(img);
+					}
+					const main = document.createElement('div');
+					main.className = 'party-picker-item-main';
+					const name = document.createElement('div');
+					name.className = 'party-picker-item-name';
+					name.textContent = party?.name || party?.title || 'Party Mode';
+					const meta = document.createElement('div');
+					meta.className = 'party-picker-item-meta';
+					const photoCount = Number(party?.photo_count) || 0;
+					const queueCount = Number(party?.queue_count) || 0;
+					const pushedCount = Number(party?.pushed_count) || 0;
+					meta.textContent = `${photoCount} photo${photoCount === 1 ? '' : 's'} · ${queueCount} in queue · ${pushedCount} pushed`;
+					main.appendChild(name);
+					main.appendChild(meta);
+					btn.appendChild(thumb);
+					btn.appendChild(main);
+					btn.addEventListener('click', () => { void this.select(id); });
+					return btn;
+				},
+				async select(groupId) {
+					const id = Number(groupId);
+					if (!Number.isFinite(id) || id <= 0) return;
+					if (this.els.pickerStatus) {
+						this.els.pickerStatus.hidden = false;
+						this.els.pickerStatus.textContent = 'Linking party…';
+					}
+					const ok = await PartySettings.selectPartyGroup(id);
+					if (!ok) {
+						if (this.els.pickerStatus) {
+							this.els.pickerStatus.hidden = false;
+							this.els.pickerStatus.textContent = 'Could not link that party.';
+						}
+						return;
+					}
+					PartyUI.populateSettingsForm();
+					PartyUI.updateLinkedPartyHint();
+					PartyUI.renderAll();
+					this.close();
+					PartyLog.write(`Linked party: ${PartySettings.getLinkedPartyLabel()}`);
+				}
+			};
+
 			// --- party/nav ---
 			const PartyNav = {
 				view: 'main',
@@ -1674,6 +1970,7 @@
 					void PartyCapture.closeCaptureOverlay();
 					PartySettings.startDraft();
 					PartyUI.populateSettingsForm();
+					PartyUI.updateLinkedPartyHint();
 					this.setView('settings');
 				},
 				closeSettings(save) {
@@ -2459,6 +2756,157 @@
 					}
 					return out;
 				},
+				_inputUrlFromSourceMeta(meta) {
+					if (!meta || typeof meta !== 'object') return null;
+					const args = meta.args && typeof meta.args === 'object' ? meta.args : {};
+					const candidates = [
+						meta.source_image_url,
+						args.image_url,
+						args.image,
+						args.input_image,
+						args.reference_image
+					];
+					for (const raw of candidates) {
+						if (typeof raw !== 'string' || !raw.trim()) continue;
+						return raw.trim();
+					}
+					return null;
+				},
+				_mediaUrlFromSource(source) {
+					const raw = typeof source?.file_path === 'string' && source.file_path.trim()
+						? source.file_path.trim()
+						: '';
+					return raw || null;
+				},
+				hydrateFromGroupResponse(data) {
+					const meta = data?.meta && typeof data.meta === 'object' ? data.meta : {};
+					const party = meta.party && typeof meta.party === 'object' ? meta.party : {};
+					const sources = Array.isArray(meta.group?.source_creations) ? meta.group.source_creations : [];
+					if (!sources.length) return;
+
+					const queueById = new Map();
+					for (const entry of Array.isArray(party.queue) ? party.queue : []) {
+						const id = Number(entry?.creation_id ?? entry?.creationId);
+						if (Number.isFinite(id) && id > 0) queueById.set(id, entry);
+					}
+					const pushedById = new Map();
+					for (const entry of Array.isArray(party.pushed) ? party.pushed : []) {
+						const id = Number(entry?.creation_id ?? entry?.creationId);
+						if (Number.isFinite(id) && id > 0) pushedById.set(id, entry);
+					}
+					const groupCreationIds = new Set();
+					for (const source of sources) {
+						const id = Number(source?.id);
+						if (Number.isFinite(id) && id > 0) groupCreationIds.add(id);
+					}
+
+					this.items = this.items.filter((item) => {
+						const cid = Number(item.creationId);
+						if (!Number.isFinite(cid) || cid <= 0) return true;
+						return groupCreationIds.has(cid);
+					});
+
+					const existingByCreationId = new Map();
+					for (const item of this.items) {
+						const cid = Number(item.creationId);
+						if (Number.isFinite(cid) && cid > 0) existingByCreationId.set(cid, item);
+					}
+
+					let changed = false;
+					for (const source of sources) {
+						const creationId = Number(source?.id);
+						if (!Number.isFinite(creationId) || creationId <= 0) continue;
+
+						let status = 'ready';
+						let pushedAt = null;
+						let error = undefined;
+						if (pushedById.has(creationId)) {
+							status = 'committed';
+							pushedAt = pushedById.get(creationId)?.pushed_at || null;
+						} else if (queueById.has(creationId)) {
+							const remote = queueById.get(creationId);
+							const remoteStatus = String(remote?.status || '').toLowerCase();
+							if (remoteStatus === 'processing' || remoteStatus === 'ready' || remoteStatus === 'failed') {
+								status = remoteStatus;
+							}
+							if (typeof remote?.error === 'string' && remote.error.trim()) {
+								error = remote.error.trim();
+							}
+						} else {
+							const sourceStatus = String(source?.status || '').toLowerCase();
+							if (sourceStatus === 'creating') status = 'processing';
+							else if (sourceStatus === 'failed') status = 'failed';
+						}
+
+						const resultUrl = this._mediaUrlFromSource(source);
+						const sourceMeta = source?.meta && typeof source.meta === 'object' ? source.meta : {};
+						const originalUrl = this._inputUrlFromSourceMeta(sourceMeta) || resultUrl || '';
+						const updatedAt = queueById.get(creationId)?.updated_at
+							|| pushedAt
+							|| source?.created_at
+							|| new Date().toISOString();
+
+						let item = existingByCreationId.get(creationId);
+						if (item) {
+							if (item.status !== status) {
+								item.status = status;
+								changed = true;
+							}
+							if (error !== undefined && item.error !== error) {
+								item.error = error;
+								changed = true;
+							}
+							if (pushedAt && item.pushedAt !== pushedAt) {
+								item.pushedAt = pushedAt;
+								changed = true;
+							}
+							if (resultUrl && item.resultDataUrl !== resultUrl) {
+								item.resultDataUrl = resultUrl;
+								changed = true;
+							}
+							if (originalUrl && item.originalDataUrl !== originalUrl) {
+								item.originalDataUrl = originalUrl;
+								changed = true;
+							}
+							if (item.updatedAt !== updatedAt) {
+								item.updatedAt = updatedAt;
+								changed = true;
+							}
+							continue;
+						}
+
+						if (!originalUrl && !resultUrl) continue;
+						/** @type {PartyQueueItem} */
+						item = {
+							id: `pty_grp_${creationId}`,
+							status,
+							createdAt: source?.created_at || updatedAt,
+							updatedAt,
+							prompt: typeof party?.settings?.prompt === 'string' && party.settings.prompt.trim()
+								? party.settings.prompt.trim()
+								: PartySettings.getPrompt(),
+							originalDataUrl: originalUrl || resultUrl || '',
+							width: Number(source?.width) || undefined,
+							height: Number(source?.height) || undefined,
+							orientation: PARTY_ORIENTATION,
+							aspectRatio: PARTY_ASPECT_RATIO,
+							creationId
+						};
+						if (resultUrl && (status === 'ready' || status === 'committed')) {
+							item.resultDataUrl = resultUrl;
+						}
+						if (error) item.error = error;
+						if (pushedAt) item.pushedAt = pushedAt;
+						this.items.unshift(item);
+						changed = true;
+					}
+
+					if (changed) {
+						this._persist();
+						this._emit();
+					}
+					PartyTransform.resumeAll(this);
+				},
 				_persist() {
 					const active = this.items
 						.filter((it) => it.status !== 'committed')
@@ -2874,6 +3322,17 @@
 					form.elements.prompt.value = draft.party.prompt || DEFAULT_PARTY_PROMPT;
 					form.elements.autoReviewReady.checked = draft.party.autoReviewReady === true;
 					this.updateCaptureMethodHint(draft.device.captureMethodId);
+					this.updateLinkedPartyHint();
+				},
+				updateLinkedPartyHint() {
+					const hint = this.els.settingsLinkedHint;
+					if (!hint) return;
+					const label = PartySettings.getLinkedPartyLabel();
+					if (!label) {
+						hint.textContent = 'Not linked yet — a group starts when your first photo finishes transforming.';
+						return;
+					}
+					hint.textContent = `Linked to “${label}”. Choose another party to resume on this device.`;
 				},
 				renderPendingGrid() {
 					const list = this.els.pendingGrid;
@@ -3008,6 +3467,13 @@
 						settingsCancel: document.getElementById('party-settings-cancel'),
 						settingsSave: document.getElementById('party-settings-save'),
 						settingsForm: document.getElementById('party-settings-form'),
+						settingsLinkedHint: document.getElementById('party-settings-linked-hint'),
+						choosePartyBtn: document.getElementById('party-settings-choose-party'),
+						pickerOverlay: document.getElementById('party-picker-overlay'),
+						pickerList: document.getElementById('party-picker-list'),
+						pickerEmpty: document.getElementById('party-picker-empty'),
+						pickerStatus: document.getElementById('party-picker-status'),
+						pickerClose: document.getElementById('party-picker-close'),
 						settingsCaptureHint: document.getElementById('party-settings-capture-hint'),
 						captureOverlay: document.getElementById('party-capture-overlay'),
 						captureClose: document.getElementById('party-capture-close'),
@@ -3040,6 +3506,7 @@
 					};
 					PartyUI.init(els);
 					PartyNav.init(els);
+					PartyPicker.init(els);
 					PartyCapture.init(els, (photo) => this.onPhotoCaptured(photo));
 					PartyQueue.init(() => PartyUI.renderAll());
 					if (PartySettings.getGroupCreationId()) {
@@ -3051,6 +3518,7 @@
 
 					const method = PartyCapture.getMethod(PartySettings.getCaptureMethodId());
 					void PartyCapture.setMethod(method);
+					PartyUI.updateLinkedPartyHint();
 					PartyUI.renderAll();
 					PartyLog.write('Party Mode ready');
 				},
