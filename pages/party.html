@@ -660,6 +660,24 @@
 			display: none !important;
 		}
 
+		.party-detail-source-missing {
+			position: absolute;
+			inset: 0;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			padding: 24px;
+			background: #000;
+			color: var(--party-muted);
+			font-size: 0.82rem;
+			line-height: 1.45;
+			text-align: center;
+		}
+
+		.party-detail-source-missing[hidden] {
+			display: none !important;
+		}
+
 		.party-detail-working-spinner {
 			width: 28px;
 			height: 28px;
@@ -1172,7 +1190,8 @@
 				</div>
 				<div class="party-detail-frame party-detail-frame--source">
 					<span class="party-detail-label">Source</span>
-					<img id="party-review-original" alt="Source photo" />
+					<div class="party-detail-source-missing" id="party-review-source-missing" hidden>Source photo not on this device. The transformed version is shown above.</div>
+					<img id="party-review-original" alt="Source photo" hidden />
 				</div>
 			</div>
 			<div class="party-detail-actions" id="party-detail-actions-queue">
@@ -1266,7 +1285,7 @@
 			/** @typedef {'processing'|'ready'|'committed'|'failed'} PartyItemStatus */
 			/** @typedef {'portrait'|'landscape'|'square'} PartyOrientation */
 			/** @typedef {{ dataUrl: string, width: number, height: number, orientation: PartyOrientation, aspectRatio: string, exifCorrected: boolean, screenOrientation?: string|null, captureSource?: string, viewportCorrected?: boolean, holdSource?: string }} PartyStoredPhoto */
-			/** @typedef {{ id: string, status: PartyItemStatus, createdAt: string, updatedAt: string, prompt: string, originalDataUrl: string, resultDataUrl?: string, error?: string, creationId?: number, creationToken?: string, width?: number, height?: number, orientation?: PartyOrientation, aspectRatio?: string, exifCorrected?: boolean, screenOrientation?: string|null }} PartyQueueItem */
+			/** @typedef {{ id: string, status: PartyItemStatus, createdAt: string, updatedAt: string, prompt: string, originalDataUrl: string, resultDataUrl?: string, error?: string, creationId?: number, creationToken?: string, width?: number, height?: number, orientation?: PartyOrientation, aspectRatio?: string, exifCorrected?: boolean, screenOrientation?: string|null, sourceUnavailable?: boolean }} PartyQueueItem */
 			/** @typedef {{ id: string, friendlyName: string, hint: string, kind: 'native'|'live', inputId?: string, facing?: 'environment'|'user', default?: boolean }} CaptureMethodDef */
 
 			const CAPTURE_METHODS = /** @type {CaptureMethodDef[]} */ ([
@@ -2648,7 +2667,7 @@
 				init(onChange) {
 					this._onChange = onChange;
 					const data = PartyStorage.load();
-					this.items = data.items.filter((it) => it && it.id && it.originalDataUrl);
+					this.items = data.items.filter((it) => it && it.id && (it.originalDataUrl || it.resultDataUrl));
 					void this._hydrateAllMeta().then(() => {
 						PartyTransform.resumeAll(this);
 						this._emit();
@@ -2778,6 +2797,36 @@
 						: '';
 					return raw || null;
 				},
+				hasLocalCaptureSource(item) {
+					const url = String(item?.originalDataUrl || '');
+					return url.startsWith('data:') || url.startsWith('blob:');
+				},
+				isSourceMissingOnDevice(item) {
+					if (!item) return true;
+					if (item.sourceUnavailable === true) return true;
+					if (this.hasLocalCaptureSource(item)) return false;
+					const original = String(item.originalDataUrl || '');
+					const result = String(item.resultDataUrl || '');
+					if (!original && result) return true;
+					if (original && result && original === result) return true;
+					return false;
+				},
+				_resolveHydratedSource(sourceMeta, resultUrl) {
+					const inputUrl = this._inputUrlFromSourceMeta(sourceMeta);
+					if (inputUrl && inputUrl !== resultUrl) {
+						return { originalDataUrl: inputUrl, sourceUnavailable: false };
+					}
+					return { originalDataUrl: '', sourceUnavailable: true };
+				},
+				_applyHydratedSourceFields(item, sourceMeta, resultUrl) {
+					if (this.hasLocalCaptureSource(item)) {
+						item.sourceUnavailable = false;
+						return;
+					}
+					const resolved = this._resolveHydratedSource(sourceMeta, resultUrl);
+					item.originalDataUrl = resolved.originalDataUrl;
+					item.sourceUnavailable = resolved.sourceUnavailable;
+				},
 				hydrateFromGroupResponse(data) {
 					const meta = data?.meta && typeof data.meta === 'object' ? data.meta : {};
 					const party = meta.party && typeof meta.party === 'object' ? meta.party : {};
@@ -2840,7 +2889,6 @@
 
 						const resultUrl = this._mediaUrlFromSource(source);
 						const sourceMeta = source?.meta && typeof source.meta === 'object' ? source.meta : {};
-						const originalUrl = this._inputUrlFromSourceMeta(sourceMeta) || resultUrl || '';
 						const updatedAt = queueById.get(creationId)?.updated_at
 							|| pushedAt
 							|| source?.created_at
@@ -2864,8 +2912,10 @@
 								item.resultDataUrl = resultUrl;
 								changed = true;
 							}
-							if (originalUrl && item.originalDataUrl !== originalUrl) {
-								item.originalDataUrl = originalUrl;
+							const prevSource = item.originalDataUrl;
+							const prevUnavailable = item.sourceUnavailable;
+							this._applyHydratedSourceFields(item, sourceMeta, resultUrl);
+							if (item.originalDataUrl !== prevSource || item.sourceUnavailable !== prevUnavailable) {
 								changed = true;
 							}
 							if (item.updatedAt !== updatedAt) {
@@ -2875,7 +2925,8 @@
 							continue;
 						}
 
-						if (!originalUrl && !resultUrl) continue;
+						if (!resultUrl) continue;
+						const resolved = this._resolveHydratedSource(sourceMeta, resultUrl);
 						/** @type {PartyQueueItem} */
 						item = {
 							id: `pty_grp_${creationId}`,
@@ -2885,7 +2936,8 @@
 							prompt: typeof party?.settings?.prompt === 'string' && party.settings.prompt.trim()
 								? party.settings.prompt.trim()
 								: PartySettings.getPrompt(),
-							originalDataUrl: originalUrl || resultUrl || '',
+							originalDataUrl: resolved.originalDataUrl,
+							sourceUnavailable: resolved.sourceUnavailable,
 							width: Number(source?.width) || undefined,
 							height: Number(source?.height) || undefined,
 							orientation: PARTY_ORIENTATION,
@@ -3376,8 +3428,8 @@
 					const img = document.createElement('img');
 					const showResult = opts.sent || item.status === 'ready';
 					img.src = showResult
-						? (item.resultDataUrl || item.originalDataUrl)
-						: item.originalDataUrl;
+						? (item.resultDataUrl || item.originalDataUrl || '')
+						: (item.originalDataUrl || item.resultDataUrl || '');
 					img.alt = '';
 					btn.appendChild(img);
 					if (!opts.sent) {
@@ -3426,9 +3478,21 @@
 					}
 					const isProcessing = item.status === 'processing';
 					const isPushed = item.status === 'committed';
+					const sourceMissing = PartyQueue.isSourceMissingOnDevice(item);
 					overlay.hidden = false;
 					document.body.classList.add('party-page--review-open');
-					if (this.els.reviewOriginal) this.els.reviewOriginal.src = item.originalDataUrl;
+					if (this.els.reviewSourceMissing) {
+						this.els.reviewSourceMissing.hidden = !sourceMissing;
+					}
+					if (this.els.reviewOriginal) {
+						if (sourceMissing) {
+							this.els.reviewOriginal.hidden = true;
+							this.els.reviewOriginal.removeAttribute('src');
+						} else {
+							this.els.reviewOriginal.hidden = false;
+							this.els.reviewOriginal.src = item.originalDataUrl;
+						}
+					}
 					if (this.els.reviewWorking) this.els.reviewWorking.hidden = !isProcessing;
 					if (this.els.reviewResult) {
 						if (isProcessing) {
@@ -3441,7 +3505,7 @@
 					}
 					if (this.els.actionsQueue) this.els.actionsQueue.hidden = isPushed;
 					if (this.els.actionsPushed) this.els.actionsPushed.hidden = !isPushed;
-					if (this.els.redoBtn) this.els.redoBtn.disabled = isProcessing;
+					if (this.els.redoBtn) this.els.redoBtn.disabled = isProcessing || sourceMissing;
 					if (this.els.pushBtn) this.els.pushBtn.disabled = isProcessing;
 				},
 				renderAll() {
@@ -3493,6 +3557,7 @@
 						sentEmpty: document.getElementById('party-sent-empty'),
 						reviewOverlay: document.getElementById('party-review-overlay'),
 						reviewOriginal: document.getElementById('party-review-original'),
+						reviewSourceMissing: document.getElementById('party-review-source-missing'),
 						reviewWorking: document.getElementById('party-review-working'),
 						reviewResult: document.getElementById('party-review-result'),
 						actionsQueue: document.getElementById('party-detail-actions-queue'),
