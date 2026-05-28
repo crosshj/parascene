@@ -774,6 +774,103 @@ export default function createCreateRoutes({ queries, storage }) {
 		return new Date().toISOString();
 	}
 
+	function parsePartySettingsPayload(raw) {
+		if (!raw || typeof raw !== "object") return null;
+		const partyName = typeof raw.partyName === "string" ? raw.partyName.trim() : "";
+		const prompt = typeof raw.prompt === "string" ? raw.prompt.trim() : "";
+		const autoReviewReady = raw.autoReviewReady === true;
+		if (!partyName && !prompt && !autoReviewReady) return null;
+		return {
+			version: 1,
+			partyName,
+			prompt,
+			autoReviewReady
+		};
+	}
+
+	function buildPartyGroupMeta(partyName, partySettings) {
+		const name = String(partyName || partySettings?.partyName || "").trim();
+		if (!name && !partySettings) return null;
+		return {
+			mode: true,
+			...(name ? { name } : {}),
+			...(partySettings ? { settings: partySettings } : {})
+		};
+	}
+
+	function parsePartyPushedPayload(raw) {
+		if (!Array.isArray(raw)) return null;
+		const out = [];
+		const seen = new Set();
+		for (const entry of raw) {
+			const creationId = Number(entry?.creation_id ?? entry?.creationId);
+			if (!Number.isFinite(creationId) || creationId <= 0 || seen.has(creationId)) continue;
+			seen.add(creationId);
+			const pushedAt =
+				typeof entry?.pushed_at === "string" && entry.pushed_at.trim()
+					? entry.pushed_at.trim()
+					: nowIso();
+			out.push({ creation_id: creationId, pushed_at: pushedAt });
+		}
+		return out;
+	}
+
+	function getGroupSourceCreationIds(meta) {
+		const groupPayload = meta?.group && typeof meta.group === "object" ? meta.group : null;
+		const rawIds = Array.isArray(groupPayload?.source_creation_ids) ? groupPayload.source_creation_ids : [];
+		return new Set(
+			rawIds
+				.map((id) => Number(id))
+				.filter((id) => Number.isFinite(id) && id > 0)
+		);
+	}
+
+	function filterPartyPushedToGroupSources(meta, pushedEntries) {
+		const sourceIds = getGroupSourceCreationIds(meta);
+		if (!sourceIds.size) return pushedEntries;
+		return pushedEntries.filter((entry) => sourceIds.has(Number(entry.creation_id)));
+	}
+
+	const PARTY_QUEUE_STATUSES = new Set(["processing", "ready", "failed"]);
+
+	function parsePartyQueuePayload(raw) {
+		if (!Array.isArray(raw)) return null;
+		const out = [];
+		const seen = new Set();
+		for (const entry of raw) {
+			const creationId = Number(entry?.creation_id ?? entry?.creationId);
+			if (!Number.isFinite(creationId) || creationId <= 0 || seen.has(creationId)) continue;
+			const status = String(entry?.status || "").toLowerCase();
+			if (!PARTY_QUEUE_STATUSES.has(status)) continue;
+			seen.add(creationId);
+			const updatedAt =
+				typeof entry?.updated_at === "string" && entry.updated_at.trim()
+					? entry.updated_at.trim()
+					: nowIso();
+			const item = { creation_id: creationId, status, updated_at: updatedAt };
+			if (status === "failed" && typeof entry?.error === "string" && entry.error.trim()) {
+				item.error = entry.error.trim().slice(0, 280);
+			}
+			out.push(item);
+		}
+		return out;
+	}
+
+	function filterPartyQueueToGroupSources(meta, queueEntries, pushedEntries = []) {
+		const sourceIds = getGroupSourceCreationIds(meta);
+		const pushedIds = new Set(
+			(Array.isArray(pushedEntries) ? pushedEntries : [])
+				.map((entry) => Number(entry?.creation_id))
+				.filter((id) => Number.isFinite(id) && id > 0)
+		);
+		return queueEntries.filter((entry) => {
+			const id = Number(entry.creation_id);
+			if (pushedIds.has(id)) return false;
+			if (!sourceIds.size) return true;
+			return sourceIds.has(id);
+		});
+	}
+
 	// Provider must fetch image URLs; use share subdomain (sh.parascene.com) so unauthenticated provider requests are allowed.
 	const providerBase = getShareBaseUrl();
 
@@ -3045,7 +3142,9 @@ export default function createCreateRoutes({ queries, storage }) {
 
 		try {
 			const rawIds = Array.isArray(req.body?.ids) ? req.body.ids : [];
+			const partySettingsParsed = parsePartySettingsPayload(req.body?.party_settings);
 			const partyNameRaw = typeof req.body?.party_name === "string" ? req.body.party_name.trim() : "";
+			const effectivePartyName = partyNameRaw || partySettingsParsed?.partyName || "";
 			const ids = [];
 			const seen = new Set();
 			for (const raw of rawIds) {
@@ -3057,7 +3156,7 @@ export default function createCreateRoutes({ queries, storage }) {
 			if (ids.length < 1) {
 				return res.status(400).json({ error: "No creations selected" });
 			}
-			if (ids.length < 2 && !partyNameRaw) {
+			if (ids.length < 2 && !effectivePartyName) {
 				return res.status(400).json({ error: "Select at least 2 creations to group" });
 			}
 
@@ -3239,10 +3338,11 @@ export default function createCreateRoutes({ queries, storage }) {
 					meta: rowMeta && typeof rowMeta === "object" ? rowMeta : null
 				};
 			});
+			const partyMetaBlock = buildPartyGroupMeta(effectivePartyName, partySettingsParsed);
 			const groupedMetaBase = {
 				...(parseMeta(first.meta) || {}),
 				media_type: "image",
-				...(partyNameRaw ? { party: { mode: true, name: partyNameRaw } } : {}),
+				...(partyMetaBlock ? { party: partyMetaBlock } : {}),
 				group: {
 					kind: "group_creations",
 					version: 1,
@@ -3288,8 +3388,8 @@ export default function createCreateRoutes({ queries, storage }) {
 				return res.status(500).json({ error: "Failed to set grouped creation cover timestamp" });
 			}
 
-			if (partyNameRaw) {
-				await queries.updateCreatedImage.run(groupedId, user.id, partyNameRaw, null, false);
+			if (effectivePartyName) {
+				await queries.updateCreatedImage.run(groupedId, user.id, effectivePartyName, null, false);
 			}
 
 			for (const row of sourceRows) {
@@ -3306,7 +3406,7 @@ export default function createCreateRoutes({ queries, storage }) {
 			const groupedMetaOut = parseMeta(grouped.meta);
 			return res.json({
 				ok: true,
-				mode: partyNameRaw && sourceRows.length === 1 ? "create_party_group" : "create_group",
+				mode: effectivePartyName && sourceRows.length === 1 ? "create_party_group" : "create_group",
 				grouped_creation: {
 					id: grouped.id,
 					status: grouped.status || "completed",
@@ -3317,6 +3417,88 @@ export default function createCreateRoutes({ queries, storage }) {
 			});
 		} catch (error) {
 			return res.status(500).json({ error: "Failed to group creations" });
+		}
+	});
+
+	// POST /api/create/images/:id/party-settings - Persist Party Mode settings, queue, and pushed state on a party group.
+	router.post("/api/create/images/:id/party-settings", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		try {
+			const groupId = Number(req.params.id);
+			if (!Number.isFinite(groupId) || groupId <= 0) {
+				return res.status(400).json({ error: "Invalid creation id" });
+			}
+			const settingsProvided = req.body?.party_settings != null;
+			const pushedProvided = req.body?.party_pushed != null;
+			const queueProvided = req.body?.party_queue != null;
+			if (!settingsProvided && !pushedProvided && !queueProvided) {
+				return res.status(400).json({ error: "Nothing to update" });
+			}
+			const settings = settingsProvided ? parsePartySettingsPayload(req.body.party_settings) : null;
+			if (settingsProvided && !settings) {
+				return res.status(400).json({ error: "Invalid party settings" });
+			}
+			const pushedParsed = pushedProvided ? parsePartyPushedPayload(req.body.party_pushed) : null;
+			if (pushedProvided && pushedParsed === null) {
+				return res.status(400).json({ error: "Invalid party pushed list" });
+			}
+			const queueParsed = queueProvided ? parsePartyQueuePayload(req.body.party_queue) : null;
+			if (queueProvided && queueParsed === null) {
+				return res.status(400).json({ error: "Invalid party queue list" });
+			}
+			const row = await queries.selectCreatedImageById.get(groupId, user.id);
+			if (!row) {
+				return res.status(404).json({ error: "Creation not found" });
+			}
+			const meta = parseMeta(row.meta) || {};
+			if (meta?.group?.kind !== "group_creations" || meta?.party?.mode !== true) {
+				return res.status(400).json({ error: "Creation is not a party group" });
+			}
+			const existingSettings =
+				meta?.party?.settings && typeof meta.party.settings === "object" ? meta.party.settings : null;
+			const nextSettings = settings || existingSettings || {
+				version: 1,
+				partyName: "",
+				prompt: "",
+				autoReviewReady: false
+			};
+			const existingPushed = Array.isArray(meta?.party?.pushed) ? meta.party.pushed : [];
+			const nextPushedRaw = pushedProvided ? pushedParsed : existingPushed;
+			const nextPushed = filterPartyPushedToGroupSources(meta, nextPushedRaw);
+			const existingQueue = Array.isArray(meta?.party?.queue) ? meta.party.queue : [];
+			const nextQueueRaw = queueProvided ? queueParsed : existingQueue;
+			const nextQueue = filterPartyQueueToGroupSources(meta, nextQueueRaw, nextPushed);
+			const partyName = nextSettings.partyName || meta?.party?.name || row.title || "Party Mode";
+			const nextMeta = {
+				...meta,
+				party: {
+					...(meta.party && typeof meta.party === "object" ? meta.party : {}),
+					mode: true,
+					name: partyName,
+					settings: {
+						...nextSettings,
+						partyName
+					},
+					queue: nextQueue,
+					pushed: nextPushed
+				}
+			};
+			const metaResult = await queries.updateCreatedImageMeta.run(groupId, user.id, nextMeta);
+			if (!metaResult || metaResult.changes === 0) {
+				return res.status(500).json({ error: "Failed to update party settings" });
+			}
+			if (settingsProvided) {
+				await queries.updateCreatedImage.run(groupId, user.id, partyName, row.description ?? null, false);
+			}
+			return res.json({
+				ok: true,
+				title: partyName,
+				meta: nextMeta
+			});
+		} catch (error) {
+			return res.status(500).json({ error: "Failed to save party settings" });
 		}
 	});
 

@@ -1194,6 +1194,8 @@
 			const PartySettings = {
 				_device: null,
 				_party: null,
+				_pushed: [],
+				_queue: [],
 				_draftDevice: null,
 				_draftParty: null,
 				_defaults: {
@@ -1209,7 +1211,9 @@
 						autoReviewReady: false,
 						groupPartyKey: '',
 						groupCreationId: null,
-						pendingGroupCreationId: null
+						pendingGroupCreationId: null,
+						pushed: [],
+						queue: []
 					}
 				},
 				_clone(obj) {
@@ -1242,7 +1246,13 @@
 					if (!party) return;
 					party.groupCreationId = null;
 					party.pendingGroupCreationId = null;
+					party.pushed = [];
+					party.queue = [];
 					party.groupPartyKey = this._partyGroupKey(party);
+					if (party === this._party) {
+						this._pushed = [];
+						this._queue = [];
+					}
 				},
 				_syncPartyGroupScope() {
 					const key = this._partyGroupKey();
@@ -1261,6 +1271,8 @@
 					if (!String(this._party.prompt || '').trim()) {
 						this._party.prompt = DEFAULT_PARTY_PROMPT;
 					}
+					this._pushed = this._normalizePushedList(this._party.pushed);
+					this._queue = this._normalizeQueueList(this._party.queue);
 					this._syncPartyGroupScope();
 					this._draftDevice = null;
 					this._draftParty = null;
@@ -1281,6 +1293,216 @@
 				},
 				getPartyName() {
 					return String(this._party?.partyName || '').trim();
+				},
+				getPartySettingsForGroup() {
+					return {
+						partyName: this.getPartyName(),
+						prompt: this.getPrompt(),
+						autoReviewReady: this.getAutoReviewReady()
+					};
+				},
+				_normalizePushedEntry(entry) {
+					const creationId = Number(entry?.creation_id ?? entry?.creationId);
+					if (!Number.isFinite(creationId) || creationId <= 0) return null;
+					const pushedAt = typeof entry?.pushed_at === 'string' && entry.pushed_at.trim()
+						? entry.pushed_at.trim()
+						: new Date().toISOString();
+					return { creation_id: creationId, pushed_at: pushedAt };
+				},
+				_normalizePushedList(raw) {
+					if (!Array.isArray(raw)) return [];
+					const out = [];
+					const seen = new Set();
+					for (const entry of raw) {
+						const normalized = this._normalizePushedEntry(entry);
+						if (!normalized || seen.has(normalized.creation_id)) continue;
+						seen.add(normalized.creation_id);
+						out.push(normalized);
+					}
+					return out;
+				},
+				getPartyPushedForGroup() {
+					return this._pushed.map((entry) => ({
+						creation_id: entry.creation_id,
+						pushed_at: entry.pushed_at
+					}));
+				},
+				setPartyPushed(entries) {
+					this._pushed = this._normalizePushedList(entries);
+					this._party.pushed = this._clone(this._pushed);
+					this._saveJson(PARTY_SETTINGS_KEY, this._party);
+				},
+				addPartyPushedCreation(creationId) {
+					const id = Number(creationId);
+					if (!Number.isFinite(id) || id <= 0) return false;
+					if (this._pushed.some((entry) => entry.creation_id === id)) return false;
+					this._pushed.push({ creation_id: id, pushed_at: new Date().toISOString() });
+					this._party.pushed = this._clone(this._pushed);
+					this._saveJson(PARTY_SETTINGS_KEY, this._party);
+					return true;
+				},
+				removePartyPushedCreation(creationId) {
+					const id = Number(creationId);
+					if (!Number.isFinite(id) || id <= 0) return false;
+					const next = this._pushed.filter((entry) => entry.creation_id !== id);
+					if (next.length === this._pushed.length) return false;
+					this._pushed = next;
+					this._party.pushed = this._clone(this._pushed);
+					this._saveJson(PARTY_SETTINGS_KEY, this._party);
+					return true;
+				},
+				_normalizeQueueEntry(entry) {
+					const creationId = Number(entry?.creation_id ?? entry?.creationId);
+					if (!Number.isFinite(creationId) || creationId <= 0) return null;
+					const status = String(entry?.status || '').toLowerCase();
+					if (status !== 'processing' && status !== 'ready' && status !== 'failed') return null;
+					const updatedAt = typeof entry?.updated_at === 'string' && entry.updated_at.trim()
+						? entry.updated_at.trim()
+						: new Date().toISOString();
+					const normalized = { creation_id: creationId, status, updated_at: updatedAt };
+					if (status === 'failed' && typeof entry?.error === 'string' && entry.error.trim()) {
+						normalized.error = entry.error.trim().slice(0, 280);
+					}
+					return normalized;
+				},
+				_normalizeQueueList(raw) {
+					if (!Array.isArray(raw)) return [];
+					const out = [];
+					const seen = new Set();
+					for (const entry of raw) {
+						const normalized = this._normalizeQueueEntry(entry);
+						if (!normalized || seen.has(normalized.creation_id)) continue;
+						seen.add(normalized.creation_id);
+						out.push(normalized);
+					}
+					return out;
+				},
+				getPartyQueueForGroup() {
+					if (typeof PartyQueue?.getGroupQueueSnapshot === 'function') {
+						return PartyQueue.getGroupQueueSnapshot();
+					}
+					return this._queue.map((entry) => ({
+						creation_id: entry.creation_id,
+						status: entry.status,
+						updated_at: entry.updated_at,
+						...(entry.error ? { error: entry.error } : {})
+					}));
+				},
+				setPartyQueue(entries) {
+					this._queue = this._normalizeQueueList(entries);
+					this._party.queue = this._clone(this._queue);
+					this._saveJson(PARTY_SETTINGS_KEY, this._party);
+				},
+				applyPartySettingsFromMeta(meta) {
+					const settings = meta?.party?.settings;
+					let changed = false;
+					if (settings && typeof settings === 'object') {
+						if (typeof settings.partyName === 'string') {
+							this._party.partyName = settings.partyName.trim();
+							changed = true;
+						}
+						if (typeof settings.prompt === 'string' && settings.prompt.trim()) {
+							this._party.prompt = settings.prompt.trim();
+							changed = true;
+						}
+						if (typeof settings.autoReviewReady === 'boolean') {
+							this._party.autoReviewReady = settings.autoReviewReady;
+							changed = true;
+						}
+					}
+					const legacyName = typeof meta?.party?.name === 'string' ? meta.party.name.trim() : '';
+					const titleName = typeof meta?.title === 'string' ? meta.title.trim() : '';
+					const fallbackName = legacyName || titleName;
+					if (fallbackName && !this.getPartyName()) {
+						this._party.partyName = fallbackName;
+						changed = true;
+					}
+					if (changed) {
+						this._party.groupPartyKey = this._partyGroupKey();
+						this._saveJson(PARTY_SETTINGS_KEY, this._party);
+					}
+					return changed;
+				},
+				applyPartyPushedFromMeta(meta) {
+					const raw = meta?.party?.pushed;
+					if (!Array.isArray(raw)) return false;
+					const next = this._normalizePushedList(raw);
+					const prevJson = JSON.stringify(this._pushed);
+					const nextJson = JSON.stringify(next);
+					if (prevJson !== nextJson) {
+						this._pushed = next;
+						this._party.pushed = this._clone(this._pushed);
+						this._saveJson(PARTY_SETTINGS_KEY, this._party);
+					}
+					PartyQueue.applyPushedFromGroup(this._pushed);
+					return prevJson !== nextJson;
+				},
+				applyPartyQueueFromMeta(meta) {
+					const raw = meta?.party?.queue;
+					if (!Array.isArray(raw)) return false;
+					const next = this._normalizeQueueList(raw);
+					const prevJson = JSON.stringify(this._queue);
+					const nextJson = JSON.stringify(next);
+					if (prevJson !== nextJson) {
+						this._queue = next;
+						this._party.queue = this._clone(this._queue);
+						this._saveJson(PARTY_SETTINGS_KEY, this._party);
+					}
+					PartyQueue.applyQueueFromGroup(this._queue);
+					return prevJson !== nextJson;
+				},
+				async loadFromGroup() {
+					const groupId = this.getGroupCreationId();
+					if (!groupId) return false;
+					try {
+						const res = await fetch(`/api/create/images/${groupId}`, { credentials: 'include' });
+						const data = await res.json().catch(() => ({}));
+						if (!res.ok) {
+							if (res.status === 404) {
+								this._resetPartyGroupTracking();
+								this._saveJson(PARTY_SETTINGS_KEY, this._party);
+							}
+							return false;
+						}
+						const payload = { ...(data.meta || {}), title: data.title };
+						const settingsChanged = this.applyPartySettingsFromMeta(payload);
+						const queueChanged = this.applyPartyQueueFromMeta(payload);
+						const pushedChanged = this.applyPartyPushedFromMeta(payload);
+						return settingsChanged || queueChanged || pushedChanged;
+					} catch (err) {
+						PartyLog.write(`Party group load failed: ${err?.message || err}`);
+						return false;
+					}
+				},
+				async syncToGroup() {
+					const groupId = this.getGroupCreationId();
+					if (!groupId) return true;
+					try {
+						const res = await fetch(`/api/create/images/${groupId}/party-settings`, {
+							method: 'POST',
+							credentials: 'include',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({
+								party_settings: this.getPartySettingsForGroup(),
+								party_queue: this.getPartyQueueForGroup(),
+								party_pushed: this.getPartyPushedForGroup()
+							})
+						});
+						const data = await res.json().catch(() => ({}));
+						if (!res.ok) {
+							throw new Error(data?.error || data?.message || `Save failed (${res.status})`);
+						}
+						if (data?.meta) {
+							const payload = { ...data.meta, title: data.title };
+							this.applyPartySettingsFromMeta(payload);
+							this.applyPartyQueueFromMeta(payload);
+							this.applyPartyPushedFromMeta(payload);
+						}
+						return true;
+					} catch (err) {
+						PartyLog.write(`Party settings sync failed: ${err?.message || err}`);
+						return false;
+					}
 				},
 				getGroupCreationId() {
 					const n = Number(this._party?.groupCreationId);
@@ -1343,6 +1565,7 @@
 					this._draftDevice = null;
 					this._draftParty = null;
 					PartyLog.write('Party settings saved');
+					void this.syncToGroup();
 					return true;
 				}
 			};
@@ -1372,6 +1595,7 @@
 						if (groupId === id) return;
 						await this._callGroup({ ids: [groupId, id] });
 						PartyLog.write(`Added creation ${id} to party group ${groupId}`);
+						void PartySettings.syncToGroup();
 						return;
 					}
 
@@ -1389,9 +1613,13 @@
 					}
 					PartySettings.setGroupCreationId(groupedId);
 					PartyLog.write(`Started party group "${this._partyLabel()}" (${groupedId}) with creation ${id}`);
+					void PartySettings.syncToGroup();
 				},
 				async _callGroup({ ids, partyName = '' }) {
-					const body = { ids };
+					const body = {
+						ids,
+						party_settings: PartySettings.getPartySettingsForGroup()
+					};
 					if (partyName) body.party_name = partyName;
 					const res = await fetch('/api/create/images/group', {
 						method: 'POST',
@@ -1404,6 +1632,21 @@
 						throw new Error(data?.error || data?.message || `Group failed (${res.status})`);
 					}
 					return data;
+				},
+				syncState() {
+					return PartySettings.syncToGroup();
+				},
+				recordPush(item) {
+					const creationId = Number(item?.creationId);
+					if (!Number.isFinite(creationId) || creationId <= 0) return Promise.resolve();
+					PartySettings.addPartyPushedCreation(creationId);
+					return this.syncState();
+				},
+				unrecordPush(creationId) {
+					const id = Number(creationId);
+					if (!Number.isFinite(id) || id <= 0) return Promise.resolve();
+					PartySettings.removePartyPushedCreation(id);
+					return this.syncState();
 				}
 			};
 
@@ -1946,6 +2189,7 @@
 					queue._persist();
 					queue._emit();
 					PartyLog.write(`Transform failed: ${item.id} — ${item.error}`);
+					void PartyGroup.syncState();
 				},
 				async start(itemId, queue) {
 					const item = queue.items.find((it) => it.id === itemId);
@@ -2007,6 +2251,7 @@
 						item.updatedAt = new Date().toISOString();
 						queue._persist();
 						PartyLog.write(`Transform started: creation ${creationId}`);
+						void PartyGroup.syncState();
 						this._poll(itemId, queue, 0);
 					} catch (err) {
 						this._fail(queue, item, err?.message || String(err));
@@ -2038,6 +2283,7 @@
 								queue._emit();
 								PartyLog.write(`Transform ready: creation ${current.creationId}`);
 								void PartyGroup.assignCreation(current.creationId);
+								void PartyGroup.syncState();
 								if (PartySettings.getAutoReviewReady()) {
 									PartyApp.openReview(current.id);
 								}
@@ -2125,6 +2371,94 @@
 				_emit() {
 					if (typeof this._onChange === 'function') this._onChange();
 				},
+				applyPushedFromGroup(pushedEntries) {
+					if (!Array.isArray(pushedEntries) || !pushedEntries.length) return;
+					const byId = new Map();
+					for (const raw of pushedEntries) {
+						const id = Number(raw?.creation_id ?? raw?.creationId);
+						if (!Number.isFinite(id) || id <= 0) continue;
+						byId.set(id, typeof raw?.pushed_at === 'string' ? raw.pushed_at : null);
+					}
+					let changed = false;
+					for (const item of this.items) {
+						const cid = Number(item.creationId);
+						if (!byId.has(cid)) continue;
+						const pushedAt = byId.get(cid);
+						if (item.status !== 'committed') {
+							item.status = 'committed';
+							item.updatedAt = new Date().toISOString();
+							changed = true;
+						}
+						if (pushedAt && item.pushedAt !== pushedAt) {
+							item.pushedAt = pushedAt;
+							changed = true;
+						}
+					}
+					if (changed) {
+						this._persist();
+						this._emit();
+					}
+				},
+				applyQueueFromGroup(queueEntries) {
+					if (!Array.isArray(queueEntries) || !queueEntries.length) return;
+					const byId = new Map();
+					for (const raw of queueEntries) {
+						const id = Number(raw?.creation_id ?? raw?.creationId);
+						if (!Number.isFinite(id) || id <= 0) continue;
+						byId.set(id, raw);
+					}
+					let changed = false;
+					for (const item of this.items) {
+						if (item.status === 'committed') continue;
+						const cid = Number(item.creationId);
+						if (!byId.has(cid)) continue;
+						const remote = byId.get(cid);
+						const remoteStatus = String(remote?.status || '').toLowerCase();
+						if (
+							remoteStatus
+							&& remoteStatus !== 'committed'
+							&& item.status !== remoteStatus
+						) {
+							item.status = remoteStatus;
+							changed = true;
+						}
+						if (remoteStatus === 'failed' && typeof remote?.error === 'string' && remote.error) {
+							if (item.error !== remote.error) {
+								item.error = remote.error;
+								changed = true;
+							}
+						}
+						const updatedAt = typeof remote?.updated_at === 'string' ? remote.updated_at : null;
+						if (updatedAt && item.updatedAt !== updatedAt) {
+							item.updatedAt = updatedAt;
+							changed = true;
+						}
+					}
+					if (changed) {
+						this._persist();
+						this._emit();
+					}
+				},
+				getGroupQueueSnapshot() {
+					const out = [];
+					const seen = new Set();
+					for (const item of this.items) {
+						if (item.status === 'committed') continue;
+						const creationId = Number(item.creationId);
+						if (!Number.isFinite(creationId) || creationId <= 0 || seen.has(creationId)) continue;
+						seen.add(creationId);
+						const entry = {
+							creation_id: creationId,
+							status: item.status,
+							updated_at: item.updatedAt || new Date().toISOString()
+						};
+						if (item.status === 'failed' && item.error) {
+							entry.error = String(item.error).slice(0, 280);
+						}
+						out.push(entry);
+					}
+					return out;
+				},
 				_persist() {
 					const active = this.items
 						.filter((it) => it.status !== 'committed')
@@ -2202,6 +2536,7 @@
 					this._persist();
 					this._emit();
 					PartyLog.write(`Redo queued: ${id}`);
+					void PartyGroup.syncState();
 					void PartyTransform.start(id, this);
 				},
 				push(id) {
@@ -2209,21 +2544,28 @@
 					if (!item || item.status !== 'ready') return false;
 					item.status = 'committed';
 					item.updatedAt = new Date().toISOString();
+					item.pushedAt = item.updatedAt;
 					if (this.selectedId === id) this.selectedId = null;
 					this._persist();
 					this._emit();
 					PartyLog.write(`Pushed: ${id}`);
+					void PartyGroup.recordPush(item);
 					return true;
 				},
 				discard(id) {
 					const idx = this.items.findIndex((it) => it.id === id);
 					if (idx === -1) return false;
+					const item = this.items[idx];
+					const wasCommitted = item.status === 'committed';
+					const creationId = item.creationId;
 					PartyTransform.cancel(id);
 					this.items.splice(idx, 1);
 					if (this.selectedId === id) this.selectedId = null;
 					this._persist();
 					this._emit();
 					PartyLog.write(`Discarded: ${id}`);
+					if (wasCommitted && creationId) void PartyGroup.unrecordPush(creationId);
+					else if (creationId) void PartyGroup.syncState();
 					return true;
 				},
 				activeItems() {
@@ -2652,7 +2994,7 @@
 
 			// --- party/app ---
 			const PartyApp = {
-				init() {
+				async init() {
 					PartyPage.bindLandscapeLock();
 					PartyLog.init(document.getElementById('party-log-list'));
 					PartySettings.load();
@@ -2700,6 +3042,12 @@
 					PartyNav.init(els);
 					PartyCapture.init(els, (photo) => this.onPhotoCaptured(photo));
 					PartyQueue.init(() => PartyUI.renderAll());
+					if (PartySettings.getGroupCreationId()) {
+						await PartySettings.loadFromGroup();
+					} else {
+						PartyQueue.applyQueueFromGroup(PartySettings.getPartyQueueForGroup());
+						PartyQueue.applyPushedFromGroup(PartySettings.getPartyPushedForGroup());
+					}
 
 					const method = PartyCapture.getMethod(PartySettings.getCaptureMethodId());
 					void PartyCapture.setMethod(method);
@@ -2753,9 +3101,9 @@
 			};
 
 			if (document.readyState === 'loading') {
-				document.addEventListener('DOMContentLoaded', () => PartyApp.init());
+				document.addEventListener('DOMContentLoaded', () => { void PartyApp.init(); });
 			} else {
-				PartyApp.init();
+				void PartyApp.init();
 			}
 		})();
 	</script>
