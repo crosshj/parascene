@@ -1,0 +1,175 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Engagement — {{periodLabel}}</title>
+<meta name="darkreader-lock" />
+{{!styleBlock}}
+<p class="small"><a href=".">Up one folder</a></p>
+<h1>Engagement — {{periodLabel}}</h1>
+<p class="small">Generated: {{generatedAt}} · Window: {{windowDays}} US East partition days ({{fromDay}} → {{toDay}})</p>
+<div class="copy-row">
+	<button type="button" id="copy-engagement-summary">Copy summary JSON</button>
+	<button type="button" id="copy-engagement-raw">Copy raw JSON</button>
+	<span class="copy-status" id="copy-engagement-status" aria-live="polite"></span>
+</div>
+
+<section class="grid">
+	<div class="card">
+		<div class="small">Avg traffic DAU</div>
+		<div>{{avgTrafficDau}}</div>
+		<div class="small">{{priorTrafficDauNote}}</div>
+	</div>
+	<div class="card">
+		<div class="small">Avg logged-in visit DAU</div>
+		<div>{{avgVisitDau}}</div>
+		<div class="small">{{priorVisitDauNote}}</div>
+	</div>
+	<div class="card">
+		<div class="small">Avg action DAU</div>
+		<div>{{avgActionDau}}</div>
+		<div class="small">{{priorActionDauNote}}</div>
+	</div>
+	<div class="card">
+		<div class="small">Latest WAU (action)</div>
+		<div>{{latestActionWau}}</div>
+		<div class="small">Week {{latestWeekLabel}}</div>
+	</div>
+	<div class="card">
+		<div class="small">Visit MAU (logged-in)</div>
+		<div>{{visitMau}}</div>
+	</div>
+	<div class="card">
+		<div class="small">Action MAU</div>
+		<div>{{actionMau}}</div>
+	</div>
+	<div class="card">
+		<div class="small">Stickiness (avg visit DAU ÷ visit MAU)</div>
+		<div>{{stickinessVisit}}</div>
+	</div>
+	<div class="card">
+		<div class="small">Paid users (snapshot)</div>
+		<div>{{paidUsers}}</div>
+	</div>
+</section>
+
+<section>
+	<h2>How the data sources fit together</h2>
+	<ul>
+		<li><strong>Visit pulse</strong> — passive traffic: unique visitors, logged-in vs anonymous, session hits and active
+			time blocks.</li>
+		<li><strong>User growth story</strong> — logged-in core actions, cohort retention, churn, share→try funnel.</li>
+		<li><strong>User taste profile</strong> — follows and chat depth; included in leader breakdown for this window.</li>
+	</ul>
+	<p class="small">Weeks use <strong>Monday-start US East</strong> partition days (same as pulse). Partial weeks at window
+		edges are labeled with their actual day range.</p>
+</section>
+
+<section>
+	<h2>Story</h2>
+	<ul>{{!observationsHtml}}</ul>
+</section>
+
+<section>
+	<h2>Weekly rollup</h2>
+	<p class="small">WAU = unique users in the ISO-style week (Mon–Sun US East). WoW compares to the prior week in this
+		window.</p>
+	{{!weeklyTableHtml}}
+</section>
+
+<section>
+	<h2>Daily heartbeat</h2>
+	<p class="small">Dashed lines indicate linear regression trend (slope per day).</p>
+	<h3>Traffic (pulse)</h3>
+	<p class="small">All unique visitors per day (includes anonymous). For logged-in engagement only, see Engagement depth
+		below. Vertical ticks mark week boundaries (Monday US East).</p>
+	<div class="chart-wrap">
+		{{!trafficDauChartHtml}}
+	</div>
+	<h3>Logged-in engagement</h3>
+	<p class="small">Logged-in visit DAU (pulse) vs action DAU (core events).</p>
+	<div class="chart-wrap">
+		{{!engagedDauChartHtml}}
+	</div>
+	{{!dailyTableHtml}}
+</section>
+
+<section>
+	<h2>Engagement depth</h2>
+	<p class="small">Logged-in users only — anonymous pulse traffic is excluded.</p>
+	<div class="grid">
+		<div class="card">
+			<div class="small">Avg day activation (action DAU ÷ visit DAU)</div>
+			<div>{{avgActivationRate}}</div>
+		</div>
+		<div class="card">
+			<div class="small">Avg core actions / action DAU / day</div>
+			<div>{{avgActionsPerActionDau}}</div>
+		</div>
+		<div class="card">
+			<div class="small">Avg hits / logged-in visit DAU / day</div>
+			<div>{{avgHitsPerVisitDau}}</div>
+		</div>
+		<div class="card">
+			<div class="small">Avg 15m blocks / logged-in visit DAU / day</div>
+			<div>{{avgBlocksPerVisitDau}}</div>
+		</div>
+	</div>
+	<h3>Activation</h3>
+	<p class="small">Percent of logged-in visit DAU with at least one core action that day.</p>
+	<div class="chart-wrap">
+		{{!activationChartHtml}}
+	</div>
+	<h3>Session depth</h3>
+	<p class="small">Avg active 15m blocks per logged-in visit DAU (pulse ranges).</p>
+	<div class="chart-wrap">
+		{{!sessionDepthChartHtml}}
+	</div>
+</section>
+
+<section>
+	<h2>Retention &amp; return visits</h2>
+	<div class="grid">
+		<div class="card">
+			<div class="small">Returning logged-in (2+ days)</div>
+			<div>{{returningVisitUsers}} <span class="small">({{returningVisitRate}} of visit MAU)</span></div>
+		</div>
+		<div class="card">
+			<div class="small">Avg active days (logged-in, visit MAU)</div>
+			<div>{{avgVisitDaysPerMau}}</div>
+		</div>
+	</div>
+</section>
+
+<section>
+	<h2>Signup funnel (window cohort)</h2>
+	{{!funnelTableHtml}}
+</section>
+
+<section>
+	<h2>Retention by signup week</h2>
+	<p class="small">W+1 / W+4 = share of that week’s signups with any core action in the following week / four weeks later.</p>
+	{{!cohortTableHtml}}
+</section>
+
+<section>
+	<h2>Churn snapshot</h2>
+	<p>{{churnParagraph}}</p>
+</section>
+
+<section>
+	<h2>Share + try-flow (window)</h2>
+	{{!shareTryTableHtml}}
+	<p class="small">Anonymous top-of-funnel from growth story. Scoped to this report window.</p>
+</section>
+
+<section>
+	<h2>Core action mix</h2>
+	{{!actionMixTableHtml}}
+</section>
+
+<section>
+	<h2>Top engagers (window)</h2>
+	<p class="small">Core actions plus follows and chat (taste-profile categories). Mutations shown separately.</p>
+	{{!leaderTableHtml}}
+</section>
+
+{{!copyScriptHtml}}

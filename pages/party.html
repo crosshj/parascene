@@ -24,31 +24,43 @@
 			box-sizing: border-box;
 		}
 
-		html.party-page-root,
-		body.party-page {
-			height: 100%;
-			min-height: 100%;
+		/* Match chat: layout viewport (100dvh / height:100%) can be taller than the visible
+		   area on mobile — sync --party-vh from visualViewport in PartyPage.bindViewportSync. */
+		html.party-page-root {
+			height: 100vh;
+			height: 100dvh;
+			min-height: 100dvh;
+			height: var(--party-vh, 100dvh);
+			min-height: var(--party-vh, 100dvh);
 			overflow: hidden;
-			font-family: var(--font-family);
+			max-width: 100%;
 		}
 
 		body.party-page {
 			margin: 0;
+			height: 100%;
+			min-height: 0;
+			width: 100%;
+			display: flex;
+			flex-direction: column;
+			overflow: hidden;
+			overscroll-behavior: none;
 			background: var(--bg);
 			color: var(--text);
+			font-family: var(--font-family);
 			-webkit-font-smoothing: antialiased;
+			-webkit-text-size-adjust: 100%;
 		}
 
 		body.party-page main.party-page-outer {
+			flex: 1 1 auto;
 			width: 100%;
 			max-width: none;
 			margin: 0;
 			padding: 0;
-			height: 100dvh;
-			height: var(--party-vh, 100dvh);
+			min-height: 0;
 			display: flex;
 			flex-direction: column;
-			min-height: 0;
 			box-sizing: border-box;
 		}
 
@@ -1076,7 +1088,7 @@
 		<div class="party-route" id="party-app">
 			<div class="party-frame" id="party-frame">
 				<header class="chat-page-topbar" aria-label="Party navigation">
-					<a href="/create" class="chat-page-back party-topbar-back" id="party-topbar-back" aria-label="Back to create">
+					<a href="#" class="chat-page-back party-topbar-back" id="party-topbar-back" aria-label="Back to create">
 						<span class="chat-page-back-icon" aria-hidden="true">&lt;-</span>
 					</a>
 					<h1 class="chat-page-title" id="party-topbar-title">Party Mode</h1>
@@ -1860,16 +1872,22 @@
 						if (e.target === els.pickerOverlay) this.close();
 					});
 				},
-				close() {
+				isOpen() {
+					return Boolean(this.els.pickerOverlay && !this.els.pickerOverlay.hidden);
+				},
+				close(opts = {}) {
+					if (!this.isOpen()) return;
 					if (this.els.pickerOverlay) this.els.pickerOverlay.hidden = true;
 					if (this.els.pickerStatus) {
 						this.els.pickerStatus.hidden = true;
 						this.els.pickerStatus.textContent = '';
 					}
+					PartyHistory.onClose('picker', opts);
 				},
 				async open() {
 					if (!this.els.pickerOverlay) return;
 					this.els.pickerOverlay.hidden = false;
+					PartyHistory.onOpen('picker');
 					if (this.els.pickerList) this.els.pickerList.replaceChildren();
 					if (this.els.pickerEmpty) this.els.pickerEmpty.hidden = true;
 					if (this.els.pickerStatus) {
@@ -1965,6 +1983,82 @@
 				}
 			};
 
+			// --- party/history (browser + header back for overlays/settings) ---
+			const PartyHistory = {
+				_pushed: /** @type {Record<string, boolean>} */ ({}),
+				_suppressPopstate: 0,
+				init() {
+					window.addEventListener(
+						'popstate',
+						(e) => {
+							if (this._suppressPopstate > 0) {
+								this._suppressPopstate -= 1;
+								return;
+							}
+							if (this._dismissTopmost({ fromPopstate: true })) {
+								e.stopImmediatePropagation();
+							}
+						},
+						true
+					);
+				},
+				getTopLayer() {
+					if (PartyCapture.isOverlayOpen()) return 'capture';
+					if (PartyUI.isReviewOpen()) return 'review';
+					if (PartyPicker.isOpen()) return 'picker';
+					if (PartyNav.view === 'settings') return 'settings';
+					return 'main';
+				},
+				updateTopbarLabel() {
+					const back = PartyNav.els?.topbarBack;
+					if (!back) return;
+					const onMain = this.getTopLayer() === 'main';
+					back.setAttribute('aria-label', onMain ? 'Back to create' : 'Back to party');
+				},
+				onOpen(layer) {
+					if (this._pushed[layer]) return;
+					const prev =
+						typeof history.state === 'object' && history.state !== null ? history.state : {};
+					history.pushState({ ...prev, psParty: layer }, '', window.location.href);
+					this._pushed[layer] = true;
+					this.updateTopbarLabel();
+				},
+				onClose(layer, opts = {}) {
+					if (!this._pushed[layer]) return;
+					this._pushed[layer] = false;
+					this.updateTopbarLabel();
+					if (opts.fromPopstate) return;
+					this._suppressPopstate += 1;
+					history.back();
+				},
+				_dismissTopmost(opts = {}) {
+					const fromPopstate = opts.fromPopstate === true;
+					if (PartyCapture.isOverlayOpen()) {
+						void PartyCapture.closeCaptureOverlay({ fromPopstate });
+						return true;
+					}
+					if (PartyUI.isReviewOpen()) {
+						PartyQueue.selectedId = null;
+						PartyUI.renderAll();
+						this.onClose('review', { fromPopstate });
+						return true;
+					}
+					if (PartyPicker.isOpen()) {
+						PartyPicker.close({ fromPopstate });
+						return true;
+					}
+					if (PartyNav.view === 'settings') {
+						PartyNav.closeSettings(false, { fromPopstate });
+						return true;
+					}
+					return false;
+				},
+				goBack() {
+					if (this._dismissTopmost({ fromPopstate: false })) return;
+					window.location.href = '/create';
+				}
+			};
+
 			// --- party/nav ---
 			const PartyNav = {
 				view: 'main',
@@ -1980,9 +2074,8 @@
 						}
 					});
 					els.topbarBack?.addEventListener('click', (e) => {
-						if (this.view !== 'settings') return;
 						e.preventDefault();
-						this.closeSettings(false);
+						PartyHistory.goBack();
 					});
 				},
 				openSettings() {
@@ -1991,8 +2084,10 @@
 					PartyUI.populateSettingsForm();
 					PartyUI.updateLinkedPartyHint();
 					this.setView('settings');
+					PartyHistory.onOpen('settings');
 				},
-				closeSettings(save) {
+				closeSettings(save, opts = {}) {
+					if (this.view !== 'settings') return;
 					if (save) {
 						PartySettings.readDraftFromForm(this.els.settingsForm);
 						if (!PartySettings.applyDraft()) return;
@@ -2002,6 +2097,7 @@
 						PartySettings.cancelDraft();
 					}
 					this.setView('main');
+					PartyHistory.onClose('settings', opts);
 				},
 				setView(view) {
 					this.view = view;
@@ -2013,19 +2109,72 @@
 					}
 					if (this.els.topbarActions) this.els.topbarActions.hidden = isSettings;
 					if (this.els.topbarBack) {
-						this.els.topbarBack.href = isSettings ? '#' : '/create';
-						this.els.topbarBack.setAttribute(
-							'aria-label',
-							isSettings ? 'Back to party' : 'Back to create'
-						);
+						this.els.topbarBack.href = '#';
 					}
 					document.body.classList.toggle('party-page--settings-open', isSettings);
+					PartyHistory.updateTopbarLabel();
 				}
 			};
 
 			// --- party/page ---
 			const PartyPage = {
 				_landscapeLockTried: false,
+				_viewportCleanup: null,
+				applyRootHeightFromVisualViewport() {
+					const el = document.documentElement;
+					if (!el.classList.contains('party-page-root')) return;
+					const vv = window.visualViewport;
+					const ih =
+						typeof window.innerHeight === 'number' && Number.isFinite(window.innerHeight)
+							? window.innerHeight
+							: 0;
+					let h = 0;
+					if (vv && typeof vv.height === 'number' && Number.isFinite(vv.height) && vv.height > 0) {
+						h = ih > 0 ? Math.min(vv.height, ih) : vv.height;
+					} else if (ih > 0) {
+						h = ih;
+					}
+					if (h > 0) {
+						el.style.setProperty('--party-vh', `${h}px`);
+					} else {
+						el.style.removeProperty('--party-vh');
+					}
+				},
+				teardownViewportSync() {
+					if (typeof this._viewportCleanup === 'function') {
+						this._viewportCleanup();
+						this._viewportCleanup = null;
+					}
+				},
+				bindViewportSync() {
+					this.teardownViewportSync();
+					const onViewport = () => this.applyRootHeightFromVisualViewport();
+					if (window.visualViewport) {
+						window.visualViewport.addEventListener('resize', onViewport);
+						window.visualViewport.addEventListener('scroll', onViewport);
+					}
+					window.addEventListener('resize', onViewport);
+					window.addEventListener('orientationchange', onViewport);
+					this.applyRootHeightFromVisualViewport();
+					requestAnimationFrame(() => {
+						requestAnimationFrame(() => {
+							this.applyRootHeightFromVisualViewport();
+						});
+					});
+					this._viewportCleanup = () => {
+						try {
+							document.documentElement.style.removeProperty('--party-vh');
+						} catch {
+							// ignore
+						}
+						if (window.visualViewport) {
+							window.visualViewport.removeEventListener('resize', onViewport);
+							window.visualViewport.removeEventListener('scroll', onViewport);
+						}
+						window.removeEventListener('resize', onViewport);
+						window.removeEventListener('orientationchange', onViewport);
+					};
+				},
 				/** Best-effort landscape lock (PWA / some Android browsers). */
 				tryLockLandscape() {
 					if (this._landscapeLockTried) return;
@@ -3186,12 +3335,15 @@
 						if (strong) strong.textContent = 'Starting camera…';
 					}
 					if (this.els.liveVideo) this.els.liveVideo.hidden = true;
+					PartyHistory.onOpen('capture');
 					await this.startLive();
 				},
-				async closeCaptureOverlay() {
+				async closeCaptureOverlay(opts = {}) {
+					if (!this.isOverlayOpen()) return;
 					if (this.els.captureOverlay) this.els.captureOverlay.hidden = true;
 					document.body.classList.remove('party-page--capture-open');
 					await this.stopLive();
+					PartyHistory.onClose('capture', opts);
 				},
 				/** White flash over viewfinder — in-app shutter only */
 				playShutterFlash() {
@@ -3338,6 +3490,10 @@
 			// --- party/ui ---
 			const PartyUI = {
 				els: {},
+				isReviewOpen() {
+					const overlay = this.els.reviewOverlay;
+					return Boolean(overlay && !overlay.hidden);
+				},
 				init(els) {
 					this.els = els;
 					els.redoBtn?.addEventListener('click', () => PartyApp.onRedo());
@@ -3518,6 +3674,8 @@
 			// --- party/app ---
 			const PartyApp = {
 				async init() {
+					PartyHistory.init();
+					PartyPage.bindViewportSync();
 					PartyPage.bindLandscapeLock();
 					PartyLog.init(document.getElementById('party-log-list'));
 					PartySettings.load();
@@ -3571,6 +3729,7 @@
 					};
 					PartyUI.init(els);
 					PartyNav.init(els);
+					PartyHistory.updateTopbarLabel();
 					PartyPicker.init(els);
 					PartyCapture.init(els, (photo) => this.onPhotoCaptured(photo));
 					PartyQueue.init(() => PartyUI.renderAll());
@@ -3593,13 +3752,19 @@
 					PartyUI.renderAll();
 				},
 				openReview(id) {
+					const hadReview = PartyUI.isReviewOpen();
 					const item = PartyQueue.select(id);
 					if (!item) return;
 					PartyUI.renderAll();
+					if (!hadReview && PartyUI.isReviewOpen()) {
+						PartyHistory.onOpen('review');
+					}
 				},
-				closeReview() {
+				closeReview(opts = {}) {
+					if (!PartyUI.isReviewOpen()) return;
 					PartyQueue.selectedId = null;
 					PartyUI.renderAll();
+					PartyHistory.onClose('review', opts);
 				},
 				onRedo() {
 					const id = PartyQueue.selectedId;

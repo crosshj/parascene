@@ -238,6 +238,17 @@ th {
 	color: var(--report-heading-muted);
 }
 
+tr.week-head td {
+	background: var(--report-surface);
+	border-bottom: 1px solid var(--report-border);
+	color: var(--report-heading-muted);
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: .02em;
+	padding-top: 14px;
+	text-transform: none;
+}
+
 .col-end {
 	text-align: right;
 }
