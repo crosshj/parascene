@@ -626,6 +626,75 @@
 		.party-detail-media {
 			width: 100%;
 			flex: 0 0 auto;
+			position: relative;
+		}
+
+		.party-detail-nav {
+			position: relative;
+			height: 0;
+			z-index: 4;
+			pointer-events: none;
+		}
+
+		.party-detail-nav[hidden] {
+			display: none !important;
+		}
+
+		.party-detail-nav-btn {
+			position: absolute;
+			top: 0;
+			transform: translateY(-50%);
+			width: 42px;
+			height: 42px;
+			border: 1px solid rgba(255, 255, 255, 0.28);
+			border-radius: 50%;
+			background: rgba(0, 0, 0, 0.54);
+			color: rgba(255, 255, 255, 0.94);
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			padding: 0;
+			cursor: pointer;
+			pointer-events: auto;
+			touch-action: manipulation;
+		}
+
+		.party-detail-nav-btn svg {
+			display: block;
+			width: 18px;
+			height: 18px;
+			stroke: currentColor;
+			stroke-width: 2.2;
+			stroke-linecap: round;
+			stroke-linejoin: round;
+			fill: none;
+			pointer-events: none;
+		}
+
+		.party-detail-nav-btn--prev {
+			left: 10px;
+		}
+
+		.party-detail-nav-btn--next {
+			right: 10px;
+		}
+
+		.party-detail-nav-btn:hover {
+			background: rgba(0, 0, 0, 0.66);
+		}
+
+		.party-detail-nav-btn:active {
+			transform: translateY(-50%) scale(0.97);
+		}
+
+		.party-detail-nav-btn:focus-visible {
+			outline: 2px solid var(--focus, #6366f1);
+			outline-offset: 2px;
+		}
+
+		.party-detail-nav-btn:disabled {
+			opacity: 0.35;
+			cursor: default;
 		}
 
 		.party-detail-frame {
@@ -1361,6 +1430,14 @@
 						<span>Working</span>
 					</div>
 					<img id="party-review-result" alt="Transformed photo" hidden />
+				</div>
+				<div class="party-detail-nav" id="party-review-nav" hidden>
+					<button type="button" class="party-detail-nav-btn party-detail-nav-btn--prev" id="party-review-prev" aria-label="Previous photo">
+						<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M14.5 6.5L9 12l5.5 5.5" /></svg>
+					</button>
+					<button type="button" class="party-detail-nav-btn party-detail-nav-btn--next" id="party-review-next" aria-label="Next photo">
+						<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9.5 6.5L15 12l-5.5 5.5" /></svg>
+					</button>
 				</div>
 				<div class="party-detail-frame party-detail-frame--source">
 					<span class="party-detail-label">Source</span>
@@ -3795,6 +3872,19 @@
 				committedItems() {
 					return this.items.filter((it) => it.status === 'committed');
 				},
+				reviewNavigationItems() {
+					const active = this.activeItems();
+					const sent = this.committedItems().slice().reverse();
+					return [...active, ...sent];
+				},
+				reviewStep(direction) {
+					const list = this.reviewNavigationItems();
+					if (list.length <= 1 || !this.selectedId) return null;
+					const idx = list.findIndex((it) => it.id === this.selectedId);
+					if (idx < 0) return null;
+					const next = list[(idx + direction + list.length) % list.length];
+					return next?.id || null;
+				},
 				processingCount() {
 					return this.items.filter((it) => it.status === 'processing').length;
 				},
@@ -4115,6 +4205,14 @@
 					els.dismissBtn?.addEventListener('click', () => PartyApp.closeReview());
 					els.heldDismissBtn?.addEventListener('click', () => PartyApp.closeReview());
 					els.gpSyncBtn?.addEventListener('click', () => { void PartyApp.onSyncGooglePhotos(); });
+					els.reviewPrev?.addEventListener('click', (e) => {
+						e.preventDefault();
+						PartyApp.onReviewStep(-1);
+					});
+					els.reviewNext?.addEventListener('click', (e) => {
+						e.preventDefault();
+						PartyApp.onReviewStep(1);
+					});
 				},
 				_fillCaptureMethodSelect(sel, selectedId) {
 					if (!sel) return;
@@ -4321,7 +4419,15 @@
 						this.els.pushBtn.disabled = isProcessing;
 						this.els.pushBtn.textContent = 'Push';
 					}
+					this.updateReviewNav();
 					PartyPage.updateViewportScrollMode();
+				},
+				updateReviewNav() {
+					const nav = this.els.reviewNav;
+					if (!nav) return;
+					const list = PartyQueue.reviewNavigationItems();
+					const show = list.length > 1 && Boolean(PartyQueue.selectedId);
+					nav.hidden = !show;
 				},
 				renderAll() {
 					this.renderPendingGrid();
@@ -4380,6 +4486,9 @@
 						reviewSourceMissing: document.getElementById('party-review-source-missing'),
 						reviewWorking: document.getElementById('party-review-working'),
 						reviewResult: document.getElementById('party-review-result'),
+						reviewNav: document.getElementById('party-review-nav'),
+						reviewPrev: document.getElementById('party-review-prev'),
+						reviewNext: document.getElementById('party-review-next'),
 						actionsQueue: document.getElementById('party-detail-actions-queue'),
 						actionsHeld: document.getElementById('party-detail-actions-held'),
 						actionsPushed: document.getElementById('party-detail-actions-pushed'),
@@ -4429,6 +4538,12 @@
 					if (!hadReview && PartyUI.isReviewOpen()) {
 						PartyHistory.onOpen('review');
 					}
+				},
+				onReviewStep(direction) {
+					if (!PartyUI.isReviewOpen()) return;
+					const nextId = PartyQueue.reviewStep(direction);
+					if (!nextId) return;
+					this.openReview(nextId);
 				},
 				closeReview(opts = {}) {
 					if (!PartyUI.isReviewOpen()) return;
