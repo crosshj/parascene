@@ -449,6 +449,11 @@
 			color: var(--accent-fg, #fff);
 		}
 
+		.party-btn--primary.party-btn--busy::after {
+			border-color: rgba(255, 255, 255, 0.25);
+			border-top-color: #fff;
+		}
+
 		.party-btn--ghost {
 			background: transparent;
 			color: var(--party-muted);
@@ -755,6 +760,31 @@
 			background: transparent;
 			color: var(--party-danger);
 			border: 1px solid var(--party-danger);
+		}
+
+		.party-btn--busy {
+			position: relative;
+			color: transparent;
+			pointer-events: none;
+		}
+
+		.party-btn--busy::after {
+			content: '';
+			position: absolute;
+			left: 50%;
+			top: 50%;
+			width: 16px;
+			height: 16px;
+			margin: -8px 0 0 -8px;
+			border: 2px solid rgba(255, 255, 255, 0.2);
+			border-top-color: #fff;
+			border-radius: 50%;
+			animation: party-spin 0.8s linear infinite;
+		}
+
+		.party-btn--danger.party-btn--busy::after {
+			border-color: rgba(248, 113, 113, 0.25);
+			border-top-color: var(--party-danger);
 		}
 
 		/* Portrait/gyro queue badge — re-enable with PORTRAIT/GYRO block in party.html script */
@@ -2740,6 +2770,7 @@
 				},
 				/** Backfill metadata for items saved before exact 16:9 normalization */
 				async hydrateItemMeta(item) {
+					if (item.status === 'held') return;
 					if (!item.width || !item.height || item.aspectRatio !== PARTY_ASPECT_RATIO) {
 						const img = await this._loadImage(item.originalDataUrl);
 						item.width = img.naturalWidth;
@@ -3544,7 +3575,12 @@
 						void PartyTransform.start(item.id, this);
 						return true;
 					} catch (err) {
-						PartyLog.write(`Transform prep failed: ${err?.message || err}`);
+						const msg = err?.message ? String(err.message) : 'Transform prep failed';
+						item.error = msg;
+						item.updatedAt = new Date().toISOString();
+						this._persist();
+						this._emit();
+						PartyLog.write(`Transform prep failed: ${msg}`);
 						return false;
 					}
 				},
@@ -3555,6 +3591,7 @@
 							|| it.status === 'processing'
 							|| it.status === 'ready'
 							|| it.status === 'committed'
+							|| it.status === 'failed'
 						);
 					});
 					if (!item) return null;
@@ -3891,6 +3928,55 @@
 					const overlay = this.els.reviewOverlay;
 					return Boolean(overlay && !overlay.hidden);
 				},
+				discardButtonFor(item) {
+					if (item?.status === 'held') return this.els.heldDiscardBtn;
+					if (item?.status === 'committed') return this.els.pushedDiscardBtn;
+					return this.els.discardBtn;
+				},
+				setDiscardBusy(item, busy) {
+					const active = this.discardButtonFor(item);
+					const buttons = [
+						this.els.heldDiscardBtn,
+						this.els.discardBtn,
+						this.els.pushedDiscardBtn
+					];
+					for (const btn of buttons) {
+						if (!btn) continue;
+						btn.disabled = busy;
+						btn.classList.toggle('party-btn--busy', busy && btn === active);
+						if (!busy && btn.dataset.defaultLabel) {
+							btn.textContent = btn.dataset.defaultLabel;
+						}
+					}
+					if (busy && active && !active.dataset.defaultLabel) {
+						active.dataset.defaultLabel = active.textContent || 'Discard';
+						active.textContent = '';
+					}
+					if (this.els.heldDismissBtn) this.els.heldDismissBtn.disabled = busy;
+					if (this.els.transformBtn) this.els.transformBtn.disabled = busy || PartyQueue.isSourceMissingOnDevice(item);
+					if (this.els.dismissBtn) this.els.dismissBtn.disabled = busy;
+					if (this.els.cancelBtn) this.els.cancelBtn.disabled = busy;
+				},
+				setTransformBusy(item, busy) {
+					const btn = this.els.transformBtn;
+					if (btn) {
+						btn.classList.toggle('party-btn--busy', busy);
+						if (busy) {
+							if (!btn.dataset.defaultLabel) {
+								btn.dataset.defaultLabel = btn.textContent || 'Transform';
+							}
+							btn.textContent = '';
+							btn.disabled = true;
+						} else {
+							if (btn.dataset.defaultLabel) {
+								btn.textContent = btn.dataset.defaultLabel;
+							}
+							btn.disabled = item ? PartyQueue.isSourceMissingOnDevice(item) : false;
+						}
+					}
+					if (this.els.heldDiscardBtn) this.els.heldDiscardBtn.disabled = busy;
+					if (this.els.heldDismissBtn) this.els.heldDismissBtn.disabled = busy;
+				},
 				init(els) {
 					this.els = els;
 					els.redoBtn?.addEventListener('click', () => PartyApp.onRedo());
@@ -4031,11 +4117,9 @@
 							|| item.status === 'processing'
 							|| item.status === 'ready'
 							|| item.status === 'committed'
+							|| item.status === 'failed'
 						) {
 							PartyApp.openReview(item.id);
-						} else if (item.status === 'failed') {
-							PartyQueue.redo(item.id);
-							PartyUI.renderAll();
 						}
 					});
 					return btn;
@@ -4049,6 +4133,7 @@
 						|| item.status === 'processing'
 						|| item.status === 'ready'
 						|| item.status === 'committed'
+						|| item.status === 'failed'
 					);
 					if (!reviewable) {
 						overlay.hidden = true;
@@ -4058,11 +4143,23 @@
 					const isHeld = item.status === 'held';
 					const isProcessing = item.status === 'processing';
 					const isPushed = item.status === 'committed';
+					const isFailed = item.status === 'failed';
 					const sourceMissing = PartyQueue.isSourceMissingOnDevice(item);
+					const heldDefaultNote = 'Not landscape — transform to run the party look, or discard.';
 					overlay.hidden = false;
 					document.body.classList.add('party-page--review-open');
 					if (this.els.reviewHeldNote) {
-						this.els.reviewHeldNote.hidden = !isHeld;
+						if (isHeld || (isFailed && item.error)) {
+							this.els.reviewHeldNote.hidden = false;
+							this.els.reviewHeldNote.textContent = isHeld && item.error
+								? item.error
+								: isFailed && item.error
+									? item.error
+									: heldDefaultNote;
+						} else {
+							this.els.reviewHeldNote.hidden = true;
+							this.els.reviewHeldNote.textContent = heldDefaultNote;
+						}
 					}
 					if (this.els.reviewSourceMissing) {
 						this.els.reviewSourceMissing.hidden = isHeld || !sourceMissing;
@@ -4089,7 +4186,9 @@
 					if (this.els.actionsHeld) this.els.actionsHeld.hidden = !isHeld;
 					if (this.els.actionsQueue) this.els.actionsQueue.hidden = isHeld || isPushed;
 					if (this.els.actionsPushed) this.els.actionsPushed.hidden = !isPushed;
-					if (this.els.transformBtn) this.els.transformBtn.disabled = sourceMissing;
+					if (this.els.transformBtn) {
+						this.els.transformBtn.disabled = sourceMissing || isProcessing;
+					}
 					if (this.els.redoBtn) this.els.redoBtn.disabled = isProcessing || sourceMissing;
 					if (this.els.pushBtn) {
 						this.els.pushBtn.disabled = isProcessing;
@@ -4219,10 +4318,27 @@
 				async onTransform() {
 					const id = PartyQueue.selectedId;
 					if (!id) return;
-					if (this.els.transformBtn) this.els.transformBtn.disabled = true;
-					const ok = await PartyQueue.startTransform(id);
-					if (!ok && this.els.transformBtn) this.els.transformBtn.disabled = false;
-					PartyUI.renderAll();
+					const item = PartyQueue.selectedItem();
+					if (!item || item.status !== 'held') return;
+
+					PartyUI.setTransformBusy(item, true);
+					try {
+						item.error = undefined;
+						const ok = await PartyQueue.startTransform(id);
+						if (!ok) {
+							PartyUI.renderAll();
+							return;
+						}
+						PartyUI.renderAll();
+					} catch (err) {
+						item.error = err?.message ? String(err.message) : 'Transform failed';
+						item.updatedAt = new Date().toISOString();
+						PartyQueue._persist();
+						PartyLog.write(`Transform failed: ${item.error}`);
+						PartyUI.renderAll();
+					} finally {
+						PartyUI.setTransformBusy(item, false);
+					}
 				},
 				async onSyncGooglePhotos() {
 					const btn = PartyUI.els.gpSyncBtn;
@@ -4292,46 +4408,56 @@
 					const id = PartyQueue.selectedId;
 					if (!id) return;
 					const item = PartyQueue.selectedItem();
-					const msg = item?.status === 'committed'
+					if (!item) return;
+					const wasCommitted = item.status === 'committed';
+					const msg = wasCommitted
 						? 'Remove this photo from Pushed? It will also be removed from your Google Photos party album when possible.'
-						: item?.status === 'held'
+						: item.status === 'held'
 							? 'Discard this photo?'
-							: item?.status === 'processing'
+							: item.status === 'processing'
 								? 'Discard this photo while it is still processing?'
 								: 'Discard this photo? It will be removed from the queue.';
 					if (!window.confirm(msg)) return;
 
-					if (
-						item?.status === 'committed'
-						&& item.googlePhotosMediaItemId
-						&& item.googlePhotosAlbumId
-					) {
-						try {
-							await PartyGooglePhotos.removeFromAlbum(
-								item.googlePhotosAlbumId,
-								item.googlePhotosMediaItemId
-							);
-							PartyGooglePhotos.unmarkCreationSynced(item.creationId);
-							PartyLog.write('Removed from Google Photos album');
-						} catch (err) {
-							PartyLog.write(`Google Photos remove skipped: ${err?.message || err}`);
-						}
-					} else if (wasCommitted && item.creationId) {
-						const record = PartyGooglePhotos.getSyncRecord(item.creationId);
-						if (record?.albumId && record?.mediaItemId) {
+					PartyUI.setDiscardBusy(item, true);
+					try {
+						if (
+							wasCommitted
+							&& item.googlePhotosMediaItemId
+							&& item.googlePhotosAlbumId
+						) {
 							try {
-								await PartyGooglePhotos.removeFromAlbum(record.albumId, record.mediaItemId);
+								await PartyGooglePhotos.removeFromAlbum(
+									item.googlePhotosAlbumId,
+									item.googlePhotosMediaItemId
+								);
 								PartyGooglePhotos.unmarkCreationSynced(item.creationId);
 								PartyLog.write('Removed from Google Photos album');
 							} catch (err) {
 								PartyLog.write(`Google Photos remove skipped: ${err?.message || err}`);
 							}
+						} else if (wasCommitted && item.creationId) {
+							const record = PartyGooglePhotos.getSyncRecord(item.creationId);
+							if (record?.albumId && record?.mediaItemId) {
+								try {
+									await PartyGooglePhotos.removeFromAlbum(record.albumId, record.mediaItemId);
+									PartyGooglePhotos.unmarkCreationSynced(item.creationId);
+									PartyLog.write('Removed from Google Photos album');
+								} catch (err) {
+									PartyLog.write(`Google Photos remove skipped: ${err?.message || err}`);
+								}
+							}
 						}
-					}
 
-					PartyQueue.discard(id);
-					this.closeReview();
-					PartyUI.renderAll();
+						PartyQueue.discard(id);
+						void PartyGroup.syncState();
+						this.closeReview();
+						PartyUI.renderAll();
+					} catch (err) {
+						PartyLog.write(`Discard failed: ${err?.message || err}`);
+					} finally {
+						PartyUI.setDiscardBusy(item, false);
+					}
 				}
 			};
 
