@@ -1299,6 +1299,7 @@ body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-topb
 body.chat-page .chat-page-messages img.chat-doom-avatar,
 body.chat-page .chat-page-messages img.chat-doom-poster,
 body.chat-page .chat-page-messages img.feed-card-img,
+body.chat-page .chat-page-messages img.feed-card-group-img,
 body.chat-page .chat-page-messages img.comment-avatar-img,
 body.chat-page .chat-page-messages img.challenge-pane-hero-image {
 	display: block !important;

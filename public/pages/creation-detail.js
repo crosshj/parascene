@@ -1229,7 +1229,34 @@ async function loadCreation() {
 		return promise;
 	}
 
-	function showHeroImage(nextUrl) {
+	function waitForImgElementReady(img) {
+		if (!(img instanceof HTMLImageElement)) return Promise.resolve(false);
+		const finish = () => {
+			if (typeof img.decode === 'function') {
+				return img.decode().then(() => true).catch(() => true);
+			}
+			return Promise.resolve(true);
+		};
+		if (img.complete && img.naturalWidth > 0) {
+			return finish();
+		}
+		return new Promise((resolve) => {
+			const done = (ok) => {
+				img.removeEventListener('load', onLoad);
+				img.removeEventListener('error', onError);
+				resolve(ok);
+			};
+			const onLoad = () => {
+				finish().then(() => done(true));
+			};
+			const onError = () => done(false);
+			img.addEventListener('load', onLoad);
+			img.addEventListener('error', onError);
+		});
+	}
+
+	function showHeroImage(nextUrl, options = {}) {
+		const deferBackground = options.deferBackground === true;
 		const url = String(nextUrl || '').trim();
 		if (!url) return;
 		const currentUrl = String(heroImageDisplayedUrl() || '').trim();
@@ -1265,7 +1292,9 @@ async function loadCreation() {
 			if (imageEl.complete && imageEl.naturalWidth > 0) {
 				applyLoadedImageState();
 			} else {
-				setHeroBackgroundUrl(url);
+				if (!deferBackground) {
+					setHeroBackgroundUrl(url);
+				}
 				ensureHeroImageVisible();
 			}
 			return;
@@ -1288,7 +1317,9 @@ async function loadCreation() {
 			if (imageEl.complete && imageEl.naturalWidth > 0) {
 				applyLoadedImageState();
 			} else {
-				setHeroBackgroundUrl(url);
+				if (!deferBackground) {
+					setHeroBackgroundUrl(url);
+				}
 				ensureHeroImageVisible();
 			}
 		});
@@ -1320,7 +1351,7 @@ async function loadCreation() {
 		return true;
 	}
 
-	function mountGroupHeroCarousel(sources, initialSourceId) {
+	async function mountGroupHeroCarousel(sources, initialSourceId) {
 		const usable = (Array.isArray(sources) ? sources : [])
 			.filter((source) => source && typeof source === 'object')
 			.map((source) => ({
@@ -1341,15 +1372,27 @@ async function loadCreation() {
 			img.decoding = 'async';
 			img.loading = 'eager';
 			img.src = source.url;
-			if (source.id === initialId) img.classList.add('is-active');
 			groupHeroImageBySourceId.set(source.id, img);
 			stack.appendChild(img);
 		}
 		groupHeroStackEl = stack;
 		imageWrapper.appendChild(stack);
+
+		let activeId = initialId;
+		if (!groupHeroImageBySourceId.has(activeId)) {
+			activeId = usable[0]?.id;
+		}
+		const activeImg = groupHeroImageBySourceId.get(activeId);
+		const activeReady = activeImg ? await waitForImgElementReady(activeImg) : false;
+		if (!isCurrentLoad()) return false;
+		if (!activeReady) {
+			teardownGroupHeroCarousel();
+			return false;
+		}
+
 		imageWrapper.classList.add('group-carousel-active');
 		imageEl.style.display = 'none';
-		if (!setGroupHeroCarouselActive(initialId)) {
+		if (!setGroupHeroCarouselActive(activeId)) {
 			const first = usable[0];
 			setGroupHeroCarouselActive(first.id);
 		}
@@ -1582,7 +1625,14 @@ async function loadCreation() {
 		}
 
 		if (status === 'completed' && mediaType === 'image' && creation.url) {
-			showHeroImage(creation.url);
+			const groupPayloadEarly =
+				meta?.group && typeof meta.group === 'object' ? meta.group : null;
+			const groupSourceCountEarly = Array.isArray(groupPayloadEarly?.source_creations)
+				? groupPayloadEarly.source_creations.length
+				: 0;
+			const pendingGroupCarousel =
+				groupPayloadEarly?.kind === 'group_creations' && groupSourceCountEarly > 1;
+			showHeroImage(creation.url, { deferBackground: pendingGroupCarousel });
 		} else if (status === 'completed' && mediaType === 'video' && creation.video_url) {
 			clearHeroImage();
 			const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
@@ -1854,33 +1904,6 @@ async function loadCreation() {
 			if (coverIndex > 0) {
 				const [coverSource] = groupSources.splice(coverIndex, 1);
 				groupSources.unshift(coverSource);
-			}
-		}
-		const allGroupSourceIds = groupSources
-			.map((source) => Number(source?.id))
-			.filter((id) => Number.isFinite(id) && id > 0);
-		if (allGroupSourceIds.length > 0) {
-			const liveTitleById = new Map();
-			await Promise.allSettled(
-				allGroupSourceIds.map(async (id) => {
-					try {
-						const res = await fetch(`/api/create/images/${id}`, lineageFetchInit);
-						if (!res.ok) return;
-						const payload = await res.json().catch(() => null);
-						const liveTitle = typeof payload?.title === 'string' ? payload.title.trim() : '';
-						if (liveTitle) liveTitleById.set(Number(id), liveTitle);
-					} catch {
-						// ignore per-source title fetch errors
-					}
-				})
-			);
-			for (const source of groupSources) {
-				const sourceId = Number(source?.id);
-				if (!Number.isFinite(sourceId) || sourceId <= 0) continue;
-				const liveTitle = liveTitleById.get(sourceId);
-				const fallbackTitle = typeof source?.rawTitle === 'string' ? source.rawTitle.trim() : '';
-				const titleBase = liveTitle || fallbackTitle || groupTitleForSourceLabels;
-				source.title = `${titleBase} (${sourceId})`;
 			}
 		}
 		const hasGroupHeroNavigation = isGroupCreation && groupSources.length > 1;
@@ -4101,7 +4124,7 @@ async function loadCreation() {
 				const coverLoaded = await preloadHeroImageUrl(coverUrl);
 				if (!isCurrentLoad() || !coverLoaded?.ok) return;
 
-				const mounted = mountGroupHeroCarousel(groupSources, Number(cover.id));
+				const mounted = await mountGroupHeroCarousel(groupSources, Number(cover.id));
 				groupCarouselEnabled = mounted;
 				if (!mounted) return;
 

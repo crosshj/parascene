@@ -2391,11 +2391,38 @@ body.creation-detail-page main>section:first-of-type {
 	max-height: none;
 }
 
-.creation-detail-image-wrapper.group-carousel-active {
+/* Legacy 1:1 groups: square carousel box. Extended-ratio groups keep their hero layout below. */
+.creation-detail-image-wrapper.group-carousel-active:not(.hero-layout-landscape):not(.hero-layout-portrait) {
 	width: min(92vw, 80vh, 1100px);
 	max-width: 90%;
 	aspect-ratio: 1 / 1;
 	max-height: 80vh;
+}
+
+.creation-detail-image-wrapper.hero-layout-landscape.group-carousel-active {
+	width: min(100%, 1408px, calc(var(--hero-max-height, 80vh) * var(--hero-aspect-w, 16) / var(--hero-aspect-h, 9)));
+	max-width: min(100%, 1408px, calc(var(--hero-max-height, 80vh) * var(--hero-aspect-w, 16) / var(--hero-aspect-h, 9)));
+	max-height: var(--hero-max-height, 80vh);
+	aspect-ratio: var(--hero-aspect-ratio, 16 / 9);
+	height: auto;
+	margin-inline: auto;
+	display: block;
+}
+
+.creation-detail-image-wrapper.hero-layout-portrait.group-carousel-active {
+	width: min(92vw, calc(var(--hero-max-height, 80vh) * var(--hero-aspect-w, 4) / var(--hero-aspect-h, 5)), 1100px);
+	max-width: 90%;
+	max-height: var(--hero-max-height, 80vh);
+	aspect-ratio: var(--hero-aspect-ratio);
+	height: auto;
+	margin-inline: auto;
+	display: block;
+}
+
+.creation-detail-image-wrapper.hero-layout-landscape.group-carousel-active:not(.image-loading):not(.image-error),
+.creation-detail-image-wrapper.hero-layout-portrait.group-carousel-active:not(.image-loading):not(.image-error) {
+	aspect-ratio: var(--hero-aspect-ratio);
+	max-height: var(--hero-max-height, 80vh);
 }
 
 .creation-detail-image-wrapper.hero-layout-landscape > video.creation-detail-image,
@@ -2534,12 +2561,19 @@ body.creation-detail-page main>section:first-of-type {
 	height: 100%;
 	max-width: 100%;
 	max-height: 100%;
-	object-fit: contain;
+	object-fit: cover;
 	border-radius: 8px;
 	box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
 	opacity: 0;
 	visibility: hidden;
 	transition: opacity 0.14s ease;
+}
+
+.creation-detail-image-wrapper.hero-layout-landscape.group-carousel-active .creation-detail-group-hero-image,
+.creation-detail-image-wrapper.hero-layout-portrait.group-carousel-active .creation-detail-group-hero-image {
+	object-fit: unset;
+	border-radius: 0;
+	box-shadow: none;
 }
 
 .creation-detail-group-hero-image.is-active {
