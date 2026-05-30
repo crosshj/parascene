@@ -16,6 +16,9 @@ const PHOTOS_ALBUM_REMOVE_URL = (albumId) =>
 const MAX_ALBUM_TITLE_LEN = 80;
 
 const DEFAULT_ALBUM_TITLE = "Parascene";
+const PARTY_ALBUM_PREFIX = "Parascene — ";
+const PARTY_ALBUM_PREFIX_RE = /^parascene\s*[—–-]\s*/i;
+const PARTY_ALBUM_DEFAULT_NAME = "Party Mode";
 const STATE_TTL_SEC = 10 * 60;
 
 function normalizeReturnUrl(raw) {
@@ -150,6 +153,22 @@ function normalizeAlbumTitle(raw) {
 	return title.slice(0, MAX_ALBUM_TITLE_LEN);
 }
 
+function stripPartyAlbumPrefix(title) {
+	const t = typeof title === "string" ? title.trim() : "";
+	if (!t) return "";
+	return t.replace(PARTY_ALBUM_PREFIX_RE, "").trim();
+}
+
+function formatPartyAlbumTitle(partyName) {
+	const bare = stripPartyAlbumPrefix(partyName) || PARTY_ALBUM_DEFAULT_NAME;
+	return normalizeAlbumTitle(`${PARTY_ALBUM_PREFIX}${bare}`) || normalizeAlbumTitle(`${PARTY_ALBUM_PREFIX}${PARTY_ALBUM_DEFAULT_NAME}`);
+}
+
+function partyAlbumLegacyTitle(partyName) {
+	const bare = stripPartyAlbumPrefix(partyName) || PARTY_ALBUM_DEFAULT_NAME;
+	return normalizeAlbumTitle(bare) || PARTY_ALBUM_DEFAULT_NAME;
+}
+
 async function fetchJson(url, options = {}) {
 	const res = await fetch(url, options);
 	const text = await res.text().catch(() => "");
@@ -267,6 +286,42 @@ async function findOrCreateAlbumByTitle({ accessToken, title }) {
 	const albums = await listAppCreatedAlbums({ accessToken });
 	const match = albums.find((row) => row.albumTitle === wanted);
 	if (match) return match;
+	return createAlbum({ accessToken, title: wanted });
+}
+
+async function patchAlbumTitle({ accessToken, albumId, title }) {
+	const albumTitle = normalizeAlbumTitle(title);
+	const id = typeof albumId === "string" ? albumId.trim() : "";
+	if (!id || !albumTitle) throw new Error("Invalid album patch");
+	const url = `${PHOTOS_ALBUMS_URL}/${encodeURIComponent(id)}?updateMask=title`;
+	const { ok, data, text } = await fetchJson(url, {
+		method: "PATCH",
+		headers: {
+			Authorization: `Bearer ${accessToken}`,
+			"Content-Type": "application/json"
+		},
+		body: JSON.stringify({ title: albumTitle })
+	});
+	if (!ok) {
+		const msg = data?.error?.message || text || "Album rename failed";
+		throw new Error(String(msg));
+	}
+	return { albumId: id, albumTitle };
+}
+
+async function findOrCreatePartyAlbumByTitle({ accessToken, partyName }) {
+	const wanted = formatPartyAlbumTitle(partyName);
+	const legacyWanted = partyAlbumLegacyTitle(partyName);
+	const albums = await listAppCreatedAlbums({ accessToken });
+	const exact = albums.find((row) => row.albumTitle === wanted);
+	if (exact) return exact;
+	const legacy = albums.find((row) => row.albumTitle === legacyWanted);
+	if (legacy) {
+		if (legacy.albumTitle !== wanted) {
+			return patchAlbumTitle({ accessToken, albumId: legacy.albumId, title: wanted });
+		}
+		return legacy;
+	}
 	return createAlbum({ accessToken, title: wanted });
 }
 
@@ -634,9 +689,9 @@ export default function createGooglePhotosRoutes({ queries, storage }) {
 			let albumId = "";
 			let albumTitle = DEFAULT_ALBUM_TITLE;
 			if (albumTitleRaw) {
-				const album = await findOrCreateAlbumByTitle({
+				const album = await findOrCreatePartyAlbumByTitle({
 					accessToken,
-					title: albumTitleRaw
+					partyName: albumTitleRaw
 				});
 				albumId = album.albumId;
 				albumTitle = album.albumTitle;
@@ -701,7 +756,7 @@ export default function createGooglePhotosRoutes({ queries, storage }) {
 			(typeof meta?.party?.name === "string" && meta.party.name.trim()) ||
 			(typeof meta?.party?.settings?.partyName === "string" && meta.party.settings.partyName.trim()) ||
 			(typeof row.title === "string" && row.title.trim()) ||
-			DEFAULT_ALBUM_TITLE;
+			PARTY_ALBUM_DEFAULT_NAME;
 
 		const pushedRaw = Array.isArray(meta?.party?.pushed) ? meta.party.pushed : [];
 		const pushed = filterPartyPushedToGroupSources(meta, normalizePartyPushedEntries(pushedRaw));
@@ -709,7 +764,7 @@ export default function createGooglePhotosRoutes({ queries, storage }) {
 
 		try {
 			const { accessToken } = await getGooglePhotosAccessForUser(user, queries);
-			const album = await findOrCreateAlbumByTitle({ accessToken, title: partyName });
+			const album = await findOrCreatePartyAlbumByTitle({ accessToken, partyName });
 			const albumMedia = await searchAlbumMediaItems({ accessToken, albumId: album.albumId });
 
 			const inAlbumByCreationId = new Map();

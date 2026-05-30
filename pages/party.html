@@ -2889,7 +2889,7 @@
 					if (pending > 0) {
 						return `${pending} pushed photo${pending === 1 ? '' : 's'} not in Google Photos yet. Sync uploads missing items and removes extras.`;
 					}
-					return `Sync matches Google Photos to Pushed in “${this.partyAlbumTitle()}”.`;
+					return `Sync matches Google Photos to Pushed in “${this.partyName()}”.`;
 				},
 				async fetchStatus(force = false) {
 					if (!force && this._status) return this._status;
@@ -2906,18 +2906,17 @@
 					}
 					return this._status;
 				},
-				partyAlbumTitle() {
-					const name = PartySettings.getPartyName();
-					return name || 'Party Mode';
+				partyName() {
+					return PartySettings.getPartyName() || 'Party Mode';
 				},
-				async uploadCreation(creationId, albumTitle) {
+				async uploadCreation(creationId, partyName) {
 					const res = await fetch('/api/google-photos/upload', {
 						method: 'POST',
 						credentials: 'include',
 						headers: { 'Content-Type': 'application/json' },
 						body: JSON.stringify({
 							creationId: Number(creationId),
-							albumTitle: String(albumTitle || '').trim() || undefined
+							albumTitle: String(partyName || '').trim() || undefined
 						})
 					});
 					const data = await res.json().catch(() => ({}));
@@ -2961,10 +2960,7 @@
 						method: 'POST',
 						credentials: 'include',
 						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({
-							groupId,
-							albumTitle: this.partyAlbumTitle()
-						})
+						body: JSON.stringify({ groupId })
 					});
 					const data = await res.json().catch(() => ({}));
 					if (!res.ok) {
@@ -2983,7 +2979,7 @@
 						removed: Number(data?.removed) || 0,
 						uploadFailed: Number(data?.uploadFailed) || 0,
 						pushedCount: Number(data?.pushedCount) || 0,
-						albumTitle: data?.albumTitle || this.partyAlbumTitle(),
+						albumTitle: this.partyName(),
 						albumId: data?.albumId || null
 					};
 				}
@@ -4275,9 +4271,9 @@
 
 						let googlePhotosMeta = null;
 						if (status.configured && status.connected) {
-							const albumTitle = PartyGooglePhotos.partyAlbumTitle();
-							googlePhotosMeta = await PartyGooglePhotos.uploadCreation(item.creationId, albumTitle);
-							PartyLog.write(`Google Photos: ${albumTitle}`);
+							const partyName = PartyGooglePhotos.partyName();
+							googlePhotosMeta = await PartyGooglePhotos.uploadCreation(item.creationId, partyName);
+							PartyLog.write(`Google Photos: ${partyName}`);
 						}
 
 						const ok = PartyQueue.push(id, googlePhotosMeta);
