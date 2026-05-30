@@ -834,6 +834,45 @@ export default function createCreateRoutes({ queries, storage }) {
 		);
 	}
 
+	function collectPartyGroupDeletionIds(meta, groupId) {
+		const ids = new Set();
+		const gid = Number(groupId);
+		if (Number.isFinite(gid) && gid > 0) ids.add(gid);
+		for (const id of getGroupSourceCreationIds(meta)) ids.add(id);
+		const party = meta?.party && typeof meta.party === "object" ? meta.party : {};
+		for (const entry of [
+			...(Array.isArray(party.queue) ? party.queue : []),
+			...(Array.isArray(party.pushed) ? party.pushed : [])
+		]) {
+			const cid = Number(entry?.creation_id ?? entry?.creationId);
+			if (Number.isFinite(cid) && cid > 0) ids.add(cid);
+		}
+		return [...ids];
+	}
+
+	async function deleteOwnedCreationForParty(user, creationId, queries) {
+		const id = Number(creationId);
+		if (!Number.isFinite(id) || id <= 0) return { ok: true, skipped: true };
+		const image = await queries.selectCreatedImageById.get(id, user.id);
+		if (!image) return { ok: true, skipped: true };
+		const meta = parseMeta(image.meta);
+		const status = image.status || "completed";
+		if (status === "creating") {
+			const timeoutAt = meta?.timeout_at ? new Date(meta.timeout_at).getTime() : NaN;
+			if (!Number.isFinite(timeoutAt) || Date.now() <= timeoutAt) {
+				return { ok: false, error: "Cannot delete while a photo is still processing" };
+			}
+		}
+		const markResult = await queries.markCreatedImageUnavailable?.run(id, user.id);
+		if (!markResult || markResult.changes === 0) {
+			return { ok: false, error: "Failed to delete a party photo" };
+		}
+		if (queries.deleteFeedItemByCreatedImageId?.run) {
+			await queries.deleteFeedItemByCreatedImageId.run(id);
+		}
+		return { ok: true, deleted: id };
+	}
+
 	function filterPartyPushedToGroupSources(meta, pushedEntries) {
 		const sourceIds = getGroupSourceCreationIds(meta);
 		if (!sourceIds.size) return pushedEntries;
@@ -3524,6 +3563,49 @@ export default function createCreateRoutes({ queries, storage }) {
 			return res.json({ parties });
 		} catch (error) {
 			return res.status(500).json({ error: "Failed to list party groups" });
+		}
+	});
+
+	// DELETE /api/party/groups/:id - Delete a party group and all grouped source creations.
+	router.delete("/api/party/groups/:id", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		try {
+			const groupId = Number(req.params.id);
+			if (!Number.isFinite(groupId) || groupId <= 0) {
+				return res.status(400).json({ error: "Invalid party id" });
+			}
+			const groupRow = await queries.selectCreatedImageById.get(groupId, user.id);
+			if (!groupRow) {
+				return res.status(404).json({ error: "Party not found" });
+			}
+			const meta = parseMeta(groupRow.meta) || {};
+			if (meta?.party?.mode !== true || meta?.group?.kind !== "group_creations") {
+				return res.status(400).json({ error: "Not a party group" });
+			}
+
+			const idsToDelete = collectPartyGroupDeletionIds(meta, groupId);
+			const sourceIds = idsToDelete.filter((id) => id !== groupId);
+			const deleted = [];
+
+			for (const id of sourceIds) {
+				const result = await deleteOwnedCreationForParty(user, id, queries);
+				if (!result.ok) {
+					return res.status(400).json({ error: result.error || "Failed to delete party photos" });
+				}
+				if (result.deleted) deleted.push(result.deleted);
+			}
+
+			const groupResult = await deleteOwnedCreationForParty(user, groupId, queries);
+			if (!groupResult.ok) {
+				return res.status(400).json({ error: groupResult.error || "Failed to delete party group" });
+			}
+			if (groupResult.deleted) deleted.push(groupResult.deleted);
+
+			return res.json({ ok: true, deleted_creation_ids: deleted });
+		} catch (error) {
+			return res.status(500).json({ error: "Failed to delete party" });
 		}
 	});
 

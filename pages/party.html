@@ -16,6 +16,8 @@
 			--party-ok: var(--color-green-fg, #3dd68c);
 			--party-amber: var(--color-amber, #f5c542);
 			--party-danger: var(--color-red-fg, #ff6b6b);
+			--party-border: var(--border, rgba(255, 255, 255, 0.12));
+			--party-surface-raised: var(--surface, rgba(255, 255, 255, 0.04));
 			--party-dock-offset: calc(72px + env(safe-area-inset-bottom));
 		}
 
@@ -103,9 +105,36 @@
 			font-feature-settings: 'liga' 1, 'clig' 1, 'calt' 1;
 		}
 
+		body.party-page .chat-page-topbar-actions .feed-card-action-more {
+			align-self: auto;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			min-width: 40px;
+			min-height: 40px;
+			margin: 0;
+			padding: 8px;
+			border: none;
+			border-radius: 50%;
+			background: transparent;
+			color: var(--text-muted, var(--party-muted));
+			font-weight: inherit;
+			filter: none;
+			transform: none;
+			cursor: pointer;
+			-webkit-tap-highlight-color: transparent;
+		}
+
+		body.party-page .chat-page-topbar-actions .feed-card-action-more:hover:not(:disabled) {
+			color: var(--text);
+			background: color-mix(in srgb, var(--text) 6%, transparent);
+			filter: none;
+			transform: none;
+		}
+
 		body.party-page .chat-page-topbar-actions .feed-card-action-more svg {
-			width: 26px;
-			height: 26px;
+			width: 20px;
+			height: 20px;
 		}
 
 		.party-scroll {
@@ -115,11 +144,16 @@
 			overflow-y: auto;
 			-webkit-overflow-scrolling: touch;
 			overscroll-behavior: contain;
-			padding: 12px 0 16px;
+			padding: 0 0 16px;
+		}
+
+		.party-grid-section {
+			display: flex;
+			flex-direction: column;
 		}
 
 		.party-grid-section + .party-grid-section {
-			margin-top: 16px;
+			margin-top: 28px;
 		}
 
 		.party-grid-head {
@@ -127,8 +161,8 @@
 			display: flex;
 			flex-direction: row;
 			align-items: center;
-			margin: 0 0 6px;
-			padding: 4px 16px 0;
+			margin: 0 0 8px;
+			padding: 0 16px;
 			box-sizing: border-box;
 			background: none;
 			border: none;
@@ -164,27 +198,16 @@
 			}
 		}
 
-		.party-grid-empty {
-			margin: 0 16px;
-			font-size: 0.8rem;
-			color: var(--party-muted);
-			padding: 16px 12px;
-			border: 1px dashed color-mix(in srgb, var(--border) 80%, transparent);
-			border-radius: 10px;
-			text-align: center;
-		}
-
-		.party-queue-empty {
+		.party-section-empty {
 			margin: 0;
-			padding: 28px 24px 20px;
-			font-size: 0.875rem;
+			padding: 16px 16px 4px;
+			font-size: 0.8125rem;
 			line-height: 1.45;
-			color: var(--text-muted);
+			color: var(--party-muted);
 			text-align: center;
 		}
 
-		.party-grid-empty[hidden],
-		.party-queue-empty[hidden] {
+		.party-section-empty[hidden] {
 			display: none !important;
 		}
 
@@ -520,22 +543,6 @@
 			display: block;
 		}
 
-		.party-grid-item[data-status='processing'] {
-			box-shadow: inset 0 0 0 2px var(--party-amber);
-		}
-
-		.party-grid-item[data-status='ready'] {
-			box-shadow: inset 0 0 0 2px var(--party-ok);
-		}
-
-		.party-grid-item[data-status='held'] {
-			box-shadow: inset 0 0 0 2px var(--party-amber);
-		}
-
-		.party-grid-item[data-selected='true'] {
-			box-shadow: inset 0 0 0 2px var(--accent);
-		}
-
 		.party-grid-item-badge {
 			position: absolute;
 			left: 4px;
@@ -565,10 +572,6 @@
 
 		.party-grid-item--sent {
 			opacity: 0.82;
-		}
-
-		.party-grid-item--sent[data-selected='true'] {
-			opacity: 1;
 		}
 
 		.party-queue-spinner {
@@ -722,6 +725,11 @@
 			color: #fff;
 			background: rgba(0, 0, 0, 0.55);
 			pointer-events: none;
+		}
+
+		.party-detail-frame--source .party-detail-label {
+			top: auto;
+			bottom: 10px;
 		}
 
 		.party-detail-frame img {
@@ -1033,6 +1041,33 @@
 			line-height: 1.45;
 		}
 
+		#party-edit-prompt {
+			min-height: 220px;
+		}
+
+		.party-edit-delete-wrap {
+			padding: 28px 16px 8px;
+		}
+
+		body.party-page .party-edit-delete-btn.btn-outlined {
+			align-self: stretch;
+			width: 100%;
+			box-sizing: border-box;
+			margin: 0;
+			padding: 11px 16px;
+			border-radius: 10px;
+			font-size: 0.875rem;
+			font-weight: 500;
+			filter: none;
+			transform: none;
+		}
+
+		body.party-page .party-edit-delete-btn.btn-outlined:hover:not(:disabled),
+		body.party-page .party-edit-delete-btn.btn-outlined:active:not(:disabled) {
+			filter: none;
+			transform: none;
+		}
+
 		.party-field-row {
 			display: flex;
 			align-items: flex-start;
@@ -1072,115 +1107,165 @@
 			line-height: 1.4;
 		}
 
-		.party-picker-overlay {
-			position: fixed;
-			inset: 0;
-			z-index: 120;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			padding: 24px 16px;
-			background: var(--bg);
-			overflow: hidden;
-		}
-
-		.party-picker-overlay[hidden] {
-			display: none !important;
-		}
-
-		body.party-page.party-page--picker-open {
-			overflow: hidden;
-		}
-
-		.party-picker {
+		.party-parties-section {
 			display: flex;
 			flex-direction: column;
-			width: 100%;
-			max-width: 400px;
-			max-height: min(78vh, 520px);
-			background: var(--party-surface);
-			border: 1px solid var(--party-border);
-			border-radius: 14px;
-			overflow: hidden;
-			box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+			gap: 14px;
+			padding: 0 0 24px;
+			box-sizing: border-box;
 		}
 
-		.party-picker-head {
-			flex-shrink: 0;
-			display: flex;
-			align-items: center;
-			justify-content: space-between;
-			gap: 12px;
-			padding: 14px 16px;
-			border-bottom: 1px solid var(--party-border);
-		}
-
-		.party-picker-head h2 {
+		.party-parties-intro {
 			margin: 0;
-			font-size: 0.95rem;
-			font-weight: 600;
-		}
-
-		.party-picker-close {
-			padding: 6px 10px;
-			border: none;
-			border-radius: 6px;
-			background: transparent;
+			padding: 8px 16px 2px;
+			font-size: 0.8125rem;
 			color: var(--party-muted);
-			font: inherit;
-			font-size: 0.82rem;
-			cursor: pointer;
+			line-height: 1.5;
 		}
 
-		.party-picker-panel {
-			flex: 1;
-			min-height: 0;
-			display: flex;
-			flex-direction: column;
-			align-items: stretch;
-			justify-content: center;
-			padding: 12px 16px 16px;
-			overflow: hidden;
-		}
-
+		.party-view--parties .party-picker-body,
 		.party-picker-body {
-			flex: 0 1 auto;
+			flex: 1 1 auto;
 			width: 100%;
-			max-height: min(52vh, 400px);
+			max-height: none;
 			overflow-y: auto;
 			-webkit-overflow-scrolling: touch;
 			display: flex;
 			flex-direction: column;
-			gap: 8px;
+			gap: 0;
+			border-top: 1px solid color-mix(in srgb, var(--party-border) 100%, transparent);
 		}
 
 		.party-picker-item {
 			display: flex;
 			align-items: center;
-			gap: 12px;
+			gap: 0;
 			width: 100%;
-			padding: 12px;
-			border: 1px solid var(--party-border);
-			border-radius: 10px;
-			background: var(--party-surface-raised);
+			border: none;
+			border-bottom: 1px solid color-mix(in srgb, var(--party-border) 100%, transparent);
+			border-radius: 0;
+			background: transparent;
 			color: inherit;
+			box-sizing: border-box;
+		}
+
+		.party-picker-item[data-selected='true'] {
+			background: color-mix(in srgb, var(--party-ok) 6%, transparent);
+		}
+
+		body.party-page .party-picker-item-select,
+		body.party-page .party-picker-item-edit {
+			margin: 0;
+			border: none;
+			background: transparent;
+			color: inherit;
+			font-weight: inherit;
+			filter: none;
+			transform: none;
+			-webkit-tap-highlight-color: transparent;
+			touch-action: manipulation;
+		}
+
+		body.party-page .party-picker-item-select {
+			align-self: stretch;
+			flex: 1 1 auto;
+			min-width: 0;
+			display: flex;
+			align-items: center;
+			gap: 14px;
+			padding: 14px 0 14px 16px;
 			text-align: left;
 			cursor: pointer;
 			font: inherit;
 		}
 
-		.party-picker-item[data-selected='true'] {
-			border-color: var(--party-ok);
-			box-shadow: inset 0 0 0 1px var(--party-ok);
+		body.party-page .party-picker-item-edit {
+			align-self: center;
+			flex: 0 0 auto;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			width: 44px;
+			height: 44px;
+			margin: 0 6px 0 0;
+			padding: 0;
+			border-radius: 6px;
+			color: var(--party-muted);
+			cursor: pointer;
+			font: inherit;
 		}
 
-		.party-picker-item-thumb {
-			flex: 0 0 52px;
-			width: 52px;
-			height: 52px;
+		body.party-page .party-picker-item-select:hover,
+		body.party-page .party-picker-item-select:active,
+		body.party-page .party-picker-item-edit:hover,
+		body.party-page .party-picker-item-edit:active {
+			filter: none;
+			transform: none;
+		}
+
+		.party-picker-item-select:focus-visible,
+		.party-picker-item-edit:focus-visible {
+			outline: 2px solid var(--focus, var(--party-ok));
+			outline-offset: -2px;
+		}
+
+		.party-picker-item-edit:hover:not(:disabled) {
+			color: var(--text);
+			background: color-mix(in srgb, var(--text) 6%, transparent);
+		}
+
+		.party-picker-item-edit svg {
+			display: block;
+			width: 18px;
+			height: 18px;
+		}
+
+		body.party-page button.party-picker-item.party-picker-item--new {
+			display: flex;
+			align-items: center;
+			gap: 14px;
+			width: 100%;
+			padding: 14px 16px;
+			border: none;
+			border-top: 1px solid color-mix(in srgb, var(--party-border) 100%, transparent);
+			border-radius: 0;
+			background: transparent;
+			color: inherit;
+			text-align: left;
+			cursor: pointer;
+			font: inherit;
+			font-weight: inherit;
+			filter: none;
+			transform: none;
+			align-self: auto;
+		}
+
+		body.party-page button.party-picker-item.party-picker-item--new:hover,
+		body.party-page button.party-picker-item.party-picker-item--new:active {
+			filter: none;
+			transform: none;
+			background: color-mix(in srgb, var(--text) 3%, transparent);
+		}
+
+		.party-picker-item-thumb,
+		.party-picker-item-thumb--new {
+			flex: 0 0 104px;
+			width: 104px;
+			height: 58px;
 			border-radius: 6px;
 			overflow: hidden;
-			background: var(--party-surface-raised);
+			background: color-mix(in srgb, var(--text) 6%, transparent);
+		}
+
+		.party-picker-item-thumb--new {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			font-size: 1.125rem;
+			font-weight: 500;
+			line-height: 1;
+			color: var(--party-muted);
+			border: none;
 		}
 
 		.party-picker-item-thumb img {
@@ -1195,20 +1280,50 @@
 			display: flex;
 			flex-direction: column;
 			gap: 4px;
+			padding: 2px 0;
 		}
 
 		.party-picker-item-name {
-			font-size: 0.88rem;
+			font-size: 0.9375rem;
 			font-weight: 600;
+			line-height: 1.3;
 			overflow: hidden;
 			text-overflow: ellipsis;
 			white-space: nowrap;
 		}
 
 		.party-picker-item-meta {
-			font-size: 0.72rem;
+			font-size: 0.75rem;
 			color: var(--party-muted);
-			line-height: 1.35;
+			line-height: 1.4;
+		}
+
+		.party-switch-party-wrap {
+			padding: 12px 16px 20px;
+		}
+
+		body.party-page .party-switch-party-btn.btn-outlined {
+			align-self: stretch;
+			width: 100%;
+			box-sizing: border-box;
+			margin: 0;
+			padding: 11px 16px;
+			border-radius: 10px;
+			border-color: color-mix(in srgb, var(--border) 88%, transparent);
+			background: transparent;
+			color: var(--party-muted);
+			font-size: 0.875rem;
+			font-weight: 500;
+			filter: none;
+			transform: none;
+		}
+
+		.party-switch-party-btn.btn-outlined:hover:not(:disabled) {
+			border-color: color-mix(in srgb, var(--party-muted) 45%, var(--border));
+			color: color-mix(in srgb, var(--party-muted) 88%, var(--text));
+			background: color-mix(in srgb, var(--text) 4%, transparent);
+			filter: none;
+			transform: none;
 		}
 
 		.party-picker-empty,
@@ -1322,14 +1437,58 @@
 					</div>
 				</header>
 
-				<div class="party-view party-view--main" id="party-view-main">
+				<div class="party-view party-view--parties" id="party-view-parties">
+					<div class="party-scroll">
+						<section class="party-parties-section" aria-label="Your parties">
+							<p class="party-parties-intro">Select a party to open its queue, or create a new one.</p>
+							<div class="party-picker-body" id="party-picker-list"></div>
+							<p class="party-picker-status" id="party-picker-status" hidden></p>
+						</section>
+					</div>
+				</div>
+
+				<div class="party-view party-view--party-edit" id="party-view-party-edit" hidden>
+					<div class="party-scroll">
+						<form class="party-settings-form" id="party-edit-form">
+							<section class="party-settings-section" aria-labelledby="party-edit-title">
+								<h2 class="party-settings-section-title" id="party-edit-heading">New party</h2>
+								<p class="party-settings-section-desc" id="party-edit-desc">Name this party and set the transform prompt for guest photos.</p>
+
+								<div class="party-field">
+									<label for="party-edit-party-name">Party name</label>
+									<input class="party-input" type="text" id="party-edit-party-name" name="partyName" maxlength="80" placeholder="Saturday night" autocomplete="off" />
+								</div>
+
+								<div class="party-field">
+									<label for="party-edit-prompt">Transform prompt</label>
+									<textarea class="party-textarea prompt-editor" id="party-edit-prompt" name="prompt" rows="10" maxlength="2000" placeholder="Describe the look for every guest photo…"></textarea>
+								</div>
+							</section>
+						</form>
+
+						<div class="party-edit-delete-wrap" id="party-edit-delete-wrap" hidden>
+							<button type="button" class="btn-outlined btn-danger-outlined party-edit-delete-btn" id="party-edit-delete">Delete party</button>
+						</div>
+					</div>
+
+					<footer class="party-dock party-dock--split">
+						<button type="button" class="party-dock-cancel" id="party-edit-cancel">Cancel</button>
+						<button type="button" class="btn-primary party-dock-save" id="party-edit-continue">Continue</button>
+					</footer>
+				</div>
+
+				<div class="party-view party-view--main" id="party-view-main" hidden>
 				<div class="party-scroll">
+					<div class="party-switch-party-wrap">
+						<button type="button" class="btn-outlined party-switch-party-btn" id="party-switch-party-btn">Choose another party</button>
+					</div>
+
 					<section class="party-grid-section" id="party-pending-section" aria-label="Queue">
 						<div class="party-grid-head">
 							<h2 class="party-grid-title">Queue</h2>
 						</div>
 						<div class="party-grid" id="party-pending-grid"></div>
-						<p class="party-queue-empty" id="party-pending-empty">Capture a photo to transform.</p>
+						<p class="party-section-empty" id="party-pending-empty">Capture a photo to transform.</p>
 					</section>
 
 					<section class="party-grid-section" aria-label="Pushed">
@@ -1337,7 +1496,7 @@
 							<h2 class="party-grid-title">Pushed</h2>
 						</div>
 						<div class="party-grid" id="party-sent-grid"></div>
-						<p class="party-grid-empty" id="party-sent-empty" hidden>No photos pushed yet.</p>
+						<p class="party-section-empty" id="party-sent-empty" hidden>No photos pushed yet.</p>
 					</section>
 				</div>
 
@@ -1349,28 +1508,6 @@
 				<div class="party-view party-view--settings" id="party-view-settings" hidden>
 					<div class="party-scroll">
 						<form class="party-settings-form" id="party-settings-form">
-							<section class="party-settings-section" aria-labelledby="party-settings-party-title">
-								<h2 class="party-settings-section-title" id="party-settings-party-title">This party</h2>
-								<p class="party-settings-section-desc">Saved for this party only. New captures use the prompt below.</p>
-
-								<div class="party-field">
-									<label for="party-settings-party-name">Party name</label>
-									<input class="party-input" type="text" id="party-settings-party-name" name="partyName" maxlength="80" placeholder="Saturday night" autocomplete="off" />
-								</div>
-
-								<div class="party-field">
-									<span class="party-field-label">Resume on this device</span>
-									<p class="party-settings-linked" id="party-settings-linked-hint">Not linked yet — a group starts when your first photo finishes transforming.</p>
-									<button type="button" class="party-btn party-btn--ghost party-settings-choose-btn" id="party-settings-choose-party">Choose party…</button>
-								</div>
-
-								<div class="party-field">
-									<label for="party-settings-prompt">Transform prompt</label>
-									<textarea class="party-textarea prompt-editor" id="party-settings-prompt" name="prompt" rows="4" maxlength="2000" placeholder="Describe the look for every guest photo…"></textarea>
-									<p class="party-field-hint">Same image-to-image model as basic Create — landscape 16:9.</p>
-								</div>
-							</section>
-
 							<section class="party-settings-section" aria-labelledby="party-settings-google-photos-title">
 								<h2 class="party-settings-section-title" id="party-settings-google-photos-title">Google Photos</h2>
 								<p class="party-settings-section-desc">Sync keeps the party album matched to Pushed on Parascene — uploads missing photos and removes extras.</p>
@@ -1495,20 +1632,6 @@
 
 	<ul class="party-log-list" id="party-log-list" hidden></ul>
 
-	<div class="party-picker-overlay" id="party-picker-overlay" hidden>
-		<div class="party-picker" role="dialog" aria-modal="true" aria-labelledby="party-picker-title">
-			<header class="party-picker-head">
-				<h2 id="party-picker-title">Choose party</h2>
-				<button type="button" class="party-picker-close" id="party-picker-close">Cancel</button>
-			</header>
-			<div class="party-picker-panel">
-				<div class="party-picker-body" id="party-picker-list"></div>
-				<p class="party-picker-empty" id="party-picker-empty" hidden>No parties yet. Finish transforming a photo on any device to start one.</p>
-				<p class="party-picker-status" id="party-picker-status" hidden></p>
-			</div>
-		</div>
-	</div>
-
 	<input type="file" class="party-hidden-input" id="party-input-native-env" accept="image/*" capture="environment" />
 	<input type="file" class="party-hidden-input" id="party-input-native-user" accept="image/*" capture="user" />
 	<input type="file" class="party-hidden-input" id="party-input-native-picker" accept="image/*" />
@@ -1527,6 +1650,8 @@
 			const DEVICE_SETTINGS_KEY = 'parascene_party_device_settings_v1';
 			const PARTY_SETTINGS_KEY = 'parascene_party_session_settings_v1';
 			const DEFAULT_PARTY_PROMPT = 'Party landscape guest photo — warm stylized album shot';
+			const PARTY_GEAR_ICON =
+				'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
 			const PARTY_ASPECT_RATIO = '16:9';
 			const PARTY_ASPECT_W = 16;
 			const PARTY_ASPECT_H = 9;
@@ -1995,6 +2120,16 @@
 					this._party.groupPartyKey = this._partyGroupKey();
 					this._saveJson(PARTY_SETTINGS_KEY, this._party);
 				},
+				clearLinkedParty() {
+					this._resetPartyGroupTracking();
+					this._saveJson(PARTY_SETTINGS_KEY, this._party);
+				},
+				beginNewPartySession() {
+					this._resetPartyGroupTracking();
+					this._party.partyName = '';
+					this._party.groupPartyKey = this._partyGroupKey();
+					this._saveJson(PARTY_SETTINGS_KEY, this._party);
+				},
 				setPendingGroupCreationId(id) {
 					this._party.pendingGroupCreationId = Number.isFinite(Number(id)) && Number(id) > 0
 						? Number(id)
@@ -2023,9 +2158,6 @@
 						? methodId
 						: 'native-picker';
 					this._draftDevice.shutterSound = form.elements.shutterSound?.checked !== false;
-					this._draftParty.partyName = String(form.elements.partyName?.value || '').trim();
-					const prompt = String(form.elements.prompt?.value || '').trim();
-					this._draftParty.prompt = prompt || DEFAULT_PARTY_PROMPT;
 					this._draftParty.autoReviewReady = form.elements.autoReviewReady?.checked === true;
 				},
 				applyDraft() {
@@ -2044,6 +2176,122 @@
 					PartyLog.write('Party settings saved');
 					void this.syncToGroup();
 					return true;
+				},
+				readPartyEditFromForm(form) {
+					if (!form || !this._draftParty) return;
+					this._draftParty.partyName = String(form.elements.partyName?.value || '').trim();
+					const prompt = String(form.elements.prompt?.value || '').trim();
+					this._draftParty.prompt = prompt || DEFAULT_PARTY_PROMPT;
+				},
+				applyPartyEditDraft() {
+					if (!this._draftParty) return false;
+					this._party.partyName = String(this._draftParty.partyName || '').trim();
+					const prompt = String(this._draftParty.prompt || '').trim();
+					this._party.prompt = prompt || DEFAULT_PARTY_PROMPT;
+					this._party.groupPartyKey = this._partyGroupKey();
+					this._saveJson(PARTY_SETTINGS_KEY, this._party);
+					this._draftParty = null;
+					this._draftDevice = null;
+					void this.syncToGroup();
+					return true;
+				},
+				async beginEditPartyDraft(groupId) {
+					const id = Number(groupId);
+					if (!Number.isFinite(id) || id <= 0) return false;
+					try {
+						const res = await fetch(`/api/create/images/${id}`, { credentials: 'include' });
+						const data = await res.json().catch(() => ({}));
+						if (!res.ok) return false;
+						this._draftDevice = this._clone(this._device);
+						this._draftParty = this._clone(this._party);
+						const payload = { ...(data.meta || {}), title: data.title };
+						const settings = payload?.party?.settings;
+						if (settings && typeof settings.partyName === 'string') {
+							this._draftParty.partyName = settings.partyName.trim();
+						} else {
+							const legacyName =
+								(typeof payload?.party?.name === 'string' && payload.party.name.trim()) ||
+								(typeof payload?.title === 'string' && payload.title.trim()) ||
+								'';
+							this._draftParty.partyName = legacyName;
+						}
+						if (settings && typeof settings.prompt === 'string' && settings.prompt.trim()) {
+							this._draftParty.prompt = settings.prompt.trim();
+						} else {
+							this._draftParty.prompt = DEFAULT_PARTY_PROMPT;
+						}
+						return true;
+					} catch (err) {
+						PartyLog.write(`Party edit load failed: ${err?.message || err}`);
+						return false;
+					}
+				},
+				async savePartyEditForGroup(groupId) {
+					if (!this._draftParty) return false;
+					const id = Number(groupId);
+					if (!Number.isFinite(id) || id <= 0) return false;
+					const partyName = String(this._draftParty.partyName || '').trim();
+					const prompt = String(this._draftParty.prompt || '').trim() || DEFAULT_PARTY_PROMPT;
+					const linkedId = this.getGroupCreationId();
+					if (linkedId === id) {
+						this._party.partyName = partyName;
+						this._party.prompt = prompt;
+						this._party.groupPartyKey = this._partyGroupKey();
+						this._saveJson(PARTY_SETTINGS_KEY, this._party);
+						this._draftParty = null;
+						this._draftDevice = null;
+						return this.syncToGroup();
+					}
+					let autoReviewReady = false;
+					try {
+						const res = await fetch(`/api/create/images/${id}`, { credentials: 'include' });
+						const data = await res.json().catch(() => ({}));
+						if (res.ok) {
+							autoReviewReady = data?.meta?.party?.settings?.autoReviewReady === true;
+						}
+					} catch (_) {
+						/* keep default false */
+					}
+					try {
+						const res = await fetch(`/api/create/images/${id}/party-settings`, {
+							method: 'POST',
+							credentials: 'include',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({
+								party_settings: { partyName, prompt, autoReviewReady }
+							})
+						});
+						const data = await res.json().catch(() => ({}));
+						if (!res.ok) {
+							throw new Error(data?.error || data?.message || `Save failed (${res.status})`);
+						}
+						this._draftParty = null;
+						this._draftDevice = null;
+						return true;
+					} catch (err) {
+						PartyLog.write(`Party edit save failed: ${err?.message || err}`);
+						return false;
+					}
+				},
+				async deletePartyGroup(groupId) {
+					const id = Number(groupId);
+					if (!Number.isFinite(id) || id <= 0) return false;
+					try {
+						const res = await fetch(`/api/party/groups/${id}`, {
+							method: 'DELETE',
+							credentials: 'include'
+						});
+						const data = await res.json().catch(() => ({}));
+						if (!res.ok) {
+							throw new Error(data?.error || data?.message || `Delete failed (${res.status})`);
+						}
+						this._draftParty = null;
+						this._draftDevice = null;
+						return true;
+					} catch (err) {
+						PartyLog.write(`Party delete failed: ${err?.message || err}`);
+						return false;
+					}
 				}
 			};
 
@@ -2174,34 +2422,21 @@
 				_parties: [],
 				init(els) {
 					this.els = els;
-					els.choosePartyBtn?.addEventListener('click', () => { void this.open(); });
-					els.pickerClose?.addEventListener('click', () => this.close());
-					els.pickerOverlay?.addEventListener('click', (e) => {
-						if (e.target === els.pickerOverlay) this.close();
-					});
 				},
 				isOpen() {
-					return Boolean(this.els.pickerOverlay && !this.els.pickerOverlay.hidden);
+					return PartyNav.view === 'parties';
 				},
-				close(opts = {}) {
-					if (!this.isOpen()) return;
-					if (this.els.pickerOverlay) this.els.pickerOverlay.hidden = true;
-					document.body.classList.remove('party-page--picker-open');
-					PartyPage.updateViewportScrollMode();
-					if (this.els.pickerStatus) {
-						this.els.pickerStatus.hidden = true;
-						this.els.pickerStatus.textContent = '';
+				open(opts = {}) {
+					if (opts.clearSelection === true) {
+						PartySettings.clearLinkedParty();
+						PartyQueue.clearForUnlinked();
+						PartyUI.renderAll();
 					}
-					PartyHistory.onClose('picker', opts);
+					PartyNav.setView('parties');
+					void this.loadAndRender();
 				},
-				async open() {
-					if (!this.els.pickerOverlay) return;
-					this.els.pickerOverlay.hidden = false;
-					document.body.classList.add('party-page--picker-open');
-					PartyPage.updateViewportScrollMode();
-					PartyHistory.onOpen('picker');
+				async loadAndRender() {
 					if (this.els.pickerList) this.els.pickerList.replaceChildren();
-					if (this.els.pickerEmpty) this.els.pickerEmpty.hidden = true;
 					if (this.els.pickerStatus) {
 						this.els.pickerStatus.hidden = false;
 						this.els.pickerStatus.textContent = 'Loading parties…';
@@ -2223,29 +2458,49 @@
 				},
 				render() {
 					const list = this.els.pickerList;
-					const empty = this.els.pickerEmpty;
 					const status = this.els.pickerStatus;
 					if (!list) return;
 					list.replaceChildren();
 					if (status) status.hidden = true;
-					if (!this._parties.length) {
-						if (empty) empty.hidden = false;
-						return;
-					}
-					if (empty) empty.hidden = true;
 					const linkedId = PartySettings.getGroupCreationId();
-					this._parties.forEach((party) => {
+					for (const party of this._parties) {
 						list.appendChild(this._buildItem(party, linkedId));
-					});
+					}
+					list.appendChild(this._buildNewPartyItem());
 				},
-				_buildItem(party, linkedId) {
+				_buildNewPartyItem() {
 					const btn = document.createElement('button');
 					btn.type = 'button';
-					btn.className = 'party-picker-item';
+					btn.className = 'party-picker-item party-picker-item--new';
+					const thumb = document.createElement('div');
+					thumb.className = 'party-picker-item-thumb party-picker-item-thumb--new';
+					thumb.setAttribute('aria-hidden', 'true');
+					thumb.textContent = '+';
+					const main = document.createElement('div');
+					main.className = 'party-picker-item-main';
+					const name = document.createElement('div');
+					name.className = 'party-picker-item-name';
+					name.textContent = 'New party';
+					const meta = document.createElement('div');
+					meta.className = 'party-picker-item-meta';
+					meta.textContent = 'Start a new themed party';
+					main.appendChild(name);
+					main.appendChild(meta);
+					btn.appendChild(thumb);
+					btn.appendChild(main);
+					btn.addEventListener('click', () => this.startNew());
+					return btn;
+				},
+				_buildItem(party, linkedId) {
+					const row = document.createElement('div');
+					row.className = 'party-picker-item';
 					const id = Number(party?.id);
 					if (Number.isFinite(id) && id > 0 && id === linkedId) {
-						btn.dataset.selected = 'true';
+						row.dataset.selected = 'true';
 					}
+					const btn = document.createElement('button');
+					btn.type = 'button';
+					btn.className = 'party-picker-item-select';
 					const thumb = document.createElement('div');
 					thumb.className = 'party-picker-item-thumb';
 					if (party?.thumbnail_url) {
@@ -2270,7 +2525,37 @@
 					btn.appendChild(thumb);
 					btn.appendChild(main);
 					btn.addEventListener('click', () => { void this.select(id); });
-					return btn;
+					const editBtn = document.createElement('button');
+					editBtn.type = 'button';
+					editBtn.className = 'party-picker-item-edit';
+					editBtn.setAttribute('aria-label', 'Edit party');
+					editBtn.innerHTML = PARTY_GEAR_ICON;
+					editBtn.addEventListener('click', (e) => {
+						e.preventDefault();
+						e.stopPropagation();
+						void this.editParty(id);
+					});
+					row.appendChild(btn);
+					row.appendChild(editBtn);
+					return row;
+				},
+				async editParty(groupId) {
+					const id = Number(groupId);
+					if (!Number.isFinite(id) || id <= 0) return;
+					if (this.els.pickerStatus) {
+						this.els.pickerStatus.hidden = false;
+						this.els.pickerStatus.textContent = 'Loading party…';
+					}
+					const ok = await PartySettings.beginEditPartyDraft(id);
+					if (!ok) {
+						if (this.els.pickerStatus) {
+							this.els.pickerStatus.hidden = false;
+							this.els.pickerStatus.textContent = 'Could not load that party.';
+						}
+						return;
+					}
+					if (this.els.pickerStatus) this.els.pickerStatus.hidden = true;
+					PartyNav.openPartyEdit('edit', id);
 				},
 				async select(groupId) {
 					const id = Number(groupId);
@@ -2288,11 +2573,15 @@
 						return;
 					}
 					PartyUI.populateSettingsForm();
-					PartyUI.updateLinkedPartyHint();
 					void PartyUI.updateGooglePhotosSyncHint();
 					PartyUI.renderAll();
-					this.close();
+					PartyNav.setView('main');
 					PartyLog.write(`Linked party: ${PartySettings.getLinkedPartyLabel()}`);
+				},
+				startNew() {
+					PartySettings.beginNewPartySession();
+					PartyQueue.clearForUnlinked();
+					PartyNav.openPartyEdit('create');
 				}
 			};
 
@@ -2318,14 +2607,24 @@
 				getTopLayer() {
 					if (PartyCapture.isOverlayOpen()) return 'capture';
 					if (PartyUI.isReviewOpen()) return 'review';
-					if (PartyPicker.isOpen()) return 'picker';
+					if (PartyNav.view === 'parties') return 'parties';
+					if (PartyNav.view === 'partyEdit') return 'partyEdit';
 					if (PartyNav.view === 'settings') return 'settings';
 					return 'main';
 				},
 				updateTopbarLabel() {
 					const back = PartyNav.els?.topbarBack;
 					if (!back) return;
-					const onMain = this.getTopLayer() === 'main';
+					const layer = this.getTopLayer();
+					if (layer === 'parties') {
+						back.setAttribute('aria-label', 'Back to create');
+						return;
+					}
+					if (layer === 'partyEdit') {
+						back.setAttribute('aria-label', 'Back to parties');
+						return;
+					}
+					const onMain = layer === 'main';
 					back.setAttribute('aria-label', onMain ? 'Back to create' : 'Back to party');
 				},
 				onOpen(layer) {
@@ -2356,8 +2655,12 @@
 						this.onClose('review', { fromPopstate });
 						return true;
 					}
-					if (PartyPicker.isOpen()) {
-						PartyPicker.close({ fromPopstate });
+					if (PartyNav.view === 'parties') {
+						window.location.href = '/create';
+						return true;
+					}
+					if (PartyNav.view === 'partyEdit') {
+						PartyNav.closePartyEdit(false, { fromPopstate });
 						return true;
 					}
 					if (PartyNav.view === 'settings') {
@@ -2374,13 +2677,18 @@
 
 			// --- party/nav ---
 			const PartyNav = {
-				view: 'main',
+				view: 'parties',
+				partyEditMode: 'create',
+				_editGroupId: null,
 				els: {},
 				init(els) {
 					this.els = els;
 					els.settingsOpen?.addEventListener('click', () => this.openSettings());
 					els.settingsCancel?.addEventListener('click', () => this.closeSettings(false));
 					els.settingsSave?.addEventListener('click', () => this.closeSettings(true));
+					els.partyEditCancel?.addEventListener('click', () => this.closePartyEdit(false));
+					els.partyEditContinue?.addEventListener('click', () => this.closePartyEdit(true));
+					els.partyEditDelete?.addEventListener('click', () => { void this.deletePartyEdit(); });
 					els.settingsForm?.addEventListener('change', (e) => {
 						if (e.target?.name === 'captureMethodId') {
 							PartyUI.updateCaptureMethodHint(e.target.value);
@@ -2391,11 +2699,110 @@
 						PartyHistory.goBack();
 					});
 				},
+				updateTopbarTitle() {
+					const title = this.els.topbarTitle;
+					if (!title) return;
+					if (this.view === 'settings') {
+						title.textContent = 'Party Settings';
+					} else if (this.view === 'parties') {
+						title.textContent = 'Parties';
+					} else if (this.view === 'partyEdit') {
+						title.textContent = this.partyEditMode === 'edit' ? 'Edit party' : 'New party';
+					} else {
+						title.textContent = PartySettings.getLinkedPartyLabel() || 'Party Mode';
+					}
+				},
+				openPartyEdit(mode = 'create', groupId = null) {
+					void PartyCapture.closeCaptureOverlay();
+					this.partyEditMode = mode === 'edit' ? 'edit' : 'create';
+					this._editGroupId = mode === 'edit' ? Number(groupId) : null;
+					if (mode !== 'edit') {
+						PartySettings.startDraft();
+					}
+					PartyUI.populatePartyEditForm();
+					this.syncPartyEditChrome();
+					this.setView('partyEdit');
+					PartyHistory.onOpen('partyEdit');
+				},
+				syncPartyEditChrome() {
+					const heading = this.els.partyEditHeading;
+					const desc = this.els.partyEditDesc;
+					const continueBtn = this.els.partyEditContinue;
+					const deleteWrap = this.els.partyEditDeleteWrap;
+					const deleteBtn = this.els.partyEditDelete;
+					const isEdit = this.partyEditMode === 'edit';
+					if (heading) heading.textContent = isEdit ? 'Edit party' : 'New party';
+					if (desc) {
+						desc.textContent = isEdit
+							? 'Update the name and transform prompt for this party.'
+							: 'Name this party and set the transform prompt for guest photos.';
+					}
+					if (continueBtn) continueBtn.textContent = isEdit ? 'Save' : 'Continue';
+					if (deleteWrap) deleteWrap.hidden = !isEdit;
+					if (deleteBtn) deleteBtn.disabled = false;
+				},
+				async deletePartyEdit() {
+					if (this.view !== 'partyEdit' || this.partyEditMode !== 'edit') return;
+					const editGroupId = this._editGroupId;
+					if (!Number.isFinite(Number(editGroupId)) || Number(editGroupId) <= 0) return;
+					PartySettings.readPartyEditFromForm(this.els.partyEditForm);
+					const draft = PartySettings.getDraft();
+					const name = String(draft?.party?.partyName || '').trim() || 'this party';
+					if (!window.confirm(`Delete "${name}" and all its photos? This cannot be undone.`)) return;
+					const deleteBtn = this.els.partyEditDelete;
+					if (deleteBtn) deleteBtn.disabled = true;
+					const ok = await PartySettings.deletePartyGroup(editGroupId);
+					if (deleteBtn) deleteBtn.disabled = false;
+					if (!ok) return;
+					if (PartySettings.getGroupCreationId() === editGroupId) {
+						PartySettings.clearLinkedParty();
+						PartyQueue.clearForUnlinked();
+						PartyUI.renderAll();
+					}
+					PartySettings.cancelDraft();
+					this._editGroupId = null;
+					this.setView('parties');
+					void PartyPicker.loadAndRender();
+					PartyLog.write('Party deleted');
+					PartyHistory.onClose('partyEdit', {});
+				},
+				closePartyEdit(save, opts = {}) {
+					if (this.view !== 'partyEdit') return;
+					const finish = async () => {
+						const isCreate = this.partyEditMode === 'create';
+						const editGroupId = this._editGroupId;
+						if (save) {
+							PartySettings.readPartyEditFromForm(this.els.partyEditForm);
+							const ok = isCreate
+								? PartySettings.applyPartyEditDraft()
+								: await PartySettings.savePartyEditForGroup(editGroupId);
+							if (!ok) return;
+						} else {
+							PartySettings.cancelDraft();
+						}
+						this._editGroupId = null;
+						const dest = save && isCreate ? 'main' : 'parties';
+						this.setView(dest);
+						if (save) {
+							if (isCreate) {
+								PartyUI.renderAll();
+								PartyLog.write('New party session');
+							} else {
+								if (PartySettings.getGroupCreationId() === editGroupId) {
+									PartyUI.renderAll();
+								}
+								void PartyPicker.loadAndRender();
+								PartyLog.write('Party updated');
+							}
+						}
+						PartyHistory.onClose('partyEdit', opts);
+					};
+					void finish();
+				},
 				openSettings() {
 					void PartyCapture.closeCaptureOverlay();
 					PartySettings.startDraft();
 					PartyUI.populateSettingsForm();
-					PartyUI.updateLinkedPartyHint();
 					void PartyUI.updateGooglePhotosSyncHint();
 					this.setView('settings');
 					PartyHistory.onOpen('settings');
@@ -2410,22 +2817,27 @@
 					} else {
 						PartySettings.cancelDraft();
 					}
-					this.setView('main');
+					this.setView(PartySettings.getGroupCreationId() ? 'main' : 'parties');
 					PartyHistory.onClose('settings', opts);
 				},
 				setView(view) {
 					this.view = view;
+					const isMain = view === 'main';
 					const isSettings = view === 'settings';
-					if (this.els.viewMain) this.els.viewMain.hidden = isSettings;
+					const isParties = view === 'parties';
+					const isPartyEdit = view === 'partyEdit';
+					if (this.els.viewMain) this.els.viewMain.hidden = !isMain;
 					if (this.els.viewSettings) this.els.viewSettings.hidden = !isSettings;
-					if (this.els.topbarTitle) {
-						this.els.topbarTitle.textContent = isSettings ? 'Party Settings' : 'Party Mode';
+					if (this.els.viewParties) this.els.viewParties.hidden = !isParties;
+					if (this.els.viewPartyEdit) this.els.viewPartyEdit.hidden = !isPartyEdit;
+					this.updateTopbarTitle();
+					if (this.els.topbarActions) {
+						this.els.topbarActions.hidden = isSettings || isPartyEdit;
 					}
-					if (this.els.topbarActions) this.els.topbarActions.hidden = isSettings;
 					if (this.els.topbarBack) {
 						this.els.topbarBack.href = '#';
 					}
-					document.body.classList.toggle('party-page--settings-open', isSettings);
+					document.body.classList.toggle('party-page--settings-open', isSettings || isPartyEdit);
 					PartyPage.updateViewportScrollMode();
 					PartyHistory.updateTopbarLabel();
 				}
@@ -2503,7 +2915,8 @@
 					}
 					if (PartyCapture.isOverlayOpen()) return false;
 					if (PartyUI.isReviewOpen()) return false;
-					if (PartyPicker.isOpen()) return false;
+					if (PartyNav.view === 'settings') return false;
+					if (PartyNav.view === 'partyEdit') return false;
 					return true;
 				},
 				updateViewportScrollMode() {
@@ -3885,6 +4298,15 @@
 					const next = list[(idx + direction + list.length) % list.length];
 					return next?.id || null;
 				},
+				clearForUnlinked() {
+					for (const item of this.items) {
+						PartyTransform.cancel(item.id);
+					}
+					this.items = [];
+					this.selectedId = null;
+					this._persist();
+					this._emit();
+				},
 				processingCount() {
 					return this.items.filter((it) => it.status === 'processing').length;
 				},
@@ -4213,6 +4635,9 @@
 						e.preventDefault();
 						PartyApp.onReviewStep(1);
 					});
+					els.switchPartyBtn?.addEventListener('click', () => {
+						PartyPicker.open({ clearSelection: true });
+					});
 				},
 				_fillCaptureMethodSelect(sel, selectedId) {
 					if (!sel) return;
@@ -4237,21 +4662,15 @@
 					if (!form) return;
 					this._fillCaptureMethodSelect(form.elements.captureMethodId, draft.device.captureMethodId);
 					form.elements.shutterSound.checked = draft.device.shutterSound !== false;
-					form.elements.partyName.value = draft.party.partyName || '';
-					form.elements.prompt.value = draft.party.prompt || DEFAULT_PARTY_PROMPT;
 					form.elements.autoReviewReady.checked = draft.party.autoReviewReady === true;
 					this.updateCaptureMethodHint(draft.device.captureMethodId);
-					this.updateLinkedPartyHint();
 				},
-				updateLinkedPartyHint() {
-					const hint = this.els.settingsLinkedHint;
-					if (!hint) return;
-					const label = PartySettings.getLinkedPartyLabel();
-					if (!label) {
-						hint.textContent = 'Not linked yet — a group starts when your first photo finishes transforming.';
-						return;
-					}
-					hint.textContent = `Linked to “${label}”. Choose another party to resume on this device.`;
+				populatePartyEditForm() {
+					const draft = PartySettings.getDraft();
+					const form = this.els.partyEditForm;
+					if (!form) return;
+					form.elements.partyName.value = draft.party.partyName || '';
+					form.elements.prompt.value = draft.party.prompt || DEFAULT_PARTY_PROMPT;
 				},
 				async updateGooglePhotosSyncHint() {
 					const hint = this.els.gpSyncHint;
@@ -4309,7 +4728,6 @@
 					if (opts.sent) btn.classList.add('party-grid-item--sent');
 					btn.dataset.status = item.status;
 					btn.dataset.itemId = item.id;
-					if (PartyQueue.selectedId === item.id) btn.dataset.selected = 'true';
 					const img = document.createElement('img');
 					const showResult = opts.sent || item.status === 'ready';
 					img.src = showResult
@@ -4446,6 +4864,8 @@
 					PartySettings.load();
 					const els = {
 						viewMain: document.getElementById('party-view-main'),
+						viewParties: document.getElementById('party-view-parties'),
+						viewPartyEdit: document.getElementById('party-view-party-edit'),
 						viewSettings: document.getElementById('party-view-settings'),
 						topbarBack: document.getElementById('party-topbar-back'),
 						topbarTitle: document.getElementById('party-topbar-title'),
@@ -4454,15 +4874,18 @@
 						settingsCancel: document.getElementById('party-settings-cancel'),
 						settingsSave: document.getElementById('party-settings-save'),
 						settingsForm: document.getElementById('party-settings-form'),
-						settingsLinkedHint: document.getElementById('party-settings-linked-hint'),
+						partyEditForm: document.getElementById('party-edit-form'),
+						partyEditHeading: document.getElementById('party-edit-heading'),
+						partyEditDesc: document.getElementById('party-edit-desc'),
+						partyEditCancel: document.getElementById('party-edit-cancel'),
+						partyEditContinue: document.getElementById('party-edit-continue'),
+						partyEditDeleteWrap: document.getElementById('party-edit-delete-wrap'),
+						partyEditDelete: document.getElementById('party-edit-delete'),
 						gpSyncHint: document.getElementById('party-settings-gp-sync-hint'),
 						gpSyncBtn: document.getElementById('party-settings-gp-sync'),
-						choosePartyBtn: document.getElementById('party-settings-choose-party'),
-						pickerOverlay: document.getElementById('party-picker-overlay'),
+						switchPartyBtn: document.getElementById('party-switch-party-btn'),
 						pickerList: document.getElementById('party-picker-list'),
-						pickerEmpty: document.getElementById('party-picker-empty'),
 						pickerStatus: document.getElementById('party-picker-status'),
-						pickerClose: document.getElementById('party-picker-close'),
 						settingsCaptureHint: document.getElementById('party-settings-capture-hint'),
 						captureOverlay: document.getElementById('party-capture-overlay'),
 						captureClose: document.getElementById('party-capture-close'),
@@ -4508,16 +4931,25 @@
 					PartyPicker.init(els);
 					PartyCapture.init(els, (photo) => this.onPhotoCaptured(photo));
 					PartyQueue.init(() => PartyUI.renderAll());
-					if (PartySettings.getGroupCreationId()) {
-						await PartySettings.loadFromGroup();
+
+					let showMain = false;
+					const linkedId = PartySettings.getGroupCreationId();
+					if (linkedId) {
+						showMain = await PartySettings.loadFromGroup();
+						if (!showMain) {
+							PartySettings.clearLinkedParty();
+						}
+					}
+					if (showMain) {
+						PartyNav.setView('main');
 					} else {
-						PartyQueue.applyQueueFromGroup(PartySettings.getPartyQueueForGroup());
-						PartyQueue.applyPushedFromGroup(PartySettings.getPartyPushedForGroup());
+						PartyQueue.clearForUnlinked();
+						PartyNav.setView('parties');
+						void PartyPicker.loadAndRender();
 					}
 
 					const method = PartyCapture.getMethod(PartySettings.getCaptureMethodId());
 					void PartyCapture.setMethod(method);
-					PartyUI.updateLinkedPartyHint();
 					PartyUI.renderAll();
 					PartyLog.write('Party Mode ready');
 				},
