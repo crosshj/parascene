@@ -880,6 +880,50 @@ export default function createCreateRoutes({ queries, storage }) {
 		});
 	}
 
+	function removeCreationFromPartyGroupMeta(meta, creationId) {
+		const id = Number(creationId);
+		if (!Number.isFinite(id) || id <= 0) return null;
+		const baseMeta = meta && typeof meta === "object" ? { ...meta } : {};
+		const partyRaw = baseMeta.party && typeof baseMeta.party === "object" ? baseMeta.party : {};
+		const existingQueue = Array.isArray(partyRaw.queue) ? partyRaw.queue : [];
+		const existingPushed = Array.isArray(partyRaw.pushed) ? partyRaw.pushed : [];
+		const nextQueue = existingQueue.filter((entry) => Number(entry?.creation_id) !== id);
+		const nextPushed = existingPushed.filter((entry) => Number(entry?.creation_id) !== id);
+
+		const groupPayload =
+			baseMeta.group && typeof baseMeta.group === "object" ? { ...baseMeta.group } : null;
+		let removedFromGroup = false;
+		if (groupPayload?.kind === "group_creations") {
+			const sourceCreationsRaw = Array.isArray(groupPayload.source_creations)
+				? groupPayload.source_creations
+				: [];
+			const sourceCreations = sourceCreationsRaw.filter((item) => item && typeof item === "object");
+			const remaining = sourceCreations
+				.filter((item) => Number(item.id) !== id)
+				.map((item, index) => ({ ...item, order: index }));
+			removedFromGroup = remaining.length !== sourceCreations.length;
+			const coverSourceId = Number(groupPayload.cover_source_id);
+			const nextCoverId =
+				coverSourceId === id ? Number(remaining[0]?.id) || 0 : coverSourceId > 0 ? coverSourceId : Number(remaining[0]?.id) || 0;
+			baseMeta.group = {
+				...groupPayload,
+				updated_at: nowIso(),
+				cover_source_id: nextCoverId,
+				source_creation_ids: remaining
+					.map((item) => Number(item.id))
+					.filter((n, idx, arr) => Number.isFinite(n) && n > 0 && arr.indexOf(n) === idx),
+				source_creations: remaining
+			};
+		}
+
+		baseMeta.party = {
+			...partyRaw,
+			queue: nextQueue,
+			pushed: nextPushed
+		};
+		return { meta: baseMeta, removedFromGroup };
+	}
+
 	// Provider must fetch image URLs; use share subdomain (sh.parascene.com) so unauthenticated provider requests are allowed.
 	const providerBase = getShareBaseUrl();
 
@@ -3562,6 +3606,101 @@ export default function createCreateRoutes({ queries, storage }) {
 			});
 		} catch (error) {
 			return res.status(500).json({ error: "Failed to save party settings" });
+		}
+	});
+
+	// POST /api/create/images/:id/party-remove-source - Drop a source from a party group (discard).
+	router.post("/api/create/images/:id/party-remove-source", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		try {
+			const groupId = Number(req.params.id);
+			const creationId = Number(req.body?.creation_id ?? req.body?.creationId);
+			if (!Number.isFinite(groupId) || groupId <= 0) {
+				return res.status(400).json({ error: "Invalid group id" });
+			}
+			if (!Number.isFinite(creationId) || creationId <= 0) {
+				return res.status(400).json({ error: "Invalid creation id" });
+			}
+			if (groupId === creationId) {
+				return res.status(400).json({ error: "Cannot remove the party group creation" });
+			}
+
+			const groupRow = await queries.selectCreatedImageById.get(groupId, user.id);
+			if (!groupRow) {
+				return res.status(404).json({ error: "Party group not found" });
+			}
+			const meta = parseMeta(groupRow.meta) || {};
+			if (meta?.party?.mode !== true || meta?.group?.kind !== "group_creations") {
+				return res.status(400).json({ error: "Creation is not a party group" });
+			}
+
+			const removedState = removeCreationFromPartyGroupMeta(meta, creationId);
+			if (!removedState) {
+				return res.status(400).json({ error: "Invalid creation id" });
+			}
+
+			let nextMeta = removedState.meta;
+			const groupPayload = nextMeta.group && typeof nextMeta.group === "object" ? nextMeta.group : null;
+			const remainingSources = Array.isArray(groupPayload?.source_creations)
+				? groupPayload.source_creations.filter((item) => item && typeof item === "object")
+				: [];
+			const coverSourceId = Number(groupPayload?.cover_source_id);
+
+			if (remainingSources.length > 0 && Number.isFinite(coverSourceId) && coverSourceId > 0) {
+				const coverState = buildGroupCoverUpdateState({
+					groupMeta: nextMeta,
+					groupPayload,
+					sourceCreations: remainingSources,
+					coverSourceId,
+					storage,
+					fallbackGroupRow: groupRow
+				});
+				if (coverState) {
+					const updateResult = await queries.updateCreatedImageGroupCover?.run(
+						groupId,
+						user.id,
+						coverState.updatePayload
+					);
+					if (!updateResult || updateResult.changes === 0) {
+						return res.status(500).json({ error: "Failed to update party group cover" });
+					}
+					nextMeta = coverState.meta;
+				} else {
+					const metaResult = await queries.updateCreatedImageMeta.run(groupId, user.id, nextMeta);
+					if (!metaResult || metaResult.changes === 0) {
+						return res.status(500).json({ error: "Failed to update party group" });
+					}
+				}
+			} else {
+				const metaResult = await queries.updateCreatedImageMeta.run(groupId, user.id, nextMeta);
+				if (!metaResult || metaResult.changes === 0) {
+					return res.status(500).json({ error: "Failed to update party group" });
+				}
+			}
+
+			const sourceRow = await queries.selectCreatedImageById.get(creationId, user.id);
+			if (sourceRow) {
+				const markResult = await queries.markCreatedImageUnavailable?.run(creationId, user.id);
+				if (!markResult || markResult.changes === 0) {
+					return res.status(500).json({ error: "Failed to discard source creation" });
+				}
+				if (queries.deleteFeedItemByCreatedImageId?.run) {
+					await queries.deleteFeedItemByCreatedImageId.run(creationId);
+				}
+			}
+
+			const updatedGroup = await queries.selectCreatedImageById.get(groupId, user.id);
+			const outMeta = parseMeta(updatedGroup?.meta) || nextMeta;
+			return res.json({
+				ok: true,
+				removed_from_group: removedState.removedFromGroup,
+				title: typeof updatedGroup?.title === "string" ? updatedGroup.title : groupRow.title,
+				meta: outMeta
+			});
+		} catch (error) {
+			return res.status(500).json({ error: "Failed to remove source from party group" });
 		}
 	});
 

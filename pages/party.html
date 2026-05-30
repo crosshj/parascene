@@ -1167,6 +1167,52 @@
 				padding-right: max(12px, calc((100% - 720px) / 2 + 12px));
 			}
 		}
+
+		/* Mobile: document scroll (native pull-to-refresh) on main + settings — match chat viewport-scroll. */
+		@media (max-width: 768px) {
+			html.party-page-root.party-page--viewport-scroll {
+				height: auto;
+				min-height: 100%;
+				overflow-x: hidden;
+				overflow-y: auto;
+			}
+
+			body.party-page.party-page--viewport-scroll {
+				height: auto;
+				min-height: 100%;
+				overflow-x: hidden;
+				overflow-y: visible;
+				overscroll-behavior-y: auto;
+			}
+
+			body.party-page.party-page--viewport-scroll main.party-page-outer {
+				position: relative;
+				height: auto;
+				min-height: var(--party-vh, 100dvh);
+				overflow: visible;
+			}
+
+			body.party-page.party-page--viewport-scroll .party-route,
+			body.party-page.party-page--viewport-scroll .party-frame,
+			body.party-page.party-page--viewport-scroll .party-view {
+				min-height: auto;
+				overflow: visible;
+			}
+
+			body.party-page.party-page--viewport-scroll .party-scroll {
+				flex: 0 0 auto;
+				min-height: auto;
+				overflow: visible;
+				overscroll-behavior-y: auto;
+				-webkit-overflow-scrolling: auto;
+			}
+
+			html.party-page-root.party-page--viewport-scroll[data-party-viewport-scroll-lock='1'],
+			body.party-page.party-page--viewport-scroll[data-party-viewport-scroll-lock='1'] {
+				overflow: hidden;
+				overscroll-behavior: none;
+			}
+		}
 	</style>
 </head>
 
@@ -1987,6 +2033,47 @@
 					if (!Number.isFinite(id) || id <= 0) return Promise.resolve();
 					PartySettings.removePartyPushedCreation(id);
 					return this.syncState();
+				},
+				async removeSource(creationId) {
+					const id = Number(creationId);
+					if (!Number.isFinite(id) || id <= 0) return { ok: true };
+					const groupId = PartySettings.getGroupCreationId();
+					if (!groupId) {
+						try {
+							const res = await fetch(`/api/create/images/${id}`, {
+								method: 'DELETE',
+								credentials: 'include'
+							});
+							if (!res.ok) {
+								const data = await res.json().catch(() => ({}));
+								throw new Error(data?.error || data?.message || `Delete failed (${res.status})`);
+							}
+							PartyLog.write(`Discarded creation ${id}`);
+						} catch (err) {
+							PartyLog.write(`Creation discard skipped: ${err?.message || err}`);
+						}
+						return { ok: true };
+					}
+					const res = await fetch(`/api/create/images/${groupId}/party-remove-source`, {
+						method: 'POST',
+						credentials: 'include',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ creation_id: id })
+					});
+					const data = await res.json().catch(() => ({}));
+					if (!res.ok) {
+						throw new Error(data?.error || data?.message || `Remove failed (${res.status})`);
+					}
+					if (data?.meta) {
+						const payload = { ...data.meta, title: data.title };
+						PartySettings.applyPartySettingsFromMeta(payload);
+						PartySettings.applyPartyQueueFromMeta(payload);
+						PartySettings.applyPartyPushedFromMeta(payload);
+					}
+					if (data?.removed_from_group) {
+						PartyLog.write(`Removed creation ${id} from party group`);
+					}
+					return data;
 				}
 			};
 
@@ -2009,6 +2096,7 @@
 					if (!this.isOpen()) return;
 					if (this.els.pickerOverlay) this.els.pickerOverlay.hidden = true;
 					document.body.classList.remove('party-page--picker-open');
+					PartyPage.updateViewportScrollMode();
 					if (this.els.pickerStatus) {
 						this.els.pickerStatus.hidden = true;
 						this.els.pickerStatus.textContent = '';
@@ -2019,6 +2107,7 @@
 					if (!this.els.pickerOverlay) return;
 					this.els.pickerOverlay.hidden = false;
 					document.body.classList.add('party-page--picker-open');
+					PartyPage.updateViewportScrollMode();
 					PartyHistory.onOpen('picker');
 					if (this.els.pickerList) this.els.pickerList.replaceChildren();
 					if (this.els.pickerEmpty) this.els.pickerEmpty.hidden = true;
@@ -2246,6 +2335,7 @@
 						this.els.topbarBack.href = '#';
 					}
 					document.body.classList.toggle('party-page--settings-open', isSettings);
+					PartyPage.updateViewportScrollMode();
 					PartyHistory.updateTopbarLabel();
 				}
 			};
@@ -2282,7 +2372,10 @@
 				},
 				bindViewportSync() {
 					this.teardownViewportSync();
-					const onViewport = () => this.applyRootHeightFromVisualViewport();
+					const onViewport = () => {
+						this.applyRootHeightFromVisualViewport();
+						this.updateViewportScrollMode();
+					};
 					if (window.visualViewport) {
 						window.visualViewport.addEventListener('resize', onViewport);
 						window.visualViewport.addEventListener('scroll', onViewport);
@@ -2290,9 +2383,11 @@
 					window.addEventListener('resize', onViewport);
 					window.addEventListener('orientationchange', onViewport);
 					this.applyRootHeightFromVisualViewport();
+					this.updateViewportScrollMode();
 					requestAnimationFrame(() => {
 						requestAnimationFrame(() => {
 							this.applyRootHeightFromVisualViewport();
+							this.updateViewportScrollMode();
 						});
 					});
 					this._viewportCleanup = () => {
@@ -2308,6 +2403,26 @@
 						window.removeEventListener('resize', onViewport);
 						window.removeEventListener('orientationchange', onViewport);
 					};
+				},
+				shouldUseViewportScroll() {
+					try {
+						if (!window.matchMedia('(max-width: 768px)').matches) return false;
+					} catch {
+						return false;
+					}
+					if (PartyCapture.isOverlayOpen()) return false;
+					if (PartyUI.isReviewOpen()) return false;
+					if (PartyPicker.isOpen()) return false;
+					return true;
+				},
+				updateViewportScrollMode() {
+					const root = document.documentElement;
+					const on = this.shouldUseViewportScroll();
+					root.classList.toggle('party-page--viewport-scroll', on);
+					document.body.classList.toggle('party-page--viewport-scroll', on);
+					if (on) {
+						root.removeAttribute('data-party-viewport-scroll-lock');
+					}
 				},
 				/** Best-effort landscape lock (PWA / some Android browsers). */
 				tryLockLandscape() {
@@ -3652,17 +3767,12 @@
 				discard(id) {
 					const idx = this.items.findIndex((it) => it.id === id);
 					if (idx === -1) return false;
-					const item = this.items[idx];
-					const wasCommitted = item.status === 'committed';
-					const creationId = item.creationId;
 					PartyTransform.cancel(id);
 					this.items.splice(idx, 1);
 					if (this.selectedId === id) this.selectedId = null;
 					this._persist();
 					this._emit();
 					PartyLog.write(`Discarded: ${id}`);
-					if (wasCommitted && creationId) void PartyGroup.unrecordPush(creationId);
-					else if (creationId) void PartyGroup.syncState();
 					return true;
 				},
 				activeItems() {
@@ -3777,6 +3887,7 @@
 					if (!this.method || !this.usesInAppViewfinder(this.method)) return;
 					if (this.els.captureOverlay) this.els.captureOverlay.hidden = false;
 					document.body.classList.add('party-page--capture-open');
+					PartyPage.updateViewportScrollMode();
 					if (this.els.placeholder) {
 						this.els.placeholder.hidden = false;
 						const strong = this.els.placeholder.querySelector('strong');
@@ -3790,6 +3901,7 @@
 					if (!this.isOverlayOpen()) return;
 					if (this.els.captureOverlay) this.els.captureOverlay.hidden = true;
 					document.body.classList.remove('party-page--capture-open');
+					PartyPage.updateViewportScrollMode();
 					await this.stopLive();
 					PartyHistory.onClose('capture', opts);
 				},
@@ -4138,6 +4250,7 @@
 					if (!reviewable) {
 						overlay.hidden = true;
 						document.body.classList.remove('party-page--review-open');
+						PartyPage.updateViewportScrollMode();
 						return;
 					}
 					const isHeld = item.status === 'held';
@@ -4194,6 +4307,7 @@
 						this.els.pushBtn.disabled = isProcessing;
 						this.els.pushBtn.textContent = 'Push';
 					}
+					PartyPage.updateViewportScrollMode();
 				},
 				renderAll() {
 					this.renderPendingGrid();
@@ -4411,12 +4525,12 @@
 					if (!item) return;
 					const wasCommitted = item.status === 'committed';
 					const msg = wasCommitted
-						? 'Remove this photo from Pushed? It will also be removed from your Google Photos party album when possible.'
+						? 'Remove this photo from Pushed? It will be removed from the party group and from your Google Photos party album when possible.'
 						: item.status === 'held'
 							? 'Discard this photo?'
 							: item.status === 'processing'
-								? 'Discard this photo while it is still processing?'
-								: 'Discard this photo? It will be removed from the queue.';
+								? 'Discard this photo while it is still processing? It will be removed from the party group.'
+								: 'Discard this photo? It will be removed from the queue and party group.';
 					if (!window.confirm(msg)) return;
 
 					PartyUI.setDiscardBusy(item, true);
@@ -4447,6 +4561,11 @@
 									PartyLog.write(`Google Photos remove skipped: ${err?.message || err}`);
 								}
 							}
+						}
+
+						const creationId = Number(item.creationId);
+						if (Number.isFinite(creationId) && creationId > 0) {
+							await PartyGroup.removeSource(creationId);
 						}
 
 						PartyQueue.discard(id);
