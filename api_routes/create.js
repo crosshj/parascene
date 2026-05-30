@@ -810,7 +810,16 @@ export default function createCreateRoutes({ queries, storage }) {
 				typeof entry?.pushed_at === "string" && entry.pushed_at.trim()
 					? entry.pushed_at.trim()
 					: nowIso();
-			out.push({ creation_id: creationId, pushed_at: pushedAt });
+			const normalized = { creation_id: creationId, pushed_at: pushedAt };
+			const mediaItemId =
+				typeof entry?.google_photos_media_item_id === "string"
+					? entry.google_photos_media_item_id.trim()
+					: "";
+			const albumId =
+				typeof entry?.google_photos_album_id === "string" ? entry.google_photos_album_id.trim() : "";
+			if (mediaItemId) normalized.google_photos_media_item_id = mediaItemId;
+			if (albumId) normalized.google_photos_album_id = albumId;
+			out.push(normalized);
 		}
 		return out;
 	}

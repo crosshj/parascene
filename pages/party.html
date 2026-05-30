@@ -522,6 +522,10 @@
 			box-shadow: inset 0 0 0 2px var(--party-ok);
 		}
 
+		.party-grid-item[data-status='held'] {
+			box-shadow: inset 0 0 0 2px var(--party-amber);
+		}
+
 		.party-grid-item[data-selected='true'] {
 			box-shadow: inset 0 0 0 2px var(--accent);
 		}
@@ -547,6 +551,10 @@
 
 		.party-grid-item[data-status='ready'] .party-grid-item-badge {
 			color: var(--party-ok);
+		}
+
+		.party-grid-item[data-status='held'] .party-grid-item-badge {
+			color: var(--party-amber);
 		}
 
 		.party-grid-item--sent {
@@ -687,6 +695,24 @@
 		}
 
 		.party-detail-source-missing[hidden] {
+			display: none !important;
+		}
+
+		.party-detail-held-note {
+			position: absolute;
+			inset: 0;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			padding: 24px;
+			background: rgba(0, 0, 0, 0.55);
+			color: var(--party-amber);
+			font-size: 0.82rem;
+			line-height: 1.45;
+			text-align: center;
+		}
+
+		.party-detail-held-note[hidden] {
 			display: none !important;
 		}
 
@@ -934,6 +960,11 @@
 			justify-content: center;
 		}
 
+		.party-settings-choose-btn:disabled {
+			opacity: 0.45;
+			cursor: not-allowed;
+		}
+
 		.party-settings-linked {
 			margin: 0;
 			font-size: 0.78rem;
@@ -946,28 +977,36 @@
 			inset: 0;
 			z-index: 120;
 			display: flex;
-			align-items: flex-end;
+			align-items: center;
 			justify-content: center;
-			padding: 0;
-			background: rgba(0, 0, 0, 0.72);
+			padding: 24px 16px;
+			background: var(--bg);
+			overflow: hidden;
 		}
 
 		.party-picker-overlay[hidden] {
-			display: none;
+			display: none !important;
+		}
+
+		body.party-page.party-page--picker-open {
+			overflow: hidden;
 		}
 
 		.party-picker {
 			display: flex;
 			flex-direction: column;
 			width: 100%;
-			max-width: 720px;
-			max-height: min(72vh, 560px);
+			max-width: 400px;
+			max-height: min(78vh, 520px);
 			background: var(--party-surface);
-			border-radius: 14px 14px 0 0;
+			border: 1px solid var(--party-border);
+			border-radius: 14px;
 			overflow: hidden;
+			box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
 		}
 
 		.party-picker-head {
+			flex-shrink: 0;
 			display: flex;
 			align-items: center;
 			justify-content: space-between;
@@ -993,10 +1032,26 @@
 			cursor: pointer;
 		}
 
-		.party-picker-body {
+		.party-picker-panel {
 			flex: 1;
+			min-height: 0;
+			display: flex;
+			flex-direction: column;
+			align-items: stretch;
+			justify-content: center;
+			padding: 12px 16px 16px;
+			overflow: hidden;
+		}
+
+		.party-picker-body {
+			flex: 0 1 auto;
+			width: 100%;
+			max-height: min(52vh, 400px);
 			overflow-y: auto;
 			-webkit-overflow-scrolling: touch;
+			display: flex;
+			flex-direction: column;
+			gap: 8px;
 		}
 
 		.party-picker-item {
@@ -1004,10 +1059,10 @@
 			align-items: center;
 			gap: 12px;
 			width: 100%;
-			padding: 12px 16px;
-			border: none;
-			border-bottom: 1px solid var(--party-border);
-			background: transparent;
+			padding: 12px;
+			border: 1px solid var(--party-border);
+			border-radius: 10px;
+			background: var(--party-surface-raised);
 			color: inherit;
 			text-align: left;
 			cursor: pointer;
@@ -1015,7 +1070,8 @@
 		}
 
 		.party-picker-item[data-selected='true'] {
-			background: var(--party-surface-raised);
+			border-color: var(--party-ok);
+			box-shadow: inset 0 0 0 1px var(--party-ok);
 		}
 
 		.party-picker-item-thumb {
@@ -1058,11 +1114,16 @@
 		.party-picker-empty,
 		.party-picker-status {
 			margin: 0;
-			padding: 16px;
+			padding: 8px 4px 0;
 			font-size: 0.78rem;
 			color: var(--party-muted);
 			text-align: center;
 			line-height: 1.45;
+		}
+
+		.party-picker-empty[hidden],
+		.party-picker-status[hidden] {
+			display: none !important;
 		}
 
 		@media (min-width: 769px) {
@@ -1151,6 +1212,16 @@
 								</div>
 							</section>
 
+							<section class="party-settings-section" aria-labelledby="party-settings-google-photos-title">
+								<h2 class="party-settings-section-title" id="party-settings-google-photos-title">Google Photos</h2>
+								<p class="party-settings-section-desc">Sync keeps the party album matched to Pushed on Parascene — uploads missing photos and removes extras.</p>
+
+								<div class="party-field">
+									<p class="party-settings-linked" id="party-settings-gp-sync-hint">Connect Google Photos to sync pushed photos.</p>
+									<button type="button" class="party-btn party-btn--ghost party-settings-choose-btn" id="party-settings-gp-sync">Sync pushed photos</button>
+								</div>
+							</section>
+
 							<section class="party-settings-section" aria-labelledby="party-settings-device-title">
 								<h2 class="party-settings-section-title" id="party-settings-device-title">Device</h2>
 								<p class="party-settings-section-desc">Applies every time you use Party Mode on this device.</p>
@@ -1175,7 +1246,7 @@
 									<label for="party-settings-auto-review">Open review automatically when a transform finishes</label>
 								</div>
 
-								<p class="party-settings-note">Photos are always captured and transformed in landscape 16:9. Hold your phone sideways when shooting.</p>
+								<p class="party-settings-note">Landscape 16:9 photos transform automatically. Portrait or square photos wait for you to transform or discard.</p>
 							</section>
 						</form>
 					</div>
@@ -1194,6 +1265,7 @@
 			<div class="party-detail-media">
 				<div class="party-detail-frame party-detail-frame--result">
 					<span class="party-detail-label">Transformed</span>
+					<div class="party-detail-held-note" id="party-review-held-note" hidden>Not landscape — transform to run the party look, or discard.</div>
 					<div class="party-detail-working" id="party-review-working" hidden>
 						<div class="party-detail-working-spinner" aria-hidden="true"></div>
 						<span>Working</span>
@@ -1205,6 +1277,11 @@
 					<div class="party-detail-source-missing" id="party-review-source-missing" hidden>Source photo not on this device. The transformed version is shown above.</div>
 					<img id="party-review-original" alt="Source photo" hidden />
 				</div>
+			</div>
+			<div class="party-detail-actions" id="party-detail-actions-held" hidden>
+				<button type="button" class="party-btn party-btn--primary" id="party-transform-btn">Transform</button>
+				<button type="button" class="party-btn party-btn--danger" id="party-held-discard-btn">Discard</button>
+				<button type="button" class="party-btn party-btn--ghost" id="party-held-dismiss-btn">Dismiss</button>
 			</div>
 			<div class="party-detail-actions" id="party-detail-actions-queue">
 				<button type="button" class="party-btn party-btn--ghost" id="party-redo-btn">Redo</button>
@@ -1257,9 +1334,11 @@
 				<h2 id="party-picker-title">Choose party</h2>
 				<button type="button" class="party-picker-close" id="party-picker-close">Cancel</button>
 			</header>
-			<div class="party-picker-body" id="party-picker-list"></div>
-			<p class="party-picker-empty" id="party-picker-empty" hidden>No parties yet. Finish transforming a photo on any device to start one.</p>
-			<p class="party-picker-status" id="party-picker-status" hidden></p>
+			<div class="party-picker-panel">
+				<div class="party-picker-body" id="party-picker-list"></div>
+				<p class="party-picker-empty" id="party-picker-empty" hidden>No parties yet. Finish transforming a photo on any device to start one.</p>
+				<p class="party-picker-status" id="party-picker-status" hidden></p>
+			</div>
 		</div>
 	</div>
 
@@ -1294,7 +1373,7 @@
 			/** Grok i2i input — same 16:9 box (1280×720). */
 			const GROK_INPUT_LONG_EDGE = 1280;
 
-			/** @typedef {'processing'|'ready'|'committed'|'failed'} PartyItemStatus */
+			/** @typedef {'held'|'processing'|'ready'|'committed'|'failed'} PartyItemStatus */
 			/** @typedef {'portrait'|'landscape'|'square'} PartyOrientation */
 			/** @typedef {{ dataUrl: string, width: number, height: number, orientation: PartyOrientation, aspectRatio: string, exifCorrected: boolean, screenOrientation?: string|null, captureSource?: string, viewportCorrected?: boolean, holdSource?: string }} PartyStoredPhoto */
 			/** @typedef {{ id: string, status: PartyItemStatus, createdAt: string, updatedAt: string, prompt: string, originalDataUrl: string, resultDataUrl?: string, error?: string, creationId?: number, creationToken?: string, width?: number, height?: number, orientation?: PartyOrientation, aspectRatio?: string, exifCorrected?: boolean, screenOrientation?: string|null, sourceUnavailable?: boolean }} PartyQueueItem */
@@ -1497,7 +1576,16 @@
 					const pushedAt = typeof entry?.pushed_at === 'string' && entry.pushed_at.trim()
 						? entry.pushed_at.trim()
 						: new Date().toISOString();
-					return { creation_id: creationId, pushed_at: pushedAt };
+					const normalized = { creation_id: creationId, pushed_at: pushedAt };
+					const mediaItemId = typeof entry?.google_photos_media_item_id === 'string'
+						? entry.google_photos_media_item_id.trim()
+						: '';
+					const albumId = typeof entry?.google_photos_album_id === 'string'
+						? entry.google_photos_album_id.trim()
+						: '';
+					if (mediaItemId) normalized.google_photos_media_item_id = mediaItemId;
+					if (albumId) normalized.google_photos_album_id = albumId;
+					return normalized;
 				},
 				_normalizePushedList(raw) {
 					if (!Array.isArray(raw)) return [];
@@ -1512,10 +1600,19 @@
 					return out;
 				},
 				getPartyPushedForGroup() {
-					return this._pushed.map((entry) => ({
-						creation_id: entry.creation_id,
-						pushed_at: entry.pushed_at
-					}));
+					return this._pushed.map((entry) => {
+						const out = {
+							creation_id: entry.creation_id,
+							pushed_at: entry.pushed_at
+						};
+						if (entry.google_photos_media_item_id) {
+							out.google_photos_media_item_id = entry.google_photos_media_item_id;
+						}
+						if (entry.google_photos_album_id) {
+							out.google_photos_album_id = entry.google_photos_album_id;
+						}
+						return out;
+					});
 				},
 				setPartyPushed(entries) {
 					this._pushed = this._normalizePushedList(entries);
@@ -1625,6 +1722,9 @@
 						this._saveJson(PARTY_SETTINGS_KEY, this._party);
 					}
 					PartyQueue.applyPushedFromGroup(this._pushed);
+					if (prevJson !== nextJson) {
+						PartyGooglePhotos.rebuildSyncMapFromPushed(this._pushed);
+					}
 					return prevJson !== nextJson;
 				},
 				applyPartyQueueFromMeta(meta) {
@@ -1878,6 +1978,7 @@
 				close(opts = {}) {
 					if (!this.isOpen()) return;
 					if (this.els.pickerOverlay) this.els.pickerOverlay.hidden = true;
+					document.body.classList.remove('party-page--picker-open');
 					if (this.els.pickerStatus) {
 						this.els.pickerStatus.hidden = true;
 						this.els.pickerStatus.textContent = '';
@@ -1887,6 +1988,7 @@
 				async open() {
 					if (!this.els.pickerOverlay) return;
 					this.els.pickerOverlay.hidden = false;
+					document.body.classList.add('party-page--picker-open');
 					PartyHistory.onOpen('picker');
 					if (this.els.pickerList) this.els.pickerList.replaceChildren();
 					if (this.els.pickerEmpty) this.els.pickerEmpty.hidden = true;
@@ -1977,6 +2079,7 @@
 					}
 					PartyUI.populateSettingsForm();
 					PartyUI.updateLinkedPartyHint();
+					void PartyUI.updateGooglePhotosSyncHint();
 					PartyUI.renderAll();
 					this.close();
 					PartyLog.write(`Linked party: ${PartySettings.getLinkedPartyLabel()}`);
@@ -2083,6 +2186,7 @@
 					PartySettings.startDraft();
 					PartyUI.populateSettingsForm();
 					PartyUI.updateLinkedPartyHint();
+					void PartyUI.updateGooglePhotosSyncHint();
 					this.setView('settings');
 					PartyHistory.onOpen('settings');
 				},
@@ -2300,13 +2404,24 @@
 			};
 			*/
 
-			// --- party/images (landscape-only — all captures normalized to width > height, 16:9 transform) ---
+			// --- party/images (landscape transforms auto; portrait/square held for manual action) ---
 			const PartyImages = {
+				classifyOrientation(width, height) {
+					const ratio = width / height;
+					if (ratio > 1.05) return 'landscape';
+					if (ratio < 0.95) return 'portrait';
+					return 'square';
+				},
+				isLandscapeOrientation(width, height) {
+					return this.classifyOrientation(width, height) === 'landscape';
+				},
 				formatOrientationDetail(item) {
 					const dims = item.width && item.height ? `${item.width}×${item.height}` : '';
-					const rotated = item.viewportCorrected ? ' · rotated to landscape' : '';
-					const ar = `Transform ratio: ${item.aspectRatio || PARTY_ASPECT_RATIO}`;
-					return ['Landscape' + rotated, dims, ar].filter(Boolean).join(' · ');
+					const name = item.orientation
+						? item.orientation.charAt(0).toUpperCase() + item.orientation.slice(1)
+						: 'Landscape';
+					const ar = item.aspectRatio ? `Ratio: ${item.aspectRatio}` : '';
+					return [name, dims, ar].filter(Boolean).join(' · ');
 				},
 
 				/*
@@ -2473,23 +2588,32 @@
 					ctx.drawImage(srcCanvas, 0, 0, srcW, srcH, 0, 0, destW, destH);
 					return canvas;
 				},
-				/** @param {HTMLVideoElement} video */
-				drawVideoFrameToCanvas(video) {
+				_scaleDrawableToLongEdge(drawable, srcW, srcH, longEdge) {
+					const scale = Math.min(1, longEdge / Math.max(srcW, srcH));
+					const outW = Math.max(1, Math.round(srcW * scale));
+					const outH = Math.max(1, Math.round(srcH * scale));
+					const canvas = document.createElement('canvas');
+					canvas.width = outW;
+					canvas.height = outH;
+					const ctx = canvas.getContext('2d');
+					if (!ctx) throw new Error('Canvas unavailable');
+					ctx.imageSmoothingEnabled = true;
+					ctx.imageSmoothingQuality = 'high';
+					ctx.drawImage(drawable, 0, 0, srcW, srcH, 0, 0, outW, outH);
+					return { canvas, width: outW, height: outH };
+				},
+				/** @param {HTMLVideoElement} video — raw frame, no forced landscape crop */
+				drawVideoFrameRaw(video) {
 					const vw = video.videoWidth;
 					const vh = video.videoHeight;
 					if (!vw || !vh) throw new Error('No video frame');
-					const fitted = this._fitAspectRatioCanvas(
-						video,
-						vw,
-						vh,
-						PARTY_ASPECT_W,
-						PARTY_ASPECT_H,
-						STORED_IMAGE_LONG_EDGE
-					);
-					return {
-						canvas: fitted.canvas,
-						viewportCorrected: fitted.rotated || fitted.cropped
-					};
+					const canvas = document.createElement('canvas');
+					canvas.width = vw;
+					canvas.height = vh;
+					const ctx = canvas.getContext('2d');
+					if (!ctx) throw new Error('Canvas unavailable');
+					ctx.drawImage(video, 0, 0, vw, vh);
+					return { canvas, width: vw, height: vh };
 				},
 				async canvasToJpegBlob(canvas, quality = 0.9) {
 					const blob = await new Promise((resolve) => {
@@ -2535,50 +2659,70 @@
 					}
 					const decoded = await this._decodeSource(file);
 					try {
-						/* Portrait/gyro preparePhoto (disabled — no forced landscape):
-						const scale = Math.min(1, maxEdge / Math.max(decoded.width, decoded.height));
-						const w = Math.max(1, Math.round(decoded.width * scale));
-						const h = Math.max(1, Math.round(decoded.height * scale));
-						const canvas = document.createElement('canvas');
-						canvas.width = w;
-						canvas.height = h;
-						canvas.getContext('2d').drawImage(decoded.drawable, 0, 0, w, h);
-						const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
-						const orientation = this.classifyOrientation(w, h);
-						return {
-							dataUrl, width: w, height: h, orientation,
-							aspectRatio: this.suggestAspectRatio(w, h),
-							exifCorrected: decoded.exifCorrected,
-							screenOrientation: screen.orientation?.type ?? null,
-							captureSource: meta.captureSource,
-							viewportCorrected: meta.viewportCorrected === true,
-							holdSource: meta.holdSource
-						};
-						*/
+						const orientation = this.classifyOrientation(decoded.width, decoded.height);
+						if (this.isLandscapeOrientation(decoded.width, decoded.height)) {
+							const fitted = this._fitAspectRatioCanvas(
+								decoded.drawable,
+								decoded.width,
+								decoded.height,
+								PARTY_ASPECT_W,
+								PARTY_ASPECT_H,
+								longEdge
+							);
+							const dataUrl = fitted.canvas.toDataURL('image/jpeg', 0.82);
+							return {
+								dataUrl,
+								width: fitted.width,
+								height: fitted.height,
+								orientation: 'landscape',
+								aspectRatio: PARTY_ASPECT_RATIO,
+								exifCorrected: decoded.exifCorrected,
+								screenOrientation: screen.orientation?.type ?? null,
+								captureSource: meta.captureSource,
+								viewportCorrected: meta.viewportCorrected === true || fitted.rotated || fitted.cropped
+							};
+						}
 
-						const fitted = this._fitAspectRatioCanvas(
+						const scaled = this._scaleDrawableToLongEdge(
 							decoded.drawable,
 							decoded.width,
 							decoded.height,
-							PARTY_ASPECT_W,
-							PARTY_ASPECT_H,
 							longEdge
 						);
-						const dataUrl = fitted.canvas.toDataURL('image/jpeg', 0.82);
+						const dataUrl = scaled.canvas.toDataURL('image/jpeg', 0.82);
 						return {
 							dataUrl,
-							width: fitted.width,
-							height: fitted.height,
-							orientation: PARTY_ORIENTATION,
-							aspectRatio: PARTY_ASPECT_RATIO,
+							width: scaled.width,
+							height: scaled.height,
+							orientation,
+							aspectRatio: `${scaled.width}:${scaled.height}`,
 							exifCorrected: decoded.exifCorrected,
-							screenOrientation: null,
+							screenOrientation: screen.orientation?.type ?? null,
 							captureSource: meta.captureSource,
-							viewportCorrected: meta.viewportCorrected === true || fitted.rotated || fitted.cropped
+							viewportCorrected: false
 						};
 					} finally {
 						decoded.close();
 					}
+				},
+				async normalizePhotoForTransform(dataUrl) {
+					const img = await this._loadImage(dataUrl);
+					const fitted = this._fitAspectRatioCanvas(
+						img,
+						img.naturalWidth,
+						img.naturalHeight,
+						PARTY_ASPECT_W,
+						PARTY_ASPECT_H,
+						STORED_IMAGE_LONG_EDGE
+					);
+					return {
+						dataUrl: fitted.canvas.toDataURL('image/jpeg', 0.82),
+						width: fitted.width,
+						height: fitted.height,
+						orientation: PARTY_ORIENTATION,
+						aspectRatio: PARTY_ASPECT_RATIO,
+						viewportCorrected: true
+					};
 				},
 				/** Exact 16:9 PNG at 1280×720 — bypasses edited-upload 1024² server crop. */
 				async dataUrlToGrokUploadFile(dataUrl, filename) {
@@ -2621,6 +2765,229 @@
 				const v = document.querySelector('meta[name="asset-version"]')?.getAttribute('content')?.trim();
 				return v ? `?v=${encodeURIComponent(v)}` : '';
 			}
+
+			const GP_SYNC_KEY_PREFIX = 'parascene_party_gp_sync_v1';
+
+			const PartyGooglePhotos = {
+				_status: null,
+				_syncMapCache: null,
+				_syncMapGroupId: null,
+				_syncStorageKey() {
+					const groupId = PartySettings.getGroupCreationId();
+					return groupId ? `${GP_SYNC_KEY_PREFIX}_${groupId}` : `${GP_SYNC_KEY_PREFIX}_local`;
+				},
+				loadSyncMap() {
+					const key = this._syncStorageKey();
+					if (this._syncMapCache && this._syncMapGroupId === key) return this._syncMapCache;
+					try {
+						const raw = localStorage.getItem(key);
+						const data = raw ? JSON.parse(raw) : {};
+						this._syncMapCache = data && typeof data === 'object' ? data : {};
+					} catch {
+						this._syncMapCache = {};
+					}
+					this._syncMapGroupId = key;
+					return this._syncMapCache;
+				},
+				saveSyncMap(map) {
+					const key = this._syncStorageKey();
+					this._syncMapCache = map && typeof map === 'object' ? map : {};
+					this._syncMapGroupId = key;
+					try {
+						localStorage.setItem(key, JSON.stringify(this._syncMapCache));
+					} catch (err) {
+						PartyLog.write(`GP sync save failed: ${err?.message || err}`);
+					}
+				},
+				getSyncRecord(creationId) {
+					const id = Number(creationId);
+					if (!Number.isFinite(id) || id <= 0) return null;
+					const row = this.loadSyncMap()[String(id)];
+					if (!row || typeof row !== 'object') return null;
+					const mediaItemId = typeof row.mediaItemId === 'string' ? row.mediaItemId.trim() : '';
+					const albumId = typeof row.albumId === 'string' ? row.albumId.trim() : '';
+					if (!mediaItemId) return null;
+					return { mediaItemId, albumId: albumId || null };
+				},
+				isCreationSynced(creationId) {
+					return Boolean(this.getSyncRecord(creationId));
+				},
+				markCreationSynced(creationId, meta = {}) {
+					const id = Number(creationId);
+					if (!Number.isFinite(id) || id <= 0) return;
+					const mediaItemId = typeof meta.mediaItemId === 'string' ? meta.mediaItemId.trim() : '';
+					if (!mediaItemId) return;
+					const map = this.loadSyncMap();
+					map[String(id)] = {
+						mediaItemId,
+						albumId: typeof meta.albumId === 'string' ? meta.albumId.trim() : '',
+						syncedAt: new Date().toISOString()
+					};
+					this.saveSyncMap(map);
+				},
+				unmarkCreationSynced(creationId) {
+					const id = Number(creationId);
+					if (!Number.isFinite(id) || id <= 0) return;
+					const map = this.loadSyncMap();
+					if (!map[String(id)]) return;
+					delete map[String(id)];
+					this.saveSyncMap(map);
+				},
+				applySyncMapToItem(item) {
+					const id = Number(item?.creationId);
+					if (!Number.isFinite(id) || id <= 0) return;
+					if (item.googlePhotosMediaItemId) return;
+					const record = this.getSyncRecord(id);
+					if (!record) return;
+					item.googlePhotosMediaItemId = record.mediaItemId;
+					if (record.albumId) item.googlePhotosAlbumId = record.albumId;
+				},
+				applySyncMapToQueue() {
+					for (const item of PartyQueue.items) {
+						if (item.status === 'committed') this.applySyncMapToItem(item);
+					}
+				},
+				rebuildSyncMapFromPushed(entries) {
+					const map = {};
+					for (const entry of Array.isArray(entries) ? entries : []) {
+						const id = Number(entry?.creation_id);
+						const mediaItemId = typeof entry?.google_photos_media_item_id === 'string'
+							? entry.google_photos_media_item_id.trim()
+							: '';
+						if (!Number.isFinite(id) || id <= 0 || !mediaItemId) continue;
+						map[String(id)] = {
+							mediaItemId,
+							albumId: typeof entry?.google_photos_album_id === 'string'
+								? entry.google_photos_album_id.trim()
+								: '',
+							syncedAt: new Date().toISOString()
+						};
+					}
+					this.saveSyncMap(map);
+				},
+				countPendingSync() {
+					const pushed = PartySettings.getPartyPushedForGroup();
+					let pending = 0;
+					for (const entry of pushed) {
+						const id = Number(entry?.creation_id);
+						if (!Number.isFinite(id) || id <= 0) continue;
+						if (entry.google_photos_media_item_id || this.isCreationSynced(id)) continue;
+						pending++;
+					}
+					return pending;
+				},
+				formatSyncHint(status, pending) {
+					if (!status?.configured) {
+						return 'Google Photos is not available on this server.';
+					}
+					if (!PartySettings.getGroupCreationId()) {
+						return 'Link a party before syncing to Google Photos.';
+					}
+					if (!status?.connected) {
+						return 'Connect Google Photos to sync the party album.';
+					}
+					if (pending > 0) {
+						return `${pending} pushed photo${pending === 1 ? '' : 's'} not in Google Photos yet. Sync uploads missing items and removes extras.`;
+					}
+					return `Sync matches Google Photos to Pushed in “${this.partyAlbumTitle()}”.`;
+				},
+				async fetchStatus(force = false) {
+					if (!force && this._status) return this._status;
+					try {
+						const res = await fetch('/api/google-photos/status', { credentials: 'include' });
+						const data = await res.json().catch(() => ({}));
+						this._status = {
+							configured: res.ok && data?.configured === true,
+							connected: res.ok && data?.connected === true,
+							albumTitle: typeof data?.albumTitle === 'string' ? data.albumTitle : null
+						};
+					} catch {
+						this._status = { configured: false, connected: false, albumTitle: null };
+					}
+					return this._status;
+				},
+				partyAlbumTitle() {
+					const name = PartySettings.getPartyName();
+					return name || 'Party Mode';
+				},
+				async uploadCreation(creationId, albumTitle) {
+					const res = await fetch('/api/google-photos/upload', {
+						method: 'POST',
+						credentials: 'include',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({
+							creationId: Number(creationId),
+							albumTitle: String(albumTitle || '').trim() || undefined
+						})
+					});
+					const data = await res.json().catch(() => ({}));
+					if (!res.ok) {
+						throw new Error(data?.message || data?.error || `Upload failed (${res.status})`);
+					}
+					return data;
+				},
+				async removeFromAlbum(albumId, mediaItemId) {
+					const res = await fetch('/api/google-photos/remove', {
+						method: 'POST',
+						credentials: 'include',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({
+							albumId: String(albumId || ''),
+							mediaItemIds: [String(mediaItemId || '')]
+						})
+					});
+					const data = await res.json().catch(() => ({}));
+					if (!res.ok) {
+						throw new Error(data?.message || data?.error || `Remove failed (${res.status})`);
+					}
+					return data;
+				},
+				async syncPushed() {
+					const status = await this.fetchStatus(true);
+					if (!status.configured) {
+						throw new Error('Google Photos is not configured');
+					}
+					if (!status.connected) {
+						window.location.href = '/integrations#google-photos=connect';
+						return { redirected: true, uploaded: 0, removed: 0, uploadFailed: 0 };
+					}
+
+					const groupId = PartySettings.getGroupCreationId();
+					if (!groupId) {
+						throw new Error('Link a party before syncing');
+					}
+
+					const res = await fetch('/api/google-photos/sync-party', {
+						method: 'POST',
+						credentials: 'include',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({
+							groupId,
+							albumTitle: this.partyAlbumTitle()
+						})
+					});
+					const data = await res.json().catch(() => ({}));
+					if (!res.ok) {
+						throw new Error(data?.message || data?.error || `Sync failed (${res.status})`);
+					}
+
+					if (data?.meta) {
+						PartySettings.applyPartyPushedFromMeta(data.meta);
+					}
+					this.rebuildSyncMapFromPushed(PartySettings.getPartyPushedForGroup());
+					PartyGooglePhotos.applySyncMapToQueue();
+					PartyQueue._persist();
+
+					return {
+						uploaded: Number(data?.uploaded) || 0,
+						removed: Number(data?.removed) || 0,
+						uploadFailed: Number(data?.uploadFailed) || 0,
+						pushedCount: Number(data?.pushedCount) || 0,
+						albumTitle: data?.albumTitle || this.partyAlbumTitle(),
+						albumId: data?.albumId || null
+					};
+				}
+			};
 
 			/** Submit + poll: MUTATE_DEFAULT_* → Grok image-to-image (image_url + prompt), logged-in /api/create. */
 			const PartyTransform = {
@@ -2817,6 +3184,7 @@
 					this._onChange = onChange;
 					const data = PartyStorage.load();
 					this.items = data.items.filter((it) => it && it.id && (it.originalDataUrl || it.resultDataUrl));
+					PartyGooglePhotos.applySyncMapToQueue();
 					void this._hydrateAllMeta().then(() => {
 						PartyTransform.resumeAll(this);
 						this._emit();
@@ -3106,6 +3474,7 @@
 						this._persist();
 						this._emit();
 					}
+					PartyGooglePhotos.applySyncMapToQueue();
 					PartyTransform.resumeAll(this);
 				},
 				_persist() {
@@ -3121,10 +3490,11 @@
 				},
 				/** @param {PartyStoredPhoto} photo */
 				enqueue(photo) {
+					const autoTransform = photo.orientation === 'landscape';
 					/** @type {PartyQueueItem} */
 					const item = {
 						id: this._newId(),
-						status: 'processing',
+						status: autoTransform ? 'processing' : 'held',
 						createdAt: new Date().toISOString(),
 						updatedAt: new Date().toISOString(),
 						prompt: PartySettings.getPrompt(),
@@ -3138,17 +3508,55 @@
 						viewportCorrected: photo.viewportCorrected === true
 					};
 					this.items.unshift(item);
-					this.selectedId = null;
+					this.selectedId = autoTransform ? null : item.id;
 					this._persist();
 					this._emit();
-					PartyLog.write(`Queued: ${item.id}`);
-					void PartyTransform.start(item.id, this);
+					if (autoTransform) {
+						PartyLog.write(`Queued: ${item.id}`);
+						void PartyTransform.start(item.id, this);
+					} else {
+						PartyLog.write(`Held (not landscape): ${item.id}`);
+					}
 					return item;
+				},
+				async startTransform(id) {
+					const idx = this.items.findIndex((it) => it.id === id);
+					if (idx === -1) return false;
+					const item = this.items[idx];
+					if (item.status !== 'held') return false;
+					try {
+						const normalized = await PartyImages.normalizePhotoForTransform(item.originalDataUrl);
+						item.originalDataUrl = normalized.dataUrl;
+						item.width = normalized.width;
+						item.height = normalized.height;
+						item.orientation = normalized.orientation;
+						item.aspectRatio = normalized.aspectRatio;
+						item.viewportCorrected = normalized.viewportCorrected === true;
+						item.status = 'processing';
+						item.resultDataUrl = undefined;
+						item.error = undefined;
+						item.creationId = undefined;
+						item.creationToken = undefined;
+						item.updatedAt = new Date().toISOString();
+						if (idx > 0) {
+							this.items.splice(idx, 1);
+							this.items.unshift(item);
+						}
+						this._persist();
+						this._emit();
+						PartyLog.write(`Transform queued: ${id}`);
+						void PartyTransform.start(item.id, this);
+						return true;
+					} catch (err) {
+						PartyLog.write(`Transform prep failed: ${err?.message || err}`);
+						return false;
+					}
 				},
 				select(id) {
 					const item = this.items.find((it) => {
 						return it.id === id && (
-							it.status === 'processing'
+							it.status === 'held'
+							|| it.status === 'processing'
 							|| it.status === 'ready'
 							|| it.status === 'committed'
 						);
@@ -3188,12 +3596,19 @@
 					void PartyGroup.syncState();
 					void PartyTransform.start(id, this);
 				},
-				push(id) {
+				push(id, googlePhotosMeta = null) {
 					const item = this.items.find((it) => it.id === id);
 					if (!item || item.status !== 'ready') return false;
 					item.status = 'committed';
 					item.updatedAt = new Date().toISOString();
 					item.pushedAt = item.updatedAt;
+					if (googlePhotosMeta?.mediaItemId) {
+						item.googlePhotosMediaItemId = String(googlePhotosMeta.mediaItemId);
+						PartyGooglePhotos.markCreationSynced(item.creationId, googlePhotosMeta);
+					}
+					if (googlePhotosMeta?.albumId) {
+						item.googlePhotosAlbumId = String(googlePhotosMeta.albumId);
+					}
 					if (this.selectedId === id) this.selectedId = null;
 					this._persist();
 					this._emit();
@@ -3412,25 +3827,11 @@
 					const video = this.els.liveVideo;
 					if (!video?.videoWidth) return;
 					try {
-						// Landscape-only (active):
-						const { canvas, viewportCorrected } = PartyImages.drawVideoFrameToCanvas(video);
+						const { canvas } = PartyImages.drawVideoFrameRaw(video);
 						const blob = await PartyImages.canvasToJpegBlob(canvas, 0.9);
 						const photo = await PartyImages.preparePhoto(blob, {
-							captureSource: 'live-viewfinder',
-							viewportCorrected
+							captureSource: 'live-viewfinder'
 						});
-
-						/* Portrait/gyro live capture (disabled):
-						const hold = await PartyMotion.sampleHoldOrientation();
-						const { canvas, viewportCorrected, holdSource } = PartyImages.drawVideoFrameToCanvasWithHold(video, hold);
-						const blob = await PartyImages.canvasToJpegBlob(canvas, 0.9);
-						const photo = await PartyImages.preparePhoto(blob, {
-							captureSource: 'live-viewfinder',
-							viewportCorrected,
-							holdSource: holdSource || hold.source
-						});
-						*/
-
 						if (typeof this._onSnap === 'function') this._onSnap(photo);
 						await this.closeCaptureOverlay();
 					} catch (err) {
@@ -3497,11 +3898,15 @@
 				init(els) {
 					this.els = els;
 					els.redoBtn?.addEventListener('click', () => PartyApp.onRedo());
-					els.pushBtn?.addEventListener('click', () => PartyApp.onPush());
-					els.discardBtn?.addEventListener('click', () => PartyApp.onDiscard());
-					els.pushedDiscardBtn?.addEventListener('click', () => PartyApp.onDiscard());
+					els.pushBtn?.addEventListener('click', () => { void PartyApp.onPush(); });
+					els.transformBtn?.addEventListener('click', () => { void PartyApp.onTransform(); });
+					els.discardBtn?.addEventListener('click', () => { void PartyApp.onDiscard(); });
+					els.pushedDiscardBtn?.addEventListener('click', () => { void PartyApp.onDiscard(); });
+					els.heldDiscardBtn?.addEventListener('click', () => { void PartyApp.onDiscard(); });
 					els.cancelBtn?.addEventListener('click', () => PartyApp.closeReview());
 					els.dismissBtn?.addEventListener('click', () => PartyApp.closeReview());
+					els.heldDismissBtn?.addEventListener('click', () => PartyApp.closeReview());
+					els.gpSyncBtn?.addEventListener('click', () => { void PartyApp.onSyncGooglePhotos(); });
 				},
 				_fillCaptureMethodSelect(sel, selectedId) {
 					if (!sel) return;
@@ -3541,6 +3946,24 @@
 						return;
 					}
 					hint.textContent = `Linked to “${label}”. Choose another party to resume on this device.`;
+				},
+				async updateGooglePhotosSyncHint() {
+					const hint = this.els.gpSyncHint;
+					const btn = this.els.gpSyncBtn;
+					if (!hint && !btn) return;
+					const status = await PartyGooglePhotos.fetchStatus(true);
+					const pending = PartyGooglePhotos.countPendingSync();
+					if (hint) {
+						hint.textContent = PartyGooglePhotos.formatSyncHint(status, pending);
+					}
+					if (btn) {
+						const linked = Boolean(PartySettings.getGroupCreationId());
+						const canSync = status.configured && linked && (status.connected || pending > 0);
+						btn.disabled = !canSync;
+						btn.textContent = pending > 0
+							? `Sync ${pending} photo${pending === 1 ? '' : 's'}`
+							: 'Sync to Google Photos';
+					}
 				},
 				renderPendingGrid() {
 					const list = this.els.pendingGrid;
@@ -3595,7 +4018,9 @@
 							? 'Working'
 							: item.status === 'ready'
 								? 'Ready'
-								: item.status;
+								: item.status === 'held'
+									? 'Review'
+									: item.status;
 						btn.appendChild(badge);
 						if (item.status === 'processing') {
 							const spin = document.createElement('div');
@@ -3606,7 +4031,8 @@
 					}
 					btn.addEventListener('click', () => {
 						if (
-							item.status === 'processing'
+							item.status === 'held'
+							|| item.status === 'processing'
 							|| item.status === 'ready'
 							|| item.status === 'committed'
 						) {
@@ -3623,7 +4049,8 @@
 					if (!overlay) return;
 					const item = PartyQueue.selectedItem();
 					const reviewable = item && (
-						item.status === 'processing'
+						item.status === 'held'
+						|| item.status === 'processing'
 						|| item.status === 'ready'
 						|| item.status === 'committed'
 					);
@@ -3632,16 +4059,20 @@
 						document.body.classList.remove('party-page--review-open');
 						return;
 					}
+					const isHeld = item.status === 'held';
 					const isProcessing = item.status === 'processing';
 					const isPushed = item.status === 'committed';
 					const sourceMissing = PartyQueue.isSourceMissingOnDevice(item);
 					overlay.hidden = false;
 					document.body.classList.add('party-page--review-open');
+					if (this.els.reviewHeldNote) {
+						this.els.reviewHeldNote.hidden = !isHeld;
+					}
 					if (this.els.reviewSourceMissing) {
-						this.els.reviewSourceMissing.hidden = !sourceMissing;
+						this.els.reviewSourceMissing.hidden = isHeld || !sourceMissing;
 					}
 					if (this.els.reviewOriginal) {
-						if (sourceMissing) {
+						if (sourceMissing && !isHeld) {
 							this.els.reviewOriginal.hidden = true;
 							this.els.reviewOriginal.removeAttribute('src');
 						} else {
@@ -3651,7 +4082,7 @@
 					}
 					if (this.els.reviewWorking) this.els.reviewWorking.hidden = !isProcessing;
 					if (this.els.reviewResult) {
-						if (isProcessing) {
+						if (isHeld || isProcessing) {
 							this.els.reviewResult.hidden = true;
 							this.els.reviewResult.removeAttribute('src');
 						} else {
@@ -3659,10 +4090,15 @@
 							this.els.reviewResult.src = item.resultDataUrl || '';
 						}
 					}
-					if (this.els.actionsQueue) this.els.actionsQueue.hidden = isPushed;
+					if (this.els.actionsHeld) this.els.actionsHeld.hidden = !isHeld;
+					if (this.els.actionsQueue) this.els.actionsQueue.hidden = isHeld || isPushed;
 					if (this.els.actionsPushed) this.els.actionsPushed.hidden = !isPushed;
+					if (this.els.transformBtn) this.els.transformBtn.disabled = sourceMissing;
 					if (this.els.redoBtn) this.els.redoBtn.disabled = isProcessing || sourceMissing;
-					if (this.els.pushBtn) this.els.pushBtn.disabled = isProcessing;
+					if (this.els.pushBtn) {
+						this.els.pushBtn.disabled = isProcessing;
+						this.els.pushBtn.textContent = 'Push';
+					}
 				},
 				renderAll() {
 					this.renderPendingGrid();
@@ -3690,6 +4126,8 @@
 						settingsSave: document.getElementById('party-settings-save'),
 						settingsForm: document.getElementById('party-settings-form'),
 						settingsLinkedHint: document.getElementById('party-settings-linked-hint'),
+						gpSyncHint: document.getElementById('party-settings-gp-sync-hint'),
+						gpSyncBtn: document.getElementById('party-settings-gp-sync'),
 						choosePartyBtn: document.getElementById('party-settings-choose-party'),
 						pickerOverlay: document.getElementById('party-picker-overlay'),
 						pickerList: document.getElementById('party-picker-list'),
@@ -3714,16 +4152,21 @@
 						sentGrid: document.getElementById('party-sent-grid'),
 						sentEmpty: document.getElementById('party-sent-empty'),
 						reviewOverlay: document.getElementById('party-review-overlay'),
+						reviewHeldNote: document.getElementById('party-review-held-note'),
 						reviewOriginal: document.getElementById('party-review-original'),
 						reviewSourceMissing: document.getElementById('party-review-source-missing'),
 						reviewWorking: document.getElementById('party-review-working'),
 						reviewResult: document.getElementById('party-review-result'),
 						actionsQueue: document.getElementById('party-detail-actions-queue'),
+						actionsHeld: document.getElementById('party-detail-actions-held'),
 						actionsPushed: document.getElementById('party-detail-actions-pushed'),
+						transformBtn: document.getElementById('party-transform-btn'),
 						redoBtn: document.getElementById('party-redo-btn'),
 						pushBtn: document.getElementById('party-push-btn'),
 						discardBtn: document.getElementById('party-discard-btn'),
 						cancelBtn: document.getElementById('party-cancel-btn'),
+						heldDiscardBtn: document.getElementById('party-held-discard-btn'),
+						heldDismissBtn: document.getElementById('party-held-dismiss-btn'),
 						pushedDiscardBtn: document.getElementById('party-pushed-discard-btn'),
 						dismissBtn: document.getElementById('party-dismiss-btn')
 					};
@@ -3747,8 +4190,12 @@
 					PartyLog.write('Party Mode ready');
 				},
 				onPhotoCaptured(photo) {
-					PartyLog.write(`Snap landscape ${photo.width}×${photo.height} → ${photo.aspectRatio}`);
+					const label = photo.orientation === 'landscape' ? 'landscape' : `${photo.orientation} held`;
+					PartyLog.write(`Snap ${label} ${photo.width}×${photo.height}`);
 					PartyQueue.enqueue(photo);
+					if (photo.orientation !== 'landscape') {
+						PartyApp.openReview(PartyQueue.selectedId);
+					}
 					PartyUI.renderAll();
 				},
 				openReview(id) {
@@ -3773,25 +4220,119 @@
 					this.closeReview();
 					PartyUI.renderAll();
 				},
-				onPush() {
+				async onTransform() {
 					const id = PartyQueue.selectedId;
 					if (!id) return;
-					const ok = PartyQueue.push(id);
-					if (!ok) return;
-					window.alert('POC: Push would send the transformed photo to your Google Photos album.');
-					this.closeReview();
+					if (this.els.transformBtn) this.els.transformBtn.disabled = true;
+					const ok = await PartyQueue.startTransform(id);
+					if (!ok && this.els.transformBtn) this.els.transformBtn.disabled = false;
 					PartyUI.renderAll();
 				},
-				onDiscard() {
+				async onSyncGooglePhotos() {
+					const btn = PartyUI.els.gpSyncBtn;
+					const hint = PartyUI.els.gpSyncHint;
+					if (btn) {
+						btn.disabled = true;
+						btn.textContent = 'Syncing…';
+					}
+					if (hint) hint.textContent = 'Syncing Google Photos with Pushed…';
+					try {
+						const result = await PartyGooglePhotos.syncPushed();
+						if (result?.redirected) return;
+						const parts = [];
+						if (result.uploaded > 0) parts.push(`${result.uploaded} uploaded`);
+						if (result.removed > 0) parts.push(`${result.removed} removed`);
+						if (result.uploadFailed > 0) parts.push(`${result.uploadFailed} failed`);
+						if (parts.length) {
+							PartyLog.write(`GP sync: ${parts.join(', ')} → ${result.albumTitle}`);
+						} else {
+							PartyLog.write(`GP sync: already matched (${result.pushedCount} pushed)`);
+						}
+					} catch (err) {
+						PartyLog.write(`GP sync error: ${err?.message || err}`);
+					} finally {
+						await PartyUI.updateGooglePhotosSyncHint();
+					}
+				},
+				async onPush() {
+					const id = PartyQueue.selectedId;
+					if (!id) return;
+					const item = PartyQueue.selectedItem();
+					if (!item || item.status !== 'ready' || !item.creationId) return;
+
+					const btn = PartyUI.els.pushBtn;
+					if (btn) {
+						btn.disabled = true;
+						btn.textContent = 'Pushing…';
+					}
+
+					try {
+						const status = await PartyGooglePhotos.fetchStatus();
+						if (status.configured && !status.connected) {
+							window.location.href = '/integrations#google-photos=connect';
+							return;
+						}
+
+						let googlePhotosMeta = null;
+						if (status.configured && status.connected) {
+							const albumTitle = PartyGooglePhotos.partyAlbumTitle();
+							googlePhotosMeta = await PartyGooglePhotos.uploadCreation(item.creationId, albumTitle);
+							PartyLog.write(`Google Photos: ${albumTitle}`);
+						}
+
+						const ok = PartyQueue.push(id, googlePhotosMeta);
+						if (!ok) return;
+						this.closeReview();
+						PartyUI.renderAll();
+					} catch (err) {
+						PartyLog.write(`Push failed: ${err?.message || err}`);
+						if (btn) {
+							btn.disabled = false;
+							btn.textContent = 'Push';
+						}
+					}
+				},
+				async onDiscard() {
 					const id = PartyQueue.selectedId;
 					if (!id) return;
 					const item = PartyQueue.selectedItem();
 					const msg = item?.status === 'committed'
-						? 'Remove this photo from Pushed? (POC: does not delete from Google Photos.)'
-						: item?.status === 'processing'
-							? 'Discard this photo while it is still processing?'
-							: 'Discard this photo? It will be removed from the queue.';
+						? 'Remove this photo from Pushed? It will also be removed from your Google Photos party album when possible.'
+						: item?.status === 'held'
+							? 'Discard this photo?'
+							: item?.status === 'processing'
+								? 'Discard this photo while it is still processing?'
+								: 'Discard this photo? It will be removed from the queue.';
 					if (!window.confirm(msg)) return;
+
+					if (
+						item?.status === 'committed'
+						&& item.googlePhotosMediaItemId
+						&& item.googlePhotosAlbumId
+					) {
+						try {
+							await PartyGooglePhotos.removeFromAlbum(
+								item.googlePhotosAlbumId,
+								item.googlePhotosMediaItemId
+							);
+							PartyGooglePhotos.unmarkCreationSynced(item.creationId);
+							PartyLog.write('Removed from Google Photos album');
+						} catch (err) {
+							PartyLog.write(`Google Photos remove skipped: ${err?.message || err}`);
+						}
+					} else if (wasCommitted && item.creationId) {
+						const record = PartyGooglePhotos.getSyncRecord(item.creationId);
+						if (record?.albumId && record?.mediaItemId) {
+							try {
+								await PartyGooglePhotos.removeFromAlbum(record.albumId, record.mediaItemId);
+								PartyGooglePhotos.unmarkCreationSynced(item.creationId);
+								PartyLog.write('Removed from Google Photos album');
+							} catch (err) {
+								PartyLog.write(`Google Photos remove skipped: ${err?.message || err}`);
+							}
+						}
+					}
+
 					PartyQueue.discard(id);
 					this.closeReview();
 					PartyUI.renderAll();
