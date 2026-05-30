@@ -16,6 +16,7 @@
 			--party-ok: var(--color-green-fg, #3dd68c);
 			--party-amber: var(--color-amber, #f5c542);
 			--party-danger: var(--color-red-fg, #ff6b6b);
+			--party-dock-offset: calc(72px + env(safe-area-inset-bottom));
 		}
 
 		*,
@@ -1205,6 +1206,19 @@
 				overflow: visible;
 				overscroll-behavior-y: auto;
 				-webkit-overflow-scrolling: auto;
+			}
+
+			body.party-page.party-page--viewport-scroll .party-view:not([hidden]) .party-scroll {
+				padding-bottom: var(--party-dock-offset);
+			}
+
+			body.party-page.party-page--viewport-scroll .party-view:not([hidden]) .party-dock {
+				position: fixed;
+				left: 0;
+				right: 0;
+				bottom: 0;
+				z-index: 40;
+				margin: 0;
 			}
 
 			html.party-page-root.party-page--viewport-scroll[data-party-viewport-scroll-lock='1'],
