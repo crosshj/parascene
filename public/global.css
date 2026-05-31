@@ -5509,11 +5509,11 @@ app-route-feed {
 	position: relative;
 	inset: auto;
 	display: block;
-	width: auto;
+	width: 100%;
 	max-width: 100%;
-	height: auto;
+	height: 100%;
 	max-height: 250px;
-	object-fit: contain;
+	object-fit: cover;
 	object-position: center;
 	margin: 0;
 	flex-shrink: 0;
@@ -7605,7 +7605,7 @@ body.chat-page .chat-page-canvas-panel-body {
 
 /* Defensive: media and long tokens cannot extend past the message column (page scroll stays vertical-only).
  * Exclude fixed-aspect tiles (doom, feed cards, challenges hero strip). */
-body.chat-page .chat-page-messages img:not(.chat-doom-poster):not(.chat-doom-avatar):not(.feed-card-img):not(.feed-card-group-img):not(.comment-avatar-img):not(.challenge-pane-hero-image),
+body.chat-page .chat-page-messages img:not(.chat-doom-poster):not(.chat-doom-avatar):not(.feed-card-img):not(.feed-card-group-img):not(.connect-chat-creation-embed-img):not(.connect-chat-creation-embed-group-img):not(.comment-avatar-img):not(.challenge-pane-hero-image),
 body.chat-page .chat-page-messages video:not(.chat-doom-video) {
 	max-width: 100%;
 	height: auto;
@@ -12000,19 +12000,10 @@ button.msg-reply-indicator-inner:hover {
 	background: color-mix(in srgb, var(--surface) 38%, transparent);
 }
 
-.chat-inline-image-lightbox-close:focus {
-	outline: none;
-}
-
+.chat-inline-image-lightbox-close:focus,
 .chat-inline-image-lightbox-close:focus-visible {
-	outline: 2px solid var(--focus);
-	outline-offset: 2px;
-}
-
-.chat-inline-image-lightbox--video-gallery .chat-inline-image-lightbox-close:focus,
-.chat-inline-image-lightbox--video-gallery .chat-inline-image-lightbox-close:focus-visible {
-	outline: none;
-	box-shadow: none;
+	outline: none !important;
+	box-shadow: none !important;
 }
 
 .chat-inline-image-lightbox-frame {
@@ -13075,7 +13066,7 @@ body:has(.chat-hashtag-nav-overlay) {
 	width: 100%;
 	height: 100%;
 	border-radius: inherit;
-	object-fit: contain;
+	object-fit: cover;
 	object-position: center;
 	opacity: 0;
 	visibility: hidden;
@@ -13146,7 +13137,7 @@ body:has(.chat-hashtag-nav-overlay) {
 	width: 100%;
 	height: 100%;
 	border-radius: inherit;
-	object-fit: contain;
+	object-fit: cover;
 	object-position: center;
 }
 
@@ -13382,7 +13373,7 @@ body:has(.chat-hashtag-nav-overlay) {
 }
 
 .connect-chat-msg-bubble .connect-chat-creation-embed-inner--group-carousel .connect-chat-creation-embed-group-img {
-	object-fit: contain;
+	object-fit: cover;
 	object-position: center;
 }
 
@@ -13458,11 +13449,11 @@ body:has(.chat-hashtag-nav-overlay) {
 	position: relative;
 	inset: auto;
 	display: block;
-	width: auto;
+	width: 100%;
 	max-width: 100%;
-	height: auto;
+	height: 100%;
 	max-height: 260px;
-	object-fit: contain;
+	object-fit: cover;
 	object-position: center;
 	margin: 0;
 	flex-shrink: 0;

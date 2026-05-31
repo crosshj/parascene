@@ -1410,6 +1410,21 @@ function appendCreationIdToMediaUrl(url, creationId) {
 	return hash ? `${next}#${hash}` : next;
 }
 
+function appendShareAccessToMediaUrl(url, shareOpts) {
+	const raw = typeof url === 'string' ? url.trim() : '';
+	if (!raw || !shareOpts) return raw;
+	if (/[?&]share_version=/.test(raw.split('#')[0])) return raw;
+	const version =
+		typeof shareOpts.shareVersion === 'string' ? shareOpts.shareVersion.trim() : '';
+	const token = typeof shareOpts.shareToken === 'string' ? shareOpts.shareToken.trim() : '';
+	if (!version || !token) return raw;
+	if (!raw.includes('/api/images/created/') && !raw.includes('/api/videos/created/')) return raw;
+	const [beforeHash, hash = ''] = raw.split('#');
+	const sep = beforeHash.includes('?') ? '&' : '?';
+	const next = `${beforeHash}${sep}share_version=${encodeURIComponent(version)}&share_token=${encodeURIComponent(token)}`;
+	return hash ? `${next}#${hash}` : next;
+}
+
 /**
  * Same visuals as `.route-media.route-media-error` / moderated icon on feed and creation detail.
  * Optional title line above the icon when `titleText` is set.
@@ -1752,7 +1767,11 @@ export function hydrateChatCreationEmbeds(rootEl) {
 					groupSourcesRaw
 						.map((source) => {
 							const fp = typeof source?.file_path === 'string' ? source.file_path.trim() : '';
-							return appendCreationIdToMediaUrl(fp, creationIdNum);
+							let urlWithDelegation = appendCreationIdToMediaUrl(fp, creationIdNum);
+							if (shareOpts) {
+								urlWithDelegation = appendShareAccessToMediaUrl(urlWithDelegation, shareOpts);
+							}
+							return urlWithDelegation;
 						})
 						.filter(Boolean)
 				),

@@ -1116,9 +1116,63 @@ export function bindChatInlineImageLightboxClickDelegation(rootEl, options = {})
 					? String(embedWrap.getAttribute('data-creation-id') || '').trim()
 					: '';
 			if (!creationId) return;
+			let galleryUrls = [];
+			try {
+				const raw = groupInner.dataset.chatGroupGalleryUrls;
+				if (raw) galleryUrls = JSON.parse(raw);
+			} catch {
+				galleryUrls = [];
+			}
+			if (!Array.isArray(galleryUrls) || galleryUrls.length === 0) {
+				galleryUrls = Array.from(
+					groupInner.querySelectorAll('.connect-chat-creation-embed-group-img')
+				)
+					.map((img) =>
+						img instanceof HTMLImageElement
+							? String(img.currentSrc || img.getAttribute('src') || '').trim()
+							: ''
+					)
+					.filter(Boolean);
+			}
+			const activeImg = groupInner.querySelector('.connect-chat-creation-embed-group-img.is-active');
+			const galleryImgs = Array.from(
+				groupInner.querySelectorAll('.connect-chat-creation-embed-group-img')
+			).filter((img) => img instanceof HTMLImageElement);
+			let galleryIndex = 0;
+			if (activeImg instanceof HTMLImageElement) {
+				const activeSrc = String(activeImg.currentSrc || activeImg.getAttribute('src') || '').trim();
+				const idx = galleryUrls.indexOf(activeSrc);
+				if (idx >= 0) galleryIndex = idx;
+				else galleryIndex = Math.max(0, galleryImgs.indexOf(activeImg));
+			}
+			const src =
+				galleryUrls[galleryIndex] ||
+				(activeImg instanceof HTMLImageElement
+					? String(activeImg.currentSrc || activeImg.getAttribute('src') || '').trim()
+					: '');
+			if (!src && !(activeImg instanceof HTMLImageElement)) return;
 			e.preventDefault();
 			e.stopPropagation();
-			window.location.href = `/creations/${encodeURIComponent(creationId)}`;
+			openChatInlineImageLightbox(
+				src,
+				{
+					creationId,
+					...(galleryUrls.length > 1
+						? {
+								galleryUrls,
+								galleryImgs,
+								galleryIndex,
+								onGalleryLightboxSlideChange: (idx) => {
+									for (let i = 0; i < galleryImgs.length; i += 1) {
+										galleryImgs[i].classList.toggle('is-active', i === idx);
+									}
+								},
+							}
+						: {}),
+					...(activeImg instanceof HTMLImageElement ? { sourceImg: activeImg } : {}),
+				},
+				openHooks
+			);
 			return;
 		}
 

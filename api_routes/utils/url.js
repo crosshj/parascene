@@ -91,3 +91,24 @@ export function appendCreationIdToMediaUrl(url, creationId) {
 		return `${s}${sep}creation_id=${encodeURIComponent(String(id))}`;
 	}
 }
+
+/** Append share token query params so `<img src>` can load unpublished group sources via share links. */
+export function appendShareAccessToMediaUrl(url, shareAccess) {
+	if (!url || !shareAccess) return url;
+	const s = String(url);
+	if (/[?&]share_version=/.test(s.split("#")[0])) return url;
+	const version =
+		typeof shareAccess.version === "string" ? shareAccess.version.trim() : "";
+	const token = typeof shareAccess.token === "string" ? shareAccess.token.trim() : "";
+	if (!version || !token) return url;
+	if (!s.includes("/api/images/created/") && !s.includes("/api/videos/created/")) return url;
+	try {
+		const parsed = new URL(s, "http://localhost");
+		parsed.searchParams.set("share_version", version);
+		parsed.searchParams.set("share_token", token);
+		return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+	} catch {
+		const sep = s.includes("?") ? "&" : "?";
+		return `${s}${sep}share_version=${encodeURIComponent(version)}&share_token=${encodeURIComponent(token)}`;
+	}
+}

@@ -3,7 +3,13 @@ import path from "path";
 import { fileURLToPath } from "url";
 import Busboy from "busboy";
 import sharp from "sharp";
-import { appendCreationIdToMediaUrl, getThumbnailUrl, getBaseAppUrl, getShareBaseUrl } from "./utils/url.js";
+import {
+	appendCreationIdToMediaUrl,
+	appendShareAccessToMediaUrl,
+	getThumbnailUrl,
+	getBaseAppUrl,
+	getShareBaseUrl
+} from "./utils/url.js";
 import { buildProviderHeaders } from "./utils/providerAuth.js";
 import { runCreationJob, runProviderPollJob, PROVIDER_TIMEOUT_MS } from "./utils/creationJob.js";
 import { runLandscapeJob } from "./utils/landscapeJob.js";
@@ -217,7 +223,27 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			}
 
-			if (!isOwner && !isPublished && !isAdmin && !lineageOk && !creationDelegationOk && !challengeMessageOk) {
+			let shareDelegationOk = false;
+			const shareVersionRaw = req.query?.share_version;
+			const shareTokenRaw = req.query?.share_token;
+			const shareVersion =
+				typeof shareVersionRaw === "string" ? shareVersionRaw.trim() : String(shareVersionRaw || "").trim();
+			const shareToken =
+				typeof shareTokenRaw === "string" ? shareTokenRaw.trim() : String(shareTokenRaw || "").trim();
+			if (!isOwner && !isPublished && !isAdmin && shareVersion && shareToken) {
+				try {
+					shareDelegationOk = await canViewViaShareTokenDelegation({
+						ancestorRow: image,
+						shareVersion,
+						shareToken,
+						queries
+					});
+				} catch {
+					shareDelegationOk = false;
+				}
+			}
+
+			if (!isOwner && !isPublished && !isAdmin && !lineageOk && !creationDelegationOk && !challengeMessageOk && !shareDelegationOk) {
 				return res.status(403).json({ error: "Access denied" });
 			}
 
@@ -340,13 +366,34 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			}
 
+			let shareDelegationOkVideo = false;
+			const shareVersionRawV = req.query?.share_version;
+			const shareTokenRawV = req.query?.share_token;
+			const shareVersionV =
+				typeof shareVersionRawV === "string" ? shareVersionRawV.trim() : String(shareVersionRawV || "").trim();
+			const shareTokenV =
+				typeof shareTokenRawV === "string" ? shareTokenRawV.trim() : String(shareTokenRawV || "").trim();
+			if (!isOwner && !isPublished && !isAdmin && shareVersionV && shareTokenV) {
+				try {
+					shareDelegationOkVideo = await canViewViaShareTokenDelegation({
+						ancestorRow: image,
+						shareVersion: shareVersionV,
+						shareToken: shareTokenV,
+						queries
+					});
+				} catch {
+					shareDelegationOkVideo = false;
+				}
+			}
+
 			if (
 				!isOwner &&
 				!isPublished &&
 				!isAdmin &&
 				!lineageOkVideo &&
 				!creationDelegationOkVideo &&
-				!challengeMessageOkVideo
+				!challengeMessageOkVideo &&
+				!shareDelegationOkVideo
 			) {
 				return res.status(403).json({ error: "Access denied" });
 			}
@@ -716,6 +763,67 @@ export default function createCreateRoutes({ queries, storage }) {
 		const viewerOwnsDelegated = viewerUserId != null && Number(delegatedRow.user_id) === Number(viewerUserId);
 		const isAdmin = viewerRole === "admin";
 		return !!(delegatedPublished || viewerOwnsDelegated || isAdmin);
+	}
+
+	function collectGroupSourceCreationIds(groupPayload) {
+		const ids = new Set();
+		if (!groupPayload || typeof groupPayload !== "object") return ids;
+		const rawIds = Array.isArray(groupPayload.source_creation_ids) ? groupPayload.source_creation_ids : [];
+		for (const id of rawIds) {
+			const n = Number(id);
+			if (Number.isFinite(n) && n > 0) ids.add(n);
+		}
+		const sourceCreations = Array.isArray(groupPayload.source_creations) ? groupPayload.source_creations : [];
+		for (const source of sourceCreations) {
+			const n = Number(source?.id);
+			if (Number.isFinite(n) && n > 0) ids.add(n);
+		}
+		const coverSourceId = Number(groupPayload.cover_source_id);
+		if (Number.isFinite(coverSourceId) && coverSourceId > 0) ids.add(coverSourceId);
+		return ids;
+	}
+
+	function isGroupSourceOfSharedCreation(groupRow, ancestorId) {
+		const meta = parseMeta(groupRow?.meta);
+		const groupPayload = meta?.group && typeof meta.group === "object" ? meta.group : null;
+		if (groupPayload?.kind !== "group_creations") return false;
+		return collectGroupSourceCreationIds(groupPayload).has(Number(ancestorId));
+	}
+
+	async function canViewViaShareTokenDelegation({ ancestorRow, shareVersion, shareToken, queries }) {
+		const verified = verifyShareToken({ version: shareVersion, token: shareToken });
+		if (!verified.ok) return false;
+		const sharedRow = await queries.selectCreatedImageByIdAnyUser?.get(verified.imageId);
+		if (!sharedRow) return false;
+		if (sharedRow.unavailable_at != null && String(sharedRow.unavailable_at) !== "") return false;
+		const status = sharedRow.status || "completed";
+		if (status !== "completed") return false;
+		const sharedId = Number(sharedRow.id);
+		const ancestorId = Number(ancestorRow.id);
+		if (sharedId === ancestorId) return true;
+		return isGroupSourceOfSharedCreation(sharedRow, ancestorId);
+	}
+
+	function rewriteGroupMetaForShareAccess(meta, shareAccess, groupCreationId) {
+		if (!shareAccess || !meta || typeof meta !== "object") return meta;
+		const groupPayload = meta.group && typeof meta.group === "object" ? meta.group : null;
+		if (groupPayload?.kind !== "group_creations") return meta;
+		const sourcesRaw = Array.isArray(groupPayload.source_creations) ? groupPayload.source_creations : [];
+		const nextSources = sourcesRaw.map((source) => {
+			if (!source || typeof source !== "object") return source;
+			let filePath = typeof source.file_path === "string" ? source.file_path.trim() : "";
+			if (!filePath) return source;
+			filePath = appendCreationIdToMediaUrl(filePath, groupCreationId);
+			filePath = appendShareAccessToMediaUrl(filePath, shareAccess);
+			return { ...source, file_path: filePath };
+		});
+		return {
+			...meta,
+			group: {
+				...groupPayload,
+				source_creations: nextSources
+			}
+		};
 	}
 
 	/** Append lineage_of so /api/images/created and /api/videos/created accept delegated reads. */
@@ -2686,7 +2794,9 @@ export default function createCreateRoutes({ queries, storage }) {
 				like_count: likeCount,
 				viewer_liked: viewerLiked,
 				user_id: image.user_id,
-				meta,
+				meta: shareAccess
+					? rewriteGroupMetaForShareAccess(meta, shareAccess, creationIdForMedia)
+					: meta,
 				nsfw: !!meta?.nsfw,
 				is_moderated_error: isModeratedError(status, meta),
 				media_type: mediaType,
