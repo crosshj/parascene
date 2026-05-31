@@ -1,4 +1,5 @@
 import { VynlyApiError } from "./vynlyClient.js";
+import { resolveCreatedImageStorageFilename } from "./resolveCreatedImageStorageFilename.js";
 import { applyVynlyShareWatermark } from "./vynlyShareWatermark.js";
 
 const MAX_BYTES = 4 * 1024 * 1024;
@@ -188,7 +189,13 @@ export async function shareCreationToVynly(deps) {
 	}
 
 	const { image } = resolved;
-	const buf = await storage.getImageBuffer(image.filename);
+	const storageFilename = resolveCreatedImageStorageFilename(image);
+	if (!storageFilename) {
+		const err = new Error("Image file missing");
+		err.status = 400;
+		throw err;
+	}
+	const buf = await storage.getImageBuffer(storageFilename);
 	if (!buf || !Buffer.isBuffer(buf)) {
 		const err = new Error("Failed to read image");
 		err.status = 500;

@@ -134,6 +134,7 @@ class AppModalShare extends HTMLElement {
 		this._googlePhotosStatusRequestId = 0;
 		this._googlePhotosConfigured = false;
 		this._imageExportEligible = false;
+		this._isGroupCreation = false;
 
 		this.handleEscape = this.handleEscape.bind(this);
 		this.handleOpen = this.handleOpen.bind(this);
@@ -437,7 +438,8 @@ class AppModalShare extends HTMLElement {
 		const id = e.detail?.creationId ?? null;
 		const vynlyShareEligible = e.detail?.vynlyShareEligible !== false;
 		const imageExportEligible = e.detail?.imageExportEligible === true;
-		this.open(id, { vynlyShareEligible, imageExportEligible });
+		const isGroupCreation = e.detail?.isGroupCreation === true;
+		this.open(id, { vynlyShareEligible, imageExportEligible, isGroupCreation });
 	}
 
 	handleCloseAllModals() {
@@ -462,24 +464,29 @@ class AppModalShare extends HTMLElement {
 		const openGen = this._openRequestId;
 		this._vynlyShareEligible = options.vynlyShareEligible !== false;
 		this._imageExportEligible = options.imageExportEligible === true;
+		this._isGroupCreation = options.isGroupCreation === true;
 		this.resetAllCtas();
 
-		const vynlyRow = this.querySelector("[data-share-vynly]");
-		if (vynlyRow instanceof HTMLButtonElement) {
-			if (this._vynlyShareEligible === false) {
-				vynlyRow.style.display = "none";
-			} else if (typeof options.vynlyConfigured === "boolean") {
-				vynlyRow.style.display = options.vynlyConfigured ? "" : "none";
-			} else {
-				await this.refreshVynlyRowVisibility();
-				if (openGen !== this._openRequestId) return;
+		if (this._isGroupCreation) {
+			this.hideSingleImageShareRows();
+		} else {
+			const vynlyRow = this.querySelector("[data-share-vynly]");
+			if (vynlyRow instanceof HTMLButtonElement) {
+				if (this._vynlyShareEligible === false) {
+					vynlyRow.style.display = "none";
+				} else if (typeof options.vynlyConfigured === "boolean") {
+					vynlyRow.style.display = options.vynlyConfigured ? "" : "none";
+				} else {
+					await this.refreshVynlyRowVisibility();
+					if (openGen !== this._openRequestId) return;
+				}
 			}
+
+			if (openGen !== this._openRequestId) return;
+
+			await this.refreshGooglePhotosRowVisibility();
+			if (openGen !== this._openRequestId) return;
 		}
-
-		if (openGen !== this._openRequestId) return;
-
-		await this.refreshGooglePhotosRowVisibility();
-		if (openGen !== this._openRequestId) return;
 
 		this._isOpen = true;
 		const overlay = this.querySelector("[data-overlay]");
@@ -499,15 +506,34 @@ class AppModalShare extends HTMLElement {
 		this._vynlyShareEligible = true;
 		this._googlePhotosConfigured = false;
 		this._imageExportEligible = false;
+		this._isGroupCreation = false;
 		const overlay = this.querySelector("[data-overlay]");
 		if (overlay) overlay.classList.remove("open");
 		this.resetAllCtas();
+	}
+
+	hideSingleImageShareRows() {
+		for (const selector of [
+			"[data-share-image-file]",
+			"[data-open-watermarked]",
+			"[data-share-google-photos]",
+			"[data-share-vynly]"
+		]) {
+			const row = this.querySelector(selector);
+			if (row instanceof HTMLElement) {
+				row.style.display = "none";
+			}
+		}
 	}
 
 	updateButtons() {
 		const nativeBtn = this.querySelector("[data-native-share]");
 		if (nativeBtn instanceof HTMLButtonElement) {
 			nativeBtn.style.display = typeof navigator.share === "function" ? "" : "none";
+		}
+		if (this._isGroupCreation) {
+			this.hideSingleImageShareRows();
+			return;
 		}
 		const shareImageFileBtn = this.querySelector("[data-share-image-file]");
 		if (shareImageFileBtn instanceof HTMLButtonElement) {
@@ -526,7 +552,7 @@ class AppModalShare extends HTMLElement {
 		if (!(row instanceof HTMLButtonElement)) return;
 
 		row.style.display = "none";
-		if (!this._imageExportEligible) return;
+		if (this._isGroupCreation || !this._imageExportEligible) return;
 
 		const requestId = ++this._googlePhotosStatusRequestId;
 		try {
@@ -547,7 +573,7 @@ class AppModalShare extends HTMLElement {
 		if (!(row instanceof HTMLButtonElement)) return;
 
 		row.style.display = "none";
-		if (this._vynlyShareEligible === false) {
+		if (this._isGroupCreation || this._vynlyShareEligible === false) {
 			return;
 		}
 

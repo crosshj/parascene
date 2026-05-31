@@ -2,7 +2,12 @@ import express from "express";
 import path from "path";
 import { clearAuthCookie, COOKIE_NAME } from "./auth.js";
 import { injectCommonHead, getPageTokens } from "./utils/head.js";
-import { getBaseAppUrl, getShareBaseUrl } from "./utils/url.js";
+import {
+	appendCreationIdToMediaUrl,
+	appendShareAccessToMediaUrl,
+	getBaseAppUrl,
+	getShareBaseUrl
+} from "./utils/url.js";
 import { verifyShareToken } from "./utils/shareLink.js";
 import { buildRequestMeta } from "./utils/analytics.js";
 import { buildSidebarPseudoStripListStaticHtml } from "../public/shared/chatSidebarRoster.js";
@@ -67,6 +72,109 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			.replace(/>/g, "&gt;")
 			.replace(/"/g, "&quot;")
 			.replace(/'/g, "&#39;");
+	}
+
+	const shareGroupNavButtonsHtml = `
+					<button type="button" class="share-hero-nav share-hero-nav-prev" data-share-group-prev hidden aria-label="Previous image">
+						<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M14.5 6.5L9 12l5.5 5.5" /></svg>
+					</button>
+					<button type="button" class="share-hero-nav share-hero-nav-next" data-share-group-next hidden aria-label="Next image">
+						<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9.5 6.5L15 12l-5.5 5.5" /></svg>
+					</button>`;
+
+	function buildShareGroupCarouselSlides({ image, imageMeta, imageAlt, version, token, storage }) {
+		const groupPayload =
+			imageMeta?.group && typeof imageMeta.group === "object" ? imageMeta.group : null;
+		if (groupPayload?.kind !== "group_creations") return null;
+		const groupId = Number(image?.id);
+		if (!Number.isFinite(groupId) || groupId <= 0) return null;
+		const shareAccess = {
+			version: typeof version === "string" ? version.trim() : "",
+			token: typeof token === "string" ? token.trim() : ""
+		};
+		if (!shareAccess.version || !shareAccess.token) return null;
+
+		const sourcesRaw = Array.isArray(groupPayload.source_creations) ? groupPayload.source_creations : [];
+		const mapped = [];
+		for (const source of sourcesRaw) {
+			if (!source || typeof source !== "object") continue;
+			let filePath = typeof source.file_path === "string" ? source.file_path.trim() : "";
+			if (!filePath) {
+				const filename = typeof source.filename === "string" ? source.filename.trim() : "";
+				if (filename && storage?.getImageUrl) {
+					filePath = storage.getImageUrl(filename);
+				}
+			}
+			if (!filePath) continue;
+			let url = appendCreationIdToMediaUrl(filePath, groupId);
+			url = appendShareAccessToMediaUrl(url, shareAccess);
+			const sourceTitle = typeof source.title === "string" ? source.title.trim() : "";
+			mapped.push({
+				id: Number(source.id),
+				url,
+				title: sourceTitle || imageAlt
+			});
+		}
+
+		const coverSourceId = Number(groupPayload.cover_source_id);
+		const ordered = [...mapped];
+		if (Number.isFinite(coverSourceId) && coverSourceId > 0) {
+			const coverIndex = ordered.findIndex((item) => Number(item.id) === coverSourceId);
+			if (coverIndex > 0) {
+				const [coverItem] = ordered.splice(coverIndex, 1);
+				ordered.unshift(coverItem);
+			}
+		}
+
+		const seen = new Set();
+		const slides = [];
+		for (const item of ordered) {
+			if (!item.url || seen.has(item.url)) continue;
+			seen.add(item.url);
+			slides.push({ url: item.url, title: item.title });
+		}
+		return slides.length > 1 ? slides : null;
+	}
+
+	function buildShareHeroLayoutAttrs(image, imageMeta) {
+		const layout = resolveExtendedHeroLayout({
+			width: image?.width,
+			height: image?.height,
+			meta: imageMeta,
+			media_type: imageMeta?.media_type,
+			video_url:
+				imageMeta?.video && typeof imageMeta.video === "object"
+					? imageMeta.video.file_path
+					: null
+		});
+		if (!layout) {
+			return {
+				wrapClass: "share-hero-media-wrap hero-layout-legacy",
+				styleAttr: ""
+			};
+		}
+		let wrapClass = `share-hero-media-wrap hero-layout-${layout.mode}`;
+		if (layout.mode === "portrait") {
+			wrapClass += " hero-portrait-by-width";
+		}
+		const styleAttr = ` style="--hero-aspect-w: ${layout.w}; --hero-aspect-h: ${layout.h}; --hero-aspect-ratio: ${layout.w} / ${layout.h}"`;
+		return { wrapClass, styleAttr };
+	}
+
+	function buildShareImageHeroMediaHtml({ shareImageSrc, imageAlt, groupCarouselSlides, heroLayout }) {
+		const layout = heroLayout || {
+			wrapClass: "share-hero-media-wrap hero-layout-legacy",
+			styleAttr: ""
+		};
+		const coverImg = `<img class="share-image" data-share-hero-cover src="${escapeHtml(shareImageSrc)}" alt="${escapeHtml(imageAlt)}" decoding="async" />`;
+		if (!Array.isArray(groupCarouselSlides) || groupCarouselSlides.length <= 1) {
+			return `<div class="${layout.wrapClass}"${layout.styleAttr}>${coverImg}</div>`;
+		}
+		const carouselB64 = Buffer.from(JSON.stringify(groupCarouselSlides), "utf8").toString("base64");
+		return `<div class="${layout.wrapClass} share-hero-media-wrap--group"${layout.styleAttr} data-share-group-carousel-b64="${carouselB64}">
+					${coverImg}
+					${shareGroupNavButtonsHtml}
+				</div>`;
 	}
 
 	/** Turn @mentions and #hashtags into links; matches client logic in userText.js */
@@ -473,11 +581,28 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 							<path d="M8 5v14l11-7z" />
 						</svg>
 					</button>`;
+			const groupCarouselSlides =
+				!isVideo && imageMeta && typeof imageMeta === "object"
+					? buildShareGroupCarouselSlides({
+						image,
+						imageMeta,
+						imageAlt,
+						version,
+						token,
+						storage
+					})
+					: null;
+			const shareHeroLayout = buildShareHeroLayoutAttrs(image, imageMeta);
 			const shareHeroMediaHtml = isVideo && shareVideoUrl
 				? `<div class="share-hero-video-wrap">
 					<video class="share-image share-video" data-share-hero-video playsinline muted loop preload="metadata" poster="${escapeHtml(shareImageSrc)}" src="${escapeHtml(shareVideoUrl)}" aria-label="${escapeHtml(imageAlt)}"></video>${shareVideoPlayBtn}
 				</div>`
-				: `<img class="share-image" src="${escapeHtml(shareImageSrc)}" alt="${escapeHtml(imageAlt)}" />`;
+				: buildShareImageHeroMediaHtml({
+					shareImageSrc,
+					imageAlt,
+					groupCarouselSlides,
+					heroLayout: shareHeroLayout
+				});
 
 			const shareIntroHtml = showCreator
 				? `${escapeHtml(heroSharer)} shared this with you. It was created by ${escapeHtml(heroCreator)} on Parascene.`

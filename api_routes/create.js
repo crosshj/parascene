@@ -18,6 +18,7 @@ import { scheduleEmbeddingJob } from "./utils/embeddingJob.js";
 import { deleteCreationEmbedding } from "./utils/embeddings.js";
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { verifyQStashRequest } from "./utils/qstashVerification.js";
+import { resolveCreatedImageStorageFilename } from "./utils/resolveCreatedImageStorageFilename.js";
 import { ACTIVE_SHARE_VERSION, mintShareToken, verifyShareToken } from "./utils/shareLink.js";
 import { getStyleInfo } from "./utils/createStyles.js";
 import {
@@ -3175,12 +3176,17 @@ export default function createCreateRoutes({ queries, storage }) {
 			}
 			const image = resolved.image;
 
-			const sourceBuf = await storage.getImageBuffer(image.filename);
+			const storageFilename = resolveCreatedImageStorageFilename(image);
+			if (!storageFilename) {
+				return res.status(400).json({ error: "Image file missing" });
+			}
+
+			const sourceBuf = await storage.getImageBuffer(storageFilename);
 			if (!sourceBuf || !Buffer.isBuffer(sourceBuf)) {
 				return res.status(500).json({ error: "Failed to read image" });
 			}
 
-			const contentType = guessImageContentType(image.filename);
+			const contentType = guessImageContentType(storageFilename);
 			const suffix =
 				contentType === "image/jpeg"
 					? ".jpg"
@@ -3244,11 +3250,12 @@ export default function createCreateRoutes({ queries, storage }) {
 			if (creationRowIsVideo(image.meta)) {
 				return res.status(400).json({ error: "Video creations are not supported for watermarked export" });
 			}
-			if (!image.filename) {
+			const storageFilename = resolveCreatedImageStorageFilename(image);
+			if (!storageFilename) {
 				return res.status(400).json({ error: "Image file missing" });
 			}
 
-			const sourceBuf = await storage.getImageBuffer(image.filename);
+			const sourceBuf = await storage.getImageBuffer(storageFilename);
 			if (!sourceBuf || !Buffer.isBuffer(sourceBuf)) {
 				return res.status(500).json({ error: "Failed to read image" });
 			}
@@ -3256,7 +3263,7 @@ export default function createCreateRoutes({ queries, storage }) {
 			const wm = await applyVynlyShareWatermark(sourceBuf);
 			const outBuf = wm?.buffer && Buffer.isBuffer(wm.buffer) ? wm.buffer : sourceBuf;
 			const contentType =
-				typeof wm?.contentType === "string" && wm.contentType ? wm.contentType : guessImageContentType(image.filename);
+				typeof wm?.contentType === "string" && wm.contentType ? wm.contentType : guessImageContentType(storageFilename);
 			const suffix =
 				typeof wm?.filenameSuffix === "string" && wm.filenameSuffix
 					? wm.filenameSuffix

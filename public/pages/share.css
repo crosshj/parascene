@@ -77,12 +77,197 @@ body.share-page {
 	width: 100%;
 	max-width: 720px;
 	margin: 0 auto;
+	--hero-max-height: min(70vh, calc(100svh - 12rem));
+}
+
+.share-hero:has(.hero-layout-landscape) {
+	max-width: min(100%, 960px);
 }
 
 .share-hero-media {
 	border-radius: 16px;
 	overflow: hidden;
 	width: 100%;
+}
+
+.share-hero-media-wrap {
+	position: relative;
+	width: 100%;
+	margin-inline: auto;
+	line-height: 0;
+}
+
+.share-hero-media-wrap.hero-layout-legacy {
+	aspect-ratio: 1 / 1;
+	max-width: 100%;
+}
+
+.share-hero-media-wrap.hero-layout-legacy > .share-image {
+	width: 100%;
+	height: 100%;
+	aspect-ratio: unset;
+	object-fit: cover;
+}
+
+.share-hero-media-wrap.hero-layout-portrait {
+	width: 100%;
+	max-width: 100%;
+	aspect-ratio: var(--hero-aspect-ratio);
+	height: auto;
+	display: block;
+	overflow: hidden;
+}
+
+.share-hero-media-wrap.hero-layout-landscape {
+	width: min(100%, 960px, calc(var(--hero-max-height, 70vh) * var(--hero-aspect-w, 16) / var(--hero-aspect-h, 9)));
+	max-width: 100%;
+	max-height: var(--hero-max-height, 70vh);
+	aspect-ratio: var(--hero-aspect-ratio, 16 / 9);
+	height: auto;
+	display: block;
+	overflow: hidden;
+}
+
+.share-hero-media-wrap.hero-layout-portrait > .share-image[data-share-hero-cover] {
+	width: 100%;
+	height: auto;
+	max-width: none;
+	max-height: none;
+	aspect-ratio: unset;
+	object-fit: unset;
+	display: block;
+}
+
+.share-hero-media-wrap.hero-layout-portrait.share-hero-media-wrap--group > .share-image[data-share-hero-cover],
+.share-hero-media-wrap.hero-layout-portrait.share-hero-media-wrap--group.share-carousel-active > .share-image[data-share-hero-cover] {
+	width: 100%;
+	height: 100%;
+}
+
+.share-hero-media-wrap.hero-layout-landscape > .share-image[data-share-hero-cover] {
+	width: 100%;
+	height: auto;
+	max-height: var(--hero-max-height, 70vh);
+	aspect-ratio: unset;
+	object-fit: unset;
+}
+
+.share-hero-media-wrap--group.hero-layout-legacy {
+	aspect-ratio: 1 / 1;
+}
+
+.share-hero-media-wrap--group.hero-layout-portrait {
+	width: 100%;
+	max-width: 100%;
+	aspect-ratio: var(--hero-aspect-ratio);
+	max-height: none;
+}
+
+.share-hero-media-wrap--group.hero-layout-landscape {
+	max-height: var(--hero-max-height, 70vh);
+}
+
+.share-hero-media-wrap--group.hero-layout-legacy > .share-image[data-share-hero-cover] {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.share-group-hero-stack {
+	position: absolute;
+	inset: 0;
+	z-index: 2;
+	width: 100%;
+	height: 100%;
+}
+
+.share-group-hero-image {
+	position: absolute;
+	inset: 0;
+	display: block;
+	width: 100%;
+	height: 100%;
+	max-width: none;
+	max-height: none;
+	object-fit: cover;
+	opacity: 0;
+	z-index: 1;
+	pointer-events: none;
+	transition: opacity 0.14s ease;
+}
+
+.share-hero-media-wrap.hero-layout-landscape .share-group-hero-image {
+	object-fit: contain;
+}
+
+.share-hero-media-wrap.hero-layout-portrait .share-group-hero-image {
+	object-fit: contain;
+}
+
+.share-group-hero-image.is-active {
+	opacity: 1;
+	z-index: 3;
+	pointer-events: auto;
+}
+
+.share-hero-nav {
+	position: absolute;
+	top: 50%;
+	transform: translateY(-50%);
+	width: 46px;
+	height: 46px;
+	border: 1px solid color-mix(in srgb, var(--text) 22%, transparent);
+	border-radius: 50%;
+	background: color-mix(in srgb, var(--surface) 76%, transparent);
+	color: var(--text);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	cursor: pointer;
+	z-index: 4;
+	touch-action: manipulation;
+	backdrop-filter: blur(8px);
+	-webkit-backdrop-filter: blur(8px);
+	transition: background-color 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+
+.share-hero-nav svg {
+	width: 20px;
+	height: 20px;
+	display: block;
+	stroke: currentColor;
+	stroke-width: 2.2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	fill: none;
+	pointer-events: none;
+}
+
+.share-hero-nav[hidden] {
+	display: none;
+}
+
+.share-hero-nav:hover {
+	background: color-mix(in srgb, var(--surface) 88%, transparent);
+	border-color: color-mix(in srgb, var(--text) 35%, transparent);
+}
+
+.share-hero-nav:active {
+	transform: translateY(-50%) scale(0.97);
+}
+
+.share-hero-nav:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+.share-hero-nav-prev {
+	left: 10px;
+}
+
+.share-hero-nav-next {
+	right: 10px;
 }
 
 .share-hero-video-wrap {
@@ -168,6 +353,10 @@ body.share-page {
 	height: auto;
 	aspect-ratio: 1 / 1;
 	object-fit: cover;
+	background: var(--image-placeholder);
+}
+
+.share-hero-media .share-image[data-share-hero-cover] {
 	background: var(--image-placeholder);
 }
 

@@ -1839,7 +1839,6 @@ async function loadCreation() {
 		if (isGroupCreation) {
 			actionsContext.showEdit = false;
 			actionsContext.showMutate = false;
-			actionsContext.showShare = false;
 			actionsContext.showRetry = false;
 			actionsContext.showDelete = false;
 			actionsContext.showQueueForLater = false;
@@ -4359,6 +4358,9 @@ document.addEventListener('click', async (e) => {
 		if (!creationId) return;
 		const vynlyShareEligible = !isCurrentCreationVideoForVynly();
 		const imageExportEligible = shareBtn.dataset.imageExportEligible === '1';
+		const creationMeta =
+			lastCreationMeta?.meta && typeof lastCreationMeta.meta === 'object' ? lastCreationMeta.meta : null;
+		const isGroupCreation = creationMeta?.group?.kind === 'group_creations';
 		let vynlyConfigured = false;
 		if (vynlyShareEligible) {
 			try {
@@ -4376,7 +4378,8 @@ document.addEventListener('click', async (e) => {
 				creationId,
 				vynlyShareEligible,
 				vynlyConfigured,
-				imageExportEligible
+				imageExportEligible,
+				isGroupCreation
 			}
 		}));
 	}

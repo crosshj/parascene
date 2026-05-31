@@ -10,8 +10,61 @@ Publishing the parent row grants context-scoped read of named source/member crea
 
 - User groups several existing creations into one logical creation that can be published like any other.
 - Feed and detail treat the group row as the primary item; members are sources referenced from the parent (metadata or a normalized member list, TBD).
+- Implemented: `meta.group.kind === group_creations`; sources archived; group row has cover + `source_creations`; feed carousel; detail thumbs, set cover, ungroup (unpublished); publish/unpublish on group row.
 - Follow-up: schema and API for member list, ordering, add/remove before publish, and how feed cards show the group vs a single thumb.
 - Follow-up: extend delegation checks so fetches for member ids use the group parent id as context (same pattern as `lineage_of` today), and ensure image/video bytes routes stay aligned with metadata access.
+
+### Share
+
+Public share page (`/s/v1/...`, `api_routes/pages.js`, `public/pages/share.js`):
+
+- Link mint points at the group row; page shows carousel (source URLs with share delegation), portrait/landscape layout from group dimensions.
+- Cover image: `GET /api/share/.../image` resolves storage via cover source (not synthetic `group/...` filename).
+
+Share modal (`app-modal-share`, opened from creation detail with `isGroupCreation`):
+
+- Enabled for groups: copy link, QR, SMS, email, X, Facebook, Reddit, LinkedIn, device link share (URL only).
+- Hidden for groups (single-image export only — cover, not full group): device image file, open watermarked image, Google Photos, Vynly.
+- Follow-up: OG/social preview uses wide crop (`variant=wide`); portrait groups may look cropped in unfurl cards while the link page is correct.
+- Follow-up: multi-image file export (zip, multi-file native share, upload all sources).
+
+### Creation detail actions (checklist)
+
+Shipped:
+
+- [x] Publish / un-publish on group row
+- [x] Detail: thumbs, set cover, ungroup (unpublished)
+- [x] Feed group carousel
+- [x] Share pill on detail (link targets use public share page above)
+
+Still disabled in UI (`creation-detail.js` `actionsContext`):
+
+- edit, mutate, delete, queue for later, queue from frame, retry, more-info
+
+Bug fix:
+
+- [ ] Decouple `hideActions` from `hasGroupPublishActions` (`creation-detail.js`)
+- [ ] Show more menu for published groups when viewer is not owner (copy link, etc.)
+- [ ] Non-owners on published groups: like, tip, follow visible again
+
+Tier 1 — enable in UI (low risk):
+
+- [ ] Show edit pill (group title/description/NSFW only)
+- [ ] Show queue for later in more menu (decide: cover vs active thumb `source_id`)
+- [ ] Set avatar reachable in more menu after menu fix
+
+Tier 2 — design + API before enable:
+
+- [ ] Delete: define cascade (restore sources, delete sources, or require ungroup first)
+- [ ] Mutate: cover-only label or mutate-from-selected-source + lineage
+
+Tier 3 — defer:
+
+- [ ] Challenge submit rules for groups
+- [ ] Creator copy: publish exposes group/cover; sources stay archived
+- [ ] Edit sync into `meta.group.source_creations` and/or live source rows
+
+Remove `actionsContext` disables when each remaining item above is done.
 
 ## 2) Video built from several creations
 

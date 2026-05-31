@@ -1,5 +1,6 @@
 import express from "express";
 import sharp from "sharp";
+import { resolveCreatedImageStorageFilename } from "./utils/resolveCreatedImageStorageFilename.js";
 import { verifyShareToken } from "./utils/shareLink.js";
 
 function parseMeta(raw) {
@@ -95,11 +96,12 @@ export default function createShareRoutes({ queries, storage }) {
 			if (status !== "completed") {
 				return res.status(404).json({ error: "Not found" });
 			}
-			if (!image.filename) {
+			const storageFilename = resolveCreatedImageStorageFilename(image);
+			if (!storageFilename) {
 				return res.status(404).json({ error: "Not found" });
 			}
 
-			const buf = await storage.getImageBuffer(image.filename);
+			const buf = await storage.getImageBuffer(storageFilename);
 			const basePng = await ensurePngBuffer(buf);
 			const png = variant === "wide" ? await toWideCardPng(basePng) : basePng;
 			res.setHeader("Content-Type", "image/png");
