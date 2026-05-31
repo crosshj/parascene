@@ -4824,7 +4824,8 @@ dialog.creation-detail-dialog:not([open]) {
 	background: var(--surface);
 	border: 1px solid var(--border);
 	box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
-	overflow: hidden;
+	overflow-x: hidden;
+	overflow-y: auto;
 }
 
 .landscape-modal-title-row {
@@ -5077,6 +5078,12 @@ dialog.creation-detail-dialog:not([open]) {
 	gap: 10px;
 	justify-content: center;
 	flex-shrink: 0;
+	position: sticky;
+	bottom: 0;
+	z-index: 2;
+	padding-top: 12px;
+	margin-top: auto;
+	background: var(--surface);
 }
 
 /* Mobile: size modal to content so it isn't forced to 90vh and doesn't dominate the screen.

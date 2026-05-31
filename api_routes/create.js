@@ -19,6 +19,7 @@ import { deleteCreationEmbedding } from "./utils/embeddings.js";
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { verifyQStashRequest } from "./utils/qstashVerification.js";
 import { resolveCreatedImageStorageFilename } from "./utils/resolveCreatedImageStorageFilename.js";
+import { getLandscapeOutpaintEligibility } from "../public/shared/aspectRatio.js";
 import { ACTIVE_SHARE_VERSION, mintShareToken, verifyShareToken } from "./utils/shareLink.js";
 import { getStyleInfo } from "./utils/createStyles.js";
 import {
@@ -185,7 +186,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			}
 			let creationDelegationOk = false;
-			const delegatedRaw = req.query?.creation_id ?? req.query?.group_id;
+			const delegatedRaw = req.query?.creation_id ?? req.query?.group_id ?? req.query?.group_of;
 			const delegatedCreationId =
 				typeof delegatedRaw === "string" ? parseInt(delegatedRaw, 10) : Number(delegatedRaw);
 			if (!isOwner && !isPublished && !isAdmin && Number.isFinite(delegatedCreationId) && delegatedCreationId > 0) {
@@ -327,7 +328,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			}
 			let creationDelegationOkVideo = false;
-			const delegatedRawV = req.query?.creation_id ?? req.query?.group_id;
+			const delegatedRawV = req.query?.creation_id ?? req.query?.group_id ?? req.query?.group_of;
 			const delegatedCreationIdV =
 				typeof delegatedRawV === "string" ? parseInt(delegatedRawV, 10) : Number(delegatedRawV);
 			if (!isOwner && !isPublished && !isAdmin && Number.isFinite(delegatedCreationIdV) && delegatedCreationIdV > 0) {
@@ -789,6 +790,140 @@ export default function createCreateRoutes({ queries, storage }) {
 		const groupPayload = meta?.group && typeof meta.group === "object" ? meta.group : null;
 		if (groupPayload?.kind !== "group_creations") return false;
 		return collectGroupSourceCreationIds(groupPayload).has(Number(ancestorId));
+	}
+
+	function findGroupSourceSnapshot(groupPayload, sourceId) {
+		const sid = Number(sourceId);
+		if (!groupPayload || typeof groupPayload !== "object" || !Number.isFinite(sid) || sid <= 0) {
+			return null;
+		}
+		const sources = Array.isArray(groupPayload.source_creations) ? groupPayload.source_creations : [];
+		return sources.find((s) => s && typeof s === "object" && Number(s.id) === sid) || null;
+	}
+
+	/** Mutate-from-group: resolve pixels + metadata from group row + embedded source snapshot (not archived source GET). */
+	async function buildGroupMutateSourcePayload({ groupRow, sourceId, viewerUser }) {
+		if (!groupRow || !viewerUser) return null;
+		const groupId = Number(groupRow.id);
+		const sid = Number(sourceId);
+		if (!Number.isFinite(groupId) || groupId <= 0 || !Number.isFinite(sid) || sid <= 0) return null;
+		if (!viewerOwnsCreationRow(groupRow, viewerUser.id) && viewerUser.role !== "admin") return null;
+		if (!isGroupSourceOfSharedCreation(groupRow, sid)) return null;
+
+		const groupMeta = parseMeta(groupRow.meta);
+		const groupPayload = groupMeta?.group && typeof groupMeta.group === "object" ? groupMeta.group : null;
+		const snap = findGroupSourceSnapshot(groupPayload, sid);
+
+		let sourceRow = null;
+		try {
+			sourceRow = await queries.selectCreatedImageByIdAnyUser?.get(sid);
+		} catch {
+			sourceRow = null;
+		}
+
+		const status = sourceRow?.status || snap?.status || "completed";
+		if (status !== "completed") return { error: "not_ready" };
+
+		let filename =
+			typeof snap?.filename === "string" && snap.filename.trim() && !snap.filename.startsWith("group/")
+				? snap.filename.trim()
+				: "";
+		if (!filename && sourceRow?.filename) {
+			const fn = String(sourceRow.filename).trim();
+			if (fn && !fn.startsWith("group/")) filename = fn;
+		}
+
+		let filePath = typeof snap?.file_path === "string" ? snap.file_path.trim() : "";
+		if (!filePath && sourceRow?.file_path) filePath = String(sourceRow.file_path).trim();
+
+		let rawUrl = filePath || (filename ? storage.getImageUrl(filename) : null);
+		if (!rawUrl) return null;
+
+		const url = appendCreationIdToMediaUrl(rawUrl, groupId);
+
+		const title =
+			(typeof snap?.title === "string" && snap.title.trim()) ||
+			(typeof sourceRow?.title === "string" && sourceRow.title.trim()) ||
+			"Untitled";
+		const isPublished = sourceRow
+			? sourceRow.published === 1 || sourceRow.published === true
+			: false;
+		const sourceUserId = sourceRow?.user_id ?? snap?.user_id ?? null;
+
+		let creator = null;
+		if (sourceUserId) {
+			const creatorUser = await queries.selectUserById.get(sourceUserId).catch(() => null);
+			const creatorProfile = await queries.selectUserProfileByUserId
+				.get(sourceUserId)
+				.catch(() => null);
+			if (creatorUser) {
+				creator = {
+					id: creatorUser.id,
+					email: creatorUser.email,
+					role: creatorUser.role,
+					user_name: creatorProfile?.user_name ?? null,
+					display_name: creatorProfile?.display_name ?? null,
+					avatar_url: creatorProfile?.avatar_url ?? null,
+					plan: creatorUser.meta?.plan === "founder" ? "founder" : "free"
+				};
+			}
+		}
+
+		const snapMeta = snap?.meta && typeof snap.meta === "object" ? snap.meta : null;
+		const sourceMeta = sourceRow?.meta ? parseMeta(sourceRow.meta) : snapMeta;
+		const mediaType =
+			typeof sourceMeta?.media_type === "string"
+				? sourceMeta.media_type
+				: typeof snapMeta?.media_type === "string"
+					? snapMeta.media_type
+					: "image";
+
+		return {
+			id: sid,
+			group_id: groupId,
+			filename: filename || sourceRow?.filename || null,
+			url,
+			thumbnail_url: url ? getThumbnailUrl(url) : null,
+			width: sourceRow?.width ?? snap?.width ?? null,
+			height: sourceRow?.height ?? snap?.height ?? null,
+			status: "completed",
+			published: isPublished,
+			title,
+			user_id: sourceUserId,
+			meta: sourceMeta,
+			media_type: mediaType,
+			mutate_of_id: sid,
+			creator
+		};
+	}
+
+	function viewerOwnsCreationRow(row, viewerUserId) {
+		if (!row || viewerUserId == null) return false;
+		return Number(row.user_id) === Number(viewerUserId);
+	}
+
+	function parsePositiveIntQuery(value) {
+		const n = typeof value === "string" ? parseInt(value, 10) : Number(value);
+		return Number.isFinite(n) && n > 0 ? n : null;
+	}
+
+	async function selectOwnedGroupRow(groupId, viewerUserId) {
+		const gid = Number(groupId);
+		if (!Number.isFinite(gid) || gid <= 0) return null;
+		const owned = await queries.selectCreatedImageById.get(gid, viewerUserId);
+		if (owned) return owned;
+		const any = await queries.selectCreatedImageByIdAnyUser?.get(gid);
+		if (any && viewerOwnsCreationRow(any, viewerUserId)) return any;
+		return null;
+	}
+
+	async function canViewUnavailableImageViaGroupParent({ imageRow, groupParentId, viewerUserId }) {
+		if (!imageRow) return false;
+		const gid = parsePositiveIntQuery(groupParentId);
+		if (!gid) return false;
+		const groupRow = await selectOwnedGroupRow(gid, viewerUserId);
+		if (!groupRow) return false;
+		return isGroupSourceOfSharedCreation(groupRow, imageRow.id);
 	}
 
 	async function canViewViaShareTokenDelegation({ ancestorRow, shareVersion, shareToken, queries }) {
@@ -1451,6 +1586,22 @@ export default function createCreateRoutes({ queries, storage }) {
 			return res.status(400).json({ error: "Creation is not ready for landscape" });
 		}
 
+		const storageFilename = resolveCreatedImageStorageFilename(image);
+		if (!storageFilename) {
+			return res.json({
+				supported: false,
+				message: "Could not resolve image file for landscape.",
+			});
+		}
+
+		const landscapeEligibility = getLandscapeOutpaintEligibility(image);
+		if (!landscapeEligibility.eligible) {
+			return res.json({
+				supported: false,
+				message: landscapeEligibility.reason || "Landscape is not supported for this creation.",
+			});
+		}
+
 		let server = null;
 		const meta = parseMeta(image.meta) || {};
 		if (meta.server_id && Number.isFinite(Number(meta.server_id))) {
@@ -1539,6 +1690,22 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 		if (image.status !== "completed" || !image.filename) {
 			return res.status(400).json({ error: "Creation is not ready for landscape" });
+		}
+
+		const storageFilename = resolveCreatedImageStorageFilename(image);
+		if (!storageFilename) {
+			return res.status(400).json({
+				error: "No image file",
+				message: "Could not resolve image file for landscape.",
+			});
+		}
+
+		const landscapeEligibility = getLandscapeOutpaintEligibility(image);
+		if (!landscapeEligibility.eligible) {
+			return res.status(400).json({
+				error: "Landscape not supported",
+				message: landscapeEligibility.reason || "Landscape is not supported for this creation.",
+			});
 		}
 
 		const existingMeta = parseMeta(image.meta) || {};
@@ -1733,7 +1900,20 @@ export default function createCreateRoutes({ queries, storage }) {
 			}
 		}
 
-			const { server_id, method, args, creation_token, retry_of_id, mutate_of_id, mutate_parent_ids, credit_cost: bodyCreditCost, hydrate_mentions, style_key } = req.body;
+			const {
+				server_id,
+				method,
+				args,
+				creation_token,
+				retry_of_id,
+				mutate_of_id,
+				mutate_parent_ids,
+				credit_cost: bodyCreditCost,
+				hydrate_mentions,
+				style_key,
+				group_id: bodyGroupId,
+				group_of: bodyGroupOf
+			} = req.body;
 			const safeArgs = args && typeof args === "object" ? { ...args } : {};
 		const hydrateMentions = hydrate_mentions === true || hydrate_mentions === "true" || hydrate_mentions === 1 || hydrate_mentions === "1";
 
@@ -1996,6 +2176,16 @@ export default function createCreateRoutes({ queries, storage }) {
 						const isAdmin = user.role === 'admin';
 						if (isPublished || isAdmin) {
 							source = any;
+						}
+					}
+				}
+
+				if (!source) {
+					const groupIdForMutate = parsePositiveIntQuery(bodyGroupId ?? bodyGroupOf);
+					if (groupIdForMutate) {
+						const groupRow = await selectOwnedGroupRow(groupIdForMutate, user.id);
+						if (groupRow && isGroupSourceOfSharedCreation(groupRow, sourceId)) {
+							source = await queries.selectCreatedImageByIdAnyUser?.get(sourceId);
 						}
 					}
 				}
@@ -2560,6 +2750,41 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	});
 
+	// GET /api/create/images/:groupId/mutate-source?source_id= — group-first mutate bootstrap (avoids archived-source delegation).
+	router.get("/api/create/images/:id/mutate-source", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		try {
+			const groupId = parsePositiveIntQuery(req.params.id);
+			const sourceId = parsePositiveIntQuery(req.query?.source_id);
+			if (!groupId || !sourceId) {
+				return res.status(400).json({ error: "group id and source_id are required" });
+			}
+
+			const groupRow = await selectOwnedGroupRow(groupId, user.id);
+			if (!groupRow) {
+				return res.status(404).json({ error: "Image not found" });
+			}
+
+			const payload = await buildGroupMutateSourcePayload({
+				groupRow,
+				sourceId,
+				viewerUser: user
+			});
+			if (!payload) {
+				return res.status(404).json({ error: "Image not found" });
+			}
+			if (payload.error === "not_ready") {
+				return res.status(409).json({ error: "Source is not ready to mutate" });
+			}
+
+			return res.json(payload);
+		} catch {
+			return res.status(500).json({ error: "Failed to fetch mutate source" });
+		}
+	});
+
 	// GET /api/create/images/:id - Get specific image metadata
 	router.get("/api/create/images/:id", async (req, res) => {
 		const user = await requireUser(req, res);
@@ -2646,7 +2871,19 @@ export default function createCreateRoutes({ queries, storage }) {
 						image = anyImage;
 					} else if (!image && isAdmin && isUnavailable) {
 						image = anyImage;
-					} else {
+					} else if (!image) {
+						const groupPid = parsePositiveIntQuery(req.query?.group_of ?? req.query?.group_id);
+						if (groupPid) {
+							const delegationOk = await canViewUnpublishedCreationViaCreationDelegation({
+								ancestorRow: anyImage,
+								creationId: groupPid,
+								viewerUserId: user.id,
+								viewerRole: user.role
+							});
+							if (delegationOk) {
+								image = anyImage;
+							}
+						}
 						if (!image) {
 							return res.status(404).json({ error: "Image not found" });
 						}
@@ -2656,27 +2893,39 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			}
 
-			// Owner viewing their own image that they deleted: treat as not found (unless lineage context from another own creation).
-			const isOwner = image.user_id === user.id;
+			// Archived rows: allow lineage context or group parent (group owner may mutate party sources in group).
+			const isOwner = viewerOwnsCreationRow(image, user.id);
 			const isAdmin = user.role === "admin";
 			const isUnavailable = image.unavailable_at != null && image.unavailable_at !== "";
-			let lineageOwnerBypassDeleted = false;
+			let unavailableContextBypass = false;
 			if (isOwner && !isAdmin && isUnavailable) {
-				const lo = req.query?.lineage_of;
-				const lineagePid = typeof lo === "string" ? parseInt(lo, 10) : Number(lo);
-				if (Number.isFinite(lineagePid) && lineagePid > 0) {
+				const lineagePid = parsePositiveIntQuery(req.query?.lineage_of);
+				if (lineagePid) {
 					const parentRow = await queries.selectCreatedImageById.get(lineagePid, user.id);
 					if (parentRow) {
 						const pm = parseMeta(parentRow.meta);
 						const allowed = collectLineageAncestorIdsFromParentMeta(pm);
-						if (allowed.has(Number(image.id)) && Number(parentRow.user_id) === Number(image.user_id)) {
-							lineageOwnerBypassDeleted = true;
+						if (allowed.has(Number(image.id)) && viewerOwnsCreationRow(parentRow, user.id)) {
+							unavailableContextBypass = true;
 							lineageMediaParentId = lineagePid;
 						}
 					}
 				}
 			}
-			if (isOwner && !isAdmin && isUnavailable && !lineageOwnerBypassDeleted) {
+			if (!isAdmin && isUnavailable && !unavailableContextBypass) {
+				const groupPid = parsePositiveIntQuery(req.query?.group_of ?? req.query?.group_id);
+				if (
+					groupPid &&
+					(await canViewUnavailableImageViaGroupParent({
+						imageRow: image,
+						groupParentId: groupPid,
+						viewerUserId: user.id
+					}))
+				) {
+					unavailableContextBypass = true;
+				}
+			}
+			if (!isAdmin && isUnavailable && !unavailableContextBypass) {
 				return res.status(404).json({ error: "Image not found" });
 			}
 

@@ -4,6 +4,27 @@ export function generateCreationToken() {
 	return `crt_${ts}_${rand}`;
 }
 
+/** Clear composer prompt drafts (same keys as createComposer clearComposerState). */
+export function clearComposerPromptDraftStorage() {
+	try {
+		localStorage.setItem('create_page_prompt', '');
+		localStorage.setItem('create_page_prompt_text', '');
+		localStorage.setItem('create_page_prompt_image_edit', '');
+	} catch (_) {}
+	try {
+		const sk = 'create-page-selections';
+		const stored = sessionStorage.getItem(sk);
+		if (!stored) return;
+		const selections = JSON.parse(stored);
+		if (!selections || typeof selections !== 'object') return;
+		const fv = selections.fieldValues && typeof selections.fieldValues === 'object' ? selections.fieldValues : {};
+		const adv = selections.advancedOptions && typeof selections.advancedOptions === 'object' ? selections.advancedOptions : {};
+		selections.fieldValues = { ...fv, prompt: '' };
+		selections.advancedOptions = { ...adv, prompt: '' };
+		sessionStorage.setItem(sk, JSON.stringify(selections));
+	} catch (_) {}
+}
+
 function invalidateRelatedDataCaches() {
 	if (typeof navigator === 'undefined' || !navigator.serviceWorker) return;
 	const msg = {
@@ -481,6 +502,7 @@ export async function submitCreationWithPending({
 	methodKey,
 	args,
 	mutateOfId,
+	mutateGroupId,
 	mutateParentIds,
 	creditCost,
 	hydrateMentions,
@@ -513,6 +535,7 @@ export async function submitCreationWithPending({
 		args: args || {},
 		creation_token: creationToken,
 		...(Number.isFinite(Number(mutateOfId)) && Number(mutateOfId) > 0 ? { mutate_of_id: Number(mutateOfId) } : {}),
+		...(Number.isFinite(Number(mutateGroupId)) && Number(mutateGroupId) > 0 ? { group_id: Number(mutateGroupId) } : {}),
 		...(parentIds.length > 0 ? { mutate_parent_ids: parentIds } : {}),
 		...(Number.isFinite(Number(creditCost)) && Number(creditCost) > 0 ? { credit_cost: Number(creditCost) } : {}),
 		...(typeof hydrateMentions === 'boolean' ? { hydrate_mentions: hydrateMentions } : {}),
@@ -568,6 +591,7 @@ export async function submitCreationWithPending({
 
 		await waitUntilCreationListed({ id: serverId, creationToken });
 		invalidateRelatedDataCaches();
+		clearComposerPromptDraftStorage();
 
 		if (navigate !== 'none') {
 			navigateToCreations({

@@ -7,6 +7,7 @@ class AppModalCreationDetails extends HTMLElement {
 		this._meta = null;
 		this._creationId = null;
 		this._description = '';
+		this._groupContext = null;
 		this.handleEscape = this.handleEscape.bind(this);
 		this.handleOpen = this.handleOpen.bind(this);
 		this.handleCloseAllModals = this.handleCloseAllModals.bind(this);
@@ -39,6 +40,11 @@ class AppModalCreationDetails extends HTMLElement {
 						</button>
 					</div>
 					<div class="modal-body">
+						<div class="field" data-group-context-field style="display: none;">
+							<div class="label">Grouped creation</div>
+							<p class="creation-details-args-hint" data-group-context-hint></p>
+							<pre class="creation-details-args" data-group-context></pre>
+						</div>
 						<div class="field" data-args-field>
 							<div class="label">Sent to provider</div>
 							<p class="creation-details-args-hint" data-args-hint>Exact <code>method</code> and <code>args</code> payload used for the generation job.</p>
@@ -99,17 +105,45 @@ class AppModalCreationDetails extends HTMLElement {
 		this._meta = detail.meta || null;
 		this._creationId = detail.creationId || null;
 		this._description = detail.description || '';
+		this._groupContext = detail.groupContext && typeof detail.groupContext === 'object' ? detail.groupContext : null;
 		this.updateContent();
 		this.open();
 	}
 
 	updateContent() {
 		const meta = this._meta || {};
+		const groupContext = this._groupContext;
+		const groupField = this.querySelector("[data-group-context-field]");
+		const groupHint = this.querySelector("[data-group-context-hint]");
+		const groupEl = this.querySelector("[data-group-context]");
 		const argsEl = this.querySelector("[data-args]");
 		const argsField = this.querySelector("[data-args-field]");
 		const argsHint = this.querySelector("[data-args-hint]");
 		const providerErrorField = this.querySelector("[data-provider-error-field]");
 		const providerErrorEl = this.querySelector("[data-provider-error]");
+
+		if (groupField instanceof HTMLElement && groupEl) {
+			if (!groupContext) {
+				groupField.style.display = "none";
+				groupEl.textContent = "";
+				if (groupHint) groupHint.textContent = "";
+			} else {
+				groupField.style.display = "";
+				const selectedTitle =
+					typeof groupContext.selectedSourceTitle === "string" && groupContext.selectedSourceTitle.trim()
+						? groupContext.selectedSourceTitle.trim()
+						: (groupContext.selectedSourceId != null ? `#${groupContext.selectedSourceId}` : "—");
+				if (groupHint) {
+					groupHint.textContent =
+						`Group row #${groupContext.groupCreationId ?? "—"} · ${groupContext.sourceCount ?? 0} sources · showing generation info for the selected image (${selectedTitle}).`;
+				}
+				try {
+					groupEl.textContent = JSON.stringify(groupContext, null, 2);
+				} catch {
+					groupEl.textContent = String(groupContext);
+				}
+			}
+		}
 
 		const args = meta.args ?? null;
 		const isPlainObject = args && typeof args === "object" && !Array.isArray(args);
@@ -118,7 +152,15 @@ class AppModalCreationDetails extends HTMLElement {
 			argsField.style.display = isPlainObject ? "" : "none";
 		}
 		if (argsHint) {
-			argsHint.style.display = isPlainObject ? "" : "none";
+			argsHint.style.display = isPlainObject
+				? (groupContext ? "none" : "")
+				: "none";
+		}
+		if (argsHint && isPlainObject && groupContext) {
+			argsHint.textContent = "Provider payload for the selected group source (not the group row).";
+			argsHint.style.display = "";
+		} else if (argsHint && isPlainObject) {
+			argsHint.textContent = "Exact method and args payload used for the generation job.";
 		}
 		if (argsEl && isPlainObject) {
 			try {

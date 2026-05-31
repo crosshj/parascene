@@ -1,5 +1,6 @@
 let submitCreationWithPending;
 let formatMentionsFailureForDialog;
+let mutatePromptSaveTimerId = null;
 let fetchJsonWithStatusDeduped;
 let attachAutoGrowTextarea;
 let refreshAutoGrowTextareas;
@@ -23,6 +24,8 @@ let addToMutateQueue;
 let clearMutateQueue;
 let loadMutateQueue;
 let removeFromMutateQueueByImageUrl;
+let applyHeroAspectLayoutToElement;
+let aspectRatioFromCreation;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -81,6 +84,10 @@ async function loadDeps() {
 		loadMutateQueue = mutateQueueMod.loadMutateQueue;
 		removeFromMutateQueueByImageUrl = mutateQueueMod.removeFromMutateQueueByImageUrl;
 
+		const aspectRatioMod = await import(`/shared/aspectRatio.js${qs}`);
+		applyHeroAspectLayoutToElement = aspectRatioMod.applyHeroAspectLayoutToElement;
+		aspectRatioFromCreation = aspectRatioMod.aspectRatioFromCreation;
+
 		await import(`/components/elements/tabs.js${qs}`);
 	})();
 	return _depsPromise;
@@ -125,13 +132,20 @@ function persistMutateImageEditDraftToStorage(prompt) {
 	} catch (_) { }
 }
 
-/** Queue (single item) + same prompt/tab/session snapshot as Image Edit on /create. */
-function persistMutateForNextCreatePage({ prompt, mutateOfId, normalizedImageUrl, published }) {
+function cancelMutatePromptDraftPersist() {
+	if (mutatePromptSaveTimerId != null) {
+		clearTimeout(mutatePromptSaveTimerId);
+		mutatePromptSaveTimerId = null;
+	}
+}
+
+/** After mutate submit: queue source for lineage; prompt cleared on success in createSubmit. */
+function prepareCreationsPageAfterMutateSubmit({ mutateOfId, normalizedImageUrl, published }) {
+	cancelMutatePromptDraftPersist();
 	try {
 		clearMutateQueue();
 		addToMutateQueue({ sourceId: mutateOfId, imageUrl: normalizedImageUrl, published });
 	} catch (_) { }
-	persistMutateImageEditDraftToStorage(prompt);
 }
 
 function getCreationId() {
@@ -163,19 +177,69 @@ function mutateModeFromTabOrDataset(idOrMode) {
 	return v === 'image-to-video' ? 'image-to-video' : 'image-to-image';
 }
 
-function withVariant(url, variant) {
-	if (typeof url !== 'string' || !url) return '';
+/** Full-resolution preview URL (detail hero uses creation.url, not thumbnail variant). */
+function getMutatePreviewImageUrl(raw) {
+	if (typeof raw !== 'string' || !raw.trim()) return '';
 	try {
-		const parsed = new URL(url, window.location.origin);
-		parsed.searchParams.set('variant', variant);
+		const parsed = new URL(raw.trim(), window.location.origin);
+		parsed.searchParams.delete('variant');
 		return parsed.toString();
 	} catch {
-		const parts = url.split('#');
-		const base = parts[0] || '';
-		const hash = parts.length > 1 ? `#${parts.slice(1).join('#')}` : '';
-		const joiner = base.includes('?') ? '&' : '?';
-		return `${base}${joiner}variant=${encodeURIComponent(variant)}${hash}`;
+		const value = raw.trim();
+		return value.replace(/([?&])variant=[^&]+(&?)/g, (_, lead, tail) => (tail ? lead : '')).replace(/\?&/, '?').replace(/[?&]$/, '');
 	}
+}
+
+function normalizeCreationMetaForAspect(raw) {
+	if (raw == null) return null;
+	if (typeof raw === 'object') return raw;
+	if (typeof raw === 'string') {
+		try {
+			const parsed = JSON.parse(raw);
+			return parsed && typeof parsed === 'object' ? parsed : null;
+		} catch {
+			return null;
+		}
+	}
+	return null;
+}
+
+/** Match creation-detail hero layout; prefer real pixel dimensions when metadata is missing or square. */
+function applyMutateSourceAspectLayout(wrap, creation, img) {
+	if (!(wrap instanceof HTMLElement)) return;
+	const meta = normalizeCreationMetaForAspect(creation?.meta);
+	const payload = {
+		width: creation?.width,
+		height: creation?.height,
+		meta,
+		media_type: creation?.media_type,
+		video_url: creation?.video_url,
+	};
+
+	if (typeof applyHeroAspectLayoutToElement === 'function') {
+		applyHeroAspectLayoutToElement(wrap, payload);
+	}
+
+	let w = Number(creation?.width);
+	let h = Number(creation?.height);
+	if (img instanceof HTMLImageElement && img.naturalWidth > 0 && img.naturalHeight > 0) {
+		w = img.naturalWidth;
+		h = img.naturalHeight;
+	}
+	if (!(Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0) && typeof aspectRatioFromCreation === 'function') {
+		const ratio = aspectRatioFromCreation(payload);
+		w = ratio.w;
+		h = ratio.h;
+	}
+	if (!(Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0) || w === h) return;
+
+	const mode = w > h ? 'landscape' : 'portrait';
+	wrap.classList.remove('hero-layout-legacy', 'hero-layout-landscape', 'hero-layout-portrait', 'hero-portrait-by-width');
+	wrap.style.setProperty('--hero-aspect-w', String(w));
+	wrap.style.setProperty('--hero-aspect-h', String(h));
+	wrap.style.setProperty('--hero-aspect-ratio', `${w} / ${h}`);
+	wrap.classList.add(`hero-layout-${mode}`);
+	if (mode === 'portrait') wrap.classList.add('hero-portrait-by-width');
 }
 
 async function loadEditPage() {
@@ -193,7 +257,37 @@ async function loadEditPage() {
 	editContent.innerHTML = renderEmptyLoading({});
 
 	try {
-		const response = await fetch(`/api/create/images/${creationId}`, { credentials: 'include' });
+		const searchParams = new URLSearchParams(window.location.search);
+		const sourceIdRaw = searchParams.get('source_id');
+		const groupOfRaw = searchParams.get('group_of');
+		const sourceIdParam =
+			sourceIdRaw != null && String(sourceIdRaw).trim() !== '' ? String(sourceIdRaw).trim() : '';
+		const groupOfLegacy =
+			groupOfRaw != null && String(groupOfRaw).trim() !== '' ? String(groupOfRaw).trim() : '';
+
+		// Group-first: /creations/{groupId}/mutate?source_id={sourceId}
+		// Legacy: /creations/{sourceId}/mutate?group_of={groupId}
+		let mutateSourceId = creationId;
+		let mutateGroupId = null;
+		let creationDetailHref = `/creations/${creationId}`;
+		let imageApiUrl = `/api/create/images/${creationId}`;
+
+		if (sourceIdParam) {
+			mutateSourceId = parseInt(sourceIdParam, 10);
+			mutateGroupId = creationId;
+			creationDetailHref = `/creations/${creationId}`;
+			imageApiUrl = `/api/create/images/${creationId}/mutate-source?source_id=${encodeURIComponent(sourceIdParam)}`;
+		} else if (groupOfLegacy) {
+			const legacyGroupId = parseInt(groupOfLegacy, 10);
+			if (Number.isFinite(legacyGroupId) && legacyGroupId > 0) {
+				mutateSourceId = creationId;
+				mutateGroupId = legacyGroupId;
+				creationDetailHref = `/creations/${legacyGroupId}`;
+				imageApiUrl = `/api/create/images/${legacyGroupId}/mutate-source?source_id=${encodeURIComponent(String(creationId))}`;
+			}
+		}
+
+		const response = await fetch(imageApiUrl, { credentials: 'include' });
 		if (!response.ok) {
 			editContent.innerHTML = renderEmptyState({
 				title: 'Unable to load creation',
@@ -203,6 +297,10 @@ async function loadEditPage() {
 		}
 
 		const creation = await response.json();
+		if (mutateGroupId == null && creation?.group_id != null) {
+			const gid = Number(creation.group_id);
+			if (Number.isFinite(gid) && gid > 0) mutateGroupId = gid;
+		}
 		if (creation?.creator?.id != null || creation?.user_id != null) {
 			addPageUsers([{
 				user_id: creation.creator?.id ?? creation.user_id,
@@ -214,9 +312,8 @@ async function loadEditPage() {
 		const status = creation.status || 'completed';
 		const canEdit = status === 'completed' && Boolean(creation.url);
 		const title = typeof creation.title === 'string' && creation.title.trim() ? creation.title.trim() : 'Untitled';
-		const creationDetailHref = `/creations/${creationId}`;
 		const sourceImageUrl = canEdit ? String(creation.url) : '';
-		const thumbUrl = canEdit ? withVariant(sourceImageUrl, 'thumbnail') : '';
+		const previewImageUrl = canEdit ? getMutatePreviewImageUrl(sourceImageUrl) : '';
 
 		function escapeHtml(value) {
 			return String(value ?? '')
@@ -238,12 +335,12 @@ async function loadEditPage() {
 		// While we build the form, keep the existing route loader visible.
 		// Preload the thumbnail in the background so it can pop in quickly once rendered.
 		const thumbPreload = new Promise((resolve) => {
-			if (!thumbUrl) return resolve({ ok: false });
+			if (!previewImageUrl) return resolve({ ok: false });
 			const img = new Image();
 			img.onload = () => resolve({ ok: true });
 			img.onerror = () => resolve({ ok: false });
 			img.decoding = 'async';
-			img.src = thumbUrl;
+			img.src = previewImageUrl;
 		});
 
 		const servers = await loadMutateServerOptions();
@@ -307,10 +404,10 @@ async function loadEditPage() {
 					${hasImageMode ? html`
 					<tab label="Image Edit" data-id="image-to-image" ${activeMode==='image-to-image' ? 'default' : '' }>
 						<h1 class="create-title">What do you want to change?</h1>
-						<div class="create-image-edit-wrap creation-edit-source-wrap">
-							<div class="create-image-edit-box creation-edit-source-box" data-source-thumb-wrap title="View creation"
-								aria-label="Source image">
-								<img class="image-thumb" data-source-thumb alt="Source image" />
+						<div class="creation-edit-source-wrap">
+							<div class="creation-detail-image-wrapper creation-edit-source-box image-loading" data-source-thumb-wrap
+								title="View creation" aria-label="Source image">
+								<img class="creation-detail-image image-thumb" data-source-thumb data-image alt="Source image" />
 							</div>
 							<a href="${creationDetailHref}" class="creation-edit-source-link" data-source-link>change image</a>
 						</div>
@@ -331,10 +428,10 @@ async function loadEditPage() {
 					${hasI2vTab ? html`
 					<tab label="Image To Video" data-id="image-to-video" ${activeMode==='image-to-video' ? 'default' : '' }>
 						<h1 class="create-title">What happens next?</h1>
-						<div class="create-image-edit-wrap creation-edit-source-wrap">
-							<div class="create-image-edit-box creation-edit-source-box" data-source-thumb-wrap title="View creation"
-								aria-label="Source image">
-								<img class="image-thumb" data-source-thumb alt="Source image" />
+						<div class="creation-edit-source-wrap">
+							<div class="creation-detail-image-wrapper creation-edit-source-box image-loading" data-source-thumb-wrap
+								title="View creation" aria-label="Source image">
+								<img class="creation-detail-image image-thumb" data-source-thumb data-image alt="Source image" />
 							</div>
 							<a href="${creationDetailHref}" class="creation-edit-source-link" data-source-link>change image</a>
 						</div>
@@ -408,22 +505,26 @@ async function loadEditPage() {
 			const thumb = thumbEl;
 			const thumbWrap = thumb.closest('[data-source-thumb-wrap]');
 			if (!(thumb instanceof HTMLImageElement) || !(thumbWrap instanceof HTMLElement)) return;
-			thumbWrap.classList.add('loading');
-			thumbWrap.classList.remove('loaded');
-			thumbWrap.classList.remove('error');
+			applyMutateSourceAspectLayout(thumbWrap, creation, thumb);
+			thumbWrap.classList.add('image-loading');
+			thumbWrap.classList.remove('image-error');
 			thumb.style.opacity = '0';
-			thumb.addEventListener('load', () => {
-				thumbWrap.classList.remove('loading');
-				thumbWrap.classList.add('loaded');
-				thumbWrap.classList.remove('error');
+			const onPreviewLoad = () => {
+				applyMutateSourceAspectLayout(thumbWrap, creation, thumb);
+				thumbWrap.classList.remove('image-loading');
+				thumbWrap.classList.remove('image-error');
 				thumb.style.opacity = '';
-			}, { once: true });
-			thumb.addEventListener('error', () => {
-				thumbWrap.classList.remove('loading');
-				thumbWrap.classList.remove('loaded');
-				thumbWrap.classList.add('error');
-			}, { once: true });
-			thumb.src = thumbUrl;
+			};
+			const onPreviewError = () => {
+				thumbWrap.classList.remove('image-loading');
+				thumbWrap.classList.add('image-error');
+			};
+			thumb.addEventListener('load', onPreviewLoad, { once: true });
+			thumb.addEventListener('error', onPreviewError, { once: true });
+			thumb.src = previewImageUrl;
+			if (thumb.complete && thumb.naturalWidth > 0) {
+				onPreviewLoad();
+			}
 			thumb.loading = 'lazy';
 			thumb.decoding = 'async';
 			thumbWrap.addEventListener('click', (e) => {
@@ -451,7 +552,14 @@ async function loadEditPage() {
 
 		let creditsCount = null;
 
-		editContent.dataset.mutateSourceId = String(creationId);
+		editContent.dataset.mutateSourceId = String(
+			Number.isFinite(Number(mutateSourceId)) && Number(mutateSourceId) > 0 ? mutateSourceId : creationId
+		);
+		if (mutateGroupId != null && Number.isFinite(Number(mutateGroupId)) && Number(mutateGroupId) > 0) {
+			editContent.dataset.mutateGroupId = String(mutateGroupId);
+		} else {
+			delete editContent.dataset.mutateGroupId;
+		}
 		editContent.dataset.mutateImageUrl = sourceImageUrl;
 		editContent.dataset.mutatePublished =
 			creation.published === true || creation.published === 1 ? '1' : '0';
@@ -461,11 +569,11 @@ async function loadEditPage() {
 		if (normalizedImageUrlForQueue) {
 			try {
 				const queueItems = loadMutateQueue();
-				const creationIdNum = Number(creationId);
+				const mutateSourceIdNum = Number(editContent.dataset.mutateSourceId || creationId);
 				isImageQueued = queueItems.some((item) => {
 					const itemUrl = typeof item?.imageUrl === 'string' ? item.imageUrl : '';
 					const itemSourceIdNum = Number(item?.sourceId);
-					const matchesSourceId = Number.isFinite(itemSourceIdNum) && itemSourceIdNum > 0 && itemSourceIdNum === creationIdNum;
+					const matchesSourceId = Number.isFinite(itemSourceIdNum) && itemSourceIdNum > 0 && itemSourceIdNum === mutateSourceIdNum;
 					const matchesUrl = itemUrl === normalizedImageUrlForQueue;
 					return matchesSourceId || matchesUrl;
 				});
@@ -670,10 +778,10 @@ async function loadEditPage() {
 
 		updateCostAndButtonState();
 
-		let promptSaveTimer;
 		function scheduleMutatePromptPersist() {
-			clearTimeout(promptSaveTimer);
-			promptSaveTimer = setTimeout(() => {
+			cancelMutatePromptDraftPersist();
+			mutatePromptSaveTimerId = setTimeout(() => {
+				mutatePromptSaveTimerId = null;
 				const activePromptEl = editContent.querySelector('app-tabs tab:not([hidden]) [data-edit-prompt]');
 				const text = activePromptEl instanceof HTMLTextAreaElement ? activePromptEl.value || '' : '';
 				persistMutateImageEditDraftToStorage(text);
@@ -827,6 +935,8 @@ document.addEventListener('click', (e) => {
 		? MUTATE_VIDEO_LTX_SERVER_ID
 		: MUTATE_DEFAULT_SERVER_ID;
 	const mutateOfId = Number(sourceIdRaw);
+	const mutateGroupIdRaw = container?.dataset?.mutateGroupId || '';
+	const mutateGroupId = Number(mutateGroupIdRaw);
 
 	// Safety checks (button should already be disabled if these are missing).
 	if (!prompt) return;
@@ -851,8 +961,8 @@ document.addEventListener('click', (e) => {
 
 	const doSubmit = (hydrateMentions) => {
 		btn.disabled = true;
-		persistMutateForNextCreatePage({
-			prompt,
+		cancelMutatePromptDraftPersist();
+		prepareCreationsPageAfterMutateSubmit({
 			mutateOfId,
 			normalizedImageUrl,
 			published: container?.dataset?.mutatePublished === '1',
@@ -886,6 +996,7 @@ document.addEventListener('click', (e) => {
 			serverId,
 			methodKey,
 			mutateOfId,
+			...(Number.isFinite(mutateGroupId) && mutateGroupId > 0 ? { mutateGroupId } : {}),
 			args,
 			hydrateMentions,
 			navigate: 'full'

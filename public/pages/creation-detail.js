@@ -49,6 +49,7 @@ let renderCommentAvatarHtml;
 let uploadImageFile;
 let createReplyIndicatorElement;
 let applyHeroAspectLayoutToElement;
+let getLandscapeOutpaintEligibility;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -171,12 +172,45 @@ async function loadDeps() {
 
 		const aspectRatioMod = await import(`/shared/aspectRatio.js${qs}`);
 		applyHeroAspectLayoutToElement = aspectRatioMod.applyHeroAspectLayoutToElement;
+		getLandscapeOutpaintEligibility = aspectRatioMod.getLandscapeOutpaintEligibility;
 	})();
 	return _depsPromise;
 }
 
 const html = String.raw;
 const TIP_MIN_VISIBLE_BALANCE = 10.0;
+
+function getGroupActionTarget() {
+	const sid = Number(lastGroupSelectedSourceId);
+	if (!Number.isFinite(sid) || sid <= 0) return null;
+	const source = lastGroupSourcesById.get(sid);
+	const filePath = typeof source?.filePath === 'string' ? source.filePath.trim() : '';
+	if (!filePath) return null;
+	const imageUrl = normalizeImageUrlForQueue(filePath);
+	if (!imageUrl) return null;
+	return { sourceId: sid, imageUrl };
+}
+
+/** Payload for applyHeroAspectLayoutToElement (width/height + meta). */
+function heroAspectPayloadFromRecord(record) {
+	if (!record || typeof record !== 'object') return record;
+	const w = Number(record.width);
+	const h = Number(record.height);
+	return {
+		width: Number.isFinite(w) && w > 0 ? w : record.width,
+		height: Number.isFinite(h) && h > 0 ? h : record.height,
+		meta: record.meta ?? null,
+		media_type: record.media_type,
+		video_url: record.video_url,
+	};
+}
+
+function applyDetailHeroAspectLayout(record) {
+	const imageWrapper = document.querySelector('[data-image]')?.closest?.('.creation-detail-image-wrapper');
+	if (!(imageWrapper instanceof HTMLElement)) return;
+	if (typeof applyHeroAspectLayoutToElement !== 'function') return;
+	applyHeroAspectLayoutToElement(imageWrapper, heroAspectPayloadFromRecord(record));
+}
 
 /** Normalize image URL for queue match (origin + path). Same idea as creation-edit toParasceneImageUrl. */
 function normalizeImageUrlForQueue(raw) {
@@ -449,7 +483,7 @@ const MORE_MENU_ITEM_DEFS = [
 	},
 	{
 		action: 'landscape',
-		show: (d) => d.isOwner && !d.isAdmin,
+		show: (d) => d.showLandscapeMenu,
 		icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
 	stroke-linejoin="round" aria-hidden="true">
 	<rect x="2" y="6" width="20" height="12" rx="1.5" /></svg>`,
@@ -457,7 +491,7 @@ const MORE_MENU_ITEM_DEFS = [
 	},
 	{
 		action: 'more-info',
-		show: (d) => d.hasDetailsModalContent,
+		show: (d) => d.hasDetailsModalContent && !d.actionsContext?.showMoreInfoPill,
 		icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
 	stroke-linejoin="round" aria-hidden="true">
 	<circle cx="12" cy="12" r="10"></circle>
@@ -1568,8 +1602,6 @@ async function loadCreation() {
 		const creation = await response.json();
 		if (!isCurrentLoad()) return;
 
-		applyHeroAspectLayoutToElement(imageWrapper, creation);
-
 		// Fetch direct children (published creations with mutate_of_id = this id), order by created_at
 		const childrenPromise = fetch(`/api/create/images/${creationId}/children`, { credentials: 'include' })
 			.then((r) => (r.ok ? r.json() : []))
@@ -1734,7 +1766,10 @@ async function loadCreation() {
 			// ignore
 		}
 
-		const isOwner = currentUserId && creation.user_id && currentUserId === creation.user_id;
+		const isOwner =
+			currentUserId != null &&
+			creation.user_id != null &&
+			Number(currentUserId) === Number(creation.user_id);
 		const isAdmin = currentUser?.role === 'admin';
 		const canEdit = isOwner || isAdmin;
 		const enableNsfw = currentUser?.enableNsfw === true;
@@ -1837,15 +1872,9 @@ async function loadCreation() {
 		const groupMeta = meta?.group && typeof meta.group === 'object' ? meta.group : null;
 		const isGroupCreation = groupMeta?.kind === 'group_creations';
 		if (isGroupCreation) {
-			actionsContext.showEdit = false;
-			actionsContext.showMutate = false;
 			actionsContext.showRetry = false;
-			actionsContext.showDelete = false;
-			actionsContext.showQueueForLater = false;
 			actionsContext.showQueueFromFrame = false;
-			actionsContext.showMoreInfoPill = false;
 		}
-		const hasGroupPublishActions = Boolean(actionsContext.showPublish || actionsContext.showUnpublish);
 		const groupSourcesRaw = Array.isArray(groupMeta?.source_creations) ? groupMeta.source_creations : [];
 		const groupSourcesMapped = groupSourcesRaw
 			.map((source, index) => {
@@ -1884,15 +1913,20 @@ async function loadCreation() {
 				if (sourceModel) sourceMetaItems.push(`Model ${sourceModel}`);
 				if (sourceDuration) sourceMetaItems.push(`Duration ${sourceDuration}`);
 				const sourceGenerationInfo = sourceMetaItems.join(' • ');
+				const sourceWidth = Number(sourceObj.width);
+				const sourceHeight = Number(sourceObj.height);
 				return {
 					id: sourceId,
 					title: sourceRawTitle ? `${sourceRawTitle} (${sourceId})` : `${groupTitleForSourceLabels} (${sourceId})`,
 					rawTitle: sourceRawTitle,
 					filePath: sourceFilePath,
+					width: Number.isFinite(sourceWidth) && sourceWidth > 0 ? sourceWidth : undefined,
+					height: Number.isFinite(sourceHeight) && sourceHeight > 0 ? sourceHeight : undefined,
 					description: sourceDescription,
 					createdAt: sourceCreatedAt,
 					prompt: sourcePrompt,
-					generationInfo: sourceGenerationInfo
+					generationInfo: sourceGenerationInfo,
+					meta: sourceMeta
 				};
 			})
 			.filter(Boolean);
@@ -1906,6 +1940,30 @@ async function loadCreation() {
 			}
 		}
 		const hasGroupHeroNavigation = isGroupCreation && groupSources.length > 1;
+		if (isGroupCreation) {
+			lastDetailIsGroupCreation = true;
+			lastGroupSourcesById = new Map(
+				groupSources.map((source) => [Number(source.id), source]).filter(([id]) => Number.isFinite(id) && id > 0)
+			);
+			lastGroupSelectedSourceId = Number(groupSources[0]?.id) || null;
+			const hasSourceMedia = groupSources.some((s) => typeof s.filePath === 'string' && s.filePath.trim());
+			if (hasSourceMedia && status === 'completed' && !isFailed && !isAdmin) {
+				actionsContext.showMutate = true;
+				actionsContext.showQueueForLater = true;
+			}
+			actionsContext.showDelete = canEdit && !isAdmin;
+		} else {
+			lastDetailIsGroupCreation = false;
+			lastGroupSourcesById = new Map();
+			lastGroupSelectedSourceId = null;
+		}
+
+		if (isGroupCreation && groupSources.length > 0) {
+			applyDetailHeroAspectLayout(groupSources[0]);
+		} else {
+			applyDetailHeroAspectLayout(creation);
+		}
+
 		if (imageWrapper instanceof HTMLElement) {
 			imageWrapper.onmouseenter = null;
 			imageWrapper.onmouseleave = null;
@@ -2293,7 +2351,9 @@ async function loadCreation() {
 		if (!hasDetailsModalContent && providerError && typeof providerError === 'object') {
 			hasDetailsModalContent = true;
 		}
-
+		if (isGroupCreation && groupSources.length > 0) {
+			hasDetailsModalContent = true;
+		}
 
 		// Get creator information
 		const creatorUserName = typeof creation?.creator?.user_name === 'string' ? creation.creator.user_name.trim() : '';
@@ -2394,6 +2454,18 @@ async function loadCreation() {
 			</button>
 		` : '';
 
+		const landscapeEligibility =
+			typeof getLandscapeOutpaintEligibility === 'function'
+				? getLandscapeOutpaintEligibility(creation)
+				: { eligible: true };
+		const showLandscapeMenu =
+			isPublished &&
+			isOwner &&
+			!isAdmin &&
+			status === 'completed' &&
+			!isFailed &&
+			landscapeEligibility.eligible;
+
 		const stripData = {
 			creatorProfileHref,
 			creatorName,
@@ -2409,8 +2481,7 @@ async function loadCreation() {
 			likeCount,
 			actionsContext,
 			isOwner,
-			isFailed,
-			hideActions: isGroupCreation && !hasGroupPublishActions
+			isFailed
 		};
 		const menuData = {
 			isFailed,
@@ -2509,7 +2580,7 @@ async function loadCreation() {
 				${escapeHtml(mobileBylineText)}</div>`}
 			${challengeDetailBannerHtml}
 			${renderCreationDetailActionStrip(stripData, escapeHtml)}
-			${isGroupCreation && !hasGroupPublishActions ? '' : renderCreationDetailMoreMenu(menuData, escapeHtml)}
+			${renderCreationDetailMoreMenu(menuData, escapeHtml)}
 			${groupLeadDescriptionHtml}
 			${groupSectionHtml}
 			${groupSectionHtml ? html`<div class="creation-detail-group-divider" aria-hidden="true"></div>` : ''}
@@ -2644,19 +2715,21 @@ async function loadCreation() {
 		const founderFlairEl = detailContent.querySelector('[data-founder-flair-avatar-bg]');
 		if (founderFlairEl && !viewerAvatarUrl) founderFlairEl.style.setProperty('--avatar-bg', viewerColor);
 
-		// Landscape (hidden trigger): only for owner, not admin, when published and completed.
+		// Landscape (hidden trigger): published owner, square cover (groups use cover dimensions).
+		lastDetailLandscapeOwner = Boolean(isOwner);
+		lastDetailLandscapeEligibility = landscapeEligibility;
 		const landscapeBtn = detailContent.querySelector('[data-landscape-btn]');
 		if (landscapeBtn) {
 			const lurl = meta?.landscapeUrl;
 			const hasLandscapeUrl = typeof lurl === 'string' && lurl !== 'loading' && !lurl.startsWith('error:') && (lurl.startsWith('http') || lurl.startsWith('/'));
-			const showLandscape = isPublished && isOwner && !isAdmin && status === 'completed' && !isFailed;
-			if (!showLandscape) {
+			landscapeBtn.dataset.landscapeIsSelf = isOwner ? '1' : '0';
+			landscapeBtn.dataset.landscapeHasUrl = hasLandscapeUrl ? '1' : '0';
+			if (!showLandscapeMenu) {
 				landscapeBtn.style.display = 'none';
+				landscapeBtn.disabled = true;
 			} else {
 				landscapeBtn.style.display = '';
 				landscapeBtn.disabled = false;
-				landscapeBtn.dataset.landscapeHasUrl = hasLandscapeUrl ? '1' : '0';
-				landscapeBtn.dataset.landscapeIsSelf = isOwner ? '1' : '0';
 				const labelEl = landscapeBtn.querySelector('[data-landscape-btn-text]');
 				if (labelEl) labelEl.textContent = 'Landscape';
 			}
@@ -3603,13 +3676,37 @@ async function loadCreation() {
 
 		const detailsBtn = detailContent.querySelector('[data-creation-details-link]');
 		const openDetailsModal = () => {
-			document.dispatchEvent(new CustomEvent('open-creation-details-modal', {
-				detail: {
-					creationId,
-					meta,
-					description: descriptionText
+			const detail = {
+				creationId,
+				meta,
+				description: descriptionText
+			};
+			if (isGroupCreation && groupSources.length > 0) {
+				const selectedId =
+					Number(lastGroupSelectedSourceId) > 0
+						? Number(lastGroupSelectedSourceId)
+						: Number(groupSources[0]?.id);
+				const selectedSource = groupSources.find((s) => Number(s.id) === selectedId) || groupSources[0];
+				const sourceMeta =
+					selectedSource?.meta && typeof selectedSource.meta === 'object' ? selectedSource.meta : null;
+				detail.isGroupCreation = true;
+				detail.groupContext = {
+					groupCreationId: creationId,
+					sourceCount: groupSources.length,
+					coverSourceId: Number.isFinite(coverSourceIdFromMeta) ? coverSourceIdFromMeta : null,
+					selectedSourceId: selectedSource?.id ?? null,
+					selectedSourceTitle: selectedSource?.title ?? null,
+					sourceIds: groupSources.map((s) => s.id)
+				};
+				if (sourceMeta) {
+					detail.meta = {
+						...(meta && typeof meta === 'object' ? meta : {}),
+						...sourceMeta,
+						group: groupMeta
+					};
 				}
-			}));
+			}
+			document.dispatchEvent(new CustomEvent('open-creation-details-modal', { detail }));
 		};
 		if (detailsBtn && meta && hasDetailsModalContent) {
 			detailsBtn.addEventListener('click', openDetailsModal);
@@ -3903,24 +4000,35 @@ async function loadCreation() {
 				e.stopPropagation();
 				const action = item.getAttribute('data-creation-more-action');
 				const targets = {
-					'more-info': () => detailContent.querySelector('[data-creation-details-link]')?.click(),
+					'more-info': () => openDetailsModal(),
 					'copy-link': () => detailContent.querySelector('[data-copy-link-button]')?.click(),
 					'set-avatar': () => detailContent.querySelector('button[data-set-avatar-button]')?.click(),
-					'landscape': () => { const b = detailContent.querySelector('[data-landscape-btn]'); if (b && !b.disabled) b.click(); },
+					'landscape': () => openLandscapeModalFromLoadedCreation(),
 					'unpublish': () => handleUnpublish(),
 					'delete': () => handleDelete(actionsContext?.deletePermanent),
 					'queue-for-later': () => {
-						if (!showQueueForLater || !normalizedImageUrlForQueue) return;
-						const sourceId = Number(creationId);
+						if (!actionsContext.showQueueForLater) return;
+						const queueTarget = isGroupCreation
+							? getGroupActionTarget()
+							: (normalizedImageUrlForQueue
+								? { sourceId: Number(creationId), imageUrl: normalizedImageUrlForQueue }
+								: null);
+						if (!queueTarget?.imageUrl) {
+							if (isGroupCreation) alert('Select a source image in the group first.');
+							return;
+						}
+						const { sourceId: queueSourceId, imageUrl: queueImageUrl } = queueTarget;
 						const labelEl = item.querySelector('[data-queue-for-later-label]');
 						const currentlyQueued = loadMutateQueue().some((q) => {
 							const sid = Number(q?.sourceId);
 							const url = typeof q?.imageUrl === 'string' ? q.imageUrl : '';
-							return (Number.isFinite(sid) && sid === sourceId) || url === normalizedImageUrlForQueue || normalizeImageUrlForQueue(url) === normalizedImageUrlForQueue;
+							return (Number.isFinite(sid) && sid === queueSourceId)
+								|| url === queueImageUrl
+								|| normalizeImageUrlForQueue(url) === queueImageUrl;
 						});
 						if (currentlyQueued) {
 							try {
-								removeFromMutateQueueByImageUrl(normalizedImageUrlForQueue);
+								removeFromMutateQueueByImageUrl(queueImageUrl);
 								if (labelEl) labelEl.textContent = 'Queue for later';
 								showToast('Removed from queue');
 							} catch {
@@ -3928,7 +4036,7 @@ async function loadCreation() {
 							}
 						} else {
 							try {
-								addToMutateQueue({ sourceId, imageUrl: normalizedImageUrlForQueue, published: isPublished });
+								addToMutateQueue({ sourceId: queueSourceId, imageUrl: queueImageUrl, published: isPublished });
 								if (labelEl) labelEl.textContent = 'Remove from queue';
 								showToast('Added to queue');
 							} catch {
@@ -4042,6 +4150,8 @@ async function loadCreation() {
 				const source = sourceById.get(Number(sourceId));
 				if (!source) return;
 				selectedGroupSourceId = Number(source.id);
+				lastGroupSelectedSourceId = selectedGroupSourceId;
+				applyDetailHeroAspectLayout(source);
 				for (const btn of groupThumbButtons) {
 					const isActive = Number(btn.getAttribute('data-group-source-thumb')) === Number(source.id);
 					btn.classList.toggle('is-active', isActive);
@@ -4110,38 +4220,38 @@ async function loadCreation() {
 				};
 			}
 
-			// Strict carousel behavior:
-			// 1) Cover image must load successfully.
-			// 2) Then load remaining images.
-			// 3) Show controls only after all are loaded.
-			// 4) Navigation only changes stacking (no src swaps).
-			void (async () => {
-				if (!isCurrentLoad()) return;
-				const cover = groupSources[0];
-				const coverUrl = typeof cover?.filePath === 'string' ? cover.filePath.trim() : '';
-				if (!coverUrl) return;
-				const coverLoaded = await preloadHeroImageUrl(coverUrl);
-				if (!isCurrentLoad() || !coverLoaded?.ok) return;
+			// Multi-source carousel only; a single grouped source uses normal hero layout (16:9, etc.).
+			if (groupSources.length > 1) {
+				void (async () => {
+					if (!isCurrentLoad()) return;
+					const cover = groupSources[0];
+					const coverUrl = typeof cover?.filePath === 'string' ? cover.filePath.trim() : '';
+					if (!coverUrl) return;
+					const coverLoaded = await preloadHeroImageUrl(coverUrl);
+					if (!isCurrentLoad() || !coverLoaded?.ok) return;
 
-				const mounted = await mountGroupHeroCarousel(groupSources, Number(cover.id));
-				groupCarouselEnabled = mounted;
-				if (!mounted) return;
+					const mounted = await mountGroupHeroCarousel(groupSources, Number(cover.id));
+					groupCarouselEnabled = mounted;
+					if (!mounted) return;
 
-				const remainingUrls = groupSources
-					.slice(1)
-					.map((source) => (typeof source?.filePath === 'string' ? source.filePath.trim() : ''))
-					.filter(Boolean);
-				if (remainingUrls.length > 0) {
-					await Promise.allSettled(remainingUrls.map((url) => preloadHeroImageUrl(url)));
-				}
-				if (!isCurrentLoad()) return;
-				if (hasGroupHeroNavigation && groupHeroPrevBtn instanceof HTMLButtonElement && groupHeroNextBtn instanceof HTMLButtonElement) {
-					groupHeroPrevBtn.hidden = false;
-					groupHeroNextBtn.hidden = false;
-					groupHeroPrevBtn.disabled = false;
-					groupHeroNextBtn.disabled = false;
-				}
-			})();
+					const remainingUrls = groupSources
+						.slice(1)
+						.map((source) => (typeof source?.filePath === 'string' ? source.filePath.trim() : ''))
+						.filter(Boolean);
+					if (remainingUrls.length > 0) {
+						await Promise.allSettled(remainingUrls.map((url) => preloadHeroImageUrl(url)));
+					}
+					if (!isCurrentLoad()) return;
+					if (hasGroupHeroNavigation && groupHeroPrevBtn instanceof HTMLButtonElement && groupHeroNextBtn instanceof HTMLButtonElement) {
+						groupHeroPrevBtn.hidden = false;
+						groupHeroNextBtn.hidden = false;
+						groupHeroPrevBtn.disabled = false;
+						groupHeroNextBtn.disabled = false;
+					}
+				})();
+			} else if (typeof groupSources[0]?.filePath === 'string' && groupSources[0].filePath.trim()) {
+				showHeroImage(groupSources[0].filePath.trim());
+			}
 			if (setCoverBtn instanceof HTMLButtonElement) {
 				setCoverBtn.addEventListener('click', async () => {
 					if (!Number.isFinite(selectedGroupSourceId) || selectedGroupSourceId <= 0) return;
@@ -4236,6 +4346,13 @@ async function loadCreation() {
 let currentCreationId = null;
 let lastCreationMeta = null;
 let loadCreationSequence = 0;
+let lastDetailLandscapeOwner = false;
+let lastDetailLandscapeEligibility = { eligible: true };
+/** Group detail: selected thumb / carousel source for mutate + queue. */
+let lastDetailIsGroupCreation = false;
+let lastGroupSelectedSourceId = null;
+/** @type {Map<number, { id: number, filePath?: string, title?: string, meta?: object | null }>} */
+let lastGroupSourcesById = new Map();
 
 /**
  * Video creations cannot use Vynly share (server + client). Mirrors api_routes/utils/vynlyShareFromCreation.js.
@@ -4343,6 +4460,18 @@ document.addEventListener('click', (e) => {
 	const mutateBtn = e.target.closest('[data-mutate-btn]');
 	if (mutateBtn && !mutateBtn.disabled) {
 		e.preventDefault();
+		if (lastDetailIsGroupCreation) {
+			const target = getGroupActionTarget();
+			if (!target) {
+				alert('Select a source image in the group first.');
+				return;
+			}
+			const groupId = getCreationId();
+			if (!groupId || !Number.isFinite(Number(groupId))) return;
+			const sourceQuery = `?source_id=${encodeURIComponent(String(target.sourceId))}`;
+			window.location.href = `/creations/${groupId}/mutate${sourceQuery}`;
+			return;
+		}
 		const creationId = getCreationId();
 		if (!creationId) return;
 		window.location.href = `/creations/${creationId}/mutate`;
@@ -4397,7 +4526,7 @@ const landscapeCostDialogMessage = document.querySelector('[data-landscape-cost-
 const landscapeCostCancel = document.querySelector('[data-landscape-cost-cancel]');
 const landscapeCostContinue = document.querySelector('[data-landscape-cost-continue]');
 const landscapePrimaryBtn = document.querySelector('[data-landscape-primary-btn]');
-const landscapePrimaryBtnText = document.querySelector('[data-landscape-btn-text]');
+const landscapePrimaryBtnText = landscapePrimaryBtn?.querySelector?.('[data-landscape-btn-text]') ?? null;
 const landscapePrimaryBtnSpinner = document.querySelector('[data-landscape-btn-spinner]');
 const landscapeRemoveBtn = document.querySelector('[data-landscape-remove-btn]');
 const landscapeCloseBtn = document.querySelector('[data-landscape-close-btn]');
@@ -4423,7 +4552,29 @@ function setLandscapePrimaryButtonLoading(loading) {
 	if (landscapePrimaryBtnText) landscapePrimaryBtnText.style.visibility = loading ? 'hidden' : '';
 }
 
-function openLandscapeModal(creationId, { landscapeUrl, isOwner, isLoading, errorMsg } = {}) {
+function openLandscapeModalFromLoadedCreation() {
+	const creationId = getCreationId();
+	if (!creationId) return;
+	const meta = lastCreationMeta?.meta || {};
+	const landscapeUrl = meta.landscapeUrl;
+	const isLoading = landscapeUrl === 'loading';
+	const hasImage = typeof landscapeUrl === 'string' && (landscapeUrl.startsWith('http') || landscapeUrl.startsWith('/'));
+	const errorFromMeta =
+		typeof landscapeUrl === 'string' && landscapeUrl.startsWith('error:') ? landscapeUrl.slice(6).trim() : null;
+	const eligibility = lastDetailLandscapeEligibility || { eligible: true };
+	const errorMsg = eligibility.eligible
+		? errorFromMeta || null
+		: eligibility.reason || 'Landscape is not supported for this creation.';
+	openLandscapeModal(creationId, {
+		landscapeUrl: hasImage ? landscapeUrl : null,
+		isOwner: lastDetailLandscapeOwner,
+		isLoading,
+		errorMsg,
+		canGenerate: eligibility.eligible
+	});
+}
+
+function openLandscapeModal(creationId, { landscapeUrl, isOwner, isLoading, errorMsg, canGenerate = true } = {}) {
 	landscapeModalCreationId = creationId;
 	landscapeModalIsOwner = isOwner;
 	landscapePendingCost = null;
@@ -4458,7 +4609,7 @@ function openLandscapeModal(creationId, { landscapeUrl, isOwner, isLoading, erro
 	}
 
 	if (landscapePrimaryBtn) {
-		landscapePrimaryBtn.style.display = isOwner ? '' : 'none';
+		landscapePrimaryBtn.style.display = isOwner && canGenerate ? '' : 'none';
 		landscapePrimaryBtn.disabled = !!isLoading;
 		if (landscapePrimaryBtnText) landscapePrimaryBtnText.textContent = hasImage ? 'Re-generate' : 'Generate';
 	}
@@ -4761,32 +4912,7 @@ document.addEventListener('click', (e) => {
 	const landscapeBtn = e.target.closest('[data-landscape-btn]');
 	if (!landscapeBtn || landscapeBtn.disabled) return;
 	e.preventDefault();
-	const creationId = getCreationId();
-	if (!creationId) return;
-	const isOwner = landscapeBtn.dataset.landscapeIsSelf === '1';
-	const hasUrl = landscapeBtn.dataset.landscapeHasUrl === '1';
-	// Diagnostic: button state when opening modal (helps troubleshoot Brave/Windows "no Generate" reports).
-	if (typeof console !== 'undefined' && console.debug) {
-		console.debug('[Landscape click]', {
-			creationId,
-			'data-landscape-is-self': landscapeBtn.dataset.landscapeIsSelf,
-			'data-landscape-has-url': landscapeBtn.dataset.landscapeHasUrl,
-			derivedIsOwner: isOwner,
-			derivedHasUrl: hasUrl
-		});
-	}
-	const meta = lastCreationMeta?.meta || {};
-	const landscapeUrl = meta.landscapeUrl;
-	const isLoading = landscapeUrl === 'loading';
-	const hasImage = typeof landscapeUrl === 'string' && (landscapeUrl.startsWith('http') || landscapeUrl.startsWith('/'));
-	const errorMsg = typeof landscapeUrl === 'string' && landscapeUrl.startsWith('error:') ? landscapeUrl.slice(6).trim() : null;
-
-	openLandscapeModal(creationId, {
-		landscapeUrl: hasImage ? landscapeUrl : null,
-		isOwner,
-		isLoading,
-		errorMsg: errorMsg || null
-	});
+	openLandscapeModalFromLoadedCreation();
 });
 
 /**
@@ -4802,9 +4928,12 @@ async function handleDelete(isPermanent) {
 	const deleteBtn = document.querySelector('[data-delete-btn]');
 	const resolvedPermanent = typeof isPermanent === 'boolean' ? isPermanent : (deleteBtn?.dataset?.permanentDelete === '1');
 
-	if (!confirm(resolvedPermanent
+	const deleteConfirmMessage = resolvedPermanent
 		? 'Permanently delete this creation? This cannot be undone.'
-		: 'Are you sure you want to delete this creation? This action cannot be undone.')) {
+		: (lastDetailIsGroupCreation
+			? 'Delete this grouped creation? The group will be removed from your library; archived source images are not deleted.'
+			: 'Are you sure you want to delete this creation? This action cannot be undone.');
+	if (!confirm(deleteConfirmMessage)) {
 		return;
 	}
 

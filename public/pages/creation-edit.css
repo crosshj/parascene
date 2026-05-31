@@ -12,6 +12,11 @@
 	margin: 0 auto;
 }
 
+.creation-edit-route .creation-edit-create-content:has(.hero-layout-landscape),
+.creation-edit-route .creation-edit-create-content:has(.hero-layout-portrait) {
+	max-width: min(100%, 720px);
+}
+
 .creation-edit-route .form-static {
 	padding: 0.75rem 1rem;
 	border-radius: 8px;
@@ -212,20 +217,32 @@
 	flex-direction: column;
 	align-items: center;
 	gap: 10px;
-	width: 50%;
-	max-width: 50%;
+	width: 100%;
+	max-width: 100%;
+	margin-inline: auto;
+	--hero-max-height: min(52vh, 480px);
 }
 
-.creation-edit-route .creation-edit-source-box {
+.creation-edit-route .creation-edit-source-wrap:has(.hero-layout-portrait) {
+	width: min(100%, 360px);
+	max-width: 100%;
+}
+
+/* Reuse creation-detail hero sizing from creations.css */
+.creation-edit-route .creation-detail-image-wrapper.creation-edit-source-box {
 	width: 100%;
-	aspect-ratio: 1 / 1;
-	min-height: 120px;
+	max-width: 100%;
+	padding: 0;
 	border-radius: 10px;
 	overflow: hidden;
 	border: 1px dashed var(--border);
 	background: color-mix(in srgb, var(--text) 6%, transparent);
-	position: relative;
 	cursor: pointer;
+}
+
+.creation-edit-route .creation-detail-image-wrapper.hero-layout-legacy {
+	width: min(100%, 320px);
+	max-width: 100%;
 }
 
 .creation-edit-route .creation-edit-source-link {
@@ -267,17 +284,17 @@
 	color: var(--text-muted);
 }
 
-.creation-edit-route .creation-edit-source-box.loading {
+.creation-edit-route .creation-detail-image-wrapper.image-loading {
 	background: linear-gradient(90deg, var(--surface-muted), var(--surface-strong), var(--surface-muted));
 	background-size: 200% 100%;
 	animation: loading 4s linear infinite;
 }
 
-.creation-edit-route .creation-edit-source-box.error {
+.creation-edit-route .creation-detail-image-wrapper.image-error {
 	background: var(--image-placeholder);
 }
 
-.creation-edit-route .creation-edit-source-box.error::after {
+.creation-edit-route .creation-detail-image-wrapper.image-error::after {
 	content: "";
 	position: absolute;
 	inset: 0;
@@ -290,16 +307,14 @@
 	opacity: 0.85;
 }
 
-.creation-edit-route .image-thumb {
-	width: 100%;
-	height: 100%;
-	display: block;
-	object-fit: contain;
+.creation-edit-route .creation-detail-image-wrapper .creation-detail-image,
+.creation-edit-route .creation-detail-image-wrapper .image-thumb {
 	opacity: 0;
 	transition: opacity 0.3s ease;
 }
 
-.creation-edit-route .creation-edit-source-box.loaded .image-thumb {
+.creation-edit-route .creation-detail-image-wrapper:not(.image-loading):not(.image-error) .creation-detail-image,
+.creation-edit-route .creation-detail-image-wrapper:not(.image-loading):not(.image-error) .image-thumb {
 	opacity: 1;
 }
 
@@ -382,7 +397,12 @@ body.creation-edit-page .creation-edit-route .create-btn-generate:focus-visible 
 
 @media (max-width: 768px) {
 	.creation-edit-route .creation-edit-source-wrap {
-		width: min(50%, 230px);
-		max-width: min(50%, 230px);
+		width: 100%;
+		max-width: 100%;
+		--hero-max-height: min(44vh, 360px);
+	}
+
+	.creation-edit-route .creation-edit-source-wrap:has(.hero-layout-portrait) {
+		width: min(100%, 300px);
 	}
 }

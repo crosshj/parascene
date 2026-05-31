@@ -224,3 +224,79 @@ export function applyHeroAspectLayoutToElement(wrapper, creation) {
 		wrapper.classList.add('hero-portrait-by-width');
 	}
 }
+
+const LANDSCAPE_OUTPAINT_SQUARE_TOLERANCE = 0.06;
+const LANDSCAPE_169_RATIO = 16 / 9;
+const LANDSCAPE_169_TOLERANCE = 0.04;
+
+/**
+ * @param {number} w
+ * @param {number} h
+ * @param {number} [tolerance]
+ * @returns {boolean | null} null when dimensions unknown
+ */
+export function isSquareAspectRatio(w, h, tolerance = LANDSCAPE_OUTPAINT_SQUARE_TOLERANCE) {
+	if (!Number.isFinite(w) || w <= 0 || !Number.isFinite(h) || h <= 0) return null;
+	return Math.abs(w / h - 1) <= tolerance;
+}
+
+/**
+ * @param {number} w
+ * @param {number} h
+ * @param {number} [tolerance]
+ * @returns {boolean}
+ */
+export function isLandscape169AspectRatio(w, h, tolerance = LANDSCAPE_169_TOLERANCE) {
+	if (!Number.isFinite(w) || w <= 0 || !Number.isFinite(h) || h <= 0) return false;
+	return Math.abs(w / h - LANDSCAPE_169_RATIO) <= tolerance;
+}
+
+/**
+ * Dimensions used for landscape (outpaint) eligibility — group rows use cover source.
+ * @param {{ width?: unknown, height?: unknown, meta?: unknown } | null | undefined} creation
+ * @returns {{ w: number, h: number }}
+ */
+export function resolveLandscapeOutpaintDimensions(creation) {
+	const meta = normalizeCreationMeta(creation?.meta);
+	const group = meta?.group && typeof meta.group === 'object' ? meta.group : null;
+	if (group?.kind === 'group_creations') {
+		const sources = Array.isArray(group.source_creations) ? group.source_creations : [];
+		const coverId = Number(group.cover_source_id);
+		const cover = sources.find((s) => s && typeof s === 'object' && Number(s.id) === coverId) || sources.find((s) => s && typeof s === 'object') || null;
+		if (cover) {
+			const w = Number(cover.width);
+			const h = Number(cover.height);
+			if (Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0) {
+				return { w, h };
+			}
+		}
+	}
+	const { w, h } = aspectRatioFromCreation(creation);
+	return { w, h };
+}
+
+/**
+ * Landscape modal outpaint: square sources only; skip video and already-16:9.
+ * @param {{ width?: unknown, height?: unknown, meta?: unknown, video_url?: unknown, media_type?: unknown } | null | undefined} creation
+ * @returns {{ eligible: boolean, reason?: string }}
+ */
+export function getLandscapeOutpaintEligibility(creation) {
+	if (creationHasVideo(creation)) {
+		return { eligible: false, reason: 'Landscape is only available for images.' };
+	}
+	const { w, h } = resolveLandscapeOutpaintDimensions(creation);
+	if (isLandscape169AspectRatio(w, h)) {
+		return {
+			eligible: false,
+			reason: 'This creation is already 16:9. The main image is used for wide layouts.',
+		};
+	}
+	const square = isSquareAspectRatio(w, h);
+	if (square === false) {
+		return {
+			eligible: false,
+			reason: 'Landscape generation works from square (1:1) images. Portrait or wide originals are not supported yet.',
+		};
+	}
+	return { eligible: true };
+}
