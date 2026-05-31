@@ -3342,7 +3342,16 @@ export default function createCreateRoutes({ queries, storage }) {
 					return res.status(400).json({ error: "No new creations selected to add to this group" });
 				}
 				const mergedSources = [...existingSources, ...appendedSources];
-				const mergedMeta = {
+				const isPartyGroup = targetGroupMeta?.party?.mode === true;
+				const lastAppendedId = Number(appendedSources[appendedSources.length - 1]?.id);
+				const defaultCoverSourceId = Number(targetGroupMeta?.group?.cover_source_id) > 0
+					? Number(targetGroupMeta.group.cover_source_id)
+					: Number(existingSources[0]?.id ?? appendedSources[0]?.id ?? 0);
+				const nextCoverSourceId =
+					isPartyGroup && Number.isFinite(lastAppendedId) && lastAppendedId > 0
+						? lastAppendedId
+						: defaultCoverSourceId;
+				const mergedMetaBase = {
 					...targetGroupMeta,
 					media_type: "image",
 					group: {
@@ -3354,22 +3363,44 @@ export default function createCreateRoutes({ queries, storage }) {
 							: nowIso(),
 						updated_at: nowIso(),
 						ungroup_supported: true,
-						cover_source_id: Number(targetGroupMeta?.group?.cover_source_id) > 0
-							? Number(targetGroupMeta.group.cover_source_id)
-							: Number(existingSources[0]?.id ?? appendedSources[0]?.id ?? 0),
+						cover_source_id: nextCoverSourceId,
 						source_creation_ids: mergedSources
 							.map((item) => Number(item.id))
 							.filter((n, idx, arr) => Number.isFinite(n) && n > 0 && arr.indexOf(n) === idx),
 						source_creations: mergedSources
 					}
 				};
-				const updateMetaResult = await queries.updateCreatedImageMeta.run(
-					targetGroupRow.id,
-					user.id,
-					mergedMeta
-				);
-				if (!updateMetaResult || updateMetaResult.changes === 0) {
-					return res.status(500).json({ error: "Failed to update grouped creation" });
+				let mergedMeta = mergedMetaBase;
+				if (isPartyGroup && Number.isFinite(nextCoverSourceId) && nextCoverSourceId > 0) {
+					const coverState = buildGroupCoverUpdateState({
+						groupMeta: mergedMetaBase,
+						groupPayload: mergedMetaBase.group,
+						sourceCreations: mergedSources,
+						coverSourceId: nextCoverSourceId,
+						storage,
+						fallbackGroupRow: targetGroupRow
+					});
+					if (!coverState) {
+						return res.status(500).json({ error: "Failed to build party group cover" });
+					}
+					const updateCoverResult = await queries.updateCreatedImageGroupCover?.run(
+						targetGroupRow.id,
+						user.id,
+						coverState.updatePayload
+					);
+					if (!updateCoverResult || updateCoverResult.changes === 0) {
+						return res.status(500).json({ error: "Failed to update party group cover" });
+					}
+					mergedMeta = coverState.meta;
+				} else {
+					const updateMetaResult = await queries.updateCreatedImageMeta.run(
+						targetGroupRow.id,
+						user.id,
+						mergedMeta
+					);
+					if (!updateMetaResult || updateMetaResult.changes === 0) {
+						return res.status(500).json({ error: "Failed to update grouped creation" });
+					}
 				}
 				for (const row of rowsToAdd) {
 					const markResult = await queries.markCreatedImageUnavailable?.run(row.id, user.id);
