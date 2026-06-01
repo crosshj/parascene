@@ -10,11 +10,15 @@ import { getShareBaseUrl } from "./utils/url.js";
 import { ACTIVE_SHARE_VERSION, mintShareToken } from "./utils/shareLink.js";
 import { removeJoinedPrivateChannelInviteDmMessages } from "./utils/chatInviteCleanup.js";
 import {
+	resolveChallengeOrganizerAllowlistFromMessages
+} from "./utils/challengeSubmitShared.js";
+import {
 	collectChatMiscGenericKeysFromMessageBody,
 	isChatMiscGenericKeyOwnedByUser
 } from "./utils/chatMiscGenericKeys.js";
 import { canvasBodyMarkdownToSafeHtml } from "./utils/canvasBodyHtml.js";
 import { CHALLENGE_SCORE_REACTION_KEYS } from "../src/chat/challenges/constants.js";
+import { CHALLENGE_ADMIN_USER_NAMES_HARDCODED } from "../src/chat/challenges/challengeAdmin.js";
 import { composeChatStampedReply, sanitizeClientReplyPreview } from "./utils/chatReplyStamp.js";
 
 function normalizeChatReactionsBucket(raw) {
@@ -91,6 +95,27 @@ function tryParseChallengeJsonBody(body) {
 	} catch {
 		return null;
 	}
+}
+
+function normalizeUsernameForChallengeOrganizer(input) {
+	const raw = typeof input === "string" ? input.trim().replace(/^@+/, "") : "";
+	if (!raw) return null;
+	const normalized = raw.toLowerCase();
+	if (!/^[a-z0-9][a-z0-9_]{2,23}$/.test(normalized)) return null;
+	return normalized;
+}
+
+function normalizeOrganizerUserNamesList(raw) {
+	const list = Array.isArray(raw) ? raw : [];
+	const out = [];
+	const seen = new Set();
+	for (const entry of list) {
+		const normalized = normalizeUsernameForChallengeOrganizer(entry);
+		if (!normalized || seen.has(normalized)) continue;
+		seen.add(normalized);
+		out.push(normalized);
+	}
+	return out;
 }
 
 const MAX_MESSAGE_CHARS = 4000;
@@ -599,6 +624,57 @@ export default function createChatRoutes({ queries, storage }) {
 			throw new Error("Could not encrypt private channel message");
 		}
 		return `${CHAT_PRIVATE_BODY_PREFIX}${nextCipher}`;
+	}
+
+	async function validateAndNormalizeChallengesGlobalConfigBody(sb, threadRow, bodyRaw) {
+		const body = typeof bodyRaw === "string" ? bodyRaw : "";
+		const parsed = tryParseChallengeJsonBody(body);
+		const kind = String(parsed?.kind || "").trim();
+		if (kind !== "challenges_global_config") {
+			return { ok: true, body };
+		}
+		const isChallengesThread =
+			threadRow?.type === "channel" &&
+			String(threadRow?.channel_slug || "").trim().toLowerCase() === "challenges";
+		if (!isChallengesThread) {
+			return {
+				ok: false,
+				status: 400,
+				message: "challenges_global_config can only be posted in #challenges."
+			};
+		}
+		const organizerUserNames = normalizeOrganizerUserNamesList(parsed?.organizer_user_names);
+		if (organizerUserNames.length === 0) {
+			return {
+				ok: false,
+				status: 400,
+				message: "Challenge Organizer Team must include at least one valid username."
+			};
+		}
+		const { data: rows, error } = await sb
+			.from("prsn_user_profiles")
+			.select("user_name")
+			.in("user_name", organizerUserNames);
+		if (error) throw error;
+		const existing = new Set(
+			(Array.isArray(rows) ? rows : [])
+				.map((row) => (typeof row?.user_name === "string" ? row.user_name.trim().toLowerCase() : ""))
+				.filter(Boolean)
+		);
+		const missing = organizerUserNames.filter((u) => !existing.has(u));
+		if (missing.length > 0) {
+			return {
+				ok: false,
+				status: 400,
+				message: `Unknown usernames in Challenge Organizer Team: ${missing.join(", ")}`
+			};
+		}
+		const normalizedPayload = {
+			...parsed,
+			kind: "challenges_global_config",
+			organizer_user_names: organizerUserNames
+		};
+		return { ok: true, body: JSON.stringify(normalizedPayload) };
 	}
 
 	async function setUserPrivateKeyForThread(sb, userId, threadId, secretK) {
@@ -2282,7 +2358,7 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 			}
 			const { data: threadRow, error: thErr } = await sb
 				.from("prsn_chat_threads")
-				.select("id, type, meta")
+				.select("id, type, meta, channel_slug")
 				.eq("id", threadId)
 				.maybeSingle();
 			if (thErr) throw thErr;
@@ -2299,6 +2375,18 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 					message: "Private channel messages must be encrypted"
 				});
 			}
+			const globalConfigBodyResult = await validateAndNormalizeChallengesGlobalConfigBody(
+				sb,
+				threadRow,
+				body
+			);
+			if (!globalConfigBodyResult.ok) {
+				return res.status(globalConfigBodyResult.status || 400).json({
+					error: "Bad request",
+					message: globalConfigBodyResult.message || "Invalid challenges global config"
+				});
+			}
+			body = globalConfigBodyResult.body;
 
 			body = await normalizeBodyForThreadStorage(sb, threadRow, userId, body);
 			if (body.length > MAX_MESSAGE_CHARS) {
@@ -2735,25 +2823,56 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 				});
 			}
 
-			const senderId = Number(msg.sender_id);
-			const isSender = Number.isFinite(senderId) && senderId === Number(userId);
-			const isAdmin = await viewerIsAdminRole(userId);
-			if (!isSender && !isAdmin) {
-				return res.status(403).json({ error: "Forbidden", message: "You can only edit your own messages" });
-			}
-
 			const threadId = Number(msg.thread_id);
 			if (!(await isMember(sb, threadId, userId))) {
 				return res.status(403).json({ error: "Forbidden", message: "Not a member of this thread" });
 			}
 			const { data: threadRow, error: thErr } = await sb
 				.from("prsn_chat_threads")
-				.select("id, type, meta")
+				.select("id, type, meta, channel_slug")
 				.eq("id", threadId)
 				.maybeSingle();
 			if (thErr) throw thErr;
 			if (!threadRow) {
 				return res.status(404).json({ error: "Not found", message: "Thread not found" });
+			}
+
+			const senderId = Number(msg.sender_id);
+			const isSender = Number.isFinite(senderId) && senderId === Number(userId);
+			const isAdmin = await viewerIsAdminRole(userId);
+			const payload = tryParseChallengeJsonBody(msg?.body);
+			const payloadKind = String(payload?.kind || "").trim();
+			const isChallengesThread =
+				threadRow?.type === "channel" &&
+				String(threadRow?.channel_slug || "").trim().toLowerCase() === "challenges";
+			const isChallengeConfigMessage =
+				payloadKind === "challenge_config" || payloadKind === "challenges_global_config";
+			let isChallengeOrganizer = false;
+			if (isChallengesThread && isChallengeConfigMessage) {
+				const { data: challengeRows, error: challengeRowsError } = await sb
+					.from("prsn_chat_messages")
+					.select("id, body")
+					.eq("thread_id", threadId)
+					.order("created_at", { ascending: true })
+					.order("id", { ascending: true })
+					.limit(500);
+				if (challengeRowsError) throw challengeRowsError;
+				const allowlist = resolveChallengeOrganizerAllowlistFromMessages(
+					Array.isArray(challengeRows) ? challengeRows : [],
+					CHALLENGE_ADMIN_USER_NAMES_HARDCODED
+				);
+				const viewerProfile =
+					typeof queries?.selectUserProfileByUserId?.get === "function"
+						? await queries.selectUserProfileByUserId.get(userId).catch(() => null)
+						: null;
+				const viewerUserName =
+					typeof viewerProfile?.user_name === "string"
+						? viewerProfile.user_name.trim().toLowerCase()
+						: "";
+				isChallengeOrganizer = Boolean(viewerUserName) && allowlist.includes(viewerUserName);
+			}
+			if (!isSender && !isAdmin && !(isChallengesThread && isChallengeConfigMessage && isChallengeOrganizer)) {
+				return res.status(403).json({ error: "Forbidden", message: "You can only edit your own messages" });
 			}
 
 			const prevMeta =
@@ -2799,7 +2918,23 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 						message: "Private channel messages must be encrypted"
 					});
 				}
-				newBody = await normalizeBodyForThreadStorage(sb, threadRow, userId, b);
+				const globalConfigBodyResult = await validateAndNormalizeChallengesGlobalConfigBody(
+					sb,
+					threadRow,
+					b
+				);
+				if (!globalConfigBodyResult.ok) {
+					return res.status(globalConfigBodyResult.status || 400).json({
+						error: "Bad request",
+						message: globalConfigBodyResult.message || "Invalid challenges global config"
+					});
+				}
+				newBody = await normalizeBodyForThreadStorage(
+					sb,
+					threadRow,
+					userId,
+					globalConfigBodyResult.body
+				);
 				if (newBody.length > MAX_MESSAGE_CHARS) {
 					return res.status(400).json({
 						error: "Bad request",

@@ -4,19 +4,86 @@
  *
  * @type {readonly string[]}
  */
-export const CHALLENGE_ADMIN_USER_NAMES_HARDCODED = Object.freeze(['oceanman']);
+export const CHALLENGE_ADMIN_USER_NAMES_HARDCODED = Object.freeze(['oceanman', 'paperman']);
 
 const ADMIN_LOWER = new Set(
 	CHALLENGE_ADMIN_USER_NAMES_HARDCODED.map((s) => String(s || '').trim().toLowerCase()).filter(Boolean)
 );
 
 /**
- * @param {string | null | undefined} viewerUserName profile.user_name / handle
+ * @param {unknown} raw
  */
-export function isChallengeChannelAdmin(viewerUserName) {
+export function normalizeChallengeOrganizerUserNames(raw) {
+	const list = Array.isArray(raw) ? raw : [];
+	const out = [];
+	const seen = new Set();
+	for (const entry of list) {
+		const u = String(entry || '').trim().replace(/^@+/, '').toLowerCase();
+		if (!u || seen.has(u)) continue;
+		seen.add(u);
+		out.push(u);
+	}
+	return out;
+}
+
+/**
+ * @param {unknown} body
+ * @returns {object | null}
+ */
+function tryParseChallengeJsonBody(body) {
+	if (body == null) return null;
+	const s = String(body).trim();
+	if (!s || (!s.startsWith('{') && !s.startsWith('['))) return null;
+	try {
+		const parsed = JSON.parse(s);
+		return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * @param {object[]} messagesAsc chronological thread messages
+ * @returns {{ payload: object, messageId: number } | null}
+ */
+export function pickLatestChallengesGlobalConfig(messagesAsc) {
+	let latest = null;
+	let latestSortId = -1;
+	for (const msg of messagesAsc || []) {
+		const payload = tryParseChallengeJsonBody(msg?.body);
+		if (!payload || String(payload.kind || '').trim() !== 'challenges_global_config') continue;
+		const mid = Number(msg?.id);
+		const sortId = Number.isFinite(mid) && mid > 0 ? Math.floor(mid) : 0;
+		if (sortId >= latestSortId) {
+			latestSortId = sortId;
+			latest = { payload, messageId: sortId };
+		}
+	}
+	return latest;
+}
+
+/**
+ * @param {object[]} messagesAsc chronological thread messages
+ */
+export function resolveChallengeOrganizerAllowlistFromMessages(messagesAsc) {
+	const globalCfg = pickLatestChallengesGlobalConfig(messagesAsc);
+	if (globalCfg) {
+		return normalizeChallengeOrganizerUserNames(globalCfg.payload?.organizer_user_names);
+	}
+	return [...CHALLENGE_ADMIN_USER_NAMES_HARDCODED];
+}
+
+/**
+ * @param {string | null | undefined} viewerUserName profile.user_name / handle
+ * @param {string[] | null | undefined} organizerUserNames normalized (or raw) usernames
+ */
+export function isChallengeChannelAdmin(viewerUserName, organizerUserNames) {
 	const u = typeof viewerUserName === 'string' ? viewerUserName.trim().toLowerCase() : '';
 	if (!u) return false;
-	return ADMIN_LOWER.has(u);
+	const names = Array.isArray(organizerUserNames)
+		? normalizeChallengeOrganizerUserNames(organizerUserNames)
+		: [...ADMIN_LOWER];
+	return new Set(names).has(u);
 }
 
 /**

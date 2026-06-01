@@ -39,6 +39,55 @@ export function pickLatestChallengeConfigPayload(messagesAsc) {
 }
 
 /**
+ * @param {unknown} raw
+ * @returns {string[]}
+ */
+export function normalizeChallengeOrganizerUserNames(raw) {
+	const list = Array.isArray(raw) ? raw : [];
+	const out = [];
+	const seen = new Set();
+	for (const entry of list) {
+		const u = String(entry || "").trim().replace(/^@+/, "").toLowerCase();
+		if (!u || seen.has(u)) continue;
+		seen.add(u);
+		out.push(u);
+	}
+	return out;
+}
+
+/**
+ * @param {{ body?: unknown, id?: unknown }[]} messagesAsc chronological
+ * @returns {{ payload: object, messageId: number } | null}
+ */
+export function pickLatestChallengesGlobalConfigPayload(messagesAsc) {
+	let latest = null;
+	let latestSortId = -1;
+	for (const m of messagesAsc || []) {
+		const p = tryParseChallengeJsonBody(m?.body);
+		if (!p || String(p.kind || "").trim() !== "challenges_global_config") continue;
+		const mid = Number(m?.id);
+		const sortId = Number.isFinite(mid) && mid > 0 ? Math.floor(mid) : 0;
+		if (sortId >= latestSortId) {
+			latestSortId = sortId;
+			latest = { payload: p, messageId: sortId };
+		}
+	}
+	return latest;
+}
+
+/**
+ * @param {{ body?: unknown, id?: unknown }[]} messagesAsc chronological
+ * @param {string[]} fallbackUserNames normalized or raw usernames
+ */
+export function resolveChallengeOrganizerAllowlistFromMessages(messagesAsc, fallbackUserNames = []) {
+	const globalCfg = pickLatestChallengesGlobalConfigPayload(messagesAsc);
+	if (globalCfg) {
+		return normalizeChallengeOrganizerUserNames(globalCfg.payload?.organizer_user_names);
+	}
+	return normalizeChallengeOrganizerUserNames(fallbackUserNames);
+}
+
+/**
  * @param {object | null | undefined} meta
  * @param {number} threadId
  * @param {string} challengeId

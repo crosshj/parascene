@@ -3,7 +3,10 @@ import { summarizeLatestChallengeConfigs } from './model/organizerSummaries.js';
 import {
 	normalizeChallengeHeroRefForSave,
 	parseDatetimeLocalToIso,
-	REWARD_FIELD_KEYS
+	REWARD_FIELD_KEYS,
+	normalizeChallengeOrganizerUserNames,
+	pickLatestChallengesGlobalConfig,
+	resolveChallengeOrganizerAllowlistFromMessages
 } from './challengeAdmin.js';
 import {
 	renderChallengeOrganizerSidebarMarkup,
@@ -75,6 +78,8 @@ async function hydrateChallengeOrganizerStatsThumbs(rootEl) {
  *   messages: object[],
  *   viewerId: number | null,
  *   viewerUserName?: string | null,
+ *   organizerUserNames?: string[],
+ *   globalConfigMessageId?: number | null,
  *   threadId: number,
  *   postMessage: (body: string) => Promise<{ ok: boolean, error?: string }>,
  *   patchMessage?: (messageId: number, body: string) => Promise<{ ok: boolean, error?: string }>,
@@ -122,6 +127,31 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 			: /** @param {string} [cls] */ (cls) =>
 					`<svg class="${String(cls || '').trim()}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
 	let rowByChallengeId = new Map();
+	const upsertLocalMessage = (message) => {
+		if (!message || typeof message !== 'object') return;
+		const mid = Number(message.id);
+		if (!Number.isFinite(mid) || mid <= 0) return;
+		const idx = opts.messages.findIndex((m) => Number(m?.id) === mid);
+		if (idx >= 0) {
+			opts.messages[idx] = { ...opts.messages[idx], ...message };
+			return;
+		}
+		opts.messages.push(message);
+		opts.messages.sort((a, b) => {
+			const aid = Number(a?.id);
+			const bid = Number(b?.id);
+			if (Number.isFinite(aid) && Number.isFinite(bid) && aid !== bid) return aid - bid;
+			const at = Date.parse(String(a?.created_at || ''));
+			const bt = Date.parse(String(b?.created_at || ''));
+			if (Number.isFinite(at) && Number.isFinite(bt) && at !== bt) return at - bt;
+			return 0;
+		});
+	};
+	let globalConfigMessageId =
+		Number.isFinite(Number(opts.globalConfigMessageId)) && Number(opts.globalConfigMessageId) > 0
+			? Number(opts.globalConfigMessageId)
+			: null;
+	let organizerUserNames = normalizeChallengeOrganizerUserNames(opts.organizerUserNames || []);
 	let activeStatsRequestToken = 0;
 	/** @type {{ challengeTitle: string, data: { topCreations?: object[], topSubmitters?: object[], topVoters?: object[], globalAverage?: number }, excludedUserNames: string[], sortMode: 'weighted' | 'average' } | null} */
 	let activeStatsModalState = null;
@@ -151,11 +181,19 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 			return;
 		}
 		modalTitle.textContent =
-			mode === 'edit' ? 'Edit challenge' : 'New challenge';
+			mode === 'edit'
+				? 'Edit challenge'
+				: mode === 'global'
+					? 'Global settings'
+					: 'New challenge';
 		modalBody.innerHTML = renderChallengeOrganizerModalInnerHtml(
 			mode,
 			editPayload,
-			configMessageId
+			configMessageId,
+			{
+				organizerUserNames,
+				configMessageId: globalConfigMessageId
+			}
 		);
 		modalEl.classList.add('open');
 		modalEl.setAttribute('aria-hidden', 'false');
@@ -272,13 +310,18 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 			return;
 		}
 		const adminForm = form;
+		const formRole = adminForm.getAttribute('data-challenge-admin-form');
+		const isEditForm = formRole === 'edit';
+		const isGlobalForm = formRole === 'global';
 		const modalEl = host.querySelector('[data-challenges-organizer-modal]');
-		if (!modalEl?.contains(adminForm)) return;
+		if (!isGlobalForm && !modalEl?.contains(adminForm)) return;
 
 		const errEl = adminForm.querySelector('[data-challenge-admin-error]');
+		const successEl = adminForm.querySelector('[data-challenge-admin-success]');
 		const submitBtn = adminForm.querySelector('.challenge-pane-admin-submit');
 
 		const fd = new FormData(adminForm);
+		const organizerCsvRaw = String(fd.get('organizer_user_names_csv') || '').trim();
 		const challengeId = String(fd.get('challenge_id') || '').trim();
 		const title = String(fd.get('title') || '').trim();
 		const details = String(fd.get('details') || '').trim();
@@ -286,42 +329,22 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 		const resultsPublishNow = String(fd.get('results_publish_now') || '').trim() === '1';
 		const resultsPublishedExisting = String(fd.get('results_published_at_existing') || '').trim();
 
-		if (!challengeId || !title) return;
-
-		const payload = {
-			kind: 'challenge_config',
-			challenge_id: challengeId,
-			title,
-			...(details ? { details } : {}),
-			...(heroRef ? { hero_image_url: heroRef } : {})
-		};
-		for (const key of REWARD_FIELD_KEYS) {
-			const s = String(fd.get(key) || '').trim();
-			if (s) payload[key] = s;
-		}
-		const timeFields = [
-			'submission_start_at',
-			'submission_end_at',
-			'voting_start_at',
-			'voting_end_at'
-		];
-		for (const key of timeFields) {
-			const iso = parseDatetimeLocalToIso(String(fd.get(key) || ''));
-			if (iso) payload[key] = iso;
-		}
-
-		if (resultsPublishNow && !resultsPublishedExisting) {
-			payload.results_published_at = new Date().toISOString();
-		}
-
 		if (errEl instanceof HTMLElement) {
 			errEl.hidden = true;
 			errEl.textContent = '';
 			errEl.replaceChildren();
 		}
-		if (submitBtn instanceof HTMLButtonElement) submitBtn.disabled = true;
-		const formRole = adminForm.getAttribute('data-challenge-admin-form');
-		const isEditForm = formRole === 'edit';
+		if (successEl instanceof HTMLElement) {
+			successEl.hidden = true;
+			successEl.textContent = '';
+		}
+		if (submitBtn instanceof HTMLButtonElement) {
+			const originalLabel = submitBtn.getAttribute('data-default-label') || submitBtn.textContent || 'Save';
+			submitBtn.setAttribute('data-default-label', originalLabel);
+			submitBtn.disabled = true;
+			submitBtn.classList.add('is-loading');
+			submitBtn.textContent = 'Saving';
+		}
 
 		/** @param {string} text */
 		const setFormError = (text) => {
@@ -371,10 +394,49 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 
 		let postSucceeded = false;
 		try {
+			let payload;
+			if (isGlobalForm) {
+				const parsedNames = normalizeChallengeOrganizerUserNames(
+					organizerCsvRaw.split(',')
+				);
+				payload = {
+					kind: 'challenges_global_config',
+					organizer_user_names: parsedNames
+				};
+			} else {
+				if (!challengeId || !title) return;
+				payload = {
+					kind: 'challenge_config',
+					challenge_id: challengeId,
+					title,
+					...(details ? { details } : {}),
+					...(heroRef ? { hero_image_url: heroRef } : {})
+				};
+				for (const key of REWARD_FIELD_KEYS) {
+					const s = String(fd.get(key) || '').trim();
+					if (s) payload[key] = s;
+				}
+				const timeFields = [
+					'submission_start_at',
+					'submission_end_at',
+					'voting_start_at',
+					'voting_end_at'
+				];
+				for (const key of timeFields) {
+					const iso = parseDatetimeLocalToIso(String(fd.get(key) || ''));
+					if (iso) payload[key] = iso;
+				}
+				if (resultsPublishNow && !resultsPublishedExisting) {
+					payload.results_published_at = new Date().toISOString();
+				}
+			}
 			const body = JSON.stringify(payload);
 			let r;
-			if (isEditForm) {
-				const midRaw = fd.get('config_message_id');
+			if (isEditForm || (isGlobalForm && Number.isFinite(Number(fd.get('global_config_message_id'))) && Number(fd.get('global_config_message_id')) > 0)) {
+				const midRaw = isGlobalForm ? fd.get('global_config_message_id') : fd.get('config_message_id');
+				const missingMsgError = isGlobalForm
+					? 'Could not resolve global config message to update — reload and try again.'
+					: 'Could not resolve challenge message to update — reload and try again.';
 				const mid = Number(midRaw);
 				const hasMid = Number.isFinite(mid) && mid > 0;
 				const patch = opts.patchMessage;
@@ -384,7 +446,7 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 					throw new Error(
 						hasMid
 							? 'Updates are not available (missing patch handler).'
-							: 'Could not resolve challenge message to update — reload and try again.'
+							: missingMsgError
 					);
 				}
 			} else {
@@ -393,15 +455,36 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 			if (!r.ok) {
 				throw new Error(
 					r.error ||
-						(isEditForm ? 'Could not update challenge.' : 'Could not publish challenge.')
+						(isGlobalForm
+							? 'Could not save global settings.'
+							: isEditForm
+								? 'Could not update challenge.'
+								: 'Could not publish challenge.')
 				);
 			}
 			postSucceeded = true;
-			await opts.reload();
+			if (successEl instanceof HTMLElement) {
+				successEl.hidden = false;
+				successEl.textContent = isGlobalForm ? 'Organizer team saved.' : 'Saved.';
+			}
+			if (isGlobalForm) {
+				upsertLocalMessage(r.message);
+				organizerUserNames = resolveChallengeOrganizerAllowlistFromMessages(opts.messages);
+				const globalCfg = pickLatestChallengesGlobalConfig(opts.messages);
+				globalConfigMessageId =
+					Number.isFinite(Number(globalCfg?.messageId)) && Number(globalCfg?.messageId) > 0
+						? Number(globalCfg.messageId)
+						: null;
+				paint();
+			} else {
+				await opts.reload();
+			}
 			if (!isEditForm) {
 				adminForm.reset();
 			}
-			closeModal();
+			if (!isGlobalForm) {
+				closeModal();
+			}
 		} catch (err) {
 			if (errEl instanceof HTMLElement) {
 				if (postSucceeded) {
@@ -411,12 +494,20 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 				} else {
 					setFormError(
 						err?.message ||
-							(isEditForm ? 'Could not update challenge.' : 'Could not publish challenge.')
+							(isGlobalForm
+								? 'Could not save global settings.'
+								: isEditForm
+									? 'Could not update challenge.'
+									: 'Could not publish challenge.')
 					);
 				}
 			}
 		} finally {
-			if (submitBtn instanceof HTMLButtonElement) submitBtn.disabled = false;
+			if (submitBtn instanceof HTMLButtonElement) {
+				submitBtn.disabled = false;
+				submitBtn.classList.remove('is-loading');
+				submitBtn.textContent = submitBtn.getAttribute('data-default-label') || 'Save';
+			}
 		}
 	};
 
@@ -540,6 +631,12 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 			viewerId: opts.viewerId,
 			nowMs: Date.now()
 		});
+		organizerUserNames = resolveChallengeOrganizerAllowlistFromMessages(opts.messages);
+		const globalCfg = pickLatestChallengesGlobalConfig(opts.messages);
+		globalConfigMessageId =
+			Number.isFinite(Number(globalCfg?.messageId)) && Number(globalCfg?.messageId) > 0
+				? Number(globalCfg.messageId)
+				: null;
 		const summaries = summarizeLatestChallengeConfigs(model.raw.configs);
 		rowByChallengeId = new Map(summaries.map((s) => [s.challenge_id, s]));
 
@@ -548,6 +645,8 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 		const plusSvg = plusIcon('challenge-pane-organizer-plus-svg');
 		host.innerHTML = renderChallengeOrganizerSidebarMarkup({
 			rows: summaries,
+			organizerUserNames,
+			globalConfigMessageId,
 			gearIconSvg: gearSvg,
 			statsIconSvg: statsSvg,
 			plusIconSvg: plusSvg

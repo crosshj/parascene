@@ -3432,7 +3432,8 @@ export async function initChatPage(root, options = {}) {
 		if (!res.ok) {
 			return { ok: false, error: data.message || data.error || 'Could not send' };
 		}
-		return { ok: true };
+		const message = await decryptMessageForActiveThread(data?.message || null, threadId);
+		return { ok: true, message };
 	}
 
 	async function patchChatMessage(messageId, payload = {}) {
@@ -9155,7 +9156,16 @@ export async function initChatPage(root, options = {}) {
 				fetchChatViewerProfileMini()
 			]);
 			const viewerUserName = viewerProf?.user_name ?? null;
-			chatChallengesOrganizerEligible = Boolean(challengesChannelModule.isChallengeChannelAdmin?.(viewerUserName));
+			const organizerUserNames = challengesChannelModule.resolveChallengeOrganizerAllowlistFromMessages?.(
+				messages
+			);
+			const globalConfig =
+				typeof challengesChannelModule.pickLatestChallengesGlobalConfig === 'function'
+					? challengesChannelModule.pickLatestChallengesGlobalConfig(messages)
+					: null;
+			chatChallengesOrganizerEligible = Boolean(
+				challengesChannelModule.isChallengeChannelAdmin?.(viewerUserName, organizerUserNames)
+			);
 			if (isStaleChatPane(paneEpoch)) return;
 			lastChatMessagesPayload = [];
 			messagesEl.innerHTML = '';
@@ -9188,6 +9198,11 @@ export async function initChatPage(root, options = {}) {
 					messages,
 					viewerId: Number.isFinite(Number(chatViewerId)) ? Number(chatViewerId) : null,
 					viewerUserName,
+					organizerUserNames: Array.isArray(organizerUserNames) ? organizerUserNames : [],
+					globalConfigMessageId:
+						Number.isFinite(Number(globalConfig?.messageId)) && Number(globalConfig?.messageId) > 0
+							? Number(globalConfig.messageId)
+							: null,
 					threadId: tid,
 					postMessage: (body) => postChatMessage(tid, body),
 					patchMessage: (messageId, body) => patchChatMessageBody(messageId, body),

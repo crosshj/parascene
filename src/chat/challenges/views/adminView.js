@@ -42,7 +42,51 @@ export function challengeConfigDatetimeLocals(cfg) {
 	};
 }
 
-const MODAL_FORM_LEAD = `<p class="challenge-pane-muted challenge-pane-admin-lead challenge-pane-organizer-modal-lead">Uses JSON <code>challenge_config</code> on the thread. <strong>New challenge</strong> posts a message; <strong>save changes</strong> updates that challenge’s existing message.</p>`;
+const MODAL_FORM_LEAD = `<p class="challenge-pane-muted challenge-pane-admin-lead challenge-pane-organizer-modal-lead">Uses JSON configs in-thread. <strong>New challenge</strong> posts <code>challenge_config</code>; <strong>save changes</strong> updates the existing config message. <strong>Global settings</strong> manages <code>challenges_global_config</code>.</p>`;
+
+/**
+ * @param {string[]} organizerUserNames
+ * @param {number | null | undefined} configMessageId
+ */
+export function renderChallengeOrganizerGlobalConfigFormHtml(organizerUserNames, configMessageId) {
+	const users = Array.isArray(organizerUserNames) ? organizerUserNames : [];
+	const value = users.map((u) => String(u || '').trim()).filter(Boolean).join(', ');
+	const mid =
+		typeof configMessageId === 'number' &&
+		Number.isFinite(configMessageId) &&
+		configMessageId > 0
+			? configMessageId
+			: null;
+	const hiddenMsg =
+		mid != null
+			? `<input type="hidden" name="global_config_message_id" value="${esc(String(mid))}" />`
+			: '';
+	return `<form class="challenge-pane-admin-config-form challenge-pane-organizer-global-config-form" data-challenge-admin-config-form data-challenge-admin-form="global">
+			${hiddenMsg}
+			<label class="challenge-pane-label challenge-pane-organizer-global-config-label">Challenge Organizer Team</label>
+			<div class="challenge-pane-organizer-global-config-row">
+				<input type="text" name="organizer_user_names_csv" class="challenge-pane-input challenge-pane-organizer-global-config-input" maxlength="2000"
+					placeholder="oceanman, paperman" autocomplete="off" value="${esc(value)}" />
+				<button type="submit" class="btn-primary challenge-pane-admin-submit challenge-pane-organizer-global-config-save">Save</button>
+			</div>
+			<div class="challenge-pane-form-error challenge-pane-admin-error" data-challenge-admin-error hidden role="alert"></div>
+			<div class="challenge-pane-admin-success" data-challenge-admin-success hidden role="status" aria-live="polite"></div>
+		</form>`;
+}
+
+/**
+ * @param {{ organizerUserNames?: string[], globalConfigMessageId?: number | null }} vm
+ */
+function renderChallengeOrganizerGlobalConfigInlineHtml(vm) {
+	const names = Array.isArray(vm?.organizerUserNames) ? vm.organizerUserNames : [];
+	const messageId =
+		Number.isFinite(Number(vm?.globalConfigMessageId)) && Number(vm.globalConfigMessageId) > 0
+			? Number(vm.globalConfigMessageId)
+			: null;
+	return `<section class="challenge-pane-organizer-inline-global-config">
+		${renderChallengeOrganizerGlobalConfigFormHtml(names, messageId)}
+	</section>`;
+}
 
 /**
  * @param {object} prefills — reward_* strings from {@link challengeRewardPrefillsForOrganizerForm}
@@ -153,6 +197,7 @@ export function renderChallengeOrganizerEditFormHtml(latest, configMessageId) {
 			${resultsControlHtml}
 			<button type="submit" class="btn-primary challenge-pane-admin-submit">Save changes</button>
 			<div class="challenge-pane-form-error challenge-pane-admin-error" data-challenge-admin-error hidden role="alert"></div>
+			<div class="challenge-pane-admin-success" data-challenge-admin-success hidden role="status" aria-live="polite"></div>
 		</form>`;
 }
 
@@ -184,6 +229,7 @@ export function renderChallengeOrganizerCreateFormHtml(
 			${renderDatetimeFieldsHtml({})}
 			<button type="submit" class="btn-primary challenge-pane-admin-submit">${esc(submitLabel)}</button>
 			<div class="challenge-pane-form-error challenge-pane-admin-error" data-challenge-admin-error hidden role="alert"></div>
+			<div class="challenge-pane-admin-success" data-challenge-admin-success hidden role="status" aria-live="polite"></div>
 		</form>`;
 }
 
@@ -582,8 +628,15 @@ export function renderChallengeOrganizerStatsModalInnerHtml(vm) {
  * @param {object | null} [editPayload] — challenge_config shape when mode is edit
  * @param {number | null | undefined} [configMessageId] — message row to update when editing
  */
-export function renderChallengeOrganizerModalInnerHtml(mode, editPayload, configMessageId) {
+export function renderChallengeOrganizerModalInnerHtml(mode, editPayload, configMessageId, globalConfigVm) {
 	const lead = MODAL_FORM_LEAD;
+	if (mode === 'global') {
+		const vm =
+			globalConfigVm && typeof globalConfigVm === 'object'
+				? globalConfigVm
+				: { organizerUserNames: [], configMessageId: null };
+		return `${lead}${renderChallengeOrganizerGlobalConfigFormHtml(vm.organizerUserNames, vm.configMessageId)}`;
+	}
 	if (mode === 'edit' && editPayload && typeof editPayload === 'object') {
 		return `${lead}${renderChallengeOrganizerEditFormHtml(editPayload, configMessageId)}`;
 	}
@@ -612,6 +665,10 @@ function renderChallengeOrganizerModalHtml() {
  */
 export function renderChallengeOrganizerSidebarMarkup(vm) {
 	const rows = vm.rows || [];
+	const globalConfigSection = renderChallengeOrganizerGlobalConfigInlineHtml({
+		organizerUserNames: vm.organizerUserNames || [],
+		globalConfigMessageId: vm.globalConfigMessageId ?? null
+	});
 	const table = renderChallengeOrganizerTableHtml(rows, {
 		gearIconSvg: vm.gearIconSvg || '',
 		statsIconSvg: vm.statsIconSvg || '',
@@ -630,7 +687,7 @@ export function renderChallengeOrganizerSidebarMarkup(vm) {
 					</div>
 				</div>
 				<div class="chat-page-canvas-panel-scroll">
-					<div class="challenge-pane-organizer-sidebar-body user-text">${table}</div>
+					<div class="challenge-pane-organizer-sidebar-body user-text">${table}${globalConfigSection}</div>
 				</div>
 			</div>
 			${modal}

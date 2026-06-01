@@ -24,6 +24,9 @@ export {
 } from './views/adminView.js';
 export {
 	isChallengeChannelAdmin,
+	normalizeChallengeOrganizerUserNames,
+	pickLatestChallengesGlobalConfig,
+	resolveChallengeOrganizerAllowlistFromMessages,
 	parseDatetimeLocalToIso,
 	pickChallengeConfigTimestamp,
 	pickChallengeHeroImageUrl,
