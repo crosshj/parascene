@@ -18,7 +18,6 @@ import {
 } from "./utils/chatMiscGenericKeys.js";
 import { canvasBodyMarkdownToSafeHtml } from "./utils/canvasBodyHtml.js";
 import { CHALLENGE_SCORE_REACTION_KEYS } from "../src/chat/challenges/constants.js";
-import { CHALLENGE_ADMIN_USER_NAMES_HARDCODED } from "../src/chat/challenges/challengeAdmin.js";
 import { composeChatStampedReply, sanitizeClientReplyPreview } from "./utils/chatReplyStamp.js";
 
 function normalizeChatReactionsBucket(raw) {
@@ -2858,8 +2857,7 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 					.limit(500);
 				if (challengeRowsError) throw challengeRowsError;
 				const allowlist = resolveChallengeOrganizerAllowlistFromMessages(
-					Array.isArray(challengeRows) ? challengeRows : [],
-					CHALLENGE_ADMIN_USER_NAMES_HARDCODED
+					Array.isArray(challengeRows) ? challengeRows : []
 				);
 				const viewerProfile =
 					typeof queries?.selectUserProfileByUserId?.get === "function"

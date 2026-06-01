@@ -1,16 +1,4 @@
 /**
- * Who may post challenge_config / run organizer UI in #challenges.
- * Replace with server-driven roles (e.g. thread moderators) when ready.
- *
- * @type {readonly string[]}
- */
-export const CHALLENGE_ADMIN_USER_NAMES_HARDCODED = Object.freeze(['oceanman', 'paperman']);
-
-const ADMIN_LOWER = new Set(
-	CHALLENGE_ADMIN_USER_NAMES_HARDCODED.map((s) => String(s || '').trim().toLowerCase()).filter(Boolean)
-);
-
-/**
  * @param {unknown} raw
  */
 export function normalizeChallengeOrganizerUserNames(raw) {
@@ -70,7 +58,7 @@ export function resolveChallengeOrganizerAllowlistFromMessages(messagesAsc) {
 	if (globalCfg) {
 		return normalizeChallengeOrganizerUserNames(globalCfg.payload?.organizer_user_names);
 	}
-	return [...CHALLENGE_ADMIN_USER_NAMES_HARDCODED];
+	return [];
 }
 
 /**
@@ -82,7 +70,7 @@ export function isChallengeChannelAdmin(viewerUserName, organizerUserNames) {
 	if (!u) return false;
 	const names = Array.isArray(organizerUserNames)
 		? normalizeChallengeOrganizerUserNames(organizerUserNames)
-		: [...ADMIN_LOWER];
+		: [];
 	return new Set(names).has(u);
 }
 

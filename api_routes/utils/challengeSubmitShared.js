@@ -77,14 +77,13 @@ export function pickLatestChallengesGlobalConfigPayload(messagesAsc) {
 
 /**
  * @param {{ body?: unknown, id?: unknown }[]} messagesAsc chronological
- * @param {string[]} fallbackUserNames normalized or raw usernames
  */
-export function resolveChallengeOrganizerAllowlistFromMessages(messagesAsc, fallbackUserNames = []) {
+export function resolveChallengeOrganizerAllowlistFromMessages(messagesAsc) {
 	const globalCfg = pickLatestChallengesGlobalConfigPayload(messagesAsc);
 	if (globalCfg) {
 		return normalizeChallengeOrganizerUserNames(globalCfg.payload?.organizer_user_names);
 	}
-	return normalizeChallengeOrganizerUserNames(fallbackUserNames);
+	return [];
 }
 
 /**

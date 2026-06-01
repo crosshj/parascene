@@ -32,8 +32,7 @@ export {
 	pickChallengeHeroImageUrl,
 	normalizeChallengeHeroRefForSave,
 	sanitizeChallengeHeroImageUrl,
-	isoToDatetimeLocalInput,
-	CHALLENGE_ADMIN_USER_NAMES_HARDCODED
+	isoToDatetimeLocalInput
 } from './challengeAdmin.js';
 /** Standalone HTML fragments for other surfaces (e.g. creation detail submit chrome). */
 export { renderSubmitSection } from './views/submitView.js';
