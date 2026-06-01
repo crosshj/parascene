@@ -130,7 +130,7 @@ async function resolveChallengeHeroImageUrl({ queries, cfg, latestSubmissionImag
 }
 
 /** Phases where we still promote the challenge on the home/chat feed */
-const INACTIVE_FEED_PHASES = new Set(["results", "empty", "unknown"]);
+const INACTIVE_FEED_PHASES = new Set(["empty", "unknown"]);
 
 /**
  * Sums credit amounts from 1st / 2nd / 3rd / participation reward lines (e.g. "2000 credits", "1,500 credit").
@@ -170,6 +170,10 @@ function phaseSubtitle(phase) {
 			return "Voting open";
 		case "between":
 			return "Between rounds";
+		case "finalizing":
+			return "Finalizing";
+		case "results":
+			return "Winners announced";
 		default:
 			return "Community challenge";
 	}

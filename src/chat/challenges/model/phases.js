@@ -6,6 +6,8 @@ import { parseIso } from '../constants.js';
  */
 export function challengePhaseDisplayLabel(phase) {
 	if (phase === 'submit_and_vote') return 'Open for submissions & voting';
+	if (phase === 'finalizing') return 'Finalizing (winners soon)';
+	if (phase === 'results') return 'Winners announced';
 	const s = String(phase || '').replace(/_/g, ' ');
 	return s || '—';
 }
@@ -33,10 +35,18 @@ export function deriveChallengePhase(cfg, nowMs) {
 		parseIso(cfg.end_at) ??
 		parseIso(cfg.endAt);
 
+	const resultsPublishedAt =
+		parseIso(cfg.results_published_at) ??
+		parseIso(cfg.resultsPublishedAt) ??
+		(cfg.results_published === true || cfg.results_published === 1 ? nowMs : null);
+
 	const submissionOpen =
 		(subStart == null || nowMs >= subStart) && (subEnd == null || nowMs <= subEnd);
 
-	if (voteEnd != null && nowMs > voteEnd) return 'results';
+	if (voteEnd != null && nowMs > voteEnd) {
+		if (resultsPublishedAt != null && nowMs >= resultsPublishedAt) return 'results';
+		return 'finalizing';
+	}
 
 	const votingOpen =
 		voteEnd != null &&

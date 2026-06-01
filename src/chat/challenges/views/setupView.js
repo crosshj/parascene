@@ -35,7 +35,7 @@ export function renderSetupSection(setup) {
 	} else {
 		html += `<ul class="challenge-pane-setup-list">`;
 		for (const row of past) {
-			html += `<li class="challenge-pane-setup-item"><span class="challenge-pane-setup-item-title">${rowTitle(row.payload)}</span> <span class="challenge-pane-phase-badge challenge-pane-phase-badge--results">${esc(row.phase)}</span></li>`;
+			html += `<li class="challenge-pane-setup-item"><span class="challenge-pane-setup-item-title">${rowTitle(row.payload)}</span> <span class="challenge-pane-phase-badge challenge-pane-phase-badge--results">${esc(challengePhaseDisplayLabel(row.phase))}</span></li>`;
 		}
 		html += `</ul>`;
 	}

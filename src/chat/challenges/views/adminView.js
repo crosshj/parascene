@@ -107,6 +107,28 @@ export function renderChallengeOrganizerEditFormHtml(latest, configMessageId) {
 	const rewardPrefills = challengeRewardPrefillsForOrganizerForm(latest);
 	const dt = challengeConfigDatetimeLocals(latest);
 	const heroUrl = pickChallengeHeroImageUrl(latest);
+	const resultsPublishedAtRaw =
+		latest.results_published_at != null
+			? String(latest.results_published_at).trim()
+			: latest.resultsPublishedAt != null
+				? String(latest.resultsPublishedAt).trim()
+				: '';
+	const resultsPublishedAlready = Boolean(resultsPublishedAtRaw);
+	const resultsControlHtml = resultsPublishedAlready
+		? `<div class="challenge-pane-admin-datetimes">
+				<p class="challenge-pane-muted challenge-pane-admin-datetimes-label">Results</p>
+				<p class="challenge-pane-muted">Results are published.</p>
+				<input type="hidden" name="results_published_at_existing" value="${esc(resultsPublishedAtRaw)}" />
+			</div>`
+		: `<div class="challenge-pane-admin-datetimes">
+				<p class="challenge-pane-muted challenge-pane-admin-datetimes-label">Results</p>
+				<label class="challenge-pane-label">
+					<input type="checkbox" name="results_publish_now" value="1" />
+					Publish results (switches challenge from Finalizing → Winners announced)
+				</label>
+				<p class="challenge-pane-muted">Use this only after you’ve finalized winners and handled payout.</p>
+				<input type="hidden" name="results_published_at_existing" value="" />
+			</div>`;
 
 	return `<p class="challenge-pane-muted challenge-pane-admin-sublead">Challenge ID stays the same so submissions stay linked.</p>
 		<form class="challenge-pane-admin-config-form" data-challenge-admin-config-form data-challenge-admin-form="edit">
@@ -128,6 +150,7 @@ export function renderChallengeOrganizerEditFormHtml(latest, configMessageId) {
 			</label>
 			${renderOrganizerRewardsSection(rewardPrefills)}
 			${renderDatetimeFieldsHtml(dt)}
+			${resultsControlHtml}
 			<button type="submit" class="btn-primary challenge-pane-admin-submit">Save changes</button>
 			<div class="challenge-pane-form-error challenge-pane-admin-error" data-challenge-admin-error hidden role="alert"></div>
 		</form>`;

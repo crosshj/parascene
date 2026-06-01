@@ -273,6 +273,8 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 		const title = String(fd.get('title') || '').trim();
 		const details = String(fd.get('details') || '').trim();
 		const heroRef = normalizeChallengeHeroRefForSave(fd.get('hero_image_url'));
+		const resultsPublishNow = String(fd.get('results_publish_now') || '').trim() === '1';
+		const resultsPublishedExisting = String(fd.get('results_published_at_existing') || '').trim();
 
 		if (!challengeId || !title) return;
 
@@ -296,6 +298,10 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 		for (const key of timeFields) {
 			const iso = parseDatetimeLocalToIso(String(fd.get(key) || ''));
 			if (iso) payload[key] = iso;
+		}
+
+		if (resultsPublishNow && !resultsPublishedExisting) {
+			payload.results_published_at = new Date().toISOString();
 		}
 
 		if (errEl instanceof HTMLElement) {

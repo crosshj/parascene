@@ -101,6 +101,10 @@ export function renderSubmissionsSection(vm) {
 
 	if (!challengePhaseUsesSubmitVoteTabs(vm.phase)) {
 		let html = `<section class="challenge-pane-section challenge-pane-submissions-section"><h3 class="challenge-pane-section-label">Submissions</h3>`;
+		if (vm.phase === 'finalizing') {
+			html += `<p class="challenge-pane-muted">Voting has closed. The challenge runner is finalizing results and payout.</p>
+				<p class="challenge-pane-muted">Winners will be announced once everything is confirmed.</p>`;
+		}
 		html += listHtml;
 		html += `</section>`;
 		return html;
