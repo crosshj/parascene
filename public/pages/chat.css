@@ -489,11 +489,87 @@ body.chat-page main.chat-page-outer {
 	font-weight: 600;
 }
 
+.challenge-pane-organizer-stats-sort-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.challenge-pane-organizer-stats-sort-label {
+	font-size: 0.8125rem;
+	color: var(--text-muted);
+}
+
+.challenge-pane-organizer-stats-sort-label.is-active {
+	color: var(--text);
+	font-weight: 600;
+}
+
+.challenge-pane-organizer-stats-inline-label {
+	flex: 0 0 auto;
+	font-size: 0.75rem;
+	color: var(--text-muted);
+	white-space: nowrap;
+}
+
+.challenge-pane-organizer-stats-sort-switch {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	width: 46px;
+	height: 26px;
+	flex: 0 0 auto;
+	padding: 2px;
+	border: 1px solid var(--border);
+	border-radius: 999px;
+	background: var(--surface-strong);
+	cursor: pointer;
+	transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.challenge-pane-organizer-stats-sort-switch[aria-checked='true'] {
+	background: rgba(19, 218, 138, 0.2);
+	border-color: var(--green, #13da8a);
+}
+
+.challenge-pane-organizer-stats-sort-switch:focus-visible {
+	outline: 2px solid var(--focus-ring);
+	outline-offset: 2px;
+}
+
+.challenge-pane-organizer-stats-sort-switch-thumb {
+	display: block;
+	width: 20px;
+	height: 20px;
+	border-radius: 50%;
+	background: var(--text);
+	transform: translateX(0);
+	transition: transform 120ms ease;
+}
+
+.challenge-pane-organizer-stats-sort-switch[aria-checked='true'] .challenge-pane-organizer-stats-sort-switch-thumb {
+	transform: translateX(20px);
+}
+
+.challenge-pane-organizer-stats-sort-state {
+	margin: 0;
+	font-size: 0.75rem;
+	color: var(--text-muted);
+}
+
+.challenge-pane-organizer-stats-controls-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+
 .challenge-pane-organizer-stats-filter {
 	display: flex;
 	align-items: center;
 	gap: 8px;
 	min-width: 0;
+	flex: 1 1 auto;
 }
 
 .challenge-pane-organizer-stats-filter-label {
@@ -511,6 +587,20 @@ body.chat-page main.chat-page-outer {
 
 .challenge-pane-organizer-stats-filter-apply {
 	flex: 0 0 auto;
+}
+
+@media (max-width: 768px) {
+	.challenge-pane-organizer-stats-controls-row {
+		flex-wrap: wrap;
+	}
+
+	.challenge-pane-organizer-stats-sort-toggle {
+		flex: 0 0 auto;
+	}
+
+	.challenge-pane-organizer-stats-filter {
+		flex: 1 1 100%;
+	}
 }
 
 .challenge-pane-organizer-stats-subhead--secondary {

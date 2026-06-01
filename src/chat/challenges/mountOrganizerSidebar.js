@@ -10,6 +10,10 @@ import {
 	renderChallengeOrganizerModalInnerHtml,
 	renderChallengeOrganizerStatsModalInnerHtml
 } from './views/adminView.js';
+import {
+	openChatAttachmentPreviewLightbox,
+	openChatInlineImageLightbox
+} from '../../shared/chatInlineImageLightbox.js';
 
 /** Creation payload from GET /api/create/images/:id (with optional challenge_message_id). */
 function statsThumbSrcFromCreationPayload(c) {
@@ -119,7 +123,7 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 					`<svg class="${String(cls || '').trim()}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
 	let rowByChallengeId = new Map();
 	let activeStatsRequestToken = 0;
-	/** @type {{ challengeTitle: string, data: { topCreations?: object[], topSubmitters?: object[], topVoters?: object[] }, excludedUserNames: string[] } | null} */
+	/** @type {{ challengeTitle: string, data: { topCreations?: object[], topSubmitters?: object[], topVoters?: object[], globalAverage?: number }, excludedUserNames: string[], sortMode: 'weighted' | 'average' } | null} */
 	let activeStatsModalState = null;
 
 	const closeModal = () => {
@@ -206,16 +210,20 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 				data: {
 					topCreations: data.topCreations,
 					topSubmitters: data.topSubmitters,
-					topVoters: data.topVoters
+					topVoters: data.topVoters,
+					globalAverage: Number(data.globalAverage)
 				},
-				excludedUserNames: defaultExcludedUserNames
+				excludedUserNames: defaultExcludedUserNames,
+				sortMode: 'weighted'
 			};
 			modalBody.innerHTML = renderChallengeOrganizerStatsModalInnerHtml({
 				challengeTitle: activeStatsModalState.challengeTitle,
 				topCreations: activeStatsModalState.data.topCreations,
 				topSubmitters: activeStatsModalState.data.topSubmitters,
 				topVoters: activeStatsModalState.data.topVoters,
-				excludedUserNames: activeStatsModalState.excludedUserNames
+				globalAverage: activeStatsModalState.data.globalAverage,
+				excludedUserNames: activeStatsModalState.excludedUserNames,
+				sortMode: activeStatsModalState.sortMode
 			});
 			if (requestToken !== activeStatsRequestToken) return;
 			void hydrateChallengeOrganizerStatsThumbs(modalBody);
@@ -256,7 +264,9 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 				topCreations: activeStatsModalState.data.topCreations,
 				topSubmitters: activeStatsModalState.data.topSubmitters,
 				topVoters: activeStatsModalState.data.topVoters,
-				excludedUserNames: activeStatsModalState.excludedUserNames
+				globalAverage: activeStatsModalState.data.globalAverage,
+				excludedUserNames: activeStatsModalState.excludedUserNames,
+				sortMode: activeStatsModalState.sortMode
 			});
 			void hydrateChallengeOrganizerStatsThumbs(modalBody);
 			return;
@@ -413,6 +423,70 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 	const onHostClick = (e) => {
 		const t = e.target;
 		if (!(t instanceof Element)) return;
+
+		const statsCreationLink = t.closest('[data-challenge-stats-creation-lightbox]');
+		if (statsCreationLink instanceof HTMLAnchorElement) {
+			e.preventDefault();
+			e.stopPropagation();
+			const creationId = Number(statsCreationLink.getAttribute('data-challenge-stats-creation-id'));
+			if (!Number.isFinite(creationId) || creationId <= 0) return;
+			const challengeMessageId = Number(
+				statsCreationLink.getAttribute('data-challenge-message-id')
+			);
+			const qs =
+				Number.isFinite(challengeMessageId) && challengeMessageId > 0
+					? `?challenge_message_id=${encodeURIComponent(String(challengeMessageId))}`
+					: '';
+			void (async () => {
+				try {
+					const res = await fetch(
+						`/api/create/images/${encodeURIComponent(String(creationId))}${qs}`,
+						{ credentials: 'include' }
+					);
+					const payload = res.ok ? await res.json().catch(() => null) : null;
+					if (!payload || payload._error) return;
+					const mediaType =
+						typeof payload.media_type === 'string' ? payload.media_type : 'image';
+					const imageUrl = typeof payload.url === 'string' ? payload.url.trim() : '';
+					const videoUrl =
+						typeof payload.video_url === 'string' ? payload.video_url.trim() : '';
+					if (mediaType === 'video' && videoUrl) {
+						openChatAttachmentPreviewLightbox(videoUrl, 'video', {
+							creationId: String(creationId)
+						});
+						return;
+					}
+					if (!imageUrl) return;
+					openChatInlineImageLightbox(imageUrl, {
+						creationId: String(creationId)
+					});
+				} catch {
+					// ignore
+				}
+			})();
+			return;
+		}
+
+		const statsSortSwitch = t.closest('[data-challenge-stats-sort-switch]');
+		if (statsSortSwitch instanceof HTMLButtonElement) {
+			const nextSortMode =
+				activeStatsModalState?.sortMode === 'weighted' ? 'average' : 'weighted';
+			const modalBody = host.querySelector('[data-challenges-organizer-modal-body]');
+			if (!(modalBody instanceof HTMLElement) || !activeStatsModalState) return;
+			if (activeStatsModalState.sortMode === nextSortMode) return;
+			activeStatsModalState.sortMode = nextSortMode;
+			modalBody.innerHTML = renderChallengeOrganizerStatsModalInnerHtml({
+				challengeTitle: activeStatsModalState.challengeTitle,
+				topCreations: activeStatsModalState.data.topCreations,
+				topSubmitters: activeStatsModalState.data.topSubmitters,
+				topVoters: activeStatsModalState.data.topVoters,
+				globalAverage: activeStatsModalState.data.globalAverage,
+				excludedUserNames: activeStatsModalState.excludedUserNames,
+				sortMode: activeStatsModalState.sortMode
+			});
+			void hydrateChallengeOrganizerStatsThumbs(modalBody);
+			return;
+		}
 
 		if (t.closest('[data-challenges-organizer-modal-close]')) {
 			closeModal();

@@ -2066,6 +2066,35 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 				return res.status(403).json({ error: "Forbidden", message: "Not a member of this thread" });
 			}
 
+			const { data: siteWideVoteRows, error: siteWideVoteRowsError } = await sb
+				.from("prsn_chat_messages")
+				.select("body, reactions");
+			if (siteWideVoteRowsError) throw siteWideVoteRowsError;
+			let globalVoteValue = 0;
+			let globalVoteCount = 0;
+			for (const msg of Array.isArray(siteWideVoteRows) ? siteWideVoteRows : []) {
+				const payload = tryParseChallengeJsonBody(msg?.body);
+				if (!payload || String(payload.kind || "").trim() !== "challenge_submission") {
+					continue;
+				}
+				const reactions =
+					msg?.reactions && typeof msg.reactions === "object" && !Array.isArray(msg.reactions)
+						? msg.reactions
+						: {};
+				for (let i = 0; i < CHALLENGE_SCORE_REACTION_KEYS.length; i += 1) {
+					const key = CHALLENGE_SCORE_REACTION_KEYS[i];
+					const weight = i + 1;
+					const ids = Array.isArray(reactions[key]) ? reactions[key] : [];
+					for (const rawUid of ids) {
+						const uid = Number(rawUid);
+						if (!Number.isFinite(uid) || uid <= 0) continue;
+						globalVoteCount += 1;
+						globalVoteValue += weight;
+					}
+				}
+			}
+			const globalAverage = globalVoteCount > 0 ? globalVoteValue / globalVoteCount : 0;
+
 			const { data: rows, error } = await sb
 				.from("prsn_chat_messages")
 				.select("id, sender_id, body, reactions, created_at")
@@ -2209,6 +2238,7 @@ function buildChannelInviteSystemBody({ inviterHandle, invitedHandles }) {
 			return res.status(200).json({
 				ok: true,
 				challengeId,
+				globalAverage,
 				topCreations,
 				topSubmitters,
 				topVoters

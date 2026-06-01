@@ -270,6 +270,8 @@ export function renderChallengeOrganizerTableHtml(rows, icons) {
 /**
  * @param {{
  *   challengeTitle?: string,
+ *   globalAverage?: number,
+ *   sortMode?: 'weighted' | 'average',
  *   topCreations?: {
  *     creationId: number | null,
  *     messageId: number | null,
@@ -286,6 +288,7 @@ export function renderChallengeOrganizerTableHtml(rows, icons) {
  * }} vm
  */
 export function renderChallengeOrganizerStatsModalInnerHtml(vm) {
+	const WEIGHTED_RATING_MIN_VOTES = 15;
 	const loading = vm?.loading === true;
 	const error = typeof vm?.error === 'string' ? vm.error.trim() : '';
 	if (loading) {
@@ -307,32 +310,71 @@ export function renderChallengeOrganizerStatsModalInnerHtml(vm) {
 			.filter(Boolean)
 	);
 	const excludedDisplayValue = excludedUserNames.join(', ');
+	const sortMode = vm?.sortMode === 'average' ? 'average' : 'weighted';
 	const topCreations = Array.isArray(vm?.topCreations) ? vm.topCreations : [];
+	const globalAverageFromVm = Number(vm?.globalAverage);
+	const fallbackTotals = topCreations.reduce(
+		(acc, row) => {
+			const voteValue = Number.isFinite(Number(row?.voteValue))
+				? Math.max(0, Number(row.voteValue))
+				: 0;
+			const voteCount = Number.isFinite(Number(row?.voteCount))
+				? Math.max(0, Number(row.voteCount))
+				: 0;
+			acc.voteValue += voteValue;
+			acc.voteCount += voteCount;
+			return acc;
+		},
+		{ voteValue: 0, voteCount: 0 }
+	);
+	const globalAverage =
+		Number.isFinite(globalAverageFromVm) && globalAverageFromVm >= 0
+			? globalAverageFromVm
+			: fallbackTotals.voteCount > 0
+				? fallbackTotals.voteValue / fallbackTotals.voteCount
+				: 0;
 	const filteredTopCreations = topCreations.filter((row) => {
 		const creatorUserName =
 			row?.creatorUserName != null ? String(row.creatorUserName).trim().toLowerCase() : '';
 		return !creatorUserName || !excludedSet.has(creatorUserName);
 	});
+	const weightedRatingForRow = (row) => {
+		const voteValue = Number.isFinite(Number(row?.voteValue))
+			? Math.max(0, Math.floor(Number(row.voteValue)))
+			: 0;
+		const voteCount = Number.isFinite(Number(row?.voteCount))
+			? Math.max(0, Math.floor(Number(row.voteCount)))
+			: 0;
+		const averageVote = voteCount > 0 ? voteValue / voteCount : 0;
+		return (
+			(voteCount * averageVote + WEIGHTED_RATING_MIN_VOTES * globalAverage) /
+			(voteCount + WEIGHTED_RATING_MIN_VOTES)
+		);
+	};
 	const sortedTopCreations = [...filteredTopCreations].sort((a, b) => {
-		const aVoteValue = Number.isFinite(Number(a?.voteValue))
-			? Math.max(0, Math.floor(Number(a.voteValue)))
-			: 0;
-		const bVoteValue = Number.isFinite(Number(b?.voteValue))
-			? Math.max(0, Math.floor(Number(b.voteValue)))
-			: 0;
 		const aVoteCount = Number.isFinite(Number(a?.voteCount))
 			? Math.max(0, Math.floor(Number(a.voteCount)))
 			: 0;
 		const bVoteCount = Number.isFinite(Number(b?.voteCount))
 			? Math.max(0, Math.floor(Number(b.voteCount)))
 			: 0;
+		const aVoteValue = Number.isFinite(Number(a?.voteValue))
+			? Math.max(0, Math.floor(Number(a.voteValue)))
+			: 0;
+		const bVoteValue = Number.isFinite(Number(b?.voteValue))
+			? Math.max(0, Math.floor(Number(b.voteValue)))
+			: 0;
 		const aAverageVote = aVoteCount > 0 ? aVoteValue / aVoteCount : 0;
 		const bAverageVote = bVoteCount > 0 ? bVoteValue / bVoteCount : 0;
+		if (sortMode === 'weighted') {
+			const aWeightedRating = weightedRatingForRow(a);
+			const bWeightedRating = weightedRatingForRow(b);
+			if (bWeightedRating !== aWeightedRating) {
+				return bWeightedRating - aWeightedRating;
+			}
+		}
 		if (bAverageVote !== aAverageVote) {
 			return bAverageVote - aAverageVote;
-		}
-		if (bVoteValue !== aVoteValue) {
-			return bVoteValue - aVoteValue;
 		}
 		return bVoteCount - aVoteCount;
 	});
@@ -352,6 +394,10 @@ export function renderChallengeOrganizerStatsModalInnerHtml(vm) {
 				: 0;
 			const averageVote = voteCount > 0 ? voteValue / voteCount : 0;
 			const averageVoteDisplay = Number.isFinite(averageVote) ? averageVote.toFixed(2) : '0.00';
+			const weightedRating = weightedRatingForRow(row);
+			const weightedRatingDisplay = Number.isFinite(weightedRating)
+				? weightedRating.toFixed(2)
+				: '0.00';
 			const messageId =
 				Number.isFinite(Number(row?.messageId)) && Number(row.messageId) > 0
 					? Math.floor(Number(row.messageId))
@@ -380,7 +426,7 @@ export function renderChallengeOrganizerStatsModalInnerHtml(vm) {
 			const creationCell = cid
 				? `<a class="challenge-pane-organizer-stats-creation" href="/creations/${encodeURIComponent(
 						String(cid)
-					)}" aria-label="View creation ${esc(String(cid))}">
+					)}" aria-label="View creation ${esc(String(cid))}" data-challenge-stats-creation-lightbox data-challenge-stats-creation-id="${esc(String(cid))}"${midAttr}>
 					${thumbBlock}
 				</a>`
 				: '<span class="challenge-pane-muted">Unknown creation</span>';
@@ -391,6 +437,7 @@ export function renderChallengeOrganizerStatsModalInnerHtml(vm) {
 				<td>${esc(String(voteValue))}</td>
 				<td>${esc(String(voteCount))}</td>
 				<td>${esc(averageVoteDisplay)}</td>
+				<td>${esc(weightedRatingDisplay)}</td>
 			</tr>`;
 		})
 		.join('');
@@ -404,6 +451,7 @@ export function renderChallengeOrganizerStatsModalInnerHtml(vm) {
 					<th scope="col">Vote value</th>
 					<th scope="col">Votes</th>
 					<th scope="col">Average vote</th>
+					<th scope="col">Weighted rating</th>
 				</tr>
 			</thead>
 			<tbody>${rowsHtml}</tbody>
@@ -498,12 +546,29 @@ export function renderChallengeOrganizerStatsModalInnerHtml(vm) {
 
 	return `<section class="challenge-pane-organizer-stats-view">
 		<p class="challenge-pane-organizer-stats-kicker">${esc(challengeTitle)}</p>
-		<h4 class="challenge-pane-organizer-stats-subhead">Top 10 creations by average vote</h4>
-		<form class="challenge-pane-organizer-stats-filter" data-challenge-stats-filter-form>
-			<label class="challenge-pane-organizer-stats-filter-label" for="challenge-stats-excluded-usernames">Exclude usernames</label>
-			<input id="challenge-stats-excluded-usernames" type="text" class="challenge-pane-input challenge-pane-organizer-stats-filter-input" data-challenge-stats-filter-input name="excluded_usernames" value="${esc(excludedDisplayValue)}" placeholder="organizer, user2" autocomplete="off" />
-			<button type="submit" class="btn-outlined challenge-pane-organizer-stats-filter-apply">Apply</button>
-		</form>
+		<h4 class="challenge-pane-organizer-stats-subhead">Top 10 creations by ${sortMode === 'average' ? 'average vote' : 'weighted rating'}</h4>
+		<div class="challenge-pane-organizer-stats-controls-row">
+			<div class="challenge-pane-organizer-stats-sort-toggle" role="group" aria-label="Top 10 sort mode">
+				<span class="challenge-pane-organizer-stats-inline-label">Sort</span>
+				<span class="challenge-pane-organizer-stats-sort-label${sortMode === 'average' ? ' is-active' : ''}">Avg</span>
+				<button
+					type="button"
+					class="challenge-pane-organizer-stats-sort-switch"
+					role="switch"
+					aria-label="Toggle Top 10 sort mode"
+					aria-checked="${sortMode === 'weighted' ? 'true' : 'false'}"
+					data-challenge-stats-sort-switch
+				>
+					<span class="challenge-pane-organizer-stats-sort-switch-thumb" aria-hidden="true"></span>
+				</button>
+				<span class="challenge-pane-organizer-stats-sort-label${sortMode === 'weighted' ? ' is-active' : ''}">Weighted</span>
+			</div>
+			<form class="challenge-pane-organizer-stats-filter" data-challenge-stats-filter-form>
+				<label class="challenge-pane-organizer-stats-inline-label" for="challenge-stats-excluded-usernames">Exclude</label>
+				<input id="challenge-stats-excluded-usernames" type="text" class="challenge-pane-input challenge-pane-organizer-stats-filter-input" data-challenge-stats-filter-input name="excluded_usernames" value="${esc(excludedDisplayValue)}" placeholder="Exclude: user1, user2" autocomplete="off" />
+				<button type="submit" class="btn-outlined challenge-pane-organizer-stats-filter-apply">Apply</button>
+			</form>
+		</div>
 		<div class="challenge-pane-organizer-stats-table-wrap">${bodyTable}</div>
 		<h4 class="challenge-pane-organizer-stats-subhead challenge-pane-organizer-stats-subhead--secondary">Top 10 entrants by submissions</h4>
 		<div class="challenge-pane-organizer-stats-table-wrap">${submittersTable}</div>
