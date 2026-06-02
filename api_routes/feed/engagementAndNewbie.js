@@ -267,6 +267,14 @@ export function buildChallengeEngagementVirtualRows(snapshot) {
 				: phase === "finalizing"
 					? "FINALIZING"
 					: "ENDED";
+		const inactiveTone =
+			phase === "pre_submit"
+				? previous?.phase === "finalizing"
+					? "finalizing"
+					: "ended"
+				: phase === "finalizing"
+					? "finalizing"
+					: "ended";
 		const inactiveHook =
 			phase === "pre_submit"
 				? "Next challenge starting soon. Previous round is finalizing."
@@ -315,6 +323,7 @@ export function buildChallengeEngagementVirtualRows(snapshot) {
 					nextChallengeTitle,
 					nextChallengeSubtitle,
 					nextChallengeImageUrl,
+					inactiveTone,
 					ctaLabel: "View challenges",
 					ctaRoute: "/challenges",
 					challengeTitleRoute: "/challenges"

@@ -335,13 +335,35 @@ a.feed-card-engagement-title.feed-card-engagement-title-link:hover {
 	margin-top: 0;
 }
 
-.feed-card-engagement-inner-challenge-inactive {
+.feed-card-engagement-inner.feed-card-engagement-inner-challenge.feed-card-engagement-inner-challenge-inactive {
 	background:
-		radial-gradient(120% 110% at 96% -2%, rgba(255, 210, 235, 0.11) 0%, transparent 56%),
-		linear-gradient(124deg, #53356a 0%, #65407b 52%, #75498a 100%);
+		radial-gradient(120% 110% at 96% -2%, rgba(228, 225, 212, 0.12) 0%, transparent 56%),
+		linear-gradient(124deg, #34373e 0%, #3d4148 52%, #474c54 100%);
 	gap: 9px;
 	border: 1px solid color-mix(in srgb, #ffffff 14%, transparent);
 	box-shadow: 0 6px 18px rgba(28, 8, 38, 0.24);
+}
+
+.feed-card-engagement-inner.feed-card-engagement-inner-challenge.feed-card-engagement-inner-challenge-inactive--finalizing {
+	background:
+		radial-gradient(122% 116% at 100% 0%, rgba(248, 193, 116, 0.24) 0%, transparent 60%),
+		linear-gradient(124deg, #4b3f34 0%, #5c4a38 50%, #6f5940 100%);
+}
+
+.feed-card-engagement-inner.feed-card-engagement-inner-challenge.feed-card-engagement-inner-challenge-inactive--ended {
+	background:
+		radial-gradient(124% 112% at 100% -4%, rgba(184, 192, 206, 0.18) 0%, transparent 58%),
+		linear-gradient(124deg, #353a42 0%, #40454d 50%, #4c525b 100%);
+}
+
+.feed-card-engagement-inner-challenge-inactive--finalizing .feed-card-engagement-status-chip {
+	background: rgba(255, 229, 185, 0.56);
+	color: rgba(102, 62, 18, 0.94);
+}
+
+.feed-card-engagement-inner-challenge-inactive--ended .feed-card-engagement-status-chip {
+	background: rgba(225, 231, 238, 0.5);
+	color: rgba(56, 64, 77, 0.94);
 }
 
 .feed-card-engagement-inner-challenge-inactive .feed-card-engagement-head {
@@ -498,6 +520,35 @@ a.feed-card-engagement-title.feed-card-engagement-title-link:hover {
 	background: #ffffff !important;
 	color: rgba(44, 22, 58, 0.98) !important;
 	box-shadow: 0 2px 6px rgba(14, 6, 20, 0.14);
+}
+
+@media (prefers-color-scheme: light) {
+	.feed-card-engagement-inner.feed-card-engagement-inner-challenge.feed-card-engagement-inner-challenge-inactive {
+		border: 1px solid color-mix(in srgb, #37244f 20%, transparent);
+		box-shadow: 0 5px 14px rgba(38, 26, 56, 0.16);
+	}
+
+	.feed-card-engagement-inner.feed-card-engagement-inner-challenge.feed-card-engagement-inner-challenge-inactive--finalizing {
+		background:
+			radial-gradient(122% 112% at 100% -2%, rgba(247, 194, 121, 0.24) 0%, transparent 62%),
+			linear-gradient(124deg, #b49e84 0%, #c0a989 52%, #ccb592 100%);
+	}
+
+	.feed-card-engagement-inner.feed-card-engagement-inner-challenge.feed-card-engagement-inner-challenge-inactive--ended {
+		background:
+			radial-gradient(122% 112% at 100% -2%, rgba(188, 197, 210, 0.22) 0%, transparent 62%),
+			linear-gradient(124deg, #8d949f 0%, #9aa1ac 52%, #a8aeb8 100%);
+	}
+
+	.feed-card-engagement-inner-challenge-inactive--finalizing .feed-card-engagement-status-chip {
+		background: rgba(255, 232, 195, 0.72);
+		color: rgba(99, 61, 22, 0.92);
+	}
+
+	.feed-card-engagement-inner-challenge-inactive--ended .feed-card-engagement-status-chip {
+		background: rgba(232, 237, 243, 0.68);
+		color: rgba(63, 71, 84, 0.92);
+	}
 }
 
 .feed-card-engagement-actions {

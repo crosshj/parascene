@@ -471,6 +471,10 @@ function buildEngagementFeedCard(item, performShellNavigation = null) {
 		const title = escapeHtmlFeedCardText(payload.title || "Community challenge");
 		const subtitle = payload.subtitle ? escapeHtmlFeedCardText(String(payload.subtitle)) : "";
 		const statusChip = payload.statusChip ? escapeHtmlFeedCardText(String(payload.statusChip)) : "";
+		const inactiveTone =
+			typeof payload.inactiveTone === "string" && payload.inactiveTone.trim()
+				? payload.inactiveTone.trim().toLowerCase()
+				: "ended";
 		const hook = payload.hook ? escapeHtmlFeedCardText(String(payload.hook)) : "";
 		const heroImageUrl =
 			typeof payload.heroImageUrl === "string" && payload.heroImageUrl.trim()
@@ -542,7 +546,7 @@ function buildEngagementFeedCard(item, performShellNavigation = null) {
 			: "";
 
 		card.innerHTML = html`
-			<div class="feed-card-engagement-inner feed-card-engagement-inner-challenge feed-card-engagement-inner-challenge-inactive">
+			<div class="feed-card-engagement-inner feed-card-engagement-inner-challenge feed-card-engagement-inner-challenge-inactive feed-card-engagement-inner-challenge-inactive--${escapeHtmlFeedCardText(inactiveTone)}">
 				<div class="feed-card-engagement-head">
 					<div class="feed-card-engagement-kicker">${kicker}</div>
 					${statusChip
