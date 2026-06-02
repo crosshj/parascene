@@ -8848,6 +8848,120 @@ body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading {
 	margin-bottom: 8px;
 }
 
+.challenge-pane-history-list {
+	list-style: none;
+	margin: 10px 0 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	width: 100%;
+}
+
+.challenge-pane-history-card {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 12px;
+	width: 100%;
+	box-sizing: border-box;
+	text-align: left;
+}
+
+.challenge-pane-history-card-thumb-wrap {
+	width: 72px;
+	height: 72px;
+	flex: 0 0 72px;
+	border-radius: 8px;
+	overflow: hidden;
+	background: color-mix(in srgb, var(--text) 8%, transparent);
+	border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+}
+
+.challenge-pane-history-card-thumb {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.challenge-pane-history-card-thumb-fallback {
+	width: 100%;
+	height: 100%;
+	background:
+		linear-gradient(
+			135deg,
+			color-mix(in srgb, var(--accent, #5eead4) 20%, transparent),
+			color-mix(in srgb, var(--text) 12%, transparent)
+		);
+}
+
+.challenge-pane-history-card-content {
+	min-width: 0;
+	flex: 1 1 auto;
+	text-align: left;
+}
+
+.challenge-pane-history-card-title {
+	margin: 0;
+	font-size: 0.9375rem;
+	font-weight: 600;
+	color: var(--text);
+}
+
+.challenge-pane-history-card-range {
+	margin: 6px 0 0;
+	font-size: 0.8125rem;
+	color: var(--text-muted, rgba(255, 255, 255, 0.6));
+}
+
+.challenge-pane-history-card-state {
+	margin-left: auto;
+	flex: 0 0 auto;
+	align-self: center;
+	font-size: 0.75rem;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	color: var(--text-muted, rgba(255, 255, 255, 0.72));
+	text-transform: uppercase;
+}
+
+.challenge-pane-empty.route-empty-image-grid {
+	text-align: left;
+	padding: 0;
+	color: var(--text);
+	width: 100%;
+}
+
+.challenge-pane-history-section .challenge-pane-section-label {
+	text-align: left;
+}
+
+.challenge-pane-history-section {
+	width: 100%;
+}
+
+.challenge-pane-inactive-note {
+	padding: 14px 16px;
+	border-radius: 10px;
+	border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+	background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+.challenge-pane-inactive-note-title {
+	margin: 0;
+	font-size: 1rem;
+	font-weight: 600;
+	color: var(--text);
+}
+
+.challenge-pane-inactive-note-text {
+	margin: 8px 0 0;
+	font-size: 0.875rem;
+	line-height: 1.45;
+	color: var(--text-muted, rgba(255, 255, 255, 0.7));
+}
+
 .challenge-pane-label {
 	display: flex;
 	flex-direction: column;

@@ -1,12 +1,15 @@
 import { buildChallengesChannelModel } from './model/buildChannelModel.js';
 import { rankedSubmissionsForPeerVoting } from './model/participantSlice.js';
-import { renderEmptyParticipantPane } from './views/emptyParticipantView.js';
+import {
+	renderEmptyParticipantPane,
+	renderNextChallengeSection,
+	renderPastChallengesSection
+} from './views/emptyParticipantView.js';
 import { renderHeroSection } from './views/heroView.js';
 import { participantHeroViewModel } from './views/presentParticipantHero.js';
 import { renderChallengeCountdowns } from './views/countdownView.js';
 import { renderChallengeHeroImage, renderDetailsAndReward } from './views/detailsRewardView.js';
 import { renderChallengeVoteHeroCta, renderSubmissionsSection } from './views/submissionsView.js';
-import { renderResultsSection } from './views/resultsView.js';
 import {
 	fetchCreationEmbedPayload,
 	parseHeroCreationOrShareRef,
@@ -113,6 +116,79 @@ async function hydrateChallengeHeroImage(rootEl) {
 	}
 }
 
+/**
+ * Resolve challenge history card media refs inside `.challenge-pane-root`.
+ * @param {Element | null | undefined} rootEl
+ */
+async function hydrateChallengeHistoryThumbnails(rootEl) {
+	const wraps = Array.from(
+		rootEl?.querySelectorAll?.('[data-challenge-history-thumb-pending]') || []
+	);
+	for (const wrap of wraps) {
+		if (!(wrap instanceof HTMLElement)) continue;
+		const raw = wrap.getAttribute('data-challenge-history-thumb-ref') || '';
+		const img = wrap.querySelector('[data-challenge-history-thumb-img]');
+		const fallback = wrap.querySelector('[data-challenge-history-thumb-fallback]');
+
+		const showFallback = () => {
+			wrap.removeAttribute('data-challenge-history-thumb-pending');
+			if (img instanceof HTMLImageElement) {
+				img.removeAttribute('src');
+				img.hidden = true;
+			}
+			if (fallback instanceof HTMLElement) {
+				fallback.hidden = false;
+			}
+		};
+
+		if (!(img instanceof HTMLImageElement)) {
+			showFallback();
+			continue;
+		}
+
+		let src = null;
+		const cref = parseHeroCreationOrShareRef(raw);
+		if (cref?.kind === 'creation') {
+			const data = await fetchCreationEmbedPayload(cref.creationId, cref.shareOpts);
+			src = imageUrlFromCreationPayload(data);
+		} else {
+			src = parseHeroDirectMediaUrl(raw);
+		}
+
+		if (!src) {
+			showFallback();
+			continue;
+		}
+
+		if (fallback instanceof HTMLElement) fallback.hidden = true;
+		// Reveal immediately once a resolvable source exists; if load fails, error handler restores fallback.
+		wrap.removeAttribute('data-challenge-history-thumb-pending');
+		img.hidden = false;
+		img.addEventListener(
+			'error',
+			() => {
+				showFallback();
+			},
+			{ once: true }
+		);
+		img.addEventListener(
+			'load',
+			() => {
+				if (img.naturalWidth > 0) {
+					wrap.removeAttribute('data-challenge-history-thumb-pending');
+					img.hidden = false;
+				}
+			},
+			{ once: true }
+		);
+		img.src = src;
+		if (img.complete && img.naturalWidth > 0) {
+			wrap.removeAttribute('data-challenge-history-thumb-pending');
+			img.hidden = false;
+		}
+	}
+}
+
 function consumeAutoOpenVoteIntentFromUrl() {
 	try {
 		const u = new URL(window.location.href);
@@ -139,9 +215,21 @@ function consumeAutoOpenVoteIntentFromUrl() {
 export function renderChallengesPaneHtml(model, opts) {
 	let html = '<div class="challenge-pane">';
 	const { latestConfig, phase, rankedSubmissions } = model.participant;
+	const challengeId =
+		latestConfig && latestConfig.challenge_id != null
+			? String(latestConfig.challenge_id).trim()
+			: '';
+	const isActiveChallenge =
+		phase === 'submitting' || phase === 'voting' || phase === 'submit_and_vote';
 
 	if (!latestConfig) {
-		html += renderEmptyParticipantPane();
+		html += renderEmptyParticipantPane(model.raw.configs);
+		html += '</div>';
+		return html;
+	}
+
+	if (!isActiveChallenge) {
+		html += renderEmptyParticipantPane(model.raw.configs);
 		html += '</div>';
 		return html;
 	}
@@ -168,9 +256,13 @@ export function renderChallengesPaneHtml(model, opts) {
 		ranked: rankedSubmissions
 	});
 
-	if (phase === 'results') {
-		html += renderResultsSection({ ranked: rankedSubmissions });
-	}
+	html += renderNextChallengeSection(model.raw.configs, {
+		excludeChallengeId: challengeId
+	});
+
+	html += renderPastChallengesSection(model.raw.configs, {
+		excludeChallengeId: challengeId
+	});
 
 	html += '</div>';
 	return html;
@@ -261,6 +353,7 @@ export async function mountChallengesPane(opts) {
 	});
 
 	void hydrateChallengeHeroImage(root);
+	void hydrateChallengeHistoryThumbnails(root);
 
 	const voteModal = createChallengeVoteModal({
 		toggleReaction,

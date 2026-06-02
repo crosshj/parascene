@@ -16,6 +16,10 @@ export function summarizeLatestChallengeConfigs(configs) {
 		const msgId = Number(row.msg?.id);
 		const sortKey = Number.isFinite(msgId) && msgId > 0 ? msgId : 0;
 		const title = typeof p.title === 'string' ? p.title : '';
+		const prev = latest.get(cid);
+		if (prev && prev.sortKey > sortKey) {
+			continue;
+		}
 		latest.set(cid, {
 			challenge_id: cid,
 			title,
