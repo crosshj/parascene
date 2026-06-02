@@ -60,6 +60,13 @@ function challengeHistoryStateLabel(payload) {
 	return 'Ended';
 }
 
+function challengeStateClassFromLabel(label) {
+	const raw = typeof label === 'string' ? label.trim().toLowerCase() : '';
+	if (raw === 'upcoming') return 'upcoming';
+	if (raw === 'finalizing') return 'finalizing';
+	return 'ended';
+}
+
 function challengeStartsAtMs(payload) {
 	const start = pickChallengeConfigTimestamp(payload, 'submission_start_at');
 	const ms = Date.parse(String(start || '').trim());
@@ -113,6 +120,7 @@ function renderChallengeHistoryCards(configs = [], opts = {}) {
 			const activeRange = challengeActiveRangeLabel(summary.payload);
 			const heroRef = challengeHistoryThumbnailRef(summary.payload);
 			const stateLabel = challengeHistoryStateLabel(summary.payload);
+			const stateClass = challengeStateClassFromLabel(stateLabel);
 			return `<li class="challenge-pane-card challenge-pane-history-card">
 				<div class="challenge-pane-history-card-thumb-wrap" data-challenge-history-thumb-pending data-challenge-history-thumb-ref="${esc(heroRef)}">
 					<img class="challenge-pane-history-card-thumb" alt="" loading="lazy" hidden data-challenge-history-thumb-img />
@@ -122,7 +130,7 @@ function renderChallengeHistoryCards(configs = [], opts = {}) {
 					<h3 class="challenge-pane-history-card-title">${esc(title)}</h3>
 					<p class="challenge-pane-history-card-range">${esc(activeRange)}</p>
 				</div>
-				<div class="challenge-pane-history-card-state" aria-label="Challenge state">${esc(stateLabel)}</div>
+				<div class="challenge-pane-history-card-state challenge-pane-history-card-state--${esc(stateClass)}" aria-label="Challenge state">${esc(stateLabel)}</div>
 			</li>`;
 		})
 		.join('');
@@ -153,7 +161,7 @@ export function renderNextChallengeSection(configs = [], opts = {}) {
 						<h3 class="challenge-pane-history-card-title">${esc(title)}</h3>
 						<p class="challenge-pane-history-card-range">${esc(activeRange)}</p>
 					</div>
-					<div class="challenge-pane-history-card-state" aria-label="Challenge state">Upcoming</div>
+					<div class="challenge-pane-history-card-state challenge-pane-history-card-state--upcoming" aria-label="Challenge state">Upcoming</div>
 				</li>
 			</ul>
 		</section>`;
