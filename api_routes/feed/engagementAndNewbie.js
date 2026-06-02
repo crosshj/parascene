@@ -25,6 +25,16 @@ function formatEndsInSummary(deadlineMs, nowMs) {
 	return "Ending soon";
 }
 
+function formatStartsInSummary(startMs, nowMs) {
+	if (!Number.isFinite(startMs) || startMs <= nowMs) return "Starts soon";
+	const sec = Math.floor((startMs - nowMs) / 1000);
+	const days = Math.floor(sec / 86400);
+	const hours = Math.floor((sec % 86400) / 3600);
+	if (days >= 1) return days === 1 ? "Starts in 1 day" : `Starts in ${days} days`;
+	if (hours >= 1) return hours === 1 ? "Starts in 1 hour" : `Starts in ${hours} hours`;
+	return "Starts soon";
+}
+
 /**
  * Dual CTAs: Vote or View → /challenges, Create → /create.
  * Filled vs outline (text): client uses `feed-card-engagement-cta` (filled) vs
@@ -207,6 +217,112 @@ export function buildChallengeEngagementVirtualRows(snapshot) {
 		return [];
 	}
 	const nowMs = Date.now();
+	const phase = typeof snapshot.phase === "string" ? snapshot.phase : "";
+	const isInactiveState = phase === "finalizing" || phase === "results" || phase === "pre_submit";
+
+	if (isInactiveState) {
+		const nextFromCurrent = {
+			title:
+				typeof snapshot.title === "string" && snapshot.title.trim()
+					? snapshot.title.trim()
+					: "",
+			submissionStartAt:
+				typeof snapshot?.submissionStartAt === "string" ? snapshot.submissionStartAt.trim() : "",
+			heroImageUrl:
+				typeof snapshot.heroImageUrl === "string" && snapshot.heroImageUrl.trim()
+					? snapshot.heroImageUrl.trim()
+					: ""
+		};
+		const next = phase === "pre_submit"
+			? nextFromCurrent
+			: snapshot?.nextChallenge && typeof snapshot.nextChallenge === "object"
+				? snapshot.nextChallenge
+				: null;
+		const previous = snapshot?.previousChallenge && typeof snapshot.previousChallenge === "object"
+			? snapshot.previousChallenge
+			: null;
+		const nextChallengeTitle =
+			typeof next?.title === "string" && next.title.trim() ? next.title.trim() : "";
+		const nextStartMs =
+			typeof next?.submissionStartAt === "string"
+				? Date.parse(next.submissionStartAt)
+				: NaN;
+		const nextChallengeSubtitle =
+			Number.isFinite(nextStartMs)
+				? formatStartsInSummary(nextStartMs, nowMs)
+				: phase === "pre_submit"
+					? "Starts soon"
+				: "";
+		const nextChallengeImageUrl =
+			typeof next?.heroImageUrl === "string" && next.heroImageUrl.trim()
+				? next.heroImageUrl.trim()
+				: "";
+		const inactiveStatusChip =
+			phase === "pre_submit"
+				? previous?.phase === "finalizing"
+					? "FINALIZING"
+					: previous?.phase === "results"
+						? "ENDED"
+						: "NO ACTIVE"
+				: phase === "finalizing"
+					? "FINALIZING"
+					: "ENDED";
+		const inactiveHook =
+			phase === "pre_submit"
+				? "Next challenge starting soon. Previous round is finalizing."
+				: phase === "finalizing"
+				? "Next challenge starting soon. Previous round is finalizing."
+				: "Next challenge starting soon. Previous round has ended.";
+		const inactiveTitle =
+			phase === "pre_submit"
+				? typeof previous?.title === "string" && previous.title.trim()
+					? previous.title.trim()
+					: "Previous challenge"
+				: typeof snapshot.title === "string" && snapshot.title.trim()
+					? snapshot.title.trim()
+					: "Community challenge";
+		const inactiveSubtitle =
+			phase === "pre_submit"
+				? typeof previous?.phaseSubtitle === "string" && previous.phaseSubtitle.trim()
+					? previous.phaseSubtitle.trim()
+					: "No active challenge"
+				: typeof snapshot.phaseSubtitle === "string" && snapshot.phaseSubtitle.trim()
+					? snapshot.phaseSubtitle.trim()
+					: "";
+		const inactiveHero =
+			phase === "pre_submit"
+				? typeof previous?.heroImageUrl === "string" && previous.heroImageUrl.trim()
+					? previous.heroImageUrl.trim()
+					: ""
+				: typeof snapshot.heroImageUrl === "string" && snapshot.heroImageUrl.trim()
+					? snapshot.heroImageUrl.trim()
+					: "";
+
+		return [
+			{
+				type: "engagement",
+				variant: "challenge_stats_inactive",
+				id: `engagement:challenge_inactive:${snapshot.challengeId.trim()}`,
+				slot: "after_first",
+				created_at: new Date().toISOString(),
+				payload: {
+					kicker: "Challenge",
+					title: inactiveTitle || "Community challenge",
+					subtitle: inactiveSubtitle,
+					statusChip: inactiveStatusChip,
+					hook: inactiveHook,
+					heroImageUrl: inactiveHero,
+					nextChallengeTitle,
+					nextChallengeSubtitle,
+					nextChallengeImageUrl,
+					ctaLabel: "View challenges",
+					ctaRoute: "/challenges",
+					challengeTitleRoute: "/challenges"
+				}
+			}
+		];
+	}
+
 	const rawPrize =
 		typeof snapshot.topPrize === "string" && snapshot.topPrize.trim()
 			? snapshot.topPrize.trim()
@@ -251,7 +367,6 @@ export function buildChallengeEngagementVirtualRows(snapshot) {
 	].filter(Boolean);
 	const socialProofLine = socialProofParts.join(" • ");
 
-	const phase = typeof snapshot.phase === "string" ? snapshot.phase : "";
 	const slot = pickChallengeFeedSlot(snapshot, nowMs);
 	const statusChip = pickChallengeStatusChip(snapshot, nowMs);
 	const hook = pickChallengeHook(snapshot, nowMs);

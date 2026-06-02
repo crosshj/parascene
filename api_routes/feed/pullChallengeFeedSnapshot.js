@@ -11,6 +11,7 @@ import {
 	pickChallengeHeroImageUrl,
 	sanitizeChallengeHeroImageUrl
 } from "../../src/chat/challenges/challengeAdmin.js";
+import { summarizeLatestChallengeConfigs } from "../../src/chat/challenges/model/organizerSummaries.js";
 import { CHALLENGE_SCORE_REACTION_KEYS } from "../../src/chat/challenges/constants.js";
 import { appendCreationIdToMediaUrl, getThumbnailUrl } from "../utils/url.js";
 import { verifyShareToken } from "../utils/shareLink.js";
@@ -179,6 +180,105 @@ function phaseSubtitle(phase) {
 	}
 }
 
+function parseChallengeStartMs(cfg) {
+	const start = pickChallengeConfigTimestamp(cfg, "submission_start_at");
+	const ms = Date.parse(String(start || "").trim());
+	return Number.isFinite(ms) ? ms : null;
+}
+
+async function resolveNextChallengeSnapshot(messages, nowMs, queries, currentChallengeId = "") {
+	const configs = [];
+	for (const m of messages) {
+		const payload = tryParseChallengeJsonBody(m?.body);
+		if (!payload || String(payload.kind || "").trim() !== "challenge_config") continue;
+		configs.push({ msg: m, payload });
+	}
+
+	const summaries = summarizeLatestChallengeConfigs(configs)
+		.filter((row) => {
+			const cid = String(row?.challenge_id || "").trim();
+			if (!cid || cid === String(currentChallengeId || "").trim()) return false;
+			const phase = deriveChallengePhase(row?.payload || null, nowMs);
+			return phase === "pre_submit";
+		})
+		.sort((a, b) => {
+			const aStart = parseChallengeStartMs(a?.payload);
+			const bStart = parseChallengeStartMs(b?.payload);
+			if (aStart == null && bStart == null) return b.sortKey - a.sortKey;
+			if (aStart == null) return 1;
+			if (bStart == null) return -1;
+			return aStart - bStart;
+		});
+
+	const next = summaries[0];
+	if (!next) return null;
+
+	const nextTitle =
+		typeof next.payload?.title === "string" && next.payload.title.trim()
+			? next.payload.title.trim()
+			: "Upcoming challenge";
+	const nextStartMs = parseChallengeStartMs(next.payload);
+	const nextEnd = pickChallengeConfigTimestamp(next.payload, "voting_end_at");
+	const nextHeroImageUrl = await resolveChallengeHeroImageUrl({
+		queries,
+		cfg: next.payload,
+		latestSubmissionImageId: NaN
+	});
+
+	return {
+		challengeId: String(next.challenge_id || "").trim(),
+		title: nextTitle,
+		phase: "pre_submit",
+		phaseSubtitle: phaseSubtitle("pre_submit"),
+		submissionStartAt: nextStartMs != null ? new Date(nextStartMs).toISOString() : "",
+		votingEndAt: typeof nextEnd === "string" ? nextEnd : "",
+		heroImageUrl: nextHeroImageUrl || ""
+	};
+}
+
+async function resolvePreviousChallengeSnapshot(messages, nowMs, queries, currentChallengeId = "") {
+	const configs = [];
+	for (const m of messages) {
+		const payload = tryParseChallengeJsonBody(m?.body);
+		if (!payload || String(payload.kind || "").trim() !== "challenge_config") continue;
+		configs.push({ msg: m, payload });
+	}
+
+	const summaries = summarizeLatestChallengeConfigs(configs)
+		.filter((row) => {
+			const cid = String(row?.challenge_id || "").trim();
+			if (!cid || cid === String(currentChallengeId || "").trim()) return false;
+			const phase = deriveChallengePhase(row?.payload || null, nowMs);
+			return phase === "finalizing" || phase === "results";
+		})
+		.sort((a, b) => b.sortKey - a.sortKey);
+
+	const prev = summaries[0];
+	if (!prev) return null;
+	const prevPhase = deriveChallengePhase(prev.payload, nowMs);
+	const prevTitle =
+		typeof prev.payload?.title === "string" && prev.payload.title.trim()
+			? prev.payload.title.trim()
+			: "Previous challenge";
+	const prevStart = pickChallengeConfigTimestamp(prev.payload, "submission_start_at");
+	const prevEnd = pickChallengeConfigTimestamp(prev.payload, "voting_end_at");
+	const prevHeroImageUrl = await resolveChallengeHeroImageUrl({
+		queries,
+		cfg: prev.payload,
+		latestSubmissionImageId: NaN
+	});
+
+	return {
+		challengeId: String(prev.challenge_id || "").trim(),
+		title: prevTitle,
+		phase: prevPhase,
+		phaseSubtitle: phaseSubtitle(prevPhase),
+		submissionStartAt: typeof prevStart === "string" ? prevStart : "",
+		votingEndAt: typeof prevEnd === "string" ? prevEnd : "",
+		heroImageUrl: prevHeroImageUrl || ""
+	};
+}
+
 /**
  * Live data from #challenges thread (latest `challenge_config` + matching `challenge_submission` messages).
  * Returns `{ ok: false }` when challenge data is unavailable (e.g. no #challenges thread).
@@ -278,11 +378,24 @@ export async function pullChallengeFeedSnapshot(opts = {}) {
 				: "Challenge";
 
 		const highlightDeadlineMs = computeHighlightDeadlineMs(cfg, phase, nowMs);
+		const submissionStartAt = pickChallengeConfigTimestamp(cfg, "submission_start_at");
 		const heroImageUrl = await resolveChallengeHeroImageUrl({
 			queries,
 			cfg,
 			latestSubmissionImageId
 		});
+		const nextChallenge = await resolveNextChallengeSnapshot(
+			messages,
+			nowMs,
+			queries,
+			challengeId
+		);
+		const previousChallenge = await resolvePreviousChallengeSnapshot(
+			messages,
+			nowMs,
+			queries,
+			challengeId
+		);
 
 		return {
 			ok: true,
@@ -295,12 +408,15 @@ export async function pullChallengeFeedSnapshot(opts = {}) {
 			topPrize,
 			phaseSubtitle: phaseSubtitle(phase),
 			viewerHasEntered,
+			submissionStartAt: typeof submissionStartAt === "string" ? submissionStartAt : "",
 			highlightDeadlineMs,
 			latestSubmissionMs,
 			hasUnvotedEntries: viewerIdOk ? unvotedEntries > 0 : submissionCount > 0,
 			recentSubmissionCount24h,
 			heroImageUrl,
-			totalRewardCredits
+			totalRewardCredits,
+			nextChallenge,
+			previousChallenge
 		};
 	} catch (err) {
 		console.warn("[feed] pullChallengeFeedSnapshot", err?.message || err);

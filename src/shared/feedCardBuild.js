@@ -463,6 +463,149 @@ function buildEngagementFeedCard(item, performShellNavigation = null) {
 			? item.payload
 			: {};
 
+	if (variant === "challenge_stats_inactive") {
+		const kicker =
+			typeof payload.kicker === "string" && payload.kicker.trim()
+				? escapeHtmlFeedCardText(payload.kicker.trim())
+				: "Challenge";
+		const title = escapeHtmlFeedCardText(payload.title || "Community challenge");
+		const subtitle = payload.subtitle ? escapeHtmlFeedCardText(String(payload.subtitle)) : "";
+		const statusChip = payload.statusChip ? escapeHtmlFeedCardText(String(payload.statusChip)) : "";
+		const hook = payload.hook ? escapeHtmlFeedCardText(String(payload.hook)) : "";
+		const heroImageUrl =
+			typeof payload.heroImageUrl === "string" && payload.heroImageUrl.trim()
+				? escapeHtmlFeedCardText(payload.heroImageUrl.trim())
+				: "";
+		const nextChallengeTitle =
+			typeof payload.nextChallengeTitle === "string" && payload.nextChallengeTitle.trim()
+				? escapeHtmlFeedCardText(payload.nextChallengeTitle.trim())
+				: "";
+		const nextChallengeSubtitle =
+			typeof payload.nextChallengeSubtitle === "string" && payload.nextChallengeSubtitle.trim()
+				? escapeHtmlFeedCardText(payload.nextChallengeSubtitle.trim())
+				: "";
+		const nextChallengeImageUrl =
+			typeof payload.nextChallengeImageUrl === "string" && payload.nextChallengeImageUrl.trim()
+				? escapeHtmlFeedCardText(payload.nextChallengeImageUrl.trim())
+				: "";
+		const ctaLabel = escapeHtmlFeedCardText(payload.ctaLabel || "View challenges");
+		const rawCtaRoute = String(payload.ctaRoute || "/challenges").trim();
+		const ctaRoute = rawCtaRoute.startsWith("/help") ? getHelpHref(rawCtaRoute) : rawCtaRoute;
+		const rawChallengeTitleRoute = String(payload.challengeTitleRoute || "/challenges").trim();
+		const challengeTitleHref = rawChallengeTitleRoute.startsWith("/help")
+			? getHelpHref(rawChallengeTitleRoute)
+			: rawChallengeTitleRoute;
+
+		const mainThumbBlock = heroImageUrl
+			? html`<div class="feed-card-engagement-thumb-wrap feed-card-engagement-thumb-wrap--focus is-loading" data-engagement-thumb-wrap>
+					<span class="feed-card-engagement-thumb-placeholder" aria-hidden="true"></span>
+					<img class="feed-card-engagement-thumb" src="${heroImageUrl}" alt="" loading="lazy" decoding="async" data-engagement-thumb>
+				</div>`
+			: "";
+		const nextThumbBlock = nextChallengeImageUrl
+			? html`<div class="feed-card-engagement-thumb-wrap feed-card-engagement-thumb-wrap--focus is-loading" data-engagement-thumb-wrap>
+					<span class="feed-card-engagement-thumb-placeholder" aria-hidden="true"></span>
+					<img class="feed-card-engagement-thumb" src="${nextChallengeImageUrl}" alt="" loading="lazy" decoding="async" data-engagement-thumb>
+				</div>`
+			: "";
+		const nextChallengeBlock = nextChallengeTitle
+			? html`<div class="feed-card-engagement-next-hero">
+					<div class="feed-card-engagement-next-label">Next</div>
+					<div class="feed-card-engagement-next-body">
+						${nextThumbBlock}
+						<div class="feed-card-engagement-next-copy">
+							<div class="feed-card-engagement-next-title">${nextChallengeTitle}</div>
+							${nextChallengeSubtitle ? html`<div class="feed-card-engagement-next-subtitle">${nextChallengeSubtitle}</div>` : ""}
+						</div>
+					</div>
+				</div>`
+			: html`<div class="feed-card-engagement-next-hero">
+					<div class="feed-card-engagement-next-label">Next</div>
+					<div class="feed-card-engagement-next-body feed-card-engagement-next-body--no-media">
+						<div class="feed-card-engagement-next-copy">
+							<div class="feed-card-engagement-next-title">Upcoming challenge</div>
+							<div class="feed-card-engagement-next-subtitle">Check Challenges for schedule details</div>
+						</div>
+					</div>
+				</div>`;
+		const currentSummaryBlock = title
+			? html`<div class="feed-card-engagement-next-hero feed-card-engagement-prev-hero">
+					<div class="feed-card-engagement-next-label">Previous</div>
+					<div class="feed-card-engagement-next-body">
+						${mainThumbBlock}
+						<div class="feed-card-engagement-next-copy">
+							<div class="feed-card-engagement-next-title">${title}</div>
+							${subtitle ? html`<div class="feed-card-engagement-next-subtitle">${subtitle}</div>` : ""}
+						</div>
+					</div>
+				</div>`
+			: "";
+
+		card.innerHTML = html`
+			<div class="feed-card-engagement-inner feed-card-engagement-inner-challenge feed-card-engagement-inner-challenge-inactive">
+				<div class="feed-card-engagement-head">
+					<div class="feed-card-engagement-kicker">${kicker}</div>
+					${statusChip
+						? html`<div class="feed-card-engagement-status-chip">${clock3Icon('feed-card-engagement-status-chip-icon')}${statusChip}</div>`
+						: ""}
+				</div>
+				${hook ? html`<div class="feed-card-engagement-hook feed-card-engagement-inactive-note">${hook}</div>` : ""}
+				${nextChallengeBlock}
+				<div class="feed-card-engagement-main feed-card-engagement-main--inactive-secondary">
+					${currentSummaryBlock}
+				</div>
+				<div class="feed-card-engagement-actions">
+					<a class="route-empty-button feed-card-engagement-cta" href="${ctaRoute}" data-engagement-inactive-cta>${ctaLabel}</a>
+				</div>
+			</div>
+		`;
+
+		const ctaEl = card.querySelector("[data-engagement-inactive-cta]");
+		if (ctaEl instanceof HTMLAnchorElement) {
+			ctaEl.addEventListener("click", (e) => {
+				const href = ctaEl.getAttribute("href") || "/challenges";
+				navigateEngagementFeedCardHref(href, e, performShellNavigation);
+			});
+		}
+		const titleLinkEl = card.querySelector("[data-challenge-title-link]");
+		if (titleLinkEl instanceof HTMLAnchorElement) {
+			titleLinkEl.addEventListener("click", (e) => {
+				const href = titleLinkEl.getAttribute("href") || "/challenges";
+				navigateEngagementFeedCardHref(href, e, performShellNavigation);
+			});
+		}
+		card.addEventListener("click", (e) => {
+			const raw = e.target;
+			const el = raw instanceof Element ? raw : raw?.parentElement;
+			if (!el || !(el instanceof Element)) return;
+			if (el.closest(".feed-card-engagement-actions")) return;
+			if (el.closest("a[href]")) return;
+			if (el.closest("button")) return;
+			navigateEngagementFeedCardHref(challengeTitleHref || "/challenges", e, performShellNavigation);
+		});
+
+		const thumbWraps = Array.from(card.querySelectorAll("[data-engagement-thumb-wrap]"));
+		for (const wrap of thumbWraps) {
+			if (!(wrap instanceof HTMLElement)) continue;
+			const img = wrap.querySelector("[data-engagement-thumb]");
+			if (!(img instanceof HTMLImageElement)) continue;
+			const markLoaded = () => {
+				wrap.classList.remove("is-loading", "is-error");
+				wrap.classList.add("is-loaded");
+			};
+			const markError = () => {
+				wrap.classList.remove("is-loading", "is-loaded");
+				wrap.classList.add("is-error");
+			};
+			img.addEventListener("load", markLoaded, { once: true });
+			img.addEventListener("error", markError, { once: true });
+			if (img.complete && img.naturalWidth > 0) {
+				markLoaded();
+			}
+		}
+		return card;
+	}
+
 	if (variant === "contest_stats" || variant === "challenge_stats") {
 		const title = escapeHtmlFeedCardText(payload.title || "Community");
 		const subtitle = payload.subtitle ? escapeHtmlFeedCardText(String(payload.subtitle)) : "";

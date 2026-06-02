@@ -335,6 +335,171 @@ a.feed-card-engagement-title.feed-card-engagement-title-link:hover {
 	margin-top: 0;
 }
 
+.feed-card-engagement-inner-challenge-inactive {
+	background:
+		radial-gradient(120% 110% at 96% -2%, rgba(255, 210, 235, 0.11) 0%, transparent 56%),
+		linear-gradient(124deg, #53356a 0%, #65407b 52%, #75498a 100%);
+	gap: 9px;
+	border: 1px solid color-mix(in srgb, #ffffff 14%, transparent);
+	box-shadow: 0 6px 18px rgba(28, 8, 38, 0.24);
+}
+
+.feed-card-engagement-inner-challenge-inactive .feed-card-engagement-head {
+	margin-bottom: 0;
+}
+
+.feed-card-engagement-inner-challenge-inactive .feed-card-engagement-kicker {
+	letter-spacing: 0.1em;
+	color: rgba(255, 255, 255, 0.58);
+}
+
+.feed-card-engagement-inner-challenge-inactive .feed-card-engagement-status-chip {
+	font-size: 0.64rem;
+	padding: 5px 9px;
+	color: rgba(64, 35, 77, 0.9);
+	background: rgba(246, 236, 255, 0.38);
+	border: 1px solid color-mix(in srgb, #ffffff 18%, transparent);
+}
+
+.feed-card-engagement-next-hero {
+	display: flex;
+	flex-direction: column;
+	gap: 7px;
+}
+
+.feed-card-engagement-next-label {
+	margin: 0;
+	font-size: 0.6875rem;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: rgba(255, 255, 255, 0.74);
+}
+
+.feed-card-engagement-next-body {
+	display: flex;
+	align-items: center;
+	gap: 11px;
+	min-width: 0;
+}
+
+.feed-card-engagement-next-body--no-media {
+	padding-left: 0;
+}
+
+.feed-card-engagement-thumb-wrap--focus {
+	width: 62px;
+	height: 62px;
+	border-radius: 10px;
+}
+
+.feed-card-engagement-thumb-wrap--focus .feed-card-engagement-thumb-placeholder {
+	border-radius: 10px;
+}
+
+.feed-card-engagement-next-copy {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.feed-card-engagement-next-title {
+	margin: 0;
+	font-size: 1.08rem;
+	font-weight: 600;
+	line-height: 1.16;
+	color: rgba(255, 255, 255, 0.98);
+}
+
+.feed-card-engagement-next-subtitle {
+	margin: 0;
+	font-size: 0.86rem;
+	line-height: 1.28;
+	color: rgba(255, 255, 255, 0.8);
+}
+
+.feed-card-engagement-main--inactive-secondary {
+	border-top: 1px solid color-mix(in srgb, #ffffff 15%, transparent);
+	padding-top: 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.feed-card-engagement-inactive-note {
+	font-size: 0.83rem;
+	line-height: 1.32;
+	color: rgba(255, 255, 255, 0.78);
+}
+
+.feed-card-engagement-inactive-note::before {
+	content: none;
+}
+
+.feed-card-engagement-current-inline {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	min-width: 0;
+	opacity: 0.82;
+}
+
+.feed-card-engagement-current-copy {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.feed-card-engagement-current-label {
+	margin: 0;
+	font-size: 0.67rem;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: rgba(255, 255, 255, 0.66);
+}
+
+.feed-card-engagement-current-title {
+	margin: 0;
+	font-size: 0.8rem;
+	font-weight: 600;
+	line-height: 1.2;
+	color: rgba(255, 255, 255, 0.84);
+}
+
+.feed-card-engagement-current-subtitle {
+	margin: 0;
+	font-size: 0.72rem;
+	line-height: 1.22;
+	color: rgba(255, 255, 255, 0.64);
+}
+
+.feed-card-engagement-inner-challenge-inactive .feed-card-engagement-actions {
+	margin-top: 1px;
+}
+
+.feed-card-engagement-inner-challenge-inactive .feed-card-engagement-cta {
+	min-height: 35px;
+	padding: 6px 12px;
+	font-size: 0.82rem;
+	border-radius: 7px;
+	background: rgba(255, 255, 255, 0.93) !important;
+	color: rgba(58, 33, 75, 0.95) !important;
+	box-shadow: 0 1px 2px rgba(14, 6, 20, 0.12);
+}
+
+.feed-card-engagement .feed-card-engagement-inner-challenge-inactive .feed-card-engagement-cta::before,
+.feed-card-engagement-inner-challenge-inactive .feed-card-engagement-cta::before {
+	content: none;
+}
+
+.feed-card-engagement-inner-challenge-inactive .feed-card-engagement-cta:hover {
+	background: #ffffff !important;
+	color: rgba(44, 22, 58, 0.98) !important;
+	box-shadow: 0 2px 6px rgba(14, 6, 20, 0.14);
+}
+
 .feed-card-engagement-actions {
 	display: flex;
 	align-items: center;
@@ -540,6 +705,45 @@ a.feed-card-engagement-title.feed-card-engagement-title-link:hover {
 
 	.feed-card-engagement-inner-challenge .feed-card-engagement-hook {
 		font-size: 0.95rem;
+	}
+
+	.feed-card-engagement-next-body {
+		gap: 8px;
+	}
+
+	.feed-card-engagement-thumb-wrap--focus {
+		width: 50px;
+		height: 50px;
+	}
+
+	.feed-card-engagement-next-title {
+		font-size: 0.94rem;
+	}
+
+	.feed-card-engagement-next-subtitle {
+		font-size: 0.76rem;
+	}
+
+	.feed-card-engagement-main--inactive-secondary {
+		padding-top: 8px;
+		gap: 6px;
+	}
+
+	.feed-card-engagement-inactive-note {
+		font-size: 0.78rem;
+	}
+
+	.feed-card-engagement-current-title {
+		font-size: 0.8rem;
+	}
+
+	.feed-card-engagement-current-subtitle {
+		font-size: 0.72rem;
+	}
+
+	.feed-card-engagement-inner-challenge-inactive .feed-card-engagement-status-chip {
+		font-size: 0.62rem;
+		padding: 5px 8px;
 	}
 
 	.feed-card-engagement-actions {
