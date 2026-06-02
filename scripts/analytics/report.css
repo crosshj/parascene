@@ -177,6 +177,40 @@ ul {
 	margin-bottom: 16px;
 }
 
+/* Milestone progress (engagement and other reports) */
+
+.milestone-summary {
+	margin: 0 0 14px;
+}
+
+.milestone-bar {
+	height: 8px;
+	background: #e2e8f0;
+	border-radius: 4px;
+	overflow: hidden;
+	min-width: 120px;
+}
+
+.milestone-bar span {
+	display: block;
+	height: 100%;
+	background: #b45309;
+	border-radius: 4px;
+}
+
+.milestone-bar.is-met span {
+	background: #0f766e;
+}
+
+table.milestone-table td:nth-child(4) {
+	width: 28%;
+}
+
+table.milestone-table tr.milestone-met td:last-child {
+	color: #0f766e;
+	font-weight: 600;
+}
+
 .stat-box {
 	min-width: 128px;
 	padding: 12px;

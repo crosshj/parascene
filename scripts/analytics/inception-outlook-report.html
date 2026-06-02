@@ -1,0 +1,78 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Parascene — inception &amp; outlook</title>
+<meta name="darkreader-lock" />
+{{!styleBlock}}
+<p class="small"><a href=".">Up one folder</a></p>
+<h1>Parascene — inception &amp; outlook</h1>
+<p class="lede">{{lede}}</p>
+<p class="small">Generated: {{generatedAt}}</p>
+
+<section class="card card-lg">
+	<h2>How to read this</h2>
+	<p>{{methodology}}</p>
+	<p class="small">{{milestoneLegend}}</p>
+</section>
+
+<section>
+	<h2>Story so far</h2>
+	<ul>{{!storyHtml}}</ul>
+</section>
+
+<section>
+	<h2>Outlook (~{{forwardWeeksShort}} weeks and ~{{forwardMonths}} months)</h2>
+	<p class="small">{{outlookSummary}}</p>
+	{{!outlookTableHtml}}
+</section>
+
+<section>
+	<h2>Total users (signups, cumulative)</h2>
+	<p class="small">Solid = actual · Dashed = projected. Vertical ticks = stable-small-room milestones (achieved or projected).</p>
+	<div class="chart-wrap">{{!usersChartHtml}}</div>
+</section>
+
+<section>
+	<h2>Action MAU (core actions per month)</h2>
+	<p class="small">Logged-in users with ≥1 core action in the month. Current month omitted from trend (partial).</p>
+	<div class="chart-wrap">{{!mauChartHtml}}</div>
+</section>
+
+<section>
+	<h2>Action WAU (core actions per week)</h2>
+	<p class="small">Stable-small-room targets: action WAU ≥ 20, visit WAU ≥ 25 (when pulse data exists).</p>
+	<div class="chart-wrap">{{!wauChartHtml}}</div>
+</section>
+
+<section>
+	<h2>Logged-in visit DAU (visit pulse)</h2>
+	<p class="small">From {{pulseFromDay}}. Visit WAU ≥ 25 milestones use weekly pulse rollups on the WAU chart.</p>
+	<div class="chart-wrap">{{!visitDauChartHtml}}</div>
+</section>
+
+<section class="card card-lg">
+	<h2>Stable small room — roadmap</h2>
+	<p class="small">{{milestoneMetCount}} of {{milestoneTotalCount}} criteria met. Window metrics (returning rate, top-2 share) use {{milestoneWindowLabel}}. Orange “projected hit” uses the same weekly/monthly regression as the dashed chart tails.</p>
+	{{!milestoneTableHtml}}
+</section>
+
+<section>
+	<h2>Engagement depth (weekly)</h2>
+	<p class="small">Commenters, publishers, and action-DAU intensity per US/Eastern week. Dashed = projected from last {{regressionWeeks}} complete weeks.</p>
+	<h3>Distinct commenters</h3>
+	<div class="chart-wrap">{{!commentersChartHtml}}</div>
+	<h3>Distinct publishers</h3>
+	<div class="chart-wrap">{{!publishersChartHtml}}</div>
+	<h3>Avg action DAU</h3>
+	<div class="chart-wrap">{{!avgActionDauChartHtml}}</div>
+	<h3>High-intensity days (action DAU ≥ 12)</h3>
+	<div class="chart-wrap">{{!highActionDaysChartHtml}}</div>
+	<h3>Top-2 share of core actions</h3>
+	<p class="small">Share of weekly core actions from the two most active users. Stable-small-room target ≤ 50% (green line). Lower = more distributed participation.</p>
+	<div class="chart-wrap">{{!top2ShareChartHtml}}</div>
+</section>
+
+<section>
+	<h2>Scenario table</h2>
+	<p class="small">Projected values at month-end if recent trend slope holds (rounded).</p>
+	{{!scenarioTableHtml}}
+</section>

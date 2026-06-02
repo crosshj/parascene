@@ -1053,7 +1053,13 @@ async function main() {
 	console.log(`wrote ${OUT}`)
 }
 
-main().catch(err => {
-	console.error(err)
-	process.exit(1)
-})
+export { buildStory, loadFromDbInstance, addDays, toIsoDate, startOfUtcDay, startOfUtcWeek }
+
+const isCli =
+	process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+if (isCli) {
+	main().catch((err) => {
+		console.error(err)
+		process.exit(1)
+	})
+}

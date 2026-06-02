@@ -30,6 +30,25 @@ const DEFAULT_DAYS = Number(process.env.ENGAGEMENT_WINDOW_DAYS || 30);
 const PULSE_DAY_MS = 24 * 60 * 60 * 1000;
 const CORE_ACTION_TYPES = new Set(["creation", "publish", "comment", "like", "reaction", "tip_sent"]);
 
+/** Product milestone: “stable small room” — logged-in engagement, not traffic. */
+const MILESTONE_STABLE_SMALL_ROOM = {
+	id: "stable_small_room",
+	title: "Stable small room",
+	subtitle:
+		"Feels inhabited to a new logged-in visitor. Measured on the latest week in this window (US East Mon–Sun); sustain = 4 consecutive weeks with action WAU ≥ 20.",
+	targets: {
+		action_wau: 20,
+		visit_wau: 25,
+		avg_action_dau: 12,
+		high_action_days: 3,
+		commenters: 5,
+		publishers: 3,
+		returning_visit_rate: 0.5,
+		top2_action_share_max: 0.5,
+		action_wau_streak_weeks: 4
+	}
+};
+
 const esc = (s) =>
 	String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
@@ -375,6 +394,171 @@ function multiSparkline(
 	</svg>`;
 }
 
+function longestWeeklyStreak(weeklyRows, predicate) {
+	let best = 0;
+	let cur = 0;
+	for (const w of weeklyRows) {
+		if (predicate(w)) {
+			cur++;
+			if (cur > best) best = cur;
+		} else {
+			cur = 0;
+		}
+	}
+	return best;
+}
+
+function milestoneCriterion({ label, value, target, compare, hint = "" }) {
+	const num = Number(value);
+	const tgt = Number(target);
+	let met = false;
+	let pct = 0;
+	if (compare === "gte") {
+		met = num >= tgt;
+		pct = tgt > 0 ? Math.min(100, Math.round((num / tgt) * 100)) : met ? 100 : 0;
+	} else if (compare === "lte") {
+		met = num <= tgt;
+		if (met) pct = 100;
+		else if (tgt > 0) pct = Math.max(0, Math.round(100 - ((num - tgt) / tgt) * 100));
+	}
+	const currentLabel = compare === "lte" ? `${fmt2(num * 100)}%` : String(Number.isInteger(num) ? num : fmt1(num));
+	const targetLabel = compare === "lte" ? `≤ ${fmt2(tgt * 100)}%` : `≥ ${tgt}`;
+	return { label, hint, currentLabel, targetLabel, met, pct: Math.max(0, Math.min(100, pct)) };
+}
+
+function buildStableSmallRoomMilestone(report, events, actionCountsByUser, coreActions) {
+	const targets = MILESTONE_STABLE_SMALL_ROOM.targets;
+	const weeklyRows = report.weeklyRows || [];
+	const latestWeek = weeklyRows[weeklyRows.length - 1];
+	const latestWeekStart = latestWeek?.week_start;
+	const latestWeekDays = (report.dailyRows || []).filter((d) => d.week_start === latestWeekStart);
+	const latestWeekDaySet = new Set(latestWeekDays.map((d) => d.day));
+
+	const actionWau = Number(latestWeek?.action_wau) || 0;
+	const visitWau = Number(latestWeek?.visit_wau) || 0;
+	const avgActionDau = latestWeekDays.length ? avg(latestWeekDays.map((d) => d.action_dau)) : 0;
+	const highActionDays = latestWeekDays.filter((d) => d.action_dau >= targets.avg_action_dau).length;
+	const highActionTarget = Math.min(targets.high_action_days, latestWeekDays.length || targets.high_action_days);
+
+	const weekEvents = events.filter((e) => latestWeekDaySet.has(e.day));
+	const commenters = new Set(weekEvents.filter((e) => e.type === "comment").map((e) => e.user_id)).size;
+	const publishers = new Set(weekEvents.filter((e) => e.type === "publish").map((e) => e.user_id)).size;
+
+	const visitMau = Number(report.visitMau) || 0;
+	const returningUsers = Number(report.returningVisitUsers) || 0;
+	const returningRate = visitMau ? returningUsers / visitMau : 0;
+
+	const sortedActions = [...actionCountsByUser.entries()].sort((a, b) => b[1] - a[1]);
+	const top2Actions = (sortedActions[0]?.[1] || 0) + (sortedActions[1]?.[1] || 0);
+	const top2Share = coreActions > 0 ? top2Actions / coreActions : 0;
+
+	const actionWauStreak = longestWeeklyStreak(weeklyRows, (w) => Number(w.action_wau) >= targets.action_wau);
+	const weeksHitActionWau = weeklyRows.filter((w) => Number(w.action_wau) >= targets.action_wau).length;
+
+	const criteria = [
+		milestoneCriterion({
+			label: "Action WAU (latest week)",
+			value: actionWau,
+			target: targets.action_wau,
+			compare: "gte",
+			hint: latestWeek?.week_label
+		}),
+		milestoneCriterion({
+			label: "Visit WAU (latest week)",
+			value: visitWau,
+			target: targets.visit_wau,
+			compare: "gte",
+			hint: latestWeek?.week_label
+		}),
+		milestoneCriterion({
+			label: "Avg action DAU (latest week)",
+			value: avgActionDau,
+			target: targets.avg_action_dau,
+			compare: "gte"
+		}),
+		milestoneCriterion({
+			label: `Days with action DAU ≥ ${targets.avg_action_dau} (latest week)`,
+			value: highActionDays,
+			target: highActionTarget,
+			compare: "gte",
+			hint: `${latestWeekDays.length} day(s) in window for this week`
+		}),
+		milestoneCriterion({
+			label: "Distinct commenters (latest week)",
+			value: commenters,
+			target: targets.commenters,
+			compare: "gte"
+		}),
+		milestoneCriterion({
+			label: "Distinct publishers (latest week)",
+			value: publishers,
+			target: targets.publishers,
+			compare: "gte"
+		}),
+		milestoneCriterion({
+			label: "Returning logged-in (2+ visit days ÷ visit MAU)",
+			value: returningRate,
+			target: targets.returning_visit_rate,
+			compare: "gte",
+			hint: `window ${report.fromDay} → ${report.toDay}`
+		}),
+		milestoneCriterion({
+			label: "Top 2 users’ share of core actions",
+			value: top2Share,
+			target: targets.top2_action_share_max,
+			compare: "lte",
+			hint: `window ${report.fromDay} → ${report.toDay}`
+		}),
+		milestoneCriterion({
+			label: "Consecutive weeks with action WAU ≥ 20",
+			value: actionWauStreak,
+			target: targets.action_wau_streak_weeks,
+			compare: "gte",
+			hint: `${weeksHitActionWau} of ${weeklyRows.length} week(s) in this report hit ≥ 20`
+		})
+	];
+
+	const metCount = criteria.filter((c) => c.met).length;
+	const totalCount = criteria.length;
+
+	return {
+		...MILESTONE_STABLE_SMALL_ROOM,
+		latestWeekLabel: latestWeek?.week_label || "—",
+		metCount,
+		totalCount,
+		summaryLine: `${metCount} of ${totalCount} criteria met`,
+		progressPct: totalCount ? Math.round((metCount / totalCount) * 100) : 0,
+		criteria
+	};
+}
+
+function renderMilestoneHtml(milestone) {
+	if (!milestone?.criteria?.length) {
+		return '<section><h2>Milestone</h2><p class="small">Not enough data in this window.</p></section>';
+	}
+	const rows = milestone.criteria
+		.map((c) => {
+			const hint = c.hint ? `<div class="small">${esc(c.hint)}</div>` : "";
+			return `<tr class="${c.met ? "milestone-met" : ""}">
+			<td>${esc(c.label)}${hint}</td>
+			<td>${esc(c.currentLabel)}</td>
+			<td>${esc(c.targetLabel)}</td>
+			<td><div class="milestone-bar${c.met ? " is-met" : ""}" title="${c.pct}% toward target"><span style="width:${c.pct}%"></span></div></td>
+			<td>${c.met ? "Met" : "Not yet"}</td>
+		</tr>`;
+		})
+		.join("");
+	return `<section class="milestone-section">
+	<h2>Milestone: ${esc(milestone.title)}</h2>
+	<p class="small">${esc(milestone.subtitle)}</p>
+	<p class="milestone-summary"><strong>${esc(milestone.summaryLine)}</strong> · Latest week: ${esc(milestone.latestWeekLabel)}</p>
+	<table class="milestone-table">
+		<thead><tr><th>Criterion</th><th>Current</th><th>Target</th><th>Progress</th><th>Status</th></tr></thead>
+		<tbody>${rows}</tbody>
+	</table>
+</section>`;
+}
+
 function buildShareTryFunnel(shareRows, tryRows, windowStartMs, windowEndMs) {
 	const clientIdFromMeta = (m) => {
 		const a = typeof m?.prsn_cid === "string" ? m.prsn_cid.trim() : "";
@@ -517,7 +701,23 @@ function buildEngagementSummaryExport(report) {
 		share_try_funnel: report.shareTryFunnel,
 		action_mix: report.actionCounts,
 		story_bullets: report.observations,
-		engagement_leaders_anonymized: anonymizedLeaders
+		engagement_leaders_anonymized: anonymizedLeaders,
+		milestone: report.milestone
+			? {
+					id: report.milestone.id,
+					title: report.milestone.title,
+					met_count: report.milestone.metCount,
+					total_count: report.milestone.totalCount,
+					progress_pct: report.milestone.progressPct,
+					criteria: report.milestone.criteria.map((c) => ({
+						label: c.label,
+						current: c.currentLabel,
+						target: c.targetLabel,
+						met: c.met,
+						progress_pct: c.pct
+					}))
+				}
+			: null
 	};
 }
 
@@ -1110,6 +1310,20 @@ function buildReport(fromDay, toDay, pulseRows, users, events, shareTryFunnel, d
 		observations.push("No flushed visit pulse days in this window — run flush for completed days first.");
 	}
 
+	const milestone = buildStableSmallRoomMilestone(
+		{
+			fromDay,
+			toDay,
+			weeklyRows,
+			dailyRows,
+			visitMau: String(visitMau),
+			returningVisitUsers: String(returningVisitUsers)
+		},
+		events,
+		actionCountsByUser,
+		coreActions
+	);
+
 	return {
 		fromDay,
 		toDay,
@@ -1152,7 +1366,8 @@ function buildReport(fromDay, toDay, pulseRows, users, events, shareTryFunnel, d
 			visitMau,
 			actionMau
 		},
-		observations
+		observations,
+		milestone
 	};
 }
 
@@ -1208,6 +1423,7 @@ async function renderHtml(report) {
 		returningVisitRate: report.returningVisitRate,
 		avgVisitDaysPerMau: report.avgVisitDaysPerMau,
 		churnParagraph: report.churn.paragraph,
+		milestoneHtml: renderMilestoneHtml(report.milestone),
 		observationsHtml: report.observations.map((o) => `<li>${esc(o)}</li>`).join(""),
 		trafficDauChartHtml,
 		engagedDauChartHtml,
@@ -1364,8 +1580,8 @@ async function summarizePriorPeriod(fromDay, toDay) {
 	};
 }
 
-async function main() {
-	const { fromDay, toDay } = resolveWindow();
+/** Load engagement report + milestone for a US East day window (same as monthly report). */
+export async function loadEngagementReportForWindow(fromDay, toDay) {
 	const [pulseRows, engagement, priorSummary] = await Promise.all([
 		loadPulseDays(fromDay, toDay),
 		loadEngagementData(fromDay, toDay),
@@ -1381,6 +1597,14 @@ async function main() {
 		engagement.detailByUser,
 		priorSummary
 	);
+	return report;
+}
+
+export { buildStableSmallRoomMilestone, renderMilestoneHtml };
+
+async function main() {
+	const { fromDay, toDay } = resolveWindow();
+	const report = await loadEngagementReportForWindow(fromDay, toDay);
 	report.leaders = await enrichLeaders(report.leaders);
 	const html = await renderHtml(report);
 	const out =
@@ -1392,7 +1616,11 @@ async function main() {
 	console.log(out);
 }
 
-main().catch((err) => {
-	console.error("[engagement-monthly-report]", err?.message || err);
-	process.exit(1);
-});
+const isCli =
+	process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isCli) {
+	main().catch((err) => {
+		console.error("[engagement-monthly-report]", err?.message || err);
+		process.exit(1);
+	});
+}
