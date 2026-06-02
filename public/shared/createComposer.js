@@ -862,9 +862,6 @@ export function mountCreateComposer(host, opts = {}) {
 		const trimmed = typeof url === 'string' ? url.trim() : '';
 		const cid = Number(creationId);
 		if (!trimmed || !Number.isFinite(cid) || cid <= 0) return;
-		revokeAttachmentBlobUrls();
-		attachmentItems = [];
-		attachmentMutateSourceIds = [];
 		attachmentItems.push(trimmed);
 		attachmentMutateSourceIds.push(cid);
 		saveAttachmentsToStorage();
