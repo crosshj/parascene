@@ -1,31 +1,7 @@
 [
   {
-    "name": "channels++",
-    "description": "Private/public channels where only way to get image is to be part of channel. Includes publishing to channel.",
-    "cost": 50,
-    "impact": 61,
-    "dependsOn": [],
-    "starred": false
-  },
-  {
     "name": "Feed Content++",
     "description": "something different than yesterday",
-    "cost": 50,
-    "impact": 50,
-    "dependsOn": [],
-    "starred": false
-  },
-  {
-    "name": "Inline Feed Callouts",
-    "description": "currently the newbie feed has callouts, but the other people's feed do not.  Imagine: upcoming events + discord + nudges, etc",
-    "cost": 50,
-    "impact": 50,
-    "dependsOn": [],
-    "starred": false
-  },
-  {
-    "name": "expose todo/roadmap",
-    "description": "give people an idea what is upcoming + merge with feature requests",
     "cost": 50,
     "impact": 50,
     "dependsOn": [],

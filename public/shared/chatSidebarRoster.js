@@ -22,6 +22,9 @@ function escapeHtmlPseudoStrip(str) {
  */
 export const SIDEBAR_PSEUDO_STRIP_ORDER = ['feed', 'challenges', 'creations', 'comments', 'explore', 'prompt-library', 'feedback'];
 
+/** Opt-in chat sidebar row (injected after Feed when enabled). Not in SSR strip order. */
+export const FEED_BETA_PSEUDO_STRIP_SLUG = 'feed-beta';
+
 /** Notes-to-self shortcut: not a channel, opens the viewer's own DM. */
 export const SIDEBAR_NOTES_STRIP_HREF = '/chat/notes';
 
@@ -31,6 +34,7 @@ export const SIDEBAR_HELP_STRIP_HREF = '/help';
 /** @type {Record<string, string>} */
 const SIDEBAR_PSEUDO_STRIP_TITLES = {
 	feed: 'Feed',
+	'feed-beta': 'Feed [beta]',
 	challenges: 'Challenges',
 	explore: 'Explore',
 	'prompt-library': 'Prompt Library',
@@ -112,9 +116,10 @@ export function inferPseudoStripSlugFromChannelMeta(meta) {
 }
 
 /** Exclude these from the collapsible “Channels” list — they render only in the top strip. */
-export const SIDEBAR_TOP_STRIP_CHANNEL_SLUGS = new Set(
-	SIDEBAR_PSEUDO_STRIP_ORDER.map((s) => s.toLowerCase())
-);
+export const SIDEBAR_TOP_STRIP_CHANNEL_SLUGS = new Set([
+	...SIDEBAR_PSEUDO_STRIP_ORDER.map((s) => s.toLowerCase()),
+	FEED_BETA_PSEUDO_STRIP_SLUG
+]);
 
 /**
  * Strip slugs that mirror primary app chrome: `app-navigation` links in `pages/app.html` (feed, explore, creations)
@@ -426,6 +431,63 @@ export function buildSidebarHelpStripAnchorHtml(requestPath = '') {
  * @param {string} [requestPath] — e.g. Express `req.path` so the current pseudo channel can show `is-active` on first paint.
  * @returns {string}
  */
+/**
+ * Feed [beta] strip row (client-injected when user is opted in).
+ * @param {string} [requestPath]
+ * @returns {string}
+ */
+export function buildFeedBetaStripAnchorHtml(requestPath = '') {
+	const slug = FEED_BETA_PSEUDO_STRIP_SLUG;
+	const title = SIDEBAR_PSEUDO_STRIP_TITLES[slug] || 'Feed [beta]';
+	const href = `/chat/c/${encodeURIComponent(slug)}`;
+	const activeSlug = pseudoStripActiveSlugFromRequestPath(requestPath);
+	const activeCls = activeSlug === slug ? ' is-active' : '';
+	const iconAvatarHtml = pseudoStripRouteIconAvatarHtml('feed');
+	const avatarHtml =
+		iconAvatarHtml ||
+		`<div class="comment-avatar connect-chat-thread-row-channel-avatar chat-page-sidebar-channel-avatar" style="background: ${escapeHtmlPseudoStrip(getAvatarColor(slug))};" aria-hidden="true">#</div>`;
+	return `<a class="chat-page-sidebar-row chat-page-sidebar-row--feed-beta${activeCls}" href="${escapeHtmlPseudoStrip(href)}" data-chat-pseudo-slug="${escapeHtmlPseudoStrip(slug)}">
+				${avatarHtml}
+				<div class="chat-page-sidebar-row-body">
+					<div class="chat-page-sidebar-row-title-line">
+						<span class="chat-page-sidebar-row-title">${escapeHtmlPseudoStrip(title)}</span>
+					</div>
+				</div>
+			</a>`;
+}
+
+/**
+ * Show or hide Feed [beta] in the pseudo strip (after Feed).
+ * @param {HTMLElement|null|undefined} listEl — `[data-chat-sidebar-pseudo-list]`
+ * @param {{ enabled?: boolean, requestPath?: string }} [opts]
+ */
+export function syncFeedBetaPseudoStripRow(listEl, opts = {}) {
+	if (!(listEl instanceof HTMLElement)) return;
+	const slug = FEED_BETA_PSEUDO_STRIP_SLUG;
+	const enabled = opts.enabled === true;
+	const existing = listEl.querySelector(`[data-chat-pseudo-slug="${slug}"]`);
+	if (!enabled) {
+		existing?.remove();
+		return;
+	}
+	const requestPath = String(opts.requestPath || '');
+	if (existing instanceof HTMLElement) {
+		const activeSlug = pseudoStripActiveSlugFromRequestPath(requestPath);
+		existing.classList.toggle('is-active', activeSlug === slug);
+		return;
+	}
+	const tpl = document.createElement('template');
+	tpl.innerHTML = buildFeedBetaStripAnchorHtml(requestPath);
+	const row = tpl.content.firstElementChild;
+	if (!(row instanceof HTMLElement)) return;
+	const feedRow = listEl.querySelector('[data-chat-pseudo-slug="feed"]');
+	if (feedRow instanceof HTMLElement) {
+		feedRow.insertAdjacentElement('afterend', row);
+	} else {
+		listEl.appendChild(row);
+	}
+}
+
 export function buildSidebarPseudoStripListStaticHtml(requestPath = '') {
 	const activeSlug = pseudoStripActiveSlugFromRequestPath(requestPath);
 	const channelHtml = SIDEBAR_PSEUDO_STRIP_ORDER.map((slug) => {

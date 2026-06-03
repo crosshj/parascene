@@ -626,6 +626,25 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		updateUserFeedBetaEnabled: {
+			run: async (userId, feedBetaEnabled) => {
+				const { data: current, error: selectError } = await serviceClient
+					.from(prefixedTable("users"))
+					.select("meta")
+					.eq("id", userId)
+					.maybeSingle();
+				if (selectError) throw selectError;
+				const existing = current?.meta ?? null;
+				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
+				meta.feedBetaEnabled = Boolean(feedBetaEnabled);
+				const { error } = await serviceClient
+					.from(prefixedTable("users"))
+					.update({ meta })
+					.eq("id", userId);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
 		updateUserReferral: {
 			run: async (userId, referral) => {
 				if (!referral || typeof referral !== "object") return { changes: 0 };

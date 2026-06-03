@@ -102,6 +102,10 @@ class AppModalUser extends HTMLElement {
 		this._grantFounderButton = this.querySelector('[data-user-grant-founder-button]');
 		this._revokeFounderButton = this.querySelector('[data-user-revoke-founder-button]');
 		this._founderError = this.querySelector('[data-user-founder-error]');
+		this._feedBetaZone = this.querySelector('[data-user-feed-beta-zone]');
+		this._feedBetaValue = this.querySelector('[data-user-feed-beta-value]');
+		this._feedBetaButton = this.querySelector('[data-user-feed-beta-button]');
+		this._feedBetaError = this.querySelector('[data-user-feed-beta-error]');
 		this._overlay?.addEventListener('click', (e) => {
 			if (e.target?.dataset?.userClose !== undefined || e.target === this._overlay) this.close();
 		});
@@ -130,6 +134,7 @@ class AppModalUser extends HTMLElement {
 		this.querySelector('[data-user-suspend-confirm-cancel]')?.addEventListener('click', () => this.hideSuspendConfirm());
 		this._grantFounderButton?.addEventListener('click', () => this.handleGrantFounder());
 		this._revokeFounderButton?.addEventListener('click', () => this.handleRevokeFounder());
+		this._feedBetaButton?.addEventListener('click', () => this.handleToggleFeedBeta());
 		this.loadViewerUser();
 	}
 
@@ -260,6 +265,20 @@ class AppModalUser extends HTMLElement {
 									<button type="button" class="btn-secondary user-revoke-founder-button" data-user-revoke-founder-button style="display: none;">Revoke gifted founder</button>
 								</div>
 								<div class="alert error user-founder-error" data-user-founder-error hidden></div>
+							</div>
+						</div>
+						<div class="user-modal-section" data-user-feed-beta-zone style="display: none;">
+							<div class="user-modal-section-title user-modal-section-title-no-border">Feed [beta]</div>
+							<div class="user-feed-beta-zone">
+								<div class="user-modal-field">
+									<div class="user-modal-field-label">Chat feed beta</div>
+									<div class="user-modal-field-value" data-user-feed-beta-value>false</div>
+								</div>
+								<p class="user-modal-muted">Shows Feed [beta] in chat sidebar. Admins always have access.</p>
+								<div class="user-status-actions">
+									<button type="button" class="btn-secondary" data-user-feed-beta-button>Enable Feed [beta]</button>
+								</div>
+								<div class="alert error user-feed-beta-error" data-user-feed-beta-error hidden></div>
 							</div>
 						</div>
 					</div>
@@ -496,6 +515,88 @@ class AppModalUser extends HTMLElement {
 			this.updateFounderZone(user);
 		} else if (this._founderZone) {
 			this._founderZone.style.display = 'none';
+		}
+		this.updateFeedBetaZone(user);
+	}
+
+	updateFeedBetaZone(user) {
+		const isAdminViewer = this._viewerRole === 'admin';
+		const targetId = Number(user?.id);
+		if (!this._feedBetaZone || !isAdminViewer || !Number.isFinite(targetId) || targetId <= 0) {
+			if (this._feedBetaZone) this._feedBetaZone.style.display = 'none';
+			return;
+		}
+		this._feedBetaZone.style.display = '';
+		const enabled =
+			user?.feedBetaEnabled === true || user?.meta?.feedBetaEnabled === true;
+		if (this._feedBetaValue) {
+			this._feedBetaValue.textContent = enabled ? 'true' : 'false';
+		}
+		if (this._feedBetaButton) {
+			this._feedBetaButton.textContent = enabled ? 'Disable Feed [beta]' : 'Enable Feed [beta]';
+		}
+		if (this._feedBetaError) {
+			this._feedBetaError.hidden = true;
+			this._feedBetaError.textContent = '';
+		}
+	}
+
+	async handleToggleFeedBeta() {
+		const userId = Number(this._currentUser?.id);
+		if (!Number.isFinite(userId) || userId <= 0) return;
+		const enabled =
+			this._currentUser?.feedBetaEnabled === true ||
+			this._currentUser?.meta?.feedBetaEnabled === true;
+		const next = !enabled;
+		if (this._feedBetaButton) {
+			this._feedBetaButton.disabled = true;
+			this._feedBetaButton.classList.add('is-loading');
+		}
+		if (this._feedBetaError) {
+			this._feedBetaError.hidden = true;
+			this._feedBetaError.textContent = '';
+		}
+		try {
+			const res = await fetch(`/admin/users/${userId}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify({ feedBetaEnabled: next })
+			});
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				const message = data?.error || 'Failed to update Feed [beta] access.';
+				if (this._feedBetaError) {
+					this._feedBetaError.hidden = false;
+					this._feedBetaError.textContent = message;
+				} else {
+					alert(message);
+				}
+				return;
+			}
+			if (this._currentUser) {
+				this._currentUser.feedBetaEnabled = next;
+				if (this._currentUser.meta && typeof this._currentUser.meta === 'object') {
+					this._currentUser.meta.feedBetaEnabled = next;
+				} else {
+					this._currentUser.meta = { feedBetaEnabled: next };
+				}
+			}
+			this.updateFeedBetaZone(this._currentUser);
+			document.dispatchEvent(new CustomEvent('user-updated', { detail: { userId } }));
+		} catch (err) {
+			const message = err?.message || 'Failed to update Feed [beta] access.';
+			if (this._feedBetaError) {
+				this._feedBetaError.hidden = false;
+				this._feedBetaError.textContent = message;
+			} else {
+				alert(message);
+			}
+		} finally {
+			if (this._feedBetaButton) {
+				this._feedBetaButton.disabled = false;
+				this._feedBetaButton.classList.remove('is-loading');
+			}
 		}
 	}
 

@@ -891,16 +891,40 @@ export async function initChatPage(root, options = {}) {
 	const qs = getImportQuery(v);
 	const chatSidebarServerGearSvg = gearIcon('chat-page-sidebar-server-settings-icon');
 
+	function viewerCanAccessFeedBeta() {
+		return chatViewerFeedBetaEnabled === true;
+	}
+
+	function syncChatFeedBetaSidebarRow() {
+		const sidebar = document.querySelector('[data-chat-sidebar]');
+		const listEl = sidebar?.querySelector('[data-chat-sidebar-pseudo-list]');
+		rosterMod.syncFeedBetaPseudoStripRow(listEl, {
+			enabled: viewerCanAccessFeedBeta(),
+			requestPath: window.location.pathname
+		});
+	}
+
 	async function hydrateAudibleNotificationsFromProfileOnce() {
 		try {
-			const r = await fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 2000 });
-			if (r.ok && r.data) {
-				hydrateChatAudibleNotificationsFromServer(r.data.audibleNotifications);
+			const [profileR, feedBetaR] = await Promise.all([
+				fetchJsonWithStatusDeduped('/api/profile', { credentials: 'include' }, { windowMs: 2000 }),
+				fetchJsonWithStatusDeduped('/api/feed-beta/access', { credentials: 'include' }, { windowMs: 2000 })
+			]);
+			if (profileR.ok && profileR.data) {
+				hydrateChatAudibleNotificationsFromServer(profileR.data.audibleNotifications);
+			}
+			if (feedBetaR.ok && feedBetaR.data) {
+				chatViewerFeedBetaEnabled = feedBetaR.data.canAccess === true;
+				syncChatFeedBetaSidebarRow();
 			}
 		} catch {
 			// ignore
 		}
 	}
+
+	document.addEventListener('user-updated', () => {
+		void hydrateAudibleNotificationsFromProfileOnce();
+	});
 
 	function chatReactionGetCount(val) {
 		if (typeof val === 'number' && Number.isFinite(val)) return Math.max(0, val);
@@ -933,6 +957,8 @@ export async function initChatPage(root, options = {}) {
 	let chatViewerIsAdmin = false;
 	/** Set from GET /api/chat/threads (`viewer_is_founder`) or threads cache. */
 	let chatViewerIsFounder = false;
+	/** Set from GET /api/feed-beta/access (`canAccess`). */
+	let chatViewerFeedBetaEnabled = false;
 	/** Canvas list for current channel thread (GET .../canvases). */
 	let chatCanvasesList = [];
 	/** Message id pinned for the active channel thread (from GET .../canvases). */
@@ -1748,6 +1774,7 @@ export async function initChatPage(root, options = {}) {
 	function isNewestFirstBrowseLane(laneSlug) {
 		if (
 			laneSlug === 'feed' ||
+			laneSlug === 'feed-beta' ||
 			laneSlug === 'explore' ||
 			laneSlug === 'creations' ||
 			laneSlug === 'comments' ||
@@ -1764,6 +1791,7 @@ export async function initChatPage(root, options = {}) {
 		const slug = String(channelSlug || '').trim().toLowerCase();
 		const pseudoLane =
 			slug === 'feed' ||
+			slug === 'feed-beta' ||
 			slug === 'explore' ||
 			slug === 'creations' ||
 			slug === 'comments' ||
@@ -2826,7 +2854,11 @@ export async function initChatPage(root, options = {}) {
 	}
 
 	function shouldHideBottomComposers() {
-		return isFeedDoomLaneHideBottomComposers() || isMobilePseudoChannelHideBottomComposers();
+		return (
+			isFeedDoomLaneHideBottomComposers() ||
+			isMobilePseudoChannelHideBottomComposers() ||
+			activePseudoChannelSlug === 'feed-beta'
+		);
 	}
 
 	/** Full create composer overlay — desktop/tablet pseudo channels only. */
@@ -5523,6 +5555,7 @@ export async function initChatPage(root, options = {}) {
 				if (!patched) {
 					syncChatSidebarPseudoStripActiveNow(window.location.pathname);
 				}
+				syncChatFeedBetaSidebarRow();
 			}
 
 			const dmHtml = rosterMod.buildChatSidebarDmListHtml(dms, rowHtml);
@@ -7675,6 +7708,67 @@ export async function initChatPage(root, options = {}) {
 				messagesEl.removeAttribute('aria-busy');
 			}
 			if (!isStaleChatPane(paneEpoch) && activePseudoChannelSlug === 'feed') {
+				scrollChatFeedPseudoChannelToTop();
+			}
+			rebuildTopbarMenuDynamic();
+		}
+	}
+
+	async function loadFeedBetaChannelMessages() {
+		const messagesEl = root.querySelector('[data-chat-messages]');
+		if (!messagesEl) return;
+		const paneEpoch = bumpChatMessagesPaneEpoch();
+		enterPseudoChannelLoad();
+		teardownCommentsChannelLoadMore();
+		teardownFeedChannelLoadMore();
+		teardownExploreChannelLoadMore();
+		messagesEl.setAttribute('aria-busy', 'true');
+		try {
+			if (isStaleChatPane(paneEpoch)) return;
+			const r = await fetchJsonWithStatusDeduped(
+				'/api/feed-beta',
+				{ credentials: 'include' },
+				{ windowMs: 0 }
+			);
+			if (isStaleChatPane(paneEpoch)) return;
+			clearPageUsers();
+			messagesEl.innerHTML = '';
+			messagesEl.removeAttribute('aria-busy');
+			if (!r.ok) {
+				const msg =
+					r.data?.error ||
+					r.data?.message ||
+					(r.status === 403
+						? 'Feed [beta] is not enabled for your account.'
+						: 'Could not load Feed [beta].');
+				messagesEl.innerHTML = renderEmptyState({
+					message: typeof msg === 'string' ? msg : 'Could not load Feed [beta].'
+				});
+				scrollChatFeedPseudoChannelToTop();
+				return;
+			}
+			const apiMessage =
+				typeof r.data?.message === 'string' && r.data.message.trim()
+					? r.data.message.trim()
+					: 'Ranked feed delivery is not implemented yet.';
+			messagesEl.innerHTML = renderEmptyState({ message: apiMessage });
+			scrollChatFeedPseudoChannelToTop();
+		} catch (err) {
+			console.error('[Chat page] feed-beta channel:', err);
+			if (!isStaleChatPane(paneEpoch)) {
+				paintChatMessagesPaneError(
+					messagesEl,
+					err?.message || 'Could not load Feed [beta].',
+					"Couldn't load Feed [beta]"
+				);
+			}
+		} finally {
+			exitPseudoChannelLoad();
+			unlockChatMessagesPaneScroll(messagesEl);
+			if (!isStaleChatPane(paneEpoch) && messagesEl.isConnected) {
+				messagesEl.removeAttribute('aria-busy');
+			}
+			if (!isStaleChatPane(paneEpoch) && activePseudoChannelSlug === 'feed-beta') {
 				scrollChatFeedPseudoChannelToTop();
 			}
 			rebuildTopbarMenuDynamic();
@@ -10270,6 +10364,7 @@ export async function initChatPage(root, options = {}) {
 			const slug = String(parsed.slug || '').trim().toLowerCase();
 			if (
 				slug === 'feed' ||
+				slug === 'feed-beta' ||
 				slug === 'explore' ||
 				slug === 'creations' ||
 				slug === 'comments' ||
@@ -10299,9 +10394,17 @@ export async function initChatPage(root, options = {}) {
 				messagesEl.innerHTML =
 					'<div class="chat-doom-scroll-loading route-loading chat-page-thread-loading" aria-busy="true" aria-label="Loading"></div>';
 				resetAndLockChatMessagesScrollForSkeleton(messagesEl, 'feed');
+			} else if (channelSlugForLoading === 'feed-beta') {
+				messagesEl.innerHTML = renderEmptyState({
+					loading: true,
+					loadingAriaLabel: 'Loading',
+					className: 'chat-page-thread-loading'
+				});
+				resetAndLockChatMessagesScrollForSkeleton(messagesEl, 'feed-beta');
 			} else if (channelSlugForLoading === 'feed' && typeof renderFeedCardsSkeleton === 'function') {
+				const spotlightHtml = getChatFeedMobileSpotlightHtml();
 				messagesEl.innerHTML = `<div class="feed-route chat-feed-channel-route">
-					${getChatFeedMobileSpotlightHtml()}
+					${spotlightHtml}
 					<div class="route-cards feed-cards" data-feed-container aria-busy="true" aria-label="Loading">${renderFeedCardsSkeleton(4)}</div>
 				</div>`;
 				resetAndLockChatMessagesScrollForSkeleton(messagesEl, 'feed');
@@ -10358,6 +10461,7 @@ export async function initChatPage(root, options = {}) {
 		 * same issue as feed/explore/creations — otherwise the previous scroll position lingers under the skeleton. */
 		if (
 			activePseudoChannelSlug === 'feed' ||
+			activePseudoChannelSlug === 'feed-beta' ||
 			activePseudoChannelSlug === 'feed_doom' ||
 			activePseudoChannelSlug === 'explore' ||
 			activePseudoChannelSlug === 'creations' ||
@@ -10444,6 +10548,19 @@ export async function initChatPage(root, options = {}) {
 						messagesEl.removeAttribute('aria-busy');
 					}
 					await loadCommentsChannelMessages();
+					return;
+				}
+				if (slug === 'feed-beta') {
+					activePseudoChannelSlug = 'feed-beta';
+					activeThreadId = null;
+					updateTitleFromMeta({
+						type: 'channel',
+						channel_slug: 'feed-beta',
+					});
+					if (messagesEl) {
+						messagesEl.removeAttribute('aria-busy');
+					}
+					await loadFeedBetaChannelMessages();
 					return;
 				}
 				if (slug === 'feed') {

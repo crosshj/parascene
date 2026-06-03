@@ -221,16 +221,31 @@ export default function createAdminRoutes({ queries, storage }) {
 		}
 
 		const suspended = req.body?.suspended;
-		if (typeof suspended !== "boolean") {
-			return res.status(400).json({ error: "suspended must be a boolean" });
+		const feedBetaEnabled = req.body?.feedBetaEnabled;
+		const hasSuspended = typeof suspended === "boolean";
+		const hasFeedBeta = typeof feedBetaEnabled === "boolean";
+		if (!hasSuspended && !hasFeedBeta) {
+			return res.status(400).json({
+				error: "Provide suspended and/or feedBetaEnabled as booleans"
+			});
 		}
 
-		if (!queries.updateUserSuspended?.run) {
-			return res.status(500).json({ error: "User suspend update not available" });
+		if (hasSuspended) {
+			if (!queries.updateUserSuspended?.run) {
+				return res.status(500).json({ error: "User suspend update not available" });
+			}
+			await queries.updateUserSuspended.run(targetUserId, suspended);
+		}
+		if (hasFeedBeta) {
+			if (!queries.updateUserFeedBetaEnabled?.run) {
+				return res.status(500).json({ error: "Feed beta update not available" });
+			}
+			await queries.updateUserFeedBetaEnabled.run(targetUserId, feedBetaEnabled);
 		}
 
-		await queries.updateUserSuspended.run(targetUserId, suspended);
 		const updated = await queries.selectUserById.get(targetUserId);
+		const meta =
+			updated?.meta != null && typeof updated.meta === "object" ? updated.meta : {};
 		let creditsBalance = 0;
 		try {
 			const creditsRow = await queries.selectUserCredits.get(targetUserId);
@@ -242,7 +257,8 @@ export default function createAdminRoutes({ queries, storage }) {
 			ok: true,
 			user: {
 				...updated,
-				suspended,
+				suspended: meta.suspended === true,
+				feedBetaEnabled: meta.feedBetaEnabled === true,
 				credits: creditsBalance
 			}
 		});
