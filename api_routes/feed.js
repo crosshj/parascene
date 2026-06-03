@@ -16,6 +16,9 @@ import { pullChallengeFeedSnapshot } from "./feed/pullChallengeFeedSnapshot.js";
 import { assembleFeedItems } from "./feed/assembleFeedItems.js";
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { removeJoinedPrivateChannelInviteDmMessages } from "./utils/chatInviteCleanup.js";
+import { canAccessFeedBeta } from "./feedBeta/access.js";
+import { pullFeedBetaRows } from "./feedBeta/pullFeedBetaRows.js";
+
 export default function createFeedRoutes({ queries }) {
 	const router = express.Router();
 
@@ -73,8 +76,35 @@ export default function createFeedRoutes({ queries }) {
 			Number.isFinite(afterIdNum) &&
 			afterIdNum > 0;
 
+		const useFeedBeta = canAccessFeedBeta(user);
+		const enableNsfw = Boolean(user.meta && user.meta.enableNsfw === true);
+
 		let creationPull;
-		if (hasImageCursor) {
+		if (useFeedBeta) {
+			const refreshBeta =
+				String(req.query?.refresh ?? '').trim() === '1' ||
+				(offset === 0 && !hasImageCursor && (!slotPack || offset === 0));
+			creationPull = await pullFeedBetaRows({
+				queries,
+				user,
+				limit,
+				offset,
+				slotPack,
+				afterAt: afterAt != null ? String(afterAt) : undefined,
+				afterIdNum,
+				enableNsfw,
+				showOwnPosts: showOwnPostsInFeed,
+				refresh: refreshBeta
+			});
+			const servedIds = creationPull?.feedBetaServedIds;
+			if (Array.isArray(servedIds) && servedIds.length > 0 && queries.updateUserFeedBetaSeen?.run) {
+				try {
+					await queries.updateUserFeedBetaSeen.run(user.id, servedIds);
+				} catch (err) {
+					console.warn('[feed] feedBeta seen', err?.message || err);
+				}
+			}
+		} else if (hasImageCursor) {
 			creationPull = await pullCreationFeedRowsAfterImageCursor({
 				queries,
 				userId: user.id,
@@ -89,7 +119,7 @@ export default function createFeedRoutes({ queries }) {
 				userId: user.id,
 				limit,
 				showOwnPosts: showOwnPostsInFeed,
-				enableNsfw: Boolean(user.meta && user.meta.enableNsfw === true)
+				enableNsfw
 			});
 		} else {
 			creationPull = await pullCreationFeedRows({
@@ -101,8 +131,14 @@ export default function createFeedRoutes({ queries }) {
 			});
 		}
 
+		const assembleOffset = useFeedBeta
+			? creationPull?.mobileChatSlotPackPageOne
+				? 0
+				: 1
+			: offset;
+
 		let challengeSnapshot = { ok: false };
-		if (offset === 0) {
+		if (assembleOffset === 0) {
 			try {
 				challengeSnapshot = await pullChallengeFeedSnapshot({
 					viewerUserId: user.id,
@@ -119,7 +155,7 @@ export default function createFeedRoutes({ queries }) {
 			queries,
 			user,
 			limit,
-			offset,
+			offset: assembleOffset,
 			creationPull,
 			challengeSnapshot,
 			feedSurface

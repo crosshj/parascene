@@ -4,6 +4,7 @@ import sharp from "sharp";
 import { RELATED_PARAM_DEFAULTS, RELATED_PARAM_KEYS } from "./relatedParams.js";
 import { getThumbnailUrl } from "../api_routes/utils/url.js";
 import { putAnchorCreationFirst } from "../api_routes/feed/doomSiteVideoTimeline.js";
+import { createSelectFeedBetaSitewideCatalog } from "./feedBetaSitewideCatalog.js";
 
 // Note: Supabase schema must be provisioned separately (SQL editor/migrations).
 // All application tables use the "prsn_" prefix.
@@ -637,6 +638,32 @@ export function openDb() {
 				const existing = current?.meta ?? null;
 				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
 				meta.feedBetaEnabled = Boolean(feedBetaEnabled);
+				const { error } = await serviceClient
+					.from(prefixedTable("users"))
+					.update({ meta })
+					.eq("id", userId);
+				if (error) throw error;
+				return { changes: 1 };
+			}
+		},
+		updateUserFeedBetaSeen: {
+			run: async (userId, seenIds) => {
+				const cap = 400;
+				const safe = Array.isArray(seenIds)
+					? seenIds.map((id) => String(id ?? "").trim()).filter(Boolean)
+					: [];
+				if (safe.length === 0) return { changes: 0 };
+				const { data: current, error: selectError } = await serviceClient
+					.from(prefixedTable("users"))
+					.select("meta")
+					.eq("id", userId)
+					.maybeSingle();
+				if (selectError) throw selectError;
+				const existing = current?.meta ?? null;
+				const meta = typeof existing === "object" && existing !== null ? { ...existing } : {};
+				const prev = Array.isArray(meta.feedBetaSeen) ? meta.feedBetaSeen.map((id) => String(id)) : [];
+				const merged = [...new Set([...prev, ...safe])].slice(-cap);
+				meta.feedBetaSeen = merged;
 				const { error } = await serviceClient
 					.from(prefixedTable("users"))
 					.update({ meta })
@@ -3723,6 +3750,12 @@ export function openDb() {
 				paginated: explorePaginated
 			};
 		})(),
+		/** Sitewide published feed rows for Feed [beta] ranking (no follow/viewer exclusion). */
+		selectFeedBetaSitewideCatalog: createSelectFeedBetaSitewideCatalog(serviceClient, {
+			prefixedTable,
+			resolveFeedRowTitle,
+			getThumbnailUrl
+		}),
 		selectNewestPublishedFeedItems: {
 			// All published feed items, newest first (no viewer/follow filtering). Used for Advanced create "Newest".
 			all: async (userId) => {

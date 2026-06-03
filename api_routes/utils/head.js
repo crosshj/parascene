@@ -62,7 +62,7 @@ function escapeHtmlUrl(url) {
  * - PAGE_META_DESCRIPTION: meta description content for the page (defaults to site-wide description).
  * - Optional req: when provided, includes CANONICAL_LINK and OG_URL_TAG (canonical www) for the request.
  */
-export function getPageTokens(req) {
+export function getPageTokens(req, extra = {}) {
 	const v = getAssetVersion();
 	const defaultDescription =
 		"parascene is a community that uses AI, ML, and algorithms to support creation. Join us for creativity, entertainment, and involvement.";
@@ -81,7 +81,21 @@ export function getPageTokens(req) {
 	}
 	const authed = !!(req?.auth?.userId);
 	tokens.PRSN_SUPABASE_BOOT = authed ? getSupabaseBootHtml() : "";
+	const feedBetaEnabled =
+		extra?.feedBetaEnabled === true ||
+		(req?.viewerFeedBetaEnabled === true && extra?.feedBetaEnabled !== false);
+	tokens.PRSN_FEED_BETA_BOOT = getFeedBetaBootHtml(feedBetaEnabled);
 	return tokens;
+}
+
+function getFeedBetaBootHtml(enabled) {
+	const flag = enabled === true ? "true" : "false";
+	return (
+		`<script>window.__PRSN_FEED_BETA_ENABLED__=${flag};` +
+		`try{localStorage.setItem('prsn-feed-beta-enabled',${flag}?'1':'0');` +
+		`document.documentElement.classList.toggle('feed-beta-enabled',${flag});}` +
+		`catch(e){}</script>`
+	);
 }
 
 /**
@@ -144,6 +158,7 @@ function getCommonHead() {
 		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 		{{GLOBAL_CSS_LINK}}
 		<meta name="asset-version" content="{{V_PARAM}}" />
+		{{PRSN_FEED_BETA_BOOT}}
 		{{PRSN_SUPABASE_BOOT}}
 		<script type="module" src="{{ENTRY_MODULE_SRC}}"></script>
 		{{CANONICAL_LINK}}
@@ -195,6 +210,7 @@ export function injectCommonHead(htmlContent, extraTokens) {
 	const tokens = {
 		CANONICAL_LINK: "",
 		PRSN_SUPABASE_BOOT: "",
+		PRSN_FEED_BETA_BOOT: getFeedBetaBootHtml(false),
 		...ex,
 		ENTRY_MODULE_SRC:
 			ex.ENTRY_MODULE_SRC !== undefined && ex.ENTRY_MODULE_SRC !== null && String(ex.ENTRY_MODULE_SRC).length > 0

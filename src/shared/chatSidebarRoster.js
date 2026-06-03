@@ -5,6 +5,7 @@
 import { getAvatarColor } from './avatar.js';
 import { serverChannelTagFromServerName } from './serverChatTag.js';
 import { readDmPinKeysOrdered } from './chatDmPins.js';
+import { feedNavLabel, readFeedBetaEnabledSync } from './feedBetaNav.js';
 import * as Icons from '/icons/svg-strings.js';
 
 function escapeHtmlPseudoStrip(str) {
@@ -22,9 +23,6 @@ function escapeHtmlPseudoStrip(str) {
  */
 export const SIDEBAR_PSEUDO_STRIP_ORDER = ['feed', 'challenges', 'creations', 'comments', 'explore', 'prompt-library', 'feedback'];
 
-/** Opt-in chat sidebar row (injected after Feed when enabled). Not in SSR strip order. */
-export const FEED_BETA_PSEUDO_STRIP_SLUG = 'feed-beta';
-
 /** Notes-to-self shortcut: not a channel, opens the viewer's own DM. */
 export const SIDEBAR_NOTES_STRIP_HREF = '/chat/notes';
 
@@ -34,7 +32,6 @@ export const SIDEBAR_HELP_STRIP_HREF = '/help';
 /** @type {Record<string, string>} */
 const SIDEBAR_PSEUDO_STRIP_TITLES = {
 	feed: 'Feed',
-	'feed-beta': 'Feed [beta]',
 	challenges: 'Challenges',
 	explore: 'Explore',
 	'prompt-library': 'Prompt Library',
@@ -113,7 +110,20 @@ export function getSidebarPseudoChannelTitle(channelSlug) {
 		.toLowerCase()
 		.trim();
 	if (!s) return null;
-	return SIDEBAR_PSEUDO_STRIP_TITLES[s] ?? null;
+	const base = SIDEBAR_PSEUDO_STRIP_TITLES[s] ?? null;
+	if (!base) return null;
+	if (s === 'feed') return feedNavLabel(base);
+	return base;
+}
+
+function pseudoStripTitleForSlug(slug, opts = {}) {
+	const key = String(slug || '').trim().toLowerCase();
+	const base = SIDEBAR_PSEUDO_STRIP_TITLES[key] || `#${key}`;
+	if (key !== 'feed') return base;
+	const enabled =
+		opts.feedBetaEnabled === true ||
+		(opts.feedBetaEnabled !== false && readFeedBetaEnabledSync());
+	return feedNavLabel(base, enabled);
 }
 
 /**
@@ -140,10 +150,9 @@ export function inferPseudoStripSlugFromChannelMeta(meta) {
 }
 
 /** Exclude these from the collapsible “Channels” list — they render only in the top strip. */
-export const SIDEBAR_TOP_STRIP_CHANNEL_SLUGS = new Set([
-	...SIDEBAR_PSEUDO_STRIP_ORDER.map((s) => s.toLowerCase()),
-	FEED_BETA_PSEUDO_STRIP_SLUG
-]);
+export const SIDEBAR_TOP_STRIP_CHANNEL_SLUGS = new Set(
+	SIDEBAR_PSEUDO_STRIP_ORDER.map((s) => s.toLowerCase())
+);
 
 /**
  * Strip slugs that mirror primary app chrome: `app-navigation` links in `pages/app.html` (feed, explore, creations)
@@ -340,7 +349,7 @@ export function buildSidebarPseudoStripRows() {
 	return SIDEBAR_PSEUDO_STRIP_ORDER.map((slug) => ({
 		type: 'channel',
 		channel_slug: slug,
-		title: SIDEBAR_PSEUDO_STRIP_TITLES[slug] || `#${slug}`,
+		title: pseudoStripTitleForSlug(slug),
 		unread_count: 0,
 		last_read_message_id: null,
 	}));
@@ -455,67 +464,10 @@ export function buildSidebarHelpStripAnchorHtml(requestPath = '') {
  * @param {string} [requestPath] — e.g. Express `req.path` so the current pseudo channel can show `is-active` on first paint.
  * @returns {string}
  */
-/**
- * Feed [beta] strip row (client-injected when user is opted in).
- * @param {string} [requestPath]
- * @returns {string}
- */
-export function buildFeedBetaStripAnchorHtml(requestPath = '') {
-	const slug = FEED_BETA_PSEUDO_STRIP_SLUG;
-	const title = SIDEBAR_PSEUDO_STRIP_TITLES[slug] || 'Feed [beta]';
-	const href = `/chat/c/${encodeURIComponent(slug)}`;
-	const activeSlug = pseudoStripActiveSlugFromRequestPath(requestPath);
-	const activeCls = activeSlug === slug ? ' is-active' : '';
-	const iconAvatarHtml = pseudoStripRouteIconAvatarHtml('feed');
-	const avatarHtml =
-		iconAvatarHtml ||
-		`<div class="comment-avatar connect-chat-thread-row-channel-avatar chat-page-sidebar-channel-avatar" style="background: ${escapeHtmlPseudoStrip(getAvatarColor(slug))};" aria-hidden="true">#</div>`;
-	return `<a class="chat-page-sidebar-row chat-page-sidebar-row--feed-beta${activeCls}" href="${escapeHtmlPseudoStrip(href)}" data-chat-pseudo-slug="${escapeHtmlPseudoStrip(slug)}">
-				${avatarHtml}
-				<div class="chat-page-sidebar-row-body">
-					<div class="chat-page-sidebar-row-title-line">
-						<span class="chat-page-sidebar-row-title">${escapeHtmlPseudoStrip(title)}</span>
-					</div>
-				</div>
-			</a>`;
-}
-
-/**
- * Show or hide Feed [beta] in the pseudo strip (after Feed).
- * @param {HTMLElement|null|undefined} listEl — `[data-chat-sidebar-pseudo-list]`
- * @param {{ enabled?: boolean, requestPath?: string }} [opts]
- */
-export function syncFeedBetaPseudoStripRow(listEl, opts = {}) {
-	if (!(listEl instanceof HTMLElement)) return;
-	const slug = FEED_BETA_PSEUDO_STRIP_SLUG;
-	const enabled = opts.enabled === true;
-	const existing = listEl.querySelector(`[data-chat-pseudo-slug="${slug}"]`);
-	if (!enabled) {
-		existing?.remove();
-		return;
-	}
-	const requestPath = String(opts.requestPath || '');
-	if (existing instanceof HTMLElement) {
-		const activeSlug = pseudoStripActiveSlugFromRequestPath(requestPath);
-		existing.classList.toggle('is-active', activeSlug === slug);
-		return;
-	}
-	const tpl = document.createElement('template');
-	tpl.innerHTML = buildFeedBetaStripAnchorHtml(requestPath);
-	const row = tpl.content.firstElementChild;
-	if (!(row instanceof HTMLElement)) return;
-	const feedRow = listEl.querySelector('[data-chat-pseudo-slug="feed"]');
-	if (feedRow instanceof HTMLElement) {
-		feedRow.insertAdjacentElement('afterend', row);
-	} else {
-		listEl.appendChild(row);
-	}
-}
-
-export function buildSidebarPseudoStripListStaticHtml(requestPath = '') {
+export function buildSidebarPseudoStripListStaticHtml(requestPath = '', opts = {}) {
 	const activeSlug = pseudoStripActiveSlugFromRequestPath(requestPath);
 	const channelHtml = SIDEBAR_PSEUDO_STRIP_ORDER.map((slug) => {
-		const title = SIDEBAR_PSEUDO_STRIP_TITLES[slug] || `#${slug}`;
+		const title = pseudoStripTitleForSlug(slug, opts);
 		const href =
 			slug === 'prompt-library' ? '/prompt-library' : `/chat/c/${encodeURIComponent(slug)}`;
 		const bg = getAvatarColor(slug);
@@ -524,12 +476,14 @@ export function buildSidebarPseudoStripListStaticHtml(requestPath = '') {
 		const navDup = SIDEBAR_STRIP_SLUGS_ALSO_IN_APP_PRIMARY_NAV.has(slug);
 		const navCls = navDup ? ' chat-page-sidebar-row--also-in-app-primary-nav' : '';
 		const activeCls = activeSlug === slug ? ' is-active' : '';
+		const feedBetaCls = slug === 'feed' && title.includes('[beta]') ? ' chat-page-sidebar-row--feed-beta' : '';
 		const notesHtml = slug === 'creations' ? buildSidebarNotesStripAnchorHtml(requestPath) : '';
-		return `<a class="chat-page-sidebar-row${navCls}${activeCls}" href="${escapeHtmlPseudoStrip(href)}" data-chat-pseudo-slug="${escapeHtmlPseudoStrip(slug)}">
+		const feedNavAttr = slug === 'feed' ? ' data-feed-nav="feed"' : '';
+		return `<a class="chat-page-sidebar-row${navCls}${activeCls}${feedBetaCls}" href="${escapeHtmlPseudoStrip(href)}" data-chat-pseudo-slug="${escapeHtmlPseudoStrip(slug)}">
 				${avatarHtml}
 				<div class="chat-page-sidebar-row-body">
 					<div class="chat-page-sidebar-row-title-line">
-						<span class="chat-page-sidebar-row-title">${escapeHtmlPseudoStrip(title)}</span>
+						<span class="chat-page-sidebar-row-title"${feedNavAttr}>${escapeHtmlPseudoStrip(title)}</span>
 					</div>
 				</div>
 			</a>${notesHtml}`;

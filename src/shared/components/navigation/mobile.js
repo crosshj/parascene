@@ -1,4 +1,9 @@
 import { homeIcon } from '/icons/svg-strings.js';
+import {
+	applyFeedBetaNavLabelsToDom,
+	feedNavLabel,
+	readFeedBetaEnabledSync
+} from '../../feedBetaNav.js';
 
 const html = String.raw;
 const CHAT_FIRST_ROUTE_PATHS = {
@@ -38,19 +43,32 @@ class AppNavigationMobile extends HTMLElement {
 		super();
 		this.handleNavClick = this.handleNavClick.bind(this);
 		this.handleRouteChange = this.handleRouteChange.bind(this);
+		this.handleFeedBetaChanged = this.handleFeedBetaChanged.bind(this);
+		this.feedBetaEnabled = false;
 	}
 
 	connectedCallback() {
+		this.feedBetaEnabled = readFeedBetaEnabledSync();
+		applyFeedBetaNavLabelsToDom(this.feedBetaEnabled);
 		this.render();
 		this.setupEventListeners();
 		window.addEventListener('popstate', this.handleRouteChange);
 		document.addEventListener('route-change', this.handleRouteChange);
+		document.addEventListener('feed-beta-changed', this.handleFeedBetaChanged);
 		setTimeout(() => this.handleRouteChange(), 0);
 	}
 
 	disconnectedCallback() {
 		window.removeEventListener('popstate', this.handleRouteChange);
 		document.removeEventListener('route-change', this.handleRouteChange);
+		document.removeEventListener('feed-beta-changed', this.handleFeedBetaChanged);
+	}
+
+	handleFeedBetaChanged(event) {
+		this.feedBetaEnabled = event?.detail?.enabled === true;
+		applyFeedBetaNavLabelsToDom(this.feedBetaEnabled);
+		this.render();
+		this.setupEventListeners();
 	}
 
 	setupEventListeners() {
@@ -232,13 +250,15 @@ class AppNavigationMobile extends HTMLElement {
 	}
 
 	render() {
+		const homeLabel = feedNavLabel('Home', this.feedBetaEnabled);
+		const feedBetaCls = this.feedBetaEnabled ? ' mobile-bottom-nav-item--feed-beta' : '';
 		this.innerHTML = html`
       <div class="mobile-bottom-nav-wrap" aria-label="Mobile actions">
         <div class="mobile-bottom-nav-bar" aria-hidden="true"></div>
         <div class="mobile-bottom-nav-buttons" role="navigation" aria-label="Mobile actions">
-          <button class="mobile-bottom-nav-item" data-route="feed" aria-label="Home">
+          <button class="mobile-bottom-nav-item${feedBetaCls}" data-route="feed" aria-label="${homeLabel}">
 			${homeIcon('mobile-bottom-nav-icon mobile-bottom-nav-icon-home')}
-            <span class="mobile-bottom-nav-text" aria-hidden="true">Home</span>
+            <span class="mobile-bottom-nav-text feed-nav-label-text" data-feed-nav="home" aria-hidden="true">${homeLabel}</span>
           </button>
           <button class="mobile-bottom-nav-item" data-route="explore" aria-label="Explore">
             <svg class="mobile-bottom-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

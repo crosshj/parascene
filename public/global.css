@@ -437,6 +437,22 @@ header .header-nav a:hover {
 	color: var(--text);
 }
 
+header .header-nav a.nav-link--feed-beta,
+.mobile-menu-nav a.nav-link--feed-beta {
+	white-space: nowrap;
+}
+
+.mobile-bottom-nav-item--feed-beta .mobile-bottom-nav-text {
+	font-size: 0.625rem;
+	line-height: 1.1;
+	max-width: 4.5rem;
+	text-align: center;
+}
+
+.chat-page-sidebar-row--feed-beta .chat-page-sidebar-row-title {
+	white-space: nowrap;
+}
+
 header .header-nav a.active {
 	color: var(--text);
 	font-weight: 700;
@@ -16134,6 +16150,83 @@ body.modal-open {
 	pointer-events: auto;
 	position: relative;
 	z-index: 1;
+}
+
+.feed-beta-why-modal {
+	max-width: 420px;
+	width: calc(100% - 24px);
+}
+
+.feed-beta-why-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 16px 16px 0;
+}
+
+.feed-beta-why-title {
+	margin: 0;
+	font-size: 1.05rem;
+	font-weight: 600;
+	line-height: 1.3;
+}
+
+.feed-beta-why-close {
+	flex-shrink: 0;
+	width: 32px;
+	height: 32px;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--text-muted);
+	font-size: 1.4rem;
+	line-height: 1;
+	cursor: pointer;
+}
+
+.feed-beta-why-close:hover {
+	background: var(--surface-hover);
+	color: var(--text);
+}
+
+.feed-beta-why-body {
+	padding: 12px 16px 16px;
+	overflow: auto;
+	max-height: min(70vh, 480px);
+}
+
+.feed-beta-why-summary {
+	margin: 0 0 12px;
+	line-height: 1.45;
+}
+
+.feed-beta-why-details {
+	margin: 0 0 12px;
+	padding-left: 1.2rem;
+	line-height: 1.45;
+}
+
+.feed-beta-why-details li + li {
+	margin-top: 6px;
+}
+
+.feed-beta-why-dev {
+	margin-top: 8px;
+	font-size: 0.9rem;
+}
+
+.feed-beta-why-dev-pre {
+	margin: 8px 0 0;
+	padding: 10px;
+	border-radius: 8px;
+	background: var(--surface-alt, rgba(127, 127, 127, 0.08));
+	font-size: 0.75rem;
+	line-height: 1.35;
+	overflow: auto;
+	max-height: 220px;
+	white-space: pre-wrap;
+	word-break: break-word;
 }
 
 /* NSFW content: frosted overlay unless user has enabled "View NSFW" (body.view-nsfw).

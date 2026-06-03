@@ -34,6 +34,7 @@ import {
 	viewGridIcon
 } from '/icons/svg-strings.js';
 import { attachFeedCardCreationDragSource } from './creationComposerDrag.js';
+import { openFeedBetaWhyModal } from './feedBetaWhyModal.js';
 
 const { buildBlogPostPublicPath, BLOG_CAMPAIGN_INTERNAL } = blogCampaignPathMod;
 const { formatDateTime, formatRelativeTime } = datetimeMod;
@@ -1267,6 +1268,7 @@ function buildFeedCreationCard(
             </svg>
           </button>
           <div class="feed-card-menu" data-feed-menu style="display: none;">
+            ${item.feed_beta_why ? `<button class="feed-card-menu-item" type="button" data-feed-beta-why>Why am I seeing this?</button>` : ''}
             <button class="feed-card-menu-item" type="button" data-hide-item>Hide from my feed</button>
           </div>
         </div>
@@ -1309,7 +1311,17 @@ function buildFeedCreationCard(
 	const moreButton = card.querySelector('button[data-more-button]');
 	const menu = card.querySelector('[data-feed-menu]');
 	const hideButton = card.querySelector('button[data-hide-item]');
+	const whyButton = card.querySelector('button[data-feed-beta-why]');
 	const itemId = item.created_image_id || item.id;
+
+	if (whyButton && item.feed_beta_why) {
+		whyButton.addEventListener('click', (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			menu.style.display = 'none';
+			openFeedBetaWhyModal(item.feed_beta_why);
+		});
+	}
 
 	if (moreButton && menu && hideButton && itemId) {
 		// Close any open menus when clicking outside

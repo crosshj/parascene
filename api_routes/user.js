@@ -634,6 +634,7 @@ export default function createProfileRoutes({ queries }) {
 				? user.meta.vynlyTokenPrefix.trim()
 				: null;
 		const appearOffline = user.appear_offline === true;
+		const feedBetaEnabled = user.meta?.feedBetaEnabled === true;
 		const metaPublic = sanitizeUserMetaForClient(user.meta);
 		return res.json({
 			...user,
@@ -646,6 +647,7 @@ export default function createProfileRoutes({ queries }) {
 			enableNsfw,
 			showOwnPostsInFeed,
 			audibleNotifications,
+			feedBetaEnabled,
 			hasApiKey,
 			apiKeyPrefix,
 			hasVynlyToken,

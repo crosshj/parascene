@@ -7,7 +7,6 @@ import { openDb } from "../db/index.js";
 import createAdminRoutes from "../api_routes/admin.js";
 import createExploreRoutes from "../api_routes/explore.js";
 import createFeedRoutes from "../api_routes/feed.js";
-import createFeedBetaRoutes from "../api_routes/feedBeta/index.js";
 import createCreateRoutes from "../api_routes/create.js";
 import createCreationsRoutes from "../api_routes/creations.js";
 import createImagesRoutes from "../api_routes/images.js";
@@ -312,7 +311,6 @@ app.use(createFollowsRoutes({ queries }));
 
 app.use(createAdminRoutes({ queries, storage }));
 app.use(createFeedRoutes({ queries }));
-app.use(createFeedBetaRoutes({ queries }));
 app.use(createExploreRoutes({ queries }));
 app.use(createSuggestRoutes({ queries }));
 app.use(createPromptInjectionsRoutes({ queries, storage }));

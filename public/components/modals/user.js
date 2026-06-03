@@ -1,4 +1,5 @@
 let buildProfilePath;
+let setFeedBetaEnabledClient;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -17,6 +18,8 @@ async function loadDeps() {
 	_depsPromise = (async () => {
 		const profileLinksMod = await import(`../../shared/profileLinks.js${qs}`);
 		buildProfilePath = profileLinksMod.buildProfilePath;
+		const feedBetaNavMod = await import(`../../shared/feedBetaNav.js${qs}`);
+		setFeedBetaEnabledClient = feedBetaNavMod.setFeedBetaEnabledClient;
 	})();
 	return _depsPromise;
 }
@@ -583,6 +586,13 @@ class AppModalUser extends HTMLElement {
 				}
 			}
 			this.updateFeedBetaZone(this._currentUser);
+			if (
+				typeof setFeedBetaEnabledClient === 'function' &&
+				this._viewerUserId != null &&
+				Number(this._viewerUserId) === userId
+			) {
+				setFeedBetaEnabledClient(next);
+			}
 			document.dispatchEvent(new CustomEvent('user-updated', { detail: { userId } }));
 		} catch (err) {
 			const message = err?.message || 'Failed to update Feed [beta] access.';

@@ -1,186 +1,95 @@
-# Plan: Feed [beta] (chat SPA only)
+# Plan: Feed [beta] — finish to done
 
-Ranked discovery feed for chat **`#feed-beta`**. Opt-in only. **Do not regress chat `#feed` or legacy app feed** — same cards, same mobile spotlight layout, better source and ranking.
+Backend swap on `GET /api/feed` when `user.meta.feedBetaEnabled`. Same URLs/UI. Legacy path unchanged for everyone else.
 
-## Principle: only make it better
+## Done means
 
-Keep from chat `#feed` today
+Opt-in users get a discovery feed that:
 
-- Full feed cards: video autoplay, images, group carousel, likes, hide, NSFW
-- `assembleFeedItems`: tips, blog, challenge engagement on page 1
-- Mobile: `partitionChatFeedMobileAlternating` — slots are **video vs non-video**, not follow graph
-- Infinite scroll pager pattern (`createPseudoColumnPager` + load-more tail)
+- Uses ranked pools (not a flat shuffle of the catalog)
+- Keeps mobile 4v+3i×3 layout with working spotlight videos
+- Reshuffles page 1 on open; page 2+ scrolls without reshuffling the session logic we have today
+- Dedupes repeats via `feedBetaSeen` and explains each card via `feed_beta_why`
+- Does not lie in UI copy about “seen” or “underseen”
+- Passes automated tests + a short manual QA checklist
 
-Improve in beta only
+Done does not mean: viewport impressions, analytics tables, feed sessions in Redis, per-slot 21-pool mobile editorial, comment/reply pools, own-activity pool, Bayesian scoring, admin tuning UI, or publish/like hooks. Those are post-done.
 
-- Discovery: hot, new, catalog unseen, newcomer + mention boost, small follow sprinkle
-- No Explore-style “hide authors you follow”
-- Refresh can resample page 1; seen dedupe
-- **Two-thread sampler** (video / other) so mobile spotlights always have a video supply
+## Already shipped
 
-Do not change
+- `/api/feed` branch → `api_routes/feedBeta/*` + `assembleFeedItems`
+- Pools per page: hot_24h, hot_7d, new, newcomer, catalog_unseen, follow_sprinkle (+ fill)
+- Two threads (video / other) → `mergeBetaPage` + slot-pack interleave
+- Candidate catalog: recent + top engaged + back slice + video head
+- `feedBetaSeen` on serve (cap 400, `user.meta`)
+- Page-token cursor for chat load-more
+- `feed_beta_why` stamped at pool draw / merge; “Why am I seeing this?” in card menu
+- Admin opt-in toggle; nav `[beta]` labels
+- Tests: access, cursor, merge, score, threads, pools, videoHead, reason, nav
 
-- Chat **`#feed`** — still `/api/feed`, server slot-pack + cursor as today
-- Legacy **`app-route-feed`** — still `/api/feed`
-- Doom scroll, explore, recsys related
+## Gaps blocking done
 
-## Surface scope
+1. **Honest “seen / catalog” story** — Today “catalog_unseen” = not in `feedBetaSeen` (server-served IDs), not viewport, not impression-based underseen. Either fix copy in `reason.js` to match behavior, or add minimal impression infra (see phase 2). Until then, do not claim “you have not been shown it.”
 
-In
+2. **Mobile spotlight videos** — Must reliably fill 12 video slots for beta slot-pack page 1 (site video head, no seen filter on spotlight). Verify on device; fix if still empty.
 
-- Pseudo-channel **`feed-beta`** (`/chat/c/feed-beta`)
-- `GET /api/feed-beta`
-- Sidebar **Feed [beta]** when `feedBetaEnabled`
+3. **Catalog still feels thin** — Candidate set is ~500 recent + engaged + one random back slice (~300). Most of ~13k never enters the pool. For done: widen fetch limits or pull two back-catalog slices per page so catalog_unseen has real depth.
 
-Out
+4. **No creator cap per page** — Same author can dominate a page. For done: max 2 creations per `user_id` per page in `pullFeedBetaRows` or pool draw.
 
-- App shell feed route, app nav
-- Replacing `#feed` for everyone
-- Beta `slot_pack`, `feed_cursor`, `feed_after_*` (no server slot-pack for beta)
+5. **Newcomer detection is narrow** — Only authors in the current catalog batch + account age. For done: acceptable if documented; optional stretch: small cached newcomer id set (account age query, not full exposure model).
 
-## Architecture
+6. **Integration test missing** — `GET /api/feed` beta branch returns same keys as legacy + `feed_beta_why` on creation rows.
 
-```
-GET /api/feed-beta
-  → sampleVideoThread()     ─┐
-  → sampleOtherThread()     ─┼→ mergeBetaPage() → rows
-  → hydrate ids             ─┘
-  → assembleFeedItems({ feedSurface: 'chat' })
-  → { items, hasMore }
+7. **No manual QA sign-off** — Need one checklist run (below) before calling beta done.
 
-GET /api/feed  →  unchanged (#feed + legacy)
-```
+## Do next (order)
 
-Chat client
+### Phase 1 — Correctness (ship blockers)
 
-```
-#feed       →  /api/feed, mobileChatSlotPack: true (unchanged)
-#feed-beta  →  /api/feed-beta, mobileChatSlotPack: false
-              →  offset pagination only
-              →  initial mobile: partitionChatFeedMobileAlternating(ordered)
-              →  load-more: plain card append (same as #feed tail)
-```
+- [ ] Verify mobile spotlight videos end-to-end (beta user, chat `#feed`, slot_pack page 1)
+- [ ] Update `reason.js` user copy: catalog pool = “from your catalog mix — not on your recent Feed [beta] list yet” (or similar); remove “shown” unless we measure viewport
+- [ ] Max 2 items per creator per page when merging rows
+- [ ] Add integration test: beta `/api/feed` response shape + `feed_beta_why` on sampled creations
+- [ ] Run manual QA checklist; fix anything red
 
-Reuse server interleave helper only (not slot-pack pull):
+### Phase 2 — Flesh out content (still in v1 done)
 
-- `interleaveSlotPackHead` from `pullMobileChatSlotPackFeed.js` — merge video + other **samples** into one ordered list for the page (4v+3i × 3 head budget optional on page 1; remainder = tail in feed order)
+- [ ] Widen catalog: bump `recentFetchLimit` / `backCatalogFetchLimit` or second back-catalog draw with different seed
+- [ ] Map `feed_beta_why.developer.pool` → short user labels (Rising today, New creation, From the catalog, etc.) in modal
+- [ ] Document in code comment on `seen.js`: `feedBetaSeen` = served-on-API, not viewport
 
-## Two-thread algo (core)
+### Phase 3 — Post-done (explicit defer)
 
-Two ranked streams, same rules in each:
+- Viewport impression beacons + `user_creation_seen` table
+- `feed_events` (source_pool, position, impression/click/like) for tuning
+- `creation_stats` windows (24h/7d) and better hot scoring
+- Feed session: precompute ~100–200 ordered IDs per visit
+- Pools: recentComment, ownActivity
+- Per-slot mobile 21-pool editorial plan + fallbacks
+- Publish/like hooks; `feed_beta.*` policy knobs; taste vectors
 
-| Thread | Contents |
-|--------|----------|
-| **Video** | `media_type === 'video'` + valid `video_url` |
-| **Other** | Image (and non-video) creations eligible for feed cards |
+## Manual QA checklist
 
-Not in threads: tips, blog, engagement — injected by `assembleFeedItems` after merge on `offset === 0`.
+Beta user, chat `#feed` and app Home `/feed`:
 
-Per thread, same pool draws (counts tunable via `feed_beta.*`):
+- Page 1 looks different on refresh (not identical order every time)
+- Page 2+ appends without duplicates from page 1
+- Mobile: three 2×2 video strips populated (not skeleton placeholders)
+- Hot/new items appear near top (not only stale catalog)
+- Newcomer / follow items appear occasionally, follows do not dominate
+- ⋮ → “Why am I seeing this?” shows pool + developer block
+- Toggle off `feedBetaEnabled` → legacy follow feed behavior returns
+- NSFW off still filters; cards match legacy (video, groups, tips, challenge card page 1)
 
-- hot (24h / 7d)
-- new publish
-- newcomer (author **or** @mentions newcomer — `textMentions.js`)
-- catalog unseen (minus `seen`)
-- follow sprinkle (small; fallback if no follows)
-- score bumps: newcomer_author, newcomer_mentioned (mention slightly less), follow_author ~10%, freshness
+## Key files
 
-**No** excluding followed user ids from any pool.
+- Pull: `api_routes/feedBeta/pullFeedBetaRows.js`, `pools.js`, `mergeBetaPage.js`, `catalog.js`, `reason.js`
+- Seen: `api_routes/feedBeta/seen.js`, `db/supabase.js` (`updateUserFeedBetaSeen`)
+- API: `api_routes/feed.js`, `transformFeedCreationRow.js`
+- UI: `public/shared/feedCardBuild.js`, `feedBetaWhyModal.js`
+- Params: `api_routes/feedBeta/params.js`
 
-### Read path: pull both, merge
+## Reference
 
-1. Sample `V` ids from video thread, `O` ids from other thread (separate offsets on load-more: `video_offset`, `other_offset`, or one page budget split).
-2. Hydrate both; preserve per-thread order.
-3. **mergeBetaPage**:
-   - Page 1 mobile-friendly: `interleaveSlotPackHead(videos, others)` for structured prefix (matches 3× 2×2 + between strips), then append tail from remaining video+other in round-robin or thread order.
-   - Desktop or simple mode: interleave lightly or video chunk + other chunk; client partition still works.
-4. `refresh=1` (page 1 only): resample both threads; do not use image feed_cursor.
-
-### Why two threads
-
-- Matches mobile slots (video vs not) in the **engine**, not by accident in one shuffle.
-- Avoids empty spotlight grids when the catalog is image-heavy.
-- Tune “more hot video” vs “more newcomer images” independently.
-
-## Per user
-
-- `seen` — don’t repeat in `#feed-beta`
-- Optional prebuilt queue later; v0 sample at request is OK at 13k scale
-- Taste / semantic later (optional tail on either thread)
-
-## Full parity (cards)
-
-- Merged rows → `{ rows, hasMore, isNewbieFeed }` → `assembleFeedItems` + `pullChallengeFeedSnapshot` when `offset === 0`
-- Same JSON shape as `/api/feed` for chat pager
-- `feed_surface: 'chat'`
-
-## API surface
-
-- `GET /api/feed-beta?limit=&offset=` (and/or `video_offset` + `other_offset` if split)
-- `?refresh=1` — resample both threads for page 1
-- Auth + `feedBetaEnabled` meta opt-in only
-- **No** `slot_pack`, **no** `feed_cursor` on beta
-
-## Mobile slots (no cursor slot-pack)
-
-- Server: two threads + merge (optional `interleaveSlotPackHead` on page 1 prefix)
-- Client: **`partitionChatFeedMobileAlternating`** on first paint — same as `#feed`, include `feed-beta` in lane checks beside `feed`
-- Load-more: append cards only; no re-partition (same as `#feed`)
-
-## At publish / on engagement
-
-- Publish: pools, newcomer flags on creation meta, thread membership (video vs other)
-- Like / view in beta: bump hot pools, `seen`; `feedBeta/hooks.js` one-liners from create/likes (v1b OK)
-
-## Tuning (policy_knobs `feed_beta.*`)
-
-Worth admin later (mirror `related.*`); v0 defaults in code.
-
-- Per-thread slot counts (hot, new, newcomer, catalog, follow)
-- `newcomer_account_days`, multipliers (author vs mentioned, follow nudge)
-- Page 1 interleave prefix on/off or length
-- Not admin: 4v+3i geometry (`chatFeedMobilePartition.js` constants)
-
-## Small footprint
-
-- All beta logic: `api_routes/feedBeta/`
-- Reuse: `assembleFeedItems`, `interleaveSlotPackHead`, `textMentions`, `selectFeedItemsByCreationIds`, `partitionChatFeedMobileAlternating`, `feedCardBuild.js`
-- Chat: `apiPath` param + `feed-beta` lane; **no** fork of card DOM
-- **No** edits to `pullMobileChatSlotPackFeed` behavior for `#feed`
-
-New modules (target)
-
-- `index.js` — router, gate
-- `pools.js`, `newcomer.js`, `seen.js`
-- `sampleVideoThread.js`, `sampleOtherThread.js`
-- `mergeBetaPage.js` — interleave + tail
-- `pullFeedBetaRows.js` — orchestrate
-- `hooks.js`
-
-## Files touched
-
-Backend — new: `api_routes/feedBeta/*` (above)
-
-Backend — edit: `api/index.js`, `api_routes/user.js`, `api_routes/admin.js`; optional `likes.js` / publish hook
-
-Chat — edit: `feedChannelData.js`, `chatPage.js` (feed-beta lane + mobile partition branch), `chatSidebarRoster.js`; maybe `chatViewportShellSync.js`, `pages.js` route allowlist
-
-Admin: opt-in toggle (API-first OK)
-
-Tests: `feedBeta.merge.test.js`, `feedBeta.threads.test.js` (slot mix, newcomer, no follow exclusion)
-
-Do not touch: `feed.js` app route, `app.html`, app nav, `api_routes/feed.js`, `#feed` pager slot-pack config, `recsys.js`
-
-## Rollout
-
-1. Two-thread sample + merge + `/api/feed-beta` + tests
-2. Chat `#feed-beta` + opt-in + mobile partition (no beta slot_pack)
-3. Seen + refresh
-4. Publish/like hooks + policy knobs
-
-## Open questions
-
-- Newcomer N days / follower threshold
-- Split offsets vs single offset with fixed V/O ratio per page
-- Empty beta: fallback `isNewbieFeed` vs custom copy
-- Page 1 always interleave prefix on mobile, or client-only partition from flat merge
+External spec comparison: `_docs/PLAN_feed_beta_chatgpt.md` — aspirational; not the done bar for v1.

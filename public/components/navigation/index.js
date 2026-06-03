@@ -13,6 +13,10 @@ let notificationCreationHref;
 let notificationChatHref;
 let notificationPrimaryHref;
 let notificationPrimaryClickable;
+let feedNavLabel;
+let readFeedBetaEnabledSync;
+let setFeedBetaEnabledClient;
+let applyFeedBetaNavLabelsToDom;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -65,6 +69,12 @@ async function loadDeps() {
 		notificationChatHref = notifNavMod.notificationChatHref;
 		notificationPrimaryHref = notifNavMod.notificationPrimaryHref;
 		notificationPrimaryClickable = notifNavMod.notificationPrimaryClickable;
+
+		const feedBetaNavMod = await import(`../../shared/feedBetaNav.js${qs}`);
+		feedNavLabel = feedBetaNavMod.feedNavLabel;
+		readFeedBetaEnabledSync = feedBetaNavMod.readFeedBetaEnabledSync;
+		setFeedBetaEnabledClient = feedBetaNavMod.setFeedBetaEnabledClient;
+		applyFeedBetaNavLabelsToDom = feedBetaNavMod.applyFeedBetaNavLabelsToDom;
 	})();
 	return _depsPromise;
 }
@@ -106,6 +116,8 @@ class AppNavigation extends HTMLElement {
 		this.authLinks = [];
 		this.defaultRoute = null;
 		this.hasParsedRoutes = false;
+		this.feedBetaEnabled = false;
+		this.handleFeedBetaChanged = this.handleFeedBetaChanged.bind(this);
 	}
 
 	static get observedAttributes() {
@@ -120,6 +132,11 @@ class AppNavigation extends HTMLElement {
 
 	async connectedCallback() {
 		await loadDeps();
+		this.feedBetaEnabled =
+			typeof readFeedBetaEnabledSync === 'function' ? readFeedBetaEnabledSync() : false;
+		if (typeof applyFeedBetaNavLabelsToDom === 'function') {
+			applyFeedBetaNavLabelsToDom(this.feedBetaEnabled);
+		}
 		// Establish avatar loading state before first render to avoid icon flicker.
 		if (this.hasAttribute('show-profile')) {
 			this.avatarUrl = this.readStoredAvatarUrl();
@@ -143,6 +160,7 @@ class AppNavigation extends HTMLElement {
 		document.addEventListener('credits-claim-status', this.handleCreditsClaimStatus);
 		document.addEventListener('chat-unread-refresh', this._onChatUnreadRefresh);
 		document.addEventListener('visibilitychange', this._onDocumentVisibilityChatTitle);
+		document.addEventListener('feed-beta-changed', this.handleFeedBetaChanged);
 		this.loadNotificationCount();
 		this.loadCreditsCount();
 		// Don't show credits callout until claim status is known from API.
@@ -172,6 +190,7 @@ class AppNavigation extends HTMLElement {
 		document.removeEventListener('credits-claim-status', this.handleCreditsClaimStatus);
 		document.removeEventListener('chat-unread-refresh', this._onChatUnreadRefresh);
 		document.removeEventListener('visibilitychange', this._onDocumentVisibilityChatTitle);
+		document.removeEventListener('feed-beta-changed', this.handleFeedBetaChanged);
 		try {
 			restoreChatGlobalUnreadFavicon();
 		} catch {
@@ -284,6 +303,13 @@ class AppNavigation extends HTMLElement {
 					<img class="profile-avatar" ${this.avatarUrl ? `src="${this.avatarUrl}"` : ''} alt="" aria-hidden="true">
 					${fallbackSvg}`;
 			}
+		}
+	}
+
+	handleFeedBetaChanged(event) {
+		this.feedBetaEnabled = event?.detail?.enabled === true;
+		if (typeof applyFeedBetaNavLabelsToDom === 'function') {
+			applyFeedBetaNavLabelsToDom(this.feedBetaEnabled);
 		}
 	}
 
@@ -575,6 +601,13 @@ class AppNavigation extends HTMLElement {
 			setNsfwContentEnabled(user?.enableNsfw === true);
 			if (typeof hydrateChatAudibleNotificationsFromServer === 'function') {
 				hydrateChatAudibleNotificationsFromServer(user?.audibleNotifications);
+			}
+			if (typeof setFeedBetaEnabledClient === 'function') {
+				setFeedBetaEnabledClient(
+					user?.feedBetaEnabled === true || user?.meta?.feedBetaEnabled === true
+				);
+				this.feedBetaEnabled =
+					user?.feedBetaEnabled === true || user?.meta?.feedBetaEnabled === true;
 			}
 
 			// If no signed-in user, clear cache
@@ -1368,8 +1401,14 @@ class AppNavigation extends HTMLElement {
 					isChatRoute
 						? html`<span class="nav-link-unread-badge" aria-hidden="true"></span>`
 						: '';
+				const feedBetaCls =
+					routeId === 'feed' && this.feedBetaEnabled ? ' nav-link--feed-beta' : '';
+				const routeLabelHtml =
+					routeId === 'feed'
+						? html`<span class="feed-nav-label-text" data-feed-nav="feed">${typeof feedNavLabel === 'function' ? feedNavLabel(routeLabel, this.feedBetaEnabled) : routeLabel}</span>${chatBadge}`
+						: html`${routeLabel}${chatBadge}`;
 				// Generate clean URL path (e.g., /feed, /explore)
-				return html`<a href="/${routeId}" class="nav-link${isChatRoute ? ' nav-link--chat-unread' : ''}" data-route="${routeId}">${routeLabel}${chatBadge}</a>`;
+				return html`<a href="/${routeId}" class="nav-link${isChatRoute ? ' nav-link--chat-unread' : ''}${feedBetaCls}" data-route="${routeId}">${routeLabelHtml}</a>`;
 				}).join('')}
 				${(this.externalNavLinks || []).map((ext) =>
 				html`<a href="${ext.href}" class="nav-link nav-external-link">${ext.label}</a>`
@@ -1472,7 +1511,13 @@ class AppNavigation extends HTMLElement {
 					isChatRoute
 						? html`<span class="nav-link-unread-badge" aria-hidden="true"></span>`
 						: '';
-				return html`<a href="/${routeId}" class="nav-link${isChatRoute ? ' nav-link--chat-unread' : ''}" data-route="${routeId}">${routeLabel}${chatBadge}</a>`;
+				const feedBetaCls =
+					routeId === 'feed' && this.feedBetaEnabled ? ' nav-link--feed-beta' : '';
+				const routeLabelHtml =
+					routeId === 'feed'
+						? html`<span class="feed-nav-label-text" data-feed-nav="feed">${typeof feedNavLabel === 'function' ? feedNavLabel(routeLabel, this.feedBetaEnabled) : routeLabel}</span>${chatBadge}`
+						: html`${routeLabel}${chatBadge}`;
+				return html`<a href="/${routeId}" class="nav-link${isChatRoute ? ' nav-link--chat-unread' : ''}${feedBetaCls}" data-route="${routeId}">${routeLabelHtml}</a>`;
 				}).join('')}
 				${(this.externalNavLinks || []).map((ext) =>
 				html`<a href="${ext.href}" class="nav-link nav-external-link">${ext.label}</a>`

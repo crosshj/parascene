@@ -23,6 +23,7 @@ const [
 	challengeSubmitMetaMod,
 	creationBadgesMod,
 	mediaAudioLevelingMod,
+	feedBetaWhyModalMod,
 ] = await Promise.all([
 	import(`./blogCampaignPath.js${_qs}`),
 	import(`./datetime.js${_qs}`),
@@ -33,6 +34,7 @@ const [
 	import(`./challengeSubmitMeta.js${_qs}`),
 	import(`./creationBadges.js${_qs}`),
 	import(`./mediaAudioLeveling.js${_qs}`),
+	import(`./feedBetaWhyModal.js${_qs}`),
 ]);
 
 const { buildBlogPostPublicPath, BLOG_CAMPAIGN_INTERNAL } = blogCampaignPathMod;
@@ -44,6 +46,7 @@ const { getHelpHref } = helpUrlMod;
 const { creationMetaHasChallengeSubmission } = challengeSubmitMetaMod;
 const { challengeEnteredBadgeHtml, publishedBadgeHtml } = creationBadgesMod;
 const { primeMediaElementForAudioLeveling } = mediaAudioLevelingMod;
+const { openFeedBetaWhyModal } = feedBetaWhyModalMod;
 
 const html = String.raw;
 
@@ -792,6 +795,7 @@ function buildFeedCreationCard(
             </svg>
           </button>
           <div class="feed-card-menu" data-feed-menu style="display: none;">
+            ${item.feed_beta_why ? `<button class="feed-card-menu-item" type="button" data-feed-beta-why>Why am I seeing this?</button>` : ''}
             <button class="feed-card-menu-item" type="button" data-hide-item>Hide from my feed</button>
           </div>
         </div>
@@ -834,7 +838,17 @@ function buildFeedCreationCard(
 	const moreButton = card.querySelector('button[data-more-button]');
 	const menu = card.querySelector('[data-feed-menu]');
 	const hideButton = card.querySelector('button[data-hide-item]');
+	const whyButton = card.querySelector('button[data-feed-beta-why]');
 	const itemId = item.created_image_id || item.id;
+
+	if (whyButton && item.feed_beta_why) {
+		whyButton.addEventListener('click', (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			menu.style.display = 'none';
+			openFeedBetaWhyModal(item.feed_beta_why);
+		});
+	}
 
 	if (moreButton && menu && hideButton && itemId) {
 		// Close any open menus when clicking outside

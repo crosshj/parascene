@@ -1,5 +1,5 @@
 /**
- * Feed [beta] opt-in gate (chat SPA). Legacy `/api/feed` unchanged.
+ * Feed [beta] opt-in gate. When true, GET /api/feed uses pullFeedBetaRows.
  */
 
 export function canAccessFeedBeta(user) {

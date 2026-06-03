@@ -13,6 +13,7 @@ import { buildRequestMeta } from "./utils/analytics.js";
 import { buildSidebarPseudoStripListStaticHtml } from "../public/shared/chatSidebarRoster.js";
 import { isChatBroadcastMentionSlug } from "../public/shared/chatBroadcastMentions.js";
 import { portraitHeroSizing, resolveExtendedHeroLayout } from "../public/shared/aspectRatio.js";
+import { canAccessFeedBeta } from "./feedBeta/access.js";
 
 function getPageForUser(user) {
 	const roleToPage = {
@@ -220,8 +221,11 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 
 	/** Served HTML tokens for `pages/chat.html` (sidebar strip + Rollup chat bundle entry). */
 	function buildChatPageTokens(req, sidebarStripPath) {
+		const feedBetaEnabled = req?.viewerFeedBetaEnabled === true;
 		const t = getPageTokens(req);
-		t.CHAT_SIDEBAR_PSEUDO_STRIP_LIST = buildSidebarPseudoStripListStaticHtml(sidebarStripPath);
+		t.CHAT_SIDEBAR_PSEUDO_STRIP_LIST = buildSidebarPseudoStripListStaticHtml(sidebarStripPath, {
+			feedBetaEnabled
+		});
 		t.ENTRY_MODULE_SRC = `/build/chat.bundle.js${t.V}`;
 		// chat.html loads `/build/chat.bundle.css` (global + chat.css); omit duplicate `/global.css` from injectCommonHead.
 		t.GLOBAL_CSS_LINK = "";
@@ -691,6 +695,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			return null;
 		}
 
+		req.viewerFeedBetaEnabled = canAccessFeedBeta(user);
 		return user;
 	}
 
@@ -737,6 +742,8 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			res.setHeader("Content-Type", "text/html");
 			return res.send(htmlContent);
 		}
+
+		req.viewerFeedBetaEnabled = canAccessFeedBeta(user);
 
 		const fs = await import("fs/promises");
 		let htmlContent;
@@ -1287,6 +1294,7 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 		if (userId) {
 			const user = await queries.selectUserById.get(userId);
 			if (user) {
+				req.viewerFeedBetaEnabled = canAccessFeedBeta(user);
 				const rolePageName = getPageForUser(user);
 				const rolePagePath = path.join(pagesDir, rolePageName);
 				let headerHtml = "";
@@ -1432,6 +1440,8 @@ export default function createPageRoutes({ queries, pagesDir, staticDir, storage
 			}
 			return redirectToAuth(req, res);
 		}
+
+		req.viewerFeedBetaEnabled = canAccessFeedBeta(user);
 
 		// Logged-in user on auth URL (e.g. /auth or /auth#login from another tab) → redirect to app
 		if (req.path === "/auth" || req.path === "/auth.html") {
