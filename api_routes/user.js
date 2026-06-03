@@ -635,6 +635,7 @@ export default function createProfileRoutes({ queries }) {
 				: null;
 		const appearOffline = user.appear_offline === true;
 		const feedBetaEnabled = user.meta?.feedBetaEnabled === true;
+		const forceLegacyFeed = user.meta?.forceLegacyFeed === true;
 		const metaPublic = sanitizeUserMetaForClient(user.meta);
 		return res.json({
 			...user,
@@ -648,6 +649,7 @@ export default function createProfileRoutes({ queries }) {
 			showOwnPostsInFeed,
 			audibleNotifications,
 			feedBetaEnabled,
+			forceLegacyFeed,
 			hasApiKey,
 			apiKeyPrefix,
 			hasVynlyToken,
@@ -812,10 +814,11 @@ export default function createProfileRoutes({ queries }) {
 		const wantsNsfw = Object.prototype.hasOwnProperty.call(body, "enableNsfw");
 		const wantsShowOwnPosts = Object.prototype.hasOwnProperty.call(body, "showOwnPostsInFeed");
 		const wantsAudible = Object.prototype.hasOwnProperty.call(body, "audibleNotifications");
-		if (!wantsNsfw && !wantsShowOwnPosts && !wantsAudible) {
+		const wantsForceLegacy = Object.prototype.hasOwnProperty.call(body, "forceLegacyFeed");
+		if (!wantsNsfw && !wantsShowOwnPosts && !wantsAudible && !wantsForceLegacy) {
 			return res.status(400).json({
 				error: "Invalid request",
-				message: "Provide enableNsfw, showOwnPostsInFeed, and/or audibleNotifications."
+				message: "Provide enableNsfw, showOwnPostsInFeed, audibleNotifications, and/or forceLegacyFeed."
 			});
 		}
 		if (wantsNsfw && typeof body.enableNsfw !== "boolean") {
@@ -831,6 +834,12 @@ export default function createProfileRoutes({ queries }) {
 			return res.status(400).json({
 				error: "Invalid request",
 				message: "audibleNotifications must be a boolean when provided."
+			});
+		}
+		if (wantsForceLegacy && typeof body.forceLegacyFeed !== "boolean") {
+			return res.status(400).json({
+				error: "Invalid request",
+				message: "forceLegacyFeed must be a boolean when provided."
 			});
 		}
 		try {
@@ -852,10 +861,24 @@ export default function createProfileRoutes({ queries }) {
 				}
 				await queries.updateUserAudibleNotifications.run(req.auth.userId, body.audibleNotifications);
 			}
+			if (wantsForceLegacy) {
+				const user = await queries.selectUserById.get(req.auth.userId);
+				if (!user?.meta?.feedBetaEnabled) {
+					return res.status(403).json({
+						error: "Forbidden",
+						message: "Force legacy feed is only available for feed beta participants."
+					});
+				}
+				if (!queries.updateUserForceLegacyFeed?.run) {
+					return res.status(500).json({ error: "Not available", message: "Profile update is not available." });
+				}
+				await queries.updateUserForceLegacyFeed.run(req.auth.userId, body.forceLegacyFeed);
+			}
 			const out = { ok: true };
 			if (wantsNsfw) out.enableNsfw = body.enableNsfw;
 			if (wantsShowOwnPosts) out.showOwnPostsInFeed = body.showOwnPostsInFeed;
 			if (wantsAudible) out.audibleNotifications = body.audibleNotifications;
+			if (wantsForceLegacy) out.forceLegacyFeed = body.forceLegacyFeed;
 			return res.json(out);
 		} catch (err) {
 			console.error("[PATCH /api/profile]", err);

@@ -17,6 +17,7 @@ let feedNavLabel;
 let readFeedBetaEnabledSync;
 let setFeedBetaEnabledClient;
 let applyFeedBetaNavLabelsToDom;
+let feedBetaActiveFromProfile;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -75,6 +76,7 @@ async function loadDeps() {
 		readFeedBetaEnabledSync = feedBetaNavMod.readFeedBetaEnabledSync;
 		setFeedBetaEnabledClient = feedBetaNavMod.setFeedBetaEnabledClient;
 		applyFeedBetaNavLabelsToDom = feedBetaNavMod.applyFeedBetaNavLabelsToDom;
+		feedBetaActiveFromProfile = feedBetaNavMod.feedBetaActiveFromProfile;
 	})();
 	return _depsPromise;
 }
@@ -603,11 +605,12 @@ class AppNavigation extends HTMLElement {
 				hydrateChatAudibleNotificationsFromServer(user?.audibleNotifications);
 			}
 			if (typeof setFeedBetaEnabledClient === 'function') {
-				setFeedBetaEnabledClient(
-					user?.feedBetaEnabled === true || user?.meta?.feedBetaEnabled === true
-				);
-				this.feedBetaEnabled =
-					user?.feedBetaEnabled === true || user?.meta?.feedBetaEnabled === true;
+				const betaActive =
+					typeof feedBetaActiveFromProfile === 'function'
+						? feedBetaActiveFromProfile(user)
+						: user?.feedBetaEnabled === true || user?.meta?.feedBetaEnabled === true;
+				setFeedBetaEnabledClient(betaActive);
+				this.feedBetaEnabled = betaActive;
 			}
 
 			// If no signed-in user, clear cache

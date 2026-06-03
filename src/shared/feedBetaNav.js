@@ -27,6 +27,14 @@ export function readFeedBetaEnabledSync() {
 	return false;
 }
 
+/** Effective beta feed chrome + API path: opted in and not forcing legacy. */
+export function feedBetaActiveFromProfile(user) {
+	if (!user || typeof user !== 'object') return false;
+	const optedIn = user.feedBetaEnabled === true || user.meta?.feedBetaEnabled === true;
+	if (!optedIn) return false;
+	return user.forceLegacyFeed !== true && user.meta?.forceLegacyFeed !== true;
+}
+
 /** @param {boolean} enabled */
 export function setFeedBetaEnabledClient(enabled) {
 	if (typeof window === 'undefined') return;

@@ -15,6 +15,7 @@ import {
 } from '../../notificationNav.js';
 import {
 	applyFeedBetaNavLabelsToDom,
+	feedBetaActiveFromProfile,
 	feedNavLabel,
 	readFeedBetaEnabledSync,
 	setFeedBetaEnabledClient
@@ -545,11 +546,8 @@ class AppNavigation extends HTMLElement {
 			if (typeof hydrateChatAudibleNotificationsFromServer === 'function') {
 				hydrateChatAudibleNotificationsFromServer(user?.audibleNotifications);
 			}
-			setFeedBetaEnabledClient(
-				user?.feedBetaEnabled === true || user?.meta?.feedBetaEnabled === true
-			);
-			this.feedBetaEnabled =
-				user?.feedBetaEnabled === true || user?.meta?.feedBetaEnabled === true;
+			setFeedBetaEnabledClient(feedBetaActiveFromProfile(user));
+			this.feedBetaEnabled = feedBetaActiveFromProfile(user);
 
 			// If no signed-in user, clear cache
 			if (!currentUserEmail) {

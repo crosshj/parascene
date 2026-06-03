@@ -1,5 +1,6 @@
 let buildProfilePath;
 let setFeedBetaEnabledClient;
+let feedBetaActiveFromProfile;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -20,6 +21,7 @@ async function loadDeps() {
 		buildProfilePath = profileLinksMod.buildProfilePath;
 		const feedBetaNavMod = await import(`../../shared/feedBetaNav.js${qs}`);
 		setFeedBetaEnabledClient = feedBetaNavMod.setFeedBetaEnabledClient;
+		feedBetaActiveFromProfile = feedBetaNavMod.feedBetaActiveFromProfile;
 	})();
 	return _depsPromise;
 }
@@ -591,7 +593,11 @@ class AppModalUser extends HTMLElement {
 				this._viewerUserId != null &&
 				Number(this._viewerUserId) === userId
 			) {
-				setFeedBetaEnabledClient(next);
+				const betaActive =
+					typeof feedBetaActiveFromProfile === 'function'
+						? feedBetaActiveFromProfile(this._currentUser)
+						: next;
+				setFeedBetaEnabledClient(betaActive);
 			}
 			document.dispatchEvent(new CustomEvent('user-updated', { detail: { userId } }));
 		} catch (err) {
