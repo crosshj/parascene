@@ -3,7 +3,7 @@
 <title>Visit pulse {{dayKey}}</title>
 <meta name="darkreader-lock" />
 {{!styleBlock}}
-<nav class="small" aria-label="Report navigation">
+<nav class="small report-chrome" aria-label="Report navigation">
 	<a href=".">Up one folder</a>
 	<span class="sep" aria-hidden="true">·</span>
 	{{!prevDayNavHtml}}
@@ -13,7 +13,7 @@
 <h1>Visit pulse — {{dayKey}}</h1>
 <p class="small">Partition: {{tzLabel}} · Source: {{source}} · Generated: {{generatedEt}} <span class="small">(UTC
 		{{generatedUtc}})</span></p>
-<div class="copy-row">
+<div class="copy-row report-chrome">
 	<button type="button" id="copy-pulse-summary">Copy summary JSON</button>
 	<button type="button" id="copy-pulse-raw">Copy raw JSON</button>
 	<span class="copy-status" id="copy-pulse-status" aria-live="polite"></span>

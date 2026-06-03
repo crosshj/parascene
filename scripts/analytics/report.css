@@ -7,7 +7,7 @@
  *
  * OK:
  *   - Generic elements and layout (nav, section, table, button, .card, .grid)
- *   - Reusable utility/pattern classes any offline report can use (.small, .copy-row, .sep)
+ *   - Reusable utility/pattern classes any offline report can use (.small, .copy-row, .sep, .report-chrome)
  *   - Design tokens in :root (--report-*)
  *
  * NOT OK:
@@ -76,6 +76,11 @@ section {
 
 .back {
 	margin-bottom: 18px;
+}
+
+/* Screen-only chrome: folder link, prev/next, copy/export controls */
+.report-chrome {
+	display: block;
 }
 
 nav {
@@ -417,5 +422,229 @@ summary {
 	table {
 		display: block;
 		overflow-x: auto;
+	}
+}
+
+/* Print — keep section titles with their body; charts/tables readable */
+
+@media print {
+	:root {
+		--report-text: #000;
+		--report-muted-fg: #333;
+		--report-heading-muted: #222;
+		--report-border: #bbb;
+	}
+
+	* {
+		-webkit-print-color-adjust: exact;
+		print-color-adjust: exact;
+	}
+
+	body {
+		max-width: none;
+		margin: 0;
+		padding: 0 12mm;
+		font-size: 11pt;
+		line-height: 1.4;
+	}
+
+	main {
+		max-width: none;
+	}
+
+	.report-chrome,
+	.back,
+	nav,
+	.copy-row,
+	nav .sep,
+	button,
+	input[type="button"],
+	input[type="submit"],
+	a[data-pulse-day-nav],
+	summary {
+		display: none !important;
+		visibility: hidden !important;
+		height: 0 !important;
+		margin: 0 !important;
+		padding: 0 !important;
+		overflow: hidden !important;
+		border: 0 !important;
+	}
+
+	/* First body line is often “Up one folder” (older reports too) */
+	body > p.small:first-of-type,
+	body > p.report-chrome:first-of-type,
+	p.small:has(> a[href="."]),
+	p.small:has(> a[href="./"]) {
+		display: none !important;
+		visibility: hidden !important;
+		height: 0 !important;
+		margin: 0 !important;
+		padding: 0 !important;
+		overflow: hidden !important;
+	}
+
+	h1 {
+		break-after: avoid;
+		page-break-after: avoid;
+	}
+
+	h1 + p,
+	h1 + .small,
+	h1 + div {
+		break-before: avoid;
+		page-break-before: avoid;
+	}
+
+	h2,
+	h3,
+	h4,
+	.table-grid > h2 {
+		break-after: avoid;
+		page-break-after: avoid;
+		orphans: 4;
+	}
+
+	/* Heading + lede/caption stay on the same page as the block below */
+	section > h2 + p,
+	section > h2 + .small,
+	section > h2 + ul,
+	section > h3 + p,
+	section > h3 + .small,
+	.card > h2 + p,
+	.card > h2 + .small,
+	.card > h2 + ul,
+	.table-grid > h2 + p,
+	.table-grid > h2 + .small,
+	.table-grid > h2 + .chart-wrap {
+		break-after: avoid;
+		page-break-after: avoid;
+	}
+
+	section > h3 + .chart-wrap,
+	section > h2 + .chart-wrap {
+		break-before: avoid;
+		page-break-before: avoid;
+	}
+
+	section > h2 + .small + h3,
+	section > h2 + p + h3,
+	section > h2 + table,
+	section > h2 + .small + table,
+	section > h2 + p + table,
+	.card > h2 + table,
+	.card > h2 + .small + table,
+	.card > h2 + p + table {
+		break-before: avoid;
+		page-break-before: avoid;
+	}
+
+	.report-print-group {
+		break-inside: avoid;
+		page-break-inside: avoid;
+		-webkit-column-break-inside: avoid;
+		margin: 0 0 16px;
+	}
+
+	.report-print-group > h2,
+	.report-print-group > h3,
+	.report-print-group > p {
+		break-after: avoid;
+		page-break-after: avoid;
+	}
+
+	.report-print-group.report-print-loose {
+		break-inside: auto;
+		page-break-inside: auto;
+	}
+
+	.report-print-group.report-print-loose > h2,
+	.report-print-group.report-print-loose > h3,
+	.report-print-group.report-print-loose > p {
+		break-after: avoid;
+		page-break-after: avoid;
+	}
+
+	.chart-wrap {
+		break-inside: avoid;
+		page-break-inside: avoid;
+		margin: 8px 0 0;
+		border-color: #ccc;
+		background: #fff;
+	}
+
+	.chart-wrap svg {
+		display: block;
+		width: 100% !important;
+		max-width: 100%;
+		height: 200px !important;
+		max-height: 200px;
+	}
+
+	section {
+		margin: 0 0 18px;
+	}
+
+	.card,
+	.card.card-lg {
+		break-inside: auto;
+		page-break-inside: auto;
+		margin: 14px 0;
+		padding: 12px;
+		border-color: #ccc;
+		background: #fff;
+	}
+
+	.grid,
+	.grid-2 {
+		break-inside: auto;
+		page-break-inside: auto;
+	}
+
+	.grid > .card,
+	.grid-2 > .card {
+		break-inside: avoid;
+		page-break-inside: avoid;
+	}
+
+	table {
+		display: table;
+		overflow: visible;
+		break-inside: auto;
+		page-break-inside: auto;
+	}
+
+	thead {
+		display: table-header-group;
+	}
+
+	tfoot {
+		display: table-footer-group;
+	}
+
+	tr {
+		break-inside: avoid;
+		page-break-inside: avoid;
+	}
+
+	/* Milestone / wide tables: allow break but repeat header */
+	table.milestone-table {
+		break-inside: auto;
+		page-break-inside: auto;
+	}
+
+	p,
+	li {
+		orphans: 3;
+		widows: 3;
+	}
+
+	ul {
+		break-inside: auto;
+		page-break-inside: auto;
+	}
+
+	a[href]::after {
+		content: none;
 	}
 }

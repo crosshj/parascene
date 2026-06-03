@@ -75,7 +75,7 @@ async function renderTasteProfilesHtml(report, options = {}) {
 		return `<ul class="list-plain">${items.map(renderItem).join("")}</ul>`;
 	};
 	const navLinkHtml = options.singleUser
-		? '<p class="back"><a href="index.html">&lt;- Back to all users</a></p>'
+		? '<p class="back report-chrome"><a href="index.html">&lt;- Back to all users</a></p>'
 		: "";
 
 	const leaderboard = profiles.map((p, index) => {
