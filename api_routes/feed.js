@@ -171,7 +171,8 @@ export default function createFeedRoutes({ queries }) {
 			includeChallengeEngagement:
 				assembleOpts.includeChallengeEngagement &&
 				challengeSnapshot?.ok &&
-				challengeSnapshot.active
+				challengeSnapshot.active,
+			includeEditorialPin: assembleOpts.includeEditorialPin
 		});
 
 		const body = { items, hasMore };

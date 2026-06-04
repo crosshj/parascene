@@ -31,6 +31,17 @@ import {
 	TRY_DEFAULT_MODEL,
 	TRY_DEFAULT_SERVER_ID,
 } from "../public/shared/generationDefaults.js";
+import {
+	FEED_EDITORIAL_PINS_POLICY_KEY,
+	EDITORIAL_INJECT_SLOTS,
+	EDITORIAL_PIN_POLICY_DEFAULTS,
+	EDITORIAL_PIN_SURFACES,
+	loadEditorialPinPolicyDocument,
+	parseEditorialPinPolicyDocument,
+	serializeEditorialPinPolicyDocument,
+	validateEditorialPinPolicyDocument
+} from "./feed/editorialPinPolicy.js";
+import { bumpFeedVersionCounter } from "./feed/feedVersion.js";
 
 /** Subscription ID stored in user.meta when admin grants founder status without payment. Not a Stripe ID. */
 const GIFTED_FOUNDER_SUBSCRIPTION_ID = "gifted_founder";
@@ -2052,6 +2063,50 @@ export default function createAdminRoutes({ queries, storage }) {
 		}
 		const settings = await queries.getRelatedParams.get();
 		res.json(settings);
+	});
+
+	/** GET /admin/feed/editorial-pins — sitewide injected feed promos. Admin-only. */
+	router.get("/admin/feed/editorial-pins", async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+		const doc = await loadEditorialPinPolicyDocument(queries);
+		res.json(doc);
+	});
+
+	/** PATCH /admin/feed/editorial-pins — replace policy document; bumps version_feed. Admin-only. */
+	router.patch("/admin/feed/editorial-pins", async (req, res) => {
+		const adminUser = await requireAdmin(req, res);
+		if (!adminUser) return;
+		if (!queries.upsertPolicyKey?.run) {
+			return res.status(500).json({ error: "Policy storage unavailable." });
+		}
+		const body = req.body && typeof req.body === "object" ? req.body : {};
+		const parsed = parseEditorialPinPolicyDocument(body);
+		const validated = validateEditorialPinPolicyDocument(parsed);
+		if (!validated.ok) {
+			return res.status(400).json({ error: validated.error });
+		}
+		const pinIds = validated.document.pins.map((p) => Number(p.created_image_id));
+		if (pinIds.length > 0 && queries.selectFeedItemsByCreationIds?.all) {
+			const rows = await queries.selectFeedItemsByCreationIds.all(pinIds);
+			const found = new Set(
+				(Array.isArray(rows) ? rows : []).map((r) => Number(r.created_image_id ?? r.id))
+			);
+			const missing = pinIds.filter((id) => !found.has(id));
+			if (missing.length > 0) {
+				return res.status(400).json({
+					error: `Creation not found or unavailable: ${missing.join(", ")}`
+				});
+			}
+		}
+		const serialized = serializeEditorialPinPolicyDocument(validated.document);
+		await queries.upsertPolicyKey.run(
+			FEED_EDITORIAL_PINS_POLICY_KEY,
+			serialized,
+			"Sitewide editorial feed pins: inject creations on page 1 with placement and display knobs."
+		);
+		await bumpFeedVersionCounter(queries);
+		res.json(validated.document);
 	});
 
 	/** PATCH /admin/related-settings — body: flat key/value (e.g. related.lineage_weight: 100). Upsert each into policy_knobs. Admin-only. */

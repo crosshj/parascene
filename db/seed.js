@@ -113,7 +113,40 @@ const seedData = {
 		{ key: "related.semantic_weight", value: "50", description: "Weight for vector when click-next exists. 0 = semantic not used in blend." },
 		{ key: "related.semantic_weight_no_click_next", value: "95", description: "When no click-next from this creation, strongly prefer semantic (0–100)." },
 		{ key: "related.semantic_distance_max", value: "0.8", description: "Max cosine distance to include semantic neighbours (above = orthogonal/opposite, excluded)." },
-		{ key: "min_days_before_tip", value: "60", description: "Minimum days a user must be present before they can tip (free accounts only; upgraded plans are exempt)." }
+		{ key: "min_days_before_tip", value: "60", description: "Minimum days a user must be present before they can tip (free accounts only; upgraded plans are exempt)." },
+		{
+			key: "feed.editorial_pins",
+			value: JSON.stringify({
+				defaults: {
+					min_index_flat: 3,
+					min_index_slot_pack: 7,
+					after_challenge_offset: 2,
+					respect_challenge: true,
+					show_metadata: true,
+					extra_spacing: true
+				},
+				pins: [
+					{
+						id: "pin-12440",
+						created_image_id: 12440,
+						enabled: true,
+						until: "2026-06-10T23:59:59.999Z",
+						show_metadata: true,
+						extra_spacing: true,
+						surfaces: ["all"],
+						inject: {
+							slot: "min_index",
+							min_index_flat: 3,
+							min_index_slot_pack: 7,
+							after_challenge_offset: 2,
+							respect_challenge: true
+						}
+					}
+				]
+			}),
+			description:
+				"Sitewide editorial feed pins: inject creations on page 1 with placement and display knobs."
+		}
 	],
 
 	notifications: [

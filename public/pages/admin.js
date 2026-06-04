@@ -578,7 +578,7 @@ function setupAlgoTabPersistence() {
 	if (!tabsEl) return;
 
 	const storageKey = "admin-algo-tab";
-	const validTabIds = ["transitions", "graph", "settings"];
+	const validTabIds = ["transitions", "graph", "settings", "feed-pins"];
 
 	const savedTab = (() => {
 		try {
@@ -602,6 +602,9 @@ function setupAlgoTabPersistence() {
 		tabsEl.addEventListener("tab-change", (e) => {
 			const id = e.detail?.id;
 			if (!id || !validTabIds.includes(id)) return;
+			if (id === "feed-pins") {
+				loadFeedEditorialPins();
+			}
 			try {
 				sessionStorage.setItem(storageKey, id);
 			} catch {
@@ -1647,6 +1650,319 @@ async function renderRelatedSettingsForm(settingsContainer, data) {
 	});
 }
 
+const EDITORIAL_PIN_INJECT_SLOT_LABELS = {
+	min_index: "Minimum index (flat / slot-pack floors)",
+	top: "Top of page (index 0)",
+	after_first: "After 1st item",
+	after_second: "After 2nd item",
+	after_third: "After 3rd item",
+	after_fourth: "After 4th item",
+	after_fifth: "After 5th item",
+	fixed_index: "Fixed index (0-based)"
+};
+
+function isoToDatetimeLocalInput(iso) {
+	if (!iso) return "";
+	const ms = Date.parse(String(iso));
+	if (!Number.isFinite(ms)) return "";
+	const d = new Date(ms);
+	const pad = (n) => String(n).padStart(2, "0");
+	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function datetimeLocalInputToIso(value) {
+	const raw = typeof value === "string" ? value.trim() : "";
+	if (!raw) return null;
+	const ms = Date.parse(raw);
+	return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+}
+
+function collectFeedEditorialPinsDocumentFromForm(container) {
+	const defaults = {
+		min_index_flat: Number(container.querySelector("[data-feed-pin-default-min-flat]")?.value) || 3,
+		min_index_slot_pack:
+			Number(container.querySelector("[data-feed-pin-default-min-slot-pack]")?.value) || 7,
+		after_challenge_offset:
+			Number(container.querySelector("[data-feed-pin-default-challenge-offset]")?.value) || 2,
+		respect_challenge:
+			container.querySelector("[data-feed-pin-default-respect-challenge]")?.checked !== false,
+		show_metadata:
+			container.querySelector("[data-feed-pin-default-show-metadata]")?.checked !== false,
+		extra_spacing: container.querySelector("[data-feed-pin-default-extra-spacing]")?.checked !== false
+	};
+	const pins = [];
+	container.querySelectorAll("[data-feed-pin-row]").forEach((row) => {
+		const createdImageId = Number.parseInt(
+			String(row.querySelector("[data-feed-pin-creation-id]")?.value ?? "").trim(),
+			10
+		);
+		if (!Number.isFinite(createdImageId) || createdImageId <= 0) return;
+		const surfaces = [];
+		if (row.querySelector("[data-feed-pin-surface-all]")?.checked) surfaces.push("all");
+		if (row.querySelector("[data-feed-pin-surface-chat]")?.checked) surfaces.push("chat");
+		if (row.querySelector("[data-feed-pin-surface-home]")?.checked) surfaces.push("home");
+		pins.push({
+			id: String(row.querySelector("[data-feed-pin-id]")?.value ?? "").trim() || `pin-${createdImageId}`,
+			created_image_id: createdImageId,
+			enabled: row.querySelector("[data-feed-pin-enabled]")?.checked !== false,
+			starts_at: datetimeLocalInputToIso(
+				row.querySelector("[data-feed-pin-starts-at]")?.value ?? ""
+			),
+			until: datetimeLocalInputToIso(row.querySelector("[data-feed-pin-until]")?.value ?? ""),
+			show_metadata: row.querySelector("[data-feed-pin-show-metadata]")?.checked !== false,
+			extra_spacing: row.querySelector("[data-feed-pin-extra-spacing]")?.checked !== false,
+			surfaces: surfaces.length ? surfaces : ["all"],
+			inject: {
+				slot: String(row.querySelector("[data-feed-pin-inject-slot]")?.value ?? "min_index").trim(),
+				fixed_index:
+					String(row.querySelector("[data-feed-pin-inject-slot]")?.value ?? "") === "fixed_index"
+						? Number(row.querySelector("[data-feed-pin-fixed-index]")?.value)
+						: null,
+				min_index_flat: Number(row.querySelector("[data-feed-pin-min-flat]")?.value),
+				min_index_slot_pack: Number(row.querySelector("[data-feed-pin-min-slot-pack]")?.value),
+				after_challenge_offset: Number(
+					row.querySelector("[data-feed-pin-challenge-offset]")?.value
+				),
+				respect_challenge: row.querySelector("[data-feed-pin-respect-challenge]")?.checked !== false
+			}
+		});
+	});
+	return { defaults, pins };
+}
+
+function renderFeedEditorialPinRow(pin, defaults, index) {
+	const wrap = document.createElement("div");
+	wrap.className = "admin-settings-field admin-feed-pin-row";
+	wrap.dataset.feedPinRow = String(index);
+	wrap.style.gridColumn = "1 / -1";
+
+	const cid = pin?.created_image_id ?? "";
+	const inject = pin?.inject ?? {};
+	const surfaces = Array.isArray(pin?.surfaces) ? pin.surfaces : ["all"];
+	const slot = inject.slot ?? "min_index";
+
+	const slotOptions = Object.keys(EDITORIAL_PIN_INJECT_SLOT_LABELS)
+		.map(
+			(key) =>
+				`<option value="${key}"${slot === key ? " selected" : ""}>${EDITORIAL_PIN_INJECT_SLOT_LABELS[key]}</option>`
+		)
+		.join("");
+
+	wrap.innerHTML = `
+		<div class="admin-feed-pin-row-head">
+			<strong>Pin ${index + 1}</strong>
+			<a class="admin-detail" href="/creations/${cid}" target="_blank" rel="noopener">Preview</a>
+			<button type="button" class="btn-secondary admin-feed-pin-remove" data-feed-pin-remove>Remove</button>
+		</div>
+		<input type="hidden" data-feed-pin-id value="${String(pin?.id ?? `pin-${cid}`).replace(/"/g, "&quot;")}" />
+		<label class="admin-settings-label">Creation ID</label>
+		<input type="number" class="admin-settings-input" data-feed-pin-creation-id min="1" value="${cid}" />
+		<label class="admin-settings-label">Enabled</label>
+		<input type="checkbox" data-feed-pin-enabled ${pin?.enabled !== false ? "checked" : ""} />
+		<label class="admin-settings-label">Starts at (optional)</label>
+		<input type="datetime-local" class="admin-settings-input" data-feed-pin-starts-at value="${isoToDatetimeLocalInput(pin?.starts_at)}" />
+		<label class="admin-settings-label">Expires at</label>
+		<input type="datetime-local" class="admin-settings-input" data-feed-pin-until value="${isoToDatetimeLocalInput(pin?.until)}" />
+		<label class="admin-settings-label">Surfaces</label>
+		<div class="admin-settings-row">
+			<label><input type="checkbox" data-feed-pin-surface-all ${surfaces.includes("all") ? "checked" : ""} /> All</label>
+			<label><input type="checkbox" data-feed-pin-surface-chat ${surfaces.includes("chat") ? "checked" : ""} /> Chat #feed</label>
+			<label><input type="checkbox" data-feed-pin-surface-home ${surfaces.includes("home") ? "checked" : ""} /> Home feed</label>
+		</div>
+		<label class="admin-settings-label">Inject placement</label>
+		<select class="admin-settings-input" data-feed-pin-inject-slot>${slotOptions}</select>
+		<label class="admin-settings-label">Fixed index (when placement = fixed)</label>
+		<input type="number" class="admin-settings-input" data-feed-pin-fixed-index min="0" max="50" value="${inject.fixed_index ?? defaults.min_index_flat ?? 3}" />
+		<label class="admin-settings-label">Min index (flat feed)</label>
+		<input type="number" class="admin-settings-input" data-feed-pin-min-flat min="0" max="50" value="${inject.min_index_flat ?? defaults.min_index_flat ?? 3}" />
+		<label class="admin-settings-label">Min index (mobile slot-pack)</label>
+		<input type="number" class="admin-settings-input" data-feed-pin-min-slot-pack min="0" max="50" value="${inject.min_index_slot_pack ?? defaults.min_index_slot_pack ?? 7}" />
+		<label class="admin-settings-label">Offset after challenge card</label>
+		<input type="number" class="admin-settings-input" data-feed-pin-challenge-offset min="0" max="20" value="${inject.after_challenge_offset ?? defaults.after_challenge_offset ?? 2}" />
+		<label class="admin-settings-label">Respect challenge placement</label>
+		<input type="checkbox" data-feed-pin-respect-challenge ${inject.respect_challenge !== false ? "checked" : ""} />
+		<label class="admin-settings-label">Show metadata after image (author, title, likes)</label>
+		<input type="checkbox" data-feed-pin-show-metadata ${pin?.show_metadata !== false ? "checked" : ""} />
+		<label class="admin-settings-label">Extra vertical spacing</label>
+		<input type="checkbox" data-feed-pin-extra-spacing ${pin?.extra_spacing !== false ? "checked" : ""} />
+	`;
+	return wrap;
+}
+
+async function renderFeedEditorialPinsForm(container, doc) {
+	container.innerHTML = "";
+	container.classList.add("admin-related-settings-grid");
+
+	const defaults = doc?.defaults ?? {};
+	const pins = Array.isArray(doc?.pins) ? doc.pins : [];
+
+	const intro = document.createElement("p");
+	intro.className = "admin-detail";
+	intro.style.gridColumn = "1 / -1";
+	intro.textContent =
+		"Inject published creations on feed page 1 for all users (not Feed [beta] only). Pins are removed from organic positions first so they never appear back-to-back with themselves.";
+	container.appendChild(intro);
+
+	const defaultsTitle = document.createElement("span");
+	defaultsTitle.className = "admin-settings-section-title";
+	defaultsTitle.textContent = "Defaults for new pins";
+	defaultsTitle.style.gridColumn = "1 / -1";
+	container.appendChild(defaultsTitle);
+
+	const defaultFields = [
+		["Min index (flat)", "data-feed-pin-default-min-flat", defaults.min_index_flat ?? 3],
+		["Min index (slot-pack)", "data-feed-pin-default-min-slot-pack", defaults.min_index_slot_pack ?? 7],
+		["After challenge offset", "data-feed-pin-default-challenge-offset", defaults.after_challenge_offset ?? 2]
+	];
+	for (const [label, attr, val] of defaultFields) {
+		const wrap = document.createElement("div");
+		wrap.className = "admin-settings-field";
+		wrap.innerHTML = `<label class="admin-settings-label">${label}</label><input type="number" class="admin-settings-input" ${attr} min="0" max="50" value="${val}" />`;
+		container.appendChild(wrap);
+	}
+
+	const respectWrap = document.createElement("div");
+	respectWrap.className = "admin-settings-field";
+	respectWrap.innerHTML = `<label class="admin-settings-label">Respect challenge card</label><input type="checkbox" data-feed-pin-default-respect-challenge ${defaults.respect_challenge !== false ? "checked" : ""} />`;
+	container.appendChild(respectWrap);
+
+	const metaWrap = document.createElement("div");
+	metaWrap.className = "admin-settings-field";
+	metaWrap.innerHTML = `<label class="admin-settings-label">Show metadata by default</label><input type="checkbox" data-feed-pin-default-show-metadata ${defaults.show_metadata !== false ? "checked" : ""} />`;
+	container.appendChild(metaWrap);
+
+	const spaceWrap = document.createElement("div");
+	spaceWrap.className = "admin-settings-field";
+	spaceWrap.innerHTML = `<label class="admin-settings-label">Extra spacing by default</label><input type="checkbox" data-feed-pin-default-extra-spacing ${defaults.extra_spacing !== false ? "checked" : ""} />`;
+	container.appendChild(spaceWrap);
+
+	const pinsTitle = document.createElement("span");
+	pinsTitle.className = "admin-settings-section-title";
+	pinsTitle.textContent = "Active pins";
+	pinsTitle.style.gridColumn = "1 / -1";
+	container.appendChild(pinsTitle);
+
+	const pinsHost = document.createElement("div");
+	pinsHost.dataset.feedPinsHost = "";
+	pinsHost.style.gridColumn = "1 / -1";
+	container.appendChild(pinsHost);
+
+	const paintPins = (list, defs) => {
+		pinsHost.innerHTML = "";
+		if (!list.length) {
+			const empty = document.createElement("p");
+			empty.className = "admin-detail";
+			empty.textContent = "No pins configured.";
+			pinsHost.appendChild(empty);
+			return;
+		}
+		list.forEach((pin, i) => pinsHost.appendChild(renderFeedEditorialPinRow(pin, defs, i)));
+		bindFeedEditorialPinRowHandlers(pinsHost);
+	};
+
+	paintPins(pins, defaults);
+
+	const addBtn = document.createElement("button");
+	addBtn.type = "button";
+	addBtn.className = "btn-secondary";
+	addBtn.textContent = "Add pin";
+	addBtn.style.gridColumn = "1 / -1";
+	addBtn.addEventListener("click", () => {
+		const current = collectFeedEditorialPinsDocumentFromForm(container);
+		current.pins.push({
+			created_image_id: "",
+			enabled: true,
+			surfaces: ["all"],
+			inject: { slot: "min_index" }
+		});
+		const emptyMsg = pinsHost.querySelector(".admin-detail");
+		if (emptyMsg) emptyMsg.remove();
+		pinsHost.appendChild(
+			renderFeedEditorialPinRow(current.pins[current.pins.length - 1], current.defaults, current.pins.length - 1)
+		);
+		bindFeedEditorialPinRowHandlers(pinsHost);
+	});
+	container.appendChild(addBtn);
+
+	const actions = document.createElement("div");
+	actions.className = "admin-settings-actions admin-related-save-bar";
+	actions.style.gridColumn = "1 / -1";
+	const saveBtn = document.createElement("button");
+	saveBtn.type = "button";
+	saveBtn.className = "btn-primary admin-settings-save";
+	saveBtn.innerHTML =
+		'<span class="admin-settings-save-label">Save feed pins</span><span class="admin-settings-save-spinner" aria-hidden="true"></span>';
+	actions.appendChild(saveBtn);
+	container.appendChild(actions);
+
+	const statusEl = document.createElement("div");
+	statusEl.className = "admin-related-save-status";
+	statusEl.setAttribute("role", "alert");
+	statusEl.style.gridColumn = "1 / -1";
+	container.appendChild(statusEl);
+
+	saveBtn.addEventListener("click", async () => {
+		saveBtn.disabled = true;
+		saveBtn.classList.add("is-loading");
+		statusEl.textContent = "";
+		const payload = collectFeedEditorialPinsDocumentFromForm(container);
+		try {
+			const res = await fetch("/admin/feed/editorial-pins", {
+				method: "PATCH",
+				credentials: "include",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(payload)
+			});
+			const resData = await res.json().catch(() => ({}));
+			if (res.ok) {
+				statusEl.textContent = "Saved. Feed version bumped.";
+				statusEl.classList.remove("admin-related-save-status-error");
+				await renderFeedEditorialPinsForm(container, resData);
+			} else {
+				statusEl.textContent = resData?.error || "Failed to save.";
+				statusEl.classList.add("admin-related-save-status-error");
+			}
+		} catch {
+			statusEl.textContent = "Failed to save.";
+			statusEl.classList.add("admin-related-save-status-error");
+		} finally {
+			saveBtn.disabled = false;
+			saveBtn.classList.remove("is-loading");
+		}
+	});
+}
+
+function bindFeedEditorialPinRowHandlers(pinsHost) {
+	pinsHost.querySelectorAll("[data-feed-pin-remove]").forEach((btn) => {
+		btn.addEventListener("click", () => {
+			btn.closest("[data-feed-pin-row]")?.remove();
+			if (!pinsHost.querySelector("[data-feed-pin-row]")) {
+				const empty = document.createElement("p");
+				empty.className = "admin-detail";
+				empty.textContent = "No pins configured.";
+				pinsHost.appendChild(empty);
+			}
+		});
+	});
+}
+
+async function loadFeedEditorialPins() {
+	const container = document.querySelector("#feed-editorial-pins-container");
+	if (!container) return;
+	container.innerHTML = "";
+	renderLoading(container, "Loading feed pins…");
+	try {
+		const res = await fetch("/admin/feed/editorial-pins", { credentials: "include" });
+		if (!res.ok) throw new Error("load failed");
+		const doc = await res.json();
+		container.innerHTML = "";
+		await renderFeedEditorialPinsForm(container, doc);
+	} catch {
+		container.innerHTML = "";
+		renderError(container, "Error loading feed pins.");
+	}
+}
+
 async function loadRelatedAlgorithm() {
 	const settingsContainer = document.querySelector("#related-settings-container");
 	const transitionsContainer = document.querySelector("#related-transitions-container");
@@ -1681,9 +1997,13 @@ async function loadRelatedAlgorithm() {
 	}
 	loadRelatedTransitions(transitionsContainer);
 	try {
-		if (sessionStorage.getItem("admin-algo-tab") === "graph") {
+		const algoTab = sessionStorage.getItem("admin-algo-tab");
+		if (algoTab === "graph") {
 			const graphContainer = document.querySelector("#related-graph-container");
 			if (graphContainer) loadRelatedGraph(graphContainer);
+		}
+		if (algoTab === "feed-pins") {
+			loadFeedEditorialPins();
 		}
 	} catch {
 		// ignore

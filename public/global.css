@@ -2578,6 +2578,11 @@ app-route-feed {
 	margin: 4em 0;
 }
 
+.feed-card--editorial-pin {
+	margin-top: 28px;
+	margin-bottom: 28px;
+}
+
 .feed-card-tip-inner {
 	background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
 	border-radius: 0;

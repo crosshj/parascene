@@ -6,12 +6,17 @@ import {
 	injectEngagementIntoSlotPackHead,
 	mergeEngagementIntoPage
 } from "./engagementAndNewbie.js";
+import {
+	buildEditorialPinFeedItems,
+	mergeEditorialPinIntoPage
+} from "./editorialPin.js";
 
 /**
- * Combine creation rows, NSFW filter, blog merge, challenge engagement card, newbie tips.
+ * Combine creation rows, NSFW filter, blog merge, challenge engagement card, editorial pin, newbie tips.
  *
  * Merge order:
- *   creation pulls → transform → NSFW → blog merge (offset 0) → challenge engagement (offset 0) → newbie tips
+ *   creation pulls → transform → NSFW → blog merge (offset 0) → challenge engagement (offset 0)
+ *   → editorial pin (page 1) → newbie tips
  */
 export async function assembleFeedItems({
 	queries,
@@ -22,7 +27,8 @@ export async function assembleFeedItems({
 	challengeSnapshot,
 	feedSurface = "",
 	includeBlogMerge,
-	includeChallengeEngagement
+	includeChallengeEngagement,
+	includeEditorialPin
 }) {
 	const enableNsfw = Boolean(user.meta && user.meta.enableNsfw === true);
 	const { rows, hasMore, isNewbieFeed } = creationPull;
@@ -74,7 +80,34 @@ export async function assembleFeedItems({
 		feedSurface: surface
 	});
 
-	const items = applyNewbieFeedTips(pageAfterEngagement, isNewbieFeed);
+	const doEditorialPin =
+		includeEditorialPin === true ||
+		(includeEditorialPin !== false &&
+			Number(offset) === 0 &&
+			!skipEngagement);
+
+	let pageAfterPin = pageAfterEngagement;
+	if (doEditorialPin) {
+		const { items: pinItems, pins: pinConfigs, defaults: pinDefaults } =
+			await buildEditorialPinFeedItems(queries, {
+				enableNsfw,
+				feedSurface: surface
+			});
+		for (let i = 0; i < pinItems.length; i += 1) {
+			pageAfterPin = mergeEditorialPinIntoPage(
+				pageAfterPin,
+				pinItems[i],
+				pinConfigs[i],
+				pinDefaults,
+				{
+					limit,
+					slotPackPageOne: Boolean(creationPull?.mobileChatSlotPackPageOne)
+				}
+			);
+		}
+	}
+
+	const items = applyNewbieFeedTips(pageAfterPin, isNewbieFeed);
 
 	return { items, hasMore };
 }

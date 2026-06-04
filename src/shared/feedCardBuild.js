@@ -1114,7 +1114,10 @@ function buildFeedCreationCard(
 	}
 
 	if (hideFeedCardMetadata) {
-		card.className = "feed-card feed-card--image-only";
+		card.className =
+			item.editorial_pin === true && item.editorial_pin_extra_spacing !== false
+				? "feed-card feed-card--image-only feed-card--editorial-pin"
+				: "feed-card feed-card--image-only";
 		const isPublished = item.published === true || item.published === 1;
 		const publishedOverlay = isPublished ? publishedBadgeHtml() : '';
 		const isGroupCreation = parsedMeta?.group?.kind === 'group_creations';
@@ -1162,7 +1165,11 @@ function buildFeedCreationCard(
 		return card;
 	}
 
-	card.className = "feed-card";
+	if (item.editorial_pin === true && item.editorial_pin_extra_spacing !== false) {
+		card.className = "feed-card feed-card--editorial-pin";
+	} else {
+		card.className = "feed-card";
+	}
 
 	const author = item.author || "Anonymous";
 	const authorUserName = typeof item.author_user_name === "string" ? item.author_user_name.trim() : "";
@@ -1552,7 +1559,8 @@ function finishFeedCreationCardMediaAndClick(
  */
 export function createFeedItemCard(item, itemIndex, options = {}) {
 	const setupFeedVideo = options.setupFeedVideo;
-	const hideFeedCardMetadata = options.hideFeedCardMetadata === true;
+	const hideFeedCardMetadata =
+		options.hideFeedCardMetadata === true || item.editorial_pin_show_metadata === false;
 	const preferThumbnail = options.preferThumbnail === true;
 	const creationsBulkChrome = options.creationsBulkChrome === true;
 	const resolveCreationCardHref =

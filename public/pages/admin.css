@@ -273,6 +273,25 @@
 	grid-column: 1 / -1;
 }
 
+.admin-feed-pin-row {
+	border: 1px solid var(--color-border-subtle, rgba(255, 255, 255, 0.12));
+	border-radius: 10px;
+	padding: 16px;
+	margin-bottom: 12px;
+}
+
+.admin-feed-pin-row-head {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-bottom: 12px;
+	flex-wrap: wrap;
+}
+
+.admin-feed-pin-row .admin-settings-label {
+	margin-top: 10px;
+}
+
 .admin-related-settings-grid .admin-settings-input.admin-related-input {
 	width: 100%;
 	max-width: none;

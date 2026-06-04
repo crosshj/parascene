@@ -20,6 +20,8 @@ let feedItemCardImageUrl;
 let isFeedCreationImageProcessing;
 let markFeedCardImageUnavailable;
 let setupFeedCardGroupCarousel;
+/** @type {typeof import('../../shared/feedCardBuild.js').createFeedItemCard} */
+let createFeedItemCard;
 /** @type {typeof import('../../shared/safeMediaPlay.js').safeMediaPlay} */
 let safeMediaPlay;
 
@@ -79,6 +81,7 @@ async function loadDeps() {
 		isFeedCreationImageProcessing = feedCardBuildMod.isFeedCreationImageProcessing;
 		markFeedCardImageUnavailable = feedCardBuildMod.markFeedCardImageUnavailable;
 		setupFeedCardGroupCarousel = feedCardBuildMod.setupFeedCardGroupCarousel;
+		createFeedItemCard = feedCardBuildMod.createFeedItemCard;
 
 		const safeMediaPlayMod = await import(`../../shared/safeMediaPlay.js${qs}`);
 		safeMediaPlay = safeMediaPlayMod.safeMediaPlay;
@@ -270,6 +273,11 @@ class AppRouteFeed extends HTMLElement {
 		}
 		if (item.type === "blog_post") {
 			return this.buildBlogPostCard(item);
+		}
+		if (item.editorial_pin === true && typeof createFeedItemCard === "function") {
+			return createFeedItemCard(item, itemIndex, {
+				setupFeedVideo: (el) => this.setupFeedVideoAutoplay(el)
+			});
 		}
 
 		const card = document.createElement("div");

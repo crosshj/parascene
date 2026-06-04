@@ -30,12 +30,15 @@ export function resolveFeedAssembleOptions(opts) {
 	const betaPageOne = isFeedBetaAssemblePageOne(opts);
 	const legacyPageOne = !useFeedBeta && Number(offset) === 0;
 
+	const pageOneAssembly =
+		(betaPageOne || legacyPageOne) &&
+		!Boolean(creationPull?.mobileChatSlotPackContinuation);
+
 	return {
 		includeBlogMerge:
 			legacyPageOne && !Boolean(creationPull?.mobileChatSlotPackPageOne),
-		includeChallengeEngagement:
-			(betaPageOne || legacyPageOne) &&
-			!Boolean(creationPull?.mobileChatSlotPackContinuation),
+		includeChallengeEngagement: pageOneAssembly,
+		includeEditorialPin: pageOneAssembly,
 		fetchChallengeSnapshot: betaPageOne || legacyPageOne
 	};
 }
