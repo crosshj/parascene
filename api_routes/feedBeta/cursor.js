@@ -1,5 +1,6 @@
-/** Sentinel `after_image_created_at` — beta page-token cursors (not chronological SQL boundaries). */
-export const FEED_BETA_CURSOR_SENTINEL_AT = '1970-01-01T00:00:00.000Z';
+import { FEED_BETA_CURSOR_SENTINEL_AT } from '../../src/shared/feedBetaContinuation.js';
+
+export { FEED_BETA_CURSOR_SENTINEL_AT };
 
 /**
  * @param {string|undefined|null} afterAt

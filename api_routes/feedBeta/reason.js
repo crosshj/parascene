@@ -2,7 +2,7 @@
  * Feed [beta] placement reasons — stamped when rows are chosen during pull/merge, not inferred later.
  */
 
-/** @typedef {'hot_24h'|'hot_7d'|'new'|'newcomer'|'catalog_unseen'|'catalog_relaxed'|'follow_sprinkle'|'fill_remainder'|'site_video_head'|'db_random_fallback'} FeedBetaPoolId */
+/** @typedef {'hot_24h'|'hot_7d'|'new'|'newcomer'|'catalog_unseen'|'catalog_relaxed'|'follow_sprinkle'|'fill_remainder'|'site_video_head'|'db_random_fallback'|'page_fill'} FeedBetaPoolId */
 
 const POOL_USER = {
 	hot_24h: 'It is getting strong engagement in the last 24 hours.',
@@ -17,14 +17,20 @@ const POOL_USER = {
 	fill_remainder: 'It filled an open slot on this page after the main pools were drawn.',
 	site_video_head: 'It is among the newest site-wide videos for the mobile spotlight strip.',
 	db_random_fallback:
-		'Ranked pools did not fill this page — it was added as a random pick from the catalog.'
+		'Ranked pools did not fill this page — it was added as a random pick from the catalog.',
+	page_fill:
+		'Ranked pools and the creator cap left open slots — it was added to fill the page to your requested size.'
 };
 
 const MERGE_USER = {
 	slot_pack_head_video: 'On mobile, it was placed in a spotlight video slot at the top of the page.',
 	slot_pack_head_image: 'On mobile, it was placed in the card strip between spotlight videos.',
 	slot_pack_tail: 'It continued the page after the mobile spotlight section.',
-	round_robin: 'It was merged into the page from the video and image threads.'
+	round_robin: 'It was merged into the page from the video and image threads.',
+	page_one_chronological:
+		'On the first page, items were ordered newest-first by publish time.',
+	page_one_recency:
+		'On the first page, items were ordered newest-first by publish time.'
 };
 
 /**

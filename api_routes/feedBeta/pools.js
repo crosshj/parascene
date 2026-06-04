@@ -126,11 +126,40 @@ function weightedSampleWithReason(entries, take, rng, pool, stampBase, seen, use
  * @param {object} opts
  * @returns {object[]}
  */
+/**
+ * Pool slot counts per page. Page 1 can lean hot; page 2+ reserves more `new` slots so
+ * scrollers still see site-fresh posts alongside unseen engaged back-catalog.
+ * @param {number} pageIndex
+ * @param {typeof FEED_BETA_DEFAULT_PARAMS} params
+ */
+export function feedBetaPoolTakesForPage(pageIndex, params = FEED_BETA_DEFAULT_PARAMS) {
+	const page = Math.max(1, Number(pageIndex) || 1);
+	if (page <= 1) {
+		return {
+			hot24Take: params.hot24Take,
+			hot7Take: params.hot7Take,
+			newTake: params.newTake,
+			newcomerTake: params.newcomerTake,
+			catalogTake: params.catalogTake,
+			followTake: params.followTake
+		};
+	}
+	return {
+		hot24Take: Math.max(3, params.hot24Take - 1),
+		hot7Take: Math.max(2, params.hot7Take - 1),
+		newTake: params.newTake + 2,
+		newcomerTake: params.newcomerTake,
+		catalogTake: Math.max(5, params.catalogTake - 1),
+		followTake: params.followTake
+	};
+}
+
 export function drawThreadPageFromCatalog(catalog, opts) {
 	const params = FEED_BETA_DEFAULT_PARAMS;
 	const thread = opts.thread;
 	const take = Math.max(1, Number(opts.take) || 20);
 	const pageIndex = Math.max(1, Number(opts.pageIndex) || 1);
+	const poolTakes = feedBetaPoolTakesForPage(pageIndex, params);
 	const relaxed = isFeedBetaRelaxedPage(pageIndex, params);
 	const seen =
 		opts.ignoreSeen === true ? new Set() : opts.seen instanceof Set ? opts.seen : new Set();
@@ -193,17 +222,17 @@ export function drawThreadPageFromCatalog(catalog, opts) {
 
 	const out = [];
 	out.push(
-		...takeRowsFromScored(hot24Pool, seen, params.hot24Take, used, 'hot_24h', stampBase, skipSeenFilter)
+		...takeRowsFromScored(hot24Pool, seen, poolTakes.hot24Take, used, 'hot_24h', stampBase, skipSeenFilter)
 	);
 	out.push(
-		...takeRowsFromScored(hot7Pool, seen, params.hot7Take, used, 'hot_7d', stampBase, skipSeenFilter)
+		...takeRowsFromScored(hot7Pool, seen, poolTakes.hot7Take, used, 'hot_7d', stampBase, skipSeenFilter)
 	);
-	out.push(...takeRowsFromScored(newPool, seen, params.newTake, used, 'new', stampBase, skipSeenFilter));
+	out.push(...takeRowsFromScored(newPool, seen, poolTakes.newTake, used, 'new', stampBase, skipSeenFilter));
 	out.push(
 		...takeRowsFromScored(
 			newcomerPool,
 			seen,
-			params.newcomerTake,
+			poolTakes.newcomerTake,
 			used,
 			'newcomer',
 			stampBase,
@@ -218,7 +247,7 @@ export function drawThreadPageFromCatalog(catalog, opts) {
 	out.push(
 		...weightedSampleWithReason(
 			catalogCandidates,
-			params.catalogTake,
+			poolTakes.catalogTake,
 			rng,
 			catalogPoolId,
 			stampBase,
@@ -233,7 +262,7 @@ export function drawThreadPageFromCatalog(catalog, opts) {
 			...takeRowsFromScored(
 				followPool,
 				seen,
-				params.followTake,
+				poolTakes.followTake,
 				used,
 				'follow_sprinkle',
 				stampBase,

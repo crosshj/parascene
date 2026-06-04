@@ -1,5 +1,5 @@
 import { describe, expect, test } from '@jest/globals';
-import { enforceCreatorCapOnPage } from '../api_routes/feedBeta/creatorCap.js';
+import { enforceCreatorCapOnPage, pickTopEngagedPerAuthor } from '../api_routes/feedBeta/creatorCap.js';
 import { mergeBetaPage } from '../api_routes/feedBeta/mergeBetaPage.js';
 import { pullFeedBetaRows } from '../api_routes/feedBeta/pullFeedBetaRows.js';
 
@@ -18,6 +18,27 @@ function row(id, opts = {}) {
 	};
 }
 
+function rowWithEngagement(id, userId, engagement, likeCount = 0) {
+	return {
+		...row(id, { userId }),
+		like_count: likeCount,
+		feed_beta_why: { developer: { engagement } }
+	};
+}
+
+describe('pickTopEngagedPerAuthor', () => {
+	test('keeps two highest-engagement rows per author in original order', () => {
+		const primary = [
+			rowWithEngagement(1, 10, 0.2),
+			rowWithEngagement(2, 10, 5.0),
+			rowWithEngagement(3, 10, 1.0),
+			rowWithEngagement(4, 10, 8.0)
+		];
+		const kept = pickTopEngagedPerAuthor(primary, 2);
+		expect(kept.map((r) => r.id)).toEqual([2, 4]);
+	});
+});
+
 describe('enforceCreatorCapOnPage', () => {
 	test('limits same author and backfills from spare rows', () => {
 		const primary = [1, 2, 3, 4].map((id) => row(id, { userId: 10 }));
@@ -35,6 +56,22 @@ describe('enforceCreatorCapOnPage', () => {
 		}, {});
 		expect(authorCounts['10']).toBe(2);
 		expect(authorCounts['20']).toBe(2);
+	});
+
+	test('prefers high-engagement spare over low-engagement when filling cap slots', () => {
+		const primary = [rowWithEngagement(1, 10, 9.0), rowWithEngagement(2, 10, 8.0)];
+		const spare = [
+			rowWithEngagement(3, 20, 0.1),
+			rowWithEngagement(4, 20, 4.5)
+		];
+		const out = enforceCreatorCapOnPage(primary, {
+			limit: 3,
+			spareRows: spare,
+			maxPerCreator: 2
+		});
+		expect(out.length).toBe(3);
+		expect(out.some((r) => r.id === 4)).toBe(true);
+		expect(out.some((r) => r.id === 3)).toBe(false);
 	});
 });
 

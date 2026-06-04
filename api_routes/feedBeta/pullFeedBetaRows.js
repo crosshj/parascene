@@ -3,12 +3,13 @@ import {
 	isFeedBetaPageCursor,
 	pageIndexAfterBetaCursor
 } from './cursor.js';
+import { buildFeedBetaContinuation } from './continuation.js';
 import { pullFeedBetaCandidateCatalog, pullFeedBetaSlotPackVideoHead } from './catalog.js';
 import { FEED_BETA_DEFAULT_PARAMS } from './params.js';
-import { mergeBetaPage } from './mergeBetaPage.js';
+import { mergeBetaPage, sortFeedBetaRowsNewestFirst } from './mergeBetaPage.js';
 import { buildFeedBetaScoreContext, sampleThreadRows } from './pools.js';
 import { computeBetaHasMore } from './hasMore.js';
-import { supplementBetaPageFromRandomFallback } from './randomFallback.js';
+import { ensureBetaPageFilledToLimit } from './fillPageToLimit.js';
 import { getFeedBetaSeenSet } from './seen.js';
 import { feedRowCreationIdKey, normalizeFeedBetaMediaFields } from './rowMedia.js';
 import { stampFeedBetaRowReason } from './reason.js';
@@ -21,12 +22,16 @@ import {
  * @param {object} opts
  * @returns {number}
  */
-function resolveBetaPageIndex({ slotPack, offset, afterAt, afterIdNum, limit }) {
+function resolveBetaPageIndex({ slotPack, offset, afterAt, afterIdNum, limit, feedBetaAck }) {
 	if (slotPack && offset === 0 && !isFeedBetaPageCursor(afterAt, afterIdNum)) {
 		return 1;
 	}
 	if (isFeedBetaPageCursor(afterAt, afterIdNum)) {
 		return pageIndexAfterBetaCursor(afterIdNum);
+	}
+	const ackPage = Number(feedBetaAck?.completed_page);
+	if (Number.isFinite(ackPage) && ackPage >= 1) {
+		return ackPage + 1;
 	}
 	const safeLimit = Math.max(1, Number(limit) || 20);
 	return Math.floor(Math.max(0, offset) / safeLimit) + 1;
@@ -58,7 +63,8 @@ export async function pullFeedBetaRows({
 	afterIdNum,
 	enableNsfw,
 	showOwnPosts,
-	refresh = false
+	refresh = false,
+	feedBetaAck = null
 }) {
 	const userId = user.id;
 	const safeLimit = Math.min(Math.max(1, Number(limit) || 20), 100);
@@ -67,8 +73,10 @@ export async function pullFeedBetaRows({
 		offset,
 		afterAt,
 		afterIdNum,
-		limit: safeLimit
+		limit: safeLimit,
+		feedBetaAck
 	});
+	const previousPageUnfilled = feedBetaAck?.page_filled === false;
 	const isSlotPackPageOne = Boolean(slotPack) && pageIndex === 1;
 	const isContinuation = pageIndex > 1 || (!slotPack && offset > 0);
 	const seen = getFeedBetaSeenSet(user);
@@ -150,7 +158,8 @@ export async function pullFeedBetaRows({
 		videoRows,
 		otherRows,
 		limit: safeLimit,
-		slotPackPageOne: isSlotPackPageOne
+		slotPackPageOne: isSlotPackPageOne,
+		pageIndex
 	});
 	let rows = mergedRows.map((row) => {
 		const norm = normalizeFeedBetaMediaFields(row);
@@ -161,14 +170,16 @@ export async function pullFeedBetaRows({
 	});
 
 	if (rows.length < safeLimit) {
-		rows = await supplementBetaPageFromRandomFallback(queries, userId, {
+		rows = await ensureBetaPageFilledToLimit(queries, userId, {
 			rows,
 			safeLimit,
 			pageSeed,
 			pageIndex,
 			servedSeen: seen,
 			enableNsfw,
-			showOwnPosts: showOwnPosts === true
+			showOwnPosts: showOwnPosts === true,
+			catalog,
+			forceRelaxFill: previousPageUnfilled
 		});
 		rows = rows.map((row) => {
 			const norm = normalizeFeedBetaMediaFields(row);
@@ -179,6 +190,20 @@ export async function pullFeedBetaRows({
 		});
 	}
 
+	if (pageIndex === 1 && rows.length > 1) {
+		rows = sortFeedBetaRowsNewestFirst(rows);
+	}
+
+	let sitewideCatalogSize = null;
+	const sitewideCat = queries.selectFeedBetaSitewideCatalog;
+	if (sitewideCat && typeof sitewideCat.getPublishedCount === 'function') {
+		try {
+			sitewideCatalogSize = await sitewideCat.getPublishedCount(userId);
+		} catch {
+			sitewideCatalogSize = null;
+		}
+	}
+
 	const hasMore = computeBetaHasMore({
 		pageIndex,
 		rows,
@@ -186,7 +211,8 @@ export async function pullFeedBetaRows({
 		catalog,
 		servedSeen: seen,
 		params,
-		isSlotPackPageOne
+		isSlotPackPageOne,
+		sitewideCatalogSize
 	});
 
 	const result = {
@@ -195,12 +221,23 @@ export async function pullFeedBetaRows({
 		isNewbieFeed: false,
 		mobileChatSlotPackPageOne: isSlotPackPageOne,
 		mobileChatSlotPackContinuation: isContinuation && !isSlotPackPageOne,
-		feedBetaServedIds: creationIdsFromBetaRows(rows)
+		feedBetaServedIds: creationIdsFromBetaRows(rows),
+		feedBetaPageCursor: buildBetaPageFeedCursor(pageIndex),
+		feedBetaContinuation: buildFeedBetaContinuation({
+			pageIndex,
+			rows,
+			safeLimit,
+			catalog,
+			servedSeen: seen,
+			params,
+			isSlotPackPageOne,
+			sitewideCatalogSize,
+			hasMore
+		})
 	};
 
-	if (slotPack || isFeedBetaPageCursor(afterAt, afterIdNum)) {
-		result.slotPackFeedCursor = buildBetaPageFeedCursor(pageIndex);
-	}
+	/** @deprecated use feedBetaPageCursor */
+	result.slotPackFeedCursor = result.feedBetaPageCursor;
 
 	return result;
 }

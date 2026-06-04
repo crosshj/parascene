@@ -5,16 +5,41 @@ import {
 	MOBILE_CHAT_SPOTLIGHT_GROUP_COUNT,
 	MOBILE_CHAT_SPOTLIGHT_VIDEOS_PER_GROUP
 } from '../../src/shared/chatFeedMobilePartition.js';
-import { authorCountsFromRows, enforceCreatorCapOnPage } from './creatorCap.js';
+import { authorCountsFromRows, enforceCreatorCapOnPage, rowEngagementScore } from './creatorCap.js';
 import { FEED_BETA_DEFAULT_PARAMS } from './params.js';
 import { appendFeedBetaMergeReason } from './reason.js';
 import { feedRowCreationIdKey, feedRowIsVideoThread } from './rowMedia.js';
 
 /**
- * @param {object[]} videos — newest first
- * @param {object[]} others — newest first
+ * @param {object|null|undefined} row
+ * @returns {number}
+ */
+export function feedBetaRowCreatedAtMs(row) {
+	const ms = Date.parse(String(row?.created_at ?? ''));
+	return Number.isFinite(ms) ? ms : 0;
+}
+
+/**
+ * Page 1 (and post-fill): strict newest-first by `created_at`.
+ * @param {object[]} rows
  * @returns {object[]}
  */
+export function sortFeedBetaRowsNewestFirst(rows) {
+	return (Array.isArray(rows) ? rows : [])
+		.slice()
+		.sort((a, b) => feedBetaRowCreatedAtMs(b) - feedBetaRowCreatedAtMs(a));
+}
+
+/**
+ * @param {object[]} videos
+ * @param {object[]} others
+ * @param {number} max
+ * @returns {object[]}
+ */
+function mergePageOneNewestFirst(videos, others, max) {
+	return sortFeedBetaRowsNewestFirst([...videos, ...others]).slice(0, max);
+}
+
 function roundRobinTail(videos, others, max) {
 	const out = [];
 	let vi = 0;
@@ -33,7 +58,7 @@ function roundRobinTail(videos, others, max) {
  * @returns {{ videos: object[], others: object[] }}
  */
 function sortNewestFirst(videoRows, otherRows) {
-	const byNew = (a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? ''));
+	const byNew = (a, b) => feedBetaRowCreatedAtMs(b) - feedBetaRowCreatedAtMs(a);
 	return {
 		videos: videoRows.slice().sort(byNew),
 		others: otherRows.slice().sort(byNew)
@@ -46,14 +71,13 @@ function sortNewestFirst(videoRows, otherRows) {
  * @param {Set<string>} usedKeys
  * @returns {object[]}
  */
-function spareRowsNewestFirst(videos, others, usedKeys) {
-	const byNew = (a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? ''));
+function spareRowsForCreatorCap(videos, others, usedKeys) {
 	return [...videos, ...others]
 		.filter((row) => {
 			const key = feedRowCreationIdKey(row);
 			return key && !usedKeys.has(key);
 		})
-		.sort(byNew);
+		.sort((a, b) => rowEngagementScore(b) - rowEngagementScore(a));
 }
 
 /**
@@ -69,7 +93,7 @@ function applyPageCreatorCap(rows, videos, others, limit) {
 		const key = feedRowCreationIdKey(row);
 		if (key) usedKeys.add(key);
 	}
-	const spare = spareRowsNewestFirst(videos, others, usedKeys);
+	const spare = spareRowsForCreatorCap(videos, others, usedKeys);
 	return enforceCreatorCapOnPage(rows, {
 		limit,
 		spareRows: spare,
@@ -83,10 +107,13 @@ function applyPageCreatorCap(rows, videos, others, limit) {
  * @param {object[]} opts.otherRows
  * @param {number} opts.limit
  * @param {boolean} opts.slotPackPageOne
+ * @param {number} [opts.pageIndex]
  * @returns {{ rows: object[] }}
  */
-export function mergeBetaPage({ videoRows, otherRows, limit, slotPackPageOne }) {
+export function mergeBetaPage({ videoRows, otherRows, limit, slotPackPageOne, pageIndex = 1 }) {
 	const safeLimit = Math.min(Math.max(1, Number(limit) || 20), 100);
+	const page = Math.max(1, Number(pageIndex) || 1);
+	const pageOneChronological = page === 1;
 	const { videos, others } = sortNewestFirst(videoRows, otherRows);
 
 	if (slotPackPageOne) {
@@ -118,10 +145,13 @@ export function mergeBetaPage({ videoRows, otherRows, limit, slotPackPageOne }) 
 		}
 		const tailVideos = videos.filter((r) => !usedV.has(Number(r.created_image_id ?? r.id)));
 		const tailOthers = others.filter((r) => !usedO.has(Number(r.created_image_id ?? r.id)));
-		const tailRaw = roundRobinTail(tailVideos, tailOthers, Math.max(0, safeLimit - head.length));
+		const tailBudget = Math.max(0, safeLimit - head.length);
+		const tailRaw = pageOneChronological
+			? mergePageOneNewestFirst(tailVideos, tailOthers, tailBudget)
+			: roundRobinTail(tailVideos, tailOthers, tailBudget);
 		const tail = tailRaw.map((row, i) =>
 			appendFeedBetaMergeReason(row, {
-				merge_layout: 'slot_pack_tail',
+				merge_layout: pageOneChronological ? 'page_one_chronological' : 'slot_pack_tail',
 				position_in_page: head.length + i + 1
 			})
 		);
@@ -130,20 +160,26 @@ export function mergeBetaPage({ videoRows, otherRows, limit, slotPackPageOne }) 
 			const key = feedRowCreationIdKey(row);
 			if (key) headKeys.add(key);
 		}
-		const tailSpare = spareRowsNewestFirst(tailVideos, tailOthers, headKeys);
-		const tailBudget = Math.max(0, safeLimit - head.length);
+		const tailSpare = spareRowsForCreatorCap(tailVideos, tailOthers, headKeys);
 		const cappedTail = enforceCreatorCapOnPage(tail, {
 			limit: tailBudget,
 			spareRows: tailSpare,
 			maxPerCreator: FEED_BETA_DEFAULT_PARAMS.maxCreationsPerAuthorPerPage,
 			seedAuthorCounts: authorCountsFromRows(head)
 		});
-		return { rows: [...head, ...cappedTail] };
+		const sortedTail = pageOneChronological ? sortFeedBetaRowsNewestFirst(cappedTail) : cappedTail;
+		return { rows: [...head, ...sortedTail] };
 	}
 
-	const mergedRaw = roundRobinTail(videos, others, safeLimit);
+	const mergedRaw = pageOneChronological
+		? mergePageOneNewestFirst(videos, others, safeLimit)
+		: roundRobinTail(videos, others, safeLimit);
+	const mergeLayout = pageOneChronological ? 'page_one_chronological' : 'round_robin';
 	const merged = mergedRaw.map((row, i) =>
-		appendFeedBetaMergeReason(row, { merge_layout: 'round_robin', position_in_page: i + 1 })
+		appendFeedBetaMergeReason(row, { merge_layout: mergeLayout, position_in_page: i + 1 })
 	);
-	return { rows: applyPageCreatorCap(merged, videos, others, safeLimit) };
+	const capped = applyPageCreatorCap(merged, videos, others, safeLimit);
+	return {
+		rows: pageOneChronological ? sortFeedBetaRowsNewestFirst(capped) : capped
+	};
 }

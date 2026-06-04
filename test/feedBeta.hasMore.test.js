@@ -125,4 +125,49 @@ describe('computeBetaHasMore', () => {
 			})
 		).toBe(false);
 	});
+
+	test('sitewide size keeps hasMore true while feedBetaSeen is incomplete', () => {
+		const served = new Set(Array.from({ length: 139 }, (_, i) => String(i + 1)));
+		expect(
+			computeBetaHasMore({
+				pageIndex: 40,
+				rows: [{ created_image_id: 999, id: 999 }],
+				safeLimit: 20,
+				catalog: [],
+				servedSeen: served,
+				params,
+				sitewideCatalogSize: 3439
+			})
+		).toBe(true);
+	});
+
+	test('sitewide size yields hasMore false when feedBetaSeen covers catalog', () => {
+		const served = new Set(Array.from({ length: 100 }, (_, i) => String(i + 1)));
+		expect(
+			computeBetaHasMore({
+				pageIndex: 10,
+				rows: [{ created_image_id: 1, id: 1 }],
+				safeLimit: 20,
+				catalog: [],
+				servedSeen: served,
+				params,
+				sitewideCatalogSize: 100
+			})
+		).toBe(false);
+	});
+
+	test('sitewide size yields hasMore false on empty page even if unseen remain', () => {
+		const served = new Set(['1', '2']);
+		expect(
+			computeBetaHasMore({
+				pageIndex: 3,
+				rows: [],
+				safeLimit: 20,
+				catalog: [],
+				servedSeen: served,
+				params,
+				sitewideCatalogSize: 500
+			})
+		).toBe(false);
+	});
 });

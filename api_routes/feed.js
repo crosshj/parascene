@@ -14,10 +14,12 @@ import {
 import { pullDoomFeedRows } from "./feed/pullDoomFeedRows.js";
 import { pullChallengeFeedSnapshot } from "./feed/pullChallengeFeedSnapshot.js";
 import { assembleFeedItems } from "./feed/assembleFeedItems.js";
+import { resolveFeedAssembleOptions } from "./feed/resolveFeedAssemble.js";
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { removeJoinedPrivateChannelInviteDmMessages } from "./utils/chatInviteCleanup.js";
 import { canAccessFeedBeta } from "./feedBeta/access.js";
 import { pullFeedBetaRows } from "./feedBeta/pullFeedBetaRows.js";
+import { parseFeedBetaAckFromQuery } from "./feedBeta/continuation.js";
 
 export default function createFeedRoutes({ queries }) {
 	const router = express.Router();
@@ -78,12 +80,13 @@ export default function createFeedRoutes({ queries }) {
 
 		const useFeedBeta = canAccessFeedBeta(user);
 		const enableNsfw = Boolean(user.meta && user.meta.enableNsfw === true);
+		const feedBetaAck = useFeedBeta ? parseFeedBetaAckFromQuery(req.query) : null;
 
 		let creationPull;
 		if (useFeedBeta) {
 			const refreshBeta =
 				String(req.query?.refresh ?? '').trim() === '1' ||
-				(offset === 0 && !hasImageCursor && (!slotPack || offset === 0));
+				(offset === 0 && !hasImageCursor && (!slotPack || offset === 0) && !feedBetaAck);
 			creationPull = await pullFeedBetaRows({
 				queries,
 				user,
@@ -94,7 +97,8 @@ export default function createFeedRoutes({ queries }) {
 				afterIdNum,
 				enableNsfw,
 				showOwnPosts: showOwnPostsInFeed,
-				refresh: refreshBeta
+				refresh: refreshBeta,
+				feedBetaAck
 			});
 			const servedIds = creationPull?.feedBetaServedIds;
 			if (Array.isArray(servedIds) && servedIds.length > 0 && queries.updateUserFeedBetaSeen?.run) {
@@ -131,14 +135,18 @@ export default function createFeedRoutes({ queries }) {
 			});
 		}
 
-		const assembleOffset = useFeedBeta
-			? creationPull?.mobileChatSlotPackPageOne
-				? 0
-				: 1
-			: offset;
+		const assembleOpts = resolveFeedAssembleOptions({
+			useFeedBeta,
+			offset,
+			hasImageCursor,
+			feedBetaAck,
+			afterAt: afterAt != null ? String(afterAt) : undefined,
+			afterIdNum,
+			creationPull
+		});
 
 		let challengeSnapshot = { ok: false };
-		if (assembleOffset === 0) {
+		if (assembleOpts.fetchChallengeSnapshot) {
 			try {
 				challengeSnapshot = await pullChallengeFeedSnapshot({
 					viewerUserId: user.id,
@@ -155,19 +163,27 @@ export default function createFeedRoutes({ queries }) {
 			queries,
 			user,
 			limit,
-			offset: assembleOffset,
+			offset,
 			creationPull,
 			challengeSnapshot,
-			feedSurface
+			feedSurface,
+			includeBlogMerge: assembleOpts.includeBlogMerge,
+			includeChallengeEngagement:
+				assembleOpts.includeChallengeEngagement &&
+				challengeSnapshot?.ok &&
+				challengeSnapshot.active
 		});
 
 		const body = { items, hasMore };
-		if (creationPull?.slotPackFeedCursor) {
-			const c = creationPull.slotPackFeedCursor;
+		const betaCursor = creationPull?.feedBetaPageCursor ?? creationPull?.slotPackFeedCursor;
+		if (betaCursor) {
 			body.feed_cursor = {
-				after_image_created_at: c.created_at,
-				after_image_id: String(c.created_image_id)
+				after_image_created_at: betaCursor.created_at,
+				after_image_id: String(betaCursor.created_image_id)
 			};
+		}
+		if (creationPull?.feedBetaContinuation) {
+			body.feed_beta = creationPull.feedBetaContinuation;
 		}
 		return res.json(body);
 	});

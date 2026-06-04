@@ -46,5 +46,11 @@ export const FEED_BETA_DEFAULT_PARAMS = {
 	maxCreationsPerAuthorPerPage: 2,
 
 	/** Max rows fetched for random backfill when pools under-fill a page. */
-	randomFallbackFetchLimit: 320
+	randomFallbackFetchLimit: 320,
+
+	/** Extra random DB attempts when page is still short after merge + cap. */
+	pageFillMaxRandomAttempts: 4,
+
+	/** Page 1 fill may ignore feedBetaSeen + liked so the first screen hits client `limit`. */
+	pageFillRelaxSeenFromPage: 1
 };

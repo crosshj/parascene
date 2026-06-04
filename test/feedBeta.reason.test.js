@@ -59,9 +59,11 @@ describe('feedBeta reason at assembly', () => {
 			videoRows: [row],
 			otherRows: [],
 			limit: 4,
-			slotPackPageOne: false
+			slotPackPageOne: false,
+			pageIndex: 2
 		});
 		expect(rows[0].feed_beta_why.developer.merge_layout).toBe('round_robin');
+		expect(rows[0].created_image_id).toBe(9);
 		expect(rows[0].feed_beta_why.developer.position_in_page).toBe(1);
 	});
 

@@ -15,6 +15,9 @@ export function isFeedBetaAssumedHasMorePage(pageIndex, params) {
 /**
  * Whether beta feed pagination should continue after this page.
  *
+ * When `sitewideCatalogSize` is set, scroll continues until `feedBetaSeen` covers
+ * the published sitewide catalog (not when a candidate batch or page cap runs out).
+ *
  * @param {object} opts
  * @param {number} opts.pageIndex
  * @param {object[]} opts.rows
@@ -23,6 +26,7 @@ export function isFeedBetaAssumedHasMorePage(pageIndex, params) {
  * @param {Set<string>} opts.servedSeen
  * @param {{ maxPageIndex: number, hasMoreThroughPage?: number }} opts.params
  * @param {boolean} [opts.isSlotPackPageOne]
+ * @param {number|null|undefined} [opts.sitewideCatalogSize]
  * @returns {boolean}
  */
 export function computeBetaHasMore({
@@ -32,10 +36,25 @@ export function computeBetaHasMore({
 	catalog,
 	servedSeen,
 	params,
-	isSlotPackPageOne = false
+	isSlotPackPageOne = false,
+	sitewideCatalogSize = null
 }) {
+	const servedCount = servedSeen instanceof Set ? servedSeen.size : 0;
+	const siteTotal = Number(sitewideCatalogSize);
+	const hasSiteTotal = Number.isFinite(siteTotal) && siteTotal > 0;
+
+	if (hasSiteTotal && servedCount >= siteTotal) {
+		return false;
+	}
+
+	const rowCount = Array.isArray(rows) ? rows.length : 0;
+
+	if (hasSiteTotal && servedCount < siteTotal) {
+		return rowCount > 0;
+	}
+
 	if (pageIndex >= params.maxPageIndex) return false;
-	if (!Array.isArray(rows) || rows.length === 0) return false;
+	if (rowCount === 0) return false;
 
 	if (isFeedBetaAssumedHasMorePage(pageIndex, params)) return true;
 
@@ -52,8 +71,8 @@ export function computeBetaHasMore({
 	});
 
 	const filledEnough =
-		rows.length >= safeLimit ||
-		(isSlotPackPageOne && rows.length >= MOBILE_CHAT_SLOT_PACK_STRUCTURED_LEN);
+		rowCount >= safeLimit ||
+		(isSlotPackPageOne && rowCount >= MOBILE_CHAT_SLOT_PACK_STRUCTURED_LEN);
 
 	if (!filledEnough) return false;
 

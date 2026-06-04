@@ -42,13 +42,14 @@ UI
 - Settings → Force legacy feed (beta participants only)
 - Card menu → “Why am I seeing this?” (`feedBetaWhyModal.js`)
 
-Tests (13 suites, 49 tests — run `npm test -- test/feedBeta`)
+Tests (run `npm test -- test/feedBeta`)
 
-- access (incl. forceLegacyFeed), cursor, merge, score, threads, pools, videoHead, reason, nav, seen, hasMore, pagination/creatorCap, randomFallback
+- access (incl. forceLegacyFeed), cursor, merge, score, threads, pools, poolTakes, videoHead, reason, nav, seen, hasMore, pagination/creatorCap, randomFallback
+- apiFeed (route-shaped integration), catalog (sitewide vs explore), followSprinkle, requirements, goldenPath, prodCatalog
 
 ## Open (do in order)
 
-1. Integration test — `GET /api/feed` beta branch returns same top-level keys as legacy and `feed_beta_why` on creation rows (mock or test DB). File: e.g. `test/feedBeta.apiFeed.test.js`.
+1. ~~Integration test — `GET /api/feed` beta branch~~ — `test/feedBeta.apiFeed.test.js` (route helper + mocks; not HTTP supertest).
 
 2. Mobile spotlight QA — beta user, chat `#feed`, `slot_pack=mobile_chat_v1` page 1: three 2×2 video strips filled (not skeletons). Fix in `pullFeedBetaRows` / video head path if red.
 

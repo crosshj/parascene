@@ -2,6 +2,7 @@
  * Chat `#feed` fetchPage: slot-pack page 1; continuation uses API `feed_cursor`.
  */
 import { describe, expect, test } from '@jest/globals';
+import { FEED_BETA_CURSOR_SENTINEL_AT } from '../src/shared/feedBetaContinuation.js';
 import { createChatFeedFetchPage, normalizeFeedCursorFromApi } from '../src/chat/feed/feedChannelData.js';
 
 describe('normalizeFeedCursorFromApi', () => {
@@ -127,5 +128,60 @@ describe('createChatFeedFetchPage mobile slot-pack paging', () => {
 		const u = new URL(urls[2], 'http://localhost');
 		expect(u.searchParams.get('feed_after_image_created_at')).toBe('2025-01-05');
 		expect(u.searchParams.get('feed_after_image_id')).toBe('5');
+	});
+});
+
+describe('createChatFeedFetchPage beta page cursor (desktop)', () => {
+	test('load-more uses feed_cursor and feed_beta_ack, not item offset', async () => {
+		const urls = [];
+		const fetchPage = createChatFeedFetchPage({
+			mobileChatSlotPack: false,
+			pageSize: 28,
+			fetchJsonWithStatusDeduped: async (url) => {
+				urls.push(url);
+				const isInitial = !url.includes('feed_after_image');
+				return {
+					ok: true,
+					data: isInitial
+						? {
+								items: Array.from({ length: 4 }, (_, i) => ({
+									created_image_id: i + 1,
+									created_at: '2025-01-01'
+								})),
+								hasMore: true,
+								feed_cursor: {
+									after_image_created_at: FEED_BETA_CURSOR_SENTINEL_AT,
+									after_image_id: '1'
+								},
+								feed_beta: {
+									completed_page: 1,
+									page_filled: false,
+									served_count: 4
+								}
+							}
+						: {
+								items: [{ created_image_id: 99, created_at: '2024-12-01' }],
+								hasMore: true,
+								feed_cursor: {
+									after_image_created_at: FEED_BETA_CURSOR_SENTINEL_AT,
+									after_image_id: '2'
+								},
+								feed_beta: {
+									completed_page: 2,
+									page_filled: false,
+									served_count: 1
+								}
+							}
+				};
+			}
+		});
+		const page1 = await fetchPage({ initial: true, items: [] });
+		await fetchPage({ initial: false, items: page1.pageItems });
+		expect(urls.length).toBe(2);
+		const u = new URL(urls[1], 'http://localhost');
+		expect(u.searchParams.get('feed_after_image_created_at')).toBe(FEED_BETA_CURSOR_SENTINEL_AT);
+		expect(u.searchParams.get('feed_after_image_id')).toBe('1');
+		expect(u.searchParams.get('feed_beta_ack')).toBeTruthy();
+		expect(u.searchParams.get('offset')).toBe(null);
 	});
 });

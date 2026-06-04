@@ -260,6 +260,17 @@ export function createSelectFeedBetaSitewideCatalog(serviceClient, deps) {
 			return rows.slice(0, lim);
 		},
 
-		getCandidates: (viewerId, opts = {}) => getRecent(viewerId, opts)
+		getCandidates: (viewerId, opts = {}) => getRecent(viewerId, opts),
+
+		/** Published sitewide feed_items count (available creations). Used for hasMore exhaustion. */
+		getPublishedCount: async () => {
+			const { count, error } = await serviceClient
+				.from(prefixedTable('feed_items'))
+				.select('id, prsn_created_images!inner(id)', { count: 'exact', head: true })
+				.not('prsn_created_images.user_id', 'is', null)
+				.is('prsn_created_images.unavailable_at', null);
+			if (error) throw error;
+			return Math.max(0, Number(count) || 0);
+		}
 	};
 }
