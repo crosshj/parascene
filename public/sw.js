@@ -26,6 +26,8 @@ const IMAGE_MANAGED_IDLE_MAX_DAYS = 30;
 const IMAGE_LAST_ACCESSED_MAX_AGE_MS = IMAGE_MANAGED_IDLE_MAX_DAYS * 24 * 60 * 60 * 1000;
 const IMAGE_TRIM_THROTTLE_MS = 60 * 1000;
 const DATA_REVALIDATE_TTL_MS = 30 * 1000;
+const CHALLENGE_ENGAGEMENT_REVALIDATE_TTL_MS = 5 * 60 * 1000;
+const CHALLENGE_ENGAGEMENT_PATH = "/api/feed/challenge-engagement";
 const FEED_VERSION_CHECK_TTL_MS = 15 * 1000;
 const FEED_VERSION_CACHE_URL = "/__sw/meta/version_feed";
 const dataRevalidateAtByKey = new Map();
@@ -133,6 +135,14 @@ function isCacheableDataRequest(request, url) {
 
 function isFeedDataRequest(url) {
 	return url.pathname.startsWith("/api/feed") && url.pathname !== "/api/feed/version";
+}
+
+function isChallengeEngagementRequest(url) {
+	return url.pathname === CHALLENGE_ENGAGEMENT_PATH;
+}
+
+function dataRevalidateTtlMs(url) {
+	return isChallengeEngagementRequest(url) ? CHALLENGE_ENGAGEMENT_REVALIDATE_TTL_MS : DATA_REVALIDATE_TTL_MS;
 }
 
 function parseVersionNumber(raw) {
@@ -461,8 +471,9 @@ async function staleWhileRevalidateData(request) {
 		const key = request.url;
 		const now = Date.now();
 		const nextAllowedAt = dataRevalidateAtByKey.get(key) || 0;
+		const revalidateTtlMs = dataRevalidateTtlMs(new URL(request.url));
 		if (now >= nextAllowedAt) {
-			dataRevalidateAtByKey.set(key, now + DATA_REVALIDATE_TTL_MS);
+			dataRevalidateAtByKey.set(key, now + revalidateTtlMs);
 			void revalidateDataRequest(request);
 		}
 		return cached;
@@ -597,7 +608,7 @@ self.addEventListener("fetch", (event) => {
 	}
 	if (isCacheableDataRequest(request, url)) {
 		event.respondWith((async () => {
-			if (isFeedDataRequest(url)) {
+			if (isFeedDataRequest(url) && !isChallengeEngagementRequest(url)) {
 				await checkFeedVersionAndInvalidateIfNeeded();
 			}
 			return staleWhileRevalidateData(request);
