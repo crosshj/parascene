@@ -42,7 +42,7 @@ export function resolveFeedAssembleOptions(opts) {
 		includeBlogMerge:
 			pageOneForBlog && !isChatSurface && !Boolean(creationPull?.mobileChatSlotPackPageOne),
 		includeChallengeEngagement: pageOneAssembly && !isChatSurface,
-		includeEditorialPin: pageOneAssembly && !isChatSurface,
+		includeEditorialPin: pageOneAssembly,
 		fetchChallengeSnapshot: (betaPageOne || legacyPageOne) && !isChatSurface
 	};
 }

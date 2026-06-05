@@ -68,6 +68,18 @@
 	border: 1px solid color-mix(in srgb, #ffffff 18%, transparent);
 }
 
+/* Deferred challenge card: flat skeleton fill inside the live card shell. */
+.feed-card-engagement-inner.feed-card-engagement-inner-challenge.feed-card-engagement-inner-challenge--loading {
+	background: var(--skeleton);
+	border: none;
+	box-shadow: none;
+	min-height: 370px;
+	padding: 0;
+	gap: 0;
+	width: 100%;
+	box-sizing: border-box;
+}
+
 .feed-card-engagement-inner.feed-card-engagement-inner-challenge .feed-card-engagement-cta:not(.feed-card-engagement-cta--text):not(.feed-card-engagement-cta--outline) {
 	color: #4a1f58 !important;
 	box-shadow: 0 1px 3px rgba(28, 8, 38, 0.16);

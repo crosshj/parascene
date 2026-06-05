@@ -20,19 +20,23 @@ export async function fetchChatFeedChallengeEngagement(fetchJson) {
  */
 export function createChatFeedChallengePlaceholderElement() {
 	const el = document.createElement('div');
-	el.className = 'feed-card feed-card-challenge-placeholder route-card';
+	el.className = 'feed-card feed-card-engagement feed-card-challenge-loading';
 	el.dataset.chatFeedChallengeSlot = '1';
 	el.setAttribute('aria-busy', 'true');
 	el.setAttribute('aria-label', 'Loading community challenge');
-	el.innerHTML = `<div class="skeleton-feed-card feed-card-challenge-placeholder-skeleton" aria-hidden="true">
-		<div class="skeleton-feed-card-image"></div>
-		<div class="skeleton-feed-card-footer">
-			<div class="skeleton-feed-card-content">
-				<div class="skeleton-line skeleton-line--title"></div>
-				<div class="skeleton-line skeleton-line--subtitle"></div>
-			</div>
-		</div>
-	</div>`;
+
+	const shell = document.createElement('div');
+	shell.className =
+		'feed-card-engagement-inner feed-card-engagement-inner-challenge feed-card-engagement-inner-challenge--loading skeleton';
+	shell.setAttribute('aria-hidden', 'true');
+	/* Inline so height holds before chat.bundle.css picks up page rules. */
+	shell.style.minHeight = '370px';
+	shell.style.padding = '0';
+	shell.style.background = 'var(--skeleton)';
+	shell.style.border = 'none';
+	shell.style.boxShadow = 'none';
+
+	el.appendChild(shell);
 	return el;
 }
 

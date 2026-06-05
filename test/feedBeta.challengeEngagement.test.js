@@ -73,7 +73,7 @@ describe('resolveFeedAssembleOptions', () => {
 		expect(opts.fetchChallengeSnapshot).toBe(false);
 	});
 
-	test('chat surface page 1 skips editorial pin', () => {
+	test('chat surface page 1 includes editorial pin', () => {
 		const opts = resolveFeedAssembleOptions({
 			useFeedBeta: true,
 			offset: 0,
@@ -91,7 +91,7 @@ describe('resolveFeedAssembleOptions', () => {
 			}
 		});
 		expect(opts.includeChallengeEngagement).toBe(false);
-		expect(opts.includeEditorialPin).toBe(false);
+		expect(opts.includeEditorialPin).toBe(true);
 		expect(opts.fetchChallengeSnapshot).toBe(false);
 	});
 
