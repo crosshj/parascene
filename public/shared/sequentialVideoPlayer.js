@@ -37,6 +37,12 @@ function applySlotAspect(slot, width, height) {
 	slot.classList.add('sequential-video-slot--sized');
 }
 
+const HOVER_PAUSE_HINT_QUERY = '(hover: hover) and (pointer: fine)';
+
+function supportsHoverPauseHint() {
+	return typeof window !== 'undefined' && window.matchMedia(HOVER_PAUSE_HINT_QUERY).matches;
+}
+
 /**
  * @param {HTMLElement} container
  * @param {SequentialVideoSlide[]} slides
@@ -47,7 +53,10 @@ function applySlotAspect(slot, width, height) {
  *   muted?: boolean,
  *   videoClass?: string,
  *   slotClass?: string,
- *   onIndexChange?: (index: number, slide: SequentialVideoSlide) => void
+ *   posterUrl?: string,
+ *   onIndexChange?: (index: number, slide: SequentialVideoSlide) => void,
+ *   onFirstReveal?: () => void,
+ *   onPlaybackStateChange?: () => void
  * }} [options]
  */
 export function mountSequentialVideoPlayer(container, slides, options = {}) {
@@ -78,6 +87,10 @@ export function mountSequentialVideoPlayer(container, slides, options = {}) {
 		? options.slotClass.trim()
 		: 'sequential-video-player-slot';
 	const onIndexChange = typeof options.onIndexChange === 'function' ? options.onIndexChange : null;
+	const onFirstReveal = typeof options.onFirstReveal === 'function' ? options.onFirstReveal : null;
+	const onPlaybackStateChange =
+		typeof options.onPlaybackStateChange === 'function' ? options.onPlaybackStateChange : null;
+	const posterUrl = typeof options.posterUrl === 'string' ? options.posterUrl.trim() : '';
 	const len = normalized.length;
 
 	let startIndex = Number(options.startIndex);
@@ -88,17 +101,34 @@ export function mountSequentialVideoPlayer(container, slides, options = {}) {
 	slot.className = slotClass;
 	slot.style.setProperty('--sequential-video-ar', '16 / 9');
 
-	const placeholder = document.createElement('div');
-	placeholder.className = 'sequential-video-player-placeholder skeleton';
-	placeholder.setAttribute('role', 'status');
-	placeholder.setAttribute('aria-live', 'polite');
-	placeholder.setAttribute('aria-label', 'Loading video');
+	let posterEl = null;
+	let placeholder = null;
+	if (posterUrl) {
+		posterEl = document.createElement('img');
+		posterEl.className = 'sequential-video-player-poster';
+		posterEl.src = posterUrl;
+		posterEl.alt = '';
+		posterEl.decoding = 'async';
+		posterEl.loading = 'eager';
+	} else {
+		placeholder = document.createElement('div');
+		placeholder.className = 'sequential-video-player-placeholder skeleton';
+		placeholder.setAttribute('role', 'status');
+		placeholder.setAttribute('aria-live', 'polite');
+		placeholder.setAttribute('aria-label', 'Loading video');
+	}
 
 	let placeholderHidden = false;
+	let firstRevealNotified = false;
 	const hidePlaceholder = () => {
 		if (placeholderHidden) return;
 		placeholderHidden = true;
-		if (placeholder.parentNode) placeholder.remove();
+		if (posterEl?.parentNode) posterEl.remove();
+		if (placeholder?.parentNode) placeholder.remove();
+	};
+
+	const notifyPlaybackStateChange = () => {
+		onPlaybackStateChange?.();
 	};
 
 	const revealVideo = (video) => {
@@ -107,6 +137,11 @@ export function mountSequentialVideoPlayer(container, slides, options = {}) {
 			video.classList.remove('sequential-video-player-video--pending');
 		}
 		slot.classList.add('sequential-video-slot--playing');
+		if (!firstRevealNotified) {
+			firstRevealNotified = true;
+			onFirstReveal?.();
+		}
+		notifyPlaybackStateChange();
 	};
 
 	const videos = [0, 1].map(() => {
@@ -126,7 +161,8 @@ export function mountSequentialVideoPlayer(container, slides, options = {}) {
 		slot.appendChild(video);
 		return video;
 	});
-	slot.appendChild(placeholder);
+	if (posterEl) slot.appendChild(posterEl);
+	if (placeholder) slot.appendChild(placeholder);
 
 	const playOverlay = document.createElement('div');
 	playOverlay.className = 'chat-doom-play-overlay sequential-video-player-play-overlay';
@@ -169,7 +205,7 @@ export function mountSequentialVideoPlayer(container, slides, options = {}) {
 			if (playOverlayPauseHint instanceof HTMLElement) playOverlayPauseHint.hidden = true;
 			return;
 		}
-		if (slotHovered) {
+		if (slotHovered && supportsHoverPauseHint()) {
 			playOverlay.hidden = false;
 			playOverlay.setAttribute('aria-hidden', 'false');
 			if (playOverlayPlayIcon instanceof HTMLElement) playOverlayPlayIcon.hidden = true;
@@ -189,15 +225,18 @@ export function mountSequentialVideoPlayer(container, slides, options = {}) {
 		e.stopPropagation();
 		if (video.paused) {
 			userPaused = false;
+			slotHovered = false;
 			void tryPlayVideo(video).then(() => syncPlayPauseOverlay());
 		} else {
 			userPaused = true;
+			slotHovered = false;
 			video.pause();
 			syncPlayPauseOverlay();
 		}
 	};
 
 	const onSlotMouseEnter = () => {
+		if (!supportsHoverPauseHint()) return;
 		slotHovered = true;
 		syncPlayPauseOverlay();
 	};
@@ -460,14 +499,14 @@ export function mountSequentialVideoPlayer(container, slides, options = {}) {
 				return;
 			}
 
+			activePlayer = incomingPlayer;
+
 			if (isFirst) {
 				setActivePlayerVisible(incomingPlayer);
 				await playVideoInitial(incomingVideo, slide);
 			} else {
 				await crossfadeToPlayer(incomingPlayer, outgoingPlayer, slide);
 			}
-
-			activePlayer = incomingPlayer;
 			preloadNextSlide();
 			notifyIndexChange();
 		} finally {
@@ -487,9 +526,14 @@ export function mountSequentialVideoPlayer(container, slides, options = {}) {
 		v.addEventListener('play', () => {
 			userPaused = false;
 			syncPlayPauseOverlay();
+			notifyPlaybackStateChange();
 		});
 		v.addEventListener('pause', () => {
 			syncPlayPauseOverlay();
+			notifyPlaybackStateChange();
+		});
+		v.addEventListener('volumechange', () => {
+			notifyPlaybackStateChange();
 		});
 	});
 
@@ -541,6 +585,54 @@ export function mountSequentialVideoPlayer(container, slides, options = {}) {
 			if (video instanceof HTMLVideoElement) {
 				void tryPlayVideo(video);
 			}
+		},
+		togglePlayPause() {
+			const video = videos[activePlayer];
+			if (!(video instanceof HTMLVideoElement) || !placeholderHidden || advanceLock || tornDown) {
+				return;
+			}
+			if (video.paused) {
+				userPaused = false;
+				void tryPlayVideo(video).then(() => syncPlayPauseOverlay());
+			} else {
+				userPaused = true;
+				video.pause();
+				syncPlayPauseOverlay();
+			}
+		},
+		getActiveVideo() {
+			const activeVideos = videos.filter(
+				(video) =>
+					video instanceof HTMLVideoElement &&
+					video.classList.contains('is-active') &&
+					Boolean(video.currentSrc || video.getAttribute('src'))
+			);
+			if (activeVideos.length > 0) {
+				activeVideos.sort((a, b) => {
+					const aZ = Number.parseInt(a.style.zIndex || '0', 10) || 0;
+					const bZ = Number.parseInt(b.style.zIndex || '0', 10) || 0;
+					return bZ - aZ;
+				});
+				return activeVideos[0];
+			}
+			const fallback = videos[activePlayer];
+			return fallback instanceof HTMLVideoElement ? fallback : null;
+		},
+		getVideos() {
+			return videos.filter((video) => video instanceof HTMLVideoElement);
+		},
+		setMuted(muted) {
+			const nextMuted = muted === true;
+			for (const video of videos) {
+				if (!(video instanceof HTMLVideoElement)) continue;
+				video.muted = nextMuted;
+				if (nextMuted) video.setAttribute('muted', '');
+				else video.removeAttribute('muted');
+			}
+		},
+		isMuted() {
+			const video = videos[activePlayer];
+			return video instanceof HTMLVideoElement ? video.muted : true;
 		},
 	};
 }

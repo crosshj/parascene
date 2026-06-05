@@ -2425,9 +2425,21 @@ body.creation-detail-page main>section:first-of-type {
 	max-height: var(--hero-max-height, 80vh);
 }
 
-.creation-detail-image-wrapper.hero-layout-landscape > video.creation-detail-image,
-.creation-detail-image-wrapper.hero-layout-portrait > video.creation-detail-image {
+.creation-detail-image-wrapper.hero-layout-landscape:not(.group-video-playlist-active):not(.group-carousel-active) > video.creation-detail-image,
+.creation-detail-image-wrapper.hero-layout-portrait:not(.group-video-playlist-active):not(.group-carousel-active) > video.creation-detail-image {
+	width: 100%;
+	height: auto;
+	max-width: none;
+	max-height: none;
 	display: none;
+	object-fit: unset;
+	box-shadow: none;
+	border-radius: 0;
+}
+
+.creation-detail-image-wrapper.hero-layout-landscape.hero-video-revealed:not(.group-video-playlist-active) > video.creation-detail-image,
+.creation-detail-image-wrapper.hero-layout-portrait.hero-video-revealed:not(.group-video-playlist-active) > video.creation-detail-image {
+	display: block;
 }
 
 .creation-detail-hero-nav {
@@ -2581,8 +2593,48 @@ body.creation-detail-page main>section:first-of-type {
 	visibility: visible;
 }
 
-.creation-detail-image-wrapper.group-video-playlist-active .creation-detail-image,
 .creation-detail-image-wrapper.group-video-playlist-active > video[data-video] {
+	display: none;
+}
+
+.creation-detail-image-wrapper.group-video-playlist-active:not(.hero-video-revealed) > img[data-image] {
+	display: block;
+	position: relative;
+	z-index: 1;
+}
+
+.creation-detail-image-wrapper.group-video-playlist-active.hero-video-revealed > img[data-image] {
+	display: none;
+}
+
+.creation-detail-image-wrapper.hero-video-pending:not(.hero-video-revealed):not(.group-video-playlist-active) > img[data-image] {
+	display: block;
+	position: relative;
+	z-index: 1;
+	width: 100%;
+	height: auto;
+	max-width: none;
+	max-height: none;
+	object-fit: cover;
+	border-radius: 0;
+	visibility: visible;
+}
+
+.creation-detail-image-wrapper.hero-layout-landscape.hero-video-pending:not(.hero-video-revealed):not(.group-video-playlist-active) > img[data-image],
+.creation-detail-image-wrapper.hero-layout-portrait.hero-video-pending:not(.hero-video-revealed):not(.group-video-playlist-active) > img[data-image] {
+	object-fit: unset;
+	box-shadow: none;
+}
+
+.creation-detail-image-wrapper:not(.hero-video-revealed):not(.group-video-playlist-active) > video[data-video] {
+	display: none !important;
+}
+
+.creation-detail-image-wrapper.hero-video-revealed:not(.group-video-playlist-active) > video[data-video] {
+	display: block;
+}
+
+.creation-detail-image-wrapper.hero-video-revealed:not(.group-video-playlist-active) > img[data-image] {
 	display: none;
 }
 
@@ -2633,15 +2685,19 @@ body.creation-detail-page main>section:first-of-type {
 	pointer-events: none;
 }
 
-.creation-detail-group-hero-video-slot .sequential-video-player-placeholder.skeleton {
+.creation-detail-group-hero-video-slot .sequential-video-player-placeholder.skeleton,
+.creation-detail-group-hero-video-slot .sequential-video-player-poster {
 	position: absolute;
 	inset: 0;
 	z-index: 2;
 	border-radius: 8px;
 	pointer-events: none;
+	object-fit: cover;
+	width: 100%;
+	height: 100%;
 }
 
-.creation-detail-group-hero-video-slot {
+.creation-detail-group-hero-video-slot .sequential-video-player-placeholder.skeleton {
 	cursor: pointer;
 }
 
@@ -2651,7 +2707,7 @@ body.creation-detail-page main>section:first-of-type {
 }
 
 .creation-detail-group-hero-video-slot .sequential-video-player-play-overlay:not([hidden]) {
-	pointer-events: auto;
+	pointer-events: none;
 }
 
 .creation-detail-group-hero-video-slot .chat-doom-play-overlay {
@@ -2703,29 +2759,42 @@ body.creation-detail-page main>section:first-of-type {
 	box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
 }
 
-.creation-detail-group-thumb--video {
-	position: relative;
-}
-
-.creation-detail-group-thumb-play {
-	position: absolute;
-	left: 50%;
-	top: 50%;
-	transform: translate(-50%, -50%);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 28px;
-	height: 28px;
-	border-radius: 50%;
-	background: rgba(0, 0, 0, 0.55);
-	color: #fff;
-	pointer-events: none;
-	z-index: 2;
+@media (hover: none), (pointer: coarse) {
+	.creation-detail-group-hero-video-slot .chat-doom-play-overlay-inner--pausehint {
+		display: none !important;
+	}
 }
 
 .creation-detail-image-wrapper video.creation-detail-image {
 	object-fit: cover;
+}
+
+.creation-detail-image-wrapper.group-video-playlist-active .creation-detail-video-muted-badge {
+	z-index: 6;
+}
+
+.creation-detail-image-wrapper.hero-video-volume-controls .creation-detail-video-muted-badge {
+	opacity: 0;
+	visibility: hidden;
+	pointer-events: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+	.creation-detail-image-wrapper.hero-video-volume-controls.hero-video-muted .creation-detail-video-muted-badge,
+	.creation-detail-image-wrapper.hero-video-volume-controls.hero-video-hover .creation-detail-video-muted-badge {
+		opacity: 1;
+		visibility: visible;
+		pointer-events: auto;
+	}
+}
+
+@media (hover: none), (pointer: coarse) {
+	.creation-detail-image-wrapper.hero-video-volume-controls.hero-video-muted .creation-detail-video-muted-badge,
+	.creation-detail-image-wrapper.hero-video-volume-controls.hero-video-paused:not(.hero-video-muted) .creation-detail-video-muted-badge {
+		opacity: 1;
+		visibility: visible;
+		pointer-events: auto;
+	}
 }
 
 .creation-detail-video-muted-badge {
@@ -2747,14 +2816,23 @@ body.creation-detail-page main>section:first-of-type {
 	touch-action: manipulation;
 	backdrop-filter: blur(8px);
 	-webkit-backdrop-filter: blur(8px);
-	pointer-events: auto;
 	transition:
+		opacity 0.16s ease,
+		visibility 0.16s ease,
 		background-color 0.16s ease,
 		border-color 0.16s ease,
 		transform 0.16s ease;
 }
 
-.creation-detail-video-muted-badge[hidden] {
+.creation-detail-video-muted-glyph {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	height: 100%;
+}
+
+.creation-detail-video-muted-glyph[hidden] {
 	display: none !important;
 }
 
@@ -2768,6 +2846,10 @@ body.creation-detail-page main>section:first-of-type {
 	stroke-linejoin: round;
 	fill: none;
 	pointer-events: none;
+}
+
+.creation-detail-video-muted-badge[hidden] {
+	display: none !important;
 }
 
 .creation-detail-video-muted-badge:hover {

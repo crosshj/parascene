@@ -154,14 +154,12 @@ export function creationHasVideo(creation) {
 }
 
 /**
- * Extended hero layout applies only to supported non-square ratios (4:5, 9:16, 16:9)
+ * Extended hero layout applies to supported non-square ratios (4:5, 9:16, 16:9)
  * or non-square stored dimensions. 1:1 keeps the legacy square container.
- * Video creations always use legacy 1:1 (do not infer ratio from dimensions/args).
  * @param {{ width?: unknown, height?: unknown, meta?: unknown, media_type?: unknown, video_url?: unknown } | null | undefined} creation
  * @returns {boolean}
  */
 export function shouldUseExtendedHeroLayout(creation) {
-	if (creationHasVideo(creation)) return false;
 	const meta = normalizeCreationMeta(creation?.meta);
 	const argRaw = meta?.args?.aspect_ratio;
 	if (argRaw != null && String(argRaw).trim()) {

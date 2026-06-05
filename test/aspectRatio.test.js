@@ -88,7 +88,7 @@ describe('extended hero layout scope', () => {
 		expect(shouldUseExtendedHeroLayout({ width: 1024, height: 1024, meta: {} })).toBe(false);
 	});
 
-	test('video creations always use legacy 1:1 hero layout', () => {
+	test('video creations use extended layout from aspect ratio metadata', () => {
 		const videoCreation = {
 			width: 1920,
 			height: 1080,
@@ -96,15 +96,15 @@ describe('extended hero layout scope', () => {
 			video_url: '/api/videos/created/abc.mp4',
 			meta: { args: { aspect_ratio: '16:9' } },
 		};
-		expect(shouldUseExtendedHeroLayout(videoCreation)).toBe(false);
-		expect(resolveExtendedHeroLayout(videoCreation)).toBeNull();
+		expect(shouldUseExtendedHeroLayout(videoCreation)).toBe(true);
+		expect(resolveExtendedHeroLayout(videoCreation)?.mode).toBe('landscape');
 		const added = [];
 		const wrapper = {
 			classList: { remove: () => {}, add: (c) => added.push(c) },
 			style: { removeProperty: () => {}, setProperty: () => {} },
 		};
 		applyHeroAspectLayoutToElement(wrapper, videoCreation);
-		expect(added).toContain('hero-layout-legacy');
-		expect(added).not.toContain('hero-layout-landscape');
+		expect(added).toContain('hero-layout-landscape');
+		expect(added).not.toContain('hero-layout-legacy');
 	});
 });
