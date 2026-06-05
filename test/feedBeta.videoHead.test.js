@@ -98,10 +98,17 @@ describe('feedBeta mobile slot-pack page one', () => {
 		expect(videoCount).toBeGreaterThanOrEqual(
 			MOBILE_CHAT_SPOTLIGHT_GROUP_COUNT * MOBILE_CHAT_SPOTLIGHT_VIDEOS_PER_GROUP
 		);
-		expect(pull.rows[0].feed_beta_why?.developer?.mobile_slot_index).toBe(1);
+		expect(pull.rows.some((r) => r.feed_beta_why?.developer?.mobile_slot_index != null)).toBe(true);
+		for (let i = 1; i < pull.rows.length; i += 1) {
+			expect(
+				String(pull.rows[i - 1].created_at || '').localeCompare(
+					String(pull.rows[i].created_at || '')
+				)
+			).toBeGreaterThanOrEqual(0);
+		}
 	});
 
-	test('slot-pack page one does not resort rows newest-first', async () => {
+	test('slot-pack page one sorts editorial picks newest-first for display', async () => {
 		const catalog = [
 			videoRow(1, { ageHours: 48, likeCount: 50 }),
 			videoRow(2, { ageHours: 1, likeCount: 5 }),
@@ -120,7 +127,7 @@ describe('feedBeta mobile slot-pack page one', () => {
 		const pull = await pullFeedBetaRows({
 			queries,
 			user,
-			limit: 4,
+			limit: 8,
 			offset: 0,
 			slotPack: true,
 			enableNsfw: true,
@@ -128,7 +135,14 @@ describe('feedBeta mobile slot-pack page one', () => {
 			refresh: false
 		});
 		expect(pull.rows.length).toBeGreaterThan(0);
-		expect(pull.rows[0].feed_beta_why?.developer?.mobile_slot_index).toBe(1);
-		expect(pull.rows[0].media_type).toBe('video');
+		for (let i = 1; i < pull.rows.length; i += 1) {
+			expect(
+				String(pull.rows[i - 1].created_at || '').localeCompare(
+					String(pull.rows[i].created_at || '')
+				)
+			).toBeGreaterThanOrEqual(0);
+		}
+		expect(pull.rows[0].created_image_id).toBe(2);
+		expect(pull.rows.some((r) => r.feed_beta_why?.developer?.pool)).toBe(true);
 	});
 });

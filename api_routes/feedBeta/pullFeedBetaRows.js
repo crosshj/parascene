@@ -258,7 +258,7 @@ export async function pullFeedBetaRows({
 		});
 	}
 
-	if (pageIndex === 1 && rows.length > 1 && !isSlotPackPageOne) {
+	if (pageIndex === 1 && rows.length > 1) {
 		rows = sortFeedBetaRowsNewestFirst(rows);
 	}
 

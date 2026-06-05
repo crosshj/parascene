@@ -101,23 +101,25 @@ export function stampFeedBetaRowReason(row, stamp, entry = null) {
  * @returns {object}
  */
 export function appendFeedBetaMergeReason(row, layout) {
-	if (!row || typeof row !== 'object' || !row.feed_beta_why) return row;
+	if (!row || typeof row !== 'object') return row;
+	const baseWhy =
+		row.feed_beta_why && typeof row.feed_beta_why === 'object'
+			? row.feed_beta_why
+			: { details: [], developer: {} };
 	const mergeLine = layout.merge_layout ? feedBetaMergeUserLine(layout.merge_layout) : null;
-	const details = Array.isArray(row.feed_beta_why.details) ? row.feed_beta_why.details.slice() : [];
+	const details = Array.isArray(baseWhy.details) ? baseWhy.details.slice() : [];
 	if (mergeLine && !details.includes(mergeLine)) {
 		details.push(mergeLine);
 	}
 	const developer = {
-		...(row.feed_beta_why.developer && typeof row.feed_beta_why.developer === 'object'
-			? row.feed_beta_why.developer
-			: {}),
+		...(baseWhy.developer && typeof baseWhy.developer === 'object' ? baseWhy.developer : {}),
 		...(layout.merge_layout ? { merge_layout: layout.merge_layout } : {}),
 		...(layout.position_in_page != null ? { position_in_page: layout.position_in_page } : {})
 	};
 	return {
 		...row,
 		feed_beta_why: {
-			...row.feed_beta_why,
+			...baseWhy,
 			details,
 			developer
 		}

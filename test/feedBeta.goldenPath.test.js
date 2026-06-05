@@ -25,7 +25,7 @@ import {
  * - Opens feed on phone (slot_pack page 1), scrolls, comes back later, pull-to-refreshes, goes deep.
  *
  * Acts (simulated with fixture catalog + feedBetaSeen / viewer_liked)
- * 1. First visit — fresh feed: ranked pools (hot/new/newcomer/catalog/follow), spotlight videos, not pure recency.
+ * 1. First visit — fresh feed: ranked pools (hot/new/newcomer/catalog/follow), spotlight videos, then sorted by date for display.
  * 2. Same day return — pool draws skip prior API-served IDs (feedBetaSeen); discovery continues.
  * 3. Pull to refresh — page 1 reshuffles (new page-1 seed).
  * 4. Scroll page 2 — continuation, no duplicates from page 1.
@@ -60,6 +60,14 @@ describe('feedBeta golden path (prod catalog)', () => {
 		const session1Pools = poolsOnPage(session1.rows);
 		expect(session1Pools.has('hot_24h') || session1Pools.has('hot_7d')).toBe(true);
 		expect(session1Pools.has('new') || session1Pools.has('newcomer')).toBe(true);
+
+		for (let i = 1; i < session1.rows.length; i += 1) {
+			expect(
+				String(session1.rows[i - 1].created_at || '').localeCompare(
+					String(session1.rows[i].created_at || '')
+				)
+			).toBeGreaterThanOrEqual(0);
+		}
 
 		const followedOnPage1 = session1.rows.some((r) => Number(r.user_id) === followUserId);
 		expect(followedOnPage1).toBe(true);
