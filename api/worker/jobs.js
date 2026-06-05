@@ -106,6 +106,14 @@ export default async function handler(req, res) {
 					duration_ms: Date.now() - start
 				});
 			}
+			if (jobType === "feed_beta_catalog_rebuild") {
+				logJobError("Catalog rebuild failed (non-retryable)", err?.message || err);
+				res.setHeader("Upstash-NonRetryable-Error", "true");
+				return res.status(489).json({
+					ok: false,
+					error: err?.message || String(err)
+				});
+			}
 			throw err;
 		}
 	} catch (error) {

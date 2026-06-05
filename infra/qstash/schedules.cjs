@@ -6,7 +6,7 @@
  * Upstash-Schedule-Id is stable — re-run sync to update cron/body in place.
  */
 
-/** @typedef {{ id: string, label: string, destinationPath: string, cron: string, body?: object, method?: string }} QStashScheduleDef */
+/** @typedef {{ id: string, label: string, destinationPath: string, cron: string, body?: object, method?: string, retries?: number }} QStashScheduleDef */
 
 /** @type {QStashScheduleDef[]} */
 const QSTASH_SCHEDULES = [
@@ -31,7 +31,9 @@ const QSTASH_SCHEDULES = [
 		destinationPath: "/api/worker/jobs",
 		cron: "*/15 * * * *",
 		body: { job_type: "feed_beta_catalog_rebuild", args: {} },
-		method: "POST"
+		method: "POST",
+		/* One attempt per tick — next cron run is the retry. */
+		retries: 0
 	}
 ];
 

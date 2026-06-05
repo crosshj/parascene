@@ -10,7 +10,7 @@ Opt-in via `user.meta.feedBetaEnabled`. `GET /api/feed` uses `pullFeedBetaRows` 
 
 **Shared catalog (all users)**
 
-- QStash every 15 min: `feed_beta_catalog_rebuild` → hydrates recent/hot/back_pool/video_head once → Redis key `feed-beta:catalog:v1` (20 min TTL)
+- QStash every 15 min: `feed_beta_catalog_rebuild` → hydrates recent/hot/back_pool/video_head once → Redis key `feed-beta:catalog:v1` (20 min TTL); schedule uses `retries: 0` (failed tick waits for next cron, no QStash backoff)
 - `GET /api/feed` reads snapshot from Redis; slices back pool by page seed in memory
 - Fallback: smaller live DB pull if Redis miss
 - Per request: one batch `likes_created_image` query for `viewer_liked` on catalog ids only

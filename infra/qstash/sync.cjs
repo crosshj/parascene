@@ -45,6 +45,9 @@ async function upsertSchedule(def, destination, { token, qstashBase, dryRun }) {
 	console.log(`  cron:        ${def.cron}`);
 	console.log(`  destination: ${destination}`);
 	console.log(`  body:        ${hasBody ? JSON.stringify(body) : "(none)"}`);
+	if (def.retries != null) {
+		console.log(`  retries:     ${def.retries}`);
+	}
 
 	if (dryRun) return { id: def.id, dryRun: true };
 
@@ -54,6 +57,9 @@ async function upsertSchedule(def, destination, { token, qstashBase, dryRun }) {
 		"Upstash-Schedule-Id": def.id,
 		"Upstash-Method": def.method || "POST"
 	};
+	if (def.retries != null) {
+		headers["Upstash-Retries"] = String(Math.max(0, Number(def.retries) || 0));
+	}
 	if (hasBody) {
 		headers["Content-Type"] = "application/json";
 	}
