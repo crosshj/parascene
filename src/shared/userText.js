@@ -353,7 +353,7 @@ const INLINE_CHAT_VIDEO_PLAY_OVERLAY_HTML =
 function renderInlineGenericVideo(relativePath, originalUrl) {
 	const rp = escapeHtml(relativePath);
 	void originalUrl;
-	/* Square placeholder until loaded; paused thumb with doom play + expand icons only. */
+	/* Square placeholder until loaded; paused thumb with centered play icon only. */
 	return (
 		`<div class="connect-chat-creation-embed connect-chat-creation-embed--square is-loading" data-generic-video-embed="1">` +
 		`<div class="connect-chat-creation-embed-media">` +
@@ -1396,6 +1396,48 @@ function creationEmbedTitleDisplayText(data) {
 	return titleRaw;
 }
 
+function orderGroupSourcesCoverFirst(groupSourcesRaw, coverSourceId) {
+	const list = Array.isArray(groupSourcesRaw)
+		? groupSourcesRaw.filter((item) => item && typeof item === 'object')
+		: [];
+	const coverId = Number(coverSourceId);
+	if (!Number.isFinite(coverId) || coverId <= 0) return list;
+	const coverIndex = list.findIndex((item) => Number(item.id) === coverId);
+	if (coverIndex <= 0) return list;
+	const ordered = [...list];
+	const [coverSource] = ordered.splice(coverIndex, 1);
+	ordered.unshift(coverSource);
+	return ordered;
+}
+
+function buildGroupEmbedPosterUrl(source, creationIdNum, shareOpts) {
+	const fp = typeof source?.file_path === 'string' ? source.file_path.trim() : '';
+	if (!fp) return '';
+	let urlWithDelegation = appendCreationIdToMediaUrl(fp, creationIdNum);
+	if (shareOpts) {
+		urlWithDelegation = appendShareAccessToMediaUrl(urlWithDelegation, shareOpts);
+	}
+	return urlWithDelegation;
+}
+
+function buildGroupEmbedVideoSlide(source, creationIdNum, shareOpts) {
+	const meta = source?.meta && typeof source.meta === 'object' ? source.meta : null;
+	const sourceMediaType = typeof meta?.media_type === 'string' ? meta.media_type : 'image';
+	const videoPath = meta?.video?.file_path;
+	if (sourceMediaType !== 'video' || typeof videoPath !== 'string' || !videoPath.trim()) return null;
+	let videoUrl = appendCreationIdToMediaUrl(videoPath.trim(), creationIdNum);
+	if (shareOpts) {
+		videoUrl = appendShareAccessToMediaUrl(videoUrl, shareOpts);
+	}
+	const width = Number(source?.width);
+	const height = Number(source?.height);
+	return {
+		url: videoUrl,
+		width: Number.isFinite(width) && width > 0 ? width : 0,
+		height: Number.isFinite(height) && height > 0 ? height : 0,
+	};
+}
+
 function appendCreationIdToMediaUrl(url, creationId) {
 	const raw = typeof url === 'string' ? url.trim() : '';
 	const id = Number(creationId);
@@ -1762,20 +1804,17 @@ export function hydrateChatCreationEmbeds(rootEl) {
 				? groupPayload.source_creations
 				: [];
 			const creationIdNum = Number(creationId);
-			const groupSourceUrls = [
-				...new Set(
-					groupSourcesRaw
-						.map((source) => {
-							const fp = typeof source?.file_path === 'string' ? source.file_path.trim() : '';
-							let urlWithDelegation = appendCreationIdToMediaUrl(fp, creationIdNum);
-							if (shareOpts) {
-								urlWithDelegation = appendShareAccessToMediaUrl(urlWithDelegation, shareOpts);
-							}
-							return urlWithDelegation;
-						})
-						.filter(Boolean)
-				),
-			];
+			const orderedGroupSources = orderGroupSourcesCoverFirst(
+				groupSourcesRaw,
+				groupPayload?.cover_source_id
+			);
+			const groupSourceUrls = orderedGroupSources
+				.map((source) => buildGroupEmbedPosterUrl(source, creationIdNum, shareOpts))
+				.filter(Boolean);
+			const groupVideoSlides = orderedGroupSources
+				.map((source) => buildGroupEmbedVideoSlide(source, creationIdNum, shareOpts))
+				.filter((slide) => slide && slide.url);
+			const isGroupVideoGallery = mediaType === 'video' && groupVideoSlides.length > 1;
 			const hasGroupCarouselUi =
 				groupPayload?.kind === 'group_creations' && groupSourceUrls.length > 1;
 			const hasRenderableMedia =
@@ -1822,39 +1861,34 @@ export function hydrateChatCreationEmbeds(rootEl) {
 				return;
 			}
 
-			if (mediaType === 'video' && videoUrl) {
-				const poster = url ? ` poster="${escapeHtml(url)}"` : '';
-				/* Inline: paused thumb + play/expand icons; full controls + sound in lightbox. */
-				wrap.classList.add('is-loading');
-				wrap.innerHTML = `<div class="connect-chat-creation-embed-media"><div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--video${nsfwClass}"${nsfwDataAttr} role="button" tabindex="0" aria-label="Open video" title="Open video"><video class="connect-chat-creation-embed-video" playsinline preload="metadata" crossorigin="anonymous" src="${escapeHtml(videoUrl)}"${poster} data-inline-video-loading="1"></video>${INLINE_CHAT_VIDEO_PLAY_OVERLAY_HTML}</div></div>`;
-				trimWhitespaceOnlyTextNodes(wrap);
-				const vid = wrap.querySelector('.connect-chat-creation-embed-video');
-				if (vid instanceof HTMLVideoElement) {
-					bindInlineChatVideoPreviewLoading(wrap, vid);
-					bindChatCreationEmbedMediaLoadError(wrap, vid);
-				}
-				attachChatCreationEmbedDetailLinkReveal(wrap);
-				return;
-			}
-
 			if (hasGroupCarouselUi) {
-				const initialAlt = titleRaw.length > 0 ? escapeHtml(titleRaw) : 'grouped creation image';
-				const stackHtml = groupSourceUrls
+				const initialAlt = titleRaw.length > 0 ? escapeHtml(titleRaw) : (isGroupVideoGallery ? 'grouped creation video' : 'grouped creation image');
+				const groupCarouselVideoClass = isGroupVideoGallery
+					? ' connect-chat-creation-embed-inner--group-video-carousel'
+					: '';
+				const groupCarouselLabel = isGroupVideoGallery ? 'Open grouped videos' : 'Open grouped images';
+				const displayPosterUrls = isGroupVideoGallery ? groupSourceUrls.slice(0, 1) : groupSourceUrls;
+				const stackHtml = displayPosterUrls
 					.map(
 						(src, index) =>
 							`<img class="connect-chat-creation-embed-group-img${index === 0 ? ' is-active' : ''}" src="${escapeHtml(src)}" alt="${initialAlt}" loading="eager" decoding="async" data-group-slide-index="${index}" />`
 					)
 					.join('');
+				const groupVideoOverlayHtml = isGroupVideoGallery ? INLINE_CHAT_VIDEO_PLAY_OVERLAY_HTML : '';
+				const groupNavHtml = isGroupVideoGallery
+					? ''
+					: `<button type="button" class="connect-chat-creation-embed-group-nav connect-chat-creation-embed-group-nav--prev" aria-label="Previous grouped image">` +
+						`<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M14.5 6.5L9 12l5.5 5.5" /></svg>` +
+						`</button>` +
+						`<button type="button" class="connect-chat-creation-embed-group-nav connect-chat-creation-embed-group-nav--next" aria-label="Next grouped image">` +
+						`<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9.5 6.5L15 12l-5.5 5.5" /></svg>` +
+						`</button>`;
 				wrap.innerHTML =
 					`<div class="connect-chat-creation-embed-media">` +
-					`<div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--group-carousel${nsfwClass}"${nsfwDataAttr}>` +
+					`<div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--group-carousel${groupCarouselVideoClass}${nsfwClass}"${nsfwDataAttr}${isGroupVideoGallery ? ' role="button" tabindex="0" aria-label="' + groupCarouselLabel + '" title="' + groupCarouselLabel + '"' : ''}>` +
 					`<div class="connect-chat-creation-embed-group-stack">${stackHtml}</div>` +
-					`<button type="button" class="connect-chat-creation-embed-group-nav connect-chat-creation-embed-group-nav--prev" aria-label="Previous grouped image">` +
-					`<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M14.5 6.5L9 12l5.5 5.5" /></svg>` +
-					`</button>` +
-					`<button type="button" class="connect-chat-creation-embed-group-nav connect-chat-creation-embed-group-nav--next" aria-label="Next grouped image">` +
-					`<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9.5 6.5L15 12l-5.5 5.5" /></svg>` +
-					`</button>` +
+					`${groupVideoOverlayHtml}` +
+					`${groupNavHtml}` +
 					`</div></div>`;
 				trimWhitespaceOnlyTextNodes(wrap);
 				const innerCarousel = wrap.querySelector('.connect-chat-creation-embed-inner--group-carousel');
@@ -1863,6 +1897,15 @@ export function hydrateChatCreationEmbeds(rootEl) {
 						innerCarousel.dataset.chatGroupGalleryUrls = JSON.stringify(groupSourceUrls);
 					} catch {
 						delete innerCarousel.dataset.chatGroupGalleryUrls;
+					}
+					if (isGroupVideoGallery) {
+						try {
+							innerCarousel.dataset.chatGroupVideoGallerySlides = JSON.stringify(groupVideoSlides);
+						} catch {
+							delete innerCarousel.dataset.chatGroupVideoGallerySlides;
+						}
+					} else {
+						delete innerCarousel.dataset.chatGroupVideoGallerySlides;
 					}
 				}
 				const groupImages = Array.from(wrap.querySelectorAll('.connect-chat-creation-embed-group-img'));
@@ -1879,27 +1922,44 @@ export function hydrateChatCreationEmbeds(rootEl) {
 					const idx = groupImages.findIndex((img) => img.classList.contains('is-active'));
 					return idx >= 0 ? idx : 0;
 				};
-				if (groupImages.length <= 1) {
-					if (prevBtn instanceof HTMLButtonElement) prevBtn.hidden = true;
-					if (nextBtn instanceof HTMLButtonElement) nextBtn.hidden = true;
-				} else {
-					if (prevBtn instanceof HTMLButtonElement) {
-						prevBtn.addEventListener('click', (e) => {
-							e.preventDefault();
-							e.stopPropagation();
-							setActiveIndex(getActiveIndex() - 1);
-						});
-					}
-					if (nextBtn instanceof HTMLButtonElement) {
-						nextBtn.addEventListener('click', (e) => {
-							e.preventDefault();
-							e.stopPropagation();
-							setActiveIndex(getActiveIndex() + 1);
-						});
+				if (!isGroupVideoGallery) {
+					if (groupImages.length <= 1) {
+						if (prevBtn instanceof HTMLButtonElement) prevBtn.hidden = true;
+						if (nextBtn instanceof HTMLButtonElement) nextBtn.hidden = true;
+					} else {
+						if (prevBtn instanceof HTMLButtonElement) {
+							prevBtn.addEventListener('click', (e) => {
+								e.preventDefault();
+								e.stopPropagation();
+								setActiveIndex(getActiveIndex() - 1);
+							});
+						}
+						if (nextBtn instanceof HTMLButtonElement) {
+							nextBtn.addEventListener('click', (e) => {
+								e.preventDefault();
+								e.stopPropagation();
+								setActiveIndex(getActiveIndex() + 1);
+							});
+						}
 					}
 				}
 				for (const img of groupImages) {
 					if (img instanceof HTMLImageElement) bindChatCreationEmbedMediaLoadError(wrap, img);
+				}
+				attachChatCreationEmbedDetailLinkReveal(wrap);
+				return;
+			}
+
+			if (mediaType === 'video' && videoUrl) {
+				const poster = url ? ` poster="${escapeHtml(url)}"` : '';
+				/* Inline: paused thumb + play icon; full controls + sound in lightbox. */
+				wrap.classList.add('is-loading');
+				wrap.innerHTML = `<div class="connect-chat-creation-embed-media"><div class="connect-chat-creation-embed-inner connect-chat-creation-embed-inner--video${nsfwClass}"${nsfwDataAttr} role="button" tabindex="0" aria-label="Open video" title="Open video"><video class="connect-chat-creation-embed-video" playsinline preload="metadata" crossorigin="anonymous" src="${escapeHtml(videoUrl)}"${poster} data-inline-video-loading="1"></video>${INLINE_CHAT_VIDEO_PLAY_OVERLAY_HTML}</div></div>`;
+				trimWhitespaceOnlyTextNodes(wrap);
+				const vid = wrap.querySelector('.connect-chat-creation-embed-video');
+				if (vid instanceof HTMLVideoElement) {
+					bindInlineChatVideoPreviewLoading(wrap, vid);
+					bindChatCreationEmbedMediaLoadError(wrap, vid);
 				}
 				attachChatCreationEmbedDetailLinkReveal(wrap);
 				return;

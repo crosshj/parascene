@@ -8025,11 +8025,15 @@ export async function initChatPage(root, options = {}) {
 				const isPublished = card.dataset.published === '1';
 				const mediaType = (card.dataset.mediaType || 'image').toLowerCase();
 				const creationStatus = (card.dataset.creationStatus || '').toLowerCase();
-				return !isPublished && mediaType === 'image' && creationStatus === 'completed';
+				return !isPublished && (mediaType === 'image' || mediaType === 'video') && creationStatus === 'completed';
 			});
+			const selectedMediaTypes = new Set(
+				selectedCards.map((card) => (card.dataset.mediaType || 'image').toLowerCase())
+			);
+			const homogeneousMedia = selectedMediaTypes.size <= 1;
 			const selectedGroups = selectedCards.filter((card) => card.dataset.groupCreation === '1');
 			let canGroup = false;
-			if (selectedCards.length > 0 && eligibleCards.length === selectedCards.length && selectedGroups.length <= 1) {
+			if (selectedCards.length > 0 && eligibleCards.length === selectedCards.length && homogeneousMedia && selectedGroups.length <= 1) {
 				if (selectedGroups.length === 0) {
 					canGroup = selectedCards.length >= 2;
 				} else {
@@ -8386,10 +8390,17 @@ export async function initChatPage(root, options = {}) {
 				const isPublished = card.dataset.published === '1';
 				const mediaType = (card.dataset.mediaType || 'image').toLowerCase();
 				const creationStatus = (card.dataset.creationStatus || '').toLowerCase();
-				return isPublished || mediaType !== 'image' || creationStatus !== 'completed';
+				return isPublished || (mediaType !== 'image' && mediaType !== 'video') || creationStatus !== 'completed';
 			}).length;
+			const mediaTypes = new Set(
+				selected.map((card) => (card.dataset.mediaType || 'image').toLowerCase())
+			);
 			if (invalidCount > 0) {
-				alert('Group Creations supports only completed, unpublished image creations.');
+				alert('Group Creations supports only completed, unpublished image or video creations.');
+				return;
+			}
+			if (mediaTypes.size > 1) {
+				alert('Cannot mix image and video creations in one group.');
 				return;
 			}
 			const selectedGroups = selected.filter((card) => card.dataset.groupCreation === '1');
@@ -8401,8 +8412,10 @@ export async function initChatPage(root, options = {}) {
 				.map((card) => Number(card.dataset.imageId))
 				.filter((id) => Number.isFinite(id) && id > 0);
 			if (ids.length < 2) return;
+			const groupMediaType = [...mediaTypes][0] || 'image';
+			const groupMediaNoun = groupMediaType === 'video' ? 'video' : 'image';
 			const confirmMsg = selectedGroups.length === 1
-				? `Add ${ids.length - 1} image${ids.length - 1 === 1 ? '' : 's'} to the selected group?`
+				? `Add ${ids.length - 1} ${groupMediaNoun}${ids.length - 1 === 1 ? '' : 's'} to the selected group?`
 				: `Group ${ids.length} creations into a single creation?`;
 			if (!window.confirm(confirmMsg)) return;
 			if (!(bulkGroup instanceof HTMLButtonElement)) return;

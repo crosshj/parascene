@@ -179,6 +179,7 @@ async function loadDeps() {
 
 const html = String.raw;
 const TIP_MIN_VISIBLE_BALANCE = 10.0;
+const GROUP_MOVE_LEFT_BTN_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>';
 
 function getGroupActionTarget() {
 	const sid = Number(lastGroupSelectedSourceId);
@@ -1064,6 +1065,8 @@ async function loadCreation() {
 	const heroImagePreloadPromises = new Map();
 	const heroImageWarmUrls = new Set();
 	let groupHeroStackEl = null;
+	let groupHeroVideoStackEl = null;
+	let groupHeroVideoPlayer = null;
 	const groupHeroImageBySourceId = new Map();
 
 	if (!detailContent || !imageEl || !backgroundEl) return;
@@ -1359,7 +1362,20 @@ async function loadCreation() {
 		});
 	}
 
+	function teardownGroupHeroVideoPlayer() {
+		if (groupHeroVideoPlayer && typeof groupHeroVideoPlayer.teardown === 'function') {
+			groupHeroVideoPlayer.teardown();
+		}
+		groupHeroVideoPlayer = null;
+		if (groupHeroVideoStackEl && groupHeroVideoStackEl.parentNode) {
+			groupHeroVideoStackEl.parentNode.removeChild(groupHeroVideoStackEl);
+		}
+		groupHeroVideoStackEl = null;
+		imageWrapper?.classList.remove('group-video-playlist-active');
+	}
+
 	function teardownGroupHeroCarousel() {
+		teardownGroupHeroVideoPlayer();
 		if (groupHeroStackEl && groupHeroStackEl.parentNode) {
 			groupHeroStackEl.parentNode.removeChild(groupHeroStackEl);
 		}
@@ -1430,6 +1446,89 @@ async function loadCreation() {
 			const first = usable[0];
 			setGroupHeroCarouselActive(first.id);
 		}
+		return true;
+	}
+
+	function preloadHeroVideoUrl(url) {
+		const key = String(url || '').trim();
+		if (!key) return Promise.resolve({ ok: false });
+		return new Promise((resolve) => {
+			const video = document.createElement('video');
+			video.preload = 'auto';
+			const done = (ok) => {
+				video.removeEventListener('canplay', onReady);
+				video.removeEventListener('loadeddata', onReady);
+				video.removeEventListener('error', onError);
+				resolve({ ok });
+			};
+			const onReady = () => done(true);
+			const onError = () => done(false);
+			video.addEventListener('canplay', onReady, { once: true });
+			video.addEventListener('loadeddata', onReady, { once: true });
+			video.addEventListener('error', onError, { once: true });
+			video.src = key;
+			try {
+				video.load();
+			} catch {
+				done(false);
+				return;
+			}
+			window.setTimeout(() => done(video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA), 8000);
+		});
+	}
+
+	async function mountGroupHeroVideoPlaylist(sources, initialSourceId, hooks = {}) {
+		const playable = (Array.isArray(sources) ? sources : [])
+			.map((source) => ({
+				id: Number(source?.id),
+				url: typeof source?.videoUrl === 'string' ? source.videoUrl.trim() : '',
+				width: Number(source?.width),
+				height: Number(source?.height),
+			}))
+			.filter((source) => Number.isFinite(source.id) && source.id > 0 && source.url);
+		if (!imageWrapper || playable.length === 0) return false;
+
+		teardownGroupHeroCarousel();
+		const stack = document.createElement('div');
+		stack.className = 'creation-detail-group-hero-video-stack';
+		imageWrapper.appendChild(stack);
+		groupHeroVideoStackEl = stack;
+
+		const slides = playable.map((source) => ({
+			url: source.url,
+			sourceId: source.id,
+			width: Number.isFinite(source.width) && source.width > 0 ? source.width : 0,
+			height: Number.isFinite(source.height) && source.height > 0 ? source.height : 0,
+		}));
+		let startIndex = slides.findIndex((slide) => Number(slide.sourceId) === Number(initialSourceId));
+		if (startIndex < 0) startIndex = 0;
+
+		const v = getAssetVersionParam();
+		const qs = getImportQuery(v);
+		const mod = await import(`/shared/sequentialVideoPlayer.js${qs}`);
+		if (!isCurrentLoad() || typeof mod.mountSequentialVideoPlayer !== 'function') {
+			teardownGroupHeroVideoPlayer();
+			return false;
+		}
+
+		groupHeroVideoPlayer = mod.mountSequentialVideoPlayer(stack, slides, {
+			startIndex,
+			loopPlaylist: true,
+			autoAdvanceOnEnded: true,
+			muted: true,
+			videoClass: 'creation-detail-group-hero-video',
+			slotClass: 'creation-detail-group-hero-video-slot',
+			onIndexChange: typeof hooks.onIndexChange === 'function' ? hooks.onIndexChange : null,
+		});
+		if (!groupHeroVideoPlayer) {
+			teardownGroupHeroVideoPlayer();
+			return false;
+		}
+
+		resetHeroVideo();
+		imageEl.style.display = 'none';
+		imageWrapper.classList.add('group-video-playlist-active');
+		imageWrapper.classList.remove('image-loading', 'image-error', 'image-error-moderated');
 		return true;
 	}
 
@@ -1666,6 +1765,14 @@ async function loadCreation() {
 				groupPayloadEarly?.kind === 'group_creations' && groupSourceCountEarly > 1;
 			showHeroImage(creation.url, { deferBackground: pendingGroupCarousel });
 		} else if (status === 'completed' && mediaType === 'video' && creation.video_url) {
+			const groupPayloadEarlyVideo =
+				meta?.group && typeof meta.group === 'object' ? meta.group : null;
+			const groupSourceCountEarlyVideo = Array.isArray(groupPayloadEarlyVideo?.source_creations)
+				? groupPayloadEarlyVideo.source_creations.length
+				: 0;
+			const pendingGroupVideoPlaylist =
+				groupPayloadEarlyVideo?.kind === 'group_creations' && groupSourceCountEarlyVideo > 1;
+
 			clearHeroImage();
 			const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
 			if (modIcon) modIcon.remove();
@@ -1677,7 +1784,7 @@ async function loadCreation() {
 				setHeroBackgroundUrl(bgUrl);
 			}
 
-			if (videoEl) {
+			if (!pendingGroupVideoPlaylist && videoEl) {
 				if (videoMutedBadgeEl) videoMutedBadgeEl.hidden = true;
 				// Use bgUrl (creation image or thumbnail) as poster while video loads.
 				if (bgUrl) {
@@ -1698,6 +1805,8 @@ async function loadCreation() {
 				if (typeof safeMediaPlay === 'function') {
 					safeMediaPlay(videoEl);
 				}
+			} else if (pendingGroupVideoPlaylist) {
+				resetHeroVideo();
 			}
 		} else if (status === 'creating' && !isTimedOut) {
 			const modIcon = imageWrapper?.querySelector('.creation-detail-error-icon-moderated');
@@ -1915,11 +2024,18 @@ async function loadCreation() {
 				const sourceGenerationInfo = sourceMetaItems.join(' • ');
 				const sourceWidth = Number(sourceObj.width);
 				const sourceHeight = Number(sourceObj.height);
+				const sourceMediaType = typeof sourceMeta?.media_type === 'string' ? sourceMeta.media_type : 'image';
+				const sourceVideoUrlRaw = sourceMeta?.video?.file_path;
+				const sourceVideoUrl = sourceMediaType === 'video' && typeof sourceVideoUrlRaw === 'string' && sourceVideoUrlRaw.trim()
+					? appendCreationIdToMediaUrl(sourceVideoUrlRaw.trim(), creationId)
+					: '';
 				return {
 					id: sourceId,
 					title: sourceRawTitle ? `${sourceRawTitle} (${sourceId})` : `${groupTitleForSourceLabels} (${sourceId})`,
 					rawTitle: sourceRawTitle,
 					filePath: sourceFilePath,
+					videoUrl: sourceVideoUrl,
+					mediaType: sourceMediaType,
 					width: Number.isFinite(sourceWidth) && sourceWidth > 0 ? sourceWidth : undefined,
 					height: Number.isFinite(sourceHeight) && sourceHeight > 0 ? sourceHeight : undefined,
 					description: sourceDescription,
@@ -1939,6 +2055,7 @@ async function loadCreation() {
 				groupSources.unshift(coverSource);
 			}
 		}
+		const isGroupVideo = isGroupCreation && mediaType === 'video';
 		const hasGroupHeroNavigation = isGroupCreation && groupSources.length > 1;
 		if (isGroupCreation) {
 			lastDetailIsGroupCreation = true;
@@ -1946,7 +2063,10 @@ async function loadCreation() {
 				groupSources.map((source) => [Number(source.id), source]).filter(([id]) => Number.isFinite(id) && id > 0)
 			);
 			lastGroupSelectedSourceId = Number(groupSources[0]?.id) || null;
-			const hasSourceMedia = groupSources.some((s) => typeof s.filePath === 'string' && s.filePath.trim());
+			const hasSourceMedia = groupSources.some((s) =>
+				(typeof s.filePath === 'string' && s.filePath.trim()) ||
+				(typeof s.videoUrl === 'string' && s.videoUrl.trim())
+			);
 			if (hasSourceMedia && status === 'completed' && !isFailed && !isAdmin) {
 				actionsContext.showMutate = true;
 				actionsContext.showQueueForLater = true;
@@ -1978,21 +2098,33 @@ async function loadCreation() {
 			groupHeroNextBtn.disabled = true;
 			groupHeroNextBtn.onclick = null;
 		}
+		const canReorderGroupSources = isOwner && !isPublished;
+		const groupMediaCountLabel = isGroupVideo ? 'video' : 'image';
 		const groupSectionHtml = isGroupCreation && groupSources.length > 0
 			? html`
 				<section class="creation-detail-group-section" data-group-creation-section>
 					<div class="creation-detail-group-header">
 						<h3 class="creation-detail-group-title">Grouped Creations</h3>
-						<div class="creation-detail-group-subtitle">${groupSources.length} image${groupSources.length === 1 ? '' : 's'}</div>
+						<div class="creation-detail-group-subtitle">${groupSources.length} ${groupMediaCountLabel}${groupSources.length === 1 ? '' : 's'}</div>
 					</div>
 					<div class="creation-detail-group-grid">
-						${groupSources.map((source, index) => source.filePath
-					? html`<button type="button" class="creation-detail-group-item creation-detail-group-thumb${index === 0 ? ' is-active' : ''}"
+						${groupSources.map((source, index) => {
+					const isVideoThumb = source.mediaType === 'video';
+					const thumbHtml = source.filePath
+						? html`<button type="button" class="creation-detail-group-item creation-detail-group-thumb${isVideoThumb ? ' creation-detail-group-thumb--video' : ''}${index === 0 ? ' is-active' : ''}"
 									data-group-source-thumb="${source.id}" aria-label="View ${escapeHtml(source.title)}">
 									<img src="${escapeHtml(source.filePath)}" alt="${escapeHtml(source.title)}" loading="eager" />
+									${isVideoThumb ? html`<span class="creation-detail-group-thumb-play" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M8 5v14l11-7z"></path></svg></span>` : ''}
 								</button>`
-					: html`<button type="button" class="creation-detail-group-item creation-detail-group-item-fallback creation-detail-group-thumb${index === 0 ? ' is-active' : ''}"
-									data-group-source-thumb="${source.id}" aria-label="View source #${source.id}">#${source.id}</button>`).join('')}
+						: html`<button type="button" class="creation-detail-group-item creation-detail-group-item-fallback creation-detail-group-thumb${index === 0 ? ' is-active' : ''}"
+									data-group-source-thumb="${source.id}" aria-label="View source #${source.id}">#${source.id}</button>`;
+					const moveLeftHtml = canReorderGroupSources && index > 0
+						? html`<button type="button" class="creation-detail-group-move-left" data-group-move-left="${source.id}" aria-label="Move left">${GROUP_MOVE_LEFT_BTN_SVG}</button>`
+						: '';
+					return html`<div class="creation-detail-group-slot">
+								<div class="creation-detail-group-thumb-wrap">${thumbHtml}${moveLeftHtml}</div>
+							</div>`;
+				}).join('')}
 					</div>
 					${isOwner ? html`
 					<div class="creation-detail-group-actions">
@@ -4135,6 +4267,7 @@ async function loadCreation() {
 			let selectedGroupSourceId = Number(groupSources[0]?.id);
 			const currentCoverId = Number(groupSources[0]?.id);
 			let groupCarouselEnabled = false;
+			let groupVideoPlaylistEnabled = false;
 
 			function syncSetCoverButton() {
 				if (!(setCoverBtn instanceof HTMLButtonElement)) return;
@@ -4182,7 +4315,12 @@ async function loadCreation() {
 				}
 
 				if (shouldUpdateMedia) {
-					if (source.filePath) {
+					if (groupVideoPlaylistEnabled && source.videoUrl) {
+						const idx = orderedSourceIds.indexOf(Number(source.id));
+						if (idx >= 0 && groupHeroVideoPlayer) {
+							void groupHeroVideoPlayer.goToIndex(idx, { autoplay: true });
+						}
+					} else if (source.filePath) {
 						if (!groupCarouselEnabled || !setGroupHeroCarouselActive(source.id)) {
 							showHeroImage(source.filePath);
 						}
@@ -4207,6 +4345,34 @@ async function loadCreation() {
 					setActiveGroupSource(sourceId);
 				});
 			}
+			const groupMoveLeftButtons = Array.from(detailContent.querySelectorAll('[data-group-move-left]'));
+			for (const btn of groupMoveLeftButtons) {
+				btn.addEventListener('click', async (e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					const sourceId = Number(btn.getAttribute('data-group-move-left'));
+					if (!Number.isFinite(sourceId) || sourceId <= 0) return;
+					btn.disabled = true;
+					try {
+						const res = await fetch(`/api/create/images/${creationId}/group-reorder`, {
+							method: 'POST',
+							credentials: 'include',
+							headers: { 'content-type': 'application/json' },
+							body: JSON.stringify({ source_id: sourceId })
+						});
+						const data = await res.json().catch(() => ({}));
+						if (!res.ok) {
+							alert(data?.error || 'Failed to reorder group sources');
+							btn.disabled = false;
+							return;
+						}
+						await loadCreation();
+					} catch (err) {
+						alert(err?.message || 'Failed to reorder group sources');
+						btn.disabled = false;
+					}
+				});
+			}
 			if (hasGroupHeroNavigation && groupHeroPrevBtn instanceof HTMLButtonElement) {
 				groupHeroPrevBtn.onclick = (e) => {
 					e.preventDefault();
@@ -4220,27 +4386,56 @@ async function loadCreation() {
 				};
 			}
 
-			// Multi-source carousel only; a single grouped source uses normal hero layout (16:9, etc.).
+			// Multi-source carousel/playlist only; a single grouped source uses normal hero layout.
 			if (groupSources.length > 1) {
 				void (async () => {
 					if (!isCurrentLoad()) return;
 					const cover = groupSources[0];
-					const coverUrl = typeof cover?.filePath === 'string' ? cover.filePath.trim() : '';
-					if (!coverUrl) return;
-					const coverLoaded = await preloadHeroImageUrl(coverUrl);
-					if (!isCurrentLoad() || !coverLoaded?.ok) return;
 
-					const mounted = await mountGroupHeroCarousel(groupSources, Number(cover.id));
-					groupCarouselEnabled = mounted;
-					if (!mounted) return;
+					if (isGroupVideo) {
+						const coverVideoUrl = typeof cover?.videoUrl === 'string' ? cover.videoUrl.trim() : '';
+						if (!coverVideoUrl) return;
+						const coverLoaded = await preloadHeroVideoUrl(coverVideoUrl);
+						if (!isCurrentLoad() || !coverLoaded?.ok) return;
 
-					const remainingUrls = groupSources
-						.slice(1)
-						.map((source) => (typeof source?.filePath === 'string' ? source.filePath.trim() : ''))
-						.filter(Boolean);
-					if (remainingUrls.length > 0) {
-						await Promise.allSettled(remainingUrls.map((url) => preloadHeroImageUrl(url)));
+						const remainingVideoUrls = groupSources
+							.slice(1)
+							.map((source) => (typeof source?.videoUrl === 'string' ? source.videoUrl.trim() : ''))
+							.filter(Boolean);
+						if (remainingVideoUrls.length > 0) {
+							await Promise.allSettled(remainingVideoUrls.map((url) => preloadHeroVideoUrl(url)));
+						}
+						if (!isCurrentLoad()) return;
+
+						const mounted = await mountGroupHeroVideoPlaylist(groupSources, Number(cover.id), {
+							onIndexChange: (index) => {
+								const sourceId = orderedSourceIds[index];
+								if (Number.isFinite(sourceId) && sourceId > 0) {
+									setActiveGroupSource(sourceId, { updateMedia: false });
+								}
+							},
+						});
+						groupVideoPlaylistEnabled = mounted;
+						if (!mounted) return;
+					} else {
+						const coverUrl = typeof cover?.filePath === 'string' ? cover.filePath.trim() : '';
+						if (!coverUrl) return;
+						const coverLoaded = await preloadHeroImageUrl(coverUrl);
+						if (!isCurrentLoad() || !coverLoaded?.ok) return;
+
+						const mounted = await mountGroupHeroCarousel(groupSources, Number(cover.id));
+						groupCarouselEnabled = mounted;
+						if (!mounted) return;
+
+						const remainingUrls = groupSources
+							.slice(1)
+							.map((source) => (typeof source?.filePath === 'string' ? source.filePath.trim() : ''))
+							.filter(Boolean);
+						if (remainingUrls.length > 0) {
+							await Promise.allSettled(remainingUrls.map((url) => preloadHeroImageUrl(url)));
+						}
 					}
+
 					if (!isCurrentLoad()) return;
 					if (hasGroupHeroNavigation && groupHeroPrevBtn instanceof HTMLButtonElement && groupHeroNextBtn instanceof HTMLButtonElement) {
 						groupHeroPrevBtn.hidden = false;
@@ -4249,6 +4444,25 @@ async function loadCreation() {
 						groupHeroNextBtn.disabled = false;
 					}
 				})();
+			} else if (isGroupVideo && typeof groupSources[0]?.videoUrl === 'string' && groupSources[0].videoUrl.trim()) {
+				resetHeroVideo();
+				if (videoEl) {
+					const posterUrl = typeof groupSources[0]?.filePath === 'string' ? groupSources[0].filePath.trim() : '';
+					if (posterUrl) videoEl.setAttribute('poster', posterUrl);
+					videoEl.style.display = 'block';
+					videoEl.muted = true;
+					videoEl.playsInline = true;
+					videoEl.autoplay = true;
+					videoEl.loop = true;
+					videoEl.setAttribute('playsinline', '');
+					videoEl.setAttribute('muted', '');
+					videoEl.setAttribute('autoplay', '');
+					videoEl.setAttribute('loop', '');
+					videoEl.src = groupSources[0].videoUrl.trim();
+					if (typeof safeMediaPlay === 'function') {
+						safeMediaPlay(videoEl);
+					}
+				}
 			} else if (typeof groupSources[0]?.filePath === 'string' && groupSources[0].filePath.trim()) {
 				showHeroImage(groupSources[0].filePath.trim());
 			}

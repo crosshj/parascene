@@ -583,7 +583,7 @@ body.chat-page .chat-page-messages .connect-chat-msg-bubble .user-text-msg-list.
 	margin-left: 0;
 }
 
-.connect-chat-msg-bubble .connect-chat-creation-embed-inner--group-carousel .connect-chat-creation-embed-group-stack::before {
+.connect-chat-msg-bubble .connect-chat-creation-embed-inner--group-carousel:not(.connect-chat-creation-embed-inner--group-video-carousel) .connect-chat-creation-embed-group-stack::before {
 	content: '';
 	position: absolute;
 	right: 14px;
@@ -596,7 +596,7 @@ body.chat-page .chat-page-messages .connect-chat-msg-bubble .user-text-msg-list.
 	z-index: 5;
 }
 
-.connect-chat-msg-bubble .connect-chat-creation-embed-inner--group-carousel .connect-chat-creation-embed-group-stack::after {
+.connect-chat-msg-bubble .connect-chat-creation-embed-inner--group-carousel:not(.connect-chat-creation-embed-inner--group-video-carousel) .connect-chat-creation-embed-group-stack::after {
 	content: '';
 	position: absolute;
 	right: 8px;
@@ -614,7 +614,7 @@ body.chat-page .chat-page-messages .connect-chat-msg-bubble .user-text-msg-list.
 
 @media (prefers-color-scheme: dark) {
 	.connect-chat-msg-bubble .user-text-inline-image-link::after,
-	.connect-chat-msg-bubble .connect-chat-creation-embed-inner--group-carousel .connect-chat-creation-embed-group-stack::after {
+	.connect-chat-msg-bubble .connect-chat-creation-embed-inner--group-carousel:not(.connect-chat-creation-embed-inner--group-video-carousel) .connect-chat-creation-embed-group-stack::after {
 		background: color-mix(in srgb, #000 66%, transparent);
 		box-shadow:
 			0 0 0 1px rgba(255, 255, 255, 0.18),

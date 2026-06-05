@@ -550,6 +550,21 @@ export default function createCreateRoutes({ queries, storage }) {
 		}
 	}
 
+	function resolveCreationMediaType(meta) {
+		return typeof meta?.media_type === "string" ? meta.media_type : "image";
+	}
+
+	function applyGroupMediaTypeFromCoverMeta(groupMeta, coverSourceMeta) {
+		const next = groupMeta && typeof groupMeta === "object" ? { ...groupMeta } : {};
+		const coverMeta = coverSourceMeta && typeof coverSourceMeta === "object" ? coverSourceMeta : {};
+		const coverMediaType = resolveCreationMediaType(coverMeta);
+		next.media_type = coverMediaType;
+		if (coverMediaType === "video" && coverMeta.video && typeof coverMeta.video === "object") {
+			next.video = { ...coverMeta.video };
+		}
+		return next;
+	}
+
 	function syncGroupLineageFromCoverMeta(groupMeta, coverMeta) {
 		const next = groupMeta && typeof groupMeta === "object" ? { ...groupMeta } : {};
 		const source = coverMeta && typeof coverMeta === "object" ? coverMeta : {};
@@ -614,7 +629,10 @@ export default function createCreateRoutes({ queries, storage }) {
 				source_creations: reorderedSources
 			}
 		};
-		const nextMeta = syncGroupLineageFromCoverMeta(nextMetaBase, selectedSource.meta);
+		const nextMeta = applyGroupMediaTypeFromCoverMeta(
+			syncGroupLineageFromCoverMeta(nextMetaBase, selectedSource.meta),
+			selectedSource.meta
+		);
 
 		const selectedFilePath = normalizeGroupCoverFilePath(
 			typeof selectedSource.filename === "string" && selectedSource.filename
@@ -645,6 +663,70 @@ export default function createCreateRoutes({ queries, storage }) {
 				color: nextColor,
 				meta: nextMeta
 			}
+		};
+	}
+
+	function normalizeGroupSourcesCoverFirst(sourceList, coverSourceId) {
+		const list = Array.isArray(sourceList)
+			? sourceList.filter((item) => item && typeof item === "object")
+			: [];
+		const coverId = Number(coverSourceId);
+		if (!Number.isFinite(coverId) || coverId <= 0) return list;
+		const coverIndex = list.findIndex((item) => Number(item.id) === coverId);
+		if (coverIndex <= 0) return list;
+		const normalized = [...list];
+		const [coverSource] = normalized.splice(coverIndex, 1);
+		normalized.unshift(coverSource);
+		return normalized;
+	}
+
+	function buildGroupReorderLeftState({
+		groupMeta,
+		groupPayload,
+		sourceCreations,
+		sourceId,
+		storage,
+		fallbackGroupRow
+	}) {
+		const coverSourceId = Number(groupPayload?.cover_source_id);
+		const sourceList = normalizeGroupSourcesCoverFirst(sourceCreations, coverSourceId);
+		const index = sourceList.findIndex((item) => Number(item.id) === Number(sourceId));
+		if (index <= 0) return null;
+
+		const reordered = [...sourceList];
+		[reordered[index - 1], reordered[index]] = [reordered[index], reordered[index - 1]];
+		const reorderedSources = reordered.map((item, orderIndex) => ({ ...item, order: orderIndex }));
+		const oldFirstId = Number(sourceList[0]?.id);
+		const newCoverId = Number(reorderedSources[0]?.id);
+
+		if (Number.isFinite(newCoverId) && newCoverId > 0 && newCoverId !== oldFirstId) {
+			return buildGroupCoverUpdateState({
+				groupMeta,
+				groupPayload,
+				sourceCreations: reorderedSources,
+				coverSourceId: newCoverId,
+				storage,
+				fallbackGroupRow
+			});
+		}
+
+		const nextMeta = {
+			...(groupMeta && typeof groupMeta === "object" ? groupMeta : {}),
+			group: {
+				...(groupPayload && typeof groupPayload === "object" ? groupPayload : {}),
+				updated_at: nowIso(),
+				cover_source_id: Number.isFinite(newCoverId) && newCoverId > 0 ? newCoverId : coverSourceId,
+				source_creation_ids: reorderedSources
+					.map((item) => Number(item.id))
+					.filter((n, idx, arr) => Number.isFinite(n) && n > 0 && arr.indexOf(n) === idx),
+				source_creations: reorderedSources
+			}
+		};
+
+		return {
+			reorderedSources,
+			meta: nextMeta,
+			updatePayload: null
 		};
 	}
 
@@ -3619,6 +3701,7 @@ export default function createCreateRoutes({ queries, storage }) {
 			}
 
 			const selectedRows = [];
+			let groupMediaType = null;
 			for (const id of ids) {
 				const row = await queries.selectCreatedImageById.get(id, user.id);
 				if (!row) {
@@ -3637,9 +3720,14 @@ export default function createCreateRoutes({ queries, storage }) {
 					return res.status(400).json({ error: "Only completed creations can be grouped" });
 				}
 				const sourceMeta = parseMeta(row.meta) || {};
-				const mediaType = typeof sourceMeta.media_type === "string" ? sourceMeta.media_type : "image";
-				if (mediaType !== "image") {
-					return res.status(400).json({ error: "Only image creations can be grouped" });
+				const mediaType = resolveCreationMediaType(sourceMeta);
+				if (mediaType !== "image" && mediaType !== "video") {
+					return res.status(400).json({ error: "Only image or video creations can be grouped" });
+				}
+				if (groupMediaType == null) {
+					groupMediaType = mediaType;
+				} else if (groupMediaType !== mediaType) {
+					return res.status(400).json({ error: "Cannot mix image and video creations in one group" });
 				}
 				selectedRows.push(row);
 			}
@@ -3663,10 +3751,14 @@ export default function createCreateRoutes({ queries, storage }) {
 				if (rowsToAdd.length === 0) {
 					return res.status(400).json({ error: "Select at least one non-group creation to add" });
 				}
+				const existingGroupMediaType = resolveCreationMediaType(targetGroupMeta);
 				for (const row of rowsToAdd) {
 					const rowMeta = parseMeta(row.meta) || {};
 					if (rowMeta?.group?.kind === "group_creations") {
 						return res.status(400).json({ error: "Cannot add a group into another group" });
+					}
+					if (resolveCreationMediaType(rowMeta) !== existingGroupMediaType) {
+						return res.status(400).json({ error: "Cannot mix image and video creations in one group" });
 					}
 				}
 
@@ -3719,7 +3811,7 @@ export default function createCreateRoutes({ queries, storage }) {
 						: defaultCoverSourceId;
 				const mergedMetaBase = {
 					...targetGroupMeta,
-					media_type: "image",
+					media_type: existingGroupMediaType,
 					group: {
 						...(targetGroupMeta.group || {}),
 						kind: "group_creations",
@@ -3828,9 +3920,10 @@ export default function createCreateRoutes({ queries, storage }) {
 				};
 			});
 			const partyMetaBlock = buildPartyGroupMeta(effectivePartyName, partySettingsParsed);
+			const firstMeta = parseMeta(first.meta) || {};
 			const groupedMetaBase = {
-				...(parseMeta(first.meta) || {}),
-				media_type: "image",
+				...firstMeta,
+				media_type: groupMediaType || resolveCreationMediaType(firstMeta),
 				...(partyMetaBlock ? { party: partyMetaBlock } : {}),
 				group: {
 					kind: "group_creations",
@@ -4236,6 +4329,74 @@ export default function createCreateRoutes({ queries, storage }) {
 			});
 		} catch (error) {
 			return res.status(500).json({ error: "Failed to set group cover" });
+		}
+	});
+
+	// POST /api/create/images/:id/group-reorder - Move a grouped source one slot left.
+	router.post("/api/create/images/:id/group-reorder", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		try {
+			const groupId = Number(req.params.id);
+			const sourceId = Number(req.body?.source_id);
+			if (!Number.isFinite(groupId) || groupId <= 0 || !Number.isFinite(sourceId) || sourceId <= 0) {
+				return res.status(400).json({ error: "Invalid ids" });
+			}
+			const groupRow = await queries.selectCreatedImageById.get(groupId, user.id);
+			if (!groupRow) {
+				return res.status(404).json({ error: "Creation not found" });
+			}
+			const isPublished = groupRow.published === 1 || groupRow.published === true;
+			if (isPublished) {
+				return res.status(400).json({ error: "Published group creations cannot be reordered" });
+			}
+			const groupMeta = parseMeta(groupRow.meta) || {};
+			const groupPayload = groupMeta?.group && typeof groupMeta.group === "object" ? groupMeta.group : null;
+			if (!groupPayload || groupPayload.kind !== "group_creations") {
+				return res.status(400).json({ error: "Creation is not a group creation" });
+			}
+			const sourceCreationsRaw = Array.isArray(groupPayload.source_creations) ? groupPayload.source_creations : [];
+			const sourceCreations = sourceCreationsRaw.filter((item) => item && typeof item === "object");
+			const reorderState = buildGroupReorderLeftState({
+				groupMeta,
+				groupPayload,
+				sourceCreations,
+				sourceId,
+				storage,
+				fallbackGroupRow: groupRow
+			});
+			if (!reorderState) {
+				return res.status(400).json({ error: "Selected source cannot be moved left" });
+			}
+
+			if (reorderState.updatePayload) {
+				const updateResult = await queries.updateCreatedImageGroupCover?.run(
+					groupId,
+					user.id,
+					reorderState.updatePayload
+				);
+				if (!updateResult || updateResult.changes === 0) {
+					return res.status(500).json({ error: "Failed to reorder group sources" });
+				}
+			} else {
+				const metaResult = await queries.updateCreatedImageMeta.run(groupId, user.id, reorderState.meta);
+				if (!metaResult || metaResult.changes === 0) {
+					return res.status(500).json({ error: "Failed to reorder group sources" });
+				}
+			}
+
+			const updatedGroup = await queries.selectCreatedImageById.get(groupId, user.id);
+			return res.json({
+				ok: true,
+				grouped_creation: {
+					id: updatedGroup?.id ?? groupId,
+					created_at: updatedGroup?.created_at ?? groupRow.created_at,
+					meta: parseMeta(updatedGroup?.meta) || reorderState.meta
+				}
+			});
+		} catch (error) {
+			return res.status(500).json({ error: "Failed to reorder group sources" });
 		}
 	});
 
