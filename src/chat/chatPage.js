@@ -3890,9 +3890,40 @@ export async function initChatPage(root, options = {}) {
 		return `<span class="chat-page-header-avatar chat-page-header-avatar--channel ${sizeCls}" style="background: ${bg};" data-chat-header-avatar-glyph="#" aria-hidden="true"></span>`;
 	}
 
+	function getDmProfileHrefFromMeta(meta) {
+		if (!meta || meta.type !== 'dm') return null;
+		if (rosterMod.isSelfDmThread(meta, chatViewerId)) return null;
+		const ou = meta?.other_user && typeof meta.other_user === 'object' ? meta.other_user : null;
+		const oid =
+			ou?.id != null ? Number(ou.id) : Number(rosterMod.getDmOtherUserId(meta));
+		const profileHref = buildProfilePath({
+			userName: typeof ou?.user_name === 'string' ? ou.user_name : undefined,
+			userId: Number.isFinite(oid) && oid > 0 ? oid : undefined
+		});
+		if (profileHref) return profileHref;
+		if (Number.isFinite(oid) && oid > 0) return `/user/${oid}`;
+		return null;
+	}
+
+	function appendDmViewProfileMenuItem(parent) {
+		const href = getDmProfileHrefFromMeta(activeHeaderMeta);
+		if (!href || !(parent instanceof HTMLElement)) return;
+		const profileBtn = document.createElement('button');
+		profileBtn.type = 'button';
+		profileBtn.className = 'feed-card-menu-item';
+		profileBtn.dataset.chatDmProfileOpen = href;
+		profileBtn.setAttribute('role', 'menuitem');
+		profileBtn.textContent = 'View Profile';
+		parent.appendChild(profileBtn);
+	}
+
 	function buildChatHeaderTitleInnerHtml(meta, label, opts = {}) {
 		const avatarHtml = buildChatHeaderAvatarHtml(meta, opts);
-		return `${avatarHtml}<span class="chat-page-header-title-text">${escapeHtml(label)}</span>`;
+		const inner = `${avatarHtml}<span class="chat-page-header-title-text">${escapeHtml(label)}</span>`;
+		const profileHref = getDmProfileHrefFromMeta(meta);
+		if (!profileHref) return inner;
+		const ariaLabel = `View ${String(label || 'user').trim()} profile`;
+		return `<a class="chat-page-header-profile-link" href="${escapeHtml(profileHref)}" data-profile-link aria-label="${escapeHtml(ariaLabel)}">${inner}</a>`;
 	}
 
 	function buildChatReactionMetaRowHtml(m) {
@@ -11408,6 +11439,7 @@ export async function initChatPage(root, options = {}) {
 			divTop.setAttribute('aria-hidden', 'true');
 			body.appendChild(divTop);
 		}
+		appendDmViewProfileMenuItem(body);
 		const channelLabel = root.querySelector('[data-chat-title]')?.textContent?.trim() || '';
 		const ch = document.createElement('button');
 		ch.type = 'button';
@@ -11981,6 +12013,7 @@ export async function initChatPage(root, options = {}) {
 			return;
 		}
 		dyn.replaceChildren();
+		appendDmViewProfileMenuItem(dyn);
 		if (canOpenPrivateChannelMembersModal()) {
 			const membersBtn = document.createElement('button');
 			membersBtn.type = 'button';
@@ -12490,6 +12523,15 @@ export async function initChatPage(root, options = {}) {
 			closeMobileChromeSheet();
 			closeTopbarMenu();
 			runChatRefresh();
+			return;
+		}
+		const dmProfileOpenEl = t.closest('[data-chat-dm-profile-open]');
+		if (dmProfileOpenEl instanceof HTMLElement) {
+			e.preventDefault();
+			const href = dmProfileOpenEl.getAttribute('data-chat-dm-profile-open') || '';
+			closeTopbarMenu();
+			closeMobileChromeSheet();
+			if (href.trim()) window.location.assign(href.trim());
 			return;
 		}
 		if (t.closest('[data-chat-private-members-open]')) {
