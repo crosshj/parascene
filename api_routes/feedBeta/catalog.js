@@ -161,7 +161,7 @@ export function newcomerContextFromSnapshot(snapshot) {
  * @param {number} userId
  * @param {string} pageSeed
  * @param {{ deferLikes?: boolean }} [opts]
- * @returns {Promise<{ catalog: object[], publishedCount: number|null, fromSnapshot: boolean, snapshotNewcomer: object|null }>}
+ * @returns {Promise<{ catalog: object[], publishedCount: number|null, fromSnapshot: boolean, snapshotNewcomer: object|null, videoHead: object[] }>}
  */
 export async function pullFeedBetaCandidateCatalogBundle(queries, userId, pageSeed, opts = {}) {
 	const snapshot = await loadFeedBetaCatalogSnapshotCached();
@@ -169,9 +169,11 @@ export async function pullFeedBetaCandidateCatalogBundle(queries, userId, pageSe
 	let publishedCount = null;
 	let fromSnapshot = false;
 	let snapshotNewcomer = null;
+	let videoHead = [];
 
 	if (snapshot) {
 		catalog = catalogFromSnapshot(snapshot, pageSeed);
+		videoHead = Array.isArray(snapshot.video_head) ? snapshot.video_head : [];
 		const cached = Number(snapshot.published_count);
 		if (Number.isFinite(cached) && cached >= 0) publishedCount = cached;
 		fromSnapshot = true;
@@ -181,11 +183,11 @@ export async function pullFeedBetaCandidateCatalogBundle(queries, userId, pageSe
 	}
 
 	if (opts.deferLikes === true) {
-		return { catalog, publishedCount, fromSnapshot, snapshotNewcomer };
+		return { catalog, publishedCount, fromSnapshot, snapshotNewcomer, videoHead };
 	}
 
 	catalog = await applyViewerLikedToCatalog(queries, userId, catalog);
-	return { catalog, publishedCount, fromSnapshot, snapshotNewcomer };
+	return { catalog, publishedCount, fromSnapshot, snapshotNewcomer, videoHead };
 }
 
 /**

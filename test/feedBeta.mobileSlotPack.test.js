@@ -68,6 +68,45 @@ describe('feedBeta mobile editorial slot pack', () => {
 		expect(out[0].feed_beta_why?.developer?.mobile_slot_index).toBe(1);
 	});
 
+	test('video slots prefer newest publish over older hot engagement', () => {
+		const videoHead = [];
+		for (let id = 101; id <= 112; id += 1) {
+			videoHead.push(
+				catalogRow(id, { mediaType: 'video', likeCount: 1, ageHours: id - 100 })
+			);
+		}
+		const catalog = [
+			catalogRow(100, { mediaType: 'video', likeCount: 500, ageHours: 720 }),
+			...videoHead,
+			catalogRow(201, { mediaType: 'image', ageHours: 1 }),
+			catalogRow(202, { mediaType: 'image', ageHours: 2 }),
+			catalogRow(203, { mediaType: 'image', ageHours: 3 })
+		];
+		const ctx = {
+			nowMs: Date.now(),
+			followingIds: new Set(),
+			newcomerAuthorIds: new Set(),
+			newcomerHandles: new Set(),
+			params: FEED_BETA_DEFAULT_PARAMS
+		};
+		const out = drawMobileEditorialSlotPackPage(catalog, {
+			scoreContext: ctx,
+			pageIndex: 1,
+			pageSeed: 'slot:recency',
+			seen: new Set(['100', '101', '102', '103', '104']),
+			enableNsfw: true,
+			viewerUserId: 99,
+			showOwnPosts: true,
+			videoHead
+		});
+		const videoIds = out
+			.filter((row) => row.meta?.media_type === 'video')
+			.map((row) => row.created_image_id);
+		expect(videoIds.slice(0, 4)).toEqual([101, 102, 103, 104]);
+		expect(out.filter((row) => row.meta?.media_type === 'video').length).toBe(12);
+		expect(videoIds).not.toContain(100);
+	});
+
 	test('feedBetaPoolLabel maps known pools', () => {
 		expect(feedBetaPoolLabel('hot_24h')).toBe('Rising today');
 		expect(feedBetaPoolLabel('recent_comment')).toBe('People are talking');

@@ -4,7 +4,7 @@ import {
 	pageIndexAfterBetaCursor
 } from './cursor.js';
 import { buildFeedBetaContinuation } from './continuation.js';
-import { pullFeedBetaCandidateCatalogBundle, resolveFeedBetaSitewideCatalogSize, applyViewerLikedFromSet, applyViewerLikedToCatalog, loadViewerLikedCreationIdSetForUser } from './catalog.js';
+import { pullFeedBetaCandidateCatalogBundle, resolveFeedBetaSitewideCatalogSize, applyViewerLikedFromSet, applyViewerLikedToCatalog, loadViewerLikedCreationIdSetForUser, pullFeedBetaSlotPackVideoHead } from './catalog.js';
 import { loadFollowingIdSet } from './context.js';
 import { FEED_BETA_DEFAULT_PARAMS } from './params.js';
 import { mergeBetaPage, sortFeedBetaRowsNewestFirst } from './mergeBetaPage.js';
@@ -112,7 +112,7 @@ export async function pullFeedBetaRows({
 	const parallelWallStart = performance.now();
 	const [seen, bundle, likedSet] = await Promise.all([seenPromise, catalogPromise, likedPromise]);
 	timing?.add('pull.parallel_io_wall', performance.now() - parallelWallStart);
-	let { catalog, publishedCount: catalogPublishedCount, fromSnapshot, snapshotNewcomer } = bundle;
+	let { catalog, publishedCount: catalogPublishedCount, fromSnapshot, snapshotNewcomer, videoHead } = bundle;
 	if (likedSet instanceof Set) {
 		catalog = timing
 			? timing.time('pull.apply_likes', () => applyViewerLikedFromSet(catalog, likedSet))
@@ -152,6 +152,22 @@ export async function pullFeedBetaRows({
 
 	let mergedRows;
 	if (isSlotPackPageOne) {
+		let spotlightVideoHead = Array.isArray(videoHead) ? videoHead : [];
+		if (spotlightVideoHead.length === 0) {
+			spotlightVideoHead = await (timing
+				? timing.timeAsync('pull.slot_pack_video_head', () =>
+						pullFeedBetaSlotPackVideoHead(queries, userId, {
+							limit: params.slotPackVideoCap + 24,
+							enableNsfw,
+							showOwnPosts: showOwnPosts === true
+						})
+					)
+				: pullFeedBetaSlotPackVideoHead(queries, userId, {
+						limit: params.slotPackVideoCap + 24,
+						enableNsfw,
+						showOwnPosts: showOwnPosts === true
+					}));
+		}
 		const slotRows = timing
 			? timing.time('pull.slot_pack_draw', () =>
 					drawMobileEditorialSlotPackPage(catalog, {
@@ -159,7 +175,8 @@ export async function pullFeedBetaRows({
 						viewerUserId: userId,
 						scoreContext,
 						pageSeed,
-						pageIndex
+						pageIndex,
+						videoHead: spotlightVideoHead
 					})
 				)
 			: drawMobileEditorialSlotPackPage(catalog, {
@@ -167,7 +184,8 @@ export async function pullFeedBetaRows({
 					viewerUserId: userId,
 					scoreContext,
 					pageSeed,
-					pageIndex
+					pageIndex,
+					videoHead: spotlightVideoHead
 				});
 		mergedRows = slotRows.map((row, index) =>
 			appendFeedBetaMergeReason(row, {
