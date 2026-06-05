@@ -12,6 +12,7 @@ import * as challengeSubmitMetaMod from './challengeSubmitMeta.js';
 import * as creationBadgesMod from './creationBadges.js';
 import {
 	isFeedRowVideoCreation,
+	isChatFeedChallengePlaceholder,
 	partitionChatFeedMobileAlternating,
 	partitionFeedVideosForChatSpotlight
 } from './chatFeedMobilePartition.js';
@@ -21,6 +22,7 @@ export {
 	addHiddenFeedItem,
 	getHiddenFeedItems,
 	isFeedRowVideoCreation,
+	isChatFeedChallengePlaceholder,
 	partitionChatFeedMobileAlternating,
 	partitionFeedVideosForChatSpotlight
 };
@@ -34,7 +36,7 @@ import {
 	viewGridIcon
 } from '/icons/svg-strings.js';
 import { attachFeedCardCreationDragSource } from './creationComposerDrag.js';
-import { attachFeedImpressionBeacon } from './feedImpressionBeacon.js';
+import { attachFeedImpressionBeacon, recordFeedImpressionOnClick } from './feedImpressionBeacon.js';
 import { openFeedBetaWhyModal } from './feedBetaWhyModal.js';
 
 const { buildBlogPostPublicPath, BLOG_CAMPAIGN_INTERNAL } = blogCampaignPathMod;
@@ -1525,8 +1527,10 @@ function finishFeedCreationCardMediaAndClick(
 				}
 			}
 			if (typeof performCreationNavigation === 'function') {
+				recordFeedImpressionOnClick(item);
 				performCreationNavigation(href, e);
 			} else {
+				recordFeedImpressionOnClick(item);
 				window.location.href = href;
 			}
 		});

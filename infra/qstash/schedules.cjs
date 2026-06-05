@@ -24,6 +24,14 @@ const QSTASH_SCHEDULES = [
 		cron: "10 5 * * *",
 		body: { job_type: "visit_pulse_flush", args: {} },
 		method: "POST"
+	},
+	{
+		id: "parascene-feed-beta-catalog-rebuild",
+		label: "Rebuild shared feed beta catalog snapshot in Redis (every 15 min)",
+		destinationPath: "/api/worker/jobs",
+		cron: "*/15 * * * *",
+		body: { job_type: "feed_beta_catalog_rebuild", args: {} },
+		method: "POST"
 	}
 ];
 

@@ -25,6 +25,9 @@ export async function loadFollowingIdSet(queries, userId) {
  * @param {number} [newcomerDays]
  * @returns {Promise<{ newcomerAuthorIds: Set<string>, newcomerHandles: Set<string> }>}
  */
+/** Max distinct authors loaded for newcomer pool context per request. */
+const NEWCOMER_AUTHOR_LOOKUP_CAP = 80;
+
 export async function loadNewcomerAuthorContext(
 	queries,
 	catalogRows,
@@ -36,7 +39,7 @@ export async function loadNewcomerAuthorContext(
 				.map((r) => Number(r.user_id))
 				.filter((id) => Number.isFinite(id) && id > 0)
 		)
-	];
+	].slice(0, NEWCOMER_AUTHOR_LOOKUP_CAP);
 	const newcomerAuthorIds = new Set();
 	const newcomerHandles = new Set();
 	if (authorIds.length === 0) {

@@ -1,17 +1,74 @@
 /**
- * Feed [beta] viewport impression beacons → POST /api/feed/impression → prsn_user_creation_seen.
+ * Feed [beta] batched viewport impressions → sessionStorage queue → POST /api/feed/impressions.
  */
 
 import { readFeedBetaEnabledSync } from './feedBetaNav.js';
+import {
+	FLUSH_INTERVAL_MS,
+	FLUSH_MAX_ITEMS,
+	QUEUE_STORAGE_KEY,
+	SENT_STORAGE_KEY,
+	coalesceImpressionQueue,
+	mergeImpressionIntoQueue,
+	parseStoredImpressionQueue,
+	parseStoredSentCreationIds,
+	serializeSentCreationIds,
+	shouldSkipImpressionEnqueue
+} from './feedImpressionQueue.js';
 
 const IMPRESSION_THRESHOLD = 0.5;
-const IMPRESSION_MIN_MS = 1000;
-const reportedKeys = new Set();
+const IMPRESSION_MIN_MS = 3000;
 
-/**
- * @param {object|null|undefined} item
- * @returns {object}
- */
+/** @type {number|null} */
+let flushTimer = null;
+let flushInFlight = false;
+
+function readQueueFromStorage() {
+	if (typeof sessionStorage === 'undefined') return [];
+	try {
+		return parseStoredImpressionQueue(sessionStorage.getItem(QUEUE_STORAGE_KEY));
+	} catch {
+		return [];
+	}
+}
+
+function writeQueueToStorage(queue) {
+	if (typeof sessionStorage === 'undefined') return;
+	try {
+		sessionStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(coalesceImpressionQueue(queue)));
+	} catch {
+		try {
+			const trimmed = coalesceImpressionQueue(queue).slice(-Math.max(1, Math.floor(queue.length / 2)));
+			sessionStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(trimmed));
+		} catch {
+			// ignore
+		}
+	}
+}
+
+function readSentFromStorage() {
+	if (typeof sessionStorage === 'undefined') return new Set();
+	try {
+		return parseStoredSentCreationIds(sessionStorage.getItem(SENT_STORAGE_KEY));
+	} catch {
+		return new Set();
+	}
+}
+
+function addSentToStorage(ids) {
+	if (typeof sessionStorage === 'undefined') return;
+	const sent = readSentFromStorage();
+	for (const id of ids) {
+		const s = String(id ?? '').trim();
+		if (s) sent.add(s);
+	}
+	try {
+		sessionStorage.setItem(SENT_STORAGE_KEY, JSON.stringify(serializeSentCreationIds(sent)));
+	} catch {
+		// ignore
+	}
+}
+
 function attributionFromItem(item) {
 	const dev =
 		item?.feed_beta_why?.developer && typeof item.feed_beta_why.developer === 'object'
@@ -27,36 +84,72 @@ function attributionFromItem(item) {
 	};
 }
 
-/**
- * @param {number} creationId
- * @param {object} item
- * @param {string} [surface]
- */
-async function postFeedImpression(creationId, item, surface) {
-	const key = String(creationId);
-	if (reportedKeys.has(key)) return;
-	reportedKeys.add(key);
+function enqueueFeedImpression(item, trigger, surface) {
+	const rawId = item?.created_image_id ?? item?.id;
+	const creationId = Number(rawId);
+	if (!Number.isFinite(creationId) || creationId <= 0) return;
+
+	const sent = readSentFromStorage();
+	const queue = readQueueFromStorage();
+	if (shouldSkipImpressionEnqueue(sent, queue, creationId, trigger)) return;
+
+	const entry = {
+		creation_id: creationId,
+		trigger,
+		surface: surface || null,
+		attribution: attributionFromItem(item),
+		queued_at: new Date().toISOString()
+	};
+	writeQueueToStorage(mergeImpressionIntoQueue(queue, entry));
+
+	if (trigger === 'click' || readQueueFromStorage().length >= FLUSH_MAX_ITEMS) {
+		void flushImpressionQueue({ keepalive: trigger === 'click' });
+		return;
+	}
+	scheduleImpressionFlush();
+}
+
+function scheduleImpressionFlush() {
+	if (flushTimer != null) return;
+	flushTimer = window.setTimeout(() => {
+		flushTimer = null;
+		void flushImpressionQueue({});
+	}, FLUSH_INTERVAL_MS);
+}
+
+export async function flushImpressionQueue(opts = {}) {
+	if (typeof window === 'undefined' || flushInFlight) return;
+	if (!readFeedBetaEnabledSync()) return;
+
+	const queue = coalesceImpressionQueue(readQueueFromStorage());
+	if (queue.length === 0) return;
+
+	flushInFlight = true;
 	try {
-		await fetch('/api/feed/impression', {
+		const res = await fetch('/api/feed/impressions', {
 			method: 'POST',
 			credentials: 'include',
+			keepalive: opts.keepalive === true,
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({
-				creation_id: creationId,
-				surface: surface || null,
-				attribution: attributionFromItem(item)
-			})
+			body: JSON.stringify({ items: queue })
 		});
+		if (!res.ok) return;
+
+		writeQueueToStorage([]);
+		addSentToStorage(queue.map((row) => row.creation_id));
 	} catch {
-		reportedKeys.delete(key);
+		// leave queue for retry
+	} finally {
+		flushInFlight = false;
 	}
 }
 
-/**
- * @param {HTMLElement} card
- * @param {object} item
- * @param {{ surface?: string, target?: Element|null }} [opts]
- */
+export function recordFeedImpressionOnClick(item, opts = {}) {
+	if (typeof window === 'undefined') return;
+	if (!readFeedBetaEnabledSync()) return;
+	enqueueFeedImpression(item, 'click', opts.surface);
+}
+
 export function attachFeedImpressionBeacon(card, item, opts = {}) {
 	if (typeof window === 'undefined' || typeof IntersectionObserver === 'undefined') return;
 	if (!readFeedBetaEnabledSync()) return;
@@ -82,7 +175,7 @@ export function attachFeedImpressionBeacon(card, item, opts = {}) {
 					timer = window.setTimeout(() => {
 						timer = null;
 						if (Date.now() - visibleSince >= IMPRESSION_MIN_MS) {
-							void postFeedImpression(creationId, item, opts.surface);
+							enqueueFeedImpression(item, 'dwell', opts.surface);
 							observer.disconnect();
 						}
 					}, IMPRESSION_MIN_MS);
@@ -99,4 +192,16 @@ export function attachFeedImpressionBeacon(card, item, opts = {}) {
 	);
 
 	observer.observe(target);
+}
+
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+	void flushImpressionQueue({});
+	document.addEventListener('visibilitychange', () => {
+		if (document.visibilityState === 'hidden') {
+			void flushImpressionQueue({ keepalive: true });
+		}
+	});
+	window.addEventListener('pagehide', () => {
+		void flushImpressionQueue({ keepalive: true });
+	});
 }

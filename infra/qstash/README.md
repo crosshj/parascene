@@ -32,6 +32,7 @@ On-demand jobs (creation, embeddings) are **not** schedules — they use `/v2/pu
 |----|------------|-------------|
 | `parascene-notifications-cron` | `0 * * * *` | `/api/worker/notifications` |
 | `parascene-visit-pulse-flush` | `10 5 * * *` | `/api/worker/jobs` |
+| `parascene-feed-beta-catalog-rebuild` | `*/15 * * * *` | `/api/worker/jobs` |
 
 Notifications cron runs hourly; digests only send during policy windows (`digest_utc_windows`, default 09:00 and 18:00 UTC). Other hours no-op with `not_in_window`.
 

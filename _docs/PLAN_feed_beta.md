@@ -1,41 +1,49 @@
 # Plan: Feed [beta]
 
-Status: v0 shipped. Optional polish and post-v0 pools/editorial landed in code. Remaining defer items need new DB tables and/or client impression beacons.
+Status: course-corrected — Redis hot path for seen + shared catalog snapshot. No Postgres seen table.
 
-Opt-in via `user.meta.feedBetaEnabled`. `GET /api/feed` uses `pullFeedBetaRows` when `canAccessFeedBeta` (opted in and not `forceLegacyFeed`). Same URLs/UI; legacy path unchanged for everyone else.
+Goal: fast first pages that feel alive; short memory (seen TTL ~30d); no long analytics history on the feed path.
 
-## Shipped (v0 + follow-up)
+Opt-in via `user.meta.feedBetaEnabled`. `GET /api/feed` uses `pullFeedBetaRows` when `canAccessFeedBeta`.
 
-API / pull
+## Architecture
 
-- Ranked pools: hot_24h, hot_7d, new, newcomer, recent_comment, own_activity, catalog_unseen, catalog_relaxed (page 5+), follow_sprinkle, fill, db_random_fallback
-- Mobile chat `#feed` page 1: 21-slot editorial draw (`mobileSlotPack.js`) — per-slot pool + media type with fallbacks (replaces site_video_head for beta slot-pack)
-- Wider catalog fetch limits in `params.js`
-- Blog post merge on beta app Home `/feed` page 1 (parity with legacy; still skipped on chat slot-pack page 1)
-- `feed_beta_why.label` friendly pool labels + why modal label line
-- Newcomer pool limitation documented in `reason.js`
-- Viewport impressions: `prsn_user_creation_seen` + `POST /api/feed/impression` + client beacons on feed cards (beta only); pool exclusion reads DB + legacy `meta.feedBetaSeen`
+**Shared catalog (all users)**
 
-UI
+- QStash every 15 min: `feed_beta_catalog_rebuild` → hydrates recent/hot/back_pool/video_head once → Redis key `feed-beta:catalog:v1` (20 min TTL)
+- `GET /api/feed` reads snapshot from Redis; slices back pool by page seed in memory
+- Fallback: smaller live DB pull if Redis miss
+- Per request: one batch `likes_created_image` query for `viewer_liked` on catalog ids only
 
-- Admin opt-in, nav `[beta]`, force legacy feed (enrolled only), why modal
+**Seen (per user)**
 
-Tests: `npm test -- test/feedBeta`
+- Impression batch → Redis SET `feed-beta:seen:{userId}` + 30d TTL (no Postgres)
+- Feed read merges Redis seen + legacy `meta.feedBetaSeen` (cap 400)
+- Liked exclusion uses existing likes table, not rollup columns
 
-## Post-v0 defer (needs external work)
+**Not on hot path**
 
-- `feed_events`, `creation_stats` rolling windows, Bayesian hot scoring
-- Feed session: precomputed ordered ID list per visit (Redis or Postgres + TTL)
-- Admin tuning UI for `feed_beta.*` policy knobs
-- Publish/like hooks to refresh stats; taste vectors; prune job for stale `prsn_user_creation_seen` rows
+- Postgres seen rollup removed (Redis only)
+
+## Ops
+
+- Redis: same Upstash env as visit pulse (`UPSTASH_REDIS_REST_*`)
+- First deploy / after cold start: `node scripts/analytics/feed-beta-catalog-rebuild.js`
+- Schedules: `node infra/qstash/sync.cjs --only parascene-feed-beta-catalog-rebuild`
 
 ## Key files
 
-- Pull: `api_routes/feedBeta/pullFeedBetaRows.js`, `pools.js`, `mobileSlotPack.js`, `mergeBetaPage.js`, `catalog.js`, `hasMore.js`, `randomFallback.js`, `creatorCap.js`, `reason.js`, `seen.js`, `params.js`
-- Assembly: `api_routes/feed/resolveFeedAssemble.js`
-- Catalog DB: `db/feedBetaSitewideCatalog.js`
-- UI: `public/shared/feedBetaWhyModal.js`, `feedBetaNav.js`, `feedCardBuild.js`
+- Catalog: `api_routes/feedBeta/catalogSnapshot.js`, `catalogRebuild.js`, `catalog.js`
+- Seen: `api_routes/feedBeta/seenRedis.js`, `seen.js`
+- Impressions: `public/shared/feedImpressionBeacon.js`
+- Worker: `api/worker/jobs.js`
+
+## Deferred
+
+- `feed_events`, `creation_stats`, Bayesian scoring
+- Feed sessions (stable page 2+ ordered list in Redis)
+- Admin tuning UI for pool knobs
 
 ## Reference
 
-Aspirational spec: `_docs/PLAN_feed_beta_chatgpt.md`
+`_docs/PLAN_feed_beta_chatgpt.md`

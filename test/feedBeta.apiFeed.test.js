@@ -170,4 +170,34 @@ describe('GET /api/feed beta integration', () => {
 		expect(body.feed_cursor.after_image_created_at).toBe(FEED_BETA_CURSOR_SENTINEL_AT);
 		expect(Number(body.feed_cursor.after_image_id)).toBe(1);
 	});
+
+	test('beta response includes feed_timing segments', async () => {
+		const catalog = mergeProdCatalogWithInjections(
+			prodCatalogSteadyState(loadFeedBetaProdCatalogFixture().rows),
+			[
+				injectCatalogRow({
+					createdImageId: 9_100_830,
+					userId: 9_100_831,
+					ageHours: 1
+				})
+			]
+		);
+		const { body } = await buildGetFeedJsonResponse({
+			queries: createBetaApiQueries(catalog),
+			user: { id: 9001, role: 'consumer', meta: { feedBetaEnabled: true } },
+			query: { limit: 20, feed_surface: 'chat' }
+		});
+
+		expect(body.feed_timing).toBeDefined();
+		expect(typeof body.feed_timing.total_ms).toBe('number');
+		expect(body.feed_timing.segments).toBeDefined();
+		expect(typeof body.feed_timing.segments).toBe('object');
+		expect(Array.isArray(body.feed_timing.segments)).toBe(false);
+		const segmentKeys = Object.keys(body.feed_timing.segments);
+		expect(segmentKeys.some((k) => k.endsWith('pull.rows_total'))).toBe(true);
+		expect(segmentKeys.some((k) => k.endsWith('assemble.total'))).toBe(true);
+		expect(typeof body.feed_timing.server_handler_ms).toBe('number');
+		expect(typeof body.feed_timing.response_bytes).toBe('number');
+		expect(body.feed_timing.client_network_hint).toContain('Network');
+	});
 });

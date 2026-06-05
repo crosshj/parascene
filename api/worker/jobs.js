@@ -3,6 +3,7 @@ import { openDb } from "../../db/index.js";
 import { verifyQStashRequest } from "../../api_routes/utils/qstashVerification.js";
 import { runEmbeddingJob } from "../../api_routes/utils/embeddingJob.js";
 import { runVisitPulseFlush } from "../../api_routes/utils/visitPulseFlush.js";
+import { runFeedBetaCatalogRebuild } from "../../api_routes/feedBeta/catalogRebuild.js";
 
 console.log("[Jobs Worker] Module loaded at", new Date().toISOString());
 
@@ -30,7 +31,8 @@ function captureQStashMeta(req) {
 
 const JOB_HANDLERS = {
 	embedding: runEmbeddingJob,
-	visit_pulse_flush: runVisitPulseFlush
+	visit_pulse_flush: runVisitPulseFlush,
+	feed_beta_catalog_rebuild: runFeedBetaCatalogRebuild
 };
 
 export default async function handler(req, res) {
@@ -88,7 +90,7 @@ export default async function handler(req, res) {
 
 		const start = Date.now();
 		try {
-			await handler({ args });
+			const result = await handler({ queries, args });
 			if (effectiveJobId && queries.updateJobStatus) {
 				await queries.updateJobStatus.run(effectiveJobId, "completed", {
 					duration_ms: Date.now() - start

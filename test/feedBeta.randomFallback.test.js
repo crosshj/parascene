@@ -97,7 +97,10 @@ describe('pullFeedBetaRows random fallback integration', () => {
 		});
 		expect(pull.rows.length).toBe(10);
 		expect(
-			pull.rows.some((r) => r.feed_beta_why?.developer?.pool === 'db_random_fallback')
+			pull.rows.some((r) => {
+				const pool = r.feed_beta_why?.developer?.pool;
+				return pool === 'db_random_fallback' || pool === 'page_fill';
+			})
 		).toBe(true);
 	});
 });

@@ -72,10 +72,54 @@ describe('resolveFeedAssembleOptions', () => {
 		expect(opts.includeChallengeEngagement).toBe(false);
 		expect(opts.fetchChallengeSnapshot).toBe(false);
 	});
+
+	test('chat surface page 1 skips editorial pin', () => {
+		const opts = resolveFeedAssembleOptions({
+			useFeedBeta: true,
+			offset: 0,
+			hasImageCursor: false,
+			feedBetaAck: null,
+			afterAt: undefined,
+			afterIdNum: NaN,
+			feedSurface: 'chat',
+			creationPull: {
+				rows: [],
+				hasMore: true,
+				mobileChatSlotPackPageOne: true,
+				mobileChatSlotPackContinuation: false,
+				feedBetaContinuation: { completed_page: 1 }
+			}
+		});
+		expect(opts.includeChallengeEngagement).toBe(false);
+		expect(opts.includeEditorialPin).toBe(false);
+		expect(opts.fetchChallengeSnapshot).toBe(false);
+	});
+
+	test('chat surface page 1 skips blog merge', () => {
+		const opts = resolveFeedAssembleOptions({
+			useFeedBeta: true,
+			offset: 0,
+			hasImageCursor: false,
+			feedBetaAck: null,
+			afterAt: undefined,
+			afterIdNum: NaN,
+			feedSurface: 'chat',
+			creationPull: {
+				rows: [],
+				hasMore: true,
+				mobileChatSlotPackPageOne: false,
+				mobileChatSlotPackContinuation: false,
+				feedBetaContinuation: { completed_page: 1 }
+			}
+		});
+		expect(opts.includeBlogMerge).toBe(false);
+		expect(opts.includeChallengeEngagement).toBe(false);
+		expect(opts.fetchChallengeSnapshot).toBe(false);
+	});
 });
 
 describe('assembleFeedItems beta desktop challenge', () => {
-	test('injects engagement on feed [beta] page 1 with feed_surface=chat', async () => {
+	test('injects engagement on feed [beta] page 1 when includeChallengeEngagement is true', async () => {
 		const rows = [minimalCreationRow(1), minimalCreationRow(2)];
 		const { items } = await assembleFeedItems({
 			queries: {},

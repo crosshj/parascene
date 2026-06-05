@@ -4283,6 +4283,20 @@ body.chat-page .chat-page-messages.chat-page-messages--doom-host .chat-doom-rail
 	opacity: 0.85;
 }
 
+/* Chat #feed: deferred challenge card skeleton (mobile middle slot + desktop insert). */
+body.chat-page .feed-card-challenge-placeholder {
+	min-height: 180px;
+}
+
+body.chat-page .feed-card-challenge-placeholder .feed-card-challenge-placeholder-skeleton,
+body.chat-page .feed-card-challenge-placeholder .skeleton-feed-card {
+	min-height: 180px;
+}
+
+body.chat-page .feed-card-challenge-placeholder .skeleton-feed-card-image {
+	min-height: 120px;
+}
+
 @media print {
 	body.chat-page main.chat-page-outer {
 		max-width: none;

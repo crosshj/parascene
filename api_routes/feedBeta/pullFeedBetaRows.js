@@ -4,16 +4,18 @@ import {
 	pageIndexAfterBetaCursor
 } from './cursor.js';
 import { buildFeedBetaContinuation } from './continuation.js';
-import { pullFeedBetaCandidateCatalog } from './catalog.js';
+import { pullFeedBetaCandidateCatalogBundle, resolveFeedBetaSitewideCatalogSize, applyViewerLikedFromSet, applyViewerLikedToCatalog, loadViewerLikedCreationIdSetForUser } from './catalog.js';
+import { loadFollowingIdSet } from './context.js';
 import { FEED_BETA_DEFAULT_PARAMS } from './params.js';
 import { mergeBetaPage, sortFeedBetaRowsNewestFirst } from './mergeBetaPage.js';
 import { drawMobileEditorialSlotPackPage } from './mobileSlotPack.js';
 import { buildFeedBetaScoreContext, sampleThreadRows } from './pools.js';
 import { computeBetaHasMore } from './hasMore.js';
 import { ensureBetaPageFilledToLimit } from './fillPageToLimit.js';
-import { getFeedBetaSeenSet, loadFeedBetaSeenSetForUser } from './seen.js';
+import { loadFeedBetaSeenSetForUser } from './seen.js';
 import { feedRowCreationIdKey, normalizeFeedBetaMediaFields } from './rowMedia.js';
 import { appendFeedBetaMergeReason } from './reason.js';
+import { wrapTimedPromise } from '../feed/feedTiming.js';
 
 /**
  * @param {object} opts
@@ -62,7 +64,8 @@ export async function pullFeedBetaRows({
 	showOwnPosts,
 	refresh = false,
 	feedBetaAck = null,
-	seenSet = null
+	seenSet = null,
+	timing = null
 }) {
 	const userId = user.id;
 	const safeLimit = Math.min(Math.max(1, Number(limit) || 20), 100);
@@ -77,13 +80,64 @@ export async function pullFeedBetaRows({
 	const previousPageUnfilled = feedBetaAck?.page_filled === false;
 	const isSlotPackPageOne = Boolean(slotPack) && pageIndex === 1;
 	const isContinuation = pageIndex > 1 || (!slotPack && offset > 0);
-	const seen = seenSet instanceof Set ? seenSet : getFeedBetaSeenSet(user);
 	const params = FEED_BETA_DEFAULT_PARAMS;
 
 	const pageSeed = buildPageShuffleSeed(userId, pageIndex, refresh);
 	const shuffleSeed = pageSeed;
-	const catalog = await pullFeedBetaCandidateCatalog(queries, userId, pageSeed);
-	const scoreContext = await buildFeedBetaScoreContext(queries, userId, catalog);
+	const followingPromise = wrapTimedPromise(
+		timing,
+		'pull.following',
+		loadFollowingIdSet(queries, userId)
+	);
+	const seenPromise = wrapTimedPromise(
+		timing,
+		'pull.seen',
+		seenSet instanceof Set
+			? Promise.resolve(seenSet)
+			: loadFeedBetaSeenSetForUser(queries, user)
+	);
+	const canLoadLikes = typeof queries?.selectViewerLikedCreationIdsByUser?.all === 'function';
+	const likedPromise = wrapTimedPromise(
+		timing,
+		'pull.likes',
+		canLoadLikes ? loadViewerLikedCreationIdSetForUser(queries, userId) : Promise.resolve(null)
+	);
+	const catalogPromise = wrapTimedPromise(
+		timing,
+		'pull.catalog',
+		pullFeedBetaCandidateCatalogBundle(queries, userId, pageSeed, {
+			deferLikes: true
+		})
+	);
+	const parallelWallStart = performance.now();
+	const [seen, bundle, likedSet] = await Promise.all([seenPromise, catalogPromise, likedPromise]);
+	timing?.add('pull.parallel_io_wall', performance.now() - parallelWallStart);
+	let { catalog, publishedCount: catalogPublishedCount, fromSnapshot, snapshotNewcomer } = bundle;
+	if (likedSet instanceof Set) {
+		catalog = timing
+			? timing.time('pull.apply_likes', () => applyViewerLikedFromSet(catalog, likedSet))
+			: applyViewerLikedFromSet(catalog, likedSet);
+	} else {
+		catalog = await (timing
+			? timing.timeAsync('pull.apply_likes', () =>
+					applyViewerLikedToCatalog(queries, userId, catalog)
+				)
+			: applyViewerLikedToCatalog(queries, userId, catalog));
+	}
+	const followingIds = await followingPromise;
+	const scoreContext = timing
+		? await timing.timeAsync('pull.score_context', () =>
+				buildFeedBetaScoreContext(queries, userId, catalog, {
+					followingIds,
+					pageIndex,
+					snapshotNewcomer
+				})
+			)
+		: await buildFeedBetaScoreContext(queries, userId, catalog, {
+				followingIds,
+				pageIndex,
+				snapshotNewcomer
+			});
 
 	const sampleOpts = {
 		catalog,
@@ -98,13 +152,23 @@ export async function pullFeedBetaRows({
 
 	let mergedRows;
 	if (isSlotPackPageOne) {
-		const slotRows = drawMobileEditorialSlotPackPage(catalog, {
-			...sampleOpts,
-			viewerUserId: userId,
-			scoreContext,
-			pageSeed,
-			pageIndex
-		});
+		const slotRows = timing
+			? timing.time('pull.slot_pack_draw', () =>
+					drawMobileEditorialSlotPackPage(catalog, {
+						...sampleOpts,
+						viewerUserId: userId,
+						scoreContext,
+						pageSeed,
+						pageIndex
+					})
+				)
+			: drawMobileEditorialSlotPackPage(catalog, {
+					...sampleOpts,
+					viewerUserId: userId,
+					scoreContext,
+					pageSeed,
+					pageIndex
+				});
 		mergedRows = slotRows.map((row, index) =>
 			appendFeedBetaMergeReason(row, {
 				merge_layout: 'mobile_editorial_slot',
@@ -115,10 +179,12 @@ export async function pullFeedBetaRows({
 		const videoTake = Math.ceil(safeLimit / 2) + 6;
 		const otherTake = Math.ceil(safeLimit / 2) + 6;
 
+		const drawStart = performance.now();
 		const [videoRows, otherRows] = await Promise.all([
 			sampleThreadRows(queries, userId, { ...sampleOpts, thread: 'video', take: videoTake }),
 			sampleThreadRows(queries, userId, { ...sampleOpts, thread: 'other', take: otherTake })
 		]);
+		timing?.add('pull.thread_draw', performance.now() - drawStart);
 
 		({ rows: mergedRows } = mergeBetaPage({
 			videoRows,
@@ -138,17 +204,33 @@ export async function pullFeedBetaRows({
 	});
 
 	if (rows.length < safeLimit) {
-		rows = await ensureBetaPageFilledToLimit(queries, userId, {
-			rows,
-			safeLimit,
-			pageSeed,
-			pageIndex,
-			servedSeen: seen,
-			enableNsfw,
-			showOwnPosts: showOwnPosts === true,
-			catalog,
-			forceRelaxFill: previousPageUnfilled
-		});
+		rows = await (timing
+			? timing.timeAsync('pull.page_fill', () =>
+					ensureBetaPageFilledToLimit(queries, userId, {
+						rows,
+						safeLimit,
+						pageSeed,
+						pageIndex,
+						servedSeen: seen,
+						enableNsfw,
+						showOwnPosts: showOwnPosts === true,
+						catalog,
+						catalogFromSnapshot: fromSnapshot,
+						forceRelaxFill: previousPageUnfilled
+					})
+				)
+			: ensureBetaPageFilledToLimit(queries, userId, {
+					rows,
+					safeLimit,
+					pageSeed,
+					pageIndex,
+					servedSeen: seen,
+					enableNsfw,
+					showOwnPosts: showOwnPosts === true,
+					catalog,
+					catalogFromSnapshot: fromSnapshot,
+					forceRelaxFill: previousPageUnfilled
+				}));
 		rows = rows.map((row) => {
 			const norm = normalizeFeedBetaMediaFields(row);
 			if (row?.feed_beta_why) {
@@ -163,25 +245,39 @@ export async function pullFeedBetaRows({
 	}
 
 	let sitewideCatalogSize = null;
-	const sitewideCat = queries.selectFeedBetaSitewideCatalog;
-	if (sitewideCat && typeof sitewideCat.getPublishedCount === 'function') {
-		try {
-			sitewideCatalogSize = await sitewideCat.getPublishedCount(userId);
-		} catch {
-			sitewideCatalogSize = null;
-		}
+	try {
+		sitewideCatalogSize = await (timing
+			? timing.timeAsync('pull.published_count', () =>
+					resolveFeedBetaSitewideCatalogSize(queries, catalogPublishedCount)
+				)
+			: resolveFeedBetaSitewideCatalogSize(queries, catalogPublishedCount));
+	} catch {
+		sitewideCatalogSize = null;
 	}
 
-	const hasMore = computeBetaHasMore({
-		pageIndex,
-		rows,
-		safeLimit,
-		catalog,
-		servedSeen: seen,
-		params,
-		isSlotPackPageOne,
-		sitewideCatalogSize
-	});
+	const hasMore = timing
+		? timing.time('pull.has_more', () =>
+				computeBetaHasMore({
+					pageIndex,
+					rows,
+					safeLimit,
+					catalog,
+					servedSeen: seen,
+					params,
+					isSlotPackPageOne,
+					sitewideCatalogSize
+				})
+			)
+		: computeBetaHasMore({
+				pageIndex,
+				rows,
+				safeLimit,
+				catalog,
+				servedSeen: seen,
+				params,
+				isSlotPackPageOne,
+				sitewideCatalogSize
+			});
 
 	const result = {
 		rows,
@@ -201,7 +297,14 @@ export async function pullFeedBetaRows({
 			isSlotPackPageOne,
 			sitewideCatalogSize,
 			hasMore
-		})
+		}),
+		feedBetaTimingMeta: {
+			pageIndex,
+			fromSnapshot,
+			catalogSize: catalog.length,
+			slotPackPageOne: isSlotPackPageOne,
+			rowCount: rows.length
+		}
 	};
 
 	/** @deprecated use feedBetaPageCursor */

@@ -377,10 +377,20 @@ export async function sampleThreadRows(queries, userId, opts) {
  * @param {number} userId
  * @param {object[]} catalog
  */
-export async function buildFeedBetaScoreContext(queries, userId, catalog) {
+export async function buildFeedBetaScoreContext(queries, userId, catalog, opts = {}) {
+	const followingPromise =
+		opts.followingIds instanceof Set
+			? Promise.resolve(opts.followingIds)
+			: loadFollowingIdSet(queries, userId);
+	const skipNewcomer = Math.max(1, Number(opts.pageIndex) || 1) >= 2;
+	const snapshotNewcomer = opts.snapshotNewcomer;
 	const [followingIds, newcomer] = await Promise.all([
-		loadFollowingIdSet(queries, userId),
-		loadNewcomerAuthorContext(queries, catalog)
+		followingPromise,
+		skipNewcomer
+			? Promise.resolve({ newcomerAuthorIds: new Set(), newcomerHandles: new Set() })
+			: snapshotNewcomer
+				? Promise.resolve(snapshotNewcomer)
+				: loadNewcomerAuthorContext(queries, catalog)
 	]);
 	return {
 		nowMs: Date.now(),

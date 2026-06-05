@@ -49,7 +49,7 @@ const { creationMetaHasChallengeSubmission } = challengeSubmitMetaMod;
 const { challengeEnteredBadgeHtml, publishedBadgeHtml } = creationBadgesMod;
 const { primeMediaElementForAudioLeveling } = mediaAudioLevelingMod;
 const { openFeedBetaWhyModal } = feedBetaWhyModalMod;
-const { attachFeedImpressionBeacon } = feedImpressionBeaconMod;
+const { attachFeedImpressionBeacon, recordFeedImpressionOnClick } = feedImpressionBeaconMod;
 
 const html = String.raw;
 
@@ -1049,8 +1049,10 @@ function finishFeedCreationCardMediaAndClick(
 				}
 			}
 			if (typeof performCreationNavigation === 'function') {
+				recordFeedImpressionOnClick(item);
 				performCreationNavigation(href, e);
 			} else {
+				recordFeedImpressionOnClick(item);
 				window.location.href = href;
 			}
 		});

@@ -53,23 +53,6 @@ function rowVisible(row, enableNsfw, viewerUserId, showOwnPosts) {
 }
 
 /**
- * @param {object[]} catalog
- * @param {'video'|'nonVideo'} media
- * @param {boolean} enableNsfw
- * @param {number} viewerUserId
- * @param {boolean} showOwnPosts
- */
-function filterMediaCatalog(catalog, media, enableNsfw, viewerUserId, showOwnPosts) {
-	return (Array.isArray(catalog) ? catalog : [])
-		.map(normalizeFeedBetaMediaFields)
-		.filter((row) => {
-			if (!rowVisible(row, enableNsfw, viewerUserId, showOwnPosts)) return false;
-			if (media === 'video') return feedRowIsVideoThread(row);
-			return feedRowIsOtherThread(row);
-		});
-}
-
-/**
  * @param {object} entry
  * @param {string} poolId
  * @param {number} viewerUserId
@@ -152,27 +135,28 @@ export function drawMobileEditorialSlotPackPage(catalog, opts) {
 		relax_filters: false
 	};
 
-	const videoEntries = filterMediaCatalog(catalog, 'video', enableNsfw, viewerUserId, showOwnPosts)
-		.filter((row) => {
-			const key = feedRowCreationIdKey(row);
-			return key && !isFeedBetaRowExcludedFromPools(row, seen, { relaxed: false });
-		})
-		.map((row) => ({ row, ...scoreFeedBetaRow(row, ctx) }));
+	const scoredEntries = [];
+	for (const raw of Array.isArray(catalog) ? catalog : []) {
+		const row = normalizeFeedBetaMediaFields(raw);
+		if (!rowVisible(row, enableNsfw, viewerUserId, showOwnPosts)) continue;
+		const key = feedRowCreationIdKey(row);
+		if (!key || isFeedBetaRowExcludedFromPools(row, seen, { relaxed: false })) continue;
+		const isVideo = feedRowIsVideoThread(row);
+		const isOther = feedRowIsOtherThread(row);
+		if (!isVideo && !isOther) continue;
+		scoredEntries.push({
+			row,
+			isVideo,
+			isOther,
+			isOwn: viewerUserId != null && String(row.user_id) === String(viewerUserId),
+			...scoreFeedBetaRow(row, ctx)
+		});
+	}
 
-	const nonVideoEntries = filterMediaCatalog(catalog, 'nonVideo', enableNsfw, viewerUserId, showOwnPosts)
-		.filter((row) => {
-			const key = feedRowCreationIdKey(row);
-			return key && !isFeedBetaRowExcludedFromPools(row, seen, { relaxed: false });
-		})
-		.map((row) => ({ row, ...scoreFeedBetaRow(row, ctx) }));
-
-	const ownVideoEntries = filterMediaCatalog(catalog, 'video', enableNsfw, viewerUserId, true)
-		.filter((row) => String(row.user_id) === String(viewerUserId))
-		.map((row) => ({ row, ...scoreFeedBetaRow(row, ctx) }));
-
-	const ownNonVideoEntries = filterMediaCatalog(catalog, 'nonVideo', enableNsfw, viewerUserId, true)
-		.filter((row) => String(row.user_id) === String(viewerUserId))
-		.map((row) => ({ row, ...scoreFeedBetaRow(row, ctx) }));
+	const videoEntries = scoredEntries.filter((entry) => entry.isVideo);
+	const nonVideoEntries = scoredEntries.filter((entry) => entry.isOther);
+	const ownVideoEntries = scoredEntries.filter((entry) => entry.isVideo && entry.isOwn);
+	const ownNonVideoEntries = scoredEntries.filter((entry) => entry.isOther && entry.isOwn);
 
 	const used = new Set();
 	const out = [];

@@ -1,9 +1,8 @@
 import { feedRowCreationIdKey } from './rowMedia.js';
+import { loadFeedBetaSeenSetFromRedis } from './seenRedis.js';
 
+/** Max legacy meta ids merged with Redis seen. */
 const SEEN_CAP = 400;
-
-/** Max creation ids loaded from DB per feed request (pool exclusion). */
-export const FEED_VIEWPORT_SEEN_LOAD_LIMIT = 2000;
 
 /**
  * @param {object|null|undefined} user
@@ -106,23 +105,16 @@ export function mergeFeedBetaSeenIds(user, ids) {
 }
 
 /**
- * Merge legacy meta.feedBetaSeen with viewport rows from prsn_user_creation_seen.
+ * Legacy meta.feedBetaSeen + Redis seen set (short TTL, no Postgres on read path).
  * @param {object} queries
  * @param {object|null|undefined} user
  * @returns {Promise<Set<string>>}
  */
 export async function loadFeedBetaSeenSetForUser(queries, user) {
+	void queries;
 	const out = getFeedBetaSeenSet(user);
-	const load = queries?.selectUserCreationSeen?.getRecentCreationIds;
-	if (typeof load?.run !== 'function' || user?.id == null) return out;
-	try {
-		const ids = await load.run(user.id, { limit: FEED_VIEWPORT_SEEN_LOAD_LIMIT });
-		for (const id of Array.isArray(ids) ? ids : []) {
-			const s = String(id ?? '').trim();
-			if (s) out.add(s);
-		}
-	} catch {
-		// fail open — meta.feedBetaSeen still applies
-	}
+	if (user?.id == null) return out;
+	const redisSeen = await loadFeedBetaSeenSetFromRedis(user.id);
+	for (const id of redisSeen) out.add(id);
 	return out;
 }

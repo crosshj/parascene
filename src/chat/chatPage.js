@@ -75,6 +75,7 @@ import {
 	feedItemToUser,
 	getHiddenFeedItems,
 	isFeedRowVideoCreation,
+	isChatFeedChallengePlaceholder,
 	partitionChatFeedMobileAlternating
 } from '../shared/feedCardBuild.js';
 import {
@@ -83,6 +84,10 @@ import {
 	createChatFeedFetchPage
 } from './feed/feedChannelData.js';
 import { createChatFeedChannelElementsFromSegments, getChatFeedMobileSpotlightHtml } from './feed/feedChannelView.js';
+import {
+	createChatFeedChallengePlaceholderElement,
+	loadDeferredChatFeedChallenge
+} from './feed/feedChannelChallenge.js';
 import { mountChatDoomScroll, teardownChatDoomScroll } from './feed/doomScrollMount.js';
 import { openDoomCommentsPopover, tryConsumeDoomCommentsHistoryForCapture } from './doom/doomCommentsPopover.js';
 import { addToMutateQueue } from '/shared/mutateQueue.js';
@@ -7587,8 +7592,11 @@ export async function initChatPage(root, options = {}) {
 	}
 
 	function createFeedChannelCardRenderer(messagesElHost) {
-		return (item, i) =>
-			createFeedItemCard(
+		return (item, i) => {
+			if (isChatFeedChallengePlaceholder(item)) {
+				return createChatFeedChallengePlaceholderElement();
+			}
+			return createFeedItemCard(
 				item,
 				i,
 				feedCardOptionsForPseudoLane(
@@ -7596,6 +7604,7 @@ export async function initChatPage(root, options = {}) {
 					'feed'
 				)
 			);
+		};
 	}
 
 	async function loadFeedChannelMessages() {
@@ -7673,7 +7682,7 @@ export async function initChatPage(root, options = {}) {
 			let routeResult;
 			if (shouldChatFeedUseMobileAlternatingLayout()) {
 				routeResult = createChatFeedChannelElementsFromSegments(
-					partitionChatFeedMobileAlternating(ordered).segments,
+					partitionChatFeedMobileAlternating(ordered, { reserveChallengeSlot: true }).segments,
 					renderFeedCard,
 					feedChannelMobileSpotlightOptions
 				);
@@ -7702,6 +7711,14 @@ export async function initChatPage(root, options = {}) {
 				}
 				scrollChatMessagesToEnd();
 			}
+			void loadDeferredChatFeedChallenge({
+				messagesEl,
+				routeWrap,
+				mobileLayout: useMobileFeedLayout,
+				fetchJson: fetchJsonWithStatusDeduped,
+				renderCard: renderFeedCard,
+				isStale: () => isStaleChatPane(paneEpoch)
+			});
 		} catch (err) {
 			console.error('[Chat page] feed channel:', err);
 			if (!isStaleChatPane(paneEpoch)) {

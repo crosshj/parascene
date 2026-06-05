@@ -1,6 +1,3 @@
-/** Max creation ids loaded from DB per feed request (pool exclusion). */
-export const FEED_VIEWPORT_SEEN_LOAD_LIMIT = 2000;
-
 /**
  * @param {unknown} raw
  * @returns {object}
@@ -25,6 +22,8 @@ export function sanitizeFeedImpressionMeta(raw) {
 	if (Number.isFinite(position) && position >= 1) out.position_in_page = Math.floor(position);
 	const slotIndex = Number(raw.mobile_slot_index);
 	if (Number.isFinite(slotIndex) && slotIndex >= 1) out.mobile_slot_index = Math.floor(slotIndex);
+	const trigger = typeof raw.trigger === 'string' ? raw.trigger.trim().slice(0, 32) : '';
+	if (trigger) out.trigger = trigger;
 	return out;
 }
 
@@ -43,7 +42,24 @@ export function parseFeedImpressionBody(body) {
 				: {};
 	const meta = sanitizeFeedImpressionMeta({
 		...dev,
-		surface: body?.surface ?? dev?.surface
+		surface: body?.surface ?? dev?.surface,
+		trigger: body?.trigger ?? dev?.trigger
 	});
 	return { creationId, meta };
+}
+
+const BATCH_IMPRESSION_MAX = 50;
+
+/**
+ * @param {object|null|undefined} body
+ * @returns {{ creationId: number, meta: object }[]}
+ */
+export function parseFeedImpressionsBatchBody(body) {
+	const raw = Array.isArray(body?.items) ? body.items : [];
+	const out = [];
+	for (const item of raw.slice(0, BATCH_IMPRESSION_MAX)) {
+		const parsed = parseFeedImpressionBody(item);
+		if (parsed) out.push(parsed);
+	}
+	return out;
 }

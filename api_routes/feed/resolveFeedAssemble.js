@@ -27,6 +27,9 @@ export function isFeedBetaAssemblePageOne(opts) {
  */
 export function resolveFeedAssembleOptions(opts) {
 	const { useFeedBeta, offset, creationPull } = opts;
+	const feedSurface =
+		typeof opts.feedSurface === 'string' ? opts.feedSurface.trim().toLowerCase() : '';
+	const isChatSurface = feedSurface === 'chat';
 	const betaPageOne = isFeedBetaAssemblePageOne(opts);
 	const legacyPageOne = !useFeedBeta && Number(offset) === 0;
 	const pageOneForBlog = useFeedBeta ? betaPageOne : legacyPageOne;
@@ -37,9 +40,9 @@ export function resolveFeedAssembleOptions(opts) {
 
 	return {
 		includeBlogMerge:
-			pageOneForBlog && !Boolean(creationPull?.mobileChatSlotPackPageOne),
-		includeChallengeEngagement: pageOneAssembly,
-		includeEditorialPin: pageOneAssembly,
-		fetchChallengeSnapshot: betaPageOne || legacyPageOne
+			pageOneForBlog && !isChatSurface && !Boolean(creationPull?.mobileChatSlotPackPageOne),
+		includeChallengeEngagement: pageOneAssembly && !isChatSurface,
+		includeEditorialPin: pageOneAssembly && !isChatSurface,
+		fetchChallengeSnapshot: (betaPageOne || legacyPageOne) && !isChatSurface
 	};
 }

@@ -206,6 +206,13 @@ app.use(integrationBearerMiddleware());
 app.use(sessionMiddleware(queries));
 app.use(createVisitPulseMiddleware({ failOpen: true }));
 
+app.use((req, res, next) => {
+	if (req.method === "GET" && req.path === "/api/feed") {
+		req._feedRequestT0 = performance.now();
+	}
+	next();
+});
+
 function isPollingHeavyPath(pathname) {
 	const p = String(pathname || "");
 	return (

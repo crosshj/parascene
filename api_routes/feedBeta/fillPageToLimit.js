@@ -178,46 +178,23 @@ export async function ensureBetaPageFilledToLimit(queries, userId, opts) {
 		viewerUserId: userId
 	};
 
-	const getRandom = queries.selectFeedBetaSitewideCatalog?.getRandomSlice;
-	if (typeof getRandom === 'function') {
-		const neededFirst = safeLimit - rows.length;
-		const fetchLimit = Math.min(
-			params.randomFallbackFetchLimit,
-			Math.max(neededFirst * 8, neededFirst + 16)
-		);
-		const strictRelaxed = isFeedBetaRelaxedPage(pageIndex, params);
-		try {
-			const candidates = await getRandom(userId, {
-				seed: `${pageSeed}:random-fallback`,
-				limit: fetchLimit
-			});
-			rows = appendBetaPageFillCandidates(rows, candidates, {
-				...fillOpts,
-				relaxFilters: strictRelaxed,
-				stampBase: {
-					pool: 'db_random_fallback',
-					thread: null,
-					page_index: pageIndex,
-					page_seed: pageSeed,
-					source: 'db_random_fallback',
-					relax_filters: strictRelaxed
-				}
-			});
-		} catch {
-			// continue to catalog / relaxed fill
-		}
-	}
-	if (rows.length >= safeLimit) return rows;
-
 	const catalog = Array.isArray(opts.catalog) ? opts.catalog : [];
+	const catalogFromSnapshot = opts.catalogFromSnapshot === true;
 	if (catalog.length > 0) {
-		rows = fillBetaPageFromCatalog(rows, catalog, fillOpts);
+		rows = fillBetaPageFromCatalog(rows, catalog, {
+			...fillOpts,
+			forceRelaxFill:
+				opts.forceRelaxFill === true || (catalogFromSnapshot && pageIndex >= 2)
+		});
 	}
 	if (rows.length >= safeLimit) return rows;
 
+	const getRandom = queries.selectFeedBetaSitewideCatalog?.getRandomSlice;
 	if (typeof getRandom !== 'function') return rows;
 
-	const maxAttempts = Math.max(1, Number(params.pageFillMaxRandomAttempts) || 4);
+	const maxAttempts = catalogFromSnapshot
+		? 1
+		: Math.max(1, Number(params.pageFillMaxRandomAttempts) || 4);
 	const strictRelaxed = isFeedBetaRelaxedPage(pageIndex, params);
 	const relaxFill =
 		opts.forceRelaxFill === true ||
@@ -227,7 +204,9 @@ export async function ensureBetaPageFilledToLimit(queries, userId, opts) {
 	for (let attempt = 0; attempt < maxAttempts && rows.length < safeLimit; attempt += 1) {
 		const needed = safeLimit - rows.length;
 		const fetchLimit = Math.min(
-			params.randomFallbackFetchLimit,
+			catalogFromSnapshot
+				? Math.min(params.randomFallbackFetchLimit, Math.max(needed * 8, needed + 16))
+				: params.randomFallbackFetchLimit,
 			Math.max(needed * 12, needed + 24)
 		);
 		let candidates = [];

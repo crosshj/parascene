@@ -34,6 +34,25 @@ function isFeedRowImageCreationBetweenSpotlightStrips(item) {
 	return true;
 }
 
+/** Placeholder row for deferred chat challenge (middle of first between-spotlight strip). */
+export const CHAT_FEED_CHALLENGE_PLACEHOLDER = Object.freeze({
+	type: 'challenge_placeholder',
+	id: 'challenge-deferred'
+});
+
+/**
+ * @param {object|null|undefined} item
+ * @returns {boolean}
+ */
+export function isChatFeedChallengePlaceholder(item) {
+	return (
+		item != null &&
+		typeof item === 'object' &&
+		item.type === CHAT_FEED_CHALLENGE_PLACEHOLDER.type &&
+		item.id === CHAT_FEED_CHALLENGE_PLACEHOLDER.id
+	);
+}
+
 /**
  * Challenge promo card from `/api/feed` (`type: "engagement"`, `variant: "challenge_stats"`).
  * @param {object|null|undefined} item
@@ -135,17 +154,23 @@ function takeNextVideoCreationsForChatSpotlightFromPool(items, max) {
  * engagement card when present, otherwise another image creation. Tips/blog stay in the pool for the tail.
  *
  * @param {object[]} items — mutable pool in feed order
+ * @param {{ reserveChallengeSlot?: boolean }} [opts]
  * @returns {object[]}
  */
-function takeNextBetweenSpotlightThreeSlotStripFromPool(items) {
+function takeNextBetweenSpotlightThreeSlotStripFromPool(items, opts = {}) {
+	const reserveChallenge = opts.reserveChallengeSlot === true;
 	const chunk = [];
 	const first = spliceFirstFeedPoolMatch(items, isFeedRowImageCreationBetweenSpotlightStrips);
 	if (first) chunk.push(first);
 
-	let middle =
-		spliceFirstFeedPoolMatch(items, isChallengeEngagementFeedRow) ||
-		spliceFirstFeedPoolMatch(items, isFeedRowImageCreationBetweenSpotlightStrips);
-	if (middle) chunk.push(middle);
+	if (reserveChallenge) {
+		chunk.push({ ...CHAT_FEED_CHALLENGE_PLACEHOLDER });
+	} else {
+		let middle =
+			spliceFirstFeedPoolMatch(items, isChallengeEngagementFeedRow) ||
+			spliceFirstFeedPoolMatch(items, isFeedRowImageCreationBetweenSpotlightStrips);
+		if (middle) chunk.push(middle);
+	}
 
 	const third = spliceFirstFeedPoolMatch(items, isFeedRowImageCreationBetweenSpotlightStrips);
 	if (third) chunk.push(third);
@@ -158,17 +183,27 @@ function takeNextBetweenSpotlightThreeSlotStripFromPool(items) {
  * engagement when available, image); then one tail with everything left in feed order.
  *
  * @param {object[]} ordered
+ * @param {{ reserveChallengeSlot?: boolean }} [opts]
  * @returns {{ segments: Array<{ type: 'spotlight', videos: object[] } | { type: 'cards', items: object[] }> }}
  */
-export function partitionChatFeedMobileAlternating(ordered) {
+export function partitionChatFeedMobileAlternating(ordered, opts = {}) {
 	const pool = Array.isArray(ordered) ? ordered.slice() : [];
+	if (opts.reserveChallengeSlot === true) {
+		for (let i = pool.length - 1; i >= 0; i -= 1) {
+			if (isChallengeEngagementFeedRow(pool[i])) {
+				pool.splice(i, 1);
+			}
+		}
+	}
 	/** @type {Array<{ type: 'spotlight', videos: object[] } | { type: 'cards', items: object[] }>} */
 	const segments = [];
 
 	for (let g = 0; g < CHAT_FEED_SPOTLIGHT_GROUP_MAX; g += 1) {
 		const videos = takeNextVideoCreationsForChatSpotlightFromPool(pool, CHAT_FEED_SPOTLIGHT_VIDEOS);
 		segments.push({ type: 'spotlight', videos });
-		const chunk = takeNextBetweenSpotlightThreeSlotStripFromPool(pool);
+		const chunk = takeNextBetweenSpotlightThreeSlotStripFromPool(pool, {
+			reserveChallengeSlot: opts.reserveChallengeSlot === true && g === 0
+		});
 		if (chunk.length > 0) {
 			segments.push({ type: 'cards', items: chunk });
 		}
