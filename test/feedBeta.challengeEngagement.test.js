@@ -32,7 +32,7 @@ const activeChallengeSnapshot = {
 };
 
 describe('resolveFeedAssembleOptions', () => {
-	test('beta desktop page 1 fetches challenge and skips blog', () => {
+	test('beta desktop page 1 fetches challenge and merges blog on app Home', () => {
 		const opts = resolveFeedAssembleOptions({
 			useFeedBeta: true,
 			offset: 0,
@@ -48,7 +48,7 @@ describe('resolveFeedAssembleOptions', () => {
 				feedBetaContinuation: { completed_page: 1 }
 			}
 		});
-		expect(opts.includeBlogMerge).toBe(false);
+		expect(opts.includeBlogMerge).toBe(true);
 		expect(opts.fetchChallengeSnapshot).toBe(true);
 		expect(opts.includeChallengeEngagement).toBe(true);
 	});

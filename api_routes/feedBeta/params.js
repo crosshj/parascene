@@ -1,9 +1,9 @@
 /** Default pool slot counts per thread (v0 — later `feed_beta.*` policy knobs). */
 export const FEED_BETA_DEFAULT_PARAMS = {
 	/** Candidate sources (merged per request). */
-	recentFetchLimit: 500,
-	hotEngagedFetchLimit: 200,
-	backCatalogFetchLimit: 300,
+	recentFetchLimit: 800,
+	hotEngagedFetchLimit: 350,
+	backCatalogFetchLimit: 500,
 	backCatalogMinAgeDays: 7,
 	backCatalogMaxOffset: 8000,
 
@@ -13,7 +13,11 @@ export const FEED_BETA_DEFAULT_PARAMS = {
 	newTake: 4,
 	newcomerTake: 4,
 	/** Unseen weighted sample — back-catalog + exploration. */
-	catalogTake: 8,
+	catalogTake: 7,
+	/** Items with recent comments. */
+	recentCommentTake: 2,
+	/** Viewer own creations with engagement (small feedback loop). */
+	ownActivityTake: 1,
 	/** Small follow sprinkle (not a gate). */
 	followTake: 2,
 
@@ -46,7 +50,7 @@ export const FEED_BETA_DEFAULT_PARAMS = {
 	maxCreationsPerAuthorPerPage: 2,
 
 	/** Max rows fetched for random backfill when pools under-fill a page. */
-	randomFallbackFetchLimit: 320,
+	randomFallbackFetchLimit: 480,
 
 	/** Extra random DB attempts when page is still short after merge + cap. */
 	pageFillMaxRandomAttempts: 4,

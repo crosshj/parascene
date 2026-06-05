@@ -40,6 +40,7 @@ describe('feedBeta reason at assembly', () => {
 		expect(out.length).toBe(1);
 		expect(out[0].feed_beta_why).toBeTruthy();
 		expect(typeof out[0].feed_beta_why.summary).toBe('string');
+		expect(out[0].feed_beta_why.label).toBeTruthy();
 		expect(out[0].feed_beta_why.developer.pool).toBeTruthy();
 		expect(out[0].feed_beta_why.developer.page_index).toBe(1);
 	});

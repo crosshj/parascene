@@ -24,6 +24,7 @@ const [
 	creationBadgesMod,
 	mediaAudioLevelingMod,
 	feedBetaWhyModalMod,
+	feedImpressionBeaconMod,
 ] = await Promise.all([
 	import(`./blogCampaignPath.js${_qs}`),
 	import(`./datetime.js${_qs}`),
@@ -35,6 +36,7 @@ const [
 	import(`./creationBadges.js${_qs}`),
 	import(`./mediaAudioLeveling.js${_qs}`),
 	import(`./feedBetaWhyModal.js${_qs}`),
+	import(`./feedImpressionBeacon.js${_qs}`),
 ]);
 
 const { buildBlogPostPublicPath, BLOG_CAMPAIGN_INTERNAL } = blogCampaignPathMod;
@@ -47,6 +49,7 @@ const { creationMetaHasChallengeSubmission } = challengeSubmitMetaMod;
 const { challengeEnteredBadgeHtml, publishedBadgeHtml } = creationBadgesMod;
 const { primeMediaElementForAudioLeveling } = mediaAudioLevelingMod;
 const { openFeedBetaWhyModal } = feedBetaWhyModalMod;
+const { attachFeedImpressionBeacon } = feedImpressionBeaconMod;
 
 const html = String.raw;
 
@@ -930,6 +933,7 @@ function buildFeedCreationCard(
 		resolveCreationCardHref,
 		performCreationNavigation
 	);
+	attachFeedImpressionBeacon(card, item);
 	return card;
 }
 

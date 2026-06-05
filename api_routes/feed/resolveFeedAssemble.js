@@ -1,7 +1,7 @@
 import { isFeedBetaPageCursor } from '../feedBeta/cursor.js';
 
 /**
- * Feed [beta] page 1 for assembly (challenge card, not blog merge).
+ * Feed [beta] page 1 for assembly (challenge card + blog merge on app Home).
  * @param {object} opts
  * @returns {boolean}
  */
@@ -29,6 +29,7 @@ export function resolveFeedAssembleOptions(opts) {
 	const { useFeedBeta, offset, creationPull } = opts;
 	const betaPageOne = isFeedBetaAssemblePageOne(opts);
 	const legacyPageOne = !useFeedBeta && Number(offset) === 0;
+	const pageOneForBlog = useFeedBeta ? betaPageOne : legacyPageOne;
 
 	const pageOneAssembly =
 		(betaPageOne || legacyPageOne) &&
@@ -36,7 +37,7 @@ export function resolveFeedAssembleOptions(opts) {
 
 	return {
 		includeBlogMerge:
-			legacyPageOne && !Boolean(creationPull?.mobileChatSlotPackPageOne),
+			pageOneForBlog && !Boolean(creationPull?.mobileChatSlotPackPageOne),
 		includeChallengeEngagement: pageOneAssembly,
 		includeEditorialPin: pageOneAssembly,
 		fetchChallengeSnapshot: betaPageOne || legacyPageOne

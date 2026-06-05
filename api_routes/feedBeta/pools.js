@@ -141,6 +141,8 @@ export function feedBetaPoolTakesForPage(pageIndex, params = FEED_BETA_DEFAULT_P
 			newTake: params.newTake,
 			newcomerTake: params.newcomerTake,
 			catalogTake: params.catalogTake,
+			recentCommentTake: params.recentCommentTake,
+			ownActivityTake: params.ownActivityTake,
 			followTake: params.followTake
 		};
 	}
@@ -150,6 +152,8 @@ export function feedBetaPoolTakesForPage(pageIndex, params = FEED_BETA_DEFAULT_P
 		newTake: params.newTake + 2,
 		newcomerTake: params.newcomerTake,
 		catalogTake: Math.max(5, params.catalogTake - 1),
+		recentCommentTake: Math.max(1, params.recentCommentTake - 1),
+		ownActivityTake: 0,
 		followTake: params.followTake
 	};
 }
@@ -206,16 +210,40 @@ export function drawThreadPageFromCatalog(catalog, opts) {
 	const newcomerPool = scored
 		.filter((e) => e.isNewcomer)
 		.sort((a, b) => b.score - a.score);
+	const recentCommentPool = scored
+		.filter((e) => Number(e.row?.comment_count ?? 0) > 0)
+		.sort(
+			(a, b) =>
+				Number(b.row?.comment_count ?? 0) - Number(a.row?.comment_count ?? 0) ||
+				b.score - a.score
+		);
 	const followPool = scored.filter((e) => e.isFollow).sort((a, b) => b.score - a.score);
 	const unseenPool = scored.slice().sort((a, b) => b.score - a.score);
+
+	let ownActivityPool = [];
+	if (poolTakes.ownActivityTake > 0 && viewerUserId != null) {
+		const ownRows = filterThreadCatalog(catalog, thread, enableNsfw, viewerUserId, true).filter(
+			(row) =>
+				String(row.user_id) === String(viewerUserId) &&
+				(Number(row.like_count ?? 0) > 0 || Number(row.comment_count ?? 0) > 0)
+		);
+		ownActivityPool = ownRows
+			.map((row) => {
+				const parts = scoreFeedBetaRow(row, ctx);
+				return { row, ...parts };
+			})
+			.sort((a, b) => b.score - a.score);
+	}
 
 	if (shuffleSeed) {
 		shuffleInPlace(hot24Pool, rng);
 		shuffleInPlace(hot7Pool, rng);
 		shuffleInPlace(newPool, rng);
 		shuffleInPlace(newcomerPool, rng);
+		shuffleInPlace(recentCommentPool, rng);
 		shuffleInPlace(followPool, rng);
 		shuffleInPlace(unseenPool, rng);
+		shuffleInPlace(ownActivityPool, rng);
 	}
 
 	const catalogPoolId = relaxed ? 'catalog_relaxed' : 'catalog_unseen';
@@ -235,6 +263,17 @@ export function drawThreadPageFromCatalog(catalog, opts) {
 			poolTakes.newcomerTake,
 			used,
 			'newcomer',
+			stampBase,
+			skipSeenFilter
+		)
+	);
+	out.push(
+		...takeRowsFromScored(
+			recentCommentPool,
+			seen,
+			poolTakes.recentCommentTake,
+			used,
+			'recent_comment',
 			stampBase,
 			skipSeenFilter
 		)
@@ -265,6 +304,20 @@ export function drawThreadPageFromCatalog(catalog, opts) {
 				poolTakes.followTake,
 				used,
 				'follow_sprinkle',
+				stampBase,
+				skipSeenFilter
+			)
+		);
+	}
+
+	if (ownActivityPool.length > 0 && poolTakes.ownActivityTake > 0) {
+		out.push(
+			...takeRowsFromScored(
+				ownActivityPool,
+				seen,
+				poolTakes.ownActivityTake,
+				used,
+				'own_activity',
 				stampBase,
 				skipSeenFilter
 			)

@@ -16217,6 +16217,15 @@ body.modal-open {
 	max-height: min(70vh, 480px);
 }
 
+.feed-beta-why-label {
+	margin: 0 0 8px;
+	font-size: 0.75rem;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--color-amber-fg, var(--accent));
+}
+
 .feed-beta-why-summary {
 	margin: 0 0 12px;
 	line-height: 1.45;

@@ -1,14 +1,38 @@
 /**
  * Feed [beta] placement reasons — stamped when rows are chosen during pull/merge, not inferred later.
+ *
+ * Newcomer pool: authors are only flagged as newcomers when they appear in the current
+ * request catalog batch and their account is younger than `newcomerAccountDays`. Authors
+ * outside that batch are not considered for the newcomer pool on this page.
  */
 
-/** @typedef {'hot_24h'|'hot_7d'|'new'|'newcomer'|'catalog_unseen'|'catalog_relaxed'|'follow_sprinkle'|'fill_remainder'|'site_video_head'|'db_random_fallback'|'page_fill'} FeedBetaPoolId */
+/** @typedef {'hot_24h'|'hot_7d'|'new'|'newcomer'|'recent_comment'|'own_activity'|'catalog_unseen'|'catalog_relaxed'|'follow_sprinkle'|'fill_remainder'|'site_video_head'|'db_random_fallback'|'page_fill'} FeedBetaPoolId */
+
+/** Short user-facing label per pool (why modal + cards). */
+export const FEED_BETA_POOL_LABELS = {
+	hot_24h: 'Rising today',
+	hot_7d: 'Recently active',
+	new: 'New creation',
+	newcomer: 'New creator',
+	recent_comment: 'People are talking',
+	own_activity: 'People reacted to your creation',
+	catalog_unseen: 'From the catalog',
+	catalog_relaxed: 'From the catalog',
+	follow_sprinkle: 'From someone you follow',
+	fill_remainder: 'Filling this page',
+	site_video_head: 'Mobile spotlight video',
+	db_random_fallback: 'Random from catalog',
+	page_fill: 'Filling this page'
+};
 
 const POOL_USER = {
 	hot_24h: 'It is getting strong engagement in the last 24 hours.',
 	hot_7d: 'It is getting strong engagement this week.',
 	new: 'It was published recently.',
-	newcomer: 'It highlights a new creator or welcomes someone new to the community.',
+	newcomer:
+		'It highlights a new creator or welcomes someone new to the community. Newcomers are detected from authors in this feed batch whose accounts are still young.',
+	recent_comment: 'People have been commenting on it recently.',
+	own_activity: 'Your creation picked up likes or comments.',
 	catalog_unseen:
 		'It is from the back catalog — not on your recent Feed [beta] pages and not something you have liked.',
 	catalog_relaxed:
@@ -26,12 +50,22 @@ const MERGE_USER = {
 	slot_pack_head_video: 'On mobile, it was placed in a spotlight video slot at the top of the page.',
 	slot_pack_head_image: 'On mobile, it was placed in the card strip between spotlight videos.',
 	slot_pack_tail: 'It continued the page after the mobile spotlight section.',
+	mobile_editorial_slot: 'On mobile, it was placed in a ranked editorial slot for this page.',
 	round_robin: 'It was merged into the page from the video and image threads.',
 	page_one_chronological:
 		'On the first page, items were ordered newest-first by publish time.',
 	page_one_recency:
 		'On the first page, items were ordered newest-first by publish time.'
 };
+
+/**
+ * @param {FeedBetaPoolId|string|null|undefined} pool
+ * @returns {string|null}
+ */
+export function feedBetaPoolLabel(pool) {
+	if (!pool || typeof pool !== 'string') return null;
+	return FEED_BETA_POOL_LABELS[pool] ?? null;
+}
 
 /**
  * @param {FeedBetaPoolId} pool
@@ -93,11 +127,12 @@ export function appendFeedBetaMergeReason(row, layout) {
 /**
  * @param {object} stamp
  * @param {object|null|undefined} entry — scored pool entry
- * @returns {{ summary: string, details: string[], developer: object }}
+ * @returns {{ label: string|null, summary: string, details: string[], developer: object }}
  */
 export function buildFeedBetaWhy(stamp, entry = null) {
 	const pool = stamp.pool ?? null;
 	const thread = stamp.thread ?? null;
+	const label = feedBetaPoolLabel(pool);
 	const summary = pool ? feedBetaPoolUserLine(pool) : 'Shown in Feed [beta].';
 	const details = [];
 
@@ -105,6 +140,10 @@ export function buildFeedBetaWhy(stamp, entry = null) {
 		details.push('Drawn from the video thread for this page.');
 	} else if (thread === 'other') {
 		details.push('Drawn from the non-video thread for this page.');
+	}
+
+	if (stamp.mobile_slot_index != null) {
+		details.push(`Mobile editorial slot ${stamp.mobile_slot_index}.`);
 	}
 
 	if (entry?.isNewcomerAuthor) {
@@ -132,6 +171,8 @@ export function buildFeedBetaWhy(stamp, entry = null) {
 		page_seed: stamp.page_seed ?? null,
 		source: stamp.source ?? 'pool_draw',
 		relax_filters: stamp.relax_filters === true,
+		mobile_slot_index: stamp.mobile_slot_index ?? null,
+		mobile_slot_media: stamp.mobile_slot_media ?? null,
 		score: entry?.score ?? null,
 		engagement: entry?.engagement ?? null,
 		age_hours: entry?.ageHours ?? null,
@@ -145,5 +186,5 @@ export function buildFeedBetaWhy(stamp, entry = null) {
 		}
 	};
 
-	return { summary, details, developer };
+	return { label, summary, details, developer };
 }

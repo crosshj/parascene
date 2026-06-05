@@ -1,22 +1,42 @@
 import { describe, expect, test } from '@jest/globals';
 import { pullFeedBetaSiteVideoHead, pullFeedBetaSlotPackVideoHead } from '../api_routes/feedBeta/catalog.js';
 import { pullFeedBetaRows } from '../api_routes/feedBeta/pullFeedBetaRows.js';
-import { MOBILE_CHAT_SPOTLIGHT_VIDEOS_PER_GROUP } from '../src/shared/chatFeedMobilePartition.js';
-import { MOBILE_CHAT_SPOTLIGHT_GROUP_COUNT } from '../src/shared/chatFeedMobilePartition.js';
+import {
+	MOBILE_CHAT_SPOTLIGHT_GROUP_COUNT,
+	MOBILE_CHAT_SPOTLIGHT_VIDEOS_PER_GROUP
+} from '../src/shared/chatFeedMobilePartition.js';
 
-function videoRow(id) {
+function videoRow(id, opts = {}) {
+	const ageHours = opts.ageHours ?? 2;
 	return {
 		created_image_id: id,
 		id,
-		created_at: `2025-06-${String(id).padStart(2, '0')}T12:00:00.000Z`,
+		created_at: new Date(Date.now() - ageHours * 60 * 60 * 1000).toISOString(),
 		user_id: 2,
 		nsfw: false,
+		like_count: opts.likeCount ?? 20,
+		comment_count: opts.commentCount ?? 0,
 		meta: { media_type: 'video', video: { file_path: `/api/videos/created/v${id}.mp4` } },
 		url: `/api/images/created/thumb_${id}.png`
 	};
 }
 
-describe('feedBeta mobile video head', () => {
+function imageRow(id, opts = {}) {
+	const ageHours = opts.ageHours ?? 4;
+	return {
+		created_image_id: id,
+		id,
+		created_at: new Date(Date.now() - ageHours * 60 * 60 * 1000).toISOString(),
+		user_id: 3,
+		nsfw: false,
+		like_count: opts.likeCount ?? 5,
+		comment_count: opts.commentCount ?? 0,
+		meta: { media_type: 'image' },
+		url: `/api/images/created/img_${id}.png`
+	};
+}
+
+describe('feedBeta catalog video head helpers', () => {
 	test('pullFeedBetaSiteVideoHead returns playable video rows from site feed page', async () => {
 		const rows = Array.from({ length: 12 }, (_, i) => videoRow(i + 1));
 		const queries = {
@@ -41,17 +61,21 @@ describe('feedBeta mobile video head', () => {
 		expect(out.length).toBe(12);
 		expect(out[0].video_url).toContain('/api/videos/created/');
 	});
+});
 
-	test('slot-pack page one uses site video head before pool sampling', async () => {
-		const siteVideos = Array.from({ length: 12 }, (_, i) => videoRow(100 + i));
+describe('feedBeta mobile slot-pack page one', () => {
+	test('uses editorial slot draw and preserves enough videos for spotlight strips', async () => {
+		const catalog = [];
+		for (let i = 1; i <= 12; i += 1) {
+			catalog.push(videoRow(100 + i, { likeCount: 40 - i }));
+		}
+		for (let i = 1; i <= 9; i += 1) {
+			catalog.push(imageRow(200 + i));
+		}
 		const queries = {
-			selectFeedItems: {
-				getLatestFeedSlotPackHead: async () => ({ videos: siteVideos, images: [] }),
-				getSitePublishedVideoFeedPage: async () => ({ rows: siteVideos, hasMore: false })
-			},
 			selectFeedBetaSitewideCatalog: {
-				getRecent: async () => [],
-				getTopEngaged: async () => [],
+				getRecent: async () => catalog,
+				getTopEngaged: async () => catalog,
 				getBackCatalogSlice: async () => []
 			},
 			selectUserFollowing: { all: async () => [] }
@@ -68,52 +92,43 @@ describe('feedBeta mobile video head', () => {
 			refresh: false
 		});
 		expect(pull.mobileChatSlotPackPageOne).toBe(true);
-		const headLen =
-			MOBILE_CHAT_SPOTLIGHT_GROUP_COUNT *
-			(MOBILE_CHAT_SPOTLIGHT_VIDEOS_PER_GROUP + 3);
-		const head = pull.rows.slice(0, Math.min(headLen, pull.rows.length));
-		const videoCount = head.filter(
+		const videoCount = pull.rows.filter(
 			(r) => r.media_type === 'video' && typeof r.video_url === 'string' && r.video_url.length > 0
 		).length;
 		expect(videoCount).toBeGreaterThanOrEqual(
 			MOBILE_CHAT_SPOTLIGHT_GROUP_COUNT * MOBILE_CHAT_SPOTLIGHT_VIDEOS_PER_GROUP
 		);
+		expect(pull.rows[0].feed_beta_why?.developer?.mobile_slot_index).toBe(1);
 	});
 
-	test('slot-pack page one still fills spotlight videos when all are in feedBetaSeen', async () => {
-		const siteVideos = Array.from({ length: 12 }, (_, i) => videoRow(200 + i));
-		const seenIds = siteVideos.map((row) => String(row.id));
+	test('slot-pack page one does not resort rows newest-first', async () => {
+		const catalog = [
+			videoRow(1, { ageHours: 48, likeCount: 50 }),
+			videoRow(2, { ageHours: 1, likeCount: 5 }),
+			imageRow(3, { ageHours: 24 }),
+			imageRow(4, { ageHours: 1 })
+		];
 		const queries = {
-			selectFeedItems: {
-				getLatestFeedSlotPackHead: async () => ({ videos: siteVideos, images: [] })
-			},
 			selectFeedBetaSitewideCatalog: {
-				getRecent: async () => [],
-				getTopEngaged: async () => [],
+				getRecent: async () => catalog,
+				getTopEngaged: async () => catalog,
 				getBackCatalogSlice: async () => []
 			},
 			selectUserFollowing: { all: async () => [] }
 		};
-		const user = { id: 1, meta: { feedBetaEnabled: true, feedBetaSeen: seenIds } };
+		const user = { id: 1, meta: { feedBetaEnabled: true, feedBetaSeen: [] } };
 		const pull = await pullFeedBetaRows({
 			queries,
 			user,
-			limit: 28,
+			limit: 4,
 			offset: 0,
 			slotPack: true,
 			enableNsfw: true,
 			showOwnPosts: true,
 			refresh: false
 		});
-		const headLen =
-			MOBILE_CHAT_SPOTLIGHT_GROUP_COUNT *
-			(MOBILE_CHAT_SPOTLIGHT_VIDEOS_PER_GROUP + 3);
-		const head = pull.rows.slice(0, Math.min(headLen, pull.rows.length));
-		const videoCount = head.filter(
-			(r) => r.media_type === 'video' && typeof r.video_url === 'string' && r.video_url.length > 0
-		).length;
-		expect(videoCount).toBe(
-			MOBILE_CHAT_SPOTLIGHT_GROUP_COUNT * MOBILE_CHAT_SPOTLIGHT_VIDEOS_PER_GROUP
-		);
+		expect(pull.rows.length).toBeGreaterThan(0);
+		expect(pull.rows[0].feed_beta_why?.developer?.mobile_slot_index).toBe(1);
+		expect(pull.rows[0].media_type).toBe('video');
 	});
 });

@@ -34,6 +34,7 @@ import {
 	viewGridIcon
 } from '/icons/svg-strings.js';
 import { attachFeedCardCreationDragSource } from './creationComposerDrag.js';
+import { attachFeedImpressionBeacon } from './feedImpressionBeacon.js';
 import { openFeedBetaWhyModal } from './feedBetaWhyModal.js';
 
 const { buildBlogPostPublicPath, BLOG_CAMPAIGN_INTERNAL } = blogCampaignPathMod;
@@ -1162,6 +1163,7 @@ function buildFeedCreationCard(
 			performCreationNavigation,
 			enableComposerDragSource
 		);
+		attachFeedImpressionBeacon(card, item);
 		return card;
 	}
 
@@ -1406,6 +1408,7 @@ function buildFeedCreationCard(
 		performCreationNavigation,
 		enableComposerDragSource
 	);
+	attachFeedImpressionBeacon(card, item);
 	return card;
 }
 

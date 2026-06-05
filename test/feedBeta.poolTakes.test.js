@@ -9,7 +9,9 @@ describe('feedBetaPoolTakesForPage', () => {
 			hot7Take: 4,
 			newTake: 4,
 			newcomerTake: 4,
-			catalogTake: 8,
+			catalogTake: 7,
+			recentCommentTake: 2,
+			ownActivityTake: 1,
 			followTake: 2
 		});
 	});
@@ -20,7 +22,9 @@ describe('feedBetaPoolTakesForPage', () => {
 			hot7Take: 3,
 			newTake: 6,
 			newcomerTake: 4,
-			catalogTake: 7,
+			catalogTake: 6,
+			recentCommentTake: 1,
+			ownActivityTake: 0,
 			followTake: 2
 		});
 	});

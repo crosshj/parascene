@@ -17,13 +17,19 @@ export function openFeedBetaWhyModal(why) {
 	overlay.setAttribute('aria-modal', 'true');
 	overlay.setAttribute('aria-labelledby', 'feed-beta-why-title');
 
+	const developer =
+		why.developer && typeof why.developer === 'object' ? why.developer : null;
+	const label =
+		typeof why.label === 'string' && why.label.trim() ? why.label.trim() : '';
 	const summary =
 		typeof why.summary === 'string' && why.summary.trim() ? why.summary.trim() : 'Shown in Feed [beta].';
 	const details = Array.isArray(why.details)
 		? why.details.filter((d) => typeof d === 'string' && d.trim())
 		: [];
-	const developer =
-		why.developer && typeof why.developer === 'object' ? why.developer : null;
+
+	const labelHtml = label
+		? `<p class="feed-beta-why-label">${escapeHtml(label)}</p>`
+		: '';
 
 	const detailsHtml =
 		details.length > 0
@@ -41,6 +47,7 @@ export function openFeedBetaWhyModal(why) {
 				<button type="button" class="feed-beta-why-close" aria-label="Close">&times;</button>
 			</div>
 			<div class="feed-beta-why-body">
+				${labelHtml}
 				<p class="feed-beta-why-summary">${escapeHtml(summary)}</p>
 				${detailsHtml}
 				${devHtml}

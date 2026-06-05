@@ -2,6 +2,9 @@ import { feedRowCreationIdKey } from './rowMedia.js';
 
 const SEEN_CAP = 400;
 
+/** Max creation ids loaded from DB per feed request (pool exclusion). */
+export const FEED_VIEWPORT_SEEN_LOAD_LIMIT = 2000;
+
 /**
  * @param {object|null|undefined} user
  * @returns {Set<string>}
@@ -100,4 +103,26 @@ export function mergeFeedBetaSeenIds(user, ids) {
 		if (s) prev.add(s);
 	}
 	return Array.from(prev).slice(-SEEN_CAP);
+}
+
+/**
+ * Merge legacy meta.feedBetaSeen with viewport rows from prsn_user_creation_seen.
+ * @param {object} queries
+ * @param {object|null|undefined} user
+ * @returns {Promise<Set<string>>}
+ */
+export async function loadFeedBetaSeenSetForUser(queries, user) {
+	const out = getFeedBetaSeenSet(user);
+	const load = queries?.selectUserCreationSeen?.getRecentCreationIds;
+	if (typeof load?.run !== 'function' || user?.id == null) return out;
+	try {
+		const ids = await load.run(user.id, { limit: FEED_VIEWPORT_SEEN_LOAD_LIMIT });
+		for (const id of Array.isArray(ids) ? ids : []) {
+			const s = String(id ?? '').trim();
+			if (s) out.add(s);
+		}
+	} catch {
+		// fail open — meta.feedBetaSeen still applies
+	}
+	return out;
 }

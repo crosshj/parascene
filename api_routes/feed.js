@@ -1,5 +1,5 @@
 /**
- * Feed API routes (`GET /api/feed`, `GET /api/feed/doom`, `GET /api/feed/version`).
+ * Feed API routes (`GET /api/feed`, `POST /api/feed/impression`, `GET /api/feed/doom`, `GET /api/feed/version`).
  *
  * `/api/feed` — chat feed (followed, slot-pack, cursor tail). `./feed/pullCreationFeedRows.js`, `./feed/pullMobileChatSlotPackFeed.js`
  * `/api/feed/doom` — site-wide video timeline for doom scroll. `./feed/pullDoomFeedRows.js`
@@ -20,6 +20,8 @@ import { removeJoinedPrivateChannelInviteDmMessages } from "./utils/chatInviteCl
 import { canAccessFeedBeta } from "./feedBeta/access.js";
 import { pullFeedBetaRows } from "./feedBeta/pullFeedBetaRows.js";
 import { parseFeedBetaAckFromQuery } from "./feedBeta/continuation.js";
+import { loadFeedBetaSeenSetForUser } from "./feedBeta/seen.js";
+import { parseFeedImpressionBody } from "./feedBeta/userCreationSeen.js";
 
 export default function createFeedRoutes({ queries }) {
 	const router = express.Router();
@@ -87,6 +89,7 @@ export default function createFeedRoutes({ queries }) {
 			const refreshBeta =
 				String(req.query?.refresh ?? '').trim() === '1' ||
 				(offset === 0 && !hasImageCursor && (!slotPack || offset === 0) && !feedBetaAck);
+			const seenSet = await loadFeedBetaSeenSetForUser(queries, user);
 			creationPull = await pullFeedBetaRows({
 				queries,
 				user,
@@ -98,16 +101,9 @@ export default function createFeedRoutes({ queries }) {
 				enableNsfw,
 				showOwnPosts: showOwnPostsInFeed,
 				refresh: refreshBeta,
-				feedBetaAck
+				feedBetaAck,
+				seenSet
 			});
-			const servedIds = creationPull?.feedBetaServedIds;
-			if (Array.isArray(servedIds) && servedIds.length > 0 && queries.updateUserFeedBetaSeen?.run) {
-				try {
-					await queries.updateUserFeedBetaSeen.run(user.id, servedIds);
-				} catch (err) {
-					console.warn('[feed] feedBeta seen', err?.message || err);
-				}
-			}
 		} else if (hasImageCursor) {
 			creationPull = await pullCreationFeedRowsAfterImageCursor({
 				queries,
@@ -187,6 +183,34 @@ export default function createFeedRoutes({ queries }) {
 			body.feed_beta = creationPull.feedBetaContinuation;
 		}
 		return res.json(body);
+	});
+
+	router.post("/api/feed/impression", async (req, res) => {
+		if (!req.auth?.userId) {
+			return res.status(401).json({ error: "Unauthorized" });
+		}
+		const user = await queries.selectUserById.get(req.auth.userId);
+		if (!user) {
+			return res.status(404).json({ error: "User not found" });
+		}
+		if (!canAccessFeedBeta(user)) {
+			return res.status(403).json({ error: "Feed beta not enabled" });
+		}
+		const parsed = parseFeedImpressionBody(req.body);
+		if (!parsed) {
+			return res.status(400).json({ error: "Invalid creation_id" });
+		}
+		const record = queries.selectUserCreationSeen?.recordImpression;
+		if (!record?.run) {
+			return res.status(503).json({ error: "Impression storage unavailable" });
+		}
+		try {
+			const result = await record.run(user.id, parsed.creationId, parsed.meta);
+			return res.json({ ok: true, inserted: result?.inserted === true });
+		} catch (err) {
+			console.warn("[POST /api/feed/impression]", err?.message || err);
+			return res.status(500).json({ error: "Internal server error" });
+		}
 	});
 
 	router.get("/api/feed/doom", async (req, res) => {

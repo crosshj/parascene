@@ -672,6 +672,69 @@ export function openDb() {
 				return { changes: 1 };
 			}
 		},
+		selectUserCreationSeen: {
+			getRecentCreationIds: {
+				run: async (userId, opts = {}) => {
+					const limit = Math.min(
+						Math.max(1, Number(opts.limit) || 2000),
+						5000
+					);
+					const { data, error } = await serviceClient
+						.from(prefixedTable("user_creation_seen"))
+						.select("creation_id")
+						.eq("user_id", userId)
+						.order("last_seen_at", { ascending: false })
+						.limit(limit);
+					if (error) throw error;
+					return (Array.isArray(data) ? data : [])
+						.map((row) => row?.creation_id)
+						.filter((id) => id != null);
+				}
+			},
+			recordImpression: {
+				run: async (userId, creationId, meta = {}) => {
+					const uid = Number(userId);
+					const cid = Number(creationId);
+					if (!Number.isFinite(uid) || uid <= 0 || !Number.isFinite(cid) || cid <= 0) {
+						return { changes: 0, inserted: false };
+					}
+					const table = prefixedTable("user_creation_seen");
+					const now = new Date().toISOString();
+					const safeMeta =
+						meta && typeof meta === "object" && !Array.isArray(meta) ? meta : {};
+					const { data: existing, error: selectError } = await serviceClient
+						.from(table)
+						.select("seen_count, meta")
+						.eq("user_id", uid)
+						.eq("creation_id", cid)
+						.maybeSingle();
+					if (selectError) throw selectError;
+					if (existing) {
+						const nextCount = Math.max(1, Number(existing.seen_count) || 0) + 1;
+						const { error } = await serviceClient
+							.from(table)
+							.update({
+								last_seen_at: now,
+								seen_count: nextCount
+							})
+							.eq("user_id", uid)
+							.eq("creation_id", cid);
+						if (error) throw error;
+						return { changes: 1, inserted: false };
+					}
+					const { error } = await serviceClient.from(table).insert({
+						user_id: uid,
+						creation_id: cid,
+						first_seen_at: now,
+						last_seen_at: now,
+						seen_count: 1,
+						meta: safeMeta
+					});
+					if (error) throw error;
+					return { changes: 1, inserted: true };
+				}
+			}
+		},
 		updateUserReferral: {
 			run: async (userId, referral) => {
 				if (!referral || typeof referral !== "object") return { changes: 0 };

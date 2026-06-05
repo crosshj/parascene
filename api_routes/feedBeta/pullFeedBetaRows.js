@@ -4,19 +4,16 @@ import {
 	pageIndexAfterBetaCursor
 } from './cursor.js';
 import { buildFeedBetaContinuation } from './continuation.js';
-import { pullFeedBetaCandidateCatalog, pullFeedBetaSlotPackVideoHead } from './catalog.js';
+import { pullFeedBetaCandidateCatalog } from './catalog.js';
 import { FEED_BETA_DEFAULT_PARAMS } from './params.js';
 import { mergeBetaPage, sortFeedBetaRowsNewestFirst } from './mergeBetaPage.js';
+import { drawMobileEditorialSlotPackPage } from './mobileSlotPack.js';
 import { buildFeedBetaScoreContext, sampleThreadRows } from './pools.js';
 import { computeBetaHasMore } from './hasMore.js';
 import { ensureBetaPageFilledToLimit } from './fillPageToLimit.js';
-import { getFeedBetaSeenSet } from './seen.js';
+import { getFeedBetaSeenSet, loadFeedBetaSeenSetForUser } from './seen.js';
 import { feedRowCreationIdKey, normalizeFeedBetaMediaFields } from './rowMedia.js';
-import { stampFeedBetaRowReason } from './reason.js';
-import {
-	MOBILE_CHAT_SPOTLIGHT_GROUP_COUNT,
-	MOBILE_CHAT_SPOTLIGHT_VIDEOS_PER_GROUP
-} from '../../src/shared/chatFeedMobilePartition.js';
+import { appendFeedBetaMergeReason } from './reason.js';
 
 /**
  * @param {object} opts
@@ -64,7 +61,8 @@ export async function pullFeedBetaRows({
 	enableNsfw,
 	showOwnPosts,
 	refresh = false,
-	feedBetaAck = null
+	feedBetaAck = null,
+	seenSet = null
 }) {
 	const userId = user.id;
 	const safeLimit = Math.min(Math.max(1, Number(limit) || 20), 100);
@@ -79,20 +77,13 @@ export async function pullFeedBetaRows({
 	const previousPageUnfilled = feedBetaAck?.page_filled === false;
 	const isSlotPackPageOne = Boolean(slotPack) && pageIndex === 1;
 	const isContinuation = pageIndex > 1 || (!slotPack && offset > 0);
-	const seen = getFeedBetaSeenSet(user);
+	const seen = seenSet instanceof Set ? seenSet : getFeedBetaSeenSet(user);
 	const params = FEED_BETA_DEFAULT_PARAMS;
 
 	const pageSeed = buildPageShuffleSeed(userId, pageIndex, refresh);
 	const shuffleSeed = pageSeed;
 	const catalog = await pullFeedBetaCandidateCatalog(queries, userId, pageSeed);
 	const scoreContext = await buildFeedBetaScoreContext(queries, userId, catalog);
-
-	const videoTake = isSlotPackPageOne
-		? params.slotPackVideoCap + 8
-		: Math.ceil(safeLimit / 2) + 6;
-	const otherTake = isSlotPackPageOne
-		? params.slotPackOtherCap + 8
-		: Math.ceil(safeLimit / 2) + 6;
 
 	const sampleOpts = {
 		catalog,
@@ -105,62 +96,39 @@ export async function pullFeedBetaRows({
 		shuffleSeed
 	};
 
-	const reasonStamp = { page_index: pageIndex, page_seed: pageSeed };
-
-	const slotPackVideoHeadCount =
-		MOBILE_CHAT_SPOTLIGHT_GROUP_COUNT * MOBILE_CHAT_SPOTLIGHT_VIDEOS_PER_GROUP;
-
-	async function resolveVideoRows() {
-		if (!isSlotPackPageOne) {
-			return sampleThreadRows(queries, userId, { ...sampleOpts, thread: 'video', take: videoTake });
-		}
-		const siteVideos = await pullFeedBetaSlotPackVideoHead(queries, userId, {
-			limit: slotPackVideoHeadCount,
-			enableNsfw,
-			showOwnPosts: showOwnPosts === true
-		});
-		const stampedSite = siteVideos.map((row) =>
-			stampFeedBetaRowReason(
-				row,
-				{
-					...reasonStamp,
-					pool: 'site_video_head',
-					thread: 'video',
-					source: 'site_video_head',
-					ignore_seen: true
-				},
-				null
-			)
-		);
-		if (stampedSite.length >= slotPackVideoHeadCount) {
-			return stampedSite.slice(0, videoTake);
-		}
-		const poolVideos = await sampleThreadRows(queries, userId, {
+	let mergedRows;
+	if (isSlotPackPageOne) {
+		const slotRows = drawMobileEditorialSlotPackPage(catalog, {
 			...sampleOpts,
-			thread: 'video',
-			take: videoTake,
-			ignoreSeen: true
+			viewerUserId: userId,
+			scoreContext,
+			pageSeed,
+			pageIndex
 		});
-		const byId = new Map();
-		for (const row of [...stampedSite, ...poolVideos]) {
-			const key = feedRowCreationIdKey(row);
-			if (key && !byId.has(key)) byId.set(key, row);
-		}
-		return [...byId.values()].slice(0, videoTake);
+		mergedRows = slotRows.map((row, index) =>
+			appendFeedBetaMergeReason(row, {
+				merge_layout: 'mobile_editorial_slot',
+				position_in_page: index + 1
+			})
+		);
+	} else {
+		const videoTake = Math.ceil(safeLimit / 2) + 6;
+		const otherTake = Math.ceil(safeLimit / 2) + 6;
+
+		const [videoRows, otherRows] = await Promise.all([
+			sampleThreadRows(queries, userId, { ...sampleOpts, thread: 'video', take: videoTake }),
+			sampleThreadRows(queries, userId, { ...sampleOpts, thread: 'other', take: otherTake })
+		]);
+
+		({ rows: mergedRows } = mergeBetaPage({
+			videoRows,
+			otherRows,
+			limit: safeLimit,
+			slotPackPageOne: false,
+			pageIndex
+		}));
 	}
 
-	const [videoRows, otherRows] = await Promise.all([
-		resolveVideoRows(),
-		sampleThreadRows(queries, userId, { ...sampleOpts, thread: 'other', take: otherTake })
-	]);
-
-	const { rows: mergedRows } = mergeBetaPage({
-		videoRows,
-		otherRows,
-		limit: safeLimit,
-		slotPackPageOne: isSlotPackPageOne,
-		pageIndex
-	});
 	let rows = mergedRows.map((row) => {
 		const norm = normalizeFeedBetaMediaFields(row);
 		if (row?.feed_beta_why) {
@@ -190,7 +158,7 @@ export async function pullFeedBetaRows({
 		});
 	}
 
-	if (pageIndex === 1 && rows.length > 1) {
+	if (pageIndex === 1 && rows.length > 1 && !isSlotPackPageOne) {
 		rows = sortFeedBetaRowsNewestFirst(rows);
 	}
 
