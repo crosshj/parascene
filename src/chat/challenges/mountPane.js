@@ -68,9 +68,11 @@ async function hydrateChallengeHeroImage(rootEl) {
 	};
 
 	let src = null;
+	const challengeId = wrap.getAttribute('data-challenge-id') || '';
+	const challengeOpts = challengeId ? { challengeId } : null;
 	const cref = parseHeroCreationOrShareRef(raw);
 	if (cref?.kind === 'creation') {
-		const data = await fetchCreationEmbedPayload(cref.creationId, cref.shareOpts);
+		const data = await fetchCreationEmbedPayload(cref.creationId, cref.shareOpts, challengeOpts);
 		src = imageUrlFromCreationPayload(data);
 	} else {
 		src = parseHeroDirectMediaUrl(raw);
@@ -147,9 +149,11 @@ async function hydrateChallengeHistoryThumbnails(rootEl) {
 		}
 
 		let src = null;
+		const challengeId = wrap.getAttribute('data-challenge-id') || '';
+		const challengeOpts = challengeId ? { challengeId } : null;
 		const cref = parseHeroCreationOrShareRef(raw);
 		if (cref?.kind === 'creation') {
-			const data = await fetchCreationEmbedPayload(cref.creationId, cref.shareOpts);
+			const data = await fetchCreationEmbedPayload(cref.creationId, cref.shareOpts, challengeOpts);
 			src = imageUrlFromCreationPayload(data);
 		} else {
 			src = parseHeroDirectMediaUrl(raw);

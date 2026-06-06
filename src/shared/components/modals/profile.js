@@ -19,6 +19,7 @@ import {
 } from '/shared/chatAudibleNotificationsPref.js';
 import {
 	feedBetaActiveFromProfile,
+	isFeedBetaOptedInFromProfile,
 	setFeedBetaEnabledClient
 } from '../../feedBetaNav.js';
 
@@ -257,10 +258,7 @@ class AppModalProfile extends HTMLElement {
 	syncForceLegacyFeedVisibility() {
 		const wrap = this.shadowRoot.querySelector('[data-force-legacy-wrap]');
 		if (!wrap) return;
-		const inBeta =
-			this.profileData?.feedBetaEnabled === true ||
-			this.profileData?.meta?.feedBetaEnabled === true;
-		if (inBeta) {
+		if (isFeedBetaOptedInFromProfile(this.profileData)) {
 			wrap.removeAttribute('hidden');
 		} else {
 			wrap.setAttribute('hidden', '');
@@ -365,7 +363,9 @@ class AppModalProfile extends HTMLElement {
 		const overlay = this.shadowRoot.querySelector('.profile-overlay');
 		if (overlay) {
 			overlay.classList.add('open');
-			this.loadProfile({ silent: true });
+			void this.loadProfile({ silent: true }).then(() => {
+				this.syncNsfwTogglesFromStorage();
+			});
 		}
 		this.syncNsfwTogglesFromStorage();
 		// Dispatch event to close notifications if open
@@ -742,7 +742,8 @@ class AppModalProfile extends HTMLElement {
           cursor: pointer;
           accent-color: var(--accent);
         }
-        [data-nsfw-obscure-wrap][hidden] {
+        [data-nsfw-obscure-wrap][hidden],
+        [data-force-legacy-wrap][hidden] {
           display: none !important;
         }
       </style>

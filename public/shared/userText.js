@@ -1642,13 +1642,21 @@ function attachChatCreationEmbedDetailLinkReveal(wrap) {
 	);
 }
 
-export async function fetchCreationEmbedPayload(id, shareOpts) {
+export async function fetchCreationEmbedPayload(id, shareOpts, challengeOpts) {
 	const shareVersion =
 		shareOpts && typeof shareOpts.shareVersion === 'string' ? shareOpts.shareVersion.trim() : '';
 	const shareToken =
 		shareOpts && typeof shareOpts.shareToken === 'string' ? shareOpts.shareToken.trim() : '';
+	const challengeId =
+		challengeOpts && challengeOpts.challengeId != null
+			? String(challengeOpts.challengeId).trim()
+			: '';
 	const cacheKey =
-		shareVersion && shareToken ? `${id}\0${shareVersion}\0${shareToken}` : id;
+		shareVersion && shareToken
+			? `${id}\0${shareVersion}\0${shareToken}\0${challengeId}`
+			: challengeId
+				? `${id}\0challenge:${challengeId}`
+				: id;
 	if (creationEmbedDataCache.has(cacheKey)) {
 		return creationEmbedDataCache.get(cacheKey);
 	}
@@ -1660,7 +1668,10 @@ export async function fetchCreationEmbedPayload(id, shareOpts) {
 				headers['X-Share-Version'] = shareVersion;
 				headers['X-Share-Token'] = shareToken;
 			}
-			const res = await fetch(`/api/create/images/${encodeURIComponent(id)}`, {
+			const qs = challengeId
+				? `?challenge_id=${encodeURIComponent(challengeId)}`
+				: '';
+			const res = await fetch(`/api/create/images/${encodeURIComponent(id)}${qs}`, {
 				method: 'GET',
 				credentials: 'include',
 				headers,

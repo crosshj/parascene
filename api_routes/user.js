@@ -649,7 +649,7 @@ export default function createProfileRoutes({ queries }) {
 			showOwnPostsInFeed,
 			audibleNotifications,
 			feedBetaEnabled,
-			forceLegacyFeed,
+			forceLegacyFeed: feedBetaEnabled ? forceLegacyFeed : false,
 			hasApiKey,
 			apiKeyPrefix,
 			hasVynlyToken,

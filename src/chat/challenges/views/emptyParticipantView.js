@@ -121,8 +121,11 @@ function renderChallengeHistoryCards(configs = [], opts = {}) {
 			const heroRef = challengeHistoryThumbnailRef(summary.payload);
 			const stateLabel = challengeHistoryStateLabel(summary.payload);
 			const stateClass = challengeStateClassFromLabel(stateLabel);
+			const challengeId =
+				typeof summary.challenge_id === 'string' ? summary.challenge_id.trim() : '';
+			const challengeIdAttr = challengeId ? ` data-challenge-id="${esc(challengeId)}"` : '';
 			return `<li class="challenge-pane-card challenge-pane-history-card">
-				<div class="challenge-pane-history-card-thumb-wrap" data-challenge-history-thumb-pending data-challenge-history-thumb-ref="${esc(heroRef)}">
+				<div class="challenge-pane-history-card-thumb-wrap" data-challenge-history-thumb-pending data-challenge-history-thumb-ref="${esc(heroRef)}"${challengeIdAttr}>
 					<img class="challenge-pane-history-card-thumb" alt="" loading="lazy" hidden data-challenge-history-thumb-img />
 					<div class="challenge-pane-history-card-thumb-fallback" aria-hidden="true" data-challenge-history-thumb-fallback></div>
 				</div>
@@ -149,11 +152,14 @@ export function renderNextChallengeSection(configs = [], opts = {}) {
 		: `Challenge ${summary.challenge_id}`;
 	const activeRange = challengeActiveRangeLabel(summary.payload);
 	const heroRef = challengeHistoryThumbnailRef(summary.payload);
+	const challengeId =
+		typeof summary.challenge_id === 'string' ? summary.challenge_id.trim() : '';
+	const challengeIdAttr = challengeId ? ` data-challenge-id="${esc(challengeId)}"` : '';
 	return `<section class="challenge-pane-section challenge-pane-next-section">
 			<h3 class="challenge-pane-section-label">Next challenge</h3>
 			<ul class="challenge-pane-history-list">
 				<li class="challenge-pane-card challenge-pane-history-card">
-					<div class="challenge-pane-history-card-thumb-wrap" data-challenge-history-thumb-pending data-challenge-history-thumb-ref="${esc(heroRef)}">
+					<div class="challenge-pane-history-card-thumb-wrap" data-challenge-history-thumb-pending data-challenge-history-thumb-ref="${esc(heroRef)}"${challengeIdAttr}>
 						<img class="challenge-pane-history-card-thumb" alt="" loading="lazy" hidden data-challenge-history-thumb-img />
 						<div class="challenge-pane-history-card-thumb-fallback" aria-hidden="true" data-challenge-history-thumb-fallback></div>
 					</div>

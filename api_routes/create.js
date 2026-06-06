@@ -36,6 +36,7 @@ import { insertNotificationsForChatMentions } from "./utils/chatMentionNotificat
 import { notifyCreationMentionsOnPublish } from "./utils/activityNotifications.js";
 import {
 	canViewUnpublishedCreationViaChallengeMessage,
+	canViewUnpublishedCreationViaChallengeHero,
 	fetchChatChannelThreadRow,
 	findChallengesChannelThreadId,
 	validateChallengeSubmission
@@ -225,6 +226,25 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			}
 
+			let challengeHeroOk = false;
+			const challengeIdRawImg = req.query?.challenge_id;
+			const challengeIdImg =
+				typeof challengeIdRawImg === "string" ? challengeIdRawImg.trim() : String(challengeIdRawImg || "").trim();
+			if (!isOwner && !isPublished && !isAdmin && userId) {
+				const sbHero = getSupabaseServiceClient();
+				if (sbHero) {
+					try {
+						challengeHeroOk = await canViewUnpublishedCreationViaChallengeHero(sbHero, {
+							ancestorRow: image,
+							challengeId: challengeIdImg || undefined,
+							viewerUserId: userId
+						});
+					} catch {
+						challengeHeroOk = false;
+					}
+				}
+			}
+
 			let shareDelegationOk = false;
 			const shareVersionRaw = req.query?.share_version;
 			const shareTokenRaw = req.query?.share_token;
@@ -245,7 +265,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			}
 
-			if (!isOwner && !isPublished && !isAdmin && !lineageOk && !creationDelegationOk && !challengeMessageOk && !shareDelegationOk) {
+			if (!isOwner && !isPublished && !isAdmin && !lineageOk && !creationDelegationOk && !challengeMessageOk && !challengeHeroOk && !shareDelegationOk) {
 				return res.status(403).json({ error: "Access denied" });
 			}
 
@@ -368,6 +388,25 @@ export default function createCreateRoutes({ queries, storage }) {
 				}
 			}
 
+			let challengeHeroOkVideo = false;
+			const challengeIdRawVid = req.query?.challenge_id;
+			const challengeIdVid =
+				typeof challengeIdRawVid === "string" ? challengeIdRawVid.trim() : String(challengeIdRawVid || "").trim();
+			if (!isOwner && !isPublished && !isAdmin && userId) {
+				const sbHeroVid = getSupabaseServiceClient();
+				if (sbHeroVid) {
+					try {
+						challengeHeroOkVideo = await canViewUnpublishedCreationViaChallengeHero(sbHeroVid, {
+							ancestorRow: image,
+							challengeId: challengeIdVid || undefined,
+							viewerUserId: userId
+						});
+					} catch {
+						challengeHeroOkVideo = false;
+					}
+				}
+			}
+
 			let shareDelegationOkVideo = false;
 			const shareVersionRawV = req.query?.share_version;
 			const shareTokenRawV = req.query?.share_token;
@@ -395,6 +434,7 @@ export default function createCreateRoutes({ queries, storage }) {
 				!lineageOkVideo &&
 				!creationDelegationOkVideo &&
 				!challengeMessageOkVideo &&
+				!challengeHeroOkVideo &&
 				!shareDelegationOkVideo
 			) {
 				return res.status(403).json({ error: "Access denied" });
@@ -1071,6 +1111,21 @@ export default function createCreateRoutes({ queries, storage }) {
 		} catch {
 			const sep = s.includes("?") ? "&" : "?";
 			return `${s}${sep}challenge_message_id=${encodeURIComponent(String(challengeMessageId))}`;
+		}
+	}
+
+	/** Append challenge_id for delegated reads of unpublished challenge hero images. */
+	function appendChallengeIdToMediaUrl(url, challengeId) {
+		if (!url || !challengeId) return url;
+		const s = String(url);
+		if (!s.includes("/api/images/created/") && !s.includes("/api/videos/created/")) return url;
+		try {
+			const parsed = new URL(url, "http://localhost");
+			parsed.searchParams.set("challenge_id", String(challengeId));
+			return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+		} catch {
+			const sep = s.includes("?") ? "&" : "?";
+			return `${s}${sep}challenge_id=${encodeURIComponent(String(challengeId))}`;
 		}
 	}
 
@@ -2882,6 +2937,7 @@ export default function createCreateRoutes({ queries, storage }) {
 			let shareAccess = null;
 			let lineageMediaParentId = null;
 			let challengeMediaMessageId = null;
+			let challengeHeroId = null;
 
 			// If not found as owner, check if it exists and is either published or user is admin
 			if (!image) {
@@ -2945,6 +3001,29 @@ export default function createCreateRoutes({ queries, storage }) {
 								} catch {
 									// ignore
 								}
+							}
+						}
+					}
+
+					// Challenge hero images may reference unpublished organizer creations.
+					if (!image && !isUnavailable) {
+						const chIdRaw = req.query?.challenge_id;
+						const chId =
+							typeof chIdRaw === "string" ? chIdRaw.trim() : String(chIdRaw || "").trim();
+						const sbHero = getSupabaseServiceClient();
+						if (sbHero) {
+							try {
+								const heroOk = await canViewUnpublishedCreationViaChallengeHero(sbHero, {
+									ancestorRow: anyImage,
+									challengeId: chId || undefined,
+									viewerUserId: user.id
+								});
+								if (heroOk) {
+									image = anyImage;
+									if (chId) challengeHeroId = chId;
+								}
+							} catch {
+								// ignore
 							}
 						}
 					}
@@ -3056,11 +3135,21 @@ export default function createCreateRoutes({ queries, storage }) {
 				!shareAccess &&
 				status === "completed";
 
+			const appendChallengeHeroToMediaUrls =
+				challengeHeroId != null &&
+				!isPublished &&
+				!isOwner &&
+				!shareAccess &&
+				status === "completed";
+
 			if (url && appendLineageToMediaUrls) {
 				url = appendLineageOfToMediaUrl(url, lineageMediaParentId);
 			}
 			if (url && appendChallengeToMediaUrls) {
 				url = appendChallengeMessageIdToMediaUrl(url, challengeMediaMessageId);
+			}
+			if (url && appendChallengeHeroToMediaUrls) {
+				url = appendChallengeIdToMediaUrl(url, challengeHeroId);
 			}
 
 			const mediaType = typeof meta?.media_type === "string" ? meta.media_type : "image";
@@ -3081,6 +3170,9 @@ export default function createCreateRoutes({ queries, storage }) {
 			}
 			if (videoUrl && appendChallengeToMediaUrls) {
 				videoUrl = appendChallengeMessageIdToMediaUrl(videoUrl, challengeMediaMessageId);
+			}
+			if (videoUrl && appendChallengeHeroToMediaUrls) {
+				videoUrl = appendChallengeIdToMediaUrl(videoUrl, challengeHeroId);
 			}
 			const sourceImageUrl =
 				typeof meta?.source_image_url === "string" && meta.source_image_url

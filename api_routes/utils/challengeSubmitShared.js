@@ -1,4 +1,5 @@
 import { deriveChallengePhase } from "../../src/chat/challenges/model/phases.js";
+import { pickChallengeHeroImageUrl } from "../../src/chat/challenges/challengeAdmin.js";
 
 const MAX_NOTE_CHARS = 500;
 const MESSAGE_FETCH_LIMIT = 500;
@@ -168,6 +169,24 @@ export async function fetchThreadMessagesChronological(sb, threadId, limit = MES
 }
 
 /**
+ * Recent thread messages, newest first (for resolving latest challenge_config rows).
+ * @param {import("@supabase/supabase-js").SupabaseClient} sb
+ * @param {number} threadId
+ * @param {number} [limit]
+ */
+export async function fetchThreadMessagesNewestFirst(sb, threadId, limit = MESSAGE_FETCH_LIMIT) {
+	const { data, error } = await sb
+		.from("prsn_chat_messages")
+		.select("id, body, created_at, sender_id, reactions")
+		.eq("thread_id", threadId)
+		.order("created_at", { ascending: false })
+		.order("id", { ascending: false })
+		.limit(limit);
+	if (error) throw error;
+	return Array.isArray(data) ? data : [];
+}
+
+/**
  * Viewer may load another user's unpublished challenge entry when it is referenced by an existing
  * `challenge_submission` chat message in #challenges and the viewer is a thread member (same gate as submissions).
  *
@@ -208,6 +227,142 @@ export async function canViewUnpublishedCreationViaChallengeMessage(sb, args) {
 	if (!threadRow || threadRow.type !== "channel" || slug !== "challenges") return false;
 
 	return isChatThreadMember(sb, tid, vid);
+}
+
+/**
+ * Parse a creation id from challenge hero reference strings (`/creations/:id`, API paths, or full URLs).
+ * @param {unknown} raw
+ * @returns {number}
+ */
+export function parseCreationIdFromChallengeHeroRef(raw) {
+	const s = typeof raw === "string" ? raw.trim() : "";
+	if (!s) return NaN;
+
+	const fromPlainPath = (text) => {
+		const m1 = text.match(/\/creations\/(\d+)(?:\D|$)/i);
+		if (m1) return Number(m1[1]);
+		const m2 = text.match(/\/(?:api\/)?create\/images\/(\d+)(?:\D|$)/i);
+		if (m2) return Number(m2[1]);
+		return NaN;
+	};
+
+	const plain = fromPlainPath(s);
+	if (Number.isFinite(plain) && plain > 0) return plain;
+
+	try {
+		const u = new URL(s, "https://www.parascene.com");
+		const path = `${u.pathname || ""}${u.search || ""}`;
+		const fromUrlPath = fromPlainPath(path);
+		if (Number.isFinite(fromUrlPath) && fromUrlPath > 0) return fromUrlPath;
+	} catch {
+		// ignore
+	}
+	return NaN;
+}
+
+/**
+ * Latest `challenge_config` payload for a given challenge id (newest messages first).
+ * @param {{ body?: unknown, created_at?: string }[]} messagesNewestFirst
+ * @param {unknown} challengeId
+ * @returns {object | null}
+ */
+export function pickLatestChallengeConfigForChallengeId(messagesNewestFirst, challengeId) {
+	const cid = String(challengeId || "").trim();
+	if (!cid) return null;
+	for (const m of messagesNewestFirst || []) {
+		const p = tryParseChallengeJsonBody(m?.body);
+		if (!p || String(p.kind || "").trim() !== "challenge_config") continue;
+		if (String(p.challenge_id || "").trim() !== cid) continue;
+		return p;
+	}
+	return null;
+}
+
+/**
+ * @param {{ body?: unknown, created_at?: string }[]} messagesNewestFirst
+ * @returns {Map<string, { payload: object, created_at?: string }>}
+ */
+export function latestChallengeConfigByChallengeId(messagesNewestFirst) {
+	const map = new Map();
+	for (const m of messagesNewestFirst || []) {
+		const p = tryParseChallengeJsonBody(m?.body);
+		if (!p || String(p.kind || "").trim() !== "challenge_config") continue;
+		const cid = String(p.challenge_id || "").trim();
+		if (!cid || map.has(cid)) continue;
+		map.set(cid, { payload: p, created_at: m.created_at });
+	}
+	return map;
+}
+
+/**
+ * Walk newest challenge_config rows for `challengeId` until a hero ref matches `creationId`
+ * (handles partial config updates that omit hero_image_url on the latest row).
+ * @param {{ body?: unknown }[]} messagesNewestFirst
+ * @param {string} challengeId
+ * @param {number} creationId
+ */
+export function challengeHeroCreationMatchesInRecentConfigs(messagesNewestFirst, challengeId, creationId) {
+	const cid = String(challengeId || "").trim();
+	const targetId = Number(creationId);
+	if (!cid || !Number.isFinite(targetId) || targetId <= 0) return false;
+	for (const m of messagesNewestFirst || []) {
+		const p = tryParseChallengeJsonBody(m?.body);
+		if (!p || String(p.kind || "").trim() !== "challenge_config") continue;
+		if (String(p.challenge_id || "").trim() !== cid) continue;
+		const heroRef = pickChallengeHeroImageUrl(p);
+		if (!heroRef) continue;
+		const heroCreationId = parseCreationIdFromChallengeHeroRef(heroRef);
+		if (Number.isFinite(heroCreationId) && heroCreationId === targetId) return true;
+	}
+	return false;
+}
+
+/**
+ * Viewer may load another user's unpublished creation when it is the configured hero image
+ * for a challenge in #challenges.
+ *
+ * When `challengeId` is omitted, any recent challenge config whose hero ref resolves to the
+ * creation id is accepted (supports clients that have not yet passed `?challenge_id=`).
+ *
+ * @param {import("@supabase/supabase-js").SupabaseClient} sb
+ * @param {{
+ *   ancestorRow: { id?: unknown, unavailable_at?: unknown },
+ *   challengeId?: string,
+ *   viewerUserId: number,
+ * }} args
+ */
+export async function canViewUnpublishedCreationViaChallengeHero(sb, args) {
+	const ancestorRow = args?.ancestorRow;
+	const challengeId = String(args?.challengeId || "").trim();
+	const vid = Number(args?.viewerUserId);
+	if (!ancestorRow || !Number.isFinite(vid) || vid <= 0) {
+		return false;
+	}
+	if (ancestorRow.unavailable_at != null && ancestorRow.unavailable_at !== "") return false;
+
+	const threadId = await findChallengesChannelThreadId(sb);
+	if (!threadId) return false;
+
+	const threadRow = await fetchChatChannelThreadRow(sb, threadId);
+	const slug = String(threadRow?.channel_slug || "").toLowerCase();
+	if (!threadRow || threadRow.type !== "channel" || slug !== "challenges") return false;
+
+	const messagesNewest = await fetchThreadMessagesNewestFirst(sb, threadId);
+
+	if (challengeId) {
+		return challengeHeroCreationMatchesInRecentConfigs(
+			messagesNewest,
+			challengeId,
+			ancestorRow.id
+		);
+	}
+
+	for (const cid of latestChallengeConfigByChallengeId(messagesNewest).keys()) {
+		if (challengeHeroCreationMatchesInRecentConfigs(messagesNewest, cid, ancestorRow.id)) {
+			return true;
+		}
+	}
+	return false;
 }
 
 /**
