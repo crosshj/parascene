@@ -1,5 +1,5 @@
 import { extractChallengeEvents } from './extractEvents.js';
-import { pickLatestConfig, submissionsForLatestChallenge } from './participantSlice.js';
+import { pickParticipantFocusConfig, submissionsForLatestChallenge } from './participantSlice.js';
 
 /**
  * Back-compat shape used by older imports: latest challenge config + matching submissions only.
@@ -7,7 +7,7 @@ import { pickLatestConfig, submissionsForLatestChallenge } from './participantSl
  */
 export function parseChallengeTimeline(messages) {
 	const { configs, submissions } = extractChallengeEvents(messages);
-	const { latestConfig, latestConfigMsg } = pickLatestConfig(configs);
+	const { latestConfig, latestConfigMsg } = pickParticipantFocusConfig(configs, Date.now());
 	const forChallenge = submissionsForLatestChallenge(submissions, latestConfig);
 	return { latestConfig, latestConfigMsg, submissions: forChallenge };
 }

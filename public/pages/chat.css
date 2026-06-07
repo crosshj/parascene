@@ -469,19 +469,34 @@ body.chat-page main.chat-page-outer {
 }
 
 .challenge-pane-organizer-modal-body .challenge-pane-admin-config-form {
-	flex: 1 1 auto;
-	min-height: 0;
+	flex: 0 0 auto;
 	display: flex;
 	flex-direction: column;
 	max-width: none;
+	box-sizing: border-box;
+}
+
+.challenge-pane-admin-form-footer {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	flex-shrink: 0;
+	padding-bottom: 24px;
 }
 
 .challenge-pane-organizer-modal-body .challenge-pane-admin-config-form > .challenge-pane-label:not(.challenge-pane-organizer-details-field),
 .challenge-pane-organizer-modal-body .challenge-pane-admin-config-form > .challenge-pane-admin-rewards-group,
 .challenge-pane-organizer-modal-body .challenge-pane-admin-config-form > .challenge-pane-admin-datetimes,
+.challenge-pane-organizer-modal-body .challenge-pane-admin-config-form > .challenge-pane-admin-results-row,
+.challenge-pane-organizer-modal-body .challenge-pane-admin-config-form > .challenge-pane-admin-form-footer,
 .challenge-pane-organizer-modal-body .challenge-pane-admin-config-form > .challenge-pane-admin-submit,
-.challenge-pane-organizer-modal-body .challenge-pane-admin-config-form > .challenge-pane-admin-error {
+.challenge-pane-organizer-modal-body .challenge-pane-admin-config-form > .challenge-pane-admin-error,
+.challenge-pane-organizer-modal-body .challenge-pane-admin-config-form > .challenge-pane-admin-success {
 	flex-shrink: 0;
+}
+
+.challenge-pane-organizer-modal-body .challenge-pane-admin-form-footer > .challenge-pane-admin-submit {
+	align-self: flex-start;
 }
 
 /*
@@ -511,6 +526,8 @@ body.chat-page main.chat-page-outer {
 	overflow-y: auto;
 	min-height: 0;
 	max-height: none;
+	padding-bottom: 24px;
+	scroll-padding-bottom: 24px;
 }
 
 .challenge-pane-organizer-stats-view {

@@ -1,6 +1,7 @@
 import { buildChallengesChannelModel } from './model/buildChannelModel.js';
 import { summarizeLatestChallengeConfigs } from './model/organizerSummaries.js';
 import {
+	mergeFullChallengeConfigForChallenge,
 	normalizeChallengeHeroRefForSave,
 	parseDatetimeLocalToIso,
 	REWARD_FIELD_KEYS,
@@ -11,7 +12,8 @@ import {
 import {
 	renderChallengeOrganizerSidebarMarkup,
 	renderChallengeOrganizerModalInnerHtml,
-	renderChallengeOrganizerStatsModalInnerHtml
+	renderChallengeOrganizerStatsModalInnerHtml,
+	bindChallengeResultsToggle
 } from './views/adminView.js';
 import {
 	openChatAttachmentPreviewLightbox,
@@ -127,6 +129,7 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 			: /** @param {string} [cls] */ (cls) =>
 					`<svg class="${String(cls || '').trim()}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
 	let rowByChallengeId = new Map();
+	let challengeConfigEntries = [];
 	const upsertLocalMessage = (message) => {
 		if (!message || typeof message !== 'object') return;
 		const mid = Number(message.id);
@@ -195,6 +198,7 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 				configMessageId: globalConfigMessageId
 			}
 		);
+		bindChallengeResultsToggle(modalBody);
 		modalEl.classList.add('open');
 		modalEl.setAttribute('aria-hidden', 'false');
 		setOrganizerModalOpenClass(true);
@@ -326,7 +330,7 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 		const title = String(fd.get('title') || '').trim();
 		const details = String(fd.get('details') || '').trim();
 		const heroRef = normalizeChallengeHeroRefForSave(fd.get('hero_image_url'));
-		const resultsPublishNow = String(fd.get('results_publish_now') || '').trim() === '1';
+		const resultsRef = normalizeChallengeHeroRefForSave(fd.get('results_creation_url'));
 		const resultsPublishedExisting = String(fd.get('results_published_at_existing') || '').trim();
 
 		if (errEl instanceof HTMLElement) {
@@ -405,16 +409,41 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 				};
 			} else {
 				if (!challengeId || !title) return;
+				const base = isEditForm
+					? mergeFullChallengeConfigForChallenge(challengeConfigEntries, challengeId)
+					: {};
 				payload = {
+					...base,
 					kind: 'challenge_config',
 					challenge_id: challengeId,
-					title,
-					...(details ? { details } : {}),
-					...(heroRef ? { hero_image_url: heroRef } : {})
+					title
 				};
+				if (details) payload.details = details;
+				else delete payload.details;
+				if (heroRef) payload.hero_image_url = heroRef;
+				else delete payload.hero_image_url;
+				const publishCheckbox = adminForm.querySelector('[name="results_publish_now"]');
+				if (publishCheckbox instanceof HTMLInputElement) {
+					if (publishCheckbox.checked) {
+						if (resultsPublishedExisting) {
+							payload.results_published_at = resultsPublishedExisting;
+						} else {
+							payload.results_published_at = new Date().toISOString();
+						}
+						const resultsUrlInput = adminForm.querySelector('[name="results_creation_url"]');
+						if (resultsUrlInput instanceof HTMLInputElement) {
+							if (resultsRef) payload.results_creation_url = resultsRef;
+							else delete payload.results_creation_url;
+						}
+					} else {
+						delete payload.results_published_at;
+						delete payload.results_creation_url;
+					}
+				}
 				for (const key of REWARD_FIELD_KEYS) {
 					const s = String(fd.get(key) || '').trim();
 					if (s) payload[key] = s;
+					else delete payload[key];
 				}
 				const timeFields = [
 					'submission_start_at',
@@ -425,29 +454,22 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 				for (const key of timeFields) {
 					const iso = parseDatetimeLocalToIso(String(fd.get(key) || ''));
 					if (iso) payload[key] = iso;
-				}
-				if (resultsPublishNow && !resultsPublishedExisting) {
-					payload.results_published_at = new Date().toISOString();
+					else delete payload[key];
 				}
 			}
 			const body = JSON.stringify(payload);
 			let r;
-			if (isEditForm || (isGlobalForm && Number.isFinite(Number(fd.get('global_config_message_id'))) && Number(fd.get('global_config_message_id')) > 0)) {
-				const midRaw = isGlobalForm ? fd.get('global_config_message_id') : fd.get('config_message_id');
-				const missingMsgError = isGlobalForm
-					? 'Could not resolve global config message to update — reload and try again.'
-					: 'Could not resolve challenge message to update — reload and try again.';
-				const mid = Number(midRaw);
-				const hasMid = Number.isFinite(mid) && mid > 0;
+			if (
+				isGlobalForm &&
+				Number.isFinite(Number(fd.get('global_config_message_id'))) &&
+				Number(fd.get('global_config_message_id')) > 0
+			) {
+				const mid = Number(fd.get('global_config_message_id'));
 				const patch = opts.patchMessage;
-				if (typeof patch === 'function' && hasMid) {
+				if (typeof patch === 'function' && Number.isFinite(mid) && mid > 0) {
 					r = await patch(mid, body);
 				} else {
-					throw new Error(
-						hasMid
-							? 'Updates are not available (missing patch handler).'
-							: missingMsgError
-					);
+					throw new Error('Updates are not available (missing patch handler).');
 				}
 			} else {
 				r = await opts.postMessage(body);
@@ -477,6 +499,7 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 						: null;
 				paint();
 			} else {
+				if (r.message) upsertLocalMessage(r.message);
 				await opts.reload();
 			}
 			if (!isEditForm) {
@@ -601,7 +624,8 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 			const cid = editBtn.getAttribute('data-challenges-organizer-edit') || '';
 			const row = rowByChallengeId.get(cid);
 			if (row?.payload) {
-				openModal('edit', row.payload, row.configMessageId);
+				const merged = mergeFullChallengeConfigForChallenge(challengeConfigEntries, cid);
+				openModal('edit', merged, row.configMessageId);
 			}
 			return;
 		}
@@ -638,6 +662,7 @@ export function mountChallengesOrganizerSidebar(host, opts) {
 				? Number(globalCfg.messageId)
 				: null;
 		const summaries = summarizeLatestChallengeConfigs(model.raw.configs);
+		challengeConfigEntries = model.raw.configs;
 		rowByChallengeId = new Map(summaries.map((s) => [s.challenge_id, s]));
 
 		const gearSvg = gearIcon('challenge-pane-organizer-gear-svg');

@@ -1,7 +1,86 @@
 import { esc } from '../constants.js';
 import { summarizeLatestChallengeConfigs } from '../model/organizerSummaries.js';
-import { pickChallengeConfigTimestamp, pickChallengeHeroImageUrl } from '../challengeAdmin.js';
+import {
+	mergeFullChallengeConfigForChallenge,
+	pickChallengeConfigTimestamp,
+	pickChallengeHeroImageUrl
+} from '../challengeAdmin.js';
 import { deriveChallengePhase } from '../model/phases.js';
+import { ACTIVE_PARTICIPANT_PHASES } from '../model/participantSlice.js';
+import { parseHeroCreationOrShareRef } from '../../../shared/userText.js';
+
+/**
+ * @param {string} raw results_creation_url value
+ * @returns {string | null} in-app navigation href
+ */
+function resolveChallengeResultsNavigationHref(raw) {
+	const cref = parseHeroCreationOrShareRef(raw);
+	if (cref?.kind === 'creation') {
+		return `/creations/${encodeURIComponent(String(cref.creationId))}`;
+	}
+	return null;
+}
+
+/**
+ * @param {{ msg: object, payload: object }[]} configEntries
+ * @param {object} summaryPayload
+ * @param {string} challengeId
+ */
+function effectiveChallengePayload(configEntries, summaryPayload, challengeId) {
+	const merged = mergeFullChallengeConfigForChallenge(configEntries, challengeId);
+	return { ...summaryPayload, ...merged };
+}
+
+/**
+ * @param {object} payload merged challenge_config
+ * @param {number} nowMs
+ * @returns {{ stateLabel: string, stateClass: string, resultsHref: string | null }}
+ */
+function challengeHistoryCardMeta(payload, nowMs) {
+	const phase = deriveChallengePhase(payload, nowMs);
+	const resultsHref = resolveChallengeResultsNavigationHref(
+		typeof payload.results_creation_url === 'string' ? payload.results_creation_url : ''
+	);
+	if (phase === 'results' && resultsHref) {
+		return { stateLabel: 'View results', stateClass: 'results', resultsHref };
+	}
+	if (phase === 'results') {
+		return { stateLabel: 'Winners announced', stateClass: 'results', resultsHref: null };
+	}
+	if (phase === 'finalizing') {
+		return { stateLabel: 'Finalizing', stateClass: 'finalizing', resultsHref: null };
+	}
+	if (phase === 'submit_and_vote' || phase === 'submitting') {
+		return { stateLabel: 'Open', stateClass: 'active', resultsHref: null };
+	}
+	if (phase === 'voting') {
+		return { stateLabel: 'Voting', stateClass: 'active', resultsHref: null };
+	}
+	if (phase === 'between') {
+		return { stateLabel: 'Between rounds', stateClass: 'between', resultsHref: null };
+	}
+	return { stateLabel: 'Ended', stateClass: 'ended', resultsHref: null };
+}
+
+function renderChallengeHistoryCardInner({
+	title,
+	activeRange,
+	heroRef,
+	challengeId,
+	stateLabel,
+	stateClass
+}) {
+	const challengeIdAttr = challengeId ? ` data-challenge-id="${esc(challengeId)}"` : '';
+	return `<div class="challenge-pane-history-card-thumb-wrap" data-challenge-history-thumb-pending data-challenge-history-thumb-ref="${esc(heroRef)}"${challengeIdAttr}>
+					<img class="challenge-pane-history-card-thumb" alt="" loading="lazy" hidden data-challenge-history-thumb-img />
+					<div class="challenge-pane-history-card-thumb-fallback" aria-hidden="true" data-challenge-history-thumb-fallback></div>
+				</div>
+				<div class="challenge-pane-history-card-content">
+					<h3 class="challenge-pane-history-card-title">${esc(title)}</h3>
+					<p class="challenge-pane-history-card-range">${esc(activeRange)}</p>
+				</div>
+				<div class="challenge-pane-history-card-state challenge-pane-history-card-state--${esc(stateClass)}" aria-label="Challenge state">${esc(stateLabel)}</div>`;
+}
 
 function formatShortDateTime(isoLike) {
 	const raw = typeof isoLike === 'string' ? isoLike.trim() : '';
@@ -54,18 +133,6 @@ function challengeHistoryThumbnailRef(payload) {
 	return '';
 }
 
-function challengeHistoryStateLabel(payload) {
-	const phase = deriveChallengePhase(payload, Date.now());
-	if (phase === 'finalizing') return 'Finalizing';
-	return 'Ended';
-}
-
-function challengeStateClassFromLabel(label) {
-	const raw = typeof label === 'string' ? label.trim().toLowerCase() : '';
-	if (raw === 'upcoming') return 'upcoming';
-	if (raw === 'finalizing') return 'finalizing';
-	return 'ended';
-}
 
 function challengeStartsAtMs(payload) {
 	const start = pickChallengeConfigTimestamp(payload, 'submission_start_at');
@@ -106,8 +173,13 @@ function renderChallengeHistoryCards(configs = [], opts = {}) {
 		if (!excludeChallengeId) return true;
 		return cid !== excludeChallengeId;
 	}).filter((s) => {
-		const phase = deriveChallengePhase(s.payload, Date.now());
-		return phase !== 'pre_submit';
+		const challengeId =
+			typeof s.challenge_id === 'string' ? s.challenge_id.trim() : '';
+		const effectivePayload = effectiveChallengePayload(configs, s.payload, challengeId);
+		const phase = deriveChallengePhase(effectivePayload, Date.now());
+		if (phase === 'pre_submit') return false;
+		if (ACTIVE_PARTICIPANT_PHASES.has(phase)) return false;
+		return true;
 	});
 	if (!summaries.length) {
 		return `<p class="challenge-pane-muted">No challenges have been posted yet.</p>`;
@@ -117,24 +189,29 @@ function renderChallengeHistoryCards(configs = [], opts = {}) {
 			const title = summary.title && summary.title.trim()
 				? summary.title.trim()
 				: `Challenge ${summary.challenge_id}`;
-			const activeRange = challengeActiveRangeLabel(summary.payload);
-			const heroRef = challengeHistoryThumbnailRef(summary.payload);
-			const stateLabel = challengeHistoryStateLabel(summary.payload);
-			const stateClass = challengeStateClassFromLabel(stateLabel);
 			const challengeId =
 				typeof summary.challenge_id === 'string' ? summary.challenge_id.trim() : '';
-			const challengeIdAttr = challengeId ? ` data-challenge-id="${esc(challengeId)}"` : '';
-			return `<li class="challenge-pane-card challenge-pane-history-card">
-				<div class="challenge-pane-history-card-thumb-wrap" data-challenge-history-thumb-pending data-challenge-history-thumb-ref="${esc(heroRef)}"${challengeIdAttr}>
-					<img class="challenge-pane-history-card-thumb" alt="" loading="lazy" hidden data-challenge-history-thumb-img />
-					<div class="challenge-pane-history-card-thumb-fallback" aria-hidden="true" data-challenge-history-thumb-fallback></div>
-				</div>
-				<div class="challenge-pane-history-card-content">
-					<h3 class="challenge-pane-history-card-title">${esc(title)}</h3>
-					<p class="challenge-pane-history-card-range">${esc(activeRange)}</p>
-				</div>
-				<div class="challenge-pane-history-card-state challenge-pane-history-card-state--${esc(stateClass)}" aria-label="Challenge state">${esc(stateLabel)}</div>
+			const effectivePayload = effectiveChallengePayload(configs, summary.payload, challengeId);
+			const activeRange = challengeActiveRangeLabel(effectivePayload);
+			const heroRef = challengeHistoryThumbnailRef(effectivePayload);
+			const { stateLabel, stateClass, resultsHref } = challengeHistoryCardMeta(
+				effectivePayload,
+				Date.now()
+			);
+			const inner = renderChallengeHistoryCardInner({
+				title,
+				activeRange,
+				heroRef,
+				challengeId,
+				stateLabel,
+				stateClass
+			});
+			if (resultsHref) {
+				return `<li class="challenge-pane-card challenge-pane-history-card challenge-pane-history-card--has-link">
+				<a class="challenge-pane-history-card-link" href="${esc(resultsHref)}">${inner}</a>
 			</li>`;
+			}
+			return `<li class="challenge-pane-card challenge-pane-history-card">${inner}</li>`;
 		})
 		.join('');
 	return `<ul class="challenge-pane-history-list">${cards}</ul>`;
@@ -192,7 +269,7 @@ export function renderEmptyParticipantPane(configs = []) {
 	return `<div class="challenge-pane-empty route-empty-image-grid">
 			<section class="challenge-pane-section challenge-pane-inactive-note" aria-label="No active challenge">
 				<h2 class="challenge-pane-inactive-note-title">No active challenge right now</h2>
-				<p class="challenge-pane-inactive-note-text">There is currently no active challenge. Review previous challenges below and check back for upcoming challenges.</p>
+				<p class="challenge-pane-inactive-note-text">There is currently no active challenge. Review previous challenges below — published results open your highlights creation when configured.</p>
 			</section>
 			${renderNextChallengeSection(configs)}
 			${renderPastChallengesSection(configs)}

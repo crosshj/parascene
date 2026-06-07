@@ -1352,3 +1352,29 @@ body.chat-page .chat-page-messages .chat-doom-bottom-row .chat-doom-avatar-slot 
 body.chat-page .chat-page-messages.chat-page-messages--doom-host video.chat-doom-video::-webkit-media-controls {
 	display: none !important;
 }
+
+/*
+ * Organizer edit modal: stale chat.bundle.css kept the form at flex:1 + min-height:0, so the
+ * scroll area ended at the viewport edge and bottom padding never appeared. hotfix loads after bundle.
+ */
+.challenge-pane-organizer-modal-body .challenge-pane-admin-config-form {
+	flex: 0 0 auto !important;
+	min-height: auto !important;
+}
+
+.challenge-pane-admin-form-footer {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	flex-shrink: 0;
+	padding-bottom: 24px;
+}
+
+.challenge-pane-organizer-modal-body .challenge-pane-admin-form-footer > .challenge-pane-admin-submit {
+	align-self: flex-start;
+}
+
+.chat-page-challenges-organizer-modal-panel .challenge-pane-organizer-modal-body {
+	padding-bottom: 24px;
+	scroll-padding-bottom: 24px;
+}

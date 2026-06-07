@@ -163,6 +163,71 @@ export function normalizeChallengeHeroRefForSave(raw) {
 	return s;
 }
 
+/**
+ * Stored results/highlights creation link (`results_creation_url` on challenge_config).
+ * @param {object | null | undefined} cfg challenge_config payload
+ */
+export function pickChallengeResultsCreationUrl(cfg) {
+	if (!cfg || typeof cfg !== 'object') return '';
+	const v = cfg.results_creation_url ?? cfg.results_url ?? cfg.results_highlights_url;
+	let s = typeof v === 'string' ? v.trim() : String(v ?? '').trim();
+	if (s.length > HERO_MEDIA_REF_MAX) s = s.slice(0, HERO_MEDIA_REF_MAX);
+	return s;
+}
+
+/**
+ * @param {object | null | undefined} cfg challenge_config payload
+ * @returns {string}
+ */
+export function pickChallengeResultsPublishedAt(cfg) {
+	if (!cfg || typeof cfg !== 'object') return '';
+	const v = cfg.results_published_at ?? cfg.resultsPublishedAt;
+	if (v === true || v === 1) return new Date().toISOString();
+	return typeof v === 'string' ? v.trim() : String(v ?? '').trim();
+}
+
+/**
+ * Merge sparse challenge_config patches for one challenge (chronological entries; last set wins per field).
+ * @param {{ msg?: object, payload?: object }[]} configEntries
+ * @param {unknown} challengeId
+ * @returns {{ results_creation_url?: string, results_published_at?: string }}
+ */
+export function mergeChallengeConfigFieldsForChallenge(configEntries, challengeId) {
+	const cid = String(challengeId || '').trim();
+	/** @type {{ results_creation_url?: string, results_published_at?: string }} */
+	const out = {};
+	if (!cid) return out;
+	for (const row of configEntries || []) {
+		const p = row?.payload;
+		if (!p || typeof p !== 'object' || String(p.kind || '').trim() !== 'challenge_config') continue;
+		if (String(p.challenge_id || '').trim() !== cid) continue;
+		const resultsUrl = pickChallengeResultsCreationUrl(p);
+		if (resultsUrl) out.results_creation_url = resultsUrl;
+		const publishedAt = pickChallengeResultsPublishedAt(p);
+		if (publishedAt) out.results_published_at = publishedAt;
+	}
+	return out;
+}
+
+/**
+ * Full merged challenge_config for one challenge (chronological patches; last set wins per field).
+ * @param {{ msg?: object, payload?: object }[]} configEntries
+ * @param {unknown} challengeId
+ * @returns {object}
+ */
+export function mergeFullChallengeConfigForChallenge(configEntries, challengeId) {
+	const cid = String(challengeId || '').trim();
+	if (!cid) return {};
+	let out = {};
+	for (const row of configEntries || []) {
+		const p = row?.payload;
+		if (!p || typeof p !== 'object' || String(p.kind || '').trim() !== 'challenge_config') continue;
+		if (String(p.challenge_id || '').trim() !== cid) continue;
+		out = { ...out, ...p };
+	}
+	return out;
+}
+
 const REWARD_FIELD_KEYS = /** @type {const} */ ([
 	'reward_first',
 	'reward_second',

@@ -8889,6 +8889,32 @@ body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading {
 	text-align: left;
 }
 
+.challenge-pane-history-card--has-link {
+	padding: 0;
+}
+
+.challenge-pane-history-card-link {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 12px;
+	width: 100%;
+	box-sizing: border-box;
+	text-align: left;
+	color: inherit;
+	text-decoration: none;
+	border-radius: inherit;
+}
+
+.challenge-pane-history-card-link:hover .challenge-pane-history-card-title {
+	color: var(--accent, #5eead4);
+}
+
+.challenge-pane-history-card-link:focus-visible {
+	outline: 2px solid var(--accent, #5eead4);
+	outline-offset: 2px;
+}
+
 .challenge-pane-history-card-thumb-wrap {
 	width: 72px;
 	height: 72px;
@@ -8969,6 +8995,24 @@ body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading {
 	background: color-mix(in srgb, var(--text-muted, rgba(255, 255, 255, 0.72)) 14%, transparent);
 }
 
+.challenge-pane-history-card-state--results {
+	color: #d1fae5;
+	border-color: color-mix(in srgb, var(--color-green, #22c55e) 78%, transparent);
+	background: color-mix(in srgb, var(--color-green, #22c55e) 36%, transparent);
+}
+
+.challenge-pane-history-card-state--active {
+	color: #d1fae5;
+	border-color: color-mix(in srgb, var(--color-green, #22c55e) 78%, transparent);
+	background: color-mix(in srgb, var(--color-green, #22c55e) 36%, transparent);
+}
+
+.challenge-pane-history-card-state--between {
+	color: color-mix(in srgb, var(--color-amber, #f59e0b) 70%, var(--text) 30%);
+	border-color: color-mix(in srgb, var(--color-amber, #f59e0b) 56%, transparent);
+	background: color-mix(in srgb, var(--color-amber, #f59e0b) 22%, transparent);
+}
+
 @media (prefers-color-scheme: light) {
 	.challenge-pane-history-card-state--upcoming {
 		color: #0f5132;
@@ -8986,6 +9030,24 @@ body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading {
 		color: #4b5563;
 		border-color: rgba(107, 114, 128, 0.3);
 		background: rgba(107, 114, 128, 0.12);
+	}
+
+	.challenge-pane-history-card-state--results {
+		color: #0f5132;
+		border-color: rgba(25, 135, 84, 0.35);
+		background: rgba(25, 135, 84, 0.14);
+	}
+
+	.challenge-pane-history-card-state--active {
+		color: #0f5132;
+		border-color: rgba(25, 135, 84, 0.35);
+		background: rgba(25, 135, 84, 0.14);
+	}
+
+	.challenge-pane-history-card-state--between {
+		color: #7a4f01;
+		border-color: rgba(176, 124, 19, 0.34);
+		background: rgba(176, 124, 19, 0.14);
 	}
 }
 
@@ -9259,6 +9321,46 @@ body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading {
 .challenge-pane-admin-datetimes-label {
 	margin: 0 0 4px;
 	font-size: 0.8125rem;
+}
+
+.challenge-pane-admin-results-row {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin-top: 4px;
+	padding-top: 8px;
+	border-top: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+.challenge-pane-admin-checkbox-inline {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	font-size: 0.875rem;
+	font-weight: 500;
+	color: var(--text);
+	cursor: pointer;
+}
+
+.challenge-pane-admin-checkbox-inline input[type='checkbox'] {
+	margin: 0;
+	flex-shrink: 0;
+	width: 16px;
+	height: 16px;
+	accent-color: var(--color-green, #22c55e);
+	cursor: pointer;
+}
+
+.challenge-pane-admin-results-highlights {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	min-width: 0;
+}
+
+.challenge-pane-admin-results-highlights[hidden] {
+	display: none;
 }
 
 .challenge-pane-admin-submit {

@@ -3,6 +3,11 @@ import { deriveChallengePhase } from './phases.js';
 import { extractChallengeEvents } from './extractEvents.js';
 import { CHALLENGE_SCORE_REACTION_KEYS } from '../constants.js';
 import { weightedScoreFromReactions } from '../constants.js';
+import { summarizeLatestChallengeConfigs } from './organizerSummaries.js';
+import { mergeFullChallengeConfigForChallenge } from '../challengeAdmin.js';
+
+/** Phases where the main challenge pane shows submissions / voting UI. */
+export const ACTIVE_PARTICIPANT_PHASES = new Set(['submitting', 'voting', 'submit_and_vote']);
 
 /**
  * Latest config by message created_at (participant-focused thread view).
@@ -21,6 +26,84 @@ export function pickLatestConfig(configEntries) {
 	}
 
 	return { latestConfig, latestConfigMsg };
+}
+
+/**
+ * Latest chat row for one challenge_id (by message created_at).
+ * @param {{ msg: object, payload: object }[]} configEntries
+ * @param {string} challengeId
+ */
+export function pickLatestConfigMsgForChallenge(configEntries, challengeId) {
+	const cid = String(challengeId || '').trim();
+	if (!cid) return null;
+	let latestConfigMsg = /** @type {object | null} */ (null);
+	for (const { msg, payload } of configEntries || []) {
+		const rowCid =
+			payload && payload.challenge_id != null ? String(payload.challenge_id).trim() : '';
+		if (rowCid !== cid) continue;
+		const curMs = parseIso(msg?.created_at) ?? 0;
+		const prevMs = latestConfigMsg ? parseIso(latestConfigMsg?.created_at) ?? 0 : -1;
+		if (!latestConfigMsg || curMs >= prevMs) {
+			latestConfigMsg = msg;
+		}
+	}
+	return latestConfigMsg;
+}
+
+/**
+ * Participant focus: prefer a currently active challenge over the most recently edited config row.
+ * @param {{ msg: object, payload: object }[]} configEntries
+ * @param {number} nowMs
+ */
+export function pickParticipantFocusConfig(configEntries, nowMs) {
+	const summaries = summarizeLatestChallengeConfigs(configEntries);
+	/** @type {{ challengeId: string, payload: object, phase: string, sortKey: number, endMs: number }[]} */
+	const active = [];
+
+	for (const summary of summaries) {
+		const cid = String(summary.challenge_id || '').trim();
+		if (!cid) continue;
+		const merged = mergeFullChallengeConfigForChallenge(configEntries, cid);
+		const phase = deriveChallengePhase(merged, nowMs);
+		if (!ACTIVE_PARTICIPANT_PHASES.has(phase)) continue;
+		const endMs =
+			parseIso(merged.voting_end_at) ??
+			parseIso(merged.submission_end_at) ??
+			Number.POSITIVE_INFINITY;
+		active.push({
+			challengeId: cid,
+			payload: merged,
+			phase,
+			sortKey: summary.sortKey,
+			endMs
+		});
+	}
+
+	if (active.length) {
+		active.sort((a, b) => {
+			if (a.endMs !== b.endMs) return a.endMs - b.endMs;
+			return b.sortKey - a.sortKey;
+		});
+		const pick = active[0];
+		return {
+			latestConfig: pick.payload,
+			latestConfigMsg: pickLatestConfigMsgForChallenge(configEntries, pick.challengeId)
+		};
+	}
+
+	const { latestConfig: rawLatest, latestConfigMsg } = pickLatestConfig(configEntries);
+	if (!rawLatest) {
+		return { latestConfig: null, latestConfigMsg: null };
+	}
+	const cid =
+		rawLatest.challenge_id != null ? String(rawLatest.challenge_id).trim() : '';
+	if (!cid) {
+		return { latestConfig: rawLatest, latestConfigMsg };
+	}
+	return {
+		latestConfig: mergeFullChallengeConfigForChallenge(configEntries, cid),
+		latestConfigMsg: pickLatestConfigMsgForChallenge(configEntries, cid)
+	};
 }
 
 /**
@@ -122,7 +205,7 @@ export function buildReactionsByMessageId(messages) {
  */
 export function buildParticipantSliceFromExtracted(extracted, messages, nowMs) {
 	const { configs, submissions } = extracted;
-	const { latestConfig, latestConfigMsg } = pickLatestConfig(configs);
+	const { latestConfig, latestConfigMsg } = pickParticipantFocusConfig(configs, nowMs);
 	const phase = deriveChallengePhase(latestConfig, nowMs);
 	const forChallenge = submissionsForLatestChallenge(submissions, latestConfig);
 	const reactionMap = buildReactionsByMessageId(messages);

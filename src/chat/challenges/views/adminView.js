@@ -3,8 +3,70 @@ import {
 	challengeRewardPrefillsForOrganizerForm,
 	isoToDatetimeLocalInput,
 	pickChallengeConfigTimestamp,
-	pickChallengeHeroImageUrl
+	pickChallengeHeroImageUrl,
+	pickChallengeResultsCreationUrl
 } from '../challengeAdmin.js';
+import { deriveChallengePhase } from '../model/phases.js';
+
+/** @param {object} latest @param {number} [nowMs] */
+function isChallengeReadyForResultsConfig(latest, nowMs = Date.now()) {
+	const phase = deriveChallengePhase(latest, nowMs);
+	return phase === 'finalizing' || phase === 'results';
+}
+
+/**
+ * Minimal publish toggle + conditional highlights field (edit only, after voting closes).
+ * @param {object} latest
+ * @param {number} [nowMs]
+ */
+function renderChallengeResultsSectionHtml(latest, nowMs = Date.now()) {
+	if (!isChallengeReadyForResultsConfig(latest, nowMs)) {
+		return '';
+	}
+
+	const resultsUrl = pickChallengeResultsCreationUrl(latest);
+	const resultsPublishedAtRaw = pickChallengeResultsPublishedAtFromCfg(latest);
+	const resultsPublishedAlready = Boolean(resultsPublishedAtRaw);
+	const publishChecked = resultsPublishedAlready || Boolean(resultsUrl);
+
+	return `<div class="challenge-pane-admin-results-row">
+			<label class="challenge-pane-admin-checkbox-inline">
+				<input type="checkbox" name="results_publish_now" value="1" data-challenge-results-toggle${publishChecked ? ' checked' : ''} />
+				Publish results
+			</label>
+			<input type="hidden" name="results_published_at_existing" value="${esc(resultsPublishedAtRaw)}" />
+			<div class="challenge-pane-admin-results-highlights" data-challenge-results-highlights${publishChecked ? '' : ' hidden'}>
+				<label class="challenge-pane-label">Highlights creation
+					<input type="text" name="results_creation_url" class="challenge-pane-input challenge-pane-organizer-results-url-input" maxlength="2000"
+						placeholder="/creations/12787" autocomplete="off" value="${esc(resultsUrl)}" />
+				</label>
+			</div>
+		</div>`;
+}
+
+/**
+ * Show/hide highlights field when publish checkbox toggles.
+ * @param {ParentNode} root
+ */
+export function bindChallengeResultsToggle(root) {
+	const checkbox = root.querySelector('[data-challenge-results-toggle]');
+	const highlights = root.querySelector('[data-challenge-results-highlights]');
+	if (!(checkbox instanceof HTMLInputElement) || !(highlights instanceof HTMLElement)) {
+		return;
+	}
+	const sync = () => {
+		highlights.hidden = !checkbox.checked;
+	};
+	checkbox.addEventListener('change', sync);
+	sync();
+}
+
+/** @param {object} latest */
+function pickChallengeResultsPublishedAtFromCfg(latest) {
+	if (latest.results_published_at != null) return String(latest.results_published_at).trim();
+	if (latest.resultsPublishedAt != null) return String(latest.resultsPublishedAt).trim();
+	return '';
+}
 
 function renderDatetimeFieldsHtml(values) {
 	const v = values || {};
@@ -126,7 +188,7 @@ function renderOrganizerRewardsSection(prefills) {
 
 /**
  * @param {object} latest — challenge_config payload
- * @param {number | null | undefined} configMessageId — chat message id to PATCH (organizer sidebar)
+ * @param {number | null | undefined} configMessageId — latest config message id (reference only; saves post a new config row)
  */
 export function renderChallengeOrganizerEditFormHtml(latest, configMessageId) {
 	const cid =
@@ -151,28 +213,7 @@ export function renderChallengeOrganizerEditFormHtml(latest, configMessageId) {
 	const rewardPrefills = challengeRewardPrefillsForOrganizerForm(latest);
 	const dt = challengeConfigDatetimeLocals(latest);
 	const heroUrl = pickChallengeHeroImageUrl(latest);
-	const resultsPublishedAtRaw =
-		latest.results_published_at != null
-			? String(latest.results_published_at).trim()
-			: latest.resultsPublishedAt != null
-				? String(latest.resultsPublishedAt).trim()
-				: '';
-	const resultsPublishedAlready = Boolean(resultsPublishedAtRaw);
-	const resultsControlHtml = resultsPublishedAlready
-		? `<div class="challenge-pane-admin-datetimes">
-				<p class="challenge-pane-muted challenge-pane-admin-datetimes-label">Results</p>
-				<p class="challenge-pane-muted">Results are published.</p>
-				<input type="hidden" name="results_published_at_existing" value="${esc(resultsPublishedAtRaw)}" />
-			</div>`
-		: `<div class="challenge-pane-admin-datetimes">
-				<p class="challenge-pane-muted challenge-pane-admin-datetimes-label">Results</p>
-				<label class="challenge-pane-label">
-					<input type="checkbox" name="results_publish_now" value="1" />
-					Publish results (switches challenge from Finalizing → Winners announced)
-				</label>
-				<p class="challenge-pane-muted">Use this only after you’ve finalized winners and handled payout.</p>
-				<input type="hidden" name="results_published_at_existing" value="" />
-			</div>`;
+	const resultsSectionHtml = renderChallengeResultsSectionHtml(latest);
 
 	return `<p class="challenge-pane-muted challenge-pane-admin-sublead">Challenge ID stays the same so submissions stay linked.</p>
 		<form class="challenge-pane-admin-config-form" data-challenge-admin-config-form data-challenge-admin-form="edit">
@@ -188,16 +229,18 @@ export function renderChallengeOrganizerEditFormHtml(latest, configMessageId) {
 				<input type="text" name="hero_image_url" class="challenge-pane-input" maxlength="2000"
 					placeholder="/creations/123, share link, or image URL" autocomplete="off" value="${esc(heroUrl)}" />
 			</label>
-			<p class="challenge-pane-muted challenge-pane-organizer-image-hint">Creation detail link, Parascene share link, or direct image URL.</p>
+			<p class="challenge-pane-muted challenge-pane-organizer-image-hint">Promo image while the challenge is live.</p>
 			<label class="challenge-pane-label challenge-pane-organizer-details-field">Details
 				<textarea name="details" class="challenge-pane-input challenge-pane-admin-textarea challenge-pane-organizer-details-textarea" rows="8" maxlength="8000" placeholder="Rules, theme, etc.">${esc(details)}</textarea>
 			</label>
 			${renderOrganizerRewardsSection(rewardPrefills)}
 			${renderDatetimeFieldsHtml(dt)}
-			${resultsControlHtml}
-			<button type="submit" class="btn-primary challenge-pane-admin-submit">Save changes</button>
-			<div class="challenge-pane-form-error challenge-pane-admin-error" data-challenge-admin-error hidden role="alert"></div>
-			<div class="challenge-pane-admin-success" data-challenge-admin-success hidden role="status" aria-live="polite"></div>
+			${resultsSectionHtml}
+			<div class="challenge-pane-admin-form-footer">
+				<div class="challenge-pane-form-error challenge-pane-admin-error" data-challenge-admin-error hidden role="alert"></div>
+				<div class="challenge-pane-admin-success" data-challenge-admin-success hidden role="status" aria-live="polite"></div>
+				<button type="submit" class="btn-primary challenge-pane-admin-submit">Save changes</button>
+			</div>
 		</form>`;
 }
 
@@ -221,15 +264,17 @@ export function renderChallengeOrganizerCreateFormHtml(
 				<input type="text" name="hero_image_url" class="challenge-pane-input" maxlength="2000"
 					placeholder="/creations/123, share link, or image URL" autocomplete="off" />
 			</label>
-			<p class="challenge-pane-muted challenge-pane-organizer-image-hint">Creation detail link, Parascene share link, or direct image URL — same idea as chat.</p>
+			<p class="challenge-pane-muted challenge-pane-organizer-image-hint">Promo image while the challenge is live.</p>
 			<label class="challenge-pane-label challenge-pane-organizer-details-field">Details
 				<textarea name="details" class="challenge-pane-input challenge-pane-admin-textarea challenge-pane-organizer-details-textarea" rows="8" maxlength="8000" placeholder="Rules, theme, etc."></textarea>
 			</label>
 			${renderOrganizerRewardsSection({})}
 			${renderDatetimeFieldsHtml({})}
-			<button type="submit" class="btn-primary challenge-pane-admin-submit">${esc(submitLabel)}</button>
-			<div class="challenge-pane-form-error challenge-pane-admin-error" data-challenge-admin-error hidden role="alert"></div>
-			<div class="challenge-pane-admin-success" data-challenge-admin-success hidden role="status" aria-live="polite"></div>
+			<div class="challenge-pane-admin-form-footer">
+				<div class="challenge-pane-form-error challenge-pane-admin-error" data-challenge-admin-error hidden role="alert"></div>
+				<div class="challenge-pane-admin-success" data-challenge-admin-success hidden role="status" aria-live="polite"></div>
+				<button type="submit" class="btn-primary challenge-pane-admin-submit">${esc(submitLabel)}</button>
+			</div>
 		</form>`;
 }
 
