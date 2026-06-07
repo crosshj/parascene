@@ -2,7 +2,7 @@ let fetchJsonWithStatusDeduped;
 let formatRelativeTime;
 let helpIcon;
 let creditIcon;
-let closeIcon;
+let modalDismissIconSvg;
 let getHelpHref;
 
 function getAssetVersionParam() {
@@ -29,7 +29,9 @@ async function loadDeps() {
 		const iconsMod = await import(`../../icons/svg-strings.js${qs}`);
 		helpIcon = iconsMod.helpIcon;
 		creditIcon = iconsMod.creditIcon;
-		closeIcon = iconsMod.closeIcon;
+
+		const dismissMod = await import(`../../shared/modalDismiss.js${qs}`);
+		modalDismissIconSvg = dismissMod.MODAL_DISMISS_ICON_SVG;
 
 		const helpUrlMod = await import(`../../shared/helpUrl.js${qs}`);
 		getHelpHref = helpUrlMod.getHelpHref;
@@ -77,7 +79,7 @@ class AppModalCredits extends HTMLElement {
 		document.addEventListener('close-all-modals', this.handleCloseAllModals);
 
 		const overlay = this.querySelector('.credits-overlay');
-		const closeButton = this.querySelector('.credits-close');
+		const closeButton = this.querySelector('.modal-dismiss');
 		const claimButton = this.querySelector('.credits-claim-button');
 
 		if (overlay) {
@@ -477,25 +479,6 @@ class AppModalCredits extends HTMLElement {
           margin: 0;
           font-size: 1.5rem;
         }
-        .credits-close {
-          background: transparent;
-          border: none;
-          color: var(--text);
-          cursor: pointer;
-          padding: 4px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: 6px;
-          transition: background-color 0.2s;
-        }
-        .credits-close:hover {
-          background: var(--surface-strong);
-        }
-        .credits-close-icon {
-          width: 24px;
-          height: 24px;
-        }
         .credits-body {
           padding: 20px;
         }
@@ -553,9 +536,7 @@ class AppModalCredits extends HTMLElement {
         <div class="credits-modal">
           <div class="credits-header">
             <div></div>
-            <button class="credits-close" aria-label="Close">
-              ${closeIcon('credits-close-icon')}
-            </button>
+            <button type="button" class="modal-dismiss" aria-label="Close">${modalDismissIconSvg}</button>
           </div>
           <div class="credits-body">
             <div class="credits-balance">

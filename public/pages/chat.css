@@ -903,34 +903,25 @@ button[data-chat-topbar-pinned-canvas] {
 	top: calc(100% + 4px);
 }
 
-.chat-page-canvas-close {
+/* Match ⋮ hit target; override legacy bundle text-× typography that misaligns the SVG. */
+.chat-page-canvas-panel-head-actions .chat-page-canvas-close.modal-dismiss {
+	flex-shrink: 0;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
 	min-width: 40px;
 	min-height: 40px;
+	padding: 0;
 	margin: 0;
-	padding: 0 6px;
 	border: none;
-	border-radius: 50%;
-	background: transparent;
-	color: var(--text-muted);
-	font-size: 1.35rem;
-	line-height: 1;
-	cursor: pointer;
-	-webkit-tap-highlight-color: transparent;
+	border-radius: 6px;
+	font-size: 0;
+	line-height: 0;
 	touch-action: manipulation;
-	transition: background-color 0.12s ease, color 0.12s ease;
 }
 
-.chat-page-canvas-close:hover {
-	color: var(--text);
-	background: color-mix(in srgb, var(--text) 6%, transparent);
-}
-
-.chat-page-canvas-close:focus-visible {
-	outline: 2px solid var(--focus);
-	outline-offset: 2px;
+.chat-page-canvas-panel-head-actions .chat-page-canvas-close.modal-dismiss .modal-dismiss-icon {
+	display: block;
 }
 
 .chat-page-canvas-panel-scroll {

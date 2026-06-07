@@ -6,6 +6,7 @@
 import { fetchJsonWithStatusDeduped } from '../../api.js';
 import { getAvatarColor } from '../../avatar.js';
 import { renderCommentAvatarHtml } from '../../commentItem.js';
+import { MODAL_DISMISS_ICON_SVG } from '../../modalDismiss.js';
 
 function escapeHtml(str) {
 	return String(str ?? '')
@@ -154,7 +155,7 @@ export function initChatSidebarModals(options) {
 	<div class="modal modal-medium chat-page-chat-modal-panel">
 		<div class="modal-header">
 			<h3 id="chat-modal-dm-title">New direct message</h3>
-			<button type="button" class="modal-close chat-page-chat-modal-close" data-chat-modal-close aria-label="Close"><span class="modal-close-icon" aria-hidden="true">×</span></button>
+			<button type="button" class="modal-dismiss chat-page-chat-modal-close" data-chat-modal-close aria-label="Close">${MODAL_DISMISS_ICON_SVG}</button>
 		</div>
 		<div class="modal-body">
 			<label class="chat-page-chat-modal-label" for="chat-modal-dm-search">Search people</label>
@@ -169,7 +170,7 @@ export function initChatSidebarModals(options) {
 	<div class="modal modal-medium chat-page-chat-modal-panel chat-page-chat-modal-panel--servers">
 		<div class="modal-header">
 			<h3 id="chat-modal-servers-title">Servers</h3>
-			<button type="button" class="modal-close chat-page-chat-modal-close" data-chat-modal-close aria-label="Close"><span class="modal-close-icon" aria-hidden="true">×</span></button>
+			<button type="button" class="modal-dismiss chat-page-chat-modal-close" data-chat-modal-close aria-label="Close">${MODAL_DISMISS_ICON_SVG}</button>
 		</div>
 		<div class="modal-body">
 			<p class="chat-page-chat-modal-lead">Join a server or register your own image generation server.</p>
@@ -182,7 +183,7 @@ export function initChatSidebarModals(options) {
 	<div class="modal modal-medium chat-page-chat-modal-panel chat-page-chat-modal-panel--channels">
 		<div class="modal-header">
 			<h3 id="chat-modal-channels-title">Channels</h3>
-			<button type="button" class="modal-close chat-page-chat-modal-close" data-chat-modal-close aria-label="Close"><span class="modal-close-icon" aria-hidden="true">×</span></button>
+			<button type="button" class="modal-dismiss chat-page-chat-modal-close" data-chat-modal-close aria-label="Close">${MODAL_DISMISS_ICON_SVG}</button>
 		</div>
 		<div class="modal-body">
 			<div class="chat-page-chat-modal-channel-group chat-page-chat-modal-field">

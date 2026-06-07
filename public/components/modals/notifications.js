@@ -6,6 +6,8 @@ let notificationCreationHref;
 let notificationChatHref;
 let notificationPrimaryHref;
 let notificationPrimaryClickable;
+let modalDismissIconSvg;
+let modalDismissShadowCss;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -37,6 +39,10 @@ async function loadDeps() {
 		notificationChatHref = notifNavMod.notificationChatHref;
 		notificationPrimaryHref = notifNavMod.notificationPrimaryHref;
 		notificationPrimaryClickable = notifNavMod.notificationPrimaryClickable;
+
+		const dismissMod = await import(`../../shared/modalDismiss.js${qs}`);
+		modalDismissIconSvg = dismissMod.MODAL_DISMISS_ICON_SVG;
+		modalDismissShadowCss = dismissMod.MODAL_DISMISS_SHADOW_CSS;
 	})();
 	return _depsPromise;
 }
@@ -87,7 +93,7 @@ class AppModalNotifications extends HTMLElement {
 		const overlays = this.shadowRoot.querySelectorAll(
 			'.notifications-overlay, .notification-detail-overlay'
 		);
-		const closeButtons = this.shadowRoot.querySelectorAll('.notifications-close');
+		const closeButtons = this.shadowRoot.querySelectorAll('.modal-dismiss');
 
 		overlays.forEach((overlay) => {
 			overlay.addEventListener('click', (e) => {
@@ -496,25 +502,7 @@ class AppModalNotifications extends HTMLElement {
           margin: 0;
           font-size: 1.5rem;
         }
-        .notifications-close {
-          background: transparent;
-          border: none;
-          color: var(--text);
-          cursor: pointer;
-          padding: 4px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: 6px;
-          transition: background-color 0.2s;
-        }
-        .notifications-close:hover {
-          background: var(--surface-strong);
-        }
-        .notifications-close-icon {
-          width: 24px;
-          height: 24px;
-        }
+        ${modalDismissShadowCss}
         .notifications-body {
           padding: 20px;
           padding-bottom: 16px;
@@ -727,12 +715,7 @@ class AppModalNotifications extends HTMLElement {
         <div class="notifications-modal">
           <div class="notifications-header">
             <h2>Notifications</h2>
-            <button class="notifications-close" aria-label="Close">
-              <svg class="notifications-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
+            <button type="button" class="modal-dismiss" aria-label="Close">${modalDismissIconSvg}</button>
           </div>
           <div class="notifications-body">
             <div class="notifications-content"></div>
@@ -746,12 +729,7 @@ class AppModalNotifications extends HTMLElement {
         <div class="notification-detail-modal">
           <div class="notifications-header">
             <h2>Notification</h2>
-            <button class="notifications-close" aria-label="Close">
-              <svg class="notifications-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
+            <button type="button" class="modal-dismiss" aria-label="Close">${modalDismissIconSvg}</button>
           </div>
           <div class="notification-detail-body">
             <div class="notification-detail-content"></div>

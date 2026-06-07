@@ -1,4 +1,5 @@
 import { esc } from '../constants.js';
+import { MODAL_DISMISS_ICON_SVG } from '../../../shared/modalDismiss.js';
 import {
 	challengeRewardPrefillsForOrganizerForm,
 	isoToDatetimeLocalInput,
@@ -693,7 +694,7 @@ function renderChallengeOrganizerModalHtml() {
 		<div class="modal modal-medium chat-page-chat-modal-panel chat-page-challenges-organizer-modal-panel">
 			<div class="modal-header">
 				<h3 id="challenges-organizer-modal-title" data-challenges-organizer-modal-title>New challenge</h3>
-				<button type="button" class="modal-close chat-page-chat-modal-close" data-challenges-organizer-modal-close aria-label="Close"><span class="modal-close-icon" aria-hidden="true">×</span></button>
+				<button type="button" class="modal-dismiss chat-page-chat-modal-close" data-challenges-organizer-modal-close aria-label="Close">${MODAL_DISMISS_ICON_SVG}</button>
 			</div>
 			<div class="modal-body user-text challenge-pane-organizer-modal-body" data-challenges-organizer-modal-body></div>
 		</div>
@@ -726,8 +727,8 @@ export function renderChallengeOrganizerSidebarMarkup(vm) {
 					<div class="chat-page-canvas-panel-title-row">
 						<h2 class="chat-page-canvas-panel-title">Organizer</h2>
 						<div class="chat-page-canvas-panel-head-actions">
-							<button type="button" class="chat-page-canvas-close" data-chat-challenges-organizer-close
-								aria-label="Close organizer tools">×</button>
+							<button type="button" class="modal-dismiss chat-page-canvas-close" data-chat-challenges-organizer-close
+								aria-label="Close organizer tools">${MODAL_DISMISS_ICON_SVG}</button>
 						</div>
 					</div>
 				</div>

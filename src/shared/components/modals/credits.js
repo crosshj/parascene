@@ -1,7 +1,8 @@
 import { formatRelativeTime } from '../../datetime.js';
 import { fetchJsonWithStatusDeduped } from '../../api.js';
-import { helpIcon, creditIcon, closeIcon } from '/icons/svg-strings.js';
+import { helpIcon, creditIcon } from '/icons/svg-strings.js';
 import { getHelpHref } from '../../helpUrl.js';
+import { MODAL_DISMISS_ICON_SVG } from '../../modalDismiss.js';
 
 const html = String.raw;
 
@@ -42,7 +43,7 @@ class AppModalCredits extends HTMLElement {
 		document.addEventListener('close-all-modals', this.handleCloseAllModals);
 
 		const overlay = this.querySelector('.credits-overlay');
-		const closeButton = this.querySelector('.credits-close');
+		const closeButton = this.querySelector('.modal-dismiss');
 		const claimButton = this.querySelector('.credits-claim-button');
 
 		if (overlay) {
@@ -442,25 +443,6 @@ class AppModalCredits extends HTMLElement {
           margin: 0;
           font-size: 1.5rem;
         }
-        .credits-close {
-          background: transparent;
-          border: none;
-          color: var(--text);
-          cursor: pointer;
-          padding: 4px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: 6px;
-          transition: background-color 0.2s;
-        }
-        .credits-close:hover {
-          background: var(--surface-strong);
-        }
-        .credits-close-icon {
-          width: 24px;
-          height: 24px;
-        }
         .credits-body {
           padding: 20px;
         }
@@ -518,9 +500,7 @@ class AppModalCredits extends HTMLElement {
         <div class="credits-modal">
           <div class="credits-header">
             <div></div>
-            <button class="credits-close" aria-label="Close">
-              ${closeIcon('credits-close-icon')}
-            </button>
+            <button type="button" class="modal-dismiss" aria-label="Close">${MODAL_DISMISS_ICON_SVG}</button>
           </div>
           <div class="credits-body">
             <div class="credits-balance">
