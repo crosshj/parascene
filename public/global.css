@@ -8169,22 +8169,6 @@ body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading {
 
 .challenge-vote-modal-close {
 	flex-shrink: 0;
-	width: 40px;
-	height: 40px;
-	margin: 0;
-	padding: 0;
-	border: none;
-	border-radius: 10px;
-	font-size: 1.35rem;
-	line-height: 1;
-	color: var(--text-muted);
-	background: transparent;
-	cursor: pointer;
-}
-
-.challenge-vote-modal-close:hover {
-	color: var(--text);
-	background: color-mix(in srgb, var(--text) 8%, transparent);
 }
 
 .challenge-vote-modal-main {
@@ -8500,13 +8484,6 @@ body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading {
 	.challenge-vote-modal-title {
 		font-size: 0.9375rem;
 		line-height: 1.25;
-	}
-
-	.challenge-vote-modal-close {
-		width: 36px;
-		height: 36px;
-		font-size: 1.15rem;
-		border-radius: 8px;
 	}
 
 	.challenge-vote-modal-top {
@@ -12224,26 +12201,12 @@ button.msg-reply-indicator-inner:hover {
 	top: max(8px, env(safe-area-inset-top));
 	right: max(8px, env(safe-area-inset-right));
 	z-index: 2;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 40px;
-	height: 40px;
-	margin: 0;
-	padding: 0;
-	border: none;
-	border-radius: 8px;
-	background: color-mix(in srgb, var(--surface) 22%, transparent);
-	color: var(--text);
-	font-size: 1.5rem;
-	line-height: 1;
-	font-weight: 300;
-	cursor: pointer;
-	-webkit-tap-highlight-color: transparent;
+	color: rgba(255, 255, 255, 0.88);
 }
 
 .chat-inline-image-lightbox-close:hover {
-	background: color-mix(in srgb, var(--surface) 38%, transparent);
+	background: color-mix(in srgb, #fff 14%, transparent);
+	color: #fff;
 }
 
 .chat-inline-image-lightbox-close:focus,
@@ -17065,6 +17028,37 @@ app-modal-publish .publish-checkbox-label input[type="checkbox"] {
 }
 
 /* Modal Close Button */
+.modal-dismiss {
+	background: transparent;
+	border: none;
+	color: var(--text-muted);
+	cursor: pointer;
+	padding: 6px;
+	margin: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 6px;
+	transition: background-color 0.15s ease, color 0.15s ease;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.modal-dismiss:hover {
+	background: var(--surface-strong);
+	color: var(--text);
+}
+
+.modal-dismiss:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
+
+.modal-dismiss-icon {
+	width: 22px;
+	height: 22px;
+	flex-shrink: 0;
+}
+
 .modal-close,
 .publish-modal-close {
 	background: transparent;

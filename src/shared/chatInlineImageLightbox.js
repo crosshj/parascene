@@ -1,5 +1,6 @@
 import { copyIcon, linkIcon2 } from '/icons/svg-strings.js';
 import { DEFAULT_APP_ORIGIN } from './userText.js';
+import { createModalDismissButton } from './modalDismiss.js';
 import {
 	attachMediaAudioLeveling,
 	primeMediaElementForAudioLeveling
@@ -324,11 +325,7 @@ export function openChatInlineImageLightbox(src, creationMeta, hooks) {
 	overlay.setAttribute('aria-modal', 'true');
 	overlay.setAttribute('aria-label', creationMeta?.creationId ? 'Creation preview' : 'Image');
 
-	const closeBtn = document.createElement('button');
-	closeBtn.type = 'button';
-	closeBtn.className = 'chat-inline-image-lightbox-close';
-	closeBtn.setAttribute('aria-label', 'Close');
-	closeBtn.textContent = '×';
+	const closeBtn = createModalDismissButton({ extraClass: 'chat-inline-image-lightbox-close' });
 
 	const frame = document.createElement('div');
 	frame.className = useGallery
@@ -552,11 +549,7 @@ export function openChatVideoGalleryLightbox(slides, hooks) {
 	overlay.setAttribute('aria-modal', 'true');
 	overlay.setAttribute('aria-label', galleryLabel);
 
-	const closeBtn = document.createElement('button');
-	closeBtn.type = 'button';
-	closeBtn.className = 'chat-inline-image-lightbox-close';
-	closeBtn.setAttribute('aria-label', 'Close');
-	closeBtn.textContent = '×';
+	const closeBtn = createModalDismissButton({ extraClass: 'chat-inline-image-lightbox-close' });
 
 	const frame = document.createElement('div');
 	frame.className = 'chat-inline-image-lightbox-frame chat-inline-image-lightbox-frame--video-gallery';
@@ -1035,11 +1028,7 @@ export function openChatAttachmentPreviewLightbox(src, kind, hooks) {
 	overlay.setAttribute('aria-modal', 'true');
 	overlay.setAttribute('aria-label', kind === 'video' ? 'Video' : 'Preview');
 
-	const closeBtn = document.createElement('button');
-	closeBtn.type = 'button';
-	closeBtn.className = 'chat-inline-image-lightbox-close';
-	closeBtn.setAttribute('aria-label', 'Close');
-	closeBtn.textContent = '×';
+	const closeBtn = createModalDismissButton({ extraClass: 'chat-inline-image-lightbox-close' });
 
 	const frame = document.createElement('div');
 	frame.className = 'chat-inline-image-lightbox-frame';

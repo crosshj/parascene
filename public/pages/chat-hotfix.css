@@ -917,11 +917,17 @@ body.chat-page .chat-page-messages .connect-chat-suno-embed-iframe {
 	justify-content: flex-start;
 }
 
-button.chat-inline-image-lightbox-close:focus,
-button.chat-inline-image-lightbox-close:focus-visible {
-	outline: none !important;
-	box-shadow: none !important;
-	border: none !important;
+.chat-inline-image-lightbox-close.modal-dismiss {
+	position: fixed;
+	top: max(8px, env(safe-area-inset-top));
+	right: max(8px, env(safe-area-inset-right));
+	z-index: 2;
+	color: rgba(255, 255, 255, 0.88);
+}
+
+.chat-inline-image-lightbox-close.modal-dismiss:hover {
+	background: color-mix(in srgb, #fff 14%, transparent);
+	color: #fff;
 }
 
 .chat-inline-image-lightbox-frame {
@@ -1377,4 +1383,36 @@ body.chat-page .chat-page-messages.chat-page-messages--doom-host video.chat-doom
 .chat-page-challenges-organizer-modal-panel .challenge-pane-organizer-modal-body {
 	padding-bottom: 24px;
 	scroll-padding-bottom: 24px;
+}
+
+/* Minimal header dismiss (Settings modal pattern) — hotfix when chat.bundle.css lags global.css. */
+.modal-dismiss {
+	background: transparent;
+	border: none;
+	color: var(--text-muted);
+	cursor: pointer;
+	padding: 6px;
+	margin: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 6px;
+	transition: background-color 0.15s ease, color 0.15s ease;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.modal-dismiss:hover {
+	background: var(--surface-strong);
+	color: var(--text);
+}
+
+.modal-dismiss:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
+
+.modal-dismiss-icon {
+	width: 22px;
+	height: 22px;
+	flex-shrink: 0;
 }

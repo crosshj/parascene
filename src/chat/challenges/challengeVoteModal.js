@@ -4,6 +4,7 @@ import {
 	challengeScoreToReactionKey,
 	parseIso
 } from './constants.js';
+import { MODAL_DISMISS_ICON_SVG } from '../../shared/modalDismiss.js';
 
 /**
  * Set while the vote modal is open. Chat page `popstate` must call
@@ -924,7 +925,7 @@ export function createChallengeVoteModal(opts) {
 				<div class="challenge-vote-modal" role="dialog" aria-modal="true" aria-labelledby="challenge-vote-modal-title" tabindex="-1">
 					<div class="challenge-vote-modal-top">
 						<h2 id="challenge-vote-modal-title" class="challenge-vote-modal-title"></h2>
-						<button type="button" class="challenge-vote-modal-close" data-challenge-vote-dismiss aria-label="Close">×</button>
+						<button type="button" class="modal-dismiss challenge-vote-modal-close" data-challenge-vote-dismiss aria-label="Close">${MODAL_DISMISS_ICON_SVG}</button>
 					</div>
 					<div class="challenge-vote-modal-main">
 						<div class="challenge-vote-modal-media-column">
