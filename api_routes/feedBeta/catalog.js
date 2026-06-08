@@ -62,12 +62,35 @@ export function applyViewerLikedFromSet(catalog, liked) {
 		return catalog.map((row) => ({ ...row, viewer_liked: false }));
 	}
 	return catalog.map((row) => {
-		const key = row?.created_image_id != null ? String(row.created_image_id) : '';
+		const key = feedRowCreationIdKey(row);
 		return {
 			...row,
 			viewer_liked: key ? liked.has(key) : false
 		};
 	});
+}
+
+/**
+ * Stamp `viewer_liked` on feed page rows via a likes query for those creation ids.
+ * Used after assembly so spotlight / snapshot rows match catalog rows.
+ *
+ * @param {object} queries
+ * @param {number} userId
+ * @param {object[]} rows
+ * @returns {Promise<object[]>}
+ */
+export async function applyViewerLikedToRows(queries, userId, rows) {
+	if (!Array.isArray(rows) || rows.length === 0) return rows;
+	const ids = rows
+		.map((row) => feedRowCreationIdKey(row))
+		.filter(Boolean)
+		.map((key) => Number(key))
+		.filter((id) => Number.isFinite(id) && id > 0);
+	if (ids.length === 0) {
+		return rows.map((row) => ({ ...row, viewer_liked: false }));
+	}
+	const liked = await loadViewerLikedCreationIdSet(queries, userId, ids);
+	return applyViewerLikedFromSet(rows, liked);
 }
 
 /**

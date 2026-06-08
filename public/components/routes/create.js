@@ -1403,13 +1403,7 @@ class AppRouteCreate extends HTMLElement {
 					this.saveSelections();
 					this.persistImageFieldSelection(fieldKey, value);
 					if (fieldKey === 'model' && !this._renderingFields) {
-						const shouldShow =
-							typeof shouldUseAspectRatioSelector === 'function' &&
-							shouldUseAspectRatioSelector(this.getFormFieldContext());
-						const hasAspectRatioField = !!this.querySelector('[data-field-key="aspect_ratio"]');
-						if (shouldShow !== hasAspectRatioField) {
-							this.renderFields();
-						}
+						this.syncAspectRatioFieldVisibility();
 					}
 				}
 			});
@@ -1445,6 +1439,7 @@ class AppRouteCreate extends HTMLElement {
 		fieldsGroup.style.display = 'flex';
 		this.applyUrlPromptToBasicFields();
 		fieldsGroup.querySelectorAll(".prompt-editor").forEach((el) => attachPromptInlineSuggest(el));
+		this.syncAspectRatioFieldVisibility();
 	}
 
 	hideMethodGroup() {
@@ -1662,6 +1657,14 @@ class AppRouteCreate extends HTMLElement {
 			}
 		});
 
+		const formContext = this.getFormFieldContext();
+		if (
+			typeof shouldUseAspectRatioSelector === 'function' &&
+			!shouldUseAspectRatioSelector(formContext)
+		) {
+			delete collectedArgs.aspect_ratio;
+		}
+
 		// Validate required data
 		if (!this.selectedServer.id || !methodKey) {
 			this.resetCreateButton(button);
@@ -1874,15 +1877,70 @@ class AppRouteCreate extends HTMLElement {
 		return Object.keys(methods).find(key => methods[key] === this.selectedMethod) || null;
 	}
 
-	getFormFieldContext() {
+	/** Model value for capability checks — fieldValues, live select, config default, or first option. */
+	resolveEffectiveModelValue() {
 		const modelField = this.selectedMethod?.fields?.model;
-		const modelDefault = modelField?.default;
-		const modelValue = String(this.fieldValues.model ?? modelDefault ?? '');
+		if (!modelField || typeof modelField !== 'object') return '';
+
+		const fromFieldValues = this.fieldValues.model;
+		if (fromFieldValues !== undefined && fromFieldValues !== null && String(fromFieldValues).trim()) {
+			return String(fromFieldValues).trim();
+		}
+
+		const pendingSaved =
+			this._pendingSavedFieldValues && typeof this._pendingSavedFieldValues === 'object'
+				? this._pendingSavedFieldValues
+				: null;
+		const fromPending = pendingSaved?.model;
+		if (fromPending !== undefined && fromPending !== null && String(fromPending).trim()) {
+			return String(fromPending).trim();
+		}
+
+		const domEl = this.querySelector('#field-model');
+		if (domEl && typeof domEl.value === 'string' && domEl.value.trim()) {
+			return domEl.value.trim();
+		}
+
+		const explicitDefault = modelField.default;
+		if (explicitDefault !== undefined && explicitDefault !== null && String(explicitDefault).trim()) {
+			return String(explicitDefault).trim();
+		}
+
+		const options = modelField.options;
+		if (Array.isArray(options) && options.length > 0) {
+			const first = options[0];
+			if (typeof first === 'string' && first.trim()) return first.trim();
+			if (first && typeof first === 'object') {
+				const value = first.value ?? first.id ?? first.label ?? '';
+				if (String(value).trim()) return String(value).trim();
+			}
+		}
+
+		return '';
+	}
+
+	getFormFieldContext() {
 		return {
 			serverId: this.selectedServer?.id,
 			methodKey: this.getMethodKey(),
-			modelValue
+			modelValue: this.resolveEffectiveModelValue(),
+			fields: this.selectedMethod?.fields ?? null,
 		};
+	}
+
+	/** Re-render when server/method/model implies aspect_ratio but the field is missing (or vice versa). */
+	syncAspectRatioFieldVisibility() {
+		if (this._syncingAspectRatioField) return;
+		if (typeof shouldUseAspectRatioSelector !== 'function') return;
+		const shouldShow = shouldUseAspectRatioSelector(this.getFormFieldContext());
+		const hasAspectRatioField = !!this.querySelector('[data-field-key="aspect_ratio"]');
+		if (shouldShow === hasAspectRatioField) return;
+		this._syncingAspectRatioField = true;
+		try {
+			this.renderFields();
+		} finally {
+			this._syncingAspectRatioField = false;
+		}
 	}
 
 	applyAspectRatioFieldVisibility(fieldsForRender, allFields) {
@@ -1911,11 +1969,11 @@ class AppRouteCreate extends HTMLElement {
 		}
 
 		delete fieldsForRender.aspect_ratio;
-		if (this.fieldValues.aspect_ratio === undefined || this.fieldValues.aspect_ratio === '') {
-			const def = aspectField.default;
-			if (def !== undefined && def !== null && String(def).trim()) {
-				this.fieldValues.aspect_ratio = String(def);
-			}
+		const def = aspectField.default;
+		if (def !== undefined && def !== null && String(def).trim()) {
+			this.fieldValues.aspect_ratio = String(def);
+		} else {
+			delete this.fieldValues.aspect_ratio;
 		}
 	}
 
@@ -2622,6 +2680,7 @@ class AppRouteCreate extends HTMLElement {
 				}
 			}
 		});
+		this.syncAspectRatioFieldVisibility();
 		// Re-apply URL prompt so it wins over any saved prompt we skipped
 		this.applyUrlPromptToBasicFields();
 	}

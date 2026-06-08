@@ -224,4 +224,3 @@ class AppModalCreationDetails extends HTMLElement {
 }
 
 customElements.define("app-modal-creation-details", AppModalCreationDetails);
-

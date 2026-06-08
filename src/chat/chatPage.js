@@ -83,7 +83,12 @@ import {
 	getChatFeedItemKey,
 	createChatFeedFetchPage
 } from './feed/feedChannelData.js';
-import { createChatFeedChannelElementsFromSegments, getChatFeedMobileSpotlightHtml } from './feed/feedChannelView.js';
+import {
+	createChatFeedChannelElementsFromSegments,
+	getChatFeedMobileSpotlightHtml,
+	mountChatFeedLoadMoreSkeleton,
+	removeChatFeedLoadMoreSkeleton,
+} from './feed/feedChannelView.js';
 import {
 	createChatFeedChallengePlaceholderElement,
 	loadDeferredChatFeedChallenge
@@ -988,7 +993,7 @@ export async function initChatPage(root, options = {}) {
 	let feedChannelLoadMoreFallbackCleanup = null;
 	/** Edge-trigger for feed lane preload target (card or sentinel). */
 	let feedChannelSentinelWasIntersecting = false;
-	/** After a preload load, ignore repeat triggers until the target leaves the band. */
+	/** One-shot gate per preload-band entry; re-armed when leaving the band or after append nudge. */
 	let feedChannelLoadLatchArmed = true;
 	let feedChannelScrollWasNearLoadEdge = false;
 	/** Start loading older feed rows when this many `.feed-card` items remain below the reader. */
@@ -6965,7 +6970,14 @@ export async function initChatPage(root, options = {}) {
 		const cards = getFeedLaneFeedCards(messagesEl, laneSlug);
 		const n = cards.length;
 		if (n === 0) return null;
-		const idx = Math.max(0, n - FEED_LANE_PRELOAD_CARDS_FROM_END);
+		/*
+		 * When fewer than FEED_LANE_PRELOAD_CARDS_FROM_END cards exist, `n - 5` clamps to 0
+		 * (top/newest card). Preload must track the bottom/older edge instead.
+		 */
+		const idx =
+			n <= FEED_LANE_PRELOAD_CARDS_FROM_END
+				? n - 1
+				: n - FEED_LANE_PRELOAD_CARDS_FROM_END;
 		const el = cards[idx];
 		return el instanceof HTMLElement ? el : null;
 	}
@@ -6981,9 +6993,8 @@ export async function initChatPage(root, options = {}) {
 	function isFeedLanePreloadTriggerReached(messagesEl, laneSlug) {
 		const trigger = getFeedLanePreloadTriggerCard(messagesEl, laneSlug);
 		if (!trigger) return false;
-		const scrollRoot = getFeedChannelLoadScrollRoot(messagesEl);
-		const rect = trigger.getBoundingClientRect();
-		return rect.top < scrollRoot.bottom && rect.bottom > scrollRoot.top;
+		const margin = feedChannelViewportLoadMarginPx(messagesEl);
+		return trigger.getBoundingClientRect().top <= getFeedChannelScrollportBottomPx(messagesEl) + margin;
 	}
 
 	/**
@@ -7256,10 +7267,6 @@ export async function initChatPage(root, options = {}) {
 		disconnectFeedChannelLoadObserver();
 		const observeTarget = resolveFeedChannelLoadMoreObserveTarget(messagesEl);
 		if (!(observeTarget instanceof HTMLElement)) return;
-		const slug = activePseudoChannelSlug;
-		const usesCardTrigger =
-			feedLaneUsesCardPreloadTrigger(slug) &&
-			observeTarget === getFeedLanePreloadTriggerCard(messagesEl, slug);
 		feedChannelSentinelWasIntersecting = false;
 		const observerRoot = getFeedChannelIntersectionRoot(messagesEl);
 		feedChannelLoadMoreObserver = new IntersectionObserver(
@@ -7291,7 +7298,7 @@ export async function initChatPage(root, options = {}) {
 			},
 			{
 				root: observerRoot,
-				rootMargin: usesCardTrigger ? '0px' : feedChannelObserverRootMargin(messagesEl),
+				rootMargin: feedChannelObserverRootMargin(messagesEl),
 				threshold: 0,
 			}
 		);
@@ -7300,6 +7307,37 @@ export async function initChatPage(root, options = {}) {
 		if (sentinel instanceof HTMLElement) {
 			setupFeedChannelLoadMoreScrollFallback(sentinel, messagesEl);
 		}
+		nudgeFeedChannelLoadMoreIfStillNear(messagesEl);
+	}
+
+	/**
+	 * After append the preload trigger card moves; if the reader is still in the preload band,
+	 * re-check once layout settles so the next page can load without scrolling away and back.
+	 * @param {HTMLElement} messagesEl
+	 */
+	function nudgeFeedChannelLoadMoreIfStillNear(messagesEl) {
+		if (!(messagesEl instanceof HTMLElement)) return;
+		const runCheck = () => {
+			if (
+				!pseudoColumnPager?.getHasMore() ||
+				pseudoColumnPager.isOlderBusy() ||
+				loadingPseudoChannelMessages
+			) {
+				return;
+			}
+			const slug = activePseudoChannelSlug;
+			if (slug !== 'feed' && slug !== 'explore' && slug !== 'creations') return;
+			const sentinel = messagesEl.querySelector('[data-chat-feed-load-sentinel]');
+			if (!(sentinel instanceof HTMLElement)) return;
+			if (!isFeedChannelSentinelNearLoadEdge(sentinel, messagesEl)) return;
+			feedChannelLoadLatchArmed = true;
+			feedChannelScrollWasNearLoadEdge = false;
+			feedChannelSentinelWasIntersecting = false;
+			maybeLoadMoreFeedChannelIfNear(sentinel, messagesEl);
+		};
+		requestAnimationFrame(() => {
+			requestAnimationFrame(runCheck);
+		});
 	}
 
 	function refreshFeedChannelLoadMoreAfterAppend(messagesEl) {
@@ -7308,14 +7346,11 @@ export async function initChatPage(root, options = {}) {
 			disconnectFeedChannelLoadObserver();
 			return;
 		}
-		const sentinel = messagesEl.querySelector('[data-chat-feed-load-sentinel]');
-		const stillNear =
-			sentinel instanceof HTMLElement && isFeedChannelSentinelNearLoadEdge(sentinel, messagesEl);
 		setupFeedChannelLoadMoreObserver(messagesEl);
-		/* Re-arm when still in the preload band so we do not chain load-more on observer reconnect. */
 		feedChannelLoadLatchArmed = true;
-		feedChannelScrollWasNearLoadEdge = stillNear;
-		feedChannelSentinelWasIntersecting = stillNear;
+		feedChannelScrollWasNearLoadEdge = false;
+		feedChannelSentinelWasIntersecting = false;
+		nudgeFeedChannelLoadMoreIfStillNear(messagesEl);
 	}
 
 	/**
@@ -7486,6 +7521,7 @@ export async function initChatPage(root, options = {}) {
 				anchor.getBoundingClientRect().top - messagesEl.getBoundingClientRect().top;
 		}
 
+		mountChatFeedLoadMoreSkeleton(cards);
 		try {
 			const r = await pseudoColumnPager.loadOlder();
 			if (!r.ok) {
@@ -7496,11 +7532,6 @@ export async function initChatPage(root, options = {}) {
 					? Array.isArray(r.appended) ? r.appended : []
 					: Array.isArray(r.prepended) ? r.prepended : [];
 			if (mergedFiltered.length === 0) {
-				const loadSentinel = messagesEl.querySelector('[data-chat-feed-load-sentinel]');
-				feedChannelLoadLatchArmed = false;
-				feedChannelScrollWasNearLoadEdge =
-					loadSentinel instanceof HTMLElement &&
-					isFeedChannelSentinelNearLoadEdge(loadSentinel, messagesEl);
 				refreshFeedChannelLoadMoreAfterAppend(messagesEl);
 				return;
 			}
@@ -7576,6 +7607,8 @@ export async function initChatPage(root, options = {}) {
 						? 'creations channel'
 						: 'feed channel';
 			console.error(`[Chat page] ${label} load more:`, err);
+		} finally {
+			removeChatFeedLoadMoreSkeleton(cards);
 		}
 	}
 

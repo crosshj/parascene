@@ -19,7 +19,10 @@ import { deleteCreationEmbedding } from "./utils/embeddings.js";
 import { getSupabaseServiceClient } from "./utils/supabaseService.js";
 import { verifyQStashRequest } from "./utils/qstashVerification.js";
 import { resolveCreatedImageStorageFilename } from "./utils/resolveCreatedImageStorageFilename.js";
-import { getLandscapeOutpaintEligibility } from "../public/shared/aspectRatio.js";
+import {
+	canSetVideoPosterFromFirstFrame,
+	getLandscapeOutpaintEligibility,
+} from "../public/shared/aspectRatio.js";
 import { ACTIVE_SHARE_VERSION, mintShareToken, verifyShareToken } from "./utils/shareLink.js";
 import { getStyleInfo } from "./utils/createStyles.js";
 import {
@@ -4988,6 +4991,120 @@ export default function createCreateRoutes({ queries, storage }) {
 			// console.error("Error adding admin video:", err);
 			const message = err?.message && typeof err.message === "string" ? err.message : "Failed to add video";
 			return res.status(500).json({ error: "Failed to add video", message });
+		}
+	});
+
+	// POST /api/create/images/:id/video-placeholder — Owner/admin: set poster image for t2v rows with a broken placeholder.
+	router.post("/api/create/images/:id/video-placeholder", async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		const id = Number(req.params.id);
+		if (!Number.isFinite(id) || id <= 0) {
+			return res.status(400).json({ error: "Invalid creation id" });
+		}
+
+		let image = await queries.selectCreatedImageById?.get(id, user.id);
+		if (!image) {
+			image = await queries.selectCreatedImageByIdAnyUser?.get(id);
+			if (!image) {
+				return res.status(404).json({ error: "Creation not found" });
+			}
+			const isOwner = image.user_id === user.id;
+			if (!isOwner && user.role !== "admin") {
+				return res.status(403).json({ error: "Forbidden" });
+			}
+		}
+
+		if ((image.status || "") !== "completed") {
+			return res.status(400).json({ error: "Only completed creations can have a poster set" });
+		}
+
+		const existingMeta = parseMeta(image.meta) || {};
+		const creationForCheck = {
+			status: image.status,
+			width: image.width,
+			height: image.height,
+			meta: existingMeta,
+			video_url: typeof existingMeta?.video?.file_path === "string" ? existingMeta.video.file_path : null,
+			media_type: existingMeta.media_type,
+		};
+		if (!canSetVideoPosterFromFirstFrame(creationForCheck)) {
+			return res.status(400).json({ error: "This creation cannot have its poster set from video" });
+		}
+
+		if (!req.is("multipart/form-data")) {
+			return res.status(400).json({ error: "Request must be multipart/form-data with an image file" });
+		}
+
+		try {
+			const maxBytes = 20 * 1024 * 1024;
+			const { fields, files } = await parseMultipartCreate(req, { maxFileBytes: maxBytes });
+			const imageFile = files?.image;
+			if (!imageFile || !Buffer.isBuffer(imageFile.buffer) || imageFile.buffer.length === 0) {
+				return res.status(400).json({ error: "No image file provided; use form field name 'image'" });
+			}
+			const mimeType = typeof imageFile.mimeType === "string" ? imageFile.mimeType.trim() : "";
+			if (!mimeType.startsWith("image/")) {
+				return res.status(400).json({ error: "File must be an image" });
+			}
+
+			const targetWidth = Number(fields?.video_width);
+			const targetHeight = Number(fields?.video_height);
+			const hasTargetDims =
+				Number.isFinite(targetWidth) &&
+				targetWidth > 0 &&
+				Number.isFinite(targetHeight) &&
+				targetHeight > 0;
+
+			let pngBuffer = await ensurePngBuffer(imageFile.buffer);
+			const sharpMeta = await sharp(pngBuffer).metadata();
+			let width = Number(sharpMeta.width);
+			let height = Number(sharpMeta.height);
+			if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+				return res.status(400).json({ error: "Could not read image dimensions" });
+			}
+
+			if (hasTargetDims && (width !== targetWidth || height !== targetHeight)) {
+				pngBuffer = await sharp(pngBuffer)
+					.resize(Math.round(targetWidth), Math.round(targetHeight), { fit: "fill" })
+					.png()
+					.toBuffer();
+				width = Math.round(targetWidth);
+				height = Math.round(targetHeight);
+			}
+
+			const timestamp = Date.now();
+			const random = Math.random().toString(36).substring(2, 9);
+			const filename = `${image.user_id}_${id}_${timestamp}_${random}.png`;
+			const imageUrl = await storage.uploadImage(pngBuffer, filename);
+
+			const mergedMeta = {
+				...existingMeta,
+				video_placeholder_manual: true,
+			};
+
+			const updateResult = await queries.updateCreatedImageJobCompleted.run(id, image.user_id, {
+				filename,
+				file_path: imageUrl,
+				width,
+				height,
+				color: image.color ?? null,
+				meta: mergedMeta,
+			});
+			if (updateResult.changes === 0) {
+				return res.status(500).json({ error: "Failed to update creation poster" });
+			}
+
+			return res.json({
+				ok: true,
+				url: imageUrl,
+				width,
+				height,
+			});
+		} catch (err) {
+			const message = err?.message && typeof err.message === "string" ? err.message : "Failed to set poster";
+			return res.status(500).json({ error: "Failed to set poster", message });
 		}
 	});
 

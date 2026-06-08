@@ -3,6 +3,7 @@ import {
 	MUTATE_DEFAULT_METHOD_KEY,
 	MUTATE_DEFAULT_MODEL,
 	MUTATE_DEFAULT_SERVER_ID,
+	PARASCENE_BLUE_SERVER_ID,
 } from './generationDefaults.js';
 
 export const ASPECT_RATIO_PRESETS = {
@@ -24,8 +25,38 @@ export const ASPECT_RATIO_SELECTOR_LABELS = {
 };
 
 /**
- * Visual aspect ratio picker on createAdvanced for grok-imagine + replicate on server 1.
- * @param {{ serverId?: unknown, methodKey?: unknown, modelValue?: unknown } | null | undefined} context
+ * Client-side capability until the provider exposes per-model aspect_ratio support.
+ * Replicate shares one method.fields.aspect_ratio across all models; only grok honors it today.
+ * Parascene Blue methods opt in via their own field config.
+ * @param {{ serverId?: unknown, methodKey?: unknown, modelValue?: unknown, fields?: Record<string, unknown> | null } | null | undefined} context
+ * @returns {boolean}
+ */
+export function modelSupportsAspectRatio(context) {
+	if (!context || typeof context !== 'object') return false;
+	const modelValue = String(context.modelValue ?? '').trim();
+	const serverId = Number(context.serverId);
+	const methodKey = String(context.methodKey || '');
+
+	if (
+		serverId === MUTATE_DEFAULT_SERVER_ID &&
+		methodKey === MUTATE_DEFAULT_METHOD_KEY &&
+		modelValue === MUTATE_DEFAULT_MODEL
+	) {
+		return true;
+	}
+
+	if (serverId === PARASCENE_BLUE_SERVER_ID) {
+		const aspectField = context.fields?.aspect_ratio;
+		return Boolean(aspectField && typeof aspectField === 'object');
+	}
+
+	return false;
+}
+
+/**
+ * Visual aspect ratio picker when the active model supports aspect_ratio.
+ * Callers should pass `fields` from the method config when available.
+ * @param {{ serverId?: unknown, methodKey?: unknown, modelValue?: unknown, fields?: Record<string, unknown> | null } | null | undefined} context
  * @returns {boolean}
  */
 export function shouldUseAspectRatioSelector(context, {
@@ -34,6 +65,9 @@ export function shouldUseAspectRatioSelector(context, {
 	modelValue = MUTATE_DEFAULT_MODEL,
 } = {}) {
 	if (!context || typeof context !== 'object') return false;
+	if (!modelSupportsAspectRatio(context)) return false;
+	const aspectField = context.fields?.aspect_ratio;
+	if (aspectField && typeof aspectField === 'object') return true;
 	if (Number(context.serverId) !== Number(serverId)) return false;
 	if (String(context.methodKey || '') !== String(methodKey)) return false;
 	return String(context.modelValue || '') === String(modelValue);
@@ -61,6 +95,24 @@ export function parseAspectRatioString(raw) {
 }
 
 /**
+ * Target pixel box for a ratio key with a fixed long edge (placeholder / pending rows).
+ * @param {unknown} raw
+ * @param {number} [longEdge=1024]
+ * @returns {{ width: number, height: number }}
+ */
+export function dimensionsForAspectRatioLongEdge(raw, longEdge = 1024) {
+	const edge = Number(longEdge);
+	const fallback = Number.isFinite(edge) && edge > 0 ? Math.round(edge) : 1024;
+	const parsed = parseAspectRatioString(raw);
+	if (!parsed) return { width: fallback, height: fallback };
+	const [rw, rh] = parsed;
+	if (rw >= rh) {
+		return { width: fallback, height: Math.max(1, Math.round((fallback * rh) / rw)) };
+	}
+	return { width: Math.max(1, Math.round((fallback * rw) / rh)), height: fallback };
+}
+
+/**
  * @param {unknown} meta
  * @returns {Record<string, unknown> | null}
  */
@@ -85,6 +137,13 @@ export function normalizeCreationMeta(meta) {
  */
 export function aspectRatioFromCreation(creation) {
 	const meta = normalizeCreationMeta(creation?.meta);
+	if (meta?.video_placeholder_manual === true) {
+		const manualW = Number(creation?.width);
+		const manualH = Number(creation?.height);
+		if (Number.isFinite(manualW) && manualW > 0 && Number.isFinite(manualH) && manualH > 0) {
+			return { w: manualW, h: manualH, source: 'dimensions' };
+		}
+	}
 	const fromArg = parseAspectRatioString(meta?.args?.aspect_ratio);
 	if (fromArg) {
 		return { w: fromArg[0], h: fromArg[1], source: 'args' };
@@ -161,6 +220,13 @@ export function creationHasVideo(creation) {
  */
 export function shouldUseExtendedHeroLayout(creation) {
 	const meta = normalizeCreationMeta(creation?.meta);
+	if (meta?.video_placeholder_manual === true) {
+		const w = Number(creation?.width);
+		const h = Number(creation?.height);
+		if (Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0) {
+			return w !== h;
+		}
+	}
 	const argRaw = meta?.args?.aspect_ratio;
 	if (argRaw != null && String(argRaw).trim()) {
 		const key = String(argRaw).trim();
@@ -297,4 +363,85 @@ export function getLandscapeOutpaintEligibility(creation) {
 		};
 	}
 	return { eligible: true };
+}
+
+/**
+ * @param {Record<string, unknown> | null | undefined} args
+ * @returns {boolean}
+ */
+export function creationArgsHasSourceImage(args) {
+	if (!args || typeof args !== 'object') return false;
+	const urls = [args.image_url, args.image, args.source_image_url];
+	for (const u of urls) {
+		if (typeof u === 'string' && u.trim()) return true;
+	}
+	if (Array.isArray(args.input_images) && args.input_images.length > 0) {
+		return args.input_images.some((x) => typeof x === 'string' && x.trim());
+	}
+	return false;
+}
+
+/**
+ * Text-to-video jobs (no source image). Parascene Blue uses method `image2video` for both flows.
+ * @param {{ width?: unknown, height?: unknown, meta?: unknown, media_type?: unknown, video_url?: unknown, source_image_url?: unknown } | null | undefined} creation
+ * @returns {boolean}
+ */
+export function isText2VideoCreation(creation) {
+	if (!creationHasVideo(creation)) return false;
+	const meta = normalizeCreationMeta(creation?.meta);
+	if (creationArgsHasSourceImage(meta?.args)) return false;
+	const topSource =
+		typeof creation?.source_image_url === 'string' ? creation.source_image_url.trim() : '';
+	if (topSource) return false;
+	const metaSource =
+		typeof meta?.source_image_url === 'string' ? meta.source_image_url.trim() : '';
+	if (metaSource) return false;
+	return true;
+}
+
+/**
+ * Stored poster dimensions match the job aspect_ratio (or no ratio was requested).
+ * @param {{ width?: unknown, height?: unknown, meta?: unknown } | null | undefined} creation
+ * @returns {boolean}
+ */
+export function hasProperVideoPlaceholderDimensions(creation) {
+	const meta = normalizeCreationMeta(creation?.meta);
+	if (meta?.video_placeholder_manual === true) return true;
+
+	const w = Number(creation?.width);
+	const h = Number(creation?.height);
+	if (!Number.isFinite(w) || w <= 0 || !Number.isFinite(h) || h <= 0) return false;
+
+	const aspectRaw = meta?.args?.aspect_ratio;
+	if (aspectRaw == null || !String(aspectRaw).trim()) return true;
+
+	const parsed = parseAspectRatioString(aspectRaw);
+	if (!parsed) return true;
+	if (parsed[0] === parsed[1]) return w === h;
+
+	const ratioW = w / h;
+	const ratioE = parsed[0] / parsed[1];
+	return Math.abs(ratioW - ratioE) <= 0.02;
+}
+
+/** Temporary: show "Use first frame as poster" even after a manual capture. Set false before release. */
+export const TEMP_ALLOW_REPEAT_VIDEO_POSTER = true;
+
+/**
+ * Completed text-to-video rows that still use an auto-generated placeholder (not a saved frame).
+ * @param {{ status?: unknown, width?: unknown, height?: unknown, meta?: unknown, media_type?: unknown, video_url?: unknown } | null | undefined} creation
+ * @returns {boolean}
+ */
+export function canSetVideoPosterFromFirstFrame(creation) {
+	if (!creation || typeof creation !== 'object') return false;
+	if (String(creation.status || '').toLowerCase() !== 'completed') return false;
+	if (!isText2VideoCreation(creation)) return false;
+	const meta = normalizeCreationMeta(creation?.meta);
+	if (!TEMP_ALLOW_REPEAT_VIDEO_POSTER && meta?.video_placeholder_manual === true) return false;
+	return true;
+}
+
+/** @deprecated Use canSetVideoPosterFromFirstFrame */
+export function needsManualVideoPlaceholder(creation) {
+	return canSetVideoPosterFromFirstFrame(creation) && !hasProperVideoPlaceholderDimensions(creation);
 }

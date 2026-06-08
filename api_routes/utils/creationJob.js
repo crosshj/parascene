@@ -1,5 +1,6 @@
 import { buildProviderHeaders } from "./providerAuth.js";
 import { scheduleProviderPollJob } from "./scheduleCreationJob.js";
+import { dimensionsForAspectRatioLongEdge } from "../../public/shared/aspectRatio.js";
 import sharp from "sharp";
 
 const PROVIDER_TIMEOUT_MS = 50_000;
@@ -185,10 +186,16 @@ async function createPlaceholderImageBuffer(width = DEFAULT_WIDTH, height = DEFA
 	return await createPlaceholderImageBufferInternal(width, height);
 }
 
+/** Transparent PNG sized for video pending poster (aspect_ratio from job args when set). */
+async function createVideoPlaceholderImageBuffer(aspectRatioRaw) {
+	const { width, height } = dimensionsForAspectRatioLongEdge(aspectRatioRaw, DEFAULT_WIDTH);
+	return await createPlaceholderImageBufferInternal(width, height);
+}
+
 async function createPlaceholderImageBufferInternal(width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT) {
 	try {
 		return await sharp({
-			create: { width, height, channels: 4, background: { r: 24, g: 24, b: 32, alpha: 1 } },
+			create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
 		})
 			.png()
 			.toBuffer();
@@ -585,11 +592,11 @@ export async function runCreationJob({ queries, storage, payload }) {
 					imageBuffer = await fetchImageBufferFromUrl(sourceImageUrl);
 				} catch (thumbnailErr) {
 					logCreationWarn("Failed to fetch source image for video thumbnail; using placeholder instead", safeErrorMessage(thumbnailErr));
-					imageBuffer = await createPlaceholderImageBufferInternal();
+					imageBuffer = await createVideoPlaceholderImageBuffer(argsForProvider.aspect_ratio);
 				}
 			} else {
 				logCreationWarn("No image_url or image provided for video; using placeholder thumbnail");
-				imageBuffer = await createPlaceholderImageBufferInternal();
+				imageBuffer = await createVideoPlaceholderImageBuffer(argsForProvider.aspect_ratio);
 			}
 
 			try {
@@ -1089,11 +1096,11 @@ export async function runProviderPollJob({ queries, storage, payload }) {
 						"Poll: failed to fetch source image for video thumbnail; using placeholder instead",
 						safeErrorMessage(thumbnailErr),
 					);
-					imageBuffer = await createPlaceholderImageBufferInternal();
+					imageBuffer = await createVideoPlaceholderImageBuffer(originalArgs.aspect_ratio);
 				}
 			} else {
 				logCreationWarn("Poll: no image_url or image provided for video; using placeholder thumbnail");
-				imageBuffer = await createPlaceholderImageBufferInternal();
+				imageBuffer = await createVideoPlaceholderImageBuffer(originalArgs.aspect_ratio);
 			}
 
 			try {

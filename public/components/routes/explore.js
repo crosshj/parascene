@@ -57,6 +57,9 @@ async function loadDeps() {
 
 		const creationCardMod = await import(`../../shared/creationCard.js${qs}`);
 		buildCreationCardShell = creationCardMod.buildCreationCardShell;
+
+		const aspectRatioMod = await import(`../../shared/aspectRatio.js${qs}`);
+		applyCreationMediaAspectToElement = aspectRatioMod.applyCreationMediaAspectToElement;
 	})();
 	return _depsPromise;
 }
@@ -669,7 +672,9 @@ class AppRouteExplore extends HTMLElement {
 			}
 
 			const mediaEl = card.querySelector('.route-media');
-			const url = item.thumbnail_url || item.image_url;
+			const url = mediaType === 'video'
+				? (item.image_url || item.thumbnail_url)
+				: (item.thumbnail_url || item.image_url);
 			if (mediaEl && url) {
 				mediaEl.dataset.bgUrl = url;
 				mediaEl.dataset.bgQueued = '0';

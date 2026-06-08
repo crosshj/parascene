@@ -50,6 +50,8 @@ let uploadImageFile;
 let createReplyIndicatorElement;
 let applyHeroAspectLayoutToElement;
 let getLandscapeOutpaintEligibility;
+let canSetVideoPosterFromFirstFrame;
+let captureVideoFirstFrameFile;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -173,6 +175,10 @@ async function loadDeps() {
 		const aspectRatioMod = await import(`/shared/aspectRatio.js${qs}`);
 		applyHeroAspectLayoutToElement = aspectRatioMod.applyHeroAspectLayoutToElement;
 		getLandscapeOutpaintEligibility = aspectRatioMod.getLandscapeOutpaintEligibility;
+		canSetVideoPosterFromFirstFrame = aspectRatioMod.canSetVideoPosterFromFirstFrame;
+
+		const queueFrameMod = await import(`/shared/queueFromFrameModal.js${qs}`);
+		captureVideoFirstFrameFile = queueFrameMod.captureVideoFirstFrameFile;
 	})();
 	return _depsPromise;
 }
@@ -461,6 +467,17 @@ const MORE_MENU_ITEM_DEFS = [
 	<line x1="3" y1="10" x2="21" y2="10"></line>
 </svg>`,
 		label: (d) => (d.actionsContext?.queueForLaterLabel ?? 'Queue for later')
+	},
+	{
+		action: 'set-video-poster',
+		show: (d) => d.actionsContext?.showSetVideoPoster,
+		icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+	stroke-linejoin="round" aria-hidden="true">
+	<rect x="3" y="5" width="18" height="14" rx="2"></rect>
+	<circle cx="8.5" cy="10.5" r="1.5" fill="currentColor" stroke="none"></circle>
+	<path d="M21 15l-5-5L5 19"></path>
+</svg>`,
+		label: 'Use first frame as poster'
 	},
 	{
 		action: 'queue-from-frame',
@@ -2071,6 +2088,15 @@ async function loadCreation() {
 			!isFailed &&
 			mediaType === 'video' &&
 			Boolean(creation.video_url);
+		const showSetVideoPoster =
+			canEdit &&
+			!adminViewingUserDeleted &&
+			status === 'completed' &&
+			!isFailed &&
+			mediaType === 'video' &&
+			Boolean(creation.video_url) &&
+			typeof canSetVideoPosterFromFirstFrame === 'function' &&
+			canSetVideoPosterFromFirstFrame(creation);
 		const showAdminVideoTools = isAdmin && !adminViewingUserDeleted && (status === 'completed' || status === 'failed');
 		const normalizedImageUrlForQueue = showQueueForLater ? normalizeImageUrlForQueue(creation.url) : '';
 		let isQueuedForLater = false;
@@ -2110,6 +2136,7 @@ async function loadCreation() {
 			showDelete: canEdit && !isAdmin,
 			showQueueForLater,
 			showQueueFromFrame,
+			showSetVideoPoster,
 			queueForLaterLabel,
 			isFailed,
 			deleteDisabled: (userDeleted && isAdmin) ? false : !(!isPublished && (status === 'failed' || (status === 'creating' && isTimedOut) || status === 'completed')),
@@ -2121,6 +2148,7 @@ async function loadCreation() {
 		if (isGroupCreation) {
 			actionsContext.showRetry = false;
 			actionsContext.showQueueFromFrame = false;
+			actionsContext.showSetVideoPoster = false;
 		}
 		const groupSourcesRaw = Array.isArray(groupMeta?.source_creations) ? groupMeta.source_creations : [];
 		const groupSourcesMapped = groupSourcesRaw
@@ -2622,7 +2650,6 @@ async function loadCreation() {
 		if (isGroupCreation && groupSources.length > 0) {
 			hasDetailsModalContent = true;
 		}
-
 		// Get creator information
 		const creatorUserName = typeof creation?.creator?.user_name === 'string' ? creation.creator.user_name.trim() : '';
 		const creatorDisplayName = typeof creation?.creator?.display_name === 'string' ? creation.creator.display_name.trim() : '';
@@ -3947,7 +3974,7 @@ async function loadCreation() {
 			const detail = {
 				creationId,
 				meta,
-				description: descriptionText
+				description: descriptionText,
 			};
 			if (isGroupCreation && groupSources.length > 0) {
 				const selectedId =
@@ -4325,6 +4352,50 @@ async function loadCreation() {
 							addToMutateQueue,
 							showToast,
 						});
+					},
+					'set-video-poster': async () => {
+						if (!actionsContext.showSetVideoPoster || !creation.video_url) return;
+						closeMobileMoreMenu();
+						await loadDeps();
+						if (typeof captureVideoFirstFrameFile !== 'function') return;
+						try {
+							showToast('Saving poster…');
+							const heroVideo = document.querySelector('video[data-video]');
+							const useHeroVideo =
+								heroVideo instanceof HTMLVideoElement &&
+								heroVideo.videoWidth > 0 &&
+								heroVideo.videoHeight > 0;
+							const { file, width, height } = await captureVideoFirstFrameFile(
+								String(creation.video_url),
+								Number(creationId),
+								{ existingVideo: useHeroVideo ? heroVideo : null }
+							);
+							const formData = new FormData();
+							formData.append('image', file);
+							formData.append('video_width', String(width));
+							formData.append('video_height', String(height));
+							const res = await fetch(`/api/create/images/${creationId}/video-placeholder`, {
+								method: 'POST',
+								credentials: 'include',
+								body: formData,
+							});
+							const data = await res.json().catch(() => ({}));
+							if (!res.ok) {
+								showToast(data?.message || data?.error || 'Could not set poster');
+								return;
+							}
+							document.dispatchEvent(new CustomEvent('creation-video-placeholder-updated', {
+								detail: {
+									creationId: Number(creationId),
+									url: data?.url,
+									width: data?.width,
+									height: data?.height,
+								},
+							}));
+							showToast('Poster updated');
+						} catch (err) {
+							showToast(err?.message || 'Could not set poster');
+						}
 					},
 				};
 				if (typeof targets[action] === 'function') targets[action]();
@@ -4742,6 +4813,14 @@ async function checkAndLoadCreation() {
 // Set up modal event listeners
 document.addEventListener('DOMContentLoaded', () => {
 	checkAndLoadCreation();
+});
+
+document.addEventListener('creation-video-placeholder-updated', (event) => {
+	const detail = event?.detail || {};
+	const updatedId = Number(detail.creationId);
+	const pageId = Number(getCreationId());
+	if (!Number.isFinite(updatedId) || !Number.isFinite(pageId) || updatedId !== pageId) return;
+	loadCreation();
 });
 
 // Open modal when publish button is clicked

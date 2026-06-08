@@ -4,7 +4,15 @@ import {
 	pageIndexAfterBetaCursor
 } from './cursor.js';
 import { buildFeedBetaContinuation } from './continuation.js';
-import { pullFeedBetaCandidateCatalogBundle, resolveFeedBetaSitewideCatalogSize, applyViewerLikedFromSet, applyViewerLikedToCatalog, loadViewerLikedCreationIdSetForUser, pullFeedBetaSlotPackVideoHead } from './catalog.js';
+import {
+	pullFeedBetaCandidateCatalogBundle,
+	resolveFeedBetaSitewideCatalogSize,
+	applyViewerLikedFromSet,
+	applyViewerLikedToCatalog,
+	applyViewerLikedToRows,
+	loadViewerLikedCreationIdSetForUser,
+	pullFeedBetaSlotPackVideoHead
+} from './catalog.js';
 import { loadFollowingIdSet } from './context.js';
 import { FEED_BETA_DEFAULT_PARAMS } from './params.js';
 import { mergeBetaPage, sortFeedBetaRowsNewestFirst } from './mergeBetaPage.js';
@@ -261,6 +269,12 @@ export async function pullFeedBetaRows({
 	if (pageIndex === 1 && rows.length > 1) {
 		rows = sortFeedBetaRowsNewestFirst(rows);
 	}
+
+	rows = await (timing
+		? timing.timeAsync('pull.stamp_page_likes', () =>
+				applyViewerLikedToRows(queries, userId, rows)
+			)
+		: applyViewerLikedToRows(queries, userId, rows));
 
 	let sitewideCatalogSize = null;
 	try {

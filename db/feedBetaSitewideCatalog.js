@@ -8,7 +8,7 @@ import { createSeededRng, shuffleInPlace } from '../api_routes/feedBeta/rng.js';
 export function createSelectFeedBetaSitewideCatalog(serviceClient, deps) {
 	const { prefixedTable, resolveFeedRowTitle, getThumbnailUrl } = deps;
 	const BETA_COLS =
-		'id, title, summary, author, tags, created_at, created_image_id, prsn_created_images!inner(filename, file_path, user_id, unavailable_at, meta, title)';
+		'id, title, summary, author, tags, created_at, created_image_id, prsn_created_images!inner(filename, file_path, user_id, unavailable_at, meta, title, width, height)';
 
 	/**
 	 * @param {number|null|undefined} viewerId
@@ -46,6 +46,8 @@ export function createSelectFeedBetaSitewideCatalog(serviceClient, deps) {
 					user_id,
 					meta,
 					nsfw,
+					width: prsn_created_images?.width ?? null,
+					height: prsn_created_images?.height ?? null,
 					url: resolvedUrl,
 					thumbnail_url: getThumbnailUrl(resolvedUrl),
 					like_count: 0,

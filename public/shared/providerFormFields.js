@@ -838,7 +838,8 @@ export function renderFields(container, fields, options = {}) {
 	if (!container || !fields || typeof fields !== 'object') return;
 
 	const opts = { ...DEFAULTS, ...options };
-	const formContext = opts.formContext && typeof opts.formContext === 'object' ? opts.formContext : null;
+	const baseFormContext = opts.formContext && typeof opts.formContext === 'object' ? opts.formContext : null;
+	const formContext = baseFormContext ? { ...baseFormContext, fields } : { fields };
 	const fieldKeys = sortedProviderFieldKeys(fields, formContext);
 	if (fieldKeys.length === 0) return;
 

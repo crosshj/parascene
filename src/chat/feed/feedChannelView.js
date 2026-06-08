@@ -3,8 +3,10 @@
  */
 
 import { createFeedSpotlightVideoTile } from '../../shared/feedCardBuild.js';
+import { renderFeedCardsSkeleton } from '../../shared/skeleton.js';
 
 const SPOTLIGHT_SLOTS = 4;
+const FEED_LOAD_MORE_SKELETON_COUNT = 3;
 
 /**
  * Mobile-only (CSS): 2×2 strip above the vertical feed — skeleton tiles or image previews.
@@ -134,6 +136,47 @@ export function createChatFeedChannelElementsFromSegments(segments, renderCard, 
  * @param {{ spotlightVideos?: object[], resolveSpotlightHref?: (item: object) => string | undefined }} [options]
  * @returns {{ routeWrap: HTMLDivElement, cards: HTMLDivElement, sentinel: HTMLDivElement }}
  */
+/**
+ * Append feed card skeletons at the bottom of a lane cards host while load-more is in flight.
+ * @param {HTMLElement} cardsHost — `.route-cards.feed-cards` tail host for the active lane
+ * @returns {HTMLElement[]}
+ */
+export function mountChatFeedLoadMoreSkeleton(cardsHost) {
+	if (!(cardsHost instanceof HTMLElement)) return [];
+	if (cardsHost.querySelector('[data-chat-feed-load-more-skeleton]')) {
+		return Array.from(cardsHost.querySelectorAll('[data-chat-feed-load-more-skeleton]'));
+	}
+	const temp = document.createElement('div');
+	temp.innerHTML = renderFeedCardsSkeleton(FEED_LOAD_MORE_SKELETON_COUNT);
+	/** @type {HTMLElement[]} */
+	const mounted = [];
+	while (temp.firstElementChild instanceof HTMLElement) {
+		const el = temp.firstElementChild;
+		el.dataset.chatFeedLoadMoreSkeleton = '1';
+		el.setAttribute('aria-hidden', 'true');
+		cardsHost.appendChild(el);
+		mounted.push(el);
+	}
+	if (mounted.length > 0) {
+		cardsHost.setAttribute('aria-busy', 'true');
+	}
+	return mounted;
+}
+
+/**
+ * @param {HTMLElement} cardsHost
+ */
+export function removeChatFeedLoadMoreSkeleton(cardsHost) {
+	if (!(cardsHost instanceof HTMLElement)) return;
+	const nodes = cardsHost.querySelectorAll('[data-chat-feed-load-more-skeleton]');
+	for (let i = 0; i < nodes.length; i += 1) {
+		nodes[i].remove();
+	}
+	if (!cardsHost.querySelector('[data-chat-feed-load-more-skeleton]')) {
+		cardsHost.removeAttribute('aria-busy');
+	}
+}
+
 export function createChatFeedChannelElements(ordered, renderCard, options = {}) {
 	const spotlightVideos = Array.isArray(options.spotlightVideos) ? options.spotlightVideos : [];
 	const channelOpts =

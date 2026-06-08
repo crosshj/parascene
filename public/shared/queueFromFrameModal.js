@@ -17,8 +17,10 @@ let previewReady = false;
  * @property {string} videoUrl
  * @property {number} sourceId
  * @property {boolean} [published]
- * @property {(file: File, options?: { uploadKind?: string }) => Promise<string>} uploadImageFile
- * @property {(item: object) => void} addToMutateQueue
+ * @property {'queue' | 'video-placeholder'} [mode]
+ * @property {(file: File, options?: { uploadKind?: string }) => Promise<string>} [uploadImageFile]
+ * @property {(item: object) => void} [addToMutateQueue]
+ * @property {(file: File) => Promise<void>} [onPlaceholderConfirm]
  * @property {(message: string) => void} showToast
  */
 
@@ -58,6 +60,110 @@ export async function captureCanvasFrameBlob(canvas) {
 	});
 }
 
+/**
+ * @param {HTMLVideoElement} video
+ * @returns {Promise<{ width: number, height: number }>}
+ */
+export async function waitForVideoIntrinsicDimensions(video) {
+	if (!(video instanceof HTMLVideoElement)) {
+		throw new Error('Video is not available');
+	}
+	if (video.videoWidth > 0 && video.videoHeight > 0) {
+		return { width: video.videoWidth, height: video.videoHeight };
+	}
+	await new Promise((resolve, reject) => {
+		const onError = () => reject(new Error('Could not load video'));
+		const onMeta = () => {
+			video.removeEventListener('error', onError);
+			video.removeEventListener('loadedmetadata', onMeta);
+			resolve();
+		};
+		video.addEventListener('error', onError, { once: true });
+		video.addEventListener('loadedmetadata', onMeta, { once: true });
+	});
+	if (video.videoWidth > 0 && video.videoHeight > 0) {
+		return { width: video.videoWidth, height: video.videoHeight };
+	}
+	throw new Error('Video dimensions are not available yet');
+}
+
+/**
+ * @param {HTMLVideoElement} video
+ * @param {number} timeSec
+ */
+async function seekVideoToTime(video, timeSec) {
+	video.pause();
+	const duration = Number(video.duration);
+	const target = Number.isFinite(duration) && duration > 0
+		? clampFrameTime(timeSec, duration)
+		: 0;
+	video.currentTime = target;
+	await new Promise((resolve) => {
+		video.addEventListener('seeked', resolve, { once: true });
+		window.setTimeout(resolve, 800);
+	});
+}
+
+/**
+ * Load a video URL, seek to the first frame at native resolution, and return a PNG File.
+ * @param {string} videoUrl
+ * @param {number} sourceId
+ * @param {{ existingVideo?: HTMLVideoElement | null }} [options]
+ * @returns {Promise<{ file: File, width: number, height: number }>}
+ */
+export async function captureVideoFirstFrameFile(videoUrl, sourceId, options = {}) {
+	const url = typeof videoUrl === 'string' ? videoUrl.trim() : '';
+	const id = Number(sourceId);
+	if (!url || !Number.isFinite(id) || id <= 0) {
+		throw new Error('Video is not available');
+	}
+
+	const existingVideo = options.existingVideo instanceof HTMLVideoElement
+		? options.existingVideo
+		: null;
+	const video = existingVideo || document.createElement('video');
+	const shouldDispose = !existingVideo;
+
+	if (!existingVideo) {
+		video.muted = true;
+		video.playsInline = true;
+		video.setAttribute('playsinline', '');
+		video.preload = 'auto';
+		video.src = url;
+		try { video.load(); } catch { /* ignore */ }
+	} else if (!video.currentSrc && !video.src) {
+		video.src = url;
+		try { video.load(); } catch { /* ignore */ }
+	}
+
+	const canvas = document.createElement('canvas');
+
+	try {
+		await waitForVideoIntrinsicDimensions(video);
+		await seekVideoToTime(video, 0);
+
+		if (!drawVideoFrameToCanvas(video, canvas)) {
+			throw new Error('First frame is not available yet');
+		}
+
+		const width = canvas.width;
+		const height = canvas.height;
+		if (!(width > 0 && height > 0)) {
+			throw new Error('First frame has invalid dimensions');
+		}
+
+		const blob = await captureCanvasFrameBlob(canvas);
+		const file = new File([blob], `poster-${id}.png`, { type: 'image/png' });
+		return { file, width, height };
+	} finally {
+		if (shouldDispose) {
+			video.pause();
+			video.removeAttribute('src');
+			try { video.load(); } catch { /* ignore */ }
+		}
+	}
+}
+
 function getModalElements() {
 	if (!modalRoot) return null;
 	return {
@@ -87,11 +193,19 @@ function setConfirmEnabled(enabled) {
 	if (confirmBtn instanceof HTMLButtonElement) confirmBtn.disabled = !enabled;
 }
 
+function getConfirmLabel(mode, busy) {
+	if (mode === 'video-placeholder') {
+		return busy ? 'Saving…' : 'Use this frame';
+	}
+	return busy ? 'Queuing…' : 'Add to queue';
+}
+
 function setModalBusy(busy) {
 	const els = getModalElements();
 	if (!els) return;
 	els.overlay?.classList.toggle('is-busy', Boolean(busy));
 	const { confirmBtn, cancelBtn, closeBtn, scrub, video } = els;
+	const mode = activeDeps?.mode === 'video-placeholder' ? 'video-placeholder' : 'queue';
 	if (confirmBtn instanceof HTMLButtonElement) {
 		if (busy) {
 			confirmBtn.disabled = true;
@@ -99,11 +213,11 @@ function setModalBusy(busy) {
 				confirmBtn.insertAdjacentHTML('afterbegin', '<span class="queue-from-frame-btn-spinner" aria-hidden="true"></span>');
 			}
 			const label = confirmBtn.querySelector('.queue-from-frame-btn-label');
-			if (label) label.textContent = 'Queuing…';
+			if (label) label.textContent = getConfirmLabel(mode, true);
 		} else {
 			confirmBtn.querySelector('.queue-from-frame-btn-spinner')?.remove();
 			const label = confirmBtn.querySelector('.queue-from-frame-btn-label');
-			if (label) label.textContent = 'Add to queue';
+			if (label) label.textContent = getConfirmLabel(mode, false);
 			confirmBtn.disabled = !previewReady;
 		}
 	}
@@ -258,15 +372,26 @@ function wireModalEvents(root) {
 			}
 			const blob = await captureCanvasFrameBlob(canvas);
 			const file = new File([blob], `frame-${deps.sourceId}.png`, { type: 'image/png' });
-			const imageUrl = await deps.uploadImageFile(file, { uploadKind: 'edited' });
-			deps.addToMutateQueue({
-				sourceId: deps.sourceId,
-				imageUrl,
-				published: deps.published,
-				fromFrame: true,
-				frameTimeSec: Number(s.value),
-			});
-			deps.showToast('Added to queue');
+			if (deps.mode === 'video-placeholder') {
+				if (typeof deps.onPlaceholderConfirm !== 'function') {
+					throw new Error('Poster save is not available');
+				}
+				await deps.onPlaceholderConfirm(file);
+				deps.showToast('Poster updated');
+			} else {
+				if (typeof deps.uploadImageFile !== 'function' || typeof deps.addToMutateQueue !== 'function') {
+					throw new Error('Queue is not available');
+				}
+				const imageUrl = await deps.uploadImageFile(file, { uploadKind: 'edited' });
+				deps.addToMutateQueue({
+					sourceId: deps.sourceId,
+					imageUrl,
+					published: deps.published,
+					fromFrame: true,
+					frameTimeSec: Number(s.value),
+				});
+				deps.showToast('Added to queue');
+			}
 			closeQueueFromFrameModal();
 		} catch (err) {
 			setModalBusy(false);
@@ -341,13 +466,32 @@ function beginPicker(videoUrl, initialTimeHint) {
 /**
  * @param {QueueFromFrameModalDeps} deps
  */
+function applyModalModeCopy(mode) {
+	const titleEl = modalRoot?.querySelector('#queue-from-frame-title');
+	const hintEl = modalRoot?.querySelector('.creation-detail-queue-frame-hint');
+	if (titleEl instanceof HTMLElement) {
+		titleEl.textContent = mode === 'video-placeholder' ? 'Set poster from frame' : 'Queue from frame';
+	}
+	if (hintEl instanceof HTMLElement) {
+		hintEl.textContent = mode === 'video-placeholder'
+			? 'Scrub to the frame you want to use as the video poster, then save it.'
+			: 'Scrub to the frame you want, then add it to your mutate queue.';
+	}
+	const label = modalRoot?.querySelector('.queue-from-frame-btn-label');
+	if (label instanceof HTMLElement) {
+		label.textContent = getConfirmLabel(mode, false);
+	}
+}
+
 export function openQueueFromFrameModal(deps) {
 	const videoUrl = typeof deps?.videoUrl === 'string' ? deps.videoUrl.trim() : '';
 	const sourceId = Number(deps?.sourceId);
 	if (!videoUrl || !Number.isFinite(sourceId) || sourceId <= 0) return;
 
 	ensureModalDom();
-	activeDeps = deps;
+	const mode = deps?.mode === 'video-placeholder' ? 'video-placeholder' : 'queue';
+	activeDeps = { ...deps, mode };
+	applyModalModeCopy(mode);
 	previewReady = false;
 	setConfirmEnabled(false);
 	setModalBusy(false);

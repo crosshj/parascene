@@ -160,7 +160,8 @@ export function applyFeedCardCreationProcessingState(imageContainer, imageEl) {
 export function feedItemCardImageUrl(item, preferThumbnail = false) {
 	if (!item) return '';
 	const creationId = Number(item?.created_image_id ?? item?.id);
-	if (preferThumbnail) {
+	const useThumbnail = preferThumbnail && !isFeedRowVideoCreation(item);
+	if (useThumbnail) {
 		return appendCreationIdToMediaUrl(item.thumbnail_url || item.image_url || '', creationId);
 	}
 	return appendCreationIdToMediaUrl(item.image_url || item.thumbnail_url || '', creationId);
@@ -177,7 +178,8 @@ export function feedItemCardImageUrlCandidates(item, preferThumbnail = false) {
 	const thumbRaw = typeof item.thumbnail_url === 'string' ? item.thumbnail_url.trim() : '';
 	const full = appendCreationIdToMediaUrl(fullRaw, creationId);
 	const thumb = appendCreationIdToMediaUrl(thumbRaw, creationId);
-	const ordered = preferThumbnail ? [thumb, full] : [full, thumb];
+	const useThumbnail = preferThumbnail && !isFeedRowVideoCreation(item);
+	const ordered = useThumbnail ? [thumb, full] : [full, thumb];
 	const out = [];
 	const seen = new Set();
 	for (const u of ordered) {
@@ -1477,10 +1479,7 @@ function finishFeedCreationCardMediaAndClick(
 		const videoEl = card.querySelector('.feed-card-video');
 		if (videoEl) {
 			primeMediaElementForAudioLeveling(videoEl);
-			const posterUrl = displayUrl || "";
-			if (posterUrl) {
-				videoEl.poster = posterUrl;
-			}
+			videoEl.removeAttribute('poster');
 			videoEl.muted = true;
 			videoEl.playsInline = true;
 			videoEl.loop = true;

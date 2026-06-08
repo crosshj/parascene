@@ -60,18 +60,23 @@ function shouldLogStartup() {
 	return process.env.ENABLE_STARTUP_LOGS === "true";
 }
 
+function isLocalDevServer() {
+	return process.env.NODE_ENV !== "production";
+}
+
 // Handle unhandled promise rejections
 process.on("unhandledRejection", (reason, promise) => {
 	console.error("[Startup] Unhandled Promise Rejection:", reason);
 	if (reason instanceof Error) {
 		console.error("Error stack:", reason.stack);
 	}
-	// Don't exit in production, but log the error
-	if (process.env.NODE_ENV === "production") {
-		// console.error("Continuing in production mode...");
-	} else {
-		// console.error("Exiting due to unhandled rejection in development");
-		process.exit(1);
+	// Local `npm run watch` (NODE_ENV=dev): log and keep nodemon alive through transient DNS/network blips.
+	// Production (Vercel): log and continue — same as before.
+	if (isLocalDevServer()) {
+		console.warn(
+			"[Startup] Local dev: continuing after unhandled rejection (fix DNS/network or the failing request)."
+		);
+		return;
 	}
 });
 

@@ -991,7 +991,7 @@ class AppRouteCreations extends HTMLElement {
 					challengeGridBlur: inChallenge && !item.nsfw,
 				});
 				const mediaEl = card.querySelector('.route-media');
-				const url = item.thumbnail_url || item.url;
+				const url = mediaType === 'video' ? (item.url || item.thumbnail_url) : (item.thumbnail_url || item.url);
 				if (mediaEl) {
 					if (index < this.eagerImageCount) {
 						setRouteMediaBackgroundImage(mediaEl, url, { lowPriority: !this.isRouteActive() });

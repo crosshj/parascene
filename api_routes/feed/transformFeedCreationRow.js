@@ -60,6 +60,8 @@ export function transformFeedCreationRow(item) {
 		meta: meta && typeof meta === "object" ? meta : null,
 		media_type: mediaType,
 		video_url: videoUrl,
+		width: item.width ?? null,
+		height: item.height ?? null,
 		doom_scroll_full_height:
 			meta && typeof meta === "object" && meta.doom_scroll_full_height === true,
 		feed_beta_why: feedBetaWhy

@@ -524,10 +524,7 @@ class AppRouteFeed extends HTMLElement {
 		if (isVideo && !processing) {
 			const videoEl = card.querySelector('.feed-card-video');
 			if (videoEl) {
-				const posterUrl = displayUrl || "";
-				if (posterUrl) {
-					videoEl.poster = posterUrl;
-				}
+				videoEl.removeAttribute('poster');
 				videoEl.muted = true;
 				videoEl.playsInline = true;
 				videoEl.loop = true;

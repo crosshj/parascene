@@ -3635,6 +3635,12 @@ app-route-feed {
 	position: relative;
 }
 
+.feed-card-image.feed-card-image-video .feed-card-img,
+.feed-card-image.feed-card-image-video .feed-card-video {
+	object-fit: cover;
+	object-position: center;
+}
+
 .feed-card-image .feed-card-video {
 	position: absolute;
 	inset: 0;
@@ -7627,7 +7633,7 @@ body.chat-page .chat-page-canvas-panel-body {
 /* Defensive: media and long tokens cannot extend past the message column (page scroll stays vertical-only).
  * Exclude fixed-aspect tiles (doom, feed cards, challenges hero strip). */
 body.chat-page .chat-page-messages img:not(.chat-doom-poster):not(.chat-doom-avatar):not(.feed-card-img):not(.feed-card-group-img):not(.connect-chat-creation-embed-img):not(.connect-chat-creation-embed-group-img):not(.comment-avatar-img):not(.challenge-pane-hero-image),
-body.chat-page .chat-page-messages video:not(.chat-doom-video) {
+body.chat-page .chat-page-messages video:not(.chat-doom-video):not(.feed-card-video) {
 	max-width: 100%;
 	height: auto;
 }
@@ -9512,7 +9518,8 @@ body.chat-page .chat-page-messages .route-loading.chat-page-thread-loading {
 		border-radius: 10px;
 	}
 
-	.chat-page-messages .chat-feed-channel-route .feed-card-image.chat-feed-mobile-spotlight-cell-media .feed-card-img {
+	.chat-page-messages .chat-feed-channel-route .feed-card-image.chat-feed-mobile-spotlight-cell-media .feed-card-img,
+	.chat-page-messages .chat-feed-channel-route .feed-card-image.chat-feed-mobile-spotlight-cell-media .feed-card-video {
 		position: absolute;
 		inset: 0;
 		width: 100%;

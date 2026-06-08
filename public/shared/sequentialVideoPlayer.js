@@ -92,6 +92,7 @@ export function mountSequentialVideoPlayer(container, slides, options = {}) {
 		typeof options.onPlaybackStateChange === 'function' ? options.onPlaybackStateChange : null;
 	const posterUrl = typeof options.posterUrl === 'string' ? options.posterUrl.trim() : '';
 	const len = normalized.length;
+	const loopSingleClip = len <= 1 && loopPlaylist;
 
 	let startIndex = Number(options.startIndex);
 	if (!Number.isFinite(startIndex)) startIndex = 0;
@@ -155,6 +156,8 @@ export function mountSequentialVideoPlayer(container, slides, options = {}) {
 		video.preload = 'auto';
 		video.muted = startMuted;
 		video.defaultMuted = startMuted;
+		video.loop = loopSingleClip;
+		if (loopSingleClip) video.setAttribute('loop', '');
 		primeMediaElementForAudioLeveling(video);
 		attachMediaAudioLeveling(video);
 		video.classList.add('sequential-video-player-video--pending');
@@ -270,15 +273,15 @@ export function mountSequentialVideoPlayer(container, slides, options = {}) {
 
 	const syncVideoSlotAspect = (video, slide) => {
 		if (!(video instanceof HTMLVideoElement)) return;
-		const intrinsic = videoIntrinsicSize(video);
-		if (intrinsic.width > 0 && intrinsic.height > 0) {
-			applySlotAspect(slot, intrinsic.width, intrinsic.height);
-			return;
-		}
 		const w = Number(slide?.width);
 		const h = Number(slide?.height);
 		if (Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0) {
 			applySlotAspect(slot, w, h);
+			return;
+		}
+		const intrinsic = videoIntrinsicSize(video);
+		if (intrinsic.width > 0 && intrinsic.height > 0) {
+			applySlotAspect(slot, intrinsic.width, intrinsic.height);
 		}
 	};
 
@@ -319,8 +322,9 @@ export function mountSequentialVideoPlayer(container, slides, options = {}) {
 			video.addEventListener('loadedmetadata', onMeta, { once: true });
 			video.addEventListener('error', done, { once: true });
 			video.pause();
-			video.loop = false;
-			video.removeAttribute('loop');
+			video.loop = loopSingleClip;
+			if (loopSingleClip) video.setAttribute('loop', '');
+			else video.removeAttribute('loop');
 			video.controls = false;
 			video.removeAttribute('controls');
 			video.src = url;
@@ -432,7 +436,7 @@ export function mountSequentialVideoPlayer(container, slides, options = {}) {
 		const handoff = () => {
 			if (handedOff) return;
 			handedOff = true;
-			if (outgoing instanceof HTMLVideoElement) {
+			if (outgoing instanceof HTMLVideoElement && outgoing !== incoming) {
 				outgoing.pause();
 				outgoing.classList.remove('is-active');
 				outgoing.style.removeProperty('z-index');
@@ -515,10 +519,10 @@ export function mountSequentialVideoPlayer(container, slides, options = {}) {
 	};
 
 	const onVideoEnded = (e) => {
-		if (!autoAdvanceOnEnded || advanceLock || tornDown) return;
+		if (loopSingleClip || !autoAdvanceOnEnded || advanceLock || tornDown) return;
 		if (e?.target !== videos[activePlayer]) return;
 		if (!loopPlaylist && activeIndex >= len - 1) return;
-		void applyIndex(activeIndex + 1, { autoplay: true });
+		void applyIndex(activeIndex + 1, { autoplay: true, force: true });
 	};
 
 	videos.forEach((v) => {
