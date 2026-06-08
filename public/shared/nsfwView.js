@@ -171,21 +171,23 @@ export function handleNsfwClick(e) {
 	/* Revealed doom clip: do not fall through to creationId/session confirm — allow pause/play. */
 	if (e.target?.closest?.('.chat-doom-slide-media-frame.nsfw.nsfw-revealed')) return false;
 
-	const creationId = getCreationIdFromNsfwElement(e.target);
-	if (!creationId) return false;
-
 	const onDetailPage = typeof window !== 'undefined' && window.location?.pathname?.match?.(/^\/creations\/[^/]+$/);
 
 	// On creation-detail: reveal only when user has enabled NSFW in profile; otherwise swallow click (no reveal).
 	if (onDetailPage) {
 		if (document.body.dataset.enableNsfw !== '1') return true;
 		if (document.body.classList.contains(NSFW_VIEW_BODY_CLASS)) return false;
-		const nsfwEl = e.target?.classList?.contains?.('nsfw') ? e.target : e.target?.closest?.('.nsfw');
+		/* Revealed hero: allow play/pause, mute, and group nav — no repeat confirm. */
+		if (e.target?.closest?.('.creation-detail-image-wrapper.nsfw.nsfw-revealed')) return false;
+		const nsfwEl = e.target?.closest?.('.creation-detail-image-wrapper.nsfw:not(.nsfw-revealed)');
 		if (!nsfwEl) return false;
 		if (!window.confirm(NSFW_CONFIRM_MESSAGE_THIS_IMAGE)) return true;
 		revealNsfwElementOnly(nsfwEl);
 		return true;
 	}
+
+	const creationId = getCreationIdFromNsfwElement(e.target);
+	if (!creationId) return false;
 
 	// Else: e.g. NSFW overlay outside cards — confirm then enable session-wide and navigate
 	if (e.target?.closest?.('.connect-chat-creation-embed')) return false;

@@ -2773,6 +2773,36 @@ body.creation-detail-page main>section:first-of-type {
 	z-index: 6;
 }
 
+/* Stack NSFW blur/label above hero video stack (z-index 2) and play overlay (z-index 4). */
+.creation-detail-image-wrapper.nsfw:not(.nsfw-revealed)::after {
+	z-index: 5;
+	pointer-events: auto;
+	cursor: pointer;
+}
+
+.creation-detail-image-wrapper.nsfw:not(.nsfw-revealed)::before {
+	z-index: 6;
+}
+
+body.view-nsfw .creation-detail-image-wrapper.nsfw::after {
+	pointer-events: none;
+	cursor: default;
+}
+
+.creation-detail-image-wrapper.nsfw:not(.nsfw-revealed) .creation-detail-group-hero-video-stack {
+	pointer-events: none;
+}
+
+.creation-detail-image-wrapper.nsfw:not(.nsfw-revealed) .creation-detail-video-muted-badge {
+	opacity: 0;
+	visibility: hidden;
+	pointer-events: none;
+}
+
+.creation-detail-image-wrapper.nsfw:not(.nsfw-revealed) .creation-detail-hero-nav {
+	z-index: 7;
+}
+
 .creation-detail-image-wrapper.hero-video-volume-controls .creation-detail-video-muted-badge {
 	opacity: 0;
 	visibility: hidden;
