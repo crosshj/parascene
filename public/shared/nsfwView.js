@@ -173,14 +173,14 @@ export function handleNsfwClick(e) {
 
 	const onDetailPage = typeof window !== 'undefined' && window.location?.pathname?.match?.(/^\/creations\/[^/]+$/);
 
-	// On creation-detail: reveal only when user has enabled NSFW in profile; otherwise swallow click (no reveal).
+	// On creation-detail: reveal only when user has enabled NSFW in profile; otherwise swallow click on blurred hero only.
 	if (onDetailPage) {
-		if (document.body.dataset.enableNsfw !== '1') return true;
 		if (document.body.classList.contains(NSFW_VIEW_BODY_CLASS)) return false;
 		/* Revealed hero: allow play/pause, mute, and group nav — no repeat confirm. */
 		if (e.target?.closest?.('.creation-detail-image-wrapper.nsfw.nsfw-revealed')) return false;
 		const nsfwEl = e.target?.closest?.('.creation-detail-image-wrapper.nsfw:not(.nsfw-revealed)');
 		if (!nsfwEl) return false;
+		if (document.body.dataset.enableNsfw !== '1') return true;
 		if (!window.confirm(NSFW_CONFIRM_MESSAGE_THIS_IMAGE)) return true;
 		revealNsfwElementOnly(nsfwEl);
 		return true;
