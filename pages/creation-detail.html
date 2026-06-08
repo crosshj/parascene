@@ -75,6 +75,51 @@
 		</div>
 	</dialog>
 
+	<!-- Share Audio: extract audio from video or show existing shareable link -->
+	<dialog class="creation-detail-dialog share-audio-modal" data-share-audio-modal aria-labelledby="share-audio-modal-title">
+		<h2 id="share-audio-modal-title" class="dialog-title">Share Audio</h2>
+		<button class="modal-close" type="button" aria-label="Close" data-share-audio-close-btn>
+			<svg class="modal-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+				stroke-linecap="round" stroke-linejoin="round">
+				<line x1="18" y1="6" x2="6" y2="18"></line>
+				<line x1="6" y1="6" x2="18" y2="18"></line>
+			</svg>
+		</button>
+		<div class="share-audio-modal-content">
+			<div class="share-audio-modal-stage">
+				<div class="share-audio-panel share-audio-prompt-panel is-active" data-share-audio-panel="prompt">
+					<p class="share-audio-prompt" data-share-audio-prompt>
+						Extract audio from this video and get a link you can share anywhere. Extraction runs in real time and may take as long as the video.
+					</p>
+				</div>
+				<div class="share-audio-panel share-audio-progress-panel" data-share-audio-panel="progress">
+					<div class="share-audio-progress-wrap" data-share-audio-progress-wrap>
+						<div class="share-audio-progress-track" aria-hidden="true">
+							<div class="share-audio-progress-bar" data-share-audio-progress-bar></div>
+						</div>
+						<p class="share-audio-progress-label" data-share-audio-progress-label role="status" aria-live="polite">Extracting audio… 0%</p>
+					</div>
+				</div>
+				<div class="share-audio-panel share-audio-ready-panel" data-share-audio-panel="ready">
+					<div class="share-audio-ready" data-share-audio-ready>
+						<audio class="share-audio-player" data-share-audio-player controls preload="metadata"></audio>
+						<label class="share-audio-link-label" for="share-audio-link-input">Shareable link</label>
+						<div class="share-audio-link-row">
+							<input id="share-audio-link-input" class="share-audio-link-input" data-share-audio-link-input type="text" readonly />
+							<button type="button" class="btn-outlined share-audio-copy-btn" data-share-audio-copy-btn>Copy link</button>
+						</div>
+					</div>
+				</div>
+			</div>
+			<p class="share-audio-error" data-share-audio-error role="alert"></p>
+		</div>
+		<div class="share-audio-modal-actions">
+			<button type="button" class="btn-primary share-audio-extract-btn" data-share-audio-extract-btn>
+				<span data-share-audio-extract-btn-text>Extract audio</span>
+			</button>
+		</div>
+	</dialog>
+
 	<!--APP_MOBILE_BOTTOM_NAV-->
 
 	<main>

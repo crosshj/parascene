@@ -3,11 +3,39 @@ import path from "path";
 import sharp from "sharp";
 import { CHAT_UPLOAD_MAX_BYTES } from "../src/shared/chatUploadMaxBytes.js";
 import { isChatMiscGenericKeyOwnedByUser, safeDecodeGenericImageKeyTail } from "./utils/chatMiscGenericKeys.js";
+import { sendBufferWithRangeSupport } from "./utils/sendBufferWithRangeSupport.js";
+
+function parseMeta(raw) {
+	if (raw == null) return null;
+	if (typeof raw === "object") return raw;
+	if (typeof raw !== "string") return null;
+	try {
+		return JSON.parse(raw);
+	} catch {
+		return null;
+	}
+}
+
+function parseShareAudioCreationIdFromKey(key) {
+	const raw = String(key || "");
+	if (!raw.startsWith("share-audio/")) return null;
+	const baseName = raw.split("/").pop() || "";
+	const withoutExt = baseName.replace(/\.[^.]+$/, "");
+	const parts = withoutExt.split("_");
+	const creationId = Number(parts[1]);
+	return Number.isFinite(creationId) && creationId > 0 ? creationId : null;
+}
 
 function guessContentType(key, hintedName = "") {
-	const keyExt = path.extname(String(key || "")).toLowerCase();
+	const rawKey = String(key || "");
+	const keyExt = path.extname(rawKey).toLowerCase();
 	const hintExt = path.extname(String(hintedName || "")).toLowerCase();
 	const ext = hintExt || keyExt;
+	if (rawKey.startsWith("share-audio/")) {
+		if (ext === ".webm") return "audio/webm";
+		if (ext === ".ogg") return "audio/ogg";
+		if (ext === ".m4a" || ext === ".mp4") return "audio/mp4";
+	}
 	if (ext === ".html" || ext === ".htm") return "text/html; charset=utf-8";
 	if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
 	if (ext === ".webp") return "image/webp";
@@ -56,6 +84,9 @@ function extFromContentType(contentType) {
 	if (ct.includes("video/mp4")) return ".mp4";
 	if (ct.includes("video/webm")) return ".webm";
 	if (ct.includes("video/quicktime")) return ".mov";
+	if (ct.includes("audio/webm")) return ".webm";
+	if (ct.includes("audio/ogg")) return ".ogg";
+	if (ct.includes("audio/mp4")) return ".m4a";
 	if (ct.includes("application/pdf")) return ".pdf";
 	if (ct.includes("text/plain")) return ".txt";
 	if (ct.includes("application/json")) return ".json";
@@ -206,6 +237,68 @@ export default function createImagesRoutes({ storage, queries }) {
 
 		if (!key) {
 			return res.status(400).json({ error: "Invalid key" });
+		}
+
+		if (key.startsWith("share-audio/")) {
+			try {
+				if (!storage?.getGenericImageBuffer) {
+					return res.status(500).json({ error: "Generic images storage not available" });
+				}
+
+				const creationId = parseShareAudioCreationIdFromKey(key);
+				if (!creationId) {
+					return res.status(404).json({ error: "Audio not found" });
+				}
+
+				const image = await queries.selectCreatedImageByIdAnyUser?.get(creationId);
+				if (!image) {
+					return res.status(404).json({ error: "Audio not found" });
+				}
+
+				const meta = parseMeta(image.meta) || {};
+				const shareAudio = meta.share_audio && typeof meta.share_audio === "object" ? meta.share_audio : null;
+				const storedKey = typeof shareAudio?.key === "string" ? shareAudio.key.trim() : "";
+				if (!storedKey || storedKey !== key) {
+					return res.status(404).json({ error: "Audio not found" });
+				}
+
+				const userId = req.auth?.userId;
+				const isOwner = userId && Number(image.user_id) === Number(userId);
+				const isPublished = image.published === 1 || image.published === true;
+				let isAdmin = false;
+				if (userId && !isOwner && !isPublished) {
+					try {
+						const user = await queries.selectUserById.get(userId);
+						isAdmin = user?.role === "admin";
+					} catch {
+						isAdmin = false;
+					}
+				}
+
+				if (!isPublished && !isOwner && !isAdmin) {
+					if (!userId) {
+						return res.status(401).json({ error: "Unauthorized" });
+					}
+					return res.status(403).json({ error: "Access denied" });
+				}
+
+				const buffer = await storage.getGenericImageBuffer(key);
+				const contentType =
+					typeof shareAudio.content_type === "string" && shareAudio.content_type
+						? shareAudio.content_type
+						: guessContentType(key, hintedName);
+				return sendBufferWithRangeSupport(res, buffer, {
+					contentType,
+					cacheControl: "public, max-age=3600",
+					rangeHeader: typeof req.headers.range === "string" ? req.headers.range : "",
+				});
+			} catch (error) {
+				const message = String(error?.message || "");
+				if (message.toLowerCase().includes("not found")) {
+					return res.status(404).json({ error: "Audio not found" });
+				}
+				return res.status(500).json({ error: "Failed to serve audio" });
+			}
 		}
 
 		// Public-read subset: profile images (avatars/covers) and edited images (provider fetch) are viewable without auth.

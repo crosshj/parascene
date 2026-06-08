@@ -7378,6 +7378,13 @@ export function openDb() {
 	const GENERIC_BUCKET = "prsn_generic-images";
 	const MISC_BUCKET = "prsn_misc";
 
+	function storageBucketForGenericKey(objectKey) {
+		const key = String(objectKey || "");
+		if (/^profile\/\d+\/misc_[^/]+$/i.test(key)) return MISC_BUCKET;
+		if (key.startsWith("share-audio/")) return MISC_BUCKET;
+		return GENERIC_BUCKET;
+	}
+
 	function getThumbnailFilename(filename) {
 		const ext = path.extname(filename);
 		const base = path.basename(filename, ext);
@@ -7518,9 +7525,7 @@ export function openDb() {
 			if (!objectKey) {
 				throw new Error("Image not found");
 			}
-			const bucket = /^profile\/\d+\/misc_[^/]+$/i.test(objectKey)
-				? MISC_BUCKET
-				: GENERIC_BUCKET;
+			const bucket = storageBucketForGenericKey(objectKey);
 			const { data, error } = await storageClient.storage
 				.from(bucket)
 				.download(objectKey);
@@ -7537,9 +7542,7 @@ export function openDb() {
 				throw new Error("Invalid key");
 			}
 			const contentType = String(options?.contentType || "application/octet-stream");
-			const bucket = /^profile\/\d+\/misc_[^/]+$/i.test(objectKey)
-				? MISC_BUCKET
-				: GENERIC_BUCKET;
+			const bucket = storageBucketForGenericKey(objectKey);
 			const { error } = await storageClient.storage
 				.from(bucket)
 				.upload(objectKey, buffer, { contentType, upsert: true });
@@ -7552,9 +7555,7 @@ export function openDb() {
 		deleteGenericImage: async (key) => {
 			const objectKey = String(key || "");
 			if (!objectKey) return;
-			const bucket = /^profile\/\d+\/misc_[^/]+$/i.test(objectKey)
-				? MISC_BUCKET
-				: GENERIC_BUCKET;
+			const bucket = storageBucketForGenericKey(objectKey);
 			const { error } = await storageClient.storage
 				.from(bucket)
 				.remove([objectKey]);

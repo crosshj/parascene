@@ -78,6 +78,26 @@ function buildGenericUrl(key) {
 	return `/api/images/generic/${segments.join("/")}`;
 }
 
+function normalizeShareAudioContentType(raw) {
+	const ct = String(raw || "").toLowerCase().trim();
+	if (!ct) return "audio/webm";
+	if (ct.startsWith("audio/webm")) return "audio/webm";
+	if (ct.startsWith("audio/ogg")) return "audio/ogg";
+	if (ct.startsWith("audio/mp4") || ct.includes("m4a")) return "audio/mp4";
+	if (ct.startsWith("audio/")) return ct.split(";")[0].trim();
+	return "audio/webm";
+}
+
+function shareAudioExtFromContentType(contentType) {
+	const ct = normalizeShareAudioContentType(contentType);
+	if (ct === "audio/ogg") return "ogg";
+	if (ct === "audio/mp4") return "m4a";
+	return "webm";
+}
+
+/** Matches Supabase `prsn_misc` bucket file size limit for share-audio uploads. */
+const SHARE_AUDIO_MAX_BYTES = 20 * 1024 * 1024;
+
 function guessImageContentType(filename) {
 	const f = String(filename || "").toLowerCase();
 	if (f.endsWith(".webp")) return "image/webp";
@@ -5107,6 +5127,117 @@ export default function createCreateRoutes({ queries, storage }) {
 			return res.status(500).json({ error: "Failed to set poster", message });
 		}
 	});
+
+	// POST /api/create/images/:id/share-audio — Store shareable audio extracted client-side from a video creation.
+	router.post(
+		"/api/create/images/:id/share-audio",
+		express.raw({ type: () => true, limit: `${SHARE_AUDIO_MAX_BYTES}b` }),
+		async (req, res) => {
+		const user = await requireUser(req, res);
+		if (!user) return;
+
+		const id = Number(req.params.id);
+		if (!Number.isFinite(id) || id <= 0) {
+			return res.status(400).json({ error: "Invalid creation id" });
+		}
+
+		const image = await queries.selectCreatedImageByIdAnyUser?.get(id);
+		if (!image) {
+			return res.status(404).json({ error: "Creation not found" });
+		}
+
+		const isOwner = Number(image.user_id) === Number(user.id);
+		const isAdmin = user.role === "admin";
+		const isPublished = image.published === 1 || image.published === true;
+		if (!isOwner && !isAdmin && !isPublished) {
+			return res.status(403).json({ error: "Forbidden" });
+		}
+
+		if ((image.status || "") !== "completed") {
+			return res.status(400).json({ error: "Only completed creations support share audio" });
+		}
+
+		const existingMeta = parseMeta(image.meta) || {};
+		if (existingMeta?.group?.kind === "group_creations") {
+			return res.status(400).json({ error: "Share audio is not available for grouped creations" });
+		}
+		if (existingMeta.media_type !== "video" || !existingMeta?.video?.file_path) {
+			return res.status(400).json({ error: "Share audio is only available for video creations" });
+		}
+
+		const existingShareAudio =
+			existingMeta.share_audio && typeof existingMeta.share_audio === "object"
+				? existingMeta.share_audio
+				: null;
+		const existingKey =
+			typeof existingShareAudio?.key === "string" ? existingShareAudio.key.trim() : "";
+		const existingPath =
+			typeof existingShareAudio?.file_path === "string" ? existingShareAudio.file_path.trim() : "";
+		if (existingKey || existingPath) {
+			return res.json({
+				ok: true,
+				audio_url: existingPath || buildGenericUrl(existingKey),
+				share_audio: existingShareAudio,
+				already_exists: true,
+			});
+		}
+
+		if (typeof storage.uploadGenericImage !== "function") {
+			return res.status(503).json({ error: "Audio storage not available" });
+		}
+
+		try {
+			const audioBuffer = req.body;
+			if (!audioBuffer || !Buffer.isBuffer(audioBuffer) || audioBuffer.length === 0) {
+				return res.status(400).json({ error: "Empty audio upload" });
+			}
+			if (audioBuffer.length > SHARE_AUDIO_MAX_BYTES) {
+				return res.status(413).json({
+					error: "Audio file too large",
+					message: "Extracted audio must be 20 MB or smaller.",
+					max_bytes: SHARE_AUDIO_MAX_BYTES,
+				});
+			}
+
+			const mimeType = normalizeShareAudioContentType(req.headers["content-type"]);
+			const safeExt = shareAudioExtFromContentType(mimeType);
+			const timestamp = Date.now();
+			const random = Math.random().toString(36).substring(2, 9);
+			const storageKey = `share-audio/${image.user_id}_${id}_${timestamp}_${random}.${safeExt}`;
+
+			await storage.uploadGenericImage(audioBuffer, storageKey, {
+				contentType: mimeType,
+			});
+			const audioUrl = buildGenericUrl(storageKey);
+
+			const shareAudio = {
+				key: storageKey,
+				file_path: audioUrl,
+				content_type: mimeType,
+				extracted_at: new Date().toISOString(),
+			};
+			const mergedMeta = {
+				...existingMeta,
+				share_audio: shareAudio,
+			};
+
+			const updateResult = await queries.updateCreatedImageMeta.run(id, image.user_id, mergedMeta);
+			if (updateResult.changes === 0) {
+				return res.status(500).json({ error: "Failed to save audio reference on creation" });
+			}
+
+			return res.json({
+				ok: true,
+				audio_url: audioUrl,
+				share_audio: shareAudio,
+			});
+		} catch (err) {
+			const raw = err?.message && typeof err.message === "string" ? err.message : "Failed to save audio";
+			const message = raw.replace(/^Failed to upload generic image:\s*/i, "");
+			return res.status(500).json({ error: "Failed to save audio", message });
+		}
+		}
+	);
 
 	// POST /api/create/images/:id/admin-restore-user-delete — Admin only: undo owner soft-delete (clear unavailable_at).
 	router.post("/api/create/images/:id/admin-restore-user-delete", async (req, res) => {

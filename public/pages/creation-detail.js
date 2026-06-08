@@ -52,6 +52,7 @@ let applyHeroAspectLayoutToElement;
 let getLandscapeOutpaintEligibility;
 let canSetVideoPosterFromFirstFrame;
 let captureVideoFirstFrameFile;
+let openShareAudioModal;
 
 function getAssetVersionParam() {
 	const meta = document.querySelector('meta[name="asset-version"]');
@@ -179,6 +180,9 @@ async function loadDeps() {
 
 		const queueFrameMod = await import(`/shared/queueFromFrameModal.js${qs}`);
 		captureVideoFirstFrameFile = queueFrameMod.captureVideoFirstFrameFile;
+
+		const shareAudioMod = await import(`/shared/shareAudioModal.js${qs}`);
+		openShareAudioModal = shareAudioMod.openShareAudioModal;
 	})();
 	return _depsPromise;
 }
@@ -488,6 +492,17 @@ const MORE_MENU_ITEM_DEFS = [
 	<path d="M10 9v6l5-3-5-3z"></path>
 </svg>`,
 		label: 'Queue from frame'
+	},
+	{
+		action: 'share-audio',
+		show: (d) => d.showShareAudio,
+		icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+	stroke-linejoin="round" aria-hidden="true">
+	<path d="M9 18V5l12-2v13"></path>
+	<circle cx="6" cy="18" r="3"></circle>
+	<circle cx="18" cy="16" r="3"></circle>
+</svg>`,
+		label: 'Share Audio'
 	},
 	{
 		action: 'set-avatar',
@@ -2760,6 +2775,13 @@ async function loadCreation() {
 			status === 'completed' &&
 			!isFailed &&
 			landscapeEligibility.eligible;
+		const showShareAudio =
+			!isGroupCreation &&
+			!isAdmin &&
+			status === 'completed' &&
+			!isFailed &&
+			mediaType === 'video' &&
+			Boolean(creation.video_url);
 
 		const stripData = {
 			creatorProfileHref,
@@ -2783,6 +2805,8 @@ async function loadCreation() {
 			hasDetailsModalContent,
 			isOwner,
 			isAdmin,
+			showLandscapeMenu,
+			showShareAudio,
 			actionsContext
 		};
 
@@ -4396,6 +4420,29 @@ async function loadCreation() {
 						} catch (err) {
 							showToast(err?.message || 'Could not set poster');
 						}
+					},
+					'share-audio': async () => {
+						if (!showShareAudio || !creation.video_url) return;
+						closeMobileMoreMenu();
+						await loadDeps();
+						if (typeof openShareAudioModal !== 'function') return;
+						openShareAudioModal({
+							creationId: Number(creationId),
+							videoUrl: String(creation.video_url),
+							shareAudio: meta?.share_audio ?? null,
+							showToast,
+							onSaved: (audioUrl) => {
+								if (meta && typeof meta === 'object') {
+									meta.share_audio = {
+										...(meta.share_audio && typeof meta.share_audio === 'object' ? meta.share_audio : {}),
+										file_path: audioUrl,
+									};
+								}
+								if (lastCreationMeta?.meta && typeof lastCreationMeta.meta === 'object') {
+									lastCreationMeta.meta.share_audio = meta?.share_audio ?? null;
+								}
+							},
+						});
 					},
 				};
 				if (typeof targets[action] === 'function') targets[action]();
